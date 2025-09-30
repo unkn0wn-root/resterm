@@ -58,7 +58,7 @@ func (m *Model) setFocus(target paneFocus) {
 func (m *Model) allowPaneFocusShortcut() bool {
 	switch m.focus {
 	case focusEditor:
-		return !m.editorInsertMode
+		return false
 	case focusFile:
 		return m.fileList.FilterState() != list.Filtering
 	case focusRequests:
@@ -83,6 +83,7 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 			m.setStatusMessage(statusMsg{text: "Insert mode", level: statusInfo})
 		}
 	} else {
+		m.editor.ClearSelection()
 		m.editor.KeyMap = m.editorViewKeyMap
 		m.editor.Cursor.SetMode(cursor.CursorStatic)
 		m.editor.Cursor.Blink = false

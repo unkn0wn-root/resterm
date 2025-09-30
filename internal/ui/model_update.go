@@ -2,8 +2,8 @@ package ui
 
 import (
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
 func (m Model) Init() tea.Cmd {
@@ -24,6 +24,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if cmd := m.applyLayout(); cmd != nil {
 			cmds = append(cmds, cmd)
+		}
+	case editorEvent:
+		if typed.dirty {
+			m.dirty = true
+		}
+		if typed.status != nil {
+			m.setStatusMessage(*typed.status)
 		}
 	case tea.KeyMsg:
 		if cmd := m.handleKey(typed); cmd != nil {
@@ -351,8 +358,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 				m.suppressEditorKey = true
 				return nil
 			case "esc":
+				m.editor.ClearSelection()
 				m.suppressEditorKey = true
 				return nil
+			case "v":
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.ToggleVisual()
+				m.suppressEditorKey = true
+				return cmd
+			case "y":
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.YankSelection()
+				m.suppressEditorKey = true
+				return cmd
+			}
+			if updated, cmd, ok := m.editor.HandleMotion(keyStr); ok {
+				m.editor = updated
+				m.suppressEditorKey = true
+				return cmd
 			}
 		} else {
 			switch keyStr {
