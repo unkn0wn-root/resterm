@@ -226,8 +226,16 @@ func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, f
 	}
 	defer stream.CloseSend()
 
+	symbol := strings.TrimSpace(strings.TrimPrefix(fullMethod, "/"))
+	if idx := strings.LastIndex(symbol, "/"); idx > 0 && idx < len(symbol)-1 {
+		service := symbol[:idx]
+		method := symbol[idx+1:]
+		if service != "" && method != "" {
+			symbol = service + "." + method
+		}
+	}
 	request := &reflectpb.ServerReflectionRequest{
-		MessageRequest: &reflectpb.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: strings.TrimPrefix(fullMethod, "/")},
+		MessageRequest: &reflectpb.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: symbol},
 	}
 	if err := stream.Send(request); err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "send reflection request")
