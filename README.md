@@ -8,22 +8,46 @@
   <img src="_media/resterm.png" alt="Screenshot of resterm TUI" width="720" />
 </p>
 
-Resterm is inspired by the VS Code REST Client extension. It provides a three-pane TUI built with Bubble Tea, allowing you to edit `.http`/`.rest` files and inspect responses side-by-side without leaving the terminal.
-
 ## Features
-- Compatible parser for REST Client request files (`###` separators, `@name` metadata, inline variables, headers, bodies, file includes).
-- Workspace-aware file explorer with filtering of `.http`/`.rest` requests.
-- Three-pane TUI with a pill-styled status header that highlights workspace, environment, active request, and test results; the editor defaults to a safe view mode with an `i`/`Esc` insert toggle, and the response pane offers `Pretty`, `Raw`, `Headers`, and `History` tabs plus a quick request preview.
-- Built-in authentication helpers via `@auth` directives (basic, bearer, API key, custom headers).
-- Variable resolution stack (request -> file -> environment -> OS env) with support for dynamic helpers like `{{$timestamp}}` and `{{$uuid}}`.
-- Pretty responses include syntax highlighting (JSON/XML/HTML).
-- Pre-request and test scripts with JavaScript (goja) can mutate requests before sending, run assertions after responses, and surface pass/fail summaries directly in the header and status bar.
-- GraphQL mode (`@graphql`) wraps queries, operation names, and variables into correct JSON payloads (or query string for GET) automatically, with optional `@variables` sections and history-friendly previews.
-- gRPC mode (`GRPC host:port` + `@grpc package.Service/Method`) dynamically builds protobuf requests using local descriptor sets or server reflection, streams metadata/trailers into the UI, and records call history alongside HTTP requests.
-- Persistent cookie jar so sessions survive across requests.
-- Persistent history with environment-aware entries, replay from the History tab, and optional body redaction via `@no-log`.
-- Environment file discovery (`rest-client.env.json` or `resterm.env.json`) and CLI flag overrides.
-- Configurable HTTP options (timeout, redirects, TLS, proxy).
+- **Workspace explorer.** Filters `.http`/`.rest` files, respects workspace roots, and keeps the file pane navigable with incremental search.
+- **Editor with modal workflow.** Starts in view mode, supports Vim-style motions, visual selections with inline highlighting, clipboard yank/cut, and an `i` / `Esc` toggle for insert mode.
+- **Status-aware response pane.** Pill-style header calls out workspace, environment, active request, and script/test outcomes; response tabs cover Pretty, Raw, Headers, and History, plus request previews.
+- **Auth & variable helpers.** `@auth` directives cover basic, bearer, API key, and custom headers; variable resolution spans request, file, environment, and OS layers with helpers like `{{$timestamp}}` and `{{$uuid}}`.
+- **Pre-request & test scripting.** JavaScript (goja) hooks mutate outgoing requests, assert on responses, and surface pass/fail summaries inline.
+- **GraphQL tooling.** `@graphql` and `@variables` directives produce proper payloads, attach operation names, and keep previews/history readable.
+- **gRPC client.** `GRPC host:port` requests with `@grpc` metadata build messages from descriptor sets or reflection, stream metadata/trailers, and log history entries beside HTTP calls.
+- **Session persistence.** Cookie jar, history store, and environment-aware entries survive restarts; `@no-log` can redact bodies.
+- **Configurable transport.** Flag-driven timeout, TLS, redirect, and proxy settings alongside environment file discovery (`resterm.env.json` or legacy `rest-client.env.json`).
+
+## Request File Structure
+
+Resterm reads plain-text `.http`/`.rest` files. Each request follows the same conventions so the editor, parser, and history can reason about it consistently.
+
+```http
+### get user
+# @name getUser
+# @description Fetch a user profile
+GET https://{{baseUrl}}/users/{{userId}}
+Authorization: Bearer {{token}}
+X-Debug: {{$timestamp}}
+
+{
+  "verbose": true
+}
+
+### create user
+POST https://{{baseUrl}}/users
+Content-Type: application/json
+
+< ./payloads/create-user.json
+```
+
+- **Request separators.** Start a new request with a line beginning `###` (an optional label after the hashes is ignored by the parser but is handy for readability).
+- **Metadata directives.** Comment lines (`#` or `//`) before the request line can include directives such as `@name`, `@description`, `@tag`, `@auth`, `@graphql`, `@grpc`, `@variables`, and `@script`. See [Request Metadata & Settings](#request-metadata--settings) for the full list.
+- **Request line.** The first non-comment line specifies the verb and target. HTTP calls use `<METHOD> <URL>`, whereas gRPC calls begin with `GRPC host:port` followed by `@grpc package.Service/Method` metadata.
+- **Headers.** Subsequent lines of the form `Header-Name: value` are sent verbatim after variable substitution.
+- **Body.** A blank line separates headers from the body. You can inline JSON/text, use heredoc-style scripts, or include external files with `< ./path/to/file`.
+- **Inline variables.** Placeholders like `{{userId}}` or `{{token}}` are resolved using the variable stack (request variables, file-level variables, selected environment, then OS environment). Helpers such as `{{$uuid}}` and `{{$timestamp}}` are available out of the box.
 
 ## Getting Started
 
@@ -72,7 +96,7 @@ By default `resterm` scans the opened file’s directory (or the current working
 - `--proxy`: HTTP proxy URL.
 - `--recurisve`: recursively scan the workspace for `.http`/`.rest` files.
 
-Environment files follow the REST Client JSON structure, for example:
+Environment files are simple JSON maps keyed by environment name, for example:
 
 ```json
 {
@@ -100,7 +124,7 @@ Environment files follow the REST Client JSON structure, for example:
 - `@no-log` - skip storing the response body snippet for that request in history.
 - `@script <kind>` followed by lines beginning with `>` - executes JavaScript either as `pre-request` (mutate method/url/headers/body/variables) or `test` blocks whose assertions appear in the UI and history.
 
-### GraphQL Requests
+### GraphQL
 
 Enable GraphQL handling by adding `@graphql` to the request’s comment block. The request body captures the query, and an optional `@variables` directive switches the subsequent body lines to JSON variables (or `< file.json` to load from disk). `@operation <name>` sets the `operationName` field. Example:
 
@@ -123,7 +147,7 @@ query FetchUser($id: ID!) {
 
 `resterm` packages this as `{ "query": ..., "variables": ... }` for POST requests (or as query parameters for GET), sets `Content-Type: application/json` when needed, and preserves the query/variables layout in previews and history.
 
-### gRPC Requests
+### gRPC
 
 Switch a request into gRPC mode by starting the request line with `GRPC host:port` and declaring the method using `@grpc <package.Service>/<Method>`. Optionally provide a compiled descriptor set (`@grpc-descriptor descriptors/service.protoset`) or rely on server reflection (`@grpc-reflection true`, the default). The request body should contain protobuf JSON for the request message, or use `< payload.json` to load from disk. Example:
 
@@ -139,7 +163,7 @@ GRPC localhost:50051
 
 Headers and `@grpc-metadata key: value` directives attach gRPC metadata. `resterm` resolves templates before invoking the call, displays headers/trailers and the JSON response, and records each invocation in history with the gRPC status code.
 
-Inline/request/file-level variables continue to match the VS Code REST Client, with environment resolution from `rest-client.env.json` / `resterm.env.json`, the selected environment, and OS environment variables.
+Inline, request-, and file-level variables resolve against the selected environment file (`resterm.env.json` or `rest-client.env.json`), then fall back to OS environment variables.
 
 ## Development
 
