@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -81,6 +82,20 @@ type requestEditor struct {
 	selection     selectionState
 	mode          selectionMode
 	pendingMotion string
+	search        editorSearch
+}
+
+type searchMatch struct {
+	start int
+	end   int
+}
+
+type editorSearch struct {
+	query   string
+	isRegex bool
+	matches []searchMatch
+	index   int
+	active  bool
 }
 
 func newRequestEditor() requestEditor {
@@ -109,20 +124,26 @@ func (e *requestEditor) startSelection(pos cursorPosition, mode selectionMode) {
 func (e *requestEditor) clearSelection() {
 	e.selection.Clear()
 	e.mode = selectionNone
-	e.Model.ClearSelectionRange()
+	e.applySelectionHighlight()
 }
 
 func (e *requestEditor) applySelectionHighlight() {
-	if !e.hasSelection() || !e.selection.IsActive() {
-		e.Model.ClearSelectionRange()
-		return
+	if e.hasSelection() && e.selection.IsActive() {
+		start, end := e.selection.Range()
+		if start.Offset != end.Offset {
+			e.Model.SetSelectionRange(start.Offset, end.Offset)
+			return
+		}
 	}
-	start, end := e.selection.Range()
-	if start.Offset == end.Offset {
-		e.Model.ClearSelectionRange()
-		return
+	if match, ok := e.currentSearchMatch(); ok {
+		start := e.clampOffset(match.start)
+		end := e.clampOffset(match.end)
+		if end > start {
+			e.Model.SetSelectionRange(start, end)
+			return
+		}
 	}
-	e.Model.SetSelectionRange(start.Offset, end.Offset)
+	e.Model.ClearSelectionRange()
 }
 
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
@@ -373,6 +394,109 @@ func (e requestEditor) HandleMotion(command string) (requestEditor, tea.Cmd, boo
 	return updated, cmd, true
 }
 
+func (e requestEditor) ApplySearch(query string, isRegex bool) (requestEditor, tea.Cmd) {
+	trimmed := strings.TrimSpace(query)
+	pe := &e
+	pe.search.query = trimmed
+	pe.search.isRegex = isRegex
+	pe.search.matches = nil
+	pe.search.index = -1
+	pe.search.active = false
+
+	if trimmed == "" {
+		pe.applySelectionHighlight()
+		status := statusMsg{text: "Enter a search pattern", level: statusWarn}
+		return e, toEditorEventCmd(editorEvent{status: &status})
+	}
+
+	matches, err := pe.buildSearchMatches(trimmed, isRegex)
+	if err != nil {
+		pe.applySelectionHighlight()
+		status := statusMsg{text: fmt.Sprintf("Invalid regex: %v", err), level: statusError}
+		return e, toEditorEventCmd(editorEvent{status: &status})
+	}
+
+	pe.search.matches = matches
+	if len(matches) == 0 {
+		pe.applySelectionHighlight()
+		status := statusMsg{text: fmt.Sprintf("No matches for %q", trimmed), level: statusWarn}
+		return e, toEditorEventCmd(editorEvent{status: &status})
+	}
+
+	pe.clearSelection()
+	offset := pe.caretPosition().Offset
+	index, wrapped := firstMatchIndex(matches, offset)
+	if index < 0 {
+		index = 0
+	}
+	moveCmd := pe.jumpToSearchIndex(index)
+	statusText := fmt.Sprintf("Match %d/%d for %q", index+1, len(matches), trimmed)
+	if wrapped {
+		statusText += " (wrapped)"
+	}
+	status := statusMsg{text: statusText, level: statusInfo}
+	if moveCmd != nil {
+		return e, tea.Batch(moveCmd, toEditorEventCmd(editorEvent{status: &status}))
+	}
+	return e, toEditorEventCmd(editorEvent{status: &status})
+}
+
+func (e requestEditor) NextSearchMatch() (requestEditor, tea.Cmd) {
+	pe := &e
+	trimmed := strings.TrimSpace(pe.search.query)
+	if trimmed == "" {
+		status := statusMsg{text: "No active search", level: statusWarn}
+		return e, toEditorEventCmd(editorEvent{status: &status})
+	}
+
+	if len(pe.search.matches) == 0 {
+		matches, err := pe.buildSearchMatches(trimmed, pe.search.isRegex)
+		if err != nil {
+			status := statusMsg{text: fmt.Sprintf("Invalid regex: %v", err), level: statusError}
+			return e, toEditorEventCmd(editorEvent{status: &status})
+		}
+		pe.search.matches = matches
+		pe.search.index = -1
+		if len(matches) == 0 {
+			status := statusMsg{text: fmt.Sprintf("No matches for %q", trimmed), level: statusWarn}
+			pe.applySelectionHighlight()
+			return e, toEditorEventCmd(editorEvent{status: &status})
+		}
+	}
+
+	if pe.search.index < 0 || pe.search.index >= len(pe.search.matches) {
+		offset := pe.caretPosition().Offset
+		index, wrapped := firstMatchIndex(pe.search.matches, offset)
+		moveCmd := pe.jumpToSearchIndex(index)
+		statusText := fmt.Sprintf("Match %d/%d for %q", index+1, len(pe.search.matches), trimmed)
+		if wrapped {
+			statusText += " (wrapped)"
+		}
+		status := statusMsg{text: statusText, level: statusInfo}
+		if moveCmd != nil {
+			return e, tea.Batch(moveCmd, toEditorEventCmd(editorEvent{status: &status}))
+		}
+		return e, toEditorEventCmd(editorEvent{status: &status})
+	}
+
+	nextIndex := pe.search.index + 1
+	wrapped := false
+	if nextIndex >= len(pe.search.matches) {
+		nextIndex = 0
+		wrapped = true
+	}
+	moveCmd := pe.jumpToSearchIndex(nextIndex)
+	statusText := fmt.Sprintf("Match %d/%d for %q", nextIndex+1, len(pe.search.matches), trimmed)
+	if wrapped {
+		statusText += " (wrapped)"
+	}
+	status := statusMsg{text: statusText, level: statusInfo}
+	if moveCmd != nil {
+		return e, tea.Batch(moveCmd, toEditorEventCmd(editorEvent{status: &status}))
+	}
+	return e, toEditorEventCmd(editorEvent{status: &status})
+}
+
 func (e requestEditor) caretPosition() cursorPosition {
 	line := e.Line()
 	info := e.LineInfo()
@@ -429,6 +553,7 @@ func (e *requestEditor) removeSelection() bool {
 	e.SetValue(string(updated))
 	e.clearSelection()
 	e.moveCursorTo(start.Line, start.Column)
+	e.applySelectionHighlight()
 	return true
 }
 
@@ -649,6 +774,110 @@ func positionForOffset(value string, offset int) (int, int) {
 	}
 	last := len(lines) - 1
 	return last, utf8.RuneCountInString(lines[last])
+}
+
+func (e requestEditor) clampOffset(offset int) int {
+	if offset < 0 {
+		return 0
+	}
+	total := utf8.RuneCountInString(e.Value())
+	if offset > total {
+		return total
+	}
+	return offset
+}
+
+func (e requestEditor) currentSearchMatch() (searchMatch, bool) {
+	if !e.search.active {
+		return searchMatch{}, false
+	}
+	if e.search.index < 0 || e.search.index >= len(e.search.matches) {
+		return searchMatch{}, false
+	}
+	return e.search.matches[e.search.index], true
+}
+
+func firstMatchIndex(matches []searchMatch, offset int) (int, bool) {
+	if len(matches) == 0 {
+		return -1, false
+	}
+	for i, match := range matches {
+		if offset < match.end {
+			return i, false
+		}
+	}
+	return 0, true
+}
+
+func literalMatches(content, pattern string) []searchMatch {
+	patternRunes := []rune(pattern)
+	contentRunes := []rune(content)
+	plen := len(patternRunes)
+	if plen == 0 || len(contentRunes) < plen {
+		return nil
+	}
+	matches := make([]searchMatch, 0)
+	for i := 0; i <= len(contentRunes)-plen; i++ {
+		match := true
+		for j := 0; j < plen; j++ {
+			if contentRunes[i+j] != patternRunes[j] {
+				match = false
+				break
+			}
+		}
+		if match {
+			matches = append(matches, searchMatch{start: i, end: i + plen})
+		}
+	}
+	return matches
+}
+
+func regexMatches(content string, rx *regexp.Regexp) []searchMatch {
+	indices := rx.FindAllStringIndex(content, -1)
+	if len(indices) == 0 {
+		return nil
+	}
+	matches := make([]searchMatch, 0, len(indices))
+	for _, idx := range indices {
+		if len(idx) != 2 {
+			continue
+		}
+		startByte, endByte := idx[0], idx[1]
+		if endByte <= startByte {
+			continue
+		}
+		start := utf8.RuneCountInString(content[:startByte])
+		end := utf8.RuneCountInString(content[:endByte])
+		matches = append(matches, searchMatch{start: start, end: end})
+	}
+	return matches
+}
+
+func (e requestEditor) buildSearchMatches(query string, isRegex bool) ([]searchMatch, error) {
+	value := e.Value()
+	if isRegex {
+		rx, err := regexp.Compile(query)
+		if err != nil {
+			return nil, err
+		}
+		return regexMatches(value, rx), nil
+	}
+	return literalMatches(value, query), nil
+}
+
+func (e *requestEditor) jumpToSearchIndex(index int) tea.Cmd {
+	if index < 0 || index >= len(e.search.matches) {
+		return nil
+	}
+	match := e.search.matches[index]
+	start := e.clampOffset(match.start)
+	line, col := positionForOffset(e.Value(), start)
+	e.search.index = index
+	e.search.active = true
+	return e.executeMotion(func() {
+		e.moveCursorTo(line, col)
+		e.applySelectionHighlight()
+	})
 }
 
 func stripSelectionMovement(msg tea.KeyMsg) (tea.KeyMsg, bool) {

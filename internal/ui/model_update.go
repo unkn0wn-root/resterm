@@ -119,6 +119,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, inputCmd
 	}
 
+	if m.showSearchPrompt {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "esc":
+				m.closeSearchPrompt()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			case "ctrl+r":
+				m.toggleSearchMode()
+				return m, nil
+			case "enter":
+				cmd := m.submitSearchPrompt()
+				return m, cmd
+			}
+		}
+		var inputCmd tea.Cmd
+		m.searchInput, inputCmd = m.searchInput.Update(msg)
+		return m, inputCmd
+	}
+
 	if m.showHelp {
 		if m.helpJustOpened {
 			m.helpJustOpened = false
@@ -353,6 +374,15 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if m.focus == focusEditor {
 		if !m.editorInsertMode {
 			switch keyStr {
+			case "shift+f", "F":
+				cmd := m.openSearchPrompt()
+				m.suppressEditorKey = true
+				return cmd
+			case "n":
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.NextSearchMatch()
+				m.suppressEditorKey = true
+				return cmd
 			case "i":
 				m.setInsertMode(true, true)
 				m.suppressEditorKey = true

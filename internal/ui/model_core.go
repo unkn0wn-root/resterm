@@ -100,6 +100,10 @@ type Model struct {
 	showErrorModal    bool
 	errorModalMessage string
 
+	showSearchPrompt bool
+	searchInput      textinput.Model
+	searchIsRegex    bool
+
 	statusMessage    statusMsg
 	statusPulseBase  string
 	statusPulseFrame int
@@ -226,6 +230,13 @@ func New(cfg Config) Model {
 	openPathInput.Prompt = ""
 	openPathInput.SetCursor(0)
 
+	searchInput := textinput.New()
+	searchInput.Placeholder = "pattern"
+	searchInput.CharLimit = 0
+	searchInput.Prompt = "/"
+	searchInput.SetCursor(0)
+	searchInput.Blur()
+
 	response := viewport.New(0, 0)
 	response.SetContent(centerContent(noResponseMessage, 0, 0))
 
@@ -282,6 +293,7 @@ func New(cfg Config) Model {
 		editorViewKeyMap:   viewKeyMap,
 		newFileInput:       newFileInput,
 		openPathInput:      openPathInput,
+		searchInput:        searchInput,
 	}
 	model.setInsertMode(false, false)
 

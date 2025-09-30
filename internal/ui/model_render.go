@@ -237,6 +237,10 @@ func (m Model) renderHistoryPane() string {
 }
 
 func (m Model) renderCommandBar() string {
+	if m.showSearchPrompt {
+		return m.renderSearchPrompt()
+	}
+
 	type hint struct {
 		key   string
 		label string
@@ -267,6 +271,25 @@ func (m Model) renderCommandBar() string {
 	for i := 1; i < len(rendered); i++ {
 		row = lipgloss.JoinHorizontal(lipgloss.Top, row, divider, rendered[i])
 	}
+	return m.theme.CommandBar.Render(row)
+}
+
+func (m Model) renderSearchPrompt() string {
+	mode := "literal"
+	if m.searchIsRegex {
+		mode = "regex"
+	}
+	label := lipgloss.NewStyle().Bold(true).Render("Search ")
+	input := m.searchInput.View()
+	modeBadge := lipgloss.NewStyle().
+		Faint(true).
+		PaddingLeft(2).
+		Render(strings.ToUpper(mode))
+	hints := lipgloss.NewStyle().
+		Faint(true).
+		PaddingLeft(2).
+		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
+	row := lipgloss.JoinHorizontal(lipgloss.Top, label, input, modeBadge, hints)
 	return m.theme.CommandBar.Render(row)
 }
 

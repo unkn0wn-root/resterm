@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func newTestEditor(content string) requestEditor {
@@ -26,6 +28,22 @@ func applyMotion(t *testing.T, editor requestEditor, command string) requestEdit
 		t.Fatalf("expected motion %q to be handled", command)
 	}
 	return updated
+}
+
+func statusFromCmd(t *testing.T, cmd tea.Cmd) *statusMsg {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	msg := cmd()
+	if msg == nil {
+		return nil
+	}
+	evt, ok := msg.(editorEvent)
+	if !ok {
+		t.Fatalf("expected editorEvent, got %T", msg)
+	}
+	return evt.status
 }
 
 func TestRequestEditorMotionGG(t *testing.T) {
@@ -159,5 +177,113 @@ func TestRequestEditorMotionPaging(t *testing.T) {
 	editor = applyMotion(t, editor, "ctrl+b")
 	if line := editor.Line(); line != 0 {
 		t.Fatalf("expected ctrl+b to return to line 0; got %d", line)
+	}
+}
+
+func TestRequestEditorApplySearchLiteral(t *testing.T) {
+	content := "one\ntwo\nthree two"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.ApplySearch("two", false)
+	status := statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status message from search")
+	}
+	if status.level != statusInfo {
+		t.Fatalf("expected info status, got %v", status.level)
+	}
+	if want := "Match 1/2 for \"two\""; status.text != want {
+		t.Fatalf("expected status %q, got %q", want, status.text)
+	}
+
+	if editor.search.query != "two" {
+		t.Fatalf("search query not stored: %q", editor.search.query)
+	}
+	if editor.search.index != 0 {
+		t.Fatalf("expected search index 0, got %d", editor.search.index)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 1 || pos.Column != 0 {
+		t.Fatalf("expected caret at line 1 column 0, got line %d column %d", pos.Line, pos.Column)
+	}
+}
+
+func TestRequestEditorApplySearchRegexInvalid(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editor, cmd := editor.ApplySearch("[", true)
+	status := statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status message for invalid regex")
+	}
+	if status.level != statusError {
+		t.Fatalf("expected error status, got %v", status.level)
+	}
+	if !strings.Contains(status.text, "Invalid regex") {
+		t.Fatalf("unexpected status text %q", status.text)
+	}
+	if editor.search.active {
+		t.Fatal("search should be inactive after invalid regex")
+	}
+	if len(editor.search.matches) != 0 {
+		t.Fatalf("expected no matches, got %d", len(editor.search.matches))
+	}
+}
+
+func TestRequestEditorNextSearchMatchWrap(t *testing.T) {
+	content := "foo bar\nfoo baz\nfoo"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.ApplySearch("foo", false)
+	if status := statusFromCmd(t, cmd); status == nil {
+		t.Fatal("expected initial search status")
+	}
+
+	editor, cmd = editor.NextSearchMatch()
+	status := statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after next search")
+	}
+	if status.level != statusInfo {
+		t.Fatalf("expected info level, got %v", status.level)
+	}
+	if !strings.Contains(status.text, "Match 2/3") {
+		t.Fatalf("expected status to show second match, got %q", status.text)
+	}
+	if editor.search.index != 1 {
+		t.Fatalf("expected search index 1, got %d", editor.search.index)
+	}
+
+	editor, cmd = editor.NextSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after wrap")
+	}
+	if !strings.Contains(status.text, "Match 3/3") {
+		t.Fatalf("expected status to show third match, got %q", status.text)
+	}
+	if strings.Contains(status.text, "(wrapped)") {
+		t.Fatalf("did not expect wrap notice on third match, got %q", status.text)
+	}
+	if editor.search.index != 2 {
+		t.Fatalf("expected search index 2, got %d", editor.search.index)
+	}
+
+	editor, cmd = editor.NextSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after cycling to first match")
+	}
+	if !strings.Contains(status.text, "Match 1/3") {
+		t.Fatalf("expected status to reset to first match, got %q", status.text)
+	}
+	if !strings.Contains(status.text, "(wrapped)") {
+		t.Fatalf("expected wrap notice when cycling back, got %q", status.text)
+	}
+	if editor.search.index != 0 {
+		t.Fatalf("expected search index reset to 0, got %d", editor.search.index)
 	}
 }
