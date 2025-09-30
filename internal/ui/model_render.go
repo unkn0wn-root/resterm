@@ -15,6 +15,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame("Initialising...")
 	}
 
+	if m.showErrorModal {
+		return m.renderWithinAppFrame(m.renderErrorModal())
+	}
+
 	if m.showOpenModal {
 		return m.renderWithinAppFrame(m.renderOpenModal())
 	}
@@ -467,6 +471,38 @@ func (m Model) renderStatusBar() string {
 	}
 
 	return m.theme.StatusBar.Render(builder.String())
+}
+
+func (m Model) renderErrorModal() string {
+	width := m.width - 10
+	if width > 72 {
+		width = 72
+	}
+	if width < 32 {
+		candidate := m.width - 4
+		if candidate > 0 {
+			width = maxInt(24, candidate)
+		} else {
+			width = 48
+		}
+	}
+	contentWidth := maxInt(width-4, 24)
+	message := strings.TrimSpace(m.errorModalMessage)
+	if message == "" {
+		message = "An unexpected error occurred."
+	}
+	wrapped := wrapToWidth(message, contentWidth)
+	messageView := m.theme.Error.Copy().Render(wrapped)
+	title := m.theme.HeaderTitle.Width(contentWidth).Align(lipgloss.Center).Render("Error")
+	instructions := fmt.Sprintf("%s / %s Dismiss", m.theme.CommandBarHint.Render("Esc"), m.theme.CommandBarHint.Render("Enter"))
+	content := lipgloss.JoinVertical(lipgloss.Left, title, "", messageView, "", instructions)
+	boxStyle := m.theme.BrowserBorder.Copy().
+		Width(width)
+	box := boxStyle.Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
 }
 
 func (m Model) renderEnvironmentSelector() string {

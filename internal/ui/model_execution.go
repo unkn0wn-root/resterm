@@ -57,7 +57,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	base := fmt.Sprintf("Sending %s", cloned.URL)
 	m.statusPulseBase = base
 	m.statusPulseFrame = -1
-	m.statusMessage = statusMsg{text: base, level: statusInfo}
+	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
 	execCmd := m.executeRequest(doc, cloned, options)
 	if tick := m.scheduleStatusPulse(); tick != nil {
@@ -171,7 +171,7 @@ func (m *Model) handleStatusPulse() tea.Cmd {
 	}
 
 	dots := strings.Repeat(".", m.statusPulseFrame+1)
-	m.statusMessage = statusMsg{text: base + dots, level: statusInfo}
+	m.setStatusMessage(statusMsg{text: base + dots, level: statusInfo})
 	return m.scheduleStatusPulse()
 }
 

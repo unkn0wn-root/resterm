@@ -47,7 +47,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		if code == errdef.CodeScript {
 			level = statusWarn
 		}
-		m.statusMessage = statusMsg{text: errdef.Message(msg.err), level: level}
+		m.setStatusMessage(statusMsg{text: errdef.Message(msg.err), level: level})
 		return nil
 	}
 
@@ -83,13 +83,13 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 
 	switch {
 	case scriptErr != nil:
-		m.statusMessage = statusMsg{text: fmt.Sprintf("Tests error: %v", scriptErr), level: statusWarn}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Tests error: %v", scriptErr), level: statusWarn})
 	case failureCount > 0:
-		m.statusMessage = statusMsg{text: fmt.Sprintf("%s (%d) – %d test(s) failed", resp.Status, resp.StatusCode, failureCount), level: statusWarn}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s (%d) – %d test(s) failed", resp.Status, resp.StatusCode, failureCount), level: statusWarn})
 	case len(tests) > 0:
-		m.statusMessage = statusMsg{text: fmt.Sprintf("%s (%d) – all tests passed", resp.Status, resp.StatusCode), level: statusSuccess}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s (%d) – all tests passed", resp.Status, resp.StatusCode), level: statusSuccess})
 	default:
-		m.statusMessage = statusMsg{text: fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode), level: statusSuccess}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode), level: statusSuccess})
 	}
 
 	token := nextResponseRenderToken()
@@ -244,9 +244,9 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 
 	switch {
 	case resp.StatusCode != codes.OK:
-		m.statusMessage = statusMsg{text: statusLine, level: statusWarn}
+		m.setStatusMessage(statusMsg{text: statusLine, level: statusWarn})
 	default:
-		m.statusMessage = statusMsg{text: statusLine, level: statusSuccess}
+		m.setStatusMessage(statusMsg{text: statusLine, level: statusSuccess})
 	}
 	m.responseViewport.GotoTop()
 	return m.syncResponseContent()
@@ -279,7 +279,7 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 	}
 
 	if err := m.historyStore.Append(entry); err != nil {
-		m.statusMessage = statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
@@ -312,7 +312,7 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	}
 
 	if err := m.historyStore.Append(entry); err != nil {
-		m.statusMessage = statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
@@ -592,7 +592,7 @@ func (m *Model) replayHistorySelection() tea.Cmd {
 	m.testResults = nil
 	m.scriptError = nil
 	m.sending = true
-	m.statusMessage = statusMsg{text: fmt.Sprintf("Replaying %s", req.URL), level: statusInfo}
+	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Replaying %s", req.URL), level: statusInfo})
 
 	return m.executeRequest(doc, req, options)
 }

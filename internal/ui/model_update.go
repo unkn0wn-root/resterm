@@ -37,7 +37,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case statusMsg:
-		m.statusMessage = typed
+		m.setStatusMessage(typed)
 	case statusPulseMsg:
 		if cmd := m.handleStatusPulse(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -54,6 +54,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleResponseLoadingTick(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	}
+
+	if m.showErrorModal {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "esc", "enter":
+				m.closeErrorModal()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			}
+		}
+		return m, nil
 	}
 
 	if m.showOpenModal {

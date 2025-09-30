@@ -89,14 +89,16 @@ type Model struct {
 	historyList      list.Model
 	envList          list.Model
 
-	responseTabs     []string
-	activeTab        responseTab
-	focus            paneFocus
-	showEnvSelector  bool
-	showHelp         bool
-	helpJustOpened   bool
-	showNewFileModal bool
-	showOpenModal    bool
+	responseTabs      []string
+	activeTab         responseTab
+	focus             paneFocus
+	showEnvSelector   bool
+	showHelp          bool
+	helpJustOpened    bool
+	showNewFileModal  bool
+	showOpenModal     bool
+	showErrorModal    bool
+	errorModalMessage string
 
 	statusMessage    statusMsg
 	statusPulseBase  string

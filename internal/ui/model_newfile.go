@@ -109,6 +109,6 @@ func (m *Model) submitNewFile() tea.Cmd {
 	m.selectFileByPath(finalPath)
 	m.setFocus(focusEditor)
 	cmd := m.openFile(finalPath)
-	m.statusMessage = statusMsg{text: fmt.Sprintf("Created %s", filepath.Base(finalPath)), level: statusSuccess}
+	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Created %s", filepath.Base(finalPath)), level: statusSuccess})
 	return cmd
 }

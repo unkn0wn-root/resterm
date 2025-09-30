@@ -39,7 +39,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.activeRequestTitle = ""
 	m.activeRequestKey = ""
 	m.dirty = false
-	m.statusMessage = statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess}
+	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess})
 	m.syncHistory()
 	return nil
 }

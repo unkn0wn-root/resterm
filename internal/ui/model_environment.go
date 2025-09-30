@@ -52,7 +52,7 @@ func (m *Model) applyEnvironmentSelection() tea.Cmd {
 	}
 
 	m.cfg.EnvironmentName = item.name
-	m.statusMessage = statusMsg{text: fmt.Sprintf("Environment set to %s", item.name), level: statusInfo}
+	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Environment set to %s", item.name), level: statusInfo})
 	m.syncHistory()
 	return nil
 }

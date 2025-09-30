@@ -80,14 +80,14 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 		m.editor.Cursor.SetMode(cursor.CursorBlink)
 		m.editor.Cursor.Blink = true
 		if announce {
-			m.statusMessage = statusMsg{text: "Insert mode", level: statusInfo}
+			m.setStatusMessage(statusMsg{text: "Insert mode", level: statusInfo})
 		}
 	} else {
 		m.editor.KeyMap = m.editorViewKeyMap
 		m.editor.Cursor.SetMode(cursor.CursorStatic)
 		m.editor.Cursor.Blink = false
 		if announce {
-			m.statusMessage = statusMsg{text: "View mode", level: statusInfo}
+			m.setStatusMessage(statusMsg{text: "View mode", level: statusInfo})
 		}
 	}
 }
