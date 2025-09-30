@@ -7,7 +7,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"github.com/unkn0wn-root/resterm/pkg/restfile"
 )
@@ -84,7 +84,7 @@ type Model struct {
 
 	fileList         list.Model
 	requestList      list.Model
-	editor           textarea.Model
+	editor           requestEditor
 	responseViewport viewport.Model
 	historyList      list.Model
 	envList          list.Model
@@ -205,7 +205,7 @@ func New(cfg Config) Model {
 		}
 	}
 
-	editor := textarea.New()
+	editor := newRequestEditor()
 	editor.Placeholder = "Write HTTP requests here..."
 	editor.SetValue(cfg.InitialContent)
 	editor.ShowLineNumbers = true

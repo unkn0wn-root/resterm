@@ -8,12 +8,12 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/key"
-	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/pkg/restfile"
 )
 
@@ -422,8 +422,8 @@ func stripHTMLTags(input string) string {
 	return strings.Join(cleaned, "\n")
 }
 
-func currentCursorLine(textarea textarea.Model) int {
-	return textarea.Line() + 1
+func currentCursorLine(ed requestEditor) int {
+	return ed.Line() + 1
 }
 
 func findRequestAtLine(doc *restfile.Document, line int) *restfile.Request {
