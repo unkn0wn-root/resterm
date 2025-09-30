@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/atotto/clipboard"
@@ -77,8 +78,9 @@ func toEditorEventCmd(evt editorEvent) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
-	selection selectionState
-	mode      selectionMode
+	selection     selectionState
+	mode          selectionMode
+	pendingMotion string
 }
 
 func newRequestEditor() requestEditor {
@@ -178,6 +180,70 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			}
 			handled = true
 		}
+	case "gg":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.moveToBufferTop() }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "G":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.moveToBufferBottom() }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "^":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.moveToLineStartNonBlank() }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "e":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.moveToWordEnd() }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "ctrl+f":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.pageDown(true) }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "ctrl+b":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.pageUp(true) }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "ctrl+d":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.pageDown(false) }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case "ctrl+u":
+		handled = true
+		if e.mode != selectionVisual {
+			e.clearSelection()
+		}
+		if cmd := e.executeMotion(func() { e.pageUp(false) }); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	if !handled {
@@ -259,6 +325,28 @@ func (e requestEditor) YankSelection() (requestEditor, tea.Cmd) {
 }
 
 func (e requestEditor) HandleMotion(command string) (requestEditor, tea.Cmd, bool) {
+	if e.pendingMotion == "g" {
+		if command == "g" {
+			e.pendingMotion = ""
+			msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g', 'g'}}
+			updated, cmd := e.Update(msg)
+			updated.pendingMotion = ""
+			return updated, cmd, true
+		}
+		e.pendingMotion = ""
+	}
+
+	switch command {
+	case "g":
+		e.pendingMotion = "g"
+		return e, nil, true
+	case "G", "^", "e", "ctrl+f", "ctrl+b", "ctrl+d", "ctrl+u":
+		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(command)}
+		updated, cmd := e.Update(msg)
+		updated.pendingMotion = ""
+		return updated, cmd, true
+	}
+
 	var msg tea.KeyMsg
 	switch command {
 	case "h":
@@ -281,6 +369,7 @@ func (e requestEditor) HandleMotion(command string) (requestEditor, tea.Cmd, boo
 		return e, nil, false
 	}
 	updated, cmd := e.Update(msg)
+	updated.pendingMotion = ""
 	return updated, cmd, true
 }
 
@@ -372,6 +461,122 @@ func (e *requestEditor) moveCursorTo(line, column int) {
 	e.SetCursor(column)
 }
 
+func (e *requestEditor) moveToBufferTop() {
+	line := 0
+	col := 0
+	lines := strings.Split(e.Value(), "\n")
+	if len(lines) > 0 {
+		col = firstNonWhitespaceColumn(lines[0])
+	}
+	e.moveCursorTo(line, col)
+}
+
+func (e *requestEditor) moveToBufferBottom() {
+	lines := strings.Split(e.Value(), "\n")
+	if len(lines) == 0 {
+		e.moveCursorTo(0, 0)
+		return
+	}
+	line := len(lines) - 1
+	col := firstNonWhitespaceColumn(lines[line])
+	e.moveCursorTo(line, col)
+}
+
+func (e *requestEditor) moveToLineStartNonBlank() {
+	lines := strings.Split(e.Value(), "\n")
+	if len(lines) == 0 {
+		e.moveCursorTo(0, 0)
+		return
+	}
+	line := e.Line()
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(lines) {
+		line = len(lines) - 1
+	}
+	col := firstNonWhitespaceColumn(lines[line])
+	e.moveCursorTo(line, col)
+}
+
+func (e *requestEditor) moveToWordEnd() {
+	value := e.Value()
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return
+	}
+	pos := e.caretPosition()
+	idx := pos.Offset
+	if idx >= len(runes) {
+		idx = len(runes) - 1
+	}
+	if idx < 0 {
+		idx = 0
+	}
+
+	if unicode.IsSpace(runes[idx]) {
+		for idx < len(runes) && unicode.IsSpace(runes[idx]) {
+			idx++
+		}
+		if idx >= len(runes) {
+			return
+		}
+	}
+
+	for idx+1 < len(runes) && !unicode.IsSpace(runes[idx+1]) {
+		idx++
+	}
+
+	line, col := positionForOffset(value, idx)
+	e.moveCursorTo(line, col)
+}
+
+func (e *requestEditor) executeMotion(fn func()) tea.Cmd {
+	fn()
+	var cmd tea.Cmd
+	e.Model, cmd = e.Model.Update(nil)
+	return cmd
+}
+
+func (e requestEditor) pageStep(full bool) int {
+	height := e.Height()
+	if height <= 0 {
+		height = 1
+	}
+	if full {
+		if height > 1 {
+			return height - 1
+		}
+		return 1
+	}
+	step := height / 2
+	if step < 1 {
+		step = 1
+	}
+	return step
+}
+
+func (e *requestEditor) pageDown(full bool) {
+	e.moveLines(e.pageStep(full))
+}
+
+func (e *requestEditor) pageUp(full bool) {
+	e.moveLines(-e.pageStep(full))
+}
+
+func (e *requestEditor) moveLines(delta int) {
+	switch {
+	case delta > 0:
+		for i := 0; i < delta; i++ {
+			e.CursorDown()
+		}
+	case delta < 0:
+		for i := 0; i < -delta; i++ {
+			e.CursorUp()
+		}
+	}
+}
+
 func (e requestEditor) offsetForPosition(line, column int) int {
 	if line < 0 {
 		return 0
@@ -411,6 +616,39 @@ func lineLength(value string, line int) int {
 		line = len(lines) - 1
 	}
 	return utf8.RuneCountInString(lines[line])
+}
+
+func firstNonWhitespaceColumn(line string) int {
+	runes := []rune(line)
+	for i, r := range runes {
+		if !unicode.IsSpace(r) {
+			return i
+		}
+	}
+	return 0
+}
+
+func positionForOffset(value string, offset int) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	lines := strings.Split(value, "\n")
+	if len(lines) == 0 {
+		return 0, 0
+	}
+	remaining := offset
+	for i, line := range lines {
+		lineLen := utf8.RuneCountInString(line)
+		if remaining <= lineLen {
+			return i, remaining
+		}
+		remaining -= lineLen + 1
+		if remaining < 0 {
+			return i, lineLen
+		}
+	}
+	last := len(lines) - 1
+	return last, utf8.RuneCountInString(lines[last])
 }
 
 func stripSelectionMovement(msg tea.KeyMsg) (tea.KeyMsg, bool) {
