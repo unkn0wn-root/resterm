@@ -1,0 +1,61 @@
+### Health Checks
+# @name API Health
+# @tag smoke health
+GET {{services.api.base}}/health
+Accept: application/json
+Authorization: Bearer {{auth.token}}
+
+### Provisioning Flow
+# @name Start Provisioning
+# @tag provisioning create
+@requestId = {{$uuid}}
+POST {{services.api.base}}/provisioning
+Content-Type: application/json
+Authorization: Bearer {{auth.token}}
+
+{
+  "requestId": "{{requestId}}",
+  "tenant": {
+    "id": "{{tenant.id}}",
+    "region": "{{tenant.region}}"
+  },
+  "options": {
+    "plan": "{{plans.primary}}",
+    "addons": ["{{plans.addons[0]}}", "{{plans.addons[1]}}"],
+    "limits": {
+      "projects": {{limits.projects}},
+      "users": {{limits.users}}
+    }
+  }
+}
+
+### Billing Scenarios
+# @name Create Invoice
+# @tag billing create
+POST {{services.billing.base}}/invoices
+Content-Type: application/json
+Authorization: Bearer {{auth.token}}
+
+{
+  "tenantId": "{{tenant.id}}",
+  "currency": "{{billing.currency}}",
+  "lines": [
+    {
+      "sku": "workspace",
+      "quantity": 1,
+      "unitPrice": {{billing.pricing.workspace}}
+    },
+    {
+      "sku": "seat",
+      "quantity": {{limits.users}},
+      "unitPrice": {{billing.pricing.seat}}
+    }
+  ]
+}
+
+### Billing Scenarios
+# @name Fetch Invoice
+# @tag billing read
+GET {{services.billing.base}}/invoices/{{billing.sampleInvoiceId}}
+Accept: application/json
+Authorization: Bearer {{auth.token}}

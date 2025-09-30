@@ -1,0 +1,21 @@
+###
+# @name getGoogle
+GET https://www.google.com
+User-Agent: resterm/0.1
+
+###
+# @name createPost
+POST https://jsonplaceholder.typicode.com/posts
+Content-Type: application/json
+
+{
+  "title": "foo",
+  "body": "bar",
+  "userId": 1
+}
+
+
+###
+# @name authTest
+# @auth bearer {{token}}
+GET https://httpbin.org/bearer

@@ -1,0 +1,46 @@
+### Create Workspace With Nested Settings
+# @name Create Workspace
+# @tag workspaces nested setup
+@workspaceName = Terminal Toolkit
+@workspaceId = 4301
+@limits.users = 25
+@limits.storage = "5GB"
+@featureA = realtime-updates
+@featureB = script-hooks
+
+POST {{base.url}}/workspaces
+Content-Type: application/json
+Authorization: Bearer {{auth.token}}
+X-Tenant-ID: {{tenant.id}}
+
+{
+  "name": "{{workspaceName}}",
+  "limits": {
+    "users": {{limits.users}},
+    "storage": "{{limits.storage}}"
+  },
+  "features": [
+    "{{featureA}}",
+    "{{featureB}}",
+    "{{features[0]}}"
+  ],
+  "metadata": {
+    "region": "{{meta.region}}",
+    "plan": "{{meta.plan}}",
+    "flags": {{meta.flags}}
+  }
+}
+
+### Retrieve Workspace Snapshot
+# @name Get Workspace
+# @tag workspaces read nested
+GET {{base.url}}/workspaces/{{workspaceId}}?include=settings,features&expand={{query.expand}}
+Accept: application/json
+Authorization: Bearer {{auth.token}}
+
+### List Workspace Members
+# @name List Members
+# @tag workspaces members nested
+GET {{base.url}}/workspaces/{{workspaceId}}/members?limit={{limits.users}}&offset=0
+Accept: application/json
+Authorization: Bearer {{auth.token}}
