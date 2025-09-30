@@ -17,7 +17,9 @@ func (m *Model) openSelectedFile() tea.Cmd {
 	if path == "" {
 		return nil
 	}
-	return m.openFile(path)
+	cmd := m.openFile(path)
+	m.setFocus(focusRequests)
+	return cmd
 }
 
 func (m *Model) openFile(path string) tea.Cmd {
