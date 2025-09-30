@@ -11,7 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type Runner struct{}

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"

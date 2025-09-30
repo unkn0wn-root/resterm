@@ -3,7 +3,7 @@ package grpcbuilder
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type Builder struct {

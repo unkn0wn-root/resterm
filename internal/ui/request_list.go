@@ -5,7 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type requestListItem struct {

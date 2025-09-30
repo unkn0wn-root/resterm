@@ -16,9 +16,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/parser/curl"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
 )
 
 func (m *Model) sendActiveRequest() tea.Cmd {

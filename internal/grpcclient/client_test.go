@@ -3,7 +3,7 @@ package grpcclient
 import (
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestShouldUsePlaintextHonoursRequestOverride(t *testing.T) {

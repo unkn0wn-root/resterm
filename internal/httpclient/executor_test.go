@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
 )
 
 func TestApplyRequestSettings(t *testing.T) {

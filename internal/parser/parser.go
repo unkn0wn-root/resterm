@@ -9,7 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
-	"github.com/unkn0wn-root/resterm/pkg/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 var (
