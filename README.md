@@ -149,7 +149,7 @@ History is stored in `~/.config/resterm/history.json` (using the platform-approp
 
 ```bash
 go test ./...
-go run ./cmd/resterm --file examples/basic.http
+go run ./cmd/resterm --file _examples/basic.http
 ```
 
 ## Roadmap
