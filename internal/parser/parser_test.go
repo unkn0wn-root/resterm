@@ -93,6 +93,48 @@ GET https://example.com/api
 	}
 }
 
+func TestParseScriptFileInclude(t *testing.T) {
+	src := `# @name FileScript
+# @script test
+> < ./scripts/validation.js
+GET https://example.com/api
+`
+
+	doc := Parse("filescript.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	script := req.Metadata.Scripts[0]
+	if script.FilePath != "./scripts/validation.js" {
+		t.Fatalf("unexpected script file path: %q", script.FilePath)
+	}
+	if script.Body != "" {
+		t.Fatalf("expected script body to be empty for file include, got %q", script.Body)
+	}
+}
+
+func TestParseScriptFileIncludeWithIndent(t *testing.T) {
+	src := `# @script test
+>     < ./script.js
+GET https://example.com`
+
+	doc := Parse("indent.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	if req.Metadata.Scripts[0].FilePath != "./script.js" {
+		t.Fatalf("unexpected script file path: %q", req.Metadata.Scripts[0].FilePath)
+	}
+}
+
 func TestParseBlockComments(t *testing.T) {
 	src := `/**
  * @name Blocked

@@ -77,6 +77,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
 			Request:   req,
 			Variables: preVars,
+			BaseDir:   options.BaseDir,
 		})
 		if err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request script")}
@@ -131,6 +132,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		tests, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 			Response:  response,
 			Variables: testVars,
+			BaseDir:   options.BaseDir,
 		})
 
 		return responseMsg{
