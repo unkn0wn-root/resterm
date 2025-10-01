@@ -272,6 +272,23 @@ func (m *Model) canPreviewOnSpace() bool {
 	}
 }
 
+func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
+	keyStr := msg.String()
+	switch keyStr {
+	case "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j", "ctrl+m":
+		return true
+	case "enter":
+		return !insertMode
+	}
+	switch msg.Type {
+	case tea.KeyCtrlJ:
+		return true
+	case tea.KeyEnter:
+		return !insertMode
+	}
+	return false
+}
+
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	keyStr := msg.String()
 
@@ -422,8 +439,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 				return nil
 			}
 		}
-		switch keyStr {
-		case "ctrl+enter", "ctrl+j", "cmd+enter", "alt+enter":
+		if shouldSendEditorRequest(msg, m.editorInsertMode) {
 			if !m.sending {
 				m.suppressEditorKey = true
 				return m.sendActiveRequest()
