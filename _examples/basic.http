@@ -17,5 +17,5 @@ Content-Type: application/json
 
 ###
 # @name authTest
-# @auth bearer {{token}}
+# @auth bearer {{auth.token}}
 GET https://httpbin.org/bearer
