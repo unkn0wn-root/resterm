@@ -334,6 +334,14 @@ func (b *documentBuilder) handleScript(line int, rawLine string) {
 	if kind == "" {
 		kind = "test"
 	}
+	trimmedHead := strings.TrimLeft(body, " \t")
+	if strings.HasPrefix(trimmedHead, "<") {
+		path := strings.TrimSpace(strings.TrimPrefix(trimmedHead, "<"))
+		if path != "" {
+			b.request.appendScriptInclude(kind, path)
+		}
+		return
+	}
 	b.request.appendScriptLine(kind, body)
 }
 
@@ -419,6 +427,15 @@ func (r *requestBuilder) flushPendingScript() {
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: r.scriptBufferKind, Body: script})
 	r.scriptBuffer = nil
 	r.scriptBufferKind = ""
+}
+
+func (r *requestBuilder) appendScriptInclude(kind, path string) {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "" {
+		kind = "test"
+	}
+	r.flushPendingScript()
+	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: kind, FilePath: path})
 }
 
 func (b *documentBuilder) handleBodyLine(line string) {
