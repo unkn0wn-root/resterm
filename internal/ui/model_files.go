@@ -49,9 +49,13 @@ func (m *Model) openFile(path string) tea.Cmd {
 
 func (m *Model) saveFile() tea.Cmd {
 	if m.currentFile == "" {
-		return func() tea.Msg {
-			return statusMsg{text: "No file selected", level: statusWarn}
+		if strings.TrimSpace(m.editor.Value()) == "" {
+			return func() tea.Msg {
+				return statusMsg{text: "No file selected", level: statusWarn}
+			}
 		}
+		m.openSaveAsModal()
+		return nil
 	}
 	content := []byte(m.editor.Value())
 	if err := os.WriteFile(m.currentFile, content, 0o644); err != nil {

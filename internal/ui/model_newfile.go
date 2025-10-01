@@ -14,6 +14,14 @@ import (
 var newFileExtensions = []string{".http", ".rest"}
 
 func (m *Model) openNewFileModal() {
+	m.prepareNewFileModal(false)
+}
+
+func (m *Model) openSaveAsModal() {
+	m.prepareNewFileModal(true)
+}
+
+func (m *Model) prepareNewFileModal(fromSave bool) {
 	m.showNewFileModal = true
 	m.newFileError = ""
 	m.newFileExtIndex = 0
@@ -22,6 +30,7 @@ func (m *Model) openNewFileModal() {
 	m.showHelp = false
 	m.showEnvSelector = false
 	m.closeOpenModal()
+	m.newFileFromSave = fromSave
 }
 
 func (m *Model) closeNewFileModal() {
@@ -29,6 +38,7 @@ func (m *Model) closeNewFileModal() {
 	m.newFileError = ""
 	m.newFileInput.Blur()
 	m.newFileInput.SetValue("")
+	m.newFileFromSave = false
 }
 
 func (m *Model) cycleNewFileExtension(delta int) {
@@ -93,11 +103,17 @@ func (m *Model) submitNewFile() tea.Cmd {
 		return nil
 	}
 
-	if err := os.WriteFile(finalPath, []byte(""), 0o644); err != nil {
+	content := []byte("")
+	if m.newFileFromSave {
+		content = []byte(m.editor.Value())
+	}
+
+	if err := os.WriteFile(finalPath, content, 0o644); err != nil {
 		m.newFileError = fmt.Sprintf("create file: %v", err)
 		return nil
 	}
 
+	fromSave := m.newFileFromSave
 	m.closeNewFileModal()
 	entries, err := filesvc.ListRequestFiles(m.workspaceRoot, m.workspaceRecursive)
 	if err != nil {
@@ -109,6 +125,10 @@ func (m *Model) submitNewFile() tea.Cmd {
 	m.selectFileByPath(finalPath)
 	m.setFocus(focusEditor)
 	cmd := m.openFile(finalPath)
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Created %s", filepath.Base(finalPath)), level: statusSuccess})
+	label := "Created"
+	if fromSave {
+		label = "Saved"
+	}
+	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s %s", label, filepath.Base(finalPath)), level: statusSuccess})
 	return cmd
 }

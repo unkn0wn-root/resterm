@@ -150,6 +150,7 @@ type Model struct {
 	newFileInput          textinput.Model
 	newFileExtIndex       int
 	newFileError          string
+	newFileFromSave       bool
 	openPathInput         textinput.Model
 	openPathError         string
 
