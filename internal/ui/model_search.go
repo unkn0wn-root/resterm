@@ -15,6 +15,7 @@ func (m *Model) openSearchPrompt() tea.Cmd {
 	m.closeNewFileModal()
 	m.closeOpenModal()
 	m.showSearchPrompt = true
+	m.searchJustOpened = true
 	m.searchIsRegex = m.editor.search.isRegex
 	if strings.TrimSpace(m.searchInput.Value()) == "" {
 		m.searchInput.SetValue(m.editor.search.query)
@@ -28,6 +29,7 @@ func (m *Model) closeSearchPrompt() {
 		return
 	}
 	m.showSearchPrompt = false
+	m.searchJustOpened = false
 	m.searchInput.Blur()
 }
 

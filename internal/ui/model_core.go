@@ -103,6 +103,7 @@ type Model struct {
 	showSearchPrompt bool
 	searchInput      textinput.Model
 	searchIsRegex    bool
+	searchJustOpened bool
 
 	statusMessage    statusMsg
 	statusPulseBase  string

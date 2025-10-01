@@ -121,6 +121,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showSearchPrompt {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if m.searchJustOpened {
+				m.searchJustOpened = false
+				switch keyMsg.String() {
+				case "shift+f", "F":
+					return m, nil
+				}
+			}
 			switch keyMsg.String() {
 			case "esc":
 				m.closeSearchPrompt()
