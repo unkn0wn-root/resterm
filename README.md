@@ -19,6 +19,9 @@
 - **Session persistence.** Cookie jar, history store, and environment-aware entries survive restarts; `@no-log` can redact bodies.
 - **Configurable transport.** Flag-driven timeout, TLS, redirect, and proxy settings alongside environment file discovery (`resterm.env.json` or legacy `rest-client.env.json`).
 
+> [!WARNING]
+> Resterm is still in early stages so bugs and undesired behaviors can be expected.
+
 ## Request File Structure
 
 Resterm reads plain-text `.http`/`.rest` files. Each request follows the same conventions so the editor, parser, and history can reason about it consistently.
