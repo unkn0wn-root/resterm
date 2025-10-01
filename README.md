@@ -10,7 +10,7 @@
 
 ## Features
 - **Workspace explorer.** Filters `.http`/`.rest` files, respects workspace roots, and keeps the file pane navigable with incremental search.
-- **Editor with modal workflow.** Starts in view mode, supports Vim-style motions, visual selections with inline highlighting, clipboard yank/cut, and an `i` / `Esc` toggle for insert mode.
+- **Editor with modal workflow.** Starts in view mode, supports Vim-style motions, visual selections with inline highlighting, clipboard yank/cut, `Shift+F` search, and an `i` / `Esc` toggle for insert mode.
 - **Status-aware response pane.** Pill-style header calls out workspace, environment, active request, and script/test outcomes; response tabs cover Pretty, Raw, Headers, and History, plus request previews.
 - **Auth & variable helpers.** `@auth` directives cover basic, bearer, API key, and custom headers; variable resolution spans request, file, environment, and OS layers with helpers like `{{$timestamp}}` and `{{$uuid}}`.
 - **Pre-request & test scripting.** JavaScript (goja) hooks mutate outgoing requests, assert on responses, and surface pass/fail summaries inline.
@@ -85,6 +85,16 @@ By default `resterm` scans the opened file’s directory (or the current working
 | Replay highlighted history entry | `Enter` (History tab) |
 | Quit | `Ctrl+Q` (`Ctrl+D` also works) |
 
+#### Editor motions & search
+- `h`, `j`, `k`, `l` - move left/down/up/right
+- `w`, `b`, `e` - jump by words (`e` lands on word ends)
+- `0`, `$`, `^` - start/end/first non-blank of line
+- `gg`, `G` - top/bottom of buffer
+- `Ctrl+f` / `Ctrl+b` - page down/up (`Ctrl+d` / `Ctrl+u` half-page)
+- `v`, `y` - visual select, yank selection
+- `Shift+F` - open search prompt; `Ctrl+R` toggles regex while open
+- `n` - jump to the next match (wraps around)
+
 ### CLI Flags
 - `--file`: path to a `.http`/`.rest` file to open.
 - `--workspace`: directory to scan for request files.
@@ -147,6 +157,12 @@ query FetchUser($id: ID!) {
 
 `resterm` packages this as `{ "query": ..., "variables": ... }` for POST requests (or as query parameters for GET), sets `Content-Type: application/json` when needed, and preserves the query/variables layout in previews and history.
 
+**GraphQL metadata**
+- `@graphql [true|false]` - enable (default) or turn off GraphQL processing for the request.
+- `@operation <name>` (alias: `@graphql-operation`) - populate the `operationName` field.
+- `@variables [< file.json]` - start a variables block. Lines following the directive are treated as JSON until another directive is encountered; use `< file.json` to load from disk.
+- `@query < file.graphql>` - optional helper if you prefer to load the main query from a file instead of inlining it.
+
 ### gRPC
 
 Switch a request into gRPC mode by starting the request line with `GRPC host:port` and declaring the method using `@grpc <package.Service>/<Method>`. Optionally provide a compiled descriptor set (`@grpc-descriptor descriptors/service.protoset`) or rely on server reflection (`@grpc-reflection true`, the default). The request body should contain protobuf JSON for the request message, or use `< payload.json` to load from disk. Example:
@@ -162,6 +178,14 @@ GRPC localhost:50051
 ```
 
 Headers and `@grpc-metadata key: value` directives attach gRPC metadata. `resterm` resolves templates before invoking the call, displays headers/trailers and the JSON response, and records each invocation in history with the gRPC status code.
+
+**gRPC metadata**
+- `@grpc <package.Service>/<Method>` - specify the fully-qualified method name (package optional).
+- `@grpc-descriptor <path>` - path to a compiled descriptor set (`protoc --descriptor_set_out`).
+- `@grpc-reflection [true|false]` - toggle server reflection (default `true`).
+- `@grpc-plaintext [true|false]` - override TLS usage for the channel.
+- `@grpc-authority <value>` - set the :authority pseudo-header for HTTP/2.
+- `@grpc-metadata <key>: <value>` - add unary call metadata (repeat for multiple entries).
 
 Inline, request-, and file-level variables resolve against the selected environment file (`resterm.env.json` or `rest-client.env.json`), then fall back to OS environment variables.
 
