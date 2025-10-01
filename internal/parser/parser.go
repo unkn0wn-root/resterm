@@ -54,6 +54,8 @@ type requestBuilder struct {
 	variables         []restfile.Variable
 	originalLines     []string
 	currentScriptKind string
+	scriptBufferKind  string
+	scriptBuffer      []string
 	settings          map[string]string
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
@@ -66,6 +68,10 @@ func newDocumentBuilder(doc *restfile.Document) *documentBuilder {
 
 func (b *documentBuilder) processLine(lineNumber int, line string) {
 	trimmed := strings.TrimSpace(line)
+
+	if b.inRequest && b.request != nil && !strings.HasPrefix(trimmed, ">") {
+		b.request.flushPendingScript()
+	}
 
 	if b.inBlock {
 		content, closed := parseBlockCommentLine(trimmed, false)
@@ -103,7 +109,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if strings.HasPrefix(trimmed, ">") {
-		b.handleScript(lineNumber, strings.TrimSpace(strings.TrimPrefix(line, ">")))
+		b.handleScript(lineNumber, line)
 		b.appendLine(line)
 		return
 	}
@@ -308,19 +314,27 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	}
 }
 
-func (b *documentBuilder) handleScript(line int, body string) {
+func (b *documentBuilder) handleScript(line int, rawLine string) {
 	if !b.ensureRequest(line) {
 		return
 	}
+
+	stripped := strings.TrimLeft(rawLine, " \t")
+	if !strings.HasPrefix(stripped, ">") {
+		return
+	}
+	body := strings.TrimPrefix(stripped, ">")
+	if len(body) > 0 {
+		if body[0] == ' ' || body[0] == '\t' {
+			body = body[1:]
+		}
+	}
+	body = strings.TrimRight(body, " \t")
 	kind := b.request.currentScriptKind
 	if kind == "" {
 		kind = "test"
 	}
-	body = strings.TrimSpace(body)
-	if strings.HasPrefix(body, "{") && strings.HasSuffix(body, "}") {
-		body = strings.TrimSpace(body)
-	}
-	b.request.metadata.Scripts = append(b.request.metadata.Scripts, restfile.ScriptBlock{Kind: kind, Body: body})
+	b.request.appendScriptLine(kind, body)
 }
 
 func parseAuthSpec(rest string) *restfile.AuthSpec {
@@ -382,6 +396,31 @@ func contains(list []string, value string) bool {
 	return false
 }
 
+func (r *requestBuilder) appendScriptLine(kind, body string) {
+	kind = strings.ToLower(strings.TrimSpace(kind))
+	if kind == "" {
+		kind = "test"
+	}
+
+	if r.scriptBufferKind != "" && !strings.EqualFold(r.scriptBufferKind, kind) {
+		r.flushPendingScript()
+	}
+	if r.scriptBufferKind == "" {
+		r.scriptBufferKind = kind
+	}
+	r.scriptBuffer = append(r.scriptBuffer, body)
+}
+
+func (r *requestBuilder) flushPendingScript() {
+	if len(r.scriptBuffer) == 0 {
+		return
+	}
+	script := strings.Join(r.scriptBuffer, "\n")
+	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: r.scriptBufferKind, Body: script})
+	r.scriptBuffer = nil
+	r.scriptBufferKind = ""
+}
+
 func (b *documentBuilder) handleBodyLine(line string) {
 	if b.request.graphql.HandleBodyLine(line) {
 		return
@@ -437,6 +476,8 @@ func (b *documentBuilder) flushRequest(_ int) {
 		return
 	}
 
+	b.request.flushPendingScript()
+
 	req := b.request.build()
 	if req.Method != "" && req.URL != "" {
 		b.doc.Requests = append(b.doc.Requests, req)
@@ -453,6 +494,8 @@ func (b *documentBuilder) finish() {
 }
 
 func (r *requestBuilder) build() *restfile.Request {
+	r.flushPendingScript()
+
 	req := &restfile.Request{
 		Metadata:     r.metadata,
 		Method:       r.http.Method(),
