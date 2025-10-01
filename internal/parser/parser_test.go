@@ -50,6 +50,49 @@ GET https://example.com/api
 	}
 }
 
+func TestParseMultiLineScripts(t *testing.T) {
+	src := `# @name Scripted
+# @script pre-request
+> const token = vars.get("token");
+> request.setHeader("X-Debug", token);
+
+# @script test
+> tests["status"] = () => {
+>   tests.assert(response.statusCode === 200, "status code");
+> };
+GET https://example.com/api
+`
+
+	doc := Parse("scripted.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 2 {
+		t.Fatalf("expected 2 script blocks, got %d", len(req.Metadata.Scripts))
+	}
+	pre := req.Metadata.Scripts[0]
+	if pre.Kind != "pre-request" {
+		t.Fatalf("expected pre-request script, got %s", pre.Kind)
+	}
+	expectedPre := "const token = vars.get(\"token\");\nrequest.setHeader(\"X-Debug\", token);"
+	if pre.Body != expectedPre {
+		t.Fatalf("unexpected pre-request script body: %q", pre.Body)
+	}
+	testBlock := req.Metadata.Scripts[1]
+	if testBlock.Kind != "test" {
+		t.Fatalf("expected test script, got %s", testBlock.Kind)
+	}
+	if strings.Count(testBlock.Body, "\n") != 2 {
+		t.Fatalf("expected multi-line script body, got %q", testBlock.Body)
+	}
+	for _, fragment := range []string{"tests[\"status\"] = () => {", "tests.assert(response.statusCode === 200, \"status code\");", "};"} {
+		if !strings.Contains(testBlock.Body, fragment) {
+			t.Fatalf("expected test script body to contain %q, got %q", fragment, testBlock.Body)
+		}
+	}
+}
+
 func TestParseBlockComments(t *testing.T) {
 	src := `/**
  * @name Blocked
