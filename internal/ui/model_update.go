@@ -186,15 +186,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	} else {
 		switch m.focus {
 		case focusFile:
-			var fileCmd tea.Cmd
-			m.fileList, fileCmd = m.fileList.Update(msg)
-			cmds = append(cmds, fileCmd)
+			if m.suppressListKey {
+				m.suppressListKey = false
+			} else {
+				var fileCmd tea.Cmd
+				m.fileList, fileCmd = m.fileList.Update(msg)
+				cmds = append(cmds, fileCmd)
+			}
 		case focusRequests:
-			var reqCmd tea.Cmd
-			prevReqIndex := m.requestList.Index()
-			m.requestList, reqCmd = m.requestList.Update(msg)
-			m.syncEditorWithRequestSelection(prevReqIndex)
-			cmds = append(cmds, reqCmd)
+			if m.suppressListKey {
+				m.suppressListKey = false
+			} else {
+				var reqCmd tea.Cmd
+				prevReqIndex := m.requestList.Index()
+				m.requestList, reqCmd = m.requestList.Update(msg)
+				m.syncEditorWithRequestSelection(prevReqIndex)
+				cmds = append(cmds, reqCmd)
+			}
 		}
 	}
 
@@ -290,22 +298,74 @@ func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
+	return m.handleKeyWithChord(msg, true)
+}
+
+func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	keyStr := msg.String()
+	var prefixCmd tea.Cmd
+	combine := func(c tea.Cmd) tea.Cmd {
+		if prefixCmd == nil {
+			return c
+		}
+		if c == nil {
+			return prefixCmd
+		}
+		return tea.Batch(prefixCmd, c)
+	}
+
+	if m.focus != focusFile && m.focus != focusRequests {
+		m.suppressListKey = false
+	}
+
+	if allowChord {
+		if !m.hasPendingChord && m.repeatChordActive {
+			if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, keyStr); handled {
+				m.suppressListKey = true
+				return combine(chordCmd)
+			}
+			m.repeatChordActive = false
+			m.repeatChordPrefix = ""
+		}
+		if m.hasPendingChord {
+			storedMsg := m.pendingChordMsg
+			prefix := m.pendingChord
+			m.pendingChord = ""
+			m.hasPendingChord = false
+			m.pendingChordMsg = tea.KeyMsg{}
+			if handled, chordCmd := m.resolveChord(prefix, keyStr); handled {
+				m.suppressListKey = true
+				return combine(chordCmd)
+			}
+			prefixCmd = m.handleKeyWithChord(storedMsg, false)
+			m.suppressListKey = true
+			allowChord = false
+			keyStr = msg.String()
+		} else if m.canStartChord(msg, keyStr) {
+			m.repeatChordActive = false
+			m.repeatChordPrefix = ""
+			m.pendingChord = keyStr
+			m.pendingChordMsg = msg
+			m.hasPendingChord = true
+			m.suppressListKey = true
+			return combine(nil)
+		}
+	}
 
 	if m.showHelp && !m.helpJustOpened {
 		switch keyStr {
 		case "ctrl+q", "ctrl+d":
-			return tea.Quit
+			return combine(tea.Quit)
 		case "esc", "?", "shift+/":
 			m.showHelp = false
 			m.helpJustOpened = false
 		}
-		return nil
+		return combine(nil)
 	}
 
 	if isSpaceKey(msg) && m.canPreviewOnSpace() {
 		if cmd := m.sendRequestFromList(false); cmd != nil {
-			return cmd
+			return combine(cmd)
 		}
 	}
 
@@ -316,47 +376,39 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 		if prev == focusEditor || m.focus == focusEditor {
 			m.suppressEditorKey = true
 		}
-		return nil
+		return combine(nil)
 	case "shift+tab":
 		prev := m.focus
 		m.cycleFocus(false)
 		if prev == focusEditor || m.focus == focusEditor {
 			m.suppressEditorKey = true
 		}
-		return nil
+		return combine(nil)
 	case "ctrl+e":
 		if len(m.cfg.EnvironmentSet) == 0 {
-			return func() tea.Msg {
+			return combine(func() tea.Msg {
 				return statusMsg{text: "No environments configured", level: statusWarn}
-			}
+			})
 		}
 		m.openEnvironmentSelector()
-		return nil
+		return combine(nil)
 	case "ctrl+s":
-		return m.saveFile()
+		return combine(m.saveFile())
 	case "?", "shift+/":
 		m.toggleHelp()
-		return nil
+		return combine(nil)
 	case "ctrl+o":
 		m.openOpenModal()
-		return nil
+		return combine(nil)
 	case "ctrl+shift+o", "shift+ctrl+o":
-		return m.reloadWorkspace()
+		return combine(m.reloadWorkspace())
 	case "ctrl+n":
 		m.openNewFileModal()
-		return nil
+		return combine(nil)
 	case "ctrl+r":
-		return m.reparseDocument()
-	case "ctrl+up", "ctrl+shift+up", "shift+ctrl+up", "alt+up":
-		if changed, cmd := m.adjustSidebarSplit(sidebarSplitStep); changed {
-			return cmd
-		}
-	case "ctrl+down", "ctrl+shift+down", "shift+ctrl+down", "alt+down":
-		if changed, cmd := m.adjustSidebarSplit(-sidebarSplitStep); changed {
-			return cmd
-		}
+		return combine(m.reparseDocument())
 	case "ctrl+q", "ctrl+d":
-		return tea.Quit
+		return combine(tea.Quit)
 	case "h":
 		if m.allowPaneFocusShortcut() {
 			prev := m.focus
@@ -364,7 +416,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			if prev == focusEditor || m.focus == focusEditor {
 				m.suppressEditorKey = true
 			}
-			return nil
+			return combine(nil)
 		}
 	case "l":
 		if m.allowPaneFocusShortcut() {
@@ -373,7 +425,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			if prev == focusEditor || m.focus == focusEditor {
 				m.suppressEditorKey = true
 			}
-			return nil
+			return combine(nil)
 		}
 	case "j":
 		if m.focus == focusFile && m.fileList.FilterState() != list.Filtering {
@@ -381,7 +433,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			idx := m.fileList.Index()
 			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
 				m.setFocus(focusRequests)
-				return nil
+				return combine(nil)
 			}
 		}
 	case "k":
@@ -390,7 +442,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			idx := m.requestList.Index()
 			if len(items) == 0 || idx <= 0 {
 				m.setFocus(focusFile)
-				return nil
+				return combine(nil)
 			}
 		}
 	}
@@ -401,48 +453,48 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 			case "shift+f", "F":
 				cmd := m.openSearchPrompt()
 				m.suppressEditorKey = true
-				return cmd
+				return combine(cmd)
 			case "n":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.NextSearchMatch()
 				m.suppressEditorKey = true
-				return cmd
+				return combine(cmd)
 			case "i":
 				m.setInsertMode(true, true)
 				m.suppressEditorKey = true
-				return nil
+				return combine(nil)
 			case "esc":
 				m.editor.ClearSelection()
 				m.suppressEditorKey = true
-				return nil
+				return combine(nil)
 			case "v":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.ToggleVisual()
 				m.suppressEditorKey = true
-				return cmd
+				return combine(cmd)
 			case "y":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.YankSelection()
 				m.suppressEditorKey = true
-				return cmd
+				return combine(cmd)
 			}
 			if updated, cmd, ok := m.editor.HandleMotion(keyStr); ok {
 				m.editor = updated
 				m.suppressEditorKey = true
-				return cmd
+				return combine(cmd)
 			}
 		} else {
 			switch keyStr {
 			case "esc":
 				m.setInsertMode(false, true)
 				m.suppressEditorKey = true
-				return nil
+				return combine(nil)
 			}
 		}
 		if shouldSendEditorRequest(msg, m.editorInsertMode) {
 			if !m.sending {
 				m.suppressEditorKey = true
-				return m.sendActiveRequest()
+				return combine(m.sendActiveRequest())
 			}
 		}
 		if m.editorInsertMode {
@@ -459,39 +511,111 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 	if m.focus == focusFile {
 		switch keyStr {
 		case "enter":
-			return m.openSelectedFile()
+			return combine(m.openSelectedFile())
 		}
 	}
 
 	if m.focus == focusRequests {
 		switch {
 		case keyStr == "enter":
-			return m.sendRequestFromList(true)
+			return combine(m.sendRequestFromList(true))
 		case isSpaceKey(msg):
-			return m.sendRequestFromList(false)
+			return combine(m.sendRequestFromList(false))
 		}
 	}
 
 	if m.focus == focusResponse {
 		switch keyStr {
 		case "left", "ctrl+h":
-			return m.activatePrevTab()
+			return combine(m.activatePrevTab())
 		case "right", "ctrl+l":
-			return m.activateNextTab()
+			return combine(m.activateNextTab())
 		case "j":
 			if m.activeTab != responseTabHistory {
-				return m.activateNextTab()
+				return combine(m.activateNextTab())
 			}
 		case "k":
 			if m.activeTab != responseTabHistory {
-				return m.activatePrevTab()
+				return combine(m.activatePrevTab())
 			}
 		case "enter":
 			if m.activeTab == responseTabHistory {
-				return m.replayHistorySelection()
+				return combine(m.replayHistorySelection())
 			}
 		}
 	}
 
+	if m.focus != focusFile && m.focus != focusRequests {
+		m.suppressListKey = false
+	}
+
+	return combine(nil)
+}
+
+func (m *Model) canStartChord(msg tea.KeyMsg, keyStr string) bool {
+	if keyStr != "g" {
+		return false
+	}
+	if m.focus == focusEditor && m.editorInsertMode {
+		return false
+	}
+	if msg.Type != tea.KeyRunes {
+		return false
+	}
+	return true
+}
+
+func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
+	switch prefix {
+	case "g":
+		switch next {
+		case "h":
+			m.repeatChordPrefix = prefix
+			m.repeatChordActive = true
+			return true, m.runEditorResize(-editorSplitStep)
+		case "l":
+			m.repeatChordPrefix = prefix
+			m.repeatChordActive = true
+			return true, m.runEditorResize(editorSplitStep)
+		case "j":
+			m.repeatChordPrefix = prefix
+			m.repeatChordActive = true
+			return true, m.runSidebarResize(-sidebarSplitStep)
+		case "k":
+			m.repeatChordPrefix = prefix
+			m.repeatChordActive = true
+			return true, m.runSidebarResize(sidebarSplitStep)
+		}
+	}
+	return false, nil
+}
+
+func (m *Model) runEditorResize(delta float64) tea.Cmd {
+	changed, bounded, cmd := m.adjustEditorSplit(delta)
+	if changed {
+		return cmd
+	}
+	if bounded {
+		if delta < 0 {
+			m.setStatusMessage(statusMsg{text: "Editor already at minimum width", level: statusInfo})
+		} else if delta > 0 {
+			m.setStatusMessage(statusMsg{text: "Editor already at maximum width", level: statusInfo})
+		}
+	}
+	return nil
+}
+
+func (m *Model) runSidebarResize(delta float64) tea.Cmd {
+	changed, bounded, cmd := m.adjustSidebarSplit(delta)
+	if changed {
+		return cmd
+	}
+	if bounded {
+		if delta > 0 {
+			m.setStatusMessage(statusMsg{text: "Sidebar already at maximum height", level: statusInfo})
+		} else if delta < 0 {
+			m.setStatusMessage(statusMsg{text: "Sidebar already at minimum height", level: statusInfo})
+		}
+	}
 	return nil
 }

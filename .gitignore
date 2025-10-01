@@ -27,4 +27,4 @@ coverage/
 resterm
 
 # test harness services
-test_services/
+_test_services/

@@ -86,9 +86,12 @@ By default `resterm` scans the opened file’s directory (or the current working
 | Save current file | `Ctrl+S` |
 | Reparse document | `Ctrl+R` |
 | Refresh workspace file list | `Ctrl+O` |
-| Adjust sidebar split | `Ctrl+Up` / `Ctrl+Down` |
+| Adjust files/requests split | `gk` / `gj` |
+| Adjust editor width | `gh` / `gl` |
 | Replay highlighted history entry | `Enter` (History tab) |
 | Quit | `Ctrl+Q` (`Ctrl+D` also works) |
+
+Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another key, so tap any non-resize key when you want to return to normal navigation.
 
 #### Editor motions & search
 - `h`, `j`, `k`, `l` - move left/down/up/right

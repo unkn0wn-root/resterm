@@ -58,6 +58,15 @@ const (
 	sidebarSplitPadding = 3
 )
 
+const (
+	editorSplitDefault   = 0.6
+	editorSplitStep      = 0.05
+	minEditorSplit       = 0.3
+	maxEditorSplit       = 0.70
+	minEditorPaneWidth   = 30
+	minResponsePaneWidth = 30
+)
+
 type Config struct {
 	FilePath        string
 	InitialContent  string
@@ -140,6 +149,13 @@ type Model struct {
 	sidebarSplit          float64
 	sidebarFilesHeight    int
 	sidebarRequestsHeight int
+	editorSplit           float64
+	pendingChord          string
+	pendingChordMsg       tea.KeyMsg
+	hasPendingChord       bool
+	repeatChordPrefix     string
+	repeatChordActive     bool
+	suppressListKey       bool
 	ready                 bool
 	dirty                 bool
 	sending               bool
@@ -286,6 +302,7 @@ func New(cfg Config) Model {
 		activeTab:          responseTabPretty,
 		focus:              focusFile,
 		sidebarSplit:       sidebarSplitDefault,
+		editorSplit:        editorSplitDefault,
 		historyStore:       cfg.History,
 		currentFile:        cfg.FilePath,
 		statusMessage:      initialStatus,

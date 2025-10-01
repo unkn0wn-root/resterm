@@ -14,14 +14,13 @@ func TestAdjustSidebarSplitModifiesHeights(t *testing.T) {
 	model.ready = true
 	_ = model.applyLayout()
 
-	model.focus = focusFile
 	initialFiles := model.sidebarFilesHeight
 	initialRequests := model.sidebarRequestsHeight
 	if initialFiles <= 0 || initialRequests <= 0 {
 		t.Fatalf("expected initial sidebar heights to be positive, got %d and %d", initialFiles, initialRequests)
 	}
 
-	if changed, _ := model.adjustSidebarSplit(sidebarSplitStep); !changed {
+	if changed, _, _ := model.adjustSidebarSplit(sidebarSplitStep); !changed {
 		t.Fatalf("expected sidebar split adjustment to apply")
 	}
 	if model.sidebarFilesHeight <= initialFiles {
@@ -40,21 +39,90 @@ func TestAdjustSidebarSplitClampsBounds(t *testing.T) {
 	model.ready = true
 	_ = model.applyLayout()
 
-	model.focus = focusFile
 	model.sidebarSplit = maxSidebarSplit
-	if changed, _ := model.adjustSidebarSplit(sidebarSplitStep); changed {
+	if changed, bounded, _ := model.adjustSidebarSplit(sidebarSplitStep); changed {
 		t.Fatalf("expected split at max to remain unchanged")
+	} else if !bounded {
+		t.Fatalf("expected upper bound to be reported when at maximum")
 	}
 
-	model.focus = focusRequests
 	model.sidebarSplit = minSidebarSplit
-	if changed, _ := model.adjustSidebarSplit(-sidebarSplitStep); changed {
+	if changed, bounded, _ := model.adjustSidebarSplit(-sidebarSplitStep); changed {
 		t.Fatalf("expected split at min to remain unchanged")
+	} else if !bounded {
+		t.Fatalf("expected lower bound to be reported when at minimum")
 	}
 
+	model.sidebarSplit = sidebarSplitDefault
 	model.focus = focusEditor
-	if changed, _ := model.adjustSidebarSplit(sidebarSplitStep); changed {
-		t.Fatalf("expected adjustment to be ignored outside sidebar focus")
+	if changed, _, _ := model.adjustSidebarSplit(sidebarSplitStep); !changed {
+		t.Fatalf("expected adjustment to apply regardless of focus")
+	}
+}
+
+func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 160
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+
+	initialEditor := model.editor.Width()
+	initialResponse := model.responseViewport.Width
+	if initialEditor <= 0 || initialResponse <= 0 {
+		t.Fatalf("expected initial widths to be positive, got %d and %d", initialEditor, initialResponse)
+	}
+
+	if changed, _, _ := model.adjustEditorSplit(-editorSplitStep); !changed {
+		t.Fatalf("expected editor split decrease to apply")
+	}
+	if model.editor.Width() >= initialEditor {
+		t.Fatalf("expected editor width to shrink, initial %d new %d", initialEditor, model.editor.Width())
+	}
+	if model.responseViewport.Width <= initialResponse {
+		t.Fatalf("expected response width to grow, initial %d new %d", initialResponse, model.responseViewport.Width)
+	}
+
+	if changed, _, _ := model.adjustEditorSplit(editorSplitStep * 2); !changed {
+		t.Fatalf("expected editor split increase to apply")
+	}
+	if model.editor.Width() <= initialEditor {
+		t.Fatalf("expected editor width to exceed original, initial %d new %d", initialEditor, model.editor.Width())
+	}
+	if model.responseViewport.Width >= initialResponse {
+		t.Fatalf("expected response width to shrink, initial %d new %d", initialResponse, model.responseViewport.Width)
+	}
+}
+
+func TestAdjustEditorSplitClampsBounds(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 160
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+
+	model.editorSplit = minEditorSplit
+	_ = model.applyLayout()
+	if changed, bounded, _ := model.adjustEditorSplit(-editorSplitStep); changed {
+		t.Fatalf("expected split at minimum to remain unchanged")
+	} else if !bounded {
+		t.Fatalf("expected lower bound to be reported when at minimum width")
+	}
+
+	model.editorSplit = maxEditorSplit
+	_ = model.applyLayout()
+	if changed, bounded, _ := model.adjustEditorSplit(editorSplitStep); changed {
+		t.Fatalf("expected split at maximum to remain unchanged")
+	} else if !bounded {
+		t.Fatalf("expected upper bound to be reported when at maximum width")
+	}
+
+	model.editorSplit = editorSplitDefault
+	_ = model.applyLayout()
+	if changed, _, _ := model.adjustEditorSplit(editorSplitStep); !changed {
+		t.Fatalf("expected adjustment to apply when within bounds")
 	}
 }
 
