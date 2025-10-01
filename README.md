@@ -137,7 +137,7 @@ Environment files are simple JSON maps keyed by environment name, for example:
   - `@auth Authorization <value>` (custom header)
 - `@setting <key> <value>` - per-request overrides. Recognised keys (`timeout`, `proxy`, `followredirects`, `insecure`), and `@timeout <duration>` is accepted as a shorthand.
 - `@no-log` - skip storing the response body snippet for that request in history.
-- `@script <kind>` followed by lines beginning with `>` - executes JavaScript either as `pre-request` (mutate method/url/headers/body/variables) or `test` blocks whose assertions appear in the UI and history.
+- `@script <kind>` followed by lines beginning with `>` - executes JavaScript either as `pre-request` (mutate method/url/headers/body/variables) or `test` blocks whose assertions appear in the UI and history. Use `> < ./path/to/file.js` to load a script from disk (paths resolve relative to the request file unless absolute).
 
 ### GraphQL
 

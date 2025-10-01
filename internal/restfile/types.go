@@ -31,6 +31,7 @@ type AuthSpec struct {
 type ScriptBlock struct {
 	Kind string
 	Body string
+	FilePath string
 }
 
 type BodySource struct {
