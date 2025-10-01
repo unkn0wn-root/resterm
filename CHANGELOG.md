@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.6](https://github.com/unkn0wn-root/resterm/compare/v0.0.5...v0.0.6) (2025-10-01)
+
+
+### Features
+
+* allow loading [@script](https://github.com/script) blocks from external files ([9e9ff60](https://github.com/unkn0wn-root/resterm/commit/9e9ff60390b46bb9c850fd91e4c3bca94fc9d220))
+
 ### [0.0.5](https://github.com/unkn0wn-root/resterm/compare/v0.0.4...v0.0.5) (2025-10-01)
 
 ### [0.0.4](https://github.com/unkn0wn-root/resterm/compare/v0.0.3...v0.0.4) (2025-10-01)
