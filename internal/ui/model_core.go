@@ -289,7 +289,7 @@ func New(cfg Config) Model {
 		historyStore:       cfg.History,
 		currentFile:        cfg.FilePath,
 		statusMessage:      initialStatus,
-		scriptRunner:       scripts.NewRunner(),
+		scriptRunner:       scripts.NewRunner(nil),
 		editorInsertMode:   false,
 		editorWriteKeyMap:  writeKeyMap,
 		editorViewKeyMap:   viewKeyMap,

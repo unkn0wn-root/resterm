@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -14,15 +15,21 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-type Runner struct{}
+type Runner struct {
+	fs httpclient.FileSystem
+}
 
-func NewRunner() *Runner {
-	return &Runner{}
+func NewRunner(fs httpclient.FileSystem) *Runner {
+	if fs == nil {
+		fs = httpclient.OSFileSystem{}
+	}
+	return &Runner{fs: fs}
 }
 
 type PreRequestInput struct {
 	Request   *restfile.Request
 	Variables map[string]string
+	BaseDir   string
 }
 
 type PreRequestOutput struct {
@@ -37,6 +44,7 @@ type PreRequestOutput struct {
 type TestInput struct {
 	Response  *httpclient.Response
 	Variables map[string]string
+	BaseDir   string
 }
 
 type TestResult struct {
@@ -57,7 +65,10 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 		if strings.ToLower(block.Kind) != "pre-request" {
 			continue
 		}
-		script := normalizeScript(block.Body)
+		script, err := r.loadScript(block, input.BaseDir)
+		if err != nil {
+			return result, errdef.Wrap(errdef.CodeScript, err, "pre-request script %d", idx+1)
+		}
 		if script == "" {
 			continue
 		}
@@ -86,7 +97,10 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
 			continue
 		}
-		script := normalizeScript(block.Body)
+		script, err := r.loadScript(block, input.BaseDir)
+		if err != nil {
+			return aggregated, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
+		}
 		if script == "" {
 			continue
 		}
@@ -151,6 +165,22 @@ func normalizeScript(body string) string {
 	}
 
 	return script
+}
+
+func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string, error) {
+	if strings.TrimSpace(block.FilePath) == "" {
+		return normalizeScript(block.Body), nil
+	}
+
+	path := block.FilePath
+	if !filepath.IsAbs(path) && baseDir != "" {
+		path = filepath.Join(baseDir, path)
+	}
+	data, err := r.fs.ReadFile(path)
+	if err != nil {
+		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read script file %s", path)
+	}
+	return normalizeScript(string(data)), nil
 }
 
 type preRequestAPI struct {

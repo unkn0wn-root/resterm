@@ -2,6 +2,8 @@ package scripts
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,7 +12,7 @@ import (
 )
 
 func TestRunPreRequestScripts(t *testing.T) {
-	runner := NewRunner()
+	runner := NewRunner(nil)
 	req := &restfile.Request{
 		Method: "GET",
 		URL:    "https://example.com/api",
@@ -38,8 +40,58 @@ func TestRunPreRequestScripts(t *testing.T) {
 	}
 }
 
+func TestRunScriptsFromFile(t *testing.T) {
+	dir := t.TempDir()
+	preScript := "request.setHeader(\"X-File\", \"1\");\nvars.set(\"fromFile\", \"yes\");"
+	if err := os.WriteFile(filepath.Join(dir, "pre.js"), []byte(preScript), 0o600); err != nil {
+		t.Fatalf("write pre script: %v", err)
+	}
+	testScript := `client.test("file status", function () {
+	  tests.assert(response.statusCode === 201, "status code");
+});
+client.test("vars carried", function () {
+	  tests.assert(vars.get("fromFile") === "yes", "vars should be visible");
+});`
+	if err := os.WriteFile(filepath.Join(dir, "test.js"), []byte(testScript), 0o600); err != nil {
+		t.Fatalf("write test script: %v", err)
+	}
+
+	runner := NewRunner(nil)
+	req := &restfile.Request{Method: "POST", URL: "https://example.com/api"}
+	preBlocks := []restfile.ScriptBlock{{Kind: "pre-request", FilePath: "pre.js"}}
+	preResult, err := runner.RunPreRequest(preBlocks, PreRequestInput{Request: req, Variables: map[string]string{}, BaseDir: dir})
+	if err != nil {
+		t.Fatalf("pre-request file script: %v", err)
+	}
+	if preResult.Headers.Get("X-File") != "1" {
+		t.Fatalf("expected header from file script")
+	}
+	if preResult.Variables["fromFile"] != "yes" {
+		t.Fatalf("expected variable from file script")
+	}
+
+	response := &httpclient.Response{
+		Status:     "201 Created",
+		StatusCode: 201,
+		Body:       []byte(`{"ok":true}`),
+	}
+	testBlocks := []restfile.ScriptBlock{{Kind: "test", FilePath: "test.js"}}
+	results, err := runner.RunTests(testBlocks, TestInput{Response: response, Variables: preResult.Variables, BaseDir: dir})
+	if err != nil {
+		t.Fatalf("test file script: %v", err)
+	}
+	if len(results) != 4 {
+		t.Fatalf("expected four results, got %d", len(results))
+	}
+	for _, res := range results {
+		if !res.Passed {
+			t.Fatalf("expected results to pass: %+v", results)
+		}
+	}
+}
+
 func TestRunTestsScripts(t *testing.T) {
-	runner := NewRunner()
+	runner := NewRunner(nil)
 	response := &httpclient.Response{
 		Status:       "200 OK",
 		StatusCode:   200,
