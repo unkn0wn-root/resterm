@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.3](https://github.com/unkn0wn-root/resterm/compare/v0.0.2...v0.0.3) (2025-10-01)
+
+
+### Bug Fixes
+
+* disable motions in insert mode ([7fd8985](https://github.com/unkn0wn-root/resterm/commit/7fd8985fd995741dabb0d657b289f0a5cf5208b0))
+* inline request sending ([bde3f1f](https://github.com/unkn0wn-root/resterm/commit/bde3f1fc5b27486471cef25e6573cbe8ce1722cf))
+
 ### 0.0.2 (2025-10-01)
 
 
