@@ -180,6 +180,23 @@ func TestRequestEditorMotionPaging(t *testing.T) {
 	}
 }
 
+func TestRequestEditorMotionsDisabled(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetMotionsEnabled(false)
+
+	msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}
+	editor, _ = editor.Update(msg)
+	if got := editor.Value(); got != "e" {
+		t.Fatalf("expected rune to insert when motions disabled; got %q", got)
+	}
+
+	_, _, handled := editor.HandleMotion("G")
+	if handled {
+		t.Fatal("expected motion handler to ignore commands when disabled")
+	}
+}
+
 func TestRequestEditorApplySearchLiteral(t *testing.T) {
 	content := "one\ntwo\nthree two"
 	editor := newTestEditor(content)

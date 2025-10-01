@@ -76,6 +76,7 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 	}
 	m.editorInsertMode = enabled
 	if enabled {
+		m.editor.SetMotionsEnabled(false)
 		m.editor.KeyMap = m.editorWriteKeyMap
 		m.editor.Cursor.SetMode(cursor.CursorBlink)
 		m.editor.Cursor.Blink = true
@@ -84,6 +85,7 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 		}
 	} else {
 		m.editor.ClearSelection()
+		m.editor.SetMotionsEnabled(true)
 		m.editor.KeyMap = m.editorViewKeyMap
 		m.editor.Cursor.SetMode(cursor.CursorStatic)
 		m.editor.Cursor.Blink = false

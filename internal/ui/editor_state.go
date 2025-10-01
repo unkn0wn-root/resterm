@@ -83,6 +83,7 @@ type requestEditor struct {
 	mode          selectionMode
 	pendingMotion string
 	search        editorSearch
+	motionsEnabled bool
 }
 
 type searchMatch struct {
@@ -100,7 +101,14 @@ type editorSearch struct {
 
 func newRequestEditor() requestEditor {
 	ta := textarea.New()
-	return requestEditor{Model: ta}
+	return requestEditor{Model: ta, motionsEnabled: true}
+}
+
+func (e *requestEditor) SetMotionsEnabled(enabled bool) {
+	e.motionsEnabled = enabled
+	if !enabled {
+		e.pendingMotion = ""
+	}
 }
 
 type selectionMode int
@@ -202,6 +210,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			handled = true
 		}
 	case "gg":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -210,6 +221,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "G":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -218,6 +232,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "^":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -226,6 +243,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "e":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -234,6 +254,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "ctrl+f":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -242,6 +265,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "ctrl+b":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -250,6 +276,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "ctrl+d":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -258,6 +287,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "ctrl+u":
+		if !e.motionsEnabled {
+			break
+		}
 		handled = true
 		if e.mode != selectionVisual {
 			e.clearSelection()
@@ -346,6 +378,9 @@ func (e requestEditor) YankSelection() (requestEditor, tea.Cmd) {
 }
 
 func (e requestEditor) HandleMotion(command string) (requestEditor, tea.Cmd, bool) {
+	if !e.motionsEnabled {
+		return e, nil, false
+	}
 	if e.pendingMotion == "g" {
 		if command == "g" {
 			e.pendingMotion = ""
