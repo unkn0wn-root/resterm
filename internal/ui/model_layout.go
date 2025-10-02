@@ -25,24 +25,59 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.sidebarSplit = sidebarSplitDefault
 	}
 
+	if m.editorSplit <= 0 {
+		m.editorSplit = editorSplitDefault
+	}
+
+	if m.editorSplit < minEditorSplit {
+		m.editorSplit = minEditorSplit
+	}
+
+	if m.editorSplit > maxEditorSplit {
+		m.editorSplit = maxEditorSplit
+	}
+
 	fileWidth := m.width / 5
 	if fileWidth < 20 {
 		fileWidth = 20
 	}
 
 	remaining := m.width - fileWidth
-	if remaining < 40 {
-		remaining = 40
+	minimumRemaining := minEditorPaneWidth + minResponsePaneWidth
+	if remaining < minimumRemaining {
+		remaining = minimumRemaining
 	}
 
-	editorWidth := remaining * 3 / 5
-	if editorWidth < 30 {
-		editorWidth = 30
+	desiredEditor := int(math.Round(float64(remaining) * m.editorSplit))
+	if desiredEditor < minEditorPaneWidth {
+		desiredEditor = minEditorPaneWidth
+	}
+
+	maxEditor := remaining - minResponsePaneWidth
+	if desiredEditor > maxEditor {
+		desiredEditor = maxEditor
+	}
+
+	editorWidth := desiredEditor
+	if editorWidth < minEditorPaneWidth {
+		editorWidth = minEditorPaneWidth
 	}
 
 	responseWidth := remaining - editorWidth
-	if responseWidth < 30 {
-		responseWidth = 30
+	if responseWidth < minResponsePaneWidth {
+		responseWidth = minResponsePaneWidth
+		editorWidth = remaining - responseWidth
+		if editorWidth < minEditorPaneWidth {
+			editorWidth = minEditorPaneWidth
+		}
+	}
+
+	if editorWidth < 1 {
+		editorWidth = 1
+	}
+
+	if responseWidth < 1 {
+		responseWidth = 1
 	}
 
 	available := paneHeight - sidebarSplitPadding
@@ -105,13 +140,24 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.sidebarSplit = ratio
 	}
 
+	if remaining > 0 {
+		realEditorRatio := float64(editorWidth) / float64(remaining)
+		if realEditorRatio < minEditorSplit {
+			realEditorRatio = minEditorSplit
+		}
+		if realEditorRatio > maxEditorSplit {
+			realEditorRatio = maxEditorSplit
+		}
+		m.editorSplit = realEditorRatio
+	}
+
 	m.fileList.SetSize(fileWidth-4, maxInt(filesHeight-2, 1))
 	m.requestList.SetSize(fileWidth-4, maxInt(requestsHeight-2, 1))
-	m.editor.SetWidth(editorWidth - 4)
+	m.editor.SetWidth(maxInt(editorWidth-4, 1))
 	m.editor.SetHeight(paneHeight - 2)
-	m.responseViewport.Width = responseWidth - 4
+	m.responseViewport.Width = maxInt(responseWidth-4, 1)
 	m.responseViewport.Height = paneHeight - 4
-	m.historyList.SetSize(responseWidth-4, paneHeight-4)
+	m.historyList.SetSize(maxInt(responseWidth-4, 1), maxInt(paneHeight-4, 1))
 	if len(m.envList.Items()) > 0 {
 		envWidth := minInt(40, m.width-6)
 		if envWidth < 20 {
@@ -126,13 +172,9 @@ func (m *Model) applyLayout() tea.Cmd {
 	return m.syncResponseContent()
 }
 
-func (m *Model) adjustSidebarSplit(delta float64) (bool, tea.Cmd) {
-	if m.focus != focusFile && m.focus != focusRequests {
-		return false, nil
-	}
-
+func (m *Model) adjustSidebarSplit(delta float64) (bool, bool, tea.Cmd) {
 	if !m.ready || m.height <= 0 {
-		return false, nil
+		return false, false, nil
 	}
 
 	current := m.sidebarSplit
@@ -141,18 +183,63 @@ func (m *Model) adjustSidebarSplit(delta float64) (bool, tea.Cmd) {
 	}
 
 	updated := current + delta
+	bounded := false
 	if updated < minSidebarSplit {
 		updated = minSidebarSplit
+		bounded = true
 	}
 
 	if updated > maxSidebarSplit {
 		updated = maxSidebarSplit
+		bounded = true
 	}
 
 	if math.Abs(updated-current) < 1e-6 {
-		return false, nil
+		return false, bounded, nil
 	}
 
 	m.sidebarSplit = updated
-	return true, m.applyLayout()
+	return true, bounded, m.applyLayout()
+}
+
+func (m *Model) adjustEditorSplit(delta float64) (bool, bool, tea.Cmd) {
+	if !m.ready || m.width <= 0 {
+		return false, false, nil
+	}
+
+	current := m.editorSplit
+	if current <= 0 {
+		current = editorSplitDefault
+	}
+
+	prevSplit := current
+	updated := current + delta
+	bounded := false
+	if updated < minEditorSplit {
+		updated = minEditorSplit
+		bounded = true
+	}
+	if updated > maxEditorSplit {
+		updated = maxEditorSplit
+		bounded = true
+	}
+
+	if math.Abs(updated-current) < 1e-6 {
+		return false, bounded, nil
+	}
+
+	prevEditorWidth := m.editor.Width()
+	prevResponseWidth := m.responseViewport.Width
+	m.editorSplit = updated
+	cmd := m.applyLayout()
+
+	newSplit := m.editorSplit
+	newEditorWidth := m.editor.Width()
+	newResponseWidth := m.responseViewport.Width
+	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newEditorWidth != prevEditorWidth || newResponseWidth != prevResponseWidth
+	if !changed {
+		return false, true, cmd
+	}
+
+	return true, bounded, cmd
 }
