@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.7](https://github.com/unkn0wn-root/resterm/compare/v0.0.5...v0.0.7) (2025-10-02)
+
+
+### Features
+
+* add delete to be able to mark and delete section ([4766ff8](https://github.com/unkn0wn-root/resterm/commit/4766ff8e5fccabcb25d406d4a2a89d0009801c18))
+* add undo to deleted buffer ([f600fea](https://github.com/unkn0wn-root/resterm/commit/f600fea8eedfa4c5632cb3b6867c386ad7172682))
+* allow loading script blocks from external files ([1d33d6a](https://github.com/unkn0wn-root/resterm/commit/1d33d6ac52d588bdf947f2056416bba3b8a01017))
+* respect the current viewport so we don't move editor to deleted line ([b5e11c1](https://github.com/unkn0wn-root/resterm/commit/b5e11c15fae62460c525f02e23cfd78a05fd5073))
+* **ui:** add repeatable pane resizing chords and new "g" mode for resizing ([c261653](https://github.com/unkn0wn-root/resterm/commit/c26165306861bbab30b1a18a9889661b36e1c3d8))
+
 ### [0.0.6](https://github.com/unkn0wn-root/resterm/compare/v0.0.5...v0.0.6) (2025-10-01)
 
 
