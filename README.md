@@ -84,7 +84,7 @@ By default `resterm` scans the opened file’s directory (or the current working
 | Toggle help overlay | `?` |
 | Open environment selector | `Ctrl+E` |
 | Save current file | `Ctrl+S` |
-| Reparse document | `Ctrl+R` |
+| Reparse document | `Ctrl+T` |
 | Refresh workspace file list | `Ctrl+O` |
 | Adjust files/requests split | `gk` / `gj` |
 | Adjust editor width | `gh` / `gl` |
@@ -99,8 +99,12 @@ Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another
 - `0`, `$`, `^` - start/end/first non-blank of line
 - `gg`, `G` - top/bottom of buffer
 - `Ctrl+f` / `Ctrl+b` - page down/up (`Ctrl+d` / `Ctrl+u` half-page)
-- `v`, `y`, `d` - visual select, yank selection, delete selection
+- `v`, `V`, `y`, `d` - visual select, visual line select, yank selection, delete via current selection or motion (`dw`, `db`, `dk`, `dgg`, `dG`, etc.)
 - `u` - undo last edit
+- `Ctrl+r` - redo previously undone edit
+- `dd`, `D`, `x`, `c`, `a` - delete line, delete to end of line, delete character, change line, append after cursor (enter insert mode)
+- `p`, `P` - paste after/before cursor
+- `f`, `t`, `T` - find character (forward / forward before target / backward before target)
 - `Shift+F` - open search prompt; `Ctrl+R` toggles regex while open
 - `n` - jump to the next match (wraps around)
 

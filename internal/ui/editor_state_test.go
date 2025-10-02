@@ -6,6 +6,7 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -345,6 +346,243 @@ func TestUndoRestoresViewStart(t *testing.T) {
 	editor, _ = editor.UndoLastChange()
 	if got := editor.ViewStart(); got != 30 {
 		t.Fatalf("expected undo to restore view start 30, got %d", got)
+	}
+}
+
+func TestRedoRestoresUndoneChange(t *testing.T) {
+	editor := newTestEditor("abc")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 1)
+
+	editor, _ = editor.DeleteCharAtCursor()
+	if got := editor.Value(); got != "ac" {
+		t.Fatalf("expected middle char removed, got %q", got)
+	}
+	editor, _ = editor.UndoLastChange()
+	if got := editor.Value(); got != "abc" {
+		t.Fatalf("expected undo to restore text, got %q", got)
+	}
+	editor, cmd := editor.RedoLastChange()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Redid last change" {
+		t.Fatalf("expected redo status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "ac" {
+		t.Fatalf("expected redo to reapply deletion, got %q", got)
+	}
+}
+
+func TestDeleteCurrentLineRemovesLine(t *testing.T) {
+	editor := newTestEditor("alpha\nbeta\ncharlie")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	before := editor.Value()
+	editor, cmd := editor.DeleteCurrentLine()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Deleted line" {
+		t.Fatalf("expected line deletion status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got == before || got != "beta\ncharlie" {
+		t.Fatalf("expected first line removed, got %q", got)
+	}
+}
+
+func TestDeleteToLineEndRemovesTail(t *testing.T) {
+	editor := newTestEditor("alpha beta\nsecond")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 6)
+
+	editor, cmd := editor.DeleteToLineEnd()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Deleted to end of line" {
+		t.Fatalf("expected delete tail status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "alpha \nsecond" {
+		t.Fatalf("expected tail removed, got %q", got)
+	}
+}
+
+func TestDeleteCharAtCursorRemovesRune(t *testing.T) {
+	editor := newTestEditor("xyz")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 1)
+
+	editor, cmd := editor.DeleteCharAtCursor()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Deleted character" {
+		t.Fatalf("expected char deletion status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "xz" {
+		t.Fatalf("expected middle character removed, got %q", got)
+	}
+}
+
+func TestChangeCurrentLineClearsContent(t *testing.T) {
+	editor := newTestEditor("alpha\nbeta")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 0)
+
+	editor, cmd := editor.ChangeCurrentLine()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Changed line" {
+		t.Fatalf("expected change line status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "alpha\n" {
+		t.Fatalf("expected second line cleared, got %q", got)
+	}
+}
+
+func TestPasteClipboardInsertsAfterCursor(t *testing.T) {
+	if err := clipboard.WriteAll("ZZ"); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("abc")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 1)
+
+	editor, cmd := editor.PasteClipboard(true)
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Pasted" {
+		t.Fatalf("expected paste status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "abZZc" {
+		t.Fatalf("expected clipboard pasted after character, got %q", got)
+	}
+}
+
+func TestPasteClipboardLinewisePreservesFollowingLine(t *testing.T) {
+	if err := clipboard.WriteAll(""); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("first\nsecond\nthird")
+	editor.registerText = "alpha\n"
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.PasteClipboard(true)
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil || evt.status.text != "Pasted" {
+		t.Fatalf("expected paste status, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "first\nalpha\nsecond\nthird" {
+		t.Fatalf("expected linewise paste to preserve following line, got %q", got)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 1 {
+		t.Fatalf("expected cursor to land on inserted line, got line %d", pos.Line)
+	}
+	if pos.Column != 0 {
+		t.Fatalf("expected cursor at column 0 of inserted line, got column %d", pos.Column)
+	}
+}
+
+func TestPasteClipboardLinewiseRepeatedKeepsOrder(t *testing.T) {
+	editor := newTestEditor("second\nthird")
+	editorPtr := &editor
+
+	// Prime the register with a linewise yank (simulating `dd`).
+	editor.registerText = "first\n"
+
+	editorPtr.moveCursorTo(0, 0)
+	editor, _ = editor.PasteClipboard(true)
+	if got := editor.Value(); got != "second\nfirst\nthird" {
+		t.Fatalf("unexpected value after first paste: %q", got)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 1 || pos.Column != 0 {
+		t.Fatalf("expected cursor on inserted line after first paste, got line %d col %d", pos.Line, pos.Column)
+	}
+
+	editor, _ = editor.PasteClipboard(true)
+	if got := editor.Value(); got != "second\nfirst\nfirst\nthird" {
+		t.Fatalf("unexpected value after second paste: %q", got)
+	}
+	pos = editor.caretPosition()
+	if pos.Line != 2 || pos.Column != 0 {
+		t.Fatalf("expected cursor on latest inserted line, got line %d col %d", pos.Line, pos.Column)
+	}
+}
+
+func TestPasteClipboardLinewiseCRLF(t *testing.T) {
+	if err := clipboard.WriteAll(""); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("first\nsecond")
+	editor.registerText = "alpha\r\n"
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, _ = editor.PasteClipboard(true)
+	if got := editor.Value(); got != "first\nalpha\nsecond" {
+		t.Fatalf("unexpected value after CRLF paste: %q", got)
+	}
+}
+
+func TestPasteClipboardCROnly(t *testing.T) {
+	if err := clipboard.WriteAll(""); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("first\nsecond")
+	editor.registerText = "alpha\r"
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, _ = editor.PasteClipboard(true)
+	if got := editor.Value(); got != "first\nalpha\nsecond" {
+		t.Fatalf("unexpected value after CR paste: %q", got)
+	}
+}
+
+func TestHandleMotionFindForward(t *testing.T) {
+	editor := newTestEditor("alphabet")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	updated, _, handled := editor.HandleMotion("f")
+	if !handled {
+		t.Fatalf("expected f to be handled")
+	}
+	updated, cmd, handled := updated.HandleMotion("b")
+	if !handled {
+		t.Fatalf("expected second motion key to be handled")
+	}
+	if cmd != nil {
+		if evt := cmd(); evt != nil {
+			if e, ok := evt.(editorEvent); ok && e.status != nil {
+				t.Fatalf("did not expect status on successful find, got %+v", e.status)
+			}
+		}
+	}
+	pos := updated.caretPosition()
+	if pos.Column != 5 {
+		t.Fatalf("expected cursor at column 5 (b), got %d", pos.Column)
+	}
+}
+
+func TestHandleMotionFindBackwardTill(t *testing.T) {
+	editor := newTestEditor("alphabet")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 6)
+
+	updated, _, handled := editor.HandleMotion("T")
+	if !handled {
+		t.Fatalf("expected T to be handled")
+	}
+	updated, cmd, handled := updated.HandleMotion("l")
+	if !handled {
+		t.Fatalf("expected target key to be handled")
+	}
+	if cmd != nil {
+		if evt := cmd(); evt != nil {
+			if e, ok := evt.(editorEvent); ok && e.status != nil {
+				t.Fatalf("did not expect warning on successful find, got %+v", e.status)
+			}
+		}
+	}
+	pos := updated.caretPosition()
+	if pos.Column != 2 {
+		t.Fatalf("expected cursor just after found char (column 2), got %d", pos.Column)
 	}
 }
 

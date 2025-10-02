@@ -82,6 +82,13 @@ type Config struct {
 	Recursive       bool
 }
 
+type operatorState struct {
+	active     bool
+	operator   string
+	anchor     cursorPosition
+	motionKeys []string
+}
+
 type Model struct {
 	cfg                Config
 	theme              theme.Theme
@@ -155,6 +162,7 @@ type Model struct {
 	hasPendingChord       bool
 	repeatChordPrefix     string
 	repeatChordActive     bool
+	operator              operatorState
 	suppressListKey       bool
 	ready                 bool
 	dirty                 bool
@@ -230,6 +238,7 @@ func New(cfg Config) Model {
 	editor := newRequestEditor()
 	editor.Placeholder = "Write HTTP requests here..."
 	editor.SetValue(cfg.InitialContent)
+	editor.moveToBufferTop()
 	editor.ShowLineNumbers = true
 	writeKeyMap := editor.KeyMap
 	viewKeyMap := makeReadOnlyKeyMap(editor.KeyMap)

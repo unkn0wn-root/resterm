@@ -93,4 +93,5 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 			m.setStatusMessage(statusMsg{text: "View mode", level: statusInfo})
 		}
 	}
+	m.editor.undoCoalescing = false
 }

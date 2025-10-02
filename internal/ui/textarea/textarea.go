@@ -30,7 +30,7 @@ const (
 	defaultHeight    = 6
 	defaultWidth     = 40
 	defaultCharLimit = 0 // no limit
-	defaultMaxHeight = 99
+	defaultMaxHeight = 0
 	defaultMaxWidth  = 500
 
 	// XXX: in v2, make max lines dynamic and default max lines configurable.
@@ -922,6 +922,15 @@ func (m *Model) SetViewStart(offset int) {
 	if m.viewport == nil {
 		return
 	}
+	// Ensure the viewport has up-to-date content before applying the offset so
+	// that the y-offset clamps against the real scroll bounds. Without this the
+	// viewport may believe it has zero lines, causing any non-zero offset to be
+	// clamped back to zero.
+	//
+	// Calling View() is enough to refresh the viewport's internal line buffer.
+	// We ignore the rendered output here because we only need the side effect of
+	// populating the viewport state used for clamping.
+	_ = m.View()
 	m.viewport.SetYOffset(offset)
 }
 
@@ -1361,9 +1370,24 @@ func (m Model) renderSelectionSegments(
 // formatLineNumber formats the line number for display dynamically based on
 // the maximum number of lines.
 func (m Model) formatLineNumber(x any) string {
-	// XXX: ultimately we should use a max buffer height, which has yet to be
-	// implemented.
-	digits := len(strconv.Itoa(m.MaxHeight))
+	maxLine := len(m.value)
+	if maxLine < 1 {
+		maxLine = 1
+	}
+	if m.height > maxLine {
+		maxLine = m.height
+	}
+	if v, ok := x.(int); ok && v > maxLine {
+		maxLine = v
+	} else if s, ok := x.(string); ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(s)); err == nil && n > maxLine {
+			maxLine = n
+		}
+	}
+	digits := len(strconv.Itoa(maxLine))
+	if digits < 2 {
+		digits = 2
+	}
 	return fmt.Sprintf(" %*v ", digits, x)
 }
 
