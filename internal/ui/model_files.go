@@ -34,7 +34,9 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.setInsertMode(false, false)
 	m.editor.ClearSelection()
 	m.editor.SetValue(string(data))
-	m.editor.SetCursor(0)
+	m.editor.undoStack = nil
+	m.editor.SetViewStart(0)
+	m.editor.moveCursorTo(0, 0)
 	m.editor.ClearSelection()
 	m.doc = parser.Parse(path, data)
 	m.syncRequestList(m.doc)

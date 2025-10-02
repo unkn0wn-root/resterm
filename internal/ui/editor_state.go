@@ -79,11 +79,22 @@ func toEditorEventCmd(evt editorEvent) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
-	selection     selectionState
-	mode          selectionMode
-	pendingMotion string
-	search        editorSearch
+	selection      selectionState
+	mode           selectionMode
+	pendingMotion  string
+	search         editorSearch
 	motionsEnabled bool
+	undoStack      []editorSnapshot
+}
+
+const editorUndoLimit = 64
+
+type editorSnapshot struct {
+	value     string
+	cursor    cursorPosition
+	selection selectionState
+	mode      selectionMode
+	viewStart int
 }
 
 type searchMatch struct {
@@ -108,6 +119,28 @@ func (e *requestEditor) SetMotionsEnabled(enabled bool) {
 	e.motionsEnabled = enabled
 	if !enabled {
 		e.pendingMotion = ""
+	}
+}
+
+func (e requestEditor) ViewStart() int {
+	return e.Model.ViewStart()
+}
+
+func (e *requestEditor) SetViewStart(offset int) {
+	e.Model.SetViewStart(offset)
+}
+
+func (e *requestEditor) pushUndoSnapshot() {
+	snapshot := editorSnapshot{
+		value:     e.Value(),
+		cursor:    e.caretPosition(),
+		selection: e.selection,
+		mode:      e.mode,
+		viewStart: e.ViewStart(),
+	}
+	e.undoStack = append(e.undoStack, snapshot)
+	if len(e.undoStack) > editorUndoLimit {
+		e.undoStack = e.undoStack[1:]
 	}
 }
 
@@ -377,6 +410,35 @@ func (e requestEditor) YankSelection() (requestEditor, tea.Cmd) {
 	return e, cmd
 }
 
+func (e requestEditor) DeleteSelection() (requestEditor, tea.Cmd) {
+	text := e.selectedText()
+	if text == "" {
+		return e, toEditorEventCmd(editorEvent{status: &statusMsg{text: "No selection to delete", level: statusWarn}})
+	}
+	if e.removeSelection() {
+		status := statusMsg{text: "Selection deleted", level: statusInfo}
+		return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	}
+	return e, nil
+}
+
+func (e requestEditor) UndoLastChange() (requestEditor, tea.Cmd) {
+	if len(e.undoStack) == 0 {
+		return e, toEditorEventCmd(editorEvent{status: &statusMsg{text: "Nothing to undo", level: statusInfo}})
+	}
+	last := e.undoStack[len(e.undoStack)-1]
+	e.undoStack = e.undoStack[:len(e.undoStack)-1]
+	e.SetValue(last.value)
+	e.moveCursorTo(last.cursor.Line, last.cursor.Column)
+	e.selection = last.selection
+	e.mode = last.mode
+	e.pendingMotion = ""
+	e.applySelectionHighlight()
+	e.Model.SetViewStart(last.viewStart)
+	status := statusMsg{text: "Undid last change", level: statusInfo}
+	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+}
+
 func (e requestEditor) HandleMotion(command string) (requestEditor, tea.Cmd, bool) {
 	if !e.motionsEnabled {
 		return e, nil, false
@@ -571,6 +633,10 @@ func (e *requestEditor) removeSelection() bool {
 		return false
 	}
 
+	prevView := e.Model.ViewStart()
+
+	e.pushUndoSnapshot()
+
 	runes := []rune(e.Value())
 	if start.Offset < 0 {
 		start.Offset = 0
@@ -589,6 +655,7 @@ func (e *requestEditor) removeSelection() bool {
 	e.clearSelection()
 	e.moveCursorTo(start.Line, start.Column)
 	e.applySelectionHighlight()
+	e.Model.SetViewStart(prevView)
 	return true
 }
 

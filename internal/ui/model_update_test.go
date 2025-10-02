@@ -202,3 +202,126 @@ func TestChordFallbackMaintainsEditorMotions(t *testing.T) {
 		t.Fatalf("expected repeat chord state to be cleared after fallback")
 	}
 }
+
+func TestHandleKeyDDeletesSelection(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 120
+	model.height = 40
+	model.ready = true
+	model.setFocus(focusEditor)
+	model.setInsertMode(false, false)
+	model.editor.SetValue("alpha")
+
+	editorPtr := &model.editor
+	editorPtr.moveCursorTo(0, 0)
+	start := model.editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd == nil {
+		t.Fatalf("expected delete selection to emit command")
+	}
+	if got := model.editor.Value(); got != "" {
+		t.Fatalf("expected selection to be removed, got %q", got)
+	}
+	if model.editor.hasSelection() {
+		t.Fatal("expected selection to be cleared after delete")
+	}
+}
+
+func TestHandleKeyDWithoutSelectionShowsStatus(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 120
+	model.height = 40
+	model.ready = true
+	model.setFocus(focusEditor)
+	model.setInsertMode(false, false)
+	model.editor.SetValue("alpha")
+
+	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if cmd == nil {
+		t.Fatalf("expected command when deleting without selection")
+	}
+	msg := cmd()
+	evt, ok := msg.(editorEvent)
+	if !ok {
+		t.Fatalf("expected editorEvent, got %T", msg)
+	}
+	if evt.dirty {
+		t.Fatalf("expected dirty to remain false when nothing deleted")
+	}
+	if evt.status == nil || evt.status.text != "No selection to delete" {
+		t.Fatalf("expected warning status, got %+v", evt.status)
+	}
+	if got := model.editor.Value(); got != "alpha" {
+		t.Fatalf("expected content to remain unchanged, got %q", got)
+	}
+}
+
+func TestHandleKeyUUdoesUndo(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 120
+	model.height = 40
+	model.ready = true
+	model.setFocus(focusEditor)
+	model.setInsertMode(false, false)
+	model.editor.SetValue("alpha")
+
+	editorPtr := &model.editor
+	editorPtr.moveCursorTo(0, 0)
+	start := model.editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if got := model.editor.Value(); got != "" {
+		t.Fatalf("expected deletion to clear content, got %q", got)
+	}
+	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd == nil {
+		t.Fatalf("expected undo command")
+	}
+	msg := cmd()
+	evt, ok := msg.(editorEvent)
+	if !ok {
+		t.Fatalf("expected editorEvent, got %T", msg)
+	}
+	if evt.status == nil || evt.status.text != "Undid last change" {
+		t.Fatalf("expected undo status, got %+v", evt.status)
+	}
+	if got := model.editor.Value(); got != "alpha" {
+		t.Fatalf("expected undo to restore content, got %q", got)
+	}
+}
+
+func TestHandleKeyUWithoutHistoryShowsStatus(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 120
+	model.height = 40
+	model.ready = true
+	model.setFocus(focusEditor)
+	model.setInsertMode(false, false)
+	model.editor.SetValue("alpha")
+
+	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
+	if cmd == nil {
+		t.Fatalf("expected undo command")
+	}
+	msg := cmd()
+	evt, ok := msg.(editorEvent)
+	if !ok {
+		t.Fatalf("expected editorEvent, got %T", msg)
+	}
+	if evt.status == nil || evt.status.text != "Nothing to undo" {
+		t.Fatalf("expected no-history status, got %+v", evt.status)
+	}
+	if evt.dirty {
+		t.Fatalf("expected dirty to remain false when no undo")
+	}
+	if got := model.editor.Value(); got != "alpha" {
+		t.Fatalf("expected content unchanged, got %q", got)
+	}
+}

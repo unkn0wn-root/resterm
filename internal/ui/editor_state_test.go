@@ -46,6 +46,22 @@ func statusFromCmd(t *testing.T, cmd tea.Cmd) *statusMsg {
 	return evt.status
 }
 
+func editorEventFromCmd(t *testing.T, cmd tea.Cmd) editorEvent {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected command to emit editorEvent")
+	}
+	msg := cmd()
+	if msg == nil {
+		t.Fatal("expected editorEvent message, got nil")
+	}
+	evt, ok := msg.(editorEvent)
+	if !ok {
+		t.Fatalf("expected editorEvent, got %T", msg)
+	}
+	return evt
+}
+
 func TestRequestEditorMotionGG(t *testing.T) {
 	content := "  first\nsecond\nthird"
 	editor := newTestEditor(content)
@@ -194,6 +210,141 @@ func TestRequestEditorMotionsDisabled(t *testing.T) {
 	_, _, handled := editor.HandleMotion("G")
 	if handled {
 		t.Fatal("expected motion handler to ignore commands when disabled")
+	}
+}
+
+func TestRequestEditorDeleteSelectionRemovesText(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	updated, cmd := editor.DeleteSelection()
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatalf("expected delete selection to mark editor dirty")
+	}
+	if evt.status == nil || evt.status.text != "Selection deleted" {
+		t.Fatalf("expected delete status message, got %+v", evt.status)
+	}
+	if got := updated.Value(); got != "" {
+		t.Fatalf("expected selection to be removed, got %q", got)
+	}
+	if updated.hasSelection() {
+		t.Fatal("expected selection to be cleared")
+	}
+}
+
+func TestRequestEditorDeleteSelectionRequiresSelection(t *testing.T) {
+	editor := newTestEditor("alpha")
+	updated, cmd := editor.DeleteSelection()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.dirty {
+		t.Fatalf("expected no dirty flag when nothing deleted")
+	}
+	if evt.status == nil || evt.status.text != "No selection to delete" {
+		t.Fatalf("expected warning about missing selection, got %+v", evt.status)
+	}
+	if got := updated.Value(); got != "alpha" {
+		t.Fatalf("expected content to remain unchanged, got %q", got)
+	}
+}
+
+func TestRequestEditorUndoRestoresDeletion(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	editor, _ = editor.DeleteSelection()
+	editor, cmd := editor.UndoLastChange()
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatalf("expected undo to mark editor dirty")
+	}
+	if evt.status == nil || evt.status.text != "Undid last change" {
+		t.Fatalf("expected undo status message, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "alpha" {
+		t.Fatalf("expected undo to restore content, got %q", got)
+	}
+	if !editor.selection.IsActive() {
+		t.Fatalf("expected selection to be restored")
+	}
+}
+
+func TestRequestEditorUndoWhenEmpty(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editor, cmd := editor.UndoLastChange()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.dirty {
+		t.Fatalf("expected no dirty flag when nothing to undo")
+	}
+	if evt.status == nil || evt.status.text != "Nothing to undo" {
+		t.Fatalf("expected no-undo status message, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "alpha" {
+		t.Fatalf("expected content unchanged, got %q", got)
+	}
+}
+
+func TestDeleteSelectionPreservesViewStart(t *testing.T) {
+	var lines []string
+	for i := 0; i < 120; i++ {
+		lines = append(lines, fmt.Sprintf("line %03d", i))
+	}
+	content := strings.Join(lines, "\n")
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.SetHeight(8)
+	editorPtr.SetViewStart(40)
+	if got := editor.ViewStart(); got != 40 {
+		t.Fatalf("expected view start 40, got %d", got)
+	}
+
+	editorPtr.moveCursorTo(60, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	offset := editor.offsetForPosition(61, 0)
+	editorPtr.selection.Update(cursorPosition{Line: 61, Column: 0, Offset: offset})
+	editorPtr.applySelectionHighlight()
+
+	_, _ = editor.DeleteSelection()
+	if got := editor.ViewStart(); got != 40 {
+		t.Fatalf("expected view start to remain 40, got %d", got)
+	}
+}
+
+func TestUndoRestoresViewStart(t *testing.T) {
+	var lines []string
+	for i := 0; i < 120; i++ {
+		lines = append(lines, fmt.Sprintf("line %03d", i))
+	}
+	content := strings.Join(lines, "\n")
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.SetHeight(8)
+	editorPtr.SetViewStart(30)
+
+	editorPtr.moveCursorTo(45, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 46, Column: 0, Offset: editor.offsetForPosition(46, 0)})
+	editorPtr.applySelectionHighlight()
+
+	editor, _ = editor.DeleteSelection()
+	if got := editor.ViewStart(); got != 30 {
+		t.Fatalf("expected delete to preserve view start, got %d", got)
+	}
+	editor, _ = editor.UndoLastChange()
+	if got := editor.ViewStart(); got != 30 {
+		t.Fatalf("expected undo to restore view start 30, got %d", got)
 	}
 }
 

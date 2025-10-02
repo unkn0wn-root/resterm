@@ -909,6 +909,22 @@ func (m *Model) SetSelectionStyle(style lipgloss.Style) {
 	m.selectionStyle = style
 }
 
+// ViewStart returns the index of the first visible line in the viewport.
+func (m Model) ViewStart() int {
+	if m.viewport == nil {
+		return 0
+	}
+	return m.viewport.YOffset
+}
+
+// SetViewStart updates the viewport so that the line at offset becomes the first visible line.
+func (m *Model) SetViewStart(offset int) {
+	if m.viewport == nil {
+		return
+	}
+	m.viewport.SetYOffset(offset)
+}
+
 // repositionView repositions the view of the viewport based on the defined
 // scrolling behavior.
 func (m *Model) repositionView() {
