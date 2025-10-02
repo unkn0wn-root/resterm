@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.0.8](https://github.com/unkn0wn-root/resterm/compare/v0.0.7...v0.0.8) (2025-10-02)
+
+
+### Bug Fixes
+
+* set the textarea viewport to refresh itself before clamping the scroll offset so non-zero view starts survive even when the viewport hasn’t rendered yet ([adccf37](https://github.com/unkn0wn-root/resterm/commit/adccf37972e202ee1868d7c152392c40360309e2))
+
 ### [0.0.7](https://github.com/unkn0wn-root/resterm/compare/v0.0.5...v0.0.7) (2025-10-02)
 
 
