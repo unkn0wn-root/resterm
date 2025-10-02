@@ -409,24 +409,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		return combine(m.reparseDocument())
 	case "ctrl+q", "ctrl+d":
 		return combine(tea.Quit)
-	case "h":
-		if m.allowPaneFocusShortcut() {
-			prev := m.focus
-			m.cycleFocus(false)
-			if prev == focusEditor || m.focus == focusEditor {
-				m.suppressEditorKey = true
-			}
-			return combine(nil)
-		}
-	case "l":
-		if m.allowPaneFocusShortcut() {
-			prev := m.focus
-			m.cycleFocus(true)
-			if prev == focusEditor || m.focus == focusEditor {
-				m.suppressEditorKey = true
-			}
-			return combine(nil)
-		}
 	case "j":
 		if m.focus == focusFile && m.fileList.FilterState() != list.Filtering {
 			items := m.fileList.Items()
@@ -526,9 +508,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 
 	if m.focus == focusResponse {
 		switch keyStr {
-		case "left", "ctrl+h":
+		case "left", "ctrl+h", "h":
 			return combine(m.activatePrevTab())
-		case "right", "ctrl+l":
+		case "right", "ctrl+l", "l":
 			return combine(m.activateNextTab())
 		case "j":
 			if m.activeTab != responseTabHistory {
