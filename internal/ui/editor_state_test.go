@@ -294,6 +294,60 @@ func TestRequestEditorUndoWhenEmpty(t *testing.T) {
 	}
 }
 
+func TestDeleteSelectionPreservesViewStart(t *testing.T) {
+	var lines []string
+	for i := 0; i < 120; i++ {
+		lines = append(lines, fmt.Sprintf("line %03d", i))
+	}
+	content := strings.Join(lines, "\n")
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.SetHeight(8)
+	editorPtr.SetViewStart(40)
+	if got := editor.ViewStart(); got != 40 {
+		t.Fatalf("expected view start 40, got %d", got)
+	}
+
+	editorPtr.moveCursorTo(60, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	offset := editor.offsetForPosition(61, 0)
+	editorPtr.selection.Update(cursorPosition{Line: 61, Column: 0, Offset: offset})
+	editorPtr.applySelectionHighlight()
+
+	_, _ = editor.DeleteSelection()
+	if got := editor.ViewStart(); got != 40 {
+		t.Fatalf("expected view start to remain 40, got %d", got)
+	}
+}
+
+func TestUndoRestoresViewStart(t *testing.T) {
+	var lines []string
+	for i := 0; i < 120; i++ {
+		lines = append(lines, fmt.Sprintf("line %03d", i))
+	}
+	content := strings.Join(lines, "\n")
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.SetHeight(8)
+	editorPtr.SetViewStart(30)
+
+	editorPtr.moveCursorTo(45, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 46, Column: 0, Offset: editor.offsetForPosition(46, 0)})
+	editorPtr.applySelectionHighlight()
+
+	editor, _ = editor.DeleteSelection()
+	if got := editor.ViewStart(); got != 30 {
+		t.Fatalf("expected delete to preserve view start, got %d", got)
+	}
+	editor, _ = editor.UndoLastChange()
+	if got := editor.ViewStart(); got != 30 {
+		t.Fatalf("expected undo to restore view start 30, got %d", got)
+	}
+}
+
 func TestRequestEditorApplySearchLiteral(t *testing.T) {
 	content := "one\ntwo\nthree two"
 	editor := newTestEditor(content)

@@ -94,6 +94,7 @@ type editorSnapshot struct {
 	cursor    cursorPosition
 	selection selectionState
 	mode      selectionMode
+	viewStart int
 }
 
 type searchMatch struct {
@@ -127,6 +128,7 @@ func (e *requestEditor) pushUndoSnapshot() {
 		cursor:    e.caretPosition(),
 		selection: e.selection,
 		mode:      e.mode,
+		viewStart: e.Model.ViewStart(),
 	}
 	e.undoStack = append(e.undoStack, snapshot)
 	if len(e.undoStack) > editorUndoLimit {
@@ -424,6 +426,7 @@ func (e requestEditor) UndoLastChange() (requestEditor, tea.Cmd) {
 	e.mode = last.mode
 	e.pendingMotion = ""
 	e.applySelectionHighlight()
+	e.Model.SetViewStart(last.viewStart)
 	status := statusMsg{text: "Undid last change", level: statusInfo}
 	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
 }
@@ -622,6 +625,8 @@ func (e *requestEditor) removeSelection() bool {
 		return false
 	}
 
+	prevView := e.Model.ViewStart()
+
 	e.pushUndoSnapshot()
 
 	runes := []rune(e.Value())
@@ -642,6 +647,7 @@ func (e *requestEditor) removeSelection() bool {
 	e.clearSelection()
 	e.moveCursorTo(start.Line, start.Column)
 	e.applySelectionHighlight()
+	e.Model.SetViewStart(prevView)
 	return true
 }
 
