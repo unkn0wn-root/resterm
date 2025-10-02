@@ -122,13 +122,21 @@ func (e *requestEditor) SetMotionsEnabled(enabled bool) {
 	}
 }
 
+func (e requestEditor) ViewStart() int {
+	return e.Model.ViewStart()
+}
+
+func (e *requestEditor) SetViewStart(offset int) {
+	e.Model.SetViewStart(offset)
+}
+
 func (e *requestEditor) pushUndoSnapshot() {
 	snapshot := editorSnapshot{
 		value:     e.Value(),
 		cursor:    e.caretPosition(),
 		selection: e.selection,
 		mode:      e.mode,
-		viewStart: e.Model.ViewStart(),
+		viewStart: e.ViewStart(),
 	}
 	e.undoStack = append(e.undoStack, snapshot)
 	if len(e.undoStack) > editorUndoLimit {
