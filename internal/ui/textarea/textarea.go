@@ -922,6 +922,15 @@ func (m *Model) SetViewStart(offset int) {
 	if m.viewport == nil {
 		return
 	}
+	// Ensure the viewport has up-to-date content before applying the offset so
+	// that the y-offset clamps against the real scroll bounds. Without this the
+	// viewport may believe it has zero lines, causing any non-zero offset to be
+	// clamped back to zero.
+	//
+	// Calling View() is enough to refresh the viewport's internal line buffer.
+	// We ignore the rendered output here because we only need the side effect of
+	// populating the viewport state used for clamping.
+	_ = m.View()
 	m.viewport.SetYOffset(offset)
 }
 
