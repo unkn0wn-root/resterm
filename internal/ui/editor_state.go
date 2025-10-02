@@ -84,6 +84,16 @@ type requestEditor struct {
 	pendingMotion  string
 	search         editorSearch
 	motionsEnabled bool
+	undoStack      []editorSnapshot
+}
+
+const editorUndoLimit = 64
+
+type editorSnapshot struct {
+	value     string
+	cursor    cursorPosition
+	selection selectionState
+	mode      selectionMode
 }
 
 type searchMatch struct {
@@ -108,6 +118,19 @@ func (e *requestEditor) SetMotionsEnabled(enabled bool) {
 	e.motionsEnabled = enabled
 	if !enabled {
 		e.pendingMotion = ""
+	}
+}
+
+func (e *requestEditor) pushUndoSnapshot() {
+	snapshot := editorSnapshot{
+		value:     e.Value(),
+		cursor:    e.caretPosition(),
+		selection: e.selection,
+		mode:      e.mode,
+	}
+	e.undoStack = append(e.undoStack, snapshot)
+	if len(e.undoStack) > editorUndoLimit {
+		e.undoStack = e.undoStack[1:]
 	}
 }
 
@@ -389,6 +412,22 @@ func (e requestEditor) DeleteSelection() (requestEditor, tea.Cmd) {
 	return e, nil
 }
 
+func (e requestEditor) UndoLastChange() (requestEditor, tea.Cmd) {
+	if len(e.undoStack) == 0 {
+		return e, toEditorEventCmd(editorEvent{status: &statusMsg{text: "Nothing to undo", level: statusInfo}})
+	}
+	last := e.undoStack[len(e.undoStack)-1]
+	e.undoStack = e.undoStack[:len(e.undoStack)-1]
+	e.SetValue(last.value)
+	e.moveCursorTo(last.cursor.Line, last.cursor.Column)
+	e.selection = last.selection
+	e.mode = last.mode
+	e.pendingMotion = ""
+	e.applySelectionHighlight()
+	status := statusMsg{text: "Undid last change", level: statusInfo}
+	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+}
+
 func (e requestEditor) HandleMotion(command string) (requestEditor, tea.Cmd, bool) {
 	if !e.motionsEnabled {
 		return e, nil, false
@@ -582,6 +621,8 @@ func (e *requestEditor) removeSelection() bool {
 		e.clearSelection()
 		return false
 	}
+
+	e.pushUndoSnapshot()
 
 	runes := []rune(e.Value())
 	if start.Offset < 0 {

@@ -441,6 +441,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.editor, cmd = m.editor.NextSearchMatch()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			case "u":
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.UndoLastChange()
+				m.suppressEditorKey = true
+				return combine(cmd)
 			case "d":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.DeleteSelection()

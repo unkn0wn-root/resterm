@@ -253,6 +253,47 @@ func TestRequestEditorDeleteSelectionRequiresSelection(t *testing.T) {
 	}
 }
 
+func TestRequestEditorUndoRestoresDeletion(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	editor, _ = editor.DeleteSelection()
+	editor, cmd := editor.UndoLastChange()
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatalf("expected undo to mark editor dirty")
+	}
+	if evt.status == nil || evt.status.text != "Undid last change" {
+		t.Fatalf("expected undo status message, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "alpha" {
+		t.Fatalf("expected undo to restore content, got %q", got)
+	}
+	if !editor.selection.IsActive() {
+		t.Fatalf("expected selection to be restored")
+	}
+}
+
+func TestRequestEditorUndoWhenEmpty(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editor, cmd := editor.UndoLastChange()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.dirty {
+		t.Fatalf("expected no dirty flag when nothing to undo")
+	}
+	if evt.status == nil || evt.status.text != "Nothing to undo" {
+		t.Fatalf("expected no-undo status message, got %+v", evt.status)
+	}
+	if got := editor.Value(); got != "alpha" {
+		t.Fatalf("expected content unchanged, got %q", got)
+	}
+}
+
 func TestRequestEditorApplySearchLiteral(t *testing.T) {
 	content := "one\ntwo\nthree two"
 	editor := newTestEditor(content)

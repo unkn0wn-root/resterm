@@ -100,6 +100,7 @@ Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another
 - `gg`, `G` - top/bottom of buffer
 - `Ctrl+f` / `Ctrl+b` - page down/up (`Ctrl+d` / `Ctrl+u` half-page)
 - `v`, `y`, `d` - visual select, yank selection, delete selection
+- `u` - undo last edit
 - `Shift+F` - open search prompt; `Ctrl+R` toggles regex while open
 - `n` - jump to the next match (wraps around)
 
