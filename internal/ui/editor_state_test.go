@@ -46,6 +46,22 @@ func statusFromCmd(t *testing.T, cmd tea.Cmd) *statusMsg {
 	return evt.status
 }
 
+func editorEventFromCmd(t *testing.T, cmd tea.Cmd) editorEvent {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("expected command to emit editorEvent")
+	}
+	msg := cmd()
+	if msg == nil {
+		t.Fatal("expected editorEvent message, got nil")
+	}
+	evt, ok := msg.(editorEvent)
+	if !ok {
+		t.Fatalf("expected editorEvent, got %T", msg)
+	}
+	return evt
+}
+
 func TestRequestEditorMotionGG(t *testing.T) {
 	content := "  first\nsecond\nthird"
 	editor := newTestEditor(content)
@@ -194,6 +210,46 @@ func TestRequestEditorMotionsDisabled(t *testing.T) {
 	_, _, handled := editor.HandleMotion("G")
 	if handled {
 		t.Fatal("expected motion handler to ignore commands when disabled")
+	}
+}
+
+func TestRequestEditorDeleteSelectionRemovesText(t *testing.T) {
+	editor := newTestEditor("alpha")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	updated, cmd := editor.DeleteSelection()
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatalf("expected delete selection to mark editor dirty")
+	}
+	if evt.status == nil || evt.status.text != "Selection deleted" {
+		t.Fatalf("expected delete status message, got %+v", evt.status)
+	}
+	if got := updated.Value(); got != "" {
+		t.Fatalf("expected selection to be removed, got %q", got)
+	}
+	if updated.hasSelection() {
+		t.Fatal("expected selection to be cleared")
+	}
+}
+
+func TestRequestEditorDeleteSelectionRequiresSelection(t *testing.T) {
+	editor := newTestEditor("alpha")
+	updated, cmd := editor.DeleteSelection()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.dirty {
+		t.Fatalf("expected no dirty flag when nothing deleted")
+	}
+	if evt.status == nil || evt.status.text != "No selection to delete" {
+		t.Fatalf("expected warning about missing selection, got %+v", evt.status)
+	}
+	if got := updated.Value(); got != "alpha" {
+		t.Fatalf("expected content to remain unchanged, got %q", got)
 	}
 }
 

@@ -575,7 +575,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "0 / ^ / $", "Line start / first non-blank / line end"),
 		helpRow(m, "gg / G", "Top / bottom of buffer"),
 		helpRow(m, "Ctrl+f / Ctrl+b", "Page down / up (Ctrl+d / Ctrl+u half-page)"),
-		helpRow(m, "v / y", "Visual select / yank selection"),
+		helpRow(m, "v / y / d", "Visual select / yank / delete selection"),
 		"",
 		m.theme.HeaderTitle.Width(width - 4).Align(lipgloss.Left).Render("Search"),
 		helpRow(m, "Shift+F", "Open search prompt (Ctrl+R toggles regex)"),
