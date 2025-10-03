@@ -31,15 +31,30 @@ func (m Model) View() string {
 	editorPane := m.renderEditorPane()
 	responsePane := m.renderResponsePane()
 
-	panes := lipgloss.JoinHorizontal(lipgloss.Top, filePane, editorPane, responsePane)
-	body := lipgloss.JoinVertical(lipgloss.Left, m.renderCommandBar(), panes, m.renderStatusBar())
+	panes := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		filePane,
+		editorPane,
+		responsePane,
+	)
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.renderCommandBar(),
+		panes,
+		m.renderStatusBar(),
+	)
 	header := m.renderHeader()
 	base := lipgloss.JoinVertical(lipgloss.Left, header, body)
 	if m.showHelp {
 		return m.renderWithinAppFrame(m.renderHelpOverlay())
 	}
 	if m.showEnvSelector {
-		content := lipgloss.JoinVertical(lipgloss.Left, header, m.renderEnvironmentSelector(), body)
+		content := lipgloss.JoinVertical(
+			lipgloss.Left,
+			header,
+			m.renderEnvironmentSelector(),
+			body,
+		)
 		return m.renderWithinAppFrame(content)
 	}
 	return m.renderWithinAppFrame(base)
@@ -50,12 +65,24 @@ func (m Model) renderWithinAppFrame(content string) string {
 	innerHeight := maxInt(m.height, lipgloss.Height(content))
 
 	if innerWidth > 0 {
-		content = lipgloss.Place(innerWidth, lipgloss.Height(content), lipgloss.Top, lipgloss.Left, content,
-			lipgloss.WithWhitespaceChars(" "))
+		content = lipgloss.Place(
+			innerWidth,
+			lipgloss.Height(content),
+			lipgloss.Top,
+			lipgloss.Left,
+			content,
+			lipgloss.WithWhitespaceChars(" "),
+		)
 	}
 	if innerWidth > 0 && innerHeight > lipgloss.Height(content) {
-		content = lipgloss.Place(innerWidth, innerHeight, lipgloss.Top, lipgloss.Left, content,
-			lipgloss.WithWhitespaceChars(" "))
+		content = lipgloss.Place(
+			innerWidth,
+			innerHeight,
+			lipgloss.Top,
+			lipgloss.Left,
+			content,
+			lipgloss.WithWhitespaceChars(" "),
+		)
 	}
 
 	framed := m.theme.AppFrame.Render(content)
@@ -63,9 +90,16 @@ func (m Model) renderWithinAppFrame(content string) string {
 	frameWidth := maxInt(m.frameWidth, lipgloss.Width(framed))
 	frameHeight := maxInt(m.frameHeight, lipgloss.Height(framed))
 
-	if frameWidth > lipgloss.Width(framed) || frameHeight > lipgloss.Height(framed) {
-		framed = lipgloss.Place(frameWidth, frameHeight, lipgloss.Top, lipgloss.Left, framed,
-			lipgloss.WithWhitespaceChars(" "))
+	if frameWidth > lipgloss.Width(framed) ||
+		frameHeight > lipgloss.Height(framed) {
+		framed = lipgloss.Place(
+			frameWidth,
+			frameHeight,
+			lipgloss.Top,
+			lipgloss.Left,
+			framed,
+			lipgloss.WithWhitespaceChars(" "),
+		)
 	}
 
 	return framed
@@ -116,18 +150,39 @@ func (m Model) renderFilePane() string {
 	filesView := listStyle.Render(m.fileList.View())
 	requestsView := listStyle.Render(m.requestList.View())
 	if m.focus == focusFile {
-		filesView = listStyle.Copy().Foreground(m.theme.PaneBorderFocusFile).Render(m.fileList.View())
+		filesView = listStyle.Copy().
+			Foreground(m.theme.PaneBorderFocusFile).
+			Render(m.fileList.View())
 	}
 	if m.focus == focusRequests {
-		requestsView = listStyle.Copy().Foreground(m.theme.PaneBorderFocusRequests).Render(m.requestList.View())
+		requestsView = listStyle.Copy().
+			Foreground(m.theme.PaneBorderFocusRequests).
+			Render(m.requestList.View())
 	}
 	if len(m.requestItems) == 0 {
-		requestsView = lipgloss.NewStyle().Width(innerWidth).Align(lipgloss.Center).Render(m.theme.HeaderValue.Render("No requests parsed"))
+		empty := lipgloss.NewStyle().
+			Width(innerWidth).
+			Align(lipgloss.Center)
+		requestsView = empty.Render(
+			m.theme.HeaderValue.Render("No requests parsed"),
+		)
 	}
-	separator := m.theme.PaneDivider.Copy().Width(innerWidth).Render(strings.Repeat("─", innerWidth))
+	separator := m.theme.PaneDivider.Copy().
+		Width(innerWidth).
+		Render(strings.Repeat("─", innerWidth))
 
-	filesSection := lipgloss.JoinVertical(lipgloss.Left, filesTitle, separator, filesView)
-	requestsSection := lipgloss.JoinVertical(lipgloss.Left, requestsTitle, separator, requestsView)
+	filesSection := lipgloss.JoinVertical(
+		lipgloss.Left,
+		filesTitle,
+		separator,
+		filesView,
+	)
+	requestsSection := lipgloss.JoinVertical(
+		lipgloss.Left,
+		requestsTitle,
+		separator,
+		requestsView,
+	)
 
 	if m.focus == focusFile {
 		highlight := lipgloss.NewStyle().
@@ -143,7 +198,12 @@ func (m Model) renderFilePane() string {
 			Padding(0, 1)
 		requestsSection = highlight.Render(requestsSection)
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left, filesSection, "", requestsSection)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		filesSection,
+		"",
+		requestsSection,
+	)
 	if !paneActive {
 		content = faintStyle.Render(content)
 	}
@@ -153,7 +213,10 @@ func (m Model) renderFilePane() string {
 	if targetHeight < minHeight {
 		targetHeight = minHeight
 	}
-	return style.Width(width).Height(targetHeight).Render(content)
+	return style.
+		Width(width).
+		Height(targetHeight).
+		Render(content)
 }
 
 func (m Model) renderEditorPane() string {
@@ -168,7 +231,10 @@ func (m Model) renderEditorPane() string {
 		style = style.Copy().Faint(true)
 		content = lipgloss.NewStyle().Faint(true).Render(content)
 	}
-	return style.Width(m.editor.Width() + 4).Height(m.editor.Height() + 4).Render(content)
+	return style.
+		Width(m.editor.Width() + 4).
+		Height(m.editor.Height() + 4).
+		Render(content)
 }
 
 func (m Model) renderResponsePane() string {
@@ -191,13 +257,20 @@ func (m Model) renderResponsePane() string {
 	} else {
 		content = m.responseViewport.View()
 	}
-	body := lipgloss.JoinVertical(lipgloss.Left, tabBar, content)
+	body := lipgloss.JoinVertical(
+		lipgloss.Left,
+		tabBar,
+		content,
+	)
 	if !active {
 		body = faintStyle.Render(body)
 	}
 	width := m.responseViewport.Width + 4
 	height := m.responseViewport.Height + 6
-	return style.Width(width).Height(height).Render(body)
+	return style.
+		Width(width).
+		Height(height).
+		Render(body)
 }
 
 func (m Model) renderTabs() string {
@@ -229,8 +302,14 @@ func (m Model) renderHistoryPane() string {
 		}
 		formatted := formatHistorySnippet(snippet, wrapWidth)
 		if formatted != "" {
-			snippetStyle := lipgloss.NewStyle().MarginTop(1).Foreground(lipgloss.Color("#A6A1BB"))
-			view = lipgloss.JoinVertical(lipgloss.Left, view, snippetStyle.Render(formatted))
+			snippetStyle := lipgloss.NewStyle().
+				MarginTop(1).
+				Foreground(lipgloss.Color("#A6A1BB"))
+			view = lipgloss.JoinVertical(
+				lipgloss.Left,
+				view,
+				snippetStyle.Render(formatted),
+			)
 		}
 	}
 	return view
@@ -269,7 +348,12 @@ func (m Model) renderCommandBar() string {
 	divider := m.theme.CommandDivider.Render(" ")
 	row := rendered[0]
 	for i := 1; i < len(rendered); i++ {
-		row = lipgloss.JoinHorizontal(lipgloss.Top, row, divider, rendered[i])
+		row = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			row,
+			divider,
+			rendered[i],
+		)
 	}
 	return m.theme.CommandBar.Render(row)
 }
@@ -289,11 +373,21 @@ func (m Model) renderSearchPrompt() string {
 		Faint(true).
 		PaddingLeft(2).
 		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
-	row := lipgloss.JoinHorizontal(lipgloss.Top, label, input, modeBadge, hints)
+	row := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		label,
+		input,
+		modeBadge,
+		hints,
+	)
 	return m.theme.CommandBar.Render(row)
 }
 
-func renderCommandButton(key, label string, palette theme.CommandSegmentStyle) string {
+func renderCommandButton(
+	key string,
+	label string,
+	palette theme.CommandSegmentStyle,
+) string {
 	keyColor := palette.Key
 	if keyColor == "" {
 		keyColor = lipgloss.Color("#FFFFFF")
@@ -311,8 +405,12 @@ func renderCommandButton(key, label string, palette theme.CommandSegmentStyle) s
 		button = button.Background(palette.Background)
 	}
 
-	keyStyle := lipgloss.NewStyle().Foreground(keyColor).Bold(true)
-	labelStyle := lipgloss.NewStyle().Foreground(textColor).Bold(false)
+	keyStyle := lipgloss.NewStyle().
+		Foreground(keyColor).
+		Bold(true)
+	labelStyle := lipgloss.NewStyle().
+		Foreground(textColor).
+		Bold(false)
 	if palette.Background != "" {
 		keyStyle = keyStyle.Background(palette.Background)
 		labelStyle = labelStyle.Background(palette.Background)
@@ -364,7 +462,12 @@ func (m Model) renderHeader() string {
 	separator := m.theme.HeaderSeparator.Render(" ")
 	joined := segments[0]
 	for i := 1; i < len(segments); i++ {
-		joined = lipgloss.JoinHorizontal(lipgloss.Top, joined, separator, segments[i])
+		joined = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			joined,
+			separator,
+			segments[i],
+		)
 	}
 
 	width := maxInt(m.width, lipgloss.Width(joined))
@@ -379,7 +482,9 @@ func (m Model) renderHeaderButton(idx int, label, value string) string {
 	}
 	valueText := strings.TrimSpace(value)
 	if strings.HasPrefix(valueText, tabIndicatorPrefix) {
-		valueText = strings.TrimSpace(strings.TrimPrefix(valueText, tabIndicatorPrefix))
+		valueText = strings.TrimSpace(
+			strings.TrimPrefix(valueText, tabIndicatorPrefix),
+		)
 	}
 	if valueText == "" {
 		valueText = "—"
@@ -516,9 +621,23 @@ func (m Model) renderErrorModal() string {
 	}
 	wrapped := wrapToWidth(message, contentWidth)
 	messageView := m.theme.Error.Copy().Render(wrapped)
-	title := m.theme.HeaderTitle.Width(contentWidth).Align(lipgloss.Center).Render("Error")
-	instructions := fmt.Sprintf("%s / %s Dismiss", m.theme.CommandBarHint.Render("Esc"), m.theme.CommandBarHint.Render("Enter"))
-	content := lipgloss.JoinVertical(lipgloss.Left, title, "", messageView, "", instructions)
+	title := m.theme.HeaderTitle.
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render("Error")
+	instructions := fmt.Sprintf(
+		"%s / %s Dismiss",
+		m.theme.CommandBarHint.Render("Esc"),
+		m.theme.CommandBarHint.Render("Enter"),
+	)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		"",
+		messageView,
+		"",
+		instructions,
+	)
 	boxStyle := m.theme.BrowserBorder.Copy().
 		Width(width)
 	box := boxStyle.Render(content)
@@ -533,10 +652,16 @@ func (m Model) renderEnvironmentSelector() string {
 	if width < 24 {
 		width = 24
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left,
+	commands := fmt.Sprintf(
+		"%s Select    %s Cancel",
+		m.theme.CommandBarHint.Render("Enter"),
+		m.theme.CommandBarHint.Render("Esc"),
+	)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
 		m.envList.View(),
 		"",
-		fmt.Sprintf("%s Select    %s Cancel", m.theme.CommandBarHint.Render("Enter"), m.theme.CommandBarHint.Render("Esc")),
+		commands,
 	)
 	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
@@ -546,12 +671,19 @@ func (m Model) renderEnvironmentSelector() string {
 }
 
 func (m Model) renderHelpOverlay() string {
-	width := minInt(m.width-10, 64)
+	width := minInt(m.width-10, 80)
 	if width < 32 {
 		width = 32
 	}
+	header := func(text string, align lipgloss.Position) string {
+		return m.theme.HeaderTitle.
+			Width(width - 4).
+			Align(align).
+			Render(text)
+	}
+
 	rows := []string{
-		m.theme.HeaderTitle.Width(width - 4).Align(lipgloss.Center).Render("Key Bindings"),
+		header("Key Bindings", lipgloss.Center),
 		"",
 		helpRow(m, "Tab", "Cycle focus"),
 		helpRow(m, "Shift+Tab", "Reverse focus"),
@@ -565,20 +697,25 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+E", "Environment selector"),
 		helpRow(m, "gk / gj", "Adjust files/requests split"),
 		helpRow(m, "gh / gl", "Adjust editor/response width"),
-		helpRow(m, "Ctrl+R", "Reparse document"),
+		helpRow(m, "Ctrl+T", "Reparse document"),
 		helpRow(m, "Ctrl+Q", "Quit (Ctrl+D also works)"),
 		helpRow(m, "?", "Toggle this help"),
 		"",
-		m.theme.HeaderTitle.Width(width - 4).Align(lipgloss.Left).Render("Editor motions"),
+		header("Editor motions", lipgloss.Left),
 		helpRow(m, "h / j / k / l", "Move left / down / up / right"),
 		helpRow(m, "w / b / e", "Next word / previous word / word end"),
 		helpRow(m, "0 / ^ / $", "Line start / first non-blank / line end"),
 		helpRow(m, "gg / G", "Top / bottom of buffer"),
 		helpRow(m, "Ctrl+f / Ctrl+b", "Page down / up (Ctrl+d / Ctrl+u half-page)"),
-		helpRow(m, "v / y / d", "Visual select / yank / delete selection"),
-		helpRow(m, "u", "Undo last edit"),
+		helpRow(m, "v / V / y", "Visual select (char / line) / yank selection"),
+		helpRow(m, "d + motion", "Delete via Vim motions (dw, db, dk, dgg, dG)"),
+		helpRow(m, "dd / D / x / c", "Delete line / to end / char / change line"),
+		helpRow(m, "a", "Append after cursor (enter insert mode)"),
+		helpRow(m, "p / P", "Paste after / before cursor"),
+		helpRow(m, "f / t / T", "Find character (forward / till / backward)"),
+		helpRow(m, "u / Ctrl+r", "Undo / redo last edit"),
 		"",
-		m.theme.HeaderTitle.Width(width - 4).Align(lipgloss.Left).Render("Search"),
+		header("Search", lipgloss.Left),
 		helpRow(m, "Shift+F", "Open search prompt (Ctrl+R toggles regex)"),
 		helpRow(m, "n", "Next match (wraps around)"),
 		"",
@@ -597,7 +734,9 @@ func (m Model) renderNewFileModal() string {
 	if width < 36 {
 		width = 36
 	}
-	inputView := lipgloss.NewStyle().Width(width - 8).Render(m.newFileInput.View())
+	inputView := lipgloss.NewStyle().
+		Width(width - 8).
+		Render(m.newFileInput.View())
 
 	var extLabels []string
 	for idx, ext := range newFileExtensions {
@@ -612,19 +751,36 @@ func (m Model) renderNewFileModal() string {
 	enter := m.theme.CommandBarHint.Render("Enter")
 	esc := m.theme.CommandBarHint.Render("Esc")
 	switchHint := m.theme.CommandBarHint.Render("Tab/←/→")
-	instructions := fmt.Sprintf("%s Create    %s Cancel    %s Switch", enter, esc, switchHint)
+	instructions := fmt.Sprintf(
+		"%s Create    %s Cancel    %s Switch",
+		enter,
+		esc,
+		switchHint,
+	)
 
 	lines := []string{
-		m.theme.HeaderTitle.Width(width - 4).Align(lipgloss.Center).Render("New Request File"),
+		m.theme.HeaderTitle.
+			Width(width - 4).
+			Align(lipgloss.Center).
+			Render("New Request File"),
 		"",
-		lipgloss.NewStyle().Padding(0, 2).Render(inputView),
-		lipgloss.NewStyle().Padding(0, 2).Render("Extension: " + strings.Join(extLabels, "  ")),
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Render(inputView),
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Render("Extension: " + strings.Join(extLabels, "  ")),
 	}
 	if m.newFileError != "" {
-		errorLine := m.theme.Error.Copy().Padding(0, 2).Render(m.newFileError)
+		errorLine := m.theme.Error.Copy().
+			Padding(0, 2).
+			Render(m.newFileError)
 		lines = append(lines, "", errorLine)
 	}
-	lines = append(lines, "", m.theme.HeaderValue.Copy().Padding(0, 2).Render(instructions))
+	headerValue := m.theme.HeaderValue.Copy().
+		Padding(0, 2).
+		Render(instructions)
+	lines = append(lines, "", headerValue)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
@@ -639,23 +795,37 @@ func (m Model) renderOpenModal() string {
 	if width < 36 {
 		width = 36
 	}
-	inputView := lipgloss.NewStyle().Width(width - 8).Render(m.openPathInput.View())
+	inputView := lipgloss.NewStyle().
+		Width(width - 8).
+		Render(m.openPathInput.View())
 
 	enter := m.theme.CommandBarHint.Render("Enter")
 	esc := m.theme.CommandBarHint.Render("Esc")
 	info := fmt.Sprintf("%s Open    %s Cancel", enter, esc)
 
 	lines := []string{
-		m.theme.HeaderTitle.Width(width - 4).Align(lipgloss.Center).Render("Open File or Workspace"),
+		m.theme.HeaderTitle.
+			Width(width - 4).
+			Align(lipgloss.Center).
+			Render("Open File or Workspace"),
 		"",
-		lipgloss.NewStyle().Padding(0, 2).Render("Enter a path to a .http/.rest file or a folder"),
-		lipgloss.NewStyle().Padding(0, 2).Render(inputView),
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Render("Enter a path to a .http/.rest file or a folder"),
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Render(inputView),
 	}
 	if m.openPathError != "" {
-		errorLine := m.theme.Error.Copy().Padding(0, 2).Render(m.openPathError)
+		errorLine := m.theme.Error.Copy().
+			Padding(0, 2).
+			Render(m.openPathError)
 		lines = append(lines, "", errorLine)
 	}
-	lines = append(lines, "", m.theme.HeaderValue.Copy().Padding(0, 2).Render(info))
+	headerInfo := m.theme.HeaderValue.Copy().
+		Padding(0, 2).
+		Render(info)
+	lines = append(lines, "", headerInfo)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
@@ -666,9 +836,18 @@ func (m Model) renderOpenModal() string {
 }
 
 func helpRow(m Model, key, description string) string {
-	keyStyled := m.theme.HeaderTitle.Render(fmt.Sprintf("%-12s", key))
-	descStyled := m.theme.HeaderValue.Render(description)
-	return fmt.Sprintf("%s %s", keyStyled, descStyled)
+	keyStyled := m.theme.HeaderTitle.Copy().
+		Width(18).
+		Align(lipgloss.Left).
+		Render(key)
+	descStyled := m.theme.HeaderValue.Copy().
+		PaddingLeft(2).
+		Render(description)
+	return lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		keyStyled,
+		descStyled,
+	)
 }
 
 func (m Model) focusLabel() string {

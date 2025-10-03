@@ -37,17 +37,29 @@ func (i requestListItem) Description() string {
 
 func (i requestListItem) FilterValue() string {
 	name := i.request.Metadata.Name
-	return strings.Join([]string{name, requestTypeBadge(i.request), i.request.Method, i.request.URL}, " ")
+	parts := []string{
+		name,
+		requestTypeBadge(i.request),
+		i.request.Method,
+		i.request.URL,
+	}
+	return strings.Join(parts, " ")
 }
 
-func buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) {
+func buildRequestItems(
+	doc *restfile.Document,
+) ([]requestListItem, []list.Item) {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil, nil
 	}
 	items := make([]requestListItem, len(doc.Requests))
 	listItems := make([]list.Item, len(doc.Requests))
 	for idx, req := range doc.Requests {
-		item := requestListItem{request: req, index: idx, line: req.LineRange.Start}
+		item := requestListItem{
+			request: req,
+			index:   idx,
+			line:    req.LineRange.Start,
+		}
 		items[idx] = item
 		listItems[idx] = item
 	}

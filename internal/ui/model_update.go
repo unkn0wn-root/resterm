@@ -33,8 +33,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatusMessage(*typed.status)
 		}
 	case tea.KeyMsg:
-		if cmd := m.handleKey(typed); cmd != nil {
-			cmds = append(cmds, cmd)
+		if !m.showSearchPrompt {
+			if cmd := m.handleKey(typed); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 	case responseMsg:
 		m.sending = false
@@ -298,6 +300,9 @@ func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
+	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector {
+		return nil
+	}
 	return m.handleKeyWithChord(msg, true)
 }
 
@@ -312,6 +317,20 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return prefixCmd
 		}
 		return tea.Batch(prefixCmd, c)
+	}
+
+	if m.operator.active {
+		m.suppressEditorKey = true
+		cmd := m.handleOperatorKey(msg)
+		return combine(cmd)
+	}
+
+	if m.focus == focusEditor && m.editor.awaitingFindTarget() {
+		if updated, cmd, ok := m.editor.HandleMotion(keyStr); ok {
+			m.editor = updated
+			m.suppressEditorKey = true
+			return combine(cmd)
+		}
 	}
 
 	if m.focus != focusFile && m.focus != focusRequests {
@@ -405,7 +424,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	case "ctrl+n":
 		m.openNewFileModal()
 		return combine(nil)
-	case "ctrl+r":
+	case "ctrl+t":
 		return combine(m.reparseDocument())
 	case "ctrl+q", "ctrl+d":
 		return combine(tea.Quit)
@@ -446,9 +465,42 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.editor, cmd = m.editor.UndoLastChange()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			case "ctrl+r":
+				cmd := m.runRedoLastChange()
+				m.suppressEditorKey = true
+				return combine(cmd)
 			case "d":
-				var cmd tea.Cmd
-				m.editor, cmd = m.editor.DeleteSelection()
+				if m.editor.hasSelection() {
+					var cmd tea.Cmd
+					m.editor, cmd = m.editor.DeleteSelection()
+					m.suppressEditorKey = true
+					return combine(cmd)
+				}
+				m.repeatChordActive = false
+				m.repeatChordPrefix = ""
+				m.startOperator("d")
+				m.suppressEditorKey = true
+				m.suppressListKey = true
+				return combine(nil)
+			case "D":
+				cmd := m.runDeleteToLineEnd()
+				m.suppressEditorKey = true
+				return combine(cmd)
+			case "x":
+				cmd := m.runDeleteCharAtCursor()
+				m.suppressEditorKey = true
+				return combine(cmd)
+			case "c":
+				cmd := m.runChangeCurrentLine()
+				m.suppressEditorKey = true
+				m.setInsertMode(true, true)
+				return combine(cmd)
+			case "p":
+				cmd := m.runPasteClipboard(true)
+				m.suppressEditorKey = true
+				return combine(cmd)
+			case "P":
+				cmd := m.runPasteClipboard(false)
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "i":
@@ -464,11 +516,31 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.editor, cmd = m.editor.ToggleVisual()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			case "V":
+				var cmd tea.Cmd
+				m.editor, cmd = m.editor.ToggleVisualLine()
+				m.suppressEditorKey = true
+				return combine(cmd)
 			case "y":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.YankSelection()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			case "a":
+				editorPtr := &m.editor
+				editorPtr.ClearSelection()
+				pos := editorPtr.caretPosition()
+				lineLen := lineLength(editorPtr.Value(), pos.Line)
+				targetCol := pos.Column
+				if targetCol < lineLen {
+					targetCol++
+				} else {
+					targetCol = lineLen
+				}
+				editorPtr.moveCursorTo(pos.Line, targetCol)
+				m.setInsertMode(true, true)
+				m.suppressEditorKey = true
+				return combine(nil)
 			}
 			if updated, cmd, ok := m.editor.HandleMotion(keyStr); ok {
 				m.editor = updated
@@ -545,16 +617,21 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 }
 
 func (m *Model) canStartChord(msg tea.KeyMsg, keyStr string) bool {
-	if keyStr != "g" {
-		return false
-	}
-	if m.focus == focusEditor && m.editorInsertMode {
-		return false
-	}
 	if msg.Type != tea.KeyRunes {
 		return false
 	}
-	return true
+	if m.editor.awaitingFindTarget() {
+		return false
+	}
+	switch keyStr {
+	case "g":
+		if m.focus == focusEditor && m.editorInsertMode {
+			return false
+		}
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
@@ -580,6 +657,85 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		}
 	}
 	return false, nil
+}
+
+func (m *Model) startOperator(op string) {
+	m.operator.active = true
+	m.operator.operator = op
+	m.operator.anchor = m.editor.caretPosition()
+	if m.operator.motionKeys != nil {
+		m.operator.motionKeys = m.operator.motionKeys[:0]
+	}
+}
+
+func (m *Model) clearOperatorState() {
+	m.operator.active = false
+	m.operator.operator = ""
+	m.operator.anchor = cursorPosition{}
+	m.operator.motionKeys = nil
+}
+
+func (m *Model) handleOperatorKey(msg tea.KeyMsg) tea.Cmd {
+	keyStr := msg.String()
+	m.suppressListKey = true
+	switch keyStr {
+	case "esc", "ctrl+c", "ctrl+g":
+		m.clearOperatorState()
+		return nil
+	}
+
+	if m.operator.operator == "d" && keyStr == "d" {
+		m.clearOperatorState()
+		return m.runDeleteCurrentLine()
+	}
+
+	updated, motionCmd, handled := m.editor.HandleMotion(keyStr)
+	if !handled {
+		m.clearOperatorState()
+		status := statusMsg{text: "Delete requires a motion", level: statusWarn}
+		return toEditorEventCmd(editorEvent{status: &status})
+	}
+
+	m.operator.motionKeys = append(m.operator.motionKeys, keyStr)
+	m.editor = updated
+
+	if m.editor.pendingMotion != "" || m.editor.awaitingFindTarget() {
+		return motionCmd
+	}
+
+	spec, err := classifyDeleteMotion(m.operator.motionKeys)
+	if err != nil {
+		anchor := m.operator.anchor
+		editorPtr := &m.editor
+		editorPtr.moveCursorTo(anchor.Line, anchor.Column)
+		editorPtr.applySelectionHighlight()
+		m.clearOperatorState()
+		status := statusMsg{text: err.Error(), level: statusWarn}
+		return batchCommands(motionCmd, toEditorEventCmd(editorEvent{status: &status}))
+	}
+
+	deleteCmd := m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.DeleteMotion(m.operator.anchor, spec)
+	})
+	m.clearOperatorState()
+	return batchCommands(motionCmd, deleteCmd)
+}
+
+func batchCommands(cmds ...tea.Cmd) tea.Cmd {
+	var nonNil []tea.Cmd
+	for _, cmd := range cmds {
+		if cmd != nil {
+			nonNil = append(nonNil, cmd)
+		}
+	}
+	switch len(nonNil) {
+	case 0:
+		return nil
+	case 1:
+		return nonNil[0]
+	default:
+		return tea.Batch(nonNil...)
+	}
 }
 
 func (m *Model) runEditorResize(delta float64) tea.Cmd {
@@ -610,4 +766,50 @@ func (m *Model) runSidebarResize(delta float64) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (m *Model) applyEditorMutation(op func(requestEditor) (requestEditor, tea.Cmd)) tea.Cmd {
+	before := m.editor.Value()
+	editor, cmd := op(m.editor)
+	if editor.Value() != before {
+		m.dirty = true
+	}
+	m.editor = editor
+	return cmd
+}
+
+func (m *Model) runDeleteCurrentLine() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.DeleteCurrentLine()
+	})
+}
+
+func (m *Model) runDeleteToLineEnd() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.DeleteToLineEnd()
+	})
+}
+
+func (m *Model) runDeleteCharAtCursor() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.DeleteCharAtCursor()
+	})
+}
+
+func (m *Model) runChangeCurrentLine() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.ChangeCurrentLine()
+	})
+}
+
+func (m *Model) runPasteClipboard(after bool) tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.PasteClipboard(after)
+	})
+}
+
+func (m *Model) runRedoLastChange() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.RedoLastChange()
+	})
 }

@@ -29,8 +29,8 @@ type AuthSpec struct {
 }
 
 type ScriptBlock struct {
-	Kind string
-	Body string
+	Kind     string
+	Body     string
 	FilePath string
 }
 
