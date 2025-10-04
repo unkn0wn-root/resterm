@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -15,7 +17,7 @@ func (e *requestEditor) writeClipboardWithFallback(
 	text string,
 	success string,
 ) statusMsg {
-	trimmed := text
+	trimmed := normalizeClipboardText(text)
 	e.registerText = trimmed
 	if trimmed == "" {
 		return statusMsg{text: success, level: statusInfo}
@@ -39,12 +41,15 @@ func (e *requestEditor) resolvePasteBuffer() (
 	text, err := clipboard.ReadAll()
 	if err == nil {
 		if text != "" {
-			e.registerText = text
-			return text, pasteSourceClipboard, true, nil
+			normalized := normalizeClipboardText(text)
+			e.registerText = normalized
+			return normalized, pasteSourceClipboard, true, nil
 		}
 
 		if e.registerText != "" {
-			return e.registerText, pasteSourceRegisterEmpty, true, nil
+			normalized := normalizeClipboardText(e.registerText)
+			e.registerText = normalized
+			return normalized, pasteSourceRegisterEmpty, true, nil
 		}
 
 		msg := statusMsg{text: "Clipboard empty", level: statusWarn}
@@ -52,7 +57,9 @@ func (e *requestEditor) resolvePasteBuffer() (
 	}
 
 	if e.registerText != "" {
-		return e.registerText, pasteSourceRegisterError, true, nil
+		normalized := normalizeClipboardText(e.registerText)
+		e.registerText = normalized
+		return normalized, pasteSourceRegisterError, true, nil
 	}
 
 	msg := statusMsg{text: "Clipboard unavailable", level: statusWarn}
@@ -60,7 +67,7 @@ func (e *requestEditor) resolvePasteBuffer() (
 }
 
 func (e *requestEditor) copyToClipboard(text string) tea.Cmd {
-	trimmed := text
+	trimmed := normalizeClipboardText(text)
 	e.registerText = trimmed
 	if trimmed == "" {
 		return func() tea.Msg {
@@ -72,4 +79,15 @@ func (e *requestEditor) copyToClipboard(text string) tea.Cmd {
 		status := e.writeClipboardWithFallback(trimmed, "Copied selection")
 		return editorEvent{status: &status}
 	}
+}
+
+func normalizeClipboardText(text string) string {
+	if text == "" {
+		return text
+	}
+	if !strings.ContainsRune(text, '\r') {
+		return text
+	}
+	withoutCRLF := strings.ReplaceAll(text, "\r\n", "\n")
+	return strings.ReplaceAll(withoutCRLF, "\r", "\n")
 }
