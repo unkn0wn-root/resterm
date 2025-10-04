@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.1.0](https://github.com/unkn0wn-root/resterm/compare/v0.0.9...v0.1.0) (2025-10-04)
+
+
+### Bug Fixes
+
+* **editor:** normalize clipboard pastes and broaden delete motions ([c6af22c](https://github.com/unkn0wn-root/resterm/commit/c6af22c09f8a32a1e9d96dd6e2919f920e36d1f7))
+
 ### [0.0.9](https://github.com/unkn0wn-root/resterm/compare/v0.0.8...v0.0.9) (2025-10-03)
 
 
