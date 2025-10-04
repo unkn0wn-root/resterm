@@ -360,9 +360,9 @@ func colorizeDiff(diff string) string {
 		case strings.HasPrefix(line, "@@"):
 			styled = hunk.Render(line)
 		case strings.HasPrefix(line, "+"):
-			styled = green.Render(line)
+			styled = green.Render(stripANSIEscape(line))
 		case strings.HasPrefix(line, "-"):
-			styled = red.Render(line)
+			styled = red.Render(stripANSIEscape(line))
 		}
 		builder.WriteString(styled)
 		if i < len(lines)-1 {
