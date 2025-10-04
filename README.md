@@ -88,10 +88,20 @@ By default `resterm` scans the opened file’s directory (or the current working
 | Refresh workspace file list | `Ctrl+O` |
 | Adjust files/requests split | `gk` / `gj` |
 | Adjust editor width | `gh` / `gl` |
+| Split responses vertically | `Ctrl+V` |
+| Split responses horizontally | `Ctrl+U` |
+| Pin/unpin focused response pane | `Ctrl+Shift+V` |
+| Target response pane for new responses | `Ctrl+F`, then `← / →` or `h / l` |
 | Replay highlighted history entry | `Enter` (History tab) |
 | Quit | `Ctrl+Q` (`Ctrl+D` also works) |
 
 Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another key, so tap any non-resize key when you want to return to normal navigation.
+
+#### Response panes, pinning & diff
+- Split the response area vertically (`Ctrl+V`) or horizontally (`Ctrl+U`). Press the shortcut again to collapse the split.
+- Use `Ctrl+F` followed by `← / →` (or `h / l`) to choose which pane receives the next response. The other pane is pinned automatically so you can compare results.
+- `Ctrl+Shift+V` toggles whether the focused pane tracks new responses (live) or stays pinned to its current snapshot.
+- Each pane has **Pretty**, **Raw**, **Headers**, **Diff**, and **History** tabs. Open **Diff** in either pane to compare its current base tab (Pretty/Raw/Headers) against the other pane.
 
 #### Editor motions & search
 - `h`, `j`, `k`, `l` - move left/down/up/right

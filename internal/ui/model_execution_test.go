@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -145,10 +144,10 @@ func TestPrepareGRPCRequestUsesBodyOverride(t *testing.T) {
 }
 
 func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
-	vp := viewport.New(80, 10)
-	model := Model{
-		responseViewport: vp,
-		activeTab:        responseTabPretty,
+	model := New(Config{})
+	model.ready = true
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
 	}
 	req := &restfile.Request{
 		Method: "GRPC",
@@ -181,7 +180,11 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 	if model.lastError != err {
 		t.Fatalf("expected lastError to retain grpc invoke err")
 	}
-	if model.prettyView == "" || !strings.Contains(model.prettyView, "NotFound") {
-		t.Fatalf("expected pretty view to mention grpc status, got %q", model.prettyView)
+	if model.responseLatest == nil || !strings.Contains(model.responseLatest.pretty, "NotFound") {
+		var got string
+		if model.responseLatest != nil {
+			got = model.responseLatest.pretty
+		}
+		t.Fatalf("expected response view to mention grpc status, got %q", got)
 	}
 }

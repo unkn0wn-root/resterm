@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -165,8 +166,15 @@ func formatHTTPHeaders(headers http.Header) string {
 	if len(headers) == 0 {
 		return ""
 	}
+	keys := make([]string, 0, len(headers))
+	for name := range headers {
+		keys = append(keys, name)
+	}
+	sort.Strings(keys)
 	builder := strings.Builder{}
-	for name, values := range headers {
+	for _, name := range keys {
+		values := append([]string(nil), headers[name]...)
+		sort.Strings(values)
 		builder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
 	}
 	return strings.TrimRight(builder.String(), "\n")

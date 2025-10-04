@@ -2,100 +2,93 @@ package ui
 
 import tea "github.com/charmbracelet/bubbletea"
 
-func (m *Model) activatePrevTab() tea.Cmd {
-	prev := m.activeTab
-	if m.activeTab == responseTabPretty {
-		m.activeTab = responseTabHistory
-	} else {
-		m.activeTab--
+func (m *Model) activatePrevTabFor(id responsePaneID) tea.Cmd {
+	pane := m.pane(id)
+	if pane == nil {
+		return nil
 	}
-	if m.activeTab == responseTabHistory && prev != responseTabHistory {
+	tabs := m.availableResponseTabs()
+	idx := indexOfResponseTab(tabs, pane.activeTab)
+	if idx == -1 {
+		pane.setActiveTab(tabs[0])
+	} else {
+		idx = (idx - 1 + len(tabs)) % len(tabs)
+		pane.setActiveTab(tabs[idx])
+	}
+	if pane.activeTab == responseTabHistory {
 		m.historyJumpToLatest = true
 	}
-	return m.syncResponseContent()
+	return m.syncResponsePane(id)
 }
 
-func (m *Model) activateNextTab() tea.Cmd {
-	prev := m.activeTab
-	if m.activeTab == responseTabHistory {
-		m.activeTab = responseTabPretty
-	} else {
-		m.activeTab++
+func (m *Model) activateNextTabFor(id responsePaneID) tea.Cmd {
+	pane := m.pane(id)
+	if pane == nil {
+		return nil
 	}
-	if m.activeTab == responseTabHistory && prev != responseTabHistory {
+	tabs := m.availableResponseTabs()
+	idx := indexOfResponseTab(tabs, pane.activeTab)
+	if idx == -1 {
+		pane.setActiveTab(tabs[0])
+	} else {
+		idx = (idx + 1) % len(tabs)
+		pane.setActiveTab(tabs[idx])
+	}
+	if pane.activeTab == responseTabHistory {
 		m.historyJumpToLatest = true
 	}
-	return m.syncResponseContent()
+	return m.syncResponsePane(id)
 }
 
-func (m *Model) renderViewport(content string) {
-	width := m.responseViewport.Width
-	if width <= 0 {
-		width = 80
-	}
-	m.responseViewport.SetContent(wrapToWidth(content, width))
-}
-
-func (m *Model) syncResponseContent() tea.Cmd {
-	if m.activeTab == responseTabHistory {
-		return nil
-	}
-
-	if m.responseLoading {
-		m.responseViewport.SetContent(m.responseLoadingMessage())
-		return nil
-	}
-
-	width := m.responseViewport.Width
-	if width <= 0 {
-		width = defaultResponseViewportWidth
-	}
-	height := m.responseViewport.Height
-
-	source, cache := m.responseSourceForTab(m.activeTab)
-	if source == "" {
-		centered := centerContent(noResponseMessage, width, height)
-		m.responseViewport.SetContent(wrapToWidth(centered, width))
-		return nil
-	}
-
-	if source == noResponseMessage {
-		centered := centerContent(noResponseMessage, width, height)
-		wrapped := wrapToWidth(centered, width)
-		if cache != nil {
-			*cache = cachedWrap{width: width, content: wrapped, valid: true}
+func indexOfResponseTab(tabs []responseTab, target responseTab) int {
+	for i, tab := range tabs {
+		if tab == target {
+			return i
 		}
-		m.responseViewport.SetContent(wrapped)
-		return nil
 	}
-
-	if cache != nil && cache.valid && cache.width == width {
-		m.responseViewport.SetContent(cache.content)
-		return nil
-	}
-
-	if cache != nil && m.responseRenderToken != "" {
-		m.responseViewport.SetContent(responseReflowingMessage)
-		return wrapResponseContentCmd(m.responseRenderToken, m.prettyView, m.rawView, m.headersView, width)
-	}
-
-	wrapped := wrapToWidth(source, width)
-	if cache != nil {
-		*cache = cachedWrap{width: width, content: wrapped, valid: true}
-	}
-	m.responseViewport.SetContent(wrapped)
-	return nil
+	return -1
 }
 
-func (m *Model) responseSourceForTab(tab responseTab) (string, *cachedWrap) {
+func (m *Model) availableResponseTabs() []responseTab {
+	tabs := []responseTab{responseTabPretty, responseTabRaw, responseTabHeaders}
+	if m.diffAvailable() {
+		tabs = append(tabs, responseTabDiff)
+	}
+	tabs = append(tabs, responseTabHistory)
+	return tabs
+}
+
+func (m *Model) responseTabLabel(tab responseTab) string {
 	switch tab {
 	case responseTabPretty:
-		return m.prettyView, &m.prettyWrapCache
+		return "Pretty"
 	case responseTabRaw:
-		return m.rawView, &m.rawWrapCache
+		return "Raw"
 	case responseTabHeaders:
-		return m.headersView, &m.headersWrapCache
+		return "Headers"
+	case responseTabDiff:
+		return "Diff"
+	case responseTabHistory:
+		return "History"
 	default:
-		return "", nil
+		return "?"
 	}
+}
+
+func (m *Model) diffAvailable() bool {
+	if !m.responseSplit {
+		return false
+	}
+	left := m.pane(responsePanePrimary)
+	right := m.pane(responsePaneSecondary)
+	if left == nil || right == nil {
+		return false
+	}
+	if left.snapshot == nil || right.snapshot == nil {
+		return false
+	}
+	if !left.snapshot.ready || !right.snapshot.ready {
+		return false
+	}
+	return true
 }

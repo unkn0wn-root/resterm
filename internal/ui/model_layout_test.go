@@ -69,7 +69,7 @@ func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
 	_ = model.applyLayout()
 
 	initialEditor := model.editor.Width()
-	initialResponse := model.responseViewport.Width
+	initialResponse := model.responseContentWidth()
 	if initialEditor <= 0 || initialResponse <= 0 {
 		t.Fatalf("expected initial widths to be positive, got %d and %d", initialEditor, initialResponse)
 	}
@@ -80,8 +80,8 @@ func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
 	if model.editor.Width() >= initialEditor {
 		t.Fatalf("expected editor width to shrink, initial %d new %d", initialEditor, model.editor.Width())
 	}
-	if model.responseViewport.Width <= initialResponse {
-		t.Fatalf("expected response width to grow, initial %d new %d", initialResponse, model.responseViewport.Width)
+	if model.responseContentWidth() <= initialResponse {
+		t.Fatalf("expected response width to grow, initial %d new %d", initialResponse, model.responseContentWidth())
 	}
 
 	if changed, _, _ := model.adjustEditorSplit(editorSplitStep * 2); !changed {
@@ -90,8 +90,8 @@ func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
 	if model.editor.Width() <= initialEditor {
 		t.Fatalf("expected editor width to exceed original, initial %d new %d", initialEditor, model.editor.Width())
 	}
-	if model.responseViewport.Width >= initialResponse {
-		t.Fatalf("expected response width to shrink, initial %d new %d", initialResponse, model.responseViewport.Width)
+	if model.responseContentWidth() >= initialResponse {
+		t.Fatalf("expected response width to shrink, initial %d new %d", initialResponse, model.responseContentWidth())
 	}
 }
 

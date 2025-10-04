@@ -155,9 +155,114 @@ func (m *Model) applyLayout() tea.Cmd {
 	m.requestList.SetSize(fileWidth-4, maxInt(requestsHeight-2, 1))
 	m.editor.SetWidth(maxInt(editorWidth-4, 1))
 	m.editor.SetHeight(paneHeight - 2)
-	m.responseViewport.Width = maxInt(responseWidth-4, 1)
-	m.responseViewport.Height = paneHeight - 4
-	m.historyList.SetSize(maxInt(responseWidth-4, 1), maxInt(paneHeight-4, 1))
+
+	primaryContentWidth := maxInt(responseWidth-4, 1)
+	responseContentHeight := paneHeight - 4
+	primaryPane := &m.responsePanes[0]
+	secondaryPane := &m.responsePanes[1]
+
+	if m.responseSplit {
+		switch m.responseSplitOrientation {
+		case responseSplitHorizontal:
+			width := primaryContentWidth
+			available := responseContentHeight - responseSplitSeparatorHeight
+			if available < 0 {
+				available = 0
+			}
+			ratio := m.responseSplitRatio
+			if ratio <= 0 {
+				ratio = 0.5
+			}
+			primaryHeight := int(math.Round(float64(available) * ratio))
+			minHeight := minResponseSplitHeight
+			if available < minHeight*2 {
+				minHeight = maxInt(available/2, 1)
+			}
+			if primaryHeight < minHeight {
+				primaryHeight = minHeight
+			}
+			maxPrimary := available - minHeight
+			if maxPrimary < primaryHeight {
+				primaryHeight = maxPrimary
+			}
+			if primaryHeight < 1 {
+				primaryHeight = maxInt(available, 1)
+			}
+			secondaryHeight := available - primaryHeight
+			if secondaryHeight < 1 && available > 0 {
+				secondaryHeight = 1
+				tmp := available - secondaryHeight
+				if tmp < 1 {
+					tmp = 1
+				}
+				primaryHeight = tmp
+			}
+			primaryPane.viewport.Width = maxInt(width, 1)
+			primaryPane.viewport.Height = maxInt(primaryHeight, 1)
+			secondaryPane.viewport.Width = maxInt(width, 1)
+			secondaryPane.viewport.Height = maxInt(secondaryHeight, 1)
+		default:
+			available := primaryContentWidth - responseSplitSeparatorWidth
+			if available < 0 {
+				available = 0
+			}
+			var primaryWidth, secondaryWidth int
+			if available <= 0 {
+				primaryWidth, secondaryWidth = 1, 1
+			} else if available < minResponseSplitWidth*2 {
+				primaryWidth = maxInt(available/2, 1)
+				secondaryWidth = available - primaryWidth
+				if secondaryWidth < 1 {
+					secondaryWidth = 1
+				}
+			} else {
+				ratio := m.responseSplitRatio
+				if ratio <= 0 {
+					ratio = 0.5
+				}
+				primaryWidth = int(math.Round(float64(available) * ratio))
+				if primaryWidth < minResponseSplitWidth {
+					primaryWidth = minResponseSplitWidth
+				}
+				maxPrimary := available - minResponseSplitWidth
+				if maxPrimary < minResponseSplitWidth {
+					maxPrimary = available - minResponseSplitWidth
+				}
+				if maxPrimary < 1 {
+					maxPrimary = 1
+				}
+				if primaryWidth > maxPrimary {
+					primaryWidth = maxPrimary
+				}
+				if primaryWidth < 1 {
+					primaryWidth = 1
+				}
+				secondaryWidth = available - primaryWidth
+				if secondaryWidth < 1 {
+					secondaryWidth = 1
+				}
+			}
+			primaryPane.viewport.Width = maxInt(primaryWidth, 1)
+			primaryPane.viewport.Height = responseContentHeight
+			secondaryPane.viewport.Width = maxInt(secondaryWidth, 1)
+			secondaryPane.viewport.Height = responseContentHeight
+		}
+	} else {
+		primaryPane.viewport.Width = maxInt(primaryContentWidth, 1)
+		primaryPane.viewport.Height = responseContentHeight
+		secondaryPane.viewport.Width = maxInt(primaryContentWidth, 1)
+		secondaryPane.viewport.Height = responseContentHeight
+	}
+
+	historyPane := primaryPane
+	if m.responseSplit {
+		if m.responsePanes[1].activeTab == responseTabHistory {
+			historyPane = secondaryPane
+		}
+	}
+	historyWidth := maxInt(historyPane.viewport.Width, 1)
+	historyHeight := maxInt(historyPane.viewport.Height, 1)
+	m.historyList.SetSize(historyWidth, historyHeight)
 	if len(m.envList.Items()) > 0 {
 		envWidth := minInt(40, m.width-6)
 		if envWidth < 20 {
@@ -169,7 +274,7 @@ func (m *Model) applyLayout() tea.Cmd {
 		}
 		m.envList.SetSize(envWidth, envHeight)
 	}
-	return m.syncResponseContent()
+	return m.syncResponsePanes()
 }
 
 func (m *Model) adjustSidebarSplit(delta float64) (bool, bool, tea.Cmd) {
@@ -229,13 +334,13 @@ func (m *Model) adjustEditorSplit(delta float64) (bool, bool, tea.Cmd) {
 	}
 
 	prevEditorWidth := m.editor.Width()
-	prevResponseWidth := m.responseViewport.Width
+	prevResponseWidth := m.responseContentWidth()
 	m.editorSplit = updated
 	cmd := m.applyLayout()
 
 	newSplit := m.editorSplit
 	newEditorWidth := m.editor.Width()
-	newResponseWidth := m.responseViewport.Width
+	newResponseWidth := m.responseContentWidth()
 	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newEditorWidth != prevEditorWidth || newResponseWidth != prevResponseWidth
 	if !changed {
 		return false, true, cmd
