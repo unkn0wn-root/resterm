@@ -254,14 +254,14 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 
 	switch tab {
 	case responseTabPretty:
-		return snapshot.pretty, tab
+		return ensureTrailingNewline(snapshot.pretty), tab
 	case responseTabRaw:
-		return snapshot.raw, tab
+		return ensureTrailingNewline(snapshot.raw), tab
 	case responseTabHeaders:
 		if snapshot.headers == "" {
-			return "<no headers>", tab
+			return "<no headers>\n", tab
 		}
-		return snapshot.headers, tab
+		return ensureTrailingNewline(snapshot.headers), tab
 	case responseTabDiff:
 		baseTab := pane.ensureContentTab()
 		if diff, ok := m.computeDiffFor(id, baseTab); ok {
@@ -300,6 +300,9 @@ func (m *Model) computeDiffFor(id responsePaneID, baseTab responseTab) (string, 
 		leftContent = left.pretty
 		rightContent = right.pretty
 	}
+
+	leftContent = ensureTrailingNewline(leftContent)
+	rightContent = ensureTrailingNewline(rightContent)
 
 	if leftContent == rightContent {
 		return "Responses are identical", true
@@ -343,6 +346,16 @@ func colorizeDiff(diff string) string {
 		}
 	}
 	return builder.String()
+}
+
+func ensureTrailingNewline(content string) string {
+	if content == "" {
+		return "\n"
+	}
+	if strings.HasSuffix(content, "\n") {
+		return content
+	}
+	return content + "\n"
 }
 
 func (m *Model) ensurePaneActiveTabValid(pane *responsePaneState) {
