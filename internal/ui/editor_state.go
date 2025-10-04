@@ -239,8 +239,8 @@ func (e *requestEditor) clearSelection() {
 
 func (e *requestEditor) applySelectionHighlight() {
 	if e.hasSelection() && e.selection.IsActive() {
-	if startOffset, endOffset, ok := e.selectionOffsets(); ok &&
-		endOffset > startOffset {
+		if startOffset, endOffset, ok := e.selectionOffsets(); ok &&
+			endOffset > startOffset {
 			e.Model.SetSelectionRange(startOffset, endOffset)
 			return
 		}
@@ -662,37 +662,62 @@ func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
 	}
 
 	first := keys[0]
+	spec := deleteMotionSpec{command: first}
+
 	switch first {
 	case "g":
-		if len(keys) == 2 && keys[1] == "g" {
-			return deleteMotionSpec{command: "gg", linewise: true}, nil
+		if len(keys) != 2 {
+			return deleteMotionSpec{}, fmt.Errorf(
+				"unsupported delete motion sequence %v",
+				keys,
+			)
 		}
-		return deleteMotionSpec{}, fmt.Errorf(
-			"unsupported delete motion sequence g%v",
-			keys[1:],
-		)
-	}
-
-	if len(keys) > 1 {
-		return deleteMotionSpec{}, fmt.Errorf(
-			"unsupported delete motion sequence %v",
-			keys,
-		)
-	}
-	spec := deleteMotionSpec{command: first}
-	switch first {
+		switch keys[1] {
+		case "g":
+			spec.command = "gg"
+			spec.linewise = true
+			return spec, nil
+		default:
+			return deleteMotionSpec{}, fmt.Errorf(
+				"unsupported delete motion sequence g%v",
+				keys[1:],
+			)
+		}
 	case "w":
 		spec.includeFinalForward = true
+		return spec, nil
+	case "e":
+		spec.includeFinalForward = true
+		return spec, nil
 	case "b":
-		// delete previous word; no adjustments
-	case "k":
+		return spec, nil
+	case "j", "k", "G":
 		spec.linewise = true
-	case "G":
-		spec.linewise = true
+		return spec, nil
+	case "$":
+		return spec, nil
+	case "f", "F":
+		if len(keys) < 2 {
+			return deleteMotionSpec{}, fmt.Errorf("find motion requires a target")
+		}
+		spec.includeFinalForward = true
+		return spec, nil
+	case "t", "T":
+		if len(keys) < 2 {
+			return deleteMotionSpec{}, fmt.Errorf("till motion requires a target")
+		}
+		spec.includeFinalForward = true
+		return spec, nil
 	default:
-		return deleteMotionSpec{}, fmt.Errorf("unsupported delete motion %q", first)
+		if len(keys) > 1 {
+			return deleteMotionSpec{}, fmt.Errorf(
+				"unsupported delete motion sequence %v",
+				keys,
+			)
+		}
 	}
-	return spec, nil
+
+	return deleteMotionSpec{}, fmt.Errorf("unsupported delete motion %q", first)
 }
 
 func (e requestEditor) DeleteCurrentLine() (requestEditor, tea.Cmd) {
@@ -1256,7 +1281,7 @@ func (e requestEditor) NextSearchMatch() (requestEditor, tea.Cmd) {
 
 	moveCmd := pe.jumpToSearchIndex(nextIndex)
 	statusText := fmt.Sprintf(
-	"Match %d/%d for %q",
+		"Match %d/%d for %q",
 		nextIndex+1,
 		len(pe.search.matches),
 		trimmed,

@@ -443,7 +443,10 @@ func TestPasteClipboardInsertsAfterCursor(t *testing.T) {
 
 	editor, cmd := editor.PasteClipboard(true)
 	evt := editorEventFromCmd(t, cmd)
-	if evt.status == nil || evt.status.text != "Pasted" {
+	if evt.status == nil {
+		t.Fatal("expected paste status, got nil")
+	}
+	if evt.status.text != "Pasted" {
 		t.Fatalf("expected paste status, got %+v", evt.status)
 	}
 	if got := editor.Value(); got != "abZZc" {
@@ -462,8 +465,11 @@ func TestPasteClipboardLinewisePreservesFollowingLine(t *testing.T) {
 
 	editor, cmd := editor.PasteClipboard(true)
 	evt := editorEventFromCmd(t, cmd)
-	if evt.status == nil || evt.status.text != "Pasted" {
-		t.Fatalf("expected paste status, got %+v", evt.status)
+	if evt.status == nil {
+		t.Fatal("expected paste status, got nil")
+	}
+	if evt.status.text != "Pasted from editor register" {
+		t.Fatalf("expected register paste status, got %+v", evt.status)
 	}
 	if got := editor.Value(); got != "first\nalpha\nsecond\nthird" {
 		t.Fatalf("expected linewise paste to preserve following line, got %q", got)
