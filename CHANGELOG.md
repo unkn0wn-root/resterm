@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.3](https://github.com/unkn0wn-root/resterm/compare/v0.1.2...v0.1.3) (2025-10-04)
+
+
+### Bug Fixes
+
+* **ui:** surface body diffs when viewing headers ([41fbbe6](https://github.com/unkn0wn-root/resterm/commit/41fbbe6516cda2f187cd8891afb3d18383acf26c))
+
 ### [0.1.2](https://github.com/unkn0wn-root/resterm/compare/v0.1.1...v0.1.2) (2025-10-04)
 
 
