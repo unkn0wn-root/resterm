@@ -418,6 +418,31 @@ func TestDeleteCharAtCursorRemovesRune(t *testing.T) {
 	}
 }
 
+func TestDeleteCharAtCursorRemovesSelection(t *testing.T) {
+	editor := newTestEditor("alpha beta")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+	start := editor.caretPosition()
+	editorPtr.startSelection(start, selectionManual)
+	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
+	editorPtr.applySelectionHighlight()
+
+	editor, cmd := editor.DeleteCharAtCursor()
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil {
+		t.Fatalf("expected selection deletion status, got %+v", evt.status)
+	}
+	if evt.status.text != "Deleted selection" && !strings.Contains(evt.status.text, "Clipboard unavailable") {
+		t.Fatalf("unexpected selection deletion status, got %+v", evt.status)
+	}
+	if editor.hasSelection() {
+		t.Fatalf("expected selection to clear after deletion")
+	}
+	if got := editor.Value(); got != " beta" {
+		t.Fatalf("expected selected text removed, got %q", got)
+	}
+}
+
 func TestChangeCurrentLineClearsContent(t *testing.T) {
 	editor := newTestEditor("alpha\nbeta")
 	editorPtr := &editor

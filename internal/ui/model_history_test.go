@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -42,10 +41,12 @@ func TestFormatHistorySnippetHandlesStyleOnly(t *testing.T) {
 }
 
 func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
-	vp := viewport.New(80, 10)
-	model := Model{
-		responseViewport: vp,
-		activeTab:        responseTabPretty,
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
 	}
 
 	resp := &httpclient.Response{
@@ -67,44 +68,19 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 	if model.responseRenderToken == "" {
 		t.Fatalf("expected responseRenderToken to be assigned")
 	}
-	if content := model.responseViewport.View(); !strings.HasPrefix(content, responseFormattingBase) {
+	if content := model.pane(responsePanePrimary).viewport.View(); !strings.HasPrefix(content, responseFormattingBase) {
 		t.Fatalf("expected viewport to show formatting message prefix, got %q", content)
 	}
 
-	queue := collectMsgs(cmd)
-	for i := 0; i < len(queue); i++ {
-		switch typed := queue[i].(type) {
-		case responseRenderedMsg:
-			if typed.token != model.responseRenderToken {
-				t.Fatalf("expected render token to match model state")
-			}
-			if follow := model.handleResponseRendered(typed); follow != nil {
-				queue = append(queue, collectMsgs(follow)...)
-			}
-		case responseWrapMsg:
-			if follow := model.handleResponseWrap(typed); follow != nil {
-				queue = append(queue, collectMsgs(follow)...)
-			}
-		case tea.Cmd:
-			queue = append(queue, collectMsgs(typed)...)
-		case responseLoadingTickMsg:
-			if follow := model.handleResponseLoadingTick(); follow != nil {
-				queue = append(queue, collectMsgs(follow)...)
-			}
-		case nil:
-			// ignore
-		default:
-			t.Fatalf("unexpected message type %T", typed)
-		}
-	}
+	drainResponseCommands(t, &model, cmd)
 
 	if model.responseLoading {
 		t.Fatalf("expected responseLoading to be false after render completes")
 	}
-	if model.prettyView == "" {
-		t.Fatalf("expected prettyView to be populated")
+	if model.responseLatest == nil || model.responseLatest.pretty == "" {
+		t.Fatalf("expected latest snapshot to be populated")
 	}
-	viewportContent := model.responseViewport.View()
+	viewportContent := model.pane(responsePanePrimary).viewport.View()
 	if !strings.Contains(viewportContent, "Status:") {
 		t.Fatalf("expected viewport content to include response summary, got %q", viewportContent)
 	}
@@ -126,4 +102,246 @@ func collectMsgs(cmd tea.Cmd) []tea.Msg {
 		return msgs
 	}
 	return []tea.Msg{msg}
+}
+
+func drainResponseCommands(t *testing.T, model *Model, initial tea.Cmd) {
+	queue := collectMsgs(initial)
+	for len(queue) > 0 {
+		msg := queue[0]
+		queue = queue[1:]
+		switch typed := msg.(type) {
+		case responseRenderedMsg:
+			if typed.token != model.responseRenderToken {
+				t.Fatalf("render token mismatch: %s vs %s", typed.token, model.responseRenderToken)
+			}
+			if follow := model.handleResponseRendered(typed); follow != nil {
+				queue = append(queue, collectMsgs(follow)...)
+			}
+		case responseWrapMsg:
+			if follow := model.handleResponseWrap(typed); follow != nil {
+				queue = append(queue, collectMsgs(follow)...)
+			}
+		case tea.Cmd:
+			queue = append(queue, collectMsgs(typed)...)
+		case statusMsg:
+			// ignore status updates
+		case responseLoadingTickMsg:
+			if follow := model.handleResponseLoadingTick(); follow != nil {
+				queue = append(queue, collectMsgs(follow)...)
+			}
+		case nil:
+			// ignore
+		default:
+			t.Fatalf("unexpected message type %T", typed)
+		}
+	}
+}
+
+func TestToggleResponseSplitConfiguresSecondaryPane(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	resp := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("alpha"),
+		EffectiveURL: "https://example.com",
+	}
+
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp, nil, nil))
+	if model.responseLatest == nil || !model.responseLatest.ready {
+		t.Fatalf("expected latest snapshot to be ready")
+	}
+
+	if model.responseSplit {
+		t.Fatalf("expected split to be disabled initially")
+	}
+
+	if cmd := model.toggleResponseSplitVertical(); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if !model.responseSplit {
+		t.Fatalf("expected split to be enabled")
+	}
+	secondary := model.pane(responsePaneSecondary)
+	if secondary == nil {
+		t.Fatalf("expected secondary pane to exist")
+	}
+	if secondary.followLatest {
+		t.Fatalf("expected secondary pane to be pinned by default")
+	}
+	if secondary.activeTab != responseTabPretty {
+		t.Fatalf("expected secondary pane default tab to be Pretty, got %v", secondary.activeTab)
+	}
+	if secondary.snapshot != model.responseLatest {
+		t.Fatalf("expected secondary pane to reference latest snapshot")
+	}
+}
+
+func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	first := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("first"),
+		EffectiveURL: "https://example.com/one",
+	}
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(first, nil, nil))
+	if model.diffAvailable() {
+		t.Fatalf("diff should be unavailable before split")
+	}
+
+	if cmd := model.toggleResponseSplitVertical(); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if !model.responseSplit {
+		t.Fatalf("expected split enabled")
+	}
+
+	second := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("second"),
+		EffectiveURL: "https://example.com/two",
+	}
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(second, nil, nil))
+	if !model.diffAvailable() {
+		t.Fatalf("expected diff to be available after second response")
+	}
+
+	primary := model.pane(responsePanePrimary)
+	primary.setActiveTab(responseTabDiff)
+	primary.lastContentTab = responseTabRaw
+	if cmd := model.syncResponsePane(responsePanePrimary); cmd != nil {
+		collectMsgs(cmd)
+	}
+	diffView := primary.viewport.View()
+	if !strings.Contains(diffView, "+") && !strings.Contains(diffView, "Responses are identical") {
+		t.Fatalf("expected diff view to contain diff markers, got %q", diffView)
+	}
+
+	tabs := model.availableResponseTabs()
+	if indexOfResponseTab(tabs, responseTabDiff) == -1 {
+		t.Fatalf("expected diff tab to be present")
+	}
+}
+
+func TestResponsesFollowLastFocusedPane(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		drainResponseCommands(t, &model, cmd)
+	}
+
+	resp1 := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("first"),
+		EffectiveURL: "https://example.com/one",
+	}
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil))
+
+	primary := model.pane(responsePanePrimary)
+	if primary == nil || primary.snapshot == nil || !strings.Contains(primary.snapshot.pretty, "first") {
+		t.Fatalf("expected primary pane to hold first response")
+	}
+
+	if cmd := model.toggleResponseSplitVertical(); cmd != nil {
+		drainResponseCommands(t, &model, cmd)
+	}
+	model.setFocus(focusResponse)
+	model.focusResponsePane(responsePaneSecondary)
+	model.setFocus(focusRequests)
+
+	resp2 := &httpclient.Response{
+		Status:       "201 Created",
+		StatusCode:   201,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("second"),
+		EffectiveURL: "https://example.com/two",
+	}
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil))
+
+	secondary := model.pane(responsePaneSecondary)
+	if secondary == nil || secondary.snapshot == nil || !strings.Contains(secondary.snapshot.pretty, "second") {
+		t.Fatalf("expected secondary pane to receive latest response")
+	}
+	if primary.snapshot == nil || !strings.Contains(primary.snapshot.pretty, "first") {
+		t.Fatalf("expected primary pane to retain previous response")
+	}
+	if !secondary.followLatest || primary.followLatest {
+		t.Fatalf("expected secondary to be live and primary pinned")
+	}
+}
+
+func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	resp1 := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("first"),
+		EffectiveURL: "https://example.com/a",
+	}
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil))
+	primary := model.pane(responsePanePrimary)
+	firstSnapshot := primary.snapshot
+	if firstSnapshot == nil {
+		t.Fatalf("expected primary snapshot to be set")
+	}
+	if cmd := model.toggleResponseSplitVertical(); cmd != nil {
+		collectMsgs(cmd)
+	}
+	model.setFocus(focusResponse)
+
+	if cmd := model.togglePaneFollowLatest(responsePanePrimary); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if primary.followLatest {
+		t.Fatalf("expected primary pane to be pinned after toggle")
+	}
+	secondary := model.pane(responsePaneSecondary)
+	if secondary == nil || !secondary.followLatest {
+		t.Fatalf("expected secondary pane to become live after pinning primary")
+	}
+
+	resp2 := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": []string{"text/plain"}},
+		Body:         []byte("second"),
+		EffectiveURL: "https://example.com/b",
+	}
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil))
+	if primary.snapshot != firstSnapshot {
+		t.Fatalf("expected pinned pane to retain original snapshot")
+	}
+	if secondary.snapshot == nil || !strings.Contains(secondary.snapshot.pretty, "second") {
+		t.Fatalf("expected live pane to receive new response")
+	}
 }

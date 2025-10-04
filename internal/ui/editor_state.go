@@ -816,6 +816,20 @@ func (e requestEditor) DeleteToLineEnd() (requestEditor, tea.Cmd) {
 }
 
 func (e requestEditor) DeleteCharAtCursor() (requestEditor, tea.Cmd) {
+	if e.hasSelection() {
+		removed, ok := (&e).removeSelection()
+		if !ok {
+			return e, statusCmd(statusWarn, "Nothing to delete")
+		}
+		status := statusMsg{}
+		if removed != "" {
+			status = (&e).writeClipboardWithFallback(removed, "Deleted selection")
+		} else {
+			status = statusMsg{text: "Deleted selection", level: statusInfo}
+		}
+		return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	}
+
 	runes := []rune(e.Value())
 	cursor := e.caretPosition()
 	if cursor.Offset >= len(runes) {

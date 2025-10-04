@@ -59,18 +59,36 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) tea.Cmd {
 	m.lastGRPC = nil
 	m.lastResponse = resp
-	m.resetResponseViews()
+
+	if m.responseLatest != nil && m.responseLatest.ready {
+		m.responsePrevious = m.responseLatest
+	}
 
 	if resp == nil {
 		m.responseLoading = false
 		m.responseLoadingFrame = 0
-		width := m.responseViewport.Width
-		if width <= 0 {
-			width = defaultResponseViewportWidth
+		m.responseRenderToken = ""
+		m.responseLatest = nil
+		m.responsePending = nil
+		target := m.responseTargetPane()
+		for _, id := range m.visiblePaneIDs() {
+			pane := m.pane(id)
+			if pane == nil {
+				continue
+			}
+			if id == target {
+				pane.snapshot = nil
+				pane.invalidateCaches()
+				width := pane.viewport.Width
+				if width <= 0 {
+					width = defaultResponseViewportWidth
+				}
+				centered := centerContent(noResponseMessage, width, pane.viewport.Height)
+				pane.viewport.SetContent(wrapToWidth(centered, width))
+				pane.viewport.GotoTop()
+			}
 		}
-		centered := centerContent(noResponseMessage, width, m.responseViewport.Height)
-		m.responseViewport.SetContent(wrapToWidth(centered, width))
-		m.responseViewport.GotoTop()
+		m.setLivePane(target)
 		return nil
 	}
 
@@ -93,36 +111,42 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 	}
 
 	token := nextResponseRenderToken()
+	snapshot := &responseSnapshot{id: token}
 	m.responseRenderToken = token
+	m.responsePending = snapshot
+	m.responseLatest = snapshot
+	if m.responseTokens == nil {
+		m.responseTokens = make(map[string]*responseSnapshot)
+	}
+	m.responseTokens[token] = snapshot
 	m.responseLoading = true
 	m.responseLoadingFrame = 0
-	m.showResponseLoadingMessage()
-	m.responseViewport.GotoTop()
 
-	width := m.responseViewport.Width
-	if width <= 0 {
-		width = defaultResponseViewportWidth
+	target := m.responseTargetPane()
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		if id == target {
+			pane.snapshot = snapshot
+			pane.invalidateCaches()
+			pane.viewport.SetContent(m.responseLoadingMessage())
+			pane.viewport.GotoTop()
+		}
+	}
+	m.setLivePane(target)
+
+	primaryWidth := m.pane(responsePanePrimary).viewport.Width
+	if primaryWidth <= 0 {
+		primaryWidth = defaultResponseViewportWidth
 	}
 
-	cmds := []tea.Cmd{renderHTTPResponseCmd(token, resp, tests, scriptErr, width)}
+	cmds := []tea.Cmd{renderHTTPResponseCmd(token, resp, tests, scriptErr, primaryWidth)}
 	if tick := m.scheduleResponseLoadingTick(); tick != nil {
 		cmds = append(cmds, tick)
 	}
 	return tea.Batch(cmds...)
-}
-
-func (m *Model) resetResponseViews() {
-	m.prettyView = ""
-	m.rawView = ""
-	m.headersView = ""
-	m.prettyWrapCache = cachedWrap{}
-	m.rawWrapCache = cachedWrap{}
-	m.headersWrapCache = cachedWrap{}
-	m.responseLoadingFrame = 0
-}
-
-func (m *Model) showResponseLoadingMessage() {
-	m.responseViewport.SetContent(m.responseLoadingMessage())
 }
 
 func (m *Model) responseLoadingMessage() string {
@@ -144,38 +168,49 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		return nil
 	}
 
+	snapshot, ok := m.responseTokens[msg.token]
+	if !ok {
+		snapshot = m.responseLatest
+	}
+	if snapshot == nil {
+		return nil
+	}
+
+	snapshot.pretty = msg.pretty
+	snapshot.raw = msg.raw
+	snapshot.headers = msg.headers
+	snapshot.ready = true
+
+	delete(m.responseTokens, msg.token)
+	if m.responsePending == snapshot {
+		m.responsePending = nil
+	}
+	m.responseRenderToken = ""
 	m.responseLoading = false
 	m.responseLoadingFrame = 0
-	m.prettyView = msg.pretty
-	m.rawView = msg.raw
-	m.headersView = msg.headers
+	m.responseLatest = snapshot
 
-	if msg.width > 0 {
-		m.prettyWrapCache = cachedWrap{width: msg.width, content: msg.prettyWrapped, valid: true}
-		m.rawWrapCache = cachedWrap{width: msg.width, content: msg.rawWrapped, valid: true}
-		m.headersWrapCache = cachedWrap{width: msg.width, content: msg.headersWrapped, valid: true}
-	} else {
-		m.prettyWrapCache = cachedWrap{}
-		m.rawWrapCache = cachedWrap{}
-		m.headersWrapCache = cachedWrap{}
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.snapshot != snapshot {
+			continue
+		}
+		pane.invalidateCaches()
+		if msg.width > 0 && pane.viewport.Width == msg.width {
+			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, valid: true}
+			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: msg.rawWrapped, valid: true}
+			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: msg.headersWrapped, valid: true}
+		}
+		pane.viewport.GotoTop()
+	}
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane != nil {
+			pane.wrapCache[responseTabDiff] = cachedWrap{}
+		}
 	}
 
-	currentWidth := m.responseViewport.Width
-	if currentWidth <= 0 {
-		currentWidth = defaultResponseViewportWidth
-	}
-
-	if msg.width != currentWidth {
-		m.responseViewport.SetContent(responseReflowingMessage)
-		m.responseViewport.GotoTop()
-		return wrapResponseContentCmd(m.responseRenderToken, m.prettyView, m.rawView, m.headersView, currentWidth)
-	}
-
-	if cmd := m.syncResponseContent(); cmd != nil {
-		return cmd
-	}
-	m.responseViewport.GotoTop()
-	return nil
+	return m.syncResponsePanes()
 }
 
 func (m *Model) handleResponseLoadingTick() tea.Cmd {
@@ -183,7 +218,19 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 		return nil
 	}
 	m.responseLoadingFrame = (m.responseLoadingFrame + 1) % 3
-	m.showResponseLoadingMessage()
+	message := m.responseLoadingMessage()
+	updated := false
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.snapshot == nil || pane.snapshot.ready {
+			continue
+		}
+		pane.viewport.SetContent(message)
+		updated = true
+	}
+	if !updated {
+		return nil
+	}
 	return m.scheduleResponseLoadingTick()
 }
 
@@ -192,12 +239,7 @@ func (m *Model) handleResponseWrap(msg responseWrapMsg) tea.Cmd {
 		return nil
 	}
 
-	m.prettyWrapCache = cachedWrap{width: msg.width, content: msg.prettyWrapped, valid: true}
-	m.rawWrapCache = cachedWrap{width: msg.width, content: msg.rawWrapped, valid: true}
-	m.headersWrapCache = cachedWrap{width: msg.width, content: msg.headersWrapped, valid: true}
-
-	m.responseViewport.GotoTop()
-	return m.syncResponseContent()
+	return nil
 }
 
 func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.TestResult, scriptErr error, req *restfile.Request) tea.Cmd {
@@ -205,10 +247,26 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	m.lastGRPC = resp
 	m.responseLoading = false
 	m.responseRenderToken = ""
-	m.resetResponseViews()
+	m.responsePending = nil
+	if m.responseLatest != nil && m.responseLatest.ready {
+		m.responsePrevious = m.responseLatest
+	}
 
 	if resp == nil {
-		m.responseViewport.SetContent("No gRPC response")
+		target := m.responseTargetPane()
+		for _, id := range m.visiblePaneIDs() {
+			pane := m.pane(id)
+			if pane == nil {
+				continue
+			}
+			if id == target {
+				pane.snapshot = nil
+				pane.invalidateCaches()
+				pane.viewport.SetContent("No gRPC response")
+				pane.viewport.GotoTop()
+			}
+		}
+		m.setLivePane(target)
 		return nil
 	}
 
@@ -238,9 +296,20 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	if resp.StatusMessage != "" {
 		statusLine += " (" + resp.StatusMessage + ")"
 	}
-	m.prettyView = joinSections(statusLine, body)
-	m.rawView = joinSections(statusLine, body)
-	m.headersView = joinSections(statusLine, headersContent)
+	snapshot := &responseSnapshot{
+		pretty:  joinSections(statusLine, body),
+		raw:     joinSections(statusLine, body),
+		headers: joinSections(statusLine, headersContent),
+		ready:   true,
+	}
+	m.responseLatest = snapshot
+	m.responsePending = nil
+
+	if m.responseTokens != nil {
+		for key := range m.responseTokens {
+			delete(m.responseTokens, key)
+		}
+	}
 
 	switch {
 	case resp.StatusCode != codes.OK:
@@ -248,8 +317,22 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	default:
 		m.setStatusMessage(statusMsg{text: statusLine, level: statusSuccess})
 	}
-	m.responseViewport.GotoTop()
-	return m.syncResponseContent()
+
+	target := m.responseTargetPane()
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		if id == target {
+			pane.snapshot = snapshot
+		}
+		pane.invalidateCaches()
+		pane.viewport.GotoTop()
+	}
+	m.setLivePane(target)
+
+	return m.syncResponsePanes()
 }
 
 func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Request, requestText string, environment string) {
@@ -420,28 +503,57 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 		return nil
 	}
 	preview := renderRequestText(req)
-	m.activeTab = responseTabPretty
-	m.responseRenderToken = ""
-	m.responseLoading = false
-	m.resetResponseViews()
-	m.prettyView = preview
-	m.rawView = preview
-	m.headersView = preview
-	width := m.responseViewport.Width
-	if width <= 0 {
-		width = defaultResponseViewportWidth
+	snapshot := &responseSnapshot{
+		pretty:  preview,
+		raw:     preview,
+		headers: preview,
+		ready:   true,
 	}
-	wrapped := wrapToWidth(preview, width)
-	m.prettyWrapCache = cachedWrap{width: width, content: wrapped, valid: true}
-	m.rawWrapCache = cachedWrap{width: width, content: wrapped, valid: true}
-	m.headersWrapCache = cachedWrap{width: width, content: wrapped, valid: true}
-	m.responseViewport.SetContent(wrapped)
-	m.responseViewport.GotoTop()
+	m.responseRenderToken = ""
+	m.responsePending = nil
+	m.responseLoading = false
+	m.responseLatest = snapshot
+
+	targetPaneID := m.responseTargetPane()
+
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		if id == targetPaneID {
+			pane.snapshot = snapshot
+		}
+		pane.invalidateCaches()
+		if id == targetPaneID {
+			pane.setActiveTab(responseTabPretty)
+		}
+		pane.viewport.GotoTop()
+	}
+	m.setLivePane(targetPaneID)
+
+	if pane := m.pane(targetPaneID); pane != nil {
+		displayWidth := pane.viewport.Width
+		if displayWidth <= 0 {
+			displayWidth = defaultResponseViewportWidth
+		}
+		wrapped := wrapToWidth(preview, displayWidth)
+		pane.wrapCache[responseTabPretty] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
+		pane.wrapCache[responseTabRaw] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
+		pane.wrapCache[responseTabHeaders] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
+		pane.wrapCache[responseTabDiff] = cachedWrap{}
+		pane.viewport.SetContent(wrapped)
+	}
+
 	m.testResults = nil
 	m.scriptError = nil
-	return func() tea.Msg {
+	status := func() tea.Msg {
 		return statusMsg{text: fmt.Sprintf("Previewing %s", requestDisplayName(req)), level: statusInfo}
 	}
+	if cmd := m.syncResponsePanes(); cmd != nil {
+		return tea.Batch(cmd, status)
+	}
+	return status
 }
 
 func (m *Model) moveCursorToLine(target int) {

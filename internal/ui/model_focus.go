@@ -40,6 +40,9 @@ func (m *Model) setFocus(target paneFocus) {
 	}
 	prev := m.focus
 	m.focus = target
+	if target != focusResponse {
+		m.responsePaneChord = false
+	}
 	if target == focusEditor {
 		if m.editorInsertMode {
 			m.editor.Cursor.SetMode(cursor.CursorBlink)
@@ -52,6 +55,10 @@ func (m *Model) setFocus(target paneFocus) {
 			m.setInsertMode(false, false)
 		}
 		m.editor.Blur()
+	}
+	if target == focusResponse {
+		m.ensurePaneFocusValid()
+		m.setLivePane(m.responsePaneFocus)
 	}
 }
 

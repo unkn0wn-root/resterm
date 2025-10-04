@@ -40,7 +40,15 @@ const (
 	responseTabPretty responseTab = iota
 	responseTabRaw
 	responseTabHeaders
+	responseTabDiff
 	responseTabHistory
+)
+
+type responseSplitOrientation int
+
+const (
+	responseSplitVertical responseSplitOrientation = iota
+	responseSplitHorizontal
 )
 
 const noResponseMessage = "░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█\n░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█\n░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀"
@@ -59,12 +67,16 @@ const (
 )
 
 const (
-	editorSplitDefault   = 0.6
-	editorSplitStep      = 0.05
-	minEditorSplit       = 0.3
-	maxEditorSplit       = 0.70
-	minEditorPaneWidth   = 30
-	minResponsePaneWidth = 30
+	editorSplitDefault           = 0.6
+	editorSplitStep              = 0.05
+	minEditorSplit               = 0.3
+	maxEditorSplit               = 0.70
+	minEditorPaneWidth           = 30
+	minResponsePaneWidth         = 30
+	minResponseSplitWidth        = 24
+	responseSplitSeparatorWidth  = 1
+	minResponseSplitHeight       = 6
+	responseSplitSeparatorHeight = 1
 )
 
 type Config struct {
@@ -98,23 +110,31 @@ type Model struct {
 	workspaceRoot      string
 	workspaceRecursive bool
 
-	fileList         list.Model
-	requestList      list.Model
-	editor           requestEditor
-	responseViewport viewport.Model
-	historyList      list.Model
-	envList          list.Model
+	fileList                 list.Model
+	requestList              list.Model
+	editor                   requestEditor
+	responsePanes            [2]responsePaneState
+	responseSplit            bool
+	responseSplitRatio       float64
+	responseSplitOrientation responseSplitOrientation
+	responsePaneFocus        responsePaneID
+	responsePaneChord        bool
+	historyList              list.Model
+	envList                  list.Model
 
-	responseTabs      []string
-	activeTab         responseTab
-	focus             paneFocus
-	showEnvSelector   bool
-	showHelp          bool
-	helpJustOpened    bool
-	showNewFileModal  bool
-	showOpenModal     bool
-	showErrorModal    bool
-	errorModalMessage string
+	responseLatest      *responseSnapshot
+	responsePrevious    *responseSnapshot
+	responsePending     *responseSnapshot
+	responseTokens      map[string]*responseSnapshot
+	responseLastFocused responsePaneID
+	focus               paneFocus
+	showEnvSelector     bool
+	showHelp            bool
+	helpJustOpened      bool
+	showNewFileModal    bool
+	showOpenModal       bool
+	showErrorModal      bool
+	errorModalMessage   string
 
 	showSearchPrompt bool
 	searchInput      textinput.Model
@@ -132,16 +152,9 @@ type Model struct {
 	testResults  []scripts.TestResult
 	scriptError  error
 
-	prettyView  string
-	rawView     string
-	headersView string
-
 	responseRenderToken  string
 	responseLoading      bool
 	responseLoadingFrame int
-	prettyWrapCache      cachedWrap
-	rawWrapCache         cachedWrap
-	headersWrapCache     cachedWrap
 
 	historyStore        *history.Store
 	historyEntries      []history.Entry
@@ -264,8 +277,10 @@ func New(cfg Config) Model {
 	searchInput.SetCursor(0)
 	searchInput.Blur()
 
-	response := viewport.New(0, 0)
-	response.SetContent(centerContent(noResponseMessage, 0, 0))
+	primaryViewport := viewport.New(0, 0)
+	primaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
+	secondaryViewport := viewport.New(0, 0)
+	secondaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
 
 	reqDelegate := list.NewDefaultDelegate()
 	reqDelegate.ShowDescription = true
@@ -304,24 +319,30 @@ func New(cfg Config) Model {
 		fileList:           fileList,
 		requestList:        requestList,
 		editor:             editor,
-		responseViewport:   response,
 		historyList:        historyList,
 		envList:            envList,
-		responseTabs:       []string{"Pretty", "Raw", "Headers", "History"},
-		activeTab:          responseTabPretty,
-		focus:              focusFile,
-		sidebarSplit:       sidebarSplitDefault,
-		editorSplit:        editorSplitDefault,
-		historyStore:       cfg.History,
-		currentFile:        cfg.FilePath,
-		statusMessage:      initialStatus,
-		scriptRunner:       scripts.NewRunner(nil),
-		editorInsertMode:   false,
-		editorWriteKeyMap:  writeKeyMap,
-		editorViewKeyMap:   viewKeyMap,
-		newFileInput:       newFileInput,
-		openPathInput:      openPathInput,
-		searchInput:        searchInput,
+		responsePanes: [2]responsePaneState{
+			newResponsePaneState(primaryViewport, true),
+			newResponsePaneState(secondaryViewport, false),
+		},
+		responsePaneFocus:        responsePanePrimary,
+		responseSplitRatio:       0.5,
+		responseSplitOrientation: responseSplitVertical,
+		responseTokens:           make(map[string]*responseSnapshot),
+		responseLastFocused:      responsePanePrimary,
+		focus:                    focusFile,
+		sidebarSplit:             sidebarSplitDefault,
+		editorSplit:              editorSplitDefault,
+		historyStore:             cfg.History,
+		currentFile:              cfg.FilePath,
+		statusMessage:            initialStatus,
+		scriptRunner:             scripts.NewRunner(nil),
+		editorInsertMode:         false,
+		editorWriteKeyMap:        writeKeyMap,
+		editorViewKeyMap:         viewKeyMap,
+		newFileInput:             newFileInput,
+		openPathInput:            openPathInput,
+		searchInput:              searchInput,
 	}
 	model.setInsertMode(false, false)
 
@@ -331,6 +352,7 @@ func New(cfg Config) Model {
 		_ = model.historyStore.Load()
 	}
 	model.syncHistory()
+	model.setLivePane(responsePanePrimary)
 
 	return model
 }

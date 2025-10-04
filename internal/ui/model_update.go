@@ -219,7 +219,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if _, ok := msg.(tea.WindowSizeMsg); ok || (m.focus == focusResponse && m.activeTab == responseTabHistory) {
+	if _, ok := msg.(tea.WindowSizeMsg); ok || (m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
 		var histCmd tea.Cmd
 		m.historyList, histCmd = m.historyList.Update(msg)
 		if m.historyJumpToLatest {
@@ -230,18 +230,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, histCmd)
 	}
 
-	if _, ok := msg.(tea.WindowSizeMsg); ok || (m.focus == focusResponse && m.activeTab != responseTabHistory) {
-		skipViewport := false
-		if keyMsg, ok := msg.(tea.KeyMsg); ok && m.focus == focusResponse && m.activeTab != responseTabHistory {
-			switch keyMsg.String() {
-			case "j", "k":
-				skipViewport = true
+	if winMsg, ok := msg.(tea.WindowSizeMsg); ok {
+		for _, id := range m.visiblePaneIDs() {
+			pane := m.pane(id)
+			if pane == nil || pane.activeTab == responseTabHistory {
+				continue
+			}
+			var paneCmd tea.Cmd
+			pane.viewport, paneCmd = pane.viewport.Update(winMsg)
+			if paneCmd != nil {
+				cmds = append(cmds, paneCmd)
 			}
 		}
-		if !skipViewport {
-			var respCmd tea.Cmd
-			m.responseViewport, respCmd = m.responseViewport.Update(msg)
-			cmds = append(cmds, respCmd)
+	} else if m.focus == focusResponse {
+		pane := m.focusedPane()
+		if pane != nil && pane.activeTab != responseTabHistory {
+			skipViewport := false
+			if keyMsg, ok := msg.(tea.KeyMsg); ok {
+				switch keyMsg.String() {
+				case "j", "k":
+					skipViewport = true
+				}
+			}
+			if !skipViewport {
+				var paneCmd tea.Cmd
+				pane.viewport, paneCmd = pane.viewport.Update(msg)
+				if paneCmd != nil {
+					cmds = append(cmds, paneCmd)
+				}
+			}
 		}
 	}
 
@@ -413,6 +430,18 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		return combine(nil)
 	case "ctrl+s":
 		return combine(m.saveFile())
+	case "ctrl+v":
+		m.responsePaneChord = false
+		return combine(m.toggleResponseSplitVertical())
+	case "ctrl+u":
+		m.responsePaneChord = false
+		return combine(m.toggleResponseSplitHorizontal())
+	case "ctrl+shift+v", "shift+ctrl+v":
+		target := responsePanePrimary
+		if m.focus == focusResponse {
+			target = m.responsePaneFocus
+		}
+		return combine(m.togglePaneFollowLatest(target))
 	case "?", "shift+/":
 		m.toggleHelp()
 		return combine(nil)
@@ -589,21 +618,78 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if m.focus == focusResponse {
+		if m.responsePaneChord {
+			switch keyStr {
+			case "left", "h":
+				m.responsePaneChord = false
+				if m.responseSplit {
+					m.focusResponsePane(responsePanePrimary)
+				}
+				return combine(nil)
+			case "right", "l":
+				m.responsePaneChord = false
+				if m.responseSplit {
+					m.focusResponsePane(responsePaneSecondary)
+				}
+				return combine(nil)
+			case "ctrl+f":
+				return combine(nil)
+			default:
+				m.responsePaneChord = false
+			}
+		}
+		if keyStr == "ctrl+f" {
+			if m.responseSplit {
+				m.responsePaneChord = true
+				return combine(nil)
+			}
+			m.setStatusMessage(statusMsg{text: "Enable split to switch panes", level: statusInfo})
+			return combine(nil)
+		}
+		pane := m.focusedPane()
 		switch keyStr {
-		case "left", "ctrl+h", "h":
-			return combine(m.activatePrevTab())
-		case "right", "ctrl+l", "l":
-			return combine(m.activateNextTab())
+		case "down":
+			if pane == nil || pane.activeTab == responseTabHistory {
+				return combine(nil)
+			}
+			pane.viewport.LineDown(1)
+			return combine(nil)
+		case "up":
+			if pane == nil || pane.activeTab == responseTabHistory {
+				return combine(nil)
+			}
+			pane.viewport.LineUp(1)
+			return combine(nil)
+		case "pgdown":
+			if pane == nil || pane.activeTab == responseTabHistory {
+				return combine(nil)
+			}
+			pane.viewport.PageDown()
+			return combine(nil)
+		case "pgup":
+			if pane == nil || pane.activeTab == responseTabHistory {
+				return combine(nil)
+			}
+			pane.viewport.PageUp()
+			return combine(nil)
 		case "j":
-			if m.activeTab != responseTabHistory {
-				return combine(m.activateNextTab())
+			if pane == nil || pane.activeTab == responseTabHistory {
+				return combine(m.activateNextTabFor(m.responsePaneFocus))
 			}
+			pane.viewport.LineDown(1)
+			return combine(nil)
 		case "k":
-			if m.activeTab != responseTabHistory {
-				return combine(m.activatePrevTab())
+			if pane == nil || pane.activeTab == responseTabHistory {
+				return combine(m.activatePrevTabFor(m.responsePaneFocus))
 			}
+			pane.viewport.LineUp(1)
+			return combine(nil)
+		case "left", "ctrl+h", "h":
+			return combine(m.activatePrevTabFor(m.responsePaneFocus))
+		case "right", "ctrl+l", "l":
+			return combine(m.activateNextTabFor(m.responsePaneFocus))
 		case "enter":
-			if m.activeTab == responseTabHistory {
+			if pane != nil && pane.activeTab == responseTabHistory {
 				return combine(m.replayHistorySelection())
 			}
 		}

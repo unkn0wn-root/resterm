@@ -209,7 +209,7 @@ func (m Model) renderFilePane() string {
 	}
 
 	minHeight := m.fileList.Height() + m.requestList.Height() + 8
-	targetHeight := m.responseViewport.Height + 6
+	targetHeight := m.responseContentHeight() + 6
 	if targetHeight < minHeight {
 		targetHeight = minHeight
 	}
@@ -240,8 +240,7 @@ func (m Model) renderEditorPane() string {
 func (m Model) renderResponsePane() string {
 	style := m.theme.ResponseBorder
 	active := m.focus == focusResponse
-	faintStyle := lipgloss.NewStyle().Faint(true)
-	if m.focus == focusResponse {
+	if active {
 		style = style.Copy().
 			BorderForeground(lipgloss.Color("#6CC4C4")).
 			Bold(true).
@@ -250,50 +249,141 @@ func (m Model) renderResponsePane() string {
 		style = style.Copy().Faint(true)
 	}
 
-	tabBar := m.renderTabs()
-	var content string
-	if m.activeTab == responseTabHistory {
-		content = m.renderHistoryPane()
+	var body string
+	if m.responseSplit {
+		primaryFocused := active && m.responsePaneFocus == responsePanePrimary
+		secondaryFocused := active && m.responsePaneFocus == responsePaneSecondary
+		if m.responseSplitOrientation == responseSplitHorizontal {
+			top := m.renderResponseColumn(responsePanePrimary, primaryFocused)
+			bottom := m.renderResponseColumn(responsePaneSecondary, secondaryFocused)
+			divider := m.renderResponseDividerHorizontal(top, bottom)
+			if divider != "" {
+				body = lipgloss.JoinVertical(lipgloss.Left, top, divider, bottom)
+			} else {
+				body = lipgloss.JoinVertical(lipgloss.Left, top, bottom)
+			}
+		} else {
+			left := m.renderResponseColumn(responsePanePrimary, primaryFocused)
+			right := m.renderResponseColumn(responsePaneSecondary, secondaryFocused)
+			divider := m.renderResponseDivider(left, right)
+			if divider != "" {
+				body = lipgloss.JoinHorizontal(lipgloss.Top, left, divider, right)
+			} else {
+				body = lipgloss.JoinHorizontal(lipgloss.Top, left, right)
+			}
+		}
 	} else {
-		content = m.responseViewport.View()
+		column := m.renderResponseColumn(responsePanePrimary, active)
+		if !active {
+			column = lipgloss.NewStyle().Faint(true).Render(column)
+		}
+		body = column
 	}
-	body := lipgloss.JoinVertical(
-		lipgloss.Left,
-		tabBar,
-		content,
-	)
-	if !active {
-		body = faintStyle.Render(body)
-	}
-	width := m.responseViewport.Width + 4
-	height := m.responseViewport.Height + 6
+
+	width := m.responseContentWidth() + 4
+	height := m.responseContentHeight() + 6
 	return style.
 		Width(width).
 		Height(height).
 		Render(body)
 }
 
-func (m Model) renderTabs() string {
-	var rendered []string
-	for idx, tab := range m.responseTabs {
-		if idx == int(m.activeTab) {
-			label := tabIndicatorPrefix + tab
-			rendered = append(rendered, m.theme.TabActive.Render(label))
-		} else {
-			rendered = append(rendered, m.theme.TabInactive.Render(tab))
-		}
+func (m Model) renderResponseColumn(id responsePaneID, focused bool) string {
+	pane := m.pane(id)
+	if pane == nil {
+		return ""
 	}
-	return m.theme.Tabs.Render(strings.Join(rendered, " "))
+
+	tabs := m.renderPaneTabs(id, focused)
+	var content string
+	if pane.activeTab == responseTabHistory {
+		content = m.renderHistoryPaneFor(id)
+	} else {
+		content = pane.viewport.View()
+	}
+
+	if !focused && m.focus == focusResponse {
+		tabs = lipgloss.NewStyle().Faint(true).Render(tabs)
+		content = lipgloss.NewStyle().Faint(true).Render(content)
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		tabs,
+		content,
+	)
 }
 
-func (m Model) renderHistoryPane() string {
+func (m Model) renderPaneTabs(id responsePaneID, focused bool) string {
+	pane := m.pane(id)
+	if pane == nil {
+		return ""
+	}
+
+	tabs := m.availableResponseTabs()
+	labels := make([]string, 0, len(tabs))
+	for _, tab := range tabs {
+		label := m.responseTabLabel(tab)
+		if tab == pane.activeTab {
+			if focused {
+				label = tabIndicatorPrefix + label
+			}
+			labels = append(labels, m.theme.TabActive.Render(label))
+		} else {
+			labels = append(labels, m.theme.TabInactive.Render(label))
+		}
+	}
+
+	mode := "Pinned"
+	if pane.followLatest {
+		mode = "Live"
+	}
+	badge := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#A6A1BB")).
+		PaddingLeft(2).
+		Faint(!focused || m.focus != focusResponse).
+		Render(strings.ToUpper(mode))
+
+	row := strings.Join(labels, " ")
+	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
+	return m.theme.Tabs.Render(row)
+}
+
+func (m Model) renderResponseDivider(left, right string) string {
+	if !m.responseSplit {
+		return ""
+	}
+	height := maxInt(lipgloss.Height(left), lipgloss.Height(right))
+	if height <= 0 {
+		height = m.responseContentHeight() + 2
+	}
+	line := strings.Repeat("│\n", height-1) + "│"
+	return m.theme.PaneDivider.Copy().Render(line)
+}
+
+func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
+	if !m.responseSplit {
+		return ""
+	}
+	width := maxInt(lipgloss.Width(top), lipgloss.Width(bottom))
+	if width <= 0 {
+		width = m.responseContentWidth()
+	}
+	if width <= 0 {
+		return ""
+	}
+	line := strings.Repeat("─", width)
+	return m.theme.PaneDivider.Copy().Render(line)
+}
+
+func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 	if len(m.historyEntries) == 0 {
 		return "No history yet. Execute a request to populate this view."
 	}
 	view := m.historyList.View()
 	if item, ok := m.historyList.SelectedItem().(historyItem); ok {
 		snippet := strings.TrimSpace(stripANSIEscape(item.entry.BodySnippet))
-		wrapWidth := m.responseViewport.Width
+		wrapWidth := m.pane(id).viewport.Width
 		if wrapWidth <= 0 {
 			wrapWidth = m.width - 6
 		}
@@ -694,6 +784,9 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+N", "Create request file"),
 		helpRow(m, "Ctrl+O", "Open file or folder"),
 		helpRow(m, "Ctrl+Shift+O", "Refresh workspace"),
+		helpRow(m, "Ctrl+V / Ctrl+U", "Split response vertically / horizontally"),
+		helpRow(m, "Ctrl+Shift+V", "Pin or unpin focused response pane"),
+		helpRow(m, "Ctrl+F, ←/→", "Send future responses to selected pane"),
 		helpRow(m, "Ctrl+E", "Environment selector"),
 		helpRow(m, "gk / gj", "Adjust files/requests split"),
 		helpRow(m, "gh / gl", "Adjust editor/response width"),
