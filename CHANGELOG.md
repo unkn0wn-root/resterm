@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.4](https://github.com/unkn0wn-root/resterm/compare/v0.1.3...v0.1.4) (2025-10-04)
+
+
+### Bug Fixes
+
+* strip ansi seq before applying styles ([4ef6368](https://github.com/unkn0wn-root/resterm/commit/4ef63684913d5822d87e8219852a1832cf162ec7))
+
 ### [0.1.3](https://github.com/unkn0wn-root/resterm/compare/v0.1.2...v0.1.3) (2025-10-04)
 
 
