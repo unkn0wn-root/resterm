@@ -14,6 +14,7 @@
 - **Inline requests.** Type `https://api.example.com` or `GET https://api.example.com` directly in the editor and press `Ctrl+Enter` - no `.http`/`.rest` file required.
 - **Curl command parsing (limited).** supports basic `curl` invocations (method, headers, data flags) - more in the road-map.
 - **Status-aware response pane.** Pill-style header calls out workspace, environment, active request, and script/test outcomes; response tabs cover Pretty, Raw, Headers, and History, plus request previews.
+- **Split response views with diffing.** Snap responses into vertical or horizontal splits, pin panes, and compare Pretty/Raw/Headers tabs side-by-side with a unified diff view.
 - **Auth & variable helpers.** `@auth` directives cover basic, bearer, API key, and custom headers; variable resolution spans request, file, environment, and OS layers with helpers like `{{$timestamp}}` and `{{$uuid}}`.
 - **Pre-request & test scripting.** JavaScript (goja) hooks mutate outgoing requests, assert on responses, and surface pass/fail summaries inline.
 - **GraphQL tooling.** `@graphql` and `@variables` directives produce proper payloads, attach operation names, and keep previews/history readable.
