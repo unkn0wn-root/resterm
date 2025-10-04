@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.1](https://github.com/unkn0wn-root/resterm/compare/v0.1.0...v0.1.1) (2025-10-04)
+
+
+### Features
+
+* add split for response, diff for requests and 'x' now deletes at mark ([786f121](https://github.com/unkn0wn-root/resterm/commit/786f1214a6d1169bed92f2f1020c42612080f16b))
+
 ## [0.1.0](https://github.com/unkn0wn-root/resterm/compare/v0.0.9...v0.1.0) (2025-10-04)
 
 
