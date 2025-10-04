@@ -2,6 +2,7 @@ package ui
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	udiff "github.com/aymanbagabas/go-udiff"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -233,7 +234,12 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		return nil
 	}
 
-	wrapped := wrapToWidth(content, width)
+	var wrapped string
+	if cacheKey == responseTabDiff {
+		wrapped = wrapDiffContent(content, width)
+	} else {
+		wrapped = wrapToWidth(content, width)
+	}
 	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
 	pane.viewport.SetContent(wrapped)
 	return nil
@@ -288,36 +294,54 @@ func (m *Model) computeDiffFor(id responsePaneID, baseTab responseTab) (string, 
 		return "", false
 	}
 
-	var leftContent, rightContent string
-	switch baseTab {
-	case responseTabRaw:
-		leftContent = left.raw
-		rightContent = right.raw
-	case responseTabHeaders:
-		leftContent = left.headers
-		rightContent = right.headers
-	default:
-		leftContent = left.pretty
-		rightContent = right.pretty
-	}
-
-	leftContent = ensureTrailingNewline(leftContent)
-	rightContent = ensureTrailingNewline(rightContent)
-
-	if leftContent == rightContent {
-		return "Responses are identical", true
-	}
-
 	leftLabel := "pane-primary"
 	rightLabel := "pane-secondary"
 	if id == responsePaneSecondary {
 		leftLabel, rightLabel = rightLabel, leftLabel
 	}
-	diff := udiff.Unified(leftLabel, rightLabel, leftContent, rightContent)
-	if strings.TrimSpace(diff) == "" {
-		return "Responses differ but diff is empty", true
+
+	var sections []string
+	appendDiff := func(title, lhs, rhs, lhsLabel, rhsLabel string) {
+		leftContent := ensureTrailingNewline(lhs)
+		rightContent := ensureTrailingNewline(rhs)
+		if leftContent == rightContent {
+			return
+		}
+		diff := udiff.Unified(lhsLabel, rhsLabel, leftContent, rightContent)
+		if strings.TrimSpace(diff) == "" {
+			sections = append(sections, "Responses differ but diff is empty")
+			return
+		}
+		if title != "" {
+			sections = append(sections, title)
+		}
+		sections = append(sections, diff)
 	}
-	return colorizeDiff(diff), true
+
+	switch baseTab {
+	case responseTabRaw:
+		appendDiff("", left.raw, right.raw, leftLabel, rightLabel)
+	case responseTabHeaders:
+		// Always include the response body diff when users land here from Headers.
+		appendDiff("", left.pretty, right.pretty, leftLabel, rightLabel)
+		leftHeaders := left.headers
+		if leftHeaders == "" {
+			leftHeaders = "<no headers>\n"
+		}
+		rightHeaders := right.headers
+		if rightHeaders == "" {
+			rightHeaders = "<no headers>\n"
+		}
+		appendDiff("Headers", leftHeaders, rightHeaders, leftLabel+" headers", rightLabel+" headers")
+	default:
+		appendDiff("", left.pretty, right.pretty, leftLabel, rightLabel)
+	}
+
+	if len(sections) == 0 {
+		return "Responses are identical", true
+	}
+	combined := strings.Join(sections, "\n\n")
+	return colorizeDiff(combined), true
 }
 
 func colorizeDiff(diff string) string {
@@ -356,6 +380,81 @@ func ensureTrailingNewline(content string) string {
 		return content
 	}
 	return content + "\n"
+}
+
+func wrapDiffContent(content string, width int) string {
+	if width <= 0 {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		segments := wrapDiffLine(line, width)
+		wrapped = append(wrapped, segments...)
+	}
+	return strings.Join(wrapped, "\n")
+}
+
+func wrapDiffLine(line string, width int) []string {
+	if width <= 0 {
+		return []string{line}
+	}
+	if line == "" {
+		return []string{""}
+	}
+	if visibleWidth(line) <= width {
+		return []string{line}
+	}
+	marker, markerWidth, remainder, ok := splitDiffMarker(line)
+	if !ok {
+		return wrapLineSegments(line, width)
+	}
+	if markerWidth >= width {
+		return wrapLineSegments(line, width)
+	}
+	segmentWidth := width - markerWidth
+	if segmentWidth <= 0 {
+		return wrapLineSegments(line, width)
+	}
+	segments := wrapLineSegments(remainder, segmentWidth)
+	if len(segments) == 0 {
+		return []string{marker}
+	}
+	result := make([]string, len(segments))
+	for i, seg := range segments {
+		result[i] = marker + seg
+	}
+	return result
+}
+
+func splitDiffMarker(line string) (marker string, markerWidth int, remainder string, ok bool) {
+	if line == "" {
+		return "", 0, "", false
+	}
+	index := 0
+	for index < len(line) {
+		if loc := ansiSequenceRegex.FindStringIndex(line[index:]); loc != nil && loc[0] == 0 {
+			index += loc[1]
+			continue
+		}
+		break
+	}
+	if index >= len(line) {
+		return "", 0, line, false
+	}
+	r, size := utf8.DecodeRuneInString(line[index:])
+	if size <= 0 {
+		return "", 0, line, false
+	}
+	switch r {
+	case '+', '-', ' ':
+		marker = line[:index+size]
+		remainder = line[index+size:]
+		markerWidth = visibleWidth(marker)
+		return marker, markerWidth, remainder, true
+	default:
+		return "", 0, line, false
+	}
 }
 
 func (m *Model) ensurePaneActiveTabValid(pane *responsePaneState) {
