@@ -57,6 +57,52 @@ Content-Type: application/json
 
 ## Getting Started
 
+### Install prebuilt binaries
+
+Download from [GitHub Releases](https://github.com/unkn0wn-root/resterm/releases). You can use the snippets below to automatically detect the latest tag and fetch the matching binary for your platform.
+
+> [!NOTE]
+> The examples require `curl` and `jq`. Install `jq` with your package manager (e.g. `brew install jq`, `sudo apt install jq` etc.).
+
+#### Linux / macOS
+
+```bash
+# Detect latest version
+LATEST_TAG=$(curl -fsSL https://api.github.com/repos/unkn0wn-root/resterm/releases/latest | jq -r .tag_name)
+
+# Download the appropriate binary (Darwin/Linux + amd64/arm64)
+curl -fL -o resterm "https://github.com/unkn0wn-root/resterm/releases/download/${LATEST_TAG}/resterm_$(uname -s)_$(uname -m)"
+
+# Make it executable and install into your PATH
+chmod +x resterm
+sudo install -m 0755 resterm /usr/local/bin/resterm
+```
+
+If your system does not include `install`, replace the final line with `sudo mv resterm /usr/local/bin/resterm`.
+
+#### Windows (PowerShell)
+
+```powershell
+# Detect latest version
+$release = Invoke-RestMethod -Uri "https://api.github.com/repos/unkn0wn-root/resterm/releases/latest"
+$tag = $release.tag_name
+
+# Map PROCESSOR_ARCHITECTURE to the release naming convention
+$arch = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'arm64' } else { 'x86_64' }
+$asset = "resterm_Windows_$arch"
+
+# Download and rename to resterm.exe
+Invoke-WebRequest -Uri "https://github.com/unkn0wn-root/resterm/releases/download/$tag/$asset" -OutFile $asset
+Rename-Item $asset resterm.exe -Force
+
+# Move into a directory on your PATH (update the destination to your preference)
+Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe" -Force
+```
+
+Ensure the destination directory is on your `PATH`. If `%USERPROFILE%\bin` does not exist, create it and add it to your environment variables.
+
+### Build from source
+
 ```bash
 # build the binary
 go build ./cmd/resterm
