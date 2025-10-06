@@ -99,16 +99,16 @@ func DefaultTheme() Theme {
 			BorderForeground(lipgloss.Color("#FFE29B")),
 		HeaderSegments: []HeaderSegmentStyle{
 			{
-				Background: lipgloss.Color("#7D56F4"),
-				Border:     lipgloss.Color("#A58CFF"),
-				Foreground: lipgloss.Color("#F5F2FF"),
-				Accent:     lipgloss.Color("#FFFFFF"),
+				Background: lipgloss.Color("#9CD6FF"),
+				Border:     lipgloss.Color("#B9E1FF"),
+				Foreground: lipgloss.Color("#0D2C3D"),
+				Accent:     lipgloss.Color("#134158"),
 			},
 			{
-				Background: lipgloss.Color("#15AABF"),
-				Border:     lipgloss.Color("#2EC6D6"),
-				Foreground: lipgloss.Color("#EFFDFF"),
-				Accent:     lipgloss.Color("#FFFFFF"),
+				Background: lipgloss.Color("#B8F5C9"),
+				Border:     lipgloss.Color("#D3FBE0"),
+				Foreground: lipgloss.Color("#0F2E1A"),
+				Accent:     lipgloss.Color("#18472A"),
 			},
 			{
 				Background: lipgloss.Color("#FF7A45"),
