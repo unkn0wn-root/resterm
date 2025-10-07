@@ -416,64 +416,47 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 	contentWidth := maxInt(pane.viewport.Width, 1)
 	contentHeight := maxInt(pane.viewport.Height, 1)
 
-	var body string
 	if len(m.historyEntries) == 0 {
-		body = "No history yet. Execute a request to populate this view."
-	} else {
-		view := m.historyList.View()
-		view = lipgloss.NewStyle().
+		body := lipgloss.NewStyle().
 			MaxWidth(contentWidth).
-			Render(view)
-		if item, ok := m.historyList.SelectedItem().(historyItem); ok {
-			snippet := strings.TrimSpace(stripANSIEscape(item.entry.BodySnippet))
-			wrapWidth := pane.viewport.Width
-			if wrapWidth <= 0 {
-				wrapWidth = m.width - 6
-			}
-			if wrapWidth <= 0 {
-				wrapWidth = 80
-			}
-			formatted := formatHistorySnippet(snippet, wrapWidth)
-			if formatted != "" {
-				snippetStyle := lipgloss.NewStyle().
-					MarginTop(1).
-					Foreground(lipgloss.Color("#A6A1BB")).
-					MaxWidth(contentWidth)
-				snippetView := snippetStyle.Render(formatted)
-				snippetHeight := lipgloss.Height(snippetView)
-				if snippetHeight >= contentHeight {
-					snippetView = lipgloss.NewStyle().
-						MaxHeight(contentHeight).
-						Render(snippetView)
-					body = snippetView
-				} else {
-					maxListHeight := maxInt(contentHeight-snippetHeight, 1)
-					trimmedList := lipgloss.NewStyle().
-						MaxHeight(maxListHeight).
-						Render(view)
-					remaining := maxInt(contentHeight-lipgloss.Height(trimmedList), 0)
-					if remaining > 0 {
-						snippetView = lipgloss.NewStyle().
-							MaxHeight(remaining).
-							Render(snippetView)
-					}
-					if lipgloss.Height(snippetView) == 0 {
-						body = trimmedList
-					} else {
-						body = lipgloss.JoinVertical(
-							lipgloss.Left,
-							trimmedList,
-							snippetView,
-						)
-					}
-				}
-			}
-			if body == "" {
-				body = view
-			}
+			MaxHeight(contentHeight).
+			Render("No history yet. Execute a request to populate this view.")
+		return lipgloss.Place(
+			contentWidth,
+			contentHeight,
+			lipgloss.Top,
+			lipgloss.Left,
+			body,
+			lipgloss.WithWhitespaceChars(" "),
+		)
+	}
+
+	listView := m.historyList.View()
+	listView = lipgloss.NewStyle().
+		MaxWidth(contentWidth).
+		Render(listView)
+
+	var snippetView string
+	if item, ok := m.historyList.SelectedItem().(historyItem); ok {
+		snippet := strings.TrimSpace(stripANSIEscape(item.entry.BodySnippet))
+		wrapWidth := pane.viewport.Width
+		if wrapWidth <= 0 {
+			wrapWidth = m.width - 6
+		}
+		if wrapWidth <= 0 {
+			wrapWidth = 80
+		}
+		formatted := formatHistorySnippet(snippet, wrapWidth)
+		if formatted != "" {
+			snippetView = lipgloss.NewStyle().
+				MarginTop(1).
+				Foreground(lipgloss.Color("#A6A1BB")).
+				MaxWidth(contentWidth).
+				Render(formatted)
 		}
 	}
 
+	body := layoutHistoryContent(listView, snippetView, contentHeight)
 	body = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
 		MaxHeight(contentHeight).
@@ -486,6 +469,54 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 		lipgloss.Left,
 		body,
 		lipgloss.WithWhitespaceChars(" "),
+	)
+}
+
+func layoutHistoryContent(listView, snippetView string, maxHeight int) string {
+	height := maxInt(maxHeight, 1)
+	if snippetView == "" {
+		return lipgloss.NewStyle().
+			MaxHeight(height).
+			Render(listView)
+	}
+
+	snippet := lipgloss.NewStyle().
+		MaxHeight(height).
+		Render(snippetView)
+	snippetHeight := lipgloss.Height(snippet)
+	if snippetHeight >= height {
+		return snippet
+	}
+
+	listHeight := height - snippetHeight
+	if listHeight <= 0 {
+		return snippet
+	}
+
+	trimmedList := lipgloss.NewStyle().
+		MaxHeight(listHeight).
+		Render(listView)
+	trimmedListHeight := lipgloss.Height(trimmedList)
+	if trimmedListHeight == 0 {
+		return snippet
+	}
+
+	remaining := height - trimmedListHeight
+	if remaining <= 0 {
+		return trimmedList
+	}
+
+	trimmedSnippet := lipgloss.NewStyle().
+		MaxHeight(remaining).
+		Render(snippet)
+	if lipgloss.Height(trimmedSnippet) == 0 {
+		return trimmedList
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		trimmedList,
+		trimmedSnippet,
 	)
 }
 
