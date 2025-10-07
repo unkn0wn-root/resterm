@@ -75,6 +75,10 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, _ int) []lipgloss.Style 
 		return styles
 	}
 
+	if styles := s.requestSeparatorStyles(line, i); styles != nil {
+		return styles
+	}
+
 	markerStart := i
 	markerLen := commentMarkerLength(line, i)
 	if markerLen == 0 {
@@ -198,6 +202,24 @@ func (s *metadataRuneStyler) requestLineStyles(line []rune, start int) []lipglos
 	lineStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
 	for idx := start; idx < len(line); idx++ {
 		styles[idx] = lineStyle
+	}
+	return styles
+}
+
+func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []lipgloss.Style {
+	color := s.palette.RequestSeparator
+	if color == "" {
+		return nil
+	}
+
+	if !strings.HasPrefix(strings.ToUpper(string(line[start:])), "### ") {
+		return nil
+	}
+
+	styles := make([]lipgloss.Style, len(line))
+	separatorStyle := lipgloss.NewStyle().Foreground(color).Bold(false)
+	for idx := start; idx < len(line); idx++ {
+		styles[idx] = separatorStyle
 	}
 	return styles
 }

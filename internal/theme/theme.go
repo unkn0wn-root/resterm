@@ -23,6 +23,7 @@ type EditorMetadataPalette struct {
 	SettingKey       lipgloss.Color
 	SettingValue     lipgloss.Color
 	RequestLine      lipgloss.Color
+	RequestSeparator lipgloss.Color
 	DirectiveColors  map[string]lipgloss.Color
 }
 
@@ -188,6 +189,7 @@ func DefaultTheme() Theme {
 			SettingKey:       lipgloss.Color("#FFD46A"),
 			SettingValue:     lipgloss.Color("#FFEBC5"),
 			RequestLine:      lipgloss.Color("#FF6E6E"),
+			RequestSeparator: lipgloss.Color("#515054"), // still debating with myself if i want this
 			DirectiveColors: map[string]lipgloss.Color{
 				"name":              directiveAccent,
 				"description":       directiveAccent,

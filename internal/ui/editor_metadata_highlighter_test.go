@@ -53,7 +53,7 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 	styler := newMetadataRuneStyler(palette)
 	color := palette.RequestLine
 	if color == "" {
-		t.Fatal("expected auth color in palette")
+		t.Fatal("expected request line color in palette")
 	}
 	expected := lipgloss.NewStyle().Foreground(color).Bold(true).Render("P")
 
@@ -73,5 +73,26 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 	}
 	if got := styles[0].Render("G"); got != lipgloss.NewStyle().Foreground(color).Bold(true).Render("G") {
 		t.Fatalf("gRPC request style mismatch:\nwant %q\n got %q", expected, got)
+	}
+}
+
+func TestMetadataRuneStylerRequestSeparator(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+	color := palette.RequestSeparator
+	if color == "" {
+		t.Fatal("expected request separator color in palette")
+	}
+
+	line := []rune("### graphql list items")
+	styles := styler.StylesForLine(line, 0)
+	if styles == nil {
+		t.Fatalf("expected styles for request separator")
+	}
+	if got, want := styles[0].Render("#"), lipgloss.NewStyle().Foreground(color).Bold(true).Render("#"); got != want {
+		t.Fatalf("request separator style mismatch:\nwant %q\n got %q", want, got)
+	}
+	if got, want := styles[5].Render("g"), lipgloss.NewStyle().Foreground(color).Bold(true).Render("g"); got != want {
+		t.Fatalf("request separator text not styled uniformly:\nwant %q\n got %q", want, got)
 	}
 }
