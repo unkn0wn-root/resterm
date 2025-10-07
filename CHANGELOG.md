@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.7](https://github.com/unkn0wn-root/resterm/compare/v0.1.6...v0.1.7) (2025-10-07)
+
+
+### Features
+
+* add request separator color ([9ec619d](https://github.com/unkn0wn-root/resterm/commit/9ec619dba65db7facf32a28761fdc0a8cb8af703))
+* editor metadata styling ([78f14dd](https://github.com/unkn0wn-root/resterm/commit/78f14dd6108e5e9a855a3ebb91f66b8349ce35e1))
+
 ### [0.1.6](https://github.com/unkn0wn-root/resterm/compare/v0.1.5...v0.1.6) (2025-10-07)
 
 
