@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.6](https://github.com/unkn0wn-root/resterm/compare/v0.1.5...v0.1.6) (2025-10-07)
+
+
+### Bug Fixes
+
+* guard history pane so j/k works after switching focus ([0e8b78b](https://github.com/unkn0wn-root/resterm/commit/0e8b78b0cf455647f1b93148324907a5fec4084b))
+
 ### [0.1.5](https://github.com/unkn0wn-root/resterm/compare/v0.1.4...v0.1.5) (2025-10-06)
 
 ### [0.1.4](https://github.com/unkn0wn-root/resterm/compare/v0.1.3...v0.1.4) (2025-10-04)
