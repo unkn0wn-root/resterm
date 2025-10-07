@@ -648,13 +648,13 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 		pane := m.focusedPane()
 		switch keyStr {
-		case "down":
+		case "down", "j":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
 			pane.viewport.LineDown(1)
 			return combine(nil)
-		case "up":
+		case "up", "k":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
@@ -671,18 +671,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			}
 			pane.viewport.PageUp()
-			return combine(nil)
-		case "j":
-			if pane == nil || pane.activeTab == responseTabHistory {
-				return combine(nil)
-			}
-			pane.viewport.LineDown(1)
-			return combine(nil)
-		case "k":
-			if pane == nil || pane.activeTab == responseTabHistory {
-				return combine(nil)
-			}
-			pane.viewport.LineUp(1)
 			return combine(nil)
 		case "left", "ctrl+h", "h":
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
