@@ -63,7 +63,7 @@ const (
 	maxSidebarSplit     = 0.8
 	minSidebarFiles     = 6
 	minSidebarRequests  = 4
-	sidebarSplitPadding = 3
+	sidebarSplitPadding = 1
 )
 
 const (
@@ -72,7 +72,7 @@ const (
 	minEditorSplit               = 0.3
 	maxEditorSplit               = 0.70
 	minEditorPaneWidth           = 30
-	minResponsePaneWidth         = 30
+	minResponsePaneWidth         = 50
 	minResponseSplitWidth        = 24
 	responseSplitSeparatorWidth  = 1
 	minResponseSplitHeight       = 6
@@ -164,6 +164,7 @@ type Model struct {
 
 	width                 int
 	height                int
+	paneContentHeight     int
 	frameWidth            int
 	frameHeight           int
 	sidebarSplit          float64

@@ -674,13 +674,13 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(nil)
 		case "j":
 			if pane == nil || pane.activeTab == responseTabHistory {
-				return combine(m.activateNextTabFor(m.responsePaneFocus))
+				return combine(nil)
 			}
 			pane.viewport.LineDown(1)
 			return combine(nil)
 		case "k":
 			if pane == nil || pane.activeTab == responseTabHistory {
-				return combine(m.activatePrevTabFor(m.responsePaneFocus))
+				return combine(nil)
 			}
 			pane.viewport.LineUp(1)
 			return combine(nil)
