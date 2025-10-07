@@ -21,6 +21,8 @@ func (m *Model) applyLayout() tea.Cmd {
 		paneHeight = 4
 	}
 
+	m.paneContentHeight = paneHeight
+
 	if m.sidebarSplit <= 0 {
 		m.sidebarSplit = sidebarSplitDefault
 	}
@@ -154,18 +156,23 @@ func (m *Model) applyLayout() tea.Cmd {
 	m.fileList.SetSize(fileWidth-4, maxInt(filesHeight-2, 1))
 	m.requestList.SetSize(fileWidth-4, maxInt(requestsHeight-2, 1))
 	m.editor.SetWidth(maxInt(editorWidth-4, 1))
-	m.editor.SetHeight(paneHeight - 2)
+	m.editor.SetHeight(maxInt(paneHeight, 1))
 
 	primaryContentWidth := maxInt(responseWidth-4, 1)
-	responseContentHeight := paneHeight - 4
 	primaryPane := &m.responsePanes[0]
 	secondaryPane := &m.responsePanes[1]
+
+	const responseTabsHeight = 1
+	baseViewportHeight := paneHeight - responseTabsHeight
+	if baseViewportHeight < 1 {
+		baseViewportHeight = 1
+	}
 
 	if m.responseSplit {
 		switch m.responseSplitOrientation {
 		case responseSplitHorizontal:
 			width := primaryContentWidth
-			available := responseContentHeight - responseSplitSeparatorHeight
+			available := paneHeight - (responseTabsHeight*2 + responseSplitSeparatorHeight)
 			if available < 0 {
 				available = 0
 			}
@@ -243,15 +250,15 @@ func (m *Model) applyLayout() tea.Cmd {
 				}
 			}
 			primaryPane.viewport.Width = maxInt(primaryWidth, 1)
-			primaryPane.viewport.Height = responseContentHeight
+			primaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
 			secondaryPane.viewport.Width = maxInt(secondaryWidth, 1)
-			secondaryPane.viewport.Height = responseContentHeight
+			secondaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
 		}
 	} else {
 		primaryPane.viewport.Width = maxInt(primaryContentWidth, 1)
-		primaryPane.viewport.Height = responseContentHeight
+		primaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
 		secondaryPane.viewport.Width = maxInt(primaryContentWidth, 1)
-		secondaryPane.viewport.Height = responseContentHeight
+		secondaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
 	}
 
 	historyPane := primaryPane

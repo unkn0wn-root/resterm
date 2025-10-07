@@ -208,8 +208,9 @@ func (m Model) renderFilePane() string {
 		content = faintStyle.Render(content)
 	}
 
-	minHeight := m.fileList.Height() + m.requestList.Height() + 8
-	targetHeight := m.responseContentHeight() + 6
+	minHeight := m.fileList.Height() + m.requestList.Height() + 6
+	frameHeight := style.GetVerticalFrameSize()
+	targetHeight := m.paneContentHeight + frameHeight
 	if targetHeight < minHeight {
 		targetHeight = minHeight
 	}
@@ -231,9 +232,12 @@ func (m Model) renderEditorPane() string {
 		style = style.Copy().Faint(true)
 		content = lipgloss.NewStyle().Faint(true).Render(content)
 	}
+	frameHeight := style.GetVerticalFrameSize()
+	innerHeight := maxInt(m.editor.Height(), m.paneContentHeight)
+	height := innerHeight + frameHeight
 	return style.
 		Width(m.editor.Width() + 4).
-		Height(m.editor.Height() + 4).
+		Height(height).
 		Render(content)
 }
 
@@ -281,7 +285,11 @@ func (m Model) renderResponsePane() string {
 	}
 
 	width := m.responseContentWidth() + 4
-	height := m.responseContentHeight() + 6
+	frameHeight := style.GetVerticalFrameSize()
+	height := m.paneContentHeight + frameHeight
+	if height < frameHeight {
+		height = frameHeight
+	}
 	return style.
 		Width(width).
 		Height(height).
@@ -294,23 +302,46 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool) string {
 		return ""
 	}
 
+	contentWidth := maxInt(pane.viewport.Width, 1)
+	contentHeight := maxInt(pane.viewport.Height, 1)
+
 	tabs := m.renderPaneTabs(id, focused)
+	tabs = lipgloss.NewStyle().
+		MaxWidth(contentWidth).
+		Render(tabs)
 	var content string
 	if pane.activeTab == responseTabHistory {
 		content = m.renderHistoryPaneFor(id)
 	} else {
 		content = pane.viewport.View()
 	}
+	content = lipgloss.NewStyle().
+		MaxWidth(contentWidth).
+		MaxHeight(contentHeight).
+		Render(content)
 
 	if !focused && m.focus == focusResponse {
 		tabs = lipgloss.NewStyle().Faint(true).Render(tabs)
 		content = lipgloss.NewStyle().Faint(true).Render(content)
 	}
 
-	return lipgloss.JoinVertical(
+	column := lipgloss.JoinVertical(
 		lipgloss.Left,
 		tabs,
 		content,
+	)
+	columnHeight := maxInt(contentHeight+lipgloss.Height(tabs), 1)
+	column = lipgloss.NewStyle().
+		MaxWidth(contentWidth).
+		MaxHeight(columnHeight).
+		Render(column)
+	return lipgloss.Place(
+		contentWidth,
+		columnHeight,
+		lipgloss.Top,
+		lipgloss.Left,
+		column,
+		lipgloss.WithWhitespaceChars(" "),
 	)
 }
 
@@ -355,7 +386,7 @@ func (m Model) renderResponseDivider(left, right string) string {
 	}
 	height := maxInt(lipgloss.Height(left), lipgloss.Height(right))
 	if height <= 0 {
-		height = m.responseContentHeight() + 2
+		height = maxInt(m.paneContentHeight, 1)
 	}
 	line := strings.Repeat("│\n", height-1) + "│"
 	return m.theme.PaneDivider.Copy().Render(line)
@@ -377,13 +408,38 @@ func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
 }
 
 func (m Model) renderHistoryPaneFor(id responsePaneID) string {
-	if len(m.historyEntries) == 0 {
-		return "No history yet. Execute a request to populate this view."
+	pane := m.pane(id)
+	if pane == nil {
+		return ""
 	}
-	view := m.historyList.View()
+
+	contentWidth := maxInt(pane.viewport.Width, 1)
+	contentHeight := maxInt(pane.viewport.Height, 1)
+
+	if len(m.historyEntries) == 0 {
+		body := lipgloss.NewStyle().
+			MaxWidth(contentWidth).
+			MaxHeight(contentHeight).
+			Render("No history yet. Execute a request to populate this view.")
+		return lipgloss.Place(
+			contentWidth,
+			contentHeight,
+			lipgloss.Top,
+			lipgloss.Left,
+			body,
+			lipgloss.WithWhitespaceChars(" "),
+		)
+	}
+
+	listView := m.historyList.View()
+	listView = lipgloss.NewStyle().
+		MaxWidth(contentWidth).
+		Render(listView)
+
+	var snippetView string
 	if item, ok := m.historyList.SelectedItem().(historyItem); ok {
 		snippet := strings.TrimSpace(stripANSIEscape(item.entry.BodySnippet))
-		wrapWidth := m.pane(id).viewport.Width
+		wrapWidth := pane.viewport.Width
 		if wrapWidth <= 0 {
 			wrapWidth = m.width - 6
 		}
@@ -392,17 +448,76 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 		}
 		formatted := formatHistorySnippet(snippet, wrapWidth)
 		if formatted != "" {
-			snippetStyle := lipgloss.NewStyle().
+			snippetView = lipgloss.NewStyle().
 				MarginTop(1).
-				Foreground(lipgloss.Color("#A6A1BB"))
-			view = lipgloss.JoinVertical(
-				lipgloss.Left,
-				view,
-				snippetStyle.Render(formatted),
-			)
+				Foreground(lipgloss.Color("#A6A1BB")).
+				MaxWidth(contentWidth).
+				Render(formatted)
 		}
 	}
-	return view
+
+	body := layoutHistoryContent(listView, snippetView, contentHeight)
+	body = lipgloss.NewStyle().
+		MaxWidth(contentWidth).
+		MaxHeight(contentHeight).
+		Render(body)
+
+	return lipgloss.Place(
+		contentWidth,
+		contentHeight,
+		lipgloss.Top,
+		lipgloss.Left,
+		body,
+		lipgloss.WithWhitespaceChars(" "),
+	)
+}
+
+func layoutHistoryContent(listView, snippetView string, maxHeight int) string {
+	height := maxInt(maxHeight, 1)
+	if snippetView == "" {
+		return lipgloss.NewStyle().
+			MaxHeight(height).
+			Render(listView)
+	}
+
+	snippet := lipgloss.NewStyle().
+		MaxHeight(height).
+		Render(snippetView)
+	snippetHeight := lipgloss.Height(snippet)
+	if snippetHeight >= height {
+		return snippet
+	}
+
+	listHeight := height - snippetHeight
+	if listHeight <= 0 {
+		return snippet
+	}
+
+	trimmedList := lipgloss.NewStyle().
+		MaxHeight(listHeight).
+		Render(listView)
+	trimmedListHeight := lipgloss.Height(trimmedList)
+	if trimmedListHeight == 0 {
+		return snippet
+	}
+
+	remaining := height - trimmedListHeight
+	if remaining <= 0 {
+		return trimmedList
+	}
+
+	trimmedSnippet := lipgloss.NewStyle().
+		MaxHeight(remaining).
+		Render(snippet)
+	if lipgloss.Height(trimmedSnippet) == 0 {
+		return trimmedList
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		trimmedList,
+		trimmedSnippet,
+	)
 }
 
 func (m Model) renderCommandBar() string {
