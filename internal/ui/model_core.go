@@ -250,6 +250,7 @@ func New(cfg Config) Model {
 	}
 
 	editor := newRequestEditor()
+	editor.Model.SetRuneStyler(newMetadataRuneStyler(th.EditorMetadata))
 	editor.Placeholder = "Write HTTP requests here..."
 	editor.SetValue(cfg.InitialContent)
 	editor.moveToBufferTop()

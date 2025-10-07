@@ -601,9 +601,7 @@ func TestHandleKeyDdDeletesLine(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected editorEvent, got %T", msg)
 	}
-	if evt.status == nil || evt.status.text != "Deleted line" {
-		t.Fatalf("expected delete line status, got %+v", evt.status)
-	}
+	expectStatusWithClipboardFallback(t, evt.status, "Deleted line")
 	if got := model.editor.Value(); got != "beta\ncharlie" {
 		t.Fatalf("expected first line removed, got %q", got)
 	}
@@ -635,9 +633,7 @@ func TestHandleKeyDdDeletesLastLineWithoutBlank(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected editorEvent, got %T", msg)
 		}
-		if evt.status == nil || evt.status.text != "Deleted line" {
-			t.Fatalf("expected delete line status, got %+v", evt.status)
-		}
+		expectStatusWithClipboardFallback(t, evt.status, "Deleted line")
 	}
 	if got := model.editor.Value(); got != "alpha" {
 		t.Fatalf("expected trailing line removed without blank, got %q", got)
@@ -667,9 +663,7 @@ func TestHandleKeyDdDeletesTrailingBlankLine(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected editorEvent, got %T", msg)
 		}
-		if evt.status == nil || evt.status.text != "Deleted line" {
-			t.Fatalf("expected delete line status, got %+v", evt.status)
-		}
+		expectStatusWithClipboardFallback(t, evt.status, "Deleted line")
 	}
 	if got := model.editor.Value(); got != "alpha" {
 		t.Fatalf("expected trailing blank line removed, got %q", got)

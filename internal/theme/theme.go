@@ -16,6 +16,17 @@ type CommandSegmentStyle struct {
 	Text       lipgloss.Color
 }
 
+type EditorMetadataPalette struct {
+	CommentMarker    lipgloss.Color
+	DirectiveDefault lipgloss.Color
+	Value            lipgloss.Color
+	SettingKey       lipgloss.Color
+	SettingValue     lipgloss.Color
+	RequestLine      lipgloss.Color
+	RequestSeparator lipgloss.Color
+	DirectiveColors  map[string]lipgloss.Color
+}
+
 type Theme struct {
 	BrowserBorder           lipgloss.Style
 	EditorBorder            lipgloss.Style
@@ -47,11 +58,13 @@ type Theme struct {
 	PaneBorderFocusFile     lipgloss.Color
 	PaneBorderFocusRequests lipgloss.Color
 	PaneActiveForeground    lipgloss.Color
+	EditorMetadata          EditorMetadataPalette
 }
 
 func DefaultTheme() Theme {
 	accent := lipgloss.Color("#7D56F4")
 	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#dcd7ff"))
+	directiveAccent := lipgloss.Color("#56A9DD")
 
 	return Theme{
 		BrowserBorder:  base.Copy().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A78BFA")),
@@ -169,6 +182,39 @@ func DefaultTheme() Theme {
 		PaneBorderFocusFile:     lipgloss.Color("#7D56F4"),
 		PaneBorderFocusRequests: lipgloss.Color("#15AABF"),
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
+		EditorMetadata: EditorMetadataPalette{
+			CommentMarker:    lipgloss.Color("#5E5A72"),
+			DirectiveDefault: directiveAccent,
+			Value:            lipgloss.Color("#E6E1FF"),
+			SettingKey:       lipgloss.Color("#FFD46A"),
+			SettingValue:     lipgloss.Color("#FFEBC5"),
+			RequestLine:      lipgloss.Color("#FF6E6E"),
+			RequestSeparator: lipgloss.Color("#626166"), // still debating with myself if i want this
+			DirectiveColors: map[string]lipgloss.Color{
+				"name":              directiveAccent,
+				"description":       directiveAccent,
+				"desc":              directiveAccent,
+				"tag":               directiveAccent,
+				"auth":              directiveAccent,
+				"graphql":           directiveAccent,
+				"graphql-operation": directiveAccent,
+				"operation":         directiveAccent,
+				"variables":         directiveAccent,
+				"graphql-variables": directiveAccent,
+				"query":             directiveAccent,
+				"graphql-query":     directiveAccent,
+				"grpc":              directiveAccent,
+				"grpc-descriptor":   directiveAccent,
+				"grpc-reflection":   directiveAccent,
+				"grpc-plaintext":    directiveAccent,
+				"grpc-authority":    directiveAccent,
+				"grpc-metadata":     directiveAccent,
+				"setting":           directiveAccent,
+				"timeout":           directiveAccent,
+				"script":            directiveAccent,
+				"no-log":            directiveAccent,
+			},
+		},
 	}
 }
 

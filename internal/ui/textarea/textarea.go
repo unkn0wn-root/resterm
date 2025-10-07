@@ -43,6 +43,13 @@ type (
 	pasteErrMsg struct{ error }
 )
 
+// RuneStyler can inject per-rune styling into the textarea during rendering.
+// Implementations should return either nil (no styling) or a slice of styles
+// matching the length of the provided line.
+type RuneStyler interface {
+	StylesForLine(line []rune, lineIndex int) []lipgloss.Style
+}
+
 // KeyMap is the key bindings for different actions within the textarea.
 type KeyMap struct {
 	CharacterBackward       key.Binding
@@ -230,6 +237,7 @@ type Model struct {
 	selectionStart  int
 	selectionEnd    int
 	selectionStyle  lipgloss.Style
+	runeStyler      RuneStyler
 
 	// Cursor is the text area cursor.
 	Cursor cursor.Model
@@ -909,6 +917,16 @@ func (m *Model) SetSelectionStyle(style lipgloss.Style) {
 	m.selectionStyle = style
 }
 
+// SetRuneStyler registers a styling hook applied when rendering each line.
+func (m *Model) SetRuneStyler(styler RuneStyler) {
+	m.runeStyler = styler
+}
+
+// RuneStyler returns the styling hook for per-rune rendering, if any.
+func (m Model) RuneStyler() RuneStyler {
+	return m.runeStyler
+}
+
 // ViewStart returns the index of the first visible line in the viewport.
 func (m Model) ViewStart() int {
 	if m.viewport == nil {
@@ -1195,6 +1213,13 @@ func (m Model) View() string {
 	for l, line := range m.value {
 		wrappedLines := m.memoizedWrap(line, m.width)
 
+		var lineStyles []lipgloss.Style
+		if m.runeStyler != nil && len(line) > 0 {
+			if styles := m.runeStyler.StylesForLine(line, l); len(styles) == len(line) {
+				lineStyles = styles
+			}
+		}
+
 		if m.row == l {
 			style = m.style.computedCursorLine()
 		} else {
@@ -1254,22 +1279,8 @@ func (m Model) View() string {
 				padding -= m.width - strwidth
 			}
 
-			if selectionActive {
-				segments := m.renderSelectionSegments(wrappedLine, style, &lineConsumed, lineLen, &globalOffset, selStart, selEnd)
-				if m.row == l && lineInfo.RowOffset == wl {
-					writeSegments(&s, segments, 0, lineInfo.ColumnOffset)
-					if m.col >= len(line) && lineInfo.CharOffset >= m.width {
-						m.Cursor.SetChar(" ")
-						s.WriteString(m.Cursor.View())
-					} else {
-						m.Cursor.SetChar(string(wrappedLine[lineInfo.ColumnOffset]))
-						s.WriteString(style.Render(m.Cursor.View()))
-						writeSegments(&s, segments, lineInfo.ColumnOffset+1, len(segments))
-					}
-				} else {
-					writeSegments(&s, segments, 0, len(segments))
-				}
-			} else {
+			needsStyler := lineStyles != nil || selectionActive
+			if !needsStyler {
 				if m.row == l && lineInfo.RowOffset == wl {
 					s.WriteString(style.Render(string(wrappedLine[:lineInfo.ColumnOffset])))
 					if m.col >= len(line) && lineInfo.CharOffset >= m.width {
@@ -1287,6 +1298,59 @@ func (m Model) View() string {
 					actual := min(remaining, len(wrappedLine))
 					lineConsumed += actual
 					globalOffset += actual
+				}
+			} else {
+				segmentStart := lineConsumed
+				segments := m.renderStyledSegments(
+					wrappedLine,
+					style,
+					lineStyles,
+					&lineConsumed,
+					lineLen,
+					&globalOffset,
+					selectionActive,
+					selStart,
+					selEnd,
+				)
+
+				if selectionActive {
+					if m.row == l && lineInfo.RowOffset == wl {
+						writeSegments(&s, segments, 0, lineInfo.ColumnOffset)
+						if m.col >= len(line) && lineInfo.CharOffset >= m.width {
+							m.Cursor.SetChar(" ")
+							s.WriteString(m.Cursor.View())
+						} else {
+							m.Cursor.SetChar(string(wrappedLine[lineInfo.ColumnOffset]))
+							cursorStyle := style
+							cursorIndex := segmentStart + lineInfo.ColumnOffset
+							if lineStyles != nil && cursorIndex >= 0 && cursorIndex < len(lineStyles) {
+								cursorStyle = cursorStyle.Inherit(lineStyles[cursorIndex])
+							}
+							s.WriteString(cursorStyle.Render(m.Cursor.View()))
+							writeSegments(&s, segments, lineInfo.ColumnOffset+1, len(segments))
+						}
+					} else {
+						writeSegments(&s, segments, 0, len(segments))
+					}
+				} else {
+					if m.row == l && lineInfo.RowOffset == wl {
+						writeSegments(&s, segments, 0, lineInfo.ColumnOffset)
+						if m.col >= len(line) && lineInfo.CharOffset >= m.width {
+							m.Cursor.SetChar(" ")
+							s.WriteString(m.Cursor.View())
+						} else {
+							m.Cursor.SetChar(string(wrappedLine[lineInfo.ColumnOffset]))
+							cursorStyle := style
+							cursorIndex := segmentStart + lineInfo.ColumnOffset
+							if lineStyles != nil && cursorIndex >= 0 && cursorIndex < len(lineStyles) {
+								cursorStyle = cursorStyle.Inherit(lineStyles[cursorIndex])
+							}
+							s.WriteString(cursorStyle.Render(m.Cursor.View()))
+							writeSegments(&s, segments, lineInfo.ColumnOffset+1, len(segments))
+						}
+					} else {
+						writeSegments(&s, segments, 0, len(segments))
+					}
 				}
 			}
 
@@ -1342,22 +1406,32 @@ func writeSegments(builder *strings.Builder, segments []string, start, end int) 
 	}
 }
 
-func (m Model) renderSelectionSegments(
+func (m Model) renderStyledSegments(
 	wrappedLine []rune,
 	baseStyle lipgloss.Style,
+	lineStyles []lipgloss.Style,
 	lineConsumed *int,
 	lineLen int,
 	globalOffset *int,
+	selectionActive bool,
 	selectionStart, selectionEnd int,
 ) []string {
 	segments := make([]string, len(wrappedLine))
-	highlightStyle := m.selectionStyle.Copy().Inherit(baseStyle)
 	for i, r := range wrappedLine {
 		isActual := *lineConsumed < lineLen
-		renderStyle := baseStyle
-		if isActual && *globalOffset >= selectionStart && *globalOffset < selectionEnd {
-			renderStyle = highlightStyle
+		runeStyle := baseStyle
+		if isActual && lineStyles != nil {
+			idx := *lineConsumed
+			if idx >= 0 && idx < len(lineStyles) {
+				runeStyle = runeStyle.Inherit(lineStyles[idx])
+			}
 		}
+
+		renderStyle := runeStyle
+		if selectionActive && isActual && *globalOffset >= selectionStart && *globalOffset < selectionEnd {
+			renderStyle = m.selectionStyle.Copy().Inherit(runeStyle)
+		}
+
 		segments[i] = renderStyle.Render(string(r))
 		if isActual {
 			*lineConsumed++

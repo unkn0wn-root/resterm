@@ -63,6 +63,19 @@ func editorEventFromCmd(t *testing.T, cmd tea.Cmd) editorEvent {
 	return evt
 }
 
+const clipboardFallbackStatus = "Clipboard unavailable; saved in editor register"
+
+func expectStatusWithClipboardFallback(t *testing.T, status *statusMsg, want string) {
+	t.Helper()
+	if status == nil {
+		t.Fatalf("expected status %q, got nil", want)
+	}
+	if status.text == want || status.text == clipboardFallbackStatus {
+		return
+	}
+	t.Fatalf("expected status %q (or clipboard fallback), got %q", want, status.text)
+}
+
 func TestRequestEditorMotionGG(t *testing.T) {
 	content := "  first\nsecond\nthird"
 	editor := newTestEditor(content)
@@ -228,9 +241,7 @@ func TestRequestEditorDeleteSelectionRemovesText(t *testing.T) {
 	if !evt.dirty {
 		t.Fatalf("expected delete selection to mark editor dirty")
 	}
-	if evt.status == nil || evt.status.text != "Selection deleted" {
-		t.Fatalf("expected delete status message, got %+v", evt.status)
-	}
+	expectStatusWithClipboardFallback(t, evt.status, "Selection deleted")
 	if got := updated.Value(); got != "" {
 		t.Fatalf("expected selection to be removed, got %q", got)
 	}
@@ -380,9 +391,7 @@ func TestDeleteCurrentLineRemovesLine(t *testing.T) {
 	before := editor.Value()
 	editor, cmd := editor.DeleteCurrentLine()
 	evt := editorEventFromCmd(t, cmd)
-	if evt.status == nil || evt.status.text != "Deleted line" {
-		t.Fatalf("expected line deletion status, got %+v", evt.status)
-	}
+	expectStatusWithClipboardFallback(t, evt.status, "Deleted line")
 	if got := editor.Value(); got == before || got != "beta\ncharlie" {
 		t.Fatalf("expected first line removed, got %q", got)
 	}
@@ -395,9 +404,7 @@ func TestDeleteToLineEndRemovesTail(t *testing.T) {
 
 	editor, cmd := editor.DeleteToLineEnd()
 	evt := editorEventFromCmd(t, cmd)
-	if evt.status == nil || evt.status.text != "Deleted to end of line" {
-		t.Fatalf("expected delete tail status, got %+v", evt.status)
-	}
+	expectStatusWithClipboardFallback(t, evt.status, "Deleted to end of line")
 	if got := editor.Value(); got != "alpha \nsecond" {
 		t.Fatalf("expected tail removed, got %q", got)
 	}
@@ -410,9 +417,7 @@ func TestDeleteCharAtCursorRemovesRune(t *testing.T) {
 
 	editor, cmd := editor.DeleteCharAtCursor()
 	evt := editorEventFromCmd(t, cmd)
-	if evt.status == nil || evt.status.text != "Deleted character" {
-		t.Fatalf("expected char deletion status, got %+v", evt.status)
-	}
+	expectStatusWithClipboardFallback(t, evt.status, "Deleted character")
 	if got := editor.Value(); got != "xz" {
 		t.Fatalf("expected middle character removed, got %q", got)
 	}
@@ -450,9 +455,7 @@ func TestChangeCurrentLineClearsContent(t *testing.T) {
 
 	editor, cmd := editor.ChangeCurrentLine()
 	evt := editorEventFromCmd(t, cmd)
-	if evt.status == nil || evt.status.text != "Changed line" {
-		t.Fatalf("expected change line status, got %+v", evt.status)
-	}
+	expectStatusWithClipboardFallback(t, evt.status, "Changed line")
 	if got := editor.Value(); got != "alpha\n" {
 		t.Fatalf("expected second line cleared, got %q", got)
 	}
