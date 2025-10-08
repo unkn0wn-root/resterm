@@ -1,0 +1,165 @@
+package ui
+
+import (
+	"strings"
+	"testing"
+)
+
+func TestWrapLineSegmentsPreservesLeadingIndent(t *testing.T) {
+	line := "    indentation text"
+	segments := wrapLineSegments(line, 10)
+	if len(segments) < 2 {
+		t.Fatalf("expected multiple segments, got %d", len(segments))
+	}
+	if !strings.HasPrefix(segments[0], "    ") {
+		t.Fatalf("expected first segment to include indentation, got %q", segments[0])
+	}
+}
+
+func TestWrapLineSegmentsSkipsLeadingWhitespaceOnContinuation(t *testing.T) {
+	segments := wrapLineSegments("foo bar baz", 5)
+	if len(segments) != 3 {
+		t.Fatalf("expected 3 segments, got %d", len(segments))
+	}
+	for i := 1; i < len(segments); i++ {
+		if strings.HasPrefix(segments[i], " ") {
+			t.Fatalf("segment %d unexpectedly starts with whitespace: %q", i, segments[i])
+		}
+	}
+}
+
+func TestWrapLineSegmentsHandlesLongTokenWithIndent(t *testing.T) {
+	segments := wrapLineSegments("    Supercalifragilistic", 10)
+	if len(segments) < 2 {
+		t.Fatalf("expected wrapped long token, got %d segments", len(segments))
+	}
+	if !strings.HasPrefix(segments[0], "    ") {
+		t.Fatalf("expected first segment to preserve indentation, got %q", segments[0])
+	}
+	if !strings.Contains(segments[0], "Super") {
+		t.Fatalf("expected first segment to contain token prefix, got %q", segments[0])
+	}
+}
+
+func TestWrapLineSegmentsSplitsLongWhitespace(t *testing.T) {
+	line := strings.Repeat(" ", 12) + "x"
+	segments := wrapLineSegments(line, 5)
+	if len(segments) < 3 {
+		t.Fatalf("expected whitespace to be split across segments, got %d", len(segments))
+	}
+	if segments[0] != strings.Repeat(" ", 5) {
+		t.Fatalf("expected first segment to contain 5 spaces, got %q", segments[0])
+	}
+	if !strings.HasSuffix(segments[len(segments)-1], "x") {
+		t.Fatalf("expected final segment to include trailing content, got %q", segments[len(segments)-1])
+	}
+}
+
+func TestWrapLineSegmentsWithANSIEscape(t *testing.T) {
+	line := "\x1b[31mError:\x1b[0m details"
+	segments := wrapLineSegments(line, 6)
+	if len(segments) < 2 {
+		t.Fatalf("expected ANSI-colored text to wrap, got %d segments", len(segments))
+	}
+	joined := strings.Join(segments, "")
+	if !strings.Contains(joined, "\x1b[31m") || !strings.Contains(joined, "\x1b[0m") {
+		t.Fatalf("expected ANSI escape codes to be preserved, got %q", joined)
+	}
+}
+
+func TestWrapToWidthPreservesJSONIndentation(t *testing.T) {
+	json := "{\n    \"key\": \"value\",\n    \"nested\": {\n        \"deep\": \"value\"\n    }\n}"
+	wrapped := wrapToWidth(json, 12)
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) < 5 {
+		t.Fatalf("expected wrapped JSON to produce multiple lines, got %d", len(lines))
+	}
+	var foundIndented bool
+	for _, line := range lines {
+		if strings.HasPrefix(line, "    \"") || strings.HasPrefix(line, "        \"") {
+			foundIndented = true
+		}
+	}
+	if !foundIndented {
+		t.Fatalf("expected at least one wrapped line to retain JSON indentation, got %v", lines)
+	}
+	if !strings.Contains(strings.Join(lines, ""), "\"deep\"") {
+		t.Fatalf("expected wrapped JSON to contain nested keys, got %q", strings.Join(lines, ""))
+	}
+}
+
+func TestWrapLineSegmentsComplexMixedContent(t *testing.T) {
+	line := "\t    \x1b[32m✓\x1b[0m 你好世界 resterm supercalifragilisticexpialidocious"
+	segments := wrapLineSegments(line, 14)
+	if len(segments) < 4 {
+		t.Fatalf("expected multiple segments, got %d", len(segments))
+	}
+	if !strings.HasPrefix(segments[0], "\t    ") {
+		t.Fatalf("expected first segment to keep tab + spaces, got %q", segments[0])
+	}
+	var sawResterm bool
+	for idx, segment := range segments {
+		if segment == "" {
+			t.Fatalf("segment %d empty", idx)
+		}
+		if strings.Contains(segment, "resterm") {
+			sawResterm = true
+			if strings.HasPrefix(segment, " ") {
+				t.Fatalf("continuation segment unexpectedly starts with space: %q", segment)
+			}
+		}
+	}
+	if !sawResterm {
+		t.Fatalf("expected to find continuation segment containing 'resterm', segments=%v", segments)
+	}
+}
+
+func TestWrapLineSegmentsVeryNarrowUnicode(t *testing.T) {
+	line := "你好世界"
+	segments := wrapLineSegments(line, 2)
+	if len(segments) != 4 {
+		t.Fatalf("expected each rune to form its own segment, got %d", len(segments))
+	}
+	for _, segment := range segments {
+		if strings.TrimSpace(segment) == "" {
+			t.Fatalf("unexpected blank segment in %v", segments)
+		}
+	}
+	if strings.Join(segments, "") != line {
+		t.Fatalf("expected wrapped unicode content to match original, got %q", strings.Join(segments, ""))
+	}
+}
+
+func TestWrapToWidthMultiLineMixedContent(t *testing.T) {
+	multiline := strings.Join([]string{
+		"    {",
+		"        \"greeting\": \"hello\",",
+		"        \"colored\": \"\x1b[36mcyan text\x1b[0m\",",
+		"        \"data\": \"supercalifragilisticexpialidocious\"",
+		"    }",
+	}, "\n")
+	wrapped := wrapToWidth(multiline, 20)
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) <= 5 {
+		t.Fatalf("expected wrapped multiline content to expand, got %d lines", len(lines))
+	}
+	if !strings.HasPrefix(lines[0], "    {") {
+		t.Fatalf("expected first line to retain indentation, got %q", lines[0])
+	}
+	var continuationWithoutIndent bool
+	for i := 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "        ") {
+			continue
+		}
+		if !strings.HasPrefix(lines[i], "    ") && !strings.HasPrefix(lines[i], "        ") && strings.HasPrefix(lines[i], "\"") {
+			continuationWithoutIndent = true
+		}
+	}
+	if !continuationWithoutIndent {
+		t.Fatalf("expected at least one continuation line without leading indentation, got %v", lines)
+	}
+	joined := strings.Join(lines, "")
+	if !strings.Contains(joined, "supercalifragilisticexpialidocious") {
+		t.Fatalf("expected wrapped content to retain long word, got %q", joined)
+	}
+}
