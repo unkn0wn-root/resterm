@@ -72,7 +72,7 @@ const (
 	minEditorSplit               = 0.3
 	maxEditorSplit               = 0.70
 	minEditorPaneWidth           = 30
-	minResponsePaneWidth         = 50
+	minResponsePaneWidth         = 40
 	minResponseSplitWidth        = 24
 	responseSplitSeparatorWidth  = 1
 	minResponseSplitHeight       = 6
