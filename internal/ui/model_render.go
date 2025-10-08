@@ -769,35 +769,74 @@ func (m Model) headerTestSummary() (string, bool) {
 }
 
 func (m Model) renderStatusBar() string {
-	builder := strings.Builder{}
-	if m.statusMessage.text != "" {
-		builder.WriteString(m.statusMessage.text)
-	} else if m.dirty {
-		builder.WriteString("Unsaved changes")
-	} else {
-		builder.WriteString("Ready")
+	statusText := m.statusMessage.text
+	if statusText == "" {
+		if m.dirty {
+			statusText = "Unsaved changes"
+		} else {
+			statusText = "Ready"
+		}
 	}
 
+	const sep = "    "
+	sepWidth := lipgloss.Width(sep)
+
+	segments := make([]string, 0, 4)
 	if m.cfg.EnvironmentName != "" {
-		builder.WriteString("    ")
-		builder.WriteString(fmt.Sprintf("Env: %s", m.cfg.EnvironmentName))
+		segments = append(segments, fmt.Sprintf("Env: %s", m.cfg.EnvironmentName))
 	}
 	if m.currentFile != "" {
-		builder.WriteString("    ")
-		builder.WriteString(filepath.Base(m.currentFile))
+		segments = append(segments, filepath.Base(m.currentFile))
 	}
-	builder.WriteString("    ")
-	builder.WriteString(fmt.Sprintf("Focus: %s", m.focusLabel()))
+	segments = append(segments, fmt.Sprintf("Focus: %s", m.focusLabel()))
 	if m.focus == focusEditor {
-		builder.WriteString("    ")
 		mode := "VIEW"
 		if m.editorInsertMode {
 			mode = "INSERT"
 		}
-		builder.WriteString(fmt.Sprintf("Mode: %s", mode))
+		segments = append(segments, fmt.Sprintf("Mode: %s", mode))
 	}
 
-	return m.theme.StatusBar.Render(truncateStatus(builder.String(), m.width))
+	staticText := strings.Join(segments, sep)
+	maxContentWidth := maxInt(m.width-2, 1)
+	messageText := statusText
+
+	if staticText != "" {
+		staticWidth := lipgloss.Width(staticText)
+		if staticWidth > maxContentWidth {
+			staticText = truncateToWidth(staticText, maxContentWidth)
+			messageText = ""
+		} else {
+			available := maxContentWidth - staticWidth
+			if messageText != "" {
+				if available > sepWidth {
+					available -= sepWidth
+					messageText = truncateToWidth(messageText, available)
+				} else {
+					messageText = ""
+				}
+			}
+		}
+	} else {
+		messageText = truncateToWidth(messageText, maxContentWidth)
+	}
+
+	var builder strings.Builder
+	if messageText != "" {
+		builder.WriteString(messageText)
+	}
+	if staticText != "" {
+		if builder.Len() > 0 {
+			builder.WriteString(sep)
+		}
+		builder.WriteString(staticText)
+	}
+	combined := builder.String()
+	if combined == "" {
+		combined = truncateToWidth(statusText, maxContentWidth)
+	}
+
+	return m.theme.StatusBar.Render(combined)
 }
 
 func truncateStatus(text string, width int) string {
@@ -805,14 +844,21 @@ func truncateStatus(text string, width int) string {
 		return text
 	}
 	maxWidth := maxInt(width-2, 1)
+	return truncateToWidth(text, maxWidth)
+}
+
+func truncateToWidth(text string, maxWidth int) string {
+	if maxWidth <= 0 {
+		return ""
+	}
 	if lipgloss.Width(text) <= maxWidth {
 		return text
 	}
 	ellipsisWidth := lipgloss.Width("…")
-	available := maxWidth - ellipsisWidth
-	if available <= 0 {
+	if maxWidth <= ellipsisWidth {
 		return "…"
 	}
+	available := maxWidth - ellipsisWidth
 	var (
 		builder       strings.Builder
 		consumedWidth int
