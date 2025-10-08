@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -136,16 +137,68 @@ func wrapLineSegments(line string, width int) []string {
 	if visibleWidth(line) <= width {
 		return []string{line}
 	}
-	segments := make([]string, 0, (len(line)/width)+1)
-	remaining := line
-	for len(remaining) > 0 {
-		segment, rest := splitSegment(remaining, width)
-		segments = append(segments, segment)
-		if rest == "" {
-			break
-		}
-		remaining = rest
+
+	tokens := tokenizeLine(line)
+	if len(tokens) == 0 {
+		return []string{""}
 	}
+
+	segments := make([]string, 0, len(tokens))
+	var current strings.Builder
+	currentWidth := 0
+
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		segment := current.String()
+		trimmed := strings.TrimRight(segment, " ")
+		if trimmed != "" {
+			segment = trimmed
+		}
+		segments = append(segments, segment)
+		current.Reset()
+		currentWidth = 0
+	}
+
+	for _, tok := range tokens {
+		if !tok.isSpace && tok.width > width {
+			if currentWidth > 0 {
+				flush()
+			}
+			parts := splitLongToken(tok.text, width)
+			for _, part := range parts {
+				if part == "" {
+					continue
+				}
+				trimmed := strings.TrimRight(part, " ")
+				if trimmed != "" {
+					part = trimmed
+				}
+				segments = append(segments, part)
+			}
+			continue
+		}
+
+		if currentWidth > 0 && currentWidth+tok.width > width {
+			flush()
+			if tok.isSpace {
+				continue
+			}
+		}
+
+		if currentWidth == 0 && tok.isSpace {
+			continue
+		}
+
+		current.WriteString(tok.text)
+		currentWidth += tok.width
+	}
+
+	if currentWidth > 0 || current.Len() > 0 {
+		flush()
+	}
+
 	if len(segments) == 0 {
 		return []string{""}
 	}
@@ -197,6 +250,91 @@ func splitSegment(s string, width int) (string, string) {
 		}
 	}
 	return segment, rest
+}
+
+func splitLongToken(token string, width int) []string {
+	if width <= 0 {
+		return []string{token}
+	}
+	remaining := token
+	parts := make([]string, 0, (len(token)/width)+1)
+	for len(remaining) > 0 {
+		segment, rest := splitSegment(remaining, width)
+		if segment == "" && rest == "" {
+			break
+		}
+		parts = append(parts, segment)
+		if rest == "" || rest == remaining {
+			break
+		}
+		remaining = rest
+	}
+	if len(parts) == 0 {
+		return []string{""}
+	}
+	return parts
+}
+
+type textToken struct {
+	text    string
+	width   int
+	isSpace bool
+}
+
+func tokenizeLine(line string) []textToken {
+	if line == "" {
+		return nil
+	}
+	var tokens []textToken
+	var builder strings.Builder
+	width := 0
+	currentIsSpace := false
+	haveToken := false
+
+	flush := func() {
+		if builder.Len() == 0 {
+			return
+		}
+		tokens = append(tokens, textToken{
+			text:    builder.String(),
+			width:   width,
+			isSpace: currentIsSpace,
+		})
+		builder.Reset()
+		width = 0
+		haveToken = false
+	}
+
+	index := 0
+	for index < len(line) {
+		if loc := ansiSequenceRegex.FindStringIndex(line[index:]); loc != nil && loc[0] == 0 {
+			seq := line[index : index+loc[1]]
+			builder.WriteString(seq)
+			index += loc[1]
+			continue
+		}
+
+		r, size := utf8.DecodeRuneInString(line[index:])
+		if size <= 0 {
+			size = 1
+		}
+		isSpace := unicode.IsSpace(r)
+		if !haveToken {
+			currentIsSpace = isSpace
+			haveToken = true
+		} else if currentIsSpace != isSpace {
+			flush()
+			currentIsSpace = isSpace
+			haveToken = true
+		}
+
+		builder.WriteString(line[index : index+size])
+		width += runewidth.RuneWidth(r)
+		index += size
+	}
+
+	flush()
+	return tokens
 }
 
 func centerContent(content string, width, height int) string {
