@@ -95,4 +95,13 @@ func TestMetadataRuneStylerRequestSeparator(t *testing.T) {
 	if got, want := styles[5].Render("g"), lipgloss.NewStyle().Foreground(color).Bold(true).Render("g"); got != want {
 		t.Fatalf("request separator text not styled uniformly:\nwant %q\n got %q", want, got)
 	}
+
+	lineNoSpace := []rune("###")
+	styles = styler.StylesForLine(lineNoSpace, 0)
+	if styles == nil {
+		t.Fatalf("expected styles for compact request separator")
+	}
+	if got, want := styles[0].Render("#"), lipgloss.NewStyle().Foreground(color).Bold(true).Render("#"); got != want {
+		t.Fatalf("request separator without space not styled correctly:\nwant %q\n got %q", want, got)
+	}
 }

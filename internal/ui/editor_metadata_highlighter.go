@@ -212,7 +212,7 @@ func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []li
 		return nil
 	}
 
-	if !strings.HasPrefix(strings.ToUpper(string(line[start:])), "### ") {
+	if !hasRequestSeparatorPrefix(line, start) {
 		return nil
 	}
 
@@ -230,6 +230,19 @@ func skipSpace(line []rune, start int) int {
 		i++
 	}
 	return i
+}
+
+func hasRequestSeparatorPrefix(line []rune, start int) bool {
+	if len(line)-start < 3 {
+		return false
+	}
+	if string(line[start:start+3]) != "###" {
+		return false
+	}
+	if len(line) == start+3 {
+		return true
+	}
+	return unicode.IsSpace(line[start+3])
 }
 
 func commentMarkerLength(line []rune, idx int) int {
