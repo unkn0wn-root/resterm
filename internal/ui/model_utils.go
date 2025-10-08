@@ -146,53 +146,96 @@ func wrapLineSegments(line string, width int) []string {
 	segments := make([]string, 0, len(tokens))
 	var current strings.Builder
 	currentWidth := 0
+	lineHasNonSpace := false
 
-	flush := func() {
-		if current.Len() == 0 {
+	appendSegment := func(segment string) {
+		if segment == "" {
 			return
 		}
-		segment := current.String()
 		trimmed := strings.TrimRight(segment, " ")
 		if trimmed != "" {
 			segment = trimmed
 		}
 		segments = append(segments, segment)
+	}
+
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		appendSegment(current.String())
 		current.Reset()
 		currentWidth = 0
 	}
 
 	for _, tok := range tokens {
-		if !tok.isSpace && tok.width > width {
-			if currentWidth > 0 {
-				flush()
-			}
-			parts := splitLongToken(tok.text, width)
-			for _, part := range parts {
-				if part == "" {
-					continue
-				}
-				trimmed := strings.TrimRight(part, " ")
-				if trimmed != "" {
-					part = trimmed
-				}
-				segments = append(segments, part)
-			}
+		text := tok.text
+		tokWidth := tok.width
+		if text == "" {
 			continue
 		}
 
-		if currentWidth > 0 && currentWidth+tok.width > width {
-			flush()
-			if tok.isSpace {
+		if tokWidth == 0 {
+			current.WriteString(text)
+			continue
+		}
+
+		if tokWidth > width {
+			if currentWidth > 0 {
+				remaining := width - currentWidth
+				if remaining <= 0 {
+					flush()
+				} else {
+					segment, rest := splitSegment(text, remaining)
+					if segment != "" {
+						current.WriteString(segment)
+						currentWidth += visibleWidth(segment)
+						if !tok.isSpace {
+							lineHasNonSpace = true
+						}
+					}
+					flush()
+					if rest == "" || rest == text {
+						continue
+					}
+					text = rest
+					tokWidth = visibleWidth(text)
+					if tokWidth == 0 {
+						continue
+					}
+				}
+			}
+			if tokWidth > width {
+				parts := splitLongToken(text, width)
+				if !tok.isSpace {
+					lineHasNonSpace = true
+				}
+				for _, part := range parts {
+					if part == "" {
+						continue
+					}
+					appendSegment(part)
+				}
 				continue
 			}
 		}
 
-		if currentWidth == 0 && tok.isSpace {
+		if currentWidth > 0 && currentWidth+tokWidth > width {
+			flush()
+			if tok.isSpace && lineHasNonSpace {
+				continue
+			}
+		}
+
+		if currentWidth == 0 && tok.isSpace && lineHasNonSpace {
 			continue
 		}
 
-		current.WriteString(tok.text)
-		currentWidth += tok.width
+		current.WriteString(text)
+		currentWidth += tokWidth
+		if !tok.isSpace {
+			lineHasNonSpace = true
+		}
 	}
 
 	if currentWidth > 0 || current.Len() > 0 {
