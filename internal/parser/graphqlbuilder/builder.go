@@ -55,10 +55,22 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		}
 		return true
 	case "query":
-		if b.enabled {
-			b.collectVariables = false
-			return true
+		if !b.enabled {
+			return false
 		}
+		b.collectVariables = false
+		b.queryLines = nil
+		b.queryFile = ""
+
+		rest = strings.TrimSpace(rest)
+		if rest != "" {
+			if strings.HasPrefix(rest, "<") {
+				b.queryFile = strings.TrimSpace(strings.TrimPrefix(rest, "<"))
+				return true
+			}
+			b.queryLines = append(b.queryLines, rest)
+		}
+		return true
 	}
 	return false
 }
