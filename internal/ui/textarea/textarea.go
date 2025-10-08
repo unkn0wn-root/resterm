@@ -1209,12 +1209,29 @@ func (m Model) View() string {
 		lineInfo         = m.LineInfo()
 	)
 
+	viewPad := 3
+	visibleStart := 0
+	visibleEnd := m.height + viewPad
+	if m.viewport != nil {
+		viewTop := m.viewport.YOffset
+		viewHeight := m.viewport.Height
+		if viewHeight <= 0 {
+			viewHeight = m.height
+		}
+		visibleStart = max(viewTop-viewPad, 0)
+		visibleEnd = viewTop + viewHeight + viewPad
+	}
+
 	displayLine := 0
 	for l, line := range m.value {
 		wrappedLines := m.memoizedWrap(line, m.width)
 
+		lineStart := displayLine
+		lineEnd := lineStart + len(wrappedLines)
+		lineVisible := lineEnd >= visibleStart && lineStart <= visibleEnd
+
 		var lineStyles []lipgloss.Style
-		if m.runeStyler != nil && len(line) > 0 {
+		if lineVisible && m.runeStyler != nil && len(line) > 0 {
 			if styles := m.runeStyler.StylesForLine(line, l); len(styles) == len(line) {
 				lineStyles = styles
 			}
@@ -1233,10 +1250,21 @@ func (m Model) View() string {
 		newlineSelected := selectionActive && l < len(m.value)-1 && selStart <= lineEndOffset && lineEndOffset < selEnd
 
 		for wl, wrappedLine := range wrappedLines {
-			prompt := m.getPromptString(displayLine)
+			currentRow := displayLine
+			displayLine++
+			if currentRow < visibleStart || currentRow > visibleEnd {
+				s.WriteRune('\n')
+				if remaining := lineLen - lineConsumed; remaining > 0 {
+					consumed := min(remaining, len(wrappedLine))
+					lineConsumed += consumed
+					globalOffset += consumed
+				}
+				continue
+			}
+
+			prompt := m.getPromptString(currentRow)
 			prompt = m.style.computedPrompt().Render(prompt)
 			s.WriteString(style.Render(prompt))
-			displayLine++
 
 			var ln string
 			if m.ShowLineNumbers { //nolint:nestif

@@ -46,6 +46,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		level := statusError
 		if code == errdef.CodeScript {
 			level = statusWarn
+			m.openErrorModal(errdef.Message(msg.err))
 		}
 		m.setStatusMessage(statusMsg{text: errdef.Message(msg.err), level: level})
 		return nil

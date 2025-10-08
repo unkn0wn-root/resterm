@@ -33,7 +33,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatusMessage(*typed.status)
 		}
 	case tea.KeyMsg:
-		if !m.showSearchPrompt {
+		if !m.showSearchPrompt && !m.showEnvSelector {
 			if cmd := m.handleKey(typed); cmd != nil {
 				cmds = append(cmds, cmd)
 			}

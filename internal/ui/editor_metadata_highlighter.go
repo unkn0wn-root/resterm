@@ -54,18 +54,91 @@ var httpRequestMethods = map[string]struct{}{
 }
 
 type metadataRuneStyler struct {
-	palette theme.EditorMetadataPalette
+	palette             theme.EditorMetadataPalette
+	commentStyle        lipgloss.Style
+	commentEnabled      bool
+	directiveStyles     map[string]lipgloss.Style
+	valueStyle          lipgloss.Style
+	valueEnabled        bool
+	settingKeyStyle     lipgloss.Style
+	settingKeyEnabled   bool
+	settingValueStyle   lipgloss.Style
+	settingValueEnabled bool
+	requestLineStyle    lipgloss.Style
+	requestLineEnabled  bool
+	requestSepStyle     lipgloss.Style
+	requestSepEnabled   bool
+	cache               map[int]lineCache
+}
+
+type lineCache struct {
+	hash     uint64
+	length   int
+	computed bool
+	styles   []lipgloss.Style
 }
 
 func newMetadataRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
-	return &metadataRuneStyler{palette: p}
+	s := &metadataRuneStyler{
+		palette:         p,
+		directiveStyles: make(map[string]lipgloss.Style),
+		cache:           make(map[int]lineCache),
+	}
+
+	if c := p.CommentMarker; c != "" {
+		s.commentStyle = lipgloss.NewStyle().Foreground(c)
+		s.commentEnabled = true
+	}
+
+	if c := p.Value; c != "" {
+		s.valueStyle = lipgloss.NewStyle().Foreground(c)
+		s.valueEnabled = true
+	}
+
+	if c := p.SettingKey; c != "" {
+		s.settingKeyStyle = lipgloss.NewStyle().Foreground(c).Bold(true)
+		s.settingKeyEnabled = true
+	}
+
+	if c := p.SettingValue; c != "" {
+		s.settingValueStyle = lipgloss.NewStyle().Foreground(c)
+		s.settingValueEnabled = true
+	}
+
+	reqColor := p.RequestLine
+	if reqColor == "" {
+		reqColor = p.DirectiveDefault
+	}
+	if reqColor != "" {
+		s.requestLineStyle = lipgloss.NewStyle().Foreground(reqColor).Bold(true)
+		s.requestLineEnabled = true
+	}
+
+	if c := p.RequestSeparator; c != "" {
+		s.requestSepStyle = lipgloss.NewStyle().Foreground(c)
+		s.requestSepEnabled = true
+	}
+
+	return s
 }
 
-func (s *metadataRuneStyler) StylesForLine(line []rune, _ int) []lipgloss.Style {
+func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Style {
 	if len(line) == 0 {
+		delete(s.cache, idx)
 		return nil
 	}
 
+	lineHash := hashRunes(line)
+	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash && cached.length == len(line) {
+		return cached.styles
+	}
+
+	styles := s.computeStyles(line)
+	s.cache[idx] = lineCache{hash: lineHash, length: len(line), computed: true, styles: styles}
+	return styles
+}
+
+func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 	i := skipSpace(line, 0)
 	if i >= len(line) {
 		return nil
@@ -90,12 +163,22 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, _ int) []lipgloss.Style 
 		return nil
 	}
 
-	styles := make([]lipgloss.Style, len(line))
+	var (
+		styles []lipgloss.Style
+		styled bool
+	)
 
-	if color := s.palette.CommentMarker; color != "" {
-		markerStyle := lipgloss.NewStyle().Foreground(color)
+	ensureStyles := func() {
+		if !styled {
+			styles = make([]lipgloss.Style, len(line))
+			styled = true
+		}
+	}
+
+	if s.commentEnabled {
+		ensureStyles()
 		for idx := markerStart; idx < markerStart+markerLen && idx < len(line); idx++ {
-			styles[idx] = markerStyle
+			styles[idx] = s.commentStyle
 		}
 	}
 
@@ -105,12 +188,8 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, _ int) []lipgloss.Style 
 	}
 	directiveKey := strings.ToLower(string(line[directiveStart+1 : directiveEnd]))
 
-	directiveColor := s.palette.DirectiveDefault
-	if c, ok := s.palette.DirectiveColors[directiveKey]; ok && c != "" {
-		directiveColor = c
-	}
-	if directiveColor != "" {
-		dirStyle := lipgloss.NewStyle().Foreground(directiveColor).Bold(true)
+	if dirStyle, ok := s.directiveStyle(directiveKey); ok {
+		ensureStyles()
 		for idx := directiveStart; idx < directiveEnd; idx++ {
 			styles[idx] = dirStyle
 		}
@@ -118,79 +197,129 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, _ int) []lipgloss.Style 
 
 	valueStart := skipSpace(line, directiveEnd)
 	if valueStart >= len(line) {
-		return styles
+		if styled {
+			return styles
+		}
+		return nil
 	}
 
 	switch directiveKey {
 	case "setting":
-		return s.applySettingStyles(line, styles, valueStart)
+		s.applySettingStyles(line, &styles, &styled, valueStart)
+		if styled {
+			return styles
+		}
+		return nil
 	case "timeout":
-		return s.applyTimeoutStyles(line, styles, valueStart)
+		s.applyTimeoutStyles(line, &styles, &styled, valueStart)
+		if styled {
+			return styles
+		}
+		return nil
 	}
 
 	mode := metadataValueModeToken
 	if m, ok := directiveValueModes[directiveKey]; ok {
 		mode = m
 	}
-	if mode == metadataValueModeNone || s.palette.Value == "" {
-		return styles
+	if mode == metadataValueModeNone || !s.valueEnabled {
+		if styled {
+			return styles
+		}
+		return nil
 	}
 
-	valueStyle := lipgloss.NewStyle().Foreground(s.palette.Value)
+	ensureStyles()
 	switch mode {
 	case metadataValueModeRest:
 		for idx := valueStart; idx < len(line); idx++ {
-			styles[idx] = valueStyle
+			styles[idx] = s.valueStyle
 		}
 	case metadataValueModeToken:
 		tokenEnd := readToken(line, valueStart)
 		for idx := valueStart; idx < tokenEnd && idx < len(line); idx++ {
-			styles[idx] = valueStyle
+			styles[idx] = s.valueStyle
 		}
 	}
 
 	return styles
 }
 
-func (s *metadataRuneStyler) applySettingStyles(line []rune, styles []lipgloss.Style, start int) []lipgloss.Style {
+func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
+	if style, ok := s.directiveStyles[key]; ok {
+		return style, true
+	}
+
+	var color lipgloss.Color
+	if c, ok := s.palette.DirectiveColors[key]; ok && c != "" {
+		color = c
+	} else {
+		color = s.palette.DirectiveDefault
+	}
+	if color == "" {
+		return lipgloss.Style{}, false
+	}
+	style := lipgloss.NewStyle().Foreground(color).Bold(true)
+	s.directiveStyles[key] = style
+	return style, true
+}
+
+func (s *metadataRuneStyler) applySettingStyles(line []rune, styles *[]lipgloss.Style, styled *bool, start int) {
+	if !s.settingKeyEnabled && !s.settingValueEnabled {
+		return
+	}
+
+	ensure := func() {
+		if !*styled {
+			*styles = make([]lipgloss.Style, len(line))
+			*styled = true
+		}
+	}
+
 	keyEnd := readToken(line, start)
-	if keyEnd > start && s.palette.SettingKey != "" {
-		keyStyle := lipgloss.NewStyle().Foreground(s.palette.SettingKey).Bold(true)
+	if keyEnd > start && s.settingKeyEnabled {
+		ensure()
 		for idx := start; idx < keyEnd && idx < len(line); idx++ {
-			styles[idx] = keyStyle
+			(*styles)[idx] = s.settingKeyStyle
 		}
 	}
 
 	valueStart := skipSpace(line, keyEnd)
-	if valueStart >= len(line) || s.palette.SettingValue == "" {
-		return styles
+	if valueStart >= len(line) || !s.settingValueEnabled {
+		return
 	}
 
-	valueStyle := lipgloss.NewStyle().Foreground(s.palette.SettingValue)
+	ensure()
 	for idx := valueStart; idx < len(line); idx++ {
-		styles[idx] = valueStyle
+		(*styles)[idx] = s.settingValueStyle
 	}
-	return styles
 }
 
-func (s *metadataRuneStyler) applyTimeoutStyles(line []rune, styles []lipgloss.Style, start int) []lipgloss.Style {
-	if s.palette.SettingValue == "" {
-		return styles
+func (s *metadataRuneStyler) applyTimeoutStyles(line []rune, styles *[]lipgloss.Style, styled *bool, start int) {
+	if !s.settingValueEnabled {
+		return
 	}
-
-	valueStyle := lipgloss.NewStyle().Foreground(s.palette.SettingValue)
+	if !*styled {
+		*styles = make([]lipgloss.Style, len(line))
+		*styled = true
+	}
 	for idx := start; idx < len(line); idx++ {
-		styles[idx] = valueStyle
+		(*styles)[idx] = s.settingValueStyle
 	}
-	return styles
+}
+
+func hashRunes(runes []rune) uint64 {
+	var h uint64 = 1469598103934665603
+	const prime uint64 = 1099511628211
+	for _, r := range runes {
+		h ^= uint64(r)
+		h *= prime
+	}
+	return h
 }
 
 func (s *metadataRuneStyler) requestLineStyles(line []rune, start int) []lipgloss.Style {
-	color := s.palette.RequestLine
-	if color == "" {
-		color = s.palette.DirectiveDefault
-	}
-	if color == "" {
+	if !s.requestLineEnabled {
 		return nil
 	}
 
@@ -199,16 +328,14 @@ func (s *metadataRuneStyler) requestLineStyles(line []rune, start int) []lipglos
 	}
 
 	styles := make([]lipgloss.Style, len(line))
-	lineStyle := lipgloss.NewStyle().Foreground(color).Bold(true)
 	for idx := start; idx < len(line); idx++ {
-		styles[idx] = lineStyle
+		styles[idx] = s.requestLineStyle
 	}
 	return styles
 }
 
 func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []lipgloss.Style {
-	color := s.palette.RequestSeparator
-	if color == "" {
+	if !s.requestSepEnabled {
 		return nil
 	}
 
@@ -217,9 +344,8 @@ func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []li
 	}
 
 	styles := make([]lipgloss.Style, len(line))
-	separatorStyle := lipgloss.NewStyle().Foreground(color).Bold(false)
 	for idx := start; idx < len(line); idx++ {
-		styles[idx] = separatorStyle
+		styles[idx] = s.requestSepStyle
 	}
 	return styles
 }

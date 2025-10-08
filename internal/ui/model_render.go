@@ -49,13 +49,7 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderHelpOverlay())
 	}
 	if m.showEnvSelector {
-		content := lipgloss.JoinVertical(
-			lipgloss.Left,
-			header,
-			m.renderEnvironmentSelector(),
-			body,
-		)
-		return m.renderWithinAppFrame(content)
+		return m.renderWithinAppFrame(m.renderEnvironmentModal())
 	}
 	return m.renderWithinAppFrame(base)
 }
@@ -803,7 +797,22 @@ func (m Model) renderStatusBar() string {
 		builder.WriteString(fmt.Sprintf("Mode: %s", mode))
 	}
 
-	return m.theme.StatusBar.Render(builder.String())
+	return m.theme.StatusBar.Render(truncateStatus(builder.String(), m.width))
+}
+
+func truncateStatus(text string, width int) string {
+	if width <= 0 {
+		return text
+	}
+	maxWidth := maxInt(width-2, 1)
+	if lipgloss.Width(text) <= maxWidth {
+		return text
+	}
+	trim := text
+	for lipgloss.Width(trim) > maxWidth-1 && len(trim) > 0 {
+		trim = trim[:len(trim)-1]
+	}
+	return strings.TrimSpace(trim) + "…"
 }
 
 func (m Model) renderErrorModal() string {
@@ -852,7 +861,7 @@ func (m Model) renderErrorModal() string {
 	)
 }
 
-func (m Model) renderEnvironmentSelector() string {
+func (m Model) renderEnvironmentModal() string {
 	width := minInt(m.width-10, 48)
 	if width < 24 {
 		width = 24
@@ -869,7 +878,12 @@ func (m Model) renderEnvironmentSelector() string {
 		commands,
 	)
 	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
 	)
