@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run tests
+        run: go test ./...
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  release-builds:
+    if: github.event_name == 'release'
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    strategy:
+      matrix:
+        goos: [linux, windows, darwin]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          case "$GOOS" in
+            darwin) goos_label="Darwin" ;;
+            linux) goos_label="Linux" ;;
+            windows) goos_label="Windows" ;;
+            *) goos_label="$GOOS" ;;
+          esac
+          case "$GOARCH" in
+            amd64) goarch_label="x86_64" ;;
+            arm64) goarch_label="arm64" ;;
+            *) goarch_label="$GOARCH" ;;
+          esac
+          output="dist/resterm_${goos_label}_${goarch_label}"
+          if [ "$GOOS" = "windows" ]; then
+            output="${output}.exe"
+          fi
+          GOOS="$GOOS" GOARCH="$GOARCH" go build -o "$output" ./cmd/resterm
+      - name: Upload release artifacts
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*
