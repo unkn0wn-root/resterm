@@ -15,7 +15,7 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
-	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
+	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -49,7 +49,7 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq *restfile.GRPCRequest, options Options) (*Response, error) {
+func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq *restfile.GRPCRequest, options Options) (resp *Response, err error) {
 	if grpcReq == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "missing grpc metadata")
 	}
@@ -82,11 +82,15 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 		dialOpts = append(dialOpts, grpc.WithAuthority(grpcReq.Authority))
 	}
 
-	conn, err := grpc.DialContext(ctx, target, dialOpts...)
+	conn, err := grpc.NewClient(target, dialOpts...)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "dial grpc target")
 	}
-	defer conn.Close()
+	defer func() {
+		if closeErr := conn.Close(); closeErr != nil && err == nil {
+			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close grpc connection")
+		}
+	}()
 
 	methodDesc, err := c.resolveMethodDescriptor(ctx, conn, grpcReq, options)
 	if err != nil {
@@ -119,7 +123,7 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	invokeErr := conn.Invoke(callCtx, grpcReq.FullMethod, inputMsg, outputMsg, grpc.Header(&headerMD), grpc.Trailer(&trailerMD))
 	duration := time.Since(start)
 
-	resp := &Response{
+	resp = &Response{
 		Headers:       copyMetadata(headerMD),
 		Trailers:      copyMetadata(trailerMD),
 		StatusCode:    codes.OK,
@@ -218,13 +222,17 @@ func findMethodInFiles(files *protoregistry.Files, grpcReq *restfile.GRPCRequest
 	return method, nil
 }
 
-func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, fullMethod string) (*descriptorpb.FileDescriptorSet, error) {
+func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, fullMethod string) (set *descriptorpb.FileDescriptorSet, err error) {
 	client := reflectpb.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "open reflection stream")
 	}
-	defer stream.CloseSend()
+	defer func() {
+		if closeErr := stream.CloseSend(); closeErr != nil && err == nil {
+			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close reflection stream")
+		}
+	}()
 
 	symbol := strings.TrimSpace(strings.TrimPrefix(fullMethod, "/"))
 	if idx := strings.LastIndex(symbol, "/"); idx > 0 && idx < len(symbol)-1 {
@@ -251,7 +259,7 @@ func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, f
 		return nil, errdef.New(errdef.CodeHTTP, "reflection response missing descriptors")
 	}
 
-	set := &descriptorpb.FileDescriptorSet{}
+	set = &descriptorpb.FileDescriptorSet{}
 	for _, raw := range fileResp.FileDescriptorProto {
 		fd := &descriptorpb.FileDescriptorProto{}
 		if err := proto.Unmarshal(raw, fd); err != nil {

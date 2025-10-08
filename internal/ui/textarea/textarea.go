@@ -1384,7 +1384,7 @@ func (m Model) View() string {
 
 			pad := strings.Repeat(" ", max(0, padding))
 			if selectionActive && newlineSelected && wl == len(wrappedLines)-1 && pad != "" {
-				newlineStyle := m.selectionStyle.Copy().Inherit(style)
+				newlineStyle := m.selectionStyle.Inherit(style)
 				s.WriteString(newlineStyle.Render(pad))
 			} else {
 				s.WriteString(style.Render(pad))
@@ -1457,7 +1457,7 @@ func (m Model) renderStyledSegments(
 
 		renderStyle := runeStyle
 		if selectionActive && isActual && *globalOffset >= selectionStart && *globalOffset < selectionEnd {
-			renderStyle = m.selectionStyle.Copy().Inherit(runeStyle)
+			renderStyle = m.selectionStyle.Inherit(runeStyle)
 		}
 
 		segments[i] = renderStyle.Render(string(r))

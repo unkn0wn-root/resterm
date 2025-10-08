@@ -117,9 +117,15 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 func (r *Runner) executePreRequestScript(script string, input PreRequestInput, output *PreRequestOutput) error {
 	vm := goja.New()
 	pre := newPreRequestAPI(output, input)
-	bindCommon(vm)
-	vm.Set("request", pre.requestAPI())
-	vm.Set("vars", pre.varsAPI())
+	if err := bindCommon(vm); err != nil {
+		return errdef.Wrap(errdef.CodeScript, err, "bind console api")
+	}
+	if err := vm.Set("request", pre.requestAPI()); err != nil {
+		return errdef.Wrap(errdef.CodeScript, err, "bind request api")
+	}
+	if err := vm.Set("vars", pre.varsAPI()); err != nil {
+		return errdef.Wrap(errdef.CodeScript, err, "bind vars api")
+	}
 
 	_, err := vm.RunString(script)
 	if err != nil {
@@ -131,12 +137,24 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, error) {
 	vm := goja.New()
 	tester := newTestAPI(input.Response, input.Variables)
-	bindCommon(vm)
-	vm.Set("tests", tester.testsAPI())
-	vm.Set("client", tester.clientAPI())
-	vm.Set("resterm", tester.clientAPI())
-	vm.Set("response", tester.responseAPI())
-	vm.Set("vars", tester.varsAPI())
+	if err := bindCommon(vm); err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, "bind console api")
+	}
+	if err := vm.Set("tests", tester.testsAPI()); err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, "bind tests api")
+	}
+	if err := vm.Set("client", tester.clientAPI()); err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, "bind client api")
+	}
+	if err := vm.Set("resterm", tester.clientAPI()); err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, "bind resterm alias")
+	}
+	if err := vm.Set("response", tester.responseAPI()); err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, "bind response api")
+	}
+	if err := vm.Set("vars", tester.varsAPI()); err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, "bind vars api")
+	}
 
 	_, err := vm.RunString(script)
 	if err != nil {
@@ -145,13 +163,13 @@ func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult
 	return tester.results(), nil
 }
 
-func bindCommon(vm *goja.Runtime) {
+func bindCommon(vm *goja.Runtime) error {
 	console := map[string]func(goja.FunctionCall) goja.Value{
 		"log":   func(call goja.FunctionCall) goja.Value { return goja.Undefined() },
 		"warn":  func(call goja.FunctionCall) goja.Value { return goja.Undefined() },
 		"error": func(call goja.FunctionCall) goja.Value { return goja.Undefined() },
 	}
-	vm.Set("console", console)
+	return vm.Set("console", console)
 }
 
 func normalizeScript(body string) string {

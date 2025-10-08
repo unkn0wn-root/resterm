@@ -53,10 +53,6 @@ func (pane *responsePaneState) invalidateCaches() {
 	}
 }
 
-func (pane *responsePaneState) invalidateCacheFor(tab responseTab) {
-	pane.wrapCache[tab] = cachedWrap{}
-}
-
 func (pane *responsePaneState) setActiveTab(tab responseTab) {
 	pane.activeTab = tab
 	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders {
@@ -181,23 +177,6 @@ func (m *Model) responseContentWidth() int {
 		width = defaultResponseViewportWidth
 	}
 	return width
-}
-
-func (m *Model) responseContentHeight() int {
-	primary := m.pane(responsePanePrimary)
-	height := 0
-	if primary != nil {
-		height = primary.viewport.Height
-	}
-	if m.responseSplit && m.responseSplitOrientation == responseSplitHorizontal {
-		if secondary := m.pane(responsePaneSecondary); secondary != nil {
-			height += responseSplitSeparatorHeight + secondary.viewport.Height
-		}
-	}
-	if height <= 0 {
-		height = defaultResponseViewportWidth
-	}
-	return height
 }
 
 func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
@@ -615,26 +594,4 @@ func (m *Model) focusResponsePane(id responsePaneID) {
 	}
 	m.responsePaneFocus = id
 	m.setLivePane(id)
-}
-
-func (m *Model) cycleResponsePaneFocus(forward bool) {
-	if !m.responseSplit {
-		m.responsePaneFocus = responsePanePrimary
-		m.setLivePane(responsePanePrimary)
-		return
-	}
-	if forward {
-		if m.responsePaneFocus == responsePanePrimary {
-			m.responsePaneFocus = responsePaneSecondary
-		} else {
-			m.responsePaneFocus = responsePanePrimary
-		}
-	} else {
-		if m.responsePaneFocus == responsePaneSecondary {
-			m.responsePaneFocus = responsePanePrimary
-		} else {
-			m.responsePaneFocus = responsePaneSecondary
-		}
-	}
-	m.setLivePane(m.responsePaneFocus)
 }

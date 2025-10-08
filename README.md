@@ -252,7 +252,7 @@ Headers and `@grpc-metadata key: value` directives attach gRPC metadata. `rester
 **gRPC metadata**
 - `@grpc <package.Service>/<Method>` - specify the fully-qualified method name (package optional).
 - `@grpc-descriptor <path>` - path to a compiled descriptor set (`protoc --descriptor_set_out`).
-- `@grpc-reflection [true|false]` - toggle server reflection (default `true`).
+- `@grpc-reflection [true|false]` - toggle server reflection (default `true`). When enabled, `resterm` queries the stable gRPC reflection v1 service registered via `reflection.Register`.
 - `@grpc-plaintext [true|false]` - override TLS usage for the channel.
 - `@grpc-authority <value>` - set the :authority pseudo-header for HTTP/2.
 - `@grpc-metadata <key>: <value>` - add unary call metadata (repeat for multiple entries).

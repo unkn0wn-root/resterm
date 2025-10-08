@@ -104,12 +104,12 @@ func (m Model) renderFilePane() string {
 	paneActive := m.focus == focusFile || m.focus == focusRequests
 	switch m.focus {
 	case focusFile:
-		style = style.Copy().
+		style = style.
 			BorderForeground(m.theme.PaneBorderFocusFile).
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	case focusRequests:
-		style = style.Copy().
+		style = style.
 			BorderForeground(m.theme.PaneBorderFocusRequests).
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
@@ -117,23 +117,23 @@ func (m Model) renderFilePane() string {
 
 	faintStyle := lipgloss.NewStyle().Faint(true)
 	if !paneActive {
-		style = style.Copy().Faint(true)
+		style = style.Faint(true)
 	}
 
 	width := m.fileList.Width() + 4
 	innerWidth := maxInt(1, width-4)
-	titleBase := m.theme.PaneTitle.Copy().Width(innerWidth).Align(lipgloss.Center)
+	titleBase := m.theme.PaneTitle.Width(innerWidth).Align(lipgloss.Center)
 	filesTitle := titleBase.Render(strings.ToUpper("Files"))
 	requestsTitle := titleBase.Render(strings.ToUpper("Requests"))
 	if m.focus == focusFile {
-		filesTitle = m.theme.PaneTitleFile.Copy().
+		filesTitle = m.theme.PaneTitleFile.
 			Width(innerWidth).
 			Align(lipgloss.Center).
 			Foreground(m.theme.PaneActiveForeground).
 			Render(strings.ToUpper("Files"))
 	}
 	if m.focus == focusRequests {
-		requestsTitle = m.theme.PaneTitleRequests.Copy().
+		requestsTitle = m.theme.PaneTitleRequests.
 			Width(innerWidth).
 			Align(lipgloss.Center).
 			Foreground(m.theme.PaneActiveForeground).
@@ -144,12 +144,12 @@ func (m Model) renderFilePane() string {
 	filesView := listStyle.Render(m.fileList.View())
 	requestsView := listStyle.Render(m.requestList.View())
 	if m.focus == focusFile {
-		filesView = listStyle.Copy().
+		filesView = listStyle.
 			Foreground(m.theme.PaneBorderFocusFile).
 			Render(m.fileList.View())
 	}
 	if m.focus == focusRequests {
-		requestsView = listStyle.Copy().
+		requestsView = listStyle.
 			Foreground(m.theme.PaneBorderFocusRequests).
 			Render(m.requestList.View())
 	}
@@ -161,7 +161,7 @@ func (m Model) renderFilePane() string {
 			m.theme.HeaderValue.Render("No requests parsed"),
 		)
 	}
-	separator := m.theme.PaneDivider.Copy().
+	separator := m.theme.PaneDivider.
 		Width(innerWidth).
 		Render(strings.Repeat("─", innerWidth))
 
@@ -218,12 +218,12 @@ func (m Model) renderEditorPane() string {
 	style := m.theme.EditorBorder
 	content := m.editor.View()
 	if m.focus == focusEditor {
-		style = style.Copy().
+		style = style.
 			BorderForeground(lipgloss.Color("#B794F6")).
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
-		style = style.Copy().Faint(true)
+		style = style.Faint(true)
 		content = lipgloss.NewStyle().Faint(true).Render(content)
 	}
 	frameHeight := style.GetVerticalFrameSize()
@@ -239,12 +239,12 @@ func (m Model) renderResponsePane() string {
 	style := m.theme.ResponseBorder
 	active := m.focus == focusResponse
 	if active {
-		style = style.Copy().
+		style = style.
 			BorderForeground(lipgloss.Color("#6CC4C4")).
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
-		style = style.Copy().Faint(true)
+		style = style.Faint(true)
 	}
 
 	var body string
@@ -383,7 +383,7 @@ func (m Model) renderResponseDivider(left, right string) string {
 		height = maxInt(m.paneContentHeight, 1)
 	}
 	line := strings.Repeat("│\n", height-1) + "│"
-	return m.theme.PaneDivider.Copy().Render(line)
+	return m.theme.PaneDivider.Render(line)
 }
 
 func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
@@ -398,7 +398,7 @@ func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
 		return ""
 	}
 	line := strings.Repeat("─", width)
-	return m.theme.PaneDivider.Copy().Render(line)
+	return m.theme.PaneDivider.Render(line)
 }
 
 func (m Model) renderHistoryPaneFor(id responsePaneID) string {
@@ -900,7 +900,7 @@ func (m Model) renderErrorModal() string {
 		message = "An unexpected error occurred."
 	}
 	wrapped := wrapToWidth(message, contentWidth)
-	messageView := m.theme.Error.Copy().Render(wrapped)
+	messageView := m.theme.Error.Render(wrapped)
 	title := m.theme.HeaderTitle.
 		Width(contentWidth).
 		Align(lipgloss.Center).
@@ -918,8 +918,7 @@ func (m Model) renderErrorModal() string {
 		"",
 		instructions,
 	)
-	boxStyle := m.theme.BrowserBorder.Copy().
-		Width(width)
+	boxStyle := m.theme.BrowserBorder.Width(width)
 	box := boxStyle.Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
@@ -943,7 +942,7 @@ func (m Model) renderEnvironmentModal() string {
 		"",
 		commands,
 	)
-	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(
 		m.width,
 		m.height,
@@ -1010,7 +1009,7 @@ func (m Model) renderHelpOverlay() string {
 		m.theme.HeaderValue.Render("Press Esc to close this help"),
 	}
 	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
@@ -1031,7 +1030,7 @@ func (m Model) renderNewFileModal() string {
 		label := fmt.Sprintf("[%s]", ext)
 		style := lipgloss.NewStyle().Foreground(lipgloss.Color("#4D4663")).Bold(false)
 		if idx == m.newFileExtIndex {
-			style = m.theme.CommandBarHint.Copy().Bold(true)
+			style = m.theme.CommandBarHint.Bold(true)
 		}
 		extLabels = append(extLabels, style.Render(label))
 	}
@@ -1060,18 +1059,18 @@ func (m Model) renderNewFileModal() string {
 			Render("Extension: " + strings.Join(extLabels, "  ")),
 	}
 	if m.newFileError != "" {
-		errorLine := m.theme.Error.Copy().
+		errorLine := m.theme.Error.
 			Padding(0, 2).
 			Render(m.newFileError)
 		lines = append(lines, "", errorLine)
 	}
-	headerValue := m.theme.HeaderValue.Copy().
+	headerValue := m.theme.HeaderValue.
 		Padding(0, 2).
 		Render(instructions)
 	lines = append(lines, "", headerValue)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
@@ -1105,18 +1104,18 @@ func (m Model) renderOpenModal() string {
 			Render(inputView),
 	}
 	if m.openPathError != "" {
-		errorLine := m.theme.Error.Copy().
+		errorLine := m.theme.Error.
 			Padding(0, 2).
 			Render(m.openPathError)
 		lines = append(lines, "", errorLine)
 	}
-	headerInfo := m.theme.HeaderValue.Copy().
+	headerInfo := m.theme.HeaderValue.
 		Padding(0, 2).
 		Render(info)
 	lines = append(lines, "", headerInfo)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
-	box := m.theme.BrowserBorder.Copy().Width(width).Render(content)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
@@ -1124,11 +1123,11 @@ func (m Model) renderOpenModal() string {
 }
 
 func helpRow(m Model, key, description string) string {
-	keyStyled := m.theme.HeaderTitle.Copy().
+	keyStyled := m.theme.HeaderTitle.
 		Width(18).
 		Align(lipgloss.Left).
 		Render(key)
-	descStyled := m.theme.HeaderValue.Copy().
+	descStyled := m.theme.HeaderValue.
 		PaddingLeft(2).
 		Render(description)
 	return lipgloss.JoinHorizontal(

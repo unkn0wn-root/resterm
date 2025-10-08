@@ -55,10 +55,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleResponseRendered(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case responseWrapMsg:
-		if cmd := m.handleResponseWrap(typed); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
 	case responseLoadingTickMsg:
 		if cmd := m.handleResponseLoadingTick(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -375,7 +371,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			prefixCmd = m.handleKeyWithChord(storedMsg, false)
 			m.suppressListKey = true
-			allowChord = false
 			keyStr = msg.String()
 		} else if m.canStartChord(msg, keyStr) {
 			m.repeatChordActive = false
@@ -652,13 +647,13 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
-			pane.viewport.LineDown(1)
+			pane.viewport.ScrollDown(1)
 			return combine(nil)
 		case "up", "k":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
-			pane.viewport.LineUp(1)
+			pane.viewport.ScrollUp(1)
 			return combine(nil)
 		case "pgdown":
 			if pane == nil || pane.activeTab == responseTabHistory {

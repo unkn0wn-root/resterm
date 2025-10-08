@@ -36,14 +36,6 @@ type responseRenderedMsg struct {
 	headersWrapped string
 }
 
-type responseWrapMsg struct {
-	token          string
-	width          int
-	prettyWrapped  string
-	rawWrapped     string
-	headersWrapped string
-}
-
 var responseRenderSeq uint64
 
 func nextResponseRenderToken() string {
@@ -76,27 +68,6 @@ func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scri
 			prettyWrapped:  wrapToWidth(pretty, targetWidth),
 			rawWrapped:     wrapToWidth(raw, targetWidth),
 			headersWrapped: wrapToWidth(headers, targetWidth),
-		}
-	}
-}
-
-func wrapResponseContentCmd(token string, pretty, raw, headers string, width int) tea.Cmd {
-	if width <= 0 {
-		width = defaultResponseViewportWidth
-	}
-
-	targetWidth := width
-	prettyContent := pretty
-	rawContent := raw
-	headersContent := headers
-
-	return func() tea.Msg {
-		return responseWrapMsg{
-			token:          token,
-			width:          targetWidth,
-			prettyWrapped:  wrapToWidth(prettyContent, targetWidth),
-			rawWrapped:     wrapToWidth(rawContent, targetWidth),
-			headersWrapped: wrapToWidth(headersContent, targetWidth),
 		}
 	}
 }

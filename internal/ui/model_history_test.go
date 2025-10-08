@@ -117,10 +117,6 @@ func drainResponseCommands(t *testing.T, model *Model, initial tea.Cmd) {
 			if follow := model.handleResponseRendered(typed); follow != nil {
 				queue = append(queue, collectMsgs(follow)...)
 			}
-		case responseWrapMsg:
-			if follow := model.handleResponseWrap(typed); follow != nil {
-				queue = append(queue, collectMsgs(follow)...)
-			}
 		case tea.Cmd:
 			queue = append(queue, collectMsgs(typed)...)
 		case statusMsg:

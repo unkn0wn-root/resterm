@@ -241,7 +241,7 @@ func (e *requestEditor) applySelectionHighlight() {
 	if e.hasSelection() && e.selection.IsActive() {
 		if startOffset, endOffset, ok := e.selectionOffsets(); ok &&
 			endOffset > startOffset {
-			e.Model.SetSelectionRange(startOffset, endOffset)
+			e.SetSelectionRange(startOffset, endOffset)
 			return
 		}
 	}
@@ -249,11 +249,11 @@ func (e *requestEditor) applySelectionHighlight() {
 		start := e.clampOffset(match.start)
 		end := e.clampOffset(match.end)
 		if end > start {
-			e.Model.SetSelectionRange(start, end)
+			e.SetSelectionRange(start, end)
 			return
 		}
 	}
-	e.Model.ClearSelectionRange()
+	e.ClearSelectionRange()
 }
 
 func (e requestEditor) selectionOffsets() (int, int, bool) {
@@ -1127,7 +1127,8 @@ func (e requestEditor) HandleMotion(
 	if !e.motionsEnabled {
 		return e, nil, false
 	}
-	if e.pendingMotion == "g" {
+	switch e.pendingMotion {
+	case "g":
 		if command == "g" {
 			e.pendingMotion = ""
 			msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g', 'g'}}
@@ -1136,9 +1137,7 @@ func (e requestEditor) HandleMotion(
 			return updated, cmd, true
 		}
 		e.pendingMotion = ""
-	} else if e.pendingMotion == "f" ||
-		e.pendingMotion == "t" ||
-		e.pendingMotion == "T" {
+	case "f", "t", "T":
 		pending := e.pendingMotion
 		e.pendingMotion = ""
 		if command == "esc" || command == "ctrl+c" || command == "ctrl+g" {

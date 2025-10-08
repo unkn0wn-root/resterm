@@ -165,9 +165,7 @@ func parseMethod(spec string) (pkg string, service string, method string) {
 	if working == "" {
 		return "", "", ""
 	}
-	if strings.HasPrefix(working, "/") {
-		working = strings.TrimPrefix(working, "/")
-	}
+	working = strings.TrimPrefix(working, "/")
 
 	parts := strings.Split(working, "/")
 	if len(parts) < 2 {
