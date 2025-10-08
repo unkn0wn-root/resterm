@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.10](https://github.com/unkn0wn-root/resterm/compare/v0.1.9...v0.1.10) (2025-10-08)
+
+
+### Bug Fixes
+
+* **status:** utf-8 and truncation overflow for narrow width ([a5598cf](https://github.com/unkn0wn-root/resterm/commit/a5598cf045aa43f23585973f26a1620d5e58a1eb))
+
 ### [0.1.9](https://github.com/unkn0wn-root/resterm/compare/v0.1.8...v0.1.9) (2025-10-08)
 
 ### [0.1.8](https://github.com/unkn0wn-root/resterm/compare/v0.1.7...v0.1.8) (2025-10-08)
