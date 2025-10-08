@@ -808,11 +808,31 @@ func truncateStatus(text string, width int) string {
 	if lipgloss.Width(text) <= maxWidth {
 		return text
 	}
-	trim := text
-	for lipgloss.Width(trim) > maxWidth-1 && len(trim) > 0 {
-		trim = trim[:len(trim)-1]
+	ellipsisWidth := lipgloss.Width("…")
+	available := maxWidth - ellipsisWidth
+	if available <= 0 {
+		return "…"
 	}
-	return strings.TrimSpace(trim) + "…"
+	var (
+		builder       strings.Builder
+		consumedWidth int
+	)
+	for _, r := range text {
+		runeWidth := lipgloss.Width(string(r))
+		if consumedWidth+runeWidth > available {
+			break
+		}
+		builder.WriteRune(r)
+		consumedWidth += runeWidth
+	}
+	trimmed := strings.TrimSpace(builder.String())
+	if trimmed == "" {
+		trimmed = builder.String()
+	}
+	if trimmed == "" {
+		return "…"
+	}
+	return trimmed + "…"
 }
 
 func (m Model) renderErrorModal() string {
