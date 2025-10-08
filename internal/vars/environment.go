@@ -11,12 +11,16 @@ import (
 
 type EnvironmentSet map[string]map[string]string
 
-func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
+func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, fmt.Errorf("open env file: %w", err)
 	}
-	defer f.Close()
+	defer func() {
+		if closeErr := f.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close env file: %w", closeErr)
+		}
+	}()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
@@ -28,7 +32,7 @@ func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
 		return nil, fmt.Errorf("parse env file: %w", err)
 	}
 
-	envs := make(EnvironmentSet)
+	envs = make(EnvironmentSet)
 	switch v := raw.(type) {
 	case map[string]interface{}:
 		for envName, value := range v {

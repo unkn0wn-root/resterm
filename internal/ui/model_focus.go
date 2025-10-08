@@ -2,7 +2,6 @@ package ui
 
 import (
 	"github.com/charmbracelet/bubbles/cursor"
-	"github.com/charmbracelet/bubbles/list"
 )
 
 func (m *Model) cycleFocus(forward bool) {
@@ -59,21 +58,6 @@ func (m *Model) setFocus(target paneFocus) {
 	if target == focusResponse {
 		m.ensurePaneFocusValid()
 		m.setLivePane(m.responsePaneFocus)
-	}
-}
-
-func (m *Model) allowPaneFocusShortcut() bool {
-	switch m.focus {
-	case focusEditor:
-		return false
-	case focusFile:
-		return m.fileList.FilterState() != list.Filtering
-	case focusRequests:
-		return m.requestList.FilterState() != list.Filtering
-	case focusResponse:
-		return true
-	default:
-		return true
 	}
 }
 

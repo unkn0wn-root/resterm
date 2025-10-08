@@ -69,7 +69,7 @@ type Response struct {
 	Request      *restfile.Request
 }
 
-func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (*Response, error) {
+func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (resp *Response, err error) {
 	bodyReader, err := c.prepareBody(req, resolver, opts)
 	if err != nil {
 		return nil, err
@@ -115,30 +115,34 @@ func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *v
 	}
 
 	start := time.Now()
-	resp, err := client.Do(httpReq)
+	httpResp, err := client.Do(httpReq)
 	duration := time.Since(start)
 	if err != nil {
 		return &Response{Request: req, Duration: duration}, errdef.Wrap(errdef.CodeHTTP, err, "perform request")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if closeErr := httpResp.Body.Close(); closeErr != nil && err == nil {
+			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
+		}
+	}()
 
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(httpResp.Body)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "read response body")
 	}
 
-	response := &Response{
-		Status:       resp.Status,
-		StatusCode:   resp.StatusCode,
-		Proto:        resp.Proto,
-		Headers:      resp.Header.Clone(),
+	resp = &Response{
+		Status:       httpResp.Status,
+		StatusCode:   httpResp.StatusCode,
+		Proto:        httpResp.Proto,
+		Headers:      httpResp.Header.Clone(),
 		Body:         body,
 		Duration:     duration,
-		EffectiveURL: resp.Request.URL.String(),
+		EffectiveURL: httpResp.Request.URL.String(),
 		Request:      req,
 	}
 
-	return response, nil
+	return resp, nil
 }
 
 func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {

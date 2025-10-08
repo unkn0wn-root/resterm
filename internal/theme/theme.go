@@ -67,9 +67,9 @@ func DefaultTheme() Theme {
 	directiveAccent := lipgloss.Color("#56A9DD")
 
 	return Theme{
-		BrowserBorder:  base.Copy().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A78BFA")),
-		EditorBorder:   base.Copy().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent),
-		ResponseBorder: base.Copy().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FB3B3")),
+		BrowserBorder:  base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A78BFA")),
+		EditorBorder:   base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent),
+		ResponseBorder: base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FB3B3")),
 		AppFrame: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#403B59")),

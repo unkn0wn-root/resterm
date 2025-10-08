@@ -235,14 +235,6 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 	return m.scheduleResponseLoadingTick()
 }
 
-func (m *Model) handleResponseWrap(msg responseWrapMsg) tea.Cmd {
-	if msg.token == "" || msg.token != m.responseRenderToken {
-		return nil
-	}
-
-	return nil
-}
-
 func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.TestResult, scriptErr error, req *restfile.Request) tea.Cmd {
 	m.lastResponse = nil
 	m.lastGRPC = resp

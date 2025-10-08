@@ -127,7 +127,7 @@ func main() {
 	})
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
-	if err := program.Start(); err != nil {
+	if _, err := program.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

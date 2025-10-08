@@ -153,13 +153,13 @@ func isJSIdentifier(name string) bool {
 	}
 	for i, r := range name {
 		if i == 0 {
-			if !(unicode.IsLetter(r) || r == '_' || r == '$') {
+			if !unicode.IsLetter(r) && r != '_' && r != '$' {
 				return false
 			}
 			continue
 		}
 
-		if !(unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_' || r == '$') {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' && r != '$' {
 			return false
 		}
 	}
