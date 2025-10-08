@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.12](https://github.com/unkn0wn-root/resterm/compare/v0.1.11...v0.1.12) (2025-10-08)
+
+
+### Features
+
+* add basic model_utils test (wrapper) ([a490629](https://github.com/unkn0wn-root/resterm/commit/a490629ab85e515c720c8dcd9c51876e28ac8ec3))
+* add gh ci with lint, tests and build (on release only) ([7bfb06b](https://github.com/unkn0wn-root/resterm/commit/7bfb06b15130bdab2697ea4d2fbe81f5cf131eca))
+
+
+### Bug Fixes
+
+* graphql query builder from file ([fd12229](https://github.com/unkn0wn-root/resterm/commit/fd12229e0073717a189978fdaa733e1675f920d7))
+* wrapToWidth to handle indentation better ([1514674](https://github.com/unkn0wn-root/resterm/commit/1514674240b8c72783c13823356649d6014bc66e))
+
 ### [0.1.11](https://github.com/unkn0wn-root/resterm/compare/v0.1.10...v0.1.11) (2025-10-08)
 
 ### [0.1.10](https://github.com/unkn0wn-root/resterm/compare/v0.1.9...v0.1.10) (2025-10-08)
