@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -186,5 +187,21 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 			got = model.responseLatest.pretty
 		}
 		t.Fatalf("expected response view to mention grpc status, got %q", got)
+	}
+}
+
+func TestResolveRequestTimeout(t *testing.T) {
+	req := &restfile.Request{Settings: map[string]string{"timeout": "5s"}}
+	if got := resolveRequestTimeout(req, 30*time.Second); got != 5*time.Second {
+		t.Fatalf("expected timeout override to return 5s, got %s", got)
+	}
+
+	req.Settings["timeout"] = "invalid"
+	if got := resolveRequestTimeout(req, 10*time.Second); got != 10*time.Second {
+		t.Fatalf("expected fallback to base timeout, got %s", got)
+	}
+
+	if got := resolveRequestTimeout(nil, 15*time.Second); got != 15*time.Second {
+		t.Fatalf("expected base timeout when request nil, got %s", got)
 	}
 }

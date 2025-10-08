@@ -80,18 +80,19 @@ const (
 )
 
 type Config struct {
-	FilePath        string
-	InitialContent  string
-	Client          *httpclient.Client
-	Theme           *theme.Theme
-	EnvironmentSet  vars.EnvironmentSet
-	EnvironmentName string
-	EnvironmentFile string
-	HTTPOptions     httpclient.Options
-	GRPCOptions     grpcclient.Options
-	History         *history.Store
-	WorkspaceRoot   string
-	Recursive       bool
+	FilePath            string
+	InitialContent      string
+	Client              *httpclient.Client
+	Theme               *theme.Theme
+	EnvironmentSet      vars.EnvironmentSet
+	EnvironmentName     string
+	EnvironmentFile     string
+	EnvironmentFallback string
+	HTTPOptions         httpclient.Options
+	GRPCOptions         grpcclient.Options
+	History             *history.Store
+	WorkspaceRoot       string
+	Recursive           bool
 }
 
 type operatorState struct {
@@ -228,6 +229,12 @@ func New(cfg Config) Model {
 	if err != nil {
 		initialStatus = statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusWarn}
 		entries = nil
+	}
+	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
+		initialStatus = statusMsg{
+			text:  fmt.Sprintf("Environment defaulted to %q; press Ctrl+E to change.", cfg.EnvironmentFallback),
+			level: statusInfo,
+		}
 	}
 
 	items := makeFileItems(entries)

@@ -96,8 +96,8 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			}
 		}
 
-		timeout := defaultTimeout(options.Timeout)
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
+		ctx, cancel := context.WithTimeout(context.Background(), effectiveTimeout)
 		defer cancel()
 
 		if req.GRPC != nil {
@@ -110,7 +110,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			}
 
 			if grpcOpts.DialTimeout == 0 {
-				grpcOpts.DialTimeout = timeout
+				grpcOpts.DialTimeout = effectiveTimeout
 			}
 
 			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts)
@@ -182,6 +182,17 @@ func defaultTimeout(timeout time.Duration) time.Duration {
 		return timeout
 	}
 	return 30 * time.Second
+}
+
+func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Duration {
+	if req != nil {
+		if raw, ok := req.Settings["timeout"]; ok {
+			if dur, err := time.ParseDuration(raw); err == nil && dur > 0 {
+				return dur
+			}
+		}
+	}
+	return base
 }
 
 func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, extras ...map[string]string) *vars.Resolver {

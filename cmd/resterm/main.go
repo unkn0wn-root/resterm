@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -29,7 +30,7 @@ func main() {
 		insecure  bool
 		follow    bool
 		proxyURL  string
-		recurisve bool
+		recursive bool
 	)
 
 	follow = true
@@ -42,7 +43,8 @@ func main() {
 	flag.BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
 	flag.BoolVar(&follow, "follow", true, "Follow redirects")
 	flag.StringVar(&proxyURL, "proxy", "", "HTTP proxy URL")
-	flag.BoolVar(&recurisve, "recurisve", false, "Recursively scan workspace for request files")
+	flag.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
+	flag.BoolVar(&recursive, "recurisve", false, "(deprecated) Recursively scan workspace for request files")
 	flag.Parse()
 
 	if filePath == "" && flag.NArg() > 0 {
@@ -75,10 +77,14 @@ func main() {
 	}
 
 	envSet, resolvedEnvFile := loadEnvironment(envFile, filePath, workspace)
-	if envName == "" && envSet != nil {
-		for name := range envSet {
-			envName = name
-			break
+	var envFallback string
+	if envName == "" && len(envSet) > 0 {
+		selected, notify := selectDefaultEnvironment(envSet)
+		if selected != "" {
+			envName = selected
+			if notify {
+				envFallback = selected
+			}
 		}
 	}
 
@@ -105,18 +111,19 @@ func main() {
 
 	th := theme.DefaultTheme()
 	model := ui.New(ui.Config{
-		FilePath:        filePath,
-		InitialContent:  initialContent,
-		Client:          client,
-		Theme:           &th,
-		EnvironmentSet:  envSet,
-		EnvironmentName: envName,
-		EnvironmentFile: resolvedEnvFile,
-		HTTPOptions:     httpOpts,
-		GRPCOptions:     grpcOpts,
-		History:         historyStore,
-		WorkspaceRoot:   workspace,
-		Recursive:       recurisve,
+		FilePath:            filePath,
+		InitialContent:      initialContent,
+		Client:              client,
+		Theme:               &th,
+		EnvironmentSet:      envSet,
+		EnvironmentName:     envName,
+		EnvironmentFile:     resolvedEnvFile,
+		EnvironmentFallback: envFallback,
+		HTTPOptions:         httpOpts,
+		GRPCOptions:         grpcOpts,
+		History:             historyStore,
+		WorkspaceRoot:       workspace,
+		Recursive:           recursive,
 	})
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
@@ -152,4 +159,22 @@ func loadEnvironment(explicit string, filePath string, workspace string) (vars.E
 		return nil, ""
 	}
 	return envs, path
+}
+
+func selectDefaultEnvironment(envs vars.EnvironmentSet) (string, bool) {
+	if len(envs) == 0 {
+		return "", false
+	}
+	preferred := []string{"dev", "default", "local"}
+	for _, name := range preferred {
+		if _, ok := envs[name]; ok {
+			return name, len(envs) > 1
+		}
+	}
+	names := make([]string, 0, len(envs))
+	for name := range envs {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names[0], len(envs) > 1
 }
