@@ -8,6 +8,9 @@
   <img src="_media/resterm.png" alt="Screenshot of resterm TUI" width="720" />
 </p>
 
+> [!WARNING]
+> Resterm is still in early stages so bugs and undesired behaviors can be expected.
+
 ## Features
 - **Workspace explorer.** Filters `.http`/`.rest` files, respects workspace roots, and keeps the file pane navigable with incremental search.
 - **Editor with modal workflow.** Starts in view mode, supports Vim-style motions, visual selections with inline highlighting, clipboard yank/cut, `Shift+F` search, and an `i` / `Esc` toggle for insert mode.
@@ -21,9 +24,6 @@
 - **gRPC client.** `GRPC host:port` requests with `@grpc` metadata build messages from descriptor sets or reflection, stream metadata/trailers, and log history entries beside HTTP calls.
 - **Session persistence.** Cookie jar, history store, and environment-aware entries survive restarts; `@no-log` can redact bodies.
 - **Configurable transport.** Flag-driven timeout, TLS, redirect, and proxy settings alongside environment file discovery (`resterm.env.json` or legacy `rest-client.env.json`).
-
-> [!WARNING]
-> Resterm is still in early stages so bugs and undesired behaviors can be expected.
 
 ## Request File Structure
 
