@@ -163,7 +163,7 @@ Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another
 - `p`, `P` - paste after/before cursor
 - `f`, `t`, `T` - find character (forward / forward before target / backward before target)
 - `Shift+F` - open search prompt; `Ctrl+R` toggles regex while open
-- `n` - jump to the next match (wraps around)
+- `n` / `p` - jump to the next / previous match (wraps around)
 
 ### CLI Flags
 - `--file`: path to a `.http`/`.rest` file to open.

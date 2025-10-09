@@ -727,3 +727,109 @@ func TestRequestEditorNextSearchMatchWrap(t *testing.T) {
 		t.Fatalf("expected search index reset to 0, got %d", editor.search.index)
 	}
 }
+
+func TestRequestEditorRegexSearchMatches(t *testing.T) {
+	content := "foo\nfao\nbar"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.ApplySearch("f.o", true)
+	status := statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status from regex search")
+	}
+	if status.level != statusInfo {
+		t.Fatalf("expected info status, got %v", status.level)
+	}
+	if !strings.Contains(status.text, "Match 1/2") {
+		t.Fatalf("expected first regex match status, got %q", status.text)
+	}
+	if !editor.search.isRegex {
+		t.Fatal("expected regex flag to remain set")
+	}
+
+	editor, cmd = editor.NextSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after advancing regex search")
+	}
+	if !strings.Contains(status.text, "Match 2/2") {
+		t.Fatalf("expected second regex match status, got %q", status.text)
+	}
+	if editor.search.index != 1 {
+		t.Fatalf("expected search index 1 after advancing, got %d", editor.search.index)
+	}
+
+	editor, cmd = editor.PrevSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after retreating regex search")
+	}
+	if !strings.Contains(status.text, "Match 1/2") {
+		t.Fatalf("expected to return to first regex match, got %q", status.text)
+	}
+	if editor.search.index != 0 {
+		t.Fatalf("expected search index reset to 0, got %d", editor.search.index)
+	}
+}
+
+func TestRequestEditorPrevSearchMatchWrap(t *testing.T) {
+	content := "foo bar\nfoo baz\nfoo"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.ApplySearch("foo", false)
+	if status := statusFromCmd(t, cmd); status == nil {
+		t.Fatal("expected initial search status")
+	}
+
+	editor, cmd = editor.PrevSearchMatch()
+	status := statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after previous search")
+	}
+	if status.level != statusInfo {
+		t.Fatalf("expected info level, got %v", status.level)
+	}
+	if !strings.Contains(status.text, "Match 3/3") {
+		t.Fatalf("expected status to show third match, got %q", status.text)
+	}
+	if !strings.Contains(status.text, "(wrapped)") {
+		t.Fatalf("expected wrap notice when cycling back, got %q", status.text)
+	}
+	if editor.search.index != 2 {
+		t.Fatalf("expected search index 2, got %d", editor.search.index)
+	}
+
+	editor, cmd = editor.PrevSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after moving to previous match")
+	}
+	if !strings.Contains(status.text, "Match 2/3") {
+		t.Fatalf("expected status to show second match, got %q", status.text)
+	}
+	if strings.Contains(status.text, "(wrapped)") {
+		t.Fatalf("did not expect wrap notice on second match, got %q", status.text)
+	}
+	if editor.search.index != 1 {
+		t.Fatalf("expected search index 1, got %d", editor.search.index)
+	}
+
+	editor, cmd = editor.PrevSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after cycling to first match")
+	}
+	if !strings.Contains(status.text, "Match 1/3") {
+		t.Fatalf("expected status to show first match, got %q", status.text)
+	}
+	if strings.Contains(status.text, "(wrapped)") {
+		t.Fatalf("did not expect wrap notice on first match, got %q", status.text)
+	}
+	if editor.search.index != 0 {
+		t.Fatalf("expected search index reset to 0, got %d", editor.search.index)
+	}
+}

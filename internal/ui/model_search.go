@@ -235,3 +235,82 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 	}
 	return status
 }
+
+func (m *Model) retreatResponseSearch() tea.Cmd {
+	paneID := m.responsePaneFocus
+	pane := m.pane(paneID)
+	if pane == nil {
+		return statusCmd(statusWarn, "No response pane available")
+	}
+	if !pane.search.hasQuery() {
+		return statusCmd(statusWarn, "No active search")
+	}
+
+	tab := pane.activeTab
+	if tab == responseTabHistory {
+		tab = pane.ensureContentTab()
+	}
+
+	width := pane.viewport.Width
+	if width <= 0 {
+		width = defaultResponseViewportWidth
+	}
+
+	content, cacheKey := m.paneContentForTab(paneID, tab)
+	snapshotID := ""
+	snapshotReady := false
+	if pane.snapshot != nil {
+		snapshotID = pane.snapshot.id
+		snapshotReady = pane.snapshot.ready
+	}
+	if !snapshotReady {
+		return statusCmd(statusWarn, "Response not ready")
+	}
+
+	wrapped := wrapContentForTab(cacheKey, content, width)
+	if pane.search.needsRefresh(snapshotID, cacheKey, width) {
+		prevIndex := pane.search.index
+		pane.search.prepare(pane.search.query, pane.search.isRegex, cacheKey, snapshotID, width)
+		if err := pane.search.computeMatches(wrapped); err != nil {
+			pane.search.invalidate()
+			return statusCmd(statusError, fmt.Sprintf("Invalid regex: %v", err))
+		}
+		if len(pane.search.matches) == 0 {
+			status := statusCmd(statusWarn, fmt.Sprintf("No matches for %q", pane.search.query))
+			if syncCmd := m.syncResponsePane(paneID); syncCmd != nil {
+				return tea.Batch(syncCmd, status)
+			}
+			return status
+		}
+		if prevIndex >= 0 && prevIndex < len(pane.search.matches) {
+			pane.search.index = prevIndex
+		} else {
+			pane.search.index = 0
+		}
+	}
+
+	if len(pane.search.matches) == 0 {
+		return statusCmd(statusWarn, fmt.Sprintf("No matches for %q", pane.search.query))
+	}
+
+	prev := pane.search.index - 1
+	wrappedAround := false
+	if prev < 0 {
+		prev = len(pane.search.matches) - 1
+		wrappedAround = true
+	}
+	pane.search.index = prev
+	match := pane.search.matches[prev]
+	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
+	pane.search.active = true
+
+	statusText := fmt.Sprintf("Match %d/%d for %q", prev+1, len(pane.search.matches), pane.search.query)
+	if wrappedAround {
+		statusText += " (wrapped)"
+	}
+	status := statusCmd(statusInfo, statusText)
+	if syncCmd := m.syncResponsePane(paneID); syncCmd != nil {
+		return tea.Batch(syncCmd, status)
+	}
+	return status
+}

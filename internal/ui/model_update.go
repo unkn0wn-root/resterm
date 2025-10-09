@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
@@ -484,6 +486,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.editor, cmd = m.editor.NextSearchMatch()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			case "p":
+				if strings.TrimSpace(m.editor.search.query) != "" {
+					var cmd tea.Cmd
+					m.editor, cmd = m.editor.PrevSearchMatch()
+					m.suppressEditorKey = true
+					return combine(cmd)
+				}
+				cmd := m.runPasteClipboard(true)
+				m.suppressEditorKey = true
+				return combine(cmd)
 			case "u":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.UndoLastChange()
@@ -518,10 +530,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				cmd := m.runChangeCurrentLine()
 				m.suppressEditorKey = true
 				m.setInsertMode(true, true)
-				return combine(cmd)
-			case "p":
-				cmd := m.runPasteClipboard(true)
-				m.suppressEditorKey = true
 				return combine(cmd)
 			case "P":
 				cmd := m.runPasteClipboard(false)
@@ -648,6 +656,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(cmd)
 		case "n":
 			cmd := m.advanceResponseSearch()
+			return combine(cmd)
+		case "p":
+			cmd := m.retreatResponseSearch()
 			return combine(cmd)
 		case "down", "j":
 			if pane == nil || pane.activeTab == responseTabHistory {

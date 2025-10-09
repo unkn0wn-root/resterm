@@ -1310,6 +1310,74 @@ func (e requestEditor) NextSearchMatch() (requestEditor, tea.Cmd) {
 	return e, status
 }
 
+func (e requestEditor) PrevSearchMatch() (requestEditor, tea.Cmd) {
+	pe := &e
+	trimmed := strings.TrimSpace(pe.search.query)
+	if trimmed == "" {
+		return e, statusCmd(statusWarn, "No active search")
+	}
+
+	if len(pe.search.matches) == 0 {
+		matches, err := pe.buildSearchMatches(trimmed, pe.search.isRegex)
+		if err != nil {
+			msg := fmt.Sprintf("Invalid regex: %v", err)
+			return e, statusCmd(statusError, msg)
+		}
+		pe.search.matches = matches
+		pe.search.index = -1
+		if len(matches) == 0 {
+			msg := fmt.Sprintf("No matches for %q", trimmed)
+			pe.applySelectionHighlight()
+			return e, statusCmd(statusWarn, msg)
+		}
+	}
+
+	if pe.search.index < 0 || pe.search.index >= len(pe.search.matches) {
+		offset := pe.caretPosition().Offset
+		index, wrapped := lastMatchIndex(pe.search.matches, offset)
+		moveCmd := pe.jumpToSearchIndex(index)
+		statusText := fmt.Sprintf(
+			"Match %d/%d for %q",
+			index+1,
+			len(pe.search.matches),
+			trimmed,
+		)
+		if wrapped {
+			statusText += " (wrapped)"
+		}
+
+		status := statusCmd(statusInfo, statusText)
+		if moveCmd != nil {
+			return e, tea.Batch(moveCmd, status)
+		}
+		return e, status
+	}
+
+	prevIndex := pe.search.index - 1
+	wrapped := false
+	if prevIndex < 0 {
+		prevIndex = len(pe.search.matches) - 1
+		wrapped = true
+	}
+
+	moveCmd := pe.jumpToSearchIndex(prevIndex)
+	statusText := fmt.Sprintf(
+		"Match %d/%d for %q",
+		prevIndex+1,
+		len(pe.search.matches),
+		trimmed,
+	)
+	if wrapped {
+		statusText += " (wrapped)"
+	}
+
+	status := statusCmd(statusInfo, statusText)
+	if moveCmd != nil {
+		return e, tea.Batch(moveCmd, status)
+	}
+	return e, status
+}
+
 func (e requestEditor) caretPosition() cursorPosition {
 	line := e.Line()
 	info := e.LineInfo()
@@ -1687,6 +1755,19 @@ func firstMatchIndex(matches []searchMatch, offset int) (int, bool) {
 		}
 	}
 	return 0, true
+}
+
+func lastMatchIndex(matches []searchMatch, offset int) (int, bool) {
+	if len(matches) == 0 {
+		return -1, false
+	}
+	for i := len(matches) - 1; i >= 0; i-- {
+		match := matches[i]
+		if offset > match.start {
+			return i, false
+		}
+	}
+	return len(matches) - 1, true
 }
 
 func literalMatches(content, pattern string) []searchMatch {
