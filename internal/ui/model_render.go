@@ -1076,7 +1076,7 @@ func (m Model) renderHelpOverlay() string {
 		"",
 		header("Search", lipgloss.Left),
 		helpRow(m, "Shift+F", "Open search prompt (Ctrl+R toggles regex)"),
-		helpRow(m, "n", "Next match (wraps around)"),
+		helpRow(m, "n / p", "Next / previous match (wraps around)"),
 		"",
 		m.theme.HeaderValue.Render("Press Esc to close this help"),
 	}
