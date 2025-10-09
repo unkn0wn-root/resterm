@@ -701,9 +701,12 @@ func (m Model) renderHeader() string {
 	if env == "" {
 		env = "default"
 	}
-	request := m.activeRequestTitle
+	request := requestBaseTitle(m.currentRequest)
 	if strings.TrimSpace(request) == "" {
-		request = "—"
+		request = strings.TrimSpace(m.activeRequestTitle)
+		if request == "" {
+			request = "—"
+		}
 	}
 
 	type segment struct {

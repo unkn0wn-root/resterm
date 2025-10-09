@@ -25,6 +25,8 @@ type Entry struct {
 	Duration    time.Duration `json:"duration"`
 	BodySnippet string        `json:"bodySnippet"`
 	RequestText string        `json:"requestText"`
+	Description string        `json:"description,omitempty"`
+	Tags        []string      `json:"tags,omitempty"`
 }
 
 type Store struct {
