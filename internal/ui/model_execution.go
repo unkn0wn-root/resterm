@@ -140,11 +140,13 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			return responseMsg{err: err}
 		}
 
-		if err := m.applyCaptures(doc, req, resolver, response); err != nil {
+		var captures captureResult
+		if err := m.applyCaptures(doc, req, resolver, response, &captures); err != nil {
 			return responseMsg{err: err}
 		}
 
-		testVars := mergeVariableMaps(baseVars, scriptVars)
+		updatedVars := m.collectVariables(doc, req)
+		testVars := mergeVariableMaps(updatedVars, scriptVars)
 		testGlobals := m.collectGlobalValues(doc)
 		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 			Response:  response,
@@ -263,6 +265,7 @@ func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, ext
 			fileVars[v.Name] = v.Value
 		}
 	}
+	m.mergeFileRuntimeVars(fileVars, doc)
 	if len(fileVars) > 0 {
 		providers = append(providers, vars.NewMapProvider("file", fileVars))
 	}
@@ -285,6 +288,29 @@ func (m *Model) environmentValues() map[string]string {
 	return nil
 }
 
+func (m *Model) documentRuntimePath(doc *restfile.Document) string {
+	if doc != nil && strings.TrimSpace(doc.Path) != "" {
+		return doc.Path
+	}
+	return m.currentFile
+}
+
+func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Document) {
+	if target == nil || m.fileVars == nil {
+		return
+	}
+	path := m.documentRuntimePath(doc)
+	if snapshot := m.fileVars.snapshot(m.cfg.EnvironmentName, path); len(snapshot) > 0 {
+		for key, entry := range snapshot {
+			name := strings.TrimSpace(entry.Name)
+			if name == "" {
+				name = key
+			}
+			target[name] = entry.Value
+		}
+	}
+}
+
 func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request) map[string]string {
 	vars := make(map[string]string)
 	if env := m.environmentValues(); env != nil {
@@ -300,6 +326,7 @@ func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request) 
 			vars[v.Name] = v.Value
 		}
 	}
+	m.mergeFileRuntimeVars(vars, doc)
 	if m.globals != nil {
 		if snapshot := m.globals.snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
 			for key, entry := range snapshot {
@@ -451,7 +478,42 @@ func maskSecret(value string, secret bool) string {
 	return value
 }
 
-func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *httpclient.Response) error {
+type captureResult struct {
+	requestVars map[string]restfile.Variable
+	fileVars    map[string]restfile.Variable
+}
+
+func (r *captureResult) addRequest(name, value string, secret bool) {
+	if r == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	if r.requestVars == nil {
+		r.requestVars = make(map[string]restfile.Variable)
+	}
+	key := strings.ToLower(name)
+	r.requestVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeRequest}
+}
+
+func (r *captureResult) addFile(name, value string, secret bool) {
+	if r == nil {
+		return
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	if r.fileVars == nil {
+		r.fileVars = make(map[string]restfile.Variable)
+	}
+	key := strings.ToLower(name)
+	r.fileVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeFile}
+}
+
+func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *httpclient.Response, result *captureResult) error {
 	if req == nil || resp == nil {
 		return nil
 	}
@@ -467,14 +529,26 @@ func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, res
 		switch capture.Scope {
 		case restfile.CaptureScopeRequest:
 			upsertVariable(&req.Variables, restfile.ScopeRequest, capture.Name, value, capture.Secret)
+			if result != nil {
+				result.addRequest(capture.Name, value, capture.Secret)
+			}
 		case restfile.CaptureScopeFile:
 			if doc != nil {
 				upsertVariable(&doc.Variables, restfile.ScopeFile, capture.Name, value, capture.Secret)
+			}
+			if result != nil {
+				result.addFile(capture.Name, value, capture.Secret)
 			}
 		case restfile.CaptureScopeGlobal:
 			if m.globals != nil {
 				m.globals.set(m.cfg.EnvironmentName, capture.Name, value, capture.Secret)
 			}
+		}
+	}
+	if result != nil && len(result.fileVars) > 0 && m.fileVars != nil {
+		path := m.documentRuntimePath(doc)
+		for _, entry := range result.fileVars {
+			m.fileVars.set(m.cfg.EnvironmentName, path, entry.Name, entry.Value, entry.Secret)
 		}
 	}
 	return nil

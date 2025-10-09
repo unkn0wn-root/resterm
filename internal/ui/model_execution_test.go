@@ -311,8 +311,9 @@ func copyValues(src url.Values) url.Values {
 
 func TestApplyCapturesStoresValues(t *testing.T) {
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		globals: newGlobalStore(),
+		cfg:      Config{EnvironmentName: "dev"},
+		globals:  newGlobalStore(),
+		fileVars: newFileStore(),
 	}
 
 	resp := &httpclient.Response{
@@ -324,19 +325,28 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		Body: []byte(`{"token":"abc123","nested":{"value":42}}`),
 	}
 
-	doc := &restfile.Document{}
+	doc := &restfile.Document{Path: "./sample.http"}
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
 				{Scope: restfile.CaptureScopeGlobal, Name: "authToken", Expression: "Bearer {{response.json.token}}", Secret: true},
 				{Scope: restfile.CaptureScopeFile, Name: "lastTrace", Expression: "{{response.headers.X-Trace}}", Secret: false},
+				{Scope: restfile.CaptureScopeRequest, Name: "recentStatus", Expression: "{{response.status}}", Secret: false},
 			},
 		},
 	}
 
 	resolver := model.buildResolver(doc, req, nil)
-	if err := model.applyCaptures(doc, req, resolver, resp); err != nil {
+	var captures captureResult
+	if err := model.applyCaptures(doc, req, resolver, resp, &captures); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
+	}
+
+	if _, ok := captures.requestVars["recentstatus"]; !ok {
+		t.Fatalf("expected request capture to be recorded: %+v", captures.requestVars)
+	}
+	if _, ok := captures.fileVars["lasttrace"]; !ok {
+		t.Fatalf("expected file capture to be recorded: %+v", captures.fileVars)
 	}
 
 	snapshot := model.globals.snapshot("dev")
@@ -367,6 +377,35 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	}
 	if doc.Variables[0].Name != "lastTrace" || doc.Variables[0].Value != "abc" {
 		t.Fatalf("unexpected file variable %+v", doc.Variables[0])
+	}
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected one request variable, got %d", len(req.Variables))
+	}
+	if req.Variables[0].Name != "recentStatus" || req.Variables[0].Value != "200 OK" {
+		t.Fatalf("unexpected request variable %+v", req.Variables[0])
+	}
+	varsWithReq := model.collectVariables(doc, req)
+	if varsWithReq["recentStatus"] != "200 OK" {
+		t.Fatalf("expected request capture to be available in collected vars, got %q", varsWithReq["recentStatus"])
+	}
+
+	store := model.fileVars.snapshot("dev", "./sample.http")
+	if len(store) != 1 {
+		t.Fatalf("expected one stored file variable, got %d", len(store))
+	}
+	var stored fileVariable
+	for _, entry := range store {
+		stored = entry
+	}
+	if stored.Name != "lastTrace" || stored.Value != "abc" {
+		t.Fatalf("unexpected stored file capture %+v", stored)
+	}
+
+	// simulate a fresh parse of the document (no baked-in variables)
+	freshDoc := &restfile.Document{Path: "./sample.http"}
+	vars := model.collectVariables(freshDoc, nil)
+	if vars["lastTrace"] != "abc" {
+		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
 	}
 }
 

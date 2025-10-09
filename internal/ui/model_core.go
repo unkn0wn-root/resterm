@@ -163,6 +163,7 @@ type Model struct {
 	testResults  []scripts.TestResult
 	scriptError  error
 	globals      *globalStore
+	fileVars     *fileStore
 	oauth        *oauth.Manager
 
 	responseRenderToken  string
@@ -359,6 +360,7 @@ func New(cfg Config) Model {
 		statusMessage:            initialStatus,
 		scriptRunner:             scripts.NewRunner(nil),
 		globals:                  newGlobalStore(),
+		fileVars:                 newFileStore(),
 		oauth:                    oauth.NewManager(client),
 		editorInsertMode:         false,
 		editorWriteKeyMap:        writeKeyMap,
