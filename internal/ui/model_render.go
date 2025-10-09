@@ -303,6 +303,12 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool) string {
 	tabs = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
 		Render(tabs)
+
+	searchView := ""
+	if m.showSearchPrompt && m.searchTarget == searchTargetResponse && m.searchResponsePane == id {
+		searchView = m.renderResponseSearchPrompt(contentWidth)
+	}
+
 	var content string
 	if pane.activeTab == responseTabHistory {
 		content = m.renderHistoryPaneFor(id)
@@ -316,13 +322,21 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool) string {
 
 	if !focused && m.focus == focusResponse {
 		tabs = lipgloss.NewStyle().Faint(true).Render(tabs)
+		if searchView != "" {
+			searchView = lipgloss.NewStyle().Faint(true).Render(searchView)
+		}
 		content = lipgloss.NewStyle().Faint(true).Render(content)
 	}
 
+	elements := []string{tabs}
+	if searchView != "" {
+		elements = append(elements, searchView)
+	}
+	elements = append(elements, content)
+
 	column := lipgloss.JoinVertical(
 		lipgloss.Left,
-		tabs,
-		content,
+		elements...,
 	)
 	columnHeight := maxInt(contentHeight+lipgloss.Height(tabs), 1)
 	column = lipgloss.NewStyle().
@@ -516,6 +530,9 @@ func layoutHistoryContent(listView, snippetView string, maxHeight int) string {
 
 func (m Model) renderCommandBar() string {
 	if m.showSearchPrompt {
+		if m.searchTarget == searchTargetResponse {
+			return m.renderResponseSearchInfo()
+		}
 		return m.renderSearchPrompt()
 	}
 
@@ -562,6 +579,7 @@ func (m Model) renderSearchPrompt() string {
 	if m.searchIsRegex {
 		mode = "regex"
 	}
+	m.searchInput.Width = 0
 	label := lipgloss.NewStyle().Bold(true).Render("Search ")
 	input := m.searchInput.View()
 	modeBadge := lipgloss.NewStyle().
@@ -576,6 +594,60 @@ func (m Model) renderSearchPrompt() string {
 		lipgloss.Top,
 		label,
 		input,
+		modeBadge,
+		hints,
+	)
+	return m.theme.CommandBar.Render(row)
+}
+
+func (m Model) renderResponseSearchPrompt(width int) string {
+	if width <= 0 {
+		width = defaultResponseViewportWidth
+	}
+	mode := "literal"
+	if m.searchIsRegex {
+		mode = "regex"
+	}
+	label := lipgloss.NewStyle().Bold(true).Render("Search ")
+	modeBadge := lipgloss.NewStyle().
+		Faint(true).
+		PaddingLeft(1).
+		Render(strings.ToUpper(mode))
+	reserved := lipgloss.Width(label) + lipgloss.Width(modeBadge) + 2
+	inputWidth := width - reserved
+	if inputWidth < 4 {
+		inputWidth = maxInt(4, width-8)
+	}
+	m.searchInput.Width = inputWidth
+	input := lipgloss.NewStyle().MaxWidth(inputWidth).Render(m.searchInput.View())
+	row := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		label,
+		input,
+		modeBadge,
+	)
+	return m.theme.CommandBar.
+		Width(width).
+		Render(row)
+}
+
+func (m Model) renderResponseSearchInfo() string {
+	mode := "literal"
+	if m.searchIsRegex {
+		mode = "regex"
+	}
+	label := lipgloss.NewStyle().Bold(true).Render("Response Search ")
+	modeBadge := lipgloss.NewStyle().
+		Faint(true).
+		PaddingLeft(1).
+		Render(strings.ToUpper(mode))
+	hints := lipgloss.NewStyle().
+		Faint(true).
+		PaddingLeft(1).
+		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
+	row := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		label,
 		modeBadge,
 		hints,
 	)

@@ -643,6 +643,12 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 		pane := m.focusedPane()
 		switch keyStr {
+		case "shift+f", "F":
+			cmd := m.openSearchPrompt()
+			return combine(cmd)
+		case "n":
+			cmd := m.advanceResponseSearch()
+			return combine(cmd)
 		case "down", "j":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)

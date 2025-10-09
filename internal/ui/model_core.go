@@ -51,6 +51,13 @@ const (
 	responseSplitHorizontal
 )
 
+type searchTarget int
+
+const (
+	searchTargetEditor searchTarget = iota
+	searchTargetResponse
+)
+
 const noResponseMessage = "░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█\n░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█\n░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀"
 const historySnippetPlaceholder = "[HTML content omitted]"
 const historySnippetMaxLines = 24
@@ -137,10 +144,12 @@ type Model struct {
 	showErrorModal      bool
 	errorModalMessage   string
 
-	showSearchPrompt bool
-	searchInput      textinput.Model
-	searchIsRegex    bool
-	searchJustOpened bool
+	showSearchPrompt   bool
+	searchInput        textinput.Model
+	searchIsRegex      bool
+	searchJustOpened   bool
+	searchTarget       searchTarget
+	searchResponsePane responsePaneID
 
 	statusMessage    statusMsg
 	statusPulseBase  string
@@ -352,6 +361,7 @@ func New(cfg Config) Model {
 		newFileInput:             newFileInput,
 		openPathInput:            openPathInput,
 		searchInput:              searchInput,
+		searchTarget:             searchTargetEditor,
 	}
 	model.setInsertMode(false, false)
 
