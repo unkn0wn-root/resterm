@@ -28,37 +28,39 @@ type EditorMetadataPalette struct {
 }
 
 type Theme struct {
-	BrowserBorder           lipgloss.Style
-	EditorBorder            lipgloss.Style
-	ResponseBorder          lipgloss.Style
-	AppFrame                lipgloss.Style
-	Header                  lipgloss.Style
-	HeaderTitle             lipgloss.Style
-	HeaderValue             lipgloss.Style
-	HeaderSeparator         lipgloss.Style
-	StatusBar               lipgloss.Style
-	StatusBarKey            lipgloss.Style
-	StatusBarValue          lipgloss.Style
-	CommandBar              lipgloss.Style
-	CommandBarHint          lipgloss.Style
-	Tabs                    lipgloss.Style
-	TabActive               lipgloss.Style
-	TabInactive             lipgloss.Style
-	Notification            lipgloss.Style
-	Error                   lipgloss.Style
-	Success                 lipgloss.Style
-	HeaderBrand             lipgloss.Style
-	HeaderSegments          []HeaderSegmentStyle
-	CommandSegments         []CommandSegmentStyle
-	CommandDivider          lipgloss.Style
-	PaneTitle               lipgloss.Style
-	PaneTitleFile           lipgloss.Style
-	PaneTitleRequests       lipgloss.Style
-	PaneDivider             lipgloss.Style
-	PaneBorderFocusFile     lipgloss.Color
-	PaneBorderFocusRequests lipgloss.Color
-	PaneActiveForeground    lipgloss.Color
-	EditorMetadata          EditorMetadataPalette
+	BrowserBorder                 lipgloss.Style
+	EditorBorder                  lipgloss.Style
+	ResponseBorder                lipgloss.Style
+	AppFrame                      lipgloss.Style
+	Header                        lipgloss.Style
+	HeaderTitle                   lipgloss.Style
+	HeaderValue                   lipgloss.Style
+	HeaderSeparator               lipgloss.Style
+	StatusBar                     lipgloss.Style
+	StatusBarKey                  lipgloss.Style
+	StatusBarValue                lipgloss.Style
+	CommandBar                    lipgloss.Style
+	CommandBarHint                lipgloss.Style
+	ResponseSearchHighlight       lipgloss.Style
+	ResponseSearchHighlightActive lipgloss.Style
+	Tabs                          lipgloss.Style
+	TabActive                     lipgloss.Style
+	TabInactive                   lipgloss.Style
+	Notification                  lipgloss.Style
+	Error                         lipgloss.Style
+	Success                       lipgloss.Style
+	HeaderBrand                   lipgloss.Style
+	HeaderSegments                []HeaderSegmentStyle
+	CommandSegments               []CommandSegmentStyle
+	CommandDivider                lipgloss.Style
+	PaneTitle                     lipgloss.Style
+	PaneTitleFile                 lipgloss.Style
+	PaneTitleRequests             lipgloss.Style
+	PaneDivider                   lipgloss.Style
+	PaneBorderFocusFile           lipgloss.Color
+	PaneBorderFocusRequests       lipgloss.Color
+	PaneActiveForeground          lipgloss.Color
+	EditorMetadata                EditorMetadataPalette
 }
 
 func DefaultTheme() Theme {
@@ -82,7 +84,14 @@ func DefaultTheme() Theme {
 		StatusBarValue:  lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
 		CommandBar:      lipgloss.NewStyle().Foreground(lipgloss.Color("#C2C0D9")).Padding(0, 1),
 		CommandBarHint:  lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
-		Tabs:            lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
+		ResponseSearchHighlight: lipgloss.NewStyle().
+			Background(lipgloss.Color("#2C1E3A")).
+			Foreground(lipgloss.Color("#E9E6FF")),
+		ResponseSearchHighlightActive: lipgloss.NewStyle().
+			Background(lipgloss.Color("#FFD46A")).
+			Foreground(lipgloss.Color("#1A1020")).
+			Bold(true),
+		Tabs: lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
 		TabActive: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FDFBFF")).
 			Background(lipgloss.Color("#7D56F4")).

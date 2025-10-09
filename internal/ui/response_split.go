@@ -35,6 +35,7 @@ type responsePaneState struct {
 	followLatest   bool
 	snapshot       *responseSnapshot
 	wrapCache      map[responseTab]cachedWrap
+	search         responseSearchState
 }
 
 func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneState {
@@ -44,6 +45,7 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		lastContentTab: responseTabPretty,
 		followLatest:   followLatest,
 		wrapCache:      make(map[responseTab]cachedWrap),
+		search:         responseSearchState{index: -1},
 	}
 }
 
@@ -51,6 +53,7 @@ func (pane *responsePaneState) invalidateCaches() {
 	for k := range pane.wrapCache {
 		pane.wrapCache[k] = cachedWrap{}
 	}
+	pane.search.invalidate()
 }
 
 func (pane *responsePaneState) setActiveTab(tab responseTab) {
@@ -198,25 +201,97 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	}
 	height := pane.viewport.Height
 
+	snapshotID := ""
+	snapshotReady := false
+	if pane.snapshot != nil {
+		snapshotReady = pane.snapshot.ready
+		snapshotID = pane.snapshot.id
+	}
+
 	content, cacheKey := m.paneContentForTab(id, tab)
 	if content == "" {
 		centered := centerContent(noResponseMessage, width, height)
 		wrapped := wrapToWidth(centered, width)
 		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
-		pane.viewport.SetContent(wrapped)
+		decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+		pane.viewport.SetContent(decorated)
+		ensureResponseMatchInView(pane, wrapped)
 		return nil
 	}
 
 	cache := pane.wrapCache[cacheKey]
 	if cache.valid && cache.width == width {
-		pane.viewport.SetContent(cache.content)
+		decorated := m.decorateResponseContentForPane(pane, cacheKey, cache.content, width, snapshotReady, snapshotID)
+		pane.viewport.SetContent(decorated)
+		ensureResponseMatchInView(pane, cache.content)
 		return nil
 	}
 
 	wrapped := wrapContentForTab(cacheKey, content, width)
 	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
-	pane.viewport.SetContent(wrapped)
+	decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+	pane.viewport.SetContent(decorated)
+	ensureResponseMatchInView(pane, wrapped)
 	return nil
+}
+
+func (m *Model) decorateResponseContentForPane(
+	pane *responsePaneState,
+	tab responseTab,
+	base string,
+	width int,
+	snapshotReady bool,
+	snapshotID string,
+) string {
+	if pane == nil {
+		return base
+	}
+	if !pane.search.hasQuery() {
+		return base
+	}
+	if !snapshotReady {
+		return base
+	}
+
+	if pane.search.needsRefresh(snapshotID, tab, width) {
+		prevIndex := pane.search.index
+		pane.search.prepare(pane.search.query, pane.search.isRegex, tab, snapshotID, width)
+		if err := pane.search.computeMatches(base); err != nil {
+			pane.search.invalidate()
+			return base
+		}
+		if len(pane.search.matches) == 0 {
+			return base
+		}
+		if prevIndex >= 0 && prevIndex < len(pane.search.matches) {
+			pane.search.index = prevIndex
+		}
+	}
+
+	if len(pane.search.matches) == 0 {
+		return base
+	}
+	if pane.search.index < 0 || pane.search.index >= len(pane.search.matches) {
+		pane.search.index = 0
+	}
+	highlight := m.theme.ResponseSearchHighlight
+	active := m.theme.ResponseSearchHighlightActive
+	return decorateResponseContent(base, pane.search.matches, highlight, active, pane.search.index)
+}
+
+func ensureResponseMatchInView(pane *responsePaneState, base string) {
+	if pane == nil {
+		return
+	}
+	if !pane.search.active || len(pane.search.matches) == 0 {
+		return
+	}
+	idx := pane.search.index
+	if idx < 0 || idx >= len(pane.search.matches) {
+		idx = 0
+		pane.search.index = idx
+	}
+	ensureResponseMatchVisible(&pane.viewport, base, pane.search.matches[idx])
 }
 
 func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, responseTab) {
