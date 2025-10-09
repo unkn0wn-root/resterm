@@ -1,0 +1,56 @@
+### Simulated OAuth2 Token Exchange
+# @name OAuthManualExchange
+# @tag oauth2 capture
+# @description Use httpbin to echo a client-credentials request and capture the token into globals for reuse.
+# @var request oauth.requestId {{$uuid}}
+# @capture global-secret oauth.manualToken {{response.json.json.access_token}}
+# @capture file oauth.manualRefresh {{response.json.json.refresh_token}}
+POST https://httpbin.org/anything/oauth/token
+Content-Type: application/json
+Accept: application/json
+
+{
+  "grant_type": "client_credentials",
+  "client_id": "{{oauth.clientId}}",
+  "client_secret": "{{oauth.clientSecret}}",
+  "scope": "{{oauth.scope}}",
+  "access_token": "manual-{{$uuid}}",
+  "refresh_token": "refresh-{{$uuid}}",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "request_id": "{{oauth.requestId}}"
+}
+
+### Call API With Captured Token
+# @name OAuthManualReuse
+# @tag oauth2 reuse
+# @description Pulls the token from the global cache populated by the previous request.
+# @capture request oauth.manualAuthHeader {{response.json.headers.Authorization}}
+# @script test
+> client.test("manual token reused", function () {
+>   var echoed = vars.get("oauth.manualAuthHeader");
+>   var token = vars.get("oauth.manualToken");
+>   tests.assert(typeof token === "string" && token.length > 0, "token should be available");
+>   tests.assert(typeof echoed === "string" && echoed.includes(token), "Bearer header should include the captured token");
+> });
+GET {{base.url}}/anything/accounts
+Authorization: Bearer {{oauth.manualToken}}
+Accept: application/json
+
+### Client Credentials With @auth oauth2
+# @name OAuthDirective
+# @tag oauth2 directive
+# @description Delegates token acquisition to Resterm.
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" audience={{oauth.audience}} cache_key={{oauth.cacheKey}} client_auth=body
+# @capture request oauth.directiveAuthHeader {{response.json.headers.Authorization}}
+GET {{base.url}}/anything/projects
+Accept: application/json
+
+### Reuse Cached Directive Token
+# @name OAuthDirectiveReuse
+# @tag oauth2 directive reuse
+# @description Using the same cache_key allows the cached access token to be sent without another token exchange when it is still valid.
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" cache_key={{oauth.cacheKey}}
+# @capture request oauth.directiveReuseAuth {{response.json.headers.Authorization}}
+GET {{base.url}}/anything/projects/{{tenant.id}}
+Accept: application/json

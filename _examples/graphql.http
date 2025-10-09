@@ -1,0 +1,44 @@
+### Inline GraphQL Query
+# @name GraphQLFetchWorkspace
+# @tag graphql workspaces
+# @description Inline @graphql request with variables block.
+# @graphql
+# @operation FetchWorkspace
+POST {{graphql.endpoint}}
+Accept: application/json
+
+query FetchWorkspace($id: ID!, $includeMembers: Boolean!) {
+  workspace(id: $id) {
+    id
+    name
+    region
+    plan
+    members @include(if: $includeMembers) {
+      totalCount
+      edges {
+        node {
+          id
+          email
+        }
+      }
+    }
+  }
+}
+
+# @variables
+{
+  "id": "{{graphql.workspaceId}}",
+  "includeMembers": true
+}
+
+### GraphQL With External Files
+# @name GraphQLFromFiles
+# @tag graphql files
+# @description Loads query and variables via file references.
+# @graphql
+# @operation FetchWorkspace
+# @query < ./queries/workspace.graphql
+POST {{graphql.endpoint}}
+Accept: application/json
+
+# @variables < ./queries/workspace.variables.json

@@ -243,14 +243,14 @@ Content-Type: application/json
 GET https://api.example.com/users
 ```
 
-Prefer scripting? You can achieve the same with pre/post scripts:
+Prefer scripting? You can achieve the same with pre/post scripts (supports only ES5.1):
 
 ```
 ### Step 1: Login
 # @name GlobalAuthLogin
 # @script test
 > client.test("store global token", function () {
->   const data = response.json();
+>   var data = response.json();
 >   vars.global.set("globalAuth.token", data.token, {secret: true});
 > });
 POST https://auth.example.com/api/login

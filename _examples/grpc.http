@@ -1,0 +1,29 @@
+### Generate Report Over gRPC
+# @name GrpcGenerateReport
+# @tag grpc reports
+# @description Demonstrates @grpc metadata, reflection, and plaintext override.
+# @grpc analytics.ReportingService/GenerateReport
+# @grpc-reflection true
+# @grpc-plaintext true
+# @grpc-authority {{grpc.authority}}
+# @grpc-metadata x-trace-id: {{$uuid}}
+GRPC {{grpc.host}}
+
+{
+  "tenantId": "{{tenant.id}}",
+  "reportId": "rep-{{$uuid}}",
+  "includeHistorical": true
+}
+
+### Fetch Report Status With Descriptor
+# @name GrpcReportStatus
+# @tag grpc reports
+# @description Uses a precompiled descriptor set and additional metadata.
+# @grpc analytics.ReportingService/GetReportStatus
+# @grpc-descriptor descriptors/analytics.protoset
+# @grpc-metadata authorization: Bearer {{analytics.sessionToken}}
+GRPC {{grpc.host}}
+
+{
+  "reportId": "rep-{{$uuid}}"
+}

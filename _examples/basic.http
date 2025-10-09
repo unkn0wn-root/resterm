@@ -1,12 +1,14 @@
-###
-# @name getGoogle
-GET https://www.google.com
+### Status Check
+# @name getStatus
+GET {{base.url}}/status/204
 User-Agent: resterm/0.1
+Accept: application/json
 
-###
+### Create Post
 # @name createPost
-POST https://jsonplaceholder.typicode.com/posts
+POST {{base.url}}/anything/posts
 Content-Type: application/json
+Accept: application/json
 
 {
   "title": "foo",
@@ -14,14 +16,15 @@ Content-Type: application/json
   "userId": 1
 }
 
-
-###
-# @name authTest
+### Bearer Auth Example
+# @name bearerEcho
 # @auth bearer {{auth.token}}
-GET https://httpbin.org/bearer
+GET {{base.url}}/bearer
+Accept: application/json
 
-###
-# @global auth.clientSecret demo-secret
-# @name oauthDemo
-# @auth oauth2 token_url=https://auth.example.com/oauth/token client_id=demo-client client_secret={{auth.clientSecret}} scope="read write"
-GET https://httpbin.org/anything
+### OAuth2 Directive
+# @name oauthDirectiveDemo
+# @description Demonstrates Resterm's built-in @auth oauth2 support with environment-driven parameters.
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" audience={{oauth.audience}} cache_key={{oauth.cacheKey}}
+GET {{base.url}}/anything/oauth2-demo
+Accept: application/json
