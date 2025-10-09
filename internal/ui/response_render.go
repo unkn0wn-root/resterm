@@ -1,7 +1,11 @@
 package ui
 
 import (
+	"bytes"
+	"encoding/json"
+	"encoding/xml"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -65,9 +69,9 @@ func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scri
 			raw:            raw,
 			headers:        headers,
 			width:          targetWidth,
-			prettyWrapped:  wrapToWidth(pretty, targetWidth),
-			rawWrapped:     wrapToWidth(raw, targetWidth),
-			headersWrapped: wrapToWidth(headers, targetWidth),
+			prettyWrapped:  wrapContentForTab(responseTabPretty, pretty, targetWidth),
+			rawWrapped:     wrapContentForTab(responseTabRaw, raw, targetWidth),
+			headersWrapped: wrapContentForTab(responseTabHeaders, headers, targetWidth),
 		}
 	}
 }
@@ -116,7 +120,7 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 		prettyBody = "<empty>"
 	}
 
-	rawBody := trimResponseBody(string(resp.Body))
+	rawBody := formatRawBody(resp.Body, contentType)
 	if isBodyEmpty(rawBody) {
 		rawBody = "<empty>"
 	}
@@ -131,6 +135,54 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 	headersView := joinSections(summary, headersSection)
 
 	return prettyView, rawView, headersView
+}
+
+func formatRawBody(body []byte, contentType string) string {
+	raw := trimResponseBody(string(body))
+	formatted, ok := indentRawBody(body, contentType)
+	if !ok {
+		return raw
+	}
+	return trimResponseBody(formatted)
+}
+
+func indentRawBody(body []byte, contentType string) (string, bool) {
+	ct := strings.ToLower(contentType)
+	switch {
+	case strings.Contains(ct, "json"):
+		var buf bytes.Buffer
+		if err := json.Indent(&buf, body, "", "  "); err == nil {
+			return buf.String(), true
+		}
+	case strings.Contains(ct, "xml"):
+		if formatted, ok := indentXML(body); ok {
+			return formatted, true
+		}
+	}
+	return "", false
+}
+
+func indentXML(body []byte) (string, bool) {
+	decoder := xml.NewDecoder(bytes.NewReader(body))
+	var buf bytes.Buffer
+	encoder := xml.NewEncoder(&buf)
+	encoder.Indent("", "  ")
+	for {
+		tok, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return "", false
+		}
+		if err := encoder.EncodeToken(tok); err != nil {
+			return "", false
+		}
+	}
+	if err := encoder.Flush(); err != nil {
+		return "", false
+	}
+	return buf.String(), true
 }
 
 func formatHTTPHeaders(headers http.Header) string {

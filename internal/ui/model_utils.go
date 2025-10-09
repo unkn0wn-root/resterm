@@ -18,10 +18,35 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
+func (m *Model) filterEditorMessage(msg tea.Msg) tea.Msg {
+	if !m.editorInsertMode {
+		if km, ok := msg.(tea.KeyMsg); ok {
+			if km.Type == tea.KeyRunes && len(km.Runes) > 0 {
+				km.Runes = nil
+				return km
+			}
+			switch km.String() {
+			case "enter", "ctrl+m", "ctrl+j", "backspace", "ctrl+h", "delete":
+				km.Type = tea.KeyRunes
+				km.Runes = nil
+				return km
+			}
+		}
+	}
+	return msg
+}
+
+var ansiSequenceRegex = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)")
+
+func stripANSIEscape(s string) string {
+	return ansiSequenceRegex.ReplaceAllString(s, "")
+}
+
 func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 	if len(results) == 0 && scriptErr == nil {
 		return ""
 	}
+
 	builder := strings.Builder{}
 	builder.WriteString("Tests:\n")
 	if scriptErr != nil {
@@ -48,13 +73,16 @@ func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult,
 	if resp == nil {
 		return ""
 	}
+
 	parts := []string{
 		fmt.Sprintf("Status: %s", resp.Status),
 		fmt.Sprintf("URL: %s", resp.EffectiveURL),
 	}
+
 	if resp.Duration > 0 {
 		parts = append(parts, fmt.Sprintf("Duration: %s", resp.Duration.Round(time.Millisecond)))
 	}
+
 	summary := strings.Join(parts, "\n")
 	if testSummary := formatTestSummary(tests, scriptErr); testSummary != "" {
 		summary = joinSections(summary, testSummary)
@@ -71,12 +99,6 @@ func joinSections(sections ...string) string {
 		}
 	}
 	return strings.Join(parts, "\n\n")
-}
-
-var ansiSequenceRegex = regexp.MustCompile("\x1b\\[[0-9;]*[A-Za-z]")
-
-func stripANSIEscape(s string) string {
-	return ansiSequenceRegex.ReplaceAllString(s, "")
 }
 
 func makeReadOnlyKeyMap(base textarea.KeyMap) textarea.KeyMap {
@@ -96,28 +118,11 @@ func makeReadOnlyKeyMap(base textarea.KeyMap) textarea.KeyMap {
 	return read
 }
 
-func (m *Model) filterEditorMessage(msg tea.Msg) tea.Msg {
-	if !m.editorInsertMode {
-		if km, ok := msg.(tea.KeyMsg); ok {
-			if km.Type == tea.KeyRunes && len(km.Runes) > 0 {
-				km.Runes = nil
-				return km
-			}
-			switch km.String() {
-			case "enter", "ctrl+m", "ctrl+j", "backspace", "ctrl+h", "delete":
-				km.Type = tea.KeyRunes
-				km.Runes = nil
-				return km
-			}
-		}
-	}
-	return msg
-}
-
 func wrapToWidth(content string, width int) string {
 	if width <= 0 {
 		return content
 	}
+
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
 	for _, line := range lines {
@@ -125,6 +130,95 @@ func wrapToWidth(content string, width int) string {
 		wrapped = append(wrapped, segments...)
 	}
 	return strings.Join(wrapped, "\n")
+}
+
+func wrapContentForTab(tab responseTab, content string, width int) string {
+	switch tab {
+	case responseTabRaw:
+		return wrapPreformattedContent(content, width)
+	case responseTabDiff:
+		return wrapDiffContent(content, width)
+	default:
+		return wrapToWidth(content, width)
+	}
+}
+
+func wrapPreformattedContent(content string, width int) string {
+	if width <= 0 {
+		return content
+	}
+
+	lines := strings.Split(content, "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		segments := wrapPreformattedLine(line, width)
+		wrapped = append(wrapped, segments...)
+	}
+	return strings.Join(wrapped, "\n")
+}
+
+func wrapPreformattedLine(line string, width int) []string {
+	if width <= 0 {
+		return []string{line}
+	}
+	if line == "" {
+		return []string{""}
+	}
+	if visibleWidth(line) <= width {
+		return []string{line}
+	}
+
+	indent := leadingIndent(line)
+	if indent == "" {
+		return wrapLineSegments(line, width)
+	}
+
+	indentWidth := visibleWidth(indent)
+	available := width - indentWidth
+	if available <= 0 {
+		return wrapLineSegments(line, width)
+	}
+
+	body := line[len(indent):]
+	if body == "" {
+		return []string{indent}
+	}
+
+	segments := make([]string, 0, (len(line)/width)+1)
+	remaining := body
+	for len(remaining) > 0 {
+		segment, rest := splitSegment(remaining, available)
+		segments = append(segments, indent+segment)
+		if rest == "" || rest == remaining {
+			if rest == "" {
+				break
+			}
+			fallback := wrapLineSegments(rest, width)
+			segments = append(segments, fallback...)
+			break
+		}
+		remaining = rest
+	}
+	if len(segments) == 0 {
+		return []string{""}
+	}
+	return segments
+}
+
+func leadingIndent(line string) string {
+	if line == "" {
+		return ""
+	}
+
+	var builder strings.Builder
+	for _, r := range line {
+		if r == ' ' || r == '\t' {
+			builder.WriteRune(r)
+			continue
+		}
+		break
+	}
+	return builder.String()
 }
 
 func wrapLineSegments(line string, width int) []string {
@@ -143,8 +237,8 @@ func wrapLineSegments(line string, width int) []string {
 		return []string{""}
 	}
 
-	segments := make([]string, 0, len(tokens))
 	var current strings.Builder
+	segments := make([]string, 0, len(tokens))
 	currentWidth := 0
 	lineHasNonSpace := false
 
@@ -194,10 +288,12 @@ func wrapLineSegments(line string, width int) []string {
 							lineHasNonSpace = true
 						}
 					}
+
 					flush()
 					if rest == "" || rest == text {
 						continue
 					}
+
 					text = rest
 					tokWidth = visibleWidth(text)
 					if tokWidth == 0 {
@@ -252,6 +348,7 @@ func splitSegment(s string, width int) (string, string) {
 	if width <= 0 || visibleWidth(s) <= width {
 		return s, ""
 	}
+
 	var builder strings.Builder
 	currentWidth := 0
 	index := 0
@@ -262,10 +359,12 @@ func splitSegment(s string, width int) (string, string) {
 			index += loc[1]
 			continue
 		}
+
 		r, size := utf8.DecodeRuneInString(s[index:])
 		if size <= 0 {
 			size = 1
 		}
+
 		runeWidth := runewidth.RuneWidth(r)
 		if runeWidth <= 0 {
 			runeWidth = 1
@@ -273,10 +372,12 @@ func splitSegment(s string, width int) (string, string) {
 		if currentWidth+runeWidth > width {
 			break
 		}
+
 		builder.WriteString(s[index : index+size])
 		currentWidth += runeWidth
 		index += size
 	}
+
 	segment := builder.String()
 	rest := s[index:]
 	if segment == "" && rest != "" {
@@ -299,6 +400,7 @@ func splitLongToken(token string, width int) []string {
 	if width <= 0 {
 		return []string{token}
 	}
+
 	remaining := token
 	parts := make([]string, 0, (len(token)/width)+1)
 	for len(remaining) > 0 {
@@ -306,6 +408,7 @@ func splitLongToken(token string, width int) []string {
 		if segment == "" && rest == "" {
 			break
 		}
+
 		parts = append(parts, segment)
 		if rest == "" || rest == remaining {
 			break
@@ -328,6 +431,7 @@ func tokenizeLine(line string) []textToken {
 	if line == "" {
 		return nil
 	}
+
 	var tokens []textToken
 	var builder strings.Builder
 	width := 0
@@ -361,6 +465,7 @@ func tokenizeLine(line string) []textToken {
 		if size <= 0 {
 			size = 1
 		}
+
 		isSpace := unicode.IsSpace(r)
 		if !haveToken {
 			currentIsSpace = isSpace
@@ -407,6 +512,7 @@ func centerContent(content string, width, height int) string {
 			padded[i] = line
 			continue
 		}
+
 		padding := (width - lineWidth) / 2
 		if padding < 0 {
 			padding = 0
@@ -431,20 +537,6 @@ func visibleWidth(s string) int {
 	}
 	clean := ansiSequenceRegex.ReplaceAllString(s, "")
 	return runewidth.StringWidth(clean)
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
-
-func maxInt(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }
 
 func formatHistorySnippet(snippet string, width int) string {
@@ -611,6 +703,7 @@ func findRequestAtLine(doc *restfile.Document, line int) *restfile.Request {
 	if doc == nil {
 		return nil
 	}
+
 	for _, req := range doc.Requests {
 		if line >= req.LineRange.Start && line <= req.LineRange.End {
 			return req
@@ -630,4 +723,18 @@ func requestIdentifier(req *restfile.Request) string {
 		return req.Metadata.Name
 	}
 	return strings.TrimSpace(req.URL)
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }

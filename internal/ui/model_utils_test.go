@@ -74,17 +74,59 @@ func TestWrapToWidthPreservesJSONIndentation(t *testing.T) {
 	if len(lines) < 5 {
 		t.Fatalf("expected wrapped JSON to produce multiple lines, got %d", len(lines))
 	}
+
 	var foundIndented bool
 	for _, line := range lines {
 		if strings.HasPrefix(line, "    \"") || strings.HasPrefix(line, "        \"") {
 			foundIndented = true
 		}
 	}
+
 	if !foundIndented {
 		t.Fatalf("expected at least one wrapped line to retain JSON indentation, got %v", lines)
 	}
 	if !strings.Contains(strings.Join(lines, ""), "\"deep\"") {
 		t.Fatalf("expected wrapped JSON to contain nested keys, got %q", strings.Join(lines, ""))
+	}
+}
+
+func TestWrapContentForTabRawMaintainsIndentOnWrap(t *testing.T) {
+	body := strings.Join([]string{
+		"Status: 200 OK",
+		"URL: http://example.com",
+		"",
+		"    \"key\": \"" + strings.Repeat("a", 32) + "\"",
+	}, "\n")
+
+	wrapped := wrapContentForTab(responseTabRaw, body, 20)
+	lines := strings.Split(wrapped, "\n")
+	var indentLineIndex = -1
+	for i, line := range lines {
+		if strings.HasPrefix(line, "    \"key\":") {
+			indentLineIndex = i
+			break
+		}
+	}
+
+	if indentLineIndex == -1 {
+		t.Fatalf("expected wrapped content to include indented key line, got %v", lines)
+	}
+	if indentLineIndex+1 >= len(lines) {
+		t.Fatalf("expected continuation line after indented key, got %v", lines)
+	}
+	if !strings.HasPrefix(lines[indentLineIndex+1], "    ") {
+		t.Fatalf("expected continuation line to retain indentation, got %q", lines[indentLineIndex+1])
+	}
+}
+
+func TestStripANSIEscapeExtendedSequences(t *testing.T) {
+	input := "\x1b[?25l\x1b]0;title\x07hello"
+	stripped := stripANSIEscape(input)
+	if stripped != "hello" {
+		t.Fatalf("expected stripped output to be hello, got %q", stripped)
+	}
+	if width := visibleWidth(input); width != len("hello") {
+		t.Fatalf("expected visible width to ignore ANSI sequences, got %d", width)
 	}
 }
 
@@ -120,11 +162,13 @@ func TestWrapLineSegmentsVeryNarrowUnicode(t *testing.T) {
 	if len(segments) != 4 {
 		t.Fatalf("expected each rune to form its own segment, got %d", len(segments))
 	}
+
 	for _, segment := range segments {
 		if strings.TrimSpace(segment) == "" {
 			t.Fatalf("unexpected blank segment in %v", segments)
 		}
 	}
+
 	if strings.Join(segments, "") != line {
 		t.Fatalf("expected wrapped unicode content to match original, got %q", strings.Join(segments, ""))
 	}
@@ -146,6 +190,7 @@ func TestWrapToWidthMultiLineMixedContent(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "    {") {
 		t.Fatalf("expected first line to retain indentation, got %q", lines[0])
 	}
+
 	var continuationWithoutIndent bool
 	for i := 1; i < len(lines); i++ {
 		if strings.HasPrefix(lines[i], "        ") {
@@ -158,6 +203,7 @@ func TestWrapToWidthMultiLineMixedContent(t *testing.T) {
 	if !continuationWithoutIndent {
 		t.Fatalf("expected at least one continuation line without leading indentation, got %v", lines)
 	}
+
 	joined := strings.Join(lines, "")
 	if !strings.Contains(joined, "supercalifragilisticexpialidocious") {
 		t.Fatalf("expected wrapped content to retain long word, got %q", joined)

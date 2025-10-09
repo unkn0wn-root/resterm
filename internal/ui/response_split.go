@@ -213,12 +213,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		return nil
 	}
 
-	var wrapped string
-	if cacheKey == responseTabDiff {
-		wrapped = wrapDiffContent(content, width)
-	} else {
-		wrapped = wrapToWidth(content, width)
-	}
+	wrapped := wrapContentForTab(cacheKey, content, width)
 	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
 	pane.viewport.SetContent(wrapped)
 	return nil
