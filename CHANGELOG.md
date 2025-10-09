@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.15](https://github.com/unkn0wn-root/resterm/compare/v0.1.14...v0.1.15) (2025-10-09)
+
+
+### Features
+
+* add oauth2 auth, globals, and capture support ([746d71e](https://github.com/unkn0wn-root/resterm/commit/746d71e8328df035e016c81f2f93680cd51748a0))
+* persist [@capture](https://github.com/capture) file/request scopes and document usage ([ff2f9bb](https://github.com/unkn0wn-root/resterm/commit/ff2f9bbb18f659512fee10ab8201c589ad160771))
+
 ### [0.1.14](https://github.com/unkn0wn-root/resterm/compare/v0.1.13...v0.1.14) (2025-10-09)
 
 
