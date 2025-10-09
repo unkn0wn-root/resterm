@@ -87,6 +87,7 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 				centered := centerContent(noResponseMessage, width, pane.viewport.Height)
 				pane.viewport.SetContent(wrapToWidth(centered, width))
 				pane.viewport.GotoTop()
+				pane.setCurrPosition()
 			}
 		}
 		m.setLivePane(target)
@@ -134,6 +135,7 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 			pane.invalidateCaches()
 			pane.viewport.SetContent(m.responseLoadingMessage())
 			pane.viewport.GotoTop()
+			pane.setCurrPosition()
 		}
 	}
 	m.setLivePane(target)
@@ -203,6 +205,7 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: msg.headersWrapped, valid: true}
 		}
 		pane.viewport.GotoTop()
+		pane.setCurrPosition()
 	}
 	for _, id := range m.visiblePaneIDs() {
 		pane := m.pane(id)
@@ -257,6 +260,7 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 				pane.invalidateCaches()
 				pane.viewport.SetContent("No gRPC response")
 				pane.viewport.GotoTop()
+				pane.setCurrPosition()
 			}
 		}
 		m.setLivePane(target)
@@ -322,6 +326,7 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 		}
 		pane.invalidateCaches()
 		pane.viewport.GotoTop()
+		pane.setCurrPosition()
 	}
 	m.setLivePane(target)
 
@@ -522,6 +527,7 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 			pane.setActiveTab(responseTabPretty)
 		}
 		pane.viewport.GotoTop()
+		pane.setCurrPosition()
 	}
 	m.setLivePane(targetPaneID)
 

@@ -669,24 +669,28 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			}
 			pane.viewport.ScrollDown(1)
+			pane.setCurrPosition()
 			return combine(nil)
 		case "up", "k":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
 			pane.viewport.ScrollUp(1)
+			pane.setCurrPosition()
 			return combine(nil)
 		case "pgdown":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
 			pane.viewport.PageDown()
+			pane.setCurrPosition()
 			return combine(nil)
 		case "pgup":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
 			pane.viewport.PageUp()
+			pane.setCurrPosition()
 			return combine(nil)
 		case "left", "ctrl+h", "h":
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
