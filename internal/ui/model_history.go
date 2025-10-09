@@ -460,8 +460,12 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 	m.activeRequestTitle = requestDisplayName(req)
 	m.activeRequestKey = requestKey(req)
 	_ = m.selectRequestItemByKey(m.activeRequestKey)
-	if prev != "" && prev != m.activeRequestKey {
-		if summary := requestMetaSummary(req); summary != "" {
+	if prev != m.activeRequestKey {
+		summary := requestMetaSummary(req)
+		if summary == "" {
+			summary = requestBaseTitle(req)
+		}
+		if summary != "" {
 			m.setStatusMessage(statusMsg{text: summary, level: statusInfo})
 		}
 	}

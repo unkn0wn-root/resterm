@@ -38,14 +38,17 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.editor.SetViewStart(0)
 	m.editor.moveCursorTo(0, 0)
 	m.editor.ClearSelection()
-	m.doc = parser.Parse(path, data)
-	m.syncRequestList(m.doc)
 	m.currentRequest = nil
 	m.activeRequestTitle = ""
 	m.activeRequestKey = ""
+	m.doc = parser.Parse(path, data)
+	m.syncRequestList(m.doc)
 	m.dirty = false
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess})
 	m.syncHistory()
+	if len(m.requestItems) > 0 {
+		m.syncEditorWithRequestSelection(-1)
+	}
 	return nil
 }
 
