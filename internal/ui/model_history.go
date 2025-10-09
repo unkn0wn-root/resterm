@@ -604,7 +604,7 @@ func (m *Model) moveCursorToLine(target int) {
 	m.editor, _ = m.editor.Update(tea.KeyMsg{Type: tea.KeyHome})
 }
 
-func requestDisplayName(req *restfile.Request) string {
+func requestBaseTitle(req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
@@ -613,15 +613,21 @@ func requestDisplayName(req *restfile.Request) string {
 		method = "REQ"
 	}
 	name := strings.TrimSpace(req.Metadata.Name)
-	base := name
-	if base == "" {
+	if name == "" {
 		url := strings.TrimSpace(req.URL)
 		if len(url) > 60 {
 			url = url[:57] + "..."
 		}
-		base = url
+		name = url
 	}
-	base = fmt.Sprintf("%s %s", method, base)
+	return fmt.Sprintf("%s %s", method, name)
+}
+
+func requestDisplayName(req *restfile.Request) string {
+	if req == nil {
+		return ""
+	}
+	base := requestBaseTitle(req)
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := joinTags(req.Metadata.Tags, 3)
 	var extra []string
