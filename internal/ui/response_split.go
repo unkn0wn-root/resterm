@@ -18,7 +18,6 @@ const (
 	responsePaneSecondary
 )
 
-// responseSnapshot captures rendered response strings for presentation.
 type responseSnapshot struct {
 	id      string
 	pretty  string
@@ -27,7 +26,6 @@ type responseSnapshot struct {
 	ready   bool
 }
 
-// responsePaneState tracks UI state for a single response pane.
 type responsePaneState struct {
 	viewport       viewport.Model
 	activeTab      responseTab
@@ -36,6 +34,7 @@ type responsePaneState struct {
 	snapshot       *responseSnapshot
 	wrapCache      map[responseTab]cachedWrap
 	search         responseSearchState
+	tabScroll      map[responseTab]int
 }
 
 func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneState {
@@ -46,6 +45,7 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		followLatest:   followLatest,
 		wrapCache:      make(map[responseTab]cachedWrap),
 		search:         responseSearchState{index: -1},
+		tabScroll:      make(map[responseTab]int),
 	}
 }
 
@@ -54,13 +54,49 @@ func (pane *responsePaneState) invalidateCaches() {
 		pane.wrapCache[k] = cachedWrap{}
 	}
 	pane.search.invalidate()
+	if pane.tabScroll != nil {
+		pane.tabScroll = make(map[responseTab]int)
+	}
 }
 
 func (pane *responsePaneState) setActiveTab(tab responseTab) {
+	if pane.activeTab != tab {
+		pane.setCurrPosition()
+	}
 	pane.activeTab = tab
 	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders {
 		pane.lastContentTab = tab
 	}
+}
+
+func (pane *responsePaneState) setCurrPosition() {
+	if pane == nil {
+		return
+	}
+	if pane.tabScroll == nil {
+		pane.tabScroll = make(map[responseTab]int)
+	}
+	offset := pane.viewport.YOffset
+	if offset < 0 {
+		offset = 0
+	}
+	pane.tabScroll[pane.activeTab] = offset
+}
+
+func (pane *responsePaneState) restoreScrollForActiveTab() {
+	if pane == nil {
+		return
+	}
+	if pane.tabScroll == nil {
+		pane.tabScroll = make(map[responseTab]int)
+	}
+	offset, ok := pane.tabScroll[pane.activeTab]
+	if !ok {
+		offset = 0
+	}
+
+	_ = pane.viewport.View()
+	pane.viewport.SetYOffset(offset)
 }
 
 func (pane *responsePaneState) ensureContentTab() responseTab {
@@ -215,7 +251,9 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
 		decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 		pane.viewport.SetContent(decorated)
+		pane.restoreScrollForActiveTab()
 		ensureResponseMatchInView(pane, wrapped)
+		pane.setCurrPosition()
 		return nil
 	}
 
@@ -223,7 +261,9 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	if cache.valid && cache.width == width {
 		decorated := m.decorateResponseContentForPane(pane, cacheKey, cache.content, width, snapshotReady, snapshotID)
 		pane.viewport.SetContent(decorated)
+		pane.restoreScrollForActiveTab()
 		ensureResponseMatchInView(pane, cache.content)
+		pane.setCurrPosition()
 		return nil
 	}
 
@@ -231,7 +271,9 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
 	decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 	pane.viewport.SetContent(decorated)
+	pane.restoreScrollForActiveTab()
 	ensureResponseMatchInView(pane, wrapped)
+	pane.setCurrPosition()
 	return nil
 }
 
@@ -647,6 +689,7 @@ func (m *Model) togglePaneFollowLatest(id responsePaneID) tea.Cmd {
 		pane.viewport.SetContent(m.responseLoadingMessage())
 	}
 	pane.viewport.GotoTop()
+	pane.setCurrPosition()
 
 	syncCmd := m.syncResponsePane(id)
 	status := func() tea.Msg {
