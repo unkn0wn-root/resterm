@@ -77,3 +77,54 @@ func TestSaveFilePromptsForPathAndSavesContent(t *testing.T) {
 		t.Fatalf("expected save flag to reset")
 	}
 }
+
+func TestOpenTemporaryDocumentResetsState(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "sample.http")
+	content := "GET https://example.com\n\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write sample file: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th})
+	m := &model
+	if cmd := m.openFile(path); cmd != nil {
+		cmd()
+	}
+	if m.currentFile != path {
+		t.Fatalf("expected model to load file before temporary document")
+	}
+
+	if cmd := m.openTemporaryDocument(); cmd != nil {
+		cmd()
+	}
+
+	if m.currentFile != "" {
+		t.Fatalf("expected current file to clear, got %q", m.currentFile)
+	}
+	if m.cfg.FilePath != "" {
+		t.Fatalf("expected config file path to clear, got %q", m.cfg.FilePath)
+	}
+	if m.editor.Value() != "" {
+		t.Fatalf("expected editor to be empty, got %q", m.editor.Value())
+	}
+	if m.doc == nil {
+		t.Fatal("expected document to be initialised")
+	}
+	if len(m.doc.Requests) != 0 {
+		t.Fatalf("expected no requests in temporary document, got %d", len(m.doc.Requests))
+	}
+	if len(m.requestList.Items()) != 0 {
+		t.Fatalf("expected request list to clear, got %d items", len(m.requestList.Items()))
+	}
+	if m.focus != focusEditor {
+		t.Fatalf("expected focus to switch to editor, got %v", m.focus)
+	}
+	if m.statusMessage.text != "Temporary document" {
+		t.Fatalf("unexpected status message: %q", m.statusMessage.text)
+	}
+	if m.dirty {
+		t.Fatalf("expected clean editor state for temporary document")
+	}
+}
