@@ -131,7 +131,8 @@ By default `resterm` scans the opened file’s directory (or the current working
 | Toggle help overlay | `?` |
 | Open environment selector | `Ctrl+E` |
 | Save current file | `Ctrl+S` |
-| Reparse document | `Ctrl+T` |
+| New temporary document | `Ctrl+T` |
+| Reparse document | `Ctrl+P` (`Ctrl+Alt+P` also works) |
 | Refresh workspace file list | `Ctrl+O` |
 | Adjust files/requests split | `gk` / `gj` |
 | Adjust editor width | `gh` / `gl` |
