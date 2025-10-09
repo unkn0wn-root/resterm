@@ -3,6 +3,8 @@ package parser
 import (
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestParseAuthAndSettings(t *testing.T) {
@@ -10,6 +12,7 @@ func TestParseAuthAndSettings(t *testing.T) {
 # @auth bearer token-123
 # @setting timeout 5s
 # @tag smoke critical
+# @capture global authToken {{response.json.token}}
 GET https://example.com/api
 > {% tests.assert(true, "status ok") %}
 `
@@ -47,6 +50,46 @@ GET https://example.com/api
 	}
 	if script.Body == "" {
 		t.Fatalf("expected script body to be captured")
+	}
+
+	if len(req.Metadata.Captures) != 1 {
+		t.Fatalf("expected one capture, got %d", len(req.Metadata.Captures))
+	}
+	capture := req.Metadata.Captures[0]
+	if capture.Scope != restfile.CaptureScopeGlobal {
+		t.Fatalf("expected global capture scope, got %v", capture.Scope)
+	}
+	if capture.Name != "authToken" {
+		t.Fatalf("unexpected capture name: %s", capture.Name)
+	}
+	if capture.Expression != "{{response.json.token}}" {
+		t.Fatalf("unexpected capture expression: %q", capture.Expression)
+	}
+}
+
+func TestParseOAuth2AuthSpec(t *testing.T) {
+	spec := parseAuthSpec(`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`)
+	if spec == nil {
+		t.Fatalf("expected oauth2 spec")
+	}
+	if spec.Type != "oauth2" {
+		t.Fatalf("unexpected auth type %q", spec.Type)
+	}
+	checks := map[string]string{
+		"token_url":     "https://auth.example.com/token",
+		"client_id":     "my-client",
+		"client_secret": "s3cr3t",
+		"scope":         "read write",
+		"grant":         "password",
+		"username":      "jane",
+		"password":      "pwd",
+		"client_auth":   "body",
+		"audience":      "https://api.example.com",
+	}
+	for key, expected := range checks {
+		if spec.Params[key] != expected {
+			t.Fatalf("expected %s=%q, got %q", key, expected, spec.Params[key])
+		}
 	}
 }
 

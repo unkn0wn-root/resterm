@@ -26,9 +26,17 @@ func NewRunner(fs httpclient.FileSystem) *Runner {
 	return &Runner{fs: fs}
 }
 
+type GlobalValue struct {
+	Name   string
+	Value  string
+	Secret bool
+	Delete bool
+}
+
 type PreRequestInput struct {
 	Request   *restfile.Request
 	Variables map[string]string
+	Globals   map[string]GlobalValue
 	BaseDir   string
 }
 
@@ -39,11 +47,13 @@ type PreRequestOutput struct {
 	URL       *string
 	Method    *string
 	Variables map[string]string
+	Globals   map[string]GlobalValue
 }
 
 type TestInput struct {
 	Response  *httpclient.Response
 	Variables map[string]string
+	Globals   map[string]GlobalValue
 	BaseDir   string
 }
 
@@ -59,6 +69,7 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 		Headers:   make(http.Header),
 		Query:     make(map[string]string),
 		Variables: make(map[string]string),
+		Globals:   make(map[string]GlobalValue),
 	}
 
 	for idx, block := range scripts {
@@ -86,12 +97,16 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 	if len(result.Variables) == 0 {
 		result.Variables = nil
 	}
+	if len(result.Globals) == 0 {
+		result.Globals = nil
+	}
 
 	return result, nil
 }
 
-func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]TestResult, error) {
+func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
 	var aggregated []TestResult
+	changes := make(map[string]GlobalValue)
 
 	for idx, block := range scripts {
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
@@ -99,19 +114,25 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 		}
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
-			return aggregated, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
+			return aggregated, changes, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
 		}
 		if script == "" {
 			continue
 		}
-		results, err := r.executeTestScript(script, input)
+		results, globals, err := r.executeTestScript(script, input)
 		if err != nil {
-			return aggregated, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
+			return aggregated, changes, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
 		}
 		aggregated = append(aggregated, results...)
+		for key, value := range globals {
+			changes[key] = value
+		}
 	}
 
-	return aggregated, nil
+	if len(changes) == 0 {
+		changes = nil
+	}
+	return aggregated, changes, nil
 }
 
 func (r *Runner) executePreRequestScript(script string, input PreRequestInput, output *PreRequestOutput) error {
@@ -134,33 +155,33 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 	return nil
 }
 
-func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, error) {
+func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
 	vm := goja.New()
-	tester := newTestAPI(input.Response, input.Variables)
+	tester := newTestAPI(input.Response, input.Variables, input.Globals)
 	if err := bindCommon(vm); err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "bind console api")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind console api")
 	}
 	if err := vm.Set("tests", tester.testsAPI()); err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "bind tests api")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind tests api")
 	}
 	if err := vm.Set("client", tester.clientAPI()); err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "bind client api")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind client api")
 	}
 	if err := vm.Set("resterm", tester.clientAPI()); err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "bind resterm alias")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind resterm alias")
 	}
 	if err := vm.Set("response", tester.responseAPI()); err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "bind response api")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind response api")
 	}
 	if err := vm.Set("vars", tester.varsAPI()); err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "bind vars api")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind vars api")
 	}
 
 	_, err := vm.RunString(script)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, "execute test script")
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "execute test script")
 	}
-	return tester.results(), nil
+	return tester.results(), tester.globalChanges(), nil
 }
 
 func bindCommon(vm *goja.Runtime) error {
@@ -201,10 +222,15 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string,
 	return normalizeScript(string(data)), nil
 }
 
+func normalizeGlobalKey(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
+}
+
 type preRequestAPI struct {
 	request   *restfile.Request
 	output    *PreRequestOutput
 	variables map[string]string
+	globals   map[string]GlobalValue
 }
 
 func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preRequestAPI {
@@ -212,7 +238,14 @@ func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preReque
 	for k, v := range input.Variables {
 		vars[k] = v
 	}
-	return &preRequestAPI{request: input.Request, output: output, variables: vars}
+	globals := make(map[string]GlobalValue, len(input.Globals))
+	for key, value := range input.Globals {
+		if strings.TrimSpace(value.Name) == "" {
+			value.Name = key
+		}
+		globals[normalizeGlobalKey(value.Name)] = value
+	}
+	return &preRequestAPI{request: input.Request, output: output, variables: vars, globals: globals}
 }
 
 func (api *preRequestAPI) requestAPI() map[string]interface{} {
@@ -289,21 +322,107 @@ func (api *preRequestAPI) varsAPI() map[string]interface{} {
 			_, ok := api.variables[name]
 			return ok
 		},
+		"global": api.globalAPI(),
 	}
+}
+
+func (api *preRequestAPI) globalAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"get": func(name string) string {
+			entry, ok := api.globals[normalizeGlobalKey(name)]
+			if !ok {
+				return ""
+			}
+			return entry.Value
+		},
+		"set": func(call goja.FunctionCall) goja.Value {
+			if len(call.Arguments) < 2 {
+				return goja.Undefined()
+			}
+			name := call.Arguments[0].String()
+			value := call.Arguments[1].String()
+			secret := false
+			if len(call.Arguments) >= 3 {
+				secret = parseGlobalSecret(call.Arguments[2])
+			}
+			api.setGlobal(name, value, secret)
+			return goja.Undefined()
+		},
+		"has": func(name string) bool {
+			_, ok := api.globals[normalizeGlobalKey(name)]
+			return ok
+		},
+		"delete": func(name string) {
+			api.deleteGlobal(name)
+		},
+	}
+}
+
+func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	key := normalizeGlobalKey(name)
+	entry := GlobalValue{Name: name, Value: value, Secret: secret}
+	api.globals[key] = entry
+	if api.output.Globals == nil {
+		api.output.Globals = make(map[string]GlobalValue)
+	}
+	api.output.Globals[key] = entry
+}
+
+func (api *preRequestAPI) deleteGlobal(name string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	key := normalizeGlobalKey(name)
+	delete(api.globals, key)
+	if api.output.Globals == nil {
+		api.output.Globals = make(map[string]GlobalValue)
+	}
+	api.output.Globals[key] = GlobalValue{Name: name, Delete: true}
+}
+
+func parseGlobalSecret(value goja.Value) bool {
+	switch exported := value.Export().(type) {
+	case bool:
+		return exported
+	case map[string]interface{}:
+		if secret, ok := exported["secret"].(bool); ok {
+			return secret
+		}
+	}
+	return false
 }
 
 type testAPI struct {
 	response  *httpclient.Response
 	variables map[string]string
+	globals   map[string]GlobalValue
+	changes   map[string]GlobalValue
 	cases     []TestResult
 }
 
-func newTestAPI(resp *httpclient.Response, vars map[string]string) *testAPI {
+func newTestAPI(resp *httpclient.Response, vars map[string]string, globals map[string]GlobalValue) *testAPI {
 	copyVars := make(map[string]string, len(vars))
 	for k, v := range vars {
 		copyVars[k] = v
 	}
-	return &testAPI{response: resp, variables: copyVars}
+	globalCopy := make(map[string]GlobalValue, len(globals))
+	for key, value := range globals {
+		if strings.TrimSpace(value.Name) == "" {
+			value.Name = key
+		}
+		globalCopy[normalizeGlobalKey(value.Name)] = value
+	}
+	return &testAPI{
+		response:  resp,
+		variables: copyVars,
+		globals:   globalCopy,
+		changes:   make(map[string]GlobalValue),
+	}
 }
 
 func (api *testAPI) testsAPI() map[string]interface{} {
@@ -388,7 +507,78 @@ func (api *testAPI) varsAPI() map[string]interface{} {
 			_, ok := api.variables[name]
 			return ok
 		},
+		"global": api.globalAPI(),
 	}
+}
+
+func (api *testAPI) globalAPI() map[string]interface{} {
+	return map[string]interface{}{
+		"get": func(name string) string {
+			entry, ok := api.globals[normalizeGlobalKey(name)]
+			if !ok {
+				return ""
+			}
+			return entry.Value
+		},
+		"set": func(call goja.FunctionCall) goja.Value {
+			if len(call.Arguments) < 2 {
+				return goja.Undefined()
+			}
+			name := call.Arguments[0].String()
+			value := call.Arguments[1].String()
+			secret := false
+			if len(call.Arguments) >= 3 {
+				secret = parseGlobalSecret(call.Arguments[2])
+			}
+			api.setGlobal(name, value, secret)
+			return goja.Undefined()
+		},
+		"has": func(name string) bool {
+			_, ok := api.globals[normalizeGlobalKey(name)]
+			return ok
+		},
+		"delete": func(name string) {
+			api.deleteGlobal(name)
+		},
+	}
+}
+
+func (api *testAPI) setGlobal(name, value string, secret bool) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	key := normalizeGlobalKey(name)
+	entry := GlobalValue{Name: name, Value: value, Secret: secret}
+	api.globals[key] = entry
+	if api.changes == nil {
+		api.changes = make(map[string]GlobalValue)
+	}
+	api.changes[key] = entry
+}
+
+func (api *testAPI) deleteGlobal(name string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return
+	}
+	key := normalizeGlobalKey(name)
+	delete(api.globals, key)
+	if api.changes == nil {
+		api.changes = make(map[string]GlobalValue)
+	}
+	api.changes[key] = GlobalValue{Name: name, Delete: true}
+}
+
+func (api *testAPI) globalChanges() map[string]GlobalValue {
+	if len(api.changes) == 0 {
+		return nil
+	}
+	clone := make(map[string]GlobalValue, len(api.changes))
+	for key, value := range api.changes {
+		clone[key] = value
+	}
+	return clone
 }
 
 func (api *testAPI) assert(condition bool, message string) {

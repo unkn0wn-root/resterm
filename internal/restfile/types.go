@@ -72,6 +72,22 @@ type RequestMetadata struct {
 	NoLog       bool
 	Auth        *AuthSpec
 	Scripts     []ScriptBlock
+	Captures    []CaptureSpec
+}
+
+type CaptureScope int
+
+const (
+	CaptureScopeRequest CaptureScope = iota
+	CaptureScopeFile
+	CaptureScopeGlobal
+)
+
+type CaptureSpec struct {
+	Scope      CaptureScope
+	Name       string
+	Expression string
+	Secret     bool
 }
 
 type Request struct {
@@ -90,6 +106,7 @@ type Request struct {
 type Document struct {
 	Path      string
 	Variables []Variable
+	Globals   []Variable
 	Requests  []*Request
 	Errors    []ParseError
 	Raw       []byte

@@ -19,3 +19,9 @@ Content-Type: application/json
 # @name authTest
 # @auth bearer {{auth.token}}
 GET https://httpbin.org/bearer
+
+###
+# @global auth.clientSecret demo-secret
+# @name oauthDemo
+# @auth oauth2 token_url=https://auth.example.com/oauth/token client_id=demo-client client_secret={{auth.clientSecret}} scope="read write"
+GET https://httpbin.org/anything

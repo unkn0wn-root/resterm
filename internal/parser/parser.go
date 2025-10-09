@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
@@ -13,7 +14,7 @@ import (
 )
 
 var (
-	variableLineRe = regexp.MustCompile(`^@([A-Za-z0-9_.-]+)\s*(?::|=)\s*(.+)$`)
+	variableLineRe = regexp.MustCompile(`^@(?:(global)\s+)?([A-Za-z0-9_.-]+)\s*(?::|=)\s*(.+)$`)
 )
 
 func Parse(path string, data []byte) *restfile.Document {
@@ -40,11 +41,12 @@ func normalizeNewlines(data []byte) []byte {
 }
 
 type documentBuilder struct {
-	doc       *restfile.Document
-	inRequest bool
-	request   *requestBuilder
-	fileVars  []restfile.Variable
-	inBlock   bool
+	doc        *restfile.Document
+	inRequest  bool
+	request    *requestBuilder
+	fileVars   []restfile.Variable
+	globalVars []restfile.Variable
+	inBlock    bool
 }
 
 type requestBuilder struct {
@@ -115,10 +117,19 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if matches := variableLineRe.FindStringSubmatch(trimmed); matches != nil {
+		scopeToken := strings.ToLower(strings.TrimSpace(matches[1]))
+		name := matches[2]
+		value := strings.TrimSpace(matches[3])
 		variable := restfile.Variable{
-			Name:  matches[1],
-			Value: strings.TrimSpace(matches[2]),
+			Name:  name,
+			Value: value,
 			Line:  lineNumber,
+		}
+		if scopeToken == "global" {
+			variable.Scope = restfile.ScopeGlobal
+			b.globalVars = append(b.globalVars, variable)
+			b.appendLine(line)
+			return
 		}
 		if b.inRequest && !b.request.http.HasMethod() {
 			variable.Scope = restfile.ScopeRequest
@@ -252,11 +263,19 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		return
 	}
 
+	key, rest := splitDirective(directive)
+	if key == "" {
+		return
+	}
+
+	if b.handleScopedVariableDirective(key, rest, line) {
+		return
+	}
+
 	if !b.ensureRequest(line) {
 		return
 	}
 
-	key, rest := splitDirective(directive)
 	if b.request.grpc.HandleDirective(key, rest) {
 		return
 	}
@@ -307,10 +326,82 @@ func (b *documentBuilder) handleComment(line int, text string) {
 			b.request.settings = make(map[string]string)
 		}
 		b.request.settings["timeout"] = rest
+	case "var":
+		name, value := parseNameValue(rest)
+		if name == "" {
+			return
+		}
+		variable := restfile.Variable{
+			Name:   name,
+			Value:  value,
+			Line:   line,
+			Scope:  restfile.ScopeRequest,
+			Secret: false,
+		}
+		b.request.variables = append(b.request.variables, variable)
 	case "script":
 		if rest != "" {
 			b.request.currentScriptKind = strings.ToLower(rest)
 		}
+	case "capture":
+		if capture, ok := b.parseCaptureDirective(rest, line); ok {
+			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
+		}
+	}
+}
+
+func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
+	scopeToken, remainder := splitDirective(rest)
+	if scopeToken == "" {
+		return restfile.CaptureSpec{}, false
+	}
+	scope, secret, ok := parseCaptureScope(scopeToken)
+	if !ok {
+		return restfile.CaptureSpec{}, false
+	}
+	trimmed := strings.TrimSpace(remainder)
+	if trimmed == "" {
+		return restfile.CaptureSpec{}, false
+	}
+	nameEnd := strings.IndexAny(trimmed, " \t")
+	if nameEnd == -1 {
+		return restfile.CaptureSpec{}, false
+	}
+	name := strings.TrimSpace(trimmed[:nameEnd])
+	expression := strings.TrimSpace(trimmed[nameEnd:])
+	if expression == "" {
+		return restfile.CaptureSpec{}, false
+	}
+	if strings.HasPrefix(expression, "=") {
+		expression = strings.TrimSpace(expression[1:])
+	}
+	if expression == "" {
+		return restfile.CaptureSpec{}, false
+	}
+	return restfile.CaptureSpec{
+		Scope:      scope,
+		Name:       name,
+		Expression: expression,
+		Secret:     secret,
+	}, true
+}
+
+func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
+	lowered := strings.ToLower(strings.TrimSpace(token))
+	secret := false
+	if strings.HasSuffix(lowered, "-secret") {
+		secret = true
+		lowered = strings.TrimSuffix(lowered, "-secret")
+	}
+	switch lowered {
+	case "request":
+		return restfile.CaptureScopeRequest, secret, true
+	case "file":
+		return restfile.CaptureScopeFile, secret, true
+	case "global":
+		return restfile.CaptureScopeGlobal, secret, true
+	default:
+		return 0, false, false
 	}
 }
 
@@ -346,7 +437,7 @@ func (b *documentBuilder) handleScript(line int, rawLine string) {
 }
 
 func parseAuthSpec(rest string) *restfile.AuthSpec {
-	fields := strings.Fields(rest)
+	fields := splitAuthFields(rest)
 	if len(fields) == 0 {
 		return nil
 	}
@@ -368,6 +459,22 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 			params["name"] = fields[2]
 			params["value"] = strings.Join(fields[3:], " ")
 		}
+	case "oauth2":
+		if len(fields) < 2 {
+			return nil
+		}
+		for key, value := range parseKeyValuePairs(fields[1:]) {
+			params[key] = value
+		}
+		if params["token_url"] == "" {
+			return nil
+		}
+		if params["grant"] == "" {
+			params["grant"] = "client_credentials"
+		}
+		if params["client_auth"] == "" {
+			params["client_auth"] = "basic"
+		}
 	default:
 		if len(fields) >= 2 {
 			params["header"] = fields[0]
@@ -379,6 +486,151 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		return nil
 	}
 	return &restfile.AuthSpec{Type: authType, Params: params}
+}
+
+func splitAuthFields(input string) []string {
+	var fields []string
+	var current strings.Builder
+	inQuote := false
+	var quoteRune rune
+
+	flush := func() {
+		if current.Len() > 0 {
+			fields = append(fields, current.String())
+			current.Reset()
+		}
+	}
+
+	for _, r := range input {
+		switch {
+		case inQuote:
+			if r == quoteRune {
+				inQuote = false
+			} else {
+				current.WriteRune(r)
+			}
+		case unicode.IsSpace(r):
+			flush()
+		case r == '"' || r == '\'':
+			inQuote = true
+			quoteRune = r
+		default:
+			current.WriteRune(r)
+		}
+	}
+	flush()
+	return fields
+}
+
+func parseKeyValuePairs(fields []string) map[string]string {
+	params := make(map[string]string, len(fields))
+	for _, field := range fields {
+		field = strings.TrimSpace(field)
+		if field == "" {
+			continue
+		}
+		if idx := strings.Index(field, "="); idx != -1 {
+			key := strings.ToLower(strings.TrimSpace(field[:idx]))
+			value := strings.TrimSpace(field[idx+1:])
+			key = strings.ReplaceAll(key, "-", "_")
+			params[key] = value
+		}
+	}
+	return params
+}
+
+func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
+	switch key {
+	case "global", "global-secret":
+		name, value := parseNameValue(rest)
+		if name == "" {
+			return true
+		}
+		b.addGlobalVariable(name, value, line, strings.HasSuffix(key, "-secret"))
+		return true
+	case "var":
+		scopeToken, remainder := splitFirst(rest)
+		if scopeToken == "" {
+			return false
+		}
+		scope := strings.ToLower(scopeToken)
+		secret := false
+		if strings.HasSuffix(scope, "-secret") {
+			secret = true
+			scope = strings.TrimSuffix(scope, "-secret")
+		}
+		name, value := parseNameValue(remainder)
+		if name == "" {
+			return true
+		}
+		switch scope {
+		case "global":
+			b.addGlobalVariable(name, value, line, secret)
+			return true
+		case "file":
+			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeFile, Secret: secret}
+			b.fileVars = append(b.fileVars, variable)
+			return true
+		case "request":
+			if !b.ensureRequest(line) {
+				return true
+			}
+			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeRequest, Secret: secret}
+			b.request.variables = append(b.request.variables, variable)
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
+	}
+}
+
+func (b *documentBuilder) addGlobalVariable(name, value string, line int, secret bool) {
+	variable := restfile.Variable{
+		Name:   name,
+		Value:  value,
+		Line:   line,
+		Scope:  restfile.ScopeGlobal,
+		Secret: secret,
+	}
+	b.globalVars = append(b.globalVars, variable)
+}
+
+func splitFirst(text string) (string, string) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "", ""
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return "", ""
+	}
+	token := fields[0]
+	remainder := strings.TrimSpace(trimmed[len(token):])
+	return token, remainder
+}
+
+func parseNameValue(input string) (string, string) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", ""
+	}
+	if idx := strings.IndexAny(trimmed, ":="); idx != -1 {
+		name := strings.TrimSpace(trimmed[:idx])
+		value := strings.TrimSpace(trimmed[idx+1:])
+		return name, value
+	}
+	fields := strings.Fields(trimmed)
+	if len(fields) == 0 {
+		return "", ""
+	}
+	name := fields[0]
+	value := ""
+	if len(trimmed) > len(name) {
+		value = strings.TrimSpace(trimmed[len(name):])
+	}
+	return name, value
 }
 
 func splitDirective(text string) (string, string) {
@@ -508,6 +760,7 @@ func (b *documentBuilder) flushRequest(_ int) {
 func (b *documentBuilder) finish() {
 	b.flushRequest(0)
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
+	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
 }
 
 func (r *requestBuilder) build() *restfile.Request {

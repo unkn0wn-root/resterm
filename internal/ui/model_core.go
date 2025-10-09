@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -161,6 +162,9 @@ type Model struct {
 	scriptRunner *scripts.Runner
 	testResults  []scripts.TestResult
 	scriptError  error
+	globals      *globalStore
+	fileVars     *fileStore
+	oauth        *oauth.Manager
 
 	responseRenderToken  string
 	responseLoading      bool
@@ -355,6 +359,9 @@ func New(cfg Config) Model {
 		currentFile:              cfg.FilePath,
 		statusMessage:            initialStatus,
 		scriptRunner:             scripts.NewRunner(nil),
+		globals:                  newGlobalStore(),
+		fileVars:                 newFileStore(),
+		oauth:                    oauth.NewManager(client),
 		editorInsertMode:         false,
 		editorWriteKeyMap:        writeKeyMap,
 		editorViewKeyMap:         viewKeyMap,
