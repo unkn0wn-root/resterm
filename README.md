@@ -15,7 +15,7 @@
 - **Curl command parsing (limited).** supports basic `curl` invocations (method, headers, data flags) - more in the road-map.
 - **Status-aware response pane.** Pill-style header calls out workspace, environment, active request, and script/test outcomes; response tabs cover Pretty, Raw, Headers, and History, plus request previews.
 - **Split response views with diffing.** Snap responses into vertical or horizontal splits, pin panes, and compare Pretty/Raw/Headers tabs side-by-side with a unified diff view.
-- **Auth & variable helpers.** `@auth` directives cover basic, bearer, API key, and custom headers; variable resolution spans request, file, environment, and OS layers with helpers like `{{$timestamp}}` and `{{$uuid}}`.
+- **Auth & variable helpers.** `@auth` directives cover basic, bearer, API key, custom headers, and OAuth 2.0; variable resolution spans request, file, environment, and OS layers with helpers like `{{$timestamp}}` and `{{$uuid}}`. Globals defined via `@global` or `vars.global.*` can be inspected with `Ctrl+G` and cleared with `Ctrl+Shift+G`.
 - **Pre-request & test scripting.** JavaScript (goja) hooks mutate outgoing requests, assert on responses, and surface pass/fail summaries inline.
 - **GraphQL tooling.** `@graphql` and `@variables` directives produce proper payloads, attach operation names, and keep previews/history readable.
 - **gRPC client.** `GRPC host:port` requests with `@grpc` metadata build messages from descriptor sets or reflection, stream metadata/trailers, and log history entries beside HTTP calls.
@@ -138,6 +138,8 @@ By default `resterm` scans the opened file’s directory (or the current working
 | Split responses vertically | `Ctrl+V` |
 | Split responses horizontally | `Ctrl+U` |
 | Pin/unpin focused response pane | `Ctrl+Shift+V` |
+| Show globals summary | `Ctrl+G` |
+| Clear globals for current environment | `Ctrl+Shift+G` |
 | Target response pane for new responses | `Ctrl+F`, then `← / →` or `h / l` |
 | Replay highlighted history entry | `Enter` (History tab) |
 | Quit | `Ctrl+Q` (`Ctrl+D` also works) |
@@ -148,6 +150,7 @@ Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another
 - Split the response area vertically (`Ctrl+V`) or horizontally (`Ctrl+U`). Press the shortcut again to collapse the split.
 - Use `Ctrl+F` followed by `← / →` (or `h / l`) to choose which pane receives the next response. The other pane is pinned automatically so you can compare results.
 - `Ctrl+Shift+V` toggles whether the focused pane tracks new responses (live) or stays pinned to its current snapshot.
+- `Ctrl+G` shows the currently cached globals (per environment and document); `Ctrl+Shift+G` clears cached globals for the active environment.
 - Each pane has **Pretty**, **Raw**, **Headers**, **Diff**, and **History** tabs. Open **Diff** in either pane to compare its current base tab (Pretty/Raw/Headers) against the other pane.
 
 #### Editor motions & search
@@ -174,7 +177,7 @@ Note: resize chords (`gh`, `gl`, `gj`, `gk`) stay active until you press another
 - `--insecure`: skip TLS certificate verification.
 - `--follow`: follow redirects (default `true`).
 - `--proxy`: HTTP proxy URL.
-- `--recurisve`: recursively scan the workspace for `.http`/`.rest` files.
+- `--recursive`: recursively scan the workspace for `.http`/`.rest` files.
 
 Environment files are simple JSON maps keyed by environment name, for example:
 
@@ -200,9 +203,71 @@ Environment files are simple JSON maps keyed by environment name, for example:
   - `@auth bearer <token>`
   - `@auth apikey <header|query> <name> <value>`
   - `@auth Authorization <value>` (custom header)
+  - `@auth oauth2 token_url=<url> client_id=<id> client_secret=<secret> [scope=...] [audience=...] [resource=...] [grant=client_credentials|password] [username=...] [password=...] [client_auth=basic|body] [cache_key=<id>]`
+    - Tokens are cached per environment, refreshed automatically when `expires_in` or `refresh_token` data is returned, and applied as `Authorization` headers by default.
 - `@setting <key> <value>` - per-request overrides. Recognised keys (`timeout`, `proxy`, `followredirects`, `insecure`), and `@timeout <duration>` is accepted as a shorthand.
 - `@no-log` - skip storing the response body snippet for that request in history.
 - `@script <kind>` followed by lines beginning with `>` - executes JavaScript either as `pre-request` (mutate method/url/headers/body/variables) or `test` blocks whose assertions appear in the UI and history. Use `> < ./path/to/file.js` to load a script from disk (paths resolve relative to the request file unless absolute).
+- `@global <name> <value>` (or `@var global <name> <value>`) - seeds a global variable that subsequent requests can consume. Scripts can manage them via `vars.global.get/set/has/delete`; secrets are masked in summaries and can be cleared with `Ctrl+Shift+G`.
+
+### Globals & token management
+
+- **Document globals** live in the request file itself. Declaring `@global api.token my-value` makes that token available to every request in the current `.http` document, but it isn’t shared with other files unless you repeat (or script) the same name there.
+- **Runtime globals** created via scripting (`vars.global.set(...)`) are stored per environment. Give each token a unique key (for example `serviceA.token`, `serviceB.token`) so different services can refresh independently without collisions.
+- **Environment isolation.** Switching environments clears runtime globals automatically, so `dev` and `prod` can maintain separate secrets even if the keys match. At any time press `Ctrl+G` to inspect the current cache (secret values are masked as `•••`) or `Ctrl+Shift+G` to clear it manually.
+- **Directive autonomy.** Every `@auth oauth2` directive performs its own token exchange. Multiple files can point at different identity providers or credentials without sharing state unless you explicitly pass tokens through globals.
+- **Persistence.** Keep long-lived or reusable secrets in environment JSON (`resterm.env.json`). Use runtime globals for transient session tokens generated by pre-request scripts.
+
+Example - capture an OAuth token into a global:
+
+```
+### Step 1: Login
+# @name GlobalAuthLogin
+# @capture global-secret globalAuth.token {{response.json.token}}
+POST https://auth.example.com/api/login
+Content-Type: application/json
+
+{
+  "username": "{{admin_email}}",
+  "password": "password"
+}
+
+### Step 2: Call API with captured token
+# @name ListUsers
+# @auth bearer {{globalAuth.token}}
+GET https://api.example.com/users
+```
+
+Prefer scripting? You can achieve the same with pre/post scripts:
+
+```
+### Step 1: Login
+# @name GlobalAuthLogin
+# @script test
+> client.test("store global token", function () {
+>   const data = response.json();
+>   vars.global.set("globalAuth.token", data.token, {secret: true});
+> });
+POST https://auth.example.com/api/login
+Content-Type: application/json
+
+{
+  "username": "{{admin_email}}",
+  "password": "password"
+}
+
+### Step 2: Call API with captured token
+# @name ListUsers
+# @auth bearer {{globalAuth.token}}
+GET https://api.example.com/users
+```
+
+Mix and match: directives keep simple captures declarative, while scripts still let you run custom logic, parse complex payloads, or branch on response state before writing to globals.
+
+**Capture directive notes**
+- Scopes can be `global`, `file`, or `request`; add `-secret` (for example `global-secret`) to mask the stored value in summaries.
+- Expressions support `{{…}}` placeholders: `{{response.json.token}}`, `{{response.headers.X-Trace}}`, `{{response.status}}`, `{{response.body}}`, and more.
+- If the target variable already exists (maybe from an earlier `@global`), the capture simply overwrites it - no extra wiring needed.
 
 ### GraphQL
 

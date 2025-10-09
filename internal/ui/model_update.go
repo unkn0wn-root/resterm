@@ -425,6 +425,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 		m.openEnvironmentSelector()
 		return combine(nil)
+	case "ctrl+g":
+		return combine(m.showGlobalSummary())
+	case "ctrl+shift+g", "shift+ctrl+g":
+		return combine(m.clearGlobalValues())
 	case "ctrl+s":
 		return combine(m.saveFile())
 	case "ctrl+v":
