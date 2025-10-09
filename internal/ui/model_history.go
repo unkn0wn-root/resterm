@@ -344,6 +344,8 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 	} else if len(snippet) > 2000 {
 		snippet = snippet[:2000]
 	}
+	desc := strings.TrimSpace(req.Metadata.Description)
+	tags := normalizedTags(req.Metadata.Tags)
 
 	entry := history.Entry{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -357,6 +359,8 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
 		RequestText: requestText,
+		Description: desc,
+		Tags:        tags,
 	}
 
 	if err := m.historyStore.Append(entry); err != nil {
@@ -377,6 +381,8 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	} else if len(snippet) > 2000 {
 		snippet = snippet[:2000]
 	}
+	desc := strings.TrimSpace(req.Metadata.Description)
+	tags := normalizedTags(req.Metadata.Tags)
 
 	entry := history.Entry{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -390,6 +396,8 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
 		RequestText: requestText,
+		Description: desc,
+		Tags:        tags,
 	}
 
 	if err := m.historyStore.Append(entry); err != nil {
@@ -448,9 +456,15 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 		m.activeRequestKey = ""
 		return
 	}
+	prev := m.activeRequestKey
 	m.activeRequestTitle = requestDisplayName(req)
 	m.activeRequestKey = requestKey(req)
 	_ = m.selectRequestItemByKey(m.activeRequestKey)
+	if prev != "" && prev != m.activeRequestKey {
+		if summary := requestMetaSummary(req); summary != "" {
+			m.setStatusMessage(statusMsg{text: summary, level: statusInfo})
+		}
+	}
 }
 
 func (m *Model) selectRequestItemByKey(key string) bool {
@@ -594,14 +608,33 @@ func requestDisplayName(req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
-	if name := strings.TrimSpace(req.Metadata.Name); name != "" {
-		return name
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if method == "" {
+		method = "REQ"
 	}
-	url := strings.TrimSpace(req.URL)
-	if len(url) > 60 {
-		url = url[:57] + "..."
+	name := strings.TrimSpace(req.Metadata.Name)
+	base := name
+	if base == "" {
+		url := strings.TrimSpace(req.URL)
+		if len(url) > 60 {
+			url = url[:57] + "..."
+		}
+		base = url
 	}
-	return fmt.Sprintf("%s %s", req.Method, url)
+	base = fmt.Sprintf("%s %s", method, base)
+	desc := strings.TrimSpace(req.Metadata.Description)
+	tags := joinTags(req.Metadata.Tags, 3)
+	var extra []string
+	if desc != "" {
+		extra = append(extra, condense(desc, 60))
+	}
+	if tags != "" {
+		extra = append(extra, tags)
+	}
+	if len(extra) == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s - %s", base, strings.Join(extra, " | "))
 }
 
 func requestKey(req *restfile.Request) string {
@@ -612,6 +645,37 @@ func requestKey(req *restfile.Request) string {
 		return "name:" + name
 	}
 	return fmt.Sprintf("line:%d:%s", req.LineRange.Start, req.Method)
+}
+
+func requestMetaSummary(req *restfile.Request) string {
+	if req == nil {
+		return ""
+	}
+	var parts []string
+	if desc := strings.TrimSpace(req.Metadata.Description); desc != "" {
+		parts = append(parts, condense(desc, 90))
+	}
+	if tags := joinTags(req.Metadata.Tags, 5); tags != "" {
+		parts = append(parts, tags)
+	}
+	return strings.Join(parts, " | ")
+}
+
+func normalizedTags(tags []string) []string {
+	if len(tags) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(tags))
+	for _, t := range tags {
+		t = strings.TrimSpace(t)
+		if t != "" {
+			out = append(out, t)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 func (m *Model) findRequestByKey(key string) *restfile.Request {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -20,15 +21,30 @@ func (h historyItem) Title() string {
 
 func (h historyItem) Description() string {
 	dur := h.entry.Duration.Truncate(time.Millisecond)
-	desc := fmt.Sprintf("%s %s [%s]", h.entry.Method, h.entry.URL, dur)
-	if h.entry.Environment != "" {
-		desc += fmt.Sprintf(" | env:%s", h.entry.Environment)
+	base := fmt.Sprintf("%s %s [%s]", h.entry.Method, h.entry.URL, dur)
+	if env := strings.TrimSpace(h.entry.Environment); env != "" {
+		base = fmt.Sprintf("%s | env:%s", base, env)
 	}
-	return desc
+	var lines []string
+	if desc := strings.TrimSpace(h.entry.Description); desc != "" {
+		lines = append(lines, condense(desc, 80))
+	}
+	if tags := joinTags(h.entry.Tags, 5); tags != "" {
+		lines = append(lines, tags)
+	}
+	lines = append(lines, base)
+	return strings.Join(lines, "\n")
 }
 
 func (h historyItem) FilterValue() string {
-	return h.entry.URL
+	parts := []string{
+		h.entry.URL,
+		h.entry.Method,
+		h.entry.Description,
+		strings.Join(h.entry.Tags, " "),
+		h.entry.Environment,
+	}
+	return strings.Join(parts, " ")
 }
 
 func makeHistoryItems(entries []history.Entry) []list.Item {

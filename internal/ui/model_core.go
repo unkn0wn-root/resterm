@@ -306,6 +306,7 @@ func New(cfg Config) Model {
 
 	reqDelegate := list.NewDefaultDelegate()
 	reqDelegate.ShowDescription = true
+	reqDelegate.SetHeight(3)
 	requestList := list.New(nil, reqDelegate, 0, 0)
 	requestList.Title = "Requests"
 	requestList.SetShowStatusBar(false)
@@ -314,7 +315,10 @@ func New(cfg Config) Model {
 	requestList.SetShowTitle(false)
 	requestList.DisableQuitKeybindings()
 
-	historyList := list.New(nil, list.NewDefaultDelegate(), 0, 0)
+	histDelegate := list.NewDefaultDelegate()
+	histDelegate.ShowDescription = true
+	histDelegate.SetHeight(3)
+	historyList := list.New(nil, histDelegate, 0, 0)
 	historyList.SetShowStatusBar(false)
 	historyList.SetShowHelp(false)
 	historyList.SetShowTitle(false)
