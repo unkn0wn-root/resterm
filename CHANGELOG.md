@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.14](https://github.com/unkn0wn-root/resterm/compare/v0.1.13...v0.1.14) (2025-10-09)
+
+
+### Features
+
+* add backward search navigation and cover regex behavior ([9b26b64](https://github.com/unkn0wn-root/resterm/commit/9b26b64ecaa4603ef513ff964f626315887691a9))
+* added search bar to the response tab ([64a7329](https://github.com/unkn0wn-root/resterm/commit/64a73294c7afcb8b487e27a49ab69dce261889d3))
+
 ### [0.1.13](https://github.com/unkn0wn-root/resterm/compare/v0.1.12...v0.1.13) (2025-10-09)
 
 
