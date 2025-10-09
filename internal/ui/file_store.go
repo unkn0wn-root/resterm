@@ -58,29 +58,6 @@ func (s *fileStore) set(env, path, name, value string, secret bool) {
 	}
 }
 
-func (s *fileStore) delete(env, path, name string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	key := fileStoreKey(env, path)
-	entries := s.values[key]
-	if len(entries) == 0 {
-		return
-	}
-
-	delete(entries, normalizeNameKey(name))
-	if len(entries) == 0 {
-		delete(s.values, key)
-	}
-}
-
-func (s *fileStore) clear(env, path string) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	delete(s.values, fileStoreKey(env, path))
-}
-
 func (s *fileStore) clearEnv(env string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
