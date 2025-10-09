@@ -52,6 +52,28 @@ func (m *Model) openFile(path string) tea.Cmd {
 	return nil
 }
 
+func (m *Model) openTemporaryDocument() tea.Cmd {
+	m.cfg.FilePath = ""
+	m.currentFile = ""
+	m.currentRequest = nil
+	m.activeRequestKey = ""
+	m.activeRequestTitle = ""
+	m.setInsertMode(false, false)
+	m.editor.ClearSelection()
+	m.editor.SetValue("")
+	m.editor.undoStack = nil
+	m.editor.SetViewStart(0)
+	m.editor.moveCursorTo(0, 0)
+	m.editor.ClearSelection()
+	m.doc = parser.Parse("", nil)
+	m.syncRequestList(m.doc)
+	m.dirty = false
+	m.syncHistory()
+	m.setFocus(focusEditor)
+	m.setStatusMessage(statusMsg{text: "Temporary document", level: statusInfo})
+	return nil
+}
+
 func (m *Model) saveFile() tea.Cmd {
 	if m.currentFile == "" {
 		if strings.TrimSpace(m.editor.Value()) == "" {

@@ -455,6 +455,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		m.openNewFileModal()
 		return combine(nil)
 	case "ctrl+t":
+		return combine(m.openTemporaryDocument())
+	case "ctrl+p":
+		m.suppressEditorKey = true
+		return combine(m.reparseDocument())
+	case "ctrl+alt+p", "alt+ctrl+p":
+		m.suppressEditorKey = true
+		return combine(m.reparseDocument())
+	case "ctrl+shift+t", "shift+ctrl+t":
 		return combine(m.reparseDocument())
 	case "ctrl+q", "ctrl+d":
 		return combine(tea.Quit)
