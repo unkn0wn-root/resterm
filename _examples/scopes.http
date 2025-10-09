@@ -1,0 +1,46 @@
+### Seed Analytics Session
+# @name AnalyticsSeedSession
+# @description Demonstrates @global, @var file/request, and capture scopes working together.
+# @tag analytics session
+# @global analytics.apiKey demo-analytics-key
+# @var file analytics.baseUrl https://httpbin.org/anything/analytics
+# @var file analytics.defaultRange last-30-days
+# @var request analytics.jobId job-{{$uuid}}
+# @var request analytics.requestToken session-{{$uuid}}
+# @capture global-secret analytics.sessionToken {{response.json.json.sessionToken}}
+# @capture file analytics.lastJobId {{response.json.json.jobId}}
+# @capture request analytics.trace {{response.json.headers.X-Amzn-Trace-Id}}
+POST {{analytics.baseUrl}}/sessions
+Content-Type: application/json
+Authorization: Bearer {{analytics.requestToken}}
+X-API-Key: {{analytics.apiKey}}
+X-Job-ID: {{analytics.jobId}}
+
+{
+  "jobId": "{{analytics.jobId}}",
+  "sessionToken": "{{analytics.requestToken}}",
+  "range": "{{analytics.defaultRange}}",
+  "tenant": "{{tenant.id}}"
+}
+
+### Retrieve Last Analytics Job
+# @name AnalyticsFetchJob
+# @tag analytics read
+# @description Reuses captured globals and file variables while showing request-scope captures.
+# @var request analytics.traceId {{$uuid}}
+# @capture request echoed.authorization {{response.json.headers.Authorization}}
+# @script test
+> client.test("captures reused session token", function () {
+>   var echoed = vars.get("echoed.authorization");
+>   var token = vars.get("analytics.sessionToken");
+>   tests.assert(typeof token === "string" && token.length > 0, "captured session token is available");
+>   tests.assert(typeof echoed === "string" && echoed.includes(token), "Authorization header includes captured token");
+> });
+> client.test("trace id propagated", function () {
+>   tests.assert(vars.get("analytics.traceId"), "request-scope value should be visible to tests");
+> });
+GET {{analytics.baseUrl}}/jobs/{{analytics.lastJobId}}
+Authorization: Bearer {{analytics.sessionToken}}
+X-API-Key: {{analytics.apiKey}}
+X-Trace-ID: {{analytics.traceId}}
+Accept: application/json

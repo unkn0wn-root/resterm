@@ -1,0 +1,17 @@
+query FetchWorkspace($id: ID!, $includeMembers: Boolean!) {
+  workspace(id: $id) {
+    id
+    name
+    region
+    plan
+    members @include(if: $includeMembers) {
+      totalCount
+      edges {
+        node {
+          id
+          email
+        }
+      }
+    }
+  }
+}

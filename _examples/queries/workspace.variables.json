@@ -1,0 +1,4 @@
+{
+  "id": "{{graphql.workspaceId}}",
+  "includeMembers": false
+}

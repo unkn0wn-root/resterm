@@ -1,0 +1,32 @@
+### Fast Timeout
+# @name TimeoutDemo
+# @tag transport timeout
+# @description Demonstrates @timeout to fail fast on slow responses.
+# @timeout 2s
+GET {{base.url}}/delay/5
+Accept: application/json
+
+### Custom Transport Options
+# @name CustomTransport
+# @tag transport settings
+# @description Shows insecure, proxy, and redirect overrides.
+# @setting insecure true
+# @setting followredirects false
+# @setting proxy {{transport.proxy}}
+GET https://example.invalid/ping
+Accept: */*
+
+### Sensitive Payload With No Logging
+# @name NoLogExample
+# @tag transport privacy
+# @description Prevents body snippets from landing in history.
+# @no-log
+# @setting timeout 4s
+POST {{services.billing.base}}/secrets
+Content-Type: application/json
+Accept: application/json
+
+{
+  "secret": "{{$uuid}}",
+  "source": "transport demo"
+}

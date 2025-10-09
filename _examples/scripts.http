@@ -1,0 +1,41 @@
+# Top-level globals apply to every request below without needing an immediate request line.
+# @global reporting.apiKey demo-reporting-api-key
+# @global-secret reporting.sharedSecret shared-secret-value
+
+### Bootstrap Reporting Session
+# @name ReportsBootstrap
+# @tag scripts pre-request
+# @description Pre-request script seeds and reuses a global token while mutating headers and body.
+# @script pre-request
+> var existing = vars.global.get("reporting.token");
+> var token = existing || `script-${Date.now()}`;
+> vars.global.set("reporting.token", token, {secret: true});
+> request.setHeader("Authorization", `Bearer ${token}`);
+> request.setHeader("X-Trace-ID", `trace-${Date.now()}`);
+> request.setHeader("X-API-Key", vars.get("reporting.apiKey"));
+> var payload = {
+>   correlationId: `corr-${Date.now()}`,
+>   scope: "reports",
+>   requestedAt: new Date().toISOString()
+> };
+> request.setBody(JSON.stringify(payload, null, 2));
+POST {{services.api.base}}/reports/sessions
+Content-Type: application/json
+Accept: application/json
+X-Shared-Secret: {{reporting.sharedSecret}}
+
+### List Reports With Script Token
+# @name ReportsList
+# @tag scripts reuse
+# @description Uses the global token populated by the pre-request script along with the top-level API key.
+# @auth bearer {{reporting.token}}
+# @capture request reporting.lastTrace {{response.headers.X-Amzn-Trace-Id}}
+# @script test
+> client.test("script-created token is available", function () {
+>   var token = vars.get("reporting.token");
+>   tests.assert(typeof token === "string" && token.length > 0, "global token should exist");
+> });
+GET {{services.api.base}}/reports
+Accept: application/json
+X-API-Key: {{reporting.apiKey}}
+X-Shared-Secret: {{reporting.sharedSecret}}
