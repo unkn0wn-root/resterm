@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.16](https://github.com/unkn0wn-root/resterm/compare/v0.1.15...v0.1.16) (2025-10-09)
+
+
+### Features
+
+* shorten active header ([d351088](https://github.com/unkn0wn-root/resterm/commit/d35108846fc94afea84880f7fb6cab84e53ca45f))
+* use description and tags in requests pane ([7ca1cfb](https://github.com/unkn0wn-root/resterm/commit/7ca1cfb3b0689370a661fd55a57d785d6a0ac784))
+
+
+### Bug Fixes
+
+* keep current scroll position while changing panes in response panes ([2767633](https://github.com/unkn0wn-root/resterm/commit/276763372340a055200afeb7affda158a954187a))
+* sync editor with request selection after opening a req file ([8cfde0e](https://github.com/unkn0wn-root/resterm/commit/8cfde0e969ba330ba4c936b405d882e62baf3f73))
+
 ### [0.1.15](https://github.com/unkn0wn-root/resterm/compare/v0.1.14...v0.1.15) (2025-10-09)
 
 
