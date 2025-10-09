@@ -460,7 +460,7 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 	m.activeRequestTitle = requestDisplayName(req)
 	m.activeRequestKey = requestKey(req)
 	_ = m.selectRequestItemByKey(m.activeRequestKey)
-	if prev != "" && prev != m.activeRequestKey {
+	if prev != m.activeRequestKey {
 		summary := requestMetaSummary(req)
 		if summary == "" {
 			summary = requestBaseTitle(req)
