@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.17](https://github.com/unkn0wn-root/resterm/compare/v0.1.16...v0.1.17) (2025-10-09)
+
+
+### Features
+
+* add new temp file ([3bcf158](https://github.com/unkn0wn-root/resterm/commit/3bcf158ec144e6745d410a2da3425ad900861507))
+* temporary file and key bindings ([a31d297](https://github.com/unkn0wn-root/resterm/commit/a31d29707c1a4e2a71f4ec776b956290caa8d9e5))
+
 ### [0.1.16](https://github.com/unkn0wn-root/resterm/compare/v0.1.15...v0.1.16) (2025-10-09)
 
 
