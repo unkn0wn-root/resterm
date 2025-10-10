@@ -19,18 +19,25 @@ import (
 )
 
 func (m *Model) filterEditorMessage(msg tea.Msg) tea.Msg {
-	if !m.editorInsertMode {
-		if km, ok := msg.(tea.KeyMsg); ok {
-			if km.Type == tea.KeyRunes && len(km.Runes) > 0 {
-				km.Runes = nil
-				return km
-			}
-			switch km.String() {
-			case "enter", "ctrl+m", "ctrl+j", "backspace", "ctrl+h", "delete":
+	if km, ok := msg.(tea.KeyMsg); ok {
+		if m.editorInsertMode {
+			if km.Type == tea.KeyTab {
 				km.Type = tea.KeyRunes
-				km.Runes = nil
+				km.Runes = []rune{'\t'}
 				return km
 			}
+			return msg
+		}
+
+		if km.Type == tea.KeyRunes && len(km.Runes) > 0 {
+			km.Runes = nil
+			return km
+		}
+		switch km.String() {
+		case "enter", "ctrl+m", "ctrl+j", "backspace", "ctrl+h", "delete":
+			km.Type = tea.KeyRunes
+			km.Runes = nil
+			return km
 		}
 	}
 	return msg

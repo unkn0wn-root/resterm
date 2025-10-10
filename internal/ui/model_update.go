@@ -404,6 +404,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 
 	switch keyStr {
 	case "tab":
+		if m.focus == focusEditor && m.editorInsertMode {
+			break
+		}
 		prev := m.focus
 		m.cycleFocus(true)
 		if prev == focusEditor || m.focus == focusEditor {
@@ -411,6 +414,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 		return combine(nil)
 	case "shift+tab":
+		if m.focus == focusEditor && m.editorInsertMode {
+			break
+		}
 		prev := m.focus
 		m.cycleFocus(false)
 		if prev == focusEditor || m.focus == focusEditor {

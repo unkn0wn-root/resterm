@@ -64,6 +64,23 @@ func TestHandleKeyEnterInInsertModeDoesNotSend(t *testing.T) {
 	}
 }
 
+func TestTabInViewModeCyclesFocus(t *testing.T) {
+	model := newTestModelWithDoc(sampleRequestDoc)
+	model.setFocus(focusEditor)
+	model.setInsertMode(false, false)
+
+	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	if cmd != nil {
+		t.Fatalf("expected tab focus change to produce no command")
+	}
+	if model.focus != focusResponse {
+		t.Fatalf("expected focus to move to response pane, got %v", model.focus)
+	}
+	if !model.suppressEditorKey {
+		t.Fatalf("expected editor key suppression to be enabled after focus change")
+	}
+}
+
 func TestHandleKeyIgnoredWhileErrorModalVisible(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
 	model.setFocus(focusEditor)
