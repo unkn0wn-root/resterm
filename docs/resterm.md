@@ -14,7 +14,7 @@
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 ```
 
-This requires Go 1.22 or newer. The binary will be installed in `$(go env GOPATH)/bin`.
+This requires Go 1.24 or newer. The binary will be installed in `$(go env GOPATH)/bin`.
 
 ---
 
@@ -64,14 +64,14 @@ Content-Type: application/json
 | Send active request | `Ctrl+Enter` |
 | Toggle help overlay | `?` |
 | Toggle editor insert mode | `i` / `Esc` |
-| Focus file list | `gf` |
-| Focus request list | `gr` |
+| Cycle focus (files -> requests -> editor -> response) | `Tab` / `Shift+Tab` |
 | File list incremental search | Start typing while focus is in the list |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
+| Open file picker | `Ctrl+O` |
 | New scratch buffer | `Ctrl+T` |
 | Reparse current document | `Ctrl+P` (also `Ctrl+Alt+P`) |
-| Refresh workspace files | `Ctrl+O` |
+| Refresh workspace files | `Ctrl+Shift+O` |
 | Split response vertically / horizontally | `Ctrl+V` / `Ctrl+U` |
 | Pin or unpin response pane | `Ctrl+Shift+V` |
 | Choose target pane for next response | `Ctrl+F`, then arrow keys or `h` / `l` |
@@ -92,7 +92,7 @@ Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be p
 
 ### History and globals
 
-- The history pane persists responses per request/environment. Entries survive restarts (stored under the config directory; see [Configuration](#configuration)).
+- The history pane persists responses along with their request and environment metadata. Entries survive restarts (stored under the config directory; see [Configuration](#configuration)).
 - `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` clears them for the active environment.
 - `Ctrl+E` opens the environment picker to switch between `resterm.env.json` (or `rest-client.env.json`) entries.
 
@@ -160,12 +160,13 @@ Switch environments with `Ctrl+E`. If multiple environments exist, Resterm defau
 
 When expanding `{{variable}}` templates, Resterm looks in:
 
-1. *Request-scope* variables (`@var request`, `@capture request`, runtime `vars.set`).
-2. *File scope* (static declarations and `@capture file`).
-3. *Document globals* (`@global`, `@var global`).
-4. *Runtime globals* stored via captures or scripts (per environment).
-5. Selected environment JSON.
-6. Operating system environment variables (case-sensitive and uppercase fallbacks).
+1. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
+2. *Request-scope* variables (`@var request`, `@capture request`).
+3. *Runtime globals* stored via captures or scripts (per environment).
+4. *Document globals* (`@global`, `@var global`).
+5. *File scope* declarations and `@capture file` values.
+6. Selected environment JSON.
+7. OS environment variables (case-sensitive with an uppercase fallback).
 
 Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
@@ -285,7 +286,7 @@ See [Scripting API](#scripting-api) for available helpers.
 
 ## GraphQL
 
-Enable GraphQL handling with `# @graphql` (defaults to enabled). Resterm packages GraphQL requests according to HTTP method:
+Enable GraphQL handling with `# @graphql` (requests start with it disabled). Resterm packages GraphQL requests according to HTTP method:
 
 - **POST**: body becomes `{ "query": ..., "variables": ..., "operationName": ... }`.
 - **GET**: query parameters `query`, `variables`, `operationName` are attached.
@@ -483,10 +484,9 @@ Run `resterm --help` for the latest list. Core flags:
 | `--env-file <path>` | Provide an explicit environment JSON file. |
 | `--timeout <duration>` | Default HTTP timeout (per request). |
 | `--insecure` | Skip TLS certificate verification globally. |
-| `--follow` / `--no-follow` | Control redirect following (default on). |
+| `--follow` | Control redirect following (default on; pass `--follow=false` to disable). |
 | `--proxy <url>` | HTTP proxy URL. |
 
-Platform-specific builds also expose flags for custom CAs or certificates when needed.
 
 ---
 
@@ -521,6 +521,6 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
 - Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
 - `Ctrl+Shift+V` pins the focused response pane—ideal for diffing the last good response against the current attempt.
-- Keep secrets in environment files or runtime globals marked as `-secret`. History never persists masked values.
+- Keep secrets in environment files or runtime globals marked as `-secret`. Remember that history stores the raw response unless you add `@no-log` or redact the payload yourself.
 
 For additional questions or feature requests, open an issue on GitHub.
