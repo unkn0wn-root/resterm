@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net"
@@ -91,12 +90,14 @@ func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *v
 	if req.Headers != nil {
 		for name, values := range req.Headers {
 			for _, value := range values {
-				expanded, expandErr := resolver.ExpandTemplates(value)
-				if expandErr == nil {
-					httpReq.Header.Add(name, expanded)
-				} else {
-					httpReq.Header.Add(name, value)
+				if resolver != nil {
+					if expanded, expandErr := resolver.ExpandTemplates(value); expandErr == nil {
+						httpReq.Header.Add(name, expanded)
+						continue
+					}
 				}
+				// fall back to the raw value when expansion is unavailable
+				httpReq.Header.Add(name, value)
 			}
 		}
 	}
@@ -159,11 +160,15 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 		if err != nil {
 			return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read body file %s", path)
 		}
-		return strings.NewReader(string(data)), nil
+		return bytes.NewReader(data), nil
 	case req.Body.Text != "":
-		expanded, err := resolver.ExpandTemplates(req.Body.Text)
-		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
+		expanded := req.Body.Text
+		if resolver != nil {
+			var err error
+			expanded, err = resolver.ExpandTemplates(req.Body.Text)
+			if err != nil {
+				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
+			}
 		}
 		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir)
 		if err != nil {
@@ -317,7 +322,11 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		TLSHandshakeTimeout: 10 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+		ForceAttemptHTTP2:     true,
 	}
 
 	if opts.ProxyURL != "" {
@@ -378,20 +387,25 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 		return opts
 	}
 	effective := opts
-	if value, ok := settings["timeout"]; ok {
+	// normalize keys once to ensure case-insensitive matching
+	norm := make(map[string]string, len(settings))
+	for k, v := range settings {
+		norm[strings.ToLower(k)] = v
+	}
+	if value, ok := norm["timeout"]; ok {
 		if dur, err := time.ParseDuration(value); err == nil {
 			effective.Timeout = dur
 		}
 	}
-	if value, ok := settings["proxy"]; ok && value != "" {
+	if value, ok := norm["proxy"]; ok && value != "" {
 		effective.ProxyURL = value
 	}
-	if value, ok := settings["followredirects"]; ok {
+	if value, ok := norm["followredirects"]; ok {
 		if b, err := strconv.ParseBool(value); err == nil {
 			effective.FollowRedirects = b
 		}
 	}
-	if value, ok := settings["insecure"]; ok {
+	if value, ok := norm["insecure"]; ok {
 		if b, err := strconv.ParseBool(value); err == nil {
 			effective.InsecureSkipVerify = b
 		}
@@ -407,20 +421,21 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 		if value == "" {
 			return ""
 		}
-		expanded, err := resolver.ExpandTemplates(value)
-		if err != nil {
+		if resolver == nil {
 			return value
 		}
-		return expanded
+		if expanded, err := resolver.ExpandTemplates(value); err == nil {
+			return expanded
+		}
+		return value
 	}
 
 	switch strings.ToLower(auth.Type) {
 	case "basic":
 		user := expand(auth.Params["username"])
 		pass := expand(auth.Params["password"])
-		token := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
 		if req.Header.Get("Authorization") == "" {
-			req.Header.Set("Authorization", "Basic "+token)
+			req.SetBasicAuth(user, pass)
 		}
 	case "bearer":
 		token := expand(auth.Params["token"])
@@ -455,9 +470,14 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
-	var lines []string
+	var b strings.Builder
+	first := true
 	for scanner.Scan() {
 		line := scanner.Text()
+		if !first {
+			b.WriteByte('\n')
+		}
+		first = false
 		trimmed := strings.TrimSpace(line)
 		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
 			includePath := strings.TrimSpace(trimmed[1:])
@@ -471,15 +491,14 @@ func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error)
 				if err != nil {
 					return "", errdef.Wrap(errdef.CodeFilesystem, err, "include body file %s", includePath)
 				}
-
-				lines = append(lines, string(data))
+				b.WriteString(string(data))
 				continue
 			}
 		}
-		lines = append(lines, line)
+		b.WriteString(line)
 	}
 	if err := scanner.Err(); err != nil {
 		return "", errdef.Wrap(errdef.CodeFilesystem, err, "scan body includes")
 	}
-	return strings.Join(lines, "\n"), nil
+	return b.String(), nil
 }

@@ -16,26 +16,33 @@ type FileEntry struct {
 func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	var entries []FileEntry
 	exts := map[string]struct{}{".http": {}, ".rest": {}}
+	include := func(name string) bool {
+		_, ok := exts[strings.ToLower(filepath.Ext(name))]
+		return ok
+	}
+	appendEntry := func(name, path string) {
+		entries = append(entries, FileEntry{Name: name, Path: path})
+	}
+
 	if recursive {
 		err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-
 			if d.IsDir() {
 				if strings.HasPrefix(d.Name(), ".") && path != root {
 					return filepath.SkipDir
 				}
 				return nil
 			}
-
-			if _, ok := exts[strings.ToLower(filepath.Ext(d.Name()))]; ok {
-				rel, relErr := filepath.Rel(root, path)
-				if relErr != nil {
-					rel = d.Name()
-				}
-				entries = append(entries, FileEntry{Name: rel, Path: path})
+			if !include(d.Name()) {
+				return nil
 			}
+			rel := d.Name()
+			if r, relErr := filepath.Rel(root, path); relErr == nil {
+				rel = r
+			}
+			appendEntry(rel, path)
 			return nil
 		})
 		if err != nil {
@@ -47,13 +54,10 @@ func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 			return nil, err
 		}
 		for _, entry := range dirEntries {
-			if entry.IsDir() {
+			if entry.IsDir() || !include(entry.Name()) {
 				continue
 			}
-			if _, ok := exts[strings.ToLower(filepath.Ext(entry.Name()))]; ok {
-				path := filepath.Join(root, entry.Name())
-				entries = append(entries, FileEntry{Name: entry.Name(), Path: path})
-			}
+			appendEntry(entry.Name(), filepath.Join(root, entry.Name()))
 		}
 	}
 
