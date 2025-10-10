@@ -1,7 +1,7 @@
 <h1 align="center">Resterm</h1>
 
 <p align="center">
-  <em>a terminal-based REST/GrapQL/gRPC client.</em>
+  <em>a terminal-based REST/GraphQL/gRPC client.</em>
 </p>
 
 <p align="center">
