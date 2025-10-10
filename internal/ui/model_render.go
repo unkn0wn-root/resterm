@@ -1061,6 +1061,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+E", "Environment selector"),
 		helpRow(m, "gk / gj", "Adjust files/requests split"),
 		helpRow(m, "gh / gl", "Adjust editor/response width"),
+		helpRow(m, "gr / gi / gp", "Focus requests / editor / response"),
 		helpRow(m, "Ctrl+T", "Temporary document"),
 		helpRow(m, "Ctrl+P", "Reparse document"),
 		helpRow(m, "Ctrl+Q", "Quit (Ctrl+D also works)"),

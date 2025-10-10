@@ -69,6 +69,7 @@ go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 2. Launch Resterm: `resterm --workspace path/to/project` (or if your .http/.rest file is in the same dir. - just type `resterm` and it will be autodiscovered).
 3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane.
 4. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls.
+5. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), and adjust the editor/response width with `g+h` / `g+l`.
 
 A minimal request file:
 
