@@ -23,6 +23,7 @@ Resterm is a terminal-first client for working **HTTP**, **GraphQL**, and **gRPC
 - **Variable** scopes, captures, and JavaScript hooks for pre-request mutation and post-response testing.
 - **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, metadata).
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
+- **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 
 ## Documentation
 

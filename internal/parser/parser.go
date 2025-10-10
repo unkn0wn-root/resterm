@@ -4,7 +4,9 @@ import (
 	"bufio"
 	"bytes"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
@@ -355,6 +357,10 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		if capture, ok := b.parseCaptureDirective(rest, line); ok {
 			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
 		}
+	case "profile":
+		if spec := parseProfileSpec(rest); spec != nil {
+			b.request.metadata.Profile = spec
+		}
 	}
 }
 
@@ -494,6 +500,53 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		return nil
 	}
 	return &restfile.AuthSpec{Type: authType, Params: params}
+}
+
+func parseProfileSpec(rest string) *restfile.ProfileSpec {
+	trimmed := strings.TrimSpace(rest)
+	spec := &restfile.ProfileSpec{}
+
+	if trimmed == "" {
+		spec.Count = 10
+		return spec
+	}
+
+	fields := splitAuthFields(trimmed)
+	params := parseKeyValuePairs(fields)
+
+	if spec.Count == 0 {
+		if raw, ok := params["count"]; ok {
+			if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n > 0 {
+				spec.Count = n
+			}
+		}
+	}
+
+	if spec.Count == 0 && len(fields) == 1 && !strings.Contains(fields[0], "=") {
+		if n, err := strconv.Atoi(fields[0]); err == nil && n > 0 {
+			spec.Count = n
+		}
+	}
+
+	if raw, ok := params["warmup"]; ok {
+		if n, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil && n >= 0 {
+			spec.Warmup = n
+		}
+	}
+
+	if raw, ok := params["delay"]; ok {
+		if dur, err := time.ParseDuration(strings.TrimSpace(raw)); err == nil && dur >= 0 {
+			spec.Delay = dur
+		}
+	}
+
+	if spec.Count <= 0 {
+		spec.Count = 10
+	}
+	if spec.Warmup < 0 {
+		spec.Warmup = 0
+	}
+	return spec
 }
 
 func splitAuthFields(input string) []string {

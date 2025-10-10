@@ -70,20 +70,18 @@ func (i requestListItem) FilterValue() string {
 	return strings.Join(parts, " ")
 }
 
-func buildRequestItems(
-	doc *restfile.Document,
-) ([]requestListItem, []list.Item) {
+func buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil, nil
 	}
 	items := make([]requestListItem, len(doc.Requests))
 	listItems := make([]list.Item, len(doc.Requests))
 	for idx, req := range doc.Requests {
-		item := requestListItem{
-			request: req,
-			index:   idx,
-			line:    req.LineRange.Start,
+		line := req.LineRange.Start
+		if line <= 0 {
+			line = 1
 		}
+		item := requestListItem{request: req, index: idx, line: line}
 		items[idx] = item
 		listItems[idx] = item
 	}

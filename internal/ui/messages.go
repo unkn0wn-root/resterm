@@ -8,6 +8,7 @@ import (
 )
 
 type statusPulseMsg struct{}
+type profileNextIterationMsg struct{}
 
 type statusLevel int
 

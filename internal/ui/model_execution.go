@@ -52,10 +52,12 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.currentRequest = cloned
 	m.testResults = nil
 	m.scriptError = nil
-
 	options := m.cfg.HTTPOptions
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)
+	}
+	if cloned.Metadata.Profile != nil {
+		return m.startProfileRun(doc, cloned, options)
 	}
 
 	m.sending = true
@@ -71,11 +73,21 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	return execCmd
 }
 
-func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options) tea.Cmd {
+func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, extras ...map[string]string) tea.Cmd {
 	client := m.client
 	runner := m.scriptRunner
 	envName := m.cfg.EnvironmentName
 	baseVars := m.collectVariables(doc, req)
+	if len(extras) > 0 {
+		for _, extra := range extras {
+			for key, value := range extra {
+				if key == "" {
+					continue
+				}
+				baseVars[key] = value
+			}
+		}
+	}
 
 	return func() tea.Msg {
 		preVars := cloneStringMap(baseVars)
@@ -87,25 +99,34 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			BaseDir:   options.BaseDir,
 		})
 		if err != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request script")}
+			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request script"), executed: req}
 		}
 
 		if err := applyPreRequestOutput(req, preResult); err != nil {
-			return responseMsg{err: err}
+			return responseMsg{err: err, executed: req}
 		}
 
 		m.applyGlobalMutations(preResult.Globals)
 
 		scriptVars := cloneStringMap(preResult.Variables)
-		resolver := m.buildResolver(doc, req, scriptVars)
+		resolverExtras := make([]map[string]string, 0, len(extras)+1)
+		if len(scriptVars) > 0 {
+			resolverExtras = append(resolverExtras, scriptVars)
+		}
+		for _, extra := range extras {
+			if len(extra) > 0 {
+				resolverExtras = append(resolverExtras, extra)
+			}
+		}
+		resolver := m.buildResolver(doc, req, resolverExtras...)
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
 		if err := m.ensureOAuth(req, resolver, options, effectiveTimeout); err != nil {
-			return responseMsg{err: err}
+			return responseMsg{err: err, executed: req}
 		}
 
 		if req.GRPC != nil {
 			if err := m.prepareGRPCRequest(req, resolver); err != nil {
-				return responseMsg{err: err}
+				return responseMsg{err: err, executed: req}
 			}
 		}
 
@@ -137,12 +158,12 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 		response, err := client.Execute(ctx, req, resolver, options)
 		if err != nil {
-			return responseMsg{err: err}
+			return responseMsg{err: err, executed: req}
 		}
 
 		var captures captureResult
 		if err := m.applyCaptures(doc, req, resolver, response, &captures); err != nil {
-			return responseMsg{err: err}
+			return responseMsg{err: err, executed: req}
 		}
 
 		updatedVars := m.collectVariables(doc, req)

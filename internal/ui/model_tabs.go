@@ -1,6 +1,10 @@
 package ui
 
-import tea "github.com/charmbracelet/bubbletea"
+import (
+	"strings"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 func (m *Model) activatePrevTabFor(id responsePaneID) tea.Cmd {
 	pane := m.pane(id)
@@ -51,6 +55,9 @@ func indexOfResponseTab(tabs []responseTab, target responseTab) int {
 
 func (m *Model) availableResponseTabs() []responseTab {
 	tabs := []responseTab{responseTabPretty, responseTabRaw, responseTabHeaders}
+	if m.snapshotHasStats() {
+		tabs = append(tabs, responseTabStats)
+	}
 	if m.diffAvailable() {
 		tabs = append(tabs, responseTabDiff)
 	}
@@ -66,6 +73,8 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 		return "Raw"
 	case responseTabHeaders:
 		return "Headers"
+	case responseTabStats:
+		return "Stats"
 	case responseTabDiff:
 		return "Diff"
 	case responseTabHistory:
@@ -91,4 +100,20 @@ func (m *Model) diffAvailable() bool {
 		return false
 	}
 	return true
+}
+
+func (m *Model) snapshotHasStats() bool {
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.snapshot == nil {
+			continue
+		}
+		if strings.TrimSpace(pane.snapshot.stats) != "" {
+			return true
+		}
+	}
+	if m.responseLatest != nil && strings.TrimSpace(m.responseLatest.stats) != "" {
+		return true
+	}
+	return false
 }

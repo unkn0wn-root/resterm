@@ -24,6 +24,12 @@ const responseLoadingTickInterval = 200 * time.Millisecond
 type responseLoadingTickMsg struct{}
 
 func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
+	if state := m.profileRun; state != nil {
+		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
+			return m.handleProfileResponse(msg)
+		}
+	}
+
 	m.lastError = nil
 	m.testResults = msg.tests
 	m.scriptError = msg.scriptErr
@@ -297,6 +303,9 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, valid: true}
 			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: msg.rawWrapped, valid: true}
 			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: msg.headersWrapped, valid: true}
+		}
+		if strings.TrimSpace(snapshot.stats) != "" {
+			pane.wrapCache[responseTabStats] = cachedWrap{}
 		}
 		pane.viewport.GotoTop()
 		pane.setCurrPosition()
@@ -683,9 +692,11 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 	if req == nil {
 		m.activeRequestTitle = ""
 		m.activeRequestKey = ""
+		m.currentRequest = nil
 		return
 	}
 	prev := m.activeRequestKey
+	m.currentRequest = req
 	m.activeRequestTitle = requestDisplayName(req)
 	m.activeRequestKey = requestKey(req)
 	_ = m.selectRequestItemByKey(m.activeRequestKey)
@@ -740,7 +751,6 @@ func (m *Model) syncEditorWithRequestSelection(previousIndex int) {
 	item := m.requestItems[idx]
 	m.moveCursorToLine(item.line)
 	m.setActiveRequest(item.request)
-	m.currentRequest = item.request
 }
 
 func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
@@ -748,6 +758,11 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 		return nil
 	}
 	preview := renderRequestText(req)
+	statusText := fmt.Sprintf("Previewing %s", requestDisplayName(req))
+	return m.applyPreview(preview, statusText)
+}
+
+func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 	snapshot := &responseSnapshot{
 		pretty:  preview,
 		raw:     preview,
@@ -788,16 +803,24 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 		pane.wrapCache[responseTabRaw] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
 		pane.wrapCache[responseTabHeaders] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
+		pane.wrapCache[responseTabStats] = cachedWrap{}
 		pane.viewport.SetContent(wrapped)
 	}
 
 	m.testResults = nil
 	m.scriptError = nil
-	status := func() tea.Msg {
-		return statusMsg{text: fmt.Sprintf("Previewing %s", requestDisplayName(req)), level: statusInfo}
+
+	var status tea.Cmd
+	if strings.TrimSpace(statusText) != "" {
+		status = func() tea.Msg {
+			return statusMsg{text: statusText, level: statusInfo}
+		}
 	}
 	if cmd := m.syncResponsePanes(); cmd != nil {
-		return tea.Batch(cmd, status)
+		if status != nil {
+			return tea.Batch(cmd, status)
+		}
+		return cmd
 	}
 	return status
 }
