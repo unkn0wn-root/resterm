@@ -769,6 +769,16 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 			m.repeatChordPrefix = prefix
 			m.repeatChordActive = true
 			return true, m.runSidebarResize(sidebarSplitStep)
+		case "r":
+			m.setFocus(focusRequests)
+			return true, nil
+		case "p":
+			m.setFocus(focusResponse)
+			return true, nil
+		case "i":
+			m.setFocus(focusEditor)
+			m.setInsertMode(false, true)
+			return true, nil
 		}
 	}
 	return false, nil
