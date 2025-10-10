@@ -187,6 +187,7 @@ Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$ti
 | `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
+| `@log-sensitive-headers` | `# @log-sensitive-headers [true|false]` | Allow allowlisted sensitive headers (Authorization, API keys, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
 | `@setting` | `# @setting key value` | Per-request transport overrides (`timeout`, `proxy`, `followredirects`, `insecure`). |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
 
@@ -465,8 +466,9 @@ Body helpers:
 
 ## Response History & Diffing
 
-- Every successful request produces a history entry with request text, method, status, duration, and a body snippet (unless `@no-log` is set).
+- Every successful request produces a history entry with request text, method, status, duration, and a body snippet (unless `@no-log` is set). Values injected from `-secret` captures and allowlisted sensitive headers (Authorization, Proxy-Authorization, X-API-Key, X-Auth-Token, etc.) are masked automatically unless you opt-in with `@log-sensitive-headers`.
 - History entries are environment-aware; selecting another environment filters the list automatically.
+- When focused on the history list, press `Enter` to load a request into the editor without executing it. Use `r`/`Ctrl+R` (or your normal send shortcut such as `Ctrl+Enter` / `Cmd+Enter`) to replay the loaded entry.
 - The Diff tab compares focused versus pinned panes, making regression analysis straightforward.
 
 ---

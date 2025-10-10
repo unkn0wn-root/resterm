@@ -11,6 +11,48 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 )
 
+func TestRedactHistoryTextMasksSecrets(t *testing.T) {
+	mask := maskSecret("", true)
+	secrets := []string{"oauth-token", "oauth-refresh"}
+	text := "access=oauth-token&refresh=oauth-refresh"
+	redacted := redactHistoryText(text, secrets, false)
+	expected := "access=" + mask + "&refresh=" + mask
+	if redacted != expected {
+		t.Fatalf("expected %q, got %q", expected, redacted)
+	}
+}
+
+func TestRedactHistoryTextSkipsWhenNoSecrets(t *testing.T) {
+	text := "plain text"
+	if got := redactHistoryText(text, nil, true); got != text {
+		t.Fatalf("expected unchanged text when no secrets, got %q", got)
+	}
+
+	if got := redactHistoryText("", []string{"secret"}, true); got != "" {
+		t.Fatalf("expected empty text to remain empty, got %q", got)
+	}
+}
+
+func TestRedactHistoryTextMasksSensitiveHeaders(t *testing.T) {
+	mask := maskSecret("", true)
+	input := "Authorization: Bearer 123\nX-API-Key: abc"
+	got := redactHistoryText(input, nil, true)
+	if !strings.Contains(got, "Authorization: "+mask) {
+		t.Fatalf("expected authorization header to be masked, got %q", got)
+	}
+	if !strings.Contains(got, "X-API-Key: "+mask) {
+		t.Fatalf("expected api key header to be masked, got %q", got)
+	}
+}
+
+func TestRedactHistoryTextHonorsSensitiveHeaderOverride(t *testing.T) {
+	input := "Authorization: Bearer 123"
+	got := redactHistoryText(input, nil, false)
+	if got != input {
+		t.Fatalf("expected header to remain when masking disabled, got %q", got)
+	}
+}
+
 func TestFormatHistorySnippetStripsHTMLAndLimitsLines(t *testing.T) {
 	snippet := "<html><head><style>body{color:red}</style></head><body><h1>Hello</h1><p>World</p><p>More content here.</p><p>Line4</p><p>Line5</p><p>Line6</p><p>Line7</p><p>Line8</p><p>Line9</p><p>Line10</p><p>Line11</p><p>Line12</p><p>Line13</p><p>Line14</p><p>Line15</p><p>Line16</p><p>Line17</p><p>Line18</p><p>Line19</p><p>Line20</p><p>Line21</p><p>Line22</p><p>Line23</p><p>Line24</p><p>Line25</p></body></html>"
 

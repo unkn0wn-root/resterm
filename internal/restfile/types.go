@@ -66,13 +66,14 @@ type GRPCRequest struct {
 }
 
 type RequestMetadata struct {
-	Name        string
-	Description string
-	Tags        []string
-	NoLog       bool
-	Auth        *AuthSpec
-	Scripts     []ScriptBlock
-	Captures    []CaptureSpec
+	Name                  string
+	Description           string
+	Tags                  []string
+	NoLog                 bool
+	AllowSensitiveHeaders bool
+	Auth                  *AuthSpec
+	Scripts               []ScriptBlock
+	Captures              []CaptureSpec
 }
 
 type CaptureScope int

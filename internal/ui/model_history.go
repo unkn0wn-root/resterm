@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -338,14 +339,22 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 		return
 	}
 
+	secrets := m.secretValuesForRedaction(req)
+	maskHeaders := !req.Metadata.AllowSensitiveHeaders
+
 	snippet := string(resp.Body)
 	if req.Metadata.NoLog {
 		snippet = "<body suppressed>"
-	} else if len(snippet) > 2000 {
-		snippet = snippet[:2000]
+	} else {
+		snippet = redactHistoryText(snippet, secrets, false)
+		if len(snippet) > 2000 {
+			snippet = snippet[:2000]
+		}
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := normalizedTags(req.Metadata.Tags)
+
+	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -358,7 +367,7 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 		StatusCode:  resp.StatusCode,
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
-		RequestText: requestText,
+		RequestText: redacted,
 		Description: desc,
 		Tags:        tags,
 	}
@@ -375,14 +384,22 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 		return
 	}
 
+	secrets := m.secretValuesForRedaction(req)
+	maskHeaders := !req.Metadata.AllowSensitiveHeaders
+
 	snippet := resp.Message
 	if req.Metadata.NoLog {
 		snippet = "<body suppressed>"
-	} else if len(snippet) > 2000 {
-		snippet = snippet[:2000]
+	} else {
+		snippet = redactHistoryText(snippet, secrets, false)
+		if len(snippet) > 2000 {
+			snippet = snippet[:2000]
+		}
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
 	tags := normalizedTags(req.Metadata.Tags)
+
+	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
 	entry := history.Entry{
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
@@ -395,7 +412,7 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 		StatusCode:  int(resp.StatusCode),
 		Duration:    resp.Duration,
 		BodySnippet: snippet,
-		RequestText: requestText,
+		RequestText: redacted,
 		Description: desc,
 		Tags:        tags,
 	}
@@ -405,6 +422,135 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
+}
+
+var sensitiveHeaderNames = map[string]struct{}{
+	"authorization":           {},
+	"proxy-authorization":     {},
+	"x-api-key":               {},
+	"x-auth-token":            {},
+	"x-goog-api-key":          {},
+	"x-aws-access-token":      {},
+	"x-aws-secret-access-key": {},
+}
+
+func (m *Model) secretValuesForRedaction(req *restfile.Request) []string {
+	values := make(map[string]struct{})
+	add := func(value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		values[value] = struct{}{}
+	}
+
+	if req != nil {
+		for _, v := range req.Variables {
+			if v.Secret {
+				add(v.Value)
+			}
+		}
+	}
+
+	if doc := m.doc; doc != nil {
+		for _, v := range doc.Variables {
+			if v.Secret {
+				add(v.Value)
+			}
+		}
+		for _, v := range doc.Globals {
+			if v.Secret {
+				add(v.Value)
+			}
+		}
+	}
+
+	if m.fileVars != nil {
+		path := m.documentRuntimePath(m.doc)
+		if snapshot := m.fileVars.snapshot(m.cfg.EnvironmentName, path); len(snapshot) > 0 {
+			for _, entry := range snapshot {
+				if entry.Secret {
+					add(entry.Value)
+				}
+			}
+		}
+	}
+
+	if m.globals != nil {
+		if snapshot := m.globals.snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
+			for _, entry := range snapshot {
+				if entry.Secret {
+					add(entry.Value)
+				}
+			}
+		}
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+
+	secrets := make([]string, 0, len(values))
+	for value := range values {
+		secrets = append(secrets, value)
+	}
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	return secrets
+}
+
+func redactHistoryText(text string, secrets []string, maskHeaders bool) string {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" && len(secrets) == 0 {
+		return text
+	}
+
+	redacted := text
+	if len(secrets) > 0 {
+		mask := maskSecret("", true)
+		for _, value := range secrets {
+			if value == "" || !strings.Contains(redacted, value) {
+				continue
+			}
+			redacted = strings.ReplaceAll(redacted, value, mask)
+		}
+	}
+
+	if maskHeaders {
+		redacted = redactSensitiveHeaders(redacted)
+	}
+
+	return redacted
+}
+
+func redactSensitiveHeaders(text string) string {
+	lines := strings.Split(text, "\n")
+	mask := maskSecret("", true)
+	changed := false
+	for idx, line := range lines {
+		colon := strings.Index(line, ":")
+		if colon <= 0 {
+			continue
+		}
+		name := strings.TrimSpace(line[:colon])
+		if name == "" {
+			continue
+		}
+		if _, ok := sensitiveHeaderNames[strings.ToLower(name)]; !ok {
+			continue
+		}
+		rest := line[colon+1:]
+		leadingSpaces := len(rest) - len(strings.TrimLeft(rest, " \t"))
+		prefix := line[:colon+1]
+		pad := ""
+		if leadingSpaces > 0 {
+			pad = rest[:leadingSpaces]
+		}
+		lines[idx] = prefix + pad + mask
+		changed = true
+	}
+	if !changed {
+		return text
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) syncHistory() {
@@ -738,22 +884,24 @@ func (m *Model) selectNewestHistoryEntry() {
 }
 
 func (m *Model) replayHistorySelection() tea.Cmd {
+	return m.loadHistorySelection(true)
+}
+
+func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	item, ok := m.historyList.SelectedItem().(historyItem)
 	if !ok {
 		return nil
 	}
 	entry := item.entry
 	if entry.RequestText == "" {
-		return func() tea.Msg {
-			return statusMsg{text: "History entry missing request payload", level: statusWarn}
-		}
+		m.setStatusMessage(statusMsg{text: "History entry missing request payload", level: statusWarn})
+		return nil
 	}
 
 	doc := parser.Parse(m.currentFile, []byte(entry.RequestText))
 	if len(doc.Requests) == 0 {
-		return func() tea.Msg {
-			return statusMsg{text: "Unable to parse stored request", level: statusError}
-		}
+		m.setStatusMessage(statusMsg{text: "Unable to parse stored request", level: statusError})
+		return nil
 	}
 
 	docReq := doc.Requests[0]
@@ -776,8 +924,21 @@ func (m *Model) replayHistorySelection() tea.Cmd {
 	m.editor.SetCursor(0)
 	m.testResults = nil
 	m.scriptError = nil
+
+	if !send {
+		m.sending = false
+		label := strings.TrimSpace(requestDisplayName(req))
+		if label == "" {
+			label = strings.TrimSpace(fmt.Sprintf("%s %s", req.Method, req.URL))
+		}
+		if label == "" {
+			label = "history request"
+		}
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Loaded %s from history", label), level: statusInfo})
+		return nil
+	}
+
 	m.sending = true
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Replaying %s", req.URL), level: statusInfo})
-
 	return m.executeRequest(doc, req, options)
 }
