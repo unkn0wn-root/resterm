@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.19](https://github.com/unkn0wn-root/resterm/compare/v0.1.18...v0.1.19) (2025-10-10)
+
+
+### Features
+
+* mask sensitive history data and decouple history replay from auto-send ([6139108](https://github.com/unkn0wn-root/resterm/commit/6139108d610e29e53beb53180d08765ff5aa2338))
+
 ### [0.1.18](https://github.com/unkn0wn-root/resterm/compare/v0.1.17...v0.1.18) (2025-10-10)
 
 ### [0.1.17](https://github.com/unkn0wn-root/resterm/compare/v0.1.16...v0.1.17) (2025-10-09)
