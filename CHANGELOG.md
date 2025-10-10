@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.20](https://github.com/unkn0wn-root/resterm/compare/v0.1.19...v0.1.20) (2025-10-10)
+
+
+### Features
+
+* add new focus on pane shortcuts ([6cf9cc7](https://github.com/unkn0wn-root/resterm/commit/6cf9cc748eff0248d40c9126635ed3179b3d1ecf))
+
+
+### Bug Fixes
+
+* suppress tab focus switching in insert mode ([1952a4f](https://github.com/unkn0wn-root/resterm/commit/1952a4f95e728d92508671b6cbfe414d86ef0830))
+
 ### [0.1.19](https://github.com/unkn0wn-root/resterm/compare/v0.1.18...v0.1.19) (2025-10-10)
 
 
