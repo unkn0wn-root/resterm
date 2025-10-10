@@ -308,6 +308,14 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		}
 	case "no-log", "nolog":
 		b.request.metadata.NoLog = true
+	case "log-sensitive-headers", "log-secret-headers":
+		if rest == "" {
+			b.request.metadata.AllowSensitiveHeaders = true
+			return
+		}
+		if value, ok := parseBool(rest); ok {
+			b.request.metadata.AllowSensitiveHeaders = value
+		}
 	case "auth":
 		spec := parseAuthSpec(rest)
 		if spec != nil {
@@ -537,6 +545,17 @@ func parseKeyValuePairs(fields []string) map[string]string {
 		}
 	}
 	return params
+}
+
+func parseBool(value string) (bool, bool) {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "true", "t", "1", "yes", "on":
+		return true, true
+	case "false", "f", "0", "no", "off":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {

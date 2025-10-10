@@ -706,6 +706,19 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(m.activateNextTabFor(m.responsePaneFocus))
 		case "enter":
 			if pane != nil && pane.activeTab == responseTabHistory {
+				return combine(m.loadHistorySelection(false))
+			}
+		}
+	}
+
+	if pane := m.focusedPane(); pane != nil && pane.activeTab == responseTabHistory {
+		switch keyStr := msg.String(); keyStr {
+		case "r", "R", "ctrl+r", "ctrl+R":
+			return combine(m.replayHistorySelection())
+		case "enter":
+			// handled above
+		default:
+			if shouldSendEditorRequest(msg, false) {
 				return combine(m.replayHistorySelection())
 			}
 		}
