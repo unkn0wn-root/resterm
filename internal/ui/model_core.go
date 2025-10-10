@@ -41,6 +41,7 @@ const (
 	responseTabPretty responseTab = iota
 	responseTabRaw
 	responseTabHeaders
+	responseTabStats
 	responseTabDiff
 	responseTabHistory
 )
@@ -210,6 +211,7 @@ type Model struct {
 	doc                *restfile.Document
 	currentFile        string
 	currentRequest     *restfile.Request
+	profileRun         *profileState
 	activeRequestTitle string
 	activeRequestKey   string
 }

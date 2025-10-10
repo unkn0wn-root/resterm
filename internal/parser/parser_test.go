@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -175,6 +176,32 @@ GET https://example.com`
 	}
 	if req.Metadata.Scripts[0].FilePath != "./script.js" {
 		t.Fatalf("unexpected script file path: %q", req.Metadata.Scripts[0].FilePath)
+	}
+}
+
+func TestParseProfileDirective(t *testing.T) {
+	src := `### Timed
+# @profile count=5 warmup=2 delay=250ms
+GET https://example.com/api
+`
+
+	doc := Parse("profile.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Profile == nil {
+		t.Fatalf("expected profile metadata to be parsed")
+	}
+	prof := req.Metadata.Profile
+	if prof.Count != 5 {
+		t.Fatalf("expected count=5, got %d", prof.Count)
+	}
+	if prof.Warmup != 2 {
+		t.Fatalf("expected warmup=2, got %d", prof.Warmup)
+	}
+	if prof.Delay != 250*time.Millisecond {
+		t.Fatalf("expected delay=250ms, got %s", prof.Delay)
 	}
 }
 

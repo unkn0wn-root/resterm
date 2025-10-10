@@ -23,6 +23,7 @@ type responseSnapshot struct {
 	pretty  string
 	raw     string
 	headers string
+	stats   string
 	ready   bool
 }
 
@@ -359,6 +360,11 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 			return "<no headers>\n", tab
 		}
 		return ensureTrailingNewline(snapshot.headers), tab
+	case responseTabStats:
+		if strings.TrimSpace(snapshot.stats) == "" {
+			return "<no stats>\n", tab
+		}
+		return ensureTrailingNewline(snapshot.stats), tab
 	case responseTabDiff:
 		baseTab := pane.ensureContentTab()
 		if diff, ok := m.computeDiffFor(id, baseTab); ok {

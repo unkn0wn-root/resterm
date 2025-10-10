@@ -87,6 +87,7 @@ The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G
 - **Pretty**: formatted JSON (or best-effort formatting for other types).
 - **Raw**: exact payload text.
 - **Headers**: request and response headers.
+- **Stats**: latency summaries and histograms from `@profile` runs.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates).
 
@@ -245,6 +246,24 @@ POST https://httpbin.org/anything/analytics/sessions
 - **External file**: `< ./payloads/create-user.json` loads the file relative to the request file.
 - **Inline includes**: lines in the body starting with `@ path/to/file` are replaced with the file contents (useful for multi-part templates).
 - **GraphQL**: handled separately (see [GraphQL](#graphql)).
+
+### Profiling requests
+
+Add `# @profile` to any request to run it repeatedly and collect latency statistics without leaving the terminal.
+
+```
+### Benchmark health check
+# @profile count=50 warmup=5 delay=100ms
+GET https://httpbin.org/status/200
+```
+
+Flags:
+
+- `count` - number of measured runs (defaults to 10).
+- `warmup` - optional warmup runs that are executed but excluded from stats.
+- `delay` - optional delay between runs (e.g. `250ms`).
+
+When profiling completes the response pane's **Stats** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
 
 ### Authentication directives
 
@@ -511,7 +530,7 @@ Explore `_examples/` for ready-to-run scenarios:
 - `scripts.http` – pre-request and test scripting patterns.
 - `graphql.http` – inline and file-based GraphQL requests.
 - `grpc.http` – gRPC reflection and descriptor usage.
-- `oauth2.http` – manual capture vs `@auth oauth2` flows.
+- `oauth2.http` – manual capture vs using the `@auth oauth2` directive.
 - `transport.http` – timeout, proxy, and `@no-log` samples.
 
 Open one in Resterm, switch to the appropriate environment (`resterm.env.json`), and send requests to see each feature in action.

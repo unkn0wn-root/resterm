@@ -1,6 +1,9 @@
 package restfile
 
-import "net/http"
+import (
+	"net/http"
+	"time"
+)
 
 type VariableScope int
 
@@ -74,6 +77,13 @@ type RequestMetadata struct {
 	Auth                  *AuthSpec
 	Scripts               []ScriptBlock
 	Captures              []CaptureSpec
+	Profile               *ProfileSpec
+}
+
+type ProfileSpec struct {
+	Count  int
+	Warmup int
+	Delay  time.Duration
 }
 
 type CaptureScope int
