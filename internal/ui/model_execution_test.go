@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -194,6 +195,79 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 			got = model.responseLatest.pretty
 		}
 		t.Fatalf("expected response view to mention grpc status, got %q", got)
+	}
+}
+
+func TestHandleResponseMsgShowsHTTPErrorInPane(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	err := errdef.New(errdef.CodeHTTP, "send request failed")
+	cmd := model.handleResponseMessage(responseMsg{err: err})
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.showErrorModal {
+		t.Fatalf("expected error modal to stay closed for request errors")
+	}
+	if model.responseLatest == nil || !model.responseLatest.ready {
+		t.Fatalf("expected latest snapshot to be ready")
+	}
+	if !strings.Contains(model.responseLatest.pretty, "send request failed") {
+		t.Fatalf("expected pretty view to include error text, got %q", model.responseLatest.pretty)
+	}
+	viewport := model.pane(responsePanePrimary).viewport.View()
+	if !strings.Contains(viewport, "send request failed") {
+		t.Fatalf("expected viewport to include error details, got %q", viewport)
+	}
+	if model.statusMessage.level != statusError {
+		t.Fatalf("expected status message to record error, got %v", model.statusMessage.level)
+	}
+	if model.suppressNextErrorModal {
+		t.Fatalf("expected suppress flag to reset after status update")
+	}
+}
+
+func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 100
+	model.height = 30
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	err := errdef.Wrap(errdef.CodeScript, errors.New("boom"), "pre-request script")
+	cmd := model.handleResponseMessage(responseMsg{err: err})
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.showErrorModal {
+		t.Fatalf("expected error modal to stay closed for script errors")
+	}
+	if model.statusMessage.level != statusWarn {
+		t.Fatalf("expected script errors to show warning status, got %v", model.statusMessage.level)
+	}
+	if model.responseLatest == nil || !strings.Contains(model.responseLatest.pretty, "pre-request script") {
+		var pretty string
+		if model.responseLatest != nil {
+			pretty = model.responseLatest.pretty
+		}
+		t.Fatalf("expected pretty view to mention script failure, got %q", pretty)
+	}
+	viewport := model.pane(responsePanePrimary).viewport.View()
+	if !strings.Contains(viewport, "pre-request script") {
+		t.Fatalf("expected viewport to include script error details, got %q", viewport)
+	}
+	if model.suppressNextErrorModal {
+		t.Fatalf("expected suppress flag to reset after script error")
 	}
 }
 

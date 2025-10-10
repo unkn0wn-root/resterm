@@ -4,8 +4,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"sort"
@@ -13,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -248,7 +247,7 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 			form.Set("client_secret", cfg.ClientSecret)
 		}
 	default:
-		return Token{}, fmt.Errorf("unsupported oauth2 grant type: %s", grant)
+		return Token{}, errdef.New(errdef.CodeHTTP, "unsupported oauth2 grant type: %s", grant)
 	}
 
 	headers := make(http.Header)
@@ -273,7 +272,7 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 		return Token{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Token{}, fmt.Errorf("oauth token request failed: %s", resp.Status)
+		return Token{}, errdef.New(errdef.CodeHTTP, "oauth token request failed: %s", resp.Status)
 	}
 
 	token, err := parseTokenResponse(resp.Body)
@@ -285,7 +284,7 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 
 func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, opts httpclient.Options) (Token, error) {
 	if refresh == "" {
-		return Token{}, errors.New("missing refresh token")
+		return Token{}, errdef.New(errdef.CodeHTTP, "missing refresh token")
 	}
 
 	form := url.Values{}
@@ -330,7 +329,7 @@ func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, 
 		return Token{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Token{}, fmt.Errorf("oauth token refresh failed: %s", resp.Status)
+		return Token{}, errdef.New(errdef.CodeHTTP, "oauth token refresh failed: %s", resp.Status)
 	}
 
 	token, err := parseTokenResponse(resp.Body)
@@ -343,10 +342,10 @@ func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, 
 func parseTokenResponse(body []byte) (Token, error) {
 	var resp tokenResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return Token{}, err
+		return Token{}, errdef.Wrap(errdef.CodeHTTP, err, "decode oauth token response")
 	}
 	if resp.AccessToken == "" {
-		return Token{}, errors.New("oauth token response missing access_token")
+		return Token{}, errdef.New(errdef.CodeHTTP, "oauth token response missing access_token")
 	}
 	if resp.TokenType == "" {
 		resp.TokenType = "Bearer"

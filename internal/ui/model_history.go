@@ -47,15 +47,108 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		level := statusError
 		if code == errdef.CodeScript {
 			level = statusWarn
-			m.openErrorModal(errdef.Message(msg.err))
 		}
+		cmd := m.consumeRequestError(msg.err)
+		m.suppressNextErrorModal = true
 		m.setStatusMessage(statusMsg{text: errdef.Message(msg.err), level: level})
-		return nil
+		return cmd
 	}
 
 	cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr)
 	m.recordHTTPHistory(msg.response, msg.executed, msg.requestText, msg.environment)
 	return cmd
+}
+
+func (m *Model) consumeRequestError(err error) tea.Cmd {
+	if err == nil {
+		return nil
+	}
+
+	if m.responseLatest != nil && m.responseLatest.ready {
+		m.responsePrevious = m.responseLatest
+	}
+
+	m.responseLoading = false
+	m.responseLoadingFrame = 0
+	m.responsePending = nil
+	m.responseRenderToken = ""
+	if m.responseTokens != nil {
+		for key := range m.responseTokens {
+			delete(m.responseTokens, key)
+		}
+	}
+
+	code := errdef.CodeOf(err)
+	title := requestErrorTitle(code)
+	detail := strings.TrimSpace(errdef.Message(err))
+	if detail == "" {
+		detail = "Request failed with no additional details."
+	}
+	note := requestErrorNote(code)
+	pretty := joinSections(title, detail, note)
+	raw := joinSections(title, detail)
+
+	var meta []string
+	if code != errdef.CodeUnknown && string(code) != "" {
+		meta = append(meta, fmt.Sprintf("Code: %s", strings.ToUpper(string(code))))
+	}
+	if strings.TrimSpace(note) != "" {
+		meta = append(meta, note)
+	}
+	metaText := strings.Join(meta, "\n")
+	headers := joinSections(title, metaText, detail)
+
+	snapshot := &responseSnapshot{
+		id:      nextResponseRenderToken(),
+		pretty:  pretty,
+		raw:     raw,
+		headers: headers,
+		ready:   true,
+	}
+	m.responseLatest = snapshot
+	m.responsePending = nil
+
+	target := m.responseTargetPane()
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		pane.snapshot = snapshot
+		pane.invalidateCaches()
+		pane.viewport.SetContent(pretty)
+		pane.viewport.GotoTop()
+		pane.setCurrPosition()
+	}
+	m.setLivePane(target)
+
+	return m.syncResponsePanes()
+}
+
+func requestErrorTitle(code errdef.Code) string {
+	switch code {
+	case errdef.CodeScript:
+		return "Request Script Error"
+	case errdef.CodeHTTP:
+		return "HTTP Request Error"
+	case errdef.CodeParse:
+		return "Request Parse Error"
+	}
+	if code != errdef.CodeUnknown && string(code) != "" {
+		return fmt.Sprintf("Request Error (%s)", strings.ToUpper(string(code)))
+	}
+	return "Request Error"
+}
+
+func requestErrorNote(code errdef.Code) string {
+	switch code {
+	case errdef.CodeScript:
+		return "Request scripts failed before completion."
+	case errdef.CodeHTTP:
+		return "No response payload received."
+	default:
+		return "Request did not produce a response payload."
+	}
 }
 
 func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) tea.Cmd {

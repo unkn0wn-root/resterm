@@ -131,19 +131,20 @@ type Model struct {
 	historyList              list.Model
 	envList                  list.Model
 
-	responseLatest      *responseSnapshot
-	responsePrevious    *responseSnapshot
-	responsePending     *responseSnapshot
-	responseTokens      map[string]*responseSnapshot
-	responseLastFocused responsePaneID
-	focus               paneFocus
-	showEnvSelector     bool
-	showHelp            bool
-	helpJustOpened      bool
-	showNewFileModal    bool
-	showOpenModal       bool
-	showErrorModal      bool
-	errorModalMessage   string
+	responseLatest         *responseSnapshot
+	responsePrevious       *responseSnapshot
+	responsePending        *responseSnapshot
+	responseTokens         map[string]*responseSnapshot
+	responseLastFocused    responsePaneID
+	focus                  paneFocus
+	showEnvSelector        bool
+	showHelp               bool
+	helpJustOpened         bool
+	showNewFileModal       bool
+	showOpenModal          bool
+	showErrorModal         bool
+	errorModalMessage      string
+	suppressNextErrorModal bool
 
 	showSearchPrompt   bool
 	searchInput        textinput.Model

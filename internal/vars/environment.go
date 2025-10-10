@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+
+	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
 
 type EnvironmentSet map[string]map[string]string
@@ -14,22 +16,22 @@ type EnvironmentSet map[string]map[string]string
 func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, fmt.Errorf("open env file: %w", err)
+		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "open env file %s", path)
 	}
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
-			err = fmt.Errorf("close env file: %w", closeErr)
+			err = errdef.Wrap(errdef.CodeFilesystem, closeErr, "close env file %s", path)
 		}
 	}()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return nil, fmt.Errorf("read env file: %w", err)
+		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read env file %s", path)
 	}
 
 	var raw interface{}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse env file: %w", err)
+		return nil, errdef.Wrap(errdef.CodeParse, err, "parse env file %s", path)
 	}
 
 	envs = make(EnvironmentSet)
@@ -39,7 +41,7 @@ func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 			envs[envName] = flattenEnv(value)
 		}
 	default:
-		return nil, fmt.Errorf("unsupported env file format: %T", raw)
+		return nil, errdef.New(errdef.CodeParse, "unsupported env file format: %T", raw)
 	}
 	return envs, nil
 }

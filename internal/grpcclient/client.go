@@ -61,8 +61,12 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 
 	ctx := parent
 	cancel := func() {}
-	if timeout := req.Settings["timeout"]; timeout != "" {
-		if dur, err := time.ParseDuration(timeout); err == nil && dur > 0 {
+	var timeoutSetting string
+	if req != nil {
+		timeoutSetting = req.Settings["timeout"]
+	}
+	if timeoutSetting != "" {
+		if dur, err := time.ParseDuration(timeoutSetting); err == nil && dur > 0 {
 			ctx, cancel = context.WithTimeout(parent, dur)
 		}
 	} else if options.DialTimeout > 0 {
