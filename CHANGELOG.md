@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.22](https://github.com/unkn0wn-root/resterm/compare/v0.1.21...v0.1.22) (2025-10-10)
+
+
+### Features
+
+* added new meta  to profile request ([98a0a55](https://github.com/unkn0wn-root/resterm/commit/98a0a55f8055596c4c81b07e3606f7c916cbea46))
+
 ### [0.1.21](https://github.com/unkn0wn-root/resterm/compare/v0.1.20...v0.1.21) (2025-10-10)
 
 ### [0.1.20](https://github.com/unkn0wn-root/resterm/compare/v0.1.19...v0.1.20) (2025-10-10)
