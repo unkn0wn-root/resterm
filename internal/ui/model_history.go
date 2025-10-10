@@ -424,16 +424,6 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	m.syncHistory()
 }
 
-var sensitiveHeaderNames = map[string]struct{}{
-	"authorization":           {},
-	"proxy-authorization":     {},
-	"x-api-key":               {},
-	"x-auth-token":            {},
-	"x-goog-api-key":          {},
-	"x-aws-access-token":      {},
-	"x-aws-secret-access-key": {},
-}
-
 func (m *Model) secretValuesForRedaction(req *restfile.Request) []string {
 	values := make(map[string]struct{})
 	add := func(value string) {
@@ -534,7 +524,7 @@ func redactSensitiveHeaders(text string) string {
 		if name == "" {
 			continue
 		}
-		if _, ok := sensitiveHeaderNames[strings.ToLower(name)]; !ok {
+		if !shouldMaskHistoryHeader(name) {
 			continue
 		}
 		rest := line[colon+1:]
