@@ -18,15 +18,11 @@ func (i requestListItem) Title() string {
 	if i.request == nil {
 		return ""
 	}
-	method := strings.ToUpper(strings.TrimSpace(i.request.Method))
-	if method == "" {
-		method = "REQ"
-	}
 	name := strings.TrimSpace(i.request.Metadata.Name)
 	if name == "" {
 		name = fmt.Sprintf("Request %d", i.index+1)
 	}
-	parts := []string{method, name}
+	parts := []string{name}
 	if badge := requestTypeBadge(i.request); badge != "" {
 		parts = append(parts, badge)
 	}
