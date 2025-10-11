@@ -89,7 +89,7 @@ The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G
 - **Headers**: request and response headers.
 - **Stats**: latency summaries and histograms from `@profile` runs.
 - **Diff**: compare the focused pane against the other response pane.
-- **History**: chronological responses for the selected request (live updates).
+- **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
 
 Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
 
@@ -249,7 +249,7 @@ POST https://httpbin.org/anything/analytics/sessions
 
 ### Profiling requests
 
-Add `# @profile` to any request to run it repeatedly and collect latency statistics without leaving the terminal.
+Add `# @profile` to any request to run it repeatedly and collect latency statistics without leaving the terminal. Profile runs are recorded in history with aggregated results; hit `p` on the entry to inspect the stored JSON.
 
 ```
 ### Benchmark health check
