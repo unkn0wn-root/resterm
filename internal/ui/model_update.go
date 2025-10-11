@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -75,6 +76,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
+			}
+		}
+		return m, nil
+	}
+
+	if m.showHistoryPreview {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			vp := m.historyPreviewViewport
+			switch keyMsg.String() {
+			case "esc", "enter":
+				m.closeHistoryPreview()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			case "down", "j":
+				if vp != nil {
+					vp.LineDown(1)
+				}
+				return m, nil
+			case "up", "k":
+				if vp != nil {
+					vp.LineUp(1)
+				}
+				return m, nil
+			case "pgdown", "ctrl+f":
+				if vp != nil {
+					vp.PageDown()
+				}
+				return m, nil
+			case "pgup", "ctrl+b", "ctrl+u":
+				if vp != nil {
+					vp.PageUp()
+				}
+				return m, nil
+			case "home":
+				if vp != nil {
+					vp.GotoTop()
+				}
+				return m, nil
+			case "end":
+				if vp != nil {
+					vp.GotoBottom()
+				}
+				return m, nil
 			}
 		}
 		return m, nil
@@ -319,7 +364,7 @@ func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector {
+	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector || m.showHistoryPreview {
 		return nil
 	}
 	return m.handleKeyWithChord(msg, true)
@@ -680,6 +725,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			cmd := m.advanceResponseSearch()
 			return combine(cmd)
 		case "p":
+			if pane != nil && pane.activeTab == responseTabHistory {
+				if entry, ok := m.selectedHistoryEntry(); ok {
+					m.openHistoryPreview(entry)
+				} else {
+					m.setStatusMessage(statusMsg{text: "No history entry selected", level: statusWarn})
+				}
+				return combine(nil)
+			}
 			cmd := m.retreatResponseSearch()
 			return combine(cmd)
 		case "down", "j":
@@ -719,17 +772,30 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(m.loadHistorySelection(false))
 			}
 		}
-	}
-
-	if pane := m.focusedPane(); pane != nil && pane.activeTab == responseTabHistory {
-		switch keyStr := msg.String(); keyStr {
-		case "r", "R", "ctrl+r", "ctrl+R":
-			return combine(m.replayHistorySelection())
-		case "enter":
-			// handled above
-		default:
-			if shouldSendEditorRequest(msg, false) {
+		if pane != nil && pane.activeTab == responseTabHistory {
+			switch keyStr := msg.String(); keyStr {
+			case "d":
+				if entry, ok := m.selectedHistoryEntry(); ok {
+					if deleted, err := m.deleteHistoryEntry(entry.ID); err != nil {
+						m.setStatusMessage(statusMsg{text: fmt.Sprintf("history delete error: %v", err), level: statusError})
+					} else if deleted {
+						m.syncHistory()
+						m.setStatusMessage(statusMsg{text: "History entry deleted", level: statusInfo})
+					} else {
+						m.setStatusMessage(statusMsg{text: "History entry not found", level: statusWarn})
+					}
+				} else {
+					m.setStatusMessage(statusMsg{text: "No history entry selected", level: statusWarn})
+				}
+				return combine(nil)
+			case "r", "R", "ctrl+r", "ctrl+R":
 				return combine(m.replayHistorySelection())
+			case "enter":
+				// handled above
+			default:
+				if shouldSendEditorRequest(msg, false) {
+					return combine(m.replayHistorySelection())
+				}
 			}
 		}
 	}

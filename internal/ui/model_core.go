@@ -145,6 +145,10 @@ type Model struct {
 	showOpenModal          bool
 	showErrorModal         bool
 	errorModalMessage      string
+	showHistoryPreview     bool
+	historyPreviewContent  string
+	historyPreviewTitle    string
+	historyPreviewViewport *viewport.Model
 	suppressNextErrorModal bool
 
 	showSearchPrompt   bool
@@ -337,19 +341,24 @@ func New(cfg Config) Model {
 	envList.SetFilteringEnabled(false)
 	envList.DisableQuitKeybindings()
 
+	previewViewport := viewport.New(0, 0)
+	previewViewport.HighPerformanceRendering = false
+	previewViewport.SetContent("")
+
 	model := Model{
-		cfg:                cfg,
-		theme:              th,
-		client:             client,
-		grpcClient:         grpcExec,
-		grpcOptions:        cfg.GRPCOptions,
-		workspaceRoot:      workspace,
-		workspaceRecursive: cfg.Recursive,
-		fileList:           fileList,
-		requestList:        requestList,
-		editor:             editor,
-		historyList:        historyList,
-		envList:            envList,
+		cfg:                    cfg,
+		theme:                  th,
+		client:                 client,
+		grpcClient:             grpcExec,
+		grpcOptions:            cfg.GRPCOptions,
+		workspaceRoot:          workspace,
+		workspaceRecursive:     cfg.Recursive,
+		fileList:               fileList,
+		requestList:            requestList,
+		editor:                 editor,
+		historyList:            historyList,
+		envList:                envList,
+		historyPreviewViewport: &previewViewport,
 		responsePanes: [2]responsePaneState{
 			newResponsePaneState(primaryViewport, true),
 			newResponsePaneState(secondaryViewport, false),

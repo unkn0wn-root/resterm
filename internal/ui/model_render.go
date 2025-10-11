@@ -19,6 +19,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderErrorModal())
 	}
 
+	if m.showHistoryPreview {
+		return m.renderWithinAppFrame(m.renderHistoryPreviewModal())
+	}
+
 	if m.showOpenModal {
 		return m.renderWithinAppFrame(m.renderOpenModal())
 	}
@@ -444,27 +448,7 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 		MaxWidth(contentWidth).
 		Render(listView)
 
-	var snippetView string
-	if item, ok := m.historyList.SelectedItem().(historyItem); ok {
-		snippet := strings.TrimSpace(stripANSIEscape(item.entry.BodySnippet))
-		wrapWidth := pane.viewport.Width
-		if wrapWidth <= 0 {
-			wrapWidth = m.width - 6
-		}
-		if wrapWidth <= 0 {
-			wrapWidth = 80
-		}
-		formatted := formatHistorySnippet(snippet, wrapWidth)
-		if formatted != "" {
-			snippetView = lipgloss.NewStyle().
-				MarginTop(1).
-				Foreground(lipgloss.Color("#A6A1BB")).
-				MaxWidth(contentWidth).
-				Render(formatted)
-		}
-	}
-
-	body := layoutHistoryContent(listView, snippetView, contentHeight)
+	body := layoutHistoryContent(listView, "", contentHeight)
 	body = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
 		MaxHeight(contentHeight).
@@ -954,6 +938,87 @@ func truncateToWidth(text string, maxWidth int) string {
 		return "…"
 	}
 	return trimmed + "…"
+}
+
+func (m Model) renderHistoryPreviewModal() string {
+	width := minInt(m.width-6, 100)
+	if width < 48 {
+		candidate := m.width - 4
+		if candidate > 0 {
+			width = maxInt(36, candidate)
+		} else {
+			width = 48
+		}
+	}
+	contentWidth := maxInt(width-4, 32)
+	title := strings.TrimSpace(m.historyPreviewTitle)
+	if title == "" {
+		title = "History Entry"
+	}
+	body := m.historyPreviewContent
+	if strings.TrimSpace(body) == "" {
+		body = "{}"
+	}
+	viewWidth := maxInt(contentWidth-4, 20)
+	bodyHeight := maxInt(min(m.height-12, 30), 8)
+	if bodyHeight > m.height-6 {
+		bodyHeight = maxInt(m.height-6, 8)
+	}
+	if bodyHeight <= 0 {
+		bodyHeight = 8
+	}
+	if viewWidth <= 0 {
+		viewWidth = 20
+	}
+
+	var bodyView string
+	if vp := m.historyPreviewViewport; vp != nil {
+		wrapped := wrapPreformattedContent(body, viewWidth)
+		vp.SetContent(wrapped)
+		vp.Width = viewWidth
+		vp.Height = bodyHeight
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(vp.View())
+	} else {
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(wrapPreformattedContent(body, viewWidth))
+	}
+
+	headerView := m.theme.HeaderTitle.
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render(title)
+	instructions := fmt.Sprintf(
+		"%s / %s Close",
+		m.theme.CommandBarHint.Render("Esc"),
+		m.theme.CommandBarHint.Render("Enter"),
+	)
+	instructionsView := m.theme.HeaderValue.
+		Padding(0, 2).
+		Render(instructions)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerView,
+		"",
+		bodyView,
+		"",
+		instructionsView,
+	)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
 }
 
 func (m Model) renderErrorModal() string {

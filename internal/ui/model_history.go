@@ -993,6 +993,26 @@ func (m *Model) replayHistorySelection() tea.Cmd {
 	return m.loadHistorySelection(true)
 }
 
+func (m *Model) deleteHistoryEntry(id string) (bool, error) {
+	if id == "" {
+		return false, nil
+	}
+	if m.historyStore == nil {
+		return false, nil
+	}
+	deleted, err := m.historyStore.Delete(id)
+	if err != nil || !deleted {
+		return deleted, err
+	}
+	if m.historySelectedID == id {
+		m.historySelectedID = ""
+	}
+	if m.showHistoryPreview {
+		m.closeHistoryPreview()
+	}
+	return true, nil
+}
+
 func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	item, ok := m.historyList.SelectedItem().(historyItem)
 	if !ok {

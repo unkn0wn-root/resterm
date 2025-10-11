@@ -263,6 +263,8 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		m.responseLatest.stats = report
 	}
 
+	m.recordProfileHistory(state, stats, msg, report)
+
 	summary := buildProfileSummary(state)
 	m.setStatusMessage(statusMsg{text: summary, level: statusInfo})
 

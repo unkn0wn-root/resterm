@@ -14,19 +14,50 @@ import (
 )
 
 type Entry struct {
-	ID          string        `json:"id"`
-	ExecutedAt  time.Time     `json:"executedAt"`
-	Environment string        `json:"environment"`
-	RequestName string        `json:"requestName"`
-	Method      string        `json:"method"`
-	URL         string        `json:"url"`
-	Status      string        `json:"status"`
-	StatusCode  int           `json:"statusCode"`
-	Duration    time.Duration `json:"duration"`
-	BodySnippet string        `json:"bodySnippet"`
-	RequestText string        `json:"requestText"`
-	Description string        `json:"description,omitempty"`
-	Tags        []string      `json:"tags,omitempty"`
+	ID             string          `json:"id"`
+	ExecutedAt     time.Time       `json:"executedAt"`
+	Environment    string          `json:"environment"`
+	RequestName    string          `json:"requestName"`
+	Method         string          `json:"method"`
+	URL            string          `json:"url"`
+	Status         string          `json:"status"`
+	StatusCode     int             `json:"statusCode"`
+	Duration       time.Duration   `json:"duration"`
+	BodySnippet    string          `json:"bodySnippet"`
+	RequestText    string          `json:"requestText"`
+	Description    string          `json:"description,omitempty"`
+	Tags           []string        `json:"tags,omitempty"`
+	ProfileResults *ProfileResults `json:"profileResults,omitempty"`
+}
+
+type ProfileResults struct {
+	TotalRuns      int                   `json:"totalRuns"`
+	WarmupRuns     int                   `json:"warmupRuns"`
+	SuccessfulRuns int                   `json:"successfulRuns"`
+	FailedRuns     int                   `json:"failedRuns"`
+	Latency        *ProfileLatency       `json:"latency,omitempty"`
+	Percentiles    []ProfilePercentile   `json:"percentiles,omitempty"`
+	Histogram      []ProfileHistogramBin `json:"histogram,omitempty"`
+}
+
+type ProfileLatency struct {
+	Count  int           `json:"count"`
+	Min    time.Duration `json:"min"`
+	Max    time.Duration `json:"max"`
+	Mean   time.Duration `json:"mean"`
+	Median time.Duration `json:"median"`
+	StdDev time.Duration `json:"stdDev"`
+}
+
+type ProfilePercentile struct {
+	Percentile int           `json:"percentile"`
+	Value      time.Duration `json:"value"`
+}
+
+type ProfileHistogramBin struct {
+	From  time.Duration `json:"from"`
+	To    time.Duration `json:"to"`
+	Count int           `json:"count"`
 }
 
 type Store struct {
@@ -106,6 +137,36 @@ func (s *Store) Entries() []Entry {
 	return copies
 }
 
+func (s *Store) Delete(id string) (bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.loaded {
+		if err := s.Load(); err != nil {
+			return false, err
+		}
+	}
+
+	idx := -1
+	for i, entry := range s.entries {
+		if entry.ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return false, nil
+	}
+
+	copy(s.entries[idx:], s.entries[idx+1:])
+	s.entries = s.entries[:len(s.entries)-1]
+
+	if err := s.persist(); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func (s *Store) ByRequest(identifier string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -135,9 +196,14 @@ func (s *Store) persist() error {
 		return errdef.Wrap(errdef.CodeHistory, err, "encode history")
 	}
 
-	if err := os.WriteFile(s.path, data, 0o644); err != nil {
-		return errdef.Wrap(errdef.CodeFilesystem, err, "write history")
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return errdef.Wrap(errdef.CodeFilesystem, err, "write history tmp")
 	}
+	if err := os.Rename(tmp, s.path); err != nil {
+		return errdef.Wrap(errdef.CodeFilesystem, err, "replace history file")
+	}
+
 	return nil
 }
 
