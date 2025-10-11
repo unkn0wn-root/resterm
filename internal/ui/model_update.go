@@ -92,22 +92,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "down", "j":
 				if vp != nil {
-					vp.LineDown(1)
+					vp.ScrollDown(1)
 				}
 				return m, nil
 			case "up", "k":
 				if vp != nil {
-					vp.LineUp(1)
+					vp.ScrollUp(1)
 				}
 				return m, nil
 			case "pgdown", "ctrl+f":
 				if vp != nil {
-					vp.PageDown()
+					vp.ScrollDown(vp.Height)
 				}
 				return m, nil
 			case "pgup", "ctrl+b", "ctrl+u":
 				if vp != nil {
-					vp.PageUp()
+					vp.ScrollUp(vp.Height)
 				}
 				return m, nil
 			case "home":

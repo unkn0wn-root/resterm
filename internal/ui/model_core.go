@@ -342,7 +342,6 @@ func New(cfg Config) Model {
 	envList.DisableQuitKeybindings()
 
 	previewViewport := viewport.New(0, 0)
-	previewViewport.HighPerformanceRendering = false
 	previewViewport.SetContent("")
 
 	model := Model{
