@@ -205,6 +205,77 @@ GET https://example.com/api
 	}
 }
 
+func TestParseWorkflowDirectives(t *testing.T) {
+	src := `# @workflow provision-account on-failure=continue
+# @description Provision new account flow
+# @tag smoke regression
+# @step Authenticate using=AuthLogin expect.status="200 OK"
+# @step CreateProfile using=CreateUser on-failure=stop vars.request.name={{vars.global.username}} expect.status="201 Created"
+# @step Audit using=AuditLog capture=global.auditId
+
+### AuthLogin
+GET https://example.com/auth
+
+### CreateUser
+POST https://example.com/users
+
+### AuditLog
+GET https://example.com/audit
+`
+
+	doc := Parse("workflow.http", []byte(src))
+	if len(doc.Workflows) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(doc.Workflows))
+	}
+	workflow := doc.Workflows[0]
+	if workflow.Name != "provision-account" {
+		t.Fatalf("unexpected workflow name %q", workflow.Name)
+	}
+	if workflow.DefaultOnFailure != restfile.WorkflowOnFailureContinue {
+		t.Fatalf("expected default on-failure=continue, got %s", workflow.DefaultOnFailure)
+	}
+	if workflow.Description == "" || !strings.Contains(workflow.Description, "Provision new account flow") {
+		t.Fatalf("expected workflow description, got %q", workflow.Description)
+	}
+	if len(workflow.Tags) != 2 {
+		t.Fatalf("expected 2 tags, got %v", workflow.Tags)
+	}
+	if len(workflow.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(workflow.Steps))
+	}
+	step0 := workflow.Steps[0]
+	if step0.Using != "AuthLogin" {
+		t.Fatalf("expected first step to use AuthLogin, got %q", step0.Using)
+	}
+	if step0.Expect["status"] != "200 OK" {
+		t.Fatalf("expected first step expect.status=200 OK, got %q", step0.Expect["status"])
+	}
+	step1 := workflow.Steps[1]
+	if step1.OnFailure != restfile.WorkflowOnFailureStop {
+		t.Fatalf("expected second step on-failure=stop, got %s", step1.OnFailure)
+	}
+	varsKey := "vars.request.name"
+	if step1.Vars[varsKey] != "{{vars.global.username}}" {
+		t.Fatalf("expected %s override, got %q", varsKey, step1.Vars[varsKey])
+	}
+	if step1.Expect["status"] != "201 Created" {
+		t.Fatalf("expected quoted status value, got %q", step1.Expect["status"])
+	}
+	step2 := workflow.Steps[2]
+	if step2.Options["capture"] != "global.auditId" {
+		t.Fatalf("expected capture option propagated, got %v", step2.Options)
+	}
+	if workflow.LineRange.Start != 1 {
+		t.Fatalf("expected workflow start line 1, got %d", workflow.LineRange.Start)
+	}
+	if workflow.LineRange.End < workflow.LineRange.Start {
+		t.Fatalf("invalid workflow line range: %#v", workflow.LineRange)
+	}
+	if len(doc.Requests) != 3 {
+		t.Fatalf("expected 3 requests parsed, got %d", len(doc.Requests))
+	}
+}
+
 func TestParseBlockComments(t *testing.T) {
 	src := `/**
  * @name Blocked
@@ -268,6 +339,30 @@ query FetchUser($id: ID!) {
 	}
 	if !strings.Contains(gql.Variables, "\"id\": \"123\"") {
 		t.Fatalf("expected variables json to contain id, got %q", gql.Variables)
+	}
+	if strings.Contains(gql.Query, "# @variables") {
+		t.Fatalf("expected directives stripped from query")
+	}
+}
+
+func TestParseOptionTokensQuotedValues(t *testing.T) {
+	input := `expect.status="201 Created" vars.request.item_name='Workflow Demo Item' note=alpha\ beta message="He said \"hi\"" flag`
+	opts := parseOptionTokens(input)
+
+	if got := opts["expect.status"]; got != "201 Created" {
+		t.Fatalf("expected expect.status to be '201 Created', got %q", got)
+	}
+	if got := opts["vars.request.item_name"]; got != "Workflow Demo Item" {
+		t.Fatalf("expected vars.request.item_name to keep spaces, got %q", got)
+	}
+	if got := opts["note"]; got != "alpha beta" {
+		t.Fatalf("expected escaped spaces to collapse, got %q", got)
+	}
+	if got := opts["message"]; got != "He said \"hi\"" {
+		t.Fatalf("expected escaped quotes preserved, got %q", got)
+	}
+	if got := opts["flag"]; got != "true" {
+		t.Fatalf("expected bare flag to default to true, got %q", got)
 	}
 }
 

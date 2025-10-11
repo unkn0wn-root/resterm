@@ -227,11 +227,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if _, ok := msg.(tea.WindowSizeMsg); ok {
 		var fileCmd tea.Cmd
 		var reqCmd tea.Cmd
+		var scenCmd tea.Cmd
 		prevReqIndex := m.requestList.Index()
 		m.fileList, fileCmd = m.fileList.Update(msg)
 		m.requestList, reqCmd = m.requestList.Update(msg)
+		m.workflowList, scenCmd = m.workflowList.Update(msg)
 		m.syncEditorWithRequestSelection(prevReqIndex)
-		cmds = append(cmds, fileCmd, reqCmd)
+		cmds = append(cmds, fileCmd, reqCmd, scenCmd)
 	} else {
 		switch m.focus {
 		case focusFile:
@@ -251,6 +253,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.requestList, reqCmd = m.requestList.Update(msg)
 				m.syncEditorWithRequestSelection(prevReqIndex)
 				cmds = append(cmds, reqCmd)
+			}
+		case focusWorkflows:
+			if m.suppressListKey {
+				m.suppressListKey = false
+			} else {
+				var scenCmd tea.Cmd
+				prevIdx := m.workflowList.Index()
+				m.workflowList, scenCmd = m.workflowList.Update(msg)
+				if m.workflowList.Index() != prevIdx {
+					m.updateWorkflowHistoryFilter()
+				}
+				cmds = append(cmds, scenCmd)
 			}
 		}
 	}
@@ -397,7 +411,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 	}
 
-	if m.focus != focusFile && m.focus != focusRequests {
+	if m.focus != focusFile && m.focus != focusRequests && m.focus != focusWorkflows {
 		m.suppressListKey = false
 	}
 
@@ -526,7 +540,33 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			items := m.fileList.Items()
 			idx := m.fileList.Index()
 			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
-				m.setFocus(focusRequests)
+				if len(m.requestItems) > 0 {
+					m.setFocus(focusRequests)
+				} else if len(m.workflowItems) > 0 {
+					m.setFocus(focusWorkflows)
+				} else {
+					m.setFocus(focusEditor)
+				}
+				return combine(nil)
+			}
+		}
+		if m.focus == focusRequests && m.requestList.FilterState() != list.Filtering {
+			items := m.requestList.Items()
+			idx := m.requestList.Index()
+			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
+				if len(m.workflowItems) > 0 {
+					m.setFocus(focusWorkflows)
+				} else {
+					m.setFocus(focusEditor)
+				}
+				return combine(nil)
+			}
+		}
+		if m.focus == focusWorkflows && m.workflowList.FilterState() != list.Filtering {
+			items := m.workflowList.Items()
+			idx := m.workflowList.Index()
+			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
+				m.setFocus(focusEditor)
 				return combine(nil)
 			}
 		}
@@ -536,6 +576,18 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			idx := m.requestList.Index()
 			if len(items) == 0 || idx <= 0 {
 				m.setFocus(focusFile)
+				return combine(nil)
+			}
+		}
+		if m.focus == focusWorkflows && m.workflowList.FilterState() != list.Filtering {
+			items := m.workflowList.Items()
+			idx := m.workflowList.Index()
+			if len(items) == 0 || idx <= 0 {
+				if len(m.requestItems) > 0 {
+					m.setFocus(focusRequests)
+				} else {
+					m.setFocus(focusFile)
+				}
 				return combine(nil)
 			}
 		}
@@ -687,6 +739,15 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 	}
 
+	if m.focus == focusWorkflows {
+		switch {
+		case keyStr == "enter":
+			return combine(m.runSelectedWorkflow())
+		case isSpaceKey(msg):
+			return combine(m.runSelectedWorkflow())
+		}
+	}
+
 	if m.focus == focusResponse {
 		if m.responsePaneChord {
 			switch keyStr {
@@ -800,7 +861,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 	}
 
-	if m.focus != focusFile && m.focus != focusRequests {
+	if m.focus != focusFile && m.focus != focusRequests && m.focus != focusWorkflows {
 		m.suppressListKey = false
 	}
 

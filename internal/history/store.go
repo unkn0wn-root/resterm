@@ -7,10 +7,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type Entry struct {
@@ -73,6 +75,10 @@ func NewStore(path string, maxEntries int) *Store {
 		maxEntries = 200
 	}
 	return &Store{path: path, maxEntries: maxEntries}
+}
+
+func NormalizeWorkflowName(name string) string {
+	return strings.TrimSpace(name)
 }
 
 func (s *Store) Load() error {
@@ -174,16 +180,38 @@ func (s *Store) ByRequest(identifier string) []Entry {
 		return s.Entries()
 	}
 
-	var result []Entry
+	var matched []Entry
 	for _, entry := range s.entries {
+		if entry.Method == restfile.HistoryMethodWorkflow {
+			continue
+		}
 		if entry.RequestName == identifier || entry.URL == identifier {
-			result = append(result, entry)
+			matched = append(matched, entry)
 		}
 	}
-	sort.SliceStable(result, func(i, j int) bool {
-		return newerFirst(result[i], result[j])
+	sort.SliceStable(matched, func(i, j int) bool {
+		return newerFirst(matched[i], matched[j])
 	})
-	return result
+	return matched
+}
+
+func (s *Store) ByWorkflow(name string) []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	trimmed := NormalizeWorkflowName(name)
+	if trimmed == "" {
+		return nil
+	}
+	var matched []Entry
+	for _, entry := range s.entries {
+		if entry.Method == restfile.HistoryMethodWorkflow && strings.EqualFold(NormalizeWorkflowName(entry.RequestName), trimmed) {
+			matched = append(matched, entry)
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return newerFirst(matched[i], matched[j])
+	})
+	return matched
 }
 
 func (s *Store) persist() error {

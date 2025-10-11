@@ -141,3 +141,56 @@ func TestViewRespectsFrameDimensions(t *testing.T) {
 		t.Fatalf("expected view height %d, got %d", model.frameHeight, got)
 	}
 }
+
+func TestApplyLayoutAccountsForWorkflowPadding(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 120
+	model.height = 60
+	model.ready = true
+	model.workflowItems = []workflowListItem{{}}
+	model.showWorkflow = true
+	model.sidebarSplit = sidebarWorkflowSplit
+	_ = model.applyLayout()
+
+	gaps := sidebarSplitPadding + 1
+	if total := model.sidebarFilesHeight + model.sidebarRequestsHeight + gaps; total != model.paneContentHeight {
+		t.Fatalf("expected pane content height %d, got %d", model.paneContentHeight, total)
+	}
+	requestHeight := model.requestList.Height() + sidebarChrome
+	workflowHeight := model.workflowList.Height() + sidebarChrome
+	if requestHeight <= 0 || workflowHeight <= 0 {
+		t.Fatalf("expected positive section heights, got %d and %d", requestHeight, workflowHeight)
+	}
+	if got := requestHeight + workflowHeight; got != model.sidebarRequestsHeight {
+		t.Fatalf("expected combined request heights %d, got %d", model.sidebarRequestsHeight, got)
+	}
+	if diff := requestHeight - workflowHeight; diff > 1 || diff < -1 {
+		t.Fatalf("expected request/workflow sections to remain balanced, requests=%d workflows=%d", requestHeight, workflowHeight)
+	}
+}
+
+func TestApplyLayoutMaintainsHeightWithWorkflowFocus(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 120
+	model.height = 60
+	model.ready = true
+	model.focus = focusWorkflows
+	model.workflowItems = []workflowListItem{{}}
+	model.showWorkflow = true
+	model.sidebarSplit = sidebarWorkflowSplit
+	_ = model.applyLayout()
+
+	gaps := sidebarSplitPadding + 1
+	total := model.sidebarFilesHeight + model.sidebarRequestsHeight + gaps
+	if total != model.paneContentHeight {
+		t.Fatalf("expected pane height %d, got %d", model.paneContentHeight, total)
+	}
+
+	expectedRequests := (model.requestList.Height() + sidebarChrome) +
+		(model.workflowList.Height() + sidebarChrome) + sidebarFocusPad
+	if model.sidebarRequestsHeight != expectedRequests {
+		t.Fatalf("expected requests height %d, got %d", expectedRequests, model.sidebarRequestsHeight)
+	}
+}

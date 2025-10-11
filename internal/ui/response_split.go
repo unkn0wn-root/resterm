@@ -19,12 +19,15 @@ const (
 )
 
 type responseSnapshot struct {
-	id      string
-	pretty  string
-	raw     string
-	headers string
-	stats   string
-	ready   bool
+	id            string
+	pretty        string
+	raw           string
+	headers       string
+	stats         string
+	statsColored  string
+	statsColorize bool
+	statsKind     statsReportKind
+	ready         bool
 }
 
 type responsePaneState struct {
@@ -364,7 +367,16 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 		if strings.TrimSpace(snapshot.stats) == "" {
 			return "<no stats>\n", tab
 		}
-		return ensureTrailingNewline(snapshot.stats), tab
+		content := snapshot.stats
+		if snapshot.statsColorize {
+			if snapshot.statsColored == "" {
+				snapshot.statsColored = colorizeStatsReport(snapshot.stats, snapshot.statsKind)
+			}
+			if strings.TrimSpace(snapshot.statsColored) != "" {
+				content = snapshot.statsColored
+			}
+		}
+		return ensureTrailingNewline(content), tab
 	case responseTabDiff:
 		baseTab := pane.ensureContentTab()
 		if diff, ok := m.computeDiffFor(id, baseTab); ok {

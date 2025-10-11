@@ -24,6 +24,11 @@ const responseLoadingTickInterval = 200 * time.Millisecond
 type responseLoadingTickMsg struct{}
 
 func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
+	if state := m.workflowRun; state != nil {
+		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
+			return m.handleWorkflowResponse(msg)
+		}
+	}
 	if state := m.profileRun; state != nil {
 		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
 			return m.handleProfileResponse(msg)
@@ -659,24 +664,39 @@ func (m *Model) syncHistory() {
 		identifier = requestIdentifier(m.currentRequest)
 	}
 
-	entries := m.historyStore.ByRequest(identifier)
+	var entries []history.Entry
+	switch {
+	case history.NormalizeWorkflowName(m.historyWorkflowName) != "":
+		entries = m.historyStore.ByWorkflow(m.historyWorkflowName)
+	case identifier != "":
+		entries = m.historyStore.ByRequest(identifier)
+	default:
+		entries = m.historyStore.Entries()
+	}
 	m.historyEntries = entries
 	m.historyList.SetItems(makeHistoryItems(entries))
 	m.restoreHistorySelection()
 }
 
 func (m *Model) syncRequestList(doc *restfile.Document) {
+	_ = m.syncWorkflowList(doc)
 	items, listItems := buildRequestItems(doc)
 	m.requestItems = items
 	if len(listItems) == 0 {
 		m.requestList.SetItems(nil)
 		m.requestList.Select(-1)
+		if m.ready {
+			m.applyLayout()
+		}
 		return
 	}
 	m.requestList.SetItems(listItems)
 	if m.selectRequestItemByKey(m.activeRequestKey) {
 		if idx := m.requestList.Index(); idx >= 0 && idx < len(m.requestItems) {
 			m.currentRequest = m.requestItems[idx].request
+		}
+		if m.ready {
+			m.applyLayout()
 		}
 		return
 	}
@@ -686,6 +706,9 @@ func (m *Model) syncRequestList(doc *restfile.Document) {
 		m.activeRequestTitle = requestDisplayName(m.requestItems[0].request)
 		m.activeRequestKey = requestKey(m.requestItems[0].request)
 	}
+	if m.ready {
+		m.applyLayout()
+	}
 }
 
 func (m *Model) setActiveRequest(req *restfile.Request) {
@@ -694,6 +717,12 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 		m.activeRequestKey = ""
 		m.currentRequest = nil
 		return
+	}
+	if m.historyWorkflowName != "" {
+		m.historyWorkflowName = ""
+		if m.ready {
+			m.syncHistory()
+		}
 	}
 	prev := m.activeRequestKey
 	m.currentRequest = req

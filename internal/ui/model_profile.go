@@ -249,11 +249,14 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		}
 	} else {
 		snapshot := &responseSnapshot{
-			pretty:  report,
-			raw:     report,
-			headers: report,
-			stats:   report,
-			ready:   true,
+			pretty:        report,
+			raw:           report,
+			headers:       report,
+			stats:         report,
+			statsColorize: true,
+			statsKind:     statsReportKindProfile,
+			statsColored:  "",
+			ready:         true,
 		}
 		m.responseLatest = snapshot
 		m.responsePending = nil
@@ -261,6 +264,9 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 
 	if m.responseLatest != nil {
 		m.responseLatest.stats = report
+		m.responseLatest.statsColored = ""
+		m.responseLatest.statsColorize = true
+		m.responseLatest.statsKind = statsReportKindProfile
 	}
 
 	m.recordProfileHistory(state, stats, msg, report)

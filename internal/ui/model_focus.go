@@ -8,27 +8,55 @@ func (m *Model) cycleFocus(forward bool) {
 	switch m.focus {
 	case focusFile:
 		if forward {
-			m.setFocus(focusRequests)
+			if len(m.requestItems) > 0 {
+				m.setFocus(focusRequests)
+			} else if len(m.workflowItems) > 0 {
+				m.setFocus(focusWorkflows)
+			} else {
+				m.setFocus(focusEditor)
+			}
 		} else {
 			m.setFocus(focusResponse)
 		}
 	case focusRequests:
 		if forward {
-			m.setFocus(focusEditor)
+			if len(m.workflowItems) > 0 {
+				m.setFocus(focusWorkflows)
+			} else {
+				m.setFocus(focusEditor)
+			}
 		} else {
 			m.setFocus(focusFile)
+		}
+	case focusWorkflows:
+		if forward {
+			m.setFocus(focusEditor)
+		} else {
+			if len(m.requestItems) > 0 {
+				m.setFocus(focusRequests)
+			} else {
+				m.setFocus(focusFile)
+			}
 		}
 	case focusEditor:
 		if forward {
 			m.setFocus(focusResponse)
 		} else {
-			m.setFocus(focusRequests)
+			if len(m.workflowItems) > 0 {
+				m.setFocus(focusWorkflows)
+			} else {
+				m.setFocus(focusRequests)
+			}
 		}
 	case focusResponse:
 		if forward {
 			m.setFocus(focusFile)
 		} else {
-			m.setFocus(focusEditor)
+			if len(m.workflowItems) > 0 {
+				m.setFocus(focusWorkflows)
+			} else {
+				m.setFocus(focusEditor)
+			}
 		}
 	}
 }
