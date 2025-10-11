@@ -15,6 +15,9 @@ func (m *Model) recordProfileHistory(st *profileState, stats analysis.LatencySta
 	if m.historyStore == nil || st == nil || st.base == nil {
 		return
 	}
+	if st.base.Metadata.NoLog {
+		return
+	}
 
 	entry := m.buildProfileHistoryEntry(st, stats, msg, report)
 	if entry == nil {
