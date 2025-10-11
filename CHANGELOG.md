@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.23](https://github.com/unkn0wn-root/resterm/compare/v0.1.22...v0.1.23) (2025-10-11)
+
+
+### Features
+
+* **history:** record profile runs, add preview modal, enable delete ([bb90292](https://github.com/unkn0wn-root/resterm/commit/bb90292e2cb50fe7a40c7b53ce6e3333fad0dd37))
+
+
+### Bug Fixes
+
+* lint errors ([e11d388](https://github.com/unkn0wn-root/resterm/commit/e11d388038fada48c72ecb5e7551dda824d5b3c6))
+
 ### [0.1.22](https://github.com/unkn0wn-root/resterm/compare/v0.1.21...v0.1.22) (2025-10-10)
 
 
