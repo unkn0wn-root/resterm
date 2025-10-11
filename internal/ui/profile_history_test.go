@@ -108,3 +108,23 @@ func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 		t.Fatalf("expected profile snippet placeholder, got %q", entry.BodySnippet)
 	}
 }
+
+func TestRecordProfileHistorySkipsNoLog(t *testing.T) {
+	dir := t.TempDir()
+	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	model := New(Config{History: store})
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/profile",
+		Metadata: restfile.RequestMetadata{
+			NoLog: true,
+		},
+	}
+	st := &profileState{base: req, total: 1, successes: []time.Duration{time.Millisecond}}
+	stats := analysis.ComputeLatencyStats(st.successes, []int{}, 1)
+	msg := responseMsg{response: &httpclient.Response{Status: "200 OK", StatusCode: 200}}
+	model.recordProfileHistory(st, stats, msg, "")
+	if entries := store.Entries(); len(entries) != 0 {
+		t.Fatalf("expected no history entries when no-log set, got %d", len(entries))
+	}
+}
