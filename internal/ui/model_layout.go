@@ -82,57 +82,110 @@ func (m *Model) applyLayout() tea.Cmd {
 		responseWidth = 1
 	}
 
-	available := paneHeight - sidebarSplitPadding
+	hasWorkflow := len(m.workflowItems) > 0
+	fileBorder := 0
+	requestsBorder := 0
+	workflowBorder := 0
+	switch m.focus {
+	case focusFile:
+		fileBorder = sidebarFocusPad
+	case focusRequests:
+		requestsBorder = sidebarFocusPad
+	case focusWorkflows:
+		if hasWorkflow {
+			workflowBorder = sidebarFocusPad
+		}
+	}
+
+	padding := sidebarSplitPadding
+	if hasWorkflow {
+		padding++
+	}
+
+	borderExtra := fileBorder + requestsBorder + workflowBorder
+	available := paneHeight - padding - borderExtra
 	if available < 0 {
 		available = 0
 	}
 
-	filesHeight := int(math.Round(float64(paneHeight) * m.sidebarSplit))
-	if filesHeight < 0 {
-		filesHeight = 0
+	filesBase := int(math.Round(float64(available) * m.sidebarSplit))
+	if filesBase < 0 {
+		filesBase = 0
 	}
 
-	maxFiles := available - minSidebarRequests
-	if maxFiles < 0 {
-		maxFiles = 0
+	minRequestsBase := minSidebarRequests
+	if hasWorkflow {
+		minRequestsBase = minSidebarRequests * 2
+	}
+	if minRequestsBase > available {
+		minRequestsBase = available
+	}
+	maxFilesBase := available - minRequestsBase
+	if maxFilesBase < 0 {
+		maxFilesBase = 0
 	}
 
-	minFilesAllowed := minSidebarFiles
-	if minFilesAllowed > available {
-		minFilesAllowed = available
+	minFilesBase := minSidebarFiles
+	if minFilesBase > available {
+		minFilesBase = available
 	}
-	if minFilesAllowed > maxFiles {
-		minFilesAllowed = maxFiles
+	if minFilesBase > maxFilesBase {
+		minFilesBase = maxFilesBase
 	}
-	if filesHeight < minFilesAllowed {
-		filesHeight = minFilesAllowed
+	if filesBase < minFilesBase {
+		filesBase = minFilesBase
 	}
-	if filesHeight > maxFiles {
-		filesHeight = maxFiles
+	if filesBase > maxFilesBase {
+		filesBase = maxFilesBase
 	}
 
-	requestsHeight := available - filesHeight
-	if requestsHeight < minSidebarRequests {
-		desired := minSidebarRequests
+	requestsBase := available - filesBase
+	if requestsBase < minRequestsBase {
+		desired := minRequestsBase
 		if desired > available {
 			desired = available
 		}
-		requestsHeight = desired
-		filesHeight = available - requestsHeight
+		requestsBase = desired
+		filesBase = available - requestsBase
+		if filesBase < 0 {
+			filesBase = 0
+		}
 	}
 
-	if filesHeight < 0 {
-		filesHeight = 0
+	requestBase := requestsBase
+	workflowBase := 0
+	if hasWorkflow {
+		combinedMin := minSidebarRequests * 2
+		if requestsBase >= combinedMin {
+			workflowBase = requestsBase / 2
+			if workflowBase < minSidebarRequests {
+				workflowBase = minSidebarRequests
+			}
+			if workflowBase > requestsBase-minSidebarRequests {
+				workflowBase = requestsBase - minSidebarRequests
+			}
+			requestBase = requestsBase - workflowBase
+		} else {
+			requestBase = minInt(requestsBase, minSidebarRequests)
+			workflowBase = requestsBase - requestBase
+			if workflowBase < 0 {
+				workflowBase = 0
+			}
+		}
 	}
+	requestsBase = requestBase + workflowBase
 
-	if requestsHeight < 0 {
-		requestsHeight = 0
-	}
+	filesHeight := filesBase + fileBorder
+	requestHeight := requestBase + requestsBorder
+	workflowHeight := workflowBase + workflowBorder
+	combinedRequestsHeight := requestHeight + workflowHeight
 
 	m.sidebarFilesHeight = filesHeight
-	m.sidebarRequestsHeight = requestsHeight
-	if paneHeight > 0 {
-		ratio := float64(filesHeight) / float64(paneHeight)
+	m.sidebarRequestsHeight = combinedRequestsHeight
+
+	baseTotal := filesBase + requestsBase
+	if baseTotal > 0 {
+		ratio := float64(filesBase) / float64(baseTotal)
 		if ratio < minSidebarSplit {
 			ratio = minSidebarSplit
 		}
@@ -153,8 +206,27 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.editorSplit = realEditorRatio
 	}
 
-	m.fileList.SetSize(fileWidth-4, maxInt(filesHeight-2, 1))
-	m.requestList.SetSize(fileWidth-4, maxInt(requestsHeight-2, 1))
+	fileListHeight := filesBase - sidebarChrome
+	if fileListHeight < 0 {
+		fileListHeight = 0
+	}
+	m.fileList.SetSize(fileWidth-4, fileListHeight)
+
+	requestListHeight := requestBase - sidebarChrome
+	if requestListHeight < 0 {
+		requestListHeight = 0
+	}
+	m.requestList.SetSize(fileWidth-4, requestListHeight)
+
+	if hasWorkflow && workflowBase > 0 {
+		workflowListHeight := workflowBase - sidebarChrome
+		if workflowListHeight < 0 {
+			workflowListHeight = 0
+		}
+		m.workflowList.SetSize(fileWidth-4, workflowListHeight)
+	} else {
+		m.workflowList.SetSize(fileWidth-4, 0)
+	}
 	m.editor.SetWidth(maxInt(editorWidth-4, 1))
 	m.editor.SetHeight(maxInt(paneHeight, 1))
 
@@ -310,8 +382,19 @@ func (m *Model) adjustSidebarSplit(delta float64) (bool, bool, tea.Cmd) {
 		return false, bounded, nil
 	}
 
+	prevSplit := m.sidebarSplit
+	prevFiles := m.sidebarFilesHeight
+	prevRequests := m.sidebarRequestsHeight
 	m.sidebarSplit = updated
-	return true, bounded, m.applyLayout()
+	cmd := m.applyLayout()
+	newSplit := m.sidebarSplit
+	newFiles := m.sidebarFilesHeight
+	newRequests := m.sidebarRequestsHeight
+	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newFiles != prevFiles || newRequests != prevRequests
+	if !changed {
+		return false, true, cmd
+	}
+	return true, bounded, cmd
 }
 
 func (m *Model) adjustEditorSplit(delta float64) (bool, bool, tea.Cmd) {

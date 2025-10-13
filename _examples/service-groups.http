@@ -29,7 +29,7 @@ Authorization: Bearer {{auth.token}}
   }
 }
 
-### Billing Scenarios
+### Billing Workflows
 # @name Create Invoice
 # @tag billing create
 POST {{services.billing.base}}/invoices
@@ -53,7 +53,7 @@ Authorization: Bearer {{auth.token}}
   ]
 }
 
-### Billing Scenarios
+### Billing Workflows
 # @name Fetch Invoice
 # @tag billing read
 GET {{services.billing.base}}/invoices/{{billing.sampleInvoiceId}}

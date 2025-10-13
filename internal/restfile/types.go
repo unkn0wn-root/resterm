@@ -114,13 +114,45 @@ type Request struct {
 	GRPC         *GRPCRequest
 }
 
+const (
+	HistoryMethodWorkflow = "WORKFLOW"
+)
+
 type Document struct {
 	Path      string
 	Variables []Variable
 	Globals   []Variable
 	Requests  []*Request
+	Workflows []Workflow
 	Errors    []ParseError
 	Raw       []byte
+}
+
+type WorkflowFailureMode string
+
+const (
+	WorkflowOnFailureStop     WorkflowFailureMode = "stop"
+	WorkflowOnFailureContinue WorkflowFailureMode = "continue"
+)
+
+type Workflow struct {
+	Name             string
+	Description      string
+	Tags             []string
+	DefaultOnFailure WorkflowFailureMode
+	Options          map[string]string
+	Steps            []WorkflowStep
+	LineRange        LineRange
+}
+
+type WorkflowStep struct {
+	Name      string
+	Using     string
+	OnFailure WorkflowFailureMode
+	Expect    map[string]string
+	Vars      map[string]string
+	Options   map[string]string
+	Line      int
 }
 
 type ParseError struct {

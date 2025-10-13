@@ -49,6 +49,7 @@ type documentBuilder struct {
 	fileVars   []restfile.Variable
 	globalVars []restfile.Variable
 	inBlock    bool
+	workflow   *workflowBuilder
 }
 
 type requestBuilder struct {
@@ -64,6 +65,12 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
+}
+
+type workflowBuilder struct {
+	startLine int
+	endLine   int
+	workflow  restfile.Workflow
 }
 
 func newDocumentBuilder(doc *restfile.Document) *documentBuilder {
@@ -102,6 +109,9 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if strings.HasPrefix(trimmed, "###") {
+		if b.workflow != nil {
+			b.flushWorkflow(lineNumber - 1)
+		}
 		b.flushRequest(lineNumber - 1)
 		return
 	}
@@ -268,6 +278,22 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	key, rest := splitDirective(directive)
 	if key == "" {
 		return
+	}
+
+	if key == "workflow" {
+		b.startWorkflow(line, rest)
+		return
+	}
+	if key == "step" {
+		if b.workflow != nil {
+			b.workflow.addStep(line, rest)
+		}
+		return
+	}
+	if b.workflow != nil && !b.inRequest {
+		if b.workflow.handleDirective(key, rest, line) {
+			return
+		}
 	}
 
 	if b.handleScopedVariableDirective(key, rest, line) {
@@ -719,6 +745,120 @@ func splitDirective(text string) (string, string) {
 	return key, rest
 }
 
+func parseOptionTokens(input string) map[string]string {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return map[string]string{}
+	}
+	tokens := tokenizeOptionTokens(trimmed)
+	if len(tokens) == 0 {
+		return map[string]string{}
+	}
+	options := make(map[string]string, len(tokens))
+	for _, token := range tokens {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		key := token
+		value := "true"
+		if idx := strings.Index(token, "="); idx >= 0 {
+			key = strings.TrimSpace(token[:idx])
+			value = strings.TrimSpace(token[idx+1:])
+		}
+		if key == "" {
+			continue
+		}
+		options[strings.ToLower(key)] = trimQuotes(value)
+	}
+	return options
+}
+
+func tokenizeOptionTokens(input string) []string {
+	var tokens []string
+	var current strings.Builder
+	var quote rune
+	escaping := false
+
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		tokens = append(tokens, current.String())
+		current.Reset()
+	}
+
+	for _, r := range input {
+		switch {
+		case escaping:
+			current.WriteRune(r)
+			escaping = false
+		case r == '\\':
+			escaping = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+				break
+			}
+			current.WriteRune(r)
+		case r == '"' || r == '\'':
+			quote = r
+		case unicode.IsSpace(r):
+			flush()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	if escaping {
+		current.WriteRune('\\')
+	}
+	flush()
+	return tokens
+}
+
+func trimQuotes(value string) string {
+	if len(value) >= 2 {
+		first := value[0]
+		last := value[len(value)-1]
+		if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+			return value[1 : len(value)-1]
+		}
+	}
+	return value
+}
+
+func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool) {
+	trimmed := strings.TrimSpace(strings.ToLower(value))
+	if trimmed == "" {
+		return "", false
+	}
+	switch trimmed {
+	case "stop", "fail", "abort":
+		return restfile.WorkflowOnFailureStop, true
+	case "continue", "skip":
+		return restfile.WorkflowOnFailureContinue, true
+	default:
+		return "", false
+	}
+}
+
+func parseTagList(text string) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	parts := strings.FieldsFunc(text, func(r rune) bool {
+		return unicode.IsSpace(r) || r == ','
+	})
+	var tags []string
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			tags = append(tags, trimmed)
+		}
+	}
+	return tags
+}
+
 func contains(list []string, value string) bool {
 	for _, item := range list {
 		if strings.EqualFold(item, value) {
@@ -790,6 +930,10 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 		return true
 	}
 
+	if b.workflow != nil {
+		b.flushWorkflow(line - 1)
+	}
+
 	b.inRequest = true
 	b.request = &requestBuilder{
 		startLine:         line,
@@ -829,8 +973,20 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.inBlock = false
 }
 
+func (b *documentBuilder) flushWorkflow(line int) {
+	if b.workflow == nil {
+		return
+	}
+	scene := b.workflow.build(line)
+	if len(scene.Steps) > 0 {
+		b.doc.Workflows = append(b.doc.Workflows, scene)
+	}
+	b.workflow = nil
+}
+
 func (b *documentBuilder) finish() {
 	b.flushRequest(0)
+	b.flushWorkflow(0)
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
 }
@@ -877,4 +1033,171 @@ func (r *requestBuilder) build() *restfile.Request {
 	}
 
 	return req
+}
+
+func (b *documentBuilder) startWorkflow(line int, rest string) {
+	if b.inRequest {
+		b.flushRequest(line - 1)
+	}
+	nameToken, remainder := splitFirst(rest)
+	if nameToken == "" || strings.Contains(nameToken, "=") {
+		return
+	}
+	b.flushWorkflow(line - 1)
+	sb := newWorkflowBuilder(line, nameToken)
+	sb.applyOptions(parseOptionTokens(remainder))
+	sb.touch(line)
+	b.workflow = sb
+}
+
+func newWorkflowBuilder(line int, name string) *workflowBuilder {
+	return &workflowBuilder{
+		startLine: line,
+		endLine:   line,
+		workflow: restfile.Workflow{
+			Name:             strings.TrimSpace(name),
+			Tags:             []string{},
+			DefaultOnFailure: restfile.WorkflowOnFailureStop,
+		},
+	}
+}
+
+func (s *workflowBuilder) touch(line int) {
+	if line > s.endLine {
+		s.endLine = line
+	}
+}
+
+func (s *workflowBuilder) applyOptions(opts map[string]string) {
+	if len(opts) == 0 {
+		return
+	}
+	leftovers := make(map[string]string)
+	for key, value := range opts {
+		switch key {
+		case "on-failure", "onfailure":
+			if mode, ok := parseWorkflowFailureMode(value); ok {
+				s.workflow.DefaultOnFailure = mode
+			}
+		default:
+			leftovers[key] = value
+		}
+	}
+	if len(leftovers) > 0 {
+		if s.workflow.Options == nil {
+			s.workflow.Options = make(map[string]string, len(leftovers))
+		}
+		for key, value := range leftovers {
+			s.workflow.Options[key] = value
+		}
+	}
+}
+
+func (s *workflowBuilder) handleDirective(key, rest string, line int) bool {
+	switch key {
+	case "description", "desc":
+		if rest == "" {
+			return true
+		}
+		if s.workflow.Description != "" {
+			s.workflow.Description += "\n"
+		}
+		s.workflow.Description += rest
+		s.touch(line)
+		return true
+	case "tag", "tags":
+		tags := parseTagList(rest)
+		if len(tags) == 0 {
+			return true
+		}
+		for _, tag := range tags {
+			if !contains(s.workflow.Tags, tag) {
+				s.workflow.Tags = append(s.workflow.Tags, tag)
+			}
+		}
+		s.touch(line)
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *workflowBuilder) addStep(line int, rest string) {
+	remainder := strings.TrimSpace(rest)
+	if remainder == "" {
+		return
+	}
+	name := ""
+	firstToken, remainderAfterFirst := splitFirst(remainder)
+	if firstToken != "" && !strings.Contains(firstToken, "=") {
+		name = firstToken
+		remainder = remainderAfterFirst
+	}
+	options := parseOptionTokens(remainder)
+	if explicitName, ok := options["name"]; ok {
+		if name == "" {
+			name = explicitName
+		}
+		delete(options, "name")
+	}
+	using := options["using"]
+	if using == "" {
+		return
+	}
+	delete(options, "using")
+	step := restfile.WorkflowStep{
+		Name:      name,
+		Using:     strings.TrimSpace(using),
+		OnFailure: s.workflow.DefaultOnFailure,
+		Line:      line,
+	}
+	if mode, ok := options["on-failure"]; ok {
+		if parsed, ok := parseWorkflowFailureMode(mode); ok {
+			step.OnFailure = parsed
+		}
+		delete(options, "on-failure")
+	}
+	if len(options) > 0 {
+		leftover := make(map[string]string)
+		for key, value := range options {
+			switch {
+			case strings.HasPrefix(key, "expect."):
+				suffix := strings.TrimPrefix(key, "expect.")
+				if suffix == "" {
+					continue
+				}
+				if step.Expect == nil {
+					step.Expect = make(map[string]string)
+				}
+				step.Expect[suffix] = value
+			case strings.HasPrefix(key, "vars."):
+				sanitized := strings.TrimSpace(key)
+				if sanitized == "" {
+					continue
+				}
+				if step.Vars == nil {
+					step.Vars = make(map[string]string)
+				}
+				step.Vars[sanitized] = value
+			default:
+				leftover[key] = value
+			}
+		}
+		if len(leftover) > 0 {
+			step.Options = leftover
+		}
+	}
+	s.workflow.Steps = append(s.workflow.Steps, step)
+	s.touch(line)
+}
+
+func (s *workflowBuilder) build(line int) restfile.Workflow {
+	if line > 0 {
+		s.touch(line)
+	}
+	s.workflow.LineRange = restfile.LineRange{Start: s.startLine, End: s.endLine}
+	if s.workflow.LineRange.End < s.workflow.LineRange.Start {
+		s.workflow.LineRange.End = s.workflow.LineRange.Start
+	}
+	return s.workflow
 }

@@ -105,7 +105,7 @@ func (m Model) renderWithinAppFrame(content string) string {
 
 func (m Model) renderFilePane() string {
 	style := m.theme.BrowserBorder
-	paneActive := m.focus == focusFile || m.focus == focusRequests
+	paneActive := m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows
 	switch m.focus {
 	case focusFile:
 		style = style.
@@ -113,6 +113,11 @@ func (m Model) renderFilePane() string {
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	case focusRequests:
+		style = style.
+			BorderForeground(m.theme.PaneBorderFocusRequests).
+			Bold(true).
+			BorderStyle(lipgloss.ThickBorder())
+	case focusWorkflows:
 		style = style.
 			BorderForeground(m.theme.PaneBorderFocusRequests).
 			Bold(true).
@@ -129,6 +134,7 @@ func (m Model) renderFilePane() string {
 	titleBase := m.theme.PaneTitle.Width(innerWidth).Align(lipgloss.Center)
 	filesTitle := titleBase.Render(strings.ToUpper("Files"))
 	requestsTitle := titleBase.Render(strings.ToUpper("Requests"))
+	workflowsTitle := titleBase.Render(strings.ToUpper("Workflows"))
 	if m.focus == focusFile {
 		filesTitle = m.theme.PaneTitleFile.
 			Width(innerWidth).
@@ -143,10 +149,18 @@ func (m Model) renderFilePane() string {
 			Foreground(m.theme.PaneActiveForeground).
 			Render(strings.ToUpper("Requests"))
 	}
+	if m.focus == focusWorkflows {
+		workflowsTitle = m.theme.PaneTitleRequests.
+			Width(innerWidth).
+			Align(lipgloss.Center).
+			Foreground(m.theme.PaneActiveForeground).
+			Render(strings.ToUpper("Workflows"))
+	}
 
 	listStyle := lipgloss.NewStyle().Width(innerWidth)
 	filesView := listStyle.Render(m.fileList.View())
 	requestsView := listStyle.Render(m.requestList.View())
+	workflowsView := listStyle.Render(m.workflowList.View())
 	if m.focus == focusFile {
 		filesView = listStyle.
 			Foreground(m.theme.PaneBorderFocusFile).
@@ -157,12 +171,25 @@ func (m Model) renderFilePane() string {
 			Foreground(m.theme.PaneBorderFocusRequests).
 			Render(m.requestList.View())
 	}
+	if m.focus == focusWorkflows {
+		workflowsView = listStyle.
+			Foreground(m.theme.PaneBorderFocusRequests).
+			Render(m.workflowList.View())
+	}
 	if len(m.requestItems) == 0 {
 		empty := lipgloss.NewStyle().
 			Width(innerWidth).
 			Align(lipgloss.Center)
 		requestsView = empty.Render(
 			m.theme.HeaderValue.Render("No requests parsed"),
+		)
+	}
+	if len(m.workflowItems) == 0 {
+		empty := lipgloss.NewStyle().
+			Width(innerWidth).
+			Align(lipgloss.Center)
+		workflowsView = empty.Render(
+			m.theme.HeaderValue.Render("No workflows defined"),
 		)
 	}
 	separator := m.theme.PaneDivider.
@@ -181,6 +208,12 @@ func (m Model) renderFilePane() string {
 		separator,
 		requestsView,
 	)
+	workflowsSection := lipgloss.JoinVertical(
+		lipgloss.Left,
+		workflowsTitle,
+		separator,
+		workflowsView,
+	)
 
 	if m.focus == focusFile {
 		highlight := lipgloss.NewStyle().
@@ -196,22 +229,32 @@ func (m Model) renderFilePane() string {
 			Padding(0, 1)
 		requestsSection = highlight.Render(requestsSection)
 	}
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		filesSection,
-		"",
-		requestsSection,
-	)
+	if m.focus == focusWorkflows {
+		highlight := lipgloss.NewStyle().
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(m.theme.PaneBorderFocusRequests).
+			Padding(0, 1)
+		workflowsSection = highlight.Render(workflowsSection)
+	}
+	sections := []string{filesSection, "", requestsSection}
+	if len(m.workflowItems) > 0 {
+		sections = append(sections, "", workflowsSection)
+	}
+	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
 	if !paneActive {
 		content = faintStyle.Render(content)
 	}
 
-	minHeight := m.fileList.Height() + m.requestList.Height() + 6
-	frameHeight := style.GetVerticalFrameSize()
-	targetHeight := m.paneContentHeight + frameHeight
-	if targetHeight < minHeight {
-		targetHeight = minHeight
+	gapCount := sidebarSplitPadding
+	if len(m.workflowItems) > 0 {
+		gapCount++
 	}
+	contentHeight := m.sidebarFilesHeight + m.sidebarRequestsHeight + gapCount
+	if contentHeight < m.paneContentHeight {
+		contentHeight = m.paneContentHeight
+	}
+	frameHeight := style.GetVerticalFrameSize()
+	targetHeight := contentHeight + frameHeight
 	return style.
 		Width(width).
 		Height(targetHeight).
@@ -1287,6 +1330,8 @@ func (m Model) focusLabel() string {
 		return "Files"
 	case focusRequests:
 		return "Requests"
+	case focusWorkflows:
+		return "Workflows"
 	case focusEditor:
 		return "Editor"
 	case focusResponse:

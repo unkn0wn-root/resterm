@@ -31,6 +31,7 @@ type paneFocus int
 const (
 	focusFile paneFocus = iota
 	focusRequests
+	focusWorkflows
 	focusEditor
 	focusResponse
 )
@@ -66,13 +67,16 @@ const historySnippetMaxLines = 24
 const tabIndicatorPrefix = "▸ "
 
 const (
-	sidebarSplitDefault = 0.5
-	sidebarSplitStep    = 0.05
-	minSidebarSplit     = 0.2
-	maxSidebarSplit     = 0.8
-	minSidebarFiles     = 6
-	minSidebarRequests  = 4
-	sidebarSplitPadding = 1
+	sidebarSplitDefault  = 0.5
+	sidebarSplitStep     = 0.05
+	minSidebarSplit      = 0.2
+	maxSidebarSplit      = 0.8
+	sidebarWorkflowSplit = 1.0 / 3.0
+	minSidebarFiles      = 6
+	minSidebarRequests   = 4
+	sidebarSplitPadding  = 1
+	sidebarChrome        = 2
+	sidebarFocusPad      = 2
 )
 
 const (
@@ -122,6 +126,7 @@ type Model struct {
 
 	fileList                 list.Model
 	requestList              list.Model
+	workflowList             list.Model
 	editor                   requestEditor
 	responsePanes            [2]responsePaneState
 	responseSplit            bool
@@ -180,7 +185,10 @@ type Model struct {
 	historyEntries      []history.Entry
 	historySelectedID   string
 	historyJumpToLatest bool
+	historyWorkflowName string
 	requestItems        []requestListItem
+	workflowItems       []workflowListItem
+	showWorkflow        bool
 
 	width                 int
 	height                int
@@ -216,8 +224,10 @@ type Model struct {
 	currentFile        string
 	currentRequest     *restfile.Request
 	profileRun         *profileState
+	workflowRun        *workflowState
 	activeRequestTitle string
 	activeRequestKey   string
+	activeWorkflowKey  string
 }
 
 func New(cfg Config) Model {
@@ -322,6 +332,17 @@ func New(cfg Config) Model {
 	requestList.SetShowTitle(false)
 	requestList.DisableQuitKeybindings()
 
+	workflowDelegate := list.NewDefaultDelegate()
+	workflowDelegate.ShowDescription = true
+	workflowDelegate.SetHeight(3)
+	workflowList := list.New(nil, workflowDelegate, 0, 0)
+	workflowList.Title = "Workflows"
+	workflowList.SetShowStatusBar(false)
+	workflowList.SetShowHelp(false)
+	workflowList.SetFilteringEnabled(true)
+	workflowList.SetShowTitle(false)
+	workflowList.DisableQuitKeybindings()
+
 	histDelegate := list.NewDefaultDelegate()
 	histDelegate.ShowDescription = true
 	histDelegate.SetHeight(3)
@@ -354,6 +375,7 @@ func New(cfg Config) Model {
 		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,
 		requestList:            requestList,
+		workflowList:           workflowList,
 		editor:                 editor,
 		historyList:            historyList,
 		envList:                envList,

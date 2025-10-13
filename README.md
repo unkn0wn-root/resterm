@@ -20,10 +20,11 @@ Resterm is a terminal-first client for working **HTTP**, **GraphQL**, and **gRPC
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Inline** requests and curl import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History** views with optional split panes and pinned comparisons.
-- **Variable** scopes, captures, and JavaScript hooks for pre-request mutation and post-response testing.
+- **Variable** scopes, captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
 - **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, metadata).
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
+- **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
 
 ## Documentation
 
@@ -86,6 +87,13 @@ User-Agent: resterm
 GET https://httpbin.org/bearer
 Accept: application/json
 ```
+
+## Workflows at a Glance
+
+- Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
+- Set per-step assertions (`expect.status`, `expect.statuscode`) and pass data between steps via `vars.request.*` and `vars.workflow.*` namespaces.
+- View progress in the sidebar, and inspect the aggregated summary in History after the run.
+- See [`docs/resterm.md`](./docs/resterm.md#workflows-multi-step-workflows) for the full reference and `_examples/workflows.http` for a runnable sample workflow.
 
 ## Quick Configuration Overview
 

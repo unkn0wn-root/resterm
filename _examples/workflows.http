@@ -1,0 +1,55 @@
+# @global base_url https://httpbin.org
+# @global workflow.region demo
+# @global-secret auth.token seed-token
+
+# @workflow sample-order on-failure=continue environment=demo vars.workflow.name="Sample Order" vars.workflow.item_id="workflow-42"
+# @description Demonstrates multi-step workflows with expectations and variable overrides.
+# @description Run inside resterm to see per-step status updates and history aggregation.
+# @tag demo workflow
+# @step Authenticate using=AcquireToken expect.statuscode=200
+# @step FetchHeaders using=FetchHeaders expect.status="200 OK" expect.statuscode=200 vars.request.trace_header="workflow-trace"
+# @step CreateResource using=CreateResource vars.request.item_value="workflow created" expect.statuscode=200
+# @step Cleanup using=DeleteResource on-failure=continue expect.status="200 OK" expect.statuscode=200
+
+### Acquire OAuth-style token
+# @name AcquireToken
+# @description Simulated token mint using httpbin echo response.
+# @tag workflow auth
+# @capture global auth.token {{response.json.json.token}}
+POST {{base_url}}/post
+Content-Type: application/json
+
+{
+  "token": "workflow-token",
+  "workflow": "{{vars.workflow.name}}",
+  "region": "{{workflow.region}}"
+}
+
+### Fetch headers with workflow override
+# @name FetchHeaders
+# @description Demonstrates vars.request.* overrides and captured globals.
+# @tag workflow http
+# @auth bearer {{auth.token}}
+GET {{base_url}}/headers
+X-Trace-ID: {{vars.request.trace_header}}
+
+### Create resource using workflow variables
+# @name CreateResource
+# @description Uses vars.workflow.* and vars.request.* to populate request body.
+# @tag workflow http create
+# @auth bearer {{auth.token}}
+POST {{base_url}}/anything/resource
+Content-Type: application/json
+
+{
+  "id": "{{vars.workflow.item_id}}",
+  "value": "{{vars.request.item_value}}",
+  "workflow": "{{vars.workflow.name}}"
+}
+
+### Cleanup resource (simulated)
+# @name DeleteResource
+# @description Final step shows on-failure handling; httpbin returns 200.
+# @tag workflow cleanup
+# @auth bearer {{auth.token}}
+DELETE {{base_url}}/status/200

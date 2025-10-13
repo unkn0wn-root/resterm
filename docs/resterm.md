@@ -265,6 +265,44 @@ Flags:
 
 When profiling completes the response pane's **Stats** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
 
+### Workflows (multi-step workflows)
+
+Group existing requests into repeatable workflows using `@workflow` blocks. Each step references a request by name and can override variables or expectations.
+
+```
+### Provision account
+# @workflow provision-account on-failure=continue
+# @step Authenticate using=AuthLogin expect.statuscode=200
+# @step CreateProfile using=CreateUser vars.request.name={{vars.workflow.userName}}
+# @step FetchProfile using=GetUser
+
+### AuthLogin
+POST https://example.com/auth
+
+### CreateUser
+POST https://example.com/users
+
+### GetUser
+GET https://example.com/users/{{vars.workflow.userId}}
+```
+
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Stats** tab shows a workflow summary, and a consolidated entry is written to history so you can review results later.
+
+Key directives and tokens:
+
+- `@workflow <name>` starts a workflow. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling.
+- `@description` / `@tag` lines inside the workflow build the description and tag list shown in the UI and stored in history.
+- `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments.
+- `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
+- `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
+- Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
+- `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
+
+> **Tip:** Workflow assignments are expanded once when the request executes. If you need helpers such as `{{$uuid}}`, place them directly in the request/template or compute them via a pre-request script before assigning the value.
+> **Tip:** Options are parsed like CLI flags; wrap values in quotes or escape spaces (`\ `) to keep text together (e.g. `expect.status="201 Created"`).
+
+Every workflow run is persisted alongside regular requests in History; the newest entry is highlighted automatically so you can open the generated `@workflow` definition and results from the History pane immediately after the run.
+
 ### Authentication directives
 
 | Type | Syntax | Notes |
@@ -428,7 +466,7 @@ Example test block:
 
 ---
 
-## Authentication Workflows
+## Authentication
 
 ### Static tokens
 
@@ -521,17 +559,18 @@ Run `resterm --help` for the latest list. Core flags:
 
 ---
 
-## Example Workflows
+## Examples
 
-Explore `_examples/` for ready-to-run scenarios:
+Explore `_examples/` for ready-to-run:
 
-- `basic.http` – simple GET/POST with bearer auth.
-- `scopes.http` – demonstrates global/file/request captures.
-- `scripts.http` – pre-request and test scripting patterns.
-- `graphql.http` – inline and file-based GraphQL requests.
-- `grpc.http` – gRPC reflection and descriptor usage.
-- `oauth2.http` – manual capture vs using the `@auth oauth2` directive.
-- `transport.http` – timeout, proxy, and `@no-log` samples.
+- `basic.http` - simple GET/POST with bearer auth.
+- `scopes.http` - demonstrates global/file/request captures.
+- `scripts.http` - pre-request and test scripting patterns.
+- `graphql.http` - inline and file-based GraphQL requests.
+- `grpc.http` - gRPC reflection and descriptor usage.
+- `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
+- `transport.http` - timeout, proxy, and `@no-log` samples.
+- `workflows.http` - end-to-end workflow with captures, overrides, and expectations.
 
 Open one in Resterm, switch to the appropriate environment (`resterm.env.json`), and send requests to see each feature in action.
 
