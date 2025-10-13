@@ -27,6 +27,7 @@ type responseSnapshot struct {
 	statsColored  string
 	statsColorize bool
 	statsKind     statsReportKind
+	workflowStats *workflowStatsView
 	ready         bool
 }
 
@@ -241,6 +242,13 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	}
 	height := pane.viewport.Height
 
+	if tab == responseTabStats {
+		snapshot := pane.snapshot
+		if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+			return m.syncWorkflowStatsPane(pane, width, snapshot)
+		}
+	}
+
 	snapshotID := ""
 	snapshotReady := false
 	if pane.snapshot != nil {
@@ -277,6 +285,21 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
 	ensureResponseMatchInView(pane, wrapped)
+	pane.setCurrPosition()
+	return nil
+}
+
+func (m *Model) syncWorkflowStatsPane(pane *responsePaneState, width int, snapshot *responseSnapshot) tea.Cmd {
+	if pane == nil || snapshot == nil || snapshot.workflowStats == nil {
+		return nil
+	}
+	render := snapshot.workflowStats.render(width)
+	pane.wrapCache[responseTabStats] = cachedWrap{width: width, content: render.content, valid: true}
+	decorated := m.decorateResponseContentForPane(pane, responseTabStats, render.content, width, snapshot.ready, snapshot.id)
+	pane.viewport.SetContent(decorated)
+	pane.restoreScrollForActiveTab()
+	snapshot.workflowStats.ensureVisible(pane, render)
+	ensureResponseMatchInView(pane, render.content)
 	pane.setCurrPosition()
 	return nil
 }

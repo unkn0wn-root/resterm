@@ -11,9 +11,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 type workflowState struct {
@@ -35,11 +37,16 @@ type workflowStepRuntime struct {
 }
 
 type workflowStepResult struct {
-	Step     restfile.WorkflowStep
-	Success  bool
-	Status   string
-	Duration time.Duration
-	Message  string
+	Step      restfile.WorkflowStep
+	Success   bool
+	Status    string
+	Duration  time.Duration
+	Message   string
+	HTTP      *httpclient.Response
+	GRPC      *grpcclient.Response
+	Tests     []scripts.TestResult
+	ScriptErr error
+	Err       error
 }
 
 func (s *workflowState) matches(req *restfile.Request) bool {
@@ -218,6 +225,9 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 	duration := time.Since(state.stepStart)
 	success := true
 	message := ""
+	httpResp := cloneHTTPResponse(msg.response)
+	grpcResp := cloneGRPCResponse(msg.grpc)
+	tests := append([]scripts.TestResult(nil), msg.tests...)
 
 	if msg.response != nil {
 		status = msg.response.Status
@@ -284,17 +294,23 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 	}
 
 	return workflowStepResult{
-		Step:     step,
-		Success:  success,
-		Status:   status,
-		Duration: duration,
-		Message:  message,
+		Step:      step,
+		Success:   success,
+		Status:    status,
+		Duration:  duration,
+		Message:   message,
+		HTTP:      httpResp,
+		GRPC:      grpcResp,
+		Tests:     tests,
+		ScriptErr: msg.scriptErr,
+		Err:       msg.err,
 	}
 }
 
 func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	report := m.buildWorkflowReport(state)
 	summary := workflowSummary(state)
+	statsView := newWorkflowStatsView(state)
 	m.workflowRun = nil
 	m.sending = false
 	m.statusPulseBase = ""
@@ -307,6 +323,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.responseLatest.statsColored = ""
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindWorkflow
+		m.responseLatest.workflowStats = statsView
 	} else {
 		snapshot := &responseSnapshot{
 			pretty:        report,
@@ -316,13 +333,20 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 			statsColorize: true,
 			statsKind:     statsReportKindWorkflow,
 			statsColored:  "",
+			workflowStats: statsView,
 			ready:         true,
 		}
 		m.responseLatest = snapshot
 		m.responsePending = nil
 	}
 
-	return nil
+	var cmd tea.Cmd
+	if m.responseLatest != nil && m.responseLatest.workflowStats != nil {
+		m.invalidateWorkflowStatsCaches(m.responseLatest)
+		cmd = m.activateWorkflowStatsView(m.responseLatest)
+	}
+
+	return cmd
 }
 
 func workflowSummary(state *workflowState) string {
@@ -398,6 +422,28 @@ func displayStepName(step restfile.WorkflowStep) string {
 		return name
 	}
 	return strings.TrimSpace(step.Using)
+}
+
+func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
+	if resp == nil {
+		return nil
+	}
+	headers := make(map[string][]string, len(resp.Headers))
+	for key, values := range resp.Headers {
+		headers[key] = append([]string(nil), values...)
+	}
+	trailers := make(map[string][]string, len(resp.Trailers))
+	for key, values := range resp.Trailers {
+		trailers[key] = append([]string(nil), values...)
+	}
+	return &grpcclient.Response{
+		Message:       resp.Message,
+		Headers:       headers,
+		Trailers:      trailers,
+		StatusCode:    resp.StatusCode,
+		StatusMessage: resp.StatusMessage,
+		Duration:      resp.Duration,
+	}
 }
 
 func (m *Model) syncWorkflowList(doc *restfile.Document) bool {
