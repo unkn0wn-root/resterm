@@ -8,6 +8,10 @@
   <img src="_media/resterm.png" alt="Screenshot of resterm TUI" width="720" />
 </p>
 
+<p align="center">
+  <img src="_media/resterm2.png" alt="Screenshot of resterm workflow run" width="720" />
+</p>
+
 > [!WARNING]
 > Resterm is still in early stages so bugs and undesired behaviors can be expected.
 
