@@ -71,11 +71,13 @@ go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 
 ## Quick Start
 
-1. Create or open a directory that contains `.http` / `.rest` files (see `_examples/` for samples).
-2. Launch Resterm: `resterm --workspace path/to/project` (or if your .http/.rest file is in the same dir. - just type `resterm` and it will be autodiscovered).
-3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane.
-4. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls.
-5. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), and adjust the editor/response width with `g+h` / `g+l`.
+1. Create or open a directory that contains `.http` / `.rest` files (see `_examples/` for samples). If you want to start right away without any .http - just open resterm...
+2. ... or launch Resterm: `resterm --workspace path/to/project` (or if your .http/.rest file is in the same dir. - just type `resterm` and it will be autodiscovered).
+3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane. If you don't have any .http file, just switch to the editor (`Tab`) and type `https://<some_url_dot_something>` and press `Ctrl+Enter`.
+4. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), and adjust the editor/response width with `g+h` / `g+l`.
+5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls.
+
+See the documentation [`docs/resterm.md`](./docs/resterm.md) for a complete breakdown of variable resolution, scripting helpers, history storage, and transport overrides.
 
 A minimal request file:
 
@@ -105,7 +107,7 @@ Accept: application/json
 - CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`.
 - Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
 
-See the documentation [`docs/resterm.md`](./docs/resterm.md) for a complete breakdown of variable resolution, scripting helpers, history storage, and transport overrides.
+Again - If you want to see complete referance - see the documentation [`docs/resterm.md`](./docs/resterm.md).
 
 ## Roadmap
 - Command palette & keymap customisation
