@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	"github.com/alecthomas/chroma/quick"
+	js "github.com/unkn0wn-root/resterm/internal/parser/javascript"
 )
 
 func prettifyBody(body []byte, contentType string) string {
@@ -52,6 +53,9 @@ func prettifyBody(body []byte, contentType string) string {
 }
 
 func renderJSONAsJS(body []byte) (string, bool) {
+	if formatted, err := js.FormatValue(string(body)); err == nil {
+		return formatted, true
+	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
 	var value interface{}
@@ -75,6 +79,10 @@ func writeJSONValue(buf *strings.Builder, value interface{}, indent int) {
 	case json.Number:
 		buf.WriteString(v.String())
 	case string:
+		if formatted, ok := js.FormatInlineValue(v, indent); ok {
+			buf.WriteString(formatted)
+			return
+		}
 		buf.WriteString(strconv.Quote(v))
 	case bool:
 		if v {
