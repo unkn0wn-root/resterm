@@ -80,6 +80,13 @@ const (
 )
 
 const (
+	minWorkflowSplit     = 0.3
+	maxWorkflowSplit     = 0.7
+	workflowSplitDefault = 0.5
+	workflowSplitStep    = 0.05
+)
+
+const (
 	editorSplitDefault           = 0.6
 	editorSplitStep              = 0.05
 	minEditorSplit               = 0.3
@@ -198,6 +205,7 @@ type Model struct {
 	sidebarSplit          float64
 	sidebarFilesHeight    int
 	sidebarRequestsHeight int
+	workflowSplit         float64
 	editorSplit           float64
 	pendingChord          string
 	pendingChordMsg       tea.KeyMsg
@@ -391,6 +399,7 @@ func New(cfg Config) Model {
 		responseLastFocused:      responsePanePrimary,
 		focus:                    focusFile,
 		sidebarSplit:             sidebarSplitDefault,
+		workflowSplit:            workflowSplitDefault,
 		editorSplit:              editorSplitDefault,
 		historyStore:             cfg.History,
 		currentFile:              cfg.FilePath,

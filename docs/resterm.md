@@ -67,6 +67,8 @@ Content-Type: application/json
 | Cycle focus (files -> requests -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus requests / editor / response panes | `g+r` / `g+i` / `g+p` |
 | Adjust editor/response width | `g+h` / `g+l` |
+| Adjust files/requests split | `g+j` / `g+k` |
+| Adjust requests/workflows split | `g+J` / `g+K` |
 | File list incremental search | Start typing while focus is in the list |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |

@@ -152,26 +152,57 @@ func (m *Model) applyLayout() tea.Cmd {
 		}
 	}
 
-	requestBase := requestsBase
+	restRequests := requestsBase
 	workflowBase := 0
+	requestBase := restRequests
 	if hasWorkflow {
-		combinedMin := minSidebarRequests * 2
-		if requestsBase >= combinedMin {
-			workflowBase = requestsBase / 2
-			if workflowBase < minSidebarRequests {
-				workflowBase = minSidebarRequests
-			}
-			if workflowBase > requestsBase-minSidebarRequests {
-				workflowBase = requestsBase - minSidebarRequests
-			}
-			requestBase = requestsBase - workflowBase
-		} else {
-			requestBase = minInt(requestsBase, minSidebarRequests)
-			workflowBase = requestsBase - requestBase
+		if m.workflowSplit <= 0 {
+			m.workflowSplit = workflowSplitDefault
+		}
+		if m.workflowSplit < minWorkflowSplit {
+			m.workflowSplit = minWorkflowSplit
+		}
+		if m.workflowSplit > maxWorkflowSplit {
+			m.workflowSplit = maxWorkflowSplit
+		}
+
+		available := restRequests
+		minPrimary := minSidebarRequests
+		minWorkflow := minSidebarRequests
+		if available < minPrimary+minWorkflow {
+			requestBase = minInt(available, minPrimary)
+			workflowBase = available - requestBase
 			if workflowBase < 0 {
 				workflowBase = 0
 			}
+		} else {
+			desiredWorkflow := int(math.Round(float64(available) * (1 - m.workflowSplit)))
+			if desiredWorkflow < minWorkflow {
+				desiredWorkflow = minWorkflow
+			}
+			if desiredWorkflow > available-minPrimary {
+				desiredWorkflow = available - minPrimary
+			}
+			if desiredWorkflow < 0 {
+				desiredWorkflow = 0
+			}
+			workflowBase = desiredWorkflow
+			requestBase = available - workflowBase
 		}
+
+		total := requestBase + workflowBase
+		if total > 0 {
+			ratio := float64(requestBase) / float64(total)
+			if ratio < minWorkflowSplit {
+				ratio = minWorkflowSplit
+			}
+			if ratio > maxWorkflowSplit {
+				ratio = maxWorkflowSplit
+			}
+			m.workflowSplit = ratio
+		}
+	} else {
+		workflowBase = 0
 	}
 	requestsBase = requestBase + workflowBase
 
@@ -391,6 +422,41 @@ func (m *Model) adjustSidebarSplit(delta float64) (bool, bool, tea.Cmd) {
 	newFiles := m.sidebarFilesHeight
 	newRequests := m.sidebarRequestsHeight
 	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newFiles != prevFiles || newRequests != prevRequests
+	if !changed {
+		return false, true, cmd
+	}
+	return true, bounded, cmd
+}
+
+func (m *Model) adjustWorkflowSplit(delta float64) (bool, bool, tea.Cmd) {
+	if !m.ready || len(m.workflowItems) == 0 {
+		return false, false, nil
+	}
+
+	current := m.workflowSplit
+	if current <= 0 {
+		current = workflowSplitDefault
+	}
+
+	updated := current + delta
+	bounded := false
+	if updated < minWorkflowSplit {
+		updated = minWorkflowSplit
+		bounded = true
+	}
+	if updated > maxWorkflowSplit {
+		updated = maxWorkflowSplit
+		bounded = true
+	}
+
+	if math.Abs(updated-current) < 1e-6 {
+		return false, bounded, nil
+	}
+
+	prev := m.workflowSplit
+	m.workflowSplit = updated
+	cmd := m.applyLayout()
+	changed := math.Abs(m.workflowSplit-prev) > 1e-6
 	if !changed {
 		return false, true, cmd
 	}
