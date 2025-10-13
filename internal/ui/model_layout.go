@@ -202,7 +202,6 @@ func (m *Model) applyLayout() tea.Cmd {
 			m.workflowSplit = ratio
 		}
 	} else {
-		requestBase = restRequests
 		workflowBase = 0
 	}
 	requestsBase = requestBase + workflowBase
