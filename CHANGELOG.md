@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.2.0](https://github.com/unkn0wn-root/resterm/compare/v0.1.25...v0.2.0) (2025-10-13)
+
+
+### Features
+
+* new lexer for javascript objects to improve prettify ([1c43f8b](https://github.com/unkn0wn-root/resterm/commit/1c43f8b56ed66e591f582d4470471045e3ad28ec))
+* **ui:** capture each request for workflow and assign to each workflow task ([5f96868](https://github.com/unkn0wn-root/resterm/commit/5f968687fcf4750a4a709d99075ef495c339969f))
+
+
+### Bug Fixes
+
+* allow both : / = and direct assigment for gobal/request/var ([4214875](https://github.com/unkn0wn-root/resterm/commit/42148751ba1c1841bf1e6698f965054c01920e63))
+
 ### [0.1.25](https://github.com/unkn0wn-root/resterm/compare/v0.1.24...v0.1.25) (2025-10-13)
 
 
