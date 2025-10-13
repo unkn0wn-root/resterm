@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
@@ -536,61 +535,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	case "ctrl+q", "ctrl+d":
 		return combine(tea.Quit)
 	case "j":
-		if m.focus == focusFile && m.fileList.FilterState() != list.Filtering {
-			items := m.fileList.Items()
-			idx := m.fileList.Index()
-			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
-				if len(m.requestItems) > 0 {
-					m.setFocus(focusRequests)
-				} else if len(m.workflowItems) > 0 {
-					m.setFocus(focusWorkflows)
-				} else {
-					m.setFocus(focusEditor)
-				}
-				return combine(nil)
-			}
-		}
-		if m.focus == focusRequests && m.requestList.FilterState() != list.Filtering {
-			items := m.requestList.Items()
-			idx := m.requestList.Index()
-			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
-				if len(m.workflowItems) > 0 {
-					m.setFocus(focusWorkflows)
-				} else {
-					m.setFocus(focusEditor)
-				}
-				return combine(nil)
-			}
-		}
-		if m.focus == focusWorkflows && m.workflowList.FilterState() != list.Filtering {
-			items := m.workflowList.Items()
-			idx := m.workflowList.Index()
-			if len(items) == 0 || idx == -1 || idx >= len(items)-1 {
-				m.setFocus(focusEditor)
-				return combine(nil)
-			}
-		}
 	case "k":
-		if m.focus == focusRequests && m.requestList.FilterState() != list.Filtering {
-			items := m.requestList.Items()
-			idx := m.requestList.Index()
-			if len(items) == 0 || idx <= 0 {
-				m.setFocus(focusFile)
-				return combine(nil)
-			}
-		}
-		if m.focus == focusWorkflows && m.workflowList.FilterState() != list.Filtering {
-			items := m.workflowList.Items()
-			idx := m.workflowList.Index()
-			if len(items) == 0 || idx <= 0 {
-				if len(m.requestItems) > 0 {
-					m.setFocus(focusRequests)
-				} else {
-					m.setFocus(focusFile)
-				}
-				return combine(nil)
-			}
-		}
 	}
 
 	if m.focus == focusEditor {
@@ -901,11 +846,25 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "j":
 			m.repeatChordPrefix = prefix
 			m.repeatChordActive = true
+			if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
+				return true, m.runWorkflowResize(-workflowSplitStep)
+			}
 			return true, m.runSidebarResize(-sidebarSplitStep)
 		case "k":
 			m.repeatChordPrefix = prefix
 			m.repeatChordActive = true
+			if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
+				return true, m.runWorkflowResize(workflowSplitStep)
+			}
 			return true, m.runSidebarResize(sidebarSplitStep)
+		case "J", "shift+j":
+			m.repeatChordPrefix = prefix
+			m.repeatChordActive = true
+			return true, m.runWorkflowResize(workflowSplitStep)
+		case "K", "shift+k":
+			m.repeatChordPrefix = prefix
+			m.repeatChordActive = true
+			return true, m.runWorkflowResize(-workflowSplitStep)
 		case "r":
 			m.setFocus(focusRequests)
 			return true, nil
@@ -1025,6 +984,21 @@ func (m *Model) runSidebarResize(delta float64) tea.Cmd {
 			m.setStatusMessage(statusMsg{text: "Sidebar already at maximum height", level: statusInfo})
 		} else if delta < 0 {
 			m.setStatusMessage(statusMsg{text: "Sidebar already at minimum height", level: statusInfo})
+		}
+	}
+	return nil
+}
+
+func (m *Model) runWorkflowResize(delta float64) tea.Cmd {
+	changed, bounded, cmd := m.adjustWorkflowSplit(delta)
+	if changed {
+		return cmd
+	}
+	if bounded {
+		if delta > 0 {
+			m.setStatusMessage(statusMsg{text: "Workflows already at minimum height", level: statusInfo})
+		} else if delta < 0 {
+			m.setStatusMessage(statusMsg{text: "Workflows already at maximum height", level: statusInfo})
 		}
 	}
 	return nil

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -44,15 +45,139 @@ func (i requestListItem) Description() string {
 	if method == "" {
 		method = "REQ"
 	}
-	url := strings.TrimSpace(i.request.URL)
-	if len(url) > 60 {
-		url = url[:57] + "..."
+	target := requestTarget(i.request)
+	displayTarget := truncateDisplay(target)
+
+	if desc != "" {
+		infoParts := compactStrings(method, displayTarget)
+		info := strings.TrimSpace(strings.Join(infoParts, " "))
+		if info == "" {
+			info = method
+		}
+		return strings.Join(compactStrings(desc, info), "\n")
 	}
-	info := fmt.Sprintf("%s %s", method, url)
-	if desc == "" {
-		return info
+
+	path, base := splitRequestURL(target)
+	displayPath := truncateDisplay(path)
+	displayBase := truncateDisplay(base)
+
+	primary := method
+	secondary := ""
+
+	if base != "" {
+		if displayPath != "" {
+			primary = strings.TrimSpace(primary + " " + displayPath)
+		}
+		if displayBase != "" {
+			secondary = displayBase
+		}
 	}
-	return strings.Join([]string{desc, info}, "\n")
+
+	if secondary == "" && displayTarget != "" {
+		secondary = displayTarget
+	}
+
+	if secondary == "" {
+		line := i.line
+		if line <= 0 {
+			line = 1
+		}
+		secondary = fmt.Sprintf("Line %d", line)
+	}
+
+	return strings.Join(compactStrings(primary, secondary), "\n")
+}
+
+func compactStrings(values ...string) []string {
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		trimmed := strings.TrimSpace(value)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
+
+func truncateDisplay(value string) string {
+	if len(value) > 60 {
+		return value[:57] + "..."
+	}
+	return value
+}
+
+func requestTarget(req *restfile.Request) string {
+	if req == nil {
+		return ""
+	}
+	if target := strings.TrimSpace(req.URL); target != "" {
+		return target
+	}
+	grpc := req.GRPC
+	if grpc == nil {
+		return ""
+	}
+	if target := strings.TrimSpace(grpc.FullMethod); target != "" {
+		return target
+	}
+	service := strings.TrimSpace(grpc.Service)
+	method := strings.TrimSpace(grpc.Method)
+	switch {
+	case service != "" && method != "":
+		return fmt.Sprintf("%s.%s", service, method)
+	case method != "":
+		return method
+	case service != "":
+		return service
+	}
+	if target := strings.TrimSpace(grpc.Target); target != "" {
+		return target
+	}
+	if target := strings.TrimSpace(grpc.Package); target != "" {
+		return target
+	}
+	return ""
+}
+
+func splitRequestURL(raw string) (path string, base string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	u, err := url.Parse(raw)
+	if err == nil && u.Host != "" {
+		base = u.Host
+		if u.Scheme != "" {
+			base = fmt.Sprintf("%s://%s", u.Scheme, u.Host)
+		}
+		path = u.Path
+		if u.RawPath != "" {
+			path = u.RawPath
+		}
+		if path == "" && u.RawQuery != "" {
+			path = "/"
+		}
+		if u.RawQuery != "" {
+			path = fmt.Sprintf("%s?%s", path, u.RawQuery)
+		}
+		if u.Fragment != "" {
+			path = fmt.Sprintf("%s#%s", path, u.Fragment)
+		}
+		return path, base
+	}
+
+	schemeIdx := strings.Index(raw, "://")
+	if schemeIdx == -1 {
+		return "", ""
+	}
+	remainder := raw[schemeIdx+3:]
+	slashIdx := strings.Index(remainder, "/")
+	if slashIdx == -1 {
+		return "", raw
+	}
+	base = raw[:schemeIdx+3+slashIdx]
+	path = remainder[slashIdx:]
+	return path, base
 }
 
 func (i requestListItem) FilterValue() string {
