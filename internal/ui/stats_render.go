@@ -27,6 +27,7 @@ var (
 	statsNeutralStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
 	statsMessageStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Faint(true)
 	statsDurationStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#56C2F4")).Bold(true)
+	statsSelectedStyle = lipgloss.NewStyle().Background(lipgloss.Color("#343B59")).Foreground(lipgloss.Color("#E8E9F0"))
 )
 
 func colorizeStatsReport(report string, kind statsReportKind) string {

@@ -741,20 +741,38 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			cmd := m.retreatResponseSearch()
 			return combine(cmd)
-		case "down", "j":
-			if pane == nil || pane.activeTab == responseTabHistory {
-				return combine(nil)
-			}
-			pane.viewport.ScrollDown(1)
-			pane.setCurrPosition()
+	case "down", "j":
+		if pane == nil {
 			return combine(nil)
-		case "up", "k":
-			if pane == nil || pane.activeTab == responseTabHistory {
-				return combine(nil)
+		}
+		if pane.activeTab == responseTabStats {
+			snapshot := pane.snapshot
+			if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+				return combine(m.moveWorkflowStatsSelection(1))
 			}
-			pane.viewport.ScrollUp(1)
-			pane.setCurrPosition()
+		}
+		if pane.activeTab == responseTabHistory {
 			return combine(nil)
+		}
+		pane.viewport.ScrollDown(1)
+		pane.setCurrPosition()
+		return combine(nil)
+	case "up", "k":
+		if pane == nil {
+			return combine(nil)
+		}
+		if pane.activeTab == responseTabStats {
+			snapshot := pane.snapshot
+			if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+				return combine(m.moveWorkflowStatsSelection(-1))
+			}
+		}
+		if pane.activeTab == responseTabHistory {
+			return combine(nil)
+		}
+		pane.viewport.ScrollUp(1)
+		pane.setCurrPosition()
+		return combine(nil)
 		case "pgdown":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
@@ -773,11 +791,19 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
 		case "right", "ctrl+l", "l":
 			return combine(m.activateNextTabFor(m.responsePaneFocus))
-		case "enter":
-			if pane != nil && pane.activeTab == responseTabHistory {
-				return combine(m.loadHistorySelection(false))
+	case "enter":
+		if pane != nil {
+			switch pane.activeTab {
+			case responseTabHistory:
+			return combine(m.loadHistorySelection(false))
+			case responseTabStats:
+				snapshot := pane.snapshot
+				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					return combine(m.toggleWorkflowStatsExpansion())
+				}
 			}
 		}
+	}
 		if pane != nil && pane.activeTab == responseTabHistory {
 			switch keyStr := msg.String(); keyStr {
 			case "d":
