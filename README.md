@@ -88,7 +88,7 @@ GET https://httpbin.org/bearer
 Accept: application/json
 ```
 
-## Workflows at a Glance
+## Workflows
 
 - Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
 - Set per-step assertions (`expect.status`, `expect.statuscode`) and pass data between steps via `vars.request.*` and `vars.workflow.*` namespaces.
