@@ -330,25 +330,8 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 		}
 
 		if len(stats.Histogram) > 0 {
-			builder.WriteString("\n  Histogram:\n")
-			maxCount := 0
-			for _, bucket := range stats.Histogram {
-				if bucket.Count > maxCount {
-					maxCount = bucket.Count
-				}
-			}
-			if maxCount == 0 {
-				maxCount = 1
-			}
-			const barWidth = 20
-			for _, bucket := range stats.Histogram {
-				barLen := int((float64(bucket.Count) / float64(maxCount)) * float64(barWidth))
-				if barLen < 0 {
-					barLen = 0
-				}
-				bar := strings.Repeat("#", barLen)
-				builder.WriteString(fmt.Sprintf("    %s – %s | %-20s (%d)\n", bucket.From, bucket.To, bar, bucket.Count))
-			}
+			builder.WriteString("\n")
+			builder.WriteString(renderHistogram(stats.Histogram))
 		}
 	}
 
