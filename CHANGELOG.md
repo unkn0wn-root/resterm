@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.1.25](https://github.com/unkn0wn-root/resterm/compare/v0.1.24...v0.1.25) (2025-10-13)
+
+
+### Features
+
+* add workflow runner and colorize Stats ([8a6bdfb](https://github.com/unkn0wn-root/resterm/commit/8a6bdfb7b5a8df4a58cf4692a20b708621525789))
+* **ui:** refine sidebar resizing and request list layout ([1cfb393](https://github.com/unkn0wn-root/resterm/commit/1cfb393cad7d1747a9253c606815678225e8c240))
+
+
+### Bug Fixes
+
+* made a mistake. Fix lint ([6e3cfd5](https://github.com/unkn0wn-root/resterm/commit/6e3cfd59c7b02fb659d1bdac331cabab6f194633))
+
 ### [0.1.24](https://github.com/unkn0wn-root/resterm/compare/v0.1.23...v0.1.24) (2025-10-11)
 
 
