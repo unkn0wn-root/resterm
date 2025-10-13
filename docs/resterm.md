@@ -466,7 +466,7 @@ Example test block:
 
 ---
 
-## Authentication Workflows
+## Authentication
 
 ### Static tokens
 
@@ -559,18 +559,18 @@ Run `resterm --help` for the latest list. Core flags:
 
 ---
 
-## Example Workflows
+## Examples
 
-Explore `_examples/` for ready-to-run workflows:
+Explore `_examples/` for ready-to-run:
 
-- `basic.http` – simple GET/POST with bearer auth.
-- `scopes.http` – demonstrates global/file/request captures.
-- `scripts.http` – pre-request and test scripting patterns.
-- `graphql.http` – inline and file-based GraphQL requests.
-- `grpc.http` – gRPC reflection and descriptor usage.
-- `oauth2.http` – manual capture vs using the `@auth oauth2` directive.
-- `transport.http` – timeout, proxy, and `@no-log` samples.
-- `workflows.http` – end-to-end workflow with captures, overrides, and expectations.
+- `basic.http` - simple GET/POST with bearer auth.
+- `scopes.http` - demonstrates global/file/request captures.
+- `scripts.http` - pre-request and test scripting patterns.
+- `graphql.http` - inline and file-based GraphQL requests.
+- `grpc.http` - gRPC reflection and descriptor usage.
+- `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
+- `transport.http` - timeout, proxy, and `@no-log` samples.
+- `workflows.http` - end-to-end workflow with captures, overrides, and expectations.
 
 Open one in Resterm, switch to the appropriate environment (`resterm.env.json`), and send requests to see each feature in action.
 
