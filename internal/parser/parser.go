@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	variableLineRe = regexp.MustCompile(`^@(?:(global)\s+)?([A-Za-z0-9_.-]+)\s*(?::|=)\s*(.+)$`)
+	variableLineRe = regexp.MustCompile(`^@(?:(global)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
+	nameValueRe    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
 func Parse(path string, data []byte) *restfile.Document {
@@ -131,7 +132,11 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	if matches := variableLineRe.FindStringSubmatch(trimmed); matches != nil {
 		scopeToken := strings.ToLower(strings.TrimSpace(matches[1]))
 		name := matches[2]
-		value := strings.TrimSpace(matches[3])
+		valueCandidate := matches[3]
+		if valueCandidate == "" {
+			valueCandidate = matches[4]
+		}
+		value := strings.TrimSpace(valueCandidate)
 		variable := restfile.Variable{
 			Name:  name,
 			Value: value,
@@ -714,21 +719,16 @@ func parseNameValue(input string) (string, string) {
 	if trimmed == "" {
 		return "", ""
 	}
-	if idx := strings.IndexAny(trimmed, ":="); idx != -1 {
-		name := strings.TrimSpace(trimmed[:idx])
-		value := strings.TrimSpace(trimmed[idx+1:])
-		return name, value
-	}
-	fields := strings.Fields(trimmed)
-	if len(fields) == 0 {
+	matches := nameValueRe.FindStringSubmatch(trimmed)
+	if matches == nil {
 		return "", ""
 	}
-	name := fields[0]
-	value := ""
-	if len(trimmed) > len(name) {
-		value = strings.TrimSpace(trimmed[len(name):])
+	name := matches[1]
+	valueCandidate := matches[2]
+	if valueCandidate == "" {
+		valueCandidate = matches[3]
 	}
-	return name, value
+	return name, strings.TrimSpace(valueCandidate)
 }
 
 func splitDirective(text string) (string, string) {
