@@ -12,8 +12,8 @@
   <img src="_media/resterm2.png" alt="Screenshot of resterm workflow run" width="720" />
 </p>
 
-> [!WARNING]
-> Resterm is still in early stages so bugs and undesired behaviors can be expected.
+> [!NOTE]
+> Resterm moves fast so bugs and undesired behaviors can be expected before making stable version.
 
 ## Overview
 
