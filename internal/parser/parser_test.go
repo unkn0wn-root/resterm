@@ -68,6 +68,94 @@ GET https://example.com/api
 	}
 }
 
+func TestParseGlobalDirectiveWhitespaceValue(t *testing.T) {
+	src := `# @global base_url https://httpbin.org
+# @global alt_url: https://alt.example.com
+GET https://example.com
+`
+
+	doc := Parse("globals.http", []byte(src))
+
+	if len(doc.Globals) != 2 {
+		t.Fatalf("expected 2 globals, got %d", len(doc.Globals))
+	}
+
+	values := make(map[string]string)
+	for _, gv := range doc.Globals {
+		values[gv.Name] = gv.Value
+	}
+
+	if values["base_url"] != "https://httpbin.org" {
+		t.Fatalf("expected base_url to be https://httpbin.org, got %q", values["base_url"])
+	}
+
+	if values["alt_url"] != "https://alt.example.com" {
+		t.Fatalf("expected alt_url to be https://alt.example.com, got %q", values["alt_url"])
+	}
+}
+
+func TestParseRequestVarDirectiveVariants(t *testing.T) {
+	src := `# @name Vars
+# @var simple foo
+# @var equals key=value
+# @var colon key: value
+# @var url https://example.com:8443/path
+GET https://example.com
+`
+
+	doc := Parse("vars.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Variables) != 4 {
+		t.Fatalf("expected 4 request variables, got %d", len(req.Variables))
+	}
+
+	vals := make(map[string]string)
+	for _, v := range req.Variables {
+		vals[v.Name] = v.Value
+	}
+
+	checks := map[string]string{
+		"simple": "foo",
+		"equals": "key=value",
+		"colon":  "key: value",
+		"url":    "https://example.com:8443/path",
+	}
+	for name, expected := range checks {
+		if vals[name] != expected {
+			t.Fatalf("expected %s=%q, got %q", name, expected, vals[name])
+		}
+	}
+}
+
+func TestParseCaptureDirectiveGlobal(t *testing.T) {
+	src := `# @name Capture
+# @capture global auth.token {{response.json.json.token}}
+GET https://example.com
+`
+
+	doc := Parse("capture.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Captures) != 1 {
+		t.Fatalf("expected 1 capture, got %d", len(req.Metadata.Captures))
+	}
+	cap := req.Metadata.Captures[0]
+	if cap.Scope != restfile.CaptureScopeGlobal {
+		t.Fatalf("expected global capture scope, got %v", cap.Scope)
+	}
+	if cap.Name != "auth.token" {
+		t.Fatalf("expected capture name auth.token, got %q", cap.Name)
+	}
+	if cap.Expression != "{{response.json.json.token}}" {
+		t.Fatalf("unexpected capture expression %q", cap.Expression)
+	}
+}
+
 func TestParseOAuth2AuthSpec(t *testing.T) {
 	spec := parseAuthSpec(`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`)
 	if spec == nil {
