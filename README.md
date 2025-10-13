@@ -13,7 +13,7 @@
 </p>
 
 > [!NOTE]
-> Resterm moves fast so bugs and undesired behaviors can be expected before making stable version.
+> See the documentation [`docs/resterm.md`](./docs/resterm.md) for a complete breakdown of all technical aspects and features.
 
 ## Overview
 
@@ -76,8 +76,6 @@ go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane. If you don't have any .http file, just switch to the editor (`Tab`) and type `https://<some_url_dot_something>` and press `Ctrl+Enter`.
 4. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), and adjust the editor/response width with `g+h` / `g+l`.
 5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls.
-
-See the documentation [`docs/resterm.md`](./docs/resterm.md) for a complete breakdown of variable resolution, scripting helpers, history storage, and transport overrides.
 
 A minimal request file:
 
