@@ -1253,7 +1253,6 @@ func inlineCurlRequest(lines []string, lineNumber int) *restfile.Request {
 
 func extractCurlCommand(lines []string, cursorIdx int) (start int, end int, command string) {
 	start = -1
-	var builder strings.Builder
 	for i := cursorIdx; i >= 0; i-- {
 		trimmed := strings.TrimSpace(lines[i])
 		if trimmed == "" {
@@ -1266,40 +1265,110 @@ func extractCurlCommand(lines []string, cursorIdx int) (start int, end int, comm
 			start = i
 			break
 		}
-		if !continuesCurl(trimmed) {
-			return -1, -1, ""
-		}
 	}
 	if start == -1 {
 		return -1, -1, ""
 	}
 
-	builder.Reset()
+	qs := &curlQuoteState{}
+	var b strings.Builder
 	end = start
 	for i := start; i < len(lines); i++ {
 		line := lines[i]
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" && i > start {
+		openBefore := qs.open()
+		if strings.TrimSpace(line) == "" && i > start && !openBefore {
 			break
 		}
 
-		end = i
-		stripped := strings.TrimLeft(line, " \t")
-		tail := strings.TrimRight(stripped, " \t")
-		continued := false
-		if strings.HasSuffix(tail, "\\") && !strings.HasSuffix(tail, "\\\\") {
-			continued = true
-			stripped = strings.TrimSuffix(tail, "\\")
+		seg := line
+		if !openBefore {
+			seg = strings.TrimLeft(seg, " \t")
+		}
+		if !openBefore {
+			seg = strings.TrimRight(seg, " \t")
+		}
+		if seg == "" {
+			seg = ""
 		}
 
-		builder.WriteString(stripped)
-		if continued {
-			builder.WriteByte(' ')
+		cont := curlLineContinues(seg)
+		if cont {
+			seg = seg[:len(seg)-1]
+		}
+
+		if b.Len() > 0 {
+			if openBefore {
+				b.WriteByte('\n')
+			} else {
+				b.WriteByte(' ')
+			}
+		}
+
+		b.WriteString(seg)
+		qs.consume(seg)
+		end = i
+		if cont {
+			qs.resetEscape()
+			continue
+		}
+		if qs.open() {
 			continue
 		}
 		break
 	}
-	return start, end, strings.TrimSpace(builder.String())
+
+	return start, end, strings.TrimSpace(b.String())
+}
+
+type curlQuoteState struct {
+	ins bool
+	ind bool
+	esc bool
+}
+
+func (s *curlQuoteState) consume(v string) {
+	for _, r := range v {
+		if s.esc {
+			s.esc = false
+			continue
+		}
+		switch r {
+		case '\\':
+			if s.ins {
+				continue
+			}
+			s.esc = true
+		case '\'':
+			if s.ind {
+				continue
+			}
+			s.ins = !s.ins
+		case '"':
+			if s.ins {
+				continue
+			}
+			s.ind = !s.ind
+		}
+	}
+}
+
+func (s *curlQuoteState) open() bool {
+	return s.ins || s.ind
+}
+
+func (s *curlQuoteState) resetEscape() {
+	s.esc = false
+}
+
+func curlLineContinues(v string) bool {
+	if v == "" {
+		return false
+	}
+	count := 0
+	for i := len(v) - 1; i >= 0 && v[i] == '\\'; i-- {
+		count++
+	}
+	return count%2 == 1
 }
 
 func isCurlStartLine(line string) bool {
@@ -1317,16 +1386,6 @@ func isCurlStartLine(line string) bool {
 				return true
 			}
 		}
-	}
-	return false
-}
-
-func continuesCurl(line string) bool {
-	if strings.HasPrefix(line, "-") || strings.HasPrefix(line, "--") {
-		return true
-	}
-	if strings.HasSuffix(line, "\\") {
-		return true
 	}
 	return false
 }
