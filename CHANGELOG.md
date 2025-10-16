@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.3.0](https://github.com/unkn0wn-root/resterm/compare/v0.2.2...v0.3.0) (2025-10-16)
+
+
+### Features
+
+* add inline metadata hints (autocomplete) and make some small tweaks to editor ([658a9c2](https://github.com/unkn0wn-root/resterm/commit/658a9c2580f61b78e7693e4da3f8b80983bae449))
+
+
+### Bug Fixes
+
+* linter ([c9733c2](https://github.com/unkn0wn-root/resterm/commit/c9733c22402badccec47a5d0b9c11bc8b71888a2))
+
 ### [0.2.2](https://github.com/unkn0wn-root/resterm/compare/v0.2.1...v0.2.2) (2025-10-16)
 
 
