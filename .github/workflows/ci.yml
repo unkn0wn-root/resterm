@@ -46,6 +46,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist
+
+          VERSION="${GITHUB_REF_NAME}"
+          COMMIT="${GITHUB_SHA::7}"
+          DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+
+          LDFLAGS="-X 'main.version=${VERSION}' -X 'main.commit=${COMMIT}' -X 'main.date=${DATE}'"
+
           case "$GOOS" in
             darwin) goos_label="Darwin" ;;
             linux) goos_label="Linux" ;;
@@ -61,7 +68,9 @@ jobs:
           if [ "$GOOS" = "windows" ]; then
             output="${output}.exe"
           fi
-          GOOS="$GOOS" GOARCH="$GOARCH" go build -o "$output" ./cmd/resterm
+
+          echo "Building version $VERSION"
+          GOOS="$GOOS" GOARCH="$GOARCH" go build -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v1
         with:

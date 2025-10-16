@@ -20,17 +20,24 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+var (
+	version = "dev"
+	commit  = "unknown"
+	date    = "unknown"
+)
+
 func main() {
 	var (
-		filePath  string
-		envName   string
-		envFile   string
-		workspace string
-		timeout   time.Duration
-		insecure  bool
-		follow    bool
-		proxyURL  string
-		recursive bool
+		filePath    string
+		envName     string
+		envFile     string
+		workspace   string
+		timeout     time.Duration
+		insecure    bool
+		follow      bool
+		proxyURL    string
+		recursive   bool
+		showVersion bool
 	)
 
 	follow = true
@@ -45,7 +52,15 @@ func main() {
 	flag.StringVar(&proxyURL, "proxy", "", "HTTP proxy URL")
 	flag.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
 	flag.BoolVar(&recursive, "recurisve", false, "(deprecated) Recursively scan workspace for request files")
+	flag.BoolVar(&showVersion, "version", false, "Show resterm version")
 	flag.Parse()
+
+	if showVersion {
+		fmt.Printf("resterm %s\n", version)
+		fmt.Printf("  commit: %s\n", commit)
+		fmt.Printf("  built:  %s\n", date)
+		os.Exit(0)
+	}
 
 	if filePath == "" && flag.NArg() > 0 {
 		filePath = flag.Arg(0)
