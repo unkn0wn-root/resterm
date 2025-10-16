@@ -1,8 +1,8 @@
-#!/bin/sh
+#!/bin/bash
 set -e
 
 REPO="unkn0wn-root/resterm"
-INSTALL_DIR="/usr/local/bin"
+INSTALL_DIR="$HOME/.local/bin"
 BINARY_NAME="resterm"
 
 RED='\033[0;31m'
@@ -66,9 +66,9 @@ download_binary() {
     info "Downloading from: $url"
 
     if command_exists curl; then
-        curl -fL -o "$output" "$url" || error "Download failed"
+        curl -fL --progress-bar -o "$output" "$url" || error "Download failed"
     elif command_exists wget; then
-        wget -qO "$output" "$url" || error "Download failed"
+        wget --show-progress -qO "$output" "$url" || error "Download failed"
     fi
 }
 
@@ -78,6 +78,26 @@ main() {
     OS=$(detect_os)
     ARCH=$(detect_arch)
     info "Detected OS: $OS, Architecture: $ARCH"
+
+    case "$SHELL" in
+        */bash) shellRc="$HOME/.bashrc" ;;
+        */zsh) shellRc="$HOME/.zshrc" ;;
+        */ksh) shellRc="$HOME/.kshrc" ;;
+        */sh) shellRc="$HOME/.shrc" ;;
+        *)
+            shellRc="$HOME/.profile"
+            warn "Shell $SHELL not directly supported, using .profile for PATH"
+            ;;
+    esac
+
+    mkdir -p "$INSTALL_DIR"
+    touch "$shellRc"
+
+    grep -F 'export PATH=$PATH:$HOME/.local/bin' "$shellRc" > /dev/null || {
+        echo 'export PATH=$PATH:$HOME/.local/bin' >> "$shellRc"
+        info "Added \$HOME/.local/bin to PATH in $shellRc"
+        info "To use resterm immediately, run: . $shellRc or restart your session"
+    }
 
     info "Fetching latest release..."
     VERSION=$(get_latest_release)
@@ -97,24 +117,10 @@ main() {
     chmod +x "$TMP_BINARY"
 
     info "Installing to $INSTALL_DIR..."
-    if [ -w "$INSTALL_DIR" ]; then
-        mv "$TMP_BINARY" "$INSTALL_DIR/$BINARY_NAME"
-    else
-        info "Requesting sudo privileges to install to $INSTALL_DIR..."
-        sudo mv "$TMP_BINARY" "$INSTALL_DIR/$BINARY_NAME"
-    fi
+    mv "$TMP_BINARY" "$INSTALL_DIR/$BINARY_NAME"
 
-    if command_exists "$BINARY_NAME"; then
-        INSTALLED_VERSION=$("$BINARY_NAME" --version 2>&1 || echo "unknown")
-        info "Successfully installed Resterm!"
-        info "Version: $INSTALLED_VERSION"
-        info "Location: $(command -v $BINARY_NAME)"
-        echo ""
-        info "Run 'resterm --help' to get started"
-    else
-        warn "Installation completed but binary not found in PATH"
-        warn "You may need to add $INSTALL_DIR to your PATH"
-    fi
+    info "✔ Successfully installed Resterm $VERSION!"
+    info "Location: $INSTALL_DIR/$BINARY_NAME"
 }
 
 main
