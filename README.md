@@ -48,10 +48,34 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 ## Installation
 
-> [!NOTE]
-> The install helper uses `curl` and `jq`. Install `jq` with your package manager (`brew install jq`, `sudo apt install jq`, etc.).
+### Quick Install
 
-### Linux / macOS
+**Linux / macOS:**
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | sh
+```
+
+or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
+```
+
+These scripts will automatically detect your architecture, download the latest release, and install the binary.
+
+### Manual Installation
+
+> [!NOTE]
+> The manual install helper uses `curl` and `jq`. Install `jq` with your package manager (`brew install jq`, `sudo apt install jq`, etc.).
+
+#### Linux / macOS
 
 ```bash
 # Detect latest tag
@@ -65,7 +89,7 @@ chmod +x resterm
 sudo install -m 0755 resterm /usr/local/bin/resterm
 ```
 
-### Windows (PowerShell)
+#### Windows (PowerShell)
 
 ```powershell
 $latest = Invoke-RestMethod https://api.github.com/repos/unkn0wn-root/resterm/releases/latest
