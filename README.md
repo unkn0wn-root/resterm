@@ -53,13 +53,13 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 **Linux / macOS:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
 ```
 
 or with `wget`:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | sh
+wget -qO- https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
 ```
 
 **Windows (PowerShell):**
