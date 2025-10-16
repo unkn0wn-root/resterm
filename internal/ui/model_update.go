@@ -887,10 +887,16 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "h":
 			m.repeatChordPrefix = prefix
 			m.repeatChordActive = true
+			if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
+				return true, m.runSidebarWidthResize(-sidebarWidthStep)
+			}
 			return true, m.runEditorResize(-editorSplitStep)
 		case "l":
 			m.repeatChordPrefix = prefix
 			m.repeatChordActive = true
+			if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
+				return true, m.runSidebarWidthResize(sidebarWidthStep)
+			}
 			return true, m.runEditorResize(editorSplitStep)
 		case "j":
 			m.repeatChordPrefix = prefix
@@ -1018,6 +1024,21 @@ func (m *Model) runEditorResize(delta float64) tea.Cmd {
 			m.setStatusMessage(statusMsg{text: "Editor already at minimum width", level: statusInfo})
 		} else if delta > 0 {
 			m.setStatusMessage(statusMsg{text: "Editor already at maximum width", level: statusInfo})
+		}
+	}
+	return nil
+}
+
+func (m *Model) runSidebarWidthResize(delta float64) tea.Cmd {
+	changed, bounded, cmd := m.adjustSidebarWidth(delta)
+	if changed {
+		return cmd
+	}
+	if bounded {
+		if delta < 0 {
+			m.setStatusMessage(statusMsg{text: "Sidebar already at minimum width", level: statusInfo})
+		} else if delta > 0 {
+			m.setStatusMessage(statusMsg{text: "Sidebar already at maximum width", level: statusInfo})
 		}
 	}
 	return nil
