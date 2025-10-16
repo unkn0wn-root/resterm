@@ -5,34 +5,46 @@
 </p>
 
 <p align="center">
-  <img src="_media/resterm.png" alt="Screenshot of resterm TUI" width="720" />
+  <img src="_media/resterm_base.png" alt="Screenshot of resterm TUI base" width="720" />
 </p>
 
 <p align="center">
-  <img src="_media/resterm2.png" alt="Screenshot of resterm workflow run" width="720" />
+  <strong>Split panes with response diffing side-by-side</strong>
 </p>
 
-> [!NOTE]
-> See the documentation [`docs/resterm.md`](./docs/resterm.md) for a complete breakdown of all technical aspects and features.
+<p align="center">
+  <img src="_media/resterm_full.png" alt="Screenshot of resterm TUI fulleditor" width="720" />
+</p>
 
-## Overview
+<p align="center">
+  <strong>Split panes response and profiler</strong>
+</p>
 
-Resterm is a terminal-first client for working **HTTP**, **GraphQL**, and **gRPC** services. It pairs a Vim-like-style editor with a workspace explorer, response diff, history and scripting so you can iterate on requests without leaving the keyboard.
+<p align="center">
+  <img src="_media/resterm_profiler.png" alt="Screenshot of resterm profiler" width="720" />
+</p>
+
+<p align="center">
+  <strong>Workflow run with step-by-step validation</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_workflow.png" alt="Screenshot of resterm workflow run" width="720" />
+</p>
+
+Resterm is a terminal-first client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app. Simple, yet feature rich, terminal client for .http/.rest files.
+It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard.
 
 ## Highlights
 - **Editor** with inline syntax highlighting, search (`Ctrl+F`), and clipboard motions.
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
-- **Inline** requests and curl import for one-off calls (`Ctrl+Enter` on a URL or curl block).
+- **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History** views with optional split panes and pinned comparisons.
 - **Variable** scopes, captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
 - **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, metadata).
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
-
-## Documentation
-
-The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
 
 ## Installation
 
@@ -92,6 +104,26 @@ GET https://httpbin.org/bearer
 Accept: application/json
 ```
 
+### Inline curl import
+
+Drop a curl command into the editor and press `Ctrl+Enter` anywhere inside to turn it into a structured request. Resterm understands common flags (`-X`, `-H`, `--data*`, `--json`, `--url`, `--user`, `--compressed`, `-F/--form`, etc.), merges repeated data segments, and respects multipart uploads.
+
+```bash
+sudo curl \
+  --compressed \
+  --url "https://httpbin.org/post?source=resterm&case=multipart" \
+  --request POST \
+  -H "Accept: application/json" \
+  -H "X-Client: resterm-dev" \
+  --user resterm:test123 \
+  -F file=@README.md \
+  --form-string memo='Testing resterm inline curl
+with multiline value' \
+  --form-string meta='{"env":"test","attempt":1}'
+```
+
+If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically. Resterm loads the file attachment, preserves multiline form fields, and applies compression/auth headers without extra tweaks.
+
 ## Workflows
 
 - Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
@@ -105,11 +137,6 @@ Accept: application/json
 - CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`.
 - Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
 
-Again - If you want to see complete referance - see the documentation [`docs/resterm.md`](./docs/resterm.md).
+## Documentation
 
-## Roadmap
-- Command palette & keymap customisation
-- Richer response tooling (streaming previews, save-to-file, diffing)
-- Better scripting support (shared helpers, setup/teardown, better assertions)
-- Themes & layout configuration
-- Support more curl flags
+The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
