@@ -51,7 +51,7 @@ Content-Type: application/json
 
 ### Layout
 
-- **Sidebar**: upper half lists `.http`/`.rest` files (filtered by workspace root); lower half lists requests discovered in the active document.
+- **Sidebar**: upper half lists `.http`/`.rest` files (filtered by workspace root); lower half lists requests discovered in the active document. When focused, `g+h` shrinks and `g+l` expands the sidebar.
 - **Editor**: middle pane with modal editing (view mode by default, `i` to insert, `Esc` to return to view). Inline syntax highlighting marks metadata, headers, and bodies.
 - **Response panes**: right-hand side displays the most recent response, with optional splits for side-by-side comparisons.
 - **Header bar**: shows workspace, active environment, current request, and test summaries.
@@ -66,7 +66,7 @@ Content-Type: application/json
 | Toggle editor insert mode | `i` / `Esc` |
 | Cycle focus (files -> requests -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus requests / editor / response panes | `g+r` / `g+i` / `g+p` |
-| Adjust editor/response width | `g+h` / `g+l` |
+| Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
 | Adjust files/requests split | `g+j` / `g+k` |
 | Adjust requests/workflows split | `g+J` / `g+K` |
 | File list incremental search | Start typing while focus is in the list |
