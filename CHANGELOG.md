@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.3.1](https://github.com/unkn0wn-root/resterm/compare/v0.3.0...v0.3.1) (2025-10-16)
+
+
+### Features
+
+* add files/requests resize (g+h/l) ([501a2b2](https://github.com/unkn0wn-root/resterm/commit/501a2b2938de568b8039b69ce15bdfae0b603438))
+
 ## [0.3.0](https://github.com/unkn0wn-root/resterm/compare/v0.2.2...v0.3.0) (2025-10-16)
 
 
