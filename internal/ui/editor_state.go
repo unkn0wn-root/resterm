@@ -85,15 +85,17 @@ func statusCmd(level statusLevel, text string) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
-	selection      selectionState
-	mode           selectionMode
-	pendingMotion  string
-	search         editorSearch
-	motionsEnabled bool
-	undoStack      []editorSnapshot
-	redoStack      []editorSnapshot
-	undoCoalescing bool
-	registerText   string
+	selection            selectionState
+	mode                 selectionMode
+	pendingMotion        string
+	search               editorSearch
+	motionsEnabled       bool
+	undoStack            []editorSnapshot
+	redoStack            []editorSnapshot
+	undoCoalescing       bool
+	registerText         string
+	metadataHints        metadataHintState
+	metadataHintsEnabled bool
 }
 
 const editorUndoLimit = 64
@@ -117,6 +119,77 @@ type editorSearch struct {
 	matches []searchMatch
 	index   int
 	active  bool
+}
+
+const metadataHintDisplayLimit = 6
+
+type metadataHintState struct {
+	active       bool
+	anchorOffset int
+	selection    int
+	filtered     []metadataHintOption
+	query        string
+}
+
+func (s *metadataHintState) deactivate() {
+	s.active = false
+	s.filtered = nil
+	s.selection = 0
+	s.query = ""
+	s.anchorOffset = 0
+}
+
+func (s *metadataHintState) update(anchor int, filtered []metadataHintOption, query string) {
+	if len(filtered) == 0 {
+		s.deactivate()
+		return
+	}
+	if !s.active || s.anchorOffset != anchor || s.selection >= len(filtered) {
+		s.selection = 0
+	}
+	s.active = true
+	s.anchorOffset = anchor
+	s.filtered = filtered
+	s.query = query
+}
+
+func (s *metadataHintState) move(delta int) {
+	if !s.active || len(s.filtered) == 0 {
+		return
+	}
+	count := len(s.filtered)
+	idx := (s.selection + delta) % count
+	if idx < 0 {
+		idx += count
+	}
+	s.selection = idx
+}
+
+func (s metadataHintState) display(limit int) (items []metadataHintOption, selected int, ok bool) {
+	if !s.active || len(s.filtered) == 0 || limit <= 0 {
+		return nil, 0, false
+	}
+	if s.selection >= len(s.filtered) {
+		return nil, 0, false
+	}
+	start := s.selection - limit/2
+	if start < 0 {
+		start = 0
+	}
+	maxStart := len(s.filtered) - limit
+	if maxStart < 0 {
+		maxStart = 0
+	}
+	if start > maxStart {
+		start = maxStart
+	}
+	end := start + limit
+	if end > len(s.filtered) {
+		end = len(s.filtered)
+	}
+	window := make([]metadataHintOption, end-start)
+	copy(window, s.filtered[start:end])
+	return window, s.selection - start, true
 }
 
 func newRequestEditor() requestEditor {
@@ -293,6 +366,114 @@ func (e requestEditor) selectionSummaryRange() (
 	return start, end
 }
 
+func (e *requestEditor) SetMetadataHintsEnabled(enabled bool) {
+	e.metadataHintsEnabled = enabled
+	if !enabled {
+		e.metadataHints.deactivate()
+	}
+}
+
+func (e *requestEditor) metadataHintsDisplay(limit int) (items []metadataHintOption, selection int, ok bool) {
+	return e.metadataHints.display(limit)
+}
+
+func (e *requestEditor) handleMetadataHintNavigation(msg tea.KeyMsg) (bool, tea.Cmd) {
+	if !e.metadataHints.active || len(e.metadataHints.filtered) == 0 {
+		return false, nil
+	}
+	switch msg.String() {
+	case "down", "ctrl+n":
+		e.metadataHints.move(1)
+		return true, nil
+	case "up", "ctrl+p", "shift+tab":
+		e.metadataHints.move(-1)
+		return true, nil
+	case "tab", "enter", "ctrl+m":
+		cmd := e.applyMetadataHintSelection()
+		return true, cmd
+	default:
+		return false, nil
+	}
+}
+
+func (e *requestEditor) refreshMetadataHints() {
+	if !e.metadataHintsEnabled {
+		e.metadataHints.deactivate()
+		return
+	}
+	value := e.Value()
+	runes := []rune(value)
+	caret := e.caretPosition()
+	if caret.Offset <= 0 || caret.Offset > len(runes) {
+		e.metadataHints.deactivate()
+		return
+	}
+	anchor := findMetadataAnchor(runes, caret.Offset)
+	if anchor == -1 {
+		e.metadataHints.deactivate()
+		return
+	}
+	if !isMetadataDirectiveContext(runes, anchor) {
+		e.metadataHints.deactivate()
+		return
+	}
+	queryRunes := runes[anchor+1 : caret.Offset]
+	if hasDisallowedMetadataRunes(queryRunes) {
+		e.metadataHints.deactivate()
+		return
+	}
+	query := strings.ToLower(string(queryRunes))
+	filtered := filterMetadataHintOptions(query)
+	if len(filtered) == 0 {
+		e.metadataHints.deactivate()
+		return
+	}
+	e.metadataHints.update(anchor, filtered, query)
+}
+
+func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
+	if !e.metadataHints.active || len(e.metadataHints.filtered) == 0 {
+		return nil
+	}
+	if e.metadataHints.selection < 0 || e.metadataHints.selection >= len(e.metadataHints.filtered) {
+		return nil
+	}
+	replacement := e.metadataHints.filtered[e.metadataHints.selection].Label
+	start := e.metadataHints.anchorOffset
+	caret := e.caretPosition()
+	if start < 0 || caret.Offset < start {
+		e.metadataHints.deactivate()
+		return nil
+	}
+	runes := []rune(e.Value())
+	end := caret.Offset
+	if end > len(runes) {
+		end = len(runes)
+	}
+	before := runes[:start]
+	after := runes[end:]
+	replacementRunes := []rune(replacement)
+	needsSpace := len(after) == 0 || !unicode.IsSpace(after[0])
+	e.pushUndoSnapshot()
+	updated := append([]rune{}, before...)
+	updated = append(updated, replacementRunes...)
+	newOffset := len(updated)
+	if needsSpace {
+		updated = append(updated, ' ')
+		newOffset++
+	}
+	updated = append(updated, after...)
+	newValue := string(updated)
+	prevView := e.ViewStart()
+	e.SetValue(newValue)
+	e.SetViewStart(prevView)
+	line, col := positionForOffset(newValue, newOffset)
+	e.moveCursorTo(line, col)
+	e.applySelectionHighlight()
+	e.metadataHints.deactivate()
+	return toEditorEventCmd(editorEvent{dirty: true})
+}
+
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	keyMsg, isKey := msg.(tea.KeyMsg)
 	if !isKey {
@@ -309,6 +490,13 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	handled := false
 	var cmds []tea.Cmd
 
+	if consumed, hintCmd := e.handleMetadataHintNavigation(keyMsg); consumed {
+		if hintCmd != nil {
+			cmds = append(cmds, hintCmd)
+		}
+		return e, tea.Batch(cmds...)
+	}
+
 	switch keyMsg.String() {
 	case "ctrl+space":
 		if e.hasSelection() {
@@ -322,6 +510,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			e.clearSelection()
 			handled = true
 		}
+		e.metadataHints.deactivate()
 	case "ctrl+c":
 		if text := e.selectedText(); text != "" {
 			cmds = append(cmds, (&e).copyToClipboard(text))
@@ -483,6 +672,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	}
 
 	after := e.caretPosition()
+	e.refreshMetadataHints()
 	if transformed.String() != keyMsg.String() && !e.hasSelection() {
 		e.clearSelection()
 	}
@@ -1723,6 +1913,63 @@ func positionForOffset(value string, offset int) (int, int) {
 	return last, utf8.RuneCountInString(lines[last])
 }
 
+func findMetadataAnchor(runes []rune, caretOffset int) int {
+	for i := caretOffset - 1; i >= 0; i-- {
+		switch runes[i] {
+		case '@':
+			return i
+		case '\n':
+			return -1
+		}
+	}
+	return -1
+}
+
+func hasDisallowedMetadataRunes(query []rune) bool {
+	for _, r := range query {
+		if r == '\n' || unicode.IsSpace(r) {
+			return true
+		}
+		if !isMetadataQueryRune(r) {
+			return true
+		}
+	}
+	return false
+}
+
+func isMetadataQueryRune(r rune) bool {
+	if unicode.IsLetter(r) || unicode.IsDigit(r) {
+		return true
+	}
+	switch r {
+	case '-', '_':
+		return true
+	default:
+		return false
+	}
+}
+
+func isMetadataDirectiveContext(runes []rune, anchor int) bool {
+	if anchor <= 0 {
+		return false
+	}
+	lineStart := anchor
+	for lineStart > 0 && runes[lineStart-1] != '\n' {
+		lineStart--
+	}
+	prefix := strings.TrimSpace(string(runes[lineStart:anchor]))
+	if prefix == "" {
+		return false
+	}
+	if strings.HasSuffix(prefix, "#") || strings.HasSuffix(prefix, "*") {
+		return true
+	}
+	if strings.HasSuffix(prefix, "//") || strings.HasSuffix(prefix, "/*") {
+		return true
+	}
+	return false
+}
+
 func (e requestEditor) clampOffset(offset int) int {
 	if offset < 0 {
 		return 0
@@ -1845,6 +2092,25 @@ func (e *requestEditor) jumpToSearchIndex(index int) tea.Cmd {
 		e.moveCursorTo(line, col)
 		e.applySelectionHighlight()
 	})
+}
+
+func (e requestEditor) SearchActive() bool {
+	if !e.search.active {
+		return false
+	}
+	return strings.TrimSpace(e.search.query) != ""
+}
+
+func (e *requestEditor) ExitSearchMode() tea.Cmd {
+	hadState := e.search.active || len(e.search.matches) > 0
+	e.search.active = false
+	e.search.matches = nil
+	e.search.index = -1
+	e.applySelectionHighlight()
+	if !hadState {
+		return nil
+	}
+	return statusCmd(statusInfo, "Search cleared")
 }
 
 func stripSelectionMovement(msg tea.KeyMsg) (tea.KeyMsg, bool) {

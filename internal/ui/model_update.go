@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
@@ -359,20 +358,36 @@ func (m *Model) canPreviewOnSpace() bool {
 	}
 }
 
-func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
-	keyStr := msg.String()
-	switch keyStr {
+func isSendShortcut(msg tea.KeyMsg) bool {
+	switch msg.String() {
 	case "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j", "ctrl+m":
 		return true
-	case "enter":
-		return !insertMode
 	}
+
 	switch msg.Type {
 	case tea.KeyCtrlJ:
 		return true
+	}
+
+	return false
+}
+
+func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
+	if isSendShortcut(msg) {
+		return true
+	}
+
+	keyStr := msg.String()
+	switch keyStr {
+	case "enter":
+		return !insertMode
+	}
+
+	switch msg.Type {
 	case tea.KeyEnter:
 		return !insertMode
 	}
+
 	return false
 }
 
@@ -551,7 +566,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "p":
-				if strings.TrimSpace(m.editor.search.query) != "" {
+				if m.editor.SearchActive() {
 					var cmd tea.Cmd
 					m.editor, cmd = m.editor.PrevSearchMatch()
 					m.suppressEditorKey = true
@@ -604,9 +619,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(nil)
 			case "esc":
+				exitCmd := m.editor.ExitSearchMode()
 				m.editor.ClearSelection()
 				m.suppressEditorKey = true
-				return combine(nil)
+				return combine(exitCmd)
 			case "v":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.ToggleVisual()
@@ -741,38 +757,38 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			cmd := m.retreatResponseSearch()
 			return combine(cmd)
-	case "down", "j":
-		if pane == nil {
-			return combine(nil)
-		}
-		if pane.activeTab == responseTabStats {
-			snapshot := pane.snapshot
-			if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
-				return combine(m.moveWorkflowStatsSelection(1))
+		case "down", "j":
+			if pane == nil {
+				return combine(nil)
 			}
-		}
-		if pane.activeTab == responseTabHistory {
-			return combine(nil)
-		}
-		pane.viewport.ScrollDown(1)
-		pane.setCurrPosition()
-		return combine(nil)
-	case "up", "k":
-		if pane == nil {
-			return combine(nil)
-		}
-		if pane.activeTab == responseTabStats {
-			snapshot := pane.snapshot
-			if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
-				return combine(m.moveWorkflowStatsSelection(-1))
+			if pane.activeTab == responseTabStats {
+				snapshot := pane.snapshot
+				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					return combine(m.moveWorkflowStatsSelection(1))
+				}
 			}
-		}
-		if pane.activeTab == responseTabHistory {
+			if pane.activeTab == responseTabHistory {
+				return combine(nil)
+			}
+			pane.viewport.ScrollDown(1)
+			pane.setCurrPosition()
 			return combine(nil)
-		}
-		pane.viewport.ScrollUp(1)
-		pane.setCurrPosition()
-		return combine(nil)
+		case "up", "k":
+			if pane == nil {
+				return combine(nil)
+			}
+			if pane.activeTab == responseTabStats {
+				snapshot := pane.snapshot
+				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					return combine(m.moveWorkflowStatsSelection(-1))
+				}
+			}
+			if pane.activeTab == responseTabHistory {
+				return combine(nil)
+			}
+			pane.viewport.ScrollUp(1)
+			pane.setCurrPosition()
+			return combine(nil)
 		case "pgdown":
 			if pane == nil || pane.activeTab == responseTabHistory {
 				return combine(nil)
@@ -791,19 +807,19 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
 		case "right", "ctrl+l", "l":
 			return combine(m.activateNextTabFor(m.responsePaneFocus))
-	case "enter":
-		if pane != nil {
-			switch pane.activeTab {
-			case responseTabHistory:
-			return combine(m.loadHistorySelection(false))
-			case responseTabStats:
-				snapshot := pane.snapshot
-				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
-					return combine(m.toggleWorkflowStatsExpansion())
+		case "enter":
+			if pane != nil {
+				switch pane.activeTab {
+				case responseTabHistory:
+					return combine(m.loadHistorySelection(false))
+				case responseTabStats:
+					snapshot := pane.snapshot
+					if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+						return combine(m.toggleWorkflowStatsExpansion())
+					}
 				}
 			}
 		}
-	}
 		if pane != nil && pane.activeTab == responseTabHistory {
 			switch keyStr := msg.String(); keyStr {
 			case "d":
@@ -830,6 +846,13 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				}
 			}
 		}
+	}
+
+	if isSendShortcut(msg) {
+		if m.sending {
+			return combine(nil)
+		}
+		return combine(m.sendActiveRequest())
 	}
 
 	if m.focus != focusFile && m.focus != focusRequests && m.focus != focusWorkflows {

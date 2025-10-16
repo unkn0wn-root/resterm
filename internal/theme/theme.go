@@ -61,6 +61,10 @@ type Theme struct {
 	PaneBorderFocusRequests       lipgloss.Color
 	PaneActiveForeground          lipgloss.Color
 	EditorMetadata                EditorMetadataPalette
+	EditorHintBox                 lipgloss.Style
+	EditorHintItem                lipgloss.Style
+	EditorHintSelected            lipgloss.Style
+	EditorHintAnnotation          lipgloss.Style
 }
 
 func DefaultTheme() Theme {
@@ -224,6 +228,10 @@ func DefaultTheme() Theme {
 				"no-log":            directiveAccent,
 			},
 		},
+		EditorHintBox:        lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1).Foreground(lipgloss.Color("#E6E1FF")),
+		EditorHintItem:       lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D4F1")),
+		EditorHintSelected:   lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1020")).Background(lipgloss.Color("#FFD46A")).Bold(true),
+		EditorHintAnnotation: lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 	}
 }
 

@@ -36,7 +36,7 @@ Resterm is a terminal-first client for working with **HTTP**, **GraphQL**, and *
 It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard.
 
 ## Highlights
-- **Editor** with inline syntax highlighting, search (`Ctrl+F`), and clipboard motions.
+- **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History** views with optional split panes and pinned comparisons.

@@ -84,4 +84,3 @@ func TestHandleProfileResponseUpdatesState(t *testing.T) {
 		t.Fatalf("expected stats report to be populated after profiling run")
 	}
 }
-

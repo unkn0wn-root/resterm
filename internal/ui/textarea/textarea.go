@@ -238,6 +238,7 @@ type Model struct {
 	selectionEnd    int
 	selectionStyle  lipgloss.Style
 	runeStyler      RuneStyler
+	overlayLines    []string
 
 	// Cursor is the text area cursor.
 	Cursor cursor.Model
@@ -670,7 +671,7 @@ func (m *Model) deleteWordLeft() {
 	// Linter note: it's critical that we acquire the initial cursor position
 	// here prior to altering it via SetCursor() below. As such, moving this
 	// call into the corresponding if clause does not apply here.
-	oldCol := m.col //nolint:ifshort
+	oldCol := m.col
 
 	m.SetCursor(m.col - 1)
 	for unicode.IsSpace(m.value[m.row][m.col]) {
@@ -915,6 +916,22 @@ func (m Model) SelectionStyle() lipgloss.Style {
 // SetSelectionStyle overrides the default highlight style.
 func (m *Model) SetSelectionStyle(style lipgloss.Style) {
 	m.selectionStyle = style
+}
+
+// SetOverlayLines configures auxiliary lines inserted after the cursor row.
+func (m *Model) SetOverlayLines(lines []string) {
+	if len(lines) == 0 {
+		m.overlayLines = nil
+		return
+	}
+	buffer := make([]string, len(lines))
+	copy(buffer, lines)
+	m.overlayLines = buffer
+}
+
+// ClearOverlay clears any active overlay content.
+func (m *Model) ClearOverlay() {
+	m.overlayLines = nil
 }
 
 // SetRuneStyler registers a styling hook applied when rendering each line.
@@ -1204,10 +1221,12 @@ func (m Model) View() string {
 	var (
 		s                strings.Builder
 		style            lipgloss.Style
-		newLines         int
 		widestLineNumber int
 		lineInfo         = m.LineInfo()
 	)
+
+	overlayLines := m.overlayLines
+	overlayActive := len(overlayLines) > 0
 
 	viewPad := 3
 	visibleStart := 0
@@ -1391,13 +1410,21 @@ func (m Model) View() string {
 			}
 
 			s.WriteRune('\n')
-			newLines++
+
+			if overlayActive && m.row == l && lineInfo.RowOffset == wl {
+				displayLine, widestLineNumber = m.renderOverlayLines(&s, displayLine, widestLineNumber, overlayLines)
+				overlayActive = false
+			}
 		}
 
 		if l < len(m.value)-1 {
 			globalOffset++
 		}
 	}
+
+	if overlayActive {
+		displayLine, widestLineNumber = m.renderOverlayLines(&s, displayLine, widestLineNumber, overlayLines)
+}
 
 	// Always show at least `m.Height` lines at all times.
 	// To do this we can simply pad out a few extra new lines in the view.
@@ -1417,6 +1444,43 @@ func (m Model) View() string {
 
 	m.viewport.SetContent(s.String())
 	return m.style.Base.Render(m.viewport.View())
+}
+
+func (m *Model) renderOverlayLines(
+	builder *strings.Builder,
+	displayLine int,
+	widestLineNumber int,
+	lines []string,
+) (int, int) {
+	if len(lines) == 0 {
+		return displayLine, widestLineNumber
+	}
+	textStyle := m.style.computedText()
+	for _, line := range lines {
+		prompt := m.getPromptString(displayLine)
+		prompt = m.style.computedPrompt().Render(prompt)
+		builder.WriteString(textStyle.Render(prompt))
+
+		var ln string
+		if m.ShowLineNumbers {
+			ln = textStyle.Render(m.style.computedLineNumber().Render(m.formatLineNumber(" ")))
+			builder.WriteString(ln)
+			lnw := lipgloss.Width(ln)
+			if lnw > widestLineNumber {
+				widestLineNumber = lnw
+			}
+		}
+
+		builder.WriteString(line)
+		padWidth := m.width - lipgloss.Width(line)
+		if padWidth > 0 {
+			pad := strings.Repeat(" ", padWidth)
+			builder.WriteString(textStyle.Render(pad))
+		}
+		builder.WriteRune('\n')
+		displayLine++
+	}
+	return displayLine, widestLineNumber
 }
 
 func writeSegments(builder *strings.Builder, segments []string, start, end int) {

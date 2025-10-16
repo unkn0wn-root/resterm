@@ -1,18 +1,18 @@
 package ui
 
 import (
-    "strings"
-    "testing"
-    "time"
+	"strings"
+	"testing"
+	"time"
 
-    "github.com/unkn0wn-root/resterm/internal/analysis"
+	"github.com/unkn0wn-root/resterm/internal/analysis"
 )
 
 func TestRenderHistogramAlignment(t *testing.T) {
-    bins := []analysis.HistogramBucket{
-        {From: 1 * time.Millisecond, To: 2 * time.Millisecond, Count: 6},
-        {From: 3 * time.Millisecond, To: 5 * time.Millisecond, Count: 0},
-    }
+	bins := []analysis.HistogramBucket{
+		{From: 1 * time.Millisecond, To: 2 * time.Millisecond, Count: 6},
+		{From: 3 * time.Millisecond, To: 5 * time.Millisecond, Count: 0},
+	}
 	output := renderHistogram(bins)
 	lines := strings.Split(strings.TrimSpace(output), "\n")
 	if len(lines) != 3 { // header + 2 rows
