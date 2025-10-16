@@ -67,3 +67,23 @@ func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 		t.Fatalf("expected continuation line to retain indentation %q, got %q", indent, lines[indentIndex+1])
 	}
 }
+
+func TestBuildHTTPResponseViewsPreservesLeadingWhitespace(t *testing.T) {
+	body := []byte("  leading line\n    indented line")
+	resp := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": {"text/plain"}},
+		Body:         body,
+		Duration:     5 * time.Millisecond,
+		EffectiveURL: "https://example.com/whitespace",
+	}
+
+	pretty, raw, _ := buildHTTPResponseViews(resp, nil, nil)
+	if !strings.Contains(pretty, "  leading line") {
+		t.Fatalf("expected pretty view to retain leading spaces, got %q", pretty)
+	}
+	if !strings.Contains(raw, "  leading line") {
+		t.Fatalf("expected raw view to retain leading spaces, got %q", raw)
+	}
+}

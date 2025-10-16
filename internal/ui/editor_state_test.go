@@ -833,3 +833,99 @@ func TestRequestEditorPrevSearchMatchWrap(t *testing.T) {
 		t.Fatalf("expected search index reset to 0, got %d", editor.search.index)
 	}
 }
+
+func TestRequestEditorMetadataHintsSuggestAndAccept(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to activate after typing @")
+	}
+	if len(editor.metadataHints.filtered) == 0 {
+		t.Fatal("expected metadata hint options")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+
+	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatal("expected autocomplete acceptance to mark editor dirty")
+	}
+	if got := editor.Value(); !strings.HasPrefix(got, "# @name ") {
+		t.Fatalf("expected @name completion, got %q", got)
+	}
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to close after acceptance")
+	}
+}
+
+func TestRequestEditorMetadataHintsIgnoreNonCommentContext(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to remain inactive outside comment context")
+	}
+}
+
+func TestRequestEditorExitSearchMode(t *testing.T) {
+	content := "foo\nbar\nfoo"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.ApplySearch("foo", false)
+	status := statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after applying search")
+	}
+	if !editor.SearchActive() {
+		t.Fatal("expected search to be active after applying search")
+	}
+
+	exitCmd := editorPtr.ExitSearchMode()
+	exitStatus := statusFromCmd(t, exitCmd)
+	if exitStatus == nil {
+		t.Fatal("expected status when exiting search mode")
+	}
+	if exitStatus.level != statusInfo {
+		t.Fatalf("expected info status when exiting search, got %v", exitStatus.level)
+	}
+	if exitStatus.text != "Search cleared" {
+		t.Fatalf("unexpected exit status %q", exitStatus.text)
+	}
+	if editor.SearchActive() {
+		t.Fatal("expected search to be inactive after exit")
+	}
+	if editor.search.active {
+		t.Fatal("internal search flag should be false after exit")
+	}
+	if editor.search.index != -1 {
+		t.Fatalf("expected search index reset to -1, got %d", editor.search.index)
+	}
+	if len(editor.search.matches) != 0 {
+		t.Fatalf("expected search matches cleared, got %d", len(editor.search.matches))
+	}
+	if _, ok := editor.currentSearchMatch(); ok {
+		t.Fatal("did not expect current search match after exit")
+	}
+
+	editor, cmd = editor.NextSearchMatch()
+	status = statusFromCmd(t, cmd)
+	if status == nil {
+		t.Fatal("expected status after resuming search")
+	}
+	if !editor.SearchActive() {
+		t.Fatal("expected search to reactivate on next match")
+	}
+	if editor.search.index != 0 {
+		t.Fatalf("expected search index 0 after resuming, got %d", editor.search.index)
+	}
+}

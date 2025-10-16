@@ -100,12 +100,20 @@ func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult,
 func joinSections(sections ...string) string {
 	var parts []string
 	for _, section := range sections {
-		trimmed := strings.TrimSpace(section)
-		if trimmed != "" {
-			parts = append(parts, trimmed)
+		trimmed := trimSection(section)
+		if strings.TrimSpace(trimmed) == "" {
+			continue
 		}
+		parts = append(parts, trimmed)
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+func trimSection(section string) string {
+	if section == "" {
+		return ""
+	}
+	return strings.Trim(section, "\r\n")
 }
 
 func makeReadOnlyKeyMap(base textarea.KeyMap) textarea.KeyMap {

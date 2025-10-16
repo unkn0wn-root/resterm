@@ -238,6 +238,7 @@ type Model struct {
 	selectionEnd    int
 	selectionStyle  lipgloss.Style
 	runeStyler      RuneStyler
+	overlayLines    []string
 
 	// Cursor is the text area cursor.
 	Cursor cursor.Model
@@ -917,6 +918,22 @@ func (m *Model) SetSelectionStyle(style lipgloss.Style) {
 	m.selectionStyle = style
 }
 
+// SetOverlayLines configures auxiliary lines inserted after the cursor row.
+func (m *Model) SetOverlayLines(lines []string) {
+	if len(lines) == 0 {
+		m.overlayLines = nil
+		return
+	}
+	buffer := make([]string, len(lines))
+	copy(buffer, lines)
+	m.overlayLines = buffer
+}
+
+// ClearOverlay clears any active overlay content.
+func (m *Model) ClearOverlay() {
+	m.overlayLines = nil
+}
+
 // SetRuneStyler registers a styling hook applied when rendering each line.
 func (m *Model) SetRuneStyler(styler RuneStyler) {
 	m.runeStyler = styler
@@ -1209,6 +1226,10 @@ func (m Model) View() string {
 		lineInfo         = m.LineInfo()
 	)
 
+	overlayLines := m.overlayLines
+	overlayActive := len(overlayLines) > 0
+	overlayInserted := false
+
 	viewPad := 3
 	visibleStart := 0
 	visibleEnd := m.height + viewPad
@@ -1392,11 +1413,21 @@ func (m Model) View() string {
 
 			s.WriteRune('\n')
 			newLines++
+
+			if overlayActive && !overlayInserted && m.row == l && lineInfo.RowOffset == wl {
+				overlayInserted = true
+				displayLine, newLines, widestLineNumber = m.renderOverlayLines(&s, displayLine, newLines, widestLineNumber, overlayLines)
+			}
 		}
 
 		if l < len(m.value)-1 {
 			globalOffset++
 		}
+	}
+
+	if overlayActive && !overlayInserted {
+		displayLine, newLines, widestLineNumber = m.renderOverlayLines(&s, displayLine, newLines, widestLineNumber, overlayLines)
+		overlayInserted = true
 	}
 
 	// Always show at least `m.Height` lines at all times.
@@ -1417,6 +1448,45 @@ func (m Model) View() string {
 
 	m.viewport.SetContent(s.String())
 	return m.style.Base.Render(m.viewport.View())
+}
+
+func (m *Model) renderOverlayLines(
+	builder *strings.Builder,
+	displayLine int,
+	newLines int,
+	widestLineNumber int,
+	lines []string,
+) (int, int, int) {
+	if len(lines) == 0 {
+		return displayLine, newLines, widestLineNumber
+	}
+	textStyle := m.style.computedText()
+	for _, line := range lines {
+		prompt := m.getPromptString(displayLine)
+		prompt = m.style.computedPrompt().Render(prompt)
+		builder.WriteString(textStyle.Render(prompt))
+
+		var ln string
+		if m.ShowLineNumbers {
+			ln = textStyle.Render(m.style.computedLineNumber().Render(m.formatLineNumber(" ")))
+			builder.WriteString(ln)
+			lnw := lipgloss.Width(ln)
+			if lnw > widestLineNumber {
+				widestLineNumber = lnw
+			}
+		}
+
+		builder.WriteString(line)
+		padWidth := m.width - lipgloss.Width(line)
+		if padWidth > 0 {
+			pad := strings.Repeat(" ", padWidth)
+			builder.WriteString(textStyle.Render(pad))
+		}
+		builder.WriteRune('\n')
+		displayLine++
+		newLines++
+	}
+	return displayLine, newLines, widestLineNumber
 }
 
 func writeSegments(builder *strings.Builder, segments []string, start, end int) {

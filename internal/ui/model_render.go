@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -263,6 +264,17 @@ func (m Model) renderFilePane() string {
 
 func (m Model) renderEditorPane() string {
 	style := m.theme.EditorBorder
+	if m.focus == focusEditor && m.editorInsertMode {
+		if items, selection, ok := m.editor.metadataHintsDisplay(metadataHintDisplayLimit); ok && len(items) > 0 {
+			overlay := m.buildMetadataHintOverlay(items, selection, m.editor.Width())
+			m.editor.SetOverlayLines(overlay)
+		} else {
+			m.editor.ClearOverlay()
+		}
+	} else {
+		m.editor.ClearOverlay()
+	}
+
 	content := m.editor.View()
 	if m.focus == focusEditor {
 		style = style.
@@ -280,6 +292,39 @@ func (m Model) renderEditorPane() string {
 		Width(m.editor.Width() + 4).
 		Height(height).
 		Render(content)
+}
+
+func (m Model) buildMetadataHintOverlay(items []metadataHintOption, selection int, width int) []string {
+	if len(items) == 0 || width <= 0 {
+		return nil
+	}
+	lines := make([]string, len(items))
+	for i, item := range items {
+		labelStyle := m.theme.EditorHintItem
+		if i == selection {
+			labelStyle = m.theme.EditorHintSelected
+		}
+		label := labelStyle.Render(item.Label)
+		if item.Summary != "" {
+			annotation := m.theme.EditorHintAnnotation.Render(item.Summary)
+			lines[i] = lipgloss.JoinHorizontal(lipgloss.Top, label, " ", annotation)
+		} else {
+			lines[i] = label
+		}
+	}
+	boxWidth := width
+	if boxWidth > 60 {
+		boxWidth = 60
+	}
+	content := strings.Join(lines, "\n")
+	box := m.theme.EditorHintBox.Width(boxWidth).Render(content)
+	rawLines := strings.Split(box, "\n")
+	overlay := make([]string, 0, len(rawLines))
+	for _, line := range rawLines {
+		trimmed := ansi.Truncate(line, width, "")
+		overlay = append(overlay, trimmed)
+	}
+	return overlay
 }
 
 func (m Model) renderResponsePane() string {
