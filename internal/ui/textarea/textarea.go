@@ -671,7 +671,7 @@ func (m *Model) deleteWordLeft() {
 	// Linter note: it's critical that we acquire the initial cursor position
 	// here prior to altering it via SetCursor() below. As such, moving this
 	// call into the corresponding if clause does not apply here.
-	oldCol := m.col //nolint:ifshort
+	oldCol := m.col
 
 	m.SetCursor(m.col - 1)
 	for unicode.IsSpace(m.value[m.row][m.col]) {
@@ -1221,14 +1221,12 @@ func (m Model) View() string {
 	var (
 		s                strings.Builder
 		style            lipgloss.Style
-		newLines         int
 		widestLineNumber int
 		lineInfo         = m.LineInfo()
 	)
 
 	overlayLines := m.overlayLines
 	overlayActive := len(overlayLines) > 0
-	overlayInserted := false
 
 	viewPad := 3
 	visibleStart := 0
@@ -1412,11 +1410,10 @@ func (m Model) View() string {
 			}
 
 			s.WriteRune('\n')
-			newLines++
 
-			if overlayActive && !overlayInserted && m.row == l && lineInfo.RowOffset == wl {
-				overlayInserted = true
-				displayLine, newLines, widestLineNumber = m.renderOverlayLines(&s, displayLine, newLines, widestLineNumber, overlayLines)
+			if overlayActive && m.row == l && lineInfo.RowOffset == wl {
+				displayLine, widestLineNumber = m.renderOverlayLines(&s, displayLine, widestLineNumber, overlayLines)
+				overlayActive = false
 			}
 		}
 
@@ -1425,10 +1422,9 @@ func (m Model) View() string {
 		}
 	}
 
-	if overlayActive && !overlayInserted {
-		displayLine, newLines, widestLineNumber = m.renderOverlayLines(&s, displayLine, newLines, widestLineNumber, overlayLines)
-		overlayInserted = true
-	}
+	if overlayActive {
+		displayLine, widestLineNumber = m.renderOverlayLines(&s, displayLine, widestLineNumber, overlayLines)
+}
 
 	// Always show at least `m.Height` lines at all times.
 	// To do this we can simply pad out a few extra new lines in the view.
@@ -1453,12 +1449,11 @@ func (m Model) View() string {
 func (m *Model) renderOverlayLines(
 	builder *strings.Builder,
 	displayLine int,
-	newLines int,
 	widestLineNumber int,
 	lines []string,
-) (int, int, int) {
+) (int, int) {
 	if len(lines) == 0 {
-		return displayLine, newLines, widestLineNumber
+		return displayLine, widestLineNumber
 	}
 	textStyle := m.style.computedText()
 	for _, line := range lines {
@@ -1484,9 +1479,8 @@ func (m *Model) renderOverlayLines(
 		}
 		builder.WriteRune('\n')
 		displayLine++
-		newLines++
 	}
-	return displayLine, newLines, widestLineNumber
+	return displayLine, widestLineNumber
 }
 
 func writeSegments(builder *strings.Builder, segments []string, start, end int) {

@@ -453,10 +453,7 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	before := runes[:start]
 	after := runes[end:]
 	replacementRunes := []rune(replacement)
-	needsSpace := true
-	if len(after) > 0 && unicode.IsSpace(after[0]) {
-		needsSpace = false
-	}
+	needsSpace := len(after) == 0 || !unicode.IsSpace(after[0])
 	e.pushUndoSnapshot()
 	updated := append([]rune{}, before...)
 	updated = append(updated, replacementRunes...)
