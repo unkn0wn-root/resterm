@@ -67,6 +67,14 @@ const historySnippetMaxLines = 24
 const tabIndicatorPrefix = "▸ "
 
 const (
+	sidebarWidthDefault   = 0.2
+	sidebarWidthStep      = 0.05
+	minSidebarWidthRatio  = 0.05
+	maxSidebarWidthRatio  = 0.5
+	minSidebarWidthPixels = 20
+)
+
+const (
 	sidebarSplitDefault  = 0.5
 	sidebarSplitStep     = 0.05
 	minSidebarSplit      = 0.2
@@ -202,6 +210,8 @@ type Model struct {
 	paneContentHeight     int
 	frameWidth            int
 	frameHeight           int
+	sidebarWidth          float64
+	sidebarWidthPx        int
 	sidebarSplit          float64
 	sidebarFilesHeight    int
 	sidebarRequestsHeight int
@@ -398,6 +408,7 @@ func New(cfg Config) Model {
 		responseTokens:           make(map[string]*responseSnapshot),
 		responseLastFocused:      responsePanePrimary,
 		focus:                    focusFile,
+		sidebarWidth:             sidebarWidthDefault,
 		sidebarSplit:             sidebarSplitDefault,
 		workflowSplit:            workflowSplitDefault,
 		editorSplit:              editorSplitDefault,

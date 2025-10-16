@@ -181,6 +181,48 @@ func TestHandleKeyGhIgnoredInInsertMode(t *testing.T) {
 	}
 }
 
+func TestHandleKeyGhShrinksSidebarWhenFocused(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 200
+	model.height = 60
+	model.ready = true
+	model.setFocus(focusFile)
+	_ = model.applyLayout()
+	initialSidebar := model.sidebarWidthPx
+	initialEditor := model.editor.Width()
+
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+
+	if model.sidebarWidthPx >= initialSidebar {
+		t.Fatalf("expected gh to shrink sidebar width, initial %d new %d", initialSidebar, model.sidebarWidthPx)
+	}
+	if model.editor.Width() <= initialEditor {
+		t.Fatalf("expected editor width to grow after sidebar shrinks, initial %d new %d", initialEditor, model.editor.Width())
+	}
+}
+
+func TestHandleKeyGlExpandsSidebarWhenFocused(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 200
+	model.height = 60
+	model.ready = true
+	model.setFocus(focusRequests)
+	_ = model.applyLayout()
+	initialSidebar := model.sidebarWidthPx
+	initialEditor := model.editor.Width()
+
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+
+	if model.sidebarWidthPx <= initialSidebar {
+		t.Fatalf("expected gl to expand sidebar width, initial %d new %d", initialSidebar, model.sidebarWidthPx)
+	}
+	if model.editor.Width() >= initialEditor {
+		t.Fatalf("expected editor width to shrink after sidebar expands, initial %d new %d", initialEditor, model.editor.Width())
+	}
+}
+
 func TestHandleKeyGjAdjustsSidebar(t *testing.T) {
 	model := New(Config{WorkspaceRoot: t.TempDir()})
 	model.width = 160

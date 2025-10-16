@@ -39,13 +39,71 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.editorSplit = maxEditorSplit
 	}
 
-	fileWidth := m.width / 5
-	if fileWidth < 20 {
-		fileWidth = 20
+	if m.sidebarWidth <= 0 {
+		m.sidebarWidth = sidebarWidthDefault
 	}
 
-	remaining := m.width - fileWidth
-	minimumRemaining := minEditorPaneWidth + minResponsePaneWidth
+	width := m.width
+	mainMinimum := minEditorPaneWidth + minResponsePaneWidth
+	desiredSidebar := 0
+	if width > 0 {
+		desiredSidebar = int(math.Round(float64(width) * m.sidebarWidth))
+	}
+
+	minSidebar := minSidebarWidthPixels
+	if width > 0 {
+		minRatioWidth := int(math.Round(float64(width) * minSidebarWidthRatio))
+		if minRatioWidth > minSidebar {
+			minSidebar = minRatioWidth
+		}
+		if minSidebar > width {
+			minSidebar = width
+		}
+	}
+	if minSidebar < 1 {
+		minSidebar = 1
+	}
+
+	maxSidebar := minSidebarWidthPixels
+	if maxSidebar < 1 {
+		maxSidebar = 1
+	}
+	if width > 0 {
+		ratioCap := int(math.Round(float64(width) * maxSidebarWidthRatio))
+		if ratioCap < 1 {
+			ratioCap = 1
+		}
+		maxSidebar = ratioCap
+		contentCap := width - 1
+		if contentCap < 1 {
+			contentCap = 1
+		}
+		if maxSidebar > contentCap {
+			maxSidebar = contentCap
+		}
+	}
+	if maxSidebar < 1 {
+		maxSidebar = 1
+	}
+	if minSidebar > maxSidebar {
+		minSidebar = maxSidebar
+	}
+
+	if desiredSidebar < minSidebar {
+		desiredSidebar = minSidebar
+	}
+	if desiredSidebar > maxSidebar {
+		desiredSidebar = maxSidebar
+	}
+	if desiredSidebar < 1 {
+		desiredSidebar = 1
+	}
+
+	fileWidth := desiredSidebar
+	m.sidebarWidthPx = fileWidth
+
+	remaining := width - fileWidth
+	minimumRemaining := mainMinimum
 	if remaining < minimumRemaining {
 		remaining = minimumRemaining
 	}
@@ -80,6 +138,17 @@ func (m *Model) applyLayout() tea.Cmd {
 
 	if responseWidth < 1 {
 		responseWidth = 1
+	}
+
+	if width > 0 {
+		realSidebarRatio := float64(fileWidth) / float64(width)
+		if realSidebarRatio < minSidebarWidthRatio {
+			realSidebarRatio = minSidebarWidthRatio
+		}
+		if realSidebarRatio > maxSidebarWidthRatio {
+			realSidebarRatio = maxSidebarWidthRatio
+		}
+		m.sidebarWidth = realSidebarRatio
 	}
 
 	hasWorkflow := len(m.workflowItems) > 0
@@ -385,6 +454,44 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.envList.SetSize(envWidth, envHeight)
 	}
 	return m.syncResponsePanes()
+}
+
+func (m *Model) adjustSidebarWidth(delta float64) (bool, bool, tea.Cmd) {
+	if !m.ready || m.width <= 0 {
+		return false, false, nil
+	}
+
+	current := m.sidebarWidth
+	if current <= 0 {
+		current = sidebarWidthDefault
+	}
+
+	updated := current + delta
+	bounded := false
+	if updated < minSidebarWidthRatio {
+		updated = minSidebarWidthRatio
+		bounded = true
+	}
+	if updated > maxSidebarWidthRatio {
+		updated = maxSidebarWidthRatio
+		bounded = true
+	}
+
+	if math.Abs(updated-current) < 1e-6 {
+		return false, bounded, nil
+	}
+
+	prevRatio := m.sidebarWidth
+	prevWidth := m.sidebarWidthPx
+	m.sidebarWidth = updated
+	cmd := m.applyLayout()
+	newRatio := m.sidebarWidth
+	newWidth := m.sidebarWidthPx
+	changed := math.Abs(newRatio-prevRatio) > 1e-6 || newWidth != prevWidth
+	if !changed {
+		return false, true, cmd
+	}
+	return true, bounded, cmd
 }
 
 func (m *Model) adjustSidebarSplit(delta float64) (bool, bool, tea.Cmd) {

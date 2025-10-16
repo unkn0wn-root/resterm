@@ -60,6 +60,73 @@ func TestAdjustSidebarSplitClampsBounds(t *testing.T) {
 	}
 }
 
+func TestAdjustSidebarWidthModifiesWidths(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 180
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+
+	initialSidebar := model.sidebarWidthPx
+	initialEditor := model.editor.Width()
+	if initialSidebar <= 0 || initialEditor <= 0 {
+		t.Fatalf("expected initial widths to be positive, got sidebar %d editor %d", initialSidebar, initialEditor)
+	}
+
+	if changed, _, _ := model.adjustSidebarWidth(sidebarWidthStep); !changed {
+		t.Fatalf("expected sidebar width increase to apply")
+	}
+	expanded := model.sidebarWidthPx
+	if expanded <= initialSidebar {
+		t.Fatalf("expected sidebar width to grow, initial %d new %d", initialSidebar, expanded)
+	}
+	if model.editor.Width() >= initialEditor {
+		t.Fatalf("expected editor width to shrink after sidebar grows, initial %d new %d", initialEditor, model.editor.Width())
+	}
+
+	if changed, _, _ := model.adjustSidebarWidth(-sidebarWidthStep * 2); !changed {
+		t.Fatalf("expected sidebar width decrease to apply")
+	}
+	shrunken := model.sidebarWidthPx
+	if shrunken >= initialSidebar {
+		t.Fatalf("expected sidebar width to shrink below initial, initial %d new %d", initialSidebar, shrunken)
+	}
+	if model.editor.Width() <= initialEditor {
+		t.Fatalf("expected editor width to grow after sidebar shrinks, initial %d new %d", initialEditor, model.editor.Width())
+	}
+}
+
+func TestAdjustSidebarWidthClampsBounds(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 160
+	model.height = 60
+	model.ready = true
+
+	model.sidebarWidth = maxSidebarWidthRatio
+	_ = model.applyLayout()
+	if changed, bounded, _ := model.adjustSidebarWidth(sidebarWidthStep); changed {
+		t.Fatalf("expected width at maximum to remain unchanged")
+	} else if !bounded {
+		t.Fatalf("expected upper bound to be reported when at maximum width")
+	}
+
+	model.sidebarWidth = minSidebarWidthRatio
+	_ = model.applyLayout()
+	if changed, bounded, _ := model.adjustSidebarWidth(-sidebarWidthStep); changed {
+		t.Fatalf("expected width at minimum to remain unchanged")
+	} else if !bounded {
+		t.Fatalf("expected lower bound to be reported when at minimum width")
+	}
+
+	model.sidebarWidth = sidebarWidthDefault
+	_ = model.applyLayout()
+	if changed, _, _ := model.adjustSidebarWidth(sidebarWidthStep); !changed {
+		t.Fatalf("expected width adjustment within bounds to apply")
+	}
+}
+
 func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
 	cfg := Config{WorkspaceRoot: t.TempDir()}
 	model := New(cfg)
