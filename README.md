@@ -164,7 +164,7 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 
 ### Custom themes
 
-Resterm ships with a vibrant default palette, but you can provide your own by dropping theme definitions into the themes directory mentioned above. Each theme can be written in TOML or JSON and only needs to override the parts you care about.
+Resterm ships with a default palette, but you can provide your own by dropping theme definitions into the themes directory mentioned above. Each theme can be written in TOML or JSON and only needs to override the parts you care about.
 
 A ready-to-use sample lives in `_examples/themes/aurora.toml`. Point `RESTERM_THEMES_DIR` env var at that folder to try it immediately.
 
