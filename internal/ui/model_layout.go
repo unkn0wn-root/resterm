@@ -44,7 +44,6 @@ func (m *Model) applyLayout() tea.Cmd {
 	}
 
 	width := m.width
-	mainMinimum := minEditorPaneWidth + minResponsePaneWidth
 	desiredSidebar := 0
 	if width > 0 {
 		desiredSidebar = int(math.Round(float64(width) * m.sidebarWidth))
@@ -103,41 +102,75 @@ func (m *Model) applyLayout() tea.Cmd {
 	m.sidebarWidthPx = fileWidth
 
 	remaining := width - fileWidth
-	minimumRemaining := mainMinimum
-	if remaining < minimumRemaining {
-		remaining = minimumRemaining
+	if remaining < 2 {
+		remaining = 2
 	}
 
-	desiredEditor := int(math.Round(float64(remaining) * m.editorSplit))
-	if desiredEditor < minEditorPaneWidth {
-		desiredEditor = minEditorPaneWidth
+	editorMin := minEditorPaneWidth
+	responseMin := minResponsePaneWidth
+	ratio := m.editorSplit
+	if ratio <= 0 {
+		ratio = editorSplitDefault
 	}
 
-	maxEditor := remaining - minResponsePaneWidth
+	if remaining < editorMin+responseMin {
+		scaledEditor := int(math.Round(float64(remaining) * ratio))
+		if scaledEditor < 1 {
+			scaledEditor = 1
+		}
+		if scaledEditor > remaining-1 {
+			scaledEditor = remaining - 1
+		}
+		editorMin = scaledEditor
+		responseMin = remaining - editorMin
+		if responseMin < 1 {
+			responseMin = 1
+			editorMin = remaining - responseMin
+			if editorMin < 1 {
+				editorMin = 1
+			}
+		}
+	}
+
+	desiredEditor := int(math.Round(float64(remaining) * ratio))
+	if desiredEditor < editorMin {
+		desiredEditor = editorMin
+	}
+
+	maxEditor := remaining - responseMin
+	if maxEditor < editorMin {
+		maxEditor = editorMin
+	}
 	if desiredEditor > maxEditor {
 		desiredEditor = maxEditor
 	}
 
 	editorWidth := desiredEditor
-	if editorWidth < minEditorPaneWidth {
-		editorWidth = minEditorPaneWidth
+	responseWidth := remaining - editorWidth
+	if responseWidth < responseMin {
+		responseWidth = responseMin
+		editorWidth = remaining - responseWidth
+	}
+	if editorWidth < editorMin {
+		editorWidth = editorMin
+		responseWidth = remaining - editorWidth
 	}
 
-	responseWidth := remaining - editorWidth
-	if responseWidth < minResponsePaneWidth {
-		responseWidth = minResponsePaneWidth
-		editorWidth = remaining - responseWidth
-		if editorWidth < minEditorPaneWidth {
-			editorWidth = minEditorPaneWidth
+	if responseWidth < 1 {
+		responseWidth = 1
+		if remaining > 1 {
+			editorWidth = remaining - responseWidth
 		}
 	}
 
 	if editorWidth < 1 {
 		editorWidth = 1
-	}
-
-	if responseWidth < 1 {
-		responseWidth = 1
+		if remaining > 1 {
+			responseWidth = remaining - editorWidth
+			if responseWidth < 1 {
+				responseWidth = 1
+			}
+		}
 	}
 
 	if width > 0 {

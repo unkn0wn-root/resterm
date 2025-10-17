@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -206,6 +207,90 @@ func TestViewRespectsFrameDimensions(t *testing.T) {
 	view := model.View()
 	if got := lipgloss.Height(view); got != model.frameHeight {
 		t.Fatalf("expected view height %d, got %d", model.frameHeight, got)
+	}
+}
+
+func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	testCases := []struct {
+		name  string
+		width int
+	}{
+		{"wide", 160},
+		{"medium", 120},
+		{"narrow", 80},
+	}
+
+	for _, tc := range testCases {
+		t := t
+		t.Run(tc.name, func(t *testing.T) {
+			model := New(cfg)
+			model.ready = true
+			model.width = tc.width
+			model.height = 40
+			_ = model.applyLayout()
+
+			listWidth := lipgloss.Width(model.fileList.View())
+			listConfiguredWidth := model.fileList.Width()
+			editorViewWidth := lipgloss.Width(model.editor.View())
+			responseView := model.renderResponseColumn(responsePanePrimary, false, 0)
+			responseViewWidth := lipgloss.Width(responseView)
+
+			editorContent := model.editor.Width()
+			responseContent := model.responseContentWidth()
+			total := model.sidebarWidthPx + (editorContent + 4) + (responseContent + 4)
+			if total > model.width {
+				t.Fatalf("calculated pane widths sidebar=%d editor=%d (content %d, view %d) response=%d (content %d, view %d) total=%d window %d (list config %d)", model.sidebarWidthPx, editorContent+4, editorContent, editorViewWidth, responseContent+4, responseContent, responseViewWidth, total, model.width, listConfiguredWidth)
+			}
+
+			filePane := model.renderFilePane()
+			editorPane := model.renderEditorPane()
+			available := model.width - lipgloss.Width(filePane) - lipgloss.Width(editorPane)
+			if available < 0 {
+				available = 0
+			}
+			responsePane := model.renderResponsePane(available)
+			panesWidth := lipgloss.Width(lipgloss.JoinHorizontal(lipgloss.Top, filePane, editorPane, responsePane))
+			if panesWidth != model.width {
+				t.Fatalf(
+					"rendered widths file=%d editor=%d response=%d total=%d window %d (calculated sidebar=%d editor=%d response=%d list view %d list config %d editor view %d response view %d)",
+					lipgloss.Width(filePane),
+					lipgloss.Width(editorPane),
+					lipgloss.Width(responsePane),
+					panesWidth,
+					model.width,
+					model.sidebarWidthPx,
+					editorContent+4,
+					responseContent+4,
+					listWidth,
+					listConfiguredWidth,
+					editorViewWidth,
+					responseViewWidth,
+				)
+			}
+		})
+	}
+}
+
+func TestFrameSizes(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	styleResponse := model.theme.ResponseBorder
+	styleResponseFocused := styleResponse.BorderStyle(lipgloss.ThickBorder())
+
+	if base := styleResponse.GetHorizontalFrameSize(); base != 2 {
+		t.Fatalf("expected base frame size 2, got %d", base)
+	}
+	if focused := styleResponseFocused.GetHorizontalFrameSize(); focused != 2 {
+		t.Fatalf("expected focused frame size 2, got %d", focused)
+	}
+	probe := styleResponse.Width(10).Render(strings.Repeat("X", 10))
+	if w := lipgloss.Width(probe); w != 12 {
+		t.Fatalf("expected width 12 with Width(10), got %d", w)
+	}
+	probe = styleResponse.Width(10).MaxWidth(10).Render(strings.Repeat("X", 10))
+	if w := lipgloss.Width(probe); w != 10 {
+		t.Fatalf("expected width 10 with Width/MaxWidth(10), got %d", w)
 	}
 }
 

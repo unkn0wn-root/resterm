@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"math"
 	"path/filepath"
 	"strings"
 
@@ -33,8 +34,14 @@ func (m Model) View() string {
 	}
 
 	filePane := m.renderFilePane()
+	fileWidth := lipgloss.Width(filePane)
 	editorPane := m.renderEditorPane()
-	responsePane := m.renderResponsePane()
+	editorWidth := lipgloss.Width(editorPane)
+	availableResponseWidth := m.width - fileWidth - editorWidth
+	if availableResponseWidth < 0 {
+		availableResponseWidth = 0
+	}
+	responsePane := m.renderResponsePane(availableResponseWidth)
 
 	panes := lipgloss.JoinHorizontal(
 		lipgloss.Top,
@@ -290,6 +297,11 @@ func (m Model) renderEditorPane() string {
 	}
 
 	content := m.editor.View()
+	innerWidth := lipgloss.Width(content)
+	minInnerWidth := m.editor.Width() + 4
+	if innerWidth < minInnerWidth {
+		innerWidth = minInnerWidth
+	}
 	if m.focus == focusEditor {
 		style = style.
 			BorderForeground(lipgloss.Color("#B794F6")).
@@ -303,7 +315,7 @@ func (m Model) renderEditorPane() string {
 	innerHeight := maxInt(m.editor.Height(), m.paneContentHeight)
 	height := innerHeight + frameHeight
 	return style.
-		Width(m.editor.Width() + 4).
+		Width(innerWidth).
 		Height(height).
 		Render(content)
 }
@@ -341,7 +353,7 @@ func (m Model) buildMetadataHintOverlay(items []metadataHintOption, selection in
 	return overlay
 }
 
-func (m Model) renderResponsePane() string {
+func (m Model) renderResponsePane(availableWidth int) string {
 	style := m.theme.ResponseBorder
 	active := m.focus == focusResponse
 	if active {
@@ -353,13 +365,40 @@ func (m Model) renderResponsePane() string {
 		style = style.Faint(true)
 	}
 
+	frameWidth := style.GetHorizontalFrameSize()
+	computedOuterWidth := m.responseContentWidth() + frameWidth
+	targetOuterWidth := computedOuterWidth
+	if availableWidth > 0 {
+		targetOuterWidth = availableWidth
+	} else {
+		targetOuterWidth = frameWidth
+	}
+	if targetOuterWidth < frameWidth {
+		targetOuterWidth = frameWidth
+	}
+	contentBudget := targetOuterWidth - frameWidth
+	if contentBudget < 1 {
+		contentBudget = 1
+	}
+
 	var body string
 	if m.responseSplit {
 		primaryFocused := active && m.responsePaneFocus == responsePanePrimary
 		secondaryFocused := active && m.responsePaneFocus == responsePaneSecondary
 		if m.responseSplitOrientation == responseSplitHorizontal {
-			top := m.renderResponseColumn(responsePanePrimary, primaryFocused)
-			bottom := m.renderResponseColumn(responsePaneSecondary, secondaryFocused)
+			columnWidth := maxInt(contentBudget, 1)
+			primaryPane := m.pane(responsePanePrimary)
+			secondaryPane := m.pane(responsePaneSecondary)
+			primaryWidth := clampPositive(1, columnWidth)
+			secondaryWidth := clampPositive(1, columnWidth)
+			if primaryPane != nil {
+				primaryWidth = clampPositive(primaryPane.viewport.Width, columnWidth)
+			}
+			if secondaryPane != nil {
+				secondaryWidth = clampPositive(secondaryPane.viewport.Width, columnWidth)
+			}
+			top := m.renderResponseColumn(responsePanePrimary, primaryFocused, primaryWidth)
+			bottom := m.renderResponseColumn(responsePaneSecondary, secondaryFocused, secondaryWidth)
 			divider := m.renderResponseDividerHorizontal(top, bottom)
 			if divider != "" {
 				body = lipgloss.JoinVertical(lipgloss.Left, top, divider, bottom)
@@ -367,8 +406,53 @@ func (m Model) renderResponsePane() string {
 				body = lipgloss.JoinVertical(lipgloss.Left, top, bottom)
 			}
 		} else {
-			left := m.renderResponseColumn(responsePanePrimary, primaryFocused)
-			right := m.renderResponseColumn(responsePaneSecondary, secondaryFocused)
+			dividerWidth := responseSplitSeparatorWidth
+			availableForColumns := contentBudget - dividerWidth
+			if availableForColumns < 1 {
+				availableForColumns = contentBudget
+				dividerWidth = 0
+			}
+			primary := m.pane(responsePanePrimary)
+			secondary := m.pane(responsePaneSecondary)
+			primaryWidth := 1
+			secondaryWidth := 1
+			if primary != nil {
+				primaryWidth = maxInt(primary.viewport.Width, 1)
+			}
+			if secondary != nil {
+				secondaryWidth = maxInt(secondary.viewport.Width, 1)
+			}
+			totalColumns := primaryWidth + secondaryWidth
+			if availableForColumns > 0 && totalColumns > availableForColumns {
+				scale := float64(availableForColumns) / float64(totalColumns)
+				primaryWidth = int(math.Round(float64(primaryWidth) * scale))
+				if primaryWidth < 1 {
+					primaryWidth = 1
+				}
+				secondaryWidth = availableForColumns - primaryWidth
+				if secondaryWidth < 1 {
+					secondaryWidth = 1
+					if availableForColumns > 1 {
+						primaryWidth = availableForColumns - secondaryWidth
+					}
+				}
+			}
+			if dividerWidth > 0 && primaryWidth+secondaryWidth > availableForColumns {
+				excess := primaryWidth + secondaryWidth - availableForColumns
+				if primaryWidth >= secondaryWidth {
+					primaryWidth -= excess
+					if primaryWidth < 1 {
+						primaryWidth = 1
+					}
+				} else {
+					secondaryWidth -= excess
+					if secondaryWidth < 1 {
+						secondaryWidth = 1
+					}
+				}
+			}
+			left := m.renderResponseColumn(responsePanePrimary, primaryFocused, clampPositive(primaryWidth, contentBudget))
+			right := m.renderResponseColumn(responsePaneSecondary, secondaryFocused, clampPositive(secondaryWidth, contentBudget))
 			divider := m.renderResponseDivider(left, right)
 			if divider != "" {
 				body = lipgloss.JoinHorizontal(lipgloss.Top, left, divider, right)
@@ -377,32 +461,41 @@ func (m Model) renderResponsePane() string {
 			}
 		}
 	} else {
-		column := m.renderResponseColumn(responsePanePrimary, active)
+		primary := m.pane(responsePanePrimary)
+		columnWidth := 1
+		if primary != nil {
+			columnWidth = maxInt(primary.viewport.Width, 1)
+		}
+		if contentBudget > 0 && columnWidth > contentBudget {
+			columnWidth = contentBudget
+		}
+		column := m.renderResponseColumn(responsePanePrimary, active, columnWidth)
 		if !active {
 			column = lipgloss.NewStyle().Faint(true).Render(column)
 		}
 		body = column
 	}
 
-	width := m.responseContentWidth() + 4
+	width := targetOuterWidth
 	frameHeight := style.GetVerticalFrameSize()
 	height := m.paneContentHeight + frameHeight
 	if height < frameHeight {
 		height = frameHeight
 	}
-	return style.
-		Width(width).
-		Height(height).
-		Render(body)
+	contentWidth := maxInt(width-frameWidth, 1)
+	return style.Width(contentWidth).MaxWidth(width).Height(height).Render(body)
 }
 
-func (m Model) renderResponseColumn(id responsePaneID, focused bool) string {
+func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth int) string {
 	pane := m.pane(id)
 	if pane == nil {
 		return ""
 	}
 
 	contentWidth := maxInt(pane.viewport.Width, 1)
+	if maxWidth > 0 && maxWidth < contentWidth {
+		contentWidth = maxWidth
+	}
 	contentHeight := maxInt(pane.viewport.Height, 1)
 
 	tabs := m.renderPaneTabs(id, focused)
@@ -612,6 +705,16 @@ func layoutHistoryContent(listView, snippetView string, maxHeight int) string {
 		trimmedList,
 		trimmedSnippet,
 	)
+}
+
+func clampPositive(value, maxValue int) int {
+	if value < 1 {
+		value = 1
+	}
+	if maxValue > 0 && value > maxValue {
+		return maxValue
+	}
+	return value
 }
 
 func (m Model) renderCommandBar() string {
