@@ -19,6 +19,7 @@ func (m *Model) openHistoryPreview(entry history.Entry) {
 	m.showHistoryPreview = true
 	m.showHelp = false
 	m.showEnvSelector = false
+	m.showThemeSelector = false
 	if vp := m.historyPreviewViewport; vp != nil {
 		vp.SetYOffset(0)
 		vp.GotoTop()

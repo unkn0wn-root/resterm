@@ -1,0 +1,129 @@
+[metadata]
+name = "Aurora"
+description = "High-contrast midnight palette tuned for dark terminals"
+author = "resterm"
+version = "1.1.0"
+tags = ["dark", "contrast"]
+
+[styles.header_title]
+foreground = "#38bdf8"
+bold = true
+
+[styles.header_value]
+foreground = "#e2e8f0"
+
+[styles.header_separator]
+foreground = "#2563eb"
+
+[styles.browser_border]
+border_color = "#1f3a5f"
+
+[styles.command_bar]
+foreground = "#e2e8f0"
+background = "#0b1220"
+
+[styles.command_bar_hint]
+foreground = "#34d399"
+bold = true
+
+[styles.status_bar]
+foreground = "#f8fafc"
+background = "#111c33"
+
+[styles.status_bar_key]
+foreground = "#f97316"
+bold = true
+
+[styles.status_bar_value]
+foreground = "#cbd5f5"
+
+[styles.tab_active]
+background = "#1d4ed8"
+foreground = "#f8fafc"
+
+[styles.tab_inactive]
+foreground = "#64748b"
+
+[styles.notification]
+background = "#1e293b"
+foreground = "#f8fafc"
+
+[styles.error]
+background = "#991b1b"
+foreground = "#fef2f2"
+
+[styles.success]
+background = "#064e3b"
+foreground = "#d1fae5"
+
+[styles.list_item_title]
+foreground = "#f8fafc"
+
+[styles.list_item_description]
+foreground = "#93c5fd"
+
+[styles.list_item_selected_title]
+foreground = "#121110"
+background = "#38bdf8"
+bold = false
+
+[styles.list_item_selected_description]
+foreground = "#0f1729"
+background = "#22d3ee"
+
+[styles.list_item_dimmed_title]
+foreground = "#475569"
+
+[styles.list_item_dimmed_description]
+foreground = "#334155"
+
+[styles.list_item_filter_match]
+foreground = "#f97316"
+underline = true
+
+[styles.response_content]
+foreground = "#44b864"
+
+[styles.response_content_raw]
+foreground = "#96d4a7"
+
+[styles.response_content_headers]
+foreground = "#34d399"
+
+[colors]
+pane_border_focus_file = "#38bdf8"
+pane_border_focus_requests = "#34d399"
+pane_active_foreground = "#f8fafc"
+
+[editor_metadata]
+comment_marker = "#38bdf8"
+value = "#22d3ee"
+directive_default = "#c084fc"
+request_line = "#fcd34d"
+request_separator = "#2563eb"
+
+[editor_metadata.directive_colors]
+graphql = "#c084fc"
+workflow = "#34d399"
+custom = "#94a3b8"
+
+[[header_segments]]
+background = "#280CCC"
+foreground = "#f8fafc"
+border = "#2563eb"
+accent = "#E9E9F2"
+
+[[header_segments]]
+background = "#E0A643"
+foreground = "#302C27"
+border = "#2563eb"
+
+[[command_segments]]
+background = "#0b1220"
+key = "#34d399"
+text = "#e2e8f0"
+
+[[command_segments]]
+background = "#111c33"
+key = "#f97316"
+text = "#f8fafc"

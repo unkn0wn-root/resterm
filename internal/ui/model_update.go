@@ -201,6 +201,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showThemeSelector {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "esc":
+				m.showThemeSelector = false
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			case "enter":
+				cmd := m.applyThemeSelection()
+				return m, cmd
+			case "?", "shift+/":
+				m.toggleHelp()
+				return m, nil
+			}
+		}
+		var themeCmd tea.Cmd
+		m.themeList, themeCmd = m.themeList.Update(msg)
+		return m, themeCmd
+	}
+
 	if m.showEnvSelector {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			switch keyMsg.String() {
@@ -536,6 +557,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		return combine(m.reloadWorkspace())
 	case "ctrl+n":
 		m.openNewFileModal()
+		return combine(nil)
+	case "ctrl+alt+t", "alt+ctrl+t":
+		m.openThemeSelector()
 		return combine(nil)
 	case "ctrl+t":
 		return combine(m.openTemporaryDocument())
@@ -929,6 +953,9 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "i":
 			m.setFocus(focusEditor)
 			m.setInsertMode(false, true)
+			return true, nil
+		case "t":
+			m.openThemeSelector()
 			return true, nil
 		}
 	}

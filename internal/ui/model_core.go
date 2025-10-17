@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/list"
@@ -11,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -112,6 +114,10 @@ type Config struct {
 	InitialContent      string
 	Client              *httpclient.Client
 	Theme               *theme.Theme
+	ThemeCatalog        theme.Catalog
+	ActiveThemeKey      string
+	Settings            config.Settings
+	SettingsHandle      config.SettingsHandle
 	EnvironmentSet      vars.EnvironmentSet
 	EnvironmentName     string
 	EnvironmentFile     string
@@ -133,6 +139,7 @@ type operatorState struct {
 type Model struct {
 	cfg                Config
 	theme              theme.Theme
+	themeCatalog       theme.Catalog
 	client             *httpclient.Client
 	grpcClient         *grpcclient.Client
 	grpcOptions        grpcclient.Options
@@ -151,6 +158,7 @@ type Model struct {
 	responsePaneChord        bool
 	historyList              list.Model
 	envList                  list.Model
+	themeList                list.Model
 
 	responseLatest         *responseSnapshot
 	responsePrevious       *responseSnapshot
@@ -159,6 +167,7 @@ type Model struct {
 	responseLastFocused    responsePaneID
 	focus                  paneFocus
 	showEnvSelector        bool
+	showThemeSelector      bool
 	showHelp               bool
 	helpJustOpened         bool
 	showNewFileModal       bool
@@ -196,6 +205,8 @@ type Model struct {
 	responseLoading      bool
 	responseLoadingFrame int
 
+	activeThemeKey      string
+	settingsHandle      config.SettingsHandle
 	historyStore        *history.Store
 	historyEntries      []history.Entry
 	historySelectedID   string
@@ -253,6 +264,10 @@ func New(cfg Config) Model {
 	if cfg.Theme != nil {
 		th = *cfg.Theme
 	}
+	activeTheme := strings.TrimSpace(cfg.ActiveThemeKey)
+	if activeTheme == "" {
+		activeTheme = "default"
+	}
 
 	client := cfg.Client
 	if client == nil {
@@ -286,9 +301,7 @@ func New(cfg Config) Model {
 	}
 
 	items := makeFileItems(entries)
-	delegate := list.NewDefaultDelegate()
-	delegate.ShowDescription = false
-	fileList := list.New(items, delegate, 0, 0)
+	fileList := list.New(items, listDelegateForTheme(th, false, 0), 0, 0)
 	fileList.Title = "Files"
 	fileList.SetShowStatusBar(false)
 	fileList.SetShowHelp(false)
@@ -339,9 +352,7 @@ func New(cfg Config) Model {
 	secondaryViewport := viewport.New(0, 0)
 	secondaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
 
-	reqDelegate := list.NewDefaultDelegate()
-	reqDelegate.ShowDescription = true
-	reqDelegate.SetHeight(3)
+	reqDelegate := listDelegateForTheme(th, true, 3)
 	requestList := list.New(nil, reqDelegate, 0, 0)
 	requestList.Title = "Requests"
 	requestList.SetShowStatusBar(false)
@@ -350,9 +361,7 @@ func New(cfg Config) Model {
 	requestList.SetShowTitle(false)
 	requestList.DisableQuitKeybindings()
 
-	workflowDelegate := list.NewDefaultDelegate()
-	workflowDelegate.ShowDescription = true
-	workflowDelegate.SetHeight(3)
+	workflowDelegate := listDelegateForTheme(th, true, 3)
 	workflowList := list.New(nil, workflowDelegate, 0, 0)
 	workflowList.Title = "Workflows"
 	workflowList.SetShowStatusBar(false)
@@ -361,9 +370,7 @@ func New(cfg Config) Model {
 	workflowList.SetShowTitle(false)
 	workflowList.DisableQuitKeybindings()
 
-	histDelegate := list.NewDefaultDelegate()
-	histDelegate.ShowDescription = true
-	histDelegate.SetHeight(3)
+	histDelegate := listDelegateForTheme(th, true, 3)
 	historyList := list.New(nil, histDelegate, 0, 0)
 	historyList.SetShowStatusBar(false)
 	historyList.SetShowHelp(false)
@@ -371,14 +378,35 @@ func New(cfg Config) Model {
 	historyList.DisableQuitKeybindings()
 
 	envItems := makeEnvItems(cfg.EnvironmentSet)
-	envDelegate := list.NewDefaultDelegate()
-	envDelegate.ShowDescription = false
-	envList := list.New(envItems, envDelegate, 0, 0)
+	envList := list.New(envItems, listDelegateForTheme(th, false, 0), 0, 0)
 	envList.Title = "Environments"
 	envList.SetShowStatusBar(false)
 	envList.SetShowHelp(false)
 	envList.SetFilteringEnabled(false)
 	envList.DisableQuitKeybindings()
+
+	themeItems := makeThemeItems(cfg.ThemeCatalog, activeTheme)
+	themeDelegate := listDelegateForTheme(th, true, 3)
+	themeList := list.New(themeItems, themeDelegate, 0, 0)
+	themeList.Title = "Themes"
+	themeList.SetShowStatusBar(false)
+	themeList.SetShowHelp(false)
+	themeList.SetFilteringEnabled(true)
+	themeList.SetShowTitle(false)
+	themeList.DisableQuitKeybindings()
+	if len(themeItems) > 0 {
+		selected := false
+		for i, item := range themeItems {
+			if t, ok := item.(themeItem); ok && t.key == activeTheme {
+				themeList.Select(i)
+				selected = true
+				break
+			}
+		}
+		if !selected {
+			themeList.Select(0)
+		}
+	}
 
 	previewViewport := viewport.New(0, 0)
 	previewViewport.SetContent("")
@@ -386,6 +414,7 @@ func New(cfg Config) Model {
 	model := Model{
 		cfg:                    cfg,
 		theme:                  th,
+		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,
 		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
@@ -397,7 +426,10 @@ func New(cfg Config) Model {
 		editor:                 editor,
 		historyList:            historyList,
 		envList:                envList,
+		themeList:              themeList,
 		historyPreviewViewport: &previewViewport,
+		activeThemeKey:         activeTheme,
+		settingsHandle:         cfg.SettingsHandle,
 		responsePanes: [2]responsePaneState{
 			newResponsePaneState(primaryViewport, true),
 			newResponsePaneState(secondaryViewport, false),
@@ -436,6 +468,7 @@ func New(cfg Config) Model {
 	}
 	model.syncHistory()
 	model.setLivePane(responsePanePrimary)
+	model.applyThemeToLists()
 
 	return model
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// responsePaneID identifies a pane within the response area.
 type responsePaneID int
 
 const (
@@ -262,6 +261,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		wrapped := wrapToWidth(centered, width)
 		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
 		decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+		decorated = m.applyResponseContentStyles(cacheKey, decorated)
 		pane.viewport.SetContent(decorated)
 		pane.restoreScrollForActiveTab()
 		ensureResponseMatchInView(pane, wrapped)
@@ -272,6 +272,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	cache := pane.wrapCache[cacheKey]
 	if cache.valid && cache.width == width {
 		decorated := m.decorateResponseContentForPane(pane, cacheKey, cache.content, width, snapshotReady, snapshotID)
+		decorated = m.applyResponseContentStyles(cacheKey, decorated)
 		pane.viewport.SetContent(decorated)
 		pane.restoreScrollForActiveTab()
 		ensureResponseMatchInView(pane, cache.content)
@@ -282,6 +283,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	wrapped := wrapContentForTab(cacheKey, content, width)
 	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
 	decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+	decorated = m.applyResponseContentStyles(cacheKey, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
 	ensureResponseMatchInView(pane, wrapped)
@@ -296,6 +298,7 @@ func (m *Model) syncWorkflowStatsPane(pane *responsePaneState, width int, snapsh
 	render := snapshot.workflowStats.render(width)
 	pane.wrapCache[responseTabStats] = cachedWrap{width: width, content: render.content, valid: true}
 	decorated := m.decorateResponseContentForPane(pane, responseTabStats, render.content, width, snapshot.ready, snapshot.id)
+	decorated = m.applyResponseContentStyles(responseTabStats, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
 	snapshot.workflowStats.ensureVisible(pane, render)
@@ -346,6 +349,18 @@ func (m *Model) decorateResponseContentForPane(
 	highlight := m.theme.ResponseSearchHighlight
 	active := m.theme.ResponseSearchHighlightActive
 	return decorateResponseContent(base, pane.search.matches, highlight, active, pane.search.index)
+}
+
+func (m *Model) applyResponseContentStyles(tab responseTab, content string) string {
+	styled := m.theme.ResponseContent.Render(content)
+	switch tab {
+	case responseTabRaw:
+		return m.theme.ResponseContentRaw.Render(styled)
+	case responseTabHeaders:
+		return m.theme.ResponseContentHeaders.Render(styled)
+	default:
+		return styled
+	}
 }
 
 func ensureResponseMatchInView(pane *responsePaneState, base string) {

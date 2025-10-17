@@ -1,0 +1,128 @@
+[metadata]
+name = "Daybreak"
+description = "Crisp, low-glare palette tuned for light terminals"
+author = "resterm"
+version = "1.0.0"
+tags = ["light", "contrast"]
+
+[styles.header_title]
+foreground = "#1e40af"
+bold = true
+
+[styles.header_value]
+foreground = "#0f172a"
+
+[styles.header_separator]
+foreground = "#2563eb"
+
+[styles.browser_border]
+border_color = "#cbd5f5"
+
+[styles.command_bar]
+foreground = "#1f2933"
+background = "#e2e8f0"
+
+[styles.command_bar_hint]
+foreground = "#0f172a"
+bold = true
+
+[styles.status_bar]
+foreground = "#f8fafc"
+background = "#1f2937"
+
+[styles.status_bar_key]
+foreground = "#facc15"
+bold = true
+
+[styles.status_bar_value]
+foreground = "#e2e8f0"
+
+[styles.tab_active]
+background = "#2563eb"
+foreground = "#f8fafc"
+
+[styles.tab_inactive]
+foreground = "#475569"
+
+[styles.notification]
+background = "#c7d2fe"
+foreground = "#1f2933"
+
+[styles.error]
+background = "#fee2e2"
+foreground = "#b91c1c"
+
+[styles.success]
+background = "#dcfce7"
+foreground = "#166534"
+
+[styles.list_item_title]
+foreground = "#0f172a"
+
+[styles.list_item_description]
+foreground = "#334155"
+
+[styles.list_item_selected_title]
+foreground = "#0f172a"
+background = "#bfdbfe"
+bold = true
+
+[styles.list_item_selected_description]
+foreground = "#0f172a"
+background = "#bae6fd"
+
+[styles.list_item_dimmed_title]
+foreground = "#94a3b8"
+
+[styles.list_item_dimmed_description]
+foreground = "#a1acc2"
+
+[styles.list_item_filter_match]
+foreground = "#c026d3"
+underline = true
+
+[styles.response_content]
+foreground = "#0f172a"
+
+[styles.response_content_raw]
+foreground = "#1e3a8a"
+
+[styles.response_content_headers]
+foreground = "#047857"
+
+[colors]
+pane_border_focus_file = "#2563eb"
+pane_border_focus_requests = "#0d9488"
+pane_active_foreground = "#0f172a"
+
+[editor_metadata]
+comment_marker = "#94a3b8"
+value = "#0369a1"
+directive_default = "#1e40af"
+request_line = "#c026d3"
+request_separator = "#2563eb"
+
+[editor_metadata.directive_colors]
+graphql = "#7c3aed"
+workflow = "#0d9488"
+custom = "#f97316"
+
+[[header_segments]]
+background = "#2563eb"
+foreground = "#f8fafc"
+border = "#1d4ed8"
+
+[[header_segments]]
+background = "#0d9488"
+foreground = "#f8fafc"
+border = "#0f766e"
+
+[[command_segments]]
+background = "#e2e8f0"
+key = "#1e40af"
+text = "#1f2933"
+
+[[command_segments]]
+background = "#dbeafe"
+key = "#0f172a"
+text = "#1f2933"

@@ -13,6 +13,7 @@ func (m *Model) openSearchPrompt() tea.Cmd {
 	}
 	m.showHelp = false
 	m.showEnvSelector = false
+	m.showThemeSelector = false
 	m.closeNewFileModal()
 	m.closeOpenModal()
 	m.showSearchPrompt = true

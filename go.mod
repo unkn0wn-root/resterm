@@ -13,6 +13,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/dop251/goja v0.0.0-20250630131328-58d95d85e994
 	github.com/mattn/go-runewidth v0.0.16
+	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/rivo/uniseg v0.4.7
 	google.golang.org/grpc v1.75.1
 	google.golang.org/protobuf v1.36.9
