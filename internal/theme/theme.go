@@ -243,7 +243,7 @@ func DefaultTheme() Theme {
 		EditorHintSelected:          lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1020")).Background(lipgloss.Color("#FFD46A")).Bold(true),
 		EditorHintAnnotation:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 		ListItemTitle:               lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
-		ListItemDescription:         lipgloss.NewStyle().Foreground(lipgloss.Color("#A39FBF")),
+		ListItemDescription:         lipgloss.NewStyle().Foreground(lipgloss.Color("#7d7b87")),
 		ListItemSelectedTitle:       lipgloss.Style{},
 		ListItemSelectedDescription: lipgloss.Style{},
 		ListItemDimmedTitle:         lipgloss.NewStyle().Foreground(lipgloss.Color("#5E5A72")),

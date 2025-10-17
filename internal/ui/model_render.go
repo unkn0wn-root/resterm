@@ -219,6 +219,17 @@ func (m Model) renderFilePane() string {
 		workflowsView,
 	)
 
+	inactiveSection := lipgloss.NewStyle().Faint(true)
+	if m.focus != focusFile {
+		filesSection = inactiveSection.Render(filesSection)
+	}
+	if m.focus != focusRequests {
+		requestsSection = inactiveSection.Render(requestsSection)
+	}
+	if m.focus != focusWorkflows {
+		workflowsSection = inactiveSection.Render(workflowsSection)
+	}
+
 	if m.focus == focusFile {
 		highlight := lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
