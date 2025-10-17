@@ -1424,7 +1424,7 @@ func (m Model) View() string {
 
 	if overlayActive {
 		displayLine, widestLineNumber = m.renderOverlayLines(&s, displayLine, widestLineNumber, overlayLines)
-}
+	}
 
 	// Always show at least `m.Height` lines at all times.
 	// To do this we can simply pad out a few extra new lines in the view.
