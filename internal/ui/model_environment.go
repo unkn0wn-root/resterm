@@ -9,6 +9,7 @@ import (
 func (m *Model) openEnvironmentSelector() {
 	m.showEnvSelector = true
 	m.showHelp = false
+	m.showThemeSelector = false
 	if m.cfg.EnvironmentName == "" {
 		if len(m.envList.Items()) > 0 {
 			m.envList.Select(0)
@@ -37,6 +38,7 @@ func (m *Model) toggleHelp() {
 	m.showHelp = true
 	m.helpJustOpened = true
 	m.showEnvSelector = false
+	m.showThemeSelector = false
 }
 
 func (m *Model) applyEnvironmentSelection() tea.Cmd {

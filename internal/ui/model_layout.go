@@ -453,6 +453,17 @@ func (m *Model) applyLayout() tea.Cmd {
 		}
 		m.envList.SetSize(envWidth, envHeight)
 	}
+	if len(m.themeList.Items()) > 0 {
+		themeWidth := minInt(48, m.width-6)
+		if themeWidth < 24 {
+			themeWidth = 24
+		}
+		themeHeight := minInt(paneHeight-4, 14)
+		if themeHeight < 5 {
+			themeHeight = 5
+		}
+		m.themeList.SetSize(themeWidth, themeHeight)
+	}
 	return m.syncResponsePanes()
 }
 

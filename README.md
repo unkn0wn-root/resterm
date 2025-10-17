@@ -160,6 +160,29 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 - Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory.
 - CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`.
 - Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
+- Themes: add `.toml` or `.json` files under `~/.config/resterm/themes` (override with `RESTERM_THEMES_DIR`) and switch them at runtime with `Ctrl+Alt+T` (or chord `g` then `t`).
+
+### Custom themes
+
+Resterm ships with a default palette, but you can provide your own by dropping theme definitions into the themes directory mentioned above. Each theme can be written in TOML or JSON and only needs to override the parts you care about.
+
+A ready-to-use sample lives in `_examples/themes/aurora.toml`. Point `RESTERM_THEMES_DIR` env var at that folder to try it immediately.
+
+```toml
+[metadata]
+name = "Oceanic"
+author = "You"
+
+[styles.header_title]
+foreground = "#5fd1ff"
+bold = true
+
+[colors]
+pane_active_foreground = "#5fd1ff"
+pane_border_focus_file = "#1f6feb"
+```
+
+Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_THEMES_DIR`) and press `Ctrl+Alt+T` (or type `g` then `t`) inside Resterm to pick it as the default. The selected theme is persisted to `settings.toml` so it is restored on the next launch.
 
 ## Documentation
 

@@ -18,6 +18,7 @@ func (m *Model) openOpenModal() {
 	m.openPathInput.Focus()
 	m.showHelp = false
 	m.showEnvSelector = false
+	m.showThemeSelector = false
 	m.closeNewFileModal()
 }
 

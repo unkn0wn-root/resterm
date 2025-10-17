@@ -53,6 +53,9 @@ func (m Model) View() string {
 	if m.showHelp {
 		return m.renderWithinAppFrame(m.renderHelpOverlay())
 	}
+	if m.showThemeSelector {
+		return m.renderWithinAppFrame(m.renderThemeModal())
+	}
 	if m.showEnvSelector {
 		return m.renderWithinAppFrame(m.renderEnvironmentModal())
 	}
@@ -215,6 +218,17 @@ func (m Model) renderFilePane() string {
 		separator,
 		workflowsView,
 	)
+
+	inactiveSection := lipgloss.NewStyle().Faint(true)
+	if m.focus != focusFile {
+		filesSection = inactiveSection.Render(filesSection)
+	}
+	if m.focus != focusRequests {
+		requestsSection = inactiveSection.Render(requestsSection)
+	}
+	if m.focus != focusWorkflows {
+		workflowsSection = inactiveSection.Render(workflowsSection)
+	}
 
 	if m.focus == focusFile {
 		highlight := lipgloss.NewStyle().
@@ -1182,6 +1196,34 @@ func (m Model) renderEnvironmentModal() string {
 	)
 }
 
+func (m Model) renderThemeModal() string {
+	width := minInt(m.width-10, 60)
+	if width < 28 {
+		width = 28
+	}
+	commands := fmt.Sprintf(
+		"%s Apply    %s Cancel",
+		m.theme.CommandBarHint.Render("Enter"),
+		m.theme.CommandBarHint.Render("Esc"),
+	)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		m.themeList.View(),
+		"",
+		commands,
+	)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
 func (m Model) renderHelpOverlay() string {
 	width := minInt(m.width-10, 80)
 	if width < 32 {
@@ -1212,6 +1254,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+G", "Show globals summary"),
 		helpRow(m, "Ctrl+Shift+G", "Clear globals for environment"),
 		helpRow(m, "Ctrl+E", "Environment selector"),
+		helpRow(m, "Ctrl+Alt+T / g t", "Theme selector"),
 		helpRow(m, "gk / gj", "Adjust files/requests split"),
 		helpRow(m, "gh / gl", "Adjust editor/response width"),
 		helpRow(m, "gr / gi / gp", "Focus requests / editor / response"),

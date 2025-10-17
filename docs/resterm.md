@@ -557,7 +557,81 @@ Run `resterm --help` for the latest list. Core flags:
 
 - Config directory: `$HOME/Library/Application Support/resterm` (macOS), `%APPDATA%\resterm` (Windows), or `$HOME/.config/resterm` (Linux/Unix). Override with `RESTERM_CONFIG_DIR`.
 - History file: `<config-dir>/history.json` (max ~500 entries by default).
+- Settings file: `<config-dir>/settings.toml` (created when you first change preferences such as the default theme).
+- Theme directory: `<config-dir>/themes/` (override with `RESTERM_THEMES_DIR`). Drop `.toml` or `.json` files here to make them available in the selector.
 - Runtime globals and file captures are scoped per environment and document; they are released when you clear globals or switch environments.
+
+---
+
+## Theming
+
+Resterm lets you override its Lip Gloss styles. Fonts and ultimate colour rendering still come from your terminal emulator; the theme controls which colours Resterm asks the terminal to use.
+
+### Where themes live
+
+- Default directory: `<config-dir>/themes/`
+- Override with `RESTERM_THEMES_DIR`
+- Sample: `_examples/themes/aurora.toml`
+- Switch at runtime with `Ctrl+Alt+T` (or press `g` then `t`). The selection persists in `settings.toml`.
+
+### Theme anatomy
+
+Theme files can be TOML or JSON. Unspecified fields inherit defaults.
+
+```toml
+[metadata]
+name = "Oceanic"
+author = "You"
+description = "Cool dusk palette"
+
+[styles.header_title]
+foreground = "#5fd1ff"
+bold = true
+
+[colors]
+pane_border_focus_file = "#1f6feb"
+pane_active_foreground = "#f8faff"
+
+[editor_metadata]
+comment_marker = "#4c566a"
+
+[[header_segments]]
+background = "#5e81ac"
+foreground = "#eceff4"
+
+[[command_segments]]
+background = "#3b4252"
+key = "#88c0d0"
+text = "#eceff4"
+```
+
+#### Sections and fields
+
+| Section | Keys | Notes |
+| --- | --- | --- |
+| `[metadata]` | `name`, `description`, `author`, `version`, `tags[]` | Informational only; shown in the selector. |
+| `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
+| `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground` | Frequently reused single colours. |
+| `[editor_metadata]` | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]` | Controls metadata highlighting inside the editor. |
+| `[[header_segments]]` | `background`, `foreground`, `border`, `accent` | Rotating header chips; add multiple tables for rotation. |
+| `[[command_segments]]` | `background`, `border`, `key`, `text` | Colour sets for command bar hint capsules. |
+
+Setting `editor_metadata.directive_default` recolours every built-in directive (`@name`, `@tag`, etc.) that still uses the inherited default. Specify entries inside `[editor_metadata.directive_colors]` only when you need a directive to diverge from that default.
+
+Set `editor_metadata.request_line` to recolour the full request line (`POST https://…`). If you omit it, Resterm falls back to the directive default.
+Use `editor_metadata.request_separator` for the `###` section dividers and `editor_metadata.comment_marker` for the `#` / `//` prefixes at the start of comment lines.
+
+`styles.list_item_*` keys control the sidebar, history, and picker list rows. `styles.response_content`, `styles.response_content_raw`, and `styles.response_content_headers` colour the response panes for Raw and Headers (with the general key applied first, then the tab-specific override).
+
+### Testing a theme
+
+```bash
+export RESTERM_THEMES_DIR="$(pwd)/_examples/themes"
+resterm
+```
+
+Inside Resterm, press `g` then `t` (or `Ctrl+Alt+T`) and pick “Aurora” for a dark setup or “Daybreak” for light terminals. Quit and restart to confirm the theme persists. If a theme fails to parse, Resterm logs the error and falls back to the default palette.
+
 
 ---
 

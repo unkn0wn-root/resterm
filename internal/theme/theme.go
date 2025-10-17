@@ -65,6 +65,16 @@ type Theme struct {
 	EditorHintItem                lipgloss.Style
 	EditorHintSelected            lipgloss.Style
 	EditorHintAnnotation          lipgloss.Style
+	ListItemTitle                 lipgloss.Style
+	ListItemDescription           lipgloss.Style
+	ListItemSelectedTitle         lipgloss.Style
+	ListItemSelectedDescription   lipgloss.Style
+	ListItemDimmedTitle           lipgloss.Style
+	ListItemDimmedDescription     lipgloss.Style
+	ListItemFilterMatch           lipgloss.Style
+	ResponseContent               lipgloss.Style
+	ResponseContentRaw            lipgloss.Style
+	ResponseContentHeaders        lipgloss.Style
 }
 
 func DefaultTheme() Theme {
@@ -228,10 +238,20 @@ func DefaultTheme() Theme {
 				"no-log":            directiveAccent,
 			},
 		},
-		EditorHintBox:        lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1).Foreground(lipgloss.Color("#E6E1FF")),
-		EditorHintItem:       lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D4F1")),
-		EditorHintSelected:   lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1020")).Background(lipgloss.Color("#FFD46A")).Bold(true),
-		EditorHintAnnotation: lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
+		EditorHintBox:               lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1).Foreground(lipgloss.Color("#E6E1FF")),
+		EditorHintItem:              lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D4F1")),
+		EditorHintSelected:          lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1020")).Background(lipgloss.Color("#FFD46A")).Bold(true),
+		EditorHintAnnotation:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
+		ListItemTitle:               lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
+		ListItemDescription:         lipgloss.NewStyle().Foreground(lipgloss.Color("#7d7b87")),
+		ListItemSelectedTitle:       lipgloss.Style{},
+		ListItemSelectedDescription: lipgloss.Style{},
+		ListItemDimmedTitle:         lipgloss.NewStyle().Foreground(lipgloss.Color("#5E5A72")),
+		ListItemDimmedDescription:   lipgloss.NewStyle().Foreground(lipgloss.Color("#4A4760")),
+		ListItemFilterMatch:         lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("#B9A5FF")),
+		ResponseContent:             lipgloss.NewStyle(),
+		ResponseContentRaw:          lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
+		ResponseContentHeaders:      lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),
 	}
 }
 
