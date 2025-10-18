@@ -116,3 +116,20 @@ func (u cliUpdater) printStaged(st update.SwapStatus) {
 		}
 	}
 }
+
+func (u cliUpdater) printChangelog(res update.Result) {
+	notes := strings.TrimSpace(res.Info.Notes)
+	if notes == "" {
+		if _, err := fmt.Fprintln(u.out, "Changelog: not provided"); err != nil {
+			log.Printf("print changelog missing failed: %v", err)
+		}
+		return
+	}
+	if _, err := fmt.Fprintln(u.out, "Changelog:"); err != nil {
+		log.Printf("print changelog header failed: %v", err)
+		return
+	}
+	if _, err := fmt.Fprintln(u.out, notes); err != nil {
+		log.Printf("print changelog body failed: %v", err)
+	}
+}

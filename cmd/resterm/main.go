@@ -29,7 +29,7 @@ import (
 )
 
 var (
-	version = "dev"
+	version = "v0.2.2"
 	commit  = "unknown"
 	date    = "unknown"
 )
@@ -106,6 +106,7 @@ func main() {
 			os.Exit(0)
 		}
 		u.printAvailable(res)
+		u.printChangelog(res)
 		if !doUpdate {
 			if _, werr := fmt.Fprintln(os.Stdout, "Run `resterm --update` to install."); werr != nil {
 				log.Printf("update hint write failed: %v", werr)
