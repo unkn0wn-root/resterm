@@ -909,8 +909,16 @@ func (m Model) renderHeader() string {
 	}
 
 	segments := make([]string, 0, len(segmentsData)+1)
-	brandContent := strings.ToUpper("RESTERM")
-	brandSegment := m.theme.HeaderBrand.Render(" " + brandContent + " ")
+	brandLabel := strings.ToUpper("RESTERM")
+	versionDisplay := strings.TrimSpace(m.cfg.Version)
+	if versionDisplay == "" {
+		versionDisplay = strings.TrimSpace(m.updateVersion)
+	}
+	brandText := brandLabel
+	if versionDisplay != "" {
+		brandText = fmt.Sprintf("%s %s", brandLabel, versionDisplay)
+	}
+	brandSegment := m.theme.HeaderBrand.Render(" " + brandText + " ")
 	segments = append(segments, brandSegment)
 	for i, seg := range segmentsData {
 		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value))

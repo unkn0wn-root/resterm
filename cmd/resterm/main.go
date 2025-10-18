@@ -71,7 +71,7 @@ func main() {
 		os.Exit(0)
 	}
 
-	updateHTTP := &http.Client{}
+	updateHTTP := &http.Client{Timeout: 60 * time.Second}
 	upClient, err := update.NewClient(updateHTTP, updateRepo)
 	if err != nil {
 		log.Fatalf("update client: %v", err)
