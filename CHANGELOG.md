@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.3](https://github.com/unkn0wn-root/resterm/compare/v0.4.2...v0.4.3) (2025-10-18)
+
+
+### Features
+
+* add progress bar to updater ([#56](https://github.com/unkn0wn-root/resterm/issues/56)) ([cbd62df](https://github.com/unkn0wn-root/resterm/commit/cbd62dfb2be20e6e5d167c05684174311261a017))
+* **editor:** add 8-column buffer scroll to margin ([#57](https://github.com/unkn0wn-root/resterm/issues/57)) ([560b3d6](https://github.com/unkn0wn-root/resterm/commit/560b3d6e7289b0873cbfdf41961fa45712eaecee))
+
 ### [0.4.2](https://github.com/unkn0wn-root/resterm/compare/v0.4.1...v0.4.2) (2025-10-18)
 
 
