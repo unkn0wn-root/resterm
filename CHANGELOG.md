@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.5](https://github.com/unkn0wn-root/resterm/compare/v0.4.4...v0.4.5) (2025-10-18)
+
+
+### Bug Fixes
+
+* strips the CommandBar style’s left/right padding before styling and re-inserts it as plain spaces ([#58](https://github.com/unkn0wn-root/resterm/issues/58)) ([73bd114](https://github.com/unkn0wn-root/resterm/commit/73bd114f09d38ca89894f88ab19ebb2ff1f1b54f))
+
 ### [0.4.4](https://github.com/unkn0wn-root/resterm/compare/v0.4.3...v0.4.4) (2025-10-18)
 
 ### [0.4.3](https://github.com/unkn0wn-root/resterm/compare/v0.4.2...v0.4.3) (2025-10-18)
