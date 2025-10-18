@@ -918,7 +918,7 @@ func (m Model) renderHeader() string {
 	if versionDisplay != "" {
 		brandText = fmt.Sprintf("%s %s", brandLabel, versionDisplay)
 	}
-	brandSegment := m.theme.HeaderBrand.Render(" " + brandText + " ")
+	brandSegment := m.theme.HeaderBrand.Render(brandText)
 	segments = append(segments, brandSegment)
 	for i, seg := range segmentsData {
 		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value))
