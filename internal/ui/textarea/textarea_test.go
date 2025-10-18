@@ -12,86 +12,92 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestVerticalScrolling(t *testing.T) {
+func TestHorizontalAutoScroll(t *testing.T) {
 	textarea := newTextArea()
 	textarea.Prompt = ""
 	textarea.ShowLineNumbers = false
 	textarea.SetHeight(1)
 	textarea.SetWidth(20)
-	textarea.CharLimit = 100
+	textarea.CharLimit = 0
 
 	textarea, _ = textarea.Update(nil)
 
-	input := "This is a really long line that should wrap around the text area."
+	input := "This is a really long line that should remain on one row."
 
 	for _, k := range input {
 		textarea, _ = textarea.Update(keyPress(k))
+	}
+
+	if textarea.horizOffset == 0 {
+		t.Fatalf("expected horizontal offset to advance for long line")
 	}
 
 	view := textarea.View()
-
-	// The view should contain the first "line" of the input.
-	if !strings.Contains(view, "This is a really") {
-		t.Log(view)
-		t.Error("Text area did not render the input")
+	visible := stripString(view)
+	if !strings.HasSuffix(visible, "one row.") {
+		t.Fatalf("expected tail of line visible, got %q", visible)
+	}
+	if strings.Contains(visible, "This is a really") {
+		t.Fatalf("expected initial segment to scroll out, got %q", visible)
 	}
 
-	// But we should be able to scroll to see the next line.
-	// Let's scroll down for each line to view the full input.
-	lines := []string{
-		"long line that",
-		"should wrap around",
-		"the text area.",
+	home := tea.KeyMsg{Type: tea.KeyHome}
+	textarea, _ = textarea.Update(home)
+
+	if textarea.horizOffset != 0 {
+		t.Fatalf("expected horizontal offset to reset after Home, got %d", textarea.horizOffset)
 	}
-	for _, line := range lines {
-		textarea.viewport.ScrollDown(1)
-		view = textarea.View()
-		if !strings.Contains(view, line) {
-			t.Log(view)
-			t.Error("Text area did not render the correct scrolled input")
-		}
+
+	view = textarea.View()
+	visible = stripString(view)
+	if !strings.Contains(visible, "This is a really") {
+		t.Fatalf("expected leading text visible after Home, got %q", visible)
 	}
 }
 
-func TestWordWrapOverflowing(t *testing.T) {
-	// An interesting edge case is when the user enters many words that fill up
-	// the text area and then goes back up and inserts a few words which causes
-	// a cascading wrap and causes an overflow of the last line.
-	//
-	// In this case, we should not let the user insert more words if, after the
-	// entire wrap is complete, the last line is overflowing.
+func TestExtendingLongLinePreservesContent(t *testing.T) {
 	textarea := newTextArea()
+	textarea.Prompt = ""
+	textarea.ShowLineNumbers = false
+	textarea.SetHeight(2)
+	textarea.SetWidth(16)
 
-	textarea.SetHeight(3)
-	textarea.SetWidth(20)
-	textarea.CharLimit = 500
+	textarea.SetValue("alpha beta gamma delta")
 
-	textarea, _ = textarea.Update(nil)
+	home := tea.KeyMsg{Type: tea.KeyHome}
+	textarea, _ = textarea.Update(home)
 
-	input := "Testing Testing Testing Testing Testing Testing Testing Testing"
-
-	for _, k := range input {
-		textarea, _ = textarea.Update(keyPress(k))
-		textarea.View()
+	prefix := "start-"
+	for _, r := range prefix {
+		textarea, _ = textarea.Update(keyPress(r))
 	}
 
-	// We have essentially filled the text area with input.
-	// Let's see if we can cause wrapping to overflow the last line.
-	textarea.row = 0
-	textarea.col = 0
-
-	input = "Testing"
-
-	for _, k := range input {
-		textarea, _ = textarea.Update(keyPress(k))
-		textarea.View()
+	want := prefix + "alpha beta gamma delta"
+	if got := textarea.Value(); got != want {
+		t.Fatalf("expected %q, got %q", want, got)
 	}
+}
 
-	lastLineWidth := textarea.LineInfo().Width
-	if lastLineWidth > 20 {
-		t.Log(lastLineWidth)
-		t.Log(textarea.View())
-		t.Fail()
+func TestOverlayRespectsHorizontalOffset(t *testing.T) {
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(1)
+	m.SetWidth(6)
+
+	color := lipgloss.NewStyle().Foreground(lipgloss.Color("5"))
+	line := lipgloss.JoinHorizontal(lipgloss.Left, color.Render("0123456789"))
+	m.horizOffset = 4
+
+	var builder strings.Builder
+	_, _ = m.renderOverlayLines(&builder, 0, 0, []string{line})
+
+	plain := ansi.Strip(builder.String())
+	if !strings.Contains(plain, "456789") {
+		t.Fatalf("expected overlay to include scrolled content, got %q", plain)
+	}
+	if strings.Contains(plain, "0123") {
+		t.Fatalf("expected overlay to omit truncated prefix, got %q", plain)
 	}
 }
 
@@ -269,7 +275,7 @@ func TestVerticalNavigationShouldRememberPositionWhileTraversing(t *testing.T) {
 
 	// We are at the end of the last line.
 	if textarea.col != 20 || textarea.row != 2 {
-		t.Log(textarea.col)
+		t.Logf("col=%d row=%d len=%d", textarea.col, textarea.row, len(textarea.value[textarea.row]))
 		t.Fatal("Expected cursor to be on the 20th character of the last line")
 	}
 
@@ -619,15 +625,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					foo
-					bar
-					baz
+				r baz
 
 
 
-				`),
-				cursorRow: 2,
-				cursorCol: 3,
+
+
+			`),
+				cursorRow: 0,
+				cursorCol: 11,
 			},
 		},
 		{
@@ -734,15 +740,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 1234
-					>
-					>
-					>
-					>
-					>
-				`),
-				cursorRow: 1,
-				cursorCol: 0,
+				>   1 1234
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 4,
 			},
 		},
 		{
@@ -757,15 +763,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 1234
-					>     5
-					>
-					>
-					>
-					>
-				`),
-				cursorRow: 1,
-				cursorCol: 1,
+				>   1 2345
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 5,
 			},
 		},
 		{
@@ -805,15 +811,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 1234
-					>
-					>
-					>
-					>
-					>
-				`),
-				cursorRow: 1,
-				cursorCol: 0,
+				>   1 1234
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 4,
 			},
 		},
 		{
@@ -829,15 +835,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 1234
-					>     5
-					>
-					>
-					>
-					>
-				`),
-				cursorRow: 1,
-				cursorCol: 1,
+				>   1 2345
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 5,
 			},
 		},
 		{
@@ -852,15 +858,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 1
-					>     2
-					>     3
-					>
-					>
-					>
-				`),
-				cursorRow: 3,
-				cursorCol: 0,
+				>   1 3
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 3,
 			},
 		},
 		{
@@ -875,15 +881,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 1
-					>     2
-					>     3
-					>
-					>
-					>
-				`),
-				cursorRow: 3,
-				cursorCol: 0,
+				>   1 3
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 3,
 			},
 		},
 		{
@@ -899,15 +905,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					> 1
-					> 2
-					> 3
-					>
-					>
-					>
-				`),
-				cursorRow: 3,
-				cursorCol: 0,
+				> 3
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 3,
 			},
 		},
 		{
@@ -924,15 +930,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					1
-					2
-					3
+				3
 
 
 
-				`),
-				cursorRow: 3,
-				cursorCol: 0,
+
+
+			`),
+				cursorRow: 0,
+				cursorCol: 3,
 			},
 		},
 		{
@@ -947,15 +953,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					>   1 12
-					>     3
+					>   1 23
+					>
 					>
 					>
 					>
 					>
 				`),
-				cursorRow: 1,
-				cursorCol: 1,
+				cursorRow: 0,
+				cursorCol: 3,
 			},
 		},
 		{
@@ -995,15 +1001,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					> 1234
-					>
-					>
-					>
-					>
-					>
-				`),
-				cursorRow: 1,
-				cursorCol: 0,
+				> 1234
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 4,
 			},
 		},
 		{
@@ -1019,15 +1025,15 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					> 1234
-					> 5
-					>
-					>
-					>
-					>
-				`),
-				cursorRow: 1,
-				cursorCol: 1,
+				> 2345
+				>
+				>
+				>
+				>
+				>
+			`),
+				cursorRow: 0,
+				cursorCol: 5,
 			},
 		},
 		{
@@ -1101,17 +1107,17 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					┌──────────┐
-					│>   1 1234│
-					│>         │
-					│>         │
-					│>         │
-					│>         │
-					│>         │
-					└──────────┘
-				`),
-				cursorRow: 1,
-				cursorCol: 0,
+				┌──────────┐
+				│>   1 1234│
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				└──────────┘
+			`),
+				cursorRow: 0,
+				cursorCol: 4,
 			},
 		},
 		{
@@ -1129,17 +1135,17 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					┌──────────┐
-					│>   1 1234│
-					│>     5   │
-					│>         │
-					│>         │
-					│>         │
-					│>         │
-					└──────────┘
-				`),
-				cursorRow: 1,
-				cursorCol: 1,
+				┌──────────┐
+				│>   1 2345│
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				└──────────┘
+			`),
+				cursorRow: 0,
+				cursorCol: 5,
 			},
 		},
 		{
@@ -1216,17 +1222,17 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					┌──────────┐
-					│> 12345678│
-					│>         │
-					│>         │
-					│>         │
-					│>         │
-					│>         │
-					└──────────┘
-				`),
-				cursorRow: 1,
-				cursorCol: 0,
+				┌──────────┐
+				│> 12345678│
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				└──────────┘
+			`),
+				cursorRow: 0,
+				cursorCol: 8,
 			},
 		},
 		{
@@ -1245,17 +1251,17 @@ func TestView(t *testing.T) {
 			},
 			want: want{
 				view: heredoc.Doc(`
-					┌──────────┐
-					│> 12345678│
-					│> 9       │
-					│>         │
-					│>         │
-					│>         │
-					│>         │
-					└──────────┘
-				`),
-				cursorRow: 1,
-				cursorCol: 1,
+				┌──────────┐
+				│> 23456789│
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				│>         │
+				└──────────┘
+			`),
+				cursorRow: 0,
+				cursorCol: 9,
 			},
 		},
 		{
