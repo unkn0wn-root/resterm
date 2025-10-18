@@ -57,6 +57,7 @@ func (c Client) Latest(ctx context.Context) (Info, error) {
 	if c.http == nil {
 		return Info{}, errNilHTTPClient
 	}
+
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", c.api, c.repo)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -135,6 +136,7 @@ func needsUpdate(curr, latest string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("latest: %w", err)
 	}
+
 	cv, err := parseSemver(curr)
 	if err != nil {
 		return true, nil

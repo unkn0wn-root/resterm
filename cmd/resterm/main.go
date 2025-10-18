@@ -2,9 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -68,6 +71,11 @@ func main() {
 		fmt.Printf("resterm %s\n", version)
 		fmt.Printf("  commit: %s\n", commit)
 		fmt.Printf("  built:  %s\n", date)
+		if sum, err := executableChecksum(); err == nil {
+			fmt.Printf("  sha256: %s\n", sum)
+		} else {
+			fmt.Printf("  sha256: unavailable (%v)\n", err)
+		}
 		os.Exit(0)
 	}
 
@@ -277,6 +285,30 @@ func loadEnvironment(explicit string, filePath string, workspace string) (vars.E
 		return nil, ""
 	}
 	return envs, path
+}
+
+func executableChecksum() (string, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	exe, err = filepath.EvalSymlinks(exe)
+	if err != nil {
+		return "", err
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		return "", err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func selectDefaultEnvironment(envs vars.EnvironmentSet) (string, bool) {

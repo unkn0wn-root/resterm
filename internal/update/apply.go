@@ -33,6 +33,7 @@ func (c Client) Download(ctx context.Context, a Asset, dst string) (int64, error
 	if a.URL == "" {
 		return 0, fmt.Errorf("empty asset url")
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
 	if err != nil {
 		return 0, fmt.Errorf("build asset request: %w", err)
@@ -63,6 +64,7 @@ func (c Client) Download(ctx context.Context, a Asset, dst string) (int64, error
 	if err != nil {
 		return n, fmt.Errorf("write asset: %w", err)
 	}
+
 	if a.Size > 0 && n != a.Size {
 		return n, fmt.Errorf("download size mismatch: got %d want %d", n, a.Size)
 	}
@@ -76,6 +78,7 @@ func (c Client) FetchChecksum(ctx context.Context, a Asset) (string, error) {
 	if c.http == nil {
 		return "", errNilHTTPClient
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.URL, nil)
 	if err != nil {
 		return "", fmt.Errorf("build checksum request: %w", err)
@@ -109,6 +112,7 @@ func readFirstToken(r io.Reader) (string, error) {
 	if !scanner.Scan() {
 		return "", fmt.Errorf("empty checksum body")
 	}
+
 	txt := scanner.Text()
 	fields := strings.Fields(txt)
 	if len(fields) == 0 {
@@ -130,6 +134,7 @@ func verifyChecksum(path, want string) error {
 	if _, err := io.Copy(h, f); err != nil {
 		return fmt.Errorf("hash binary: %w", err)
 	}
+
 	got := hex.EncodeToString(h.Sum(nil))
 	if got != want {
 		return fmt.Errorf("checksum mismatch: got %s want %s", got, want)
@@ -141,6 +146,7 @@ func verifyVersion(ctx context.Context, path, want string) error {
 	if want == "" {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
@@ -176,10 +182,12 @@ func prepareTemp(dir string) (string, error) {
 	if runtime.GOOS == "windows" {
 		pat = "resterm-update-*.exe"
 	}
+
 	tmp, err := os.CreateTemp(dir, pat)
 	if err != nil {
 		return "", fmt.Errorf("create temp file: %w", err)
 	}
+
 	path := tmp.Name()
 	if err := tmp.Close(); err != nil {
 		return "", fmt.Errorf("close temp file: %w", err)
