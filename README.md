@@ -105,6 +105,15 @@ Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 ```
 
+### Update
+
+```bash
+resterm --check-update
+resterm --update
+```
+
+The first command reports whether a newer release is available; the second downloads and installs it (Windows users receive a staged binary to swap on restart).
+
 ## Quick Start
 
 1. Create or open a directory that contains `.http` / `.rest` files (see `_examples/` for samples). If you want to start right away without any .http - just open resterm...

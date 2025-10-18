@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/list"
@@ -23,6 +24,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
+	"github.com/unkn0wn-root/resterm/internal/update"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -127,6 +129,9 @@ type Config struct {
 	History             *history.Store
 	WorkspaceRoot       string
 	Recursive           bool
+	Version             string
+	UpdateClient        update.Client
+	EnableUpdate        bool
 }
 
 type operatorState struct {
@@ -194,12 +199,20 @@ type Model struct {
 	lastGRPC         *grpcclient.Response
 	lastError        error
 
-	scriptRunner *scripts.Runner
-	testResults  []scripts.TestResult
-	scriptError  error
-	globals      *globalStore
-	fileVars     *fileStore
-	oauth        *oauth.Manager
+	scriptRunner    *scripts.Runner
+	testResults     []scripts.TestResult
+	scriptError     error
+	globals         *globalStore
+	fileVars        *fileStore
+	oauth           *oauth.Manager
+	updateClient    update.Client
+	updateVersion   string
+	updateEnabled   bool
+	updateBusy      bool
+	updateAnnounce  string
+	updateInfo      *update.Result
+	updateLastErr   string
+	updateLastCheck time.Time
 
 	responseRenderToken  string
 	responseLoading      bool
@@ -411,6 +424,9 @@ func New(cfg Config) Model {
 	previewViewport := viewport.New(0, 0)
 	previewViewport.SetContent("")
 
+	updateVersion := strings.TrimSpace(cfg.Version)
+	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" && cfg.UpdateClient.Ready()
+
 	model := Model{
 		cfg:                    cfg,
 		theme:                  th,
@@ -451,6 +467,9 @@ func New(cfg Config) Model {
 		globals:                  newGlobalStore(),
 		fileVars:                 newFileStore(),
 		oauth:                    oauth.NewManager(client),
+		updateClient:             cfg.UpdateClient,
+		updateVersion:            updateVersion,
+		updateEnabled:            updateEnabled,
 		editorInsertMode:         false,
 		editorWriteKeyMap:        writeKeyMap,
 		editorViewKeyMap:         viewKeyMap,

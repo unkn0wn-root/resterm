@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -18,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui"
+	"github.com/unkn0wn-root/resterm/internal/update"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -39,6 +43,8 @@ func main() {
 		proxyURL    string
 		recursive   bool
 		showVersion bool
+		checkUpdate bool
+		doUpdate    bool
 	)
 
 	follow = true
@@ -54,12 +60,61 @@ func main() {
 	flag.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
 	flag.BoolVar(&recursive, "recurisve", false, "(deprecated) Recursively scan workspace for request files")
 	flag.BoolVar(&showVersion, "version", false, "Show resterm version")
+	flag.BoolVar(&checkUpdate, "check-update", false, "Check for newer releases and exit")
+	flag.BoolVar(&doUpdate, "update", false, "Download and install the latest release, if available")
 	flag.Parse()
 
 	if showVersion {
 		fmt.Printf("resterm %s\n", version)
 		fmt.Printf("  commit: %s\n", commit)
 		fmt.Printf("  built:  %s\n", date)
+		os.Exit(0)
+	}
+
+	updateHTTP := &http.Client{}
+	upClient, err := update.NewClient(updateHTTP, updateRepo)
+	if err != nil {
+		log.Fatalf("update client: %v", err)
+	}
+
+	if checkUpdate || doUpdate {
+		u := newCLIUpdater(upClient, version)
+		ctx := context.Background()
+		res, ok, err := u.check(ctx)
+		if err != nil {
+			if errors.Is(err, errUpdateDisabled) {
+				if _, werr := fmt.Fprintln(os.Stdout, "Update checks are disabled for dev builds."); werr != nil {
+					log.Printf("update notice write failed: %v", werr)
+				}
+				os.Exit(0)
+			}
+			if _, serr := fmt.Fprintf(os.Stderr, "update check failed: %v\n", err); serr != nil {
+				log.Printf("update check error write failed: %v", serr)
+			}
+			os.Exit(1)
+		}
+		if !ok {
+			u.printNoUpdate()
+			os.Exit(0)
+		}
+		u.printAvailable(res)
+		if !doUpdate {
+			if _, werr := fmt.Fprintln(os.Stdout, "Run `resterm --update` to install."); werr != nil {
+				log.Printf("update hint write failed: %v", werr)
+			}
+			os.Exit(0)
+		}
+		st, err := u.apply(ctx, res)
+		if errors.Is(err, update.ErrPendingSwap) {
+			u.printStaged(st)
+			os.Exit(0)
+		}
+		if err != nil {
+			if _, serr := fmt.Fprintf(os.Stderr, "update failed: %v\n", err); serr != nil {
+				log.Printf("update failure write failed: %v", serr)
+			}
+			os.Exit(1)
+		}
 		os.Exit(0)
 	}
 
@@ -162,6 +217,8 @@ func main() {
 		}
 		settings.DefaultTheme = ""
 	}
+	updateEnabled := version != "dev"
+
 	model := ui.New(ui.Config{
 		FilePath:            filePath,
 		InitialContent:      initialContent,
@@ -180,11 +237,16 @@ func main() {
 		History:             historyStore,
 		WorkspaceRoot:       workspace,
 		Recursive:           recursive,
+		Version:             version,
+		UpdateClient:        upClient,
+		EnableUpdate:        updateEnabled,
 	})
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
 	if _, err := program.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		if _, serr := fmt.Fprintf(os.Stderr, "error: %v\n", err); serr != nil {
+			log.Printf("program error write failed: %v", serr)
+		}
 		os.Exit(1)
 	}
 }
