@@ -24,6 +24,100 @@ var errUpdateDisabled = errors.New("update disabled for dev build")
 
 const changelogDividerErr = "print changelog divider failed: %v"
 
+type cliProgress struct {
+	out        io.Writer
+	label      string
+	total      int64
+	downloaded int64
+	barWidth   int
+	lastPct    int
+	done       bool
+}
+
+func newCLIProgress(out io.Writer, label string) *cliProgress {
+	return &cliProgress{
+		out:      out,
+		label:    label,
+		barWidth: 28,
+		lastPct:  -1,
+	}
+}
+
+func (p *cliProgress) Start(total int64) {
+	if p == nil || p.done {
+		return
+	}
+	p.total = total
+	p.render(true)
+}
+
+func (p *cliProgress) Advance(n int64) {
+	if p == nil || p.done || n <= 0 {
+		return
+	}
+	p.downloaded += n
+	p.render(false)
+}
+
+func (p *cliProgress) Finish() {
+	if p == nil || p.done {
+		return
+	}
+	if p.total > 0 {
+		p.downloaded = p.total
+		p.render(true)
+		if _, err := fmt.Fprintln(p.out); err != nil {
+			log.Printf("progress finish write failed: %v", err)
+		}
+	} else {
+		line := fmt.Sprintf("\r%s: %s", p.label, humanBytes(p.downloaded))
+		if _, err := fmt.Fprintln(p.out, line); err != nil {
+			log.Printf("progress finish write failed: %v", err)
+		}
+	}
+	p.done = true
+}
+
+func (p *cliProgress) render(force bool) {
+	if p == nil || p.done {
+		return
+	}
+	var line string
+	if p.total > 0 {
+		percent := 0
+		if p.total > 0 {
+			percent = int((p.downloaded * 100) / p.total)
+			if percent > 100 {
+				percent = 100
+			}
+		}
+		if !force && percent == p.lastPct {
+			return
+		}
+		p.lastPct = percent
+		filled := 0
+		if p.total > 0 {
+			filled = int((p.downloaded * int64(p.barWidth)) / p.total)
+			if filled > p.barWidth {
+				filled = p.barWidth
+			}
+		}
+		if filled < 0 {
+			filled = 0
+		}
+		bar := strings.Repeat("=", filled) + strings.Repeat(" ", p.barWidth-filled)
+		line = fmt.Sprintf("\r%s: [%s] %3d%%", p.label, bar, percent)
+	} else {
+		if !force && p.downloaded == 0 {
+			return
+		}
+		line = fmt.Sprintf("\r%s: %s", p.label, humanBytes(p.downloaded))
+	}
+	if _, err := fmt.Fprint(p.out, line); err != nil {
+		log.Printf("progress write failed: %v", err)
+	}
+}
+
 type cliUpdater struct {
 	cl  update.Client
 	ver string
@@ -71,17 +165,51 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 		return update.SwapStatus{}, fmt.Errorf("locate executable: %w", err)
 	}
 	exe = resolveExecPath(exe)
-	st, err := update.Apply(ctx, u.cl, res, exe)
-	if errors.Is(err, update.ErrPendingSwap) {
+	current := strings.TrimSpace(u.ver)
+	if current == "" {
+		current = "unknown"
+	}
+	if _, werr := fmt.Fprintf(u.out, "Updating resterm %s → %s\n", current, res.Info.Version); werr != nil {
+		log.Printf("print update header failed: %v", werr)
+	}
+	if _, werr := fmt.Fprintf(u.out, "Target: %s\n", exe); werr != nil {
+		log.Printf("print target failed: %v", werr)
+	}
+	if !res.HasSum {
+		if _, werr := fmt.Fprintln(u.out, "Warning: checksum not published; proceeding without verification."); werr != nil {
+			log.Printf("print checksum warning failed: %v", werr)
+		}
+	}
+	prog := newCLIProgress(u.out, "Downloading")
+	st, err := update.ApplyWithProgress(ctx, u.cl, res, exe, prog)
+	if err != nil && !errors.Is(err, update.ErrPendingSwap) {
 		return st, err
 	}
-	if err != nil {
-		return st, err
+	if res.HasSum {
+		if _, werr := fmt.Fprintln(u.out, "Checksum verified."); werr != nil {
+			log.Printf("print checksum status failed: %v", werr)
+		}
+	} else {
+		if _, werr := fmt.Fprintln(u.out, "Checksum verification skipped."); werr != nil {
+			log.Printf("print checksum skip failed: %v", werr)
+		}
+	}
+	if _, werr := fmt.Fprintln(u.out, "Binary verified."); werr != nil {
+		log.Printf("print binary verification failed: %v", werr)
+	}
+	if st.Pending {
+		if _, werr := fmt.Fprintf(u.out, "Update staged at %s. Restart resterm to complete.\n", st.NewPath); werr != nil {
+			log.Printf("print staged path failed: %v", werr)
+		}
+	} else {
+		if _, werr := fmt.Fprintf(u.out, "Installed to %s.\n", exe); werr != nil {
+			log.Printf("print install path failed: %v", werr)
+		}
 	}
 	if _, werr := fmt.Fprintf(u.out, "resterm updated to %s\n", res.Info.Version); werr != nil {
 		log.Printf("print update notice failed: %v", werr)
 	}
-	return st, nil
+	return st, err
 }
 
 func resolveExecPath(path string) string {
@@ -104,18 +232,6 @@ func (u cliUpdater) printNoUpdate() {
 func (u cliUpdater) printAvailable(res update.Result) {
 	if _, err := fmt.Fprintf(u.out, "New version available: %s\n", res.Info.Version); err != nil {
 		log.Printf("print available failed: %v", err)
-	}
-}
-
-func (u cliUpdater) printStaged(st update.SwapStatus) {
-	if st.NewPath != "" {
-		if _, err := fmt.Fprintf(u.out, "Update staged at %s. Restart resterm to complete.\n", st.NewPath); err != nil {
-			log.Printf("print staged path failed: %v", err)
-		}
-	} else {
-		if _, err := fmt.Fprintln(u.out, "Update staged. Restart resterm to complete."); err != nil {
-			log.Printf("print staged notice failed: %v", err)
-		}
 	}
 }
 
@@ -187,4 +303,22 @@ func countLeadingSpaces(s string) int {
 		break
 	}
 	return count
+}
+
+func humanBytes(n int64) string {
+	const (
+		kb = 1024
+		mb = 1024 * kb
+		gb = 1024 * mb
+	)
+	switch {
+	case n >= gb:
+		return fmt.Sprintf("%.2f GiB", float64(n)/float64(gb))
+	case n >= mb:
+		return fmt.Sprintf("%.2f MiB", float64(n)/float64(mb))
+	case n >= kb:
+		return fmt.Sprintf("%.2f KiB", float64(n)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }

@@ -26,7 +26,13 @@ type SwapStatus struct {
 	NewPath string
 }
 
-func (c Client) Download(ctx context.Context, a Asset, dst string) (int64, error) {
+type Progress interface {
+	Start(total int64)
+	Advance(n int64)
+	Finish()
+}
+
+func (c Client) Download(ctx context.Context, a Asset, dst string, prog Progress) (int64, error) {
 	if c.http == nil {
 		return 0, errNilHTTPClient
 	}
@@ -60,7 +66,18 @@ func (c Client) Download(ctx context.Context, a Asset, dst string) (int64, error
 		_ = f.Close()
 	}()
 
-	n, err := io.Copy(f, res.Body)
+	var reader io.Reader = res.Body
+	if prog != nil {
+		total := a.Size
+		if total <= 0 && res.ContentLength > 0 {
+			total = res.ContentLength
+		}
+		prog.Start(total)
+		defer prog.Finish()
+		reader = io.TeeReader(res.Body, progressWriter{progress: prog})
+	}
+
+	n, err := io.Copy(f, reader)
 	if err != nil {
 		return n, fmt.Errorf("write asset: %w", err)
 	}
@@ -69,6 +86,17 @@ func (c Client) Download(ctx context.Context, a Asset, dst string) (int64, error
 		return n, fmt.Errorf("download size mismatch: got %d want %d", n, a.Size)
 	}
 	return n, nil
+}
+
+type progressWriter struct {
+	progress Progress
+}
+
+func (w progressWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		w.progress.Advance(int64(len(p)))
+	}
+	return len(p), nil
 }
 
 func (c Client) FetchChecksum(ctx context.Context, a Asset) (string, error) {
@@ -162,6 +190,14 @@ func verifyVersion(ctx context.Context, path, want string) error {
 }
 
 func Apply(ctx context.Context, c Client, res Result, exe string) (SwapStatus, error) {
+	return apply(ctx, c, res, exe, nil)
+}
+
+func ApplyWithProgress(ctx context.Context, c Client, res Result, exe string, prog Progress) (SwapStatus, error) {
+	return apply(ctx, c, res, exe, prog)
+}
+
+func apply(ctx context.Context, c Client, res Result, exe string, prog Progress) (SwapStatus, error) {
 	tmpPath, err := prepareTemp(filepath.Dir(exe))
 	if err != nil {
 		return SwapStatus{}, err
@@ -170,7 +206,7 @@ func Apply(ctx context.Context, c Client, res Result, exe string) (SwapStatus, e
 		_ = os.Remove(tmpPath)
 	}()
 
-	if err := stageBinary(ctx, c, res, tmpPath); err != nil {
+	if err := stageBinary(ctx, c, res, tmpPath, prog); err != nil {
 		return SwapStatus{}, err
 	}
 
@@ -195,8 +231,8 @@ func prepareTemp(dir string) (string, error) {
 	return path, nil
 }
 
-func stageBinary(ctx context.Context, c Client, res Result, path string) error {
-	if _, err := c.Download(ctx, res.Bin, path); err != nil {
+func stageBinary(ctx context.Context, c Client, res Result, path string, prog Progress) error {
+	if _, err := c.Download(ctx, res.Bin, path, prog); err != nil {
 		return err
 	}
 

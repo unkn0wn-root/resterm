@@ -113,12 +113,8 @@ func main() {
 			}
 			os.Exit(0)
 		}
-		st, err := u.apply(ctx, res)
-		if errors.Is(err, update.ErrPendingSwap) {
-			u.printStaged(st)
-			os.Exit(0)
-		}
-		if err != nil {
+		_, err = u.apply(ctx, res)
+		if err != nil && !errors.Is(err, update.ErrPendingSwap) {
 			if _, serr := fmt.Fprintf(os.Stderr, "update failed: %v\n", err); serr != nil {
 				log.Printf("update failure write failed: %v", serr)
 			}
