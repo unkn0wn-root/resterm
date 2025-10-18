@@ -43,7 +43,6 @@ func decodeInfo(r io.Reader) (Info, error) {
 	}
 
 	dec := json.NewDecoder(r)
-	dec.DisallowUnknownFields()
 	if err := dec.Decode(&raw); err != nil {
 		return Info{}, fmt.Errorf("decode release: %w", err)
 	}

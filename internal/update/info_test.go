@@ -10,6 +10,7 @@ func TestDecodeInfo(t *testing.T) {
         "tag_name": "v1.2.3",
         "body": "notes",
         "published_at": "2024-08-01T12:00:00Z",
+        "url": "https://api.github.com/repos/unkn0wn-root/resterm/releases/1",
         "assets": [
             {"name": "resterm_Linux_x86_64", "browser_download_url": "https://x/bin", "size": 1024},
             {"name": "resterm_Linux_x86_64.sha256", "browser_download_url": "https://x/sum", "size": 99},
