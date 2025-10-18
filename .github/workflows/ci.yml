@@ -71,6 +71,7 @@ jobs:
 
           echo "Building version $VERSION"
           GOOS="$GOOS" GOARCH="$GOARCH" go build -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
+          sha256sum "$output" | awk '{print $1}' > "${output}.sha256"
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v1
         with:

@@ -29,6 +29,9 @@ func For(goos, goarch string) (Platform, error) {
 		return Platform{}, err
 	}
 	asset := fmt.Sprintf("%s_%s_%s", binPrefix, osName, archName)
+	if osName == "Windows" {
+		asset += ".exe"
+	}
 	return Platform{
 		OS:    goos,
 		Arch:  goarch,
