@@ -366,13 +366,7 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	}
 
 	frameWidth := style.GetHorizontalFrameSize()
-	computedOuterWidth := m.responseContentWidth() + frameWidth
-	targetOuterWidth := computedOuterWidth
-	if availableWidth > 0 {
-		targetOuterWidth = availableWidth
-	} else {
-		targetOuterWidth = frameWidth
-	}
+	targetOuterWidth := availableWidth
 	if targetOuterWidth < frameWidth {
 		targetOuterWidth = frameWidth
 	}
