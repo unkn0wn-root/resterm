@@ -754,7 +754,7 @@ func (m Model) renderCommandBar() string {
 			rendered[i],
 		)
 	}
-	return m.theme.CommandBar.Render(row)
+	return renderCommandBarContainer(m.theme.CommandBar, row)
 }
 
 func (m Model) renderSearchPrompt() string {
@@ -780,7 +780,7 @@ func (m Model) renderSearchPrompt() string {
 		modeBadge,
 		hints,
 	)
-	return m.theme.CommandBar.Render(row)
+	return renderCommandBarContainer(m.theme.CommandBar, row)
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {
@@ -809,9 +809,10 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 		input,
 		modeBadge,
 	)
-	return m.theme.CommandBar.
-		Width(width).
-		Render(row)
+	return renderCommandBarContainer(
+		m.theme.CommandBar.Width(width),
+		row,
+	)
 }
 
 func (m Model) renderResponseSearchInfo() string {
@@ -834,7 +835,42 @@ func (m Model) renderResponseSearchInfo() string {
 		modeBadge,
 		hints,
 	)
-	return m.theme.CommandBar.Render(row)
+	return renderCommandBarContainer(m.theme.CommandBar, row)
+}
+
+func renderCommandBarContainer(style lipgloss.Style, content string) string {
+	padLeft := style.GetPaddingLeft()
+	padRight := style.GetPaddingRight()
+	width := style.GetWidth()
+	maxWidth := style.GetMaxWidth()
+
+	// Remove horizontal padding from the styled region so themes can set
+	// a background colour without colouring the edge gutter.
+	style = style.PaddingLeft(0).PaddingRight(0)
+
+	if width > 0 {
+		style = style.Width(maxInt(width-padLeft-padRight, 0))
+	}
+	if maxWidth > 0 {
+		style = style.MaxWidth(maxInt(maxWidth-padLeft-padRight, 0))
+	}
+
+	rendered := style.Render(content)
+
+	if padLeft == 0 && padRight == 0 {
+		return rendered
+	}
+
+	segments := make([]string, 0, 3)
+	if padLeft > 0 {
+		segments = append(segments, strings.Repeat(" ", padLeft))
+	}
+	segments = append(segments, rendered)
+	if padRight > 0 {
+		segments = append(segments, strings.Repeat(" ", padRight))
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, segments...)
 }
 
 func renderCommandButton(
