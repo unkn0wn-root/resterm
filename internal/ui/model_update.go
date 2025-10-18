@@ -2,13 +2,19 @@ package ui
 
 import (
 	"fmt"
+	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
 func (m Model) Init() tea.Cmd {
-	return textarea.Blink
+	cmds := []tea.Cmd{textarea.Blink}
+	if m.updateEnabled {
+		cmds = append(cmds, newUpdateTickCmd(0))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -63,6 +69,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case profileNextIterationMsg:
 		if cmd := m.executeProfileIteration(); cmd != nil {
 			cmds = append(cmds, cmd)
+		}
+	case updateTickMsg:
+		if cmd := m.enqueueUpdateCheck(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case updateCheckMsg:
+		m.updateBusy = false
+		m.updateLastCheck = time.Now()
+		if m.updateEnabled {
+			cmds = append(cmds, newUpdateTickCmd(updateInterval))
+		}
+		if typed.err != nil {
+			errText := typed.err.Error()
+			if errText != "" && errText != m.updateLastErr {
+				m.updateLastErr = errText
+				m.setStatusMessage(statusMsg{text: fmt.Sprintf("update check failed: %s", errText), level: statusWarn})
+			}
+		} else {
+			m.updateLastErr = ""
+			if typed.res != nil {
+				ver := strings.TrimSpace(typed.res.Info.Version)
+				if ver != "" && ver != m.updateAnnounce {
+					res := *typed.res
+					m.updateInfo = &res
+					m.updateAnnounce = ver
+					m.setStatusMessage(statusMsg{text: fmt.Sprintf("Update available: %s (run `resterm --update`)", ver), level: statusInfo})
+				}
+			}
 		}
 	}
 

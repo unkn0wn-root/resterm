@@ -5,10 +5,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/update"
 )
 
 type statusPulseMsg struct{}
 type profileNextIterationMsg struct{}
+type updateTickMsg struct{}
 
 type statusLevel int
 
@@ -33,4 +35,9 @@ type responseMsg struct {
 type statusMsg struct {
 	text  string
 	level statusLevel
+}
+
+type updateCheckMsg struct {
+	res *update.Result
+	err error
 }
