@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.4.0](https://github.com/unkn0wn-root/resterm/compare/v0.3.1...v0.4.0) (2025-10-18)
+
+
+### Features
+
+* added custom themes ([1731cf3](https://github.com/unkn0wn-root/resterm/commit/1731cf32a01c64c356493369c03b5ce368a8d1de))
+* faint/blur requests when in files ([49819f0](https://github.com/unkn0wn-root/resterm/commit/49819f0a3a14e045fe5648341b283a03218c7225))
+* **ui/textarea:** add horizontal scroll and safe ANSI rendering ([3cd7151](https://github.com/unkn0wn-root/resterm/commit/3cd7151c10c94f0730246a4525b5d2f272820635))
+
+
+### Bug Fixes
+
+* lint and redundant code ([443cbe3](https://github.com/unkn0wn-root/resterm/commit/443cbe3e9a9046c319acb074f0d9a8283d12ba09))
+
 ### [0.3.1](https://github.com/unkn0wn-root/resterm/compare/v0.3.0...v0.3.1) (2025-10-16)
 
 
