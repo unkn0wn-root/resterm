@@ -172,9 +172,6 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 	if _, werr := fmt.Fprintf(u.out, "Updating resterm %s → %s\n", current, res.Info.Version); werr != nil {
 		log.Printf("print update header failed: %v", werr)
 	}
-	if _, werr := fmt.Fprintf(u.out, "Target: %s\n", exe); werr != nil {
-		log.Printf("print target failed: %v", werr)
-	}
 	if !res.HasSum {
 		if _, werr := fmt.Fprintln(u.out, "Warning: checksum not published; proceeding without verification."); werr != nil {
 			log.Printf("print checksum warning failed: %v", werr)
