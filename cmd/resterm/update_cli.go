@@ -201,10 +201,6 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 		if _, werr := fmt.Fprintf(u.out, "Update staged at %s. Restart resterm to complete.\n", st.NewPath); werr != nil {
 			log.Printf("print staged path failed: %v", werr)
 		}
-	} else {
-		if _, werr := fmt.Fprintf(u.out, "Installed to %s.\n", exe); werr != nil {
-			log.Printf("print install path failed: %v", werr)
-		}
 	}
 	if _, werr := fmt.Fprintf(u.out, "resterm updated to %s\n", res.Info.Version); werr != nil {
 		log.Printf("print update notice failed: %v", werr)
