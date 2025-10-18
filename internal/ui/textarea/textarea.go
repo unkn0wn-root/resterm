@@ -31,6 +31,11 @@ const (
 	defaultMaxHeight = 0
 	defaultMaxWidth  = 500
 
+	// horizontalScrollMargin defines how many columns of padding we try to keep
+	// between the cursor and either horizontal edge of the viewport before we
+	// start shifting content. Behaves similarly to Vim's sidescrolloff.
+	horizontalScrollMargin = 8
+
 	// XXX: in v2, make max lines dynamic and default max lines configurable.
 	maxLines = 10000
 )
@@ -936,8 +941,25 @@ func (m *Model) repositionHorizontal() {
 	}
 
 	line := m.value[m.row]
+
+	margin := horizontalScrollMargin
+	if m.width > 0 {
+		maxMargin := max(0, (m.width-1)/2)
+		if margin > maxMargin {
+			margin = maxMargin
+		}
+	} else {
+		margin = 0
+	}
+
 	lineWidth := visualWidth(line)
-	maxOffset := max(0, lineWidth-m.width)
+	if lineWidth <= m.width {
+		margin = 0
+	}
+	if m.width <= horizontalScrollMargin+1 {
+		margin = 0
+	}
+	maxOffset := max(0, lineWidth+margin-m.width)
 
 	cursorLeft := visualWidthUntil(line, m.col)
 	cursorWidth := 1
@@ -945,10 +967,13 @@ func (m *Model) repositionHorizontal() {
 		cursorWidth = safeRuneWidth(line[m.col])
 	}
 
-	if cursorLeft < m.horizOffset {
-		m.horizOffset = cursorLeft
-	} else if cursorLeft+cursorWidth > m.horizOffset+m.width {
-		m.horizOffset = cursorLeft + cursorWidth - m.width
+	leftBoundary := m.horizOffset + margin
+	rightBoundary := m.horizOffset + m.width - margin
+
+	if cursorLeft < leftBoundary {
+		m.horizOffset = cursorLeft - margin
+	} else if cursorLeft+cursorWidth > rightBoundary {
+		m.horizOffset = cursorLeft + cursorWidth + margin - m.width
 	}
 
 	if m.horizOffset > maxOffset {

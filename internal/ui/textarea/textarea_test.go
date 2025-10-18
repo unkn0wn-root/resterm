@@ -55,6 +55,58 @@ func TestHorizontalAutoScroll(t *testing.T) {
 	}
 }
 
+func TestHorizontalScrollMargin(t *testing.T) {
+	textarea := newTextArea()
+	textarea.Prompt = ""
+	textarea.ShowLineNumbers = false
+	textarea.SetHeight(1)
+	textarea.SetWidth(30)
+	textarea.CharLimit = 0
+
+	textarea.SetValue(strings.Repeat("x", 60))
+	textarea.CursorStart()
+
+	margin := min(horizontalScrollMargin, textarea.Width()/2)
+	if margin == 0 {
+		t.Fatalf("test requires positive horizontal scroll margin")
+	}
+
+	target := textarea.Width() - margin
+	textarea.SetCursor(target)
+
+	if textarea.horizOffset == 0 {
+		t.Fatalf("expected horizontal offset to advance once cursor nears right edge")
+	}
+
+	lineWidth := visualWidth(textarea.value[0])
+	expected := target + 1 + margin - textarea.Width()
+	if expected < 0 {
+		expected = 0
+	}
+	maxOffset := max(0, lineWidth+margin-textarea.Width())
+	if expected > maxOffset {
+		expected = maxOffset
+	}
+
+	if textarea.horizOffset != expected {
+		t.Fatalf("expected horiz offset %d, got %d", expected, textarea.horizOffset)
+	}
+
+	textarea.SetCursor(margin - 1)
+	if textarea.horizOffset != 0 {
+		t.Fatalf("expected horizontal offset to reset when cursor returns within left margin, got %d", textarea.horizOffset)
+	}
+
+	textarea.SetCursor(len(textarea.value[0]))
+	endExpected := lineWidth + margin - textarea.Width()
+	if endExpected < 0 {
+		endExpected = 0
+	}
+	if textarea.horizOffset != endExpected {
+		t.Fatalf("expected horiz offset %d at end of line, got %d", endExpected, textarea.horizOffset)
+	}
+}
+
 func TestExtendingLongLinePreservesContent(t *testing.T) {
 	textarea := newTextArea()
 	textarea.Prompt = ""
