@@ -22,6 +22,8 @@ const (
 
 var errUpdateDisabled = errors.New("update disabled for dev build")
 
+const changelogDividerErr = "print changelog divider failed: %v"
+
 type cliUpdater struct {
 	cl  update.Client
 	ver string
@@ -119,9 +121,16 @@ func (u cliUpdater) printStaged(st update.SwapStatus) {
 
 func (u cliUpdater) printChangelog(res update.Result) {
 	notes := strings.TrimSpace(res.Info.Notes)
+	divider := strings.Repeat("-", 64)
+	if _, err := fmt.Fprintln(u.out, divider); err != nil {
+		log.Printf(changelogDividerErr, err)
+	}
 	if notes == "" {
 		if _, err := fmt.Fprintln(u.out, "Changelog: not provided"); err != nil {
 			log.Printf("print changelog missing failed: %v", err)
+		}
+		if _, err := fmt.Fprintln(u.out, divider); err != nil {
+			log.Printf(changelogDividerErr, err)
 		}
 		return
 	}
@@ -129,7 +138,53 @@ func (u cliUpdater) printChangelog(res update.Result) {
 		log.Printf("print changelog header failed: %v", err)
 		return
 	}
-	if _, err := fmt.Fprintln(u.out, notes); err != nil {
-		log.Printf("print changelog body failed: %v", err)
+	for _, line := range formatChangelog(notes) {
+		if _, err := fmt.Fprintln(u.out, line); err != nil {
+			log.Printf("print changelog body failed: %v", err)
+			return
+		}
 	}
+	if _, err := fmt.Fprintln(u.out, divider); err != nil {
+		log.Printf(changelogDividerErr, err)
+	}
+}
+
+func formatChangelog(raw string) []string {
+	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
+	lines := strings.Split(normalized, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmedRight := strings.TrimRight(line, " \t")
+		if strings.TrimSpace(trimmedRight) == "" {
+			out = append(out, "")
+			continue
+		}
+
+		leading := countLeadingSpaces(line)
+		token := strings.TrimSpace(trimmedRight)
+		switch {
+		case strings.HasPrefix(token, "- ") || strings.HasPrefix(token, "* "):
+			item := strings.TrimSpace(token[2:])
+			out = append(out, strings.Repeat(" ", leading)+"• "+item)
+		default:
+			out = append(out, trimmedRight)
+		}
+	}
+	return out
+}
+
+func countLeadingSpaces(s string) int {
+	count := 0
+	for _, r := range s {
+		if r == ' ' || r == '\t' {
+			if r == '\t' {
+				count += 4
+			} else {
+				count++
+			}
+			continue
+		}
+		break
+	}
+	return count
 }
