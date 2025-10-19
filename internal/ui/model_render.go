@@ -1212,6 +1212,7 @@ func (m Model) renderStatusBar() string {
 		minGap = 0
 	}
 
+	leftAvailable := lineWidth
 	maxLeftWidth := lineWidth
 	if statusBarLeftMaxRatio > 0 && statusBarLeftMaxRatio < 1 {
 		ratioWidth := int(math.Round(float64(lineWidth) * statusBarLeftMaxRatio))
@@ -1224,16 +1225,18 @@ func (m Model) renderStatusBar() string {
 		if minGap == 0 {
 			available = lineWidth - versionWidth
 		}
+		if available < 0 {
+			available = 0
+		}
+		leftAvailable = available
 		if available < maxLeftWidth {
 			maxLeftWidth = available
 		}
 	}
-	if maxLeftWidth < 0 {
-		maxLeftWidth = 0
-	}
 
 	const sep = "    "
 	sepWidth := lipgloss.Width(sep)
+	ellipsisWidth := lipgloss.Width("…")
 
 	segments := make([]string, 0, 4)
 	if m.cfg.EnvironmentName != "" {
@@ -1252,6 +1255,27 @@ func (m Model) renderStatusBar() string {
 	}
 
 	staticText := strings.Join(segments, sep)
+	staticWidth := lipgloss.Width(staticText)
+	if staticWidth > 0 {
+		if staticWidth > leftAvailable {
+			maxLeftWidth = leftAvailable
+		} else if staticWidth > maxLeftWidth {
+			maxLeftWidth = staticWidth
+		}
+	}
+	if statusText != "" && staticWidth > 0 {
+		minRequired := staticWidth + sepWidth + ellipsisWidth
+		if minRequired <= leftAvailable && maxLeftWidth < minRequired {
+			maxLeftWidth = minRequired
+		}
+	}
+	if maxLeftWidth > leftAvailable {
+		maxLeftWidth = leftAvailable
+	}
+	if maxLeftWidth < 0 {
+		maxLeftWidth = 0
+	}
+
 	maxContentWidth := maxLeftWidth
 	messageText := statusText
 
