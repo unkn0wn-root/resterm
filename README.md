@@ -99,7 +99,7 @@ Invoke-WebRequest -Uri $asset.browser_download_url -OutFile resterm.exe
 Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
 ```
 
-### From source
+#### From source
 
 ```bash
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
@@ -142,7 +142,7 @@ Accept: application/json
 Drop a curl command into the editor and press `Ctrl+Enter` anywhere inside to turn it into a structured request. Resterm understands common flags (`-X`, `-H`, `--data*`, `--json`, `--url`, `--user`, `--compressed`, `-F/--form`, etc.), merges repeated data segments, and respects multipart uploads.
 
 ```bash
-sudo curl \
+curl \
   --compressed \
   --url "https://httpbin.org/post?source=resterm&case=multipart" \
   --request POST \
