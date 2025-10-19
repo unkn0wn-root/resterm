@@ -780,7 +780,11 @@ func (m Model) renderSearchPrompt() string {
 		modeBadge,
 		hints,
 	)
-	return renderCommandBarContainer(m.theme.CommandBar, row)
+	return renderCommandBarContainer(
+		m.theme.CommandBar,
+		row,
+		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
+	)
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {
@@ -796,7 +800,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 		Faint(true).
 		PaddingLeft(1).
 		Render(strings.ToUpper(mode))
-	reserved := lipgloss.Width(label) + lipgloss.Width(modeBadge) + 2
+	reserved := lipgloss.Width(label) + lipgloss.Width(modeBadge) + 2 + searchCommandBarLeadingColorSpaces
 	inputWidth := width - reserved
 	if inputWidth < 4 {
 		inputWidth = maxInt(4, width-8)
@@ -812,8 +816,11 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 	return renderCommandBarContainer(
 		m.theme.CommandBar.Width(width),
 		row,
+		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
 	)
 }
+
+const searchCommandBarLeadingColorSpaces = 1
 
 func (m Model) renderResponseSearchInfo() string {
 	mode := "literal"
@@ -835,10 +842,40 @@ func (m Model) renderResponseSearchInfo() string {
 		modeBadge,
 		hints,
 	)
-	return renderCommandBarContainer(m.theme.CommandBar, row)
+	return renderCommandBarContainer(
+		m.theme.CommandBar,
+		row,
+		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
+	)
 }
 
-func renderCommandBarContainer(style lipgloss.Style, content string) string {
+type commandBarContainerConfig struct {
+	leadingColoredSpaces int
+}
+
+type commandBarContainerOption func(*commandBarContainerConfig)
+
+func withColoredLeadingSpaces(spaces int) commandBarContainerOption {
+	if spaces < 0 {
+		spaces = 0
+	}
+	return func(cfg *commandBarContainerConfig) {
+		cfg.leadingColoredSpaces = spaces
+	}
+}
+
+func renderCommandBarContainer(
+	style lipgloss.Style,
+	content string,
+	opts ...commandBarContainerOption,
+) string {
+	var cfg commandBarContainerConfig
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
 	padLeft := style.GetPaddingLeft()
 	padRight := style.GetPaddingRight()
 	width := style.GetWidth()
@@ -846,31 +883,65 @@ func renderCommandBarContainer(style lipgloss.Style, content string) string {
 
 	// Remove horizontal padding from the styled region so themes can set
 	// a background colour without colouring the edge gutter.
-	style = style.PaddingLeft(0).PaddingRight(0)
+	baseStyle := style.PaddingLeft(0).PaddingRight(0)
 
-	if width > 0 {
-		style = style.Width(maxInt(width-padLeft-padRight, 0))
+	innerWidth := width
+	if innerWidth > 0 {
+		innerWidth = maxInt(innerWidth-padLeft-padRight, 0)
 	}
-	if maxWidth > 0 {
-		style = style.MaxWidth(maxInt(maxWidth-padLeft-padRight, 0))
+	innerMaxWidth := maxWidth
+	if innerMaxWidth > 0 {
+		innerMaxWidth = maxInt(innerMaxWidth-padLeft-padRight, 0)
 	}
 
-	rendered := style.Render(content)
+	leadingSpaces := cfg.leadingColoredSpaces
+	if leadingSpaces > 0 {
+		if innerWidth > 0 {
+			leadingSpaces = minInt(leadingSpaces, innerWidth)
+		}
+		if innerMaxWidth > 0 {
+			leadingSpaces = minInt(leadingSpaces, innerMaxWidth)
+		}
+	}
+	innerSegments := make([]string, 0, 2)
+	if leadingSpaces > 0 {
+		leadingStyle := baseStyle
+		if innerWidth > 0 {
+			leadingStyle = leadingStyle.Width(leadingSpaces)
+		}
+		if innerMaxWidth > 0 {
+			leadingStyle = leadingStyle.MaxWidth(leadingSpaces)
+		}
+		innerSegments = append(innerSegments, leadingStyle.Render(strings.Repeat(" ", leadingSpaces)))
+	}
+
+	contentStyle := baseStyle
+	if innerWidth > 0 {
+		remaining := maxInt(innerWidth-leadingSpaces, 0)
+		contentStyle = contentStyle.Width(remaining)
+	}
+	if innerMaxWidth > 0 {
+		remainingMax := maxInt(innerMaxWidth-leadingSpaces, 0)
+		contentStyle = contentStyle.MaxWidth(remainingMax)
+	}
+	innerSegments = append(innerSegments, contentStyle.Render(content))
+
+	inner := lipgloss.JoinHorizontal(lipgloss.Top, innerSegments...)
 
 	if padLeft == 0 && padRight == 0 {
-		return rendered
+		return inner
 	}
 
-	segments := make([]string, 0, 3)
+	outer := make([]string, 0, 3)
 	if padLeft > 0 {
-		segments = append(segments, strings.Repeat(" ", padLeft))
+		outer = append(outer, strings.Repeat(" ", padLeft))
 	}
-	segments = append(segments, rendered)
+	outer = append(outer, inner)
 	if padRight > 0 {
-		segments = append(segments, strings.Repeat(" ", padRight))
+		outer = append(outer, strings.Repeat(" ", padRight))
 	}
 
-	return lipgloss.JoinHorizontal(lipgloss.Top, segments...)
+	return lipgloss.JoinHorizontal(lipgloss.Top, outer...)
 }
 
 func renderCommandButton(
