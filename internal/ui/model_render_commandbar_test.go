@@ -47,10 +47,32 @@ func TestRenderCommandBarContainerWithColoredLeadingSpaces(t *testing.T) {
 
 	out := renderCommandBarContainer(style, "Hi", withColoredLeadingSpaces(2))
 
-	if !strings.Contains(out, "  Hi") {
+	if !strings.HasPrefix(out, "  Hi") {
 		t.Fatalf("expected colored leading spaces before content, got %q", out)
+	}
+	if strings.Contains(out, "\n") {
+		t.Fatalf("expected single line output, got %q", out)
 	}
 	if lipgloss.Width(out) != 4 {
 		t.Fatalf("expected rendered width 4, got %d", lipgloss.Width(out))
+	}
+}
+
+func TestRenderCommandBarContainerWithColoredSpacesAndWidth(t *testing.T) {
+	style := lipgloss.NewStyle().
+		Background(lipgloss.Color("#654321")).
+		Padding(0, 1).
+		Width(12)
+
+	out := renderCommandBarContainer(style, "foobar", withColoredLeadingSpaces(2))
+
+	if strings.Contains(out, "\n") {
+		t.Fatalf("expected single line output, got %q", out)
+	}
+	if !strings.HasPrefix(out, "  ") {
+		t.Fatalf("expected leading coloured spaces, got %q", out)
+	}
+	if lipgloss.Width(out) != 12 {
+		t.Fatalf("expected rendered width 12, got %d", lipgloss.Width(out))
 	}
 }
