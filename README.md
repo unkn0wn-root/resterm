@@ -105,7 +105,7 @@ Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 ```
 
-### Update
+## Update
 
 ```bash
 resterm --check-update
