@@ -12,6 +12,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
+const statusBarLeftMaxRatio = 0.7
+
 func (m Model) View() string {
 	if !m.ready {
 		return m.renderWithinAppFrame("Initialising...")
@@ -187,21 +189,23 @@ func (m Model) renderFilePane() string {
 			Foreground(m.theme.PaneBorderFocusRequests).
 			Render(m.workflowList.View())
 	}
+	if len(m.fileList.Items()) == 0 {
+		filesView = centeredListView(
+			filesView,
+			innerWidth,
+			m.theme.HeaderValue.Render("No items"))
+	}
 	if len(m.requestItems) == 0 {
-		empty := lipgloss.NewStyle().
-			Width(innerWidth).
-			Align(lipgloss.Center)
-		requestsView = empty.Render(
-			m.theme.HeaderValue.Render("No requests parsed"),
-		)
+		requestsView = centeredListView(
+			requestsView,
+			innerWidth,
+			m.theme.HeaderValue.Render("No requests parsed"))
 	}
 	if len(m.workflowItems) == 0 {
-		empty := lipgloss.NewStyle().
-			Width(innerWidth).
-			Align(lipgloss.Center)
-		workflowsView = empty.Render(
-			m.theme.HeaderValue.Render("No workflows defined"),
-		)
+		workflowsView = centeredListView(
+			workflowsView,
+			innerWidth,
+			m.theme.HeaderValue.Render("No workflows defined"))
 	}
 	separator := m.theme.PaneDivider.
 		Width(innerWidth).
@@ -281,6 +285,23 @@ func (m Model) renderFilePane() string {
 		Width(width).
 		Height(targetHeight).
 		Render(content)
+}
+
+func centeredListView(view string, width int, content string) string {
+	height := lipgloss.Height(view)
+	if height < 1 {
+		height = 1
+	}
+	if width < 1 {
+		width = 1
+	}
+	return lipgloss.Place(
+		width,
+		height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
 }
 
 func (m Model) renderEditorPane() string {
@@ -492,7 +513,7 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	}
 	contentHeight := maxInt(pane.viewport.Height, 1)
 
-	tabs := m.renderPaneTabs(id, focused)
+	tabs := m.renderPaneTabs(id, focused, contentWidth)
 	tabs = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
 		Render(tabs)
@@ -546,7 +567,7 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	)
 }
 
-func (m Model) renderPaneTabs(id responsePaneID, focused bool) string {
+func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string {
 	pane := m.pane(id)
 	if pane == nil {
 		return ""
@@ -578,7 +599,41 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool) string {
 
 	row := strings.Join(labels, " ")
 	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
-	return m.theme.Tabs.Render(row)
+	lineWidth := maxInt(width, 1)
+	padding := 0
+	if focused && m.focus == focusResponse {
+		padding = 1
+	}
+	innerWidth := maxInt(lineWidth-padding*2, 1)
+	rowStyle := m.theme.Tabs.
+		Width(innerWidth).
+		Align(lipgloss.Center)
+	row = rowStyle.Render(row)
+	divider := m.theme.PaneDivider.
+		Width(innerWidth).
+		Render(strings.Repeat("─", innerWidth))
+	block := lipgloss.JoinVertical(lipgloss.Left, row, divider)
+	if padding > 0 {
+		pad := strings.Repeat(" ", padding)
+		block = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			pad,
+			block,
+			pad,
+		)
+	}
+	blockWidth := lipgloss.Width(block)
+	if lineWidth > blockWidth {
+		block = lipgloss.Place(
+			lineWidth,
+			lipgloss.Height(block),
+			lipgloss.Center,
+			lipgloss.Top,
+			block,
+			lipgloss.WithWhitespaceChars(" "),
+		)
+	}
+	return block
 }
 
 func (m Model) renderResponseDivider(left, right string) string {
@@ -1017,15 +1072,7 @@ func (m Model) renderHeader() string {
 
 	segments := make([]string, 0, len(segmentsData)+1)
 	brandLabel := strings.ToUpper("RESTERM")
-	versionDisplay := strings.TrimSpace(m.cfg.Version)
-	if versionDisplay == "" {
-		versionDisplay = strings.TrimSpace(m.updateVersion)
-	}
-	brandText := brandLabel
-	if versionDisplay != "" {
-		brandText = fmt.Sprintf("%s %s", brandLabel, versionDisplay)
-	}
-	brandSegment := m.theme.HeaderBrand.Render(brandText)
+	brandSegment := m.theme.HeaderBrand.Render(brandLabel)
 	segments = append(segments, brandSegment)
 	for i, seg := range segmentsData {
 		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value))
@@ -1151,6 +1198,40 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 
+	versionText := strings.TrimSpace(m.cfg.Version)
+	if versionText == "" {
+		versionText = strings.TrimSpace(m.updateVersion)
+	}
+	lineWidth := maxInt(m.width-2, 1)
+	if versionText != "" {
+		versionText = truncateToWidth(versionText, lineWidth)
+	}
+	versionWidth := lipgloss.Width(versionText)
+	minGap := 1
+	if versionWidth == 0 || lineWidth <= versionWidth {
+		minGap = 0
+	}
+
+	maxLeftWidth := lineWidth
+	if statusBarLeftMaxRatio > 0 && statusBarLeftMaxRatio < 1 {
+		ratioWidth := int(math.Round(float64(lineWidth) * statusBarLeftMaxRatio))
+		if ratioWidth < maxLeftWidth {
+			maxLeftWidth = ratioWidth
+		}
+	}
+	if versionWidth > 0 {
+		available := lineWidth - versionWidth - minGap
+		if minGap == 0 {
+			available = lineWidth - versionWidth
+		}
+		if available < maxLeftWidth {
+			maxLeftWidth = available
+		}
+	}
+	if maxLeftWidth < 0 {
+		maxLeftWidth = 0
+	}
+
 	const sep = "    "
 	sepWidth := lipgloss.Width(sep)
 
@@ -1171,16 +1252,22 @@ func (m Model) renderStatusBar() string {
 	}
 
 	staticText := strings.Join(segments, sep)
-	maxContentWidth := maxInt(m.width-2, 1)
+	maxContentWidth := maxLeftWidth
 	messageText := statusText
 
-	if staticText != "" {
+	if maxContentWidth <= 0 {
+		staticText = ""
+		messageText = ""
+	} else if staticText != "" {
 		staticWidth := lipgloss.Width(staticText)
 		if staticWidth > maxContentWidth {
 			staticText = truncateToWidth(staticText, maxContentWidth)
 			messageText = ""
 		} else {
 			available := maxContentWidth - staticWidth
+			if available < 0 {
+				available = 0
+			}
 			if messageText != "" {
 				if available > sepWidth {
 					available -= sepWidth
@@ -1204,12 +1291,43 @@ func (m Model) renderStatusBar() string {
 		}
 		builder.WriteString(staticText)
 	}
-	combined := builder.String()
-	if combined == "" {
-		combined = truncateToWidth(statusText, maxContentWidth)
+
+	lineContent := builder.String()
+	if lineContent == "" && maxContentWidth > 0 {
+		lineContent = truncateToWidth(statusText, maxContentWidth)
 	}
 
-	return m.theme.StatusBar.Render(combined)
+	if versionWidth > 0 {
+		if maxLeftWidth > 0 {
+			lineContent = truncateToWidth(lineContent, maxLeftWidth)
+		}
+		leftWidth := lipgloss.Width(lineContent)
+		spaceWidth := lineWidth - versionWidth - leftWidth
+		if spaceWidth < 0 {
+			spaceWidth = 0
+		}
+		if leftWidth > 0 {
+			if minGap > 0 && spaceWidth < minGap {
+				spaceWidth = minGap
+			}
+			lineContent = lineContent + strings.Repeat(" ", spaceWidth) + versionText
+		} else {
+			pad := maxInt(lineWidth-versionWidth, 0)
+			if minGap > 0 && pad > lineWidth-versionWidth-minGap {
+				pad = lineWidth - versionWidth - minGap
+				if pad < 0 {
+					pad = 0
+				}
+			}
+			lineContent = strings.Repeat(" ", pad) + versionText
+		}
+	}
+
+	if lineContent == "" {
+		lineContent = truncateToWidth(statusText, lineWidth)
+	}
+
+	return m.theme.StatusBar.Render(lineContent)
 }
 
 func truncateStatus(text string, width int) string {

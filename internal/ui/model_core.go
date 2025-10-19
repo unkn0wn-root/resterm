@@ -74,7 +74,7 @@ const (
 	sidebarWidthDefault   = 0.2
 	sidebarWidthStep      = 0.05
 	minSidebarWidthRatio  = 0.05
-	maxSidebarWidthRatio  = 0.5
+	maxSidebarWidthRatio  = 0.3
 	minSidebarWidthPixels = 20
 )
 
@@ -102,7 +102,7 @@ const (
 	editorSplitDefault           = 0.6
 	editorSplitStep              = 0.05
 	minEditorSplit               = 0.3
-	maxEditorSplit               = 0.70
+	maxEditorSplit               = 0.63
 	minEditorPaneWidth           = 30
 	minResponsePaneWidth         = 40
 	minResponseSplitWidth        = 24
