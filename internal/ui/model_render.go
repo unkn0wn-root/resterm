@@ -905,7 +905,7 @@ func renderCommandBarContainer(
 	}
 	innerSegments := make([]string, 0, 2)
 	if leadingSpaces > 0 {
-		leadingStyle := baseStyle.Copy()
+		leadingStyle := baseStyle
 		if innerWidth > 0 {
 			leadingStyle = leadingStyle.Width(leadingSpaces)
 		}
@@ -915,7 +915,7 @@ func renderCommandBarContainer(
 		innerSegments = append(innerSegments, leadingStyle.Render(strings.Repeat(" ", leadingSpaces)))
 	}
 
-	contentStyle := baseStyle.Copy()
+	contentStyle := baseStyle
 	if innerWidth > 0 {
 		remaining := maxInt(innerWidth-leadingSpaces, 0)
 		contentStyle = contentStyle.Width(remaining)
