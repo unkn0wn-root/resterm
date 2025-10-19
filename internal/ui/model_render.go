@@ -780,7 +780,11 @@ func (m Model) renderSearchPrompt() string {
 		modeBadge,
 		hints,
 	)
-	return renderCommandBarContainer(m.theme.CommandBar, row)
+	return renderCommandBarContainer(
+		m.theme.CommandBar,
+		row,
+		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
+	)
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {
@@ -812,8 +816,11 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 	return renderCommandBarContainer(
 		m.theme.CommandBar.Width(width),
 		row,
+		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
 	)
 }
+
+const searchCommandBarLeadingColorSpaces = 1
 
 func (m Model) renderResponseSearchInfo() string {
 	mode := "literal"
@@ -835,10 +842,40 @@ func (m Model) renderResponseSearchInfo() string {
 		modeBadge,
 		hints,
 	)
-	return renderCommandBarContainer(m.theme.CommandBar, row)
+	return renderCommandBarContainer(
+		m.theme.CommandBar,
+		row,
+		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
+	)
 }
 
-func renderCommandBarContainer(style lipgloss.Style, content string) string {
+type commandBarContainerConfig struct {
+	leadingColoredSpaces int
+}
+
+type commandBarContainerOption func(*commandBarContainerConfig)
+
+func withColoredLeadingSpaces(spaces int) commandBarContainerOption {
+	if spaces < 0 {
+		spaces = 0
+	}
+	return func(cfg *commandBarContainerConfig) {
+		cfg.leadingColoredSpaces = spaces
+	}
+}
+
+func renderCommandBarContainer(
+	style lipgloss.Style,
+	content string,
+	opts ...commandBarContainerOption,
+) string {
+	var cfg commandBarContainerConfig
+	for _, opt := range opts {
+		if opt == nil {
+			continue
+		}
+		opt(&cfg)
+	}
 	padLeft := style.GetPaddingLeft()
 	padRight := style.GetPaddingRight()
 	width := style.GetWidth()
@@ -853,6 +890,10 @@ func renderCommandBarContainer(style lipgloss.Style, content string) string {
 	}
 	if maxWidth > 0 {
 		style = style.MaxWidth(maxInt(maxWidth-padLeft-padRight, 0))
+	}
+
+	if cfg.leadingColoredSpaces > 0 {
+		content = strings.Repeat(" ", cfg.leadingColoredSpaces) + content
 	}
 
 	rendered := style.Render(content)
