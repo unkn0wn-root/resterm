@@ -958,8 +958,14 @@ func TestMainSplitOrientationChord(t *testing.T) {
 	if model.responseContentHeight >= baselineHeight {
 		t.Fatalf("expected response content height to shrink below %d, got %d", baselineHeight, model.responseContentHeight)
 	}
-	if model.editorContentHeight+model.responseContentHeight < baselineHeight-2 {
-		t.Fatalf("expected stacked heights to roughly cover baseline height")
+	frameAllowance := model.theme.EditorBorder.GetVerticalFrameSize() + model.theme.ResponseBorder.GetVerticalFrameSize()
+	expectedTotal := baselineHeight - frameAllowance
+	if expectedTotal < 1 {
+		expectedTotal = 1
+	}
+	combined := model.editorContentHeight + model.responseContentHeight
+	if combined < expectedTotal-1 || combined > expectedTotal+1 {
+		t.Fatalf("expected stacked heights near %d, got %d", expectedTotal, combined)
 	}
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}); cmd != nil {

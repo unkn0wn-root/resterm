@@ -116,9 +116,12 @@ func (m *Model) applyLayout() tea.Cmd {
 	if m.mainSplitOrientation == mainSplitHorizontal {
 		editorWidth = remaining
 		responseWidth = remaining
-		availableHeight := paneHeight
+		editorFrame := m.theme.EditorBorder.GetVerticalFrameSize()
+		responseFrame := m.theme.ResponseBorder.GetVerticalFrameSize()
+		frameAllowance := editorFrame + responseFrame
+		availableHeight := paneHeight - frameAllowance
 		if availableHeight < 2 {
-			availableHeight = 2
+			availableHeight = maxInt(paneHeight-frameAllowance, 1)
 		}
 
 		ratio := m.editorSplit
