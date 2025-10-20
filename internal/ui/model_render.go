@@ -39,18 +39,37 @@ func (m Model) View() string {
 	fileWidth := lipgloss.Width(filePane)
 	editorPane := m.renderEditorPane()
 	editorWidth := lipgloss.Width(editorPane)
-	availableResponseWidth := m.width - fileWidth - editorWidth
-	if availableResponseWidth < 0 {
-		availableResponseWidth = 0
-	}
-	responsePane := m.renderResponsePane(availableResponseWidth)
 
-	panes := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		filePane,
-		editorPane,
-		responsePane,
-	)
+	var panes string
+	if m.mainSplitOrientation == mainSplitHorizontal {
+		availableRight := m.width - fileWidth
+		if availableRight < 0 {
+			availableRight = 0
+		}
+		rightWidth := editorWidth
+		if availableRight > rightWidth {
+			rightWidth = availableRight
+		}
+		responsePane := m.renderResponsePane(rightWidth)
+		rightColumn := lipgloss.JoinVertical(lipgloss.Left, editorPane, responsePane)
+		panes = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			filePane,
+			rightColumn,
+		)
+	} else {
+		availableResponseWidth := m.width - fileWidth - editorWidth
+		if availableResponseWidth < 0 {
+			availableResponseWidth = 0
+		}
+		responsePane := m.renderResponsePane(availableResponseWidth)
+		panes = lipgloss.JoinHorizontal(
+			lipgloss.Top,
+			filePane,
+			editorPane,
+			responsePane,
+		)
+	}
 	body := lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.renderCommandBar(),
@@ -333,7 +352,11 @@ func (m Model) renderEditorPane() string {
 		content = lipgloss.NewStyle().Faint(true).Render(content)
 	}
 	frameHeight := style.GetVerticalFrameSize()
-	innerHeight := maxInt(m.editor.Height(), m.paneContentHeight)
+	editorContentHeight := m.editorContentHeight
+	if editorContentHeight <= 0 {
+		editorContentHeight = m.paneContentHeight
+	}
+	innerHeight := maxInt(m.editor.Height(), editorContentHeight)
 	height := innerHeight + frameHeight
 	return style.
 		Width(innerWidth).
@@ -493,7 +516,11 @@ func (m Model) renderResponsePane(availableWidth int) string {
 
 	width := targetOuterWidth
 	frameHeight := style.GetVerticalFrameSize()
-	height := m.paneContentHeight + frameHeight
+	responseHeight := m.responseContentHeight
+	if responseHeight <= 0 {
+		responseHeight = m.paneContentHeight
+	}
+	height := responseHeight + frameHeight
 	if height < frameHeight {
 		height = frameHeight
 	}

@@ -69,6 +69,7 @@ Content-Type: application/json
 | Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
 | Adjust files/requests split | `g+j` / `g+k` |
 | Adjust requests/workflows split | `g+J` / `g+K` |
+| Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
 | File list incremental search | Start typing while focus is in the list |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |

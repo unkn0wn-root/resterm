@@ -923,6 +923,62 @@ func TestResponsePaneFocusChord(t *testing.T) {
 	}
 }
 
+func TestMainSplitOrientationChord(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 160
+	model.height = 48
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.mainSplitOrientation != mainSplitVertical {
+		t.Fatalf("expected default orientation to be vertical")
+	}
+	baselineHeight := model.paneContentHeight
+	if model.editorContentHeight != baselineHeight {
+		t.Fatalf("expected editor content height %d, got %d", baselineHeight, model.editorContentHeight)
+	}
+	if model.responseContentHeight != baselineHeight {
+		t.Fatalf("expected response content height %d, got %d", baselineHeight, model.responseContentHeight)
+	}
+
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}}); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if model.mainSplitOrientation != mainSplitHorizontal {
+		t.Fatalf("expected g+s to switch to horizontal orientation")
+	}
+	if model.editorContentHeight >= baselineHeight {
+		t.Fatalf("expected editor content height to shrink below %d, got %d", baselineHeight, model.editorContentHeight)
+	}
+	if model.responseContentHeight >= baselineHeight {
+		t.Fatalf("expected response content height to shrink below %d, got %d", baselineHeight, model.responseContentHeight)
+	}
+	if model.editorContentHeight+model.responseContentHeight < baselineHeight-2 {
+		t.Fatalf("expected stacked heights to roughly cover baseline height")
+	}
+
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'v'}}); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if model.mainSplitOrientation != mainSplitVertical {
+		t.Fatalf("expected g+v to restore vertical orientation")
+	}
+	if model.editorContentHeight != baselineHeight {
+		t.Fatalf("expected editor height reset to %d, got %d", baselineHeight, model.editorContentHeight)
+	}
+	if model.responseContentHeight != baselineHeight {
+		t.Fatalf("expected response height reset to %d, got %d", baselineHeight, model.responseContentHeight)
+	}
+}
+
 func TestHandleKeyFindPendingIgnoresInsertMode(t *testing.T) {
 	model := newTestModelWithDoc("pilot")
 	model.ready = true
