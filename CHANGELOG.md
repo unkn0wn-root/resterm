@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.7](https://github.com/unkn0wn-root/resterm/compare/v0.4.6...v0.4.7) (2025-10-20)
+
+
+### Features
+
+* horizontal response pane ([#62](https://github.com/unkn0wn-root/resterm/issues/62)) ([9ae8f5d](https://github.com/unkn0wn-root/resterm/commit/9ae8f5dbff40fbb71b7977f1e1672f37a1100aef))
+* new response wrapper ([3c46110](https://github.com/unkn0wn-root/resterm/commit/3c46110b788a39902c0b8b90d7dba3ff973e3bc0))
+
 ### [0.4.6](https://github.com/unkn0wn-root/resterm/compare/v0.4.5...v0.4.6) (2025-10-19)
 
 ### [0.4.5](https://github.com/unkn0wn-root/resterm/compare/v0.4.4...v0.4.5) (2025-10-18)
