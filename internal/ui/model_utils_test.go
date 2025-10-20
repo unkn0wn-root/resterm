@@ -209,3 +209,86 @@ func TestWrapToWidthMultiLineMixedContent(t *testing.T) {
 		t.Fatalf("expected wrapped content to retain long word, got %q", joined)
 	}
 }
+
+func TestWrapStructuredLineAddsDefaultIndent(t *testing.T) {
+	line := "\"message\": \"" + strings.Repeat("x", 24) + "\""
+	segments := wrapStructuredLine(line, 16)
+	if len(segments) < 2 {
+		t.Fatalf("expected line to wrap, got %d segments", len(segments))
+	}
+	if !strings.HasPrefix(stripANSIEscape(segments[1]), wrapContinuationUnit) {
+		t.Fatalf("expected continuation to start with %q, got %q", wrapContinuationUnit, segments[1])
+	}
+	if width := visibleWidth(segments[1]); width > 16 {
+		t.Fatalf("expected continuation width <= 16, got %d", width)
+	}
+}
+
+func TestWrapStructuredLineExtendsExistingIndent(t *testing.T) {
+	line := "    \"details\": \"" + strings.Repeat("y", 30) + "\""
+	segments := wrapStructuredLine(line, 18)
+	if len(segments) < 2 {
+		t.Fatalf("expected wrapped segments, got %d", len(segments))
+	}
+	second := stripANSIEscape(segments[1])
+	expectedPrefix := "      "
+	if !strings.HasPrefix(second, expectedPrefix) {
+		t.Fatalf("expected continuation to start with %q, got %q", expectedPrefix, segments[1])
+	}
+}
+
+func TestWrapStructuredLineHandlesNarrowWidth(t *testing.T) {
+	line := "    \"note\": \"short\""
+	segments := wrapStructuredLine(line, 4)
+	if len(segments) < 2 {
+		t.Fatalf("expected line to wrap with narrow width, got %d segments", len(segments))
+	}
+	if strings.HasPrefix(stripANSIEscape(segments[1]), wrapContinuationUnit) {
+		t.Fatalf("expected continuation indent to be suppressed for narrow width, got %q", segments[1])
+	}
+}
+
+func TestWrapContentForTabPrettyUsesStructuredWrap(t *testing.T) {
+	content := "\"payload\": \"" + strings.Repeat("z", 28) + "\""
+	wrapped := wrapContentForTab(responseTabPretty, content, 20)
+	lines := strings.Split(wrapped, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected pretty content to wrap, got %v", lines)
+	}
+	if !strings.HasPrefix(stripANSIEscape(lines[1]), wrapContinuationUnit) {
+		t.Fatalf("expected continuation line to include structured indent, got %q", lines[1])
+	}
+}
+
+func TestWrapStructuredLineKeepsANSIPrefix(t *testing.T) {
+	coloredIndent := "\x1b[31m    \x1b[0m"
+	line := coloredIndent + "\"ansi\": \"" + strings.Repeat("q", 18) + "\""
+	segments := wrapStructuredLine(line, 14)
+	if len(segments) < 2 {
+		t.Fatalf("expected ANSI line to wrap, got %d segments", len(segments))
+	}
+	if !strings.HasPrefix(segments[1], "\x1b[31m") {
+		t.Fatalf("expected continuation to begin with ANSI prefix, got %q", segments[1])
+	}
+	if !strings.HasPrefix(stripANSIEscape(segments[1]), "      ") {
+		t.Fatalf("expected continuation to retain extended indent, got %q", segments[1])
+	}
+}
+
+func TestWrapStructuredLineMaintainsValueColor(t *testing.T) {
+	keyColor := "\x1b[32m"
+	valueColor := "\x1b[37m"
+	reset := "\x1b[0m"
+	line := "    " + keyColor + "\"repository_search_url\"" + reset + ": " + valueColor + "\"https://api.github.com/search/" + strings.Repeat("x", 12) + "\"" + reset
+	segments := wrapStructuredLine(line, 44)
+	if len(segments) < 2 {
+		t.Fatalf("expected wrapped segments, got %d", len(segments))
+	}
+	continuation := segments[1]
+	if !strings.Contains(continuation, valueColor) {
+		t.Fatalf("expected continuation to include value color, got %q", continuation)
+	}
+	if strings.Contains(continuation, keyColor) {
+		t.Fatalf("expected continuation not to include key color, got %q", continuation)
+	}
+}

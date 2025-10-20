@@ -153,6 +153,8 @@ func wrapContentForTab(tab responseTab, content string, width int) string {
 		return wrapPreformattedContent(content, width)
 	case responseTabDiff:
 		return wrapDiffContent(content, width)
+	case responseTabPretty:
+		return wrapStructuredContent(content, width)
 	default:
 		return wrapToWidth(content, width)
 	}

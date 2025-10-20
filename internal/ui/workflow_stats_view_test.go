@@ -64,3 +64,42 @@ func TestWorkflowStatsRenderIndicators(t *testing.T) {
 		t.Fatalf("expected placeholder detail for entry without response")
 	}
 }
+
+func TestWorkflowStatsRenderWrappedIndent(t *testing.T) {
+	view := &workflowStatsView{
+		name:       "wrap",
+		started:    time.Now(),
+		totalSteps: 1,
+		entries: []workflowStatsEntry{
+			{
+				index: 0,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Step"},
+					Success: true,
+					Message: strings.Repeat("wrapped message ", 3),
+				},
+			},
+		},
+		expanded:    map[int]bool{0: true},
+		renderCache: make(map[int]workflowStatsRender),
+	}
+
+	render := view.render(16)
+	lines := strings.Split(stripANSIEscape(render.content), "\n")
+	var messageLines []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "    ") && strings.Contains(line, "wrap") {
+			messageLines = append(messageLines, line)
+		}
+	}
+
+	if len(messageLines) < 2 {
+		t.Fatalf("expected wrapped message to span multiple lines, matched=%v content=%q", messageLines, stripANSIEscape(render.content))
+	}
+	if !strings.HasPrefix(messageLines[0], "    ") {
+		t.Fatalf("expected first message line to retain base indent, got %q", messageLines[0])
+	}
+	if !strings.HasPrefix(messageLines[1], "      ") {
+		t.Fatalf("expected continuation line to extend indent, got %q", messageLines[1])
+	}
+}

@@ -259,7 +259,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	if content == "" {
 		centered := centerContent(noResponseMessage, width, height)
 		wrapped := wrapToWidth(centered, width)
-		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
+		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, base: centered, valid: true}
 		decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 		decorated = m.applyResponseContentStyles(cacheKey, decorated)
 		pane.viewport.SetContent(decorated)
@@ -281,7 +281,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	}
 
 	wrapped := wrapContentForTab(cacheKey, content, width)
-	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, valid: true}
+	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, base: content, valid: true}
 	decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 	decorated = m.applyResponseContentStyles(cacheKey, decorated)
 	pane.viewport.SetContent(decorated)
@@ -296,7 +296,7 @@ func (m *Model) syncWorkflowStatsPane(pane *responsePaneState, width int, snapsh
 		return nil
 	}
 	render := snapshot.workflowStats.render(width)
-	pane.wrapCache[responseTabStats] = cachedWrap{width: width, content: render.content, valid: true}
+	pane.wrapCache[responseTabStats] = cachedWrap{width: width, content: render.content, base: render.content, valid: true}
 	decorated := m.decorateResponseContentForPane(pane, responseTabStats, render.content, width, snapshot.ready, snapshot.id)
 	decorated = m.applyResponseContentStyles(responseTabStats, decorated)
 	pane.viewport.SetContent(decorated)

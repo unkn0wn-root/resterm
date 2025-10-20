@@ -26,6 +26,7 @@ const (
 type cachedWrap struct {
 	width   int
 	content string
+	base    string
 	valid   bool
 }
 

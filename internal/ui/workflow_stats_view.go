@@ -119,23 +119,23 @@ func (v *workflowStatsView) render(width int) workflowStatsRender {
 
 	header := v.workflowHeader()
 	for _, line := range header {
-		lines = append(lines, wrapLineSegments(line, width)...)
+		lines = append(lines, wrapStructuredLine(line, width)...)
 	}
 
 	for idx, entry := range v.entries {
 		start := len(lines)
 		title := v.renderEntryTitle(entry)
-		lines = append(lines, wrapLineSegments(title, width)...)
+		lines = append(lines, wrapStructuredLine(title, width)...)
 
 		if msg := strings.TrimSpace(entry.result.Message); msg != "" {
 			msgLine := statsMessageStyle.Render("    " + msg)
-			lines = append(lines, wrapLineSegments(msgLine, width)...)
+			lines = append(lines, wrapStructuredLine(msgLine, width)...)
 		}
 
 		if v.expanded[idx] || !entry.hasResponse() {
 			detailLines := entry.detailLines()
 			for _, dl := range detailLines {
-				lines = append(lines, wrapLineSegments(dl, width)...)
+				lines = append(lines, wrapStructuredLine(dl, width)...)
 			}
 		}
 

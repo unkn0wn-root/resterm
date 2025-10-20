@@ -305,9 +305,9 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		}
 		pane.invalidateCaches()
 		if msg.width > 0 && pane.viewport.Width == msg.width {
-			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, valid: true}
-			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: msg.rawWrapped, valid: true}
-			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: msg.headersWrapped, valid: true}
+			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, base: ensureTrailingNewline(msg.pretty), valid: true}
+			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: msg.rawWrapped, base: ensureTrailingNewline(msg.raw), valid: true}
+			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: msg.headersWrapped, base: ensureTrailingNewline(msg.headers), valid: true}
 		}
 		if strings.TrimSpace(snapshot.stats) != "" {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
@@ -828,9 +828,9 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 			displayWidth = defaultResponseViewportWidth
 		}
 		wrapped := wrapToWidth(preview, displayWidth)
-		pane.wrapCache[responseTabPretty] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
-		pane.wrapCache[responseTabRaw] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
-		pane.wrapCache[responseTabHeaders] = cachedWrap{width: displayWidth, content: wrapped, valid: true}
+		pane.wrapCache[responseTabPretty] = cachedWrap{width: displayWidth, content: wrapped, base: ensureTrailingNewline(snapshot.pretty), valid: true}
+		pane.wrapCache[responseTabRaw] = cachedWrap{width: displayWidth, content: wrapped, base: ensureTrailingNewline(snapshot.raw), valid: true}
+		pane.wrapCache[responseTabHeaders] = cachedWrap{width: displayWidth, content: wrapped, base: ensureTrailingNewline(snapshot.headers), valid: true}
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
 		pane.wrapCache[responseTabStats] = cachedWrap{}
 		pane.viewport.SetContent(wrapped)
