@@ -988,6 +988,10 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 			m.setFocus(focusEditor)
 			m.setInsertMode(false, true)
 			return true, nil
+		case "s":
+			return true, m.setMainSplitOrientation(mainSplitHorizontal)
+		case "v":
+			return true, m.setMainSplitOrientation(mainSplitVertical)
 		case "t":
 			m.openThemeSelector()
 			return true, nil

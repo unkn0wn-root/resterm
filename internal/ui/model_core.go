@@ -58,6 +58,13 @@ const (
 	responseSplitHorizontal
 )
 
+type mainSplitOrientation int
+
+const (
+	mainSplitVertical mainSplitOrientation = iota
+	mainSplitHorizontal
+)
+
 type searchTarget int
 
 const (
@@ -109,6 +116,8 @@ const (
 	responseSplitSeparatorWidth  = 1
 	minResponseSplitHeight       = 6
 	responseSplitSeparatorHeight = 1
+	minEditorPaneHeight          = 10
+	minResponsePaneHeight        = 6
 )
 
 type Config struct {
@@ -161,6 +170,9 @@ type Model struct {
 	responseSplitOrientation responseSplitOrientation
 	responsePaneFocus        responsePaneID
 	responsePaneChord        bool
+	mainSplitOrientation     mainSplitOrientation
+	editorContentHeight      int
+	responseContentHeight    int
 	historyList              list.Model
 	envList                  list.Model
 	themeList                list.Model
@@ -453,6 +465,7 @@ func New(cfg Config) Model {
 		responsePaneFocus:        responsePanePrimary,
 		responseSplitRatio:       0.5,
 		responseSplitOrientation: responseSplitVertical,
+		mainSplitOrientation:     mainSplitVertical,
 		responseTokens:           make(map[string]*responseSnapshot),
 		responseLastFocused:      responsePanePrimary,
 		focus:                    focusFile,
