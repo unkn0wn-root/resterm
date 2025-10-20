@@ -5,7 +5,7 @@ import (
 	"unicode/utf8"
 )
 
-const wrapContinuationUnit = "    "
+const wrapContinuationUnit = "  "
 
 func wrapStructuredSegments(line string, width int, prefix string, prefixWidth int) []string {
 	if width <= 0 {
@@ -179,31 +179,18 @@ func structuredContinuationPrefix(line string, width int) (string, int) {
 	unit := wrapContinuationUnit
 	unitWidth := visibleWidth(unit)
 	if unitWidth == 0 {
-		unitWidth = 4
+		unitWidth = 2
 	}
 
-	prefix := indent + unit
-	prefixWidth := indentWidth + unitWidth
-
-	if prefixWidth >= width {
-		prefix = indent
-		prefixWidth = indentWidth
-		if prefixWidth >= width {
-			prefix = ""
-			prefixWidth = 0
-		}
+	if indentWidth >= width {
+		return "", 0
 	}
 
-	if prefix == "" && unitWidth < width {
-		prefix = unit
-		prefixWidth = unitWidth
-		if prefixWidth >= width {
-			prefix = ""
-			prefixWidth = 0
-		}
+	if indentWidth+unitWidth < width {
+		return indent + unit, indentWidth + unitWidth
 	}
 
-	return prefix, prefixWidth
+	return indent, indentWidth
 }
 
 func leadingWhitespaceWithANSI(line string) string {

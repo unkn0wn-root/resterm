@@ -231,7 +231,7 @@ func TestWrapStructuredLineExtendsExistingIndent(t *testing.T) {
 		t.Fatalf("expected wrapped segments, got %d", len(segments))
 	}
 	second := stripANSIEscape(segments[1])
-	expectedPrefix := "        "
+	expectedPrefix := "      "
 	if !strings.HasPrefix(second, expectedPrefix) {
 		t.Fatalf("expected continuation to start with %q, got %q", expectedPrefix, segments[1])
 	}
@@ -270,7 +270,7 @@ func TestWrapStructuredLineKeepsANSIPrefix(t *testing.T) {
 	if !strings.HasPrefix(segments[1], "\x1b[31m") {
 		t.Fatalf("expected continuation to begin with ANSI prefix, got %q", segments[1])
 	}
-	if !strings.HasPrefix(stripANSIEscape(segments[1]), "        ") {
+	if !strings.HasPrefix(stripANSIEscape(segments[1]), "      ") {
 		t.Fatalf("expected continuation to retain extended indent, got %q", segments[1])
 	}
 }

@@ -99,7 +99,7 @@ func TestWorkflowStatsRenderWrappedIndent(t *testing.T) {
 	if !strings.HasPrefix(messageLines[0], "    ") {
 		t.Fatalf("expected first message line to retain base indent, got %q", messageLines[0])
 	}
-	if !strings.HasPrefix(messageLines[1], "        ") {
+	if !strings.HasPrefix(messageLines[1], "      ") {
 		t.Fatalf("expected continuation line to extend indent, got %q", messageLines[1])
 	}
 }
