@@ -9,11 +9,15 @@
 </p>
 
 <p align="center">
+  <strong>split in horizontal view</strong>
+</p>
+
+<p align="center">
   <img src="_media/resterm_hsplit.png" alt="Screenshot of resterm TUI in horizontal split" width="720" />
 </p>
 
 <p align="center">
-  <strong>Split panes with response diffing side-by-side</strong>
+  <strong>split panes with response diffing side-by-side</strong>
 </p>
 
 <p align="center">
