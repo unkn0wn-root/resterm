@@ -110,8 +110,7 @@ func (m *Model) applyLayout() tea.Cmd {
 	m.responseContentHeight = paneHeight
 
 	var editorWidth, responseWidth int
-	editorHeight := paneHeight
-	responseHeight := paneHeight
+	var editorHeight int
 
 	if m.mainSplitOrientation == mainSplitHorizontal {
 		editorWidth = remaining
@@ -160,7 +159,7 @@ func (m *Model) applyLayout() tea.Cmd {
 		if editorHeight > maxEditor {
 			editorHeight = maxEditor
 		}
-		responseHeight = availableHeight - editorHeight
+		responseHeight := availableHeight - editorHeight
 		if responseHeight < minResponse {
 			responseHeight = minResponse
 			editorHeight = availableHeight - responseHeight
@@ -242,7 +241,6 @@ func (m *Model) applyLayout() tea.Cmd {
 		}
 
 		editorHeight = paneHeight
-		responseHeight = paneHeight
 		m.editorContentHeight = paneHeight
 		m.responseContentHeight = paneHeight
 	}
