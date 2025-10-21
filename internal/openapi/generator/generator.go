@@ -73,6 +73,9 @@ func (b *Builder) Generate(ctx context.Context, spec *model.Spec, opts openapi.G
 	}
 
 	for _, op := range spec.Operations {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
 		if op.Method == "" || op.Path == "" {
 			continue
 		}
@@ -954,8 +957,7 @@ func sanitizeVariableName(location model.ParameterLocation, name string) string 
 	builder.WriteString(prefix)
 	builder.WriteRune('_')
 
-	runes := []rune(name)
-	for _, r := range runes {
+	for _, r := range name {
 		switch {
 		case unicode.IsLetter(r) || unicode.IsDigit(r):
 			builder.WriteRune(unicode.ToLower(r))

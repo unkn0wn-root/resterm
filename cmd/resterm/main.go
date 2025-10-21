@@ -108,14 +108,14 @@ func main() {
 		res, ok, err := u.check(ctx)
 		if err != nil {
 			if errors.Is(err, errUpdateDisabled) {
-				rtfmt.Fprintln(
+				_ = rtfmt.Fprintln(
 					os.Stdout,
 					rtfmt.LogHandler(log.Printf, "update notice write failed: %v"),
 					"Update checks are disabled for dev builds.",
 				)
 				os.Exit(0)
 			}
-			rtfmt.Fprintf(
+			_ = rtfmt.Fprintf(
 				os.Stderr,
 				"update check failed: %v\n",
 				rtfmt.LogHandler(log.Printf, "update check error write failed: %v"),
@@ -130,7 +130,7 @@ func main() {
 		u.printAvailable(res)
 		u.printChangelog(res)
 		if !doUpdate {
-			rtfmt.Fprintln(
+			_ = rtfmt.Fprintln(
 				os.Stdout,
 				rtfmt.LogHandler(log.Printf, "update hint write failed: %v"),
 				"Run `resterm --update` to install.",
@@ -139,7 +139,7 @@ func main() {
 		}
 		_, err = u.apply(ctx, res)
 		if err != nil && !errors.Is(err, update.ErrPendingSwap) {
-			rtfmt.Fprintf(
+			_ = rtfmt.Fprintf(
 				os.Stderr,
 				"update failed: %v\n",
 				rtfmt.LogHandler(log.Printf, "update failure write failed: %v"),
@@ -175,7 +175,7 @@ func main() {
 			targetOut,
 			version,
 			opts); err != nil {
-			rtfmt.Fprintf(
+			_ = rtfmt.Fprintf(
 				os.Stderr,
 				"openapi import error: %v\n",
 				nil,
@@ -184,7 +184,7 @@ func main() {
 			os.Exit(1)
 		}
 
-		rtfmt.Fprintf(os.Stdout, "Generated %s from %s\n", nil, targetOut, openapiSpec)
+		_ = rtfmt.Fprintf(os.Stdout, "Generated %s from %s\n", nil, targetOut, openapiSpec)
 		os.Exit(0)
 	}
 

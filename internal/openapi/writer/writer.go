@@ -111,19 +111,19 @@ func renderScopeVariables(b *strings.Builder, vars []restfile.Variable) {
 			if v.Secret {
 				directive = "@global-secret"
 			}
-			b.WriteString(fmt.Sprintf("# %s %s %s\n", directive, v.Name, value))
+			fmt.Fprintf(b, "# %s %s %s\n", directive, v.Name, value)
 		case restfile.ScopeFile:
 			scopeToken := "file"
 			if v.Secret {
 				scopeToken = "file-secret"
 			}
-			b.WriteString(fmt.Sprintf("# @var %s %s %s\n", scopeToken, v.Name, value))
+			fmt.Fprintf(b, "# @var %s %s %s\n", scopeToken, v.Name, value)
 		default:
 			scopeToken := "request"
 			if v.Secret {
 				scopeToken = "request-secret"
 			}
-			b.WriteString(fmt.Sprintf("# @var %s %s %s\n", scopeToken, v.Name, value))
+			fmt.Fprintf(b, "# @var %s %s %s\n", scopeToken, v.Name, value)
 		}
 	}
 }
@@ -365,17 +365,6 @@ func renderHeaders(b *strings.Builder, headers http.Header) {
 			b.WriteString(value)
 			b.WriteString("\n")
 		}
-	}
-}
-
-func scopeToken(scope restfile.VariableScope) string {
-	switch scope {
-	case restfile.ScopeFile:
-		return "file"
-	case restfile.ScopeGlobal:
-		return "global"
-	default:
-		return "request"
 	}
 }
 
