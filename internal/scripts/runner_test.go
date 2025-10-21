@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -70,10 +69,11 @@ client.test("vars carried", function () {
 		t.Fatalf("expected variable from file script")
 	}
 
-	response := &httpclient.Response{
-		Status:     "201 Created",
-		StatusCode: 201,
-		Body:       []byte(`{"ok":true}`),
+	response := &Response{
+		Kind:   ResponseKindHTTP,
+		Status: "201 Created",
+		Code:   201,
+		Body:   []byte(`{"ok":true}`),
 	}
 	testBlocks := []restfile.ScriptBlock{{Kind: "test", FilePath: "test.js"}}
 	results, globals, err := runner.RunTests(testBlocks, TestInput{Response: response, Variables: preResult.Variables, BaseDir: dir})
@@ -95,12 +95,13 @@ client.test("vars carried", function () {
 
 func TestRunTestsScripts(t *testing.T) {
 	runner := NewRunner(nil)
-	response := &httpclient.Response{
-		Status:       "200 OK",
-		StatusCode:   200,
-		EffectiveURL: "https://example.com/api",
-		Duration:     125 * time.Millisecond,
-		Headers: http.Header{
+	response := &Response{
+		Kind:   ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		URL:    "https://example.com/api",
+		Time:   125 * time.Millisecond,
+		Header: http.Header{
 			"Content-Type": {"application/json"},
 		},
 		Body: []byte(`{"ok":true}`),
@@ -120,6 +121,89 @@ func TestRunTestsScripts(t *testing.T) {
 	for _, r := range results {
 		if !r.Passed {
 			t.Fatalf("expected all tests to pass, got %#v", results)
+		}
+	}
+	if globals != nil {
+		t.Fatalf("expected no global changes, got %+v", globals)
+	}
+}
+
+func TestRunTestsScriptsStream(t *testing.T) {
+	runner := NewRunner(nil)
+	response := &Response{
+		Kind:   ResponseKindHTTP,
+		Status: "101 Switching Protocols",
+		Code:   101,
+		Header: http.Header{"Content-Type": {"application/json"}},
+		Body:   []byte(`{"events":[],"summary":{}}`),
+		URL:    "wss://example.com/socket",
+	}
+	streamInfo := &StreamInfo{
+		Kind: "websocket",
+		Summary: map[string]interface{}{
+			"sentCount":     1,
+			"receivedCount": 1,
+			"duration":      int64(time.Second),
+			"closedBy":      "client",
+		},
+		Events: []map[string]interface{}{
+			{
+				"step":      "1:send",
+				"direction": "send",
+				"type":      "text",
+				"text":      "hello",
+				"timestamp": "2024-01-01T00:00:00Z",
+			},
+			{
+				"step":      "2:receive",
+				"direction": "receive",
+				"type":      "text",
+				"text":      "hi",
+				"timestamp": "2024-01-01T00:00:01Z",
+			},
+		},
+	}
+
+	script := `client.test("stream summary", function () {
+	const summary = stream.summary();
+	tests.assert(stream.enabled() === true, "stream enabled");
+	tests.assert(summary.sentCount === 1, "sent count");
+	const events = stream.events();
+	tests.assert(events.length === 2, "event length");
+});
+
+client.test("stream callbacks", function () {
+	let seen = 0;
+	stream.onEvent(function (evt) {
+		seen += 1;
+		tests.assert(evt.type === "text", "event type");
+	});
+	stream.onClose(function (summary) {
+		tests.assert(summary.closedBy === "client", "closed by client");
+		tests.assert(seen === 2, "all events replayed");
+	});
+});
+
+client.test("response stream access", function () {
+	const info = response.stream();
+	tests.assert(info.enabled === true, "response stream enabled");
+	tests.assert(info.summary.sentCount === 1, "response summary count");
+});`
+
+	results, globals, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{
+		Response:  response,
+		Variables: map[string]string{},
+		Stream:    streamInfo,
+	})
+	if err != nil {
+		t.Fatalf("run stream tests: %v", err)
+	}
+	if len(results) != 12 {
+		t.Fatalf("expected twelve results, got %d", len(results))
+	}
+	for _, res := range results {
+		if !res.Passed {
+			t.Fatalf("expected all stream tests to pass, got %+v", results)
 		}
 	}
 	if globals != nil {
@@ -176,7 +260,7 @@ vars.global.delete("removeMe");`,
 
 func TestTestScriptsGlobalMutation(t *testing.T) {
 	runner := NewRunner(nil)
-	resp := &httpclient.Response{StatusCode: 204}
+	resp := &Response{Kind: ResponseKindHTTP, Status: "204", Code: 204}
 	scripts := []restfile.ScriptBlock{{
 		Kind: "test",
 		Body: `client.test("update global", function () {

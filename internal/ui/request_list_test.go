@@ -138,3 +138,30 @@ func TestRequestListItemDescriptionFallbacks(t *testing.T) {
 		})
 	}
 }
+
+func TestRequestListItemDescriptionExpandsConstants(t *testing.T) {
+	t.Parallel()
+
+	doc := &restfile.Document{
+		Constants: []restfile.Constant{{Name: "svc.http", Value: "http://localhost:8080"}},
+		Requests: []*restfile.Request{
+			{
+				Method: "get",
+				URL:    "{{svc.http}}/api/items",
+				LineRange: restfile.LineRange{
+					Start: 5,
+				},
+			},
+		},
+	}
+
+	items, _ := buildRequestItems(doc)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	desc := items[0].Description()
+	expected := "GET /api/items\nhttp://localhost:8080"
+	if desc != expected {
+		t.Fatalf("expected %q, got %q", expected, desc)
+	}
+}

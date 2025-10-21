@@ -26,6 +26,12 @@ type Variable struct {
 	Secret bool
 }
 
+type Constant struct {
+	Name  string
+	Value string
+	Line  int
+}
+
 type AuthSpec struct {
 	Type   string
 	Params map[string]string
@@ -42,6 +48,11 @@ type BodySource struct {
 	FilePath string
 	MimeType string
 	GraphQL  *GraphQLBody
+	Options  BodyOptions
+}
+
+type BodyOptions struct {
+	ExpandTemplates bool
 }
 
 type GraphQLBody struct {
@@ -112,6 +123,55 @@ type Request struct {
 	LineRange    LineRange
 	OriginalText string
 	GRPC         *GRPCRequest
+	SSE          *SSERequest
+	WebSocket    *WebSocketRequest
+}
+
+type SSERequest struct {
+	Options SSEOptions
+}
+
+type SSEOptions struct {
+	TotalTimeout time.Duration
+	IdleTimeout  time.Duration
+	MaxEvents    int
+	MaxBytes     int64
+}
+
+type WebSocketRequest struct {
+	Options WebSocketOptions
+	Steps   []WebSocketStep
+}
+
+type WebSocketOptions struct {
+	HandshakeTimeout time.Duration
+	ReceiveTimeout   time.Duration
+	MaxMessageBytes  int64
+	Subprotocols     []string
+	Compression      bool
+	CompressionSet   bool
+}
+
+type WebSocketStepType string
+
+const (
+	WebSocketStepSendText   WebSocketStepType = "send_text"
+	WebSocketStepSendJSON   WebSocketStepType = "send_json"
+	WebSocketStepSendBase64 WebSocketStepType = "send_base64"
+	WebSocketStepSendFile   WebSocketStepType = "send_file"
+	WebSocketStepPing       WebSocketStepType = "ping"
+	WebSocketStepPong       WebSocketStepType = "pong"
+	WebSocketStepWait       WebSocketStepType = "wait"
+	WebSocketStepClose      WebSocketStepType = "close"
+)
+
+type WebSocketStep struct {
+	Type     WebSocketStepType
+	Value    string
+	File     string
+	Duration time.Duration
+	Code     int
+	Reason   string
 }
 
 const (
@@ -122,6 +182,7 @@ type Document struct {
 	Path      string
 	Variables []Variable
 	Globals   []Variable
+	Constants []Constant
 	Requests  []*Request
 	Workflows []Workflow
 	Errors    []ParseError

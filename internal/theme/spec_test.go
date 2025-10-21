@@ -34,6 +34,7 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			ListItemTitle:       &StyleSpec{Foreground: strPtr("#222233")},
 			ListItemDescription: &StyleSpec{Foreground: strPtr("#9999aa")},
 			ResponseContentRaw:  &StyleSpec{Foreground: strPtr("#abcdef")},
+			StreamContent:       &StyleSpec{Foreground: strPtr("#123123")},
 		},
 	}
 
@@ -71,6 +72,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if color := updated.ResponseContentRaw.GetForeground(); color != lipgloss.Color("#abcdef") {
 		t.Errorf("expected raw response foreground #abcdef, got %v", color)
+	}
+	if color := updated.StreamContent.GetForeground(); color != lipgloss.Color("#123123") {
+		t.Errorf("expected stream content foreground #123123, got %v", color)
 	}
 	if base.PaneActiveForeground == "#123456" {
 		t.Errorf("base theme should remain unchanged")

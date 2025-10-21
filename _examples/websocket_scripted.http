@@ -1,0 +1,24 @@
+### Scripted WebSocket Echo
+# @name WebSocketScriptedEcho
+# @websocket timeout=10s receive=1s
+# @script test
+> client.test("echo reply received", function () {
+>   var events = stream.events();
+>   tests.assert(stream.enabled() === true, "stream should be enabled");
+>   tests.assert(events.length >= 2, "should see both send and receive events");
+>   var send = events[0];
+>   var recv = null;
+>   for (var i = 0; i < events.length; i++) {
+>     if (events[i].direction === "receive") {
+>       recv = events[i];
+>       break;
+>     }
+>   }
+>   tests.assert(send.text === "Hello from Resterm", "sent payload matches");
+>   tests.assert(recv && recv.text === "Hello from Resterm", "echo payload matches");
+> });
+# @capture request lastEcho {{stream.events[1].text}}
+# @ws send Hello from Resterm
+# @ws wait 1s
+# @ws close 1000 scripted close
+wss://echo.websocket.events

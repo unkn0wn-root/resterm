@@ -68,7 +68,7 @@ func (pane *responsePaneState) setActiveTab(tab responseTab) {
 		pane.setCurrPosition()
 	}
 	pane.activeTab = tab
-	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders {
+	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders || tab == responseTabStream {
 		pane.lastContentTab = tab
 	}
 }
@@ -105,7 +105,7 @@ func (pane *responsePaneState) restoreScrollForActiveTab() {
 
 func (pane *responsePaneState) ensureContentTab() responseTab {
 	switch pane.lastContentTab {
-	case responseTabPretty, responseTabRaw, responseTabHeaders:
+	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabStream:
 		return pane.lastContentTab
 	default:
 		return responseTabPretty
@@ -352,6 +352,9 @@ func (m *Model) decorateResponseContentForPane(
 }
 
 func (m *Model) applyResponseContentStyles(tab responseTab, content string) string {
+	if tab == responseTabStream {
+		return m.theme.StreamContent.Render(content)
+	}
 	styled := m.theme.ResponseContent.Render(content)
 	switch tab {
 	case responseTabRaw:
@@ -382,6 +385,13 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 	pane := m.pane(id)
 	if pane == nil {
 		return "", tab
+	}
+	if tab == responseTabStream {
+		content := m.streamContentForPane(id)
+		if content == "" {
+			content = "<stream idle>\n"
+		}
+		return ensureTrailingNewline(content), tab
 	}
 	snapshot := pane.snapshot
 	if snapshot == nil {

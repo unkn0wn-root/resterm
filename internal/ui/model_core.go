@@ -22,6 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/update"
@@ -46,6 +47,7 @@ const (
 	responseTabPretty responseTab = iota
 	responseTabRaw
 	responseTabHeaders
+	responseTabStream
 	responseTabStats
 	responseTabDiff
 	responseTabHistory
@@ -282,6 +284,20 @@ type Model struct {
 	activeRequestTitle string
 	activeRequestKey   string
 	activeWorkflowKey  string
+
+	streamMgr          *stream.Manager
+	streamMsgChan      chan tea.Msg
+	streamBatchWindow  time.Duration
+	streamMaxEvents    int
+	liveSessions       map[string]*liveSession
+	wsSenders          map[string]*httpclient.WebSocketSender
+	sessionHandles     map[string]*stream.Session
+	wsConsole          *websocketConsole
+	streamFilterActive bool
+	streamFilterInput  textinput.Model
+	requestSessions    map[*restfile.Request]string
+	sessionRequests    map[string]*restfile.Request
+	requestKeySessions map[string]string
 }
 
 func New(cfg Config) Model {
@@ -490,6 +506,25 @@ func New(cfg Config) Model {
 		openPathInput:            openPathInput,
 		searchInput:              searchInput,
 		searchTarget:             searchTargetEditor,
+		streamMgr:                stream.NewManager(),
+		streamMsgChan:            make(chan tea.Msg, 128),
+		streamBatchWindow:        defaultStreamBatchWindow,
+		streamMaxEvents:          defaultStreamMaxEvents,
+		sessionHandles:           make(map[string]*stream.Session),
+		liveSessions:             make(map[string]*liveSession),
+		wsSenders:                make(map[string]*httpclient.WebSocketSender),
+		streamFilterInput: func() textinput.Model {
+			ti := textinput.New()
+			ti.Placeholder = "filter"
+			ti.Prompt = "Filter: "
+			ti.CharLimit = 0
+			ti.SetCursor(0)
+			ti.Blur()
+			return ti
+		}(),
+		requestSessions:    make(map[*restfile.Request]string),
+		sessionRequests:    make(map[string]*restfile.Request),
+		requestKeySessions: make(map[string]string),
 	}
 	model.setInsertMode(false, false)
 

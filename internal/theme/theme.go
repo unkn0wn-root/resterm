@@ -75,6 +75,22 @@ type Theme struct {
 	ResponseContent               lipgloss.Style
 	ResponseContentRaw            lipgloss.Style
 	ResponseContentHeaders        lipgloss.Style
+	StreamContent                 lipgloss.Style
+	StreamTimestamp               lipgloss.Style
+	StreamDirectionSend           lipgloss.Style
+	StreamDirectionReceive        lipgloss.Style
+	StreamDirectionInfo           lipgloss.Style
+	StreamEventName               lipgloss.Style
+	StreamData                    lipgloss.Style
+	StreamBinary                  lipgloss.Style
+	StreamSummary                 lipgloss.Style
+	StreamError                   lipgloss.Style
+	StreamConsoleTitle            lipgloss.Style
+	StreamConsoleMode             lipgloss.Style
+	StreamConsoleStatus           lipgloss.Style
+	StreamConsolePrompt           lipgloss.Style
+	StreamConsoleInput            lipgloss.Style
+	StreamConsoleInputFocused     lipgloss.Style
 }
 
 func DefaultTheme() Theme {
@@ -252,6 +268,22 @@ func DefaultTheme() Theme {
 		ResponseContent:             lipgloss.NewStyle(),
 		ResponseContentRaw:          lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		ResponseContentHeaders:      lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),
+		StreamContent:               lipgloss.NewStyle(),
+		StreamTimestamp:             lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
+		StreamDirectionSend:         lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")).Bold(true),
+		StreamDirectionReceive:      lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")).Bold(true),
+		StreamDirectionInfo:         lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")).Bold(true),
+		StreamEventName:             lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
+		StreamData:                  lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
+		StreamBinary:                lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC078")),
+		StreamSummary:               lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Italic(true),
+		StreamError:                 lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")).Bold(true),
+		StreamConsoleTitle:          lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
+		StreamConsoleMode:           lipgloss.NewStyle().Foreground(lipgloss.Color("#33C481")).Bold(true),
+		StreamConsoleStatus:         lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")),
+		StreamConsolePrompt:         lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
+		StreamConsoleInput:          lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")).BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5E5A72")).Padding(0, 1),
+		StreamConsoleInputFocused:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FDFBFF")).BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7D56F4")).Padding(0, 1),
 	}
 }
 

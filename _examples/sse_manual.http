@@ -1,0 +1,5 @@
+### Manual SSE Feed
+# @name RecentChangesSSE
+# @sse idle=5s total=20s
+# Tip: switch to the Stream tab to watch events arrive live.
+GET https://stream.wikimedia.org/v2/stream/recentchange

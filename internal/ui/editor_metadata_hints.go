@@ -35,6 +35,9 @@ var metadataHintCatalog = []metadataHintOption{
 	{Label: "@grpc-plaintext", Summary: "Force plaintext gRPC transport"},
 	{Label: "@grpc-authority", Summary: "Set gRPC authority override"},
 	{Label: "@grpc-metadata", Summary: "Attach gRPC metadata headers"},
+	{Label: "@sse", Summary: "Enable Server-Sent Events streaming"},
+	{Label: "@websocket", Summary: "Enable WebSocket streaming"},
+	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
 }
 
 func filterMetadataHintOptions(query string) []metadataHintOption {

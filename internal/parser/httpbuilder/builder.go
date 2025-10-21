@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var methodRe = regexp.MustCompile(`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT)\b`)
+var methodRe = regexp.MustCompile(`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|WS|WSS)\b`)
 
 func IsMethodLine(line string) bool {
 	return methodRe.MatchString(line)
@@ -23,8 +23,23 @@ func ParseMethodLine(line string) (method string, url string, ok bool) {
 	}
 
 	method = strings.ToUpper(fields[0])
+	if method == "WS" || method == "WSS" {
+		method = http.MethodGet
+	}
 	url = strings.Join(fields[1:], " ")
 	return method, url, true
+}
+
+func ParseWebSocketURLLine(line string) (url string, ok bool) {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return "", false
+	}
+	lower := strings.ToLower(trimmed)
+	if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
+		return trimmed, true
+	}
+	return "", false
 }
 
 type Builder struct {
@@ -46,7 +61,11 @@ func (b *Builder) HasMethod() bool {
 }
 
 func (b *Builder) SetMethodAndURL(method, url string) {
-	b.method = strings.ToUpper(strings.TrimSpace(method))
+	m := strings.ToUpper(strings.TrimSpace(method))
+	if m == "WS" || m == "WSS" {
+		m = http.MethodGet
+	}
+	b.method = m
 	b.url = strings.TrimSpace(url)
 }
 

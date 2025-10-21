@@ -166,13 +166,14 @@ Switch environments with `Ctrl+E`. If multiple environments exist, Resterm defau
 
 When expanding `{{variable}}` templates, Resterm looks in:
 
-1. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
-2. *Request-scope* variables (`@var request`, `@capture request`).
-3. *Runtime globals* stored via captures or scripts (per environment).
-4. *Document globals* (`@global`, `@var global`).
-5. *File scope* declarations and `@capture file` values.
-6. Selected environment JSON.
-7. OS environment variables (case-sensitive with an uppercase fallback).
+1. *File constants* (`@const`).
+2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
+3. *Request-scope* variables (`@var request`, `@capture request`).
+4. *Runtime globals* stored via captures or scripts (per environment).
+5. *Document globals* (`@global`, `@var global`).
+6. *File scope* declarations and `@capture file` values.
+7. Selected environment JSON.
+8. OS environment variables (case-sensitive with an uppercase fallback).
 
 Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
@@ -190,6 +191,7 @@ Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$ti
 | Directive | Syntax | Description |
 | --- | --- | --- |
 | `@name` | `# @name identifier` | Friendly name used in the request list and history. |
+| `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document. |
 | `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
@@ -208,10 +210,11 @@ GET https://httpbin.org/delay/5
 
 ### Variable declarations
 
-`@var` and `@global` provide static values evaluated before the request is sent.
+`@const`, `@var`, and `@global` provide static values evaluated before the request is sent. Constants resolve immediately when the file is parsed and cannot be overridden by captures or scripts; variables follow the usual resolution order and may be updated at runtime.
 
 | Scope | Syntax | Visibility |
 | --- | --- | --- |
+| Constant | `# @const api.root https://api.example.com` | Immutable for the lifetime of the document; available to every request in the file. |
 | Global | `# @global api.token value` or `# @var global api.token value` | Visible to every request and every file (per environment). |
 | File | `# @var file upload.root https://storage.example.com` | Visible to all requests in the same document only. |
 | Request | `# @var request trace.id {{$uuid}}` | Visible only to the current request (useful for tests). |
@@ -230,6 +233,7 @@ Expressions can reference:
 - `{{response.body}}`
 - `{{response.headers.<Header-Name>}}`
 - `{{response.json.path}}` (dot/bracket navigation into JSON)
+- `{{stream.kind}}`, `{{stream.summary.sentCount}}`, `{{stream.events[0].text}}` for streaming transcripts (available when the request used `@sse` or `@websocket`)
 - Any template variables resolvable by the current stack
 
 Example:
@@ -453,6 +457,13 @@ Objects:
   - `body()` (raw string)
   - `json()` (parsed JSON or `null`)
   - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map)
+- `stream`
+  - `enabled()` – returns `true` when the current response is an SSE or WebSocket transcript.
+  - `kind()` – returns `"sse"` or `"websocket"`.
+  - `summary()` – copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.).
+  - `events()` – array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
+  - `onEvent(fn)` – registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
+  - `onClose(fn)` – registers a callback invoked once with the summary after all events replay.
 - `vars` – same API as pre-request scripts (allows reading request/file/global values and writing request-scope values for assertions).
 - `vars.global` – identical to pre-request usage; changes persist after the script.
 - `console.*` – same placeholders as above.
@@ -681,7 +692,7 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 - If a template fails to expand (undefined variable), Resterm leaves the placeholder intact and surfaces an error banner.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
 - Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
-- `Ctrl+Shift+V` pins the focused response pane—ideal for diffing the last good response against the current attempt.
+- `Ctrl+Shift+V` pins the focused response pane-ideal for diffing the last good response against the current attempt.
 - Keep secrets in environment files or runtime globals marked as `-secret`. Remember that history stores the raw response unless you add `@no-log` or redact the payload yourself.
 
 For additional questions or feature requests, open an issue on GitHub.

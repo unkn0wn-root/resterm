@@ -48,8 +48,9 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History** views with optional split panes and pinned comparisons.
-- **Variable** scopes, captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
+- **Variable** scopes, compile-time constants (`@const`), captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
 - **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, metadata).
+- **Streaming** WebSocket and Server-Sent Events support with `@websocket`/`@ws` scripted steps and `@sse` controls.
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
@@ -230,3 +231,23 @@ Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_TH
 ## Documentation
 
 The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
+### Streaming Requests
+
+Use `@sse` to keep an HTTP request open for Server-Sent Events and `@websocket`/`@ws` directives to script WebSocket conversations directly in your `.http` files.
+
+```http
+### Receive notifications
+# @name streamNotifications
+# @sse duration=1m idle=5s max-events=10
+GET https://api.example.com/notifications
+
+### WebSocket handshake with scripted steps
+# @name chat
+# @websocket receive=2s subprotocols=chat.v1
+# @ws send-json {"type":"hello"}
+# @ws wait 1s
+# @ws close 1000 closing
+GET wss://chat.example.com/socket
+```
+
+Resterm captures the streaming transcript and renders it as prettified JSON so you can diff, test, and archive streaming interactions in history.

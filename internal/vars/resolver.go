@@ -57,6 +57,28 @@ func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	return result, firstErr
 }
 
+func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
+	var firstErr error
+	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
+		submatches := templateVarPattern.FindStringSubmatch(match)
+		if len(submatches) < 2 {
+			return match
+		}
+		name := strings.TrimSpace(submatches[1])
+		if name == "" {
+			return match
+		}
+		if value, ok := r.Resolve(name); ok {
+			return value
+		}
+		if firstErr == nil {
+			firstErr = fmt.Errorf("undefined variable: %s", name)
+		}
+		return match
+	})
+	return result, firstErr
+}
+
 func resolveDynamic(name string) (string, bool) {
 	switch name {
 	case "$timestamp":

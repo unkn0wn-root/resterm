@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 )
@@ -152,6 +154,88 @@ func TestPrepareGRPCRequestUsesBodyOverride(t *testing.T) {
 	}
 }
 
+func TestPrepareGRPCRequestNormalizesSchemedTarget(t *testing.T) {
+	resolver := vars.NewResolver()
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "grpc://localhost:8082",
+			FullMethod: "/pkg.Service/Call",
+		},
+	}
+
+	var model Model
+	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+		t.Fatalf("prepareGRPCRequest returned error: %v", err)
+	}
+	if req.GRPC.Target != "localhost:8082" {
+		t.Fatalf("expected target to be normalized, got %q", req.GRPC.Target)
+	}
+	if req.URL != "localhost:8082" {
+		t.Fatalf("expected URL to mirror normalized target, got %q", req.URL)
+	}
+}
+
+func TestPrepareGRPCRequestNormalizesSecureSchemes(t *testing.T) {
+	resolver := vars.NewResolver()
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "grpcs://api.example.com:8443",
+			FullMethod: "/pkg.Service/Call",
+		},
+	}
+
+	var model Model
+	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+		t.Fatalf("prepareGRPCRequest returned error: %v", err)
+	}
+	if req.GRPC.Target != "api.example.com:8443" {
+		t.Fatalf("expected target to drop grpcs scheme, got %q", req.GRPC.Target)
+	}
+	if !req.GRPC.PlaintextSet || req.GRPC.Plaintext {
+		t.Fatalf("expected secure scheme to enforce TLS, got plaintext=%v set=%v", req.GRPC.Plaintext, req.GRPC.PlaintextSet)
+	}
+}
+
+func TestNormalizeGRPCTargetPreservesQuery(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			Target:     "grpc://localhost:9000/service?alt=blue",
+			FullMethod: "/svc.Method",
+		},
+	}
+
+	var model Model
+	if err := model.prepareGRPCRequest(req, vars.NewResolver()); err != nil {
+		t.Fatalf("prepareGRPCRequest returned error: %v", err)
+	}
+	if req.GRPC.Target != "localhost:9000/service?alt=blue" {
+		t.Fatalf("expected query to be preserved, got %q", req.GRPC.Target)
+	}
+}
+
+func TestPrepareGRPCRequestExpandsDescriptorSet(t *testing.T) {
+	resolver := vars.NewResolver(vars.NewMapProvider("doc", map[string]string{"grpc.descriptor": "./testdata/example.protoset"}))
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			Target:        "localhost:50051",
+			FullMethod:    "/pkg.Svc/Call",
+			DescriptorSet: "{{grpc.descriptor}}",
+		},
+	}
+
+	var model Model
+	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+		t.Fatalf("prepareGRPCRequest returned error: %v", err)
+	}
+	if req.GRPC.DescriptorSet != "./testdata/example.protoset" {
+		t.Fatalf("expected descriptor set to be expanded, got %q", req.GRPC.DescriptorSet)
+	}
+}
+
 func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 	model := New(Config{})
 	model.ready = true
@@ -268,6 +352,90 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 	}
 	if model.suppressNextErrorModal {
 		t.Fatalf("expected suppress flag to reset after script error")
+	}
+}
+
+type transportFunc func(*http.Request) (*http.Response, error)
+
+func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
+	fakeClient := httpclient.NewClient(nil)
+	fakeClient.httpFactory = func(httpclient.Options) (*http.Client, error) {
+		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
+			reader, writer := io.Pipe()
+			go func() {
+				defer writer.Close()
+				_, _ = io.WriteString(writer, "data: hello\n\n")
+			}()
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       reader,
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	}
+
+	model := New(Config{Client: fakeClient})
+	doc := &restfile.Document{}
+	model.doc = doc
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE:    &restfile.SSERequest{},
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "stream.count",
+				Expression: "{{response.json.summary.eventCount}}",
+			}},
+			Scripts: []restfile.ScriptBlock{{
+				Kind: "test",
+				Body: `{% tests.assert(response.json.summary.eventCount === 1, "event count"); %}`,
+			}},
+		},
+	}
+	doc.Requests = []*restfile.Request{req}
+
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg, ok := cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg from command")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error from executeRequest: %v", msg.err)
+	}
+	if msg.response == nil {
+		t.Fatalf("expected response in message")
+	}
+	if len(msg.tests) != 1 {
+		t.Fatalf("expected one test result, got %d", len(msg.tests))
+	}
+	if !msg.tests[0].Passed {
+		t.Fatalf("expected test to pass, got %+v", msg.tests[0])
+	}
+	found := false
+	for _, v := range msg.executed.Variables {
+		if v.Name == "stream.count" && v.Value == "1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected capture to populate request variable, got %+v", msg.executed.Variables)
 	}
 }
 
@@ -390,10 +558,11 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		fileVars: newFileStore(),
 	}
 
-	resp := &httpclient.Response{
-		Status:     "200 OK",
-		StatusCode: 200,
-		Headers: http.Header{
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Header: http.Header{
 			"X-Trace": {"abc"},
 		},
 		Body: []byte(`{"token":"abc123","nested":{"value":42}}`),
@@ -412,7 +581,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	resolver := model.buildResolver(doc, req, nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, &captures); err != nil {
+	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
 	}
 
@@ -480,6 +649,91 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	vars := model.collectVariables(freshDoc, nil)
 	if vars["lastTrace"] != "abc" {
 		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
+	}
+}
+
+func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "200"}
+	stream := &scripts.StreamInfo{
+		Kind: "sse",
+		Events: []map[string]interface{}{
+			{"event": "ready"},
+			{"event": "change", "data": "value"},
+		},
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "last",
+				Expression: "{{stream.events[-1].event}}",
+			}},
+		},
+	}
+	var captures captureResult
+	if err := model.applyCaptures(nil, req, nil, resp, stream, &captures); err != nil {
+		t.Fatalf("applyCaptures stream: %v", err)
+	}
+	if len(req.Variables) == 0 || req.Variables[len(req.Variables)-1].Value != "change" {
+		t.Fatalf("expected last event to be change, got %+v", req.Variables)
+	}
+}
+
+func TestApplyCapturesWithStreamData(t *testing.T) {
+	model := Model{
+		cfg:      Config{EnvironmentName: "dev"},
+		globals:  newGlobalStore(),
+		fileVars: newFileStore(),
+	}
+
+	streamInfo := &scripts.StreamInfo{
+		Kind: "websocket",
+		Summary: map[string]interface{}{
+			"sentCount":     1,
+			"receivedCount": 2,
+		},
+		Events: []map[string]interface{}{
+			{"text": "hello"},
+			{"text": "world"},
+		},
+	}
+
+	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "101 Switching Protocols"}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{
+				{Scope: restfile.CaptureScopeRequest, Name: "streamKind", Expression: "{{stream.kind}}"},
+				{Scope: restfile.CaptureScopeFile, Name: "received", Expression: "{{stream.summary.receivedCount}}"},
+				{Scope: restfile.CaptureScopeGlobal, Name: "lastMessage", Expression: "{{stream.events[1].text}}"},
+			},
+		},
+	}
+
+	doc := &restfile.Document{Path: "./stream.http"}
+	resolver := model.buildResolver(doc, req, nil)
+	var captures captureResult
+	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures); err != nil {
+		t.Fatalf("applyCaptures stream: %v", err)
+	}
+
+	vars := model.collectVariables(doc, req)
+	if vars["streamKind"] != "websocket" {
+		t.Fatalf("expected stream kind capture, got %q", vars["streamKind"])
+	}
+	if len(doc.Variables) == 0 || doc.Variables[0].Value != "2" {
+		t.Fatalf("expected file capture for received count, got %+v", doc.Variables)
+	}
+	snapshot := model.globals.snapshot("dev")
+	if len(snapshot) != 1 {
+		t.Fatalf("expected one global capture, got %d", len(snapshot))
+	}
+	var globalEntry globalValue
+	for _, value := range snapshot {
+		globalEntry = value
+	}
+	if globalEntry.Value != "world" {
+		t.Fatalf("expected last message capture to be world, got %q", globalEntry.Value)
 	}
 }
 

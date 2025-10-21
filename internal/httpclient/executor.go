@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"nhooyr.io/websocket"
 )
 
 type Options struct {
@@ -45,8 +46,10 @@ func (OSFileSystem) ReadFile(name string) ([]byte, error) {
 }
 
 type Client struct {
-	fs  FileSystem
-	jar http.CookieJar
+	fs          FileSystem
+	jar         http.CookieJar
+	httpFactory func(Options) (*http.Client, error)
+	wsDial      func(context.Context, string, *websocket.DialOptions) (*websocket.Conn, *http.Response, error)
 }
 
 func NewClient(fs FileSystem) *Client {
@@ -54,7 +57,10 @@ func NewClient(fs FileSystem) *Client {
 		fs = OSFileSystem{}
 	}
 	jar, _ := cookiejar.New(nil)
-	return &Client{fs: fs, jar: jar}
+	c := &Client{fs: fs, jar: jar}
+	c.httpFactory = c.buildHTTPClient
+	c.wsDial = websocket.Dial
+	return c
 }
 
 type Response struct {
@@ -68,49 +74,23 @@ type Response struct {
 	Request      *restfile.Request
 }
 
-func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (resp *Response, err error) {
-	bodyReader, err := c.prepareBody(req, resolver, opts)
+func (c *Client) Execute(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (resp *Response, err error) {
+	httpReq, effectiveOpts, err := c.prepareHTTPRequest(ctx, req, resolver, opts)
 	if err != nil {
 		return nil, err
 	}
 
-	expandedURL := req.URL
-	if resolver != nil {
-		expandedURL, err = resolver.ExpandTemplates(req.URL)
-		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
-		}
+	factory := c.httpFactory
+	if factory == nil {
+		factory = c.buildHTTPClient
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, bodyReader)
-	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "build request")
-	}
-
-	if req.Headers != nil {
-		for name, values := range req.Headers {
-			for _, value := range values {
-				if resolver != nil {
-					if expanded, expandErr := resolver.ExpandTemplates(value); expandErr == nil {
-						httpReq.Header.Add(name, expanded)
-						continue
-					}
-				}
-				// fall back to the raw value when expansion is unavailable
-				httpReq.Header.Add(name, value)
-			}
-		}
-	}
-	if req.Body.GraphQL != nil && !strings.EqualFold(req.Method, "GET") {
-		if httpReq.Header.Get("Content-Type") == "" {
-			httpReq.Header.Set("Content-Type", "application/json")
-		}
-	}
-
-	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-
-	effectiveOpts := applyRequestSettings(opts, req.Settings)
-	client, err := c.buildHTTPClient(effectiveOpts)
+	client, err := factory(effectiveOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +101,7 @@ func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *v
 	if err != nil {
 		return &Response{Request: req, Duration: duration}, errdef.Wrap(errdef.CodeHTTP, err, "perform request")
 	}
+
 	defer func() {
 		if closeErr := httpResp.Body.Close(); closeErr != nil && err == nil {
 			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
@@ -146,19 +127,93 @@ func (c *Client) Execute(ctx context.Context, req *restfile.Request, resolver *v
 	return resp, nil
 }
 
+func (c *Client) prepareHTTPRequest(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (*http.Request, Options, error) {
+	if req == nil {
+		return nil, opts, errdef.New(errdef.CodeHTTP, "request is nil")
+	}
+
+	bodyReader, err := c.prepareBody(req, resolver, opts)
+	if err != nil {
+		return nil, opts, err
+	}
+
+	expandedURL := strings.TrimSpace(req.URL)
+	if expandedURL == "" {
+		return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
+	}
+	if resolver != nil {
+		expandedURL, err = resolver.ExpandTemplates(expandedURL)
+		if err != nil {
+			return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
+		}
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, bodyReader)
+	if err != nil {
+		return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "build request")
+	}
+
+	if req.Headers != nil {
+		for name, values := range req.Headers {
+			for _, value := range values {
+				finalValue := value
+				if resolver != nil {
+					if expanded, expandErr := resolver.ExpandTemplates(value); expandErr == nil {
+						finalValue = expanded
+					}
+				}
+				httpReq.Header.Add(name, finalValue)
+			}
+		}
+	}
+
+	if req.Body.GraphQL != nil && !strings.EqualFold(req.Method, "GET") {
+		if httpReq.Header.Get("Content-Type") == "" {
+			httpReq.Header.Set("Content-Type", "application/json")
+		}
+	}
+
+	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
+
+	effectiveOpts := applyRequestSettings(opts, req.Settings)
+
+	return httpReq, effectiveOpts, nil
+}
+
 func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	if req.Body.GraphQL != nil {
 		return c.prepareGraphQLBody(req, resolver, opts)
 	}
+
 	switch {
 	case req.Body.FilePath != "":
 		path := req.Body.FilePath
 		if !filepath.IsAbs(path) && opts.BaseDir != "" {
 			path = filepath.Join(opts.BaseDir, path)
 		}
+
 		data, err := c.fs.ReadFile(path)
 		if err != nil {
 			return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read body file %s", path)
+		}
+
+		if resolver != nil && req.Body.Options.ExpandTemplates {
+			text := string(data)
+			expanded, err := resolver.ExpandTemplates(text)
+			if err != nil {
+				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body file templates")
+			}
+
+			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir)
+			if procErr != nil {
+				return nil, procErr
+			}
+			return strings.NewReader(processed), nil
 		}
 		return bytes.NewReader(data), nil
 	case req.Body.Text != "":
@@ -227,11 +282,13 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		variablesMap  map[string]interface{}
 		variablesJSON string
 	)
+
 	if variablesRaw != "" {
 		parsed, parseErr := decodeGraphQLVariables(variablesRaw)
 		if parseErr != nil {
 			return nil, parseErr
 		}
+
 		variablesMap = parsed
 		normalised, marshalErr := json.Marshal(parsed)
 		if marshalErr != nil {
@@ -245,6 +302,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		if urlErr != nil {
 			return nil, errdef.Wrap(errdef.CodeHTTP, urlErr, "parse graphql request url")
 		}
+
 		values := parsedURL.Query()
 		values.Set("query", query)
 		if operationName != "" {
@@ -252,11 +310,13 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		} else {
 			values.Del("operationName")
 		}
+
 		if variablesJSON != "" {
 			values.Set("variables", variablesJSON)
 		} else {
 			values.Del("variables")
 		}
+
 		parsedURL.RawQuery = values.Encode()
 		req.URL = parsedURL.String()
 		return nil, nil
@@ -265,12 +325,15 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	payload := map[string]interface{}{
 		"query": query,
 	}
+
 	if operationName != "" {
 		payload["operationName"] = operationName
 	}
+
 	if variablesMap != nil {
 		payload["variables"] = variablesMap
 	}
+
 	body, marshalErr := json.Marshal(payload)
 	if marshalErr != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, marshalErr, "encode graphql payload")
@@ -283,9 +346,11 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) 
 	if inline != "" {
 		return inline, nil
 	}
+
 	if filePath == "" {
 		return "", nil
 	}
+
 	resolved := filePath
 	if !filepath.IsAbs(resolved) && baseDir != "" {
 		resolved = filepath.Join(baseDir, resolved)
@@ -386,8 +451,8 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 	if len(settings) == 0 {
 		return opts
 	}
+
 	effective := opts
-	// normalize keys once to ensure case-insensitive matching
 	norm := make(map[string]string, len(settings))
 	for k, v := range settings {
 		norm[strings.ToLower(k)] = v
@@ -417,6 +482,7 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 	if auth == nil || len(auth.Params) == 0 {
 		return
 	}
+
 	expand := func(value string) string {
 		if value == "" {
 			return ""
@@ -470,6 +536,7 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
+
 	var b strings.Builder
 	first := true
 	for scanner.Scan() {
@@ -477,6 +544,7 @@ func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error)
 		if !first {
 			b.WriteByte('\n')
 		}
+
 		first = false
 		trimmed := strings.TrimSpace(line)
 		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
@@ -497,6 +565,7 @@ func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error)
 		}
 		b.WriteString(line)
 	}
+
 	if err := scanner.Err(); err != nil {
 		return "", errdef.Wrap(errdef.CodeFilesystem, err, "scan body includes")
 	}
