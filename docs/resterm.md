@@ -550,7 +550,29 @@ Run `resterm --help` for the latest list. Core flags:
 | `--insecure` | Skip TLS certificate verification globally. |
 | `--follow` | Control redirect following (default on; pass `--follow=false` to disable). |
 | `--proxy <url>` | HTTP proxy URL. |
+| `--from-openapi <spec>` | Generate a `.http` collection from an OpenAPI document. |
+| `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http`). |
+| `--openapi-base-var <name>` | Override the base URL variable injected into the generated file (`baseUrl` by default). |
+| `--openapi-resolve-refs` | Resolve external `$ref` pointers before generation. |
+| `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default. |
+| `--openapi-server-index <n>` | Choose which server entry (0-based) seeds the base URL. |
 
+### Importing OpenAPI specs
+
+```bash
+resterm \
+  --from-openapi openapi-test.yml \
+  --http-out openapi-test.http \
+  --openapi-resolve-refs \
+  --openapi-server-index 1
+```
+
+- Loads the OpenAPI document, optionally resolves external `$ref` pointers, and emits a `.http` file that mirrors Resterm metadata and variable conventions.
+- Unsupported constructs (for example OpenID Connect) are preserved as `Warning:` lines in the generated header so you know where manual follow-up is required.
+- `openapi-test.yml` in the repository is a comprehensive spec that exercises callbacks, complex query styles, and mixed security schemes—perfect for smoke-testing the converter.
+
+> [!NOTE]
+> Resterm's converter is powered by [`kin-openapi`](https://github.com/getkin/kin-openapi), which currently validates OpenAPI documents up to **v3.0.1**. Work on v3.1 support is ongoing progress in [getkin/kin-openapi#1102](https://github.com/getkin/kin-openapi/pull/1102).
 
 ---
 

@@ -53,6 +53,8 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
+- **OpenAPI parser** - convert OpenAPI specs file into resterm .http file
+
 
 ## Installation
 
@@ -172,10 +174,34 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 - View progress in the sidebar, and inspect the aggregated summary in History after the run.
 - See [`docs/resterm.md`](./docs/resterm.md#workflows-multi-step-workflows) for the full reference and `_examples/workflows.http` for a runnable sample workflow.
 
+## OpenAPI imports
+
+Resterm can translate an OpenAPI 3 specification into a `.http` collection directly from the CLI.
+
+```bash
+resterm \
+  --from-openapi openapi-test.yml \
+  --http-out openapi-test.http \
+  --openapi-base-var apiBase \
+  --openapi-resolve-refs \
+  --openapi-server-index 1
+```
+
+- `--from-openapi` points at the source spec, `--http-out` controls the generated `.http` file (defaults to `<spec>.http` when omitted).
+- `--openapi-base-var` overrides the variable name injected for the base URL (falls back to `baseUrl`).
+- `--openapi-resolve-refs` enables kin-openapi's `$ref` resolution before generation.
+- `--openapi-include-deprecated` keeps deprecated operations that are skipped by default.
+- `--openapi-server-index` picks which server entry (0-based) should populate the base URL if multiple servers are defined.
+
+The repository ships with `openapi-specs.yml`, an intentionally full-featured spec that covers array/object query parameters, callbacks, and unsupported constructs (for example OpenID Connect). Those unsupported pieces surface as `Warning:` lines within the generated header comment so you can verify warning handling end-to-end.
+
+> [!NOTE]
+> Resterm relies on [`kin-openapi`](https://github.com/getkin/kin-openapi), which currently supports OpenAPI documents up to **v3.0.1**. Work on v3.1 support is tracked in [getkin/kin-openapi#1102](https://github.com/getkin/kin-openapi/pull/1102).
+
 ## Quick Configuration Overview
 
 - Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory.
-- CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`.
+- CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out`, `--openapi-base-var`, `--openapi-resolve-refs`, `--openapi-include-deprecated`, `--openapi-server-index`.
 - Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
 - Themes: add `.toml` or `.json` files under `~/.config/resterm/themes` (override with `RESTERM_THEMES_DIR`) and switch them at runtime with `Ctrl+Alt+T` (or chord `g` then `t`).
 

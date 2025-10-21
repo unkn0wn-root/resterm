@@ -1,0 +1,451 @@
+openapi: 3.0.3
+info:
+  title: Resterm OpenAPI Feature Harness
+  version: 1.0.0
+  description: |
+    Comprehensive test surface used to validate Resterm's OpenAPI import pipeline.
+    Exercises security schemes, parameter serialization styles, callbacks, examples,
+    request bodies, and multi-server resolution.
+servers:
+  - url: https://api.resterm.dev/v1
+    description: Primary production server
+  - url: https://{stage}.resterm.dev/{basePath}
+    description: Stage-specific server
+    variables:
+      stage:
+        default: staging
+        enum: [staging, qa]
+      basePath:
+        default: v1
+components:
+  securitySchemes:
+    basicAuth:
+      type: http
+      scheme: basic
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    oauthDemo:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.resterm.dev/oauth/token
+          scopes:
+            metrics.read: Read metrics
+            metrics.write: Write metrics
+        password:
+          tokenUrl: https://auth.resterm.dev/oauth/token
+          scopes:
+            profile.read: Read user profile
+        authorizationCode:
+          authorizationUrl: https://auth.resterm.dev/oauth/authorize
+          tokenUrl: https://auth.resterm.dev/oauth/token
+          scopes:
+            dashboards.manage: Manage dashboards
+        implicit:
+          authorizationUrl: https://auth.resterm.dev/oauth/authorize
+          scopes:
+            dashboards.view: View dashboards
+    oidcProvider:
+      type: openIdConnect
+      openIdConnectUrl: https://auth.resterm.dev/.well-known/openid-configuration
+  schemas:
+    User:
+      type: object
+      required: [id, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+          example: 9b0e5b1d-4a98-4bb0-9a9e-8a21b713c3da
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        displayName:
+          type: string
+          example: Jane Doe
+        address:
+          $ref: '#/components/schemas/Address'
+        preferences:
+          $ref: '#/components/schemas/UserPreferences'
+    Address:
+      type: object
+      properties:
+        line1:
+          type: string
+        line2:
+          type: string
+        city:
+          type: string
+        country:
+          type: string
+          default: US
+    UserPreferences:
+      type: object
+      additionalProperties:
+        type: string
+      properties:
+        theme:
+          type: string
+          enum: [light, dark, system]
+        telemetryOptIn:
+          type: boolean
+          default: false
+    NewUser:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        displayName:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+          example: [admin, editor]
+    Metric:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+        value:
+          type: number
+          format: double
+        tags:
+          type: array
+          items:
+            type: string
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+paths:
+  /users:
+    get:
+      summary: List users
+      description: Returns a filtered page of users.
+      parameters:
+        - name: limit
+          in: query
+          description: Page size
+          schema:
+            type: integer
+            default: 25
+        - name: tags
+          in: query
+          description: Filter by user tags
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+            example: [beta, premium]
+        - name: filter
+          in: query
+          description: Structured filter criteria
+          style: deepObject
+          explode: true
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+              minCreatedAt:
+                type: string
+                format: date-time
+        - name: traceId
+          in: header
+          schema:
+            type: string
+            example: trace-123
+        - name: locale
+          in: cookie
+          schema:
+            type: string
+            default: en-US
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/User'
+                  nextPageToken:
+                    type: string
+                    nullable: true
+              examples:
+                sample:
+                  value:
+                    items:
+                      - id: 4d6cccd2-b668-4b8e-8a4f-18ac52ffb1fd
+                        email: alice@example.com
+                        displayName: Alice Example
+                        preferences:
+                          theme: dark
+                          telemetryOptIn: true
+                    nextPageToken: token-2
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - bearerAuth: []
+    post:
+      summary: Create a user
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NewUser'
+            examples:
+              default:
+                value:
+                  email: new.user@example.com
+                  password: changeme123
+                  displayName: New Person
+                  roles: [viewer]
+          multipart/form-data:
+            schema:
+              type: object
+              required: [payload]
+              properties:
+                payload:
+                  $ref: '#/components/schemas/NewUser'
+                avatar:
+                  type: string
+                  format: binary
+      responses:
+        '201':
+          description: User created
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '422':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      security:
+        - basicAuth: []
+        - oauthDemo:
+            - profile.read
+  /users/{userId}:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        description: Identifier of the user
+        schema:
+          type: string
+    get:
+      summary: Get user by ID
+      responses:
+        '200':
+          description: User information
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '404':
+          description: Not found
+      security:
+        - apiKeyAuth: []
+    patch:
+      summary: Update user metadata
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preferences:
+                  $ref: '#/components/schemas/UserPreferences'
+                address:
+                  $ref: '#/components/schemas/Address'
+      responses:
+        '200':
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+      security:
+        - oauthDemo:
+            - dashboards.manage
+  /metrics:
+    post:
+      summary: Submit metrics
+      description: Accepts newline-delimited JSON payloads.
+      parameters:
+        - name: dataset
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: region
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: array
+            items:
+              type: string
+            example: [us-east-1, eu-west-1]
+        - name: summary
+          in: query
+          style: form
+          explode: false
+          schema:
+            type: object
+            properties:
+              window:
+                type: string
+              includeOutliers:
+                type: boolean
+            example:
+              window: 24h
+              includeOutliers: false
+      requestBody:
+        required: true
+        content:
+          application/x-ndjson:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/Metric'
+      responses:
+        '202':
+          description: Accepted for processing
+      security:
+        - oauthDemo:
+            - metrics.write
+        - bearerAuth: []
+      callbacks:
+        ingestionStatus:
+          '{$request.query.dataset}/status':
+            get:
+              summary: Poll ingestion status
+              responses:
+                '200':
+                  description: Current status
+                  content:
+                    application/json:
+                      schema:
+                        type: object
+                        properties:
+                          dataset:
+                            type: string
+                          state:
+                            type: string
+                            enum: [pending, processing, completed, failed]
+                          updatedAt:
+                            type: string
+                            format: date-time
+  /dashboards:
+    get:
+      summary: List dashboards
+      servers:
+        - url: https://dashboards.resterm.dev/api
+      responses:
+        '200':
+          description: A list of dashboards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    name:
+                      type: string
+                    owner:
+                      type: string
+      security:
+        - oauthDemo:
+            - dashboards.view
+        - bearerAuth: []
+  /reports/{year}:
+    parameters:
+      - name: year
+        in: path
+        required: true
+        schema:
+          type: integer
+      - name: quarter
+        in: query
+        style: form
+        explode: false
+        schema:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 4
+          example: [1, 2]
+    get:
+      summary: Retrieve quarterly reports
+      responses:
+        '200':
+          description: Reports bundle
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Invalid selection
+      security:
+        - apiKeyAuth: []
+        - oauthDemo:
+            - metrics.read
+  /oidc/resources:
+    get:
+      summary: List OIDC protected resources
+      description: Endpoint intentionally protected with OpenID Connect scheme to validate warning handling.
+      responses:
+        '200':
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+      security:
+        - oidcProvider: []
