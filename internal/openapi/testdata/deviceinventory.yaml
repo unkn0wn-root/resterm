@@ -1,0 +1,156 @@
+openapi: 3.0.3
+info:
+  title: Device Inventory API
+  version: 1.2.0
+  description: |
+    Sample inventory API used for exercising Resterm's OpenAPI conversion pipeline.
+servers:
+  - url: https://api.example.com/v1
+    description: Primary server
+  - url: https://{env}.example.com/{basePath}
+    description: Configurable server
+    variables:
+      env:
+        default: staging
+      basePath:
+        default: v2
+paths:
+  /devices:
+    get:
+      operationId: listDevices
+      summary: List devices
+      description: Returns paginated hardware devices.
+      tags: [devices, inventory]
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+        - name: x-region
+          in: header
+          required: false
+          schema:
+            type: string
+            enum: [us-east-1, eu-west-1]
+      responses:
+        '200':
+          description: Successful list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Device'
+                  nextToken:
+                    type: string
+              example:
+                items:
+                  - id: 1
+                    serialNumber: SN-1001
+                    model: EnviroMonitor
+                    status: active
+                nextToken: next-abc123
+      security:
+        - bearerAuth: []
+    post:
+      operationId: registerDevice
+      summary: Register a device
+      tags: [devices]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DeviceRegistration'
+            examples:
+              default:
+                summary: Sample device registration
+                value:
+                  serialNumber: SN-2005
+                  model: FlowSensor
+                  status: active
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+      security:
+        - oauthDemo:
+            - devices.write
+    parameters:
+      - name: traceId
+        in: header
+        required: false
+        schema:
+          type: string
+  /devices/{id}:
+    get:
+      operationId: getDevice
+      summary: Get device by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            example: device-001
+      responses:
+        '200':
+          description: Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Device'
+      security:
+        - apiKeyAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    oauthDemo:
+      type: oauth2
+      flows:
+        clientCredentials:
+          tokenUrl: https://auth.example.com/oauth/token
+          scopes:
+            devices.read: Read devices
+            devices.write: Register devices
+  schemas:
+    Device:
+      type: object
+      required: [id, serialNumber]
+      properties:
+        id:
+          type: integer
+          format: int64
+        serialNumber:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, maintenance]
+    DeviceRegistration:
+      type: object
+      required: [serialNumber, model]
+      properties:
+        serialNumber:
+          type: string
+        model:
+          type: string
+        status:
+          type: string
+          default: active
