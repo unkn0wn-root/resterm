@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.4.8](https://github.com/unkn0wn-root/resterm/compare/v0.4.7...v0.4.8) (2025-10-22)
+
+
+### Features
+
+* add OpenAPI -> resterm import pipeline ([11e76e2](https://github.com/unkn0wn-root/resterm/commit/11e76e2aaeb09f4e285299724154bd7fb2c7c796))
+
 ### [0.4.7](https://github.com/unkn0wn-root/resterm/compare/v0.4.6...v0.4.7) (2025-10-20)
 
 
