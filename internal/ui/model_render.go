@@ -602,45 +602,16 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	}
 
 	tabs := m.availableResponseTabs()
-	labels := make([]string, 0, len(tabs))
-	for _, tab := range tabs {
-		label := m.responseTabLabel(tab)
-		if tab == pane.activeTab {
-			if focused {
-				label = tabIndicatorPrefix + label
-			}
-			labels = append(labels, m.theme.TabActive.Render(label))
-		} else {
-			labels = append(labels, m.theme.TabInactive.Render(label))
-		}
-	}
-
-	mode := "Pinned"
-	if pane.followLatest {
-		mode = "Live"
-	}
-	badge := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#A6A1BB")).
-		PaddingLeft(2).
-		Faint(!focused || m.focus != focusResponse).
-		Render(strings.ToUpper(mode))
-
-	row := strings.Join(labels, " ")
-	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
 	lineWidth := maxInt(width, 1)
-	rowStyle := m.theme.Tabs.Copy().
-		Width(lineWidth).
-		Align(lipgloss.Center)
+	rowStyle := m.theme.Tabs.Width(lineWidth).Align(lipgloss.Center)
 	contentLimit := lineWidth
 	if contentLimit < 1 {
 		contentLimit = 1
 	}
 	rowContent := m.buildTabRowContent(tabs, pane.activeTab, focused, pane.followLatest, contentLimit)
-	row = rowStyle.Render(rowContent)
+	row := rowStyle.Render(rowContent)
 	row = clampLines(row, 1)
-	divider := m.theme.PaneDivider.Copy().
-		Width(lineWidth).
-		Render(strings.Repeat("─", lineWidth))
+	divider := m.theme.PaneDivider.Width(lineWidth).Render(strings.Repeat("─", lineWidth))
 	block := lipgloss.JoinVertical(lipgloss.Left, row, divider)
 	return block
 }
@@ -679,9 +650,9 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 	}
 	plans := []plan{
 		{
-			activeStyle:   m.theme.TabActive.Copy(),
-			inactiveStyle: m.theme.TabInactive.Copy(),
-			badgeStyle:    baseBadgeStyle.Copy().PaddingLeft(2),
+			activeStyle:   m.theme.TabActive,
+			inactiveStyle: m.theme.TabInactive,
+			badgeStyle:    baseBadgeStyle.PaddingLeft(2),
 			badgeText:     strings.ToUpper(mode),
 			labelFn: func(full string, isActive bool) string {
 				text := full
@@ -692,9 +663,9 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 			},
 		},
 		{
-			activeStyle:   m.theme.TabActive.Copy().Padding(0, 1),
-			inactiveStyle: m.theme.TabInactive.Copy().Padding(0),
-			badgeStyle:    baseBadgeStyle.Copy().PaddingLeft(1),
+			activeStyle:   m.theme.TabActive.Padding(0, 1),
+			inactiveStyle: m.theme.TabInactive.Padding(0),
+			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
 			badgeText:     strings.ToUpper(mode),
 			labelFn: func(full string, isActive bool) string {
 				if isActive {
@@ -707,9 +678,9 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 			},
 		},
 		{
-			activeStyle:   m.theme.TabActive.Copy().Padding(0),
-			inactiveStyle: m.theme.TabInactive.Copy().Padding(0),
-			badgeStyle:    baseBadgeStyle.Copy().PaddingLeft(1),
+			activeStyle:   m.theme.TabActive.Padding(0),
+			inactiveStyle: m.theme.TabInactive.Padding(0),
+			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
 			badgeText:     firstRuneUpper(mode),
 			labelFn: func(full string, isActive bool) string {
 				label := firstRuneUpper(full)

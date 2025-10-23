@@ -31,7 +31,11 @@ func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		if err != nil {
 			t.Fatalf("websocket accept failed: %v", err)
 		}
-		defer conn.Close(websocket.StatusNormalClosure, "bye")
+		defer func() {
+			if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
+				t.Logf("close websocket: %v", err)
+			}
+		}()
 
 		ctx := r.Context()
 		for {
@@ -164,7 +168,7 @@ func TestStartWebSocketInteractive(t *testing.T) {
 	deadline := time.After(2 * time.Second)
 
 loop:
-	for !(receivedSend && receivedEcho && receivedPong) {
+	for !receivedSend || !receivedEcho || !receivedPong {
 		select {
 		case evt, ok := <-listener.C:
 			if !ok {

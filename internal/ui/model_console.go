@@ -377,19 +377,6 @@ func (m *Model) ensureWebSocketConsole(sessionID string, session *stream.Session
 	m.wsConsole = newWebsocketConsole(sessionID, session, sender, baseDir)
 }
 
-func (m *Model) detachWebSocketConsole(sessionID string) {
-	if m.wsConsole != nil && (sessionID == "" || m.wsConsole.sessionID == sessionID) {
-		m.wsConsole = nil
-	}
-}
-
-func (m *Model) activeConsoleSessionID() string {
-	if m.wsConsole == nil {
-		return ""
-	}
-	return m.wsConsole.sessionID
-}
-
 func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	key := msg.String()
 	sessionID := m.sessionIDForRequest(m.currentRequest)

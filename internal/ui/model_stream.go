@@ -446,13 +446,6 @@ func (m *Model) sessionIDForRequest(req *restfile.Request) string {
 	return ""
 }
 
-func (m *Model) requestForSession(id string) *restfile.Request {
-	if id == "" || m.sessionRequests == nil {
-		return nil
-	}
-	return m.sessionRequests[id]
-}
-
 func (m *Model) hasActiveStream() bool {
 	if m.wsConsole != nil {
 		return true
@@ -832,17 +825,6 @@ func matchesFilter(filter string, evt *stream.Event) bool {
 		}
 	}
 	return false
-}
-
-func directionToString(dir stream.Direction) string {
-	switch dir {
-	case stream.DirSend:
-		return "send"
-	case stream.DirReceive:
-		return "receive"
-	default:
-		return "info"
-	}
 }
 
 func opcodeToType(op int) string {

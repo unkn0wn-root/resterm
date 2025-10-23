@@ -55,8 +55,10 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 	}
 
 	streamOpts := req.SSE.Options
-	streamCtx := ctx
-	cancel := func() {}
+	var (
+		streamCtx context.Context
+		cancel    context.CancelFunc
+	)
 	if streamOpts.TotalTimeout > 0 {
 		streamCtx, cancel = context.WithTimeout(ctx, streamOpts.TotalTimeout)
 	} else {
@@ -93,10 +95,13 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
 	if httpResp.StatusCode >= 400 || !strings.Contains(contentType, "text/event-stream") {
 		body, readErr := io.ReadAll(httpResp.Body)
-		httpResp.Body.Close()
+		closeErr := httpResp.Body.Close()
 		cancel()
 		if readErr != nil {
 			return nil, nil, errdef.Wrap(errdef.CodeHTTP, readErr, "read response body")
+		}
+		if closeErr != nil {
+			return nil, nil, errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
 		}
 		return nil, &Response{
 			Status:       httpResp.Status,
@@ -126,7 +131,9 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 
 	go func() {
 		defer cancel()
-		defer httpResp.Body.Close()
+		defer func() {
+			_ = httpResp.Body.Close()
+		}()
 		runSSESession(session, httpResp.Body, streamOpts)
 	}()
 

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -105,8 +106,10 @@ func (c *Client) StartWebSocket(
 	}
 
 	wsOpts := req.WebSocket.Options
-	handshakeCtx := ctx
-	handshakeCancel := func() {}
+	var (
+		handshakeCtx    context.Context
+		handshakeCancel context.CancelFunc
+	)
 	if wsOpts.HandshakeTimeout > 0 {
 		handshakeCtx, handshakeCancel = context.WithTimeout(ctx, wsOpts.HandshakeTimeout)
 	} else {
@@ -671,7 +674,12 @@ func (rt *wsRuntime) shutdown() {
 		if rt.cancel != nil {
 			rt.cancel()
 		}
-		rt.conn.Close(websocket.StatusNormalClosure, "")
+		if err := rt.conn.Close(websocket.StatusNormalClosure, ""); err != nil &&
+			!errors.Is(err, net.ErrClosed) && !errors.Is(err, context.Canceled) {
+			if rt.session != nil {
+				rt.session.Close(errdef.Wrap(errdef.CodeHTTP, err, "close websocket connection"))
+			}
+		}
 	})
 }
 

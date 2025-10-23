@@ -367,7 +367,11 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
-				defer writer.Close()
+				defer func() {
+					if err := writer.Close(); err != nil {
+						t.Logf("close writer: %v", err)
+					}
+				}()
 				_, _ = io.WriteString(writer, "data: hello\n\n")
 			}()
 			resp := &http.Response{

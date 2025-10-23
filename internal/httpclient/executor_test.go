@@ -242,7 +242,11 @@ func TestExecuteSSEIdleTimeout(t *testing.T) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
-				defer writer.Close()
+				defer func() {
+					if err := writer.Close(); err != nil {
+						t.Logf("close writer: %v", err)
+					}
+				}()
 				_, _ = io.WriteString(writer, "data: ping\n\n")
 				<-req.Context().Done()
 			}()
@@ -296,7 +300,11 @@ func TestStartSSEPublishesEvents(t *testing.T) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
-				defer writer.Close()
+				defer func() {
+					if err := writer.Close(); err != nil {
+						t.Logf("close writer: %v", err)
+					}
+				}()
 				_, _ = io.WriteString(writer, "data: first\n\n")
 				time.Sleep(10 * time.Millisecond)
 				_, _ = io.WriteString(writer, "data: second\n\n")
