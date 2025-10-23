@@ -204,13 +204,13 @@ func (wc *websocketConsole) updateInputForMode() {
 
 func (wc *websocketConsole) view(width int, th theme.Theme) string {
 	effectiveWidth := effectiveConsoleWidth(width)
-	wc.input.SetWidth(effectiveWidth)
 	wc.applyInputStyles(th)
 	if wc.active {
 		wc.input.Focus()
 	} else {
 		wc.input.Blur()
 	}
+	wc.input.SetWidth(effectiveWidth)
 
 	title := th.StreamConsoleTitle.Render("WebSocket Console")
 	modeLabel := th.StreamSummary.Render("Mode:")
