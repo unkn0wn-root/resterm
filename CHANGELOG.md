@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.5.0](https://github.com/unkn0wn-root/resterm/compare/v0.4.8...v0.5.0) (2025-10-23)
+
+
+### Bug Fixes
+
+* remove unused func and fix linter ([baf7c16](https://github.com/unkn0wn-root/resterm/commit/baf7c16f18097b68cbb335e99e6e4fe90d39b7d8))
+* response pane width ([e877c17](https://github.com/unkn0wn-root/resterm/commit/e877c17735d9751a6aa79cebe96d531872dcd8b7))
+* response pane width ([2673f39](https://github.com/unkn0wn-root/resterm/commit/2673f39ab7cbb12edaafc1d7faf8756af5934c7f))
+* response pane width ([3c63b50](https://github.com/unkn0wn-root/resterm/commit/3c63b506012c1f2a3e50ec2698e180978ea39e90))
+
 ### [0.4.8](https://github.com/unkn0wn-root/resterm/compare/v0.4.7...v0.4.8) (2025-10-22)
 
 
