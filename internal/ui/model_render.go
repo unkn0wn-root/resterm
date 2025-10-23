@@ -628,45 +628,20 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	row := strings.Join(labels, " ")
 	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
 	lineWidth := maxInt(width, 1)
-	padding := 0
-	if focused && m.focus == focusResponse {
-		padding = 1
-	}
-	innerWidth := maxInt(lineWidth-padding*2, 1)
-	rowStyle := m.theme.Tabs.
-		Width(innerWidth).
+	rowStyle := m.theme.Tabs.Copy().
+		Width(lineWidth).
 		Align(lipgloss.Center)
-	contentLimit := innerWidth - rowStyle.GetHorizontalPadding()
+	contentLimit := lineWidth
 	if contentLimit < 1 {
 		contentLimit = 1
 	}
 	rowContent := m.buildTabRowContent(tabs, pane.activeTab, focused, pane.followLatest, contentLimit)
 	row = rowStyle.Render(rowContent)
 	row = clampLines(row, 1)
-	divider := m.theme.PaneDivider.
-		Width(innerWidth).
-		Render(strings.Repeat("─", innerWidth))
+	divider := m.theme.PaneDivider.Copy().
+		Width(lineWidth).
+		Render(strings.Repeat("─", lineWidth))
 	block := lipgloss.JoinVertical(lipgloss.Left, row, divider)
-	if padding > 0 {
-		pad := strings.Repeat(" ", padding)
-		block = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			pad,
-			block,
-			pad,
-		)
-	}
-	blockWidth := lipgloss.Width(block)
-	if lineWidth > blockWidth {
-		block = lipgloss.Place(
-			lineWidth,
-			lipgloss.Height(block),
-			lipgloss.Center,
-			lipgloss.Top,
-			block,
-			lipgloss.WithWhitespaceChars(" "),
-		)
-	}
 	return block
 }
 
