@@ -45,7 +45,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 ## Highlights
 - **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).
-- **Live streaming** WebSocket and Server-Sent Events with scripted `@ws` steps, automatic transcripts and an interactive console for ad-hoc frames.
+- **WebSockets and SSE** with scripted `@ws` steps, automatic transcripts and an interactive console for ad-hoc frames.
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
@@ -218,10 +218,10 @@ Accept: text/event-stream
 
 `@sse` accepts:
 
-- `duration` / `timeout` - total session timeout before Resterm aborts the stream.
-- `idle` / `idle-timeout` - maximum gap between events before the stream is closed.
-- `max-events` — stop after N events (Resterm still records the transcript).
-- `max-bytes` / `limit-bytes` - cap downloaded payload size.
+- `duration` / `timeout` total session timeout before Resterm aborts the stream.
+- `idle` / `idle-timeout` maximum gap between events before the stream is closed.
+- `max-events` stop after N events (Resterm still records the transcript).
+- `max-bytes` / `limit-bytes` cap downloaded payload size.
 
 The Pretty/Raw/Headers tabs collapse into a JSON transcript when a stream finishes and the history entry exposes a summary (`events`, `bytes`, `reason`).
 
@@ -240,7 +240,7 @@ Switch any request to WebSocket mode with `# @websocket` and describe scripted s
 wss://chat.example.com/stream
 ```
 
-or if you prefer just just to open websocket connection:
+or if you prefer just to open websocket connection:
 ```http
 ### Chat
 # @name websocketChat
@@ -303,23 +303,3 @@ Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_TH
 ## Documentation
 
 The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
-### Streaming Requests
-
-Use `@sse` to keep an HTTP request open for Server-Sent Events and `@websocket`/`@ws` directives to script WebSocket conversations directly in your `.http` files.
-
-```http
-### Receive notifications
-# @name streamNotifications
-# @sse duration=1m idle=5s max-events=10
-GET https://api.example.com/notifications
-
-### WebSocket handshake with scripted steps
-# @name chat
-# @websocket receive-timeout=2s subprotocols=chat.v1
-# @ws send-json {"type":"hello"}
-# @ws wait 1s
-# @ws close 1000 closing
-GET wss://chat.example.com/socket
-```
-
-Transcripts flow into the Stream tab, history, and scripting APIs so you can diff, test, and archive streaming interactions without leaving the terminal.
