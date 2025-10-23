@@ -74,3 +74,20 @@ func TestRenderStatusBarLongMessagePreservesStaticFields(t *testing.T) {
 		t.Fatalf("expected truncated message before static fields, got %q", prefix)
 	}
 }
+
+func TestRenderPaneTabsClampsHeight(t *testing.T) {
+	model := Model{
+		theme:             theme.DefaultTheme(),
+		focus:             focusResponse,
+		responsePaneFocus: responsePanePrimary,
+		wsConsole:         &websocketConsole{},
+		responsePanes: [2]responsePaneState{
+			{activeTab: responseTabPretty, followLatest: false},
+		},
+	}
+
+	view := model.renderPaneTabs(responsePanePrimary, true, 12)
+	if got := lipgloss.Height(view); got != 2 {
+		t.Fatalf("expected tab bar height to remain 2 lines, got %d", got)
+	}
+}
