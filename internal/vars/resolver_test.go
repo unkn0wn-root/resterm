@@ -38,3 +38,19 @@ func TestExpandTemplatesStatic(t *testing.T) {
 		t.Fatalf("unexpected dynamic expansion %q", dynamicExpanded)
 	}
 }
+
+func TestExpandTemplatesWithProviderLabel(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewMapProvider("env", map[string]string{
+		"id": "123",
+	}))
+
+	expanded, err := resolver.ExpandTemplates("{{env.id}}")
+	if err != nil {
+		t.Fatalf("unexpected error expanding namespaced variable: %v", err)
+	}
+	if expanded != "123" {
+		t.Fatalf("expected value 123, got %q", expanded)
+	}
+}

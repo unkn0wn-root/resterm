@@ -43,7 +43,8 @@ func TestWebSocketConsoleCycleMode(t *testing.T) {
 	if console.mode == initial {
 		t.Fatalf("expected mode to change")
 	}
-	for i := 0; i < 5; i++ {
+	modeCount := int(consoleModeFile-consoleModeText) + 1
+	for i := 0; i < modeCount-1; i++ {
 		console.cycleMode()
 	}
 	if console.mode != initial {

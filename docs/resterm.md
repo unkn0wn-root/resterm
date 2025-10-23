@@ -342,6 +342,8 @@ Supported `@ws` steps:
 
 Handshake failures surface the HTTP response so upgrade issues are easy to debug. Successful sessions stream events into the UI and history with metadata for direction, opcode, sizes, and close status. The summary exposed to templates and scripts includes `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, and `closeReason`.
 
+> **Heads-up:** When you keep a WebSocket URL in `@const`, `@global`, or `@var`, write the request line as `GET {{ws.url}}` (or whichever variable you use). The parser needs the explicit method to recognise the line as a WebSocket request before template expansion. Literal `ws://` / `wss://` URLs without a method still work when written directly.
+
 ### Stream tab, history, and console
 
 - The Stream tab appears automatically whenever a streaming session is active. Scroll to review frames, press `b` to bookmark important events, and switch tabs with the arrow keys (`Ctrl+H` / `Ctrl+L`).

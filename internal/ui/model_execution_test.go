@@ -363,7 +363,7 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	fakeClient := httpclient.NewClient(nil)
-	fakeClient.httpFactory = func(httpclient.Options) (*http.Client, error) {
+	fakeClient.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
 		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
@@ -382,7 +382,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 			return resp, nil
 		})
 		return &http.Client{Transport: transport}, nil
-	}
+	})
 
 	model := New(Config{Client: fakeClient})
 	doc := &restfile.Document{}
@@ -400,7 +400,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 			}},
 			Scripts: []restfile.ScriptBlock{{
 				Kind: "test",
-				Body: `{% tests.assert(response.json.summary.eventCount === 1, "event count"); %}`,
+				Body: `{% tests.assert(response.json().summary.eventCount === 1, "event count"); %}`,
 			}},
 		},
 	}
@@ -420,6 +420,10 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	}
 	if msg.response == nil {
 		t.Fatalf("expected response in message")
+	}
+	if msg.scriptErr != nil {
+		t.Logf("response body: %s", string(msg.response.Body))
+		t.Fatalf("unexpected script error: %v", msg.scriptErr)
 	}
 	if len(msg.tests) != 1 {
 		t.Fatalf("expected one test result, got %d", len(msg.tests))

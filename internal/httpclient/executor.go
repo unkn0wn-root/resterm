@@ -63,6 +63,12 @@ func NewClient(fs FileSystem) *Client {
 	return c
 }
 
+// SetHTTPFactory allows callers to override how http.Client instances are created.
+// Passing nil restores the default factory.
+func (c *Client) SetHTTPFactory(factory func(Options) (*http.Client, error)) {
+	c.httpFactory = factory
+}
+
 type Response struct {
 	Status       string
 	StatusCode   int

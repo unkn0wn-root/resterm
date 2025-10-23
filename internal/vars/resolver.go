@@ -24,9 +24,39 @@ func NewResolver(providers ...Provider) *Resolver {
 }
 
 func (r *Resolver) Resolve(name string) (string, bool) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", false
+	}
 	for _, provider := range r.providers {
-		if value, ok := provider.Resolve(name); ok {
+		if value, ok := provider.Resolve(trimmed); ok {
 			return value, true
+		}
+	}
+	if !strings.Contains(trimmed, ".") {
+		return "", false
+	}
+	lowered := strings.ToLower(trimmed)
+	for _, provider := range r.providers {
+		label := strings.TrimSpace(provider.Label())
+		if label == "" {
+			continue
+		}
+		labelLower := strings.ToLower(label)
+		if idx := strings.Index(labelLower, ":"); idx >= 0 {
+			labelLower = strings.TrimSpace(labelLower[:idx])
+		}
+		if labelLower == "" {
+			continue
+		}
+		if strings.HasPrefix(lowered, labelLower+".") {
+			subject := strings.TrimSpace(trimmed[len(labelLower)+1:])
+			if subject == "" {
+				continue
+			}
+			if value, ok := provider.Resolve(subject); ok {
+				return value, true
+			}
 		}
 	}
 	return "", false

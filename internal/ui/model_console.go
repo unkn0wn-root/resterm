@@ -518,7 +518,7 @@ func (m *Model) sendConsolePayload() tea.Cmd {
 	mode := m.wsConsole.mode
 	sendFunc, status, payloadText, err := m.wsConsole.payload()
 	if err != nil {
-		m.wsConsole.setStatus(err.Error())
+		m.wsConsole.setStatus("%s", err.Error())
 		m.refreshStreamPanes()
 		return nil
 	}
@@ -593,7 +593,7 @@ func (m *Model) handleConsoleResult(msg wsConsoleResultMsg) {
 		return
 	}
 	if msg.err != nil {
-		m.wsConsole.setStatus(msg.err.Error())
+		m.wsConsole.setStatus("%s", msg.err.Error())
 		m.refreshStreamPanes()
 		return
 	}
@@ -607,7 +607,7 @@ func (m *Model) handleConsoleResult(msg wsConsoleResultMsg) {
 	m.wsConsole.input.SetValue("")
 	m.wsConsole.input.SetCursor(0)
 	if msg.status != "" {
-		m.wsConsole.setStatus(msg.status)
+		m.wsConsole.setStatus("%s", msg.status)
 	} else {
 		m.wsConsole.clearStatus()
 	}
