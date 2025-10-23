@@ -716,6 +716,9 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 		m.activeRequestTitle = ""
 		m.activeRequestKey = ""
 		m.currentRequest = nil
+		m.streamFilterActive = false
+		m.streamFilterInput.SetValue("")
+		m.streamFilterInput.Blur()
 		return
 	}
 	if m.historyWorkflowName != "" {
@@ -726,6 +729,24 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 	}
 	prev := m.activeRequestKey
 	m.currentRequest = req
+	if m.wsConsole != nil {
+		sessionID := m.sessionIDForRequest(req)
+		if sessionID == "" || m.wsConsole.sessionID != sessionID {
+			m.wsConsole = nil
+		}
+	}
+	if m.requestSessions != nil && m.requestKeySessions != nil {
+		if key := requestKey(req); key != "" {
+			if id, ok := m.requestKeySessions[key]; ok {
+				if existing := m.requestSessions[req]; existing == "" {
+					m.requestSessions[req] = id
+				}
+			}
+		}
+	}
+	m.streamFilterActive = false
+	m.streamFilterInput.SetValue("")
+	m.streamFilterInput.Blur()
 	m.activeRequestTitle = requestDisplayName(req)
 	m.activeRequestKey = requestKey(req)
 	_ = m.selectRequestItemByKey(m.activeRequestKey)

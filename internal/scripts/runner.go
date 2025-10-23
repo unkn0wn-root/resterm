@@ -51,10 +51,11 @@ type PreRequestOutput struct {
 }
 
 type TestInput struct {
-	Response  *httpclient.Response
+	Response  *Response
 	Variables map[string]string
 	Globals   map[string]GlobalValue
 	BaseDir   string
+	Stream    *StreamInfo
 }
 
 type TestResult struct {
@@ -76,6 +77,7 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 		if strings.ToLower(block.Kind) != "pre-request" {
 			continue
 		}
+
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
 			return result, errdef.Wrap(errdef.CodeScript, err, "pre-request script %d", idx+1)
@@ -83,6 +85,7 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 		if script == "" {
 			continue
 		}
+
 		if err := r.executePreRequestScript(script, input, &result); err != nil {
 			return result, errdef.Wrap(errdef.CodeScript, err, "pre-request script %d", idx+1)
 		}
@@ -112,6 +115,7 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
 			continue
 		}
+
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
 			return aggregated, changes, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
@@ -119,10 +123,12 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 		if script == "" {
 			continue
 		}
+
 		results, globals, err := r.executeTestScript(script, input)
 		if err != nil {
 			return aggregated, changes, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
 		}
+
 		aggregated = append(aggregated, results...)
 		for key, value := range globals {
 			changes[key] = value
@@ -141,9 +147,11 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 	if err := bindCommon(vm); err != nil {
 		return errdef.Wrap(errdef.CodeScript, err, "bind console api")
 	}
+
 	if err := vm.Set("request", pre.requestAPI()); err != nil {
 		return errdef.Wrap(errdef.CodeScript, err, "bind request api")
 	}
+
 	if err := vm.Set("vars", pre.varsAPI()); err != nil {
 		return errdef.Wrap(errdef.CodeScript, err, "bind vars api")
 	}
@@ -157,29 +165,45 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 
 func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
 	vm := goja.New()
-	tester := newTestAPI(input.Response, input.Variables, input.Globals)
+	streamInfo := input.Stream.Clone()
+	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo)
+	streamBinding := newStreamAPI(vm, streamInfo)
+
 	if err := bindCommon(vm); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind console api")
 	}
+
 	if err := vm.Set("tests", tester.testsAPI()); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind tests api")
 	}
+
 	if err := vm.Set("client", tester.clientAPI()); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind client api")
 	}
+
 	if err := vm.Set("resterm", tester.clientAPI()); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind resterm alias")
 	}
+
 	if err := vm.Set("response", tester.responseAPI()); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind response api")
 	}
+
 	if err := vm.Set("vars", tester.varsAPI()); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind vars api")
+	}
+
+	if err := vm.Set("stream", streamBinding.object()); err != nil {
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind stream api")
 	}
 
 	_, err := vm.RunString(script)
 	if err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "execute test script")
+	}
+
+	if err := streamBinding.replay(); err != nil {
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "execute stream callbacks")
 	}
 	return tester.results(), tester.globalChanges(), nil
 }
@@ -215,6 +239,7 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string,
 	if !filepath.IsAbs(path) && baseDir != "" {
 		path = filepath.Join(baseDir, path)
 	}
+
 	data, err := r.fs.ReadFile(path)
 	if err != nil {
 		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read script file %s", path)
@@ -238,6 +263,7 @@ func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preReque
 	for k, v := range input.Variables {
 		vars[k] = v
 	}
+
 	globals := make(map[string]GlobalValue, len(input.Globals))
 	for key, value := range input.Globals {
 		if strings.TrimSpace(value.Name) == "" {
@@ -363,6 +389,7 @@ func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
 	if name == "" {
 		return
 	}
+
 	key := normalizeGlobalKey(name)
 	entry := GlobalValue{Name: name, Value: value, Secret: secret}
 	api.globals[key] = entry
@@ -377,6 +404,7 @@ func (api *preRequestAPI) deleteGlobal(name string) {
 	if name == "" {
 		return
 	}
+
 	key := normalizeGlobalKey(name)
 	delete(api.globals, key)
 	if api.output.Globals == nil {
@@ -398,18 +426,20 @@ func parseGlobalSecret(value goja.Value) bool {
 }
 
 type testAPI struct {
-	response  *httpclient.Response
+	response  *Response
 	variables map[string]string
 	globals   map[string]GlobalValue
 	changes   map[string]GlobalValue
 	cases     []TestResult
+	stream    *StreamInfo
 }
 
-func newTestAPI(resp *httpclient.Response, vars map[string]string, globals map[string]GlobalValue) *testAPI {
+func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo) *testAPI {
 	copyVars := make(map[string]string, len(vars))
 	for k, v := range vars {
 		copyVars[k] = v
 	}
+
 	globalCopy := make(map[string]GlobalValue, len(globals))
 	for key, value := range globals {
 		if strings.TrimSpace(value.Name) == "" {
@@ -422,7 +452,107 @@ func newTestAPI(resp *httpclient.Response, vars map[string]string, globals map[s
 		variables: copyVars,
 		globals:   globalCopy,
 		changes:   make(map[string]GlobalValue),
+		stream:    stream,
 	}
+}
+
+type streamAPI struct {
+	vm            *goja.Runtime
+	info          *StreamInfo
+	eventHandlers []goja.Callable
+	closeHandlers []goja.Callable
+}
+
+func newStreamAPI(vm *goja.Runtime, info *StreamInfo) *streamAPI {
+	clone := info.Clone()
+	return &streamAPI{vm: vm, info: clone}
+}
+
+func (api *streamAPI) object() map[string]interface{} {
+	enabled := api.info != nil
+	return map[string]interface{}{
+		"enabled": func() bool { return enabled },
+		"kind": func() string {
+			if api.info == nil {
+				return ""
+			}
+			return api.info.Kind
+		},
+		"summary": func() map[string]interface{} {
+			if api.info == nil || len(api.info.Summary) == 0 {
+				return map[string]interface{}{}
+			}
+			clone := make(map[string]interface{}, len(api.info.Summary))
+			for k, v := range api.info.Summary {
+				clone[k] = v
+			}
+			return clone
+		},
+		"events": func() []map[string]interface{} {
+			if api.info == nil || len(api.info.Events) == 0 {
+				return []map[string]interface{}{}
+			}
+			out := make([]map[string]interface{}, len(api.info.Events))
+			for i, evt := range api.info.Events {
+				if evt == nil {
+					continue
+				}
+				copyEvt := make(map[string]interface{}, len(evt))
+				for k, v := range evt {
+					copyEvt[k] = v
+				}
+				out[i] = copyEvt
+			}
+			return out
+		},
+		"onEvent": api.registerEventHandler,
+		"onClose": api.registerCloseHandler,
+	}
+}
+
+func (api *streamAPI) registerEventHandler(call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) == 0 {
+		return goja.Undefined()
+	}
+
+	fn, ok := goja.AssertFunction(call.Arguments[0])
+	if ok {
+		api.eventHandlers = append(api.eventHandlers, fn)
+	}
+	return goja.Undefined()
+}
+
+func (api *streamAPI) registerCloseHandler(call goja.FunctionCall) goja.Value {
+	if len(call.Arguments) == 0 {
+		return goja.Undefined()
+	}
+
+	fn, ok := goja.AssertFunction(call.Arguments[0])
+	if ok {
+		api.closeHandlers = append(api.closeHandlers, fn)
+	}
+	return goja.Undefined()
+}
+
+func (api *streamAPI) replay() error {
+	if api.info == nil {
+		return nil
+	}
+	for _, evt := range api.info.Events {
+		val := api.vm.ToValue(evt)
+		for _, handler := range api.eventHandlers {
+			if _, err := handler(goja.Undefined(), val); err != nil {
+				return err
+			}
+		}
+	}
+	summaryVal := api.vm.ToValue(api.info.Summary)
+	for _, handler := range api.closeHandlers {
+		if _, err := handler(goja.Undefined(), summaryVal); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (api *testAPI) testsAPI() map[string]interface{} {
@@ -441,26 +571,47 @@ func (api *testAPI) clientAPI() map[string]interface{} {
 func (api *testAPI) responseAPI() map[string]interface{} {
 	body := ""
 	status := ""
-	statusCode := 0
+	code := 0
 	url := ""
-	duration := 0.0
+	seconds := 0.0
 	headers := map[string]string{}
-	if api.response != nil {
-		body = string(api.response.Body)
-		status = api.response.Status
-		statusCode = api.response.StatusCode
-		url = api.response.EffectiveURL
-		duration = api.response.Duration.Seconds()
-		for name, values := range api.response.Headers {
+	kind := ""
+	if r := api.response; r != nil {
+		body = string(r.Body)
+		status = r.Status
+		code = r.Code
+		url = r.URL
+		seconds = r.Time.Seconds()
+		kind = string(r.Kind)
+		for name, values := range r.Header {
 			headers[strings.ToLower(name)] = strings.Join(values, ", ")
 		}
 	}
 
+	headerLookup := func(name string) string {
+		if api.response == nil || api.response.Header == nil {
+			return ""
+		}
+		return api.response.Header.Get(name)
+	}
+
+	headerHas := func(name string) bool {
+		if api.response == nil || api.response.Header == nil {
+			return false
+		}
+		if _, ok := api.response.Header[name]; ok {
+			return true
+		}
+		_, ok := api.response.Header[http.CanonicalHeaderKey(name)]
+		return ok
+	}
+
 	return map[string]interface{}{
+		"kind":       kind,
 		"status":     status,
-		"statusCode": statusCode,
+		"statusCode": code,
 		"url":        url,
-		"duration":   duration,
+		"duration":   seconds,
 		"body":       body,
 		"json": func() interface{} {
 			if api.response == nil {
@@ -473,24 +624,27 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 			return js
 		},
 		"headers": map[string]interface{}{
-			"get": func(name string) string {
-				if api.response == nil {
-					return ""
-				}
-				return api.response.Headers.Get(name)
-			},
-			"has": func(name string) bool {
-				if api.response == nil {
-					return false
-				}
-				_, ok := api.response.Headers[name]
-				if ok {
-					return true
-				}
-				_, ok = api.response.Headers[http.CanonicalHeaderKey(name)]
-				return ok
-			},
+			"get": headerLookup,
+			"has": headerHas,
 			"all": headers,
+		},
+		"stream": func() map[string]interface{} {
+			if api.stream == nil {
+				return map[string]interface{}{"enabled": false}
+			}
+			clone := api.stream.Clone()
+			if clone.Summary == nil {
+				clone.Summary = make(map[string]interface{})
+			}
+			if clone.Events == nil {
+				clone.Events = []map[string]interface{}{}
+			}
+			return map[string]interface{}{
+				"enabled": true,
+				"kind":    clone.Kind,
+				"summary": clone.Summary,
+				"events":  clone.Events,
+			}
 		},
 	}
 }
@@ -524,12 +678,14 @@ func (api *testAPI) globalAPI() map[string]interface{} {
 			if len(call.Arguments) < 2 {
 				return goja.Undefined()
 			}
+
 			name := call.Arguments[0].String()
 			value := call.Arguments[1].String()
 			secret := false
 			if len(call.Arguments) >= 3 {
 				secret = parseGlobalSecret(call.Arguments[2])
 			}
+
 			api.setGlobal(name, value, secret)
 			return goja.Undefined()
 		},
@@ -548,6 +704,7 @@ func (api *testAPI) setGlobal(name, value string, secret bool) {
 	if name == "" {
 		return
 	}
+
 	key := normalizeGlobalKey(name)
 	entry := GlobalValue{Name: name, Value: value, Secret: secret}
 	api.globals[key] = entry
@@ -562,6 +719,7 @@ func (api *testAPI) deleteGlobal(name string) {
 	if name == "" {
 		return
 	}
+
 	key := normalizeGlobalKey(name)
 	delete(api.globals, key)
 	if api.changes == nil {
@@ -574,6 +732,7 @@ func (api *testAPI) globalChanges() map[string]GlobalValue {
 	if len(api.changes) == 0 {
 		return nil
 	}
+
 	clone := make(map[string]GlobalValue, len(api.changes))
 	for key, value := range api.changes {
 		clone[key] = value
@@ -586,10 +745,12 @@ func (api *testAPI) assert(condition bool, message string) {
 	if name == "" {
 		name = "assert"
 	}
+
 	result := TestResult{
 		Name:   name,
 		Passed: condition,
 	}
+
 	if !condition && message != "" {
 		result.Message = message
 	}
@@ -600,6 +761,7 @@ func (api *testAPI) fail(message string) {
 	if message == "" {
 		message = "fail"
 	}
+
 	api.cases = append(api.cases, TestResult{
 		Name:    message,
 		Message: message,

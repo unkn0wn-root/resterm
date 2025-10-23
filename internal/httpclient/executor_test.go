@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -144,4 +145,246 @@ func TestPrepareGraphQLGetQueryParameters(t *testing.T) {
 	if values.Get("variables") == "" {
 		t.Fatalf("expected variables parameter to be set")
 	}
+}
+
+func TestPrepareBodyFileExpandTemplates(t *testing.T) {
+	fs := mapFS{
+		"payload.json": []byte(`{"id":"{{env.id}}"}`),
+	}
+	client := NewClient(fs)
+	req := &restfile.Request{Method: "POST", URL: "https://example.com"}
+	req.Body.FilePath = "payload.json"
+	req.Body.Options.ExpandTemplates = true
+	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"id": "123"}))
+	reader, err := client.prepareBody(req, resolver, Options{})
+	if err != nil {
+		t.Fatalf("prepare body: %v", err)
+	}
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if string(data) != `{"id":"123"}` {
+		t.Fatalf("unexpected expanded body: %s", string(data))
+	}
+}
+
+type mapFS map[string][]byte
+
+func (m mapFS) ReadFile(name string) ([]byte, error) {
+	if data, ok := m[name]; ok {
+		return data, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func TestExecuteSSE(t *testing.T) {
+	client := NewClient(nil)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		stream := strings.Join([]string{
+			":warmup",
+			"",
+			"id: 1",
+			"event: greet",
+			"data: hello world",
+			"",
+		}, "\n") + "\n"
+		return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(stream)),
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})}, nil
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE:    &restfile.SSERequest{},
+	}
+	resp, err := client.ExecuteSSE(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("execute sse: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+
+	var transcript struct {
+		Events []struct {
+			Event string `json:"event"`
+			Data  string `json:"data"`
+		}
+		Summary struct {
+			EventCount int `json:"eventCount"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
+		t.Fatalf("unmarshal transcript: %v", err)
+	}
+	if transcript.Summary.EventCount == 0 {
+		t.Fatalf("expected at least one event, got %d", transcript.Summary.EventCount)
+	}
+	if transcript.Events[transcript.Summary.EventCount-1].Event != "greet" {
+		t.Fatalf("expected final event to be greet, got %s", transcript.Events[len(transcript.Events)-1].Event)
+	}
+}
+
+func TestExecuteSSEIdleTimeout(t *testing.T) {
+	client := NewClient(nil)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			reader, writer := io.Pipe()
+			go func() {
+				defer func() {
+					if err := writer.Close(); err != nil {
+						t.Logf("close writer: %v", err)
+					}
+				}()
+				_, _ = io.WriteString(writer, "data: ping\n\n")
+				<-req.Context().Done()
+			}()
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       reader,
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE: &restfile.SSERequest{Options: restfile.SSEOptions{
+			IdleTimeout:  25 * time.Millisecond,
+			TotalTimeout: 500 * time.Millisecond,
+		}},
+	}
+
+	resp, err := client.ExecuteSSE(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("execute sse idle: %v", err)
+	}
+	if resp == nil {
+		t.Fatalf("expected response")
+	}
+
+	var transcript struct {
+		Summary struct {
+			Reason string `json:"reason"`
+		} `json:"summary"`
+	}
+	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
+		t.Fatalf("unmarshal transcript: %v", err)
+	}
+	if transcript.Summary.Reason != "timeout:idle" {
+		t.Fatalf("expected idle timeout reason, got %q", transcript.Summary.Reason)
+	}
+}
+
+func TestStartSSEPublishesEvents(t *testing.T) {
+	client := NewClient(nil)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			reader, writer := io.Pipe()
+			go func() {
+				defer func() {
+					if err := writer.Close(); err != nil {
+						t.Logf("close writer: %v", err)
+					}
+				}()
+				_, _ = io.WriteString(writer, "data: first\n\n")
+				time.Sleep(10 * time.Millisecond)
+				_, _ = io.WriteString(writer, "data: second\n\n")
+			}()
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       reader,
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE:    &restfile.SSERequest{},
+	}
+	handle, fallback, err := client.StartSSE(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("start sse: %v", err)
+	}
+	if fallback != nil {
+		t.Fatalf("expected streaming session, got fallback response")
+	}
+
+	session := handle.Session
+	listener := session.Subscribe()
+	received := make([]string, 0, 2)
+	for _, evt := range listener.Snapshot.Events {
+		if evt.Direction == stream.DirReceive {
+			received = append(received, string(evt.Payload))
+		}
+	}
+	done := make(chan struct{})
+	go func() {
+		for evt := range listener.C {
+			if evt.Direction != stream.DirReceive {
+				continue
+			}
+			received = append(received, string(evt.Payload))
+		}
+		close(done)
+	}()
+
+	select {
+	case <-session.Done():
+	case <-time.After(time.Second):
+		t.Fatal("session did not complete")
+	}
+
+	listener.Cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("listener did not drain")
+	}
+
+	if len(received) < 2 {
+		t.Fatalf("expected at least two events, got %d", len(received))
+	}
+	if received[0] != "first" || received[1] != "second" {
+		t.Fatalf("unexpected events: %v", received)
+	}
+	state, serr := session.State()
+	if serr != nil {
+		t.Fatalf("unexpected session error: %v", serr)
+	}
+	if state != stream.StateClosed {
+		t.Fatalf("expected session to close cleanly, got state %v", state)
+	}
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (fn roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return fn(req)
 }

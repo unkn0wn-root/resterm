@@ -7,12 +7,14 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type requestListItem struct {
-	request *restfile.Request
-	index   int
-	line    int
+	request       *restfile.Request
+	index         int
+	line          int
+	constResolver *vars.Resolver
 }
 
 func (i requestListItem) Title() string {
@@ -46,6 +48,7 @@ func (i requestListItem) Description() string {
 		method = "REQ"
 	}
 	target := requestTarget(i.request)
+	target = i.expandTarget(target)
 	displayTarget := truncateDisplay(target)
 
 	if desc != "" {
@@ -180,6 +183,20 @@ func splitRequestURL(raw string) (path string, base string) {
 	return path, base
 }
 
+func (i requestListItem) expandTarget(raw string) string {
+	if i.constResolver == nil {
+		return raw
+	}
+	if !strings.Contains(raw, "{{") {
+		return raw
+	}
+	expanded, err := i.constResolver.ExpandTemplatesStatic(raw)
+	if err != nil {
+		return raw
+	}
+	return expanded
+}
+
 func (i requestListItem) FilterValue() string {
 	if i.request == nil {
 		return ""
@@ -199,6 +216,15 @@ func buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) 
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil, nil
 	}
+
+	var constResolver *vars.Resolver
+	if len(doc.Constants) > 0 {
+		values := make(map[string]string, len(doc.Constants))
+		for _, c := range doc.Constants {
+			values[c.Name] = c.Value
+		}
+		constResolver = vars.NewResolver(vars.NewMapProvider("const", values))
+	}
 	items := make([]requestListItem, len(doc.Requests))
 	listItems := make([]list.Item, len(doc.Requests))
 	for idx, req := range doc.Requests {
@@ -206,7 +232,7 @@ func buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) 
 		if line <= 0 {
 			line = 1
 		}
-		item := requestListItem{request: req, index: idx, line: line}
+		item := requestListItem{request: req, index: idx, line: line, constResolver: constResolver}
 		items[idx] = item
 		listItems[idx] = item
 	}
@@ -217,6 +243,10 @@ func requestTypeBadge(req *restfile.Request) string {
 	switch {
 	case req == nil:
 		return ""
+	case req.WebSocket != nil:
+		return "[WS]"
+	case req.SSE != nil:
+		return "[SSE]"
 	case req.GRPC != nil:
 		return "[gRPC]"
 	case req.Body.GraphQL != nil:

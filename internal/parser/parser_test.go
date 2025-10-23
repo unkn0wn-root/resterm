@@ -94,6 +94,34 @@ GET https://example.com
 	}
 }
 
+func TestParseConstDirectives(t *testing.T) {
+	t.Parallel()
+
+	src := `# @const svc.http http://localhost:8080
+# @const greeting Hello World
+
+GET {{svc.http}}/status
+`
+
+	doc := Parse("const.http", []byte(src))
+	if doc == nil {
+		t.Fatalf("expected document")
+	}
+	if len(doc.Constants) != 2 {
+		t.Fatalf("expected 2 constants, got %d", len(doc.Constants))
+	}
+	consts := make(map[string]restfile.Constant)
+	for _, c := range doc.Constants {
+		consts[c.Name] = c
+	}
+	if got := consts["svc.http"].Value; got != "http://localhost:8080" {
+		t.Fatalf("expected svc.http to be http://localhost:8080, got %q", got)
+	}
+	if got := consts["greeting"].Value; got != "Hello World" {
+		t.Fatalf("expected greeting to be Hello World, got %q", got)
+	}
+}
+
 func TestParseRequestVarDirectiveVariants(t *testing.T) {
 	src := `# @name Vars
 # @var simple foo
@@ -290,6 +318,27 @@ GET https://example.com/api
 	}
 	if prof.Delay != 250*time.Millisecond {
 		t.Fatalf("expected delay=250ms, got %s", prof.Delay)
+	}
+}
+
+func TestParseBodyExpandDirective(t *testing.T) {
+	src := `### ExpandBody
+# @body expand
+POST https://example.com/api
+
+< ./payload.json
+`
+
+	doc := Parse("body-expand.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if !req.Body.Options.ExpandTemplates {
+		t.Fatalf("expected expand templates flag to be set")
+	}
+	if req.Body.FilePath != "./payload.json" {
+		t.Fatalf("unexpected file path %q", req.Body.FilePath)
 	}
 }
 
@@ -519,5 +568,90 @@ GRPC localhost:50051
 	}
 	if grpc.PlaintextSet {
 		t.Fatalf("expected plaintext to be unset when directive is missing")
+	}
+}
+
+func TestParseSSEDirective(t *testing.T) {
+	src := `# @name stream
+# @sse duration=45s idle=5s max-events=200 max-bytes=64kb
+GET https://example.com/events
+`
+
+	doc := Parse("sse.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.SSE == nil {
+		t.Fatalf("expected SSE metadata to be parsed")
+	}
+	if req.SSE.Options.TotalTimeout != 45*time.Second {
+		t.Fatalf("unexpected total timeout: %v", req.SSE.Options.TotalTimeout)
+	}
+	if req.SSE.Options.IdleTimeout != 5*time.Second {
+		t.Fatalf("unexpected idle timeout: %v", req.SSE.Options.IdleTimeout)
+	}
+	if req.SSE.Options.MaxEvents != 200 {
+		t.Fatalf("unexpected max events: %d", req.SSE.Options.MaxEvents)
+	}
+	if req.SSE.Options.MaxBytes != 64*1024 {
+		t.Fatalf("unexpected max bytes: %d", req.SSE.Options.MaxBytes)
+	}
+}
+
+func TestParseWebSocketDirectives(t *testing.T) {
+	src := `# @name ws
+# @websocket timeout=12s receive=6s max-message-bytes=1mb subprotocols=chat,json compression=false
+# @ws send Hello world
+# @ws send-json {"op":"ping"}
+# @ws send-base64 SGVsbG8=
+# @ws send-file < data.bin
+# @ws ping heartbeat
+# @ws wait 2s
+# @ws close 1001 going away
+GET ws://example.com/socket
+`
+
+	doc := Parse("ws.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.WebSocket == nil {
+		t.Fatalf("expected websocket metadata")
+	}
+	ws := req.WebSocket
+	if ws.Options.HandshakeTimeout != 12*time.Second {
+		t.Fatalf("unexpected handshake timeout: %v", ws.Options.HandshakeTimeout)
+	}
+	if ws.Options.ReceiveTimeout != 6*time.Second {
+		t.Fatalf("unexpected receive timeout: %v", ws.Options.ReceiveTimeout)
+	}
+	if ws.Options.MaxMessageBytes != 1024*1024 {
+		t.Fatalf("unexpected max message bytes: %d", ws.Options.MaxMessageBytes)
+	}
+	if len(ws.Options.Subprotocols) != 2 {
+		t.Fatalf("expected 2 subprotocols, got %d", len(ws.Options.Subprotocols))
+	}
+	if ws.Options.Subprotocols[0] != "chat" || ws.Options.Subprotocols[1] != "json" {
+		t.Fatalf("unexpected subprotocol list: %v", ws.Options.Subprotocols)
+	}
+	if !ws.Options.CompressionSet || ws.Options.Compression {
+		t.Fatalf("expected compression flag to be false and explicitly set")
+	}
+	if len(ws.Steps) != 7 {
+		t.Fatalf("expected 7 steps, got %d", len(ws.Steps))
+	}
+	if ws.Steps[0].Type != restfile.WebSocketStepSendText || ws.Steps[0].Value != "Hello world" {
+		t.Fatalf("unexpected first step: %+v", ws.Steps[0])
+	}
+	if ws.Steps[3].Type != restfile.WebSocketStepSendFile || ws.Steps[3].File != "data.bin" {
+		t.Fatalf("unexpected file step: %+v", ws.Steps[3])
+	}
+	if ws.Steps[5].Type != restfile.WebSocketStepWait || ws.Steps[5].Duration != 2*time.Second {
+		t.Fatalf("unexpected wait step: %+v", ws.Steps[5])
+	}
+	if ws.Steps[6].Type != restfile.WebSocketStepClose || ws.Steps[6].Code != 1001 || ws.Steps[6].Reason != "going away" {
+		t.Fatalf("unexpected close step: %+v", ws.Steps[6])
 	}
 }

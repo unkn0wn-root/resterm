@@ -17,6 +17,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -124,14 +125,28 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			return responseMsg{err: err, executed: req}
 		}
 
+		var (
+			ctx          context.Context
+			cancel       context.CancelFunc
+			cancelActive = true
+		)
+
+		if req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
+			ctx, cancel = context.WithCancel(context.Background())
+		} else {
+			ctx, cancel = context.WithTimeout(context.Background(), effectiveTimeout)
+		}
+		defer func() {
+			if cancelActive {
+				cancel()
+			}
+		}()
+
 		if req.GRPC != nil {
 			if err := m.prepareGRPCRequest(req, resolver); err != nil {
 				return responseMsg{err: err, executed: req}
 			}
 		}
-
-		ctx, cancel := context.WithTimeout(context.Background(), effectiveTimeout)
-		defer cancel()
 
 		if req.GRPC != nil {
 			grpcOpts := m.grpcOptions
@@ -147,22 +162,97 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			}
 
 			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts)
+			if grpcErr != nil {
+				return responseMsg{
+					grpc:        grpcResp,
+					err:         grpcErr,
+					executed:    req,
+					requestText: renderRequestText(req),
+					environment: envName,
+				}
+			}
+
+			respForScripts := grpcScriptResponse(req, grpcResp)
+			var captures captureResult
+			if err := m.applyCaptures(doc, req, resolver, respForScripts, nil, &captures); err != nil {
+				return responseMsg{err: err, executed: req}
+			}
+
+			updatedVars := m.collectVariables(doc, req)
+			testVars := mergeVariableMaps(updatedVars, scriptVars)
+			testGlobals := m.collectGlobalValues(doc)
+			tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
+				Response:  respForScripts,
+				Variables: testVars,
+				Globals:   testGlobals,
+				BaseDir:   options.BaseDir,
+			})
+			m.applyGlobalMutations(globalChanges)
+
 			return responseMsg{
 				grpc:        grpcResp,
-				err:         grpcErr,
+				tests:       tests,
+				scriptErr:   testErr,
 				executed:    req,
 				requestText: renderRequestText(req),
 				environment: envName,
 			}
 		}
 
-		response, err := client.Execute(ctx, req, resolver, options)
+		var response *httpclient.Response
+		switch {
+		case req.WebSocket != nil:
+			if err := m.expandWebSocketSteps(req, resolver); err != nil {
+				return responseMsg{err: err, executed: req}
+			}
+			handle, fallback, startErr := client.StartWebSocket(ctx, req, resolver, options)
+			if startErr != nil {
+				return responseMsg{err: startErr, executed: req}
+			}
+			if fallback != nil {
+				response = fallback
+			} else {
+				m.attachWebSocketHandle(handle, req)
+				if len(req.WebSocket.Steps) == 0 {
+					if handle != nil && handle.Session != nil {
+						sessionDone := handle.Session.Done()
+						go func() {
+							<-sessionDone
+							cancel()
+						}()
+						cancelActive = false
+					}
+					response = streamingPlaceholderResponse(handle.Meta)
+				} else {
+					response, err = client.CompleteWebSocket(ctx, handle, req, options)
+				}
+			}
+		case req.SSE != nil:
+			handle, fallback, startErr := client.StartSSE(ctx, req, resolver, options)
+			if startErr != nil {
+				return responseMsg{err: startErr, executed: req}
+			}
+			if fallback != nil {
+				response = fallback
+			} else {
+				m.attachSSEHandle(handle, req)
+				response, err = httpclient.CompleteSSE(handle)
+			}
+		default:
+			response, err = client.Execute(ctx, req, resolver, options)
+		}
 		if err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
+		streamInfo, streamErr := streamInfoFromResponse(req, response)
+		if streamErr != nil {
+			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript"), executed: req}
+		}
+
+		respForScripts := httpScriptResponse(response)
 		var captures captureResult
-		if err := m.applyCaptures(doc, req, resolver, response, &captures); err != nil {
+		if err := m.applyCaptures(doc, req, resolver, respForScripts, streamInfo, &captures); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
@@ -170,10 +260,11 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		testVars := mergeVariableMaps(updatedVars, scriptVars)
 		testGlobals := m.collectGlobalValues(doc)
 		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
-			Response:  response,
+			Response:  respForScripts,
 			Variables: testVars,
 			Globals:   testGlobals,
 			BaseDir:   options.BaseDir,
+			Stream:    streamInfo,
 		})
 		m.applyGlobalMutations(globalChanges)
 
@@ -188,7 +279,122 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 	}
 }
 
-const statusPulseInterval = 300 * time.Millisecond
+func streamingPlaceholderResponse(meta httpclient.StreamMeta) *httpclient.Response {
+	headers := meta.Headers.Clone()
+	if headers == nil {
+		headers = make(http.Header)
+	}
+	headers.Set(streamHeaderType, "websocket")
+	headers.Set(streamHeaderSummary, "streaming")
+	status := meta.Status
+	if strings.TrimSpace(status) == "" {
+		status = "101 Switching Protocols"
+	}
+	statusCode := meta.StatusCode
+	if statusCode == 0 {
+		statusCode = http.StatusSwitchingProtocols
+	}
+	return &httpclient.Response{
+		Status:       status,
+		StatusCode:   statusCode,
+		Proto:        meta.Proto,
+		Headers:      headers,
+		EffectiveURL: meta.EffectiveURL,
+		Request:      meta.Request,
+	}
+}
+
+func (m *Model) expandWebSocketSteps(req *restfile.Request, resolver *vars.Resolver) error {
+	if req == nil || req.WebSocket == nil || resolver == nil {
+		return nil
+	}
+	steps := req.WebSocket.Steps
+	if len(steps) == 0 {
+		return nil
+	}
+	for i := range steps {
+		step := &steps[i]
+		if trimmed := strings.TrimSpace(step.Value); trimmed != "" {
+			expanded, err := resolver.ExpandTemplates(trimmed)
+			if err != nil {
+				return errdef.Wrap(errdef.CodeHTTP, err, "expand websocket step value")
+			}
+			step.Value = expanded
+		}
+		if trimmed := strings.TrimSpace(step.File); trimmed != "" {
+			expanded, err := resolver.ExpandTemplates(trimmed)
+			if err != nil {
+				return errdef.Wrap(errdef.CodeHTTP, err, "expand websocket file path")
+			}
+			step.File = expanded
+		}
+		if trimmed := strings.TrimSpace(step.Reason); trimmed != "" {
+			expanded, err := resolver.ExpandTemplates(trimmed)
+			if err != nil {
+				return errdef.Wrap(errdef.CodeHTTP, err, "expand websocket close reason")
+			}
+			step.Reason = expanded
+		}
+	}
+	req.WebSocket.Steps = steps
+	return nil
+}
+
+func httpScriptResponse(resp *httpclient.Response) *scripts.Response {
+	if resp == nil {
+		return nil
+	}
+	return &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: resp.Status,
+		Code:   resp.StatusCode,
+		URL:    resp.EffectiveURL,
+		Time:   resp.Duration,
+		Header: cloneHeader(resp.Headers),
+		Body:   append([]byte(nil), resp.Body...),
+	}
+}
+
+func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scripts.Response {
+	if resp == nil {
+		return nil
+	}
+	headers := make(http.Header)
+	for name, values := range resp.Headers {
+		for _, value := range values {
+			headers.Add(name, value)
+		}
+	}
+	for name, values := range resp.Trailers {
+		key := "Grpc-Trailer-" + name
+		for _, value := range values {
+			headers.Add(key, value)
+		}
+	}
+	status := resp.StatusCode.String()
+	if msg := strings.TrimSpace(resp.StatusMessage); msg != "" && !strings.EqualFold(msg, status) {
+		status = fmt.Sprintf("%s (%s)", status, msg)
+	}
+	target := ""
+	if req != nil && req.GRPC != nil {
+		target = strings.TrimSpace(req.GRPC.Target)
+	}
+	return &scripts.Response{
+		Kind:   scripts.ResponseKindGRPC,
+		Status: status,
+		Code:   int(resp.StatusCode),
+		URL:    target,
+		Time:   resp.Duration,
+		Header: headers,
+		Body:   []byte(resp.Message),
+	}
+}
+
+const statusPulseInterval = 1 * time.Second
+const (
+	streamHeaderType    = "X-Resterm-Stream-Type"
+	streamHeaderSummary = "X-Resterm-Stream-Summary"
+)
 
 func (m *Model) scheduleStatusPulse() tea.Cmd {
 	if !m.sending {
@@ -238,7 +444,15 @@ func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Durat
 }
 
 func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, extras ...map[string]string) *vars.Resolver {
-	providers := make([]vars.Provider, 0, 8)
+	providers := make([]vars.Provider, 0, 9)
+
+	if doc != nil && len(doc.Constants) > 0 {
+		constValues := make(map[string]string, len(doc.Constants))
+		for _, c := range doc.Constants {
+			constValues[c.Name] = c.Value
+		}
+		providers = append(providers, vars.NewMapProvider("const", constValues))
+	}
 
 	for _, extra := range extras {
 		if len(extra) > 0 {
@@ -534,14 +748,14 @@ func (r *captureResult) addFile(name, value string, secret bool) {
 	r.fileVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeFile}
 }
 
-func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *httpclient.Response, result *captureResult) error {
+func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *scripts.Response, stream *scripts.StreamInfo, result *captureResult) error {
 	if req == nil || resp == nil {
 		return nil
 	}
 	if len(req.Metadata.Captures) == 0 {
 		return nil
 	}
-	ctx := newCaptureContext(resp)
+	ctx := newCaptureContext(resp, stream)
 	for _, capture := range req.Metadata.Captures {
 		value, err := ctx.evaluate(capture.Expression, resolver)
 		if err != nil {
@@ -576,9 +790,10 @@ func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, res
 }
 
 type captureContext struct {
-	response  *httpclient.Response
+	response  *scripts.Response
 	body      string
 	headers   http.Header
+	stream    *scripts.StreamInfo
 	jsonOnce  sync.Once
 	jsonValue interface{}
 	jsonErr   error
@@ -586,12 +801,16 @@ type captureContext struct {
 
 var captureTemplatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
-func newCaptureContext(resp *httpclient.Response) *captureContext {
+func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo) *captureContext {
 	body := ""
 	if resp != nil {
 		body = string(resp.Body)
 	}
-	return &captureContext{response: resp, body: body, headers: cloneHeader(resp.Headers)}
+	var headers http.Header
+	if resp != nil {
+		headers = cloneHeader(resp.Header)
+	}
+	return &captureContext{response: resp, body: body, headers: headers, stream: stream}
 }
 
 func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string, error) {
@@ -603,6 +822,16 @@ func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string,
 		}
 		if strings.HasPrefix(strings.ToLower(name), "response.") {
 			value, err := c.lookupResponse(strings.TrimSpace(name[len("response."):]))
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				return match
+			}
+			return value
+		}
+		if strings.HasPrefix(strings.ToLower(name), "stream.") {
+			value, err := c.lookupStream(strings.TrimSpace(name[len("stream."):]))
 			if err != nil {
 				if firstErr == nil {
 					firstErr = err
@@ -639,7 +868,7 @@ func (c *captureContext) lookupResponse(path string) (string, error) {
 		return "", nil
 	case "statuscode":
 		if c.response != nil {
-			return strconv.Itoa(c.response.StatusCode), nil
+			return strconv.Itoa(c.response.Code), nil
 		}
 		return "", nil
 	}
@@ -661,6 +890,63 @@ func (c *captureContext) lookupResponse(path string) (string, error) {
 		return c.lookupJSON(path), nil
 	}
 	return "", fmt.Errorf("unsupported response reference %q", path)
+}
+
+func (c *captureContext) lookupStream(path string) (string, error) {
+	if c.stream == nil {
+		return "", fmt.Errorf("stream data not available")
+	}
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return "", fmt.Errorf("stream reference empty")
+	}
+	lower := strings.ToLower(trimmed)
+	if lower == "kind" {
+		return c.stream.Kind, nil
+	}
+	if strings.HasPrefix(lower, "summary.") {
+		key := strings.TrimSpace(trimmed[len("summary."):])
+		value, ok := caseLookup(c.stream.Summary, key)
+		if !ok {
+			return "", fmt.Errorf("stream summary field %s not found", key)
+		}
+		return formatCaptureValue(value)
+	}
+	if strings.HasPrefix(lower, "events[") {
+		inner := trimmed[len("events["):]
+		closeIdx := strings.Index(inner, "]")
+		if closeIdx <= 0 {
+			return "", fmt.Errorf("invalid stream events reference")
+		}
+		count := len(c.stream.Events)
+		if count == 0 {
+			return "", fmt.Errorf("stream events empty")
+		}
+		indexText := strings.TrimSpace(inner[:closeIdx])
+		idx, err := strconv.Atoi(indexText)
+		if err != nil {
+			return "", fmt.Errorf("stream event index %s invalid", indexText)
+		}
+		if idx < 0 {
+			idx = count + idx
+		}
+		if idx < 0 || idx >= count {
+			return "", fmt.Errorf("stream event index %s out of range", indexText)
+		}
+		event := c.stream.Events[idx]
+		remainder := strings.TrimSpace(inner[closeIdx+1:])
+		remainder = strings.TrimPrefix(remainder, ".")
+		remainder = strings.TrimSpace(remainder)
+		if remainder == "" {
+			return formatCaptureValue(event)
+		}
+		value, ok := caseLookup(event, remainder)
+		if !ok {
+			return "", fmt.Errorf("stream event field %s not found", remainder)
+		}
+		return formatCaptureValue(value)
+	}
+	return "", fmt.Errorf("unsupported stream reference %q", path)
 }
 
 func (c *captureContext) lookupJSON(path string) string {
@@ -758,6 +1044,48 @@ func stringifyJSONValue(value interface{}) string {
 			return fmt.Sprint(v)
 		}
 		return string(data)
+	}
+}
+
+func caseLookup(m map[string]interface{}, key string) (interface{}, bool) {
+	if m == nil {
+		return nil, false
+	}
+	if value, ok := m[key]; ok {
+		return value, true
+	}
+	lower := strings.ToLower(key)
+	for k, v := range m {
+		if strings.ToLower(k) == lower {
+			return v, true
+		}
+	}
+	return nil, false
+}
+
+func formatCaptureValue(value interface{}) (string, error) {
+	if value == nil {
+		return "", nil
+	}
+	switch v := value.(type) {
+	case string:
+		return v, nil
+	case fmt.Stringer:
+		return v.String(), nil
+	case bool:
+		return strconv.FormatBool(v), nil
+	case int, int8, int16, int32, int64:
+		return fmt.Sprintf("%d", v), nil
+	case uint, uint8, uint16, uint32, uint64:
+		return fmt.Sprintf("%d", v), nil
+	case float32, float64:
+		return fmt.Sprintf("%v", v), nil
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return fmt.Sprint(v), nil
+		}
+		return string(data), nil
 	}
 }
 
@@ -990,6 +1318,20 @@ func (m *Model) prepareGRPCRequest(req *restfile.Request, resolver *vars.Resolve
 				grpcReq.Metadata[key] = expanded
 			}
 		}
+		if authority := strings.TrimSpace(grpcReq.Authority); authority != "" {
+			expanded, err := resolver.ExpandTemplates(authority)
+			if err != nil {
+				return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc authority")
+			}
+			grpcReq.Authority = strings.TrimSpace(expanded)
+		}
+		if descriptor := strings.TrimSpace(grpcReq.DescriptorSet); descriptor != "" {
+			expanded, err := resolver.ExpandTemplates(descriptor)
+			if err != nil {
+				return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc descriptor set")
+			}
+			grpcReq.DescriptorSet = strings.TrimSpace(expanded)
+		}
 
 		if req.Headers != nil {
 			for key, values := range req.Headers {
@@ -1005,11 +1347,41 @@ func (m *Model) prepareGRPCRequest(req *restfile.Request, resolver *vars.Resolve
 	}
 
 	grpcReq.Target = strings.TrimSpace(grpcReq.Target)
+	grpcReq.Target = normalizeGRPCTarget(grpcReq.Target, grpcReq)
 	if grpcReq.Target == "" {
 		return errdef.New(errdef.CodeHTTP, "grpc target not specified")
 	}
 	req.URL = grpcReq.Target
 	return nil
+}
+
+func normalizeGRPCTarget(target string, grpcReq *restfile.GRPCRequest) string {
+	trimmed := strings.TrimSpace(target)
+	if trimmed == "" {
+		return ""
+	}
+
+	lower := strings.ToLower(trimmed)
+	switch {
+	case strings.HasPrefix(lower, "grpcs://"):
+		if grpcReq != nil && !grpcReq.PlaintextSet {
+			grpcReq.Plaintext = false
+			grpcReq.PlaintextSet = true
+		}
+		return trimmed[len("grpcs://"):]
+	case strings.HasPrefix(lower, "https://"):
+		if grpcReq != nil && !grpcReq.PlaintextSet {
+			grpcReq.Plaintext = false
+			grpcReq.PlaintextSet = true
+		}
+		return trimmed[len("https://"):]
+	case strings.HasPrefix(lower, "grpc://"):
+		return trimmed[len("grpc://"):]
+	case strings.HasPrefix(lower, "http://"):
+		return trimmed[len("http://"):]
+	default:
+		return trimmed
+	}
 }
 
 func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) error {
@@ -1105,6 +1477,24 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 		}
 		clone.GRPC = &grpcCopy
 	}
+	if req.SSE != nil {
+		sseCopy := *req.SSE
+		clone.SSE = &sseCopy
+	}
+	if req.WebSocket != nil {
+		wsCopy := *req.WebSocket
+		if len(wsCopy.Options.Subprotocols) > 0 {
+			protocols := make([]string, len(wsCopy.Options.Subprotocols))
+			copy(protocols, wsCopy.Options.Subprotocols)
+			wsCopy.Options.Subprotocols = protocols
+		}
+		if len(wsCopy.Steps) > 0 {
+			steps := make([]restfile.WebSocketStep, len(wsCopy.Steps))
+			copy(steps, wsCopy.Steps)
+			wsCopy.Steps = steps
+		}
+		clone.WebSocket = &wsCopy
+	}
 	return &clone
 }
 
@@ -1139,6 +1529,12 @@ func renderRequestText(req *restfile.Request) string {
 	}
 
 	builder.WriteString("\n")
+	if req.WebSocket != nil {
+		builder.WriteString(renderWebSocketSection(req.WebSocket))
+	}
+	if req.SSE != nil {
+		builder.WriteString(renderSSESection(req.SSE))
+	}
 	if req.GRPC != nil {
 		grpc := req.GRPC
 		if grpc.FullMethod != "" {
@@ -1213,6 +1609,111 @@ func renderRequestText(req *restfile.Request) string {
 		}
 	}
 	return builder.String()
+}
+
+func renderSSESection(sse *restfile.SSERequest) string {
+	if sse == nil {
+		return ""
+	}
+	parts := make([]string, 0, 4)
+	if sse.Options.TotalTimeout > 0 {
+		parts = append(parts, fmt.Sprintf("duration=%s", sse.Options.TotalTimeout))
+	}
+	if sse.Options.IdleTimeout > 0 {
+		parts = append(parts, fmt.Sprintf("idle=%s", sse.Options.IdleTimeout))
+	}
+	if sse.Options.MaxEvents > 0 {
+		parts = append(parts, fmt.Sprintf("max-events=%d", sse.Options.MaxEvents))
+	}
+	if sse.Options.MaxBytes > 0 {
+		parts = append(parts, fmt.Sprintf("max-bytes=%d", sse.Options.MaxBytes))
+	}
+	line := "# @sse"
+	if len(parts) > 0 {
+		line += " " + strings.Join(parts, " ")
+	}
+	return line + "\n\n"
+}
+
+func renderWebSocketSection(ws *restfile.WebSocketRequest) string {
+	if ws == nil {
+		return ""
+	}
+	lines := []string{renderWebSocketDirectiveLine(ws.Options)}
+	for _, step := range ws.Steps {
+		if line := renderWebSocketStepLine(step); line != "" {
+			lines = append(lines, line)
+		}
+	}
+	return strings.Join(lines, "\n") + "\n\n"
+}
+
+func renderWebSocketDirectiveLine(opts restfile.WebSocketOptions) string {
+	parts := make([]string, 0, 5)
+	if opts.HandshakeTimeout > 0 {
+		parts = append(parts, fmt.Sprintf("timeout=%s", opts.HandshakeTimeout))
+	}
+	if opts.ReceiveTimeout > 0 {
+		parts = append(parts, fmt.Sprintf("receive=%s", opts.ReceiveTimeout))
+	}
+	if opts.MaxMessageBytes > 0 {
+		parts = append(parts, fmt.Sprintf("max-message-bytes=%d", opts.MaxMessageBytes))
+	}
+	if len(opts.Subprotocols) > 0 {
+		parts = append(parts, fmt.Sprintf("subprotocols=%s", strings.Join(opts.Subprotocols, ",")))
+	}
+	if opts.CompressionSet {
+		parts = append(parts, fmt.Sprintf("compression=%t", opts.Compression))
+	}
+	line := "# @websocket"
+	if len(parts) > 0 {
+		line += " " + strings.Join(parts, " ")
+	}
+	return line
+}
+
+func renderWebSocketStepLine(step restfile.WebSocketStep) string {
+	prefix := "# @ws "
+	switch step.Type {
+	case restfile.WebSocketStepSendText:
+		return prefix + "send " + step.Value
+	case restfile.WebSocketStepSendJSON:
+		return prefix + "send-json " + step.Value
+	case restfile.WebSocketStepSendBase64:
+		return prefix + "send-base64 " + step.Value
+	case restfile.WebSocketStepSendFile:
+		if step.File == "" {
+			return ""
+		}
+		return prefix + "send-file " + step.File
+	case restfile.WebSocketStepPing:
+		if strings.TrimSpace(step.Value) == "" {
+			return prefix + "ping"
+		}
+		return prefix + "ping " + step.Value
+	case restfile.WebSocketStepPong:
+		if strings.TrimSpace(step.Value) == "" {
+			return prefix + "pong"
+		}
+		return prefix + "pong " + step.Value
+	case restfile.WebSocketStepWait:
+		return prefix + "wait " + step.Duration.String()
+	case restfile.WebSocketStepClose:
+		code := step.Code
+		if code == 0 {
+			if strings.TrimSpace(step.Reason) == "" {
+				return prefix + "close"
+			}
+			return prefix + "close " + step.Reason
+		}
+		reason := strings.TrimSpace(step.Reason)
+		if reason == "" {
+			return fmt.Sprintf("%sclose %d", prefix, code)
+		}
+		return fmt.Sprintf("%sclose %d %s", prefix, code, reason)
+	default:
+		return ""
+	}
 }
 
 func buildInlineRequest(content string, lineNumber int) *restfile.Request {
@@ -1444,5 +1945,8 @@ func looksLikeHTTPRequestURL(url string) bool {
 		return false
 	}
 	lower := strings.ToLower(url)
-	return strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://")
+	return strings.HasPrefix(lower, "http://") ||
+		strings.HasPrefix(lower, "https://") ||
+		strings.HasPrefix(lower, "ws://") ||
+		strings.HasPrefix(lower, "wss://")
 }

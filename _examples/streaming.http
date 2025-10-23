@@ -1,0 +1,15 @@
+### Server Sent Events Demo
+# @name sseDemo
+# @description Demonstrates streaming responses over SSE.
+# @sse duration=30s idle=10s max-events=5
+GET https://example.com/events
+Accept: text/event-stream
+
+### WebSocket Chat Demo
+# @name wsChat
+# @description Sends a message over WebSocket and waits for a reply.
+# @websocket receive=3s subprotocols=chat.v1
+# @ws send Hello from resterm!
+# @ws wait 1s
+# @ws close 1000 normal closure
+GET wss://example.com/chat

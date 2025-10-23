@@ -55,6 +55,9 @@ func indexOfResponseTab(tabs []responseTab, target responseTab) int {
 
 func (m *Model) availableResponseTabs() []responseTab {
 	tabs := []responseTab{responseTabPretty, responseTabRaw, responseTabHeaders}
+	if m.hasActiveStream() {
+		tabs = append(tabs, responseTabStream)
+	}
 	if m.snapshotHasStats() {
 		tabs = append(tabs, responseTabStats)
 	}
@@ -73,6 +76,8 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 		return "Raw"
 	case responseTabHeaders:
 		return "Headers"
+	case responseTabStream:
+		return "Stream"
 	case responseTabStats:
 		return "Stats"
 	case responseTabDiff:

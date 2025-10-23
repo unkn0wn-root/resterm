@@ -14,6 +14,9 @@ func (m Model) Init() tea.Cmd {
 	if m.updateEnabled {
 		cmds = append(cmds, newUpdateTickCmd(0))
 	}
+	if cmd := m.nextStreamMsgCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -98,6 +101,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 		}
+	case streamEventMsg:
+		m.handleStreamEvents(typed)
+		cmds = append(cmds, m.nextStreamMsgCmd())
+	case streamStateMsg:
+		m.handleStreamState(typed)
+		cmds = append(cmds, m.nextStreamMsgCmd())
+	case streamCompleteMsg:
+		m.handleStreamComplete(typed)
+		cmds = append(cmds, m.nextStreamMsgCmd())
+	case streamReadyMsg:
+		m.handleStreamReady(typed)
+		cmds = append(cmds, m.nextStreamMsgCmd())
+	case wsConsoleResultMsg:
+		m.handleConsoleResult(typed)
+		cmds = append(cmds, m.nextStreamMsgCmd())
 	}
 
 	if m.showErrorModal {
@@ -526,6 +544,13 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			m.helpJustOpened = false
 		}
 		return combine(nil)
+	}
+
+	if cmd, handled := m.handleStreamKey(msg); handled {
+		return combine(cmd)
+	}
+	if cmd, handled := m.handleWebSocketConsoleKey(msg); handled {
+		return combine(cmd)
 	}
 
 	if isSpaceKey(msg) && m.canPreviewOnSpace() {
@@ -995,6 +1020,8 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "t":
 			m.openThemeSelector()
 			return true, nil
+		case "w":
+			return true, m.toggleWebSocketConsole()
 		}
 	}
 	return false, nil

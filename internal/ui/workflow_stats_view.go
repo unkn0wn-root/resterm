@@ -9,6 +9,7 @@ import (
 type workflowStatsView struct {
 	name        string
 	started     time.Time
+	ended       time.Time
 	totalSteps  int
 	entries     []workflowStatsEntry
 	selected    int
@@ -50,6 +51,7 @@ func newWorkflowStatsView(state *workflowState) *workflowStatsView {
 	return &workflowStatsView{
 		name:        strings.TrimSpace(state.workflow.Name),
 		started:     state.start,
+		ended:       state.end,
 		totalSteps:  len(state.steps),
 		entries:     entries,
 		selected:    selected,
@@ -163,9 +165,15 @@ func (v *workflowStatsView) workflowHeader() []string {
 	}
 	workflow := renderLabelValue("Workflow", name, statsLabelStyle, statsValueStyle)
 	started := renderLabelValue("Started", v.started.Format(time.RFC3339), statsLabelStyle, statsValueStyle)
+	lines := []string{workflow, started}
+	if !v.ended.IsZero() {
+		ended := renderLabelValue("Ended", v.ended.Format(time.RFC3339), statsLabelStyle, statsValueStyle)
+		lines = append(lines, ended)
+	}
 	stepCount := fmt.Sprintf("%d", v.totalSteps)
 	steps := renderLabelValue("Steps", stepCount, statsLabelStyle, statsValueStyle)
-	return []string{workflow, started, steps, ""}
+	lines = append(lines, steps, "")
+	return lines
 }
 
 func (v *workflowStatsView) renderEntryTitle(entry workflowStatsEntry) string {

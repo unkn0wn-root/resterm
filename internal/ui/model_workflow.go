@@ -28,6 +28,7 @@ type workflowState struct {
 	results   []workflowStepResult
 	current   *restfile.Request
 	start     time.Time
+	end       time.Time
 	stepStart time.Time
 }
 
@@ -308,6 +309,9 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 }
 
 func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
+	if state != nil {
+		state.end = time.Now()
+	}
 	report := m.buildWorkflowReport(state)
 	summary := workflowSummary(state)
 	statsView := newWorkflowStatsView(state)
@@ -395,6 +399,9 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 	}
 	builder.WriteString(fmt.Sprintf("Workflow: %s\n", name))
 	builder.WriteString(fmt.Sprintf("Started: %s\n", state.start.Format(time.RFC3339)))
+	if !state.end.IsZero() {
+		builder.WriteString(fmt.Sprintf("Ended: %s\n", state.end.Format(time.RFC3339)))
+	}
 	builder.WriteString(fmt.Sprintf("Steps: %d\n\n", len(state.steps)))
 	for idx, result := range state.results {
 		status := "PASS"

@@ -86,6 +86,15 @@ func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult,
 		fmt.Sprintf("URL: %s", resp.EffectiveURL),
 	}
 
+	if resp.Headers != nil {
+		if streamType := strings.TrimSpace(resp.Headers.Get(streamHeaderType)); streamType != "" {
+			parts = append(parts, fmt.Sprintf("Stream: %s", streamType))
+		}
+		if summary := strings.TrimSpace(resp.Headers.Get(streamHeaderSummary)); summary != "" {
+			parts = append(parts, fmt.Sprintf("Stream summary: %s", summary))
+		}
+	}
+
 	if resp.Duration > 0 {
 		parts = append(parts, fmt.Sprintf("Duration: %s", resp.Duration.Round(time.Millisecond)))
 	}

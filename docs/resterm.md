@@ -66,6 +66,7 @@ Content-Type: application/json
 | Toggle editor insert mode | `i` / `Esc` |
 | Cycle focus (files -> requests -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus requests / editor / response panes | `g+r` / `g+i` / `g+p` |
+| Toggle WebSocket console (Stream tab) | `Ctrl+I` |
 | Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
 | Adjust files/requests split | `g+j` / `g+k` |
 | Adjust requests/workflows split | `g+J` / `g+K` |
@@ -89,10 +90,13 @@ The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G
 
 - **Pretty**: formatted JSON (or best-effort formatting for other types).
 - **Raw**: exact payload text.
+- **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
 - **Headers**: request and response headers.
 - **Stats**: latency summaries and histograms from `@profile` runs.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
+
+When a request opens a stream, the Stream tab becomes available. Use `Ctrl+I` to reveal the WebSocket console inside the Stream tab, `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, arrow keys to replay recent payloads, `Ctrl+P` to send ping, and `Ctrl+W` to close the session.
 
 Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
 
@@ -166,13 +170,14 @@ Switch environments with `Ctrl+E`. If multiple environments exist, Resterm defau
 
 When expanding `{{variable}}` templates, Resterm looks in:
 
-1. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
-2. *Request-scope* variables (`@var request`, `@capture request`).
-3. *Runtime globals* stored via captures or scripts (per environment).
-4. *Document globals* (`@global`, `@var global`).
-5. *File scope* declarations and `@capture file` values.
-6. Selected environment JSON.
-7. OS environment variables (case-sensitive with an uppercase fallback).
+1. *File constants* (`@const`).
+2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
+3. *Request-scope* variables (`@var request`, `@capture request`).
+4. *Runtime globals* stored via captures or scripts (per environment).
+5. *Document globals* (`@global`, `@var global`).
+6. *File scope* declarations and `@capture file` values.
+7. Selected environment JSON.
+8. OS environment variables (case-sensitive with an uppercase fallback).
 
 Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
@@ -190,6 +195,7 @@ Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$ti
 | Directive | Syntax | Description |
 | --- | --- | --- |
 | `@name` | `# @name identifier` | Friendly name used in the request list and history. |
+| `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document. |
 | `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
@@ -208,10 +214,11 @@ GET https://httpbin.org/delay/5
 
 ### Variable declarations
 
-`@var` and `@global` provide static values evaluated before the request is sent.
+`@const`, `@var`, and `@global` provide static values evaluated before the request is sent. Constants resolve immediately when the file is parsed and cannot be overridden by captures or scripts; variables follow the usual resolution order and may be updated at runtime.
 
 | Scope | Syntax | Visibility |
 | --- | --- | --- |
+| Constant | `# @const api.root https://api.example.com` | Immutable for the lifetime of the document; available to every request in the file. |
 | Global | `# @global api.token value` or `# @var global api.token value` | Visible to every request and every file (per environment). |
 | File | `# @var file upload.root https://storage.example.com` | Visible to all requests in the same document only. |
 | Request | `# @var request trace.id {{$uuid}}` | Visible only to the current request (useful for tests). |
@@ -230,6 +237,7 @@ Expressions can reference:
 - `{{response.body}}`
 - `{{response.headers.<Header-Name>}}`
 - `{{response.json.path}}` (dot/bracket navigation into JSON)
+- `{{stream.kind}}`, `{{stream.summary.sentCount}}`, `{{stream.events[0].text}}` for streaming transcripts (available when the request used `@sse` or `@websocket`)
 - Any template variables resolvable by the current stack
 
 Example:
@@ -268,6 +276,80 @@ Flags:
 
 When profiling completes the response pane's **Stats** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
 
+## Streaming (SSE & WebSocket)
+
+Streaming sessions surface in the Stream response tab, are captured in history, and can be consumed by captures and scripts.
+
+### Server-Sent Events (`@sse`)
+
+Add `# @sse` to keep an HTTP request open for events:
+
+```http
+### Notifications
+# @name notifications
+# @sse duration=2m idle=15s max-events=250
+GET https://api.example.com/notifications
+```
+
+`@sse` accepts the following options:
+
+| Token | Description |
+| --- | --- |
+| `duration` / `timeout` | Maximum lifetime of the stream. Resterm cancels the request once the timer elapses. |
+| `idle` / `idle-timeout` | Maximum quiet period between events before the session is closed. |
+| `max-events` | Stop reading after N events have been delivered. |
+| `max-bytes` / `limit-bytes` | Cap the total payload size and close once the limit is exceeded. |
+
+If the server responds with a non-2xx status or a non-`text/event-stream` content type, Resterm falls back to a standard HTTP response so you can inspect the error. Successful streams produce a transcript (events plus metadata) that appears in the Stream tab and is saved in history. The summary exposed to templates and scripts includes `eventCount`, `byteCount`, `duration`, and `reason` (for example `eof`, `timeout`, `idle-timeout`).
+
+### WebSockets (`@websocket`, `@ws`)
+
+Use `# @websocket` to negotiate an upgrade, then describe scripted interactions with `# @ws` lines:
+
+```http
+### Chat session
+# @name chatSession
+# @websocket timeout=10s receive-timeout=4s subprotocols=chat.v2,json compression=true
+# @ws send {"type":"hello"}
+# @ws wait 1s
+# @ws send-json {"type":"message","text":"Hello from Resterm"}
+# @ws ping heartbeat
+# @ws close 1000 "client done"
+GET wss://chat.example.com/room
+```
+
+Available WebSocket options:
+
+| Token | Description |
+| --- | --- |
+| `timeout` | Handshake deadline (applies until the connection upgrades). |
+| `receive-timeout` | Idle receive window once the socket is open (0 leaves it unbounded). |
+| `max-message-bytes` | Upper bound on inbound frame sizes. |
+| `subprotocols` | Comma-separated list advertised during the handshake. |
+| `compression=<true|false>` | Explicitly enable or disable per-message compression. |
+
+Supported `@ws` steps:
+
+| Step | Effect |
+| --- | --- |
+| `@ws send <text>` | Send a UTF-8 text frame. Templates expand before sending. |
+| `@ws send-json <object>` | Encode JSON and send it as text. |
+| `@ws send-base64 <data>` | Decode base64 and send the result as binary. |
+| `@ws send-file <path>` | Send a file from disk (relative to the request file unless absolute). |
+| `@ws ping [payload]` / `@ws pong [payload]` | Emit control frames (payload limited to 125 bytes). |
+| `@ws wait <duration>` | Pause for the specified duration (e.g. `500ms`). |
+| `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). |
+
+Handshake failures surface the HTTP response so upgrade issues are easy to debug. Successful sessions stream events into the UI and history with metadata for direction, opcode, sizes, and close status. The summary exposed to templates and scripts includes `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, and `closeReason`.
+
+> **Heads-up:** When you keep a WebSocket URL in `@const`, `@global`, or `@var`, write the request line as `GET {{ws.url}}` (or whichever variable you use). The parser needs the explicit method to recognise the line as a WebSocket request before template expansion. Literal `ws://` / `wss://` URLs without a method still work when written directly.
+
+### Stream tab, history, and console
+
+- The Stream tab appears automatically whenever a streaming session is active. Scroll to review frames, press `b` to bookmark important events, and switch tabs with the arrow keys (`Ctrl+H` / `Ctrl+L`).
+- Toggle the interactive WebSocket console with `Ctrl+I` while the Stream tab is focused. Cycle payload modes with `F2` (text → JSON → base64 → file), send payloads with `Ctrl+S` or `Ctrl+Enter`, reuse previous payloads with the arrow keys, issue ping frames via `Ctrl+P`, close gracefully with `Ctrl+W`, and clear the live buffer with `Ctrl+L`.
+- Completed transcripts are saved alongside the request in history with summary headers (`X-Resterm-Stream-Type`, `X-Resterm-Stream-Summary`). Scripts and captures can access the same data via `stream.*` templates and APIs (see [Scripting](#scripting-api)).
+
 ### Workflows (multi-step workflows)
 
 Group existing requests into repeatable workflows using `@workflow` blocks. Each step references a request by name and can override variables or expectations.
@@ -289,7 +371,7 @@ POST https://example.com/users
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 
-Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Stats** tab shows a workflow summary, and a consolidated entry is written to history so you can review results later.
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Stats** tab shows a workflow summary (including started/ended timestamps), and a consolidated entry is written to history so you can review results later.
 
 Key directives and tokens:
 
@@ -453,6 +535,13 @@ Objects:
   - `body()` (raw string)
   - `json()` (parsed JSON or `null`)
   - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map)
+- `stream`
+  - `enabled()` – returns `true` when the current response is an SSE or WebSocket transcript.
+  - `kind()` – returns `"sse"` or `"websocket"`.
+  - `summary()` – copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.).
+  - `events()` – array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
+  - `onEvent(fn)` – registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
+  - `onClose(fn)` – registers a callback invoked once with the summary after all events replay.
 - `vars` – same API as pre-request scripts (allows reading request/file/global values and writing request-scope values for assertions).
 - `vars.global` – identical to pre-request usage; changes persist after the script.
 - `console.*` – same placeholders as above.
@@ -633,7 +722,7 @@ text = "#eceff4"
 | Section | Keys | Notes |
 | --- | --- | --- |
 | `[metadata]` | `name`, `description`, `author`, `version`, `tags[]` | Informational only; shown in the selector. |
-| `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
+| `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers`, `stream_content`, `stream_timestamp`, `stream_direction_send`, `stream_direction_receive`, `stream_direction_info`, `stream_event_name`, `stream_data`, `stream_binary`, `stream_summary`, `stream_error`, `stream_console_title`, `stream_console_mode`, `stream_console_status`, `stream_console_prompt`, `stream_console_input`, `stream_console_input_focused` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
 | `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground` | Frequently reused single colours. |
 | `[editor_metadata]` | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]` | Controls metadata highlighting inside the editor. |
 | `[[header_segments]]` | `background`, `foreground`, `border`, `accent` | Rotating header chips; add multiple tables for rotation. |
@@ -643,6 +732,8 @@ Setting `editor_metadata.directive_default` recolours every built-in directive (
 
 Set `editor_metadata.request_line` to recolour the full request line (`POST https://…`). If you omit it, Resterm falls back to the directive default.
 Use `editor_metadata.request_separator` for the `###` section dividers and `editor_metadata.comment_marker` for the `#` / `//` prefixes at the start of comment lines.
+
+`styles.stream_*` keys control the transcript viewer (events, timestamps, direction badges). `styles.stream_console_*` tweak the interactive WebSocket console (prompt, status line, input field).
 
 `styles.list_item_*` keys control the sidebar, history, and picker list rows. `styles.response_content`, `styles.response_content_raw`, and `styles.response_content_headers` colour the response panes for Raw and Headers (with the general key applied first, then the tab-specific override).
 
@@ -681,7 +772,7 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 - If a template fails to expand (undefined variable), Resterm leaves the placeholder intact and surfaces an error banner.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
 - Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
-- `Ctrl+Shift+V` pins the focused response pane—ideal for diffing the last good response against the current attempt.
+- `Ctrl+Shift+V` pins the focused response pane-ideal for diffing the last good response against the current attempt.
 - Keep secrets in environment files or runtime globals marked as `-secret`. Remember that history stores the raw response unless you add `@no-log` or redact the payload yourself.
 
 For additional questions or feature requests, open an issue on GitHub.

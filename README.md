@@ -45,15 +45,16 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 ## Highlights
 - **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).
+- **Live streaming** WebSocket and Server-Sent Events with scripted `@ws` steps, automatic transcripts and an interactive console for ad-hoc frames.
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
-- **Pretty/Raw/Header/Diff/History** views with optional split panes and pinned comparisons.
-- **Variable** scopes, captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
+- **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
+- **Variable** scopes, compile-time constants (`@const`), captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
 - **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, metadata).
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
-- **OpenAPI parser** - convert OpenAPI specs file into resterm .http file
+- **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
 
 
 ## Installation
@@ -167,6 +168,7 @@ with multiline value' \
 
 If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically. Resterm loads the file attachment, preserves multiline form fields, and applies compression/auth headers without extra tweaks.
 
+
 ## Workflows
 
 - Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
@@ -197,6 +199,77 @@ The repository ships with `openapi-specs.yml`, an intentionally full-featured sp
 
 > [!NOTE]
 > Resterm relies on [`kin-openapi`](https://github.com/getkin/kin-openapi), which currently supports OpenAPI documents up to **v3.0.1**. Work on v3.1 support is tracked in [getkin/kin-openapi#1102](https://github.com/getkin/kin-openapi/pull/1102).
+
+## Streaming (WebSocket & SSE)
+
+Streaming requests are first-class citizens in Resterm. Enable the **Stream** response tab to watch events in real time, scrub through history and replay transcripts from the History pane.
+
+### Server-Sent Events
+
+Annotate any HTTP request with `# @sse` to keep the connection open and capture events:
+
+```http
+### Notification feed
+# @name streamNotifications
+# @sse duration=1m idle=5s max-events=50
+GET https://api.example.com/notifications
+Accept: text/event-stream
+```
+
+`@sse` accepts:
+
+- `duration` / `timeout` - total session timeout before Resterm aborts the stream.
+- `idle` / `idle-timeout` - maximum gap between events before the stream is closed.
+- `max-events` — stop after N events (Resterm still records the transcript).
+- `max-bytes` / `limit-bytes` - cap downloaded payload size.
+
+The Pretty/Raw/Headers tabs collapse into a JSON transcript when a stream finishes and the history entry exposes a summary (`events`, `bytes`, `reason`).
+
+### WebSockets
+
+Switch any request to WebSocket mode with `# @websocket` and describe scripted steps with `# @ws` lines:
+
+```http
+### Chat handshake
+# @name websocketChat
+# @websocket timeout=10s receive-timeout=5s subprotocols=chat.v2,json
+# @ws send {"type":"hello"}
+# @ws wait 1s
+# @ws send-json {"type":"message","text":"Hi"}
+# @ws close 1000 "client done"
+wss://chat.example.com/stream
+```
+
+or if you prefer just just to open websocket connection:
+```http
+### Chat
+# @name websocketChat
+# @websocket
+ws://chat.example.com/stream
+```
+
+WebSocket options mirror runtime controls:
+
+- `timeout` - handshake deadline.
+- `receive-timeout` - idle receive window (0 keeps it open indefinitely).
+- `max-message-bytes` - hard cap for inbound payloads.
+- `subprotocols` - comma-separated list sent during the handshake.
+- `compression=<true|false>` - explicitly enable or disable per-message compression.
+
+Each `@ws` directive emits a step:
+
+- `send`/`send-json`/`send-base64`/`send-file` send text, JSON, base64, or file payloads.
+- `ping` / `pong` transmit control frames.
+- `wait <duration>` pauses before the next scripted action.
+- `close [code] [reason]` ends the session with an optional status.
+
+The transcript records sender/receiver, opcode, sizes, close metadata and elapsed time. History entries keep the conversation for later review or scripted assertions.
+
+### Stream viewer & console
+
+- Focus the response pane with `g+p`, then switch to the Stream tab using the left/right arrow keys (or `Ctrl+H` / `Ctrl+L`). Follow events live, bookmark frames and scrub after the stream completes.
+- Toggle the interactive WebSocket console with `Ctrl+I` or `g+r` while the Stream tab is focused. Use `F2` to cycle payload modes (text, JSON, base64, file), `Ctrl+S` (or `Ctrl+Enter`) to send, arrows to navigate history, `Ctrl+P` for ping, `Ctrl+W` to close and `Ctrl+L` to clear the buffer.
+- Scripted tests can consume transcripts via the `stream` API (`stream.kind`, `stream.summary`, `stream.events`, `stream.onEvent()`), enabling assertions on streaming workloads.
 
 ## Quick Configuration Overview
 
@@ -230,3 +303,23 @@ Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_TH
 ## Documentation
 
 The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
+### Streaming Requests
+
+Use `@sse` to keep an HTTP request open for Server-Sent Events and `@websocket`/`@ws` directives to script WebSocket conversations directly in your `.http` files.
+
+```http
+### Receive notifications
+# @name streamNotifications
+# @sse duration=1m idle=5s max-events=10
+GET https://api.example.com/notifications
+
+### WebSocket handshake with scripted steps
+# @name chat
+# @websocket receive-timeout=2s subprotocols=chat.v1
+# @ws send-json {"type":"hello"}
+# @ws wait 1s
+# @ws close 1000 closing
+GET wss://chat.example.com/socket
+```
+
+Transcripts flow into the Stream tab, history, and scripting APIs so you can diff, test, and archive streaming interactions without leaving the terminal.

@@ -66,6 +66,22 @@ type StylesSpec struct {
 	ResponseContent               *StyleSpec `json:"response_content" toml:"response_content"`
 	ResponseContentRaw            *StyleSpec `json:"response_content_raw" toml:"response_content_raw"`
 	ResponseContentHeaders        *StyleSpec `json:"response_content_headers" toml:"response_content_headers"`
+	StreamContent                 *StyleSpec `json:"stream_content" toml:"stream_content"`
+	StreamTimestamp               *StyleSpec `json:"stream_timestamp" toml:"stream_timestamp"`
+	StreamDirectionSend           *StyleSpec `json:"stream_direction_send" toml:"stream_direction_send"`
+	StreamDirectionReceive        *StyleSpec `json:"stream_direction_receive" toml:"stream_direction_receive"`
+	StreamDirectionInfo           *StyleSpec `json:"stream_direction_info" toml:"stream_direction_info"`
+	StreamEventName               *StyleSpec `json:"stream_event_name" toml:"stream_event_name"`
+	StreamData                    *StyleSpec `json:"stream_data" toml:"stream_data"`
+	StreamBinary                  *StyleSpec `json:"stream_binary" toml:"stream_binary"`
+	StreamSummary                 *StyleSpec `json:"stream_summary" toml:"stream_summary"`
+	StreamError                   *StyleSpec `json:"stream_error" toml:"stream_error"`
+	StreamConsoleTitle            *StyleSpec `json:"stream_console_title" toml:"stream_console_title"`
+	StreamConsoleMode             *StyleSpec `json:"stream_console_mode" toml:"stream_console_mode"`
+	StreamConsoleStatus           *StyleSpec `json:"stream_console_status" toml:"stream_console_status"`
+	StreamConsolePrompt           *StyleSpec `json:"stream_console_prompt" toml:"stream_console_prompt"`
+	StreamConsoleInput            *StyleSpec `json:"stream_console_input" toml:"stream_console_input"`
+	StreamConsoleInputFocused     *StyleSpec `json:"stream_console_input_focused" toml:"stream_console_input_focused"`
 }
 
 type ColorsSpec struct {
@@ -251,6 +267,54 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		return Theme{}, err
 	}
 	if err := apply("response_content_headers", &cloned.ResponseContentHeaders, spec.Styles.ResponseContentHeaders); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_content", &cloned.StreamContent, spec.Styles.StreamContent); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_timestamp", &cloned.StreamTimestamp, spec.Styles.StreamTimestamp); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_direction_send", &cloned.StreamDirectionSend, spec.Styles.StreamDirectionSend); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_direction_receive", &cloned.StreamDirectionReceive, spec.Styles.StreamDirectionReceive); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_direction_info", &cloned.StreamDirectionInfo, spec.Styles.StreamDirectionInfo); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_event_name", &cloned.StreamEventName, spec.Styles.StreamEventName); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_data", &cloned.StreamData, spec.Styles.StreamData); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_binary", &cloned.StreamBinary, spec.Styles.StreamBinary); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_summary", &cloned.StreamSummary, spec.Styles.StreamSummary); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_error", &cloned.StreamError, spec.Styles.StreamError); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_console_title", &cloned.StreamConsoleTitle, spec.Styles.StreamConsoleTitle); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_console_mode", &cloned.StreamConsoleMode, spec.Styles.StreamConsoleMode); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_console_status", &cloned.StreamConsoleStatus, spec.Styles.StreamConsoleStatus); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_console_prompt", &cloned.StreamConsolePrompt, spec.Styles.StreamConsolePrompt); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_console_input", &cloned.StreamConsoleInput, spec.Styles.StreamConsoleInput); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("stream_console_input_focused", &cloned.StreamConsoleInputFocused, spec.Styles.StreamConsoleInputFocused); err != nil {
 		return Theme{}, err
 	}
 

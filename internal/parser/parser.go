@@ -3,6 +3,7 @@ package parser
 import (
 	"bufio"
 	"bytes"
+	"net/http"
 	"regexp"
 	"strconv"
 	"strings"
@@ -49,6 +50,7 @@ type documentBuilder struct {
 	request    *requestBuilder
 	fileVars   []restfile.Variable
 	globalVars []restfile.Variable
+	consts     []restfile.Constant
 	inBlock    bool
 	workflow   *workflowBuilder
 }
@@ -66,6 +68,9 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
+	sse               *sseBuilder
+	websocket         *wsBuilder
+	bodyOptions       restfile.BodyOptions
 }
 
 type workflowBuilder struct {
@@ -209,6 +214,16 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 		return
 	}
 
+	if url, ok := httpbuilder.ParseWebSocketURLLine(line); ok {
+		if !b.ensureRequest(lineNumber) {
+			return
+		}
+
+		b.request.http.SetMethodAndURL(http.MethodGet, url)
+		b.appendLine(line)
+		return
+	}
+
 	if b.inRequest && b.request.http.HasMethod() && !b.request.http.HeaderDone() {
 		if idx := strings.Index(line, ":"); idx != -1 {
 			headerName := strings.TrimSpace(line[:idx])
@@ -305,6 +320,13 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		return
 	}
 
+	if key == "const" {
+		if name, value := parseNameValue(rest); name != "" {
+			b.addConstant(name, value, line)
+		}
+		return
+	}
+
 	if !b.ensureRequest(line) {
 		return
 	}
@@ -312,13 +334,25 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if b.request.grpc.HandleDirective(key, rest) {
 		return
 	}
+	if b.request.websocket.HandleDirective(key, rest) {
+		return
+	}
+	if b.request.sse.HandleDirective(key, rest) {
+		return
+	}
 	if b.request.graphql.HandleDirective(key, rest) {
 		return
+	}
+	if key == "body" {
+		if b.request != nil && b.request.handleBodyDirective(rest) {
+			return
+		}
 	}
 	switch key {
 	case "name":
 		if rest != "" {
-			b.request.metadata.Name = rest
+			value := trimQuotes(strings.TrimSpace(rest))
+			b.request.metadata.Name = value
 		}
 	case "description", "desc":
 		if b.request.metadata.Description != "" {
@@ -700,6 +734,15 @@ func (b *documentBuilder) addGlobalVariable(name, value string, line int, secret
 	b.globalVars = append(b.globalVars, variable)
 }
 
+func (b *documentBuilder) addConstant(name, value string, line int) {
+	constant := restfile.Constant{
+		Name:  name,
+		Value: value,
+		Line:  line,
+	}
+	b.consts = append(b.consts, constant)
+}
+
 func splitFirst(text string) (string, string) {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" {
@@ -737,7 +780,7 @@ func splitDirective(text string) (string, string) {
 		return "", ""
 	}
 
-	key := strings.ToLower(fields[0])
+	key := strings.ToLower(strings.TrimRight(fields[0], ":"))
 	var rest string
 	if len(text) > len(fields[0]) {
 		rest = strings.TrimSpace(text[len(fields[0]):])
@@ -902,6 +945,30 @@ func (r *requestBuilder) appendScriptInclude(kind, path string) {
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: kind, FilePath: path})
 }
 
+func (r *requestBuilder) handleBodyDirective(rest string) bool {
+	value := strings.TrimSpace(rest)
+	if value == "" {
+		return false
+	}
+	key, val := splitDirective(value)
+	if key == "" {
+		key = value
+	}
+	switch strings.ToLower(key) {
+	case "expand", "expand-templates":
+		enabled := true
+		if strings.TrimSpace(val) != "" {
+			if parsed, ok := parseBool(val); ok {
+				enabled = parsed
+			}
+		}
+		r.bodyOptions.ExpandTemplates = enabled
+		return true
+	default:
+		return false
+	}
+}
+
 func (b *documentBuilder) handleBodyLine(line string) {
 	if b.request.graphql.HandleBodyLine(line) {
 		return
@@ -942,6 +1009,8 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 		http:              httpbuilder.New(),
 		graphql:           graphqlbuilder.New(),
 		grpc:              grpcbuilder.New(),
+		sse:               newSSEBuilder(),
+		websocket:         newWebSocketBuilder(),
 	}
 	return true
 }
@@ -989,6 +1058,7 @@ func (b *documentBuilder) finish() {
 	b.flushWorkflow(0)
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
+	b.doc.Constants = append(b.doc.Constants, b.consts...)
 }
 
 func (r *requestBuilder) build() *restfile.Request {
@@ -1006,26 +1076,49 @@ func (r *requestBuilder) build() *restfile.Request {
 		OriginalText: strings.Join(r.originalLines, "\n"),
 	}
 
-	if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok {
-		req.GRPC = grpcReq
-		req.Body = body
-		if mime != "" {
-			req.Body.MimeType = mime
+	if wsReq, ok := r.websocket.Finalize(); ok {
+		req.WebSocket = wsReq
+	}
+	if sseReq, ok := r.sse.Finalize(); ok {
+		req.SSE = sseReq
+	}
+
+	if req.WebSocket == nil && req.SSE == nil {
+		if grpcReq, body, mime, ok := r.grpc.Finalize(r.http.MimeType()); ok {
+			req.GRPC = grpcReq
+			req.Body = body
+			if mime != "" {
+				req.Body.MimeType = mime
+			}
+			if r.settings != nil {
+				req.Settings = r.settings
+			}
+			return req
+		} else if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
+			req.Body.GraphQL = gql
+			if mime != "" {
+				req.Body.MimeType = mime
+			}
+		} else {
+			if file := r.http.BodyFromFile(); file != "" {
+				req.Body.FilePath = file
+			} else if text := r.http.BodyText(); text != "" {
+				req.Body.Text = text
+			}
+			if mime := r.http.MimeType(); mime != "" {
+				req.Body.MimeType = mime
+			}
+			req.Body.Options = r.bodyOptions
 		}
-	} else if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
-		req.Body.GraphQL = gql
-		if mime != "" {
-			req.Body.MimeType = mime
-		}
-	} else {
-		if file := r.http.BodyFromFile(); file != "" {
-			req.Body.FilePath = file
-		} else if text := r.http.BodyText(); text != "" {
-			req.Body.Text = text
-		}
-		if mime := r.http.MimeType(); mime != "" {
-			req.Body.MimeType = mime
-		}
+	}
+
+	if file := r.http.BodyFromFile(); file != "" {
+		req.Body.FilePath = file
+	} else if text := r.http.BodyText(); text != "" {
+		req.Body.Text = text
+	}
+	if mime := r.http.MimeType(); mime != "" {
+		req.Body.MimeType = mime
 	}
 
 	if r.settings != nil {

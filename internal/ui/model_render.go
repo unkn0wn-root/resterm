@@ -5,6 +5,7 @@ import (
 	"math"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
@@ -601,65 +602,17 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	}
 
 	tabs := m.availableResponseTabs()
-	labels := make([]string, 0, len(tabs))
-	for _, tab := range tabs {
-		label := m.responseTabLabel(tab)
-		if tab == pane.activeTab {
-			if focused {
-				label = tabIndicatorPrefix + label
-			}
-			labels = append(labels, m.theme.TabActive.Render(label))
-		} else {
-			labels = append(labels, m.theme.TabInactive.Render(label))
-		}
-	}
-
-	mode := "Pinned"
-	if pane.followLatest {
-		mode = "Live"
-	}
-	badge := lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#A6A1BB")).
-		PaddingLeft(2).
-		Faint(!focused || m.focus != focusResponse).
-		Render(strings.ToUpper(mode))
-
-	row := strings.Join(labels, " ")
-	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
 	lineWidth := maxInt(width, 1)
-	padding := 0
-	if focused && m.focus == focusResponse {
-		padding = 1
+	rowStyle := m.theme.Tabs.Width(lineWidth).Align(lipgloss.Center)
+	contentLimit := lineWidth
+	if contentLimit < 1 {
+		contentLimit = 1
 	}
-	innerWidth := maxInt(lineWidth-padding*2, 1)
-	rowStyle := m.theme.Tabs.
-		Width(innerWidth).
-		Align(lipgloss.Center)
-	row = rowStyle.Render(row)
-	divider := m.theme.PaneDivider.
-		Width(innerWidth).
-		Render(strings.Repeat("─", innerWidth))
+	rowContent := m.buildTabRowContent(tabs, pane.activeTab, focused, pane.followLatest, contentLimit)
+	row := rowStyle.Render(rowContent)
+	row = clampLines(row, 1)
+	divider := m.theme.PaneDivider.Width(lineWidth).Render(strings.Repeat("─", lineWidth))
 	block := lipgloss.JoinVertical(lipgloss.Left, row, divider)
-	if padding > 0 {
-		pad := strings.Repeat(" ", padding)
-		block = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			pad,
-			block,
-			pad,
-		)
-	}
-	blockWidth := lipgloss.Width(block)
-	if lineWidth > blockWidth {
-		block = lipgloss.Place(
-			lineWidth,
-			lipgloss.Height(block),
-			lipgloss.Center,
-			lipgloss.Top,
-			block,
-			lipgloss.WithWhitespaceChars(" "),
-		)
-	}
 	return block
 }
 
@@ -673,6 +626,129 @@ func (m Model) renderResponseDivider(left, right string) string {
 	}
 	line := strings.Repeat("│\n", height-1) + "│"
 	return m.theme.PaneDivider.Render(line)
+}
+
+func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focused bool, followLatest bool, limit int) string {
+	if limit <= 0 {
+		limit = 1
+	}
+	mode := "Pinned"
+	if followLatest {
+		mode = "Live"
+	}
+	baseBadgeStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#A6A1BB"))
+	if !focused || m.focus != focusResponse {
+		baseBadgeStyle = baseBadgeStyle.Faint(true)
+	}
+	type plan struct {
+		activeStyle   lipgloss.Style
+		inactiveStyle lipgloss.Style
+		badgeStyle    lipgloss.Style
+		badgeText     string
+		labelFn       func(full string, isActive bool) string
+	}
+	plans := []plan{
+		{
+			activeStyle:   m.theme.TabActive,
+			inactiveStyle: m.theme.TabInactive,
+			badgeStyle:    baseBadgeStyle.PaddingLeft(2),
+			badgeText:     strings.ToUpper(mode),
+			labelFn: func(full string, isActive bool) string {
+				text := full
+				if isActive && focused {
+					text = tabIndicatorPrefix + text
+				}
+				return text
+			},
+		},
+		{
+			activeStyle:   m.theme.TabActive.Padding(0, 1),
+			inactiveStyle: m.theme.TabInactive.Padding(0),
+			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
+			badgeText:     strings.ToUpper(mode),
+			labelFn: func(full string, isActive bool) string {
+				if isActive {
+					if focused {
+						return tabIndicatorPrefix + full
+					}
+					return full
+				}
+				return shortenLabel(full, 4)
+			},
+		},
+		{
+			activeStyle:   m.theme.TabActive.Padding(0),
+			inactiveStyle: m.theme.TabInactive.Padding(0),
+			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
+			badgeText:     firstRuneUpper(mode),
+			labelFn: func(full string, isActive bool) string {
+				label := firstRuneUpper(full)
+				if label == "" {
+					label = "-"
+				}
+				if isActive && focused {
+					return tabIndicatorPrefix + label
+				}
+				return label
+			},
+		},
+	}
+
+	for idx, plan := range plans {
+		segments := make([]string, 0, len(tabs))
+		for _, tab := range tabs {
+			full := m.responseTabLabel(tab)
+			text := plan.labelFn(full, tab == active)
+			style := plan.inactiveStyle
+			if tab == active {
+				style = plan.activeStyle
+			}
+			segments = append(segments, style.Render(text))
+		}
+		row := strings.Join(segments, " ")
+		badge := plan.badgeStyle.Render(plan.badgeText)
+		row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
+		if lipgloss.Width(row) <= limit && !strings.Contains(row, "\n") {
+			return row
+		}
+		if idx == len(plans)-1 {
+			return ansi.Truncate(row, limit, "…")
+		}
+	}
+	return ""
+}
+
+func clampLines(content string, maxLines int) string {
+	if maxLines <= 0 {
+		return ""
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) <= maxLines {
+		return content
+	}
+	return strings.Join(lines[:maxLines], "\n")
+}
+
+func shortenLabel(label string, maxRunes int) string {
+	trimmed := strings.TrimSpace(label)
+	if trimmed == "" || maxRunes <= 0 {
+		return ""
+	}
+	runes := []rune(trimmed)
+	if len(runes) <= maxRunes {
+		return trimmed
+	}
+	return string(runes[:maxRunes])
+}
+
+func firstRuneUpper(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	r, _ := utf8.DecodeRuneInString(trimmed)
+	return strings.ToUpper(string(r))
 }
 
 func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
