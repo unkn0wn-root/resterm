@@ -1781,7 +1781,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+Shift+O", "Refresh workspace"),
 		helpRow(m, "Ctrl+V / Ctrl+U", "Split response vertically / horizontally"),
 		helpRow(m, "Ctrl+Shift+V", "Pin or unpin focused response pane"),
-		helpRow(m, "Ctrl+F, ←/→", "Send future responses to selected pane"),
+		helpRow(m, "Ctrl+F or Ctrl+B, ←/→", "Send future responses to selected pane"),
 		helpRow(m, "Ctrl+G", "Show globals summary"),
 		helpRow(m, "Ctrl+Shift+G", "Clear globals for environment"),
 		helpRow(m, "Ctrl+E", "Environment selector"),

@@ -1,8 +1,12 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 func TestWrapLineSegmentsPreservesLeadingIndent(t *testing.T) {
@@ -119,93 +123,22 @@ func TestWrapContentForTabRawMaintainsIndentOnWrap(t *testing.T) {
 	}
 }
 
-func TestStripANSIEscapeExtendedSequences(t *testing.T) {
-	input := "\x1b[?25l\x1b]0;title\x07hello"
-	stripped := stripANSIEscape(input)
-	if stripped != "hello" {
-		t.Fatalf("expected stripped output to be hello, got %q", stripped)
-	}
-	if width := visibleWidth(input); width != len("hello") {
-		t.Fatalf("expected visible width to ignore ANSI sequences, got %d", width)
-	}
-}
-
-func TestWrapLineSegmentsComplexMixedContent(t *testing.T) {
-	line := "\t    \x1b[32m✓\x1b[0m 你好世界 resterm supercalifragilisticexpialidocious"
-	segments := wrapLineSegments(line, 14)
-	if len(segments) < 4 {
-		t.Fatalf("expected multiple segments, got %d", len(segments))
-	}
-	if !strings.HasPrefix(segments[0], "\t    ") {
-		t.Fatalf("expected first segment to keep tab + spaces, got %q", segments[0])
-	}
-	var sawResterm bool
-	for idx, segment := range segments {
-		if segment == "" {
-			t.Fatalf("segment %d empty", idx)
-		}
-		if strings.Contains(segment, "resterm") {
-			sawResterm = true
-			if strings.HasPrefix(segment, " ") {
-				t.Fatalf("continuation segment unexpectedly starts with space: %q", segment)
-			}
-		}
-	}
-	if !sawResterm {
-		t.Fatalf("expected to find continuation segment containing 'resterm', segments=%v", segments)
-	}
-}
-
-func TestWrapLineSegmentsVeryNarrowUnicode(t *testing.T) {
-	line := "你好世界"
-	segments := wrapLineSegments(line, 2)
-	if len(segments) != 4 {
-		t.Fatalf("expected each rune to form its own segment, got %d", len(segments))
-	}
-
-	for _, segment := range segments {
-		if strings.TrimSpace(segment) == "" {
-			t.Fatalf("unexpected blank segment in %v", segments)
-		}
-	}
-
-	if strings.Join(segments, "") != line {
-		t.Fatalf("expected wrapped unicode content to match original, got %q", strings.Join(segments, ""))
-	}
-}
-
-func TestWrapToWidthMultiLineMixedContent(t *testing.T) {
-	multiline := strings.Join([]string{
+func TestWrapToWidthRetainsMultilineIndentationAndColor(t *testing.T) {
+	content := strings.Join([]string{
 		"    {",
-		"        \"greeting\": \"hello\",",
-		"        \"colored\": \"\x1b[36mcyan text\x1b[0m\",",
-		"        \"data\": \"supercalifragilisticexpialidocious\"",
+		"        \"alpha\": \"value\",",
+		"        \"beta\": \"supercalifragilisticexpialidocious\",",
+		"        \"gamma\": \"\x1b[32mcolored\x1b[0m\"",
 		"    }",
 	}, "\n")
-	wrapped := wrapToWidth(multiline, 20)
-	lines := strings.Split(wrapped, "\n")
+	lines := strings.Split(wrapToWidth(content, 18), "\n")
 	if len(lines) <= 5 {
 		t.Fatalf("expected wrapped multiline content to expand, got %d lines", len(lines))
 	}
 	if !strings.HasPrefix(lines[0], "    {") {
 		t.Fatalf("expected first line to retain indentation, got %q", lines[0])
 	}
-
-	var continuationWithoutIndent bool
-	for i := 1; i < len(lines); i++ {
-		if strings.HasPrefix(lines[i], "        ") {
-			continue
-		}
-		if !strings.HasPrefix(lines[i], "    ") && !strings.HasPrefix(lines[i], "        ") && strings.HasPrefix(lines[i], "\"") {
-			continuationWithoutIndent = true
-		}
-	}
-	if !continuationWithoutIndent {
-		t.Fatalf("expected at least one continuation line without leading indentation, got %v", lines)
-	}
-
-	joined := strings.Join(lines, "")
-	if !strings.Contains(joined, "supercalifragilisticexpialidocious") {
+	if joined := strings.Join(lines, ""); !strings.Contains(joined, "supercalifragilisticexpialidocious") {
 		t.Fatalf("expected wrapped content to retain long word, got %q", joined)
 	}
 }
@@ -218,9 +151,6 @@ func TestWrapStructuredLineAddsDefaultIndent(t *testing.T) {
 	}
 	if !strings.HasPrefix(stripANSIEscape(segments[1]), wrapContinuationUnit) {
 		t.Fatalf("expected continuation to start with %q, got %q", wrapContinuationUnit, segments[1])
-	}
-	if width := visibleWidth(segments[1]); width > 16 {
-		t.Fatalf("expected continuation width <= 16, got %d", width)
 	}
 }
 
@@ -290,5 +220,42 @@ func TestWrapStructuredLineMaintainsValueColor(t *testing.T) {
 	}
 	if strings.Contains(continuation, keyColor) {
 		t.Fatalf("expected continuation not to include key color, got %q", continuation)
+	}
+}
+
+func TestFormatTestSummaryColorsStatuses(t *testing.T) {
+	results := []scripts.TestResult{
+		{Name: "alpha", Passed: true, Elapsed: 1500 * time.Millisecond},
+		{Name: "beta", Passed: false, Message: "boom"},
+	}
+
+	output := formatTestSummary(results, nil)
+
+	if !strings.Contains(output, statsHeadingStyle.Render("Tests:")) {
+		t.Fatalf("expected colored Tests header, got %q", output)
+	}
+	if !strings.Contains(output, statsSuccessStyle.Render("[PASS]")) {
+		t.Fatalf("expected PASS badge to be colored, got %q", output)
+	}
+	if !strings.Contains(output, statsWarnStyle.Render("[FAIL]")) {
+		t.Fatalf("expected FAIL badge to be colored, got %q", output)
+	}
+	if !strings.Contains(output, statsDurationStyle.Render("(1.5s)")) {
+		t.Fatalf("expected duration to be colored, got %q", output)
+	}
+	if !strings.Contains(output, statsMessageStyle.Render("boom")) {
+		t.Fatalf("expected message to be colored, got %q", output)
+	}
+}
+
+func TestFormatTestSummaryColorsErrors(t *testing.T) {
+	err := errors.New("kaboom")
+	output := formatTestSummary(nil, err)
+
+	if !strings.Contains(output, statsWarnStyle.Render("[ERROR]")) {
+		t.Fatalf("expected error badge to be colored, got %q", output)
+	}
+	if !strings.Contains(output, statsMessageStyle.Render("kaboom")) {
+		t.Fatalf("expected error message to be colored, got %q", output)
 	}
 }

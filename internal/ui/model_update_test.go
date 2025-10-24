@@ -886,40 +886,52 @@ func TestHandleKeyFindPendingIgnoresDeleteOperator(t *testing.T) {
 }
 
 func TestResponsePaneFocusChord(t *testing.T) {
-	model := New(Config{})
-	model.ready = true
-	model.width = 120
-	model.height = 40
-	if cmd := model.applyLayout(); cmd != nil {
-		collectMsgs(cmd)
+	tests := []struct {
+		name string
+		key  tea.KeyType
+	}{
+		{name: "CtrlF", key: tea.KeyCtrlF},
+		{name: "CtrlB", key: tea.KeyCtrlB},
 	}
 
-	model.setFocus(focusResponse)
-	if out := model.toggleResponseSplitVertical(); out != nil {
-		collectMsgs(out)
-	}
-	if !model.responseSplit {
-		t.Fatalf("expected split to be enabled")
-	}
-	if model.responsePaneFocus != responsePanePrimary {
-		t.Fatalf("expected initial focus on primary pane")
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			model := New(Config{})
+			model.ready = true
+			model.width = 120
+			model.height = 40
+			if cmd := model.applyLayout(); cmd != nil {
+				collectMsgs(cmd)
+			}
 
-	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyCtrlF}); cmd != nil {
-		collectMsgs(cmd)
-	}
-	if !model.responsePaneChord {
-		t.Fatalf("expected ctrl+f to arm pane chord")
-	}
+			model.setFocus(focusResponse)
+			if out := model.toggleResponseSplitVertical(); out != nil {
+				collectMsgs(out)
+			}
+			if !model.responseSplit {
+				t.Fatalf("expected split to be enabled")
+			}
+			if model.responsePaneFocus != responsePanePrimary {
+				t.Fatalf("expected initial focus on primary pane")
+			}
 
-	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRight}); cmd != nil {
-		collectMsgs(cmd)
-	}
-	if model.responsePaneFocus != responsePaneSecondary {
-		t.Fatalf("expected chord to switch focus to secondary pane")
-	}
-	if model.responsePaneChord {
-		t.Fatalf("expected chord to clear after navigation")
+			if cmd := model.handleKey(tea.KeyMsg{Type: tc.key}); cmd != nil {
+				collectMsgs(cmd)
+			}
+			if !model.responsePaneChord {
+				t.Fatalf("expected %s to arm pane chord", tc.name)
+			}
+
+			if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRight}); cmd != nil {
+				collectMsgs(cmd)
+			}
+			if model.responsePaneFocus != responsePaneSecondary {
+				t.Fatalf("expected chord to switch focus to secondary pane")
+			}
+			if model.responsePaneChord {
+				t.Fatalf("expected chord to clear after navigation")
+			}
+		})
 	}
 }
 

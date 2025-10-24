@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -55,23 +56,35 @@ func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 	}
 
 	builder := strings.Builder{}
-	builder.WriteString("Tests:\n")
+	builder.WriteString(statsHeadingStyle.Render("Tests:") + "\n")
 	if scriptErr != nil {
-		builder.WriteString(fmt.Sprintf("  [error] %v\n", scriptErr))
+		errorLabel := statsWarnStyle.Render("[ERROR]")
+		builder.WriteString("  " + errorLabel + " " + statsMessageStyle.Render(scriptErr.Error()) + "\n")
 	}
 	for _, result := range results {
-		status := "PASS"
+		statusStyle := statsSuccessStyle
+		statusLabel := "[PASS]"
 		if !result.Passed {
-			status = "FAIL"
+			statusStyle = statsWarnStyle
+			statusLabel = "[FAIL]"
 		}
-		line := fmt.Sprintf("  [%s] %s", status, result.Name)
-		if result.Message != "" {
-			line += fmt.Sprintf(" – %s", result.Message)
+		line := strings.Builder{}
+		line.WriteString("  ")
+		line.WriteString(statusStyle.Render(statusLabel))
+		if strings.TrimSpace(result.Name) != "" {
+			line.WriteString(" ")
+			line.WriteString(statsValueStyle.Render(result.Name))
+		}
+		if strings.TrimSpace(result.Message) != "" {
+			line.WriteString(" – ")
+			line.WriteString(statsMessageStyle.Render(result.Message))
 		}
 		if result.Elapsed > 0 {
-			line += fmt.Sprintf(" (%s)", result.Elapsed.Truncate(time.Millisecond))
+			dur := result.Elapsed.Truncate(time.Millisecond)
+			line.WriteString(" ")
+			line.WriteString(statsDurationStyle.Render(fmt.Sprintf("(%s)", dur)))
 		}
-		builder.WriteString(line + "\n")
+		builder.WriteString(line.String() + "\n")
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
@@ -81,29 +94,59 @@ func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult,
 		return ""
 	}
 
-	parts := []string{
-		fmt.Sprintf("Status: %s", resp.Status),
-		fmt.Sprintf("URL: %s", resp.EffectiveURL),
+	var lines []string
+	statusLine := renderStatusLine(resp.Status, resp.StatusCode)
+	if statusLine != "" {
+		lines = append(lines, statusLine)
 	}
-
+	if trimmedURL := strings.TrimSpace(resp.EffectiveURL); trimmedURL != "" {
+		lines = append(lines, renderLabelValue("URL", trimmedURL, statsLabelStyle, statsValueStyle))
+	}
 	if resp.Headers != nil {
 		if streamType := strings.TrimSpace(resp.Headers.Get(streamHeaderType)); streamType != "" {
-			parts = append(parts, fmt.Sprintf("Stream: %s", streamType))
+			lines = append(lines, renderLabelValue("Stream", streamType, statsLabelStyle, statsValueStyle))
 		}
 		if summary := strings.TrimSpace(resp.Headers.Get(streamHeaderSummary)); summary != "" {
-			parts = append(parts, fmt.Sprintf("Stream summary: %s", summary))
+			lines = append(lines, renderLabelValue("Stream summary", summary, statsLabelStyle, statsMessageStyle))
 		}
 	}
-
 	if resp.Duration > 0 {
-		parts = append(parts, fmt.Sprintf("Duration: %s", resp.Duration.Round(time.Millisecond)))
+		dur := resp.Duration.Round(time.Millisecond)
+		if dur <= 0 {
+			dur = resp.Duration
+		}
+		lines = append(lines, renderLabelValue("Duration", dur.String(), statsLabelStyle, statsDurationStyle))
 	}
 
-	summary := strings.Join(parts, "\n")
+	summary := strings.Join(lines, "\n")
 	if testSummary := formatTestSummary(tests, scriptErr); testSummary != "" {
 		summary = joinSections(summary, testSummary)
 	}
 	return summary
+}
+
+func renderStatusLine(status string, code int) string {
+	trimmed := strings.TrimSpace(status)
+	if trimmed == "" {
+		return ""
+	}
+	style := selectStatusStyle(code)
+	return renderLabelValue("Status", trimmed, statsLabelStyle, style)
+}
+
+func selectStatusStyle(code int) lipgloss.Style {
+	switch {
+	case code >= 500 && code <= 599:
+		return statsWarnStyle
+	case code >= 400 && code <= 499:
+		return statsWarnStyle
+	case code >= 300 && code <= 399:
+		return statsNeutralStyle
+	case code > 0:
+		return statsSuccessStyle
+	default:
+		return statsValueStyle
+	}
 }
 
 func joinSections(sections ...string) string {

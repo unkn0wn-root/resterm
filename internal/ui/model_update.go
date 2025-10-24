@@ -807,13 +807,13 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					m.focusResponsePane(responsePaneSecondary)
 				}
 				return combine(nil)
-			case "ctrl+f":
+			case "ctrl+f", "ctrl+b":
 				return combine(nil)
 			default:
 				m.responsePaneChord = false
 			}
 		}
-		if keyStr == "ctrl+f" {
+		if keyStr == "ctrl+f" || keyStr == "ctrl+b" {
 			if m.responseSplit {
 				m.responsePaneChord = true
 				return combine(nil)

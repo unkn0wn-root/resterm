@@ -87,3 +87,40 @@ func TestBuildHTTPResponseViewsPreservesLeadingWhitespace(t *testing.T) {
 		t.Fatalf("expected raw view to retain leading spaces, got %q", raw)
 	}
 }
+
+func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
+	resp := &httpclient.Response{
+		Status:     "201 Created",
+		StatusCode: 201,
+		Headers: http.Header{
+			"Content-Type": {"application/json"},
+			"X-Demo":       {"value"},
+		},
+		Body:         []byte(`{"id":1}`),
+		Duration:     3 * time.Millisecond,
+		EffectiveURL: "https://api.example.com/items",
+	}
+
+	pretty, raw, headers := buildHTTPResponseViews(resp, nil, nil)
+	if !strings.Contains(pretty, statsLabelStyle.Render("Status:")) {
+		t.Fatalf("expected colored status label, got %q", pretty)
+	}
+	if !strings.Contains(pretty, statsSuccessStyle.Render("201 Created")) {
+		t.Fatalf("expected colored status value, got %q", pretty)
+	}
+	if !strings.Contains(pretty, statsDurationStyle.Render("3ms")) {
+		t.Fatalf("expected colored duration value, got %q", pretty)
+	}
+	if strings.Contains(raw, "\x1b[") {
+		t.Fatalf("expected raw view without ANSI codes, got %q", raw)
+	}
+	if !strings.Contains(headers, statsHeadingStyle.Render("Headers:")) {
+		t.Fatalf("expected colored headers heading, got %q", headers)
+	}
+	if !strings.Contains(headers, statsLabelStyle.Render("Content-Type:")) {
+		t.Fatalf("expected colored header names, got %q", headers)
+	}
+	if !strings.Contains(headers, statsHeaderValueStyle.Render("application/json")) {
+		t.Fatalf("expected colored header values, got %q", headers)
+	}
+}

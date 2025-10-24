@@ -80,7 +80,7 @@ Content-Type: application/json
 | Refresh workspace files | `Ctrl+Shift+O` |
 | Split response vertically / horizontally | `Ctrl+V` / `Ctrl+U` |
 | Pin or unpin response pane | `Ctrl+Shift+V` |
-| Choose target pane for next response | `Ctrl+F`, then arrow keys or `h` / `l` |
+| Choose target pane for next response | `Ctrl+F` or `Ctrl+B`, then arrow keys or `h` / `l` |
 | Show globals summary / clear globals | `Ctrl+G` / `Ctrl+Shift+G` |
 | Quit | `Ctrl+Q` (or `Ctrl+D`) |
 

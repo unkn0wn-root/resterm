@@ -108,7 +108,7 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 	}
 
 	summary := buildResponseSummary(resp, tests, scriptErr)
-	headersContent := formatHTTPHeaders(resp.Headers)
+	coloredHeaders := formatHTTPHeaders(resp.Headers, true)
 
 	contentType := ""
 	if resp.Headers != nil {
@@ -126,14 +126,17 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 		rawBody = "<empty>"
 	}
 
-	headersSection := ""
-	if headersContent != "" {
-		headersSection = "Headers:\n" + headersContent
+	headersSectionColored := ""
+	if coloredHeaders != "" {
+		headersSectionColored = statsHeadingStyle.Render("Headers:") + "\n" + coloredHeaders
 	}
 
-	prettyView := joinSections(summary, prettyBody)
-	rawView := joinSections(summary, rawBody)
-	headersView := joinSections(summary, headersSection)
+	coloredSummary := summary
+	plainSummary := stripANSIEscape(summary)
+
+	prettyView := joinSections(coloredSummary, prettyBody)
+	rawView := joinSections(plainSummary, rawBody)
+	headersView := joinSections(coloredSummary, headersSectionColored)
 
 	return prettyView, rawView, headersView
 }
@@ -186,7 +189,7 @@ func indentXML(body []byte) (string, bool) {
 	return buf.String(), true
 }
 
-func formatHTTPHeaders(headers http.Header) string {
+func formatHTTPHeaders(headers http.Header, colored bool) string {
 	if len(headers) == 0 {
 		return ""
 	}
@@ -199,7 +202,21 @@ func formatHTTPHeaders(headers http.Header) string {
 	for _, name := range keys {
 		values := append([]string(nil), headers[name]...)
 		sort.Strings(values)
-		builder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
+		joined := strings.Join(values, ", ")
+		if colored {
+			if strings.TrimSpace(joined) == "" {
+				builder.WriteString(statsLabelStyle.Render(name + ":"))
+			} else {
+				builder.WriteString(renderLabelValue(name, joined, statsLabelStyle, statsHeaderValueStyle))
+			}
+		} else {
+			if strings.TrimSpace(joined) == "" {
+				builder.WriteString(fmt.Sprintf("%s:", name))
+			} else {
+				builder.WriteString(fmt.Sprintf("%s: %s", name, joined))
+			}
+		}
+		builder.WriteString("\n")
 	}
 	return strings.TrimRight(builder.String(), "\n")
 }
