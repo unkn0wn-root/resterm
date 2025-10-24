@@ -816,18 +816,6 @@ func clampLines(content string, maxLines int) string {
 	return strings.Join(lines[:maxLines], "\n")
 }
 
-func shortenLabel(label string, maxRunes int) string {
-	trimmed := strings.TrimSpace(label)
-	if trimmed == "" || maxRunes <= 0 {
-		return ""
-	}
-	runes := []rune(trimmed)
-	if len(runes) <= maxRunes {
-		return trimmed
-	}
-	return string(runes[:maxRunes])
-}
-
 func firstRuneUpper(value string) string {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
