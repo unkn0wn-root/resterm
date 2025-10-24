@@ -1,7 +1,7 @@
 <h1 align="center">Resterm</h1>
 
 <p align="center">
-  <em>a terminal-based REST/GraphQL/gRPC client.</em>
+  <em>a terminal-based REST/GraphQL/gRPC/WebSocket/SSE client.</em>
 </p>
 
 <p align="center">
@@ -17,11 +17,11 @@
 </p>
 
 <p align="center">
-  <strong>split panes with response diffing side-by-side</strong>
+  <strong>Split panes response with Workflow and WebSocket</strong>
 </p>
 
 <p align="center">
-  <img src="_media/resterm_full.png" alt="Screenshot of resterm TUI fulleditor" width="720" />
+  <img src="_media/resterm_websocket.png" alt="Screenshot of resterm TUI with WebSocket and Workflow" width="720" />
 </p>
 
 <p align="center">
