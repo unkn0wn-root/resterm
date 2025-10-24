@@ -123,23 +123,37 @@ type editorSearch struct {
 
 const metadataHintDisplayLimit = 6
 
+type metadataHintMode int
+
+const (
+	metadataHintModeDirective metadataHintMode = iota
+	metadataHintModeSubcommand
+)
+
+type metadataHintContext struct {
+	mode      metadataHintMode
+	directive string
+	baseKey   string
+	query     string
+}
+
 type metadataHintState struct {
 	active       bool
 	anchorOffset int
 	selection    int
 	filtered     []metadataHintOption
-	query        string
+	ctx          metadataHintContext
 }
 
 func (s *metadataHintState) deactivate() {
 	s.active = false
 	s.filtered = nil
 	s.selection = 0
-	s.query = ""
 	s.anchorOffset = 0
+	s.ctx = metadataHintContext{}
 }
 
-func (s *metadataHintState) update(anchor int, filtered []metadataHintOption, query string) {
+func (s *metadataHintState) update(anchor int, filtered []metadataHintOption, ctx metadataHintContext) {
 	if len(filtered) == 0 {
 		s.deactivate()
 		return
@@ -150,7 +164,7 @@ func (s *metadataHintState) update(anchor int, filtered []metadataHintOption, qu
 	s.active = true
 	s.anchorOffset = anchor
 	s.filtered = filtered
-	s.query = query
+	s.ctx = ctx
 }
 
 func (s *metadataHintState) move(delta int) {
@@ -418,17 +432,17 @@ func (e *requestEditor) refreshMetadataHints() {
 		return
 	}
 	queryRunes := runes[anchor+1 : caret.Offset]
-	if hasDisallowedMetadataRunes(queryRunes) {
+	ctx, ok := analyzeMetadataHintContext(queryRunes)
+	if !ok {
 		e.metadataHints.deactivate()
 		return
 	}
-	query := strings.ToLower(string(queryRunes))
-	filtered := filterMetadataHintOptions(query)
+	filtered := filterMetadataHintOptions(ctx.baseKey, ctx.query)
 	if len(filtered) == 0 {
 		e.metadataHints.deactivate()
 		return
 	}
-	e.metadataHints.update(anchor, filtered, query)
+	e.metadataHints.update(anchor, filtered, ctx)
 }
 
 func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
@@ -438,7 +452,8 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	if e.metadataHints.selection < 0 || e.metadataHints.selection >= len(e.metadataHints.filtered) {
 		return nil
 	}
-	replacement := e.metadataHints.filtered[e.metadataHints.selection].Label
+	selected := e.metadataHints.filtered[e.metadataHints.selection]
+	replacement := selected.Label
 	start := e.metadataHints.anchorOffset
 	caret := e.caretPosition()
 	if start < 0 || caret.Offset < start {
@@ -452,6 +467,14 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	}
 	before := runes[:start]
 	after := runes[end:]
+	if e.metadataHints.ctx.mode == metadataHintModeSubcommand {
+		directive := strings.TrimSpace(e.metadataHints.ctx.directive)
+		if directive == "" {
+			e.metadataHints.deactivate()
+			return nil
+		}
+		replacement = "@" + directive + " " + selected.Label
+	}
 	replacementRunes := []rune(replacement)
 	needsSpace := len(after) == 0 || !unicode.IsSpace(after[0])
 	e.pushUndoSnapshot()
@@ -1925,16 +1948,54 @@ func findMetadataAnchor(runes []rune, caretOffset int) int {
 	return -1
 }
 
-func hasDisallowedMetadataRunes(query []rune) bool {
-	for _, r := range query {
-		if r == '\n' || unicode.IsSpace(r) {
-			return true
+func analyzeMetadataHintContext(query []rune) (metadataHintContext, bool) {
+	ctx := metadataHintContext{mode: metadataHintModeDirective}
+	if len(query) == 0 {
+		return ctx, true
+	}
+	firstSpace := -1
+	for i, r := range query {
+		if r == '\n' || r == '\r' {
+			return metadataHintContext{}, false
+		}
+		if unicode.IsSpace(r) {
+			firstSpace = i
+			break
 		}
 		if !isMetadataQueryRune(r) {
-			return true
+			return metadataHintContext{}, false
 		}
 	}
-	return false
+	if firstSpace == -1 {
+		ctx.query = strings.ToLower(string(query))
+		return ctx, true
+	}
+	if firstSpace == 0 {
+		return metadataHintContext{}, false
+	}
+	directive := string(query[:firstSpace])
+	baseKey := normalizeDirectiveKey(directive)
+	if baseKey == "" {
+		return metadataHintContext{}, false
+	}
+	subStart := firstSpace
+	for subStart < len(query) && unicode.IsSpace(query[subStart]) {
+		if query[subStart] == '\n' || query[subStart] == '\r' {
+			return metadataHintContext{}, false
+		}
+		subStart++
+	}
+	subQueryRunes := query[subStart:]
+	for _, r := range subQueryRunes {
+		if unicode.IsSpace(r) || !isMetadataQueryRune(r) {
+			return metadataHintContext{}, false
+		}
+	}
+	ctx.mode = metadataHintModeSubcommand
+	ctx.directive = directive
+	ctx.baseKey = baseKey
+	ctx.query = strings.ToLower(string(subQueryRunes))
+	return ctx, true
 }
 
 func isMetadataQueryRune(r rune) bool {

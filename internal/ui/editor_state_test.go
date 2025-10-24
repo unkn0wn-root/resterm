@@ -63,6 +63,14 @@ func editorEventFromCmd(t *testing.T, cmd tea.Cmd) editorEvent {
 	return evt
 }
 
+func collectHintLabels(options []metadataHintOption) map[string]bool {
+	labels := make(map[string]bool, len(options))
+	for _, option := range options {
+		labels[option.Label] = true
+	}
+	return labels
+}
+
 const clipboardFallbackStatus = "Clipboard unavailable; saved in editor register"
 
 func expectStatusWithClipboardFallback(t *testing.T, status *statusMsg, want string) {
@@ -861,6 +869,61 @@ func TestRequestEditorMetadataHintsSuggestAndAccept(t *testing.T) {
 	}
 	if editor.metadataHints.active {
 		t.Fatal("expected metadata hints to close after acceptance")
+	}
+}
+
+func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	keys := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'@'}},
+		{Type: tea.KeyRunes, Runes: []rune{'w'}},
+		{Type: tea.KeyRunes, Runes: []rune{'s'}},
+		{Type: tea.KeyRunes, Runes: []rune{' '}},
+	}
+	for _, key := range keys {
+		var cmd tea.Cmd
+		editor, cmd = editor.Update(key)
+		if cmd != nil {
+			cmd() // drain potential status updates
+		}
+	}
+
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to activate for @ws directive")
+	}
+	if editor.metadataHints.ctx.mode != metadataHintModeSubcommand {
+		t.Fatalf("expected subcommand hint mode, got %v", editor.metadataHints.ctx.mode)
+	}
+
+	labels := collectHintLabels(editor.metadataHints.filtered)
+	for _, label := range []string{"send", "send-json", "send-base64", "send-file", "ping", "pong", "wait", "close"} {
+		if !labels[label] {
+			t.Fatalf("expected ws subcommand %q in suggestions", label)
+		}
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
+	if len(editor.metadataHints.filtered) == 0 {
+		t.Fatal("expected filtered subcommand suggestions after typing prefix")
+	}
+	if got := editor.metadataHints.filtered[editor.metadataHints.selection].Label; got != "send" {
+		t.Fatalf("expected first suggestion to be send, got %q", got)
+	}
+
+	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatal("expected accepting subcommand hint to mark editor dirty")
+	}
+	if got := editor.Value(); !strings.HasPrefix(got, "# @ws send ") {
+		t.Fatalf("expected editor content to include ws subcommand, got %q", got)
+	}
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to close after subcommand acceptance")
 	}
 }
 
