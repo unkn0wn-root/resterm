@@ -641,14 +641,7 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 	if !focused || m.focus != focusResponse {
 		baseBadgeStyle = baseBadgeStyle.Faint(true)
 	}
-	type plan struct {
-		activeStyle   lipgloss.Style
-		inactiveStyle lipgloss.Style
-		badgeStyle    lipgloss.Style
-		badgeText     string
-		labelFn       func(full string, isActive bool) string
-	}
-	plans := []plan{
+	plans := []tabRowPlan{
 		{
 			activeStyle:   m.theme.TabActive,
 			inactiveStyle: m.theme.TabInactive,
@@ -667,15 +660,7 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 			inactiveStyle: m.theme.TabInactive.Padding(0),
 			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
 			badgeText:     strings.ToUpper(mode),
-			labelFn: func(full string, isActive bool) string {
-				if isActive {
-					if focused {
-						return tabIndicatorPrefix + full
-					}
-					return full
-				}
-				return shortenLabel(full, 4)
-			},
+			adaptive:      true,
 		},
 		{
 			activeStyle:   m.theme.TabActive.Padding(0),
@@ -696,20 +681,16 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 	}
 
 	for idx, plan := range plans {
-		segments := make([]string, 0, len(tabs))
-		for _, tab := range tabs {
-			full := m.responseTabLabel(tab)
-			text := plan.labelFn(full, tab == active)
-			style := plan.inactiveStyle
-			if tab == active {
-				style = plan.activeStyle
-			}
-			segments = append(segments, style.Render(text))
+		var (
+			row  string
+			fits bool
+		)
+		if plan.adaptive {
+			row, fits = m.buildAdaptiveTabRow(tabs, active, focused, plan, limit)
+		} else {
+			row, fits = m.buildStaticTabRow(tabs, active, plan, limit)
 		}
-		row := strings.Join(segments, " ")
-		badge := plan.badgeStyle.Render(plan.badgeText)
-		row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
-		if lipgloss.Width(row) <= limit && !strings.Contains(row, "\n") {
+		if fits {
 			return row
 		}
 		if idx == len(plans)-1 {
@@ -717,6 +698,111 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 		}
 	}
 	return ""
+}
+
+func (m Model) buildStaticTabRow(tabs []responseTab, active responseTab, plan tabRowPlan, limit int) (string, bool) {
+	segments := make([]string, 0, len(tabs))
+	for _, tab := range tabs {
+		full := m.responseTabLabel(tab)
+		text := plan.labelFn(full, tab == active)
+		style := plan.inactiveStyle
+		if tab == active {
+			style = plan.activeStyle
+		}
+		segments = append(segments, style.Render(text))
+	}
+	row := strings.Join(segments, " ")
+	badge := plan.badgeStyle.Render(plan.badgeText)
+	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
+	return row, lipgloss.Width(row) <= limit && !strings.Contains(row, "\n")
+}
+
+func (m Model) buildAdaptiveTabRow(tabs []responseTab, active responseTab, focused bool, plan tabRowPlan, limit int) (string, bool) {
+	states := make([]tabLabelState, 0, len(tabs))
+	for _, tab := range tabs {
+		runes := []rune(m.responseTabLabel(tab))
+		state := tabLabelState{
+			runes:     runes,
+			isActive:  tab == active,
+			maxLength: len(runes),
+		}
+		if state.isActive {
+			state.length = state.maxLength
+		} else {
+			state.length = minInt(state.maxLength, 4)
+		}
+		states = append(states, state)
+	}
+
+	row, width := m.renderTabRowFromStates(states, plan, focused)
+	if width > limit || strings.Contains(row, "\n") {
+		return row, false
+	}
+
+	for {
+		expanded := false
+		for i := range states {
+			state := &states[i]
+			if state.isActive || state.length >= state.maxLength {
+				continue
+			}
+			state.length++
+			candidate, candidateWidth := m.renderTabRowFromStates(states, plan, focused)
+			if candidateWidth <= limit && !strings.Contains(candidate, "\n") {
+				row = candidate
+				expanded = true
+				continue
+			}
+			state.length--
+		}
+		if !expanded {
+			break
+		}
+	}
+
+	return row, true
+}
+
+func (m Model) renderTabRowFromStates(states []tabLabelState, plan tabRowPlan, focused bool) (string, int) {
+	segments := make([]string, 0, len(states))
+	for _, state := range states {
+		length := state.length
+		if length < 0 {
+			length = 0
+		}
+		if length > state.maxLength {
+			length = state.maxLength
+		}
+		label := string(state.runes[:length])
+		if state.isActive && focused {
+			label = tabIndicatorPrefix + label
+		}
+		style := plan.inactiveStyle
+		if state.isActive {
+			style = plan.activeStyle
+		}
+		segments = append(segments, style.Render(label))
+	}
+	row := strings.Join(segments, " ")
+	badge := plan.badgeStyle.Render(plan.badgeText)
+	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
+	return row, lipgloss.Width(row)
+}
+
+type tabLabelState struct {
+	runes     []rune
+	isActive  bool
+	length    int
+	maxLength int
+}
+
+type tabRowPlan struct {
+	activeStyle   lipgloss.Style
+	inactiveStyle lipgloss.Style
+	badgeStyle    lipgloss.Style
+	badgeText     string
+	labelFn       func(full string, isActive bool) string
+	adaptive      bool
 }
 
 func clampLines(content string, maxLines int) string {
