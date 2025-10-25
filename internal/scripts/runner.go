@@ -56,6 +56,7 @@ type TestInput struct {
 	Globals   map[string]GlobalValue
 	BaseDir   string
 	Stream    *StreamInfo
+	Trace     *TraceInput
 }
 
 type TestResult struct {
@@ -166,7 +167,7 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
-	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo)
+	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo, input.Trace)
 	streamBinding := newStreamAPI(vm, streamInfo)
 
 	if err := bindCommon(vm); err != nil {
@@ -195,6 +196,10 @@ func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult
 
 	if err := vm.Set("stream", streamBinding.object()); err != nil {
 		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind stream api")
+	}
+
+	if err := vm.Set("trace", tester.traceAPI()); err != nil {
+		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind trace api")
 	}
 
 	_, err := vm.RunString(script)
@@ -432,9 +437,10 @@ type testAPI struct {
 	changes   map[string]GlobalValue
 	cases     []TestResult
 	stream    *StreamInfo
+	trace     *traceBinding
 }
 
-func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo) *testAPI {
+func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo, trace *TraceInput) *testAPI {
 	copyVars := make(map[string]string, len(vars))
 	for k, v := range vars {
 		copyVars[k] = v
@@ -453,6 +459,7 @@ func newTestAPI(resp *Response, vars map[string]string, globals map[string]Globa
 		globals:   globalCopy,
 		changes:   make(map[string]GlobalValue),
 		stream:    stream,
+		trace:     newTraceBinding(trace),
 	}
 }
 
@@ -566,6 +573,13 @@ func (api *testAPI) clientAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"test": api.namedTest,
 	}
+}
+
+func (api *testAPI) traceAPI() map[string]interface{} {
+	if api.trace == nil {
+		return newTraceBinding(nil).object()
+	}
+	return api.trace.object()
 }
 
 func (api *testAPI) responseAPI() map[string]interface{} {

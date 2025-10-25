@@ -54,6 +54,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 - **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
+- **Tracing and Timeline** with `@trace` to enable request tracing.
 - **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
 
 
@@ -175,6 +176,15 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 - Set per-step assertions (`expect.status`, `expect.statuscode`) and pass data between steps via `vars.request.*` and `vars.workflow.*` namespaces.
 - View progress in the sidebar, and inspect the aggregated summary in History after the run.
 - See [`docs/resterm.md`](./docs/resterm.md#workflows-multi-step-workflows) for the full reference and `_examples/workflows.http` for a runnable sample workflow.
+
+## Tracing & Timeline
+
+- Enable per-phase network tracing by adding `# @trace` metadata to a request. Budgets use `phase<=duration` syntax (for example `dns<=50ms total<=300ms tolerance=25ms`). Supported phases mirror the HTTP client hooks: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
+- When a traced response arrives, a **Timeline** tab appears beside Pretty/Raw/Headers. It renders a proportional bar chart, annotates overruns, and lists budget breaches. Jump straight to it with `Ctrl+Alt+L` (or the `g+t` chord) and exit via the standard tab navigation.
+- Trace data is available to scripts through the `trace` binding (`trace.enabled()`, `trace.phases()`, `trace.breaches()`, `trace.withinBudget()`, etc.), making CI assertions straightforward.
+- `_examples/trace.http` contains two runnable requests (one within budget, one intentionally breaching) for quick experimentation.
+- Resterm can export spans to OpenTelemetry when `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`) is set. Optional extras: `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`.
+- Spans are emitted only when tracing is enabled. Budget breaches and HTTP failures automatically mark spans with an error status so distributed traces surface anomalies clearly.
 
 ## OpenAPI imports
 

@@ -89,12 +89,24 @@ type RequestMetadata struct {
 	Scripts               []ScriptBlock
 	Captures              []CaptureSpec
 	Profile               *ProfileSpec
+	Trace                 *TraceSpec
 }
 
 type ProfileSpec struct {
 	Count  int
 	Warmup int
 	Delay  time.Duration
+}
+
+type TraceSpec struct {
+	Enabled bool
+	Budgets TraceBudget
+}
+
+type TraceBudget struct {
+	Total     time.Duration
+	Tolerance time.Duration
+	Phases    map[string]time.Duration
 }
 
 type CaptureScope int

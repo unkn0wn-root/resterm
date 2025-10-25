@@ -27,6 +27,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/openapi/parser"
 	"github.com/unkn0wn-root/resterm/internal/openapi/writer"
 	"github.com/unkn0wn-root/resterm/internal/rtfmt"
+	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui"
 	"github.com/unkn0wn-root/resterm/internal/update"
@@ -59,9 +60,17 @@ func main() {
 		openapiResolveRefs       bool
 		openapiIncludeDeprecated bool
 		openapiServerIndex       int
+		traceOTEndpoint          string
+		traceOTInsecure          bool
+		traceOTService           string
 	)
 
 	follow = true
+
+	telemetryCfg := telemetry.ConfigFromEnv(os.Getenv)
+	traceOTEndpoint = telemetryCfg.Endpoint
+	traceOTInsecure = telemetryCfg.Insecure
+	traceOTService = telemetryCfg.ServiceName
 
 	flag.StringVar(&filePath, "file", "", "Path to .http/.rest file to open")
 	flag.StringVar(&envName, "env", "", "Environment name to use")
@@ -82,7 +91,15 @@ func main() {
 	flag.BoolVar(&openapiResolveRefs, "openapi-resolve-refs", false, "Resolve external $ref references during OpenAPI import")
 	flag.BoolVar(&openapiIncludeDeprecated, "openapi-include-deprecated", false, "Include deprecated operations when generating requests")
 	flag.IntVar(&openapiServerIndex, "openapi-server-index", 0, "Preferred server index (0-based) from the spec to use as the base URL")
+	flag.StringVar(&traceOTEndpoint, "trace-otel-endpoint", traceOTEndpoint, "OTLP collector endpoint used when @trace is enabled")
+	flag.BoolVar(&traceOTInsecure, "trace-otel-insecure", traceOTInsecure, "Disable TLS for OTLP trace export")
+	flag.StringVar(&traceOTService, "trace-otel-service", traceOTService, "Override service.name resource attribute for exported spans")
 	flag.Parse()
+
+	telemetryCfg.Endpoint = strings.TrimSpace(traceOTEndpoint)
+	telemetryCfg.Insecure = traceOTInsecure
+	telemetryCfg.ServiceName = strings.TrimSpace(traceOTService)
+	telemetryCfg.Version = version
 
 	if showVersion {
 		fmt.Printf("resterm %s\n", version)
@@ -230,6 +247,23 @@ func main() {
 	}
 
 	client := httpclient.NewClient(nil)
+
+	provider, err := telemetry.New(telemetryCfg)
+	if err != nil {
+		if telemetryCfg.Enabled() {
+			log.Printf("telemetry init error: %v", err)
+		}
+	} else {
+		client.SetTelemetry(provider)
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			if shutdownErr := provider.Shutdown(ctx); shutdownErr != nil {
+				log.Printf("telemetry shutdown: %v", shutdownErr)
+			}
+		}()
+	}
+
 	httpOpts := httpclient.Options{
 		Timeout:            timeout,
 		FollowRedirects:    follow,

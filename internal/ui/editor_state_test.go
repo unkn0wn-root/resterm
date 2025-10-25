@@ -927,6 +927,61 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 	}
 }
 
+func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	keys := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'@'}},
+		{Type: tea.KeyRunes, Runes: []rune{'t'}},
+		{Type: tea.KeyRunes, Runes: []rune{'r'}},
+		{Type: tea.KeyRunes, Runes: []rune{'a'}},
+		{Type: tea.KeyRunes, Runes: []rune{'c'}},
+		{Type: tea.KeyRunes, Runes: []rune{'e'}},
+		{Type: tea.KeyRunes, Runes: []rune{' '}},
+		{Type: tea.KeyRunes, Runes: []rune{'d'}},
+	}
+	for _, key := range keys {
+		var cmd tea.Cmd
+		editor, cmd = editor.Update(key)
+		if cmd != nil {
+			cmd()
+		}
+	}
+
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to remain active for trace subcommand")
+	}
+	if editor.metadataHints.ctx.mode != metadataHintModeSubcommand {
+		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.mode)
+	}
+
+	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatal("expected accepting trace hint to mark editor dirty")
+	}
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to close after acceptance")
+	}
+
+	wantContent := "# @trace dns<=50ms "
+	if got := editor.Value(); got != wantContent {
+		t.Fatalf("unexpected editor content after trace insertion:\nwant %q\n got %q", wantContent, got)
+	}
+
+	pos := editor.caretPosition()
+	wantedOffset := utf8.RuneCountInString("# @trace dns<=")
+	if pos.Offset != wantedOffset {
+		t.Fatalf("expected caret offset %d, got %d", wantedOffset, pos.Offset)
+	}
+	if pos.Column != wantedOffset {
+		t.Fatalf("expected caret column %d, got %d", wantedOffset, pos.Column)
+	}
+}
+
 func TestRequestEditorMetadataHintsIgnoreNonCommentContext(t *testing.T) {
 	editor := newTestEditor("")
 	editorPtr := &editor

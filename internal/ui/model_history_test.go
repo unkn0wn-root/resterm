@@ -8,7 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 )
 
 func TestRedactHistoryTextMasksSecrets(t *testing.T) {
@@ -219,6 +221,61 @@ func TestToggleResponseSplitConfiguresSecondaryPane(t *testing.T) {
 	}
 	if secondary.snapshot != model.responseLatest {
 		t.Fatalf("expected secondary pane to reference latest snapshot")
+	}
+}
+
+func TestPresentHistoryEntryPopulatesTimeline(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 100
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	tl := &nettrace.Timeline{
+		Duration: 110 * time.Millisecond,
+		Phases: []nettrace.Phase{
+			{Kind: nettrace.PhaseDNS, Duration: 30 * time.Millisecond},
+			{Kind: nettrace.PhaseConnect, Duration: 40 * time.Millisecond},
+			{Kind: nettrace.PhaseTransfer, Duration: 40 * time.Millisecond},
+		},
+	}
+	budget := nettrace.Budget{
+		Total: 120 * time.Millisecond,
+		Phases: map[nettrace.PhaseKind]time.Duration{
+			nettrace.PhaseDNS: 50 * time.Millisecond,
+		},
+	}
+	report := nettrace.NewReport(tl, budget)
+	summary := history.NewTraceSummary(tl, report)
+	entry := history.Entry{
+		Trace:      summary,
+		Status:     "200 OK",
+		StatusCode: 200,
+		Duration:   tl.Duration,
+		Method:     "GET",
+		URL:        "https://example.com",
+	}
+
+	cmd := model.presentHistoryEntry(entry, nil)
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.responseLatest == nil || model.responseLatest.timeline == nil {
+		t.Fatalf("expected history timeline to populate snapshot")
+	}
+	if !model.snapshotHasTimeline() {
+		t.Fatalf("expected timeline tab to become available")
+	}
+	pane := model.pane(responsePanePrimary)
+	if pane == nil || pane.snapshot != model.responseLatest {
+		t.Fatalf("expected primary pane to reference latest snapshot")
+	}
+	content, _ := model.paneContentForTab(responsePanePrimary, responseTabTimeline)
+	if !strings.Contains(content, "Timeline") {
+		t.Fatalf("expected timeline content to render, got %q", content)
 	}
 }
 

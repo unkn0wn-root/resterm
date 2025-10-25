@@ -49,6 +49,7 @@ const (
 	responseTabHeaders
 	responseTabStream
 	responseTabStats
+	responseTabTimeline
 	responseTabDiff
 	responseTabHistory
 )
@@ -197,6 +198,7 @@ type Model struct {
 	historyPreviewContent  string
 	historyPreviewTitle    string
 	historyPreviewViewport *viewport.Model
+	helpViewport           *viewport.Model
 	suppressNextErrorModal bool
 
 	showSearchPrompt   bool
@@ -452,6 +454,9 @@ func New(cfg Config) Model {
 	previewViewport := viewport.New(0, 0)
 	previewViewport.SetContent("")
 
+	helpViewport := viewport.New(0, 0)
+	helpViewport.SetContent("")
+
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" && cfg.UpdateClient.Ready()
 
@@ -472,6 +477,7 @@ func New(cfg Config) Model {
 		envList:                envList,
 		themeList:              themeList,
 		historyPreviewViewport: &previewViewport,
+		helpViewport:           &helpViewport,
 		activeThemeKey:         activeTheme,
 		settingsHandle:         cfg.SettingsHandle,
 		responsePanes: [2]responsePaneState{

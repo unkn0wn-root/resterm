@@ -5,7 +5,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strings"
 	"sync/atomic"
@@ -16,11 +18,18 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
 
 func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
@@ -788,5 +797,80 @@ func TestClearGlobalValues(t *testing.T) {
 	}
 	if model.statusMessage.level != statusInfo {
 		t.Fatalf("expected info level, got %v", model.statusMessage.level)
+	}
+}
+func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
+	model := New(Config{})
+
+	client := model.client
+	client.SetHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			clientTrace := httptrace.ContextClientTrace(req.Context())
+			if clientTrace != nil {
+				now := time.Now()
+				if clientTrace.DNSStart != nil {
+					clientTrace.DNSStart(httptrace.DNSStartInfo{Host: req.URL.Host})
+				}
+				time.Sleep(100 * time.Microsecond)
+				if clientTrace.DNSDone != nil {
+					clientTrace.DNSDone(httptrace.DNSDoneInfo{Addrs: []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}})
+				}
+				time.Sleep(100 * time.Microsecond)
+				if clientTrace.ConnectStart != nil {
+					clientTrace.ConnectStart("tcp", req.URL.Host)
+				}
+				time.Sleep(100 * time.Microsecond)
+				if clientTrace.ConnectDone != nil {
+					clientTrace.ConnectDone("tcp", req.URL.Host, nil)
+				}
+				time.Sleep(100 * time.Microsecond)
+				if clientTrace.WroteHeaders != nil {
+					clientTrace.WroteHeaders()
+				}
+				time.Sleep(100 * time.Microsecond)
+				if clientTrace.WroteRequest != nil {
+					clientTrace.WroteRequest(httptrace.WroteRequestInfo{})
+				}
+				time.Sleep(100 * time.Microsecond)
+				if clientTrace.GotFirstResponseByte != nil {
+					clientTrace.GotFirstResponseByte()
+				}
+				_ = now
+			}
+
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("ok")),
+				Request:    req,
+			}
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	})
+
+	content := "### Trace\n# @trace total<=1s\nGET https://example.com\n\n"
+	doc := parser.Parse("trace.http", []byte(content))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected single request")
+	}
+	req := doc.Requests[0]
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest command")
+	}
+	msg, ok := cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	model.handleResponseMessage(msg)
+	if model.responseLatest == nil || model.responseLatest.timeline == nil {
+		t.Fatalf("expected timeline to be populated in snapshot")
 	}
 }

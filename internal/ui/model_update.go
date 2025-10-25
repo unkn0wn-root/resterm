@@ -536,12 +536,37 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if m.showHelp && !m.helpJustOpened {
+		vp := m.helpViewport
 		switch keyStr {
 		case "ctrl+q", "ctrl+d":
 			return combine(tea.Quit)
 		case "esc", "?", "shift+/":
 			m.showHelp = false
 			m.helpJustOpened = false
+		case "down", "j":
+			if vp != nil {
+				vp.ScrollDown(1)
+			}
+		case "up", "k":
+			if vp != nil {
+				vp.ScrollUp(1)
+			}
+		case "pgdown", "ctrl+f":
+			if vp != nil {
+				vp.ScrollDown(maxInt(1, vp.Height))
+			}
+		case "pgup", "ctrl+b", "ctrl+u":
+			if vp != nil {
+				vp.ScrollUp(maxInt(1, vp.Height))
+			}
+		case "home":
+			if vp != nil {
+				vp.GotoTop()
+			}
+		case "end":
+			if vp != nil {
+				vp.GotoBottom()
+			}
 		}
 		return combine(nil)
 	}
@@ -628,6 +653,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	case "ctrl+alt+p", "alt+ctrl+p":
 		m.suppressEditorKey = true
 		return combine(m.reparseDocument())
+	case "ctrl+alt+l", "alt+ctrl+l":
+		return combine(m.selectTimelineTab())
 	case "ctrl+shift+t", "shift+ctrl+t":
 		return combine(m.reparseDocument())
 	case "ctrl+q", "ctrl+d":
@@ -1009,6 +1036,9 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "p":
 			m.setFocus(focusResponse)
 			return true, nil
+		case "m":
+			m.openThemeSelector()
+			return true, nil
 		case "i":
 			m.setFocus(focusEditor)
 			m.setInsertMode(false, true)
@@ -1018,6 +1048,9 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "v":
 			return true, m.setMainSplitOrientation(mainSplitVertical)
 		case "t":
+			cmd := m.selectTimelineTab()
+			return true, cmd
+		case "T", "shift+t":
 			m.openThemeSelector()
 			return true, nil
 		case "w":

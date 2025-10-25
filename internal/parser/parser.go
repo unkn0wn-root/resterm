@@ -426,6 +426,10 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		if spec := parseProfileSpec(rest); spec != nil {
 			b.request.metadata.Profile = spec
 		}
+	case "trace":
+		if spec := parseTraceSpec(rest); spec != nil {
+			b.request.metadata.Trace = spec
+		}
 	}
 }
 
@@ -612,6 +616,117 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 		spec.Warmup = 0
 	}
 	return spec
+}
+
+func parseTraceSpec(rest string) *restfile.TraceSpec {
+	spec := &restfile.TraceSpec{Enabled: true}
+	trimmed := strings.TrimSpace(rest)
+	if trimmed == "" {
+		return spec
+	}
+
+	fields := splitAuthFields(trimmed)
+	for _, field := range fields {
+		value := strings.TrimSpace(field)
+		if value == "" {
+			continue
+		}
+		lower := strings.ToLower(value)
+		switch lower {
+		case "off", "disable", "disabled", "false":
+			spec.Enabled = false
+			continue
+		case "on", "enable", "enabled", "true":
+			spec.Enabled = true
+			continue
+		}
+
+		if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
+			name := normalizeTracePhaseName(parts[0])
+			dur := parseDuration(parts[1])
+			if dur <= 0 {
+				continue
+			}
+			if name == "total" {
+				spec.Budgets.Total = dur
+				continue
+			}
+			if spec.Budgets.Phases == nil {
+				spec.Budgets.Phases = make(map[string]time.Duration)
+			}
+			spec.Budgets.Phases[name] = dur
+			continue
+		}
+
+		if idx := strings.Index(value, "="); idx != -1 {
+			key := strings.ToLower(strings.TrimSpace(value[:idx]))
+			val := strings.TrimSpace(value[idx+1:])
+			switch key {
+			case "enabled":
+				if b, ok := parseBool(val); ok {
+					spec.Enabled = b
+				}
+			case "total":
+				if dur := parseDuration(val); dur > 0 {
+					spec.Budgets.Total = dur
+				}
+			case "tolerance", "allowance", "grace":
+				if dur := parseDuration(val); dur >= 0 {
+					spec.Budgets.Tolerance = dur
+				}
+			default:
+				dur := parseDuration(val)
+				if dur <= 0 {
+					continue
+				}
+				name := normalizeTracePhaseName(key)
+				if name == "total" {
+					spec.Budgets.Total = dur
+					continue
+				}
+				if spec.Budgets.Phases == nil {
+					spec.Budgets.Phases = make(map[string]time.Duration)
+				}
+				spec.Budgets.Phases[name] = dur
+			}
+		}
+	}
+
+	if len(spec.Budgets.Phases) == 0 {
+		spec.Budgets.Phases = nil
+	}
+	return spec
+}
+
+func parseDuration(value string) time.Duration {
+	dur, err := time.ParseDuration(strings.TrimSpace(value))
+	if err != nil {
+		return 0
+	}
+	return dur
+}
+
+func normalizeTracePhaseName(name string) string {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "dns", "lookup", "name":
+		return "dns"
+	case "connect", "dial":
+		return "connect"
+	case "tls", "handshake":
+		return "tls"
+	case "headers", "request_headers", "req_headers", "header":
+		return "request_headers"
+	case "body", "request_body", "req_body":
+		return "request_body"
+	case "ttfb", "first_byte", "wait":
+		return "ttfb"
+	case "transfer", "download":
+		return "transfer"
+	case "total", "overall":
+		return "total"
+	default:
+		return strings.ToLower(strings.TrimSpace(name))
+	}
 }
 
 func splitAuthFields(input string) []string {

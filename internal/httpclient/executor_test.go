@@ -2,9 +2,12 @@ package httpclient
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -169,6 +173,108 @@ func TestPrepareBodyFileExpandTemplates(t *testing.T) {
 	}
 }
 
+func TestExecuteCapturesTraceTimeline(t *testing.T) {
+	client := NewClient(nil)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			trace := httptrace.ContextClientTrace(req.Context())
+			if trace != nil {
+				if trace.DNSStart != nil {
+					trace.DNSStart(httptrace.DNSStartInfo{Host: "example.com"})
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.DNSDone != nil {
+					trace.DNSDone(httptrace.DNSDoneInfo{Addrs: []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}})
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.ConnectStart != nil {
+					trace.ConnectStart("tcp", "93.184.216.34:443")
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.ConnectDone != nil {
+					trace.ConnectDone("tcp", "93.184.216.34:443", nil)
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.TLSHandshakeStart != nil {
+					trace.TLSHandshakeStart()
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.TLSHandshakeDone != nil {
+					trace.TLSHandshakeDone(tls.ConnectionState{}, nil)
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.WroteHeaders != nil {
+					trace.WroteHeaders()
+				}
+				time.Sleep(200 * time.Microsecond)
+				if trace.WroteRequest != nil {
+					trace.WroteRequest(httptrace.WroteRequestInfo{})
+				}
+				time.Sleep(300 * time.Microsecond)
+				if trace.GotFirstResponseByte != nil {
+					trace.GotFirstResponseByte()
+				}
+			}
+
+			body := &slowBody{data: []byte("ok"), delay: 300 * time.Microsecond}
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       body,
+				Request:    req,
+			}
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	}
+
+	req := &restfile.Request{Method: http.MethodGet, URL: "https://example.com"}
+	budget := nettrace.Budget{Total: 10 * time.Microsecond}
+	resp, err := client.Execute(context.Background(), req, vars.NewResolver(), Options{Trace: true, TraceBudget: &budget})
+	if err != nil {
+		t.Fatalf("execute request: %v", err)
+	}
+	if resp.Timeline == nil {
+		t.Fatalf("expected timeline to be recorded")
+	}
+	if resp.TraceReport == nil {
+		t.Fatalf("expected trace report to be populated")
+	}
+	if resp.TraceReport.Budget.Total != budget.Total {
+		t.Fatalf("expected report to retain budget total, got %v", resp.TraceReport.Budget.Total)
+	}
+	if len(resp.TraceReport.BudgetReport.Breaches) == 0 {
+		t.Fatalf("expected budget breaches to be recorded")
+	}
+
+	durations := make(map[nettrace.PhaseKind]time.Duration)
+	for _, phase := range resp.Timeline.Phases {
+		durations[phase.Kind] += phase.Duration
+	}
+
+	for _, kind := range []nettrace.PhaseKind{
+		nettrace.PhaseDNS,
+		nettrace.PhaseConnect,
+		nettrace.PhaseTTFB,
+		nettrace.PhaseTransfer,
+	} {
+		if durations[kind] <= 0 {
+			t.Fatalf("expected duration for phase %s to be > 0, got %v", kind, durations[kind])
+		}
+	}
+	if resp.Timeline.Duration <= 0 {
+		t.Fatalf("expected overall timeline duration > 0, got %v", resp.Timeline.Duration)
+	}
+	if resp.Duration < resp.Timeline.Duration {
+		t.Fatalf("expected response duration %v to be >= timeline duration %v", resp.Duration, resp.Timeline.Duration)
+	}
+	if diff := resp.Duration - resp.Timeline.Duration; diff > time.Millisecond || diff < -time.Millisecond {
+		t.Fatalf("expected response duration and timeline duration to match within 1ms, got diff %v", diff)
+	}
+}
+
 type mapFS map[string][]byte
 
 func (m mapFS) ReadFile(name string) ([]byte, error) {
@@ -177,6 +283,25 @@ func (m mapFS) ReadFile(name string) ([]byte, error) {
 	}
 	return nil, os.ErrNotExist
 }
+
+type slowBody struct {
+	data   []byte
+	delay  time.Duration
+	offset int
+}
+
+func (b *slowBody) Read(p []byte) (int, error) {
+	if b.offset >= len(b.data) {
+		time.Sleep(b.delay)
+		return 0, io.EOF
+	}
+	time.Sleep(b.delay)
+	n := copy(p, b.data[b.offset:])
+	b.offset += n
+	return n, nil
+}
+
+func (b *slowBody) Close() error { return nil }
 
 func TestExecuteSSE(t *testing.T) {
 	client := NewClient(nil)
@@ -196,9 +321,15 @@ func TestExecuteSSE(t *testing.T) {
 				Proto:      "HTTP/1.1",
 				Header:     make(http.Header),
 				Body:       io.NopCloser(strings.NewReader(stream)),
-				Request:    req,
 			}
 			resp.Header.Set("Content-Type", "text/event-stream")
+			finalReq := req.Clone(req.Context())
+			parsed, err := url.Parse("https://final.example.com/events")
+			if err != nil {
+				return nil, err
+			}
+			finalReq.URL = parsed
+			resp.Request = finalReq
 			return resp, nil
 		})}, nil
 	}
@@ -214,6 +345,9 @@ func TestExecuteSSE(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected status 200, got %d", resp.StatusCode)
+	}
+	if resp.EffectiveURL != "https://final.example.com/events" {
+		t.Fatalf("expected effective url to track redirect, got %s", resp.EffectiveURL)
 	}
 
 	var transcript struct {
@@ -291,6 +425,52 @@ func TestExecuteSSEIdleTimeout(t *testing.T) {
 	}
 	if transcript.Summary.Reason != "timeout:idle" {
 		t.Fatalf("expected idle timeout reason, got %q", transcript.Summary.Reason)
+	}
+}
+
+func TestExecuteSSEMaxBytes(t *testing.T) {
+	client := NewClient(nil)
+	first := "data: one\n\n"
+	second := "data: two\n\n"
+	maxBytes := len(first)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		stream := first + second
+		return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(stream)),
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})}, nil
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE: &restfile.SSERequest{Options: restfile.SSEOptions{
+			MaxBytes: int64(maxBytes),
+		}},
+	}
+
+	resp, err := client.ExecuteSSE(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("execute sse max bytes: %v", err)
+	}
+
+	var transcript SSETranscript
+	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
+		t.Fatalf("unmarshal transcript: %v", err)
+	}
+	if transcript.Summary.Reason != "limit:max_bytes" {
+		t.Fatalf("expected max bytes limit reason, got %q", transcript.Summary.Reason)
+	}
+	if transcript.Summary.EventCount != 1 {
+		t.Fatalf("expected exactly one event before byte limit, got %d", transcript.Summary.EventCount)
 	}
 }
 

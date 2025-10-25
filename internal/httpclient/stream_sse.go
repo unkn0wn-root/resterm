@@ -74,9 +74,10 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 		httpReq.Header.Set("Accept", "text/event-stream")
 	}
 
-	factory := c.httpFactory
+	factory := c.resolveHTTPFactory()
 	if factory == nil {
-		factory = c.buildHTTPClient
+		cancel()
+		return nil, nil, errdef.New(errdef.CodeHTTP, "http client factory unavailable")
 	}
 	client, err := factory(effectiveOpts)
 	if err != nil {
@@ -90,6 +91,13 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 	if err != nil {
 		cancel()
 		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "perform sse request")
+	}
+
+	effURL := ""
+	if httpResp.Request != nil && httpResp.Request.URL != nil {
+		effURL = httpResp.Request.URL.String()
+	} else if httpReq.URL != nil {
+		effURL = httpReq.URL.String()
 	}
 
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
@@ -110,7 +118,7 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 			Headers:      httpResp.Header.Clone(),
 			Body:         body,
 			Duration:     time.Since(start),
-			EffectiveURL: httpReq.URL.String(),
+			EffectiveURL: effURL,
 			Request:      req,
 		}, nil
 	}
@@ -120,7 +128,7 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 		StatusCode:   httpResp.StatusCode,
 		Proto:        httpResp.Proto,
 		Headers:      httpResp.Header.Clone(),
-		EffectiveURL: httpReq.URL.String(),
+		EffectiveURL: effURL,
 		ConnectedAt:  time.Now(),
 		Request:      req,
 		BaseDir:      effectiveOpts.BaseDir,
@@ -266,9 +274,12 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 
 	for {
 		if opts.MaxBytes > 0 && byteCount >= opts.MaxBytes {
-			summary.Reason = "limit:max_bytes"
+			if summary.Reason == "" || summary.Reason == "eof" {
+				summary.Reason = "limit:max_bytes"
+			}
 			break
 		}
+
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
 			byteCount += int64(len(line))
@@ -279,6 +290,8 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 				}
 			}
 		}
+
+		limitReached := opts.MaxBytes > 0 && byteCount >= opts.MaxBytes
 
 		if err != nil && !errors.Is(err, io.EOF) {
 			session.Close(errdef.Wrap(errdef.CodeHTTP, err, "read sse stream"))
@@ -301,6 +314,13 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 				session.Close(err)
 				return
 			}
+		}
+
+		if limitReached {
+			if summary.Reason == "" || summary.Reason == "eof" {
+				summary.Reason = "limit:max_bytes"
+			}
+			break
 		}
 
 		if errors.Is(err, io.EOF) {

@@ -206,22 +206,64 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 		}
 	}
 
+	var traceSpec *restfile.TraceSpec
+	if resp != nil {
+		if cloned := cloneTraceSpec(traceSpecFromRequest(resp.Request)); cloned != nil && cloned.Enabled {
+			traceSpec = cloned
+		}
+	}
+	var timeline timelineReport
+	if resp != nil && resp.Timeline != nil {
+		timeline = buildTimelineReport(resp.Timeline, traceSpec, resp.TraceReport, newTimelineStyles(&m.theme))
+	}
+
+	statusLevel := statusSuccess
+	statusText := ""
+	if resp != nil {
+		statusText = fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode)
+	}
+
 	switch {
 	case scriptErr != nil:
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Tests error: %v", scriptErr), level: statusWarn})
+		statusText = fmt.Sprintf("%s – tests error: %v", statusText, scriptErr)
+		statusLevel = statusWarn
 	case failureCount > 0:
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s (%d) – %d test(s) failed", resp.Status, resp.StatusCode, failureCount), level: statusWarn})
+		statusText = fmt.Sprintf("%s – %d test(s) failed", statusText, failureCount)
+		statusLevel = statusWarn
 	case len(tests) > 0:
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s (%d) – all tests passed", resp.Status, resp.StatusCode), level: statusSuccess})
+		statusText = fmt.Sprintf("%s – all tests passed", statusText)
 	default:
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode), level: statusSuccess})
+		if statusText == "" {
+			statusText = "Request completed"
+			statusLevel = statusSuccess
+		}
 	}
+
+	if len(timeline.breaches) > 0 {
+		primary := timeline.breaches[0]
+		overrun := primary.Over.Round(time.Millisecond)
+		statusText = fmt.Sprintf("%s – trace budget breach %s (+%s)", statusText, humanPhaseName(primary.Kind), overrun)
+		if len(timeline.breaches) > 1 {
+			statusText = fmt.Sprintf("%s (%d total)", statusText, len(timeline.breaches))
+		}
+		statusLevel = statusWarn
+	}
+
+	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel})
 
 	token := nextResponseRenderToken()
 	snapshot := &responseSnapshot{id: token}
 	m.responseRenderToken = token
 	m.responsePending = snapshot
 	m.responseLatest = snapshot
+	if traceSpec != nil {
+		snapshot.traceSpec = traceSpec
+	}
+	if resp != nil && resp.Timeline != nil {
+		snapshot.timeline = resp.Timeline.Clone()
+		snapshot.traceReport = timeline
+		snapshot.traceData = resp.TraceReport.Clone()
+	}
 	if m.responseTokens == nil {
 		m.responseTokens = make(map[string]*responseSnapshot)
 	}
@@ -312,6 +354,9 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		if strings.TrimSpace(snapshot.stats) != "" {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
 		}
+		if snapshot.timeline != nil {
+			pane.wrapCache[responseTabTimeline] = cachedWrap{}
+		}
 		pane.viewport.GotoTop()
 		pane.setCurrPosition()
 	}
@@ -319,6 +364,7 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		pane := m.pane(id)
 		if pane != nil {
 			pane.wrapCache[responseTabDiff] = cachedWrap{}
+			pane.wrapCache[responseTabTimeline] = cachedWrap{}
 		}
 	}
 
@@ -478,7 +524,7 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 		Description: desc,
 		Tags:        tags,
 	}
-
+	entry.Trace = history.NewTraceSummary(resp.Timeline, resp.TraceReport)
 	if err := m.historyStore.Append(entry); err != nil {
 		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
 	}
@@ -1063,6 +1109,13 @@ func (m *Model) deleteHistoryEntry(id string) (bool, error) {
 	return true, nil
 }
 
+func traceSpecFromRequest(req *restfile.Request) *restfile.TraceSpec {
+	if req == nil {
+		return nil
+	}
+	return req.Metadata.Trace
+}
+
 func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	item, ok := m.historyList.SelectedItem().(historyItem)
 	if !ok {
@@ -1111,10 +1164,119 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 			label = "history request"
 		}
 		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Loaded %s from history", label), level: statusInfo})
-		return nil
+		return m.presentHistoryEntry(entry, req)
 	}
 
 	m.sending = true
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Replaying %s", req.URL), level: statusInfo})
 	return m.executeRequest(doc, req, options)
+}
+
+func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {
+	if entry.Trace == nil {
+		return nil
+	}
+
+	tl := entry.Trace.Timeline()
+	if tl == nil {
+		return nil
+	}
+	rep := entry.Trace.Report()
+	traceSpec := traceSpecFromSummary(entry.Trace)
+	if traceSpec == nil {
+		if clone := cloneTraceSpec(traceSpecFromRequest(req)); clone != nil && clone.Enabled {
+			traceSpec = clone
+		}
+	}
+	report := buildTimelineReport(tl, traceSpec, rep, newTimelineStyles(&m.theme))
+	summary := historyEntrySummary(entry)
+	snap := &responseSnapshot{
+		id:          nextResponseRenderToken(),
+		pretty:      summary,
+		raw:         summary,
+		headers:     "",
+		ready:       true,
+		timeline:    tl,
+		traceData:   rep,
+		traceReport: report,
+		traceSpec:   traceSpec,
+	}
+
+	m.applyHistorySnapshot(snap)
+	return m.syncResponsePanes()
+}
+
+func (m *Model) applyHistorySnapshot(snap *responseSnapshot) {
+	if snap == nil {
+		return
+	}
+
+	m.responsePending = nil
+	m.responseLatest = snap
+	if m.responseTokens != nil {
+		for key := range m.responseTokens {
+			delete(m.responseTokens, key)
+		}
+	}
+
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		pane.snapshot = snap
+		pane.invalidateCaches()
+		if pane.activeTab == responseTabHistory {
+			continue
+		}
+		pane.viewport.SetContent(ensureTrailingNewline(snap.pretty))
+		pane.viewport.GotoTop()
+		pane.setCurrPosition()
+	}
+}
+
+func traceSpecFromSummary(summary *history.TraceSummary) *restfile.TraceSpec {
+	if summary == nil || summary.Budgets == nil {
+		return nil
+	}
+	spec := &restfile.TraceSpec{Enabled: true}
+	spec.Budgets.Total = summary.Budgets.Total
+	spec.Budgets.Tolerance = summary.Budgets.Tolerance
+	if len(summary.Budgets.Phases) > 0 {
+		phases := make(map[string]time.Duration, len(summary.Budgets.Phases))
+		for name, limit := range summary.Budgets.Phases {
+			phases[name] = limit
+		}
+		spec.Budgets.Phases = phases
+	}
+	return spec
+}
+
+func historyEntrySummary(entry history.Entry) string {
+	var lines []string
+	label := strings.TrimSpace(entry.RequestName)
+	if label == "" {
+		parts := strings.TrimSpace(strings.Join([]string{entry.Method, entry.URL}, " "))
+		if parts != "" {
+			label = parts
+		}
+	}
+	if label != "" {
+		lines = append(lines, label)
+	}
+	if entry.Status != "" && entry.StatusCode > 0 {
+		lines = append(lines, fmt.Sprintf("Status: %s (%d)", entry.Status, entry.StatusCode))
+	} else if entry.Status != "" {
+		lines = append(lines, fmt.Sprintf("Status: %s", entry.Status))
+	} else if entry.StatusCode > 0 {
+		lines = append(lines, fmt.Sprintf("Status code: %d", entry.StatusCode))
+	}
+	if entry.Duration > 0 {
+		lines = append(lines, fmt.Sprintf("Duration: %s", entry.Duration))
+	}
+	if !entry.ExecutedAt.IsZero() {
+		lines = append(lines, "Recorded: "+entry.ExecutedAt.Format(time.RFC3339))
+	}
+	lines = append(lines, "Timeline: open the Timeline tab for phase details.")
+	return strings.Join(lines, "\n")
 }

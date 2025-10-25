@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -90,6 +91,17 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		}
 	}
 	body := append([]byte(nil), resp.Body...)
+	var (
+		timeline    *nettrace.Timeline
+		traceReport *nettrace.Report
+	)
+	if resp.Timeline != nil {
+		timeline = resp.Timeline.Clone()
+	}
+	if resp.TraceReport != nil {
+		traceReport = resp.TraceReport.Clone()
+	}
+
 	return &httpclient.Response{
 		Status:       resp.Status,
 		StatusCode:   resp.StatusCode,
@@ -99,6 +111,8 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		Duration:     resp.Duration,
 		EffectiveURL: resp.EffectiveURL,
 		Request:      resp.Request,
+		Timeline:     timeline,
+		TraceReport:  traceReport,
 	}
 }
 

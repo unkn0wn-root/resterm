@@ -1760,15 +1760,24 @@ func (m Model) renderHelpOverlay() string {
 	if width < 32 {
 		width = 32
 	}
+	contentWidth := maxInt(width-4, 24)
+	viewWidth := maxInt(contentWidth-4, 18)
+	maxBodyHeight := m.height - 8
+	if maxBodyHeight < 6 {
+		maxBodyHeight = 6
+	}
+	bodyHeight := maxInt(min(28, maxBodyHeight), 6)
+
 	header := func(text string, align lipgloss.Position) string {
 		return m.theme.HeaderTitle.
-			Width(width - 4).
+			Width(viewWidth).
 			Align(align).
 			Render(text)
 	}
 
 	rows := []string{
 		header("Key Bindings", lipgloss.Center),
+		m.theme.HeaderValue.Render("Esc closes • ↑/↓ scroll • PgUp/PgDn page"),
 		"",
 		helpRow(m, "Tab", "Cycle focus"),
 		helpRow(m, "Shift+Tab", "Reverse focus"),
@@ -1785,7 +1794,8 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+G", "Show globals summary"),
 		helpRow(m, "Ctrl+Shift+G", "Clear globals for environment"),
 		helpRow(m, "Ctrl+E", "Environment selector"),
-		helpRow(m, "Ctrl+Alt+T / g t", "Theme selector"),
+		helpRow(m, "Ctrl+Alt+L / g t", "Timeline tab"),
+		helpRow(m, "Ctrl+Alt+T / g m", "Theme selector"),
 		helpRow(m, "gk / gj", "Adjust files/requests split"),
 		helpRow(m, "gh / gl", "Adjust editor/response width"),
 		helpRow(m, "gr / gi / gp", "Focus requests / editor / response"),
@@ -1811,11 +1821,26 @@ func (m Model) renderHelpOverlay() string {
 		header("Search", lipgloss.Left),
 		helpRow(m, "Shift+F", "Open search prompt (Ctrl+R toggles regex)"),
 		helpRow(m, "n / p", "Next / previous match (wraps around)"),
-		"",
-		m.theme.HeaderValue.Render("Press Esc to close this help"),
 	}
-	content := lipgloss.JoinVertical(lipgloss.Left, rows...)
-	box := m.theme.BrowserBorder.Width(width).Render(content)
+	body := lipgloss.JoinVertical(lipgloss.Left, rows...)
+
+	var bodyView string
+	if vp := m.helpViewport; vp != nil {
+		vp.Width = viewWidth
+		vp.Height = bodyHeight
+		vp.SetContent(body)
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(vp.View())
+	} else {
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(body)
+	}
+
+	box := m.theme.BrowserBorder.Width(width).Render(bodyView)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),

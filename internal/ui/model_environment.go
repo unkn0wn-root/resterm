@@ -39,6 +39,10 @@ func (m *Model) toggleHelp() {
 	m.helpJustOpened = true
 	m.showEnvSelector = false
 	m.showThemeSelector = false
+	if vp := m.helpViewport; vp != nil {
+		vp.SetYOffset(0)
+		vp.GotoTop()
+	}
 }
 
 func (m *Model) applyEnvironmentSelection() tea.Cmd {

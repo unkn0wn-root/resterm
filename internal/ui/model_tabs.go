@@ -61,6 +61,9 @@ func (m *Model) availableResponseTabs() []responseTab {
 	if m.snapshotHasStats() {
 		tabs = append(tabs, responseTabStats)
 	}
+	if m.snapshotHasTimeline() {
+		tabs = append(tabs, responseTabTimeline)
+	}
 	if m.diffAvailable() {
 		tabs = append(tabs, responseTabDiff)
 	}
@@ -80,6 +83,8 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 		return "Stream"
 	case responseTabStats:
 		return "Stats"
+	case responseTabTimeline:
+		return "Timeline"
 	case responseTabDiff:
 		return "Diff"
 	case responseTabHistory:
@@ -121,4 +126,30 @@ func (m *Model) snapshotHasStats() bool {
 		return true
 	}
 	return false
+}
+
+func (m *Model) snapshotHasTimeline() bool {
+	hasTrace := func(snapshot *responseSnapshot) bool {
+		if snapshot == nil {
+			return false
+		}
+		if snapshot.timeline != nil {
+			return true
+		}
+		if snapshot.traceSpec != nil && snapshot.traceSpec.Enabled {
+			return true
+		}
+		return false
+	}
+
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		if hasTrace(pane.snapshot) {
+			return true
+		}
+	}
+	return hasTrace(m.responseLatest)
 }
