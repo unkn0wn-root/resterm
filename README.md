@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <strong>split in horizontal view</strong>
+  <strong>With trace and timeline</strong>
 </p>
 
 <p align="center">
-  <img src="_media/resterm_hsplit.png" alt="Screenshot of resterm TUI in horizontal split" width="720" />
+  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of resterm workflow run" width="720" />
 </p>
 
 <p align="center">
@@ -32,13 +32,6 @@
   <img src="_media/resterm_profiler.png" alt="Screenshot of resterm profiler" width="720" />
 </p>
 
-<p align="center">
-  <strong>Workflow run with step-by-step validation</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_workflow.png" alt="Screenshot of resterm workflow run" width="720" />
-</p>
 
 Resterm is a terminal-first client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app. Simple, yet feature rich, terminal client for .http/.rest files.
 It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard.
