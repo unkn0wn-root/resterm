@@ -66,6 +66,7 @@ Content-Type: application/json
 | Toggle editor insert mode | `i` / `Esc` |
 | Cycle focus (files -> requests -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus requests / editor / response panes | `g+r` / `g+i` / `g+p` |
+| Open timeline tab | `Ctrl+Alt+L` (or `g+t`) |
 | Toggle WebSocket console (Stream tab) | `Ctrl+I` |
 | Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
 | Adjust files/requests split | `g+j` / `g+k` |
@@ -93,12 +94,22 @@ The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
 - **Headers**: request and response headers.
 - **Stats**: latency summaries and histograms from `@profile` runs.
+- **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
 
 When a request opens a stream, the Stream tab becomes available. Use `Ctrl+I` to reveal the WebSocket console inside the Stream tab, `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, arrow keys to replay recent payloads, `Ctrl+P` to send ping, and `Ctrl+W` to close the session.
 
 Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
+
+### Timeline & tracing
+
+- Add `# @trace` directives to enable HTTP tracing on a request. Budgets use `phase<=duration` notation (`dns<=50ms`, `total<=300ms`, etc.) with an optional `tolerance=` applied to every phase. Supported phases map to `nettrace`: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
+- When a traced response arrives, Resterm evaluates budgets, raises status bar warnings for breaches, and unlocks the Timeline tab. Use `Ctrl+Alt+L` or the `g+t` chord to jump straight to it from anywhere.
+- The Timeline view renders proportional bars, annotates overruns, and lists budget breaches. Metadata such as cached DNS results or reused sockets appears beneath each phase.
+- Scripts can inspect traces through the `trace` binding (`trace.enabled()`, `trace.phases()`, `trace.breaches()`, `trace.withinBudget()`, etc.), allowing automated validations inside Goja test blocks.
+- See `_examples/trace.http` for a runnable pair of requests (one within budget, one deliberately breaching) that demonstrate the timeline output and status messaging.
+- Configure optional OpenTelemetry export with `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`). Additional switches: `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`. Spans are emitted only while tracing is enabled; HTTP failures and budget breaches mark the span status as `Error`.
 
 ### History and globals
 
@@ -198,6 +209,7 @@ Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$ti
 | `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document. |
 | `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
+| `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
 | `@log-sensitive-headers` | `# @log-sensitive-headers [true|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
 | `@setting` | `# @setting key value` | Per-request transport overrides (`timeout`, `proxy`, `followredirects`, `insecure`). |

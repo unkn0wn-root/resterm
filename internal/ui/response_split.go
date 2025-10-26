@@ -8,6 +8,9 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 type responsePaneID int
@@ -28,6 +31,10 @@ type responseSnapshot struct {
 	statsKind     statsReportKind
 	workflowStats *workflowStatsView
 	ready         bool
+	timeline      *nettrace.Timeline
+	traceData     *nettrace.Report
+	traceReport   timelineReport
+	traceSpec     *restfile.TraceSpec
 }
 
 type responsePaneState struct {
@@ -68,7 +75,7 @@ func (pane *responsePaneState) setActiveTab(tab responseTab) {
 		pane.setCurrPosition()
 	}
 	pane.activeTab = tab
-	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders || tab == responseTabStream {
+	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders || tab == responseTabStream || tab == responseTabTimeline {
 		pane.lastContentTab = tab
 	}
 }
@@ -105,7 +112,7 @@ func (pane *responsePaneState) restoreScrollForActiveTab() {
 
 func (pane *responsePaneState) ensureContentTab() responseTab {
 	switch pane.lastContentTab {
-	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabStream:
+	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabStream, responseTabTimeline:
 		return pane.lastContentTab
 	default:
 		return responseTabPretty
@@ -425,6 +432,15 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 			}
 		}
 		return ensureTrailingNewline(content), tab
+	case responseTabTimeline:
+		if snapshot.timeline == nil {
+			return "Trace data unavailable.\n", tab
+		}
+		styles := newTimelineStyles(&m.theme)
+		report := buildTimelineReport(snapshot.timeline, snapshotTraceSpec(snapshot), snapshot.traceData, styles)
+		snapshot.traceReport = report
+		content := renderTimeline(report, pane.viewport.Width)
+		return ensureTrailingNewline(content), tab
 	case responseTabDiff:
 		baseTab := pane.ensureContentTab()
 		if diff, ok := m.computeDiffFor(id, baseTab); ok {
@@ -527,6 +543,13 @@ func colorizeDiff(diff string) string {
 		}
 	}
 	return builder.String()
+}
+
+func snapshotTraceSpec(snapshot *responseSnapshot) *restfile.TraceSpec {
+	if snapshot == nil || snapshot.traceSpec == nil {
+		return nil
+	}
+	return snapshot.traceSpec
 }
 
 func ensureTrailingNewline(content string) string {
@@ -773,4 +796,32 @@ func (m *Model) focusResponsePane(id responsePaneID) {
 	}
 	m.responsePaneFocus = id
 	m.setLivePane(id)
+}
+
+func (m *Model) selectTimelineTab() tea.Cmd {
+	if !m.snapshotHasTimeline() {
+		return func() tea.Msg {
+			return statusMsg{text: "Trace timeline unavailable", level: statusWarn}
+		}
+	}
+	m.setFocus(focusResponse)
+	paneID := m.responsePaneFocus
+	if !m.responseSplit {
+		paneID = responsePanePrimary
+	} else {
+		if primary := m.pane(responsePanePrimary); primary != nil && primary.snapshot != nil && primary.snapshot.timeline != nil {
+			paneID = responsePanePrimary
+		} else if secondary := m.pane(responsePaneSecondary); secondary != nil && secondary.snapshot != nil && secondary.snapshot.timeline != nil {
+			paneID = responsePaneSecondary
+		}
+	}
+	m.focusResponsePane(paneID)
+	pane := m.pane(paneID)
+	if pane == nil {
+		return nil
+	}
+	pane.setActiveTab(responseTabTimeline)
+	pane.invalidateCaches()
+	pane.restoreScrollForActiveTab()
+	return m.syncResponsePane(paneID)
 }

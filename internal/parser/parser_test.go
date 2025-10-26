@@ -655,3 +655,56 @@ GET ws://example.com/socket
 		t.Fatalf("unexpected close step: %+v", ws.Steps[6])
 	}
 }
+
+func TestParseTraceDirectiveWithBudgets(t *testing.T) {
+	src := `# @trace dns<=50ms connect<=120ms total<=400ms tolerance=25ms
+GET https://example.com/api
+`
+
+	doc := Parse("trace.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	spec := req.Metadata.Trace
+	if spec == nil {
+		t.Fatalf("expected trace metadata")
+	}
+	if !spec.Enabled {
+		t.Fatalf("expected trace enabled")
+	}
+	if spec.Budgets.Total != 400*time.Millisecond {
+		t.Fatalf("unexpected total budget: %v", spec.Budgets.Total)
+	}
+	if spec.Budgets.Tolerance != 25*time.Millisecond {
+		t.Fatalf("unexpected tolerance: %v", spec.Budgets.Tolerance)
+	}
+	if spec.Budgets.Phases == nil {
+		t.Fatalf("expected phase budgets")
+	}
+	if spec.Budgets.Phases["dns"] != 50*time.Millisecond {
+		t.Fatalf("unexpected dns budget: %v", spec.Budgets.Phases["dns"])
+	}
+	if spec.Budgets.Phases["connect"] != 120*time.Millisecond {
+		t.Fatalf("unexpected connect budget: %v", spec.Budgets.Phases["connect"])
+	}
+}
+
+func TestParseTraceDirectiveDisabled(t *testing.T) {
+	src := `# @trace enabled=false
+GET https://example.com/api
+`
+
+	doc := Parse("trace-disabled.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	spec := req.Metadata.Trace
+	if spec == nil {
+		t.Fatalf("expected trace metadata")
+	}
+	if spec.Enabled {
+		t.Fatalf("expected trace disabled")
+	}
+}

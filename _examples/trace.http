@@ -1,0 +1,15 @@
+### Happy path
+# @name trace-ok
+# @description Demonstrates trace budgets that pass comfortably.
+# @trace dns<=40ms connect<=120ms ttfb<=300ms total<=600ms tolerance=25ms
+GET https://httpbin.org/delay/0.05
+Accept: application/json
+User-Agent: resterm-trace-demo
+
+### Intentional breach
+# @name trace-breach
+# @description Increase the server delay so the `total` budget triggers.
+# @trace total<=150ms tolerance=25ms
+GET https://httpbin.org/delay/0.25
+Accept: application/json
+User-Agent: resterm-trace-demo

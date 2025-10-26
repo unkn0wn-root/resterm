@@ -432,6 +432,10 @@ func (e *requestEditor) refreshMetadataHints() {
 		return
 	}
 	queryRunes := runes[anchor+1 : caret.Offset]
+	if caret.Offset < len(runes) && isMetadataQueryRune(runes[caret.Offset]) {
+		// Caret sits before additional directive characters; keep existing hints.
+		return
+	}
 	ctx, ok := analyzeMetadataHintContext(queryRunes)
 	if !ok {
 		e.metadataHints.deactivate()
@@ -453,7 +457,10 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 		return nil
 	}
 	selected := e.metadataHints.filtered[e.metadataHints.selection]
-	replacement := selected.Label
+	insert := selected.Label
+	if selected.Insert != "" {
+		insert = selected.Insert
+	}
 	start := e.metadataHints.anchorOffset
 	caret := e.caretPosition()
 	if start < 0 || caret.Offset < start {
@@ -467,29 +474,62 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	}
 	before := runes[:start]
 	after := runes[end:]
+	prefix := ""
 	if e.metadataHints.ctx.mode == metadataHintModeSubcommand {
 		directive := strings.TrimSpace(e.metadataHints.ctx.directive)
 		if directive == "" {
 			e.metadataHints.deactivate()
 			return nil
 		}
-		replacement = "@" + directive + " " + selected.Label
+		prefix = "@" + directive + " "
 	}
-	replacementRunes := []rune(replacement)
+	prefixRunes := []rune(prefix)
+	bodyRunes := []rune(insert)
+	replacementRunes := append(prefixRunes, bodyRunes...)
 	needsSpace := len(after) == 0 || !unicode.IsSpace(after[0])
 	e.pushUndoSnapshot()
 	updated := append([]rune{}, before...)
+	insertStart := len(updated)
 	updated = append(updated, replacementRunes...)
-	newOffset := len(updated)
+	insertEnd := len(updated)
+	newOffset := insertEnd
+	placeholderStart := -1
+	placeholderEnd := -1
+	if back := selected.CursorBack; back > 0 {
+		bodyLen := len(bodyRunes)
+		if bodyLen > 0 {
+			if back > bodyLen {
+				back = bodyLen
+			}
+			cursorMin := insertStart + len(prefixRunes)
+			target := insertEnd - back
+			if target < cursorMin {
+				target = cursorMin
+			}
+			newOffset = target
+			placeholderStart = target
+			placeholderEnd = insertEnd
+		}
+	}
 	if needsSpace {
 		updated = append(updated, ' ')
-		newOffset++
 	}
 	updated = append(updated, after...)
 	newValue := string(updated)
 	prevView := e.ViewStart()
 	e.SetValue(newValue)
 	e.SetViewStart(prevView)
+	if placeholderStart >= 0 && placeholderEnd > placeholderStart {
+		startLine, startCol := positionForOffset(newValue, placeholderStart)
+		endLine, endCol := positionForOffset(newValue, placeholderEnd)
+		startPos := cursorPosition{Line: startLine, Column: startCol, Offset: placeholderStart}
+		endPos := cursorPosition{Line: endLine, Column: endCol, Offset: placeholderEnd}
+		e.startSelection(endPos, selectionManual)
+		e.selection.Update(startPos)
+		newOffset = placeholderStart
+	} else {
+		e.clearSelection()
+	}
 	line, col := positionForOffset(newValue, newOffset)
 	e.moveCursorTo(line, col)
 	e.applySelectionHighlight()
@@ -598,6 +638,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "e":
+		if e.metadataHints.active {
+			break
+		}
 		if !e.motionsEnabled {
 			break
 		}

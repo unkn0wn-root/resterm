@@ -3,9 +3,11 @@ package ui
 import "strings"
 
 type metadataHintOption struct {
-	Label   string
-	Aliases []string
-	Summary string
+	Label      string
+	Aliases    []string
+	Summary    string
+	Insert     string
+	CursorBack int
 }
 
 var metadataHintCatalog = []metadataHintOption{
@@ -24,6 +26,7 @@ var metadataHintCatalog = []metadataHintOption{
 	{Label: "@const", Summary: "Define a reusable constant"},
 	{Label: "@script", Summary: "Start a pre-request or test script block"},
 	{Label: "@capture", Summary: "Capture data from the response"},
+	{Label: "@trace", Summary: "Enable HTTP tracing and latency budgets"},
 	{Label: "@profile", Summary: "Run the request repeatedly with profiling"},
 	{Label: "@workflow", Summary: "Begin a workflow definition"},
 	{Label: "@step", Summary: "Add a workflow step"},
@@ -50,6 +53,21 @@ var metadataSubcommandCatalog = map[string][]metadataHintOption{
 	"script": {
 		{Label: "pre-request", Summary: "Run script before the request"},
 		{Label: "test", Summary: "Run script after the response"},
+	},
+	"trace": {
+		{Label: "enabled=true", Summary: "Turn tracing on"},
+		{Label: "enabled=false", Summary: "Turn tracing off"},
+		{Label: "total<=", Summary: "Set overall latency budget", Insert: "total<=400ms", CursorBack: len("400ms")},
+		{Label: "total=", Summary: "Set overall latency budget (alternate syntax)", Insert: "total=400ms", CursorBack: len("400ms")},
+		{Label: "dns<=", Summary: "Budget for DNS lookup", Insert: "dns<=50ms", CursorBack: len("50ms")},
+		{Label: "connect<=", Summary: "Budget for TCP connect", Insert: "connect<=120ms", CursorBack: len("120ms")},
+		{Label: "tls<=", Summary: "Budget for TLS handshake", Insert: "tls<=150ms", CursorBack: len("150ms")},
+		{Label: "request-headers<=", Summary: "Budget for sending request headers", Insert: "request-headers<=20ms", CursorBack: len("20ms")},
+		{Label: "request-body<=", Summary: "Budget for sending request body", Insert: "request-body<=100ms", CursorBack: len("100ms")},
+		{Label: "ttfb<=", Summary: "Budget until first response byte", Insert: "ttfb<=200ms", CursorBack: len("200ms")},
+		{Label: "transfer<=", Summary: "Budget for response transfer", Insert: "transfer<=250ms", CursorBack: len("250ms")},
+		{Label: "tolerance=", Summary: "Allow extra shared tolerance", Insert: "tolerance=25ms", CursorBack: len("25ms")},
+		{Label: "allowance=", Summary: "Alias for tolerance", Insert: "allowance=25ms", CursorBack: len("25ms")},
 	},
 	"ws": {
 		{Label: "send", Summary: "Send a text frame"},

@@ -123,7 +123,12 @@ func (c *Client) StartWebSocket(
 		return nil, nil, err
 	}
 
-	client, err := c.buildHTTPClient(effectiveOpts)
+	factory := c.resolveHTTPFactory()
+	if factory == nil {
+		handshakeCancel()
+		return nil, nil, errdef.New(errdef.CodeHTTP, "http client factory unavailable")
+	}
+	client, err := factory(effectiveOpts)
 	if err != nil {
 		handshakeCancel()
 		return nil, nil, err
@@ -358,15 +363,14 @@ func (c *Client) CompleteWebSocket(
 
 	<-eventsDone
 
+	state, stateErr := session.State()
 	stats := session.StatsSnapshot()
 	if !stats.EndedAt.IsZero() {
 		acc.summary.Duration = stats.EndedAt.Sub(stats.StartedAt)
 	} else {
 		acc.summary.Duration = time.Since(handle.Meta.ConnectedAt)
 	}
-	if acc.summary.ClosedBy == "" {
-		acc.summary.ClosedBy = "client"
-	}
+	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
 
 	transcript := WebSocketTranscript{Events: acc.events, Summary: acc.summary}
 	body, err := json.MarshalIndent(transcript, "", "  ")
@@ -1001,5 +1005,24 @@ func directionToString(dir stream.Direction) string {
 		return "receive"
 	default:
 		return "info"
+	}
+}
+
+func applyWebSocketSummaryDefaults(sum *WebSocketSummary, state stream.State, stateErr error) {
+	if sum == nil {
+		return
+	}
+	if sum.ClosedBy == "" {
+		if state == stream.StateFailed || stateErr != nil {
+			sum.ClosedBy = "error"
+			if sum.CloseReason == "" && stateErr != nil {
+				sum.CloseReason = stateErr.Error()
+			}
+		} else {
+			sum.ClosedBy = "client"
+		}
+	}
+	if sum.CloseReason == "" && stateErr != nil && sum.ClosedBy == "error" {
+		sum.CloseReason = stateErr.Error()
 	}
 }

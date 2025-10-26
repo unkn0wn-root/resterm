@@ -7,7 +7,6 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Kind identifies the type of streaming session.
 type Kind int
 
 const (

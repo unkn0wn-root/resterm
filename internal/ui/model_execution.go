@@ -24,6 +24,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/traceutil"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -57,6 +58,12 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)
 	}
+	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
+		options.Trace = true
+		if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
+			options.TraceBudget = &budget
+		}
+	}
 	if cloned.Metadata.Profile != nil {
 		return m.startProfileRun(doc, cloned, options)
 	}
@@ -75,6 +82,12 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 }
 
 func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, extras ...map[string]string) tea.Cmd {
+	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
+		options.Trace = true
+		if budget, ok := traceutil.BudgetFromSpec(req.Metadata.Trace); ok {
+			options.TraceBudget = &budget
+		}
+	}
 	client := m.client
 	runner := m.scriptRunner
 	envName := m.cfg.EnvironmentName
@@ -242,7 +255,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			response, err = client.Execute(ctx, req, resolver, options)
 		}
 		if err != nil {
-			return responseMsg{err: err, executed: req}
+			return responseMsg{response: response, err: err, executed: req}
 		}
 
 		streamInfo, streamErr := streamInfoFromResponse(req, response)
@@ -259,12 +272,14 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		updatedVars := m.collectVariables(doc, req)
 		testVars := mergeVariableMaps(updatedVars, scriptVars)
 		testGlobals := m.collectGlobalValues(doc)
+		traceInput := scripts.NewTraceInput(response.Timeline, req.Metadata.Trace)
 		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 			Response:  respForScripts,
 			Variables: testVars,
 			Globals:   testGlobals,
 			BaseDir:   options.BaseDir,
 			Stream:    streamInfo,
+			Trace:     traceInput,
 		})
 		m.applyGlobalMutations(globalChanges)
 

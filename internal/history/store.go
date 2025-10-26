@@ -30,6 +30,7 @@ type Entry struct {
 	Description    string          `json:"description,omitempty"`
 	Tags           []string        `json:"tags,omitempty"`
 	ProfileResults *ProfileResults `json:"profileResults,omitempty"`
+	Trace          *TraceSummary   `json:"trace,omitempty"`
 }
 
 type ProfileResults struct {

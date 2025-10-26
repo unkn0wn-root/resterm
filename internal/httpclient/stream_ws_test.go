@@ -3,6 +3,8 @@ package httpclient
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -117,6 +119,57 @@ func TestExecuteWebSocketChat(t *testing.T) {
 	}
 	if !foundPong {
 		t.Fatalf("expected pong event in transcript: %+v", transcript.Events)
+	}
+}
+
+func TestStartWebSocketUsesHTTPFactory(t *testing.T) {
+	client := NewClient(nil)
+	called := false
+	client.SetHTTPFactory(func(Options) (*http.Client, error) {
+		called = true
+		return &http.Client{}, nil
+	})
+	client.wsDial = func(ctx context.Context, url string, opts *websocket.DialOptions) (*websocket.Conn, *http.Response, error) {
+		return nil, nil, fmt.Errorf("dial boom")
+	}
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.com/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{},
+		},
+	}
+
+	_, _, err := client.StartWebSocket(context.Background(), req, nil, Options{})
+	if err == nil {
+		t.Fatalf("expected dial error")
+	}
+	if !called {
+		t.Fatalf("expected custom HTTP factory to be used")
+	}
+}
+
+func TestApplyWebSocketSummaryDefaults(t *testing.T) {
+	sum := WebSocketSummary{}
+	applyWebSocketSummaryDefaults(&sum, stream.StateFailed, errors.New("boom"))
+	if sum.ClosedBy != "error" {
+		t.Fatalf("expected closedBy to be error, got %q", sum.ClosedBy)
+	}
+	if sum.CloseReason != "boom" {
+		t.Fatalf("expected close reason to propagate error, got %q", sum.CloseReason)
+	}
+
+	sumExisting := WebSocketSummary{ClosedBy: "server"}
+	applyWebSocketSummaryDefaults(&sumExisting, stream.StateFailed, errors.New("ignored"))
+	if sumExisting.ClosedBy != "server" {
+		t.Fatalf("expected existing closedBy to remain, got %q", sumExisting.ClosedBy)
+	}
+
+	sumClient := WebSocketSummary{}
+	applyWebSocketSummaryDefaults(&sumClient, stream.StateClosed, nil)
+	if sumClient.ClosedBy != "client" {
+		t.Fatalf("expected default closedBy to client, got %q", sumClient.ClosedBy)
 	}
 }
 

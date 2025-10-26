@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -304,5 +305,95 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	}
 	if updated.Delete {
 		t.Fatalf("did not expect delete flag")
+	}
+}
+
+func TestTraceBindingProvidesTimeline(t *testing.T) {
+	runner := NewRunner(nil)
+	t0 := time.Unix(0, 0)
+	timeline := &nettrace.Timeline{
+		Started:   t0,
+		Completed: t0.Add(75 * time.Millisecond),
+		Duration:  75 * time.Millisecond,
+		Phases: []nettrace.Phase{
+			{Kind: nettrace.PhaseDNS, Start: t0, End: t0.Add(5 * time.Millisecond), Duration: 5 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "example.com", Cached: true}},
+			{Kind: nettrace.PhaseConnect, Start: t0.Add(5 * time.Millisecond), End: t0.Add(30 * time.Millisecond), Duration: 25 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "93.184.216.34:443"}},
+			{Kind: nettrace.PhaseTLS, Start: t0.Add(30 * time.Millisecond), End: t0.Add(45 * time.Millisecond), Duration: 15 * time.Millisecond},
+			{Kind: nettrace.PhaseReqHdrs, Start: t0.Add(45 * time.Millisecond), End: t0.Add(46 * time.Millisecond), Duration: 1 * time.Millisecond},
+			{Kind: nettrace.PhaseReqBody, Start: t0.Add(46 * time.Millisecond), End: t0.Add(48 * time.Millisecond), Duration: 2 * time.Millisecond},
+			{Kind: nettrace.PhaseTTFB, Start: t0.Add(48 * time.Millisecond), End: t0.Add(55 * time.Millisecond), Duration: 7 * time.Millisecond},
+			{Kind: nettrace.PhaseTransfer, Start: t0.Add(55 * time.Millisecond), End: t0.Add(75 * time.Millisecond), Duration: 20 * time.Millisecond},
+		},
+	}
+	spec := &restfile.TraceSpec{
+		Enabled: true,
+		Budgets: restfile.TraceBudget{
+			Total:     60 * time.Millisecond,
+			Tolerance: 5 * time.Millisecond,
+			Phases: map[string]time.Duration{
+				"dns":     5 * time.Millisecond,
+				"connect": 15 * time.Millisecond,
+			},
+		},
+	}
+	traceInput := NewTraceInput(timeline, spec)
+	response := &Response{Kind: ResponseKindHTTP, Status: "200 OK", Code: 200}
+	script := `client.test("trace basics", function () {
+  tests.assert(trace.enabled() === true, "enabled");
+  tests.assert(Math.round(trace.durationMs()) === 75, "duration ms");
+  tests.assert(typeof trace.started() === "string", "started string");
+  const phases = trace.phases();
+  tests.assert(phases.length === 7, "phase count");
+  tests.assert(phases[0].meta.cached === true, "dns cached meta");
+  const dns = trace.getPhase("dns");
+  tests.assert(dns.count === 1, "dns count");
+  tests.assert(Math.round(dns.durationMs) === 5, "dns duration");
+  const names = trace.phaseNames();
+  tests.assert(names.indexOf("dns") !== -1, "names include dns");
+  const budgets = trace.budgets();
+  tests.assert(budgets.enabled === true, "budgets enabled");
+  tests.assert(Math.round(budgets.phases.connect) === 15, "connect budget");
+  const breaches = trace.breaches();
+  tests.assert(breaches.length === 2, "breaches count");
+  tests.assert(trace.withinBudget() === false, "not within budget");
+});`
+
+	results, globals, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{
+		Response:  response,
+		Variables: map[string]string{},
+		Trace:     traceInput,
+	})
+	if err != nil {
+		t.Fatalf("trace test script: %v", err)
+	}
+	if globals != nil {
+		t.Fatalf("expected no globals, got %+v", globals)
+	}
+	if len(results) == 0 {
+		t.Fatalf("expected trace script results")
+	}
+	for _, res := range results {
+		if !res.Passed {
+			t.Fatalf("trace script failure: %+v", res)
+		}
+	}
+}
+
+func TestTraceBindingDisabled(t *testing.T) {
+	runner := NewRunner(nil)
+	resp := &Response{Kind: ResponseKindHTTP, Status: "200 OK", Code: 200}
+	script := `client.test("trace disabled", function () {
+  tests.assert(trace.enabled() === false, "trace disabled");
+  tests.assert(trace.breaches().length === 0, "no breaches when disabled");
+  tests.assert(trace.withinBudget() === true, "within budget default");
+});`
+	results, _, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{Response: resp})
+	if err != nil {
+		t.Fatalf("trace disabled script: %v", err)
+	}
+	for _, res := range results {
+		if !res.Passed {
+			t.Fatalf("trace disabled assertion failed: %+v", res)
+		}
 	}
 }

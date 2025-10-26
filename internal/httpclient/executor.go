@@ -19,7 +19,9 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"nhooyr.io/websocket"
 )
@@ -33,6 +35,8 @@ type Options struct {
 	ClientCert         string
 	ClientKey          string
 	BaseDir            string
+	Trace              bool
+	TraceBudget        *nettrace.Budget
 }
 
 type FileSystem interface {
@@ -50,6 +54,17 @@ type Client struct {
 	jar         http.CookieJar
 	httpFactory func(Options) (*http.Client, error)
 	wsDial      func(context.Context, string, *websocket.DialOptions) (*websocket.Conn, *http.Response, error)
+	telemetry   telemetry.Instrumenter
+}
+
+func (c *Client) resolveHTTPFactory() func(Options) (*http.Client, error) {
+	if c == nil {
+		return nil
+	}
+	if c.httpFactory != nil {
+		return c.httpFactory
+	}
+	return c.buildHTTPClient
 }
 
 func NewClient(fs FileSystem) *Client {
@@ -57,7 +72,7 @@ func NewClient(fs FileSystem) *Client {
 		fs = OSFileSystem{}
 	}
 	jar, _ := cookiejar.New(nil)
-	c := &Client{fs: fs, jar: jar}
+	c := &Client{fs: fs, jar: jar, telemetry: telemetry.Noop()}
 	c.httpFactory = c.buildHTTPClient
 	c.wsDial = websocket.Dial
 	return c
@@ -69,6 +84,14 @@ func (c *Client) SetHTTPFactory(factory func(Options) (*http.Client, error)) {
 	c.httpFactory = factory
 }
 
+// SetTelemetry configures the instrumenter used to emit OpenTelemetry spans. Passing nil restores the no-op implementation.
+func (c *Client) SetTelemetry(instr telemetry.Instrumenter) {
+	if instr == nil {
+		instr = telemetry.Noop()
+	}
+	c.telemetry = instr
+}
+
 type Response struct {
 	Status       string
 	StatusCode   int
@@ -78,6 +101,8 @@ type Response struct {
 	Duration     time.Duration
 	EffectiveURL string
 	Request      *restfile.Request
+	Timeline     *nettrace.Timeline
+	TraceReport  *nettrace.Report
 }
 
 func (c *Client) Execute(
@@ -91,9 +116,9 @@ func (c *Client) Execute(
 		return nil, err
 	}
 
-	factory := c.httpFactory
+	factory := c.resolveHTTPFactory()
 	if factory == nil {
-		factory = c.buildHTTPClient
+		return nil, errdef.New(errdef.CodeHTTP, "http client factory unavailable")
 	}
 
 	client, err := factory(effectiveOpts)
@@ -101,11 +126,74 @@ func (c *Client) Execute(
 		return nil, err
 	}
 
+	var (
+		timeline    *nettrace.Timeline
+		traceSess   *traceSession
+		traceReport *nettrace.Report
+	)
+
+	instrumenter := c.telemetry
+	if !effectiveOpts.Trace || instrumenter == nil {
+		instrumenter = telemetry.Noop()
+	}
+
+	var budgetCopy *nettrace.Budget
+	if effectiveOpts.TraceBudget != nil {
+		clone := effectiveOpts.TraceBudget.Clone()
+		budgetCopy = &clone
+	}
+
+	spanCtx, requestSpan := instrumenter.Start(httpReq.Context(), telemetry.RequestStart{
+		Request:     req,
+		HTTPRequest: httpReq,
+		Budget:      budgetCopy,
+	})
+	httpReq = httpReq.WithContext(spanCtx)
+
+	defer func() {
+		if requestSpan == nil {
+			return
+		}
+		if timeline != nil || traceReport != nil {
+			requestSpan.RecordTrace(timeline, traceReport)
+		}
+		statusCode := 0
+		if resp != nil {
+			statusCode = resp.StatusCode
+		}
+		requestSpan.End(telemetry.RequestResult{
+			Err:        err,
+			StatusCode: statusCode,
+			Report:     traceReport,
+		})
+	}()
+
+	if effectiveOpts.Trace {
+		traceSess = newTraceSession()
+		httpReq = traceSess.bind(httpReq)
+	}
+
+	buildTraceReport := func(tl *nettrace.Timeline) *nettrace.Report {
+		if tl == nil {
+			return nil
+		}
+		var budget nettrace.Budget
+		if effectiveOpts.TraceBudget != nil {
+			budget = effectiveOpts.TraceBudget.Clone()
+		}
+		return nettrace.NewReport(tl, budget)
+	}
+
 	start := time.Now()
 	httpResp, err := client.Do(httpReq)
-	duration := time.Since(start)
 	if err != nil {
-		return &Response{Request: req, Duration: duration}, errdef.Wrap(errdef.CodeHTTP, err, "perform request")
+		duration := time.Since(start)
+		if traceSess != nil {
+			traceSess.fail(err)
+			timeline = traceSess.complete()
+			traceReport = buildTraceReport(timeline)
+		}
+		return &Response{Request: req, Duration: duration, Timeline: timeline, TraceReport: traceReport}, errdef.Wrap(errdef.CodeHTTP, err, "perform request")
 	}
 
 	defer func() {
@@ -115,9 +203,22 @@ func (c *Client) Execute(
 	}()
 
 	body, err := io.ReadAll(httpResp.Body)
+	if traceSess != nil {
+		traceSess.finishTransfer(err)
+	}
 	if err != nil {
+		if traceSess != nil {
+			traceSess.fail(err)
+			traceSess.complete()
+		}
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "read response body")
 	}
+
+	if traceSess != nil {
+		timeline = traceSess.complete()
+		traceReport = buildTraceReport(timeline)
+	}
+	duration := time.Since(start)
 
 	resp = &Response{
 		Status:       httpResp.Status,
@@ -125,10 +226,12 @@ func (c *Client) Execute(
 		Proto:        httpResp.Proto,
 		Headers:      httpResp.Header.Clone(),
 		Body:         body,
-		Duration:     duration,
 		EffectiveURL: httpResp.Request.URL.String(),
 		Request:      req,
+		Timeline:     timeline,
+		TraceReport:  traceReport,
 	}
+	resp.Duration = duration
 
 	return resp, nil
 }
