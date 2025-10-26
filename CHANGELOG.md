@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.6.0](https://github.com/unkn0wn-root/resterm/compare/v0.5.2...v0.6.0) (2025-10-26)
+
+
+### Features
+
+* add HTTP tracing, timeline UI, and OTEL export support ([af0cee1](https://github.com/unkn0wn-root/resterm/commit/af0cee1708e08b1ecbec577cf2a9365c0bc269d0))
+
 ### [0.5.2](https://github.com/unkn0wn-root/resterm/compare/v0.5.1...v0.5.2) (2025-10-24)
 
 
