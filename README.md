@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of resterm workflow run" width="720" />
+  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of resterm with timeline" width="720" />
 </p>
 
 <p align="center">
