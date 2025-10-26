@@ -17,7 +17,6 @@ import (
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.24.0"
 	"go.opentelemetry.io/otel/trace"
-	"google.golang.org/grpc"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -272,10 +271,8 @@ func newExporter(cfg Config) (sdktrace.SpanExporter, error) {
 	defer cancel()
 
 	clientOpts := []otlptracegrpc.Option{
-		otlptracegrpc.WithDialOption(grpc.WithBlock()),
+		otlptracegrpc.WithEndpoint(cfg.Endpoint),
 	}
-
-	clientOpts = append(clientOpts, otlptracegrpc.WithEndpoint(cfg.Endpoint))
 	if cfg.Insecure {
 		clientOpts = append(clientOpts, otlptracegrpc.WithInsecure())
 	}

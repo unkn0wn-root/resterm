@@ -55,14 +55,14 @@ func newTimelineStyles(th *theme.Theme) timelineStyles {
 		return styles
 	}
 
-	styles.title = th.HeaderTitle.Copy().Bold(true)
-	styles.phase = th.ResponseContent.Copy().Bold(true)
-	styles.emph = th.ResponseContent.Copy().Bold(true)
-	styles.meta = th.ResponseContent.Copy().Faint(true)
-	styles.barOK = th.Success.Copy()
-	styles.barWarn = th.Error.Copy().Bold(true)
-	styles.statusOK = th.Success.Copy().Bold(true)
-	styles.statusWarn = th.Error.Copy().Bold(true)
+	styles.title = th.HeaderTitle.Bold(true)
+	styles.phase = th.ResponseContent.Bold(true)
+	styles.emph = th.ResponseContent.Bold(true)
+	styles.meta = th.ResponseContent.Faint(true)
+	styles.barOK = th.Success
+	styles.barWarn = th.Error.Bold(true)
+	styles.statusOK = th.Success.Bold(true)
+	styles.statusWarn = th.Error.Bold(true)
 	return styles
 }
 
