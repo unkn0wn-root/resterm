@@ -2,10 +2,12 @@ package ui
 
 import (
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -221,6 +223,49 @@ func TestWrapStructuredLineMaintainsValueColor(t *testing.T) {
 	if strings.Contains(continuation, keyColor) {
 		t.Fatalf("expected continuation not to include key color, got %q", continuation)
 	}
+}
+
+func TestRenderContentLengthLine(t *testing.T) {
+	t.Run("uses numeric header value", func(t *testing.T) {
+		resp := &httpclient.Response{
+			Headers: http.Header{"Content-Length": {"64"}},
+			Body:    []byte("payload"),
+		}
+		line := renderContentLengthLine(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: 64 bytes" {
+			t.Fatalf("expected header-derived content length, got %q", plain)
+		}
+	})
+
+	t.Run("falls back to body length", func(t *testing.T) {
+		resp := &httpclient.Response{Body: []byte("xyz")}
+		line := renderContentLengthLine(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: 3 bytes" {
+			t.Fatalf("expected body length fallback, got %q", plain)
+		}
+	})
+
+	t.Run("returns raw header when non-numeric", func(t *testing.T) {
+		resp := &httpclient.Response{
+			Headers: http.Header{"Content-Length": {"approx 100"}},
+		}
+		line := renderContentLengthLine(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: approx 100" {
+			t.Fatalf("expected raw header value, got %q", plain)
+		}
+	})
+
+	t.Run("pluralizes singular byte", func(t *testing.T) {
+		resp := &httpclient.Response{Body: []byte{0x01}}
+		line := renderContentLengthLine(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: 1 byte" {
+			t.Fatalf("expected singular byte form, got %q", plain)
+		}
+	})
 }
 
 func TestFormatTestSummaryColorsStatuses(t *testing.T) {

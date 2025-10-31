@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
@@ -99,6 +100,9 @@ func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult,
 	if statusLine != "" {
 		lines = append(lines, statusLine)
 	}
+	if lengthLine := renderContentLengthLine(resp); lengthLine != "" {
+		lines = append(lines, lengthLine)
+	}
 	if trimmedURL := strings.TrimSpace(resp.EffectiveURL); trimmedURL != "" {
 		lines = append(lines, renderLabelValue("URL", trimmedURL, statsLabelStyle, statsValueStyle))
 	}
@@ -132,6 +136,45 @@ func renderStatusLine(status string, code int) string {
 	}
 	style := selectStatusStyle(code)
 	return renderLabelValue("Status", trimmed, statsLabelStyle, style)
+}
+
+func renderContentLengthLine(resp *httpclient.Response) string {
+	if resp == nil {
+		return ""
+	}
+
+	var (
+		headerValue string
+		length      int64 = -1
+	)
+	if resp.Headers != nil {
+		headerValue = strings.TrimSpace(resp.Headers.Get("Content-Length"))
+	}
+
+	if headerValue != "" {
+		if parsed, err := strconv.ParseInt(headerValue, 10, 64); err == nil && parsed >= 0 {
+			length = parsed
+		} else {
+			return renderLabelValue("Content-Length", headerValue, statsLabelStyle, statsValueStyle)
+		}
+	}
+
+	if length < 0 {
+		length = int64(len(resp.Body))
+	}
+
+	if length < 0 {
+		return ""
+	}
+
+	return renderLabelValue("Content-Length", formatByteQuantity(length), statsLabelStyle, statsValueStyle)
+}
+
+func formatByteQuantity(n int64) string {
+	if n == 1 {
+		return "1 byte"
+	}
+	return fmt.Sprintf("%d bytes", n)
 }
 
 func selectStatusStyle(code int) lipgloss.Style {
