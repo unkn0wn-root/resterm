@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.6.1](https://github.com/unkn0wn-root/resterm/compare/v0.6.0...v0.6.1) (2025-10-31)
+
+
+### Features
+
+* add content-length to the response sum ([596dc5d](https://github.com/unkn0wn-root/resterm/commit/596dc5d99fbe8ecb30cc0c332675b769706340aa))
+
 ## [0.6.0](https://github.com/unkn0wn-root/resterm/compare/v0.5.2...v0.6.0) (2025-10-26)
 
 
