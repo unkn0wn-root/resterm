@@ -57,15 +57,15 @@ func TestComputeDiffForHeadersIncludesBody(t *testing.T) {
 	model.responseSplit = true
 
 	left := &responseSnapshot{
-		pretty:  ensureTrailingNewline("Status: 201 Created\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}"),
-		raw:     ensureTrailingNewline("Status: 201 Created\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}"),
-		headers: ensureTrailingNewline("Status: 201 Created\nURL: http://localhost/items\nDuration: 3ms\n\nHeaders:\nContent-Type: application/json"),
+		pretty:  ensureTrailingNewline("Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}"),
+		raw:     ensureTrailingNewline("Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}"),
+		headers: ensureTrailingNewline("Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\nHeaders:\nContent-Type: application/json"),
 		ready:   true,
 	}
 	right := &responseSnapshot{
-		pretty:  ensureTrailingNewline("Status: 200 OK\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}"),
-		raw:     ensureTrailingNewline("Status: 200 OK\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}"),
-		headers: ensureTrailingNewline("Status: 200 OK\nURL: http://localhost/items\nDuration: 4ms\n\nHeaders:\nContent-Type: application/json"),
+		pretty:  ensureTrailingNewline("Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}"),
+		raw:     ensureTrailingNewline("Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}"),
+		headers: ensureTrailingNewline("Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\nHeaders:\nContent-Type: application/json"),
 		ready:   true,
 	}
 
