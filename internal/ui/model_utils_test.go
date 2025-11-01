@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"errors"
 	"net/http"
 	"strings"
@@ -264,6 +265,46 @@ func TestRenderContentLengthLine(t *testing.T) {
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 1 byte" {
 			t.Fatalf("expected singular byte form, got %q", plain)
+		}
+	})
+}
+
+func TestRenderContentLengthLinePretty(t *testing.T) {
+	t.Run("formats numeric header", func(t *testing.T) {
+		resp := &httpclient.Response{
+			Headers: http.Header{"Content-Length": {"2048"}},
+		}
+		line := renderContentLengthLinePretty(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: 2 kb" {
+			t.Fatalf("expected human readable size, got %q", plain)
+		}
+	})
+
+	t.Run("falls back to body length", func(t *testing.T) {
+		resp := &httpclient.Response{Body: bytes.Repeat([]byte{'x'}, 1536)}
+		line := renderContentLengthLinePretty(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: 1.5 kb" {
+			t.Fatalf("expected body length in human readable form, got %q", plain)
+		}
+	})
+
+	t.Run("handles zero length", func(t *testing.T) {
+		resp := &httpclient.Response{}
+		line := renderContentLengthLinePretty(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: 0 b" {
+			t.Fatalf("expected zero length to render with unit, got %q", plain)
+		}
+	})
+
+	t.Run("returns raw value when non-numeric", func(t *testing.T) {
+		resp := &httpclient.Response{Headers: http.Header{"Content-Length": {"approx 100"}}}
+		line := renderContentLengthLinePretty(resp)
+		plain := stripANSIEscape(line)
+		if plain != "Content-Length: approx 100" {
+			t.Fatalf("expected non-numeric header to remain unchanged, got %q", plain)
 		}
 	})
 }

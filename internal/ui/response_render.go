@@ -121,7 +121,8 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 		return noResponseMessage, noResponseMessage, noResponseMessage
 	}
 
-	summary := buildResponseSummary(resp, tests, scriptErr)
+	summary := buildRespSum(resp, tests, scriptErr)
+	prettySummary := buildRespSumPretty(resp, tests, scriptErr)
 	coloredHeaders := formatHTTPHeaders(resp.Headers, true)
 
 	contentType := ""
@@ -145,12 +146,10 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 		headersSectionColored = statsHeadingStyle.Render("Headers:") + "\n" + coloredHeaders
 	}
 
-	coloredSummary := summary
 	plainSummary := stripANSIEscape(summary)
-
-	prettyView := joinSections(coloredSummary, prettyBody)
+	prettyView := joinSections(prettySummary, prettyBody)
 	rawView := joinSections(plainSummary, rawBody)
-	headersView := joinSections(coloredSummary, headersSectionColored)
+	headersView := joinSections(summary, headersSectionColored)
 
 	return prettyView, rawView, headersView
 }
