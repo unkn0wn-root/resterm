@@ -90,9 +90,26 @@ func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) string {
+func buildRespSum(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) string {
+	return buildRespSumWithLength(resp, tests, scriptErr, renderContentLengthLine)
+}
+
+func buildRespSumPretty(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) string {
+	return buildRespSumWithLength(resp, tests, scriptErr, renderContentLengthLinePretty)
+}
+
+func buildRespSumWithLength(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+	lengthFn func(*httpclient.Response) string,
+) string {
 	if resp == nil {
 		return ""
+	}
+
+	if lengthFn == nil {
+		lengthFn = renderContentLengthLine
 	}
 
 	var lines []string
@@ -100,20 +117,25 @@ func buildResponseSummary(resp *httpclient.Response, tests []scripts.TestResult,
 	if statusLine != "" {
 		lines = append(lines, statusLine)
 	}
-	if lengthLine := renderContentLengthLine(resp); lengthLine != "" {
+
+	if lengthLine := lengthFn(resp); lengthLine != "" {
 		lines = append(lines, lengthLine)
 	}
+
 	if trimmedURL := strings.TrimSpace(resp.EffectiveURL); trimmedURL != "" {
 		lines = append(lines, renderLabelValue("URL", trimmedURL, statsLabelStyle, statsValueStyle))
 	}
+
 	if resp.Headers != nil {
 		if streamType := strings.TrimSpace(resp.Headers.Get(streamHeaderType)); streamType != "" {
 			lines = append(lines, renderLabelValue("Stream", streamType, statsLabelStyle, statsValueStyle))
 		}
+
 		if summary := strings.TrimSpace(resp.Headers.Get(streamHeaderSummary)); summary != "" {
 			lines = append(lines, renderLabelValue("Stream summary", summary, statsLabelStyle, statsMessageStyle))
 		}
 	}
+
 	if resp.Duration > 0 {
 		dur := resp.Duration.Round(time.Millisecond)
 		if dur <= 0 {
@@ -138,23 +160,55 @@ func renderStatusLine(status string, code int) string {
 	return renderLabelValue("Status", trimmed, statsLabelStyle, style)
 }
 
-func renderContentLengthLine(resp *httpclient.Response) string {
-	if resp == nil {
-		return ""
-	}
+type contentLen struct {
+	n       int64
+	raw     string
+	has     bool
+	numeric bool
+}
 
+func contentLength(resp *httpclient.Response) contentLen {
+	if resp == nil {
+		return contentLen{}
+	}
 	if resp.Headers != nil {
 		if v := strings.TrimSpace(resp.Headers.Get("Content-Length")); v != "" {
 			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
-				return renderLabelValue("Content-Length", formatByteQuantity(n), statsLabelStyle, statsValueStyle)
+				return contentLen{n: n, has: true, numeric: true}
 			}
-
-			return renderLabelValue("Content-Length", v, statsLabelStyle, statsValueStyle)
+			return contentLen{raw: v, has: true}
 		}
 	}
-
 	n := int64(len(resp.Body))
-	return renderLabelValue("Content-Length", formatByteQuantity(n), statsLabelStyle, statsValueStyle)
+	return contentLen{n: n, has: true, numeric: true}
+}
+
+func renderContentLengthLine(resp *httpclient.Response) string {
+	cl := contentLength(resp)
+	if !cl.has {
+		return ""
+	}
+
+	value := cl.raw
+	if cl.numeric {
+		value = formatByteQuantity(cl.n)
+	}
+
+	return renderLabelValue("Content-Length", value, statsLabelStyle, statsValueStyle)
+}
+
+func renderContentLengthLinePretty(resp *httpclient.Response) string {
+	cl := contentLength(resp)
+	if !cl.has {
+		return ""
+	}
+
+	value := cl.raw
+	if cl.numeric {
+		value = formatByteSize(cl.n)
+	}
+
+	return renderLabelValue("Content-Length", value, statsLabelStyle, statsValueStyle)
 }
 
 func formatByteQuantity(n int64) string {
@@ -162,6 +216,27 @@ func formatByteQuantity(n int64) string {
 		return "1 byte"
 	}
 	return fmt.Sprintf("%d bytes", n)
+}
+
+func formatByteSize(n int64) string {
+	if n < 0 {
+		n = 0
+	}
+
+	units := []string{"b", "kb", "mb", "gb"}
+	f := float64(n)
+	i := 0
+	for i < len(units)-1 && f >= 1024 {
+		f /= 1024
+		i++
+	}
+	if i == 0 {
+		return fmt.Sprintf("%d %s", n, units[i])
+	}
+
+	s := fmt.Sprintf("%.1f", f)
+	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
+	return s + " " + units[i]
 }
 
 func selectStatusStyle(code int) lipgloss.Style {
