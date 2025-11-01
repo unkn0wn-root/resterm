@@ -143,31 +143,18 @@ func renderContentLengthLine(resp *httpclient.Response) string {
 		return ""
 	}
 
-	var (
-		headerValue string
-		length      int64 = -1
-	)
 	if resp.Headers != nil {
-		headerValue = strings.TrimSpace(resp.Headers.Get("Content-Length"))
-	}
+		if v := strings.TrimSpace(resp.Headers.Get("Content-Length")); v != "" {
+			if n, err := strconv.ParseInt(v, 10, 64); err == nil && n >= 0 {
+				return renderLabelValue("Content-Length", formatByteQuantity(n), statsLabelStyle, statsValueStyle)
+			}
 
-	if headerValue != "" {
-		if parsed, err := strconv.ParseInt(headerValue, 10, 64); err == nil && parsed >= 0 {
-			length = parsed
-		} else {
-			return renderLabelValue("Content-Length", headerValue, statsLabelStyle, statsValueStyle)
+			return renderLabelValue("Content-Length", v, statsLabelStyle, statsValueStyle)
 		}
 	}
 
-	if length < 0 {
-		length = int64(len(resp.Body))
-	}
-
-	if length < 0 {
-		return ""
-	}
-
-	return renderLabelValue("Content-Length", formatByteQuantity(length), statsLabelStyle, statsValueStyle)
+	n := int64(len(resp.Body))
+	return renderLabelValue("Content-Length", formatByteQuantity(n), statsLabelStyle, statsValueStyle)
 }
 
 func formatByteQuantity(n int64) string {
