@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.6.2](https://github.com/unkn0wn-root/resterm/compare/v0.6.1...v0.6.2) (2025-11-01)
+
+
+### Features
+
+* improve response summary content-length rendering ([0ed32ab](https://github.com/unkn0wn-root/resterm/commit/0ed32ab5f5ef7591a811e64b5a2bf55987805518))
+
 ### [0.6.1](https://github.com/unkn0wn-root/resterm/compare/v0.6.0...v0.6.1) (2025-10-31)
 
 
