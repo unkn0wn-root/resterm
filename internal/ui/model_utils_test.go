@@ -276,7 +276,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 		}
 		line := renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
-		if plain != "Content-Length: 2 kb" {
+		if plain != "Content-Length: 2 KiB" {
 			t.Fatalf("expected human readable size, got %q", plain)
 		}
 	})
@@ -285,7 +285,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 		resp := &httpclient.Response{Body: bytes.Repeat([]byte{'x'}, 1536)}
 		line := renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
-		if plain != "Content-Length: 1.5 kb" {
+		if plain != "Content-Length: 1.5 KiB" {
 			t.Fatalf("expected body length in human readable form, got %q", plain)
 		}
 	})
@@ -294,7 +294,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 		resp := &httpclient.Response{}
 		line := renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
-		if plain != "Content-Length: 0 b" {
+		if plain != "Content-Length: 0 B" {
 			t.Fatalf("expected zero length to render with unit, got %q", plain)
 		}
 	})

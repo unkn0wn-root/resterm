@@ -223,7 +223,7 @@ func formatByteSize(n int64) string {
 		n = 0
 	}
 
-	units := []string{"b", "kb", "mb", "gb"}
+	units := []string{"B", "KiB", "MiB", "GiB"}
 	f := float64(n)
 	i := 0
 	for i < len(units)-1 && f >= 1024 {
