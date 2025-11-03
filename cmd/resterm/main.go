@@ -65,8 +65,6 @@ func main() {
 		traceOTService           string
 	)
 
-	follow = true
-
 	telemetryCfg := telemetry.ConfigFromEnv(os.Getenv)
 	traceOTEndpoint = telemetryCfg.Endpoint
 	traceOTInsecure = telemetryCfg.Insecure
