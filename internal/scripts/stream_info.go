@@ -7,6 +7,8 @@ type StreamInfo struct {
 	Events  []map[string]interface{}
 }
 
+// Clone deep copies the summary and events so script runtimes can mutate data
+// without affecting callers.
 func (info *StreamInfo) Clone() *StreamInfo {
 	if info == nil {
 		return nil

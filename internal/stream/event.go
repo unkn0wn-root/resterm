@@ -60,6 +60,7 @@ type WSMetadata struct {
 
 var seqCounter uint64
 
+// nextSequence returns a monotonically increasing event sequence id.
 func nextSequence() uint64 {
 	return atomic.AddUint64(&seqCounter, 1)
 }

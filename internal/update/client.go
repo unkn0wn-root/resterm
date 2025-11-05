@@ -27,6 +27,7 @@ type Client struct {
 	api  string
 }
 
+// NewClient constructs an updater client targeting the supplied repository.
 func NewClient(h *http.Client, repo string) (Client, error) {
 	if repo == "" {
 		return Client{}, ErrUnknownRepo
@@ -37,6 +38,7 @@ func NewClient(h *http.Client, repo string) (Client, error) {
 	return Client{http: h, repo: repo, api: apiHost}, nil
 }
 
+// WithAPI overrides the GitHub API host, useful for testing.
 func (c Client) WithAPI(v string) Client {
 	if v == "" {
 		c.api = apiHost
@@ -46,10 +48,12 @@ func (c Client) WithAPI(v string) Client {
 	return c
 }
 
+// Ready reports whether the client has both a repo and an HTTP client.
 func (c Client) Ready() bool {
 	return c.repo != "" && c.http != nil
 }
 
+// Latest fetches the most recent GitHub release metadata.
 func (c Client) Latest(ctx context.Context) (Info, error) {
 	if c.repo == "" {
 		return Info{}, ErrUnknownRepo
@@ -100,6 +104,7 @@ type Result struct {
 	HasSum bool
 }
 
+// Check determines if an update is available for the platform and current version.
 func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, error) {
 	if curr == "" || curr == "dev" {
 		return Result{}, ErrNoUpdate
@@ -131,6 +136,7 @@ func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, 
 	return res, nil
 }
 
+// needsUpdate compares the semantic versions and ignores parse failures for current versions.
 func needsUpdate(curr, latest string) (bool, error) {
 	lv, err := parseSemver(latest)
 	if err != nil {

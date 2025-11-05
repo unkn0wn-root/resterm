@@ -45,6 +45,8 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
+// Wrap annotates an existing error with a resterm error code and optional
+// message, returning nil when the original error is nil.
 func Wrap(code Code, err error, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
@@ -57,6 +59,7 @@ func Wrap(code Code, err error, format string, args ...interface{}) error {
 	return &Error{Code: ensureCode(code), Message: msg, Err: err}
 }
 
+// New creates a formatted error with the supplied code.
 func New(code Code, format string, args ...interface{}) error {
 	msg := format
 	if len(args) > 0 {
@@ -65,6 +68,7 @@ func New(code Code, format string, args ...interface{}) error {
 	return &Error{Code: ensureCode(code), Message: msg}
 }
 
+// CodeOf extracts a resterm error code from the wrapped error value.
 func CodeOf(err error) Code {
 	var e *Error
 	if stdErrors.As(err, &e) {
@@ -73,6 +77,7 @@ func CodeOf(err error) Code {
 	return CodeUnknown
 }
 
+// Is reports whether the supplied error carries the target error code.
 func Is(err error, code Code) bool {
 	if err == nil {
 		return false
@@ -84,6 +89,7 @@ func Is(err error, code Code) bool {
 	return false
 }
 
+// Message returns the error string or empty when the error is nil.
 func Message(err error) string {
 	if err == nil {
 		return ""

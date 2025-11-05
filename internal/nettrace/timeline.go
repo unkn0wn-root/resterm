@@ -41,6 +41,7 @@ type Timeline struct {
 	Phases    []Phase
 }
 
+// Clone duplicates the timeline including its phase slice.
 func (tl *Timeline) Clone() *Timeline {
 	if tl == nil {
 		return nil
@@ -57,6 +58,7 @@ func (tl *Timeline) Clone() *Timeline {
 	}
 }
 
+// normalizePhases sorts phases by start and end times to keep ordering stable.
 func normalizePhases(phases []Phase) []Phase {
 	if len(phases) <= 1 {
 		return phases
@@ -104,10 +106,13 @@ type BudgetReport struct {
 	Breaches []BudgetBreach
 }
 
+// WithinLimit reports whether any budget breaches were recorded.
 func (r BudgetReport) WithinLimit() bool {
 	return len(r.Breaches) == 0
 }
 
+// EvaluateBudget compares the timeline against budget thresholds, applying the
+// global tolerance to each limit and returning any breaches.
 func EvaluateBudget(tl *Timeline, b Budget) BudgetReport {
 	if tl == nil {
 		return BudgetReport{}
@@ -150,6 +155,7 @@ func EvaluateBudget(tl *Timeline, b Budget) BudgetReport {
 	return BudgetReport{Breaches: breaches}
 }
 
+// aggregateDurations sums the durations of each phase kind for budget checks.
 func aggregateDurations(tl *Timeline) map[PhaseKind]time.Duration {
 	out := make(map[PhaseKind]time.Duration, len(tl.Phases)+1)
 	for _, phase := range tl.Phases {

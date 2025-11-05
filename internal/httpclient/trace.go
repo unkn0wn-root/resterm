@@ -18,6 +18,7 @@ type traceSession struct {
 	transferActive bool
 }
 
+// newTraceSession sets up httptrace callbacks to map client phases into nettrace timelines.
 func newTraceSession() *traceSession {
 	s := &traceSession{collector: nettrace.NewCollector()}
 	s.trace = &httptrace.ClientTrace{
@@ -35,6 +36,7 @@ func newTraceSession() *traceSession {
 	return s
 }
 
+// bind attaches the httptrace client hooks to the request context.
 func (s *traceSession) bind(req *http.Request) *http.Request {
 	if req == nil {
 		return nil

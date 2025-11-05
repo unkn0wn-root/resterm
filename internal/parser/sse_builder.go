@@ -12,10 +12,12 @@ type sseBuilder struct {
 	options restfile.SSEOptions
 }
 
+// newSSEBuilder configures a default SSE builder with disabled options.
 func newSSEBuilder() *sseBuilder {
 	return &sseBuilder{}
 }
 
+// HandleDirective processes @sse directives enabling the builder and parsing options.
 func (b *sseBuilder) HandleDirective(key, rest string) bool {
 	if !strings.EqualFold(key, "sse") {
 		return false
@@ -43,6 +45,7 @@ func (b *sseBuilder) HandleDirective(key, rest string) bool {
 	return true
 }
 
+// applyOption updates SSE timeouts and limits based on option name.
 func (b *sseBuilder) applyOption(name, value string) {
 	switch strings.ToLower(name) {
 	case "duration", "timeout":
@@ -70,6 +73,7 @@ func (b *sseBuilder) applyOption(name, value string) {
 	}
 }
 
+// Finalize returns the SSE request options if SSE mode was enabled.
 func (b *sseBuilder) Finalize() (*restfile.SSERequest, bool) {
 	if !b.enabled {
 		return nil, false

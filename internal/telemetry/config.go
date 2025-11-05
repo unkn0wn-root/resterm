@@ -23,6 +23,7 @@ type Config struct {
 	DialTimeout time.Duration
 }
 
+// Default returns the baseline telemetry config used when no overrides exist.
 func Default() Config {
 	return Config{
 		ServiceName: "resterm",
@@ -30,10 +31,13 @@ func Default() Config {
 	}
 }
 
+// Enabled reports whether telemetry is configured with a non empty endpoint.
 func (c Config) Enabled() bool {
 	return strings.TrimSpace(c.Endpoint) != ""
 }
 
+// ConfigFromEnv populates Config from environment variables, falling back to
+// defaults when values are missing or invalid.
 func ConfigFromEnv(getenv func(string) string) Config {
 	if getenv == nil {
 		getenv = func(string) string { return "" }
@@ -70,6 +74,8 @@ func ConfigFromEnv(getenv func(string) string) Config {
 	return cfg
 }
 
+// MergeHeaders copies dst and overlays src, trimming empty keys and returning
+// nil when both maps are empty so callers can skip serialization entirely.
 func MergeHeaders(dst map[string]string, src map[string]string) map[string]string {
 	if len(src) == 0 {
 		if len(dst) == 0 {
@@ -98,6 +104,7 @@ func MergeHeaders(dst map[string]string, src map[string]string) map[string]strin
 	return merged
 }
 
+// ParseHeaders converts comma separated key=value pairs into a header map.
 func ParseHeaders(spec string) (map[string]string, error) {
 	if strings.TrimSpace(spec) == "" {
 		return nil, nil
@@ -129,6 +136,8 @@ func ParseHeaders(spec string) (map[string]string, error) {
 	return headers, nil
 }
 
+// parseBool accepts a handful of truthy and falsey strings and reports whether
+// the input matched a known token.
 func parseBool(value string) (bool, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "1", "true", "yes", "y", "on":

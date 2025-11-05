@@ -71,6 +71,7 @@ type Store struct {
 	loaded     bool
 }
 
+// NewStore creates a file backed history store with a bounded entry list.
 func NewStore(path string, maxEntries int) *Store {
 	if maxEntries <= 0 {
 		maxEntries = 200
@@ -78,10 +79,13 @@ func NewStore(path string, maxEntries int) *Store {
 	return &Store{path: path, maxEntries: maxEntries}
 }
 
+// NormalizeWorkflowName trims user provided workflow names for comparisons.
 func NormalizeWorkflowName(name string) string {
 	return strings.TrimSpace(name)
 }
 
+// Load reads the persisted history file, tolerating missing files and ensuring
+// the entries are sorted newest first.
 func (s *Store) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -116,6 +120,8 @@ func (s *Store) Load() error {
 	return nil
 }
 
+// Append records a new history entry, enforcing the max entry limit and
+// persisting to disk.
 func (s *Store) Append(entry Entry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -138,6 +144,8 @@ func (s *Store) Append(entry Entry) error {
 	return nil
 }
 
+// Entries returns a copy of all entries so callers cannot mutate internal
+// slices.
 func (s *Store) Entries() []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -146,6 +154,7 @@ func (s *Store) Entries() []Entry {
 	return copies
 }
 
+// Delete removes an entry by id and reports whether a record was removed.
 func (s *Store) Delete(id string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -177,6 +186,8 @@ func (s *Store) Delete(id string) (bool, error) {
 	return true, nil
 }
 
+// ByRequest returns entries matching a request name or URL, skipping workflow
+// entries and returning results sorted newest first.
 func (s *Store) ByRequest(identifier string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -202,6 +213,7 @@ func (s *Store) ByRequest(identifier string) []Entry {
 	return matched
 }
 
+// ByWorkflow filters history for workflow executions by normalized name.
 func (s *Store) ByWorkflow(name string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -225,6 +237,8 @@ func (s *Store) ByWorkflow(name string) []Entry {
 	return matched
 }
 
+// persist atomically writes the history file by first writing to a temp file
+// and renaming it into place.
 func (s *Store) persist() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return errdef.Wrap(errdef.CodeFilesystem, err, "create history dir")
@@ -246,6 +260,7 @@ func (s *Store) persist() error {
 	return nil
 }
 
+// sortEntriesLocked orders entries newest first. Caller must hold the lock.
 func (s *Store) sortEntriesLocked() {
 	if len(s.entries) < 2 {
 		return
@@ -256,6 +271,8 @@ func (s *Store) sortEntriesLocked() {
 	})
 }
 
+// newerFirst compares two entries prioritizing executed timestamps and falling
+// back to ids for deterministic ordering.
 func newerFirst(a, b Entry) bool {
 	ai := a.ExecutedAt
 	bi := b.ExecutedAt
@@ -273,6 +290,8 @@ func newerFirst(a, b Entry) bool {
 	}
 }
 
+// compareIDsDesc compares ids numerically when possible, falling back to
+// lexicographical order.
 func compareIDsDesc(a, b string) bool {
 	ai, errA := strconv.ParseInt(a, 10, 64)
 	bi, errB := strconv.ParseInt(b, 10, 64)

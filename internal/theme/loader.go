@@ -45,12 +45,14 @@ type Catalog struct {
 	index map[string]int
 }
 
+// All returns a copy of the ordered theme definitions.
 func (c Catalog) All() []Definition {
 	out := make([]Definition, len(c.order))
 	copy(out, c.order)
 	return out
 }
 
+// Keys lists the ordered keys used to refer to each theme.
 func (c Catalog) Keys() []string {
 	keys := make([]string, len(c.order))
 	for i, def := range c.order {
@@ -59,6 +61,7 @@ func (c Catalog) Keys() []string {
 	return keys
 }
 
+// Get looks up a theme definition by key.
 func (c Catalog) Get(key string) (Definition, bool) {
 	if c.index == nil {
 		return Definition{}, false
@@ -70,6 +73,7 @@ func (c Catalog) Get(key string) (Definition, bool) {
 	return c.order[idx], true
 }
 
+// add appends a definition to the catalog and updates the index.
 func (c *Catalog) add(def Definition) {
 	if c.index == nil {
 		c.index = make(map[string]int)
@@ -78,6 +82,8 @@ func (c *Catalog) add(def Definition) {
 	c.order = append(c.order, def)
 }
 
+// LoadCatalog builds a catalog by combining the builtin theme with themes found
+// under the provided directories.
 func LoadCatalog(dirs []string) (Catalog, error) {
 	base := DefaultTheme()
 	defs := make([]Definition, 0, 1)
@@ -145,6 +151,8 @@ func LoadCatalog(dirs []string) (Catalog, error) {
 	return catalog, nil
 }
 
+// loadUserTheme reads, decodes, and merges a theme definition with the base
+// theme, deriving a slug and display name when missing.
 func loadUserTheme(path string, format Format, base Theme) (Definition, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -181,6 +189,7 @@ func loadUserTheme(path string, format Format, base Theme) (Definition, error) {
 	return def, nil
 }
 
+// decodeThemeSpec parses the raw bytes according to the requested file format.
 func decodeThemeSpec(data []byte, format Format) (ThemeSpec, error) {
 	var spec ThemeSpec
 	switch format {
@@ -200,6 +209,8 @@ func decodeThemeSpec(data []byte, format Format) (ThemeSpec, error) {
 	return spec, nil
 }
 
+// assembleCatalog keeps the builtin definition first and sorts custom themes
+// by display name.
 func assembleCatalog(defs []Definition) Catalog {
 	var catalog Catalog
 	if len(defs) == 0 {
@@ -225,6 +236,8 @@ func assembleCatalog(defs []Definition) Catalog {
 	return catalog
 }
 
+// ensureUniqueKey generates a unique key when the candidate already exists by
+// suffixing an incrementing counter.
 func ensureUniqueKey(candidate string, used map[string]int) string {
 	key := candidate
 	if strings.TrimSpace(key) == "" {
@@ -248,6 +261,7 @@ func ensureUniqueKey(candidate string, used map[string]int) string {
 	}
 }
 
+// slugify converts arbitrary strings into url safe lowercase keys.
 func slugify(name string) string {
 	var builder strings.Builder
 	lastDash := false
@@ -268,6 +282,7 @@ func slugify(name string) string {
 	return slug
 }
 
+// humaniseSlug converts a slug back into a title cased display name.
 func humaniseSlug(slug string) string {
 	if slug == "" {
 		return "Theme"

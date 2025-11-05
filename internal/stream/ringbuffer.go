@@ -7,6 +7,7 @@ type ringBuffer struct {
 	head  int
 }
 
+// newRingBuffer allocates a fixed-size circular buffer for events.
 func newRingBuffer(size int) *ringBuffer {
 	if size <= 0 {
 		size = 1
@@ -18,6 +19,7 @@ func newRingBuffer(size int) *ringBuffer {
 	}
 }
 
+// append pushes an event, evicting the oldest when capacity is reached.
 func (r *ringBuffer) append(evt *Event) {
 	if r.size == 0 {
 		return
@@ -34,6 +36,7 @@ func (r *ringBuffer) append(evt *Event) {
 	r.head = (r.head + 1) % r.size
 }
 
+// snapshot returns the events in chronological order without mutating the buffer.
 func (r *ringBuffer) snapshot() []*Event {
 	if r.count == 0 {
 		return nil

@@ -23,6 +23,8 @@ type LatencyStats struct {
 	Histogram   []HistogramBucket
 }
 
+// ComputeLatencyStats calculates descriptive statistics, optional percentiles,
+// and a histogram for the provided durations.
 func ComputeLatencyStats(durations []time.Duration, percentiles []int, bins int) LatencyStats {
 	stats := LatencyStats{}
 	count := len(durations)
@@ -64,6 +66,7 @@ func ComputeLatencyStats(durations []time.Duration, percentiles []int, bins int)
 	return stats
 }
 
+// computeStdDev calculates the population standard deviation in milliseconds.
 func computeStdDev(values []time.Duration, mean time.Duration) time.Duration {
 	if len(values) == 0 {
 		return 0
@@ -82,6 +85,8 @@ func computeStdDev(values []time.Duration, mean time.Duration) time.Duration {
 	return time.Duration(sdMS * float64(time.Millisecond))
 }
 
+// computePercentiles returns the requested percentile values using rank based
+// indexing.
 func computePercentiles(values []time.Duration, percentiles []int) map[int]time.Duration {
 	result := make(map[int]time.Duration, len(percentiles))
 	sortedPerc := append([]int(nil), percentiles...)
@@ -112,6 +117,8 @@ func computePercentiles(values []time.Duration, percentiles []int) map[int]time.
 	return result
 }
 
+// buildHistogram distributes durations into evenly spaced buckets between the
+// minimum and maximum.
 func buildHistogram(values []time.Duration, bins int) []HistogramBucket {
 	if len(values) == 0 {
 		return nil
@@ -163,6 +170,7 @@ func buildHistogram(values []time.Duration, bins int) []HistogramBucket {
 	return hist
 }
 
+// durationFromMillis converts millisecond floats back into durations.
 func durationFromMillis(ms float64) time.Duration {
 	return time.Duration(ms * float64(time.Millisecond))
 }

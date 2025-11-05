@@ -67,6 +67,7 @@ func (c *Client) resolveHTTPFactory() func(Options) (*http.Client, error) {
 	return c.buildHTTPClient
 }
 
+// NewClient constructs an HTTP client with default transport, cookie jar, and telemetry settings.
 func NewClient(fs FileSystem) *Client {
 	if fs == nil {
 		fs = OSFileSystem{}
@@ -106,6 +107,8 @@ type Response struct {
 	TraceReport  *nettrace.Report
 }
 
+// Execute prepares the HTTP request from a restfile definition, executes it,
+// records traces, and returns a structured response.
 func (c *Client) Execute(
 	ctx context.Context,
 	req *restfile.Request,
@@ -237,6 +240,8 @@ func (c *Client) Execute(
 	return resp, nil
 }
 
+// prepareHTTPRequest builds an http.Request with resolved variables, headers,
+// body, and per-request settings.
 func (c *Client) prepareHTTPRequest(
 	ctx context.Context,
 	req *restfile.Request,
@@ -293,6 +298,8 @@ func (c *Client) prepareHTTPRequest(
 	return httpReq, effectiveOpts, nil
 }
 
+// prepareBody selects the appropriate body reader based on inline text,
+// external files, or GraphQL definitions.
 func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	if req.Body.GraphQL != nil {
 		return c.prepareGraphQLBody(req, resolver, opts)
@@ -343,6 +350,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 	}
 }
 
+// prepareGraphQLBody assembles the query, variables, and operation payload.
 func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	gql := req.Body.GraphQL
 	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, "GraphQL query")
@@ -449,6 +457,8 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	return bytes.NewReader(body), nil
 }
 
+// graphQLSectionContent returns either the inline content or file contents for
+// query and variable sections.
 func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) (string, error) {
 	inline = strings.TrimSpace(inline)
 	if inline != "" {
@@ -471,6 +481,7 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) 
 	return string(data), nil
 }
 
+// decodeGraphQLVariables parses the JSON object portion of GraphQL variables.
 func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.UseNumber()
@@ -488,6 +499,7 @@ func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
 	return payload, nil
 }
 
+// buildHTTPClient configures mutual TLS, timeouts, proxies, and cookie jars for each request.
 func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -541,6 +553,7 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	return client, nil
 }
 
+// loadRootCAs loads additional root certificates from disk, falling back to the system pool.
 func loadRootCAs(paths []string) (*x509.CertPool, error) {
 	pool := x509.NewCertPool()
 	for _, p := range paths {
@@ -555,6 +568,7 @@ func loadRootCAs(paths []string) (*x509.CertPool, error) {
 	return pool, nil
 }
 
+// applyRequestSettings applies per-request overrides to client options.
 func applyRequestSettings(opts Options, settings map[string]string) Options {
 	if len(settings) == 0 {
 		return opts
@@ -586,6 +600,7 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 	return effective
 }
 
+// applyAuthentication injects Authorization or header based credentials from restfile metadata.
 func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver, auth *restfile.AuthSpec) {
 	if auth == nil || len(auth.Params) == 0 {
 		return
@@ -641,6 +656,7 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 	}
 }
 
+// injectBodyIncludes processes < includes inside request bodies, replacing them with file contents.
 func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)

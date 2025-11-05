@@ -14,10 +14,13 @@ import (
 
 type Loader struct{}
 
+// NewLoader creates a parser Loader that uses kin-openapi under the hood.
 func NewLoader() *Loader {
 	return &Loader{}
 }
 
+// Parse loads, validates, and normalizes the OpenAPI document into an internal
+// spec model.
 func (l *Loader) Parse(ctx context.Context, path string, opts openapi.ParseOptions) (*model.Spec, error) {
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = opts.ResolveExternalRefs
@@ -45,6 +48,7 @@ func (l *Loader) Parse(ctx context.Context, path string, opts openapi.ParseOptio
 	return spec, nil
 }
 
+// collectOperations enumerates and normalizes every HTTP operation in the spec.
 func collectOperations(doc *openapi3.T) []model.Operation {
 	if doc.Paths == nil {
 		return nil
@@ -91,6 +95,8 @@ func collectOperations(doc *openapi3.T) []model.Operation {
 	return ops
 }
 
+// normalizeOperation consolidates shared metadata into the internal operation
+// model for a specific HTTP method and path.
 func normalizeOperation(
 	doc *openapi3.T,
 	path string,
@@ -118,6 +124,7 @@ func normalizeOperation(
 	return op
 }
 
+// convertServers reduces OpenAPI server objects to the simplified model.
 func convertServers(servers openapi3.Servers) []model.Server {
 	if len(servers) == 0 {
 		return nil
@@ -137,6 +144,8 @@ func convertServers(servers openapi3.Servers) []model.Server {
 	return result
 }
 
+// selectServers resolves the precedence between operation, path, and document
+// level server declarations.
 func selectServers(docServers openapi3.Servers, pathServers openapi3.Servers, opServers *openapi3.Servers) openapi3.Servers {
 	if opServers != nil && len(*opServers) > 0 {
 		return *opServers
@@ -150,6 +159,8 @@ func selectServers(docServers openapi3.Servers, pathServers openapi3.Servers, op
 	return nil
 }
 
+// resolveServerURL replaces templated variables with defaults so the URL can be
+// used directly in generated requests.
 func resolveServerURL(server *openapi3.Server) string {
 	if server == nil {
 		return ""
@@ -169,6 +180,8 @@ func resolveServerURL(server *openapi3.Server) string {
 	return resolved
 }
 
+// mergeParameters combines path level and operation level parameters while
+// removing duplicates.
 func mergeParameters(baseParams, opParams openapi3.Parameters) []model.Parameter {
 	combined := make(map[string]model.Parameter)
 
@@ -208,6 +221,7 @@ func mergeParameters(baseParams, opParams openapi3.Parameters) []model.Parameter
 	return params
 }
 
+// convertParameter maps an OpenAPI parameter into the model representation.
 func convertParameter(p *openapi3.Parameter) model.Parameter {
 	param := model.Parameter{
 		Name:        p.Name,
@@ -235,6 +249,8 @@ func convertParameter(p *openapi3.Parameter) model.Parameter {
 	return param
 }
 
+// extractParameterExample prefers explicit examples but falls back to the
+// first referenced example if present.
 func extractParameterExample(p *openapi3.Parameter) model.Example {
 	if p.Example != nil {
 		return model.Example{Value: p.Example, Source: model.ExampleFromExplicit, HasValue: true}
@@ -251,6 +267,8 @@ func extractParameterExample(p *openapi3.Parameter) model.Example {
 	return model.Example{}
 }
 
+// extractExampleFromSchema reuses schema level example, default, or enum values
+// when available.
 func extractExampleFromSchema(ref *openapi3.SchemaRef) (model.Example, bool) {
 	if ref == nil || ref.Value == nil {
 		return model.Example{}, false
@@ -272,6 +290,8 @@ func extractExampleFromSchema(ref *openapi3.SchemaRef) (model.Example, bool) {
 	return model.Example{}, false
 }
 
+// convertRequestBody flattens a request body into its content types and schema
+// references.
 func convertRequestBody(ref *openapi3.RequestBodyRef) *model.RequestBody {
 	if ref == nil || ref.Value == nil {
 		return nil
@@ -317,6 +337,8 @@ func convertRequestBody(ref *openapi3.RequestBodyRef) *model.RequestBody {
 	return result
 }
 
+// extractMediaTypeExample pulls the example from a media type definition when
+// present, otherwise returns an empty example.
 func extractMediaTypeExample(mt *openapi3.MediaType) model.Example {
 	if mt == nil {
 		return model.Example{}
@@ -337,6 +359,8 @@ func extractMediaTypeExample(mt *openapi3.MediaType) model.Example {
 	return model.Example{}
 }
 
+// convertResponses normalizes the response map into a sorted slice of response
+// models with converted media types.
 func convertResponses(responses *openapi3.Responses) []model.Response {
 	if responses == nil || responses.Len() == 0 {
 		return nil
@@ -392,6 +416,8 @@ func convertResponses(responses *openapi3.Responses) []model.Response {
 	return result
 }
 
+// resolveSecurityRequirements determines which security requirements apply to
+// the operation by following OpenAPI inheritance rules.
 func resolveSecurityRequirements(doc *openapi3.T, op *openapi3.Operation) []model.SecurityRequirement {
 	var source openapi3.SecurityRequirements
 	if op.Security != nil {
@@ -425,6 +451,8 @@ func resolveSecurityRequirements(doc *openapi3.T, op *openapi3.Operation) []mode
 	return requirements
 }
 
+// convertSecuritySchemes converts the document level security schemes into the
+// simplified resterm representation.
 func convertSecuritySchemes(raw map[string]*openapi3.SecuritySchemeRef) map[string]model.SecurityScheme {
 	if len(raw) == 0 {
 		return nil
@@ -451,6 +479,7 @@ func convertSecuritySchemes(raw map[string]*openapi3.SecuritySchemeRef) map[stri
 	return result
 }
 
+// convertOAuthFlows enumerates defined OAuth flows and captures their metadata.
 func convertOAuthFlows(flows *openapi3.OAuthFlows) []model.OAuthFlow {
 	if flows == nil {
 		return nil
@@ -480,6 +509,7 @@ func convertOAuthFlows(flows *openapi3.OAuthFlows) []model.OAuthFlow {
 	return result
 }
 
+// cloneStringSlice copies a string slice, returning nil when empty.
 func cloneStringSlice(values []string) []string {
 	if len(values) == 0 {
 		return nil
@@ -489,6 +519,7 @@ func cloneStringSlice(values []string) []string {
 	return out
 }
 
+// valueOrZero safely dereferences the pointer returning the zero value when nil.
 func valueOrZero[T any](ptr *T) T {
 	var zero T
 	if ptr == nil {

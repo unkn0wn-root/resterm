@@ -27,10 +27,12 @@ type managedSession struct {
 	summary SessionSummary
 }
 
+// NewManager constructs an in-memory session registry.
 func NewManager() *Manager {
 	return &Manager{sessions: make(map[string]*managedSession)}
 }
 
+// Register tracks a session and begins monitoring it until completion.
 func (m *Manager) Register(session *Session) SessionSummary {
 	if session == nil {
 		return SessionSummary{}
@@ -58,6 +60,7 @@ func (m *Manager) Register(session *Session) SessionSummary {
 	return summary
 }
 
+// Cancel cancels a session by id when it exists.
 func (m *Manager) Cancel(id string) bool {
 	m.mu.RLock()
 	managed := m.sessions[id]
@@ -69,6 +72,7 @@ func (m *Manager) Cancel(id string) bool {
 	return true
 }
 
+// List returns summaries for all active sessions.
 func (m *Manager) List() []SessionSummary {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -80,6 +84,7 @@ func (m *Manager) List() []SessionSummary {
 	return summaries
 }
 
+// Get retrieves the latest summary for a session id.
 func (m *Manager) Get(id string) (SessionSummary, bool) {
 	m.mu.RLock()
 	managed, ok := m.sessions[id]
@@ -90,6 +95,7 @@ func (m *Manager) Get(id string) (SessionSummary, bool) {
 	return managed.currentSummary(), true
 }
 
+// AddCompletionHook registers a callback fired when the session completes.
 func (m *Manager) AddCompletionHook(id string, hook CompletionHook) bool {
 	if hook == nil {
 		return false
@@ -103,6 +109,7 @@ func (m *Manager) AddCompletionHook(id string, hook CompletionHook) bool {
 	return ok
 }
 
+// Snapshot returns a copy of the events published by the session.
 func (m *Manager) Snapshot(id string) ([]*Event, bool) {
 	m.mu.RLock()
 	managed, ok := m.sessions[id]
@@ -113,6 +120,7 @@ func (m *Manager) Snapshot(id string) ([]*Event, bool) {
 	return managed.session.EventsSnapshot(), true
 }
 
+// watch waits for the session to finish, updates bookkeeping, and executes hooks.
 func (m *Manager) watch(managed *managedSession) {
 	session := managed.session
 	if session == nil {
@@ -147,6 +155,8 @@ func (m *Manager) watch(managed *managedSession) {
 	}
 }
 
+// currentSummary calculates a snapshot of the session state, falling back to
+// the cached summary when the session already completed.
 func (ms *managedSession) currentSummary() SessionSummary {
 	if ms.session == nil {
 		return ms.summary

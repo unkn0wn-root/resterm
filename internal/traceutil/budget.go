@@ -8,6 +8,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+// BudgetFromSpec converts a trace spec into a concrete budget and flags whether
+// the spec enables tracing. Disabled specs or empty budgets return false.
 func BudgetFromSpec(spec *restfile.TraceSpec) (nettrace.Budget, bool) {
 	if spec == nil || !spec.Enabled {
 		return nettrace.Budget{}, false
@@ -20,6 +22,8 @@ func BudgetFromSpec(spec *restfile.TraceSpec) (nettrace.Budget, bool) {
 	return nettrace.Budget{}, false
 }
 
+// BudgetFromTraceBudget normalizes raw budget values ensuring negative totals,
+// tolerances, or phase durations are clamped and phase names are canonicalized.
 func BudgetFromTraceBudget(tb restfile.TraceBudget) nettrace.Budget {
 	total := tb.Total
 	if total < 0 {
@@ -52,6 +56,7 @@ func BudgetFromTraceBudget(tb restfile.TraceBudget) nettrace.Budget {
 	return budget
 }
 
+// HasBudget reports whether any limits are configured on the budget.
 func HasBudget(b nettrace.Budget) bool {
 	if b.Total > 0 || b.Tolerance > 0 {
 		return true
@@ -59,6 +64,8 @@ func HasBudget(b nettrace.Budget) bool {
 	return len(b.Phases) > 0
 }
 
+// normalizePhaseName maps common shorthand phase names to canonical kinds so
+// user provided budgets can match the internal phase enums.
 func normalizePhaseName(name string) nettrace.PhaseKind {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "dns", "lookup", "name":

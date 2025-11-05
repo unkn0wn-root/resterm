@@ -13,6 +13,7 @@ import (
 
 type EnvironmentSet map[string]map[string]string
 
+// LoadEnvironmentFile parses a Postman style environment JSON file into a flat map.
 func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -96,6 +97,7 @@ func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
 	}
 }
 
+// ResolveEnvironment searches the provided directories for a known environment file.
 func ResolveEnvironment(paths []string) (EnvironmentSet, string, error) {
 	candidates := []string{"rest-client.env.json", "resterm.env.json"}
 	for _, dir := range paths {
@@ -116,6 +118,7 @@ type EnvironmentProvider struct {
 	backing string
 }
 
+// NewEnvironmentProvider creates a provider backed by a named environment set.
 func NewEnvironmentProvider(name string, values map[string]string, backing string) Provider {
 	return &EnvironmentProvider{
 		name:    name,
@@ -124,11 +127,13 @@ func NewEnvironmentProvider(name string, values map[string]string, backing strin
 	}
 }
 
+// Resolve looks up a variable within the named environment.
 func (p *EnvironmentProvider) Resolve(name string) (string, bool) {
 	value, ok := p.values[name]
 	return value, ok
 }
 
+// Label annotates the provider with its environment name and backing file.
 func (p *EnvironmentProvider) Label() string {
 	if p.backing == "" {
 		return fmt.Sprintf("env:%s", p.name)

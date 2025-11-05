@@ -24,6 +24,8 @@ type GenerateOptions struct {
 	Write    WriterOptions
 }
 
+// GenerateHTTPFile coordinates parsing, generation, and writing of a restfile
+// document from an OpenAPI specification path.
 func (s *Service) GenerateHTTPFile(ctx context.Context, specPath, outputPath string, opts GenerateOptions) error {
 	if ctx == nil {
 		ctx = context.Background()

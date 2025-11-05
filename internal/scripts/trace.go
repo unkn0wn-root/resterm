@@ -68,6 +68,8 @@ func NewTraceInput(tl *nettrace.Timeline, spec *restfile.TraceSpec) *TraceInput 
 	return &TraceInput{Timeline: clone, Budgets: budget}
 }
 
+// newTraceBinding clones the supplied trace input and prepares aggregates and
+// budget evaluation used by the scripting interface.
 func newTraceBinding(input *TraceInput) *traceBinding {
 	if input == nil || input.Timeline == nil {
 		return &traceBinding{}
@@ -107,6 +109,8 @@ func newTraceBinding(input *TraceInput) *traceBinding {
 	return binding
 }
 
+// cloneTraceBudget copies the duration values so scripts cannot mutate shared
+// state.
 func cloneTraceBudget(b TraceBudget) TraceBudget {
 	clone := TraceBudget{Total: b.Total, Tolerance: b.Tolerance}
 	if len(b.Phases) > 0 {
@@ -118,6 +122,8 @@ func cloneTraceBudget(b TraceBudget) TraceBudget {
 	return clone
 }
 
+// evaluateTraceBudget converts the scripting budget format into a nettrace
+// budget report by reusing the shared traceutil conversion path.
 func evaluateTraceBudget(tl *nettrace.Timeline, budget TraceBudget) nettrace.BudgetReport {
 	if tl == nil {
 		return nettrace.BudgetReport{}
@@ -137,6 +143,8 @@ func evaluateTraceBudget(tl *nettrace.Timeline, budget TraceBudget) nettrace.Bud
 	return nettrace.EvaluateBudget(tl, converted)
 }
 
+// object exposes the bindings consumed by the scripting runtime, exporting
+// functions that lazily compute each property.
 func (tb *traceBinding) object() map[string]interface{} {
 	if tb == nil {
 		tb = &traceBinding{}
@@ -214,6 +222,8 @@ func (tb *traceBinding) exportPhases() []map[string]interface{} {
 	return out
 }
 
+// getPhase returns aggregate information for a named phase including the
+// original segments that contributed to it.
 func (tb *traceBinding) getPhase(name string) map[string]interface{} {
 	if tb.timeline == nil {
 		return nil
@@ -262,6 +272,8 @@ func (tb *traceBinding) hasBudgets() bool {
 	return len(tb.budgets.Phases) > 0
 }
 
+// exportBudgets normalizes the internal budget representation to a JSON ready
+// structure that is easy for scripts to consume.
 func (tb *traceBinding) exportBudgets() map[string]interface{} {
 	if !tb.hasBudgets() {
 		return map[string]interface{}{"enabled": false}
@@ -282,6 +294,8 @@ func (tb *traceBinding) exportBudgets() map[string]interface{} {
 	}
 }
 
+// exportBreaches lists each breach in a script friendly structure with values
+// exposed in both milliseconds and seconds.
 func (tb *traceBinding) exportBreaches() []map[string]interface{} {
 	if len(tb.report.Breaches) == 0 {
 		return []map[string]interface{}{}
@@ -302,6 +316,8 @@ func (tb *traceBinding) exportBreaches() []map[string]interface{} {
 	return out
 }
 
+// exportSegment converts an individual segment into the structure surfaced in
+// the scripting runtime.
 func exportSegment(seg traceSegment) map[string]interface{} {
 	meta := map[string]interface{}{
 		"addr":   seg.Meta.Addr,

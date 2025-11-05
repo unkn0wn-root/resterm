@@ -12,10 +12,12 @@ type Builder struct {
 	messageFromFile string
 }
 
+// New creates a Builder for parsing grpc specific directives.
 func New() *Builder {
 	return &Builder{}
 }
 
+// IsMethodLine detects lines beginning with the GRPC keyword.
 func IsMethodLine(line string) bool {
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
@@ -24,6 +26,8 @@ func IsMethodLine(line string) bool {
 	return strings.EqualFold(fields[0], "GRPC")
 }
 
+// EnsureRequest allocates the grpc request metadata and default reflection
+// settings.
 func (b *Builder) EnsureRequest() *restfile.GRPCRequest {
 	if b.request == nil {
 		b.request = &restfile.GRPCRequest{Metadata: map[string]string{}, UseReflection: true}
@@ -38,6 +42,7 @@ func (b *Builder) SetTarget(target string) {
 	req.Target = strings.TrimSpace(target)
 }
 
+// HandleDirective processes grpc specific comment directives.
 func (b *Builder) HandleDirective(key, rest string) bool {
 	switch key {
 	case "grpc":
@@ -103,6 +108,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 	return false
 }
 
+// HandleBodyLine captures inline grpc message payloads or file references.
 func (b *Builder) HandleBodyLine(line string) bool {
 	if b.request == nil {
 		return false
@@ -131,6 +137,8 @@ func (b *Builder) HandleBodyLine(line string) bool {
 	return true
 }
 
+// Finalize clones the request metadata, attaches the chosen message source,
+// and returns the computed body.
 func (b *Builder) Finalize(existingMime string) (*restfile.GRPCRequest, restfile.BodySource, string, bool) {
 	if b.request == nil {
 		return nil, restfile.BodySource{}, existingMime, false
@@ -160,6 +168,8 @@ func (b *Builder) Finalize(existingMime string) (*restfile.GRPCRequest, restfile
 	return &grpcCopy, body, existingMime, true
 }
 
+// parseMethod interprets fully qualified method strings like
+// /package.Service/Method.
 func parseMethod(spec string) (pkg string, service string, method string) {
 	working := strings.TrimSpace(spec)
 	if working == "" {

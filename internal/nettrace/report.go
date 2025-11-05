@@ -29,6 +29,7 @@ func NewReport(tl *Timeline, budget Budget) *Report {
 	}
 }
 
+// hasBudget reports whether any limits are configured on the budget.
 func hasBudget(b Budget) bool {
 	if b.Total > 0 || b.Tolerance > 0 {
 		return true

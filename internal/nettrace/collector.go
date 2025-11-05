@@ -23,10 +23,12 @@ type Collector struct {
 	completed bool
 }
 
+// NewCollector tracks phases and emits a timeline when complete.
 func NewCollector() *Collector {
 	return &Collector{active: make(map[PhaseKind]*phaseState)}
 }
 
+// Begin marks the start of a phase, noting the earliest timestamp as the trace start.
 func (c *Collector) Begin(kind PhaseKind, ts time.Time) {
 	if kind == "" || kind == PhaseTotal {
 		return
@@ -46,6 +48,7 @@ func (c *Collector) Begin(kind PhaseKind, ts time.Time) {
 	c.active[kind] = state
 }
 
+// End finishes a phase, recording duration and optional errors.
 func (c *Collector) End(kind PhaseKind, ts time.Time, err error) {
 	if kind == "" || kind == PhaseTotal {
 		return
@@ -84,6 +87,7 @@ func (c *Collector) End(kind PhaseKind, ts time.Time, err error) {
 	}
 }
 
+// UpdateMeta lets callers enrich metadata for running phases.
 func (c *Collector) UpdateMeta(kind PhaseKind, fn func(*PhaseMeta)) {
 	if kind == "" || kind == PhaseTotal || fn == nil {
 		return
@@ -99,6 +103,7 @@ func (c *Collector) UpdateMeta(kind PhaseKind, fn func(*PhaseMeta)) {
 	fn(&state.meta)
 }
 
+// Fail records a trace level error string.
 func (c *Collector) Fail(err error) {
 	if err == nil {
 		return
@@ -109,6 +114,7 @@ func (c *Collector) Fail(err error) {
 	c.mu.Unlock()
 }
 
+// Complete finalizes the trace, closing any lingering phases.
 func (c *Collector) Complete(ts time.Time) {
 	if ts.IsZero() {
 		ts = time.Now()
@@ -135,6 +141,7 @@ func (c *Collector) Complete(ts time.Time) {
 	c.mu.Unlock()
 }
 
+// Timeline returns a cloned snapshot of the recorded phases.
 func (c *Collector) Timeline() *Timeline {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -168,6 +175,7 @@ func (c *Collector) Timeline() *Timeline {
 	return timeline
 }
 
+// Merge appends another collector's completed phases into the receiver.
 func (c *Collector) Merge(other *Collector) error {
 	if other == nil {
 		return nil
@@ -198,6 +206,7 @@ func (c *Collector) Merge(other *Collector) error {
 	return nil
 }
 
+// SortedPhases returns phases ordered by start time to aid debugging.
 func (c *Collector) SortedPhases() []Phase {
 	c.mu.Lock()
 	defer c.mu.Unlock()

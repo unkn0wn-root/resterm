@@ -95,6 +95,7 @@ type wsOutbound struct {
 	result   chan error
 }
 
+// StartWebSocket dials and begins streaming a websocket session, returning a handle to monitor activity.
 func (c *Client) StartWebSocket(
 	ctx context.Context,
 	req *restfile.Request,
@@ -209,6 +210,7 @@ func (c *Client) StartWebSocket(
 	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender}, nil, nil
 }
 
+// ExecuteWebSocket runs the websocket session to completion and returns the summary response.
 func (c *Client) ExecuteWebSocket(
 	ctx context.Context,
 	req *restfile.Request,
@@ -226,6 +228,7 @@ func (c *Client) ExecuteWebSocket(
 	return c.CompleteWebSocket(ctx, handle, req, opts)
 }
 
+// CompleteWebSocket waits for the websocket session to finish and returns the recorded response.
 func (c *Client) CompleteWebSocket(
 	ctx context.Context,
 	handle *WebSocketHandle,

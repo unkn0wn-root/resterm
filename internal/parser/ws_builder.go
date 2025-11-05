@@ -14,10 +14,12 @@ type wsBuilder struct {
 	steps   []restfile.WebSocketStep
 }
 
+// newWebSocketBuilder returns a disabled builder with empty options.
 func newWebSocketBuilder() *wsBuilder {
 	return &wsBuilder{}
 }
 
+// HandleDirective routes websocket directives to either session options or steps.
 func (b *wsBuilder) HandleDirective(key, rest string) bool {
 	switch strings.ToLower(key) {
 	case "websocket":
@@ -29,6 +31,7 @@ func (b *wsBuilder) HandleDirective(key, rest string) bool {
 	}
 }
 
+// handleWebSocket toggles websocket mode and parses option assignments.
 func (b *wsBuilder) handleWebSocket(rest string) bool {
 	trimmed := strings.TrimSpace(rest)
 	if trimmed == "" {
@@ -53,6 +56,7 @@ func (b *wsBuilder) handleWebSocket(rest string) bool {
 	return true
 }
 
+// applyOption updates individual websocket option fields.
 func (b *wsBuilder) applyOption(name, value string) {
 	switch strings.ToLower(name) {
 	case "timeout":
@@ -91,6 +95,7 @@ func (b *wsBuilder) applyOption(name, value string) {
 	}
 }
 
+// handleStep adds websocket scripted steps such as send, wait, or close.
 func (b *wsBuilder) handleStep(rest string) bool {
 	trimmed := strings.TrimSpace(rest)
 	if trimmed == "" {
@@ -165,6 +170,7 @@ func (b *wsBuilder) handleStep(rest string) bool {
 	return true
 }
 
+// Finalize returns the websocket request specification if enabled.
 func (b *wsBuilder) Finalize() (*restfile.WebSocketRequest, bool) {
 	if !b.enabled {
 		return nil, false

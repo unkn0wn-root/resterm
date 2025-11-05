@@ -15,10 +15,12 @@ type Platform struct {
 
 const binPrefix = "resterm"
 
+// Detect inspects runtime.GOOS and GOARCH to produce a platform descriptor.
 func Detect() (Platform, error) {
 	return For(runtime.GOOS, runtime.GOARCH)
 }
 
+// For builds a Platform for the provided Go os/arch tuple.
 func For(goos, goarch string) (Platform, error) {
 	osName, err := mapOS(goos)
 	if err != nil {
@@ -40,6 +42,7 @@ func For(goos, goarch string) (Platform, error) {
 	}, nil
 }
 
+// mapOS converts Go OS names to release asset suffixes.
 func mapOS(v string) (string, error) {
 	switch strings.ToLower(v) {
 	case "linux":
@@ -53,6 +56,7 @@ func mapOS(v string) (string, error) {
 	}
 }
 
+// mapArch converts Go architecture strings to release asset suffixes.
 func mapArch(v string) (string, error) {
 	switch v {
 	case "amd64":

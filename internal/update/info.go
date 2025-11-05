@@ -26,6 +26,7 @@ type Asset struct {
 	Size int64
 }
 
+// decodeInfo reads GitHub style release payloads into Info structures.
 func decodeInfo(r io.Reader) (Info, error) {
 	if r == nil {
 		return Info{}, errEmptyPayload
@@ -74,6 +75,7 @@ func decodeInfo(r io.Reader) (Info, error) {
 	return info, nil
 }
 
+// Asset looks up an asset by name.
 func (i Info) Asset(name string) (Asset, bool) {
 	for _, a := range i.Assets {
 		if a.Name == name {

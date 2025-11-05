@@ -6,6 +6,7 @@ import (
 	"runtime"
 )
 
+// Dir returns the platform specific configuration directory for resterm.
 func Dir() string {
 	if override := os.Getenv("RESTERM_CONFIG_DIR"); override != "" {
 		return override
@@ -26,6 +27,7 @@ func Dir() string {
 	}
 }
 
+// HistoryPath returns the absolute path to the history file.
 func HistoryPath() string {
 	return filepath.Join(Dir(), "history.json")
 }

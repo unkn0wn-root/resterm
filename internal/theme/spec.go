@@ -129,6 +129,8 @@ type StyleSpec struct {
 	Align            *string `json:"align" toml:"align"`
 }
 
+// ApplySpec merges the provided spec onto the base theme, cloning the base so
+// the original styles remain untouched.
 func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	cloned := cloneTheme(base)
 
@@ -365,6 +367,8 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	return cloned, nil
 }
 
+// apply mutates the provided style according to the style spec, validating
+// colours and borders as it goes.
 func (s *StyleSpec) apply(base lipgloss.Style) (lipgloss.Style, error) {
 	if s == nil {
 		return base, nil
@@ -434,6 +438,8 @@ func (s *StyleSpec) apply(base lipgloss.Style) (lipgloss.Style, error) {
 	return current, nil
 }
 
+// applyHeaderSegments overlays each header segment spec onto the base palette,
+// wrapping when fewer defaults are provided.
 func applyHeaderSegments(base []HeaderSegmentStyle, overrides []HeaderSegmentSpec) ([]HeaderSegmentStyle, error) {
 	if len(overrides) == 0 {
 		return base, nil
@@ -477,6 +483,8 @@ func applyHeaderSegments(base []HeaderSegmentStyle, overrides []HeaderSegmentSpe
 	return result, nil
 }
 
+// applyCommandSegments mirrors applyHeaderSegments but for command palette
+// entries.
 func applyCommandSegments(base []CommandSegmentStyle, overrides []CommandSegmentSpec) ([]CommandSegmentStyle, error) {
 	if len(overrides) == 0 {
 		return base, nil
@@ -520,6 +528,8 @@ func applyCommandSegments(base []CommandSegmentStyle, overrides []CommandSegment
 	return result, nil
 }
 
+// applyEditorMetadata updates the editor metadata colors, making sure directive
+// specific overrides inherit from the new defaults.
 func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) error {
 	if spec.CommentMarker != nil {
 		color, err := toColor("editor_metadata.comment_marker", *spec.CommentMarker)
@@ -603,6 +613,8 @@ func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) er
 	return nil
 }
 
+// cloneTheme copies theme slices and maps so modifications do not bleed into
+// the base theme.
 func cloneTheme(src Theme) Theme {
 	clone := src
 	if len(src.HeaderSegments) > 0 {
@@ -620,6 +632,8 @@ func cloneTheme(src Theme) Theme {
 	return clone
 }
 
+// toColor validates that a color field is not empty and returns a lipgloss
+// color literal.
 func toColor(field string, value string) (lipgloss.Color, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -628,6 +642,7 @@ func toColor(field string, value string) (lipgloss.Color, error) {
 	return lipgloss.Color(trimmed), nil
 }
 
+// parseAlign converts friendly alignment strings into lipgloss positions.
 func parseAlign(value string) (lipgloss.Position, error) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "left", "start", "default", "":
@@ -641,6 +656,7 @@ func parseAlign(value string) (lipgloss.Position, error) {
 	}
 }
 
+// parseBorderStyle maps human readable border names onto lipgloss borders.
 func parseBorderStyle(value string) (lipgloss.Border, error) {
 	switch value {
 	case "":

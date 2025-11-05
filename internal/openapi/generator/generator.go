@@ -42,10 +42,13 @@ const (
 	placeholderAPIKey       = "replace-with-api-key"
 )
 
+// NewBuilder constructs a generator Builder with default helpers.
 func NewBuilder() *Builder {
 	return &Builder{example: NewExampleBuilder(), globals: make(map[string]restfile.Variable)}
 }
 
+// Generate walks the OpenAPI spec and produces a restfile document populated
+// with representative requests.
 func (b *Builder) Generate(ctx context.Context, spec *model.Spec, opts openapi.GeneratorOptions) (*restfile.Document, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -103,10 +106,12 @@ func (b *Builder) Generate(ctx context.Context, spec *model.Spec, opts openapi.G
 	return doc, nil
 }
 
+// Warnings returns any warnings collected during the last generation run.
 func (b *Builder) Warnings() []string {
 	return append([]string(nil), b.warnings...)
 }
 
+// buildRequest turns a single OpenAPI operation into a restfile request.
 func (b *Builder) buildRequest(op model.Operation, spec *model.Spec, baseVarName, globalBase string) (*restfile.Request, error) {
 	rb := requestBuilder{
 		builder:      b,
@@ -120,6 +125,7 @@ func (b *Builder) buildRequest(op model.Operation, spec *model.Spec, baseVarName
 	return rb.build()
 }
 
+// registerGlobal records a global variable once so duplicates are avoided.
 func (b *Builder) registerGlobal(name, value string, secret bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -140,6 +146,7 @@ func (b *Builder) registerGlobal(name, value string, secret bool) {
 	}
 }
 
+// noteWarning appends a warning to the builder's collection after trimming it.
 func (b *Builder) noteWarning(message string) {
 	trimmed := strings.TrimSpace(message)
 	if trimmed == "" {
@@ -180,6 +187,7 @@ const (
 	schemaObject
 )
 
+// build orchestrates all parameter, body, and auth processing for the request.
 func (rb *requestBuilder) build() (*restfile.Request, error) {
 	req := &restfile.Request{
 		Metadata:  rb.buildMetadata(),
@@ -207,6 +215,8 @@ func (rb *requestBuilder) build() (*restfile.Request, error) {
 	return req, nil
 }
 
+// buildMetadata composes request metadata including tags, descriptions, and
+// generated names.
 func (rb *requestBuilder) buildMetadata() restfile.RequestMetadata {
 	meta := restfile.RequestMetadata{}
 	meta.Name = deriveRequestName(rb.op)
@@ -219,6 +229,8 @@ func (rb *requestBuilder) buildMetadata() restfile.RequestMetadata {
 	return meta
 }
 
+// processParameters groups operation parameters by location and prepares the
+// bindings used when generating URLs, headers, cookies, and variables.
 func (rb *requestBuilder) processParameters() {
 	for _, param := range rb.op.Parameters {
 		varName := rb.uniqueVariableName(param.Location, param.Name)
@@ -241,6 +253,8 @@ func (rb *requestBuilder) processParameters() {
 	}
 }
 
+// buildParamBinding captures the information needed to render a parameter into
+// the request, including serialized samples.
 func (rb *requestBuilder) buildParamBinding(param model.Parameter, varName string) paramBinding {
 	style := normalizeParamStyle(param)
 	explode := resolveParamExplode(param, style)
@@ -257,6 +271,8 @@ func (rb *requestBuilder) buildParamBinding(param model.Parameter, varName strin
 	}
 }
 
+// inferSchemaKind inspects the parameter schema to determine if it should be
+// treated as a primitive, array, or object.
 func (rb *requestBuilder) inferSchemaKind(param model.Parameter) schemaKind {
 	schema := parameterSchema(param)
 	if schema == nil {
@@ -282,6 +298,8 @@ func (rb *requestBuilder) inferSchemaKind(param model.Parameter) schemaKind {
 	}
 }
 
+// parameterSample picks a representative sample value for the parameter based
+// on available examples or schema defaults.
 func (rb *requestBuilder) parameterSample(param model.Parameter, kind schemaKind) any {
 	if param.Example.HasValue {
 		return param.Example.Value
@@ -301,6 +319,8 @@ func (rb *requestBuilder) parameterSample(param model.Parameter, kind schemaKind
 	}
 }
 
+// serializeParamValue renders a parameter sample according to the style and
+// explode rules defined by OpenAPI.
 func (rb *requestBuilder) serializeParamValue(param model.Parameter, kind schemaKind, style string, explode bool, sample any) string {
 	switch kind {
 	case schemaArray:
@@ -355,6 +375,8 @@ func (rb *requestBuilder) serializeParamValue(param model.Parameter, kind schema
 	}
 }
 
+// registerOAuthCommonGlobals seeds common OAuth globals so users can fill them
+// in once and reuse across generated requests.
 func (rb *requestBuilder) registerOAuthCommonGlobals(params map[string]string) {
 	rb.builder.registerGlobal(globalOAuthClientIDVar, placeholderClientID, false)
 	rb.builder.registerGlobal(globalOAuthClientSecretVar, placeholderClientSecret, true)
@@ -365,6 +387,8 @@ func (rb *requestBuilder) registerOAuthCommonGlobals(params map[string]string) {
 	}
 }
 
+// composeURL builds the request URL, substituting base variables and query
+// strings derived from parameter bindings.
 func (rb *requestBuilder) composeURL() string {
 	path := rb.op.Path
 	for _, binding := range rb.pathParams {
@@ -399,6 +423,7 @@ func (rb *requestBuilder) composeURL() string {
 	}
 }
 
+// applyHeaderParameters injects serialized header parameters into the request.
 func (rb *requestBuilder) applyHeaderParameters() {
 	for _, binding := range rb.headerParams {
 		value := fmt.Sprintf("{{%s}}", binding.VarName)
@@ -406,6 +431,7 @@ func (rb *requestBuilder) applyHeaderParameters() {
 	}
 }
 
+// applyCookieParameters formats cookie parameters as a single Cookie header.
 func (rb *requestBuilder) applyCookieParameters() {
 	if len(rb.cookieParams) == 0 {
 		return
@@ -417,6 +443,8 @@ func (rb *requestBuilder) applyCookieParameters() {
 	rb.headers.Add("Cookie", strings.Join(parts, "; "))
 }
 
+// applyRequestBody chooses a media type, example payload, and associated
+// headers for the request body when the operation defines one.
 func (rb *requestBuilder) applyRequestBody(req *restfile.Request) {
 	body := rb.op.RequestBody
 	if body == nil || len(body.MediaTypes) == 0 {
@@ -447,6 +475,8 @@ func (rb *requestBuilder) applyRequestBody(req *restfile.Request) {
 	}
 }
 
+// applyAcceptHeader adds a coarse Accept header based on the first response
+// content type unless the request already specifies one.
 func (rb *requestBuilder) applyAcceptHeader(req *restfile.Request) {
 	if req.Headers.Get("Accept") != "" {
 		return
@@ -458,6 +488,8 @@ func (rb *requestBuilder) applyAcceptHeader(req *restfile.Request) {
 	req.Headers.Set("Accept", contentType)
 }
 
+// applySecurity maps the first supported security requirement into request
+// metadata and registers any needed globals or warnings.
 func (rb *requestBuilder) applySecurity(req *restfile.Request) {
 	if len(rb.op.Security) == 0 || rb.spec == nil {
 		return
@@ -470,6 +502,8 @@ func (rb *requestBuilder) applySecurity(req *restfile.Request) {
 	}
 }
 
+// mapSecurity converts a security requirement into a restfile auth directive,
+// preferring schemes that generate usable requests.
 func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.AuthSpec {
 	if rb.spec == nil || rb.spec.SecuritySchemes == nil {
 		return nil
@@ -515,6 +549,8 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 	return nil
 }
 
+// buildOAuthAuthSpec builds an oauth2 auth directive and records placeholder
+// globals whenever the scheme describes an authorization flow.
 func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requirement model.SecurityRequirement) *restfile.AuthSpec {
 	flow := selectOAuthFlow(scheme)
 	if flow == nil {
@@ -578,6 +614,8 @@ func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requir
 	}
 }
 
+// requestName returns the final request display name, falling back to a
+// synthesized name when none is provided in the spec.
 func (rb *requestBuilder) requestName() string {
 	if rb.op.ID != "" {
 		return rb.op.ID
@@ -585,6 +623,7 @@ func (rb *requestBuilder) requestName() string {
 	return deriveRequestName(rb.op)
 }
 
+// operationBase derives a slug for use when synthesizing request names.
 func (rb *requestBuilder) operationBase() string {
 	if len(rb.op.Servers) > 0 {
 		return rb.op.Servers[0].URL
@@ -592,6 +631,8 @@ func (rb *requestBuilder) operationBase() string {
 	return rb.globalBase
 }
 
+// uniqueVariableName ensures generated variable names do not collide within a
+// single request.
 func (rb *requestBuilder) uniqueVariableName(location model.ParameterLocation, name string) string {
 	base := sanitizeVariableName(location, name)
 	count := rb.usedVarNames[base]
@@ -602,6 +643,8 @@ func (rb *requestBuilder) uniqueVariableName(location model.ParameterLocation, n
 	return fmt.Sprintf("%s_%d", base, count+1)
 }
 
+// resolveMediaExample returns the best available example payload for a media
+// type, using the example builder for schema based fallbacks.
 func (rb *requestBuilder) resolveMediaExample(media *model.MediaType) (any, bool) {
 	if media.Example.HasValue {
 		return media.Example.Value, true
@@ -612,6 +655,8 @@ func (rb *requestBuilder) resolveMediaExample(media *model.MediaType) (any, bool
 	return nil, false
 }
 
+// normalizeParamStyle resolves the effective serialization style for a param,
+// defaulting to OpenAPI's standard per location values.
 func normalizeParamStyle(param model.Parameter) string {
 	style := strings.ToLower(strings.TrimSpace(param.Style))
 	if style != "" {
@@ -627,6 +672,8 @@ func normalizeParamStyle(param model.Parameter) string {
 	}
 }
 
+// resolveParamExplode determines whether the parameter should explode based on
+// explicit configuration or the serialization style defaults.
 func resolveParamExplode(param model.Parameter, style string) bool {
 	if param.Explode != nil {
 		return *param.Explode
@@ -634,6 +681,8 @@ func resolveParamExplode(param model.Parameter, style string) bool {
 	return style == "form"
 }
 
+// parameterSchema returns the OpenAPI schema instance for a parameter and
+// tolerates missing references.
 func parameterSchema(param model.Parameter) *openapi3.Schema {
 	if param.Schema == nil {
 		return nil
@@ -648,6 +697,8 @@ func parameterSchema(param model.Parameter) *openapi3.Schema {
 	return nil
 }
 
+// ensureStringSlice coerces a sample value into a slice of strings, best
+// effort converting scalar values along the way.
 func ensureStringSlice(value any) []string {
 	switch v := value.(type) {
 	case []string:
@@ -671,6 +722,8 @@ func ensureStringSlice(value any) []string {
 	}
 }
 
+// ensureStringMap attempts to convert the sample value into a string map so
+// object styles can reuse a consistent representation.
 func ensureStringMap(value any) map[string]string {
 	result := make(map[string]string)
 	switch v := value.(type) {
@@ -686,6 +739,8 @@ func ensureStringMap(value any) map[string]string {
 	return result
 }
 
+// joinNameValuePairs serializes repeated primitive values using the provided
+// separator.
 func joinNameValuePairs(name string, values []string, sep string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -699,6 +754,8 @@ func joinNameValuePairs(name string, values []string, sep string) string {
 	return strings.Join(parts, sep)
 }
 
+// joinObjectExplode renders key=value pairs for each object field when explode
+// is enabled.
 func joinObjectExplode(fields map[string]string, sep string) string {
 	if len(fields) == 0 {
 		return ""
@@ -712,6 +769,8 @@ func joinObjectExplode(fields map[string]string, sep string) string {
 	return strings.Join(parts, sep)
 }
 
+// joinObjectKeyValueList concatenates name,value entries when explode is
+// disabled.
 func joinObjectKeyValueList(fields map[string]string, sep string) string {
 	if len(fields) == 0 {
 		return ""
@@ -725,6 +784,7 @@ func joinObjectKeyValueList(fields map[string]string, sep string) string {
 	return strings.Join(parts, sep)
 }
 
+// joinDeepObject formats deepObject style parameters.
 func joinDeepObject(name string, fields map[string]string) string {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -739,6 +799,7 @@ func joinDeepObject(name string, fields map[string]string) string {
 	return strings.Join(parts, "&")
 }
 
+// sortedFieldKeys returns deterministic ordering for object fields.
 func sortedFieldKeys(fields map[string]string) []string {
 	keys := make([]string, 0, len(fields))
 	for key := range fields {
@@ -748,6 +809,8 @@ func sortedFieldKeys(fields map[string]string) []string {
 	return keys
 }
 
+// selectBaseURL picks the preferred server URL or falls back to the first
+// defined server.
 func selectBaseURL(spec *model.Spec, preferred int) string {
 	if len(spec.Servers) > 0 {
 		idx := preferred
@@ -764,6 +827,8 @@ func selectBaseURL(spec *model.Spec, preferred int) string {
 	return ""
 }
 
+// selectOAuthFlow chooses which OAuth flow metadata to surface, preferring
+// authorization code flows when available.
 func selectOAuthFlow(scheme model.SecurityScheme) *model.OAuthFlow {
 	if len(scheme.OAuthFlows) == 0 {
 		return nil
@@ -785,6 +850,8 @@ func selectOAuthFlow(scheme model.SecurityScheme) *model.OAuthFlow {
 	return nil
 }
 
+// selectRequestMedia chooses the media type used for generated bodies,
+// preferring JSON payloads.
 func selectRequestMedia(media []model.MediaType) *model.MediaType {
 	if len(media) == 0 {
 		return nil
@@ -797,6 +864,8 @@ func selectRequestMedia(media []model.MediaType) *model.MediaType {
 	return &media[0]
 }
 
+// selectResponseContentType finds a representative response content type to
+// use for Accept headers.
 func selectResponseContentType(responses []model.Response) (string, bool) {
 	if len(responses) == 0 {
 		return "", false
@@ -825,6 +894,8 @@ func selectResponseContentType(responses []model.Response) (string, bool) {
 	return selected, true
 }
 
+// responseStatusScore orders status codes so typical success responses outrank
+// errors when picking response examples.
 func responseStatusScore(code string) int {
 	if code == "default" {
 		return 1
@@ -840,6 +911,7 @@ func responseStatusScore(code string) int {
 	return 0
 }
 
+// buildQueryString serializes query parameters honoring style and explode.
 func buildQueryString(params []paramBinding) string {
 	if len(params) == 0 {
 		return ""
@@ -854,6 +926,8 @@ func buildQueryString(params []paramBinding) string {
 	return strings.Join(segments, "&")
 }
 
+// serializeQueryBinding returns the raw tokens that compose a query parameter
+// serialization.
 func serializeQueryBinding(binding paramBinding) []string {
 	name := strings.TrimSpace(binding.Param.Name)
 	if name == "" {
@@ -881,6 +955,8 @@ func serializeQueryBinding(binding paramBinding) []string {
 	}
 }
 
+// joinBaseAndPath concatenates base URLs and operation paths without double
+// slashes.
 func joinBaseAndPath(base, path string) string {
 	if base == "" {
 		return path
@@ -895,6 +971,8 @@ func joinBaseAndPath(base, path string) string {
 	return trimmedBase + "/" + path
 }
 
+// deriveRequestName synthesizes a readable request name from the HTTP method
+// and tagged path segments.
 func deriveRequestName(op model.Operation) string {
 	if op.ID != "" {
 		return op.ID
@@ -915,6 +993,8 @@ func deriveRequestName(op model.Operation) string {
 	return b.String()
 }
 
+// sanitizeSegmentForName removes templating characters and converts separators
+// to spaces so segments can participate in names.
 func sanitizeSegmentForName(segment string) string {
 	segment = strings.Trim(segment, "{}")
 	var builder strings.Builder
@@ -926,6 +1006,7 @@ func sanitizeSegmentForName(segment string) string {
 	return builder.String()
 }
 
+// capitalize uppercases the first rune of the string when present.
 func capitalize(s string) string {
 	runes := []rune(s)
 	if len(runes) == 0 {
@@ -935,6 +1016,8 @@ func capitalize(s string) string {
 	return string(runes)
 }
 
+// composeDescription concatenates the summary and description trimming
+// whitespace.
 func composeDescription(summary, description string) string {
 	summary = strings.TrimSpace(summary)
 	description = strings.TrimSpace(description)
@@ -948,6 +1031,8 @@ func composeDescription(summary, description string) string {
 	}
 }
 
+// sanitizeVariableName builds a variable friendly identifier scoped to the
+// parameter location.
 func sanitizeVariableName(location model.ParameterLocation, name string) string {
 	var builder strings.Builder
 	prefix := strings.ToLower(string(location))
@@ -977,6 +1062,8 @@ func sanitizeVariableName(location model.ParameterLocation, name string) string 
 	return sanitized
 }
 
+// stringifyExample renders an example payload into JSON, optionally pretty
+// printing arrays of primitives for readability.
 func stringifyExample(value any, pretty bool) string {
 	switch v := value.(type) {
 	case nil:
@@ -1008,6 +1095,8 @@ func stringifyExample(value any, pretty bool) string {
 	return string(data)
 }
 
+// defaultParameterValue returns a sensible fallback when no explicit example
+// exists for a parameter.
 func defaultParameterValue(param model.Parameter) string {
 	switch param.Location {
 	case model.InPath:
@@ -1023,6 +1112,7 @@ func defaultParameterValue(param model.Parameter) string {
 	}
 }
 
+// cloneStrings copies the slice, returning nil when empty to avoid clutter.
 func cloneStrings(values []string) []string {
 	if len(values) == 0 {
 		return nil

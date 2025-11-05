@@ -21,6 +21,7 @@ type Config struct {
 	DropPolicy     DropPolicy
 }
 
+// defaultConfig applies sane defaults and validates drop policies.
 func defaultConfig(cfg Config) Config {
 	if cfg.BufferSize <= 0 {
 		cfg.BufferSize = 1024
@@ -88,6 +89,7 @@ type Snapshot struct {
 
 var sessionCounter uint64
 
+// NewSession creates a streaming session, wiring cancellation to the parent context.
 func NewSession(parent context.Context, kind Kind, cfg Config) *Session {
 	cfg = defaultConfig(cfg)
 	ctx, cancel := context.WithCancel(parent)
@@ -107,6 +109,7 @@ func NewSession(parent context.Context, kind Kind, cfg Config) *Session {
 	}
 }
 
+// buildSessionID prefixes ids with the stream kind and a timestamp for readability.
 func buildSessionID(kind Kind) string {
 	prefix := "stream"
 	switch kind {
@@ -119,40 +122,48 @@ func buildSessionID(kind Kind) string {
 	return prefix + "-" + time.Now().UTC().Format("20060102T150405.000000Z") + "-" + itoa(seq)
 }
 
+// ID returns the globally unique session id.
 func (s *Session) ID() string {
 	return s.id
 }
 
+// Kind identifies the transport backing the session.
 func (s *Session) Kind() Kind {
 	return s.kind
 }
 
+// Context returns a context cancelled when the session closes.
 func (s *Session) Context() context.Context {
 	return s.ctx
 }
 
+// Cancel requests shutdown of the session.
 func (s *Session) Cancel() {
 	s.cancel()
 }
 
+// State returns the current lifecycle state and associated error.
 func (s *Session) State() (State, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.state, s.err
 }
 
+// StatsSnapshot returns cumulative metrics captured so far.
 func (s *Session) StatsSnapshot() Stats {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.stats
 }
 
+// EventsSnapshot returns a copy of the buffered events.
 func (s *Session) EventsSnapshot() []*Event {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.events.snapshot()
 }
 
+// Subscribe registers a listener channel and returns a handle for consuming events.
 func (s *Session) Subscribe() Listener {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -180,6 +191,7 @@ func (s *Session) Subscribe() Listener {
 	}
 }
 
+// removeListener detaches a listener and closes its channel.
 func (s *Session) removeListener(id int) {
 	s.mu.Lock()
 	l, ok := s.listeners[id]
@@ -192,6 +204,7 @@ func (s *Session) removeListener(id int) {
 	}
 }
 
+// close marks the listener closed and drains its channel once.
 func (l *listener) close() {
 	l.closeOnce.Do(func() {
 		atomic.StoreInt32(&l.closed, 1)
@@ -199,6 +212,8 @@ func (l *listener) close() {
 	})
 }
 
+// Publish records an event, increments stats, and fan outs to listeners obeying
+// drop policies.
 func (s *Session) Publish(evt *Event) {
 	if evt == nil {
 		return
@@ -231,6 +246,7 @@ func (s *Session) Publish(evt *Event) {
 	}
 }
 
+// emit delivers an event to the listener honoring the configured drop policy.
 func (l *listener) emit(evt *Event) bool {
 	if atomic.LoadInt32(&l.closed) == 1 {
 		return false
@@ -282,14 +298,17 @@ func (l *listener) emit(evt *Event) bool {
 	return send()
 }
 
+// MarkOpen transitions the session to StateOpen if not already in a terminal state.
 func (s *Session) MarkOpen() {
 	s.setState(StateOpen, nil)
 }
 
+// MarkClosing marks the session as closing, typically before Close is invoked.
 func (s *Session) MarkClosing() {
 	s.setState(StateClosing, nil)
 }
 
+// Close finalizes the session, updates state, closes listeners, and signals completion.
 func (s *Session) Close(err error) {
 	if err != nil {
 		s.setState(StateFailed, err)
@@ -320,6 +339,7 @@ func (s *Session) Close(err error) {
 	}
 }
 
+// setState updates the state and error atomically under lock.
 func (s *Session) setState(state State, err error) {
 	s.mu.Lock()
 	s.state = state
@@ -331,16 +351,19 @@ func (s *Session) setState(state State, err error) {
 	s.mu.Unlock()
 }
 
+// Done closes when the session transitions to a terminal state.
 func (s *Session) Done() <-chan struct{} {
 	return s.done
 }
 
+// Err returns the terminal error, if any.
 func (s *Session) Err() error {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.err
 }
 
+// itoa converts integers without allocating via fmt for log friendly ids.
 func itoa(v uint64) string {
 	const digits = "0123456789"
 	if v == 0 {

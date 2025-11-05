@@ -16,6 +16,7 @@ type semver struct {
 	pre   string
 }
 
+// parseSemver parses lax semantic versions like v1.2.3-beta.
 func parseSemver(v string) (semver, error) {
 	v = strings.TrimSpace(v)
 	v = strings.TrimPrefix(v, "v")
@@ -48,6 +49,7 @@ func parseSemver(v string) (semver, error) {
 	return semver{maj: vals[0], min: vals[1], patch: vals[2], pre: pre}, nil
 }
 
+// lt compares two semantic versions using prerelease ordering rules.
 func (a semver) lt(b semver) bool {
 	if a.maj != b.maj {
 		return a.maj < b.maj
@@ -70,6 +72,7 @@ func (a semver) lt(b semver) bool {
 	return a.pre < b.pre
 }
 
+// compareSemver compares two version strings returning -1, 0, or 1.
 func compareSemver(a, b string) (int, error) {
 	la, err := parseSemver(a)
 	if err != nil {

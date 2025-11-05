@@ -19,6 +19,8 @@ type Runner struct {
 	fs httpclient.FileSystem
 }
 
+// NewRunner builds a script runner, defaulting to the OS filesystem when none
+// is supplied.
 func NewRunner(fs httpclient.FileSystem) *Runner {
 	if fs == nil {
 		fs = httpclient.OSFileSystem{}
@@ -66,6 +68,8 @@ type TestResult struct {
 	Elapsed time.Duration
 }
 
+// RunPreRequest executes each pre-request script block in order, aggregating
+// the side effects into an output structure that mutates the outgoing request.
 func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestInput) (PreRequestOutput, error) {
 	result := PreRequestOutput{
 		Headers:   make(http.Header),
@@ -108,6 +112,8 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 	return result, nil
 }
 
+// RunTests runs all test scripts, concatenating their results and returning any
+// global variable changes they emit.
 func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
 	var aggregated []TestResult
 	changes := make(map[string]GlobalValue)
@@ -142,6 +148,8 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 	return aggregated, changes, nil
 }
 
+// executePreRequestScript evaluates the script within a VM wired with request
+// and variable bindings, capturing any mutations into the output struct.
 func (r *Runner) executePreRequestScript(script string, input PreRequestInput, output *PreRequestOutput) error {
 	vm := goja.New()
 	pre := newPreRequestAPI(output, input)
@@ -164,6 +172,8 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 	return nil
 }
 
+// executeTestScript runs a test script inside a VM configured with response,
+// variable, stream, and trace helpers, returning the accumulated results.
 func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
@@ -213,6 +223,7 @@ func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult
 	return tester.results(), tester.globalChanges(), nil
 }
 
+// bindCommon installs minimal console shims so scripts can log without failing.
 func bindCommon(vm *goja.Runtime) error {
 	console := map[string]func(goja.FunctionCall) goja.Value{
 		"log":   func(call goja.FunctionCall) goja.Value { return goja.Undefined() },
@@ -222,6 +233,8 @@ func bindCommon(vm *goja.Runtime) error {
 	return vm.Set("console", console)
 }
 
+// normalizeScript trims whitespace and optional templating delimiters from the
+// script body before execution.
 func normalizeScript(body string) string {
 	script := strings.TrimSpace(body)
 	if script == "" {
@@ -235,6 +248,8 @@ func normalizeScript(body string) string {
 	return script
 }
 
+// loadScript returns the inline script body or loads it from disk, honoring
+// relative paths against the provided baseDir.
 func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string, error) {
 	if strings.TrimSpace(block.FilePath) == "" {
 		return normalizeScript(block.Body), nil
@@ -263,6 +278,8 @@ type preRequestAPI struct {
 	globals   map[string]GlobalValue
 }
 
+// newPreRequestAPI snapshots the initial request data and globals so scripts
+// operate on copies and only persisted changes are surfaced.
 func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preRequestAPI {
 	vars := make(map[string]string, len(input.Variables))
 	for k, v := range input.Variables {
@@ -279,6 +296,7 @@ func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preReque
 	return &preRequestAPI{request: input.Request, output: output, variables: vars, globals: globals}
 }
 
+// requestAPI exposes helpers to inspect and override request level properties.
 func (api *preRequestAPI) requestAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"getURL": func() string {
@@ -337,6 +355,7 @@ func (api *preRequestAPI) requestAPI() map[string]interface{} {
 	}
 }
 
+// varsAPI provides get/set helpers for request scoped variables.
 func (api *preRequestAPI) varsAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"get": func(name string) string {
@@ -357,6 +376,8 @@ func (api *preRequestAPI) varsAPI() map[string]interface{} {
 	}
 }
 
+// globalAPI lets pre request scripts read and mutate global variables while
+// tracking which entries changed.
 func (api *preRequestAPI) globalAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"get": func(name string) string {
@@ -389,6 +410,8 @@ func (api *preRequestAPI) globalAPI() map[string]interface{} {
 	}
 }
 
+// setGlobal records a global mutation in both the working copy and the output
+// payload that will be persisted by the caller.
 func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -404,6 +427,7 @@ func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
 	api.output.Globals[key] = entry
 }
 
+// deleteGlobal marks a global for deletion so the CLI can remove it later.
 func (api *preRequestAPI) deleteGlobal(name string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -418,6 +442,8 @@ func (api *preRequestAPI) deleteGlobal(name string) {
 	api.output.Globals[key] = GlobalValue{Name: name, Delete: true}
 }
 
+// parseGlobalSecret interprets either a boolean or an object literal of the
+// form {secret: true} passed to global setters.
 func parseGlobalSecret(value goja.Value) bool {
 	switch exported := value.Export().(type) {
 	case bool:
@@ -440,6 +466,8 @@ type testAPI struct {
 	trace     *traceBinding
 }
 
+// newTestAPI prepares the testing bindings by cloning mutable inputs so test
+// scripts cannot tamper with shared state.
 func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo, trace *TraceInput) *testAPI {
 	copyVars := make(map[string]string, len(vars))
 	for k, v := range vars {
@@ -470,11 +498,15 @@ type streamAPI struct {
 	closeHandlers []goja.Callable
 }
 
+// newStreamAPI clones stream info and wires it into helpers that expose the
+// event log to test scripts.
 func newStreamAPI(vm *goja.Runtime, info *StreamInfo) *streamAPI {
 	clone := info.Clone()
 	return &streamAPI{vm: vm, info: clone}
 }
 
+// object returns the object exposed to scripts, providing accessors for stream
+// metadata plus registration functions for callbacks.
 func (api *streamAPI) object() map[string]interface{} {
 	enabled := api.info != nil
 	return map[string]interface{}{
@@ -517,6 +549,8 @@ func (api *streamAPI) object() map[string]interface{} {
 	}
 }
 
+// registerEventHandler records callbacks that will be invoked for each stream
+// event after the script evaluates.
 func (api *streamAPI) registerEventHandler(call goja.FunctionCall) goja.Value {
 	if len(call.Arguments) == 0 {
 		return goja.Undefined()
@@ -529,6 +563,7 @@ func (api *streamAPI) registerEventHandler(call goja.FunctionCall) goja.Value {
 	return goja.Undefined()
 }
 
+// registerCloseHandler stores callbacks that run once after all events replay.
 func (api *streamAPI) registerCloseHandler(call goja.FunctionCall) goja.Value {
 	if len(call.Arguments) == 0 {
 		return goja.Undefined()
@@ -541,6 +576,8 @@ func (api *streamAPI) registerCloseHandler(call goja.FunctionCall) goja.Value {
 	return goja.Undefined()
 }
 
+// replay runs recorded events and summary data through the registered
+// handlers, mirroring the original stream lifecycle.
 func (api *streamAPI) replay() error {
 	if api.info == nil {
 		return nil
@@ -562,6 +599,7 @@ func (api *streamAPI) replay() error {
 	return nil
 }
 
+// testsAPI exposes assertion helpers under the global "tests" object.
 func (api *testAPI) testsAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"assert": api.assert,
@@ -569,12 +607,16 @@ func (api *testAPI) testsAPI() map[string]interface{} {
 	}
 }
 
+// clientAPI provides the legacy client.test helper used by postman style
+// scripts.
 func (api *testAPI) clientAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"test": api.namedTest,
 	}
 }
 
+// traceAPI returns timeline helpers for scripted assertions, defaulting to a
+// disabled binding when trace data is absent.
 func (api *testAPI) traceAPI() map[string]interface{} {
 	if api.trace == nil {
 		return newTraceBinding(nil).object()
@@ -582,6 +624,8 @@ func (api *testAPI) traceAPI() map[string]interface{} {
 	return api.trace.object()
 }
 
+// responseAPI projects the HTTP or gRPC response into script friendly helpers
+// including JSON parsing and header lookups.
 func (api *testAPI) responseAPI() map[string]interface{} {
 	body := ""
 	status := ""
@@ -663,6 +707,7 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 	}
 }
 
+// varsAPI surfaces request scoped variable helpers for test scripts.
 func (api *testAPI) varsAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"get": func(name string) string {
@@ -679,6 +724,8 @@ func (api *testAPI) varsAPI() map[string]interface{} {
 	}
 }
 
+// globalAPI is shared with vars.global in tests, mirroring pre request
+// behavior by tracking mutations and deletions.
 func (api *testAPI) globalAPI() map[string]interface{} {
 	return map[string]interface{}{
 		"get": func(name string) string {
@@ -713,6 +760,8 @@ func (api *testAPI) globalAPI() map[string]interface{} {
 	}
 }
 
+// setGlobal records a global mutation that will be persisted after all tests
+// complete.
 func (api *testAPI) setGlobal(name, value string, secret bool) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -728,6 +777,7 @@ func (api *testAPI) setGlobal(name, value string, secret bool) {
 	api.changes[key] = entry
 }
 
+// deleteGlobal marks a global value for deletion in the final change set.
 func (api *testAPI) deleteGlobal(name string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -742,6 +792,7 @@ func (api *testAPI) deleteGlobal(name string) {
 	api.changes[key] = GlobalValue{Name: name, Delete: true}
 }
 
+// globalChanges returns a copy of the pending global mutations for the caller.
 func (api *testAPI) globalChanges() map[string]GlobalValue {
 	if len(api.changes) == 0 {
 		return nil
@@ -754,6 +805,8 @@ func (api *testAPI) globalChanges() map[string]GlobalValue {
 	return clone
 }
 
+// assert records the outcome of a boolean assertion, defaulting the test name
+// when the caller does not provide one.
 func (api *testAPI) assert(condition bool, message string) {
 	name := message
 	if name == "" {
@@ -771,6 +824,7 @@ func (api *testAPI) assert(condition bool, message string) {
 	api.cases = append(api.cases, result)
 }
 
+// fail adds a failing test case with the supplied message.
 func (api *testAPI) fail(message string) {
 	if message == "" {
 		message = "fail"
@@ -783,6 +837,8 @@ func (api *testAPI) fail(message string) {
 	})
 }
 
+// namedTest wraps user supplied callbacks to capture panics, duration, and
+// return errors as structured test results.
 func (api *testAPI) namedTest(name string, callable goja.Callable) {
 	start := time.Now()
 	passed := true
@@ -813,6 +869,7 @@ func (api *testAPI) namedTest(name string, callable goja.Callable) {
 	}
 }
 
+// results returns a copy of all accumulated test cases.
 func (api *testAPI) results() []TestResult {
 	return append([]TestResult(nil), api.cases...)
 }

@@ -13,6 +13,8 @@ type FileEntry struct {
 	Path string
 }
 
+// ListRequestFiles returns .http/.rest files under root, optionally recursing
+// into subdirectories while skipping hidden folders.
 func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	var entries []FileEntry
 	exts := map[string]struct{}{".http": {}, ".rest": {}}

@@ -19,10 +19,12 @@ type Resolver struct {
 	providers []Provider
 }
 
+// NewResolver chains providers for multi-layer variable resolution.
 func NewResolver(providers ...Provider) *Resolver {
 	return &Resolver{providers: providers}
 }
 
+// Resolve looks up a variable by name or provider-prefixed form (env.FOO).
 func (r *Resolver) Resolve(name string) (string, bool) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -64,6 +66,7 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 
 var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
+// ExpandTemplates replaces {{var}} tokens using providers as well as dynamic variables.
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	var firstErr error
 	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
@@ -87,6 +90,7 @@ func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	return result, firstErr
 }
 
+// ExpandTemplatesStatic behaves like ExpandTemplates but ignores dynamic variables.
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
 	var firstErr error
 	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
@@ -109,6 +113,7 @@ func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
 	return result, firstErr
 }
 
+// resolveDynamic handles built in helpers like $timestamp and $uuid.
 func resolveDynamic(name string) (string, bool) {
 	switch name {
 	case "$timestamp":
@@ -130,6 +135,7 @@ type MapProvider struct {
 	label  string
 }
 
+// NewMapProvider builds a provider backed by the supplied key/value map.
 func NewMapProvider(label string, values map[string]string) Provider {
 	normalized := make(map[string]string, len(values))
 	for k, v := range values {

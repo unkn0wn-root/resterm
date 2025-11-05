@@ -49,6 +49,7 @@ type SSETranscript struct {
 	Summary SSESummary `json:"summary"`
 }
 
+// StartSSE begins streaming an SSE request, returning a stream handle and the initial response metadata.
 func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (*StreamHandle, *Response, error) {
 	if req == nil || req.SSE == nil {
 		return nil, nil, errdef.New(errdef.CodeHTTP, "sse metadata missing")
@@ -148,6 +149,7 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 	return &StreamHandle{Session: session, Meta: meta}, nil, nil
 }
 
+// ExecuteSSE runs the entire SSE request to completion, blocking until the stream finishes.
 func (c *Client) ExecuteSSE(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (*Response, error) {
 	handle, httpResp, err := c.StartSSE(ctx, req, resolver, opts)
 	if err != nil {
@@ -160,6 +162,7 @@ func (c *Client) ExecuteSSE(ctx context.Context, req *restfile.Request, resolver
 	return CompleteSSE(handle)
 }
 
+// CompleteSSE waits for the streaming session to finish and returns the final response.
 func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	if handle == nil || handle.Session == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "sse session not available")
@@ -221,6 +224,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	}, nil
 }
 
+// runSSESession reads SSE events from the body, enforcing timeouts and publishing events to the session.
 func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SSEOptions) {
 	ctx := session.Context()
 	reader := bufio.NewReader(body)
@@ -366,6 +370,7 @@ type sseAccumulator struct {
 	summary SSESummary
 }
 
+// newSSEAccumulator aggregates SSE events to produce the final summary.
 func newSSEAccumulator() *sseAccumulator {
 	return &sseAccumulator{
 		events:  make([]SSEEvent, 0, 16),
@@ -410,6 +415,7 @@ func (a *sseAccumulator) consume(evt *stream.Event) {
 	}
 }
 
+// publishSSEEvent converts an SSE event into stream events for the UI.
 func publishSSEEvent(session *stream.Session, evt SSEEvent) {
 	payload := []byte(evt.Data)
 	metadata := make(map[string]string)
@@ -449,6 +455,7 @@ type sseEventBuilder struct {
 	hasRetry bool
 }
 
+// consume processes each SSE line, building events according to the spec.
 func (b *sseEventBuilder) consume(line string) error {
 	switch {
 	case strings.HasPrefix(line, "data:"):
@@ -481,6 +488,7 @@ func (b *sseEventBuilder) consume(line string) error {
 	return nil
 }
 
+// finalize emits a fully parsed event when the builder has accumulated data.
 func (b *sseEventBuilder) finalize(index int) (SSEEvent, bool) {
 	hasContent := len(b.data) > 0 || len(b.comment) > 0 || b.event != "" || b.id != "" || b.hasRetry
 	if !hasContent {

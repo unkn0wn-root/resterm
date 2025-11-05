@@ -78,6 +78,8 @@ type manager struct {
 	shutdown sync.Once
 }
 
+// New builds an OTEL backed Instrumenter using the provided config.
+// When telemetry is disabled it returns a noop instrumenter.
 func New(cfg Config, opts ...Option) (Instrumenter, error) {
 	builder := providerOptions{}
 	for _, opt := range opts {
@@ -118,6 +120,8 @@ func New(cfg Config, opts ...Option) (Instrumenter, error) {
 	return &manager{tracer: tp.Tracer(tracerName), provider: tp}, nil
 }
 
+// Start begins a client span using HTTP and request metadata, returning a span
+// that captures timeline and budget information.
 func (m *manager) Start(ctx context.Context, info RequestStart) (context.Context, RequestSpan) {
 	if info.HTTPRequest == nil {
 		return ctx, noopSpan{}
@@ -129,6 +133,7 @@ func (m *manager) Start(ctx context.Context, info RequestStart) (context.Context
 	return ctx, &requestSpan{span: span}
 }
 
+// Shutdown flushes and closes the underlying tracer provider once.
 func (m *manager) Shutdown(ctx context.Context) error {
 	if m == nil || m.provider == nil {
 		return nil
@@ -144,6 +149,8 @@ type requestSpan struct {
 	span trace.Span
 }
 
+// RecordTrace annotates the span with per phase timing and budget breaches so
+// the OTEL trace mirrors the CLI trace output.
 func (rs *requestSpan) RecordTrace(tl *nettrace.Timeline, report *nettrace.Report) {
 	if rs == nil || rs.span == nil || tl == nil {
 		return
@@ -200,6 +207,8 @@ func (rs *requestSpan) RecordTrace(tl *nettrace.Timeline, report *nettrace.Repor
 	}
 }
 
+// End finalizes the span status using HTTP status, request errors, and trace
+// budget results to surface failures in one place.
 func (rs *requestSpan) End(result RequestResult) {
 	if rs == nil || rs.span == nil {
 		return
@@ -239,6 +248,7 @@ func (rs *requestSpan) End(result RequestResult) {
 	rs.span.End()
 }
 
+// Noop returns an Instrumenter that discards all operations.
 func Noop() Instrumenter {
 	return noopInstrumenter{}
 }
@@ -257,6 +267,8 @@ func (noopSpan) RecordTrace(*nettrace.Timeline, *nettrace.Report) {}
 
 func (noopSpan) End(RequestResult) {}
 
+// newExporter builds an OTLP exporter with the configured endpoint, headers,
+// and dial timeout, validating the endpoint along the way.
 func newExporter(cfg Config) (sdktrace.SpanExporter, error) {
 	if strings.TrimSpace(cfg.Endpoint) == "" {
 		return nil, errors.New("telemetry endpoint is required")
@@ -284,6 +296,7 @@ func newExporter(cfg Config) (sdktrace.SpanExporter, error) {
 	return otlptrace.New(ctx, client)
 }
 
+// buildResourceAttributes calculates the resource identity advertised to OTEL.
 func buildResourceAttributes(cfg Config) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		semconv.ServiceName(cfg.ServiceName),
@@ -294,6 +307,8 @@ func buildResourceAttributes(cfg Config) []attribute.KeyValue {
 	return attrs
 }
 
+// buildSpanAttributes collects the HTTP request, restfile metadata, and budget
+// information into OTEL attributes applied to each span.
 func buildSpanAttributes(info RequestStart) []attribute.KeyValue {
 	attrs := []attribute.KeyValue{
 		attribute.Bool("resterm.trace.enabled", true),
@@ -351,6 +366,8 @@ func buildSpanAttributes(info RequestStart) []attribute.KeyValue {
 	return attrs
 }
 
+// spanNameFor picks a descriptive span name prioritizing the request metadata
+// name, then the HTTP method and host.
 func spanNameFor(info RequestStart) string {
 	if info.Request != nil {
 		if name := strings.TrimSpace(info.Request.Metadata.Name); name != "" {

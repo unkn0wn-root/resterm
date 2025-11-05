@@ -7,6 +7,7 @@ import (
 	"strings"
 )
 
+// parsePositiveInt validates non-negative integers used in stream directives.
 func parsePositiveInt(value string) (int, error) {
 	trimmed := strings.TrimSpace(value)
 	if trimmed == "" {
@@ -23,6 +24,7 @@ func parsePositiveInt(value string) (int, error) {
 	return n, nil
 }
 
+// parseByteSize accepts human readable byte sizes like 10mb or 512kib.
 func parseByteSize(value string) (int64, error) {
 	trimmed := strings.TrimSpace(strings.ToLower(value))
 	if trimmed == "" {

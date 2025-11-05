@@ -21,6 +21,8 @@ var (
 	nameValueRe    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
+// Parse ingests a .http file and produces a structured document describing its
+// requests, workflows, variables, and scripts.
 func Parse(path string, data []byte) *restfile.Document {
 	scanner := bufio.NewScanner(bytes.NewReader(normalizeNewlines(data)))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
@@ -40,6 +42,7 @@ func Parse(path string, data []byte) *restfile.Document {
 	return doc
 }
 
+// normalizeNewlines converts CRLF sequences to LF for predictable tokenizing.
 func normalizeNewlines(data []byte) []byte {
 	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
 }
@@ -83,6 +86,8 @@ func newDocumentBuilder(doc *restfile.Document) *documentBuilder {
 	return &documentBuilder{doc: doc}
 }
 
+// processLine tokenizes each logical line, routing directives to the current
+// request, workflow, or document level structures.
 func (b *documentBuilder) processLine(lineNumber int, line string) {
 	trimmed := strings.TrimSpace(line)
 
@@ -249,6 +254,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	b.appendLine(line)
 }
 
+// stripComment handles inline comment markers and returns the comment text.
 func stripComment(trimmed string) (string, bool) {
 	switch {
 	case strings.HasPrefix(trimmed, "//"):
@@ -262,10 +268,13 @@ func stripComment(trimmed string) (string, bool) {
 	}
 }
 
+// isBlockCommentStart detects multi-line comment delimiters.
 func isBlockCommentStart(trimmed string) bool {
 	return strings.HasPrefix(trimmed, "/*")
 }
 
+// parseBlockCommentLine extracts the inner content of a block comment line and
+// reports when the block closes on the same line.
 func parseBlockCommentLine(trimmed string, start bool) (string, bool) {
 	working := trimmed
 	if start && strings.HasPrefix(working, "/*") {
@@ -285,6 +294,8 @@ func parseBlockCommentLine(trimmed string, start bool) (string, bool) {
 	return working, closed
 }
 
+// handleComment interprets directives embedded in comments such as @name or
+// @capture.
 func (b *documentBuilder) handleComment(line int, text string) {
 	if !strings.HasPrefix(text, "@") {
 		return
@@ -433,6 +444,8 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	}
 }
 
+// parseCaptureDirective parses @capture directives, supporting scope tokens
+// like request/file/global.
 func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
@@ -469,6 +482,8 @@ func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile
 	}, true
 }
 
+// parseCaptureScope resolves capture scope tokens and whether they imply
+// secrecy.
 func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
 	lowered := strings.ToLower(strings.TrimSpace(token))
 	secret := false
@@ -488,6 +503,8 @@ func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
 	}
 }
 
+// handleScript routes > directives into script buffers, supporting inline body
+// scripts and file includes.
 func (b *documentBuilder) handleScript(line int, rawLine string) {
 	if !b.ensureRequest(line) {
 		return
@@ -519,6 +536,7 @@ func (b *documentBuilder) handleScript(line int, rawLine string) {
 	b.request.appendScriptLine(kind, body)
 }
 
+// parseAuthSpec decodes @auth directives into structured auth specs.
 func parseAuthSpec(rest string) *restfile.AuthSpec {
 	fields := splitAuthFields(rest)
 	if len(fields) == 0 {
@@ -571,6 +589,8 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 	return &restfile.AuthSpec{Type: authType, Params: params}
 }
 
+// parseProfileSpec parses @profile directives, applying defaults and clamping
+// invalid values.
 func parseProfileSpec(rest string) *restfile.ProfileSpec {
 	trimmed := strings.TrimSpace(rest)
 	spec := &restfile.ProfileSpec{}
@@ -618,6 +638,7 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 	return spec
 }
 
+// parseTraceSpec handles @trace directives enabling trace budgets.
 func parseTraceSpec(rest string) *restfile.TraceSpec {
 	spec := &restfile.TraceSpec{Enabled: true}
 	trimmed := strings.TrimSpace(rest)
@@ -698,6 +719,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 	return spec
 }
 
+// parseDuration tolerates fractional seconds and defaults to zero on error.
 func parseDuration(value string) time.Duration {
 	dur, err := time.ParseDuration(strings.TrimSpace(value))
 	if err != nil {
@@ -706,6 +728,7 @@ func parseDuration(value string) time.Duration {
 	return dur
 }
 
+// normalizeTracePhaseName lowercases phase tokens so they align with budgets.
 func normalizeTracePhaseName(name string) string {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "dns", "lookup", "name":
@@ -729,6 +752,8 @@ func normalizeTracePhaseName(name string) string {
 	}
 }
 
+// splitAuthFields preserves quoted strings while splitting auth directive
+// arguments.
 func splitAuthFields(input string) []string {
 	var fields []string
 	var current strings.Builder
@@ -763,6 +788,7 @@ func splitAuthFields(input string) []string {
 	return fields
 }
 
+// parseKeyValuePairs interprets KEY=VALUE clauses while tolerating bare tokens.
 func parseKeyValuePairs(fields []string) map[string]string {
 	params := make(map[string]string, len(fields))
 	for _, field := range fields {
@@ -780,6 +806,7 @@ func parseKeyValuePairs(fields []string) map[string]string {
 	return params
 }
 
+// parseBool supports a handful of truthy and falsey tokens used in directives.
 func parseBool(value string) (bool, bool) {
 	switch strings.ToLower(strings.TrimSpace(value)) {
 	case "true", "t", "1", "yes", "on":
@@ -791,6 +818,8 @@ func parseBool(value string) (bool, bool) {
 	}
 }
 
+// handleScopedVariableDirective processes @var directives scoped to file or
+// global contexts.
 func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
 	switch key {
 	case "global", "global-secret":
@@ -838,6 +867,7 @@ func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line i
 	}
 }
 
+// addGlobalVariable deduplicates globals and records their source line.
 func (b *documentBuilder) addGlobalVariable(name, value string, line int, secret bool) {
 	variable := restfile.Variable{
 		Name:   name,
@@ -849,6 +879,7 @@ func (b *documentBuilder) addGlobalVariable(name, value string, line int, secret
 	b.globalVars = append(b.globalVars, variable)
 }
 
+// addConstant registers file level constants that can be referenced elsewhere.
 func (b *documentBuilder) addConstant(name, value string, line int) {
 	constant := restfile.Constant{
 		Name:  name,
@@ -872,6 +903,7 @@ func splitFirst(text string) (string, string) {
 	return token, remainder
 }
 
+// parseNameValue splits NAME VALUE pairs used by script directives.
 func parseNameValue(input string) (string, string) {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -889,6 +921,7 @@ func parseNameValue(input string) (string, string) {
 	return name, strings.TrimSpace(valueCandidate)
 }
 
+// splitDirective separates directive names from the rest of the line.
 func splitDirective(text string) (string, string) {
 	fields := strings.Fields(text)
 	if len(fields) == 0 {
@@ -903,6 +936,8 @@ func splitDirective(text string) (string, string) {
 	return key, rest
 }
 
+// parseOptionTokens reads key=value tokens used by workflows and @body
+// directives.
 func parseOptionTokens(input string) map[string]string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -932,6 +967,8 @@ func parseOptionTokens(input string) map[string]string {
 	return options
 }
 
+// tokenizeOptionTokens breaks an option string into tokens while respecting
+// quoted values.
 func tokenizeOptionTokens(input string) []string {
 	var tokens []string
 	var current strings.Builder
@@ -974,6 +1011,7 @@ func tokenizeOptionTokens(input string) []string {
 	return tokens
 }
 
+// trimQuotes removes matching leading and trailing quotes.
 func trimQuotes(value string) string {
 	if len(value) >= 2 {
 		first := value[0]
@@ -985,6 +1023,7 @@ func trimQuotes(value string) string {
 	return value
 }
 
+// parseWorkflowFailureMode validates workflow @workflow failure directives.
 func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool) {
 	trimmed := strings.TrimSpace(strings.ToLower(value))
 	if trimmed == "" {
@@ -1000,6 +1039,7 @@ func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool)
 	}
 }
 
+// parseTagList splits comma or space separated tags trimming whitespace.
 func parseTagList(text string) []string {
 	if strings.TrimSpace(text) == "" {
 		return nil
@@ -1026,6 +1066,8 @@ func contains(list []string, value string) bool {
 	return false
 }
 
+// appendScriptLine buffers inline script lines until a blank line or directive
+// flushes them.
 func (r *requestBuilder) appendScriptLine(kind, body string) {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	if kind == "" {
@@ -1041,6 +1083,7 @@ func (r *requestBuilder) appendScriptLine(kind, body string) {
 	r.scriptBuffer = append(r.scriptBuffer, body)
 }
 
+// flushPendingScript stores the buffered script body on the request metadata.
 func (r *requestBuilder) flushPendingScript() {
 	if len(r.scriptBuffer) == 0 {
 		return
@@ -1051,6 +1094,7 @@ func (r *requestBuilder) flushPendingScript() {
 	r.scriptBufferKind = ""
 }
 
+// appendScriptInclude records a script include directive.
 func (r *requestBuilder) appendScriptInclude(kind, path string) {
 	kind = strings.ToLower(strings.TrimSpace(kind))
 	if kind == "" {
@@ -1060,6 +1104,7 @@ func (r *requestBuilder) appendScriptInclude(kind, path string) {
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: kind, FilePath: path})
 }
 
+// handleBodyDirective interprets directives like @body, @body-json, and @body-file.
 func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	value := strings.TrimSpace(rest)
 	if value == "" {
@@ -1084,6 +1129,8 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	}
 }
 
+// handleBodyLine sends free form lines to the HTTP builder or sub builders like
+// GraphQL and gRPC.
 func (b *documentBuilder) handleBodyLine(line string) {
 	if b.request.graphql.HandleBodyLine(line) {
 		return
@@ -1107,6 +1154,7 @@ func (b *documentBuilder) handleBodyLine(line string) {
 	b.request.http.AppendBodyLine(line)
 }
 
+// ensureRequest creates a new request builder the first time a request stanza is encountered.
 func (b *documentBuilder) ensureRequest(line int) bool {
 	if b.inRequest {
 		return true
@@ -1130,6 +1178,7 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 	return true
 }
 
+// appendLine captures the raw file contents for later diagnostics.
 func (b *documentBuilder) appendLine(line string) {
 	if b.inRequest {
 		if b.request.startLine == 0 {
@@ -1140,6 +1189,7 @@ func (b *documentBuilder) appendLine(line string) {
 	}
 }
 
+// flushRequest finalizes the current request and appends it to the document.
 func (b *documentBuilder) flushRequest(_ int) {
 	if !b.inRequest {
 		return
@@ -1157,6 +1207,7 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.inBlock = false
 }
 
+// flushWorkflow finalizes the workflow builder and stores the result.
 func (b *documentBuilder) flushWorkflow(line int) {
 	if b.workflow == nil {
 		return
@@ -1168,6 +1219,7 @@ func (b *documentBuilder) flushWorkflow(line int) {
 	b.workflow = nil
 }
 
+// finish commits any pending request or workflow at end of file.
 func (b *documentBuilder) finish() {
 	b.flushRequest(0)
 	b.flushWorkflow(0)
@@ -1176,6 +1228,7 @@ func (b *documentBuilder) finish() {
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
 }
 
+// build assembles the final restfile.Request including metadata, headers, and body sources.
 func (r *requestBuilder) build() *restfile.Request {
 	r.flushPendingScript()
 
@@ -1243,6 +1296,7 @@ func (r *requestBuilder) build() *restfile.Request {
 	return req
 }
 
+// startWorkflow initializes a workflow builder when encountering @workflow.
 func (b *documentBuilder) startWorkflow(line int, rest string) {
 	if b.inRequest {
 		b.flushRequest(line - 1)
@@ -1258,6 +1312,7 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	b.workflow = sb
 }
 
+// newWorkflowBuilder seeds a workflow builder with default options.
 func newWorkflowBuilder(line int, name string) *workflowBuilder {
 	return &workflowBuilder{
 		startLine: line,
@@ -1270,12 +1325,14 @@ func newWorkflowBuilder(line int, name string) *workflowBuilder {
 	}
 }
 
+// touch updates the workflow's ending line whenever content is processed.
 func (s *workflowBuilder) touch(line int) {
 	if line > s.endLine {
 		s.endLine = line
 	}
 }
 
+// applyOptions parses workflow level options like failure mode or tags.
 func (s *workflowBuilder) applyOptions(opts map[string]string) {
 	if len(opts) == 0 {
 		return
@@ -1301,6 +1358,7 @@ func (s *workflowBuilder) applyOptions(opts map[string]string) {
 	}
 }
 
+// handleDirective processes workflow specific directives such as @env or @vars.
 func (s *workflowBuilder) handleDirective(key, rest string, line int) bool {
 	switch key {
 	case "description", "desc":
@@ -1330,6 +1388,7 @@ func (s *workflowBuilder) handleDirective(key, rest string, line int) bool {
 	}
 }
 
+// addStep appends a workflow step such as request references or delays.
 func (s *workflowBuilder) addStep(line int, rest string) {
 	remainder := strings.TrimSpace(rest)
 	if remainder == "" {
@@ -1399,6 +1458,7 @@ func (s *workflowBuilder) addStep(line int, rest string) {
 	s.touch(line)
 }
 
+// build produces the final Workflow struct including steps and metadata.
 func (s *workflowBuilder) build(line int) restfile.Workflow {
 	if line > 0 {
 		s.touch(line)

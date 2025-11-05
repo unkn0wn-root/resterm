@@ -49,6 +49,8 @@ func NewClient() *Client {
 	return &Client{}
 }
 
+// Execute dials the requested gRPC target, resolves descriptors, marshals the
+// input payload, and invokes the method while capturing metadata and timing.
 func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq *restfile.GRPCRequest, options Options) (resp *Response, err error) {
 	if grpcReq == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "missing grpc metadata")
@@ -153,6 +155,8 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	return resp, nil
 }
 
+// resolveMethodDescriptor locates the method descriptor using the supplied
+// descriptor set, or via server reflection when enabled.
 func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientConn, grpcReq *restfile.GRPCRequest, options Options) (protoreflect.MethodDescriptor, error) {
 	if grpcReq.FullMethod == "" {
 		return nil, errdef.New(errdef.CodeHTTP, "grpc method not specified")
@@ -186,6 +190,8 @@ func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientC
 	return findMethodInFiles(files, grpcReq)
 }
 
+// loadDescriptorSet reads a serialized descriptor set from disk, resolving
+// relative paths using the provided base directory.
 func (c *Client) loadDescriptorSet(descriptorPath, baseDir string) (*descriptorpb.FileDescriptorSet, error) {
 	path := descriptorPath
 	if !filepath.IsAbs(path) && baseDir != "" {
@@ -204,6 +210,8 @@ func (c *Client) loadDescriptorSet(descriptorPath, baseDir string) (*descriptorp
 	return fds, nil
 }
 
+// findMethodInFiles searches the registry for the service and method described
+// in the request and returns its descriptor.
 func findMethodInFiles(files *protoregistry.Files, grpcReq *restfile.GRPCRequest) (protoreflect.MethodDescriptor, error) {
 	serviceName := protoreflect.FullName(grpcReq.Service)
 	if grpcReq.Package != "" {
@@ -227,6 +235,8 @@ func findMethodInFiles(files *protoregistry.Files, grpcReq *restfile.GRPCRequest
 	return method, nil
 }
 
+// fetchDescriptorsViaReflection asks the server reflection service for the
+// descriptors required to describe the supplied fully qualified method.
 func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, fullMethod string) (set *descriptorpb.FileDescriptorSet, err error) {
 	client := reflectpb.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
@@ -276,6 +286,8 @@ func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, f
 	return set, nil
 }
 
+// shouldUsePlaintext prioritizes the request level setting, then the default
+// options, and falls back to plaintext to match grpcurl behavior.
 func shouldUsePlaintext(grpcReq *restfile.GRPCRequest, options Options) bool {
 	if grpcReq != nil && grpcReq.PlaintextSet {
 		return grpcReq.Plaintext
@@ -286,6 +298,8 @@ func shouldUsePlaintext(grpcReq *restfile.GRPCRequest, options Options) bool {
 	return true
 }
 
+// collectMetadata flattens request metadata and headers into key/value pairs
+// suitable for grpc metadata APIs, lower casing keys to match expectations.
 func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []string {
 	pairs := []string{}
 	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
@@ -312,6 +326,8 @@ func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []str
 	return pairs
 }
 
+// copyMetadata duplicates metadata maps so the returned map can be mutated by
+// callers without affecting the client-owned copy.
 func copyMetadata(md metadata.MD) map[string][]string {
 	if md == nil {
 		return nil
@@ -326,6 +342,8 @@ func copyMetadata(md metadata.MD) map[string][]string {
 	return out
 }
 
+// resolveMessage returns the inline message payload or loads it from disk when
+// a file path is present.
 func (c *Client) resolveMessage(grpcReq *restfile.GRPCRequest, baseDir string) (string, error) {
 	if grpcReq.Message != "" {
 		return grpcReq.Message, nil

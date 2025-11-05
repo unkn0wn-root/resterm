@@ -195,6 +195,8 @@ func looksStructured(s string) bool {
 	}
 }
 
+// FormatValue parses the relaxed JSON-ish syntax and formats it with standard
+// indentation for embedding in request bodies.
 func FormatValue(src string) (string, error) {
 	node, err := parseRelaxed(strings.TrimSpace(src))
 	if err != nil {
@@ -205,6 +207,8 @@ func FormatValue(src string) (string, error) {
 	return buf.String(), nil
 }
 
+// FormatInlineValue formats structured values detected inline, indenting by
+// the supplied number of levels. Non structured text returns false.
 func FormatInlineValue(src string, indent int) (string, bool) {
 	trimmed := strings.TrimSpace(src)
 	if !looksStructured(trimmed) {
@@ -253,6 +257,7 @@ type parser struct {
 	err error
 }
 
+// newParser initializes the lexer and primes the first token.
 func newParser(src string) *parser {
 	lx := newLexer(src)
 	p := &parser{lx: lx}
@@ -260,6 +265,8 @@ func newParser(src string) *parser {
 	return p
 }
 
+// parseRelaxed is the entry point for the relaxed JSON grammar used by
+// resterm scripts.
 func parseRelaxed(src string) (node, error) {
 	p := newParser(src)
 	if p.err != nil {
@@ -286,6 +293,8 @@ func (p *parser) advance() {
 	p.cur = tok
 }
 
+// parseValue dispatches based on the current token type and recursively builds
+// AST nodes.
 func (p *parser) parseValue() (node, error) {
 	switch p.cur.typ {
 	case tokenLBrace:
@@ -321,6 +330,8 @@ func (p *parser) parseValue() (node, error) {
 	}
 }
 
+// parseObject handles objects with relaxed rules around trailing commas and
+// identifier keys.
 func (p *parser) parseObject() (node, error) {
 	start := p.cur
 	p.advance()
@@ -362,6 +373,7 @@ func (p *parser) parseObject() (node, error) {
 	return obj, nil
 }
 
+// parseArray parses arrays allowing relaxed trailing commas.
 func (p *parser) parseArray() (node, error) {
 	p.advance()
 	arr := &array{}
@@ -393,6 +405,7 @@ func (p *parser) parseArray() (node, error) {
 	return arr, nil
 }
 
+// parseKey accepts quoted strings, identifiers, and numbers as object keys.
 func (p *parser) parseKey() (key, error) {
 	tok := p.cur
 	switch tok.typ {
@@ -428,10 +441,13 @@ type lexer struct {
 	width int
 }
 
+// newLexer retains the source string and prepares cursor bookkeeping.
 func newLexer(src string) *lexer {
 	return &lexer{src: src}
 }
 
+// nextToken returns the next lexical token, delegating to scanners for strings,
+// numbers, identifiers, and comments.
 func (l *lexer) nextToken() token {
 	if err := l.skipSpace(); err != nil {
 		return token{typ: tokenError, pos: l.pos, text: err.Error()}
@@ -479,6 +495,8 @@ func (l *lexer) nextToken() token {
 
 const eofRune = rune(0)
 
+// skipSpace consumes whitespace and comments, reporting errors for malformed
+// comment blocks.
 func (l *lexer) skipSpace() error {
 	for {
 		r := l.peek()
@@ -502,6 +520,8 @@ func (l *lexer) skipSpace() error {
 	}
 }
 
+// skipComment handles // and /* */ comment forms, returning whether input was
+// consumed.
 func (l *lexer) skipComment() (bool, error) {
 	l.next()
 	switch l.peek() {
@@ -532,6 +552,8 @@ func (l *lexer) skipComment() (bool, error) {
 	}
 }
 
+// scanString supports single, double, and backtick quoted strings with escape
+// sequences similar to JavaScript template literals.
 func (l *lexer) scanString() token {
 	start := l.pos
 	quote := l.next()
@@ -581,6 +603,7 @@ func (l *lexer) scanString() token {
 	}
 }
 
+// decodeSimpleEscape maps common escape codes to their rune equivalents.
 func decodeSimpleEscape(r rune) (rune, bool) {
 	switch r {
 	case 'b':
@@ -606,6 +629,7 @@ func decodeSimpleEscape(r rune) (rune, bool) {
 	}
 }
 
+// readUnicodeEscape supports both four digit and bracketed Unicode escapes.
 func (l *lexer) readUnicodeEscape() (rune, bool) {
 	if l.peek() == '{' {
 		l.next()
@@ -641,6 +665,7 @@ func (l *lexer) readUnicodeEscape() (rune, bool) {
 	return rune(val), err == nil
 }
 
+// readHexEscape parses two-digit hex escapes such as \xNN.
 func (l *lexer) readHexEscape() (rune, bool) {
 	digits := make([]rune, 2)
 	for i := 0; i < 2; i++ {
@@ -655,6 +680,8 @@ func (l *lexer) readHexEscape() (rune, bool) {
 	return rune(val), err == nil
 }
 
+// scanSign handles signed Infinity/NaN literals and defers to scanNumber when
+// the sign prefixes a numeric literal.
 func (l *lexer) scanSign() token {
 	start := l.pos
 	sign := l.next()
@@ -692,6 +719,8 @@ func (l *lexer) scanSign() token {
 	return token{typ: tokenError, pos: start, text: "unexpected sign"}
 }
 
+// scanNumber parses decimal and base prefixed literals while enforcing the
+// relaxed numeric separator rules.
 func (l *lexer) scanNumber() token {
 	start := l.pos
 	var buf strings.Builder
@@ -769,6 +798,8 @@ func (l *lexer) scanNumber() token {
 	return token{typ: tokenNumber, pos: start, text: buf.String()}
 }
 
+// scanIdentifier reads identifier tokens and maps reserved words to the
+// appropriate literal token types.
 func (l *lexer) scanIdentifier() token {
 	start := l.pos
 	var buf strings.Builder
@@ -799,6 +830,7 @@ func (l *lexer) scanIdentifier() token {
 	}
 }
 
+// consumeWord consumes the exact word ahead if it matches and returns success.
 func (l *lexer) consumeWord(word string) bool {
 	for _, r := range word {
 		if l.peek() != r {
@@ -809,6 +841,8 @@ func (l *lexer) consumeWord(word string) bool {
 	return true
 }
 
+// scanDigits appends digits matching the provided predicate and enforces valid
+// placement of numeric separators.
 func (l *lexer) scanDigits(buf *strings.Builder, valid func(rune) bool) (int, error) {
 	count := 0
 	lastWasDigit := false

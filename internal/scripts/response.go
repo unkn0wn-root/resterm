@@ -22,6 +22,8 @@ type Response struct {
 	Body   []byte
 }
 
+// Clone performs a deep copy of the response so scripts cannot mutate shared
+// buffers.
 func (r *Response) Clone() *Response {
 	if r == nil {
 		return nil

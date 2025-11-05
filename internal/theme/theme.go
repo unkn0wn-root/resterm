@@ -93,6 +93,7 @@ type Theme struct {
 	StreamConsoleInputFocused     lipgloss.Style
 }
 
+// DefaultTheme returns the built in theme used when no user theme is selected.
 func DefaultTheme() Theme {
 	accent := lipgloss.Color("#7D56F4")
 	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#dcd7ff"))

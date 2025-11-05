@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+// ParseCommand converts a curl shell command into a restfile request.
 func ParseCommand(command string) (*restfile.Request, error) {
 	tokens, err := splitTokens(command)
 	if err != nil {
@@ -22,6 +23,8 @@ func ParseCommand(command string) (*restfile.Request, error) {
 	return parseTokens(tokens)
 }
 
+// splitTokens tokenizes a curl command, honoring shell quoting rules so
+// embedded spaces and escapes are preserved.
 func splitTokens(input string) ([]string, error) {
 	var args []string
 	var current strings.Builder
@@ -91,6 +94,8 @@ func splitTokens(input string) ([]string, error) {
 	return args, nil
 }
 
+// parseTokens walks the curl arguments and maps flags onto request metadata,
+// headers, and body builders.
 func parseTokens(tokens []string) (*restfile.Request, error) {
 	idx, err := findCurlIndex(tokens)
 	if err != nil {
@@ -356,12 +361,14 @@ func parseTokens(tokens []string) (*restfile.Request, error) {
 	return req, nil
 }
 
+// ensureJSONHeader sets Content-Type to application/json if unset.
 func ensureJSONHeader(h http.Header) {
 	if h.Get("Content-Type") == "" {
 		h.Set("Content-Type", "application/json")
 	}
 }
 
+// addHeader parses curl -H style headers and appends them to the map.
 func addHeader(h http.Header, raw string) {
 	name, value := splitHeader(raw)
 	if name != "" {
@@ -369,6 +376,7 @@ func addHeader(h http.Header, raw string) {
 	}
 }
 
+// consumeNext reads the next token treating it as the value for the flag.
 func consumeNext(tokens []string, idx *int, flag string) (string, error) {
 	*idx++
 	if *idx >= len(tokens) {
@@ -377,6 +385,8 @@ func consumeNext(tokens []string, idx *int, flag string) (string, error) {
 	return tokens[*idx], nil
 }
 
+// findCurlIndex locates the curl binary in the token slice, skipping shell
+// prompts such as $ or %.
 func findCurlIndex(tokens []string) (int, error) {
 	for i, tok := range tokens {
 		trimmed := strings.TrimSpace(stripPromptPrefix(tok))
@@ -428,10 +438,13 @@ type bodyBuilder struct {
 	file  string
 }
 
+// newBodyBuilder initializes a stateful builder capable of representing the
+// various curl body flags.
 func newBodyBuilder() *bodyBuilder {
 	return &bodyBuilder{kind: bodyKindNone}
 }
 
+// ensureKind enforces that only one mutually exclusive body style is used.
 func (b *bodyBuilder) ensureKind(kind bodyKind) error {
 	if b.kind == bodyKindNone {
 		b.kind = kind
@@ -443,6 +456,7 @@ func (b *bodyBuilder) ensureKind(kind bodyKind) error {
 	return nil
 }
 
+// addData adds --data payloads, optionally guessing content type headers.
 func (b *bodyBuilder) addData(val string, guess bool) error {
 	trim := strings.TrimSpace(val)
 	if guess && strings.HasPrefix(trim, "@") {
@@ -454,6 +468,7 @@ func (b *bodyBuilder) addData(val string, guess bool) error {
 	return b.addRaw(val)
 }
 
+// addRaw attaches literal request body text.
 func (b *bodyBuilder) addRaw(val string) error {
 	if err := b.ensureKind(bodyKindRaw); err != nil {
 		return err
@@ -462,10 +477,12 @@ func (b *bodyBuilder) addRaw(val string) error {
 	return nil
 }
 
+// addJSON stores JSON payloads and marks the body as JSON for headers.
 func (b *bodyBuilder) addJSON(val string) error {
 	return b.addRaw(val)
 }
 
+// addURLEncoded parses key=value pairs for application/x-www-form-urlencoded bodies.
 func (b *bodyBuilder) addURLEncoded(raw string) error {
 	if err := b.ensureKind(bodyKindForm); err != nil {
 		return err
@@ -485,6 +502,7 @@ func (b *bodyBuilder) addURLEncoded(raw string) error {
 	return nil
 }
 
+// addFormValues splits -F style form values, inferring literal strings.
 func (b *bodyBuilder) addFormValues(raw string) error {
 	if err := b.ensureKind(bodyKindForm); err != nil {
 		return err
@@ -496,6 +514,7 @@ func (b *bodyBuilder) addFormValues(raw string) error {
 	return nil
 }
 
+// addFormPart handles both literal and file backed multipart form parts.
 func (b *bodyBuilder) addFormPart(raw string, literal bool) error {
 	if err := b.ensureKind(bodyKindMultipart); err != nil {
 		return err
@@ -508,6 +527,7 @@ func (b *bodyBuilder) addFormPart(raw string, literal bool) error {
 	return nil
 }
 
+// addFile records @file style request bodies.
 func (b *bodyBuilder) addFile(path string) error {
 	clean := strings.TrimSpace(path)
 	if clean == "" {
@@ -521,6 +541,7 @@ func (b *bodyBuilder) addFile(path string) error {
 	return nil
 }
 
+// hasContent reports whether any body content has been accumulated.
 func (b *bodyBuilder) hasContent() bool {
 	switch b.kind {
 	case bodyKindRaw:
@@ -536,6 +557,7 @@ func (b *bodyBuilder) hasContent() bool {
 	}
 }
 
+// apply finalizes the request body, configuring headers and file references as needed.
 func (b *bodyBuilder) apply(req *restfile.Request, headers http.Header) error {
 	if !b.hasContent() {
 		req.Body = restfile.BodySource{}
@@ -575,6 +597,7 @@ func (b *bodyBuilder) apply(req *restfile.Request, headers http.Header) error {
 	return nil
 }
 
+// encode returns the form field as key=value for urlencoded payloads.
 func (f formField) encode() string {
 	name := f.name
 	val := f.val
@@ -589,6 +612,7 @@ func (f formField) encode() string {
 	return name + "=" + val
 }
 
+// splitFormPair separates a form field key from its value respecting = signs.
 func splitFormPair(raw string) (string, string) {
 	part := raw
 	id := strings.Index(part, "=")
@@ -601,6 +625,7 @@ func splitFormPair(raw string) (string, string) {
 	return name, val
 }
 
+// looksLikeForm heuristically detects whether a payload is form-like.
 func looksLikeForm(v string) bool {
 	if strings.ContainsAny(v, "\n\r") {
 		return false
@@ -611,6 +636,7 @@ func looksLikeForm(v string) bool {
 	return strings.Contains(v, "=")
 }
 
+// parseMultipartPart builds a multipart part from curl -F syntax.
 func parseMultipartPart(raw string, literal bool) (multipartPart, error) {
 	content := strings.TrimSpace(raw)
 	if content == "" {
@@ -673,6 +699,7 @@ func parseMultipartPart(raw string, literal bool) (multipartPart, error) {
 	return part, nil
 }
 
+// buildMultipartBody renders the multipart payload and returns the MIME type.
 func buildMultipartBody(parts []multipartPart) (string, string) {
 	if len(parts) == 0 {
 		return "", ""
@@ -713,6 +740,7 @@ func buildMultipartBody(parts []multipartPart) (string, string) {
 	return b.String(), boundary
 }
 
+// makeBoundary generates a random multipart boundary.
 func makeBoundary() string {
 	buf := make([]byte, 12)
 	if _, err := rand.Read(buf); err != nil {
@@ -721,15 +749,18 @@ func makeBoundary() string {
 	return "resterm-" + hex.EncodeToString(buf)
 }
 
+// escapeQuotes escapes double quotes for header values.
 func escapeQuotes(v string) string {
 	return strings.ReplaceAll(v, "\"", "\\\"")
 }
 
+// buildBasicAuthHeader converts user:pass tokens into an Authorization header.
 func buildBasicAuthHeader(creds string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(creds))
 	return fmt.Sprintf("Basic %s", encoded)
 }
 
+// splitHeader splits NAME: VALUE header syntax.
 func splitHeader(header string) (string, string) {
 	parts := strings.SplitN(header, ":", 2)
 	if len(parts) == 0 {
@@ -746,6 +777,7 @@ func splitHeader(header string) (string, string) {
 	return name, value
 }
 
+// stripPromptPrefix removes shell prompt symbols that often prefix curl commands.
 func stripPromptPrefix(token string) string {
 	trimmed := strings.TrimSpace(token)
 	prefixes := []string{"$", "%", ">", "!"}
@@ -766,10 +798,12 @@ func isWhitespace(r rune) bool {
 	}
 }
 
+// sanitizeURL normalizes curl URLs by trimming quotes and redundant slashes.
 func sanitizeURL(raw string) string {
 	return strings.Trim(raw, "\"'")
 }
 
+// VisibleHeaders returns headers sorted by name for deterministic output.
 func VisibleHeaders(headers http.Header) []string {
 	if len(headers) == 0 {
 		return nil

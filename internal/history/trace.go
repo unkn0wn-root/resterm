@@ -43,6 +43,8 @@ type TraceBreach struct {
 	Over   time.Duration `json:"over"`
 }
 
+// NewTraceSummary captures the essential pieces of a timeline and optional
+// report for serialization into history entries.
 func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary {
 	if tl == nil {
 		return nil
@@ -109,6 +111,8 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 	return summary
 }
 
+// Timeline reconstructs a nettrace timeline from the summary, inferring start
+// and end timestamps when only partial data is available.
 func (s *TraceSummary) Timeline() *nettrace.Timeline {
 	if s == nil {
 		return nil
@@ -167,6 +171,8 @@ func (s *TraceSummary) Timeline() *nettrace.Timeline {
 	return tl
 }
 
+// Report rebuilds a nettrace report including budget information and recorded
+// breaches so callers can reuse the analysis pipeline.
 func (s *TraceSummary) Report() *nettrace.Report {
 	if s == nil {
 		return nil

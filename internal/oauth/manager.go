@@ -70,6 +70,7 @@ type tokenResponse struct {
 
 const expirySlack = 30 * time.Second
 
+// NewManager creates an OAuth manager with optional custom HTTP client.
 func NewManager(client *httpclient.Client) *Manager {
 	if client == nil {
 		client = httpclient.NewClient(nil)
@@ -81,6 +82,7 @@ func NewManager(client *httpclient.Client) *Manager {
 	return mgr
 }
 
+// Token returns a cached or freshly fetched token, deduplicating concurrent requests.
 func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpclient.Options) (Token, error) {
 	key := m.cacheKey(env, cfg)
 
@@ -124,6 +126,7 @@ func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpcl
 	return token, nil
 }
 
+// obtainToken tries cached tokens, refresh tokens, and finally fetches a new token.
 func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts httpclient.Options) (Token, error) {
 	if token, ok := m.cachedToken(key); ok && token.valid() {
 		return token, nil
@@ -146,6 +149,7 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 	return fetched, nil
 }
 
+// SetRequestFunc overrides the HTTP execution function, enabling tests or custom transports.
 func (m *Manager) SetRequestFunc(fn func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -158,6 +162,7 @@ func (m *Manager) SetRequestFunc(fn func(context.Context, *restfile.Request, htt
 	m.do = fn
 }
 
+// cachedToken returns a token from cache without validating expiry.
 func (m *Manager) cachedToken(key string) (Token, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -168,12 +173,14 @@ func (m *Manager) cachedToken(key string) (Token, bool) {
 	return entry.token, true
 }
 
+// cacheEntry exposes the raw cache entry for refresh operations.
 func (m *Manager) cacheEntry(key string) *cacheEntry {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.cache[key]
 }
 
+// storeToken updates the cache entry for a given key.
 func (m *Manager) storeToken(key string, cfg Config, token Token) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -183,6 +190,7 @@ func (m *Manager) storeToken(key string, cfg Config, token Token) {
 	m.cache[key] = &cacheEntry{token: token, cfg: cfg}
 }
 
+// cacheKey derives a stable cache key from the environment and config fields.
 func (m *Manager) cacheKey(env string, cfg Config) string {
 	if strings.TrimSpace(cfg.CacheKey) != "" {
 		return strings.TrimSpace(cfg.CacheKey)
@@ -214,6 +222,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 	return strings.Join(parts, "|")
 }
 
+// requestToken performs the grant-specific OAuth token request.
 func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.Options) (Token, error) {
 	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
 	if grant == "" {
@@ -292,6 +301,7 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 	return token, nil
 }
 
+// refreshToken executes the refresh_token flow to rotate an access token.
 func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, opts httpclient.Options) (Token, error) {
 	if refresh == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "missing refresh token")
@@ -350,6 +360,7 @@ func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, 
 	return token, nil
 }
 
+// parseTokenResponse decodes the JSON payload and populates expiry metadata.
 func parseTokenResponse(body []byte) (Token, error) {
 	var resp tokenResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
@@ -385,6 +396,7 @@ func parseTokenResponse(body []byte) (Token, error) {
 	return token, nil
 }
 
+// valid reports whether the token has a non-empty access token and has not expired.
 func (t Token) valid() bool {
 	if t.AccessToken == "" {
 		return false

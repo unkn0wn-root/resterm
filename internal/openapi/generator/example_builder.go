@@ -18,10 +18,12 @@ type ExampleBuilder struct {
 	maxDepth int
 }
 
+// NewExampleBuilder creates an example builder with a sane recursion depth.
 func NewExampleBuilder() *ExampleBuilder {
 	return &ExampleBuilder{maxDepth: 6}
 }
 
+// FromSchema produces an example value for the provided schema reference.
 func (b *ExampleBuilder) FromSchema(ref *model.SchemaRef) (any, bool) {
 	if ref == nil {
 		return nil, false
@@ -33,6 +35,8 @@ func (b *ExampleBuilder) FromSchema(ref *model.SchemaRef) (any, bool) {
 	return b.build(raw, 0)
 }
 
+// build recursively chooses example values honoring explicit samples and basic
+// type hints while preventing infinite recursion via maxDepth.
 func (b *ExampleBuilder) build(ref *openapi3.SchemaRef, depth int) (any, bool) {
 	if ref == nil || ref.Value == nil {
 		return nil, false
@@ -116,6 +120,7 @@ func (b *ExampleBuilder) build(ref *openapi3.SchemaRef, depth int) (any, bool) {
 	}
 }
 
+// exampleForObject iterates the object properties and generates nested samples.
 func (b *ExampleBuilder) exampleForObject(schema *openapi3.Schema, depth int) (any, bool) {
 	if schema == nil {
 		return nil, false
@@ -153,6 +158,8 @@ func (b *ExampleBuilder) exampleForObject(schema *openapi3.Schema, depth int) (a
 	return result, true
 }
 
+// exampleForString returns a representative string honoring format hints and
+// enum values when present.
 func exampleForString(schema *openapi3.Schema) string {
 	if schema == nil {
 		return ""
@@ -186,6 +193,7 @@ func exampleForString(schema *openapi3.Schema) string {
 	return "sample"
 }
 
+// exampleForInteger prefers the minimum constraint when provided.
 func exampleForInteger(schema *openapi3.Schema) int64 {
 	if schema == nil {
 		return 0
@@ -196,6 +204,7 @@ func exampleForInteger(schema *openapi3.Schema) int64 {
 	return 0
 }
 
+// exampleForNumber mirrors exampleForInteger but for floating point numbers.
 func exampleForNumber(schema *openapi3.Schema) float64 {
 	if schema == nil {
 		return 0
@@ -206,6 +215,8 @@ func exampleForNumber(schema *openapi3.Schema) float64 {
 	return 0
 }
 
+// defaultForType returns an empty value for the schema type when no better
+// information exists.
 func defaultForType(ref *openapi3.SchemaRef) any {
 	if ref == nil || ref.Value == nil {
 		return nil

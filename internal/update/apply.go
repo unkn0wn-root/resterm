@@ -32,6 +32,7 @@ type Progress interface {
 	Finish()
 }
 
+// Download streams an asset to disk optionally reporting progress.
 func (c Client) Download(ctx context.Context, a Asset, dst string, prog Progress) (int64, error) {
 	if c.http == nil {
 		return 0, errNilHTTPClient
@@ -92,6 +93,7 @@ type progressWriter struct {
 	progress Progress
 }
 
+// Write implements io.Writer to advance the progress callback.
 func (w progressWriter) Write(p []byte) (int, error) {
 	if len(p) > 0 {
 		w.progress.Advance(int64(len(p)))
@@ -99,6 +101,7 @@ func (w progressWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// FetchChecksum downloads a .sha256 asset and returns the first token.
 func (c Client) FetchChecksum(ctx context.Context, a Asset) (string, error) {
 	if !strings.HasSuffix(a.Name, ".sha256") {
 		return "", fmt.Errorf("not a checksum asset")
@@ -135,6 +138,7 @@ func (c Client) FetchChecksum(ctx context.Context, a Asset) (string, error) {
 	return strings.ToLower(line), nil
 }
 
+// readFirstToken scans the reader and returns the first whitespace delimited token.
 func readFirstToken(r io.Reader) (string, error) {
 	scanner := bufio.NewScanner(r)
 	if !scanner.Scan() {
@@ -149,6 +153,7 @@ func readFirstToken(r io.Reader) (string, error) {
 	return fields[0], nil
 }
 
+// verifyChecksum hashes the file at path and compares it to the expected sum.
 func verifyChecksum(path, want string) error {
 	f, err := os.Open(path)
 	if err != nil {
@@ -170,6 +175,7 @@ func verifyChecksum(path, want string) error {
 	return nil
 }
 
+// verifyVersion executes the binary with --version, ensuring the output contains the expected version string.
 func verifyVersion(ctx context.Context, path, want string) error {
 	if want == "" {
 		return nil
@@ -189,14 +195,17 @@ func verifyVersion(ctx context.Context, path, want string) error {
 	return nil
 }
 
+// Apply downloads and swaps in the new binary, returning ErrPendingSwap on platforms that require a restart.
 func Apply(ctx context.Context, c Client, res Result, exe string) (SwapStatus, error) {
 	return apply(ctx, c, res, exe, nil)
 }
 
+// ApplyWithProgress behaves like Apply but reports download progress.
 func ApplyWithProgress(ctx context.Context, c Client, res Result, exe string, prog Progress) (SwapStatus, error) {
 	return apply(ctx, c, res, exe, prog)
 }
 
+// apply orchestrates staging and committing the new binary.
 func apply(ctx context.Context, c Client, res Result, exe string, prog Progress) (SwapStatus, error) {
 	tmpPath, err := prepareTemp(filepath.Dir(exe))
 	if err != nil {
@@ -213,6 +222,7 @@ func apply(ctx context.Context, c Client, res Result, exe string, prog Progress)
 	return commitBinary(tmpPath, exe)
 }
 
+// prepareTemp allocates a temporary file alongside the current executable.
 func prepareTemp(dir string) (string, error) {
 	pat := "resterm-update-*"
 	if runtime.GOOS == "windows" {
@@ -231,6 +241,7 @@ func prepareTemp(dir string) (string, error) {
 	return path, nil
 }
 
+// stageBinary downloads the binary, verifies optional checksums, and ensures execute permissions.
 func stageBinary(ctx context.Context, c Client, res Result, path string, prog Progress) error {
 	if _, err := c.Download(ctx, res.Bin, path, prog); err != nil {
 		return err
@@ -255,6 +266,7 @@ func stageBinary(ctx context.Context, c Client, res Result, path string, prog Pr
 	return verifyVersion(ctx, path, res.Info.Version)
 }
 
+// commitBinary renames the staged binary into place, handling Windows swap semantics.
 func commitBinary(tmpPath, exe string) (SwapStatus, error) {
 	if runtime.GOOS == "windows" {
 		dst := exe + ".new"
@@ -270,6 +282,7 @@ func commitBinary(tmpPath, exe string) (SwapStatus, error) {
 	return SwapStatus{}, nil
 }
 
+// copyFile copies src onto dst with executable permissions.
 func copyFile(src, dst string) error {
 	in, err := os.Open(src)
 	if err != nil {

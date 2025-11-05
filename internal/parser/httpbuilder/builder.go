@@ -12,6 +12,8 @@ func IsMethodLine(line string) bool {
 	return methodRe.MatchString(line)
 }
 
+// ParseMethodLine extracts the HTTP method and URL from a request headline,
+// normalizing websocket aliases to GET.
 func ParseMethodLine(line string) (method string, url string, ok bool) {
 	if !IsMethodLine(line) {
 		return "", "", false
@@ -30,6 +32,8 @@ func ParseMethodLine(line string) (method string, url string, ok bool) {
 	return method, url, true
 }
 
+// ParseWebSocketURLLine recognizes lines that contain standalone ws:// or
+// wss:// URLs which represent websocket handshake targets.
 func ParseWebSocketURLLine(line string) (url string, ok bool) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {

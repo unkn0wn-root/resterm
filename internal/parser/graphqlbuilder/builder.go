@@ -16,10 +16,13 @@ type Builder struct {
 	queryFile        string
 }
 
+// New creates an empty GraphQL builder.
 func New() *Builder {
 	return &Builder{}
 }
 
+// HandleDirective processes comment directives that configure GraphQL body
+// generation.
 func (b *Builder) HandleDirective(key, rest string) bool {
 	switch key {
 	case "graphql":
@@ -79,6 +82,8 @@ func (b *Builder) Enabled() bool {
 	return b.enabled
 }
 
+// HandleBodyLine consumes body lines when the GraphQL builder is enabled,
+// capturing inline query or variables text.
 func (b *Builder) HandleBodyLine(line string) bool {
 	if !b.enabled {
 		return false
@@ -120,6 +125,8 @@ func (b *Builder) HandleBodyLine(line string) bool {
 	return true
 }
 
+// Finalize returns the assembled GraphQL body along with the MIME type to
+// apply to the request.
 func (b *Builder) Finalize(existingMime string) (*restfile.GraphQLBody, string, bool) {
 	if !b.enabled {
 		return nil, existingMime, false

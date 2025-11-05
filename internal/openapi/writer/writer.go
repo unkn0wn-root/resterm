@@ -17,10 +17,13 @@ import (
 
 type FileWriter struct{}
 
+// NewFileWriter returns a writer that persists generated documents to disk.
 func NewFileWriter() *FileWriter {
 	return &FileWriter{}
 }
 
+// WriteDocument renders the restfile document and writes it to the destination
+// path, ensuring directories exist and handling overwrite rules.
 func (w *FileWriter) WriteDocument(
 	ctx context.Context,
 	doc *restfile.Document,
@@ -73,6 +76,8 @@ func (w *FileWriter) WriteDocument(
 	return nil
 }
 
+// renderDocument builds the textual .http representation from the parsed
+// document and writer options.
 func renderDocument(doc *restfile.Document, opts openapi.WriterOptions) string {
 	var b strings.Builder
 
@@ -102,6 +107,8 @@ func renderDocument(doc *restfile.Document, opts openapi.WriterOptions) string {
 	return b.String()
 }
 
+// renderScopeVariables emits @var directives for file, request, or global
+// scoped variables.
 func renderScopeVariables(b *strings.Builder, vars []restfile.Variable) {
 	for _, v := range vars {
 		value := strings.TrimSpace(v.Value)
@@ -128,6 +135,7 @@ func renderScopeVariables(b *strings.Builder, vars []restfile.Variable) {
 	}
 }
 
+// renderRequest writes a single request block including metadata and body.
 func renderRequest(b *strings.Builder, req *restfile.Request) {
 	title := req.Metadata.Name
 	if title == "" {
@@ -165,6 +173,7 @@ func renderRequest(b *strings.Builder, req *restfile.Request) {
 	}
 }
 
+// renderDescription emits @description directives for each non empty line.
 func renderDescription(b *strings.Builder, description string) {
 	description = strings.TrimSpace(description)
 	if description == "" {
@@ -181,6 +190,7 @@ func renderDescription(b *strings.Builder, description string) {
 	}
 }
 
+// renderTags writes a single @tag directive containing all tags.
 func renderTags(b *strings.Builder, tags []string) {
 	if len(tags) == 0 {
 		return
@@ -200,6 +210,7 @@ func renderTags(b *strings.Builder, tags []string) {
 	b.WriteString("\n")
 }
 
+// renderLoggingDirectives emits directives controlling log behavior.
 func renderLoggingDirectives(b *strings.Builder, meta restfile.RequestMetadata) {
 	if meta.NoLog {
 		b.WriteString("# @no-log\n")
@@ -209,6 +220,7 @@ func renderLoggingDirectives(b *strings.Builder, meta restfile.RequestMetadata) 
 	}
 }
 
+// renderAuth emits an @auth directive tailored to the auth type in metadata.
 func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
 	if auth == nil || auth.Type == "" {
 		return
@@ -251,6 +263,8 @@ func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
 	b.WriteString("\n")
 }
 
+// formatOAuthParams prints oauth parameters in a deterministic order and
+// preserves unknown keys.
 func formatOAuthParams(params map[string]string) []string {
 	if len(params) == 0 {
 		return nil
@@ -299,6 +313,7 @@ func formatOAuthParams(params map[string]string) []string {
 	return parts
 }
 
+// formatAuthParam quotes parameter values when they contain whitespace.
 func formatAuthParam(key, value string) string {
 	if strings.ContainsAny(value, " \t") && !strings.Contains(value, "\"") {
 		value = "\"" + value + "\""
@@ -306,6 +321,7 @@ func formatAuthParam(key, value string) string {
 	return fmt.Sprintf("%s=%s", key, value)
 }
 
+// renderRequestVariables writes @var directives for request scoped variables.
 func renderRequestVariables(b *strings.Builder, vars []restfile.Variable) {
 	for _, v := range vars {
 		if v.Scope != restfile.ScopeRequest {
@@ -327,6 +343,7 @@ func renderRequestVariables(b *strings.Builder, vars []restfile.Variable) {
 	}
 }
 
+// renderCaptures prints @capture directives for each capture spec.
 func renderCaptures(b *strings.Builder, captures []restfile.CaptureSpec) {
 	for _, capture := range captures {
 		scope := captureScopeToken(capture)
@@ -340,6 +357,7 @@ func renderCaptures(b *strings.Builder, captures []restfile.CaptureSpec) {
 	}
 }
 
+// reqLine formats the HTTP request line defaulting the method to GET.
 func reqLine(req *restfile.Request) string {
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	if method == "" {
@@ -348,6 +366,7 @@ func reqLine(req *restfile.Request) string {
 	return fmt.Sprintf("%s %s\n", method, strings.TrimSpace(req.URL))
 }
 
+// renderHeaders writes headers sorted alphabetically to ease diffing.
 func renderHeaders(b *strings.Builder, headers http.Header) {
 	if len(headers) == 0 {
 		return
@@ -368,6 +387,7 @@ func renderHeaders(b *strings.Builder, headers http.Header) {
 	}
 }
 
+// captureScopeToken returns the scope token used in @capture directives.
 func captureScopeToken(capture restfile.CaptureSpec) string {
 	scope := ""
 	switch capture.Scope {

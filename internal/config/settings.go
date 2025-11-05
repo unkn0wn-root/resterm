@@ -27,6 +27,8 @@ type SettingsHandle struct {
 	Format SettingsFormat
 }
 
+// LoadSettings reads settings from disk preferring TOML over JSON and returns
+// a handle describing where they were loaded.
 func LoadSettings() (Settings, SettingsHandle, error) {
 	dir := Dir()
 	candidates := []SettingsHandle{
@@ -61,6 +63,7 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 	}, nil
 }
 
+// decodeSettings unmarshals config bytes according to the requested format.
 func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {
 	var settings Settings
 	switch format {
@@ -80,6 +83,8 @@ func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {
 	return settings, nil
 }
 
+// SaveSettings persists the settings using the provided handle information,
+// defaulting to TOML when unspecified.
 func SaveSettings(settings Settings, handle SettingsHandle) error {
 	path := handle.Path
 	format := handle.Format
@@ -122,6 +127,7 @@ func SaveSettings(settings Settings, handle SettingsHandle) error {
 	return nil
 }
 
+// writeFileAtomic writes a temp file and renames it into place for durability.
 func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".resterm-settings-*.tmp")
