@@ -92,6 +92,7 @@ func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpcl
 	if call, ok := m.inflight[key]; ok {
 		done := call.done
 		m.mu.Unlock()
+
 		select {
 		case <-ctx.Done():
 			return Token{}, ctx.Err()
@@ -102,6 +103,7 @@ func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpcl
 			return call.token, nil
 		}
 	}
+
 	call := &call{done: make(chan struct{})}
 	m.inflight[key] = call
 	m.mu.Unlock()
@@ -118,6 +120,7 @@ func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpcl
 	if err != nil {
 		return Token{}, err
 	}
+
 	return token, nil
 }
 
@@ -125,6 +128,7 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 	if token, ok := m.cachedToken(key); ok && token.valid() {
 		return token, nil
 	}
+
 	entry := m.cacheEntry(key)
 	if entry != nil && entry.token.RefreshToken != "" {
 		if refreshed, err := m.refreshToken(ctx, entry.cfg, entry.token.RefreshToken, opts); err == nil {
@@ -132,10 +136,12 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 			return refreshed, nil
 		}
 	}
+
 	fetched, err := m.requestToken(ctx, cfg, opts)
 	if err != nil {
 		return Token{}, err
 	}
+
 	m.storeToken(key, cfg, fetched)
 	return fetched, nil
 }
@@ -181,6 +187,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 	if strings.TrimSpace(cfg.CacheKey) != "" {
 		return strings.TrimSpace(cfg.CacheKey)
 	}
+
 	parts := []string{
 		strings.ToLower(strings.TrimSpace(env)),
 		strings.TrimSpace(cfg.TokenURL),
@@ -192,6 +199,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 		strings.TrimSpace(cfg.Username),
 		strings.ToLower(strings.TrimSpace(cfg.ClientAuth)),
 	}
+
 	if len(cfg.Extra) > 0 {
 		keys := make([]string, 0, len(cfg.Extra))
 		for k := range cfg.Extra {
@@ -202,6 +210,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 			parts = append(parts, k+"="+cfg.Extra[k])
 		}
 	}
+
 	return strings.Join(parts, "|")
 }
 
@@ -279,6 +288,7 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 	if err != nil {
 		return Token{}, err
 	}
+
 	return token, nil
 }
 
@@ -336,6 +346,7 @@ func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, 
 	if err != nil {
 		return Token{}, err
 	}
+
 	return token, nil
 }
 
@@ -344,6 +355,7 @@ func parseTokenResponse(body []byte) (Token, error) {
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return Token{}, errdef.Wrap(errdef.CodeHTTP, err, "decode oauth token response")
 	}
+
 	if resp.AccessToken == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "oauth token response missing access_token")
 	}
@@ -364,10 +376,12 @@ func parseTokenResponse(body []byte) (Token, error) {
 		RefreshToken: resp.RefreshToken,
 		Expiry:       expiry,
 	}
+
 	var raw map[string]any
 	if err := json.Unmarshal(body, &raw); err == nil {
 		token.Raw = raw
 	}
+
 	return token, nil
 }
 

@@ -76,6 +76,7 @@ func computeStdDev(values []time.Duration, mean time.Duration) time.Duration {
 		delta := ms - meanMS
 		sumSquares += delta * delta
 	}
+
 	variance := sumSquares / float64(len(values))
 	sdMS := math.Sqrt(variance)
 	return time.Duration(sdMS * float64(time.Millisecond))
@@ -86,6 +87,7 @@ func computePercentiles(values []time.Duration, percentiles []int) map[int]time.
 	sortedPerc := append([]int(nil), percentiles...)
 	sort.Ints(sortedPerc)
 	count := len(values)
+
 	for _, p := range sortedPerc {
 		if p <= 0 {
 			result[p] = values[0]
@@ -95,6 +97,7 @@ func computePercentiles(values []time.Duration, percentiles []int) map[int]time.
 			result[p] = values[count-1]
 			continue
 		}
+
 		rank := float64(p) / 100 * float64(count)
 		idx := int(math.Ceil(rank)) - 1
 		if idx < 0 {
@@ -105,6 +108,7 @@ func computePercentiles(values []time.Duration, percentiles []int) map[int]time.
 		}
 		result[p] = values[idx]
 	}
+
 	return result
 }
 
@@ -112,9 +116,11 @@ func buildHistogram(values []time.Duration, bins int) []HistogramBucket {
 	if len(values) == 0 {
 		return nil
 	}
+
 	if bins > len(values) {
 		bins = len(values)
 	}
+
 	min := float64(values[0]) / float64(time.Millisecond)
 	max := float64(values[len(values)-1]) / float64(time.Millisecond)
 	delta := max - min
@@ -153,6 +159,7 @@ func buildHistogram(values []time.Duration, bins int) []HistogramBucket {
 			Count: counts[i],
 		}
 	}
+
 	return hist
 }
 

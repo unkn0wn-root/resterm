@@ -71,6 +71,7 @@ func NewClient(fs FileSystem) *Client {
 	if fs == nil {
 		fs = OSFileSystem{}
 	}
+
 	jar, _ := cookiejar.New(nil)
 	c := &Client{fs: fs, jar: jar, telemetry: telemetry.Noop()}
 	c.httpFactory = c.buildHTTPClient
@@ -288,9 +289,7 @@ func (c *Client) prepareHTTPRequest(
 	}
 
 	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-
 	effectiveOpts := applyRequestSettings(opts, req.Settings)
-
 	return httpReq, effectiveOpts, nil
 }
 

@@ -206,7 +206,6 @@ func (c *Client) StartWebSocket(
 	go runtime.writeLoop()
 
 	sender := &WebSocketSender{runtime: runtime}
-
 	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender}, nil, nil
 }
 

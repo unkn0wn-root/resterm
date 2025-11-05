@@ -85,6 +85,7 @@ func NormalizeWorkflowName(name string) string {
 func (s *Store) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
 	if s.loaded {
 		return nil
 	}
@@ -111,6 +112,7 @@ func (s *Store) Load() error {
 
 	s.sortEntriesLocked()
 	s.loaded = true
+
 	return nil
 }
 
@@ -171,12 +173,14 @@ func (s *Store) Delete(id string) (bool, error) {
 	if err := s.persist(); err != nil {
 		return false, err
 	}
+
 	return true, nil
 }
 
 func (s *Store) ByRequest(identifier string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	if identifier == "" {
 		return s.Entries()
 	}
@@ -190,28 +194,34 @@ func (s *Store) ByRequest(identifier string) []Entry {
 			matched = append(matched, entry)
 		}
 	}
+
 	sort.SliceStable(matched, func(i, j int) bool {
 		return newerFirst(matched[i], matched[j])
 	})
+
 	return matched
 }
 
 func (s *Store) ByWorkflow(name string) []Entry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+
 	trimmed := NormalizeWorkflowName(name)
 	if trimmed == "" {
 		return nil
 	}
+
 	var matched []Entry
 	for _, entry := range s.entries {
 		if entry.Method == restfile.HistoryMethodWorkflow && strings.EqualFold(NormalizeWorkflowName(entry.RequestName), trimmed) {
 			matched = append(matched, entry)
 		}
 	}
+
 	sort.SliceStable(matched, func(i, j int) bool {
 		return newerFirst(matched[i], matched[j])
 	})
+
 	return matched
 }
 

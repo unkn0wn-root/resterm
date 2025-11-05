@@ -44,6 +44,7 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 			accumulated = errors.Join(accumulated, fmt.Errorf("read settings %q: %w", candidate.Path, err))
 			continue
 		}
+
 		settings, err := decodeSettings(data, candidate.Format)
 		if err != nil {
 			return Settings{}, SettingsHandle{}, fmt.Errorf("parse settings %q: %w", candidate.Path, err)
@@ -97,6 +98,7 @@ func SaveSettings(settings Settings, handle SettingsHandle) error {
 		data []byte
 		err  error
 	)
+
 	switch format {
 	case SettingsFormatTOML:
 		data, err = toml.Marshal(settings)
@@ -126,6 +128,7 @@ func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 	if err != nil {
 		return err
 	}
+
 	tmpPath := tmp.Name()
 	defer func() {
 		_ = os.Remove(tmpPath)
@@ -138,6 +141,7 @@ func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 		}
 		return err
 	}
+
 	if err := tmp.Chmod(perm); err != nil {
 		closeErr := tmp.Close()
 		if closeErr != nil {
@@ -145,11 +149,14 @@ func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 		}
 		return err
 	}
+
 	if err := tmp.Close(); err != nil {
 		return err
 	}
+
 	if err := os.Rename(tmpPath, path); err != nil {
 		return err
 	}
+
 	return nil
 }
