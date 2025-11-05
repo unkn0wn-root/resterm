@@ -674,7 +674,7 @@ func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
 	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "200"}
 	stream := &scripts.StreamInfo{
 		Kind: "sse",
-		Events: []map[string]interface{}{
+		Events: []map[string]any{
 			{"event": "ready"},
 			{"event": "change", "data": "value"},
 		},
@@ -706,11 +706,11 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 
 	streamInfo := &scripts.StreamInfo{
 		Kind: "websocket",
-		Summary: map[string]interface{}{
+		Summary: map[string]any{
 			"sentCount":     1,
 			"receivedCount": 2,
 		},
-		Events: []map[string]interface{}{
+		Events: []map[string]any{
 			{"text": "hello"},
 			{"text": "world"},
 		},

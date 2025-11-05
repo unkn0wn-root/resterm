@@ -145,12 +145,12 @@ func evaluateTraceBudget(tl *nettrace.Timeline, budget TraceBudget) nettrace.Bud
 
 // object exposes the bindings consumed by the scripting runtime, exporting
 // functions that lazily compute each property.
-func (tb *traceBinding) object() map[string]interface{} {
+func (tb *traceBinding) object() map[string]any {
 	if tb == nil {
 		tb = &traceBinding{}
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"enabled":         func() bool { return tb.timeline != nil },
 		"durationMs":      func() float64 { return tb.durationMillis() },
 		"durationSeconds": func() float64 { return tb.durationSeconds() },
@@ -158,11 +158,11 @@ func (tb *traceBinding) object() map[string]interface{} {
 		"error":           func() string { return tb.errorString() },
 		"started":         func() string { return tb.startedAt() },
 		"completed":       func() string { return tb.completedAt() },
-		"phases":          func() []map[string]interface{} { return tb.exportPhases() },
-		"getPhase":        func(name string) map[string]interface{} { return tb.getPhase(name) },
+		"phases":          func() []map[string]any { return tb.exportPhases() },
+		"getPhase":        func(name string) map[string]any { return tb.getPhase(name) },
 		"phaseNames":      func() []string { return tb.phaseNames() },
-		"budgets":         func() map[string]interface{} { return tb.exportBudgets() },
-		"breaches":        func() []map[string]interface{} { return tb.exportBreaches() },
+		"budgets":         func() map[string]any { return tb.exportBudgets() },
+		"breaches":        func() []map[string]any { return tb.exportBreaches() },
 		"withinBudget":    func() bool { return len(tb.report.Breaches) == 0 },
 		"hasBudgets":      func() bool { return tb.hasBudgets() },
 	}
@@ -210,12 +210,12 @@ func (tb *traceBinding) completedAt() string {
 	return tb.timeline.Completed.Format(time.RFC3339Nano)
 }
 
-func (tb *traceBinding) exportPhases() []map[string]interface{} {
+func (tb *traceBinding) exportPhases() []map[string]any {
 	if len(tb.segments) == 0 {
-		return []map[string]interface{}{}
+		return []map[string]any{}
 	}
 
-	out := make([]map[string]interface{}, 0, len(tb.segments))
+	out := make([]map[string]any, 0, len(tb.segments))
 	for _, seg := range tb.segments {
 		out = append(out, exportSegment(seg))
 	}
@@ -224,7 +224,7 @@ func (tb *traceBinding) exportPhases() []map[string]interface{} {
 
 // getPhase returns aggregate information for a named phase including the
 // original segments that contributed to it.
-func (tb *traceBinding) getPhase(name string) map[string]interface{} {
+func (tb *traceBinding) getPhase(name string) map[string]any {
 	if tb.timeline == nil {
 		return nil
 	}
@@ -238,12 +238,12 @@ func (tb *traceBinding) getPhase(name string) map[string]interface{} {
 		return nil
 	}
 
-	segments := make([]map[string]interface{}, 0, len(agg.Segments))
+	segments := make([]map[string]any, 0, len(agg.Segments))
 	for _, seg := range agg.Segments {
 		segments = append(segments, exportSegment(seg))
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"name":            agg.Name,
 		"count":           agg.Count,
 		"durationMs":      float64(agg.Duration) / float64(time.Millisecond),
@@ -274,9 +274,9 @@ func (tb *traceBinding) hasBudgets() bool {
 
 // exportBudgets normalizes the internal budget representation to a JSON ready
 // structure that is easy for scripts to consume.
-func (tb *traceBinding) exportBudgets() map[string]interface{} {
+func (tb *traceBinding) exportBudgets() map[string]any {
 	if !tb.hasBudgets() {
-		return map[string]interface{}{"enabled": false}
+		return map[string]any{"enabled": false}
 	}
 
 	phases := make(map[string]float64, len(tb.budgets.Phases))
@@ -284,7 +284,7 @@ func (tb *traceBinding) exportBudgets() map[string]interface{} {
 		phases[name] = float64(dur) / float64(time.Millisecond)
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"enabled":          true,
 		"totalMs":          float64(tb.budgets.Total) / float64(time.Millisecond),
 		"totalSeconds":     tb.budgets.Total.Seconds(),
@@ -296,14 +296,14 @@ func (tb *traceBinding) exportBudgets() map[string]interface{} {
 
 // exportBreaches lists each breach in a script friendly structure with values
 // exposed in both milliseconds and seconds.
-func (tb *traceBinding) exportBreaches() []map[string]interface{} {
+func (tb *traceBinding) exportBreaches() []map[string]any {
 	if len(tb.report.Breaches) == 0 {
-		return []map[string]interface{}{}
+		return []map[string]any{}
 	}
 
-	out := make([]map[string]interface{}, 0, len(tb.report.Breaches))
+	out := make([]map[string]any, 0, len(tb.report.Breaches))
 	for _, breach := range tb.report.Breaches {
-		out = append(out, map[string]interface{}{
+		out = append(out, map[string]any{
 			"name":          string(breach.Kind),
 			"limitMs":       float64(breach.Limit) / float64(time.Millisecond),
 			"limitSeconds":  breach.Limit.Seconds(),
@@ -318,14 +318,14 @@ func (tb *traceBinding) exportBreaches() []map[string]interface{} {
 
 // exportSegment converts an individual segment into the structure surfaced in
 // the scripting runtime.
-func exportSegment(seg traceSegment) map[string]interface{} {
-	meta := map[string]interface{}{
+func exportSegment(seg traceSegment) map[string]any {
+	meta := map[string]any{
 		"addr":   seg.Meta.Addr,
 		"reused": seg.Meta.Reused,
 		"cached": seg.Meta.Cached,
 	}
 
-	result := map[string]interface{}{
+	result := map[string]any{
 		"name":            seg.Name,
 		"durationMs":      float64(seg.Duration) / float64(time.Millisecond),
 		"durationSeconds": seg.Duration.Seconds(),

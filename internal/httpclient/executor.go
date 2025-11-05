@@ -395,7 +395,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	}
 
 	var (
-		variablesMap  map[string]interface{}
+		variablesMap  map[string]any
 		variablesJSON string
 	)
 
@@ -438,7 +438,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		return nil, nil
 	}
 
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"query": query,
 	}
 
@@ -482,15 +482,15 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) 
 }
 
 // decodeGraphQLVariables parses the JSON object portion of GraphQL variables.
-func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
+func decodeGraphQLVariables(raw string) (map[string]any, error) {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.UseNumber()
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := decoder.Decode(&payload); err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse graphql variables")
 	}
 
-	if err := decoder.Decode(new(interface{})); err != io.EOF {
+	if err := decoder.Decode(new(any)); err != io.EOF {
 		if err == nil {
 			return nil, errdef.New(errdef.CodeHTTP, "unexpected trailing data in graphql variables")
 		}

@@ -141,13 +141,13 @@ func TestRunTestsScriptsStream(t *testing.T) {
 	}
 	streamInfo := &StreamInfo{
 		Kind: "websocket",
-		Summary: map[string]interface{}{
+		Summary: map[string]any{
 			"sentCount":     1,
 			"receivedCount": 1,
 			"duration":      int64(time.Second),
 			"closedBy":      "client",
 		},
-		Events: []map[string]interface{}{
+		Events: []map[string]any{
 			{
 				"step":      "1:send",
 				"direction": "send",

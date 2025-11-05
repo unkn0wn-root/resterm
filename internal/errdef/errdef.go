@@ -47,7 +47,7 @@ func (e *Error) Unwrap() error {
 
 // Wrap annotates an existing error with a resterm error code and optional
 // message, returning nil when the original error is nil.
-func Wrap(code Code, err error, format string, args ...interface{}) error {
+func Wrap(code Code, err error, format string, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -60,7 +60,7 @@ func Wrap(code Code, err error, format string, args ...interface{}) error {
 }
 
 // New creates a formatted error with the supplied code.
-func New(code Code, format string, args ...interface{}) error {
+func New(code Code, format string, args ...any) error {
 	msg := format
 	if len(args) > 0 {
 		msg = fmt.Sprintf(format, args...)

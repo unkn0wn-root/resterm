@@ -810,7 +810,7 @@ type captureContext struct {
 	headers   http.Header
 	stream    *scripts.StreamInfo
 	jsonOnce  sync.Once
-	jsonValue interface{}
+	jsonValue any
 	jsonErr   error
 }
 
@@ -970,7 +970,7 @@ func (c *captureContext) lookupJSON(path string) string {
 			c.jsonErr = fmt.Errorf("response body empty")
 			return
 		}
-		var data interface{}
+		var data any
 		if err := json.Unmarshal([]byte(c.body), &data); err != nil {
 			c.jsonErr = err
 			return
@@ -988,13 +988,13 @@ func (c *captureContext) lookupJSON(path string) string {
 	current := c.jsonValue
 	for _, segment := range splitJSONPath(trimmed) {
 		switch typed := current.(type) {
-		case map[string]interface{}:
+		case map[string]any:
 			val, ok := typed[segment.name]
 			if !ok {
 				return ""
 			}
 			current = val
-		case []interface{}:
+		case []any:
 			if segment.index == nil {
 				return ""
 			}
@@ -1040,7 +1040,7 @@ func splitJSONPath(path string) []jsonPathSegment {
 	return segments
 }
 
-func stringifyJSONValue(value interface{}) string {
+func stringifyJSONValue(value any) string {
 	switch v := value.(type) {
 	case nil:
 		return ""
@@ -1062,7 +1062,7 @@ func stringifyJSONValue(value interface{}) string {
 	}
 }
 
-func caseLookup(m map[string]interface{}, key string) (interface{}, bool) {
+func caseLookup(m map[string]any, key string) (any, bool) {
 	if m == nil {
 		return nil, false
 	}
@@ -1078,7 +1078,7 @@ func caseLookup(m map[string]interface{}, key string) (interface{}, bool) {
 	return nil, false
 }
 
-func formatCaptureValue(value interface{}) (string, error) {
+func formatCaptureValue(value any) (string, error) {
 	if value == nil {
 		return "", nil
 	}

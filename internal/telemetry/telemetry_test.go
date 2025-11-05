@@ -109,7 +109,7 @@ func TestInstrumenterRecordsTimeline(t *testing.T) {
 	}
 }
 
-func assertAttribute(t *testing.T, span sdktrace.ReadOnlySpan, key string, want interface{}) {
+func assertAttribute(t *testing.T, span sdktrace.ReadOnlySpan, key string, want any) {
 	t.Helper()
 	attrs := span.Attributes()
 	for _, attr := range attrs {

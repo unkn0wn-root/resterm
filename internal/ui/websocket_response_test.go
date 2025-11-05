@@ -10,13 +10,13 @@ import (
 )
 
 type wsTestTranscript struct {
-	Events  []map[string]interface{} `json:"events"`
-	Summary map[string]interface{}   `json:"summary"`
+	Events  []map[string]any `json:"events"`
+	Summary map[string]any   `json:"summary"`
 }
 
 func TestBuildHTTPResponseViewsForWebSocket(t *testing.T) {
 	transcript := wsTestTranscript{
-		Events: []map[string]interface{}{
+		Events: []map[string]any{
 			{
 				"step":      "1:send_text",
 				"direction": "send",
@@ -33,7 +33,7 @@ func TestBuildHTTPResponseViewsForWebSocket(t *testing.T) {
 				"timestamp": time.Now(),
 			},
 		},
-		Summary: map[string]interface{}{
+		Summary: map[string]any{
 			"sentCount":     1,
 			"receivedCount": 1,
 			"duration":      time.Second,

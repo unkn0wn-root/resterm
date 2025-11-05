@@ -30,14 +30,14 @@ func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read env file %s", path)
 	}
 
-	var raw interface{}
+	var raw any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, errdef.Wrap(errdef.CodeParse, err, "parse env file %s", path)
 	}
 
 	envs = make(EnvironmentSet)
 	switch v := raw.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for envName, value := range v {
 			envs[envName] = flattenEnv(value)
 		}
@@ -47,15 +47,15 @@ func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 	return envs, nil
 }
 
-func flattenEnv(value interface{}) map[string]string {
+func flattenEnv(value any) map[string]string {
 	result := make(map[string]string)
 	flattenEnvValue("", value, result)
 	return result
 }
 
-func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
+func flattenEnvValue(prefix string, value any, out map[string]string) {
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for key, child := range v {
 			if key == "" {
 				continue
@@ -66,7 +66,7 @@ func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
 			}
 			flattenEnvValue(next, child, out)
 		}
-	case []interface{}:
+	case []any:
 		for idx, item := range v {
 			childKey := strconv.Itoa(idx)
 			if prefix != "" {

@@ -36,7 +36,7 @@ func convertSSETranscript(t *httpclient.SSETranscript) *scripts.StreamInfo {
 		return nil
 	}
 	info := &scripts.StreamInfo{Kind: "sse"}
-	summary := map[string]interface{}{
+	summary := map[string]any{
 		"eventCount": t.Summary.EventCount,
 		"byteCount":  t.Summary.ByteCount,
 		"duration":   t.Summary.Duration,
@@ -44,9 +44,9 @@ func convertSSETranscript(t *httpclient.SSETranscript) *scripts.StreamInfo {
 	}
 	info.Summary = summary
 	if len(t.Events) > 0 {
-		events := make([]map[string]interface{}, len(t.Events))
+		events := make([]map[string]any, len(t.Events))
 		for i, evt := range t.Events {
-			events[i] = map[string]interface{}{
+			events[i] = map[string]any{
 				"index":     evt.Index,
 				"id":        evt.ID,
 				"event":     evt.Event,
@@ -66,7 +66,7 @@ func convertWebSocketTranscript(t *httpclient.WebSocketTranscript) *scripts.Stre
 		return nil
 	}
 	info := &scripts.StreamInfo{Kind: "websocket"}
-	summary := map[string]interface{}{
+	summary := map[string]any{
 		"sentCount":     t.Summary.SentCount,
 		"receivedCount": t.Summary.ReceivedCount,
 		"duration":      t.Summary.Duration,
@@ -76,9 +76,9 @@ func convertWebSocketTranscript(t *httpclient.WebSocketTranscript) *scripts.Stre
 	}
 	info.Summary = summary
 	if len(t.Events) > 0 {
-		events := make([]map[string]interface{}, len(t.Events))
+		events := make([]map[string]any, len(t.Events))
 		for i, evt := range t.Events {
-			events[i] = map[string]interface{}{
+			events[i] = map[string]any{
 				"step":      evt.Step,
 				"direction": evt.Direction,
 				"type":      evt.Type,

@@ -133,7 +133,7 @@ func (wc *websocketConsole) sendContext() (context.Context, context.CancelFunc) 
 	return context.WithTimeout(base, websocketConsoleSendTimeout)
 }
 
-func (wc *websocketConsole) setStatus(format string, args ...interface{}) {
+func (wc *websocketConsole) setStatus(format string, args ...any) {
 	if len(args) == 0 {
 		wc.status = format
 	} else {

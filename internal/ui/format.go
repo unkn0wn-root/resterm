@@ -58,7 +58,7 @@ func renderJSONAsJS(body []byte) (string, bool) {
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
-	var value interface{}
+	var value any
 	if err := dec.Decode(&value); err != nil {
 		return "", false
 	}
@@ -70,11 +70,11 @@ func renderJSONAsJS(body []byte) (string, bool) {
 	return buf.String(), true
 }
 
-func writeJSONValue(buf *strings.Builder, value interface{}, indent int) {
+func writeJSONValue(buf *strings.Builder, value any, indent int) {
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		writeJSONObject(buf, v, indent)
-	case []interface{}:
+	case []any:
 		writeJSONArray(buf, v, indent)
 	case json.Number:
 		buf.WriteString(v.String())
@@ -102,7 +102,7 @@ func writeJSONValue(buf *strings.Builder, value interface{}, indent int) {
 	}
 }
 
-func writeJSONObject(buf *strings.Builder, obj map[string]interface{}, indent int) {
+func writeJSONObject(buf *strings.Builder, obj map[string]any, indent int) {
 	keys := make([]string, 0, len(obj))
 	for key := range obj {
 		keys = append(keys, key)
@@ -129,7 +129,7 @@ func writeJSONObject(buf *strings.Builder, obj map[string]interface{}, indent in
 	buf.WriteString("}")
 }
 
-func writeJSONArray(buf *strings.Builder, arr []interface{}, indent int) {
+func writeJSONArray(buf *strings.Builder, arr []any, indent int) {
 	if len(arr) == 0 {
 		buf.WriteString("[]")
 		return

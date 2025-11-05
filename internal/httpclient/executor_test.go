@@ -101,14 +101,14 @@ func TestPrepareGraphQLPostBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read payload: %v", err)
 	}
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := json.Unmarshal(data, &payload); err != nil {
 		t.Fatalf("unmarshal payload: %v", err)
 	}
 	if payload["query"] != "query Ping($id: ID!){ ping(id: $id) }" {
 		t.Fatalf("unexpected query: %v", payload["query"])
 	}
-	varsField, ok := payload["variables"].(map[string]interface{})
+	varsField, ok := payload["variables"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected variables object, got %T", payload["variables"])
 	}

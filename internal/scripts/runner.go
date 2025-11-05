@@ -297,8 +297,8 @@ func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preReque
 }
 
 // requestAPI exposes helpers to inspect and override request level properties.
-func (api *preRequestAPI) requestAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *preRequestAPI) requestAPI() map[string]any {
+	return map[string]any{
 		"getURL": func() string {
 			if api.request == nil {
 				return ""
@@ -356,8 +356,8 @@ func (api *preRequestAPI) requestAPI() map[string]interface{} {
 }
 
 // varsAPI provides get/set helpers for request scoped variables.
-func (api *preRequestAPI) varsAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *preRequestAPI) varsAPI() map[string]any {
+	return map[string]any{
 		"get": func(name string) string {
 			return api.variables[name]
 		},
@@ -378,8 +378,8 @@ func (api *preRequestAPI) varsAPI() map[string]interface{} {
 
 // globalAPI lets pre request scripts read and mutate global variables while
 // tracking which entries changed.
-func (api *preRequestAPI) globalAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *preRequestAPI) globalAPI() map[string]any {
+	return map[string]any{
 		"get": func(name string) string {
 			entry, ok := api.globals[normalizeGlobalKey(name)]
 			if !ok {
@@ -448,7 +448,7 @@ func parseGlobalSecret(value goja.Value) bool {
 	switch exported := value.Export().(type) {
 	case bool:
 		return exported
-	case map[string]interface{}:
+	case map[string]any:
 		if secret, ok := exported["secret"].(bool); ok {
 			return secret
 		}
@@ -507,9 +507,9 @@ func newStreamAPI(vm *goja.Runtime, info *StreamInfo) *streamAPI {
 
 // object returns the object exposed to scripts, providing accessors for stream
 // metadata plus registration functions for callbacks.
-func (api *streamAPI) object() map[string]interface{} {
+func (api *streamAPI) object() map[string]any {
 	enabled := api.info != nil
-	return map[string]interface{}{
+	return map[string]any{
 		"enabled": func() bool { return enabled },
 		"kind": func() string {
 			if api.info == nil {
@@ -517,26 +517,26 @@ func (api *streamAPI) object() map[string]interface{} {
 			}
 			return api.info.Kind
 		},
-		"summary": func() map[string]interface{} {
+		"summary": func() map[string]any {
 			if api.info == nil || len(api.info.Summary) == 0 {
-				return map[string]interface{}{}
+				return map[string]any{}
 			}
-			clone := make(map[string]interface{}, len(api.info.Summary))
+			clone := make(map[string]any, len(api.info.Summary))
 			for k, v := range api.info.Summary {
 				clone[k] = v
 			}
 			return clone
 		},
-		"events": func() []map[string]interface{} {
+		"events": func() []map[string]any {
 			if api.info == nil || len(api.info.Events) == 0 {
-				return []map[string]interface{}{}
+				return []map[string]any{}
 			}
-			out := make([]map[string]interface{}, len(api.info.Events))
+			out := make([]map[string]any, len(api.info.Events))
 			for i, evt := range api.info.Events {
 				if evt == nil {
 					continue
 				}
-				copyEvt := make(map[string]interface{}, len(evt))
+				copyEvt := make(map[string]any, len(evt))
 				for k, v := range evt {
 					copyEvt[k] = v
 				}
@@ -600,8 +600,8 @@ func (api *streamAPI) replay() error {
 }
 
 // testsAPI exposes assertion helpers under the global "tests" object.
-func (api *testAPI) testsAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *testAPI) testsAPI() map[string]any {
+	return map[string]any{
 		"assert": api.assert,
 		"fail":   api.fail,
 	}
@@ -609,15 +609,15 @@ func (api *testAPI) testsAPI() map[string]interface{} {
 
 // clientAPI provides the legacy client.test helper used by postman style
 // scripts.
-func (api *testAPI) clientAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *testAPI) clientAPI() map[string]any {
+	return map[string]any{
 		"test": api.namedTest,
 	}
 }
 
 // traceAPI returns timeline helpers for scripted assertions, defaulting to a
 // disabled binding when trace data is absent.
-func (api *testAPI) traceAPI() map[string]interface{} {
+func (api *testAPI) traceAPI() map[string]any {
 	if api.trace == nil {
 		return newTraceBinding(nil).object()
 	}
@@ -626,7 +626,7 @@ func (api *testAPI) traceAPI() map[string]interface{} {
 
 // responseAPI projects the HTTP or gRPC response into script friendly helpers
 // including JSON parsing and header lookups.
-func (api *testAPI) responseAPI() map[string]interface{} {
+func (api *testAPI) responseAPI() map[string]any {
 	body := ""
 	status := ""
 	code := 0
@@ -664,40 +664,40 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 		return ok
 	}
 
-	return map[string]interface{}{
+	return map[string]any{
 		"kind":       kind,
 		"status":     status,
 		"statusCode": code,
 		"url":        url,
 		"duration":   seconds,
 		"body":       body,
-		"json": func() interface{} {
+		"json": func() any {
 			if api.response == nil {
 				return nil
 			}
-			var js interface{}
+			var js any
 			if err := json.Unmarshal(api.response.Body, &js); err != nil {
 				return nil
 			}
 			return js
 		},
-		"headers": map[string]interface{}{
+		"headers": map[string]any{
 			"get": headerLookup,
 			"has": headerHas,
 			"all": headers,
 		},
-		"stream": func() map[string]interface{} {
+		"stream": func() map[string]any {
 			if api.stream == nil {
-				return map[string]interface{}{"enabled": false}
+				return map[string]any{"enabled": false}
 			}
 			clone := api.stream.Clone()
 			if clone.Summary == nil {
-				clone.Summary = make(map[string]interface{})
+				clone.Summary = make(map[string]any)
 			}
 			if clone.Events == nil {
-				clone.Events = []map[string]interface{}{}
+				clone.Events = []map[string]any{}
 			}
-			return map[string]interface{}{
+			return map[string]any{
 				"enabled": true,
 				"kind":    clone.Kind,
 				"summary": clone.Summary,
@@ -708,8 +708,8 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 }
 
 // varsAPI surfaces request scoped variable helpers for test scripts.
-func (api *testAPI) varsAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *testAPI) varsAPI() map[string]any {
+	return map[string]any{
 		"get": func(name string) string {
 			return api.variables[name]
 		},
@@ -726,8 +726,8 @@ func (api *testAPI) varsAPI() map[string]interface{} {
 
 // globalAPI is shared with vars.global in tests, mirroring pre request
 // behavior by tracking mutations and deletions.
-func (api *testAPI) globalAPI() map[string]interface{} {
-	return map[string]interface{}{
+func (api *testAPI) globalAPI() map[string]any {
+	return map[string]any{
 		"get": func(name string) string {
 			entry, ok := api.globals[normalizeGlobalKey(name)]
 			if !ok {
