@@ -105,18 +105,6 @@ func (m *Model) clearZoom() bool {
 	return true
 }
 
-func (m *Model) ensureRegionVisible(r paneRegion) bool {
-	changed := false
-	if res := m.setCollapseState(r, false); res.changed {
-		changed = true
-	}
-	if m.zoomActive && m.zoomRegion != r {
-		m.zoomActive = false
-		changed = true
-	}
-	return changed
-}
-
 func (m *Model) collapsedStatusLabel(r paneRegion) string {
 	switch r {
 	case paneRegionSidebar:

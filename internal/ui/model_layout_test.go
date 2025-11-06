@@ -191,7 +191,6 @@ func TestResponsePaneWidthMatchesLayout(t *testing.T) {
 				}
 			} else {
 				respPane = ""
-				respWidth = 0
 			}
 		}
 	} else {
