@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.6.4](https://github.com/unkn0wn-root/resterm/compare/v0.6.3...v0.6.4) (2025-11-06)
+
+
+### Features
+
+* **ui:** add pane minimization toggles and zoom handling ([81abf38](https://github.com/unkn0wn-root/resterm/commit/81abf3847313463956a6663f5c648a3ae1647f77))
+
+
+### Bug Fixes
+
+* powershell install script ([f5bd8ba](https://github.com/unkn0wn-root/resterm/commit/f5bd8bac874467ae3f42abbdea99f09f0156d3c3))
+* remove old func and var after recent changes ([f829d48](https://github.com/unkn0wn-root/resterm/commit/f829d48e5ed873683a75d650336541f8cbc65baf))
+
 ### [0.6.3](https://github.com/unkn0wn-root/resterm/compare/v0.6.2...v0.6.3) (2025-11-01)
 
 ### Features
