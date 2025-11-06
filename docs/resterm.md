@@ -91,6 +91,8 @@ Content-Type: application/json
 | Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
 | Adjust files/requests split | `g+j` / `g+k` |
 | Adjust requests/workflows split | `g+J` / `g+K` |
+| Toggle sidebar / editor / response minimize | `g+1` / `g+2` / `g+3` |
+| Zoom focused pane / clear zoom | `g+z` / `g+Z` |
 | Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
 | File list incremental search | Start typing while focus is in the list |
 | Open environment selector | `Ctrl+E` |
@@ -121,6 +123,13 @@ The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G
 When a request opens a stream, the Stream tab becomes available. Use `Ctrl+I` to reveal the WebSocket console inside the Stream tab, `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, arrow keys to replay recent payloads, `Ctrl+P` to send ping, and `Ctrl+W` to close the session.
 
 Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
+
+### Pane minimization & zoom
+
+- Toggle the sidebar, editor, or response panes with `g+1`, `g+2`, and `g+3`. Minimized panes collapse into thin frames that display an indicator along with a reminder of the restoring shortcut.
+- Status bar badges (`Sidebar:min`, `Editor:min`, `Response:min`) mirror the current state so you can tell when something is hidden even if the stub scrolls out of view.
+- Use `g+z` to zoom the currently focused pane and hide the others temporarily; `g+Z` clears zoom and restores the previous layout (including any manual minimize state).
+- Resize chords such as `g+h` / `g+l` are disabled while a related pane is hidden or zoomed, preventing accidental layout resets.
 
 ### Timeline & tracing
 

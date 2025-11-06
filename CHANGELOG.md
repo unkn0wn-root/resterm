@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. See [standa
 
 ### [0.6.3](https://github.com/unkn0wn-root/resterm/compare/v0.6.2...v0.6.3) (2025-11-01)
 
+### Features
+
+* add pane minimize toggles and zoom mode for sidebar/editor/response panes
+
 ### [0.6.2](https://github.com/unkn0wn-root/resterm/compare/v0.6.1...v0.6.2) (2025-11-01)
 
 

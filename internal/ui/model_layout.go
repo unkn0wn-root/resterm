@@ -12,6 +12,10 @@ func (m *Model) applyLayout() tea.Cmd {
 		return nil
 	}
 
+	sidebarCollapsed := m.effectiveRegionCollapsed(paneRegionSidebar)
+	editorCollapsed := m.effectiveRegionCollapsed(paneRegionEditor)
+	responseCollapsed := m.effectiveRegionCollapsed(paneRegionResponse)
+
 	chromeHeight := lipgloss.Height(m.renderHeader()) +
 		lipgloss.Height(m.renderCommandBar()) +
 		lipgloss.Height(m.renderStatusBar())
@@ -100,6 +104,10 @@ func (m *Model) applyLayout() tea.Cmd {
 
 	fileWidth := desiredSidebar
 	m.sidebarWidthPx = fileWidth
+	if sidebarCollapsed {
+		fileWidth = clampPositive(collapsedSidebarWidthPx, width)
+		m.sidebarWidthPx = fileWidth
+	}
 
 	remaining := width - fileWidth
 	if remaining < 2 {
@@ -245,14 +253,22 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.responseContentHeight = paneHeight
 	}
 
+	if m.mainSplitOrientation == mainSplitVertical {
+		editorWidth, responseWidth = redistributeCollapsedWidths(editorWidth, responseWidth, editorCollapsed, responseCollapsed)
+	} else {
+		m.editorContentHeight, m.responseContentHeight = redistributeCollapsedHeights(m.editorContentHeight, m.responseContentHeight, editorCollapsed, responseCollapsed)
+		editorHeight = m.editorContentHeight
+	}
+
 	if editorWidth < 1 {
 		editorWidth = 1
 	}
 	if responseWidth < 1 {
 		responseWidth = 1
 	}
+	m.responseWidthPx = responseWidth
 
-	if width > 0 {
+	if width > 0 && !sidebarCollapsed {
 		realSidebarRatio := float64(fileWidth) / float64(width)
 		if realSidebarRatio < minSidebarWidthRatio {
 			realSidebarRatio = minSidebarWidthRatio
@@ -407,7 +423,9 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.sidebarSplit = ratio
 	}
 
-	if m.mainSplitOrientation == mainSplitVertical && remaining > 0 {
+	if m.mainSplitOrientation == mainSplitVertical && remaining > 0 &&
+		!m.collapseState(paneRegionEditor) &&
+		!m.collapseState(paneRegionResponse) && !m.zoomActive {
 		realEditorRatio := float64(editorWidth) / float64(remaining)
 		if realEditorRatio < minEditorSplit {
 			realEditorRatio = minEditorSplit
@@ -422,22 +440,22 @@ func (m *Model) applyLayout() tea.Cmd {
 	if fileListHeight < 0 {
 		fileListHeight = 0
 	}
-	m.fileList.SetSize(fileWidth-4, fileListHeight)
+	m.fileList.SetSize(maxInt(fileWidth-4, 0), fileListHeight)
 
 	requestListHeight := requestBase - sidebarChrome
 	if requestListHeight < 0 {
 		requestListHeight = 0
 	}
-	m.requestList.SetSize(fileWidth-4, requestListHeight)
+	m.requestList.SetSize(maxInt(fileWidth-4, 0), requestListHeight)
 
 	if hasWorkflow && workflowBase > 0 {
 		workflowListHeight := workflowBase - sidebarChrome
 		if workflowListHeight < 0 {
 			workflowListHeight = 0
 		}
-		m.workflowList.SetSize(fileWidth-4, workflowListHeight)
+		m.workflowList.SetSize(maxInt(fileWidth-4, 0), workflowListHeight)
 	} else {
-		m.workflowList.SetSize(fileWidth-4, 0)
+		m.workflowList.SetSize(maxInt(fileWidth-4, 0), 0)
 	}
 	m.editor.SetWidth(maxInt(editorWidth-4, 1))
 	m.editor.SetHeight(maxInt(editorHeight, 1))
@@ -768,4 +786,86 @@ func (m *Model) adjustEditorSplit(delta float64) (bool, bool, tea.Cmd) {
 	}
 
 	return true, bounded, cmd
+}
+
+func redistributeCollapsedWidths(editorWidth, responseWidth int, editorCollapsed, responseCollapsed bool) (int, int) {
+	freed := 0
+	if editorCollapsed {
+		target := minInt(collapsedPaneWidthPx, editorWidth)
+		if target < 1 {
+			target = 1
+		}
+		if editorWidth > target {
+			freed += editorWidth - target
+		}
+		editorWidth = target
+	}
+	if responseCollapsed {
+		target := minInt(collapsedPaneWidthPx, responseWidth)
+		if target < 1 {
+			target = 1
+		}
+		if responseWidth > target {
+			freed += responseWidth - target
+		}
+		responseWidth = target
+	}
+	if freed > 0 {
+		switch {
+		case !editorCollapsed:
+			editorWidth += freed
+		case !responseCollapsed:
+			responseWidth += freed
+		default:
+			editorWidth += freed
+		}
+	}
+	if editorWidth < 1 {
+		editorWidth = 1
+	}
+	if responseWidth < 1 {
+		responseWidth = 1
+	}
+	return editorWidth, responseWidth
+}
+
+func redistributeCollapsedHeights(editorHeight, responseHeight int, editorCollapsed, responseCollapsed bool) (int, int) {
+	freed := 0
+	if editorCollapsed {
+		target := minInt(collapsedPaneHeightRows, editorHeight)
+		if target < 1 {
+			target = 1
+		}
+		if editorHeight > target {
+			freed += editorHeight - target
+		}
+		editorHeight = target
+	}
+	if responseCollapsed {
+		target := minInt(collapsedPaneHeightRows, responseHeight)
+		if target < 1 {
+			target = 1
+		}
+		if responseHeight > target {
+			freed += responseHeight - target
+		}
+		responseHeight = target
+	}
+	if freed > 0 {
+		switch {
+		case !editorCollapsed:
+			editorHeight += freed
+		case !responseCollapsed:
+			responseHeight += freed
+		default:
+			editorHeight += freed
+		}
+	}
+	if editorHeight < 1 {
+		editorHeight = 1
+	}
+	if responseHeight < 1 {
+		responseHeight = 1
+	}
+	return editorHeight, responseHeight
 }

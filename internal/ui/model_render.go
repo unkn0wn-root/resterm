@@ -59,11 +59,25 @@ func (m Model) View() string {
 			rightColumn,
 		)
 	} else {
-		availableResponseWidth := m.width - fileWidth - editorWidth
-		if availableResponseWidth < 0 {
-			availableResponseWidth = 0
+		pw := m.responseTargetWidth(fileWidth, editorWidth)
+		var responsePane string
+		if pw > 0 {
+			responsePane = m.renderResponsePane(pw)
+			rw := lipgloss.Width(responsePane)
+			ex := fileWidth + editorWidth + rw - m.width
+			if ex > 0 {
+				adj := pw - ex
+				if adj > 0 {
+					responsePane = m.renderResponsePane(adj)
+					rw = lipgloss.Width(responsePane)
+					if fileWidth+editorWidth+rw > m.width {
+						responsePane = ""
+					}
+				} else {
+					responsePane = ""
+				}
+			}
 		}
-		responsePane := m.renderResponsePane(availableResponseWidth)
 		panes = lipgloss.JoinHorizontal(
 			lipgloss.Top,
 			filePane,
@@ -139,6 +153,7 @@ func (m Model) renderWithinAppFrame(content string) string {
 func (m Model) renderFilePane() string {
 	style := m.theme.BrowserBorder
 	paneActive := m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows
+	collapsed := m.effectiveRegionCollapsed(paneRegionSidebar)
 	switch m.focus {
 	case focusFile:
 		style = style.
@@ -163,6 +178,11 @@ func (m Model) renderFilePane() string {
 	}
 
 	width := m.fileList.Width() + 4
+	if collapsed {
+		height := maxInt(m.paneContentHeight, collapsedPaneHeightRows) + style.GetVerticalFrameSize()
+		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionSidebar
+		return m.renderCollapsedPane(style, width, height, "Sidebar", "g1", zoomHidden, paneActive)
+	}
 	innerWidth := maxInt(1, width-4)
 	titleBase := m.theme.PaneTitle.Width(innerWidth).Align(lipgloss.Center)
 	filesTitle := titleBase.Render(strings.ToUpper("Files"))
@@ -326,7 +346,8 @@ func centeredListView(view string, width int, content string) string {
 
 func (m Model) renderEditorPane() string {
 	style := m.theme.EditorBorder
-	if m.focus == focusEditor && m.editorInsertMode {
+	collapsed := m.effectiveRegionCollapsed(paneRegionEditor)
+	if m.focus == focusEditor && m.editorInsertMode && !collapsed {
 		if items, selection, ok := m.editor.metadataHintsDisplay(metadataHintDisplayLimit); ok && len(items) > 0 {
 			overlay := m.buildMetadataHintOverlay(items, selection, m.editor.Width())
 			m.editor.SetOverlayLines(overlay)
@@ -335,6 +356,25 @@ func (m Model) renderEditorPane() string {
 		}
 	} else {
 		m.editor.ClearOverlay()
+	}
+
+	if collapsed {
+		if m.focus == focusEditor {
+			style = style.
+				BorderForeground(lipgloss.Color("#B794F6")).
+				Bold(true).
+				BorderStyle(lipgloss.ThickBorder())
+		} else {
+			style = style.Faint(true)
+		}
+		width := m.editor.Width() + 4
+		height := maxInt(m.editorContentHeight, collapsedPaneHeightRows)
+		if height < collapsedPaneHeightRows {
+			height = collapsedPaneHeightRows
+		}
+		height += style.GetVerticalFrameSize()
+		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionEditor
+		return m.renderCollapsedPane(style, width, height, "Editor", "g2", zoomHidden, m.focus == focusEditor)
 	}
 
 	content := m.editor.View()
@@ -401,6 +441,7 @@ func (m Model) buildMetadataHintOverlay(items []metadataHintOption, selection in
 func (m Model) renderResponsePane(availableWidth int) string {
 	style := m.theme.ResponseBorder
 	active := m.focus == focusResponse
+	collapsed := m.effectiveRegionCollapsed(paneRegionResponse)
 	if active {
 		style = style.
 			BorderForeground(lipgloss.Color("#6CC4C4")).
@@ -411,6 +452,9 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	}
 
 	frameWidth := style.GetHorizontalFrameSize()
+	if availableWidth < 0 {
+		availableWidth = 0
+	}
 	targetOuterWidth := availableWidth
 	if targetOuterWidth < frameWidth {
 		targetOuterWidth = frameWidth
@@ -418,6 +462,27 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	contentBudget := targetOuterWidth - frameWidth
 	if contentBudget < 1 {
 		contentBudget = 1
+	}
+
+	if collapsed {
+		height := m.responseContentHeight
+		if height <= 0 {
+			height = maxInt(m.paneContentHeight, collapsedPaneHeightRows)
+		}
+		height += style.GetVerticalFrameSize()
+		stubWidth := collapsedPaneWidthPx
+		if stubWidth > targetOuterWidth || availableWidth == 0 {
+			stubWidth = collapsedPaneWidthPx
+		}
+		minOuter := frameWidth + 1
+		if stubWidth < minOuter {
+			stubWidth = minOuter
+		}
+		if stubWidth < targetOuterWidth {
+			targetOuterWidth = stubWidth
+		}
+		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionResponse
+		return m.renderCollapsedPane(style, targetOuterWidth, height, "Response", "g3", zoomHidden, active)
 	}
 
 	var body string
@@ -527,6 +592,46 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	}
 	contentWidth := maxInt(width-frameWidth, 1)
 	return style.Width(contentWidth).MaxWidth(width).Height(height).Render(body)
+}
+
+func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
+	pw := m.responseWidthPx
+	if pw <= 0 {
+		frame := m.theme.ResponseBorder.GetHorizontalFrameSize()
+		pw = m.responseContentWidth() + frame
+		if pw < 0 {
+			pw = 0
+		}
+	}
+
+	ef := m.theme.EditorBorder.GetHorizontalFrameSize()
+	eo := m.editor.Width() + ef
+	if eo < 0 {
+		eo = 0
+	}
+
+	la := m.width - m.sidebarWidthPx - eo
+	if la < 0 {
+		la = 0
+	}
+	if pw > la {
+		pw = la
+	}
+
+	aa := m.width - fileWidth - editorWidth
+	if aa < 0 {
+		pw += aa
+	} else if pw < aa {
+		if la < aa {
+			pw = la
+		} else {
+			pw = aa
+		}
+	}
+	if pw < 0 {
+		pw = 0
+	}
+	return pw
 }
 
 func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth int) string {
@@ -838,6 +943,41 @@ func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
 	}
 	line := strings.Repeat("─", width)
 	return m.theme.PaneDivider.Render(line)
+}
+
+func (m Model) renderCollapsedPane(style lipgloss.Style, width, height int, label, key string, zoomHidden bool, focused bool) string {
+	frameWidth := style.GetHorizontalFrameSize()
+	frameHeight := style.GetVerticalFrameSize()
+	if width < frameWidth+1 {
+		width = frameWidth + 1
+	}
+	if height < frameHeight+1 {
+		height = frameHeight + 1
+	}
+	innerWidth := maxInt(width-frameWidth, 1)
+	innerHeight := maxInt(height-frameHeight, 1)
+	_ = label
+	_ = key
+	markerColor := lipgloss.Color("#3BD671")
+	if zoomHidden {
+		markerColor = lipgloss.Color("#FBBF24")
+	}
+	marker := lipgloss.NewStyle().
+		Foreground(markerColor).
+		Bold(true).
+		Render("●")
+	if !focused {
+		marker = lipgloss.NewStyle().Faint(true).Render(marker)
+	}
+	content := lipgloss.Place(
+		innerWidth,
+		innerHeight,
+		lipgloss.Center,
+		lipgloss.Center,
+		marker,
+		lipgloss.WithWhitespaceChars(" "),
+	)
+	return style.Width(width).Height(height).Render(content)
 }
 
 func (m Model) renderHistoryPaneFor(id responsePaneID) string {
@@ -1430,6 +1570,18 @@ func (m Model) renderStatusBar() string {
 		}
 		segments = append(segments, fmt.Sprintf("Mode: %s", mode))
 	}
+	if m.sidebarCollapsed {
+		segments = append(segments, "Sidebar:min")
+	}
+	if m.editorCollapsed {
+		segments = append(segments, "Editor:min")
+	}
+	if m.responseCollapsed {
+		segments = append(segments, "Response:min")
+	}
+	if m.zoomActive {
+		segments = append(segments, fmt.Sprintf("Zoom: %s", m.collapsedStatusLabel(m.zoomRegion)))
+	}
 
 	staticText := strings.Join(segments, sep)
 	staticWidth := lipgloss.Width(staticText)
@@ -1798,6 +1950,8 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Ctrl+Alt+T / g m", "Theme selector"),
 		helpRow(m, "gk / gj", "Adjust files/requests split"),
 		helpRow(m, "gh / gl", "Adjust editor/response width"),
+		helpRow(m, "g1 / g2 / g3", "Toggle sidebar / editor / response minimize"),
+		helpRow(m, "g z / g Z", "Zoom focused pane / reset zoom"),
 		helpRow(m, "gr / gi / gp", "Focus requests / editor / response"),
 		helpRow(m, "Ctrl+T", "Temporary document"),
 		helpRow(m, "Ctrl+P", "Reparse document"),
