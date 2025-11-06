@@ -90,7 +90,7 @@ function Main {
     }
     Write-Info "Latest version: $version"
 
-    $binaryFilename = "resterm_Windows_$arch"
+    $binaryFilename = "resterm_Windows_${arch}.exe"
     $downloadUrl = "https://github.com/$REPO/releases/download/$version/$binaryFilename"
 
     $installDir = Get-InstallDir
