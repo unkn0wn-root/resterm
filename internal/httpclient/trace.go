@@ -39,6 +39,7 @@ func (s *traceSession) bind(req *http.Request) *http.Request {
 	if req == nil {
 		return nil
 	}
+
 	ctx := httptrace.WithClientTrace(req.Context(), s.trace)
 	return req.WithContext(ctx)
 }
@@ -92,6 +93,7 @@ func (s *traceSession) onGotConn(info httptrace.GotConnInfo) {
 	if !info.Reused {
 		return
 	}
+
 	now := time.Now()
 	s.collector.Begin(nettrace.PhaseConnect, now)
 	s.collector.UpdateMeta(nettrace.PhaseConnect, func(meta *nettrace.PhaseMeta) {
@@ -156,6 +158,7 @@ func (s *traceSession) finishTransfer(err error) {
 	if !s.transferActive {
 		return
 	}
+
 	s.collector.End(nettrace.PhaseTransfer, time.Now(), err)
 	s.transferActive = false
 	if err != nil {

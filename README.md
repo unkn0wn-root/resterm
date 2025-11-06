@@ -36,6 +36,23 @@
 Resterm is a terminal-first client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app. Simple, yet feature rich, terminal client for .http/.rest files.
 It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard.
 
+## Index
+- [Highlights](#highlights)
+- [Installation](#installation)
+  - [Quick Install](#quick-install)
+  - [Manual Installation](#manual-installation)
+- [Update](#update)
+- [Workflows](#workflows)
+- [Tracing & Timeline](#tracing--timeline)
+- [OpenAPI imports](#openapi-imports)
+- [Streaming (WebSocket & SSE)](#streaming-websocket--sse)
+  - [Server-Sent Events](#server-sent-events)
+  - [WebSockets](#websockets)
+  - [Stream viewer & console](#stream-viewer--console)
+- [Quick Configuration Overview](#quick-configuration-overview)
+  - [Custom themes](#custom-themes)
+- [Documentation](#documentation)
+
 ## Highlights
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).

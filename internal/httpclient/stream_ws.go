@@ -206,7 +206,6 @@ func (c *Client) StartWebSocket(
 	go runtime.writeLoop()
 
 	sender := &WebSocketSender{runtime: runtime}
-
 	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender}, nil, nil
 }
 
@@ -415,6 +414,7 @@ func buildWebSocketFallback(httpResp *http.Response, req *restfile.Request, star
 	if httpResp == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "websocket handshake response unavailable")
 	}
+
 	var body []byte
 	if httpResp.Body != nil {
 		data, err := io.ReadAll(httpResp.Body)
@@ -427,6 +427,7 @@ func buildWebSocketFallback(httpResp *http.Response, req *restfile.Request, star
 		}
 		body = data
 	}
+
 	effectiveURL := ""
 	if httpResp.Request != nil && httpResp.Request.URL != nil {
 		effectiveURL = httpResp.Request.URL.String()
@@ -516,6 +517,7 @@ func (rt *wsRuntime) readLoop(opts restfile.WebSocketOptions) {
 		if msgType == websocket.MessageText {
 			opcode = wsOpcodeText
 		}
+
 		typ := opcodeToType(opcode)
 		metadata[wsMetaType] = typ
 
@@ -578,6 +580,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.conn.Write(ctx, msg.msgType, msg.payload); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket frame")
 		}
+
 		payload := append([]byte(nil), msg.payload...)
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
@@ -586,6 +589,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if _, ok := metadata[wsMetaType]; !ok {
 			metadata[wsMetaType] = opcodeToType(opcode)
 		}
+
 		session.Publish(&stream.Event{
 			Kind:      stream.KindWebSocket,
 			Direction: stream.DirSend,
@@ -601,6 +605,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.conn.Ping(ctx); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket ping")
 		}
+
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}
@@ -624,6 +629,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := wsWriteControl(rt.conn, ctx, wsOpcodePong, payload); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket pong")
 		}
+
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}
@@ -645,6 +651,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.conn.Close(msg.code, msg.reason); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "close websocket")
 		}
+
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
 			metadata = map[string]string{}

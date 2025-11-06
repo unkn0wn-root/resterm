@@ -71,6 +71,7 @@ func NewClient(fs FileSystem) *Client {
 	if fs == nil {
 		fs = OSFileSystem{}
 	}
+
 	jar, _ := cookiejar.New(nil)
 	c := &Client{fs: fs, jar: jar, telemetry: telemetry.Noop()}
 	c.httpFactory = c.buildHTTPClient
@@ -288,9 +289,7 @@ func (c *Client) prepareHTTPRequest(
 	}
 
 	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-
 	effectiveOpts := applyRequestSettings(opts, req.Settings)
-
 	return httpReq, effectiveOpts, nil
 }
 
@@ -566,24 +565,29 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 	for k, v := range settings {
 		norm[strings.ToLower(k)] = v
 	}
+
 	if value, ok := norm["timeout"]; ok {
 		if dur, err := time.ParseDuration(value); err == nil {
 			effective.Timeout = dur
 		}
 	}
+
 	if value, ok := norm["proxy"]; ok && value != "" {
 		effective.ProxyURL = value
 	}
+
 	if value, ok := norm["followredirects"]; ok {
 		if b, err := strconv.ParseBool(value); err == nil {
 			effective.FollowRedirects = b
 		}
 	}
+
 	if value, ok := norm["insecure"]; ok {
 		if b, err := strconv.ParseBool(value); err == nil {
 			effective.InsecureSkipVerify = b
 		}
 	}
+
 	return effective
 }
 

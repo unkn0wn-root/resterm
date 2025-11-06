@@ -75,7 +75,6 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	defer cancel()
 
 	usePlain := shouldUsePlaintext(grpcReq, options)
-
 	dialOpts := []grpc.DialOption{}
 	if usePlain {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -90,6 +89,7 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "dial grpc target")
 	}
+
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil && err == nil {
 			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close grpc connection")
@@ -232,6 +232,7 @@ func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, f
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "open reflection stream")
 	}
+
 	defer func() {
 		if closeErr := stream.CloseSend(); closeErr != nil && err == nil {
 			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close reflection stream")
@@ -246,6 +247,7 @@ func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, f
 			symbol = service + "." + method
 		}
 	}
+
 	request := &reflectpb.ServerReflectionRequest{
 		MessageRequest: &reflectpb.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: symbol},
 	}

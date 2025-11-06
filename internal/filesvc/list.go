@@ -20,6 +20,7 @@ func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 		_, ok := exts[strings.ToLower(filepath.Ext(name))]
 		return ok
 	}
+
 	appendEntry := func(name, path string) {
 		entries = append(entries, FileEntry{Name: name, Path: path})
 	}
@@ -64,5 +65,6 @@ func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	sort.Slice(entries, func(i, j int) bool {
 		return entries[i].Name < entries[j].Name
 	})
+
 	return entries, nil
 }

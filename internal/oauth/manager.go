@@ -74,6 +74,7 @@ func NewManager(client *httpclient.Client) *Manager {
 	if client == nil {
 		client = httpclient.NewClient(nil)
 	}
+
 	mgr := &Manager{client: client, cache: make(map[string]*cacheEntry), inflight: make(map[string]*call)}
 	mgr.do = func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 		return mgr.client.Execute(ctx, req, nil, opts)
@@ -125,6 +126,7 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 	if token, ok := m.cachedToken(key); ok && token.valid() {
 		return token, nil
 	}
+
 	entry := m.cacheEntry(key)
 	if entry != nil && entry.token.RefreshToken != "" {
 		if refreshed, err := m.refreshToken(ctx, entry.cfg, entry.token.RefreshToken, opts); err == nil {
@@ -132,10 +134,12 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 			return refreshed, nil
 		}
 	}
+
 	fetched, err := m.requestToken(ctx, cfg, opts)
 	if err != nil {
 		return Token{}, err
 	}
+
 	m.storeToken(key, cfg, fetched)
 	return fetched, nil
 }
@@ -181,6 +185,7 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 	if strings.TrimSpace(cfg.CacheKey) != "" {
 		return strings.TrimSpace(cfg.CacheKey)
 	}
+
 	parts := []string{
 		strings.ToLower(strings.TrimSpace(env)),
 		strings.TrimSpace(cfg.TokenURL),

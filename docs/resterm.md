@@ -1,5 +1,25 @@
 # Resterm Documentation
 
+## Index
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [UI Tour](#ui-tour)
+- [Workspaces & Files](#workspaces--files)
+- [Variables and Environments](#variables-and-environments)
+- [Request File Anatomy](#request-file-anatomy)
+- [Streaming (SSE & WebSocket)](#streaming-sse--websocket)
+- [GraphQL](#graphql)
+- [gRPC](#grpc)
+- [Scripting API](#scripting-api)
+- [Authentication](#authentication)
+- [HTTP Transport & Settings](#http-transport--settings)
+- [Response History & Diffing](#response-history--diffing)
+- [CLI Reference](#cli-reference)
+- [Configuration](#configuration)
+- [Theming](#theming)
+- [Examples](#examples)
+- [Troubleshooting & Tips](#troubleshooting--tips)
+
 ## Installation
 
 ### Prebuilt binaries
