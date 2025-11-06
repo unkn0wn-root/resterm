@@ -9,6 +9,14 @@
 </p>
 
 <p align="center">
+  <strong>Zoom mode</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_zommed.png" alt="Screenshot of resterm in zoomed mode" width="720" />
+</p>
+
+<p align="center">
   <strong>With trace and timeline</strong>
 </p>
 
