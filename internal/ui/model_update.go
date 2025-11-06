@@ -1055,6 +1055,16 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 			return true, nil
 		case "w":
 			return true, m.toggleWebSocketConsole()
+		case "1":
+			return true, m.togglePaneCollapse(paneRegionSidebar)
+		case "2":
+			return true, m.togglePaneCollapse(paneRegionEditor)
+		case "3":
+			return true, m.togglePaneCollapse(paneRegionResponse)
+		case "z":
+			return true, m.toggleZoomForRegion(regionFromFocus(m.focus))
+		case "Z", "shift+z":
+			return true, m.clearZoomCmd()
 		}
 	}
 	return false, nil
@@ -1140,6 +1150,14 @@ func batchCommands(cmds ...tea.Cmd) tea.Cmd {
 }
 
 func (m *Model) runEditorResize(delta float64) tea.Cmd {
+	if m.zoomActive {
+		m.setStatusMessage(statusMsg{text: "Disable zoom to resize panes", level: statusInfo})
+		return nil
+	}
+	if m.collapseState(paneRegionEditor) || m.collapseState(paneRegionResponse) {
+		m.setStatusMessage(statusMsg{text: "Expand panes before resizing", level: statusInfo})
+		return nil
+	}
 	changed, bounded, cmd := m.adjustEditorSplit(delta)
 	if changed {
 		return cmd

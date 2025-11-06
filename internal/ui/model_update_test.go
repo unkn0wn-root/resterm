@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/atotto/clipboard"
@@ -220,6 +221,48 @@ func TestHandleKeyGlExpandsSidebarWhenFocused(t *testing.T) {
 	}
 	if model.editor.Width() >= initialEditor {
 		t.Fatalf("expected editor width to shrink after sidebar expands, initial %d new %d", initialEditor, model.editor.Width())
+	}
+}
+
+func TestRunEditorResizeBlockedByZoom(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 160
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+	_ = model.toggleZoomForRegion(paneRegionEditor)
+	initial := model.editor.Width()
+	cmd := model.runEditorResize(editorSplitStep)
+	if cmd != nil {
+		t.Fatalf("expected resize command to be suppressed while zoomed")
+	}
+	if model.editor.Width() != initial {
+		t.Fatalf("expected editor width to remain unchanged while zoomed, initial %d new %d", initial, model.editor.Width())
+	}
+	if !strings.Contains(model.statusMessage.text, "Disable zoom") {
+		t.Fatalf("expected zoom warning status, got %q", model.statusMessage.text)
+	}
+}
+
+func TestRunEditorResizeBlockedWhenCollapsed(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 160
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+	if res := model.setCollapseState(paneRegionResponse, true); res.blocked {
+		t.Fatalf("expected collapse to be allowed")
+	}
+	initial := model.editor.Width()
+	cmd := model.runEditorResize(-editorSplitStep)
+	if cmd != nil {
+		t.Fatalf("expected resize command to be suppressed while response collapsed")
+	}
+	if model.editor.Width() != initial {
+		t.Fatalf("expected editor width to remain unchanged while collapsed, initial %d new %d", initial, model.editor.Width())
+	}
+	if !strings.Contains(model.statusMessage.text, "Expand panes") {
+		t.Fatalf("expected collapse warning status, got %q", model.statusMessage.text)
 	}
 }
 

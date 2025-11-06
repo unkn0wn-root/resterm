@@ -163,6 +163,111 @@ func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
 	}
 }
 
+func TestResponsePaneWidthMatchesLayout(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	m := New(cfg)
+	m.width = 180
+	m.height = 60
+	m.ready = true
+	_ = m.applyLayout()
+
+	filePane := m.renderFilePane()
+	editorPane := m.renderEditorPane()
+	fileWidth := lipgloss.Width(filePane)
+	editorWidth := lipgloss.Width(editorPane)
+	target := m.responseTargetWidth(fileWidth, editorWidth)
+	var respPane string
+	if target > 0 {
+		respPane = m.renderResponsePane(target)
+		respWidth := lipgloss.Width(respPane)
+		excess := fileWidth + editorWidth + respWidth - m.width
+		if excess > 0 {
+			adjusted := target - excess
+			if adjusted > 0 {
+				respPane = m.renderResponsePane(adjusted)
+				respWidth = lipgloss.Width(respPane)
+				if fileWidth+editorWidth+respWidth > m.width {
+					t.Fatalf("expected overflow to be resolved, width %d target %d adjusted %d", respWidth, target, adjusted)
+				}
+			} else {
+				respPane = ""
+			}
+		}
+	} else {
+		respPane = ""
+	}
+	total := fileWidth + editorWidth + lipgloss.Width(respPane)
+	if total != m.width {
+		t.Fatalf("expected combined pane width %d, got %d", m.width, total)
+	}
+}
+
+func TestZoomEditorKeepsResponseWithinBounds(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	m := New(cfg)
+	m.width = 160
+	m.height = 50
+	m.ready = true
+	if !m.setZoomRegion(paneRegionEditor) {
+		t.Fatalf("expected zoom to activate")
+	}
+	_ = m.applyLayout()
+
+	filePane := m.renderFilePane()
+	editorPane := m.renderEditorPane()
+	fileWidth := lipgloss.Width(filePane)
+	editorWidth := lipgloss.Width(editorPane)
+	target := m.responseTargetWidth(fileWidth, editorWidth)
+	var respPane string
+	if target > 0 {
+		respPane = m.renderResponsePane(target)
+		respWidth := lipgloss.Width(respPane)
+		excess := fileWidth + editorWidth + respWidth - m.width
+		if excess > 0 {
+			adjusted := target - excess
+			if adjusted > 0 {
+				respPane = m.renderResponsePane(adjusted)
+				respWidth = lipgloss.Width(respPane)
+				if fileWidth+editorWidth+respWidth > m.width {
+					t.Fatalf("expected overflow to clear when zoomed, width %d target %d adjusted %d", respWidth, target, adjusted)
+				}
+			} else {
+				respPane = ""
+			}
+		}
+	} else {
+		respPane = ""
+	}
+	total := fileWidth + editorWidth + lipgloss.Width(respPane)
+	if total > m.width {
+		t.Fatalf("expected total width <= %d, got %d", m.width, total)
+	}
+}
+
+func TestCollapseResponseExpandsEditorWidth(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 180
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+	initialEditor := model.editor.Width()
+	initialResponse := model.responseContentWidth()
+	if res := model.setCollapseState(paneRegionResponse, true); res.blocked {
+		t.Fatalf("expected response collapse to be allowed")
+	}
+	_ = model.applyLayout()
+	if !model.effectiveRegionCollapsed(paneRegionResponse) {
+		t.Fatalf("expected response pane to report collapsed state")
+	}
+	if model.editor.Width() <= initialEditor {
+		t.Fatalf("expected editor width to grow after collapsing response, initial %d new %d", initialEditor, model.editor.Width())
+	}
+	if model.responseContentWidth() >= initialResponse {
+		t.Fatalf("expected response width to shrink after collapse, initial %d new %d", initialResponse, model.responseContentWidth())
+	}
+}
+
 func TestAdjustEditorSplitClampsBounds(t *testing.T) {
 	cfg := Config{WorkspaceRoot: t.TempDir()}
 	model := New(cfg)
@@ -191,6 +296,28 @@ func TestAdjustEditorSplitClampsBounds(t *testing.T) {
 	_ = model.applyLayout()
 	if changed, _, _ := model.adjustEditorSplit(editorSplitStep); !changed {
 		t.Fatalf("expected adjustment to apply when within bounds")
+	}
+}
+
+func TestZoomEditorHidesOtherPanes(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 140
+	model.height = 50
+	model.ready = true
+	_ = model.applyLayout()
+	if !model.setZoomRegion(paneRegionEditor) {
+		t.Fatalf("expected zoom activation to apply")
+	}
+	_ = model.applyLayout()
+	if model.effectiveRegionCollapsed(paneRegionEditor) {
+		t.Fatalf("expected zoom target to remain visible")
+	}
+	if !model.effectiveRegionCollapsed(paneRegionResponse) {
+		t.Fatalf("expected response pane to be hidden while zoomed")
+	}
+	if !model.effectiveRegionCollapsed(paneRegionSidebar) {
+		t.Fatalf("expected sidebar to be hidden while zoomed")
 	}
 }
 

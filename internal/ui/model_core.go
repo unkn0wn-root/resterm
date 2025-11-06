@@ -68,6 +68,14 @@ const (
 	mainSplitHorizontal
 )
 
+type paneRegion int
+
+const (
+	paneRegionSidebar paneRegion = iota
+	paneRegionEditor
+	paneRegionResponse
+)
+
 type searchTarget int
 
 const (
@@ -123,6 +131,12 @@ const (
 	minResponsePaneHeight        = 6
 )
 
+const (
+	collapsedSidebarWidthPx = 5
+	collapsedPaneWidthPx    = 8
+	collapsedPaneHeightRows = 4
+)
+
 type Config struct {
 	FilePath            string
 	InitialContent      string
@@ -173,6 +187,11 @@ type Model struct {
 	responseSplitOrientation responseSplitOrientation
 	responsePaneFocus        responsePaneID
 	responsePaneChord        bool
+	sidebarCollapsed         bool
+	editorCollapsed          bool
+	responseCollapsed        bool
+	zoomActive               bool
+	zoomRegion               paneRegion
 	mainSplitOrientation     mainSplitOrientation
 	editorContentHeight      int
 	responseContentHeight    int
@@ -252,6 +271,7 @@ type Model struct {
 	frameHeight           int
 	sidebarWidth          float64
 	sidebarWidthPx        int
+	responseWidthPx       int
 	sidebarSplit          float64
 	sidebarFilesHeight    int
 	sidebarRequestsHeight int
