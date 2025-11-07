@@ -282,6 +282,8 @@ func formatChangelog(raw string) []string {
 	return out
 }
 
+// Tabs count as 4 spaces for changelog indentation calculation
+// so markdown nested lists look reasonable in the terminal.
 func countLeadingSpaces(s string) int {
 	count := 0
 	for _, r := range s {

@@ -166,9 +166,8 @@ func (c *Client) StartWebSocket(
 		}
 		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "dial websocket")
 	}
-	// At this point the handshake succeeded. Stop the handshake timer and switch to
-	// a fresh session-scoped context so the configured handshake timeout does not
-	// terminate the live connection.
+	// Swap contexts now - handshake timeout shouldn't kill the active connection.
+	// The new context lets the session run until explicitly closed or parent cancels.
 	handshakeCancel()
 	sessionCtx, sessionCancel := context.WithCancel(ctx)
 
@@ -698,6 +697,8 @@ type WebSocketSender struct {
 	runtime *wsRuntime
 }
 
+// Multiple contexts racing - per-message timeout, session lifetime, and write completion.
+// Nested selects give priority to results already available before checking timeouts.
 func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 	if msg.ctx == nil {
 		msg.ctx = s.runtime.session.Context()

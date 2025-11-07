@@ -106,6 +106,9 @@ type Response struct {
 	TraceReport  *nettrace.Report
 }
 
+// Wraps the HTTP roundtrip with telemetry spans and network tracing.
+// Trace session hooks into http.Client's transport to capture timing info,
+// while the defer ensures we always report metrics even on failure.
 func (c *Client) Execute(
 	ctx context.Context,
 	req *restfile.Request,
@@ -343,6 +346,8 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 	}
 }
 
+// GET requests put everything in query params, POST uses JSON body.
+// Variables need special handling since they must be valid JSON in both cases.
 func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	gql := req.Body.GraphQL
 	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, "GraphQL query")
@@ -471,6 +476,8 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) 
 	return string(data), nil
 }
 
+// Second Decode call checks for trailing garbage after the JSON object.
+// Without this, extra content would silently get ignored.
 func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.UseNumber()
@@ -646,6 +653,8 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 	}
 }
 
+// Lines starting with @ get replaced with the file contents.
+// @{variable} syntax is left alone so template expansion can handle it.
 func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)

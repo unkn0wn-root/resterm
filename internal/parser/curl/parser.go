@@ -22,6 +22,9 @@ func ParseCommand(command string) (*restfile.Request, error) {
 	return parseTokens(tokens)
 }
 
+// Shell-style tokenization with single quotes (literal), double quotes (escape-aware),
+// and backslash escaping. Single quotes disable escaping so \'doesn\'t terminate the quote.
+// Double quotes respect backslashes so you can have \"inside\" strings.
 func splitTokens(input string) ([]string, error) {
 	var args []string
 	var current strings.Builder

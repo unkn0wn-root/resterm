@@ -23,6 +23,9 @@ func NewResolver(providers ...Provider) *Resolver {
 	return &Resolver{providers: providers}
 }
 
+// First tries direct lookup across all providers.
+// If that fails and the name has a dot, tries to match a provider prefix -
+// so "production.api_key" looks for a provider labeled "production" then asks for "api_key".
 func (r *Resolver) Resolve(name string) (string, bool) {
 	trimmed := strings.TrimSpace(name)
 	if trimmed == "" {
@@ -130,6 +133,7 @@ type MapProvider struct {
 	label  string
 }
 
+// Keys get lowercased so lookups are case-insensitive
 func NewMapProvider(label string, values map[string]string) Provider {
 	normalized := make(map[string]string, len(values))
 	for k, v := range values {

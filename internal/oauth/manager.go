@@ -82,6 +82,9 @@ func NewManager(client *httpclient.Client) *Manager {
 	return mgr
 }
 
+// Deduplicates concurrent token requests for the same config.
+// If another goroutine is already fetching, we wait on their done channel
+// instead of hitting the auth server twice.
 func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpclient.Options) (Token, error) {
 	key := m.cacheKey(env, cfg)
 
@@ -376,6 +379,8 @@ func parseTokenResponse(body []byte) (Token, error) {
 	return token, nil
 }
 
+// Treats tokens expiring in the next 30 seconds as already expired
+// to avoid racing with the actual expiration.
 func (t Token) valid() bool {
 	if t.AccessToken == "" {
 		return false
