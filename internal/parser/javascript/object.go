@@ -135,6 +135,9 @@ func (l *literal) write(buf *strings.Builder, indent int) {
 	}
 }
 
+// Binary numbers get grouped with underscores in 4-bit chunks for readability.
+// 0b11110000 stays as-is but 0b111100001111 becomes 0b1111_0000_1111.
+// Hex and octal just strip existing separators without adding new ones.
 func formatNumberLiteral(text string) string {
 	if text == "" {
 		return text
@@ -809,6 +812,8 @@ func (l *lexer) consumeWord(word string) bool {
 	return true
 }
 
+// Numeric separators must have digits on both sides.
+// So 0b_1111 and 0b1111_ are invalid but 0b11_11 is fine.
 func (l *lexer) scanDigits(buf *strings.Builder, valid func(rune) bool) (int, error) {
 	count := 0
 	lastWasDigit := false

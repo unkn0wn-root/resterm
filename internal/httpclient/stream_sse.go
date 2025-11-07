@@ -221,6 +221,8 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	}, nil
 }
 
+// Idle timer watches for activity resets - each incoming byte triggers a reset.
+// The drain logic after Stop() handles the race where the timer fires just before we reset.
 func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SSEOptions) {
 	ctx := session.Context()
 	reader := bufio.NewReader(body)

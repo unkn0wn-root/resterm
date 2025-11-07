@@ -48,6 +48,8 @@ func parseSemver(v string) (semver, error) {
 	return semver{maj: vals[0], min: vals[1], patch: vals[2], pre: pre}, nil
 }
 
+// Stable releases sort higher than prereleases with the same major.minor.patch.
+// So 1.0.0 > 1.0.0-beta even though lexicographically that looks backwards.
 func (a semver) lt(b semver) bool {
 	if a.maj != b.maj {
 		return a.maj < b.maj

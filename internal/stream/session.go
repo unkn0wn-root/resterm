@@ -254,7 +254,7 @@ func (l *listener) emit(evt *Event) bool {
 				l.close()
 				return false
 			}
-		default: // DropOldest
+		default: // DropOldest - when buffer is full, try to discard one old event to make room
 			select {
 			case l.ch <- evt:
 				return true

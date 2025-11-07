@@ -301,6 +301,10 @@ func (rb *requestBuilder) parameterSample(param model.Parameter, kind schemaKind
 	}
 }
 
+// OpenAPI parameter serialization has tons of formats.
+// Arrays can be comma, space or pipe-separated.
+// Objects can use deepObject notation (name[key]=val) or key-value pairs.
+// "explode" means repeat the param name for each value vs encoding all values together.
 func (rb *requestBuilder) serializeParamValue(param model.Parameter, kind schemaKind, style string, explode bool, sample any) string {
 	switch kind {
 	case schemaArray:
@@ -764,6 +768,8 @@ func selectBaseURL(spec *model.Spec, preferred int) string {
 	return ""
 }
 
+// Picks client_credentials or password flow over the browser-based ones
+// since those need manual user interaction that can't be automated in a cli.
 func selectOAuthFlow(scheme model.SecurityScheme) *model.OAuthFlow {
 	if len(scheme.OAuthFlows) == 0 {
 		return nil
@@ -825,6 +831,9 @@ func selectResponseContentType(responses []model.Response) (string, bool) {
 	return selected, true
 }
 
+// 2xx responses score highest (200 gets 100, 299 gets 51).
+// Other numeric codes get 10, "default" gets 1.
+// Lower codes within 2xx range win so we prefer 200 over 201.
 func responseStatusScore(code string) int {
 	if code == "default" {
 		return 1
@@ -854,6 +863,8 @@ func buildQueryString(params []paramBinding) string {
 	return strings.Join(segments, "&")
 }
 
+// For "exploded" arrays/objects, the variable holds the pre-serialized query string
+// so we emit just the variable. Otherwise wrap it in name=value format.
 func serializeQueryBinding(binding paramBinding) []string {
 	name := strings.TrimSpace(binding.Param.Name)
 	if name == "" {

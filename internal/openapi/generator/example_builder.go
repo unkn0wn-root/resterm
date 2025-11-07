@@ -33,6 +33,9 @@ func (b *ExampleBuilder) FromSchema(ref *model.SchemaRef) (any, bool) {
 	return b.build(raw, 0)
 }
 
+// Depth limit prevents infinite recursion from circular schema references.
+// AllOf merges all schemas together since the result must satisfy all of them.
+// OneOf/AnyOf just pick the first option since we can't guess which variant to use.
 func (b *ExampleBuilder) build(ref *openapi3.SchemaRef, depth int) (any, bool) {
 	if ref == nil || ref.Value == nil {
 		return nil, false

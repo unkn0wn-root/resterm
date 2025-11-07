@@ -255,6 +255,8 @@ func stageBinary(ctx context.Context, c Client, res Result, path string, prog Pr
 	return verifyVersion(ctx, path, res.Info.Version)
 }
 
+// Windows can't replace a running executable, so we write it as .new
+// and rely on the startup code to swap them before relaunching.
 func commitBinary(tmpPath, exe string) (SwapStatus, error) {
 	if runtime.GOOS == "windows" {
 		dst := exe + ".new"

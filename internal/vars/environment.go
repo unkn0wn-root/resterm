@@ -52,6 +52,9 @@ func flattenEnv(value interface{}) map[string]string {
 	return result
 }
 
+// Recursively walks through JSON structure to build dot-notation paths.
+// Nested objects become "parent.child" and arrays become "parent[0]".
+// Makes deeply nested config accessible via simple string keys.
 func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
 	switch v := value.(type) {
 	case map[string]interface{}:

@@ -150,6 +150,8 @@ func EvaluateBudget(tl *Timeline, b Budget) BudgetReport {
 	return BudgetReport{Breaches: breaches}
 }
 
+// Multiple phases can have the same kind (e.g. multiple DNS lookups)
+// so we sum them up for budget checking.
 func aggregateDurations(tl *Timeline) map[PhaseKind]time.Duration {
 	out := make(map[PhaseKind]time.Duration, len(tl.Phases)+1)
 	for _, phase := range tl.Phases {

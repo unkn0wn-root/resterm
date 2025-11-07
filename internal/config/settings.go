@@ -27,6 +27,8 @@ type SettingsHandle struct {
 	Format SettingsFormat
 }
 
+// tries loading TOML first, then JSON, then returns empty settings if neither exists.
+// parse errors fail immediately but missing files just skip to the next format.
 func LoadSettings() (Settings, SettingsHandle, error) {
 	dir := Dir()
 	candidates := []SettingsHandle{
@@ -123,6 +125,8 @@ func SaveSettings(settings Settings, handle SettingsHandle) error {
 	return nil
 }
 
+// write to temp file then rename so readers never see partial/corrupt data.
+// rename is atomic on most filesystems so the settings file is always valid.
 func writeFileAtomic(path string, data []byte, perm fs.FileMode) error {
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".resterm-settings-*.tmp")

@@ -729,6 +729,8 @@ func normalizeTracePhaseName(name string) string {
 	}
 }
 
+// Splits on spaces but keeps quoted strings together.
+// Quotes themselves get stripped - "hello resterm" becomes a single field: hello resterm
 func splitAuthFields(input string) []string {
 	var fields []string
 	var current strings.Builder
@@ -932,6 +934,8 @@ func parseOptionTokens(input string) map[string]string {
 	return options
 }
 
+// Like splitAuthFields but handles backslash escapes.
+// A trailing backslash gets preserved if nothing follows it.
 func tokenizeOptionTokens(input string) []string {
 	var tokens []string
 	var current strings.Builder
