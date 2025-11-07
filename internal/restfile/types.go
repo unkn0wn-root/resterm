@@ -90,6 +90,7 @@ type RequestMetadata struct {
 	Captures              []CaptureSpec
 	Profile               *ProfileSpec
 	Trace                 *TraceSpec
+	Compare               *CompareSpec
 }
 
 type ProfileSpec struct {
@@ -107,6 +108,11 @@ type TraceBudget struct {
 	Total     time.Duration
 	Tolerance time.Duration
 	Phases    map[string]time.Duration
+}
+
+type CompareSpec struct {
+	Environments []string
+	Baseline     string
 }
 
 type CaptureScope int
@@ -188,6 +194,7 @@ type WebSocketStep struct {
 
 const (
 	HistoryMethodWorkflow = "WORKFLOW"
+	HistoryMethodCompare  = "COMPARE"
 )
 
 type Document struct {

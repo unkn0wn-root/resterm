@@ -3,6 +3,7 @@ package parser
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -81,6 +82,20 @@ type workflowBuilder struct {
 
 func newDocumentBuilder(doc *restfile.Document) *documentBuilder {
 	return &documentBuilder{doc: doc}
+}
+
+func (b *documentBuilder) addError(line int, message string) {
+	if b == nil || b.doc == nil {
+		return
+	}
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		return
+	}
+	b.doc.Errors = append(b.doc.Errors, restfile.ParseError{
+		Line:    line,
+		Message: msg,
+	})
 }
 
 func (b *documentBuilder) processLine(lineNumber int, line string) {
@@ -430,6 +445,20 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		if spec := parseTraceSpec(rest); spec != nil {
 			b.request.metadata.Trace = spec
 		}
+	case "compare":
+		if !b.ensureRequest(line) {
+			return
+		}
+		if b.request.metadata.Compare != nil {
+			b.addError(line, "@compare directive already defined for this request")
+			return
+		}
+		spec, err := parseCompareDirective(rest)
+		if err != nil {
+			b.addError(line, err.Error())
+			return
+		}
+		b.request.metadata.Compare = spec
 	}
 }
 
@@ -696,6 +725,65 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 		spec.Budgets.Phases = nil
 	}
 	return spec
+}
+
+func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
+	fields := splitAuthFields(rest)
+	envs := make([]string, 0, len(fields))
+	seen := make(map[string]struct{})
+	var baseline string
+
+	for _, field := range fields {
+		value := strings.TrimSpace(field)
+		if value == "" {
+			continue
+		}
+		if idx := strings.Index(value, "="); idx != -1 {
+			key := strings.ToLower(strings.TrimSpace(value[:idx]))
+			val := strings.TrimSpace(value[idx+1:])
+			switch key {
+			case "base", "baseline", "primary", "ref":
+				if val == "" {
+					return nil, fmt.Errorf("@compare baseline cannot be empty")
+				}
+				baseline = val
+			default:
+				return nil, fmt.Errorf("@compare unsupported option %q", key)
+			}
+			continue
+		}
+		lowered := strings.ToLower(value)
+		if _, exists := seen[lowered]; exists {
+			return nil, fmt.Errorf("@compare duplicate environment %q", value)
+		}
+		seen[lowered] = struct{}{}
+		envs = append(envs, value)
+	}
+
+	if len(envs) < 2 {
+		return nil, fmt.Errorf("@compare requires at least two environments")
+	}
+
+	if baseline == "" {
+		baseline = envs[0]
+	} else {
+		match := ""
+		for _, env := range envs {
+			if strings.EqualFold(env, baseline) {
+				match = env
+				break
+			}
+		}
+		if match == "" {
+			return nil, fmt.Errorf("@compare baseline %q must match one of the environments", baseline)
+		}
+		baseline = match
+	}
+
+	return &restfile.CompareSpec{
+		Environments: envs,
+		Baseline:     baseline,
+	}, nil
 }
 
 func parseDuration(value string) time.Duration {

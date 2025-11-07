@@ -63,7 +63,7 @@ func (m *Model) startProfileRun(doc *restfile.Document, req *restfile.Request, o
 	}
 	if req.GRPC != nil {
 		m.setStatusMessage(statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn})
-		return m.executeRequest(doc, req, options)
+		return m.executeRequest(doc, req, options, "")
 	}
 
 	spec := restfile.ProfileSpec{}
@@ -124,7 +124,7 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 	progressText := profileProgressLabel(state)
 	m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
 
-	cmd := m.executeRequest(state.doc, iterationReq, state.options)
+	cmd := m.executeRequest(state.doc, iterationReq, state.options, "")
 	return cmd
 }
 
@@ -244,7 +244,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 			cmds = append(cmds, cmd)
 		}
 	} else if msg.response != nil {
-		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr); cmd != nil {
+		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else {

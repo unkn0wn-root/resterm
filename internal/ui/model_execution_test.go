@@ -419,7 +419,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	}
 	doc.Requests = []*restfile.Request{req}
 
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions)
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "")
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -507,7 +507,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 	resolver := vars.NewResolver()
-	if err := model.ensureOAuth(req, resolver, httpclient.Options{}, time.Second); err != nil {
+	if err := model.ensureOAuth(req, resolver, httpclient.Options{}, "", time.Second); err != nil {
 		t.Fatalf("ensureOAuth: %v", err)
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
@@ -522,7 +522,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if err := model.ensureOAuth(req2, resolver, httpclient.Options{}, time.Second); err != nil {
+	if err := model.ensureOAuth(req2, resolver, httpclient.Options{}, "", time.Second); err != nil {
 		t.Fatalf("ensureOAuth second: %v", err)
 	}
 	if atomic.LoadInt32(&calls) != 1 {
@@ -547,7 +547,7 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 			"token_url": "https://auth.local/token",
 		}}},
 	}
-	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, time.Second); err != nil {
+	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "", time.Second); err != nil {
 		t.Fatalf("ensureOAuth with existing header: %v", err)
 	}
 	if atomic.LoadInt32(&called) != 0 {
@@ -566,6 +566,51 @@ func copyValues(src url.Values) url.Values {
 		dst[k] = cloned
 	}
 	return dst
+}
+
+func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
+	var requests int32
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		oauth:   oauth.NewManager(nil),
+		globals: newGlobalStore(),
+	}
+	model.oauth.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		atomic.AddInt32(&requests, 1)
+		return &httpclient.Response{
+			Status:     "200 OK",
+			StatusCode: 200,
+			Body:       []byte(`{"access_token":"token","token_type":"Bearer"}`),
+			Headers:    http.Header{},
+		}, nil
+	})
+
+	auth := &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
+		"token_url":     "https://auth.local/token",
+		"client_id":     "client",
+		"client_secret": "secret",
+		"scope":         "read",
+	}}
+	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+
+	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
+		t.Fatalf("ensureOAuth stage: %v", err)
+	}
+	req.Headers = nil
+	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
+		t.Fatalf("ensureOAuth stage cached: %v", err)
+	}
+	if atomic.LoadInt32(&requests) != 1 {
+		t.Fatalf("expected cached token for repeated stage env, got %d", requests)
+	}
+
+	req.Headers = nil
+	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "dev", time.Second); err != nil {
+		t.Fatalf("ensureOAuth dev: %v", err)
+	}
+	if atomic.LoadInt32(&requests) != 2 {
+		t.Fatalf("expected new token request when env changes, got %d", requests)
+	}
 }
 
 func TestApplyCapturesStoresValues(t *testing.T) {
@@ -596,9 +641,9 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		},
 	}
 
-	resolver := model.buildResolver(doc, req, nil)
+	resolver := model.buildResolver(doc, req, "", nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures); err != nil {
+	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
 	}
 
@@ -644,7 +689,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	if req.Variables[0].Name != "recentStatus" || req.Variables[0].Value != "200 OK" {
 		t.Fatalf("unexpected request variable %+v", req.Variables[0])
 	}
-	varsWithReq := model.collectVariables(doc, req)
+	varsWithReq := model.collectVariables(doc, req, "")
 	if varsWithReq["recentStatus"] != "200 OK" {
 		t.Fatalf("expected request capture to be available in collected vars, got %q", varsWithReq["recentStatus"])
 	}
@@ -663,9 +708,55 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	// simulate a fresh parse of the document (no baked-in variables)
 	freshDoc := &restfile.Document{Path: "./sample.http"}
-	vars := model.collectVariables(freshDoc, nil)
+	vars := model.collectVariables(freshDoc, nil, "")
 	if vars["lastTrace"] != "abc" {
 		t.Fatalf("expected file capture to be applied via runtime store, got %q", vars["lastTrace"])
+	}
+}
+
+func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
+	model := Model{
+		cfg:      Config{EnvironmentName: "dev"},
+		globals:  newGlobalStore(),
+		fileVars: newFileStore(),
+	}
+
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+	}
+
+	doc := &restfile.Document{Path: "./capture-env.http"}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{
+				{Scope: restfile.CaptureScopeGlobal, Name: "status", Expression: "{{response.status}}"},
+				{Scope: restfile.CaptureScopeFile, Name: "lastStatus", Expression: "{{response.status}}"},
+			},
+		},
+	}
+
+	var captures captureResult
+	if err := model.applyCaptures(doc, req, nil, resp, nil, &captures, "stage"); err != nil {
+		t.Fatalf("applyCaptures stage: %v", err)
+	}
+
+	if len(model.globals.snapshot("dev")) != 0 {
+		t.Fatalf("expected no globals in dev env after stage capture")
+	}
+	stageGlobals := model.globals.snapshot("stage")
+	if len(stageGlobals) != 1 {
+		t.Fatalf("expected one global in stage, got %d", len(stageGlobals))
+	}
+
+	devStore := model.fileVars.snapshot("dev", "./capture-env.http")
+	if len(devStore) != 0 {
+		t.Fatalf("expected no file captures in dev store")
+	}
+
+	stageStore := model.fileVars.snapshot("stage", "./capture-env.http")
+	if len(stageStore) != 1 {
+		t.Fatalf("expected one file capture in stage store, got %d", len(stageStore))
 	}
 }
 
@@ -689,7 +780,7 @@ func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
 		},
 	}
 	var captures captureResult
-	if err := model.applyCaptures(nil, req, nil, resp, stream, &captures); err != nil {
+	if err := model.applyCaptures(nil, req, nil, resp, stream, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 	if len(req.Variables) == 0 || req.Variables[len(req.Variables)-1].Value != "change" {
@@ -728,13 +819,13 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}
 
 	doc := &restfile.Document{Path: "./stream.http"}
-	resolver := model.buildResolver(doc, req, nil)
+	resolver := model.buildResolver(doc, req, "", nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures); err != nil {
+	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 
-	vars := model.collectVariables(doc, req)
+	vars := model.collectVariables(doc, req, "")
 	if vars["streamKind"] != "websocket" {
 		t.Fatalf("expected stream kind capture, got %q", vars["streamKind"])
 	}
@@ -857,7 +948,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 		t.Fatalf("expected single request")
 	}
 	req := doc.Requests[0]
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions)
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "")
 	if cmd == nil {
 		t.Fatalf("expected executeRequest command")
 	}

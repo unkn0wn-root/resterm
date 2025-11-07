@@ -63,6 +63,8 @@ func main() {
 		traceOTEndpoint          string
 		traceOTInsecure          bool
 		traceOTService           string
+		compareTargetsRaw        string
+		compareBaseline          string
 	)
 
 	telemetryCfg := telemetry.ConfigFromEnv(os.Getenv)
@@ -92,6 +94,8 @@ func main() {
 	flag.StringVar(&traceOTEndpoint, "trace-otel-endpoint", traceOTEndpoint, "OTLP collector endpoint used when @trace is enabled")
 	flag.BoolVar(&traceOTInsecure, "trace-otel-insecure", traceOTInsecure, "Disable TLS for OTLP trace export")
 	flag.StringVar(&traceOTService, "trace-otel-service", traceOTService, "Override service.name resource attribute for exported spans")
+	flag.StringVar(&compareTargetsRaw, "compare", "", "Default environments for manual compare runs (comma/space separated)")
+	flag.StringVar(&compareBaseline, "compare-base", "", "Baseline environment when --compare is used (defaults to first target)")
 	flag.Parse()
 
 	telemetryCfg.Endpoint = strings.TrimSpace(traceOTEndpoint)
@@ -282,6 +286,12 @@ func main() {
 		log.Printf("history load error: %v", err)
 	}
 
+	compareTargets, compareErr := parseCompareTargets(compareTargetsRaw)
+	if compareErr != nil {
+		log.Printf("invalid --compare value: %v", compareErr)
+	}
+	compareBaseline = strings.TrimSpace(compareBaseline)
+
 	settings, settingsHandle, err := config.LoadSettings()
 	if err != nil {
 		log.Printf("settings load error: %v", err)
@@ -342,6 +352,8 @@ func main() {
 		Version:             version,
 		UpdateClient:        upClient,
 		EnableUpdate:        updateEnabled,
+		CompareTargets:      compareTargets,
+		CompareBase:         compareBaseline,
 	})
 
 	program := tea.NewProgram(model, tea.WithAltScreen())
@@ -378,6 +390,40 @@ func loadEnvironment(explicit string, filePath string, workspace string) (vars.E
 		return nil, ""
 	}
 	return envs, path
+}
+
+func parseCompareTargets(raw string) ([]string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	replacer := strings.NewReplacer(",", " ", ";", " ")
+	clean := replacer.Replace(raw)
+	fields := strings.Fields(clean)
+	if len(fields) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]struct{}, len(fields))
+	targets := make([]string, 0, len(fields))
+	for _, field := range fields {
+		value := strings.TrimSpace(field)
+		if value == "" {
+			continue
+		}
+		lower := strings.ToLower(value)
+		if _, ok := seen[lower]; ok {
+			continue
+		}
+		seen[lower] = struct{}{}
+		targets = append(targets, value)
+	}
+
+	if len(targets) < 2 {
+		return nil, fmt.Errorf("expected at least two environments, got %d", len(targets))
+	}
+	return targets, nil
 }
 
 func executableChecksum() (string, error) {

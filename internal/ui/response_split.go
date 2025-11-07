@@ -35,6 +35,8 @@ type responseSnapshot struct {
 	traceData     *nettrace.Report
 	traceReport   timelineReport
 	traceSpec     *restfile.TraceSpec
+	environment   string
+	compareBundle *compareBundle
 }
 
 type responsePaneState struct {
@@ -441,6 +443,16 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 		snapshot.traceReport = report
 		content := renderTimeline(report, pane.viewport.Width)
 		return ensureTrailingNewline(content), tab
+	case responseTabCompare:
+		bundle := snapshot.compareBundle
+		if bundle == nil {
+			bundle = m.compareBundle
+		}
+		if bundle == nil {
+			return "Compare data unavailable.\n", tab
+		}
+		content := renderCompareBundle(bundle, m.compareFocusEnv(snapshot))
+		return ensureTrailingNewline(content), tab
 	case responseTabDiff:
 		baseTab := pane.ensureContentTab()
 		if diff, ok := m.computeDiffFor(id, baseTab); ok {
@@ -550,6 +562,16 @@ func snapshotTraceSpec(snapshot *responseSnapshot) *restfile.TraceSpec {
 		return nil
 	}
 	return snapshot.traceSpec
+}
+
+func (m *Model) compareFocusEnv(snapshot *responseSnapshot) string {
+	if trimmed := strings.TrimSpace(m.compareFocusedEnv); trimmed != "" {
+		return trimmed
+	}
+	if snapshot != nil {
+		return strings.TrimSpace(snapshot.environment)
+	}
+	return ""
 }
 
 func ensureTrailingNewline(content string) string {

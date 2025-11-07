@@ -2,6 +2,7 @@ package ui
 
 import (
 	"net/http"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestRedactHistoryTextMasksSecrets(t *testing.T) {
@@ -84,6 +86,152 @@ func TestFormatHistorySnippetHandlesStyleOnly(t *testing.T) {
 	}
 }
 
+func TestRecordCompareHistoryAppendsEntry(t *testing.T) {
+	tmp := t.TempDir()
+	store := history.NewStore(filepath.Join(tmp, "history.json"), 10)
+	model := New(Config{History: store})
+
+	req := &restfile.Request{
+		Method:   "GET",
+		URL:      "https://example.com/data",
+		Metadata: restfile.RequestMetadata{Name: "Sample"},
+	}
+
+	state := &compareState{
+		base:  cloneRequest(req),
+		spec:  &restfile.CompareSpec{Baseline: "dev"},
+		envs:  []string{"dev"},
+		index: 1,
+		label: "Compare sample",
+		results: []compareResult{
+			{
+				Environment: "dev",
+				Response: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body:       []byte(`{"ok":true}`),
+					Duration:   15 * time.Millisecond,
+				},
+				Request:     cloneRequest(req),
+				RequestText: "GET https://example.com/data\n",
+			},
+		},
+	}
+
+	model.recordCompareHistory(state)
+
+	entries := store.Entries()
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+	entry := entries[0]
+	if entry.Method != restfile.HistoryMethodCompare {
+		t.Fatalf("expected compare method, got %s", entry.Method)
+	}
+	if entry.Compare == nil || len(entry.Compare.Results) != 1 {
+		t.Fatalf("expected compare metadata, got %#v", entry.Compare)
+	}
+	if entry.Compare.Results[0].Environment != "dev" {
+		t.Fatalf("expected result env dev, got %s", entry.Compare.Results[0].Environment)
+	}
+}
+
+func TestLoadHistorySelectionComparePrefersFailure(t *testing.T) {
+	model := New(Config{})
+	entry := history.Entry{
+		ID:          "cmp-1",
+		Method:      restfile.HistoryMethodCompare,
+		URL:         "https://api.example.com/users",
+		RequestName: "CompareUsers",
+		ExecutedAt:  time.Now(),
+		RequestText: "GET https://api.example.com/users\n",
+		Compare: &history.CompareEntry{
+			Baseline: "dev",
+			Results: []history.CompareResult{
+				{
+					Environment: "dev",
+					Status:      "200 OK",
+					StatusCode:  200,
+					RequestText: "GET https://api.example.com/users\n",
+				},
+				{
+					Environment: "stage",
+					Status:      "500 Internal Server Error",
+					StatusCode:  500,
+					Error:       "internal error",
+					RequestText: "GET https://api.example.com/users\nX-Debug: fail\n",
+				},
+			},
+		},
+	}
+
+	model.historyEntries = []history.Entry{entry}
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries))
+	model.historyList.Select(0)
+
+	cmd := model.loadHistorySelection(false)
+	collectMsgs(cmd)
+
+	if env := model.cfg.EnvironmentName; env != "stage" {
+		t.Fatalf("expected environment to switch to failing env stage, got %s", env)
+	}
+	if !strings.Contains(model.editor.Value(), "X-Debug") {
+		t.Fatalf("expected stage request text to load, got %q", model.editor.Value())
+	}
+	if model.compareBundle == nil {
+		t.Fatalf("expected compare bundle to populate when loading compare history")
+	}
+}
+
+func TestLoadHistorySelectionCompareHydratesSnapshots(t *testing.T) {
+	model := New(Config{})
+	entry := history.Entry{
+		ID:          "cmp-2",
+		Method:      restfile.HistoryMethodCompare,
+		URL:         "https://api.example.com/items",
+		RequestName: "CompareItems",
+		ExecutedAt:  time.Now(),
+		RequestText: "GET https://api.example.com/items\n",
+		Compare: &history.CompareEntry{
+			Baseline: "dev",
+			Results: []history.CompareResult{
+				{Environment: "dev", Status: "200 OK", StatusCode: 200, BodySnippet: "{\n  \"value\": \"dev\"\n}"},
+				{Environment: "stage", Status: "500", StatusCode: 500, Error: "boom"},
+			},
+		},
+	}
+
+	model.historyEntries = []history.Entry{entry}
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries))
+	model.historyList.Select(0)
+
+	cmd := model.loadHistorySelection(false)
+	collectMsgs(cmd)
+
+	if model.compareBundle == nil {
+		t.Fatalf("expected compare bundle to be present")
+	}
+	if model.compareSelectedEnv != "stage" {
+		t.Fatalf("expected selected env to track failure, got %q", model.compareSelectedEnv)
+	}
+	if model.compareFocusedEnv != "stage" {
+		t.Fatalf("expected focused env to be stage, got %q", model.compareFocusedEnv)
+	}
+	if model.compareRowIndex != 1 {
+		t.Fatalf("expected compareRowIndex to point to stage row, got %d", model.compareRowIndex)
+	}
+	snap := model.compareSnapshot("stage")
+	if snap == nil {
+		t.Fatalf("expected snapshot stored for stage env")
+	}
+	if snap.compareBundle == nil {
+		t.Fatalf("expected snapshot to reference compare bundle")
+	}
+	if !strings.Contains(snap.pretty, "Error:") {
+		t.Fatalf("expected snapshot summary to include error text, got %q", snap.pretty)
+	}
+}
+
 func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 	model := New(Config{})
 	model.ready = true
@@ -102,7 +250,7 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 		EffectiveURL: "https://example.com",
 	}
 
-	cmd := model.consumeHTTPResponse(resp, nil, nil)
+	cmd := model.consumeHTTPResponse(resp, nil, nil, "")
 	if cmd == nil {
 		t.Fatalf("expected consumeHTTPResponse to return render command")
 	}
@@ -194,7 +342,7 @@ func TestToggleResponseSplitConfiguresSecondaryPane(t *testing.T) {
 		EffectiveURL: "https://example.com",
 	}
 
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp, nil, nil, ""))
 	if model.responseLatest == nil || !model.responseLatest.ready {
 		t.Fatalf("expected latest snapshot to be ready")
 	}
@@ -295,7 +443,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/one",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(first, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(first, nil, nil, ""))
 	if model.diffAvailable() {
 		t.Fatalf("diff should be unavailable before split")
 	}
@@ -314,7 +462,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/two",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(second, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(second, nil, nil, ""))
 	if !model.diffAvailable() {
 		t.Fatalf("expected diff to be available after second response")
 	}
@@ -352,7 +500,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/one",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, ""))
 
 	primary := model.pane(responsePanePrimary)
 	if primary == nil || primary.snapshot == nil || !strings.Contains(primary.snapshot.pretty, "first") {
@@ -373,7 +521,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/two",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, ""))
 
 	secondary := model.pane(responsePaneSecondary)
 	if secondary == nil || secondary.snapshot == nil || !strings.Contains(secondary.snapshot.pretty, "second") {
@@ -403,7 +551,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/a",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, ""))
 	primary := model.pane(responsePanePrimary)
 	firstSnapshot := primary.snapshot
 	if firstSnapshot == nil {
@@ -432,7 +580,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/b",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, ""))
 	if primary.snapshot != firstSnapshot {
 		t.Fatalf("expected pinned pane to retain original snapshot")
 	}

@@ -32,17 +32,10 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
 	cursorLine := currentCursorLine(m.editor)
-	req := findRequestAtLine(doc, cursorLine)
-	if req != nil && (cursorLine < req.LineRange.Start || cursorLine > req.LineRange.End) {
-		req = nil
-	}
+	req, _ := m.requestAtCursor(doc, content, cursorLine)
 	if req == nil {
-		if inline := buildInlineRequest(content, cursorLine); inline != nil {
-			req = inline
-		} else {
-			return func() tea.Msg {
-				return statusMsg{text: "No request at cursor", level: statusWarn}
-			}
+		return func() tea.Msg {
+			return statusMsg{text: "No request at cursor", level: statusWarn}
 		}
 	}
 
@@ -57,6 +50,13 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	options := m.cfg.HTTPOptions
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)
+	}
+	if spec := m.compareSpecForRequest(cloned); spec != nil {
+		if cloned.Metadata.Profile != nil {
+			m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"})
+			return nil
+		}
+		return m.startCompareRun(doc, cloned, spec, options)
 	}
 	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 		options.Trace = true
@@ -74,14 +74,63 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-	execCmd := m.executeRequest(doc, cloned, options)
+	execCmd := m.executeRequest(doc, cloned, options, "")
 	if tick := m.scheduleStatusPulse(); tick != nil {
 		return tea.Batch(execCmd, tick)
 	}
 	return execCmd
 }
 
-func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, extras ...map[string]string) tea.Cmd {
+func (m *Model) startConfigCompareFromEditor() tea.Cmd {
+	content := m.editor.Value()
+	doc := parser.Parse(m.currentFile, []byte(content))
+	cursorLine := currentCursorLine(m.editor)
+	req, _ := m.requestAtCursor(doc, content, cursorLine)
+	if req == nil {
+		m.setStatusMessage(statusMsg{level: statusWarn, text: "No request at cursor"})
+		return nil
+	}
+	if req.Metadata.Profile != nil {
+		m.setStatusMessage(statusMsg{level: statusWarn, text: "@profile cannot run during compare"})
+		return nil
+	}
+
+	spec := buildConfigCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase)
+	if spec == nil && req.Metadata.Compare != nil {
+		spec = cloneCompareSpec(req.Metadata.Compare)
+	}
+	if spec == nil {
+		m.setStatusMessage(statusMsg{
+			level: statusWarn,
+			text:  "No compare targets configured. Use --compare or add @compare.",
+		})
+		return nil
+	}
+
+	m.doc = doc
+	m.syncRequestList(doc)
+	m.setActiveRequest(req)
+
+	cloned := cloneRequest(req)
+	m.currentRequest = cloned
+	m.testResults = nil
+	m.scriptError = nil
+
+	options := m.cfg.HTTPOptions
+	if options.BaseDir == "" && m.currentFile != "" {
+		options.BaseDir = filepath.Dir(m.currentFile)
+	}
+	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
+		options.Trace = true
+		if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
+			options.TraceBudget = &budget
+		}
+	}
+
+	return m.startCompareRun(doc, cloned, spec, options)
+}
+
+func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, envOverride string, extras ...map[string]string) tea.Cmd {
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
 		options.Trace = true
 		if budget, ok := traceutil.BudgetFromSpec(req.Metadata.Trace); ok {
@@ -90,8 +139,8 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 	}
 	client := m.client
 	runner := m.scriptRunner
-	envName := m.cfg.EnvironmentName
-	baseVars := m.collectVariables(doc, req)
+	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
+	baseVars := m.collectVariables(doc, req, envName)
 	if len(extras) > 0 {
 		for _, extra := range extras {
 			for key, value := range extra {
@@ -105,7 +154,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 	return func() tea.Msg {
 		preVars := cloneStringMap(baseVars)
-		preGlobals := m.collectGlobalValues(doc)
+		preGlobals := m.collectGlobalValues(doc, envName)
 		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
 			Request:   req,
 			Variables: preVars,
@@ -120,7 +169,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			return responseMsg{err: err, executed: req}
 		}
 
-		m.applyGlobalMutations(preResult.Globals)
+		m.applyGlobalMutations(preResult.Globals, envName)
 
 		scriptVars := cloneStringMap(preResult.Variables)
 		resolverExtras := make([]map[string]string, 0, len(extras)+1)
@@ -132,9 +181,9 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 				resolverExtras = append(resolverExtras, extra)
 			}
 		}
-		resolver := m.buildResolver(doc, req, resolverExtras...)
+		resolver := m.buildResolver(doc, req, envName, resolverExtras...)
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
-		if err := m.ensureOAuth(req, resolver, options, effectiveTimeout); err != nil {
+		if err := m.ensureOAuth(req, resolver, options, envName, effectiveTimeout); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
@@ -187,20 +236,20 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 			respForScripts := grpcScriptResponse(req, grpcResp)
 			var captures captureResult
-			if err := m.applyCaptures(doc, req, resolver, respForScripts, nil, &captures); err != nil {
+			if err := m.applyCaptures(doc, req, resolver, respForScripts, nil, &captures, envName); err != nil {
 				return responseMsg{err: err, executed: req}
 			}
 
-			updatedVars := m.collectVariables(doc, req)
+			updatedVars := m.collectVariables(doc, req, envName)
 			testVars := mergeVariableMaps(updatedVars, scriptVars)
-			testGlobals := m.collectGlobalValues(doc)
+			testGlobals := m.collectGlobalValues(doc, envName)
 			tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 				Response:  respForScripts,
 				Variables: testVars,
 				Globals:   testGlobals,
 				BaseDir:   options.BaseDir,
 			})
-			m.applyGlobalMutations(globalChanges)
+			m.applyGlobalMutations(globalChanges, envName)
 
 			return responseMsg{
 				grpc:        grpcResp,
@@ -265,13 +314,13 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 		respForScripts := httpScriptResponse(response)
 		var captures captureResult
-		if err := m.applyCaptures(doc, req, resolver, respForScripts, streamInfo, &captures); err != nil {
+		if err := m.applyCaptures(doc, req, resolver, respForScripts, streamInfo, &captures, envName); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
-		updatedVars := m.collectVariables(doc, req)
+		updatedVars := m.collectVariables(doc, req, envName)
 		testVars := mergeVariableMaps(updatedVars, scriptVars)
-		testGlobals := m.collectGlobalValues(doc)
+		testGlobals := m.collectGlobalValues(doc, envName)
 		traceInput := scripts.NewTraceInput(response.Timeline, req.Metadata.Trace)
 		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 			Response:  respForScripts,
@@ -281,7 +330,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			Stream:    streamInfo,
 			Trace:     traceInput,
 		})
-		m.applyGlobalMutations(globalChanges)
+		m.applyGlobalMutations(globalChanges, envName)
 
 		return responseMsg{
 			response:    response,
@@ -458,7 +507,8 @@ func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Durat
 	return base
 }
 
-func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, extras ...map[string]string) *vars.Resolver {
+func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, envName string, extras ...map[string]string) *vars.Resolver {
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
 	if doc != nil && len(doc.Constants) > 0 {
@@ -486,7 +536,7 @@ func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, ext
 	}
 
 	if m.globals != nil {
-		if snapshot := m.globals.snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
+		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {
 				name := entry.Name
@@ -515,27 +565,17 @@ func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, ext
 			fileVars[v.Name] = v.Value
 		}
 	}
-	m.mergeFileRuntimeVars(fileVars, doc)
+	m.mergeFileRuntimeVars(fileVars, doc, resolvedEnv)
 	if len(fileVars) > 0 {
 		providers = append(providers, vars.NewMapProvider("file", fileVars))
 	}
 
-	if envValues := m.environmentValues(); len(envValues) > 0 {
+	if envValues := vars.EnvValues(m.cfg.EnvironmentSet, resolvedEnv); len(envValues) > 0 {
 		providers = append(providers, vars.NewMapProvider("environment", envValues))
 	}
 
 	providers = append(providers, vars.EnvProvider{})
 	return vars.NewResolver(providers...)
-}
-
-func (m *Model) environmentValues() map[string]string {
-	if m.cfg.EnvironmentSet == nil || m.cfg.EnvironmentName == "" {
-		return nil
-	}
-	if env, ok := m.cfg.EnvironmentSet[m.cfg.EnvironmentName]; ok {
-		return env
-	}
-	return nil
 }
 
 func (m *Model) documentRuntimePath(doc *restfile.Document) string {
@@ -545,12 +585,13 @@ func (m *Model) documentRuntimePath(doc *restfile.Document) string {
 	return m.currentFile
 }
 
-func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Document) {
+func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Document, envName string) {
 	if target == nil || m.fileVars == nil {
 		return
 	}
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	path := m.documentRuntimePath(doc)
-	if snapshot := m.fileVars.snapshot(m.cfg.EnvironmentName, path); len(snapshot) > 0 {
+	if snapshot := m.fileVars.snapshot(resolvedEnv, path); len(snapshot) > 0 {
 		for key, entry := range snapshot {
 			name := strings.TrimSpace(entry.Name)
 			if name == "" {
@@ -561,42 +602,44 @@ func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Doc
 	}
 }
 
-func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request) map[string]string {
-	vars := make(map[string]string)
-	if env := m.environmentValues(); env != nil {
+func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request, envName string) map[string]string {
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	result := make(map[string]string)
+	if env := vars.EnvValues(m.cfg.EnvironmentSet, resolvedEnv); env != nil {
 		for k, v := range env {
-			vars[k] = v
+			result[k] = v
 		}
 	}
 	if doc != nil {
 		for _, v := range doc.Variables {
-			vars[v.Name] = v.Value
+			result[v.Name] = v.Value
 		}
 		for _, v := range doc.Globals {
-			vars[v.Name] = v.Value
+			result[v.Name] = v.Value
 		}
 	}
-	m.mergeFileRuntimeVars(vars, doc)
+	m.mergeFileRuntimeVars(result, doc, resolvedEnv)
 	if m.globals != nil {
-		if snapshot := m.globals.snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
+		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			for key, entry := range snapshot {
 				name := entry.Name
 				if strings.TrimSpace(name) == "" {
 					name = key
 				}
-				vars[name] = entry.Value
+				result[name] = entry.Value
 			}
 		}
 	}
 	if req != nil {
 		for _, v := range req.Variables {
-			vars[v.Name] = v.Value
+			result[v.Name] = v.Value
 		}
 	}
-	return vars
+	return result
 }
 
-func (m *Model) collectGlobalValues(doc *restfile.Document) map[string]scripts.GlobalValue {
+func (m *Model) collectGlobalValues(doc *restfile.Document, envName string) map[string]scripts.GlobalValue {
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	globals := make(map[string]scripts.GlobalValue)
 	if doc != nil {
 		for _, v := range doc.Globals {
@@ -608,7 +651,7 @@ func (m *Model) collectGlobalValues(doc *restfile.Document) map[string]scripts.G
 		}
 	}
 	if m.globals != nil {
-		if snapshot := m.globals.snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
+		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			for key, entry := range snapshot {
 				name := strings.TrimSpace(entry.Name)
 				if name == "" {
@@ -624,11 +667,11 @@ func (m *Model) collectGlobalValues(doc *restfile.Document) map[string]scripts.G
 	return globals
 }
 
-func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue) {
+func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue, envName string) {
 	if len(changes) == 0 || m.globals == nil {
 		return
 	}
-	env := m.cfg.EnvironmentName
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	for _, change := range changes {
 		name := strings.TrimSpace(change.Name)
 		if name == "" {
@@ -763,13 +806,14 @@ func (r *captureResult) addFile(name, value string, secret bool) {
 	r.fileVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeFile}
 }
 
-func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *scripts.Response, stream *scripts.StreamInfo, result *captureResult) error {
+func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *scripts.Response, stream *scripts.StreamInfo, result *captureResult, envName string) error {
 	if req == nil || resp == nil {
 		return nil
 	}
 	if len(req.Metadata.Captures) == 0 {
 		return nil
 	}
+	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	ctx := newCaptureContext(resp, stream)
 	for _, capture := range req.Metadata.Captures {
 		value, err := ctx.evaluate(capture.Expression, resolver)
@@ -791,14 +835,14 @@ func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, res
 			}
 		case restfile.CaptureScopeGlobal:
 			if m.globals != nil {
-				m.globals.set(m.cfg.EnvironmentName, capture.Name, value, capture.Secret)
+				m.globals.set(envKey, capture.Name, value, capture.Secret)
 			}
 		}
 	}
 	if result != nil && len(result.fileVars) > 0 && m.fileVars != nil {
 		path := m.documentRuntimePath(doc)
 		for _, entry := range result.fileVars {
-			m.fileVars.set(m.cfg.EnvironmentName, path, entry.Name, entry.Value, entry.Secret)
+			m.fileVars.set(envKey, path, entry.Name, entry.Value, entry.Secret)
 		}
 	}
 	return nil
@@ -1118,7 +1162,7 @@ func upsertVariable(list *[]restfile.Variable, scope restfile.VariableScope, nam
 	*list = append(vars, restfile.Variable{Name: name, Value: value, Scope: scope, Secret: secret})
 }
 
-func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts httpclient.Options, timeout time.Duration) error {
+func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts httpclient.Options, envName string, timeout time.Duration) error {
 	if req == nil || req.Metadata.Auth == nil {
 		return nil
 	}
@@ -1144,7 +1188,8 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
-	token, err := m.oauth.Token(ctx, m.cfg.EnvironmentName, cfg, opts)
+	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	token, err := m.oauth.Token(ctx, envKey, cfg, opts)
 	if err != nil {
 		return errdef.Wrap(errdef.CodeHTTP, err, "fetch oauth token")
 	}
@@ -1477,6 +1522,13 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 	clone.Metadata.Tags = append([]string(nil), req.Metadata.Tags...)
 	clone.Metadata.Scripts = append([]restfile.ScriptBlock(nil), req.Metadata.Scripts...)
 	clone.Metadata.Captures = append([]restfile.CaptureSpec(nil), req.Metadata.Captures...)
+	if req.Metadata.Compare != nil {
+		spec := *req.Metadata.Compare
+		if len(spec.Environments) > 0 {
+			spec.Environments = append([]string(nil), spec.Environments...)
+		}
+		clone.Metadata.Compare = &spec
+	}
 	if req.Body.GraphQL != nil {
 		gql := *req.Body.GraphQL
 		clone.Body.GraphQL = &gql
@@ -1511,6 +1563,23 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 		clone.WebSocket = &wsCopy
 	}
 	return &clone
+}
+
+func (m *Model) requestAtCursor(doc *restfile.Document, content string, cursorLine int) (*restfile.Request, bool) {
+	var req *restfile.Request
+	if doc != nil {
+		req = findRequestAtLine(doc, cursorLine)
+		if req != nil && (cursorLine < req.LineRange.Start || cursorLine > req.LineRange.End) {
+			req = nil
+		}
+		if req != nil {
+			return req, false
+		}
+	}
+	if inline := buildInlineRequest(content, cursorLine); inline != nil {
+		return inline, true
+	}
+	return nil, false
 }
 
 func cloneHeader(h http.Header) http.Header {

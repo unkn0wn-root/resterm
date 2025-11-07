@@ -50,6 +50,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
   - [Quick Install](#quick-install)
   - [Manual Installation](#manual-installation)
 - [Update](#update)
+- [Compare Runs](#compare-runs)
 - [Workflows](#workflows)
 - [Tracing & Timeline](#tracing--timeline)
 - [OpenAPI imports](#openapi-imports)
@@ -70,6 +71,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 - **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
+- **Multi-environment compare** via `@compare` directives or the global `--compare` flag + `g+c` shortcut so you can blast the same request across dev/stage/prod, review the Compare tab, and persist bundled history entries.
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Tracing and Timeline** with `@trace` to enable request tracing.
@@ -150,7 +152,7 @@ The first command reports whether a newer release is available; the second downl
 2. ... or launch Resterm: `resterm --workspace path/to/project` (or if your .http/.rest file is in the same dir. - just type `resterm` and it will be autodiscovered).
 3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane. If you don't have any .http file, just switch to the editor (`Tab`) and type `https://<some_url_dot_something>` and press `Ctrl+Enter`.
 4. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), adjust the focused pane layout with `g+h` / `g+l` (sidebar width when the left pane is focused, editor/response split otherwise), and toggle the response pane between inline and stacked with `g+v` / `g+s`. Use `g+1`, `g+2`, and `g+3` to minimize/restore the sidebar, editor, and response panes respectively, and `g+z` / `g+Z` to zoom the focused pane and clear the zoom.
-5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls.
+5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls. Press `g+c` at any time to run a compare sweep using the global `--compare` targets (or per-request `@compare` block) and review the results in the Compare tab/history. Inside the Compare tab use ↑/↓ (or PgUp/PgDn/Home/End) to move between environments and press `Enter` to load the highlighted environment into the primary pane while the baseline remains in the secondary pane; the Diff tab then shows “selected ↔ baseline”.
 
 A minimal request file:
 
@@ -167,7 +169,7 @@ GET https://httpbin.org/bearer
 Accept: application/json
 ```
 
-### Inline curl import
+## Inline curl import
 
 Drop a curl command into the editor and press `Ctrl+Enter` anywhere inside to turn it into a structured request. Resterm understands common flags (`-X`, `-H`, `--data*`, `--json`, `--url`, `--user`, `--compressed`, `-F/--form`, etc.), merges repeated data segments, and respects multipart uploads.
 
@@ -187,6 +189,18 @@ with multiline value' \
 
 If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically. Resterm loads the file attachment, preserves multiline form fields, and applies compression/auth headers without extra tweaks.
 
+## Compare Runs
+
+> Try `_examples/compare.http` to see `@compare` directives and the `g+c` shortcut in action (pair it with `resterm --compare dev,stage,prod` for instant multi-environment sweeps).
+
+Modern API work rarely stops at a single environment, so Resterm bakes in a compare workflow that takes seconds to use:
+
+1. Add `# @compare dev stage prod base=stage` to any request (or launch the app with `--compare dev,stage,prod --compare-base stage`).
+2. Press `g+c` (or `Enter` if you mapped the command) to send the current request to every listed environment. Resterm flips into a split view automatically so you can watch progress live.
+3. When the run finishes, move to the Compare tab and use the arrow keys (PgUp/PgDn/Home/End work too) to highlight any environment. Press `Enter` and the primary pane shows that environment, the secondary pane pins the baseline and you land in the Diff tab so Pretty/Raw/Headers all reflect “selected ↔ baseline.”
+4. Loading a compare entry from History gives the same experience even if you are offline. Resterm rehydrates the snapshots so you can keep auditing deltas without rerunning requests.
+
+No extra dashboards, no vendor lock-in - just a keyboard first way to spot environment regressions faster than juggling multiple tabs.
 
 ## Workflows
 

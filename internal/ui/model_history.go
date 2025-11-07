@@ -24,6 +24,11 @@ const responseLoadingTickInterval = 200 * time.Millisecond
 type responseLoadingTickMsg struct{}
 
 func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
+	if state := m.compareRun; state != nil {
+		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
+			return m.handleCompareResponse(msg)
+		}
+	}
 	if state := m.workflowRun; state != nil {
 		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
 			return m.handleWorkflowResponse(msg)
@@ -45,7 +50,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		} else {
 			m.lastError = nil
 		}
-		cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed)
+		cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment)
 		m.recordGRPCHistory(msg.grpc, msg.executed, msg.requestText, msg.environment)
 		return cmd
 	}
@@ -65,7 +70,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		return cmd
 	}
 
-	cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr)
+	cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment)
 	m.recordHTTPHistory(msg.response, msg.executed, msg.requestText, msg.environment)
 	return cmd
 }
@@ -162,7 +167,7 @@ func requestErrorNote(code errdef.Code) string {
 	}
 }
 
-func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) tea.Cmd {
+func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error, environment string) tea.Cmd {
 	m.lastGRPC = nil
 	m.lastResponse = resp
 
@@ -252,7 +257,7 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel})
 
 	token := nextResponseRenderToken()
-	snapshot := &responseSnapshot{id: token}
+	snapshot := &responseSnapshot{id: token, environment: environment}
 	m.responseRenderToken = token
 	m.responsePending = snapshot
 	m.responseLatest = snapshot
@@ -392,7 +397,7 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 	return m.scheduleResponseLoadingTick()
 }
 
-func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.TestResult, scriptErr error, req *restfile.Request) tea.Cmd {
+func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.TestResult, scriptErr error, req *restfile.Request, environment string) tea.Cmd {
 	m.lastResponse = nil
 	m.lastGRPC = resp
 	m.responseLoading = false
@@ -448,10 +453,11 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 		statusLine += " (" + resp.StatusMessage + ")"
 	}
 	snapshot := &responseSnapshot{
-		pretty:  joinSections(statusLine, body),
-		raw:     joinSections(statusLine, body),
-		headers: joinSections(statusLine, headersContent),
-		ready:   true,
+		pretty:      joinSections(statusLine, body),
+		raw:         joinSections(statusLine, body),
+		headers:     joinSections(statusLine, headersContent),
+		ready:       true,
+		environment: environment,
 	}
 	m.responseLatest = snapshot
 	m.responsePending = nil
@@ -577,6 +583,131 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	m.syncHistory()
 }
 
+func (m *Model) recordCompareHistory(state *compareState) {
+	if m.historyStore == nil || state == nil || len(state.results) == 0 {
+		return
+	}
+
+	baseReq := state.base
+	if baseReq == nil {
+		for _, res := range state.results {
+			if res.Request != nil {
+				baseReq = res.Request
+				break
+			}
+		}
+	}
+	if baseReq == nil {
+		return
+	}
+
+	entry := history.Entry{
+		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ExecutedAt:  time.Now(),
+		RequestName: requestIdentifier(baseReq),
+		Method:      restfile.HistoryMethodCompare,
+		URL:         baseReq.URL,
+		Description: strings.TrimSpace(baseReq.Metadata.Description),
+		Tags:        normalizedTags(baseReq.Metadata.Tags),
+		Status:      state.progressSummary(),
+		RequestText: renderRequestText(baseReq),
+		Compare:     &history.CompareEntry{},
+	}
+	if state.spec != nil {
+		entry.Compare.Baseline = state.spec.Baseline
+	}
+
+	var totalDur time.Duration
+	results := make([]history.CompareResult, 0, len(state.results))
+	for _, res := range state.results {
+		resultEntry := m.buildCompareHistoryResult(res)
+		if resultEntry.Duration > 0 {
+			totalDur += resultEntry.Duration
+		}
+		results = append(results, resultEntry)
+	}
+	entry.Compare.Results = results
+	entry.Duration = totalDur
+	if entry.Status == "" {
+		entry.Status = fmt.Sprintf("Compare %d env", len(results))
+	}
+
+	if err := m.historyStore.Append(entry); err != nil {
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+		return
+	}
+	m.historySelectedID = entry.ID
+	m.syncHistory()
+}
+
+func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareResult {
+	env := strings.TrimSpace(result.Environment)
+	status, _ := compareRowStatus(&result)
+	entry := history.CompareResult{
+		Environment: env,
+		Status:      status,
+		Duration:    compareRowDuration(&result),
+		RequestText: strings.TrimSpace(result.RequestText),
+	}
+
+	req := result.Request
+	if req != nil && strings.TrimSpace(entry.RequestText) == "" {
+		entry.RequestText = renderRequestText(req)
+	}
+	if req != nil {
+		secrets := m.secretValuesForEnvironment(env, req)
+		maskHeaders := !req.Metadata.AllowSensitiveHeaders
+		entry.RequestText = redactHistoryText(entry.RequestText, secrets, maskHeaders)
+	}
+
+	switch {
+	case result.Err != nil:
+		entry.Error = errdef.Message(result.Err)
+		entry.BodySnippet = entry.Error
+		entry.StatusCode = 0
+	case result.Response != nil:
+		req := result.Request
+		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, env, m)
+		entry.StatusCode = result.Response.StatusCode
+	case result.GRPC != nil:
+		req := result.Request
+		entry.BodySnippet = buildCompareGRPCSnippet(result.GRPC, req, env, m)
+		entry.StatusCode = int(result.GRPC.StatusCode)
+	default:
+		entry.BodySnippet = "No response captured"
+		entry.StatusCode = 0
+	}
+
+	const limit = 2000
+	if len(entry.BodySnippet) > limit {
+		entry.BodySnippet = entry.BodySnippet[:limit]
+	}
+	return entry
+}
+
+func buildCompareHTTPSnippet(resp *httpclient.Response, req *restfile.Request, env string, m *Model) string {
+	if resp == nil {
+		return ""
+	}
+	if req != nil && req.Metadata.NoLog {
+		return "<body suppressed>"
+	}
+	secrets := m.secretValuesForEnvironment(env, req)
+	snippet := string(resp.Body)
+	return redactHistoryText(snippet, secrets, false)
+}
+
+func buildCompareGRPCSnippet(resp *grpcclient.Response, req *restfile.Request, env string, m *Model) string {
+	if resp == nil {
+		return ""
+	}
+	if req != nil && req.Metadata.NoLog {
+		return "<body suppressed>"
+	}
+	secrets := m.secretValuesForEnvironment(env, req)
+	return redactHistoryText(resp.Message, secrets, false)
+}
+
 func (m *Model) secretValuesForRedaction(req *restfile.Request) []string {
 	values := make(map[string]struct{})
 	add := func(value string) {
@@ -640,6 +771,17 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request) []string {
 	return secrets
 }
 
+func (m *Model) secretValuesForEnvironment(env string, req *restfile.Request) []string {
+	if strings.TrimSpace(env) == "" {
+		return m.secretValuesForRedaction(req)
+	}
+	prev := m.cfg.EnvironmentName
+	m.cfg.EnvironmentName = env
+	values := m.secretValuesForRedaction(req)
+	m.cfg.EnvironmentName = prev
+	return values
+}
+
 func redactHistoryText(text string, secrets []string, maskHeaders bool) string {
 	trimmed := strings.TrimSpace(text)
 	if trimmed == "" && len(secrets) == 0 {
@@ -694,6 +836,160 @@ func redactSensitiveHeaders(text string) string {
 		return text
 	}
 	return strings.Join(lines, "\n")
+}
+
+func selectCompareHistoryResult(entry history.Entry) *history.CompareResult {
+	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
+		return nil
+	}
+	for idx := range entry.Compare.Results {
+		res := &entry.Compare.Results[idx]
+		if res == nil {
+			continue
+		}
+		if res.Error != "" || res.StatusCode >= 400 {
+			return res
+		}
+	}
+	if baseline := strings.TrimSpace(entry.Compare.Baseline); baseline != "" {
+		for idx := range entry.Compare.Results {
+			res := &entry.Compare.Results[idx]
+			if res == nil {
+				continue
+			}
+			if strings.EqualFold(res.Environment, baseline) {
+				return res
+			}
+		}
+	}
+	return &entry.Compare.Results[0]
+}
+
+func bundleFromHistory(entry history.Entry) *compareBundle {
+	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
+		return nil
+	}
+	bundle := &compareBundle{Baseline: entry.Compare.Baseline}
+	rows := make([]compareRow, 0, len(entry.Compare.Results))
+	for idx := range entry.Compare.Results {
+		res := entry.Compare.Results[idx]
+		code := "-"
+		if res.StatusCode > 0 {
+			code = fmt.Sprintf("%d", res.StatusCode)
+		}
+		summary := strings.TrimSpace(res.Error)
+		if summary == "" {
+			summary = strings.TrimSpace(res.BodySnippet)
+		}
+		if summary == "" {
+			summary = strings.TrimSpace(res.Status)
+		}
+		if summary == "" {
+			summary = "n/a"
+		}
+		row := compareRow{
+			Result:   &compareResult{Environment: res.Environment},
+			Status:   res.Status,
+			Code:     code,
+			Duration: res.Duration,
+			Summary:  condense(summary, 80),
+		}
+		rows = append(rows, row)
+	}
+	bundle.Rows = rows
+	return bundle
+}
+
+func (m *Model) populateCompareSnapshotsFromHistory(entry history.Entry, bundle *compareBundle, preferredEnv string) string {
+	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
+		return strings.TrimSpace(preferredEnv)
+	}
+	selected := strings.TrimSpace(preferredEnv)
+	for idx := range entry.Compare.Results {
+		res := entry.Compare.Results[idx]
+		snap := buildHistoryCompareSnapshot(res, bundle)
+		if snap == nil {
+			continue
+		}
+		env := strings.TrimSpace(res.Environment)
+		m.setCompareSnapshot(env, snap)
+		if selected == "" {
+			selected = env
+		}
+	}
+	return selected
+}
+
+func buildHistoryCompareSnapshot(res history.CompareResult, bundle *compareBundle) *responseSnapshot {
+	env := strings.TrimSpace(res.Environment)
+	if env == "" {
+		return nil
+	}
+	summary := formatHistoryCompareSummary(env, res)
+	headers := formatHistoryCompareHeaders(env, res)
+	return &responseSnapshot{
+		id:            nextResponseRenderToken(),
+		pretty:        ensureTrailingNewline(summary),
+		raw:           ensureTrailingNewline(summary),
+		headers:       ensureTrailingNewline(headers),
+		ready:         true,
+		environment:   env,
+		compareBundle: bundle,
+	}
+}
+
+func formatHistoryCompareSummary(env string, res history.CompareResult) string {
+	lines := []string{fmt.Sprintf("Environment: %s", env)}
+	if status := historyResultStatus(res); status != "" {
+		lines = append(lines, fmt.Sprintf("Status: %s", status))
+	}
+	if res.Duration > 0 {
+		lines = append(lines, fmt.Sprintf("Duration: %s", formatDurationShort(res.Duration)))
+	}
+	if errText := strings.TrimSpace(res.Error); errText != "" {
+		lines = append(lines, "", "Error:", errText)
+	}
+	if body := strings.TrimSpace(res.BodySnippet); body != "" {
+		lines = append(lines, "", body)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n")
+}
+
+func formatHistoryCompareHeaders(env string, res history.CompareResult) string {
+	lines := []string{fmt.Sprintf("Environment: %s", env)}
+	if status := historyResultStatus(res); status != "" {
+		lines = append(lines, fmt.Sprintf("Status: %s", status))
+	}
+	if res.Duration > 0 {
+		lines = append(lines, fmt.Sprintf("Duration: %s", formatDurationShort(res.Duration)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func historyResultStatus(res history.CompareResult) string {
+	status := strings.TrimSpace(res.Status)
+	code := ""
+	if res.StatusCode > 0 {
+		code = fmt.Sprintf("%d", res.StatusCode)
+	}
+	switch {
+	case status != "" && code != "":
+		if strings.Contains(status, code) {
+			return status
+		}
+		return fmt.Sprintf("%s (%s)", status, code)
+	case status != "":
+		return status
+	case code != "":
+		return fmt.Sprintf("Code %s", code)
+	case strings.TrimSpace(res.Error) != "":
+		return "Error"
+	default:
+		return ""
+	}
 }
 
 func (m *Model) syncHistory() {
@@ -1122,20 +1418,37 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		return nil
 	}
 	entry := item.entry
-	if entry.RequestText == "" {
+	requestText := entry.RequestText
+	targetEnv := entry.Environment
+	var compareBundle *compareBundle
+	if entry.Compare != nil {
+		if selected := selectCompareHistoryResult(entry); selected != nil {
+			if strings.TrimSpace(selected.RequestText) != "" {
+				requestText = selected.RequestText
+			}
+			if strings.TrimSpace(selected.Environment) != "" {
+				targetEnv = selected.Environment
+			}
+		}
+		if strings.TrimSpace(requestText) == "" {
+			requestText = entry.RequestText
+		}
+		compareBundle = bundleFromHistory(entry)
+	}
+	if strings.TrimSpace(requestText) == "" {
 		m.setStatusMessage(statusMsg{text: "History entry missing request payload", level: statusWarn})
 		return nil
 	}
 
-	doc := parser.Parse(m.currentFile, []byte(entry.RequestText))
+	doc := parser.Parse(m.currentFile, []byte(requestText))
 	if len(doc.Requests) == 0 {
 		m.setStatusMessage(statusMsg{text: "Unable to parse stored request", level: statusError})
 		return nil
 	}
 
 	docReq := doc.Requests[0]
-	if entry.Environment != "" {
-		m.cfg.EnvironmentName = entry.Environment
+	if targetEnv != "" {
+		m.cfg.EnvironmentName = targetEnv
 	}
 
 	options := m.cfg.HTTPOptions
@@ -1149,7 +1462,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 
 	req := cloneRequest(docReq)
 	m.currentRequest = req
-	m.editor.SetValue(entry.RequestText)
+	m.editor.SetValue(requestText)
 	m.editor.SetCursor(0)
 	m.testResults = nil
 	m.scriptError = nil
@@ -1164,12 +1477,49 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 			label = "history request"
 		}
 		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Loaded %s from history", label), level: statusInfo})
+		if compareBundle != nil {
+			focusEnv := strings.TrimSpace(targetEnv)
+			if focusEnv == "" && len(compareBundle.Rows) > 0 {
+				focusEnv = strings.TrimSpace(compareBundle.Rows[0].Result.Environment)
+			}
+			if m.compareRun == nil {
+				m.resetCompareState()
+				hydrated := m.populateCompareSnapshotsFromHistory(entry, compareBundle, focusEnv)
+				if hydrated != "" {
+					focusEnv = hydrated
+				}
+				m.compareBundle = compareBundle
+				if focusEnv != "" {
+					m.compareSelectedEnv = focusEnv
+					m.compareFocusedEnv = focusEnv
+					m.compareRowIndex = compareRowIndexForEnv(compareBundle, focusEnv)
+				} else {
+					m.compareRowIndex = 0
+				}
+				m.invalidateCompareTabCaches()
+			}
+			if focusEnv == "" {
+				focusEnv = targetEnv
+			}
+			content := renderCompareBundle(compareBundle, focusEnv)
+			snap := &responseSnapshot{
+				id:            nextResponseRenderToken(),
+				pretty:        content,
+				raw:           content,
+				headers:       "",
+				ready:         true,
+				compareBundle: compareBundle,
+				environment:   focusEnv,
+			}
+			m.applyHistorySnapshot(snap)
+			return m.syncResponsePanes()
+		}
 		return m.presentHistoryEntry(entry, req)
 	}
 
 	m.sending = true
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Replaying %s", req.URL), level: statusInfo})
-	return m.executeRequest(doc, req, options)
+	return m.executeRequest(doc, req, options, "")
 }
 
 func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {

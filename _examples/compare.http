@@ -1,0 +1,11 @@
+### Compare health across environments
+# @name env-health
+# @compare dev stage prod base=prod
+GET {{services.api.base}}/status
+Accept: application/json
+
+### Compare feature flag
+# @name feature-flag
+# Toggle `--compare` or press `g+c` to reuse workspace defaults
+GET {{services.api.base}}/feature-flags/{{feature.name}}
+Accept: application/json

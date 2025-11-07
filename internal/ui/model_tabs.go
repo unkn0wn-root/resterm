@@ -64,6 +64,9 @@ func (m *Model) availableResponseTabs() []responseTab {
 	if m.snapshotHasTimeline() {
 		tabs = append(tabs, responseTabTimeline)
 	}
+	if m.compareTabAvailable() {
+		tabs = append(tabs, responseTabCompare)
+	}
 	if m.diffAvailable() {
 		tabs = append(tabs, responseTabDiff)
 	}
@@ -85,6 +88,8 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 		return "Stats"
 	case responseTabTimeline:
 		return "Timeline"
+	case responseTabCompare:
+		return "Compare"
 	case responseTabDiff:
 		return "Diff"
 	case responseTabHistory:
@@ -152,4 +157,23 @@ func (m *Model) snapshotHasTimeline() bool {
 		}
 	}
 	return hasTrace(m.responseLatest)
+}
+
+func (m *Model) compareTabAvailable() bool {
+	if m.compareBundle != nil {
+		return true
+	}
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.snapshot == nil {
+			continue
+		}
+		if pane.snapshot.compareBundle != nil {
+			return true
+		}
+	}
+	if m.responseLatest != nil && m.responseLatest.compareBundle != nil {
+		return true
+	}
+	return false
 }

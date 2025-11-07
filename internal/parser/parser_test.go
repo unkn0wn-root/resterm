@@ -210,6 +210,54 @@ func TestParseOAuth2AuthSpec(t *testing.T) {
 	}
 }
 
+func TestParseCompareDirective(t *testing.T) {
+	src := `# @name Compare
+# @compare dev stage prod base=stage
+GET https://example.com/health
+`
+
+	doc := Parse("compare.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Compare == nil {
+		t.Fatalf("expected compare metadata")
+	}
+	spec := req.Metadata.Compare
+	expect := []string{"dev", "stage", "prod"}
+	if len(spec.Environments) != len(expect) {
+		t.Fatalf("unexpected environments: %#v", spec.Environments)
+	}
+	for idx, env := range expect {
+		if spec.Environments[idx] != env {
+			t.Fatalf("expected env %q at position %d, got %q", env, idx, spec.Environments[idx])
+		}
+	}
+	if spec.Baseline != "stage" {
+		t.Fatalf("expected baseline stage, got %q", spec.Baseline)
+	}
+}
+
+func TestParseCompareDirectiveErrors(t *testing.T) {
+	src := `# @name Compare
+# @compare dev dev
+GET https://example.com
+`
+
+	doc := Parse("compare.http", []byte(src))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors")
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Compare != nil {
+		t.Fatalf("expected compare metadata to be nil on error")
+	}
+}
+
 func TestParseMultiLineScripts(t *testing.T) {
 	src := `# @name Scripted
 # @script pre-request
