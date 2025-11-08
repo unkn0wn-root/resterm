@@ -165,7 +165,7 @@ func (m *Model) executeWorkflowStep() tea.Cmd {
 		options.BaseDir = filepath.Dir(m.currentFile)
 	}
 
-	cmd := m.executeRequest(state.doc, clone, options, extraVars)
+	cmd := m.executeRequest(state.doc, clone, options, "", extraVars)
 	if tick := m.scheduleStatusPulse(); tick != nil {
 		return tea.Batch(cmd, tick)
 	}
@@ -188,11 +188,11 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	} else if msg.response != nil {
-		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr); cmd != nil {
+		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if msg.grpc != nil {
-		if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed); cmd != nil {
+		if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}

@@ -31,6 +31,22 @@ type Entry struct {
 	Tags           []string        `json:"tags,omitempty"`
 	ProfileResults *ProfileResults `json:"profileResults,omitempty"`
 	Trace          *TraceSummary   `json:"trace,omitempty"`
+	Compare        *CompareEntry   `json:"compare,omitempty"`
+}
+
+type CompareEntry struct {
+	Baseline string           `json:"baseline"`
+	Results  []CompareResult  `json:"results"`
+}
+
+type CompareResult struct {
+	Environment string        `json:"environment"`
+	Status      string        `json:"status"`
+	StatusCode  int           `json:"statusCode"`
+	Duration    time.Duration `json:"duration"`
+	BodySnippet string        `json:"bodySnippet"`
+	RequestText string        `json:"requestText"`
+	Error       string        `json:"error,omitempty"`
 }
 
 type ProfileResults struct {

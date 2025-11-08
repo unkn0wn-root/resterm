@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
@@ -137,4 +138,39 @@ func (p *EnvironmentProvider) Label() string {
 		return fmt.Sprintf("env:%s", p.name)
 	}
 	return fmt.Sprintf("env:%s (%s)", p.name, filepath.Base(p.backing))
+}
+
+// SelectEnv returns the effective environment name, preferring the explicit override
+// when provided, then falling back to the current selection. Empty strings are ignored.
+func SelectEnv(set EnvironmentSet, override, current string) string {
+	if trimmed := strings.TrimSpace(override); trimmed != "" {
+		return trimmed
+	}
+	if trimmed := strings.TrimSpace(current); trimmed != "" {
+		return trimmed
+	}
+	if len(set) == 0 {
+		return ""
+	}
+	for name := range set {
+		if strings.TrimSpace(name) != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+// EnvValues returns the flattened key/value map for the requested environment.
+func EnvValues(set EnvironmentSet, name string) map[string]string {
+	if set == nil {
+		return nil
+	}
+	key := strings.TrimSpace(name)
+	if key == "" {
+		return nil
+	}
+	if env, ok := set[key]; ok {
+		return env
+	}
+	return nil
 }

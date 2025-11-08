@@ -10,8 +10,10 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -22,6 +24,14 @@ const (
 	responseFormattingBase       = "Formatting response"
 	responseReflowingMessage     = "Reflowing response..."
 	defaultResponseViewportWidth = 80
+)
+
+const (
+	compareColEnvWidth      = 18
+	compareColStatusWidth   = 28
+	compareColCodeWidth     = 6
+	compareColDurationWidth = 10
+	compareColumnGap        = "  "
 )
 
 type cachedWrap struct {
@@ -240,4 +250,198 @@ func trimResponseBody(body string) string {
 
 func isBodyEmpty(body string) bool {
 	return strings.TrimSpace(stripANSIEscape(body)) == ""
+}
+
+func renderCompareBundle(bundle *compareBundle, focusedEnv string) string {
+	if bundle == nil {
+		return "Compare data unavailable"
+	}
+	var buf bytes.Buffer
+	baseline := strings.TrimSpace(bundle.Baseline)
+	title := "Baseline: (first environment)"
+	if baseline != "" {
+		title = "Baseline: " + baseline
+	}
+	buf.WriteString(statsTitleStyle.Render(title))
+	buf.WriteString("\n\n")
+	buf.WriteString(formatCompareHeader())
+	buf.WriteString("\n")
+	buf.WriteString(formatCompareSeparator())
+	buf.WriteString("\n")
+	for _, row := range bundle.Rows {
+		buf.WriteString(formatCompareRow(
+			formatCompareEnvLabel(row, baseline, focusedEnv),
+			formatCompareStatus(row),
+			formatCompareCode(row),
+			statsDurationStyle.Render(formatDurationShort(row.Duration)),
+			formatCompareDiff(row),
+		))
+		buf.WriteString("\n")
+	}
+	return buf.String()
+}
+
+func truncateCompareField(value string, limit int) string {
+	value = strings.TrimSpace(value)
+	if limit <= 0 {
+		return value
+	}
+	runes := []rune(value)
+	if len(runes) <= limit {
+		return value
+	}
+	if limit <= 3 {
+		return string(runes[:limit])
+	}
+	return string(runes[:limit-3]) + "..."
+}
+
+func formatDurationShort(d time.Duration) string {
+	if d <= 0 {
+		return "-"
+	}
+	if d < time.Microsecond {
+		return d.String()
+	}
+	if d < time.Millisecond {
+		value := d / time.Microsecond
+		return fmt.Sprintf("%dµs", value)
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return d.Round(time.Millisecond).String()
+}
+
+func formatCompareHeader() string {
+	return formatCompareRow(
+		statsHeadingStyle.Render("Env"),
+		statsHeadingStyle.Render("Status"),
+		statsHeadingStyle.Render("Code"),
+		statsHeadingStyle.Render("Duration"),
+		statsHeadingStyle.Render("Diff"),
+	)
+}
+
+func formatCompareSeparator() string {
+	segments := []string{
+		strings.Repeat("─", compareColEnvWidth),
+		strings.Repeat("─", compareColStatusWidth),
+		strings.Repeat("─", compareColCodeWidth),
+		strings.Repeat("─", compareColDurationWidth),
+		strings.Repeat("─", 12),
+	}
+	return strings.Join(segments, compareColumnGap)
+}
+
+func formatCompareRow(env, status, code, duration, diff string) string {
+	columns := []string{
+		padStyled(env, compareColEnvWidth),
+		padStyled(status, compareColStatusWidth),
+		padStyled(code, compareColCodeWidth),
+		padStyled(duration, compareColDurationWidth),
+		diff,
+	}
+	return strings.Join(columns, compareColumnGap)
+}
+
+func padStyled(content string, width int) string {
+	w := lipgloss.Width(content)
+	if w >= width {
+		return content
+	}
+	return content + strings.Repeat(" ", width-w)
+}
+
+func formatCompareEnvLabel(row compareRow, baseline, focused string) string {
+	env := ""
+	if row.Result != nil {
+		env = strings.TrimSpace(row.Result.Environment)
+	}
+	if env == "" {
+		env = "(env)"
+	}
+	label := env
+	if baseline != "" && strings.EqualFold(env, baseline) {
+		label = label + " *"
+	}
+	style := statsLabelStyle
+	if baseline != "" && strings.EqualFold(env, baseline) {
+		style = statsHeadingStyle
+	}
+	if focused != "" && strings.EqualFold(env, focused) {
+		label = "> " + label
+		style = statsSelectedStyle
+	}
+	return style.Render(label)
+}
+
+func formatCompareStatus(row compareRow) string {
+	status := strings.TrimSpace(row.Status)
+	if status == "" {
+		status = "pending"
+	}
+	indicator := compareRowIndicator(row.Result)
+	style := statsMessageStyle
+	indicatorRendered := ""
+	switch indicator {
+	case "✓":
+		style = statsSuccessStyle
+		indicatorRendered = statsSuccessStyle.Render(indicator)
+	case "✗":
+		style = statsWarnStyle
+		indicatorRendered = statsWarnStyle.Render(indicator)
+	case "…":
+		indicatorRendered = statsNeutralStyle.Render(indicator)
+	}
+	if indicatorRendered != "" {
+		return fmt.Sprintf("%s %s", indicatorRendered, style.Render(status))
+	}
+	return style.Render(status)
+}
+
+func formatCompareCode(row compareRow) string {
+	code := strings.TrimSpace(row.Code)
+	if code == "" && row.Result != nil {
+		switch {
+		case row.Result.Response != nil && row.Result.Response.StatusCode > 0:
+			code = fmt.Sprintf("%d", row.Result.Response.StatusCode)
+		case row.Result.GRPC != nil && row.Result.GRPC.StatusCode > 0:
+			code = fmt.Sprintf("%d", row.Result.GRPC.StatusCode)
+		}
+	}
+	if code == "" {
+		code = "-"
+	}
+	style := statsValueStyle
+	if code == "-" {
+		style = statsLabelStyle
+	} else if row.Result != nil && !compareResultSuccess(row.Result) {
+		style = statsWarnStyle
+	}
+	return style.Render(code)
+}
+
+func formatCompareDiff(row compareRow) string {
+	diff := truncateCompareField(row.Summary, 48)
+	if diff == "" {
+		diff = "n/a"
+	}
+	style := statsMessageStyle
+	if compareResultSuccess(row.Result) && strings.EqualFold(diff, "match") {
+		style = statsSuccessStyle
+	} else if row.Result != nil && !compareResultSuccess(row.Result) && diff != "n/a" {
+		style = statsWarnStyle
+	}
+	return style.Render(diff)
+}
+
+func compareRowIndicator(result *compareResult) string {
+	if result == nil {
+		return "…"
+	}
+	if compareResultSuccess(result) {
+		return "✓"
+	}
+	return "✗"
 }

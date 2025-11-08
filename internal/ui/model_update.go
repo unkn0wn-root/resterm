@@ -849,6 +849,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(nil)
 		}
 		pane := m.focusedPane()
+		if pane != nil && pane.activeTab == responseTabCompare {
+			if cmd := m.handleCompareTabKey(msg, pane); cmd != nil {
+				return combine(cmd)
+			}
+		}
 		switch keyStr {
 		case "shift+f", "F":
 			cmd := m.openSearchPrompt()
@@ -1053,6 +1058,8 @@ func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
 		case "T", "shift+t":
 			m.openThemeSelector()
 			return true, nil
+		case "c":
+			return true, m.startConfigCompareFromEditor()
 		case "w":
 			return true, m.toggleWebSocketConsole()
 		case "1":

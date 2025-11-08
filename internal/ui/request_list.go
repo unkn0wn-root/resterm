@@ -26,6 +26,9 @@ func (i requestListItem) Title() string {
 		name = fmt.Sprintf("Request %d", i.index+1)
 	}
 	parts := []string{name}
+	if cmp := requestCompareBadge(i.request); cmp != "" {
+		parts = append(parts, cmp)
+	}
 	if badge := requestTypeBadge(i.request); badge != "" {
 		parts = append(parts, badge)
 	}
@@ -254,6 +257,13 @@ func requestTypeBadge(req *restfile.Request) string {
 	default:
 		return "[REST]"
 	}
+}
+
+func requestCompareBadge(req *restfile.Request) string {
+	if req == nil || req.Metadata.Compare == nil {
+		return ""
+	}
+	return "[CMP]"
 }
 
 func joinTags(tags []string, max int) string {

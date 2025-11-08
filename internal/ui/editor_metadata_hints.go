@@ -28,6 +28,7 @@ var metadataHintCatalog = []metadataHintOption{
 	{Label: "@capture", Summary: "Capture data from the response"},
 	{Label: "@trace", Summary: "Enable HTTP tracing and latency budgets"},
 	{Label: "@profile", Summary: "Run the request repeatedly with profiling"},
+	{Label: "@compare", Summary: "Run the request across multiple environments"},
 	{Label: "@workflow", Summary: "Begin a workflow definition"},
 	{Label: "@step", Summary: "Add a workflow step"},
 	{Label: "@graphql", Summary: "Enable GraphQL request handling"},
@@ -78,6 +79,10 @@ var metadataSubcommandCatalog = map[string][]metadataHintOption{
 		{Label: "pong", Summary: "Send a pong frame"},
 		{Label: "wait", Summary: "Wait for a duration or incoming message"},
 		{Label: "close", Summary: "Close the connection with code and reason"},
+	},
+	"compare": {
+		{Label: "base=", Summary: "Set the baseline environment", Insert: "base=dev", CursorBack: len("dev")},
+		{Label: "baseline=", Summary: "Alias for base", Insert: "baseline=prod", CursorBack: len("prod")},
 	},
 }
 

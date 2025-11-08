@@ -7,6 +7,7 @@
 - [Workspaces & Files](#workspaces--files)
 - [Variables and Environments](#variables-and-environments)
 - [Request File Anatomy](#request-file-anatomy)
+- [Compare Runs](#compare-runs)
 - [Streaming (SSE & WebSocket)](#streaming-sse--websocket)
 - [GraphQL](#graphql)
 - [gRPC](#grpc)
@@ -43,7 +44,7 @@ This requires Go 1.24 or newer. The binary will be installed in `$(go env GOPATH
 1. Place one or more `.http` or `.rest` files in a working directory (or use the samples under `_examples/`).
 2. Run `resterm --workspace path/to/project`.
 3. Use the file pane to select a request file, then highlight a request and press `Ctrl+Enter` to send it.
-4. Inspect responses in the Pretty, Raw, Headers, Diff, or History tabs on the right.
+4. Inspect responses in the Pretty, Raw, Headers, Diff, Compare, or History tabs on the right; press `g+c` to run the current request across the global `--compare` target list (or its inline `@compare` directive) and review the results without leaving the editor.
 
 A minimal `.http` file looks like this:
 
@@ -94,6 +95,7 @@ Content-Type: application/json
 | Toggle sidebar / editor / response minimize | `g+1` / `g+2` / `g+3` |
 | Zoom focused pane / clear zoom | `g+z` / `g+Z` |
 | Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
+| Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
 | File list incremental search | Start typing while focus is in the list |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
@@ -251,6 +253,32 @@ Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$ti
 # @name TimeoutDemo
 # @timeout 2s
 GET https://httpbin.org/delay/5
+```
+
+---
+
+## Compare Runs
+
+Run the same request across multiple environments either inline or from the CLI:
+
+- Add `# @compare dev stage prod base=stage` to a request block to pin the order/baseline inside the file. Provide at least two environments; `base` is optional and defaults to the first entry.
+- Supply global defaults with `resterm --compare dev,stage,prod --compare-base stage`, then press `g+c` anywhere in the editor to reuse those targets even if the request lacks `@compare`.
+- While a compare run is active Resterm automatically enables a split layout, pins the previous response in the secondary pane, and streams progress in the status bar (`Compare dev✓ stage… prod?`). The new Compare tab renders a table with status/code/duration/diff summaries per environment.
+- Each compare sweep writes a bundled history entry (`COMPARE` method) so you can replay the failing environment later; selecting a compare history row loads the run back into the editor, restores the Compare tab, and lets you resend or inspect deltas off-line.
+- Navigate the Compare tab with ↑/↓ (or PgUp/PgDn/Home/End) to highlight any environment, then press `Enter` to load that environment’s snapshot into the primary pane while the configured baseline stays pinned in the secondary pane. The Diff tab (and Pretty/Raw/Headers) now reflect “selected ↔ baseline,” so choosing the baseline row yields an “identical” diff, while choosing another environment shows how it diverges from the baseline. To compare against a different reference, rerun with a new `base=` value or load the desired pair from History.
+
+Use `@compare` alongside the usual metadata, e.g. to couple request-scoped variables per environment:
+
+```http
+### Smoke workflow
+# @name smoke
+# @compare dev stage prod base=prod
+POST {{services.api.base}}/status
+Accept: application/json
+
+{
+  "env": "{{services.api.name}}"
+}
 ```
 
 ### Variable declarations
@@ -662,6 +690,7 @@ Body helpers:
 - History entries are environment-aware; selecting another environment filters the list automatically.
 - When focused on the history list, press `Enter` to load a request into the editor without executing it. Use `r`/`Ctrl+R` (or your normal send shortcut such as `Ctrl+Enter` / `Cmd+Enter`) to replay the loaded entry.
 - The Diff tab compares focused versus pinned panes, making regression analysis straightforward.
+- Compare runs are stored as grouped rows (`COMPARE` method). The preview (`p`) shows the entire bundle, `Enter` loads the failing (or baseline) environment back into the editor, and the Compare tab is automatically repopulated so you can audit deltas offline.
 
 ---
 
@@ -680,6 +709,8 @@ Run `resterm --help` for the latest list. Core flags:
 | `--insecure` | Skip TLS certificate verification globally. |
 | `--follow` | Control redirect following (default on; pass `--follow=false` to disable). |
 | `--proxy <url>` | HTTP proxy URL. |
+| `--compare <envs>` | Default comma/space-delimited environments for manual compare runs (`g+c`). |
+| `--compare-base <env>` | Baseline environment name when `--compare` is set (defaults to the first target). |
 | `--from-openapi <spec>` | Generate a `.http` collection from an OpenAPI document. |
 | `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http`). |
 | `--openapi-base-var <name>` | Override the base URL variable injected into the generated file (`baseUrl` by default). |
@@ -801,6 +832,7 @@ Explore `_examples/` for ready-to-run:
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
 - `transport.http` - timeout, proxy, and `@no-log` samples.
+- `compare.http` - demonstrates `@compare` directives and CLI-triggered multi-environment sweeps.
 - `workflows.http` - end-to-end workflow with captures, overrides, and expectations.
 
 Open one in Resterm, switch to the appropriate environment (`resterm.env.json`), and send requests to see each feature in action.
