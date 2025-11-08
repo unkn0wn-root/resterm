@@ -383,21 +383,16 @@ func formatCompareStatus(row compareRow) string {
 	}
 	indicator := compareRowIndicator(row.Result)
 	style := statsMessageStyle
-	if indicator == "✓" {
-		style = statsSuccessStyle
-	} else if indicator == "✗" {
-		style = statsWarnStyle
-	}
-	indicatorRendered := indicator
+	indicatorRendered := ""
 	switch indicator {
 	case "✓":
+		style = statsSuccessStyle
 		indicatorRendered = statsSuccessStyle.Render(indicator)
 	case "✗":
+		style = statsWarnStyle
 		indicatorRendered = statsWarnStyle.Render(indicator)
 	case "…":
 		indicatorRendered = statsNeutralStyle.Render(indicator)
-	default:
-		indicatorRendered = ""
 	}
 	if indicatorRendered != "" {
 		return fmt.Sprintf("%s %s", indicatorRendered, style.Render(status))
