@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.7.0](https://github.com/unkn0wn-root/resterm/compare/v0.6.4...v0.7.0) (2025-11-09)
+
+
+### Features
+
+* **compare:** add multi environment diff workflow ([8928427](https://github.com/unkn0wn-root/resterm/commit/8928427232ed48451b7697bbe2260adb9bbdfb36))
+
+
+### Bug Fixes
+
+* linter ([0783256](https://github.com/unkn0wn-root/resterm/commit/078325644e88cf477aed96ae74ab6a4e448326a2))
+
 ### [0.6.4](https://github.com/unkn0wn-root/resterm/compare/v0.6.3...v0.6.4) (2025-11-06)
 
 
