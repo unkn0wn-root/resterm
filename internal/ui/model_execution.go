@@ -51,6 +51,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)
 	}
+
 	if spec := m.compareSpecForRequest(cloned); spec != nil {
 		if cloned.Metadata.Profile != nil {
 			m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"})
@@ -58,12 +59,14 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		}
 		return m.startCompareRun(doc, cloned, spec, options)
 	}
+
 	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 		options.Trace = true
 		if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
 			options.TraceBudget = &budget
 		}
 	}
+
 	if cloned.Metadata.Profile != nil {
 		return m.startProfileRun(doc, cloned, options)
 	}
@@ -81,6 +84,9 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	return execCmd
 }
 
+// Allow CLI-level compare flags to kick off a sweep even when the request lacks
+// @compare metadata so users can reuse the same editor workflow while honoring
+// --compare selections.
 func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
@@ -90,6 +96,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "No request at cursor"})
 		return nil
 	}
+
 	if req.Metadata.Profile != nil {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "@profile cannot run during compare"})
 		return nil
@@ -130,6 +137,8 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	return m.startCompareRun(doc, cloned, spec, options)
 }
 
+// Accept an environment override so compare sweeps can force a per-iteration
+// scope without mutating the global environment selection.
 func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, envOverride string, extras ...map[string]string) tea.Cmd {
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
 		options.Trace = true
@@ -139,6 +148,8 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 	}
 	client := m.client
 	runner := m.scriptRunner
+
+	// selecting env this way lets compare overrides win without persisting the change.
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
 	baseVars := m.collectVariables(doc, req, envName)
 	if len(extras) > 0 {
@@ -181,6 +192,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 				resolverExtras = append(resolverExtras, extra)
 			}
 		}
+
 		resolver := m.buildResolver(doc, req, envName, resolverExtras...)
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
 		if err := m.ensureOAuth(req, resolver, options, envName, effectiveTimeout); err != nil {
@@ -348,16 +360,19 @@ func streamingPlaceholderResponse(meta httpclient.StreamMeta) *httpclient.Respon
 	if headers == nil {
 		headers = make(http.Header)
 	}
+
 	headers.Set(streamHeaderType, "websocket")
 	headers.Set(streamHeaderSummary, "streaming")
 	status := meta.Status
 	if strings.TrimSpace(status) == "" {
 		status = "101 Switching Protocols"
 	}
+
 	statusCode := meta.StatusCode
 	if statusCode == 0 {
 		statusCode = http.StatusSwitchingProtocols
 	}
+
 	return &httpclient.Response{
 		Status:       status,
 		StatusCode:   statusCode,
@@ -372,10 +387,12 @@ func (m *Model) expandWebSocketSteps(req *restfile.Request, resolver *vars.Resol
 	if req == nil || req.WebSocket == nil || resolver == nil {
 		return nil
 	}
+
 	steps := req.WebSocket.Steps
 	if len(steps) == 0 {
 		return nil
 	}
+
 	for i := range steps {
 		step := &steps[i]
 		if trimmed := strings.TrimSpace(step.Value); trimmed != "" {
@@ -400,6 +417,7 @@ func (m *Model) expandWebSocketSteps(req *restfile.Request, resolver *vars.Resol
 			step.Reason = expanded
 		}
 	}
+
 	req.WebSocket.Steps = steps
 	return nil
 }
@@ -423,6 +441,7 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 	if resp == nil {
 		return nil
 	}
+
 	headers := make(http.Header)
 	for name, values := range resp.Headers {
 		for _, value := range values {
@@ -435,14 +454,17 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 			headers.Add(key, value)
 		}
 	}
+
 	status := resp.StatusCode.String()
 	if msg := strings.TrimSpace(resp.StatusMessage); msg != "" && !strings.EqualFold(msg, status) {
 		status = fmt.Sprintf("%s (%s)", status, msg)
 	}
+
 	target := ""
 	if req != nil && req.GRPC != nil {
 		target = strings.TrimSpace(req.GRPC.Target)
 	}
+
 	return &scripts.Response{
 		Kind:   scripts.ResponseKindGRPC,
 		Status: status,
@@ -610,6 +632,7 @@ func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request, 
 			result[k] = v
 		}
 	}
+
 	if doc != nil {
 		for _, v := range doc.Variables {
 			result[v.Name] = v.Value
@@ -618,6 +641,7 @@ func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request, 
 			result[v.Name] = v.Value
 		}
 	}
+
 	m.mergeFileRuntimeVars(result, doc, resolvedEnv)
 	if m.globals != nil {
 		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
@@ -630,6 +654,7 @@ func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request, 
 			}
 		}
 	}
+
 	if req != nil {
 		for _, v := range req.Variables {
 			result[v.Name] = v.Value
@@ -650,6 +675,7 @@ func (m *Model) collectGlobalValues(doc *restfile.Document, envName string) map[
 			globals[name] = scripts.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
 		}
 	}
+
 	if m.globals != nil {
 		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			for key, entry := range snapshot {
@@ -661,9 +687,11 @@ func (m *Model) collectGlobalValues(doc *restfile.Document, envName string) map[
 			}
 		}
 	}
+
 	if len(globals) == 0 {
 		return nil
 	}
+
 	return globals
 }
 
@@ -671,6 +699,7 @@ func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue, env
 	if len(changes) == 0 || m.globals == nil {
 		return
 	}
+
 	env := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	for _, change := range changes {
 		name := strings.TrimSpace(change.Name)
@@ -748,12 +777,14 @@ func (m *Model) clearGlobalValues() tea.Cmd {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "No global store available"})
 		return nil
 	}
+
 	env := m.cfg.EnvironmentName
 	m.globals.clear(env)
 	label := env
 	if strings.TrimSpace(label) == "" {
 		label = "default"
 	}
+
 	m.setStatusMessage(statusMsg{level: statusInfo, text: fmt.Sprintf("Cleared globals for %s", label)})
 	return nil
 }
@@ -795,24 +826,36 @@ func (r *captureResult) addFile(name, value string, secret bool) {
 	if r == nil {
 		return
 	}
+
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return
 	}
+
 	if r.fileVars == nil {
 		r.fileVars = make(map[string]restfile.Variable)
 	}
+
 	key := strings.ToLower(name)
 	r.fileVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeFile}
 }
 
-func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, resp *scripts.Response, stream *scripts.StreamInfo, result *captureResult, envName string) error {
+func (m *Model) applyCaptures(
+	doc *restfile.Document,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	resp *scripts.Response,
+	stream *scripts.StreamInfo,
+	result *captureResult,
+	envName string,
+) error {
 	if req == nil || resp == nil {
 		return nil
 	}
 	if len(req.Metadata.Captures) == 0 {
 		return nil
 	}
+
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	ctx := newCaptureContext(resp, stream)
 	for _, capture := range req.Metadata.Captures {
@@ -839,12 +882,14 @@ func (m *Model) applyCaptures(doc *restfile.Document, req *restfile.Request, res
 			}
 		}
 	}
+
 	if result != nil && len(result.fileVars) > 0 && m.fileVars != nil {
 		path := m.documentRuntimePath(doc)
 		for _, entry := range result.fileVars {
 			m.fileVars.set(envKey, path, entry.Name, entry.Value, entry.Secret)
 		}
 	}
+
 	return nil
 }
 
@@ -865,6 +910,7 @@ func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo) *capt
 	if resp != nil {
 		body = string(resp.Body)
 	}
+
 	var headers http.Header
 	if resp != nil {
 		headers = cloneHeader(resp.Header)
@@ -879,6 +925,7 @@ func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string,
 		if name == "" {
 			return match
 		}
+
 		if strings.HasPrefix(strings.ToLower(name), "response.") {
 			value, err := c.lookupResponse(strings.TrimSpace(name[len("response."):]))
 			if err != nil {
@@ -889,6 +936,7 @@ func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string,
 			}
 			return value
 		}
+
 		if strings.HasPrefix(strings.ToLower(name), "stream.") {
 			value, err := c.lookupStream(strings.TrimSpace(name[len("stream."):]))
 			if err != nil {
@@ -899,6 +947,7 @@ func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string,
 			}
 			return value
 		}
+
 		if resolver != nil {
 			res, err := resolver.ExpandTemplates(match)
 			if err == nil {
@@ -910,6 +959,7 @@ func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string,
 		}
 		return match
 	})
+
 	if firstErr != nil {
 		return "", firstErr
 	}
@@ -955,14 +1005,17 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 	if c.stream == nil {
 		return "", fmt.Errorf("stream data not available")
 	}
+
 	trimmed := strings.TrimSpace(path)
 	if trimmed == "" {
 		return "", fmt.Errorf("stream reference empty")
 	}
+
 	lower := strings.ToLower(trimmed)
 	if lower == "kind" {
 		return c.stream.Kind, nil
 	}
+
 	if strings.HasPrefix(lower, "summary.") {
 		key := strings.TrimSpace(trimmed[len("summary."):])
 		value, ok := caseLookup(c.stream.Summary, key)
@@ -971,6 +1024,7 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 		}
 		return formatCaptureValue(value)
 	}
+
 	if strings.HasPrefix(lower, "events[") {
 		inner := trimmed[len("events["):]
 		closeIdx := strings.Index(inner, "]")
@@ -1005,6 +1059,7 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 		}
 		return formatCaptureValue(value)
 	}
+
 	return "", fmt.Errorf("unsupported stream reference %q", path)
 }
 
@@ -1024,10 +1079,12 @@ func (c *captureContext) lookupJSON(path string) string {
 	if c.jsonErr != nil {
 		return ""
 	}
+
 	trimmed := strings.TrimSpace(path[len("json"):])
 	if trimmed == "" {
 		return c.body
 	}
+
 	trimmed = strings.TrimPrefix(trimmed, ".")
 	current := c.jsonValue
 	for _, segment := range splitJSONPath(trimmed) {
@@ -1172,6 +1229,7 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	if m.oauth == nil {
 		return errdef.New(errdef.CodeHTTP, "oauth support is not initialised")
 	}
+
 	cfg, err := m.buildOAuthConfig(req.Metadata.Auth, resolver)
 	if err != nil {
 		return err
@@ -1179,6 +1237,7 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	if cfg.TokenURL == "" {
 		return errdef.New(errdef.CodeHTTP, "@auth oauth2 requires token_url")
 	}
+
 	header := cfg.Header
 	if strings.TrimSpace(header) == "" {
 		header = "Authorization"
@@ -1186,8 +1245,11 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	if req.Headers != nil && req.Headers.Get(header) != "" {
 		return nil
 	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+
 	defer cancel()
+
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	token, err := m.oauth.Token(ctx, envKey, cfg, opts)
 	if err != nil {
@@ -1199,6 +1261,7 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	if req.Headers.Get(header) != "" {
 		return nil
 	}
+
 	value := token.AccessToken
 	if strings.EqualFold(header, "authorization") {
 		typeValue := strings.TrimSpace(token.TokenType)
@@ -1207,6 +1270,7 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 		}
 		value = strings.TrimSpace(typeValue) + " " + token.AccessToken
 	}
+
 	req.Headers.Set(header, value)
 	return nil
 }
@@ -1216,6 +1280,7 @@ func (m *Model) buildOAuthConfig(auth *restfile.AuthSpec, resolver *vars.Resolve
 	if auth == nil {
 		return cfg, errdef.New(errdef.CodeHTTP, "missing oauth spec")
 	}
+
 	expand := func(key string) (string, error) {
 		value := auth.Params[key]
 		if strings.TrimSpace(value) == "" {

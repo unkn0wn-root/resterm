@@ -21,6 +21,7 @@ func buildConfigCompareSpec(targets []string, baseline string) *restfile.Compare
 	if len(clean) < 2 {
 		return nil
 	}
+
 	base := strings.TrimSpace(baseline)
 	if base == "" {
 		base = clean[0]
@@ -38,6 +39,7 @@ func buildConfigCompareSpec(targets []string, baseline string) *restfile.Compare
 		}
 		base = match
 	}
+
 	return &restfile.CompareSpec{
 		Environments: clean,
 		Baseline:     base,
@@ -48,6 +50,7 @@ func cloneCompareSpec(spec *restfile.CompareSpec) *restfile.CompareSpec {
 	if spec == nil {
 		return nil
 	}
+
 	clone := *spec
 	if len(spec.Environments) > 0 {
 		clone.Environments = append([]string(nil), spec.Environments...)
@@ -59,6 +62,7 @@ func normalizeCompareTargets(targets []string) []string {
 	if len(targets) == 0 {
 		return nil
 	}
+
 	seen := make(map[string]struct{}, len(targets))
 	result := make([]string, 0, len(targets))
 	for _, target := range targets {
@@ -73,6 +77,7 @@ func normalizeCompareTargets(targets []string) []string {
 		seen[lower] = struct{}{}
 		result = append(result, value)
 	}
+
 	if len(result) == 0 {
 		return nil
 	}
