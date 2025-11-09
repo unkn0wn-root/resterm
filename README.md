@@ -71,12 +71,11 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 - **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
-- **Multi-environment compare** via `@compare` directives or the global `--compare` flag + `g+c` shortcut so you can blast the same request across dev/stage/prod, review the Compare tab, and persist bundled history entries.
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Tracing and Timeline** with `@trace` to enable request tracing.
 - **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
-
+- **Multi-environment compare** via `@compare` directives or the global `--compare` flag + `g+c` shortcut so you can run the same request across diffrent envs. (dev/stage/prod etc.)
 
 ## Installation
 
