@@ -50,8 +50,8 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
   - [Quick Install](#quick-install)
   - [Manual Installation](#manual-installation)
 - [Update](#update)
-- [Compare Runs](#compare-runs)
 - [Workflows](#workflows)
+- [Compare Runs](#compare-runs)
 - [Tracing & Timeline](#tracing--timeline)
 - [OpenAPI imports](#openapi-imports)
 - [Streaming (WebSocket & SSE)](#streaming-websocket--sse)
@@ -188,6 +188,13 @@ with multiline value' \
 
 If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically. Resterm loads the file attachment, preserves multiline form fields, and applies compression/auth headers without extra tweaks.
 
+## Workflows
+
+- Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
+- Set per-step assertions (`expect.status`, `expect.statuscode`) and pass data between steps via `vars.request.*` and `vars.workflow.*` namespaces.
+- View progress in the sidebar, and inspect the aggregated summary in History after the run.
+- See [`docs/resterm.md`](./docs/resterm.md#workflows-multi-step-workflows) for the full reference and `_examples/workflows.http` for a runnable sample workflow.
+
 ## Compare Runs
 
 > Try `_examples/compare.http` to see `@compare` directives and the `g+c` shortcut in action (pair it with `resterm --compare dev,stage,prod` for instant multi-environment sweeps).
@@ -196,17 +203,8 @@ Modern API work rarely stops at a single environment, so Resterm bakes in a comp
 
 1. Add `# @compare dev stage prod base=stage` to any request (or launch the app with `--compare dev,stage,prod --compare-base stage`).
 2. Press `g+c` (or `Enter` if you mapped the command) to send the current request to every listed environment. Resterm flips into a split view automatically so you can watch progress live.
-3. When the run finishes, move to the Compare tab and use the arrow keys (PgUp/PgDn/Home/End work too) to highlight any environment. Press `Enter` and the primary pane shows that environment, the secondary pane pins the baseline and you land in the Diff tab so Pretty/Raw/Headers all reflect “selected ↔ baseline.”
+3. When the run finishes, move to the Compare tab and use the arrow keys (PgUp/PgDn/Home/End work too) to highlight any environment. Press `Enter` and the primary pane shows that environment, the secondary pane pins the baseline and you land in the Diff tab so Pretty/Raw/Headers all reflect selected ↔ baseline.
 4. Loading a compare entry from History gives the same experience even if you are offline. Resterm rehydrates the snapshots so you can keep auditing deltas without rerunning requests.
-
-No extra dashboards, no vendor lock-in - just a keyboard first way to spot environment regressions faster than juggling multiple tabs.
-
-## Workflows
-
-- Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
-- Set per-step assertions (`expect.status`, `expect.statuscode`) and pass data between steps via `vars.request.*` and `vars.workflow.*` namespaces.
-- View progress in the sidebar, and inspect the aggregated summary in History after the run.
-- See [`docs/resterm.md`](./docs/resterm.md#workflows-multi-step-workflows) for the full reference and `_examples/workflows.http` for a runnable sample workflow.
 
 ## Tracing & Timeline
 
