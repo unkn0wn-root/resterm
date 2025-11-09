@@ -35,8 +35,8 @@ type Entry struct {
 }
 
 type CompareEntry struct {
-	Baseline string           `json:"baseline"`
-	Results  []CompareResult  `json:"results"`
+	Baseline string          `json:"baseline"`
+	Results  []CompareResult `json:"results"`
 }
 
 type CompareResult struct {
