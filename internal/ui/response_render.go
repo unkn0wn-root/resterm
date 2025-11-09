@@ -27,8 +27,8 @@ const (
 )
 
 const (
-	compareColEnvWidth      = 18
-	compareColStatusWidth   = 28
+	compareColEnvWidth      = 11
+	compareColStatusWidth   = 13
 	compareColCodeWidth     = 6
 	compareColDurationWidth = 10
 	compareColumnGap        = "  "
