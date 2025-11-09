@@ -208,10 +208,10 @@ type Model struct {
 	responseTokens         map[string]*responseSnapshot
 	responseLastFocused    responsePaneID
 	focus                  paneFocus
-	compareSnapshots      map[string]*responseSnapshot
-	compareRowIndex       int
-	compareSelectedEnv    string
-	compareFocusedEnv     string
+	compareSnapshots       map[string]*responseSnapshot
+	compareRowIndex        int
+	compareSelectedEnv     string
+	compareFocusedEnv      string
 	showEnvSelector        bool
 	showThemeSelector      bool
 	showHelp               bool
@@ -562,7 +562,7 @@ func New(cfg Config) Model {
 		requestSessions:    make(map[*restfile.Request]string),
 		sessionRequests:    make(map[string]*restfile.Request),
 		requestKeySessions: make(map[string]string),
-		compareSnapshots:  make(map[string]*responseSnapshot),
+		compareSnapshots:   make(map[string]*responseSnapshot),
 	}
 	model.setInsertMode(false, false)
 

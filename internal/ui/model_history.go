@@ -583,6 +583,8 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	m.syncHistory()
 }
 
+// Store one bundled history entry per compare sweep so later views can rebuild
+// the tab and metadata without rerunning anything.
 func (m *Model) recordCompareHistory(state *compareState) {
 	if m.historyStore == nil || state == nil || len(state.results) == 0 {
 		return
@@ -640,9 +642,12 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	m.syncHistory()
 }
 
+// Redact sensitive values and condense each env run into the snippet the
+// history list needs to show meaningful context.
 func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareResult {
 	env := strings.TrimSpace(result.Environment)
 	status, _ := compareRowStatus(&result)
+
 	entry := history.CompareResult{
 		Environment: env,
 		Status:      status,
@@ -775,11 +780,13 @@ func (m *Model) secretValuesForEnvironment(env string, req *restfile.Request) []
 	if strings.TrimSpace(env) == "" {
 		return m.secretValuesForRedaction(req)
 	}
+
 	prev := m.cfg.EnvironmentName
 	m.cfg.EnvironmentName = env
-	values := m.secretValuesForRedaction(req)
-	m.cfg.EnvironmentName = prev
-	return values
+	defer func() {
+		m.cfg.EnvironmentName = prev
+	}()
+	return m.secretValuesForRedaction(req)
 }
 
 func redactHistoryText(text string, secrets []string, maskHeaders bool) string {
@@ -838,10 +845,13 @@ func redactSensitiveHeaders(text string) string {
 	return strings.Join(lines, "\n")
 }
 
+// Prefer failures and then the recorded baseline so reopening a history entry
+// highlights the most useful diff without guesswork.
 func selectCompareHistoryResult(entry history.Entry) *history.CompareResult {
 	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
 		return nil
 	}
+
 	for idx := range entry.Compare.Results {
 		res := &entry.Compare.Results[idx]
 		if res == nil {
@@ -869,6 +879,7 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
 		return nil
 	}
+
 	bundle := &compareBundle{Baseline: entry.Compare.Baseline}
 	rows := make([]compareRow, 0, len(entry.Compare.Results))
 	for idx := range entry.Compare.Results {
@@ -900,10 +911,13 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 	return bundle
 }
 
+// Hydrate compare snapshots straight from history so the compare tab can render
+// immediately even when no live response is available.
 func (m *Model) populateCompareSnapshotsFromHistory(entry history.Entry, bundle *compareBundle, preferredEnv string) string {
 	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
 		return strings.TrimSpace(preferredEnv)
 	}
+
 	selected := strings.TrimSpace(preferredEnv)
 	for idx := range entry.Compare.Results {
 		res := entry.Compare.Results[idx]

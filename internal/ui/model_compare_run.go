@@ -59,6 +59,9 @@ func (m *Model) resetCompareState() {
 	m.compareFocusedEnv = ""
 }
 
+// Clone the active request and reset compare bookkeeping so every environment
+// run starts from the same baseline and the diff panes are ready as
+// soon as responses arrive.
 func (m *Model) startCompareRun(doc *restfile.Document, req *restfile.Request, spec *restfile.CompareSpec, options httpclient.Options) tea.Cmd {
 	if spec == nil || len(spec.Environments) < 2 {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "Compare requires at least two environments"})
@@ -109,6 +112,8 @@ func (m *Model) startCompareRun(doc *restfile.Document, req *restfile.Request, s
 	return tea.Batch(cmds...)
 }
 
+// Each iteration swaps in its own environment so resolvers see the right values
+// without leaving the global selection changed afterward
 func (m *Model) executeCompareIteration() tea.Cmd {
 	state := m.compareRun
 	if state == nil {
@@ -136,6 +141,8 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	return runCmd
 }
 
+// Snapshot each iteration immediately so the compare tab and diff panes can
+// revisit the response even while the sweep continues.
 func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	state := m.compareRun
 	if state == nil {
@@ -204,6 +211,8 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
+// Build the reusable bundle and history entry so panes and history reuse the
+// same frozen data instead of rehydrating adhoc
 func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	if state == nil {
 		return nil
@@ -263,6 +272,8 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	return nil
 }
 
+// Temporarily swap the active environment so callers can run work under a
+// different scope without leaking the selection afterward.
 func (m *Model) withEnvironment(env string, fn func() tea.Cmd) tea.Cmd {
 	prev := m.cfg.EnvironmentName
 	m.cfg.EnvironmentName = env
@@ -270,19 +281,26 @@ func (m *Model) withEnvironment(env string, fn func() tea.Cmd) tea.Cmd {
 		m.cfg.EnvironmentName = prev
 		return nil
 	}
-	cmd := fn()
-	m.cfg.EnvironmentName = prev
-	return cmd
+
+	defer func() {
+		m.cfg.EnvironmentName = prev
+	}()
+
+	return fn()
 }
 
+// Keep the diff stable by pinning whichever response should act as the baseline
+// before the next iteration updates the live pane.
 func (m *Model) pinCompareReferencePane(state *compareState) {
 	if state == nil || !m.responseSplit {
 		return
 	}
+
 	secondary := m.pane(responsePaneSecondary)
 	if secondary == nil {
 		return
 	}
+
 	var snapshot *responseSnapshot
 	if state.index == 0 {
 		snapshot = m.responseLatest
@@ -316,6 +334,7 @@ func (m *Model) setCompareSnapshot(env string, snap *responseSnapshot) {
 	if m.compareSnapshots == nil {
 		m.compareSnapshots = make(map[string]*responseSnapshot)
 	}
+
 	key := strings.ToLower(trimmed)
 	m.compareSnapshots[key] = snap
 	if strings.TrimSpace(snap.environment) == "" {
@@ -327,6 +346,7 @@ func (m *Model) compareSnapshot(env string) *responseSnapshot {
 	if m.compareSnapshots == nil {
 		return nil
 	}
+
 	key := strings.ToLower(strings.TrimSpace(env))
 	if key == "" {
 		return nil
@@ -347,18 +367,23 @@ type compareRow struct {
 	Summary  string
 }
 
+// Condense raw iteration results into baseline-anchored rows so the compare tab
+// and history list can render summaries without recomputing deltas.
 func buildCompareBundle(results []compareResult, spec *restfile.CompareSpec) *compareBundle {
 	if len(results) == 0 {
 		return nil
 	}
+
 	var baselineName string
 	if spec != nil {
 		baselineName = strings.TrimSpace(spec.Baseline)
 	}
+
 	baseIdx := findBaselineIndex(results, baselineName)
 	if baseIdx < 0 {
 		baseIdx = 0
 	}
+
 	base := &results[baseIdx]
 	bundle := &compareBundle{
 		Baseline: base.Environment,
@@ -460,6 +485,7 @@ func summarizeHTTPDelta(base, target *httpclient.Response) string {
 	if base == nil || target == nil {
 		return "unavailable"
 	}
+
 	var deltas []string
 	if target.StatusCode != base.StatusCode {
 		deltas = append(deltas, "status")
@@ -480,6 +506,7 @@ func summarizeGRPCDelta(base, target *grpcclient.Response) string {
 	if base == nil || target == nil {
 		return "unavailable"
 	}
+
 	var deltas []string
 	if target.StatusCode != base.StatusCode {
 		deltas = append(deltas, "status")
@@ -525,6 +552,7 @@ func (s *compareState) progressSummary() string {
 	if s == nil || len(s.envs) == 0 {
 		return ""
 	}
+
 	parts := make([]string, len(s.envs))
 	for idx, env := range s.envs {
 		label := env
@@ -552,6 +580,7 @@ func (s *compareState) statusLine() string {
 	if s == nil {
 		return ""
 	}
+
 	summary := strings.TrimSpace(s.progressSummary())
 	if summary == "" {
 		return s.label
