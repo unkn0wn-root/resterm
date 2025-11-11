@@ -18,6 +18,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -302,6 +303,12 @@ func main() {
 		}
 	}
 
+	bindingMap, _, bindingErr := bindings.Load(config.Dir())
+	if bindingErr != nil {
+		log.Printf("bindings load error: %v", bindingErr)
+		bindingMap = bindings.DefaultMap()
+	}
+
 	themeCatalog, themeErr := theme.LoadCatalog([]string{config.ThemeDir()})
 	if themeErr != nil {
 		log.Printf("theme load error: %v", themeErr)
@@ -354,6 +361,7 @@ func main() {
 		EnableUpdate:        updateEnabled,
 		CompareTargets:      compareTargets,
 		CompareBase:         compareBaseline,
+		Bindings:            bindingMap,
 	})
 
 	program := tea.NewProgram(model, tea.WithAltScreen())

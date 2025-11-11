@@ -1,0 +1,30 @@
+# Sample bindings override for Resterm.
+# Copy this file to ${RESTERM_CONFIG_DIR}/bindings.toml and tweak as needed.
+
+[bindings]
+# Remap save.
+save_file = ["ctrl+shift+s"]
+
+# Stacking panes.
+set_main_split_horizontal = ["g s", "ctrl+alt+s"]
+
+# Sending requests.
+send_request = ["ctrl+enter", "cmd+enter"]
+
+# Toggle the response split.
+toggle_response_split_vertical = ["alt+v"]
+
+# Map quick focus switches.
+focus_requests = ["g r", "ctrl+alt+r"]
+focus_editor_normal = ["g i"]
+focus_response = ["g p"]
+
+# Resize sidebar.
+sidebar_width_decrease = ["g n"]
+sidebar_width_increase = ["g m"]
+
+# Open the environment selector.
+open_env_selector = ["ctrl+alt+e"]
+
+# Launch the theme selector.
+open_theme_selector = ["ctrl+alt+t", "f6"]
