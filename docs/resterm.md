@@ -111,6 +111,59 @@ Content-Type: application/json
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), visual selections with `v` / `V`, yank and delete operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
+### Custom bindings
+
+Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first and `${RESTERM_CONFIG_DIR}/bindings.json` second (default: `~/.config/resterm`). Missing files fall back to the built-in bindings. Example:
+
+```toml
+[bindings]
+save_file = ["ctrl+s"]
+set_main_split_horizontal = ["g s", "ctrl+alt+s"]
+send_request = ["ctrl+enter", "cmd+enter"]
+```
+
+- Modifiers use `+` (`ctrl+shift+o`), while chord steps are separated by spaces (`"g s"`).
+- Bindings can have at most two steps; `send_request` must remain single-step so it can run inside the editor.
+- Unknown action IDs or duplicate bindings cause the file to be rejected (Resterm logs the error and keeps defaults).
+
+#### Binding reference
+
+| Action ID | Description | Default bindings |
+| --- | --- | --- |
+| `cycle_focus_next` | Cycle focus forward (skips editor insert mode). | `tab` |
+| `cycle_focus_prev` | Cycle focus backward. | `shift+tab` |
+| `open_env_selector` | Open environment picker. | `ctrl+e` |
+| `show_globals` | Show global variable summary. | `ctrl+g` |
+| `clear_globals` | Clear global variables. | `ctrl+shift+g` |
+| `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
+| `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `ctrl+v` |
+| `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `ctrl+u` |
+| `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
+| `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
+| `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
+| `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o` |
+| `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
+| `open_theme_selector` | Open theme selector. | `ctrl+alt+t`, `g m`, `g shift+t` |
+| `open_temp_document` | Open a scratch document. | `ctrl+t` |
+| `reparse_document` | Reparse the active buffer. | `ctrl+p`, `ctrl+alt+p`, `ctrl+shift+t` |
+| `select_timeline_tab` | Focus the Timeline tab. | `ctrl+alt+l`, `g t` |
+| `quit_app` | Quit Resterm. | `ctrl+q`, `ctrl+d` |
+| `send_request` | Send the active request (single-step only). | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
+
+| Action ID | Description | Default bindings | Repeatable |
+| --- | --- | --- | --- |
+| `sidebar_width_decrease` / `sidebar_width_increase` | Shrink/grow sidebar width (editor split elsewhere). | `g h`, `g l` | ✓ |
+| `sidebar_height_decrease` / `sidebar_height_increase` | Shrink/grow files vs requests split (workflow when focused). | `g j`, `g k` | ✓ |
+| `workflow_height_increase` / `workflow_height_decrease` | Grow/shrink the workflow list. | `g shift+j`, `g shift+k` | ✓ |
+| `focus_requests` / `focus_response` / `focus_editor_normal` | Jump directly to a pane. | `g r`, `g p`, `g i` | ✗ |
+| `set_main_split_horizontal` / `set_main_split_vertical` | Stack vs side-by-side editor/response. | `g s`, `g v` | ✗ |
+| `start_compare_run` | Trigger compare sweep for the current request. | `g c` | ✗ |
+| `toggle_ws_console` | Toggle the WebSocket console. | `g w` | ✗ |
+| `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
+| `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
+
+`send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. All other actions can be remapped to any combination within the constraints above.
+
 ### Response panes
 
 - **Pretty**: formatted JSON (or best-effort formatting for other types).

@@ -60,6 +60,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
   - [Stream viewer & console](#stream-viewer--console)
 - [Quick Configuration Overview](#quick-configuration-overview)
   - [Custom themes](#custom-themes)
+  - [Custom bindings](#custom-bindings)
 - [Documentation](#documentation)
 
 ## Highlights
@@ -338,6 +339,23 @@ pane_border_focus_file = "#1f6feb"
 ```
 
 Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_THEMES_DIR`) and press `Ctrl+Alt+T` (or type `g` then `t`) inside Resterm to pick it as the default. The selected theme is persisted to `settings.toml` so it is restored on the next launch.
+
+### Custom bindings
+
+Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first (and `bindings.json` second). Each entry maps an action ID to one or more bindings:
+
+```toml
+[bindings]
+save_file = ["ctrl+shift+s"]
+set_main_split_horizontal = ["g s", "ctrl+alt+s"]
+send_request = ["ctrl+enter", "cmd+enter"]
+```
+
+- Modifiers use `+` (`ctrl+shift+o`), while chord steps are separated by spaces (`"g s"`).
+- Only up to two steps are supported; `send_request` must stay single-step so it can fire while you type.
+- Unknown actions or two actions sharing the same binding will be rejected (Resterm logs the error and keeps defaults).
+
+The complete action catalog and a binding reference live in [docs/resterm.md#custom-bindings](docs/resterm.md#custom-bindings).
 
 ## Documentation
 

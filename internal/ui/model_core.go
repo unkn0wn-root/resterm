@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -161,6 +162,7 @@ type Config struct {
 	EnableUpdate        bool
 	CompareTargets      []string
 	CompareBase         string
+	Bindings            *bindings.Map
 }
 
 type operatorState struct {
@@ -172,6 +174,7 @@ type operatorState struct {
 
 type Model struct {
 	cfg                Config
+	bindingsMap        *bindings.Map
 	theme              theme.Theme
 	themeCatalog       theme.Catalog
 	client             *httpclient.Client
@@ -349,6 +352,10 @@ func New(cfg Config) Model {
 		cfg.Client = client
 	}
 	grpcExec := grpcclient.NewClient()
+	bindingMap := cfg.Bindings
+	if bindingMap == nil {
+		bindingMap = bindings.DefaultMap()
+	}
 
 	workspace := cfg.WorkspaceRoot
 	if workspace == "" {
@@ -493,6 +500,7 @@ func New(cfg Config) Model {
 
 	model := Model{
 		cfg:                    cfg,
+		bindingsMap:            bindingMap,
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,

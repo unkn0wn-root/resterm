@@ -6,6 +6,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -431,36 +432,199 @@ func (m *Model) canPreviewOnSpace() bool {
 	}
 }
 
-func isSendShortcut(msg tea.KeyMsg) bool {
-	switch msg.String() {
-	case "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j", "ctrl+m":
-		return true
+func canonicalShortcutKey(msg tea.KeyMsg) string {
+	key := msg.String()
+	if key == "" {
+		switch msg.Type {
+		case tea.KeyCtrlJ:
+			key = "ctrl+j"
+		default:
+			return ""
+		}
 	}
+	return bindings.NormalizeKeyString(key)
+}
 
-	switch msg.Type {
-	case tea.KeyCtrlJ:
-		return true
+func isPlainRuneKey(msg tea.KeyMsg) bool {
+	return msg.Type == tea.KeyRunes && len(msg.Runes) == 1
+}
+
+func (m *Model) handleShortcutKey(key string, msg tea.KeyMsg) (tea.Cmd, bool) {
+	if key == "" || m.bindingsMap == nil {
+		return nil, false
 	}
+	binding, ok := m.bindingsMap.MatchSingle(key)
+	if !ok {
+		return nil, false
+	}
+	if binding.Action == bindings.ActionSendRequest {
+		return nil, false
+	}
+	cmd, handled := m.runShortcutBinding(binding, msg)
+	if !handled {
+		return nil, false
+	}
+	return cmd, true
+}
 
+func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch binding.Action {
+	case bindings.ActionCycleFocusNext:
+		if m.focus == focusEditor && m.editorInsertMode {
+			return nil, true
+		}
+		prev := m.focus
+		m.cycleFocus(true)
+		if prev == focusEditor || m.focus == focusEditor {
+			m.suppressEditorKey = true
+		}
+		return nil, true
+	case bindings.ActionCycleFocusPrev:
+		if m.focus == focusEditor && m.editorInsertMode {
+			return nil, true
+		}
+		prev := m.focus
+		m.cycleFocus(false)
+		if prev == focusEditor || m.focus == focusEditor {
+			m.suppressEditorKey = true
+		}
+		return nil, true
+	case bindings.ActionOpenEnvSelector:
+		if len(m.cfg.EnvironmentSet) == 0 {
+			return func() tea.Msg {
+				return statusMsg{text: "No environments configured", level: statusWarn}
+			}, true
+		}
+		m.openEnvironmentSelector()
+		return nil, true
+	case bindings.ActionShowGlobals:
+		return m.showGlobalSummary(), true
+	case bindings.ActionClearGlobals:
+		return m.clearGlobalValues(), true
+	case bindings.ActionSaveFile:
+		return m.saveFile(), true
+	case bindings.ActionToggleResponseSplitVert:
+		m.responsePaneChord = false
+		return m.toggleResponseSplitVertical(), true
+	case bindings.ActionToggleResponseSplitHorz:
+		m.responsePaneChord = false
+		return m.toggleResponseSplitHorizontal(), true
+	case bindings.ActionTogglePaneFollowLatest:
+		m.responsePaneChord = false
+		target := responsePanePrimary
+		if m.focus == focusResponse {
+			target = m.responsePaneFocus
+		}
+		return m.togglePaneFollowLatest(target), true
+	case bindings.ActionToggleHelp:
+		m.toggleHelp()
+		return nil, true
+	case bindings.ActionOpenPathModal:
+		m.openOpenModal()
+		return nil, true
+	case bindings.ActionReloadWorkspace:
+		return m.reloadWorkspace(), true
+	case bindings.ActionOpenNewFileModal:
+		m.openNewFileModal()
+		return nil, true
+	case bindings.ActionOpenThemeSelector:
+		m.openThemeSelector()
+		return nil, true
+	case bindings.ActionOpenTempDocument:
+		return m.openTemporaryDocument(), true
+	case bindings.ActionReparseDocument:
+		m.suppressEditorKey = true
+		return m.reparseDocument(), true
+	case bindings.ActionSelectTimelineTab:
+		return m.selectTimelineTab(), true
+	case bindings.ActionQuitApp:
+		return tea.Quit, true
+	case bindings.ActionSidebarWidthDecrease:
+		if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
+			return m.runSidebarWidthResize(-sidebarWidthStep), true
+		}
+		return m.runEditorResize(-editorSplitStep), true
+	case bindings.ActionSidebarWidthIncrease:
+		if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
+			return m.runSidebarWidthResize(sidebarWidthStep), true
+		}
+		return m.runEditorResize(editorSplitStep), true
+	case bindings.ActionSidebarHeightDecrease:
+		if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
+			return m.runWorkflowResize(-workflowSplitStep), true
+		}
+		return m.runSidebarResize(-sidebarSplitStep), true
+	case bindings.ActionSidebarHeightIncrease:
+		if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
+			return m.runWorkflowResize(workflowSplitStep), true
+		}
+		return m.runSidebarResize(sidebarSplitStep), true
+	case bindings.ActionWorkflowHeightIncrease:
+		return m.runWorkflowResize(workflowSplitStep), true
+	case bindings.ActionWorkflowHeightDecrease:
+		return m.runWorkflowResize(-workflowSplitStep), true
+	case bindings.ActionFocusRequests:
+		m.setFocus(focusRequests)
+		return nil, true
+	case bindings.ActionFocusResponse:
+		m.setFocus(focusResponse)
+		return nil, true
+	case bindings.ActionFocusEditorNormal:
+		m.setFocus(focusEditor)
+		m.setInsertMode(false, true)
+		return nil, true
+	case bindings.ActionSetMainSplitHorizontal:
+		return m.setMainSplitOrientation(mainSplitHorizontal), true
+	case bindings.ActionSetMainSplitVertical:
+		return m.setMainSplitOrientation(mainSplitVertical), true
+	case bindings.ActionStartCompareRun:
+		return m.startConfigCompareFromEditor(), true
+	case bindings.ActionToggleWebsocketConsole:
+		return m.toggleWebSocketConsole(), true
+	case bindings.ActionToggleSidebarCollapse:
+		return m.togglePaneCollapse(paneRegionSidebar), true
+	case bindings.ActionToggleEditorCollapse:
+		return m.togglePaneCollapse(paneRegionEditor), true
+	case bindings.ActionToggleResponseCollapse:
+		return m.togglePaneCollapse(paneRegionResponse), true
+	case bindings.ActionToggleZoom:
+		return m.toggleZoomForRegion(regionFromFocus(m.focus)), true
+	case bindings.ActionClearZoom:
+		return m.clearZoomCmd(), true
+	default:
+		return nil, false
+	}
+}
+
+func (m *Model) isSendShortcut(msg tea.KeyMsg) bool {
+	if m.bindingsMap == nil {
+		return false
+	}
+	key := canonicalShortcutKey(msg)
+	if key == "" {
+		return false
+	}
+	for _, binding := range m.bindingsMap.Bindings(bindings.ActionSendRequest) {
+		if len(binding.Steps) == 1 && binding.Steps[0] == key {
+			return true
+		}
+	}
 	return false
 }
 
-func shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
-	if isSendShortcut(msg) {
+func (m *Model) shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
+	if m.isSendShortcut(msg) {
 		return true
 	}
-
 	keyStr := msg.String()
 	switch keyStr {
 	case "enter":
 		return !insertMode
 	}
-
 	switch msg.Type {
 	case tea.KeyEnter:
 		return !insertMode
 	}
-
 	return false
 }
 
@@ -473,6 +637,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
 
 func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	keyStr := msg.String()
+	shortcutKey := canonicalShortcutKey(msg)
 	var prefixCmd tea.Cmd
 	combine := func(c tea.Cmd) tea.Cmd {
 		if prefixCmd == nil {
@@ -503,8 +668,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if allowChord {
-		if !m.hasPendingChord && m.repeatChordActive {
-			if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, keyStr); handled {
+		if !m.hasPendingChord && m.repeatChordActive && shortcutKey != "" {
+			if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, shortcutKey, msg); handled {
 				m.suppressListKey = true
 				return combine(chordCmd)
 			}
@@ -517,17 +682,19 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			m.pendingChord = ""
 			m.hasPendingChord = false
 			m.pendingChordMsg = tea.KeyMsg{}
-			if handled, chordCmd := m.resolveChord(prefix, keyStr); handled {
-				m.suppressListKey = true
-				return combine(chordCmd)
+			if shortcutKey != "" {
+				if handled, chordCmd := m.resolveChord(prefix, shortcutKey, msg); handled {
+					m.suppressListKey = true
+					return combine(chordCmd)
+				}
 			}
 			prefixCmd = m.handleKeyWithChord(storedMsg, false)
 			m.suppressListKey = true
 			keyStr = msg.String()
-		} else if m.canStartChord(msg, keyStr) {
+		} else if m.canStartChord(msg, shortcutKey) {
 			m.repeatChordActive = false
 			m.repeatChordPrefix = ""
-			m.pendingChord = keyStr
+			m.pendingChord = shortcutKey
 			m.pendingChordMsg = msg
 			m.hasPendingChord = true
 			m.suppressListKey = true
@@ -584,83 +751,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 	}
 
-	switch keyStr {
-	case "tab":
-		if m.focus == focusEditor && m.editorInsertMode {
-			break
+	if shortcutKey != "" {
+		if cmd, handled := m.handleShortcutKey(shortcutKey, msg); handled {
+			return combine(cmd)
 		}
-		prev := m.focus
-		m.cycleFocus(true)
-		if prev == focusEditor || m.focus == focusEditor {
-			m.suppressEditorKey = true
-		}
-		return combine(nil)
-	case "shift+tab":
-		if m.focus == focusEditor && m.editorInsertMode {
-			break
-		}
-		prev := m.focus
-		m.cycleFocus(false)
-		if prev == focusEditor || m.focus == focusEditor {
-			m.suppressEditorKey = true
-		}
-		return combine(nil)
-	case "ctrl+e":
-		if len(m.cfg.EnvironmentSet) == 0 {
-			return combine(func() tea.Msg {
-				return statusMsg{text: "No environments configured", level: statusWarn}
-			})
-		}
-		m.openEnvironmentSelector()
-		return combine(nil)
-	case "ctrl+g":
-		return combine(m.showGlobalSummary())
-	case "ctrl+shift+g", "shift+ctrl+g":
-		return combine(m.clearGlobalValues())
-	case "ctrl+s":
-		return combine(m.saveFile())
-	case "ctrl+v":
-		m.responsePaneChord = false
-		return combine(m.toggleResponseSplitVertical())
-	case "ctrl+u":
-		m.responsePaneChord = false
-		return combine(m.toggleResponseSplitHorizontal())
-	case "ctrl+shift+v", "shift+ctrl+v":
-		target := responsePanePrimary
-		if m.focus == focusResponse {
-			target = m.responsePaneFocus
-		}
-		return combine(m.togglePaneFollowLatest(target))
-	case "?", "shift+/":
-		m.toggleHelp()
-		return combine(nil)
-	case "ctrl+o":
-		m.openOpenModal()
-		return combine(nil)
-	case "ctrl+shift+o", "shift+ctrl+o":
-		return combine(m.reloadWorkspace())
-	case "ctrl+n":
-		m.openNewFileModal()
-		return combine(nil)
-	case "ctrl+alt+t", "alt+ctrl+t":
-		m.openThemeSelector()
-		return combine(nil)
-	case "ctrl+t":
-		return combine(m.openTemporaryDocument())
-	case "ctrl+p":
-		m.suppressEditorKey = true
-		return combine(m.reparseDocument())
-	case "ctrl+alt+p", "alt+ctrl+p":
-		m.suppressEditorKey = true
-		return combine(m.reparseDocument())
-	case "ctrl+alt+l", "alt+ctrl+l":
-		return combine(m.selectTimelineTab())
-	case "ctrl+shift+t", "shift+ctrl+t":
-		return combine(m.reparseDocument())
-	case "ctrl+q", "ctrl+d":
-		return combine(tea.Quit)
-	case "j":
-	case "k":
 	}
 
 	if m.focus == focusEditor {
@@ -777,7 +871,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			}
 		}
-		if shouldSendEditorRequest(msg, m.editorInsertMode) {
+		if m.shouldSendEditorRequest(msg, m.editorInsertMode) {
 			if !m.sending {
 				m.suppressEditorKey = true
 				return combine(m.sendActiveRequest())
@@ -956,14 +1050,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			case "enter":
 				// handled above
 			default:
-				if shouldSendEditorRequest(msg, false) {
+				if m.shouldSendEditorRequest(msg, false) {
 					return combine(m.replayHistorySelection())
 				}
 			}
 		}
 	}
 
-	if isSendShortcut(msg) {
+	if m.isSendShortcut(msg) {
 		if m.sending {
 			return combine(nil)
 		}
@@ -977,104 +1071,42 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	return combine(nil)
 }
 
-func (m *Model) canStartChord(msg tea.KeyMsg, keyStr string) bool {
-	if msg.Type != tea.KeyRunes {
+func (m *Model) canStartChord(msg tea.KeyMsg, key string) bool {
+	if key == "" || m.bindingsMap == nil {
+		return false
+	}
+	if !m.bindingsMap.HasChordPrefix(key) {
 		return false
 	}
 	if m.editor.awaitingFindTarget() {
 		return false
 	}
-	switch keyStr {
-	case "g":
-		if m.focus == focusEditor && m.editorInsertMode {
-			return false
-		}
-		return true
-	default:
+	if m.focus == focusEditor && m.editorInsertMode && isPlainRuneKey(msg) {
 		return false
 	}
+	return true
 }
 
-func (m *Model) resolveChord(prefix string, next string) (bool, tea.Cmd) {
-	switch prefix {
-	case "g":
-		switch next {
-		case "h":
-			m.repeatChordPrefix = prefix
-			m.repeatChordActive = true
-			if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
-				return true, m.runSidebarWidthResize(-sidebarWidthStep)
-			}
-			return true, m.runEditorResize(-editorSplitStep)
-		case "l":
-			m.repeatChordPrefix = prefix
-			m.repeatChordActive = true
-			if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
-				return true, m.runSidebarWidthResize(sidebarWidthStep)
-			}
-			return true, m.runEditorResize(editorSplitStep)
-		case "j":
-			m.repeatChordPrefix = prefix
-			m.repeatChordActive = true
-			if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
-				return true, m.runWorkflowResize(-workflowSplitStep)
-			}
-			return true, m.runSidebarResize(-sidebarSplitStep)
-		case "k":
-			m.repeatChordPrefix = prefix
-			m.repeatChordActive = true
-			if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
-				return true, m.runWorkflowResize(workflowSplitStep)
-			}
-			return true, m.runSidebarResize(sidebarSplitStep)
-		case "J", "shift+j":
-			m.repeatChordPrefix = prefix
-			m.repeatChordActive = true
-			return true, m.runWorkflowResize(workflowSplitStep)
-		case "K", "shift+k":
-			m.repeatChordPrefix = prefix
-			m.repeatChordActive = true
-			return true, m.runWorkflowResize(-workflowSplitStep)
-		case "r":
-			m.setFocus(focusRequests)
-			return true, nil
-		case "p":
-			m.setFocus(focusResponse)
-			return true, nil
-		case "m":
-			m.openThemeSelector()
-			return true, nil
-		case "i":
-			m.setFocus(focusEditor)
-			m.setInsertMode(false, true)
-			return true, nil
-		case "s":
-			return true, m.setMainSplitOrientation(mainSplitHorizontal)
-		case "v":
-			return true, m.setMainSplitOrientation(mainSplitVertical)
-		case "t":
-			cmd := m.selectTimelineTab()
-			return true, cmd
-		case "T", "shift+t":
-			m.openThemeSelector()
-			return true, nil
-		case "c":
-			return true, m.startConfigCompareFromEditor()
-		case "w":
-			return true, m.toggleWebSocketConsole()
-		case "1":
-			return true, m.togglePaneCollapse(paneRegionSidebar)
-		case "2":
-			return true, m.togglePaneCollapse(paneRegionEditor)
-		case "3":
-			return true, m.togglePaneCollapse(paneRegionResponse)
-		case "z":
-			return true, m.toggleZoomForRegion(regionFromFocus(m.focus))
-		case "Z", "shift+z":
-			return true, m.clearZoomCmd()
-		}
+func (m *Model) resolveChord(prefix string, next string, msg tea.KeyMsg) (bool, tea.Cmd) {
+	if m.bindingsMap == nil || prefix == "" || next == "" {
+		return false, nil
 	}
-	return false, nil
+	binding, ok := m.bindingsMap.ResolveChord(prefix, next)
+	if !ok {
+		return false, nil
+	}
+	if binding.Repeatable {
+		m.repeatChordPrefix = prefix
+		m.repeatChordActive = true
+	} else {
+		m.repeatChordActive = false
+		m.repeatChordPrefix = ""
+	}
+	cmd, handled := m.runShortcutBinding(binding, msg)
+	if !handled {
+		return true, nil
+	}
+	return true, cmd
 }
 
 func (m *Model) startOperator(op string) {
