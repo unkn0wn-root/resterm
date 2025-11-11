@@ -45,11 +45,17 @@ Resterm is a terminal-first client for working with **HTTP**, **GraphQL**, and *
 It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard.
 
 ## Index
+**Up & Running**
 - [Highlights](#highlights)
 - [Installation](#installation)
   - [Quick Install](#quick-install)
   - [Manual Installation](#manual-installation)
 - [Update](#update)
+- [Quick Start](#quick-start)
+
+---
+
+**More advanced**
 - [Workflows](#workflows)
 - [Compare Runs](#compare-runs)
 - [Tracing & Timeline](#tracing--timeline)
