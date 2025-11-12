@@ -269,7 +269,7 @@ Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv
 - Supported syntax matches common `.env` loaders: optional `export` prefixes, `KEY=value` pairs, `#`/`;` comments, single- and double-quoted values (with escapes), and `${VAR}` or `$VAR` interpolation. We expand references using earlier keys from the same file and the current OS environment.
 - The environment name is derived from a `workspace` entry (case-insensitive). If that key is missing or blank we fall back to the file name (`.env.prod` → `prod`, `prod.env` → `prod`, bare `.env` → `default`).
 - Each dotenv file yields exactly one environment today. If you need multiple environments, stick with `resterm.env.json`.
-- Limitations: no multi-workspace support, no auto-discovery, and interpolation only sees keys declared above the current line (plus OS envs). Document these assumptions in your team docs to avoid surprises.
+- Limitations: no multi-workspace support, no auto-discovery, and interpolation only sees keys declared above the current line (plus OS envs).
 
 ### Variable resolution order
 
