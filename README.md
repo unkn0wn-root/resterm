@@ -52,6 +52,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
   - [Manual Installation](#manual-installation)
 - [Update](#update)
 - [Quick Start](#quick-start)
+- [Quick Configuration Overview](#quick-configuration-overview)
 
 ---
 
@@ -64,9 +65,8 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
   - [Server-Sent Events](#server-sent-events)
   - [WebSockets](#websockets)
   - [Stream viewer & console](#stream-viewer--console)
-- [Quick Configuration Overview](#quick-configuration-overview)
-  - [Custom themes](#custom-themes)
-  - [Custom bindings](#custom-bindings)
+- [Custom themes](#custom-themes)
+- [Custom bindings](#custom-bindings)
 - [Documentation](#documentation)
 
 ## Highlights
@@ -195,6 +195,13 @@ with multiline value' \
 
 If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically. Resterm loads the file attachment, preserves multiline form fields, and applies compression/auth headers without extra tweaks.
 
+## Quick Configuration Overview
+
+- Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory. Explicit dotenv files (`.env`, `.env.*`, `*.env`) are supported via `--env-file` only; we derive the environment name from a `workspace` entry, then the file stem, falling back to `default` for bare `.env` files. Important: Dotenv loading is **single-workspace** for now. Use JSON when you need multiple environments in one file.
+- CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out`, `--openapi-base-var`, `--openapi-resolve-refs`, `--openapi-include-deprecated`, `--openapi-server-index`.
+- Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
+- Themes: add `.toml` or `.json` files under `~/.config/resterm/themes` (override with `RESTERM_THEMES_DIR`) and switch them at runtime with `Ctrl+Alt+T` (or chord `g` then `t`).
+
 ## Workflows
 
 - Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
@@ -317,14 +324,7 @@ The transcript records sender/receiver, opcode, sizes, close metadata and elapse
 - Toggle the interactive WebSocket console with `Ctrl+I` or `g+r` while the Stream tab is focused. Use `F2` to cycle payload modes (text, JSON, base64, file), `Ctrl+S` (or `Ctrl+Enter`) to send, arrows to navigate history, `Ctrl+P` for ping, `Ctrl+W` to close and `Ctrl+L` to clear the buffer.
 - Scripted tests can consume transcripts via the `stream` API (`stream.kind`, `stream.summary`, `stream.events`, `stream.onEvent()`), enabling assertions on streaming workloads.
 
-## Quick Configuration Overview
-
-- Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory. Explicit dotenv files (`.env`, `.env.*`, `*.env`) are supported via `--env-file` only; we derive the environment name from a `workspace` entry, then the file stem, falling back to `default` for bare `.env` files. Important: Dotenv loading is **single-workspace** for now. Use JSON when you need multiple environments in one file.
-- CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out`, `--openapi-base-var`, `--openapi-resolve-refs`, `--openapi-include-deprecated`, `--openapi-server-index`.
-- Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
-- Themes: add `.toml` or `.json` files under `~/.config/resterm/themes` (override with `RESTERM_THEMES_DIR`) and switch them at runtime with `Ctrl+Alt+T` (or chord `g` then `t`).
-
-### Custom themes
+## Custom themes
 
 Resterm ships with a default palette, but you can provide your own by dropping theme definitions into the themes directory mentioned above. Each theme can be written in TOML or JSON and only needs to override the parts you care about.
 
@@ -346,7 +346,7 @@ pane_border_focus_file = "#1f6feb"
 
 Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_THEMES_DIR`) and press `Ctrl+Alt+T` (or type `g` then `t`) inside Resterm to pick it as the default. The selected theme is persisted to `settings.toml` so it is restored on the next launch.
 
-### Custom bindings
+## Custom bindings
 
 Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first (and `bindings.json` second). Each entry maps an action ID to one or more bindings:
 
