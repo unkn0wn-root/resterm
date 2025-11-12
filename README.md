@@ -319,7 +319,7 @@ The transcript records sender/receiver, opcode, sizes, close metadata and elapse
 
 ## Quick Configuration Overview
 
-- Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory.
+- Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory. Explicit dotenv files (`.env`, `.env.*`, `*.env`) are supported via `--env-file` only; we derive the environment name from a `workspace` entry, then the file stem, falling back to `default` for bare `.env` files. Dotenv loading is single-workspace for now—use JSON when you need multiple environments in one file.
 - CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out`, `--openapi-base-var`, `--openapi-resolve-refs`, `--openapi-include-deprecated`, `--openapi-server-index`.
 - Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
 - Themes: add `.toml` or `.json` files under `~/.config/resterm/themes` (override with `RESTERM_THEMES_DIR`) and switch them at runtime with `Ctrl+Alt+T` (or chord `g` then `t`).
