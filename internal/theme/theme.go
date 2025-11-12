@@ -97,6 +97,38 @@ func DefaultTheme() Theme {
 	accent := lipgloss.Color("#7D56F4")
 	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#dcd7ff"))
 	directiveAccent := lipgloss.Color("#56A9DD")
+	headerSegments := []HeaderSegmentStyle{
+		{
+			Background: lipgloss.Color("#143760"),
+			Border:     lipgloss.Color("#6DA8FF"),
+			Foreground: lipgloss.Color("#F0F5FF"),
+			Accent:     lipgloss.Color("#CFE1FF"),
+		},
+		{
+			Background: lipgloss.Color("#6B5200"),
+			Border:     lipgloss.Color("#FFD76A"),
+			Foreground: lipgloss.Color("#FFF8DD"),
+			Accent:     lipgloss.Color("#FFE8A3"),
+		},
+		{
+			Background: lipgloss.Color("#343843"),
+			Border:     lipgloss.Color("#9CA3B8"),
+			Foreground: lipgloss.Color("#F2F3F7"),
+			Accent:     lipgloss.Color("#DADDE5"),
+		},
+		{
+			Background: lipgloss.Color("#5B1420"),
+			Border:     lipgloss.Color("#FF7A8C"),
+			Foreground: lipgloss.Color("#FFECEF"),
+			Accent:     lipgloss.Color("#FFC3CB"),
+		},
+		{
+			Background: lipgloss.Color("#134532"),
+			Border:     lipgloss.Color("#58D4A4"),
+			Foreground: lipgloss.Color("#E7FFF5"),
+			Accent:     lipgloss.Color("#BAF5DD"),
+		},
+	}
 
 	return Theme{
 		BrowserBorder:  base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A78BFA")),
@@ -105,10 +137,14 @@ func DefaultTheme() Theme {
 		AppFrame: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#403B59")),
-		Header:          lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E1FF")).Padding(0, 1),
+		Header: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E5E1FF")).
+			MarginTop(1).
+			Padding(0, 1).
+			MarginBottom(1),
 		HeaderTitle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
 		HeaderValue:     lipgloss.NewStyle().Foreground(lipgloss.Color("#D1CFF6")),
-		HeaderSeparator: lipgloss.NewStyle().Foreground(lipgloss.Color("#867CC1")).Bold(true),
+		HeaderSeparator: lipgloss.NewStyle().Foreground(lipgloss.Color("#7A7EA6")).Bold(true),
 		StatusBar:       lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
 		StatusBarKey:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8B39")).Bold(true),
 		StatusBarValue:  lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
@@ -134,83 +170,15 @@ func DefaultTheme() Theme {
 		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
 		Success:      lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
 		HeaderBrand: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#1A1020")).
-			Background(lipgloss.Color("#FBC859")).
+			Foreground(lipgloss.Color("#FFD76A")).
+			Background(lipgloss.Color("#1F2538")).
 			Bold(true).
-			Padding(0, 1).
-			BorderStyle(lipgloss.Border{
-				Top:         "",
-				Bottom:      "",
-				Left:        "┃",
-				Right:       "┃",
-				TopLeft:     "",
-				TopRight:    "",
-				BottomLeft:  "",
-				BottomRight: "",
-			}).
-			BorderForeground(lipgloss.Color("#FFE29B")),
-		HeaderSegments: []HeaderSegmentStyle{
-			{
-				Background: lipgloss.Color("#9CD6FF"),
-				Border:     lipgloss.Color("#B9E1FF"),
-				Foreground: lipgloss.Color("#0D2C3D"),
-				Accent:     lipgloss.Color("#134158"),
-			},
-			{
-				Background: lipgloss.Color("#B8F5C9"),
-				Border:     lipgloss.Color("#D3FBE0"),
-				Foreground: lipgloss.Color("#0F2E1A"),
-				Accent:     lipgloss.Color("#18472A"),
-			},
-			{
-				Background: lipgloss.Color("#FF7A45"),
-				Border:     lipgloss.Color("#FF9F70"),
-				Foreground: lipgloss.Color("#1F0F0A"),
-				Accent:     lipgloss.Color("#301B15"),
-			},
-			{
-				Background: lipgloss.Color("#33C481"),
-				Border:     lipgloss.Color("#5EE0A0"),
-				Foreground: lipgloss.Color("#052817"),
-				Accent:     lipgloss.Color("#06331D"),
-			},
-			{
-				Background: lipgloss.Color("#FFB61E"),
-				Border:     lipgloss.Color("#FFD46A"),
-				Foreground: lipgloss.Color("#1F1500"),
-				Accent:     lipgloss.Color("#332300"),
-			},
-		},
+			Padding(0, 1),
+		HeaderSegments: headerSegments,
 		CommandSegments: []CommandSegmentStyle{
 			{
-				Background: lipgloss.Color("#2C1E3A"),
-				Border:     lipgloss.Color("#7D56F4"),
-				Key:        lipgloss.Color("#F6E3FF"),
-				Text:       lipgloss.Color("#E5E1FF"),
-			},
-			{
-				Background: lipgloss.Color("#102B33"),
-				Border:     lipgloss.Color("#15AABF"),
-				Key:        lipgloss.Color("#A7F2FF"),
-				Text:       lipgloss.Color("#D6F7FF"),
-			},
-			{
-				Background: lipgloss.Color("#32160E"),
-				Border:     lipgloss.Color("#FF7A45"),
-				Key:        lipgloss.Color("#FFE0D3"),
-				Text:       lipgloss.Color("#FFD4C2"),
-			},
-			{
-				Background: lipgloss.Color("#0F2F20"),
-				Border:     lipgloss.Color("#33C481"),
-				Key:        lipgloss.Color("#C0F5DF"),
-				Text:       lipgloss.Color("#D6F9E8"),
-			},
-			{
-				Background: lipgloss.Color("#332408"),
-				Border:     lipgloss.Color("#FFB61E"),
-				Key:        lipgloss.Color("#FFECC0"),
-				Text:       lipgloss.Color("#FFF3D8"),
+				Key:  lipgloss.Color("#EAEAEA"),
+				Text: lipgloss.Color("#C2C0D9"),
 			},
 		},
 		CommandDivider:          lipgloss.NewStyle().Foreground(lipgloss.Color("#403B59")).Bold(true),
@@ -302,10 +270,8 @@ func (t Theme) HeaderSegment(idx int) HeaderSegmentStyle {
 func (t Theme) CommandSegment(idx int) CommandSegmentStyle {
 	if len(t.CommandSegments) == 0 {
 		return CommandSegmentStyle{
-			Background: lipgloss.Color("#2C1E3A"),
-			Border:     lipgloss.Color("#7D56F4"),
-			Key:        lipgloss.Color("#F6E3FF"),
-			Text:       lipgloss.Color("#E5E1FF"),
+			Key:  lipgloss.Color("#EAEAEA"),
+			Text: lipgloss.Color("#C2C0D9"),
 		}
 	}
 	return t.CommandSegments[idx%len(t.CommandSegments)]

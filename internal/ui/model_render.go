@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -1355,6 +1356,23 @@ func renderCommandButton(
 	return button.Render(content)
 }
 
+var headerSegmentIcons = map[string]string{
+	"resterm":   "◆",
+	"workspace": "▣",
+	"env":       "△",
+	"requests":  "⇄",
+	"active":    "▶",
+	"tests":     "✓",
+}
+
+func headerIconFor(label string) string {
+	key := strings.ToLower(strings.TrimSpace(label))
+	if icon, ok := headerSegmentIcons[key]; ok {
+		return icon
+	}
+	return "◆"
+}
+
 func (m Model) renderHeader() string {
 	workspace := filepath.Base(m.workspaceRoot)
 	if workspace == "" {
@@ -1390,13 +1408,17 @@ func (m Model) renderHeader() string {
 
 	segments := make([]string, 0, len(segmentsData)+1)
 	brandLabel := strings.ToUpper("RESTERM")
-	brandSegment := m.theme.HeaderBrand.Render(brandLabel)
+	brandText := strings.TrimSpace(fmt.Sprintf("%s %s", headerIconFor("resterm"), brandLabel))
+	brandSegment := m.theme.HeaderBrand.Render(brandText)
 	segments = append(segments, brandSegment)
 	for i, seg := range segmentsData {
 		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value))
 	}
 
-	separator := m.theme.HeaderSeparator.Render(" ")
+	separator := m.theme.HeaderSeparator.Render("  ")
+	if separator == "" {
+		separator = "  "
+	}
 	joined := segments[0]
 	for i := 1; i < len(segments); i++ {
 		joined = lipgloss.JoinHorizontal(
@@ -1427,64 +1449,139 @@ func (m Model) renderHeaderButton(idx int, label, value string) string {
 		valueText = "—"
 	}
 
-	fg := palette.Foreground
-	if fg == "" {
-		fg = lipgloss.Color("#F5F2FF")
+	icon := headerIconFor(label)
+
+	labelBg, valueBg := headerSegmentBackgrounds(palette)
+
+	labelFg := palette.Accent
+	if labelFg == "" {
+		labelFg = palette.Foreground
 	}
-	accent := palette.Accent
-	if accent == "" {
-		accent = fg
-	}
-	border := palette.Border
-	if border == "" {
-		border = accent
+	if labelFg == "" {
+		labelFg = lipgloss.Color("#F5F2FF")
 	}
 
-	borderSpec := lipgloss.Border{
-		Top:         "",
-		Bottom:      "",
-		Left:        "┃",
-		Right:       "┃",
-		TopLeft:     "",
-		TopRight:    "",
-		BottomLeft:  "",
-		BottomRight: "",
+	valueFg := palette.Foreground
+	if valueFg == "" {
+		valueFg = labelFg
 	}
 
-	button := lipgloss.NewStyle().
-		BorderStyle(borderSpec).
-		BorderForeground(border).
-		Foreground(fg).
-		Padding(0, 1)
-	if palette.Background != "" {
-		button = button.Background(palette.Background)
+	labelParts := []string{}
+	if icon != "" {
+		labelParts = append(labelParts, icon)
 	}
+	labelParts = append(labelParts, labelText)
+	labelContent := strings.TrimSpace(strings.Join(labelParts, " "))
 
 	labelStyle := lipgloss.NewStyle().
-		Foreground(accent).
-		Bold(true)
-	if palette.Background != "" {
-		labelStyle = labelStyle.Background(palette.Background)
-	}
-	valueStyle := lipgloss.NewStyle().
-		Foreground(fg).
-		Bold(true)
-	if palette.Background != "" {
-		valueStyle = valueStyle.Background(palette.Background)
-	}
-	colonStyle := lipgloss.NewStyle().
-		Foreground(accent)
-	if palette.Background != "" {
-		colonStyle = colonStyle.Background(palette.Background)
-	}
+		Background(labelBg).
+		Foreground(labelFg).
+		Bold(true).
+		Padding(0, 1)
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top,
-		labelStyle.Render(labelText),
-		colonStyle.Render(": "),
+	valueStyle := lipgloss.NewStyle().
+		Background(valueBg).
+		Foreground(valueFg).
+		Bold(true).
+		Padding(0, 1)
+
+	content := lipgloss.JoinHorizontal(
+		lipgloss.Top,
+		labelStyle.Render(labelContent),
 		valueStyle.Render(valueText),
 	)
 
-	return button.Render(content)
+	return content
+}
+
+const defaultSegmentBaseColor = lipgloss.Color("#352D57")
+
+func headerSegmentBackgrounds(palette theme.HeaderSegmentStyle) (lipgloss.Color, lipgloss.Color) {
+	base := palette.Background
+	if base == "" {
+		base = defaultSegmentBaseColor
+	}
+	darker, ok := darkenHexColor(base, 0.18)
+	if !ok {
+		darker = base
+	}
+	lighter, ok := lightenHexColor(base, 0.15)
+	if !ok {
+		lighter = base
+	}
+	return darker, lighter
+}
+
+func lightenHexColor(color lipgloss.Color, factor float64) (lipgloss.Color, bool) {
+	return mixHexColor(color, 255, 255, 255, factor)
+}
+
+func darkenHexColor(color lipgloss.Color, factor float64) (lipgloss.Color, bool) {
+	return mixHexColor(color, 0, 0, 0, factor)
+}
+
+func mixHexColor(
+	color lipgloss.Color,
+	targetR int,
+	targetG int,
+	targetB int,
+	factor float64,
+) (lipgloss.Color, bool) {
+	r, g, b, ok := parseHexColor(string(color))
+	if !ok {
+		return "", false
+	}
+	f := clamp01(factor)
+	mixed := lipgloss.Color(fmt.Sprintf("#%02X%02X%02X",
+		mixChannel(r, targetR, f),
+		mixChannel(g, targetG, f),
+		mixChannel(b, targetB, f),
+	))
+	return mixed, true
+}
+
+func mixChannel(base int, target int, factor float64) int {
+	return int(math.Round(float64(base)*(1-factor) + float64(target)*factor))
+}
+
+func clamp01(value float64) float64 {
+	switch {
+	case value < 0:
+		return 0
+	case value > 1:
+		return 1
+	default:
+		return value
+	}
+}
+
+func parseHexColor(value string) (int, int, int, bool) {
+	raw := strings.TrimSpace(value)
+	if raw == "" {
+		return 0, 0, 0, false
+	}
+	if strings.HasPrefix(raw, "#") {
+		raw = raw[1:]
+	} else {
+		return 0, 0, 0, false
+	}
+	if len(raw) == 3 {
+		raw = fmt.Sprintf("%c%c%c%c%c%c",
+			raw[0], raw[0],
+			raw[1], raw[1],
+			raw[2], raw[2],
+		)
+	} else if len(raw) != 6 {
+		return 0, 0, 0, false
+	}
+	parsed, err := strconv.ParseUint(raw, 16, 32)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	r := int((parsed >> 16) & 0xFF)
+	g := int((parsed >> 8) & 0xFF)
+	b := int(parsed & 0xFF)
+	return r, g, b, true
 }
 
 func (m Model) headerTestSummary() (string, bool) {
