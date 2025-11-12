@@ -16,6 +16,35 @@ import (
 
 const statusBarLeftMaxRatio = 0.7
 
+var headerSegmentIcons = map[string]string{
+	"resterm":   "✦",
+	"workspace": "▣",
+	"env":       "⬢",
+	"requests":  "⇄",
+	"active":    "⚡",
+	"tests":     "✓",
+}
+
+func headerIconFor(label string) string {
+	key := strings.ToLower(strings.TrimSpace(label))
+	if icon, ok := headerSegmentIcons[key]; ok {
+		return icon
+	}
+	return "✦"
+}
+
+func headerLabelText(label string) string {
+	labelText := strings.ToUpper(strings.TrimSpace(label))
+	if labelText == "" {
+		labelText = "—"
+	}
+	icon := headerIconFor(label)
+	if icon == "" {
+		return labelText
+	}
+	return fmt.Sprintf("%s %s", icon, labelText)
+}
+
 func (m Model) View() string {
 	if !m.ready {
 		return m.renderWithinAppFrame("Initialising...")
@@ -1389,7 +1418,7 @@ func (m Model) renderHeader() string {
 	}
 
 	segments := make([]string, 0, len(segmentsData)+1)
-	brandLabel := strings.ToUpper("RESTERM")
+	brandLabel := headerLabelText("RESTERM")
 	brandSegment := m.theme.HeaderBrand.Render(brandLabel)
 	segments = append(segments, brandSegment)
 	for i, seg := range segmentsData {
@@ -1413,10 +1442,7 @@ func (m Model) renderHeader() string {
 
 func (m Model) renderHeaderButton(idx int, label, value string) string {
 	palette := m.theme.HeaderSegment(idx)
-	labelText := strings.ToUpper(strings.TrimSpace(label))
-	if labelText == "" {
-		labelText = "—"
-	}
+	labelText := headerLabelText(label)
 	valueText := strings.TrimSpace(value)
 	if strings.HasPrefix(valueText, tabIndicatorPrefix) {
 		valueText = strings.TrimSpace(
