@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.7.2](https://github.com/unkn0wn-root/resterm/compare/v0.7.1...v0.7.2) (2025-11-12)
+
+
+### Features
+
+* read .env file with passing --env-file ([b97846a](https://github.com/unkn0wn-root/resterm/commit/b97846a5e8d775d07620eeb2931466e89eb3d650))
+
 ### [0.7.1](https://github.com/unkn0wn-root/resterm/compare/v0.7.0...v0.7.1) (2025-11-11)
 
 
