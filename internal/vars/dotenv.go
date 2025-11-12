@@ -22,6 +22,7 @@ const (
 	quoteModeDouble
 )
 
+// detection keeps JSON discovery stable by requiring names that intentionally look like .env files
 func IsDotEnvPath(path string) bool {
 	base := strings.ToLower(filepath.Base(path))
 	ext := strings.ToLower(filepath.Ext(path))
@@ -55,6 +56,7 @@ func loadDotEnvEnvironment(path string) (envs EnvironmentSet, err error) {
 	if err != nil {
 		return nil, err
 	}
+
 	envName := deriveDotEnvName(values, path)
 	if envName == "" {
 		envName = dotEnvDefaultName
@@ -70,8 +72,11 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 	scanner.Buffer(buf, 1024*1024)
 
 	values := make(map[string]string)
+	workspaceSeen := false
 	lineNumber := 0
 	for scanner.Scan() {
+		// process lines in order so interpolation can only see keys defined above,
+		// matching typical dotenv and keeping cycles obvious
 		lineNumber++
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
@@ -91,11 +96,19 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 
 		finalValue := value
 		if mode != quoteModeSingle {
+			// single quotes purposely stay literal
+			// so a value such as '${TOKEN}' never surprises the reader by expanding
 			if expanded, err := expandDotEnvValue(value, values, lineNumber); err != nil {
 				return nil, err
 			} else {
 				finalValue = expanded
 			}
+		}
+		if isWorkspaceKey(key) {
+			if workspaceSeen {
+				return nil, errdef.New(errdef.CodeParse, "dotenv line %d: workspace defined multiple times", lineNumber)
+			}
+			workspaceSeen = true
 		}
 		values[key] = finalValue
 	}
@@ -121,10 +134,12 @@ func parseDotEnvAssignment(line string, lineNumber int) (string, string, error) 
 	if idx < 0 {
 		return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: expected KEY=value", lineNumber)
 	}
+
 	key := strings.TrimSpace(trimmed[:idx])
 	if key == "" {
 		return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: missing key", lineNumber)
 	}
+
 	value := trimmed[idx+1:]
 	return key, value, nil
 }
@@ -201,6 +216,7 @@ func stripInlineComment(value string) string {
 }
 
 func expandDotEnvValue(value string, resolved map[string]string, lineNumber int) (string, error) {
+	// single pass keeps evaluation predictable and avoids repeated expansion which could mask typos.
 	var b strings.Builder
 	for i := 0; i < len(value); i++ {
 		ch := value[i]
@@ -258,6 +274,7 @@ func resolveDotEnvRef(name string, resolved map[string]string, lineNumber int) (
 	if value, ok := resolved[name]; ok {
 		return value, nil
 	}
+	// allow OS envs fallbacks so sensitive values can stay outside the dotenv file and be passed at launch time
 	if envValue, ok := os.LookupEnv(name); ok {
 		return envValue, nil
 	}
@@ -304,6 +321,7 @@ func resolveDoubleQuoteEscape(ch byte) byte {
 }
 
 func deriveDotEnvName(values map[string]string, path string) string {
+	// favor the workspace key so users can rename environments without touching filenames
 	if name := workspaceName(values); name != "" {
 		return name
 	}
@@ -328,7 +346,7 @@ func deriveDotEnvName(values map[string]string, path string) string {
 
 func workspaceName(values map[string]string) string {
 	for key, value := range values {
-		if strings.EqualFold(strings.TrimSpace(key), "workspace") {
+		if isWorkspaceKey(key) {
 			trimmed := strings.TrimSpace(value)
 			if trimmed != "" {
 				return trimmed
@@ -336,4 +354,8 @@ func workspaceName(values map[string]string) string {
 		}
 	}
 	return ""
+}
+
+func isWorkspaceKey(key string) bool {
+	return strings.EqualFold(strings.TrimSpace(key), "workspace")
 }

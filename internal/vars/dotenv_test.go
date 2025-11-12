@@ -123,6 +123,23 @@ func TestLoadEnvironmentFileDotEnvMissingReference(t *testing.T) {
 	}
 }
 
+func TestLoadEnvironmentFileDotEnvDuplicateWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "dup.env")
+	content := "workspace=dev\nWORKSPACE=prod\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write dup env: %v", err)
+	}
+
+	_, err := LoadEnvironmentFile(path)
+	if err == nil {
+		t.Fatalf("expected duplicate workspace error")
+	}
+	if errdef.CodeOf(err) != errdef.CodeParse {
+		t.Fatalf("expected parse error, got %v", err)
+	}
+}
+
 func mapsKeys(set EnvironmentSet) []string {
 	keys := make([]string, 0, len(set))
 	for key := range set {
