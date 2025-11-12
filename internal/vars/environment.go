@@ -14,7 +14,14 @@ import (
 
 type EnvironmentSet map[string]map[string]string
 
-func LoadEnvironmentFile(path string) (envs EnvironmentSet, err error) {
+func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
+	if IsDotEnvPath(path) {
+		return loadDotEnvEnvironment(path)
+	}
+	return loadJSONEnvironmentFile(path)
+}
+
+func loadJSONEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "open env file %s", path)

@@ -261,6 +261,16 @@ Example environment (`_examples/resterm.env.json`):
 
 Switch environments with `Ctrl+E`. If multiple environments exist, Resterm defaults to `dev`, `default`, or `local` when available.
 
+#### Dotenv files via `--env-file`
+
+Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv file when you only need a single workspace:
+
+- Pass `--env-file path/to/.env` (or `.env.prod`, `prod.env`, etc.). Dotenv files are **never** auto-discovered—explicit opt-in avoids surprising overrides.
+- Supported syntax matches common `.env` loaders: optional `export` prefixes, `KEY=value` pairs, `#`/`;` comments, single- and double-quoted values (with escapes), and `${VAR}` or `$VAR` interpolation. We expand references using earlier keys from the same file and the current OS environment.
+- The environment name is derived from a `workspace` entry (case-insensitive). If that key is missing or blank we fall back to the file name (`.env.prod` → `prod`, `prod.env` → `prod`, bare `.env` → `default`).
+- Each dotenv file yields exactly one environment today. If you need multiple environments, stick with `resterm.env.json`.
+- Limitations: no multi-workspace support, no auto-discovery, and interpolation only sees keys declared above the current line (plus OS envs).
+
 ### Variable resolution order
 
 When expanding `{{variable}}` templates, Resterm looks in:
