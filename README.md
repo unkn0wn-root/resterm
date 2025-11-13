@@ -9,15 +9,7 @@
 </p>
 
 <p align="center">
-  <strong>Zoom mode</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_zommed.png" alt="Screenshot of resterm in zoomed mode" width="720" />
-</p>
-
-<p align="center">
-  <strong>With trace and timeline</strong>
+  <strong>Trace and Timeline</strong>
 </p>
 
 <p align="center">
@@ -25,7 +17,7 @@
 </p>
 
 <p align="center">
-  <strong>Split panes response with Workflow and WebSocket</strong>
+  <strong>Workflow and WebSocket</strong>
 </p>
 
 <p align="center">
@@ -33,7 +25,15 @@
 </p>
 
 <p align="center">
-  <strong>Split panes response and profiler</strong>
+  <strong>Compare mode</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_compare.png" alt="Screenshot of resterm in zoomed mode" width="720" />
+</p>
+
+<p align="center">
+  <strong>Profiler</strong>
 </p>
 
 <p align="center">
