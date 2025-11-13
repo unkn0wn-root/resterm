@@ -363,6 +363,8 @@ send_request = ["ctrl+enter", "cmd+enter"]
 
 The complete action catalog and a binding reference live in [docs/resterm.md#custom-bindings](docs/resterm.md#custom-bindings).
 
+Check out the sample in `_examples/bindings/bindings.toml`
+
 ## Documentation
 
 The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
