@@ -328,7 +328,7 @@ The transcript records sender/receiver, opcode, sizes, close metadata and elapse
 
 Resterm ships with a default palette, but you can provide your own by dropping theme definitions into the themes directory mentioned above. Each theme can be written in TOML or JSON and only needs to override the parts you care about.
 
-A ready-to-use sample lives in `_examples/themes/aurora.toml`. Point `RESTERM_THEMES_DIR` env var at that folder to try it immediately.
+A ready-to-use sample lives in [_examples/themes/aurora.toml](_examples/themes/aurora.toml). Point `RESTERM_THEMES_DIR` env var at that folder to try it immediately.
 
 ```toml
 [metadata]
@@ -363,7 +363,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 
 The complete action catalog and a binding reference live in [docs/resterm.md#custom-bindings](docs/resterm.md#custom-bindings).
 
-Check out the sample in `_examples/bindings/bindings.toml`
+Check out the sample in [_examples/bindings/bindings.toml](_examples/bindings/bindings.toml)
 
 ## Documentation
 
