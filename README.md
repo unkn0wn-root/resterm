@@ -90,6 +90,9 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 **Linux / macOS:**
 
+> [!IMPORTANT]
+> Pre-built Linux binaries depend on glibc **2.32 or newer**. If you run an older distro, build from source on a machine with a newer glibc toolchain or upgrade glibc before using the release archives.
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
 ```
