@@ -223,6 +223,8 @@ Modern API work rarely stops at a single environment, so Resterm bakes in a comp
 3. When the run finishes, move to the Compare tab and use the arrow keys (PgUp/PgDn/Home/End work too) to highlight any environment. Press `Enter` and the primary pane shows that environment, the secondary pane pins the baseline and you land in the Diff tab so Pretty/Raw/Headers all reflect selected ↔ baseline.
 4. Loading a compare entry from History gives the same experience even if you are offline. Resterm rehydrates the snapshots so you can keep auditing deltas without rerunning requests.
 
+For more info. about compare runs, see [docs/resterm.md#compare-runs](./docs/resterm.md#compare-runs).
+
 ## Tracing & Timeline
 
 - Enable per-phase network tracing by adding `# @trace` metadata to a request. Budgets use `phase<=duration` syntax (for example `dns<=50ms total<=300ms tolerance=25ms`). Supported phases mirror the HTTP client hooks: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
@@ -231,6 +233,8 @@ Modern API work rarely stops at a single environment, so Resterm bakes in a comp
 - `_examples/trace.http` contains two runnable requests (one within budget, one intentionally breaching) for quick experimentation.
 - Resterm can export spans to OpenTelemetry when `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`) is set. Optional extras: `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`.
 - Spans are emitted only when tracing is enabled. Budget breaches and HTTP failures automatically mark spans with an error status so distributed traces surface anomalies clearly.
+
+Deep dive into budgets, keyboard shortcuts, and trace scripting in [docs/resterm.md#timeline--tracing](./docs/resterm.md#timeline--tracing).
 
 ## OpenAPI imports
 
@@ -256,9 +260,11 @@ The repository ships with `openapi-specs.yml`, an intentionally full-featured sp
 > [!NOTE]
 > Resterm relies on [`kin-openapi`](https://github.com/getkin/kin-openapi), which currently supports OpenAPI documents up to **v3.0.1**. Work on v3.1 support is tracked in [getkin/kin-openapi#1102](https://github.com/getkin/kin-openapi/pull/1102).
 
+More about OpenAPI importer and available flags in [docs/resterm.md#importing-openapi-specs](./docs/resterm.md#importing-openapi-specs).
+
 ## Streaming (WebSocket & SSE)
 
-Streaming requests are first-class citizens in Resterm. Enable the **Stream** response tab to watch events in real time, scrub through history and replay transcripts from the History pane.
+Streaming requests are first-class citizens in Resterm. Enable the **Stream** response tab to watch events in real time. See [docs/resterm.md#streaming-sse--websocket](./docs/resterm.md#streaming-sse--websocket) for the complete directive list.
 
 ### Server-Sent Events
 
@@ -279,7 +285,7 @@ Accept: text/event-stream
 - `max-events` stop after N events (Resterm still records the transcript).
 - `max-bytes` / `limit-bytes` cap downloaded payload size.
 
-The Pretty/Raw/Headers tabs collapse into a JSON transcript when a stream finishes and the history entry exposes a summary (`events`, `bytes`, `reason`).
+The Pretty/Raw/Headers tabs collapse into a JSON transcript when a stream finishes and the history entry exposes a summary (`events`, `bytes`, `reason`). More SSE options and transcript fields live in [docs/resterm.md#server-sent-events-sse](./docs/resterm.md#server-sent-events-sse).
 
 ### WebSockets
 
@@ -319,13 +325,14 @@ Each `@ws` directive emits a step:
 - `wait <duration>` pauses before the next scripted action.
 - `close [code] [reason]` ends the session with an optional status.
 
-The transcript records sender/receiver, opcode, sizes, close metadata and elapsed time. History entries keep the conversation for later review or scripted assertions.
+The transcript records sender/receiver, opcode, sizes, close metadata and elapsed time. History entries keep the conversation for later review or scripted assertions. See [docs/resterm.md#websockets-websocket-ws](./docs/resterm.md#websockets-websocket-ws).
 
 ### Stream viewer & console
 
 - Focus the response pane with `g+p`, then switch to the Stream tab using the left/right arrow keys (or `Ctrl+H` / `Ctrl+L`). Follow events live, bookmark frames and scrub after the stream completes.
 - Toggle the interactive WebSocket console with `Ctrl+I` or `g+r` while the Stream tab is focused. Use `F2` to cycle payload modes (text, JSON, base64, file), `Ctrl+S` (or `Ctrl+Enter`) to send, arrows to navigate history, `Ctrl+P` for ping, `Ctrl+W` to close and `Ctrl+L` to clear the buffer.
 - Scripted tests can consume transcripts via the `stream` API (`stream.kind`, `stream.summary`, `stream.events`, `stream.onEvent()`), enabling assertions on streaming workloads.
+Find every stream history/export hook in [docs/resterm.md#stream-tab-history-and-console](./docs/resterm.md#stream-tab-history-and-console).
 
 ## Custom themes
 
@@ -347,7 +354,7 @@ pane_active_foreground = "#5fd1ff"
 pane_border_focus_file = "#1f6feb"
 ```
 
-Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_THEMES_DIR`) and press `Ctrl+Alt+T` (or type `g` then `t`) inside Resterm to pick it as the default. The selected theme is persisted to `settings.toml` so it is restored on the next launch.
+Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_THEMES_DIR`) and press `Ctrl+Alt+T` (or type `g` then `t`) inside Resterm to pick it as the default. The selected theme is persisted to `settings.toml` so it is restored on the next launch. The theming primer (directory layout, schema, and testing tips) lives in [docs/resterm.md#theming](./docs/resterm.md#theming).
 
 ## Custom bindings
 
