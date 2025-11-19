@@ -14,7 +14,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
-const statusBarLeftMaxRatio = 0.7
+const (
+	statusBarLeftMaxRatio = 0.7
+	helpKeyColumnWidth    = 28
+)
 
 var headerSegmentIcons = map[string]string{
 	"resterm":   "✦",
@@ -1935,7 +1938,7 @@ func (m Model) renderThemeModal() string {
 }
 
 func (m Model) renderHelpOverlay() string {
-	width := minInt(m.width-10, 80)
+	width := minInt(m.width-10, 100)
 	if width < 32 {
 		width = 32
 	}
@@ -1969,6 +1972,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"), "Refresh workspace"),
 		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleResponseSplitVert, bindings.ActionToggleResponseSplitHorz}, "Ctrl+V / Ctrl+U"), "Split response vertically / horizontally"),
 		helpRow(m, m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"), "Pin or unpin focused response pane"),
+		helpRow(m, m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"), "Copy Pretty / Raw / Headers response tab"),
 		helpRow(m, "Ctrl+F or Ctrl+B, ←/→", "Send future responses to selected pane"),
 		helpRow(m, m.helpActionKey(bindings.ActionShowGlobals, "Ctrl+G"), "Show globals summary"),
 		helpRow(m, m.helpActionKey(bindings.ActionClearGlobals, "Ctrl+Shift+G"), "Clear globals for environment"),
@@ -2136,11 +2140,11 @@ func (m Model) renderOpenModal() string {
 
 func helpRow(m Model, key, description string) string {
 	keyStyled := m.theme.HeaderTitle.
-		Width(18).
+		Width(helpKeyColumnWidth).
 		Align(lipgloss.Left).
 		Render(key)
 	descStyled := m.theme.HeaderValue.
-		PaddingLeft(2).
+		PaddingLeft(4).
 		Render(description)
 	return lipgloss.JoinHorizontal(
 		lipgloss.Left,

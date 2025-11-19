@@ -66,7 +66,7 @@ func (e *requestEditor) resolvePasteBuffer() (
 	return "", "", false, &msg
 }
 
-func (e *requestEditor) copyToClipboard(text string) tea.Cmd {
+func (e *requestEditor) copyToClipboard(text string, success string) tea.Cmd {
 	trimmed := normalizeClipboardText(text)
 	e.registerText = trimmed
 	if trimmed == "" {
@@ -75,8 +75,12 @@ func (e *requestEditor) copyToClipboard(text string) tea.Cmd {
 		}
 	}
 
+	if strings.TrimSpace(success) == "" {
+		success = "Copied selection"
+	}
+
 	return func() tea.Msg {
-		status := e.writeClipboardWithFallback(trimmed, "Copied selection")
+		status := e.writeClipboardWithFallback(trimmed, success)
 		return editorEvent{status: &status}
 	}
 }
