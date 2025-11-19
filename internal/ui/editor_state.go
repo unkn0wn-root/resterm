@@ -576,12 +576,12 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		e.metadataHints.deactivate()
 	case "ctrl+c":
 		if text := e.selectedText(); text != "" {
-			cmds = append(cmds, (&e).copyToClipboard(text))
+			cmds = append(cmds, (&e).copyToClipboard(text, ""))
 		}
 		handled = true
 	case "ctrl+x":
 		if text := e.selectedText(); text != "" {
-			cmds = append(cmds, (&e).copyToClipboard(text))
+			cmds = append(cmds, (&e).copyToClipboard(text, ""))
 			if _, removed := (&e).removeSelection(); removed {
 				cmds = append(cmds, toEditorEventCmd(editorEvent{dirty: true}))
 			}
@@ -823,7 +823,7 @@ func (e requestEditor) YankSelection() (requestEditor, tea.Cmd) {
 		return e, statusCmd(statusWarn, "No selection to yank")
 	}
 
-	cmd := (&e).copyToClipboard(text)
+	cmd := (&e).copyToClipboard(text, "")
 	e.clearSelection()
 	return e, cmd
 }

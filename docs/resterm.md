@@ -149,6 +149,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `select_timeline_tab` | Focus the Timeline tab. | `ctrl+alt+l`, `g t` |
 | `quit_app` | Quit Resterm. | `ctrl+q`, `ctrl+d` |
 | `send_request` | Send the active request (single-step only). | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
+| `copy_response_tab` | Copy the focused Pretty/Raw/Headers response tab to the clipboard. | `ctrl+shift+c`, `g y` |
 
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
@@ -178,6 +179,8 @@ send_request = ["ctrl+enter", "cmd+enter"]
 When a request opens a stream, the Stream tab becomes available. Use `Ctrl+I` to reveal the WebSocket console inside the Stream tab, `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, arrow keys to replay recent payloads, `Ctrl+P` to send ping, and `Ctrl+W` to close the session.
 
 Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
+
+While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire Pretty, Raw, or Headers tab directly to your clipboard, matching the rendered text (no mouse selection required).
 
 ### Pane minimization & zoom
 

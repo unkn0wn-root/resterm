@@ -591,6 +591,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.toggleZoomForRegion(regionFromFocus(m.focus)), true
 	case bindings.ActionClearZoom:
 		return m.clearZoomCmd(), true
+	case bindings.ActionCopyResponseTab:
+		return m.copyResponseTab(), true
 	default:
 		return nil, false
 	}

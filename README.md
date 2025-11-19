@@ -161,7 +161,7 @@ The first command reports whether a newer release is available; the second downl
 2. ... or launch Resterm: `resterm --workspace path/to/project` (or if your .http/.rest file is in the same dir. - just type `resterm` and it will be autodiscovered).
 3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane. If you don't have any .http file, just switch to the editor (`Tab`) and type `https://<some_url_dot_something>` and press `Ctrl+Enter`.
 4. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), adjust the focused pane layout with `g+h` / `g+l` (sidebar width when the left pane is focused, editor/response split otherwise), and toggle the response pane between inline and stacked with `g+v` / `g+s`. Use `g+1`, `g+2`, and `g+3` to minimize/restore the sidebar, editor, and response panes respectively, and `g+z` / `g+Z` to zoom the focused pane and clear the zoom.
-5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls.
+5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls. When the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire Pretty/Raw/Headers tab into your clipboard without needing a mouse selection.
 
 A minimal request file:
 
