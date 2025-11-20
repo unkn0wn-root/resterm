@@ -2,7 +2,6 @@ package ui
 
 import (
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -225,16 +224,6 @@ func splitLabelValue(line string) (string, string, bool) {
 	label := strings.TrimSpace(line[:idx])
 	value := strings.TrimSpace(line[idx+1:])
 	return label, value, true
-}
-
-func isNonZero(value string) bool {
-	if value == "" {
-		return false
-	}
-	if i, err := strconv.Atoi(strings.Fields(value)[0]); err == nil {
-		return i != 0
-	}
-	return strings.TrimSpace(value) != "0"
 }
 
 func isWorkflowStepLine(line string) bool {
