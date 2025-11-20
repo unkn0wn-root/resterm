@@ -386,12 +386,12 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 	}
 
 	hasDelay := state.delay > 0
-	throughputLabel := "Throughput"
-	if hasDelay {
-		throughputLabel = "Throughput (includes delay)"
+	throughputText := throughput
+	if hasDelay && throughput != "n/a" {
+		throughputText = fmt.Sprintf("%s (with delay)", throughput)
 	}
 
-	appendSummaryRow("Measured elapsed", fmt.Sprintf("%s | %s: %s", formatDurationShort(elapsed), throughputLabel, throughput))
+	appendSummaryRow("Measured elapsed", fmt.Sprintf("%s | %s", formatDurationShort(elapsed), throughputText))
 
 	totalElapsedText := "n/a"
 	if totalElapsed > 0 {
