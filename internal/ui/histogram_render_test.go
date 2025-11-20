@@ -13,14 +13,14 @@ func TestRenderHistogramAlignment(t *testing.T) {
 		{From: 1 * time.Millisecond, To: 2 * time.Millisecond, Count: 6},
 		{From: 3 * time.Millisecond, To: 5 * time.Millisecond, Count: 0},
 	}
-	output := renderHistogram(bins)
-	lines := strings.Split(strings.TrimSpace(output), "\n")
-	if len(lines) != 3 { // header + 2 rows
-		t.Fatalf("expected 3 lines, got %d", len(lines))
+	output := renderHistogram(bins, "  ")
+	lines := strings.Split(strings.TrimRight(output, "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 histogram rows, got %d", len(lines))
 	}
 	// Compare positions of separators
-	first := lines[1]
-	second := lines[2]
+	first := lines[0]
+	second := lines[1]
 	pipeIdx := strings.Index(first, "|")
 	if pipeIdx == -1 || strings.Index(second, "|") != pipeIdx {
 		t.Fatalf("expected pipes to align: %q vs %q", first, second)

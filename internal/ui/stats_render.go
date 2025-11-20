@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -57,51 +58,38 @@ func colorizeProfileStats(report string) string {
 			continue
 		}
 		prefix := leadingIndent(line)
+		lower := strings.ToLower(trimmed)
 		switch {
 		case idx == 0:
 			out = append(out, prefix+statsTitleStyle.Render(trimmed))
-		case trimmed == "No successful measurements.":
-			out = append(out, prefix+statsWarnStyle.Render(trimmed))
-		case strings.EqualFold(trimmed, "Failures:"):
-			out = append(out, prefix+statsHeadingWarn.Render(trimmed))
-			inFailureBlock = true
+		case isProfileHeading(lower):
+			style := statsHeadingStyle
+			if strings.HasPrefix(lower, "failures") {
+				style = statsHeadingWarn
+				inFailureBlock = true
+			} else {
+				inFailureBlock = false
+			}
+			out = append(out, prefix+style.Render(trimmed))
 		default:
-			label, value, ok := splitLabelValue(trimmed)
-			if ok {
-				lower := strings.ToLower(label)
-				switch lower {
-				case "measured runs":
-					style := statsSuccessStyle
-					if !isNonZero(value) {
-						style = statsSubLabelStyle
-					}
-					out = append(out, prefix+renderLabelValue(label, value, statsLabelStyle, style))
-				case "warmup runs":
-					out = append(out, prefix+renderLabelValue(label, value, statsLabelStyle, statsValueStyle))
-				case "failures":
-					style := statsSuccessStyle
-					if isNonZero(value) {
-						style = statsWarnStyle
-					}
-					out = append(out, prefix+renderLabelValue(label, value, statsLabelStyle, style))
-				case "latency summary", "percentiles", "histogram":
-					out = append(out, prefix+statsHeadingStyle.Render(label+":"))
-					if lower == "histogram" {
-						inFailureBlock = false
-					}
-				default:
-					out = append(out, prefix+renderLabelValue(label, value, statsSubLabelStyle, statsValueStyle))
-				}
-				if lower != "failures" {
-					inFailureBlock = false
-				}
+			if label, value, ok := splitLabelValue(trimmed); ok {
+				out = append(out, prefix+colorizeProfileLabelValue(label, value))
+				inFailureBlock = false
 				continue
 			}
 			if inFailureBlock && strings.HasPrefix(trimmed, "-") {
 				out = append(out, prefix+statsWarnStyle.Render(trimmed))
 				continue
 			}
-			if strings.Contains(trimmed, "|") && strings.Contains(trimmed, "(") && strings.HasSuffix(trimmed, ")") {
+			if isLatencyHeaderLine(trimmed) {
+				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
+				continue
+			}
+			if isLatencyValuesLine(trimmed) {
+				out = append(out, prefix+statsValueStyle.Render(trimmed))
+				continue
+			}
+			if looksLikeHistogramRow(trimmed) {
 				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
 				continue
 			}
@@ -110,6 +98,80 @@ func colorizeProfileStats(report string) string {
 		}
 	}
 	return strings.Join(out, "\n")
+}
+
+func isProfileHeading(line string) bool {
+	line = strings.TrimSuffix(line, ":")
+	switch {
+	case strings.HasPrefix(line, "summary"):
+		return true
+	case strings.HasPrefix(line, "latency"):
+		return true
+	case strings.HasPrefix(line, "distribution"):
+		return true
+	case strings.HasPrefix(line, "failures"):
+		return true
+	default:
+		return false
+	}
+}
+
+func colorizeProfileLabelValue(label, value string) string {
+	labelStyle := statsLabelStyle
+	valueStyle := statsValueStyle
+	switch strings.ToLower(label) {
+	case "runs":
+		valueStyle = statsHeaderValueStyle
+	case "success":
+		valueStyle = statsSuccessStyle
+		if strings.HasPrefix(strings.TrimSpace(strings.ToLower(value)), "0%") || strings.Contains(strings.ToLower(value), "n/a") {
+			valueStyle = statsSubLabelStyle
+		}
+	case "elapsed":
+		valueStyle = statsHeaderValueStyle
+	case "note":
+		labelStyle = statsSubLabelStyle
+		valueStyle = statsWarnStyle
+	}
+	return renderLabelValue(label, value, labelStyle, valueStyle)
+}
+
+var latencyHeaderFields = map[string]struct{}{
+	"min": {},
+	"p50": {},
+	"p90": {},
+	"p95": {},
+	"p99": {},
+	"max": {},
+}
+
+var durationValueRegex = regexp.MustCompile(`\d+(?:\.\d+)?(?:ns|µs|us|ms|s|m|h)`)
+
+func isLatencyHeaderLine(line string) bool {
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return false
+	}
+	for _, f := range fields {
+		if _, ok := latencyHeaderFields[strings.ToLower(f)]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func isLatencyValuesLine(line string) bool {
+	if line == "" || strings.Contains(line, ":") {
+		return false
+	}
+	return durationValueRegex.MatchString(line)
+}
+
+func looksLikeHistogramRow(line string) bool {
+	if line == "" {
+		return false
+	}
+	return strings.Contains(line, "|") && strings.Contains(line, "(") && strings.Contains(line, ")")
 }
 
 func colorizeWorkflowStats(report string) string {
