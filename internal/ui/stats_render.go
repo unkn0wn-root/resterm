@@ -31,6 +31,17 @@ var (
 	statsSelectedStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#343B59")).Foreground(lipgloss.Color("#E8E9F0"))
 )
 
+var latencyHeaderFields = map[string]struct{}{
+	"min": {},
+	"p50": {},
+	"p90": {},
+	"p95": {},
+	"p99": {},
+	"max": {},
+}
+
+var durationVal = regexp.MustCompile(`\d+(?:\.\d+)?(?:ns|µs|us|ms|s|m|h)`)
+
 func colorizeStatsReport(report string, kind statsReportKind) string {
 	if strings.TrimSpace(report) == "" {
 		return report
@@ -56,6 +67,7 @@ func colorizeProfileStats(report string) string {
 			inFailureBlock = false
 			continue
 		}
+
 		prefix := leadingIndent(line)
 		lower := strings.ToLower(trimmed)
 		switch {
@@ -72,7 +84,7 @@ func colorizeProfileStats(report string) string {
 			out = append(out, prefix+style.Render(trimmed))
 		default:
 			if label, value, ok := splitLabelValue(trimmed); ok {
-				out = append(out, prefix+colorizeProfileLabelValue(label, value))
+				out = append(out, prefix+colorizeProfileLabel(label, value))
 				inFailureBlock = false
 				continue
 			}
@@ -80,15 +92,15 @@ func colorizeProfileStats(report string) string {
 				out = append(out, prefix+statsWarnStyle.Render(trimmed))
 				continue
 			}
-			if looksLikeHistogramRow(trimmed) {
+			if histogramRow(trimmed) {
 				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
 				continue
 			}
-			if isLatencyHeaderLine(trimmed) {
+			if isLatencyHeader(trimmed) {
 				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
 				continue
 			}
-			if isLatencyValuesLine(trimmed) {
+			if isLatencyVals(trimmed) {
 				out = append(out, prefix+statsValueStyle.Render(trimmed))
 				continue
 			}
@@ -115,7 +127,7 @@ func isProfileHeading(line string) bool {
 	}
 }
 
-func colorizeProfileLabelValue(label, value string) string {
+func colorizeProfileLabel(label, value string) string {
 	labelStyle := statsLabelStyle
 	valueStyle := statsValueStyle
 	switch strings.ToLower(label) {
@@ -135,18 +147,7 @@ func colorizeProfileLabelValue(label, value string) string {
 	return renderLabelValue(label, value, labelStyle, valueStyle)
 }
 
-var latencyHeaderFields = map[string]struct{}{
-	"min": {},
-	"p50": {},
-	"p90": {},
-	"p95": {},
-	"p99": {},
-	"max": {},
-}
-
-var durationValueRegex = regexp.MustCompile(`\d+(?:\.\d+)?(?:ns|µs|us|ms|s|m|h)`)
-
-func isLatencyHeaderLine(line string) bool {
+func isLatencyHeader(line string) bool {
 	fields := strings.Fields(line)
 	if len(fields) == 0 {
 		return false
@@ -159,14 +160,14 @@ func isLatencyHeaderLine(line string) bool {
 	return true
 }
 
-func isLatencyValuesLine(line string) bool {
+func isLatencyVals(line string) bool {
 	if line == "" || strings.Contains(line, ":") {
 		return false
 	}
-	return durationValueRegex.MatchString(line)
+	return durationVal.MatchString(line)
 }
 
-func looksLikeHistogramRow(line string) bool {
+func histogramRow(line string) bool {
 	if line == "" {
 		return false
 	}
@@ -182,11 +183,13 @@ func colorizeWorkflowStats(report string) string {
 			out = append(out, line)
 			continue
 		}
+
 		prefix := leadingIndent(line)
 		if idx == 0 {
 			out = append(out, prefix+statsTitleStyle.Render(trimmed))
 			continue
 		}
+
 		if label, value, ok := splitLabelValue(trimmed); ok {
 			lower := strings.ToLower(label)
 			if lower == "workflow" || lower == "started" || lower == "steps" {
@@ -194,11 +197,13 @@ func colorizeWorkflowStats(report string) string {
 				continue
 			}
 		}
+
 		if isWorkflowStepLine(trimmed) {
 			colored := colorizeWorkflowStepLine(trimmed)
 			out = append(out, prefix+colored)
 			continue
 		}
+
 		if strings.HasPrefix(line, "    ") {
 			out = append(out, prefix+statsMessageStyle.Render(trimmed))
 			continue
@@ -253,11 +258,13 @@ func highlightDurations(line string) string {
 			builder.WriteString(remaining)
 			break
 		}
+
 		end := strings.Index(remaining[start+1:], "]")
 		if end == -1 {
 			builder.WriteString(remaining)
 			break
 		}
+
 		end += start + 1
 		builder.WriteString(remaining[:start])
 		content := remaining[start+1 : end]
@@ -266,6 +273,7 @@ func highlightDurations(line string) string {
 		} else {
 			builder.WriteString(statsDurationStyle.Render("[" + content + "]"))
 		}
+
 		remaining = remaining[end+1:]
 	}
 	return builder.String()
@@ -280,11 +288,13 @@ func highlightParentheticals(line string) string {
 			builder.WriteString(remaining)
 			break
 		}
+
 		end := strings.Index(remaining[start+1:], ")")
 		if end == -1 {
 			builder.WriteString(remaining)
 			break
 		}
+
 		end += start + 1
 		builder.WriteString(remaining[:start])
 		content := remaining[start : end+1]
