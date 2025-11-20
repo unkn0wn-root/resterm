@@ -41,8 +41,8 @@
 </p>
 
 
-Resterm is a terminal client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app, no bullshit. Focus only on what's important - testing your endpoints.
-It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard (no mouse support is a feature).
+Resterm is a terminal client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app, no bullshit.
+It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard (no mouse support is a feature here).
 
 ## Index
 **Up & Running**
