@@ -345,6 +345,7 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 	appendSummaryRow("Success", successRate)
 
 	measuredElapsed := time.Duration(0)
+	measuredDuration := time.Duration(0)
 	if !state.measuredStart.IsZero() {
 		end := state.measuredEnd
 		if end.IsZero() {
@@ -352,16 +353,54 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 		}
 		measuredElapsed = end.Sub(state.measuredStart)
 	}
+	for _, d := range state.successes {
+		measuredDuration += d
+	}
+	for _, failure := range state.failures {
+		if failure.Warmup {
+			continue
+		}
+		measuredDuration += failure.Duration
+	}
+
+	totalElapsed := time.Duration(0)
+	if !state.start.IsZero() {
+		end := state.measuredEnd
+		if end.IsZero() {
+			end = time.Now()
+		}
+		totalElapsed = end.Sub(state.start)
+	}
 
 	elapsed := measuredElapsed
-	if elapsed <= 0 && !state.start.IsZero() {
-		elapsed = time.Since(state.start)
+	if elapsed <= 0 && totalElapsed > 0 {
+		elapsed = totalElapsed
 	}
 	throughput := "n/a"
 	if measuredElapsed > 0 && measured > 0 {
 		throughput = fmt.Sprintf("%.1f rps", float64(measured)/measuredElapsed.Seconds())
 	}
-	appendSummaryRow("Elapsed", fmt.Sprintf("%s | Throughput: %s", formatDurationShort(elapsed), throughput))
+	throughputNoDelay := "n/a"
+	if measuredDuration > 0 && measured > 0 {
+		throughputNoDelay = fmt.Sprintf("%.1f rps", float64(measured)/measuredDuration.Seconds())
+	}
+
+	hasDelay := state.delay > 0
+	throughputLabel := "Throughput"
+	if hasDelay {
+		throughputLabel = "Throughput (includes delay)"
+	}
+
+	appendSummaryRow("Measured elapsed", fmt.Sprintf("%s | %s: %s", formatDurationShort(elapsed), throughputLabel, throughput))
+
+	totalElapsedText := "n/a"
+	if totalElapsed > 0 {
+		totalElapsedText = formatDurationShort(totalElapsed)
+	}
+	appendSummaryRow("Total elapsed", totalElapsedText)
+	if hasDelay {
+		appendSummaryRow("Throughput (no delay)", throughputNoDelay)
+	}
 	if success == 0 {
 		appendSummaryRow("Note", "No successful measurements.")
 	}
