@@ -42,7 +42,7 @@
 
 
 Resterm is a terminal client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app, no bullshit. Focus only on what's important - testing your endpoints.
-It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard (no mouse support :))
+It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard (no mouse support is a feature).
 
 ## Index
 **Up & Running**
@@ -56,7 +56,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 ---
 
-**More advanced**
+**Deep dive**
 - [Workflows](#workflows)
 - [Compare Runs](#compare-runs)
 - [Tracing & Timeline](#tracing--timeline)
