@@ -81,16 +81,16 @@ func colorizeProfileStats(report string) string {
 				out = append(out, prefix+statsWarnStyle.Render(trimmed))
 				continue
 			}
+			if looksLikeHistogramRow(trimmed) {
+				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
+				continue
+			}
 			if isLatencyHeaderLine(trimmed) {
 				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
 				continue
 			}
 			if isLatencyValuesLine(trimmed) {
 				out = append(out, prefix+statsValueStyle.Render(trimmed))
-				continue
-			}
-			if looksLikeHistogramRow(trimmed) {
-				out = append(out, prefix+statsSubLabelStyle.Render(trimmed))
 				continue
 			}
 			out = append(out, prefix+trimmed)

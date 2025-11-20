@@ -14,19 +14,21 @@ import (
 )
 
 type profileState struct {
-	base        *restfile.Request
-	doc         *restfile.Document
-	options     httpclient.Options
-	spec        restfile.ProfileSpec
-	total       int
-	warmup      int
-	delay       time.Duration
-	index       int
-	successes   []time.Duration
-	failures    []profileFailure
-	current     *restfile.Request
-	messageBase string
-	start       time.Time
+	base          *restfile.Request
+	doc           *restfile.Document
+	options       httpclient.Options
+	spec          restfile.ProfileSpec
+	total         int
+	warmup        int
+	delay         time.Duration
+	index         int
+	successes     []time.Duration
+	failures      []profileFailure
+	current       *restfile.Request
+	messageBase   string
+	start         time.Time
+	measuredStart time.Time
+	measuredEnd   time.Time
 }
 
 type profileFailure struct {
@@ -120,6 +122,10 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 	state.current = iterationReq
 	m.currentRequest = iterationReq
 
+	if state.index >= state.warmup && state.measuredStart.IsZero() {
+		state.measuredStart = time.Now()
+	}
+
 	progressText := profileProgressLabel(state)
 	m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
 
@@ -149,6 +155,14 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 
 	success, reason := evaluateProfileOutcome(msg)
 	warmup := state.index < state.warmup
+
+	if !warmup {
+		now := time.Now()
+		if state.measuredStart.IsZero() {
+			state.measuredStart = now
+		}
+		state.measuredEnd = now
+	}
 
 	if success {
 		if !warmup {
@@ -330,13 +344,22 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 	}
 	appendSummaryRow("Success", successRate)
 
-	elapsed := time.Duration(0)
-	if !state.start.IsZero() {
+	measuredElapsed := time.Duration(0)
+	if !state.measuredStart.IsZero() {
+		end := state.measuredEnd
+		if end.IsZero() {
+			end = time.Now()
+		}
+		measuredElapsed = end.Sub(state.measuredStart)
+	}
+
+	elapsed := measuredElapsed
+	if elapsed <= 0 && !state.start.IsZero() {
 		elapsed = time.Since(state.start)
 	}
 	throughput := "n/a"
-	if elapsed > 0 && measured > 0 {
-		throughput = fmt.Sprintf("%.1f rps", float64(measured)/elapsed.Seconds())
+	if measuredElapsed > 0 && measured > 0 {
+		throughput = fmt.Sprintf("%.1f rps", float64(measured)/measuredElapsed.Seconds())
 	}
 	appendSummaryRow("Elapsed", fmt.Sprintf("%s | Throughput: %s", formatDurationShort(elapsed), throughput))
 	if success == 0 {
