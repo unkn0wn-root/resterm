@@ -157,26 +157,115 @@ The first command reports whether a newer release is available; the second downl
 
 ## Quick Start
 
-1. Create or open a directory that contains `.http` / `.rest` files (see `_examples/` for samples). If you want to start right away without any .http - just open resterm...
-2. ... or launch Resterm: `resterm --workspace path/to/project` (or if your .http/.rest file is in the same dir. - just type `resterm` and it will be autodiscovered).
-3. Pick a request from the sidebar and press `Ctrl+Enter` to send it. Responses appear in the right pane. If you don't have any .http file, just switch to the editor (`Tab`) and type `https://<some_url_dot_something>` and press `Ctrl+Enter`.
-4. Move between panes with `Tab` / `Shift+Tab`, jump directly with `g+r` (requests), `g+i` (editor), `g+p` (response), adjust the focused pane layout with `g+h` / `g+l` (sidebar width when the left pane is focused, editor/response split otherwise), and toggle the response pane between inline and stacked with `g+v` / `g+s`. Use `g+1`, `g+2`, and `g+3` to minimize/restore the sidebar, editor, and response panes respectively, and `g+z` / `g+Z` to zoom the focused pane and clear the zoom.
-5. Use `Ctrl+E` to switch environments, `Ctrl+G` to inspect captured globals, and `Ctrl+V` / `Ctrl+U` to split the response pane when comparing calls. When the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire Pretty/Raw/Headers tab into your clipboard without needing a mouse selection.
+If you just want to hit an API **right now**, you don’t need any files.
 
-A minimal request file:
+1. **Start Resterm**
 
-```http
-### Status check
-# @name status
-GET https://httpbin.org/status/204
-User-Agent: resterm
+   ```bash
+   # In a project directory (no files required)
+   resterm
 
-### Authenticated echo
-# @name bearerEcho
-# @auth bearer {{auth.token}}
-GET https://httpbin.org/bearer
-Accept: application/json
-```
+   # Or explicitly point to a workspace
+   resterm --workspace path/to/project
+   ```
+
+2. **Type a minimal request**
+
+   - Focus the editor pane (use `Tab` if needed).
+   - Type a simple request, for example:
+
+     ```http
+     GET https://httpbin.org/status/204
+     ```
+
+3. **Send it**
+
+   - Press `Ctrl+Enter` to send the request.
+   - The response appears in the response pane on the right.
+
+4. **Move around**
+
+   - `Tab` / `Shift+Tab` - cycle focus between sidebar, editor, and response.
+   - `g+p` - jump directly to the response pane.
+   - `g+i` - jump back to the editor.
+
+That’s enough to be productive: open Resterm, type a URL, hit `Ctrl+Enter`, see the response.
+
+---
+
+### Quick Start (but with files)
+
+If you work with **`.http` / `.rest` files**, Resterm will discover and use them.
+
+1. **Open a directory with request files**
+
+   - Create or open a directory that contains `.http` / `.rest` files  
+     (see `_examples/` in this repo for samples).
+   - Run:
+
+     ```bash
+     resterm
+     # or
+     resterm --workspace path/to/project
+     ```
+
+2. **Pick and send a request**
+
+   - Use the **sidebar** to select a request from your `.http` / `.rest` files.
+   - Press `Ctrl+Enter` to send it.
+   - The response shows up in the right pane.
+
+3. **Minimal request file example**
+
+   ```http
+   ### Status check
+   # @name status
+   GET https://httpbin.org/status/204
+   User-Agent: resterm
+
+   ### Authenticated echo
+   # @name bearerEcho
+   # @auth bearer {{auth.token}}
+   GET https://httpbin.org/bearer
+   Accept: application/json
+   ```
+
+---
+
+### Navigation & Layout Cheat Sheet
+
+A few keys that make Resterm feel “native” quickly:
+
+- **Pane focus & layout**
+  - `Tab` / `Shift+Tab` - move focus between sidebar, editor, and response.
+  - `g+r` - jump to **Requests** (sidebar).
+  - `g+i` - jump to **Editor**.
+  - `g+p` - jump to **Response**.
+  - `g+h` / `g+l` - adjust layout:
+    - When the **left pane** (sidebar) is focused: change sidebar width.
+    - Otherwise: change editor/response split.
+  - `g+v` / `g+s` - toggle response pane between inline and stacked layout.
+  - `g+1`, `g+2`, `g+3` + minimize/restore sidebar, editor, response.
+  - `g+z` / `g+Z` - zoom the focused pane / clear zoom.
+
+- **Environments & globals**
+  - `Ctrl+E` - switch environments.
+  - `Ctrl+G` - inspect captured globals.
+
+- **Working with responses**
+  - `Ctrl+V` / `Ctrl+U` - split the response pane for side-by-side comparison.
+  - When response pane is focused:
+    - `Ctrl+Shift+C` or `g y` - copy the entire Pretty/Raw/Headers tab  
+      to the clipboard (no mouse selection needed).
+
+---
+
+> [!TIP]
+> **If you only remember three shortcuts…**
+> - `Ctrl+Enter` - send request  
+> - `Tab` / `Shift+Tab` - switch panes  
+> - `g+p` - jump to response
+
 
 ## Inline curl import
 
