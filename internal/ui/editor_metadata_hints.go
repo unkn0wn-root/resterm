@@ -51,6 +51,11 @@ var metadataSubcommandCatalog = map[string][]metadataHintOption{
 		{Label: "expand", Summary: "Expand templates before sending the body"},
 		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},
 	},
+	"profile": {
+		{Label: "count=", Summary: "Number of measured runs", Insert: "count=10", CursorBack: len("10")},
+		{Label: "warmup=", Summary: "Warmup runs (excluded from stats)", Insert: "warmup=2", CursorBack: len("2")},
+		{Label: "delay=", Summary: "Delay between runs (e.g. 250ms)", Insert: "delay=250ms", CursorBack: len("250ms")},
+	},
 	"script": {
 		{Label: "pre-request", Summary: "Run script before the request"},
 		{Label: "test", Summary: "Run script after the response"},
