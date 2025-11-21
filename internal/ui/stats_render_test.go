@@ -53,7 +53,7 @@ func TestColorizeProfileHistogramUsesStatsPercentiles(t *testing.T) {
 		"Profiling Load Test\n" +
 		"───────────────────\n\n" +
 		"Distribution:\n" +
-		renderHistogram(bins, "  ")
+		renderHistogram(bins, histogramDefaultIndent)
 	stats := analysis.LatencyStats{
 		Count: 10,
 		Percentiles: map[int]time.Duration{
@@ -63,7 +63,7 @@ func TestColorizeProfileHistogramUsesStatsPercentiles(t *testing.T) {
 		Histogram: bins,
 	}
 	colored := colorizeStatsReport(report, statsReportKindProfile, &stats)
-	warnBar := statsWarnStyle.Render(strings.Repeat("#", 22))
+	warnBar := statsWarnStyle.Render(strings.Repeat("#", histogramBarWidth))
 	if !strings.Contains(colored, warnBar) {
 		t.Fatalf("expected bucket crossing p90 to render in warn style; output: %q", colored)
 	}
@@ -74,7 +74,7 @@ func TestParseHistogramLineKeepsOriginalBarWidth(t *testing.T) {
 		{From: 10 * time.Millisecond, To: 15 * time.Millisecond, Count: 2},
 		{From: 15 * time.Millisecond, To: 20 * time.Millisecond, Count: 1},
 	}
-	rendered := renderHistogram(bins, "  ")
+	rendered := renderHistogram(bins, histogramDefaultIndent)
 	lines := strings.Split(strings.TrimSpace(rendered), "\n")
 	if len(lines) == 0 {
 		t.Fatalf("expected histogram output")
@@ -83,7 +83,7 @@ func TestParseHistogramLineKeepsOriginalBarWidth(t *testing.T) {
 	if !ok {
 		t.Fatalf("failed to parse histogram line: %q", lines[0])
 	}
-	if row.barWidth != 22 {
+	if row.barWidth != histogramBarWidth {
 		t.Fatalf("expected bar width 22, got %d (line: %q)", row.barWidth, lines[0])
 	}
 }
@@ -97,7 +97,7 @@ func TestP90BucketNotFadedWhenSmall(t *testing.T) {
 		"Profiling Load Test\n" +
 		"───────────────────\n\n" +
 		"Distribution:\n" +
-		renderHistogram(bins, "  ")
+		renderHistogram(bins, histogramDefaultIndent)
 	stats := analysis.LatencyStats{
 		Count: 9,
 		Percentiles: map[int]time.Duration{

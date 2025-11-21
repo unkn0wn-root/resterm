@@ -422,9 +422,9 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 
 	if len(stats.Histogram) > 0 {
 		builder.WriteString("\nDistribution:\n")
-		builder.WriteString(renderHistogram(stats.Histogram, "  "))
+		builder.WriteString(renderHistogram(stats.Histogram, histogramDefaultIndent))
 		builder.WriteString("\n")
-		builder.WriteString(renderHistogramLegend("  "))
+		builder.WriteString(renderHistogramLegend(histogramDefaultIndent))
 	}
 
 	if len(state.failures) > 0 {

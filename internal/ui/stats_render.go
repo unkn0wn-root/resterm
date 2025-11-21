@@ -259,26 +259,24 @@ type histogramLayout struct {
 }
 
 type histogramContext struct {
-	lines        map[int]histogramLine
-	order        []int
-	positions    map[int]int
-	layout       histogramLayout
-	maxCount     int
-	p50          time.Duration
-	p90          time.Duration
-	hasP50P90    bool
-	profileStats *analysis.LatencyStats
+	lines     map[int]histogramLine
+	order     []int
+	positions map[int]int
+	layout    histogramLayout
+	maxCount  int
+	p50       time.Duration
+	p90       time.Duration
+	hasP50P90 bool
 }
 
 func buildHistogramContext(lines []string, stats *analysis.LatencyStats) histogramContext {
 	p50, p90, ok := latencyThresholds(stats, lines)
 	ctx := histogramContext{
-		lines:        make(map[int]histogramLine),
-		positions:    make(map[int]int),
-		p50:          p50,
-		p90:          p90,
-		hasP50P90:    ok,
-		profileStats: stats,
+		lines:     make(map[int]histogramLine),
+		positions: make(map[int]int),
+		p50:       p50,
+		p90:       p90,
+		hasP50P90: ok,
 	}
 	for idx, line := range lines {
 		row, ok := parseHistogramLine(line)
@@ -355,6 +353,9 @@ func parseHistogramLine(line string) (histogramLine, bool) {
 	}
 	if barWidth <= 0 {
 		barWidth = visibleWidth(bar)
+	}
+	if barWidth == 0 {
+		barWidth = histogramBarWidth
 	}
 
 	countText := strings.TrimSpace(line[openIdx+1 : closeIdx])
@@ -452,8 +453,8 @@ func histogramBarStyle(lineIdx int, row histogramLine, ctx histogramContext) lip
 	}
 	if ctx.maxCount > 0 {
 		share := float64(row.count) / float64(ctx.maxCount)
-		if share < 0.15 {
-			if !(ctx.hasP50P90 && bucketTouchesOrExceeds(row, ctx.p90)) {
+		if share < histogramFadeShare {
+			if !ctx.hasP50P90 || !bucketTouchesOrExceeds(row, ctx.p90) {
 				return statsSubLabelStyle
 			}
 		}
