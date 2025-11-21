@@ -178,7 +178,9 @@ func colorizeProfileLabel(label, value string) string {
 		if strings.HasPrefix(strings.TrimSpace(strings.ToLower(value)), "0%") || strings.Contains(strings.ToLower(value), "n/a") {
 			valueStyle = statsSubLabelStyle
 		}
-	case "elapsed":
+	case "elapsed", "window":
+		valueStyle = statsHeaderValueStyle
+	case "throughput":
 		valueStyle = statsHeaderValueStyle
 	case "note":
 		labelStyle = statsSubLabelStyle
