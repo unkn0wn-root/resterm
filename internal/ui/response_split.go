@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -29,6 +30,7 @@ type responseSnapshot struct {
 	statsColored  string
 	statsColorize bool
 	statsKind     statsReportKind
+	profileStats  *analysis.LatencyStats
 	workflowStats *workflowStatsView
 	ready         bool
 	timeline      *nettrace.Timeline
@@ -427,7 +429,7 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 		content := snapshot.stats
 		if snapshot.statsColorize {
 			if snapshot.statsColored == "" {
-				snapshot.statsColored = colorizeStatsReport(snapshot.stats, snapshot.statsKind)
+				snapshot.statsColored = colorizeStatsReport(snapshot.stats, snapshot.statsKind, snapshot.profileStats)
 			}
 			if strings.TrimSpace(snapshot.statsColored) != "" {
 				content = snapshot.statsColored

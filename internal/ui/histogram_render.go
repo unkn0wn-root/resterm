@@ -99,3 +99,17 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 
 	return builder.String()
 }
+
+func renderHistogramLegend(indent string) string {
+	if indent == "" {
+		indent = "  "
+	}
+	entryIndent := indent + "  "
+	lines := []string{
+		fmt.Sprintf("%sLegend:", indent),
+		fmt.Sprintf("%sgreen <= p50", entryIndent),
+		fmt.Sprintf("%syellow between p50–p90", entryIndent),
+		fmt.Sprintf("%sred overlaps or exceeds p90 (faded when bucket <15%% of busiest)", entryIndent),
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
