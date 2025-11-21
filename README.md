@@ -172,7 +172,7 @@ If you just want to hit an API **right now**, you don’t need any files.
 2. **Type a minimal request**
 
    - Focus the editor pane (use `Tab` if needed).
-   - Type a simple request, for example:
+   - Press `i` or `a` and type a simple request, for example:
 
      ```http
      GET https://httpbin.org/status/204
