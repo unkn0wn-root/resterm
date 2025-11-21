@@ -13,7 +13,7 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 		return ""
 	}
 	if indent == "" {
-		indent = "  "
+		indent = histogramDefaultIndent
 	}
 
 	maxBarCount := 0
@@ -69,12 +69,11 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 		}
 	}
 
-	const barWidth = 22
 	rowIndent := indent + "  "
 	var builder strings.Builder
 
 	for i, bucket := range bins {
-		barLen := int((float64(bucket.Count) / float64(maxBarCount)) * float64(barWidth))
+		barLen := int((float64(bucket.Count) / float64(maxBarCount)) * float64(histogramBarWidth))
 		if barLen < 0 {
 			barLen = 0
 		}
@@ -84,8 +83,8 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 		builder.WriteString(" – ")
 		builder.WriteString(fmt.Sprintf("%-*s", maxToWidth, formattedTo[i]))
 		builder.WriteString(" | ")
-		if barLen < barWidth {
-			builder.WriteString(fmt.Sprintf("%-*s", barWidth, bar))
+		if barLen < histogramBarWidth {
+			builder.WriteString(fmt.Sprintf("%-*s", histogramBarWidth, bar))
 		} else {
 			builder.WriteString(bar)
 		}
@@ -98,4 +97,18 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 	}
 
 	return builder.String()
+}
+
+func renderHistogramLegend(indent string) string {
+	if indent == "" {
+		indent = histogramDefaultIndent
+	}
+	entryIndent := indent + "  "
+	lines := []string{
+		fmt.Sprintf("%sLegend:", indent),
+		fmt.Sprintf("%sgreen <= p50", entryIndent),
+		fmt.Sprintf("%syellow between p50–p90", entryIndent),
+		fmt.Sprintf("%sred overlaps or exceeds p90 (faded when bucket <%d%% of busiest)", entryIndent, histogramFadePercent),
+	}
+	return strings.Join(lines, "\n") + "\n"
 }

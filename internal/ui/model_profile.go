@@ -230,6 +230,7 @@ func profileProgressLabel(state *profileState) string {
 	if state.index < state.warmup {
 		return fmt.Sprintf("%s warmup %d/%d", state.messageBase, state.index+1, state.warmup)
 	}
+
 	measured := state.index - state.warmup + 1
 	if measured > state.spec.Count {
 		measured = state.spec.Count
@@ -244,8 +245,10 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 
 	report := ""
 	var stats analysis.LatencyStats
+	var statsPtr *analysis.LatencyStats
 	if len(state.successes) > 0 {
 		stats = analysis.ComputeLatencyStats(state.successes, []int{50, 90, 95, 99}, 10)
+		statsPtr = &stats
 		report = m.buildProfileReport(state, stats)
 	} else {
 		report = m.buildProfileReport(state, stats)
@@ -268,6 +271,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 			stats:         report,
 			statsColorize: true,
 			statsKind:     statsReportKindProfile,
+			profileStats:  statsPtr,
 			statsColored:  "",
 			ready:         true,
 		}
@@ -280,6 +284,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		m.responseLatest.statsColored = ""
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindProfile
+		m.responseLatest.profileStats = statsPtr
 	}
 
 	m.recordProfileHistory(state, stats, msg, report)
@@ -300,6 +305,7 @@ func buildProfileSummary(state *profileState) string {
 	if state == nil {
 		return "Profiling complete"
 	}
+
 	success := state.successCount()
 	failures := state.failureCount()
 	return fmt.Sprintf("Profiling complete: %d/%d success (%d failure, %d warmup)", success, state.spec.Count, failures, state.warmup)
@@ -315,6 +321,7 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 	if lineWidth < 12 {
 		lineWidth = 12
 	}
+
 	builder.WriteString(strings.Repeat("─", lineWidth))
 	builder.WriteString("\n\n")
 
@@ -376,10 +383,12 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 	if elapsed <= 0 && totalElapsed > 0 {
 		elapsed = totalElapsed
 	}
+
 	throughput := "n/a"
 	if measuredElapsed > 0 && measured > 0 {
 		throughput = fmt.Sprintf("%.1f rps", float64(measured)/measuredElapsed.Seconds())
 	}
+
 	throughputNoDelay := "n/a"
 	if measuredDuration > 0 && measured > 0 {
 		throughputNoDelay = fmt.Sprintf("%.1f rps", float64(measured)/measuredDuration.Seconds())
@@ -413,7 +422,9 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 
 	if len(stats.Histogram) > 0 {
 		builder.WriteString("\nDistribution:\n")
-		builder.WriteString(renderHistogram(stats.Histogram, "  "))
+		builder.WriteString(renderHistogram(stats.Histogram, histogramDefaultIndent))
+		builder.WriteString("\n")
+		builder.WriteString(renderHistogramLegend(histogramDefaultIndent))
 	}
 
 	if len(state.failures) > 0 {
@@ -423,6 +434,7 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 			if failure.Warmup {
 				label = fmt.Sprintf("Warmup %d", failure.Iteration)
 			}
+
 			details := strings.TrimSpace(failure.Reason)
 			var meta []string
 			if failure.Status != "" {
@@ -431,6 +443,7 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 			if failure.Duration > 0 {
 				meta = append(meta, formatDurationShort(failure.Duration))
 			}
+
 			if len(meta) > 0 {
 				if details == "" {
 					details = strings.Join(meta, " | ")
@@ -438,6 +451,7 @@ func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencySt
 					details = fmt.Sprintf("%s [%s]", details, strings.Join(meta, " | "))
 				}
 			}
+
 			if details == "" {
 				details = "failed"
 			}
