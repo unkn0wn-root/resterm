@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"crypto/tls"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -32,6 +34,7 @@ type Options struct {
 	DefaultPlaintextSet bool
 	DescriptorPaths     []string
 	DialTimeout         time.Duration
+	SSH                 *ssh.Plan
 }
 
 type Response struct {
@@ -80,6 +83,12 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
+	}
+	if plan := options.SSH; plan != nil && plan.Active() {
+		cfgCopy := *plan.Config
+		dialOpts = append(dialOpts, grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+			return plan.Manager.DialContext(ctx, cfgCopy, "tcp", addr)
+		}))
 	}
 	if grpcReq.Authority != "" {
 		dialOpts = append(dialOpts, grpc.WithAuthority(grpcReq.Authority))

@@ -24,6 +24,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/traceutil"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -42,6 +43,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
+	m.syncSSHGlobals(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -117,6 +119,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
+	m.syncSSHGlobals(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -194,6 +197,14 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		}
 
 		resolver := m.buildResolver(doc, req, envName, resolverExtras...)
+		sshPlan, err := m.resolveSSH(doc, req, resolver, envName)
+		if err != nil {
+			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"), executed: req}
+		}
+		if sshPlan != nil {
+			options.SSH = sshPlan
+		}
+
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
 		if err := m.ensureOAuth(req, resolver, options, envName, effectiveTimeout); err != nil {
 			return responseMsg{err: err, executed: req}
@@ -233,6 +244,10 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 			if grpcOpts.DialTimeout == 0 {
 				grpcOpts.DialTimeout = effectiveTimeout
+			}
+
+			if sshPlan != nil {
+				grpcOpts.SSH = sshPlan
 			}
 
 			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts)
@@ -600,11 +615,58 @@ func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, env
 	return vars.NewResolver(providers...)
 }
 
+func (m *Model) resolveSSH(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, envName string) (*ssh.Plan, error) {
+	if req == nil || req.SSH == nil {
+		return nil, nil
+	}
+	if m.sshGlobals != nil {
+		path := m.documentRuntimePath(doc)
+		m.sshGlobals.set(path, docSSHProfiles(doc))
+	}
+
+	manager := m.sshMgr
+	if manager == nil {
+		manager = ssh.NewManager()
+		m.sshMgr = manager
+	}
+	fileProfiles := docSSHProfiles(doc)
+	globalProfiles := []restfile.SSHProfile(nil)
+	if m.sshGlobals != nil {
+		globalProfiles = m.sshGlobals.all()
+	}
+	cfg, err := ssh.Resolve(req.SSH, fileProfiles, globalProfiles, resolver, envName)
+	if err != nil {
+		return nil, err
+	}
+	if cfg != nil && !cfg.Strict {
+		m.setStatusMessage(statusMsg{
+			text:  "@ssh strict_hostkey=false (insecure)",
+			level: statusWarn,
+		})
+	}
+	return &ssh.Plan{Manager: manager, Config: cfg}, nil
+}
+
 func (m *Model) documentRuntimePath(doc *restfile.Document) string {
 	if doc != nil && strings.TrimSpace(doc.Path) != "" {
 		return doc.Path
 	}
 	return m.currentFile
+}
+
+func (m *Model) syncSSHGlobals(doc *restfile.Document) {
+	if m.sshGlobals == nil {
+		return
+	}
+	path := m.documentRuntimePath(doc)
+	m.sshGlobals.set(path, docSSHProfiles(doc))
+}
+
+func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
+	if doc == nil {
+		return nil
+	}
+	return doc.SSH
 }
 
 func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Document, envName string) {

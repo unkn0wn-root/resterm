@@ -63,6 +63,46 @@ type GraphQLBody struct {
 	OperationName string
 }
 
+type SSHScope int
+
+const (
+	SSHScopeRequest SSHScope = iota
+	SSHScopeFile
+	SSHScopeGlobal
+)
+
+type SSHOpt[T any] struct {
+	Val T
+	Set bool
+}
+
+type SSHProfile struct {
+	Scope        SSHScope
+	Name         string
+	Host         string
+	Port         int
+	PortStr      string
+	User         string
+	Pass         string
+	Key          string
+	KeyPass      string
+	Agent        SSHOpt[bool]
+	KnownHosts   string
+	Strict       SSHOpt[bool]
+	Persist      SSHOpt[bool]
+	Timeout      SSHOpt[time.Duration]
+	TimeoutStr   string
+	KeepAlive    SSHOpt[time.Duration]
+	KeepAliveStr string
+	Retries      SSHOpt[int]
+	RetriesStr   string
+}
+
+type SSHSpec struct {
+	Use    string
+	Inline *SSHProfile
+}
+
 type GRPCRequest struct {
 	Target        string
 	Package       string
@@ -143,6 +183,7 @@ type Request struct {
 	GRPC         *GRPCRequest
 	SSE          *SSERequest
 	WebSocket    *WebSocketRequest
+	SSH          *SSHSpec
 }
 
 type SSERequest struct {
@@ -202,6 +243,7 @@ type Document struct {
 	Variables []Variable
 	Globals   []Variable
 	Constants []Constant
+	SSH       []SSHProfile
 	Requests  []*Request
 	Workflows []Workflow
 	Errors    []ParseError

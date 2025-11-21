@@ -21,8 +21,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"golang.org/x/net/http2"
 	"nhooyr.io/websocket"
 )
 
@@ -37,6 +39,7 @@ type Options struct {
 	BaseDir            string
 	Trace              bool
 	TraceBudget        *nettrace.Budget
+	SSH                *ssh.Plan
 }
 
 type FileSystem interface {
@@ -534,6 +537,19 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 			tlsConfig.Certificates = []tls.Certificate{cert}
 		}
 		transport.TLSClientConfig = tlsConfig
+	}
+
+	if sshPlan := opts.SSH; sshPlan != nil && sshPlan.Active() {
+		cfgCopy := *sshPlan.Config
+		dialer := func(ctx context.Context, network, address string) (net.Conn, error) {
+			return sshPlan.Manager.DialContext(ctx, cfgCopy, network, address)
+		}
+		transport.Proxy = nil
+		transport.DialContext = dialer
+		transport.DialTLSContext = dialer
+		if err := http2.ConfigureTransport(transport); err != nil {
+			return nil, errdef.Wrap(errdef.CodeHTTP, err, "enable http2 over ssh")
+		}
 	}
 
 	client := &http.Client{Transport: transport, Jar: c.jar}

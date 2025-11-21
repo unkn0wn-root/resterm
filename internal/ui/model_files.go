@@ -42,6 +42,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.activeRequestTitle = ""
 	m.activeRequestKey = ""
 	m.doc = parser.Parse(path, data)
+	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.dirty = false
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess})
@@ -66,6 +67,7 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.editor.moveCursorTo(0, 0)
 	m.editor.ClearSelection()
 	m.doc = parser.Parse("", nil)
+	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.dirty = false
 	m.syncHistory()
@@ -91,6 +93,7 @@ func (m *Model) saveFile() tea.Cmd {
 		}
 	}
 	m.doc = parser.Parse(m.currentFile, content)
+	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	if req := m.findRequestByKey(m.activeRequestKey); req != nil {
 		m.currentRequest = req
@@ -140,6 +143,7 @@ func (m *Model) ensureWorkspaceFile(path string) bool {
 
 func (m *Model) reparseDocument() tea.Cmd {
 	m.doc = parser.Parse(m.currentFile, []byte(m.editor.Value()))
+	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	return func() tea.Msg {
 		return statusMsg{text: "Document reloaded", level: statusInfo}

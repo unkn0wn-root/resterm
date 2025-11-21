@@ -13,6 +13,7 @@
 - [gRPC](#grpc)
 - [Scripting API](#scripting-api)
 - [Authentication](#authentication)
+- [SSH Jumps](#ssh-jumps)
 - [HTTP Transport & Settings](#http-transport--settings)
 - [Response History & Diffing](#response-history--diffing)
 - [CLI Reference](#cli-reference)
@@ -288,6 +289,96 @@ When expanding `{{variable}}` templates, Resterm looks in:
 8. OS environment variables (case-sensitive with an uppercase fallback).
 
 Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
+
+---
+
+## SSH Jumps
+
+Use `@ssh` to route HTTP/gRPC/WebSocket/SSE traffic through a jump host.
+
+**Syntax:** `# @ssh [scope] [name] key=value ...`
+
+- `scope`: `global`, `file`, or `request` (default request). Global/file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
+- `name`: profile tag (default `default`).
+- Fields: `host` (required), `port` (default 22), `user`, `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true), `persist` (only honored for global/file), `timeout`, `keepalive`, `retries`, `use` (profile selection).
+- Values expand templates and support `env:VAR` to prefer terminal env vars before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
+- Global profiles are shared across the workspace; file-scoped profiles override globals when names collide.
+- Request-level `persist` is ignored. Strict host key checking is on by default; `strict_hostkey=false` is allowed but insecure.
+
+Examples:
+
+```http
+# @ssh global edge host=env:SSH_JUMP user=ops key=~/.ssh/id_ed25519 persist timeout=30s keepalive=20s
+# @global api_host http://10.0.0.10
+
+### List over jump
+# @ssh use=edge host={{api_host}} strict_hostkey=false
+GET http://{{api_host}}/v1/things
+```
+
+Inline request-only:
+
+```http
+### Local jump
+# @ssh request host=192.168.1.50 user=svc password=env:SSH_PW timeout=12s
+POST http://internal.service/api
+```
+
+### How it works
+
+SSH tunneling operates at the transport layer, making it transparent to all other features (`@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, `@grpc`, etc.).
+
+```
+Your machine                    Jump server (bastion)           Private VPC
+    │                                  │                            │
+    │  1. SSH connect                  │                            │
+    ├─────────────────────────────────►│                            │
+    │                                  │                            │
+    │  2. "Dial 10.0.0.100:80"         │  3. TCP connect            │
+    │     (through SSH channel)        ├───────────────────────────►│
+    │                                  │                            │
+    │  4. HTTP request flows through the tunnel                     │
+    │◄────────────────────────────────────────────────────────────►│
+```
+
+### Comparison with terminal tunnels
+
+What you'd do manually:
+
+```bash
+# Create tunnel in terminal
+ssh -L 8080:10.0.0.100:80 ops@jump.example.com
+
+# Then in another terminal
+curl http://localhost:8080/api/users
+```
+
+What resterm does transparently:
+
+```http
+# @ssh global jump host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist
+
+### Hit pod directly through jump
+# @ssh use=jump
+GET http://10.0.0.100/api/users
+```
+
+**Key difference:**
+
+- **Terminal tunnel:** You bind a local port, then hit `localhost:port`
+- **Resterm:** You hit the **actual internal IP** directly (`10.0.0.100`) — resterm dials through the SSH connection to reach it
+
+This makes accessing Kubernetes pods, private VPC resources, or any internal service through a bastion host seamless. The `persist` option keeps the SSH connection alive so subsequent requests reuse it without reconnection overhead.
+
+### Default key detection
+
+When no `key` is specified, resterm automatically tries these paths in order:
+
+1. `~/.ssh/id_ed25519`
+2. `~/.ssh/id_rsa`
+3. `~/.ssh/id_ecdsa`
+
+If `SSH_AUTH_SOCK` is set, the SSH agent is also used by default.
 
 ---
 
