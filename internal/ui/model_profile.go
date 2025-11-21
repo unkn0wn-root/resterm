@@ -512,11 +512,7 @@ func writeProfileRow(b *strings.Builder, label, value string) {
 	if strings.TrimSpace(value) == "" {
 		return
 	}
-	b.WriteString("  ")
-	b.WriteString(fmt.Sprintf("%-10s", label+":"))
-	b.WriteString(" ")
-	b.WriteString(value)
-	b.WriteString("\n")
+	fmt.Fprintf(b, "  %-10s %s\n", label+":", value)
 }
 
 func formatProfileRuns(mt profileMetrics) string {
@@ -570,8 +566,7 @@ func writeLatencySection(b *strings.Builder, stats analysis.LatencyStats) {
 	if stats.Count == 0 {
 		return
 	}
-	b.WriteString("Latency (")
-	b.WriteString(fmt.Sprintf("%d samples):\n", stats.Count))
+	fmt.Fprintf(b, "Latency (%d samples):\n", stats.Count)
 	b.WriteString(renderLatencyTable(stats))
 }
 
