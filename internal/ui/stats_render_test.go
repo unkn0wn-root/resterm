@@ -9,20 +9,25 @@ import (
 )
 
 func TestColorizeProfileStatsReport(t *testing.T) {
+	bins := []analysis.HistogramBucket{
+		{From: 10 * time.Millisecond, To: 15 * time.Millisecond, Count: 2},
+		{From: 15 * time.Millisecond, To: 20 * time.Millisecond, Count: 1},
+	}
+	hist := renderHistogram(bins, histogramDefaultIndent)
 	input := "" +
 		"Profiling Load Test\n" +
 		"───────────────────\n\n" +
 		"Summary:\n" +
 		"  Runs: 5 total | 3 success | 1 failure | 1 warmup\n" +
 		"  Success: 75% (3/4)\n" +
-		"  Elapsed: 1.2s | Throughput: 3.3 rps\n\n" +
+		"  Window: 4 runs in 1.2s\n" +
+		"  Throughput: 3.3 rps | no-delay: 4.0 rps\n\n" +
 		"Latency (3 samples):\n" +
 		"  min   p50   p90   p95   p99   max\n" +
 		"  10ms  12ms  18ms  18ms  18ms  20ms\n" +
 		"  mean: 14ms | median: 12ms | stddev: 4ms\n\n" +
 		"Distribution:\n" +
-		"  10ms – 15ms | #### (2) 67%\n" +
-		"  15ms – 20ms | ## (1) 33%\n"
+		hist
 	colored := colorizeStatsReport(input, statsReportKindProfile, nil)
 	stripped := ansiSequenceRegex.ReplaceAllString(colored, "")
 	if normalizeSpaces(stripped) != normalizeSpaces(input) {
@@ -31,16 +36,23 @@ func TestColorizeProfileStatsReport(t *testing.T) {
 }
 
 func TestColorizeProfileHistogramBarsColored(t *testing.T) {
+	bins := []analysis.HistogramBucket{
+		{From: 10 * time.Millisecond, To: 15 * time.Millisecond, Count: 2},
+		{From: 15 * time.Millisecond, To: 20 * time.Millisecond, Count: 1},
+	}
+	hist := renderHistogram(bins, histogramDefaultIndent)
 	input := "" +
 		"Profiling Load Test\n" +
 		"───────────────────\n\n" +
 		"Distribution:\n" +
-		"  10ms – 15ms | #### (2) 67%\n" +
-		"  15ms – 20ms | ## (1) 33%\n"
+		hist
 	colored := colorizeStatsReport(input, statsReportKindProfile, nil)
 	stripped := ansiSequenceRegex.ReplaceAllString(colored, "")
-	if !strings.Contains(stripped, "10ms – 15ms | ####") || !strings.Contains(stripped, "15ms – 20ms | ##") {
-		t.Fatalf("expected histogram lines to be preserved, got %q", stripped)
+	lines := strings.Split(strings.TrimSpace(hist), "\n")
+	for _, line := range lines {
+		if !strings.Contains(stripped, strings.TrimSpace(line)) {
+			t.Fatalf("expected histogram line %q to be preserved, got %q", line, stripped)
+		}
 	}
 }
 
@@ -49,11 +61,7 @@ func TestColorizeProfileHistogramUsesStatsPercentiles(t *testing.T) {
 		{From: 35 * time.Millisecond, To: 45 * time.Millisecond, Count: 5},
 		{From: 45 * time.Millisecond, To: 55 * time.Millisecond, Count: 5},
 	}
-	report := "" +
-		"Profiling Load Test\n" +
-		"───────────────────\n\n" +
-		"Distribution:\n" +
-		renderHistogram(bins, histogramDefaultIndent)
+	rows := strings.Split(strings.TrimSpace(renderHistogram(bins, histogramDefaultIndent)), "\n")
 	stats := analysis.LatencyStats{
 		Count: 10,
 		Percentiles: map[int]time.Duration{
@@ -62,10 +70,19 @@ func TestColorizeProfileHistogramUsesStatsPercentiles(t *testing.T) {
 		},
 		Histogram: bins,
 	}
-	colored := colorizeStatsReport(report, statsReportKindProfile, &stats)
-	warnBar := statsWarnStyle.Render(strings.Repeat("#", histogramBarWidth))
-	if !strings.Contains(colored, warnBar) {
-		t.Fatalf("expected bucket crossing p90 to render in warn style; output: %q", colored)
+	ctx := buildHistogramContext(rows, &stats)
+	foundWarn := false
+	for idx, row := range ctx.lines {
+		style := histogramBarStyle(idx, row, ctx)
+		if bucketTouchesOrExceeds(row, ctx.p90) {
+			foundWarn = true
+			if style.Render("x") != statsWarnStyle.Render("x") {
+				t.Fatalf("expected p90 bucket to render in warn style")
+			}
+		}
+	}
+	if !foundWarn {
+		t.Fatalf("expected at least one bucket to touch p90 threshold")
 	}
 }
 
@@ -93,11 +110,7 @@ func TestP90BucketNotFadedWhenSmall(t *testing.T) {
 		{From: 100 * time.Millisecond, To: 110 * time.Millisecond, Count: 8},
 		{From: 138 * time.Millisecond, To: 142 * time.Millisecond, Count: 1},
 	}
-	report := "" +
-		"Profiling Load Test\n" +
-		"───────────────────\n\n" +
-		"Distribution:\n" +
-		renderHistogram(bins, histogramDefaultIndent)
+	rows := strings.Split(strings.TrimSpace(renderHistogram(bins, histogramDefaultIndent)), "\n")
 	stats := analysis.LatencyStats{
 		Count: 9,
 		Percentiles: map[int]time.Duration{
@@ -106,10 +119,18 @@ func TestP90BucketNotFadedWhenSmall(t *testing.T) {
 		},
 		Histogram: bins,
 	}
-	colored := colorizeStatsReport(report, statsReportKindProfile, &stats)
-	warnBar := statsWarnStyle.Render("##")
-	if !strings.Contains(colored, warnBar) {
-		t.Fatalf("expected small p90 bucket to render in warn style, got %q", colored)
+	ctx := buildHistogramContext(rows, &stats)
+	foundWarn := false
+	for idx, row := range ctx.lines {
+		if bucketTouchesOrExceeds(row, ctx.p90) {
+			foundWarn = true
+			if histogramBarStyle(idx, row, ctx).Render("x") != statsWarnStyle.Render("x") {
+				t.Fatalf("expected small p90 bucket to render in warn style")
+			}
+		}
+	}
+	if !foundWarn {
+		t.Fatalf("expected histogram bucket to touch p90 threshold")
 	}
 }
 

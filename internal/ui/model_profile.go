@@ -306,160 +306,21 @@ func buildProfileSummary(state *profileState) string {
 		return "Profiling complete"
 	}
 
-	success := state.successCount()
-	failures := state.failureCount()
-	return fmt.Sprintf("Profiling complete: %d/%d success (%d failure, %d warmup)", success, state.spec.Count, failures, state.warmup)
+	mt := profileMetricsFromState(state)
+	return fmt.Sprintf("Profiling complete: %d/%d success (%d failure, %d warmup)", mt.success, state.spec.Count, mt.failures, mt.warmup)
 }
 
 func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencyStats) string {
-	var builder strings.Builder
-	title := state.messageBase
-	builder.WriteString(title)
-	builder.WriteString("\n")
+	mt := profileMetricsFromState(state)
+	var b strings.Builder
 
-	lineWidth := len(title)
-	if lineWidth < 12 {
-		lineWidth = 12
-	}
+	writeProfileHeader(&b, state.messageBase)
+	writeProfileSummary(&b, state, mt)
+	writeLatencySection(&b, stats)
+	writeDistributionSection(&b, stats)
+	writeFailureSection(&b, state)
 
-	builder.WriteString(strings.Repeat("─", lineWidth))
-	builder.WriteString("\n\n")
-
-	success := state.successCount()
-	failures := state.failureCount()
-	measured := success + failures
-
-	appendSummaryRow := func(label, value string) {
-		builder.WriteString("  ")
-		builder.WriteString(fmt.Sprintf("%-10s", label+":"))
-		builder.WriteString(" ")
-		builder.WriteString(value)
-		builder.WriteString("\n")
-	}
-
-	builder.WriteString("Summary:\n")
-	warmupText := ""
-	if state.warmup > 0 {
-		warmupText = fmt.Sprintf(" | %d warmup", state.warmup)
-	}
-	appendSummaryRow("Runs", fmt.Sprintf("%d total | %d success | %d failure%s", state.total, success, failures, warmupText))
-
-	successRate := "n/a"
-	if measured > 0 {
-		rate := (float64(success) / float64(measured)) * 100
-		successRate = fmt.Sprintf("%.0f%% (%d/%d)", rate, success, measured)
-	}
-	appendSummaryRow("Success", successRate)
-
-	measuredElapsed := time.Duration(0)
-	measuredDuration := time.Duration(0)
-	if !state.measuredStart.IsZero() {
-		end := state.measuredEnd
-		if end.IsZero() {
-			end = time.Now()
-		}
-		measuredElapsed = end.Sub(state.measuredStart)
-	}
-	for _, d := range state.successes {
-		measuredDuration += d
-	}
-	for _, failure := range state.failures {
-		if failure.Warmup {
-			continue
-		}
-		measuredDuration += failure.Duration
-	}
-
-	totalElapsed := time.Duration(0)
-	if !state.start.IsZero() {
-		end := state.measuredEnd
-		if end.IsZero() {
-			end = time.Now()
-		}
-		totalElapsed = end.Sub(state.start)
-	}
-
-	elapsed := measuredElapsed
-	if elapsed <= 0 && totalElapsed > 0 {
-		elapsed = totalElapsed
-	}
-
-	throughput := "n/a"
-	if measuredElapsed > 0 && measured > 0 {
-		throughput = fmt.Sprintf("%.1f rps", float64(measured)/measuredElapsed.Seconds())
-	}
-
-	throughputNoDelay := "n/a"
-	if measuredDuration > 0 && measured > 0 {
-		throughputNoDelay = fmt.Sprintf("%.1f rps", float64(measured)/measuredDuration.Seconds())
-	}
-
-	hasDelay := state.delay > 0
-	throughputText := throughput
-	if hasDelay && throughput != "n/a" {
-		throughputText = fmt.Sprintf("%s (with delay)", throughput)
-	}
-
-	appendSummaryRow("Measured elapsed", fmt.Sprintf("%s | %s", formatDurationShort(elapsed), throughputText))
-
-	totalElapsedText := "n/a"
-	if totalElapsed > 0 {
-		totalElapsedText = formatDurationShort(totalElapsed)
-	}
-	appendSummaryRow("Total elapsed", totalElapsedText)
-	if hasDelay {
-		appendSummaryRow("Throughput (no delay)", throughputNoDelay)
-	}
-	if success == 0 {
-		appendSummaryRow("Note", "No successful measurements.")
-	}
-
-	if stats.Count > 0 {
-		builder.WriteString("\n")
-		builder.WriteString(fmt.Sprintf("Latency (%d samples):\n", stats.Count))
-		builder.WriteString(renderLatencyTable(stats))
-	}
-
-	if len(stats.Histogram) > 0 {
-		builder.WriteString("\nDistribution:\n")
-		builder.WriteString(renderHistogram(stats.Histogram, histogramDefaultIndent))
-		builder.WriteString("\n")
-		builder.WriteString(renderHistogramLegend(histogramDefaultIndent))
-	}
-
-	if len(state.failures) > 0 {
-		builder.WriteString("\nFailures:\n")
-		for _, failure := range state.failures {
-			label := fmt.Sprintf("Run %d", failure.Iteration)
-			if failure.Warmup {
-				label = fmt.Sprintf("Warmup %d", failure.Iteration)
-			}
-
-			details := strings.TrimSpace(failure.Reason)
-			var meta []string
-			if failure.Status != "" {
-				meta = append(meta, failure.Status)
-			}
-			if failure.Duration > 0 {
-				meta = append(meta, formatDurationShort(failure.Duration))
-			}
-
-			if len(meta) > 0 {
-				if details == "" {
-					details = strings.Join(meta, " | ")
-				} else {
-					details = fmt.Sprintf("%s [%s]", details, strings.Join(meta, " | "))
-				}
-			}
-
-			if details == "" {
-				details = "failed"
-			}
-			builder.WriteString(fmt.Sprintf("  - %s: %s\n", label, details))
-		}
-	}
-
-	return strings.TrimRight(builder.String(), "\n")
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func renderLatencyTable(stats analysis.LatencyStats) string {
@@ -515,4 +376,252 @@ func percentileValue(stats analysis.LatencyStats, percentile int) time.Duration 
 		}
 	}
 	return stats.Median
+}
+
+type profileMetrics struct {
+	success          int
+	failures         int
+	warmup           int
+	total            int
+	measured         int
+	measuredElapsed  time.Duration
+	totalElapsed     time.Duration
+	measuredDuration time.Duration
+	elapsed          time.Duration
+	throughput       string
+	throughputNoWait string
+	successRate      string
+	delay            time.Duration
+}
+
+func profileMetricsFromState(state *profileState) profileMetrics {
+	if state == nil {
+		return profileMetrics{}
+	}
+
+	success := state.successCount()
+	failures := state.failureCount()
+	measured := success + failures
+
+	measuredElapsed := elapsedBetween(state.measuredStart, state.measuredEnd)
+	totalElapsed := elapsedBetween(state.start, state.measuredEnd)
+	elapsed := measuredElapsed
+	if elapsed <= 0 && totalElapsed > 0 {
+		elapsed = totalElapsed
+	}
+
+	measuredDuration := profileMeasuredDuration(state.successes, state.failures)
+
+	mt := profileMetrics{
+		success:          success,
+		failures:         failures,
+		warmup:           state.warmup,
+		total:            state.total,
+		measured:         measured,
+		measuredElapsed:  measuredElapsed,
+		totalElapsed:     totalElapsed,
+		measuredDuration: measuredDuration,
+		elapsed:          elapsed,
+		delay:            state.delay,
+	}
+	mt.successRate = profileSuccessRate(success, measured)
+	mt.throughput = profileThroughput(measured, elapsed, state.delay > 0)
+	mt.throughputNoWait = profileThroughput(measured, measuredDuration, false)
+	return mt
+}
+
+func elapsedBetween(start, end time.Time) time.Duration {
+	if start.IsZero() {
+		return 0
+	}
+	if end.IsZero() {
+		end = time.Now()
+	}
+	if end.Before(start) {
+		return 0
+	}
+	return end.Sub(start)
+}
+
+func profileMeasuredDuration(successes []time.Duration, failures []profileFailure) time.Duration {
+	total := time.Duration(0)
+	for _, d := range successes {
+		total += d
+	}
+	for _, f := range failures {
+		if f.Warmup {
+			continue
+		}
+		total += f.Duration
+	}
+	return total
+}
+
+func profileSuccessRate(success, measured int) string {
+	if measured <= 0 {
+		return "n/a"
+	}
+	rate := (float64(success) / float64(measured)) * 100
+	return fmt.Sprintf("%.0f%% (%d/%d)", rate, success, measured)
+}
+
+func profileThroughput(samples int, span time.Duration, includeDelay bool) string {
+	if samples <= 0 || span <= 0 {
+		return "n/a"
+	}
+	rps := float64(samples) / span.Seconds()
+	text := fmt.Sprintf("%.1f rps", rps)
+	if includeDelay {
+		text += " (with delay)"
+	}
+	return text
+}
+
+func writeProfileHeader(b *strings.Builder, title string) {
+	b.WriteString(title)
+	b.WriteString("\n")
+
+	lineWidth := len(title)
+	if lineWidth < 12 {
+		lineWidth = 12
+	}
+	b.WriteString(strings.Repeat("─", lineWidth))
+	b.WriteString("\n\n")
+}
+
+func writeProfileSummary(b *strings.Builder, state *profileState, mt profileMetrics) {
+	if state == nil {
+		return
+	}
+
+	b.WriteString("Summary:\n")
+	writeProfileRow(b, "Runs", formatProfileRuns(mt))
+	writeProfileRow(b, "Success", mt.successRate)
+	writeProfileRow(b, "Window", formatProfileWindow(mt))
+	if state.delay > 0 {
+		writeProfileRow(b, "Delay", fmt.Sprintf("%s between runs", formatDurationShort(state.delay)))
+	}
+	writeProfileRow(b, "Throughput", formatProfileThroughput(mt))
+	if mt.success == 0 {
+		writeProfileRow(b, "Note", "No successful measurements.")
+	}
+	b.WriteString("\n")
+}
+
+func writeProfileRow(b *strings.Builder, label, value string) {
+	if strings.TrimSpace(value) == "" {
+		return
+	}
+	b.WriteString("  ")
+	b.WriteString(fmt.Sprintf("%-10s", label+":"))
+	b.WriteString(" ")
+	b.WriteString(value)
+	b.WriteString("\n")
+}
+
+func formatProfileRuns(mt profileMetrics) string {
+	parts := []string{
+		fmt.Sprintf("%d total", mt.total),
+		fmt.Sprintf("%d success", mt.success),
+		fmt.Sprintf("%d failure", mt.failures),
+	}
+	if mt.warmup > 0 {
+		parts = append(parts, fmt.Sprintf("%d warmup", mt.warmup))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func formatProfileWindow(mt profileMetrics) string {
+	if mt.measured <= 0 && mt.totalElapsed <= 0 {
+		return "n/a"
+	}
+
+	var parts []string
+	if mt.measured > 0 && mt.elapsed > 0 {
+		runLabel := "run"
+		if mt.measured != 1 {
+			runLabel = "runs"
+		}
+		parts = append(parts, fmt.Sprintf("%d %s in %s", mt.measured, runLabel, formatDurationShort(mt.elapsed)))
+	} else if mt.elapsed > 0 {
+		parts = append(parts, formatDurationShort(mt.elapsed))
+	}
+
+	if mt.totalElapsed > 0 && mt.totalElapsed != mt.elapsed {
+		parts = append(parts, fmt.Sprintf("wall %s", formatDurationShort(mt.totalElapsed)))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func formatProfileThroughput(mt profileMetrics) string {
+	if mt.throughput == "n/a" && mt.throughputNoWait == "n/a" {
+		return "n/a"
+	}
+	if mt.throughput == "n/a" {
+		return mt.throughputNoWait
+	}
+	if mt.throughputNoWait == "n/a" || mt.throughputNoWait == mt.throughput {
+		return mt.throughput
+	}
+	return fmt.Sprintf("%s | no-delay: %s", mt.throughput, mt.throughputNoWait)
+}
+
+func writeLatencySection(b *strings.Builder, stats analysis.LatencyStats) {
+	if stats.Count == 0 {
+		return
+	}
+	b.WriteString("Latency (")
+	b.WriteString(fmt.Sprintf("%d samples):\n", stats.Count))
+	b.WriteString(renderLatencyTable(stats))
+}
+
+func writeDistributionSection(b *strings.Builder, stats analysis.LatencyStats) {
+	if len(stats.Histogram) == 0 {
+		return
+	}
+	b.WriteString("\nDistribution:\n")
+	b.WriteString(renderHistogram(stats.Histogram, histogramDefaultIndent))
+	b.WriteString("\n")
+	b.WriteString(renderHistogramLegend(histogramDefaultIndent))
+}
+
+func writeFailureSection(b *strings.Builder, state *profileState) {
+	if state == nil || len(state.failures) == 0 {
+		return
+	}
+	b.WriteString("\nFailures:\n")
+	for _, failure := range state.failures {
+		b.WriteString(formatProfileFailure(failure))
+	}
+}
+
+func formatProfileFailure(failure profileFailure) string {
+	label := fmt.Sprintf("Run %d", failure.Iteration)
+	if failure.Warmup {
+		label = fmt.Sprintf("Warmup %d", failure.Iteration)
+	}
+
+	details := strings.TrimSpace(failure.Reason)
+	meta := formatFailureMeta(failure)
+
+	switch {
+	case details != "" && meta != "":
+		details = fmt.Sprintf("%s [%s]", details, meta)
+	case details == "" && meta != "":
+		details = meta
+	case details == "":
+		details = "failed"
+	}
+	return fmt.Sprintf("  - %s: %s\n", label, details)
+}
+
+func formatFailureMeta(failure profileFailure) string {
+	parts := make([]string, 0, 3)
+	if failure.Status != "" {
+		parts = append(parts, failure.Status)
+	}
+	if failure.Duration > 0 {
+		parts = append(parts, formatDurationShort(failure.Duration))
+	}
+	return strings.Join(parts, " | ")
 }
