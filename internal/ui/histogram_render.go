@@ -17,7 +17,7 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 	}
 
 	layout := buildHistogramRenderLayout(bins)
-	rowIndent := indent + "  "
+	rowIndent := indent + histogramDefaultIndent
 	var builder strings.Builder
 
 	for i, bucket := range bins {
@@ -130,7 +130,7 @@ func renderHistogramLegend(indent string) string {
 	if indent == "" {
 		indent = histogramDefaultIndent
 	}
-	entryIndent := indent + "  "
+	entryIndent := indent + histogramDefaultIndent
 	lines := []string{
 		fmt.Sprintf("%sLegend:", indent),
 		fmt.Sprintf("%sgreen <= p50", entryIndent),
