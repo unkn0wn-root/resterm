@@ -9,10 +9,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-// Resolve turns a request-level SSH spec into a normalized plan.
-// Values are expanded via resolver plus env: tokens. Profile lookup order:
-// request inline overrides, then file-scoped profiles, then workspace globals.
-func Resolve(spec *restfile.SSHSpec, fileProfiles []restfile.SSHProfile, globalProfiles []restfile.SSHProfile, resolver *vars.Resolver, envLabel string) (*Cfg, error) {
+func Resolve(
+	spec *restfile.SSHSpec,
+	fileProfiles []restfile.SSHProfile,
+	globalProfiles []restfile.SSHProfile,
+	resolver *vars.Resolver,
+	envLabel string,
+) (*Cfg, error) {
 	if spec == nil {
 		return nil, nil
 	}
@@ -71,9 +74,11 @@ func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfi
 	setIf(&out.Name, override.Name)
 	setIf(&out.Host, override.Host)
 	setIf(&out.PortStr, override.PortStr)
+
 	if override.PortStr != "" {
 		out.Port = override.Port
 	}
+
 	setIf(&out.User, override.User)
 	setIf(&out.Pass, override.Pass)
 	setIf(&out.Key, override.Key)

@@ -72,11 +72,13 @@ func (m *Manager) dialOnce(ctx context.Context, cfg Cfg, network, addr string) (
 	if err != nil {
 		return nil, err
 	}
+
 	conn, err := cli.Dial(network, addr)
 	if err != nil {
 		_ = cli.Close()
 		return nil, err
 	}
+
 	return wrapConn(conn, cli.Close), nil
 }
 
@@ -93,6 +95,7 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 		if conn, err := cli.Dial(network, addr); err == nil {
 			return conn, nil
 		}
+
 		m.mu.Lock()
 		closeEntry(ent)
 		delete(m.cache, key)
@@ -131,6 +134,7 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
 		if err == nil {
 			return cli, nil
 		}
+
 		lastErr = err
 		select {
 		case <-ctx.Done():
@@ -171,6 +175,7 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 		netConn.Close()
 		return nil, err
 	}
+
 	hostKeyCb, err := hostKeyCallback(cfg)
 	if err != nil {
 		netConn.Close()
@@ -203,10 +208,12 @@ func authMethods(cfg Cfg) ([]xssh.AuthMethod, error) {
 		if err != nil {
 			return nil, fmt.Errorf("read ssh key: %w", err)
 		}
+
 		signer, err := parseKey(keyData, cfg.KeyPass)
 		if err != nil {
 			return nil, err
 		}
+
 		methods = append(methods, xssh.PublicKeys(signer))
 	}
 

@@ -92,11 +92,13 @@ func parsePort(cfg *Cfg, raw string) error {
 	if val == "" {
 		return nil
 	}
+
 	cfg.PortRaw = val
 	n, err := strconv.Atoi(val)
 	if err != nil || n <= 0 || n > 65535 {
 		return fmt.Errorf("invalid ssh port: %q", val)
 	}
+
 	cfg.Port = n
 	return nil
 }
@@ -109,11 +111,13 @@ func parseDuration(target *time.Duration, rawOut *string, raw string, def time.D
 		}
 		return nil
 	}
+
 	*rawOut = val
 	dur, err := time.ParseDuration(val)
 	if err != nil || dur < 0 {
 		return fmt.Errorf("invalid ssh duration: %q", val)
 	}
+
 	*target = dur
 	return nil
 }
@@ -123,11 +127,13 @@ func parseRetries(cfg *Cfg, raw string) error {
 	if val == "" {
 		return nil
 	}
+
 	cfg.RetriesRaw = val
 	n, err := strconv.Atoi(val)
 	if err != nil || n < 0 {
 		return fmt.Errorf("invalid ssh retries: %q", val)
 	}
+
 	cfg.Retries = n
 	return nil
 }
@@ -189,6 +195,7 @@ func expandPath(p string) (string, error) {
 	if path == "" {
 		return "", nil
 	}
+
 	if strings.HasPrefix(path, "~") {
 		home := userHomeDir()
 		if home == "" {
@@ -196,6 +203,7 @@ func expandPath(p string) (string, error) {
 		}
 		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
 	}
+
 	path = os.ExpandEnv(path)
 	return filepath.Clean(path), nil
 }
