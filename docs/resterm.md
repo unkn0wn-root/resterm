@@ -13,7 +13,7 @@
 - [gRPC](#grpc)
 - [Scripting API](#scripting-api)
 - [Authentication](#authentication)
-- [SSH Jumps](#ssh-jumps)
+- [SSH Tunnels](#ssh-tunnels)
 - [HTTP Transport & Settings](#http-transport--settings)
 - [Response History & Diffing](#response-history--diffing)
 - [CLI Reference](#cli-reference)
@@ -292,9 +292,9 @@ Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$ti
 
 ---
 
-## SSH Jumps
+## SSH Tunnels
 
-Use `@ssh` to route HTTP/gRPC/WebSocket/SSE traffic through a jump host.
+Use `@ssh` to route HTTP/gRPC/WebSocket/SSE traffic through an SSH bastion.
 
 **Syntax:** `# @ssh [scope] [name] key=value ...`
 
@@ -303,12 +303,19 @@ Use `@ssh` to route HTTP/gRPC/WebSocket/SSE traffic through a jump host.
 - Fields: `host` (required), `port` (default 22), `user`, `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true), `persist` (only honored for global/file), `timeout`, `keepalive`, `retries`, `use` (profile selection).
 - Values expand templates and support `env:VAR` to prefer terminal env vars before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
 - Global profiles are shared across the workspace; file-scoped profiles override globals when names collide.
-- Request-level `persist` is ignored. Strict host key checking is on by default; `strict_hostkey=false` is allowed but insecure.
+- Request-level `persist` is ignored to avoid leaking tunnels. Strict host key checking defaults to true; `strict_hostkey=false` is allowed but insecure.
+
+Scopes:
+
+- **Global** (workspace-wide): `# @ssh global bastion host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist`
+- **File** (only this `.http`): `# @ssh file edge host=10.0.0.5 user=ops`
+- **Request inline** (scope keyword optional because request is default): `# @ssh host=192.168.1.50 user=svc password=env:SSH_PW timeout=12s`
+- **Reference** a profile: `# @ssh use=bastion` (picks file-scoped profile first, then global)
 
 Examples:
 
 ```http
-# @ssh global edge host=env:SSH_JUMP user=ops key=~/.ssh/id_ed25519 persist timeout=30s keepalive=20s
+# @ssh global edge host=env:SSH_BASTION user=ops key=~/.ssh/id_ed25519 persist timeout=30s keepalive=20s
 # @global api_host http://10.0.0.10
 
 ### List over jump
@@ -329,7 +336,7 @@ POST http://internal.service/api
 SSH tunneling operates at the transport layer, making it transparent to all other features (`@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, `@grpc`, etc.).
 
 ```
-Your machine                    Jump server (bastion)           Private VPC
+Your machine                    Bastion (SSH)                  Private VPC
     │                                  │                            │
     │  1. SSH connect                  │                            │
     ├─────────────────────────────────►│                            │
@@ -347,26 +354,24 @@ What you'd do manually:
 
 ```bash
 # Create tunnel in terminal
-ssh -L 8080:10.0.0.100:80 ops@jump.example.com
-
-# Then in another terminal
-curl http://localhost:8080/api/users
+ssh -L 8080:10.0.0.100:80 ops@bastion.example.com
+curl http://localhost:8080/api/users  # in another terminal
 ```
 
 What resterm does transparently:
 
 ```http
-# @ssh global jump host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist
+# @ssh global tunnel host=bastion.example.com user=ops key=~/.ssh/id_ed25519 persist
 
-### Hit pod directly through jump
-# @ssh use=jump
+### Hit pod directly through tunnel
+# @ssh use=tunnel
 GET http://10.0.0.100/api/users
 ```
 
 **Key difference:**
 
-- **Terminal tunnel:** You bind a local port, then hit `localhost:port`
-- **Resterm:** You hit the **actual internal IP** directly (`10.0.0.100`) — resterm dials through the SSH connection to reach it
+- **Terminal tunnel:** bind a local port, then hit `localhost:port`.
+- **Resterm:** hit the **internal IP directly** (`10.0.0.100`); Resterm dials through the SSH tunnel to reach it.
 
 This makes accessing Kubernetes pods, private VPC resources, or any internal service through a bastion host seamless. The `persist` option keeps the SSH connection alive so subsequent requests reuse it without reconnection overhead.
 

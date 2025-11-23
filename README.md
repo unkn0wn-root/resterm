@@ -46,7 +46,7 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 ## Index
 **Up & Running**
-- [Highlights](#highlights)
+- [Key Capabilities](#key-capabilities)
 - [Installation](#installation)
   - [Quick Install](#quick-install)
   - [Manual Installation](#manual-installation)
@@ -56,20 +56,17 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 
 ---
 
-**Deep dive**
-- [Workflows](#workflows)
-- [Compare Runs](#compare-runs)
-- [Tracing & Timeline](#tracing--timeline)
-- [OpenAPI imports](#openapi-imports)
-- [Streaming (WebSocket & SSE)](#streaming-websocket--sse)
-  - [Server-Sent Events](#server-sent-events)
-  - [WebSockets](#websockets)
-  - [Stream viewer & console](#stream-viewer--console)
-- [Custom themes](#custom-themes)
-- [Custom bindings](#custom-bindings)
+**Feature snapshots**
+- [Workflows & scripting](#feature-snapshots)
+- [Compare runs](#feature-snapshots)
+- [Tracing & timeline](#feature-snapshots)
+- [Streaming (WebSocket & SSE)](#feature-snapshots)
+- [OpenAPI import](#feature-snapshots)
+- [Theming & bindings](#feature-snapshots)
+- [SSH Tunnels](#feature-snapshots)
 - [Documentation](#documentation)
 
-## Highlights
+## Features
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).
 - **Variable** scopes with `@global` (environment-wide), `@var file` (document), `@var request` (per-call), plus compile-time constants (`@const`), captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
@@ -81,8 +78,10 @@ It pairs a Vim-like-style editor with a workspace explorer, response diff, histo
 - **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Tracing and Timeline** with `@trace` to enable request tracing.
-- **Multi-step workflows** let you compose several named requests into one workflow (`@workflow` + `@step`), override per-step variables, and review aggregated results in History.
-- **Multi-environment compare** via `@compare` directives or the global `--compare` flag + `g+c` shortcut so you can run the same request across diffrent envs. (dev/stage/prod etc.)
+- **Multi-step workflows** compose several named requests (`@workflow` + `@step`) with per-step overrides and expectations.
+- **Multi-environment compare** via `@compare` directives or the global `--compare` flag.
+- **SSH tunnels** route HTTP/gRPC/WebSocket/SSE traffic through bastions with host key verification, keep-alives, retries, and persistent tunnels.
+- **Custom theming & bindings** if you want to make a resterm more alligned with your taste.
 
 ## Installation
 
@@ -199,7 +198,7 @@ If you work with **`.http` / `.rest` files**, Resterm will discover and use them
 
 1. **Open a directory with request files**
 
-   - Create or open a directory that contains `.http` / `.rest` files  
+   - Create or open a directory that contains `.http` / `.rest` files
      (see `_examples/` in this repo for samples).
    - Run:
 
@@ -255,15 +254,15 @@ A few keys that make Resterm feel “native” quickly:
 - **Working with responses**
   - `Ctrl+V` / `Ctrl+U` - split the response pane for side-by-side comparison.
   - When response pane is focused:
-    - `Ctrl+Shift+C` or `g y` - copy the entire Pretty/Raw/Headers tab  
+    - `Ctrl+Shift+C` or `g y` - copy the entire Pretty/Raw/Headers tab
       to the clipboard (no mouse selection needed).
 
 ---
 
 > [!TIP]
 > **If you only remember three shortcuts…**
-> - `Ctrl+Enter` - send request  
-> - `Tab` / `Shift+Tab` - switch panes  
+> - `Ctrl+Enter` - send request
+> - `Tab` / `Shift+Tab` - switch panes
 > - `g+p` - jump to response
 
 
@@ -289,180 +288,19 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 
 ## Quick Configuration Overview
 
-- Environment files: `resterm.env.json` (or legacy `rest-client.env.json`) discovered in the file directory, workspace root, or current working directory. Explicit dotenv files (`.env`, `.env.*`, `*.env`) are supported via `--env-file` only; we derive the environment name from a `workspace` entry, then the file stem, falling back to `default` for bare `.env` files. Important: Dotenv loading is **single-workspace** for now. Use JSON when you need multiple environments in one file.
-- CLI flags: `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out`, `--openapi-base-var`, `--openapi-resolve-refs`, `--openapi-include-deprecated`, `--openapi-server-index`.
-- Config directory: `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`).
-- Themes: add `.toml` or `.json` files under `~/.config/resterm/themes` (override with `RESTERM_THEMES_DIR`) and switch them at runtime with `Ctrl+Alt+T` (or chord `g` then `t`).
+- **Environments:** JSON files (`resterm.env.json`) are auto-discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace; prefer JSON when you need multiple environments in one file.
+- **Flags you'll reach for most:** `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out` (see docs for the full list).
+- **Config storage:** `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`). Themes and keybindings live under this directory when you customize them.
 
-## Workflows
+## Feature snapshots
 
-- Combine existing requests with `@workflow` + `@step` blocks to build repeatable scenarios that run inside the TUI.
-- Set per-step assertions (`expect.status`, `expect.statuscode`) and pass data between steps via `vars.request.*` and `vars.workflow.*` namespaces.
-- View progress in the sidebar, and inspect the aggregated summary in History after the run.
-- See [`docs/resterm.md`](./docs/resterm.md#workflows-multi-step-workflows) for the full reference and `_examples/workflows.http` for a runnable sample workflow.
-
-## Compare Runs
-
-> Try `_examples/compare.http` to see `@compare` directives and the `g+c` shortcut in action (pair it with `resterm --compare dev,stage,prod` for instant multi-environment sweeps).
-
-Modern API work rarely stops at a single environment, so Resterm bakes in a compare workflow that takes seconds to use:
-
-1. Add `# @compare dev stage prod base=stage` to any request (or launch the app with `--compare dev,stage,prod --compare-base stage`).
-2. Press `g+c` (or `Enter` if you mapped the command) to send the current request to every listed environment. Resterm flips into a split view automatically so you can watch progress live.
-3. When the run finishes, move to the Compare tab and use the arrow keys (PgUp/PgDn/Home/End work too) to highlight any environment. Press `Enter` and the primary pane shows that environment, the secondary pane pins the baseline and you land in the Diff tab so Pretty/Raw/Headers all reflect selected ↔ baseline.
-4. Loading a compare entry from History gives the same experience even if you are offline. Resterm rehydrates the snapshots so you can keep auditing deltas without rerunning requests.
-
-For more info. about compare runs, see [docs/resterm.md#compare-runs](./docs/resterm.md#compare-runs).
-
-## Tracing & Timeline
-
-- Enable per-phase network tracing by adding `# @trace` metadata to a request. Budgets use `phase<=duration` syntax (for example `dns<=50ms total<=300ms tolerance=25ms`). Supported phases mirror the HTTP client hooks: `dns`, `connect`, `tls`, `request_headers`, `request_body`, `ttfb`, `transfer`, and `total`.
-- When a traced response arrives, a **Timeline** tab appears beside Pretty/Raw/Headers. It renders a proportional bar chart, annotates overruns, and lists budget breaches. Jump straight to it with `Ctrl+Alt+L` (or the `g+t` chord) and exit via the standard tab navigation.
-- Trace data is available to scripts through the `trace` binding (`trace.enabled()`, `trace.phases()`, `trace.breaches()`, `trace.withinBudget()`, etc.), making CI assertions straightforward.
-- `_examples/trace.http` contains two runnable requests (one within budget, one intentionally breaching) for quick experimentation.
-- Resterm can export spans to OpenTelemetry when `RESTERM_TRACE_OTEL_ENDPOINT` (or `--trace-otel-endpoint`) is set. Optional extras: `RESTERM_TRACE_OTEL_INSECURE` / `--trace-otel-insecure`, `RESTERM_TRACE_OTEL_SERVICE` / `--trace-otel-service`, `RESTERM_TRACE_OTEL_TIMEOUT`, and `RESTERM_TRACE_OTEL_HEADERS`.
-- Spans are emitted only when tracing is enabled. Budget breaches and HTTP failures automatically mark spans with an error status so distributed traces surface anomalies clearly.
-
-Deep dive into budgets, keyboard shortcuts, and trace scripting in [docs/resterm.md#timeline--tracing](./docs/resterm.md#timeline--tracing).
-
-## OpenAPI imports
-
-Resterm can translate an OpenAPI 3 specification into a `.http` collection directly from the CLI.
-
-```bash
-resterm \
-  --from-openapi openapi-test.yml \
-  --http-out openapi-test.http \
-  --openapi-base-var apiBase \
-  --openapi-resolve-refs \
-  --openapi-server-index 1
-```
-
-- `--from-openapi` points at the source spec, `--http-out` controls the generated `.http` file (defaults to `<spec>.http` when omitted).
-- `--openapi-base-var` overrides the variable name injected for the base URL (falls back to `baseUrl`).
-- `--openapi-resolve-refs` enables kin-openapi's `$ref` resolution before generation.
-- `--openapi-include-deprecated` keeps deprecated operations that are skipped by default.
-- `--openapi-server-index` picks which server entry (0-based) should populate the base URL if multiple servers are defined.
-
-The repository ships with `openapi-specs.yml`, an intentionally full-featured spec that covers array/object query parameters, callbacks, and unsupported constructs (for example OpenID Connect). Those unsupported pieces surface as `Warning:` lines within the generated header comment so you can verify warning handling end-to-end.
-
-> [!NOTE]
-> Resterm relies on [`kin-openapi`](https://github.com/getkin/kin-openapi), which currently supports OpenAPI documents up to **v3.0.1**. Work on v3.1 support is tracked in [getkin/kin-openapi#1102](https://github.com/getkin/kin-openapi/pull/1102).
-
-More about OpenAPI importer and available flags in [docs/resterm.md#importing-openapi-specs](./docs/resterm.md#importing-openapi-specs).
-
-## Streaming (WebSocket & SSE)
-
-Streaming requests are first-class citizens in Resterm. Enable the **Stream** response tab to watch events in real time. See [docs/resterm.md#streaming-sse--websocket](./docs/resterm.md#streaming-sse--websocket) for the complete directive list.
-
-### Server-Sent Events
-
-Annotate any HTTP request with `# @sse` to keep the connection open and capture events:
-
-```http
-### Notification feed
-# @name streamNotifications
-# @sse duration=1m idle=5s max-events=50
-GET https://api.example.com/notifications
-Accept: text/event-stream
-```
-
-`@sse` accepts:
-
-- `duration` / `timeout` total session timeout before Resterm aborts the stream.
-- `idle` / `idle-timeout` maximum gap between events before the stream is closed.
-- `max-events` stop after N events (Resterm still records the transcript).
-- `max-bytes` / `limit-bytes` cap downloaded payload size.
-
-The Pretty/Raw/Headers tabs collapse into a JSON transcript when a stream finishes and the history entry exposes a summary (`events`, `bytes`, `reason`). More SSE options and transcript fields live in [docs/resterm.md#server-sent-events-sse](./docs/resterm.md#server-sent-events-sse).
-
-### WebSockets
-
-Switch any request to WebSocket mode with `# @websocket` and describe scripted steps with `# @ws` lines:
-
-```http
-### Chat handshake
-# @name websocketChat
-# @websocket timeout=10s receive-timeout=5s subprotocols=chat.v2,json
-# @ws send {"type":"hello"}
-# @ws wait 1s
-# @ws send-json {"type":"message","text":"Hi"}
-# @ws close 1000 "client done"
-wss://chat.example.com/stream
-```
-
-or if you prefer just to open websocket connection:
-```http
-### Chat
-# @name websocketChat
-# @websocket
-ws://chat.example.com/stream
-```
-
-WebSocket options mirror runtime controls:
-
-- `timeout` - handshake deadline.
-- `receive-timeout` - idle receive window (0 keeps it open indefinitely).
-- `max-message-bytes` - hard cap for inbound payloads.
-- `subprotocols` - comma-separated list sent during the handshake.
-- `compression=<true|false>` - explicitly enable or disable per-message compression.
-
-Each `@ws` directive emits a step:
-
-- `send`/`send-json`/`send-base64`/`send-file` send text, JSON, base64, or file payloads.
-- `ping` / `pong` transmit control frames.
-- `wait <duration>` pauses before the next scripted action.
-- `close [code] [reason]` ends the session with an optional status.
-
-The transcript records sender/receiver, opcode, sizes, close metadata and elapsed time. History entries keep the conversation for later review or scripted assertions. See [docs/resterm.md#websockets-websocket-ws](./docs/resterm.md#websockets-websocket-ws).
-
-### Stream viewer & console
-
-- Focus the response pane with `g+p`, then switch to the Stream tab using the left/right arrow keys (or `Ctrl+H` / `Ctrl+L`). Follow events live, bookmark frames and scrub after the stream completes.
-- Toggle the interactive WebSocket console with `Ctrl+I` or `g+r` while the Stream tab is focused. Use `F2` to cycle payload modes (text, JSON, base64, file), `Ctrl+S` (or `Ctrl+Enter`) to send, arrows to navigate history, `Ctrl+P` for ping, `Ctrl+W` to close and `Ctrl+L` to clear the buffer.
-- Scripted tests can consume transcripts via the `stream` API (`stream.kind`, `stream.summary`, `stream.events`, `stream.onEvent()`), enabling assertions on streaming workloads.
-Find every stream history/export hook in [docs/resterm.md#stream-tab-history-and-console](./docs/resterm.md#stream-tab-history-and-console).
-
-## Custom themes
-
-Resterm ships with a default palette, but you can provide your own by dropping theme definitions into the themes directory mentioned above. Each theme can be written in TOML or JSON and only needs to override the parts you care about.
-
-A ready-to-use sample lives in [_examples/themes/aurora.toml](_examples/themes/aurora.toml). Point `RESTERM_THEMES_DIR` env var at that folder to try it immediately.
-
-```toml
-[metadata]
-name = "Oceanic"
-author = "You"
-
-[styles.header_title]
-foreground = "#5fd1ff"
-bold = true
-
-[colors]
-pane_active_foreground = "#5fd1ff"
-pane_border_focus_file = "#1f6feb"
-```
-
-Save the file as `~/.config/resterm/themes/oceanic.toml` (or to your `RESTERM_THEMES_DIR`) and press `Ctrl+Alt+T` (or type `g` then `t`) inside Resterm to pick it as the default. The selected theme is persisted to `settings.toml` so it is restored on the next launch. The theming primer (directory layout, schema, and testing tips) lives in [docs/resterm.md#theming](./docs/resterm.md#theming).
-
-## Custom bindings
-
-Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first (and `bindings.json` second). Each entry maps an action ID to one or more bindings:
-
-```toml
-[bindings]
-save_file = ["ctrl+shift+s"]
-set_main_split_horizontal = ["g s", "ctrl+alt+s"]
-send_request = ["ctrl+enter", "cmd+enter"]
-```
-
-- Modifiers use `+` (`ctrl+shift+o`), while chord steps are separated by spaces (`"g s"`).
-- Only up to two steps are supported; `send_request` must stay single-step so it can fire while you type.
-- Unknown actions or two actions sharing the same binding will be rejected (Resterm logs the error and keeps defaults).
-
-The complete action catalog and a binding reference live in [docs/resterm.md#custom-bindings](docs/resterm.md#custom-bindings).
-
-Check out the sample in [_examples/bindings/bindings.toml](_examples/bindings/bindings.toml)
+- **SSH jumps/tunnels:** Route HTTP/gRPC/WebSocket/SSE through bastions with `@ssh` profiles (persist/keepalive/host-key/retries). Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-jumps) and `_examples/ssh.http`.
+- **Workflows & scripting:** Chain requests with `@workflow`/`@step`, pass data between steps, and add lightweight JS hooks. Docs + sample: [`docs/resterm.md#workflows-multi-step-workflows`](./docs/resterm.md#workflows-multi-step-workflows) and `_examples/workflows.http`.
+- **Compare runs:** Run the same request across environments with `@compare` or `--compare`, then diff responses side by side (`g+c`). Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
+- **Tracing & timeline:** Add `@trace` with budgets to capture DNS/connect/TLS/TTFB/transfer timings, visualize overruns, and optionally export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
+- **Streaming (WebSocket & SSE):** Use `@websocket` + `@ws` steps or `@sse` to script and record streams. The Stream tab keeps transcripts and an interactive console. Docs: [`docs/resterm.md#streaming-sse--websocket`](./docs/resterm.md#streaming-sse--websocket).
+- **OpenAPI import:** Convert an OpenAPI 3 spec into `.http` collections from the CLI (`--from-openapi`). Docs: [`docs/resterm.md#importing-openapi-specs`](./docs/resterm.md#importing-openapi-specs).
+- **Theming & bindings:** Optional customization via `themes/*.toml` and `bindings.toml/json` under the config dir; defaults are ready to use. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
 
 ## Documentation
 
