@@ -231,7 +231,7 @@ func TestKeepAliveStops(t *testing.T) {
 	_ = conn.Close()
 
 	time.Sleep(20 * time.Millisecond)
-	m.Close()
+	_ = m.Close()
 
 	if fc.requests.Load() == 0 {
 		t.Fatalf("expected keepalive requests to fire")

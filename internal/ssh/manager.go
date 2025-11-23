@@ -177,13 +177,13 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 
 	auth, err := authMethods(cfg)
 	if err != nil {
-		netConn.Close()
+		_ = netConn.Close()
 		return nil, err
 	}
 
 	hostKeyCb, err := hostKeyCallback(cfg)
 	if err != nil {
-		netConn.Close()
+		_ = netConn.Close()
 		return nil, err
 	}
 
@@ -199,7 +199,7 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 
 	conn, chans, reqs, err := xssh.NewClientConn(netConn, addr, sshCfg)
 	if err != nil {
-		netConn.Close()
+		_ = netConn.Close()
 		return nil, err
 	}
 	return xssh.NewClient(conn, chans, reqs), nil
