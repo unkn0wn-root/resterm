@@ -52,7 +52,7 @@ TL;DR why resterm:
 
 ## Index
 **Up & Running**
-- [Key Capabilities](#key-capabilities)
+- [Key Capabilities](#features)
 - [Installation](#installation)
   - [Quick Install](#quick-install)
   - [Manual Installation](#manual-installation)
