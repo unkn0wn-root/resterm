@@ -16,6 +16,8 @@ import (
 	knownhosts "golang.org/x/crypto/ssh/knownhosts"
 )
 
+const dialRetryDelay = 150 * time.Millisecond
+
 type Client interface {
 	Dial(network, addr string) (net.Conn, error)
 	SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error)
@@ -49,12 +51,14 @@ func NewManager() *Manager {
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	var firstErr error
+	var errs []error
 	for key, ent := range m.cache {
-		closeEntry(ent)
+		if err := closeEntry(ent); err != nil {
+			errs = append(errs, err)
+		}
 		delete(m.cache, key)
 	}
-	return firstErr
+	return errors.Join(errs...)
 }
 
 func (m *Manager) DialContext(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
@@ -97,7 +101,7 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 		}
 
 		m.mu.Lock()
-		closeEntry(ent)
+		_ = closeEntry(ent)
 		delete(m.cache, key)
 		m.mu.Unlock()
 	}
@@ -115,7 +119,7 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 
 	conn, err := cli.Dial(network, addr)
 	if err != nil {
-		closeEntry(ent)
+		_ = closeEntry(ent)
 		return nil, err
 	}
 
@@ -142,7 +146,9 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
 		default:
 		}
 		if i+1 < attempts {
-			time.Sleep(150 * time.Millisecond)
+			if err := waitWithContext(ctx, dialRetryDelay); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if lastErr == nil {
@@ -155,7 +161,7 @@ func (m *Manager) purgeLocked() {
 	now := m.now()
 	for key, ent := range m.cache {
 		if now.Sub(ent.lastUsed) > m.ttl {
-			closeEntry(ent)
+			_ = closeEntry(ent)
 			delete(m.cache, key)
 		}
 	}
@@ -295,16 +301,33 @@ func keepAliveLoop(cli Client, interval time.Duration, stop <-chan struct{}) {
 	}
 }
 
-func closeEntry(ent *entry) {
+func closeEntry(ent *entry) error {
 	if ent == nil {
-		return
+		return nil
 	}
 	select {
 	case <-ent.stop:
 	default:
 		close(ent.stop)
 	}
-	_ = ent.cli.Close()
+	if ent.cli != nil {
+		return ent.cli.Close()
+	}
+	return nil
+}
+
+func waitWithContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 type wrappedConn struct {

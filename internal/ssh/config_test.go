@@ -130,3 +130,48 @@ func TestNormalizeProfileRejectsInvalidNumbers(t *testing.T) {
 		}
 	})
 }
+
+func TestCacheKeyReflectsAuthAndOptions(t *testing.T) {
+	base := Cfg{
+		Label:      "env",
+		Name:       "edge",
+		Host:       "jump",
+		Port:       22,
+		User:       "ops",
+		Pass:       "pw1",
+		KeyPass:    "kp1",
+		KeyPath:    "/tmp/key1",
+		KnownHosts: "/tmp/kh",
+		Strict:     true,
+		Agent:      true,
+		Persist:    true,
+		Timeout:    5 * time.Second,
+		KeepAlive:  2 * time.Second,
+		Retries:    1,
+	}
+	baseKey := cacheKey(base)
+
+	changedPass := base
+	changedPass.Pass = "pw2"
+	if cacheKey(changedPass) == baseKey {
+		t.Fatalf("expected cache key to change when password changes")
+	}
+
+	changedKeyPass := base
+	changedKeyPass.KeyPass = "kp2"
+	if cacheKey(changedKeyPass) == baseKey {
+		t.Fatalf("expected cache key to change when key passphrase changes")
+	}
+
+	changedKeepAlive := base
+	changedKeepAlive.KeepAlive = base.KeepAlive + time.Second
+	if cacheKey(changedKeepAlive) == baseKey {
+		t.Fatalf("expected cache key to change when keepalive changes")
+	}
+
+	changedRetries := base
+	changedRetries.Retries = base.Retries + 1
+	if cacheKey(changedRetries) == baseKey {
+		t.Fatalf("expected cache key to change when retries changes")
+	}
+}

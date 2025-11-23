@@ -17,6 +17,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -170,6 +171,32 @@ func TestPrepareBodyFileExpandTemplates(t *testing.T) {
 	}
 	if string(data) != `{"id":"123"}` {
 		t.Fatalf("unexpected expanded body: %s", string(data))
+	}
+}
+
+func TestBuildHTTPClientSSHLeavesTLSDialerNil(t *testing.T) {
+	client := NewClient(nil)
+	mgr := &ssh.Manager{}
+	opts := Options{
+		SSH: &ssh.Plan{
+			Manager: mgr,
+			Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+		},
+	}
+
+	httpClient, err := client.buildHTTPClient(opts)
+	if err != nil {
+		t.Fatalf("build http client: %v", err)
+	}
+	transport, ok := httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("unexpected transport type %T", httpClient.Transport)
+	}
+	if transport.DialContext == nil {
+		t.Fatalf("expected ssh dialer to be set on DialContext")
+	}
+	if transport.DialTLSContext != nil {
+		t.Fatalf("expected DialTLSContext to remain nil so TLS handshakes run normally")
 	}
 }
 

@@ -154,3 +154,26 @@ func TestKeepAliveStops(t *testing.T) {
 		t.Fatalf("expected keepalive requests to fire")
 	}
 }
+
+func TestDialRetryHonorsCancelledContext(t *testing.T) {
+	cfg := Cfg{Host: "h", Port: 22, User: "u", Pass: "p", Persist: false, Retries: 3}
+	m := &Manager{
+		cache: make(map[string]*entry),
+		ttl:   time.Minute,
+		now:   time.Now,
+		dial: func(ctx context.Context, cfg Cfg) (Client, error) {
+			return nil, errBoom
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	start := time.Now()
+	if _, err := m.DialContext(ctx, cfg, "tcp", "z:80"); !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected canceled context, got %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > dialRetryDelay/2 {
+		t.Fatalf("unexpected dial delay after cancel: %v", elapsed)
+	}
+}

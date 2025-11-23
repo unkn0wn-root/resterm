@@ -546,7 +546,6 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		}
 		transport.Proxy = nil
 		transport.DialContext = dialer
-		transport.DialTLSContext = dialer
 		if err := http2.ConfigureTransport(transport); err != nil {
 			return nil, errdef.Wrap(errdef.CodeHTTP, err, "enable http2 over ssh")
 		}

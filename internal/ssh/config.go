@@ -1,6 +1,8 @@
 package ssh
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -175,12 +177,41 @@ func cacheKey(cfg Cfg) string {
 		cfg.Host,
 		strconv.Itoa(cfg.Port),
 		cfg.User,
-		cfg.KeyPath,
-		boolKey(cfg.Agent),
+		authFingerprint(cfg),
 		cfg.KnownHosts,
 		boolKey(cfg.Strict),
+		boolKey(cfg.Agent),
+		boolKey(cfg.Persist),
+		cfg.Timeout.String(),
+		cfg.KeepAlive.String(),
+		strconv.Itoa(cfg.Retries),
 	}
 	return strings.Join(parts, "|")
+}
+
+func authFingerprint(cfg Cfg) string {
+	var parts []string
+
+	if cfg.KeyPath != "" {
+		parts = append(parts, "key:"+cfg.KeyPath)
+	}
+
+	if cfg.Pass != "" {
+		parts = append(parts, "pass:"+hashSecret(cfg.Pass))
+	}
+	if cfg.KeyPass != "" {
+		parts = append(parts, "keypass:"+hashSecret(cfg.KeyPass))
+	}
+
+	if len(parts) == 0 {
+		return "noauth"
+	}
+	return strings.Join(parts, ",")
+}
+
+func hashSecret(secret string) string {
+	sum := sha256.Sum256([]byte(secret))
+	return hex.EncodeToString(sum[:])
 }
 
 func boolKey(b bool) string {
