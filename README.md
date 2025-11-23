@@ -41,8 +41,14 @@
 </p>
 
 
-Resterm is a terminal client for working with **HTTP**, **GraphQL**, and **gRPC** services. No cloud sync, no signups, no heavy desktop app, no bullshit.
-It pairs a Vim-like-style editor with a workspace explorer, response diff, history, profiler and scripting so you can iterate on requests without leaving the keyboard (no mouse support is a feature here).
+**Resterm** is a terminal client for working with **HTTP**, **GraphQL**, **gRPC**, **WebSocket** and **SSE**. No cloud sync, no signups, no heavy desktop app. If you live on the keyboard - this is your home.
+
+TL;DR why resterm:
+- Resterm is keyboard first.
+- Works offline so everything lives in plain files - no accounts or cloud.
+- Built-in SSH tunnels for HTTP/gRPC/WebSocket/SSE with keep-alives and retries.
+- Fast iteration loop with explorer + history + diff/compare + captures/workflows.
+- Debuggable - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
 
 ## Index
 **Up & Running**
@@ -289,12 +295,12 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 ## Quick Configuration Overview
 
 - **Environments:** JSON files (`resterm.env.json`) are auto-discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace; prefer JSON when you need multiple environments in one file.
-- **Flags you'll reach for most:** `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out` (see docs for the full list).
+- **Flags you probebly reach for most:** `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out` (see docs for the full list).
 - **Config storage:** `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`). Themes and keybindings live under this directory when you customize them.
 
 ## Feature snapshots
 
-- **SSH jumps/tunnels:** Route HTTP/gRPC/WebSocket/SSE through bastions with `@ssh` profiles (persist/keepalive/host-key/retries). Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-jumps) and `_examples/ssh.http`.
+- **SSH jumps/tunnels:** Route HTTP/gRPC/WebSocket/SSE through bastions with `@ssh` profiles (persist/keepalive/host-key/retries). Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
 - **Workflows & scripting:** Chain requests with `@workflow`/`@step`, pass data between steps, and add lightweight JS hooks. Docs + sample: [`docs/resterm.md#workflows-multi-step-workflows`](./docs/resterm.md#workflows-multi-step-workflows) and `_examples/workflows.http`.
 - **Compare runs:** Run the same request across environments with `@compare` or `--compare`, then diff responses side by side (`g+c`). Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
 - **Tracing & timeline:** Add `@trace` with budgets to capture DNS/connect/TLS/TTFB/transfer timings, visualize overruns, and optionally export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).

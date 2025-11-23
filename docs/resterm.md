@@ -298,11 +298,17 @@ Use `@ssh` to route HTTP/gRPC/WebSocket/SSE traffic through an SSH bastion.
 
 **Syntax:** `# @ssh [scope] [name] key=value ...`
 
+- **TL;DR**:
+  - Define a reusable profile: `# @ssh global bastion host=jump.example.com user=ops key=~/.ssh/id_ed25519 persist`
+  - Use it in a request: `# @ssh use=bastion`
+  - Inline one-off: `# @ssh host=10.0.0.5 user=svc password=env:SSH_PW`
+
 - `scope`: `global`, `file`, or `request` (default request). Global/file scopes define reusable profiles. Requests either reference a profile with `use=` or define inline options.
 - `name`: profile tag (default `default`).
 - Fields: `host` (required), `port` (default 22), `user`, `password`, `key`, `passphrase`, `agent` (default true when `SSH_AUTH_SOCK` is present), `known_hosts` (default `~/.ssh/known_hosts`), `strict_hostkey` (default true), `persist` (only honored for global/file), `timeout`, `keepalive`, `retries`, `use` (profile selection).
 - Values expand templates and support `env:VAR` to prefer terminal env vars before other scopes. Paths for `key` and `known_hosts` expand `~` and environment variables.
-- Global profiles are shared across the workspace; file-scoped profiles override globals when names collide.
+- Key is optional: resterm will use your SSH agent (if present) or fall back to default keys (`~/.ssh/id_ed25519`, `id_rsa`, `id_ecdsa`); see "Default key detection" below.
+- Global profiles are shared across the workspace; file-scoped profiles override globals when names collide. `use=` resolves file profiles first, then globals.
 - Request-level `persist` is ignored to avoid leaking tunnels. Strict host key checking defaults to true; `strict_hostkey=false` is allowed but insecure.
 
 Scopes:
@@ -331,6 +337,17 @@ Inline request-only:
 POST http://internal.service/api
 ```
 
+gRPC over SSH:
+
+```http
+# @ssh use=edge
+# @grpc testservices.inventory.ProjectService/Seed
+# @grpc-descriptor ./proto/inventory.protoset
+GRPC passthrough:///grpc-internal:8082
+
+{}
+```
+
 ### How it works
 
 SSH tunneling operates at the transport layer, making it transparent to all other features (`@trace`, `@profile`, `@workflow`, `@sse`, `@websocket`, `@graphql`, `@grpc`, etc.).
@@ -345,7 +362,7 @@ Your machine                    Bastion (SSH)                  Private VPC
     │     (through SSH channel)        ├───────────────────────────►│
     │                                  │                            │
     │  4. HTTP request flows through the tunnel                     │
-    │◄────────────────────────────────────────────────────────────►│
+    │◄─────────────────────────────────────────────────────────────►│
 ```
 
 ### Comparison with terminal tunnels
