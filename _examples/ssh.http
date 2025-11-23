@@ -1,0 +1,20 @@
+## SSH jump examples
+
+### Global profile and request override
+# @ssh global edge host=env:SSH_JUMP user=ops key=~/.ssh/id_ed25519 persist timeout=20s keepalive=10s
+# @global api_host http://10.0.0.10
+
+# @name list over jump
+# @ssh use=edge host={{api_host}} strict_hostkey=false
+GET http://{{api_host}}/v1/things
+
+### Inline request-scoped jump
+# @name create via jump
+# @ssh request host=192.168.1.50 user=svc password=env:SSH_PW timeout=12s
+POST http://internal.service/api
+Content-Type: application/json
+
+{
+  "name": "resterm-ssh",
+  "ts": "{{$timestampISO8601}}"
+}

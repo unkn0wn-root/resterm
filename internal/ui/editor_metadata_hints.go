@@ -29,6 +29,7 @@ var metadataHintCatalog = []metadataHintOption{
 	{Label: "@trace", Summary: "Enable HTTP tracing and latency budgets"},
 	{Label: "@profile", Summary: "Run the request repeatedly with profiling"},
 	{Label: "@compare", Summary: "Run the request across multiple environments"},
+	{Label: "@ssh", Summary: "Send request via SSH jump host"},
 	{Label: "@workflow", Summary: "Begin a workflow definition"},
 	{Label: "@step", Summary: "Add a workflow step"},
 	{Label: "@graphql", Summary: "Enable GraphQL request handling"},
@@ -88,6 +89,23 @@ var metadataSubcommandCatalog = map[string][]metadataHintOption{
 	"compare": {
 		{Label: "base=", Summary: "Set the baseline environment", Insert: "base=dev", CursorBack: len("dev")},
 		{Label: "baseline=", Summary: "Alias for base", Insert: "baseline=prod", CursorBack: len("prod")},
+	},
+	"ssh": {
+		{Label: "host=", Summary: "Jump host (supports env:VAR and templates)", Insert: "host=env:SSH_HOST", CursorBack: len("env:SSH_HOST")},
+		{Label: "port=", Summary: "Port (default 22)", Insert: "port=22", CursorBack: len("22")},
+		{Label: "user=", Summary: "SSH user", Insert: "user=ops", CursorBack: len("ops")},
+		{Label: "password=", Summary: "Password auth", Insert: "password=env:SSH_PW", CursorBack: len("env:SSH_PW")},
+		{Label: "key=", Summary: "Private key path", Insert: "key=~/.ssh/id_ed25519", CursorBack: len("~/.ssh/id_ed25519")},
+		{Label: "passphrase=", Summary: "Key passphrase", Insert: "passphrase=env:SSH_KEY_PW", CursorBack: len("env:SSH_KEY_PW")},
+		{Label: "agent=", Summary: "Use SSH agent (default true)", Insert: "agent=false", CursorBack: len("false")},
+		{Label: "known_hosts=", Summary: "Known hosts file", Insert: "known_hosts=~/.ssh/known_hosts", CursorBack: len("~/.ssh/known_hosts")},
+		{Label: "strict_hostkey=", Summary: "Toggle host key checking", Insert: "strict_hostkey=false", CursorBack: len("false")},
+		{Label: "persist", Summary: "Keep tunnel open (global/file scope only)"},
+		{Label: "timeout=", Summary: "SSH dial timeout", Insert: "timeout=15s", CursorBack: len("15s")},
+		{Label: "keepalive=", Summary: "Server keepalive interval", Insert: "keepalive=30s", CursorBack: len("30s")},
+		{Label: "retries=", Summary: "Retry count for tunnel attach", Insert: "retries=2", CursorBack: len("2")},
+		{Label: "use=", Summary: "Reference named profile", Insert: "use=edge", CursorBack: len("edge")},
+		{Label: "persist=", Summary: "Explicit persist toggle", Insert: "persist=true", CursorBack: len("true")},
 	},
 }
 

@@ -23,6 +23,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
@@ -154,6 +155,7 @@ type Config struct {
 	EnvironmentFallback string
 	HTTPOptions         httpclient.Options
 	GRPCOptions         grpcclient.Options
+	SSHManager          *ssh.Manager
 	History             *history.Store
 	WorkspaceRoot       string
 	Recursive           bool
@@ -180,6 +182,8 @@ type Model struct {
 	client             *httpclient.Client
 	grpcClient         *grpcclient.Client
 	grpcOptions        grpcclient.Options
+	sshMgr             *ssh.Manager
+	sshGlobals         *sshStore
 	workspaceRoot      string
 	workspaceRecursive bool
 
@@ -495,6 +499,12 @@ func New(cfg Config) Model {
 	helpViewport := viewport.New(0, 0)
 	helpViewport.SetContent("")
 
+	sshMgr := cfg.SSHManager
+	if sshMgr == nil {
+		sshMgr = ssh.NewManager()
+	}
+	sshGlobals := newSSHStore()
+
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" && cfg.UpdateClient.Ready()
 
@@ -506,6 +516,8 @@ func New(cfg Config) Model {
 		client:                 client,
 		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
+		sshMgr:                 sshMgr,
+		sshGlobals:             sshGlobals,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,
@@ -575,6 +587,7 @@ func New(cfg Config) Model {
 	model.setInsertMode(false, false)
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
+	model.syncSSHGlobals(model.doc)
 	model.syncRequestList(model.doc)
 	if model.historyStore != nil {
 		_ = model.historyStore.Load()

@@ -122,6 +122,130 @@ GET {{svc.http}}/status
 	}
 }
 
+func TestParseSSHGlobalProfile(t *testing.T) {
+	src := `# @ssh global edge host=10.0.0.5 user=ops key=~/.ssh/id_ed25519 port=2022 known_hosts=/tmp/kh strict_hostkey=false persist timeout=30s keepalive=15s retries=2
+GET http://example.com
+`
+	doc := Parse("ssh.http", []byte(src))
+	if len(doc.SSH) != 1 {
+		t.Fatalf("expected 1 ssh profile, got %d", len(doc.SSH))
+	}
+
+	prof := doc.SSH[0]
+	if prof.Scope != restfile.SSHScopeGlobal {
+		t.Fatalf("expected global scope, got %v", prof.Scope)
+	}
+	if prof.Name != "edge" {
+		t.Fatalf("expected name edge, got %q", prof.Name)
+	}
+	if prof.Host != "10.0.0.5" {
+		t.Fatalf("unexpected host %q", prof.Host)
+	}
+	if prof.Port != 2022 || prof.PortStr != "2022" {
+		t.Fatalf("unexpected port %d (%q)", prof.Port, prof.PortStr)
+	}
+	if prof.User != "ops" {
+		t.Fatalf("unexpected user %q", prof.User)
+	}
+	if prof.Key == "" {
+		t.Fatalf("expected key to be set")
+	}
+	if prof.KnownHosts != "/tmp/kh" {
+		t.Fatalf("unexpected known_hosts %q", prof.KnownHosts)
+	}
+	if !prof.Strict.Set || prof.Strict.Val {
+		t.Fatalf("expected strict_hostkey=false to be set")
+	}
+	if !prof.Persist.Set || !prof.Persist.Val {
+		t.Fatalf("expected persist to be set true")
+	}
+	if !prof.Timeout.Set || prof.TimeoutStr != "30s" {
+		t.Fatalf("timeout not captured, val=%v raw=%q", prof.Timeout.Val, prof.TimeoutStr)
+	}
+	if !prof.KeepAlive.Set || prof.KeepAliveStr != "15s" {
+		t.Fatalf("keepalive not captured, val=%v raw=%q", prof.KeepAlive.Val, prof.KeepAliveStr)
+	}
+	if !prof.Retries.Set || prof.RetriesStr != "2" {
+		t.Fatalf("retries not captured")
+	}
+}
+
+func TestParseSSHRequestUseOverride(t *testing.T) {
+	src := `### jump
+# @ssh use=edge host={{api_host}} strict_hostkey=false retries=3
+GET http://{{api_host}}
+`
+	doc := Parse("ssh_req.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.SSH == nil {
+		t.Fatalf("expected ssh spec on request")
+	}
+	if req.SSH.Use != "edge" {
+		t.Fatalf("unexpected use %q", req.SSH.Use)
+	}
+	if req.SSH.Inline == nil {
+		t.Fatalf("expected inline overrides")
+	}
+	inline := req.SSH.Inline
+	if inline.Scope != restfile.SSHScopeRequest {
+		t.Fatalf("expected request scope inline, got %v", inline.Scope)
+	}
+	if inline.Host != "{{api_host}}" {
+		t.Fatalf("unexpected inline host %q", inline.Host)
+	}
+	if !inline.Strict.Set || inline.Strict.Val {
+		t.Fatalf("expected strict_hostkey=false")
+	}
+	if !inline.Retries.Set || inline.RetriesStr != "3" {
+		t.Fatalf("expected retries override")
+	}
+}
+
+func TestParseSSHRequestIgnoresPersist(t *testing.T) {
+	src := `### jump
+# @ssh request host=1.2.3.4 user=ops persist keepalive=1s
+GET http://example.com
+`
+	doc := Parse("ssh_req_persist.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.SSH == nil || req.SSH.Inline == nil {
+		t.Fatalf("expected inline ssh profile")
+	}
+	if req.SSH.Inline.Persist.Set {
+		t.Fatalf("request persist should be ignored")
+	}
+}
+
+func TestParseSSHWithGRPCRequest(t *testing.T) {
+	src := `### grpc over ssh
+# @ssh use=jump
+# @grpc test.Inventory/Seed
+GRPC passthrough:///grpc-internal:8082
+
+{}
+`
+	doc := Parse("grpc_ssh.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.GRPC == nil {
+		t.Fatalf("expected grpc request to be parsed")
+	}
+	if req.SSH == nil {
+		t.Fatalf("expected ssh spec on grpc request")
+	}
+	if req.SSH.Use != "jump" {
+		t.Fatalf("unexpected ssh use %q", req.SSH.Use)
+	}
+}
+
 func TestParseRequestVarDirectiveVariants(t *testing.T) {
 	src := `# @name Vars
 # @var simple foo
