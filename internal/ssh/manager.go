@@ -103,7 +103,6 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 		m.mu.Lock()
 		_ = closeEntry(ent)
 		delete(m.cache, key)
-		m.mu.Unlock()
 	}
 	m.mu.Unlock()
 

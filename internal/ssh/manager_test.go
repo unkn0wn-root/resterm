@@ -36,6 +36,33 @@ func (f *fakeClient) Close() error {
 	return nil
 }
 
+type scriptedClient struct {
+	results []error
+	dials   atomic.Int32
+	closed  atomic.Int32
+}
+
+func (s *scriptedClient) Dial(network, addr string) (net.Conn, error) {
+	idx := int(s.dials.Add(1)) - 1
+	if idx < len(s.results) {
+		if err := s.results[idx]; err != nil {
+			return nil, err
+		}
+	}
+	c1, c2 := net.Pipe()
+	_ = c2.Close()
+	return c1, nil
+}
+
+func (s *scriptedClient) SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error) {
+	return true, nil, nil
+}
+
+func (s *scriptedClient) Close() error {
+	s.closed.Add(1)
+	return nil
+}
+
 func TestDialNonPersistent(t *testing.T) {
 	cfg := Cfg{Host: "h", Port: 22, User: "u", Pass: "p", Persist: false}
 	dials := atomic.Int32{}
@@ -92,6 +119,62 @@ func TestDialPersistentCaches(t *testing.T) {
 	}
 	if got := fc.dials.Load(); got != 2 {
 		t.Fatalf("expected 2 forwarded dials, got %d", got)
+	}
+}
+
+func TestDialPersistentReconnectsAfterCachedFailure(t *testing.T) {
+	cfg := Cfg{Host: "h", Port: 22, User: "u", Pass: "p", Persist: true, KeepAlive: 0}
+	first := &scriptedClient{results: []error{nil, errBoom}}
+	second := &scriptedClient{}
+	dials := atomic.Int32{}
+
+	m := &Manager{
+		cache: make(map[string]*entry),
+		ttl:   time.Minute,
+		now:   time.Now,
+		dial: func(ctx context.Context, cfg Cfg) (Client, error) {
+			switch dials.Add(1) {
+			case 1:
+				return first, nil
+			case 2:
+				return second, nil
+			default:
+				return nil, errors.New("unexpected dial")
+			}
+		},
+	}
+
+	conn1, err := m.DialContext(context.Background(), cfg, "tcp", "x:80")
+	if err != nil {
+		t.Fatalf("dial1 err: %v", err)
+	}
+	_ = conn1.Close()
+
+	conn2, err := m.DialContext(context.Background(), cfg, "tcp", "x:81")
+	if err != nil {
+		t.Fatalf("dial2 err: %v", err)
+	}
+	_ = conn2.Close()
+
+	if got := dials.Load(); got != 2 {
+		t.Fatalf("expected 2 ssh client dials, got %d", got)
+	}
+	if got := first.dials.Load(); got != 2 {
+		t.Fatalf("expected cached client to handle 2 dial attempts, got %d", got)
+	}
+	if got := first.closed.Load(); got == 0 {
+		t.Fatalf("expected cached client to be closed after failed dial")
+	}
+	if got := second.dials.Load(); got != 1 {
+		t.Fatalf("expected new client to handle replacement dial, got %d", got)
+	}
+
+	key := cacheKey(cfg)
+	m.mu.Lock()
+	ent := m.cache[key]
+	m.mu.Unlock()
+	if ent == nil || ent.cli != second {
+		t.Fatalf("expected cache to hold replacement client")
 	}
 }
 
