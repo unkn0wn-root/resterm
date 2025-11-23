@@ -64,9 +64,9 @@ func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
 		return Cfg{}, errors.New("ssh host is required")
 	}
 
-	assignTrimmedAllowEmpty(&cfg.User, p.User)
-	assignRawIfSet(&cfg.Pass, p.Pass)
-	assignRawIfSet(&cfg.KeyPass, p.KeyPass)
+	trimmedAllowEmpty(&cfg.User, p.User)
+	rawIfSet(&cfg.Pass, p.Pass)
+	rawIfSet(&cfg.KeyPass, p.KeyPass)
 
 	if err := resolvePaths(&cfg, p); err != nil {
 		return Cfg{}, err
@@ -241,14 +241,14 @@ func fallback(val, def string) string {
 	return val
 }
 
-func assignTrimmedAllowEmpty(target *string, val string) {
+func trimmedAllowEmpty(target *string, val string) {
 	if val == "" {
 		return
 	}
 	*target = strings.TrimSpace(val)
 }
 
-func assignRawIfSet(target *string, val string) {
+func rawIfSet(target *string, val string) {
 	if val == "" {
 		return
 	}
