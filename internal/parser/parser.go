@@ -1517,6 +1517,9 @@ func (r *requestBuilder) build() *restfile.Request {
 			if r.settings != nil {
 				req.Settings = r.settings
 			}
+			if r.ssh != nil {
+				req.SSH = r.ssh
+			}
 			return req
 		} else if gql, mime, ok := r.graphql.Finalize(r.http.MimeType()); ok {
 			req.Body.GraphQL = gql

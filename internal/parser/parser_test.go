@@ -222,6 +222,30 @@ GET http://example.com
 	}
 }
 
+func TestParseSSHWithGRPCRequest(t *testing.T) {
+	src := `### grpc over ssh
+# @ssh use=jump
+# @grpc test.Inventory/Seed
+GRPC passthrough:///grpc-internal:8082
+
+{}
+`
+	doc := Parse("grpc_ssh.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.GRPC == nil {
+		t.Fatalf("expected grpc request to be parsed")
+	}
+	if req.SSH == nil {
+		t.Fatalf("expected ssh spec on grpc request")
+	}
+	if req.SSH.Use != "jump" {
+		t.Fatalf("unexpected ssh use %q", req.SSH.Use)
+	}
+}
+
 func TestParseRequestVarDirectiveVariants(t *testing.T) {
 	src := `# @name Vars
 # @var simple foo
