@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.8.0](https://github.com/unkn0wn-root/resterm/compare/v0.7.8...v0.8.0) (2025-11-23)
+
+
+### Features
+
+* wip - ssh ([9ccb01e](https://github.com/unkn0wn-root/resterm/commit/9ccb01e06eedf0e5a899e51129147f68037d679d))
+
+
+### Bug Fixes
+
+* don't double unlock and panic ([6baa5fd](https://github.com/unkn0wn-root/resterm/commit/6baa5fd55bf267d1237608e0013fb3fc6e288e19))
+* grpc via ssh tunnel ([c00b4a4](https://github.com/unkn0wn-root/resterm/commit/c00b4a47f4fc8975b556f8cf48fa62a2f6034038))
+* linter ([b73def9](https://github.com/unkn0wn-root/resterm/commit/b73def9d3038d8e14c64d4ed8469eb6128192e49))
+
 ### [0.7.8](https://github.com/unkn0wn-root/resterm/compare/v0.7.7...v0.7.8) (2025-11-21)
 
 ### [0.7.7](https://github.com/unkn0wn-root/resterm/compare/v0.7.6...v0.7.7) (2025-11-21)
