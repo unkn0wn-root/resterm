@@ -171,7 +171,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 - **Pretty**: formatted JSON (or best-effort formatting for other types).
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
-- **Headers**: request and response headers.
+- **Headers**: response headers only. Request headers are captured for history/scripting but not rendered in this tab.
 - **Stats**: latency summaries and histograms from `@profile` runs.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
