@@ -593,6 +593,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.clearZoomCmd(), true
 	case bindings.ActionCopyResponseTab:
 		return m.copyResponseTab(), true
+	case bindings.ActionToggleHeaderPreview:
+		return m.toggleHeaderPreview(), true
 	default:
 		return nil, false
 	}
@@ -978,6 +980,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane.activeTab == responseTabStats {
 				snapshot := pane.snapshot
 				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					if snapshot.workflowStats.scrollExpanded(pane, 1) {
+						pane.setCurrPosition()
+						return combine(nil)
+					}
 					return combine(m.moveWorkflowStatsSelection(1))
 				}
 			}
@@ -994,6 +1000,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane.activeTab == responseTabStats {
 				snapshot := pane.snapshot
 				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					if snapshot.workflowStats.scrollExpanded(pane, -1) {
+						pane.setCurrPosition()
+						return combine(nil)
+					}
 					return combine(m.moveWorkflowStatsSelection(-1))
 				}
 			}

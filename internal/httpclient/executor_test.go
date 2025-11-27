@@ -302,6 +302,50 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 	}
 }
 
+func TestCaptureReqMetaPrefersResponseRequest(t *testing.T) {
+	sent, err := http.NewRequest("POST", "https://old.example.com/items", strings.NewReader("body"))
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	sent.Host = "old.example.com"
+	sent.ContentLength = 4
+	sent.TransferEncoding = []string{"compress"}
+	sent.Header.Set("X-Sent", "1")
+
+	respReq := sent.Clone(context.Background())
+	respReq.Method = "GET"
+	respReq.Host = "final.example.com"
+	if respReq.URL, err = url.Parse("https://final.example.com/items"); err != nil {
+		t.Fatalf("parse final url: %v", err)
+	}
+	respReq.ContentLength = 0
+	respReq.TransferEncoding = []string{"chunked"}
+	respReq.Header = make(http.Header)
+	respReq.Header.Set("X-Final", "yes")
+
+	resp := &http.Response{Request: respReq}
+
+	meta := captureReqMeta(sent, resp)
+	if meta.method != "GET" {
+		t.Fatalf("expected method from response request, got %q", meta.method)
+	}
+	if meta.host != "final.example.com" {
+		t.Fatalf("expected host from response request, got %q", meta.host)
+	}
+	if meta.length != 0 {
+		t.Fatalf("expected content length from response request, got %d", meta.length)
+	}
+	if len(meta.te) != 1 || meta.te[0] != "chunked" {
+		t.Fatalf("expected transfer-encoding chunked from response request, got %v", meta.te)
+	}
+	if meta.headers.Get("X-Final") != "yes" {
+		t.Fatalf("expected headers cloned from response request, got %v", meta.headers)
+	}
+	if meta.headers.Get("X-Sent") != "" {
+		t.Fatalf("expected sent-only header to be ignored, got %v", meta.headers)
+	}
+}
+
 type mapFS map[string][]byte
 
 func (m mapFS) ReadFile(name string) ([]byte, error) {

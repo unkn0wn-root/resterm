@@ -330,15 +330,16 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.responseLatest.workflowStats = statsView
 	} else {
 		snapshot := &responseSnapshot{
-			pretty:        report,
-			raw:           report,
-			headers:       report,
-			stats:         report,
-			statsColorize: true,
-			statsKind:     statsReportKindWorkflow,
-			statsColored:  "",
-			workflowStats: statsView,
-			ready:         true,
+			pretty:         report,
+			raw:            report,
+			headers:        report,
+			requestHeaders: report,
+			stats:          report,
+			statsColorize:  true,
+			statsKind:      statsReportKindWorkflow,
+			statsColored:   "",
+			workflowStats:  statsView,
+			ready:          true,
 		}
 		m.responseLatest = snapshot
 		m.responsePending = nil

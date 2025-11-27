@@ -151,6 +151,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `quit_app` | Quit Resterm. | `ctrl+q`, `ctrl+d` |
 | `send_request` | Send the active request (single-step only). | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
 | `copy_response_tab` | Copy the focused Pretty/Raw/Headers response tab to the clipboard. | `ctrl+shift+c`, `g y` |
+| `toggle_header_preview` | Toggle request vs response headers in the Headers tab. | `g shift+h` |
 
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
@@ -171,7 +172,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 - **Pretty**: formatted JSON (or best-effort formatting for other types).
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
-- **Headers**: response headers only. Request headers are captured for history/scripting but not rendered in this tab.
+- **Headers**: response headers by default; press `g+Shift+H` to toggle into the sent request headers view (cookies included) and back.
 - **Stats**: latency summaries and histograms from `@profile` runs.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.

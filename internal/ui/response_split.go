@@ -22,24 +22,32 @@ const (
 )
 
 type responseSnapshot struct {
-	id            string
-	pretty        string
-	raw           string
-	headers       string
-	stats         string
-	statsColored  string
-	statsColorize bool
-	statsKind     statsReportKind
-	profileStats  *analysis.LatencyStats
-	workflowStats *workflowStatsView
-	ready         bool
-	timeline      *nettrace.Timeline
-	traceData     *nettrace.Report
-	traceReport   timelineReport
-	traceSpec     *restfile.TraceSpec
-	environment   string
-	compareBundle *compareBundle
+	id             string
+	pretty         string
+	raw            string
+	headers        string
+	requestHeaders string
+	stats          string
+	statsColored   string
+	statsColorize  bool
+	statsKind      statsReportKind
+	profileStats   *analysis.LatencyStats
+	workflowStats  *workflowStatsView
+	ready          bool
+	timeline       *nettrace.Timeline
+	traceData      *nettrace.Report
+	traceReport    timelineReport
+	traceSpec      *restfile.TraceSpec
+	environment    string
+	compareBundle  *compareBundle
 }
+
+type headersViewMode int
+
+const (
+	headersViewResponse headersViewMode = iota
+	headersViewRequest
+)
 
 type responsePaneState struct {
 	viewport       viewport.Model
@@ -50,6 +58,8 @@ type responsePaneState struct {
 	wrapCache      map[responseTab]cachedWrap
 	search         responseSearchState
 	tabScroll      map[responseTab]int
+	headersView    headersViewMode
+	headerScroll   map[headersViewMode]int
 }
 
 func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneState {
@@ -61,6 +71,8 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		wrapCache:      make(map[responseTab]cachedWrap),
 		search:         responseSearchState{index: -1},
 		tabScroll:      make(map[responseTab]int),
+		headersView:    headersViewResponse,
+		headerScroll:   make(map[headersViewMode]int),
 	}
 }
 
@@ -71,6 +83,9 @@ func (pane *responsePaneState) invalidateCaches() {
 	pane.search.invalidate()
 	if pane.tabScroll != nil {
 		pane.tabScroll = make(map[responseTab]int)
+	}
+	if pane.headerScroll != nil {
+		pane.headerScroll = make(map[headersViewMode]int)
 	}
 }
 
@@ -84,8 +99,33 @@ func (pane *responsePaneState) setActiveTab(tab responseTab) {
 	}
 }
 
+func (pane *responsePaneState) setHeadersView(mode headersViewMode) {
+	if pane == nil {
+		return
+	}
+	if pane.headersView == mode {
+		return
+	}
+	pane.headersView = mode
+	if pane.wrapCache != nil {
+		pane.wrapCache[responseTabHeaders] = cachedWrap{}
+	}
+	pane.search.invalidate()
+}
+
 func (pane *responsePaneState) setCurrPosition() {
 	if pane == nil {
+		return
+	}
+	if pane.activeTab == responseTabHeaders {
+		if pane.headerScroll == nil {
+			pane.headerScroll = make(map[headersViewMode]int)
+		}
+		offset := pane.viewport.YOffset
+		if offset < 0 {
+			offset = 0
+		}
+		pane.headerScroll[pane.headersView] = offset
 		return
 	}
 	if pane.tabScroll == nil {
@@ -100,6 +140,19 @@ func (pane *responsePaneState) setCurrPosition() {
 
 func (pane *responsePaneState) restoreScrollForActiveTab() {
 	if pane == nil {
+		return
+	}
+	if pane.activeTab == responseTabHeaders {
+		if pane.headerScroll == nil {
+			pane.headerScroll = make(map[headersViewMode]int)
+		}
+		offset, ok := pane.headerScroll[pane.headersView]
+		if !ok {
+			offset = 0
+		}
+
+		_ = pane.viewport.View()
+		pane.viewport.SetYOffset(offset)
 		return
 	}
 	if pane.tabScroll == nil {
@@ -418,7 +471,13 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 	case responseTabRaw:
 		return ensureTrailingNewline(snapshot.raw), tab
 	case responseTabHeaders:
-		if snapshot.headers == "" {
+		if pane != nil && pane.headersView == headersViewRequest {
+			if strings.TrimSpace(snapshot.requestHeaders) == "" {
+				return "<no request headers>\n", tab
+			}
+			return ensureTrailingNewline(snapshot.requestHeaders), tab
+		}
+		if strings.TrimSpace(snapshot.headers) == "" {
 			return "<no headers>\n", tab
 		}
 		return ensureTrailingNewline(snapshot.headers), tab
@@ -848,4 +907,51 @@ func (m *Model) selectTimelineTab() tea.Cmd {
 	pane.invalidateCaches()
 	pane.restoreScrollForActiveTab()
 	return m.syncResponsePane(paneID)
+}
+
+func (m *Model) toggleHeaderPreview() tea.Cmd {
+	m.setFocus(focusResponse)
+	m.ensurePaneFocusValid()
+
+	paneID := m.responsePaneFocus
+	if !m.responseSplit {
+		paneID = responsePanePrimary
+	}
+	pane := m.pane(paneID)
+	if pane == nil {
+		return func() tea.Msg {
+			return statusMsg{text: "Response pane unavailable", level: statusWarn}
+		}
+	}
+
+	if pane.snapshot == nil || !pane.snapshot.ready {
+		return func() tea.Msg {
+			return statusMsg{text: "No response available", level: statusWarn}
+		}
+	}
+
+	if pane.activeTab != responseTabHeaders {
+		pane.setActiveTab(responseTabHeaders)
+	}
+
+	pane.setCurrPosition()
+
+	next := headersViewRequest
+	note := "Showing request headers (including cookies)"
+	if pane.headersView == headersViewRequest {
+		next = headersViewResponse
+		note = "Showing response headers"
+	}
+	pane.setHeadersView(next)
+	pane.restoreScrollForActiveTab()
+	pane.setCurrPosition()
+
+	cmd := m.syncResponsePane(paneID)
+	status := func() tea.Msg {
+		return statusMsg{text: note, level: statusInfo}
+	}
+	if cmd != nil {
+		return tea.Batch(cmd, status)
+	}
+	return status
 }

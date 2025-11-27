@@ -111,27 +111,40 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 		if closeErr != nil {
 			return nil, nil, errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
 		}
+		meta := captureReqMeta(httpReq, httpResp)
 		return nil, &Response{
-			Status:       httpResp.Status,
-			StatusCode:   httpResp.StatusCode,
-			Proto:        httpResp.Proto,
-			Headers:      httpResp.Header.Clone(),
-			Body:         body,
-			Duration:     time.Since(start),
-			EffectiveURL: effURL,
-			Request:      req,
+			Status:         httpResp.Status,
+			StatusCode:     httpResp.StatusCode,
+			Proto:          httpResp.Proto,
+			Headers:        httpResp.Header.Clone(),
+			ReqMethod:      meta.method,
+			RequestHeaders: meta.headers,
+			ReqHost:        meta.host,
+			ReqLen:         meta.length,
+			ReqTE:          meta.te,
+			Body:           body,
+			Duration:       time.Since(start),
+			EffectiveURL:   effURL,
+			Request:        req,
 		}, nil
 	}
 
+	reqMeta := captureReqMeta(httpReq, httpResp)
+
 	meta := StreamMeta{
-		Status:       httpResp.Status,
-		StatusCode:   httpResp.StatusCode,
-		Proto:        httpResp.Proto,
-		Headers:      httpResp.Header.Clone(),
-		EffectiveURL: effURL,
-		ConnectedAt:  time.Now(),
-		Request:      req,
-		BaseDir:      effectiveOpts.BaseDir,
+		Status:         httpResp.Status,
+		StatusCode:     httpResp.StatusCode,
+		Proto:          httpResp.Proto,
+		Headers:        httpResp.Header.Clone(),
+		RequestHeaders: reqMeta.headers,
+		RequestMethod:  reqMeta.method,
+		RequestHost:    reqMeta.host,
+		RequestLength:  reqMeta.length,
+		RequestTE:      reqMeta.te,
+		EffectiveURL:   effURL,
+		ConnectedAt:    time.Now(),
+		Request:        req,
+		BaseDir:        effectiveOpts.BaseDir,
 	}
 
 	session := stream.NewSession(streamCtx, stream.KindSSE, stream.Config{})
@@ -209,15 +222,24 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	headers.Set(streamHeaderType, "sse")
 	headers.Set(streamHeaderSummary, fmt.Sprintf("events=%d bytes=%d reason=%s", transcript.Summary.EventCount, transcript.Summary.ByteCount, transcript.Summary.Reason))
 
+	var reqHeaders http.Header
+	if handle.Meta.RequestHeaders != nil {
+		reqHeaders = handle.Meta.RequestHeaders.Clone()
+	}
 	return &Response{
-		Status:       handle.Meta.Status,
-		StatusCode:   handle.Meta.StatusCode,
-		Proto:        handle.Meta.Proto,
-		Headers:      headers,
-		Body:         body,
-		Duration:     acc.summary.Duration,
-		EffectiveURL: handle.Meta.EffectiveURL,
-		Request:      handle.Meta.Request,
+		Status:         handle.Meta.Status,
+		StatusCode:     handle.Meta.StatusCode,
+		Proto:          handle.Meta.Proto,
+		Headers:        headers,
+		ReqMethod:      handle.Meta.RequestMethod,
+		RequestHeaders: reqHeaders,
+		ReqHost:        handle.Meta.RequestHost,
+		ReqLen:         handle.Meta.RequestLength,
+		ReqTE:          append([]string(nil), handle.Meta.RequestTE...),
+		Body:           body,
+		Duration:       acc.summary.Duration,
+		EffectiveURL:   handle.Meta.EffectiveURL,
+		Request:        handle.Meta.Request,
 	}, nil
 }
 

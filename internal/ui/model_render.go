@@ -1973,6 +1973,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleResponseSplitVert, bindings.ActionToggleResponseSplitHorz}, "Ctrl+V / Ctrl+U"), "Split response vertically / horizontally"),
 		helpRow(m, m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"), "Pin or unpin focused response pane"),
 		helpRow(m, m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"), "Copy Pretty / Raw / Headers response tab"),
+		helpRow(m, m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"), "Toggle request/response headers view"),
 		helpRow(m, "Ctrl+F or Ctrl+B, ←/→", "Send future responses to selected pane"),
 		helpRow(m, m.helpActionKey(bindings.ActionShowGlobals, "Ctrl+G"), "Show globals summary"),
 		helpRow(m, m.helpActionKey(bindings.ActionClearGlobals, "Ctrl+Shift+G"), "Clear globals for environment"),

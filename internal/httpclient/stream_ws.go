@@ -171,14 +171,26 @@ func (c *Client) StartWebSocket(
 	handshakeCancel()
 	sessionCtx, sessionCancel := context.WithCancel(ctx)
 
+	reqMeta := captureReqMeta(httpReq, resp)
+
+	effURL := httpReq.URL.String()
+	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
+		effURL = resp.Request.URL.String()
+	}
+
 	meta := StreamMeta{
-		Status:       "101 Switching Protocols",
-		StatusCode:   http.StatusSwitchingProtocols,
-		Proto:        "HTTP/1.1",
-		EffectiveURL: httpReq.URL.String(),
-		ConnectedAt:  time.Now(),
-		Request:      req,
-		BaseDir:      effectiveOpts.BaseDir,
+		Status:         "101 Switching Protocols",
+		StatusCode:     http.StatusSwitchingProtocols,
+		Proto:          "HTTP/1.1",
+		EffectiveURL:   effURL,
+		ConnectedAt:    time.Now(),
+		Request:        req,
+		BaseDir:        effectiveOpts.BaseDir,
+		RequestHeaders: reqMeta.headers,
+		RequestMethod:  reqMeta.method,
+		RequestHost:    reqMeta.host,
+		RequestLength:  reqMeta.length,
+		RequestTE:      reqMeta.te,
 	}
 	if resp != nil {
 		meta.Status = resp.Status
@@ -397,15 +409,24 @@ func (c *Client) CompleteWebSocket(
 		statusCode = http.StatusSwitchingProtocols
 	}
 
+	var reqHeaders http.Header
+	if handle.Meta.RequestHeaders != nil {
+		reqHeaders = handle.Meta.RequestHeaders.Clone()
+	}
 	return &Response{
-		Status:       status,
-		StatusCode:   statusCode,
-		Proto:        handle.Meta.Proto,
-		Headers:      headers,
-		Body:         body,
-		Duration:     acc.summary.Duration,
-		EffectiveURL: handle.Meta.EffectiveURL,
-		Request:      req,
+		Status:         status,
+		StatusCode:     statusCode,
+		Proto:          handle.Meta.Proto,
+		Headers:        headers,
+		ReqMethod:      handle.Meta.RequestMethod,
+		RequestHeaders: reqHeaders,
+		ReqHost:        handle.Meta.RequestHost,
+		ReqLen:         handle.Meta.RequestLength,
+		ReqTE:          append([]string(nil), handle.Meta.RequestTE...),
+		Body:           body,
+		Duration:       acc.summary.Duration,
+		EffectiveURL:   handle.Meta.EffectiveURL,
+		Request:        req,
 	}, nil
 }
 
@@ -431,15 +452,21 @@ func buildWebSocketFallback(httpResp *http.Response, req *restfile.Request, star
 	if httpResp.Request != nil && httpResp.Request.URL != nil {
 		effectiveURL = httpResp.Request.URL.String()
 	}
+	meta := captureReqMeta(httpResp.Request, httpResp)
 	return &Response{
-		Status:       httpResp.Status,
-		StatusCode:   httpResp.StatusCode,
-		Proto:        httpResp.Proto,
-		Headers:      httpResp.Header.Clone(),
-		Body:         body,
-		Duration:     time.Since(started),
-		EffectiveURL: effectiveURL,
-		Request:      req,
+		Status:         httpResp.Status,
+		StatusCode:     httpResp.StatusCode,
+		Proto:          httpResp.Proto,
+		Headers:        httpResp.Header.Clone(),
+		ReqMethod:      meta.method,
+		RequestHeaders: meta.headers,
+		ReqHost:        meta.host,
+		ReqLen:         meta.length,
+		ReqTE:          meta.te,
+		Body:           body,
+		Duration:       time.Since(started),
+		EffectiveURL:   effectiveURL,
+		Request:        req,
 	}, nil
 }
 

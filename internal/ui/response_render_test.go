@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
@@ -122,5 +123,37 @@ func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
 	}
 	if !strings.Contains(headers, statsHeaderValueStyle.Render("application/json")) {
 		t.Fatalf("expected colored header values, got %q", headers)
+	}
+}
+
+func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
+	resp := &httpclient.Response{
+		ReqMethod:    "GET",
+		EffectiveURL: "https://final.example.com/items",
+		Request: &restfile.Request{
+			Method: "POST",
+			URL:    "https://{{env}}/items",
+		},
+		RequestHeaders: http.Header{"X-Test": {"1"}},
+	}
+
+	view := buildHTTPRequestHeadersView(resp)
+	plain := stripANSIEscape(view)
+	if !strings.Contains(plain, "GET https://final.example.com/items") {
+		t.Fatalf("expected request line to use executed method/url, got %q", plain)
+	}
+	if strings.Contains(plain, "{{env}}") {
+		t.Fatalf("expected expanded URL to omit template placeholder, got %q", plain)
+	}
+}
+
+func TestBuildRequestHeaderMapAddsDefaults(t *testing.T) {
+	resp := &httpclient.Response{
+		ReqMethod: "GET",
+		ReqHost:   "example.com",
+	}
+	hdrs := buildRequestHeaderMap(resp)
+	if hdrs.Get("Host") != "example.com" {
+		t.Fatalf("expected host to be populated from request host, got %q", hdrs.Get("Host"))
 	}
 }

@@ -105,6 +105,26 @@ func (v *workflowStatsView) invalidate() {
 	}
 }
 
+func (v *workflowStatsView) scrollExpanded(pane *responsePaneState, delta int) bool {
+	if pane == nil || v == nil {
+		return false
+	}
+	if v.selected < 0 || v.selected >= len(v.entries) {
+		return false
+	}
+	if v.expanded == nil || !v.expanded[v.selected] {
+		return false
+	}
+
+	before := pane.viewport.YOffset
+	if delta > 0 {
+		pane.viewport.ScrollDown(1)
+	} else if delta < 0 {
+		pane.viewport.ScrollUp(1)
+	}
+	return pane.viewport.YOffset != before
+}
+
 func (v *workflowStatsView) render(width int) workflowStatsRender {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
