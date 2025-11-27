@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.2](https://github.com/unkn0wn-root/resterm/compare/v0.8.1...v0.8.2) (2025-11-27)
+
+
+### Features
+
+* add request-headers toggle, capture request metadata, and add scroll to workflows with j/k ([0255878](https://github.com/unkn0wn-root/resterm/commit/02558789597365a33112adcc2b0574c29e36ec15))
+
 ### [0.8.1](https://github.com/unkn0wn-root/resterm/compare/v0.8.0...v0.8.1) (2025-11-27)
 
 ## [0.8.0](https://github.com/unkn0wn-root/resterm/compare/v0.7.8...v0.8.0) (2025-11-23)
