@@ -69,6 +69,33 @@ func TestResponseCopyPayloadHeadersFallback(t *testing.T) {
 	}
 }
 
+func TestResponseCopyPayloadRequestHeaders(t *testing.T) {
+	snap := &responseSnapshot{
+		pretty:         ensureTrailingNewline("pretty"),
+		raw:            ensureTrailingNewline("raw"),
+		headers:        ensureTrailingNewline("Headers:\nX-Resp: ok"),
+		requestHeaders: ensureTrailingNewline("Headers:\nCookie: demo=1"),
+		ready:          true,
+	}
+	model := newModelWithResponseTab(responseTabHeaders, snap)
+	pane := model.pane(responsePanePrimary)
+	pane.headersView = headersViewRequest
+
+	label, text, status := model.responseCopyPayload()
+	if status != nil {
+		t.Fatalf("expected nil status, got %+v", status)
+	}
+	if label != "Headers" {
+		t.Fatalf("expected Headers label, got %q", label)
+	}
+	if !strings.Contains(text, "Cookie: demo=1") {
+		t.Fatalf("expected request headers in copy, got %q", text)
+	}
+	if strings.Contains(text, "X-Resp") {
+		t.Fatalf("unexpected response header in request copy, got %q", text)
+	}
+}
+
 func TestCopyResponseTabWritesClipboard(t *testing.T) {
 	if err := clipboard.WriteAll(""); err != nil {
 		t.Skipf("clipboard unavailable: %v", err)

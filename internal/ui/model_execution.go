@@ -389,12 +389,17 @@ func streamingPlaceholderResponse(meta httpclient.StreamMeta) *httpclient.Respon
 	}
 
 	return &httpclient.Response{
-		Status:       status,
-		StatusCode:   statusCode,
-		Proto:        meta.Proto,
-		Headers:      headers,
-		EffectiveURL: meta.EffectiveURL,
-		Request:      meta.Request,
+		Status:         status,
+		StatusCode:     statusCode,
+		Proto:          meta.Proto,
+		Headers:        headers,
+		ReqMethod:      meta.RequestMethod,
+		RequestHeaders: cloneHeader(meta.RequestHeaders),
+		ReqHost:        meta.RequestHost,
+		ReqLen:         meta.RequestLength,
+		ReqTE:          append([]string(nil), meta.RequestTE...),
+		EffectiveURL:   meta.EffectiveURL,
+		Request:        meta.Request,
 	}
 }
 

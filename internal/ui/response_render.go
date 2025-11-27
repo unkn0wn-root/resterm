@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -42,14 +43,16 @@ type cachedWrap struct {
 }
 
 type responseRenderedMsg struct {
-	token          string
-	pretty         string
-	raw            string
-	headers        string
-	width          int
-	prettyWrapped  string
-	rawWrapped     string
-	headersWrapped string
+	token                 string
+	pretty                string
+	raw                   string
+	headers               string
+	requestHeaders        string
+	width                 int
+	prettyWrapped         string
+	rawWrapped            string
+	headersWrapped        string
+	requestHeadersWrapped string
 }
 
 var responseRenderSeq uint64
@@ -75,15 +78,18 @@ func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scri
 
 	return func() tea.Msg {
 		pretty, raw, headers := buildHTTPResponseViews(respCopy, testsCopy, scriptErr)
+		requestHeaders := buildHTTPRequestHeadersView(respCopy)
 		return responseRenderedMsg{
-			token:          token,
-			pretty:         pretty,
-			raw:            raw,
-			headers:        headers,
-			width:          targetWidth,
-			prettyWrapped:  wrapContentForTab(responseTabPretty, pretty, targetWidth),
-			rawWrapped:     wrapContentForTab(responseTabRaw, raw, targetWidth),
-			headersWrapped: wrapContentForTab(responseTabHeaders, headers, targetWidth),
+			token:                 token,
+			pretty:                pretty,
+			raw:                   raw,
+			headers:               headers,
+			requestHeaders:        requestHeaders,
+			width:                 targetWidth,
+			prettyWrapped:         wrapContentForTab(responseTabPretty, pretty, targetWidth),
+			rawWrapped:            wrapContentForTab(responseTabRaw, raw, targetWidth),
+			headersWrapped:        wrapContentForTab(responseTabHeaders, headers, targetWidth),
+			requestHeadersWrapped: wrapContentForTab(responseTabHeaders, requestHeaders, targetWidth),
 		}
 	}
 }
@@ -93,6 +99,7 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		return nil
 	}
 	var headers http.Header
+	var reqHeaders http.Header
 	if resp.Headers != nil {
 		headers = make(http.Header, len(resp.Headers))
 		for key, values := range resp.Headers {
@@ -100,6 +107,14 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 			headers[key] = copied
 		}
 	}
+	if resp.RequestHeaders != nil {
+		reqHeaders = make(http.Header, len(resp.RequestHeaders))
+		for key, values := range resp.RequestHeaders {
+			copied := append([]string(nil), values...)
+			reqHeaders[key] = copied
+		}
+	}
+	reqTE := append([]string(nil), resp.ReqTE...)
 	body := append([]byte(nil), resp.Body...)
 	var (
 		timeline    *nettrace.Timeline
@@ -113,16 +128,21 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 	}
 
 	return &httpclient.Response{
-		Status:       resp.Status,
-		StatusCode:   resp.StatusCode,
-		Proto:        resp.Proto,
-		Headers:      headers,
-		Body:         body,
-		Duration:     resp.Duration,
-		EffectiveURL: resp.EffectiveURL,
-		Request:      resp.Request,
-		Timeline:     timeline,
-		TraceReport:  traceReport,
+		Status:         resp.Status,
+		StatusCode:     resp.StatusCode,
+		Proto:          resp.Proto,
+		Headers:        headers,
+		ReqMethod:      resp.ReqMethod,
+		RequestHeaders: reqHeaders,
+		ReqHost:        resp.ReqHost,
+		ReqLen:         resp.ReqLen,
+		ReqTE:          reqTE,
+		Body:           body,
+		Duration:       resp.Duration,
+		EffectiveURL:   resp.EffectiveURL,
+		Request:        resp.Request,
+		Timeline:       timeline,
+		TraceReport:    traceReport,
 	}
 }
 
@@ -162,6 +182,65 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 	headersView := joinSections(summary, headersSectionColored)
 
 	return prettyView, rawView, headersView
+}
+
+func buildHTTPRequestHeadersView(resp *httpclient.Response) string {
+	if resp == nil {
+		return noResponseMessage
+	}
+
+	method := strings.ToUpper(strings.TrimSpace(resp.ReqMethod))
+	if method == "" && resp.Request != nil {
+		method = strings.ToUpper(strings.TrimSpace(resp.Request.Method))
+	}
+
+	url := strings.TrimSpace(resp.EffectiveURL)
+	if url == "" && resp.Request != nil {
+		url = strings.TrimSpace(resp.Request.URL)
+	}
+
+	reqLine := strings.TrimSpace(method + " " + url)
+	reqLineColored := ""
+	if reqLine != "" {
+		reqLineColored = renderLabelValue("Request", reqLine, statsLabelStyle, statsValueStyle)
+	}
+
+	hdrs := buildRequestHeaderMap(resp)
+	colored := formatHTTPHeaders(hdrs, true)
+	section := statsHeadingStyle.Render("Headers:")
+	if strings.TrimSpace(colored) != "" {
+		section += "\n" + colored
+	} else {
+		section += "\n<none>"
+	}
+
+	return joinSections(reqLineColored, section)
+}
+
+func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
+	var h http.Header
+	if resp != nil && resp.RequestHeaders != nil {
+		h = resp.RequestHeaders.Clone()
+	}
+	if h == nil {
+		h = make(http.Header)
+	}
+
+	if resp == nil {
+		return h
+	}
+
+	if h.Get("Host") == "" && strings.TrimSpace(resp.ReqHost) != "" {
+		h.Set("Host", resp.ReqHost)
+	}
+	if h.Get("Transfer-Encoding") == "" && len(resp.ReqTE) > 0 {
+		h["Transfer-Encoding"] = append([]string(nil), resp.ReqTE...)
+	}
+	if h.Get("Content-Length") == "" && resp.ReqLen > 0 {
+		h.Set("Content-Length", strconv.FormatInt(resp.ReqLen, 10))
+	}
+
+	return h
 }
 
 func formatRawBody(body []byte, contentType string) string {

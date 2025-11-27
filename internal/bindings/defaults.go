@@ -42,6 +42,7 @@ var (
 	ActionClearZoom               ActionID = "clear_zoom"
 	ActionSendRequest             ActionID = "send_request"
 	ActionCopyResponseTab         ActionID = "copy_response_tab"
+	ActionToggleHeaderPreview     ActionID = "toggle_header_preview"
 )
 
 type definition struct {
@@ -89,6 +90,7 @@ var definitions = []definition{
 	def(ActionClearZoom, false, "g shift+z"),
 	def(ActionSendRequest, false, "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j", "ctrl+m"),
 	def(ActionCopyResponseTab, false, "ctrl+shift+c", "g y"),
+	def(ActionToggleHeaderPreview, false, "g shift+h"),
 }
 
 var definitionLookup = func() map[ActionID]definition {

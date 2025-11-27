@@ -97,16 +97,21 @@ func (c *Client) SetTelemetry(instr telemetry.Instrumenter) {
 }
 
 type Response struct {
-	Status       string
-	StatusCode   int
-	Proto        string
-	Headers      http.Header
-	Body         []byte
-	Duration     time.Duration
-	EffectiveURL string
-	Request      *restfile.Request
-	Timeline     *nettrace.Timeline
-	TraceReport  *nettrace.Report
+	Status         string
+	StatusCode     int
+	Proto          string
+	Headers        http.Header
+	ReqMethod      string
+	RequestHeaders http.Header
+	ReqHost        string
+	ReqLen         int64
+	ReqTE          []string
+	Body           []byte
+	Duration       time.Duration
+	EffectiveURL   string
+	Request        *restfile.Request
+	Timeline       *nettrace.Timeline
+	TraceReport    *nettrace.Report
 }
 
 // Wraps the HTTP roundtrip with telemetry spans and network tracing.
@@ -227,20 +232,73 @@ func (c *Client) Execute(
 	}
 	duration := time.Since(start)
 
+	meta := captureReqMeta(httpReq, httpResp)
+
 	resp = &Response{
-		Status:       httpResp.Status,
-		StatusCode:   httpResp.StatusCode,
-		Proto:        httpResp.Proto,
-		Headers:      httpResp.Header.Clone(),
-		Body:         body,
-		EffectiveURL: httpResp.Request.URL.String(),
-		Request:      req,
-		Timeline:     timeline,
-		TraceReport:  traceReport,
+		Status:         httpResp.Status,
+		StatusCode:     httpResp.StatusCode,
+		Proto:          httpResp.Proto,
+		Headers:        httpResp.Header.Clone(),
+		ReqMethod:      meta.method,
+		RequestHeaders: meta.headers,
+		ReqHost:        meta.host,
+		ReqLen:         meta.length,
+		ReqTE:          meta.te,
+		Body:           body,
+		EffectiveURL:   httpResp.Request.URL.String(),
+		Request:        req,
+		Timeline:       timeline,
+		TraceReport:    traceReport,
 	}
 	resp.Duration = duration
 
 	return resp, nil
+}
+
+type reqMeta struct {
+	headers http.Header
+	method  string
+	host    string
+	length  int64
+	te      []string
+}
+
+func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
+	var h http.Header
+
+	// Prefer the final request attached to the response, since redirects and transports can mutate it.
+	reqForMeta := sent
+	if resp != nil && resp.Request != nil {
+		reqForMeta = resp.Request
+	}
+
+	if reqForMeta != nil && reqForMeta.Header != nil {
+		h = reqForMeta.Header.Clone()
+	} else if sent != nil && sent.Header != nil {
+		h = sent.Header.Clone()
+	}
+	if h == nil {
+		h = make(http.Header)
+	}
+
+	host := ""
+	length := int64(0)
+	var te []string
+	method := ""
+
+	if reqForMeta != nil {
+		host = reqForMeta.Host
+		if strings.TrimSpace(host) == "" && reqForMeta.URL != nil {
+			host = reqForMeta.URL.Host
+		}
+		length = reqForMeta.ContentLength
+		if len(reqForMeta.TransferEncoding) > 0 {
+			te = append([]string(nil), reqForMeta.TransferEncoding...)
+		}
+		method = reqForMeta.Method
+	}
+
+	return reqMeta{headers: h, method: method, host: host, length: length, te: te}
 }
 
 func (c *Client) prepareHTTPRequest(

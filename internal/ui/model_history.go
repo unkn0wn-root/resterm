@@ -334,6 +334,7 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 	snapshot.pretty = msg.pretty
 	snapshot.raw = msg.raw
 	snapshot.headers = msg.headers
+	snapshot.requestHeaders = msg.requestHeaders
 	snapshot.ready = true
 
 	delete(m.responseTokens, msg.token)
@@ -354,7 +355,14 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		if msg.width > 0 && pane.viewport.Width == msg.width {
 			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, base: ensureTrailingNewline(msg.pretty), valid: true}
 			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: msg.rawWrapped, base: ensureTrailingNewline(msg.raw), valid: true}
-			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: msg.headersWrapped, base: ensureTrailingNewline(msg.headers), valid: true}
+
+			headersBase := ensureTrailingNewline(msg.headers)
+			headersContent := msg.headersWrapped
+			if pane.headersView == headersViewRequest {
+				headersBase = ensureTrailingNewline(msg.requestHeaders)
+				headersContent = msg.requestHeadersWrapped
+			}
+			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: headersContent, base: headersBase, valid: true}
 		}
 		if strings.TrimSpace(snapshot.stats) != "" {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
@@ -1170,10 +1178,11 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 
 func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 	snapshot := &responseSnapshot{
-		pretty:  preview,
-		raw:     preview,
-		headers: preview,
-		ready:   true,
+		pretty:         preview,
+		raw:            preview,
+		headers:        preview,
+		requestHeaders: preview,
+		ready:          true,
 	}
 	m.responseRenderToken = ""
 	m.responsePending = nil
