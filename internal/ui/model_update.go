@@ -754,8 +754,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if shortcutKey != "" {
-		if cmd, handled := m.handleShortcutKey(shortcutKey, msg); handled {
-			return combine(cmd)
+		// Let plain characters through in insert mode so they become text, not shortcuts
+		if m.focus != focusEditor || !m.editorInsertMode || !isPlainRuneKey(msg) {
+			if cmd, handled := m.handleShortcutKey(shortcutKey, msg); handled {
+				return combine(cmd)
+			}
 		}
 	}
 
