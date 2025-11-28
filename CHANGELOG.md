@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.3](https://github.com/unkn0wn-root/resterm/compare/v0.8.2...v0.8.3) (2025-11-28)
+
+
+### Features
+
+* improve workflow stats navigation and align gRPC display with HTTP formatting ([3b3dfe7](https://github.com/unkn0wn-root/resterm/commit/3b3dfe798e970d73e90eeebd34e046948e7e1b92))
+
 ### [0.8.2](https://github.com/unkn0wn-root/resterm/compare/v0.8.1...v0.8.2) (2025-11-27)
 
 
