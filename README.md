@@ -44,11 +44,11 @@
 **Resterm** is a terminal client for working with **HTTP**, **GraphQL**, **gRPC**, **WebSocket** and **SSE**. No cloud sync, no signups, no heavy desktop app. If you live on the keyboard - this is your home.
 
 TL;DR why resterm:
-- Resterm is keyboard first.
-- Works offline so everything lives in plain files - no accounts or cloud.
-- Built-in SSH tunnels for HTTP/gRPC/WebSocket/SSE with keep-alives and retries.
+- Resterm is **keyboard driven**.
+- Everything lives in plain files (.http/.rest) - **no cloud or account - everything stays local**.
+- **Built-in SSH tunnels** for HTTP/gRPC/WebSocket/SSE.
 - Fast iteration loop with explorer + history + diff/compare + captures/workflows.
-- Debuggable - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
+- **Debuggable** - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
 
 ## Index
 **Up & Running**
@@ -62,7 +62,7 @@ TL;DR why resterm:
 
 ---
 
-**Feature snapshots**
+**Deep dive**
 - [Workflows & scripting](#feature-snapshots)
 - [Compare runs](#feature-snapshots)
 - [Tracing & timeline](#feature-snapshots)
