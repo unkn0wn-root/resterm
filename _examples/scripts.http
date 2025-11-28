@@ -29,7 +29,7 @@ X-Shared-Secret: {{reporting.sharedSecret}}
 # @tag scripts reuse
 # @description Uses the global token populated by the pre-request script along with the top-level API key.
 # @auth bearer {{reporting.token}}
-# @capture request reporting.lastTrace {{response.headers.X-Amzn-Trace-Id}}
+# @capture request reporting.lastTrace {{response.json.headers.X-Trace-Id}}
 # @script test
 > client.test("script-created token is available", function () {
 >   var token = vars.get("reporting.token");

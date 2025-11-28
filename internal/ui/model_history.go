@@ -452,17 +452,26 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	}
 	headersContent := strings.TrimRight(headersBuilder.String(), "\n")
 
-	body := strings.TrimSpace(resp.Message)
-	if body == "" {
-		body = "<empty>"
-	}
 	statusLine := fmt.Sprintf("gRPC %s - %s", strings.TrimPrefix(req.GRPC.FullMethod, "/"), resp.StatusCode.String())
 	if resp.StatusMessage != "" {
 		statusLine += " (" + resp.StatusMessage + ")"
 	}
+
+	contentType := "application/json"
+	prettyBodyRaw := prettifyBody([]byte(resp.Message), contentType)
+	prettyBody := trimResponseBody(prettyBodyRaw)
+	if isBodyEmpty(prettyBody) {
+		prettyBody = "<empty>"
+	}
+
+	rawBody := formatRawBody([]byte(resp.Message), contentType)
+	if isBodyEmpty(rawBody) {
+		rawBody = "<empty>"
+	}
+
 	snapshot := &responseSnapshot{
-		pretty:      joinSections(statusLine, body),
-		raw:         joinSections(statusLine, body),
+		pretty:      joinSections(statusLine, prettyBody),
+		raw:         joinSections(statusLine, rawBody),
 		headers:     joinSections(statusLine, headersContent),
 		ready:       true,
 		environment: environment,

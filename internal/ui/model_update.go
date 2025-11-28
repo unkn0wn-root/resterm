@@ -973,13 +973,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			cmd := m.retreatResponseSearch()
 			return combine(cmd)
-		case "down", "j":
+		case "down", "j", "shift+j", "J":
 			if pane == nil {
 				return combine(nil)
 			}
 			if pane.activeTab == responseTabStats {
 				snapshot := pane.snapshot
 				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					if keyStr == "shift+j" || keyStr == "J" {
+						return combine(m.jumpWorkflowStatsSelection(1))
+					}
 					if snapshot.workflowStats.scrollExpanded(pane, 1) {
 						pane.setCurrPosition()
 						return combine(nil)
@@ -993,13 +996,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			pane.viewport.ScrollDown(1)
 			pane.setCurrPosition()
 			return combine(nil)
-		case "up", "k":
+		case "up", "k", "shift+k", "K":
 			if pane == nil {
 				return combine(nil)
 			}
 			if pane.activeTab == responseTabStats {
 				snapshot := pane.snapshot
 				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					if keyStr == "shift+k" || keyStr == "K" {
+						return combine(m.jumpWorkflowStatsSelection(-1))
+					}
 					if snapshot.workflowStats.scrollExpanded(pane, -1) {
 						pane.setCurrPosition()
 						return combine(nil)

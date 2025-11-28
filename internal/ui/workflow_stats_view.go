@@ -15,6 +15,8 @@ type workflowStatsView struct {
 	selected    int
 	expanded    map[int]bool
 	renderCache map[int]workflowStatsRender
+	alignTopSelected  bool
+	alignTopRemaining int
 }
 
 type workflowStatsEntry struct {

@@ -365,7 +365,27 @@ func (m *Model) syncWorkflowStatsPane(pane *responsePaneState, width int, snapsh
 	decorated = m.applyResponseContentStyles(responseTabStats, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
-	snapshot.workflowStats.ensureVisible(pane, render)
+	alignTop := snapshot.workflowStats.alignTopSelected
+	if alignTop && snapshot.workflowStats.alignTopRemaining <= 0 {
+		snapshot.workflowStats.alignTopRemaining = m.workflowStatsPaneCount(snapshot)
+		if snapshot.workflowStats.alignTopRemaining == 0 {
+			snapshot.workflowStats.alignTopRemaining = 1
+		}
+	}
+	if alignTop && snapshot.workflowStats.selected >= 0 && snapshot.workflowStats.selected < len(render.metrics) {
+		start := render.metrics[snapshot.workflowStats.selected].start
+		if start < 0 {
+			start = 0
+		}
+		pane.viewport.SetYOffset(start)
+		snapshot.workflowStats.alignTopRemaining--
+		if snapshot.workflowStats.alignTopRemaining <= 0 {
+			snapshot.workflowStats.alignTopSelected = false
+			snapshot.workflowStats.alignTopRemaining = 0
+		}
+	} else {
+		snapshot.workflowStats.ensureVisible(pane, render)
+	}
 	ensureResponseMatchInView(pane, render.content)
 	pane.setCurrPosition()
 	return nil
