@@ -321,8 +321,10 @@ func buildWorkflowGRPCDetail(result workflowStepResult) string {
 		}
 	}
 
-	body := strings.TrimSpace(resp.Message)
-	if body == "" {
+	contentType := "application/json"
+	bodyRaw := prettifyBody([]byte(resp.Message), contentType)
+	body := trimResponseBody(bodyRaw)
+	if isBodyEmpty(body) {
 		body = "<empty>"
 	}
 	builder.WriteString(body)

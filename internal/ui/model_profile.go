@@ -87,18 +87,22 @@ func (m *Model) startProfileRun(doc *restfile.Document, req *restfile.Request, o
 	}
 
 	state := &profileState{
-		base:        cloneRequest(req),
-		doc:         doc,
-		options:     options,
-		spec:        spec,
-		total:       total,
-		warmup:      spec.Warmup,
-		delay:       spec.Delay,
-		successes:   make([]time.Duration, 0, spec.Count),
-		failures:    make([]profileFailure, 0, spec.Count/2+1),
-		messageBase: fmt.Sprintf("Profiling %s", requestBaseTitle(req)),
-		start:       time.Now(),
+		base:      cloneRequest(req),
+		doc:       doc,
+		options:   options,
+		spec:      spec,
+		total:     total,
+		warmup:    spec.Warmup,
+		delay:     spec.Delay,
+		successes: make([]time.Duration, 0, spec.Count),
+		failures:  make([]profileFailure, 0, spec.Count/2+1),
+		start:     time.Now(),
 	}
+	title := strings.TrimSpace(m.statusRequestTitle(doc, req, ""))
+	if title == "" {
+		title = requestBaseTitle(req)
+	}
+	state.messageBase = fmt.Sprintf("Profiling %s", title)
 
 	m.profileRun = state
 	m.sending = true
