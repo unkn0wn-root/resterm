@@ -82,8 +82,12 @@ func (m *Model) startCompareRun(doc *restfile.Document, req *restfile.Request, s
 		envs:      append([]string(nil), spec.Environments...),
 		originEnv: m.cfg.EnvironmentName,
 		results:   make([]compareResult, 0, len(spec.Environments)),
-		label:     fmt.Sprintf("Compare %s", requestBaseTitle(req)),
 	}
+	title := strings.TrimSpace(m.statusRequestTitle(doc, req, ""))
+	if title == "" {
+		title = requestBaseTitle(req)
+	}
+	state.label = fmt.Sprintf("Compare %s", title)
 
 	m.compareRun = state
 	m.lastCompareResults = nil

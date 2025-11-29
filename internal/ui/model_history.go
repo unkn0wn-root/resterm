@@ -1181,7 +1181,11 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 		return nil
 	}
 	preview := renderRequestText(req)
-	statusText := fmt.Sprintf("Previewing %s", requestDisplayName(req))
+	title := strings.TrimSpace(m.statusRequestTitle(m.doc, req, ""))
+	if title == "" {
+		title = requestDisplayName(req)
+	}
+	statusText := fmt.Sprintf("Previewing %s", title)
 	return m.applyPreview(preview, statusText)
 }
 
@@ -1501,10 +1505,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 
 	if !send {
 		m.sending = false
-		label := strings.TrimSpace(requestDisplayName(req))
-		if label == "" {
-			label = strings.TrimSpace(fmt.Sprintf("%s %s", req.Method, req.URL))
-		}
+		label := strings.TrimSpace(m.statusRequestTitle(doc, req, targetEnv))
 		if label == "" {
 			label = "history request"
 		}
@@ -1550,7 +1551,12 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	}
 
 	m.sending = true
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Replaying %s", req.URL), level: statusInfo})
+	replayTarget := m.statusRequestTarget(doc, req, targetEnv)
+	replayText := "Replaying"
+	if trimmed := strings.TrimSpace(replayTarget); trimmed != "" {
+		replayText = fmt.Sprintf("Replaying %s", trimmed)
+	}
+	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
 	return m.executeRequest(doc, req, options, "")
 }
 

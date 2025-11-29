@@ -74,7 +74,11 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	}
 
 	m.sending = true
-	base := fmt.Sprintf("Sending %s", cloned.URL)
+	target := m.statusRequestTarget(doc, cloned, "")
+	base := "Sending"
+	if trimmed := strings.TrimSpace(target); trimmed != "" {
+		base = fmt.Sprintf("Sending %s", trimmed)
+	}
 	m.statusPulseBase = base
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
