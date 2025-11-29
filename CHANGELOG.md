@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.4](https://github.com/unkn0wn-root/resterm/compare/v0.8.3...v0.8.4) (2025-11-29)
+
+
+### Features
+
+* prettify grpc response in workflows ([cefe457](https://github.com/unkn0wn-root/resterm/commit/cefe45733004751f2b63b1142af8c981350140ba))
+
+
+### Bug Fixes
+
+* avoid secret leaks in status/list labels and refresh on env change ([c32d638](https://github.com/unkn0wn-root/resterm/commit/c32d638c58e34708a826772b4fd87bed02305bb4))
+
 ### [0.8.3](https://github.com/unkn0wn-root/resterm/compare/v0.8.2...v0.8.3) (2025-11-28)
 
 
