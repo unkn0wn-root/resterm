@@ -3,10 +3,14 @@ package parser
 import (
 	"context"
 	"fmt"
+	"net/url"
+	"os"
 	"sort"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/speakeasy-api/openapi-overlay/pkg/overlay"
+	"gopkg.in/yaml.v3"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
@@ -22,31 +26,80 @@ func (l *Loader) Parse(ctx context.Context, path string, opts openapi.ParseOptio
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = opts.ResolveExternalRefs
 
-	document, err := loader.LoadFromFile(path)
+	var document *openapi3.T
+	var err error
+
+	if opts.OverlayPath != "" {
+		document, err = l.loadWithOverlay(loader, path, opts.OverlayPath)
+	} else {
+		document, err = loader.LoadFromFile(path)
+	}
+
 	if err != nil {
-		return nil, fmt.Errorf("load OpenAPI spec: %w", err)
+		return nil, err
+	}
+	if document == nil {
+		return nil, fmt.Errorf("openapi parser: loaded document is nil")
 	}
 
 	if err := document.Validate(ctx); err != nil {
 		return nil, fmt.Errorf("validate OpenAPI spec: %w", err)
 	}
 
-	spec := &model.Spec{
-		Title:           document.Info.Title,
-		Version:         document.Info.Version,
-		Description:     document.Info.Description,
-		Servers:         convertServers(document.Servers),
-		SecuritySchemes: convertSecuritySchemes(document.Components.SecuritySchemes),
+	if document.Info == nil {
+		return nil, fmt.Errorf("OpenAPI spec is missing 'info' section")
 	}
 
-	operations := collectOperations(document)
-	spec.Operations = operations
+	title := document.Info.Title
+	version := document.Info.Version
+	desc := document.Info.Description
+	servers := convertServers(document.Servers)
+	schemes := convertSecuritySchemes(document.Components.SecuritySchemes)
+
+	spec := &model.Spec{
+		Title:           title,
+		Version:         version,
+		Description:     desc,
+		Servers:         servers,
+		SecuritySchemes: schemes,
+	}
+
+	spec.Operations = collectOperations(document)
 
 	return spec, nil
 }
 
+func (l *Loader) loadWithOverlay(loader *openapi3.Loader, path, overlayPath string) (*openapi3.T, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read OpenAPI file: %w", err)
+	}
+
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		return nil, fmt.Errorf("unmarshal OpenAPI yaml: %w", err)
+	}
+
+	ov, err := overlay.Parse(overlayPath)
+	if err != nil {
+		return nil, fmt.Errorf("parse OpenAPI overlay: %w", err)
+	}
+
+	if err := ov.ApplyTo(&node); err != nil {
+		return nil, fmt.Errorf("apply OpenAPI overlay: %w", err)
+	}
+
+	mergedData, err := yaml.Marshal(&node)
+	if err != nil {
+		return nil, fmt.Errorf("marshal merged OpenAPI: %w", err)
+	}
+
+	docURL := &url.URL{Path: path}
+	return loader.LoadFromDataWithPath(mergedData, docURL)
+}
+
 func collectOperations(doc *openapi3.T) []model.Operation {
-	if doc.Paths == nil {
+	if doc == nil || doc.Paths == nil {
 		return nil
 	}
 

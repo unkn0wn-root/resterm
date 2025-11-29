@@ -21,6 +21,7 @@ type DocumentWriter interface {
 
 type ParseOptions struct {
 	ResolveExternalRefs bool
+	OverlayPath         string
 }
 
 type GeneratorOptions struct {

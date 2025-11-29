@@ -59,6 +59,7 @@ func main() {
 		openapiOut               string
 		openapiBase              string
 		openapiResolveRefs       bool
+		openapiOverlay           string
 		openapiIncludeDeprecated bool
 		openapiServerIndex       int
 		traceOTEndpoint          string
@@ -90,6 +91,7 @@ func main() {
 	flag.StringVar(&openapiOut, "http-out", "", "Destination path for generated .http file")
 	flag.StringVar(&openapiBase, "openapi-base-var", openapi.DefaultBaseURLVariable, "Variable name for the generated base URL")
 	flag.BoolVar(&openapiResolveRefs, "openapi-resolve-refs", false, "Resolve external $ref references during OpenAPI import")
+	flag.StringVar(&openapiOverlay, "openapi-overlay", "", "Path to OpenAPI Overlay file to apply")
 	flag.BoolVar(&openapiIncludeDeprecated, "openapi-include-deprecated", false, "Include deprecated operations when generating requests")
 	flag.IntVar(&openapiServerIndex, "openapi-server-index", 0, "Preferred server index (0-based) from the spec to use as the base URL")
 	flag.StringVar(&traceOTEndpoint, "trace-otel-endpoint", traceOTEndpoint, "OTLP collector endpoint used when @trace is enabled")
@@ -177,7 +179,10 @@ func main() {
 		}
 
 		opts := openapi.GenerateOptions{
-			Parse: openapi.ParseOptions{ResolveExternalRefs: openapiResolveRefs},
+			Parse: openapi.ParseOptions{
+				ResolveExternalRefs: openapiResolveRefs,
+				OverlayPath:         openapiOverlay,
+			},
 			Generate: openapi.GeneratorOptions{
 				BaseURLVariable:      openapiBase,
 				IncludeDeprecated:    openapiIncludeDeprecated,

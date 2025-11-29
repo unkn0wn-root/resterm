@@ -895,6 +895,7 @@ Run `resterm --help` for the latest list. Core flags:
 | `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http`). |
 | `--openapi-base-var <name>` | Override the base URL variable injected into the generated file (`baseUrl` by default). |
 | `--openapi-resolve-refs` | Resolve external `$ref` pointers before generation. |
+| `--openapi-overlay <file>` | Apply an OpenAPI Overlay to the spec before generation. |
 | `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default. |
 | `--openapi-server-index <n>` | Choose which server entry (0-based) seeds the base URL. |
 
