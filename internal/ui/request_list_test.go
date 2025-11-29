@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -164,5 +165,64 @@ func TestRequestListItemDescriptionExpandsConstants(t *testing.T) {
 	expected := "GET /api/items\nhttp://localhost:8080"
 	if desc != expected {
 		t.Fatalf("expected %q, got %q", expected, desc)
+	}
+}
+
+func TestRequestListFilterValueExpandsSafeValues(t *testing.T) {
+	t.Parallel()
+
+	doc := &restfile.Document{
+		Constants: []restfile.Constant{{Name: "svc.http", Value: "http://localhost:8080"}},
+		Requests: []*restfile.Request{
+			{
+				Method: "get",
+				URL:    "{{svc.http}}/users",
+				Metadata: restfile.RequestMetadata{
+					Name:        "{{svc.http}} Users",
+					Description: "List users",
+				},
+			},
+		},
+	}
+
+	var model Model
+	items, listItems := model.buildRequestItems(doc)
+	if len(items) != 1 || len(listItems) != 1 {
+		t.Fatalf("expected 1 item, got %d items and %d list items", len(items), len(listItems))
+	}
+	filter := items[0].FilterValue()
+	if filter == "" || !strings.Contains(filter, "http://localhost:8080") {
+		t.Fatalf("expected filter value to include expanded constant, got %q", filter)
+	}
+}
+
+func TestRequestListFilterValueDoesNotLeakSecrets(t *testing.T) {
+	t.Parallel()
+
+	doc := &restfile.Document{
+		Requests: []*restfile.Request{
+			{
+				Method: "get",
+				URL:    "https://api/{{token}}/users",
+				Variables: []restfile.Variable{{
+					Name:   "token",
+					Value:  "supersecret",
+					Secret: true,
+				}},
+			},
+		},
+	}
+
+	var model Model
+	items, _ := model.buildRequestItems(doc)
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+	filter := items[0].FilterValue()
+	if strings.Contains(filter, "supersecret") {
+		t.Fatalf("filter value leaked secret: %q", filter)
+	}
+	if !strings.Contains(filter, "{{token}}") {
+		t.Fatalf("expected unresolved secret placeholder to remain, got %q", filter)
 	}
 }

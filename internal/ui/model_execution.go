@@ -624,6 +624,93 @@ func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, env
 	return vars.NewResolver(providers...)
 }
 
+// buildDisplayResolver is a best-effort resolver for UI/status rendering that
+// avoids expanding secret values.
+func (m *Model) buildDisplayResolver(doc *restfile.Document, req *restfile.Request, envName string, extras ...map[string]string) *vars.Resolver {
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	providers := make([]vars.Provider, 0, 9)
+
+	if doc != nil && len(doc.Constants) > 0 {
+		constValues := make(map[string]string, len(doc.Constants))
+		for _, c := range doc.Constants {
+			constValues[c.Name] = c.Value
+		}
+		providers = append(providers, vars.NewMapProvider("const", constValues))
+	}
+
+	for _, extra := range extras {
+		if len(extra) > 0 {
+			providers = append(providers, vars.NewMapProvider("script", extra))
+		}
+	}
+
+	if req != nil {
+		reqVars := make(map[string]string)
+		for _, v := range req.Variables {
+			if v.Secret {
+				continue
+			}
+			reqVars[v.Name] = v.Value
+		}
+		if len(reqVars) > 0 {
+			providers = append(providers, vars.NewMapProvider("request", reqVars))
+		}
+	}
+
+	if m.globals != nil {
+		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
+			values := make(map[string]string, len(snapshot))
+			for key, entry := range snapshot {
+				if entry.Secret {
+					continue
+				}
+				name := entry.Name
+				if strings.TrimSpace(name) == "" {
+					name = key
+				}
+				values[name] = entry.Value
+			}
+			if len(values) > 0 {
+				providers = append(providers, vars.NewMapProvider("global", values))
+			}
+		}
+	}
+
+	if doc != nil {
+		globalVars := make(map[string]string)
+		for _, v := range doc.Globals {
+			if v.Secret {
+				continue
+			}
+			globalVars[v.Name] = v.Value
+		}
+		if len(globalVars) > 0 {
+			providers = append(providers, vars.NewMapProvider("document-global", globalVars))
+		}
+	}
+
+	fileVars := make(map[string]string)
+	if doc != nil {
+		for _, v := range doc.Variables {
+			if v.Secret {
+				continue
+			}
+			fileVars[v.Name] = v.Value
+		}
+	}
+	m.mergeFileRuntimeVarsSafe(fileVars, doc, resolvedEnv)
+	if len(fileVars) > 0 {
+		providers = append(providers, vars.NewMapProvider("file", fileVars))
+	}
+
+	if envValues := vars.EnvValues(m.cfg.EnvironmentSet, resolvedEnv); len(envValues) > 0 {
+		providers = append(providers, vars.NewMapProvider("environment", envValues))
+	}
+
+	providers = append(providers, vars.EnvProvider{})
+	return vars.NewResolver(providers...)
+}
+
 func (m *Model) resolveSSH(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, envName string) (*ssh.Plan, error) {
 	if req == nil || req.SSH == nil {
 		return nil, nil
@@ -686,6 +773,28 @@ func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Doc
 	path := m.documentRuntimePath(doc)
 	if snapshot := m.fileVars.snapshot(resolvedEnv, path); len(snapshot) > 0 {
 		for key, entry := range snapshot {
+			name := strings.TrimSpace(entry.Name)
+			if name == "" {
+				name = key
+			}
+			target[name] = entry.Value
+		}
+	}
+}
+
+// mergeFileRuntimeVarsSafe merges runtime file vars while skipping secrets so UI
+// previews do not leak them.
+func (m *Model) mergeFileRuntimeVarsSafe(target map[string]string, doc *restfile.Document, envName string) {
+	if target == nil || m.fileVars == nil {
+		return
+	}
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	path := m.documentRuntimePath(doc)
+	if snapshot := m.fileVars.snapshot(resolvedEnv, path); len(snapshot) > 0 {
+		for key, entry := range snapshot {
+			if entry.Secret {
+				continue
+			}
 			name := strings.TrimSpace(entry.Name)
 			if name == "" {
 				name = key

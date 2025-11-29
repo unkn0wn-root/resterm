@@ -190,13 +190,16 @@ func (i requestListItem) FilterValue() string {
 	if i.request == nil {
 		return ""
 	}
+	name := expandStatusText(i.resolver, i.request.Metadata.Name)
+	desc := expandStatusText(i.resolver, i.request.Metadata.Description)
+	target := expandStatusText(i.resolver, requestTarget(i.request))
 	parts := []string{
-		i.request.Metadata.Name,
-		i.request.Metadata.Description,
+		name,
+		desc,
 		strings.Join(i.request.Metadata.Tags, " "),
 		requestTypeBadge(i.request), // badges are static
 		i.request.Method,
-		i.request.URL,
+		target,
 	}
 	return strings.Join(parts, " ")
 }

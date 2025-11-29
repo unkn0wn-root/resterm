@@ -66,6 +66,7 @@ func (m *Model) applyEnvironmentSelection() tea.Cmd {
 	}
 	msg := fmt.Sprintf("Environment set to %s", item.name)
 	m.setStatusMessage(statusMsg{level: statusInfo, text: msg})
+	m.syncRequestList(m.doc)
 	m.syncHistory()
 	return nil
 }

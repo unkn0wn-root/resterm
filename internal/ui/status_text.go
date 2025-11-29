@@ -8,14 +8,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-// expandStatusText resolves templates best-effort so status messages mirror the
-// values that will actually be used.
+// expandStatusText resolves templates best-effort for UI display without
+// executing dynamic placeholders twice.
 func expandStatusText(r *vars.Resolver, raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || r == nil {
 		return raw
 	}
-	expanded, err := r.ExpandTemplates(raw)
+	expanded, err := r.ExpandTemplatesStatic(raw)
 	if err != nil {
 		return raw
 	}
@@ -23,7 +23,7 @@ func expandStatusText(r *vars.Resolver, raw string) string {
 }
 
 func (m *Model) statusResolver(doc *restfile.Document, req *restfile.Request, env string, extras ...map[string]string) *vars.Resolver {
-	return m.buildResolver(doc, req, env, extras...)
+	return m.buildDisplayResolver(doc, req, env, extras...)
 }
 
 func (m *Model) statusRequestTarget(doc *restfile.Document, req *restfile.Request, env string, extras ...map[string]string) string {
