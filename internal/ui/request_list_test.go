@@ -155,7 +155,8 @@ func TestRequestListItemDescriptionExpandsConstants(t *testing.T) {
 		},
 	}
 
-	items, _ := buildRequestItems(doc)
+	var model Model
+	items, _ := model.buildRequestItems(doc)
 	if len(items) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(items))
 	}

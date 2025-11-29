@@ -1053,7 +1053,7 @@ func (m *Model) syncHistory() {
 
 func (m *Model) syncRequestList(doc *restfile.Document) {
 	_ = m.syncWorkflowList(doc)
-	items, listItems := buildRequestItems(doc)
+	items, listItems := m.buildRequestItems(doc)
 	m.requestItems = items
 	if len(listItems) == 0 {
 		m.requestList.SetItems(nil)

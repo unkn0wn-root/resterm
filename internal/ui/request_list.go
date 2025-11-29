@@ -11,17 +11,17 @@ import (
 )
 
 type requestListItem struct {
-	request       *restfile.Request
-	index         int
-	line          int
-	constResolver *vars.Resolver
+	request  *restfile.Request
+	index    int
+	line     int
+	resolver *vars.Resolver
 }
 
 func (i requestListItem) Title() string {
 	if i.request == nil {
 		return ""
 	}
-	name := strings.TrimSpace(i.request.Metadata.Name)
+	name := expandStatusText(i.resolver, i.request.Metadata.Name)
 	if name == "" {
 		name = fmt.Sprintf("Request %d", i.index+1)
 	}
@@ -51,7 +51,7 @@ func (i requestListItem) Description() string {
 		method = "REQ"
 	}
 	target := requestTarget(i.request)
-	target = i.expandTarget(target)
+	target = expandStatusText(i.resolver, target)
 	displayTarget := truncateDisplay(target)
 
 	if desc != "" {
@@ -186,20 +186,6 @@ func splitRequestURL(raw string) (path string, base string) {
 	return path, base
 }
 
-func (i requestListItem) expandTarget(raw string) string {
-	if i.constResolver == nil {
-		return raw
-	}
-	if !strings.Contains(raw, "{{") {
-		return raw
-	}
-	expanded, err := i.constResolver.ExpandTemplatesStatic(raw)
-	if err != nil {
-		return raw
-	}
-	return expanded
-}
-
 func (i requestListItem) FilterValue() string {
 	if i.request == nil {
 		return ""
@@ -208,26 +194,19 @@ func (i requestListItem) FilterValue() string {
 		i.request.Metadata.Name,
 		i.request.Metadata.Description,
 		strings.Join(i.request.Metadata.Tags, " "),
-		requestTypeBadge(i.request),
+		requestTypeBadge(i.request), // badges are static
 		i.request.Method,
 		i.request.URL,
 	}
 	return strings.Join(parts, " ")
 }
 
-func buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) {
+func (m *Model) buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil, nil
 	}
 
-	var constResolver *vars.Resolver
-	if len(doc.Constants) > 0 {
-		values := make(map[string]string, len(doc.Constants))
-		for _, c := range doc.Constants {
-			values[c.Name] = c.Value
-		}
-		constResolver = vars.NewResolver(vars.NewMapProvider("const", values))
-	}
+	env := m.cfg.EnvironmentName
 	items := make([]requestListItem, len(doc.Requests))
 	listItems := make([]list.Item, len(doc.Requests))
 	for idx, req := range doc.Requests {
@@ -235,7 +214,8 @@ func buildRequestItems(doc *restfile.Document) ([]requestListItem, []list.Item) 
 		if line <= 0 {
 			line = 1
 		}
-		item := requestListItem{request: req, index: idx, line: line, constResolver: constResolver}
+		resolver := m.statusResolver(doc, req, env)
+		item := requestListItem{request: req, index: idx, line: line, resolver: resolver}
 		items[idx] = item
 		listItems[idx] = item
 	}
