@@ -120,18 +120,3 @@ func (m *Model) activateWorkflowStatsView(snapshot *responseSnapshot) tea.Cmd {
 	}
 	return m.syncResponsePanes()
 }
-
-func (m *Model) workflowStatsPaneCount(snapshot *responseSnapshot) int {
-	if snapshot == nil || snapshot.workflowStats == nil {
-		return 0
-	}
-	count := 0
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil || pane.snapshot != snapshot || pane.activeTab != responseTabStats {
-			continue
-		}
-		count++
-	}
-	return count
-}
