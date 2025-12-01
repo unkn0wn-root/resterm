@@ -126,6 +126,7 @@ func TestWorkflowStatsEnsureVisibleImmediateScrollsUp(t *testing.T) {
 			{index: 1, start: 6, end: 7},
 			{index: 2, start: 8, end: 9},
 		},
+		lineCount: 12,
 	}
 	view.renderCache[80] = render
 
@@ -156,6 +157,7 @@ func TestWorkflowStatsEnsureVisibleImmediateNoAlignWhenVisible(t *testing.T) {
 			{index: 1, start: 6, end: 7},
 			{index: 2, start: 8, end: 9},
 		},
+		lineCount: 12,
 	}
 	view.renderCache[80] = render
 
@@ -165,6 +167,18 @@ func TestWorkflowStatsEnsureVisibleImmediateNoAlignWhenVisible(t *testing.T) {
 	}
 	if pane.viewport.YOffset != 5 {
 		t.Fatalf("expected YOffset to remain 5, got %d", pane.viewport.YOffset)
+	}
+}
+
+func TestWorkflowStatsClampOffsetWithoutTrailingNewline(t *testing.T) {
+	view := &workflowStatsView{}
+	render := workflowStatsRender{
+		content:   "line1\nline2\nline3",
+		lineCount: 3,
+	}
+
+	if offset := view.clampOffset(render, 2, 2); offset != 1 {
+		t.Fatalf("expected clamp to max offset 1, got %d", offset)
 	}
 }
 
@@ -182,6 +196,7 @@ func TestWorkflowStatsSelectVisibleStartAdvancesWhenStartInView(t *testing.T) {
 			{index: 0, start: 0, end: 2},
 			{index: 1, start: 3, end: 5},
 		},
+		lineCount: 8,
 	}
 
 	pane.viewport.SetContent(strings.Repeat("x\n", 12))
@@ -216,6 +231,7 @@ func TestWorkflowStatsSelectVisibleStartMovesUpward(t *testing.T) {
 			{index: 0, start: 0, end: 2},
 			{index: 1, start: 3, end: 5},
 		},
+		lineCount: 8,
 	}
 
 	pane.viewport.SetContent(strings.Repeat("x\n", 12))

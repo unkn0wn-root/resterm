@@ -23,8 +23,9 @@ type workflowStatsEntry struct {
 }
 
 type workflowStatsRender struct {
-	content string
-	metrics []workflowStatsMetric
+	content   string
+	metrics   []workflowStatsMetric
+	lineCount int
 }
 
 type workflowStatsMetric struct {
@@ -169,11 +170,12 @@ func (v *workflowStatsView) render(width int) workflowStatsRender {
 	}
 
 	content := strings.Join(lines, "\n")
+	lineCount := len(lines)
 	if content != "" {
 		content += "\n"
 	}
 
-	render := workflowStatsRender{content: content, metrics: metrics}
+	render := workflowStatsRender{content: content, metrics: metrics, lineCount: lineCount}
 	v.renderCache[width] = render
 	return render
 }
@@ -280,7 +282,7 @@ func (v *workflowStatsView) clampOffset(render workflowStatsRender, height int, 
 	if height < 1 {
 		height = 1
 	}
-	lineCount := strings.Count(render.content, "\n")
+	lineCount := render.lineCount
 	if len(render.metrics) > 0 {
 		maxMetric := render.metrics[len(render.metrics)-1].end + 1
 		if maxMetric > lineCount {
