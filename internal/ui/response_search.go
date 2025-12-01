@@ -29,6 +29,10 @@ func (s *responseSearchState) invalidate() {
 	s.computed = false
 }
 
+func (s *responseSearchState) markStale() {
+	s.computed = false
+}
+
 func (s *responseSearchState) hasQuery() bool {
 	return strings.TrimSpace(s.query) != ""
 }

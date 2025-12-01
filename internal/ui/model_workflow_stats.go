@@ -83,7 +83,7 @@ func (m *Model) invalidateWorkflowStatsCaches(snapshot *responseSnapshot) {
 			continue
 		}
 		pane.wrapCache[responseTabStats] = cachedWrap{}
-		pane.search.invalidate()
+		pane.search.markStale()
 	}
 }
 
