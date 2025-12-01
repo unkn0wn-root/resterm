@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.8.5](https://github.com/unkn0wn-root/resterm/compare/v0.8.4...v0.8.5) (2025-12-01)
+
+
+### Bug Fixes
+
+* clear search in response tab ([1b87b10](https://github.com/unkn0wn-root/resterm/commit/1b87b105cb5d2bd2554559fba93a7087e066ecc7))
+* search ([fcd2176](https://github.com/unkn0wn-root/resterm/commit/fcd2176afb55dc323556c71c19d8fc93adcc86b5))
+* worflow search and better worflows navigation ([0f8ee5f](https://github.com/unkn0wn-root/resterm/commit/0f8ee5f8f02bc4c2e0ae932ba6845907efc40f0f))
+
 ### [0.8.4](https://github.com/unkn0wn-root/resterm/compare/v0.8.3...v0.8.4) (2025-11-29)
 
 
