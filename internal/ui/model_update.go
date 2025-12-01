@@ -959,6 +959,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		case "shift+f", "F":
 			cmd := m.openSearchPrompt()
 			return combine(cmd)
+		case "esc":
+			return combine(m.clearResponseSearch())
 		case "n":
 			cmd := m.advanceResponseSearch()
 			return combine(cmd)

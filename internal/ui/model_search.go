@@ -103,6 +103,21 @@ func (m *Model) responseSearchContent(paneID responsePaneID, tab responseTab, wi
 	return content, cacheKey, wrapContentForTab(cacheKey, content, width)
 }
 
+func (m *Model) clearResponseSearch() tea.Cmd {
+	pane := m.focusedPane()
+	if pane == nil {
+		return nil
+	}
+	if !pane.search.clear() {
+		return nil
+	}
+	status := statusCmd(statusInfo, "Search cleared")
+	if syncCmd := m.syncResponsePane(m.responsePaneFocus); syncCmd != nil {
+		return tea.Batch(syncCmd, status)
+	}
+	return status
+}
+
 func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 	paneID := m.searchResponsePane
 	if paneID != responsePanePrimary && paneID != responsePaneSecondary {
