@@ -87,6 +87,37 @@ func (m *Model) prepareEditorSearchContext() {
 	}
 }
 
+func (m *Model) responseSearchContent(paneID responsePaneID, tab responseTab, width int) (string, responseTab, string) {
+	content, cacheKey := m.paneContentForTab(paneID, tab)
+	if tab == responseTabStats {
+		if pane := m.pane(paneID); pane != nil {
+			snap := pane.snapshot
+			if snap != nil && snap.statsKind == statsReportKindWorkflow && snap.workflowStats != nil {
+				render := snap.workflowStats.render(width)
+				content = ensureTrailingNewline(render.content)
+				cacheKey = responseTabStats
+				return content, cacheKey, content
+			}
+		}
+	}
+	return content, cacheKey, wrapContentForTab(cacheKey, content, width)
+}
+
+func (m *Model) clearResponseSearch() tea.Cmd {
+	pane := m.focusedPane()
+	if pane == nil {
+		return nil
+	}
+	if !pane.search.clear() {
+		return nil
+	}
+	status := statusCmd(statusInfo, "Search cleared")
+	if syncCmd := m.syncResponsePane(m.responsePaneFocus); syncCmd != nil {
+		return tea.Batch(syncCmd, status)
+	}
+	return status
+}
+
 func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 	paneID := m.searchResponsePane
 	if paneID != responsePanePrimary && paneID != responsePaneSecondary {
@@ -108,7 +139,7 @@ func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 		width = defaultResponseViewportWidth
 	}
 
-	content, cacheKey := m.paneContentForTab(paneID, tab)
+	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
 	snapshotReady := false
 	if pane.snapshot != nil {
@@ -128,7 +159,6 @@ func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 		return status
 	}
 
-	wrapped := wrapContentForTab(cacheKey, content, width)
 	if err := pane.search.computeMatches(wrapped); err != nil {
 		pane.search.invalidate()
 		status := statusCmd(statusError, fmt.Sprintf("Invalid regex: %v", err))
@@ -178,7 +208,7 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 		width = defaultResponseViewportWidth
 	}
 
-	content, cacheKey := m.paneContentForTab(paneID, tab)
+	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
 	snapshotReady := false
 	if pane.snapshot != nil {
@@ -189,7 +219,6 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 		return statusCmd(statusWarn, "Response not ready")
 	}
 
-	wrapped := wrapContentForTab(cacheKey, content, width)
 	if pane.search.needsRefresh(snapshotID, cacheKey, width) {
 		prevIndex := pane.search.index
 		pane.search.prepare(pane.search.query, pane.search.isRegex, cacheKey, snapshotID, width)
@@ -257,7 +286,7 @@ func (m *Model) retreatResponseSearch() tea.Cmd {
 		width = defaultResponseViewportWidth
 	}
 
-	content, cacheKey := m.paneContentForTab(paneID, tab)
+	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
 	snapshotReady := false
 	if pane.snapshot != nil {
@@ -268,7 +297,6 @@ func (m *Model) retreatResponseSearch() tea.Cmd {
 		return statusCmd(statusWarn, "Response not ready")
 	}
 
-	wrapped := wrapContentForTab(cacheKey, content, width)
 	if pane.search.needsRefresh(snapshotID, cacheKey, width) {
 		prevIndex := pane.search.index
 		pane.search.prepare(pane.search.query, pane.search.isRegex, cacheKey, snapshotID, width)

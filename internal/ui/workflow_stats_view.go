@@ -15,8 +15,6 @@ type workflowStatsView struct {
 	selected    int
 	expanded    map[int]bool
 	renderCache map[int]workflowStatsRender
-	alignTopSelected  bool
-	alignTopRemaining int
 }
 
 type workflowStatsEntry struct {
@@ -25,8 +23,9 @@ type workflowStatsEntry struct {
 }
 
 type workflowStatsRender struct {
-	content string
-	metrics []workflowStatsMetric
+	content   string
+	metrics   []workflowStatsMetric
+	lineCount int
 }
 
 type workflowStatsMetric struct {
@@ -171,11 +170,12 @@ func (v *workflowStatsView) render(width int) workflowStatsRender {
 	}
 
 	content := strings.Join(lines, "\n")
+	lineCount := len(lines)
 	if content != "" {
 		content += "\n"
 	}
 
-	render := workflowStatsRender{content: content, metrics: metrics}
+	render := workflowStatsRender{content: content, metrics: metrics, lineCount: lineCount}
 	v.renderCache[width] = render
 	return render
 }
@@ -253,28 +253,127 @@ func (entry workflowStatsEntry) hasGRPC() bool {
 	return entry.result.GRPC != nil
 }
 
-func (v *workflowStatsView) ensureVisible(pane *responsePaneState, render workflowStatsRender) {
+func (v *workflowStatsView) alignSelection(pane *responsePaneState, render workflowStatsRender, forceTop bool) bool {
 	if pane == nil || !v.hasEntries() || pane.viewport.Height <= 0 {
-		return
+		return false
 	}
 	if v.selected < 0 || v.selected >= len(render.metrics) {
-		return
+		return false
 	}
 	metric := render.metrics[v.selected]
 	height := pane.viewport.Height
 	offset := pane.viewport.YOffset
-
-	if metric.start < offset {
-		pane.viewport.SetYOffset(metric.start)
-		return
-	}
-	bottom := offset + height - 1
-	if metric.end > bottom {
-		pane.viewport.SetYOffset(metric.end - height + 1)
-		if pane.viewport.YOffset < 0 {
-			pane.viewport.SetYOffset(0)
+	if !forceTop {
+		bottom := offset + height - 1
+		if metric.start <= bottom && metric.end >= offset {
+			return false
 		}
 	}
+
+	target := v.clampOffset(render, height, metric.start)
+	if target == offset {
+		return false
+	}
+	pane.viewport.SetYOffset(target)
+	return true
+}
+
+func (v *workflowStatsView) clampOffset(render workflowStatsRender, height int, target int) int {
+	if height < 1 {
+		height = 1
+	}
+	lineCount := render.lineCount
+	if len(render.metrics) > 0 {
+		maxMetric := render.metrics[len(render.metrics)-1].end + 1
+		if maxMetric > lineCount {
+			lineCount = maxMetric
+		}
+	}
+	maxOffset := lineCount - height
+	if maxOffset < 0 {
+		maxOffset = 0
+	}
+	if target < 0 {
+		return 0
+	}
+	if target > maxOffset {
+		return maxOffset
+	}
+	return target
+}
+
+func (v *workflowStatsView) ensureVisible(pane *responsePaneState, render workflowStatsRender) {
+	v.alignSelection(pane, render, false)
+}
+
+func (v *workflowStatsView) ensureVisibleImmediate(pane *responsePaneState, render workflowStatsRender) bool {
+	if pane == nil || !v.hasEntries() || pane.viewport.Height <= 0 {
+		return false
+	}
+	if v.selected < 0 || v.selected >= len(render.metrics) {
+		return false
+	}
+	return v.alignSelection(pane, render, false)
+}
+
+func (v *workflowStatsView) selectVisibleStart(pane *responsePaneState, render workflowStatsRender, direction int) bool {
+	if pane == nil || !v.hasEntries() || pane.viewport.Height <= 0 {
+		return false
+	}
+	if len(render.metrics) == 0 {
+		return false
+	}
+	height := pane.viewport.Height
+	offset := pane.viewport.YOffset
+	if height <= 0 {
+		height = 1
+	}
+	bottom := offset + height - 1
+	candidate := -1
+	if direction > 0 {
+		for _, metric := range render.metrics {
+			if metric.start >= offset && metric.start <= bottom && metric.index > v.selected {
+				candidate = metric.index
+				break
+			}
+		}
+		if candidate == -1 && v.selected >= 0 && v.selected < len(render.metrics) {
+			if render.metrics[v.selected].start < offset {
+				for _, metric := range render.metrics {
+					if metric.start >= offset {
+						candidate = metric.index
+						break
+					}
+				}
+			}
+		}
+	} else if direction < 0 {
+		for i := len(render.metrics) - 1; i >= 0; i-- {
+			metric := render.metrics[i]
+			if metric.start <= bottom && metric.start >= offset && metric.index < v.selected {
+				candidate = metric.index
+				break
+			}
+		}
+		if candidate == -1 && v.selected >= 0 && v.selected < len(render.metrics) {
+			if render.metrics[v.selected].start > bottom {
+				for i := len(render.metrics) - 1; i >= 0; i-- {
+					metric := render.metrics[i]
+					if metric.start <= bottom {
+						candidate = metric.index
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if candidate == -1 || candidate == v.selected {
+		return false
+	}
+	v.selected = candidate
+	v.invalidate()
+	return true
 }
 
 func indentLines(content string, indent string) []string {

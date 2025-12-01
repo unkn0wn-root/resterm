@@ -959,6 +959,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		case "shift+f", "F":
 			cmd := m.openSearchPrompt()
 			return combine(cmd)
+		case "esc":
+			return combine(m.clearResponseSearch())
 		case "n":
 			cmd := m.advanceResponseSearch()
 			return combine(cmd)
@@ -985,9 +987,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					}
 					if snapshot.workflowStats.scrollExpanded(pane, 1) {
 						pane.setCurrPosition()
-						return combine(nil)
+						return combine(m.selectWorkflowStatsByViewport(pane, snapshot, 1))
 					}
-					return combine(m.moveWorkflowStatsSelection(1))
+					pane.viewport.ScrollDown(1)
+					pane.setCurrPosition()
+					return combine(m.selectWorkflowStatsByViewport(pane, snapshot, 1))
 				}
 			}
 			if pane.activeTab == responseTabHistory {
@@ -1008,9 +1012,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					}
 					if snapshot.workflowStats.scrollExpanded(pane, -1) {
 						pane.setCurrPosition()
-						return combine(nil)
+						return combine(m.selectWorkflowStatsByViewport(pane, snapshot, -1))
 					}
-					return combine(m.moveWorkflowStatsSelection(-1))
+					pane.viewport.ScrollUp(1)
+					pane.setCurrPosition()
+					return combine(m.selectWorkflowStatsByViewport(pane, snapshot, -1))
 				}
 			}
 			if pane.activeTab == responseTabHistory {

@@ -29,6 +29,24 @@ func (s *responseSearchState) invalidate() {
 	s.computed = false
 }
 
+func (s *responseSearchState) markStale() {
+	s.computed = false
+}
+
+func (s *responseSearchState) clear() bool {
+	hadState := s.hasQuery() || len(s.matches) > 0 || s.active
+	s.query = ""
+	s.isRegex = false
+	s.matches = nil
+	s.index = -1
+	s.active = false
+	s.tab = 0
+	s.snapshotID = ""
+	s.width = 0
+	s.computed = false
+	return hadState
+}
+
 func (s *responseSearchState) hasQuery() bool {
 	return strings.TrimSpace(s.query) != ""
 }

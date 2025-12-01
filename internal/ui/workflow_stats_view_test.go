@@ -5,8 +5,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbles/viewport"
+
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestWorkflowStatsRenderIndicators(t *testing.T) {
@@ -101,5 +104,232 @@ func TestWorkflowStatsRenderWrappedIndent(t *testing.T) {
 	}
 	if !strings.HasPrefix(messageLines[1], "      ") {
 		t.Fatalf("expected continuation line to extend indent, got %q", messageLines[1])
+	}
+}
+
+func TestWorkflowStatsEnsureVisibleImmediateScrollsUp(t *testing.T) {
+	vp := viewport.New(80, 3)
+	vp.SetYOffset(5)
+	pane := &responsePaneState{viewport: vp, activeTab: responseTabStats}
+
+	view := &workflowStatsView{
+		entries:     []workflowStatsEntry{{index: 0}, {index: 1}, {index: 2}},
+		selected:    0,
+		renderCache: make(map[int]workflowStatsRender),
+	}
+	pane.viewport.SetContent(strings.Repeat("x\n", 12))
+	pane.viewport.SetYOffset(5)
+	render := workflowStatsRender{
+		content: "",
+		metrics: []workflowStatsMetric{
+			{index: 0, start: 2, end: 3},
+			{index: 1, start: 6, end: 7},
+			{index: 2, start: 8, end: 9},
+		},
+		lineCount: 12,
+	}
+	view.renderCache[80] = render
+
+	changed := view.ensureVisibleImmediate(pane, render)
+	if !changed {
+		t.Fatal("expected ensureVisibleImmediate to adjust offset")
+	}
+	if pane.viewport.YOffset != 2 {
+		t.Fatalf("expected YOffset to move to 2, got %d", pane.viewport.YOffset)
+	}
+}
+
+func TestWorkflowStatsEnsureVisibleImmediateNoAlignWhenVisible(t *testing.T) {
+	vp := viewport.New(80, 4)
+	pane := &responsePaneState{viewport: vp, activeTab: responseTabStats}
+
+	view := &workflowStatsView{
+		entries:     []workflowStatsEntry{{index: 0}, {index: 1}, {index: 2}},
+		selected:    1,
+		renderCache: make(map[int]workflowStatsRender),
+	}
+	pane.viewport.SetContent(strings.Repeat("x\n", 12))
+	pane.viewport.SetYOffset(5)
+	render := workflowStatsRender{
+		content: "",
+		metrics: []workflowStatsMetric{
+			{index: 0, start: 1, end: 2},
+			{index: 1, start: 6, end: 7},
+			{index: 2, start: 8, end: 9},
+		},
+		lineCount: 12,
+	}
+	view.renderCache[80] = render
+
+	changed := view.ensureVisibleImmediate(pane, render)
+	if changed {
+		t.Fatal("expected no offset change when selection already visible")
+	}
+	if pane.viewport.YOffset != 5 {
+		t.Fatalf("expected YOffset to remain 5, got %d", pane.viewport.YOffset)
+	}
+}
+
+func TestWorkflowStatsClampOffsetWithoutTrailingNewline(t *testing.T) {
+	view := &workflowStatsView{}
+	render := workflowStatsRender{
+		content:   "line1\nline2\nline3",
+		lineCount: 3,
+	}
+
+	if offset := view.clampOffset(render, 2, 2); offset != 1 {
+		t.Fatalf("expected clamp to max offset 1, got %d", offset)
+	}
+}
+
+func TestWorkflowStatsSelectVisibleStartAdvancesWhenStartInView(t *testing.T) {
+	vp := viewport.New(80, 3)
+	pane := &responsePaneState{viewport: vp, activeTab: responseTabStats}
+	view := &workflowStatsView{
+		entries:  []workflowStatsEntry{{index: 0}, {index: 1}},
+		selected: 0,
+	}
+
+	render := workflowStatsRender{
+		content: strings.Repeat("x\n", 8),
+		metrics: []workflowStatsMetric{
+			{index: 0, start: 0, end: 2},
+			{index: 1, start: 3, end: 5},
+		},
+		lineCount: 8,
+	}
+
+	pane.viewport.SetContent(strings.Repeat("x\n", 12))
+	pane.viewport.SetYOffset(0)
+	if view.selectVisibleStart(pane, render, 1) {
+		t.Fatalf("expected selection to stay when next section start not visible (sel=%d offset=%d bottom=%d)", view.selected, pane.viewport.YOffset, pane.viewport.YOffset+pane.viewport.Height-1)
+	}
+	if view.selected != 0 {
+		t.Fatalf("expected selection to remain 0, got %d", view.selected)
+	}
+
+	pane.viewport.SetYOffset(1) // viewport covers lines 1..3, start of entry 2 is 3
+	if changed := view.selectVisibleStart(pane, render, 1); !changed {
+		t.Fatalf("expected selection to advance when next section start is visible (sel=%d offset=%d bottom=%d)", view.selected, pane.viewport.YOffset, pane.viewport.YOffset+pane.viewport.Height-1)
+	}
+	if view.selected != 1 {
+		t.Fatalf("expected selection to advance to 1, got %d", view.selected)
+	}
+}
+
+func TestWorkflowStatsSelectVisibleStartMovesUpward(t *testing.T) {
+	vp := viewport.New(80, 3)
+	pane := &responsePaneState{viewport: vp, activeTab: responseTabStats}
+	view := &workflowStatsView{
+		entries:  []workflowStatsEntry{{index: 0}, {index: 1}},
+		selected: 1,
+	}
+
+	render := workflowStatsRender{
+		content: strings.Repeat("x\n", 8),
+		metrics: []workflowStatsMetric{
+			{index: 0, start: 0, end: 2},
+			{index: 1, start: 3, end: 5},
+		},
+		lineCount: 8,
+	}
+
+	pane.viewport.SetContent(strings.Repeat("x\n", 12))
+	pane.viewport.SetYOffset(3)
+	if view.selectVisibleStart(pane, render, -1) {
+		t.Fatalf("expected selection to remain when current start is already visible (sel=%d offset=%d bottom=%d)", view.selected, pane.viewport.YOffset, pane.viewport.YOffset+pane.viewport.Height-1)
+	}
+	if view.selected != 1 {
+		t.Fatalf("expected selection to remain 1, got %d", view.selected)
+	}
+
+	pane.viewport.SetYOffset(0)
+	if !view.selectVisibleStart(pane, render, -1) {
+		t.Fatalf("expected selection to move up when previous start enters view (sel=%d offset=%d bottom=%d)", view.selected, pane.viewport.YOffset, pane.viewport.YOffset+pane.viewport.Height-1)
+	}
+	if view.selected != 0 {
+		t.Fatalf("expected selection to move to 0, got %d", view.selected)
+	}
+}
+
+func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
+	width := 50
+	height := 8
+
+	state := &workflowState{
+		workflow: restfile.Workflow{Name: "wf"},
+		steps: []workflowStepRuntime{
+			{step: restfile.WorkflowStep{Name: "Step 1"}},
+			{step: restfile.WorkflowStep{Name: "Step 2"}},
+			{step: restfile.WorkflowStep{Name: "Step 3"}},
+			{step: restfile.WorkflowStep{Name: "Step 4"}},
+		},
+		results: []workflowStepResult{
+			{Step: restfile.WorkflowStep{Name: "Step 1"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("one\n", 10))}},
+			{Step: restfile.WorkflowStep{Name: "Step 2"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("two\n", 10))}},
+			{Step: restfile.WorkflowStep{Name: "Step 3"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("three\n", 16))}},
+			{Step: restfile.WorkflowStep{Name: "Step 4"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("four\n", 20))}},
+		},
+		start: time.Now(),
+		end:   time.Now(),
+	}
+
+	view := newWorkflowStatsView(state)
+	snapshot := &responseSnapshot{
+		stats:         "workflow stats",
+		statsKind:     statsReportKindWorkflow,
+		workflowStats: view,
+		ready:         true,
+	}
+
+	vp := viewport.New(width, height)
+	pane := newResponsePaneState(vp, false)
+	pane.activeTab = responseTabStats
+	pane.snapshot = snapshot
+	pane.wrapCache = make(map[responseTab]cachedWrap)
+
+	model := &Model{
+		responsePaneFocus: responsePanePrimary,
+		theme:             theme.DefaultTheme(),
+	}
+	model.responsePanes[responsePanePrimary] = pane
+
+	if err := model.syncWorkflowStatsPane(&model.responsePanes[responsePanePrimary], width, snapshot); err != nil {
+		t.Fatalf("syncWorkflowStatsPane error: %v", err)
+	}
+
+	// Expand every step using the same helpers as the UI.
+	for i := 0; i < len(view.entries); i++ {
+		for view.selected < i {
+			model.jumpWorkflowStatsSelection(1)
+		}
+		if !view.expanded[i] {
+			model.toggleWorkflowStatsExpansion()
+		}
+	}
+
+	// Move to the last step and scroll down inside its expanded response.
+	for view.selected < len(view.entries)-1 {
+		model.jumpWorkflowStatsSelection(1)
+	}
+	primaryPane := &model.responsePanes[responsePanePrimary]
+	for step := 0; step < 40; step++ {
+		if view.scrollExpanded(primaryPane, 1) {
+			primaryPane.setCurrPosition()
+		}
+	}
+
+	render := view.render(width)
+	startLast := render.metrics[len(render.metrics)-1].start
+	if primaryPane.viewport.YOffset < startLast {
+		t.Fatalf("expected to be scrolled into the last entry, got offset %d startLast %d", primaryPane.viewport.YOffset, startLast)
+	}
+
+	model.jumpWorkflowStatsSelection(-1)
+
+	current := primaryPane.viewport.YOffset
+	expected := render.metrics[len(render.metrics)-2].start
+	if current != expected {
+		t.Fatalf("expected jump to align viewport to entry 3 start (%d), got %d", expected, current)
 	}
 }
