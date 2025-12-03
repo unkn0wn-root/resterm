@@ -54,3 +54,11 @@ Accept: application/json
 # @capture request oauth.directiveReuseAuth {{response.json.headers.Authorization}}
 GET {{base.url}}/anything/projects/{{tenant.id}}
 Accept: application/json
+
+### Authorization Code with PKCE
+# @name OAuthAuthCodePKCE
+# @tag oauth2 authcode
+# @description Opens a browser at auth_url and captures the redirect on a loopback callback (PKCE S256 by default).
+# @auth oauth2 auth_url={{oauth.authUrl}} token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} scope="{{oauth.scope}}" grant=authorization_code code_challenge_method=s256
+GET {{base.url}}/anything/projects/{{tenant.id}}?flow=auth-code
+Accept: application/json

@@ -183,7 +183,7 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 	}
 }
 
-func TestBuilderGenerateOAuthAuthorizationCodeFallback(t *testing.T) {
+func TestBuilderGenerateOAuthAuthorizationCode(t *testing.T) {
 	t.Parallel()
 
 	builder := NewBuilder()
@@ -223,28 +223,44 @@ func TestBuilderGenerateOAuthAuthorizationCodeFallback(t *testing.T) {
 	if req.Metadata.Auth == nil {
 		t.Fatalf("expected auth metadata")
 	}
-	if req.Metadata.Auth.Type != "bearer" {
-		t.Fatalf("expected bearer fallback, got %s", req.Metadata.Auth.Type)
+	if req.Metadata.Auth.Type != "oauth2" {
+		t.Fatalf("expected oauth2, got %s", req.Metadata.Auth.Type)
 	}
-	if token := req.Metadata.Auth.Params["token"]; token != "{{auth.token}}" {
-		t.Fatalf("unexpected token placeholder: %s", token)
+	params := req.Metadata.Auth.Params
+	if params[openapi.OAuthParamGrant] != openapi.OAuthGrantAuthorizationCode {
+		t.Fatalf("unexpected grant %s", params[openapi.OAuthParamGrant])
+	}
+	if params[openapi.OAuthParamTokenURL] != "https://example.com/token" {
+		t.Fatalf("unexpected token_url %s", params[openapi.OAuthParamTokenURL])
+	}
+	if params[openapi.OAuthParamAuthURL] != "https://example.com/auth" {
+		t.Fatalf("unexpected auth_url %s", params[openapi.OAuthParamAuthURL])
+	}
+	if params[openapi.OAuthParamCodeMethod] != "s256" {
+		t.Fatalf("expected code_challenge_method s256, got %s", params[openapi.OAuthParamCodeMethod])
 	}
 
-	foundToken := false
-	for _, g := range doc.Globals {
-		if g.Name == "auth.token" {
-			foundToken = true
-			if !g.Secret {
-				t.Fatalf("auth.token should be secret")
+	wantGlobals := map[string]bool{
+		"oauth.clientId":     false,
+		"oauth.clientSecret": true,
+	}
+	for key, secret := range wantGlobals {
+		found := false
+		for _, g := range doc.Globals {
+			if g.Name == key {
+				found = true
+				if g.Secret != secret {
+					t.Fatalf("unexpected secret flag for %s", key)
+				}
 			}
 		}
-	}
-	if !foundToken {
-		t.Fatalf("expected auth.token global to be registered")
+		if !found {
+			t.Fatalf("expected global %s", key)
+		}
 	}
 
-	if warnings := builder.Warnings(); len(warnings) == 0 {
-		t.Fatalf("expected warning for unsupported oauth flow")
+	if warnings := builder.Warnings(); len(warnings) != 0 {
+		t.Fatalf("unexpected warnings: %v", warnings)
 	}
 }
 

@@ -8,6 +8,7 @@
 - [Variables and Environments](#variables-and-environments)
 - [Request File Anatomy](#request-file-anatomy)
 - [Compare Runs](#compare-runs)
+- [Workflows](#workflows)
 - [Streaming (SSE & WebSocket)](#streaming-sse--websocket)
 - [GraphQL](#graphql)
 - [gRPC](#grpc)
@@ -525,6 +526,44 @@ Flags:
 
 When profiling completes the response pane's **Stats** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
 
+## Workflows
+
+Group existing requests into repeatable workflows using `@workflow` blocks. Each step references a request by name and can override variables or expectations.
+
+```
+### Provision account
+# @workflow provision-account on-failure=continue
+# @step Authenticate using=AuthLogin expect.statuscode=200
+# @step CreateProfile using=CreateUser vars.request.name={{vars.workflow.userName}}
+# @step FetchProfile using=GetUser
+
+### AuthLogin
+POST https://example.com/auth
+
+### CreateUser
+POST https://example.com/users
+
+### GetUser
+GET https://example.com/users/{{vars.workflow.userId}}
+```
+
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Stats** tab shows a workflow summary (including started/ended timestamps), and a consolidated entry is written to history so you can review results later. While you read through that summary, tap `Shift+J` / `Shift+K` to move between workflow entries.
+
+Key directives and tokens:
+
+- `@workflow <name>` starts a workflow. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling.
+- `@description` / `@tag` lines inside the workflow build the description and tag list shown in the UI and stored in history.
+- `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments.
+- `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
+- `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
+- Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
+- `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
+
+> **Tip:** Workflow assignments are expanded once when the request executes. If you need helpers such as `{{$uuid}}`, place them directly in the request/template or compute them via a pre-request script before assigning the value.
+> **Tip:** Options are parsed like CLI flags; wrap values in quotes or escape spaces (`\ `) to keep text together (e.g. `expect.status="201 Created"`).
+
+Every workflow run is persisted alongside regular requests in History; the newest entry is highlighted automatically so you can open the generated `@workflow` definition and results from the History pane immediately after the run.
+
 ## Streaming (SSE & WebSocket)
 
 Streaming sessions surface in the Stream response tab, are captured in history, and can be consumed by captures and scripts.
@@ -599,44 +638,6 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 - Toggle the interactive WebSocket console with `Ctrl+I` while the Stream tab is focused. Cycle payload modes with `F2` (text → JSON → base64 → file), send payloads with `Ctrl+S` or `Ctrl+Enter`, reuse previous payloads with the arrow keys, issue ping frames via `Ctrl+P`, close gracefully with `Ctrl+W`, and clear the live buffer with `Ctrl+L`.
 - Completed transcripts are saved alongside the request in history with summary headers (`X-Resterm-Stream-Type`, `X-Resterm-Stream-Summary`). Scripts and captures can access the same data via `stream.*` templates and APIs (see [Scripting](#scripting-api)).
 
-### Workflows (multi-step workflows)
-
-Group existing requests into repeatable workflows using `@workflow` blocks. Each step references a request by name and can override variables or expectations.
-
-```
-### Provision account
-# @workflow provision-account on-failure=continue
-# @step Authenticate using=AuthLogin expect.statuscode=200
-# @step CreateProfile using=CreateUser vars.request.name={{vars.workflow.userName}}
-# @step FetchProfile using=GetUser
-
-### AuthLogin
-POST https://example.com/auth
-
-### CreateUser
-POST https://example.com/users
-
-### GetUser
-GET https://example.com/users/{{vars.workflow.userId}}
-```
-
-Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Stats** tab shows a workflow summary (including started/ended timestamps), and a consolidated entry is written to history so you can review results later. While you read through that summary, tap `Shift+J` / `Shift+K` to move between workflow entries.
-
-Key directives and tokens:
-
-- `@workflow <name>` starts a workflow. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling.
-- `@description` / `@tag` lines inside the workflow build the description and tag list shown in the UI and stored in history.
-- `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments.
-- `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
-- `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
-- Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
-- `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
-
-> **Tip:** Workflow assignments are expanded once when the request executes. If you need helpers such as `{{$uuid}}`, place them directly in the request/template or compute them via a pre-request script before assigning the value.
-> **Tip:** Options are parsed like CLI flags; wrap values in quotes or escape spaces (`\ `) to keep text together (e.g. `expect.status="201 Created"`).
-
-Every workflow run is persisted alongside regular requests in History; the newest entry is highlighted automatically so you can open the generated `@workflow` definition and results from the History pane immediately after the run.
-
 ### Authentication directives
 
 | Type | Syntax | Notes |
@@ -645,20 +646,51 @@ Every workflow run is persisted alongside regular requests in History; the newes
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
 | API key | `# @auth apikey header X-API-Key {{key}}` | `placement` can be `header` or `query`. Defaults to `X-API-Key` header if name omitted. |
 | Custom header | `# @auth Authorization CustomValue` | Arbitrary header/value pair. |
-| OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (details below). |
+| OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE). |
 
 #### OAuth 2.0 parameters
 
-- `token_url` (required)
-- `client_id`, `client_secret`
-- `scope`, `audience`, `resource`
-- `grant` (defaults to `client_credentials`; `password` and other grants supported when paired with `username`/`password`)
-- `client_auth` (`basic` or `body`; default `basic`)
-- `username`, `password` (for password credentials)
-- `cache_key` (override cache identity; otherwise derived from token URL, client ID, scope, etc.)
-- Additional `key=value` pairs are forwarded as extra form parameters.
+| Parameter | Required | Default | Description |
+| --- | --- | --- | --- |
+| `token_url` | Yes | - | Token endpoint URL. Must be provided at least once per `cache_key`. |
+| `auth_url` | For auth code | — | Authorization endpoint. Required when `grant=authorization_code`. |
+| `client_id` | Yes | - | Your application's client ID. |
+| `client_secret` | No | - | Client secret (omit for public clients using PKCE). |
+| `grant` | No | `client_credentials` | Grant type: `client_credentials`, `password`, or `authorization_code`. |
+| `scope` | No | - | Space-separated scopes to request. |
+| `audience` | No | - | Target API audience (Auth0, etc.). |
+| `resource` | No | - | Resource indicator (Azure AD, etc.). |
+| `client_auth` | No | `basic` | How to send credentials: `basic` (Authorization header) or `body` (form fields). Falls back to `body` automatically for public clients. |
+| `header` | No | `Authorization` | Which header receives the token. Use this when an API expects tokens in a custom header like `X-Access-Token`. |
+| `username` | For password | - | Resource owner username (only for `grant=password`). |
+| `password` | For password | - | Resource owner password (only for `grant=password`). |
+| `cache_key` | No | auto | Override the cache identity. Useful when multiple requests should share the same token even if their parameters differ slightly. When omitted, Resterm derives the key from token URL, client ID, scope, and other fields. |
+| `redirect_uri` | No | auto | Callback URL for authorization code flow. See details below. |
+| `code_verifier` | No | auto | PKCE verifier (43-128 characters per RFC 7636). Auto-generated when omitted. |
+| `code_challenge_method` | No | `s256` | PKCE method: `s256` (recommended) or `plain`. |
+| `state` | No | auto | CSRF protection token. Auto-generated when omitted. |
 
-Tokens are cached per environment and refreshed automatically if `refresh_token` or `expires_in` is returned.
+Any additional `key=value` pairs are forwarded as extra form parameters to both the authorization and token endpoints.
+
+#### How token caching works
+
+Resterm caches tokens per environment and `cache_key`. When a request needs a token:
+
+1. If a valid cached token exists (not expired, with 30-second safety margin), it's reused immediately.
+2. If the cached token has a `refresh_token` and is expired, Resterm attempts a refresh.
+3. If refresh fails or no token exists, a fresh token is fetched from the token endpoint.
+
+This means you can define full OAuth parameters once, then reference just `cache_key` in subsequent requests:
+
+```http
+### First request - seeds the cache
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="read write" cache_key=myapi
+GET {{base.url}}/users
+
+### Later request - reuses cached token
+# @auth oauth2 cache_key=myapi
+GET {{base.url}}/projects
+```
 
 ### Scripting (`@script`)
 
@@ -834,17 +866,99 @@ GET {{base.url}}/profile
 
 ### OAuth 2.0 directive
 
-Resterm orchestrates the token request, caches the result per environment, and injects `Authorization: Bearer ...` headers automatically. Use `cache_key` when multiple requests with identical parameters should share the token.
+Resterm handles the full OAuth 2.0 token lifecycle: fetching tokens, caching them per environment, refreshing when expired, and injecting the `Authorization: Bearer ...` header automatically. Three grant types are supported.
+
+#### Client credentials grant
+
+Best for machine-to-machine authentication where no user is involved.
 
 ```http
-# @auth oauth2 token_url={{oauth.tokenUrl}} \
-             client_id={{oauth.clientId}} \
-             client_secret={{oauth.clientSecret}} \
-             scope="{{oauth.scope}}" \
-             audience={{oauth.audience}} \
-             cache_key={{oauth.cacheKey}} \
-             client_auth=body
+### Service-to-service call
+# @auth oauth2 token_url=https://auth.example.com/oauth/token client_id={{svc.clientId}} client_secret={{svc.clientSecret}} scope="api:read api:write"
+GET https://api.example.com/internal/status
 ```
+
+By default, credentials are sent via HTTP Basic authentication. Use `client_auth=body` to send them as form fields instead (required by some providers):
+
+```http
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" client_auth=body
+GET {{base.url}}/resource
+```
+
+#### Password grant
+
+For legacy systems that require username/password authentication.
+
+```http
+### Resource owner password
+# @auth oauth2 token_url=https://auth.example.com/oauth/token client_id={{app.clientId}} client_secret={{app.clientSecret}} grant=password username={{user.email}} password={{user.password}} scope="profile"
+GET https://api.example.com/me
+```
+
+#### Authorization code + PKCE
+
+When you use `grant=authorization_code`, Resterm handles the entire OAuth automatically:
+
+1. **Browser launch** - Opens your system browser to `auth_url` with the authorization request.
+2. **Local callback server** - Spins up a temporary HTTP server on localhost to capture the redirect.
+3. **Code exchange** - Exchanges the authorization code for tokens at `token_url`, including the PKCE verifier.
+4. **Token injection** - Caches the token and injects it into your request.
+
+##### Redirect URI behavior
+
+The `redirect_uri` controls where the authorization server sends the user after login:
+
+| Configuration | Result |
+| --- | --- |
+| Omit `redirect_uri` | `http://127.0.0.1:<random-port>/oauth/callback` |
+| `redirect_uri=http://127.0.0.1:8080/callback` | Uses port 8080 with path `/callback` |
+| `redirect_uri=http://localhost:0/auth` | Random port, custom path `/auth` |
+
+**Constraints:**
+- Must use `http://` scheme (not `https://`) - [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252)
+- Host must be `127.0.0.1` or `localhost` - external hosts are rejected
+- Register the redirect URI pattern with your OAuth provider (most allow `http://127.0.0.1:*` or similar)
+
+##### PKCE details
+
+PKCE (Proof Key for Code Exchange) protects against authorization code interception. Resterm generates these automatically:
+
+- **code_verifier** - 64 random bytes, base64url-encoded (~86 characters). You can provide your own if needed (must be 43-128 characters per RFC 7636).
+- **code_challenge** - SHA-256 hash of the verifier, base64url-encoded.
+- **state** - 24 random bytes for CSRF protection.
+
+##### Example: Public client with PKCE
+
+```http
+### GitHub OAuth (public client, no secret)
+# @auth oauth2 auth_url=https://github.com/login/oauth/authorize token_url=https://github.com/login/oauth/access_token client_id={{github.clientId}} scope="repo read:user" grant=authorization_code
+GET https://api.github.com/user
+Accept: application/json
+```
+
+##### Example: Confidential client
+
+```http
+### Auth0 with client secret
+# @auth oauth2 auth_url=https://{{auth0.domain}}/authorize token_url=https://{{auth0.domain}}/oauth/token client_id={{auth0.clientId}} client_secret={{auth0.clientSecret}} scope="openid profile" audience={{auth0.audience}} grant=authorization_code
+GET {{api.url}}/userinfo
+```
+
+##### Timeout behavior
+
+Authorization code flow has a 2-minute timeout by default (to give users time to complete login in the browser). If you need longer, the request's `@timeout` setting is respected as long as it exceeds 2 minutes.
+
+#### Custom token header
+
+Some APIs expect tokens in a non-standard header. Use the `header` parameter to change where the token goes:
+
+```http
+### API expecting X-Access-Token header
+# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} header=X-Access-Token
+GET https://api.example.com/data
+```
+
+When `header` is set to something other than `Authorization`, Resterm injects just the raw token (without the "Bearer " prefix). When using the default `Authorization` header, the full `Bearer <token>` format is used.
 
 ---
 

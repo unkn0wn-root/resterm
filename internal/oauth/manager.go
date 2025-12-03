@@ -18,6 +18,8 @@ import (
 
 type Config struct {
 	TokenURL     string
+	AuthURL      string
+	RedirectURL  string
 	ClientID     string
 	ClientSecret string
 	Scope        string
@@ -29,6 +31,10 @@ type Config struct {
 	GrantType    string
 	Header       string
 	CacheKey     string
+	Code         string
+	CodeVerifier string
+	CodeMethod   string
+	State        string
 	Extra        map[string]string
 }
 
@@ -138,6 +144,10 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 		}
 	}
 
+	if strings.EqualFold(strings.TrimSpace(cfg.GrantType), "authorization_code") {
+		return m.requestAuthCodeToken(ctx, key, cfg, opts)
+	}
+
 	fetched, err := m.requestToken(ctx, cfg, opts)
 	if err != nil {
 		return Token{}, err
@@ -184,6 +194,69 @@ func (m *Manager) storeToken(key string, cfg Config, token Token) {
 	m.cache[key] = &cacheEntry{token: token, cfg: cfg}
 }
 
+// MergeCachedConfig fills empty fields in cfg from any cached config that shares the cache key.
+// This allows follow-up requests to omit repeated parameters (auth_url, token_url, etc.) as long
+// as the initial request stored a config under the same cache_key.
+func (m *Manager) MergeCachedConfig(env string, cfg Config) Config {
+	if strings.TrimSpace(cfg.CacheKey) == "" {
+		return cfg
+	}
+
+	key := m.cacheKey(env, cfg)
+	entry := m.cacheEntry(key)
+	if entry == nil {
+		return cfg
+	}
+
+	base := entry.cfg
+	merged := cfg
+
+	merged.TokenURL = inheritIfEmpty(merged.TokenURL, base.TokenURL)
+	merged.AuthURL = inheritIfEmpty(merged.AuthURL, base.AuthURL)
+	merged.RedirectURL = inheritIfEmpty(merged.RedirectURL, base.RedirectURL)
+	merged.ClientID = inheritIfEmpty(merged.ClientID, base.ClientID)
+	merged.ClientSecret = inheritIfEmpty(merged.ClientSecret, base.ClientSecret)
+	merged.Scope = inheritIfEmpty(merged.Scope, base.Scope)
+	merged.Audience = inheritIfEmpty(merged.Audience, base.Audience)
+	merged.Resource = inheritIfEmpty(merged.Resource, base.Resource)
+	merged.Username = inheritIfEmpty(merged.Username, base.Username)
+	merged.Password = inheritIfEmpty(merged.Password, base.Password)
+	merged.ClientAuth = inheritIfEmpty(merged.ClientAuth, base.ClientAuth)
+	merged.GrantType = inheritIfEmpty(merged.GrantType, base.GrantType)
+	merged.Header = inheritIfEmpty(merged.Header, base.Header)
+	merged.CodeVerifier = inheritIfEmpty(merged.CodeVerifier, base.CodeVerifier)
+	merged.CodeMethod = inheritIfEmpty(merged.CodeMethod, base.CodeMethod)
+	merged.State = inheritIfEmpty(merged.State, base.State)
+
+	merged.Extra = mergeExtras(base.Extra, cfg.Extra)
+	return merged
+}
+
+func inheritIfEmpty(current, fallback string) string {
+	if strings.TrimSpace(current) != "" {
+		return current
+	}
+	return fallback
+}
+
+func mergeExtras(base, override map[string]string) map[string]string {
+	if len(base) == 0 && len(override) == 0 {
+		return nil
+	}
+
+	merged := make(map[string]string, len(base)+len(override))
+	for k, v := range base {
+		merged[k] = v
+	}
+	for k, v := range override {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		merged[k] = v
+	}
+	return merged
+}
+
 func (m *Manager) cacheKey(env string, cfg Config) string {
 	if strings.TrimSpace(cfg.CacheKey) != "" {
 		return strings.TrimSpace(cfg.CacheKey)
@@ -192,11 +265,15 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 	parts := []string{
 		strings.ToLower(strings.TrimSpace(env)),
 		strings.TrimSpace(cfg.TokenURL),
+		strings.TrimSpace(cfg.AuthURL),
+		strings.TrimSpace(cfg.RedirectURL),
 		strings.TrimSpace(cfg.ClientID),
 		strings.TrimSpace(cfg.Scope),
 		strings.TrimSpace(cfg.Audience),
 		strings.TrimSpace(cfg.Resource),
 		strings.ToLower(strings.TrimSpace(cfg.GrantType)),
+		strings.ToLower(strings.TrimSpace(cfg.CodeMethod)),
+		strings.TrimSpace(cfg.CodeVerifier),
 		strings.TrimSpace(cfg.Username),
 		strings.ToLower(strings.TrimSpace(cfg.ClientAuth)),
 	}
@@ -236,23 +313,40 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 		}
 	}
 
-	clientAuth := strings.ToLower(strings.TrimSpace(cfg.ClientAuth))
-	if clientAuth == "" {
-		clientAuth = "basic"
-	}
+	authMode := resolveClientAuth(grant, strings.TrimSpace(cfg.ClientAuth), cfg)
 
 	switch grant {
 	case "client_credentials":
-		if clientAuth == "body" {
+		if authMode.useBody {
 			form.Set("client_id", cfg.ClientID)
 			form.Set("client_secret", cfg.ClientSecret)
 		}
 	case "password":
 		form.Set("username", cfg.Username)
 		form.Set("password", cfg.Password)
-		if clientAuth == "body" {
+		if authMode.useBody {
 			form.Set("client_id", cfg.ClientID)
 			form.Set("client_secret", cfg.ClientSecret)
+		}
+	case "authorization_code":
+		if cfg.Code == "" {
+			return Token{}, errdef.New(errdef.CodeHTTP, "missing authorization code")
+		}
+		if strings.TrimSpace(cfg.RedirectURL) == "" {
+			return Token{}, errdef.New(errdef.CodeHTTP, "authorization_code requires redirect_uri")
+		}
+		form.Set("code", cfg.Code)
+		form.Set("redirect_uri", cfg.RedirectURL)
+		if cfg.CodeVerifier != "" {
+			form.Set("code_verifier", cfg.CodeVerifier)
+		}
+		if authMode.useBody || cfg.ClientSecret == "" {
+			if cfg.ClientID != "" {
+				form.Set("client_id", cfg.ClientID)
+			}
+			if cfg.ClientSecret != "" && authMode.useBody {
+				form.Set("client_secret", cfg.ClientSecret)
+			}
 		}
 	default:
 		return Token{}, errdef.New(errdef.CodeHTTP, "unsupported oauth2 grant type: %s", grant)
@@ -260,7 +354,8 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/x-www-form-urlencoded")
-	if clientAuth == "basic" && cfg.ClientID != "" {
+	headers.Set("Accept", "application/json")
+	if authMode.useHeader && cfg.ClientID != "" {
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		headers.Set("Authorization", "Basic "+encoded)
@@ -290,6 +385,29 @@ func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.
 	return token, nil
 }
 
+type clientAuthMode struct {
+	useHeader bool
+	useBody   bool
+}
+
+func resolveClientAuth(grant, clientAuthRaw string, cfg Config) clientAuthMode {
+	mode := strings.ToLower(clientAuthRaw)
+	if mode == "" {
+		mode = "basic"
+	}
+
+	useHeader := mode == "basic"
+	if useHeader && cfg.ClientSecret == "" && (clientAuthRaw == "" || grant == "authorization_code") {
+		useHeader = false
+		mode = "body"
+	}
+
+	return clientAuthMode{
+		useHeader: useHeader,
+		useBody:   mode == "body",
+	}
+}
+
 func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, opts httpclient.Options) (Token, error) {
 	if refresh == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "missing refresh token")
@@ -315,6 +433,7 @@ func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, 
 
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/x-www-form-urlencoded")
+	headers.Set("Accept", "application/json")
 	clientAuth := strings.ToLower(strings.TrimSpace(cfg.ClientAuth))
 	if clientAuth == "basic" && cfg.ClientID != "" {
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
@@ -350,8 +469,30 @@ func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, 
 func parseTokenResponse(body []byte) (Token, error) {
 	var resp tokenResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
-		return Token{}, errdef.Wrap(errdef.CodeHTTP, err, "decode oauth token response")
+		// this covers that some legacy providers can return application/x-www-form-urlencoded
+		// or unless an explicit Accept: application/json is sent. Fall back to decoding
+		// the form-encoded body so these responses still work.
+		values, parseErr := url.ParseQuery(string(body))
+		if parseErr != nil {
+			return Token{}, errdef.Wrap(errdef.CodeHTTP, err, "decode oauth token response")
+		}
+		resp.AccessToken = values.Get("access_token")
+		resp.TokenType = values.Get("token_type")
+		resp.RefreshToken = values.Get("refresh_token")
+		if expires := values.Get("expires_in"); expires != "" {
+			resp.ExpiresIn = json.Number(expires)
+		}
+		return buildToken(resp, buildRawMap(values))
 	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err == nil {
+		return buildToken(resp, raw)
+	}
+	return buildToken(resp, nil)
+}
+
+func buildToken(resp tokenResponse, raw map[string]any) (Token, error) {
 	if resp.AccessToken == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "oauth token response missing access_token")
 	}
@@ -372,11 +513,23 @@ func parseTokenResponse(body []byte) (Token, error) {
 		RefreshToken: resp.RefreshToken,
 		Expiry:       expiry,
 	}
-	var raw map[string]any
-	if err := json.Unmarshal(body, &raw); err == nil {
-		token.Raw = raw
-	}
+	token.Raw = raw
 	return token, nil
+}
+
+func buildRawMap(values url.Values) map[string]any {
+	if len(values) == 0 {
+		return nil
+	}
+	raw := make(map[string]any, len(values))
+	for k, v := range values {
+		if len(v) == 1 {
+			raw[k] = v[0]
+			continue
+		}
+		raw[k] = v
+	}
+	return raw
 }
 
 // Treats tokens expiring in the next 30 seconds as already expired
