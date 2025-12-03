@@ -47,12 +47,12 @@ TL;DR why resterm:
 - Resterm is **keyboard driven**.
 - Everything lives in plain files (.http/.rest) - **no cloud or account - everything stays local**.
 - **Built-in SSH tunnels** for HTTP/gRPC/WebSocket/SSE.
-- Fast iteration loop with explorer + history + diff/compare + captures/workflows.
+- Fast iteration loop with _explorer_ + _history_ + _diff/compare_ + _captures/workflows_.
 - **Debuggable** - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
 
 ## Index
 **Up & Running**
-- [Key Capabilities](#features)
+- [Features](#features)
 - [Installation](#installation)
   - [Quick Install](#quick-install)
   - [Manual Installation](#manual-installation)
@@ -94,6 +94,17 @@ TL;DR why resterm:
 ### Quick Install
 
 **Linux / macOS:**
+
+**Homebrew:**
+
+```bash
+brew install resterm
+```
+
+> [!NOTE]
+> Homebrew installs should be updated with Homebrew (`brew upgrade resterm`). The built-in `resterm --update` command is for binaries installed from GitHub releases/install scripts (not via brew).
+
+**Shell script:**
 
 > [!IMPORTANT]
 > Pre-built Linux binaries depend on glibc **2.32 or newer**. If you run an older distro, build from source on a machine with a newer glibc toolchain or upgrade glibc before using the release archives.
