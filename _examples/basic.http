@@ -28,3 +28,10 @@ Accept: application/json
 # @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" audience={{oauth.audience}} cache_key={{oauth.cacheKey}}
 GET {{base.url}}/anything/oauth2-demo
 Accept: application/json
+
+### OAuth2 Directive (Reuse Cached Token)
+# @name oauthDirectiveReuseDemo
+# @description After the cache is seeded above, only cache_key is needed to reuse the token.
+# @auth oauth2 cache_key={{oauth.cacheKey}}
+GET {{base.url}}/anything/oauth2-demo-reuse
+Accept: application/json

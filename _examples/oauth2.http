@@ -50,7 +50,7 @@ Accept: application/json
 # @name OAuthDirectiveReuse
 # @tag oauth2 directive reuse
 # @description Using the same cache_key allows the cached access token to be sent without another token exchange when it is still valid.
-# @auth oauth2 token_url={{oauth.tokenUrl}} client_id={{oauth.clientId}} client_secret={{oauth.clientSecret}} scope="{{oauth.scope}}" cache_key={{oauth.cacheKey}}
+# @auth oauth2 cache_key={{oauth.cacheKey}}
 # @capture request oauth.directiveReuseAuth {{response.json.headers.Authorization}}
 GET {{base.url}}/anything/projects/{{tenant.id}}
 Accept: application/json
