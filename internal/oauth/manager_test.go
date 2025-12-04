@@ -437,7 +437,11 @@ func TestPrepareRedirectPreservesQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepare redirect: %v", err)
 	}
-	ln.Close()
+	defer func() {
+		if cerr := ln.Close(); cerr != nil {
+			t.Fatalf("close listener: %v", cerr)
+		}
+	}()
 
 	if redirect.Path != "/oauth/callback" {
 		t.Fatalf("unexpected path %q", redirect.Path)

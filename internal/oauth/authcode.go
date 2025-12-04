@@ -157,11 +157,9 @@ func buildAuthURL(base, redirect string, cfg Config, state, challenge, method st
 	}
 	if challenge != "" {
 		q.Set("code_challenge", challenge)
-		methodVal := method
+		methodVal := "plain"
 		if strings.EqualFold(method, "s256") {
 			methodVal = "S256"
-		} else {
-			methodVal = "plain"
 		}
 		q.Set("code_challenge_method", methodVal)
 	}
