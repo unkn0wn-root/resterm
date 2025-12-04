@@ -47,6 +47,7 @@ TL;DR why resterm:
 - Resterm is **keyboard driven**.
 - Everything lives in plain files (.http/.rest) - **no cloud or account - everything stays local**.
 - **Built-in SSH tunnels** for HTTP/gRPC/WebSocket/SSE.
+- **OAuth 2.0 built-in** - client credentials, password grant, authorization code + PKCE with automatic browser flow and token refresh.
 - Fast iteration loop with _explorer_ + _history_ + _diff/compare_ + _captures/workflows_.
 - **Debuggable** - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
 
@@ -63,6 +64,7 @@ TL;DR why resterm:
 ---
 
 **Deep dive**
+- [OAuth 2.0](#feature-snapshots)
 - [Workflows & scripting](#feature-snapshots)
 - [Compare runs](#feature-snapshots)
 - [Tracing & timeline](#feature-snapshots)
@@ -81,7 +83,7 @@ TL;DR why resterm:
 - **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
-- **Built-in** OAuth 2.0 client plus support for basic, bearer, API key, and custom header auth.
+- **OAuth 2.0** with automatic token management - client credentials, password grant, and authorization code + PKCE. Tokens are cached per environment, refreshed automatically, and injected into requests without manual steps.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Tracing and Timeline** with `@trace` to enable request tracing.
 - **Multi-step workflows** compose several named requests (`@workflow` + `@step`) with per-step overrides and expectations.
@@ -311,6 +313,7 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 
 ## Feature snapshots
 
+- **OAuth 2.0:** Full OAuth support with three grant types - client credentials for service-to-service calls, password grant for legacy systems, and authorization code + PKCE for user login flows. For auth code flows, Resterm opens your system browser, spins up a local callback server on `127.0.0.1`, captures the redirect and exchanges the code automatically. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
 - **SSH jumps/tunnels:** Route HTTP/gRPC/WebSocket/SSE through bastions with `@ssh` profiles (persist/keepalive/host-key/retries). Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
 - **Workflows & scripting:** Chain requests with `@workflow`/`@step`, pass data between steps, and add lightweight JS hooks. Docs + sample: [`docs/resterm.md#workflows-multi-step-workflows`](./docs/resterm.md#workflows-multi-step-workflows) and `_examples/workflows.http`.
 - **Compare runs:** Run the same request across environments with `@compare` or `--compare`, then diff responses side by side (`g+c`). Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).

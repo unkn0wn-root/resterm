@@ -258,6 +258,8 @@ func formatOAuthParams(params map[string]string) []string {
 
 	ordered := []string{
 		openapi.OAuthParamTokenURL,
+		openapi.OAuthParamAuthURL,
+		openapi.OAuthParamRedirectURI,
 		openapi.OAuthParamClientID,
 		openapi.OAuthParamClientSecret,
 		openapi.OAuthParamScope,
@@ -268,6 +270,9 @@ func formatOAuthParams(params map[string]string) []string {
 		openapi.OAuthParamPassword,
 		openapi.OAuthParamClientAuth,
 		openapi.OAuthParamCacheKey,
+		openapi.OAuthParamCodeVerifier,
+		openapi.OAuthParamCodeMethod,
+		openapi.OAuthParamState,
 	}
 	seen := make(map[string]struct{}, len(ordered))
 

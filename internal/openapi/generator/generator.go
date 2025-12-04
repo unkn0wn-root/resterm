@@ -572,7 +572,27 @@ func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requir
 		rb.builder.registerGlobal(globalOAuthPasswordVar, placeholderPassword, true)
 		rb.registerOAuthCommonGlobals(params)
 		return &restfile.AuthSpec{Type: "oauth2", Params: params}
-	case model.OAuthFlowAuthorizationCode, model.OAuthFlowImplicit:
+	case model.OAuthFlowAuthorizationCode:
+		tokenURL := strings.TrimSpace(flow.TokenURL)
+		authURL := strings.TrimSpace(flow.AuthorizationURL)
+		if tokenURL == "" || authURL == "" {
+			rb.builder.noteWarning(fmt.Sprintf("request %s uses oauth2 authorization_code flow without auth/token urls", rb.requestName()))
+			return nil
+		}
+		params := map[string]string{
+			openapi.OAuthParamTokenURL:     tokenURL,
+			openapi.OAuthParamAuthURL:      authURL,
+			openapi.OAuthParamClientID:     fmt.Sprintf("{{%s}}", globalOAuthClientIDVar),
+			openapi.OAuthParamClientSecret: fmt.Sprintf("{{%s}}", globalOAuthClientSecretVar),
+			openapi.OAuthParamGrant:        openapi.OAuthGrantAuthorizationCode,
+			openapi.OAuthParamCodeMethod:   "s256",
+		}
+		if len(scopes) > 0 {
+			params[openapi.OAuthParamScope] = strings.Join(scopes, " ")
+		}
+		rb.registerOAuthCommonGlobals(params)
+		return &restfile.AuthSpec{Type: "oauth2", Params: params}
+	case model.OAuthFlowImplicit:
 		rb.builder.registerGlobal(globalAuthTokenVar, placeholderToken, true)
 		rb.builder.noteWarning(fmt.Sprintf("request %s uses unsupported oauth flow %s; generated bearer token placeholder", rb.requestName(), flow.Type))
 		return &restfile.AuthSpec{Type: "bearer", Params: map[string]string{"token": fmt.Sprintf("{{%s}}", globalAuthTokenVar)}}

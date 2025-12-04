@@ -1414,10 +1414,14 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	if err != nil {
 		return err
 	}
+
+	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	cfg = m.oauth.MergeCachedConfig(envKey, cfg)
 	if cfg.TokenURL == "" {
-		return errdef.New(errdef.CodeHTTP, "@auth oauth2 requires token_url")
+		return errdef.New(errdef.CodeHTTP, "@auth oauth2 requires token_url (include it once per cache_key to seed the cache)")
 	}
 
+	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
 	header := cfg.Header
 	if strings.TrimSpace(header) == "" {
 		header = "Authorization"
@@ -1426,11 +1430,16 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	tokenTimeout := timeout
+	if grant == "authorization_code" && tokenTimeout < 2*time.Minute {
+		tokenTimeout = 2 * time.Minute
+		m.setStatusMessage(statusMsg{level: statusInfo, text: "Open browser to complete OAuth (auth code/PKCE)"})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), tokenTimeout)
 
 	defer cancel()
 
-	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	token, err := m.oauth.Token(ctx, envKey, cfg, opts)
 	if err != nil {
 		return errdef.Wrap(errdef.CodeHTTP, err, "fetch oauth token")
@@ -1480,6 +1489,12 @@ func (m *Model) buildOAuthConfig(auth *restfile.AuthSpec, resolver *vars.Resolve
 	if cfg.TokenURL, err = expand("token_url"); err != nil {
 		return cfg, err
 	}
+	if cfg.AuthURL, err = expand("auth_url"); err != nil {
+		return cfg, err
+	}
+	if cfg.RedirectURL, err = expand("redirect_uri"); err != nil {
+		return cfg, err
+	}
 	if cfg.ClientID, err = expand("client_id"); err != nil {
 		return cfg, err
 	}
@@ -1513,20 +1528,34 @@ func (m *Model) buildOAuthConfig(auth *restfile.AuthSpec, resolver *vars.Resolve
 	if cfg.CacheKey, err = expand("cache_key"); err != nil {
 		return cfg, err
 	}
+	if cfg.CodeVerifier, err = expand("code_verifier"); err != nil {
+		return cfg, err
+	}
+	if cfg.CodeMethod, err = expand("code_challenge_method"); err != nil {
+		return cfg, err
+	}
+	if cfg.State, err = expand("state"); err != nil {
+		return cfg, err
+	}
 
 	known := map[string]struct{}{
-		"token_url":     {},
-		"client_id":     {},
-		"client_secret": {},
-		"scope":         {},
-		"audience":      {},
-		"resource":      {},
-		"username":      {},
-		"password":      {},
-		"client_auth":   {},
-		"grant":         {},
-		"header":        {},
-		"cache_key":     {},
+		"token_url":             {},
+		"auth_url":              {},
+		"redirect_uri":          {},
+		"client_id":             {},
+		"client_secret":         {},
+		"scope":                 {},
+		"audience":              {},
+		"resource":              {},
+		"username":              {},
+		"password":              {},
+		"client_auth":           {},
+		"grant":                 {},
+		"header":                {},
+		"cache_key":             {},
+		"code_verifier":         {},
+		"code_challenge_method": {},
+		"state":                 {},
 	}
 	for key, raw := range auth.Params {
 		if _, ok := known[strings.ToLower(key)]; ok {
