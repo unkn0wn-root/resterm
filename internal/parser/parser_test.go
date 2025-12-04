@@ -334,6 +334,28 @@ func TestParseOAuth2AuthSpec(t *testing.T) {
 	}
 }
 
+func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
+	spec := parseAuthSpec(`oauth2 cache_key=github`)
+	if spec == nil {
+		t.Fatalf("expected oauth2 spec for cache-only directive")
+	}
+	if spec.Type != "oauth2" {
+		t.Fatalf("unexpected auth type %q", spec.Type)
+	}
+	if spec.Params["cache_key"] != "github" {
+		t.Fatalf("expected cache_key to be github, got %q", spec.Params["cache_key"])
+	}
+	if spec.Params["token_url"] != "" {
+		t.Fatalf("expected empty token_url, got %q", spec.Params["token_url"])
+	}
+	if spec.Params["grant"] != "client_credentials" {
+		t.Fatalf("expected default grant client_credentials, got %q", spec.Params["grant"])
+	}
+	if spec.Params["client_auth"] != "basic" {
+		t.Fatalf("expected default client_auth basic, got %q", spec.Params["client_auth"])
+	}
+}
+
 func TestParseCompareDirective(t *testing.T) {
 	src := `# @name Compare
 # @compare dev stage prod base=stage

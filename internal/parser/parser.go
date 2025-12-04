@@ -585,7 +585,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		for key, value := range parseKeyValuePairs(fields[1:]) {
 			params[key] = value
 		}
-		if params["token_url"] == "" {
+		if params["token_url"] == "" && params["cache_key"] == "" {
 			return nil
 		}
 		if params["grant"] == "" {

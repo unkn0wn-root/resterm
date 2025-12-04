@@ -692,6 +692,8 @@ GET {{base.url}}/users
 GET {{base.url}}/projects
 ```
 
+If you skip `token_url` on a follow-up directive and the cache hasn’t been seeded yet, Resterm will error with `@auth oauth2 requires token_url (include it once per cache_key to seed the cache)`.
+
 ### Scripting (`@script`)
 
 Add `# @script pre-request` or `# @script test` followed by lines that start with `>`.
