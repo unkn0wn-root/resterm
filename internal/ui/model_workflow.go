@@ -19,17 +19,19 @@ import (
 )
 
 type workflowState struct {
-	doc       *restfile.Document
-	options   httpclient.Options
-	workflow  restfile.Workflow
-	steps     []workflowStepRuntime
-	index     int
-	vars      map[string]string
-	results   []workflowStepResult
-	current   *restfile.Request
-	start     time.Time
-	end       time.Time
-	stepStart time.Time
+	doc          *restfile.Document
+	options      httpclient.Options
+	workflow     restfile.Workflow
+	steps        []workflowStepRuntime
+	index        int
+	vars         map[string]string
+	results      []workflowStepResult
+	current      *restfile.Request
+	start        time.Time
+	end          time.Time
+	stepStart    time.Time
+	canceled     bool
+	cancelReason string
 }
 
 type workflowStepRuntime struct {
@@ -40,6 +42,7 @@ type workflowStepRuntime struct {
 type workflowStepResult struct {
 	Step      restfile.WorkflowStep
 	Success   bool
+	Canceled  bool
 	Status    string
 	Duration  time.Duration
 	Message   string
@@ -49,6 +52,12 @@ type workflowStepResult struct {
 	ScriptErr error
 	Err       error
 }
+
+const (
+	workflowStatusPass     = "[PASS]"
+	workflowStatusFail     = "[FAIL]"
+	workflowStatusCanceled = "[CANCELED]"
+)
 
 func (s *workflowState) matches(req *restfile.Request) bool {
 	return s != nil && s.current != nil && req != nil && s.current == req
@@ -166,7 +175,7 @@ func (m *Model) executeWorkflowStep() tea.Cmd {
 	}
 
 	cmd := m.executeRequest(state.doc, clone, options, "", extraVars)
-	if tick := m.scheduleStatusPulse(); tick != nil {
+	if tick := m.startStatusPulse(); tick != nil {
 		return tea.Batch(cmd, tick)
 	}
 	return cmd
@@ -177,24 +186,46 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 	if state == nil {
 		return nil
 	}
+	current := state.current
 	state.current = nil
 	m.statusPulseBase = ""
 	m.statusPulseFrame = 0
 	m.sending = false
 
+	canceled := state.canceled || isCanceled(msg.err)
+
 	var cmds []tea.Cmd
-	if msg.err != nil {
-		if cmd := m.consumeRequestError(msg.err); cmd != nil {
-			cmds = append(cmds, cmd)
+	if canceled {
+		state.canceled = true
+		m.lastError = nil
+		msg.err = nil
+		if strings.TrimSpace(state.cancelReason) == "" {
+			state.cancelReason = "Workflow canceled"
 		}
-	} else if msg.response != nil {
-		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
-			cmds = append(cmds, cmd)
+		if current != nil && state.index < len(state.steps) {
+			state.index++
 		}
-	} else if msg.grpc != nil {
-		if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment); cmd != nil {
-			cmds = append(cmds, cmd)
+	} else {
+		if msg.err != nil {
+			if cmd := m.consumeRequestError(msg.err); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		} else if msg.response != nil {
+			if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		} else if msg.grpc != nil {
+			if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
+	}
+
+	if canceled {
+		if next := m.finalizeWorkflowRun(state); next != nil {
+			cmds = append(cmds, next)
+		}
+		return batchCmds(cmds)
 	}
 
 	result := evaluateWorkflowStep(state, msg)
@@ -211,13 +242,7 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 	if next != nil {
 		cmds = append(cmds, next)
 	}
-	if len(cmds) == 0 {
-		return nil
-	}
-	if len(cmds) == 1 {
-		return cmds[0]
-	}
-	return tea.Batch(cmds...)
+	return batchCmds(cmds)
 }
 
 func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepResult {
@@ -355,6 +380,32 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 }
 
 func workflowSummary(state *workflowState) string {
+	if state == nil {
+		return "Workflow complete"
+	}
+	if state.canceled {
+		name := strings.TrimSpace(state.workflow.Name)
+		if name == "" {
+			name = "workflow"
+		}
+		done := len(state.results)
+		total := len(state.steps)
+		step := done
+		if done < total {
+			step = done + 1
+		}
+		if step <= 0 {
+			step = 1
+		}
+		if total == 0 {
+			total = step
+		}
+		if step > total && total > 0 {
+			step = total
+		}
+		return fmt.Sprintf("Workflow %s canceled at step %d/%d", name, step, total)
+	}
+
 	succeeded := 0
 	for _, result := range state.results {
 		if result.Success {
@@ -381,6 +432,9 @@ func workflowSummary(state *workflowState) string {
 }
 
 func workflowStatusLevel(state *workflowState) statusLevel {
+	if state != nil && state.canceled {
+		return statusWarn
+	}
 	for _, result := range state.results {
 		if !result.Success {
 			return statusWarn
@@ -404,21 +458,11 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 		builder.WriteString(fmt.Sprintf("Ended: %s\n", state.end.Format(time.RFC3339)))
 	}
 	builder.WriteString(fmt.Sprintf("Steps: %d\n\n", len(state.steps)))
-	for idx, result := range state.results {
-		status := "PASS"
-		if !result.Success {
-			status = "FAIL"
-		}
-		builder.WriteString(fmt.Sprintf("%d. %s [%s]", idx+1, displayStepName(result.Step), status))
-		if strings.TrimSpace(result.Status) != "" {
-			builder.WriteString(fmt.Sprintf(" (%s)", result.Status))
-		}
-		if result.Duration > 0 {
-			builder.WriteString(fmt.Sprintf(" [%s]", result.Duration.Truncate(time.Millisecond)))
-		}
+	for _, entry := range buildWorkflowStatsEntries(state) {
+		builder.WriteString(workflowStepLine(entry.index, entry.result))
 		builder.WriteString("\n")
-		if strings.TrimSpace(result.Message) != "" {
-			builder.WriteString(fmt.Sprintf("    %s\n", result.Message))
+		if strings.TrimSpace(entry.result.Message) != "" {
+			builder.WriteString(fmt.Sprintf("    %s\n", entry.result.Message))
 		}
 	}
 	return strings.TrimRight(builder.String(), "\n")

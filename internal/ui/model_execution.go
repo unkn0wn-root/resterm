@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -29,7 +30,136 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+func (m *Model) cancelInFlightSend(status string) {
+	if m.sendCancel != nil {
+		m.sendCancel()
+	}
+	if strings.TrimSpace(status) != "" {
+		m.setStatusMessage(statusMsg{text: status, level: statusInfo})
+	}
+}
+
+func isCanceled(err error) bool {
+	return errors.Is(err, context.Canceled)
+}
+
+func batchCmds(cmds []tea.Cmd) tea.Cmd {
+	switch len(cmds) {
+	case 0:
+		return nil
+	case 1:
+		return cmds[0]
+	default:
+		return tea.Batch(cmds...)
+	}
+}
+
+func (m *Model) cancelStatus() string {
+	if state := m.profileRun; state != nil {
+		return "Canceling profile run..."
+	}
+	if state := m.workflowRun; state != nil {
+		name := strings.TrimSpace(state.workflow.Name)
+		if name == "" {
+			name = "workflow"
+		}
+		return fmt.Sprintf("Canceling %s...", name)
+	}
+	if m.compareRun != nil {
+		return "Canceling compare run..."
+	}
+	if m.sending {
+		return "Canceling in-progress request..."
+	}
+	return "Canceling..."
+}
+
+func (m *Model) hasActiveRun() bool {
+	return m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil
+}
+
+func (m *Model) cancelActiveRuns() tea.Cmd {
+	if !m.hasActiveRun() {
+		return nil
+	}
+	return m.cancelRuns(m.cancelStatus())
+}
+
+func (m *Model) cancelRuns(status string) tea.Cmd {
+	status = strings.TrimSpace(status)
+	if status == "" {
+		status = "Canceling..."
+	}
+
+	m.sending = false
+	m.statusPulseBase = ""
+	m.statusPulseFrame = 0
+
+	var cmds []tea.Cmd
+	if cmd := m.cancelProfileRun(status); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.cancelWorkflowRun(status); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if cmd := m.cancelCompareRun(status); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	m.cancelInFlightSend(status)
+
+	return batchCmds(cmds)
+}
+
+func (m *Model) cancelProfileRun(reason string) tea.Cmd {
+	state := m.profileRun
+	if state == nil {
+		return nil
+	}
+	state.canceled = true
+	if strings.TrimSpace(state.cancelReason) == "" {
+		state.cancelReason = reason
+	}
+	if state.current == nil {
+		return m.finalizeProfileRun(responseMsg{}, state)
+	}
+	return nil
+}
+
+func (m *Model) cancelWorkflowRun(reason string) tea.Cmd {
+	state := m.workflowRun
+	if state == nil {
+		return nil
+	}
+	state.canceled = true
+	if strings.TrimSpace(state.cancelReason) == "" {
+		state.cancelReason = reason
+	}
+	if state.current == nil {
+		return m.finalizeWorkflowRun(state)
+	}
+	return nil
+}
+
+func (m *Model) cancelCompareRun(reason string) tea.Cmd {
+	state := m.compareRun
+	if state == nil {
+		return nil
+	}
+	state.canceled = true
+	if strings.TrimSpace(state.cancelReason) == "" {
+		state.cancelReason = reason
+	}
+	if state.current == nil {
+		return m.finalizeCompareRun(state)
+	}
+	return nil
+}
+
 func (m *Model) sendActiveRequest() tea.Cmd {
+	if cmd := m.cancelActiveRuns(); cmd != nil {
+		return cmd
+	}
+
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
 	cursorLine := currentCursorLine(m.editor)
@@ -84,7 +214,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
 	execCmd := m.executeRequest(doc, cloned, options, "")
-	if tick := m.scheduleStatusPulse(); tick != nil {
+	if tick := m.startStatusPulse(); tick != nil {
 		return tea.Batch(execCmd, tick)
 	}
 	return execCmd
@@ -155,6 +285,8 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 	}
 	client := m.client
 	runner := m.scriptRunner
+	sendCtx, sendCancel := context.WithCancel(context.Background())
+	m.sendCancel = sendCancel
 
 	// selecting env this way lets compare overrides win without persisting the change.
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
@@ -171,6 +303,14 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 	}
 
 	return func() tea.Msg {
+		select {
+		case <-sendCtx.Done():
+			return responseMsg{err: context.Canceled, executed: req}
+		default:
+		}
+
+		defer sendCancel()
+
 		preVars := cloneStringMap(baseVars)
 		preGlobals := m.collectGlobalValues(doc, envName)
 		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
@@ -178,12 +318,17 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			Variables: preVars,
 			Globals:   preGlobals,
 			BaseDir:   options.BaseDir,
+			Context:   sendCtx,
 		})
 		if err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request script"), executed: req}
 		}
 
 		if err := applyPreRequestOutput(req, preResult); err != nil {
+			return responseMsg{err: err, executed: req}
+		}
+
+		if err := sendCtx.Err(); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
@@ -210,7 +355,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		}
 
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
-		if err := m.ensureOAuth(req, resolver, options, envName, effectiveTimeout); err != nil {
+		if err := m.ensureOAuth(sendCtx, req, resolver, options, envName, effectiveTimeout); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
@@ -221,9 +366,9 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		)
 
 		if req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
-			ctx, cancel = context.WithCancel(context.Background())
+			ctx, cancel = context.WithCancel(sendCtx)
 		} else {
-			ctx, cancel = context.WithTimeout(context.Background(), effectiveTimeout)
+			ctx, cancel = context.WithTimeout(sendCtx, effectiveTimeout)
 		}
 		defer func() {
 			if cancelActive {
@@ -510,12 +655,22 @@ func (m *Model) scheduleStatusPulse() tea.Cmd {
 	if !m.sending {
 		return nil
 	}
+	seq := m.statusPulseSeq
 	return tea.Tick(statusPulseInterval, func(time.Time) tea.Msg {
-		return statusPulseMsg{}
+		return statusPulseMsg{seq: seq}
 	})
 }
 
-func (m *Model) handleStatusPulse() tea.Cmd {
+func (m *Model) startStatusPulse() tea.Cmd {
+	m.statusPulseSeq++
+	m.statusPulseFrame = 0
+	return m.scheduleStatusPulse()
+}
+
+func (m *Model) handleStatusPulse(msg statusPulseMsg) tea.Cmd {
+	if msg.seq != m.statusPulseSeq {
+		return nil
+	}
 	if !m.sending {
 		return nil
 	}
@@ -523,6 +678,11 @@ func (m *Model) handleStatusPulse() tea.Cmd {
 	m.statusPulseFrame++
 	if m.statusPulseFrame >= 3 {
 		m.statusPulseFrame = 0
+	}
+
+	if m.profileRun != nil {
+		m.showProfileProgress(m.profileRun)
+		return m.scheduleStatusPulse()
 	}
 
 	base := strings.TrimSpace(m.statusPulseBase)
@@ -1399,7 +1559,7 @@ func upsertVariable(list *[]restfile.Variable, scope restfile.VariableScope, nam
 	*list = append(vars, restfile.Variable{Name: name, Value: value, Scope: scope, Secret: secret})
 }
 
-func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts httpclient.Options, envName string, timeout time.Duration) error {
+func (m *Model) ensureOAuth(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts httpclient.Options, envName string, timeout time.Duration) error {
 	if req == nil || req.Metadata.Auth == nil {
 		return nil
 	}
@@ -1433,10 +1593,10 @@ func (m *Model) ensureOAuth(req *restfile.Request, resolver *vars.Resolver, opts
 	tokenTimeout := timeout
 	if grant == "authorization_code" && tokenTimeout < 2*time.Minute {
 		tokenTimeout = 2 * time.Minute
-		m.setStatusMessage(statusMsg{level: statusInfo, text: "Open browser to complete OAuth (auth code/PKCE)"})
+		m.setStatusMessage(statusMsg{level: statusInfo, text: "Open browser to complete OAuth (auth code/PKCE). Press send again to cancel."})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), tokenTimeout)
+	ctx, cancel := context.WithTimeout(ctx, tokenTimeout)
 
 	defer cancel()
 

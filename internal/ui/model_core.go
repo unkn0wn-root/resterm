@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -86,10 +87,12 @@ const (
 	searchTargetResponse
 )
 
-const noResponseMessage = "░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█\n░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█\n░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀"
-const historySnippetPlaceholder = "[HTML content omitted]"
-const historySnippetMaxLines = 24
-const tabIndicatorPrefix = "▸ "
+const (
+	noResponseMessage         = "░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█\n░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█\n░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀"
+	historySnippetPlaceholder = "[HTML content omitted]"
+	historySnippetMaxLines    = 24
+	tabIndicatorPrefix        = "▸ "
+)
 
 const (
 	sidebarWidthDefault   = 0.2
@@ -244,6 +247,7 @@ type Model struct {
 	statusMessage    statusMsg
 	statusPulseBase  string
 	statusPulseFrame int
+	statusPulseSeq   int
 	lastResponse     *httpclient.Response
 	lastGRPC         *grpcclient.Response
 	lastError        error
@@ -301,6 +305,7 @@ type Model struct {
 	ready                 bool
 	dirty                 bool
 	sending               bool
+	sendCancel            context.CancelFunc
 	suppressEditorKey     bool
 	editorInsertMode      bool
 	editorWriteKeyMap     textarea.KeyMap
@@ -380,7 +385,7 @@ func New(cfg Config) Model {
 	}
 	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
 		initialStatus = statusMsg{
-			text:  fmt.Sprintf("Environment defaulted to %q; press Ctrl+E to change.", cfg.EnvironmentFallback),
+			text:  fmt.Sprintf("Environment defaulted to %q - press Ctrl+E to change.", cfg.EnvironmentFallback),
 			level: statusInfo,
 		}
 	}

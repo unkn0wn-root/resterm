@@ -16,7 +16,7 @@ import (
 
 const (
 	statusBarLeftMaxRatio = 0.7
-	helpKeyColumnWidth    = 28
+	helpKeyColumnWidth    = 32
 )
 
 var headerSegmentIcons = map[string]string{
@@ -1938,12 +1938,12 @@ func (m Model) renderThemeModal() string {
 }
 
 func (m Model) renderHelpOverlay() string {
-	width := minInt(m.width-10, 100)
-	if width < 32 {
-		width = 32
+	width := minInt(m.width-6, 120)
+	if width < 48 {
+		width = 48
 	}
-	contentWidth := maxInt(width-4, 24)
-	viewWidth := maxInt(contentWidth-4, 18)
+	contentWidth := maxInt(width-6, 30)
+	viewWidth := maxInt(contentWidth-6, 22)
 	maxBodyHeight := m.height - 8
 	if maxBodyHeight < 6 {
 		maxBodyHeight = 6
@@ -1966,6 +1966,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Enter", "Run selected request"),
 		helpRow(m, "Space", "Preview selected request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"),
+		helpRow(m, m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"), "Cancel in-flight run/request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"),
@@ -2145,7 +2146,7 @@ func helpRow(m Model, key, description string) string {
 		Align(lipgloss.Left).
 		Render(key)
 	descStyled := m.theme.HeaderValue.
-		PaddingLeft(4).
+		PaddingLeft(6).
 		Render(description)
 	return lipgloss.JoinHorizontal(
 		lipgloss.Left,

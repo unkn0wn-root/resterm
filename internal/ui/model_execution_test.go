@@ -507,7 +507,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 	resolver := vars.NewResolver()
-	if err := model.ensureOAuth(req, resolver, httpclient.Options{}, "", time.Second); err != nil {
+	if err := model.ensureOAuth(context.Background(), req, resolver, httpclient.Options{}, "", time.Second); err != nil {
 		t.Fatalf("ensureOAuth: %v", err)
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
@@ -522,7 +522,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if err := model.ensureOAuth(req2, resolver, httpclient.Options{}, "", time.Second); err != nil {
+	if err := model.ensureOAuth(context.Background(), req2, resolver, httpclient.Options{}, "", time.Second); err != nil {
 		t.Fatalf("ensureOAuth second: %v", err)
 	}
 	if atomic.LoadInt32(&calls) != 1 {
@@ -547,7 +547,7 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 			"token_url": "https://auth.local/token",
 		}}},
 	}
-	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "", time.Second); err != nil {
+	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "", time.Second); err != nil {
 		t.Fatalf("ensureOAuth with existing header: %v", err)
 	}
 	if atomic.LoadInt32(&called) != 0 {
@@ -593,11 +593,11 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
+	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
 		t.Fatalf("ensureOAuth stage: %v", err)
 	}
 	req.Headers = nil
-	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
+	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
 		t.Fatalf("ensureOAuth stage cached: %v", err)
 	}
 	if atomic.LoadInt32(&requests) != 1 {
@@ -605,11 +605,115 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	req.Headers = nil
-	if err := model.ensureOAuth(req, vars.NewResolver(), httpclient.Options{}, "dev", time.Second); err != nil {
+	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "dev", time.Second); err != nil {
 		t.Fatalf("ensureOAuth dev: %v", err)
 	}
 	if atomic.LoadInt32(&requests) != 2 {
 		t.Fatalf("expected new token request when env changes, got %d", requests)
+	}
+}
+
+func TestEnsureOAuthCancelsWithContext(t *testing.T) {
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		oauth:   oauth.NewManager(nil),
+		globals: newGlobalStore(),
+	}
+
+	model.oauth.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	})
+
+	auth := &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
+		"token_url": "https://auth.local/token",
+	}}
+	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+	resolver := vars.NewResolver()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if err := model.ensureOAuth(ctx, req, resolver, httpclient.Options{}, "", time.Minute); !errors.Is(err, context.Canceled) {
+			t.Errorf("expected context cancellation, got %v", err)
+		}
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ensureOAuth did not return after cancellation")
+	}
+}
+
+func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
+	model := Model{
+		cfg:          Config{EnvironmentName: "dev"},
+		scriptRunner: scripts.NewRunner(nil),
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+	}
+
+	cmd := model.executeRequest(nil, req, httpclient.Options{}, "")
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+	if model.sendCancel == nil {
+		t.Fatalf("expected sendCancel to be set")
+	}
+
+	model.sendCancel()
+	msg := cmd()
+	resp, ok := msg.(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg, got %T", msg)
+	}
+	if !errors.Is(resp.err, context.Canceled) {
+		t.Fatalf("expected cancellation error, got %v", resp.err)
+	}
+}
+
+func TestCancelActiveRunsStopsSend(t *testing.T) {
+	model := New(Config{})
+	model.sending = true
+	model.statusPulseBase = "Sending test"
+	model.statusPulseFrame = 2
+
+	canceled := false
+	model.sendCancel = func() { canceled = true }
+
+	cmd := model.cancelActiveRuns()
+	if cmd != nil {
+		t.Fatalf("expected cancelActiveRuns to return nil command, got %v", cmd)
+	}
+	if model.sending {
+		t.Fatalf("expected sending flag to reset")
+	}
+	if model.statusPulseBase != "" || model.statusPulseFrame != 0 {
+		t.Fatalf("expected pulse state cleared, got %q/%d", model.statusPulseBase, model.statusPulseFrame)
+	}
+	if !canceled {
+		t.Fatalf("expected sendCancel to be invoked")
+	}
+	if text := strings.ToLower(model.statusMessage.text); !strings.Contains(text, "canceling") {
+		t.Fatalf("expected cancel status message, got %q", model.statusMessage.text)
+	}
+}
+
+func TestCancelActiveRunsNoopWhenIdle(t *testing.T) {
+	model := New(Config{})
+	cmd := model.cancelActiveRuns()
+	if cmd != nil {
+		t.Fatalf("expected nil command when nothing is active, got %v", cmd)
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("did not expect status message, got %q", model.statusMessage.text)
 	}
 }
 

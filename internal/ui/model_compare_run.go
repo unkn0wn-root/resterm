@@ -19,18 +19,20 @@ import (
 )
 
 type compareState struct {
-	doc         *restfile.Document
-	base        *restfile.Request
-	options     httpclient.Options
-	spec        *restfile.CompareSpec
-	envs        []string
-	index       int
-	originEnv   string
-	current     *restfile.Request
-	currentEnv  string
-	requestText string
-	results     []compareResult
-	label       string
+	doc          *restfile.Document
+	base         *restfile.Request
+	options      httpclient.Options
+	spec         *restfile.CompareSpec
+	envs         []string
+	index        int
+	originEnv    string
+	current      *restfile.Request
+	currentEnv   string
+	requestText  string
+	results      []compareResult
+	label        string
+	canceled     bool
+	cancelReason string
 }
 
 type compareResult struct {
@@ -42,6 +44,7 @@ type compareResult struct {
 	ScriptErr   error
 	Request     *restfile.Request
 	RequestText string
+	Canceled    bool
 }
 
 func (s *compareState) matches(req *restfile.Request) bool {
@@ -133,13 +136,16 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	state.currentEnv = env
 	state.requestText = renderRequestText(clone)
 
+	m.sending = true
+	m.statusPulseBase = state.statusLine()
+	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
 	runCmd := m.withEnvironment(env, func() tea.Cmd {
 		return m.executeRequest(state.doc, clone, state.options, env)
 	})
 
-	if tick := m.scheduleStatusPulse(); tick != nil {
+	if tick := m.startStatusPulse(); tick != nil {
 		return tea.Batch(runCmd, tick)
 	}
 	return runCmd
@@ -154,40 +160,54 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	}
 
 	currentReq := state.current
+	currentEnv := state.currentEnv
 	state.current = nil
 	m.statusPulseBase = ""
 	m.statusPulseFrame = 0
 	m.sending = false
 
+	canceled := state.canceled || isCanceled(msg.err)
+	if canceled {
+		state.canceled = true
+		m.lastError = nil
+		msg.err = nil
+		if strings.TrimSpace(state.cancelReason) == "" {
+			state.cancelReason = "Compare run canceled"
+		}
+	}
+
 	result := compareResult{
-		Environment: state.currentEnv,
+		Environment: currentEnv,
 		Tests:       append([]scripts.TestResult(nil), msg.tests...),
 		ScriptErr:   msg.scriptErr,
 		RequestText: state.requestText,
+		Canceled:    canceled,
 	}
 	if currentReq != nil {
 		result.Request = cloneRequest(currentReq)
 	}
 
 	var cmds []tea.Cmd
-	if msg.err != nil {
+	if !canceled && msg.err != nil {
 		result.Err = msg.err
 		m.lastError = msg.err
 		if cmd := m.consumeRequestError(msg.err); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	} else if msg.grpc != nil {
+	} else if !canceled && msg.grpc != nil {
 		result.GRPC = msg.grpc
 		m.lastError = nil
 		if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	} else if msg.response != nil {
+	} else if !canceled && msg.response != nil {
 		result.Response = msg.response
 		m.lastError = nil
 		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	} else {
+		m.lastError = nil
 	}
 
 	state.results = append(state.results, result)
@@ -197,22 +217,22 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	state.index++
 
 	level := statusInfo
-	if !compareResultSuccess(&result) {
+	if canceled || !compareResultSuccess(&result) {
 		level = statusWarn
 	}
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: level})
 
-	if state.index >= len(state.envs) {
+	if canceled || state.index >= len(state.envs) {
 		if cmd := m.finalizeCompareRun(state); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		return tea.Batch(cmds...)
+		return batchCmds(cmds)
 	}
 
 	if cmd := m.executeCompareIteration(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	return tea.Batch(cmds...)
+	return batchCmds(cmds)
 }
 
 // Build the reusable bundle and history entry so panes and history reuse the
@@ -268,7 +288,10 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 
 	label := fmt.Sprintf("%s complete", state.label)
 	level := statusSuccess
-	if state.hasFailures() {
+	if state.canceled {
+		label = fmt.Sprintf("%s canceled", state.label)
+		level = statusWarn
+	} else if state.hasFailures() {
 		level = statusWarn
 	}
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s | %s", label, state.progressSummary()), level: level})
@@ -424,6 +447,8 @@ func compareRowStatus(result *compareResult) (string, string) {
 	switch {
 	case result == nil:
 		return "n/a", "-"
+	case result.Canceled:
+		return "canceled", "-"
 	case result.Err != nil:
 		return "error", ""
 	case result.Response != nil:
@@ -565,9 +590,13 @@ func (s *compareState) progressSummary() string {
 		}
 		switch {
 		case idx < len(s.results):
-			if compareResultSuccess(&s.results[idx]) {
+			res := &s.results[idx]
+			switch {
+			case res.Canceled:
+				label += "!"
+			case compareResultSuccess(res):
 				label += "✓"
-			} else {
+			default:
 				label += "✗"
 			}
 		case idx == s.index && s.current != nil:
@@ -606,6 +635,9 @@ func (s *compareState) hasFailures() bool {
 
 func compareResultSuccess(result *compareResult) bool {
 	if result == nil {
+		return false
+	}
+	if result.Canceled {
 		return false
 	}
 	if result.Err != nil || result.ScriptErr != nil {

@@ -68,6 +68,43 @@ func TestWorkflowStatsRenderIndicators(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatsCanceledEntries(t *testing.T) {
+	state := &workflowState{
+		workflow: restfile.Workflow{Name: "demo"},
+		steps: []workflowStepRuntime{
+			{step: restfile.WorkflowStep{Name: "One"}},
+			{step: restfile.WorkflowStep{Name: "Two"}},
+			{step: restfile.WorkflowStep{Name: "Three"}},
+		},
+		results: []workflowStepResult{
+			{Step: restfile.WorkflowStep{Name: "One"}, Success: true},
+		},
+		canceled:     true,
+		cancelReason: "user canceled",
+		start:        time.Now(),
+		end:          time.Now(),
+	}
+
+	view := newWorkflowStatsView(state)
+	render := view.render(80)
+	plain := stripANSIEscape(render.content)
+	if strings.Count(plain, workflowStatusCanceled) != 2 {
+		t.Fatalf("expected two canceled steps, got %d content=%q", strings.Count(plain, workflowStatusCanceled), plain)
+	}
+	if !strings.Contains(plain, "2. Two "+workflowStatusCanceled) {
+		t.Fatalf("expected second step to be marked canceled, got %q", plain)
+	}
+	if !strings.Contains(plain, "3. Three "+workflowStatusCanceled) {
+		t.Fatalf("expected third step to be marked canceled, got %q", plain)
+	}
+	if strings.Contains(plain, "user canceled") {
+		t.Fatalf("did not expect cancel reason repeated in entries, got %q", plain)
+	}
+	if strings.Contains(plain, workflowStatusCanceled+"\n    <no response captured>") {
+		t.Fatalf("did not expect placeholder response detail for canceled entries, got %q", plain)
+	}
+}
+
 func TestWorkflowStatsRenderWrappedIndent(t *testing.T) {
 	view := &workflowStatsView{
 		name:       "wrap",

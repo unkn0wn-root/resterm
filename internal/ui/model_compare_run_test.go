@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -56,6 +58,11 @@ func TestCompareResultSuccess(t *testing.T) {
 				GRPC: &grpcclient.Response{StatusCode: codes.Internal},
 			},
 			want: false,
+		},
+		{
+			name:   "canceled",
+			result: compareResult{Canceled: true},
+			want:   false,
 		},
 	}
 
@@ -176,5 +183,75 @@ func TestRecordCompareHistoryPersists(t *testing.T) {
 	}
 	if entries[0].Compare == nil {
 		t.Fatalf("expected compare payload present")
+	}
+}
+
+func TestCompareCancelStopsRun(t *testing.T) {
+	req := &restfile.Request{
+		Method:   "GET",
+		URL:      "https://example.com/compare",
+		Metadata: restfile.RequestMetadata{Name: "CompareRequest"},
+	}
+
+	state := &compareState{
+		base:       cloneRequest(req),
+		spec:       &restfile.CompareSpec{Baseline: "dev"},
+		envs:       []string{"dev", "stage"},
+		current:    cloneRequest(req),
+		currentEnv: "dev",
+		label:      "Compare sample",
+	}
+
+	model := New(Config{})
+	model.ready = true
+	model.compareRun = state
+	model.sending = true
+
+	if follow := model.handleCompareResponse(responseMsg{err: context.Canceled, executed: state.current}); follow != nil {
+		collectMsgs(follow)
+	}
+
+	if model.compareRun != nil {
+		t.Fatalf("expected compare run to clear after cancel")
+	}
+	if model.statusMessage.level != statusWarn {
+		t.Fatalf("expected warning status for cancel, got %v", model.statusMessage.level)
+	}
+	if !strings.Contains(strings.ToLower(model.statusMessage.text), "canceled") {
+		t.Fatalf("expected canceled status message, got %q", model.statusMessage.text)
+	}
+	if len(state.results) != 1 || state.results[0].Err != nil {
+		t.Fatalf("expected canceled environment to be recorded without error payload, got %+v", state.results)
+	}
+	if !state.results[0].Canceled {
+		t.Fatalf("expected canceled result marker")
+	}
+}
+
+func TestExecuteCompareIterationSetsSending(t *testing.T) {
+	req := &restfile.Request{
+		Method:   "GET",
+		URL:      "https://example.com/compare",
+		Metadata: restfile.RequestMetadata{Name: "CompareRequest"},
+	}
+
+	state := &compareState{
+		doc:   &restfile.Document{Requests: []*restfile.Request{req}},
+		base:  cloneRequest(req),
+		spec:  &restfile.CompareSpec{Environments: []string{"dev", "stage"}},
+		envs:  []string{"dev", "stage"},
+		label: "Compare test",
+	}
+
+	model := New(Config{})
+	model.ready = true
+	model.compareRun = state
+
+	cmd := model.executeCompareIteration()
+	if !model.sending {
+		t.Fatalf("expected compare iteration to mark sending")
+	}
+	if cmd == nil {
+		t.Fatalf("expected iteration command to be scheduled")
 	}
 }

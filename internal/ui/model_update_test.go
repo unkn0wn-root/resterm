@@ -65,6 +65,27 @@ func TestHandleKeyEnterInInsertModeDoesNotSend(t *testing.T) {
 	}
 }
 
+func TestCancelShortcutStopsInFlightSend(t *testing.T) {
+	model := New(Config{})
+	model.sending = true
+	canceled := false
+	model.sendCancel = func() { canceled = true }
+
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyCtrlC}); cmd != nil {
+		_ = cmd()
+	}
+
+	if model.sending {
+		t.Fatalf("expected sending flag cleared after cancel shortcut")
+	}
+	if !canceled {
+		t.Fatalf("expected cancel function to be invoked")
+	}
+	if text := strings.ToLower(model.statusMessage.text); !strings.Contains(text, "canceling") {
+		t.Fatalf("expected cancel status message, got %q", model.statusMessage.text)
+	}
+}
+
 func TestTabInViewModeCyclesFocus(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
 	model.setFocus(focusEditor)

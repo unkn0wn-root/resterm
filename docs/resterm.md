@@ -151,6 +151,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `select_timeline_tab` | Focus the Timeline tab. | `ctrl+alt+l`, `g t` |
 | `quit_app` | Quit Resterm. | `ctrl+q`, `ctrl+d` |
 | `send_request` | Send the active request (single-step only). | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
+| `cancel_run` | Cancel the in-flight request, compare, profile, or workflow run. | `ctrl+c` |
 | `copy_response_tab` | Copy the focused Pretty/Raw/Headers response tab to the clipboard. | `ctrl+shift+c`, `g y` |
 | `toggle_header_preview` | Toggle request vs response headers in the Headers tab. | `g shift+h` |
 

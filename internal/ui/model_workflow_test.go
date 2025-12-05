@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -107,6 +109,72 @@ func TestWorkflowRunProgression(t *testing.T) {
 	}
 	if len(model.statusMessage.text) == 0 {
 		t.Fatalf("expected status message describing workflow result")
+	}
+}
+
+func TestWorkflowCancelStopsRun(t *testing.T) {
+	doc := buildWorkflowDoc()
+	workflow := restfile.Workflow{
+		Name:             "demo",
+		DefaultOnFailure: restfile.WorkflowOnFailureStop,
+		Steps: []restfile.WorkflowStep{
+			{Using: "StepA"},
+			{Using: "StepB"},
+		},
+	}
+
+	model := New(Config{})
+	model.ready = true
+	model.doc = doc
+
+	cmd := model.startWorkflowRun(doc, workflow, model.cfg.HTTPOptions)
+	if cmd == nil {
+		t.Fatalf("expected workflow start command")
+	}
+	current := model.workflowRun.current
+	if current == nil {
+		t.Fatalf("expected current workflow request")
+	}
+
+	cancelMsg := responseMsg{err: context.Canceled, executed: current}
+	if follow := model.handleWorkflowResponse(cancelMsg); follow != nil {
+		collectMsgs(follow)
+	}
+
+	if model.workflowRun != nil {
+		t.Fatalf("expected workflow run to clear after cancel")
+	}
+	if model.statusMessage.level != statusWarn {
+		t.Fatalf("expected warning level status, got %v", model.statusMessage.level)
+	}
+	if !strings.Contains(strings.ToLower(model.statusMessage.text), "canceled") {
+		t.Fatalf("expected canceled status message, got %q", model.statusMessage.text)
+	}
+	if len(workflow.Steps) == 0 {
+		t.Fatalf("expected workflow steps to remain defined")
+	}
+}
+
+func TestBuildWorkflowReportIncludesCanceledSteps(t *testing.T) {
+	state := &workflowState{
+		workflow: restfile.Workflow{Name: "demo"},
+		steps: []workflowStepRuntime{
+			{step: restfile.WorkflowStep{Name: "One"}},
+			{step: restfile.WorkflowStep{Name: "Two"}},
+		},
+		results: []workflowStepResult{
+			{Step: restfile.WorkflowStep{Name: "One"}, Success: true},
+		},
+		canceled:     true,
+		cancelReason: "stopped",
+		start:        time.Now(),
+		end:          time.Now(),
+	}
+
+	var model Model
+	report := model.buildWorkflowReport(state)
+	if !strings.Contains(report, "2. Two "+workflowStatusCanceled) {
+		t.Fatalf("expected canceled step to be listed, got %q", report)
 	}
 }
 
