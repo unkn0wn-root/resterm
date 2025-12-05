@@ -18,6 +18,7 @@ func TestBuildProfileResults(t *testing.T) {
 		warmup:    1,
 		successes: []time.Duration{10 * time.Millisecond, 30 * time.Millisecond},
 		failures:  []profileFailure{{Warmup: false}, {Warmup: true}},
+		index:     4,
 	}
 	stats := analysis.ComputeLatencyStats(st.successes, []int{50, 90}, 2)
 	res := buildProfileResults(st, stats)
@@ -72,6 +73,7 @@ func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 		total:     3,
 		warmup:    1,
 		successes: []time.Duration{20 * time.Millisecond, 25 * time.Millisecond},
+		index:     3,
 		start:     time.Time{},
 	}
 	stats := analysis.ComputeLatencyStats(st.successes, []int{90}, 2)

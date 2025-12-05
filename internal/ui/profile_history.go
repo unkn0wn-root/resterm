@@ -71,6 +71,18 @@ func (m *Model) buildProfileHistoryEntry(st *profileState, stats analysis.Latenc
 }
 
 func profileHistoryStatus(st *profileState, msg responseMsg) (string, int) {
+	if st != nil && st.canceled {
+		completed := profileCompletedRuns(st)
+		total := st.total
+		if total == 0 {
+			total = st.spec.Count + st.warmup
+		}
+		if completed > 0 && total > 0 {
+			return fmt.Sprintf("Canceled at %d/%d", completed, total), 0
+		}
+		return strings.TrimSpace(st.cancelReason), 0
+	}
+
 	switch {
 	case msg.response != nil:
 		return msg.response.Status, msg.response.StatusCode
@@ -98,9 +110,15 @@ func buildProfileResults(st *profileState, stats analysis.LatencyStats) *history
 		return nil
 	}
 
+	totalRuns := profileCompletedRuns(st)
+	if totalRuns == 0 {
+		totalRuns = st.total
+	}
+	warmupRuns := profileCompletedWarmup(st)
+
 	res := &history.ProfileResults{
-		TotalRuns:      st.total,
-		WarmupRuns:     st.warmup,
+		TotalRuns:      totalRuns,
+		WarmupRuns:     warmupRuns,
 		SuccessfulRuns: len(st.successes),
 		FailedRuns:     st.failureCount(),
 	}

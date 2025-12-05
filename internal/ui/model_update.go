@@ -51,6 +51,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case responseMsg:
 		m.sending = false
+		m.sendCancel = nil
 		m.statusPulseBase = ""
 		m.statusPulseFrame = 0
 		if cmd := m.handleResponseMessage(typed); cmd != nil {
@@ -59,7 +60,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case statusMsg:
 		m.setStatusMessage(typed)
 	case statusPulseMsg:
-		if cmd := m.handleStatusPulse(); cmd != nil {
+		if cmd := m.handleStatusPulse(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case responseRenderedMsg:
@@ -879,10 +880,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 		}
 		if m.shouldSendEditorRequest(msg, m.editorInsertMode) {
-			if !m.sending {
-				m.suppressEditorKey = true
-				return combine(m.sendActiveRequest())
-			}
+			m.suppressEditorKey = true
+			return combine(m.sendActiveRequest())
 		}
 		if m.editorInsertMode {
 			km := msg
@@ -1078,6 +1077,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				// handled above
 			default:
 				if m.shouldSendEditorRequest(msg, false) {
+					if m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil {
+						return combine(m.cancelRuns(m.cancelStatus()))
+					}
 					return combine(m.replayHistorySelection())
 				}
 			}
@@ -1085,9 +1087,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if m.isSendShortcut(msg) {
-		if m.sending {
-			return combine(nil)
-		}
 		return combine(m.sendActiveRequest())
 	}
 

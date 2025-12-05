@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -82,5 +83,94 @@ func TestHandleProfileResponseUpdatesState(t *testing.T) {
 	}
 	if strings.TrimSpace(model.responseLatest.stats) == "" {
 		t.Fatalf("expected stats report to be populated after profiling run")
+	}
+}
+
+func TestProfileCancelStopsRun(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/profile",
+		Metadata: restfile.RequestMetadata{
+			Profile: &restfile.ProfileSpec{Count: 3},
+		},
+	}
+	state := &profileState{
+		base:        cloneRequest(req),
+		doc:         &restfile.Document{Requests: []*restfile.Request{req}},
+		options:     httpclient.Options{},
+		spec:        restfile.ProfileSpec{Count: 3},
+		total:       3,
+		warmup:      0,
+		successes:   make([]time.Duration, 0, 3),
+		failures:    make([]profileFailure, 0, 1),
+		current:     req,
+		messageBase: "Profiling " + requestBaseTitle(req),
+		start:       time.Now(),
+	}
+
+	model := New(Config{})
+	model.ready = true
+	model.profileRun = state
+	model.sending = true
+
+	cmd := model.handleProfileResponse(responseMsg{
+		err:      context.Canceled,
+		executed: req,
+	})
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.profileRun != nil {
+		t.Fatalf("expected profile run to clear after cancellation")
+	}
+	if !strings.Contains(strings.ToLower(model.statusMessage.text), "canceled") {
+		t.Fatalf("expected canceled status message, got %q", model.statusMessage.text)
+	}
+	if model.statusMessage.level != statusWarn {
+		t.Fatalf("expected warning level for cancellation, got %v", model.statusMessage.level)
+	}
+	if len(state.successes) != 0 || len(state.failures) != 0 {
+		t.Fatalf("expected no successes or failures recorded on cancel, got %d success %d failure", len(state.successes), len(state.failures))
+	}
+	if model.responseLatest == nil {
+		t.Fatalf("expected response snapshot to be populated on cancel")
+	}
+	if stats := strings.ToLower(model.responseLatest.stats); !strings.Contains(stats, "canceled") {
+		t.Fatalf("expected canceled status in response stats, got %q", model.responseLatest.stats)
+	}
+	if body := strings.ToLower(model.responseLatest.pretty); !strings.Contains(body, "canceled") {
+		t.Fatalf("expected response body to show cancellation summary, got %q", model.responseLatest.pretty)
+	}
+}
+
+func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/profile",
+		Metadata: restfile.RequestMetadata{
+			Name:    "profile-target",
+			Profile: &restfile.ProfileSpec{Count: 2},
+		},
+	}
+	doc := &restfile.Document{Requests: []*restfile.Request{req}}
+
+	model := New(Config{})
+	model.ready = true
+	model.responseLatest = &responseSnapshot{pretty: "old response", raw: "old response", headers: "old response", ready: true}
+
+	cmd := model.startProfileRun(doc, req, httpclient.Options{})
+	if cmd == nil {
+		t.Fatalf("expected startProfileRun to schedule execution")
+	}
+	if model.responseLatest == nil {
+		t.Fatalf("expected profile progress snapshot to be set")
+	}
+	content := model.responseLatest.pretty
+	if strings.Contains(content, "old response") {
+		t.Fatalf("expected previous response to be cleared, got %q", content)
+	}
+	if !strings.Contains(content, "run 1/2") {
+		t.Fatalf("expected progress message to mention current run, got %q", content)
 	}
 }

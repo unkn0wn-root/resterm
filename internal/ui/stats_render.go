@@ -185,6 +185,11 @@ func colorizeProfileLabel(label, value string) string {
 	case "note":
 		labelStyle = statsSubLabelStyle
 		valueStyle = statsWarnStyle
+	case "status":
+		valueStyle = statsHeaderValueStyle
+		if strings.Contains(strings.ToLower(value), "cancel") {
+			valueStyle = statsWarnStyle
+		}
 	}
 	return renderLabelValue(label, value, labelStyle, valueStyle)
 }
@@ -688,16 +693,16 @@ func isWorkflowStepLine(line string) bool {
 	if line == "" {
 		return false
 	}
-	if strings.Contains(line, "[PASS]") || strings.Contains(line, "[FAIL]") {
-		return true
-	}
-	return false
+	return strings.Contains(line, workflowStatusPass) ||
+		strings.Contains(line, workflowStatusFail) ||
+		strings.Contains(line, workflowStatusCanceled)
 }
 
 func colorizeWorkflowStepLine(line string) string {
 	colored := highlightDurations(line)
-	colored = strings.ReplaceAll(colored, "[PASS]", statsSuccessStyle.Render("[PASS]"))
-	colored = strings.ReplaceAll(colored, "[FAIL]", statsWarnStyle.Render("[FAIL]"))
+	colored = strings.ReplaceAll(colored, workflowStatusPass, statsSuccessStyle.Render(workflowStatusPass))
+	colored = strings.ReplaceAll(colored, workflowStatusFail, statsWarnStyle.Render(workflowStatusFail))
+	colored = strings.ReplaceAll(colored, workflowStatusCanceled, statsCautionStyle.Render(workflowStatusCanceled))
 	colored = highlightParentheticals(colored)
 	return colored
 }

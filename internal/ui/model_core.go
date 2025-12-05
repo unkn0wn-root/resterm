@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -244,6 +245,7 @@ type Model struct {
 	statusMessage    statusMsg
 	statusPulseBase  string
 	statusPulseFrame int
+	statusPulseSeq   int
 	lastResponse     *httpclient.Response
 	lastGRPC         *grpcclient.Response
 	lastError        error
@@ -301,6 +303,7 @@ type Model struct {
 	ready                 bool
 	dirty                 bool
 	sending               bool
+	sendCancel            context.CancelFunc
 	suppressEditorKey     bool
 	editorInsertMode      bool
 	editorWriteKeyMap     textarea.KeyMap

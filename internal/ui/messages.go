@@ -9,7 +9,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/update"
 )
 
-type statusPulseMsg struct{}
+type statusPulseMsg struct {
+	seq int
+}
 type profileNextIterationMsg struct{}
 type updateTickMsg struct{}
 

@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -56,17 +58,29 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	}
 
 	if msg.err != nil {
-		m.lastError = msg.err
+		canceled := errors.Is(msg.err, context.Canceled)
+		if !canceled {
+			m.lastError = msg.err
+		} else {
+			m.lastError = nil
+		}
 		m.lastResponse = nil
 		m.lastGRPC = nil
+
 		code := errdef.CodeOf(msg.err)
 		level := statusError
-		if code == errdef.CodeScript {
+		if code == errdef.CodeScript || canceled {
 			level = statusWarn
 		}
+
+		text := errdef.Message(msg.err)
+		if canceled {
+			text = "Request canceled"
+		}
+
 		cmd := m.consumeRequestError(msg.err)
 		m.suppressNextErrorModal = true
-		m.setStatusMessage(statusMsg{text: errdef.Message(msg.err), level: level})
+		m.setStatusMessage(statusMsg{text: text, level: level})
 		return cmd
 	}
 
@@ -79,6 +93,8 @@ func (m *Model) consumeRequestError(err error) tea.Cmd {
 	if err == nil {
 		return nil
 	}
+
+	canceled := errors.Is(err, context.Canceled)
 
 	if m.responseLatest != nil && m.responseLatest.ready {
 		m.responsePrevious = m.responseLatest
@@ -97,6 +113,10 @@ func (m *Model) consumeRequestError(err error) tea.Cmd {
 	code := errdef.CodeOf(err)
 	title := requestErrorTitle(code)
 	detail := strings.TrimSpace(errdef.Message(err))
+	if canceled {
+		title = "Request Canceled"
+		detail = "Request was canceled by user."
+	}
 	if detail == "" {
 		detail = "Request failed with no additional details."
 	}
@@ -105,10 +125,10 @@ func (m *Model) consumeRequestError(err error) tea.Cmd {
 	raw := joinSections(title, detail)
 
 	var meta []string
-	if code != errdef.CodeUnknown && string(code) != "" {
+	if code != errdef.CodeUnknown && string(code) != "" && !canceled {
 		meta = append(meta, fmt.Sprintf("Code: %s", strings.ToUpper(string(code))))
 	}
-	if strings.TrimSpace(note) != "" {
+	if strings.TrimSpace(note) != "" && !canceled {
 		meta = append(meta, note)
 	}
 	metaText := strings.Join(meta, "\n")
@@ -632,6 +652,13 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		RequestText: renderRequestText(baseReq),
 		Compare:     &history.CompareEntry{},
 	}
+	if state.canceled {
+		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.envs))
+		if strings.TrimSpace(state.label) != "" {
+			status = fmt.Sprintf("%s | %s", strings.TrimSpace(state.label), status)
+		}
+		entry.Status = status
+	}
 	if state.spec != nil {
 		entry.Compare.Baseline = state.spec.Baseline
 	}
@@ -683,6 +710,10 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 	}
 
 	switch {
+	case result.Canceled:
+		entry.Error = "canceled"
+		entry.BodySnippet = entry.Error
+		entry.StatusCode = 0
 	case result.Err != nil:
 		entry.Error = errdef.Message(result.Err)
 		entry.BodySnippet = entry.Error

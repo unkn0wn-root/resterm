@@ -34,15 +34,39 @@ type workflowStatsMetric struct {
 	end   int
 }
 
+func buildWorkflowStatsEntries(state *workflowState) []workflowStatsEntry {
+	if state == nil {
+		return nil
+	}
+	total := len(state.steps)
+	if total == 0 {
+		total = len(state.results)
+	}
+	entries := make([]workflowStatsEntry, 0, total)
+	for i, res := range state.results {
+		entries = append(entries, workflowStatsEntry{index: i, result: res})
+	}
+	if !state.canceled || len(entries) >= total || len(state.steps) == 0 {
+		return entries
+	}
+
+	for i := len(entries); i < total && i < len(state.steps); i++ {
+		step := state.steps[i].step
+		res := workflowStepResult{
+			Step:     step,
+			Canceled: true,
+		}
+		entries = append(entries, workflowStatsEntry{index: i, result: res})
+	}
+	return entries
+}
+
 func newWorkflowStatsView(state *workflowState) *workflowStatsView {
 	if state == nil {
 		return &workflowStatsView{selected: -1, expanded: make(map[int]bool)}
 	}
 
-	entries := make([]workflowStatsEntry, len(state.results))
-	for i, res := range state.results {
-		entries[i] = workflowStatsEntry{index: i, result: res}
-	}
+	entries := buildWorkflowStatsEntries(state)
 
 	selected := 0
 	if len(entries) == 0 {
@@ -199,17 +223,7 @@ func (v *workflowStatsView) workflowHeader() []string {
 }
 
 func (v *workflowStatsView) renderEntryTitle(entry workflowStatsEntry) string {
-	status := "PASS"
-	if !entry.result.Success {
-		status = "FAIL"
-	}
-	base := fmt.Sprintf("%d. %s [%s]", entry.index+1, displayStepName(entry.result.Step), status)
-	if strings.TrimSpace(entry.result.Status) != "" {
-		base += fmt.Sprintf(" (%s)", entry.result.Status)
-	}
-	if entry.result.Duration > 0 {
-		base += fmt.Sprintf(" [%s]", entry.result.Duration.Truncate(time.Millisecond))
-	}
+	base := workflowStepLine(entry.index, entry.result)
 	colored := colorizeWorkflowStepLine(base)
 
 	indicator := "[+]"
@@ -228,7 +242,33 @@ func (v *workflowStatsView) renderEntryTitle(entry workflowStatsEntry) string {
 	return line
 }
 
+func workflowStepLine(idx int, res workflowStepResult) string {
+	label := workflowStatusLabel(res)
+	line := fmt.Sprintf("%d. %s %s", idx+1, displayStepName(res.Step), label)
+	if strings.TrimSpace(res.Status) != "" {
+		line += fmt.Sprintf(" (%s)", res.Status)
+	}
+	if res.Duration > 0 {
+		line += fmt.Sprintf(" [%s]", res.Duration.Truncate(time.Millisecond))
+	}
+	return line
+}
+
+func workflowStatusLabel(res workflowStepResult) string {
+	switch {
+	case res.Canceled:
+		return workflowStatusCanceled
+	case res.Success:
+		return workflowStatusPass
+	default:
+		return workflowStatusFail
+	}
+}
+
 func (entry workflowStatsEntry) detailLines() []string {
+	if entry.result.Canceled && !entry.hasResponse() {
+		return nil
+	}
 	if entry.hasHTTP() {
 		pretty, _, _ := buildHTTPResponseViews(entry.result.HTTP, entry.result.Tests, entry.result.ScriptErr)
 		return indentLines(pretty, "    ")
