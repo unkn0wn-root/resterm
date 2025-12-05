@@ -1,6 +1,8 @@
 package scripts
 
 import (
+	"context"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -257,6 +259,38 @@ vars.global.delete("removeMe");`,
 	}
 	assertGlobal("token", false, true, "updated")
 	assertGlobal("removeMe", true, false, "")
+}
+
+func TestPreRequestCancellationInterruptsScript(t *testing.T) {
+	runner := NewRunner(nil)
+	blocks := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `while (true) {}`,
+	}}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	input := PreRequestInput{
+		Request: &restfile.Request{Method: "GET", URL: "https://example.com"},
+		Context: ctx,
+	}
+
+	done := make(chan struct{})
+	var err error
+	go func() {
+		defer close(done)
+		_, err = runner.RunPreRequest(blocks, input)
+	}()
+
+	cancel()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("pre-request cancellation did not return")
+	}
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context cancellation, got %v", err)
+	}
 }
 
 func TestTestScriptsGlobalMutation(t *testing.T) {

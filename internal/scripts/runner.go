@@ -1,7 +1,9 @@
 package scripts
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -38,6 +40,7 @@ type PreRequestInput struct {
 	Variables map[string]string
 	Globals   map[string]GlobalValue
 	BaseDir   string
+	Context   context.Context
 }
 
 type PreRequestOutput struct {
@@ -67,6 +70,11 @@ type TestResult struct {
 }
 
 func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestInput) (PreRequestOutput, error) {
+	ctx := input.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	result := PreRequestOutput{
 		Headers:   make(http.Header),
 		Query:     make(map[string]string),
@@ -75,6 +83,10 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 	}
 
 	for idx, block := range scripts {
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
+
 		if strings.ToLower(block.Kind) != "pre-request" {
 			continue
 		}
@@ -87,7 +99,7 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 			continue
 		}
 
-		if err := r.executePreRequestScript(script, input, &result); err != nil {
+		if err := r.executePreRequestScript(ctx, script, input, &result); err != nil {
 			return result, errdef.Wrap(errdef.CodeScript, err, "pre-request script %d", idx+1)
 		}
 	}
@@ -142,8 +154,20 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 	return aggregated, changes, nil
 }
 
-func (r *Runner) executePreRequestScript(script string, input PreRequestInput, output *PreRequestOutput) error {
+func (r *Runner) executePreRequestScript(ctx context.Context, script string, input PreRequestInput, output *PreRequestOutput) error {
 	vm := goja.New()
+	if ctx != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if done := ctx.Done(); done != nil {
+			go func() {
+				<-done
+				vm.Interrupt(ctx.Err())
+			}()
+		}
+	}
+
 	pre := newPreRequestAPI(output, input)
 	if err := bindCommon(vm); err != nil {
 		return errdef.Wrap(errdef.CodeScript, err, "bind console api")
@@ -159,6 +183,15 @@ func (r *Runner) executePreRequestScript(script string, input PreRequestInput, o
 
 	_, err := vm.RunString(script)
 	if err != nil {
+		if ctx != nil {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			var interrupted *goja.InterruptedError
+			if errors.As(err, &interrupted) && ctx.Err() != nil {
+				return ctx.Err()
+			}
+		}
 		return errdef.Wrap(errdef.CodeScript, err, "execute pre-request script")
 	}
 	return nil

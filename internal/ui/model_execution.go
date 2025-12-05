@@ -307,6 +307,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			Variables: preVars,
 			Globals:   preGlobals,
 			BaseDir:   options.BaseDir,
+			Context:   sendCtx,
 		})
 		if err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request script"), executed: req}
