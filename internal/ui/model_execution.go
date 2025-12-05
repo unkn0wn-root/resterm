@@ -74,6 +74,17 @@ func (m *Model) cancelStatus() string {
 	return "Canceling..."
 }
 
+func (m *Model) hasActiveRun() bool {
+	return m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil
+}
+
+func (m *Model) cancelActiveRuns() tea.Cmd {
+	if !m.hasActiveRun() {
+		return nil
+	}
+	return m.cancelRuns(m.cancelStatus())
+}
+
 func (m *Model) cancelRuns(status string) tea.Cmd {
 	status = strings.TrimSpace(status)
 	if status == "" {
@@ -145,8 +156,8 @@ func (m *Model) cancelCompareRun(reason string) tea.Cmd {
 }
 
 func (m *Model) sendActiveRequest() tea.Cmd {
-	if m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil {
-		return m.cancelRuns(m.cancelStatus())
+	if cmd := m.cancelActiveRuns(); cmd != nil {
+		return cmd
 	}
 
 	content := m.editor.Value()

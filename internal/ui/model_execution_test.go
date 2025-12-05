@@ -679,6 +679,44 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	}
 }
 
+func TestCancelActiveRunsStopsSend(t *testing.T) {
+	model := New(Config{})
+	model.sending = true
+	model.statusPulseBase = "Sending test"
+	model.statusPulseFrame = 2
+
+	canceled := false
+	model.sendCancel = func() { canceled = true }
+
+	cmd := model.cancelActiveRuns()
+	if cmd != nil {
+		t.Fatalf("expected cancelActiveRuns to return nil command, got %v", cmd)
+	}
+	if model.sending {
+		t.Fatalf("expected sending flag to reset")
+	}
+	if model.statusPulseBase != "" || model.statusPulseFrame != 0 {
+		t.Fatalf("expected pulse state cleared, got %q/%d", model.statusPulseBase, model.statusPulseFrame)
+	}
+	if !canceled {
+		t.Fatalf("expected sendCancel to be invoked")
+	}
+	if text := strings.ToLower(model.statusMessage.text); !strings.Contains(text, "canceling") {
+		t.Fatalf("expected cancel status message, got %q", model.statusMessage.text)
+	}
+}
+
+func TestCancelActiveRunsNoopWhenIdle(t *testing.T) {
+	model := New(Config{})
+	cmd := model.cancelActiveRuns()
+	if cmd != nil {
+		t.Fatalf("expected nil command when nothing is active, got %v", cmd)
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("did not expect status message, got %q", model.statusMessage.text)
+	}
+}
+
 func TestApplyCapturesStoresValues(t *testing.T) {
 	model := Model{
 		cfg:      Config{EnvironmentName: "dev"},

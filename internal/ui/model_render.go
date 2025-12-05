@@ -1966,6 +1966,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, "Enter", "Run selected request"),
 		helpRow(m, "Space", "Preview selected request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"),
+		helpRow(m, m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"), "Cancel in-flight run/request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"),

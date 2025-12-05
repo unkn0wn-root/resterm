@@ -540,6 +540,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.selectTimelineTab(), true
 	case bindings.ActionQuitApp:
 		return tea.Quit, true
+	case bindings.ActionCancelRun:
+		return m.cancelActiveRuns(), true
 	case bindings.ActionSidebarWidthDecrease:
 		if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
 			return m.runSidebarWidthResize(-sidebarWidthStep), true
@@ -1077,8 +1079,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				// handled above
 			default:
 				if m.shouldSendEditorRequest(msg, false) {
-					if m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil {
-						return combine(m.cancelRuns(m.cancelStatus()))
+					if cmd := m.cancelActiveRuns(); cmd != nil {
+						return combine(cmd)
 					}
 					return combine(m.replayHistorySelection())
 				}
