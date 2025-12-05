@@ -304,7 +304,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 
 	var cmds []tea.Cmd
 	canceled := state != nil && state.canceled
-	if msg.err != nil && !(canceled && isCanceled(msg.err)) {
+	if msg.err != nil && (!canceled || !isCanceled(msg.err)) {
 		if cmd := m.consumeRequestError(msg.err); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
