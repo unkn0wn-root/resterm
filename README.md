@@ -25,14 +25,6 @@
 </p>
 
 <p align="center">
-  <strong>Compare mode</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_compare.png" alt="Screenshot of resterm in zoomed mode" width="720" />
-</p>
-
-<p align="center">
   <strong>Profiler</strong>
 </p>
 
@@ -40,6 +32,15 @@
   <img src="_media/resterm_profiler.png" alt="Screenshot of resterm profiler" width="720" />
 </p>
 
+<p align="center">
+  <strong>OAuth browser demo</strong>
+</p>
+
+<p align="center">
+  <img src="_media/oauth.gif"
+       alt="Resterm OAuth flow"
+       width="720" />
+</p>
 
 **Resterm** is a terminal client for working with **HTTP**, **GraphQL**, **gRPC**, **WebSocket** and **SSE**. No cloud sync, no signups, no heavy desktop app. If you live on the keyboard - this is your home.
 
