@@ -174,3 +174,38 @@ func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
 		t.Fatalf("expected progress message to mention current run, got %q", content)
 	}
 }
+
+func TestProfileProgressDoesNotOverwritePinnedPane(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 42
+	model.frameWidth = model.width + 2
+	model.frameHeight = model.height + 2
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	initial := &responseSnapshot{pretty: "old content", raw: "old content", headers: "old content", ready: true}
+	model.setResponseSnapshotContent(initial)
+
+	if cmd := model.enableResponseSplit(responseSplitHorizontal); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	state := &profileState{messageBase: "Profiling sample"}
+	model.statusPulseFrame = 1
+	model.showProfileProgress(state)
+
+	primary := model.pane(responsePanePrimary)
+	secondary := model.pane(responsePaneSecondary)
+	if primary == nil || secondary == nil {
+		t.Fatalf("expected both panes to exist")
+	}
+	if !strings.Contains(primary.snapshot.pretty, "Profiling") {
+		t.Fatalf("expected primary to show profiling progress, got %q", primary.snapshot.pretty)
+	}
+	if secondary.snapshot.pretty != "old content" {
+		t.Fatalf("expected pinned secondary to retain old content, got %q", secondary.snapshot.pretty)
+	}
+}

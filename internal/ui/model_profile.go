@@ -612,6 +612,9 @@ func (m *Model) setResponseSnapshotContent(snapshot *responseSnapshot) {
 		if pane == nil {
 			continue
 		}
+		if snapshot.profilePlaceholder && !pane.followLatest {
+			continue
+		}
 		pane.snapshot = snapshot
 		pane.invalidateCaches()
 		width := pane.viewport.Width
