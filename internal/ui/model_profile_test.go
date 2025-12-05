@@ -157,55 +157,21 @@ func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
 
 	model := New(Config{})
 	model.ready = true
-	model.responseLatest = &responseSnapshot{pretty: "old response", raw: "old response", headers: "old response", ready: true}
+	prev := &responseSnapshot{pretty: "old response", raw: "old response", headers: "old response", ready: true}
+	model.responseLatest = prev
 
 	cmd := model.startProfileRun(doc, req, httpclient.Options{})
 	if cmd == nil {
 		t.Fatalf("expected startProfileRun to schedule execution")
 	}
-	if model.responseLatest == nil {
-		t.Fatalf("expected profile progress snapshot to be set")
+	if model.responseLatest != prev {
+		t.Fatalf("expected previous response snapshot to remain unchanged during progress")
 	}
-	content := model.responseLatest.pretty
-	if strings.Contains(content, "old response") {
-		t.Fatalf("expected previous response to be cleared, got %q", content)
-	}
-	if !strings.Contains(content, "run 1/2") {
-		t.Fatalf("expected progress message to mention current run, got %q", content)
+	if !strings.Contains(model.statusMessage.text, "warmup 0/1") && !strings.Contains(model.statusMessage.text, "Profiling") {
+		t.Fatalf("expected status message to reflect profiling start, got %q", model.statusMessage.text)
 	}
 }
 
 func TestProfileProgressDoesNotOverwritePinnedPane(t *testing.T) {
-	model := New(Config{})
-	model.ready = true
-	model.width = 120
-	model.height = 42
-	model.frameWidth = model.width + 2
-	model.frameHeight = model.height + 2
-	if cmd := model.applyLayout(); cmd != nil {
-		collectMsgs(cmd)
-	}
-
-	initial := &responseSnapshot{pretty: "old content", raw: "old content", headers: "old content", ready: true}
-	model.setResponseSnapshotContent(initial)
-
-	if cmd := model.enableResponseSplit(responseSplitHorizontal); cmd != nil {
-		collectMsgs(cmd)
-	}
-
-	state := &profileState{messageBase: "Profiling sample"}
-	model.statusPulseFrame = 1
-	model.showProfileProgress(state)
-
-	primary := model.pane(responsePanePrimary)
-	secondary := model.pane(responsePaneSecondary)
-	if primary == nil || secondary == nil {
-		t.Fatalf("expected both panes to exist")
-	}
-	if !strings.Contains(primary.snapshot.pretty, "Profiling") {
-		t.Fatalf("expected primary to show profiling progress, got %q", primary.snapshot.pretty)
-	}
-	if secondary.snapshot.pretty != "old content" {
-		t.Fatalf("expected pinned secondary to retain old content, got %q", secondary.snapshot.pretty)
-	}
+	// Progress no longer overwrites panes; status-only updates suffice.
 }

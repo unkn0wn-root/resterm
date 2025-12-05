@@ -112,7 +112,6 @@ func (m *Model) startProfileRun(doc *restfile.Document, req *restfile.Request, o
 	m.statusPulseFrame = 0
 
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s warmup 0/%d", state.messageBase, state.warmup), level: statusInfo})
-	m.showProfileProgress(state)
 	execCmd := m.executeProfileIteration()
 	if tick := m.startStatusPulse(); tick != nil {
 		return tea.Batch(execCmd, tick)
@@ -229,7 +228,6 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		progressText := profileProgressLabel(state)
 		m.statusPulseBase = progressText
 		m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
-		m.showProfileProgress(state)
 		m.sending = true
 		if state.delay > 0 {
 			next := tea.Tick(state.delay, func(time.Time) tea.Msg { return profileNextIterationMsg{} })
@@ -342,7 +340,6 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindProfile
 		m.responseLatest.profileStats = statsPtr
-		m.responseLatest.profilePlaceholder = false
 		cmds = append(cmds, m.activateProfileStatsTab(m.responseLatest))
 
 		if canceled {
@@ -612,27 +609,13 @@ func (m *Model) setResponseSnapshotContent(snapshot *responseSnapshot) {
 		if pane == nil {
 			continue
 		}
-		if snapshot.profilePlaceholder && !pane.followLatest {
-			continue
-		}
 		pane.snapshot = snapshot
 		pane.invalidateCaches()
 		width := pane.viewport.Width
 		if width <= 0 {
 			width = defaultResponseViewportWidth
 		}
-		content := snapshot.pretty
-		if snapshot.profilePlaceholder {
-			base := strings.TrimRight(content, "\n")
-			content = centerContent(base, width, pane.viewport.Height)
-			content = ensureTrailingNewline(content)
-			if pane.wrapCache == nil {
-				pane.wrapCache = make(map[responseTab]cachedWrap)
-			}
-			pane.wrapCache[pane.activeTab] = cachedWrap{width: width, content: content, base: content, valid: true}
-		} else {
-			content = wrapToWidth(content, width)
-		}
+		content := wrapToWidth(snapshot.pretty, width)
 		pane.viewport.SetContent(content)
 		pane.viewport.GotoTop()
 		pane.setCurrPosition()
@@ -646,19 +629,7 @@ func (m *Model) showProfileProgress(state *profileState) {
 	}
 	dots := profileProgressDots(m.statusPulseFrame)
 	text := profileProgressText(state, dots)
-	placeholder := ensureTrailingNewline(text)
-
-	snapshot := &responseSnapshot{
-		pretty:             placeholder,
-		raw:                placeholder,
-		headers:            placeholder,
-		requestHeaders:     placeholder,
-		statsKind:          statsReportKindProfile,
-		profilePlaceholder: true,
-		ready:              true,
-	}
-
-	m.setResponseSnapshotContent(snapshot)
+	m.setStatusMessage(statusMsg{text: text, level: statusInfo})
 }
 
 func profileProgressText(state *profileState, dots int) string {
