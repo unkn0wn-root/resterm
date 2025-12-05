@@ -339,7 +339,6 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindProfile
 		m.responseLatest.profileStats = statsPtr
-		cmds = append(cmds, m.activateProfileStatsTab(m.responseLatest))
 
 		if canceled {
 			summary := buildProfileSummary(state)
@@ -350,6 +349,8 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 			m.responseLatest.requestHeaders = body
 			m.setResponseSnapshotContent(m.responseLatest)
 		}
+
+		cmds = append(cmds, m.activateProfileStatsTab(m.responseLatest))
 	}
 
 	m.recordProfileHistory(state, stats, msg, report)
@@ -360,6 +361,16 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		level = statusWarn
 	}
 	m.setStatusMessage(statusMsg{text: summary, level: level})
+
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane != nil && pane.snapshot == m.responseLatest {
+			pane.invalidateCaches()
+		}
+	}
+	if cmd := m.syncResponsePanes(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 
 	return batchCmds(cmds)
 }

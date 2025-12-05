@@ -172,3 +172,47 @@ func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
 	}
 }
 
+func TestProfileCancelRefreshesStatsPane(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/profile",
+		Metadata: restfile.RequestMetadata{
+			Profile: &restfile.ProfileSpec{Count: 4},
+			Name:    "profile-target",
+		},
+	}
+
+	state := &profileState{
+		base:          cloneRequest(req),
+		doc:           &restfile.Document{Requests: []*restfile.Request{req}},
+		spec:          restfile.ProfileSpec{Count: 4},
+		total:         4,
+		index:         2,
+		successes:     []time.Duration{10 * time.Millisecond, 15 * time.Millisecond},
+		messageBase:   "Profiling " + requestBaseTitle(req),
+		start:         time.Now().Add(-time.Minute),
+		measuredStart: time.Now().Add(-30 * time.Second),
+		measuredEnd:   time.Now(),
+		canceled:      true,
+	}
+
+	model := New(Config{})
+	model.ready = true
+	primary := model.pane(responsePanePrimary)
+	primary.viewport.Width = 80
+	primary.viewport.Height = 10
+	primary.setActiveTab(responseTabStats)
+
+	cmd := model.finalizeProfileRun(responseMsg{}, state)
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	content := primary.viewport.View()
+	if !strings.Contains(content, "Runs:") {
+		t.Fatalf("expected stats pane to show profile report after cancel, got %q", content)
+	}
+	if primary.activeTab != responseTabStats {
+		t.Fatalf("expected stats tab to remain active after cancel, got %v", primary.activeTab)
+	}
+}
