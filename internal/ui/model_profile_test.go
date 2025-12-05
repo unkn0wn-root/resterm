@@ -172,6 +172,3 @@ func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
 	}
 }
 
-func TestProfileProgressDoesNotOverwritePinnedPane(t *testing.T) {
-	// Progress no longer overwrites panes; status-only updates suffice.
-}

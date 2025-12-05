@@ -141,7 +141,6 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 
 	progressText := profileProgressLabel(state)
 	m.statusPulseBase = progressText
-	m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
 	m.showProfileProgress(state)
 
 	cmd := m.executeRequest(state.doc, iterationReq, state.options, "")
