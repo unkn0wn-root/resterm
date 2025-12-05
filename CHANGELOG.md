@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.9.2](https://github.com/unkn0wn-root/resterm/compare/v0.9.1...v0.9.2) (2025-12-05)
+
+
+### Features
+
+* cancel pre-request scripts ([1aa2d19](https://github.com/unkn0wn-root/resterm/commit/1aa2d19e885403205586b15b00afb81979763f1c))
+
+
+### Bug Fixes
+
+* do not ovveride pinned pane ([c8c1ffb](https://github.com/unkn0wn-root/resterm/commit/c8c1ffb71984435a847bb82c8fba04bfbaba6601))
+* pre-requests cancelation ([2d4464f](https://github.com/unkn0wn-root/resterm/commit/2d4464f661c3d3da68fc8877b76978f2e9cfe30e))
+* resync response panes after building the summary ([91bb7a3](https://github.com/unkn0wn-root/resterm/commit/91bb7a39243f922b20034e28d54144ab4f7bb4c4))
+
 ### [0.9.1](https://github.com/unkn0wn-root/resterm/compare/v0.9.0...v0.9.1) (2025-12-04)
 
 ## [0.9.0](https://github.com/unkn0wn-root/resterm/compare/v0.8.5...v0.9.0) (2025-12-04)
