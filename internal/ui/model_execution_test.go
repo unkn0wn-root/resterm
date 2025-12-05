@@ -649,6 +649,36 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	}
 }
 
+func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
+	model := Model{
+		cfg:          Config{EnvironmentName: "dev"},
+		scriptRunner: scripts.NewRunner(nil),
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+	}
+
+	cmd := model.executeRequest(nil, req, httpclient.Options{}, "")
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+	if model.sendCancel == nil {
+		t.Fatalf("expected sendCancel to be set")
+	}
+
+	model.sendCancel()
+	msg := cmd()
+	resp, ok := msg.(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg, got %T", msg)
+	}
+	if !errors.Is(resp.err, context.Canceled) {
+		t.Fatalf("expected cancellation error, got %v", resp.err)
+	}
+}
+
 func TestApplyCapturesStoresValues(t *testing.T) {
 	model := Model{
 		cfg:      Config{EnvironmentName: "dev"},

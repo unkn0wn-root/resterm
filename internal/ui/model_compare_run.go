@@ -136,6 +136,9 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	state.currentEnv = env
 	state.requestText = renderRequestText(clone)
 
+	m.sending = true
+	m.statusPulseBase = state.statusLine()
+	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
 	runCmd := m.withEnvironment(env, func() tea.Cmd {

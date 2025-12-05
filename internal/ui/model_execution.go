@@ -80,6 +80,10 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 		status = "Canceling..."
 	}
 
+	m.sending = false
+	m.statusPulseBase = ""
+	m.statusPulseFrame = 0
+
 	var cmds []tea.Cmd
 	if cmd := m.cancelProfileRun(status); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -288,6 +292,12 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 	}
 
 	return func() tea.Msg {
+		select {
+		case <-sendCtx.Done():
+			return responseMsg{err: context.Canceled, executed: req}
+		default:
+		}
+
 		defer sendCancel()
 
 		preVars := cloneStringMap(baseVars)
@@ -303,6 +313,10 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		}
 
 		if err := applyPreRequestOutput(req, preResult); err != nil {
+			return responseMsg{err: err, executed: req}
+		}
+
+		if err := sendCtx.Err(); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 

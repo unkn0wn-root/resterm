@@ -227,3 +227,31 @@ func TestCompareCancelStopsRun(t *testing.T) {
 		t.Fatalf("expected canceled result marker")
 	}
 }
+
+func TestExecuteCompareIterationSetsSending(t *testing.T) {
+	req := &restfile.Request{
+		Method:   "GET",
+		URL:      "https://example.com/compare",
+		Metadata: restfile.RequestMetadata{Name: "CompareRequest"},
+	}
+
+	state := &compareState{
+		doc:   &restfile.Document{Requests: []*restfile.Request{req}},
+		base:  cloneRequest(req),
+		spec:  &restfile.CompareSpec{Environments: []string{"dev", "stage"}},
+		envs:  []string{"dev", "stage"},
+		label: "Compare test",
+	}
+
+	model := New(Config{})
+	model.ready = true
+	model.compareRun = state
+
+	cmd := model.executeCompareIteration()
+	if !model.sending {
+		t.Fatalf("expected compare iteration to mark sending")
+	}
+	if cmd == nil {
+		t.Fatalf("expected iteration command to be scheduled")
+	}
+}
