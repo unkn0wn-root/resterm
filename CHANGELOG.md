@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.9.3](https://github.com/unkn0wn-root/resterm/compare/v0.9.2...v0.9.3) (2025-12-06)
+
+
+### Bug Fixes
+
+* help overlay was swallowing the profile scheduler command ([675512b](https://github.com/unkn0wn-root/resterm/commit/675512bcadda1fc3d3c0aa61ac206327b32e13cc))
+
 ### [0.9.2](https://github.com/unkn0wn-root/resterm/compare/v0.9.1...v0.9.2) (2025-12-05)
 
 
