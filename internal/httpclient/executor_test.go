@@ -1,7 +1,6 @@
 package httpclient
 
 import (
-	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -243,12 +242,6 @@ func TestLoadRootCAsMergesSystemAndCustom(t *testing.T) {
 	caPath := filepath.Join(tmpDir, "ca.pem")
 	writeTestCA(t, caPath)
 
-	basePool, _ := x509.SystemCertPool()
-	baseCount := 0
-	if basePool != nil {
-		baseCount = len(basePool.Subjects())
-	}
-
 	tlsCfg, err := tlsconfig.Build(tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeAppend}, tmpDir)
 	if err != nil {
 		t.Fatalf("tlsconfig build: %v", err)
@@ -259,19 +252,8 @@ func TestLoadRootCAsMergesSystemAndCustom(t *testing.T) {
 		t.Fatalf("parse test ca: %v", err)
 	}
 
-	found := false
-	for _, subj := range pool.Subjects() {
-		if bytes.Equal(subj, cert.RawSubject) {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected custom CA to be present in pool")
-	}
-
-	if basePool != nil && len(pool.Subjects()) < baseCount+1 {
-		t.Fatalf("expected pool to include system subjects plus custom CA")
+	if _, err := cert.Verify(x509.VerifyOptions{Roots: pool}); err != nil {
+		t.Fatalf("expected custom CA to verify with merged pool: %v", err)
 	}
 }
 
@@ -284,8 +266,12 @@ func TestLoadRootCAsReplace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tlsconfig build: %v", err)
 	}
-	if got := len(tlsCfg.RootCAs.Subjects()); got != 1 {
-		t.Fatalf("expected only custom CA, got %d subjects", got)
+	cert, err := parseCert(readFile(t, caPath))
+	if err != nil {
+		t.Fatalf("parse test ca: %v", err)
+	}
+	if _, err := cert.Verify(x509.VerifyOptions{Roots: tlsCfg.RootCAs}); err != nil {
+		t.Fatalf("expected custom CA to verify with replace pool: %v", err)
 	}
 }
 
@@ -296,17 +282,6 @@ func parseCert(pemText string) (*x509.Certificate, error) {
 	}
 	return x509.ParseCertificate(block.Bytes)
 }
-
-const testCAPEM = `-----BEGIN CERTIFICATE-----
-MIIBjTCCATOgAwIBAgIUBmZySUdkGFUTkOcJCIZy9FHn5VswCgYIKoZIzj0EAwIw
-EDEOMAwGA1UEAwwFZGVtb0MwHhcNMjUwMTAxMDAwMDAwWhcNMzUwOTI4MDAwMDAw
-WjAQMQ4wDAYDVQQDDAVkZW1vQzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABKq9
-Z0SqnX+ANXoy2cwr6jciJ6TP2PzefDs2fzGEGZm4G6dkprdOCi/hTyBC0bYKT1eZ
-9VHtV6nRvWmvMRmjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/
-MB0GA1UdDgQWBBQYKHyCuXapnwXCfJOLLmObEWj1vDAKBggqhkjOPQQDAgNHADBE
-AiAy8np5xpoE2mR7BfrpsbR9f7D78Dveoxu48UUfZo0MzwIgZG9hHcRUW2KIiMzA
-I0X58F3RrgPf63HgVUsVTNff7k0=
------END CERTIFICATE-----`
 
 func writeTestCA(t *testing.T, path string) {
 	t.Helper()

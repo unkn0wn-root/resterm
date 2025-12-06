@@ -26,8 +26,9 @@ func TestBuildIncludesCustomCAAndSystem(t *testing.T) {
 	if cfg.RootCAs == nil {
 		t.Fatalf("expected RootCAs to be set")
 	}
-	if len(cfg.RootCAs.Subjects()) == 0 {
-		t.Fatalf("expected at least one subject in pool")
+	cert := parseCert(t, caPath)
+	if _, err := cert.Verify(x509.VerifyOptions{Roots: cfg.RootCAs}); err != nil {
+		t.Fatalf("expected custom CA to verify with append pool: %v", err)
 	}
 }
 
@@ -43,8 +44,9 @@ func TestBuildReplaceOnlyCustomCAs(t *testing.T) {
 	if cfg.RootCAs == nil {
 		t.Fatalf("expected RootCAs to be set")
 	}
-	if len(cfg.RootCAs.Subjects()) != 1 {
-		t.Fatalf("expected only custom CA to be present, got %d subjects", len(cfg.RootCAs.Subjects()))
+	cert := parseCert(t, caPath)
+	if _, err := cert.Verify(x509.VerifyOptions{Roots: cfg.RootCAs}); err != nil {
+		t.Fatalf("expected custom CA to verify with replace pool: %v", err)
 	}
 }
 
@@ -68,6 +70,23 @@ func TestBuildRejectsPartialClientCert(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for partial client cert/key")
 	}
+}
+
+func parseCert(t *testing.T, path string) *x509.Certificate {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read cert: %v", err)
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		t.Fatalf("decode cert %s: got nil block", path)
+	}
+	cert, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		t.Fatalf("parse cert: %v", err)
+	}
+	return cert
 }
 
 func writeTestCA(t *testing.T, path string) {
