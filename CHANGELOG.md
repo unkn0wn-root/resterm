@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.9.4](https://github.com/unkn0wn-root/resterm/compare/v0.9.3...v0.9.4) (2025-12-06)
+
+
+### Bug Fixes
+
+* lint ([5b6ea7b](https://github.com/unkn0wn-root/resterm/commit/5b6ea7b76b643d6a8282055e92f547fbd32c800b))
+
 ### [0.9.3](https://github.com/unkn0wn-root/resterm/compare/v0.9.2...v0.9.3) (2025-12-06)
 
 
