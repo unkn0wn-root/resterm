@@ -86,6 +86,52 @@ func TestHandleProfileResponseUpdatesState(t *testing.T) {
 	}
 }
 
+func TestHelpDoesNotBlockProfileProgress(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/profile",
+	}
+	state := &profileState{
+		base:        cloneRequest(req),
+		doc:         &restfile.Document{Requests: []*restfile.Request{req}},
+		spec:        restfile.ProfileSpec{Count: 2, Delay: 10 * time.Millisecond},
+		total:       2,
+		warmup:      0,
+		delay:       10 * time.Millisecond,
+		successes:   make([]time.Duration, 0, 2),
+		failures:    make([]profileFailure, 0, 1),
+		current:     req,
+		messageBase: "Profiling " + requestBaseTitle(req),
+		start:       time.Now(),
+	}
+
+	model := New(Config{})
+	model.ready = true
+	model.showHelp = true
+	model.helpJustOpened = true
+	model.profileRun = state
+	model.sending = true
+
+	resp := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Duration:     5 * time.Millisecond,
+		EffectiveURL: req.URL,
+	}
+
+	next, cmd := model.Update(responseMsg{response: resp, executed: req})
+	if cmd == nil {
+		t.Fatalf("expected profile iteration to keep scheduling while help is open")
+	}
+	updated := next.(Model)
+	if updated.profileRun == nil {
+		t.Fatalf("expected profile run to remain active after response")
+	}
+	if updated.helpJustOpened {
+		t.Fatalf("expected helpJustOpened to reset after processing help-visible message")
+	}
+}
+
 func TestProfileCancelStopsRun(t *testing.T) {
 	req := &restfile.Request{
 		Method: "GET",

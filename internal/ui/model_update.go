@@ -252,7 +252,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.helpJustOpened {
 			m.helpJustOpened = false
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 	}
 
 	if m.showThemeSelector {
