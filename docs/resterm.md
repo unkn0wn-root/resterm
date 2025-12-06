@@ -254,6 +254,8 @@ Example environment (`_examples/resterm.env.json`):
 ```json
 {
   "dev": {
+    "settings.http-root-cas": "dev-ca.pem",
+    "settings.grpc-insecure": "false",
     "services": {
       "api": {
         "base": "https://httpbin.org/anything/api"
@@ -719,6 +721,7 @@ Enable GraphQL handling with `# @graphql` (requests start with it disabled). Res
 
 - **POST**: body becomes `{ "query": ..., "variables": ..., "operationName": ... }`.
 - **GET**: query parameters `query`, `variables`, `operationName` are attached.
+- Template variables in the URL are expanded before the GET parameters are attached, so `GET {{graphql.endpoint}}` works even when the host is templated.
 
 Available directives:
 
@@ -764,6 +767,10 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 | `@grpc-plaintext [true|false]` | Force plaintext or TLS. |
 | `@grpc-authority value` | Override the HTTP/2 `:authority` header. |
 | `@grpc-metadata key: value` | Add metadata pairs (repeatable). |
+| `@setting grpc-root-cas path1,path2` | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
+| `@setting grpc-root-mode append|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
+| `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed). |
+| `@setting grpc-insecure true` | Skip TLS verification (off by default; use only for testing). |
 
 The request body contains protobuf JSON. Use `< payload.json` to load from disk. Responses display message JSON, headers, and trailers; history stores method, status, and timing alongside HTTP calls.
 
@@ -776,6 +783,7 @@ Example:
 # @grpc-plaintext true
 # @grpc-authority analytics.dev.local
 # @grpc-metadata x-trace-id: {{$uuid}}
+# @setting grpc-root-cas ./ca.pem
 GRPC {{grpc.host}}
 
 {
@@ -970,8 +978,12 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 - Global defaults are passed via CLI flags (`--timeout`, `--follow`, `--insecure`, `--proxy`).
 - Per-request overrides use `@setting` or `@timeout`.
 - Requests inherit a shared cookie jar; cookies persist across sessions.
+- TLS knobs per request: `# @setting http-root-cas a.pem,b.pem` (space/comma/semicolon separated, relative paths allowed), `http-root-mode append|replace` (default `replace`), `http-client-cert` + `http-client-key` for mTLS, and `http-insecure true` to skip verification (only for testing). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
 - History is stored in `${RESTERM_CONFIG_DIR}/history.json` (defaults to the platform config directory) and retains up to ~500 entries. Set `RESTERM_CONFIG_DIR` to relocate it.
+- Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
+- File-level defaults: place `# @setting key value` before the first request to apply to all requests in that file. Request-level `@setting` still wins.
+- Environment defaults: `resterm.env.json` can carry global settings under the `settings.` prefix (e.g., `"settings.http-root-cas": "ca-dev.pem"`, `"settings.grpc-insecure": "false"`). Precedence is global (env) < file < request.
 
 Body helpers:
 

@@ -68,6 +68,28 @@ GET https://example.com/api
 	}
 }
 
+func TestFileLevelSettingsCaptured(t *testing.T) {
+	src := `# @setting timeout 10s
+# @setting http-insecure true
+
+### First
+GET https://example.com
+`
+	doc := Parse("file-settings.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request")
+	}
+	if doc.Settings == nil {
+		t.Fatalf("expected file-level settings to be captured")
+	}
+	if doc.Settings["timeout"] != "10s" {
+		t.Fatalf("expected timeout=10s, got %q", doc.Settings["timeout"])
+	}
+	if doc.Settings["http-insecure"] != "true" {
+		t.Fatalf("expected http-insecure=true, got %q", doc.Settings["http-insecure"])
+	}
+}
+
 func TestParseGlobalDirectiveWhitespaceValue(t *testing.T) {
 	src := `# @global base_url https://httpbin.org
 # @global alt_url: https://alt.example.com

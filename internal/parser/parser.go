@@ -46,15 +46,16 @@ func normalizeNewlines(data []byte) []byte {
 }
 
 type documentBuilder struct {
-	doc        *restfile.Document
-	inRequest  bool
-	request    *requestBuilder
-	fileVars   []restfile.Variable
-	globalVars []restfile.Variable
-	consts     []restfile.Constant
-	sshDefs    []restfile.SSHProfile
-	inBlock    bool
-	workflow   *workflowBuilder
+	doc          *restfile.Document
+	inRequest    bool
+	request      *requestBuilder
+	fileVars     []restfile.Variable
+	globalVars   []restfile.Variable
+	fileSettings map[string]string
+	consts       []restfile.Constant
+	sshDefs      []restfile.SSHProfile
+	inBlock      bool
+	workflow     *workflowBuilder
 }
 
 type requestBuilder struct {
@@ -136,6 +137,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 			b.flushWorkflow(lineNumber - 1)
 		}
 		b.flushRequest(lineNumber - 1)
+		b.flushFileSettings()
 		return
 	}
 
@@ -349,6 +351,11 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		return
 	}
 
+	if key == "setting" && !b.inRequest {
+		b.handleFileSetting(rest)
+		return
+	}
+
 	if !b.ensureRequest(line) {
 		return
 	}
@@ -413,10 +420,17 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	case "setting":
 		key, value := splitDirective(rest)
 		if key != "" {
-			if b.request.settings == nil {
-				b.request.settings = make(map[string]string)
+			if b.inRequest {
+				if b.request.settings == nil {
+					b.request.settings = make(map[string]string)
+				}
+				b.request.settings[key] = value
+			} else {
+				if b.fileSettings == nil {
+					b.fileSettings = make(map[string]string)
+				}
+				b.fileSettings[key] = value
 			}
-			b.request.settings[key] = value
 		}
 	case "timeout":
 		if b.request.settings == nil {
@@ -1479,10 +1493,42 @@ func (b *documentBuilder) flushWorkflow(line int) {
 func (b *documentBuilder) finish() {
 	b.flushRequest(0)
 	b.flushWorkflow(0)
+	if len(b.fileSettings) > 0 {
+		if b.doc.Settings == nil {
+			b.doc.Settings = make(map[string]string, len(b.fileSettings))
+		}
+		for k, v := range b.fileSettings {
+			b.doc.Settings[k] = v
+		}
+	}
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
 	b.doc.SSH = append(b.doc.SSH, b.sshDefs...)
+}
+
+func (b *documentBuilder) handleFileSetting(rest string) {
+	keyName, value := splitDirective(rest)
+	if keyName == "" {
+		return
+	}
+	if b.fileSettings == nil {
+		b.fileSettings = make(map[string]string)
+	}
+	b.fileSettings[keyName] = value
+}
+
+func (b *documentBuilder) flushFileSettings() {
+	if len(b.fileSettings) == 0 {
+		return
+	}
+	if b.doc.Settings == nil {
+		b.doc.Settings = make(map[string]string, len(b.fileSettings))
+	}
+	for k, v := range b.fileSettings {
+		b.doc.Settings[k] = v
+	}
+	b.fileSettings = nil
 }
 
 func (r *requestBuilder) build() *restfile.Request {

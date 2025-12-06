@@ -2,7 +2,6 @@ package grpcclient
 
 import (
 	"context"
-	"crypto/tls"
 	"net"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -34,6 +34,11 @@ type Options struct {
 	DefaultPlaintextSet bool
 	DescriptorPaths     []string
 	DialTimeout         time.Duration
+	RootCAs             []string
+	ClientCert          string
+	ClientKey           string
+	Insecure            bool
+	RootMode            tlsconfig.RootMode
 	SSH                 *ssh.Plan
 }
 
@@ -82,7 +87,11 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	if usePlain {
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	} else {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
+		creds, err := buildTransportCredentials(options)
+		if err != nil {
+			return nil, err
+		}
+		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	}
 	if plan := options.SSH; plan != nil && plan.Active() {
 		cfgCopy := *plan.Config
@@ -159,6 +168,20 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	}
 	resp.Message = string(marshalled)
 	return resp, nil
+}
+
+func buildTransportCredentials(opts Options) (credentials.TransportCredentials, error) {
+	cfg, err := tlsconfig.Build(tlsconfig.Files{
+		RootCAs:    opts.RootCAs,
+		ClientCert: opts.ClientCert,
+		ClientKey:  opts.ClientKey,
+		Insecure:   opts.Insecure,
+		RootMode:   opts.RootMode,
+	}, opts.BaseDir)
+	if err != nil {
+		return nil, err
+	}
+	return credentials.NewTLS(cfg), nil
 }
 
 func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientConn, grpcReq *restfile.GRPCRequest, options Options) (protoreflect.MethodDescriptor, error) {
