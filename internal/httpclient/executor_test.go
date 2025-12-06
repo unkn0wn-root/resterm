@@ -1,10 +1,19 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
 	"encoding/json"
+	"encoding/pem"
+	"fmt"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptrace"
@@ -19,6 +28,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
+	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -152,6 +162,34 @@ func TestPrepareGraphQLGetQueryParameters(t *testing.T) {
 	}
 }
 
+func TestPrepareGraphQLGetWithTemplatedURL(t *testing.T) {
+	client := NewClient(nil)
+	req := &restfile.Request{Method: "GET", URL: "{{base}}/graphql?existing=1"}
+	req.Body.GraphQL = &restfile.GraphQLBody{
+		Query:         "query { ping }",
+		Variables:     "{ \"flag\": true }",
+		OperationName: "Ping",
+	}
+	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"base": "https://example.com"}))
+	if _, err := client.prepareBody(req, resolver, Options{}); err != nil {
+		t.Fatalf("prepare graphQL body (GET with template): %v", err)
+	}
+	parsed, err := url.Parse(req.URL)
+	if err != nil {
+		t.Fatalf("parse mutated url: %v", err)
+	}
+	if parsed.Scheme != "https" || parsed.Host != "example.com" {
+		t.Fatalf("expected url to be expanded, got %s", req.URL)
+	}
+	values := parsed.Query()
+	if values.Get("query") == "" || values.Get("variables") == "" {
+		t.Fatalf("expected query parameters to be populated: %v", values)
+	}
+	if values.Get("existing") != "1" {
+		t.Fatalf("expected existing query param to remain, got %q", values.Get("existing"))
+	}
+}
+
 func TestPrepareBodyFileExpandTemplates(t *testing.T) {
 	fs := mapFS{
 		"payload.json": []byte(`{"id":"{{env.id}}"}`),
@@ -198,6 +236,110 @@ func TestBuildHTTPClientSSHLeavesTLSDialerNil(t *testing.T) {
 	if transport.DialTLSContext != nil {
 		t.Fatalf("expected DialTLSContext to remain nil so TLS handshakes run normally")
 	}
+}
+
+func TestLoadRootCAsMergesSystemAndCustom(t *testing.T) {
+	tmpDir := t.TempDir()
+	caPath := filepath.Join(tmpDir, "ca.pem")
+	writeTestCA(t, caPath)
+
+	basePool, _ := x509.SystemCertPool()
+	baseCount := 0
+	if basePool != nil {
+		baseCount = len(basePool.Subjects())
+	}
+
+	tlsCfg, err := tlsconfig.Build(tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeAppend}, tmpDir)
+	if err != nil {
+		t.Fatalf("tlsconfig build: %v", err)
+	}
+	pool := tlsCfg.RootCAs
+	cert, err := parseCert(readFile(t, caPath))
+	if err != nil {
+		t.Fatalf("parse test ca: %v", err)
+	}
+
+	found := false
+	for _, subj := range pool.Subjects() {
+		if bytes.Equal(subj, cert.RawSubject) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected custom CA to be present in pool")
+	}
+
+	if basePool != nil && len(pool.Subjects()) < baseCount+1 {
+		t.Fatalf("expected pool to include system subjects plus custom CA")
+	}
+}
+
+func TestLoadRootCAsReplace(t *testing.T) {
+	tmpDir := t.TempDir()
+	caPath := filepath.Join(tmpDir, "ca.pem")
+	writeTestCA(t, caPath)
+
+	tlsCfg, err := tlsconfig.Build(tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeReplace}, tmpDir)
+	if err != nil {
+		t.Fatalf("tlsconfig build: %v", err)
+	}
+	if got := len(tlsCfg.RootCAs.Subjects()); got != 1 {
+		t.Fatalf("expected only custom CA, got %d subjects", got)
+	}
+}
+
+func parseCert(pemText string) (*x509.Certificate, error) {
+	block, _ := pem.Decode([]byte(pemText))
+	if block == nil {
+		return nil, fmt.Errorf("pem decode failed")
+	}
+	return x509.ParseCertificate(block.Bytes)
+}
+
+const testCAPEM = `-----BEGIN CERTIFICATE-----
+MIIBjTCCATOgAwIBAgIUBmZySUdkGFUTkOcJCIZy9FHn5VswCgYIKoZIzj0EAwIw
+EDEOMAwGA1UEAwwFZGVtb0MwHhcNMjUwMTAxMDAwMDAwWhcNMzUwOTI4MDAwMDAw
+WjAQMQ4wDAYDVQQDDAVkZW1vQzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABKq9
+Z0SqnX+ANXoy2cwr6jciJ6TP2PzefDs2fzGEGZm4G6dkprdOCi/hTyBC0bYKT1eZ
+9VHtV6nRvWmvMRmjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNVHRMBAf8EBTADAQH/
+MB0GA1UdDgQWBBQYKHyCuXapnwXCfJOLLmObEWj1vDAKBggqhkjOPQQDAgNHADBE
+AiAy8np5xpoE2mR7BfrpsbR9f7D78Dveoxu48UUfZo0MzwIgZG9hHcRUW2KIiMzA
+I0X58F3RrgPf63HgVUsVTNff7k0=
+-----END CERTIFICATE-----`
+
+func writeTestCA(t *testing.T, path string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate ca key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "resterm http test ca"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create ca cert: %v", err)
+	}
+	pemData := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	if err := os.WriteFile(path, pemData, 0o644); err != nil {
+		t.Fatalf("write ca cert: %v", err)
+	}
+}
+
+func readFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file %s: %v", path, err)
+	}
+	return string(data)
 }
 
 func TestExecuteCapturesTraceTimeline(t *testing.T) {

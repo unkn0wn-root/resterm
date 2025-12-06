@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"encoding/json"
 	"io"
 	"net"
@@ -23,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
+	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"golang.org/x/net/http2"
 	"nhooyr.io/websocket"
@@ -34,6 +33,7 @@ type Options struct {
 	InsecureSkipVerify bool
 	ProxyURL           string
 	RootCAs            []string
+	RootMode           tlsconfig.RootMode
 	ClientCert         string
 	ClientKey          string
 	BaseDir            string
@@ -472,7 +472,19 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	}
 
 	if strings.EqualFold(req.Method, "GET") {
-		parsedURL, urlErr := url.Parse(req.URL)
+		expandedURL := strings.TrimSpace(req.URL)
+		if resolver != nil {
+			if expanded, expandErr := resolver.ExpandTemplates(expandedURL); expandErr == nil {
+				expandedURL = strings.TrimSpace(expanded)
+			} else {
+				return nil, errdef.Wrap(errdef.CodeHTTP, expandErr, "expand graphql request url")
+			}
+		}
+		if expandedURL == "" {
+			return nil, errdef.New(errdef.CodeHTTP, "graphql request url is empty")
+		}
+
+		parsedURL, urlErr := url.Parse(expandedURL)
 		if urlErr != nil {
 			return nil, errdef.Wrap(errdef.CodeHTTP, urlErr, "parse graphql request url")
 		}
@@ -578,23 +590,18 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		transport.Proxy = http.ProxyURL(proxyURL)
 	}
 
-	if opts.InsecureSkipVerify || len(opts.RootCAs) > 0 || opts.ClientCert != "" {
-		tlsConfig := &tls.Config{InsecureSkipVerify: opts.InsecureSkipVerify} // nolint:gosec
-		if len(opts.RootCAs) > 0 {
-			pool, err := loadRootCAs(opts.RootCAs)
-			if err != nil {
-				return nil, errdef.Wrap(errdef.CodeHTTP, err, "load root cas")
-			}
-			tlsConfig.RootCAs = pool
+	if opts.InsecureSkipVerify || len(opts.RootCAs) > 0 || opts.ClientCert != "" || opts.ClientKey != "" {
+		tlsCfg, err := tlsconfig.Build(tlsconfig.Files{
+			RootCAs:    opts.RootCAs,
+			RootMode:   opts.RootMode,
+			ClientCert: opts.ClientCert,
+			ClientKey:  opts.ClientKey,
+			Insecure:   opts.InsecureSkipVerify,
+		}, opts.BaseDir)
+		if err != nil {
+			return nil, err
 		}
-		if opts.ClientCert != "" && opts.ClientKey != "" {
-			cert, err := tls.LoadX509KeyPair(opts.ClientCert, opts.ClientKey)
-			if err != nil {
-				return nil, errdef.Wrap(errdef.CodeHTTP, err, "load client certificate")
-			}
-			tlsConfig.Certificates = []tls.Certificate{cert}
-		}
-		transport.TLSClientConfig = tlsConfig
+		transport.TLSClientConfig = tlsCfg
 	}
 
 	if sshPlan := opts.SSH; sshPlan != nil && sshPlan.Active() {
@@ -619,20 +626,6 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		}
 	}
 	return client, nil
-}
-
-func loadRootCAs(paths []string) (*x509.CertPool, error) {
-	pool := x509.NewCertPool()
-	for _, p := range paths {
-		data, err := os.ReadFile(p)
-		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "read root ca %s", p)
-		}
-		if ok := pool.AppendCertsFromPEM(data); !ok {
-			return nil, errdef.New(errdef.CodeHTTP, "append cert from %s", p)
-		}
-	}
-	return pool, nil
 }
 
 func applyRequestSettings(opts Options, settings map[string]string) Options {

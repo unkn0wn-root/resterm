@@ -244,6 +244,7 @@ type Document struct {
 	Globals   []Variable
 	Constants []Constant
 	SSH       []SSHProfile
+	Settings  map[string]string
 	Requests  []*Request
 	Workflows []Workflow
 	Errors    []ParseError
