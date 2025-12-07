@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.9.5](https://github.com/unkn0wn-root/resterm/compare/v0.9.4...v0.9.5) (2025-12-07)
+
+
+### Features
+
+* abstract hints/autocomplete to ui pkg ([3ded126](https://github.com/unkn0wn-root/resterm/commit/3ded1265c621fc7ec39c937b224533a055c4c338))
+* add editor hints to setting(s) ([a415db6](https://github.com/unkn0wn-root/resterm/commit/a415db64037e95ef54d73dc52d7d59b073920e62))
+* add hints manager ([9fc3070](https://github.com/unkn0wn-root/resterm/commit/9fc3070d0cb5246d8b59a27d7f57f2c01b65318b))
+
 ### [0.9.4](https://github.com/unkn0wn-root/resterm/compare/v0.9.3...v0.9.4) (2025-12-06)
 
 
