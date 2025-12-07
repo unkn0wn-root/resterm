@@ -6,6 +6,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -21,7 +22,7 @@ func TestApplyHTTPSettingsParsesTLS(t *testing.T) {
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"val": "one"}))
 	opts := httpclient.Options{}
 
-	if err := applyHTTPSettings(&opts, req.Settings, resolver); err != nil {
+	if err := settings.ApplyHTTPSettings(&opts, req.Settings, resolver); err != nil {
 		t.Fatalf("applyHTTPSettings returned error: %v", err)
 	}
 	if !opts.InsecureSkipVerify {
@@ -47,7 +48,7 @@ func TestApplyGRPCSettingsParsesTLS(t *testing.T) {
 	resolver := vars.NewResolver(vars.NewMapProvider("x", map[string]string{"x": "two"}))
 	opts := grpcclient.Options{Insecure: true}
 
-	if err := applyGRPCSettings(&opts, req.Settings, resolver); err != nil {
+	if err := settings.ApplyGRPCSettings(&opts, req.Settings, resolver); err != nil {
 		t.Fatalf("applyGRPCSettings returned error: %v", err)
 	}
 	if opts.Insecure {
@@ -69,11 +70,11 @@ func TestSettingsFromEnvAndMerge(t *testing.T) {
 			"other":                  "ignore",
 		},
 	}
-	global := settingsFromEnv(envs, "prod")
+	global := settings.FromEnv(envs, "prod")
 	file := map[string]string{"http-root-cas": "file.pem"}
 	req := map[string]string{"http-insecure": "true"}
 
-	merged := mergeSettings(global, file, req)
+	merged := settings.Merge(global, file, req)
 	if merged["http-root-cas"] != "file.pem" {
 		t.Fatalf("expected file to override global for root cas, got %q", merged["http-root-cas"])
 	}

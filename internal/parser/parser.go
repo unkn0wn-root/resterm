@@ -355,6 +355,10 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		b.handleFileSetting(rest)
 		return
 	}
+	if key == "settings" && !b.inRequest {
+		b.fileSettings = applySettingsTokens(b.fileSettings, rest)
+		return
+	}
 
 	if !b.ensureRequest(line) {
 		return
@@ -416,6 +420,12 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		spec := parseAuthSpec(rest)
 		if spec != nil {
 			b.request.metadata.Auth = spec
+		}
+	case "settings":
+		if b.inRequest {
+			b.request.settings = applySettingsTokens(b.request.settings, rest)
+		} else {
+			b.fileSettings = applySettingsTokens(b.fileSettings, rest)
 		}
 	case "setting":
 		key, value := splitDirective(rest)
@@ -1250,6 +1260,23 @@ func parseOptionTokens(input string) map[string]string {
 		options[strings.ToLower(key)] = trimQuotes(value)
 	}
 	return options
+}
+
+func applySettingsTokens(dst map[string]string, raw string) map[string]string {
+	opts := parseOptionTokens(raw)
+	if len(opts) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(map[string]string, len(opts))
+	}
+	for k, v := range opts {
+		if k == "" {
+			continue
+		}
+		dst[k] = v
+	}
+	return dst
 }
 
 // Like splitAuthFields but handles backslash escapes.

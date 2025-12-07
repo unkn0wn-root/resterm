@@ -8,6 +8,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/ui/hint"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -96,6 +97,7 @@ type requestEditor struct {
 	registerText         string
 	metadataHints        metadataHintState
 	metadataHintsEnabled bool
+	hintManager          hint.Manager
 }
 
 const editorUndoLimit = 64
@@ -123,26 +125,12 @@ type editorSearch struct {
 
 const metadataHintDisplayLimit = 6
 
-type metadataHintMode int
-
-const (
-	metadataHintModeDirective metadataHintMode = iota
-	metadataHintModeSubcommand
-)
-
-type metadataHintContext struct {
-	mode      metadataHintMode
-	directive string
-	baseKey   string
-	query     string
-}
-
 type metadataHintState struct {
 	active       bool
 	anchorOffset int
 	selection    int
-	filtered     []metadataHintOption
-	ctx          metadataHintContext
+	filtered     []hint.Hint
+	ctx          hint.Context
 }
 
 func (s *metadataHintState) deactivate() {
@@ -150,10 +138,10 @@ func (s *metadataHintState) deactivate() {
 	s.filtered = nil
 	s.selection = 0
 	s.anchorOffset = 0
-	s.ctx = metadataHintContext{}
+	s.ctx = hint.Context{}
 }
 
-func (s *metadataHintState) update(anchor int, filtered []metadataHintOption, ctx metadataHintContext) {
+func (s *metadataHintState) update(anchor int, filtered []hint.Hint, ctx hint.Context) {
 	if len(filtered) == 0 {
 		s.deactivate()
 		return
@@ -179,7 +167,7 @@ func (s *metadataHintState) move(delta int) {
 	s.selection = idx
 }
 
-func (s metadataHintState) display(limit int) (items []metadataHintOption, selected int, ok bool) {
+func (s metadataHintState) display(limit int) (items []hint.Hint, selected int, ok bool) {
 	if !s.active || len(s.filtered) == 0 || limit <= 0 {
 		return nil, 0, false
 	}
@@ -201,14 +189,18 @@ func (s metadataHintState) display(limit int) (items []metadataHintOption, selec
 	if end > len(s.filtered) {
 		end = len(s.filtered)
 	}
-	window := make([]metadataHintOption, end-start)
+	window := make([]hint.Hint, end-start)
 	copy(window, s.filtered[start:end])
 	return window, s.selection - start, true
 }
 
 func newRequestEditor() requestEditor {
 	ta := textarea.New()
-	return requestEditor{Model: ta, motionsEnabled: true}
+	return requestEditor{
+		Model:          ta,
+		motionsEnabled: true,
+		hintManager:    hint.NewManager(hint.MetaSource()),
+	}
 }
 
 func (e *requestEditor) SetMotionsEnabled(enabled bool) {
@@ -387,7 +379,7 @@ func (e *requestEditor) SetMetadataHintsEnabled(enabled bool) {
 	}
 }
 
-func (e *requestEditor) metadataHintsDisplay(limit int) (items []metadataHintOption, selection int, ok bool) {
+func (e *requestEditor) metadataHintsDisplay(limit int) (items []hint.Hint, selection int, ok bool) {
 	return e.metadataHints.display(limit)
 }
 
@@ -422,31 +414,35 @@ func (e *requestEditor) refreshMetadataHints() {
 		e.metadataHints.deactivate()
 		return
 	}
-	anchor := findMetadataAnchor(runes, caret.Offset)
+	anchor := hint.Anchor(runes, caret.Offset)
 	if anchor == -1 {
 		e.metadataHints.deactivate()
 		return
 	}
-	if !isMetadataDirectiveContext(runes, anchor) {
+	if !hint.InDirectiveContext(runes, anchor) {
 		e.metadataHints.deactivate()
 		return
 	}
 	queryRunes := runes[anchor+1 : caret.Offset]
-	if caret.Offset < len(runes) && isMetadataQueryRune(runes[caret.Offset]) {
+	if caret.Offset < len(runes) && hint.IsQueryRune(runes[caret.Offset]) {
 		// Caret sits before additional directive characters; keep existing hints.
 		return
 	}
-	ctx, ok := analyzeMetadataHintContext(queryRunes)
+	ctx, ok := hint.AnalyzeContext(queryRunes)
 	if !ok {
 		e.metadataHints.deactivate()
 		return
 	}
-	filtered := filterMetadataHintOptions(ctx.baseKey, ctx.query)
+	filtered := e.hintManager.Options(ctx)
 	if len(filtered) == 0 {
 		e.metadataHints.deactivate()
 		return
 	}
-	e.metadataHints.update(anchor, filtered, ctx)
+	insertAnchor := anchor
+	if ctx.Mode == hint.ModeSubcommand {
+		insertAnchor = anchor + 1 + ctx.TokenStart
+	}
+	e.metadataHints.update(insertAnchor, filtered, ctx)
 }
 
 func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
@@ -474,18 +470,8 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	}
 	before := runes[:start]
 	after := runes[end:]
-	prefix := ""
-	if e.metadataHints.ctx.mode == metadataHintModeSubcommand {
-		directive := strings.TrimSpace(e.metadataHints.ctx.directive)
-		if directive == "" {
-			e.metadataHints.deactivate()
-			return nil
-		}
-		prefix = "@" + directive + " "
-	}
-	prefixRunes := []rune(prefix)
 	bodyRunes := []rune(insert)
-	replacementRunes := append(prefixRunes, bodyRunes...)
+	replacementRunes := append([]rune{}, bodyRunes...)
 	needsSpace := len(after) == 0 || !unicode.IsSpace(after[0])
 	e.pushUndoSnapshot()
 	updated := append([]rune{}, before...)
@@ -501,7 +487,7 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 			if back > bodyLen {
 				back = bodyLen
 			}
-			cursorMin := insertStart + len(prefixRunes)
+			cursorMin := insertStart
 			target := insertEnd - back
 			if target < cursorMin {
 				target = cursorMin
@@ -1977,101 +1963,6 @@ func positionForOffset(value string, offset int) (int, int) {
 	}
 	last := len(lines) - 1
 	return last, utf8.RuneCountInString(lines[last])
-}
-
-func findMetadataAnchor(runes []rune, caretOffset int) int {
-	for i := caretOffset - 1; i >= 0; i-- {
-		switch runes[i] {
-		case '@':
-			return i
-		case '\n':
-			return -1
-		}
-	}
-	return -1
-}
-
-func analyzeMetadataHintContext(query []rune) (metadataHintContext, bool) {
-	ctx := metadataHintContext{mode: metadataHintModeDirective}
-	if len(query) == 0 {
-		return ctx, true
-	}
-	firstSpace := -1
-	for i, r := range query {
-		if r == '\n' || r == '\r' {
-			return metadataHintContext{}, false
-		}
-		if unicode.IsSpace(r) {
-			firstSpace = i
-			break
-		}
-		if !isMetadataQueryRune(r) {
-			return metadataHintContext{}, false
-		}
-	}
-	if firstSpace == -1 {
-		ctx.query = strings.ToLower(string(query))
-		return ctx, true
-	}
-	if firstSpace == 0 {
-		return metadataHintContext{}, false
-	}
-	directive := string(query[:firstSpace])
-	baseKey := normalizeDirectiveKey(directive)
-	if baseKey == "" {
-		return metadataHintContext{}, false
-	}
-	subStart := firstSpace
-	for subStart < len(query) && unicode.IsSpace(query[subStart]) {
-		if query[subStart] == '\n' || query[subStart] == '\r' {
-			return metadataHintContext{}, false
-		}
-		subStart++
-	}
-	subQueryRunes := query[subStart:]
-	for _, r := range subQueryRunes {
-		if unicode.IsSpace(r) || !isMetadataQueryRune(r) {
-			return metadataHintContext{}, false
-		}
-	}
-	ctx.mode = metadataHintModeSubcommand
-	ctx.directive = directive
-	ctx.baseKey = baseKey
-	ctx.query = strings.ToLower(string(subQueryRunes))
-	return ctx, true
-}
-
-func isMetadataQueryRune(r rune) bool {
-	if unicode.IsLetter(r) || unicode.IsDigit(r) {
-		return true
-	}
-	switch r {
-	case '-', '_':
-		return true
-	default:
-		return false
-	}
-}
-
-func isMetadataDirectiveContext(runes []rune, anchor int) bool {
-	if anchor <= 0 {
-		return false
-	}
-	lineStart := anchor
-	for lineStart > 0 && runes[lineStart-1] != '\n' {
-		lineStart--
-	}
-	prefix := strings.TrimSpace(string(runes[lineStart:anchor]))
-	if prefix == "" {
-		return false
-	}
-	if strings.HasSuffix(prefix, "#") || strings.HasSuffix(prefix, "*") {
-		return true
-	}
-	if strings.HasSuffix(prefix, "//") || strings.HasSuffix(prefix, "/*") {
-		return true
-	}
-	return false
 }
 
 func (e requestEditor) clampOffset(offset int) int {

@@ -1,23 +1,16 @@
-package ui
+package hint
 
 import "strings"
 
-type metadataHintOption struct {
-	Label      string
-	Aliases    []string
-	Summary    string
-	Insert     string
-	CursorBack int
-}
-
-var metadataHintCatalog = []metadataHintOption{
+var MetaCatalog = []Hint{
 	{Label: "@name", Summary: "Assign a display name to the request"},
 	{Label: "@description", Aliases: []string{"@desc"}, Summary: "Add a multi-line description"},
 	{Label: "@tag", Aliases: []string{"@tags"}, Summary: "Categorize the request with tags"},
 	{Label: "@no-log", Aliases: []string{"@nolog"}, Summary: "Disable logging of response bodies"},
 	{Label: "@log-sensitive-headers", Aliases: []string{"@log-secret-headers"}, Summary: "Permit logging sensitive headers"},
 	{Label: "@auth", Summary: "Configure authentication (basic, bearer, etc.)"},
-	{Label: "@setting", Summary: "Set per-request options (e.g. retries, proxies)"},
+	{Label: "@setting", Summary: "Set options (transport/TLS/etc.)"},
+	{Label: "@settings", Summary: "Set multiple options on one line"},
 	{Label: "@timeout", Summary: "Override the request timeout"},
 	{Label: "@body", Summary: "Control body processing (e.g. template expansion)"},
 	{Label: "@var", Summary: "Declare a request-scoped variable"},
@@ -47,7 +40,7 @@ var metadataHintCatalog = []metadataHintOption{
 	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
 }
 
-var metadataSubcommandCatalog = map[string][]metadataHintOption{
+var metaSub = map[string][]Hint{
 	"body": {
 		{Label: "expand", Summary: "Expand templates before sending the body"},
 		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},
@@ -107,71 +100,71 @@ var metadataSubcommandCatalog = map[string][]metadataHintOption{
 		{Label: "use=", Summary: "Reference named profile", Insert: "use=edge", CursorBack: len("edge")},
 		{Label: "persist=", Summary: "Explicit persist toggle", Insert: "persist=true", CursorBack: len("true")},
 	},
+	"setting": {
+		{Label: "timeout=", Summary: "Request timeout (e.g. 5s)", Insert: "timeout=5s", CursorBack: len("5s")},
+		{Label: "proxy=", Summary: "HTTP proxy URL", Insert: "proxy=http://proxy", CursorBack: len("http://proxy")},
+		{Label: "followredirects=", Summary: "Follow redirects (true/false)", Insert: "followredirects=false", CursorBack: len("false")},
+		{Label: "insecure=", Summary: "Skip TLS verify (HTTP)", Insert: "insecure=true", CursorBack: len("true")},
+		{Label: "http-insecure=", Summary: "Skip TLS verify (HTTP)", Insert: "http-insecure=true", CursorBack: len("true")},
+		{Label: "http-root-cas=", Summary: "Extra root CAs (comma/space separated)", Insert: "http-root-cas=ca.pem", CursorBack: len("ca.pem")},
+		{Label: "http-root-mode=", Summary: "Root CA mode (append|replace)", Insert: "http-root-mode=append", CursorBack: len("append")},
+		{Label: "http-client-cert=", Summary: "Client certificate path", Insert: "http-client-cert=cert.pem", CursorBack: len("cert.pem")},
+		{Label: "http-client-key=", Summary: "Client key path", Insert: "http-client-key=key.pem", CursorBack: len("key.pem")},
+		{Label: "grpc-insecure=", Summary: "Skip TLS verify (gRPC)", Insert: "grpc-insecure=true", CursorBack: len("true")},
+		{Label: "grpc-root-cas=", Summary: "Extra gRPC root CAs", Insert: "grpc-root-cas=ca.pem", CursorBack: len("ca.pem")},
+		{Label: "grpc-root-mode=", Summary: "gRPC root mode (append|replace)", Insert: "grpc-root-mode=append", CursorBack: len("append")},
+		{Label: "grpc-client-cert=", Summary: "gRPC client cert path", Insert: "grpc-client-cert=cert.pem", CursorBack: len("cert.pem")},
+		{Label: "grpc-client-key=", Summary: "gRPC client key path", Insert: "grpc-client-key=key.pem", CursorBack: len("key.pem")},
+	},
+	"settings": {
+		{Label: "timeout=", Summary: "Request timeout (e.g. 5s)", Insert: "timeout=5s", CursorBack: len("5s")},
+		{Label: "proxy=", Summary: "HTTP proxy URL", Insert: "proxy=http://proxy", CursorBack: len("http://proxy")},
+		{Label: "followredirects=", Summary: "Follow redirects (true/false)", Insert: "followredirects=false", CursorBack: len("false")},
+		{Label: "insecure=", Summary: "Skip TLS verify (HTTP)", Insert: "insecure=true", CursorBack: len("true")},
+		{Label: "http-insecure=", Summary: "Skip TLS verify (HTTP)", Insert: "http-insecure=true", CursorBack: len("true")},
+		{Label: "http-root-cas=", Summary: "Extra root CAs (comma/space separated)", Insert: "http-root-cas=ca.pem", CursorBack: len("ca.pem")},
+		{Label: "http-root-mode=", Summary: "Root CA mode (append|replace)", Insert: "http-root-mode=append", CursorBack: len("append")},
+		{Label: "http-client-cert=", Summary: "Client certificate path", Insert: "http-client-cert=cert.pem", CursorBack: len("cert.pem")},
+		{Label: "http-client-key=", Summary: "Client key path", Insert: "http-client-key=key.pem", CursorBack: len("key.pem")},
+		{Label: "grpc-insecure=", Summary: "Skip TLS verify (gRPC)", Insert: "grpc-insecure=true", CursorBack: len("true")},
+		{Label: "grpc-root-cas=", Summary: "Extra gRPC root CAs", Insert: "grpc-root-cas=ca.pem", CursorBack: len("ca.pem")},
+		{Label: "grpc-root-mode=", Summary: "gRPC root mode (append|replace)", Insert: "grpc-root-mode=append", CursorBack: len("append")},
+		{Label: "grpc-client-cert=", Summary: "gRPC client cert path", Insert: "grpc-client-cert=cert.pem", CursorBack: len("cert.pem")},
+		{Label: "grpc-client-key=", Summary: "gRPC client key path", Insert: "grpc-client-key=key.pem", CursorBack: len("key.pem")},
+	},
 }
 
-func filterMetadataHintOptions(base string, query string) []metadataHintOption {
-	key := normalizeDirectiveKey(base)
+func MetaOptions(base, query string) []Hint {
+	key := NormalizeKey(base)
 	if key == "" {
-		return filterHintOptions(metadataHintCatalog, query)
+		return Filter(MetaCatalog, query)
 	}
-	options, ok := metadataSubcommandCatalog[key]
+	opts, ok := metaSub[key]
 	if !ok {
 		return nil
 	}
-	return filterHintOptions(options, query)
+	return Filter(opts, query)
 }
 
-func metadataOptionMatches(option metadataHintOption, query string) bool {
-	if query == "" {
-		return true
-	}
-	if prefixHas(option.Label, query) {
-		return true
-	}
-	for _, alias := range option.Aliases {
-		if prefixHas(alias, query) {
-			return true
-		}
-	}
-	return false
-}
-
-func prefixHas(label string, query string) bool {
-	trimmed := strings.TrimPrefix(label, "@")
-	return strings.HasPrefix(strings.ToLower(trimmed), query)
-}
-
-func filterHintOptions(options []metadataHintOption, query string) []metadataHintOption {
-	if len(options) == 0 {
-		return nil
-	}
-	if query == "" {
-		return cloneMetadataHintOptions(options)
-	}
-	lower := strings.ToLower(query)
-	var matches []metadataHintOption
-	for _, option := range options {
-		if metadataOptionMatches(option, lower) {
-			matches = append(matches, option)
-		}
-	}
-	return matches
-}
-
-func cloneMetadataHintOptions(options []metadataHintOption) []metadataHintOption {
-	if len(options) == 0 {
-		return nil
-	}
-	cloned := make([]metadataHintOption, len(options))
-	copy(cloned, options)
-	return cloned
-}
-
-func normalizeDirectiveKey(raw string) string {
+func NormalizeKey(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return ""
 	}
 	trimmed = strings.TrimPrefix(trimmed, "@")
 	return strings.ToLower(trimmed)
+}
+
+type metaSource struct{}
+
+func MetaSource() Source {
+	return metaSource{}
+}
+
+func (metaSource) Match(ctx Context) bool {
+	return ctx.Mode == ModeDirective || ctx.Mode == ModeSubcommand
+}
+
+func (metaSource) Options(ctx Context) []Hint {
+	return MetaOptions(ctx.BaseKey, ctx.Query)
 }

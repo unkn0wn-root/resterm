@@ -427,7 +427,8 @@ If `SSH_AUTH_SOCK` is set, the SSH agent is also used by default.
 | `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
 | `@log-sensitive-headers` | `# @log-sensitive-headers [true|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
-| `@setting` | `# @setting key value` | Per-request transport overrides (`timeout`, `proxy`, `followredirects`, `insecure`). |
+| `@setting` | `# @setting key value` | Generic settings (transport/TLS today: `timeout`, `proxy`, `followredirects`, `insecure`, `http-*`, `grpc-*`). |
+| `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
 
 ### Transport settings example
@@ -770,7 +771,9 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 | `@setting grpc-root-cas path1,path2` | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
 | `@setting grpc-root-mode append|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
 | `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed). |
-| `@setting grpc-insecure true` | Skip TLS verification (off by default; use only for testing). |
+| `@setting grpc-insecure true` | Skip TLS verification (off by default). |
+
+Supplying any gRPC TLS setting (roots, client cert/key, insecure) automatically enables TLS unless you explicitly force plaintext with `@grpc-plaintext true`.
 
 The request body contains protobuf JSON. Use `< payload.json` to load from disk. Responses display message JSON, headers, and trailers; history stores method, status, and timing alongside HTTP calls.
 
@@ -976,14 +979,16 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 ## HTTP Transport & Settings
 
 - Global defaults are passed via CLI flags (`--timeout`, `--follow`, `--insecure`, `--proxy`).
-- Per-request overrides use `@setting` or `@timeout`.
+- Per-request overrides use `@setting`, `@settings`, or `@timeout`.
 - Requests inherit a shared cookie jar; cookies persist across sessions.
-- TLS knobs per request: `# @setting http-root-cas a.pem,b.pem` (space/comma/semicolon separated, relative paths allowed), `http-root-mode append|replace` (default `replace`), `http-client-cert` + `http-client-key` for mTLS, and `http-insecure true` to skip verification (only for testing). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
+- TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
 - History is stored in `${RESTERM_CONFIG_DIR}/history.json` (defaults to the platform config directory) and retains up to ~500 entries. Set `RESTERM_CONFIG_DIR` to relocate it.
 - Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
-- File-level defaults: place `# @setting key value` before the first request to apply to all requests in that file. Request-level `@setting` still wins.
+- File-level defaults: place `# @setting key value` or `# @settings key1=val1 ...` before the first request to apply to all requests in that file. Request-level overrides still win.
+- Settings are generic. Today the recognized prefixes are transport/TLS (`http-*`, `grpc-*`, `timeout`, `proxy`, `followredirects`, `insecure`). Future features can add more prefixes; unknown keys are ignored for now to stay forward-compatible.
 - Environment defaults: `resterm.env.json` can carry global settings under the `settings.` prefix (e.g., `"settings.http-root-cas": "ca-dev.pem"`, `"settings.grpc-insecure": "false"`). Precedence is global (env) < file < request.
+- OAuth token exchanges reuse the same HTTP TLS settings (root CAs, client cert/key, `http-insecure`) as the main request.
 
 Body helpers:
 

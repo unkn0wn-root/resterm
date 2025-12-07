@@ -3,12 +3,14 @@ package ui
 import (
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/ui/hint"
 )
 
 func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
 	required := []string{"@body", "@const", "@variables", "@query", "@trace"}
-	labels := make(map[string]struct{}, len(metadataHintCatalog))
-	for _, option := range metadataHintCatalog {
+	labels := make(map[string]struct{}, len(hint.MetaCatalog))
+	for _, option := range hint.MetaCatalog {
 		labels[option.Label] = struct{}{}
 	}
 	for _, label := range required {
@@ -19,7 +21,7 @@ func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
 }
 
 func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
-	options := filterMetadataHintOptions("ws", "")
+	options := hint.MetaOptions("ws", "")
 	if len(options) == 0 {
 		t.Fatal("expected ws subcommand options")
 	}
@@ -30,7 +32,7 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 		}
 	}
 
-	filtered := filterMetadataHintOptions("ws", "send-")
+	filtered := hint.MetaOptions("ws", "send-")
 	if len(filtered) == 0 {
 		t.Fatal("expected filtered subcommand results for prefix")
 	}
@@ -40,11 +42,11 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 		}
 	}
 
-	if opts := filterMetadataHintOptions("unknown", ""); opts != nil {
+	if opts := hint.MetaOptions("unknown", ""); opts != nil {
 		t.Fatalf("expected nil suggestions for unknown directive, got %v", opts)
 	}
 
-	traceOptions := filterMetadataHintOptions("trace", "")
+	traceOptions := hint.MetaOptions("trace", "")
 	if len(traceOptions) == 0 {
 		t.Fatal("expected trace subcommand options")
 	}
@@ -53,7 +55,7 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 			t.Fatalf("missing trace subcommand %q", label)
 		}
 	}
-	filteredTrace := filterMetadataHintOptions("trace", "tot")
+	filteredTrace := hint.MetaOptions("trace", "tot")
 	if len(filteredTrace) == 0 {
 		t.Fatal("expected filtered trace subcommand results")
 	}
@@ -65,8 +67,8 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 }
 
 func TestTraceMetadataHintsProvidePlaceholders(t *testing.T) {
-	options := filterMetadataHintOptions("trace", "")
-	var dns metadataHintOption
+	options := hint.MetaOptions("trace", "")
+	var dns hint.Hint
 	found := false
 	for _, option := range options {
 		if option.Label == "dns<=" {
@@ -87,7 +89,7 @@ func TestTraceMetadataHintsProvidePlaceholders(t *testing.T) {
 }
 
 func TestTraceMetadataHintsFilterByPrefix(t *testing.T) {
-	filtered := filterMetadataHintOptions("trace", "d")
+	filtered := hint.MetaOptions("trace", "d")
 	if len(filtered) == 0 {
 		t.Fatal("expected filtered trace hints for prefix 'd'")
 	}
@@ -96,7 +98,7 @@ func TestTraceMetadataHintsFilterByPrefix(t *testing.T) {
 	}
 }
 
-func hintOptionsContain(options []metadataHintOption, label string) bool {
+func hintOptionsContain(options []hint.Hint, label string) bool {
 	for _, option := range options {
 		if option.Label == label {
 			return true
