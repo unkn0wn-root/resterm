@@ -12,6 +12,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/ui/hint"
 )
 
 const (
@@ -438,7 +439,7 @@ func (m Model) renderEditorPane() string {
 		Render(content)
 }
 
-func (m Model) buildMetadataHintOverlay(items []metadataHintOption, selection int, width int) []string {
+func (m Model) buildMetadataHintOverlay(items []hint.Hint, selection int, width int) []string {
 	if len(items) == 0 || width <= 0 {
 		return nil
 	}

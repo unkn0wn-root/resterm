@@ -8,6 +8,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/unkn0wn-root/resterm/internal/ui/hint"
 )
 
 func newTestEditor(content string) requestEditor {
@@ -63,7 +64,7 @@ func editorEventFromCmd(t *testing.T, cmd tea.Cmd) editorEvent {
 	return evt
 }
 
-func collectHintLabels(options []metadataHintOption) map[string]bool {
+func collectHintLabels(options []hint.Hint) map[string]bool {
 	labels := make(map[string]bool, len(options))
 	for _, option := range options {
 		labels[option.Label] = true
@@ -895,8 +896,8 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 	if !editor.metadataHints.active {
 		t.Fatal("expected metadata hints to activate for @ws directive")
 	}
-	if editor.metadataHints.ctx.mode != metadataHintModeSubcommand {
-		t.Fatalf("expected subcommand hint mode, got %v", editor.metadataHints.ctx.mode)
+	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
+		t.Fatalf("expected subcommand hint mode, got %v", editor.metadataHints.ctx.Mode)
 	}
 
 	labels := collectHintLabels(editor.metadataHints.filtered)
@@ -954,8 +955,8 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 	if !editor.metadataHints.active {
 		t.Fatal("expected metadata hints to remain active for trace subcommand")
 	}
-	if editor.metadataHints.ctx.mode != metadataHintModeSubcommand {
-		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.mode)
+	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
+		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.Mode)
 	}
 
 	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -982,6 +983,62 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 	}
 }
 
+func TestRequestEditorMetadataHintsProfileMultipleParams(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	keys := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'@'}},
+		{Type: tea.KeyRunes, Runes: []rune{'p'}},
+		{Type: tea.KeyRunes, Runes: []rune{'r'}},
+		{Type: tea.KeyRunes, Runes: []rune{'o'}},
+		{Type: tea.KeyRunes, Runes: []rune{'f'}},
+		{Type: tea.KeyRunes, Runes: []rune{'i'}},
+		{Type: tea.KeyRunes, Runes: []rune{'l'}},
+		{Type: tea.KeyRunes, Runes: []rune{'e'}},
+		{Type: tea.KeyRunes, Runes: []rune{' '}},
+	}
+	for _, key := range keys {
+		var cmd tea.Cmd
+		editor, cmd = editor.Update(key)
+		if cmd != nil {
+			cmd()
+		}
+	}
+
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to activate for profile subcommands")
+	}
+	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
+		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.Mode)
+	}
+
+	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		cmd()
+	}
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to close after first profile acceptance")
+	}
+
+	editorPtr.moveCursorTo(0, utf8.RuneCountInString(editor.Value()))
+	editorPtr.clearSelection()
+
+	editor, cmd = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}})
+	if cmd != nil {
+		cmd()
+	}
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to stay active for additional profile params")
+	}
+	labels := collectHintLabels(editor.metadataHints.filtered)
+	if !labels["warmup="] {
+		t.Fatalf("expected warmup suggestion, got %v", editor.metadataHints.filtered)
+	}
+}
+
 func TestRequestEditorMetadataHintsIgnoreNonCommentContext(t *testing.T) {
 	editor := newTestEditor("")
 	editorPtr := &editor
@@ -990,6 +1047,39 @@ func TestRequestEditorMetadataHintsIgnoreNonCommentContext(t *testing.T) {
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
 	if editor.metadataHints.active {
 		t.Fatal("expected metadata hints to remain inactive outside comment context")
+	}
+}
+
+func TestAnalyzeMetadataHintContextSupportsChainedProfileParams(t *testing.T) {
+	query := []rune("profile count=1 warm")
+	ctx, ok := hint.AnalyzeContext(query)
+	if !ok {
+		t.Fatal("expected analyzeMetadataHintContext to accept chained params")
+	}
+	if ctx.Mode != hint.ModeSubcommand {
+		t.Fatalf("expected subcommand mode, got %v", ctx.Mode)
+	}
+	if ctx.BaseKey != "profile" {
+		t.Fatalf("expected base key profile, got %q", ctx.BaseKey)
+	}
+	if ctx.Query != "warm" {
+		t.Fatalf("expected query warm, got %q", ctx.Query)
+	}
+	wantStart := len([]rune("profile count=1 "))
+	if ctx.TokenStart != wantStart {
+		t.Fatalf("expected token start %d, got %d", wantStart, ctx.TokenStart)
+	}
+
+	trailing := []rune("profile count=1 ")
+	ctx, ok = hint.AnalyzeContext(trailing)
+	if !ok {
+		t.Fatal("expected analyzeMetadataHintContext to accept trailing space after params")
+	}
+	if ctx.Query != "" {
+		t.Fatalf("expected empty query for trailing space, got %q", ctx.Query)
+	}
+	if ctx.TokenStart != len(trailing) {
+		t.Fatalf("expected token start at end of query, got %d", ctx.TokenStart)
 	}
 }
 

@@ -1,16 +1,8 @@
-package ui
+package hint
 
 import "strings"
 
-type metadataHintOption struct {
-	Label      string
-	Aliases    []string
-	Summary    string
-	Insert     string
-	CursorBack int
-}
-
-var metadataHintCatalog = []metadataHintOption{
+var MetaCatalog = []Hint{
 	{Label: "@name", Summary: "Assign a display name to the request"},
 	{Label: "@description", Aliases: []string{"@desc"}, Summary: "Add a multi-line description"},
 	{Label: "@tag", Aliases: []string{"@tags"}, Summary: "Categorize the request with tags"},
@@ -48,7 +40,7 @@ var metadataHintCatalog = []metadataHintOption{
 	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
 }
 
-var metadataSubcommandCatalog = map[string][]metadataHintOption{
+var metaSub = map[string][]Hint{
 	"body": {
 		{Label: "expand", Summary: "Expand templates before sending the body"},
 		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},
@@ -142,65 +134,19 @@ var metadataSubcommandCatalog = map[string][]metadataHintOption{
 	},
 }
 
-func filterMetadataHintOptions(base string, query string) []metadataHintOption {
-	key := normalizeDirectiveKey(base)
+func MetaOptions(base, query string) []Hint {
+	key := NormalizeKey(base)
 	if key == "" {
-		return filterHintOptions(metadataHintCatalog, query)
+		return Filter(MetaCatalog, query)
 	}
-	options, ok := metadataSubcommandCatalog[key]
+	opts, ok := metaSub[key]
 	if !ok {
 		return nil
 	}
-	return filterHintOptions(options, query)
+	return Filter(opts, query)
 }
 
-func metadataOptionMatches(option metadataHintOption, query string) bool {
-	if query == "" {
-		return true
-	}
-	if prefixHas(option.Label, query) {
-		return true
-	}
-	for _, alias := range option.Aliases {
-		if prefixHas(alias, query) {
-			return true
-		}
-	}
-	return false
-}
-
-func prefixHas(label string, query string) bool {
-	trimmed := strings.TrimPrefix(label, "@")
-	return strings.HasPrefix(strings.ToLower(trimmed), query)
-}
-
-func filterHintOptions(options []metadataHintOption, query string) []metadataHintOption {
-	if len(options) == 0 {
-		return nil
-	}
-	if query == "" {
-		return cloneMetadataHintOptions(options)
-	}
-	lower := strings.ToLower(query)
-	var matches []metadataHintOption
-	for _, option := range options {
-		if metadataOptionMatches(option, lower) {
-			matches = append(matches, option)
-		}
-	}
-	return matches
-}
-
-func cloneMetadataHintOptions(options []metadataHintOption) []metadataHintOption {
-	if len(options) == 0 {
-		return nil
-	}
-	cloned := make([]metadataHintOption, len(options))
-	copy(cloned, options)
-	return cloned
-}
-
-func normalizeDirectiveKey(raw string) string {
+func NormalizeKey(raw string) string {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
 		return ""
