@@ -97,6 +97,7 @@ type requestEditor struct {
 	registerText         string
 	metadataHints        metadataHintState
 	metadataHintsEnabled bool
+	hintManager          hint.Manager
 }
 
 const editorUndoLimit = 64
@@ -195,7 +196,11 @@ func (s metadataHintState) display(limit int) (items []hint.Hint, selected int, 
 
 func newRequestEditor() requestEditor {
 	ta := textarea.New()
-	return requestEditor{Model: ta, motionsEnabled: true}
+	return requestEditor{
+		Model:          ta,
+		motionsEnabled: true,
+		hintManager:    hint.NewManager(hint.MetaSource()),
+	}
 }
 
 func (e *requestEditor) SetMotionsEnabled(enabled bool) {
@@ -428,7 +433,7 @@ func (e *requestEditor) refreshMetadataHints() {
 		e.metadataHints.deactivate()
 		return
 	}
-	filtered := hint.MetaOptions(ctx.BaseKey, ctx.Query)
+	filtered := e.hintManager.Options(ctx)
 	if len(filtered) == 0 {
 		e.metadataHints.deactivate()
 		return

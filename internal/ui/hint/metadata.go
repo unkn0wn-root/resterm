@@ -154,3 +154,17 @@ func NormalizeKey(raw string) string {
 	trimmed = strings.TrimPrefix(trimmed, "@")
 	return strings.ToLower(trimmed)
 }
+
+type metaSource struct{}
+
+func MetaSource() Source {
+	return metaSource{}
+}
+
+func (metaSource) Match(ctx Context) bool {
+	return ctx.Mode == ModeDirective || ctx.Mode == ModeSubcommand
+}
+
+func (metaSource) Options(ctx Context) []Hint {
+	return MetaOptions(ctx.BaseKey, ctx.Query)
+}
