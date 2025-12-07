@@ -32,3 +32,12 @@ func TestShouldUsePlaintextHandlesExplicitFalse(t *testing.T) {
 		t.Fatalf("expected explicit false to disable plaintext")
 	}
 }
+
+func TestShouldUsePlaintextDisabledWhenTLSConfigured(t *testing.T) {
+	opts := Options{RootCAs: []string{"ca.pem"}}
+	req := &restfile.GRPCRequest{}
+
+	if shouldUsePlaintext(req, opts) {
+		t.Fatalf("expected TLS settings to disable plaintext")
+	}
+}

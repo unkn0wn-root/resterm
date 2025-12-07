@@ -315,7 +315,23 @@ func shouldUsePlaintext(grpcReq *restfile.GRPCRequest, options Options) bool {
 	if options.DefaultPlaintextSet {
 		return options.DefaultPlaintext
 	}
+	if hasTLS(options) {
+		return false
+	}
 	return true
+}
+
+func hasTLS(opts Options) bool {
+	if len(opts.RootCAs) > 0 {
+		return true
+	}
+	if opts.ClientCert != "" || opts.ClientKey != "" {
+		return true
+	}
+	if opts.Insecure {
+		return true
+	}
+	return false
 }
 
 func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []string {

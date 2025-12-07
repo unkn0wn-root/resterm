@@ -90,6 +90,59 @@ GET https://example.com
 	}
 }
 
+func TestSettingsDirectiveMultiAssignFileScope(t *testing.T) {
+	src := `# @settings timeout=10s http-insecure=true
+# @settings proxy=http://one
+
+### First
+GET https://example.com
+`
+	doc := Parse("file-settings.http", []byte(src))
+	if doc.Settings == nil {
+		t.Fatalf("expected settings to be captured")
+	}
+	if doc.Settings["timeout"] != "10s" {
+		t.Fatalf("expected timeout=10s, got %q", doc.Settings["timeout"])
+	}
+	if doc.Settings["http-insecure"] != "true" {
+		t.Fatalf("expected http-insecure=true, got %q", doc.Settings["http-insecure"])
+	}
+	if doc.Settings["proxy"] != "http://one" {
+		t.Fatalf("expected proxy=http://one, got %q", doc.Settings["proxy"])
+	}
+}
+
+func TestSettingsDirectiveRequestScopeOverride(t *testing.T) {
+	src := `# @settings timeout=9s followredirects=true
+
+### First
+# @name req1
+# @setting proxy http://legacy
+# @settings timeout=3s proxy=http://req followredirects=false
+GET https://example.com
+`
+	doc := Parse("request-settings.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Settings["timeout"] != "3s" {
+		t.Fatalf("expected request timeout=3s, got %q", req.Settings["timeout"])
+	}
+	if req.Settings["proxy"] != "http://req" {
+		t.Fatalf("expected request proxy override, got %q", req.Settings["proxy"])
+	}
+	if req.Settings["followredirects"] != "false" {
+		t.Fatalf("expected request followredirects=false, got %q", req.Settings["followredirects"])
+	}
+	if doc.Settings["timeout"] != "9s" {
+		t.Fatalf("expected file timeout=9s, got %q", doc.Settings["timeout"])
+	}
+	if doc.Settings["followredirects"] != "true" {
+		t.Fatalf("expected file followredirects=true, got %q", doc.Settings["followredirects"])
+	}
+}
+
 func TestParseGlobalDirectiveWhitespaceValue(t *testing.T) {
 	src := `# @global base_url https://httpbin.org
 # @global alt_url: https://alt.example.com

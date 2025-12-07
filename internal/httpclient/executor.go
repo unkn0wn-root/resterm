@@ -320,10 +320,12 @@ func (c *Client) prepareHTTPRequest(
 	if expandedURL == "" {
 		return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
 	}
-	if resolver != nil {
-		expandedURL, err = resolver.ExpandTemplates(expandedURL)
-		if err != nil {
-			return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
+	if req.Body.GraphQL == nil || !strings.EqualFold(req.Method, "GET") {
+		if resolver != nil {
+			expandedURL, err = resolver.ExpandTemplates(expandedURL)
+			if err != nil {
+				return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
+			}
 		}
 	}
 
