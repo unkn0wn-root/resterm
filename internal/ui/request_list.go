@@ -15,16 +15,17 @@ type requestListItem struct {
 	index    int
 	line     int
 	resolver *vars.Resolver
+	compact  *bool
 }
 
 func (i requestListItem) Title() string {
 	if i.request == nil {
 		return ""
 	}
-	name := expandStatusText(i.resolver, i.request.Metadata.Name)
-	if name == "" {
-		name = fmt.Sprintf("Request %d", i.index+1)
+	if i.useCompact() {
+		return i.compactTitle()
 	}
+	name := requestNavLabel(i.request, i.resolver, fmt.Sprintf("Request %d", i.index+1))
 	parts := []string{name}
 	if cmp := requestCompareBadge(i.request); cmp != "" {
 		parts = append(parts, cmp)
@@ -42,6 +43,48 @@ func (i requestListItem) Description() string {
 	if i.request == nil {
 		return ""
 	}
+	return i.longDescription()
+}
+
+func (i requestListItem) useCompact() bool {
+	return i.compact != nil && *i.compact
+}
+
+func (i requestListItem) compactTitle() string {
+	name := requestNavLabel(i.request, i.resolver, fmt.Sprintf("Request %d", i.index+1))
+	method := strings.ToUpper(strings.TrimSpace(i.request.Method))
+	if method == "" {
+		method = "REQ"
+	}
+	target := expandStatusText(i.resolver, requestTarget(i.request))
+	target = truncateInline(target, 42)
+	desc := condense(expandStatusText(i.resolver, i.request.Metadata.Description), 48)
+	meta := compactStrings(requestCompareBadge(i.request), requestTypeBadge(i.request), joinTags(i.request.Metadata.Tags, 3))
+
+	info := strings.Join(compactStrings(method, target), " ")
+	parts := compactStrings(name, info, desc)
+	if len(meta) > 0 {
+		parts = append(parts, strings.Join(meta, " "))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func requestNavLabel(req *restfile.Request, resolver *vars.Resolver, fallback string) string {
+	if req == nil {
+		return strings.TrimSpace(fallback)
+	}
+	name := expandStatusText(resolver, req.Metadata.Name)
+	if name == "" {
+		name = expandStatusText(resolver, req.URL)
+	}
+	label := strings.TrimSpace(name)
+	if label == "" {
+		label = strings.TrimSpace(fallback)
+	}
+	return condense(label, 120)
+}
+
+func (i requestListItem) longDescription() string {
 	desc := strings.TrimSpace(i.request.Metadata.Description)
 	if desc != "" {
 		desc = condense(desc, 80)
@@ -108,6 +151,23 @@ func compactStrings(values ...string) []string {
 func truncateDisplay(value string) string {
 	if len(value) > 60 {
 		return value[:57] + "..."
+	}
+	return value
+}
+
+func truncateInline(value string, limit int) string {
+	if limit <= 0 {
+		return value
+	}
+	if len(value) > limit {
+		cut := limit
+		if cut > 3 {
+			cut = limit - 3
+		}
+		if cut < 0 {
+			cut = 0
+		}
+		return value[:cut] + "..."
 	}
 	return value
 }
@@ -218,7 +278,7 @@ func (m *Model) buildRequestItems(doc *restfile.Document) ([]requestListItem, []
 			line = 1
 		}
 		resolver := m.statusResolver(doc, req, env)
-		item := requestListItem{request: req, index: idx, line: line, resolver: resolver}
+		item := requestListItem{request: req, index: idx, line: line, resolver: resolver, compact: m.reqCompact}
 		items[idx] = item
 		listItems[idx] = item
 	}

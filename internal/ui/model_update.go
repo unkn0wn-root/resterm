@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -298,46 +299,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok {
-		var fileCmd tea.Cmd
-		var reqCmd tea.Cmd
-		var scenCmd tea.Cmd
-		prevReqIndex := m.requestList.Index()
-		m.fileList, fileCmd = m.fileList.Update(msg)
-		m.requestList, reqCmd = m.requestList.Update(msg)
-		m.workflowList, scenCmd = m.workflowList.Update(msg)
-		m.syncEditorWithRequestSelection(prevReqIndex)
-		cmds = append(cmds, fileCmd, reqCmd, scenCmd)
+		m.navigatorFilter, _ = m.navigatorFilter.Update(msg)
 	} else {
 		switch m.focus {
-		case focusFile:
+		case focusFile, focusRequests, focusWorkflows:
 			if m.suppressListKey {
 				m.suppressListKey = false
 			} else {
-				var fileCmd tea.Cmd
-				m.fileList, fileCmd = m.fileList.Update(msg)
-				cmds = append(cmds, fileCmd)
-			}
-		case focusRequests:
-			if m.suppressListKey {
-				m.suppressListKey = false
-			} else {
-				var reqCmd tea.Cmd
-				prevReqIndex := m.requestList.Index()
-				m.requestList, reqCmd = m.requestList.Update(msg)
-				m.syncEditorWithRequestSelection(prevReqIndex)
-				cmds = append(cmds, reqCmd)
-			}
-		case focusWorkflows:
-			if m.suppressListKey {
-				m.suppressListKey = false
-			} else {
-				var scenCmd tea.Cmd
-				prevIdx := m.workflowList.Index()
-				m.workflowList, scenCmd = m.workflowList.Update(msg)
-				if m.workflowList.Index() != prevIdx {
-					m.updateWorkflowHistoryFilter()
+				if navCmd := m.updateNavigator(msg); navCmd != nil {
+					cmds = append(cmds, navCmd)
 				}
-				cmds = append(cmds, scenCmd)
 			}
 		}
 	}
@@ -448,6 +419,46 @@ func canonicalShortcutKey(msg tea.KeyMsg) string {
 
 func isPlainRuneKey(msg tea.KeyMsg) bool {
 	return msg.Type == tea.KeyRunes && len(msg.Runes) == 1
+}
+
+func (m *Model) isNavigatorFiltering() bool {
+	if !m.navigatorFilter.Focused() {
+		return false
+	}
+	switch m.focus {
+	case focusFile, focusRequests, focusWorkflows:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Model) resetChordState() {
+	m.hasPendingChord = false
+	m.pendingChord = ""
+	m.pendingChordMsg = tea.KeyMsg{}
+	m.repeatChordActive = false
+	m.repeatChordPrefix = ""
+}
+
+func (m *Model) navGate(kind navigator.Kind, warn string) bool {
+	if m.navigator == nil {
+		return true
+	}
+	sel := m.navigator.Selected()
+	if sel == nil {
+		return true
+	}
+	if sel.Kind != kind {
+		return false
+	}
+	if !samePath(sel.Payload.FilePath, m.currentFile) {
+		if warn != "" {
+			m.setStatusMessage(statusMsg{text: warn, level: statusInfo})
+		}
+		return false
+	}
+	return true
 }
 
 func (m *Model) handleShortcutKey(key string, msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -586,6 +597,18 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.toggleWebSocketConsole(), true
 	case bindings.ActionToggleSidebarCollapse:
 		return m.togglePaneCollapse(paneRegionSidebar), true
+	case bindings.ActionToggleSidebarMode:
+		m.toggleSidebarModeOverride()
+		return m.applyLayout(), true
+	case bindings.ActionToggleWorkflowPin:
+		m.toggleWorkflowPin()
+		return m.applyLayout(), true
+	case bindings.ActionToggleFilesCollapse:
+		m.toggleFilesCollapse()
+		return m.applyLayout(), true
+	case bindings.ActionToggleWorkflowsCollapse:
+		m.toggleWorkflowsCollapse()
+		return m.applyLayout(), true
 	case bindings.ActionToggleEditorCollapse:
 		return m.togglePaneCollapse(paneRegionEditor), true
 	case bindings.ActionToggleResponseCollapse:
@@ -654,6 +677,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return prefixCmd
 		}
 		return tea.Batch(prefixCmd, c)
+	}
+
+	if m.isNavigatorFiltering() {
+		m.resetChordState()
+		switch keyStr {
+		case "ctrl+q", "ctrl+d":
+			return combine(tea.Quit)
+		default:
+			return combine(nil)
+		}
 	}
 
 	if m.operator.active {
@@ -753,6 +786,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if isSpaceKey(msg) && m.canPreviewOnSpace() {
+		if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
+			return combine(nil)
+		}
 		if cmd := m.sendRequestFromList(false); cmd != nil {
 			return combine(cmd)
 		}
@@ -899,6 +935,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusFile {
 		switch keyStr {
 		case "enter":
+			if m.navigator != nil {
+				return combine(nil)
+			}
 			return combine(m.openSelectedFile())
 		}
 	}
@@ -906,8 +945,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusRequests {
 		switch {
 		case keyStr == "enter":
+			if !m.navGate(navigator.KindRequest, "Open file to send this request") {
+				return combine(nil)
+			}
 			return combine(m.sendRequestFromList(true))
 		case isSpaceKey(msg):
+			if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
+				return combine(nil)
+			}
 			return combine(m.sendRequestFromList(false))
 		}
 	}
@@ -915,8 +960,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusWorkflows {
 		switch {
 		case keyStr == "enter":
+			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
+				return combine(nil)
+			}
 			return combine(m.runSelectedWorkflow())
 		case isSpaceKey(msg):
+			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
+				return combine(nil)
+			}
 			return combine(m.runSelectedWorkflow())
 		}
 	}
@@ -1255,31 +1306,34 @@ func (m *Model) runSidebarWidthResize(delta float64) tea.Cmd {
 }
 
 func (m *Model) runSidebarResize(delta float64) tea.Cmd {
-	changed, bounded, cmd := m.adjustSidebarSplit(delta)
-	if changed {
-		return cmd
+	if m.navigator == nil {
+		return nil
 	}
-	if bounded {
-		if delta > 0 {
-			m.setStatusMessage(statusMsg{text: "Sidebar already at maximum height", level: statusInfo})
-		} else if delta < 0 {
-			m.setStatusMessage(statusMsg{text: "Sidebar already at minimum height", level: statusInfo})
+	if delta > 0 {
+		if n := m.navigator.Selected(); n != nil {
+			if n.Kind == navigator.KindFile && len(n.Children) == 0 {
+				m.expandNavigatorFile(n.Payload.FilePath)
+			}
+			n.Expanded = true
+			m.navigator.Refresh()
+		}
+	} else if delta < 0 {
+		if n := m.navigator.Selected(); n != nil && n.Expanded {
+			n.Expanded = false
+			m.navigator.Refresh()
 		}
 	}
 	return nil
 }
 
 func (m *Model) runWorkflowResize(delta float64) tea.Cmd {
-	changed, bounded, cmd := m.adjustWorkflowSplit(delta)
-	if changed {
-		return cmd
+	if m.navigator == nil {
+		return nil
 	}
-	if bounded {
-		if delta > 0 {
-			m.setStatusMessage(statusMsg{text: "Workflows already at minimum height", level: statusInfo})
-		} else if delta < 0 {
-			m.setStatusMessage(statusMsg{text: "Workflows already at maximum height", level: statusInfo})
-		}
+	if delta > 0 {
+		m.navigator.CollapseAll()
+	} else if delta < 0 {
+		m.navigator.ExpandAll()
 	}
 	return nil
 }

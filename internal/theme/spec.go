@@ -28,6 +28,15 @@ type StylesSpec struct {
 	BrowserBorder                 *StyleSpec `json:"browser_border" toml:"browser_border"`
 	EditorBorder                  *StyleSpec `json:"editor_border" toml:"editor_border"`
 	ResponseBorder                *StyleSpec `json:"response_border" toml:"response_border"`
+	NavigatorTitle                *StyleSpec `json:"navigator_title" toml:"navigator_title"`
+	NavigatorTitleSelected        *StyleSpec `json:"navigator_title_selected" toml:"navigator_title_selected"`
+	NavigatorSubtitle             *StyleSpec `json:"navigator_subtitle" toml:"navigator_subtitle"`
+	NavigatorSubtitleSelected     *StyleSpec `json:"navigator_subtitle_selected" toml:"navigator_subtitle_selected"`
+	NavigatorBadge                *StyleSpec `json:"navigator_badge" toml:"navigator_badge"`
+	NavigatorTag                  *StyleSpec `json:"navigator_tag" toml:"navigator_tag"`
+	NavigatorDetailTitle          *StyleSpec `json:"navigator_detail_title" toml:"navigator_detail_title"`
+	NavigatorDetailValue          *StyleSpec `json:"navigator_detail_value" toml:"navigator_detail_value"`
+	NavigatorDetailDim            *StyleSpec `json:"navigator_detail_dim" toml:"navigator_detail_dim"`
 	AppFrame                      *StyleSpec `json:"app_frame" toml:"app_frame"`
 	Header                        *StyleSpec `json:"header" toml:"header"`
 	HeaderTitle                   *StyleSpec `json:"header_title" toml:"header_title"`
@@ -88,6 +97,16 @@ type ColorsSpec struct {
 	PaneBorderFocusFile     *string `json:"pane_border_focus_file" toml:"pane_border_focus_file"`
 	PaneBorderFocusRequests *string `json:"pane_border_focus_requests" toml:"pane_border_focus_requests"`
 	PaneActiveForeground    *string `json:"pane_active_foreground" toml:"pane_active_foreground"`
+	MethodGET               *string `json:"method_get" toml:"method_get"`
+	MethodPOST              *string `json:"method_post" toml:"method_post"`
+	MethodPUT               *string `json:"method_put" toml:"method_put"`
+	MethodPATCH             *string `json:"method_patch" toml:"method_patch"`
+	MethodDELETE            *string `json:"method_delete" toml:"method_delete"`
+	MethodHEAD              *string `json:"method_head" toml:"method_head"`
+	MethodOPTIONS           *string `json:"method_options" toml:"method_options"`
+	MethodGRPC              *string `json:"method_grpc" toml:"method_grpc"`
+	MethodWS                *string `json:"method_ws" toml:"method_ws"`
+	MethodDefault           *string `json:"method_default" toml:"method_default"`
 }
 
 type HeaderSegmentSpec struct {
@@ -153,6 +172,33 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		return Theme{}, err
 	}
 	if err := apply("response_border", &cloned.ResponseBorder, spec.Styles.ResponseBorder); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_title", &cloned.NavigatorTitle, spec.Styles.NavigatorTitle); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_title_selected", &cloned.NavigatorTitleSelected, spec.Styles.NavigatorTitleSelected); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_subtitle", &cloned.NavigatorSubtitle, spec.Styles.NavigatorSubtitle); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_subtitle_selected", &cloned.NavigatorSubtitleSelected, spec.Styles.NavigatorSubtitleSelected); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_badge", &cloned.NavigatorBadge, spec.Styles.NavigatorBadge); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_tag", &cloned.NavigatorTag, spec.Styles.NavigatorTag); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_detail_title", &cloned.NavigatorDetailTitle, spec.Styles.NavigatorDetailTitle); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_detail_value", &cloned.NavigatorDetailValue, spec.Styles.NavigatorDetailValue); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("navigator_detail_dim", &cloned.NavigatorDetailDim, spec.Styles.NavigatorDetailDim); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("app_frame", &cloned.AppFrame, spec.Styles.AppFrame); err != nil {
@@ -338,6 +384,76 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 			return Theme{}, err
 		}
 		cloned.PaneActiveForeground = color
+	}
+	if spec.Colors.MethodGET != nil {
+		color, err := toColor("method_get", *spec.Colors.MethodGET)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.GET = color
+	}
+	if spec.Colors.MethodPOST != nil {
+		color, err := toColor("method_post", *spec.Colors.MethodPOST)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.POST = color
+	}
+	if spec.Colors.MethodPUT != nil {
+		color, err := toColor("method_put", *spec.Colors.MethodPUT)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.PUT = color
+	}
+	if spec.Colors.MethodPATCH != nil {
+		color, err := toColor("method_patch", *spec.Colors.MethodPATCH)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.PATCH = color
+	}
+	if spec.Colors.MethodDELETE != nil {
+		color, err := toColor("method_delete", *spec.Colors.MethodDELETE)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.DELETE = color
+	}
+	if spec.Colors.MethodHEAD != nil {
+		color, err := toColor("method_head", *spec.Colors.MethodHEAD)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.HEAD = color
+	}
+	if spec.Colors.MethodOPTIONS != nil {
+		color, err := toColor("method_options", *spec.Colors.MethodOPTIONS)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.OPTIONS = color
+	}
+	if spec.Colors.MethodGRPC != nil {
+		color, err := toColor("method_grpc", *spec.Colors.MethodGRPC)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.GRPC = color
+	}
+	if spec.Colors.MethodWS != nil {
+		color, err := toColor("method_ws", *spec.Colors.MethodWS)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.WS = color
+	}
+	if spec.Colors.MethodDefault != nil {
+		color, err := toColor("method_default", *spec.Colors.MethodDefault)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.MethodColors.Default = color
 	}
 
 	if len(spec.HeaderSegments) > 0 {

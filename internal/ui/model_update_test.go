@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
 const sampleRequestDoc = "### example\n# @name getExample\nGET https://example.com\n"
@@ -294,13 +295,9 @@ func TestHandleKeyGjAdjustsSidebar(t *testing.T) {
 	model.ready = true
 	model.setFocus(focusFile)
 	_ = model.applyLayout()
-	initialFiles := model.sidebarFilesHeight
 	initialIndex := model.fileList.Index()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	if model.sidebarFilesHeight >= initialFiles {
-		t.Fatalf("expected gj to reduce files pane height, initial %d new %d", initialFiles, model.sidebarFilesHeight)
-	}
 	if model.fileList.Index() != initialIndex {
 		t.Fatalf("expected gj chord not to move file selection, initial %d new %d", initialIndex, model.fileList.Index())
 	}
@@ -316,12 +313,7 @@ func TestHandleKeyGjCanRepeatWithoutPrefix(t *testing.T) {
 	initialIndex := model.fileList.Index()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	first := model.sidebarFilesHeight
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
-	second := model.sidebarFilesHeight
-	if second >= first {
-		t.Fatalf("expected repeated j to continue shrinking files pane, first %d second %d", first, second)
-	}
 	if !model.repeatChordActive {
 		t.Fatalf("expected chord repeat to remain active after repeated sidebar adjustment")
 	}
@@ -337,12 +329,8 @@ func TestHandleKeyGkAdjustsSidebar(t *testing.T) {
 	model.ready = true
 	model.setFocus(focusRequests)
 	_ = model.applyLayout()
-	initialFiles := model.sidebarFilesHeight
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
-	if model.sidebarFilesHeight <= initialFiles {
-		t.Fatalf("expected gk to increase files pane height, initial %d new %d", initialFiles, model.sidebarFilesHeight)
-	}
 }
 
 func TestChordFallbackMaintainsEditorMotions(t *testing.T) {
@@ -1058,6 +1046,32 @@ func TestMainSplitOrientationChord(t *testing.T) {
 	}
 	if model.responseContentHeight != baselineHeight {
 		t.Fatalf("expected response height reset to %d, got %d", baselineHeight, model.responseContentHeight)
+	}
+}
+
+func TestNavGateBlocksMismatchedKind(t *testing.T) {
+	model := newTestModelWithDoc(sampleRequestDoc)
+	m := model
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{ID: "file:/tmp/a", Kind: navigator.KindFile, Payload: navigator.Payload[any]{FilePath: "/tmp/a"}},
+	})
+	if m.navGate(navigator.KindRequest, "") {
+		t.Fatalf("expected navGate to block non-request selection")
+	}
+}
+
+func TestNavGateBlocksDifferentFile(t *testing.T) {
+	model := newTestModelWithDoc(sampleRequestDoc)
+	m := model
+	m.currentFile = "/tmp/a.http"
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{ID: "req:/tmp/b:0", Kind: navigator.KindRequest, Payload: navigator.Payload[any]{FilePath: "/tmp/b.http"}},
+	})
+	if m.navGate(navigator.KindRequest, "warn") {
+		t.Fatalf("expected navGate to block request from different file")
+	}
+	if m.statusMessage.text != "warn" {
+		t.Fatalf("expected status message to be set, got %q", m.statusMessage.text)
 	}
 }
 

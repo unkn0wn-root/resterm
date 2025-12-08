@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/hint"
+	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
 const (
@@ -194,167 +195,185 @@ func (m Model) renderFilePane() string {
 			BorderForeground(m.theme.PaneBorderFocusFile).
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
-	case focusRequests:
-		style = style.
-			BorderForeground(m.theme.PaneBorderFocusRequests).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	case focusWorkflows:
+	case focusRequests, focusWorkflows:
 		style = style.
 			BorderForeground(m.theme.PaneBorderFocusRequests).
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	}
-
-	faintStyle := lipgloss.NewStyle().Faint(true)
 	if !paneActive {
 		style = style.Faint(true)
 	}
-
-	width := m.fileList.Width() + 4
+	width := m.sidebarWidthPx
+	if width <= 0 {
+		width = m.fileList.Width() + 4
+	}
 	if collapsed {
 		height := maxInt(m.paneContentHeight, collapsedPaneHeightRows) + style.GetVerticalFrameSize()
 		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionSidebar
-		return m.renderCollapsedPane(style, width, height, "Sidebar", "g1", zoomHidden, paneActive)
-	}
-	innerWidth := maxInt(1, width-4)
-	titleBase := m.theme.PaneTitle.Width(innerWidth).Align(lipgloss.Center)
-	filesTitle := titleBase.Render(strings.ToUpper("Files"))
-	requestsTitle := titleBase.Render(strings.ToUpper("Requests"))
-	workflowsTitle := titleBase.Render(strings.ToUpper("Workflows"))
-	if m.focus == focusFile {
-		filesTitle = m.theme.PaneTitleFile.
-			Width(innerWidth).
-			Align(lipgloss.Center).
-			Foreground(m.theme.PaneActiveForeground).
-			Render(strings.ToUpper("Files"))
-	}
-	if m.focus == focusRequests {
-		requestsTitle = m.theme.PaneTitleRequests.
-			Width(innerWidth).
-			Align(lipgloss.Center).
-			Foreground(m.theme.PaneActiveForeground).
-			Render(strings.ToUpper("Requests"))
-	}
-	if m.focus == focusWorkflows {
-		workflowsTitle = m.theme.PaneTitleRequests.
-			Width(innerWidth).
-			Align(lipgloss.Center).
-			Foreground(m.theme.PaneActiveForeground).
-			Render(strings.ToUpper("Workflows"))
+		return m.renderCollapsedPane(style, width, height, "Navigator", "g1", zoomHidden, paneActive)
 	}
 
-	listStyle := lipgloss.NewStyle().Width(innerWidth)
-	filesView := listStyle.Render(m.fileList.View())
-	requestsView := listStyle.Render(m.requestList.View())
-	workflowsView := listStyle.Render(m.workflowList.View())
-	if m.focus == focusFile {
-		filesView = listStyle.
-			Foreground(m.theme.PaneBorderFocusFile).
-			Render(m.fileList.View())
+	innerWidth := maxInt(1, width-4)
+	filter := m.renderNavigatorFilter(innerWidth, paneActive)
+	available := m.paneContentHeight - lipgloss.Height(filter)
+	if available < 1 {
+		available = 1
 	}
-	if m.focus == focusRequests {
-		requestsView = listStyle.
-			Foreground(m.theme.PaneBorderFocusRequests).
-			Render(m.requestList.View())
+
+	detail := navigator.DetailView(m.navigator, m.theme, innerWidth)
+	detail = lipgloss.NewStyle().Width(innerWidth).Render(detail)
+	detailHeight := lipgloss.Height(detail)
+	divider := ""
+	dividerHeight := 0
+	if detail != "" && detailHeight > 0 {
+		divider = m.theme.PaneDivider.Width(innerWidth).Render(strings.Repeat("─", innerWidth))
+		dividerHeight = lipgloss.Height(divider)
 	}
-	if m.focus == focusWorkflows {
-		workflowsView = listStyle.
-			Foreground(m.theme.PaneBorderFocusRequests).
-			Render(m.workflowList.View())
+
+	listHeight := available - detailHeight - dividerHeight
+	if listHeight < 1 {
+		remainingForDetail := available - 1 - dividerHeight
+		if remainingForDetail < 0 {
+			remainingForDetail = 0
+		}
+		if detailHeight > remainingForDetail {
+			detail = lipgloss.NewStyle().MaxHeight(remainingForDetail).Render(detail)
+			detailHeight = lipgloss.Height(detail)
+			if detailHeight == 0 {
+				divider = ""
+				dividerHeight = 0
+			}
+		}
+		listHeight = maxInt(available-detailHeight-dividerHeight, 1)
 	}
-	if len(m.fileList.Items()) == 0 {
-		filesView = centeredListView(
-			filesView,
+
+	listView := navigator.ListView(m.navigator, m.theme, innerWidth, listHeight, paneActive)
+	if listView == "" {
+		listView = centeredListView(
+			"",
 			innerWidth,
-			m.theme.HeaderValue.Render("No items"))
+			m.theme.HeaderValue.Render("No requests discovered"),
+		)
 	}
-	if len(m.requestItems) == 0 {
-		requestsView = centeredListView(
-			requestsView,
-			innerWidth,
-			m.theme.HeaderValue.Render("No requests parsed"))
+	listView = lipgloss.NewStyle().Width(innerWidth).Height(listHeight).Render(listView)
+
+	bodyParts := []string{filter, listView}
+	if detail != "" && detailHeight > 0 {
+		if divider != "" {
+			bodyParts = append(bodyParts, divider)
+		}
+		bodyParts = append(bodyParts, lipgloss.NewStyle().Width(innerWidth).MaxHeight(detailHeight).Render(detail))
 	}
-	if len(m.workflowItems) == 0 {
-		workflowsView = centeredListView(
-			workflowsView,
-			innerWidth,
-			m.theme.HeaderValue.Render("No workflows defined"))
+
+	content := lipgloss.JoinVertical(lipgloss.Left, bodyParts...)
+	content = clampPane(content, innerWidth, m.paneContentHeight)
+	targetHeight := m.paneContentHeight + style.GetVerticalFrameSize()
+	return style.
+		Width(width).
+		Height(targetHeight).
+		Render(content)
+}
+
+func (m Model) renderSidebarTabs(style lipgloss.Style, width, innerWidth int, paneActive bool, filesView, requestsView, workflowsView string, faintStyle lipgloss.Style) string {
+	active := m.activeSidebarTab()
+	tabs := []struct {
+		focus paneFocus
+		title string
+		count int
+	}{
+		{focus: focusFile, title: "Files", count: len(m.fileList.Items())},
+		{focus: focusRequests, title: "Requests", count: len(m.requestItems)},
 	}
-	separator := m.theme.PaneDivider.
+	if len(m.workflowItems) > 0 {
+		tabs = append(tabs, struct {
+			focus paneFocus
+			title string
+			count int
+		}{focus: focusWorkflows, title: "Workflows", count: len(m.workflowItems)})
+	}
+
+	tabParts := make([]string, 0, len(tabs))
+	baseTab := m.theme.PaneTitle.Align(lipgloss.Center).Padding(0, 1)
+	for _, tab := range tabs {
+		label := fmt.Sprintf("%s %d", strings.ToUpper(tab.title), tab.count)
+		tabStyle := baseTab
+		if tab.focus == focusFile {
+			tabStyle = m.theme.PaneTitleFile.Align(lipgloss.Center).Padding(0, 1)
+		} else {
+			tabStyle = m.theme.PaneTitleRequests.Align(lipgloss.Center).Padding(0, 1)
+		}
+		if tab.focus == active {
+			tabStyle = tabStyle.Foreground(m.theme.PaneActiveForeground).Bold(true)
+		}
+		tabParts = append(tabParts, tabStyle.Render(label))
+	}
+
+	tabRow := lipgloss.JoinHorizontal(lipgloss.Top, tabParts...)
+	tabRow = lipgloss.Place(
+		innerWidth,
+		lipgloss.Height(tabRow),
+		lipgloss.Left,
+		lipgloss.Center,
+		tabRow,
+	)
+
+	tabDivider := m.theme.PaneDivider
+	if m.reqCompactMode() {
+		tabDivider = tabDivider.Faint(true)
+	}
+	divider := tabDivider.
 		Width(innerWidth).
 		Render(strings.Repeat("─", innerWidth))
 
-	filesSection := lipgloss.JoinVertical(
-		lipgloss.Left,
-		filesTitle,
-		separator,
-		filesView,
-	)
-	requestsSection := lipgloss.JoinVertical(
-		lipgloss.Left,
-		requestsTitle,
-		separator,
-		requestsView,
-	)
-	workflowsSection := lipgloss.JoinVertical(
-		lipgloss.Left,
-		workflowsTitle,
-		separator,
-		workflowsView,
-	)
-
-	inactiveSection := lipgloss.NewStyle().Faint(true)
-	if m.focus != focusFile {
-		filesSection = inactiveSection.Render(filesSection)
-	}
-	if m.focus != focusRequests {
-		requestsSection = inactiveSection.Render(requestsSection)
-	}
-	if m.focus != focusWorkflows {
-		workflowsSection = inactiveSection.Render(workflowsSection)
+	body := requestsView
+	switch active {
+	case focusFile:
+		if m.filesCollapsed {
+			body = centeredListView(
+				filesView,
+				innerWidth,
+				m.theme.HeaderValue.Render("Files collapsed (g Shift+F)"))
+		} else {
+			body = filesView
+		}
+	case focusWorkflows:
+		if m.workflowsCollapsed {
+			body = centeredListView(
+				workflowsView,
+				innerWidth,
+				m.theme.HeaderValue.Render("Workflows collapsed (g Shift+O)"))
+		} else {
+			body = workflowsView
+		}
 	}
 
-	if m.focus == focusFile {
-		highlight := lipgloss.NewStyle().
+	if m.focus == active {
+		border := m.theme.PaneBorderFocusRequests
+		if active == focusFile {
+			border = m.theme.PaneBorderFocusFile
+		}
+		body = lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(m.theme.PaneBorderFocusFile).
-			Padding(0, 1)
-		filesSection = highlight.Render(filesSection)
+			BorderForeground(border).
+			Padding(0, 1).
+			Render(body)
 	}
-	if m.focus == focusRequests {
-		highlight := lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(m.theme.PaneBorderFocusRequests).
-			Padding(0, 1)
-		requestsSection = highlight.Render(requestsSection)
-	}
-	if m.focus == focusWorkflows {
-		highlight := lipgloss.NewStyle().
-			BorderStyle(lipgloss.RoundedBorder()).
-			BorderForeground(m.theme.PaneBorderFocusRequests).
-			Padding(0, 1)
-		workflowsSection = highlight.Render(workflowsSection)
-	}
-	sections := []string{filesSection, "", requestsSection}
-	if len(m.workflowItems) > 0 {
-		sections = append(sections, "", workflowsSection)
-	}
-	content := lipgloss.JoinVertical(lipgloss.Left, sections...)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		tabRow,
+		divider,
+		body,
+	)
 	if !paneActive {
 		content = faintStyle.Render(content)
 	}
-
-	gapCount := sidebarSplitPadding
-	if len(m.workflowItems) > 0 {
-		gapCount++
+	targetHeight := m.paneContentHeight + style.GetVerticalFrameSize()
+	minHeight := lipgloss.Height(content) + style.GetVerticalFrameSize()
+	if targetHeight < minHeight {
+		targetHeight = minHeight
 	}
-	contentHeight := m.sidebarFilesHeight + m.sidebarRequestsHeight + gapCount
-	if contentHeight < m.paneContentHeight {
-		contentHeight = m.paneContentHeight
-	}
-	frameHeight := style.GetVerticalFrameSize()
-	targetHeight := contentHeight + frameHeight
 	return style.
 		Width(width).
 		Height(targetHeight).
@@ -376,6 +395,238 @@ func centeredListView(view string, width int, content string) string {
 		lipgloss.Center,
 		content,
 	)
+}
+
+// clampPane ensures the navigator pane renders within a fixed rectangle.
+func clampPane(content string, width, height int) string {
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
+	}
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	for i, line := range lines {
+		line = ansi.Truncate(line, width, "")
+		lineWidth := lipgloss.Width(line)
+		if lineWidth < width {
+			line += strings.Repeat(" ", width-lineWidth)
+		}
+		lines[i] = line
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for len(lines) < height {
+		lines = append(lines, strings.Repeat(" ", width))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) renderNavigatorFilter(width int, active bool) string {
+	m.ensureNavigatorFilter()
+	input := m.navigatorFilter
+	if width > 4 {
+		input.Width = width - 2
+		if input.Width < 1 {
+			input.Width = 1
+		}
+	}
+	filterView := input.View()
+	row := filterView
+	if chips := m.navigatorMethodChips(); chips != "" {
+		row = lipgloss.JoinHorizontal(lipgloss.Left, row, " ", chips)
+	}
+	if tags := m.navigatorTagChips(); tags != "" {
+		row = lipgloss.JoinHorizontal(lipgloss.Left, row, " ", tags)
+	}
+	if !active && !input.Focused() {
+		row = lipgloss.NewStyle().Faint(true).Render(row)
+	}
+	return lipgloss.NewStyle().Width(width).Render(row)
+}
+
+func (m Model) navigatorMethodChips() string {
+	if m.navigator == nil {
+		return ""
+	}
+	active := m.navigator.MethodFilters()
+	show := m.navigatorFilter.Focused() || len(active) > 0
+	if !show {
+		return ""
+	}
+	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "GRPC", "WS"}
+	parts := make([]string, 0, len(methods))
+	for _, method := range methods {
+		on := active[strings.ToUpper(method)]
+		bg := methodColor(m.theme, method)
+		style := m.theme.NavigatorBadge.Background(bg).Foreground(lipgloss.Color("#0f111a"))
+		if on {
+			style = style.Bold(true).Underline(true)
+		} else {
+			style = style.Faint(true)
+		}
+		parts = append(parts, style.Render(method))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (m Model) navigatorTagChips() string {
+	if m.navigator == nil {
+		return ""
+	}
+	active := m.navigator.TagFilters()
+	show := m.navigatorFilter.Focused() || len(active) > 0
+	if !show {
+		return ""
+	}
+	tags := m.collectNavigatorTagsFiltered(10, filterQueryTokens(m.navigatorFilter.Value()))
+	parts := make([]string, 0, len(tags))
+	for _, tag := range tags {
+		on := active[strings.ToLower(tag)]
+		style := m.theme.NavigatorTag
+		if on {
+			style = style.Bold(true).Underline(true)
+		} else {
+			style = style.Faint(true)
+		}
+		parts = append(parts, style.Render("#"+tag))
+	}
+	return strings.Join(parts, " ")
+}
+
+func (m Model) collectNavigatorTags(limit int) []string {
+	return m.collectNavigatorTagsFiltered(limit, nil)
+}
+
+func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) []string {
+	if m.navigator == nil || limit == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	var out []string
+	var walk func(nodes []*navigator.Node[any])
+	walk = func(nodes []*navigator.Node[any]) {
+		for _, n := range nodes {
+			for _, t := range n.Tags {
+				key := strings.ToLower(strings.TrimSpace(t))
+				if key == "" {
+					continue
+				}
+				if len(queryTokens) > 0 && !tagMatchesQuery(key, queryTokens) {
+					continue
+				}
+				if _, ok := seen[key]; ok {
+					continue
+				}
+				seen[key] = struct{}{}
+				out = append(out, key)
+				if limit > 0 && len(out) >= limit {
+					return
+				}
+			}
+			walk(n.Children)
+			if limit > 0 && len(out) >= limit {
+				return
+			}
+		}
+	}
+	for _, row := range m.navigator.Rows() {
+		if row.Node != nil {
+			walk([]*navigator.Node[any]{row.Node})
+		}
+	}
+	return out
+}
+
+func filterQueryTokens(val string) []string {
+	if strings.TrimSpace(val) == "" {
+		return nil
+	}
+	fields := strings.Fields(strings.ToLower(val))
+	tokens := make([]string, 0, len(fields))
+	for _, f := range fields {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		tokens = append(tokens, f)
+	}
+	return tokens
+}
+
+func tagMatchesQuery(tag string, query []string) bool {
+	if tag == "" || len(query) == 0 {
+		return true
+	}
+	for _, q := range query {
+		if q == "" {
+			continue
+		}
+		if strings.Contains(tag, q) {
+			return true
+		}
+	}
+	return false
+}
+
+func methodColor(th theme.Theme, method string) lipgloss.Color {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case "GET":
+		return th.MethodColors.GET
+	case "POST":
+		return th.MethodColors.POST
+	case "PUT":
+		return th.MethodColors.PUT
+	case "PATCH":
+		return th.MethodColors.PATCH
+	case "DELETE":
+		return th.MethodColors.DELETE
+	case "HEAD":
+		return th.MethodColors.HEAD
+	case "OPTIONS":
+		return th.MethodColors.OPTIONS
+	case "GRPC":
+		return th.MethodColors.GRPC
+	case "WS", "WEBSOCKET":
+		return th.MethodColors.WS
+	default:
+		return th.MethodColors.Default
+	}
+}
+
+func (m Model) requestDetail(width int) string {
+	item, ok := m.requestList.SelectedItem().(requestListItem)
+	if !ok || item.request == nil {
+		return ""
+	}
+	desc := condense(expandStatusText(item.resolver, item.request.Metadata.Description), 120)
+	tags := joinTags(item.request.Metadata.Tags, 5)
+	method := strings.ToUpper(strings.TrimSpace(item.request.Method))
+	target := truncateInline(expandStatusText(item.resolver, requestTarget(item.request)), 64)
+
+	lines := []string{}
+	if desc != "" {
+		lines = append(lines, desc)
+	}
+	info := strings.Join(compactStrings(method, target), " ")
+	if info != "" {
+		lines = append(lines, info)
+	}
+	if tags != "" {
+		lines = append(lines, tags)
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	style := lipgloss.NewStyle().
+		Width(width).
+		MarginTop(0).
+		Faint(true)
+	return style.Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) renderEditorPane() string {

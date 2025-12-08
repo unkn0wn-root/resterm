@@ -7,60 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func TestAdjustSidebarSplitModifiesHeights(t *testing.T) {
-	cfg := Config{WorkspaceRoot: t.TempDir()}
-	model := New(cfg)
-	model.width = 120
-	model.height = 60
-	model.ready = true
-	_ = model.applyLayout()
-
-	initialFiles := model.sidebarFilesHeight
-	initialRequests := model.sidebarRequestsHeight
-	if initialFiles <= 0 || initialRequests <= 0 {
-		t.Fatalf("expected initial sidebar heights to be positive, got %d and %d", initialFiles, initialRequests)
-	}
-
-	if changed, _, _ := model.adjustSidebarSplit(sidebarSplitStep); !changed {
-		t.Fatalf("expected sidebar split adjustment to apply")
-	}
-	if model.sidebarFilesHeight <= initialFiles {
-		t.Fatalf("expected file pane height to grow, initial %d new %d", initialFiles, model.sidebarFilesHeight)
-	}
-	if model.sidebarRequestsHeight >= initialRequests {
-		t.Fatalf("expected request pane height to shrink, initial %d new %d", initialRequests, model.sidebarRequestsHeight)
-	}
-}
-
-func TestAdjustSidebarSplitClampsBounds(t *testing.T) {
-	cfg := Config{WorkspaceRoot: t.TempDir()}
-	model := New(cfg)
-	model.width = 120
-	model.height = 60
-	model.ready = true
-	_ = model.applyLayout()
-
-	model.sidebarSplit = maxSidebarSplit
-	if changed, bounded, _ := model.adjustSidebarSplit(sidebarSplitStep); changed {
-		t.Fatalf("expected split at max to remain unchanged")
-	} else if !bounded {
-		t.Fatalf("expected upper bound to be reported when at maximum")
-	}
-
-	model.sidebarSplit = minSidebarSplit
-	if changed, bounded, _ := model.adjustSidebarSplit(-sidebarSplitStep); changed {
-		t.Fatalf("expected split at min to remain unchanged")
-	} else if !bounded {
-		t.Fatalf("expected lower bound to be reported when at minimum")
-	}
-
-	model.sidebarSplit = sidebarSplitDefault
-	model.focus = focusEditor
-	if changed, _, _ := model.adjustSidebarSplit(sidebarSplitStep); !changed {
-		t.Fatalf("expected adjustment to apply regardless of focus")
-	}
-}
-
 func TestAdjustSidebarWidthModifiesWidths(t *testing.T) {
 	cfg := Config{WorkspaceRoot: t.TempDir()}
 	model := New(cfg)
@@ -418,58 +364,5 @@ func TestFrameSizes(t *testing.T) {
 	probe = styleResponse.Width(10).MaxWidth(10).Render(strings.Repeat("X", 10))
 	if w := lipgloss.Width(probe); w != 10 {
 		t.Fatalf("expected width 10 with Width/MaxWidth(10), got %d", w)
-	}
-}
-
-func TestApplyLayoutAccountsForWorkflowPadding(t *testing.T) {
-	cfg := Config{WorkspaceRoot: t.TempDir()}
-	model := New(cfg)
-	model.width = 120
-	model.height = 60
-	model.ready = true
-	model.workflowItems = []workflowListItem{{}}
-	model.showWorkflow = true
-	model.sidebarSplit = sidebarWorkflowSplit
-	_ = model.applyLayout()
-
-	gaps := sidebarSplitPadding + 1
-	if total := model.sidebarFilesHeight + model.sidebarRequestsHeight + gaps; total != model.paneContentHeight {
-		t.Fatalf("expected pane content height %d, got %d", model.paneContentHeight, total)
-	}
-	requestHeight := model.requestList.Height() + sidebarChrome
-	workflowHeight := model.workflowList.Height() + sidebarChrome
-	if requestHeight <= 0 || workflowHeight <= 0 {
-		t.Fatalf("expected positive section heights, got %d and %d", requestHeight, workflowHeight)
-	}
-	if got := requestHeight + workflowHeight; got != model.sidebarRequestsHeight {
-		t.Fatalf("expected combined request heights %d, got %d", model.sidebarRequestsHeight, got)
-	}
-	if diff := requestHeight - workflowHeight; diff > 1 || diff < -1 {
-		t.Fatalf("expected request/workflow sections to remain balanced, requests=%d workflows=%d", requestHeight, workflowHeight)
-	}
-}
-
-func TestApplyLayoutMaintainsHeightWithWorkflowFocus(t *testing.T) {
-	cfg := Config{WorkspaceRoot: t.TempDir()}
-	model := New(cfg)
-	model.width = 120
-	model.height = 60
-	model.ready = true
-	model.focus = focusWorkflows
-	model.workflowItems = []workflowListItem{{}}
-	model.showWorkflow = true
-	model.sidebarSplit = sidebarWorkflowSplit
-	_ = model.applyLayout()
-
-	gaps := sidebarSplitPadding + 1
-	total := model.sidebarFilesHeight + model.sidebarRequestsHeight + gaps
-	if total != model.paneContentHeight {
-		t.Fatalf("expected pane height %d, got %d", model.paneContentHeight, total)
-	}
-
-	expectedRequests := (model.requestList.Height() + sidebarChrome) +
-		(model.workflowList.Height() + sidebarChrome) + sidebarFocusPad
-	if model.sidebarRequestsHeight != expectedRequests {
-		t.Fatalf("expected requests height %d, got %d", expectedRequests, model.sidebarRequestsHeight)
 	}
 }

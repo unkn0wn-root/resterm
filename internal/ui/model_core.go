@@ -28,6 +28,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
+	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/update"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -72,6 +73,13 @@ const (
 	mainSplitHorizontal
 )
 
+type sidebarMode int
+
+const (
+	sidebarModeStack sidebarMode = iota
+	sidebarModeTabs
+)
+
 type paneRegion int
 
 const (
@@ -100,22 +108,13 @@ const (
 	minSidebarWidthRatio  = 0.05
 	maxSidebarWidthRatio  = 0.3
 	minSidebarWidthPixels = 20
+	sidebarSplitDefault   = 0.5
+	sidebarSplitStep      = 0.05
+	sidebarWorkflowSplit  = 1.0 / 3.0
 )
 
 const (
-	sidebarSplitDefault  = 0.5
-	sidebarSplitStep     = 0.05
-	minSidebarSplit      = 0.2
-	maxSidebarSplit      = 0.8
-	sidebarWorkflowSplit = 1.0 / 3.0
-	minSidebarFiles      = 6
-	minSidebarRequests   = 4
-	sidebarSplitPadding  = 1
-	sidebarChrome        = 2
-	sidebarFocusPad      = 2
-)
-
-const (
+	requestCompactSwitch     = 10
 	minWorkflowSplit     = 0.3
 	maxWorkflowSplit     = 0.7
 	workflowSplitDefault = 0.5
@@ -193,6 +192,10 @@ type Model struct {
 	fileList                 list.Model
 	requestList              list.Model
 	workflowList             list.Model
+	navigator                *navigator.Model[any]
+	navigatorFilter          textinput.Model
+	navigatorCompact         bool
+	docCache                 map[string]navDocCache
 	editor                   requestEditor
 	responsePanes            [2]responsePaneState
 	responseSplit            bool
@@ -205,7 +208,16 @@ type Model struct {
 	responseCollapsed        bool
 	zoomActive               bool
 	zoomRegion               paneRegion
+	filesCollapsed           bool
+	workflowsCollapsed       bool
+	workflowPinned           bool
+	autoCollapseFiles        bool
+	sidebarModeOverride      *sidebarMode
+	sidebarMode              sidebarMode
+	sidebarTab               paneFocus
 	mainSplitOrientation     mainSplitOrientation
+	reqCompact               *bool
+	wfCompact                *bool
 	editorContentHeight      int
 	responseContentHeight    int
 	historyList              list.Model
@@ -345,6 +357,11 @@ type Model struct {
 	requestKeySessions map[string]string
 }
 
+type navDocCache struct {
+	doc *restfile.Document
+	mod time.Time
+}
+
 func New(cfg Config) Model {
 	th := theme.DefaultTheme()
 	if cfg.Theme != nil {
@@ -354,6 +371,9 @@ func New(cfg Config) Model {
 	if activeTheme == "" {
 		activeTheme = "default"
 	}
+
+	reqCompact := false
+	wfCompact := false
 
 	client := cfg.Client
 	if client == nil {
@@ -436,6 +456,13 @@ func New(cfg Config) Model {
 	searchInput.Prompt = "/"
 	searchInput.SetCursor(0)
 	searchInput.Blur()
+
+	navFilter := textinput.New()
+	navFilter.Placeholder = "filter"
+	navFilter.CharLimit = 0
+	navFilter.Prompt = ""
+	navFilter.SetCursor(0)
+	navFilter.Blur()
 
 	primaryViewport := viewport.New(0, 0)
 	primaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
@@ -528,6 +555,8 @@ func New(cfg Config) Model {
 		fileList:               fileList,
 		requestList:            requestList,
 		workflowList:           workflowList,
+		navigatorFilter:        navFilter,
+		docCache:               make(map[string]navDocCache),
 		editor:                 editor,
 		historyList:            historyList,
 		envList:                envList,
@@ -541,9 +570,15 @@ func New(cfg Config) Model {
 			newResponsePaneState(secondaryViewport, false),
 		},
 		responsePaneFocus:        responsePanePrimary,
+		sidebarMode:              sidebarModeStack,
+		sidebarTab:               focusFile,
 		responseSplitRatio:       0.5,
 		responseSplitOrientation: responseSplitVertical,
 		mainSplitOrientation:     mainSplitVertical,
+		workflowPinned:           true,
+		autoCollapseFiles:        true,
+		reqCompact:               &reqCompact,
+		wfCompact:                &wfCompact,
 		responseTokens:           make(map[string]*responseSnapshot),
 		responseLastFocused:      responsePanePrimary,
 		focus:                    focusFile,
@@ -594,6 +629,7 @@ func New(cfg Config) Model {
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
 	model.syncSSHGlobals(model.doc)
 	model.syncRequestList(model.doc)
+	model.rebuildNavigator(entries)
 	if model.historyStore != nil {
 		_ = model.historyStore.Load()
 	}

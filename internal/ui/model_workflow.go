@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -527,16 +526,6 @@ func (m *Model) syncWorkflowList(doc *restfile.Document) bool {
 func (m *Model) setWorkflowShown(visible bool) bool {
 	if m.showWorkflow == visible {
 		return false
-	}
-	const tolerance = 0.05
-	if visible {
-		if math.Abs(m.sidebarSplit-sidebarSplitDefault) < tolerance {
-			m.sidebarSplit = sidebarWorkflowSplit
-		}
-	} else {
-		if math.Abs(m.sidebarSplit-sidebarWorkflowSplit) < tolerance {
-			m.sidebarSplit = sidebarSplitDefault
-		}
 	}
 	m.showWorkflow = visible
 	return true
