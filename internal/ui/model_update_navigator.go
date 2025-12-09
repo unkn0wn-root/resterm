@@ -132,14 +132,19 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			path := n.Payload.FilePath
-			if len(n.Children) == 0 {
+			hasChildren := len(n.Children) > 0
+			if !hasChildren {
 				m.expandNavigatorFile(path)
 				if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
 					n = refreshed
 				}
 			}
 			if n != nil && len(n.Children) > 0 {
-				n.Expanded = !n.Expanded
+				if hasChildren {
+					n.Expanded = !n.Expanded
+				} else {
+					n.Expanded = true
+				}
 				m.navigator.Refresh()
 			}
 		case "left", "h":
