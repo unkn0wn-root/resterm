@@ -2106,7 +2106,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpActionKey(bindings.ActionOpenEnvSelector, "Ctrl+E"), "Environment selector"),
 		helpRow(m, m.helpActionKey(bindings.ActionSelectTimelineTab, "Ctrl+Alt+L / g t"), "Timeline tab"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenThemeSelector, "Ctrl+Alt+T / g m"), "Theme selector"),
-		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarHeightIncrease, bindings.ActionSidebarHeightDecrease}, "gk / gj"), "Adjust files/requests split"),
+		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarHeightIncrease, bindings.ActionSidebarHeightDecrease}, "gk / gj"), "Expand / collapse navigator tree"),
 		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarWidthIncrease, bindings.ActionSidebarWidthDecrease}, "gh / gl"), "Adjust editor/response width"),
 		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleSidebarCollapse, bindings.ActionToggleEditorCollapse, bindings.ActionToggleResponseCollapse}, "g1 / g2 / g3"), "Toggle sidebar / editor / response minimize"),
 		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleZoom, bindings.ActionClearZoom}, "g z / g Z"), "Zoom focused pane / reset zoom"),
