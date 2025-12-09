@@ -2,11 +2,13 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
@@ -461,6 +463,75 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	return true
 }
 
+func navRequestIndex(id string) int {
+	parts := strings.Split(id, ":")
+	if len(parts) == 0 {
+		return -1
+	}
+	last := parts[len(parts)-1]
+	idx, err := strconv.Atoi(last)
+	if err != nil || idx < 0 {
+		return -1
+	}
+	return idx
+}
+
+func (m *Model) selectRequestForNode(req *restfile.Request, id string) bool {
+	if req == nil {
+		return false
+	}
+	if key := requestKey(req); key != "" && m.selectRequestItemByKey(key) {
+		return true
+	}
+	if idx := navRequestIndex(id); idx >= 0 && idx < len(m.requestItems) {
+		m.requestList.Select(idx)
+		return true
+	}
+	return false
+}
+
+func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
+	if m.navigator == nil {
+		return nil
+	}
+	n := m.navigator.Selected()
+	if n == nil || n.Kind != navigator.KindRequest {
+		return nil
+	}
+	req, ok := n.Payload.Data.(*restfile.Request)
+	if !ok || req == nil {
+		return nil
+	}
+	path := strings.TrimSpace(n.Payload.FilePath)
+	var cmds []tea.Cmd
+	if path != "" && !samePath(path, m.currentFile) {
+		if cmd := m.openFile(path); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		if !samePath(path, m.currentFile) {
+			if len(cmds) == 0 {
+				return nil
+			}
+			return tea.Batch(cmds...)
+		}
+	}
+	if !m.selectRequestForNode(req, n.ID) {
+		m.setStatusMessage(statusMsg{text: "Request not found in file", level: statusWarn})
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	m.setFocus(focusRequests)
+	if cmd := m.sendRequestFromList(execute); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
 func (m *Model) handleShortcutKey(key string, msg tea.KeyMsg) (tea.Cmd, bool) {
 	if key == "" || m.bindingsMap == nil {
 		return nil, false
@@ -774,6 +845,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if isSpaceKey(msg) && m.canPreviewOnSpace() {
+		if m.focus == focusRequests {
+			if cmd := m.sendNavigatorRequest(false); cmd != nil {
+				return combine(cmd)
+			}
+		}
 		if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
 			return combine(nil)
 		}
@@ -933,11 +1009,17 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusRequests {
 		switch {
 		case keyStr == "enter":
+			if cmd := m.sendNavigatorRequest(true); cmd != nil {
+				return combine(cmd)
+			}
 			if !m.navGate(navigator.KindRequest, "Open file to send this request") {
 				return combine(nil)
 			}
 			return combine(m.sendRequestFromList(true))
 		case isSpaceKey(msg):
+			if cmd := m.sendNavigatorRequest(false); cmd != nil {
+				return combine(cmd)
+			}
 			if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
 				return combine(nil)
 			}
