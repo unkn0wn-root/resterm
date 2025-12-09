@@ -57,7 +57,7 @@ func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bo
 	}
 	parts := []string{pad, icon}
 	if n.Kind == KindWorkflow {
-		parts = append(parts, renderWorkflowBadge(th), " ")
+		parts = append(parts, renderWorkflowBadge(th))
 	}
 	if n.Method != "" {
 		parts = append(parts, renderMethodBadge(n.Method, th))
