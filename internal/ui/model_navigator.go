@@ -274,6 +274,9 @@ func (m *Model) syncNavigatorSelection() {
 			if samePath(path, m.currentFile) {
 				m.setActiveRequest(req)
 			} else {
+				if m.pendingCrossFileID == n.ID {
+					return
+				}
 				m.setActiveRequest(nil)
 				m.requestList.Select(-1)
 				m.setStatusMessage(statusMsg{text: "Open file to edit this request", level: statusInfo})
@@ -291,6 +294,9 @@ func (m *Model) syncNavigatorSelection() {
 				m.activeWorkflowKey = workflowKey(wf)
 				_ = m.selectWorkflowItemByKey(m.activeWorkflowKey)
 			} else {
+				if m.pendingCrossFileID == n.ID {
+					return
+				}
 				m.activeWorkflowKey = ""
 				m.workflowList.Select(-1)
 				m.setStatusMessage(statusMsg{text: "Open file to edit this workflow", level: statusInfo})

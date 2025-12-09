@@ -187,6 +187,7 @@ type Model struct {
 	navigator                *navigator.Model[any]
 	navigatorFilter          textinput.Model
 	navigatorCompact         bool
+	pendingCrossFileID       string
 	docCache                 map[string]navDocCache
 	editor                   requestEditor
 	responsePanes            [2]responsePaneState

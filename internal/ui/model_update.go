@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -463,6 +464,31 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	return true
 }
 
+func (m *Model) confirmCrossFileNavigation(n *navigator.Node[any]) bool {
+	if n == nil {
+		return true
+	}
+	path := strings.TrimSpace(n.Payload.FilePath)
+	if path == "" || samePath(path, m.currentFile) || !m.dirty {
+		m.pendingCrossFileID = ""
+		return true
+	}
+	if m.pendingCrossFileID == n.ID {
+		m.pendingCrossFileID = ""
+		return true
+	}
+	m.pendingCrossFileID = n.ID
+	base := filepath.Base(path)
+	if base == "" {
+		base = path
+	}
+	m.setStatusMessage(statusMsg{
+		text:  fmt.Sprintf("Unsaved changes will be discarded when opening %s. Press Enter/Space again to continue.", base),
+		level: statusWarn,
+	})
+	return false
+}
+
 func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
 	if n == nil {
 		return nil, true
@@ -516,6 +542,9 @@ func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
 	if n == nil || n.Kind != navigator.KindRequest {
 		return nil
 	}
+	if !m.confirmCrossFileNavigation(n) {
+		return func() tea.Msg { return nil }
+	}
 	req, ok := n.Payload.Data.(*restfile.Request)
 	if !ok || req == nil {
 		return nil
@@ -565,6 +594,9 @@ func (m *Model) sendNavigatorWorkflow() tea.Cmd {
 	n := m.navigator.Selected()
 	if n == nil || n.Kind != navigator.KindWorkflow {
 		return nil
+	}
+	if !m.confirmCrossFileNavigation(n) {
+		return func() tea.Msg { return nil }
 	}
 	wf, ok := n.Payload.Data.(*restfile.Workflow)
 	if !ok || wf == nil {
