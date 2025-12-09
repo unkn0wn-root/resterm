@@ -463,6 +463,24 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	return true
 }
 
+func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
+	if n == nil {
+		return nil, true
+	}
+	path := strings.TrimSpace(n.Payload.FilePath)
+	if path == "" || samePath(path, m.currentFile) {
+		return nil, true
+	}
+	var cmds []tea.Cmd
+	if cmd := m.openFile(path); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if samePath(path, m.currentFile) {
+		return cmds, true
+	}
+	return cmds, false
+}
+
 func navRequestIndex(id string) int {
 	parts := strings.Split(id, ":")
 	if len(parts) == 0 {
@@ -502,18 +520,12 @@ func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
 	if !ok || req == nil {
 		return nil
 	}
-	path := strings.TrimSpace(n.Payload.FilePath)
-	var cmds []tea.Cmd
-	if path != "" && !samePath(path, m.currentFile) {
-		if cmd := m.openFile(path); cmd != nil {
-			cmds = append(cmds, cmd)
+	cmds, okFile := m.ensureNavigatorFile(n)
+	if !okFile {
+		if len(cmds) == 0 {
+			return nil
 		}
-		if !samePath(path, m.currentFile) {
-			if len(cmds) == 0 {
-				return nil
-			}
-			return tea.Batch(cmds...)
-		}
+		return tea.Batch(cmds...)
 	}
 	if !m.selectRequestForNode(req, n.ID) {
 		m.setStatusMessage(statusMsg{text: "Request not found in file", level: statusWarn})
@@ -524,6 +536,56 @@ func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
 	}
 	m.setFocus(focusRequests)
 	if cmd := m.sendRequestFromList(execute); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) selectWorkflowForNode(wf *restfile.Workflow, id string) bool {
+	if wf == nil {
+		return false
+	}
+	if key := workflowKey(wf); key != "" && m.selectWorkflowItemByKey(key) {
+		return true
+	}
+	if idx := navRequestIndex(id); idx >= 0 && idx < len(m.workflowItems) {
+		m.workflowList.Select(idx)
+		return true
+	}
+	return false
+}
+
+func (m *Model) sendNavigatorWorkflow() tea.Cmd {
+	if m.navigator == nil {
+		return nil
+	}
+	n := m.navigator.Selected()
+	if n == nil || n.Kind != navigator.KindWorkflow {
+		return nil
+	}
+	wf, ok := n.Payload.Data.(*restfile.Workflow)
+	if !ok || wf == nil {
+		return nil
+	}
+	cmds, okFile := m.ensureNavigatorFile(n)
+	if !okFile {
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	if !m.selectWorkflowForNode(wf, n.ID) {
+		m.setStatusMessage(statusMsg{text: "Workflow not found in file", level: statusWarn})
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	m.setFocus(focusWorkflows)
+	if cmd := m.runSelectedWorkflow(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 	if len(cmds) == 0 {
@@ -1030,11 +1092,17 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusWorkflows {
 		switch {
 		case keyStr == "enter":
+			if cmd := m.sendNavigatorWorkflow(); cmd != nil {
+				return combine(cmd)
+			}
 			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
 				return combine(nil)
 			}
 			return combine(m.runSelectedWorkflow())
 		case isSpaceKey(msg):
+			if cmd := m.sendNavigatorWorkflow(); cmd != nil {
+				return combine(cmd)
+			}
 			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
 				return combine(nil)
 			}
