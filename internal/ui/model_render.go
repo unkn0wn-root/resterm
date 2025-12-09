@@ -216,7 +216,8 @@ func (m Model) renderFilePane() string {
 
 	innerWidth := maxInt(1, width-4)
 	filter := m.renderNavigatorFilter(innerWidth, paneActive)
-	available := m.paneContentHeight - lipgloss.Height(filter)
+	filterSep := dividerLine(m.theme.PaneDivider, innerWidth)
+	available := m.paneContentHeight - lipgloss.Height(filter) - lipgloss.Height(filterSep)
 	if available < 1 {
 		available = 1
 	}
@@ -227,7 +228,7 @@ func (m Model) renderFilePane() string {
 	divider := ""
 	dividerHeight := 0
 	if detail != "" && detailHeight > 0 {
-		divider = m.theme.PaneDivider.Width(innerWidth).Render(strings.Repeat("─", innerWidth))
+		divider = dividerLine(m.theme.PaneDivider, innerWidth)
 		dividerHeight = lipgloss.Height(divider)
 	}
 
@@ -258,7 +259,7 @@ func (m Model) renderFilePane() string {
 	}
 	listView = lipgloss.NewStyle().Width(innerWidth).Height(listHeight).Render(listView)
 
-	bodyParts := []string{filter, listView}
+	bodyParts := []string{filter, filterSep, listView}
 	if detail != "" && detailHeight > 0 {
 		if divider != "" {
 			bodyParts = append(bodyParts, divider)
@@ -424,6 +425,13 @@ func clampPane(content string, width, height int) string {
 		lines = append(lines, strings.Repeat(" ", width))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func dividerLine(st lipgloss.Style, width int) string {
+	if width < 1 {
+		width = 1
+	}
+	return st.Width(width).Render(strings.Repeat("─", width))
 }
 
 func (m Model) renderNavigatorFilter(width int, active bool) string {

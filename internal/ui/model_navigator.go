@@ -139,7 +139,7 @@ func (m *Model) cacheDoc(path string, doc *restfile.Document) {
 func (m *Model) ensureNavigatorFilter() {
 	if m.navigatorFilter.Prompt == "" {
 		ni := textinput.New()
-		ni.Placeholder = "Filter requests, tags, files"
+		ni.Placeholder = "Requests, tags, files..."
 		ni.Prompt = "Filter: "
 		ni.CharLimit = 0
 		ni.SetCursor(0)
