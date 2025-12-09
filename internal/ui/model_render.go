@@ -251,11 +251,7 @@ func (m Model) renderFilePane() string {
 
 	listView := navigator.ListView(m.navigator, m.theme, innerWidth, listHeight, paneActive)
 	if listView == "" {
-		listView = centeredListView(
-			"",
-			innerWidth,
-			m.theme.HeaderValue.Render("No requests discovered"),
-		)
+		listView = centerBox(innerWidth, listHeight, m.theme.HeaderValue.Render("No requests discovered"))
 	}
 	listView = lipgloss.NewStyle().Width(innerWidth).Height(listHeight).Render(listView)
 
@@ -283,6 +279,22 @@ func centeredListView(view string, width int, content string) string {
 	}
 	if width < 1 {
 		width = 1
+	}
+	return lipgloss.Place(
+		width,
+		height,
+		lipgloss.Center,
+		lipgloss.Center,
+		content,
+	)
+}
+
+func centerBox(width, height int, content string) string {
+	if width < 1 {
+		width = 1
+	}
+	if height < 1 {
+		height = 1
 	}
 	return lipgloss.Place(
 		width,
