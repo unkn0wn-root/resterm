@@ -91,25 +91,46 @@ func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bo
 		parts = append(parts, " ", renderTags(n.Tags, th))
 	}
 	line := strings.Join(parts, "")
-	line = ansi.Truncate(line, width, "")
-	return lipgloss.NewStyle().Width(width).Render(line)
+	truncated := ansi.Truncate(line, width, "")
+	indicator := ""
+	if len(truncated) < len(line) {
+		indicator = th.NavigatorDetailDim.Render(" +")
+		avail := width - lipgloss.Width(indicator)
+		if avail < 0 {
+			avail = 0
+		}
+		truncated = ansi.Truncate(truncated, avail, "")
+		truncated += indicator
+	}
+	return lipgloss.NewStyle().Width(width).Render(truncated)
 }
 
 func renderDetail(n *Node[any], th theme.Theme, width int) string {
 	if n == nil {
 		return ""
 	}
-	lines := []string{}
+	softWrap := func(s string, style lipgloss.Style) []string {
+		if s == "" {
+			return nil
+		}
+		raw := style.Render(s)
+		wrapped := ansi.Wrap(raw, width, "")
+		return strings.Split(wrapped, "\n")
+	}
+
+	var lines []string
+
 	header := n.Title
 	if n.Method != "" {
 		header = fmt.Sprintf("%s %s", strings.ToUpper(n.Method), header)
 	}
-	lines = append(lines, th.NavigatorDetailTitle.Render(header))
+	lines = append(lines, ansi.Truncate(th.NavigatorDetailTitle.Render(header), width, ""))
+
 	if n.Target != "" {
-		lines = append(lines, th.NavigatorDetailValue.Render(n.Target))
+		lines = append(lines, softWrap(n.Target, th.NavigatorDetailValue)...)
 	}
 	if n.Desc != "" {
-		lines = append(lines, th.NavigatorDetailDim.Render(n.Desc))
+		lines = append(lines, softWrap(n.Desc, th.NavigatorDetailDim)...)
 	}
 	if len(n.Badges) > 0 {
 		lines = append(lines, renderBadges(n.Badges, th))
@@ -117,9 +138,7 @@ func renderDetail(n *Node[any], th theme.Theme, width int) string {
 	if len(n.Tags) > 0 {
 		lines = append(lines, renderTags(n.Tags, th))
 	}
-	for i, line := range lines {
-		lines[i] = ansi.Truncate(line, width, "")
-	}
+
 	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
 
