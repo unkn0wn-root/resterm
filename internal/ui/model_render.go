@@ -272,23 +272,6 @@ func (m Model) renderFilePane() string {
 		Render(content)
 }
 
-func centeredListView(view string, width int, content string) string {
-	height := lipgloss.Height(view)
-	if height < 1 {
-		height = 1
-	}
-	if width < 1 {
-		width = 1
-	}
-	return lipgloss.Place(
-		width,
-		height,
-		lipgloss.Center,
-		lipgloss.Center,
-		content,
-	)
-}
-
 func centerBox(width, height int, content string) string {
 	if width < 1 {
 		width = 1
