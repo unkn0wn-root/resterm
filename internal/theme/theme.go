@@ -31,6 +31,15 @@ type Theme struct {
 	BrowserBorder                 lipgloss.Style
 	EditorBorder                  lipgloss.Style
 	ResponseBorder                lipgloss.Style
+	NavigatorTitle                lipgloss.Style
+	NavigatorTitleSelected        lipgloss.Style
+	NavigatorSubtitle             lipgloss.Style
+	NavigatorSubtitleSelected     lipgloss.Style
+	NavigatorBadge                lipgloss.Style
+	NavigatorTag                  lipgloss.Style
+	NavigatorDetailTitle          lipgloss.Style
+	NavigatorDetailValue          lipgloss.Style
+	NavigatorDetailDim            lipgloss.Style
 	AppFrame                      lipgloss.Style
 	Header                        lipgloss.Style
 	HeaderTitle                   lipgloss.Style
@@ -65,6 +74,7 @@ type Theme struct {
 	EditorHintItem                lipgloss.Style
 	EditorHintSelected            lipgloss.Style
 	EditorHintAnnotation          lipgloss.Style
+	MethodColors                  MethodColors
 	ListItemTitle                 lipgloss.Style
 	ListItemDescription           lipgloss.Style
 	ListItemSelectedTitle         lipgloss.Style
@@ -93,6 +103,19 @@ type Theme struct {
 	StreamConsoleInputFocused     lipgloss.Style
 }
 
+type MethodColors struct {
+	GET     lipgloss.Color
+	POST    lipgloss.Color
+	PUT     lipgloss.Color
+	PATCH   lipgloss.Color
+	DELETE  lipgloss.Color
+	HEAD    lipgloss.Color
+	OPTIONS lipgloss.Color
+	GRPC    lipgloss.Color
+	WS      lipgloss.Color
+	Default lipgloss.Color
+}
+
 func DefaultTheme() Theme {
 	accent := lipgloss.Color("#7D56F4")
 	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#dcd7ff"))
@@ -102,6 +125,21 @@ func DefaultTheme() Theme {
 		BrowserBorder:  base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A78BFA")),
 		EditorBorder:   base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent),
 		ResponseBorder: base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FB3B3")),
+		NavigatorTitle:           lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
+		NavigatorTitleSelected:   lipgloss.NewStyle().Foreground(lipgloss.Color("#0F111A")).Background(lipgloss.Color("#FFD46A")).Bold(true),
+		NavigatorSubtitle:        lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
+		NavigatorSubtitleSelected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#0F111A")).
+			Background(lipgloss.Color("#FFD46A")),
+		NavigatorBadge:      lipgloss.NewStyle().Padding(0, 1).Bold(true),
+		NavigatorTag:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
+		NavigatorDetailTitle: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FDFBFF")).
+			Bold(true),
+		NavigatorDetailValue: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#C7C4E0")),
+		NavigatorDetailDim: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7d7b87")),
 		AppFrame: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#403B59")),
@@ -265,6 +303,18 @@ func DefaultTheme() Theme {
 		ListItemDimmedTitle:         lipgloss.NewStyle().Foreground(lipgloss.Color("#5E5A72")),
 		ListItemDimmedDescription:   lipgloss.NewStyle().Foreground(lipgloss.Color("#4A4760")),
 		ListItemFilterMatch:         lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("#B9A5FF")),
+		MethodColors: MethodColors{
+			GET:     lipgloss.Color("#34d399"),
+			POST:    lipgloss.Color("#60a5fa"),
+			PUT:     lipgloss.Color("#f59e0b"),
+			PATCH:   lipgloss.Color("#14b8a6"),
+			DELETE:  lipgloss.Color("#f87171"),
+			HEAD:    lipgloss.Color("#a1a1aa"),
+			OPTIONS: lipgloss.Color("#c084fc"),
+			GRPC:    lipgloss.Color("#22d3ee"),
+			WS:      lipgloss.Color("#fb923c"),
+			Default: lipgloss.Color("#9ca3af"),
+		},
 		ResponseContent:             lipgloss.NewStyle(),
 		ResponseContentRaw:          lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		ResponseContentHeaders:      lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),

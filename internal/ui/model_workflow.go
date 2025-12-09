@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"math"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -528,16 +527,6 @@ func (m *Model) setWorkflowShown(visible bool) bool {
 	if m.showWorkflow == visible {
 		return false
 	}
-	const tolerance = 0.05
-	if visible {
-		if math.Abs(m.sidebarSplit-sidebarSplitDefault) < tolerance {
-			m.sidebarSplit = sidebarWorkflowSplit
-		}
-	} else {
-		if math.Abs(m.sidebarSplit-sidebarWorkflowSplit) < tolerance {
-			m.sidebarSplit = sidebarSplitDefault
-		}
-	}
 	m.showWorkflow = visible
 	return true
 }
@@ -621,14 +610,6 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	m.historyJumpToLatest = false
 	m.syncHistory()
 	m.historyList.Select(0)
-}
-
-func (m *Model) updateWorkflowHistoryFilter() {
-	name := ""
-	if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
-		name = item.workflow.Name
-	}
-	m.setHistoryWorkflow(name)
 }
 
 func (m *Model) setHistoryWorkflow(name string) {

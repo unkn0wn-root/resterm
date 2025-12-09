@@ -2,11 +2,15 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -298,46 +302,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok {
-		var fileCmd tea.Cmd
-		var reqCmd tea.Cmd
-		var scenCmd tea.Cmd
-		prevReqIndex := m.requestList.Index()
-		m.fileList, fileCmd = m.fileList.Update(msg)
-		m.requestList, reqCmd = m.requestList.Update(msg)
-		m.workflowList, scenCmd = m.workflowList.Update(msg)
-		m.syncEditorWithRequestSelection(prevReqIndex)
-		cmds = append(cmds, fileCmd, reqCmd, scenCmd)
+		m.navigatorFilter, _ = m.navigatorFilter.Update(msg)
 	} else {
 		switch m.focus {
-		case focusFile:
+		case focusFile, focusRequests, focusWorkflows:
 			if m.suppressListKey {
 				m.suppressListKey = false
 			} else {
-				var fileCmd tea.Cmd
-				m.fileList, fileCmd = m.fileList.Update(msg)
-				cmds = append(cmds, fileCmd)
-			}
-		case focusRequests:
-			if m.suppressListKey {
-				m.suppressListKey = false
-			} else {
-				var reqCmd tea.Cmd
-				prevReqIndex := m.requestList.Index()
-				m.requestList, reqCmd = m.requestList.Update(msg)
-				m.syncEditorWithRequestSelection(prevReqIndex)
-				cmds = append(cmds, reqCmd)
-			}
-		case focusWorkflows:
-			if m.suppressListKey {
-				m.suppressListKey = false
-			} else {
-				var scenCmd tea.Cmd
-				prevIdx := m.workflowList.Index()
-				m.workflowList, scenCmd = m.workflowList.Update(msg)
-				if m.workflowList.Index() != prevIdx {
-					m.updateWorkflowHistoryFilter()
+				if navCmd := m.updateNavigator(msg); navCmd != nil {
+					cmds = append(cmds, navCmd)
 				}
-				cmds = append(cmds, scenCmd)
 			}
 		}
 	}
@@ -448,6 +422,208 @@ func canonicalShortcutKey(msg tea.KeyMsg) string {
 
 func isPlainRuneKey(msg tea.KeyMsg) bool {
 	return msg.Type == tea.KeyRunes && len(msg.Runes) == 1
+}
+
+func (m *Model) isNavigatorFiltering() bool {
+	if !m.navigatorFilter.Focused() {
+		return false
+	}
+	switch m.focus {
+	case focusFile, focusRequests, focusWorkflows:
+		return true
+	default:
+		return false
+	}
+}
+
+func (m *Model) resetChordState() {
+	m.hasPendingChord = false
+	m.pendingChord = ""
+	m.pendingChordMsg = tea.KeyMsg{}
+	m.repeatChordActive = false
+	m.repeatChordPrefix = ""
+}
+
+func (m *Model) navGate(kind navigator.Kind, warn string) bool {
+	if m.navigator == nil {
+		return true
+	}
+	sel := m.navigator.Selected()
+	if sel == nil {
+		return true
+	}
+	if sel.Kind != kind {
+		return false
+	}
+	if !samePath(sel.Payload.FilePath, m.currentFile) {
+		if warn != "" {
+			m.setStatusMessage(statusMsg{text: warn, level: statusInfo})
+		}
+		return false
+	}
+	return true
+}
+
+func (m *Model) confirmCrossFileNavigation(n *navigator.Node[any]) bool {
+	if n == nil {
+		return true
+	}
+	path := strings.TrimSpace(n.Payload.FilePath)
+	if path == "" || samePath(path, m.currentFile) || !m.dirty {
+		m.pendingCrossFileID = ""
+		return true
+	}
+	if m.pendingCrossFileID == n.ID {
+		m.pendingCrossFileID = ""
+		return true
+	}
+	m.pendingCrossFileID = n.ID
+	base := filepath.Base(path)
+	if base == "" {
+		base = path
+	}
+	m.setStatusMessage(statusMsg{
+		text:  fmt.Sprintf("Unsaved changes will be discarded when opening %s. Press Enter/Space again to continue.", base),
+		level: statusWarn,
+	})
+	return false
+}
+
+func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
+	if n == nil {
+		return nil, true
+	}
+	path := strings.TrimSpace(n.Payload.FilePath)
+	if path == "" || samePath(path, m.currentFile) {
+		return nil, true
+	}
+	var cmds []tea.Cmd
+	if cmd := m.openFile(path); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if samePath(path, m.currentFile) {
+		return cmds, true
+	}
+	return cmds, false
+}
+
+func navRequestIndex(id string) int {
+	parts := strings.Split(id, ":")
+	if len(parts) == 0 {
+		return -1
+	}
+	last := parts[len(parts)-1]
+	idx, err := strconv.Atoi(last)
+	if err != nil || idx < 0 {
+		return -1
+	}
+	return idx
+}
+
+func (m *Model) selectRequestForNode(req *restfile.Request, id string) bool {
+	if req == nil {
+		return false
+	}
+	if key := requestKey(req); key != "" && m.selectRequestItemByKey(key) {
+		return true
+	}
+	if idx := navRequestIndex(id); idx >= 0 && idx < len(m.requestItems) {
+		m.requestList.Select(idx)
+		return true
+	}
+	return false
+}
+
+func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
+	if m.navigator == nil {
+		return nil
+	}
+	n := m.navigator.Selected()
+	if n == nil || n.Kind != navigator.KindRequest {
+		return nil
+	}
+	if !m.confirmCrossFileNavigation(n) {
+		return func() tea.Msg { return nil }
+	}
+	req, ok := n.Payload.Data.(*restfile.Request)
+	if !ok || req == nil {
+		return nil
+	}
+	cmds, okFile := m.ensureNavigatorFile(n)
+	if !okFile {
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	if !m.selectRequestForNode(req, n.ID) {
+		m.setStatusMessage(statusMsg{text: "Request not found in file", level: statusWarn})
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	m.setFocus(focusRequests)
+	if cmd := m.sendRequestFromList(execute); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m *Model) selectWorkflowForNode(wf *restfile.Workflow, id string) bool {
+	if wf == nil {
+		return false
+	}
+	if key := workflowKey(wf); key != "" && m.selectWorkflowItemByKey(key) {
+		return true
+	}
+	if idx := navRequestIndex(id); idx >= 0 && idx < len(m.workflowItems) {
+		m.workflowList.Select(idx)
+		return true
+	}
+	return false
+}
+
+func (m *Model) sendNavigatorWorkflow() tea.Cmd {
+	if m.navigator == nil {
+		return nil
+	}
+	n := m.navigator.Selected()
+	if n == nil || n.Kind != navigator.KindWorkflow {
+		return nil
+	}
+	if !m.confirmCrossFileNavigation(n) {
+		return func() tea.Msg { return nil }
+	}
+	wf, ok := n.Payload.Data.(*restfile.Workflow)
+	if !ok || wf == nil {
+		return nil
+	}
+	cmds, okFile := m.ensureNavigatorFile(n)
+	if !okFile {
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	if !m.selectWorkflowForNode(wf, n.ID) {
+		m.setStatusMessage(statusMsg{text: "Workflow not found in file", level: statusWarn})
+		if len(cmds) == 0 {
+			return nil
+		}
+		return tea.Batch(cmds...)
+	}
+	m.setFocus(focusWorkflows)
+	if cmd := m.runSelectedWorkflow(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) handleShortcutKey(key string, msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -656,6 +832,16 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		return tea.Batch(prefixCmd, c)
 	}
 
+	if m.isNavigatorFiltering() {
+		m.resetChordState()
+		switch keyStr {
+		case "ctrl+q", "ctrl+d":
+			return combine(tea.Quit)
+		default:
+			return combine(nil)
+		}
+	}
+
 	if m.operator.active {
 		m.suppressEditorKey = true
 		cmd := m.handleOperatorKey(msg)
@@ -753,6 +939,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	}
 
 	if isSpaceKey(msg) && m.canPreviewOnSpace() {
+		if m.focus == focusRequests {
+			if cmd := m.sendNavigatorRequest(false); cmd != nil {
+				return combine(cmd)
+			}
+		}
+		if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
+			return combine(nil)
+		}
 		if cmd := m.sendRequestFromList(false); cmd != nil {
 			return combine(cmd)
 		}
@@ -899,6 +1093,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusFile {
 		switch keyStr {
 		case "enter":
+			if m.navigator != nil {
+				return combine(nil)
+			}
 			return combine(m.openSelectedFile())
 		}
 	}
@@ -906,8 +1103,20 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusRequests {
 		switch {
 		case keyStr == "enter":
+			if cmd := m.sendNavigatorRequest(true); cmd != nil {
+				return combine(cmd)
+			}
+			if !m.navGate(navigator.KindRequest, "Open file to send this request") {
+				return combine(nil)
+			}
 			return combine(m.sendRequestFromList(true))
 		case isSpaceKey(msg):
+			if cmd := m.sendNavigatorRequest(false); cmd != nil {
+				return combine(cmd)
+			}
+			if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
+				return combine(nil)
+			}
 			return combine(m.sendRequestFromList(false))
 		}
 	}
@@ -915,8 +1124,20 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if m.focus == focusWorkflows {
 		switch {
 		case keyStr == "enter":
+			if cmd := m.sendNavigatorWorkflow(); cmd != nil {
+				return combine(cmd)
+			}
+			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
+				return combine(nil)
+			}
 			return combine(m.runSelectedWorkflow())
 		case isSpaceKey(msg):
+			if cmd := m.sendNavigatorWorkflow(); cmd != nil {
+				return combine(cmd)
+			}
+			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
+				return combine(nil)
+			}
 			return combine(m.runSelectedWorkflow())
 		}
 	}
@@ -1255,31 +1476,34 @@ func (m *Model) runSidebarWidthResize(delta float64) tea.Cmd {
 }
 
 func (m *Model) runSidebarResize(delta float64) tea.Cmd {
-	changed, bounded, cmd := m.adjustSidebarSplit(delta)
-	if changed {
-		return cmd
+	if m.navigator == nil {
+		return nil
 	}
-	if bounded {
-		if delta > 0 {
-			m.setStatusMessage(statusMsg{text: "Sidebar already at maximum height", level: statusInfo})
-		} else if delta < 0 {
-			m.setStatusMessage(statusMsg{text: "Sidebar already at minimum height", level: statusInfo})
+	if delta > 0 {
+		if n := m.navigator.Selected(); n != nil {
+			if n.Kind == navigator.KindFile && len(n.Children) == 0 {
+				m.expandNavigatorFile(n.Payload.FilePath)
+			}
+			n.Expanded = true
+			m.navigator.Refresh()
+		}
+	} else if delta < 0 {
+		if n := m.navigator.Selected(); n != nil && n.Expanded {
+			n.Expanded = false
+			m.navigator.Refresh()
 		}
 	}
 	return nil
 }
 
 func (m *Model) runWorkflowResize(delta float64) tea.Cmd {
-	changed, bounded, cmd := m.adjustWorkflowSplit(delta)
-	if changed {
-		return cmd
+	if m.navigator == nil {
+		return nil
 	}
-	if bounded {
-		if delta > 0 {
-			m.setStatusMessage(statusMsg{text: "Workflows already at minimum height", level: statusInfo})
-		} else if delta < 0 {
-			m.setStatusMessage(statusMsg{text: "Workflows already at maximum height", level: statusInfo})
-		}
+	if delta > 0 {
+		m.navigator.CollapseAll()
+	} else if delta < 0 {
+		m.navigator.ExpandAll()
 	}
 	return nil
 }

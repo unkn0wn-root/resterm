@@ -279,149 +279,17 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.sidebarWidth = realSidebarRatio
 	}
 
-	hasWorkflow := len(m.workflowItems) > 0
-	fileBorder := 0
-	requestsBorder := 0
-	workflowBorder := 0
-	switch m.focus {
-	case focusFile:
-		fileBorder = sidebarFocusPad
-	case focusRequests:
-		requestsBorder = sidebarFocusPad
-	case focusWorkflows:
-		if hasWorkflow {
-			workflowBorder = sidebarFocusPad
-		}
+	m.sidebarFilesHeight = paneHeight
+	m.sidebarRequestsHeight = paneHeight
+	m.navigatorCompact = paneHeight < requestCompactSwitch
+	if m.navigator != nil {
+		m.navigator.SetCompact(m.navigatorCompact)
 	}
-
-	padding := sidebarSplitPadding
-	if hasWorkflow {
-		padding++
-	}
-
-	borderExtra := fileBorder + requestsBorder + workflowBorder
-	available := paneHeight - padding - borderExtra
-	if available < 0 {
-		available = 0
-	}
-
-	filesBase := int(math.Round(float64(available) * m.sidebarSplit))
-	if filesBase < 0 {
-		filesBase = 0
-	}
-
-	minRequestsBase := minSidebarRequests
-	if hasWorkflow {
-		minRequestsBase = minSidebarRequests * 2
-	}
-	if minRequestsBase > available {
-		minRequestsBase = available
-	}
-	maxFilesBase := available - minRequestsBase
-	if maxFilesBase < 0 {
-		maxFilesBase = 0
-	}
-
-	minFilesBase := minSidebarFiles
-	if minFilesBase > available {
-		minFilesBase = available
-	}
-	if minFilesBase > maxFilesBase {
-		minFilesBase = maxFilesBase
-	}
-	if filesBase < minFilesBase {
-		filesBase = minFilesBase
-	}
-	if filesBase > maxFilesBase {
-		filesBase = maxFilesBase
-	}
-
-	requestsBase := available - filesBase
-	if requestsBase < minRequestsBase {
-		desired := minRequestsBase
-		if desired > available {
-			desired = available
-		}
-		requestsBase = desired
-		filesBase = available - requestsBase
-		if filesBase < 0 {
-			filesBase = 0
-		}
-	}
-
-	restRequests := requestsBase
-	workflowBase := 0
-	requestBase := restRequests
-	if hasWorkflow {
-		if m.workflowSplit <= 0 {
-			m.workflowSplit = workflowSplitDefault
-		}
-		if m.workflowSplit < minWorkflowSplit {
-			m.workflowSplit = minWorkflowSplit
-		}
-		if m.workflowSplit > maxWorkflowSplit {
-			m.workflowSplit = maxWorkflowSplit
-		}
-
-		available := restRequests
-		minPrimary := minSidebarRequests
-		minWorkflow := minSidebarRequests
-		if available < minPrimary+minWorkflow {
-			requestBase = minInt(available, minPrimary)
-			workflowBase = available - requestBase
-			if workflowBase < 0 {
-				workflowBase = 0
-			}
-		} else {
-			desiredWorkflow := int(math.Round(float64(available) * (1 - m.workflowSplit)))
-			if desiredWorkflow < minWorkflow {
-				desiredWorkflow = minWorkflow
-			}
-			if desiredWorkflow > available-minPrimary {
-				desiredWorkflow = available - minPrimary
-			}
-			if desiredWorkflow < 0 {
-				desiredWorkflow = 0
-			}
-			workflowBase = desiredWorkflow
-			requestBase = available - workflowBase
-		}
-
-		total := requestBase + workflowBase
-		if total > 0 {
-			ratio := float64(requestBase) / float64(total)
-			if ratio < minWorkflowSplit {
-				ratio = minWorkflowSplit
-			}
-			if ratio > maxWorkflowSplit {
-				ratio = maxWorkflowSplit
-			}
-			m.workflowSplit = ratio
-		}
-	} else {
-		workflowBase = 0
-	}
-	requestsBase = requestBase + workflowBase
-
-	filesHeight := filesBase + fileBorder
-	requestHeight := requestBase + requestsBorder
-	workflowHeight := workflowBase + workflowBorder
-	combinedRequestsHeight := requestHeight + workflowHeight
-
-	m.sidebarFilesHeight = filesHeight
-	m.sidebarRequestsHeight = combinedRequestsHeight
-
-	baseTotal := filesBase + requestsBase
-	if baseTotal > 0 {
-		ratio := float64(filesBase) / float64(baseTotal)
-		if ratio < minSidebarSplit {
-			ratio = minSidebarSplit
-		}
-		if ratio > maxSidebarSplit {
-			ratio = maxSidebarSplit
-		}
-		m.sidebarSplit = ratio
-	}
+	listWidth := maxInt(fileWidth-4, 0)
+	m.navigatorFilter.Width = listWidth
+	m.fileList.SetSize(listWidth, paneHeight)
+	m.requestList.SetSize(listWidth, 0)
+	m.workflowList.SetSize(listWidth, 0)
 
 	if m.mainSplitOrientation == mainSplitVertical && remaining > 0 &&
 		!m.collapseState(paneRegionEditor) &&
@@ -434,28 +302,6 @@ func (m *Model) applyLayout() tea.Cmd {
 			realEditorRatio = maxEditorSplit
 		}
 		m.editorSplit = realEditorRatio
-	}
-
-	fileListHeight := filesBase - sidebarChrome
-	if fileListHeight < 0 {
-		fileListHeight = 0
-	}
-	m.fileList.SetSize(maxInt(fileWidth-4, 0), fileListHeight)
-
-	requestListHeight := requestBase - sidebarChrome
-	if requestListHeight < 0 {
-		requestListHeight = 0
-	}
-	m.requestList.SetSize(maxInt(fileWidth-4, 0), requestListHeight)
-
-	if hasWorkflow && workflowBase > 0 {
-		workflowListHeight := workflowBase - sidebarChrome
-		if workflowListHeight < 0 {
-			workflowListHeight = 0
-		}
-		m.workflowList.SetSize(maxInt(fileWidth-4, 0), workflowListHeight)
-	} else {
-		m.workflowList.SetSize(maxInt(fileWidth-4, 0), 0)
 	}
 	m.editor.SetWidth(maxInt(editorWidth-4, 1))
 	m.editor.SetHeight(maxInt(editorHeight, 1))
@@ -633,82 +479,6 @@ func (m *Model) adjustSidebarWidth(delta float64) (bool, bool, tea.Cmd) {
 	newRatio := m.sidebarWidth
 	newWidth := m.sidebarWidthPx
 	changed := math.Abs(newRatio-prevRatio) > 1e-6 || newWidth != prevWidth
-	if !changed {
-		return false, true, cmd
-	}
-	return true, bounded, cmd
-}
-
-func (m *Model) adjustSidebarSplit(delta float64) (bool, bool, tea.Cmd) {
-	if !m.ready || m.height <= 0 {
-		return false, false, nil
-	}
-
-	current := m.sidebarSplit
-	if current <= 0 {
-		current = sidebarSplitDefault
-	}
-
-	updated := current + delta
-	bounded := false
-	if updated < minSidebarSplit {
-		updated = minSidebarSplit
-		bounded = true
-	}
-
-	if updated > maxSidebarSplit {
-		updated = maxSidebarSplit
-		bounded = true
-	}
-
-	if math.Abs(updated-current) < 1e-6 {
-		return false, bounded, nil
-	}
-
-	prevSplit := m.sidebarSplit
-	prevFiles := m.sidebarFilesHeight
-	prevRequests := m.sidebarRequestsHeight
-	m.sidebarSplit = updated
-	cmd := m.applyLayout()
-	newSplit := m.sidebarSplit
-	newFiles := m.sidebarFilesHeight
-	newRequests := m.sidebarRequestsHeight
-	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newFiles != prevFiles || newRequests != prevRequests
-	if !changed {
-		return false, true, cmd
-	}
-	return true, bounded, cmd
-}
-
-func (m *Model) adjustWorkflowSplit(delta float64) (bool, bool, tea.Cmd) {
-	if !m.ready || len(m.workflowItems) == 0 {
-		return false, false, nil
-	}
-
-	current := m.workflowSplit
-	if current <= 0 {
-		current = workflowSplitDefault
-	}
-
-	updated := current + delta
-	bounded := false
-	if updated < minWorkflowSplit {
-		updated = minWorkflowSplit
-		bounded = true
-	}
-	if updated > maxWorkflowSplit {
-		updated = maxWorkflowSplit
-		bounded = true
-	}
-
-	if math.Abs(updated-current) < 1e-6 {
-		return false, bounded, nil
-	}
-
-	prev := m.workflowSplit
-	m.workflowSplit = updated
-	cmd := m.applyLayout()
-	changed := math.Abs(m.workflowSplit-prev) > 1e-6
 	if !changed {
 		return false, true, cmd
 	}

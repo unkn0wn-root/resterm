@@ -45,8 +45,8 @@ func applyListTheme(th theme.Theme, model *list.Model, showDescription bool, hei
 
 func (m *Model) applyThemeToLists() {
 	applyListTheme(m.theme, &m.fileList, false, 0)
-	applyListTheme(m.theme, &m.requestList, true, 3)
-	applyListTheme(m.theme, &m.workflowList, true, 3)
+	applyListTheme(m.theme, &m.requestList, !m.reqCompactMode(), 3)
+	applyListTheme(m.theme, &m.workflowList, !m.wfCompactMode(), 3)
 	applyListTheme(m.theme, &m.historyList, true, 3)
 	applyListTheme(m.theme, &m.envList, false, 0)
 	applyListTheme(m.theme, &m.themeList, true, 3)
