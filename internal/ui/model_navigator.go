@@ -68,6 +68,10 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 		method := strings.ToUpper(strings.TrimSpace(req.Method))
 		desc := condense(expandStatusText(resolver, req.Metadata.Description), 80)
 		target := expandStatusText(resolver, requestTarget(req))
+		hasName := strings.TrimSpace(req.Metadata.Name) != ""
+		if !hasName && strings.TrimSpace(title) == strings.TrimSpace(target) {
+			target = ""
+		}
 		badges := requestBadges(req)
 		nodes = append(nodes, &navigator.Node[any]{
 			ID:      fmt.Sprintf("req:%s:%d", filePath, idx),
@@ -78,7 +82,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 			Tags:    req.Metadata.Tags,
 			Target:  target,
 			Badges:  badges,
-			HasName: strings.TrimSpace(req.Metadata.Name) != "",
+			HasName: hasName,
 			Payload: navigator.Payload[any]{FilePath: filePath, Data: req},
 		})
 	}
