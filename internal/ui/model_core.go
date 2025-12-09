@@ -27,8 +27,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/update"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -73,13 +73,6 @@ const (
 	mainSplitHorizontal
 )
 
-type sidebarMode int
-
-const (
-	sidebarModeStack sidebarMode = iota
-	sidebarModeTabs
-)
-
 type paneRegion int
 
 const (
@@ -110,11 +103,10 @@ const (
 	minSidebarWidthPixels = 20
 	sidebarSplitDefault   = 0.5
 	sidebarSplitStep      = 0.05
-	sidebarWorkflowSplit  = 1.0 / 3.0
 )
 
 const (
-	requestCompactSwitch     = 10
+	requestCompactSwitch = 10
 	minWorkflowSplit     = 0.3
 	maxWorkflowSplit     = 0.7
 	workflowSplitDefault = 0.5
@@ -208,13 +200,6 @@ type Model struct {
 	responseCollapsed        bool
 	zoomActive               bool
 	zoomRegion               paneRegion
-	filesCollapsed           bool
-	workflowsCollapsed       bool
-	workflowPinned           bool
-	autoCollapseFiles        bool
-	sidebarModeOverride      *sidebarMode
-	sidebarMode              sidebarMode
-	sidebarTab               paneFocus
 	mainSplitOrientation     mainSplitOrientation
 	reqCompact               *bool
 	wfCompact                *bool
@@ -570,13 +555,9 @@ func New(cfg Config) Model {
 			newResponsePaneState(secondaryViewport, false),
 		},
 		responsePaneFocus:        responsePanePrimary,
-		sidebarMode:              sidebarModeStack,
-		sidebarTab:               focusFile,
 		responseSplitRatio:       0.5,
 		responseSplitOrientation: responseSplitVertical,
 		mainSplitOrientation:     mainSplitVertical,
-		workflowPinned:           true,
-		autoCollapseFiles:        true,
 		reqCompact:               &reqCompact,
 		wfCompact:                &wfCompact,
 		responseTokens:           make(map[string]*responseSnapshot),

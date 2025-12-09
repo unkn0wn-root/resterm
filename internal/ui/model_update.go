@@ -597,18 +597,6 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.toggleWebSocketConsole(), true
 	case bindings.ActionToggleSidebarCollapse:
 		return m.togglePaneCollapse(paneRegionSidebar), true
-	case bindings.ActionToggleSidebarMode:
-		m.toggleSidebarModeOverride()
-		return m.applyLayout(), true
-	case bindings.ActionToggleWorkflowPin:
-		m.toggleWorkflowPin()
-		return m.applyLayout(), true
-	case bindings.ActionToggleFilesCollapse:
-		m.toggleFilesCollapse()
-		return m.applyLayout(), true
-	case bindings.ActionToggleWorkflowsCollapse:
-		m.toggleWorkflowsCollapse()
-		return m.applyLayout(), true
 	case bindings.ActionToggleEditorCollapse:
 		return m.togglePaneCollapse(paneRegionEditor), true
 	case bindings.ActionToggleResponseCollapse:

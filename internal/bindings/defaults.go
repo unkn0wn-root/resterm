@@ -36,10 +36,6 @@ var (
 	ActionStartCompareRun         ActionID = "start_compare_run"
 	ActionToggleWebsocketConsole  ActionID = "toggle_ws_console"
 	ActionToggleSidebarCollapse   ActionID = "toggle_sidebar_collapse"
-	ActionToggleSidebarMode       ActionID = "toggle_sidebar_mode"
-	ActionToggleWorkflowPin       ActionID = "toggle_workflow_pin"
-	ActionToggleFilesCollapse     ActionID = "toggle_files_collapse"
-	ActionToggleWorkflowsCollapse ActionID = "toggle_workflows_collapse"
 	ActionToggleEditorCollapse    ActionID = "toggle_editor_collapse"
 	ActionToggleResponseCollapse  ActionID = "toggle_response_collapse"
 	ActionToggleZoom              ActionID = "toggle_zoom"
@@ -89,10 +85,6 @@ var definitions = []definition{
 	def(ActionStartCompareRun, false, "g c"),
 	def(ActionToggleWebsocketConsole, false, "g w"),
 	def(ActionToggleSidebarCollapse, false, "g 1"),
-	def(ActionToggleSidebarMode, false, "g ,"),
-	def(ActionToggleWorkflowPin, false, "g shift+w"),
-	def(ActionToggleFilesCollapse, false, "g shift+f"),
-	def(ActionToggleWorkflowsCollapse, false, "g shift+o"),
 	def(ActionToggleEditorCollapse, false, "g 2"),
 	def(ActionToggleResponseCollapse, false, "g 3"),
 	def(ActionToggleZoom, false, "g z"),

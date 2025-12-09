@@ -31,9 +31,6 @@ func (m *Model) setFocus(target paneFocus) {
 	if m.focus == target {
 		return
 	}
-	if target == focusFile || target == focusRequests || target == focusWorkflows {
-		m.setSidebarTab(target)
-	}
 	prev := m.focus
 	m.focus = target
 	if target != focusResponse {
