@@ -46,7 +46,7 @@ func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
 	if !strings.Contains(clean, "WF") {
 		t.Fatalf("expected workflow badge, got %q", clean)
 	}
-	if strings.Contains(clean, "WF  sample") {
-		t.Fatalf("expected single spacing between badge and title, got %q", clean)
+	if !strings.Contains(clean, "WF  sample-order") {
+		t.Fatalf("expected padded workflow badge before title, got %q", clean)
 	}
 }
