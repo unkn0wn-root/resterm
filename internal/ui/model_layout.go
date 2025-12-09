@@ -485,41 +485,6 @@ func (m *Model) adjustSidebarWidth(delta float64) (bool, bool, tea.Cmd) {
 	return true, bounded, cmd
 }
 
-func (m *Model) adjustWorkflowSplit(delta float64) (bool, bool, tea.Cmd) {
-	if !m.ready || len(m.workflowItems) == 0 {
-		return false, false, nil
-	}
-
-	current := m.workflowSplit
-	if current <= 0 {
-		current = workflowSplitDefault
-	}
-
-	updated := current + delta
-	bounded := false
-	if updated < minWorkflowSplit {
-		updated = minWorkflowSplit
-		bounded = true
-	}
-	if updated > maxWorkflowSplit {
-		updated = maxWorkflowSplit
-		bounded = true
-	}
-
-	if math.Abs(updated-current) < 1e-6 {
-		return false, bounded, nil
-	}
-
-	prev := m.workflowSplit
-	m.workflowSplit = updated
-	cmd := m.applyLayout()
-	changed := math.Abs(m.workflowSplit-prev) > 1e-6
-	if !changed {
-		return false, true, cmd
-	}
-	return true, bounded, cmd
-}
-
 func (m *Model) setMainSplitOrientation(orientation mainSplitOrientation) tea.Cmd {
 	if orientation != mainSplitVertical && orientation != mainSplitHorizontal {
 		return nil

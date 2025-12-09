@@ -612,14 +612,6 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	m.historyList.Select(0)
 }
 
-func (m *Model) updateWorkflowHistoryFilter() {
-	name := ""
-	if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
-		name = item.workflow.Name
-	}
-	m.setHistoryWorkflow(name)
-}
-
 func (m *Model) setHistoryWorkflow(name string) {
 	trimmed := history.NormalizeWorkflowName(name)
 	if m.historyWorkflowName == trimmed {

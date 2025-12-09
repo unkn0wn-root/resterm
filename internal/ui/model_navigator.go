@@ -261,8 +261,8 @@ func (m *Model) syncNavigatorSelection() {
 		return
 	}
 	path := n.Payload.FilePath
-	switch {
-	case n.Kind == navigator.KindRequest:
+	switch n.Kind {
+	case navigator.KindRequest:
 		if req, ok := n.Payload.Data.(*restfile.Request); ok {
 			if path != "" {
 				_ = m.selectFileByPath(path)
@@ -278,7 +278,7 @@ func (m *Model) syncNavigatorSelection() {
 			m.setActiveRequest(nil)
 			m.requestList.Select(-1)
 		}
-	case n.Kind == navigator.KindWorkflow:
+	case navigator.KindWorkflow:
 		if wf, ok := n.Payload.Data.(*restfile.Workflow); ok {
 			if path != "" {
 				_ = m.selectFileByPath(path)
@@ -295,7 +295,7 @@ func (m *Model) syncNavigatorSelection() {
 			m.activeWorkflowKey = ""
 			m.workflowList.Select(-1)
 		}
-	case n.Kind == navigator.KindFile:
+	case navigator.KindFile:
 		if path != "" {
 			_ = m.selectFileByPath(path)
 		}

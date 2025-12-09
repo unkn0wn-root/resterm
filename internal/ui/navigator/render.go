@@ -155,7 +155,7 @@ func renderBadges(badges []string, th theme.Theme) string {
 	if len(badges) == 0 {
 		return ""
 	}
-	badgeStyle := th.NavigatorBadge.Copy().Padding(0, 0)
+	badgeStyle := th.NavigatorBadge.Padding(0, 0)
 	parts := make([]string, 0, len(badges))
 	for _, b := range badges {
 		label := strings.TrimSpace(b)

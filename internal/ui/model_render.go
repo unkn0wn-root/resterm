@@ -401,10 +401,6 @@ func (m Model) navigatorTagChips() string {
 	return strings.Join(parts, " ")
 }
 
-func (m Model) collectNavigatorTags(limit int) []string {
-	return m.collectNavigatorTagsFiltered(limit, nil)
-}
-
 func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) []string {
 	if m.navigator == nil || limit == 0 {
 		return nil
@@ -499,37 +495,6 @@ func methodColor(th theme.Theme, method string) lipgloss.Color {
 	default:
 		return th.MethodColors.Default
 	}
-}
-
-func (m Model) requestDetail(width int) string {
-	item, ok := m.requestList.SelectedItem().(requestListItem)
-	if !ok || item.request == nil {
-		return ""
-	}
-	desc := condense(expandStatusText(item.resolver, item.request.Metadata.Description), 120)
-	tags := joinTags(item.request.Metadata.Tags, 5)
-	method := strings.ToUpper(strings.TrimSpace(item.request.Method))
-	target := truncateInline(expandStatusText(item.resolver, requestTarget(item.request)), 64)
-
-	lines := []string{}
-	if desc != "" {
-		lines = append(lines, desc)
-	}
-	info := strings.Join(compactStrings(method, target), " ")
-	if info != "" {
-		lines = append(lines, info)
-	}
-	if tags != "" {
-		lines = append(lines, tags)
-	}
-	if len(lines) == 0 {
-		return ""
-	}
-	style := lipgloss.NewStyle().
-		Width(width).
-		MarginTop(0).
-		Faint(true)
-	return style.Render(strings.Join(lines, "\n"))
 }
 
 func (m Model) renderEditorPane() string {
@@ -1868,14 +1833,6 @@ func (m Model) renderStatusBar() string {
 	return m.theme.StatusBar.Render(lineContent)
 }
 
-func truncateStatus(text string, width int) string {
-	if width <= 0 {
-		return text
-	}
-	maxWidth := maxInt(width-2, 1)
-	return truncateToWidth(text, maxWidth)
-}
-
 func truncateToWidth(text string, maxWidth int) string {
 	if maxWidth <= 0 {
 		return ""
@@ -1883,6 +1840,7 @@ func truncateToWidth(text string, maxWidth int) string {
 	if lipgloss.Width(text) <= maxWidth {
 		return text
 	}
+
 	ellipsisWidth := lipgloss.Width("…")
 	if maxWidth <= ellipsisWidth {
 		return "…"
