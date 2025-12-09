@@ -27,3 +27,23 @@ func TestRenderBadgesUsesCommaSeparator(t *testing.T) {
 		t.Fatalf("expected all badge labels to render, got %q", clean)
 	}
 }
+
+func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
+	th := theme.DefaultTheme()
+	node := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindWorkflow,
+			Title:  "sample-order",
+			Badges: []string{"4 steps"},
+			Tags:   []string{"demo", "workflow"},
+		},
+	}
+	out := renderRow(node, false, th, 80, true, false)
+	clean := ansi.Strip(out)
+	if strings.Contains(clean, "▸") || strings.Contains(clean, "▾") {
+		t.Fatalf("expected workflow row without caret, got %q", clean)
+	}
+	if !strings.Contains(clean, "WF") {
+		t.Fatalf("expected workflow badge, got %q", clean)
+	}
+}
