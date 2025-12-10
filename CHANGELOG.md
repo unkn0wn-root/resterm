@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.10.1](https://github.com/unkn0wn-root/resterm/compare/v0.10.0...v0.10.1) (2025-12-10)
+
+
+### Bug Fixes
+
+* don't expand at second right arrow press ([5a87ef0](https://github.com/unkn0wn-root/resterm/commit/5a87ef07c6bc97297b1fcaa378f76b076896b66b))
+
 ## [0.10.0](https://github.com/unkn0wn-root/resterm/compare/v0.9.5...v0.10.0) (2025-12-09)
 
 ### [0.9.5](https://github.com/unkn0wn-root/resterm/compare/v0.9.4...v0.9.5) (2025-12-07)
