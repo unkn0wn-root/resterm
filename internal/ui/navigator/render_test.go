@@ -50,3 +50,22 @@ func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
 		t.Fatalf("expected padded workflow badge before title, got %q", clean)
 	}
 }
+
+func TestDetailViewHidesFileNodes(t *testing.T) {
+	th := theme.DefaultTheme()
+	m := New[any]([]*Node[any]{
+		{
+			ID:    "file:/tmp/demo.http",
+			Kind:  KindFile,
+			Title: "demo.http",
+			Children: []*Node[any]{
+				{ID: "req:/tmp/demo.http:0", Kind: KindRequest, Title: "first"},
+			},
+		},
+	})
+
+	out := DetailView(m, th, 80)
+	if strings.TrimSpace(ansi.Strip(out)) != "" {
+		t.Fatalf("expected file selection to render empty detail, got %q", ansi.Strip(out))
+	}
+}
