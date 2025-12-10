@@ -45,7 +45,7 @@ This requires Go 1.24 or newer. The binary will be installed in `$(go env GOPATH
 
 1. Place one or more `.http` or `.rest` files in a working directory (or use the samples under `_examples/`).
 2. Run `resterm --workspace path/to/project`.
-3. Use the file pane to select a request file, then highlight a request and press `Ctrl+Enter` to send it.
+3. Use the navigator sidebar to expand a file (`→` or `Space`), highlight a request, and press `Ctrl+Enter` to send it (`Enter` runs, `Space` previews).
 4. Inspect responses in the Pretty, Raw, Headers, Diff, Compare, or History tabs on the right; press `g+c` to run the current request across the global `--compare` target list (or its inline `@compare` directive) and review the results without leaving the editor.
 
 A minimal `.http` file looks like this:
@@ -74,7 +74,7 @@ Content-Type: application/json
 
 ### Layout
 
-- **Sidebar**: upper half lists `.http`/`.rest` files (filtered by workspace root); lower half lists requests discovered in the active document. When focused, `g+h` shrinks and `g+l` expands the sidebar.
+- **Sidebar**: unified navigator tree for files, requests, and workflows with a filter bar and tag/method chips. `→`/`Space` expand files, `g+k`/`g+j` expand or collapse the current branch, and `g+Shift+K`/`g+Shift+J` expand or collapse all. A detail well beneath the list shows the selected request/workflow summary. When focused, `g+h` shrinks and `g+l` expands the sidebar.
 - **Editor**: middle pane with modal editing (view mode by default, `i` to insert, `Esc` to return to view). Inline syntax highlighting marks metadata, headers, and bodies.
 - **Response panes**: right-hand side displays the most recent response, with optional splits for side-by-side comparisons.
 - **Header bar**: shows workspace, active environment, current request, and test summaries.
@@ -87,18 +87,20 @@ Content-Type: application/json
 | Send active request | `Ctrl+Enter` |
 | Toggle help overlay | `?` |
 | Toggle editor insert mode | `i` / `Esc` |
-| Cycle focus (files -> requests -> editor -> response) | `Tab` / `Shift+Tab` |
-| Focus requests / editor / response panes | `g+r` / `g+i` / `g+p` |
+| Cycle focus (navigator -> editor -> response) | `Tab` / `Shift+Tab` |
+| Focus navigator / editor / response panes | `g+r` / `g+i` / `g+p` |
 | Open timeline tab | `Ctrl+Alt+L` (or `g+t`) |
 | Toggle WebSocket console (Stream tab) | `Ctrl+I` |
 | Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
-| Adjust files/requests split | `g+j` / `g+k` |
-| Adjust requests/workflows split | `g+J` / `g+K` |
+| Collapse / expand current navigator branch | `g+j` / `g+k` |
+| Collapse all / expand all in navigator | `g+Shift+J` / `g+Shift+K` |
 | Toggle sidebar / editor / response minimize | `g+1` / `g+2` / `g+3` |
 | Zoom focused pane / clear zoom | `g+z` / `g+Z` |
 | Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
 | Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
-| File list incremental search | Start typing while focus is in the list |
+| Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
+| Toggle method filter for selected request | `Ctrl+M` (repeat to switch/clear) |
+| Toggle tag filters from selected item | `t` (repeat to toggle) |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
 | Open file picker | `Ctrl+O` |
@@ -158,8 +160,8 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
 | `sidebar_width_decrease` / `sidebar_width_increase` | Shrink/grow sidebar width (editor split elsewhere). | `g h`, `g l` | ✓ |
-| `sidebar_height_decrease` / `sidebar_height_increase` | Shrink/grow files vs requests split (workflow when focused). | `g j`, `g k` | ✓ |
-| `workflow_height_increase` / `workflow_height_decrease` | Grow/shrink the workflow list. | `g shift+j`, `g shift+k` | ✓ |
+| `sidebar_height_decrease` / `sidebar_height_increase` | Collapse / expand the selected navigator branch. | `g j`, `g k` | ✓ |
+| `workflow_height_increase` / `workflow_height_decrease` | Collapse all / expand all navigator branches. | `g shift+j`, `g shift+k` | ✓ |
 | `focus_requests` / `focus_response` / `focus_editor_normal` | Jump directly to a pane. | `g r`, `g p`, `g i` | ✗ |
 | `set_main_split_horizontal` / `set_main_split_vertical` | Stack vs side-by-side editor/response. | `g s`, `g v` | ✗ |
 | `start_compare_run` | Trigger compare sweep for the current request. | `g c` | ✗ |
@@ -213,8 +215,8 @@ While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire 
 ## Workspaces & Files
 
 - Resterm scans the workspace root for `.http` and `.rest` files. Use `--workspace` to set the root or rely on the directory of the file passed via `--file`. Add `--recursive` to traverse subdirectories (hidden directories are skipped).
-- The file list supports incremental filtering (`/` is not required—just type while focused).
-- The request list updates immediately when a file is saved or reparsed.
+- The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `Ctrl+M` toggles method chips (single-select) for the highlighted request, `t` toggles tag chips, and `Esc` clears text plus any chips.
+- The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear.
 - Create a scratch buffer with `Ctrl+T` for ad-hoc experiments. These buffers are not written to disk unless you save them explicitly.
 
 ### Inline requests
@@ -420,7 +422,7 @@ If `SSH_AUTH_SOCK` is set, the SSH agent is also used by default.
 
 | Directive | Syntax | Description |
 | --- | --- | --- |
-| `@name` | `# @name identifier` | Friendly name used in the request list and history. |
+| `@name` | `# @name identifier` | Friendly name used in the navigator, history, and captures. |
 | `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document. |
 | `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
@@ -1108,8 +1110,8 @@ text = "#eceff4"
 | Section | Keys | Notes |
 | --- | --- | --- |
 | `[metadata]` | `name`, `description`, `author`, `version`, `tags[]` | Informational only; shown in the selector. |
-| `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers`, `stream_content`, `stream_timestamp`, `stream_direction_send`, `stream_direction_receive`, `stream_direction_info`, `stream_event_name`, `stream_data`, `stream_binary`, `stream_summary`, `stream_error`, `stream_console_title`, `stream_console_mode`, `stream_console_status`, `stream_console_prompt`, `stream_console_input`, `stream_console_input_focused` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
-| `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground` | Frequently reused single colours. |
+| `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `navigator_title`, `navigator_title_selected`, `navigator_subtitle`, `navigator_subtitle_selected`, `navigator_badge`, `navigator_tag`, `navigator_detail_title`, `navigator_detail_value`, `navigator_detail_dim`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers`, `stream_content`, `stream_timestamp`, `stream_direction_send`, `stream_direction_receive`, `stream_direction_info`, `stream_event_name`, `stream_data`, `stream_binary`, `stream_summary`, `stream_error`, `stream_console_title`, `stream_console_mode`, `stream_console_status`, `stream_console_prompt`, `stream_console_input`, `stream_console_input_focused` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
+| `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground`, `method_get`, `method_post`, `method_put`, `method_patch`, `method_delete`, `method_head`, `method_options`, `method_grpc`, `method_ws`, `method_default` | Frequently reused colours for pane borders, active text, and method badges. |
 | `[editor_metadata]` | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]` | Controls metadata highlighting inside the editor. |
 | `[[header_segments]]` | `background`, `foreground`, `border`, `accent` | Rotating header chips; add multiple tables for rotation. |
 | `[[command_segments]]` | `background`, `border`, `key`, `text` | Colour sets for command bar hint capsules. |
@@ -1121,7 +1123,7 @@ Use `editor_metadata.request_separator` for the `###` section dividers and `edit
 
 `styles.stream_*` keys control the transcript viewer (events, timestamps, direction badges). `styles.stream_console_*` tweak the interactive WebSocket console (prompt, status line, input field).
 
-`styles.list_item_*` keys control the sidebar, history, and picker list rows. `styles.response_content`, `styles.response_content_raw`, and `styles.response_content_headers` colour the response panes for Raw and Headers (with the general key applied first, then the tab-specific override).
+`navigator_*` styles control the unified sidebar tree, and `styles.list_item_*` keys continue to power history/picker list rows. `styles.response_content`, `styles.response_content_raw`, and `styles.response_content_headers` colour the response panes for Raw and Headers (with the general key applied first, then the tab-specific override).
 
 ### Testing a theme
 
@@ -1155,7 +1157,7 @@ Open one in Resterm, switch to the appropriate environment (`resterm.env.json`),
 
 ## Troubleshooting & Tips
 
-- Use `Ctrl+P` to force a reparse if the request list seems out of sync with editor changes.
+- Use `Ctrl+P` to force a reparse if the navigator seems out of sync with editor changes.
 - If a template fails to expand (undefined variable), Resterm leaves the placeholder intact and surfaces an error banner.
 - Combine `@capture request ...` with test scripts to assert on response headers without cluttering file/global scopes.
 - Inline curl import works best with single commands; complex shell pipelines may need manual cleanup.
