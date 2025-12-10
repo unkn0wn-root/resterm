@@ -109,6 +109,9 @@ func renderDetail(n *Node[any], th theme.Theme, width int) string {
 	if n == nil {
 		return ""
 	}
+	if n.Kind == KindFile {
+		return ""
+	}
 	softWrap := func(s string, style lipgloss.Style) []string {
 		if s == "" {
 			return nil

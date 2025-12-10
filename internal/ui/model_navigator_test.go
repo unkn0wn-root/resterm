@@ -135,6 +135,54 @@ func TestNavigatorEnterDoesNotCollapseFile(t *testing.T) {
 	}
 }
 
+func TestNavigatorRightDoesNotCollapseFile(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "a.http")
+	fileB := filepath.Join(tmp, "b.http")
+	content := "### req\n# @name sample\nGET https://example.com\n"
+	writeSampleFile(t, fileA, content)
+	writeSampleFile(t, fileB, content)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+
+	target := navigatorIndex(m, "file:"+fileB)
+	if target < 0 {
+		t.Fatalf("expected navigator to include %s", fileB)
+	}
+	selectNavigatorID(t, m, "file:"+fileB)
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRight}); cmd != nil {
+		cmd()
+	}
+
+	node := m.navigator.Find("file:" + fileB)
+	if node == nil {
+		t.Fatalf("expected node for %s", fileB)
+	}
+	if !node.Expanded {
+		t.Fatalf("expected %s to expand after first right", fileB)
+	}
+	if len(node.Children) == 0 {
+		t.Fatalf("expected requests to load for %s", fileB)
+	}
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRight}); cmd != nil {
+		cmd()
+	}
+
+	node = m.navigator.Find("file:" + fileB)
+	if node == nil {
+		t.Fatalf("expected node for %s after second right", fileB)
+	}
+	if !node.Expanded {
+		t.Fatalf("expected %s to stay expanded after second right", fileB)
+	}
+}
+
 func TestNavigatorMethodFilterExcludesMismatchedRequests(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "a.http")

@@ -84,7 +84,6 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			}
 			n := m.navigator.Selected()
 			if n != nil && n.Kind == navigator.KindFile {
-				initialExpanded := n.Expanded
 				path := n.Payload.FilePath
 				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
 					cmd = m.openFile(path)
@@ -95,8 +94,8 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
 					n = refreshed
 				}
-				if n != nil && len(n.Children) > 0 {
-					n.Expanded = !initialExpanded
+				if n != nil && len(n.Children) > 0 && !n.Expanded {
+					n.Expanded = true
 					m.navigator.Refresh()
 				}
 			} else {
