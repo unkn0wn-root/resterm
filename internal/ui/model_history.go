@@ -1372,14 +1372,7 @@ func requestMetaSummary(req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
-	var parts []string
-	if desc := strings.TrimSpace(req.Metadata.Description); desc != "" {
-		parts = append(parts, condense(desc, 90))
-	}
-	if tags := joinTags(req.Metadata.Tags, 5); tags != "" {
-		parts = append(parts, tags)
-	}
-	return strings.Join(parts, " | ")
+	return joinTags(req.Metadata.Tags, 5)
 }
 
 func normalizedTags(tags []string) []string {
