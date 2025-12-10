@@ -222,32 +222,7 @@ func (m Model) renderFilePane() string {
 		available = 1
 	}
 
-	detail := navigator.DetailView(m.navigator, m.theme, innerWidth)
-	detail = lipgloss.NewStyle().Width(innerWidth).Render(detail)
-	detailHeight := lipgloss.Height(detail)
-	divider := ""
-	dividerHeight := 0
-	if detail != "" && detailHeight > 0 {
-		divider = dividerLine(m.theme.PaneDivider, innerWidth)
-		dividerHeight = lipgloss.Height(divider)
-	}
-
-	listHeight := available - detailHeight - dividerHeight
-	if listHeight < 1 {
-		remainingForDetail := available - 1 - dividerHeight
-		if remainingForDetail < 0 {
-			remainingForDetail = 0
-		}
-		if detailHeight > remainingForDetail {
-			detail = lipgloss.NewStyle().MaxHeight(remainingForDetail).Render(detail)
-			detailHeight = lipgloss.Height(detail)
-			if detailHeight == 0 {
-				divider = ""
-				dividerHeight = 0
-			}
-		}
-		listHeight = maxInt(available-detailHeight-dividerHeight, 1)
-	}
+	listHeight := available
 
 	listView := navigator.ListView(m.navigator, m.theme, innerWidth, listHeight, paneActive)
 	if listView == "" {
@@ -256,12 +231,6 @@ func (m Model) renderFilePane() string {
 	listView = lipgloss.NewStyle().Width(innerWidth).Height(listHeight).Render(listView)
 
 	bodyParts := []string{filter, filterSep, listView}
-	if detail != "" && detailHeight > 0 {
-		if divider != "" {
-			bodyParts = append(bodyParts, divider)
-		}
-		bodyParts = append(bodyParts, lipgloss.NewStyle().Width(innerWidth).MaxHeight(detailHeight).Render(detail))
-	}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, bodyParts...)
 	content = clampPane(content, innerWidth, m.paneContentHeight)

@@ -51,21 +51,27 @@ func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
 	}
 }
 
-func TestDetailViewHidesFileNodes(t *testing.T) {
+func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 	th := theme.DefaultTheme()
-	m := New[any]([]*Node[any]{
-		{
-			ID:    "file:/tmp/demo.http",
-			Kind:  KindFile,
-			Title: "demo.http",
-			Children: []*Node[any]{
-				{ID: "req:/tmp/demo.http:0", Kind: KindRequest, Title: "first"},
-			},
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindRequest,
+			Title:  "Fetch user",
+			Method: "GET",
+			Target: "https://example.com/users/1",
+			Tags:   []string{"beta", "users"},
+			Badges: []string{"AUTH", "gRPC"},
 		},
-	})
-
-	out := DetailView(m, th, 80)
-	if strings.TrimSpace(ansi.Strip(out)) != "" {
-		t.Fatalf("expected file selection to render empty detail, got %q", ansi.Strip(out))
+	}
+	out := renderRow(row, false, th, 80, true, false)
+	clean := ansi.Strip(out)
+	if strings.Contains(clean, "#beta") || strings.Contains(clean, "#users") {
+		t.Fatalf("expected tags to be omitted from list row, got %q", clean)
+	}
+	if !strings.Contains(clean, "AUTH") || !strings.Contains(clean, "gRPC") {
+		t.Fatalf("expected badges to render in list row, got %q", clean)
+	}
+	if !strings.Contains(clean, "Fetch user") || !strings.Contains(clean, "https://example.com/users/1") {
+		t.Fatalf("expected request summary to remain in list row, got %q", clean)
 	}
 }

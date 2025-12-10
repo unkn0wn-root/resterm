@@ -34,9 +34,6 @@ type StylesSpec struct {
 	NavigatorSubtitleSelected     *StyleSpec `json:"navigator_subtitle_selected" toml:"navigator_subtitle_selected"`
 	NavigatorBadge                *StyleSpec `json:"navigator_badge" toml:"navigator_badge"`
 	NavigatorTag                  *StyleSpec `json:"navigator_tag" toml:"navigator_tag"`
-	NavigatorDetailTitle          *StyleSpec `json:"navigator_detail_title" toml:"navigator_detail_title"`
-	NavigatorDetailValue          *StyleSpec `json:"navigator_detail_value" toml:"navigator_detail_value"`
-	NavigatorDetailDim            *StyleSpec `json:"navigator_detail_dim" toml:"navigator_detail_dim"`
 	AppFrame                      *StyleSpec `json:"app_frame" toml:"app_frame"`
 	Header                        *StyleSpec `json:"header" toml:"header"`
 	HeaderTitle                   *StyleSpec `json:"header_title" toml:"header_title"`
@@ -190,15 +187,6 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		return Theme{}, err
 	}
 	if err := apply("navigator_tag", &cloned.NavigatorTag, spec.Styles.NavigatorTag); err != nil {
-		return Theme{}, err
-	}
-	if err := apply("navigator_detail_title", &cloned.NavigatorDetailTitle, spec.Styles.NavigatorDetailTitle); err != nil {
-		return Theme{}, err
-	}
-	if err := apply("navigator_detail_value", &cloned.NavigatorDetailValue, spec.Styles.NavigatorDetailValue); err != nil {
-		return Theme{}, err
-	}
-	if err := apply("navigator_detail_dim", &cloned.NavigatorDetailDim, spec.Styles.NavigatorDetailDim); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("app_frame", &cloned.AppFrame, spec.Styles.AppFrame); err != nil {

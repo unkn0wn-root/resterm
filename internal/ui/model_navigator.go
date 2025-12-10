@@ -149,7 +149,7 @@ func (m *Model) ensureNavigatorFilter() {
 		ni.SetCursor(0)
 		ni.TextStyle = m.theme.NavigatorTitle
 		ni.PromptStyle = m.theme.NavigatorTitle
-		ni.PlaceholderStyle = m.theme.NavigatorDetailDim
+		ni.PlaceholderStyle = m.theme.NavigatorSubtitle
 		ni.Cursor.Style = m.theme.NavigatorTitle
 		ni.Blur()
 		m.navigatorFilter = ni

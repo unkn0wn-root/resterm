@@ -10,11 +10,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
-// View renders the navigator list and detail well without height constraints.
-func View(m *Model[any], th theme.Theme, width int, focus bool) (string, string) {
-	return ListView(m, th, width, 0, focus), DetailView(m, th, width)
-}
-
 // ListView renders the navigator list with an optional height constraint.
 func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) string {
 	if m == nil {
@@ -31,14 +26,6 @@ func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) 
 		out = append(out, renderRow(row, selected, th, width, focus, m.compact))
 	}
 	return strings.Join(out, "\n")
-}
-
-// DetailView renders the detail section for the selected node.
-func DetailView(m *Model[any], th theme.Theme, width int) string {
-	if m == nil {
-		return ""
-	}
-	return renderDetail(m.Selected(), th, width)
 }
 
 func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bool, compact bool) string {
@@ -87,14 +74,11 @@ func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bo
 	if len(n.Badges) > 0 {
 		parts = append(parts, " ", renderBadges(n.Badges, th))
 	}
-	if len(n.Tags) > 0 && !compact {
-		parts = append(parts, " ", renderTags(n.Tags, th))
-	}
 	line := strings.Join(parts, "")
 	truncated := ansi.Truncate(line, width, "")
 	indicator := ""
 	if len(truncated) < len(line) {
-		indicator = th.NavigatorDetailDim.Render(" +")
+		indicator = th.NavigatorSubtitle.Render(" +")
 		avail := width - lipgloss.Width(indicator)
 		if avail < 0 {
 			avail = 0
@@ -103,46 +87,6 @@ func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bo
 		truncated += indicator
 	}
 	return lipgloss.NewStyle().Width(width).Render(truncated)
-}
-
-func renderDetail(n *Node[any], th theme.Theme, width int) string {
-	if n == nil {
-		return ""
-	}
-	if n.Kind == KindFile {
-		return ""
-	}
-	softWrap := func(s string, style lipgloss.Style) []string {
-		if s == "" {
-			return nil
-		}
-		raw := style.Render(s)
-		wrapped := ansi.Wrap(raw, width, "")
-		return strings.Split(wrapped, "\n")
-	}
-
-	var lines []string
-
-	header := n.Title
-	if n.Method != "" {
-		header = fmt.Sprintf("%s %s", strings.ToUpper(n.Method), header)
-	}
-	lines = append(lines, ansi.Truncate(th.NavigatorDetailTitle.Render(header), width, ""))
-
-	if n.Target != "" {
-		lines = append(lines, softWrap(n.Target, th.NavigatorDetailValue)...)
-	}
-	if n.Desc != "" {
-		lines = append(lines, softWrap(n.Desc, th.NavigatorDetailDim)...)
-	}
-	if len(n.Badges) > 0 {
-		lines = append(lines, renderBadges(n.Badges, th))
-	}
-	if len(n.Tags) > 0 {
-		lines = append(lines, renderTags(n.Tags, th))
-	}
-
-	return lipgloss.NewStyle().Width(width).Render(strings.Join(lines, "\n"))
 }
 
 func renderMethodBadge(method string, th theme.Theme) string {
@@ -154,23 +98,6 @@ func renderMethodBadge(method string, th theme.Theme) string {
 func renderWorkflowBadge(th theme.Theme) string {
 	style := th.NavigatorBadge.Background(th.MethodColors.POST).Foreground(lipgloss.Color("#0f111a")).Bold(true)
 	return style.Render("WF")
-}
-
-func renderTags(tags []string, th theme.Theme) string {
-	if len(tags) == 0 {
-		return ""
-	}
-	clean := make([]string, 0, len(tags))
-	for _, t := range tags {
-		t = strings.TrimSpace(t)
-		if t != "" {
-			clean = append(clean, "#"+t)
-		}
-	}
-	if len(clean) == 0 {
-		return ""
-	}
-	return th.NavigatorTag.Render(strings.Join(clean, " "))
 }
 
 func renderBadges(badges []string, th theme.Theme) string {
@@ -186,7 +113,7 @@ func renderBadges(badges []string, th theme.Theme) string {
 		}
 		parts = append(parts, badgeStyle.Render(label))
 	}
-	sep := th.NavigatorDetailDim.Render(", ")
+	sep := th.NavigatorSubtitle.Render(", ")
 	return strings.Join(parts, sep)
 }
 
