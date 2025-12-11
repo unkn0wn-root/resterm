@@ -354,8 +354,8 @@ func (m Model) navigatorTagChips() string {
 	if !show {
 		return ""
 	}
-	tags := m.collectNavigatorTagsFiltered(10, filterQueryTokens(m.navigatorFilter.Value()))
-	parts := make([]string, 0, len(tags))
+	tags, more := m.collectNavigatorTagsFiltered(10, filterQueryTokens(m.navigatorFilter.Value()))
+	parts := make([]string, 0, len(tags)+1)
 	for _, tag := range tags {
 		on := active[strings.ToLower(tag)]
 		style := m.theme.NavigatorTag
@@ -366,19 +366,35 @@ func (m Model) navigatorTagChips() string {
 		}
 		parts = append(parts, style.Render("#"+tag))
 	}
+	if more {
+		parts = append(parts, m.theme.NavigatorTag.Faint(true).Render("..."))
+	}
 	return strings.Join(parts, " ")
 }
 
-func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) []string {
-	if m.navigator == nil || limit == 0 {
-		return nil
+func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) ([]string, bool) {
+	if m.navigator == nil || limit <= 0 {
+		return nil, false
 	}
 	seen := make(map[string]struct{})
-	var out []string
+	max := limit + 1
+	out := make([]string, 0, max)
 	var walk func(nodes []*navigator.Node[any])
+	shouldStop := func() bool {
+		return len(out) >= max
+	}
 	walk = func(nodes []*navigator.Node[any]) {
+		if shouldStop() {
+			return
+		}
 		for _, n := range nodes {
+			if shouldStop() {
+				return
+			}
 			for _, t := range n.Tags {
+				if shouldStop() {
+					return
+				}
 				key := strings.ToLower(strings.TrimSpace(t))
 				if key == "" {
 					continue
@@ -391,22 +407,23 @@ func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) []s
 				}
 				seen[key] = struct{}{}
 				out = append(out, key)
-				if limit > 0 && len(out) >= limit {
-					return
-				}
 			}
 			walk(n.Children)
-			if limit > 0 && len(out) >= limit {
-				return
-			}
 		}
 	}
 	for _, row := range m.navigator.Rows() {
+		if shouldStop() {
+			break
+		}
 		if row.Node != nil {
 			walk([]*navigator.Node[any]{row.Node})
 		}
 	}
-	return out
+	more := len(out) > limit
+	if more {
+		out = out[:limit]
+	}
+	return out, more
 }
 
 func filterQueryTokens(val string) []string {

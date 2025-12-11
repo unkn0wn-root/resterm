@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -55,5 +56,43 @@ func TestNavigatorTagChipsFilterMatchesQueryTokens(t *testing.T) {
 	clean = ansi.Strip(out)
 	if !strings.Contains(clean, "#reqscope") {
 		t.Fatalf("expected substring fallback to keep reqscope, got %q", clean)
+	}
+}
+
+func TestNavigatorTagChipsLimit(t *testing.T) {
+	model := New(Config{})
+	m := &model
+	var tags []string
+	for i := 0; i < 15; i++ {
+		tags = append(tags, fmt.Sprintf("tag%d", i))
+	}
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:    "file:/tmp/a",
+			Title: "Requests file",
+			Kind:  navigator.KindFile,
+			Tags:  tags,
+		},
+	})
+	m.ensureNavigatorFilter()
+	m.navigatorFilter.Focus()
+
+	out := m.navigatorTagChips()
+	if out == "" {
+		t.Fatalf("expected tag chips to render")
+	}
+	clean := ansi.Strip(out)
+	parts := strings.Fields(clean)
+	tagCount := 0
+	for _, p := range parts {
+		if strings.HasPrefix(p, "#") {
+			tagCount++
+		}
+	}
+	if tagCount != 10 {
+		t.Fatalf("expected 10 tags rendered, got %d (%q)", tagCount, clean)
+	}
+	if !strings.Contains(clean, "...") {
+		t.Fatalf("expected ellipsis when tags exceed limit, got %q", clean)
 	}
 }
