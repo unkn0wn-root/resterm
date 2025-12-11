@@ -578,35 +578,80 @@ func (m *Model) selectRequestForNode(req *restfile.Request, id string) bool {
 	return false
 }
 
-func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
+func (m *Model) prepareNavigatorRequest() (*restfile.Request, *navigator.Node[any], []tea.Cmd, bool) {
 	if m.navigator == nil {
-		return nil
+		return nil, nil, nil, false
 	}
 	n := m.navigator.Selected()
 	if n == nil || n.Kind != navigator.KindRequest {
-		return nil
+		return nil, nil, nil, false
 	}
 	if !m.confirmCrossFileNavigation(n) {
-		return func() tea.Msg { return nil }
+		return nil, nil, []tea.Cmd{func() tea.Msg { return nil }}, false
 	}
 	req, ok := n.Payload.Data.(*restfile.Request)
 	if !ok || req == nil {
-		return nil
+		return nil, nil, nil, false
 	}
 	cmds, okFile := m.ensureNavigatorFile(n)
 	if !okFile {
 		if len(cmds) == 0 {
-			return nil
+			return nil, nil, nil, false
 		}
-		return tea.Batch(cmds...)
+		return nil, nil, cmds, false
 	}
 	if !m.selectRequestForNode(req, n.ID) {
 		m.setStatusMessage(statusMsg{text: "Request not found in file", level: statusWarn})
+		if len(cmds) == 0 {
+			return nil, nil, nil, false
+		}
+		return nil, nil, cmds, false
+	}
+	return req, n, cmds, true
+}
+
+func (m *Model) revealRequestInEditor(req *restfile.Request) {
+	if req == nil {
+		return
+	}
+	start := req.LineRange.Start - 1
+	end := req.LineRange.End - 1
+	if start < 0 {
+		start = 0
+	}
+	if end < start {
+		end = start
+	}
+	h := m.editor.Height()
+	if h <= 0 {
+		h = 1
+	}
+	buf := h / 5
+	if buf < 1 {
+		buf = 1
+	}
+	offset := start - buf
+	if offset < 0 {
+		offset = 0
+	}
+	if span := end - offset; span >= h {
+		offset = end - h + 1
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	m.editor.SetViewStart(offset)
+}
+
+func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
+	req, _, cmds, ok := m.prepareNavigatorRequest()
+	if !ok {
 		if len(cmds) == 0 {
 			return nil
 		}
 		return tea.Batch(cmds...)
 	}
+	m.revealRequestInEditor(req)
 	m.setFocus(focusRequests)
 	if cmd := m.sendRequestFromList(execute); cmd != nil {
 		cmds = append(cmds, cmd)

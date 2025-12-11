@@ -167,6 +167,20 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			} else {
 				m.navigator.ClearTagFilters()
 			}
+		case "r":
+			req, _, cmds, ok := m.prepareNavigatorRequest()
+			if !ok {
+				if len(cmds) == 0 {
+					return applyFilter(nil)
+				}
+				return applyFilter(tea.Batch(cmds...))
+			}
+			m.revealRequestInEditor(req)
+			m.setFocus(focusEditor)
+			if len(cmds) > 0 {
+				return applyFilter(tea.Batch(cmds...))
+			}
+			return applyFilter(nil)
 		}
 	}
 
