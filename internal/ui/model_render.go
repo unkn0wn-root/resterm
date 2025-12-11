@@ -63,6 +63,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderHistoryPreviewModal())
 	}
 
+	if m.showRequestDetails {
+		return m.renderWithinAppFrame(m.renderRequestDetailsModal())
+	}
+
 	if m.showOpenModal {
 		return m.renderWithinAppFrame(m.renderOpenModal())
 	}
@@ -325,15 +329,16 @@ func (m Model) navigatorMethodChips() string {
 	if !show {
 		return ""
 	}
+	badge := m.theme.NavigatorBadge.Padding(0, 0)
+	dim := len(active) > 0 || !m.navigatorFilter.Focused()
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "GRPC", "WS"}
 	parts := make([]string, 0, len(methods))
 	for _, method := range methods {
 		on := active[strings.ToUpper(method)]
-		bg := methodColor(m.theme, method)
-		style := m.theme.NavigatorBadge.Background(bg).Foreground(lipgloss.Color("#0f111a"))
+		style := badge.Foreground(methodColor(m.theme, method))
 		if on {
 			style = style.Bold(true).Underline(true)
-		} else {
+		} else if dim {
 			style = style.Faint(true)
 		}
 		parts = append(parts, style.Render(method))
@@ -350,8 +355,8 @@ func (m Model) navigatorTagChips() string {
 	if !show {
 		return ""
 	}
-	tags := m.collectNavigatorTagsFiltered(10, filterQueryTokens(m.navigatorFilter.Value()))
-	parts := make([]string, 0, len(tags))
+	tags, more := m.collectNavigatorTagsFiltered(10, filterQueryTokens(m.navigatorFilter.Value()))
+	parts := make([]string, 0, len(tags)+1)
 	for _, tag := range tags {
 		on := active[strings.ToLower(tag)]
 		style := m.theme.NavigatorTag
@@ -362,19 +367,35 @@ func (m Model) navigatorTagChips() string {
 		}
 		parts = append(parts, style.Render("#"+tag))
 	}
+	if more {
+		parts = append(parts, m.theme.NavigatorTag.Faint(true).Render("..."))
+	}
 	return strings.Join(parts, " ")
 }
 
-func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) []string {
-	if m.navigator == nil || limit == 0 {
-		return nil
+func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) ([]string, bool) {
+	if m.navigator == nil || limit <= 0 {
+		return nil, false
 	}
 	seen := make(map[string]struct{})
-	var out []string
+	max := limit + 1
+	out := make([]string, 0, max)
 	var walk func(nodes []*navigator.Node[any])
+	shouldStop := func() bool {
+		return len(out) >= max
+	}
 	walk = func(nodes []*navigator.Node[any]) {
+		if shouldStop() {
+			return
+		}
 		for _, n := range nodes {
+			if shouldStop() {
+				return
+			}
 			for _, t := range n.Tags {
+				if shouldStop() {
+					return
+				}
 				key := strings.ToLower(strings.TrimSpace(t))
 				if key == "" {
 					continue
@@ -387,22 +408,23 @@ func (m Model) collectNavigatorTagsFiltered(limit int, queryTokens []string) []s
 				}
 				seen[key] = struct{}{}
 				out = append(out, key)
-				if limit > 0 && len(out) >= limit {
-					return
-				}
 			}
 			walk(n.Children)
-			if limit > 0 && len(out) >= limit {
-				return
-			}
 		}
 	}
 	for _, row := range m.navigator.Rows() {
+		if shouldStop() {
+			break
+		}
 		if row.Node != nil {
 			walk([]*navigator.Node[any]{row.Node})
 		}
 	}
-	return out
+	more := len(out) > limit
+	if more {
+		out = out[:limit]
+	}
+	return out, more
 }
 
 func filterQueryTokens(val string) []string {
@@ -1832,6 +1854,87 @@ func truncateToWidth(text string, maxWidth int) string {
 	return trimmed + "…"
 }
 
+func (m Model) renderRequestDetailsModal() string {
+	width := minInt(m.width-6, 96)
+	if width < 48 {
+		candidate := m.width - 4
+		if candidate > 0 {
+			width = maxInt(36, candidate)
+		} else {
+			width = 48
+		}
+	}
+	contentWidth := maxInt(width-4, 32)
+	title := strings.TrimSpace(m.requestDetailTitle)
+	if title == "" {
+		title = "Request Details"
+	}
+	viewWidth := maxInt(contentWidth-4, 20)
+	bodyHeight := maxInt(min(m.height-8, 18), 8)
+	if bodyHeight > m.height-6 {
+		bodyHeight = maxInt(m.height-6, 8)
+	}
+	if bodyHeight <= 0 {
+		bodyHeight = 8
+	}
+	if viewWidth <= 0 {
+		viewWidth = 20
+	}
+
+	body := renderDetailFields(m.requestDetailFields, viewWidth, m.theme)
+	if strings.TrimSpace(body) == "" {
+		body = "No request details available."
+	}
+
+	var bodyView string
+	if vp := m.requestDetailViewport; vp != nil {
+		vp.SetContent(body)
+		vp.Width = viewWidth
+		vp.Height = bodyHeight
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(vp.View())
+	} else {
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(body)
+	}
+
+	headerView := m.theme.HeaderTitle.
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render(title)
+	instructions := fmt.Sprintf(
+		"%s / %s Close",
+		m.theme.CommandBarHint.Render("Esc"),
+		m.theme.CommandBarHint.Render("Enter"),
+	)
+	instructionsView := m.theme.HeaderValue.
+		Padding(0, 2).
+		Render(instructions)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerView,
+		"",
+		bodyView,
+		"",
+		instructionsView,
+	)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
 func (m Model) renderHistoryPreviewModal() string {
 	width := minInt(m.width-6, 100)
 	if width < 48 {
@@ -2042,6 +2145,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpActionKey(bindings.ActionCycleFocusPrev, "Shift+Tab"), "Reverse focus"),
 		helpRow(m, "Enter", "Run selected request"),
 		helpRow(m, "Space", "Preview selected request / toggle file expansion"),
+		helpRow(m, m.helpActionKey(bindings.ActionShowRequestDetails, "g ,"), "Show selected request details"),
 		helpRow(m, m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"),
 		helpRow(m, m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"), "Cancel in-flight run/request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"),
@@ -2049,8 +2153,8 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"),
 		helpRow(m, m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"), "Refresh workspace"),
 		helpRow(m, "/ (Esc clears)", "Focus navigator filter / reset filters"),
-		helpRow(m, "Ctrl+M", "Toggle method filter for selected request"),
-		helpRow(m, "t", "Toggle tag filters for selected item"),
+		helpRow(m, "m", "Navigator: toggle method filter for selected request"),
+		helpRow(m, "t", "Navigator: toggle tag filters for selected item"),
 		helpRow(m, m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleResponseSplitVert, bindings.ActionToggleResponseSplitHorz}, "Ctrl+V / Ctrl+U"), "Split response vertically / horizontally"),
 		helpRow(m, m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"), "Pin or unpin focused response pane"),
 		helpRow(m, m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"), "Copy Pretty / Raw / Headers response tab"),

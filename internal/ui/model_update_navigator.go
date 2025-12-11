@@ -151,7 +151,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			if n != nil && n.Expanded {
 				m.navigator.ToggleExpanded()
 			}
-		case "ctrl+m":
+		case "m":
 			if n := m.navigator.Selected(); n != nil && n.Method != "" {
 				m.navigator.ToggleMethodFilter(n.Method)
 				m.syncNavigatorSelection()

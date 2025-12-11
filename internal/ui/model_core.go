@@ -232,6 +232,10 @@ type Model struct {
 	historyPreviewContent  string
 	historyPreviewTitle    string
 	historyPreviewViewport *viewport.Model
+	showRequestDetails     bool
+	requestDetailTitle     string
+	requestDetailFields    []requestDetailField
+	requestDetailViewport  *viewport.Model
 	helpViewport           *viewport.Model
 	suppressNextErrorModal bool
 
@@ -514,6 +518,9 @@ func New(cfg Config) Model {
 	previewViewport := viewport.New(0, 0)
 	previewViewport.SetContent("")
 
+	detailViewport := viewport.New(0, 0)
+	detailViewport.SetContent("")
+
 	helpViewport := viewport.New(0, 0)
 	helpViewport.SetContent("")
 
@@ -548,6 +555,7 @@ func New(cfg Config) Model {
 		envList:                envList,
 		themeList:              themeList,
 		historyPreviewViewport: &previewViewport,
+		requestDetailViewport:  &detailViewport,
 		helpViewport:           &helpViewport,
 		activeThemeKey:         activeTheme,
 		settingsHandle:         cfg.SettingsHandle,
