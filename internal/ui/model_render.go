@@ -1852,7 +1852,7 @@ func (m Model) renderRequestDetailsModal() string {
 		title = "Request Details"
 	}
 	viewWidth := maxInt(contentWidth-4, 20)
-	bodyHeight := maxInt(min(m.height-10, 24), 8)
+	bodyHeight := maxInt(min(m.height-8, 18), 8)
 	if bodyHeight > m.height-6 {
 		bodyHeight = maxInt(m.height-6, 8)
 	}
