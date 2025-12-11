@@ -6,12 +6,14 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
 type requestDetailField struct {
 	label string
 	value string
+	dim   bool
 }
 
 func (m *Model) openRequestDetails() {
@@ -108,7 +110,7 @@ func (m *Model) buildRequestDetailFields(req *restfile.Request, doc *restfile.Do
 		{label: "Name", value: name},
 		{label: "Method", value: method},
 		{label: "Target", value: target},
-		{label: "Description", value: desc},
+		{label: "Desc", value: desc, dim: true},
 		{label: "Tags", value: detailTags(req.Metadata.Tags)},
 		{label: "Type", value: detailType(req)},
 		{label: "File", value: detailFile(path, m.workspaceRoot, req.LineRange.Start)},
@@ -221,32 +223,37 @@ func filterDetailFields(fields []requestDetailField) []requestDetailField {
 	return out
 }
 
-func renderDetailFields(fields []requestDetailField, width int) string {
+func renderDetailFields(fields []requestDetailField, width int, th theme.Theme) string {
 	if width < 1 {
 		width = 1
 	}
 	var lines []string
 	for _, f := range fields {
-		if line := formatDetailField(f, width); line != "" {
+		if line := formatDetailField(f, width, th); line != "" {
 			lines = append(lines, line)
 		}
 	}
 	return strings.Join(lines, "\n")
 }
 
-func formatDetailField(f requestDetailField, width int) string {
+func formatDetailField(f requestDetailField, width int, th theme.Theme) string {
 	label := strings.TrimSpace(f.label)
 	val := strings.TrimSpace(f.value)
 	if label == "" || val == "" {
 		return ""
 	}
-	prefix := label + ": "
+	labelText := th.HeaderTitle.Bold(true).Render(label + ": ")
+	valueStyle := th.HeaderValue
+	if f.dim {
+		valueStyle = th.NavigatorSubtitle
+	}
+	prefix := labelText
 	avail := width - len(prefix)
 	if avail < 8 {
 		avail = width
 	}
-	segments := wrapLineSegments(val, avail)
-	indent := strings.Repeat(" ", len(prefix))
+	segments := wrapLineSegments(valueStyle.Render(val), avail)
+	indent := strings.Repeat(" ", visibleWidth(prefix))
 	for i, seg := range segments {
 		if i == 0 {
 			segments[i] = prefix + seg

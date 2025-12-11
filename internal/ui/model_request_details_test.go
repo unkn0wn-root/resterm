@@ -4,7 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/x/ansi"
+
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestOpenRequestDetailsCapturesFields(t *testing.T) {
@@ -43,7 +46,7 @@ func TestOpenRequestDetailsCapturesFields(t *testing.T) {
 		t.Fatalf("expected detail title to be set")
 	}
 
-	body := renderDetailFields(model.requestDetailFields, 80)
+	body := ansi.Strip(renderDetailFields(model.requestDetailFields, 80, theme.DefaultTheme()))
 	expect := []string{
 		"Get user",
 		"https://example.com/users/1",

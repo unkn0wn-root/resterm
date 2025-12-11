@@ -1863,7 +1863,7 @@ func (m Model) renderRequestDetailsModal() string {
 		viewWidth = 20
 	}
 
-	body := renderDetailFields(m.requestDetailFields, viewWidth)
+	body := renderDetailFields(m.requestDetailFields, viewWidth, m.theme)
 	if strings.TrimSpace(body) == "" {
 		body = "No request details available."
 	}
