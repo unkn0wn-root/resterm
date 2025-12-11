@@ -181,6 +181,50 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showRequestDetails {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			vp := m.requestDetailViewport
+			switch keyMsg.String() {
+			case "esc", "enter":
+				m.closeRequestDetails()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			case "down", "j":
+				if vp != nil {
+					vp.ScrollDown(1)
+				}
+				return m, nil
+			case "up", "k":
+				if vp != nil {
+					vp.ScrollUp(1)
+				}
+				return m, nil
+			case "pgdown", "ctrl+f":
+				if vp != nil {
+					vp.ScrollDown(vp.Height)
+				}
+				return m, nil
+			case "pgup", "ctrl+b", "ctrl+u":
+				if vp != nil {
+					vp.ScrollUp(vp.Height)
+				}
+				return m, nil
+			case "home":
+				if vp != nil {
+					vp.GotoTop()
+				}
+				return m, nil
+			case "end":
+				if vp != nil {
+					vp.GotoBottom()
+				}
+				return m, nil
+			}
+		}
+		return m, nil
+	}
+
 	if m.showOpenModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			switch keyMsg.String() {
@@ -696,6 +740,9 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionToggleHelp:
 		m.toggleHelp()
 		return nil, true
+	case bindings.ActionShowRequestDetails:
+		m.openRequestDetails()
+		return nil, true
 	case bindings.ActionOpenPathModal:
 		m.openOpenModal()
 		return nil, true
@@ -812,7 +859,7 @@ func (m *Model) shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector || m.showHistoryPreview {
+	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector || m.showHistoryPreview || m.showRequestDetails {
 		return nil
 	}
 	return m.handleKeyWithChord(msg, true)

@@ -63,6 +63,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderHistoryPreviewModal())
 	}
 
+	if m.showRequestDetails {
+		return m.renderWithinAppFrame(m.renderRequestDetailsModal())
+	}
+
 	if m.showOpenModal {
 		return m.renderWithinAppFrame(m.renderOpenModal())
 	}
@@ -1832,6 +1836,87 @@ func truncateToWidth(text string, maxWidth int) string {
 	return trimmed + "…"
 }
 
+func (m Model) renderRequestDetailsModal() string {
+	width := minInt(m.width-6, 96)
+	if width < 48 {
+		candidate := m.width - 4
+		if candidate > 0 {
+			width = maxInt(36, candidate)
+		} else {
+			width = 48
+		}
+	}
+	contentWidth := maxInt(width-4, 32)
+	title := strings.TrimSpace(m.requestDetailTitle)
+	if title == "" {
+		title = "Request Details"
+	}
+	viewWidth := maxInt(contentWidth-4, 20)
+	bodyHeight := maxInt(min(m.height-10, 24), 8)
+	if bodyHeight > m.height-6 {
+		bodyHeight = maxInt(m.height-6, 8)
+	}
+	if bodyHeight <= 0 {
+		bodyHeight = 8
+	}
+	if viewWidth <= 0 {
+		viewWidth = 20
+	}
+
+	body := renderDetailFields(m.requestDetailFields, viewWidth)
+	if strings.TrimSpace(body) == "" {
+		body = "No request details available."
+	}
+
+	var bodyView string
+	if vp := m.requestDetailViewport; vp != nil {
+		vp.SetContent(body)
+		vp.Width = viewWidth
+		vp.Height = bodyHeight
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(vp.View())
+	} else {
+		bodyView = lipgloss.NewStyle().
+			Padding(0, 2).
+			Width(contentWidth).
+			Render(body)
+	}
+
+	headerView := m.theme.HeaderTitle.
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render(title)
+	instructions := fmt.Sprintf(
+		"%s / %s Close",
+		m.theme.CommandBarHint.Render("Esc"),
+		m.theme.CommandBarHint.Render("Enter"),
+	)
+	instructionsView := m.theme.HeaderValue.
+		Padding(0, 2).
+		Render(instructions)
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		headerView,
+		"",
+		bodyView,
+		"",
+		instructionsView,
+	)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
 func (m Model) renderHistoryPreviewModal() string {
 	width := minInt(m.width-6, 100)
 	if width < 48 {
@@ -2042,6 +2127,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpActionKey(bindings.ActionCycleFocusPrev, "Shift+Tab"), "Reverse focus"),
 		helpRow(m, "Enter", "Run selected request"),
 		helpRow(m, "Space", "Preview selected request / toggle file expansion"),
+		helpRow(m, m.helpActionKey(bindings.ActionShowRequestDetails, "g ,"), "Show selected request details"),
 		helpRow(m, m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"),
 		helpRow(m, m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"), "Cancel in-flight run/request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"),

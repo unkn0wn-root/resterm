@@ -14,6 +14,7 @@ var (
 	ActionToggleResponseSplitHorz ActionID = "toggle_response_split_horizontal"
 	ActionTogglePaneFollowLatest  ActionID = "toggle_pane_follow_latest"
 	ActionToggleHelp              ActionID = "toggle_help"
+	ActionShowRequestDetails      ActionID = "show_request_details"
 	ActionOpenPathModal           ActionID = "open_path_modal"
 	ActionReloadWorkspace         ActionID = "reload_workspace"
 	ActionOpenNewFileModal        ActionID = "open_new_file_modal"
@@ -63,6 +64,7 @@ var definitions = []definition{
 	def(ActionToggleResponseSplitHorz, false, "ctrl+u"),
 	def(ActionTogglePaneFollowLatest, false, "ctrl+shift+v"),
 	def(ActionToggleHelp, false, "?"),
+	def(ActionShowRequestDetails, false, "g ,"),
 	def(ActionOpenPathModal, false, "ctrl+o"),
 	def(ActionReloadWorkspace, false, "ctrl+shift+o"),
 	def(ActionOpenNewFileModal, false, "ctrl+n"),
