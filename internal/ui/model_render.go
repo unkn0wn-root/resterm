@@ -329,12 +329,13 @@ func (m Model) navigatorMethodChips() string {
 	if !show {
 		return ""
 	}
+	badge := m.theme.NavigatorBadge.Padding(0, 0)
 	dim := len(active) > 0 || !m.navigatorFilter.Focused()
 	methods := []string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "GRPC", "WS"}
 	parts := make([]string, 0, len(methods))
 	for _, method := range methods {
 		on := active[strings.ToUpper(method)]
-		style := m.theme.NavigatorBadge.Foreground(methodColor(m.theme, method))
+		style := badge.Foreground(methodColor(m.theme, method))
 		if on {
 			style = style.Bold(true).Underline(true)
 		} else if dim {
