@@ -153,6 +153,34 @@ func TestOverlayRespectsHorizontalOffset(t *testing.T) {
 	}
 }
 
+func TestVerticalScrollKeepsBuffer(t *testing.T) {
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(3)
+	m.SetWidth(10)
+	m.SetValue("a\nb\nc\nd\ne")
+
+	m.viewport.SetYOffset(0)
+	m.row = 0
+	m.repositionView()
+	if m.viewport.YOffset != 0 {
+		t.Fatalf("expected top offset at start, got %d", m.viewport.YOffset)
+	}
+
+	m.row = 2
+	m.repositionView()
+	if m.viewport.YOffset != 1 {
+		t.Fatalf("expected offset to follow scrolloff, got %d", m.viewport.YOffset)
+	}
+
+	m.row = 3
+	m.repositionView()
+	if m.viewport.YOffset != 2 {
+		t.Fatalf("expected offset to advance while keeping buffer, got %d", m.viewport.YOffset)
+	}
+}
+
 func TestValueSoftWrap(t *testing.T) {
 	textarea := newTextArea()
 	textarea.SetWidth(16)

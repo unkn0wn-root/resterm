@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/bubbles/viewport"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
 type responseSearchState struct {
@@ -164,7 +166,16 @@ func ensureResponseMatchVisible(v *viewport.Model, content string, match searchM
 	if line > 0 {
 		line--
 	}
-	v.SetYOffset(line)
+	h := v.Height
+	if h <= 0 {
+		h = v.VisibleLineCount()
+	}
+	total := v.TotalLineCount()
+	if total == 0 {
+		total = strings.Count(content, "\n") + 1
+	}
+	target := scroll.Align(line, v.YOffset, h, total)
+	v.SetYOffset(target)
 }
 
 func ensureResponseHighlight(style lipgloss.Style, active bool) lipgloss.Style {
