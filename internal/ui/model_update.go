@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -616,31 +617,23 @@ func (m *Model) revealRequestInEditor(req *restfile.Request) {
 	}
 	start := req.LineRange.Start - 1
 	end := req.LineRange.End - 1
-	if start < 0 {
-		start = 0
-	}
-	if end < start {
-		end = start
-	}
 	h := m.editor.Height()
 	if h <= 0 {
 		h = 1
 	}
-	buf := h / 5
-	if buf < 1 {
-		buf = 1
-	}
-	offset := start - buf
-	if offset < 0 {
-		offset = 0
-	}
-	if span := end - offset; span >= h {
-		offset = end - h + 1
-	}
-	if offset < 0 {
-		offset = 0
-	}
+	total := m.editor.LineCount()
+	offset := scroll.Reveal(start, end, m.editor.ViewStart(), h, total)
 	m.editor.SetViewStart(offset)
+}
+
+func (m *Model) jumpToNavigatorRequest(req *restfile.Request, moveCursor bool) {
+	if req == nil {
+		return
+	}
+	m.revealRequestInEditor(req)
+	if moveCursor {
+		m.syncEditorWithRequestSelection(-1)
+	}
 }
 
 func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
@@ -651,7 +644,7 @@ func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
 		}
 		return tea.Batch(cmds...)
 	}
-	m.revealRequestInEditor(req)
+	m.jumpToNavigatorRequest(req, false)
 	m.setFocus(focusRequests)
 	if cmd := m.sendRequestFromList(execute); cmd != nil {
 		cmds = append(cmds, cmd)
