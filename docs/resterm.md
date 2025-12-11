@@ -215,7 +215,7 @@ While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire 
 ## Workspaces & Files
 
 - Resterm scans the workspace root for `.http` and `.rest` files. Use `--workspace` to set the root or rely on the directory of the file passed via `--file`. Add `--recursive` to traverse subdirectories (hidden directories are skipped).
-- The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `m` toggles method filter (single select) for the highlighted request, `t` toggles tag filter, and `Esc` clears text plus any filter.
+- The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `m` toggles method badges (single select) for the highlighted request, `t` toggles tag badges, and `Esc` clears text plus any badges.
 - The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear.
 - Create a scratch buffer with `Ctrl+T` for ad-hoc experiments. These buffers are not written to disk unless you save them explicitly.
 
