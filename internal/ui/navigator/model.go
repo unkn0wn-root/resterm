@@ -3,6 +3,8 @@ package navigator
 import (
 	"strings"
 	"unicode"
+
+	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
 // Kind identifies the type of a node in the navigator tree.
@@ -302,21 +304,7 @@ func (m *Model[T]) ensureVisible() {
 		m.offset = 0
 		return
 	}
-	if m.offset < 0 {
-		m.offset = 0
-	}
-	maxOffset := len(m.flat) - m.viewHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.sel < m.offset {
-		m.offset = m.sel
-	} else if m.sel >= m.offset+m.viewHeight {
-		m.offset = m.sel - m.viewHeight + 1
-	}
-	if m.offset > maxOffset {
-		m.offset = maxOffset
-	}
+	m.offset = scroll.Align(m.sel, m.offset, m.viewHeight, len(m.flat))
 }
 
 func flatten[T any](nodes []*Node[T], level int, filter string, methods map[string]bool, tags map[string]bool) []Flat[T] {

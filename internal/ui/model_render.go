@@ -1506,7 +1506,7 @@ func (m Model) renderHeader() string {
 	if strings.TrimSpace(request) == "" {
 		request = strings.TrimSpace(m.activeRequestTitle)
 		if request == "" {
-			request = "—"
+			request = "[none]"
 		}
 	}
 

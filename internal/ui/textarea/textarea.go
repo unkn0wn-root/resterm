@@ -21,6 +21,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	rw "github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
+
+	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
 const (
@@ -920,13 +922,31 @@ func (m *Model) SetViewStart(offset int) {
 // repositionView repositions the view of the viewport based on the defined
 // scrolling behavior.
 func (m *Model) repositionView() {
-	minimum := m.viewport.YOffset
-	maximum := minimum + m.viewport.Height - 1
-
-	if row := m.cursorLineNumber(); row < minimum {
-		m.viewport.ScrollUp(minimum - row)
-	} else if row > maximum {
-		m.viewport.ScrollDown(row - maximum)
+	row := m.cursorLineNumber()
+	h := m.viewport.Height
+	if h <= 0 {
+		h = m.height
+	}
+	total := len(m.value)
+	if total < 1 {
+		total = 1
+	}
+	maxOff := total - h
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	target := scroll.Align(row, m.viewport.YOffset, h, total)
+	if m.row >= len(m.value)-1 {
+		target = maxOff
+	}
+	if target != m.viewport.YOffset {
+		if target < 0 {
+			target = 0
+		}
+		if target > maxOff {
+			target = maxOff
+		}
+		m.viewport.YOffset = target
 	}
 }
 

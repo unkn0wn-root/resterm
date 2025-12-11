@@ -573,6 +573,10 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			}
 		}
 		handled = true
+	case " ":
+		if e.motionsEnabled && !e.metadataHints.active {
+			handled = true
+		}
 	case "ctrl+v":
 		if e.hasSelection() {
 			if _, removed := (&e).removeSelection(); removed {
@@ -2158,7 +2162,7 @@ func isMovementKey(msg tea.KeyMsg) bool {
 }
 
 func insertsText(msg tea.KeyMsg) bool {
-	if msg.Type == tea.KeyRunes && len(msg.Runes) > 0 {
+	if len(msg.Runes) > 0 {
 		return true
 	}
 	switch msg.String() {

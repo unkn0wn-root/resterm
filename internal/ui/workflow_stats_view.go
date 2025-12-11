@@ -303,14 +303,37 @@ func (v *workflowStatsView) alignSelection(pane *responsePaneState, render workf
 	metric := render.metrics[v.selected]
 	height := pane.viewport.Height
 	offset := pane.viewport.YOffset
-	if !forceTop {
-		bottom := offset + height - 1
-		if metric.start <= bottom && metric.end >= offset {
-			return false
+	total := render.lineCount
+	if total < metric.end+1 {
+		total = metric.end + 1
+	}
+	buf := height / 4
+	if buf < 1 {
+		buf = 1
+	}
+	if buf > 5 {
+		buf = 5
+	}
+	top := offset + buf
+	bottom := offset + height - 1 - buf
+	target := offset
+	if forceTop {
+		target = metric.start - buf
+	} else {
+		switch {
+		case metric.start < top:
+			target = metric.start - buf
+		case metric.start > bottom:
+			target = metric.start - buf
 		}
 	}
-
-	target := v.clampOffset(render, height, metric.start)
+	if target < 0 {
+		target = 0
+	}
+	maxOff := v.clampOffset(render, height, total)
+	if target > maxOff {
+		target = maxOff
+	}
 	if target == offset {
 		return false
 	}
@@ -368,42 +391,36 @@ func (v *workflowStatsView) selectVisibleStart(pane *responsePaneState, render w
 	if height <= 0 {
 		height = 1
 	}
+	top := offset
 	bottom := offset + height - 1
+	maxOffset := v.clampOffset(render, height, render.lineCount)
+	buf := height / 5
+	if buf < 1 {
+		buf = 1
+	}
+	if buf > 5 {
+		buf = 5
+	}
+	var currIdx int
+	for i, metric := range render.metrics {
+		if metric.index == v.selected {
+			currIdx = i
+			break
+		}
+	}
 	candidate := -1
 	if direction > 0 {
-		for _, metric := range render.metrics {
-			if metric.start >= offset && metric.start <= bottom && metric.index > v.selected {
-				candidate = metric.index
-				break
-			}
-		}
-		if candidate == -1 && v.selected >= 0 && v.selected < len(render.metrics) {
-			if render.metrics[v.selected].start < offset {
-				for _, metric := range render.metrics {
-					if metric.start >= offset {
-						candidate = metric.index
-						break
-					}
-				}
+		if currIdx+1 < len(render.metrics) {
+			next := render.metrics[currIdx+1]
+			if next.start <= bottom-buf || offset >= maxOffset {
+				candidate = next.index
 			}
 		}
 	} else if direction < 0 {
-		for i := len(render.metrics) - 1; i >= 0; i-- {
-			metric := render.metrics[i]
-			if metric.start <= bottom && metric.start >= offset && metric.index < v.selected {
-				candidate = metric.index
-				break
-			}
-		}
-		if candidate == -1 && v.selected >= 0 && v.selected < len(render.metrics) {
-			if render.metrics[v.selected].start > bottom {
-				for i := len(render.metrics) - 1; i >= 0; i-- {
-					metric := render.metrics[i]
-					if metric.start <= bottom {
-						candidate = metric.index
-						break
-					}
-				}
+		if currIdx-1 >= 0 {
+			prev := render.metrics[currIdx-1]
+			if prev.start >= top+buf || offset <= 0 {
+				candidate = prev.index
 			}
 		}
 	}
