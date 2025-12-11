@@ -91,7 +91,7 @@ var definitions = []definition{
 	def(ActionToggleResponseCollapse, false, "g 3"),
 	def(ActionToggleZoom, false, "g z"),
 	def(ActionClearZoom, false, "g shift+z"),
-	def(ActionSendRequest, false, "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j", "ctrl+m"),
+	def(ActionSendRequest, false, "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j"),
 	def(ActionCancelRun, false, "ctrl+c"),
 	def(ActionCopyResponseTab, false, "ctrl+shift+c", "g y"),
 	def(ActionToggleHeaderPreview, false, "g shift+h"),
