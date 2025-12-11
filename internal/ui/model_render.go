@@ -337,7 +337,7 @@ func (m Model) navigatorMethodChips() string {
 		style := m.theme.NavigatorBadge.Background(bg).Foreground(lipgloss.Color("#0f111a"))
 		if on {
 			style = style.Bold(true).Underline(true)
-		} else {
+		} else if len(active) > 0 || !m.navigatorFilter.Focused() {
 			style = style.Faint(true)
 		}
 		parts = append(parts, style.Render(method))
