@@ -180,10 +180,8 @@ func detailMeta(req *restfile.Request) string {
 		}
 	}
 	if c := len(req.Metadata.Scripts); c > 0 {
-		label := "Scripts"
-		if c == 1 {
-			label = "1 script"
-		} else {
+		label := "1 script"
+		if c > 1 {
 			label = fmt.Sprintf("%d scripts", c)
 		}
 		parts = append(parts, label)
