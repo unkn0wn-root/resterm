@@ -84,7 +84,7 @@ Content-Type: application/json
 
 | Action | Shortcut |
 | --- | --- |
-| Send active request | `Ctrl+Enter` |
+| Send active request | `Ctrl+Enter` / `Cmd+Enter` / `Alt+Enter` / `Ctrl+J` / `Ctrl+M` |
 | Toggle help overlay | `?` |
 | Toggle editor insert mode | `i` / `Esc` |
 | Cycle focus (navigator -> editor -> response) | `Tab` / `Shift+Tab` |
@@ -99,8 +99,8 @@ Content-Type: application/json
 | Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
 | Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
 | Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
-| Toggle method filter for selected request | `Ctrl+M` (repeat to switch/clear) |
-| Toggle tag filters from selected item | `t` (repeat to toggle) |
+| Navigator: toggle method filter for selected request | `m` (repeat to switch/clear) |
+| Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
 | Open file picker | `Ctrl+O` |
@@ -215,7 +215,7 @@ While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire 
 ## Workspaces & Files
 
 - Resterm scans the workspace root for `.http` and `.rest` files. Use `--workspace` to set the root or rely on the directory of the file passed via `--file`. Add `--recursive` to traverse subdirectories (hidden directories are skipped).
-- The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `Ctrl+M` toggles method chips (single-select) for the highlighted request, `t` toggles tag chips, and `Esc` clears text plus any chips.
+- The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `m` toggles method filter (single select) for the highlighted request, `t` toggles tag filter, and `Esc` clears text plus any filter.
 - The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear.
 - Create a scratch buffer with `Ctrl+T` for ad-hoc experiments. These buffers are not written to disk unless you save them explicitly.
 
