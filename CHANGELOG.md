@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.10.4](https://github.com/unkn0wn-root/resterm/compare/v0.10.3...v0.10.4) (2025-12-11)
+
+
+### Features
+
+* add 'type-writer' like scroll to the nav bar, editor and workflows ([510bba8](https://github.com/unkn0wn-root/resterm/commit/510bba88b20c73d204b619050724b40fdf6104e1))
+* add jump to request shortcut and focus on request in editor while sending request ([7e0e0d6](https://github.com/unkn0wn-root/resterm/commit/7e0e0d658efd8263cbc02d37233b4ad3b39da7eb))
+
+
+### Bug Fixes
+
+* space should not bypass view mode ([33ffe45](https://github.com/unkn0wn-root/resterm/commit/33ffe458a0d4a300d9655a5b620de5bd0f02e938))
+
 ### [0.10.3](https://github.com/unkn0wn-root/resterm/compare/v0.10.2...v0.10.3) (2025-12-11)
 
 
