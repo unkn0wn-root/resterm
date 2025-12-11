@@ -927,8 +927,7 @@ func (m *Model) repositionView() {
 	if h <= 0 {
 		h = m.height
 	}
-	total := m.viewport.TotalLineCount()
-	total = len(m.value)
+	total := len(m.value)
 	if total < 1 {
 		total = 1
 	}
