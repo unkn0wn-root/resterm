@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.10.5](https://github.com/unkn0wn-root/resterm/compare/v0.10.4...v0.10.5) (2025-12-12)
+
+
+### Features
+
+* save custom layout settings to persist after closing resterm ([5c1d41a](https://github.com/unkn0wn-root/resterm/commit/5c1d41a8a8f1a30353956e7c37499f6244470e47))
+
 ### [0.10.4](https://github.com/unkn0wn-root/resterm/compare/v0.10.3...v0.10.4) (2025-12-11)
 
 
