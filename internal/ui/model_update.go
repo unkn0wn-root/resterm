@@ -269,6 +269,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, inputCmd
 	}
 
+	if m.showLayoutSaveModal {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			switch keyMsg.String() {
+			case "y", "Y":
+				cmd := m.saveLayoutSettings()
+				return m, cmd
+			case "n", "N", "esc":
+				m.closeLayoutSaveModal()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+	}
+
 	if m.showSearchPrompt {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if m.searchJustOpened {
@@ -762,6 +778,9 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.clearGlobalValues(), true
 	case bindings.ActionSaveFile:
 		return m.saveFile(), true
+	case bindings.ActionSaveLayout:
+		m.openLayoutSaveModal()
+		return nil, true
 	case bindings.ActionToggleResponseSplitVert:
 		m.responsePaneChord = false
 		return m.toggleResponseSplitVertical(), true
@@ -897,7 +916,7 @@ func (m *Model) shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector || m.showHistoryPreview || m.showRequestDetails {
+	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector || m.showHistoryPreview || m.showRequestDetails || m.showLayoutSaveModal {
 		return nil
 	}
 	return m.handleKeyWithChord(msg, true)

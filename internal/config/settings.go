@@ -18,7 +18,8 @@ const (
 )
 
 type Settings struct {
-	DefaultTheme string `json:"default_theme" toml:"default_theme"`
+	DefaultTheme string         `json:"default_theme" toml:"default_theme"`
+	Layout       LayoutSettings `json:"layout" toml:"layout"`
 }
 
 type SettingsFormat string
@@ -51,6 +52,7 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 		if err != nil {
 			return Settings{}, SettingsHandle{}, fmt.Errorf("parse settings %q: %w", candidate.Path, err)
 		}
+		settings.Layout = NormaliseLayoutSettings(settings.Layout)
 		return settings, candidate, nil
 	}
 
@@ -58,10 +60,12 @@ func LoadSettings() (Settings, SettingsHandle, error) {
 		return Settings{}, SettingsHandle{}, accumulated
 	}
 
-	return Settings{}, SettingsHandle{
-		Path:   candidates[0].Path,
-		Format: SettingsFormatTOML,
-	}, nil
+	return Settings{
+			Layout: DefaultLayoutSettings(),
+		}, SettingsHandle{
+			Path:   candidates[0].Path,
+			Format: SettingsFormatTOML,
+		}, nil
 }
 
 func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {
@@ -84,6 +88,7 @@ func decodeSettings(data []byte, format SettingsFormat) (Settings, error) {
 }
 
 func SaveSettings(settings Settings, handle SettingsHandle) error {
+	settings.Layout = NormaliseLayoutSettings(settings.Layout)
 	path := handle.Path
 	format := handle.Format
 	if path == "" {

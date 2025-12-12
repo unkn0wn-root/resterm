@@ -5,6 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/config"
 )
 
 func (m *Model) applyLayout() tea.Cmd {
@@ -328,10 +330,8 @@ func (m *Model) applyLayout() tea.Cmd {
 			if available < 0 {
 				available = 0
 			}
-			ratio := m.responseSplitRatio
-			if ratio <= 0 {
-				ratio = 0.5
-			}
+			ratio := clampResponseSplitRatio(m.responseSplitRatio)
+			m.responseSplitRatio = ratio
 			primaryHeight := int(math.Round(float64(available) * ratio))
 			minHeight := minResponseSplitHeight
 			if available < minHeight*2 {
@@ -375,10 +375,8 @@ func (m *Model) applyLayout() tea.Cmd {
 					secondaryWidth = 1
 				}
 			} else {
-				ratio := m.responseSplitRatio
-				if ratio <= 0 {
-					ratio = 0.5
-				}
+				ratio := clampResponseSplitRatio(m.responseSplitRatio)
+				m.responseSplitRatio = ratio
 				primaryWidth = int(math.Round(float64(available) * ratio))
 				if primaryWidth < minResponseSplitWidth {
 					primaryWidth = minResponseSplitWidth
@@ -445,6 +443,19 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.themeList.SetSize(themeWidth, themeHeight)
 	}
 	return m.syncResponsePanes()
+}
+
+func clampResponseSplitRatio(ratio float64) float64 {
+	if ratio == 0 {
+		return responseSplitRatioDefault
+	}
+	if ratio < config.LayoutResponseRatioMin {
+		return config.LayoutResponseRatioMin
+	}
+	if ratio > config.LayoutResponseRatioMax {
+		return config.LayoutResponseRatioMax
+	}
+	return ratio
 }
 
 func (m *Model) adjustSidebarWidth(delta float64) (bool, bool, tea.Cmd) {
