@@ -74,6 +74,9 @@ func (m Model) View() string {
 	if m.showNewFileModal {
 		return m.renderWithinAppFrame(m.renderNewFileModal())
 	}
+	if m.showLayoutSaveModal {
+		return m.renderWithinAppFrame(m.renderLayoutSaveModal())
+	}
 
 	filePane := m.renderFilePane()
 	fileWidth := lipgloss.Width(filePane)
@@ -261,6 +264,23 @@ func centerBox(width, height int, content string) string {
 	)
 }
 
+func paddedLeftLine(width, pad int, text string) string {
+	if width < 1 {
+		width = 1
+	}
+	if pad < 0 {
+		pad = 0
+	}
+
+	inner := maxInt(width-(pad*2), 1)
+	wrapped := wrapToWidth(text, inner)
+	return lipgloss.NewStyle().
+		Width(width).
+		Padding(0, pad).
+		Align(lipgloss.Left).
+		Render(wrapped)
+}
+
 // clampPane ensures the navigator pane renders within a fixed rectangle.
 func clampPane(content string, width, height int) string {
 	if width < 1 {
@@ -269,10 +289,12 @@ func clampPane(content string, width, height int) string {
 	if height < 1 {
 		height = 1
 	}
+
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 {
 		lines = []string{""}
 	}
+
 	for i, line := range lines {
 		line = ansi.Truncate(line, width, "")
 		lineWidth := lipgloss.Width(line)
@@ -2061,22 +2083,76 @@ func (m Model) renderErrorModal() string {
 	)
 }
 
+func (m Model) renderLayoutSaveModal() string {
+	bodyText := "Save current pane sizes and splits to your settings file?"
+	hintsText := fmt.Sprintf(
+		"Yes (%s)    No (%s)    Exit (%s)",
+		m.theme.CommandBarHint.Render("Y/y"),
+		m.theme.CommandBarHint.Render("N/n"),
+		m.theme.CommandBarHint.Render("Esc"),
+	)
+	pad := 2
+	frame := m.theme.BrowserBorder.GetHorizontalFrameSize()
+	longest := maxInt(lipgloss.Width(bodyText), lipgloss.Width(hintsText))
+	minContent := maxInt(32, longest+(pad*2))
+
+	width := m.width - 10
+	if width > 68 {
+		width = 68
+	}
+
+	minOuter := minContent + frame
+	if width < minOuter {
+		candidate := m.width - 4
+		if candidate > 0 {
+			width = maxInt(candidate, minOuter)
+		} else {
+			width = minOuter
+		}
+	}
+
+	contentWidth := maxInt(width-frame, minContent)
+	title := m.theme.HeaderTitle.
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render("Save Layout")
+	body := paddedLeftLine(contentWidth, pad, bodyText)
+	hints := paddedLeftLine(contentWidth, pad, hintsText)
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		"",
+		body,
+		"",
+		"",
+		hints,
+	)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
 func (m Model) renderEnvironmentModal() string {
 	width := minInt(m.width-10, 48)
 	if width < 24 {
 		width = 24
 	}
+
 	commands := fmt.Sprintf(
 		"%s Select    %s Cancel",
 		m.theme.CommandBarHint.Render("Enter"),
 		m.theme.CommandBarHint.Render("Esc"),
 	)
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.envList.View(),
 		"",
 		commands,
 	)
+
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(
 		m.width,
@@ -2094,17 +2170,20 @@ func (m Model) renderThemeModal() string {
 	if width < 28 {
 		width = 28
 	}
+
 	commands := fmt.Sprintf(
 		"%s Apply    %s Cancel",
 		m.theme.CommandBarHint.Render("Enter"),
 		m.theme.CommandBarHint.Render("Esc"),
 	)
+
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
 		m.themeList.View(),
 		"",
 		commands,
 	)
+
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(
 		m.width,
@@ -2122,12 +2201,14 @@ func (m Model) renderHelpOverlay() string {
 	if width < 48 {
 		width = 48
 	}
+
 	contentWidth := maxInt(width-6, 30)
 	viewWidth := maxInt(contentWidth-6, 22)
 	maxBodyHeight := m.height - 8
 	if maxBodyHeight < 6 {
 		maxBodyHeight = 6
 	}
+
 	bodyHeight := maxInt(min(28, maxBodyHeight), 6)
 
 	header := func(text string, align lipgloss.Position) string {
@@ -2149,6 +2230,7 @@ func (m Model) renderHelpOverlay() string {
 		helpRow(m, m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"),
 		helpRow(m, m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"), "Cancel in-flight run/request"),
 		helpRow(m, m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"),
+		helpRow(m, m.helpActionKey(bindings.ActionSaveLayout, "g Shift+L"), "Save layout to settings"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"),
 		helpRow(m, m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"),
 		helpRow(m, m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"), "Refresh workspace"),

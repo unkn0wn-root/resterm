@@ -10,6 +10,7 @@ var (
 	ActionShowGlobals             ActionID = "show_globals"
 	ActionClearGlobals            ActionID = "clear_globals"
 	ActionSaveFile                ActionID = "save_file"
+	ActionSaveLayout              ActionID = "save_layout"
 	ActionToggleResponseSplitVert ActionID = "toggle_response_split_vertical"
 	ActionToggleResponseSplitHorz ActionID = "toggle_response_split_horizontal"
 	ActionTogglePaneFollowLatest  ActionID = "toggle_pane_follow_latest"
@@ -60,6 +61,7 @@ var definitions = []definition{
 	def(ActionShowGlobals, false, "ctrl+g"),
 	def(ActionClearGlobals, false, "ctrl+shift+g"),
 	def(ActionSaveFile, false, "ctrl+s"),
+	def(ActionSaveLayout, false, "g shift+l"),
 	def(ActionToggleResponseSplitVert, false, "ctrl+v"),
 	def(ActionToggleResponseSplitHorz, false, "ctrl+u"),
 	def(ActionTogglePaneFollowLatest, false, "ctrl+shift+v"),

@@ -103,6 +103,7 @@ Content-Type: application/json
 | Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
+| Save layout (prompt) | `g+Shift+L` |
 | Open file picker | `Ctrl+O` |
 | New scratch buffer | `Ctrl+T` |
 | Reparse current document | `Ctrl+P` (also `Ctrl+Alt+P`) |
@@ -140,6 +141,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `show_globals` | Show global variable summary. | `ctrl+g` |
 | `clear_globals` | Clear global variables. | `ctrl+shift+g` |
 | `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
+| `save_layout` | Prompt to persist current layout (splits, widths) to settings. | `g shift+l` |
 | `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `ctrl+v` |
 | `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `ctrl+u` |
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |

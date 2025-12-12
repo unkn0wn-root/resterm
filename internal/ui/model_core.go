@@ -96,10 +96,10 @@ const (
 )
 
 const (
-	sidebarWidthDefault   = 0.2
+	sidebarWidthDefault   = config.LayoutSidebarWidthDefault
 	sidebarWidthStep      = 0.05
-	minSidebarWidthRatio  = 0.05
-	maxSidebarWidthRatio  = 0.3
+	minSidebarWidthRatio  = config.LayoutSidebarWidthMin
+	maxSidebarWidthRatio  = config.LayoutSidebarWidthMax
 	minSidebarWidthPixels = 20
 	sidebarSplitDefault   = 0.5
 	sidebarSplitStep      = 0.05
@@ -114,10 +114,10 @@ const (
 )
 
 const (
-	editorSplitDefault           = 0.6
+	editorSplitDefault           = config.LayoutEditorSplitDefault
 	editorSplitStep              = 0.05
-	minEditorSplit               = 0.3
-	maxEditorSplit               = 0.63
+	minEditorSplit               = config.LayoutEditorSplitMin
+	maxEditorSplit               = config.LayoutEditorSplitMax
 	minEditorPaneWidth           = 30
 	minResponsePaneWidth         = 40
 	minResponseSplitWidth        = 24
@@ -126,6 +126,10 @@ const (
 	responseSplitSeparatorHeight = 1
 	minEditorPaneHeight          = 10
 	minResponsePaneHeight        = 6
+)
+
+const (
+	responseSplitRatioDefault = config.LayoutResponseRatioDefault
 )
 
 const (
@@ -225,6 +229,7 @@ type Model struct {
 	showHelp               bool
 	helpJustOpened         bool
 	showNewFileModal       bool
+	showLayoutSaveModal    bool
 	showOpenModal          bool
 	showErrorModal         bool
 	errorModalMessage      string
@@ -564,7 +569,7 @@ func New(cfg Config) Model {
 			newResponsePaneState(secondaryViewport, false),
 		},
 		responsePaneFocus:        responsePanePrimary,
-		responseSplitRatio:       0.5,
+		responseSplitRatio:       responseSplitRatioDefault,
 		responseSplitOrientation: responseSplitVertical,
 		mainSplitOrientation:     mainSplitVertical,
 		reqCompact:               &reqCompact,
@@ -614,6 +619,7 @@ func New(cfg Config) Model {
 		requestKeySessions: make(map[string]string),
 		compareSnapshots:   make(map[string]*responseSnapshot),
 	}
+	model.applyLayoutSettingsFromConfig(cfg.Settings.Layout)
 	model.setInsertMode(false, false)
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
