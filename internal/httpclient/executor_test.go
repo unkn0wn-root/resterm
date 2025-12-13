@@ -64,7 +64,7 @@ func TestInjectBodyIncludes(t *testing.T) {
 	}
 
 	body := "part1\n@payload.json\n@{notIncluded}\n"
-	processed, err := client.injectBodyIncludes(body, baseDir)
+	processed, err := client.injectBodyIncludes(body, baseDir, nil)
 	if err != nil {
 		t.Fatalf("inject body includes: %v", err)
 	}
@@ -73,6 +73,18 @@ func TestInjectBodyIncludes(t *testing.T) {
 	}
 	if !strings.Contains(processed, "@{notIncluded}") {
 		t.Fatalf("expected handlebars directive to remain untouched")
+	}
+}
+
+func TestInjectBodyIncludesFallback(t *testing.T) {
+	client := &Client{fs: mapFS{"workspace/payload.json": []byte("hi")}}
+	body := "@payload.json"
+	processed, err := client.injectBodyIncludes(body, "/does/not/exist", []string{"workspace"})
+	if err != nil {
+		t.Fatalf("inject body includes with fallback: %v", err)
+	}
+	if processed != "hi" {
+		t.Fatalf("expected fallback file contents, got %q", processed)
 	}
 }
 

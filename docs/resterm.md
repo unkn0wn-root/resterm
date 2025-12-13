@@ -295,7 +295,7 @@ When expanding `{{variable}}` templates, Resterm looks in:
 7. Selected environment JSON.
 8. OS environment variables (case-sensitive with an uppercase fallback).
 
-Dynamic helpers are also available: `{{$uuid}}`, `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
+Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
 
 ---
 
@@ -475,13 +475,13 @@ Accept: application/json
 | Scope | Syntax | Visibility |
 | --- | --- | --- |
 | Constant | `# @const api.root https://api.example.com` | Immutable for the lifetime of the document; available to every request in the file. |
-| Global | `# @global api.token value` or `# @var global api.token value` | Visible to every request and every file (per environment). |
-| File | `# @var file upload.root https://storage.example.com` | Visible to all requests in the same document only. |
-| Request | `# @var request trace.id {{$uuid}}` | Visible only to the current request (useful for tests). |
+| Global | `# @global api.token value` / `# @global-secret api.token value` / `# @var global api.token value` | Visible to every request and every file (per environment). |
+| File | `# @file upload.root https://storage.example.com` / `# @file-secret upload.root ...` / `# @var file upload.root ...` | Visible to all requests in the same document only. |
+| Request | `# @request trace.id {{$uuid}}` / `# @request-secret trace.id ...` / `# @var request trace.id ...` | Visible only to the current request (useful for tests). |
 
-You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Before the request line, these default to file scope; after the request line but before headers, they default to request scope.
+You can also use shorthand assignments outside comment blocks: `@requestId = {{$uuid}}`. Shorthand is request-scoped while you're inside a request block and file-scoped elsewhere; if you put shorthand lines after the final request (without a trailing `###`), they're treated as file variables. Add a prefix to override (`@global api.token abc`, `@request trace.id {{$uuid}}`, or `@file base.url https://example.com`).
 
-Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries.
+Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stored values in summaries; this works for both comment directives and shorthand lines (`@global-secret token xyz`, `@file-secret base.url ...`, `@request-secret trace.id ...`).
 
 ### Captures
 
@@ -510,7 +510,7 @@ POST https://httpbin.org/anything/analytics/sessions
 ### Body content
 
 - **Inline**: everything after the blank line separating headers and body.
-- **External file**: `< ./payloads/create-user.json` loads the file relative to the request file.
+- **External file**: `< ./payloads/create-user.json` loads the file relative to the request file (falls back to the workspace root / current working directory if it isn’t found alongside the file; set `RESTERM_DISABLE_FALLBACK=1` to turn fallbacks off).
 - **Inline includes**: lines in the body starting with `@ path/to/file` are replaced with the file contents (useful for multi-part templates).
 - **GraphQL**: handled separately (see [GraphQL](#graphql)).
 

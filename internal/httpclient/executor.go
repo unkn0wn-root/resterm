@@ -22,6 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"golang.org/x/net/http2"
 	"nhooyr.io/websocket"
@@ -37,6 +38,7 @@ type Options struct {
 	ClientCert         string
 	ClientKey          string
 	BaseDir            string
+	FallbackBaseDirs   []string
 	Trace              bool
 	TraceBudget        *nettrace.Budget
 	SSH                *ssh.Plan
@@ -366,14 +368,9 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 
 	switch {
 	case req.Body.FilePath != "":
-		path := req.Body.FilePath
-		if !filepath.IsAbs(path) && opts.BaseDir != "" {
-			path = filepath.Join(opts.BaseDir, path)
-		}
-
-		data, err := c.fs.ReadFile(path)
+		data, _, err := c.readFileWithFallback(req.Body.FilePath, opts.BaseDir, opts.FallbackBaseDirs, "body file")
 		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read body file %s", path)
+			return nil, err
 		}
 
 		if resolver != nil && req.Body.Options.ExpandTemplates {
@@ -383,7 +380,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body file templates")
 			}
 
-			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir)
+			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir, opts.FallbackBaseDirs)
 			if procErr != nil {
 				return nil, procErr
 			}
@@ -399,7 +396,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
 			}
 		}
-		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir)
+		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir, opts.FallbackBaseDirs)
 		if err != nil {
 			return nil, err
 		}
@@ -413,7 +410,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 // Variables need special handling since they must be valid JSON in both cases.
 func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	gql := req.Body.GraphQL
-	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, "GraphQL query")
+	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, opts.FallbackBaseDirs, "GraphQL query")
 	if err != nil {
 		return nil, err
 	}
@@ -440,7 +437,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		}
 	}
 
-	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, "GraphQL variables")
+	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, opts.FallbackBaseDirs, "GraphQL variables")
 	if err != nil {
 		return nil, err
 	}
@@ -529,7 +526,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	return bytes.NewReader(body), nil
 }
 
-func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) (string, error) {
+func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbacks []string, label string) (string, error) {
 	inline = strings.TrimSpace(inline)
 	if inline != "" {
 		return inline, nil
@@ -539,14 +536,9 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir, label string) 
 		return "", nil
 	}
 
-	resolved := filePath
-	if !filepath.IsAbs(resolved) && baseDir != "" {
-		resolved = filepath.Join(baseDir, resolved)
-	}
-
-	data, err := c.fs.ReadFile(resolved)
+	data, _, err := c.readFileWithFallback(filePath, baseDir, fallbacks, strings.ToLower(label))
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), filePath)
+		return "", err
 	}
 	return string(data), nil
 }
@@ -721,9 +713,54 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 	}
 }
 
+func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []string, label string) ([]byte, string, error) {
+	if c == nil || c.fs == nil {
+		return nil, "", errdef.New(errdef.CodeFilesystem, "file reader unavailable")
+	}
+
+	if path == "" {
+		return nil, "", errdef.New(errdef.CodeFilesystem, "%s path is empty", strings.ToLower(label))
+	}
+
+	if filepath.IsAbs(path) {
+		data, err := c.fs.ReadFile(path)
+		if err == nil {
+			return data, path, nil
+		}
+		return nil, "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), path)
+	}
+
+	candidates := make([]string, 0, 2+len(fallbacks))
+	if baseDir != "" {
+		candidates = append(candidates, filepath.Join(baseDir, path))
+	}
+	for _, fb := range fallbacks {
+		candidates = append(candidates, filepath.Join(fb, path))
+	}
+	candidates = append(candidates, path)
+	candidates = util.DedupeNonEmptyStrings(candidates)
+
+	var lastErr error
+	var lastPath string
+	for _, candidate := range candidates {
+		data, err := c.fs.ReadFile(candidate)
+		if err == nil {
+			return data, candidate, nil
+		}
+		lastErr = err
+		lastPath = candidate
+	}
+
+	if lastErr == nil {
+		lastErr = os.ErrNotExist
+		lastPath = path
+	}
+	return nil, "", errdef.Wrap(errdef.CodeFilesystem, lastErr, "read %s %s (last tried %s)", strings.ToLower(label), path, lastPath)
+}
+
 // Lines starting with @ get replaced with the file contents.
 // @{variable} syntax is left alone so template expansion can handle it.
-func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error) {
+func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []string) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
 
@@ -740,14 +777,9 @@ func (c *Client) injectBodyIncludes(body string, baseDir string) (string, error)
 		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
 			includePath := strings.TrimSpace(trimmed[1:])
 			if includePath != "" {
-				path := includePath
-				if !filepath.IsAbs(path) && baseDir != "" {
-					path = filepath.Join(baseDir, path)
-				}
-
-				data, err := c.fs.ReadFile(path)
+				data, _, err := c.readFileWithFallback(includePath, baseDir, fallbacks, "include body file")
 				if err != nil {
-					return "", errdef.Wrap(errdef.CodeFilesystem, err, "include body file %s", includePath)
+					return "", err
 				}
 				b.WriteString(string(data))
 				continue

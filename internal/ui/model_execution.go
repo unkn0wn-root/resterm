@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -28,6 +29,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -278,6 +280,8 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 // Accept an environment override so compare sweeps can force a per-iteration
 // scope without mutating the global environment selection.
 func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, envOverride string, extras ...map[string]string) tea.Cmd {
+	options = m.resolveHTTPOptions(options)
+
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
 		options.Trace = true
 		if budget, ok := traceutil.BudgetFromSpec(req.Metadata.Trace); ok {
@@ -1771,6 +1775,33 @@ func mergeVariableMaps(base map[string]string, additions map[string]string) map[
 		merged[k] = v
 	}
 	return merged
+}
+
+func (m *Model) resolveHTTPOptions(opts httpclient.Options) httpclient.Options {
+	if opts.BaseDir == "" && m.currentFile != "" {
+		opts.BaseDir = filepath.Dir(m.currentFile)
+	}
+
+	fallbacks := make([]string, 0, len(opts.FallbackBaseDirs)+3)
+	fallbacks = append(fallbacks, opts.FallbackBaseDirs...)
+	fallbacks = append(fallbacks, opts.BaseDir)
+	if m.workspaceRoot != "" {
+		fallbacks = append(fallbacks, m.workspaceRoot)
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		fallbacks = append(fallbacks, cwd)
+	}
+	if !fallbackDisabled() {
+		opts.FallbackBaseDirs = util.DedupeNonEmptyStrings(fallbacks)
+	} else {
+		opts.FallbackBaseDirs = nil
+	}
+	return opts
+}
+
+func fallbackDisabled() bool {
+	val := strings.ToLower(strings.TrimSpace(os.Getenv("RESTERM_DISABLE_FALLBACK")))
+	return val == "1" || val == "true" || val == "yes"
 }
 
 func cloneStringMap(input map[string]string) map[string]string {

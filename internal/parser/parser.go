@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	variableLineRe = regexp.MustCompile(`^@(?:(global)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
+	variableLineRe = regexp.MustCompile(`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
 	nameValueRe    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
@@ -56,13 +56,17 @@ type documentBuilder struct {
 	sshDefs      []restfile.SSHProfile
 	inBlock      bool
 	workflow     *workflowBuilder
+	finishing    bool
 }
 
 type requestBuilder struct {
 	startLine         int
 	endLine           int
+	headerDoneLine    int
+	bodyStartLine     int
+	lastBodyLine      int
 	metadata          restfile.RequestMetadata
-	variables         []restfile.Variable
+	variables         []parsedVariable
 	originalLines     []string
 	currentScriptKind string
 	scriptBufferKind  string
@@ -75,6 +79,11 @@ type requestBuilder struct {
 	websocket         *wsBuilder
 	bodyOptions       restfile.BodyOptions
 	ssh               *restfile.SSHSpec
+}
+
+type parsedVariable struct {
+	restfile.Variable
+	implicit bool
 }
 
 type workflowBuilder struct {
@@ -154,7 +163,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if matches := variableLineRe.FindStringSubmatch(trimmed); matches != nil {
-		scopeToken := strings.ToLower(strings.TrimSpace(matches[1]))
+		scopeToken, secret := parseScopeToken(matches[1])
 		name := matches[2]
 		valueCandidate := matches[3]
 		if valueCandidate == "" {
@@ -162,25 +171,38 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 		}
 		value := strings.TrimSpace(valueCandidate)
 		variable := restfile.Variable{
-			Name:  name,
-			Value: value,
-			Line:  lineNumber,
+			Name:   name,
+			Value:  value,
+			Line:   lineNumber,
+			Secret: secret,
 		}
-		if scopeToken == "global" {
+		switch scopeToken {
+		case "global":
 			variable.Scope = restfile.ScopeGlobal
 			b.globalVars = append(b.globalVars, variable)
-			b.appendLine(line)
-			return
-		}
-		if b.inRequest && !b.request.http.HasMethod() {
+		case "request":
+			if !b.ensureRequest(lineNumber) {
+				return
+			}
 			variable.Scope = restfile.ScopeRequest
-			b.request.variables = append(b.request.variables, variable)
-		} else if !b.inRequest {
+			b.request.variables = append(b.request.variables, parsedVariable{Variable: variable, implicit: false})
+		case "file":
 			variable.Scope = restfile.ScopeFile
 			b.fileVars = append(b.fileVars, variable)
-		} else {
-			variable.Scope = restfile.ScopeRequest
-			b.request.variables = append(b.request.variables, variable)
+		default:
+			if b.inRequest && !b.request.http.HasMethod() {
+				if !b.ensureRequest(lineNumber) {
+					return
+				}
+				variable.Scope = restfile.ScopeRequest
+				b.request.variables = append(b.request.variables, parsedVariable{Variable: variable, implicit: true})
+			} else if !b.inRequest {
+				variable.Scope = restfile.ScopeFile
+				b.fileVars = append(b.fileVars, variable)
+			} else {
+				variable.Scope = restfile.ScopeRequest
+				b.request.variables = append(b.request.variables, parsedVariable{Variable: variable, implicit: true})
+			}
 		}
 		b.appendLine(line)
 		return
@@ -190,11 +212,14 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 		if b.inRequest {
 			if !b.request.http.HasMethod() {
 			} else if !b.request.http.HeaderDone() {
-				b.request.http.MarkHeadersDone()
+				b.request.markHeadersDone(lineNumber)
 			} else if b.request.graphql.HandleBodyLine(line) {
+				b.request.noteBodyLine(lineNumber)
 			} else if b.request.grpc.HandleBodyLine(line) {
+				b.request.noteBodyLine(lineNumber)
 			} else {
 				b.request.http.AppendBodyLine("")
+				b.request.noteBodyLine(lineNumber)
 			}
 			b.appendLine(line)
 		}
@@ -202,7 +227,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if b.inRequest && b.request.http.HasMethod() && b.request.http.HeaderDone() {
-		b.handleBodyLine(line)
+		b.handleBodyLine(lineNumber, line)
 		b.appendLine(line)
 		return
 	}
@@ -459,7 +484,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 			Scope:  restfile.ScopeRequest,
 			Secret: false,
 		}
-		b.request.variables = append(b.request.variables, variable)
+		b.request.variables = append(b.request.variables, parsedVariable{Variable: variable, implicit: false})
 	case "script":
 		if rest != "" {
 			b.request.currentScriptKind = strings.ToLower(rest)
@@ -912,26 +937,57 @@ func parseBool(value string) (bool, bool) {
 	}
 }
 
+func parseScopeToken(token string) (string, bool) {
+	tok := strings.ToLower(strings.TrimSpace(token))
+	if tok == "" {
+		return "", false
+	}
+	secret := strings.HasSuffix(tok, "-secret")
+	if secret {
+		tok = strings.TrimSuffix(tok, "-secret")
+	}
+	return tok, secret
+}
+
 func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
 	switch key {
 	case "global", "global-secret":
+		_, secret := parseScopeToken(key)
 		name, value := parseNameValue(rest)
 		if name == "" {
 			return true
 		}
-		b.addGlobalVariable(name, value, line, strings.HasSuffix(key, "-secret"))
+		b.addGlobalVariable(name, value, line, secret)
+		return true
+	case "file", "file-secret":
+		_, secret := parseScopeToken(key)
+		name, value := parseNameValue(rest)
+		if name == "" {
+			return true
+		}
+		variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeFile, Secret: secret}
+		b.fileVars = append(b.fileVars, variable)
+		return true
+	case "request", "request-secret":
+		scope, secret := parseScopeToken(key)
+		name, value := parseNameValue(rest)
+		if name == "" {
+			return true
+		}
+		if scope == "request" {
+			if !b.ensureRequest(line) {
+				return true
+			}
+			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeRequest, Secret: secret}
+			b.request.variables = append(b.request.variables, parsedVariable{Variable: variable, implicit: false})
+		}
 		return true
 	case "var":
 		scopeToken, remainder := splitFirst(rest)
 		if scopeToken == "" {
 			return false
 		}
-		scope := strings.ToLower(scopeToken)
-		secret := false
-		if strings.HasSuffix(scope, "-secret") {
-			secret = true
-			scope = strings.TrimSuffix(scope, "-secret")
-		}
+		scope, secret := parseScopeToken(scopeToken)
 		name, value := parseNameValue(remainder)
 		if name == "" {
 			return true
@@ -949,7 +1005,7 @@ func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line i
 				return true
 			}
 			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeRequest, Secret: secret}
-			b.request.variables = append(b.request.variables, variable)
+			b.request.variables = append(b.request.variables, parsedVariable{Variable: variable, implicit: false})
 			return true
 		default:
 			return false
@@ -1433,27 +1489,32 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	}
 }
 
-func (b *documentBuilder) handleBodyLine(line string) {
+func (b *documentBuilder) handleBodyLine(lineNumber int, line string) {
 	if b.request.graphql.HandleBodyLine(line) {
+		b.request.noteBodyLine(lineNumber)
 		return
 	}
 	if b.request.grpc.HandleBodyLine(line) {
+		b.request.noteBodyLine(lineNumber)
 		return
 	}
 
 	trimmed := strings.TrimSpace(line)
 	if strings.HasPrefix(trimmed, "<") {
 		b.request.http.SetBodyFromFile(strings.TrimSpace(strings.TrimPrefix(trimmed, "<")))
+		b.request.noteBodyLine(lineNumber)
 		return
 	}
 	if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
 		parts := strings.SplitN(trimmed, "<", 2)
 		if len(parts) == 2 {
 			b.request.http.SetBodyFromFile(strings.TrimSpace(parts[1]))
+			b.request.noteBodyLine(lineNumber)
 			return
 		}
 	}
 	b.request.http.AppendBodyLine(line)
+	b.request.noteBodyLine(lineNumber)
 }
 
 func (b *documentBuilder) ensureRequest(line int) bool {
@@ -1479,6 +1540,81 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 	return true
 }
 
+func (r *requestBuilder) markHeadersDone(line int) {
+	if r == nil || r.http == nil || r.http.HeaderDone() {
+		return
+	}
+	r.headerDoneLine = line
+	r.http.MarkHeadersDone()
+}
+
+func (r *requestBuilder) noteBodyLine(line int) {
+	if r == nil {
+		return
+	}
+	if r.bodyStartLine == 0 {
+		r.bodyStartLine = line
+	}
+	r.lastBodyLine = line
+}
+
+func (r *requestBuilder) trailingBoundary() int {
+	if r == nil {
+		return 0
+	}
+	if r.lastBodyLine > 0 {
+		return r.lastBodyLine
+	}
+	if r.headerDoneLine > 0 {
+		return r.headerDoneLine
+	}
+	return 0
+}
+
+func (r *requestBuilder) trimOriginalLines(boundary int) {
+	if r == nil || boundary <= 0 || r.startLine == 0 {
+		return
+	}
+	maxLen := boundary - r.startLine + 1
+	if maxLen <= 0 || maxLen > len(r.originalLines) {
+		return
+	}
+	r.originalLines = r.originalLines[:maxLen]
+}
+
+func (r *requestBuilder) peelTrailingVars() []restfile.Variable {
+	if r == nil || len(r.variables) == 0 {
+		return nil
+	}
+
+	boundary := r.trailingBoundary()
+	if boundary == 0 {
+		return nil
+	}
+
+	keep := r.variables[:0]
+	var moved []restfile.Variable
+	for _, pv := range r.variables {
+		if pv.Scope != restfile.ScopeRequest || !pv.implicit {
+			keep = append(keep, pv)
+			continue
+		}
+		if pv.Line > boundary {
+			v := pv.Variable
+			v.Scope = restfile.ScopeFile
+			moved = append(moved, v)
+			continue
+		}
+		keep = append(keep, pv)
+	}
+
+	if len(moved) > 0 {
+		r.variables = keep
+		r.trimOriginalLines(boundary)
+	}
+	return moved
+}
+
 func (b *documentBuilder) appendLine(line string) {
 	if b.inRequest {
 		if b.request.startLine == 0 {
@@ -1495,6 +1631,12 @@ func (b *documentBuilder) flushRequest(_ int) {
 	}
 
 	b.request.flushPendingScript()
+
+	if b.finishing {
+		if moved := b.request.peelTrailingVars(); len(moved) > 0 {
+			b.fileVars = append(b.fileVars, moved...)
+		}
+	}
 
 	req := b.request.build()
 	if req.Method != "" && req.URL != "" {
@@ -1518,6 +1660,7 @@ func (b *documentBuilder) flushWorkflow(line int) {
 }
 
 func (b *documentBuilder) finish() {
+	b.finishing = true
 	b.flushRequest(0)
 	b.flushWorkflow(0)
 	if len(b.fileSettings) > 0 {
@@ -1561,13 +1704,18 @@ func (b *documentBuilder) flushFileSettings() {
 func (r *requestBuilder) build() *restfile.Request {
 	r.flushPendingScript()
 
+	vars := make([]restfile.Variable, len(r.variables))
+	for i, pv := range r.variables {
+		vars[i] = pv.Variable
+	}
+
 	req := &restfile.Request{
 		Metadata:     r.metadata,
 		Method:       r.http.Method(),
 		URL:          strings.TrimSpace(r.http.URL()),
 		Headers:      r.http.HeaderMap(),
 		Body:         restfile.BodySource{},
-		Variables:    r.variables,
+		Variables:    vars,
 		Settings:     map[string]string{},
 		LineRange:    restfile.LineRange{Start: r.startLine, End: r.startLine + len(r.originalLines) - 1},
 		OriginalText: strings.Join(r.originalLines, "\n"),

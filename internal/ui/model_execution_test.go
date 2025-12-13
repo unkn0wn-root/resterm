@@ -649,6 +649,17 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	}
 }
 
+func TestResolveHTTPOptionsFallbackEnvDisable(t *testing.T) {
+	model := &Model{currentFile: "/tmp/request.http", workspaceRoot: "/workspace"}
+	opts := httpclient.Options{BaseDir: "", FallbackBaseDirs: []string{"/extra"}}
+
+	t.Setenv("RESTERM_DISABLE_FALLBACK", "true")
+	resolved := model.resolveHTTPOptions(opts)
+	if len(resolved.FallbackBaseDirs) != 0 {
+		t.Fatalf("expected fallbacks disabled, got %v", resolved.FallbackBaseDirs)
+	}
+}
+
 func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	model := Model{
 		cfg:          Config{EnvironmentName: "dev"},
