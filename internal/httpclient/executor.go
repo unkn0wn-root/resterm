@@ -367,14 +367,11 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 		return c.prepareGraphQLBody(req, resolver, opts)
 	}
 
-	fallbacks := opts.FallbackBaseDirs
-	if opts.NoFallback {
-		fallbacks = nil
-	}
+	fallbacks, allowRaw := resolveFileLookup(opts.BaseDir, opts)
 
 	switch {
 	case req.Body.FilePath != "":
-		data, _, err := c.readFileWithFallback(req.Body.FilePath, opts.BaseDir, fallbacks, true, "body file")
+		data, _, err := c.readFileWithFallback(req.Body.FilePath, opts.BaseDir, fallbacks, allowRaw, "body file")
 		if err != nil {
 			return nil, err
 		}
@@ -386,7 +383,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body file templates")
 			}
 
-			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir, fallbacks, true)
+			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir, fallbacks, allowRaw)
 			if procErr != nil {
 				return nil, procErr
 			}
@@ -402,7 +399,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
 			}
 		}
-		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir, fallbacks, true)
+		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir, fallbacks, allowRaw)
 		if err != nil {
 			return nil, err
 		}
@@ -416,12 +413,9 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 // Variables need special handling since they must be valid JSON in both cases.
 func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	gql := req.Body.GraphQL
-	fallbacks := opts.FallbackBaseDirs
-	if opts.NoFallback {
-		fallbacks = nil
-	}
+	fallbacks, allowRaw := resolveFileLookup(opts.BaseDir, opts)
 
-	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, fallbacks, true, "GraphQL query")
+	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, fallbacks, allowRaw, "GraphQL query")
 	if err != nil {
 		return nil, err
 	}
@@ -448,7 +442,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		}
 	}
 
-	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, fallbacks, true, "GraphQL variables")
+	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, fallbacks, allowRaw, "GraphQL variables")
 	if err != nil {
 		return nil, err
 	}
@@ -776,6 +770,13 @@ func buildPathCandidates(path, baseDir string, fallbacks []string, allowRaw bool
 		list = append(list, path)
 	}
 	return util.DedupeNonEmptyStrings(list)
+}
+
+func resolveFileLookup(baseDir string, opts Options) ([]string, bool) {
+	if opts.NoFallback {
+		return nil, baseDir == ""
+	}
+	return opts.FallbackBaseDirs, true
 }
 
 // Lines starting with @ get replaced with the file contents.

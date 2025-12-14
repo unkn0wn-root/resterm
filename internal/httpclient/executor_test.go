@@ -96,6 +96,38 @@ func TestReadFileWithFallbackDisabledRaw(t *testing.T) {
 	}
 }
 
+func TestPrepareBodyNoFallbackDisallowsRawPath(t *testing.T) {
+	client := &Client{fs: mapFS{"payload.json": []byte("raw")}}
+	req := &restfile.Request{Body: restfile.BodySource{FilePath: "payload.json"}}
+	opts := Options{BaseDir: "/base/dir", NoFallback: true}
+
+	_, err := client.prepareBody(req, nil, opts)
+	if err == nil {
+		t.Fatalf("expected error when file is missing in base dir and fallback is disabled")
+	}
+	if !strings.Contains(err.Error(), "/base/dir/payload.json") {
+		t.Fatalf("expected error to mention base dir path, got %v", err)
+	}
+}
+
+func TestResolveFileLookup(t *testing.T) {
+	base := "/base"
+	fallbacks, allowRaw := resolveFileLookup(base, Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}})
+	if len(fallbacks) != 0 || allowRaw {
+		t.Fatalf("expected no fallbacks and raw disallowed when NoFallback with base dir, got %v allowRaw=%v", fallbacks, allowRaw)
+	}
+
+	fallbacks, allowRaw = resolveFileLookup("", Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}})
+	if len(fallbacks) != 0 || !allowRaw {
+		t.Fatalf("expected raw allowed when base dir empty even if NoFallback, got %v allowRaw=%v", fallbacks, allowRaw)
+	}
+
+	fallbacks, allowRaw = resolveFileLookup(base, Options{NoFallback: false, FallbackBaseDirs: []string{"/fb"}})
+	if len(fallbacks) != 1 || fallbacks[0] != "/fb" || !allowRaw {
+		t.Fatalf("expected fallbacks preserved and raw allowed when fallback enabled, got %v allowRaw=%v", fallbacks, allowRaw)
+	}
+}
+
 func TestApplyAuthenticationBasic(t *testing.T) {
 	client := NewClient(nil)
 	req := restfile.Request{Method: "GET", URL: "https://example.com"}

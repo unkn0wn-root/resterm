@@ -275,10 +275,7 @@ func (c *Client) CompleteWebSocket(
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	fallbacks := opts.FallbackBaseDirs
-	if opts.NoFallback {
-		fallbacks = nil
-	}
+	fallbacks, allowRaw := resolveFileLookup(baseDir, opts)
 
 	closedByScript := false
 	for idx, step := range wsReq.Steps {
@@ -311,7 +308,7 @@ func (c *Client) CompleteWebSocket(
 			}
 			waitForWindow(session.Context(), recvWindow)
 		case restfile.WebSocketStepSendFile:
-			data, _, readErr := c.readFileWithFallback(step.File, baseDir, fallbacks, true, "websocket payload file")
+			data, _, readErr := c.readFileWithFallback(step.File, baseDir, fallbacks, allowRaw, "websocket payload file")
 			if readErr != nil {
 				session.Cancel()
 				return nil, readErr
