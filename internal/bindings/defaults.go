@@ -22,6 +22,7 @@ var (
 	ActionOpenThemeSelector       ActionID = "open_theme_selector"
 	ActionOpenTempDocument        ActionID = "open_temp_document"
 	ActionReparseDocument         ActionID = "reparse_document"
+	ActionReloadFileFromDisk      ActionID = "reload_file_from_disk"
 	ActionSelectTimelineTab       ActionID = "select_timeline_tab"
 	ActionQuitApp                 ActionID = "quit_app"
 	ActionSidebarWidthDecrease    ActionID = "sidebar_width_decrease"
@@ -68,11 +69,12 @@ var definitions = []definition{
 	def(ActionToggleHelp, false, "?"),
 	def(ActionShowRequestDetails, false, "g ,"),
 	def(ActionOpenPathModal, false, "ctrl+o"),
-	def(ActionReloadWorkspace, false, "ctrl+shift+o"),
+	def(ActionReloadWorkspace, false, "ctrl+shift+o", "g shift+o"),
 	def(ActionOpenNewFileModal, false, "ctrl+n"),
 	def(ActionOpenThemeSelector, false, "ctrl+alt+t", "g m", "g shift+t"),
 	def(ActionOpenTempDocument, false, "ctrl+t"),
 	def(ActionReparseDocument, false, "ctrl+p", "ctrl+alt+p", "ctrl+shift+t"),
+	def(ActionReloadFileFromDisk, false, "g shift+r"),
 	def(ActionSelectTimelineTab, false, "ctrl+alt+l", "g t"),
 	def(ActionQuitApp, false, "ctrl+q", "ctrl+d"),
 	def(ActionSidebarWidthDecrease, true, "g h"),

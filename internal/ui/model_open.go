@@ -82,6 +82,7 @@ func (m *Model) resolveOpenPath(input string) (string, error) {
 
 func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.closeOpenModal()
+	m.forgetFileWatch(m.currentFile)
 	m.workspaceRoot = dir
 	m.cfg.WorkspaceRoot = dir
 	m.cfg.Recursive = m.workspaceRecursive

@@ -20,6 +20,9 @@ func (m Model) Init() tea.Cmd {
 	if m.updateEnabled {
 		cmds = append(cmds, newUpdateTickCmd(0))
 	}
+	if cmd := m.nextFileWatchMsgCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if cmd := m.nextStreamMsgCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -49,7 +52,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatusMessage(*typed.status)
 		}
 	case tea.KeyMsg:
-		if !m.showSearchPrompt && !m.showEnvSelector {
+		if !m.showSearchPrompt && !m.showEnvSelector && !m.showFileChangeModal {
 			if cmd := m.handleKey(typed); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -120,6 +123,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case streamReadyMsg:
 		m.handleStreamReady(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
+	case fileChangedMsg:
+		m.handleFileChangeEvent(typed)
+		cmds = append(cmds, m.nextFileWatchMsgCmd())
 	case wsConsoleResultMsg:
 		m.handleConsoleResult(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
@@ -136,6 +142,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, nil
+	}
+
+	if m.showFileChangeModal {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if cmd, handled := m.handleReloadBinding(keyMsg); handled {
+				return m, cmd
+			}
+			switch keyMsg.String() {
+			case "esc":
+				m.closeFileChangeModal()
+				if len(cmds) == 0 {
+					return m, nil
+				}
+				return m, tea.Batch(cmds...)
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			}
+		}
+		if len(cmds) == 0 {
+			return m, nil
+		}
+		return m, tea.Batch(cmds...)
 	}
 
 	if m.showHistoryPreview {
@@ -816,6 +844,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionReparseDocument:
 		m.suppressEditorKey = true
 		return m.reparseDocument(), true
+	case bindings.ActionReloadFileFromDisk:
+		return m.reloadFileFromDisk(), true
 	case bindings.ActionSelectTimelineTab:
 		return m.selectTimelineTab(), true
 	case bindings.ActionQuitApp:
@@ -916,10 +946,21 @@ func (m *Model) shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	if m.showErrorModal || m.showOpenModal || m.showNewFileModal || m.showEnvSelector || m.showHistoryPreview || m.showRequestDetails || m.showLayoutSaveModal {
+	if m.modalBlocksKeys() {
 		return nil
 	}
 	return m.handleKeyWithChord(msg, true)
+}
+
+func (m *Model) modalBlocksKeys() bool {
+	return m.showErrorModal ||
+		m.showOpenModal ||
+		m.showNewFileModal ||
+		m.showEnvSelector ||
+		m.showHistoryPreview ||
+		m.showRequestDetails ||
+		m.showLayoutSaveModal ||
+		m.showFileChangeModal
 }
 
 func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {

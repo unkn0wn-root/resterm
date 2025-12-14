@@ -31,6 +31,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 	"github.com/unkn0wn-root/resterm/internal/update"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+	"github.com/unkn0wn-root/resterm/internal/watcher"
 )
 
 var _ tea.Model = (*Model)(nil)
@@ -185,6 +186,9 @@ type Model struct {
 	workspaceRoot      string
 	workspaceRecursive bool
 
+	fileWatcher   *watcher.Watcher
+	fileWatchChan chan tea.Msg
+
 	fileList                 list.Model
 	requestList              list.Model
 	workflowList             list.Model
@@ -232,6 +236,8 @@ type Model struct {
 	showLayoutSaveModal    bool
 	showOpenModal          bool
 	showErrorModal         bool
+	showFileChangeModal    bool
+	fileChangeMessage      string
 	errorModalMessage      string
 	showHistoryPreview     bool
 	historyPreviewContent  string
@@ -324,6 +330,10 @@ type Model struct {
 	openPathInput         textinput.Model
 	openPathError         string
 
+	fileStale            bool
+	fileMissing          bool
+	pendingReloadConfirm bool
+
 	doc                *restfile.Document
 	currentFile        string
 	currentRequest     *restfile.Request
@@ -380,6 +390,8 @@ func New(cfg Config) Model {
 	if bindingMap == nil {
 		bindingMap = bindings.DefaultMap()
 	}
+	fileWatcher := watcher.New(watcher.Options{})
+	fileWatchChan := make(chan tea.Msg, 16)
 
 	workspace := cfg.WorkspaceRoot
 	if workspace == "" {
@@ -554,6 +566,8 @@ func New(cfg Config) Model {
 		requestList:            requestList,
 		workflowList:           workflowList,
 		navigatorFilter:        navFilter,
+		fileWatcher:            fileWatcher,
+		fileWatchChan:          fileWatchChan,
 		docCache:               make(map[string]navDocCache),
 		editor:                 editor,
 		historyList:            historyList,
@@ -630,6 +644,8 @@ func New(cfg Config) Model {
 		_ = model.historyStore.Load()
 	}
 	model.syncHistory()
+	model.watchFile(cfg.FilePath, []byte(cfg.InitialContent))
+	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
 	model.applyThemeToLists()
 
