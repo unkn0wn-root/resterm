@@ -1187,17 +1187,6 @@ func sshScopeLabel(scope restfile.SSHScope) string {
 	}
 }
 
-func (b *documentBuilder) addGlobalVariable(name, value string, line int, secret bool) {
-	variable := restfile.Variable{
-		Name:   name,
-		Value:  value,
-		Line:   line,
-		Scope:  restfile.ScopeGlobal,
-		Secret: secret,
-	}
-	b.globalVars = append(b.globalVars, variable)
-}
-
 func (b *documentBuilder) addConstant(name, value string, line int) {
 	constant := restfile.Constant{
 		Name:  name,
