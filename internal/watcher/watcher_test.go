@@ -11,12 +11,15 @@ func TestChangeDetected(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sample.http")
 	write(t, path, []byte("one"))
+	firstMod := time.Now().Add(-time.Minute)
+	setModTime(t, path, firstMod)
 
 	w := New(Options{Interval: time.Hour})
 	defer w.Stop()
 	w.Track(path, []byte("one"))
 
 	write(t, path, []byte("two"))
+	setModTime(t, path, firstMod.Add(time.Second))
 	w.Scan()
 
 	evt := recv(t, w.Events())
