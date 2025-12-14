@@ -943,36 +943,25 @@ func (b *documentBuilder) addScopedVariable(name, value string, line int, scope 
 }
 
 func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
-	switch key {
-	case "global", "global-secret":
-		_, secret := parseScopeToken(key)
-		name, value := parseNameValue(rest)
-		return b.addScopedVariable(name, value, line, restfile.ScopeGlobal, secret)
-	case "file", "file-secret":
-		_, secret := parseScopeToken(key)
-		name, value := parseNameValue(rest)
-		return b.addScopedVariable(name, value, line, restfile.ScopeFile, secret)
-	case "request", "request-secret":
-		_, secret := parseScopeToken(key)
-		name, value := parseNameValue(rest)
-		return b.addScopedVariable(name, value, line, restfile.ScopeRequest, secret)
-	case "var":
-		scopeToken, remainder := splitFirst(rest)
+	scopeToken := key
+	args := rest
+	if key == "var" {
+		scopeToken, args = splitFirst(rest)
 		if scopeToken == "" {
 			return false
 		}
-		scope, secret := parseScopeToken(scopeToken)
-		name, value := parseNameValue(remainder)
-		switch scope {
-		case "global":
-			return b.addScopedVariable(name, value, line, restfile.ScopeGlobal, secret)
-		case "file":
-			return b.addScopedVariable(name, value, line, restfile.ScopeFile, secret)
-		case "request":
-			return b.addScopedVariable(name, value, line, restfile.ScopeRequest, secret)
-		default:
-			return false
-		}
+	}
+
+	scopeStr, secret := parseScopeToken(scopeToken)
+	name, value := parseNameValue(args)
+
+	switch scopeStr {
+	case "global":
+		return b.addScopedVariable(name, value, line, restfile.ScopeGlobal, secret)
+	case "file":
+		return b.addScopedVariable(name, value, line, restfile.ScopeFile, secret)
+	case "request":
+		return b.addScopedVariable(name, value, line, restfile.ScopeRequest, secret)
 	default:
 		return false
 	}
