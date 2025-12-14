@@ -39,6 +39,7 @@ type Options struct {
 	ClientKey          string
 	BaseDir            string
 	FallbackBaseDirs   []string
+	NoFallback         bool
 	Trace              bool
 	TraceBudget        *nettrace.Budget
 	SSH                *ssh.Plan
@@ -368,7 +369,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 
 	switch {
 	case req.Body.FilePath != "":
-		data, _, err := c.readFileWithFallback(req.Body.FilePath, opts.BaseDir, opts.FallbackBaseDirs, "body file")
+		data, _, err := c.readFileWithFallback(req.Body.FilePath, opts.BaseDir, opts.FallbackBaseDirs, !opts.NoFallback, "body file")
 		if err != nil {
 			return nil, err
 		}
@@ -380,7 +381,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body file templates")
 			}
 
-			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir, opts.FallbackBaseDirs)
+			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir, opts.FallbackBaseDirs, !opts.NoFallback)
 			if procErr != nil {
 				return nil, procErr
 			}
@@ -396,7 +397,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
 			}
 		}
-		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir, opts.FallbackBaseDirs)
+		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir, opts.FallbackBaseDirs, !opts.NoFallback)
 		if err != nil {
 			return nil, err
 		}
@@ -410,7 +411,7 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 // Variables need special handling since they must be valid JSON in both cases.
 func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
 	gql := req.Body.GraphQL
-	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, opts.FallbackBaseDirs, "GraphQL query")
+	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, opts.FallbackBaseDirs, !opts.NoFallback, "GraphQL query")
 	if err != nil {
 		return nil, err
 	}
@@ -437,7 +438,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		}
 	}
 
-	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, opts.FallbackBaseDirs, "GraphQL variables")
+	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, opts.FallbackBaseDirs, !opts.NoFallback, "GraphQL variables")
 	if err != nil {
 		return nil, err
 	}
@@ -526,7 +527,7 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	return bytes.NewReader(body), nil
 }
 
-func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbacks []string, label string) (string, error) {
+func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbacks []string, allowRaw bool, label string) (string, error) {
 	inline = strings.TrimSpace(inline)
 	if inline != "" {
 		return inline, nil
@@ -536,7 +537,7 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbac
 		return "", nil
 	}
 
-	data, _, err := c.readFileWithFallback(filePath, baseDir, fallbacks, strings.ToLower(label))
+	data, _, err := c.readFileWithFallback(filePath, baseDir, fallbacks, allowRaw, strings.ToLower(label))
 	if err != nil {
 		return "", err
 	}
@@ -713,7 +714,7 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 	}
 }
 
-func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []string, label string) ([]byte, string, error) {
+func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []string, allowRaw bool, label string) ([]byte, string, error) {
 	if c == nil || c.fs == nil {
 		return nil, "", errdef.New(errdef.CodeFilesystem, "file reader unavailable")
 	}
@@ -730,15 +731,7 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 		return nil, "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), path)
 	}
 
-	candidates := make([]string, 0, 2+len(fallbacks))
-	if baseDir != "" {
-		candidates = append(candidates, filepath.Join(baseDir, path))
-	}
-	for _, fb := range fallbacks {
-		candidates = append(candidates, filepath.Join(fb, path))
-	}
-	candidates = append(candidates, path)
-	candidates = util.DedupeNonEmptyStrings(candidates)
+	candidates := buildPathCandidates(path, baseDir, fallbacks, allowRaw)
 
 	var lastErr error
 	var lastPath string
@@ -758,9 +751,26 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 	return nil, "", errdef.Wrap(errdef.CodeFilesystem, lastErr, "read %s %s (last tried %s)", strings.ToLower(label), path, lastPath)
 }
 
+func buildPathCandidates(path, baseDir string, fallbacks []string, allowRaw bool) []string {
+	list := make([]string, 0, 2+len(fallbacks))
+	if baseDir != "" {
+		list = append(list, filepath.Join(baseDir, path))
+	}
+	for _, fb := range fallbacks {
+		if fb == "" {
+			continue
+		}
+		list = append(list, filepath.Join(fb, path))
+	}
+	if allowRaw {
+		list = append(list, path)
+	}
+	return util.DedupeNonEmptyStrings(list)
+}
+
 // Lines starting with @ get replaced with the file contents.
 // @{variable} syntax is left alone so template expansion can handle it.
-func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []string) (string, error) {
+func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []string, allowRaw bool) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
 
@@ -777,7 +787,7 @@ func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []str
 		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
 			includePath := strings.TrimSpace(trimmed[1:])
 			if includePath != "" {
-				data, _, err := c.readFileWithFallback(includePath, baseDir, fallbacks, "include body file")
+				data, _, err := c.readFileWithFallback(includePath, baseDir, fallbacks, allowRaw, "include body file")
 				if err != nil {
 					return "", err
 				}

@@ -308,7 +308,7 @@ func (c *Client) CompleteWebSocket(
 			}
 			waitForWindow(session.Context(), recvWindow)
 		case restfile.WebSocketStepSendFile:
-			data, _, readErr := c.readFileWithFallback(step.File, baseDir, fallbacks, "websocket payload file")
+			data, _, readErr := c.readFileWithFallback(step.File, baseDir, fallbacks, !opts.NoFallback, "websocket payload file")
 			if readErr != nil {
 				session.Cancel()
 				return nil, readErr

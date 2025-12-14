@@ -1793,8 +1793,10 @@ func (m *Model) resolveHTTPOptions(opts httpclient.Options) httpclient.Options {
 	}
 	if !fallbackDisabled() {
 		opts.FallbackBaseDirs = util.DedupeNonEmptyStrings(fallbacks)
+		opts.NoFallback = false
 	} else {
 		opts.FallbackBaseDirs = nil
+		opts.NoFallback = true
 	}
 	return opts
 }

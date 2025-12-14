@@ -658,6 +658,9 @@ func TestResolveHTTPOptionsFallbackEnvDisable(t *testing.T) {
 	if len(resolved.FallbackBaseDirs) != 0 {
 		t.Fatalf("expected fallbacks disabled, got %v", resolved.FallbackBaseDirs)
 	}
+	if !resolved.NoFallback {
+		t.Fatalf("expected NoFallback to be true when disabled")
+	}
 }
 
 func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
