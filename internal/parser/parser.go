@@ -199,7 +199,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if b.inRequest && b.request.http.HasMethod() && b.request.http.HeaderDone() {
-		b.handleBodyLine(lineNumber, line)
+		b.handleBodyLine(line)
 		b.appendLine(line)
 		return
 	}
@@ -1452,7 +1452,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	}
 }
 
-func (b *documentBuilder) handleBodyLine(lineNumber int, line string) {
+func (b *documentBuilder) handleBodyLine(line string) {
 	if b.request.graphql.HandleBodyLine(line) {
 		return
 	}
