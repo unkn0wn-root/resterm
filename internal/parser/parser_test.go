@@ -169,6 +169,76 @@ GET https://example.com
 	}
 }
 
+func TestParseScopedVariableCommentAliases(t *testing.T) {
+	src := `# @file api.base https://example.com
+# @file-secret api.token secret-file
+
+### WithRequest
+# @request request.id 42
+# @request-secret request.token secret-req
+GET https://example.com
+`
+
+	doc := Parse("scopes-aliases.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	fileVars := make(map[string]restfile.Variable)
+	for _, v := range doc.Variables {
+		fileVars[v.Name] = v
+	}
+	if v, ok := fileVars["api.base"]; !ok || v.Scope != restfile.ScopeFile || v.Secret {
+		t.Fatalf("expected file api.base as non-secret file var, got %#v", v)
+	}
+	if v, ok := fileVars["api.token"]; !ok || v.Scope != restfile.ScopeFile || !v.Secret {
+		t.Fatalf("expected file-secret api.token, got %#v", v)
+	}
+
+	req := doc.Requests[0]
+	reqVars := make(map[string]restfile.Variable)
+	for _, v := range req.Variables {
+		reqVars[v.Name] = v
+	}
+	if v, ok := reqVars["request.id"]; !ok || v.Scope != restfile.ScopeRequest || v.Secret {
+		t.Fatalf("expected request id as non-secret request var, got %#v", v)
+	}
+	if v, ok := reqVars["request.token"]; !ok || v.Scope != restfile.ScopeRequest || !v.Secret {
+		t.Fatalf("expected request-secret token, got %#v", v)
+	}
+}
+
+func TestParseShorthandSecretVariables(t *testing.T) {
+	src := `@global-secret auth.token super-secret
+@file-secret base.url https://secret.example.com
+
+### InlineRequest
+@request-secret trace.id {{$uuid}}
+GET https://example.com
+`
+
+	doc := Parse("shorthand-secret.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	if len(doc.Globals) != 1 || doc.Globals[0].Name != "auth.token" || !doc.Globals[0].Secret {
+		t.Fatalf("expected one secret global, got %#v", doc.Globals)
+	}
+
+	if len(doc.Variables) != 1 || doc.Variables[0].Name != "base.url" || !doc.Variables[0].Secret || doc.Variables[0].Scope != restfile.ScopeFile {
+		t.Fatalf("expected one secret file variable, got %#v", doc.Variables)
+	}
+
+	req := doc.Requests[0]
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected one request variable, got %d", len(req.Variables))
+	}
+	if rv := req.Variables[0]; rv.Name != "trace.id" || rv.Scope != restfile.ScopeRequest || !rv.Secret {
+		t.Fatalf("unexpected request var: %#v", rv)
+	}
+}
+
 func TestParseConstDirectives(t *testing.T) {
 	t.Parallel()
 
@@ -354,6 +424,172 @@ GET https://example.com
 		if vals[name] != expected {
 			t.Fatalf("expected %s=%q, got %q", name, expected, vals[name])
 		}
+	}
+}
+
+func TestShorthandBeforeMethodDefaultsToFileScope(t *testing.T) {
+	src := `### One
+@id abc
+GET https://example.com
+Header: value
+`
+
+	doc := Parse("shorthand-position.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request")
+	}
+	if len(doc.Variables) != 1 {
+		t.Fatalf("expected 1 file variable, got %d", len(doc.Variables))
+	}
+	v := doc.Variables[0]
+	if v.Name != "id" || v.Value != "abc" || v.Scope != restfile.ScopeFile {
+		t.Fatalf("unexpected file variable %+v", v)
+	}
+	if len(doc.Requests[0].Variables) != 0 {
+		t.Fatalf("expected no request variables, got %d", len(doc.Requests[0].Variables))
+	}
+}
+
+func TestShorthandAfterBodyStaysRequestScoped(t *testing.T) {
+	src := `### reset
+POST https://example.com
+Content-Type: application/json
+
+{"ok":true}
+@tail outside
+@tail2 outside-2
+`
+
+	doc := Parse("shorthand-tail.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Variables) != 2 {
+		t.Fatalf("expected 2 request variables, got %d", len(req.Variables))
+	}
+	if len(doc.Variables) != 0 {
+		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
+	}
+	values := map[string]string{}
+	for _, v := range req.Variables {
+		if v.Scope != restfile.ScopeRequest {
+			t.Fatalf("expected %s to be request scoped, got %v", v.Name, v.Scope)
+		}
+		values[v.Name] = v.Value
+	}
+	if values["tail"] != "outside" || values["tail2"] != "outside-2" {
+		t.Fatalf("unexpected request vars: %+v", values)
+	}
+}
+
+func TestShorthandAfterHeaderWithoutBodyStaysRequestScoped(t *testing.T) {
+	src := `GET https://example.com
+
+@tail outside
+`
+
+	doc := Parse("shorthand-tail-nobody.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected 1 request variable, got %d", len(req.Variables))
+	}
+	if len(doc.Variables) != 0 {
+		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
+	}
+	v := req.Variables[0]
+	if v.Name != "tail" || v.Value != "outside" || v.Scope != restfile.ScopeRequest {
+		t.Fatalf("unexpected request var %+v", v)
+	}
+}
+
+func TestTrailingShorthandAfterFirstRequestDoesNotBleedIntoSecond(t *testing.T) {
+	src := `### One
+GET https://example.com
+
+@fileVar shared
+
+### Two
+GET https://example.com/2
+@reqVar inside
+`
+
+	doc := Parse("shorthand-multi.http", []byte(src))
+	if len(doc.Requests) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(doc.Requests))
+	}
+	req1 := doc.Requests[0]
+	req2 := doc.Requests[1]
+
+	if len(doc.Variables) != 0 {
+		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
+	}
+
+	if len(req1.Variables) != 1 {
+		t.Fatalf("expected 1 request var in first request, got %d", len(req1.Variables))
+	}
+	if req1.Variables[0].Name != "fileVar" || req1.Variables[0].Scope != restfile.ScopeRequest {
+		t.Fatalf("unexpected var in first request: %+v", req1.Variables[0])
+	}
+
+	if len(req2.Variables) != 1 {
+		t.Fatalf("expected 1 request var in second request, got %d", len(req2.Variables))
+	}
+	if req2.Variables[0].Name != "reqVar" || req2.Variables[0].Scope != restfile.ScopeRequest {
+		t.Fatalf("unexpected var in second request: %+v", req2.Variables[0])
+	}
+}
+
+func TestShorthandRequestScopeExplicit(t *testing.T) {
+	src := `### One
+@request requestId abc123
+GET https://example.com
+`
+
+	doc := Parse("shorthand-request.http", []byte(src))
+	if len(doc.Variables) != 0 {
+		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request")
+	}
+	req := doc.Requests[0]
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected 1 request variable, got %d", len(req.Variables))
+	}
+	v := req.Variables[0]
+	if v.Name != "requestId" || v.Value != "abc123" {
+		t.Fatalf("unexpected request variable %q=%q", v.Name, v.Value)
+	}
+	if v.Scope != restfile.ScopeRequest {
+		t.Fatalf("expected requestId to be request scoped, got %v", v.Scope)
+	}
+}
+
+func TestExplicitRequestVarNotMovedAfterBody(t *testing.T) {
+	src := `POST https://example.com
+
+{}
+@request keep me
+`
+
+	doc := Parse("shorthand-request-tail.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request")
+	}
+	req := doc.Requests[0]
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected 1 request variable, got %d", len(req.Variables))
+	}
+	if len(doc.Variables) != 0 {
+		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
+	}
+	v := req.Variables[0]
+	if v.Name != "keep" || v.Value != "me" || v.Scope != restfile.ScopeRequest {
+		t.Fatalf("unexpected request variable %+v", v)
 	}
 }
 

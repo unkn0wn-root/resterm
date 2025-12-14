@@ -9,7 +9,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -276,6 +275,10 @@ func (c *Client) CompleteWebSocket(
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
+	fallbacks := opts.FallbackBaseDirs
+	if opts.NoFallback {
+		fallbacks = nil
+	}
 
 	closedByScript := false
 	for idx, step := range wsReq.Steps {
@@ -308,14 +311,10 @@ func (c *Client) CompleteWebSocket(
 			}
 			waitForWindow(session.Context(), recvWindow)
 		case restfile.WebSocketStepSendFile:
-			resolved := step.File
-			if !filepath.IsAbs(resolved) && baseDir != "" {
-				resolved = filepath.Join(baseDir, resolved)
-			}
-			data, readErr := c.fs.ReadFile(resolved)
+			data, _, readErr := c.readFileWithFallback(step.File, baseDir, fallbacks, true, "websocket payload file")
 			if readErr != nil {
 				session.Cancel()
-				return nil, errdef.Wrap(errdef.CodeFilesystem, readErr, "read websocket payload file %s", step.File)
+				return nil, readErr
 			}
 			meta[wsMetaType] = "binary"
 			if err := sender.SendBinary(session.Context(), data, meta); err != nil {

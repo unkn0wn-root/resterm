@@ -54,3 +54,58 @@ func TestExpandTemplatesWithProviderLabel(t *testing.T) {
 		t.Fatalf("expected value 123, got %q", expanded)
 	}
 }
+
+func TestDynamicGuidAlias(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	expanded, err := resolver.ExpandTemplates("{{ $guid }}")
+	if err != nil {
+		t.Fatalf("unexpected error expanding $guid: %v", err)
+	}
+
+	if expanded == "{{ $guid }}" {
+		t.Fatalf("expected $guid to be expanded")
+	}
+	if len(expanded) != 36 {
+		t.Fatalf("expected uuid-style length 36, got %d (%q)", len(expanded), expanded)
+	}
+}
+
+func TestDynamicCanBeShadowedByProviders(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver(NewMapProvider("const", map[string]string{
+		"$timestamp": "shadowed",
+	}))
+
+	expanded, err := resolver.ExpandTemplates("{{ $timestamp }}")
+	if err != nil {
+		t.Fatalf("unexpected error expanding $timestamp: %v", err)
+	}
+	if expanded != "shadowed" {
+		t.Fatalf("expected provider value, got %q", expanded)
+	}
+}
+
+func TestDynamicHelpersCaseInsensitive(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	values := map[string]string{
+		"{{$UUID}}":             "",
+		"{{$Guid}}":             "",
+		"{{$TIMESTAMPISO8601}}": "",
+		"{{$randomINT}}":        "",
+	}
+
+	for input := range values {
+		out, err := resolver.ExpandTemplates(input)
+		if err != nil {
+			t.Fatalf("unexpected error for %s: %v", input, err)
+		}
+		if out == input {
+			t.Fatalf("expected %s to expand, got %q", input, out)
+		}
+	}
+}

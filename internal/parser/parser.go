@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	variableLineRe = regexp.MustCompile(`^@(?:(global)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
+	variableLineRe = regexp.MustCompile(`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
 	nameValueRe    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
@@ -154,7 +154,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if matches := variableLineRe.FindStringSubmatch(trimmed); matches != nil {
-		scopeToken := strings.ToLower(strings.TrimSpace(matches[1]))
+		scopeToken, secret := parseScopeToken(matches[1])
 		name := matches[2]
 		valueCandidate := matches[3]
 		if valueCandidate == "" {
@@ -162,25 +162,38 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 		}
 		value := strings.TrimSpace(valueCandidate)
 		variable := restfile.Variable{
-			Name:  name,
-			Value: value,
-			Line:  lineNumber,
+			Name:   name,
+			Value:  value,
+			Line:   lineNumber,
+			Secret: secret,
 		}
-		if scopeToken == "global" {
+		switch scopeToken {
+		case "global":
 			variable.Scope = restfile.ScopeGlobal
 			b.globalVars = append(b.globalVars, variable)
-			b.appendLine(line)
-			return
-		}
-		if b.inRequest && !b.request.http.HasMethod() {
+		case "request":
+			if !b.ensureRequest(lineNumber) {
+				return
+			}
 			variable.Scope = restfile.ScopeRequest
 			b.request.variables = append(b.request.variables, variable)
-		} else if !b.inRequest {
+		case "file":
 			variable.Scope = restfile.ScopeFile
 			b.fileVars = append(b.fileVars, variable)
-		} else {
-			variable.Scope = restfile.ScopeRequest
-			b.request.variables = append(b.request.variables, variable)
+		default:
+			if b.inRequest && !b.request.http.HasMethod() {
+				if !b.ensureRequest(lineNumber) {
+					return
+				}
+				variable.Scope = restfile.ScopeRequest
+				b.request.variables = append(b.request.variables, variable)
+			} else if !b.inRequest {
+				variable.Scope = restfile.ScopeFile
+				b.fileVars = append(b.fileVars, variable)
+			} else {
+				variable.Scope = restfile.ScopeRequest
+				b.request.variables = append(b.request.variables, variable)
+			}
 		}
 		b.appendLine(line)
 		return
@@ -190,7 +203,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 		if b.inRequest {
 			if !b.request.http.HasMethod() {
 			} else if !b.request.http.HeaderDone() {
-				b.request.http.MarkHeadersDone()
+				b.request.markHeadersDone()
 			} else if b.request.graphql.HandleBodyLine(line) {
 			} else if b.request.grpc.HandleBodyLine(line) {
 			} else {
@@ -202,7 +215,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if b.inRequest && b.request.http.HasMethod() && b.request.http.HeaderDone() {
-		b.handleBodyLine(line)
+		b.handleBodyLine(lineNumber, line)
 		b.appendLine(line)
 		return
 	}
@@ -912,26 +925,57 @@ func parseBool(value string) (bool, bool) {
 	}
 }
 
+func parseScopeToken(token string) (string, bool) {
+	tok := strings.ToLower(strings.TrimSpace(token))
+	if tok == "" {
+		return "", false
+	}
+	secret := strings.HasSuffix(tok, "-secret")
+	if secret {
+		tok = strings.TrimSuffix(tok, "-secret")
+	}
+	return tok, secret
+}
+
 func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
 	switch key {
 	case "global", "global-secret":
+		_, secret := parseScopeToken(key)
 		name, value := parseNameValue(rest)
 		if name == "" {
 			return true
 		}
-		b.addGlobalVariable(name, value, line, strings.HasSuffix(key, "-secret"))
+		b.addGlobalVariable(name, value, line, secret)
+		return true
+	case "file", "file-secret":
+		_, secret := parseScopeToken(key)
+		name, value := parseNameValue(rest)
+		if name == "" {
+			return true
+		}
+		variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeFile, Secret: secret}
+		b.fileVars = append(b.fileVars, variable)
+		return true
+	case "request", "request-secret":
+		scope, secret := parseScopeToken(key)
+		name, value := parseNameValue(rest)
+		if name == "" {
+			return true
+		}
+		if scope == "request" {
+			if !b.ensureRequest(line) {
+				return true
+			}
+			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeRequest, Secret: secret}
+			b.request.variables = append(b.request.variables, variable)
+		}
 		return true
 	case "var":
 		scopeToken, remainder := splitFirst(rest)
 		if scopeToken == "" {
 			return false
 		}
-		scope := strings.ToLower(scopeToken)
-		secret := false
-		if strings.HasSuffix(scope, "-secret") {
-			secret = true
-			scope = strings.TrimSuffix(scope, "-secret")
-		}
+		scope, secret := parseScopeToken(scopeToken)
 		name, value := parseNameValue(remainder)
 		if name == "" {
 			return true
@@ -1433,7 +1477,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	}
 }
 
-func (b *documentBuilder) handleBodyLine(line string) {
+func (b *documentBuilder) handleBodyLine(lineNumber int, line string) {
 	if b.request.graphql.HandleBodyLine(line) {
 		return
 	}
@@ -1477,6 +1521,13 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 		websocket:         newWebSocketBuilder(),
 	}
 	return true
+}
+
+func (r *requestBuilder) markHeadersDone() {
+	if r == nil || r.http == nil || r.http.HeaderDone() {
+		return
+	}
+	r.http.MarkHeadersDone()
 }
 
 func (b *documentBuilder) appendLine(line string) {
@@ -1561,13 +1612,15 @@ func (b *documentBuilder) flushFileSettings() {
 func (r *requestBuilder) build() *restfile.Request {
 	r.flushPendingScript()
 
+	vars := append([]restfile.Variable(nil), r.variables...)
+
 	req := &restfile.Request{
 		Metadata:     r.metadata,
 		Method:       r.http.Method(),
 		URL:          strings.TrimSpace(r.http.URL()),
 		Headers:      r.http.HeaderMap(),
 		Body:         restfile.BodySource{},
-		Variables:    r.variables,
+		Variables:    vars,
 		Settings:     map[string]string{},
 		LineRange:    restfile.LineRange{Start: r.startLine, End: r.startLine + len(r.originalLines) - 1},
 		OriginalText: strings.Join(r.originalLines, "\n"),

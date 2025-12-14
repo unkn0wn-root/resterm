@@ -75,6 +75,9 @@ func (r *Resolver) ExpandTemplates(input string) (string, error) {
 			return match
 		}
 		if strings.HasPrefix(name, "$") {
+			if value, ok := r.Resolve(name); ok {
+				return value
+			}
 			if dynamic, ok := resolveDynamic(name); ok {
 				return dynamic
 			}
@@ -113,15 +116,15 @@ func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
 }
 
 func resolveDynamic(name string) (string, bool) {
-	switch name {
+	switch strings.ToLower(name) {
 	case "$timestamp":
 		return fmt.Sprintf("%d", time.Now().Unix()), true
-	case "$timestampISO8601":
+	case "$timestampiso8601":
 		return time.Now().UTC().Format(time.RFC3339), true
-	case "$randomInt":
+	case "$randomint":
 		n, _ := rand.Int(rand.Reader, big.NewInt(1<<62))
 		return n.String(), true
-	case "$uuid":
+	case "$uuid", "$guid":
 		return generateUUID(), true
 	default:
 		return "", false
