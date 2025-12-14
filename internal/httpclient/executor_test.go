@@ -10,6 +10,7 @@ import (
 	"crypto/x509/pkix"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -93,6 +94,28 @@ func TestReadFileWithFallbackDisabledRaw(t *testing.T) {
 	_, _, err := client.readFileWithFallback("payload.json", "", nil, false, "payload")
 	if err == nil {
 		t.Fatalf("expected error when raw path is disallowed")
+	}
+}
+
+func TestReadFileWithFallbackStopsOnNonNotExist(t *testing.T) {
+	base := "/base"
+	fb := "fb"
+	fs := errFS{
+		data: map[string][]byte{
+			filepath.Join(fb, "payload.json"): []byte("fallback"),
+		},
+		errs: map[string]error{
+			filepath.Join(base, "payload.json"): os.ErrPermission,
+		},
+	}
+	client := &Client{fs: fs}
+
+	_, _, err := client.readFileWithFallback("payload.json", base, []string{fb}, true, "payload")
+	if err == nil {
+		t.Fatalf("expected permission error to surface")
+	}
+	if !errors.Is(err, os.ErrPermission) {
+		t.Fatalf("expected permission error, got %v", err)
 	}
 }
 
@@ -519,6 +542,21 @@ type mapFS map[string][]byte
 
 func (m mapFS) ReadFile(name string) ([]byte, error) {
 	if data, ok := m[name]; ok {
+		return data, nil
+	}
+	return nil, os.ErrNotExist
+}
+
+type errFS struct {
+	data map[string][]byte
+	errs map[string]error
+}
+
+func (e errFS) ReadFile(name string) ([]byte, error) {
+	if err, ok := e.errs[name]; ok {
+		return nil, err
+	}
+	if data, ok := e.data[name]; ok {
 		return data, nil
 	}
 	return nil, os.ErrNotExist

@@ -161,38 +161,22 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 			valueCandidate = matches[4]
 		}
 		value := strings.TrimSpace(valueCandidate)
-		variable := restfile.Variable{
-			Name:   name,
-			Value:  value,
-			Line:   lineNumber,
-			Secret: secret,
-		}
 		switch scopeToken {
 		case "global":
-			variable.Scope = restfile.ScopeGlobal
-			b.globalVars = append(b.globalVars, variable)
+			b.addScopedVariable(name, value, lineNumber, restfile.ScopeGlobal, secret)
 		case "request":
-			if !b.ensureRequest(lineNumber) {
+			if !b.addScopedVariable(name, value, lineNumber, restfile.ScopeRequest, secret) {
 				return
 			}
-			variable.Scope = restfile.ScopeRequest
-			b.request.variables = append(b.request.variables, variable)
 		case "file":
-			variable.Scope = restfile.ScopeFile
-			b.fileVars = append(b.fileVars, variable)
+			b.addScopedVariable(name, value, lineNumber, restfile.ScopeFile, secret)
 		default:
-			if b.inRequest && !b.request.http.HasMethod() {
-				if !b.ensureRequest(lineNumber) {
-					return
-				}
-				variable.Scope = restfile.ScopeRequest
-				b.request.variables = append(b.request.variables, variable)
-			} else if !b.inRequest {
-				variable.Scope = restfile.ScopeFile
-				b.fileVars = append(b.fileVars, variable)
-			} else {
-				variable.Scope = restfile.ScopeRequest
-				b.request.variables = append(b.request.variables, variable)
+			scope := restfile.ScopeRequest
+			if !b.inRequest {
+				scope = restfile.ScopeFile
+			}
+			if !b.addScopedVariable(name, value, lineNumber, scope, secret) {
+				return
 			}
 		}
 		b.appendLine(line)
@@ -215,7 +199,7 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 	}
 
 	if b.inRequest && b.request.http.HasMethod() && b.request.http.HeaderDone() {
-		b.handleBodyLine(lineNumber, line)
+		b.handleBodyLine(line)
 		b.appendLine(line)
 		return
 	}
@@ -937,67 +921,47 @@ func parseScopeToken(token string) (string, bool) {
 	return tok, secret
 }
 
-func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
-	switch key {
-	case "global", "global-secret":
-		_, secret := parseScopeToken(key)
-		name, value := parseNameValue(rest)
-		if name == "" {
-			return true
-		}
-		b.addGlobalVariable(name, value, line, secret)
+func (b *documentBuilder) addScopedVariable(name, value string, line int, scope restfile.VariableScope, secret bool) bool {
+	if name == "" {
 		return true
-	case "file", "file-secret":
-		_, secret := parseScopeToken(key)
-		name, value := parseNameValue(rest)
-		if name == "" {
-			return true
-		}
-		variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeFile, Secret: secret}
+	}
+	variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: scope, Secret: secret}
+	switch scope {
+	case restfile.ScopeGlobal:
+		b.globalVars = append(b.globalVars, variable)
+	case restfile.ScopeFile:
 		b.fileVars = append(b.fileVars, variable)
-		return true
-	case "request", "request-secret":
-		scope, secret := parseScopeToken(key)
-		name, value := parseNameValue(rest)
-		if name == "" {
-			return true
+	case restfile.ScopeRequest:
+		if !b.ensureRequest(line) {
+			return false
 		}
-		if scope == "request" {
-			if !b.ensureRequest(line) {
-				return true
-			}
-			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeRequest, Secret: secret}
-			b.request.variables = append(b.request.variables, variable)
-		}
-		return true
-	case "var":
-		scopeToken, remainder := splitFirst(rest)
+		b.request.variables = append(b.request.variables, variable)
+	default:
+		return false
+	}
+	return true
+}
+
+func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
+	scopeToken := key
+	args := rest
+	if key == "var" {
+		scopeToken, args = splitFirst(rest)
 		if scopeToken == "" {
 			return false
 		}
-		scope, secret := parseScopeToken(scopeToken)
-		name, value := parseNameValue(remainder)
-		if name == "" {
-			return true
-		}
-		switch scope {
-		case "global":
-			b.addGlobalVariable(name, value, line, secret)
-			return true
-		case "file":
-			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeFile, Secret: secret}
-			b.fileVars = append(b.fileVars, variable)
-			return true
-		case "request":
-			if !b.ensureRequest(line) {
-				return true
-			}
-			variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: restfile.ScopeRequest, Secret: secret}
-			b.request.variables = append(b.request.variables, variable)
-			return true
-		default:
-			return false
-		}
+	}
+
+	scopeStr, secret := parseScopeToken(scopeToken)
+	name, value := parseNameValue(args)
+
+	switch scopeStr {
+	case "global":
+		return b.addScopedVariable(name, value, line, restfile.ScopeGlobal, secret)
+	case "file":
+		return b.addScopedVariable(name, value, line, restfile.ScopeFile, secret)
+	case "request":
+		return b.addScopedVariable(name, value, line, restfile.ScopeRequest, secret)
 	default:
 		return false
 	}
@@ -1210,17 +1174,6 @@ func sshScopeLabel(scope restfile.SSHScope) string {
 	default:
 		return "request"
 	}
-}
-
-func (b *documentBuilder) addGlobalVariable(name, value string, line int, secret bool) {
-	variable := restfile.Variable{
-		Name:   name,
-		Value:  value,
-		Line:   line,
-		Scope:  restfile.ScopeGlobal,
-		Secret: secret,
-	}
-	b.globalVars = append(b.globalVars, variable)
 }
 
 func (b *documentBuilder) addConstant(name, value string, line int) {
@@ -1477,7 +1430,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	}
 }
 
-func (b *documentBuilder) handleBodyLine(lineNumber int, line string) {
+func (b *documentBuilder) handleBodyLine(line string) {
 	if b.request.graphql.HandleBodyLine(line) {
 		return
 	}

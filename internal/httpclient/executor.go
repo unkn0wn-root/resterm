@@ -5,7 +5,9 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -14,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
@@ -744,6 +747,9 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 		if err == nil {
 			return data, candidate, nil
 		}
+		if stopReadFallback(err) {
+			return nil, "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), candidate)
+		}
 		lastErr = err
 		lastPath = candidate
 	}
@@ -777,6 +783,25 @@ func resolveFileLookup(baseDir string, opts Options) ([]string, bool) {
 		return nil, baseDir == ""
 	}
 	return opts.FallbackBaseDirs, true
+}
+
+func stopReadFallback(err error) bool {
+	return isPerm(err) || isDirErr(err) || errors.Is(err, os.ErrInvalid)
+}
+
+func isPerm(err error) bool {
+	return errors.Is(err, os.ErrPermission) || errors.Is(err, fs.ErrPermission)
+}
+
+func isDirErr(err error) bool {
+	if errors.Is(err, syscall.EISDIR) {
+		return true
+	}
+	var pe *fs.PathError
+	if errors.As(err, &pe) && errors.Is(pe.Err, syscall.EISDIR) {
+		return true
+	}
+	return false
 }
 
 // Lines starting with @ get replaced with the file contents.
