@@ -147,11 +147,12 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
 | `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
 | `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
-| `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o` |
+| `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
 | `open_theme_selector` | Open theme selector. | `ctrl+alt+t`, `g m`, `g shift+t` |
 | `open_temp_document` | Open a scratch document. | `ctrl+t` |
 | `reparse_document` | Reparse the active buffer. | `ctrl+p`, `ctrl+alt+p`, `ctrl+shift+t` |
+| `reload_file_from_disk` | Reload the active file from disk (discarding unsaved buffer changes). | `g shift+r` |
 | `select_timeline_tab` | Focus the Timeline tab. | `ctrl+alt+l`, `g t` |
 | `quit_app` | Quit Resterm. | `ctrl+q`, `ctrl+d` |
 | `send_request` | Send the active request (single-step only). | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
@@ -218,7 +219,8 @@ While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire 
 
 - Resterm scans the workspace root for `.http` and `.rest` files. Use `--workspace` to set the root or rely on the directory of the file passed via `--file`. Add `--recursive` to traverse subdirectories (hidden directories are skipped).
 - The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `m` toggles method badges (single select) for the highlighted request, `t` toggles tag badges, and `Esc` clears text plus any badges.
-- The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear.
+- The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear. Use `Ctrl+Shift+O` (or `g+Shift+O`) to rescan the workspace for new files.
+- Resterm watches the active file on disk. If another tool edits or deletes it, a modal appears telling you the file changed or went missing. Your in-memory buffer stays intact. Press the reload shortcut (`g+Shift+R` by default, or whatever you’ve mapped to `reload_file_from_disk`) to pull the on disk version into the editor. If you have unsaved changes, the first press warns that reload will discard them; press reload again to confirm. Dismiss with `Esc` to keep your buffer and continue editing.
 - Create a scratch buffer with `Ctrl+T` for ad-hoc experiments. These buffers are not written to disk unless you save them explicitly.
 
 ### Inline requests

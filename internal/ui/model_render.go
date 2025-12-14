@@ -60,6 +60,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderErrorModal())
 	}
 
+	if m.showFileChangeModal {
+		return m.renderWithinAppFrame(m.renderFileChangeModal())
+	}
+
 	if m.showHistoryPreview {
 		return m.renderWithinAppFrame(m.renderHistoryPreviewModal())
 	}
@@ -1667,9 +1671,14 @@ func (m Model) headerTestSummary() (string, bool) {
 func (m Model) renderStatusBar() string {
 	statusText := m.statusMessage.text
 	if statusText == "" {
-		if m.dirty {
+		switch {
+		case m.fileMissing:
+			statusText = "File missing on disk"
+		case m.fileStale:
+			statusText = "File changed on disk"
+		case m.dirty:
 			statusText = "Unsaved changes"
-		} else {
+		default:
 			statusText = "Ready"
 		}
 	}
@@ -2166,6 +2175,53 @@ func (m Model) renderEnvironmentModal() string {
 	)
 }
 
+func (m Model) renderFileChangeModal() string {
+	width := m.width - 10
+	if width > 72 {
+		width = 72
+	}
+	if width < 32 {
+		candidate := m.width - 4
+		if candidate > 0 {
+			width = maxInt(24, candidate)
+		} else {
+			width = 48
+		}
+	}
+	contentWidth := maxInt(width-4, 24)
+	message := strings.TrimSpace(m.fileChangeMessage)
+	if message == "" {
+		message = "File changed outside this session."
+	}
+	reloadKey := m.helpActionKey(bindings.ActionReloadFileFromDisk, "g Shift+R")
+	body := paddedLeftLine(contentWidth, 2, message)
+	info := fmt.Sprintf("%s Reload    %s Dismiss", m.theme.CommandBarHint.Render(reloadKey), m.theme.CommandBarHint.Render("Esc"))
+	infoLine := paddedLeftLine(contentWidth, 2, info)
+	title := m.theme.HeaderTitle.
+		Width(contentWidth).
+		Align(lipgloss.Center).
+		Render("File Change Detected")
+
+	content := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		"",
+		body,
+		"",
+		infoLine,
+	)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(
+		m.width,
+		m.height,
+		lipgloss.Center,
+		lipgloss.Center,
+		box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
 func (m Model) renderThemeModal() string {
 	width := minInt(m.width-10, 60)
 	if width < 28 {
@@ -2247,6 +2303,7 @@ func (m Model) renderHelpOverlay() string {
 				{m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"), "Refresh workspace"},
 				{m.helpActionKey(bindings.ActionOpenTempDocument, "Ctrl+T"), "Temporary document"},
 				{m.helpActionKey(bindings.ActionReparseDocument, "Ctrl+P"), "Reparse document"},
+				{m.helpActionKey(bindings.ActionReloadFileFromDisk, "Ctrl+Alt+R"), "Reload file from disk"},
 				{m.helpActionKey(bindings.ActionQuitApp, "Ctrl+Q"), "Quit (Ctrl+D also works)"},
 				{m.helpActionKey(bindings.ActionToggleHelp, "?"), "Toggle this help"},
 			}),

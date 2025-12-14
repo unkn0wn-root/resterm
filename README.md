@@ -90,6 +90,7 @@ TL;DR why resterm:
 - **Multi-step workflows** compose several named requests (`@workflow` + `@step`) with per-step overrides and expectations.
 - **Multi-environment compare** via `@compare` directives or the global `--compare` flag.
 - **SSH tunnels** route HTTP/gRPC/WebSocket/SSE traffic through bastions with host key verification, keep-alives, retries, and persistent tunnels.
+- **File Watcher** with automatic file change detection: Resterm warns when the current file changes or goes missing on disk and lets you reload from disk (`g Shift+R`) or keep your buffer, plus a shortcut for quick workspace rescan (files) (`g Shift+O`).
 - **Custom theming & bindings** if you want to make a resterm more alligned with your taste.
 
 ## Installation

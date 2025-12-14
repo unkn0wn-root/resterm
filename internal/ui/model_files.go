@@ -29,6 +29,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 			return statusMsg{text: fmt.Sprintf("open failed: %v", err), level: statusError}
 		}
 	}
+	m.forgetFileWatch(m.currentFile)
 	m.currentFile = path
 	m.cfg.FilePath = path
 	m.setInsertMode(false, false)
@@ -46,6 +47,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
 	m.dirty = false
+	m.watchFile(path, data)
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess})
 	m.syncHistory()
 	if len(m.requestItems) > 0 {
@@ -55,6 +57,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 }
 
 func (m *Model) openTemporaryDocument() tea.Cmd {
+	m.forgetFileWatch(m.currentFile)
 	m.cfg.FilePath = ""
 	m.currentFile = ""
 	m.currentRequest = nil
@@ -93,14 +96,8 @@ func (m *Model) saveFile() tea.Cmd {
 			return statusMsg{text: fmt.Sprintf("save failed: %v", err), level: statusError}
 		}
 	}
-	m.doc = parser.Parse(m.currentFile, content)
-	m.syncSSHGlobals(m.doc)
-	m.syncRequestList(m.doc)
-	m.rebuildNavigator(nil)
-	if req := m.findRequestByKey(m.activeRequestKey); req != nil {
-		m.currentRequest = req
-	}
-	m.dirty = false
+	m.watchFile(m.currentFile, content)
+	m.refreshCurrentDocument(content)
 	return func() tea.Msg {
 		return statusMsg{text: fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)), level: statusSuccess}
 	}
@@ -152,4 +149,55 @@ func (m *Model) reparseDocument() tea.Cmd {
 	return func() tea.Msg {
 		return statusMsg{text: "Document reloaded", level: statusInfo}
 	}
+}
+
+func (m *Model) reloadFileFromDisk() tea.Cmd {
+	path := strings.TrimSpace(m.currentFile)
+	if path == "" {
+		return func() tea.Msg {
+			return statusMsg{text: "No file selected", level: statusWarn}
+		}
+	}
+	if m.dirty && !m.pendingReloadConfirm {
+		m.pendingReloadConfirm = true
+		return func() tea.Msg {
+			return statusMsg{text: "Reload will discard unsaved changes. Press reload again to confirm.", level: statusWarn}
+		}
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return func() tea.Msg {
+			return statusMsg{text: fmt.Sprintf("reload failed: %v", err), level: statusError}
+		}
+	}
+
+	m.pendingReloadConfirm = false
+	m.fileStale = false
+	m.fileMissing = false
+	m.closeFileChangeModal()
+	m.setInsertMode(false, false)
+	m.editor.ClearSelection()
+	m.editor.SetValue(string(data))
+	m.editor.undoStack = nil
+	m.editor.SetViewStart(0)
+	m.editor.moveCursorTo(0, 0)
+	m.editor.ClearSelection()
+	m.refreshCurrentDocument(data)
+	m.watchFile(path, data)
+
+	return func() tea.Msg {
+		return statusMsg{text: fmt.Sprintf("Reloaded %s", filepath.Base(path)), level: statusInfo}
+	}
+}
+
+func (m *Model) refreshCurrentDocument(content []byte) {
+	m.doc = parser.Parse(m.currentFile, content)
+	m.syncSSHGlobals(m.doc)
+	m.syncRequestList(m.doc)
+	m.rebuildNavigator(nil)
+	if req := m.findRequestByKey(m.activeRequestKey); req != nil {
+		m.currentRequest = req
+	}
+	m.dirty = false
 }
