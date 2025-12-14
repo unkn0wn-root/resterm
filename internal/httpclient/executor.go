@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -743,6 +744,9 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 		data, err := c.fs.ReadFile(candidate)
 		if err == nil {
 			return data, candidate, nil
+		}
+		if !errors.Is(err, os.ErrNotExist) {
+			return nil, "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), candidate)
 		}
 		lastErr = err
 		lastPath = candidate

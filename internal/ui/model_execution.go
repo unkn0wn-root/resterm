@@ -1777,7 +1777,8 @@ func mergeVariableMaps(base map[string]string, additions map[string]string) map[
 	return merged
 }
 
-func (m *Model) resolveHTTPOptions(opts httpclient.Options) httpclient.Options {
+func (m *Model) resolveHTTPOptions(base httpclient.Options) httpclient.Options {
+	opts := base
 	if opts.BaseDir == "" && m.currentFile != "" {
 		opts.BaseDir = filepath.Dir(m.currentFile)
 	}
