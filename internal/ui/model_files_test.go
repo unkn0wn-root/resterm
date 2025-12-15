@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/watcher"
 )
 
 func TestSaveFileWithoutSelectionAndEmptyEditorWarns(t *testing.T) {
@@ -126,5 +127,34 @@ func TestOpenTemporaryDocumentResetsState(t *testing.T) {
 	}
 	if m.dirty {
 		t.Fatalf("expected clean editor state for temporary document")
+	}
+}
+
+func TestReloadWarnUpdatesFileChangeModal(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "changed.http")
+	if err := os.WriteFile(path, []byte("body"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th, FilePath: path, InitialContent: "body"})
+	m := &model
+	m.dirty = true
+	m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged})
+	if !m.showFileChangeModal {
+		t.Fatalf("expected file change modal to be visible")
+	}
+
+	cmd := m.reloadFileFromDisk()
+	if cmd == nil {
+		t.Fatalf("expected warning command on first reload attempt")
+	}
+	if !m.pendingReloadConfirm {
+		t.Fatalf("expected reload confirmation to be pending")
+	}
+	want := "Reload will discard unsaved changes. Press reload again to confirm."
+	if m.fileChangeMessage != want {
+		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
 	}
 }

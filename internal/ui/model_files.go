@@ -160,8 +160,12 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	}
 	if m.dirty && !m.pendingReloadConfirm {
 		m.pendingReloadConfirm = true
+		warn := "Reload will discard unsaved changes. Press reload again to confirm."
+		if m.showFileChangeModal {
+			m.openFileChangeModal(warn)
+		}
 		return func() tea.Msg {
-			return statusMsg{text: "Reload will discard unsaved changes. Press reload again to confirm.", level: statusWarn}
+			return statusMsg{text: warn, level: statusWarn}
 		}
 	}
 
