@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.11.0](https://github.com/unkn0wn-root/resterm/compare/v0.10.5...v0.11.0) (2025-12-15)
+
+
+### Features
+
+* add file watcher to watch changes for opened file ([4b96268](https://github.com/unkn0wn-root/resterm/commit/4b962689efed8599a51f9c83376a79bc45343e7d))
+* make extended file search opt-in and improve parsing secrets ([8dfe38b](https://github.com/unkn0wn-root/resterm/commit/8dfe38b7ae08c2a54ef5a440615f0c337409c475))
+
+
+### Bug Fixes
+
+* respect no fallback file lookup ([6cb7016](https://github.com/unkn0wn-root/resterm/commit/6cb701678dfceb96ef48e947777d14f83a9778a6))
+* tests ([093074a](https://github.com/unkn0wn-root/resterm/commit/093074a6ad1cd11352c47fe609248ae2d92b5bac))
+* **watcher:** show warn modal on local unsaved changes ([dfea2ad](https://github.com/unkn0wn-root/resterm/commit/dfea2ad093b3da8721d6e7927274918a98b71893))
+
 ### [0.10.5](https://github.com/unkn0wn-root/resterm/compare/v0.10.4...v0.10.5) (2025-12-12)
 
 
