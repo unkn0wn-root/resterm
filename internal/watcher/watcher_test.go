@@ -165,6 +165,27 @@ func TestSkipsHashWhenMetadataUnchangedByDefault(t *testing.T) {
 	}
 }
 
+func TestTrackIgnoresEmptyPath(t *testing.T) {
+	w := New(Options{})
+	w.Track("", []byte("ignored"))
+	w.Track(".", []byte("ignored"))
+
+	if entries := w.snapshot(); len(entries) != 0 {
+		t.Fatalf("expected no tracked entries, got %d", len(entries))
+	}
+}
+
+func TestScanAfterStopDoesNotPanic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "stopped.http")
+	write(t, path, []byte("body"))
+
+	w := New(Options{})
+	w.Track(path, []byte("body"))
+	w.Stop()
+	w.Scan()
+}
+
 func write(t *testing.T, path string, data []byte) {
 	t.Helper()
 	if err := os.WriteFile(path, data, 0o644); err != nil {

@@ -63,6 +63,7 @@ type Watcher struct {
 const (
 	defaultInterval = time.Second
 	defaultBuffer   = 16
+	hashPrefix      = "sha256:"
 )
 
 func New(opts Options) *Watcher {
@@ -130,8 +131,11 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) Track(path string, data []byte) {
+	if path == "" {
+		return
+	}
 	clean := filepath.Clean(path)
-	if clean == "" {
+	if clean == "" || clean == "." {
 		return
 	}
 	fp := buildFingerprint(clean, data)
@@ -145,8 +149,11 @@ func (w *Watcher) Track(path string, data []byte) {
 }
 
 func (w *Watcher) Forget(path string) {
+	if path == "" {
+		return
+	}
 	clean := filepath.Clean(path)
-	if clean == "" {
+	if clean == "" || clean == "." {
 		return
 	}
 	w.mu.Lock()
@@ -155,6 +162,10 @@ func (w *Watcher) Forget(path string) {
 }
 
 func (w *Watcher) Scan() {
+	if w.isClosed() {
+		return
+	}
+
 	entries := w.snapshot()
 	for _, e := range entries {
 		if evt, ok := w.check(e); ok {
@@ -191,7 +202,7 @@ func (w *Watcher) check(e *entry) (Event, bool) {
 		return Event{}, false
 	}
 
-	metaUnchanged := !e.missing && !w.hashAll && info.ModTime().Equal(e.fp.Mod) && info.Size() == e.fp.Size
+	metaUnchanged := metaSame(info, e.fp, w.hashAll, e.missing)
 	if metaUnchanged {
 		return Event{}, false
 	}
@@ -233,10 +244,30 @@ func (w *Watcher) updateEntry(path string, fp Fingerprint, missing bool) {
 }
 
 func (w *Watcher) emit(evt Event) {
+	w.mu.RLock()
+	if w.closed {
+		w.mu.RUnlock()
+		return
+	}
 	select {
 	case w.out <- evt:
 	default:
 	}
+	w.mu.RUnlock()
+}
+
+func (w *Watcher) isClosed() bool {
+	w.mu.RLock()
+	closed := w.closed
+	w.mu.RUnlock()
+	return closed
+}
+
+func metaSame(info fs.FileInfo, fp Fingerprint, hashAll bool, missing bool) bool {
+	if missing || hashAll || info == nil {
+		return false
+	}
+	return info.ModTime().Equal(fp.Mod) && info.Size() == fp.Size
 }
 
 func buildFingerprint(path string, data []byte) Fingerprint {
@@ -261,10 +292,10 @@ func fingerprintFromStat(info fs.FileInfo, data []byte) Fingerprint {
 
 func hashBytes(data []byte) string {
 	if len(data) == 0 {
-		return "sha256:0"
+		return hashPrefix + "0"
 	}
 	sum := sha256Sum(data)
-	return "sha256:" + sum
+	return hashPrefix + sum
 }
 
 func sha256Sum(data []byte) string {
