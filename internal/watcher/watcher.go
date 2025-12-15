@@ -131,11 +131,8 @@ func (w *Watcher) Stop() {
 }
 
 func (w *Watcher) Track(path string, data []byte) {
-	if path == "" {
-		return
-	}
-	clean := filepath.Clean(path)
-	if clean == "" || clean == "." {
+	clean, ok := cleanPath(path)
+	if !ok {
 		return
 	}
 	fp := buildFingerprint(clean, data)
@@ -149,11 +146,8 @@ func (w *Watcher) Track(path string, data []byte) {
 }
 
 func (w *Watcher) Forget(path string) {
-	if path == "" {
-		return
-	}
-	clean := filepath.Clean(path)
-	if clean == "" || clean == "." {
+	clean, ok := cleanPath(path)
+	if !ok {
 		return
 	}
 	w.mu.Lock()
@@ -268,6 +262,17 @@ func metaSame(info fs.FileInfo, fp Fingerprint, hashAll bool, missing bool) bool
 		return false
 	}
 	return info.ModTime().Equal(fp.Mod) && info.Size() == fp.Size
+}
+
+func cleanPath(path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	clean := filepath.Clean(path)
+	if clean == "" || clean == "." {
+		return "", false
+	}
+	return clean, true
 }
 
 func buildFingerprint(path string, data []byte) Fingerprint {
