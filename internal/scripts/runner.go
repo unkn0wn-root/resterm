@@ -2,16 +2,19 @@ package scripts
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/dop251/goja"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -201,6 +204,7 @@ func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
 	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo, input.Trace)
+	tester.vm = vm
 	streamBinding := newStreamAPI(vm, streamInfo)
 
 	if err := bindCommon(vm); err != nil {
@@ -471,6 +475,7 @@ type testAPI struct {
 	cases     []TestResult
 	stream    *StreamInfo
 	trace     *traceBinding
+	vm        *goja.Runtime
 }
 
 func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo, trace *TraceInput) *testAPI {
@@ -623,6 +628,9 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 	seconds := 0.0
 	headers := map[string]string{}
 	kind := ""
+	ct := ""
+	disposition := ""
+	var meta binaryview.Meta
 	if r := api.response; r != nil {
 		body = string(r.Body)
 		status = r.Status
@@ -630,6 +638,12 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 		url = r.URL
 		seconds = r.Time.Seconds()
 		kind = string(r.Kind)
+		ct = r.Header.Get("Content-Type")
+		if strings.TrimSpace(ct) == "" && strings.TrimSpace(r.ContentType) != "" {
+			ct = r.ContentType
+		}
+		disposition = r.Header.Get("Content-Disposition")
+		meta = binaryview.Analyze(r.Body, ct)
 		for name, values := range r.Header {
 			headers[strings.ToLower(name)] = strings.Join(values, ", ")
 		}
@@ -654,12 +668,14 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"kind":       kind,
-		"status":     status,
-		"statusCode": code,
-		"url":        url,
-		"duration":   seconds,
-		"body":       body,
+		"kind":        kind,
+		"status":      status,
+		"statusCode":  code,
+		"url":         url,
+		"duration":    seconds,
+		"body":        body,
+		"contentType": ct,
+		"isBinary":    meta.Kind == binaryview.KindBinary,
 		"json": func() interface{} {
 			if api.response == nil {
 				return nil
@@ -669,6 +685,40 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 				return nil
 			}
 			return js
+		},
+		"base64": func() string {
+			if api.response == nil {
+				return ""
+			}
+			return base64.StdEncoding.EncodeToString(api.response.Body)
+		},
+		"arrayBuffer": func() []byte {
+			if api.response == nil {
+				return nil
+			}
+			return append([]byte(nil), api.response.Body...)
+		},
+		"bytes": func() []byte {
+			if api.response == nil {
+				return nil
+			}
+			return append([]byte(nil), api.response.Body...)
+		},
+		"filename": func() string {
+			return binaryview.FilenameHint(disposition, url, ct)
+		},
+		"saveBody": func(path string) bool {
+			if api.response == nil {
+				return false
+			}
+			trimmed := strings.TrimSpace(path)
+			if trimmed == "" {
+				return false
+			}
+			if err := os.WriteFile(trimmed, api.response.Body, 0o644); err != nil {
+				panic(api.vm.NewGoError(err))
+			}
+			return true
 		},
 		"headers": map[string]interface{}{
 			"get": headerLookup,

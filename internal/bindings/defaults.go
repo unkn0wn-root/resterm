@@ -47,6 +47,9 @@ var (
 	ActionCancelRun               ActionID = "cancel_run"
 	ActionCopyResponseTab         ActionID = "copy_response_tab"
 	ActionToggleHeaderPreview     ActionID = "toggle_header_preview"
+	ActionCycleRawView            ActionID = "cycle_raw_view"
+	ActionSaveResponseBody        ActionID = "save_response_body"
+	ActionOpenResponseExternally  ActionID = "open_response_externally"
 )
 
 type definition struct {
@@ -99,6 +102,9 @@ var definitions = []definition{
 	def(ActionCancelRun, false, "ctrl+c"),
 	def(ActionCopyResponseTab, false, "ctrl+shift+c", "g y"),
 	def(ActionToggleHeaderPreview, false, "g shift+h"),
+	def(ActionCycleRawView, false, "g b"),
+	def(ActionSaveResponseBody, false, "g shift+s"),
+	def(ActionOpenResponseExternally, false, "g shift+e"),
 }
 
 var definitionLookup = func() map[ActionID]definition {

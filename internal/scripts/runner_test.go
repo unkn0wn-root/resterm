@@ -1,8 +1,11 @@
 package scripts
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -429,5 +432,53 @@ func TestTraceBindingDisabled(t *testing.T) {
 		if !res.Passed {
 			t.Fatalf("trace disabled assertion failed: %+v", res)
 		}
+	}
+}
+
+func TestResponseAPIExposesBinaryHelpers(t *testing.T) {
+	runner := NewRunner(nil)
+	body := []byte{0x00, 0x01, 0x02, 0x03}
+	tmpDir := t.TempDir()
+	savePath := filepath.Join(tmpDir, "body.bin")
+	expectedB64 := base64.StdEncoding.EncodeToString(body)
+
+	script := fmt.Sprintf(`client.test("binary helpers", function () {
+  tests.assert(response.isBinary === true, "binary flag");
+  tests.assert(response.base64() === "%s", "base64 value");
+  const bytes = response.bytes();
+  tests.assert(bytes.length === 4, "byte length");
+  tests.assert(bytes[1] === 1, "byte copy");
+  const name = response.filename();
+  tests.assert(name && name.length > 0, "filename hint");
+  tests.assert(response.saveBody("%s") === true, "save body");
+});`, expectedB64, savePath)
+
+	resp := &Response{
+		Kind:   ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		URL:    "https://example.com/download/file.bin",
+		Header: http.Header{
+			"Content-Type":        {"application/octet-stream"},
+			"Content-Disposition": {`attachment; filename="file.bin"`},
+		},
+		Body: body,
+	}
+
+	results, _, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{Response: resp, Variables: map[string]string{}})
+	if err != nil {
+		t.Fatalf("binary helpers script: %v", err)
+	}
+	for _, res := range results {
+		if !res.Passed {
+			t.Fatalf("binary helpers assertion failed: %+v", res)
+		}
+	}
+	data, err := os.ReadFile(savePath)
+	if err != nil {
+		t.Fatalf("expected saved file, got error: %v", err)
+	}
+	if !bytes.Equal(data, body) {
+		t.Fatalf("saved body mismatch, got %v want %v", data, body)
 	}
 }

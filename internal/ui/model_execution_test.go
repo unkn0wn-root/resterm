@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -288,6 +289,53 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 			got = model.responseLatest.pretty
 		}
 		t.Fatalf("expected response view to mention grpc status, got %q", got)
+	}
+}
+
+func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	body := []byte{0x00, 0x01, 0x02, 0x03}
+	req := &restfile.Request{
+		Method: "GRPC",
+		GRPC: &restfile.GRPCRequest{
+			FullMethod: "/pkg.Service/Binary",
+		},
+	}
+	resp := &grpcclient.Response{
+		StatusCode:    codes.OK,
+		StatusMessage: "OK",
+		Message:       "{}",
+		Body:          body,
+		ContentType:   "application/octet-stream",
+	}
+
+	cmd := model.consumeGRPCResponse(resp, nil, nil, req, "")
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	snap := model.responseLatest
+	if snap == nil || !snap.ready {
+		t.Fatalf("expected response snapshot to be ready")
+	}
+	if snap.bodyMeta.Kind != binaryview.KindText {
+		t.Fatalf("expected meta kind to allow text view, got %v", snap.bodyMeta.Kind)
+	}
+	if snap.rawMode != rawViewText {
+		t.Fatalf("expected raw mode to default to text for gRPC message, got %v", snap.rawMode)
+	}
+	if snap.rawHex == "" {
+		t.Fatalf("expected hex dump to remain available")
+	}
+	if !strings.Contains(snap.raw, "{}") {
+		t.Fatalf("expected raw view to show json message, got %q", snap.raw)
 	}
 }
 

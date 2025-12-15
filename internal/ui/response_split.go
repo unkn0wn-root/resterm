@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"net/http"
 	"strings"
 	"unicode/utf8"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -22,24 +24,34 @@ const (
 )
 
 type responseSnapshot struct {
-	id             string
-	pretty         string
-	raw            string
-	headers        string
-	requestHeaders string
-	stats          string
-	statsColored   string
-	statsColorize  bool
-	statsKind      statsReportKind
-	profileStats   *analysis.LatencyStats
-	workflowStats  *workflowStatsView
-	ready          bool
-	timeline       *nettrace.Timeline
-	traceData      *nettrace.Report
-	traceReport    timelineReport
-	traceSpec      *restfile.TraceSpec
-	environment    string
-	compareBundle  *compareBundle
+	id              string
+	pretty          string
+	raw             string
+	rawSummary      string
+	rawText         string
+	rawHex          string
+	rawBase64       string
+	rawMode         rawViewMode
+	headers         string
+	requestHeaders  string
+	stats           string
+	statsColored    string
+	statsColorize   bool
+	statsKind       statsReportKind
+	profileStats    *analysis.LatencyStats
+	workflowStats   *workflowStatsView
+	ready           bool
+	timeline        *nettrace.Timeline
+	traceData       *nettrace.Report
+	traceReport     timelineReport
+	traceSpec       *restfile.TraceSpec
+	environment     string
+	compareBundle   *compareBundle
+	body            []byte
+	bodyMeta        binaryview.Meta
+	contentType     string
+	responseHeaders http.Header
+	effectiveURL    string
 }
 
 type headersViewMode int

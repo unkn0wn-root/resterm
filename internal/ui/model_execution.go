@@ -639,6 +639,11 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 		return nil
 	}
 
+	body := append([]byte(nil), resp.Body...)
+	if len(body) == 0 && strings.TrimSpace(resp.Message) != "" {
+		body = []byte(resp.Message)
+	}
+
 	headers := make(http.Header)
 	for name, values := range resp.Headers {
 		for _, value := range values {
@@ -650,6 +655,9 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 		for _, value := range values {
 			headers.Add(key, value)
 		}
+	}
+	if ct := strings.TrimSpace(resp.ContentType); ct != "" && headers.Get("Content-Type") == "" {
+		headers.Set("Content-Type", ct)
 	}
 
 	status := resp.StatusCode.String()
@@ -669,7 +677,13 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 		URL:    target,
 		Time:   resp.Duration,
 		Header: headers,
-		Body:   []byte(resp.Message),
+		Body:   body,
+		ContentType: func() string {
+			if ct := strings.TrimSpace(resp.ContentType); ct != "" {
+				return ct
+			}
+			return headers.Get("Content-Type")
+		}(),
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -32,7 +33,7 @@ func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 		t.Fatalf("unexpected message type %T", msgVal)
 	}
 
-	_, rawView, _ := buildHTTPResponseViews(resp, nil, nil)
+	rawView := buildHTTPResponseViews(resp, nil, nil).raw
 	expectedWrapped := wrapContentForTab(responseTabRaw, rawView, 12)
 	if msg.rawWrapped != expectedWrapped {
 		t.Fatalf("expected rawWrapped to match formatted raw view, got %q want %q", msg.rawWrapped, expectedWrapped)
@@ -80,7 +81,8 @@ func TestBuildHTTPResponseViewsPreservesLeadingWhitespace(t *testing.T) {
 		EffectiveURL: "https://example.com/whitespace",
 	}
 
-	pretty, raw, _ := buildHTTPResponseViews(resp, nil, nil)
+	views := buildHTTPResponseViews(resp, nil, nil)
+	pretty, raw := views.pretty, views.raw
 	if !strings.Contains(pretty, "  leading line") {
 		t.Fatalf("expected pretty view to retain leading spaces, got %q", pretty)
 	}
@@ -102,7 +104,8 @@ func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
 		EffectiveURL: "https://api.example.com/items",
 	}
 
-	pretty, raw, headers := buildHTTPResponseViews(resp, nil, nil)
+	views := buildHTTPResponseViews(resp, nil, nil)
+	pretty, raw, headers := views.pretty, views.raw, views.headers
 	if !strings.Contains(pretty, statsLabelStyle.Render("Status:")) {
 		t.Fatalf("expected colored status label, got %q", pretty)
 	}
@@ -155,5 +158,68 @@ func TestBuildRequestHeaderMapAddsDefaults(t *testing.T) {
 	hdrs := buildRequestHeaderMap(resp)
 	if hdrs.Get("Host") != "example.com" {
 		t.Fatalf("expected host to be populated from request host, got %q", hdrs.Get("Host"))
+	}
+}
+
+func TestBinaryResponsesUseSummaryAndHexRaw(t *testing.T) {
+	body := []byte{0x00, 0x01, 0x02, 0x03}
+	resp := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": {"application/octet-stream"}},
+		Body:         body,
+		Duration:     10 * time.Millisecond,
+		EffectiveURL: "https://example.com/download/file.bin",
+	}
+
+	views := buildHTTPResponseViews(resp, nil, nil)
+	pretty, raw, rawText, rawHex, rawBase64, mode := views.pretty, views.raw, views.rawText, views.rawHex, views.rawBase64, views.rawMode
+	if mode != rawViewHex {
+		t.Fatalf("expected binary responses to default to hex raw mode")
+	}
+	if rawHex != "" && !strings.Contains(raw, rawHex) {
+		t.Fatalf("expected raw view to include hex dump, got %q", raw)
+	}
+	if rawHex != binaryview.HexDump(body, 16) {
+		t.Fatalf("unexpected hex dump, got %q", rawHex)
+	}
+	if rawText == rawHex {
+		t.Fatalf("expected raw text to differ from hex view")
+	}
+	if rawBase64 == "" {
+		t.Fatalf("expected base64 preview to be populated")
+	}
+	if !strings.Contains(pretty, "Binary body") {
+		t.Fatalf("expected pretty view to show binary summary, got %q", pretty)
+	}
+}
+
+func TestPrintableOctetStreamDefaultsToText(t *testing.T) {
+	body := []byte("plain text body")
+	resp := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": {"application/octet-stream"}},
+		Body:         body,
+		Duration:     5 * time.Millisecond,
+		EffectiveURL: "https://example.com/download",
+	}
+
+	views := buildHTTPResponseViews(resp, nil, nil)
+	pretty, raw, rawText, rawHex, mode := views.pretty, views.raw, views.rawText, views.rawHex, views.rawMode
+	if mode != rawViewText {
+		t.Fatalf("expected raw mode to default to text for printable octet-stream")
+	}
+	if strings.Contains(pretty, "Binary body") {
+		t.Fatalf("expected pretty view to render text, got %q", pretty)
+	}
+	if !strings.Contains(raw, "plain text body") {
+		t.Fatalf("expected raw view to include body text, got %q", raw)
+	}
+	if rawHex == "" {
+		t.Fatalf("expected hex dump to remain available")
+	}
+	if rawText == "" {
+		t.Fatalf("expected raw text to be populated")
 	}
 }

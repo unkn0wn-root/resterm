@@ -908,6 +908,12 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.copyResponseTab(), true
 	case bindings.ActionToggleHeaderPreview:
 		return m.toggleHeaderPreview(), true
+	case bindings.ActionCycleRawView:
+		return m.cycleRawViewMode(), true
+	case bindings.ActionSaveResponseBody:
+		return m.saveResponseBody(), true
+	case bindings.ActionOpenResponseExternally:
+		return m.openResponseExternally(), true
 	default:
 		return nil, false
 	}

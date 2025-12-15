@@ -44,6 +44,8 @@ type Options struct {
 
 type Response struct {
 	Message       string
+	Body          []byte
+	ContentType   string
 	Headers       map[string][]string
 	Trailers      map[string][]string
 	StatusCode    codes.Code
@@ -150,6 +152,7 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 		Trailers:      copyMetadata(trailerMD),
 		StatusCode:    codes.OK,
 		StatusMessage: "OK",
+		ContentType:   "application/grpc+proto",
 		Duration:      duration,
 	}
 
@@ -167,6 +170,23 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode grpc response")
 	}
 	resp.Message = string(marshalled)
+
+	if wire, err := proto.Marshal(outputMsg); err == nil {
+		resp.Body = wire
+	} else {
+		resp.Body = marshalled
+		resp.ContentType = "application/json"
+	}
+	if len(resp.Body) == 0 {
+		resp.Body = marshalled
+		resp.ContentType = "application/json"
+	}
+	if resp.Headers == nil {
+		resp.Headers = make(map[string][]string)
+	}
+	if len(resp.Headers["Content-Type"]) == 0 && strings.TrimSpace(resp.ContentType) != "" {
+		resp.Headers["Content-Type"] = []string{resp.ContentType}
+	}
 	return resp, nil
 }
 

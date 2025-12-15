@@ -20,6 +20,8 @@ type Response struct {
 	Time   time.Duration
 	Header http.Header
 	Body   []byte
+	// ContentType carries the best-known type for the payload (may be empty).
+	ContentType string
 }
 
 func (r *Response) Clone() *Response {

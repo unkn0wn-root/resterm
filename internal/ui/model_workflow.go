@@ -489,6 +489,8 @@ func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
 	}
 	return &grpcclient.Response{
 		Message:       resp.Message,
+		Body:          append([]byte(nil), resp.Body...),
+		ContentType:   resp.ContentType,
 		Headers:       headers,
 		Trailers:      trailers,
 		StatusCode:    resp.StatusCode,

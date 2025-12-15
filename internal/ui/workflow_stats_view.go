@@ -270,8 +270,8 @@ func (entry workflowStatsEntry) detailLines() []string {
 		return nil
 	}
 	if entry.hasHTTP() {
-		pretty, _, _ := buildHTTPResponseViews(entry.result.HTTP, entry.result.Tests, entry.result.ScriptErr)
-		return indentLines(pretty, "    ")
+		views := buildHTTPResponseViews(entry.result.HTTP, entry.result.Tests, entry.result.ScriptErr)
+		return indentLines(views.pretty, "    ")
 	}
 	if entry.hasGRPC() {
 		detail := buildWorkflowGRPCDetail(entry.result)

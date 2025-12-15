@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -11,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -353,8 +355,23 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 
 	snapshot.pretty = msg.pretty
 	snapshot.raw = msg.raw
+	snapshot.rawSummary = msg.rawSummary
 	snapshot.headers = msg.headers
 	snapshot.requestHeaders = msg.requestHeaders
+	snapshot.body = append([]byte(nil), msg.body...)
+	snapshot.bodyMeta = msg.meta
+	snapshot.contentType = msg.contentType
+	snapshot.rawText = msg.rawText
+	snapshot.rawHex = msg.rawHex
+	snapshot.rawBase64 = msg.rawBase64
+	if msg.rawMode != 0 {
+		snapshot.rawMode = msg.rawMode
+	} else {
+		snapshot.rawMode = rawViewText
+	}
+	snapshot.responseHeaders = cloneHeaders(msg.headersMap)
+	snapshot.effectiveURL = msg.effectiveURL
+	applyRawViewMode(snapshot, snapshot.rawMode)
 	snapshot.ready = true
 
 	delete(m.responseTokens, msg.token)
@@ -374,7 +391,8 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		pane.invalidateCaches()
 		if msg.width > 0 && pane.viewport.Width == msg.width {
 			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, base: ensureTrailingNewline(msg.pretty), valid: true}
-			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: msg.rawWrapped, base: ensureTrailingNewline(msg.raw), valid: true}
+			rawWrapped := wrapContentForTab(responseTabRaw, snapshot.raw, msg.width)
+			pane.wrapCache[responseTabRaw] = cachedWrap{width: msg.width, content: rawWrapped, base: ensureTrailingNewline(snapshot.raw), valid: true}
 
 			headersBase := ensureTrailingNewline(msg.headers)
 			headersContent := msg.headersWrapped
@@ -455,10 +473,14 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	}
 
 	headersBuilder := strings.Builder{}
+	contentType := strings.TrimSpace(resp.ContentType)
 	if len(resp.Headers) > 0 {
 		headersBuilder.WriteString("Headers:\n")
 		for name, values := range resp.Headers {
 			headersBuilder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
+			if strings.EqualFold(name, "Content-Type") && contentType == "" && len(values) > 0 {
+				contentType = strings.TrimSpace(values[0])
+			}
 		}
 	}
 	if len(resp.Trailers) > 0 {
@@ -477,25 +499,47 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 		statusLine += " (" + resp.StatusMessage + ")"
 	}
 
-	contentType := "application/json"
-	prettyBodyRaw := prettifyBody([]byte(resp.Message), contentType)
-	prettyBody := trimResponseBody(prettyBodyRaw)
-	if isBodyEmpty(prettyBody) {
-		prettyBody = "<empty>"
+	body := append([]byte(nil), resp.Body...)
+	viewBody := body
+	viewContentType := contentType
+	if strings.TrimSpace(resp.Message) != "" {
+		viewBody = []byte(resp.Message)
+		if strings.TrimSpace(viewContentType) == "" || strings.Contains(strings.ToLower(viewContentType), "grpc") {
+			viewContentType = "application/json"
+		}
 	}
-
-	rawBody := formatRawBody([]byte(resp.Message), contentType)
-	if isBodyEmpty(rawBody) {
-		rawBody = "<empty>"
-	}
+	meta := binaryview.Analyze(body, contentType)
+	bv := buildBodyViews(body, viewContentType, &meta, viewBody, viewContentType)
 
 	snapshot := &responseSnapshot{
-		pretty:      joinSections(statusLine, prettyBody),
-		raw:         joinSections(statusLine, rawBody),
+		pretty:      joinSections(statusLine, bv.pretty),
+		raw:         joinSections(statusLine, bv.raw),
+		rawSummary:  statusLine,
 		headers:     joinSections(statusLine, headersContent),
 		ready:       true,
 		environment: environment,
+		body:        body,
+		bodyMeta:    meta,
+		contentType: viewContentType,
+		rawText:     bv.rawText,
+		rawHex:      bv.rawHex,
+		rawBase64:   bv.rawBase64,
+		rawMode:     bv.mode,
+		responseHeaders: func() http.Header {
+			if len(resp.Headers) == 0 && len(resp.Trailers) == 0 {
+				return nil
+			}
+			h := make(http.Header, len(resp.Headers)+len(resp.Trailers))
+			for k, v := range resp.Headers {
+				h[k] = append([]string(nil), v...)
+			}
+			for k, v := range resp.Trailers {
+				h["Grpc-Trailer-"+k] = append([]string(nil), v...)
+			}
+			return h
+		}(),
 	}
+	applyRawViewMode(snapshot, snapshot.rawMode)
 	m.responseLatest = snapshot
 	m.responsePending = nil
 
