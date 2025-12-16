@@ -312,15 +312,14 @@ func formatRawBody(body []byte, contentType string) string {
 }
 
 type bodyViews struct {
-	pretty     string
-	raw        string
-	rawSummary string
-	rawText    string
-	rawHex     string
-	rawBase64  string
-	mode       rawViewMode
-	meta       binaryview.Meta
-	ct         string
+	pretty    string
+	raw       string
+	rawText   string
+	rawHex    string
+	rawBase64 string
+	mode      rawViewMode
+	meta      binaryview.Meta
+	ct        string
 }
 
 const rawHeavyLimit = 128 * 1024

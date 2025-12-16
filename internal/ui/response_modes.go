@@ -8,17 +8,6 @@ const (
 	rawViewBase64
 )
 
-func (m rawViewMode) next() rawViewMode {
-	switch m {
-	case rawViewText:
-		return rawViewHex
-	case rawViewHex:
-		return rawViewBase64
-	default:
-		return rawViewText
-	}
-}
-
 func (m rawViewMode) label() string {
 	switch m {
 	case rawViewHex:
