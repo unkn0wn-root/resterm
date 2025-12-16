@@ -910,6 +910,10 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.toggleHeaderPreview(), true
 	case bindings.ActionCycleRawView:
 		return m.cycleRawViewMode(), true
+	case bindings.ActionScrollResponseTop:
+		return m.scrollResponseToTop(), true
+	case bindings.ActionScrollResponseBottom:
+		return m.scrollResponseToBottom(), true
 	case bindings.ActionSaveResponseBody:
 		return m.saveResponseBody(), true
 	case bindings.ActionOpenResponseExternally:
