@@ -31,7 +31,7 @@ func (m *Model) cycleRawViewMode() tea.Cmd {
 		level: statusInfo,
 		text:  fmt.Sprintf("Raw view: %s", snap.rawMode.label()),
 	})
-	return tea.Batch(tea.ClearScreen, m.syncResponsePanes())
+	return m.syncResponsePanes()
 }
 
 func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
