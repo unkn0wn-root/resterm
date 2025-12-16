@@ -43,12 +43,16 @@ type Options struct {
 }
 
 type Response struct {
-	Message       string
-	Headers       map[string][]string
-	Trailers      map[string][]string
-	StatusCode    codes.Code
-	StatusMessage string
-	Duration      time.Duration
+	Message         string
+	Body            []byte
+	ContentType     string
+	Wire            []byte
+	WireContentType string
+	Headers         map[string][]string
+	Trailers        map[string][]string
+	StatusCode      codes.Code
+	StatusMessage   string
+	Duration        time.Duration
 }
 
 type Client struct{}
@@ -146,11 +150,13 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	duration := time.Since(start)
 
 	resp = &Response{
-		Headers:       copyMetadata(headerMD),
-		Trailers:      copyMetadata(trailerMD),
-		StatusCode:    codes.OK,
-		StatusMessage: "OK",
-		Duration:      duration,
+		Headers:         copyMetadata(headerMD),
+		Trailers:        copyMetadata(trailerMD),
+		StatusCode:      codes.OK,
+		StatusMessage:   "OK",
+		ContentType:     "application/json",
+		WireContentType: "application/grpc+proto",
+		Duration:        duration,
 	}
 
 	if invokeErr != nil {
@@ -167,6 +173,20 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode grpc response")
 	}
 	resp.Message = string(marshalled)
+	resp.Body = marshalled
+
+	if wire, err := proto.Marshal(outputMsg); err == nil {
+		resp.Wire = wire
+	}
+	if len(resp.Body) == 0 {
+		resp.Body = marshalled
+	}
+	if resp.Headers == nil {
+		resp.Headers = make(map[string][]string)
+	}
+	if len(resp.Headers["Content-Type"]) == 0 && strings.TrimSpace(resp.ContentType) != "" {
+		resp.Headers["Content-Type"] = []string{resp.ContentType}
+	}
 	return resp, nil
 }
 

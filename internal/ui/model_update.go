@@ -254,6 +254,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showResponseSaveModal {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if m.responseSaveJustOpened {
+				m.responseSaveJustOpened = false
+				return m, nil
+			}
+			switch keyMsg.String() {
+			case "esc":
+				m.closeResponseSaveModal()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			case "enter":
+				cmd := m.submitResponseSave()
+				return m, cmd
+			}
+		}
+		var inputCmd tea.Cmd
+		m.responseSaveInput, inputCmd = m.responseSaveInput.Update(msg)
+		return m, inputCmd
+	}
+
 	if m.showOpenModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			switch keyMsg.String() {
@@ -908,6 +930,16 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.copyResponseTab(), true
 	case bindings.ActionToggleHeaderPreview:
 		return m.toggleHeaderPreview(), true
+	case bindings.ActionCycleRawView:
+		return m.cycleRawViewMode(), true
+	case bindings.ActionScrollResponseTop:
+		return m.scrollShortcutToEdge(true)
+	case bindings.ActionScrollResponseBottom:
+		return m.scrollShortcutToEdge(false)
+	case bindings.ActionSaveResponseBody:
+		return m.saveResponseBody(), true
+	case bindings.ActionOpenResponseExternally:
+		return m.openResponseExternally(), true
 	default:
 		return nil, false
 	}
@@ -1498,7 +1530,7 @@ func (m *Model) resolveChord(prefix string, next string, msg tea.KeyMsg) (bool, 
 	}
 	cmd, handled := m.runShortcutBinding(binding, msg)
 	if !handled {
-		return true, nil
+		return false, nil
 	}
 	return true, cmd
 }

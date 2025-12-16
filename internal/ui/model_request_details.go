@@ -85,14 +85,25 @@ func (m *Model) requestDetailTitleFor(req *restfile.Request, doc *restfile.Docum
 	if req == nil {
 		return "Request Details"
 	}
-	title := strings.TrimSpace(m.statusRequestTitle(doc, req, m.cfg.EnvironmentName))
-	if title != "" {
-		return title
+	r := m.statusResolver(doc, req, m.cfg.EnvironmentName)
+
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if method == "" {
+		method = "REQ"
 	}
-	if name := requestDisplayName(req); name != "" {
+
+	name := expandStatusText(r, req.Metadata.Name)
+	name = strings.TrimSpace(name)
+	if name != "" {
 		return name
 	}
-	return "Request Details"
+
+	target := expandStatusText(r, req.URL)
+	target = strings.TrimSpace(target)
+	if target == "" {
+		return method
+	}
+	return fmt.Sprintf("%s %s", method, target)
 }
 
 func (m *Model) buildRequestDetailFields(req *restfile.Request, doc *restfile.Document, path string) []requestDetailField {
@@ -246,7 +257,7 @@ func formatDetailField(f requestDetailField, width int, th theme.Theme) string {
 		valueStyle = th.NavigatorSubtitle
 	}
 	prefix := labelText
-	avail := width - len(prefix)
+	avail := width - visibleWidth(prefix)
 	if avail < 8 {
 		avail = width
 	}

@@ -61,7 +61,8 @@ func TestBuildHTTPResponseViewsForWebSocket(t *testing.T) {
 	resp.Headers.Set("X-Resterm-Stream-Type", "websocket")
 	resp.Headers.Set("X-Resterm-Stream-Summary", "sent=1 recv=1 closed=client")
 
-	pretty, raw, headers := buildHTTPResponseViews(resp, nil, nil)
+	views := buildHTTPResponseViews(resp, nil, nil)
+	pretty, raw, headers := views.pretty, views.raw, views.headers
 	if pretty == "" || raw == "" || headers == "" {
 		t.Fatalf("expected response views to be populated")
 	}

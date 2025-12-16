@@ -45,6 +45,9 @@ func TestOpenRequestDetailsCapturesFields(t *testing.T) {
 	if model.requestDetailTitle == "" {
 		t.Fatalf("expected detail title to be set")
 	}
+	if model.requestDetailTitle != "Get user" {
+		t.Fatalf("expected request name only in title, got %q", model.requestDetailTitle)
+	}
 
 	body := ansi.Strip(renderDetailFields(model.requestDetailFields, 80, theme.DefaultTheme()))
 	expect := []string{

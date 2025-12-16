@@ -190,6 +190,17 @@ func (m *Model[T]) SelectFirst() {
 	m.ensureVisible()
 }
 
+// SelectLast selects the last visible row.
+func (m *Model[T]) SelectLast() {
+	if len(m.flat) == 0 {
+		m.sel = -1
+		m.offset = 0
+		return
+	}
+	m.sel = len(m.flat) - 1
+	m.ensureVisible()
+}
+
 // Selected returns the active node.
 func (m *Model[T]) Selected() *Node[T] {
 	if m.sel < 0 || m.sel >= len(m.flat) {

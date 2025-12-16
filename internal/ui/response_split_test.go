@@ -139,8 +139,10 @@ func TestComputeDiffForPrettyDetectsLeadingWhitespaceChanges(t *testing.T) {
 		EffectiveURL: "https://example.com/b",
 	}
 
-	prettyA, rawA, _ := buildHTTPResponseViews(respA, nil, nil)
-	prettyB, rawB, _ := buildHTTPResponseViews(respB, nil, nil)
+	viewsA := buildHTTPResponseViews(respA, nil, nil)
+	viewsB := buildHTTPResponseViews(respB, nil, nil)
+	prettyA, rawA := viewsA.pretty, viewsA.raw
+	prettyB, rawB := viewsB.pretty, viewsB.raw
 
 	model.responsePanes[0].snapshot = &responseSnapshot{
 		pretty: ensureTrailingNewline(prettyA),

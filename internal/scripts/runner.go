@@ -2,16 +2,19 @@ package scripts
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/dop251/goja"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -201,6 +204,7 @@ func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
 	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo, input.Trace)
+	tester.vm = vm
 	streamBinding := newStreamAPI(vm, streamInfo)
 
 	if err := bindCommon(vm); err != nil {
@@ -471,6 +475,7 @@ type testAPI struct {
 	cases     []TestResult
 	stream    *StreamInfo
 	trace     *traceBinding
+	vm        *goja.Runtime
 }
 
 func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo, trace *TraceInput) *testAPI {
@@ -623,6 +628,10 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 	seconds := 0.0
 	headers := map[string]string{}
 	kind := ""
+	ct := ""
+	wireCT := ""
+	disposition := ""
+	var meta binaryview.Meta
 	if r := api.response; r != nil {
 		body = string(r.Body)
 		status = r.Status
@@ -630,6 +639,28 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 		url = r.URL
 		seconds = r.Time.Seconds()
 		kind = string(r.Kind)
+		ct = strings.TrimSpace(r.ContentType)
+		headerCT := ""
+		if r.Header != nil {
+			headerCT = strings.TrimSpace(r.Header.Get("Content-Type"))
+		}
+		if ct == "" {
+			ct = headerCT
+		}
+		wireCT = strings.TrimSpace(r.WireContentType)
+		if wireCT == "" {
+			wireCT = ct
+		}
+		disposition = r.Header.Get("Content-Disposition")
+		metaSrc := r.Wire
+		if len(metaSrc) == 0 {
+			metaSrc = r.Body
+		}
+		metaCT := wireCT
+		if strings.TrimSpace(metaCT) == "" {
+			metaCT = ct
+		}
+		meta = binaryview.Analyze(metaSrc, metaCT)
 		for name, values := range r.Header {
 			headers[strings.ToLower(name)] = strings.Join(values, ", ")
 		}
@@ -654,12 +685,14 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"kind":       kind,
-		"status":     status,
-		"statusCode": code,
-		"url":        url,
-		"duration":   seconds,
-		"body":       body,
+		"kind":        kind,
+		"status":      status,
+		"statusCode":  code,
+		"url":         url,
+		"duration":    seconds,
+		"body":        body,
+		"contentType": ct,
+		"isBinary":    meta.Kind == binaryview.KindBinary,
 		"json": func() interface{} {
 			if api.response == nil {
 				return nil
@@ -669,6 +702,60 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 				return nil
 			}
 			return js
+		},
+		"base64": func() string {
+			if api.response == nil {
+				return ""
+			}
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			return base64.StdEncoding.EncodeToString(src)
+		},
+		"arrayBuffer": func() []byte {
+			if api.response == nil {
+				return nil
+			}
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			return append([]byte(nil), src...)
+		},
+		"bytes": func() []byte {
+			if api.response == nil {
+				return nil
+			}
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			return append([]byte(nil), src...)
+		},
+		"filename": func() string {
+			nameCT := wireCT
+			if strings.TrimSpace(nameCT) == "" {
+				nameCT = ct
+			}
+			return binaryview.FilenameHint(disposition, url, nameCT)
+		},
+		"saveBody": func(path string) bool {
+			if api.response == nil {
+				return false
+			}
+			trimmed := strings.TrimSpace(path)
+			if trimmed == "" {
+				return false
+			}
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			if err := os.WriteFile(trimmed, src, 0o644); err != nil {
+				panic(api.vm.NewGoError(err))
+			}
+			return true
 		},
 		"headers": map[string]interface{}{
 			"get": headerLookup,

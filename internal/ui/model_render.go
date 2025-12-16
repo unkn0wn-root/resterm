@@ -72,6 +72,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderRequestDetailsModal())
 	}
 
+	if m.showResponseSaveModal {
+		return m.renderWithinAppFrame(m.renderResponseSaveModal())
+	}
+
 	if m.showOpenModal {
 		return m.renderWithinAppFrame(m.renderOpenModal())
 	}
@@ -1533,7 +1537,7 @@ func (m Model) renderHeader() string {
 	if strings.TrimSpace(request) == "" {
 		request = strings.TrimSpace(m.activeRequestTitle)
 		if request == "" {
-			request = "[none]"
+			request = "∅"
 		}
 	}
 
@@ -1887,7 +1891,7 @@ func truncateToWidth(text string, maxWidth int) string {
 }
 
 func (m Model) renderRequestDetailsModal() string {
-	width := minInt(m.width-6, 96)
+	width := minInt(m.width-6, 100)
 	if width < 48 {
 		candidate := m.width - 4
 		if candidate > 0 {
@@ -2324,6 +2328,7 @@ func (m Model) renderHelpOverlay() string {
 				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleResponseSplitVert, bindings.ActionToggleResponseSplitHorz}, "Ctrl+V / Ctrl+U"), "Split response vertically / horizontally"},
 				{m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"), "Pin or unpin focused response pane"},
 				{m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"), "Copy Pretty / Raw / Headers response tab"},
+				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionScrollResponseTop, bindings.ActionScrollResponseBottom}, "gg / G"), "Response tab: top / bottom"},
 				{m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"), "Toggle request/response headers view"},
 				{"Ctrl+F or Ctrl+B, ←/→", "Send future responses to selected pane"},
 				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarWidthDecrease, bindings.ActionSidebarWidthIncrease}, "g h / g l"), "Adjust editor/response width"},
@@ -2508,6 +2513,58 @@ func (m Model) renderOpenModal() string {
 		errorLine := m.theme.Error.
 			Padding(0, 2).
 			Render(m.openPathError)
+		lines = append(lines, "", errorLine)
+	}
+	headerInfo := m.theme.HeaderValue.
+		Padding(0, 2).
+		Render(info)
+	lines = append(lines, "", headerInfo)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
+func (m Model) renderResponseSaveModal() string {
+	width := minInt(m.width-10, 72)
+	if width < 40 {
+		width = 40
+	}
+	bg := lipgloss.Color("#1c1a23")
+	inputView := lipgloss.NewStyle().
+		Width(width - 8).
+		Background(bg).
+		Render(m.responseSaveInput.View())
+	inputBox := lipgloss.NewStyle().
+		Width(width - 8).
+		Background(bg).
+		Render(inputView)
+
+	enter := m.theme.CommandBarHint.Render("Enter")
+	esc := m.theme.CommandBarHint.Render("Esc")
+	info := fmt.Sprintf("%s Save    %s Cancel", enter, esc)
+
+	lines := []string{
+		m.theme.HeaderTitle.
+			Width(width - 4).
+			Align(lipgloss.Center).
+			Render("Save Response Body"),
+		"",
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Bold(true).
+			Render("Choose a path to save the response body"),
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Render(inputBox),
+	}
+	if m.responseSaveError != "" {
+		errorLine := m.theme.Error.
+			Padding(0, 2).
+			Render(m.responseSaveError)
 		lines = append(lines, "", errorLine)
 	}
 	headerInfo := m.theme.HeaderValue.

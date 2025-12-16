@@ -488,12 +488,16 @@ func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
 		trailers[key] = append([]string(nil), values...)
 	}
 	return &grpcclient.Response{
-		Message:       resp.Message,
-		Headers:       headers,
-		Trailers:      trailers,
-		StatusCode:    resp.StatusCode,
-		StatusMessage: resp.StatusMessage,
-		Duration:      resp.Duration,
+		Message:         resp.Message,
+		Body:            append([]byte(nil), resp.Body...),
+		Wire:            append([]byte(nil), resp.Wire...),
+		ContentType:     resp.ContentType,
+		WireContentType: resp.WireContentType,
+		Headers:         headers,
+		Trailers:        trailers,
+		StatusCode:      resp.StatusCode,
+		StatusMessage:   resp.StatusMessage,
+		Duration:        resp.Duration,
 	}
 }
 

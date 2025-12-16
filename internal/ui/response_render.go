@@ -16,6 +16,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -46,6 +47,7 @@ type responseRenderedMsg struct {
 	token                 string
 	pretty                string
 	raw                   string
+	rawSummary            string
 	headers               string
 	requestHeaders        string
 	width                 int
@@ -53,6 +55,15 @@ type responseRenderedMsg struct {
 	rawWrapped            string
 	headersWrapped        string
 	requestHeadersWrapped string
+	body                  []byte
+	meta                  binaryview.Meta
+	contentType           string
+	rawText               string
+	rawHex                string
+	rawBase64             string
+	rawMode               rawViewMode
+	headersMap            http.Header
+	effectiveURL          string
 }
 
 var responseRenderSeq uint64
@@ -75,14 +86,27 @@ func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scri
 	}
 
 	targetWidth := width
+	headersMap := cloneHeaders(respCopy.Headers)
+	effectiveURL := strings.TrimSpace(respCopy.EffectiveURL)
 
 	return func() tea.Msg {
-		pretty, raw, headers := buildHTTPResponseViews(respCopy, testsCopy, scriptErr)
+		views := buildHTTPResponseViews(respCopy, testsCopy, scriptErr)
+		pretty := views.pretty
+		raw := views.raw
+		headers := views.headers
+		rawSummary := views.rawSummary
+		meta := views.meta
+		ct := views.contentType
+		rawText := views.rawText
+		rawHex := views.rawHex
+		rawBase64 := views.rawBase64
+		rawMode := views.rawMode
 		requestHeaders := buildHTTPRequestHeadersView(respCopy)
 		return responseRenderedMsg{
 			token:                 token,
 			pretty:                pretty,
 			raw:                   raw,
+			rawSummary:            rawSummary,
 			headers:               headers,
 			requestHeaders:        requestHeaders,
 			width:                 targetWidth,
@@ -90,6 +114,15 @@ func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scri
 			rawWrapped:            wrapContentForTab(responseTabRaw, raw, targetWidth),
 			headersWrapped:        wrapContentForTab(responseTabHeaders, headers, targetWidth),
 			requestHeadersWrapped: wrapContentForTab(responseTabHeaders, requestHeaders, targetWidth),
+			body:                  append([]byte(nil), respCopy.Body...),
+			meta:                  meta,
+			contentType:           ct,
+			rawText:               rawText,
+			rawHex:                rawHex,
+			rawBase64:             rawBase64,
+			rawMode:               rawMode,
+			headersMap:            headersMap,
+			effectiveURL:          effectiveURL,
 		}
 	}
 }
@@ -146,9 +179,33 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 	}
 }
 
-func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) (string, string, string) {
+type responseViews struct {
+	pretty      string
+	raw         string
+	rawSummary  string
+	headers     string
+	meta        binaryview.Meta
+	contentType string
+	rawText     string
+	rawHex      string
+	rawBase64   string
+	rawMode     rawViewMode
+}
+
+func buildHTTPResponseViews(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+) responseViews {
 	if resp == nil {
-		return noResponseMessage, noResponseMessage, noResponseMessage
+		return responseViews{
+			pretty:     noResponseMessage,
+			raw:        noResponseMessage,
+			rawSummary: "",
+			headers:    noResponseMessage,
+			meta:       binaryview.Meta{},
+			rawMode:    rawViewText,
+		}
 	}
 
 	summary := buildRespSum(resp, tests, scriptErr)
@@ -159,17 +216,8 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 	if resp.Headers != nil {
 		contentType = resp.Headers.Get("Content-Type")
 	}
-
-	prettyBodyRaw := prettifyBody(resp.Body, contentType)
-	prettyBody := trimResponseBody(prettyBodyRaw)
-	if isBodyEmpty(prettyBody) {
-		prettyBody = "<empty>"
-	}
-
-	rawBody := formatRawBody(resp.Body, contentType)
-	if isBodyEmpty(rawBody) {
-		rawBody = "<empty>"
-	}
+	meta := binaryview.Analyze(resp.Body, contentType)
+	bv := buildBodyViews(resp.Body, contentType, &meta, nil, "")
 
 	headersSectionColored := ""
 	if coloredHeaders != "" {
@@ -177,11 +225,22 @@ func buildHTTPResponseViews(resp *httpclient.Response, tests []scripts.TestResul
 	}
 
 	plainSummary := stripANSIEscape(summary)
-	prettyView := joinSections(prettySummary, prettyBody)
-	rawView := joinSections(plainSummary, rawBody)
+	prettyView := joinSections(prettySummary, bv.pretty)
+	rawView := joinSections(plainSummary, bv.raw)
 	headersView := joinSections(summary, headersSectionColored)
 
-	return prettyView, rawView, headersView
+	return responseViews{
+		pretty:      prettyView,
+		raw:         rawView,
+		rawSummary:  plainSummary,
+		headers:     headersView,
+		meta:        meta,
+		contentType: contentType,
+		rawText:     bv.rawText,
+		rawHex:      bv.rawHex,
+		rawBase64:   bv.rawBase64,
+		rawMode:     bv.mode,
+	}
 }
 
 func buildHTTPRequestHeadersView(resp *httpclient.Response) string {
@@ -252,6 +311,104 @@ func formatRawBody(body []byte, contentType string) string {
 	return trimResponseBody(formatted)
 }
 
+type bodyViews struct {
+	pretty    string
+	raw       string
+	rawText   string
+	rawHex    string
+	rawBase64 string
+	mode      rawViewMode
+	meta      binaryview.Meta
+	ct        string
+}
+
+const rawHeavyLimit = 128 * 1024
+
+func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, viewBody []byte, viewContentType string) bodyViews {
+	var detected binaryview.Meta
+	if meta == nil {
+		detected = binaryview.Analyze(body, contentType)
+		meta = &detected
+	}
+	localMeta := *meta
+
+	if len(viewBody) == 0 {
+		viewBody = body
+	}
+	if strings.TrimSpace(viewContentType) == "" {
+		viewContentType = contentType
+	}
+
+	if !bytes.Equal(viewBody, body) {
+		viewMeta := binaryview.Analyze(viewBody, viewContentType)
+		if viewMeta.Kind == binaryview.KindText {
+			localMeta = viewMeta
+		}
+		if strings.TrimSpace(localMeta.MIME) == "" {
+			localMeta.MIME = viewMeta.MIME
+		}
+		if strings.TrimSpace(localMeta.Charset) == "" {
+			localMeta.Charset = viewMeta.Charset
+		}
+	}
+
+	rawHex := ""
+	rawBase64 := ""
+	if len(body) <= rawHeavyLimit {
+		rawHex = binaryview.HexDump(body, 16)
+		rawBase64 = binaryview.Base64Lines(body, 76)
+	}
+
+	rawMode := rawViewText
+	rawText := formatRawBody(viewBody, viewContentType)
+
+	decoded := viewBody
+	if localMeta.Kind == binaryview.KindText {
+		if decodedText, ok, errStr := binaryview.DecodeText(viewBody, localMeta.Charset); ok {
+			decoded = []byte(decodedText)
+			rawText = formatRawBody(decoded, viewContentType)
+		} else if errStr != "" {
+			localMeta.DecodeErr = errStr
+		}
+	}
+
+	var prettyBody string
+	if localMeta.Kind == binaryview.KindBinary {
+		prettyBody = renderBinarySummary(localMeta)
+		rawMode = rawViewHex
+	} else {
+		prettyBody = trimResponseBody(prettifyBody(decoded, viewContentType))
+	}
+	rawMode = clampRawViewMode(localMeta, rawMode)
+	if rawMode == rawViewHex && rawHex == "" {
+		rawMode = rawViewText
+	}
+
+	if isBodyEmpty(prettyBody) {
+		prettyBody = "<empty>"
+	}
+
+	rawDefault := rawText
+	if rawMode == rawViewHex && rawHex != "" {
+		rawDefault = rawHex
+	}
+	if isBodyEmpty(rawDefault) {
+		rawDefault = "<empty>"
+	}
+
+	*meta = localMeta
+	return bodyViews{
+		pretty:    prettyBody,
+		raw:       rawDefault,
+		rawText:   rawText,
+		rawHex:    rawHex,
+		rawBase64: rawBase64,
+		mode:      rawMode,
+		meta:      localMeta,
+		ct:        viewContentType,
+	}
+}
+
 func indentRawBody(body []byte, contentType string) (string, bool) {
 	ct := strings.ToLower(contentType)
 	switch {
@@ -289,6 +446,39 @@ func indentXML(body []byte) (string, bool) {
 		return "", false
 	}
 	return buf.String(), true
+}
+
+func renderBinarySummary(meta binaryview.Meta) string {
+	lines := []string{
+		statsHeadingStyle.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
+	}
+	if strings.TrimSpace(meta.MIME) != "" {
+		lines = append(lines, renderLabelValue("MIME", strings.TrimSpace(meta.MIME), statsLabelStyle, statsValueStyle))
+	}
+	if strings.TrimSpace(meta.DecodeErr) != "" {
+		lines = append(lines, statsWarnStyle.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)))
+	}
+	if meta.PreviewHex != "" {
+		lines = append(lines, renderLabelValue("Preview hex", meta.PreviewHex, statsLabelStyle, statsMessageStyle))
+	}
+	if meta.PreviewB64 != "" {
+		lines = append(lines, renderLabelValue("Preview base64", meta.PreviewB64, statsLabelStyle, statsMessageStyle))
+	}
+	if modes := rawViewModeLabels(meta); len(modes) > 0 {
+		lines = append(lines, renderLabelValue("Raw tab", strings.Join(modes, " / "), statsLabelStyle, statsValueStyle))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func cloneHeaders(h http.Header) http.Header {
+	if h == nil {
+		return nil
+	}
+	clone := make(http.Header, len(h))
+	for k, values := range h {
+		clone[k] = append([]string(nil), values...)
+	}
+	return clone
 }
 
 func formatHTTPHeaders(headers http.Header, colored bool) string {
