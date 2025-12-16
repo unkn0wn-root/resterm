@@ -72,6 +72,10 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderRequestDetailsModal())
 	}
 
+	if m.showResponseSaveModal {
+		return m.renderWithinAppFrame(m.renderResponseSaveModal())
+	}
+
 	if m.showOpenModal {
 		return m.renderWithinAppFrame(m.renderOpenModal())
 	}
@@ -2509,6 +2513,55 @@ func (m Model) renderOpenModal() string {
 		errorLine := m.theme.Error.
 			Padding(0, 2).
 			Render(m.openPathError)
+		lines = append(lines, "", errorLine)
+	}
+	headerInfo := m.theme.HeaderValue.
+		Padding(0, 2).
+		Render(info)
+	lines = append(lines, "", headerInfo)
+
+	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
+		lipgloss.WithWhitespaceChars(" "),
+		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
+func (m Model) renderResponseSaveModal() string {
+	width := minInt(m.width-10, 72)
+	if width < 40 {
+		width = 40
+	}
+	inputView := lipgloss.NewStyle().
+		Width(width - 10).
+		Render(m.responseSaveInput.View())
+	inputBox := m.theme.BrowserBorder.
+		Width(width - 4).
+		Render(lipgloss.NewStyle().Padding(0, 1).Render(inputView))
+
+	enter := m.theme.CommandBarHint.Render("Enter")
+	esc := m.theme.CommandBarHint.Render("Esc")
+	info := fmt.Sprintf("%s Save    %s Cancel", enter, esc)
+
+	lines := []string{
+		m.theme.HeaderTitle.
+			Width(width - 4).
+			Align(lipgloss.Center).
+			Render("Save Response Body"),
+		"",
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Bold(true).
+			Render("Choose a path to save the response body"),
+		lipgloss.NewStyle().
+			Padding(0, 2).
+			Render(inputBox),
+	}
+	if m.responseSaveError != "" {
+		errorLine := m.theme.Error.
+			Padding(0, 2).
+			Render(m.responseSaveError)
 		lines = append(lines, "", errorLine)
 	}
 	headerInfo := m.theme.HeaderValue.

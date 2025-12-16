@@ -295,40 +295,45 @@ type Model struct {
 	workflowItems       []workflowListItem
 	showWorkflow        bool
 
-	width                 int
-	height                int
-	paneContentHeight     int
-	frameWidth            int
-	frameHeight           int
-	sidebarWidth          float64
-	sidebarWidthPx        int
-	responseWidthPx       int
-	sidebarSplit          float64
-	sidebarFilesHeight    int
-	sidebarRequestsHeight int
-	workflowSplit         float64
-	editorSplit           float64
-	pendingChord          string
-	pendingChordMsg       tea.KeyMsg
-	hasPendingChord       bool
-	repeatChordPrefix     string
-	repeatChordActive     bool
-	operator              operatorState
-	suppressListKey       bool
-	ready                 bool
-	dirty                 bool
-	sending               bool
-	sendCancel            context.CancelFunc
-	suppressEditorKey     bool
-	editorInsertMode      bool
-	editorWriteKeyMap     textarea.KeyMap
-	editorViewKeyMap      textarea.KeyMap
-	newFileInput          textinput.Model
-	newFileExtIndex       int
-	newFileError          string
-	newFileFromSave       bool
-	openPathInput         textinput.Model
-	openPathError         string
+	width                  int
+	height                 int
+	paneContentHeight      int
+	frameWidth             int
+	frameHeight            int
+	sidebarWidth           float64
+	sidebarWidthPx         int
+	responseWidthPx        int
+	sidebarSplit           float64
+	sidebarFilesHeight     int
+	sidebarRequestsHeight  int
+	workflowSplit          float64
+	editorSplit            float64
+	pendingChord           string
+	pendingChordMsg        tea.KeyMsg
+	hasPendingChord        bool
+	repeatChordPrefix      string
+	repeatChordActive      bool
+	operator               operatorState
+	suppressListKey        bool
+	ready                  bool
+	dirty                  bool
+	sending                bool
+	sendCancel             context.CancelFunc
+	suppressEditorKey      bool
+	editorInsertMode       bool
+	editorWriteKeyMap      textarea.KeyMap
+	editorViewKeyMap       textarea.KeyMap
+	newFileInput           textinput.Model
+	newFileExtIndex        int
+	newFileError           string
+	newFileFromSave        bool
+	openPathInput          textinput.Model
+	openPathError          string
+	responseSaveInput      textinput.Model
+	responseSaveError      string
+	showResponseSaveModal  bool
+	responseSaveJustOpened bool
+	lastResponseSaveDir    string
 
 	fileStale            bool
 	fileMissing          bool
@@ -456,6 +461,12 @@ func New(cfg Config) Model {
 	openPathInput.CharLimit = 0
 	openPathInput.Prompt = ""
 	openPathInput.SetCursor(0)
+
+	responseSaveInput := textinput.New()
+	responseSaveInput.Placeholder = "~/Downloads/response.bin"
+	responseSaveInput.CharLimit = 0
+	responseSaveInput.Prompt = ""
+	responseSaveInput.SetCursor(0)
 
 	searchInput := textinput.New()
 	searchInput.Placeholder = "pattern"
@@ -610,6 +621,7 @@ func New(cfg Config) Model {
 		editorViewKeyMap:         viewKeyMap,
 		newFileInput:             newFileInput,
 		openPathInput:            openPathInput,
+		responseSaveInput:        responseSaveInput,
 		searchInput:              searchInput,
 		searchTarget:             searchTargetEditor,
 		streamMgr:                stream.NewManager(),
@@ -648,6 +660,9 @@ func New(cfg Config) Model {
 	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
 	model.applyThemeToLists()
+	if strings.TrimSpace(model.workspaceRoot) != "" && strings.TrimSpace(model.lastResponseSaveDir) == "" {
+		model.lastResponseSaveDir = model.workspaceRoot
+	}
 
 	return model
 }

@@ -14,43 +14,60 @@ import (
 )
 
 func (m *Model) saveResponseBody() tea.Cmd {
+	return m.openResponseSaveModal()
+}
+
+func (m *Model) openResponseSaveModal() tea.Cmd {
 	snapshot, status := m.activeResponseSnapshot()
 	if status != nil {
 		msg := *status
 		return func() tea.Msg { return msg }
 	}
-	body := snapshot.body
-	if len(body) == 0 {
+
+	if len(snapshot.body) == 0 {
 		m.setStatusMessage(statusMsg{level: statusInfo, text: "No response body to save"})
 		return nil
 	}
 
-	dir := m.workspaceRoot
-	if strings.TrimSpace(dir) == "" {
+	m.showResponseSaveModal = true
+	m.responseSaveError = ""
+	m.responseSaveInput.SetValue(m.defaultResponseSavePath(snapshot))
+	m.responseSaveInput.CursorEnd()
+	m.responseSaveInput.Focus()
+	m.responseSaveJustOpened = true
+	m.showHelp = false
+	m.showEnvSelector = false
+	m.showThemeSelector = false
+	m.closeOpenModal()
+	m.closeNewFileModal()
+	return nil
+}
+
+func (m *Model) closeResponseSaveModal() {
+	m.showResponseSaveModal = false
+	m.responseSaveError = ""
+	m.responseSaveJustOpened = false
+	m.responseSaveInput.Blur()
+	m.responseSaveInput.SetValue("")
+}
+
+func (m *Model) defaultResponseSavePath(snapshot *responseSnapshot) string {
+	base := strings.TrimSpace(m.lastResponseSaveDir)
+	if base == "" {
+		base = strings.TrimSpace(m.workspaceRoot)
+	}
+	if base == "" {
 		if cwd, err := os.Getwd(); err == nil {
-			dir = cwd
+			base = cwd
 		} else {
-			dir = "."
+			base = "."
 		}
 	}
-
 	name := suggestResponseFilename(snapshot)
-	path := filepath.Join(dir, name)
-	finalPath, err := ensureUniquePath(path)
-	if err != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Save failed: %v", err)})
-		return nil
+	if strings.TrimSpace(name) == "" {
+		name = "response.bin"
 	}
-	if err := os.WriteFile(finalPath, body, 0o644); err != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("Save failed: %v", err)})
-		return nil
-	}
-
-	m.setStatusMessage(statusMsg{
-		level: statusInfo,
-		text:  fmt.Sprintf("Saved response body (%s) to %s", formatByteSize(int64(len(body))), finalPath),
-	})
-	return nil
+	return filepath.Join(base, name)
 }
 
 func (m *Model) openResponseExternally() tea.Cmd {
@@ -97,6 +114,75 @@ func (m *Model) openResponseExternally() tea.Cmd {
 		text:  fmt.Sprintf("Opening response body in external app (%s)", filepath.Base(tmpPath)),
 	})
 	return nil
+}
+
+func (m *Model) submitResponseSave() tea.Cmd {
+	snapshot, status := m.activeResponseSnapshot()
+	if status != nil {
+		msg := *status
+		m.responseSaveError = msg.text
+		return nil
+	}
+	body := snapshot.body
+	if len(body) == 0 {
+		m.responseSaveError = "No response body to save"
+		return nil
+	}
+
+	input := strings.TrimSpace(m.responseSaveInput.Value())
+	if input == "" {
+		m.responseSaveError = "Enter a path"
+		return nil
+	}
+	resolved, err := m.resolveResponseSavePath(input)
+	if err != nil {
+		m.responseSaveError = err.Error()
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(resolved), 0o755); err != nil {
+		m.responseSaveError = fmt.Sprintf("create directories: %v", err)
+		return nil
+	}
+	finalPath, err := ensureUniquePath(resolved)
+	if err != nil {
+		m.responseSaveError = fmt.Sprintf("resolve path: %v", err)
+		return nil
+	}
+	if err := os.WriteFile(finalPath, body, 0o644); err != nil {
+		m.responseSaveError = fmt.Sprintf("save failed: %v", err)
+		return nil
+	}
+
+	m.lastResponseSaveDir = filepath.Dir(finalPath)
+	m.closeResponseSaveModal()
+	m.setStatusMessage(statusMsg{
+		level: statusInfo,
+		text:  fmt.Sprintf("Saved response body (%s) to %s", formatByteSize(int64(len(body))), finalPath),
+	})
+	return nil
+}
+
+func (m *Model) resolveResponseSavePath(input string) (string, error) {
+	path := expandHome(input)
+	if !filepath.IsAbs(path) {
+		base := strings.TrimSpace(m.lastResponseSaveDir)
+		if base == "" {
+			base = strings.TrimSpace(m.workspaceRoot)
+		}
+		if base == "" {
+			if cwd, err := os.Getwd(); err == nil {
+				base = cwd
+			}
+		}
+		if base != "" {
+			path = filepath.Join(base, path)
+		}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", fmt.Errorf("resolve path: %w", err)
+	}
+	return abs, nil
 }
 
 func (m *Model) activeResponseSnapshot() (*responseSnapshot, *statusMsg) {

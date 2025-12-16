@@ -254,6 +254,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
+	if m.showResponseSaveModal {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if m.responseSaveJustOpened {
+				m.responseSaveJustOpened = false
+				return m, nil
+			}
+			switch keyMsg.String() {
+			case "esc":
+				m.closeResponseSaveModal()
+				return m, nil
+			case "ctrl+q", "ctrl+d":
+				return m, tea.Quit
+			case "enter":
+				cmd := m.submitResponseSave()
+				return m, cmd
+			}
+		}
+		var inputCmd tea.Cmd
+		m.responseSaveInput, inputCmd = m.responseSaveInput.Update(msg)
+		return m, inputCmd
+	}
+
 	if m.showOpenModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			switch keyMsg.String() {
