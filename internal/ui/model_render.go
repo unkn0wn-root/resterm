@@ -2533,12 +2533,15 @@ func (m Model) renderResponseSaveModal() string {
 	if width < 40 {
 		width = 40
 	}
+	bg := lipgloss.Color("#1c1a23")
 	inputView := lipgloss.NewStyle().
-		Width(width - 10).
+		Width(width - 8).
+		Background(bg).
 		Render(m.responseSaveInput.View())
-	inputBox := m.theme.BrowserBorder.
-		Width(width - 4).
-		Render(lipgloss.NewStyle().Padding(0, 1).Render(inputView))
+	inputBox := lipgloss.NewStyle().
+		Width(width - 8).
+		Background(bg).
+		Render(inputView)
 
 	enter := m.theme.CommandBarHint.Render("Enter")
 	esc := m.theme.CommandBarHint.Render("Esc")
