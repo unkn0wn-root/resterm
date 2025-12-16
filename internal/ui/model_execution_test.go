@@ -301,7 +301,7 @@ func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	body := []byte{0x00, 0x01, 0x02, 0x03}
+	wire := []byte{0x00, 0x01, 0x02, 0x03}
 	req := &restfile.Request{
 		Method: "GRPC",
 		GRPC: &restfile.GRPCRequest{
@@ -309,11 +309,13 @@ func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
 		},
 	}
 	resp := &grpcclient.Response{
-		StatusCode:    codes.OK,
-		StatusMessage: "OK",
-		Message:       "{}",
-		Body:          body,
-		ContentType:   "application/octet-stream",
+		StatusCode:      codes.OK,
+		StatusMessage:   "OK",
+		Message:         `{"ok":true}`,
+		Body:            []byte(`{"ok":true}`),
+		Wire:            wire,
+		ContentType:     "application/json",
+		WireContentType: "application/grpc+proto",
 	}
 
 	cmd := model.consumeGRPCResponse(resp, nil, nil, req, "")
@@ -334,7 +336,7 @@ func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
 	if snap.rawHex == "" {
 		t.Fatalf("expected hex dump to remain available")
 	}
-	if !strings.Contains(snap.raw, "{}") {
+	if !strings.Contains(snap.raw, "{") {
 		t.Fatalf("expected raw view to show json message, got %q", snap.raw)
 	}
 }

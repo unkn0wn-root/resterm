@@ -499,17 +499,29 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 		statusLine += " (" + resp.StatusMessage + ")"
 	}
 
-	body := append([]byte(nil), resp.Body...)
-	viewBody := body
-	viewContentType := contentType
-	if strings.TrimSpace(resp.Message) != "" {
+	viewBody := append([]byte(nil), resp.Body...)
+	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
 		viewBody = []byte(resp.Message)
-		if strings.TrimSpace(viewContentType) == "" || strings.Contains(strings.ToLower(viewContentType), "grpc") {
-			viewContentType = "application/json"
-		}
 	}
-	meta := binaryview.Analyze(body, contentType)
-	bv := buildBodyViews(body, viewContentType, &meta, viewBody, viewContentType)
+	viewContentType := strings.TrimSpace(resp.ContentType)
+	if viewContentType == "" && len(viewBody) > 0 {
+		viewContentType = "application/json"
+	}
+
+	rawBody := append([]byte(nil), resp.Wire...)
+	if len(rawBody) == 0 {
+		rawBody = append([]byte(nil), viewBody...)
+	}
+	rawContentType := strings.TrimSpace(resp.WireContentType)
+	if rawContentType == "" {
+		rawContentType = contentType
+	}
+	if rawContentType == "" {
+		rawContentType = viewContentType
+	}
+
+	meta := binaryview.Analyze(viewBody, viewContentType)
+	bv := buildBodyViews(rawBody, rawContentType, &meta, viewBody, viewContentType)
 
 	snapshot := &responseSnapshot{
 		pretty:      joinSections(statusLine, bv.pretty),
@@ -518,9 +530,9 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 		headers:     joinSections(statusLine, headersContent),
 		ready:       true,
 		environment: environment,
-		body:        body,
+		body:        rawBody,
 		bodyMeta:    meta,
-		contentType: viewContentType,
+		contentType: rawContentType,
 		rawText:     bv.rawText,
 		rawHex:      bv.rawHex,
 		rawBase64:   bv.rawBase64,

@@ -217,6 +217,46 @@ client.test("response stream access", function () {
 	}
 }
 
+func TestResponseAPIUsesWireForBinary(t *testing.T) {
+	runner := NewRunner(nil)
+	response := &Response{
+		Kind:            ResponseKindGRPC,
+		Status:          "0 OK",
+		Code:            0,
+		Header:          http.Header{"Content-Type": {"application/json"}},
+		Body:            []byte(`{"ok":true}`),
+		Wire:            []byte{0x00, 0xFF},
+		WireContentType: "application/grpc+proto",
+	}
+
+	script := `client.test("wire preferred", function () {
+  tests.assert(response.base64() === "AP8=", "base64 uses wire");
+  tests.assert(response.bytes().length === 2, "bytes length");
+  tests.assert(response.isBinary === true, "binary flag");
+  const js = response.json();
+  tests.assert(js.ok === true, "json parsed from body");
+});`
+
+	results, globals, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{
+		Response:  response,
+		Variables: map[string]string{},
+	})
+	if err != nil {
+		t.Fatalf("run tests: %v", err)
+	}
+	if globals != nil {
+		t.Fatalf("expected no globals, got %+v", globals)
+	}
+	if len(results) != 5 {
+		t.Fatalf("expected five results (four asserts + wrapper), got %d", len(results))
+	}
+	for _, res := range results {
+		if !res.Passed {
+			t.Fatalf("expected tests to pass, got %+v", results)
+		}
+	}
+}
+
 func TestPreRequestGlobalSetAndDelete(t *testing.T) {
 	runner := NewRunner(nil)
 	blocks := []restfile.ScriptBlock{{

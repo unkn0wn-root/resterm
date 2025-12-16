@@ -629,6 +629,7 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 	headers := map[string]string{}
 	kind := ""
 	ct := ""
+	wireCT := ""
 	disposition := ""
 	var meta binaryview.Meta
 	if r := api.response; r != nil {
@@ -638,12 +639,28 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 		url = r.URL
 		seconds = r.Time.Seconds()
 		kind = string(r.Kind)
-		ct = r.Header.Get("Content-Type")
-		if strings.TrimSpace(ct) == "" && strings.TrimSpace(r.ContentType) != "" {
-			ct = r.ContentType
+		ct = strings.TrimSpace(r.ContentType)
+		headerCT := ""
+		if r.Header != nil {
+			headerCT = strings.TrimSpace(r.Header.Get("Content-Type"))
+		}
+		if ct == "" {
+			ct = headerCT
+		}
+		wireCT = strings.TrimSpace(r.WireContentType)
+		if wireCT == "" {
+			wireCT = ct
 		}
 		disposition = r.Header.Get("Content-Disposition")
-		meta = binaryview.Analyze(r.Body, ct)
+		metaSrc := r.Wire
+		if len(metaSrc) == 0 {
+			metaSrc = r.Body
+		}
+		metaCT := wireCT
+		if strings.TrimSpace(metaCT) == "" {
+			metaCT = ct
+		}
+		meta = binaryview.Analyze(metaSrc, metaCT)
 		for name, values := range r.Header {
 			headers[strings.ToLower(name)] = strings.Join(values, ", ")
 		}
@@ -690,22 +707,38 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 			if api.response == nil {
 				return ""
 			}
-			return base64.StdEncoding.EncodeToString(api.response.Body)
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			return base64.StdEncoding.EncodeToString(src)
 		},
 		"arrayBuffer": func() []byte {
 			if api.response == nil {
 				return nil
 			}
-			return append([]byte(nil), api.response.Body...)
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			return append([]byte(nil), src...)
 		},
 		"bytes": func() []byte {
 			if api.response == nil {
 				return nil
 			}
-			return append([]byte(nil), api.response.Body...)
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			return append([]byte(nil), src...)
 		},
 		"filename": func() string {
-			return binaryview.FilenameHint(disposition, url, ct)
+			nameCT := wireCT
+			if strings.TrimSpace(nameCT) == "" {
+				nameCT = ct
+			}
+			return binaryview.FilenameHint(disposition, url, nameCT)
 		},
 		"saveBody": func(path string) bool {
 			if api.response == nil {
@@ -715,7 +748,11 @@ func (api *testAPI) responseAPI() map[string]interface{} {
 			if trimmed == "" {
 				return false
 			}
-			if err := os.WriteFile(trimmed, api.response.Body, 0o644); err != nil {
+			src := api.response.Wire
+			if len(src) == 0 {
+				src = api.response.Body
+			}
+			if err := os.WriteFile(trimmed, src, 0o644); err != nil {
 				panic(api.vm.NewGoError(err))
 			}
 			return true

@@ -13,14 +13,16 @@ const (
 )
 
 type Response struct {
-	Kind   ResponseKind
-	Status string
-	Code   int
-	URL    string
-	Time   time.Duration
-	Header http.Header
-	Body   []byte
-	// ContentType carries the best-known type for the payload (may be empty).
+	Kind            ResponseKind
+	Status          string
+	Code            int
+	URL             string
+	Time            time.Duration
+	Header          http.Header
+	Body            []byte
+	Wire            []byte
+	WireContentType string
+	// ContentType carries the best-known type for the Body payload (may be empty).
 	ContentType string
 }
 
@@ -44,5 +46,6 @@ func (r *Response) Clone() *Response {
 	clone := *r
 	clone.Header = copyHeaders(r.Header)
 	clone.Body = append([]byte(nil), r.Body...)
+	clone.Wire = append([]byte(nil), r.Wire...)
 	return &clone
 }

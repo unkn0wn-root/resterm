@@ -643,6 +643,12 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 	if len(body) == 0 && strings.TrimSpace(resp.Message) != "" {
 		body = []byte(resp.Message)
 	}
+	wire := append([]byte(nil), resp.Wire...)
+	wireCT := strings.TrimSpace(resp.WireContentType)
+	ct := strings.TrimSpace(resp.ContentType)
+	if ct == "" {
+		ct = "application/json"
+	}
 
 	headers := make(http.Header)
 	for name, values := range resp.Headers {
@@ -656,7 +662,7 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 			headers.Add(key, value)
 		}
 	}
-	if ct := strings.TrimSpace(resp.ContentType); ct != "" && headers.Get("Content-Type") == "" {
+	if headers.Get("Content-Type") == "" && ct != "" {
 		headers.Set("Content-Type", ct)
 	}
 
@@ -671,19 +677,16 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 	}
 
 	return &scripts.Response{
-		Kind:   scripts.ResponseKindGRPC,
-		Status: status,
-		Code:   int(resp.StatusCode),
-		URL:    target,
-		Time:   resp.Duration,
-		Header: headers,
-		Body:   body,
-		ContentType: func() string {
-			if ct := strings.TrimSpace(resp.ContentType); ct != "" {
-				return ct
-			}
-			return headers.Get("Content-Type")
-		}(),
+		Kind:            scripts.ResponseKindGRPC,
+		Status:          status,
+		Code:            int(resp.StatusCode),
+		URL:             target,
+		Time:            resp.Duration,
+		Header:          headers,
+		Body:            body,
+		Wire:            wire,
+		WireContentType: wireCT,
+		ContentType:     ct,
 	}
 }
 
