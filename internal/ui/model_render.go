@@ -1887,7 +1887,7 @@ func truncateToWidth(text string, maxWidth int) string {
 }
 
 func (m Model) renderRequestDetailsModal() string {
-	width := minInt(m.width-6, 96)
+	width := minInt(m.width-6, 100)
 	if width < 48 {
 		candidate := m.width - 4
 		if candidate > 0 {

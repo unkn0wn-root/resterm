@@ -911,9 +911,9 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionCycleRawView:
 		return m.cycleRawViewMode(), true
 	case bindings.ActionScrollResponseTop:
-		return m.scrollResponseToTop(), true
+		return m.scrollShortcutToEdge(true)
 	case bindings.ActionScrollResponseBottom:
-		return m.scrollResponseToBottom(), true
+		return m.scrollShortcutToEdge(false)
 	case bindings.ActionSaveResponseBody:
 		return m.saveResponseBody(), true
 	case bindings.ActionOpenResponseExternally:
@@ -1508,7 +1508,7 @@ func (m *Model) resolveChord(prefix string, next string, msg tea.KeyMsg) (bool, 
 	}
 	cmd, handled := m.runShortcutBinding(binding, msg)
 	if !handled {
-		return true, nil
+		return false, nil
 	}
 	return true, cmd
 }
