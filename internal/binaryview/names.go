@@ -8,11 +8,11 @@ import (
 )
 
 // FilenameHint tries to figure out a good filename for saving a response.
-// We check multiple sources in order:
-// 1. Content-Disposition header (server's explicit suggestion)
-// 2. URL path (often contains the actual filename)
-// 3. MIME type (to at least get the right extension)
-// 4. Fall back to "response.bin" if all else fails
+// Order:
+// 1) Content-Disposition header
+// 2) URL path
+// 3) MIME type extension
+// 4) Fallback to "response.bin"
 func FilenameHint(disposition, rawURL, mimeType string) string {
 	name := filenameFromDisposition(disposition)
 	if name == "" {
@@ -20,6 +20,7 @@ func FilenameHint(disposition, rawURL, mimeType string) string {
 	}
 
 	ext := extensionForMIME(mimeType)
+
 	if name == "" {
 		name = "response"
 	}
@@ -32,10 +33,12 @@ func FilenameHint(disposition, rawURL, mimeType string) string {
 	return sanitizeFilename(name)
 }
 
-// filenameFromDisposition extracts filename from Content-Disposition header.
-// Servers can use either "filename" (ASCII only) or "filename*" (RFC 5987,
-// supports unicode). We prefer filename* when present since it handles
-// international characters properly.
+// filenameFromDisposition extracts filename from Content-Disposition.
+//
+// In Go (after reading source code - yeah, sometimes you must),
+// mime.ParseMediaType already decodes RFC 5987/RFC 2231
+// parameters (like filename*) and stores the decoded result in params["filename"].
+// So we should read params["filename"], not params["filename*"].
 func filenameFromDisposition(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
@@ -45,35 +48,11 @@ func filenameFromDisposition(value string) string {
 	if err != nil {
 		return ""
 	}
-	if v := params["filename*"]; v != "" {
-		if decoded := decodeRFC5987(v); decoded != "" {
-			return decoded
-		}
-	}
-	if v := params["filename"]; v != "" {
+	// this may already be the decoded filename* value when present.
+	if v := strings.TrimSpace(params["filename"]); v != "" {
 		return sanitizeFilename(v)
 	}
 	return ""
-}
-
-// decodeRFC5987 handles the extended filename encoding from RFC 5987.
-// Format is: charset'language'percent-encoded-value
-// Examplee: utf-8”%E4%B8%AD%E6%96%87.pdf -> 中文.pdf (got this from google translate :))
-// This exists because HTTP headers are ASCII-only, so unicode filenames
-// need special encoding. Without this, downloading "données.xlsx" from
-// a french server would give us garbage.
-func decodeRFC5987(value string) string {
-	parts := strings.SplitN(value, "''", 2)
-	raw := value
-	if len(parts) == 2 {
-		raw = parts[1]
-	}
-
-	decoded, err := url.QueryUnescape(raw)
-	if err != nil {
-		return ""
-	}
-	return sanitizeFilename(decoded)
 }
 
 func filenameFromURL(rawURL string) string {
@@ -87,21 +66,40 @@ func filenameFromURL(rawURL string) string {
 		return ""
 	}
 	base := path.Base(parsed.Path)
-	return sanitizeFilename(base)
-}
 
-func extensionForMIME(mimeType string) string {
-	if strings.TrimSpace(mimeType) == "" {
+	// avoid returning "/" or "." which sanitize into "_" or "" and look broken.
+	if base == "" || base == "/" || base == "." {
 		return ""
 	}
 
-	exts, err := mime.ExtensionsByType(mimeType)
+	name := sanitizeFilename(base)
+
+	// special-case: "/" sanitizes to "_" in our sanitizer - treat that as empty.
+	if name == "" || name == "_" {
+		return ""
+	}
+
+	return name
+}
+
+func extensionForMIME(mimeType string) string {
+	mt := strings.TrimSpace(mimeType)
+	if mt == "" {
+		return ""
+	}
+
+	// "application/json; charset=utf-8"
+	if mediaType, _, err := mime.ParseMediaType(mt); err == nil && mediaType != "" {
+		mt = mediaType
+	}
+
+	exts, err := mime.ExtensionsByType(mt)
 	if err != nil || len(exts) == 0 {
 		return ""
 	}
 	for _, ext := range exts {
-		if strings.TrimSpace(ext) != "" {
-			return ext
+		if e := strings.TrimSpace(ext); e != "" {
+			return e
 		}
 	}
 	return ""
