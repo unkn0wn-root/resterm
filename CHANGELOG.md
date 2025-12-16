@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.2](https://github.com/unkn0wn-root/resterm/compare/v0.11.1...v0.11.2) (2025-12-16)
+
+
+### Bug Fixes
+
+* add new bin response motions to help modal ([d78fdf9](https://github.com/unkn0wn-root/resterm/commit/d78fdf997756aa8355c9a200341c4a86859441db))
+
 ### [0.11.1](https://github.com/unkn0wn-root/resterm/compare/v0.11.0...v0.11.1) (2025-12-16)
 
 
