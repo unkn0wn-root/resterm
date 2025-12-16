@@ -594,13 +594,20 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 	secrets := m.secretValuesForRedaction(req)
 	maskHeaders := !req.Metadata.AllowSensitiveHeaders
 
-	snippet := string(resp.Body)
-	if req.Metadata.NoLog {
-		snippet = "<body suppressed>"
-	} else {
-		snippet = redactHistoryText(snippet, secrets, false)
-		if len(snippet) > 2000 {
-			snippet = snippet[:2000]
+	snippet := "<body suppressed>"
+	if !req.Metadata.NoLog {
+		ct := ""
+		if resp.Headers != nil {
+			ct = resp.Headers.Get("Content-Type")
+		}
+		meta := binaryview.Analyze(resp.Body, ct)
+		if meta.Kind == binaryview.KindBinary || !meta.Printable {
+			snippet = formatBinaryHistorySnippet(meta, len(resp.Body))
+		} else {
+			snippet = redactHistoryText(string(resp.Body), secrets, false)
+			if len(snippet) > 2000 {
+				snippet = snippet[:2000]
+			}
 		}
 	}
 	desc := strings.TrimSpace(req.Metadata.Description)
@@ -629,6 +636,15 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
+}
+
+func formatBinaryHistorySnippet(meta binaryview.Meta, size int) string {
+	sizeText := formatByteSize(int64(size))
+	mime := strings.TrimSpace(meta.MIME)
+	if mime != "" {
+		return fmt.Sprintf("<binary body %s, %s>", sizeText, mime)
+	}
+	return fmt.Sprintf("<binary body %s>", sizeText)
 }
 
 func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Request, requestText string, environment string) {
