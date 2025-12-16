@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.1](https://github.com/unkn0wn-root/resterm/compare/v0.11.0...v0.11.1) (2025-12-16)
+
+
+### Features
+
+* add gg/G jump up/down for each pane ([eba92c6](https://github.com/unkn0wn-root/resterm/commit/eba92c63784f7887aee0ce22d2954fcb758b4845))
+* add quick jump (gg/G) in response tab ([e203244](https://github.com/unkn0wn-root/resterm/commit/e203244a2d894163f82c9086215fab47652bd410))
+* input box for saving binary response ([d79d00a](https://github.com/unkn0wn-root/resterm/commit/d79d00af8098cefee750493300ecf91a5cb415ca))
+
+
+### Bug Fixes
+
+* keep grpc responses json friendly while exposing wire bytes ([f762bbe](https://github.com/unkn0wn-root/resterm/commit/f762bbe1582d7a4f6a781745695120987e5e934c))
+* resync panes without clearing the whole terminal ([360f243](https://github.com/unkn0wn-root/resterm/commit/360f2434d4f311ef6dc11171db2f7d1094bb259f))
+
 ## [0.11.0](https://github.com/unkn0wn-root/resterm/compare/v0.10.5...v0.11.0) (2025-12-15)
 
 
