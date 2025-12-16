@@ -451,22 +451,22 @@ func indentXML(body []byte) (string, bool) {
 
 func renderBinarySummary(meta binaryview.Meta) string {
 	lines := []string{
-		fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size))),
+		statsHeadingStyle.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
 	}
 	if strings.TrimSpace(meta.MIME) != "" {
-		lines = append(lines, "MIME: "+strings.TrimSpace(meta.MIME))
+		lines = append(lines, renderLabelValue("MIME", strings.TrimSpace(meta.MIME), statsLabelStyle, statsValueStyle))
 	}
 	if strings.TrimSpace(meta.DecodeErr) != "" {
-		lines = append(lines, "Decode warning: "+strings.TrimSpace(meta.DecodeErr))
+		lines = append(lines, statsWarnStyle.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)))
 	}
 	if meta.PreviewHex != "" {
-		lines = append(lines, "Preview hex: "+meta.PreviewHex)
+		lines = append(lines, renderLabelValue("Preview hex", meta.PreviewHex, statsLabelStyle, statsMessageStyle))
 	}
 	if meta.PreviewB64 != "" {
-		lines = append(lines, "Preview base64: "+meta.PreviewB64)
+		lines = append(lines, renderLabelValue("Preview base64", meta.PreviewB64, statsLabelStyle, statsMessageStyle))
 	}
 	if modes := rawViewModeLabels(meta); len(modes) > 0 {
-		lines = append(lines, "Raw tab: "+strings.Join(modes, " / "))
+		lines = append(lines, renderLabelValue("Raw tab", strings.Join(modes, " / "), statsLabelStyle, statsValueStyle))
 	}
 	return strings.Join(lines, "\n")
 }
