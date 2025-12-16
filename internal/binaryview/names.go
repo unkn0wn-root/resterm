@@ -7,6 +7,12 @@ import (
 	"strings"
 )
 
+// FilenameHint tries to figure out a good filename for saving a response.
+// We check multiple sources in order:
+// 1. Content-Disposition header (server's explicit suggestion)
+// 2. URL path (often contains the actual filename)
+// 3. MIME type (to at least get the right extension)
+// 4. Fall back to "response.bin" if all else fails
 func FilenameHint(disposition, rawURL, mimeType string) string {
 	name := filenameFromDisposition(disposition)
 	if name == "" {
@@ -26,6 +32,10 @@ func FilenameHint(disposition, rawURL, mimeType string) string {
 	return sanitizeFilename(name)
 }
 
+// filenameFromDisposition extracts filename from Content-Disposition header.
+// Servers can use either "filename" (ASCII only) or "filename*" (RFC 5987,
+// supports unicode). We prefer filename* when present since it handles
+// international characters properly.
 func filenameFromDisposition(value string) string {
 	if strings.TrimSpace(value) == "" {
 		return ""
@@ -46,8 +56,13 @@ func filenameFromDisposition(value string) string {
 	return ""
 }
 
+// decodeRFC5987 handles the extended filename encoding from RFC 5987.
+// Format is: charset'language'percent-encoded-value
+// Examplee: utf-8”%E4%B8%AD%E6%96%87.pdf -> 中文.pdf (got this from google translate :))
+// This exists because HTTP headers are ASCII-only, so unicode filenames
+// need special encoding. Without this, downloading "données.xlsx" from
+// a french server would give us garbage.
 func decodeRFC5987(value string) string {
-	// ex: utf-8''filename.jpg
 	parts := strings.SplitN(value, "''", 2)
 	raw := value
 	if len(parts) == 2 {

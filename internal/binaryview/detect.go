@@ -13,6 +13,8 @@ import (
 	"golang.org/x/net/html/charset"
 )
 
+// These MIME types are technically not "text/*" but everyone treats them as text.
+// Without this list, "application/json" would show up as binary gibberish.
 var textMIMESubstrings = []string{
 	"json",
 	"xml",
@@ -43,9 +45,17 @@ type Meta struct {
 }
 
 const (
+	// We only scan the first 1KB to decide if something is text or binary.
+	// Scanning the whole body would be slow for large files, and the first
+	// chunk is usually enough to tell - binary files have junk bytes early on.
 	printableSampleLimit = 1024
-	printableThreshold   = 0.95
-	previewByteLimit     = 96
+
+	// 95% printable chars = text. We allow some slack because "real worldd" text
+	// files sometimes have a few stray bytes (BOM, weird line endings, etc).
+	printableThreshold = 0.95
+
+	// Preview limit for hex/base64 snippets shown in the UI summary.
+	previewByteLimit = 96
 )
 
 func Analyze(body []byte, contentType string) Meta {
@@ -84,6 +94,10 @@ func DecodeText(body []byte, charsetLabel string) (string, bool, string) {
 	return string(decoded), true, ""
 }
 
+// decideKind figures out if we should treat response as text or binary.
+// Priority: trust MIME type first, fall back to byte analysis if unknown.
+// This matters because some servers lie about Content-Type, so we double check
+// with actual byte inspection when the MIME says binary but content looks like text.
 func decideKind(mimeType string, printable bool) Kind {
 	if mimeType != "" {
 		if isTextMIME(mimeType) {
@@ -129,6 +143,10 @@ func isTextMIME(mimeType string) bool {
 	return false
 }
 
+// isLikelyPrintable does a quick UTF-8 validity check on the body.
+// If we hit an invalid UTF-8 sequence, it's definitely binary. Otherwise
+// we count printable vs non-printable runes and use a threshold.
+// This catches edge cases where Content-Type is missing or wrong.
 func isLikelyPrintable(body []byte) bool {
 	if len(body) == 0 {
 		return true
@@ -143,6 +161,7 @@ func isLikelyPrintable(body []byte) bool {
 	total := 0
 	for len(sample) > 0 {
 		r, size := utf8.DecodeRune(sample)
+		// Invalid UTF-8 byte sequence - almost certainly binary data.
 		if r == utf8.RuneError && size == 1 {
 			return false
 		}
@@ -158,6 +177,10 @@ func isLikelyPrintable(body []byte) bool {
 	return float64(printable)/float64(total) >= printableThreshold
 }
 
+// isAllowedRune decides if a character is "printable" for our purposes.
+// We allow common whitespace (tabs, newlines) because text files have those.
+// Everything else must be a visible graphic character - control codes like
+// NUL, BEL, ESC etc. are signs of binary data.
 func isAllowedRune(r rune) bool {
 	if r == '\n' || r == '\r' || r == '\t' {
 		return true
