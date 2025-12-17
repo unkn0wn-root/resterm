@@ -99,6 +99,69 @@ func TestApplyRawViewModeKeepsSummary(t *testing.T) {
 	}
 }
 
+func TestApplyRawViewModeNoDuplicateSummaryOnEmpty(t *testing.T) {
+	summary := "Status: 204 No Content"
+	snap := &responseSnapshot{
+		rawSummary: summary,
+		raw:        joinSections(summary, "<empty>"),
+		rawMode:    rawViewText,
+		ready:      true,
+	}
+
+	applyRawViewMode(snap, rawViewText)
+
+	if strings.Count(snap.raw, summary) != 1 {
+		t.Fatalf("expected summary to appear once, got %q", snap.raw)
+	}
+	if !strings.Contains(snap.raw, "<empty>") {
+		t.Fatalf("expected empty placeholder to remain, got %q", snap.raw)
+	}
+}
+
+func TestApplyRawViewModePreservesPrebuiltRawWithoutBody(t *testing.T) {
+	t.Run("no summary", func(t *testing.T) {
+		raw := "Request Error\nDetails: failed to connect"
+		snap := &responseSnapshot{
+			raw:     raw,
+			rawMode: rawViewText,
+			ready:   true,
+		}
+
+		applyRawViewMode(snap, rawViewText)
+
+		if snap.raw != raw {
+			t.Fatalf("expected raw content to remain unchanged, got %q", snap.raw)
+		}
+		if snap.rawText != raw {
+			t.Fatalf("expected rawText to capture existing content, got %q", snap.rawText)
+		}
+	})
+
+	t.Run("with summary", func(t *testing.T) {
+		summary := "Request Error"
+		detail := "Details: failed to connect"
+		raw := joinSections(summary, detail)
+		snap := &responseSnapshot{
+			rawSummary: summary,
+			raw:        raw,
+			rawMode:    rawViewText,
+			ready:      true,
+		}
+
+		applyRawViewMode(snap, rawViewText)
+
+		if strings.Count(snap.raw, summary) != 1 {
+			t.Fatalf("expected summary to remain once, got %q", snap.raw)
+		}
+		if !strings.Contains(snap.raw, detail) {
+			t.Fatalf("expected detail content to remain, got %q", snap.raw)
+		}
+		if snap.rawText != detail {
+			t.Fatalf("expected rawText to capture body content, got %q", snap.rawText)
+		}
+	})
+}
+
 func TestHeavyHexGeneratedOnDemand(t *testing.T) {
 	body := bytes.Repeat([]byte("A"), rawHeavyLimit+1)
 	meta := binaryview.Analyze(body, "text/plain")

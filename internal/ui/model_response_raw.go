@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -51,9 +52,6 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 	if snapshot.rawBase64 == "" && needBase64 && len(snapshot.body) > 0 {
 		snapshot.rawBase64 = binaryview.Base64Lines(snapshot.body, 76)
 	}
-	if snapshot.rawText == "" {
-		snapshot.rawText = snapshot.raw
-	}
 	snapshot.rawMode = mode
 	body := ""
 	switch mode {
@@ -74,10 +72,35 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 			body = snapshot.rawText
 		}
 	}
-	if body == "" {
-		body = snapshot.raw
+	body = fallbackRawBody(snapshot, body)
+	if snapshot.rawText == "" {
+		snapshot.rawText = body
 	}
 	snapshot.raw = joinSections(snapshot.rawSummary, body)
+}
+
+func fallbackRawBody(snapshot *responseSnapshot, body string) string {
+	if body != "" {
+		return body
+	}
+	if snapshot == nil {
+		return "<empty>"
+	}
+	if snapshot.rawText == "" && len(snapshot.body) == 0 {
+		trimmed := trimSection(snapshot.raw)
+		if strings.TrimSpace(trimmed) != "" {
+			if strings.TrimSpace(snapshot.rawSummary) != "" {
+				summary := trimSection(snapshot.rawSummary)
+				if strings.HasPrefix(trimmed, summary) {
+					trimmed = strings.TrimLeft(strings.TrimPrefix(trimmed, summary), "\r\n")
+				}
+			}
+			if strings.TrimSpace(trimmed) != "" {
+				return trimmed
+			}
+		}
+	}
+	return "<empty>"
 }
 
 func ensureSnapshotMeta(snapshot *responseSnapshot) binaryview.Meta {
