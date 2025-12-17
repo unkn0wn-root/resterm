@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.3](https://github.com/unkn0wn-root/resterm/compare/v0.11.2...v0.11.3) (2025-12-17)
+
+
+### Bug Fixes
+
+* **raw tab:** remove duplicate headers on empty response ([bcbb2cd](https://github.com/unkn0wn-root/resterm/commit/bcbb2cdd0cb3c4e3ee25304d9fc60e7be669a24f))
+
 ### [0.11.2](https://github.com/unkn0wn-root/resterm/compare/v0.11.1...v0.11.2) (2025-12-16)
 
 
