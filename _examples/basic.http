@@ -4,6 +4,10 @@ GET {{base.url}}/status/204
 User-Agent: resterm/0.1
 Accept: application/json
 
+### Download binary file
+# @name downloadBinary
+GET https://raw.githubusercontent.com/unkn0wn-root/resterm/main/_media/resterm_base.png
+
 ### Create Post
 # @name createPost
 POST {{base.url}}/anything/posts

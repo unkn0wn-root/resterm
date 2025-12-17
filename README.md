@@ -84,7 +84,7 @@ TL;DR why resterm:
 - **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
 - **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
-- **Binary responses** render readable summaries with hex/base64 previews, hex/raw toggles, and shortcuts to save (`g Shift+S`) or open externally (`g Shift+E`).
+- **Binary responses** show size and type hints with hex and base64 previews, let you change Raw view modes, and include shortcuts to save with a path prompt (`g Shift+S`) or open externally (`g Shift+E`).
 - **OAuth 2.0** with automatic token management - client credentials, password grant, and authorization code + PKCE. Tokens are cached per environment, refreshed automatically, and injected into requests without manual steps.
 - **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
 - **Tracing and Timeline** with `@trace` to enable request tracing.
