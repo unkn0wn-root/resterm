@@ -29,7 +29,12 @@ func (s *echoStore) add(msg string) {
 func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 	t.Helper()
 	store := &echoStore{}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			t.Fatalf("websocket accept failed: %v", err)
@@ -55,6 +60,8 @@ func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 			}
 		}
 	}))
+	srv.Listener = ln
+	srv.Start()
 
 	cleanup := func() {
 		srv.Close()
