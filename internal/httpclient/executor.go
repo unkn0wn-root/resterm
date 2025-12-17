@@ -261,52 +261,6 @@ func (c *Client) Execute(
 	return resp, nil
 }
 
-type reqMeta struct {
-	headers http.Header
-	method  string
-	host    string
-	length  int64
-	te      []string
-}
-
-func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
-	var h http.Header
-
-	// Prefer the final request attached to the response, since redirects and transports can mutate it.
-	reqForMeta := sent
-	if resp != nil && resp.Request != nil {
-		reqForMeta = resp.Request
-	}
-
-	if reqForMeta != nil && reqForMeta.Header != nil {
-		h = reqForMeta.Header.Clone()
-	} else if sent != nil && sent.Header != nil {
-		h = sent.Header.Clone()
-	}
-	if h == nil {
-		h = make(http.Header)
-	}
-
-	host := ""
-	length := int64(0)
-	var te []string
-	method := ""
-
-	if reqForMeta != nil {
-		host = reqForMeta.Host
-		if strings.TrimSpace(host) == "" && reqForMeta.URL != nil {
-			host = reqForMeta.URL.Host
-		}
-		length = reqForMeta.ContentLength
-		if len(reqForMeta.TransferEncoding) > 0 {
-			te = append([]string(nil), reqForMeta.TransferEncoding...)
-		}
-		method = reqForMeta.Method
-	}
-
-	return reqMeta{headers: h, method: method, host: host, length: length, te: te}
-}
-
 func (c *Client) prepareHTTPRequest(
 	ctx context.Context,
 	req *restfile.Request,
@@ -551,25 +505,6 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbac
 	return string(data), nil
 }
 
-// Second Decode call checks for trailing garbage after the JSON object.
-// Without this, extra content would silently get ignored.
-func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
-	decoder := json.NewDecoder(strings.NewReader(raw))
-	decoder.UseNumber()
-	var payload map[string]interface{}
-	if err := decoder.Decode(&payload); err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse graphql variables")
-	}
-
-	if err := decoder.Decode(new(interface{})); err != io.EOF {
-		if err == nil {
-			return nil, errdef.New(errdef.CodeHTTP, "unexpected trailing data in graphql variables")
-		}
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse graphql variables")
-	}
-	return payload, nil
-}
-
 func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
@@ -628,42 +563,6 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		}
 	}
 	return client, nil
-}
-
-func applyRequestSettings(opts Options, settings map[string]string) Options {
-	if len(settings) == 0 {
-		return opts
-	}
-
-	effective := opts
-	norm := make(map[string]string, len(settings))
-	for k, v := range settings {
-		norm[strings.ToLower(k)] = v
-	}
-
-	if value, ok := norm["timeout"]; ok {
-		if dur, err := time.ParseDuration(value); err == nil {
-			effective.Timeout = dur
-		}
-	}
-
-	if value, ok := norm["proxy"]; ok && value != "" {
-		effective.ProxyURL = value
-	}
-
-	if value, ok := norm["followredirects"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			effective.FollowRedirects = b
-		}
-	}
-
-	if value, ok := norm["insecure"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			effective.InsecureSkipVerify = b
-		}
-	}
-
-	return effective
 }
 
 func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver, auth *restfile.AuthSpec) {
@@ -761,6 +660,42 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 	return nil, "", errdef.Wrap(errdef.CodeFilesystem, lastErr, "read %s %s (last tried %s)", strings.ToLower(label), path, lastPath)
 }
 
+// Lines starting with @ get replaced with the file contents.
+// @{variable} syntax is left alone so template expansion can handle it.
+func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []string, allowRaw bool) (string, error) {
+	scanner := bufio.NewScanner(strings.NewReader(body))
+	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
+
+	var b strings.Builder
+	first := true
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !first {
+			b.WriteByte('\n')
+		}
+
+		first = false
+		trimmed := strings.TrimSpace(line)
+		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
+			includePath := strings.TrimSpace(trimmed[1:])
+			if includePath != "" {
+				data, _, err := c.readFileWithFallback(includePath, baseDir, fallbacks, allowRaw, "include body file")
+				if err != nil {
+					return "", err
+				}
+				b.WriteString(string(data))
+				continue
+			}
+		}
+		b.WriteString(line)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return "", errdef.Wrap(errdef.CodeFilesystem, err, "scan body includes")
+	}
+	return b.String(), nil
+}
+
 func buildPathCandidates(path, baseDir string, fallbacks []string, allowRaw bool) []string {
 	list := make([]string, 0, 2+len(fallbacks))
 	if baseDir != "" {
@@ -804,38 +739,103 @@ func isDirErr(err error) bool {
 	return false
 }
 
-// Lines starting with @ get replaced with the file contents.
-// @{variable} syntax is left alone so template expansion can handle it.
-func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []string, allowRaw bool) (string, error) {
-	scanner := bufio.NewScanner(strings.NewReader(body))
-	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
+type reqMeta struct {
+	headers http.Header
+	method  string
+	host    string
+	length  int64
+	te      []string
+}
 
-	var b strings.Builder
-	first := true
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !first {
-			b.WriteByte('\n')
-		}
+func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
+	var h http.Header
 
-		first = false
-		trimmed := strings.TrimSpace(line)
-		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
-			includePath := strings.TrimSpace(trimmed[1:])
-			if includePath != "" {
-				data, _, err := c.readFileWithFallback(includePath, baseDir, fallbacks, allowRaw, "include body file")
-				if err != nil {
-					return "", err
-				}
-				b.WriteString(string(data))
-				continue
-			}
-		}
-		b.WriteString(line)
+	// Prefer the final request attached to the response, since redirects and transports can mutate it.
+	reqForMeta := sent
+	if resp != nil && resp.Request != nil {
+		reqForMeta = resp.Request
 	}
 
-	if err := scanner.Err(); err != nil {
-		return "", errdef.Wrap(errdef.CodeFilesystem, err, "scan body includes")
+	if reqForMeta != nil && reqForMeta.Header != nil {
+		h = reqForMeta.Header.Clone()
+	} else if sent != nil && sent.Header != nil {
+		h = sent.Header.Clone()
 	}
-	return b.String(), nil
+	if h == nil {
+		h = make(http.Header)
+	}
+
+	host := ""
+	length := int64(0)
+	var te []string
+	method := ""
+
+	if reqForMeta != nil {
+		host = reqForMeta.Host
+		if strings.TrimSpace(host) == "" && reqForMeta.URL != nil {
+			host = reqForMeta.URL.Host
+		}
+		length = reqForMeta.ContentLength
+		if len(reqForMeta.TransferEncoding) > 0 {
+			te = append([]string(nil), reqForMeta.TransferEncoding...)
+		}
+		method = reqForMeta.Method
+	}
+
+	return reqMeta{headers: h, method: method, host: host, length: length, te: te}
+}
+
+// Second Decode call checks for trailing garbage after the JSON object.
+// Without this, extra content would silently get ignored.
+func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	var payload map[string]interface{}
+	if err := decoder.Decode(&payload); err != nil {
+		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse graphql variables")
+	}
+
+	if err := decoder.Decode(new(interface{})); err != io.EOF {
+		if err == nil {
+			return nil, errdef.New(errdef.CodeHTTP, "unexpected trailing data in graphql variables")
+		}
+		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse graphql variables")
+	}
+	return payload, nil
+}
+
+func applyRequestSettings(opts Options, settings map[string]string) Options {
+	if len(settings) == 0 {
+		return opts
+	}
+
+	effective := opts
+	norm := make(map[string]string, len(settings))
+	for k, v := range settings {
+		norm[strings.ToLower(k)] = v
+	}
+
+	if value, ok := norm["timeout"]; ok {
+		if dur, err := time.ParseDuration(value); err == nil {
+			effective.Timeout = dur
+		}
+	}
+
+	if value, ok := norm["proxy"]; ok && value != "" {
+		effective.ProxyURL = value
+	}
+
+	if value, ok := norm["followredirects"]; ok {
+		if b, err := strconv.ParseBool(value); err == nil {
+			effective.FollowRedirects = b
+		}
+	}
+
+	if value, ok := norm["insecure"]; ok {
+		if b, err := strconv.ParseBool(value); err == nil {
+			effective.InsecureSkipVerify = b
+		}
+	}
+
+	return effective
 }

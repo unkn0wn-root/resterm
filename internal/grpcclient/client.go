@@ -190,20 +190,6 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	return resp, nil
 }
 
-func buildTransportCredentials(opts Options) (credentials.TransportCredentials, error) {
-	cfg, err := tlsconfig.Build(tlsconfig.Files{
-		RootCAs:    opts.RootCAs,
-		ClientCert: opts.ClientCert,
-		ClientKey:  opts.ClientKey,
-		Insecure:   opts.Insecure,
-		RootMode:   opts.RootMode,
-	}, opts.BaseDir)
-	if err != nil {
-		return nil, err
-	}
-	return credentials.NewTLS(cfg), nil
-}
-
 func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientConn, grpcReq *restfile.GRPCRequest, options Options) (protoreflect.MethodDescriptor, error) {
 	if grpcReq.FullMethod == "" {
 		return nil, errdef.New(errdef.CodeHTTP, "grpc method not specified")
@@ -253,6 +239,40 @@ func (c *Client) loadDescriptorSet(descriptorPath, baseDir string) (*descriptorp
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse descriptor set")
 	}
 	return fds, nil
+}
+
+func (c *Client) resolveMessage(grpcReq *restfile.GRPCRequest, baseDir string) (string, error) {
+	if grpcReq.Message != "" {
+		return grpcReq.Message, nil
+	}
+	if grpcReq.MessageFile == "" {
+		return "", nil
+	}
+
+	path := grpcReq.MessageFile
+	if !filepath.IsAbs(path) && baseDir != "" {
+		path = filepath.Join(baseDir, path)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read grpc message file %s", grpcReq.MessageFile)
+	}
+	return string(data), nil
+}
+
+func buildTransportCredentials(opts Options) (credentials.TransportCredentials, error) {
+	cfg, err := tlsconfig.Build(tlsconfig.Files{
+		RootCAs:    opts.RootCAs,
+		ClientCert: opts.ClientCert,
+		ClientKey:  opts.ClientKey,
+		Insecure:   opts.Insecure,
+		RootMode:   opts.RootMode,
+	}, opts.BaseDir)
+	if err != nil {
+		return nil, err
+	}
+	return credentials.NewTLS(cfg), nil
 }
 
 func findMethodInFiles(files *protoregistry.Files, grpcReq *restfile.GRPCRequest) (protoreflect.MethodDescriptor, error) {
@@ -392,24 +412,4 @@ func copyMetadata(md metadata.MD) map[string][]string {
 		out[k] = copied
 	}
 	return out
-}
-
-func (c *Client) resolveMessage(grpcReq *restfile.GRPCRequest, baseDir string) (string, error) {
-	if grpcReq.Message != "" {
-		return grpcReq.Message, nil
-	}
-	if grpcReq.MessageFile == "" {
-		return "", nil
-	}
-
-	path := grpcReq.MessageFile
-	if !filepath.IsAbs(path) && baseDir != "" {
-		path = filepath.Join(baseDir, path)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read grpc message file %s", grpcReq.MessageFile)
-	}
-	return string(data), nil
 }

@@ -500,8 +500,17 @@ func (rt *wsRuntime) readLoop(opts restfile.WebSocketOptions) {
 	ctx := session.Context()
 	defer rt.shutdown()
 
+	idle := opts.ReceiveTimeout
 	for {
-		msgType, data, err := rt.conn.Read(ctx)
+		readCtx := ctx
+		var cancel context.CancelFunc
+		if idle > 0 {
+			readCtx, cancel = context.WithTimeout(ctx, idle)
+		}
+		msgType, data, err := rt.conn.Read(readCtx)
+		if cancel != nil {
+			cancel()
+		}
 		if err != nil {
 			var ce websocket.CloseError
 			if errors.As(err, &ce) {
@@ -521,6 +530,20 @@ func (rt *wsRuntime) readLoop(opts restfile.WebSocketOptions) {
 						Code:   ce.Code,
 						Reason: ce.Reason,
 					},
+				})
+				session.Close(nil)
+				return
+			}
+			if errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+				meta := map[string]string{
+					wsMetaClosedBy:    "timeout",
+					wsMetaCloseReason: fmt.Sprintf("receive timeout after %s", idle),
+				}
+				session.Publish(&stream.Event{
+					Kind:      stream.KindWebSocket,
+					Direction: stream.DirNA,
+					Timestamp: time.Now(),
+					Metadata:  meta,
 				})
 				session.Close(nil)
 				return
