@@ -206,13 +206,19 @@ func (c *Client) StartWebSocket(
 		session: session,
 		writeCh: make(chan wsOutbound, defaultWebSocketSendQueue),
 		cancel:  sessionCancel,
+		pulse:   make(chan struct{}, 1),
 	}
+	runtime.touchActivity()
 
 	if wsOpts.MaxMessageBytes > 0 {
 		conn.SetReadLimit(wsOpts.MaxMessageBytes)
 	}
 
-	go runtime.readLoop(wsOpts)
+	if wsOpts.IdleTimeout > 0 {
+		go runtime.idleWatch(wsOpts.IdleTimeout)
+	}
+
+	go runtime.readLoop()
 	go runtime.writeLoop()
 
 	sender := &WebSocketSender{runtime: runtime}
@@ -266,9 +272,12 @@ func (c *Client) CompleteWebSocket(
 	sender := handle.Sender
 	wsReq := req.WebSocket
 	wsOpts := wsReq.Options
-	recvWindow := wsOpts.ReceiveTimeout
-	if recvWindow <= 0 {
-		recvWindow = 250 * time.Millisecond
+	recvWindow := 250 * time.Millisecond
+	if wsOpts.IdleTimeout > 0 {
+		half := wsOpts.IdleTimeout / 2
+		if half > 0 && half < recvWindow {
+			recvWindow = half
+		}
 	}
 
 	baseDir := handle.Meta.BaseDir
@@ -279,6 +288,12 @@ func (c *Client) CompleteWebSocket(
 
 	closedByScript := false
 	for idx, step := range wsReq.Steps {
+		sender.touch()
+
+		if err := ensureSessionAlive(session); err != nil {
+			return nil, err
+		}
+
 		label := fmt.Sprintf("%d:%s", idx+1, string(step.Type))
 		meta := map[string]string{wsMetaStep: label}
 		switch step.Type {
@@ -487,15 +502,29 @@ func waitForDuration(ctx context.Context, d time.Duration) error {
 	}
 }
 
+func ensureSessionAlive(session *stream.Session) error {
+	if session == nil {
+		return errdef.New(errdef.CodeHTTP, "websocket session missing")
+	}
+	if err := session.Context().Err(); err != nil {
+		if sessErr := session.Err(); sessErr != nil {
+			return sessErr
+		}
+		return errdef.Wrap(errdef.CodeHTTP, err, "websocket session closed")
+	}
+	return nil
+}
+
 type wsRuntime struct {
 	conn    *websocket.Conn
 	session *stream.Session
 	writeCh chan wsOutbound
 	cancel  context.CancelFunc
+	pulse   chan struct{}
 	once    sync.Once
 }
 
-func (rt *wsRuntime) readLoop(opts restfile.WebSocketOptions) {
+func (rt *wsRuntime) readLoop() {
 	session := rt.session
 	ctx := session.Context()
 	defer rt.shutdown()
@@ -533,6 +562,8 @@ func (rt *wsRuntime) readLoop(opts restfile.WebSocketOptions) {
 			return
 		}
 
+		rt.touchActivity()
+
 		payload := append([]byte(nil), data...)
 		metadata := map[string]string{}
 		opcode := wsOpcodeBinary
@@ -553,6 +584,49 @@ func (rt *wsRuntime) readLoop(opts restfile.WebSocketOptions) {
 				Opcode: opcode,
 			},
 		})
+	}
+}
+
+func (rt *wsRuntime) idleWatch(limit time.Duration) {
+	if limit <= 0 {
+		return
+	}
+	timer := time.NewTimer(limit)
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-rt.session.Context().Done():
+			return
+		case <-timer.C:
+			meta := map[string]string{
+				wsMetaClosedBy:    "timeout",
+				wsMetaCloseReason: fmt.Sprintf("idle timeout after %s", limit),
+			}
+			rt.session.Publish(&stream.Event{
+				Kind:      stream.KindWebSocket,
+				Direction: stream.DirNA,
+				Timestamp: time.Now(),
+				Metadata:  meta,
+			})
+			rt.session.Close(nil)
+			return
+		case <-rt.pulse:
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			timer.Reset(limit)
+		}
+	}
+}
+
+func (rt *wsRuntime) touchActivity() {
+	select {
+	case rt.pulse <- struct{}{}:
+	default:
 	}
 }
 
@@ -602,6 +676,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.conn.Write(ctx, msg.msgType, msg.payload); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket frame")
 		}
+		rt.touchActivity()
 
 		payload := append([]byte(nil), msg.payload...)
 		metadata := cloneMetadata(msg.metadata)
@@ -627,6 +702,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.conn.Ping(ctx); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket ping")
 		}
+		rt.touchActivity()
 
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
@@ -651,6 +727,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := wsWriteControl(rt.conn, ctx, wsOpcodePong, payload); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket pong")
 		}
+		rt.touchActivity()
 
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
@@ -673,6 +750,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		if err := rt.conn.Close(msg.code, msg.reason); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "close websocket")
 		}
+		rt.touchActivity()
 
 		metadata := cloneMetadata(msg.metadata)
 		if metadata == nil {
@@ -718,6 +796,13 @@ func (rt *wsRuntime) shutdown() {
 
 type WebSocketSender struct {
 	runtime *wsRuntime
+}
+
+func (s *WebSocketSender) touch() {
+	if s == nil || s.runtime == nil {
+		return
+	}
+	s.runtime.touchActivity()
 }
 
 // Multiple contexts racing - per-message timeout, session lifetime, and write completion.

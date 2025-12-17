@@ -204,7 +204,7 @@ type WebSocketRequest struct {
 
 type WebSocketOptions struct {
 	HandshakeTimeout time.Duration
-	ReceiveTimeout   time.Duration
+	IdleTimeout      time.Duration
 	MaxMessageBytes  int64
 	Subprotocols     []string
 	Compression      bool

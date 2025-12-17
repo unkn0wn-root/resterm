@@ -1,5 +1,5 @@
 ### Manual WebSocket Echo
 # @name WebSocketManualEcho
-# @websocket timeout=10s receive=2s
+# @websocket timeout=10s idle=2s
 # Tip: Open the Stream tab and use Ctrl+I to toggle the live console.
 wss://echo.websocket.events

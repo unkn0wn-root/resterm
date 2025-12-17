@@ -73,6 +73,14 @@ var metaSub = map[string][]Hint{
 		{Label: "tolerance=", Summary: "Allow extra shared tolerance", Insert: "tolerance=25ms", CursorBack: len("25ms")},
 		{Label: "allowance=", Summary: "Alias for tolerance", Insert: "allowance=25ms", CursorBack: len("25ms")},
 	},
+	"websocket": {
+		{Label: "timeout=", Summary: "Handshake deadline", Insert: "timeout=10s", CursorBack: len("10s")},
+		{Label: "idle-timeout=", Summary: "Idle timeout (resets on any activity)", Insert: "idle-timeout=5s", CursorBack: len("5s")},
+		{Label: "idle=", Summary: "Idle timeout (short form)", Insert: "idle=5s", CursorBack: len("5s")},
+		{Label: "max-message-bytes=", Summary: "Max inbound frame size", Insert: "max-message-bytes=1mb", CursorBack: len("1mb")},
+		{Label: "subprotocols=", Summary: "Comma-separated subprotocols", Insert: "subprotocols=chat,json", CursorBack: len("chat,json")},
+		{Label: "compression=", Summary: "Enable/disable compression", Insert: "compression=true", CursorBack: len("true")},
+	},
 	"ws": {
 		{Label: "send", Summary: "Send a text frame"},
 		{Label: "send-json", Summary: "Send a JSON frame"},

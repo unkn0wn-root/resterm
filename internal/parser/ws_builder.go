@@ -59,9 +59,9 @@ func (b *wsBuilder) applyOption(name, value string) {
 		if dur, err := time.ParseDuration(value); err == nil && dur >= 0 {
 			b.options.HandshakeTimeout = dur
 		}
-	case "receive", "receive-timeout":
+	case "idle", "idle-timeout":
 		if dur, err := time.ParseDuration(value); err == nil && dur >= 0 {
-			b.options.ReceiveTimeout = dur
+			b.options.IdleTimeout = dur
 		}
 	case "max-message-bytes":
 		if size, err := parseByteSize(value); err == nil {

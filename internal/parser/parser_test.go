@@ -1106,7 +1106,7 @@ GET https://example.com/events
 
 func TestParseWebSocketDirectives(t *testing.T) {
 	src := `# @name ws
-# @websocket timeout=12s receive=6s max-message-bytes=1mb subprotocols=chat,json compression=false
+# @websocket timeout=12s idle=6s max-message-bytes=1mb subprotocols=chat,json compression=false
 # @ws send Hello world
 # @ws send-json {"op":"ping"}
 # @ws send-base64 SGVsbG8=
@@ -1129,8 +1129,8 @@ GET ws://example.com/socket
 	if ws.Options.HandshakeTimeout != 12*time.Second {
 		t.Fatalf("unexpected handshake timeout: %v", ws.Options.HandshakeTimeout)
 	}
-	if ws.Options.ReceiveTimeout != 6*time.Second {
-		t.Fatalf("unexpected receive timeout: %v", ws.Options.ReceiveTimeout)
+	if ws.Options.IdleTimeout != 6*time.Second {
+		t.Fatalf("unexpected idle timeout: %v", ws.Options.IdleTimeout)
 	}
 	if ws.Options.MaxMessageBytes != 1024*1024 {
 		t.Fatalf("unexpected max message bytes: %d", ws.Options.MaxMessageBytes)

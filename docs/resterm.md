@@ -614,7 +614,7 @@ Use `# @websocket` to negotiate an upgrade, then describe scripted interactions 
 ```http
 ### Chat session
 # @name chatSession
-# @websocket timeout=10s receive-timeout=4s subprotocols=chat.v2,json compression=true
+# @websocket timeout=10s idle-timeout=4s subprotocols=chat.v2,json compression=true
 # @ws send {"type":"hello"}
 # @ws wait 1s
 # @ws send-json {"type":"message","text":"Hello from Resterm"}
@@ -628,7 +628,7 @@ Available WebSocket options:
 | Token | Description |
 | --- | --- |
 | `timeout` | Handshake deadline (applies until the connection upgrades). |
-| `receive-timeout` | Idle receive window once the socket is open (0 leaves it unbounded). |
+| `idle-timeout` | Idle timeout once the socket is open. Resets on any send or receive activity (0 leaves it unbounded). |
 | `max-message-bytes` | Upper bound on inbound frame sizes. |
 | `subprotocols` | Comma-separated list advertised during the handshake. |
 | `compression=<true|false>` | Explicitly enable or disable per-message compression. |

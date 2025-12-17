@@ -94,10 +94,6 @@ func NewStore(path string, maxEntries int) *Store {
 	return &Store{path: path, maxEntries: maxEntries}
 }
 
-func NormalizeWorkflowName(name string) string {
-	return strings.TrimSpace(name)
-}
-
 func (s *Store) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -261,6 +257,10 @@ func (s *Store) sortEntriesLocked() {
 	sort.SliceStable(s.entries, func(i, j int) bool {
 		return newerFirst(s.entries[i], s.entries[j])
 	})
+}
+
+func NormalizeWorkflowName(name string) string {
+	return strings.TrimSpace(name)
 }
 
 func newerFirst(a, b Entry) bool {

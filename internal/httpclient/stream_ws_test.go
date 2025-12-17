@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,7 +29,12 @@ func (s *echoStore) add(msg string) {
 func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 	t.Helper()
 	store := &echoStore{}
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 		if err != nil {
 			t.Fatalf("websocket accept failed: %v", err)
@@ -54,6 +60,35 @@ func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 			}
 		}
 	}))
+	srv.Listener = ln
+	srv.Start()
+
+	cleanup := func() {
+		srv.Close()
+	}
+	return srv, cleanup
+}
+
+func startSilentWebSocketServer(t *testing.T) (*httptest.Server, func()) {
+	t.Helper()
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			t.Fatalf("websocket accept failed: %v", err)
+		}
+		defer func() {
+			if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
+				t.Logf("close websocket: %v", err)
+			}
+		}()
+		<-r.Context().Done()
+	}))
+	srv.Listener = ln
+	srv.Start()
 
 	cleanup := func() {
 		srv.Close()
@@ -73,7 +108,7 @@ func TestExecuteWebSocketChat(t *testing.T) {
 		URL:    wsURL,
 		WebSocket: &restfile.WebSocketRequest{
 			Options: restfile.WebSocketOptions{
-				ReceiveTimeout: 500 * time.Millisecond,
+				IdleTimeout: 500 * time.Millisecond,
 			},
 			Steps: []restfile.WebSocketStep{
 				{Type: restfile.WebSocketStepSendText, Value: "Hello from resterm!"},
@@ -170,6 +205,56 @@ func TestApplyWebSocketSummaryDefaults(t *testing.T) {
 	applyWebSocketSummaryDefaults(&sumClient, stream.StateClosed, nil)
 	if sumClient.ClosedBy != "client" {
 		t.Fatalf("expected default closedBy to client, got %q", sumClient.ClosedBy)
+	}
+}
+
+func TestWebSocketIdleTimeout(t *testing.T) {
+	server, cleanup := startSilentWebSocketServer(t)
+	defer cleanup()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1) + "/ws/idle"
+	client := NewClient(nil)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    wsURL,
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{
+				IdleTimeout: 150 * time.Millisecond,
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	handle, fallback, err := client.StartWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("StartWebSocket returned error: %v", err)
+	}
+	if fallback != nil {
+		t.Fatalf("expected live websocket handle, got fallback response")
+	}
+
+	session := handle.Session
+	select {
+	case <-session.Done():
+	case <-time.After(750 * time.Millisecond):
+		t.Fatal("websocket session did not close after idle timeout")
+	}
+
+	acc := newWSAccumulator()
+	for _, evt := range session.EventsSnapshot() {
+		acc.consume(evt)
+	}
+	state, stateErr := session.State()
+	applyWebSocketSummaryDefaults(&acc.summary, state, stateErr)
+
+	if acc.summary.ClosedBy != "timeout" {
+		t.Fatalf("expected closedBy to be timeout, got %q", acc.summary.ClosedBy)
+	}
+	if reason := acc.summary.CloseReason; !strings.Contains(reason, "idle timeout") {
+		t.Fatalf("expected idle timeout reason, got %q", reason)
 	}
 }
 
@@ -314,7 +399,7 @@ func TestStartWebSocketHandshakeTimeoutScope(t *testing.T) {
 		WebSocket: &restfile.WebSocketRequest{
 			Options: restfile.WebSocketOptions{
 				HandshakeTimeout: 100 * time.Millisecond,
-				ReceiveTimeout:   2 * time.Second,
+				IdleTimeout:      2 * time.Second,
 			},
 		},
 	}
