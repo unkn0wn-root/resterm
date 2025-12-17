@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.4](https://github.com/unkn0wn-root/resterm/compare/v0.11.3...v0.11.4) (2025-12-17)
+
+
+### Bug Fixes
+
+* **websocket:** timeout ([827abd7](https://github.com/unkn0wn-root/resterm/commit/827abd746e57aadc68dd76829d90bc42558f41f5))
+* **websocket:** timeout via metadata ([3e1992a](https://github.com/unkn0wn-root/resterm/commit/3e1992afc21351a12455f8218c31dd07c7698ca0))
+
 ### [0.11.3](https://github.com/unkn0wn-root/resterm/compare/v0.11.2...v0.11.3) (2025-12-17)
 
 
