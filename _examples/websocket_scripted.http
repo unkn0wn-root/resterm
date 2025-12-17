@@ -1,6 +1,6 @@
 ### Scripted WebSocket Echo
 # @name WebSocketScriptedEcho
-# @websocket timeout=10s receive=1s
+# @websocket timeout=10s idle=1s
 # @script test
 > client.test("echo reply received", function () {
 >   var events = stream.events();

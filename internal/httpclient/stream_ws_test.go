@@ -208,7 +208,7 @@ func TestApplyWebSocketSummaryDefaults(t *testing.T) {
 	}
 }
 
-func TestWebSocketReceiveTimeout(t *testing.T) {
+func TestWebSocketIdleTimeout(t *testing.T) {
 	server, cleanup := startSilentWebSocketServer(t)
 	defer cleanup()
 
@@ -240,7 +240,7 @@ func TestWebSocketReceiveTimeout(t *testing.T) {
 	select {
 	case <-session.Done():
 	case <-time.After(750 * time.Millisecond):
-		t.Fatal("websocket session did not close after receive timeout")
+		t.Fatal("websocket session did not close after idle timeout")
 	}
 
 	acc := newWSAccumulator()
@@ -253,8 +253,8 @@ func TestWebSocketReceiveTimeout(t *testing.T) {
 	if acc.summary.ClosedBy != "timeout" {
 		t.Fatalf("expected closedBy to be timeout, got %q", acc.summary.ClosedBy)
 	}
-	if reason := acc.summary.CloseReason; !strings.Contains(reason, "receive timeout") {
-		t.Fatalf("expected receive timeout reason, got %q", reason)
+	if reason := acc.summary.CloseReason; !strings.Contains(reason, "idle timeout") {
+		t.Fatalf("expected idle timeout reason, got %q", reason)
 	}
 }
 

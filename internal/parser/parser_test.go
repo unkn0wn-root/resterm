@@ -1106,7 +1106,7 @@ GET https://example.com/events
 
 func TestParseWebSocketDirectives(t *testing.T) {
 	src := `# @name ws
-# @websocket timeout=12s receive=6s max-message-bytes=1mb subprotocols=chat,json compression=false
+# @websocket timeout=12s idle=6s max-message-bytes=1mb subprotocols=chat,json compression=false
 # @ws send Hello world
 # @ws send-json {"op":"ping"}
 # @ws send-base64 SGVsbG8=

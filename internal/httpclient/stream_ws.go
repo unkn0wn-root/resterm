@@ -601,7 +601,7 @@ func (rt *wsRuntime) idleWatch(limit time.Duration) {
 		case <-timer.C:
 			meta := map[string]string{
 				wsMetaClosedBy:    "timeout",
-				wsMetaCloseReason: fmt.Sprintf("receive timeout after %s", limit),
+				wsMetaCloseReason: fmt.Sprintf("idle timeout after %s", limit),
 			}
 			rt.session.Publish(&stream.Event{
 				Kind:      stream.KindWebSocket,

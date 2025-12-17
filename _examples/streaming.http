@@ -8,7 +8,7 @@ Accept: text/event-stream
 ### WebSocket Chat Demo
 # @name wsChat
 # @description Sends a message over WebSocket and waits for a reply.
-# @websocket receive=3s subprotocols=chat.v1
+# @websocket idle=3s subprotocols=chat.v1
 # @ws send Hello from resterm!
 # @ws wait 1s
 # @ws close 1000 normal closure
