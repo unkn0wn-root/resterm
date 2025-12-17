@@ -108,7 +108,7 @@ func TestExecuteWebSocketChat(t *testing.T) {
 		URL:    wsURL,
 		WebSocket: &restfile.WebSocketRequest{
 			Options: restfile.WebSocketOptions{
-				ReceiveTimeout: 500 * time.Millisecond,
+				IdleTimeout: 500 * time.Millisecond,
 			},
 			Steps: []restfile.WebSocketStep{
 				{Type: restfile.WebSocketStepSendText, Value: "Hello from resterm!"},
@@ -220,7 +220,7 @@ func TestWebSocketIdleTimeout(t *testing.T) {
 		URL:    wsURL,
 		WebSocket: &restfile.WebSocketRequest{
 			Options: restfile.WebSocketOptions{
-				ReceiveTimeout: 150 * time.Millisecond,
+				IdleTimeout: 150 * time.Millisecond,
 			},
 		},
 	}
@@ -399,7 +399,7 @@ func TestStartWebSocketHandshakeTimeoutScope(t *testing.T) {
 		WebSocket: &restfile.WebSocketRequest{
 			Options: restfile.WebSocketOptions{
 				HandshakeTimeout: 100 * time.Millisecond,
-				ReceiveTimeout:   2 * time.Second,
+				IdleTimeout:      2 * time.Second,
 			},
 		},
 	}

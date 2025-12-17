@@ -2245,8 +2245,8 @@ func renderWebSocketDirectiveLine(opts restfile.WebSocketOptions) string {
 	if opts.HandshakeTimeout > 0 {
 		parts = append(parts, fmt.Sprintf("timeout=%s", opts.HandshakeTimeout))
 	}
-	if opts.ReceiveTimeout > 0 {
-		parts = append(parts, fmt.Sprintf("idle=%s", opts.ReceiveTimeout))
+	if opts.IdleTimeout > 0 {
+		parts = append(parts, fmt.Sprintf("idle=%s", opts.IdleTimeout))
 	}
 	if opts.MaxMessageBytes > 0 {
 		parts = append(parts, fmt.Sprintf("max-message-bytes=%d", opts.MaxMessageBytes))

@@ -214,8 +214,8 @@ func (c *Client) StartWebSocket(
 		conn.SetReadLimit(wsOpts.MaxMessageBytes)
 	}
 
-	if wsOpts.ReceiveTimeout > 0 {
-		go runtime.idleWatch(wsOpts.ReceiveTimeout)
+	if wsOpts.IdleTimeout > 0 {
+		go runtime.idleWatch(wsOpts.IdleTimeout)
 	}
 
 	go runtime.readLoop()
@@ -273,8 +273,8 @@ func (c *Client) CompleteWebSocket(
 	wsReq := req.WebSocket
 	wsOpts := wsReq.Options
 	recvWindow := 250 * time.Millisecond
-	if wsOpts.ReceiveTimeout > 0 {
-		half := wsOpts.ReceiveTimeout / 2
+	if wsOpts.IdleTimeout > 0 {
+		half := wsOpts.IdleTimeout / 2
 		if half > 0 && half < recvWindow {
 			recvWindow = half
 		}

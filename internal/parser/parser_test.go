@@ -1129,8 +1129,8 @@ GET ws://example.com/socket
 	if ws.Options.HandshakeTimeout != 12*time.Second {
 		t.Fatalf("unexpected handshake timeout: %v", ws.Options.HandshakeTimeout)
 	}
-	if ws.Options.ReceiveTimeout != 6*time.Second {
-		t.Fatalf("unexpected receive timeout: %v", ws.Options.ReceiveTimeout)
+	if ws.Options.IdleTimeout != 6*time.Second {
+		t.Fatalf("unexpected idle timeout: %v", ws.Options.IdleTimeout)
 	}
 	if ws.Options.MaxMessageBytes != 1024*1024 {
 		t.Fatalf("unexpected max message bytes: %d", ws.Options.MaxMessageBytes)
