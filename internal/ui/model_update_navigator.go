@@ -129,10 +129,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 					n.Expanded = true
 					m.navigator.Refresh()
 				}
-			} else if n.Kind == navigator.KindRequest || n.Kind == navigator.KindWorkflow {
-				// Jump to editor when enter is pressed on a request or workflow
-				m.setFocus(focusEditor)
-				return nil
+
 			}
 		case " ":
 			n := m.navigator.Selected()
