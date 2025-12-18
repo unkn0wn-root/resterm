@@ -322,8 +322,6 @@ type bodyViews struct {
 	ct        string
 }
 
-const rawHeavyLimit = 128 * 1024
-
 func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, viewBody []byte, viewContentType string) bodyViews {
 	var detected binaryview.Meta
 	if meta == nil {
@@ -357,7 +355,7 @@ func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, view
 	rawBase64 := ""
 	if sz <= rawHeavyLimit {
 		rawHex = binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
-		rawBase64 = binaryview.Base64Lines(body, 76)
+		rawBase64 = binaryview.Base64Lines(body, rawBase64LineWidth)
 	}
 
 	rawMode := rawViewText
