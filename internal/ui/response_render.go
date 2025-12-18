@@ -362,7 +362,7 @@ func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, view
 
 	rawMode := rawViewText
 	rawText := ""
-	if !(localMeta.Kind == binaryview.KindBinary && !localMeta.Printable) {
+	if localMeta.Kind != binaryview.KindBinary || localMeta.Printable {
 		rawText = formatRawBody(viewBody, viewContentType)
 	}
 
