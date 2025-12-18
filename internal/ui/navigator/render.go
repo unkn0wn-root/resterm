@@ -91,12 +91,12 @@ func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bo
 
 func renderMethodBadge(method string, th theme.Theme) string {
 	label := strings.ToUpper(strings.TrimSpace(method))
-	style := th.NavigatorBadge.Background(methodColor(th, label)).Foreground(lipgloss.Color("#0f111a")).Bold(true)
+	style := th.NavigatorBadge.Foreground(methodColor(th, label)).Bold(true)
 	return style.Render(label)
 }
 
 func renderWorkflowBadge(th theme.Theme) string {
-	style := th.NavigatorBadge.Background(th.MethodColors.POST).Foreground(lipgloss.Color("#0f111a")).Bold(true)
+	style := th.NavigatorBadge.Foreground(th.MethodColors.POST).Bold(true)
 	return style.Render("WF")
 }
 
