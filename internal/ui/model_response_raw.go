@@ -54,6 +54,7 @@ func (m *Model) setRawMode(snap *responseSnapshot, mode rawViewMode, msg string)
 			p.markRawViewStale()
 		}
 	}
+	m.invalidateDiffCaches()
 
 	if msg == "" {
 		msg = fmt.Sprintf("Raw view: %s", snap.rawMode.label())
@@ -86,6 +87,7 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 			p.invalidateRawCache(mode)
 		}
 	}
+	m.invalidateDiffCaches()
 
 	m.setStatusMessage(statusMsg{level: statusInfo, text: loading})
 	return tea.Batch(m.syncResponsePanes(), loadRawDumpCmd(snap, mode))
@@ -130,12 +132,23 @@ func (m *Model) handleRawDumpLoaded(msg rawDumpLoadedMsg) tea.Cmd {
 	}
 
 	if visible {
+		m.invalidateDiffCaches()
 		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpLoadedMessage(msg.mode)})
 		if snap.rawMode == msg.mode {
 			return m.syncResponsePanes()
 		}
 	}
 	return nil
+}
+
+func (m *Model) invalidateDiffCaches() {
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.wrapCache == nil {
+			continue
+		}
+		pane.wrapCache[responseTabDiff] = cachedWrap{}
+	}
 }
 
 func rawDumpLoadingMessage(mode rawViewMode) string {
@@ -168,7 +181,7 @@ func loadRawDumpCmd(snap *responseSnapshot, mode rawViewMode) tea.Cmd {
 		case rawViewBase64:
 			content = binaryview.Base64Lines(body, 76)
 		default:
-			content = binaryview.HexDump(body, 16)
+			content = binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
 		}
 		return rawDumpLoadedMsg{snapshot: snap, mode: mode, content: content}
 	}
@@ -187,7 +200,7 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 	needHex := mode == rawViewHex
 	needBase64 := mode == rawViewBase64
 	if snapshot.rawHex == "" && needHex && len(snapshot.body) > 0 {
-		snapshot.rawHex = binaryview.HexDump(snapshot.body, 16)
+		snapshot.rawHex = binaryview.HexDump(snapshot.body, binaryview.HexDumpBytesPerLine)
 	}
 	if snapshot.rawBase64 == "" && needBase64 && len(snapshot.body) > 0 {
 		snapshot.rawBase64 = binaryview.Base64Lines(snapshot.body, 76)

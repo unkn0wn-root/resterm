@@ -356,7 +356,7 @@ func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, view
 	rawHex := ""
 	rawBase64 := ""
 	if sz <= rawHeavyLimit {
-		rawHex = binaryview.HexDump(body, 16)
+		rawHex = binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
 		rawBase64 = binaryview.Base64Lines(body, 76)
 	}
 

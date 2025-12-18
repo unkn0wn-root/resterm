@@ -39,7 +39,7 @@ func Base64Lines(body []byte, width int) string {
 
 func HexDump(body []byte, bytesPerLine int) string {
 	if bytesPerLine <= 0 {
-		bytesPerLine = hexDumpBytesPerLine
+		bytesPerLine = HexDumpBytesPerLine
 	}
 
 	var b strings.Builder
