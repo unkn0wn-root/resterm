@@ -35,7 +35,7 @@ func TestOpenRequestDetailsCapturesFields(t *testing.T) {
 	model.currentRequest = req
 	model.currentFile = "/tmp/demo.http"
 	model.workspaceRoot = "/tmp"
-	model.setFocus(focusRequests)
+	_ = model.setFocus(focusRequests)
 
 	model.openRequestDetails()
 
@@ -73,7 +73,7 @@ func TestOpenRequestDetailsRequiresNavigatorFocus(t *testing.T) {
 	}
 	model.doc = &restfile.Document{Requests: []*restfile.Request{req}}
 	model.currentRequest = req
-	model.setFocus(focusEditor)
+	_ = model.setFocus(focusEditor)
 
 	model.openRequestDetails()
 

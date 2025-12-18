@@ -453,6 +453,7 @@ func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 }
 
 func (m *Model) toggleWebSocketConsole() tea.Cmd {
+	var cmds []tea.Cmd
 	sessionID := m.sessionIDForRequest(m.currentRequest)
 	if sessionID == "" {
 		m.setStatusMessage(statusMsg{text: "No active websocket stream", level: statusWarn})
@@ -470,7 +471,9 @@ func (m *Model) toggleWebSocketConsole() tea.Cmd {
 	}
 	if m.wsConsole == nil || m.wsConsole.sessionID != sessionID {
 		m.ensureWebSocketConsole(sessionID, session, sender, m.currentRequest, baseDir)
-		m.focusStreamPane()
+		if cmd := m.focusStreamPane(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.setStatusMessage(statusMsg{text: "Websocket console ready (F2 to cycle mode)", level: statusInfo})
 	} else {
 		if m.wsConsole.active {
@@ -478,24 +481,26 @@ func (m *Model) toggleWebSocketConsole() tea.Cmd {
 			m.setStatusMessage(statusMsg{text: "Websocket console hidden", level: statusInfo})
 		} else {
 			m.wsConsole.focus()
-			m.focusStreamPane()
+			if cmd := m.focusStreamPane(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 			m.setStatusMessage(statusMsg{text: "Websocket console active", level: statusInfo})
 		}
 	}
 	m.refreshStreamPanes()
-	return nil
+	return batchCommands(cmds...)
 }
 
-func (m *Model) focusStreamPane() {
+func (m *Model) focusStreamPane() tea.Cmd {
 	if pane := m.pane(responsePanePrimary); pane != nil {
 		pane.setActiveTab(responseTabStream)
 	}
 	m.responsePaneFocus = responsePanePrimary
 	if m.focus != focusResponse {
-		m.setFocus(focusResponse)
-	} else {
-		m.setLivePane(m.responsePaneFocus)
+		return m.setFocus(focusResponse)
 	}
+	m.setLivePane(m.responsePaneFocus)
+	return nil
 }
 
 func (m *Model) sendConsolePayload() tea.Cmd {

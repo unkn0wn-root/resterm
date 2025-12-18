@@ -2,34 +2,37 @@ package ui
 
 import (
 	"github.com/charmbracelet/bubbles/cursor"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m *Model) cycleFocus(forward bool) {
+func (m *Model) cycleFocus(forward bool) tea.Cmd {
 	switch m.focus {
 	case focusFile, focusRequests, focusWorkflows:
 		if forward {
-			m.setFocus(focusEditor)
+			return m.setFocus(focusEditor)
 		} else {
-			m.setFocus(focusResponse)
+			return m.setFocus(focusResponse)
 		}
 	case focusEditor:
 		if forward {
-			m.setFocus(focusResponse)
+			return m.setFocus(focusResponse)
 		} else {
-			m.setFocus(focusRequests)
+			return m.setFocus(focusRequests)
 		}
 	case focusResponse:
 		if forward {
-			m.setFocus(focusRequests)
+			return m.setFocus(focusRequests)
 		} else {
-			m.setFocus(focusEditor)
+			return m.setFocus(focusEditor)
 		}
 	}
+	return nil
 }
 
-func (m *Model) setFocus(target paneFocus) {
+func (m *Model) setFocus(target paneFocus) tea.Cmd {
+	var cmds []tea.Cmd
 	if m.focus == target {
-		return
+		return nil
 	}
 	prev := m.focus
 	m.focus = target
@@ -38,14 +41,25 @@ func (m *Model) setFocus(target paneFocus) {
 	}
 	if target == focusEditor {
 		if m.editorInsertMode {
-			m.editor.Cursor.SetMode(cursor.CursorBlink)
+			if cmd := m.editor.Cursor.SetMode(cursor.CursorBlink); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			if cmd := m.editor.Cursor.Focus(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		} else {
-			m.editor.Cursor.SetMode(cursor.CursorStatic)
+			if cmd := m.editor.Cursor.SetMode(cursor.CursorStatic); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
-		m.editor.Focus()
+		if cmd := m.editor.Focus(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	} else {
 		if prev == focusEditor && m.editorInsertMode {
-			m.setInsertMode(false, false)
+			if cmd := m.setInsertMode(false, false); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 		m.editor.Blur()
 	}
@@ -53,18 +67,25 @@ func (m *Model) setFocus(target paneFocus) {
 		m.ensurePaneFocusValid()
 		m.setLivePane(m.responsePaneFocus)
 	}
+	return batchCommands(cmds...)
 }
 
-func (m *Model) setInsertMode(enabled bool, announce bool) {
+func (m *Model) setInsertMode(enabled bool, announce bool) tea.Cmd {
+	var cmds []tea.Cmd
 	if enabled == m.editorInsertMode {
-		return
+		return nil
 	}
 	m.editorInsertMode = enabled
 	if enabled {
 		m.editor.SetMotionsEnabled(false)
 		m.editor.KeyMap = m.editorWriteKeyMap
-		m.editor.Cursor.SetMode(cursor.CursorBlink)
+		if cmd := m.editor.Cursor.SetMode(cursor.CursorBlink); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.editor.Cursor.Blink = true
+		if cmd := m.editor.Cursor.Focus(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.editor.SetMetadataHintsEnabled(true)
 		if announce {
 			m.setStatusMessage(statusMsg{text: "Insert mode", level: statusInfo})
@@ -73,7 +94,9 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 		m.editor.ClearSelection()
 		m.editor.SetMotionsEnabled(true)
 		m.editor.KeyMap = m.editorViewKeyMap
-		m.editor.Cursor.SetMode(cursor.CursorStatic)
+		if cmd := m.editor.Cursor.SetMode(cursor.CursorStatic); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		m.editor.Cursor.Blink = false
 		m.editor.SetMetadataHintsEnabled(false)
 		if announce {
@@ -81,4 +104,5 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 		}
 	}
 	m.editor.undoCoalescing = false
+	return batchCommands(cmds...)
 }

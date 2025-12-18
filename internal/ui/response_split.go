@@ -963,7 +963,7 @@ func (m *Model) selectTimelineTab() tea.Cmd {
 			return statusMsg{text: "Trace timeline unavailable", level: statusWarn}
 		}
 	}
-	m.setFocus(focusResponse)
+	focusCmd := m.setFocus(focusResponse)
 	paneID := m.responsePaneFocus
 	if !m.responseSplit {
 		paneID = responsePanePrimary
@@ -982,11 +982,11 @@ func (m *Model) selectTimelineTab() tea.Cmd {
 	pane.setActiveTab(responseTabTimeline)
 	pane.invalidateCaches()
 	pane.restoreScrollForActiveTab()
-	return m.syncResponsePane(paneID)
+	return batchCommands(focusCmd, m.syncResponsePane(paneID))
 }
 
 func (m *Model) toggleHeaderPreview() tea.Cmd {
-	m.setFocus(focusResponse)
+	focusCmd := m.setFocus(focusResponse)
 	m.ensurePaneFocusValid()
 
 	paneID := m.responsePaneFocus
@@ -995,15 +995,15 @@ func (m *Model) toggleHeaderPreview() tea.Cmd {
 	}
 	pane := m.pane(paneID)
 	if pane == nil {
-		return func() tea.Msg {
+		return batchCommands(focusCmd, func() tea.Msg {
 			return statusMsg{text: "Response pane unavailable", level: statusWarn}
-		}
+		})
 	}
 
 	if pane.snapshot == nil || !pane.snapshot.ready {
-		return func() tea.Msg {
+		return batchCommands(focusCmd, func() tea.Msg {
 			return statusMsg{text: "No response available", level: statusWarn}
-		}
+		})
 	}
 
 	if pane.activeTab != responseTabHeaders {
@@ -1026,8 +1026,5 @@ func (m *Model) toggleHeaderPreview() tea.Cmd {
 	status := func() tea.Msg {
 		return statusMsg{text: note, level: statusInfo}
 	}
-	if cmd != nil {
-		return tea.Batch(cmd, status)
-	}
-	return status
+	return batchCommands(focusCmd, cmd, status)
 }

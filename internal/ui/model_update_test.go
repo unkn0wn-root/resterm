@@ -44,8 +44,8 @@ func keyMsgFor(key string) tea.KeyMsg {
 
 func TestHandleKeyEnterInViewModeSends(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -56,8 +56,8 @@ func TestHandleKeyEnterInViewModeSends(t *testing.T) {
 
 func TestHandleKeyEnterInInsertModeDoesNotSend(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
-	model.setFocus(focusEditor)
-	model.setInsertMode(true, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(true, false)
 	model.moveCursorToLine(2)
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -89,8 +89,8 @@ func TestCancelShortcutStopsInFlightSend(t *testing.T) {
 
 func TestTabInViewModeCyclesFocus(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyTab})
 	if cmd != nil {
@@ -106,8 +106,8 @@ func TestTabInViewModeCyclesFocus(t *testing.T) {
 
 func TestHandleKeyIgnoredWhileErrorModalVisible(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
 	model.showErrorModal = true
 
@@ -125,7 +125,7 @@ func TestHandleKeyGhShrinksEditor(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusEditor)
+	_ = model.setFocus(focusEditor)
 	_ = model.applyLayout()
 	initialEditor := model.editor.Width()
 	if initialEditor <= 0 {
@@ -144,7 +144,7 @@ func TestHandleKeyGlExpandsEditor(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusEditor)
+	_ = model.setFocus(focusEditor)
 	_ = model.applyLayout()
 	initialEditor := model.editor.Width()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
@@ -159,7 +159,7 @@ func TestHandleKeyGhCanRepeatWithoutPrefix(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusEditor)
+	_ = model.setFocus(focusEditor)
 	_ = model.applyLayout()
 	start := model.editor.Width()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
@@ -183,8 +183,8 @@ func TestHandleKeyGhIgnoredInInsertMode(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(true, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(true, false)
 	_ = model.applyLayout()
 	initialEditor := model.editor.Width()
 
@@ -209,7 +209,7 @@ func TestHandleKeyGhShrinksSidebarWhenFocused(t *testing.T) {
 	model.width = 200
 	model.height = 60
 	model.ready = true
-	model.setFocus(focusFile)
+	_ = model.setFocus(focusFile)
 	_ = model.applyLayout()
 	initialSidebar := model.sidebarWidthPx
 	initialEditor := model.editor.Width()
@@ -230,7 +230,7 @@ func TestHandleKeyGlExpandsSidebarWhenFocused(t *testing.T) {
 	model.width = 200
 	model.height = 60
 	model.ready = true
-	model.setFocus(focusRequests)
+	_ = model.setFocus(focusRequests)
 	_ = model.applyLayout()
 	initialSidebar := model.sidebarWidthPx
 	initialEditor := model.editor.Width()
@@ -293,7 +293,7 @@ func TestHandleKeyGjAdjustsSidebar(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusFile)
+	_ = model.setFocus(focusFile)
 	_ = model.applyLayout()
 	initialIndex := model.fileList.Index()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
@@ -308,7 +308,7 @@ func TestHandleKeyGjCanRepeatWithoutPrefix(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusFile)
+	_ = model.setFocus(focusFile)
 	_ = model.applyLayout()
 	initialIndex := model.fileList.Index()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
@@ -327,7 +327,7 @@ func TestHandleKeyGkAdjustsSidebar(t *testing.T) {
 	model.width = 160
 	model.height = 50
 	model.ready = true
-	model.setFocus(focusRequests)
+	_ = model.setFocus(focusRequests)
 	_ = model.applyLayout()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'k'}})
@@ -338,7 +338,7 @@ func TestChordFallbackMaintainsEditorMotions(t *testing.T) {
 	model.width = 120
 	model.height = 40
 	model.ready = true
-	model.setFocus(focusEditor)
+	_ = model.setFocus(focusEditor)
 	_ = model.applyLayout()
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
@@ -358,8 +358,8 @@ func TestHandleKeyDDeletesSelection(t *testing.T) {
 	model.width = 120
 	model.height = 40
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.editor.SetValue("alpha")
 
 	editorPtr := &model.editor
@@ -389,8 +389,8 @@ func TestHandleKeyDWithoutSelectionStartsOperator(t *testing.T) {
 	model.width = 120
 	model.height = 40
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.editor.SetValue("alpha")
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
@@ -422,8 +422,8 @@ func TestHandleKeyDWithoutSelectionStartsOperator(t *testing.T) {
 func TestDeleteOperatorDw(t *testing.T) {
 	model := newTestModelWithDoc("word another")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "w")
 
@@ -441,8 +441,8 @@ func TestDeleteOperatorDw(t *testing.T) {
 func TestDeleteOperatorDe(t *testing.T) {
 	model := newTestModelWithDoc("word another")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "e")
 
@@ -454,8 +454,8 @@ func TestDeleteOperatorDe(t *testing.T) {
 func TestDeleteOperatorDb(t *testing.T) {
 	model := newTestModelWithDoc("alpha beta")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, len("alpha "))
@@ -470,8 +470,8 @@ func TestDeleteOperatorDb(t *testing.T) {
 func TestDeleteOperatorDollar(t *testing.T) {
 	model := newTestModelWithDoc("alpha beta")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, len("alpha "))
@@ -486,8 +486,8 @@ func TestDeleteOperatorDollar(t *testing.T) {
 func TestDeleteOperatorDd(t *testing.T) {
 	model := newTestModelWithDoc("first\nsecond\nthird")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "d")
 
@@ -499,8 +499,8 @@ func TestDeleteOperatorDd(t *testing.T) {
 func TestDeleteOperatorDj(t *testing.T) {
 	model := newTestModelWithDoc("first\nsecond\nthird")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "j")
 
@@ -512,8 +512,8 @@ func TestDeleteOperatorDj(t *testing.T) {
 func TestDeleteOperatorDgg(t *testing.T) {
 	model := newTestModelWithDoc("first\nsecond\nthird")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(2, 0)
@@ -528,8 +528,8 @@ func TestDeleteOperatorDgg(t *testing.T) {
 func TestDeleteOperatorDG(t *testing.T) {
 	model := newTestModelWithDoc("first\nsecond\nthird")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "G")
 
@@ -541,8 +541,8 @@ func TestDeleteOperatorDG(t *testing.T) {
 func TestDeleteOperatorDf(t *testing.T) {
 	model := newTestModelWithDoc("abcdeffg")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "f", "f")
 
@@ -554,8 +554,8 @@ func TestDeleteOperatorDf(t *testing.T) {
 func TestDeleteOperatorDt(t *testing.T) {
 	model := newTestModelWithDoc("abcdeffg")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "t", "f")
 
@@ -567,8 +567,8 @@ func TestDeleteOperatorDt(t *testing.T) {
 func TestDeleteOperatorCancelEsc(t *testing.T) {
 	model := newTestModelWithDoc("alpha")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	sendKeys(t, model, "d", "esc")
 
@@ -585,8 +585,8 @@ func TestHandleKeyUUdoesUndo(t *testing.T) {
 	model.width = 120
 	model.height = 40
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.editor.SetValue("alpha")
 
 	editorPtr := &model.editor
@@ -620,8 +620,8 @@ func TestHandleKeyUUdoesUndo(t *testing.T) {
 func TestHandleKeyCtrlRRedeos(t *testing.T) {
 	model := newTestModelWithDoc("alpha")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 1)
 
@@ -666,8 +666,8 @@ func TestHandleKeyUWithoutHistoryShowsStatus(t *testing.T) {
 	model.width = 120
 	model.height = 40
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.editor.SetValue("alpha")
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'u'}})
@@ -693,8 +693,8 @@ func TestHandleKeyUWithoutHistoryShowsStatus(t *testing.T) {
 func TestHandleKeyDdDeletesLine(t *testing.T) {
 	model := newTestModelWithDoc("alpha\nbeta\ncharlie")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}); cmd != nil {
 		if msg := cmd(); msg != nil {
@@ -724,8 +724,8 @@ func TestHandleKeyDdDeletesLine(t *testing.T) {
 func TestHandleKeyDdDeletesLastLineWithoutBlank(t *testing.T) {
 	model := newTestModelWithDoc("alpha\nbeta")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}); cmd != nil {
@@ -754,8 +754,8 @@ func TestHandleKeyDdDeletesLastLineWithoutBlank(t *testing.T) {
 func TestHandleKeyDdDeletesTrailingBlankLine(t *testing.T) {
 	model := newTestModelWithDoc("alpha\n")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}}); cmd != nil {
@@ -784,8 +784,8 @@ func TestHandleKeyDdDeletesTrailingBlankLine(t *testing.T) {
 func TestHandleKeyDDeletesToLineEnd(t *testing.T) {
 	model := newTestModelWithDoc("alpha beta\nsecond")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 6)
 
@@ -802,8 +802,8 @@ func TestHandleKeyDDeletesToLineEnd(t *testing.T) {
 func TestHandleKeyXDeletesCharacter(t *testing.T) {
 	model := newTestModelWithDoc("xyz")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 1)
 
@@ -820,8 +820,8 @@ func TestHandleKeyXDeletesCharacter(t *testing.T) {
 func TestHandleKeyCChangesLineAndEntersInsert(t *testing.T) {
 	model := newTestModelWithDoc("alpha\nbeta")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
@@ -843,8 +843,8 @@ func TestHandleKeyPasteAfter(t *testing.T) {
 	}
 	model := newTestModelWithDoc("abc")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 1)
 
@@ -864,8 +864,8 @@ func TestHandleKeyPasteBefore(t *testing.T) {
 	}
 	model := newTestModelWithDoc("abc")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 1)
 
@@ -882,8 +882,8 @@ func TestHandleKeyPasteBefore(t *testing.T) {
 func TestHandleKeyFindMotionMovesCursor(t *testing.T) {
 	model := newTestModelWithDoc("alphabet")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 	editorPtr := &model.editor
 	editorPtr.moveCursorTo(0, 0)
 
@@ -906,8 +906,8 @@ func TestHandleKeyFindMotionMovesCursor(t *testing.T) {
 func TestHandleKeyFindPendingIgnoresDeleteOperator(t *testing.T) {
 	model := newTestModelWithDoc("abcd")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'t'}}); cmd != nil {
 		if msg := cmd(); msg != nil {
@@ -956,7 +956,7 @@ func TestResponsePaneFocusChord(t *testing.T) {
 				collectMsgs(cmd)
 			}
 
-			model.setFocus(focusResponse)
+			_ = model.setFocus(focusResponse)
 			if out := model.toggleResponseSplitVertical(); out != nil {
 				collectMsgs(out)
 			}
@@ -1078,8 +1078,8 @@ func TestNavGateBlocksDifferentFile(t *testing.T) {
 func TestHandleKeyFindPendingIgnoresInsertMode(t *testing.T) {
 	model := newTestModelWithDoc("pilot")
 	model.ready = true
-	model.setFocus(focusEditor)
-	model.setInsertMode(false, false)
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'f'}}); cmd != nil {
 		if msg := cmd(); msg != nil {

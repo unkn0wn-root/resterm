@@ -176,7 +176,9 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				return applyFilter(tea.Batch(cmds...))
 			}
 			m.jumpToNavigatorRequest(req, true)
-			m.setFocus(focusEditor)
+			if cmd := m.setFocus(focusEditor); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 			if len(cmds) > 0 {
 				return applyFilter(tea.Batch(cmds...))
 			}

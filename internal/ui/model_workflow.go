@@ -537,14 +537,14 @@ func (m *Model) setWorkflowShown(visible bool) bool {
 
 func (m *Model) resetWorkflowFocus(doc *restfile.Document) {
 	if doc != nil && len(doc.Requests) > 0 {
-		m.setFocus(focusRequests)
+		_ = m.setFocus(focusRequests)
 		return
 	}
 	if len(m.fileList.Items()) > 0 {
-		m.setFocus(focusFile)
+		_ = m.setFocus(focusFile)
 		return
 	}
-	m.setFocus(focusEditor)
+	_ = m.setFocus(focusEditor)
 }
 
 func (m *Model) selectWorkflowItemByKey(key string) bool {

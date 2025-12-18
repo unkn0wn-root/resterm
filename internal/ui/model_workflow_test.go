@@ -229,7 +229,7 @@ func TestWorkflowFocusFallback(t *testing.T) {
 	model.ready = true
 	model.doc = withWorkflow
 	model.syncRequestList(withWorkflow)
-	model.setFocus(focusWorkflows)
+	_ = model.setFocus(focusWorkflows)
 	if model.focus != focusWorkflows {
 		t.Fatalf("expected focus to be workflows, got %d", model.focus)
 	}

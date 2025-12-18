@@ -510,9 +510,9 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 	if cmd := model.toggleResponseSplitVertical(); cmd != nil {
 		drainResponseCommands(t, &model, cmd)
 	}
-	model.setFocus(focusResponse)
+	_ = model.setFocus(focusResponse)
 	model.focusResponsePane(responsePaneSecondary)
-	model.setFocus(focusRequests)
+	_ = model.setFocus(focusRequests)
 
 	resp2 := &httpclient.Response{
 		Status:       "201 Created",
@@ -560,7 +560,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 	if cmd := model.toggleResponseSplitVertical(); cmd != nil {
 		collectMsgs(cmd)
 	}
-	model.setFocus(focusResponse)
+	_ = model.setFocus(focusResponse)
 
 	if cmd := model.togglePaneFollowLatest(responsePanePrimary); cmd != nil {
 		collectMsgs(cmd)

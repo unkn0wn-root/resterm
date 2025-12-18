@@ -646,7 +646,7 @@ func New(cfg Config) Model {
 		compareSnapshots:   make(map[string]*responseSnapshot),
 	}
 	model.applyLayoutSettingsFromConfig(cfg.Settings.Layout)
-	model.setInsertMode(false, false)
+	_ = model.setInsertMode(false, false)
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
 	model.syncSSHGlobals(model.doc)

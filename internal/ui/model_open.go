@@ -94,7 +94,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.doc = nil
 	m.editor.SetValue("")
 	m.editor.SetCursor(0)
-	m.setFocus(focusFile)
+	focusCmd := m.setFocus(focusFile)
 	m.requestList.SetItems(nil)
 	m.requestItems = nil
 	m.requestList.Select(-1)
@@ -111,9 +111,12 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	} else {
 		m.fileList.Select(-1)
 	}
-	return func() tea.Msg {
-		return statusMsg{text: fmt.Sprintf("Workspace set to %s", filepath.Base(dir)), level: statusInfo}
-	}
+	return batchCommands(
+		focusCmd,
+		func() tea.Msg {
+			return statusMsg{text: fmt.Sprintf("Workspace set to %s", filepath.Base(dir)), level: statusInfo}
+		},
+	)
 }
 
 func (m *Model) applyOpenFilePath(path string) tea.Cmd {
@@ -132,8 +135,8 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	}
 	m.fileList.SetItems(makeFileItems(entries))
 	m.selectFileByPath(path)
-	m.setFocus(focusEditor)
-	return m.openFile(path)
+	focusCmd := m.setFocus(focusEditor)
+	return batchCommands(focusCmd, m.openFile(path))
 }
 
 func isSupportedRequestFile(path string) bool {
