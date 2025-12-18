@@ -70,3 +70,9 @@ type wsConsoleResultMsg struct {
 	mode    websocketConsoleMode
 	payload string
 }
+
+type rawDumpLoadedMsg struct {
+	snapshot *responseSnapshot
+	mode     rawViewMode
+	content  string
+}

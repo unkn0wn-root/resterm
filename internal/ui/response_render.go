@@ -352,15 +352,19 @@ func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, view
 		}
 	}
 
+	sz := len(body)
 	rawHex := ""
 	rawBase64 := ""
-	if len(body) <= rawHeavyLimit {
-		rawHex = binaryview.HexDump(body, 16)
+	if sz <= rawHeavyLimit {
+		rawHex = binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
 		rawBase64 = binaryview.Base64Lines(body, 76)
 	}
 
 	rawMode := rawViewText
-	rawText := formatRawBody(viewBody, viewContentType)
+	rawText := ""
+	if localMeta.Kind != binaryview.KindBinary || localMeta.Printable {
+		rawText = formatRawBody(viewBody, viewContentType)
+	}
 
 	decoded := viewBody
 	if localMeta.Kind == binaryview.KindText {
@@ -375,13 +379,21 @@ func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, view
 	var prettyBody string
 	if localMeta.Kind == binaryview.KindBinary {
 		prettyBody = renderBinarySummary(localMeta)
-		rawMode = rawViewHex
+		if rawHeavyBin(localMeta, sz) {
+			rawMode = rawViewSummary
+		} else {
+			rawMode = rawViewHex
+		}
 	} else {
 		prettyBody = trimResponseBody(prettifyBody(decoded, viewContentType))
 	}
-	rawMode = clampRawViewMode(localMeta, rawMode)
+	rawMode = clampRawViewMode(localMeta, sz, rawMode)
 	if rawMode == rawViewHex && rawHex == "" {
-		rawMode = rawViewText
+		if rawHeavyBin(localMeta, sz) {
+			rawMode = rawViewSummary
+		} else {
+			rawMode = rawViewText
+		}
 	}
 
 	if isBodyEmpty(prettyBody) {
@@ -389,7 +401,9 @@ func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, view
 	}
 
 	rawDefault := rawText
-	if rawMode == rawViewHex && rawHex != "" {
+	if rawMode == rawViewSummary {
+		rawDefault = rawSum(localMeta, sz)
+	} else if rawMode == rawViewHex && rawHex != "" {
 		rawDefault = rawHex
 	}
 	if isBodyEmpty(rawDefault) {
@@ -464,7 +478,7 @@ func renderBinarySummary(meta binaryview.Meta) string {
 	if meta.PreviewB64 != "" {
 		lines = append(lines, renderLabelValue("Preview base64", meta.PreviewB64, statsLabelStyle, statsMessageStyle))
 	}
-	if modes := rawViewModeLabels(meta); len(modes) > 0 {
+	if modes := rawViewModeLabels(meta, meta.Size); len(modes) > 0 {
 		lines = append(lines, renderLabelValue("Raw tab", strings.Join(modes, " / "), statsLabelStyle, statsValueStyle))
 	}
 	return strings.Join(lines, "\n")

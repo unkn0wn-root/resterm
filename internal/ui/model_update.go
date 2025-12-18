@@ -79,6 +79,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleResponseLoadingTick(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case rawDumpLoadedMsg:
+		if cmd := m.handleRawDumpLoaded(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case profileNextIterationMsg:
 		if cmd := m.executeProfileIteration(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -932,6 +936,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.toggleHeaderPreview(), true
 	case bindings.ActionCycleRawView:
 		return m.cycleRawViewMode(), true
+	case bindings.ActionShowRawDump:
+		return m.showRawDump(), true
 	case bindings.ActionScrollResponseTop:
 		return m.scrollShortcutToEdge(true)
 	case bindings.ActionScrollResponseBottom:
