@@ -79,6 +79,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleResponseLoadingTick(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case rawDumpLoadedMsg:
+		if cmd := m.handleRawDumpLoaded(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case profileNextIterationMsg:
 		if cmd := m.executeProfileIteration(); cmd != nil {
 			cmds = append(cmds, cmd)

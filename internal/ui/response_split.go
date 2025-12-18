@@ -32,6 +32,8 @@ type responseSnapshot struct {
 	rawHex          string
 	rawBase64       string
 	rawMode         rawViewMode
+	rawLoading      bool
+	rawLoadingMode  rawViewMode
 	headers         string
 	requestHeaders  string
 	stats           string
