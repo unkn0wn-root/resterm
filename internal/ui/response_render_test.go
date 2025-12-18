@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"net/http"
 	"strings"
 	"testing"
@@ -191,6 +192,29 @@ func TestBinaryResponsesUseSummaryAndHexRaw(t *testing.T) {
 	}
 	if !strings.Contains(pretty, "Binary body") {
 		t.Fatalf("expected pretty view to show binary summary, got %q", pretty)
+	}
+}
+
+func TestHeavyBinaryDefaultsToSummary(t *testing.T) {
+	body := bytes.Repeat([]byte{0x00, 0xff}, rawHeavyLimit/2+1)
+	resp := &httpclient.Response{
+		Status:       "200 OK",
+		StatusCode:   200,
+		Headers:      http.Header{"Content-Type": {"application/octet-stream"}},
+		Body:         body,
+		Duration:     10 * time.Millisecond,
+		EffectiveURL: "https://example.com/download/file.bin",
+	}
+
+	views := buildHTTPResponseViews(resp, nil, nil)
+	if views.rawMode != rawViewSummary {
+		t.Fatalf("expected heavy binary to default to summary mode")
+	}
+	if views.rawHex != "" || views.rawBase64 != "" {
+		t.Fatalf("expected heavy binary dumps to be deferred")
+	}
+	if !strings.Contains(views.raw, "<raw dump deferred>") {
+		t.Fatalf("expected raw summary placeholder, got %q", views.raw)
 	}
 }
 

@@ -48,6 +48,7 @@ var (
 	ActionCopyResponseTab         ActionID = "copy_response_tab"
 	ActionToggleHeaderPreview     ActionID = "toggle_header_preview"
 	ActionCycleRawView            ActionID = "cycle_raw_view"
+	ActionShowRawDump             ActionID = "show_raw_dump"
 	ActionScrollResponseTop       ActionID = "scroll_response_top"
 	ActionScrollResponseBottom    ActionID = "scroll_response_bottom"
 	ActionSaveResponseBody        ActionID = "save_response_body"
@@ -105,6 +106,7 @@ var definitions = []definition{
 	def(ActionCopyResponseTab, false, "ctrl+shift+c", "g y"),
 	def(ActionToggleHeaderPreview, false, "g shift+h"),
 	def(ActionCycleRawView, false, "g b"),
+	def(ActionShowRawDump, false, "g shift+d"),
 	def(ActionScrollResponseTop, false, "g g"),
 	def(ActionScrollResponseBottom, false, "shift+g"),
 	def(ActionSaveResponseBody, false, "g shift+s"),

@@ -17,9 +17,27 @@ func (m *Model) cycleRawViewMode() tea.Cmd {
 	}
 	snap := pane.snapshot
 	meta := ensureSnapshotMeta(snap)
-	snap.rawMode = clampRawViewMode(meta, snap.rawMode)
-	next := nextRawViewMode(meta, snap.rawMode)
-	applyRawViewMode(snap, next)
+	sz := len(snap.body)
+	snap.rawMode = clampRawViewMode(meta, sz, snap.rawMode)
+	next := nextRawViewMode(meta, sz, snap.rawMode)
+	return m.setRawMode(snap, next, "")
+}
+
+func (m *Model) showRawDump() tea.Cmd {
+	pane := m.focusedPane()
+	if pane == nil || pane.snapshot == nil || !pane.snapshot.ready {
+		m.setStatusMessage(statusMsg{level: statusInfo, text: "No response to show raw dump"})
+		return nil
+	}
+	snap := pane.snapshot
+	return m.setRawMode(snap, rawViewHex, "Raw dump loaded (hex)")
+}
+
+func (m *Model) setRawMode(snap *responseSnapshot, mode rawViewMode, msg string) tea.Cmd {
+	if snap == nil {
+		return nil
+	}
+	applyRawViewMode(snap, mode)
 
 	for _, id := range m.visiblePaneIDs() {
 		p := m.pane(id)
@@ -28,10 +46,10 @@ func (m *Model) cycleRawViewMode() tea.Cmd {
 		}
 	}
 
-	m.setStatusMessage(statusMsg{
-		level: statusInfo,
-		text:  fmt.Sprintf("Raw view: %s", snap.rawMode.label()),
-	})
+	if msg == "" {
+		msg = fmt.Sprintf("Raw view: %s", snap.rawMode.label())
+	}
+	m.setStatusMessage(statusMsg{level: statusInfo, text: msg})
 	return m.syncResponsePanes()
 }
 
@@ -40,8 +58,9 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 		return
 	}
 	meta := ensureSnapshotMeta(snapshot)
-	mode = clampRawViewMode(meta, mode)
-	if snapshot.rawText == "" && len(snapshot.body) > 0 {
+	sz := len(snapshot.body)
+	mode = clampRawViewMode(meta, sz, mode)
+	if snapshot.rawText == "" && len(snapshot.body) > 0 && (meta.Kind == binaryview.KindText || meta.Printable) {
 		snapshot.rawText = formatRawBody(snapshot.body, snapshot.contentType)
 	}
 	needHex := mode == rawViewHex
@@ -55,6 +74,8 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 	snapshot.rawMode = mode
 	body := ""
 	switch mode {
+	case rawViewSummary:
+		body = rawSum(meta, sz)
 	case rawViewHex:
 		if snapshot.rawHex != "" {
 			body = snapshot.rawHex
@@ -73,7 +94,7 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 		}
 	}
 	body = fallbackRawBody(snapshot, body)
-	if snapshot.rawText == "" {
+	if snapshot.rawText == "" && mode != rawViewSummary {
 		snapshot.rawText = body
 	}
 	snapshot.raw = joinSections(snapshot.rawSummary, body)
@@ -113,8 +134,8 @@ func ensureSnapshotMeta(snapshot *responseSnapshot) binaryview.Meta {
 	return snapshot.bodyMeta
 }
 
-func clampRawViewMode(meta binaryview.Meta, mode rawViewMode) rawViewMode {
-	modes := allowedRawViewModes(meta)
+func clampRawViewMode(meta binaryview.Meta, sz int, mode rawViewMode) rawViewMode {
+	modes := allowedRawViewModes(meta, sz)
 	for _, m := range modes {
 		if m == mode {
 			return mode
@@ -126,12 +147,12 @@ func clampRawViewMode(meta binaryview.Meta, mode rawViewMode) rawViewMode {
 	return modes[0]
 }
 
-func nextRawViewMode(meta binaryview.Meta, current rawViewMode) rawViewMode {
-	modes := allowedRawViewModes(meta)
+func nextRawViewMode(meta binaryview.Meta, sz int, current rawViewMode) rawViewMode {
+	modes := allowedRawViewModes(meta, sz)
 	if len(modes) == 0 {
 		return current
 	}
-	current = clampRawViewMode(meta, current)
+	current = clampRawViewMode(meta, sz, current)
 	idx := 0
 	for i, m := range modes {
 		if m == current {
@@ -142,15 +163,18 @@ func nextRawViewMode(meta binaryview.Meta, current rawViewMode) rawViewMode {
 	return modes[(idx+1)%len(modes)]
 }
 
-func allowedRawViewModes(meta binaryview.Meta) []rawViewMode {
+func allowedRawViewModes(meta binaryview.Meta, sz int) []rawViewMode {
 	if meta.Kind == binaryview.KindBinary && !meta.Printable {
+		if rawHeavyBin(meta, sz) {
+			return []rawViewMode{rawViewSummary, rawViewHex, rawViewBase64}
+		}
 		return []rawViewMode{rawViewHex, rawViewBase64}
 	}
 	return []rawViewMode{rawViewText, rawViewHex, rawViewBase64}
 }
 
-func rawViewModeLabels(meta binaryview.Meta) []string {
-	modes := allowedRawViewModes(meta)
+func rawViewModeLabels(meta binaryview.Meta, sz int) []string {
+	modes := allowedRawViewModes(meta, sz)
 	labels := make([]string, 0, len(modes))
 	for _, mode := range modes {
 		labels = append(labels, mode.label())

@@ -98,7 +98,8 @@ Content-Type: application/json
 | Zoom focused pane / clear zoom | `g+z` / `g+Z` |
 | Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
 | Jump to top/bottom of focused response tab | `g+g` / `G` |
-| Cycle Raw tab mode (text / hex / base64) | `g+b` |
+| Cycle Raw tab mode (text / hex / base64, summary for large binary) | `g+b` |
+| Load full Raw dump (hex) | `g+Shift+D` |
 | Save response body / open externally | `g+Shift+S` / `g+Shift+E` |
 | Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
 | Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
@@ -196,7 +197,7 @@ While the response pane is focused, `Ctrl+Shift+C` (or `g y`) copies the entire 
 
 Use `g+g` and `G` to jump to the start or end of the Pretty, Raw, or Headers tabs when the response pane is focused. The same keys jump to the first or last entry in the navigator when you are browsing files or workflows.
 
-Binary responses show size and type hints alongside quick previews. While the response pane is focused, press `g+b` to rotate the Raw tab between text, hex, and base64 views. Press `g+Shift+S` to open the Save Response Body prompt, which comes prefilled with a suggested path from your last save or workspace and writes the file after you hit Enter. `g+Shift+E` writes the body to a temporary file and opens it with your default app.
+Binary responses show size and type hints alongside quick previews. For large binary payloads, the Raw tab starts in a summary view and defers full dumps until requested. While the response pane is focused, press `g+b` to rotate the Raw tab between summary, hex, and base64 views. Press `g+Shift+D` to load the full hex dump immediately. Press `g+Shift+S` to open the Save Response Body prompt, which comes prefilled with a suggested path from your last save or workspace and writes the file after you hit Enter. `g+Shift+E` writes the body to a temporary file and opens it with your default app.
 
 ### Pane minimization & zoom
 

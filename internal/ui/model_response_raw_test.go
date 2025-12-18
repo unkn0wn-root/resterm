@@ -68,6 +68,35 @@ func TestApplyRawViewModeClampsBinaryText(t *testing.T) {
 	}
 }
 
+func TestApplyRawViewModeDefersHeavyBinary(t *testing.T) {
+	body := bytes.Repeat([]byte{0x00}, rawHeavyLimit+1)
+	meta := binaryview.Analyze(body, "application/octet-stream")
+	snap := &responseSnapshot{
+		rawSummary:  "Status: 200 OK",
+		rawMode:     rawViewText,
+		body:        body,
+		bodyMeta:    meta,
+		contentType: "application/octet-stream",
+		ready:       true,
+	}
+
+	applyRawViewMode(snap, rawViewText)
+	if snap.rawMode != rawViewSummary {
+		t.Fatalf("expected heavy binary to clamp to summary mode, got %v", snap.rawMode)
+	}
+	if snap.rawHex != "" || snap.rawBase64 != "" {
+		t.Fatalf("expected heavy binary dumps to be deferred")
+	}
+	if !strings.Contains(snap.raw, "<raw dump deferred>") {
+		t.Fatalf("expected raw summary placeholder, got %q", snap.raw)
+	}
+
+	applyRawViewMode(snap, rawViewHex)
+	if snap.rawHex == "" {
+		t.Fatalf("expected heavy hex dump to be generated on demand")
+	}
+}
+
 func TestApplyRawViewModeKeepsSummary(t *testing.T) {
 	body := []byte("hello")
 	summary := "Status: 200 OK"
