@@ -439,6 +439,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var editorCmd tea.Cmd
 			m.editor, editorCmd = m.editor.Update(filtered)
 			cmds = append(cmds, editorCmd)
+			// Sync navigator selection with editor cursor position
+			if m.focus == focusEditor {
+				m.syncNavigatorWithEditorCursor()
+			}
 		}
 	}
 
@@ -686,13 +690,15 @@ func (m *Model) revealRequestInEditor(req *restfile.Request) {
 		return
 	}
 	start := req.LineRange.Start - 1
-	end := req.LineRange.End - 1
+	// Move cursor to the start of the request
+	m.moveCursorToLine(start)
+	// Use typewriter mode to center the cursor
 	h := m.editor.Height()
 	if h <= 0 {
 		h = 1
 	}
 	total := m.editor.LineCount()
-	offset := scroll.Reveal(start, end, m.editor.ViewStart(), h, total)
+	offset := scroll.Align(start, m.editor.ViewStart(), h, total)
 	m.editor.SetViewStart(offset)
 }
 
@@ -1197,18 +1203,18 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "c":
-				cmd := m.runChangeCurrentLine()
+				changeCmd := m.runChangeCurrentLine()
+				insertCmd := m.setInsertMode(true, true)
 				m.suppressEditorKey = true
-				m.setInsertMode(true, true)
-				return combine(cmd)
+				return combine(tea.Batch(changeCmd, insertCmd))
 			case "P":
 				cmd := m.runPasteClipboard(false)
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "i":
-				m.setInsertMode(true, true)
+				cmd := m.setInsertMode(true, true)
 				m.suppressEditorKey = true
-				return combine(nil)
+				return combine(cmd)
 			case "esc":
 				exitCmd := m.editor.ExitSearchMode()
 				m.editor.ClearSelection()
@@ -1241,9 +1247,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					targetCol = lineLen
 				}
 				editorPtr.moveCursorTo(pos.Line, targetCol)
-				m.setInsertMode(true, true)
+				cmd := m.setInsertMode(true, true)
 				m.suppressEditorKey = true
-				return combine(nil)
+				return combine(cmd)
 			}
 			if updated, cmd, ok := m.editor.HandleMotion(keyStr); ok {
 				m.editor = updated

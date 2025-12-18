@@ -351,6 +351,7 @@ type Model struct {
 	activeRequestTitle string
 	activeRequestKey   string
 	activeWorkflowKey  string
+	lastEditorCursorLine int
 
 	streamMgr          *stream.Manager
 	streamMsgChan      chan tea.Msg

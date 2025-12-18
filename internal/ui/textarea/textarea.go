@@ -1361,16 +1361,20 @@ func (m Model) View() string {
 			if cursorVisible {
 				writeSegments(&s, segments, 0, min(cursorRel, len(segments)))
 				if cursorRel < len(visibleRunes) {
-					m.Cursor.SetChar(string(visibleRunes[cursorRel]))
-					cursorStyle := style
 					cursorIndex := segmentStart + cursorRel
+					cursorStyle := style
 					if lineStyles != nil && cursorIndex >= 0 && cursorIndex < len(lineStyles) {
 						cursorStyle = cursorStyle.Inherit(lineStyles[cursorIndex])
 					}
+
+					m.Cursor.SetChar(string(visibleRunes[cursorRel]))
+
+					// Use cursor's View() method which handles blinking
 					s.WriteString(cursorStyle.Render(m.Cursor.View()))
 					writeSegments(&s, segments, cursorRel+1, len(segments))
 				} else {
 					m.Cursor.SetChar(" ")
+					// Use cursor's View() method which handles blinking
 					s.WriteString(style.Render(m.Cursor.View()))
 				}
 			} else {

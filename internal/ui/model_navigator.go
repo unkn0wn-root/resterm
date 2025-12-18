@@ -273,13 +273,20 @@ func (m *Model) syncNavigatorSelection() {
 			}
 			if samePath(path, m.currentFile) {
 				m.setActiveRequest(req)
+				m.revealRequestInEditor(req)
 			} else {
 				if m.pendingCrossFileID == n.ID {
 					return
 				}
-				m.setActiveRequest(nil)
-				m.requestList.Select(-1)
-				m.setStatusMessage(statusMsg{text: "Open file to edit this request", level: statusInfo})
+				// Automatically open the file and jump to the request
+				if path != "" {
+					_ = m.openFile(path)
+					m.setActiveRequest(req)
+					m.revealRequestInEditor(req)
+				} else {
+					m.setActiveRequest(nil)
+					m.requestList.Select(-1)
+				}
 			}
 		} else {
 			m.setActiveRequest(nil)
@@ -297,9 +304,15 @@ func (m *Model) syncNavigatorSelection() {
 				if m.pendingCrossFileID == n.ID {
 					return
 				}
-				m.activeWorkflowKey = ""
-				m.workflowList.Select(-1)
-				m.setStatusMessage(statusMsg{text: "Open file to edit this workflow", level: statusInfo})
+				// Automatically open the file
+				if path != "" {
+					_ = m.openFile(path)
+					m.activeWorkflowKey = workflowKey(wf)
+					_ = m.selectWorkflowItemByKey(m.activeWorkflowKey)
+				} else {
+					m.activeWorkflowKey = ""
+					m.workflowList.Select(-1)
+				}
 			}
 		} else {
 			m.activeWorkflowKey = ""
@@ -358,4 +371,39 @@ func samePath(a, b string) bool {
 		return false
 	}
 	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+// syncNavigatorWithEditorCursor updates the navigator selection to match the request at the current cursor position
+func (m *Model) syncNavigatorWithEditorCursor() {
+	if m.navigator == nil || m.doc == nil || m.currentFile == "" {
+		return
+	}
+
+	cursorLine := currentCursorLine(m.editor)
+
+	// Only update if cursor line has changed
+	if cursorLine == m.lastEditorCursorLine {
+		return
+	}
+	m.lastEditorCursorLine = cursorLine
+
+	// Find the request at the cursor position
+	var req *restfile.Request
+	var reqIndex int
+	for i, r := range m.doc.Requests {
+		if cursorLine >= r.LineRange.Start && cursorLine <= r.LineRange.End {
+			req = r
+			reqIndex = i
+			break
+		}
+	}
+
+	// If cursor is not inside any request (e.g., on a header or blank line), don't update
+	if req == nil {
+		return
+	}
+
+	// Build the node ID for this request and select it
+	nodeID := fmt.Sprintf("req:%s:%d", m.currentFile, reqIndex)
+	m.navigator.SelectByID(nodeID)
 }

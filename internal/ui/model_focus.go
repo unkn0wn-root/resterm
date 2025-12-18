@@ -1,6 +1,7 @@
 package ui
 
 import (
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/cursor"
 )
 
@@ -39,6 +40,7 @@ func (m *Model) setFocus(target paneFocus) {
 	if target == focusEditor {
 		if m.editorInsertMode {
 			m.editor.Cursor.SetMode(cursor.CursorBlink)
+			m.editor.Cursor.Focus()
 		} else {
 			m.editor.Cursor.SetMode(cursor.CursorStatic)
 		}
@@ -55,9 +57,9 @@ func (m *Model) setFocus(target paneFocus) {
 	}
 }
 
-func (m *Model) setInsertMode(enabled bool, announce bool) {
+func (m *Model) setInsertMode(enabled bool, announce bool) tea.Cmd {
 	if enabled == m.editorInsertMode {
-		return
+		return nil
 	}
 	m.editorInsertMode = enabled
 	if enabled {
@@ -65,10 +67,10 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 		m.editor.KeyMap = m.editorWriteKeyMap
 		m.editor.Cursor.SetMode(cursor.CursorBlink)
 		m.editor.Cursor.Blink = true
+		cmd := m.editor.Cursor.Focus()
 		m.editor.SetMetadataHintsEnabled(true)
-		if announce {
-			m.setStatusMessage(statusMsg{text: "Insert mode", level: statusInfo})
-		}
+		// Mode is shown in status bar, no need for temporary message
+		return cmd
 	} else {
 		m.editor.ClearSelection()
 		m.editor.SetMotionsEnabled(true)
@@ -76,9 +78,8 @@ func (m *Model) setInsertMode(enabled bool, announce bool) {
 		m.editor.Cursor.SetMode(cursor.CursorStatic)
 		m.editor.Cursor.Blink = false
 		m.editor.SetMetadataHintsEnabled(false)
-		if announce {
-			m.setStatusMessage(statusMsg{text: "View mode", level: statusInfo})
-		}
+		// Mode is shown in status bar, no need for temporary message
 	}
 	m.editor.undoCoalescing = false
+	return nil
 }

@@ -2,39 +2,46 @@ package scroll
 
 import "testing"
 
-func TestAlignKeepsBufferAndCentersWhenNeeded(t *testing.T) {
+func TestAlignKeepsCursorCentered(t *testing.T) {
+	// h=4 means center is at 4/2 = 2
+	// When sel=0, offset should be 0-2 = -2, clamped to 0
 	off := Align(0, 0, 4, 10)
 	if off != 0 {
 		t.Fatalf("expected offset 0 at top, got %d", off)
 	}
 
+	// When sel=2, offset should be 2-2 = 0 (cursor at center)
 	off = Align(2, off, 4, 10)
 	if off != 0 {
-		t.Fatalf("expected offset to stay put inside buffer, got %d", off)
+		t.Fatalf("expected offset 0 to center sel=2, got %d", off)
 	}
 
+	// When sel=3, offset should be 3-2 = 1 (cursor at center)
 	off = Align(3, off, 4, 10)
 	if off != 1 {
-		t.Fatalf("expected offset to move minimally, got %d", off)
+		t.Fatalf("expected offset 1 to center sel=3, got %d", off)
 	}
 
+	// When sel=9, offset should be 9-2 = 7, but maxOff is 10-4=6, so clamped to 6
 	off = Align(9, off, 4, 10)
 	if off != 6 {
-		t.Fatalf("expected offset to clamp near end, got %d", off)
+		t.Fatalf("expected offset to clamp to maxOff=6, got %d", off)
 	}
 }
 
-func TestAlignPinsLastPage(t *testing.T) {
+func TestAlignPinsAtBounds(t *testing.T) {
 	h := 4
 	total := 6
-	maxOff := total - h
+	maxOff := total - h // maxOff = 2
+	// sel=4, center=2, offset should be 4-2=2
 	off := Align(4, 0, h, total)
 	if off != maxOff {
-		t.Fatalf("expected offset to stay pinned at end, got %d", off)
+		t.Fatalf("expected offset %d, got %d", maxOff, off)
 	}
+	// sel=5 (last item), offset should be 5-2=3, but maxOff=2, so clamped to 2
 	off = Align(5, off, h, total)
 	if off != maxOff {
-		t.Fatalf("expected offset to stay pinned at end, got %d", off)
+		t.Fatalf("expected offset %d, got %d", maxOff, off)
 	}
 }
 

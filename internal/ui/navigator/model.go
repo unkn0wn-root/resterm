@@ -289,6 +289,22 @@ func (m *Model[T]) Find(id string) *Node[T] {
 	return nil
 }
 
+// SelectByID selects a node by its ID
+func (m *Model[T]) SelectByID(id string) bool {
+	if id == "" {
+		return false
+	}
+	rows := m.Rows()
+	for i, row := range rows {
+		if row.Node != nil && row.Node.ID == id {
+			m.sel = i
+			m.ensureVisible()
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model[T]) refresh() {
 	m.flat = flatten(m.nodes, 0, m.filter, m.methodFilters, m.tagFilters)
 	if len(m.flat) == 0 {

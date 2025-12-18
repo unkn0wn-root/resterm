@@ -1673,19 +1673,8 @@ func (m Model) headerTestSummary() (string, bool) {
 }
 
 func (m Model) renderStatusBar() string {
-	statusText := m.statusMessage.text
-	if statusText == "" {
-		switch {
-		case m.fileMissing:
-			statusText = "File missing on disk"
-		case m.fileStale:
-			statusText = "File changed on disk"
-		case m.dirty:
-			statusText = "Unsaved changes"
-		default:
-			statusText = "Ready"
-		}
-	}
+	// Status bar now only shows editor mode
+	statusText := ""
 
 	versionText := strings.TrimSpace(m.cfg.Version)
 	if versionText == "" {
@@ -1727,32 +1716,32 @@ func (m Model) renderStatusBar() string {
 	sepWidth := lipgloss.Width(sep)
 	ellipsisWidth := lipgloss.Width("…")
 
-	segments := make([]string, 0, 4)
-	if m.cfg.EnvironmentName != "" {
-		segments = append(segments, fmt.Sprintf("Env: %s", m.cfg.EnvironmentName))
-	}
-	if m.currentFile != "" {
-		segments = append(segments, filepath.Base(m.currentFile))
-	}
-	segments = append(segments, fmt.Sprintf("Focus: %s", m.focusLabel()))
+	segments := make([]string, 0, 2)
+	// Always reserve fixed space for mode (width of "VISUAL LINE")
+	const modeWidth = 11
+	modeText := ""
 	if m.focus == focusEditor {
-		mode := "VIEW"
 		if m.editorInsertMode {
-			mode = "INSERT"
+			modeText = "INSERT"
+		} else if m.editor.isVisualLineMode() {
+			modeText = "VISUAL LINE"
+		} else if m.editor.isVisualMode() {
+			modeText = "VISUAL"
+		} else {
+			modeText = "NORMAL"
 		}
-		segments = append(segments, fmt.Sprintf("Mode: %s", mode))
 	}
-	if m.sidebarCollapsed {
-		segments = append(segments, "Sidebar:min")
-	}
-	if m.editorCollapsed {
-		segments = append(segments, "Editor:min")
-	}
-	if m.responseCollapsed {
-		segments = append(segments, "Response:min")
-	}
-	if m.zoomActive {
-		segments = append(segments, fmt.Sprintf("Zoom: %s", m.collapsedStatusLabel(m.zoomRegion)))
+	// Always pad to fixed width so file status never jumps
+	paddedMode := modeText + strings.Repeat(" ", modeWidth-len(modeText))
+	segments = append(segments, paddedMode)
+
+	// Show important file status after mode
+	if m.fileMissing {
+		segments = append(segments, "File missing on disk")
+	} else if m.fileStale {
+		segments = append(segments, "File changed on disk")
+	} else if m.dirty {
+		segments = append(segments, "Unsaved changes")
 	}
 
 	staticText := strings.Join(segments, sep)

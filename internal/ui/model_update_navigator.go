@@ -98,6 +98,10 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 					n.Expanded = true
 					m.navigator.Refresh()
 				}
+			} else if n != nil && (n.Kind == navigator.KindRequest || n.Kind == navigator.KindWorkflow) {
+				// Jump to editor when right/l is pressed on a request or workflow
+				m.setFocus(focusEditor)
+				return nil
 			} else {
 				m.navigator.ToggleExpanded()
 			}
@@ -107,23 +111,28 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			n := m.navigator.Selected()
-			if n == nil || n.Kind != navigator.KindFile {
-				// Let main key handling drive request/workflow actions.
+			if n == nil {
 				return nil
 			}
-			path := n.Payload.FilePath
-			if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
-				cmd = m.openFile(path)
-			}
-			if len(n.Children) == 0 {
-				m.expandNavigatorFile(path)
-			}
-			if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
-				n = refreshed
-			}
-			if n != nil && len(n.Children) > 0 && !n.Expanded {
-				n.Expanded = true
-				m.navigator.Refresh()
+			if n.Kind == navigator.KindFile {
+				path := n.Payload.FilePath
+				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
+					cmd = m.openFile(path)
+				}
+				if len(n.Children) == 0 {
+					m.expandNavigatorFile(path)
+				}
+				if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
+					n = refreshed
+				}
+				if n != nil && len(n.Children) > 0 && !n.Expanded {
+					n.Expanded = true
+					m.navigator.Refresh()
+				}
+			} else if n.Kind == navigator.KindRequest || n.Kind == navigator.KindWorkflow {
+				// Jump to editor when enter is pressed on a request or workflow
+				m.setFocus(focusEditor)
+				return nil
 			}
 		case " ":
 			n := m.navigator.Selected()
