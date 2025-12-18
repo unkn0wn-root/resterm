@@ -10,36 +10,46 @@ import (
 )
 
 func (m *Model) cycleRawViewMode() tea.Cmd {
-	pane := m.focusedPane()
-	if pane == nil || pane.snapshot == nil || !pane.snapshot.ready {
-		m.setStatusMessage(statusMsg{level: statusInfo, text: "No response to cycle raw view"})
+	snap := m.focusedSnapshot("No response to cycle raw view")
+	if snap == nil {
 		return nil
 	}
-	snap := pane.snapshot
+
 	meta := ensureSnapshotMeta(snap)
 	sz := len(snap.body)
 	snap.rawMode = clampRawViewMode(meta, sz, snap.rawMode)
 	next := nextRawViewMode(meta, sz, snap.rawMode)
-	if next == rawViewHex && snap.rawHex == "" && rawHeavy(sz) {
-		return m.loadRawDumpAsync(snap, rawViewHex)
-	}
-	if next == rawViewBase64 && snap.rawBase64 == "" && rawHeavy(sz) {
-		return m.loadRawDumpAsync(snap, rawViewBase64)
-	}
-	return m.setRawMode(snap, next, "")
+	return m.applyRawMode(snap, next, "")
 }
 
 func (m *Model) showRawDump() tea.Cmd {
-	pane := m.focusedPane()
-	if pane == nil || pane.snapshot == nil || !pane.snapshot.ready {
-		m.setStatusMessage(statusMsg{level: statusInfo, text: "No response to show raw dump"})
+	snap := m.focusedSnapshot("No response to show raw dump")
+	if snap == nil {
 		return nil
 	}
-	snap := pane.snapshot
+
+	msg := ""
 	if snap.rawHex != "" || len(snap.body) == 0 || !rawHeavy(len(snap.body)) {
-		return m.setRawMode(snap, rawViewHex, rawDumpLoadedMessage(rawViewHex))
+		msg = rawDumpLoadedMessage(rawViewHex)
 	}
-	return m.loadRawDumpAsync(snap, rawViewHex)
+	return m.applyRawMode(snap, rawViewHex, msg)
+}
+
+func (m *Model) applyRawMode(snap *responseSnapshot, mode rawViewMode, msg string) tea.Cmd {
+	if snap == nil {
+		return nil
+	}
+	if snap.rawLoading {
+		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpLoadingMessage(snap.rawLoadingMode)})
+		return nil
+	}
+
+	meta := ensureSnapshotMeta(snap)
+	mode = clampRawViewMode(meta, len(snap.body), mode)
+	if needsRawAsync(snap, mode) {
+		return m.loadRawDumpAsync(snap, mode)
+	}
+	return m.setRawMode(snap, mode, msg)
 }
 
 func (m *Model) setRawMode(snap *responseSnapshot, mode rawViewMode, msg string) tea.Cmd {
@@ -48,12 +58,9 @@ func (m *Model) setRawMode(snap *responseSnapshot, mode rawViewMode, msg string)
 	}
 	applyRawViewMode(snap, mode)
 
-	for _, id := range m.visiblePaneIDs() {
-		p := m.pane(id)
-		if p != nil && p.snapshot == snap {
-			p.markRawViewStale()
-		}
-	}
+	m.forEachSnapshotPane(snap, func(p *responsePaneState) {
+		p.markRawViewStale()
+	})
 	m.invalidateDiffCaches()
 
 	if msg == "" {
@@ -71,7 +78,11 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpLoadingMessage(snap.rawLoadingMode)})
 		return nil
 	}
-	if len(snap.body) == 0 {
+
+	meta := ensureSnapshotMeta(snap)
+	mode = clampRawViewMode(meta, len(snap.body), mode)
+
+	if len(snap.body) == 0 || !needsRawAsync(snap, mode) {
 		return m.setRawMode(snap, mode, rawDumpLoadedMessage(mode))
 	}
 
@@ -81,12 +92,9 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 	loading := rawDumpLoadingMessage(mode)
 	snap.raw = joinSections(snap.rawSummary, loading)
 
-	for _, id := range m.visiblePaneIDs() {
-		p := m.pane(id)
-		if p != nil && p.snapshot == snap {
-			p.invalidateRawCache(mode)
-		}
-	}
+	m.forEachSnapshotPane(snap, func(p *responsePaneState) {
+		p.invalidateRawCache(mode)
+	})
 	m.invalidateDiffCaches()
 
 	m.setStatusMessage(statusMsg{level: statusInfo, text: loading})
@@ -120,16 +128,11 @@ func (m *Model) handleRawDumpLoaded(msg rawDumpLoadedMsg) tea.Cmd {
 		applyRawViewMode(snap, msg.mode)
 	}
 
-	visible := false
-	for _, id := range m.visiblePaneIDs() {
-		p := m.pane(id)
-		if p != nil && p.snapshot == snap {
-			visible = true
-			if snap.rawMode == msg.mode {
-				p.invalidateRawCache(msg.mode)
-			}
+	visible := m.forEachSnapshotPane(snap, func(p *responsePaneState) {
+		if snap.rawMode == msg.mode {
+			p.invalidateRawCache(msg.mode)
 		}
-	}
+	})
 
 	if visible {
 		m.invalidateDiffCaches()
@@ -179,7 +182,7 @@ func loadRawDumpCmd(snap *responseSnapshot, mode rawViewMode) tea.Cmd {
 		content := ""
 		switch mode {
 		case rawViewBase64:
-			content = binaryview.Base64Lines(body, 76)
+			content = binaryview.Base64Lines(body, rawBase64LineWidth)
 		default:
 			content = binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
 		}
@@ -203,7 +206,7 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 		snapshot.rawHex = binaryview.HexDump(snapshot.body, binaryview.HexDumpBytesPerLine)
 	}
 	if snapshot.rawBase64 == "" && needBase64 && len(snapshot.body) > 0 {
-		snapshot.rawBase64 = binaryview.Base64Lines(snapshot.body, 76)
+		snapshot.rawBase64 = binaryview.Base64Lines(snapshot.body, rawBase64LineWidth)
 	}
 	snapshot.rawMode = mode
 	body := ""
@@ -256,6 +259,46 @@ func fallbackRawBody(snapshot *responseSnapshot, body string) string {
 		}
 	}
 	return "<empty>"
+}
+
+func (m *Model) focusedSnapshot(emptyMsg string) *responseSnapshot {
+	pane := m.focusedPane()
+	if pane == nil || pane.snapshot == nil || !pane.snapshot.ready {
+		if strings.TrimSpace(emptyMsg) != "" {
+			m.setStatusMessage(statusMsg{level: statusInfo, text: emptyMsg})
+		}
+		return nil
+	}
+	return pane.snapshot
+}
+
+func (m *Model) forEachSnapshotPane(snap *responseSnapshot, fn func(*responsePaneState)) bool {
+	if snap == nil || fn == nil {
+		return false
+	}
+	visible := false
+	for _, id := range m.visiblePaneIDs() {
+		p := m.pane(id)
+		if p != nil && p.snapshot == snap {
+			visible = true
+			fn(p)
+		}
+	}
+	return visible
+}
+
+func needsRawAsync(snap *responseSnapshot, mode rawViewMode) bool {
+	if snap == nil || !rawHeavy(len(snap.body)) {
+		return false
+	}
+	switch mode {
+	case rawViewHex:
+		return snap.rawHex == ""
+	case rawViewBase64:
+		return snap.rawBase64 == ""
+	default:
+		return false
+	}
 }
 
 func ensureSnapshotMeta(snapshot *responseSnapshot) binaryview.Meta {

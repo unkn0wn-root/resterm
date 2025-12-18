@@ -12,7 +12,7 @@ func TestCycleRawViewSkipsTextForBinary(t *testing.T) {
 	body := []byte{0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d, 0x0a, 0x1a}
 	meta := binaryview.Analyze(body, "application/octet-stream")
 	rawHex := binaryview.HexDump(body, 16)
-	rawBase64 := binaryview.Base64Lines(body, 76)
+	rawBase64 := binaryview.Base64Lines(body, rawBase64LineWidth)
 
 	snap := &responseSnapshot{
 		raw:         rawHex,
@@ -52,7 +52,7 @@ func TestApplyRawViewModeClampsBinaryText(t *testing.T) {
 	snap := &responseSnapshot{
 		rawText:     formatRawBody(body, "application/octet-stream"),
 		rawHex:      binaryview.HexDump(body, 16),
-		rawBase64:   binaryview.Base64Lines(body, 76),
+		rawBase64:   binaryview.Base64Lines(body, rawBase64LineWidth),
 		rawMode:     rawViewText,
 		body:        body,
 		contentType: "application/octet-stream",
@@ -97,6 +97,39 @@ func TestApplyRawViewModeDefersHeavyBinary(t *testing.T) {
 	}
 }
 
+func TestCycleRawViewModeTriggersAsyncHexLoad(t *testing.T) {
+	body := bytes.Repeat([]byte{0x00}, rawHeavyLimit+1)
+	meta := binaryview.Analyze(body, "application/octet-stream")
+	snap := &responseSnapshot{
+		rawSummary:  "Status: 200 OK",
+		rawMode:     rawViewSummary,
+		body:        body,
+		bodyMeta:    meta,
+		contentType: "application/octet-stream",
+		ready:       true,
+	}
+	model := newModelWithResponseTab(responseTabRaw, snap)
+
+	cmd := model.cycleRawViewMode()
+	pane := model.pane(responsePanePrimary)
+	if pane == nil || pane.snapshot == nil {
+		t.Fatalf("expected response pane with snapshot")
+	}
+	snap = pane.snapshot
+	if cmd == nil {
+		t.Fatalf("expected async load command for heavy hex view")
+	}
+	if !snap.rawLoading || snap.rawLoadingMode != rawViewHex {
+		t.Fatalf("expected raw hex load to start, got loading=%v mode=%v", snap.rawLoading, snap.rawLoadingMode)
+	}
+	if snap.rawMode != rawViewHex {
+		t.Fatalf("expected raw mode to switch to hex while loading, got %v", snap.rawMode)
+	}
+	if !strings.Contains(snap.raw, "Loading raw dump (hex)") {
+		t.Fatalf("expected loading placeholder, got %q", snap.raw)
+	}
+}
+
 func TestApplyRawViewModeKeepsSummary(t *testing.T) {
 	body := []byte("hello")
 	summary := "Status: 200 OK"
@@ -104,7 +137,7 @@ func TestApplyRawViewModeKeepsSummary(t *testing.T) {
 		rawSummary:  summary,
 		rawText:     formatRawBody(body, "text/plain"),
 		rawHex:      binaryview.HexDump(body, 16),
-		rawBase64:   binaryview.Base64Lines(body, 76),
+		rawBase64:   binaryview.Base64Lines(body, rawBase64LineWidth),
 		rawMode:     rawViewText,
 		body:        body,
 		contentType: "text/plain",
@@ -125,6 +158,38 @@ func TestApplyRawViewModeKeepsSummary(t *testing.T) {
 	}
 	if !strings.Contains(snap.raw, summary) || !strings.Contains(snap.raw, snap.rawBase64) {
 		t.Fatalf("expected raw view to retain summary and base64 body")
+	}
+}
+
+func TestShowRawDumpUsesCachedHex(t *testing.T) {
+	body := bytes.Repeat([]byte{0x41}, rawHeavyLimit+1)
+	meta := binaryview.Analyze(body, "application/octet-stream")
+	hex := binaryview.HexDump(body[:32], 16)
+	snap := &responseSnapshot{
+		rawSummary:  "Status: 200 OK",
+		rawHex:      hex,
+		rawMode:     rawViewSummary,
+		body:        body,
+		bodyMeta:    meta,
+		contentType: "application/octet-stream",
+		ready:       true,
+	}
+
+	model := newModelWithResponseTab(responseTabRaw, snap)
+	model.showRawDump()
+	pane := model.pane(responsePanePrimary)
+	if pane == nil || pane.snapshot == nil {
+		t.Fatalf("expected response pane with snapshot")
+	}
+	snap = pane.snapshot
+	if snap.rawLoading {
+		t.Fatalf("expected cached hex to skip async load")
+	}
+	if snap.rawMode != rawViewHex {
+		t.Fatalf("expected raw mode to switch to hex, got %v", snap.rawMode)
+	}
+	if !strings.Contains(snap.raw, hex) {
+		t.Fatalf("expected cached hex in raw output, got %q", snap.raw)
 	}
 }
 

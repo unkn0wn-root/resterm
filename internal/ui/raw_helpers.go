@@ -7,6 +7,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 )
 
+const (
+	// rawHeavyLimit marks the payload size above which we defer expensive dumps.
+	rawHeavyLimit = 128 * 1024
+	// rawBase64LineWidth mirrors PEM-style wrapping to keep long dumps readable.
+	rawBase64LineWidth = 76
+)
+
 func rawHeavy(sz int) bool {
 	return sz > rawHeavyLimit
 }
