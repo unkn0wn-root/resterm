@@ -788,23 +788,23 @@ func (e *requestEditor) ClearSelection() {
 func (e requestEditor) ToggleVisual() (requestEditor, tea.Cmd) {
 	if e.mode == selectionVisual {
 		e.clearSelection()
-		return e, statusCmd(statusInfo, "Visual mode off")
+		return e, nil
 	}
 
 	e.startSelection(e.caretPosition(), selectionVisual)
-	return e, statusCmd(statusInfo, "Visual mode")
+	return e, nil
 }
 
 func (e requestEditor) ToggleVisualLine() (requestEditor, tea.Cmd) {
 	if e.mode == selectionVisualLine {
 		e.clearSelection()
-		return e, statusCmd(statusInfo, "Visual line mode off")
+		return e, nil
 	}
 
 	e.startSelection(e.caretPosition(), selectionVisualLine)
 	e.selection.active = true
 	e.applySelectionHighlight()
-	return e, statusCmd(statusInfo, "Visual line mode")
+	return e, nil
 }
 
 func (e requestEditor) YankSelection() (requestEditor, tea.Cmd) {

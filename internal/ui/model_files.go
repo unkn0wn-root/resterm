@@ -18,8 +18,7 @@ func (m *Model) openSelectedFile() tea.Cmd {
 		return nil
 	}
 	cmd := m.openFile(path)
-	m.setFocus(focusRequests)
-	return cmd
+	return batchCommands(cmd, m.setFocus(focusRequests))
 }
 
 func (m *Model) openFile(path string) tea.Cmd {
@@ -32,7 +31,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.forgetFileWatch(m.currentFile)
 	m.currentFile = path
 	m.cfg.FilePath = path
-	m.setInsertMode(false, false)
+	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
 	m.editor.SetValue(string(data))
 	m.editor.undoStack = nil
@@ -63,7 +62,7 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.currentRequest = nil
 	m.activeRequestKey = ""
 	m.activeRequestTitle = ""
-	m.setInsertMode(false, false)
+	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
 	m.editor.SetValue("")
 	m.editor.undoStack = nil
@@ -75,9 +74,9 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.syncRequestList(m.doc)
 	m.dirty = false
 	m.syncHistory()
-	m.setFocus(focusEditor)
+	focusCmd := m.setFocus(focusEditor)
 	m.setStatusMessage(statusMsg{text: "Temporary document", level: statusInfo})
-	return nil
+	return focusCmd
 }
 
 func (m *Model) saveFile() tea.Cmd {
@@ -180,7 +179,7 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	m.fileStale = false
 	m.fileMissing = false
 	m.closeFileChangeModal()
-	m.setInsertMode(false, false)
+	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
 	m.editor.SetValue(string(data))
 	m.editor.undoStack = nil

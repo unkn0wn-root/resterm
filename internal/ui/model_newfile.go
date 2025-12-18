@@ -124,12 +124,12 @@ func (m *Model) submitNewFile() tea.Cmd {
 	}
 	m.fileList.SetItems(makeFileItems(entries))
 	m.selectFileByPath(finalPath)
-	m.setFocus(focusEditor)
+	focusCmd := m.setFocus(focusEditor)
 	cmd := m.openFile(finalPath)
 	label := "Created"
 	if fromSave {
 		label = "Saved"
 	}
 	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s %s", label, filepath.Base(finalPath)), level: statusSuccess})
-	return cmd
+	return batchCommands(focusCmd, cmd)
 }

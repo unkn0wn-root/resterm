@@ -1739,6 +1739,10 @@ func (m Model) renderStatusBar() string {
 		mode := "VIEW"
 		if m.editorInsertMode {
 			mode = "INSERT"
+		} else if m.editor.isVisualLineMode() {
+			mode = "VISUAL LINE"
+		} else if m.editor.isVisualMode() {
+			mode = "VISUAL"
 		}
 		segments = append(segments, fmt.Sprintf("Mode: %s", mode))
 	}

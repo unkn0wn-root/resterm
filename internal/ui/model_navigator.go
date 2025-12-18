@@ -323,11 +323,11 @@ func (m *Model) syncNavigatorFocus(n *navigator.Node[any]) {
 	}
 	switch n.Kind {
 	case navigator.KindRequest:
-		m.setFocus(focusRequests)
+		_ = m.setFocus(focusRequests)
 	case navigator.KindWorkflow:
-		m.setFocus(focusWorkflows)
+		_ = m.setFocus(focusWorkflows)
 	case navigator.KindFile:
-		m.setFocus(focusFile)
+		_ = m.setFocus(focusFile)
 	}
 }
 
