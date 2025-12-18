@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.5](https://github.com/unkn0wn-root/resterm/compare/v0.11.4...v0.11.5) (2025-12-18)
+
+
+### Features
+
+* async loading binary ([cad1dd3](https://github.com/unkn0wn-root/resterm/commit/cad1dd3dde1506b6ea1af2b6d0fe81bcbb4617da))
+* cache hex/base64 bin response ([25cf7fa](https://github.com/unkn0wn-root/resterm/commit/25cf7fa4fc627362a51a0a714281a235872ca77b))
+* defer large bin responses and add new shortcut to explicitly get whole body ([5c1e7d7](https://github.com/unkn0wn-root/resterm/commit/5c1e7d7ea06444ae99f52bbb76218a653fc8c507))
+
 ### [0.11.4](https://github.com/unkn0wn-root/resterm/compare/v0.11.3...v0.11.4) (2025-12-17)
 
 
