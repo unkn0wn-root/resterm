@@ -17,11 +17,11 @@
 </p>
 
 <p align="center">
-  <strong>Workflow and WebSocket</strong>
+  <strong>Workflows</strong>
 </p>
 
 <p align="center">
-  <img src="_media/resterm_websocket.png" alt="Screenshot of resterm TUI with WebSocket and Workflow" width="720" />
+  <img src="_media/resterm_workflow.png" alt="Screenshot of resterm TUI with Workflow" width="720" />
 </p>
 
 <p align="center">
