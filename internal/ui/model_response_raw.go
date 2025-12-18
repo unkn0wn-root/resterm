@@ -51,7 +51,7 @@ func (m *Model) setRawMode(snap *responseSnapshot, mode rawViewMode, msg string)
 	for _, id := range m.visiblePaneIDs() {
 		p := m.pane(id)
 		if p != nil && p.snapshot == snap {
-			p.invalidateCaches()
+			p.markRawViewStale()
 		}
 	}
 
@@ -83,7 +83,7 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 	for _, id := range m.visiblePaneIDs() {
 		p := m.pane(id)
 		if p != nil && p.snapshot == snap {
-			p.invalidateCaches()
+			p.invalidateRawCache(mode)
 		}
 	}
 
@@ -124,7 +124,7 @@ func (m *Model) handleRawDumpLoaded(msg rawDumpLoadedMsg) tea.Cmd {
 		if p != nil && p.snapshot == snap {
 			visible = true
 			if snap.rawMode == msg.mode {
-				p.invalidateCaches()
+				p.invalidateRawCache(msg.mode)
 			}
 		}
 	}

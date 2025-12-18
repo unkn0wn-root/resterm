@@ -70,6 +70,7 @@ type responsePaneState struct {
 	followLatest   bool
 	snapshot       *responseSnapshot
 	wrapCache      map[responseTab]cachedWrap
+	rawWrapCache   map[rawViewMode]cachedWrap
 	search         responseSearchState
 	tabScroll      map[responseTab]int
 	headersView    headersViewMode
@@ -83,6 +84,7 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		lastContentTab: responseTabPretty,
 		followLatest:   followLatest,
 		wrapCache:      make(map[responseTab]cachedWrap),
+		rawWrapCache:   make(map[rawViewMode]cachedWrap),
 		search:         responseSearchState{index: -1},
 		tabScroll:      make(map[responseTab]int),
 		headersView:    headersViewResponse,
@@ -94,6 +96,11 @@ func (pane *responsePaneState) invalidateCaches() {
 	for k := range pane.wrapCache {
 		pane.wrapCache[k] = cachedWrap{}
 	}
+	if pane.rawWrapCache != nil {
+		for k := range pane.rawWrapCache {
+			pane.rawWrapCache[k] = cachedWrap{}
+		}
+	}
 	pane.search.invalidate()
 	if pane.tabScroll != nil {
 		pane.tabScroll = make(map[responseTab]int)
@@ -101,6 +108,36 @@ func (pane *responsePaneState) invalidateCaches() {
 	if pane.headerScroll != nil {
 		pane.headerScroll = make(map[headersViewMode]int)
 	}
+}
+
+func (pane *responsePaneState) ensureRawWrapCache() {
+	if pane.rawWrapCache == nil {
+		pane.rawWrapCache = make(map[rawViewMode]cachedWrap)
+	}
+}
+
+func (pane *responsePaneState) markRawViewStale() {
+	if pane == nil {
+		return
+	}
+	if pane.tabScroll != nil {
+		delete(pane.tabScroll, responseTabRaw)
+	}
+	if pane.search.hasQuery() && (pane.activeTab == responseTabRaw || pane.search.tab == responseTabRaw) {
+		pane.search.markStale()
+	}
+}
+
+func (pane *responsePaneState) invalidateRawCache(mode rawViewMode) {
+	if pane == nil {
+		return
+	}
+	pane.ensureRawWrapCache()
+	pane.rawWrapCache[mode] = cachedWrap{}
+	if pane.wrapCache != nil {
+		pane.wrapCache[responseTabRaw] = cachedWrap{}
+	}
+	pane.markRawViewStale()
 }
 
 func (pane *responsePaneState) setActiveTab(tab responseTab) {
@@ -338,6 +375,31 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		centered := centerContent(noResponseMessage, width, height)
 		wrapped := wrapToWidth(centered, width)
 		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, base: centered, valid: true}
+		decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+		decorated = m.applyResponseContentStyles(cacheKey, decorated)
+		pane.viewport.SetContent(decorated)
+		pane.restoreScrollForActiveTab()
+		ensureResponseMatchInView(pane, wrapped)
+		pane.setCurrPosition()
+		return nil
+	}
+
+	if cacheKey == responseTabRaw && pane.snapshot != nil && pane.snapshot.ready {
+		mode := pane.snapshot.rawMode
+		pane.ensureRawWrapCache()
+		cache := pane.rawWrapCache[mode]
+		if cache.valid && cache.width == width {
+			decorated := m.decorateResponseContentForPane(pane, cacheKey, cache.content, width, snapshotReady, snapshotID)
+			decorated = m.applyResponseContentStyles(cacheKey, decorated)
+			pane.viewport.SetContent(decorated)
+			pane.restoreScrollForActiveTab()
+			ensureResponseMatchInView(pane, cache.content)
+			pane.setCurrPosition()
+			return nil
+		}
+
+		wrapped := wrapContentForTab(cacheKey, content, width)
+		pane.rawWrapCache[mode] = cachedWrap{width: width, content: wrapped, base: content, valid: true}
 		decorated := m.decorateResponseContentForPane(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 		decorated = m.applyResponseContentStyles(cacheKey, decorated)
 		pane.viewport.SetContent(decorated)
