@@ -87,9 +87,6 @@ func (m *Model) setInsertMode(enabled bool, announce bool) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.editor.SetMetadataHintsEnabled(true)
-		if announce {
-			m.setStatusMessage(statusMsg{text: "Insert mode", level: statusInfo})
-		}
 	} else {
 		m.editor.ClearSelection()
 		m.editor.SetMotionsEnabled(true)
@@ -99,9 +96,6 @@ func (m *Model) setInsertMode(enabled bool, announce bool) tea.Cmd {
 		}
 		m.editor.Cursor.Blink = false
 		m.editor.SetMetadataHintsEnabled(false)
-		if announce {
-			m.setStatusMessage(statusMsg{text: "View mode", level: statusInfo})
-		}
 	}
 	m.editor.undoCoalescing = false
 	return batchCommands(cmds...)
