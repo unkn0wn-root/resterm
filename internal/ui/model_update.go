@@ -437,7 +437,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			filtered := m.filterEditorMessage(msg)
 			var editorCmd tea.Cmd
+			before := m.editor.Value()
 			m.editor, editorCmd = m.editor.Update(filtered)
+			if m.editor.Value() != before {
+				m.dirty = true
+			}
 			cmds = append(cmds, editorCmd)
 			// Sync navigator selection with editor cursor position
 			if m.focus == focusEditor {
@@ -1268,15 +1272,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			m.suppressEditorKey = true
 			return combine(m.sendActiveRequest())
 		}
-		if m.editorInsertMode {
-			km := msg
-			switch km.Type {
-			case tea.KeyBackspace, tea.KeyDelete, tea.KeyRunes, tea.KeyEnter:
-				if km.Type != tea.KeyRunes || len(km.Runes) > 0 {
-					m.dirty = true
-				}
-			}
-		}
+
 	}
 
 	if m.focus == focusFile {
