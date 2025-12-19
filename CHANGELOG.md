@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.8](https://github.com/unkn0wn-root/resterm/compare/v0.11.7...v0.11.8) (2025-12-19)
+
+
+### Bug Fixes
+
+* keep navigator state stable and restore cursor request fallback ([c20aac3](https://github.com/unkn0wn-root/resterm/commit/c20aac3a2b3590cc86d0674bc1e7f05060b38d11))
+
 ### [0.11.7](https://github.com/unkn0wn-root/resterm/compare/v0.11.6...v0.11.7) (2025-12-19)
 
 
