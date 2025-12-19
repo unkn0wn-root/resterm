@@ -214,6 +214,53 @@ func TestCollapseResponseExpandsEditorWidth(t *testing.T) {
 	}
 }
 
+func TestCollapsedResponseHidesPaneWidth(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 180
+	model.height = 60
+	model.ready = true
+	_ = model.applyLayout()
+
+	if res := model.setCollapseState(paneRegionResponse, true); res.blocked {
+		t.Fatalf("expected response collapse to be allowed")
+	}
+	_ = model.applyLayout()
+	filePane := model.renderFilePane()
+	editorPane := model.renderEditorPane()
+	fileWidth := lipgloss.Width(filePane)
+	editorWidth := lipgloss.Width(editorPane)
+	if tw := model.responseTargetWidth(fileWidth, editorWidth); tw != 0 {
+		t.Fatalf("expected collapsed response target width 0, got %d", tw)
+	}
+	total := fileWidth + editorWidth
+	if total != model.width {
+		t.Fatalf("expected visible panes to fill width %d after collapse, got %d", model.width, total)
+	}
+}
+
+func TestHorizontalCollapseUsesFullHeight(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.width = 160
+	model.height = 50
+	model.ready = true
+	model.mainSplitOrientation = mainSplitHorizontal
+	_ = model.applyLayout()
+	initialResp := model.responseContentHeight
+
+	if res := model.setCollapseState(paneRegionEditor, true); res.blocked {
+		t.Fatalf("expected editor collapse to be allowed")
+	}
+	_ = model.applyLayout()
+	if model.responseContentHeight <= initialResp {
+		t.Fatalf("expected response height to grow after editor collapse, initial %d new %d", initialResp, model.responseContentHeight)
+	}
+	if model.editorContentHeight != 0 {
+		t.Fatalf("expected editor height to be zero when collapsed horizontally, got %d", model.editorContentHeight)
+	}
+}
+
 func TestAdjustEditorSplitClampsBounds(t *testing.T) {
 	cfg := Config{WorkspaceRoot: t.TempDir()}
 	model := New(cfg)
@@ -309,11 +356,15 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 			responseView := model.renderResponseColumn(responsePanePrimary, false, 0)
 			responseViewWidth := lipgloss.Width(responseView)
 
-			editorContent := model.editor.Width()
+			editorFrame := model.theme.EditorBorder.GetHorizontalFrameSize()
+			responseFrame := model.theme.ResponseBorder.GetHorizontalFrameSize()
+			editorContent := editorViewWidth
 			responseContent := model.responseContentWidth()
-			total := model.sidebarWidthPx + (editorContent + 4) + (responseContent + 4)
+			editorOuter := paneOuterWidthFromContent(editorContent, editorFrame)
+			responseOuter := paneOuterWidthFromContent(responseContent, responseFrame)
+			total := model.sidebarWidthPx + editorOuter + responseOuter
 			if total > model.width {
-				t.Fatalf("calculated pane widths sidebar=%d editor=%d (content %d, view %d) response=%d (content %d, view %d) total=%d window %d (list config %d)", model.sidebarWidthPx, editorContent+4, editorContent, editorViewWidth, responseContent+4, responseContent, responseViewWidth, total, model.width, listConfiguredWidth)
+				t.Fatalf("calculated pane widths sidebar=%d editor=%d (content %d, view %d) response=%d (content %d, view %d) total=%d window %d (list config %d)", model.sidebarWidthPx, editorOuter, editorContent, editorViewWidth, responseOuter, responseContent, responseViewWidth, total, model.width, listConfiguredWidth)
 			}
 
 			filePane := model.renderFilePane()
@@ -333,8 +384,8 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 					panesWidth,
 					model.width,
 					model.sidebarWidthPx,
-					editorContent+4,
-					responseContent+4,
+					editorOuter,
+					responseOuter,
 					listWidth,
 					listConfiguredWidth,
 					editorViewWidth,

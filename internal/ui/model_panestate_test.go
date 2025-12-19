@@ -11,20 +11,23 @@ func TestTogglePaneCollapseBlocksLastPane(t *testing.T) {
 	model.height = 50
 	model.ready = true
 	_ = model.applyLayout()
+	// Collapse editor allowed.
 	if res := model.setCollapseState(paneRegionEditor, true); res.blocked {
 		t.Fatalf("expected editor collapse to be allowed")
 	}
-	if res := model.setCollapseState(paneRegionResponse, true); res.blocked {
-		t.Fatalf("expected response collapse to be allowed")
+	// Collapse sidebar allowed while response visible.
+	if res := model.setCollapseState(paneRegionSidebar, true); res.blocked {
+		t.Fatalf("expected sidebar collapse to be allowed")
 	}
-	if cmd := model.togglePaneCollapse(paneRegionSidebar); cmd != nil {
+	// Attempt to collapse response (last visible) should be blocked.
+	if cmd := model.togglePaneCollapse(paneRegionResponse); cmd != nil {
 		t.Fatalf("expected no layout command when blocking final collapse")
 	}
-	if model.sidebarCollapsed {
-		t.Fatalf("expected sidebar to remain visible when it is the last pane")
+	if model.responseCollapsed {
+		t.Fatalf("expected response to remain visible when it is the last pane")
 	}
-	if !strings.Contains(strings.ToLower(model.statusMessage.text), "cannot hide") {
-		t.Fatalf("expected warning when attempting to minimize requests pane, got %q", model.statusMessage.text)
+	if !strings.Contains(strings.ToLower(model.statusMessage.text), "need at least one pane") {
+		t.Fatalf("expected warning about keeping a pane visible, got %q", model.statusMessage.text)
 	}
 }
 
@@ -95,5 +98,43 @@ func TestTogglePaneCollapseSidebarMinimizes(t *testing.T) {
 	}
 	if !strings.Contains(strings.ToLower(model.statusMessage.text), "sidebar minimized") {
 		t.Fatalf("expected sidebar minimized status, got %q", model.statusMessage.text)
+	}
+}
+
+func TestTogglePaneCollapseMovesFocusFromHiddenPane(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 140
+	model.height = 50
+	model.ready = true
+	_ = model.applyLayout()
+	_ = model.setFocus(focusResponse)
+
+	_ = model.togglePaneCollapse(paneRegionResponse)
+	if model.focus == focusResponse {
+		t.Fatalf("expected focus to move away from collapsed response pane")
+	}
+	if model.focus != focusRequests {
+		t.Fatalf("expected focus to land on navigator, got %v", model.focus)
+	}
+}
+
+func TestTogglePaneCollapsePreventsDoubleMainCollapse(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 140
+	model.height = 50
+	model.ready = true
+	_ = model.applyLayout()
+
+	if res := model.setCollapseState(paneRegionResponse, true); res.blocked {
+		t.Fatalf("expected first collapse to be allowed")
+	}
+	if cmd := model.togglePaneCollapse(paneRegionEditor); cmd != nil {
+		t.Fatalf("expected no layout command when blocking second main collapse")
+	}
+	if model.editorCollapsed {
+		t.Fatalf("expected editor to remain visible when response already minimized")
+	}
+	if !strings.Contains(strings.ToLower(model.statusMessage.text), "keep editor or response visible") {
+		t.Fatalf("expected friendly warning about double collapse, got %q", model.statusMessage.text)
 	}
 }
