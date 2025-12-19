@@ -131,6 +131,43 @@ func TestCycleRawViewModeTriggersAsyncHexLoad(t *testing.T) {
 	}
 }
 
+func TestRawLoadShowsOnlyReflowPlaceholder(t *testing.T) {
+	body := bytes.Repeat([]byte{0xCD}, rawHeavyLimit+1)
+	meta := binaryview.Analyze(body, "application/octet-stream")
+	snap := &responseSnapshot{
+		rawSummary:  "Status: 200 OK",
+		rawMode:     rawViewSummary,
+		body:        body,
+		bodyMeta:    meta,
+		contentType: "application/octet-stream",
+		ready:       true,
+	}
+	model := newModelWithResponseTab(responseTabRaw, snap)
+
+	cmd := model.showRawDump()
+	if cmd == nil {
+		t.Fatalf("expected async load command for heavy raw dump")
+	}
+
+	syncCmd := model.syncResponsePanes()
+	if syncCmd != nil {
+		t.Fatalf("expected no reflow command while raw dump loading, got %v", syncCmd)
+	}
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatalf("expected response pane")
+	}
+
+	view := pane.viewport.View()
+	if !strings.Contains(view, responseReflowingMessage) {
+		t.Fatalf("expected reflow placeholder during raw load, got %q", view)
+	}
+	if strings.Contains(view, rawDumpLoadingMessage(rawViewHex)) {
+		t.Fatalf("did not expect loading message in viewport during raw load, got %q", view)
+	}
+}
+
 func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
 	body := bytes.Repeat([]byte{0xAB}, responseReflowLimit+1)
 	hex := binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)

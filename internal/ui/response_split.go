@@ -409,7 +409,15 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	}
 
 	if cacheKey == responseTabRaw && pane.snapshot != nil && pane.snapshot.ready {
-		mode := pane.snapshot.rawMode
+		snap := pane.snapshot
+		mode := snap.rawMode
+
+		if snap.rawLoading && (mode == rawViewHex || mode == rawViewBase64) {
+			reflowing := centerContent(responseReflowingMessage, width, height)
+			m.applyPaneContent(pane, cacheKey, reflowing, width, snapshotReady, snapshotID)
+			return nil
+		}
+
 		pane.ensureRawWrapCache()
 		cache := pane.rawWrapCache[mode]
 		if cache.valid && cache.width == width {
