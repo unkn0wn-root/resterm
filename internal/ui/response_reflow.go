@@ -40,11 +40,14 @@ func nextResponseReflowToken() string {
 	return fmt.Sprintf("reflow-%d", id)
 }
 
-func shouldAsyncReflow(tab responseTab, content string) bool {
-	if tab != responseTabRaw {
+func shouldReflow(tab responseTab, mode rawViewMode, snap *responseSnapshot) bool {
+	if tab != responseTabRaw || snap == nil || !snap.ready {
 		return false
 	}
-	return len(content) > responseReflowLimit
+	if mode != rawViewHex && mode != rawViewBase64 {
+		return false
+	}
+	return rawHeavy(len(snap.body))
 }
 
 func reflowDelay(pane *responsePaneState, tab responseTab, width int, mode rawViewMode) time.Duration {

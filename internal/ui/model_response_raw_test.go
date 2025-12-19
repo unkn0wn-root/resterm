@@ -132,12 +132,14 @@ func TestCycleRawViewModeTriggersAsyncHexLoad(t *testing.T) {
 }
 
 func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
-	heavy := strings.Repeat("A", responseReflowLimit+1)
+	body := bytes.Repeat([]byte{0xAB}, responseReflowLimit+1)
+	hex := binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
 	snap := &responseSnapshot{
 		rawSummary: "Status: 200 OK",
-		raw:        ensureTrailingNewline(heavy),
-		rawMode:    rawViewText,
-		body:       []byte(heavy),
+		raw:        ensureTrailingNewline(hex),
+		rawHex:     hex,
+		rawMode:    rawViewHex,
+		body:       body,
 		ready:      true,
 	}
 	model := newModelWithResponseTab(responseTabRaw, snap)
@@ -177,6 +179,31 @@ func TestAsyncReflowScopedToRawTab(t *testing.T) {
 	view := pane.viewport.View()
 	if strings.Contains(view, responseReflowingMessage) {
 		t.Fatalf("did not expect reflow placeholder in non-raw tab view, got %q", view)
+	}
+}
+
+func TestRawAsyncReflowSkipsTextMode(t *testing.T) {
+	heavy := strings.Repeat("A", responseReflowLimit+1)
+	snap := &responseSnapshot{
+		rawSummary: "Status: 200 OK",
+		raw:        ensureTrailingNewline(heavy),
+		rawMode:    rawViewText,
+		body:       []byte(heavy),
+		ready:      true,
+	}
+	model := newModelWithResponseTab(responseTabRaw, snap)
+
+	cmd := model.syncResponsePanes()
+	if cmd != nil {
+		t.Fatalf("expected no async reflow command for text raw, got %v", cmd)
+	}
+	pane := model.pane(responsePanePrimary)
+	if pane.reflow.token != "" {
+		t.Fatalf("expected no reflow state for text raw, got %+v", pane.reflow)
+	}
+	view := pane.viewport.View()
+	if strings.Contains(view, responseReflowingMessage) {
+		t.Fatalf("did not expect reflow placeholder for text raw, got %q", view)
 	}
 }
 

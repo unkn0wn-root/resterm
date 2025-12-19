@@ -417,7 +417,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			return nil
 		}
 
-		if shouldAsyncReflow(cacheKey, content) {
+		if shouldReflow(cacheKey, mode, pane.snapshot) {
 			req := responseReflowReq{
 				paneID:     id,
 				tab:        cacheKey,
@@ -427,6 +427,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 				mode:       mode,
 				headers:    pane.headersView,
 			}
+
 			delay := reflowDelay(pane, cacheKey, width, mode)
 			if cmd := m.scheduleResponseReflow(pane, req, delay); cmd != nil {
 				reflowing := centerContent(responseReflowingMessage, width, height)

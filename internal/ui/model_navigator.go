@@ -376,6 +376,9 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	}
 
 	line := currentCursorLine(m.editor)
+	if line == m.lastCursorLine && m.lastCursorFile == m.currentFile && m.lastCursorDoc == m.doc {
+		return
+	}
 	req, reqIdx := requestAtLine(m.doc, line)
 
 	if req == nil {
