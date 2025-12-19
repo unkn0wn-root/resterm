@@ -104,6 +104,20 @@ func TestInlineRequestFromLineRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestRequestAtCursorFallsBackToLastRequest(t *testing.T) {
+	content := "### first\nGET https://example.com/one\n\n### second\nGET https://example.com/two\n\n"
+	doc := parser.Parse("sample.http", []byte(content))
+	var model Model
+
+	req, inline := model.requestAtCursor(doc, content, 6)
+	if inline {
+		t.Fatalf("expected document request, not inline")
+	}
+	if req == nil || strings.TrimSpace(req.URL) != "https://example.com/two" {
+		t.Fatalf("expected last request when cursor after requests, got %+v", req)
+	}
+}
+
 func TestInlineCurlRequestSingleLine(t *testing.T) {
 	content := "curl https://example.com"
 	req := buildInlineRequest(content, 1)

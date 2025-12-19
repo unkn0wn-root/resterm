@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 
@@ -107,6 +108,69 @@ func TestNavigatorIgnoresLinesOutsideRequests(t *testing.T) {
 
 	if sel := m.navigator.Selected(); sel == nil || sel.ID != firstID {
 		t.Fatalf("expected navigator to keep first request selected on non-request line, got %#v", sel)
+	}
+}
+
+func TestNavigatorCursorSyncPreservesFiltersWithinRequest(t *testing.T) {
+	content := "### one\nGET https://example.com/one\n\n### two\nGET https://example.com/two\n"
+	file := "/tmp/navsync.http"
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = file
+	m.cfg.FilePath = file
+	m.doc = parser.Parse(file, []byte(content))
+	m.syncRequestList(m.doc)
+
+	nodes := []*navigator.Node[any]{
+		{
+			ID:       "file:" + file,
+			Kind:     navigator.KindFile,
+			Payload:  navigator.Payload[any]{FilePath: file},
+			Expanded: true,
+			Children: []*navigator.Node[any]{
+				{
+					ID:      navigatorRequestID(file, 0),
+					Kind:    navigator.KindRequest,
+					Payload: navigator.Payload[any]{FilePath: file, Data: m.doc.Requests[0]},
+				},
+				{
+					ID:      navigatorRequestID(file, 1),
+					Kind:    navigator.KindRequest,
+					Payload: navigator.Payload[any]{FilePath: file, Data: m.doc.Requests[1]},
+				},
+			},
+		},
+	}
+	m.navigator = navigator.New(nodes)
+	_ = m.setFocus(focusEditor)
+
+	firstStart := m.doc.Requests[0].LineRange.Start
+	m.moveCursorToLine(firstStart)
+	m.streamFilterActive = true
+	m.streamFilterInput.SetValue("trace")
+
+	m.moveCursorToLine(firstStart + 1)
+	if !m.streamFilterActive {
+		t.Fatalf("expected stream filter to remain active within request")
+	}
+	if got := m.streamFilterInput.Value(); got != "trace" {
+		t.Fatalf("expected stream filter value to remain, got %q", got)
+	}
+	if key := requestKey(m.doc.Requests[0]); m.activeRequestKey != key {
+		t.Fatalf("expected active request to stay on first request, got %s", m.activeRequestKey)
+	}
+
+	secondStart := m.doc.Requests[1].LineRange.Start
+	m.moveCursorToLine(secondStart)
+
+	if m.streamFilterActive {
+		t.Fatalf("expected stream filter to reset after switching requests")
+	}
+	if val := m.streamFilterInput.Value(); val != "" {
+		t.Fatalf("expected stream filter input to clear, got %q", val)
+	}
+	if key := requestKey(m.doc.Requests[1]); m.activeRequestKey != key {
+		t.Fatalf("expected active request to switch to second request, got %s", m.activeRequestKey)
 	}
 }
 

@@ -361,6 +361,20 @@ func (m *Model) syncNavigatorFocus(n *navigator.Node[any]) {
 	}
 }
 
+func (m *Model) applyCursorRequest(req *restfile.Request) {
+	if req == nil {
+		return
+	}
+	key := requestKey(req)
+	if key != "" && key == m.activeRequestKey {
+		m.currentRequest = req
+		m.activeRequestTitle = requestDisplayName(req)
+		_ = m.selectRequestItemByKey(key)
+		return
+	}
+	m.setActiveRequest(req)
+}
+
 func (m *Model) resetCursorSync() {
 	m.lastCursorLine = -1
 	m.lastCursorFile = ""
@@ -409,7 +423,7 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 		return
 	}
 
-	m.setActiveRequest(req)
+	m.applyCursorRequest(req)
 	m.lastCursorLine = line
 	m.lastCursorFile = m.currentFile
 	m.lastCursorDoc = m.doc
