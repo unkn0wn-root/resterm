@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.9](https://github.com/unkn0wn-root/resterm/compare/v0.11.8...v0.11.9) (2025-12-19)
+
+
+### Bug Fixes
+
+* keep cursor based selection safe and sync navigator at EOF ([5dbb7df](https://github.com/unkn0wn-root/resterm/commit/5dbb7df491d4108f9695e1f67f952b8ae2b1785a))
+
 ### [0.11.8](https://github.com/unkn0wn-root/resterm/compare/v0.11.7...v0.11.8) (2025-12-19)
 
 
