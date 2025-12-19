@@ -209,6 +209,21 @@ func (m *Model[T]) Selected() *Node[T] {
 	return m.flat[m.sel].Node
 }
 
+// SelectByID selects the first visible node with the given id.
+func (m *Model[T]) SelectByID(id string) bool {
+	if id == "" || len(m.flat) == 0 {
+		return false
+	}
+	for i, row := range m.flat {
+		if row.Node != nil && row.Node.ID == id {
+			m.sel = i
+			m.ensureVisible()
+			return true
+		}
+	}
+	return false
+}
+
 // ToggleExpanded toggles expansion on the selected node.
 func (m *Model[T]) ToggleExpanded() {
 	n := m.Selected()

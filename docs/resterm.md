@@ -105,6 +105,7 @@ Content-Type: application/json
 | Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
 | Navigator: toggle method filter for selected request | `m` (repeat to switch/clear) |
 | Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
+| Navigator: jump to selected request in editor | `l` / `r` (when a request is highlighted) |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
 | Save layout (prompt) | `g+Shift+L` |

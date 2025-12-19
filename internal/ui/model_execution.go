@@ -2074,15 +2074,8 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 }
 
 func (m *Model) requestAtCursor(doc *restfile.Document, content string, cursorLine int) (*restfile.Request, bool) {
-	var req *restfile.Request
-	if doc != nil {
-		req = findRequestAtLine(doc, cursorLine)
-		if req != nil && (cursorLine < req.LineRange.Start || cursorLine > req.LineRange.End) {
-			req = nil
-		}
-		if req != nil {
-			return req, false
-		}
+	if req, _ := requestAtLine(doc, cursorLine); req != nil {
+		return req, false
 	}
 	if inline := buildInlineRequest(content, cursorLine); inline != nil {
 		return inline, true

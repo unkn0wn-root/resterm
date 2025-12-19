@@ -21,6 +21,34 @@ func navigatorFilterConsumesKey(msg tea.KeyMsg) bool {
 	}
 }
 
+type navJumpResult struct {
+	cmd   tea.Cmd
+	ok    bool
+	focus bool
+}
+
+func (m *Model) navReqJumpCmd() navJumpResult {
+	if m.navigator == nil {
+		return navJumpResult{}
+	}
+	n := m.navigator.Selected()
+	if n == nil || n.Kind != navigator.KindRequest {
+		return navJumpResult{}
+	}
+	req, _, cmds, ok := m.prepareNavigatorRequest()
+	if !ok {
+		if len(cmds) > 0 {
+			return navJumpResult{cmd: tea.Batch(cmds...), ok: true}
+		}
+		return navJumpResult{ok: true}
+	}
+	m.jumpToNavigatorRequest(req, true)
+	if len(cmds) > 0 {
+		return navJumpResult{cmd: tea.Batch(cmds...), ok: true, focus: true}
+	}
+	return navJumpResult{ok: true, focus: true}
+}
+
 func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 	if m.navigator == nil {
 		return nil
@@ -43,6 +71,14 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 		default:
 			return filterCmd
 		}
+	}
+
+	applyJump := func(cmd tea.Cmd, focus bool) tea.Cmd {
+		out := applyFilter(cmd)
+		if !focus {
+			return out
+		}
+		return batchCommands(out, m.setFocus(focusEditor))
 	}
 
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.navigatorFilter.Focused() && navigatorFilterConsumesKey(keyMsg) {
@@ -78,6 +114,11 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			m.navigator.Move(-1)
 			m.syncNavigatorSelection()
 		case "right", "l":
+			if ev.String() == "l" {
+				if res := m.navReqJumpCmd(); res.ok {
+					return applyJump(res.cmd, res.focus)
+				}
+			}
 			if m.navigatorFilter.Focused() {
 				m.navigatorFilter.Blur()
 				return nil
@@ -168,21 +209,10 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				m.navigator.ClearTagFilters()
 			}
 		case "r":
-			req, _, cmds, ok := m.prepareNavigatorRequest()
-			if !ok {
-				if len(cmds) == 0 {
-					return applyFilter(nil)
-				}
-				return applyFilter(tea.Batch(cmds...))
+			res := m.navReqJumpCmd()
+			if res.ok {
+				return applyJump(res.cmd, res.focus)
 			}
-			m.jumpToNavigatorRequest(req, true)
-			if cmd := m.setFocus(focusEditor); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-			if len(cmds) > 0 {
-				return applyFilter(tea.Batch(cmds...))
-			}
-			return applyFilter(nil)
 		}
 	}
 

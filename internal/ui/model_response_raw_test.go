@@ -125,8 +125,58 @@ func TestCycleRawViewModeTriggersAsyncHexLoad(t *testing.T) {
 	if snap.rawMode != rawViewHex {
 		t.Fatalf("expected raw mode to switch to hex while loading, got %v", snap.rawMode)
 	}
-	if !strings.Contains(snap.raw, "Loading raw dump (hex)") {
-		t.Fatalf("expected loading placeholder, got %q", snap.raw)
+	expected := rawDumpLoadingMessage(rawViewHex)
+	if !strings.Contains(snap.raw, expected) {
+		t.Fatalf("expected loading placeholder %q, got %q", expected, snap.raw)
+	}
+}
+
+func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
+	heavy := strings.Repeat("A", responseReflowLimit+1)
+	snap := &responseSnapshot{
+		rawSummary: "Status: 200 OK",
+		raw:        ensureTrailingNewline(heavy),
+		rawMode:    rawViewText,
+		body:       []byte(heavy),
+		ready:      true,
+	}
+	model := newModelWithResponseTab(responseTabRaw, snap)
+
+	cmd := model.syncResponsePanes()
+	if cmd == nil {
+		t.Fatalf("expected async reflow command for heavy raw content")
+	}
+	pane := model.pane(responsePanePrimary)
+	if pane.reflow.token == "" || pane.reflow.tab != responseTabRaw {
+		t.Fatalf("expected reflow state to be set for raw tab, got %+v", pane.reflow)
+	}
+	view := pane.viewport.View()
+	if !strings.Contains(view, responseReflowingMessage) {
+		t.Fatalf("expected viewport to show reflow placeholder, got %q", view)
+	}
+}
+
+func TestAsyncReflowScopedToRawTab(t *testing.T) {
+	heavy := strings.Repeat("A", responseReflowLimit+1)
+	snap := &responseSnapshot{
+		pretty:  ensureTrailingNewline(heavy),
+		raw:     ensureTrailingNewline("raw"),
+		rawMode: rawViewText,
+		ready:   true,
+	}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+
+	cmd := model.syncResponsePanes()
+	if cmd != nil {
+		t.Fatalf("expected no async reflow for non-raw tab, got command")
+	}
+	pane := model.pane(responsePanePrimary)
+	if pane.reflow.token != "" {
+		t.Fatalf("expected no reflow state for non-raw tab, got %+v", pane.reflow)
+	}
+	view := pane.viewport.View()
+	if strings.Contains(view, responseReflowingMessage) {
+		t.Fatalf("did not expect reflow placeholder in non-raw tab view, got %q", view)
 	}
 }
 

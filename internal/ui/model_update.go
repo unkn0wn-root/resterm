@@ -79,6 +79,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleResponseLoadingTick(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case responseReflowStartMsg:
+		if cmd := m.handleResponseReflowStart(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case responseReflowDoneMsg:
+		if cmd := m.handleResponseReflowDone(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case rawDumpLoadedMsg:
 		if cmd := m.handleRawDumpLoaded(typed); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -439,6 +447,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var editorCmd tea.Cmd
 			m.editor, editorCmd = m.editor.Update(filtered)
 			cmds = append(cmds, editorCmd)
+		}
+		if m.focus == focusEditor {
+			m.syncNavigatorWithEditorCursor()
 		}
 	}
 

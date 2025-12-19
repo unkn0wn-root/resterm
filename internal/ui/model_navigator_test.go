@@ -57,6 +57,59 @@ func selectNavigatorID(t *testing.T, m *Model, id string) {
 	m.navigator.Move(target - curr)
 }
 
+func TestNavigatorFollowsEditorCursor(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "sample.http")
+	content := "### first\nGET https://example.com/one\n\n### second\nGET https://example.com/two\n"
+	writeSampleFile(t, file, content)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: file, InitialContent: content})
+	m := &model
+
+	_ = m.setFocus(focusEditor)
+
+	firstStart := m.doc.Requests[0].LineRange.Start
+	m.moveCursorToLine(firstStart)
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != navigatorRequestID(file, 0) {
+		t.Fatalf("expected navigator to select first request, got %#v", sel)
+	}
+
+	secondStart := m.doc.Requests[1].LineRange.Start
+	m.moveCursorToLine(secondStart)
+
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != navigatorRequestID(file, 1) {
+		t.Fatalf("expected navigator to select second request after cursor move, got %#v", sel)
+	}
+	if key := requestKey(m.doc.Requests[1]); m.activeRequestKey != key {
+		t.Fatalf("expected active request key %s, got %s", key, m.activeRequestKey)
+	}
+}
+
+func TestNavigatorIgnoresLinesOutsideRequests(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "preface.http")
+	content := "# preface\n\n### first\nGET https://example.com/one\n\n### second\nGET https://example.com/two\n"
+	writeSampleFile(t, file, content)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: file, InitialContent: content})
+	m := &model
+
+	_ = m.setFocus(focusEditor)
+
+	firstStart := m.doc.Requests[0].LineRange.Start
+	m.moveCursorToLine(firstStart)
+	firstID := navigatorRequestID(file, 0)
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != firstID {
+		t.Fatalf("expected navigator to select first request, got %#v", sel)
+	}
+
+	m.moveCursorToLine(1)
+
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != firstID {
+		t.Fatalf("expected navigator to keep first request selected on non-request line, got %#v", sel)
+	}
+}
+
 func TestNavigatorEnterExpandsFile(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "a.http")
@@ -525,5 +578,44 @@ func TestNavigatorRequestEnterSendsFromSidebar(t *testing.T) {
 	cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatalf("expected enter to issue send command from navigator request selection")
+	}
+}
+
+func TestNavigatorRequestLJumpsToDefinition(t *testing.T) {
+	content := strings.Repeat("\n", 5) + "### example\n# @name getExample\nGET https://example.com\n"
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/sample.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	if len(m.doc.Requests) == 0 {
+		t.Fatalf("expected parsed requests in doc")
+	}
+	req := m.doc.Requests[0]
+	if req.LineRange.Start <= 1 {
+		t.Fatalf("expected request to start after line 1, got %d", req.LineRange.Start)
+	}
+	if got := currentCursorLine(m.editor); got != 1 {
+		t.Fatalf("expected cursor to start on line 1, got %d", got)
+	}
+
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      "req:/tmp/sample:0",
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: req},
+		},
+	})
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	if m.focus != focusEditor {
+		t.Fatalf("expected focus to move to editor, got %v", m.focus)
+	}
+	if got := currentCursorLine(m.editor); got != req.LineRange.Start {
+		t.Fatalf("expected cursor to jump to line %d, got %d", req.LineRange.Start, got)
 	}
 }

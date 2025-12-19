@@ -342,6 +342,9 @@ type Model struct {
 	doc                *restfile.Document
 	currentFile        string
 	currentRequest     *restfile.Request
+	lastCursorLine     int
+	lastCursorFile     string
+	lastCursorDoc      *restfile.Document
 	profileRun         *profileState
 	workflowRun        *workflowState
 	compareRun         *compareState
@@ -608,6 +611,7 @@ func New(cfg Config) Model {
 		editorSplit:              editorSplitDefault,
 		historyStore:             cfg.History,
 		currentFile:              cfg.FilePath,
+		lastCursorLine:           -1,
 		statusMessage:            initialStatus,
 		scriptRunner:             scripts.NewRunner(nil),
 		globals:                  newGlobalStore(),

@@ -1728,9 +1728,6 @@ func (m Model) renderStatusBar() string {
 	ellipsisWidth := lipgloss.Width("…")
 
 	segments := make([]string, 0, 4)
-	if m.cfg.EnvironmentName != "" {
-		segments = append(segments, fmt.Sprintf("Env: %s", m.cfg.EnvironmentName))
-	}
 	if m.currentFile != "" {
 		segments = append(segments, filepath.Base(m.currentFile))
 	}
@@ -2322,6 +2319,7 @@ func (m Model) renderHelpOverlay() string {
 				{"/ (Esc clears)", "Focus navigator filter / reset filters"},
 				{"m", "Navigator: toggle method filter for selected request"},
 				{"t", "Navigator: toggle tag filters for selected item"},
+				{"l / r", "Navigator: jump to selected request in editor"},
 				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarHeightDecrease, bindings.ActionSidebarHeightIncrease}, "g j / g k"), "Collapse / expand current navigator branch"},
 				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionWorkflowHeightIncrease, bindings.ActionWorkflowHeightDecrease}, "g Shift+J / g Shift+K"), "Collapse all / expand all navigator branches"},
 			}),

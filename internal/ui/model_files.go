@@ -31,6 +31,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.forgetFileWatch(m.currentFile)
 	m.currentFile = path
 	m.cfg.FilePath = path
+	m.resetCursorSync()
 	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
 	m.editor.SetValue(string(data))
@@ -69,6 +70,7 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.editor.SetViewStart(0)
 	m.editor.moveCursorTo(0, 0)
 	m.editor.ClearSelection()
+	m.resetCursorSync()
 	m.doc = parser.Parse("", nil)
 	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
@@ -145,6 +147,7 @@ func (m *Model) reparseDocument() tea.Cmd {
 	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
+	m.resetCursorSync()
 	return func() tea.Msg {
 		return statusMsg{text: "Document reloaded", level: statusInfo}
 	}
@@ -199,6 +202,7 @@ func (m *Model) refreshCurrentDocument(content []byte) {
 	m.syncSSHGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
+	m.resetCursorSync()
 	if req := m.findRequestByKey(m.activeRequestKey); req != nil {
 		m.currentRequest = req
 	}

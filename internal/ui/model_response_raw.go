@@ -40,7 +40,7 @@ func (m *Model) applyRawMode(snap *responseSnapshot, mode rawViewMode, msg strin
 		return nil
 	}
 	if snap.rawLoading {
-		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpLoadingMessage(snap.rawLoadingMode)})
+		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpProgressMessage(snap, snap.rawLoadingMode)})
 		return nil
 	}
 
@@ -89,7 +89,7 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 	snap.rawLoading = true
 	snap.rawLoadingMode = mode
 	snap.rawMode = mode
-	loading := rawDumpLoadingMessage(mode)
+	loading := rawDumpProgressMessage(snap, mode)
 	snap.raw = joinSections(snap.rawSummary, loading)
 
 	m.forEachSnapshotPane(snap, func(p *responsePaneState) {
@@ -155,11 +155,25 @@ func (m *Model) invalidateDiffCaches() {
 }
 
 func rawDumpLoadingMessage(mode rawViewMode) string {
+	switch mode {
+	case rawViewHex:
+		return "Generating hex dump..."
+	case rawViewBase64:
+		return "Generating base64 dump..."
+	}
 	label := strings.TrimSpace(mode.label())
 	if label == "" {
 		label = "raw"
 	}
 	return fmt.Sprintf("Loading raw dump (%s)...", label)
+}
+
+func rawDumpProgressMessage(snap *responseSnapshot, mode rawViewMode) string {
+	base := rawDumpLoadingMessage(mode)
+	if snap == nil || len(snap.body) == 0 {
+		return base
+	}
+	return fmt.Sprintf("%s (%s)", base, formatByteQuantity(int64(len(snap.body))))
 }
 
 func rawDumpLoadedMessage(mode rawViewMode) string {
