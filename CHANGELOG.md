@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.11.7](https://github.com/unkn0wn-root/resterm/compare/v0.11.6...v0.11.7) (2025-12-19)
+
+
+### Features
+
+* use reflow when generating hex/base64 and cache the results ([c2c8df9](https://github.com/unkn0wn-root/resterm/commit/c2c8df993fd3d59b2c71640c24701bf0c29506f5))
+
+
+### Bug Fixes
+
+* flickering on hex/base64 generation ([e00702f](https://github.com/unkn0wn-root/resterm/commit/e00702fd68f3ce0a1656ab21d8a6b82f7041c90c))
+* reflow only for hex/base64 ([54f182f](https://github.com/unkn0wn-root/resterm/commit/54f182fcceffa857320af90d098d8e73cf68b8ce))
+
 ### [0.11.6](https://github.com/unkn0wn-root/resterm/compare/v0.11.5...v0.11.6) (2025-12-18)
 
 ### [0.11.5](https://github.com/unkn0wn-root/resterm/compare/v0.11.4...v0.11.5) (2025-12-18)
