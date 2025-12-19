@@ -394,6 +394,14 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 		return
 	}
 	req, reqIdx := requestAtLine(m.doc, line)
+	if req == nil && len(m.doc.Requests) > 0 {
+		lastIdx := len(m.doc.Requests) - 1
+		last := m.doc.Requests[lastIdx]
+		if last != nil && line > last.LineRange.End {
+			req = last
+			reqIdx = lastIdx
+		}
+	}
 
 	if req == nil {
 		m.lastCursorLine = line

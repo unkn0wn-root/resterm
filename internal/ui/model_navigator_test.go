@@ -111,6 +111,29 @@ func TestNavigatorIgnoresLinesOutsideRequests(t *testing.T) {
 	}
 }
 
+func TestNavigatorFollowsCursorAtEOF(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "eof.http")
+	content := "### first\nGET https://example.com/one\n\n### second\nGET https://example.com/two\n\n"
+	writeSampleFile(t, file, content)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: file, InitialContent: content})
+	m := &model
+
+	_ = m.setFocus(focusEditor)
+
+	endLine := strings.Count(content, "\n") + 1
+	m.moveCursorToLine(endLine)
+
+	lastID := navigatorRequestID(file, 1)
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != lastID {
+		t.Fatalf("expected navigator to select last request at EOF, got %#v", sel)
+	}
+	if key := requestKey(m.doc.Requests[1]); m.activeRequestKey != key {
+		t.Fatalf("expected active request to follow last request at EOF, got %s", m.activeRequestKey)
+	}
+}
+
 func TestNavigatorCursorSyncPreservesFiltersWithinRequest(t *testing.T) {
 	content := "### one\nGET https://example.com/one\n\n### two\nGET https://example.com/two\n"
 	file := "/tmp/navsync.http"

@@ -104,6 +104,17 @@ func TestInlineRequestFromLineRejectsInvalid(t *testing.T) {
 	}
 }
 
+func TestRequestAtCursorBeforeRequestsReturnsNil(t *testing.T) {
+	content := "# preface\n\n### first\nGET https://example.com/one\n"
+	doc := parser.Parse("sample.http", []byte(content))
+	var model Model
+
+	req, inline := model.requestAtCursor(doc, content, 1)
+	if req != nil || inline {
+		t.Fatalf("expected no request at cursor before first request, got req=%v inline=%v", req, inline)
+	}
+}
+
 func TestRequestAtCursorFallsBackToLastRequest(t *testing.T) {
 	content := "### first\nGET https://example.com/one\n\n### second\nGET https://example.com/two\n\n"
 	doc := parser.Parse("sample.http", []byte(content))

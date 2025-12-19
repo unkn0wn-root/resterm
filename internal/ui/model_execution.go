@@ -2077,14 +2077,14 @@ func (m *Model) requestAtCursor(doc *restfile.Document, content string, cursorLi
 	if req, _ := requestAtLine(doc, cursorLine); req != nil {
 		return req, false
 	}
-	if doc != nil && len(doc.Requests) > 0 {
-		last := doc.Requests[len(doc.Requests)-1]
-		if last != nil {
-			return last, false
-		}
-	}
 	if inline := buildInlineRequest(content, cursorLine); inline != nil {
 		return inline, true
+	}
+	if doc != nil && len(doc.Requests) > 0 {
+		last := doc.Requests[len(doc.Requests)-1]
+		if last != nil && cursorLine > last.LineRange.End {
+			return last, false
+		}
 	}
 	return nil, false
 }
