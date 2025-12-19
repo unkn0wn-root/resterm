@@ -1391,6 +1391,7 @@ func (m *Model) moveCursorToLine(target int) {
 		current--
 	}
 	m.editor, _ = m.editor.Update(tea.KeyMsg{Type: tea.KeyHome})
+	m.syncNavigatorWithEditorCursor()
 }
 
 func requestBaseTitle(req *restfile.Request) string {

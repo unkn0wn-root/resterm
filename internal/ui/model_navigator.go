@@ -20,10 +20,12 @@ func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
 	if len(entries) == 0 {
 		entries = m.entriesFromList()
 	}
+
 	var prevNav *navigator.Model[any]
 	if m.navigator != nil {
 		prevNav = m.navigator
 	}
+
 	nodes := make([]*navigator.Node[any], 0, len(entries))
 	for _, entry := range entries {
 		nodes = append(nodes, m.buildFileNode(entry))
@@ -39,6 +41,10 @@ func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
 	m.navigator.SetCompact(m.navigatorCompact)
 }
 
+func navigatorRequestID(path string, idx int) string {
+	return fmt.Sprintf("req:%s:%d", path, idx)
+}
+
 func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 	id := "file:" + entry.Path
 	node := &navigator.Node[any]{
@@ -47,6 +53,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 		Kind:    navigator.KindFile,
 		Payload: navigator.Payload[any]{FilePath: entry.Path, Data: entry},
 	}
+
 	if doc, ok := m.cachedDoc(entry.Path); ok && doc != nil {
 		node.Count = len(doc.Requests)
 		node.Children = m.buildRequestNodes(doc, entry.Path)
@@ -74,7 +81,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 		}
 		badges := requestBadges(req)
 		nodes = append(nodes, &navigator.Node[any]{
-			ID:      fmt.Sprintf("req:%s:%d", filePath, idx),
+			ID:      navigatorRequestID(filePath, idx),
 			Title:   title,
 			Desc:    desc,
 			Kind:    navigator.KindRequest,
@@ -114,10 +121,12 @@ func (m *Model) cachedDoc(path string) (*restfile.Document, bool) {
 	if path == m.currentFile && m.doc != nil {
 		return m.doc, true
 	}
+
 	entry, ok := m.docCache[path]
 	if !ok || entry.doc == nil {
 		return nil, false
 	}
+
 	info, err := os.Stat(path)
 	if err != nil || info.ModTime().After(entry.mod) {
 		return nil, false
@@ -129,6 +138,7 @@ func (m *Model) cacheDoc(path string, doc *restfile.Document) {
 	if path == "" || doc == nil {
 		return
 	}
+
 	info, err := os.Stat(path)
 	mod := time.Time{}
 	if err == nil {
@@ -180,16 +190,36 @@ func (m *Model) expandNavigatorFile(path string) {
 	if m.navigator == nil {
 		return
 	}
+
 	doc := m.loadDocFor(path)
 	if doc == nil {
 		return
 	}
+
 	children := m.buildRequestNodes(doc, path)
 	m.navigator.ReplaceChildren("file:"+path, children)
 	node := m.navigator.Find("file:" + path)
 	if node != nil && len(children) > 0 {
 		node.Count = len(children)
 		node.Expanded = true
+	}
+}
+
+func (m *Model) ensureNavigatorRequestsForFile(path string) {
+	if m.navigator == nil || path == "" {
+		return
+	}
+	node := m.navigator.Find("file:" + path)
+	if node == nil {
+		return
+	}
+	if len(node.Children) == 0 {
+		m.expandNavigatorFile(path)
+		node = m.navigator.Find("file:" + path)
+	}
+	if node != nil && !node.Expanded {
+		node.Expanded = true
+		m.navigator.Refresh()
 	}
 }
 
@@ -329,6 +359,60 @@ func (m *Model) syncNavigatorFocus(n *navigator.Node[any]) {
 	case navigator.KindFile:
 		_ = m.setFocus(focusFile)
 	}
+}
+
+func (m *Model) resetCursorSync() {
+	m.lastCursorLine = -1
+	m.lastCursorFile = ""
+	m.lastCursorDoc = nil
+}
+
+func (m *Model) syncNavigatorWithEditorCursor() {
+	if m.navigator == nil || m.doc == nil || m.currentFile == "" {
+		return
+	}
+	if m.focus != focusEditor {
+		return
+	}
+
+	line := currentCursorLine(m.editor)
+	if line == m.lastCursorLine && m.lastCursorFile == m.currentFile && m.lastCursorDoc == m.doc {
+		return
+	}
+	req, reqIdx := requestAtLine(m.doc, line)
+
+	if req == nil {
+		m.lastCursorLine = line
+		m.lastCursorFile = m.currentFile
+		m.lastCursorDoc = m.doc
+		return
+	}
+
+	targetID := navigatorRequestID(m.currentFile, reqIdx)
+	currentID := ""
+	if sel := m.navigator.Selected(); sel != nil {
+		currentID = sel.ID
+	}
+	// Doc pointer comparison intentionally detects reparses as a change.
+	if line == m.lastCursorLine &&
+		m.lastCursorFile == m.currentFile &&
+		m.lastCursorDoc == m.doc &&
+		currentID == targetID {
+		return
+	}
+
+	m.ensureNavigatorRequestsForFile(m.currentFile)
+	if !m.navigator.SelectByID(targetID) {
+		m.lastCursorLine = line
+		m.lastCursorFile = m.currentFile
+		m.lastCursorDoc = m.doc
+		return
+	}
+
+	m.setActiveRequest(req)
+	m.lastCursorLine = line
+	m.lastCursorFile = m.currentFile
+	m.lastCursorDoc = m.doc
 }
 
 // applyNavigatorExpansion copies expanded state from the previous navigator tree.

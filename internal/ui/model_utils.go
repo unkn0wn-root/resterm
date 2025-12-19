@@ -873,20 +873,28 @@ func currentCursorLine(ed requestEditor) int {
 	return ed.Line() + 1
 }
 
-func findRequestAtLine(doc *restfile.Document, line int) *restfile.Request {
-	if doc == nil {
-		return nil
+func requestAtLine(doc *restfile.Document, line int) (*restfile.Request, int) {
+	if doc == nil || line < 1 {
+		return nil, -1
 	}
 
-	for _, req := range doc.Requests {
+	for idx, req := range doc.Requests {
 		if line >= req.LineRange.Start && line <= req.LineRange.End {
-			return req
+			return req, idx
 		}
 	}
-	if len(doc.Requests) > 0 {
-		return doc.Requests[len(doc.Requests)-1]
+
+	// parser anchors LineRange.Start at the first non header line of a request.
+	// treat the preceding line (should always be "###" separator) as part of the request
+	// so the cursor on the header selects the correct request in the UI.
+	headerLine := line + 1
+	for idx, req := range doc.Requests {
+		if headerLine == req.LineRange.Start {
+			return req, idx
+		}
 	}
-	return nil
+
+	return nil, -1
 }
 
 func requestIdentifier(req *restfile.Request) string {
