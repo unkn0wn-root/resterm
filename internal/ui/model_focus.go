@@ -1,36 +1,77 @@
 package ui
 
 import (
+	"fmt"
+
 	"github.com/charmbracelet/bubbles/cursor"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m *Model) cycleFocus(forward bool) tea.Cmd {
-	switch m.focus {
-	case focusFile, focusRequests, focusWorkflows:
-		if forward {
-			return m.setFocus(focusEditor)
-		} else {
-			return m.setFocus(focusResponse)
-		}
-	case focusEditor:
-		if forward {
-			return m.setFocus(focusResponse)
-		} else {
-			return m.setFocus(focusRequests)
-		}
-	case focusResponse:
-		if forward {
-			return m.setFocus(focusRequests)
-		} else {
-			return m.setFocus(focusEditor)
+	next := m.nextVisibleFocus(forward)
+	if next == m.focus {
+		return nil
+	}
+	return m.setFocus(next)
+}
+
+func (m *Model) focusVisible(target paneFocus) bool {
+	return !m.effectiveRegionCollapsed(regionFromFocus(target))
+}
+
+func (m *Model) nextVisibleFocus(forward bool) paneFocus {
+	sequence := []paneFocus{focusRequests, focusEditor, focusResponse}
+	currentRegion := regionFromFocus(m.focus)
+	idx := 0
+	for i, f := range sequence {
+		if regionFromFocus(f) == currentRegion {
+			idx = i
+			break
 		}
 	}
-	return nil
+	step := 1
+	if !forward {
+		step = -1
+	}
+	for i := 0; i < len(sequence); i++ {
+		idx = (idx + step + len(sequence)) % len(sequence)
+		candidate := sequence[idx]
+		if m.focusVisible(candidate) {
+			return candidate
+		}
+	}
+	return m.focus
+}
+
+func (m *Model) ensureVisibleFocus() tea.Cmd {
+	if m.focusVisible(m.focus) {
+		return nil
+	}
+	next := m.nextVisibleFocus(true)
+	if next == m.focus {
+		next = m.nextVisibleFocus(false)
+	}
+	if next == m.focus {
+		return nil
+	}
+	return m.setFocus(next)
 }
 
 func (m *Model) setFocus(target paneFocus) tea.Cmd {
 	var cmds []tea.Cmd
+	region := regionFromFocus(target)
+	if !m.focusVisible(target) {
+		label := m.collapsedStatusLabel(region)
+		msg := statusMsg{
+			text:  fmt.Sprintf("%s minimized", label),
+			level: statusInfo,
+		}
+		if m.zoomActive && m.zoomRegion != region && !m.collapseState(region) {
+			msg.text = fmt.Sprintf("%s hidden while zoomed", label)
+		}
+		m.setStatusMessage(msg)
+		return nil
+	}
 	if m.focus == target {
 		return nil
 	}

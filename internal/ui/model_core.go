@@ -127,16 +127,11 @@ const (
 	responseSplitSeparatorHeight = 1
 	minEditorPaneHeight          = 10
 	minResponsePaneHeight        = 6
+	paneHorizontalPadding        = 1
 )
 
 const (
 	responseSplitRatioDefault = config.LayoutResponseRatioDefault
-)
-
-const (
-	collapsedSidebarWidthPx = 5
-	collapsedPaneWidthPx    = 8
-	collapsedPaneHeightRows = 4
 )
 
 type Config struct {

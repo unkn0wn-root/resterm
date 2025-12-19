@@ -96,3 +96,34 @@ func TestNavigatorTagChipsLimit(t *testing.T) {
 		t.Fatalf("expected ellipsis when tags exceed limit, got %q", clean)
 	}
 }
+
+func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir(), Version: "vTest"})
+	model.width = 120
+	model.height = 40
+	model.ready = true
+	_ = model.applyLayout()
+
+	if res := model.setCollapseState(paneRegionSidebar, true); res.blocked {
+		t.Fatalf("expected sidebar collapse to be allowed")
+	}
+	if res := model.setCollapseState(paneRegionEditor, true); res.blocked {
+		t.Fatalf("expected editor collapse to be allowed")
+	}
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	if strings.Contains(plain, "Editor:min") || strings.Contains(plain, "Response:min") {
+		t.Fatalf("expected minimized indicators to replace legacy labels, got %q", plain)
+	}
+	if !strings.Contains(plain, "● Editor") || !strings.Contains(plain, "● Nav") {
+		t.Fatalf("expected green dot indicators for minimized panes, got %q", plain)
+	}
+	trimmed := strings.TrimSpace(plain)
+	if !strings.HasSuffix(trimmed, "vTest") {
+		t.Fatalf("expected version to remain on the right, got %q", trimmed)
+	}
+	if strings.Contains(plain, "\n") {
+		t.Fatalf("expected status bar to stay on one line, got %q", plain)
+	}
+}

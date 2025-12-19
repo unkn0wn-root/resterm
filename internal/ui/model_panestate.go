@@ -10,7 +10,13 @@ import (
 type paneToggleResult struct {
 	changed bool
 	blocked bool
+	reason  string
 }
+
+const (
+	statusNeedVisiblePane   = "Need at least one pane visible"
+	statusKeepMainPaneAlive = "Keep editor or response visible"
+)
 
 func regionFromFocus(f paneFocus) paneRegion {
 	switch f {
@@ -39,9 +45,8 @@ func (m *Model) setCollapseState(r paneRegion, collapsed bool) paneToggleResult 
 	if prev == collapsed {
 		return paneToggleResult{changed: false}
 	}
-	expanded := m.expandedRegionCount()
-	if collapsed && !prev && expanded == 1 {
-		return paneToggleResult{blocked: true}
+	if reason := m.collapseBlockReason(r, collapsed, prev); reason != "" {
+		return paneToggleResult{blocked: true, reason: reason}
 	}
 	switch r {
 	case paneRegionSidebar:
@@ -72,6 +77,26 @@ func (m *Model) expandedRegionCount() int {
 		return 0
 	}
 	return count
+}
+
+func (m *Model) collapseBlockReason(r paneRegion, targetCollapsed bool, prevCollapsed bool) string {
+	if !targetCollapsed || prevCollapsed {
+		return ""
+	}
+	if m.expandedRegionCount() == 1 {
+		return statusNeedVisiblePane
+	}
+	switch r {
+	case paneRegionEditor:
+		if m.responseCollapsed {
+			return statusKeepMainPaneAlive
+		}
+	case paneRegionResponse:
+		if m.editorCollapsed {
+			return statusKeepMainPaneAlive
+		}
+	}
+	return ""
 }
 
 func (m *Model) effectiveRegionCollapsed(r paneRegion) bool {
@@ -120,7 +145,11 @@ func (m *Model) togglePaneCollapse(r paneRegion) tea.Cmd {
 	current := m.collapseState(r)
 	res := m.setCollapseState(r, !current)
 	if res.blocked {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Cannot hide %s", strings.ToLower(m.collapsedStatusLabel(r))), level: statusWarn})
+		msg := res.reason
+		if strings.TrimSpace(msg) == "" {
+			msg = fmt.Sprintf("Cannot hide %s", strings.ToLower(m.collapsedStatusLabel(r)))
+		}
+		m.setStatusMessage(statusMsg{text: msg, level: statusWarn})
 		return nil
 	}
 	if !res.changed {
@@ -134,7 +163,16 @@ func (m *Model) togglePaneCollapse(r paneRegion) tea.Cmd {
 		msg = fmt.Sprintf("%s minimized", label)
 	}
 	m.setStatusMessage(statusMsg{text: msg, level: statusInfo})
-	return m.applyLayout()
+	cmd := m.applyLayout()
+	if !current && regionFromFocus(m.focus) == r {
+		if focusCmd := m.ensureVisibleFocus(); focusCmd != nil {
+			if cmd != nil {
+				return tea.Batch(cmd, focusCmd)
+			}
+			return focusCmd
+		}
+	}
+	return cmd
 }
 
 func (m *Model) toggleZoomForRegion(r paneRegion) tea.Cmd {

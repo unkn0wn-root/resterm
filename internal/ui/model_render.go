@@ -103,12 +103,29 @@ func (m Model) View() string {
 			rightWidth = availableRight
 		}
 		responsePane := m.renderResponsePane(rightWidth)
-		rightColumn := lipgloss.JoinVertical(lipgloss.Left, editorPane, responsePane)
-		panes = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			filePane,
-			rightColumn,
-		)
+		rightParts := make([]string, 0, 2)
+		if editorPane != "" {
+			if responsePane == "" && availableRight > 0 {
+				editorPane = padToWidth(editorPane, availableRight)
+			}
+			rightParts = append(rightParts, editorPane)
+		}
+		if responsePane != "" {
+			rightParts = append(rightParts, responsePane)
+		}
+		rightColumn := ""
+		if len(rightParts) > 0 {
+			rightColumn = lipgloss.JoinVertical(lipgloss.Left, rightParts...)
+		}
+		if rightColumn == "" {
+			panes = filePane
+		} else {
+			panes = lipgloss.JoinHorizontal(
+				lipgloss.Top,
+				filePane,
+				rightColumn,
+			)
+		}
 	} else {
 		pw := m.responseTargetWidth(fileWidth, editorWidth)
 		var responsePane string
@@ -129,11 +146,17 @@ func (m Model) View() string {
 				}
 			}
 		}
+		if responsePane == "" && m.width > fileWidth {
+			target := m.width - fileWidth
+			editorPane = padToWidth(editorPane, target)
+		}
+		parts := []string{filePane, editorPane}
+		if responsePane != "" {
+			parts = append(parts, responsePane)
+		}
 		panes = lipgloss.JoinHorizontal(
 			lipgloss.Top,
-			filePane,
-			editorPane,
-			responsePane,
+			parts...,
 		)
 	}
 	body := lipgloss.JoinVertical(
@@ -220,19 +243,21 @@ func (m Model) renderFilePane() string {
 	if !paneActive {
 		style = style.Faint(true)
 	}
+	frameWidth := style.GetHorizontalFrameSize()
 	width := m.sidebarWidthPx
 	if width <= 0 {
-		width = m.fileList.Width() + 4
+		width = paneOuterWidthFromContent(m.fileList.Width(), frameWidth)
+		if width <= 0 {
+			width = paneOuterWidthFromContent(1, frameWidth)
+		}
 	}
 	if collapsed {
-		height := maxInt(m.paneContentHeight, collapsedPaneHeightRows) + style.GetVerticalFrameSize()
-		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionSidebar
-		return m.renderCollapsedPane(style, width, height, "Navigator", "g1", zoomHidden, paneActive)
+		return ""
 	}
 
-	innerWidth := maxInt(1, width-4)
-	filter := m.renderNavigatorFilter(innerWidth, paneActive)
-	filterSep := dividerLine(m.theme.PaneDivider, innerWidth)
+	contentWidth := maxInt(paneContentWidth(width, frameWidth), 1)
+	filter := m.renderNavigatorFilter(contentWidth, paneActive)
+	filterSep := dividerLine(m.theme.PaneDivider, contentWidth)
 	available := m.paneContentHeight - lipgloss.Height(filter) - lipgloss.Height(filterSep)
 	if available < 1 {
 		available = 1
@@ -240,19 +265,22 @@ func (m Model) renderFilePane() string {
 
 	listHeight := available
 
-	listView := navigator.ListView(m.navigator, m.theme, innerWidth, listHeight, paneActive)
+	listView := navigator.ListView(m.navigator, m.theme, contentWidth, listHeight, paneActive)
 	if listView == "" {
-		listView = centerBox(innerWidth, listHeight, m.theme.HeaderValue.Render("No requests discovered"))
+		listView = centerBox(contentWidth, listHeight, m.theme.HeaderValue.Render("No requests discovered"))
 	}
-	listView = lipgloss.NewStyle().Width(innerWidth).Height(listHeight).Render(listView)
+	listView = lipgloss.NewStyle().Width(contentWidth).Height(listHeight).Render(listView)
 
 	bodyParts := []string{filter, filterSep, listView}
 
 	content := lipgloss.JoinVertical(lipgloss.Left, bodyParts...)
-	content = clampPane(content, innerWidth, m.paneContentHeight)
+	content = clampPane(content, contentWidth, m.paneContentHeight)
+	content = padHorizontal(content, paneHorizontalPadding)
 	targetHeight := m.paneContentHeight + style.GetVerticalFrameSize()
+	innerWidth := maxInt(paneInnerWidth(width, frameWidth), 1)
 	return style.
-		Width(width).
+		Width(innerWidth).
+		MaxWidth(width).
 		Height(targetHeight).
 		Render(content)
 }
@@ -326,6 +354,31 @@ func dividerLine(st lipgloss.Style, width int) string {
 		width = 1
 	}
 	return st.Width(width).Render(strings.Repeat("─", width))
+}
+
+func padToWidth(content string, width int) string {
+	if width <= 0 {
+		return content
+	}
+	height := lipgloss.Height(content)
+	if height < 1 {
+		height = 1
+	}
+	return lipgloss.Place(
+		width,
+		height,
+		lipgloss.Top,
+		lipgloss.Left,
+		content,
+		lipgloss.WithWhitespaceChars(" "),
+	)
+}
+
+func padHorizontal(content string, padding int) string {
+	if padding <= 0 {
+		return content
+	}
+	return lipgloss.NewStyle().Padding(0, padding).Render(content)
 }
 
 func (m Model) renderNavigatorFilter(width int, active bool) string {
@@ -529,30 +582,16 @@ func (m Model) renderEditorPane() string {
 	}
 
 	if collapsed {
-		if m.focus == focusEditor {
-			style = style.
-				BorderForeground(lipgloss.Color("#B794F6")).
-				Bold(true).
-				BorderStyle(lipgloss.ThickBorder())
-		} else {
-			style = style.Faint(true)
-		}
-		width := m.editor.Width() + 4
-		height := maxInt(m.editorContentHeight, collapsedPaneHeightRows)
-		if height < collapsedPaneHeightRows {
-			height = collapsedPaneHeightRows
-		}
-		height += style.GetVerticalFrameSize()
-		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionEditor
-		return m.renderCollapsedPane(style, width, height, "Editor", "g2", zoomHidden, m.focus == focusEditor)
+		return ""
 	}
 
 	content := m.editor.View()
-	innerWidth := lipgloss.Width(content)
-	minInnerWidth := m.editor.Width() + 4
-	if innerWidth < minInnerWidth {
-		innerWidth = minInnerWidth
+	contentWidth := lipgloss.Width(content)
+	if contentWidth < 1 {
+		contentWidth = 1
 	}
+	content = padHorizontal(content, paneHorizontalPadding)
+	innerWidth := contentWidth + (paneHorizontalPadding * 2)
 	if m.focus == focusEditor {
 		style = style.
 			BorderForeground(lipgloss.Color("#B794F6")).
@@ -569,8 +608,13 @@ func (m Model) renderEditorPane() string {
 	}
 	innerHeight := maxInt(m.editor.Height(), editorContentHeight)
 	height := innerHeight + frameHeight
+	outerWidth := paneOuterWidthFromContent(contentWidth, style.GetHorizontalFrameSize())
+	if outerWidth < 1 {
+		outerWidth = innerWidth + style.GetHorizontalFrameSize()
+	}
 	return style.
 		Width(innerWidth).
+		MaxWidth(outerWidth).
 		Height(height).
 		Render(content)
 }
@@ -629,30 +673,20 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	if targetOuterWidth < frameWidth {
 		targetOuterWidth = frameWidth
 	}
-	contentBudget := targetOuterWidth - frameWidth
+	innerWidth := paneInnerWidth(targetOuterWidth, frameWidth)
+	if innerWidth < 1 {
+		innerWidth = 1
+	}
+	contentBudget := innerWidth - (paneHorizontalPadding * 2)
 	if contentBudget < 1 {
 		contentBudget = 1
 	}
+	if innerWidth < contentBudget+(paneHorizontalPadding*2) {
+		innerWidth = contentBudget + (paneHorizontalPadding * 2)
+	}
 
 	if collapsed {
-		height := m.responseContentHeight
-		if height <= 0 {
-			height = maxInt(m.paneContentHeight, collapsedPaneHeightRows)
-		}
-		height += style.GetVerticalFrameSize()
-		stubWidth := collapsedPaneWidthPx
-		if stubWidth > targetOuterWidth || availableWidth == 0 {
-			stubWidth = collapsedPaneWidthPx
-		}
-		minOuter := frameWidth + 1
-		if stubWidth < minOuter {
-			stubWidth = minOuter
-		}
-		if stubWidth < targetOuterWidth {
-			targetOuterWidth = stubWidth
-		}
-		zoomHidden := m.zoomActive && m.zoomRegion != paneRegionResponse
-		return m.renderCollapsedPane(style, targetOuterWidth, height, "Response", "g3", zoomHidden, active)
+		return ""
 	}
 
 	var body string
@@ -760,24 +794,33 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	if height < frameHeight {
 		height = frameHeight
 	}
-	contentWidth := maxInt(width-frameWidth, 1)
-	return style.Width(contentWidth).MaxWidth(width).Height(height).Render(body)
+	body = lipgloss.NewStyle().Width(contentBudget).Render(body)
+	body = padHorizontal(body, paneHorizontalPadding)
+	return style.Width(innerWidth).MaxWidth(width).Height(height).Render(body)
 }
 
 func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
+	if m.effectiveRegionCollapsed(paneRegionResponse) {
+		return 0
+	}
 	pw := m.responseWidthPx
 	if pw <= 0 {
 		frame := m.theme.ResponseBorder.GetHorizontalFrameSize()
-		pw = m.responseContentWidth() + frame
+		pw = paneOuterWidthFromContent(m.responseContentWidth(), frame)
 		if pw < 0 {
 			pw = 0
 		}
 	}
 
-	ef := m.theme.EditorBorder.GetHorizontalFrameSize()
-	eo := m.editor.Width() + ef
-	if eo < 0 {
+	eo := editorWidth
+	if m.effectiveRegionCollapsed(paneRegionEditor) {
 		eo = 0
+	} else if eo <= 0 {
+		ef := m.theme.EditorBorder.GetHorizontalFrameSize()
+		eo = paneOuterWidthFromContent(lipgloss.Width(m.editor.View()), ef)
+		if eo < 0 {
+			eo = 0
+		}
 	}
 
 	la := m.width - m.sidebarWidthPx - eo
@@ -1113,41 +1156,6 @@ func (m Model) renderResponseDividerHorizontal(top, bottom string) string {
 	}
 	line := strings.Repeat("─", width)
 	return m.theme.PaneDivider.Render(line)
-}
-
-func (m Model) renderCollapsedPane(style lipgloss.Style, width, height int, label, key string, zoomHidden bool, focused bool) string {
-	frameWidth := style.GetHorizontalFrameSize()
-	frameHeight := style.GetVerticalFrameSize()
-	if width < frameWidth+1 {
-		width = frameWidth + 1
-	}
-	if height < frameHeight+1 {
-		height = frameHeight + 1
-	}
-	innerWidth := maxInt(width-frameWidth, 1)
-	innerHeight := maxInt(height-frameHeight, 1)
-	_ = label
-	_ = key
-	markerColor := lipgloss.Color("#3BD671")
-	if zoomHidden {
-		markerColor = lipgloss.Color("#FBBF24")
-	}
-	marker := lipgloss.NewStyle().
-		Foreground(markerColor).
-		Bold(true).
-		Render("●")
-	if !focused {
-		marker = lipgloss.NewStyle().Faint(true).Render(marker)
-	}
-	content := lipgloss.Place(
-		innerWidth,
-		innerHeight,
-		lipgloss.Center,
-		lipgloss.Center,
-		marker,
-		lipgloss.WithWhitespaceChars(" "),
-	)
-	return style.Width(width).Height(height).Render(content)
 }
 
 func (m Model) renderHistoryPaneFor(id responsePaneID) string {
@@ -1687,6 +1695,7 @@ func (m Model) renderStatusBar() string {
 		}
 	}
 
+	minimizedText := m.minimizedStatusText()
 	versionText := strings.TrimSpace(m.cfg.Version)
 	if versionText == "" {
 		versionText = strings.TrimSpace(m.updateVersion)
@@ -1695,9 +1704,20 @@ func (m Model) renderStatusBar() string {
 	if versionText != "" {
 		versionText = truncateToWidth(versionText, lineWidth)
 	}
-	versionWidth := lipgloss.Width(versionText)
+	rightParts := make([]string, 0, 2)
+	if minimizedText != "" {
+		rightParts = append(rightParts, minimizedText)
+	}
+	if versionText != "" {
+		rightParts = append(rightParts, versionText)
+	}
+	rightText := strings.Join(rightParts, "  ")
+	if lipgloss.Width(rightText) > lineWidth {
+		rightText = truncateToWidth(rightText, lineWidth)
+	}
+	rightWidth := lipgloss.Width(rightText)
 	minGap := 1
-	if versionWidth == 0 || lineWidth <= versionWidth {
+	if rightWidth == 0 || lineWidth <= rightWidth {
 		minGap = 0
 	}
 
@@ -1709,10 +1729,10 @@ func (m Model) renderStatusBar() string {
 			maxLeftWidth = ratioWidth
 		}
 	}
-	if versionWidth > 0 {
-		available := lineWidth - versionWidth - minGap
+	if rightWidth > 0 {
+		available := lineWidth - rightWidth - minGap
 		if minGap == 0 {
-			available = lineWidth - versionWidth
+			available = lineWidth - rightWidth
 		}
 		if available < 0 {
 			available = 0
@@ -1742,15 +1762,6 @@ func (m Model) renderStatusBar() string {
 			mode = "VISUAL"
 		}
 		segments = append(segments, fmt.Sprintf("Mode: %s", mode))
-	}
-	if m.sidebarCollapsed {
-		segments = append(segments, "Sidebar:min")
-	}
-	if m.editorCollapsed {
-		segments = append(segments, "Editor:min")
-	}
-	if m.responseCollapsed {
-		segments = append(segments, "Response:min")
 	}
 	if m.zoomActive {
 		segments = append(segments, fmt.Sprintf("Zoom: %s", m.collapsedStatusLabel(m.zoomRegion)))
@@ -1823,12 +1834,12 @@ func (m Model) renderStatusBar() string {
 		lineContent = truncateToWidth(statusText, maxContentWidth)
 	}
 
-	if versionWidth > 0 {
+	if rightWidth > 0 {
 		if maxLeftWidth > 0 {
 			lineContent = truncateToWidth(lineContent, maxLeftWidth)
 		}
 		leftWidth := lipgloss.Width(lineContent)
-		spaceWidth := lineWidth - versionWidth - leftWidth
+		spaceWidth := lineWidth - rightWidth - leftWidth
 		if spaceWidth < 0 {
 			spaceWidth = 0
 		}
@@ -1836,16 +1847,16 @@ func (m Model) renderStatusBar() string {
 			if minGap > 0 && spaceWidth < minGap {
 				spaceWidth = minGap
 			}
-			lineContent = lineContent + strings.Repeat(" ", spaceWidth) + versionText
+			lineContent = lineContent + strings.Repeat(" ", spaceWidth) + rightText
 		} else {
-			pad := maxInt(lineWidth-versionWidth, 0)
-			if minGap > 0 && pad > lineWidth-versionWidth-minGap {
-				pad = lineWidth - versionWidth - minGap
+			pad := maxInt(lineWidth-rightWidth, 0)
+			if minGap > 0 && pad > lineWidth-rightWidth-minGap {
+				pad = lineWidth - rightWidth - minGap
 				if pad < 0 {
 					pad = 0
 				}
 			}
-			lineContent = strings.Repeat(" ", pad) + versionText
+			lineContent = strings.Repeat(" ", pad) + rightText
 		}
 	}
 
@@ -1854,6 +1865,32 @@ func (m Model) renderStatusBar() string {
 	}
 
 	return m.theme.StatusBar.Render(lineContent)
+}
+
+func (m Model) minimizedStatusText() string {
+	if !m.sidebarCollapsed && !m.editorCollapsed && !m.responseCollapsed {
+		return ""
+	}
+	items := []struct {
+		on    bool
+		label string
+	}{
+		{m.sidebarCollapsed, "Nav"},
+		{m.editorCollapsed, "Editor"},
+		{m.responseCollapsed, "Resp"},
+	}
+	marker := lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#3BD671")).
+		Bold(true).
+		Render("●")
+	parts := make([]string, 0, len(items))
+	for _, item := range items {
+		if !item.on {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s %s", marker, item.label))
+	}
+	return strings.Join(parts, "  ")
 }
 
 func truncateToWidth(text string, maxWidth int) string {
