@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.12.0](https://github.com/unkn0wn-root/resterm/compare/v0.11.9...v0.12.0) (2025-12-19)
+
+
+### Features
+
+* rework minimize panes. Hide panes to make more room for other ([6e36871](https://github.com/unkn0wn-root/resterm/commit/6e36871264c031945b9526a00eafb9d0ab2c6b67))
+
 ### [0.11.9](https://github.com/unkn0wn-root/resterm/compare/v0.11.8...v0.11.9) (2025-12-19)
 
 
