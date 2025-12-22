@@ -109,3 +109,33 @@ func TestDynamicHelpersCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestExpandTemplatesExpr(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	resolver.SetExprEval(func(expr string, pos ExprPos) (string, error) {
+		if expr != "1+1" {
+			t.Fatalf("unexpected expr %q", expr)
+		}
+		return "2", nil
+	})
+
+	out, err := resolver.ExpandTemplates("{{= 1+1 }}")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "2" {
+		t.Fatalf("expected 2, got %q", out)
+	}
+}
+
+func TestExpandTemplatesExprMissing(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	_, err := resolver.ExpandTemplates("{{= 1 }}")
+	if err == nil {
+		t.Fatalf("expected error for missing expr evaluator")
+	}
+}

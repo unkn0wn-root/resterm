@@ -494,7 +494,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	}
 	doc.Requests = []*restfile.Request{req}
 
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "")
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -749,7 +749,7 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 		URL:    "https://example.com",
 	}
 
-	cmd := model.executeRequest(nil, req, httpclient.Options{}, "")
+	cmd := model.executeRequest(nil, req, httpclient.Options{}, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -834,7 +834,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		},
 	}
 
-	resolver := model.buildResolver(doc, req, "", nil)
+	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
 	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
@@ -1012,7 +1012,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	}
 
 	doc := &restfile.Document{Path: "./stream.http"}
-	resolver := model.buildResolver(doc, req, "", nil)
+	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
 	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
@@ -1141,7 +1141,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 		t.Fatalf("expected single request")
 	}
 	req := doc.Requests[0]
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "")
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest command")
 	}

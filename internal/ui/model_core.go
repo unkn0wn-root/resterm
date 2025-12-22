@@ -23,6 +23,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -261,6 +262,7 @@ type Model struct {
 	lastError        error
 
 	scriptRunner    *scripts.Runner
+	rtsEng          *rts.Eng
 	testResults     []scripts.TestResult
 	scriptError     error
 	globals         *globalStore
@@ -438,7 +440,7 @@ func New(cfg Config) Model {
 	}
 
 	editor := newRequestEditor()
-	editor.SetRuneStyler(newMetadataRuneStyler(th.EditorMetadata))
+	editor.SetRuneStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata))
 	editor.Placeholder = "Write HTTP requests here..."
 	editor.SetValue(cfg.InitialContent)
 	editor.moveToBufferTop()
@@ -609,6 +611,7 @@ func New(cfg Config) Model {
 		lastCursorLine:           -1,
 		statusMessage:            initialStatus,
 		scriptRunner:             scripts.NewRunner(nil),
+		rtsEng:                   rts.NewEng(),
 		globals:                  newGlobalStore(),
 		fileVars:                 newFileStore(),
 		oauth:                    oauth.NewManager(client),

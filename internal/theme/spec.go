@@ -121,14 +121,19 @@ type CommandSegmentSpec struct {
 }
 
 type EditorMetadataSpec struct {
-	CommentMarker    *string           `json:"comment_marker" toml:"comment_marker"`
-	DirectiveDefault *string           `json:"directive_default" toml:"directive_default"`
-	Value            *string           `json:"value" toml:"value"`
-	SettingKey       *string           `json:"setting_key" toml:"setting_key"`
-	SettingValue     *string           `json:"setting_value" toml:"setting_value"`
-	RequestLine      *string           `json:"request_line" toml:"request_line"`
-	RequestSeparator *string           `json:"request_separator" toml:"request_separator"`
-	DirectiveColors  map[string]string `json:"directive_colors" toml:"directive_colors"`
+	CommentMarker     *string           `json:"comment_marker" toml:"comment_marker"`
+	DirectiveDefault  *string           `json:"directive_default" toml:"directive_default"`
+	Value             *string           `json:"value" toml:"value"`
+	SettingKey        *string           `json:"setting_key" toml:"setting_key"`
+	SettingValue      *string           `json:"setting_value" toml:"setting_value"`
+	RequestLine       *string           `json:"request_line" toml:"request_line"`
+	RequestSeparator  *string           `json:"request_separator" toml:"request_separator"`
+	RTSKeywordDefault *string           `json:"rts_keyword_default" toml:"rts_keyword_default"`
+	RTSKeywordDecl    *string           `json:"rts_keyword_decl" toml:"rts_keyword_decl"`
+	RTSKeywordControl *string           `json:"rts_keyword_control" toml:"rts_keyword_control"`
+	RTSKeywordLiteral *string           `json:"rts_keyword_literal" toml:"rts_keyword_literal"`
+	RTSKeywordLogical *string           `json:"rts_keyword_logical" toml:"rts_keyword_logical"`
+	DirectiveColors   map[string]string `json:"directive_colors" toml:"directive_colors"`
 }
 
 type StyleSpec struct {
@@ -685,6 +690,41 @@ func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) er
 			return err
 		}
 		dst.RequestSeparator = color
+	}
+	if spec.RTSKeywordDefault != nil {
+		color, err := toColor("editor_metadata.rts_keyword_default", *spec.RTSKeywordDefault)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordDefault = color
+	}
+	if spec.RTSKeywordDecl != nil {
+		color, err := toColor("editor_metadata.rts_keyword_decl", *spec.RTSKeywordDecl)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordDecl = color
+	}
+	if spec.RTSKeywordControl != nil {
+		color, err := toColor("editor_metadata.rts_keyword_control", *spec.RTSKeywordControl)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordControl = color
+	}
+	if spec.RTSKeywordLiteral != nil {
+		color, err := toColor("editor_metadata.rts_keyword_literal", *spec.RTSKeywordLiteral)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordLiteral = color
+	}
+	if spec.RTSKeywordLogical != nil {
+		color, err := toColor("editor_metadata.rts_keyword_logical", *spec.RTSKeywordLogical)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordLogical = color
 	}
 	if len(spec.DirectiveColors) > 0 {
 		combined := make(map[string]lipgloss.Color, len(dst.DirectiveColors)+len(spec.DirectiveColors))

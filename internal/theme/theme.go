@@ -17,14 +17,19 @@ type CommandSegmentStyle struct {
 }
 
 type EditorMetadataPalette struct {
-	CommentMarker    lipgloss.Color
-	DirectiveDefault lipgloss.Color
-	Value            lipgloss.Color
-	SettingKey       lipgloss.Color
-	SettingValue     lipgloss.Color
-	RequestLine      lipgloss.Color
-	RequestSeparator lipgloss.Color
-	DirectiveColors  map[string]lipgloss.Color
+	CommentMarker     lipgloss.Color
+	DirectiveDefault  lipgloss.Color
+	Value             lipgloss.Color
+	SettingKey        lipgloss.Color
+	SettingValue      lipgloss.Color
+	RequestLine       lipgloss.Color
+	RequestSeparator  lipgloss.Color
+	RTSKeywordDefault lipgloss.Color
+	RTSKeywordDecl    lipgloss.Color
+	RTSKeywordControl lipgloss.Color
+	RTSKeywordLiteral lipgloss.Color
+	RTSKeywordLogical lipgloss.Color
+	DirectiveColors   map[string]lipgloss.Color
 }
 
 type Theme struct {
@@ -250,13 +255,18 @@ func DefaultTheme() Theme {
 		PaneBorderFocusRequests: lipgloss.Color("#15AABF"),
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
 		EditorMetadata: EditorMetadataPalette{
-			CommentMarker:    lipgloss.Color("#5E5A72"),
-			DirectiveDefault: directiveAccent,
-			Value:            lipgloss.Color("#E6E1FF"),
-			SettingKey:       lipgloss.Color("#FFD46A"),
-			SettingValue:     lipgloss.Color("#FFEBC5"),
-			RequestLine:      lipgloss.Color("#FF6E6E"),
-			RequestSeparator: lipgloss.Color("#626166"), // still debating with myself if i want this
+			CommentMarker:     lipgloss.Color("#5E5A72"),
+			DirectiveDefault:  directiveAccent,
+			Value:             lipgloss.Color("#E6E1FF"),
+			SettingKey:        lipgloss.Color("#FFD46A"),
+			SettingValue:      lipgloss.Color("#FFEBC5"),
+			RequestLine:       lipgloss.Color("#FF6E6E"),
+			RequestSeparator:  lipgloss.Color("#626166"), // still debating with myself if i want this
+			RTSKeywordDefault: directiveAccent,
+			RTSKeywordDecl:    directiveAccent,
+			RTSKeywordControl: lipgloss.Color("#FFD46A"),
+			RTSKeywordLiteral: lipgloss.Color("#6EF17E"),
+			RTSKeywordLogical: lipgloss.Color("#FF8B39"),
 			DirectiveColors: map[string]lipgloss.Color{
 				"name":              directiveAccent,
 				"description":       directiveAccent,

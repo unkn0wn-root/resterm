@@ -71,6 +71,16 @@ func (m *Model) buildProfileHistoryEntry(st *profileState, stats analysis.Latenc
 }
 
 func profileHistoryStatus(st *profileState, msg responseMsg) (string, int) {
+	if st != nil && st.skipped {
+		reason := strings.TrimSpace(st.skipReason)
+		if reason == "" {
+			reason = "SKIPPED"
+		}
+		if !strings.EqualFold(reason, "skipped") {
+			return fmt.Sprintf("SKIPPED: %s", reason), 0
+		}
+		return "SKIPPED", 0
+	}
 	if st != nil && st.canceled {
 		completed := profileCompletedRuns(st)
 		total := st.total

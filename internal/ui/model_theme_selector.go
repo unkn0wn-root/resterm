@@ -61,7 +61,7 @@ func (m *Model) applyThemeSelection() tea.Cmd {
 
 	m.theme = def.Theme
 	m.activeThemeKey = def.Key
-	m.editor.SetRuneStyler(newMetadataRuneStyler(m.theme.EditorMetadata))
+	m.editor.SetRuneStyler(selectEditorRuneStyler(m.currentFile, m.theme.EditorMetadata))
 	m.refreshThemeList()
 	m.applyThemeToLists()
 

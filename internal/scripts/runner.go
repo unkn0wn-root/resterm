@@ -93,6 +93,9 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 		if strings.ToLower(block.Kind) != "pre-request" {
 			continue
 		}
+		if scriptLang(block) != "js" {
+			continue
+		}
 
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
@@ -131,6 +134,9 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
 			continue
 		}
+		if scriptLang(block) != "js" {
+			continue
+		}
 
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
@@ -155,6 +161,16 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 		changes = nil
 	}
 	return aggregated, changes, nil
+}
+
+func scriptLang(block restfile.ScriptBlock) string {
+	lang := strings.ToLower(strings.TrimSpace(block.Lang))
+	switch lang {
+	case "", "javascript":
+		return "js"
+	default:
+		return lang
+	}
 }
 
 func (r *Runner) executePreRequestScript(ctx context.Context, script string, input PreRequestInput, output *PreRequestOutput) error {

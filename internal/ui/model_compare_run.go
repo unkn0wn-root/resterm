@@ -45,6 +45,8 @@ type compareResult struct {
 	Request     *restfile.Request
 	RequestText string
 	Canceled    bool
+	Skipped     bool
+	SkipReason  string
 }
 
 func (s *compareState) matches(req *restfile.Request) bool {
@@ -142,7 +144,7 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
 	runCmd := m.withEnvironment(env, func() tea.Cmd {
-		return m.executeRequest(state.doc, clone, state.options, env)
+		return m.executeRequest(state.doc, clone, state.options, env, nil)
 	})
 
 	if tick := m.startStatusPulse(); tick != nil {
@@ -176,19 +178,29 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 		}
 	}
 
+	if canceled {
+		msg.skipped = false
+	}
 	result := compareResult{
 		Environment: currentEnv,
 		Tests:       append([]scripts.TestResult(nil), msg.tests...),
 		ScriptErr:   msg.scriptErr,
 		RequestText: state.requestText,
 		Canceled:    canceled,
+		Skipped:     msg.skipped,
+		SkipReason:  msg.skipReason,
 	}
 	if currentReq != nil {
 		result.Request = cloneRequest(currentReq)
 	}
 
 	var cmds []tea.Cmd
-	if !canceled && msg.err != nil {
+	if !canceled && msg.skipped {
+		m.lastError = nil
+		if cmd := m.consumeSkippedRequest(msg.skipReason); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	} else if !canceled && msg.err != nil {
 		result.Err = msg.err
 		m.lastError = msg.err
 		if cmd := m.consumeRequestError(msg.err); cmd != nil {
@@ -449,6 +461,8 @@ func compareRowStatus(result *compareResult) (string, string) {
 		return "n/a", "-"
 	case result.Canceled:
 		return "canceled", "-"
+	case result.Skipped:
+		return "skipped", "-"
 	case result.Err != nil:
 		return "error", ""
 	case result.Response != nil:
@@ -479,6 +493,16 @@ func summarizeCompareDelta(base, target *compareResult) string {
 	}
 	if base != nil && strings.EqualFold(base.Environment, target.Environment) {
 		return "baseline"
+	}
+	if target.Skipped {
+		reason := strings.TrimSpace(target.SkipReason)
+		if reason == "" {
+			return "skipped"
+		}
+		return fmt.Sprintf("skipped: %s", reason)
+	}
+	if base != nil && base.Skipped {
+		return "baseline skipped"
 	}
 	if target.Err != nil {
 		return fmt.Sprintf("error: %s", errdef.Message(target.Err))
@@ -638,6 +662,9 @@ func compareResultSuccess(result *compareResult) bool {
 		return false
 	}
 	if result.Canceled {
+		return false
+	}
+	if result.Skipped {
 		return false
 	}
 	if result.Err != nil || result.ScriptErr != nil {

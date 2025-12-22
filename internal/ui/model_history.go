@@ -48,6 +48,15 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	m.testResults = msg.tests
 	m.scriptError = msg.scriptErr
 
+	if msg.skipped {
+		m.lastError = nil
+		m.testResults = nil
+		m.scriptError = nil
+		cmd := m.consumeSkippedRequest(msg.skipReason)
+		m.recordSkippedHistory(msg.executed, msg.requestText, msg.environment, msg.skipReason)
+		return cmd
+	}
+
 	if msg.grpc != nil {
 		if msg.err != nil {
 			m.lastError = msg.err
@@ -160,6 +169,58 @@ func (m *Model) consumeRequestError(err error) tea.Cmd {
 	}
 	m.setLivePane(target)
 
+	return m.syncResponsePanes()
+}
+
+func (m *Model) consumeSkippedRequest(reason string) tea.Cmd {
+	if m.responseLatest != nil && m.responseLatest.ready {
+		m.responsePrevious = m.responseLatest
+	}
+
+	m.responseLoading = false
+	m.responseLoadingFrame = 0
+	m.responsePending = nil
+	m.responseRenderToken = ""
+	if m.responseTokens != nil {
+		for key := range m.responseTokens {
+			delete(m.responseTokens, key)
+		}
+	}
+
+	title := "Request Skipped"
+	detail := strings.TrimSpace(reason)
+	if detail == "" {
+		detail = "Condition evaluated to false."
+	}
+	pretty := joinSections(title, detail)
+	raw := joinSections(title, detail)
+	headers := joinSections(title, detail)
+
+	snapshot := &responseSnapshot{
+		id:      nextResponseRenderToken(),
+		pretty:  pretty,
+		raw:     raw,
+		headers: headers,
+		ready:   true,
+	}
+	m.responseLatest = snapshot
+	m.responsePending = nil
+
+	target := m.responseTargetPane()
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		pane.snapshot = snapshot
+		pane.invalidateCaches()
+		pane.viewport.SetContent(pretty)
+		pane.viewport.GotoTop()
+		pane.setCurrPosition()
+	}
+	m.setLivePane(target)
+
+	m.setStatusMessage(statusMsg{text: detail, level: statusWarn})
 	return m.syncResponsePanes()
 }
 
@@ -639,6 +700,52 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 	m.syncHistory()
 }
 
+func (m *Model) recordSkippedHistory(req *restfile.Request, requestText, environment, reason string) {
+	if m.historyStore == nil || req == nil {
+		return
+	}
+
+	if strings.TrimSpace(requestText) == "" {
+		requestText = renderRequestText(req)
+	}
+
+	secrets := m.secretValuesForRedaction(req)
+	maskHeaders := !req.Metadata.AllowSensitiveHeaders
+	redacted := redactHistoryText(requestText, secrets, maskHeaders)
+
+	snippet := strings.TrimSpace(reason)
+	if snippet == "" {
+		snippet = "<skipped>"
+	}
+	if len(snippet) > 2000 {
+		snippet = snippet[:2000]
+	}
+
+	desc := strings.TrimSpace(req.Metadata.Description)
+	tags := normalizedTags(req.Metadata.Tags)
+
+	entry := history.Entry{
+		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ExecutedAt:  time.Now(),
+		Environment: environment,
+		RequestName: requestIdentifier(req),
+		Method:      req.Method,
+		URL:         req.URL,
+		Status:      "SKIPPED",
+		StatusCode:  0,
+		Duration:    0,
+		BodySnippet: snippet,
+		RequestText: redacted,
+		Description: desc,
+		Tags:        tags,
+	}
+	if err := m.historyStore.Append(entry); err != nil {
+		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+	}
+	m.historySelectedID = entry.ID
+	m.syncHistory()
+}
+
 func formatBinaryHistorySnippet(meta binaryview.Meta, size int) string {
 	sizeText := formatByteSize(int64(size))
 	mime := strings.TrimSpace(meta.MIME)
@@ -786,6 +893,14 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 	case result.Canceled:
 		entry.Error = "canceled"
 		entry.BodySnippet = entry.Error
+		entry.StatusCode = 0
+	case result.Skipped:
+		reason := strings.TrimSpace(result.SkipReason)
+		if reason == "" {
+			reason = "skipped"
+		}
+		entry.Error = reason
+		entry.BodySnippet = reason
 		entry.StatusCode = 0
 	case result.Err != nil:
 		entry.Error = errdef.Message(result.Err)
@@ -1656,7 +1771,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		replayText = fmt.Sprintf("Replaying %s", trimmed)
 	}
 	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
-	return m.executeRequest(doc, req, options, "")
+	return m.executeRequest(doc, req, options, "", nil)
 }
 
 func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {

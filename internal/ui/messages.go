@@ -33,6 +33,8 @@ type responseMsg struct {
 	executed    *restfile.Request
 	requestText string
 	environment string
+	skipped     bool
+	skipReason  string
 }
 
 type statusMsg struct {

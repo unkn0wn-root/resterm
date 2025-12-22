@@ -45,6 +45,23 @@ func TestRunPreRequestScripts(t *testing.T) {
 	}
 }
 
+func TestRunPreRequestSkipsRTS(t *testing.T) {
+	runner := NewRunner(nil)
+	req := &restfile.Request{}
+	blocks := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Lang: "rts",
+		Body: `request.setHeader("X-Test", "1");`,
+	}}
+	out, err := runner.RunPreRequest(blocks, PreRequestInput{Request: req, Variables: map[string]string{}})
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	if len(out.Headers) != 0 {
+		t.Fatalf("expected rts scripts to be skipped, got headers: %#v", out.Headers)
+	}
+}
+
 func TestRunScriptsFromFile(t *testing.T) {
 	dir := t.TempDir()
 	preScript := "request.setHeader(\"X-File\", \"1\");\nvars.set(\"fromFile\", \"yes\");"

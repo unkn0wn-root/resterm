@@ -121,3 +121,40 @@ func TestApplySpecDirectiveDefaultOverridesExistingEntries(t *testing.T) {
 		t.Errorf("base directive colors should remain unchanged")
 	}
 }
+
+func TestApplySpecRTSKeywordOverrides(t *testing.T) {
+	base := DefaultTheme()
+	spec := ThemeSpec{
+		EditorMetadata: &EditorMetadataSpec{
+			RTSKeywordDefault: strPtr("#101010"),
+			RTSKeywordDecl:    strPtr("#111111"),
+			RTSKeywordControl: strPtr("#222222"),
+			RTSKeywordLiteral: strPtr("#333333"),
+			RTSKeywordLogical: strPtr("#444444"),
+		},
+	}
+
+	updated, err := ApplySpec(base, spec)
+	if err != nil {
+		t.Fatalf("ApplySpec returned error: %v", err)
+	}
+
+	if got := updated.EditorMetadata.RTSKeywordDefault; got != "#101010" {
+		t.Errorf("expected RTS keyword default %q, got %q", "#101010", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordDecl; got != "#111111" {
+		t.Errorf("expected RTS keyword decl %q, got %q", "#111111", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordControl; got != "#222222" {
+		t.Errorf("expected RTS keyword control %q, got %q", "#222222", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordLiteral; got != "#333333" {
+		t.Errorf("expected RTS keyword literal %q, got %q", "#333333", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordLogical; got != "#444444" {
+		t.Errorf("expected RTS keyword logical %q, got %q", "#444444", got)
+	}
+	if base.EditorMetadata.RTSKeywordDefault == "#101010" {
+		t.Errorf("base theme should remain unchanged")
+	}
+}

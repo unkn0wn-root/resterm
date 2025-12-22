@@ -31,6 +31,8 @@ type profileState struct {
 	measuredEnd   time.Time
 	canceled      bool
 	cancelReason  string
+	skipped       bool
+	skipReason    string
 }
 
 type profileFailure struct {
@@ -66,7 +68,7 @@ func (m *Model) startProfileRun(doc *restfile.Document, req *restfile.Request, o
 	}
 	if req.GRPC != nil {
 		m.setStatusMessage(statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn})
-		return m.executeRequest(doc, req, options, "")
+		return m.executeRequest(doc, req, options, "", nil)
 	}
 
 	spec := restfile.ProfileSpec{}
@@ -143,7 +145,7 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 	m.statusPulseBase = progressText
 	m.showProfileProgress(state)
 
-	cmd := m.executeRequest(state.doc, iterationReq, state.options, "")
+	cmd := m.executeRequest(state.doc, iterationReq, state.options, "", nil)
 	return cmd
 }
 
@@ -181,6 +183,20 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		if hadCurrent && state.index < state.total {
 			state.index++
 		}
+		m.statusPulseBase = ""
+		m.statusPulseFrame = 0
+		m.sending = false
+		return m.finalizeProfileRun(msg, state)
+	}
+
+	if msg.skipped {
+		state.skipped = true
+		if strings.TrimSpace(state.skipReason) == "" {
+			state.skipReason = msg.skipReason
+		}
+		m.lastError = nil
+		m.lastResponse = nil
+		m.lastGRPC = nil
 		m.statusPulseBase = ""
 		m.statusPulseFrame = 0
 		m.sending = false
@@ -246,6 +262,13 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 }
 
 func evaluateProfileOutcome(msg responseMsg) (bool, string) {
+	if msg.skipped {
+		reason := strings.TrimSpace(msg.skipReason)
+		if reason == "" {
+			reason = "request skipped"
+		}
+		return false, reason
+	}
 	if msg.err != nil {
 		return false, errdef.Message(msg.err)
 	}
@@ -357,7 +380,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 
 	summary := buildProfileSummary(state)
 	level := statusInfo
-	if canceled {
+	if canceled || (state != nil && state.skipped) {
 		level = statusWarn
 	}
 	m.setStatusMessage(statusMsg{text: summary, level: level})
@@ -380,6 +403,13 @@ func buildProfileSummary(state *profileState) string {
 		return "Profiling complete"
 	}
 
+	if state.skipped {
+		reason := strings.TrimSpace(state.skipReason)
+		if reason == "" {
+			reason = "condition evaluated to false"
+		}
+		return fmt.Sprintf("Profiling skipped: %s", reason)
+	}
 	mt := profileMetricsFromState(state)
 	if state.canceled {
 		planned := state.total
@@ -664,7 +694,17 @@ func profileProgressDots(frame int) int {
 }
 
 func profileStatusText(state *profileState) string {
-	if state == nil || !state.canceled {
+	if state == nil {
+		return ""
+	}
+	if state.skipped {
+		reason := strings.TrimSpace(state.skipReason)
+		if reason == "" {
+			reason = "condition evaluated to false"
+		}
+		return fmt.Sprintf("Skipped: %s", reason)
+	}
+	if !state.canceled {
 		return ""
 	}
 	if summary := buildProfileSummary(state); strings.TrimSpace(summary) != "" {

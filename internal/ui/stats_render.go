@@ -695,7 +695,8 @@ func isWorkflowStepLine(line string) bool {
 	}
 	return strings.Contains(line, workflowStatusPass) ||
 		strings.Contains(line, workflowStatusFail) ||
-		strings.Contains(line, workflowStatusCanceled)
+		strings.Contains(line, workflowStatusCanceled) ||
+		strings.Contains(line, workflowStatusSkipped)
 }
 
 func colorizeWorkflowStepLine(line string) string {
@@ -703,6 +704,7 @@ func colorizeWorkflowStepLine(line string) string {
 	colored = strings.ReplaceAll(colored, workflowStatusPass, statsSuccessStyle.Render(workflowStatusPass))
 	colored = strings.ReplaceAll(colored, workflowStatusFail, statsWarnStyle.Render(workflowStatusFail))
 	colored = strings.ReplaceAll(colored, workflowStatusCanceled, statsCautionStyle.Render(workflowStatusCanceled))
+	colored = strings.ReplaceAll(colored, workflowStatusSkipped, statsCautionStyle.Render(workflowStatusSkipped))
 	colored = highlightParentheticals(colored)
 	return colored
 }
@@ -726,7 +728,7 @@ func highlightDurations(line string) string {
 		end += start + 1
 		builder.WriteString(remaining[:start])
 		content := remaining[start+1 : end]
-		if content == "PASS" || content == "FAIL" {
+		if content == "PASS" || content == "FAIL" || content == "CANCELED" || content == "SKIPPED" {
 			builder.WriteString("[" + content + "]")
 		} else {
 			builder.WriteString(statsDurationStyle.Render("[" + content + "]"))

@@ -68,6 +68,87 @@ GET https://example.com/api
 	}
 }
 
+func TestParseAssertDirective(t *testing.T) {
+	src := `# @assert status == 200
+# @assert contains(header("Content-Type"), "json") => "content type"
+GET https://example.com/api
+`
+	doc := Parse("assert.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Asserts) != 2 {
+		t.Fatalf("expected 2 asserts, got %d", len(req.Metadata.Asserts))
+	}
+	first := req.Metadata.Asserts[0]
+	if first.Expression != "status == 200" {
+		t.Fatalf("unexpected assert expression: %q", first.Expression)
+	}
+	if first.Line != 1 {
+		t.Fatalf("expected line 1, got %d", first.Line)
+	}
+	second := req.Metadata.Asserts[1]
+	if second.Expression != `contains(header("Content-Type"), "json")` {
+		t.Fatalf("unexpected assert expression: %q", second.Expression)
+	}
+	if second.Message != "content type" {
+		t.Fatalf("unexpected assert message: %q", second.Message)
+	}
+	if second.Line != 2 {
+		t.Fatalf("expected line 2, got %d", second.Line)
+	}
+}
+
+func TestParseScriptLang(t *testing.T) {
+	src := `# @script pre-request lang=rts
+> request.setHeader("X-Test", "1")
+GET https://example.com
+`
+	doc := Parse("script-lang.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	script := req.Metadata.Scripts[0]
+	if script.Kind != "pre-request" {
+		t.Fatalf("expected pre-request script, got %s", script.Kind)
+	}
+	if script.Lang != "rts" {
+		t.Fatalf("expected rts lang, got %q", script.Lang)
+	}
+	if script.Body == "" {
+		t.Fatalf("expected script body to be captured")
+	}
+}
+
+func TestParseApplyDirective(t *testing.T) {
+	src := `# @apply {headers: {"X-Test": "1"}}
+GET https://example.com
+`
+	doc := Parse("apply.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Applies) != 1 {
+		t.Fatalf("expected 1 apply directive, got %d", len(req.Metadata.Applies))
+	}
+	spec := req.Metadata.Applies[0]
+	if spec.Expression != `{headers: {"X-Test": "1"}}` {
+		t.Fatalf("unexpected apply expression: %q", spec.Expression)
+	}
+	if spec.Line != 1 {
+		t.Fatalf("expected line 1, got %d", spec.Line)
+	}
+	if spec.Col != 1 {
+		t.Fatalf("expected col 1, got %d", spec.Col)
+	}
+}
+
 func TestFileLevelSettingsCaptured(t *testing.T) {
 	src := `# @setting timeout 10s
 # @setting http-insecure true

@@ -25,6 +25,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/parser/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -187,6 +188,24 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		options.BaseDir = filepath.Dir(m.currentFile)
 	}
 
+	if cloned.Metadata.ForEach != nil {
+		if spec := m.compareSpecForRequest(cloned); spec != nil {
+			m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"})
+			return nil
+		}
+		if cloned.Metadata.Profile != nil {
+			m.setStatusMessage(statusMsg{level: statusWarn, text: "@profile cannot run alongside @for-each"})
+			return nil
+		}
+		if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
+			options.Trace = true
+			if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
+				options.TraceBudget = &budget
+			}
+		}
+		return m.startForEachRun(doc, cloned, options)
+	}
+
 	if spec := m.compareSpecForRequest(cloned); spec != nil {
 		if cloned.Metadata.Profile != nil {
 			m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"})
@@ -216,7 +235,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-	execCmd := m.executeRequest(doc, cloned, options, "")
+	execCmd := m.executeRequest(doc, cloned, options, "", nil)
 	if tick := m.startStatusPulse(); tick != nil {
 		return tea.Batch(execCmd, tick)
 	}
@@ -236,6 +255,10 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 		return nil
 	}
 
+	if req.Metadata.ForEach != nil {
+		m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"})
+		return nil
+	}
 	if req.Metadata.Profile != nil {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "@profile cannot run during compare"})
 		return nil
@@ -279,7 +302,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 
 // Accept an environment override so compare sweeps can force a per-iteration
 // scope without mutating the global environment selection.
-func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, envOverride string, extras ...map[string]string) tea.Cmd {
+func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, envOverride string, extraVals map[string]rts.Value, extras ...map[string]string) tea.Cmd {
 	options = m.resolveHTTPOptions(options)
 
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
@@ -316,8 +339,53 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 		defer sendCancel()
 
+		if req != nil && req.Metadata.When != nil {
+			shouldRun, reason, err := m.evalCondition(sendCtx, doc, req, envName, options.BaseDir, req.Metadata.When, baseVars, extraVals)
+			if err != nil {
+				tag := "@when"
+				if req.Metadata.When.Negate {
+					tag = "@skip-if"
+				}
+				return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "%s", tag), executed: req, environment: envName}
+			}
+			if !shouldRun {
+				return responseMsg{
+					executed:    req,
+					requestText: renderRequestText(req),
+					environment: envName,
+					skipped:     true,
+					skipReason:  reason,
+				}
+			}
+		}
+
 		preVars := cloneStringMap(baseVars)
+		if err := m.runRTSApply(sendCtx, doc, req, envName, options.BaseDir, preVars, extraVals); err != nil {
+			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "@apply"), executed: req}
+		}
 		preGlobals := m.collectGlobalValues(doc, envName)
+		rtsResult, err := m.runRTSPreRequest(sendCtx, doc, req, envName, options.BaseDir, preVars, preGlobals)
+		if err != nil {
+			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request rts script"), executed: req}
+		}
+
+		if err := applyPreRequestOutput(req, rtsResult); err != nil {
+			return responseMsg{err: err, executed: req}
+		}
+
+		if err := sendCtx.Err(); err != nil {
+			return responseMsg{err: err, executed: req}
+		}
+
+		if len(rtsResult.Globals) > 0 {
+			m.applyGlobalMutations(rtsResult.Globals, envName)
+			preGlobals = m.collectGlobalValues(doc, envName)
+		}
+
+		if len(rtsResult.Globals) > 0 || len(rtsResult.Variables) > 0 {
+			preVars = m.collectVariables(doc, req, envName)
+		}
+
 		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
 			Request:   req,
 			Variables: preVars,
@@ -339,7 +407,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 		m.applyGlobalMutations(preResult.Globals, envName)
 
-		scriptVars := cloneStringMap(preResult.Variables)
+		scriptVars := mergeVariableMaps(rtsResult.Variables, preResult.Variables)
 		resolverExtras := make([]map[string]string, 0, len(extras)+1)
 		if len(scriptVars) > 0 {
 			resolverExtras = append(resolverExtras, scriptVars)
@@ -350,7 +418,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			}
 		}
 
-		resolver := m.buildResolver(doc, req, envName, resolverExtras...)
+		resolver := m.buildResolver(sendCtx, doc, req, envName, options.BaseDir, extraVals, resolverExtras...)
 		sshPlan, err := m.resolveSSH(doc, req, resolver, envName)
 		if err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"), executed: req}
@@ -447,6 +515,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			updatedVars := m.collectVariables(doc, req, envName)
 			testVars := mergeVariableMaps(updatedVars, scriptVars)
 			testGlobals := m.collectGlobalValues(doc, envName)
+			asserts, assertErr := m.runAsserts(ctx, doc, req, envName, options.BaseDir, testVars, extraVals, rtsGRPC(grpcResp), nil, nil)
 			tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 				Response:  respForScripts,
 				Variables: testVars,
@@ -457,8 +526,8 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 			return responseMsg{
 				grpc:        grpcResp,
-				tests:       tests,
-				scriptErr:   testErr,
+				tests:       append(asserts, tests...),
+				scriptErr:   mergeErr(assertErr, testErr),
 				executed:    req,
 				requestText: renderRequestText(req),
 				environment: envName,
@@ -525,6 +594,7 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		updatedVars := m.collectVariables(doc, req, envName)
 		testVars := mergeVariableMaps(updatedVars, scriptVars)
 		testGlobals := m.collectGlobalValues(doc, envName)
+		asserts, assertErr := m.runAsserts(ctx, doc, req, envName, options.BaseDir, testVars, extraVals, rtsHTTP(response), rtsTrace(response), rtsStream(streamInfo))
 		traceInput := scripts.NewTraceInput(response.Timeline, req.Metadata.Trace)
 		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 			Response:  respForScripts,
@@ -538,8 +608,8 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 		return responseMsg{
 			response:    response,
-			tests:       tests,
-			scriptErr:   testErr,
+			tests:       append(asserts, tests...),
+			scriptErr:   mergeErr(assertErr, testErr),
 			executed:    req,
 			requestText: renderRequestText(req),
 			environment: envName,
@@ -758,7 +828,7 @@ func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Durat
 	return base
 }
 
-func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, envName string, extras ...map[string]string) *vars.Resolver {
+func (m *Model) buildResolver(ctx context.Context, doc *restfile.Document, req *restfile.Request, envName, base string, extraVals map[string]rts.Value, extras ...map[string]string) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -826,12 +896,15 @@ func (m *Model) buildResolver(doc *restfile.Document, req *restfile.Request, env
 	}
 
 	providers = append(providers, vars.EnvProvider{})
-	return vars.NewResolver(providers...)
+	res := vars.NewResolver(providers...)
+	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, false, extraVals, extras...))
+	res.SetExprPos(m.rtsPos(doc, req))
+	return res
 }
 
 // buildDisplayResolver is a best-effort resolver for UI/status rendering that
 // avoids expanding secret values.
-func (m *Model) buildDisplayResolver(doc *restfile.Document, req *restfile.Request, envName string, extras ...map[string]string) *vars.Resolver {
+func (m *Model) buildDisplayResolver(ctx context.Context, doc *restfile.Document, req *restfile.Request, envName, base string, extraVals map[string]rts.Value, extras ...map[string]string) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -913,7 +986,10 @@ func (m *Model) buildDisplayResolver(doc *restfile.Document, req *restfile.Reque
 	}
 
 	providers = append(providers, vars.EnvProvider{})
-	return vars.NewResolver(providers...)
+	res := vars.NewResolver(providers...)
+	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, true, extraVals, extras...))
+	res.SetExprPos(m.rtsPos(doc, req))
+	return res
 }
 
 func (m *Model) resolveSSH(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, envName string) (*ssh.Plan, error) {
@@ -1990,25 +2066,7 @@ func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) 
 		req.Body.Text = *out.Body
 		req.Body.GraphQL = nil
 	}
-	if len(out.Variables) > 0 {
-		existing := make(map[string]int)
-		for i, v := range req.Variables {
-			existing[strings.ToLower(v.Name)] = i
-		}
-
-		for name, value := range out.Variables {
-			key := strings.ToLower(name)
-			if idx, ok := existing[key]; ok {
-				req.Variables[idx].Value = value
-			} else {
-				req.Variables = append(req.Variables, restfile.Variable{
-					Name:  name,
-					Value: value,
-					Scope: restfile.ScopeRequest,
-				})
-			}
-		}
-	}
+	setRequestVars(req, out.Variables)
 	return nil
 }
 
@@ -2029,7 +2087,18 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 	clone.Variables = append([]restfile.Variable(nil), req.Variables...)
 	clone.Metadata.Tags = append([]string(nil), req.Metadata.Tags...)
 	clone.Metadata.Scripts = append([]restfile.ScriptBlock(nil), req.Metadata.Scripts...)
+	clone.Metadata.Uses = append([]restfile.UseSpec(nil), req.Metadata.Uses...)
+	clone.Metadata.Applies = append([]restfile.ApplySpec(nil), req.Metadata.Applies...)
+	clone.Metadata.Asserts = append([]restfile.AssertSpec(nil), req.Metadata.Asserts...)
 	clone.Metadata.Captures = append([]restfile.CaptureSpec(nil), req.Metadata.Captures...)
+	if req.Metadata.When != nil {
+		when := *req.Metadata.When
+		clone.Metadata.When = &when
+	}
+	if req.Metadata.ForEach != nil {
+		forEach := *req.Metadata.ForEach
+		clone.Metadata.ForEach = &forEach
+	}
 	if req.Metadata.Compare != nil {
 		spec := *req.Metadata.Compare
 		if len(spec.Environments) > 0 {
