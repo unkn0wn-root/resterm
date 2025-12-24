@@ -84,6 +84,13 @@ func strArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
 	return s, nil
 }
 
+func numArg(ctx *Ctx, pos Pos, v Value, sig string) (float64, error) {
+	if v.K != VNum {
+		return 0, rtErr(ctx, pos, "%s expects number", sig)
+	}
+	return v.N, nil
+}
+
 func listArg(ctx *Ctx, pos Pos, v Value, sig string) ([]Value, error) {
 	if v.K == VNull {
 		return nil, nil

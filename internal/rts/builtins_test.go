@@ -69,6 +69,26 @@ func TestBuiltinJSONParseStringify(t *testing.T) {
 	}
 }
 
+func TestBuiltinJSONGet(t *testing.T) {
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 4096, MaxList: 1024, MaxDict: 1024})
+	v := evalExprCtx(t, ctx, "json.get({a:{b:[1,2]}}, \"a.b[1]\")")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected json.get path 2")
+	}
+	v = evalExprCtx(t, ctx, "json.get({a:{b:[1,2]}}, \"$.a.b[0]\")")
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected json.get $ path 1")
+	}
+	v = evalExprCtx(t, ctx, "json.get({a:1}, \"missing\")")
+	if v.K != VNull {
+		t.Fatalf("expected json.get missing null")
+	}
+	v = evalExprCtx(t, ctx, "json.get({a:1}).a")
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected json.get value a=1")
+	}
+}
+
 func TestBuiltinHeadersHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "headers.get(headers.normalize({\"X-Test\":\"ok\"}), \"x-test\")")
@@ -186,5 +206,41 @@ func TestBuiltinListDictHelpers(t *testing.T) {
 	v = evalExprCtx(t, ctx, "stdlib.dict.remove({a:1,b:2}, \"a\").a")
 	if v.K != VNull {
 		t.Fatalf("expected dict.remove to drop key")
+	}
+}
+
+func TestBuiltinMathHelpers(t *testing.T) {
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	v := evalExprCtx(t, ctx, "stdlib.math.abs(-2)")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected math.abs 2")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.min(2, -1)")
+	if v.K != VNum || v.N != -1 {
+		t.Fatalf("expected math.min -1")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.max(2, -1)")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected math.max 2")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.clamp(5, 1, 3)")
+	if v.K != VNum || v.N != 3 {
+		t.Fatalf("expected math.clamp high 3")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.clamp(2, 1, 3)")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected math.clamp mid 2")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.floor(1.8)")
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected math.floor 1")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.ceil(1.2)")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected math.ceil 2")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.math.round(1.5)")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected math.round 2")
 	}
 }

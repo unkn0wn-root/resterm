@@ -103,6 +103,15 @@ func builtinsWithReq(req *requestObj) map[string]Value {
 	dic.m["merge"] = NativeNamed("dict.merge", builtinDictMerge)
 	dic.m["remove"] = NativeNamed("dict.remove", builtinDictRemove)
 
+	mt := &objMap{name: "math", m: map[string]Value{}}
+	mt.m["abs"] = NativeNamed("math.abs", builtinMathAbs)
+	mt.m["min"] = NativeNamed("math.min", builtinMathMin)
+	mt.m["max"] = NativeNamed("math.max", builtinMathMax)
+	mt.m["clamp"] = NativeNamed("math.clamp", builtinMathClamp)
+	mt.m["floor"] = NativeNamed("math.floor", builtinMathFloor)
+	mt.m["ceil"] = NativeNamed("math.ceil", builtinMathCeil)
+	mt.m["round"] = NativeNamed("math.round", builtinMathRound)
+
 	out := map[string]Value{
 		"fail":     NativeNamed("fail", builtinFail),
 		"len":      NativeNamed("len", builtinLen),
@@ -135,6 +144,7 @@ func builtinsWithReq(req *requestObj) map[string]Value {
 	std.m["text"] = Obj(txt)
 	std.m["list"] = Obj(lst)
 	std.m["dict"] = Obj(dic)
+	std.m["math"] = Obj(mt)
 	out["stdlib"] = Obj(std)
 	if req != nil {
 		out["request"] = Obj(req)
