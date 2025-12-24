@@ -44,107 +44,138 @@ func (o *objMap) Index(key Value) (Value, error) {
 	return v, nil
 }
 
+type nsSpec struct {
+	name string
+	top  bool
+	fns  map[string]NativeFunc
+}
+
+func stdlibCoreSpec() map[string]NativeFunc {
+	return map[string]NativeFunc{
+		"fail":     builtinFail,
+		"len":      builtinLen,
+		"contains": builtinContains,
+		"match":    builtinMatch,
+		"str":      builtinStr,
+		"default":  builtinDefault,
+		"uuid":     builtinUUID,
+	}
+}
+
+func stdlibNSpecs() []nsSpec {
+	return []nsSpec{
+		{name: "base64", top: true, fns: map[string]NativeFunc{
+			"encode": builtinB64Enc,
+			"decode": builtinB64Dec,
+		}},
+		{name: "url", top: true, fns: map[string]NativeFunc{
+			"encode": builtinURLEnc,
+			"decode": builtinURLDec,
+		}},
+		{name: "time", top: true, fns: map[string]NativeFunc{
+			"nowISO": builtinTimeNowISO,
+			"format": builtinTimeFormat,
+		}},
+		{name: "json", top: true, fns: map[string]NativeFunc{
+			"file":      builtinJSONFile,
+			"parse":     builtinJSONParse,
+			"stringify": builtinJSONStringify,
+			"get":       builtinJSONGet,
+		}},
+		{name: "headers", top: true, fns: map[string]NativeFunc{
+			"get":       builtinHeadersGet,
+			"has":       builtinHeadersHas,
+			"set":       builtinHeadersSet,
+			"remove":    builtinHeadersRemove,
+			"merge":     builtinHeadersMerge,
+			"normalize": builtinHeadersNormalize,
+		}},
+		{name: "query", top: true, fns: map[string]NativeFunc{
+			"parse":  builtinQueryParse,
+			"encode": builtinQueryEncode,
+			"merge":  builtinQueryMerge,
+		}},
+		{name: "text", fns: map[string]NativeFunc{
+			"lower":      builtinTextLower,
+			"upper":      builtinTextUpper,
+			"trim":       builtinTextTrim,
+			"split":      builtinTextSplit,
+			"join":       builtinTextJoin,
+			"replace":    builtinTextReplace,
+			"startsWith": builtinTextStartsWith,
+			"endsWith":   builtinTextEndsWith,
+		}},
+		{name: "list", fns: map[string]NativeFunc{
+			"append": builtinListAppend,
+			"concat": builtinListConcat,
+			"sort":   builtinListSort,
+		}},
+		{name: "dict", fns: map[string]NativeFunc{
+			"keys":   builtinDictKeys,
+			"values": builtinDictValues,
+			"items":  builtinDictItems,
+			"set":    builtinDictSet,
+			"merge":  builtinDictMerge,
+			"remove": builtinDictRemove,
+		}},
+		{name: "math", fns: map[string]NativeFunc{
+			"abs":   builtinMathAbs,
+			"min":   builtinMathMin,
+			"max":   builtinMathMax,
+			"clamp": builtinMathClamp,
+			"floor": builtinMathFloor,
+			"ceil":  builtinMathCeil,
+			"round": builtinMathRound,
+		}},
+	}
+}
+
+func addVals(dst, src map[string]Value) {
+	for k, v := range src {
+		dst[k] = v
+	}
+}
+
+func mkFns(prefix string, fns map[string]NativeFunc) map[string]Value {
+	out := make(map[string]Value, len(fns))
+	for k, f := range fns {
+		name := k
+		if prefix != "" {
+			name = prefix + "." + k
+		}
+		out[k] = NativeNamed(name, f)
+	}
+	return out
+}
+
+func mkObj(name string, fns map[string]NativeFunc) *objMap {
+	return &objMap{name: name, m: mkFns(name, fns)}
+}
+
 func Stdlib() map[string]Value {
 	return stdlibWithReq(nil)
 }
 
 func stdlibWithReq(req *requestObj) map[string]Value {
-	b64 := &objMap{name: "base64", m: map[string]Value{}}
-	b64.m["encode"] = NativeNamed("base64.encode", builtinB64Enc)
-	b64.m["decode"] = NativeNamed("base64.decode", builtinB64Dec)
-
-	u := &objMap{name: "url", m: map[string]Value{}}
-	u.m["encode"] = NativeNamed("url.encode", builtinURLEnc)
-	u.m["decode"] = NativeNamed("url.decode", builtinURLDec)
-
-	tm := &objMap{name: "time", m: map[string]Value{}}
-	tm.m["nowISO"] = NativeNamed("time.nowISO", builtinTimeNowISO)
-	tm.m["format"] = NativeNamed("time.format", builtinTimeFormat)
-
-	js := &objMap{name: "json", m: map[string]Value{}}
-	js.m["file"] = NativeNamed("json.file", builtinJSONFile)
-	js.m["parse"] = NativeNamed("json.parse", builtinJSONParse)
-	js.m["stringify"] = NativeNamed("json.stringify", builtinJSONStringify)
-	js.m["get"] = NativeNamed("json.get", builtinJSONGet)
-
-	h := &objMap{name: "headers", m: map[string]Value{}}
-	h.m["get"] = NativeNamed("headers.get", builtinHeadersGet)
-	h.m["has"] = NativeNamed("headers.has", builtinHeadersHas)
-	h.m["set"] = NativeNamed("headers.set", builtinHeadersSet)
-	h.m["remove"] = NativeNamed("headers.remove", builtinHeadersRemove)
-	h.m["merge"] = NativeNamed("headers.merge", builtinHeadersMerge)
-	h.m["normalize"] = NativeNamed("headers.normalize", builtinHeadersNormalize)
-
-	q := &objMap{name: "query", m: map[string]Value{}}
-	q.m["parse"] = NativeNamed("query.parse", builtinQueryParse)
-	q.m["encode"] = NativeNamed("query.encode", builtinQueryEncode)
-	q.m["merge"] = NativeNamed("query.merge", builtinQueryMerge)
-
-	txt := &objMap{name: "text", m: map[string]Value{}}
-	txt.m["lower"] = NativeNamed("text.lower", builtinTextLower)
-	txt.m["upper"] = NativeNamed("text.upper", builtinTextUpper)
-	txt.m["trim"] = NativeNamed("text.trim", builtinTextTrim)
-	txt.m["split"] = NativeNamed("text.split", builtinTextSplit)
-	txt.m["join"] = NativeNamed("text.join", builtinTextJoin)
-	txt.m["replace"] = NativeNamed("text.replace", builtinTextReplace)
-	txt.m["startsWith"] = NativeNamed("text.startsWith", builtinTextStartsWith)
-	txt.m["endsWith"] = NativeNamed("text.endsWith", builtinTextEndsWith)
-
-	lst := &objMap{name: "list", m: map[string]Value{}}
-	lst.m["append"] = NativeNamed("list.append", builtinListAppend)
-	lst.m["concat"] = NativeNamed("list.concat", builtinListConcat)
-	lst.m["sort"] = NativeNamed("list.sort", builtinListSort)
-
-	dic := &objMap{name: "dict", m: map[string]Value{}}
-	dic.m["keys"] = NativeNamed("dict.keys", builtinDictKeys)
-	dic.m["values"] = NativeNamed("dict.values", builtinDictValues)
-	dic.m["items"] = NativeNamed("dict.items", builtinDictItems)
-	dic.m["set"] = NativeNamed("dict.set", builtinDictSet)
-	dic.m["merge"] = NativeNamed("dict.merge", builtinDictMerge)
-	dic.m["remove"] = NativeNamed("dict.remove", builtinDictRemove)
-
-	mt := &objMap{name: "math", m: map[string]Value{}}
-	mt.m["abs"] = NativeNamed("math.abs", builtinMathAbs)
-	mt.m["min"] = NativeNamed("math.min", builtinMathMin)
-	mt.m["max"] = NativeNamed("math.max", builtinMathMax)
-	mt.m["clamp"] = NativeNamed("math.clamp", builtinMathClamp)
-	mt.m["floor"] = NativeNamed("math.floor", builtinMathFloor)
-	mt.m["ceil"] = NativeNamed("math.ceil", builtinMathCeil)
-	mt.m["round"] = NativeNamed("math.round", builtinMathRound)
-
-	out := map[string]Value{
-		"fail":     NativeNamed("fail", builtinFail),
-		"len":      NativeNamed("len", builtinLen),
-		"contains": NativeNamed("contains", builtinContains),
-		"match":    NativeNamed("match", builtinMatch),
-		"str":      NativeNamed("str", builtinStr),
-		"default":  NativeNamed("default", builtinDefault),
-		"uuid":     NativeNamed("uuid", builtinUUID),
-		"base64":   Obj(b64),
-		"url":      Obj(u),
-		"time":     Obj(tm),
-		"json":     Obj(js),
-		"headers":  Obj(h),
-		"query":    Obj(q),
+	core := mkFns("", stdlibCoreSpec())
+	spec := stdlibNSpecs()
+	top := 0
+	for _, s := range spec {
+		if s.top {
+			top++
+		}
 	}
-	std := &objMap{name: "stdlib", m: map[string]Value{}}
-	std.m["fail"] = out["fail"]
-	std.m["len"] = out["len"]
-	std.m["contains"] = out["contains"]
-	std.m["match"] = out["match"]
-	std.m["str"] = out["str"]
-	std.m["default"] = out["default"]
-	std.m["uuid"] = out["uuid"]
-	std.m["base64"] = Obj(b64)
-	std.m["url"] = Obj(u)
-	std.m["time"] = Obj(tm)
-	std.m["json"] = Obj(js)
-	std.m["headers"] = Obj(h)
-	std.m["query"] = Obj(q)
-	std.m["text"] = Obj(txt)
-	std.m["list"] = Obj(lst)
-	std.m["dict"] = Obj(dic)
-	std.m["math"] = Obj(mt)
+	out := make(map[string]Value, len(core)+top+2)
+	addVals(out, core)
+	std := &objMap{name: "stdlib", m: make(map[string]Value, len(core)+len(spec))}
+	addVals(std.m, core)
+	for _, s := range spec {
+		o := mkObj(s.name, s.fns)
+		if s.top {
+			out[s.name] = Obj(o)
+		}
+		std.m[s.name] = Obj(o)
+	}
 	out["stdlib"] = Obj(std)
 	if req != nil {
 		out["request"] = Obj(req)
