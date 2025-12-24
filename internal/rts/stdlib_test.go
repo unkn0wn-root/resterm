@@ -13,7 +13,7 @@ func evalExprCtx(t *testing.T, ctx *Ctx, src string) Value {
 	}
 	vm := &VM{ctx: ctx}
 	env := NewEnv(nil)
-	for k, v := range Builtins() {
+	for k, v := range Stdlib() {
 		env.DefConst(k, v)
 	}
 	v, err := vm.eval(env, ex)
@@ -23,7 +23,7 @@ func evalExprCtx(t *testing.T, ctx *Ctx, src string) Value {
 	return v
 }
 
-func TestBuiltinsCore(t *testing.T) {
+func TestStdlibCore(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "len([1,2,3])")
 	if v.K != VNum || v.N != 3 {
@@ -39,7 +39,7 @@ func TestBuiltinsCore(t *testing.T) {
 	}
 }
 
-func TestBuiltinJSONFile(t *testing.T) {
+func TestStdlibJSONFile(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	ctx.ReadFile = func(path string) ([]byte, error) {
 		return []byte("[{\"id\":1}]"), nil
@@ -53,7 +53,7 @@ func TestBuiltinJSONFile(t *testing.T) {
 	}
 }
 
-func TestBuiltinJSONParseStringify(t *testing.T) {
+func TestStdlibJSONParseStringify(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 4096, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "json.parse(\"{\\\"a\\\":1}\").a")
 	if v.K != VNum || v.N != 1 {
@@ -69,7 +69,7 @@ func TestBuiltinJSONParseStringify(t *testing.T) {
 	}
 }
 
-func TestBuiltinJSONGet(t *testing.T) {
+func TestStdlibJSONGet(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 4096, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "json.get({a:{b:[1,2]}}, \"a.b[1]\")")
 	if v.K != VNum || v.N != 2 {
@@ -89,7 +89,7 @@ func TestBuiltinJSONGet(t *testing.T) {
 	}
 }
 
-func TestBuiltinHeadersHelpers(t *testing.T) {
+func TestStdlibHeadersHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "headers.get(headers.normalize({\"X-Test\":\"ok\"}), \"x-test\")")
 	if v.K != VStr || v.S != "ok" {
@@ -105,7 +105,7 @@ func TestBuiltinHeadersHelpers(t *testing.T) {
 	}
 }
 
-func TestBuiltinQueryHelpers(t *testing.T) {
+func TestStdlibQueryHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "len(query.parse(\"https://x.test?p=1&p=2\").p)")
 	if v.K != VNum || v.N != 2 {
@@ -121,7 +121,7 @@ func TestBuiltinQueryHelpers(t *testing.T) {
 	}
 }
 
-func TestBuiltinTextHelpers(t *testing.T) {
+func TestStdlibTextHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "stdlib.text.lower(\"AbC\")")
 	if v.K != VStr || v.S != "abc" {
@@ -161,7 +161,7 @@ func TestBuiltinTextHelpers(t *testing.T) {
 	}
 }
 
-func TestBuiltinListDictHelpers(t *testing.T) {
+func TestStdlibListDictHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "stdlib.list.append([1,2], 3)[2]")
 	if v.K != VNum || v.N != 3 {
@@ -209,7 +209,7 @@ func TestBuiltinListDictHelpers(t *testing.T) {
 	}
 }
 
-func TestBuiltinMathHelpers(t *testing.T) {
+func TestStdlibMathHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "stdlib.math.abs(-2)")
 	if v.K != VNum || v.N != 2 {

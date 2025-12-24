@@ -44,11 +44,11 @@ func (o *objMap) Index(key Value) (Value, error) {
 	return v, nil
 }
 
-func Builtins() map[string]Value {
-	return builtinsWithReq(nil)
+func Stdlib() map[string]Value {
+	return stdlibWithReq(nil)
 }
 
-func builtinsWithReq(req *requestObj) map[string]Value {
+func stdlibWithReq(req *requestObj) map[string]Value {
 	b64 := &objMap{name: "base64", m: map[string]Value{}}
 	b64.m["encode"] = NativeNamed("base64.encode", builtinB64Enc)
 	b64.m["decode"] = NativeNamed("base64.decode", builtinB64Dec)

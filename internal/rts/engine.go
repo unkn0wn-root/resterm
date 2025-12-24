@@ -34,7 +34,7 @@ type RT struct {
 type Eng struct {
 	C      *ModCache
 	Lim    Limits
-	Bld    func() map[string]Value
+	Stdlib func() map[string]Value
 	reqObj *requestObj
 }
 
@@ -44,10 +44,10 @@ func NewEng() *Eng {
 		Lim:    Limits{MaxSteps: 10000, MaxCall: 64, MaxStr: 65536, MaxList: 2000, MaxDict: 2000},
 		reqObj: newRequestObj("request"),
 	}
-	e.Bld = func() map[string]Value {
-		return builtinsWithReq(e.reqObj)
+	e.Stdlib = func() map[string]Value {
+		return stdlibWithReq(e.reqObj)
 	}
-	e.C.SetBuiltins(e.Bld)
+	e.C.SetStdlib(e.Stdlib)
 	return e
 }
 
@@ -55,15 +55,15 @@ func (e *Eng) ensure() {
 	if e.reqObj == nil {
 		e.reqObj = newRequestObj("request")
 	}
-	if e.Bld == nil {
-		e.Bld = func() map[string]Value {
-			return builtinsWithReq(e.reqObj)
+	if e.Stdlib == nil {
+		e.Stdlib = func() map[string]Value {
+			return stdlibWithReq(e.reqObj)
 		}
 	}
 	if e.C == nil {
 		e.C = NewCache(nil)
 	}
-	e.C.SetBuiltins(e.Bld)
+	e.C.SetStdlib(e.Stdlib)
 }
 
 func (e *Eng) Eval(ctx context.Context, rt RT, src string, pos Pos) (Value, error) {
@@ -154,7 +154,7 @@ func (e *Eng) newCtx(ctx context.Context, rt RT) *Ctx {
 }
 
 func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
-	pre := cloneVals(e.Bld())
+	pre := cloneVals(e.Stdlib())
 	pre["env"] = Obj(newMapObj("env", rt.Env))
 	pre["vars"] = Obj(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
 	pre["last"] = Obj(newRespObj("last", rt.Resp))

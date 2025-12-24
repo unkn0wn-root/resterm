@@ -22,7 +22,7 @@ type ModCache struct {
 	fs  FS
 	mu  sync.RWMutex
 	ent map[string]*modEnt
-	bld func() map[string]Value
+	std func() map[string]Value
 }
 
 type modEnt struct {
@@ -39,15 +39,15 @@ func NewCache(fs FS) *ModCache {
 	if fs == nil {
 		fs = OSFS{}
 	}
-	return &ModCache{fs: fs, ent: map[string]*modEnt{}, bld: Builtins}
+	return &ModCache{fs: fs, ent: map[string]*modEnt{}, std: Stdlib}
 }
 
-func (c *ModCache) SetBuiltins(fn func() map[string]Value) {
+func (c *ModCache) SetStdlib(fn func() map[string]Value) {
 	if fn == nil {
 		return
 	}
 	c.mu.Lock()
-	c.bld = fn
+	c.std = fn
 	c.mu.Unlock()
 }
 
@@ -81,7 +81,7 @@ func (c *ModCache) Load(ctx *Ctx, base, path string) (*Comp, string, error) {
 	}
 
 	cx := ctx.CloneNoIO()
-	comp, err := Exec(cx, mod, c.bld())
+	comp, err := Exec(cx, mod, c.std())
 	if err != nil {
 		return nil, p, err
 	}
