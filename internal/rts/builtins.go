@@ -65,6 +65,7 @@ func builtinsWithReq(req *requestObj) map[string]Value {
 	js.m["file"] = NativeNamed("json.file", builtinJSONFile)
 	js.m["parse"] = NativeNamed("json.parse", builtinJSONParse)
 	js.m["stringify"] = NativeNamed("json.stringify", builtinJSONStringify)
+	js.m["get"] = NativeNamed("json.get", builtinJSONGet)
 
 	h := &objMap{name: "headers", m: map[string]Value{}}
 	h.m["get"] = NativeNamed("headers.get", builtinHeadersGet)
@@ -78,6 +79,29 @@ func builtinsWithReq(req *requestObj) map[string]Value {
 	q.m["parse"] = NativeNamed("query.parse", builtinQueryParse)
 	q.m["encode"] = NativeNamed("query.encode", builtinQueryEncode)
 	q.m["merge"] = NativeNamed("query.merge", builtinQueryMerge)
+
+	txt := &objMap{name: "text", m: map[string]Value{}}
+	txt.m["lower"] = NativeNamed("text.lower", builtinTextLower)
+	txt.m["upper"] = NativeNamed("text.upper", builtinTextUpper)
+	txt.m["trim"] = NativeNamed("text.trim", builtinTextTrim)
+	txt.m["split"] = NativeNamed("text.split", builtinTextSplit)
+	txt.m["join"] = NativeNamed("text.join", builtinTextJoin)
+	txt.m["replace"] = NativeNamed("text.replace", builtinTextReplace)
+	txt.m["startsWith"] = NativeNamed("text.startsWith", builtinTextStartsWith)
+	txt.m["endsWith"] = NativeNamed("text.endsWith", builtinTextEndsWith)
+
+	lst := &objMap{name: "list", m: map[string]Value{}}
+	lst.m["append"] = NativeNamed("list.append", builtinListAppend)
+	lst.m["concat"] = NativeNamed("list.concat", builtinListConcat)
+	lst.m["sort"] = NativeNamed("list.sort", builtinListSort)
+
+	dic := &objMap{name: "dict", m: map[string]Value{}}
+	dic.m["keys"] = NativeNamed("dict.keys", builtinDictKeys)
+	dic.m["values"] = NativeNamed("dict.values", builtinDictValues)
+	dic.m["items"] = NativeNamed("dict.items", builtinDictItems)
+	dic.m["set"] = NativeNamed("dict.set", builtinDictSet)
+	dic.m["merge"] = NativeNamed("dict.merge", builtinDictMerge)
+	dic.m["remove"] = NativeNamed("dict.remove", builtinDictRemove)
 
 	out := map[string]Value{
 		"fail":     NativeNamed("fail", builtinFail),
@@ -94,6 +118,24 @@ func builtinsWithReq(req *requestObj) map[string]Value {
 		"headers":  Obj(h),
 		"query":    Obj(q),
 	}
+	std := &objMap{name: "stdlib", m: map[string]Value{}}
+	std.m["fail"] = out["fail"]
+	std.m["len"] = out["len"]
+	std.m["contains"] = out["contains"]
+	std.m["match"] = out["match"]
+	std.m["str"] = out["str"]
+	std.m["default"] = out["default"]
+	std.m["uuid"] = out["uuid"]
+	std.m["base64"] = Obj(b64)
+	std.m["url"] = Obj(u)
+	std.m["time"] = Obj(tm)
+	std.m["json"] = Obj(js)
+	std.m["headers"] = Obj(h)
+	std.m["query"] = Obj(q)
+	std.m["text"] = Obj(txt)
+	std.m["list"] = Obj(lst)
+	std.m["dict"] = Obj(dic)
+	out["stdlib"] = Obj(std)
 	if req != nil {
 		out["request"] = Obj(req)
 	}

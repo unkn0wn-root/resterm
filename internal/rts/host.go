@@ -27,6 +27,8 @@ func (o *mapObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".get", o.getFn), true
 	case "has":
 		return NativeNamed(o.name+".has", o.hasFn), true
+	case "require":
+		return NativeNamed(o.name+".require", o.requireFn), true
 	}
 
 	v, ok := o.m[strings.ToLower(name)]
@@ -82,6 +84,22 @@ func (o *mapObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 
 	_, ok := o.m[strings.ToLower(k)]
 	return Bool(ok), nil
+}
+
+func (o *mapObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".require(name[, msg])"
+	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
+		return Null(), err
+	}
+	k, err := keyArg(ctx, pos, args[0], sig)
+	if err != nil {
+		return Null(), err
+	}
+	v, ok := o.m[strings.ToLower(k)]
+	if ok && strings.TrimSpace(v) != "" {
+		return Str(v), nil
+	}
+	return Null(), reqErr(ctx, pos, o.name, k, args)
 }
 
 type Resp struct {

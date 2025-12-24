@@ -100,3 +100,91 @@ func TestBuiltinQueryHelpers(t *testing.T) {
 		t.Fatalf("expected query length 1")
 	}
 }
+
+func TestBuiltinTextHelpers(t *testing.T) {
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	v := evalExprCtx(t, ctx, "stdlib.text.lower(\"AbC\")")
+	if v.K != VStr || v.S != "abc" {
+		t.Fatalf("expected lower abc")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.upper(\"AbC\")")
+	if v.K != VStr || v.S != "ABC" {
+		t.Fatalf("expected upper ABC")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.trim(\"  a \\t\")")
+	if v.K != VStr || v.S != "a" {
+		t.Fatalf("expected trim a")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.split(\"a,b\", \",\")[1]")
+	if v.K != VStr || v.S != "b" {
+		t.Fatalf("expected split b")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.join([\"a\",\"b\"], \"-\")")
+	if v.K != VStr || v.S != "a-b" {
+		t.Fatalf("expected join a-b")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.replace(\"a-b\", \"-\", \":\")")
+	if v.K != VStr || v.S != "a:b" {
+		t.Fatalf("expected replace a:b")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.startsWith(\"hello\", \"he\")")
+	if v.K != VBool || v.B != true {
+		t.Fatalf("expected startsWith true")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.endsWith(\"hello\", \"lo\")")
+	if v.K != VBool || v.B != true {
+		t.Fatalf("expected endsWith true")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.text.lower(\"XY\")")
+	if v.K != VStr || v.S != "xy" {
+		t.Fatalf("expected stdlib text lower")
+	}
+}
+
+func TestBuiltinListDictHelpers(t *testing.T) {
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	v := evalExprCtx(t, ctx, "stdlib.list.append([1,2], 3)[2]")
+	if v.K != VNum || v.N != 3 {
+		t.Fatalf("expected list.append to add 3")
+	}
+	v = evalExprCtx(t, ctx, "len(stdlib.list.concat([1], [2,3]))")
+	if v.K != VNum || v.N != 3 {
+		t.Fatalf("expected list.concat length 3")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.list.sort([3,1,2])[0]")
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected list.sort numbers")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.list.sort([\"b\",\"a\"])[0]")
+	if v.K != VStr || v.S != "a" {
+		t.Fatalf("expected list.sort strings")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.keys({b:1, a:2})[0]")
+	if v.K != VStr || v.S != "a" {
+		t.Fatalf("expected dict.keys sorted")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.values({b:1, a:2})[0]")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected dict.values sorted")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.items({a:1})[0].key")
+	if v.K != VStr || v.S != "a" {
+		t.Fatalf("expected dict.items key")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.items({a:1})[0].value")
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected dict.items value")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.set({a:1}, \"b\", 2).b")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected dict.set b=2")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.merge({a:1}, {a:2, b:3}).a")
+	if v.K != VNum || v.N != 2 {
+		t.Fatalf("expected dict.merge to override")
+	}
+	v = evalExprCtx(t, ctx, "stdlib.dict.remove({a:1,b:2}, \"a\").a")
+	if v.K != VNull {
+		t.Fatalf("expected dict.remove to drop key")
+	}
+}

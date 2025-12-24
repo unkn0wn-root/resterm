@@ -54,6 +54,32 @@ func builtinJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(string(data)), nil
 }
 
+func builtinJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	if err := argCountRange(ctx, pos, args, 1, 2, "json.get(value[, path])"); err != nil {
+		return Null(), err
+	}
+	raw, err := jsonIface(ctx, pos, args[0])
+	if err != nil {
+		return Null(), err
+	}
+	path := ""
+	if len(args) == 2 {
+		p, err := strArg(ctx, pos, args[1], "json.get(value[, path])")
+		if err != nil {
+			return Null(), err
+		}
+		path = p
+	}
+	if path == "" {
+		return fromIface(ctx, pos, raw)
+	}
+	val, ok := jsonGet(raw, path)
+	if !ok {
+		return Null(), nil
+	}
+	return fromIface(ctx, pos, val)
+}
+
 func jsonIndent(ctx *Ctx, pos Pos, v Value) (string, error) {
 	switch v.K {
 	case VStr:

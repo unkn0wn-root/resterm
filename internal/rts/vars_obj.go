@@ -65,6 +65,8 @@ func (o *varsObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".has", o.hasFn), true
 	case "set":
 		return NativeNamed(o.name+".set", o.setFn), true
+	case "require":
+		return NativeNamed(o.name+".require", o.requireFn), true
 	case "global":
 		return Obj(o.g), true
 	}
@@ -123,6 +125,23 @@ func (o *varsObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Bool(ok), nil
 }
 
+func (o *varsObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".require(name[, msg])"
+	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
+		return Null(), err
+	}
+	k, err := keyArg(ctx, pos, args[0], sig)
+	if err != nil {
+		return Null(), err
+	}
+	key := lowerKey(k)
+	v, ok := o.m[key]
+	if ok && strings.TrimSpace(v) != "" {
+		return Str(v), nil
+	}
+	return Null(), reqErr(ctx, pos, o.name, k, args)
+}
+
 func (o *varsObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, o.name+".set(name, value)"); err != nil {
 		return Null(), err
@@ -156,6 +175,8 @@ func (o *globalObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".set", o.setFn), true
 	case "delete":
 		return NativeNamed(o.name+".delete", o.delFn), true
+	case "require":
+		return NativeNamed(o.name+".require", o.requireFn), true
 	}
 
 	key := lowerKey(name)
@@ -210,6 +231,23 @@ func (o *globalObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	key := lowerKey(k)
 	_, ok := o.m[key]
 	return Bool(ok), nil
+}
+
+func (o *globalObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".require(name[, msg])"
+	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
+		return Null(), err
+	}
+	k, err := keyArg(ctx, pos, args[0], sig)
+	if err != nil {
+		return Null(), err
+	}
+	key := lowerKey(k)
+	v, ok := o.m[key]
+	if ok && strings.TrimSpace(v) != "" {
+		return Str(v), nil
+	}
+	return Null(), reqErr(ctx, pos, o.name, k, args)
 }
 
 func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {

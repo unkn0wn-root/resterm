@@ -1,6 +1,9 @@
 package rts
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 func argCount(ctx *Ctx, pos Pos, args []Value, want int, sig string) error {
 	if len(args) != want {
@@ -68,4 +71,80 @@ func scalarStr(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
 	default:
 		return "", rtErr(ctx, pos, "%s expects string/number/bool", sig)
 	}
+}
+
+func strArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
+	s, err := toStr(ctx, pos, v)
+	if err != nil {
+		return "", err
+	}
+	if err := chkStr(ctx, pos, s); err != nil {
+		return "", err
+	}
+	return s, nil
+}
+
+func listArg(ctx *Ctx, pos Pos, v Value, sig string) ([]Value, error) {
+	if v.K == VNull {
+		return nil, nil
+	}
+	if v.K != VList {
+		return nil, rtErr(ctx, pos, "%s expects list", sig)
+	}
+	if err := chkList(ctx, pos, len(v.L)); err != nil {
+		return nil, err
+	}
+	return v.L, nil
+}
+
+func reqMsg(ctx *Ctx, pos Pos, args []Value) (string, error) {
+	if len(args) < 2 {
+		return "", nil
+	}
+	s, err := toStr(ctx, pos, args[1])
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(s), nil
+}
+
+func reqErr(ctx *Ctx, pos Pos, obj, key string, args []Value) error {
+	msg, err := reqMsg(ctx, pos, args)
+	if err != nil {
+		return err
+	}
+	if msg == "" {
+		msg = fmt.Sprintf("missing required %s: %s", obj, key)
+	}
+	return rtErr(ctx, pos, "%s", msg)
+}
+
+func chkStr(ctx *Ctx, pos Pos, s string) error {
+	if ctx == nil || ctx.Lim.MaxStr <= 0 {
+		return nil
+	}
+	if len(s) > ctx.Lim.MaxStr {
+		return rtErr(ctx, pos, "string too long")
+	}
+	return nil
+}
+
+func chkList(ctx *Ctx, pos Pos, n int) error {
+	if ctx == nil || ctx.Lim.MaxList <= 0 {
+		return nil
+	}
+	if n > ctx.Lim.MaxList {
+		return rtErr(ctx, pos, "list too large")
+	}
+	return nil
+}
+
+func chkDict(ctx *Ctx, pos Pos, n int) error {
+	if ctx == nil || ctx.Lim.MaxDict <= 0 {
+		return nil
+	}
+	if n > ctx.Lim.MaxDict {
+		return rtErr(ctx, pos, "dict too large")
+	}
+	return nil
 }
