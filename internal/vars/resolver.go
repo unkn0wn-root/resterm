@@ -97,7 +97,11 @@ func (r *Resolver) SetExprPos(pos ExprPos) {
 	r.exprPos = pos
 }
 
-func (r *Resolver) expandTemplates(input string, pos ExprPos, allowDynamic, allowExpr bool) (string, error) {
+func (r *Resolver) expandTemplates(
+	input string,
+	pos ExprPos,
+	allowDynamic, allowExpr bool,
+) (string, error) {
 	var firstErr error
 	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
 		sub := templateVarPattern.FindStringSubmatch(match)

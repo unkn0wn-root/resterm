@@ -195,7 +195,12 @@ func workflowStepExtras(
 	return out
 }
 
-func (m *Model) wfVars(doc *restfile.Document, req *restfile.Request, env string, extra map[string]string) map[string]string {
+func (m *Model) wfVars(
+	doc *restfile.Document,
+	req *restfile.Request,
+	env string,
+	extra map[string]string,
+) map[string]string {
 	base := m.collectVariables(doc, req, env)
 	if len(extra) == 0 {
 		return base
