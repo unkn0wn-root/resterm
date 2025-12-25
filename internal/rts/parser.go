@@ -628,6 +628,7 @@ func (p *Parser) parsePrimary() Expr {
 
 func (p *Parser) parseList() Expr {
 	pos := p.expect(LBRACK).P
+	p.skipSemi()
 	if p.cur.K == RBRACK {
 		p.next()
 		return &ListLit{P: pos}
@@ -636,12 +637,17 @@ func (p *Parser) parseList() Expr {
 	var elems []Expr
 	for {
 		elems = append(elems, p.parseExpr())
+		p.skipSemi()
 		if p.cur.K == COMMA {
 			p.next()
+			p.skipSemi()
 			if p.cur.K == RBRACK {
 				break
 			}
 			continue
+		}
+		if p.cur.K == RBRACK {
+			break
 		}
 		break
 	}
@@ -651,6 +657,7 @@ func (p *Parser) parseList() Expr {
 
 func (p *Parser) parseDict() Expr {
 	pos := p.expect(LBRACE).P
+	p.skipSemi()
 	if p.cur.K == RBRACE {
 		p.next()
 		return &DictLit{P: pos}
@@ -673,12 +680,17 @@ func (p *Parser) parseDict() Expr {
 		p.expect(COLON)
 		val := p.parseExpr()
 		entries = append(entries, DictEntry{P: kp, Key: key, Val: val})
+		p.skipSemi()
 		if p.cur.K == COMMA {
 			p.next()
+			p.skipSemi()
 			if p.cur.K == RBRACE {
 				break
 			}
 			continue
+		}
+		if p.cur.K == RBRACE {
+			break
 		}
 		break
 	}

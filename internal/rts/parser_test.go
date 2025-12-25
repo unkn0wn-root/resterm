@@ -38,6 +38,50 @@ func TestParseDict(t *testing.T) {
 	}
 }
 
+func TestParseDictMultiline(t *testing.T) {
+	src := "let x = {\n  a: 1,\n  b: 2\n}\n"
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 1 {
+		t.Fatalf("expected 1 stmt")
+	}
+	let, ok := m.Stmts[0].(*LetStmt)
+	if !ok {
+		t.Fatalf("expected let")
+	}
+	dict, ok := let.Val.(*DictLit)
+	if !ok {
+		t.Fatalf("expected dict literal")
+	}
+	if len(dict.Entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(dict.Entries))
+	}
+}
+
+func TestParseListMultiline(t *testing.T) {
+	src := "let x = [\n  1,\n  2,\n  3\n]\n"
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(m.Stmts) != 1 {
+		t.Fatalf("expected 1 stmt")
+	}
+	let, ok := m.Stmts[0].(*LetStmt)
+	if !ok {
+		t.Fatalf("expected let")
+	}
+	list, ok := let.Val.(*ListLit)
+	if !ok {
+		t.Fatalf("expected list literal")
+	}
+	if len(list.Elems) != 3 {
+		t.Fatalf("expected 3 elements, got %d", len(list.Elems))
+	}
+}
+
 func TestParseConst(t *testing.T) {
 	src := "const x = 1\n"
 	m, err := ParseModule("test", []byte(src))
