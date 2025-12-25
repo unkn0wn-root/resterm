@@ -1,0 +1,63 @@
+export const sampleTag = "rts-examples"
+
+export fn sumClassic(n) {
+  let total = 0
+  for let i = 0; i < n; i = i + 1 {
+    if i == 2 {
+      continue
+    }
+    if i == 5 {
+      break
+    }
+    total = total + i
+  }
+  return total
+}
+
+export fn rangeList() {
+  let out = ""
+  for let i, v range ["a", "b", "c"] {
+    out = out + str(i) + v
+  }
+  return out
+}
+
+export fn rangeDict() {
+  let out = ""
+  for let k, v range {b: 2, a: 1} {
+    out = out + k
+  }
+  return out
+}
+
+export fn rangeString() {
+  let out = ""
+  for let i, ch range "go" {
+    out = out + str(i) + ch
+  }
+  return out
+}
+
+export fn countdown(n) {
+  let out = ""
+  for n > 0 {
+    out = out + str(n)
+    n = n - 1
+  }
+  return out
+}
+
+export fn constLabel(id) {
+  const prefix = "user-"
+  return prefix + str(id)
+}
+
+export fn dictAccess() {
+  let d = {a: 1, "b": 2}
+  return d.a + d["b"]
+}
+
+export fn tryFail() {
+  let res = try fail("boom")
+  return res.ok
+}

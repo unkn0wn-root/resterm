@@ -1,0 +1,16 @@
+export fn headerTag(user) {
+  return "user-" + str(user.id)
+}
+
+export fn role(user) {
+  return user["role"] ?? "viewer"
+}
+
+export fn payload(user) {
+  return {
+    id: user.id,
+    name: user.name,
+    role: role(user),
+    label: user.name + "-" + str(user.id)
+  }
+}

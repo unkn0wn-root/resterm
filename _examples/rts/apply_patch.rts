@@ -1,0 +1,22 @@
+export fn patch(request, vars) {
+  let hdrs = headers.merge(
+    headers.normalize({"X-Apply": "true", "Content-Type": "application/json", "X-Remove-Me": "gone"}),
+    {"X-Remove-Me": null, "X-Multi": ["a", "b"]}
+  )
+
+  let mergedURL = query.merge(request.url, {applied: "1"})
+  let body = {
+    applied: true,
+    note: vars.get("pre_request_mode") ?? "none",
+    method: request.method
+  }
+
+  return {
+    method: "PUT",
+    url: mergedURL,
+    headers: hdrs,
+    query: {from: "apply", remove: null},
+    body: body,
+    vars: {apply_note: "patched"}
+  }
+}
