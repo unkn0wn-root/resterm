@@ -263,23 +263,23 @@ func applyPatchQuery(req *restfile.Request, q map[string]*string) error {
 	if raw == "" {
 		return nil
 	}
-	if !hasTpl(raw) && applyPatchQueryURL(req, q) {
+	if hasTpl(raw) {
+		applyPatchQueryLoose(req, q)
 		return nil
 	}
-	applyPatchQueryLoose(req, q)
-	return nil
+	return applyPatchQueryURL(req, q)
 }
 
-func applyPatchQueryURL(req *restfile.Request, q map[string]*string) bool {
+func applyPatchQueryURL(req *restfile.Request, q map[string]*string) error {
 	parsed, err := url.Parse(req.URL)
 	if err != nil {
-		return false
+		return fmt.Errorf("invalid url after @apply: %w", err)
 	}
 	vals := parsed.Query()
 	applyQueryPatch(vals, q)
 	parsed.RawQuery = vals.Encode()
 	req.URL = parsed.String()
-	return true
+	return nil
 }
 
 func applyPatchQueryLoose(req *restfile.Request, q map[string]*string) {
@@ -322,6 +322,9 @@ func splitURL(raw string) (string, string, string) {
 func parseQuery(qs string) (url.Values, bool) {
 	if qs == "" {
 		return url.Values{}, true
+	}
+	if hasTpl(qs) {
+		return parseQueryLoose(qs), false
 	}
 	vals, err := url.ParseQuery(qs)
 	if err == nil {

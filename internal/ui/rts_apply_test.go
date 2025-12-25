@@ -161,6 +161,35 @@ func TestRunRTSApplyTemplatedURLQuery(t *testing.T) {
 	}
 }
 
+func TestRunRTSApplyTemplatedQueryPreservesTemplate(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com/path?mode={{= helpers.mode(env) }}&keep=1",
+		LineRange: restfile.LineRange{Start: 1, End: 3},
+		Metadata: restfile.RequestMetadata{
+			Applies: []restfile.ApplySpec{{
+				Expression: `{query: {"q": "x", "keep": null}}`,
+				Line:       1,
+				Col:        1,
+			}},
+		},
+	}
+
+	if err := model.runRTSApply(context.Background(), nil, req, "", "", nil, nil); err != nil {
+		t.Fatalf("runRTSApply: %v", err)
+	}
+	if !strings.Contains(req.URL, "{{= helpers.mode(env) }}") {
+		t.Fatalf("expected template to be preserved, got %q", req.URL)
+	}
+	if strings.Contains(req.URL, "keep=1") {
+		t.Fatalf("expected keep query param deleted, got %q", req.URL)
+	}
+	if !strings.Contains(req.URL, "q=x") {
+		t.Fatalf("expected query q=x, got %q", req.URL)
+	}
+}
+
 func findReqVar(req *restfile.Request, name string) (restfile.Variable, bool) {
 	if req == nil {
 		return restfile.Variable{}, false
