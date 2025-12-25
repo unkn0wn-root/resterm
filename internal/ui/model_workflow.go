@@ -1239,7 +1239,15 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 }
 
 func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepResult {
-	if state == nil || state.index < 0 || state.index >= len(state.steps) {
+	if state == nil {
+		return workflowStepResult{
+			Success: false,
+			Skipped: msg.skipped,
+			Message: "workflow state missing",
+			Err:     errdef.New(errdef.CodeUI, "workflow state missing"),
+		}
+	}
+	if state.index < 0 || state.index >= len(state.steps) {
 		return workflowStepResult{
 			Success: false,
 			Skipped: msg.skipped,
@@ -1265,7 +1273,7 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 			res.Iteration = iter
 			res.Total = total
 		}
-		if state != nil && state.currentBranch != "" {
+		if state.currentBranch != "" {
 			res.Branch = state.currentBranch
 		}
 		return res
@@ -1360,7 +1368,7 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 		res.Iteration = iter
 		res.Total = total
 	}
-	if state != nil && state.currentBranch != "" {
+	if state.currentBranch != "" {
 		res.Branch = state.currentBranch
 	}
 	return res
