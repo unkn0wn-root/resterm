@@ -46,7 +46,11 @@ func NewBuilder() *Builder {
 	return &Builder{example: NewExampleBuilder(), globals: make(map[string]restfile.Variable)}
 }
 
-func (b *Builder) Generate(ctx context.Context, spec *model.Spec, opts openapi.GeneratorOptions) (*restfile.Document, error) {
+func (b *Builder) Generate(
+	ctx context.Context,
+	spec *model.Spec,
+	opts openapi.GeneratorOptions,
+) (*restfile.Document, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -107,7 +111,11 @@ func (b *Builder) Warnings() []string {
 	return append([]string(nil), b.warnings...)
 }
 
-func (b *Builder) buildRequest(op model.Operation, spec *model.Spec, baseVarName, globalBase string) (*restfile.Request, error) {
+func (b *Builder) buildRequest(
+	op model.Operation,
+	spec *model.Spec,
+	baseVarName, globalBase string,
+) (*restfile.Request, error) {
 	rb := requestBuilder{
 		builder:      b,
 		op:           op,
@@ -305,7 +313,13 @@ func (rb *requestBuilder) parameterSample(param model.Parameter, kind schemaKind
 // Arrays can be comma, space or pipe-separated.
 // Objects can use deepObject notation (name[key]=val) or key-value pairs.
 // "explode" means repeat the param name for each value vs encoding all values together.
-func (rb *requestBuilder) serializeParamValue(param model.Parameter, kind schemaKind, style string, explode bool, sample any) string {
+func (rb *requestBuilder) serializeParamValue(
+	param model.Parameter,
+	kind schemaKind,
+	style string,
+	explode bool,
+	sample any,
+) string {
 	switch kind {
 	case schemaArray:
 		values := ensureStringSlice(sample)
@@ -480,7 +494,13 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 	}
 	scheme, ok := rb.spec.SecuritySchemes[req.SchemeName]
 	if !ok {
-		rb.builder.noteWarning(fmt.Sprintf("request %s references unknown security scheme %s", rb.requestName(), req.SchemeName))
+		rb.builder.noteWarning(
+			fmt.Sprintf(
+				"request %s references unknown security scheme %s",
+				rb.requestName(),
+				req.SchemeName,
+			),
+		)
 		return nil
 	}
 	switch scheme.Type {
@@ -495,7 +515,10 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 			}}
 		case "bearer":
 			rb.builder.registerGlobal(globalAuthTokenVar, placeholderToken, true)
-			return &restfile.AuthSpec{Type: "bearer", Params: map[string]string{"token": fmt.Sprintf("{{%s}}", globalAuthTokenVar)}}
+			return &restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": fmt.Sprintf("{{%s}}", globalAuthTokenVar)},
+			}
 		}
 	case model.SecurityAPIKey:
 		placement := strings.ToLower(string(scheme.In))
@@ -515,14 +538,25 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 	case model.SecurityOAuth2:
 		return rb.buildOAuthAuthSpec(scheme, req)
 	}
-	rb.builder.noteWarning(fmt.Sprintf("request %s references unsupported security scheme type %s", rb.requestName(), scheme.Type))
+	rb.builder.noteWarning(
+		fmt.Sprintf(
+			"request %s references unsupported security scheme type %s",
+			rb.requestName(),
+			scheme.Type,
+		),
+	)
 	return nil
 }
 
-func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requirement model.SecurityRequirement) *restfile.AuthSpec {
+func (rb *requestBuilder) buildOAuthAuthSpec(
+	scheme model.SecurityScheme,
+	requirement model.SecurityRequirement,
+) *restfile.AuthSpec {
 	flow := selectOAuthFlow(scheme)
 	if flow == nil {
-		rb.builder.noteWarning(fmt.Sprintf("request %s uses OAuth2 scheme without supported flow", rb.requestName()))
+		rb.builder.noteWarning(
+			fmt.Sprintf("request %s uses OAuth2 scheme without supported flow", rb.requestName()),
+		)
 		return nil
 	}
 
@@ -535,7 +569,12 @@ func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requir
 	case model.OAuthFlowClientCredentials:
 		tokenURL := strings.TrimSpace(flow.TokenURL)
 		if tokenURL == "" {
-			rb.builder.noteWarning(fmt.Sprintf("request %s uses oauth2 client credentials flow without token_url", rb.requestName()))
+			rb.builder.noteWarning(
+				fmt.Sprintf(
+					"request %s uses oauth2 client credentials flow without token_url",
+					rb.requestName(),
+				),
+			)
 			return nil
 		}
 		params := map[string]string{
@@ -553,7 +592,12 @@ func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requir
 	case model.OAuthFlowPassword:
 		tokenURL := strings.TrimSpace(flow.TokenURL)
 		if tokenURL == "" {
-			rb.builder.noteWarning(fmt.Sprintf("request %s uses oauth2 password flow without token_url", rb.requestName()))
+			rb.builder.noteWarning(
+				fmt.Sprintf(
+					"request %s uses oauth2 password flow without token_url",
+					rb.requestName(),
+				),
+			)
 			return nil
 		}
 		params := map[string]string{
@@ -576,7 +620,12 @@ func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requir
 		tokenURL := strings.TrimSpace(flow.TokenURL)
 		authURL := strings.TrimSpace(flow.AuthorizationURL)
 		if tokenURL == "" || authURL == "" {
-			rb.builder.noteWarning(fmt.Sprintf("request %s uses oauth2 authorization_code flow without auth/token urls", rb.requestName()))
+			rb.builder.noteWarning(
+				fmt.Sprintf(
+					"request %s uses oauth2 authorization_code flow without auth/token urls",
+					rb.requestName(),
+				),
+			)
 			return nil
 		}
 		params := map[string]string{
@@ -594,10 +643,21 @@ func (rb *requestBuilder) buildOAuthAuthSpec(scheme model.SecurityScheme, requir
 		return &restfile.AuthSpec{Type: "oauth2", Params: params}
 	case model.OAuthFlowImplicit:
 		rb.builder.registerGlobal(globalAuthTokenVar, placeholderToken, true)
-		rb.builder.noteWarning(fmt.Sprintf("request %s uses unsupported oauth flow %s; generated bearer token placeholder", rb.requestName(), flow.Type))
-		return &restfile.AuthSpec{Type: "bearer", Params: map[string]string{"token": fmt.Sprintf("{{%s}}", globalAuthTokenVar)}}
+		rb.builder.noteWarning(
+			fmt.Sprintf(
+				"request %s uses unsupported oauth flow %s; generated bearer token placeholder",
+				rb.requestName(),
+				flow.Type,
+			),
+		)
+		return &restfile.AuthSpec{
+			Type:   "bearer",
+			Params: map[string]string{"token": fmt.Sprintf("{{%s}}", globalAuthTokenVar)},
+		}
 	default:
-		rb.builder.noteWarning(fmt.Sprintf("request %s uses unsupported oauth flow %s", rb.requestName(), flow.Type))
+		rb.builder.noteWarning(
+			fmt.Sprintf("request %s uses unsupported oauth flow %s", rb.requestName(), flow.Type),
+		)
 		return nil
 	}
 }

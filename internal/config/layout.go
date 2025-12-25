@@ -17,10 +17,10 @@ const (
 )
 
 type LayoutSettings struct {
-	SidebarWidth        float64                   `json:"sidebar_width" toml:"sidebar_width"`
-	EditorSplit         float64                   `json:"editor_split" toml:"editor_split"`
-	MainSplit           LayoutMainSplit           `json:"main_split" toml:"main_split"`
-	ResponseSplit       bool                      `json:"response_split" toml:"response_split"`
+	SidebarWidth        float64                   `json:"sidebar_width"        toml:"sidebar_width"`
+	EditorSplit         float64                   `json:"editor_split"         toml:"editor_split"`
+	MainSplit           LayoutMainSplit           `json:"main_split"           toml:"main_split"`
+	ResponseSplit       bool                      `json:"response_split"       toml:"response_split"`
 	ResponseSplitRatio  float64                   `json:"response_split_ratio" toml:"response_split_ratio"`
 	ResponseOrientation LayoutResponseOrientation `json:"response_orientation" toml:"response_orientation"`
 }
@@ -50,12 +50,30 @@ func DefaultLayoutSettings() LayoutSettings {
 
 func NormaliseLayoutSettings(in LayoutSettings) LayoutSettings {
 	layout := DefaultLayoutSettings()
-	layout.SidebarWidth = clampFloat(in.SidebarWidth, LayoutSidebarWidthMin, LayoutSidebarWidthMax, LayoutSidebarWidthDefault)
-	layout.EditorSplit = clampFloat(in.EditorSplit, LayoutEditorSplitMin, LayoutEditorSplitMax, LayoutEditorSplitDefault)
+	layout.SidebarWidth = clampFloat(
+		in.SidebarWidth,
+		LayoutSidebarWidthMin,
+		LayoutSidebarWidthMax,
+		LayoutSidebarWidthDefault,
+	)
+	layout.EditorSplit = clampFloat(
+		in.EditorSplit,
+		LayoutEditorSplitMin,
+		LayoutEditorSplitMax,
+		LayoutEditorSplitDefault,
+	)
 	layout.ResponseSplit = in.ResponseSplit
-	layout.ResponseSplitRatio = clampFloat(in.ResponseSplitRatio, LayoutResponseRatioMin, LayoutResponseRatioMax, LayoutResponseRatioDefault)
+	layout.ResponseSplitRatio = clampFloat(
+		in.ResponseSplitRatio,
+		LayoutResponseRatioMin,
+		LayoutResponseRatioMax,
+		LayoutResponseRatioDefault,
+	)
 	layout.MainSplit = normaliseMainSplit(in.MainSplit, layout.MainSplit)
-	layout.ResponseOrientation = normaliseResponseOrientation(in.ResponseOrientation, layout.ResponseOrientation)
+	layout.ResponseOrientation = normaliseResponseOrientation(
+		in.ResponseOrientation,
+		layout.ResponseOrientation,
+	)
 	return layout
 }
 
@@ -70,7 +88,10 @@ func normaliseMainSplit(in LayoutMainSplit, def LayoutMainSplit) LayoutMainSplit
 	}
 }
 
-func normaliseResponseOrientation(in LayoutResponseOrientation, def LayoutResponseOrientation) LayoutResponseOrientation {
+func normaliseResponseOrientation(
+	in LayoutResponseOrientation,
+	def LayoutResponseOrientation,
+) LayoutResponseOrientation {
 	switch strings.ToLower(strings.TrimSpace(string(in))) {
 	case string(LayoutResponseOrientationHorizontal):
 		return LayoutResponseOrientationHorizontal

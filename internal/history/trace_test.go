@@ -13,8 +13,16 @@ func TestNewTraceSummary(t *testing.T) {
 		Completed: time.Unix(0, int64(15*time.Millisecond)),
 		Duration:  15 * time.Millisecond,
 		Phases: []nettrace.Phase{
-			{Kind: nettrace.PhaseDNS, Duration: 5 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "example.com", Cached: true}},
-			{Kind: nettrace.PhaseConnect, Duration: 10 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "93.184.216.34:443"}},
+			{
+				Kind:     nettrace.PhaseDNS,
+				Duration: 5 * time.Millisecond,
+				Meta:     nettrace.PhaseMeta{Addr: "example.com", Cached: true},
+			},
+			{
+				Kind:     nettrace.PhaseConnect,
+				Duration: 10 * time.Millisecond,
+				Meta:     nettrace.PhaseMeta{Addr: "93.184.216.34:443"},
+			},
 		},
 	}
 
@@ -58,8 +66,16 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 		Completed: time.Unix(0, int64(120*time.Millisecond)),
 		Duration:  120 * time.Millisecond,
 		Phases: []nettrace.Phase{
-			{Kind: nettrace.PhaseDNS, Duration: 40 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "example.com", Cached: true}},
-			{Kind: nettrace.PhaseConnect, Duration: 50 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "93.184.216.34:443"}},
+			{
+				Kind:     nettrace.PhaseDNS,
+				Duration: 40 * time.Millisecond,
+				Meta:     nettrace.PhaseMeta{Addr: "example.com", Cached: true},
+			},
+			{
+				Kind:     nettrace.PhaseConnect,
+				Duration: 50 * time.Millisecond,
+				Meta:     nettrace.PhaseMeta{Addr: "93.184.216.34:443"},
+			},
 			{Kind: nettrace.PhaseTransfer, Duration: 30 * time.Millisecond},
 		},
 	}
@@ -84,7 +100,12 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 	}
 	for i, phase := range rebuilt.Phases {
 		if phase.Duration != tl.Phases[i].Duration {
-			t.Fatalf("phase %d duration mismatch: %s vs %s", i, phase.Duration, tl.Phases[i].Duration)
+			t.Fatalf(
+				"phase %d duration mismatch: %s vs %s",
+				i,
+				phase.Duration,
+				tl.Phases[i].Duration,
+			)
 		}
 		if phase.Meta.Addr != tl.Phases[i].Meta.Addr {
 			t.Fatalf("phase %d addr mismatch", i)
@@ -98,6 +119,10 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 		t.Fatalf("expected budget total %s, got %s", budget.Total, rebuiltReport.Budget.Total)
 	}
 	if len(rebuiltReport.BudgetReport.Breaches) != len(report.BudgetReport.Breaches) {
-		t.Fatalf("expected %d breaches, got %d", len(report.BudgetReport.Breaches), len(rebuiltReport.BudgetReport.Breaches))
+		t.Fatalf(
+			"expected %d breaches, got %d",
+			len(report.BudgetReport.Breaches),
+			len(rebuiltReport.BudgetReport.Breaches),
+		)
 	}
 }

@@ -107,8 +107,19 @@ func TestBundleFromHistory(t *testing.T) {
 		Compare: &history.CompareEntry{
 			Baseline: "dev",
 			Results: []history.CompareResult{
-				{Environment: "dev", Status: "200 OK", StatusCode: 200, Duration: 10 * time.Millisecond},
-				{Environment: "stage", Status: "500", StatusCode: 500, Error: "boom", Duration: 12 * time.Millisecond},
+				{
+					Environment: "dev",
+					Status:      "200 OK",
+					StatusCode:  200,
+					Duration:    10 * time.Millisecond,
+				},
+				{
+					Environment: "stage",
+					Status:      "500",
+					StatusCode:  500,
+					Error:       "boom",
+					Duration:    12 * time.Millisecond,
+				},
 			},
 		},
 	}
@@ -207,7 +218,9 @@ func TestCompareCancelStopsRun(t *testing.T) {
 	model.compareRun = state
 	model.sending = true
 
-	if follow := model.handleCompareResponse(responseMsg{err: context.Canceled, executed: state.current}); follow != nil {
+	if follow := model.handleCompareResponse(
+		responseMsg{err: context.Canceled, executed: state.current},
+	); follow != nil {
 		collectMsgs(follow)
 	}
 
@@ -221,7 +234,10 @@ func TestCompareCancelStopsRun(t *testing.T) {
 		t.Fatalf("expected canceled status message, got %q", model.statusMessage.text)
 	}
 	if len(state.results) != 1 || state.results[0].Err != nil {
-		t.Fatalf("expected canceled environment to be recorded without error payload, got %+v", state.results)
+		t.Fatalf(
+			"expected canceled environment to be recorded without error payload, got %+v",
+			state.results,
+		)
 	}
 	if !state.results[0].Canceled {
 		t.Fatalf("expected canceled result marker")

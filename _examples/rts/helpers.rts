@@ -1,0 +1,27 @@
+export fn mode(env) {
+  if env.has("name") and env.get("name") == "prod" {
+    return "strict"
+  }
+  return "debug"
+}
+
+export fn envLabel(env) {
+  return env.has("name") ? env.get("name") : "default"
+}
+
+export fn authHeader(token) {
+  return token ? "Bearer " + token : ""
+}
+
+export fn coalesce(a, b) {
+  return a ?? b
+}
+
+export fn traceId() {
+  return "trace-" + uuid()
+}
+
+export fn safeTag(tag) {
+  let cleaned = tag ?? "rts"
+  return match("^[a-z0-9-]+$", cleaned) ? cleaned : "rts"
+}

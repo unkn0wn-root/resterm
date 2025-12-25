@@ -20,7 +20,12 @@ func TestNavigatorTagChipsFilterMatchesQueryTokens(t *testing.T) {
 			Kind:  navigator.KindFile,
 			Tags:  []string{"workspace"},
 			Children: []*navigator.Node[any]{
-				{ID: "req:/tmp/a:0", Kind: navigator.KindRequest, Title: "alpha req", Tags: []string{"auth", "reqscope"}},
+				{
+					ID:    "req:/tmp/a:0",
+					Kind:  navigator.KindRequest,
+					Title: "alpha req",
+					Tags:  []string{"auth", "reqscope"},
+				},
 			},
 		},
 		{
@@ -29,7 +34,12 @@ func TestNavigatorTagChipsFilterMatchesQueryTokens(t *testing.T) {
 			Kind:  navigator.KindFile,
 			Tags:  []string{"files"},
 			Children: []*navigator.Node[any]{
-				{ID: "req:/tmp/b:0", Kind: navigator.KindRequest, Title: "beta", Tags: []string{"other", "reqbeta"}},
+				{
+					ID:    "req:/tmp/b:0",
+					Kind:  navigator.KindRequest,
+					Title: "beta",
+					Tags:  []string{"other", "reqbeta"},
+				},
 			},
 		},
 	})

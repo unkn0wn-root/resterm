@@ -133,7 +133,8 @@ func (pane *responsePaneState) markRawViewStale() {
 	if pane.tabScroll != nil {
 		delete(pane.tabScroll, responseTabRaw)
 	}
-	if pane.search.hasQuery() && (pane.activeTab == responseTabRaw || pane.search.tab == responseTabRaw) {
+	if pane.search.hasQuery() &&
+		(pane.activeTab == responseTabRaw || pane.search.tab == responseTabRaw) {
 		pane.search.markStale()
 	}
 }
@@ -155,7 +156,9 @@ func (pane *responsePaneState) setActiveTab(tab responseTab) {
 		pane.setCurrPosition()
 	}
 	pane.activeTab = tab
-	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders || tab == responseTabStream || tab == responseTabTimeline {
+	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders ||
+		tab == responseTabStream ||
+		tab == responseTabTimeline {
 		pane.lastContentTab = tab
 	}
 }
@@ -230,7 +233,11 @@ func (pane *responsePaneState) restoreScrollForActiveTab() {
 
 func (pane *responsePaneState) ensureContentTab() responseTab {
 	switch pane.lastContentTab {
-	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabStream, responseTabTimeline:
+	case responseTabPretty,
+		responseTabRaw,
+		responseTabHeaders,
+		responseTabStream,
+		responseTabTimeline:
 		return pane.lastContentTab
 	default:
 		return responseTabPretty
@@ -295,7 +302,14 @@ func (m *Model) applyPaneContent(
 	if pane == nil {
 		return
 	}
-	decorated := m.decorateResponseContentForPane(pane, tab, content, width, snapshotReady, snapshotID)
+	decorated := m.decorateResponseContentForPane(
+		pane,
+		tab,
+		content,
+		width,
+		snapshotReady,
+		snapshotID,
+	)
 	decorated = m.applyResponseContentStyles(tab, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
@@ -387,7 +401,8 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 
 	if tab == responseTabStats {
 		snapshot := pane.snapshot
-		if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+		if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
+			snapshot.workflowStats != nil {
 			return m.syncWorkflowStatsPane(pane, width, snapshot)
 		}
 	}
@@ -403,7 +418,12 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	if content == "" {
 		centered := centerContent(noResponseMessage, width, height)
 		wrapped := wrapToWidth(centered, width)
-		pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, base: centered, valid: true}
+		pane.wrapCache[cacheKey] = cachedWrap{
+			width:   width,
+			content: wrapped,
+			base:    centered,
+			valid:   true,
+		}
 		m.applyPaneContent(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 		return nil
 	}
@@ -446,7 +466,12 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		}
 
 		wrapped := wrapContentForTab(cacheKey, content, width)
-		pane.rawWrapCache[mode] = cachedWrap{width: width, content: wrapped, base: content, valid: true}
+		pane.rawWrapCache[mode] = cachedWrap{
+			width:   width,
+			content: wrapped,
+			base:    content,
+			valid:   true,
+		}
 		m.applyPaneContent(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 		return nil
 	}
@@ -458,18 +483,39 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	}
 
 	wrapped := wrapContentForTab(cacheKey, content, width)
-	pane.wrapCache[cacheKey] = cachedWrap{width: width, content: wrapped, base: content, valid: true}
+	pane.wrapCache[cacheKey] = cachedWrap{
+		width:   width,
+		content: wrapped,
+		base:    content,
+		valid:   true,
+	}
 	m.applyPaneContent(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
 	return nil
 }
 
-func (m *Model) syncWorkflowStatsPane(pane *responsePaneState, width int, snapshot *responseSnapshot) tea.Cmd {
+func (m *Model) syncWorkflowStatsPane(
+	pane *responsePaneState,
+	width int,
+	snapshot *responseSnapshot,
+) tea.Cmd {
 	if pane == nil || snapshot == nil || snapshot.workflowStats == nil {
 		return nil
 	}
 	render := snapshot.workflowStats.render(width)
-	pane.wrapCache[responseTabStats] = cachedWrap{width: width, content: render.content, base: render.content, valid: true}
-	decorated := m.decorateResponseContentForPane(pane, responseTabStats, render.content, width, snapshot.ready, snapshot.id)
+	pane.wrapCache[responseTabStats] = cachedWrap{
+		width:   width,
+		content: render.content,
+		base:    render.content,
+		valid:   true,
+	}
+	decorated := m.decorateResponseContentForPane(
+		pane,
+		responseTabStats,
+		render.content,
+		width,
+		snapshot.ready,
+		snapshot.id,
+	)
 	decorated = m.applyResponseContentStyles(responseTabStats, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
@@ -596,7 +642,11 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 		content := snapshot.stats
 		if snapshot.statsColorize {
 			if snapshot.statsColored == "" {
-				snapshot.statsColored = colorizeStatsReport(snapshot.stats, snapshot.statsKind, snapshot.profileStats)
+				snapshot.statsColored = colorizeStatsReport(
+					snapshot.stats,
+					snapshot.statsKind,
+					snapshot.profileStats,
+				)
 			}
 			if strings.TrimSpace(snapshot.statsColored) != "" {
 				content = snapshot.statsColored
@@ -608,7 +658,12 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 			return "Trace data unavailable.\n", tab
 		}
 		styles := newTimelineStyles(&m.theme)
-		report := buildTimelineReport(snapshot.timeline, snapshotTraceSpec(snapshot), snapshot.traceData, styles)
+		report := buildTimelineReport(
+			snapshot.timeline,
+			snapshotTraceSpec(snapshot),
+			snapshot.traceData,
+			styles,
+		)
 		snapshot.traceReport = report
 		content := renderTimeline(report, pane.viewport.Width)
 		return ensureTrailingNewline(content), tab
@@ -686,7 +741,13 @@ func (m *Model) computeDiffFor(id responsePaneID, baseTab responseTab) (string, 
 		if rightHeaders == "" {
 			rightHeaders = "<no headers>\n"
 		}
-		appendDiff("Headers", leftHeaders, rightHeaders, leftLabel+" headers", rightLabel+" headers")
+		appendDiff(
+			"Headers",
+			leftHeaders,
+			rightHeaders,
+			leftLabel+" headers",
+			rightLabel+" headers",
+		)
 	default:
 		appendDiff("", left.pretty, right.pretty, leftLabel, rightLabel)
 	}
@@ -1000,9 +1061,15 @@ func (m *Model) selectTimelineTab() tea.Cmd {
 	if !m.responseSplit {
 		paneID = responsePanePrimary
 	} else {
-		if primary := m.pane(responsePanePrimary); primary != nil && primary.snapshot != nil && primary.snapshot.timeline != nil {
+		if primary := m.pane(
+			responsePanePrimary,
+		); primary != nil && primary.snapshot != nil &&
+			primary.snapshot.timeline != nil {
 			paneID = responsePanePrimary
-		} else if secondary := m.pane(responsePaneSecondary); secondary != nil && secondary.snapshot != nil && secondary.snapshot.timeline != nil {
+		} else if secondary := m.pane(
+			responsePaneSecondary,
+		); secondary != nil && secondary.snapshot != nil &&
+			secondary.snapshot.timeline != nil {
 			paneID = responsePaneSecondary
 		}
 	}

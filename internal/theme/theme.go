@@ -17,14 +17,19 @@ type CommandSegmentStyle struct {
 }
 
 type EditorMetadataPalette struct {
-	CommentMarker    lipgloss.Color
-	DirectiveDefault lipgloss.Color
-	Value            lipgloss.Color
-	SettingKey       lipgloss.Color
-	SettingValue     lipgloss.Color
-	RequestLine      lipgloss.Color
-	RequestSeparator lipgloss.Color
-	DirectiveColors  map[string]lipgloss.Color
+	CommentMarker     lipgloss.Color
+	DirectiveDefault  lipgloss.Color
+	Value             lipgloss.Color
+	SettingKey        lipgloss.Color
+	SettingValue      lipgloss.Color
+	RequestLine       lipgloss.Color
+	RequestSeparator  lipgloss.Color
+	RTSKeywordDefault lipgloss.Color
+	RTSKeywordDecl    lipgloss.Color
+	RTSKeywordControl lipgloss.Color
+	RTSKeywordLiteral lipgloss.Color
+	RTSKeywordLogical lipgloss.Color
+	DirectiveColors   map[string]lipgloss.Color
 }
 
 type Theme struct {
@@ -119,12 +124,17 @@ func DefaultTheme() Theme {
 	directiveAccent := lipgloss.Color("#56A9DD")
 
 	return Theme{
-		BrowserBorder:          base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#A78BFA")),
-		EditorBorder:           base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent),
-		ResponseBorder:         base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5FB3B3")),
-		NavigatorTitle:         lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
-		NavigatorTitleSelected: lipgloss.NewStyle().Foreground(lipgloss.Color("#0F111A")).Background(lipgloss.Color("#FFD46A")).Bold(true),
-		NavigatorSubtitle:      lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
+		BrowserBorder: base.BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#A78BFA")),
+		EditorBorder: base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent),
+		ResponseBorder: base.BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#5FB3B3")),
+		NavigatorTitle: lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
+		NavigatorTitleSelected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#0F111A")).
+			Background(lipgloss.Color("#FFD46A")).
+			Bold(true),
+		NavigatorSubtitle: lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
 		NavigatorSubtitleSelected: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#0F111A")).
 			Background(lipgloss.Color("#FFD46A")),
@@ -158,9 +168,12 @@ func DefaultTheme() Theme {
 		TabInactive: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#5E5A72")).
 			Padding(0, 1),
-		Notification: lipgloss.NewStyle().Foreground(lipgloss.Color("#E0DEF4")).Background(lipgloss.Color("#433C59")).Padding(0, 1),
-		Error:        lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
-		Success:      lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
+		Notification: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#E0DEF4")).
+			Background(lipgloss.Color("#433C59")).
+			Padding(0, 1),
+		Error:   lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")),
+		Success: lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")),
 		HeaderBrand: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#1A1020")).
 			Background(lipgloss.Color("#FBC859")).
@@ -241,10 +254,18 @@ func DefaultTheme() Theme {
 				Text:       lipgloss.Color("#FFF3D8"),
 			},
 		},
-		CommandDivider:          lipgloss.NewStyle().Foreground(lipgloss.Color("#403B59")).Bold(true),
-		PaneTitle:               lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Bold(true),
-		PaneTitleFile:           lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
-		PaneTitleRequests:       lipgloss.NewStyle().Foreground(lipgloss.Color("#15AABF")).Bold(true),
+		CommandDivider: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#403B59")).
+			Bold(true),
+		PaneTitle: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A6A1BB")).
+			Bold(true),
+		PaneTitleFile: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			Bold(true),
+		PaneTitleRequests: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#15AABF")).
+			Bold(true),
 		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3547")),
 		PaneBorderFocusFile:     lipgloss.Color("#7D56F4"),
 		PaneBorderFocusRequests: lipgloss.Color("#15AABF"),
@@ -256,7 +277,14 @@ func DefaultTheme() Theme {
 			SettingKey:       lipgloss.Color("#FFD46A"),
 			SettingValue:     lipgloss.Color("#FFEBC5"),
 			RequestLine:      lipgloss.Color("#FF6E6E"),
-			RequestSeparator: lipgloss.Color("#626166"), // still debating with myself if i want this
+			RequestSeparator: lipgloss.Color(
+				"#626166",
+			), // still debating with myself if i want this
+			RTSKeywordDefault: directiveAccent,
+			RTSKeywordDecl:    directiveAccent,
+			RTSKeywordControl: lipgloss.Color("#FFD46A"),
+			RTSKeywordLiteral: lipgloss.Color("#6EF17E"),
+			RTSKeywordLogical: lipgloss.Color("#FF8B39"),
 			DirectiveColors: map[string]lipgloss.Color{
 				"name":              directiveAccent,
 				"description":       directiveAccent,
@@ -282,9 +310,16 @@ func DefaultTheme() Theme {
 				"no-log":            directiveAccent,
 			},
 		},
-		EditorHintBox:               lipgloss.NewStyle().BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent).Padding(0, 1).Foreground(lipgloss.Color("#E6E1FF")),
-		EditorHintItem:              lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D4F1")),
-		EditorHintSelected:          lipgloss.NewStyle().Foreground(lipgloss.Color("#1A1020")).Background(lipgloss.Color("#FFD46A")).Bold(true),
+		EditorHintBox: lipgloss.NewStyle().
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(accent).
+			Padding(0, 1).
+			Foreground(lipgloss.Color("#E6E1FF")),
+		EditorHintItem: lipgloss.NewStyle().Foreground(lipgloss.Color("#D8D4F1")),
+		EditorHintSelected: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#1A1020")).
+			Background(lipgloss.Color("#FFD46A")).
+			Bold(true),
 		EditorHintAnnotation:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 		ListItemTitle:               lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		ListItemDescription:         lipgloss.NewStyle().Foreground(lipgloss.Color("#7d7b87")),
@@ -292,7 +327,9 @@ func DefaultTheme() Theme {
 		ListItemSelectedDescription: lipgloss.Style{},
 		ListItemDimmedTitle:         lipgloss.NewStyle().Foreground(lipgloss.Color("#5E5A72")),
 		ListItemDimmedDescription:   lipgloss.NewStyle().Foreground(lipgloss.Color("#4A4760")),
-		ListItemFilterMatch:         lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("#B9A5FF")),
+		ListItemFilterMatch: lipgloss.NewStyle().
+			Underline(true).
+			Foreground(lipgloss.Color("#B9A5FF")),
 		MethodColors: MethodColors{
 			GET:     lipgloss.Color("#34d399"),
 			POST:    lipgloss.Color("#60a5fa"),
@@ -305,25 +342,51 @@ func DefaultTheme() Theme {
 			WS:      lipgloss.Color("#fb923c"),
 			Default: lipgloss.Color("#9ca3af"),
 		},
-		ResponseContent:           lipgloss.NewStyle(),
-		ResponseContentRaw:        lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
-		ResponseContentHeaders:    lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),
-		StreamContent:             lipgloss.NewStyle(),
-		StreamTimestamp:           lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
-		StreamDirectionSend:       lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")).Bold(true),
-		StreamDirectionReceive:    lipgloss.NewStyle().Foreground(lipgloss.Color("#6EF17E")).Bold(true),
-		StreamDirectionInfo:       lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")).Bold(true),
-		StreamEventName:           lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
-		StreamData:                lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
-		StreamBinary:              lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC078")),
-		StreamSummary:             lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Italic(true),
-		StreamError:               lipgloss.NewStyle().Foreground(lipgloss.Color("#FF6E6E")).Bold(true),
-		StreamConsoleTitle:        lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
-		StreamConsoleMode:         lipgloss.NewStyle().Foreground(lipgloss.Color("#33C481")).Bold(true),
-		StreamConsoleStatus:       lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")),
-		StreamConsolePrompt:       lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
-		StreamConsoleInput:        lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")).BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#5E5A72")).Padding(0, 1),
-		StreamConsoleInputFocused: lipgloss.NewStyle().Foreground(lipgloss.Color("#FDFBFF")).BorderStyle(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#7D56F4")).Padding(0, 1),
+		ResponseContent:        lipgloss.NewStyle(),
+		ResponseContentRaw:     lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
+		ResponseContentHeaders: lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),
+		StreamContent:          lipgloss.NewStyle(),
+		StreamTimestamp:        lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
+		StreamDirectionSend: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6E6E")).
+			Bold(true),
+		StreamDirectionReceive: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6EF17E")).
+			Bold(true),
+		StreamDirectionInfo: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFD46A")).
+			Bold(true),
+		StreamEventName: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			Bold(true),
+		StreamData:   lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
+		StreamBinary: lipgloss.NewStyle().Foreground(lipgloss.Color("#FFC078")),
+		StreamSummary: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A6A1BB")).
+			Italic(true),
+		StreamError: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6E6E")).
+			Bold(true),
+		StreamConsoleTitle: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			Bold(true),
+		StreamConsoleMode: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#33C481")).
+			Bold(true),
+		StreamConsoleStatus: lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")),
+		StreamConsolePrompt: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			Bold(true),
+		StreamConsoleInput: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#EAEAEA")).
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#5E5A72")).
+			Padding(0, 1),
+		StreamConsoleInputFocused: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FDFBFF")).
+			BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#7D56F4")).
+			Padding(0, 1),
 	}
 }
 

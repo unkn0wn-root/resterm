@@ -27,10 +27,16 @@ func TestRunPreRequestScripts(t *testing.T) {
 	}
 
 	scripts := []restfile.ScriptBlock{
-		{Kind: "pre-request", Body: `request.setHeader("X-Test", "1"); request.setQueryParam("user", "alice"); vars.set("token", "abc");`},
+		{
+			Kind: "pre-request",
+			Body: `request.setHeader("X-Test", "1"); request.setQueryParam("user", "alice"); vars.set("token", "abc");`,
+		},
 	}
 
-	out, err := runner.RunPreRequest(scripts, PreRequestInput{Request: req, Variables: map[string]string{"seed": "value"}})
+	out, err := runner.RunPreRequest(
+		scripts,
+		PreRequestInput{Request: req, Variables: map[string]string{"seed": "value"}},
+	)
 	if err != nil {
 		t.Fatalf("pre-request runner: %v", err)
 	}
@@ -42,6 +48,26 @@ func TestRunPreRequestScripts(t *testing.T) {
 	}
 	if out.Variables["token"] != "abc" {
 		t.Fatalf("expected script variable to be returned")
+	}
+}
+
+func TestRunPreRequestSkipsRTS(t *testing.T) {
+	runner := NewRunner(nil)
+	req := &restfile.Request{}
+	blocks := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Lang: "rts",
+		Body: `request.setHeader("X-Test", "1");`,
+	}}
+	out, err := runner.RunPreRequest(
+		blocks,
+		PreRequestInput{Request: req, Variables: map[string]string{}},
+	)
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	if len(out.Headers) != 0 {
+		t.Fatalf("expected rts scripts to be skipped, got headers: %#v", out.Headers)
 	}
 }
 
@@ -64,7 +90,10 @@ client.test("vars carried", function () {
 	runner := NewRunner(nil)
 	req := &restfile.Request{Method: "POST", URL: "https://example.com/api"}
 	preBlocks := []restfile.ScriptBlock{{Kind: "pre-request", FilePath: "pre.js"}}
-	preResult, err := runner.RunPreRequest(preBlocks, PreRequestInput{Request: req, Variables: map[string]string{}, BaseDir: dir})
+	preResult, err := runner.RunPreRequest(
+		preBlocks,
+		PreRequestInput{Request: req, Variables: map[string]string{}, BaseDir: dir},
+	)
 	if err != nil {
 		t.Fatalf("pre-request file script: %v", err)
 	}
@@ -82,7 +111,10 @@ client.test("vars carried", function () {
 		Body:   []byte(`{"ok":true}`),
 	}
 	testBlocks := []restfile.ScriptBlock{{Kind: "test", FilePath: "test.js"}}
-	results, globals, err := runner.RunTests(testBlocks, TestInput{Response: response, Variables: preResult.Variables, BaseDir: dir})
+	results, globals, err := runner.RunTests(
+		testBlocks,
+		TestInput{Response: response, Variables: preResult.Variables, BaseDir: dir},
+	)
 	if err != nil {
 		t.Fatalf("test file script: %v", err)
 	}
@@ -114,10 +146,16 @@ func TestRunTestsScripts(t *testing.T) {
 	}
 
 	scripts := []restfile.ScriptBlock{
-		{Kind: "test", Body: `client.test("status", function() { tests.assert(response.statusCode === 200, "status code"); });`},
+		{
+			Kind: "test",
+			Body: `client.test("status", function() { tests.assert(response.statusCode === 200, "status code"); });`,
+		},
 	}
 
-	results, globals, err := runner.RunTests(scripts, TestInput{Response: response, Variables: map[string]string{}})
+	results, globals, err := runner.RunTests(
+		scripts,
+		TestInput{Response: response, Variables: map[string]string{}},
+	)
 	if err != nil {
 		t.Fatalf("run tests: %v", err)
 	}
@@ -196,11 +234,14 @@ client.test("response stream access", function () {
 	tests.assert(info.summary.sentCount === 1, "response summary count");
 });`
 
-	results, globals, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{
-		Response:  response,
-		Variables: map[string]string{},
-		Stream:    streamInfo,
-	})
+	results, globals, err := runner.RunTests(
+		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
+		TestInput{
+			Response:  response,
+			Variables: map[string]string{},
+			Stream:    streamInfo,
+		},
+	)
 	if err != nil {
 		t.Fatalf("run stream tests: %v", err)
 	}
@@ -237,10 +278,13 @@ func TestResponseAPIUsesWireForBinary(t *testing.T) {
   tests.assert(js.ok === true, "json parsed from body");
 });`
 
-	results, globals, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{
-		Response:  response,
-		Variables: map[string]string{},
-	})
+	results, globals, err := runner.RunTests(
+		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
+		TestInput{
+			Response:  response,
+			Variables: map[string]string{},
+		},
+	)
 	if err != nil {
 		t.Fatalf("run tests: %v", err)
 	}
@@ -393,13 +437,50 @@ func TestTraceBindingProvidesTimeline(t *testing.T) {
 		Completed: t0.Add(75 * time.Millisecond),
 		Duration:  75 * time.Millisecond,
 		Phases: []nettrace.Phase{
-			{Kind: nettrace.PhaseDNS, Start: t0, End: t0.Add(5 * time.Millisecond), Duration: 5 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "example.com", Cached: true}},
-			{Kind: nettrace.PhaseConnect, Start: t0.Add(5 * time.Millisecond), End: t0.Add(30 * time.Millisecond), Duration: 25 * time.Millisecond, Meta: nettrace.PhaseMeta{Addr: "93.184.216.34:443"}},
-			{Kind: nettrace.PhaseTLS, Start: t0.Add(30 * time.Millisecond), End: t0.Add(45 * time.Millisecond), Duration: 15 * time.Millisecond},
-			{Kind: nettrace.PhaseReqHdrs, Start: t0.Add(45 * time.Millisecond), End: t0.Add(46 * time.Millisecond), Duration: 1 * time.Millisecond},
-			{Kind: nettrace.PhaseReqBody, Start: t0.Add(46 * time.Millisecond), End: t0.Add(48 * time.Millisecond), Duration: 2 * time.Millisecond},
-			{Kind: nettrace.PhaseTTFB, Start: t0.Add(48 * time.Millisecond), End: t0.Add(55 * time.Millisecond), Duration: 7 * time.Millisecond},
-			{Kind: nettrace.PhaseTransfer, Start: t0.Add(55 * time.Millisecond), End: t0.Add(75 * time.Millisecond), Duration: 20 * time.Millisecond},
+			{
+				Kind:     nettrace.PhaseDNS,
+				Start:    t0,
+				End:      t0.Add(5 * time.Millisecond),
+				Duration: 5 * time.Millisecond,
+				Meta:     nettrace.PhaseMeta{Addr: "example.com", Cached: true},
+			},
+			{
+				Kind:     nettrace.PhaseConnect,
+				Start:    t0.Add(5 * time.Millisecond),
+				End:      t0.Add(30 * time.Millisecond),
+				Duration: 25 * time.Millisecond,
+				Meta:     nettrace.PhaseMeta{Addr: "93.184.216.34:443"},
+			},
+			{
+				Kind:     nettrace.PhaseTLS,
+				Start:    t0.Add(30 * time.Millisecond),
+				End:      t0.Add(45 * time.Millisecond),
+				Duration: 15 * time.Millisecond,
+			},
+			{
+				Kind:     nettrace.PhaseReqHdrs,
+				Start:    t0.Add(45 * time.Millisecond),
+				End:      t0.Add(46 * time.Millisecond),
+				Duration: 1 * time.Millisecond,
+			},
+			{
+				Kind:     nettrace.PhaseReqBody,
+				Start:    t0.Add(46 * time.Millisecond),
+				End:      t0.Add(48 * time.Millisecond),
+				Duration: 2 * time.Millisecond,
+			},
+			{
+				Kind:     nettrace.PhaseTTFB,
+				Start:    t0.Add(48 * time.Millisecond),
+				End:      t0.Add(55 * time.Millisecond),
+				Duration: 7 * time.Millisecond,
+			},
+			{
+				Kind:     nettrace.PhaseTransfer,
+				Start:    t0.Add(55 * time.Millisecond),
+				End:      t0.Add(75 * time.Millisecond),
+				Duration: 20 * time.Millisecond,
+			},
 		},
 	}
 	spec := &restfile.TraceSpec{
@@ -435,11 +516,14 @@ func TestTraceBindingProvidesTimeline(t *testing.T) {
   tests.assert(trace.withinBudget() === false, "not within budget");
 });`
 
-	results, globals, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{
-		Response:  response,
-		Variables: map[string]string{},
-		Trace:     traceInput,
-	})
+	results, globals, err := runner.RunTests(
+		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
+		TestInput{
+			Response:  response,
+			Variables: map[string]string{},
+			Trace:     traceInput,
+		},
+	)
 	if err != nil {
 		t.Fatalf("trace test script: %v", err)
 	}
@@ -464,7 +548,10 @@ func TestTraceBindingDisabled(t *testing.T) {
   tests.assert(trace.breaches().length === 0, "no breaches when disabled");
   tests.assert(trace.withinBudget() === true, "within budget default");
 });`
-	results, _, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{Response: resp})
+	results, _, err := runner.RunTests(
+		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
+		TestInput{Response: resp},
+	)
 	if err != nil {
 		t.Fatalf("trace disabled script: %v", err)
 	}
@@ -505,7 +592,10 @@ func TestResponseAPIExposesBinaryHelpers(t *testing.T) {
 		Body: body,
 	}
 
-	results, _, err := runner.RunTests([]restfile.ScriptBlock{{Kind: "test", Body: script}}, TestInput{Response: resp, Variables: map[string]string{}})
+	results, _, err := runner.RunTests(
+		[]restfile.ScriptBlock{{Kind: "test", Body: script}},
+		TestInput{Response: resp, Variables: map[string]string{}},
+	)
 	if err != nil {
 		t.Fatalf("binary helpers script: %v", err)
 	}

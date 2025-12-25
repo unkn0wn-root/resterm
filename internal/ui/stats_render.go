@@ -34,7 +34,9 @@ var (
 	statsMessageStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Faint(true)
 	statsHeaderValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#D2D4F5"))
 	statsDurationStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#56C2F4")).Bold(true)
-	statsSelectedStyle    = lipgloss.NewStyle().Background(lipgloss.Color("#343B59")).Foreground(lipgloss.Color("#E8E9F0"))
+	statsSelectedStyle    = lipgloss.NewStyle().
+				Background(lipgloss.Color("#343B59")).
+				Foreground(lipgloss.Color("#E8E9F0"))
 )
 
 var latencyHeaderFields = map[string]struct{}{
@@ -48,7 +50,11 @@ var latencyHeaderFields = map[string]struct{}{
 
 var durationVal = regexp.MustCompile(`\d+(?:\.\d+)?(?:ns|µs|us|ms|s|m|h)`)
 
-func colorizeStatsReport(report string, kind statsReportKind, profileStats *analysis.LatencyStats) string {
+func colorizeStatsReport(
+	report string,
+	kind statsReportKind,
+	profileStats *analysis.LatencyStats,
+) string {
 	if strings.TrimSpace(report) == "" {
 		return report
 	}
@@ -175,7 +181,8 @@ func colorizeProfileLabel(label, value string) string {
 		valueStyle = statsHeaderValueStyle
 	case "success":
 		valueStyle = statsSuccessStyle
-		if strings.HasPrefix(strings.TrimSpace(strings.ToLower(value)), "0%") || strings.Contains(strings.ToLower(value), "n/a") {
+		if strings.HasPrefix(strings.TrimSpace(strings.ToLower(value)), "0%") ||
+			strings.Contains(strings.ToLower(value), "n/a") {
 			valueStyle = statsSubLabelStyle
 		}
 	case "elapsed", "window":
@@ -227,7 +234,10 @@ func renderLatencySummaryLine(line string) string {
 	for _, seg := range segments {
 		trimmed := strings.TrimSpace(seg)
 		if label, value, ok := splitLabelValue(trimmed); ok {
-			colored = append(colored, renderLabelValue(label, value, statsSubLabelStyle, statsValueStyle))
+			colored = append(
+				colored,
+				renderLabelValue(label, value, statsSubLabelStyle, statsValueStyle),
+			)
 		} else {
 			colored = append(colored, statsSubLabelStyle.Render(trimmed))
 		}
@@ -543,7 +553,8 @@ func parseLatencyThresholds(lines []string) (time.Duration, time.Duration, bool)
 		if len(fields) < 3 {
 			continue
 		}
-		if !strings.EqualFold(fields[0], "min") || !strings.EqualFold(fields[1], "p50") || !strings.EqualFold(fields[2], "p90") {
+		if !strings.EqualFold(fields[0], "min") || !strings.EqualFold(fields[1], "p50") ||
+			!strings.EqualFold(fields[2], "p90") {
 			continue
 		}
 		for j := idx + 1; j < len(lines); j++ {
@@ -568,7 +579,10 @@ func parseLatencyThresholds(lines []string) (time.Duration, time.Duration, bool)
 	return 0, 0, false
 }
 
-func latencyThresholds(stats *analysis.LatencyStats, lines []string) (time.Duration, time.Duration, bool) {
+func latencyThresholds(
+	stats *analysis.LatencyStats,
+	lines []string,
+) (time.Duration, time.Duration, bool) {
 	if p50, p90, ok := percentileThresholds(stats); ok {
 		return p50, p90, true
 	}
@@ -651,7 +665,10 @@ func colorizeWorkflowStats(report string) string {
 		if label, value, ok := splitLabelValue(trimmed); ok {
 			lower := strings.ToLower(label)
 			if lower == "workflow" || lower == "started" || lower == "steps" {
-				out = append(out, prefix+renderLabelValue(label, value, statsLabelStyle, statsValueStyle))
+				out = append(
+					out,
+					prefix+renderLabelValue(label, value, statsLabelStyle, statsValueStyle),
+				)
 				continue
 			}
 		}
@@ -695,14 +712,32 @@ func isWorkflowStepLine(line string) bool {
 	}
 	return strings.Contains(line, workflowStatusPass) ||
 		strings.Contains(line, workflowStatusFail) ||
-		strings.Contains(line, workflowStatusCanceled)
+		strings.Contains(line, workflowStatusCanceled) ||
+		strings.Contains(line, workflowStatusSkipped)
 }
 
 func colorizeWorkflowStepLine(line string) string {
 	colored := highlightDurations(line)
-	colored = strings.ReplaceAll(colored, workflowStatusPass, statsSuccessStyle.Render(workflowStatusPass))
-	colored = strings.ReplaceAll(colored, workflowStatusFail, statsWarnStyle.Render(workflowStatusFail))
-	colored = strings.ReplaceAll(colored, workflowStatusCanceled, statsCautionStyle.Render(workflowStatusCanceled))
+	colored = strings.ReplaceAll(
+		colored,
+		workflowStatusPass,
+		statsSuccessStyle.Render(workflowStatusPass),
+	)
+	colored = strings.ReplaceAll(
+		colored,
+		workflowStatusFail,
+		statsWarnStyle.Render(workflowStatusFail),
+	)
+	colored = strings.ReplaceAll(
+		colored,
+		workflowStatusCanceled,
+		statsCautionStyle.Render(workflowStatusCanceled),
+	)
+	colored = strings.ReplaceAll(
+		colored,
+		workflowStatusSkipped,
+		statsCautionStyle.Render(workflowStatusSkipped),
+	)
 	colored = highlightParentheticals(colored)
 	return colored
 }
@@ -726,7 +761,7 @@ func highlightDurations(line string) string {
 		end += start + 1
 		builder.WriteString(remaining[:start])
 		content := remaining[start+1 : end]
-		if content == "PASS" || content == "FAIL" {
+		if content == "PASS" || content == "FAIL" || content == "CANCELED" || content == "SKIPPED" {
 			builder.WriteString("[" + content + "]")
 		} else {
 			builder.WriteString(statsDurationStyle.Render("[" + content + "]"))

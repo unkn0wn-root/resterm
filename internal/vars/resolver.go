@@ -15,8 +15,18 @@ type Provider interface {
 	Label() string
 }
 
+type ExprPos struct {
+	Path string
+	Line int
+	Col  int
+}
+
+type ExprEval func(expr string, pos ExprPos) (string, error)
+
 type Resolver struct {
 	providers []Provider
+	expr      ExprEval
+	exprPos   ExprPos
 }
 
 func NewResolver(providers ...Provider) *Resolver {
@@ -68,41 +78,76 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
+	return r.expandTemplates(input, r.exprPos, true, true)
+}
+
+func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
+	return r.expandTemplates(input, pos, true, true)
+}
+
+func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
+	return r.expandTemplates(input, r.exprPos, false, false)
+}
+
+func (r *Resolver) SetExprEval(fn ExprEval) {
+	r.expr = fn
+}
+
+func (r *Resolver) SetExprPos(pos ExprPos) {
+	r.exprPos = pos
+}
+
+func (r *Resolver) expandTemplates(
+	input string,
+	pos ExprPos,
+	allowDynamic, allowExpr bool,
+) (string, error) {
 	var firstErr error
 	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
-		name := strings.TrimSpace(templateVarPattern.FindStringSubmatch(match)[1])
+		sub := templateVarPattern.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		name := strings.TrimSpace(sub[1])
 		if name == "" {
 			return match
 		}
-		if strings.HasPrefix(name, "$") {
+		if strings.HasPrefix(name, "=") {
+			if !allowExpr {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("expressions not allowed")
+				}
+				return match
+			}
+			expr := strings.TrimSpace(name[1:])
+			if expr == "" {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("empty expression")
+				}
+				return match
+			}
+			if r.expr == nil {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("expressions not enabled")
+				}
+				return match
+			}
+			val, err := r.expr(expr, pos)
+			if err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				return match
+			}
+			return val
+		}
+		if allowDynamic && strings.HasPrefix(name, "$") {
 			if value, ok := r.Resolve(name); ok {
 				return value
 			}
 			if dynamic, ok := resolveDynamic(name); ok {
 				return dynamic
 			}
-		}
-		if value, ok := r.Resolve(name); ok {
-			return value
-		}
-		if firstErr == nil {
-			firstErr = fmt.Errorf("undefined variable: %s", name)
-		}
-		return match
-	})
-	return result, firstErr
-}
-
-func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
-	var firstErr error
-	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
-		submatches := templateVarPattern.FindStringSubmatch(match)
-		if len(submatches) < 2 {
-			return match
-		}
-		name := strings.TrimSpace(submatches[1])
-		if name == "" {
-			return match
 		}
 		if value, ok := r.Resolve(name); ok {
 			return value

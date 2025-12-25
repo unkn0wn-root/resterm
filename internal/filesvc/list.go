@@ -15,7 +15,7 @@ type FileEntry struct {
 
 func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	var entries []FileEntry
-	exts := map[string]struct{}{".http": {}, ".rest": {}}
+	exts := map[string]struct{}{".http": {}, ".rest": {}, ".rts": {}}
 	include := func(name string) bool {
 		_, ok := exts[strings.ToLower(filepath.Ext(name))]
 		return ok

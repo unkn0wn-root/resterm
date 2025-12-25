@@ -12,11 +12,20 @@ type Parser interface {
 }
 
 type Generator interface {
-	Generate(ctx context.Context, spec *model.Spec, opts GeneratorOptions) (*restfile.Document, error)
+	Generate(
+		ctx context.Context,
+		spec *model.Spec,
+		opts GeneratorOptions,
+	) (*restfile.Document, error)
 }
 
 type DocumentWriter interface {
-	WriteDocument(ctx context.Context, doc *restfile.Document, destination string, opts WriterOptions) error
+	WriteDocument(
+		ctx context.Context,
+		doc *restfile.Document,
+		destination string,
+		opts WriterOptions,
+	) error
 }
 
 type ParseOptions struct {

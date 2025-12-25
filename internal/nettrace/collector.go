@@ -162,7 +162,8 @@ func (c *Collector) Timeline() *Timeline {
 		Phases:    ph,
 	}
 
-	if !timeline.Started.IsZero() && !timeline.Completed.IsZero() && !timeline.Completed.Before(timeline.Started) {
+	if !timeline.Started.IsZero() && !timeline.Completed.IsZero() &&
+		!timeline.Completed.Before(timeline.Started) {
 		timeline.Duration = timeline.Completed.Sub(timeline.Started)
 	}
 	return timeline

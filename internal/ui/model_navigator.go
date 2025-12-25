@@ -228,7 +228,8 @@ func (m *Model) ensureNavigatorDataForFilter() {
 		return
 	}
 	filter := strings.TrimSpace(m.navigatorFilter.Value())
-	need := filter != "" || len(m.navigator.MethodFilters()) > 0 || len(m.navigator.TagFilters()) > 0
+	need := filter != "" || len(m.navigator.MethodFilters()) > 0 ||
+		len(m.navigator.TagFilters()) > 0
 	if !need {
 		return
 	}
@@ -309,7 +310,9 @@ func (m *Model) syncNavigatorSelection() {
 				}
 				m.setActiveRequest(nil)
 				m.requestList.Select(-1)
-				m.setStatusMessage(statusMsg{text: "Open file to edit this request", level: statusInfo})
+				m.setStatusMessage(
+					statusMsg{text: "Open file to edit this request", level: statusInfo},
+				)
 			}
 		} else {
 			m.setActiveRequest(nil)
@@ -329,7 +332,9 @@ func (m *Model) syncNavigatorSelection() {
 				}
 				m.activeWorkflowKey = ""
 				m.workflowList.Select(-1)
-				m.setStatusMessage(statusMsg{text: "Open file to edit this workflow", level: statusInfo})
+				m.setStatusMessage(
+					statusMsg{text: "Open file to edit this workflow", level: statusInfo},
+				)
 			}
 		} else {
 			m.activeWorkflowKey = ""

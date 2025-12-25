@@ -30,7 +30,12 @@ const (
 
 var launchBrowser = openBrowser
 
-func (m *Manager) requestAuthCodeToken(ctx context.Context, key string, cfg Config, opts httpclient.Options) (Token, error) {
+func (m *Manager) requestAuthCodeToken(
+	ctx context.Context,
+	key string,
+	cfg Config,
+	opts httpclient.Options,
+) (Token, error) {
 	authURL := strings.TrimSpace(cfg.AuthURL)
 	if authURL == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "authorization_code requires auth_url")
@@ -95,7 +100,10 @@ func pickVerifier(raw string) (string, error) {
 	v := strings.TrimSpace(raw)
 	if v != "" {
 		if len(v) < 43 || len(v) > 128 {
-			return "", errdef.New(errdef.CodeHTTP, "code_verifier must be between 43 and 128 characters")
+			return "", errdef.New(
+				errdef.CodeHTTP,
+				"code_verifier must be between 43 and 128 characters",
+			)
 		}
 		return v, nil
 	}
@@ -131,7 +139,11 @@ func buildChallenge(verifier, method string) (string, error) {
 	}
 }
 
-func buildAuthURL(base, redirect string, cfg Config, state, challenge, method string) (string, error) {
+func buildAuthURL(
+	base, redirect string,
+	cfg Config,
+	state, challenge, method string,
+) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {
 		return "", errdef.Wrap(errdef.CodeHTTP, err, "parse auth_url")
@@ -345,7 +357,11 @@ func (s *codeServer) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte("<html><body><p>Authentication complete. You can close this window.</p></body></html>"))
+	_, _ = w.Write(
+		[]byte(
+			"<html><body><p>Authentication complete. You can close this window.</p></body></html>",
+		),
+	)
 	go s.shutdown(context.Background())
 }
 

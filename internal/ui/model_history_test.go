@@ -195,7 +195,12 @@ func TestLoadHistorySelectionCompareHydratesSnapshots(t *testing.T) {
 		Compare: &history.CompareEntry{
 			Baseline: "dev",
 			Results: []history.CompareResult{
-				{Environment: "dev", Status: "200 OK", StatusCode: 200, BodySnippet: "{\n  \"value\": \"dev\"\n}"},
+				{
+					Environment: "dev",
+					Status:      "200 OK",
+					StatusCode:  200,
+					BodySnippet: "{\n  \"value\": \"dev\"\n}",
+				},
 				{Environment: "stage", Status: "500", StatusCode: 500, Error: "boom"},
 			},
 		},
@@ -260,7 +265,12 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 	if model.responseRenderToken == "" {
 		t.Fatalf("expected responseRenderToken to be assigned")
 	}
-	if content := model.pane(responsePanePrimary).viewport.View(); !strings.HasPrefix(content, responseFormattingBase) {
+	if content := model.pane(
+		responsePanePrimary,
+	).viewport.View(); !strings.HasPrefix(
+		content,
+		responseFormattingBase,
+	) {
 		t.Fatalf("expected viewport to show formatting message prefix, got %q", content)
 	}
 
@@ -503,7 +513,8 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, ""))
 
 	primary := model.pane(responsePanePrimary)
-	if primary == nil || primary.snapshot == nil || !strings.Contains(primary.snapshot.pretty, "first") {
+	if primary == nil || primary.snapshot == nil ||
+		!strings.Contains(primary.snapshot.pretty, "first") {
 		t.Fatalf("expected primary pane to hold first response")
 	}
 
@@ -524,7 +535,8 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, ""))
 
 	secondary := model.pane(responsePaneSecondary)
-	if secondary == nil || secondary.snapshot == nil || !strings.Contains(secondary.snapshot.pretty, "second") {
+	if secondary == nil || secondary.snapshot == nil ||
+		!strings.Contains(secondary.snapshot.pretty, "second") {
 		t.Fatalf("expected secondary pane to receive latest response")
 	}
 	if primary.snapshot == nil || !strings.Contains(primary.snapshot.pretty, "first") {

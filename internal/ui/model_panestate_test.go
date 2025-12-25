@@ -134,7 +134,13 @@ func TestTogglePaneCollapsePreventsDoubleMainCollapse(t *testing.T) {
 	if model.editorCollapsed {
 		t.Fatalf("expected editor to remain visible when response already minimized")
 	}
-	if !strings.Contains(strings.ToLower(model.statusMessage.text), "keep editor or response visible") {
-		t.Fatalf("expected friendly warning about double collapse, got %q", model.statusMessage.text)
+	if !strings.Contains(
+		strings.ToLower(model.statusMessage.text),
+		"keep editor or response visible",
+	) {
+		t.Fatalf(
+			"expected friendly warning about double collapse, got %q",
+			model.statusMessage.text,
+		)
 	}
 }

@@ -42,7 +42,11 @@ func TestSubmitOpenPathSwitchesWorkspace(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "sample.http"), []byte("GET https://example.com"), 0o644); err != nil {
+	if err := os.WriteFile(
+		filepath.Join(dir, "sample.http"),
+		[]byte("GET https://example.com"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 

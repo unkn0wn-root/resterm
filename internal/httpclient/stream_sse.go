@@ -49,7 +49,12 @@ type SSETranscript struct {
 	Summary SSESummary `json:"summary"`
 }
 
-func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (*StreamHandle, *Response, error) {
+func (c *Client) StartSSE(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (*StreamHandle, *Response, error) {
 	if req == nil || req.SSE == nil {
 		return nil, nil, errdef.New(errdef.CodeHTTP, "sse metadata missing")
 	}
@@ -161,7 +166,12 @@ func (c *Client) StartSSE(ctx context.Context, req *restfile.Request, resolver *
 	return &StreamHandle{Session: session, Meta: meta}, nil, nil
 }
 
-func (c *Client) ExecuteSSE(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts Options) (*Response, error) {
+func (c *Client) ExecuteSSE(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (*Response, error) {
 	handle, httpResp, err := c.StartSSE(ctx, req, resolver, opts)
 	if err != nil {
 		return nil, err
@@ -220,7 +230,15 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	}
 	headers.Set("Content-Type", "application/json; charset=utf-8")
 	headers.Set(streamHeaderType, "sse")
-	headers.Set(streamHeaderSummary, fmt.Sprintf("events=%d bytes=%d reason=%s", transcript.Summary.EventCount, transcript.Summary.ByteCount, transcript.Summary.Reason))
+	headers.Set(
+		streamHeaderSummary,
+		fmt.Sprintf(
+			"events=%d bytes=%d reason=%s",
+			transcript.Summary.EventCount,
+			transcript.Summary.ByteCount,
+			transcript.Summary.Reason,
+		),
+	)
 
 	var reqHeaders http.Header
 	if handle.Meta.RequestHeaders != nil {

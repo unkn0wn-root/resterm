@@ -55,19 +55,23 @@ func (m *Model) applyThemeSelection() tea.Cmd {
 	}
 	def, ok := m.themeCatalog.Get(item.key)
 	if !ok {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("theme %q unavailable", item.key)})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: fmt.Sprintf("theme %q unavailable", item.key)},
+		)
 		return nil
 	}
 
 	m.theme = def.Theme
 	m.activeThemeKey = def.Key
-	m.editor.SetRuneStyler(newMetadataRuneStyler(m.theme.EditorMetadata))
+	m.editor.SetRuneStyler(selectEditorRuneStyler(m.currentFile, m.theme.EditorMetadata))
 	m.refreshThemeList()
 	m.applyThemeToLists()
 
 	m.cfg.Settings.DefaultTheme = def.Key
 	if err := config.SaveSettings(m.cfg.Settings, m.settingsHandle); err != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: fmt.Sprintf("theme save error: %v", err)})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: fmt.Sprintf("theme save error: %v", err)},
+		)
 		return nil
 	}
 	label := def.DisplayName

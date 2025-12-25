@@ -61,7 +61,11 @@ func (m *Manager) Close() error {
 	return errors.Join(errs...)
 }
 
-func (m *Manager) DialContext(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
+func (m *Manager) DialContext(
+	ctx context.Context,
+	cfg Cfg,
+	network, addr string,
+) (net.Conn, error) {
 	if cfg.Host == "" {
 		return nil, fmt.Errorf("ssh host required")
 	}

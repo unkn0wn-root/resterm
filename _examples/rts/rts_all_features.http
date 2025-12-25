@@ -1,0 +1,127 @@
+# @global base_url https://httpbin.org
+# @global api.token demo-token
+# @global env_hint demo
+# @use ./helpers.rts as helpers
+# @use ./loops.rts as loops
+# @use ./apply_patch.rts as apply
+# @use ./pre_request.rts as pre
+
+### RTS Core Expressions + Stdlib
+# @name RTS_Core
+# @description Exercises expressions, operators, stdlib, and module calls.
+# @assert response.statusCode == 200
+# @assert response.json("args.mode") == helpers.mode(env)
+# @assert response.json("args.tag") == loops.sampleTag
+# @assert response.json("headers.X-Encoded") == base64.encode("hello")
+# @assert match("^https?://", response.json("url"))
+# @assert contains(response.text(), "\"url\"")
+# @assert headers.get(headers.normalize({"X-Test":"ok"}), "x-test") == "ok"
+# @assert len(headers.merge({"a":"1"}, {"a": null})) == 0
+# @assert query.parse(query.merge("https://example.com?p=1&q=2", {q: null})).p == "1"
+# @assert json.parse("{\"a\":1}").a == 1
+# @assert base64.decode(base64.encode("hi")) == "hi"
+# @assert url.decode(url.encode("a b")) == "a b"
+# @assert len(time.format("2006-01-02")) == 10
+# @assert len(uuid()) == 36
+# @assert (try missing_name).ok == false
+# @assert (null ?? "fallback") == "fallback"
+# @assert default(vars.get("missing"), "fallback") == "fallback"
+# @assert (true and not false) == true
+# @assert [1,2,3][1] == 2
+# @assert ({a: 1, "b": 2}.a + {a: 1, "b": 2}["b"]) == 3
+# @assert vars.get("env_hint") == "demo"
+GET {{base_url}}/get?mode={{= helpers["mode"](env) }}&tag={{= loops.sampleTag }}&uuid={{= uuid() }}
+User-Agent: resterm-rts-examples
+X-Encoded: {{= base64.encode("hello") }}
+X-Url: {{= url.encode("a b") }}
+X-Time: {{= time.nowISO() }}
+X-Trace-Id: {{= helpers.traceId() }}
+
+### RTS Pre-request Mutation
+# @name RTS_PreRequest
+# @description Mutates request, vars, and globals in pre-request.
+# @script pre-request lang=rts
+> pre.mutate(request, vars, env)
+# @assert response.json("method") == "POST"
+# @assert request.method == "POST"
+# @assert response.json("args.mode") == helpers.mode(env)
+# @assert response.json("args.mutated") == "true"
+# @assert response.json("headers.X-Mode") == helpers.mode(env)
+# @assert vars.get("pre_request_mode") == helpers.mode(env)
+POST {{base_url}}/anything
+X-Remove-Me: true
+
+### RTS Apply Patch
+# @name RTS_Apply
+# @description Applies a dict patch to method/url/headers/query/body/vars.
+# @apply apply.patch(request, vars)
+# @assert response.json("method") == "PUT"
+# @assert request.method == "PUT"
+# @assert request.query.from == "apply"
+# @assert response.json("args.from") == "apply"
+# @assert response.json("args.applied") == "1"
+# @assert response.json("headers.X-Apply") == "true"
+# @assert vars.get("apply_note") == "patched"
+GET {{base_url}}/anything?debug=0
+
+### RTS @when
+# @name RTS_When
+# @description Runs only when api.token exists.
+# @when vars.has("api.token")
+# @assert response.statusCode == 200
+GET {{base_url}}/bearer
+Authorization: {{= helpers.authHeader(vars.get("api.token")) }}
+
+### RTS @skip-if
+# @name RTS_SkipIf
+# @description Skips only when env_hint == "skip".
+# @skip-if vars.get("env_hint") == "skip"
+# @assert response.statusCode == 204
+GET {{base_url}}/status/204
+
+### RTS Loops + Const + Try
+# @name RTS_Loops
+# @description Exercises for/range/break/continue/const/try in modules.
+# @assert loops.sampleTag == "rts-examples"
+# @assert loops.sumClassic(6) == 8
+# @assert loops.rangeList() == "0a1b2c"
+# @assert loops.rangeDict() == "ab"
+# @assert loops.rangeString() == "0g1o"
+# @assert loops.countdown(3) == "321"
+# @assert loops.constLabel(7) == "user-7"
+# @assert loops.dictAccess() == 3
+# @assert loops.tryFail() == false
+GET {{base_url}}/get?tag={{= loops.sampleTag }}
+
+### RTS @for-each with json.file
+# @name RTS_ForEach
+# @description Iterates a local JSON file and posts each user.
+# @use ./users.rts as users
+# @for-each json.file("users.json") as user
+# @assert response.json("json.id") == user.id
+# @assert response.json("headers.X-User") == users.headerTag(user)
+POST {{base_url}}/post
+Content-Type: application/json
+X-User: {{= users.headerTag(user) }}
+
+{{= users.payload(user) }}
+
+### RTS Trace
+# @name RTS_Trace
+# @description Captures trace timings and budgets.
+# @trace dns<=200ms connect<=400ms ttfb<=600ms total<=1000ms tolerance=100ms
+# @assert trace.enabled() == true
+# @assert trace.budgets().enabled == true
+# @assert trace.durationMs() >= 0
+GET {{base_url}}/delay/0.1
+Accept: application/json
+
+### RTS Stream (SSE)
+# @name RTS_SSE
+# @description SSE request to populate stream.summary/events.
+# @sse duration=5s idle=2s max-events=3
+# @assert stream.enabled() == true
+# @assert stream.kind() == "sse"
+# @assert stream.summary().eventCount >= 0
+GET https://stream.wikimedia.org/v2/stream/recentchange
+Accept: text/event-stream

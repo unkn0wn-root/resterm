@@ -81,7 +81,11 @@ func NewManager(client *httpclient.Client) *Manager {
 		client = httpclient.NewClient(nil)
 	}
 
-	mgr := &Manager{client: client, cache: make(map[string]*cacheEntry), inflight: make(map[string]*call)}
+	mgr := &Manager{
+		client:   client,
+		cache:    make(map[string]*cacheEntry),
+		inflight: make(map[string]*call),
+	}
 	mgr.do = func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 		return mgr.client.Execute(ctx, req, nil, opts)
 	}
@@ -91,7 +95,12 @@ func NewManager(client *httpclient.Client) *Manager {
 // Deduplicates concurrent token requests for the same config.
 // If another goroutine is already fetching, we wait on their done channel
 // instead of hitting the auth server twice.
-func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpclient.Options) (Token, error) {
+func (m *Manager) Token(
+	ctx context.Context,
+	env string,
+	cfg Config,
+	opts httpclient.Options,
+) (Token, error) {
 	key := m.cacheKey(env, cfg)
 
 	if token, ok := m.cachedToken(key); ok && token.valid() {
@@ -131,14 +140,24 @@ func (m *Manager) Token(ctx context.Context, env string, cfg Config, opts httpcl
 	return token, nil
 }
 
-func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts httpclient.Options) (Token, error) {
+func (m *Manager) obtainToken(
+	ctx context.Context,
+	key string,
+	cfg Config,
+	opts httpclient.Options,
+) (Token, error) {
 	if token, ok := m.cachedToken(key); ok && token.valid() {
 		return token, nil
 	}
 
 	entry := m.cacheEntry(key)
 	if entry != nil && entry.token.RefreshToken != "" {
-		if refreshed, err := m.refreshToken(ctx, entry.cfg, entry.token.RefreshToken, opts); err == nil {
+		if refreshed, err := m.refreshToken(
+			ctx,
+			entry.cfg,
+			entry.token.RefreshToken,
+			opts,
+		); err == nil {
 			m.storeToken(key, cfg, refreshed)
 			return refreshed, nil
 		}
@@ -157,7 +176,9 @@ func (m *Manager) obtainToken(ctx context.Context, key string, cfg Config, opts 
 	return fetched, nil
 }
 
-func (m *Manager) SetRequestFunc(fn func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error)) {
+func (m *Manager) SetRequestFunc(
+	fn func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error),
+) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if fn == nil {
@@ -290,7 +311,11 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 	return strings.Join(parts, "|")
 }
 
-func (m *Manager) requestToken(ctx context.Context, cfg Config, opts httpclient.Options) (Token, error) {
+func (m *Manager) requestToken(
+	ctx context.Context,
+	cfg Config,
+	opts httpclient.Options,
+) (Token, error) {
 	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
 	if grant == "" {
 		grant = "client_credentials"
@@ -397,7 +422,8 @@ func resolveClientAuth(grant, clientAuthRaw string, cfg Config) clientAuthMode {
 	}
 
 	useHeader := mode == "basic"
-	if useHeader && cfg.ClientSecret == "" && (clientAuthRaw == "" || grant == "authorization_code") {
+	if useHeader && cfg.ClientSecret == "" &&
+		(clientAuthRaw == "" || grant == "authorization_code") {
 		useHeader = false
 		mode = "body"
 	}
@@ -408,7 +434,12 @@ func resolveClientAuth(grant, clientAuthRaw string, cfg Config) clientAuthMode {
 	}
 }
 
-func (m *Manager) refreshToken(ctx context.Context, cfg Config, refresh string, opts httpclient.Options) (Token, error) {
+func (m *Manager) refreshToken(
+	ctx context.Context,
+	cfg Config,
+	refresh string,
+	opts httpclient.Options,
+) (Token, error) {
 	if refresh == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "missing refresh token")
 	}

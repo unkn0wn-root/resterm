@@ -323,7 +323,13 @@ func (c *Client) CompleteWebSocket(
 			}
 			waitForWindow(session.Context(), recvWindow)
 		case restfile.WebSocketStepSendFile:
-			data, _, readErr := c.readFileWithFallback(step.File, baseDir, fallbacks, allowRaw, "websocket payload file")
+			data, _, readErr := c.readFileWithFallback(
+				step.File,
+				baseDir,
+				fallbacks,
+				allowRaw,
+				"websocket payload file",
+			)
 			if readErr != nil {
 				session.Cancel()
 				return nil, readErr
@@ -441,7 +447,11 @@ func (c *Client) CompleteWebSocket(
 	}, nil
 }
 
-func buildWebSocketFallback(httpResp *http.Response, req *restfile.Request, started time.Time) (*Response, error) {
+func buildWebSocketFallback(
+	httpResp *http.Response,
+	req *restfile.Request,
+	started time.Time,
+) (*Response, error) {
 	if httpResp == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "websocket handshake response unavailable")
 	}
@@ -722,7 +732,11 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 	case wsOutboundPong:
 		payload := append([]byte(nil), msg.payload...)
 		if len(payload) > websocketControlMaxPayload {
-			return errdef.New(errdef.CodeHTTP, "websocket pong payload exceeds %d bytes", websocketControlMaxPayload)
+			return errdef.New(
+				errdef.CodeHTTP,
+				"websocket pong payload exceeds %d bytes",
+				websocketControlMaxPayload,
+			)
 		}
 		if err := wsWriteControl(rt.conn, ctx, wsOpcodePong, payload); err != nil {
 			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket pong")
@@ -893,7 +907,11 @@ func (s *WebSocketSender) SendText(ctx context.Context, text string, meta map[st
 	return s.enqueue(msg)
 }
 
-func (s *WebSocketSender) SendJSON(ctx context.Context, jsonPayload string, meta map[string]string) error {
+func (s *WebSocketSender) SendJSON(
+	ctx context.Context,
+	jsonPayload string,
+	meta map[string]string,
+) error {
 	if !json.Valid([]byte(jsonPayload)) {
 		return errdef.New(errdef.CodeHTTP, "invalid json payload for websocket send")
 	}
@@ -913,7 +931,11 @@ func (s *WebSocketSender) SendJSON(ctx context.Context, jsonPayload string, meta
 	return s.enqueue(msg)
 }
 
-func (s *WebSocketSender) SendBinary(ctx context.Context, data []byte, meta map[string]string) error {
+func (s *WebSocketSender) SendBinary(
+	ctx context.Context,
+	data []byte,
+	meta map[string]string,
+) error {
 	payload := append([]byte(nil), data...)
 	m := cloneMetadata(meta)
 	if m == nil {
@@ -931,7 +953,11 @@ func (s *WebSocketSender) SendBinary(ctx context.Context, data []byte, meta map[
 	return s.enqueue(msg)
 }
 
-func (s *WebSocketSender) SendBase64(ctx context.Context, data string, meta map[string]string) error {
+func (s *WebSocketSender) SendBase64(
+	ctx context.Context,
+	data string,
+	meta map[string]string,
+) error {
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
 		return errdef.Wrap(errdef.CodeHTTP, err, "decode base64 payload")
@@ -952,7 +978,11 @@ func (s *WebSocketSender) Ping(ctx context.Context, meta map[string]string) erro
 func (s *WebSocketSender) Pong(ctx context.Context, payload string, meta map[string]string) error {
 	data := []byte(payload)
 	if len(data) > websocketControlMaxPayload {
-		return errdef.New(errdef.CodeHTTP, "websocket pong payload exceeds %d bytes", websocketControlMaxPayload)
+		return errdef.New(
+			errdef.CodeHTTP,
+			"websocket pong payload exceeds %d bytes",
+			websocketControlMaxPayload,
+		)
 	}
 	m := cloneMetadata(meta)
 	if m == nil {
@@ -969,7 +999,12 @@ func (s *WebSocketSender) Pong(ctx context.Context, payload string, meta map[str
 	return s.enqueue(msg)
 }
 
-func (s *WebSocketSender) Close(ctx context.Context, code websocket.StatusCode, reason string, meta map[string]string) error {
+func (s *WebSocketSender) Close(
+	ctx context.Context,
+	code websocket.StatusCode,
+	reason string,
+	meta map[string]string,
+) error {
 	msg := wsOutbound{
 		ctx:      ctx,
 		kind:     wsOutboundClose,

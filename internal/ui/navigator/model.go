@@ -333,7 +333,13 @@ func (m *Model[T]) ensureVisible() {
 	m.offset = scroll.Align(m.sel, m.offset, m.viewHeight, len(m.flat))
 }
 
-func flatten[T any](nodes []*Node[T], level int, filter string, methods map[string]bool, tags map[string]bool) []Flat[T] {
+func flatten[T any](
+	nodes []*Node[T],
+	level int,
+	filter string,
+	methods map[string]bool,
+	tags map[string]bool,
+) []Flat[T] {
 	var rows []Flat[T]
 	for _, n := range nodes {
 		childRows, ok := visible(n, level, filter, methods, tags)
@@ -344,7 +350,13 @@ func flatten[T any](nodes []*Node[T], level int, filter string, methods map[stri
 	return rows
 }
 
-func visible[T any](n *Node[T], level int, filter string, methods map[string]bool, tags map[string]bool) ([]Flat[T], bool) {
+func visible[T any](
+	n *Node[T],
+	level int,
+	filter string,
+	methods map[string]bool,
+	tags map[string]bool,
+) ([]Flat[T], bool) {
 	if n == nil {
 		return nil, false
 	}
@@ -374,7 +386,12 @@ func visible[T any](n *Node[T], level int, filter string, methods map[string]boo
 	return append([]Flat[T]{self}, childRows...), true
 }
 
-func nodeMatches[T any](n *Node[T], filter string, methods map[string]bool, tags map[string]bool) bool {
+func nodeMatches[T any](
+	n *Node[T],
+	filter string,
+	methods map[string]bool,
+	tags map[string]bool,
+) bool {
 	if n == nil {
 		return false
 	}

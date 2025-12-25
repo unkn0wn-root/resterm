@@ -7,6 +7,7 @@ import (
 )
 
 type workflowStatsView struct {
+	label       string
 	name        string
 	started     time.Time
 	ended       time.Time
@@ -74,6 +75,7 @@ func newWorkflowStatsView(state *workflowState) *workflowStatsView {
 	}
 
 	return &workflowStatsView{
+		label:       workflowRunLabel(state),
 		name:        strings.TrimSpace(state.workflow.Name),
 		started:     state.start,
 		ended:       state.end,
@@ -205,15 +207,29 @@ func (v *workflowStatsView) render(width int) workflowStatsRender {
 }
 
 func (v *workflowStatsView) workflowHeader() []string {
-	name := v.name
-	if name == "" {
-		name = "Workflow"
+	label := strings.TrimSpace(v.label)
+	if label == "" {
+		label = "Workflow"
 	}
-	workflow := renderLabelValue("Workflow", name, statsLabelStyle, statsValueStyle)
-	started := renderLabelValue("Started", v.started.Format(time.RFC3339), statsLabelStyle, statsValueStyle)
+	name := strings.TrimSpace(v.name)
+	if name == "" {
+		name = label
+	}
+	workflow := renderLabelValue(label, name, statsLabelStyle, statsValueStyle)
+	started := renderLabelValue(
+		"Started",
+		v.started.Format(time.RFC3339),
+		statsLabelStyle,
+		statsValueStyle,
+	)
 	lines := []string{workflow, started}
 	if !v.ended.IsZero() {
-		ended := renderLabelValue("Ended", v.ended.Format(time.RFC3339), statsLabelStyle, statsValueStyle)
+		ended := renderLabelValue(
+			"Ended",
+			v.ended.Format(time.RFC3339),
+			statsLabelStyle,
+			statsValueStyle,
+		)
 		lines = append(lines, ended)
 	}
 	stepCount := fmt.Sprintf("%d", v.totalSteps)
@@ -244,7 +260,12 @@ func (v *workflowStatsView) renderEntryTitle(entry workflowStatsEntry) string {
 
 func workflowStepLine(idx int, res workflowStepResult) string {
 	label := workflowStatusLabel(res)
-	line := fmt.Sprintf("%d. %s %s", idx+1, displayStepName(res.Step), label)
+	line := fmt.Sprintf(
+		"%d. %s %s",
+		idx+1,
+		workflowStepLabel(res.Step, res.Branch, res.Iteration, res.Total),
+		label,
+	)
 	if strings.TrimSpace(res.Status) != "" {
 		line += fmt.Sprintf(" (%s)", res.Status)
 	}
@@ -258,6 +279,8 @@ func workflowStatusLabel(res workflowStepResult) string {
 	switch {
 	case res.Canceled:
 		return workflowStatusCanceled
+	case res.Skipped:
+		return workflowStatusSkipped
 	case res.Success:
 		return workflowStatusPass
 	default:
@@ -269,8 +292,19 @@ func (entry workflowStatsEntry) detailLines() []string {
 	if entry.result.Canceled && !entry.hasResponse() {
 		return nil
 	}
+	if entry.result.Skipped {
+		reason := strings.TrimSpace(entry.result.Message)
+		if reason == "" {
+			reason = "Skipped"
+		}
+		return []string{statsMessageStyle.Render("    " + reason)}
+	}
 	if entry.hasHTTP() {
-		views := buildHTTPResponseViews(entry.result.HTTP, entry.result.Tests, entry.result.ScriptErr)
+		views := buildHTTPResponseViews(
+			entry.result.HTTP,
+			entry.result.Tests,
+			entry.result.ScriptErr,
+		)
 		return indentLines(views.pretty, "    ")
 	}
 	if entry.hasGRPC() {
@@ -293,7 +327,11 @@ func (entry workflowStatsEntry) hasGRPC() bool {
 	return entry.result.GRPC != nil
 }
 
-func (v *workflowStatsView) alignSelection(pane *responsePaneState, render workflowStatsRender, forceTop bool) bool {
+func (v *workflowStatsView) alignSelection(
+	pane *responsePaneState,
+	render workflowStatsRender,
+	forceTop bool,
+) bool {
 	if pane == nil || !v.hasEntries() || pane.viewport.Height <= 0 {
 		return false
 	}
@@ -369,7 +407,10 @@ func (v *workflowStatsView) ensureVisible(pane *responsePaneState, render workfl
 	v.alignSelection(pane, render, false)
 }
 
-func (v *workflowStatsView) ensureVisibleImmediate(pane *responsePaneState, render workflowStatsRender) bool {
+func (v *workflowStatsView) ensureVisibleImmediate(
+	pane *responsePaneState,
+	render workflowStatsRender,
+) bool {
 	if pane == nil || !v.hasEntries() || pane.viewport.Height <= 0 {
 		return false
 	}
@@ -379,7 +420,11 @@ func (v *workflowStatsView) ensureVisibleImmediate(pane *responsePaneState, rend
 	return v.alignSelection(pane, render, false)
 }
 
-func (v *workflowStatsView) selectVisibleStart(pane *responsePaneState, render workflowStatsRender, direction int) bool {
+func (v *workflowStatsView) selectVisibleStart(
+	pane *responsePaneState,
+	render workflowStatsRender,
+	direction int,
+) bool {
 	if pane == nil || !v.hasEntries() || pane.viewport.Height <= 0 {
 		return false
 	}
@@ -455,7 +500,11 @@ func buildWorkflowGRPCDetail(result workflowStepResult) string {
 	if grpc := result.Step; grpc.Using != "" {
 		method = grpc.Using
 	}
-	statusLine := fmt.Sprintf("gRPC %s - %s", strings.TrimPrefix(method, "/"), resp.StatusCode.String())
+	statusLine := fmt.Sprintf(
+		"gRPC %s - %s",
+		strings.TrimPrefix(method, "/"),
+		resp.StatusCode.String(),
+	)
 	if resp.StatusMessage != "" {
 		statusLine += " (" + resp.StatusMessage + ")"
 	}

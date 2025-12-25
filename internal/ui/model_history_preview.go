@@ -11,7 +11,9 @@ import (
 func (m *Model) openHistoryPreview(entry history.Entry) {
 	data, err := json.MarshalIndent(entry, "", "  ")
 	if err != nil {
-		m.setStatusMessage(statusMsg{level: statusError, text: fmt.Sprintf("preview error: %v", err)})
+		m.setStatusMessage(
+			statusMsg{level: statusError, text: fmt.Sprintf("preview error: %v", err)},
+		)
 		return
 	}
 	m.historyPreviewContent = string(data)

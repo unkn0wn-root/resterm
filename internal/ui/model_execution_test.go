@@ -64,7 +64,11 @@ func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
 		t.Fatalf("expected message file to be cleared when inline body provided")
 	}
 	if want := "Bearer abcd"; req.GRPC.Metadata["authorization"] != want {
-		t.Fatalf("expected metadata to be expanded to %q, got %q", want, req.GRPC.Metadata["authorization"])
+		t.Fatalf(
+			"expected metadata to be expanded to %q, got %q",
+			want,
+			req.GRPC.Metadata["authorization"],
+		)
 	}
 }
 
@@ -111,7 +115,11 @@ func TestRequestAtCursorBeforeRequestsReturnsNil(t *testing.T) {
 
 	req, inline := model.requestAtCursor(doc, content, 1)
 	if req != nil || inline {
-		t.Fatalf("expected no request at cursor before first request, got req=%v inline=%v", req, inline)
+		t.Fatalf(
+			"expected no request at cursor before first request, got req=%v inline=%v",
+			req,
+			inline,
+		)
 	}
 }
 
@@ -229,7 +237,11 @@ func TestPrepareGRPCRequestNormalizesSecureSchemes(t *testing.T) {
 		t.Fatalf("expected target to drop grpcs scheme, got %q", req.GRPC.Target)
 	}
 	if !req.GRPC.PlaintextSet || req.GRPC.Plaintext {
-		t.Fatalf("expected secure scheme to enforce TLS, got plaintext=%v set=%v", req.GRPC.Plaintext, req.GRPC.PlaintextSet)
+		t.Fatalf(
+			"expected secure scheme to enforce TLS, got plaintext=%v set=%v",
+			req.GRPC.Plaintext,
+			req.GRPC.PlaintextSet,
+		)
 	}
 }
 
@@ -252,7 +264,12 @@ func TestNormalizeGRPCTargetPreservesQuery(t *testing.T) {
 }
 
 func TestPrepareGRPCRequestExpandsDescriptorSet(t *testing.T) {
-	resolver := vars.NewResolver(vars.NewMapProvider("doc", map[string]string{"grpc.descriptor": "./testdata/example.protoset"}))
+	resolver := vars.NewResolver(
+		vars.NewMapProvider(
+			"doc",
+			map[string]string{"grpc.descriptor": "./testdata/example.protoset"},
+		),
+	)
 	req := &restfile.Request{
 		Method: "GRPC",
 		GRPC: &restfile.GRPCRequest{
@@ -423,7 +440,8 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 	if model.statusMessage.level != statusWarn {
 		t.Fatalf("expected script errors to show warning status, got %v", model.statusMessage.level)
 	}
-	if model.responseLatest == nil || !strings.Contains(model.responseLatest.pretty, "pre-request script") {
+	if model.responseLatest == nil ||
+		!strings.Contains(model.responseLatest.pretty, "pre-request script") {
 		var pretty string
 		if model.responseLatest != nil {
 			pretty = model.responseLatest.pretty
@@ -494,7 +512,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	}
 	doc.Requests = []*restfile.Request{req}
 
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "")
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -558,21 +576,25 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 		globals: newGlobalStore(),
 	}
 
-	model.oauth.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		atomic.AddInt32(&calls, 1)
-		values, err := url.ParseQuery(req.Body.Text)
-		if err != nil {
-			t.Fatalf("parse form: %v", err)
-		}
-		lastForm = copyValues(values)
-		lastAuth = req.Headers.Get("Authorization")
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte(`{"access_token":"token-basic","token_type":"Bearer","expires_in":3600}`),
-			Headers:    http.Header{},
-		}, nil
-	})
+	model.oauth.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			atomic.AddInt32(&calls, 1)
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			lastForm = copyValues(values)
+			lastAuth = req.Headers.Get("Authorization")
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body: []byte(
+					`{"access_token":"token-basic","token_type":"Bearer","expires_in":3600}`,
+				),
+				Headers: http.Header{},
+			}, nil
+		},
+	)
 
 	auth := &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
 		"token_url":     "https://auth.local/token",
@@ -582,7 +604,14 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 	resolver := vars.NewResolver()
-	if err := model.ensureOAuth(context.Background(), req, resolver, httpclient.Options{}, "", time.Second); err != nil {
+	if err := model.ensureOAuth(
+		context.Background(),
+		req,
+		resolver,
+		httpclient.Options{},
+		"",
+		time.Second,
+	); err != nil {
 		t.Fatalf("ensureOAuth: %v", err)
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
@@ -597,7 +626,14 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if err := model.ensureOAuth(context.Background(), req2, resolver, httpclient.Options{}, "", time.Second); err != nil {
+	if err := model.ensureOAuth(
+		context.Background(),
+		req2,
+		resolver,
+		httpclient.Options{},
+		"",
+		time.Second,
+	); err != nil {
 		t.Fatalf("ensureOAuth second: %v", err)
 	}
 	if atomic.LoadInt32(&calls) != 1 {
@@ -612,17 +648,33 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 		oauth:   oauth.NewManager(nil),
 		globals: newGlobalStore(),
 	}
-	model.oauth.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		atomic.AddInt32(&called, 1)
-		return &httpclient.Response{Status: "200", StatusCode: 200, Body: []byte(`{"access_token":"x"}`), Headers: http.Header{}}, nil
-	})
+	model.oauth.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			atomic.AddInt32(&called, 1)
+			return &httpclient.Response{
+				Status:     "200",
+				StatusCode: 200,
+				Body:       []byte(`{"access_token":"x"}`),
+				Headers:    http.Header{},
+			}, nil
+		},
+	)
 	req := &restfile.Request{
 		Headers: http.Header{"Authorization": {"Bearer manual"}},
-		Metadata: restfile.RequestMetadata{Auth: &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
-			"token_url": "https://auth.local/token",
-		}}},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
+				"token_url": "https://auth.local/token",
+			}},
+		},
 	}
-	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "", time.Second); err != nil {
+	if err := model.ensureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpclient.Options{},
+		"",
+		time.Second,
+	); err != nil {
 		t.Fatalf("ensureOAuth with existing header: %v", err)
 	}
 	if atomic.LoadInt32(&called) != 0 {
@@ -650,15 +702,17 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		oauth:   oauth.NewManager(nil),
 		globals: newGlobalStore(),
 	}
-	model.oauth.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		atomic.AddInt32(&requests, 1)
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte(`{"access_token":"token","token_type":"Bearer"}`),
-			Headers:    http.Header{},
-		}, nil
-	})
+	model.oauth.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			atomic.AddInt32(&requests, 1)
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body:       []byte(`{"access_token":"token","token_type":"Bearer"}`),
+				Headers:    http.Header{},
+			}, nil
+		},
+	)
 
 	auth := &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
 		"token_url":     "https://auth.local/token",
@@ -668,11 +722,25 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
+	if err := model.ensureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpclient.Options{},
+		"stage",
+		time.Second,
+	); err != nil {
 		t.Fatalf("ensureOAuth stage: %v", err)
 	}
 	req.Headers = nil
-	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "stage", time.Second); err != nil {
+	if err := model.ensureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpclient.Options{},
+		"stage",
+		time.Second,
+	); err != nil {
 		t.Fatalf("ensureOAuth stage cached: %v", err)
 	}
 	if atomic.LoadInt32(&requests) != 1 {
@@ -680,7 +748,14 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	req.Headers = nil
-	if err := model.ensureOAuth(context.Background(), req, vars.NewResolver(), httpclient.Options{}, "dev", time.Second); err != nil {
+	if err := model.ensureOAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		httpclient.Options{},
+		"dev",
+		time.Second,
+	); err != nil {
 		t.Fatalf("ensureOAuth dev: %v", err)
 	}
 	if atomic.LoadInt32(&requests) != 2 {
@@ -695,10 +770,12 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 		globals: newGlobalStore(),
 	}
 
-	model.oauth.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		<-ctx.Done()
-		return nil, ctx.Err()
-	})
+	model.oauth.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			<-ctx.Done()
+			return nil, ctx.Err()
+		},
+	)
 
 	auth := &restfile.AuthSpec{Type: "oauth2", Params: map[string]string{
 		"token_url": "https://auth.local/token",
@@ -710,7 +787,17 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := model.ensureOAuth(ctx, req, resolver, httpclient.Options{}, "", time.Minute); !errors.Is(err, context.Canceled) {
+		if err := model.ensureOAuth(
+			ctx,
+			req,
+			resolver,
+			httpclient.Options{},
+			"",
+			time.Minute,
+		); !errors.Is(
+			err,
+			context.Canceled,
+		) {
 			t.Errorf("expected context cancellation, got %v", err)
 		}
 	}()
@@ -749,7 +836,7 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 		URL:    "https://example.com",
 	}
 
-	cmd := model.executeRequest(nil, req, httpclient.Options{}, "")
+	cmd := model.executeRequest(nil, req, httpclient.Options{}, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest to return command")
 	}
@@ -785,7 +872,11 @@ func TestCancelActiveRunsStopsSend(t *testing.T) {
 		t.Fatalf("expected sending flag to reset")
 	}
 	if model.statusPulseBase != "" || model.statusPulseFrame != 0 {
-		t.Fatalf("expected pulse state cleared, got %q/%d", model.statusPulseBase, model.statusPulseFrame)
+		t.Fatalf(
+			"expected pulse state cleared, got %q/%d",
+			model.statusPulseBase,
+			model.statusPulseFrame,
+		)
 	}
 	if !canceled {
 		t.Fatalf("expected sendCancel to be invoked")
@@ -827,14 +918,29 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
-				{Scope: restfile.CaptureScopeGlobal, Name: "authToken", Expression: "Bearer {{response.json.token}}", Secret: true},
-				{Scope: restfile.CaptureScopeFile, Name: "lastTrace", Expression: "{{response.headers.X-Trace}}", Secret: false},
-				{Scope: restfile.CaptureScopeRequest, Name: "recentStatus", Expression: "{{response.status}}", Secret: false},
+				{
+					Scope:      restfile.CaptureScopeGlobal,
+					Name:       "authToken",
+					Expression: "Bearer {{response.json.token}}",
+					Secret:     true,
+				},
+				{
+					Scope:      restfile.CaptureScopeFile,
+					Name:       "lastTrace",
+					Expression: "{{response.headers.X-Trace}}",
+					Secret:     false,
+				},
+				{
+					Scope:      restfile.CaptureScopeRequest,
+					Name:       "recentStatus",
+					Expression: "{{response.status}}",
+					Secret:     false,
+				},
 			},
 		},
 	}
 
-	resolver := model.buildResolver(doc, req, "", nil)
+	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
 	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
@@ -884,7 +990,10 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	}
 	varsWithReq := model.collectVariables(doc, req, "")
 	if varsWithReq["recentStatus"] != "200 OK" {
-		t.Fatalf("expected request capture to be available in collected vars, got %q", varsWithReq["recentStatus"])
+		t.Fatalf(
+			"expected request capture to be available in collected vars, got %q",
+			varsWithReq["recentStatus"],
+		)
 	}
 
 	store := model.fileVars.snapshot("dev", "./sample.http")
@@ -923,8 +1032,16 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
-				{Scope: restfile.CaptureScopeGlobal, Name: "status", Expression: "{{response.status}}"},
-				{Scope: restfile.CaptureScopeFile, Name: "lastStatus", Expression: "{{response.status}}"},
+				{
+					Scope:      restfile.CaptureScopeGlobal,
+					Name:       "status",
+					Expression: "{{response.status}}",
+				},
+				{
+					Scope:      restfile.CaptureScopeFile,
+					Name:       "lastStatus",
+					Expression: "{{response.status}}",
+				},
 			},
 		},
 	}
@@ -1004,15 +1121,27 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
-				{Scope: restfile.CaptureScopeRequest, Name: "streamKind", Expression: "{{stream.kind}}"},
-				{Scope: restfile.CaptureScopeFile, Name: "received", Expression: "{{stream.summary.receivedCount}}"},
-				{Scope: restfile.CaptureScopeGlobal, Name: "lastMessage", Expression: "{{stream.events[1].text}}"},
+				{
+					Scope:      restfile.CaptureScopeRequest,
+					Name:       "streamKind",
+					Expression: "{{stream.kind}}",
+				},
+				{
+					Scope:      restfile.CaptureScopeFile,
+					Name:       "received",
+					Expression: "{{stream.summary.receivedCount}}",
+				},
+				{
+					Scope:      restfile.CaptureScopeGlobal,
+					Name:       "lastMessage",
+					Expression: "{{stream.events[1].text}}",
+				},
 			},
 		},
 	}
 
 	doc := &restfile.Document{Path: "./stream.http"}
-	resolver := model.buildResolver(doc, req, "", nil)
+	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
 	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures, ""); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
@@ -1097,7 +1226,9 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 				}
 				time.Sleep(100 * time.Microsecond)
 				if clientTrace.DNSDone != nil {
-					clientTrace.DNSDone(httptrace.DNSDoneInfo{Addrs: []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}})
+					clientTrace.DNSDone(
+						httptrace.DNSDoneInfo{Addrs: []net.IPAddr{{IP: net.ParseIP("127.0.0.1")}}},
+					)
 				}
 				time.Sleep(100 * time.Microsecond)
 				if clientTrace.ConnectStart != nil {
@@ -1141,7 +1272,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 		t.Fatalf("expected single request")
 	}
 	req := doc.Requests[0]
-	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "")
+	cmd := model.executeRequest(doc, req, model.cfg.HTTPOptions, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected executeRequest command")
 	}

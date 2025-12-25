@@ -39,8 +39,29 @@ type AuthSpec struct {
 
 type ScriptBlock struct {
 	Kind     string
+	Lang     string
 	Body     string
 	FilePath string
+}
+
+type UseSpec struct {
+	Path  string
+	Alias string
+	Line  int
+}
+
+type ConditionSpec struct {
+	Expression string
+	Line       int
+	Col        int
+	Negate     bool
+}
+
+type ForEachSpec struct {
+	Expression string
+	Var        string
+	Line       int
+	Col        int
 }
 
 type BodySource struct {
@@ -127,6 +148,11 @@ type RequestMetadata struct {
 	AllowSensitiveHeaders bool
 	Auth                  *AuthSpec
 	Scripts               []ScriptBlock
+	Uses                  []UseSpec
+	Applies               []ApplySpec
+	When                  *ConditionSpec
+	ForEach               *ForEachSpec
+	Asserts               []AssertSpec
 	Captures              []CaptureSpec
 	Profile               *ProfileSpec
 	Trace                 *TraceSpec
@@ -168,6 +194,18 @@ type CaptureSpec struct {
 	Name       string
 	Expression string
 	Secret     bool
+}
+
+type AssertSpec struct {
+	Expression string
+	Message    string
+	Line       int
+}
+
+type ApplySpec struct {
+	Expression string
+	Line       int
+	Col        int
 }
 
 type Request struct {
@@ -245,6 +283,7 @@ type Document struct {
 	Constants []Constant
 	SSH       []SSHProfile
 	Settings  map[string]string
+	Uses      []UseSpec
 	Requests  []*Request
 	Workflows []Workflow
 	Errors    []ParseError
@@ -268,7 +307,17 @@ type Workflow struct {
 	LineRange        LineRange
 }
 
+type WorkflowStepKind string
+
+const (
+	WorkflowStepKindRequest WorkflowStepKind = "step"
+	WorkflowStepKindIf      WorkflowStepKind = "if"
+	WorkflowStepKindSwitch  WorkflowStepKind = "switch"
+	WorkflowStepKindForEach WorkflowStepKind = "for-each"
+)
+
 type WorkflowStep struct {
+	Kind      WorkflowStepKind
 	Name      string
 	Using     string
 	OnFailure WorkflowFailureMode
@@ -276,6 +325,45 @@ type WorkflowStep struct {
 	Vars      map[string]string
 	Options   map[string]string
 	Line      int
+	When      *ConditionSpec
+	If        *WorkflowIf
+	Switch    *WorkflowSwitch
+	ForEach   *WorkflowForEach
+}
+
+type WorkflowIf struct {
+	Cond  string
+	Then  WorkflowIfBranch
+	Elifs []WorkflowIfBranch
+	Else  *WorkflowIfBranch
+	Line  int
+}
+
+type WorkflowIfBranch struct {
+	Cond string
+	Run  string
+	Fail string
+	Line int
+}
+
+type WorkflowSwitch struct {
+	Expr    string
+	Cases   []WorkflowSwitchCase
+	Default *WorkflowSwitchCase
+	Line    int
+}
+
+type WorkflowSwitchCase struct {
+	Expr string
+	Run  string
+	Fail string
+	Line int
+}
+
+type WorkflowForEach struct {
+	Expr string
+	Var  string
+	Line int
 }
 
 type ParseError struct {

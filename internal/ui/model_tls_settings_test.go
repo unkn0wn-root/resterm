@@ -29,7 +29,11 @@ func TestApplyHTTPSettingsParsesTLS(t *testing.T) {
 		t.Fatalf("expected InsecureSkipVerify to be set")
 	}
 	if opts.ClientCert != "cert-one" || opts.ClientKey != "key-one" {
-		t.Fatalf("expected client cert/key to expand templates, got %q / %q", opts.ClientCert, opts.ClientKey)
+		t.Fatalf(
+			"expected client cert/key to expand templates, got %q / %q",
+			opts.ClientCert,
+			opts.ClientKey,
+		)
 	}
 	if len(opts.RootCAs) != 2 || opts.RootCAs[0] != "a.pem" || opts.RootCAs[1] != "b.pem" {
 		t.Fatalf("unexpected root CAs: %#v", opts.RootCAs)
@@ -55,7 +59,11 @@ func TestApplyGRPCSettingsParsesTLS(t *testing.T) {
 		t.Fatalf("expected insecure to be overridden to false")
 	}
 	if opts.ClientCert != "cert-two" || opts.ClientKey != "key-two" {
-		t.Fatalf("expected grpc client cert/key to expand templates, got %q / %q", opts.ClientCert, opts.ClientKey)
+		t.Fatalf(
+			"expected grpc client cert/key to expand templates, got %q / %q",
+			opts.ClientCert,
+			opts.ClientKey,
+		)
 	}
 	if len(opts.RootCAs) != 1 || opts.RootCAs[0] != "ca-one" {
 		t.Fatalf("unexpected grpc root CAs: %#v", opts.RootCAs)

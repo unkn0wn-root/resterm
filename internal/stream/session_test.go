@@ -35,7 +35,11 @@ func TestSessionPublishAndSubscribe(t *testing.T) {
 }
 
 func TestSessionDropNewestPolicy(t *testing.T) {
-	s := NewSession(context.Background(), KindSSE, Config{ListenerBuffer: 1, DropPolicy: DropNewest})
+	s := NewSession(
+		context.Background(),
+		KindSSE,
+		Config{ListenerBuffer: 1, DropPolicy: DropNewest},
+	)
 	s.MarkOpen()
 	listener := s.Subscribe()
 

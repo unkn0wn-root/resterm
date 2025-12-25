@@ -58,7 +58,10 @@ func TestWrapLineSegmentsSplitsLongWhitespace(t *testing.T) {
 		t.Fatalf("expected first segment to contain 5 spaces, got %q", segments[0])
 	}
 	if !strings.HasSuffix(segments[len(segments)-1], "x") {
-		t.Fatalf("expected final segment to include trailing content, got %q", segments[len(segments)-1])
+		t.Fatalf(
+			"expected final segment to include trailing content, got %q",
+			segments[len(segments)-1],
+		)
 	}
 }
 
@@ -122,7 +125,10 @@ func TestWrapContentForTabRawMaintainsIndentOnWrap(t *testing.T) {
 		t.Fatalf("expected continuation line after indented key, got %v", lines)
 	}
 	if !strings.HasPrefix(lines[indentLineIndex+1], "    ") {
-		t.Fatalf("expected continuation line to retain indentation, got %q", lines[indentLineIndex+1])
+		t.Fatalf(
+			"expected continuation line to retain indentation, got %q",
+			lines[indentLineIndex+1],
+		)
 	}
 }
 
@@ -141,7 +147,13 @@ func TestWrapToWidthRetainsMultilineIndentationAndColor(t *testing.T) {
 	if !strings.HasPrefix(lines[0], "    {") {
 		t.Fatalf("expected first line to retain indentation, got %q", lines[0])
 	}
-	if joined := strings.Join(lines, ""); !strings.Contains(joined, "supercalifragilisticexpialidocious") {
+	if joined := strings.Join(
+		lines,
+		"",
+	); !strings.Contains(
+		joined,
+		"supercalifragilisticexpialidocious",
+	) {
 		t.Fatalf("expected wrapped content to retain long word, got %q", joined)
 	}
 }
@@ -153,7 +165,11 @@ func TestWrapStructuredLineAddsDefaultIndent(t *testing.T) {
 		t.Fatalf("expected line to wrap, got %d segments", len(segments))
 	}
 	if !strings.HasPrefix(stripANSIEscape(segments[1]), wrapContinuationUnit) {
-		t.Fatalf("expected continuation to start with %q, got %q", wrapContinuationUnit, segments[1])
+		t.Fatalf(
+			"expected continuation to start with %q, got %q",
+			wrapContinuationUnit,
+			segments[1],
+		)
 	}
 }
 
@@ -177,7 +193,10 @@ func TestWrapStructuredLineHandlesNarrowWidth(t *testing.T) {
 		t.Fatalf("expected line to wrap with narrow width, got %d segments", len(segments))
 	}
 	if strings.HasPrefix(stripANSIEscape(segments[1]), wrapContinuationUnit) {
-		t.Fatalf("expected continuation indent to be suppressed for narrow width, got %q", segments[1])
+		t.Fatalf(
+			"expected continuation indent to be suppressed for narrow width, got %q",
+			segments[1],
+		)
 	}
 }
 
@@ -212,7 +231,10 @@ func TestWrapStructuredLineMaintainsValueColor(t *testing.T) {
 	keyColor := "\x1b[32m"
 	valueColor := "\x1b[37m"
 	reset := "\x1b[0m"
-	line := "    " + keyColor + "\"repository_search_url\"" + reset + ": " + valueColor + "\"https://api.github.com/search/" + strings.Repeat("x", 12) + "\"" + reset
+	line := "    " + keyColor + "\"repository_search_url\"" + reset + ": " + valueColor + "\"https://api.github.com/search/" + strings.Repeat(
+		"x",
+		12,
+	) + "\"" + reset
 	segments := wrapStructuredLine(line, 44)
 	if len(segments) < 2 {
 		t.Fatalf("expected wrapped segments, got %d", len(segments))

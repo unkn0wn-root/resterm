@@ -68,6 +68,87 @@ GET https://example.com/api
 	}
 }
 
+func TestParseAssertDirective(t *testing.T) {
+	src := `# @assert status == 200
+# @assert contains(header("Content-Type"), "json") => "content type"
+GET https://example.com/api
+`
+	doc := Parse("assert.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Asserts) != 2 {
+		t.Fatalf("expected 2 asserts, got %d", len(req.Metadata.Asserts))
+	}
+	first := req.Metadata.Asserts[0]
+	if first.Expression != "status == 200" {
+		t.Fatalf("unexpected assert expression: %q", first.Expression)
+	}
+	if first.Line != 1 {
+		t.Fatalf("expected line 1, got %d", first.Line)
+	}
+	second := req.Metadata.Asserts[1]
+	if second.Expression != `contains(header("Content-Type"), "json")` {
+		t.Fatalf("unexpected assert expression: %q", second.Expression)
+	}
+	if second.Message != "content type" {
+		t.Fatalf("unexpected assert message: %q", second.Message)
+	}
+	if second.Line != 2 {
+		t.Fatalf("expected line 2, got %d", second.Line)
+	}
+}
+
+func TestParseScriptLang(t *testing.T) {
+	src := `# @script pre-request lang=rts
+> request.setHeader("X-Test", "1")
+GET https://example.com
+`
+	doc := Parse("script-lang.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	script := req.Metadata.Scripts[0]
+	if script.Kind != "pre-request" {
+		t.Fatalf("expected pre-request script, got %s", script.Kind)
+	}
+	if script.Lang != "rts" {
+		t.Fatalf("expected rts lang, got %q", script.Lang)
+	}
+	if script.Body == "" {
+		t.Fatalf("expected script body to be captured")
+	}
+}
+
+func TestParseApplyDirective(t *testing.T) {
+	src := `# @apply {headers: {"X-Test": "1"}}
+GET https://example.com
+`
+	doc := Parse("apply.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Applies) != 1 {
+		t.Fatalf("expected 1 apply directive, got %d", len(req.Metadata.Applies))
+	}
+	spec := req.Metadata.Applies[0]
+	if spec.Expression != `{headers: {"X-Test": "1"}}` {
+		t.Fatalf("unexpected apply expression: %q", spec.Expression)
+	}
+	if spec.Line != 1 {
+		t.Fatalf("expected line 1, got %d", spec.Line)
+	}
+	if spec.Col != 1 {
+		t.Fatalf("expected col 1, got %d", spec.Col)
+	}
+}
+
 func TestFileLevelSettingsCaptured(t *testing.T) {
 	src := `# @setting timeout 10s
 # @setting http-insecure true
@@ -226,7 +307,8 @@ GET https://example.com
 		t.Fatalf("expected one secret global, got %#v", doc.Globals)
 	}
 
-	if len(doc.Variables) != 1 || doc.Variables[0].Name != "base.url" || !doc.Variables[0].Secret || doc.Variables[0].Scope != restfile.ScopeFile {
+	if len(doc.Variables) != 1 || doc.Variables[0].Name != "base.url" || !doc.Variables[0].Secret ||
+		doc.Variables[0].Scope != restfile.ScopeFile {
 		t.Fatalf("expected one secret file variable, got %#v", doc.Variables)
 	}
 
@@ -234,7 +316,8 @@ GET https://example.com
 	if len(req.Variables) != 1 {
 		t.Fatalf("expected one request variable, got %d", len(req.Variables))
 	}
-	if rv := req.Variables[0]; rv.Name != "trace.id" || rv.Scope != restfile.ScopeRequest || !rv.Secret {
+	if rv := req.Variables[0]; rv.Name != "trace.id" || rv.Scope != restfile.ScopeRequest ||
+		!rv.Secret {
 		t.Fatalf("unexpected request var: %#v", rv)
 	}
 }
@@ -620,7 +703,9 @@ GET https://example.com
 }
 
 func TestParseOAuth2AuthSpec(t *testing.T) {
-	spec := parseAuthSpec(`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`)
+	spec := parseAuthSpec(
+		`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`,
+	)
 	if spec == nil {
 		t.Fatalf("expected oauth2 spec")
 	}
@@ -876,7 +961,8 @@ GET https://example.com/audit
 	if workflow.DefaultOnFailure != restfile.WorkflowOnFailureContinue {
 		t.Fatalf("expected default on-failure=continue, got %s", workflow.DefaultOnFailure)
 	}
-	if workflow.Description == "" || !strings.Contains(workflow.Description, "Provision new account flow") {
+	if workflow.Description == "" ||
+		!strings.Contains(workflow.Description, "Provision new account flow") {
 		t.Fatalf("expected workflow description, got %q", workflow.Description)
 	}
 	if len(workflow.Tags) != 2 {
@@ -1156,7 +1242,8 @@ GET ws://example.com/socket
 	if ws.Steps[5].Type != restfile.WebSocketStepWait || ws.Steps[5].Duration != 2*time.Second {
 		t.Fatalf("unexpected wait step: %+v", ws.Steps[5])
 	}
-	if ws.Steps[6].Type != restfile.WebSocketStepClose || ws.Steps[6].Code != 1001 || ws.Steps[6].Reason != "going away" {
+	if ws.Steps[6].Type != restfile.WebSocketStepClose || ws.Steps[6].Code != 1001 ||
+		ws.Steps[6].Reason != "going away" {
 		t.Fatalf("unexpected close step: %+v", ws.Steps[6])
 	}
 }

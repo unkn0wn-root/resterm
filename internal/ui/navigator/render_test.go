@@ -23,7 +23,8 @@ func TestRenderBadgesUsesCommaSeparator(t *testing.T) {
 	if strings.HasSuffix(clean, ",") {
 		t.Fatalf("expected no trailing comma, got %q", clean)
 	}
-	if !strings.Contains(clean, "SSE") || !strings.Contains(clean, "SCRIPT") || !strings.Contains(clean, "WS") {
+	if !strings.Contains(clean, "SSE") || !strings.Contains(clean, "SCRIPT") ||
+		!strings.Contains(clean, "WS") {
 		t.Fatalf("expected all badge labels to render, got %q", clean)
 	}
 }
@@ -71,7 +72,8 @@ func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 	if !strings.Contains(clean, "AUTH") || !strings.Contains(clean, "gRPC") {
 		t.Fatalf("expected badges to render in list row, got %q", clean)
 	}
-	if !strings.Contains(clean, "Fetch user") || !strings.Contains(clean, "https://example.com/users/1") {
+	if !strings.Contains(clean, "Fetch user") ||
+		!strings.Contains(clean, "https://example.com/users/1") {
 		t.Fatalf("expected request summary to remain in list row, got %q", clean)
 	}
 }

@@ -52,7 +52,12 @@ func TestManagerCompletionHook(t *testing.T) {
 		receivedEvents = events
 	})
 
-	event := &Event{Kind: KindSSE, Direction: DirReceive, Payload: []byte("test"), Timestamp: time.Now()}
+	event := &Event{
+		Kind:      KindSSE,
+		Direction: DirReceive,
+		Payload:   []byte("test"),
+		Timestamp: time.Now(),
+	}
 	session.Publish(event)
 	session.Close(nil)
 

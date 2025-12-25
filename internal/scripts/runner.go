@@ -72,7 +72,10 @@ type TestResult struct {
 	Elapsed time.Duration
 }
 
-func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestInput) (PreRequestOutput, error) {
+func (r *Runner) RunPreRequest(
+	scripts []restfile.ScriptBlock,
+	input PreRequestInput,
+) (PreRequestOutput, error) {
 	ctx := input.Context
 	if ctx == nil {
 		ctx = context.Background()
@@ -91,6 +94,9 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 		}
 
 		if strings.ToLower(block.Kind) != "pre-request" {
+			continue
+		}
+		if scriptLang(block) != "js" {
 			continue
 		}
 
@@ -123,12 +129,18 @@ func (r *Runner) RunPreRequest(scripts []restfile.ScriptBlock, input PreRequestI
 	return result, nil
 }
 
-func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
+func (r *Runner) RunTests(
+	scripts []restfile.ScriptBlock,
+	input TestInput,
+) ([]TestResult, map[string]GlobalValue, error) {
 	var aggregated []TestResult
 	changes := make(map[string]GlobalValue)
 
 	for idx, block := range scripts {
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
+			continue
+		}
+		if scriptLang(block) != "js" {
 			continue
 		}
 
@@ -157,7 +169,22 @@ func (r *Runner) RunTests(scripts []restfile.ScriptBlock, input TestInput) ([]Te
 	return aggregated, changes, nil
 }
 
-func (r *Runner) executePreRequestScript(ctx context.Context, script string, input PreRequestInput, output *PreRequestOutput) error {
+func scriptLang(block restfile.ScriptBlock) string {
+	lang := strings.ToLower(strings.TrimSpace(block.Lang))
+	switch lang {
+	case "", "javascript":
+		return "js"
+	default:
+		return lang
+	}
+}
+
+func (r *Runner) executePreRequestScript(
+	ctx context.Context,
+	script string,
+	input PreRequestInput,
+	output *PreRequestOutput,
+) error {
 	vm := goja.New()
 	if ctx != nil {
 		if err := ctx.Err(); err != nil {
@@ -200,7 +227,10 @@ func (r *Runner) executePreRequestScript(ctx context.Context, script string, inp
 	return nil
 }
 
-func (r *Runner) executeTestScript(script string, input TestInput) ([]TestResult, map[string]GlobalValue, error) {
+func (r *Runner) executeTestScript(
+	script string,
+	input TestInput,
+) ([]TestResult, map[string]GlobalValue, error) {
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
 	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo, input.Trace)
@@ -478,7 +508,13 @@ type testAPI struct {
 	vm        *goja.Runtime
 }
 
-func newTestAPI(resp *Response, vars map[string]string, globals map[string]GlobalValue, stream *StreamInfo, trace *TraceInput) *testAPI {
+func newTestAPI(
+	resp *Response,
+	vars map[string]string,
+	globals map[string]GlobalValue,
+	stream *StreamInfo,
+	trace *TraceInput,
+) *testAPI {
 	copyVars := make(map[string]string, len(vars))
 	for k, v := range vars {
 		copyVars[k] = v

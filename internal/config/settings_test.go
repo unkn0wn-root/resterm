@@ -23,7 +23,11 @@ func TestLoadSettingsReturnsDefaultHandleWhenMissing(t *testing.T) {
 		t.Fatalf("expected format %q, got %q", SettingsFormatTOML, handle.Format)
 	}
 	if settings.Layout.SidebarWidth != LayoutSidebarWidthDefault {
-		t.Fatalf("expected default sidebar width %v, got %v", LayoutSidebarWidthDefault, settings.Layout.SidebarWidth)
+		t.Fatalf(
+			"expected default sidebar width %v, got %v",
+			LayoutSidebarWidthDefault,
+			settings.Layout.SidebarWidth,
+		)
 	}
 	if settings.DefaultTheme != "" {
 		t.Fatalf("expected empty default theme, got %q", settings.DefaultTheme)

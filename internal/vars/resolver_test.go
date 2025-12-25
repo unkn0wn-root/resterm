@@ -109,3 +109,55 @@ func TestDynamicHelpersCaseInsensitive(t *testing.T) {
 		}
 	}
 }
+
+func TestExpandTemplatesExpr(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	resolver.SetExprEval(func(expr string, pos ExprPos) (string, error) {
+		if expr != "1+1" {
+			t.Fatalf("unexpected expr %q", expr)
+		}
+		return "2", nil
+	})
+
+	out, err := resolver.ExpandTemplates("{{= 1+1 }}")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "2" {
+		t.Fatalf("expected 2, got %q", out)
+	}
+}
+
+func TestExpandTemplatesExprMissing(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	_, err := resolver.ExpandTemplates("{{= 1 }}")
+	if err == nil {
+		t.Fatalf("expected error for missing expr evaluator")
+	}
+}
+
+func TestExpandTemplatesStaticExpr(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	called := false
+	resolver.SetExprEval(func(expr string, pos ExprPos) (string, error) {
+		called = true
+		return "ok", nil
+	})
+
+	out, err := resolver.ExpandTemplatesStatic("{{= 1+1 }}")
+	if err == nil {
+		t.Fatalf("expected error for static expression")
+	}
+	if out != "{{= 1+1 }}" {
+		t.Fatalf("unexpected expansion result %q", out)
+	}
+	if called {
+		t.Fatalf("expected static expansion to skip expression eval")
+	}
+}

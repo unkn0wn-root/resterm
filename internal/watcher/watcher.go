@@ -209,7 +209,8 @@ func (w *Watcher) check(e *entry) (Event, bool) {
 	}
 
 	next := fingerprintFromStat(info, data)
-	changed := e.missing || next.Hash != e.fp.Hash || !next.Mod.Equal(e.fp.Mod) || next.Size != e.fp.Size
+	changed := e.missing || next.Hash != e.fp.Hash || !next.Mod.Equal(e.fp.Mod) ||
+		next.Size != e.fp.Size
 
 	prev := e.fp
 	w.updateEntry(e.path, next, false)

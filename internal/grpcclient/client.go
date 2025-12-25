@@ -61,7 +61,12 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq *restfile.GRPCRequest, options Options) (resp *Response, err error) {
+func (c *Client) Execute(
+	parent context.Context,
+	req *restfile.Request,
+	grpcReq *restfile.GRPCRequest,
+	options Options,
+) (resp *Response, err error) {
 	if grpcReq == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "missing grpc metadata")
 	}
@@ -99,9 +104,12 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	}
 	if plan := options.SSH; plan != nil && plan.Active() {
 		cfgCopy := *plan.Config
-		dialOpts = append(dialOpts, grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-			return plan.Manager.DialContext(ctx, cfgCopy, "tcp", addr)
-		}))
+		dialOpts = append(
+			dialOpts,
+			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
+				return plan.Manager.DialContext(ctx, cfgCopy, "tcp", addr)
+			}),
+		)
 	}
 	if grpcReq.Authority != "" {
 		dialOpts = append(dialOpts, grpc.WithAuthority(grpcReq.Authority))
@@ -146,7 +154,14 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 
 	outputMsg := dynamicpb.NewMessage(methodDesc.Output())
 	start := time.Now()
-	invokeErr := conn.Invoke(callCtx, grpcReq.FullMethod, inputMsg, outputMsg, grpc.Header(&headerMD), grpc.Trailer(&trailerMD))
+	invokeErr := conn.Invoke(
+		callCtx,
+		grpcReq.FullMethod,
+		inputMsg,
+		outputMsg,
+		grpc.Header(&headerMD),
+		grpc.Trailer(&trailerMD),
+	)
 	duration := time.Since(start)
 
 	resp = &Response{
@@ -168,7 +183,12 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 		return resp, errdef.Wrap(errdef.CodeHTTP, invokeErr, "invoke grpc method")
 	}
 
-	marshalled, err := protojson.MarshalOptions{Multiline: true, EmitUnpopulated: true}.Marshal(outputMsg)
+	marshalled, err := protojson.MarshalOptions{
+		Multiline:       true,
+		EmitUnpopulated: true,
+	}.Marshal(
+		outputMsg,
+	)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode grpc response")
 	}
@@ -190,7 +210,12 @@ func (c *Client) Execute(parent context.Context, req *restfile.Request, grpcReq 
 	return resp, nil
 }
 
-func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientConn, grpcReq *restfile.GRPCRequest, options Options) (protoreflect.MethodDescriptor, error) {
+func (c *Client) resolveMethodDescriptor(
+	ctx context.Context,
+	conn *grpc.ClientConn,
+	grpcReq *restfile.GRPCRequest,
+	options Options,
+) (protoreflect.MethodDescriptor, error) {
 	if grpcReq.FullMethod == "" {
 		return nil, errdef.New(errdef.CodeHTTP, "grpc method not specified")
 	}
@@ -208,7 +233,10 @@ func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientC
 	}
 
 	if !grpcReq.UseReflection {
-		return nil, errdef.New(errdef.CodeHTTP, "grpc reflection disabled and no descriptor provided")
+		return nil, errdef.New(
+			errdef.CodeHTTP,
+			"grpc reflection disabled and no descriptor provided",
+		)
 	}
 
 	fds, err := fetchDescriptorsViaReflection(ctx, conn, grpcReq.FullMethod)
@@ -223,7 +251,9 @@ func (c *Client) resolveMethodDescriptor(ctx context.Context, conn *grpc.ClientC
 	return findMethodInFiles(files, grpcReq)
 }
 
-func (c *Client) loadDescriptorSet(descriptorPath, baseDir string) (*descriptorpb.FileDescriptorSet, error) {
+func (c *Client) loadDescriptorSet(
+	descriptorPath, baseDir string,
+) (*descriptorpb.FileDescriptorSet, error) {
 	path := descriptorPath
 	if !filepath.IsAbs(path) && baseDir != "" {
 		path = filepath.Join(baseDir, path)
@@ -231,7 +261,12 @@ func (c *Client) loadDescriptorSet(descriptorPath, baseDir string) (*descriptorp
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read grpc descriptor %s", descriptorPath)
+		return nil, errdef.Wrap(
+			errdef.CodeFilesystem,
+			err,
+			"read grpc descriptor %s",
+			descriptorPath,
+		)
 	}
 
 	fds := &descriptorpb.FileDescriptorSet{}
@@ -256,7 +291,12 @@ func (c *Client) resolveMessage(grpcReq *restfile.GRPCRequest, baseDir string) (
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read grpc message file %s", grpcReq.MessageFile)
+		return "", errdef.Wrap(
+			errdef.CodeFilesystem,
+			err,
+			"read grpc message file %s",
+			grpcReq.MessageFile,
+		)
 	}
 	return string(data), nil
 }
@@ -275,7 +315,10 @@ func buildTransportCredentials(opts Options) (credentials.TransportCredentials, 
 	return credentials.NewTLS(cfg), nil
 }
 
-func findMethodInFiles(files *protoregistry.Files, grpcReq *restfile.GRPCRequest) (protoreflect.MethodDescriptor, error) {
+func findMethodInFiles(
+	files *protoregistry.Files,
+	grpcReq *restfile.GRPCRequest,
+) (protoreflect.MethodDescriptor, error) {
 	serviceName := protoreflect.FullName(grpcReq.Service)
 	if grpcReq.Package != "" {
 		serviceName = protoreflect.FullName(grpcReq.Package + "." + grpcReq.Service)
@@ -293,12 +336,21 @@ func findMethodInFiles(files *protoregistry.Files, grpcReq *restfile.GRPCRequest
 
 	method := svcDesc.Methods().ByName(protoreflect.Name(grpcReq.Method))
 	if method == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "method %s not found on %s", grpcReq.Method, serviceName)
+		return nil, errdef.New(
+			errdef.CodeHTTP,
+			"method %s not found on %s",
+			grpcReq.Method,
+			serviceName,
+		)
 	}
 	return method, nil
 }
 
-func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, fullMethod string) (set *descriptorpb.FileDescriptorSet, err error) {
+func fetchDescriptorsViaReflection(
+	ctx context.Context,
+	conn *grpc.ClientConn,
+	fullMethod string,
+) (set *descriptorpb.FileDescriptorSet, err error) {
 	client := reflectpb.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
 	if err != nil {
@@ -321,7 +373,9 @@ func fetchDescriptorsViaReflection(ctx context.Context, conn *grpc.ClientConn, f
 	}
 
 	request := &reflectpb.ServerReflectionRequest{
-		MessageRequest: &reflectpb.ServerReflectionRequest_FileContainingSymbol{FileContainingSymbol: symbol},
+		MessageRequest: &reflectpb.ServerReflectionRequest_FileContainingSymbol{
+			FileContainingSymbol: symbol,
+		},
 	}
 	if err := stream.Send(request); err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "send reflection request")

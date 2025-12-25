@@ -8,141 +8,146 @@ import (
 )
 
 type Metadata struct {
-	Name        string   `json:"name" toml:"name"`
+	Name        string   `json:"name"        toml:"name"`
 	Description string   `json:"description" toml:"description"`
-	Author      string   `json:"author" toml:"author"`
-	Version     string   `json:"version" toml:"version"`
-	Tags        []string `json:"tags" toml:"tags"`
+	Author      string   `json:"author"      toml:"author"`
+	Version     string   `json:"version"     toml:"version"`
+	Tags        []string `json:"tags"        toml:"tags"`
 }
 
 type ThemeSpec struct {
-	Metadata        *Metadata            `json:"metadata" toml:"metadata"`
-	Styles          StylesSpec           `json:"styles" toml:"styles"`
-	Colors          ColorsSpec           `json:"colors" toml:"colors"`
-	HeaderSegments  []HeaderSegmentSpec  `json:"header_segments" toml:"header_segments"`
+	Metadata        *Metadata            `json:"metadata"         toml:"metadata"`
+	Styles          StylesSpec           `json:"styles"           toml:"styles"`
+	Colors          ColorsSpec           `json:"colors"           toml:"colors"`
+	HeaderSegments  []HeaderSegmentSpec  `json:"header_segments"  toml:"header_segments"`
 	CommandSegments []CommandSegmentSpec `json:"command_segments" toml:"command_segments"`
-	EditorMetadata  *EditorMetadataSpec  `json:"editor_metadata" toml:"editor_metadata"`
+	EditorMetadata  *EditorMetadataSpec  `json:"editor_metadata"  toml:"editor_metadata"`
 }
 
 type StylesSpec struct {
-	BrowserBorder                 *StyleSpec `json:"browser_border" toml:"browser_border"`
-	EditorBorder                  *StyleSpec `json:"editor_border" toml:"editor_border"`
-	ResponseBorder                *StyleSpec `json:"response_border" toml:"response_border"`
-	NavigatorTitle                *StyleSpec `json:"navigator_title" toml:"navigator_title"`
-	NavigatorTitleSelected        *StyleSpec `json:"navigator_title_selected" toml:"navigator_title_selected"`
-	NavigatorSubtitle             *StyleSpec `json:"navigator_subtitle" toml:"navigator_subtitle"`
-	NavigatorSubtitleSelected     *StyleSpec `json:"navigator_subtitle_selected" toml:"navigator_subtitle_selected"`
-	NavigatorBadge                *StyleSpec `json:"navigator_badge" toml:"navigator_badge"`
-	NavigatorTag                  *StyleSpec `json:"navigator_tag" toml:"navigator_tag"`
-	AppFrame                      *StyleSpec `json:"app_frame" toml:"app_frame"`
-	Header                        *StyleSpec `json:"header" toml:"header"`
-	HeaderTitle                   *StyleSpec `json:"header_title" toml:"header_title"`
-	HeaderValue                   *StyleSpec `json:"header_value" toml:"header_value"`
-	HeaderSeparator               *StyleSpec `json:"header_separator" toml:"header_separator"`
-	StatusBar                     *StyleSpec `json:"status_bar" toml:"status_bar"`
-	StatusBarKey                  *StyleSpec `json:"status_bar_key" toml:"status_bar_key"`
-	StatusBarValue                *StyleSpec `json:"status_bar_value" toml:"status_bar_value"`
-	CommandBar                    *StyleSpec `json:"command_bar" toml:"command_bar"`
-	CommandBarHint                *StyleSpec `json:"command_bar_hint" toml:"command_bar_hint"`
-	ResponseSearchHighlight       *StyleSpec `json:"response_search_highlight" toml:"response_search_highlight"`
+	BrowserBorder                 *StyleSpec `json:"browser_border"                   toml:"browser_border"`
+	EditorBorder                  *StyleSpec `json:"editor_border"                    toml:"editor_border"`
+	ResponseBorder                *StyleSpec `json:"response_border"                  toml:"response_border"`
+	NavigatorTitle                *StyleSpec `json:"navigator_title"                  toml:"navigator_title"`
+	NavigatorTitleSelected        *StyleSpec `json:"navigator_title_selected"         toml:"navigator_title_selected"`
+	NavigatorSubtitle             *StyleSpec `json:"navigator_subtitle"               toml:"navigator_subtitle"`
+	NavigatorSubtitleSelected     *StyleSpec `json:"navigator_subtitle_selected"      toml:"navigator_subtitle_selected"`
+	NavigatorBadge                *StyleSpec `json:"navigator_badge"                  toml:"navigator_badge"`
+	NavigatorTag                  *StyleSpec `json:"navigator_tag"                    toml:"navigator_tag"`
+	AppFrame                      *StyleSpec `json:"app_frame"                        toml:"app_frame"`
+	Header                        *StyleSpec `json:"header"                           toml:"header"`
+	HeaderTitle                   *StyleSpec `json:"header_title"                     toml:"header_title"`
+	HeaderValue                   *StyleSpec `json:"header_value"                     toml:"header_value"`
+	HeaderSeparator               *StyleSpec `json:"header_separator"                 toml:"header_separator"`
+	StatusBar                     *StyleSpec `json:"status_bar"                       toml:"status_bar"`
+	StatusBarKey                  *StyleSpec `json:"status_bar_key"                   toml:"status_bar_key"`
+	StatusBarValue                *StyleSpec `json:"status_bar_value"                 toml:"status_bar_value"`
+	CommandBar                    *StyleSpec `json:"command_bar"                      toml:"command_bar"`
+	CommandBarHint                *StyleSpec `json:"command_bar_hint"                 toml:"command_bar_hint"`
+	ResponseSearchHighlight       *StyleSpec `json:"response_search_highlight"        toml:"response_search_highlight"`
 	ResponseSearchHighlightActive *StyleSpec `json:"response_search_highlight_active" toml:"response_search_highlight_active"`
-	Tabs                          *StyleSpec `json:"tabs" toml:"tabs"`
-	TabActive                     *StyleSpec `json:"tab_active" toml:"tab_active"`
-	TabInactive                   *StyleSpec `json:"tab_inactive" toml:"tab_inactive"`
-	Notification                  *StyleSpec `json:"notification" toml:"notification"`
-	Error                         *StyleSpec `json:"error" toml:"error"`
-	Success                       *StyleSpec `json:"success" toml:"success"`
-	HeaderBrand                   *StyleSpec `json:"header_brand" toml:"header_brand"`
-	CommandDivider                *StyleSpec `json:"command_divider" toml:"command_divider"`
-	PaneTitle                     *StyleSpec `json:"pane_title" toml:"pane_title"`
-	PaneTitleFile                 *StyleSpec `json:"pane_title_file" toml:"pane_title_file"`
-	PaneTitleRequests             *StyleSpec `json:"pane_title_requests" toml:"pane_title_requests"`
-	PaneDivider                   *StyleSpec `json:"pane_divider" toml:"pane_divider"`
-	EditorHintBox                 *StyleSpec `json:"editor_hint_box" toml:"editor_hint_box"`
-	EditorHintItem                *StyleSpec `json:"editor_hint_item" toml:"editor_hint_item"`
-	EditorHintSelected            *StyleSpec `json:"editor_hint_selected" toml:"editor_hint_selected"`
-	EditorHintAnnotation          *StyleSpec `json:"editor_hint_annotation" toml:"editor_hint_annotation"`
-	ListItemTitle                 *StyleSpec `json:"list_item_title" toml:"list_item_title"`
-	ListItemDescription           *StyleSpec `json:"list_item_description" toml:"list_item_description"`
-	ListItemSelectedTitle         *StyleSpec `json:"list_item_selected_title" toml:"list_item_selected_title"`
-	ListItemSelectedDescription   *StyleSpec `json:"list_item_selected_description" toml:"list_item_selected_description"`
-	ListItemDimmedTitle           *StyleSpec `json:"list_item_dimmed_title" toml:"list_item_dimmed_title"`
-	ListItemDimmedDescription     *StyleSpec `json:"list_item_dimmed_description" toml:"list_item_dimmed_description"`
-	ListItemFilterMatch           *StyleSpec `json:"list_item_filter_match" toml:"list_item_filter_match"`
-	ResponseContent               *StyleSpec `json:"response_content" toml:"response_content"`
-	ResponseContentRaw            *StyleSpec `json:"response_content_raw" toml:"response_content_raw"`
-	ResponseContentHeaders        *StyleSpec `json:"response_content_headers" toml:"response_content_headers"`
-	StreamContent                 *StyleSpec `json:"stream_content" toml:"stream_content"`
-	StreamTimestamp               *StyleSpec `json:"stream_timestamp" toml:"stream_timestamp"`
-	StreamDirectionSend           *StyleSpec `json:"stream_direction_send" toml:"stream_direction_send"`
-	StreamDirectionReceive        *StyleSpec `json:"stream_direction_receive" toml:"stream_direction_receive"`
-	StreamDirectionInfo           *StyleSpec `json:"stream_direction_info" toml:"stream_direction_info"`
-	StreamEventName               *StyleSpec `json:"stream_event_name" toml:"stream_event_name"`
-	StreamData                    *StyleSpec `json:"stream_data" toml:"stream_data"`
-	StreamBinary                  *StyleSpec `json:"stream_binary" toml:"stream_binary"`
-	StreamSummary                 *StyleSpec `json:"stream_summary" toml:"stream_summary"`
-	StreamError                   *StyleSpec `json:"stream_error" toml:"stream_error"`
-	StreamConsoleTitle            *StyleSpec `json:"stream_console_title" toml:"stream_console_title"`
-	StreamConsoleMode             *StyleSpec `json:"stream_console_mode" toml:"stream_console_mode"`
-	StreamConsoleStatus           *StyleSpec `json:"stream_console_status" toml:"stream_console_status"`
-	StreamConsolePrompt           *StyleSpec `json:"stream_console_prompt" toml:"stream_console_prompt"`
-	StreamConsoleInput            *StyleSpec `json:"stream_console_input" toml:"stream_console_input"`
-	StreamConsoleInputFocused     *StyleSpec `json:"stream_console_input_focused" toml:"stream_console_input_focused"`
+	Tabs                          *StyleSpec `json:"tabs"                             toml:"tabs"`
+	TabActive                     *StyleSpec `json:"tab_active"                       toml:"tab_active"`
+	TabInactive                   *StyleSpec `json:"tab_inactive"                     toml:"tab_inactive"`
+	Notification                  *StyleSpec `json:"notification"                     toml:"notification"`
+	Error                         *StyleSpec `json:"error"                            toml:"error"`
+	Success                       *StyleSpec `json:"success"                          toml:"success"`
+	HeaderBrand                   *StyleSpec `json:"header_brand"                     toml:"header_brand"`
+	CommandDivider                *StyleSpec `json:"command_divider"                  toml:"command_divider"`
+	PaneTitle                     *StyleSpec `json:"pane_title"                       toml:"pane_title"`
+	PaneTitleFile                 *StyleSpec `json:"pane_title_file"                  toml:"pane_title_file"`
+	PaneTitleRequests             *StyleSpec `json:"pane_title_requests"              toml:"pane_title_requests"`
+	PaneDivider                   *StyleSpec `json:"pane_divider"                     toml:"pane_divider"`
+	EditorHintBox                 *StyleSpec `json:"editor_hint_box"                  toml:"editor_hint_box"`
+	EditorHintItem                *StyleSpec `json:"editor_hint_item"                 toml:"editor_hint_item"`
+	EditorHintSelected            *StyleSpec `json:"editor_hint_selected"             toml:"editor_hint_selected"`
+	EditorHintAnnotation          *StyleSpec `json:"editor_hint_annotation"           toml:"editor_hint_annotation"`
+	ListItemTitle                 *StyleSpec `json:"list_item_title"                  toml:"list_item_title"`
+	ListItemDescription           *StyleSpec `json:"list_item_description"            toml:"list_item_description"`
+	ListItemSelectedTitle         *StyleSpec `json:"list_item_selected_title"         toml:"list_item_selected_title"`
+	ListItemSelectedDescription   *StyleSpec `json:"list_item_selected_description"   toml:"list_item_selected_description"`
+	ListItemDimmedTitle           *StyleSpec `json:"list_item_dimmed_title"           toml:"list_item_dimmed_title"`
+	ListItemDimmedDescription     *StyleSpec `json:"list_item_dimmed_description"     toml:"list_item_dimmed_description"`
+	ListItemFilterMatch           *StyleSpec `json:"list_item_filter_match"           toml:"list_item_filter_match"`
+	ResponseContent               *StyleSpec `json:"response_content"                 toml:"response_content"`
+	ResponseContentRaw            *StyleSpec `json:"response_content_raw"             toml:"response_content_raw"`
+	ResponseContentHeaders        *StyleSpec `json:"response_content_headers"         toml:"response_content_headers"`
+	StreamContent                 *StyleSpec `json:"stream_content"                   toml:"stream_content"`
+	StreamTimestamp               *StyleSpec `json:"stream_timestamp"                 toml:"stream_timestamp"`
+	StreamDirectionSend           *StyleSpec `json:"stream_direction_send"            toml:"stream_direction_send"`
+	StreamDirectionReceive        *StyleSpec `json:"stream_direction_receive"         toml:"stream_direction_receive"`
+	StreamDirectionInfo           *StyleSpec `json:"stream_direction_info"            toml:"stream_direction_info"`
+	StreamEventName               *StyleSpec `json:"stream_event_name"                toml:"stream_event_name"`
+	StreamData                    *StyleSpec `json:"stream_data"                      toml:"stream_data"`
+	StreamBinary                  *StyleSpec `json:"stream_binary"                    toml:"stream_binary"`
+	StreamSummary                 *StyleSpec `json:"stream_summary"                   toml:"stream_summary"`
+	StreamError                   *StyleSpec `json:"stream_error"                     toml:"stream_error"`
+	StreamConsoleTitle            *StyleSpec `json:"stream_console_title"             toml:"stream_console_title"`
+	StreamConsoleMode             *StyleSpec `json:"stream_console_mode"              toml:"stream_console_mode"`
+	StreamConsoleStatus           *StyleSpec `json:"stream_console_status"            toml:"stream_console_status"`
+	StreamConsolePrompt           *StyleSpec `json:"stream_console_prompt"            toml:"stream_console_prompt"`
+	StreamConsoleInput            *StyleSpec `json:"stream_console_input"             toml:"stream_console_input"`
+	StreamConsoleInputFocused     *StyleSpec `json:"stream_console_input_focused"     toml:"stream_console_input_focused"`
 }
 
 type ColorsSpec struct {
-	PaneBorderFocusFile     *string `json:"pane_border_focus_file" toml:"pane_border_focus_file"`
+	PaneBorderFocusFile     *string `json:"pane_border_focus_file"     toml:"pane_border_focus_file"`
 	PaneBorderFocusRequests *string `json:"pane_border_focus_requests" toml:"pane_border_focus_requests"`
-	PaneActiveForeground    *string `json:"pane_active_foreground" toml:"pane_active_foreground"`
-	MethodGET               *string `json:"method_get" toml:"method_get"`
-	MethodPOST              *string `json:"method_post" toml:"method_post"`
-	MethodPUT               *string `json:"method_put" toml:"method_put"`
-	MethodPATCH             *string `json:"method_patch" toml:"method_patch"`
-	MethodDELETE            *string `json:"method_delete" toml:"method_delete"`
-	MethodHEAD              *string `json:"method_head" toml:"method_head"`
-	MethodOPTIONS           *string `json:"method_options" toml:"method_options"`
-	MethodGRPC              *string `json:"method_grpc" toml:"method_grpc"`
-	MethodWS                *string `json:"method_ws" toml:"method_ws"`
-	MethodDefault           *string `json:"method_default" toml:"method_default"`
+	PaneActiveForeground    *string `json:"pane_active_foreground"     toml:"pane_active_foreground"`
+	MethodGET               *string `json:"method_get"                 toml:"method_get"`
+	MethodPOST              *string `json:"method_post"                toml:"method_post"`
+	MethodPUT               *string `json:"method_put"                 toml:"method_put"`
+	MethodPATCH             *string `json:"method_patch"               toml:"method_patch"`
+	MethodDELETE            *string `json:"method_delete"              toml:"method_delete"`
+	MethodHEAD              *string `json:"method_head"                toml:"method_head"`
+	MethodOPTIONS           *string `json:"method_options"             toml:"method_options"`
+	MethodGRPC              *string `json:"method_grpc"                toml:"method_grpc"`
+	MethodWS                *string `json:"method_ws"                  toml:"method_ws"`
+	MethodDefault           *string `json:"method_default"             toml:"method_default"`
 }
 
 type HeaderSegmentSpec struct {
 	Background *string `json:"background" toml:"background"`
-	Border     *string `json:"border" toml:"border"`
+	Border     *string `json:"border"     toml:"border"`
 	Foreground *string `json:"foreground" toml:"foreground"`
-	Accent     *string `json:"accent" toml:"accent"`
+	Accent     *string `json:"accent"     toml:"accent"`
 }
 
 type CommandSegmentSpec struct {
 	Background *string `json:"background" toml:"background"`
-	Border     *string `json:"border" toml:"border"`
-	Key        *string `json:"key" toml:"key"`
-	Text       *string `json:"text" toml:"text"`
+	Border     *string `json:"border"     toml:"border"`
+	Key        *string `json:"key"        toml:"key"`
+	Text       *string `json:"text"       toml:"text"`
 }
 
 type EditorMetadataSpec struct {
-	CommentMarker    *string           `json:"comment_marker" toml:"comment_marker"`
-	DirectiveDefault *string           `json:"directive_default" toml:"directive_default"`
-	Value            *string           `json:"value" toml:"value"`
-	SettingKey       *string           `json:"setting_key" toml:"setting_key"`
-	SettingValue     *string           `json:"setting_value" toml:"setting_value"`
-	RequestLine      *string           `json:"request_line" toml:"request_line"`
-	RequestSeparator *string           `json:"request_separator" toml:"request_separator"`
-	DirectiveColors  map[string]string `json:"directive_colors" toml:"directive_colors"`
+	CommentMarker     *string           `json:"comment_marker"      toml:"comment_marker"`
+	DirectiveDefault  *string           `json:"directive_default"   toml:"directive_default"`
+	Value             *string           `json:"value"               toml:"value"`
+	SettingKey        *string           `json:"setting_key"         toml:"setting_key"`
+	SettingValue      *string           `json:"setting_value"       toml:"setting_value"`
+	RequestLine       *string           `json:"request_line"        toml:"request_line"`
+	RequestSeparator  *string           `json:"request_separator"   toml:"request_separator"`
+	RTSKeywordDefault *string           `json:"rts_keyword_default" toml:"rts_keyword_default"`
+	RTSKeywordDecl    *string           `json:"rts_keyword_decl"    toml:"rts_keyword_decl"`
+	RTSKeywordControl *string           `json:"rts_keyword_control" toml:"rts_keyword_control"`
+	RTSKeywordLiteral *string           `json:"rts_keyword_literal" toml:"rts_keyword_literal"`
+	RTSKeywordLogical *string           `json:"rts_keyword_logical" toml:"rts_keyword_logical"`
+	DirectiveColors   map[string]string `json:"directive_colors"    toml:"directive_colors"`
 }
 
 type StyleSpec struct {
-	Foreground       *string `json:"foreground" toml:"foreground"`
-	Background       *string `json:"background" toml:"background"`
-	BorderColor      *string `json:"border_color" toml:"border_color"`
+	Foreground       *string `json:"foreground"        toml:"foreground"`
+	Background       *string `json:"background"        toml:"background"`
+	BorderColor      *string `json:"border_color"      toml:"border_color"`
 	BorderBackground *string `json:"border_background" toml:"border_background"`
-	BorderStyle      *string `json:"border_style" toml:"border_style"`
-	Bold             *bool   `json:"bold" toml:"bold"`
-	Italic           *bool   `json:"italic" toml:"italic"`
-	Underline        *bool   `json:"underline" toml:"underline"`
-	Faint            *bool   `json:"faint" toml:"faint"`
-	Strikethrough    *bool   `json:"strikethrough" toml:"strikethrough"`
-	Align            *string `json:"align" toml:"align"`
+	BorderStyle      *string `json:"border_style"      toml:"border_style"`
+	Bold             *bool   `json:"bold"              toml:"bold"`
+	Italic           *bool   `json:"italic"            toml:"italic"`
+	Underline        *bool   `json:"underline"         toml:"underline"`
+	Faint            *bool   `json:"faint"             toml:"faint"`
+	Strikethrough    *bool   `json:"strikethrough"     toml:"strikethrough"`
+	Align            *string `json:"align"             toml:"align"`
 }
 
 func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
@@ -162,28 +167,56 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 
 	// Don't judge me.
 	// @david - rethink is this is how you want this to look because it's ugly as f.
-	if err := apply("browser_border", &cloned.BrowserBorder, spec.Styles.BrowserBorder); err != nil {
+	if err := apply(
+		"browser_border",
+		&cloned.BrowserBorder,
+		spec.Styles.BrowserBorder,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("editor_border", &cloned.EditorBorder, spec.Styles.EditorBorder); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("response_border", &cloned.ResponseBorder, spec.Styles.ResponseBorder); err != nil {
+	if err := apply(
+		"response_border",
+		&cloned.ResponseBorder,
+		spec.Styles.ResponseBorder,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("navigator_title", &cloned.NavigatorTitle, spec.Styles.NavigatorTitle); err != nil {
+	if err := apply(
+		"navigator_title",
+		&cloned.NavigatorTitle,
+		spec.Styles.NavigatorTitle,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("navigator_title_selected", &cloned.NavigatorTitleSelected, spec.Styles.NavigatorTitleSelected); err != nil {
+	if err := apply(
+		"navigator_title_selected",
+		&cloned.NavigatorTitleSelected,
+		spec.Styles.NavigatorTitleSelected,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("navigator_subtitle", &cloned.NavigatorSubtitle, spec.Styles.NavigatorSubtitle); err != nil {
+	if err := apply(
+		"navigator_subtitle",
+		&cloned.NavigatorSubtitle,
+		spec.Styles.NavigatorSubtitle,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("navigator_subtitle_selected", &cloned.NavigatorSubtitleSelected, spec.Styles.NavigatorSubtitleSelected); err != nil {
+	if err := apply(
+		"navigator_subtitle_selected",
+		&cloned.NavigatorSubtitleSelected,
+		spec.Styles.NavigatorSubtitleSelected,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("navigator_badge", &cloned.NavigatorBadge, spec.Styles.NavigatorBadge); err != nil {
+	if err := apply(
+		"navigator_badge",
+		&cloned.NavigatorBadge,
+		spec.Styles.NavigatorBadge,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("navigator_tag", &cloned.NavigatorTag, spec.Styles.NavigatorTag); err != nil {
@@ -201,7 +234,11 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	if err := apply("header_value", &cloned.HeaderValue, spec.Styles.HeaderValue); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("header_separator", &cloned.HeaderSeparator, spec.Styles.HeaderSeparator); err != nil {
+	if err := apply(
+		"header_separator",
+		&cloned.HeaderSeparator,
+		spec.Styles.HeaderSeparator,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("status_bar", &cloned.StatusBar, spec.Styles.StatusBar); err != nil {
@@ -210,19 +247,35 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	if err := apply("status_bar_key", &cloned.StatusBarKey, spec.Styles.StatusBarKey); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("status_bar_value", &cloned.StatusBarValue, spec.Styles.StatusBarValue); err != nil {
+	if err := apply(
+		"status_bar_value",
+		&cloned.StatusBarValue,
+		spec.Styles.StatusBarValue,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("command_bar", &cloned.CommandBar, spec.Styles.CommandBar); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("command_bar_hint", &cloned.CommandBarHint, spec.Styles.CommandBarHint); err != nil {
+	if err := apply(
+		"command_bar_hint",
+		&cloned.CommandBarHint,
+		spec.Styles.CommandBarHint,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("response_search_highlight", &cloned.ResponseSearchHighlight, spec.Styles.ResponseSearchHighlight); err != nil {
+	if err := apply(
+		"response_search_highlight",
+		&cloned.ResponseSearchHighlight,
+		spec.Styles.ResponseSearchHighlight,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("response_search_highlight_active", &cloned.ResponseSearchHighlightActive, spec.Styles.ResponseSearchHighlightActive); err != nil {
+	if err := apply(
+		"response_search_highlight_active",
+		&cloned.ResponseSearchHighlightActive,
+		spec.Styles.ResponseSearchHighlightActive,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("tabs", &cloned.Tabs, spec.Styles.Tabs); err != nil {
@@ -246,79 +299,171 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	if err := apply("header_brand", &cloned.HeaderBrand, spec.Styles.HeaderBrand); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("command_divider", &cloned.CommandDivider, spec.Styles.CommandDivider); err != nil {
+	if err := apply(
+		"command_divider",
+		&cloned.CommandDivider,
+		spec.Styles.CommandDivider,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("pane_title", &cloned.PaneTitle, spec.Styles.PaneTitle); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("pane_title_file", &cloned.PaneTitleFile, spec.Styles.PaneTitleFile); err != nil {
+	if err := apply(
+		"pane_title_file",
+		&cloned.PaneTitleFile,
+		spec.Styles.PaneTitleFile,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("pane_title_requests", &cloned.PaneTitleRequests, spec.Styles.PaneTitleRequests); err != nil {
+	if err := apply(
+		"pane_title_requests",
+		&cloned.PaneTitleRequests,
+		spec.Styles.PaneTitleRequests,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("pane_divider", &cloned.PaneDivider, spec.Styles.PaneDivider); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("editor_hint_box", &cloned.EditorHintBox, spec.Styles.EditorHintBox); err != nil {
+	if err := apply(
+		"editor_hint_box",
+		&cloned.EditorHintBox,
+		spec.Styles.EditorHintBox,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("editor_hint_item", &cloned.EditorHintItem, spec.Styles.EditorHintItem); err != nil {
+	if err := apply(
+		"editor_hint_item",
+		&cloned.EditorHintItem,
+		spec.Styles.EditorHintItem,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("editor_hint_selected", &cloned.EditorHintSelected, spec.Styles.EditorHintSelected); err != nil {
+	if err := apply(
+		"editor_hint_selected",
+		&cloned.EditorHintSelected,
+		spec.Styles.EditorHintSelected,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("editor_hint_annotation", &cloned.EditorHintAnnotation, spec.Styles.EditorHintAnnotation); err != nil {
+	if err := apply(
+		"editor_hint_annotation",
+		&cloned.EditorHintAnnotation,
+		spec.Styles.EditorHintAnnotation,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_title", &cloned.ListItemTitle, spec.Styles.ListItemTitle); err != nil {
+	if err := apply(
+		"list_item_title",
+		&cloned.ListItemTitle,
+		spec.Styles.ListItemTitle,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_description", &cloned.ListItemDescription, spec.Styles.ListItemDescription); err != nil {
+	if err := apply(
+		"list_item_description",
+		&cloned.ListItemDescription,
+		spec.Styles.ListItemDescription,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_selected_title", &cloned.ListItemSelectedTitle, spec.Styles.ListItemSelectedTitle); err != nil {
+	if err := apply(
+		"list_item_selected_title",
+		&cloned.ListItemSelectedTitle,
+		spec.Styles.ListItemSelectedTitle,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_selected_description", &cloned.ListItemSelectedDescription, spec.Styles.ListItemSelectedDescription); err != nil {
+	if err := apply(
+		"list_item_selected_description",
+		&cloned.ListItemSelectedDescription,
+		spec.Styles.ListItemSelectedDescription,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_dimmed_title", &cloned.ListItemDimmedTitle, spec.Styles.ListItemDimmedTitle); err != nil {
+	if err := apply(
+		"list_item_dimmed_title",
+		&cloned.ListItemDimmedTitle,
+		spec.Styles.ListItemDimmedTitle,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_dimmed_description", &cloned.ListItemDimmedDescription, spec.Styles.ListItemDimmedDescription); err != nil {
+	if err := apply(
+		"list_item_dimmed_description",
+		&cloned.ListItemDimmedDescription,
+		spec.Styles.ListItemDimmedDescription,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("list_item_filter_match", &cloned.ListItemFilterMatch, spec.Styles.ListItemFilterMatch); err != nil {
+	if err := apply(
+		"list_item_filter_match",
+		&cloned.ListItemFilterMatch,
+		spec.Styles.ListItemFilterMatch,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("response_content", &cloned.ResponseContent, spec.Styles.ResponseContent); err != nil {
+	if err := apply(
+		"response_content",
+		&cloned.ResponseContent,
+		spec.Styles.ResponseContent,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("response_content_raw", &cloned.ResponseContentRaw, spec.Styles.ResponseContentRaw); err != nil {
+	if err := apply(
+		"response_content_raw",
+		&cloned.ResponseContentRaw,
+		spec.Styles.ResponseContentRaw,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("response_content_headers", &cloned.ResponseContentHeaders, spec.Styles.ResponseContentHeaders); err != nil {
+	if err := apply(
+		"response_content_headers",
+		&cloned.ResponseContentHeaders,
+		spec.Styles.ResponseContentHeaders,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_content", &cloned.StreamContent, spec.Styles.StreamContent); err != nil {
+	if err := apply(
+		"stream_content",
+		&cloned.StreamContent,
+		spec.Styles.StreamContent,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_timestamp", &cloned.StreamTimestamp, spec.Styles.StreamTimestamp); err != nil {
+	if err := apply(
+		"stream_timestamp",
+		&cloned.StreamTimestamp,
+		spec.Styles.StreamTimestamp,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_direction_send", &cloned.StreamDirectionSend, spec.Styles.StreamDirectionSend); err != nil {
+	if err := apply(
+		"stream_direction_send",
+		&cloned.StreamDirectionSend,
+		spec.Styles.StreamDirectionSend,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_direction_receive", &cloned.StreamDirectionReceive, spec.Styles.StreamDirectionReceive); err != nil {
+	if err := apply(
+		"stream_direction_receive",
+		&cloned.StreamDirectionReceive,
+		spec.Styles.StreamDirectionReceive,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_direction_info", &cloned.StreamDirectionInfo, spec.Styles.StreamDirectionInfo); err != nil {
+	if err := apply(
+		"stream_direction_info",
+		&cloned.StreamDirectionInfo,
+		spec.Styles.StreamDirectionInfo,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_event_name", &cloned.StreamEventName, spec.Styles.StreamEventName); err != nil {
+	if err := apply(
+		"stream_event_name",
+		&cloned.StreamEventName,
+		spec.Styles.StreamEventName,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("stream_data", &cloned.StreamData, spec.Styles.StreamData); err != nil {
@@ -327,28 +472,56 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	if err := apply("stream_binary", &cloned.StreamBinary, spec.Styles.StreamBinary); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_summary", &cloned.StreamSummary, spec.Styles.StreamSummary); err != nil {
+	if err := apply(
+		"stream_summary",
+		&cloned.StreamSummary,
+		spec.Styles.StreamSummary,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("stream_error", &cloned.StreamError, spec.Styles.StreamError); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_console_title", &cloned.StreamConsoleTitle, spec.Styles.StreamConsoleTitle); err != nil {
+	if err := apply(
+		"stream_console_title",
+		&cloned.StreamConsoleTitle,
+		spec.Styles.StreamConsoleTitle,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_console_mode", &cloned.StreamConsoleMode, spec.Styles.StreamConsoleMode); err != nil {
+	if err := apply(
+		"stream_console_mode",
+		&cloned.StreamConsoleMode,
+		spec.Styles.StreamConsoleMode,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_console_status", &cloned.StreamConsoleStatus, spec.Styles.StreamConsoleStatus); err != nil {
+	if err := apply(
+		"stream_console_status",
+		&cloned.StreamConsoleStatus,
+		spec.Styles.StreamConsoleStatus,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_console_prompt", &cloned.StreamConsolePrompt, spec.Styles.StreamConsolePrompt); err != nil {
+	if err := apply(
+		"stream_console_prompt",
+		&cloned.StreamConsolePrompt,
+		spec.Styles.StreamConsolePrompt,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_console_input", &cloned.StreamConsoleInput, spec.Styles.StreamConsoleInput); err != nil {
+	if err := apply(
+		"stream_console_input",
+		&cloned.StreamConsoleInput,
+		spec.Styles.StreamConsoleInput,
+	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("stream_console_input_focused", &cloned.StreamConsoleInputFocused, spec.Styles.StreamConsoleInputFocused); err != nil {
+	if err := apply(
+		"stream_console_input_focused",
+		&cloned.StreamConsoleInputFocused,
+		spec.Styles.StreamConsoleInputFocused,
+	); err != nil {
 		return Theme{}, err
 	}
 
@@ -538,7 +711,10 @@ func (s *StyleSpec) apply(base lipgloss.Style) (lipgloss.Style, error) {
 	return current, nil
 }
 
-func applyHeaderSegments(base []HeaderSegmentStyle, overrides []HeaderSegmentSpec) ([]HeaderSegmentStyle, error) {
+func applyHeaderSegments(
+	base []HeaderSegmentStyle,
+	overrides []HeaderSegmentSpec,
+) ([]HeaderSegmentStyle, error) {
 	if len(overrides) == 0 {
 		return base, nil
 	}
@@ -581,7 +757,10 @@ func applyHeaderSegments(base []HeaderSegmentStyle, overrides []HeaderSegmentSpe
 	return result, nil
 }
 
-func applyCommandSegments(base []CommandSegmentStyle, overrides []CommandSegmentSpec) ([]CommandSegmentStyle, error) {
+func applyCommandSegments(
+	base []CommandSegmentStyle,
+	overrides []CommandSegmentSpec,
+) ([]CommandSegmentStyle, error) {
 	if len(overrides) == 0 {
 		return base, nil
 	}
@@ -686,15 +865,55 @@ func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) er
 		}
 		dst.RequestSeparator = color
 	}
+	if spec.RTSKeywordDefault != nil {
+		color, err := toColor("editor_metadata.rts_keyword_default", *spec.RTSKeywordDefault)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordDefault = color
+	}
+	if spec.RTSKeywordDecl != nil {
+		color, err := toColor("editor_metadata.rts_keyword_decl", *spec.RTSKeywordDecl)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordDecl = color
+	}
+	if spec.RTSKeywordControl != nil {
+		color, err := toColor("editor_metadata.rts_keyword_control", *spec.RTSKeywordControl)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordControl = color
+	}
+	if spec.RTSKeywordLiteral != nil {
+		color, err := toColor("editor_metadata.rts_keyword_literal", *spec.RTSKeywordLiteral)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordLiteral = color
+	}
+	if spec.RTSKeywordLogical != nil {
+		color, err := toColor("editor_metadata.rts_keyword_logical", *spec.RTSKeywordLogical)
+		if err != nil {
+			return err
+		}
+		dst.RTSKeywordLogical = color
+	}
 	if len(spec.DirectiveColors) > 0 {
-		combined := make(map[string]lipgloss.Color, len(dst.DirectiveColors)+len(spec.DirectiveColors))
+		combined := make(
+			map[string]lipgloss.Color,
+			len(dst.DirectiveColors)+len(spec.DirectiveColors),
+		)
 		for key, value := range dst.DirectiveColors {
 			combined[key] = value
 		}
 		for key, value := range spec.DirectiveColors {
 			normalized := strings.ToLower(strings.TrimSpace(key))
 			if normalized == "" {
-				return fmt.Errorf("editor_metadata.directive_colors: directive name may not be empty")
+				return fmt.Errorf(
+					"editor_metadata.directive_colors: directive name may not be empty",
+				)
 			}
 			color, err := toColor("editor_metadata.directive_colors", value)
 			if err != nil {
@@ -716,7 +935,10 @@ func cloneTheme(src Theme) Theme {
 		clone.CommandSegments = append([]CommandSegmentStyle(nil), src.CommandSegments...)
 	}
 	if src.EditorMetadata.DirectiveColors != nil {
-		clone.EditorMetadata.DirectiveColors = make(map[string]lipgloss.Color, len(src.EditorMetadata.DirectiveColors))
+		clone.EditorMetadata.DirectiveColors = make(
+			map[string]lipgloss.Color,
+			len(src.EditorMetadata.DirectiveColors),
+		)
 		for k, v := range src.EditorMetadata.DirectiveColors {
 			clone.EditorMetadata.DirectiveColors[k] = v
 		}

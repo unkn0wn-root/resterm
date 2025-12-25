@@ -45,6 +45,8 @@ type compareResult struct {
 	Request     *restfile.Request
 	RequestText string
 	Canceled    bool
+	Skipped     bool
+	SkipReason  string
 }
 
 func (s *compareState) matches(req *restfile.Request) bool {
@@ -65,13 +67,22 @@ func (m *Model) resetCompareState() {
 // Clone the active request and reset compare bookkeeping so every environment
 // run starts from the same baseline and the diff panes are ready as
 // soon as responses arrive.
-func (m *Model) startCompareRun(doc *restfile.Document, req *restfile.Request, spec *restfile.CompareSpec, options httpclient.Options) tea.Cmd {
+func (m *Model) startCompareRun(
+	doc *restfile.Document,
+	req *restfile.Request,
+	spec *restfile.CompareSpec,
+	options httpclient.Options,
+) tea.Cmd {
 	if spec == nil || len(spec.Environments) < 2 {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: "Compare requires at least two environments"})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: "Compare requires at least two environments"},
+		)
 		return nil
 	}
 	if m.compareRun != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: "Another compare run is already active"})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: "Another compare run is already active"},
+		)
 		return nil
 	}
 
@@ -142,7 +153,7 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
 	runCmd := m.withEnvironment(env, func() tea.Cmd {
-		return m.executeRequest(state.doc, clone, state.options, env)
+		return m.executeRequest(state.doc, clone, state.options, env, nil)
 	})
 
 	if tick := m.startStatusPulse(); tick != nil {
@@ -176,19 +187,29 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 		}
 	}
 
+	if canceled {
+		msg.skipped = false
+	}
 	result := compareResult{
 		Environment: currentEnv,
 		Tests:       append([]scripts.TestResult(nil), msg.tests...),
 		ScriptErr:   msg.scriptErr,
 		RequestText: state.requestText,
 		Canceled:    canceled,
+		Skipped:     msg.skipped,
+		SkipReason:  msg.skipReason,
 	}
 	if currentReq != nil {
 		result.Request = cloneRequest(currentReq)
 	}
 
 	var cmds []tea.Cmd
-	if !canceled && msg.err != nil {
+	if !canceled && msg.skipped {
+		m.lastError = nil
+		if cmd := m.consumeSkippedRequest(msg.skipReason); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	} else if !canceled && msg.err != nil {
 		result.Err = msg.err
 		m.lastError = msg.err
 		if cmd := m.consumeRequestError(msg.err); cmd != nil {
@@ -197,13 +218,24 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	} else if !canceled && msg.grpc != nil {
 		result.GRPC = msg.grpc
 		m.lastError = nil
-		if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment); cmd != nil {
+		if cmd := m.consumeGRPCResponse(
+			msg.grpc,
+			msg.tests,
+			msg.scriptErr,
+			msg.executed,
+			msg.environment,
+		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.response != nil {
 		result.Response = msg.response
 		m.lastError = nil
-		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
+		if cmd := m.consumeHTTPResponse(
+			msg.response,
+			msg.tests,
+			msg.scriptErr,
+			msg.environment,
+		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else {
@@ -294,7 +326,9 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	} else if state.hasFailures() {
 		level = statusWarn
 	}
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s | %s", label, state.progressSummary()), level: level})
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("%s | %s", label, state.progressSummary()), level: level},
+	)
 	m.recordCompareHistory(state)
 	return nil
 }
@@ -449,6 +483,8 @@ func compareRowStatus(result *compareResult) (string, string) {
 		return "n/a", "-"
 	case result.Canceled:
 		return "canceled", "-"
+	case result.Skipped:
+		return "skipped", "-"
 	case result.Err != nil:
 		return "error", ""
 	case result.Response != nil:
@@ -479,6 +515,16 @@ func summarizeCompareDelta(base, target *compareResult) string {
 	}
 	if base != nil && strings.EqualFold(base.Environment, target.Environment) {
 		return "baseline"
+	}
+	if target.Skipped {
+		reason := strings.TrimSpace(target.SkipReason)
+		if reason == "" {
+			return "skipped"
+		}
+		return fmt.Sprintf("skipped: %s", reason)
+	}
+	if base != nil && base.Skipped {
+		return "baseline skipped"
 	}
 	if target.Err != nil {
 		return fmt.Sprintf("error: %s", errdef.Message(target.Err))
@@ -638,6 +684,9 @@ func compareResultSuccess(result *compareResult) bool {
 		return false
 	}
 	if result.Canceled {
+		return false
+	}
+	if result.Skipped {
 		return false
 	}
 	if result.Err != nil || result.ScriptErr != nil {

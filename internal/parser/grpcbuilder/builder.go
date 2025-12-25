@@ -131,7 +131,9 @@ func (b *Builder) HandleBodyLine(line string) bool {
 	return true
 }
 
-func (b *Builder) Finalize(existingMime string) (*restfile.GRPCRequest, restfile.BodySource, string, bool) {
+func (b *Builder) Finalize(
+	existingMime string,
+) (*restfile.GRPCRequest, restfile.BodySource, string, bool) {
 	if b.request == nil {
 		return nil, restfile.BodySource{}, existingMime, false
 	}

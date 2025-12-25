@@ -82,21 +82,81 @@ func main() {
 	flag.BoolVar(&follow, "follow", true, "Follow redirects")
 	flag.StringVar(&proxyURL, "proxy", "", "HTTP proxy URL")
 	flag.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
-	flag.BoolVar(&recursive, "recurisve", false, "(deprecated) Recursively scan workspace for request files")
+	flag.BoolVar(
+		&recursive,
+		"recurisve",
+		false,
+		"(deprecated) Recursively scan workspace for request files",
+	)
 	flag.BoolVar(&showVersion, "version", false, "Show resterm version")
 	flag.BoolVar(&checkUpdate, "check-update", false, "Check for newer releases and exit")
-	flag.BoolVar(&doUpdate, "update", false, "Download and install the latest release, if available")
-	flag.StringVar(&openapiSpec, "from-openapi", "", "Path to OpenAPI specification file to convert")
+	flag.BoolVar(
+		&doUpdate,
+		"update",
+		false,
+		"Download and install the latest release, if available",
+	)
+	flag.StringVar(
+		&openapiSpec,
+		"from-openapi",
+		"",
+		"Path to OpenAPI specification file to convert",
+	)
 	flag.StringVar(&openapiOut, "http-out", "", "Destination path for generated .http file")
-	flag.StringVar(&openapiBase, "openapi-base-var", openapi.DefaultBaseURLVariable, "Variable name for the generated base URL")
-	flag.BoolVar(&openapiResolveRefs, "openapi-resolve-refs", false, "Resolve external $ref references during OpenAPI import")
-	flag.BoolVar(&openapiIncludeDeprecated, "openapi-include-deprecated", false, "Include deprecated operations when generating requests")
-	flag.IntVar(&openapiServerIndex, "openapi-server-index", 0, "Preferred server index (0-based) from the spec to use as the base URL")
-	flag.StringVar(&traceOTEndpoint, "trace-otel-endpoint", traceOTEndpoint, "OTLP collector endpoint used when @trace is enabled")
-	flag.BoolVar(&traceOTInsecure, "trace-otel-insecure", traceOTInsecure, "Disable TLS for OTLP trace export")
-	flag.StringVar(&traceOTService, "trace-otel-service", traceOTService, "Override service.name resource attribute for exported spans")
-	flag.StringVar(&compareTargetsRaw, "compare", "", "Default environments for manual compare runs (comma/space separated)")
-	flag.StringVar(&compareBaseline, "compare-base", "", "Baseline environment when --compare is used (defaults to first target)")
+	flag.StringVar(
+		&openapiBase,
+		"openapi-base-var",
+		openapi.DefaultBaseURLVariable,
+		"Variable name for the generated base URL",
+	)
+	flag.BoolVar(
+		&openapiResolveRefs,
+		"openapi-resolve-refs",
+		false,
+		"Resolve external $ref references during OpenAPI import",
+	)
+	flag.BoolVar(
+		&openapiIncludeDeprecated,
+		"openapi-include-deprecated",
+		false,
+		"Include deprecated operations when generating requests",
+	)
+	flag.IntVar(
+		&openapiServerIndex,
+		"openapi-server-index",
+		0,
+		"Preferred server index (0-based) from the spec to use as the base URL",
+	)
+	flag.StringVar(
+		&traceOTEndpoint,
+		"trace-otel-endpoint",
+		traceOTEndpoint,
+		"OTLP collector endpoint used when @trace is enabled",
+	)
+	flag.BoolVar(
+		&traceOTInsecure,
+		"trace-otel-insecure",
+		traceOTInsecure,
+		"Disable TLS for OTLP trace export",
+	)
+	flag.StringVar(
+		&traceOTService,
+		"trace-otel-service",
+		traceOTService,
+		"Override service.name resource attribute for exported spans",
+	)
+	flag.StringVar(
+		&compareTargetsRaw,
+		"compare",
+		"",
+		"Default environments for manual compare runs (comma/space separated)",
+	)
+	flag.StringVar(
+		&compareBaseline,
+		"compare-base",
+		"",
+		"Baseline environment when --compare is used (defaults to first target)",
+	)
 	flag.Parse()
 
 	telemetryCfg.Endpoint = strings.TrimSpace(traceOTEndpoint)
@@ -372,7 +432,11 @@ func main() {
 	}
 }
 
-func loadEnvironment(explicit string, filePath string, workspace string) (vars.EnvironmentSet, string) {
+func loadEnvironment(
+	explicit string,
+	filePath string,
+	workspace string,
+) (vars.EnvironmentSet, string) {
 	if explicit != "" {
 		envs, err := vars.LoadEnvironmentFile(explicit)
 		if err != nil {
@@ -458,7 +522,11 @@ func executableChecksum() (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func convertOpenAPISpec(ctx context.Context, specPath, outputPath, version string, opts openapi.GenerateOptions) error {
+func convertOpenAPISpec(
+	ctx context.Context,
+	specPath, outputPath, version string,
+	opts openapi.GenerateOptions,
+) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}

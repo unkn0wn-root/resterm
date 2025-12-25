@@ -140,7 +140,14 @@ func (m *Model) applyLayout() tea.Cmd {
 		if ratio <= 0 {
 			ratio = editorSplitDefault
 		}
-		editorHeight, responseHeight = m.horizontalContentHeights(paneHeight, editorCollapsed, responseCollapsed, ratio, editorFrameHeight, responseFrameHeight)
+		editorHeight, responseHeight = m.horizontalContentHeights(
+			paneHeight,
+			editorCollapsed,
+			responseCollapsed,
+			ratio,
+			editorFrameHeight,
+			responseFrameHeight,
+		)
 		m.editorContentHeight = editorHeight
 		m.responseContentHeight = responseHeight
 	} else {
@@ -222,9 +229,19 @@ func (m *Model) applyLayout() tea.Cmd {
 	}
 
 	if m.mainSplitOrientation == mainSplitVertical {
-		editorWidth, responseWidth = redistributeCollapsedWidths(editorWidth, responseWidth, editorCollapsed, responseCollapsed)
+		editorWidth, responseWidth = redistributeCollapsedWidths(
+			editorWidth,
+			responseWidth,
+			editorCollapsed,
+			responseCollapsed,
+		)
 	} else {
-		m.editorContentHeight, m.responseContentHeight = redistributeCollapsedHeights(m.editorContentHeight, m.responseContentHeight, editorCollapsed, responseCollapsed)
+		m.editorContentHeight, m.responseContentHeight = redistributeCollapsedHeights(
+			m.editorContentHeight,
+			m.responseContentHeight,
+			editorCollapsed,
+			responseCollapsed,
+		)
 		editorHeight = m.editorContentHeight
 	}
 
@@ -527,7 +544,8 @@ func (m *Model) adjustEditorSplit(delta float64) (bool, bool, tea.Cmd) {
 	newSplit := m.editorSplit
 	newEditorWidth := m.editor.Width()
 	newResponseWidth := m.responseContentWidth()
-	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newEditorWidth != prevEditorWidth || newResponseWidth != prevResponseWidth
+	changed := math.Abs(newSplit-prevSplit) > 1e-6 || newEditorWidth != prevEditorWidth ||
+		newResponseWidth != prevResponseWidth
 	if !changed {
 		return false, true, cmd
 	}
@@ -608,7 +626,10 @@ func (m *Model) horizontalContentHeights(
 	return editorHeight, responseHeight
 }
 
-func redistributeCollapsedWidths(editorWidth, responseWidth int, editorCollapsed, responseCollapsed bool) (int, int) {
+func redistributeCollapsedWidths(
+	editorWidth, responseWidth int,
+	editorCollapsed, responseCollapsed bool,
+) (int, int) {
 	if editorWidth < 0 {
 		editorWidth = 0
 	}
@@ -642,7 +663,10 @@ func redistributeCollapsedWidths(editorWidth, responseWidth int, editorCollapsed
 	return editorWidth, responseWidth
 }
 
-func redistributeCollapsedHeights(editorHeight, responseHeight int, editorCollapsed, responseCollapsed bool) (int, int) {
+func redistributeCollapsedHeights(
+	editorHeight, responseHeight int,
+	editorCollapsed, responseCollapsed bool,
+) (int, int) {
 	if editorHeight < 0 {
 		editorHeight = 0
 	}

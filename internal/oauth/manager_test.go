@@ -20,24 +20,28 @@ func TestManagerClientCredentialsBasic(t *testing.T) {
 	var capturedAuth string
 	var callCount int
 
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		callCount++
-		values, err := url.ParseQuery(req.Body.Text)
-		if err != nil {
-			t.Fatalf("parse form: %v", err)
-		}
-		capturedForm = values
-		capturedAuth = req.Headers.Get("Authorization")
-		if accept := req.Headers.Get("Accept"); accept != "application/json" {
-			t.Fatalf("expected Accept header to request json, got %q", accept)
-		}
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte(`{"access_token":"token-basic","token_type":"Bearer","expires_in":3600}`),
-			Headers:    http.Header{},
-		}, nil
-	})
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			callCount++
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			capturedForm = values
+			capturedAuth = req.Headers.Get("Authorization")
+			if accept := req.Headers.Get("Accept"); accept != "application/json" {
+				t.Fatalf("expected Accept header to request json, got %q", accept)
+			}
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body: []byte(
+					`{"access_token":"token-basic","token_type":"Bearer","expires_in":3600}`,
+				),
+				Headers: http.Header{},
+			}, nil
+		},
+	)
 
 	cfg := Config{
 		TokenURL:     "https://auth.local/token",
@@ -85,23 +89,25 @@ func TestManagerClientCredentialsBodyAuth(t *testing.T) {
 	var capturedForm url.Values
 	var capturedAuth string
 	mgr := NewManager(nil)
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		values, err := url.ParseQuery(req.Body.Text)
-		if err != nil {
-			t.Fatalf("parse form: %v", err)
-		}
-		capturedForm = values
-		capturedAuth = req.Headers.Get("Authorization")
-		if accept := req.Headers.Get("Accept"); accept != "application/json" {
-			t.Fatalf("expected Accept header to request json, got %q", accept)
-		}
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte(`{"access_token":"token-body","token_type":"Bearer"}`),
-			Headers:    http.Header{},
-		}, nil
-	})
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			capturedForm = values
+			capturedAuth = req.Headers.Get("Authorization")
+			if accept := req.Headers.Get("Accept"); accept != "application/json" {
+				t.Fatalf("expected Accept header to request json, got %q", accept)
+			}
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body:       []byte(`{"access_token":"token-body","token_type":"Bearer"}`),
+				Headers:    http.Header{},
+			}, nil
+		},
+	)
 
 	cfg := Config{
 		TokenURL:     "https://auth.local/token",
@@ -132,20 +138,22 @@ func TestManagerClientCredentialsExplicitBasicWithEmptySecret(t *testing.T) {
 	var capturedForm url.Values
 	var capturedAuth string
 	mgr := NewManager(nil)
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		values, err := url.ParseQuery(req.Body.Text)
-		if err != nil {
-			t.Fatalf("parse form: %v", err)
-		}
-		capturedForm = values
-		capturedAuth = req.Headers.Get("Authorization")
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte(`{"access_token":"token-basic","token_type":"Bearer"}`),
-			Headers:    http.Header{},
-		}, nil
-	})
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			capturedForm = values
+			capturedAuth = req.Headers.Get("Authorization")
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body:       []byte(`{"access_token":"token-basic","token_type":"Bearer"}`),
+				Headers:    http.Header{},
+			}, nil
+		},
+	)
 
 	cfg := Config{
 		TokenURL:   "https://auth.local/token",
@@ -169,22 +177,29 @@ func TestManagerClientCredentialsExplicitBasicWithEmptySecret(t *testing.T) {
 		t.Fatalf("expected basic auth header, got %q", capturedAuth)
 	}
 	if capturedForm.Get("client_id") != "" || capturedForm.Get("client_secret") != "" {
-		t.Fatalf("client credentials should not be included in body for basic auth, got %v", capturedForm)
+		t.Fatalf(
+			"client credentials should not be included in body for basic auth, got %v",
+			capturedForm,
+		)
 	}
 }
 
 func TestManagerTokenFormEncodedResponse(t *testing.T) {
 	mgr := NewManager(nil)
 	var accept string
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		accept = req.Headers.Get("Accept")
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte("access_token=form-token&token_type=bearer&refresh_token=refresh-form&expires_in=7200"),
-			Headers:    http.Header{},
-		}, nil
-	})
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			accept = req.Headers.Get("Accept")
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body: []byte(
+					"access_token=form-token&token_type=bearer&refresh_token=refresh-form&expires_in=7200",
+				),
+				Headers: http.Header{},
+			}, nil
+		},
+	)
 
 	cfg := Config{
 		TokenURL:     "https://auth.local/token",
@@ -234,7 +249,8 @@ func TestManagerMergeCachedConfig(t *testing.T) {
 		Extra:        map[string]string{"resource": "res-1"},
 	})
 
-	if merged.TokenURL != base.TokenURL || merged.AuthURL != base.AuthURL || merged.ClientID != base.ClientID {
+	if merged.TokenURL != base.TokenURL || merged.AuthURL != base.AuthURL ||
+		merged.ClientID != base.ClientID {
 		t.Fatalf("expected base URLs/IDs to be inherited: %#v", merged)
 	}
 	if merged.ClientSecret != "override-secret" {
@@ -252,35 +268,46 @@ func TestManagerRefreshToken(t *testing.T) {
 	mgr := NewManager(nil)
 	var grants []string
 
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		values, err := url.ParseQuery(req.Body.Text)
-		if err != nil {
-			t.Fatalf("parse form: %v", err)
-		}
-		grant := values.Get("grant_type")
-		grants = append(grants, grant)
-		switch grant {
-		case "client_credentials":
-			return &httpclient.Response{
-				Status:     "200 OK",
-				StatusCode: 200,
-				Body:       []byte(`{"access_token":"token-initial","token_type":"Bearer","expires_in":1,"refresh_token":"refresh-1"}`),
-				Headers:    http.Header{},
-			}, nil
-		case "refresh_token":
-			if values.Get("refresh_token") != "refresh-1" {
-				t.Fatalf("unexpected refresh token %q", values.Get("refresh_token"))
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
 			}
-			return &httpclient.Response{
-				Status:     "200 OK",
-				StatusCode: 200,
-				Body:       []byte(`{"access_token":"token-refreshed","token_type":"Bearer","expires_in":3600}`),
-				Headers:    http.Header{},
-			}, nil
-		default:
-			return &httpclient.Response{Status: "400", StatusCode: 400, Body: []byte("{}"), Headers: http.Header{}}, nil
-		}
-	})
+			grant := values.Get("grant_type")
+			grants = append(grants, grant)
+			switch grant {
+			case "client_credentials":
+				return &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body: []byte(
+						`{"access_token":"token-initial","token_type":"Bearer","expires_in":1,"refresh_token":"refresh-1"}`,
+					),
+					Headers: http.Header{},
+				}, nil
+			case "refresh_token":
+				if values.Get("refresh_token") != "refresh-1" {
+					t.Fatalf("unexpected refresh token %q", values.Get("refresh_token"))
+				}
+				return &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body: []byte(
+						`{"access_token":"token-refreshed","token_type":"Bearer","expires_in":3600}`,
+					),
+					Headers: http.Header{},
+				}, nil
+			default:
+				return &httpclient.Response{
+					Status:     "400",
+					StatusCode: 400,
+					Body:       []byte("{}"),
+					Headers:    http.Header{},
+				}, nil
+			}
+		},
+	)
 
 	cfg := Config{
 		TokenURL:     "https://auth.local/token",
@@ -317,19 +344,23 @@ func TestManagerRefreshToken(t *testing.T) {
 func TestManagerAuthorizationCodePKCE(t *testing.T) {
 	mgr := NewManager(nil)
 	var tokenForm url.Values
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		values, err := url.ParseQuery(req.Body.Text)
-		if err != nil {
-			t.Fatalf("parse form: %v", err)
-		}
-		tokenForm = values
-		return &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Body:       []byte(`{"access_token":"code-token","token_type":"Bearer","refresh_token":"refresh-code"}`),
-			Headers:    http.Header{},
-		}, nil
-	})
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			values, err := url.ParseQuery(req.Body.Text)
+			if err != nil {
+				t.Fatalf("parse form: %v", err)
+			}
+			tokenForm = values
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body: []byte(
+					`{"access_token":"code-token","token_type":"Bearer","refresh_token":"refresh-code"}`,
+				),
+				Headers: http.Header{},
+			}, nil
+		},
+	)
 
 	authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
@@ -340,11 +371,17 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 		if q.Get("response_type") != "code" {
 			t.Fatalf("expected response_type=code, got %s", q.Get("response_type"))
 		}
-		if q.Get("code_challenge") == "" || !strings.EqualFold(q.Get("code_challenge_method"), "S256") {
+		if q.Get("code_challenge") == "" ||
+			!strings.EqualFold(q.Get("code_challenge_method"), "S256") {
 			t.Fatalf("expected code_challenge S256")
 		}
 		state := q.Get("state")
-		http.Redirect(w, r, redirect+"?code=test-code&state="+url.QueryEscape(state), http.StatusFound)
+		http.Redirect(
+			w,
+			r,
+			redirect+"?code=test-code&state="+url.QueryEscape(state),
+			http.StatusFound,
+		)
 	}))
 	defer authSrv.Close()
 
@@ -379,7 +416,8 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 	if tokenForm.Get("code") != "test-code" {
 		t.Fatalf("expected code to be forwarded")
 	}
-	if tokenForm.Get("redirect_uri") == "" || !strings.Contains(tokenForm.Get("redirect_uri"), "127.0.0.1") {
+	if tokenForm.Get("redirect_uri") == "" ||
+		!strings.Contains(tokenForm.Get("redirect_uri"), "127.0.0.1") {
 		t.Fatalf("expected redirect_uri to be set, got %q", tokenForm.Get("redirect_uri"))
 	}
 	if tokenForm.Get("code_verifier") == "" {
@@ -397,10 +435,12 @@ func TestManagerAuthorizationCodePKCE(t *testing.T) {
 
 func TestManagerAuthorizationCodeStateMismatch(t *testing.T) {
 	mgr := NewManager(nil)
-	mgr.SetRequestFunc(func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
-		t.Fatalf("token exchange should not be called on state mismatch")
-		return nil, nil
-	})
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			t.Fatalf("token exchange should not be called on state mismatch")
+			return nil, nil
+		},
+	)
 
 	authSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		redirect := r.URL.Query().Get("redirect_uri")

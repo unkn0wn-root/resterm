@@ -18,8 +18,10 @@ import (
 )
 
 var (
-	variableLineRe = regexp.MustCompile(`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
-	nameValueRe    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
+	variableLineRe = regexp.MustCompile(
+		`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`,
+	)
+	nameValueRe = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
 func Parse(path string, data []byte) *restfile.Document {
@@ -54,6 +56,7 @@ type documentBuilder struct {
 	fileSettings map[string]string
 	consts       []restfile.Constant
 	sshDefs      []restfile.SSHProfile
+	fileUses     []restfile.UseSpec
 	inBlock      bool
 	workflow     *workflowBuilder
 }
@@ -65,7 +68,9 @@ type requestBuilder struct {
 	variables         []restfile.Variable
 	originalLines     []string
 	currentScriptKind string
+	currentScriptLang string
 	scriptBufferKind  string
+	scriptBufferLang  string
 	scriptBuffer      []string
 	settings          map[string]string
 	http              *httpbuilder.Builder
@@ -78,9 +83,13 @@ type requestBuilder struct {
 }
 
 type workflowBuilder struct {
-	startLine int
-	endLine   int
-	workflow  restfile.Workflow
+	startLine      int
+	endLine        int
+	workflow       restfile.Workflow
+	pendingWhen    *restfile.ConditionSpec
+	pendingForEach *restfile.ForEachSpec
+	openSwitch     *workflowSwitchBuilder
+	openIf         *workflowIfBuilder
 }
 
 func newDocumentBuilder(doc *restfile.Document) *documentBuilder {
@@ -322,12 +331,31 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	}
 	if key == "step" {
 		if b.workflow != nil {
-			b.workflow.addStep(line, rest)
+			if err := b.workflow.addStep(line, rest); err != "" {
+				b.addError(line, err)
+			}
+		}
+		return
+	}
+
+	if key == "use" {
+		spec, err := parseUseSpec(rest, line)
+		if err != nil {
+			b.addError(line, err.Error())
+			return
+		}
+		if b.inRequest && b.request != nil {
+			b.request.metadata.Uses = append(b.request.metadata.Uses, spec)
+		} else {
+			b.fileUses = append(b.fileUses, spec)
 		}
 		return
 	}
 	if b.workflow != nil && !b.inRequest {
-		if b.workflow.handleDirective(key, rest, line) {
+		if handled, errMsg := b.workflow.handleDirective(key, rest, line); handled {
+			if errMsg != "" {
+				b.addError(line, errMsg)
+			}
 			return
 		}
 	}
@@ -459,12 +487,49 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		b.request.variables = append(b.request.variables, variable)
 	case "script":
 		if rest != "" {
-			b.request.currentScriptKind = strings.ToLower(rest)
+			kind, lang := parseScriptSpec(rest)
+			b.request.currentScriptKind = kind
+			b.request.currentScriptLang = lang
+		}
+	case "apply":
+		if spec, ok := parseApplySpec(rest, line); ok {
+			b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
+		} else {
+			b.addError(line, "@apply expression missing")
 		}
 	case "capture":
 		if capture, ok := b.parseCaptureDirective(rest, line); ok {
 			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
 		}
+	case "assert":
+		if spec, ok := b.parseAssertDirective(rest, line); ok {
+			b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
+		} else {
+			b.addError(line, "@assert expression missing")
+		}
+	case "when", "skip-if":
+		negate := key == "skip-if"
+		spec, err := parseConditionSpec(rest, line, negate)
+		if err != nil {
+			b.addError(line, err.Error())
+			return
+		}
+		if b.request.metadata.When != nil {
+			b.addError(line, "@when directive already defined for this request")
+			return
+		}
+		b.request.metadata.When = spec
+	case "for-each":
+		spec, err := parseForEachSpec(rest, line)
+		if err != nil {
+			b.addError(line, err.Error())
+			return
+		}
+		if b.request.metadata.ForEach != nil {
+			b.addError(line, "@for-each directive already defined for this request")
+			return
+		}
+		b.request.metadata.ForEach = spec
 	case "profile":
 		if spec := parseProfileSpec(rest); spec != nil {
 			b.request.metadata.Profile = spec
@@ -490,7 +555,10 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	}
 }
 
-func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
+func (b *documentBuilder) parseCaptureDirective(
+	rest string,
+	line int,
+) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
 		return restfile.CaptureSpec{}, false
@@ -524,6 +592,103 @@ func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile
 		Expression: expression,
 		Secret:     secret,
 	}, true
+}
+
+func (b *documentBuilder) parseAssertDirective(rest string, line int) (restfile.AssertSpec, bool) {
+	expr, msg := splitAssert(rest)
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return restfile.AssertSpec{}, false
+	}
+	return restfile.AssertSpec{
+		Expression: expr,
+		Message:    msg,
+		Line:       line,
+	}, true
+}
+
+func parseApplySpec(rest string, line int) (restfile.ApplySpec, bool) {
+	expr := strings.TrimSpace(rest)
+	if strings.HasPrefix(expr, "=") {
+		expr = strings.TrimSpace(strings.TrimPrefix(expr, "="))
+	}
+	if expr == "" {
+		return restfile.ApplySpec{}, false
+	}
+	return restfile.ApplySpec{
+		Expression: expr,
+		Line:       line,
+		Col:        1,
+	}, true
+}
+
+func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
+	fields := splitAuthFields(rest)
+	if len(fields) < 3 {
+		return restfile.UseSpec{}, fmt.Errorf("@use requires a path and alias")
+	}
+	if !strings.EqualFold(fields[1], "as") {
+		return restfile.UseSpec{}, fmt.Errorf("@use must use 'as' to define an alias")
+	}
+	if len(fields) > 3 {
+		return restfile.UseSpec{}, fmt.Errorf("@use has too many tokens")
+	}
+	path := strings.TrimSpace(fields[0])
+	alias := strings.TrimSpace(fields[2])
+	if path == "" || alias == "" {
+		return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
+	}
+	if !isIdent(alias) {
+		return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", alias)
+	}
+	return restfile.UseSpec{
+		Path:  path,
+		Alias: alias,
+		Line:  line,
+	}, nil
+}
+
+func parseConditionSpec(rest string, line int, negate bool) (*restfile.ConditionSpec, error) {
+	expr := strings.TrimSpace(rest)
+	if expr == "" {
+		return nil, fmt.Errorf("@when expression missing")
+	}
+	return &restfile.ConditionSpec{
+		Expression: expr,
+		Line:       line,
+		Col:        1,
+		Negate:     negate,
+	}, nil
+}
+
+func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
+	trimmed := strings.TrimSpace(rest)
+	if trimmed == "" {
+		return nil, fmt.Errorf("@for-each expression missing")
+	}
+	if idx := strings.LastIndex(trimmed, " as "); idx >= 0 {
+		expr := strings.TrimSpace(trimmed[:idx])
+		name := strings.TrimSpace(trimmed[idx+4:])
+		if expr == "" || name == "" {
+			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
+		}
+		if !isIdent(name) {
+			return nil, fmt.Errorf("@for-each name %q is invalid", name)
+		}
+		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+	}
+	if idx := strings.Index(trimmed, " in "); idx >= 0 {
+		name := strings.TrimSpace(trimmed[:idx])
+		expr := strings.TrimSpace(trimmed[idx+4:])
+		if expr == "" || name == "" {
+			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
+		}
+		if !isIdent(name) {
+			return nil, fmt.Errorf("@for-each name %q is invalid", name)
+		}
+		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+	}
+	return nil, fmt.Errorf("@for-each must use 'as' or 'in'")
 }
 
 func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
@@ -562,18 +727,16 @@ func (b *documentBuilder) handleScript(line int, rawLine string) {
 	}
 	body = strings.TrimRight(body, " \t")
 	kind := b.request.currentScriptKind
-	if kind == "" {
-		kind = "test"
-	}
+	lang := b.request.currentScriptLang
 	trimmedHead := strings.TrimLeft(body, " \t")
 	if strings.HasPrefix(trimmedHead, "<") {
 		path := strings.TrimSpace(strings.TrimPrefix(trimmedHead, "<"))
 		if path != "" {
-			b.request.appendScriptInclude(kind, path)
+			b.request.appendScriptInclude(kind, lang, path)
 		}
 		return
 	}
-	b.request.appendScriptLine(kind, body)
+	b.request.appendScriptLine(kind, lang, body)
 }
 
 func parseAuthSpec(rest string) *restfile.AuthSpec {
@@ -803,7 +966,10 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 			}
 		}
 		if match == "" {
-			return nil, fmt.Errorf("@compare baseline %q must match one of the environments", baseline)
+			return nil, fmt.Errorf(
+				"@compare baseline %q must match one of the environments",
+				baseline,
+			)
 		}
 		baseline = match
 	}
@@ -921,11 +1087,60 @@ func parseScopeToken(token string) (string, bool) {
 	return tok, secret
 }
 
-func (b *documentBuilder) addScopedVariable(name, value string, line int, scope restfile.VariableScope, secret bool) bool {
+func isAlpha(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func isIdentStartRune(r rune) bool {
+	return r == '_' || isAlpha(r)
+}
+
+func isIdentRune(r rune) bool {
+	return isIdentStartRune(r) || isDigit(r)
+}
+
+func isOptionKeyRune(r rune) bool {
+	return r == '_' || r == '-' || r == '.' || isAlpha(r) || isDigit(r)
+}
+
+func isIdent(value string) bool {
+	if strings.TrimSpace(value) == "" {
+		return false
+	}
+	for i, r := range value {
+		if i == 0 {
+			if !isIdentStartRune(r) {
+				return false
+			}
+			continue
+		}
+		if !isIdentRune(r) {
+			return false
+		}
+	}
+	return true
+}
+
+func (b *documentBuilder) addScopedVariable(
+	name, value string,
+	line int,
+	scope restfile.VariableScope,
+	secret bool,
+) bool {
 	if name == "" {
 		return true
 	}
-	variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: scope, Secret: secret}
+	variable := restfile.Variable{
+		Name:   name,
+		Value:  value,
+		Line:   line,
+		Scope:  scope,
+		Secret: secret,
+	}
 	switch scope {
 	case restfile.ScopeGlobal:
 		b.globalVars = append(b.globalVars, variable)
@@ -1230,6 +1445,36 @@ func splitDirective(text string) (string, string) {
 	return key, rest
 }
 
+func splitAssert(text string) (string, string) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "", ""
+	}
+
+	inQuote := false
+	var quote byte
+	for i := 0; i < len(trimmed)-1; i++ {
+		ch := trimmed[i]
+		if inQuote {
+			if ch == quote {
+				inQuote = false
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			inQuote = true
+			quote = ch
+			continue
+		}
+		if ch == '=' && trimmed[i+1] == '>' {
+			left := strings.TrimSpace(trimmed[:i])
+			right := strings.TrimSpace(trimmed[i+2:])
+			return left, trimQuotes(right)
+		}
+	}
+	return trimmed, ""
+}
+
 func parseOptionTokens(input string) map[string]string {
 	trimmed := strings.TrimSpace(input)
 	if trimmed == "" {
@@ -1257,6 +1502,40 @@ func parseOptionTokens(input string) map[string]string {
 		options[strings.ToLower(key)] = trimQuotes(value)
 	}
 	return options
+}
+
+func splitExprOptions(input string) (string, map[string]string) {
+	tokens := splitAuthFields(strings.TrimSpace(input))
+	if len(tokens) == 0 {
+		return "", map[string]string{}
+	}
+	optIndex := -1
+	for i, token := range tokens {
+		if isOptionToken(token) {
+			optIndex = i
+			break
+		}
+	}
+	if optIndex == -1 {
+		return strings.Join(tokens, " "), map[string]string{}
+	}
+	expr := strings.Join(tokens[:optIndex], " ")
+	opts := parseOptionTokens(strings.Join(tokens[optIndex:], " "))
+	return expr, opts
+}
+
+func isOptionToken(token string) bool {
+	idx := strings.Index(token, "=")
+	if idx <= 0 {
+		return false
+	}
+	key := token[:idx]
+	for _, r := range key {
+		if !isOptionKeyRune(r) {
+			return false
+		}
+	}
+	return true
 }
 
 func applySettingsTokens(dst map[string]string, raw string) map[string]string {
@@ -1363,6 +1642,68 @@ func parseTagList(text string) []string {
 	return tags
 }
 
+func parseScriptSpec(rest string) (string, string) {
+	fields := splitAuthFields(rest)
+	kind := ""
+	lang := ""
+	for _, field := range fields {
+		if strings.Contains(field, "=") {
+			continue
+		}
+		if kind == "" {
+			kind = field
+			continue
+		}
+		if lang == "" {
+			if v, ok := scriptLangToken(field); ok {
+				lang = v
+			}
+		}
+	}
+	params := parseKeyValuePairs(fields)
+	if v := params["lang"]; v != "" {
+		lang = v
+	}
+	if v := params["language"]; v != "" && lang == "" {
+		lang = v
+	}
+	return normScriptKind(kind), normScriptLang(lang)
+}
+
+func normScriptKind(kind string) string {
+	out := strings.ToLower(strings.TrimSpace(kind))
+	if out == "" {
+		return "test"
+	}
+	return out
+}
+
+func normScriptLang(lang string) string {
+	out := strings.ToLower(strings.TrimSpace(lang))
+	switch out {
+	case "":
+		return "js"
+	case "javascript":
+		return "js"
+	case "restermlang":
+		return "rts"
+	default:
+		return out
+	}
+}
+
+func scriptLangToken(tok string) (string, bool) {
+	out := strings.ToLower(strings.TrimSpace(tok))
+	switch out {
+	case "js", "javascript":
+		return "js", true
+	case "rts", "restermlang":
+		return "rts", true
+	default:
+		return "", false
+	}
+}
+
 func contains(list []string, value string) bool {
 	for _, item := range list {
 		if strings.EqualFold(item, value) {
@@ -1372,17 +1713,16 @@ func contains(list []string, value string) bool {
 	return false
 }
 
-func (r *requestBuilder) appendScriptLine(kind, body string) {
-	kind = strings.ToLower(strings.TrimSpace(kind))
-	if kind == "" {
-		kind = "test"
-	}
-
-	if r.scriptBufferKind != "" && !strings.EqualFold(r.scriptBufferKind, kind) {
+func (r *requestBuilder) appendScriptLine(kind, lang, body string) {
+	kind = normScriptKind(kind)
+	lang = normScriptLang(lang)
+	if r.scriptBufferKind != "" &&
+		(!strings.EqualFold(r.scriptBufferKind, kind) || !strings.EqualFold(r.scriptBufferLang, lang)) {
 		r.flushPendingScript()
 	}
 	if r.scriptBufferKind == "" {
 		r.scriptBufferKind = kind
+		r.scriptBufferLang = lang
 	}
 	r.scriptBuffer = append(r.scriptBuffer, body)
 }
@@ -1392,18 +1732,25 @@ func (r *requestBuilder) flushPendingScript() {
 		return
 	}
 	script := strings.Join(r.scriptBuffer, "\n")
-	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: r.scriptBufferKind, Body: script})
+	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
+		Kind: r.scriptBufferKind,
+		Lang: r.scriptBufferLang,
+		Body: script,
+	})
 	r.scriptBuffer = nil
 	r.scriptBufferKind = ""
+	r.scriptBufferLang = ""
 }
 
-func (r *requestBuilder) appendScriptInclude(kind, path string) {
-	kind = strings.ToLower(strings.TrimSpace(kind))
-	if kind == "" {
-		kind = "test"
-	}
+func (r *requestBuilder) appendScriptInclude(kind, lang, path string) {
+	kind = normScriptKind(kind)
+	lang = normScriptLang(lang)
 	r.flushPendingScript()
-	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{Kind: kind, FilePath: path})
+	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
+		Kind:     kind,
+		Lang:     lang,
+		FilePath: path,
+	})
 }
 
 func (r *requestBuilder) handleBodyDirective(rest string) bool {
@@ -1467,6 +1814,7 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 		startLine:         line,
 		metadata:          restfile.RequestMetadata{Tags: []string{}},
 		currentScriptKind: "test",
+		currentScriptLang: "js",
 		http:              httpbuilder.New(),
 		graphql:           graphqlbuilder.New(),
 		grpc:              grpcbuilder.New(),
@@ -1514,6 +1862,12 @@ func (b *documentBuilder) flushWorkflow(line int) {
 	if b.workflow == nil {
 		return
 	}
+	if err := b.workflow.flushFlow(line); err != "" {
+		b.addError(line, err)
+	}
+	if err := b.workflow.requireNoPending(); err != "" {
+		b.addError(line, err)
+	}
 	scene := b.workflow.build(line)
 	if len(scene.Steps) > 0 {
 		b.doc.Workflows = append(b.doc.Workflows, scene)
@@ -1535,6 +1889,7 @@ func (b *documentBuilder) finish() {
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
+	b.doc.Uses = append(b.doc.Uses, b.fileUses...)
 	b.doc.SSH = append(b.doc.SSH, b.sshDefs...)
 }
 
@@ -1568,14 +1923,17 @@ func (r *requestBuilder) build() *restfile.Request {
 	vars := append([]restfile.Variable(nil), r.variables...)
 
 	req := &restfile.Request{
-		Metadata:     r.metadata,
-		Method:       r.http.Method(),
-		URL:          strings.TrimSpace(r.http.URL()),
-		Headers:      r.http.HeaderMap(),
-		Body:         restfile.BodySource{},
-		Variables:    vars,
-		Settings:     map[string]string{},
-		LineRange:    restfile.LineRange{Start: r.startLine, End: r.startLine + len(r.originalLines) - 1},
+		Metadata:  r.metadata,
+		Method:    r.http.Method(),
+		URL:       strings.TrimSpace(r.http.URL()),
+		Headers:   r.http.HeaderMap(),
+		Body:      restfile.BodySource{},
+		Variables: vars,
+		Settings:  map[string]string{},
+		LineRange: restfile.LineRange{
+			Start: r.startLine,
+			End:   r.startLine + len(r.originalLines) - 1,
+		},
 		OriginalText: strings.Join(r.originalLines, "\n"),
 	}
 
@@ -1664,6 +2022,20 @@ func newWorkflowBuilder(line int, name string) *workflowBuilder {
 	}
 }
 
+type workflowSwitchBuilder struct {
+	expr  string
+	cases []restfile.WorkflowSwitchCase
+	def   *restfile.WorkflowSwitchCase
+	line  int
+}
+
+type workflowIfBuilder struct {
+	then  restfile.WorkflowIfBranch
+	elifs []restfile.WorkflowIfBranch
+	els   *restfile.WorkflowIfBranch
+	line  int
+}
+
 func (s *workflowBuilder) touch(line int) {
 	if line > s.endLine {
 		s.endLine = line
@@ -1695,22 +2067,32 @@ func (s *workflowBuilder) applyOptions(opts map[string]string) {
 	}
 }
 
-func (s *workflowBuilder) handleDirective(key, rest string, line int) bool {
+func (s *workflowBuilder) handleDirective(key, rest string, line int) (bool, string) {
+	if s.openSwitch != nil && key != "case" && key != "default" {
+		if err := s.flushFlow(line); err != "" {
+			return true, err
+		}
+	}
+	if s.openIf != nil && key != "elif" && key != "else" {
+		if err := s.flushFlow(line); err != "" {
+			return true, err
+		}
+	}
 	switch key {
 	case "description", "desc":
 		if rest == "" {
-			return true
+			return true, ""
 		}
 		if s.workflow.Description != "" {
 			s.workflow.Description += "\n"
 		}
 		s.workflow.Description += rest
 		s.touch(line)
-		return true
+		return true, ""
 	case "tag", "tags":
 		tags := parseTagList(rest)
 		if len(tags) == 0 {
-			return true
+			return true, ""
 		}
 		for _, tag := range tags {
 			if !contains(s.workflow.Tags, tag) {
@@ -1718,16 +2100,230 @@ func (s *workflowBuilder) handleDirective(key, rest string, line int) bool {
 			}
 		}
 		s.touch(line)
-		return true
+		return true, ""
+	case "when", "skip-if":
+		if err := s.requireNoPending(); err != "" {
+			return true, err
+		}
+		spec, err := parseConditionSpec(rest, line, key == "skip-if")
+		if err != nil {
+			return true, err.Error()
+		}
+		if s.pendingWhen != nil {
+			return true, "@when directive already defined for next step"
+		}
+		s.pendingWhen = spec
+		s.touch(line)
+		return true, ""
+	case "for-each":
+		if err := s.requireNoPending(); err != "" {
+			return true, err
+		}
+		spec, err := parseForEachSpec(rest, line)
+		if err != nil {
+			return true, err.Error()
+		}
+		if s.pendingForEach != nil {
+			return true, "@for-each directive already defined for next step"
+		}
+		s.pendingForEach = spec
+		s.touch(line)
+		return true, ""
+	case "switch":
+		if err := s.requireNoPending(); err != "" {
+			return true, err
+		}
+		if err := s.flushFlow(line); err != "" {
+			return true, err
+		}
+		expr := strings.TrimSpace(rest)
+		if expr == "" {
+			return true, "@switch expression missing"
+		}
+		s.openSwitch = &workflowSwitchBuilder{expr: expr, line: line}
+		s.touch(line)
+		return true, ""
+	case "case":
+		if s.openSwitch == nil {
+			return true, "@case without @switch"
+		}
+		if err := s.openSwitch.addCase(rest, line); err != "" {
+			return true, err
+		}
+		s.touch(line)
+		return true, ""
+	case "default":
+		if s.openSwitch == nil {
+			return true, "@default without @switch"
+		}
+		if err := s.openSwitch.addDefault(rest, line); err != "" {
+			return true, err
+		}
+		s.touch(line)
+		return true, ""
+	case "if":
+		if err := s.requireNoPending(); err != "" {
+			return true, err
+		}
+		if err := s.flushFlow(line); err != "" {
+			return true, err
+		}
+		cond, opts := splitExprOptions(rest)
+		cond = strings.TrimSpace(cond)
+		if cond == "" {
+			return true, "@if expression missing"
+		}
+		run, fail, err := parseWorkflowRunOptions(opts)
+		if err != "" {
+			return true, err
+		}
+		s.openIf = &workflowIfBuilder{
+			then: restfile.WorkflowIfBranch{Cond: cond, Run: run, Fail: fail, Line: line},
+			line: line,
+		}
+		s.touch(line)
+		return true, ""
+	case "elif":
+		if s.openIf == nil {
+			return true, "@elif without @if"
+		}
+		cond, opts := splitExprOptions(rest)
+		cond = strings.TrimSpace(cond)
+		if cond == "" {
+			return true, "@elif expression missing"
+		}
+		run, fail, err := parseWorkflowRunOptions(opts)
+		if err != "" {
+			return true, err
+		}
+		s.openIf.elifs = append(
+			s.openIf.elifs,
+			restfile.WorkflowIfBranch{Cond: cond, Run: run, Fail: fail, Line: line},
+		)
+		s.touch(line)
+		return true, ""
+	case "else":
+		if s.openIf == nil {
+			return true, "@else without @if"
+		}
+		if s.openIf.els != nil {
+			return true, "@else already defined"
+		}
+		opts := parseOptionTokens(rest)
+		run, fail, err := parseWorkflowRunOptions(opts)
+		if err != "" {
+			return true, err
+		}
+		s.openIf.els = &restfile.WorkflowIfBranch{Run: run, Fail: fail, Line: line}
+		s.touch(line)
+		return true, ""
 	default:
-		return false
+		return false, ""
 	}
 }
 
-func (s *workflowBuilder) addStep(line int, rest string) {
+func (s *workflowBuilder) requireNoPending() string {
+	if s.pendingWhen != nil {
+		return "@when must be followed by @step"
+	}
+	if s.pendingForEach != nil {
+		return "@for-each must be followed by @step"
+	}
+	return ""
+}
+
+func (s *workflowBuilder) flushFlow(line int) string {
+	if s.openSwitch != nil {
+		if len(s.openSwitch.cases) == 0 && s.openSwitch.def == nil {
+			return "@switch requires at least one @case or @default"
+		}
+		step := restfile.WorkflowStep{
+			Kind: restfile.WorkflowStepKindSwitch,
+			Switch: &restfile.WorkflowSwitch{
+				Expr:    s.openSwitch.expr,
+				Cases:   s.openSwitch.cases,
+				Default: s.openSwitch.def,
+				Line:    s.openSwitch.line,
+			},
+			Line:      s.openSwitch.line,
+			OnFailure: s.workflow.DefaultOnFailure,
+		}
+		s.workflow.Steps = append(s.workflow.Steps, step)
+		s.openSwitch = nil
+		s.touch(line)
+	}
+	if s.openIf != nil {
+		step := restfile.WorkflowStep{
+			Kind: restfile.WorkflowStepKindIf,
+			If: &restfile.WorkflowIf{
+				Cond:  s.openIf.then.Cond,
+				Then:  s.openIf.then,
+				Elifs: s.openIf.elifs,
+				Else:  s.openIf.els,
+				Line:  s.openIf.line,
+			},
+			Line:      s.openIf.line,
+			OnFailure: s.workflow.DefaultOnFailure,
+		}
+		s.workflow.Steps = append(s.workflow.Steps, step)
+		s.openIf = nil
+		s.touch(line)
+	}
+	return ""
+}
+
+func (b *workflowSwitchBuilder) addCase(rest string, line int) string {
+	expr, opts := splitExprOptions(rest)
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return "@case expression missing"
+	}
+	run, fail, err := parseWorkflowRunOptions(opts)
+	if err != "" {
+		return err
+	}
+	b.cases = append(
+		b.cases,
+		restfile.WorkflowSwitchCase{Expr: expr, Run: run, Fail: fail, Line: line},
+	)
+	return ""
+}
+
+func (b *workflowSwitchBuilder) addDefault(rest string, line int) string {
+	if b.def != nil {
+		return "@default already defined"
+	}
+	opts := parseOptionTokens(rest)
+	run, fail, err := parseWorkflowRunOptions(opts)
+	if err != "" {
+		return err
+	}
+	b.def = &restfile.WorkflowSwitchCase{Run: run, Fail: fail, Line: line}
+	return ""
+}
+
+func parseWorkflowRunOptions(opts map[string]string) (string, string, string) {
+	run := strings.TrimSpace(opts["run"])
+	if run == "" {
+		run = strings.TrimSpace(opts["using"])
+	}
+	fail := strings.TrimSpace(opts["fail"])
+	if run == "" && fail == "" {
+		return "", "", "expected run=... or fail=..."
+	}
+	if run != "" && fail != "" {
+		return "", "", "cannot combine run and fail"
+	}
+	return run, fail, ""
+}
+
+func (s *workflowBuilder) addStep(line int, rest string) string {
+	if err := s.flushFlow(line); err != "" {
+		return err
+	}
 	remainder := strings.TrimSpace(rest)
 	if remainder == "" {
-		return
+		return "@step missing content"
 	}
 	name := ""
 	firstToken, remainderAfterFirst := splitFirst(remainder)
@@ -1744,10 +2340,15 @@ func (s *workflowBuilder) addStep(line int, rest string) {
 	}
 	using := options["using"]
 	if using == "" {
-		return
+		using = options["run"]
+	}
+	if using == "" {
+		return "@step missing using request"
 	}
 	delete(options, "using")
+	delete(options, "run")
 	step := restfile.WorkflowStep{
+		Kind:      restfile.WorkflowStepKindRequest,
 		Name:      name,
 		Using:     strings.TrimSpace(using),
 		OnFailure: s.workflow.DefaultOnFailure,
@@ -1789,8 +2390,22 @@ func (s *workflowBuilder) addStep(line int, rest string) {
 			step.Options = leftover
 		}
 	}
+	if s.pendingWhen != nil {
+		step.When = s.pendingWhen
+		s.pendingWhen = nil
+	}
+	if s.pendingForEach != nil {
+		step.Kind = restfile.WorkflowStepKindForEach
+		step.ForEach = &restfile.WorkflowForEach{
+			Expr: s.pendingForEach.Expression,
+			Var:  s.pendingForEach.Var,
+			Line: s.pendingForEach.Line,
+		}
+		s.pendingForEach = nil
+	}
 	s.workflow.Steps = append(s.workflow.Steps, step)
 	s.touch(line)
+	return ""
 }
 
 func (s *workflowBuilder) build(line int) restfile.Workflow {

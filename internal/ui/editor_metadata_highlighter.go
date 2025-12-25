@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"path/filepath"
 	"strings"
 	"unicode"
 
@@ -38,6 +39,17 @@ var directiveValueModes = map[string]metadataValueMode{
 	"grpc-authority":        metadataValueModeRest,
 	"grpc-metadata":         metadataValueModeRest,
 	"script":                metadataValueModeToken,
+	"use":                   metadataValueModeRest,
+	"when":                  metadataValueModeRest,
+	"skip-if":               metadataValueModeRest,
+	"assert":                metadataValueModeRest,
+	"for-each":              metadataValueModeRest,
+	"switch":                metadataValueModeRest,
+	"case":                  metadataValueModeRest,
+	"default":               metadataValueModeRest,
+	"if":                    metadataValueModeRest,
+	"elif":                  metadataValueModeRest,
+	"else":                  metadataValueModeRest,
 	"no-log":                metadataValueModeNone,
 	"log-sensitive-headers": metadataValueModeToken,
 	"log-secret-headers":    metadataValueModeToken,
@@ -124,6 +136,13 @@ func newMetadataRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
 	return s
 }
 
+func selectEditorRuneStyler(path string, palette theme.EditorMetadataPalette) textarea.RuneStyler {
+	if strings.EqualFold(filepath.Ext(strings.TrimSpace(path)), ".rts") {
+		return newRTSRuneStyler(palette)
+	}
+	return newMetadataRuneStyler(palette)
+}
+
 func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Style {
 	if len(line) == 0 {
 		delete(s.cache, idx)
@@ -131,7 +150,8 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Styl
 	}
 
 	lineHash := hashRunes(line)
-	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash && cached.length == len(line) {
+	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash &&
+		cached.length == len(line) {
 		return cached.styles
 	}
 
@@ -266,7 +286,12 @@ func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
 	return style, true
 }
 
-func (s *metadataRuneStyler) applySettingStyles(line []rune, styles *[]lipgloss.Style, styled *bool, start int) {
+func (s *metadataRuneStyler) applySettingStyles(
+	line []rune,
+	styles *[]lipgloss.Style,
+	styled *bool,
+	start int,
+) {
 	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
@@ -297,7 +322,12 @@ func (s *metadataRuneStyler) applySettingStyles(line []rune, styles *[]lipgloss.
 	}
 }
 
-func (s *metadataRuneStyler) applyTimeoutStyles(line []rune, styles *[]lipgloss.Style, styled *bool, start int) {
+func (s *metadataRuneStyler) applyTimeoutStyles(
+	line []rune,
+	styles *[]lipgloss.Style,
+	styled *bool,
+	start int,
+) {
 	if !s.settingValueEnabled {
 		return
 	}

@@ -56,7 +56,16 @@ func makeThemeItems(catalog theme.Catalog, activeKey string) []list.Item {
 		metaParts = append(metaParts, fmt.Sprintf("Key: %s", def.Key))
 		segments = append(segments, strings.Join(metaParts, "  |  "))
 		description := strings.Join(segments, "\n")
-		filter := strings.Join([]string{name, def.Key, def.Metadata.Author, def.Metadata.Description, string(def.Source)}, " ")
+		filter := strings.Join(
+			[]string{
+				name,
+				def.Key,
+				def.Metadata.Author,
+				def.Metadata.Description,
+				string(def.Source),
+			},
+			" ",
+		)
 		items = append(items, themeItem{
 			key:         def.Key,
 			name:        name,

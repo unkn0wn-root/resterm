@@ -106,7 +106,11 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 		}
 		if isWorkspaceKey(key) {
 			if workspaceSeen {
-				return nil, errdef.New(errdef.CodeParse, "dotenv line %d: workspace defined multiple times", lineNumber)
+				return nil, errdef.New(
+					errdef.CodeParse,
+					"dotenv line %d: workspace defined multiple times",
+					lineNumber,
+				)
 			}
 			workspaceSeen = true
 		}
@@ -132,7 +136,11 @@ func parseDotEnvAssignment(line string, lineNumber int) (string, string, error) 
 
 	idx := strings.IndexRune(trimmed, '=')
 	if idx < 0 {
-		return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: expected KEY=value", lineNumber)
+		return "", "", errdef.New(
+			errdef.CodeParse,
+			"dotenv line %d: expected KEY=value",
+			lineNumber,
+		)
 	}
 
 	key := strings.TrimSpace(trimmed[:idx])
@@ -173,7 +181,11 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 		ch := input[i]
 		if ch == '\\' {
 			if i+1 >= len(input) {
-				return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: unfinished escape", lineNumber)
+				return "", "", errdef.New(
+					errdef.CodeParse,
+					"dotenv line %d: unfinished escape",
+					lineNumber,
+				)
 			}
 			i++
 			next := input[i]
@@ -188,13 +200,21 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 			remainder := input[i+1:]
 			trimmed := strings.TrimSpace(remainder)
 			if trimmed != "" && trimmed[0] != '#' && trimmed[0] != ';' {
-				return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: unexpected content after quoted value", lineNumber)
+				return "", "", errdef.New(
+					errdef.CodeParse,
+					"dotenv line %d: unexpected content after quoted value",
+					lineNumber,
+				)
 			}
 			return b.String(), remainder, nil
 		}
 		b.WriteByte(ch)
 	}
-	return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: unterminated quoted value", lineNumber)
+	return "", "", errdef.New(
+		errdef.CodeParse,
+		"dotenv line %d: unterminated quoted value",
+		lineNumber,
+	)
 }
 
 func stripInlineComment(value string) string {
@@ -236,12 +256,20 @@ func expandDotEnvValue(value string, resolved map[string]string, lineNumber int)
 		if value[i+1] == '{' {
 			end := strings.IndexByte(value[i+2:], '}')
 			if end < 0 {
-				return "", errdef.New(errdef.CodeParse, "dotenv line %d: missing closing brace for ${", lineNumber)
+				return "", errdef.New(
+					errdef.CodeParse,
+					"dotenv line %d: missing closing brace for ${",
+					lineNumber,
+				)
 			}
 			end += i + 2
 			name := strings.TrimSpace(value[i+2 : end])
 			if name == "" {
-				return "", errdef.New(errdef.CodeParse, "dotenv line %d: empty variable name", lineNumber)
+				return "", errdef.New(
+					errdef.CodeParse,
+					"dotenv line %d: empty variable name",
+					lineNumber,
+				)
 			}
 			replacement, err := resolveDotEnvRef(name, resolved, lineNumber)
 			if err != nil {
@@ -281,7 +309,12 @@ func resolveDotEnvRef(name string, resolved map[string]string, lineNumber int) (
 	if envValue, ok := os.LookupEnv(strings.ToUpper(name)); ok {
 		return envValue, nil
 	}
-	return "", errdef.New(errdef.CodeParse, "dotenv line %d: variable %q is not defined", lineNumber, name)
+	return "", errdef.New(
+		errdef.CodeParse,
+		"dotenv line %d: variable %q is not defined",
+		lineNumber,
+		name,
+	)
 }
 
 func isDotEnvNameChar(ch byte) bool {

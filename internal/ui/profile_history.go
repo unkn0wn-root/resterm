@@ -11,7 +11,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
-func (m *Model) recordProfileHistory(st *profileState, stats analysis.LatencyStats, msg responseMsg, report string) {
+func (m *Model) recordProfileHistory(
+	st *profileState,
+	stats analysis.LatencyStats,
+	msg responseMsg,
+	report string,
+) {
 	if m.historyStore == nil || st == nil || st.base == nil {
 		return
 	}
@@ -25,14 +30,21 @@ func (m *Model) recordProfileHistory(st *profileState, stats analysis.LatencySta
 	}
 
 	if err := m.historyStore.Append(*entry); err != nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
 		return
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
 }
 
-func (m *Model) buildProfileHistoryEntry(st *profileState, stats analysis.LatencyStats, msg responseMsg, report string) *history.Entry {
+func (m *Model) buildProfileHistoryEntry(
+	st *profileState,
+	stats analysis.LatencyStats,
+	msg responseMsg,
+	report string,
+) *history.Entry {
 	req := st.base
 	if req == nil {
 		return nil
@@ -71,6 +83,16 @@ func (m *Model) buildProfileHistoryEntry(st *profileState, stats analysis.Latenc
 }
 
 func profileHistoryStatus(st *profileState, msg responseMsg) (string, int) {
+	if st != nil && st.skipped {
+		reason := strings.TrimSpace(st.skipReason)
+		if reason == "" {
+			reason = "SKIPPED"
+		}
+		if !strings.EqualFold(reason, "skipped") {
+			return fmt.Sprintf("SKIPPED: %s", reason), 0
+		}
+		return "SKIPPED", 0
+	}
 	if st != nil && st.canceled {
 		completed := profileCompletedRuns(st)
 		total := st.total

@@ -218,7 +218,8 @@ func (s *Store) ByWorkflow(name string) []Entry {
 
 	var matched []Entry
 	for _, entry := range s.entries {
-		if entry.Method == restfile.HistoryMethodWorkflow && strings.EqualFold(NormalizeWorkflowName(entry.RequestName), trimmed) {
+		if entry.Method == restfile.HistoryMethodWorkflow &&
+			strings.EqualFold(NormalizeWorkflowName(entry.RequestName), trimmed) {
 			matched = append(matched, entry)
 		}
 	}

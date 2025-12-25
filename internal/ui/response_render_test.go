@@ -37,7 +37,11 @@ func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 	rawView := buildHTTPResponseViews(resp, nil, nil).raw
 	expectedWrapped := wrapContentForTab(responseTabRaw, rawView, 12)
 	if msg.rawWrapped != expectedWrapped {
-		t.Fatalf("expected rawWrapped to match formatted raw view, got %q want %q", msg.rawWrapped, expectedWrapped)
+		t.Fatalf(
+			"expected rawWrapped to match formatted raw view, got %q want %q",
+			msg.rawWrapped,
+			expectedWrapped,
+		)
 	}
 	lines := strings.Split(msg.rawWrapped, "\n")
 	var (
@@ -67,7 +71,11 @@ func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 		t.Fatalf("expected continuation line after value segment, got %v", lines)
 	}
 	if !strings.HasPrefix(lines[indentIndex+1], indent) {
-		t.Fatalf("expected continuation line to retain indentation %q, got %q", indent, lines[indentIndex+1])
+		t.Fatalf(
+			"expected continuation line to retain indentation %q, got %q",
+			indent,
+			lines[indentIndex+1],
+		)
 	}
 }
 

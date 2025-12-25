@@ -94,7 +94,10 @@ func TestHorizontalScrollMargin(t *testing.T) {
 
 	textarea.SetCursor(margin - 1)
 	if textarea.horizOffset != 0 {
-		t.Fatalf("expected horizontal offset to reset when cursor returns within left margin, got %d", textarea.horizOffset)
+		t.Fatalf(
+			"expected horizontal offset to reset when cursor returns within left margin, got %d",
+			textarea.horizOffset,
+		)
 	}
 
 	textarea.SetCursor(len(textarea.value[0]))
@@ -103,7 +106,11 @@ func TestHorizontalScrollMargin(t *testing.T) {
 		endExpected = 0
 	}
 	if textarea.horizOffset != endExpected {
-		t.Fatalf("expected horiz offset %d at end of line, got %d", endExpected, textarea.horizOffset)
+		t.Fatalf(
+			"expected horiz offset %d at end of line, got %d",
+			endExpected,
+			textarea.horizOffset,
+		)
 	}
 }
 
@@ -318,7 +325,9 @@ func TestVerticalNavigationKeepsCursorHorizontalPosition(t *testing.T) {
 	if lineInfo.CharOffset != 4 || lineInfo.ColumnOffset != 2 {
 		t.Log(lineInfo.CharOffset)
 		t.Log(lineInfo.ColumnOffset)
-		t.Fatal("Expected cursor to be on the fourth character because there are two double width runes on the first line.")
+		t.Fatal(
+			"Expected cursor to be on the fourth character because there are two double width runes on the first line.",
+		)
 	}
 
 	downMsg := tea.KeyMsg{Type: tea.KeyDown, Alt: false, Runes: []rune{}}
@@ -328,7 +337,9 @@ func TestVerticalNavigationKeepsCursorHorizontalPosition(t *testing.T) {
 	if lineInfo.CharOffset != 4 || lineInfo.ColumnOffset != 4 {
 		t.Log(lineInfo.CharOffset)
 		t.Log(lineInfo.ColumnOffset)
-		t.Fatal("Expected cursor to be on the fourth character because we came down from the first line.")
+		t.Fatal(
+			"Expected cursor to be on the fourth character because we came down from the first line.",
+		)
 	}
 }
 
@@ -355,7 +366,12 @@ func TestVerticalNavigationShouldRememberPositionWhileTraversing(t *testing.T) {
 
 	// We are at the end of the last line.
 	if textarea.col != 20 || textarea.row != 2 {
-		t.Logf("col=%d row=%d len=%d", textarea.col, textarea.row, len(textarea.value[textarea.row]))
+		t.Logf(
+			"col=%d row=%d len=%d",
+			textarea.col,
+			textarea.row,
+			len(textarea.value[textarea.row]),
+		)
 		t.Fatal("Expected cursor to be on the 20th character of the last line")
 	}
 

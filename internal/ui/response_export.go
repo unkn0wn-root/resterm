@@ -157,7 +157,11 @@ func (m *Model) submitResponseSave() tea.Cmd {
 	m.closeResponseSaveModal()
 	m.setStatusMessage(statusMsg{
 		level: statusInfo,
-		text:  fmt.Sprintf("Saved response body (%s) to %s", formatByteSize(int64(len(body))), finalPath),
+		text: fmt.Sprintf(
+			"Saved response body (%s) to %s",
+			formatByteSize(int64(len(body))),
+			finalPath,
+		),
 	})
 	return nil
 }

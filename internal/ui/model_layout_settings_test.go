@@ -52,20 +52,32 @@ func TestCurrentLayoutSettingsClampsValues(t *testing.T) {
 	m.responseSplitOrientation = responseSplitHorizontal
 
 	layout := m.currentLayoutSettings()
-	if layout.SidebarWidth != config.NormaliseLayoutSettings(config.LayoutSettings{SidebarWidth: m.sidebarWidth}).SidebarWidth {
+	if layout.SidebarWidth != config.NormaliseLayoutSettings(
+		config.LayoutSettings{SidebarWidth: m.sidebarWidth},
+	).SidebarWidth {
 		t.Fatalf("expected sidebar width to be normalised, got %v", layout.SidebarWidth)
 	}
-	if layout.EditorSplit != config.NormaliseLayoutSettings(config.LayoutSettings{EditorSplit: m.editorSplit}).EditorSplit {
+	if layout.EditorSplit != config.NormaliseLayoutSettings(
+		config.LayoutSettings{EditorSplit: m.editorSplit},
+	).EditorSplit {
 		t.Fatalf("expected editor split to be normalised, got %v", layout.EditorSplit)
 	}
-	if layout.ResponseSplitRatio != config.NormaliseLayoutSettings(config.LayoutSettings{ResponseSplitRatio: m.responseSplitRatio}).ResponseSplitRatio {
-		t.Fatalf("expected response split ratio to be normalised, got %v", layout.ResponseSplitRatio)
+	if layout.ResponseSplitRatio != config.NormaliseLayoutSettings(
+		config.LayoutSettings{ResponseSplitRatio: m.responseSplitRatio},
+	).ResponseSplitRatio {
+		t.Fatalf(
+			"expected response split ratio to be normalised, got %v",
+			layout.ResponseSplitRatio,
+		)
 	}
 	if layout.MainSplit != config.LayoutMainSplitHorizontal {
 		t.Fatalf("expected main split horizontal token, got %v", layout.MainSplit)
 	}
 	if layout.ResponseOrientation != config.LayoutResponseOrientationHorizontal {
-		t.Fatalf("expected response orientation horizontal token, got %v", layout.ResponseOrientation)
+		t.Fatalf(
+			"expected response orientation horizontal token, got %v",
+			layout.ResponseOrientation,
+		)
 	}
 	if !layout.ResponseSplit {
 		t.Fatalf("expected response split to remain enabled")

@@ -211,7 +211,16 @@ func (c *Client) Execute(
 			timeline = traceSess.complete()
 			traceReport = buildTraceReport(timeline)
 		}
-		return &Response{Request: req, Duration: duration, Timeline: timeline, TraceReport: traceReport}, errdef.Wrap(errdef.CodeHTTP, err, "perform request")
+		return &Response{
+				Request:     req,
+				Duration:    duration,
+				Timeline:    timeline,
+				TraceReport: traceReport,
+			}, errdef.Wrap(
+				errdef.CodeHTTP,
+				err,
+				"perform request",
+			)
 	}
 
 	defer func() {
@@ -319,7 +328,11 @@ func (c *Client) prepareHTTPRequest(
 	return httpReq, effectiveOpts, nil
 }
 
-func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
+func (c *Client) prepareBody(
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (io.Reader, error) {
 	if req.Body.GraphQL != nil {
 		return c.prepareGraphQLBody(req, resolver, opts)
 	}
@@ -328,7 +341,13 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 
 	switch {
 	case req.Body.FilePath != "":
-		data, _, err := c.readFileWithFallback(req.Body.FilePath, opts.BaseDir, fallbacks, allowRaw, "body file")
+		data, _, err := c.readFileWithFallback(
+			req.Body.FilePath,
+			opts.BaseDir,
+			fallbacks,
+			allowRaw,
+			"body file",
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -368,11 +387,22 @@ func (c *Client) prepareBody(req *restfile.Request, resolver *vars.Resolver, opt
 
 // GET requests put everything in query params, POST uses JSON body.
 // Variables need special handling since they must be valid JSON in both cases.
-func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolver, opts Options) (io.Reader, error) {
+func (c *Client) prepareGraphQLBody(
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (io.Reader, error) {
 	gql := req.Body.GraphQL
 	fallbacks, allowRaw := resolveFileLookup(opts.BaseDir, opts)
 
-	query, err := c.graphQLSectionContent(gql.Query, gql.QueryFile, opts.BaseDir, fallbacks, allowRaw, "GraphQL query")
+	query, err := c.graphQLSectionContent(
+		gql.Query,
+		gql.QueryFile,
+		opts.BaseDir,
+		fallbacks,
+		allowRaw,
+		"GraphQL query",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -399,7 +429,14 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 		}
 	}
 
-	variablesRaw, err := c.graphQLSectionContent(gql.Variables, gql.VariablesFile, opts.BaseDir, fallbacks, allowRaw, "GraphQL variables")
+	variablesRaw, err := c.graphQLSectionContent(
+		gql.Variables,
+		gql.VariablesFile,
+		opts.BaseDir,
+		fallbacks,
+		allowRaw,
+		"GraphQL variables",
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -488,7 +525,12 @@ func (c *Client) prepareGraphQLBody(req *restfile.Request, resolver *vars.Resolv
 	return bytes.NewReader(body), nil
 }
 
-func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbacks []string, allowRaw bool, label string) (string, error) {
+func (c *Client) graphQLSectionContent(
+	inline, filePath, baseDir string,
+	fallbacks []string,
+	allowRaw bool,
+	label string,
+) (string, error) {
 	inline = strings.TrimSpace(inline)
 	if inline != "" {
 		return inline, nil
@@ -498,7 +540,13 @@ func (c *Client) graphQLSectionContent(inline, filePath, baseDir string, fallbac
 		return "", nil
 	}
 
-	data, _, err := c.readFileWithFallback(filePath, baseDir, fallbacks, allowRaw, strings.ToLower(label))
+	data, _, err := c.readFileWithFallback(
+		filePath,
+		baseDir,
+		fallbacks,
+		allowRaw,
+		strings.ToLower(label),
+	)
 	if err != nil {
 		return "", err
 	}
@@ -527,7 +575,8 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		transport.Proxy = http.ProxyURL(proxyURL)
 	}
 
-	if opts.InsecureSkipVerify || len(opts.RootCAs) > 0 || opts.ClientCert != "" || opts.ClientKey != "" {
+	if opts.InsecureSkipVerify || len(opts.RootCAs) > 0 || opts.ClientCert != "" ||
+		opts.ClientKey != "" {
 		tlsCfg, err := tlsconfig.Build(tlsconfig.Files{
 			RootCAs:    opts.RootCAs,
 			RootMode:   opts.RootMode,
@@ -565,7 +614,11 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	return client, nil
 }
 
-func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver, auth *restfile.AuthSpec) {
+func (c *Client) applyAuthentication(
+	req *http.Request,
+	resolver *vars.Resolver,
+	auth *restfile.AuthSpec,
+) {
 	if auth == nil || len(auth.Params) == 0 {
 		return
 	}
@@ -620,13 +673,23 @@ func (c *Client) applyAuthentication(req *http.Request, resolver *vars.Resolver,
 	}
 }
 
-func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []string, allowRaw bool, label string) ([]byte, string, error) {
+func (c *Client) readFileWithFallback(
+	path string,
+	baseDir string,
+	fallbacks []string,
+	allowRaw bool,
+	label string,
+) ([]byte, string, error) {
 	if c == nil || c.fs == nil {
 		return nil, "", errdef.New(errdef.CodeFilesystem, "file reader unavailable")
 	}
 
 	if path == "" {
-		return nil, "", errdef.New(errdef.CodeFilesystem, "%s path is empty", strings.ToLower(label))
+		return nil, "", errdef.New(
+			errdef.CodeFilesystem,
+			"%s path is empty",
+			strings.ToLower(label),
+		)
 	}
 
 	if filepath.IsAbs(path) {
@@ -634,7 +697,13 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 		if err == nil {
 			return data, path, nil
 		}
-		return nil, "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), path)
+		return nil, "", errdef.Wrap(
+			errdef.CodeFilesystem,
+			err,
+			"read %s %s",
+			strings.ToLower(label),
+			path,
+		)
 	}
 
 	candidates := buildPathCandidates(path, baseDir, fallbacks, allowRaw)
@@ -647,7 +716,13 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 			return data, candidate, nil
 		}
 		if stopReadFallback(err) {
-			return nil, "", errdef.Wrap(errdef.CodeFilesystem, err, "read %s %s", strings.ToLower(label), candidate)
+			return nil, "", errdef.Wrap(
+				errdef.CodeFilesystem,
+				err,
+				"read %s %s",
+				strings.ToLower(label),
+				candidate,
+			)
 		}
 		lastErr = err
 		lastPath = candidate
@@ -657,12 +732,24 @@ func (c *Client) readFileWithFallback(path string, baseDir string, fallbacks []s
 		lastErr = os.ErrNotExist
 		lastPath = path
 	}
-	return nil, "", errdef.Wrap(errdef.CodeFilesystem, lastErr, "read %s %s (last tried %s)", strings.ToLower(label), path, lastPath)
+	return nil, "", errdef.Wrap(
+		errdef.CodeFilesystem,
+		lastErr,
+		"read %s %s (last tried %s)",
+		strings.ToLower(label),
+		path,
+		lastPath,
+	)
 }
 
 // Lines starting with @ get replaced with the file contents.
 // @{variable} syntax is left alone so template expansion can handle it.
-func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []string, allowRaw bool) (string, error) {
+func (c *Client) injectBodyIncludes(
+	body string,
+	baseDir string,
+	fallbacks []string,
+	allowRaw bool,
+) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
 
@@ -676,10 +763,17 @@ func (c *Client) injectBodyIncludes(body string, baseDir string, fallbacks []str
 
 		first = false
 		trimmed := strings.TrimSpace(line)
-		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") && !strings.HasPrefix(trimmed, "@{") {
+		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") &&
+			!strings.HasPrefix(trimmed, "@{") {
 			includePath := strings.TrimSpace(trimmed[1:])
 			if includePath != "" {
-				data, _, err := c.readFileWithFallback(includePath, baseDir, fallbacks, allowRaw, "include body file")
+				data, _, err := c.readFileWithFallback(
+					includePath,
+					baseDir,
+					fallbacks,
+					allowRaw,
+					"include body file",
+				)
 				if err != nil {
 					return "", err
 				}

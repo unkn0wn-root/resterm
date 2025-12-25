@@ -16,7 +16,12 @@ func TestDeleteHistoryEntryRemovesFromStore(t *testing.T) {
 	if err := store.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	entry := history.Entry{ID: "1", ExecutedAt: time.Now(), Method: "GET", URL: "https://example.com"}
+	entry := history.Entry{
+		ID:         "1",
+		ExecutedAt: time.Now(),
+		Method:     "GET",
+		URL:        "https://example.com",
+	}
 	if err := store.Append(entry); err != nil {
 		t.Fatalf("append: %v", err)
 	}

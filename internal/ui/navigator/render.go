@@ -28,7 +28,14 @@ func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) 
 	return strings.Join(out, "\n")
 }
 
-func renderRow(row Flat[any], selected bool, th theme.Theme, width int, focus bool, compact bool) string {
+func renderRow(
+	row Flat[any],
+	selected bool,
+	th theme.Theme,
+	width int,
+	focus bool,
+	compact bool,
+) string {
 	n := row.Node
 	if n == nil {
 		return ""

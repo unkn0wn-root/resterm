@@ -59,7 +59,11 @@ func (i requestListItem) compactTitle() string {
 	target := expandStatusText(i.resolver, requestTarget(i.request))
 	target = truncateInline(target, 42)
 	desc := condense(expandStatusText(i.resolver, i.request.Metadata.Description), 48)
-	meta := compactStrings(requestCompareBadge(i.request), requestTypeBadge(i.request), joinTags(i.request.Metadata.Tags, 3))
+	meta := compactStrings(
+		requestCompareBadge(i.request),
+		requestTypeBadge(i.request),
+		joinTags(i.request.Metadata.Tags, 3),
+	)
 
 	info := strings.Join(compactStrings(method, target), " ")
 	parts := compactStrings(name, info, desc)
@@ -278,7 +282,13 @@ func (m *Model) buildRequestItems(doc *restfile.Document) ([]requestListItem, []
 			line = 1
 		}
 		resolver := m.statusResolver(doc, req, env)
-		item := requestListItem{request: req, index: idx, line: line, resolver: resolver, compact: m.reqCompact}
+		item := requestListItem{
+			request:  req,
+			index:    idx,
+			line:     line,
+			resolver: resolver,
+			compact:  m.reqCompact,
+		}
 		items[idx] = item
 		listItems[idx] = item
 	}

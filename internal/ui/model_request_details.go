@@ -18,7 +18,9 @@ type requestDetailField struct {
 
 func (m *Model) openRequestDetails() {
 	if m.focus != focusFile && m.focus != focusRequests {
-		m.setStatusMessage(statusMsg{text: "Focus files or requests to view details", level: statusInfo})
+		m.setStatusMessage(
+			statusMsg{text: "Focus files or requests to view details", level: statusInfo},
+		)
 		return
 	}
 	req, doc, path := m.requestDetailContext()
@@ -106,7 +108,11 @@ func (m *Model) requestDetailTitleFor(req *restfile.Request, doc *restfile.Docum
 	return fmt.Sprintf("%s %s", method, target)
 }
 
-func (m *Model) buildRequestDetailFields(req *restfile.Request, doc *restfile.Document, path string) []requestDetailField {
+func (m *Model) buildRequestDetailFields(
+	req *restfile.Request,
+	doc *restfile.Document,
+	path string,
+) []requestDetailField {
 	env := m.cfg.EnvironmentName
 	res := m.statusResolver(doc, req, env)
 	name := expandStatusText(res, req.Metadata.Name)
@@ -166,7 +172,11 @@ func detailFile(path string, workspace string, line int) string {
 		return ""
 	}
 	if workspace != "" {
-		if rel, err := filepath.Rel(workspace, path); err == nil && rel != "" && !strings.HasPrefix(rel, "..") {
+		if rel, err := filepath.Rel(
+			workspace,
+			path,
+		); err == nil && rel != "" &&
+			!strings.HasPrefix(rel, "..") {
 			path = rel
 		}
 	}

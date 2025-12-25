@@ -18,7 +18,11 @@ func NewLoader() *Loader {
 	return &Loader{}
 }
 
-func (l *Loader) Parse(ctx context.Context, path string, opts openapi.ParseOptions) (*model.Spec, error) {
+func (l *Loader) Parse(
+	ctx context.Context,
+	path string,
+	opts openapi.ParseOptions,
+) (*model.Spec, error) {
 	loader := openapi3.NewLoader()
 	loader.IsExternalRefsAllowed = opts.ResolveExternalRefs
 
@@ -137,7 +141,11 @@ func convertServers(servers openapi3.Servers) []model.Server {
 	return result
 }
 
-func selectServers(docServers openapi3.Servers, pathServers openapi3.Servers, opServers *openapi3.Servers) openapi3.Servers {
+func selectServers(
+	docServers openapi3.Servers,
+	pathServers openapi3.Servers,
+	opServers *openapi3.Servers,
+) openapi3.Servers {
 	if opServers != nil && len(*opServers) > 0 {
 		return *opServers
 	}
@@ -243,7 +251,12 @@ func extractParameterExample(p *openapi3.Parameter) model.Example {
 	if len(p.Examples) > 0 {
 		for _, exRef := range p.Examples {
 			if exRef != nil && exRef.Value != nil {
-				return model.Example{Summary: exRef.Value.Summary, Value: exRef.Value.Value, Source: model.ExampleFromExplicit, HasValue: true}
+				return model.Example{
+					Summary:  exRef.Value.Summary,
+					Value:    exRef.Value.Value,
+					Source:   model.ExampleFromExplicit,
+					HasValue: true,
+				}
 			}
 		}
 	}
@@ -258,15 +271,27 @@ func extractExampleFromSchema(ref *openapi3.SchemaRef) (model.Example, bool) {
 
 	schema := ref.Value
 	if schema.Example != nil {
-		return model.Example{Value: schema.Example, Source: model.ExampleFromExplicit, HasValue: true}, true
+		return model.Example{
+			Value:    schema.Example,
+			Source:   model.ExampleFromExplicit,
+			HasValue: true,
+		}, true
 	}
 
 	if schema.Default != nil {
-		return model.Example{Value: schema.Default, Source: model.ExampleFromDefault, HasValue: true}, true
+		return model.Example{
+			Value:    schema.Default,
+			Source:   model.ExampleFromDefault,
+			HasValue: true,
+		}, true
 	}
 
 	if len(schema.Enum) > 0 {
-		return model.Example{Value: schema.Enum[0], Source: model.ExampleFromEnum, HasValue: true}, true
+		return model.Example{
+			Value:    schema.Enum[0],
+			Source:   model.ExampleFromEnum,
+			HasValue: true,
+		}, true
 	}
 
 	return model.Example{}, false
@@ -329,7 +354,12 @@ func extractMediaTypeExample(mt *openapi3.MediaType) model.Example {
 	if len(mt.Examples) > 0 {
 		for _, ref := range mt.Examples {
 			if ref != nil && ref.Value != nil {
-				return model.Example{Summary: ref.Value.Summary, Value: ref.Value.Value, Source: model.ExampleFromExplicit, HasValue: true}
+				return model.Example{
+					Summary:  ref.Value.Summary,
+					Value:    ref.Value.Value,
+					Source:   model.ExampleFromExplicit,
+					HasValue: true,
+				}
 			}
 		}
 	}
@@ -392,7 +422,10 @@ func convertResponses(responses *openapi3.Responses) []model.Response {
 	return result
 }
 
-func resolveSecurityRequirements(doc *openapi3.T, op *openapi3.Operation) []model.SecurityRequirement {
+func resolveSecurityRequirements(
+	doc *openapi3.T,
+	op *openapi3.Operation,
+) []model.SecurityRequirement {
 	var source openapi3.SecurityRequirements
 	if op.Security != nil {
 		source = *op.Security
@@ -425,7 +458,9 @@ func resolveSecurityRequirements(doc *openapi3.T, op *openapi3.Operation) []mode
 	return requirements
 }
 
-func convertSecuritySchemes(raw map[string]*openapi3.SecuritySchemeRef) map[string]model.SecurityScheme {
+func convertSecuritySchemes(
+	raw map[string]*openapi3.SecuritySchemeRef,
+) map[string]model.SecurityScheme {
 	if len(raw) == 0 {
 		return nil
 	}

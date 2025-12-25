@@ -20,11 +20,25 @@ func TestWorkflowStatsSearchUsesRenderedContent(t *testing.T) {
 	pane.activeTab = responseTabStats
 
 	view := &workflowStatsView{
-		name:        "wf",
-		started:     time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
-		ended:       time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
-		totalSteps:  1,
-		entries:     []workflowStatsEntry{{index: 0, result: workflowStepResult{Step: restfile.WorkflowStep{Name: "Call"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Headers: http.Header{"Content-Type": []string{"application/json"}}, Body: []byte(`{"hello":"world"}`)}}}},
+		name:       "wf",
+		started:    time.Date(2024, time.January, 1, 0, 0, 0, 0, time.UTC),
+		ended:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
+		totalSteps: 1,
+		entries: []workflowStatsEntry{
+			{
+				index: 0,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Call"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Headers:    http.Header{"Content-Type": []string{"application/json"}},
+						Body:       []byte(`{"hello":"world"}`),
+					},
+				},
+			},
+		},
 		selected:    0,
 		expanded:    map[int]bool{0: true},
 		renderCache: make(map[int]workflowStatsRender),
@@ -67,8 +81,32 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 		ended:      time.Date(2024, time.January, 1, 0, 0, 1, 0, time.UTC),
 		totalSteps: 2,
 		entries: []workflowStatsEntry{
-			{index: 0, result: workflowStepResult{Step: restfile.WorkflowStep{Name: "Call"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Headers: http.Header{"Content-Type": []string{"application/json"}}, Body: []byte(`{"alpha":"match"}`)}}},
-			{index: 1, result: workflowStepResult{Step: restfile.WorkflowStep{Name: "Call 2"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Headers: http.Header{"Content-Type": []string{"application/json"}}, Body: []byte(`{"beta":"match"}`)}}},
+			{
+				index: 0,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Call"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Headers:    http.Header{"Content-Type": []string{"application/json"}},
+						Body:       []byte(`{"alpha":"match"}`),
+					},
+				},
+			},
+			{
+				index: 1,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Call 2"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Headers:    http.Header{"Content-Type": []string{"application/json"}},
+						Body:       []byte(`{"beta":"match"}`),
+					},
+				},
+			},
 		},
 		expanded:    map[int]bool{0: true, 1: true},
 		renderCache: make(map[int]workflowStatsRender),
@@ -83,14 +121,22 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 		ready:         true,
 	}
 
-	if status := statusFromCmd(t, model.applyResponseSearch("match", false)); status == nil || status.level != statusInfo {
+	if status := statusFromCmd(
+		t,
+		model.applyResponseSearch("match", false),
+	); status == nil ||
+		status.level != statusInfo {
 		t.Fatalf("expected search to start, got %v", status)
 	}
 	if len(pane.search.matches) < 2 {
 		t.Fatalf("expected at least two matches, got %d", len(pane.search.matches))
 	}
 
-	if status := statusFromCmd(t, model.advanceResponseSearch()); status == nil || status.level != statusInfo {
+	if status := statusFromCmd(
+		t,
+		model.advanceResponseSearch(),
+	); status == nil ||
+		status.level != statusInfo {
 		t.Fatalf("expected to advance search, got %v", status)
 	}
 	if pane.search.index != 1 {
@@ -102,7 +148,10 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 	}
 
 	if pane.search.index != 1 {
-		t.Fatalf("expected search index to stay on current match after selection change, got %d", pane.search.index)
+		t.Fatalf(
+			"expected search index to stay on current match after selection change, got %d",
+			pane.search.index,
+		)
 	}
 	if !pane.search.active {
 		t.Fatalf("expected search to remain active after selection change")

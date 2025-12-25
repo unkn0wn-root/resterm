@@ -23,6 +23,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -261,6 +262,7 @@ type Model struct {
 	lastError        error
 
 	scriptRunner    *scripts.Runner
+	rtsEng          *rts.Eng
 	testResults     []scripts.TestResult
 	scriptError     error
 	globals         *globalStore
@@ -415,7 +417,10 @@ func New(cfg Config) Model {
 	}
 	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
 		initialStatus = statusMsg{
-			text:  fmt.Sprintf("Environment defaulted to %q - press Ctrl+E to change.", cfg.EnvironmentFallback),
+			text: fmt.Sprintf(
+				"Environment defaulted to %q - press Ctrl+E to change.",
+				cfg.EnvironmentFallback,
+			),
 			level: statusInfo,
 		}
 	}
@@ -438,7 +443,7 @@ func New(cfg Config) Model {
 	}
 
 	editor := newRequestEditor()
-	editor.SetRuneStyler(newMetadataRuneStyler(th.EditorMetadata))
+	editor.SetRuneStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata))
 	editor.Placeholder = "Write HTTP requests here..."
 	editor.SetValue(cfg.InitialContent)
 	editor.moveToBufferTop()
@@ -557,7 +562,8 @@ func New(cfg Config) Model {
 	sshGlobals := newSSHStore()
 
 	updateVersion := strings.TrimSpace(cfg.Version)
-	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" && cfg.UpdateClient.Ready()
+	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" &&
+		cfg.UpdateClient.Ready()
 
 	model := Model{
 		cfg:                    cfg,
@@ -609,6 +615,7 @@ func New(cfg Config) Model {
 		lastCursorLine:           -1,
 		statusMessage:            initialStatus,
 		scriptRunner:             scripts.NewRunner(nil),
+		rtsEng:                   rts.NewEng(),
 		globals:                  newGlobalStore(),
 		fileVars:                 newFileStore(),
 		oauth:                    oauth.NewManager(client),
@@ -659,7 +666,8 @@ func New(cfg Config) Model {
 	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
 	model.applyThemeToLists()
-	if strings.TrimSpace(model.workspaceRoot) != "" && strings.TrimSpace(model.lastResponseSaveDir) == "" {
+	if strings.TrimSpace(model.workspaceRoot) != "" &&
+		strings.TrimSpace(model.lastResponseSaveDir) == "" {
 		model.lastResponseSaveDir = model.workspaceRoot
 	}
 

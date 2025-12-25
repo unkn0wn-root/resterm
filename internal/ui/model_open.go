@@ -114,7 +114,10 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	return batchCommands(
 		focusCmd,
 		func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("Workspace set to %s", filepath.Base(dir)), level: statusInfo}
+			return statusMsg{
+				text:  fmt.Sprintf("Workspace set to %s", filepath.Base(dir)),
+				level: statusInfo,
+			}
 		},
 	)
 }

@@ -40,7 +40,9 @@ func (m *Model) applyRawMode(snap *responseSnapshot, mode rawViewMode, msg strin
 		return nil
 	}
 	if snap.rawLoading {
-		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpProgressMessage(snap, snap.rawLoadingMode)})
+		m.setStatusMessage(
+			statusMsg{level: statusInfo, text: rawDumpProgressMessage(snap, snap.rawLoadingMode)},
+		)
 		return nil
 	}
 
@@ -75,7 +77,9 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 		return nil
 	}
 	if snap.rawLoading {
-		m.setStatusMessage(statusMsg{level: statusInfo, text: rawDumpLoadingMessage(snap.rawLoadingMode)})
+		m.setStatusMessage(
+			statusMsg{level: statusInfo, text: rawDumpLoadingMessage(snap.rawLoadingMode)},
+		)
 		return nil
 	}
 
@@ -211,7 +215,8 @@ func applyRawViewMode(snapshot *responseSnapshot, mode rawViewMode) {
 	meta := ensureSnapshotMeta(snapshot)
 	sz := len(snapshot.body)
 	mode = clampRawViewMode(meta, sz, mode)
-	if snapshot.rawText == "" && len(snapshot.body) > 0 && (meta.Kind == binaryview.KindText || meta.Printable) {
+	if snapshot.rawText == "" && len(snapshot.body) > 0 &&
+		(meta.Kind == binaryview.KindText || meta.Printable) {
 		snapshot.rawText = formatRawBody(snapshot.body, snapshot.contentType)
 	}
 	needHex := mode == rawViewHex

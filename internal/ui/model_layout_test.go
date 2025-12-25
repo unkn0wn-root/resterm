@@ -18,7 +18,11 @@ func TestAdjustSidebarWidthModifiesWidths(t *testing.T) {
 	initialSidebar := model.sidebarWidthPx
 	initialEditor := model.editor.Width()
 	if initialSidebar <= 0 || initialEditor <= 0 {
-		t.Fatalf("expected initial widths to be positive, got sidebar %d editor %d", initialSidebar, initialEditor)
+		t.Fatalf(
+			"expected initial widths to be positive, got sidebar %d editor %d",
+			initialSidebar,
+			initialEditor,
+		)
 	}
 
 	if changed, _, _ := model.adjustSidebarWidth(sidebarWidthStep); !changed {
@@ -29,7 +33,11 @@ func TestAdjustSidebarWidthModifiesWidths(t *testing.T) {
 		t.Fatalf("expected sidebar width to grow, initial %d new %d", initialSidebar, expanded)
 	}
 	if model.editor.Width() >= initialEditor {
-		t.Fatalf("expected editor width to shrink after sidebar grows, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to shrink after sidebar grows, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 
 	if changed, _, _ := model.adjustSidebarWidth(-sidebarWidthStep * 2); !changed {
@@ -37,10 +45,18 @@ func TestAdjustSidebarWidthModifiesWidths(t *testing.T) {
 	}
 	shrunken := model.sidebarWidthPx
 	if shrunken >= initialSidebar {
-		t.Fatalf("expected sidebar width to shrink below initial, initial %d new %d", initialSidebar, shrunken)
+		t.Fatalf(
+			"expected sidebar width to shrink below initial, initial %d new %d",
+			initialSidebar,
+			shrunken,
+		)
 	}
 	if model.editor.Width() <= initialEditor {
-		t.Fatalf("expected editor width to grow after sidebar shrinks, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to grow after sidebar shrinks, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 }
 
@@ -85,27 +101,47 @@ func TestAdjustEditorSplitReallocatesWidths(t *testing.T) {
 	initialEditor := model.editor.Width()
 	initialResponse := model.responseContentWidth()
 	if initialEditor <= 0 || initialResponse <= 0 {
-		t.Fatalf("expected initial widths to be positive, got %d and %d", initialEditor, initialResponse)
+		t.Fatalf(
+			"expected initial widths to be positive, got %d and %d",
+			initialEditor,
+			initialResponse,
+		)
 	}
 
 	if changed, _, _ := model.adjustEditorSplit(-editorSplitStep); !changed {
 		t.Fatalf("expected editor split decrease to apply")
 	}
 	if model.editor.Width() >= initialEditor {
-		t.Fatalf("expected editor width to shrink, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to shrink, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 	if model.responseContentWidth() <= initialResponse {
-		t.Fatalf("expected response width to grow, initial %d new %d", initialResponse, model.responseContentWidth())
+		t.Fatalf(
+			"expected response width to grow, initial %d new %d",
+			initialResponse,
+			model.responseContentWidth(),
+		)
 	}
 
 	if changed, _, _ := model.adjustEditorSplit(editorSplitStep * 2); !changed {
 		t.Fatalf("expected editor split increase to apply")
 	}
 	if model.editor.Width() <= initialEditor {
-		t.Fatalf("expected editor width to exceed original, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to exceed original, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 	if model.responseContentWidth() >= initialResponse {
-		t.Fatalf("expected response width to shrink, initial %d new %d", initialResponse, model.responseContentWidth())
+		t.Fatalf(
+			"expected response width to shrink, initial %d new %d",
+			initialResponse,
+			model.responseContentWidth(),
+		)
 	}
 }
 
@@ -133,7 +169,12 @@ func TestResponsePaneWidthMatchesLayout(t *testing.T) {
 				respPane = m.renderResponsePane(adjusted)
 				respWidth = lipgloss.Width(respPane)
 				if fileWidth+editorWidth+respWidth > m.width {
-					t.Fatalf("expected overflow to be resolved, width %d target %d adjusted %d", respWidth, target, adjusted)
+					t.Fatalf(
+						"expected overflow to be resolved, width %d target %d adjusted %d",
+						respWidth,
+						target,
+						adjusted,
+					)
 				}
 			} else {
 				respPane = ""
@@ -175,7 +216,12 @@ func TestZoomEditorKeepsResponseWithinBounds(t *testing.T) {
 				respPane = m.renderResponsePane(adjusted)
 				respWidth = lipgloss.Width(respPane)
 				if fileWidth+editorWidth+respWidth > m.width {
-					t.Fatalf("expected overflow to clear when zoomed, width %d target %d adjusted %d", respWidth, target, adjusted)
+					t.Fatalf(
+						"expected overflow to clear when zoomed, width %d target %d adjusted %d",
+						respWidth,
+						target,
+						adjusted,
+					)
 				}
 			} else {
 				respPane = ""
@@ -207,10 +253,18 @@ func TestCollapseResponseExpandsEditorWidth(t *testing.T) {
 		t.Fatalf("expected response pane to report collapsed state")
 	}
 	if model.editor.Width() <= initialEditor {
-		t.Fatalf("expected editor width to grow after collapsing response, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to grow after collapsing response, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 	if model.responseContentWidth() >= initialResponse {
-		t.Fatalf("expected response width to shrink after collapse, initial %d new %d", initialResponse, model.responseContentWidth())
+		t.Fatalf(
+			"expected response width to shrink after collapse, initial %d new %d",
+			initialResponse,
+			model.responseContentWidth(),
+		)
 	}
 }
 
@@ -235,7 +289,11 @@ func TestCollapsedResponseHidesPaneWidth(t *testing.T) {
 	}
 	total := fileWidth + editorWidth
 	if total != model.width {
-		t.Fatalf("expected visible panes to fill width %d after collapse, got %d", model.width, total)
+		t.Fatalf(
+			"expected visible panes to fill width %d after collapse, got %d",
+			model.width,
+			total,
+		)
 	}
 }
 
@@ -254,10 +312,17 @@ func TestHorizontalCollapseUsesFullHeight(t *testing.T) {
 	}
 	_ = model.applyLayout()
 	if model.responseContentHeight <= initialResp {
-		t.Fatalf("expected response height to grow after editor collapse, initial %d new %d", initialResp, model.responseContentHeight)
+		t.Fatalf(
+			"expected response height to grow after editor collapse, initial %d new %d",
+			initialResp,
+			model.responseContentHeight,
+		)
 	}
 	if model.editorContentHeight != 0 {
-		t.Fatalf("expected editor height to be zero when collapsed horizontally, got %d", model.editorContentHeight)
+		t.Fatalf(
+			"expected editor height to be zero when collapsed horizontally, got %d",
+			model.editorContentHeight,
+		)
 	}
 }
 
@@ -364,7 +429,19 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 			responseOuter := paneOuterWidthFromContent(responseContent, responseFrame)
 			total := model.sidebarWidthPx + editorOuter + responseOuter
 			if total > model.width {
-				t.Fatalf("calculated pane widths sidebar=%d editor=%d (content %d, view %d) response=%d (content %d, view %d) total=%d window %d (list config %d)", model.sidebarWidthPx, editorOuter, editorContent, editorViewWidth, responseOuter, responseContent, responseViewWidth, total, model.width, listConfiguredWidth)
+				t.Fatalf(
+					"calculated pane widths sidebar=%d editor=%d (content %d, view %d) response=%d (content %d, view %d) total=%d window %d (list config %d)",
+					model.sidebarWidthPx,
+					editorOuter,
+					editorContent,
+					editorViewWidth,
+					responseOuter,
+					responseContent,
+					responseViewWidth,
+					total,
+					model.width,
+					listConfiguredWidth,
+				)
 			}
 
 			filePane := model.renderFilePane()
@@ -374,7 +451,9 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 				available = 0
 			}
 			responsePane := model.renderResponsePane(available)
-			panesWidth := lipgloss.Width(lipgloss.JoinHorizontal(lipgloss.Top, filePane, editorPane, responsePane))
+			panesWidth := lipgloss.Width(
+				lipgloss.JoinHorizontal(lipgloss.Top, filePane, editorPane, responsePane),
+			)
 			if panesWidth != model.width {
 				t.Fatalf(
 					"rendered widths file=%d editor=%d response=%d total=%d window %d (calculated sidebar=%d editor=%d response=%d list view %d list config %d editor view %d response view %d)",

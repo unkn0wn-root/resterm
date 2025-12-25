@@ -32,8 +32,12 @@ func TestApplyPOSIX(t *testing.T) {
 	}
 
 	res := Result{
-		Info:   Info{Version: "v1.1.0"},
-		Bin:    Asset{Name: "resterm_Linux_x86_64", URL: "https://mock/bin", Size: int64(len(body))},
+		Info: Info{Version: "v1.1.0"},
+		Bin: Asset{
+			Name: "resterm_Linux_x86_64",
+			URL:  "https://mock/bin",
+			Size: int64(len(body)),
+		},
 		Sum:    Asset{Name: "resterm_Linux_x86_64.sha256", URL: "https://mock/sum"},
 		HasSum: true,
 	}

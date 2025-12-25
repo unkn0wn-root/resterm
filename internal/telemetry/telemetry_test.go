@@ -16,7 +16,10 @@ import (
 
 func TestInstrumenterRecordsTimeline(t *testing.T) {
 	recorder := tracetest.NewSpanRecorder()
-	inst, err := New(Config{ServiceName: "resterm-test", Version: "test"}, WithSpanProcessor(recorder))
+	inst, err := New(
+		Config{ServiceName: "resterm-test", Version: "test"},
+		WithSpanProcessor(recorder),
+	)
 	if err != nil {
 		t.Fatalf("New instrumenter: %v", err)
 	}
@@ -40,7 +43,10 @@ func TestInstrumenterRecordsTimeline(t *testing.T) {
 	}
 
 	budget := nettrace.Budget{Total: 200 * time.Millisecond}
-	ctx, span := inst.Start(context.Background(), RequestStart{Request: req, HTTPRequest: httpReq, Budget: &budget})
+	ctx, span := inst.Start(
+		context.Background(),
+		RequestStart{Request: req, HTTPRequest: httpReq, Budget: &budget},
+	)
 	if ctx == nil || span == nil {
 		t.Fatalf("expected span to be created")
 	}

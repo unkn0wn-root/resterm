@@ -36,7 +36,13 @@ func TestEvaluateWorkflowStep(t *testing.T) {
 			{step: restfile.WorkflowStep{OnFailure: restfile.WorkflowOnFailureStop}},
 		},
 	}
-	resp := responseMsg{response: &httpclient.Response{Status: "200 OK", StatusCode: 200, Duration: 20 * time.Millisecond}}
+	resp := responseMsg{
+		response: &httpclient.Response{
+			Status:     "200 OK",
+			StatusCode: 200,
+			Duration:   20 * time.Millisecond,
+		},
+	}
 	result := evaluateWorkflowStep(state, resp)
 	if !result.Success {
 		t.Fatalf("expected step success, got failure: %+v", result)
@@ -84,7 +90,14 @@ func TestWorkflowRunProgression(t *testing.T) {
 	}
 
 	// simulate successful first step
-	resp := responseMsg{response: &httpclient.Response{Status: "200 OK", StatusCode: 200, Duration: 15 * time.Millisecond}, executed: current}
+	resp := responseMsg{
+		response: &httpclient.Response{
+			Status:     "200 OK",
+			StatusCode: 200,
+			Duration:   15 * time.Millisecond,
+		},
+		executed: current,
+	}
 	model.handleWorkflowResponse(resp)
 	if model.workflowRun == nil {
 		t.Fatalf("expected workflow to continue after first step")
@@ -102,7 +115,10 @@ func TestWorkflowRunProgression(t *testing.T) {
 	}
 
 	// simulate failure on second step
-	failure := responseMsg{response: &httpclient.Response{Status: "500 Internal Server Error", StatusCode: 500}, executed: second}
+	failure := responseMsg{
+		response: &httpclient.Response{Status: "500 Internal Server Error", StatusCode: 500},
+		executed: second,
+	}
 	model.handleWorkflowResponse(failure)
 	if model.workflowRun != nil {
 		t.Fatalf("expected workflow run to finish after failure")
@@ -201,6 +217,92 @@ func TestSyncWorkflowList(t *testing.T) {
 	}
 	if model.activeWorkflowKey == "" {
 		t.Fatalf("expected active workflow key to be set")
+	}
+}
+
+func TestWorkflowIfUsesDocVars(t *testing.T) {
+	doc := &restfile.Document{
+		Variables: []restfile.Variable{
+			{Name: "auth.token", Value: "abc", Scope: restfile.ScopeFile},
+		},
+	}
+	step := restfile.WorkflowStep{
+		Kind: restfile.WorkflowStepKindIf,
+		If: &restfile.WorkflowIf{
+			Then: restfile.WorkflowIfBranch{
+				Cond: `vars.has("auth.token")`,
+				Fail: "blocked",
+				Line: 1,
+			},
+			Line: 1,
+		},
+		OnFailure: restfile.WorkflowOnFailureStop,
+	}
+	state := &workflowState{
+		doc:      doc,
+		workflow: restfile.Workflow{Name: "wf"},
+		steps:    []workflowStepRuntime{{step: step}},
+		vars:     map[string]string{},
+	}
+	model := New(Config{})
+	model.ready = true
+	model.workflowRun = state
+
+	cmd := model.executeWorkflowStep()
+	collectMsgs(cmd)
+
+	if len(state.results) != 1 {
+		t.Fatalf("expected one result, got %d", len(state.results))
+	}
+	got := state.results[0]
+	if got.Skipped {
+		t.Fatalf("expected @if to match, got skipped: %s", got.Message)
+	}
+	if got.Message != "blocked" {
+		t.Fatalf("expected message %q, got %q", "blocked", got.Message)
+	}
+}
+
+func TestWorkflowForEachUsesDocVars(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+		Metadata: restfile.RequestMetadata{
+			Name: "StepA",
+		},
+	}
+	doc := &restfile.Document{
+		Variables: []restfile.Variable{
+			{Name: "items", Value: `["a","b"]`, Scope: restfile.ScopeFile},
+		},
+		Requests: []*restfile.Request{req},
+	}
+	step := restfile.WorkflowStep{
+		Kind:  restfile.WorkflowStepKindForEach,
+		Using: "StepA",
+		ForEach: &restfile.WorkflowForEach{
+			Expr: `json.parse(vars.require("items"))`,
+			Var:  "item",
+			Line: 1,
+		},
+		OnFailure: restfile.WorkflowOnFailureStop,
+	}
+	state := &workflowState{
+		doc:      doc,
+		workflow: restfile.Workflow{Name: "wf"},
+		steps:    []workflowStepRuntime{{step: step, request: req}},
+		vars:     map[string]string{},
+	}
+	model := New(Config{})
+	model.workflowRun = state
+
+	_ = model.executeWorkflowRequestStep(state, state.steps[0], httpclient.Options{})
+
+	if state.loop == nil {
+		t.Fatalf("expected loop state to be set")
+	}
+	if len(state.loop.items) != 2 {
+		t.Fatalf("expected 2 loop items, got %d", len(state.loop.items))
 	}
 }
 

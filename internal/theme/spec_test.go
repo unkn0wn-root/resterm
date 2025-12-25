@@ -50,7 +50,10 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 		t.Fatalf("expected 1 header segment, got %d", len(updated.HeaderSegments))
 	}
 	if updated.HeaderSegments[0].Background != "#111111" {
-		t.Errorf("expected header background override, got %q", updated.HeaderSegments[0].Background)
+		t.Errorf(
+			"expected header background override, got %q",
+			updated.HeaderSegments[0].Background,
+		)
 	}
 	if len(updated.CommandSegments) != 1 {
 		t.Fatalf("expected 1 command segment, got %d", len(updated.CommandSegments))
@@ -59,7 +62,10 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 		t.Errorf("expected command key color override, got %q", updated.CommandSegments[0].Key)
 	}
 	if updated.EditorMetadata.CommentMarker != "#222222" {
-		t.Errorf("expected metadata comment marker override, got %q", updated.EditorMetadata.CommentMarker)
+		t.Errorf(
+			"expected metadata comment marker override, got %q",
+			updated.EditorMetadata.CommentMarker,
+		)
 	}
 	if color, ok := updated.EditorMetadata.DirectiveColors["custom"]; !ok || color != "#333333" {
 		t.Errorf("expected directive color #333333, got %q (present=%v)", color, ok)
@@ -106,7 +112,10 @@ func TestApplySpecDirectiveDefaultOverridesExistingEntries(t *testing.T) {
 	}
 
 	if updated.EditorMetadata.DirectiveDefault != "#123456" {
-		t.Fatalf("expected directive default to update, got %q", updated.EditorMetadata.DirectiveDefault)
+		t.Fatalf(
+			"expected directive default to update, got %q",
+			updated.EditorMetadata.DirectiveDefault,
+		)
 	}
 	if color := updated.EditorMetadata.DirectiveColors["name"]; color != "#123456" {
 		t.Errorf("expected name directive to follow new default, got %q", color)
@@ -119,5 +128,42 @@ func TestApplySpecDirectiveDefaultOverridesExistingEntries(t *testing.T) {
 	}
 	if color := base.EditorMetadata.DirectiveColors["name"]; color != original["name"] {
 		t.Errorf("base directive colors should remain unchanged")
+	}
+}
+
+func TestApplySpecRTSKeywordOverrides(t *testing.T) {
+	base := DefaultTheme()
+	spec := ThemeSpec{
+		EditorMetadata: &EditorMetadataSpec{
+			RTSKeywordDefault: strPtr("#101010"),
+			RTSKeywordDecl:    strPtr("#111111"),
+			RTSKeywordControl: strPtr("#222222"),
+			RTSKeywordLiteral: strPtr("#333333"),
+			RTSKeywordLogical: strPtr("#444444"),
+		},
+	}
+
+	updated, err := ApplySpec(base, spec)
+	if err != nil {
+		t.Fatalf("ApplySpec returned error: %v", err)
+	}
+
+	if got := updated.EditorMetadata.RTSKeywordDefault; got != "#101010" {
+		t.Errorf("expected RTS keyword default %q, got %q", "#101010", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordDecl; got != "#111111" {
+		t.Errorf("expected RTS keyword decl %q, got %q", "#111111", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordControl; got != "#222222" {
+		t.Errorf("expected RTS keyword control %q, got %q", "#222222", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordLiteral; got != "#333333" {
+		t.Errorf("expected RTS keyword literal %q, got %q", "#333333", got)
+	}
+	if got := updated.EditorMetadata.RTSKeywordLogical; got != "#444444" {
+		t.Errorf("expected RTS keyword logical %q, got %q", "#444444", got)
+	}
+	if base.EditorMetadata.RTSKeywordDefault == "#101010" {
+		t.Errorf("base theme should remain unchanged")
 	}
 }

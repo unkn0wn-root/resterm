@@ -42,7 +42,11 @@ func TestLiveSessionPause(t *testing.T) {
 	if len(ls.visibleEvents()) != 1 {
 		t.Fatalf("expected existing events visible when paused")
 	}
-	ls.append([]*stream.Event{{Kind: stream.KindSSE, Direction: stream.DirReceive, Payload: []byte("two")}})
+	ls.append(
+		[]*stream.Event{
+			{Kind: stream.KindSSE, Direction: stream.DirReceive, Payload: []byte("two")},
+		},
+	)
 	if len(ls.visibleEvents()) != 1 {
 		t.Fatalf("expected new events hidden while paused")
 	}

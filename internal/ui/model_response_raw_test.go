@@ -120,7 +120,11 @@ func TestCycleRawViewModeTriggersAsyncHexLoad(t *testing.T) {
 		t.Fatalf("expected async load command for heavy hex view")
 	}
 	if !snap.rawLoading || snap.rawLoadingMode != rawViewHex {
-		t.Fatalf("expected raw hex load to start, got loading=%v mode=%v", snap.rawLoading, snap.rawLoadingMode)
+		t.Fatalf(
+			"expected raw hex load to start, got loading=%v mode=%v",
+			snap.rawLoading,
+			snap.rawLoadingMode,
+		)
 	}
 	if snap.rawMode != rawViewHex {
 		t.Fatalf("expected raw mode to switch to hex while loading, got %v", snap.rawMode)

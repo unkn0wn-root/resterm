@@ -50,7 +50,12 @@ func shouldReflow(tab responseTab, mode rawViewMode, snap *responseSnapshot) boo
 	return rawHeavy(len(snap.body))
 }
 
-func reflowDelay(pane *responsePaneState, tab responseTab, width int, mode rawViewMode) time.Duration {
+func reflowDelay(
+	pane *responsePaneState,
+	tab responseTab,
+	width int,
+	mode rawViewMode,
+) time.Duration {
 	if pane == nil {
 		return 0
 	}
@@ -68,7 +73,11 @@ func reflowDelay(pane *responsePaneState, tab responseTab, width int, mode rawVi
 	return 0
 }
 
-func (m *Model) scheduleResponseReflow(pane *responsePaneState, req responseReflowReq, delay time.Duration) tea.Cmd {
+func (m *Model) scheduleResponseReflow(
+	pane *responsePaneState,
+	req responseReflowReq,
+	delay time.Duration,
+) tea.Cmd {
 	if pane == nil {
 		return nil
 	}
@@ -134,9 +143,19 @@ func (m *Model) handleResponseReflowDone(msg responseReflowDoneMsg) tea.Cmd {
 	}
 	if req.tab == responseTabRaw {
 		pane.ensureRawWrapCache()
-		pane.rawWrapCache[req.mode] = cachedWrap{width: req.width, content: msg.wrapped, base: req.content, valid: true}
+		pane.rawWrapCache[req.mode] = cachedWrap{
+			width:   req.width,
+			content: msg.wrapped,
+			base:    req.content,
+			valid:   true,
+		}
 	} else {
-		pane.wrapCache[req.tab] = cachedWrap{width: req.width, content: msg.wrapped, base: req.content, valid: true}
+		pane.wrapCache[req.tab] = cachedWrap{
+			width:   req.width,
+			content: msg.wrapped,
+			base:    req.content,
+			valid:   true,
+		}
 	}
 	pane.reflow = responseReflowState{}
 	if pane.activeTab == req.tab {
@@ -153,7 +172,9 @@ func reflowReqValid(pane *responsePaneState, req responseReflowReq) bool {
 	if state.token == "" || state.token != req.token {
 		return false
 	}
-	if state.tab != req.tab || state.width != req.width || state.mode != req.mode || state.headers != req.headers || state.snapshotID != req.snapshotID {
+	if state.tab != req.tab || state.width != req.width || state.mode != req.mode ||
+		state.headers != req.headers ||
+		state.snapshotID != req.snapshotID {
 		return false
 	}
 	if pane.snapshot == nil || !pane.snapshot.ready || pane.snapshot.id != req.snapshotID {

@@ -31,6 +31,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.forgetFileWatch(m.currentFile)
 	m.currentFile = path
 	m.cfg.FilePath = path
+	m.updateEditorStyler(path)
 	m.resetCursorSync()
 	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
@@ -48,7 +49,9 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.rebuildNavigator(nil)
 	m.dirty = false
 	m.watchFile(path, data)
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess})
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess},
+	)
 	m.syncHistory()
 	if len(m.requestItems) > 0 {
 		m.syncEditorWithRequestSelection(-1)
@@ -60,6 +63,7 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.forgetFileWatch(m.currentFile)
 	m.cfg.FilePath = ""
 	m.currentFile = ""
+	m.updateEditorStyler("")
 	m.currentRequest = nil
 	m.activeRequestKey = ""
 	m.activeRequestTitle = ""
@@ -100,7 +104,10 @@ func (m *Model) saveFile() tea.Cmd {
 	m.watchFile(m.currentFile, content)
 	m.refreshCurrentDocument(content)
 	return func() tea.Msg {
-		return statusMsg{text: fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)), level: statusSuccess}
+		return statusMsg{
+			text:  fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)),
+			level: statusSuccess,
+		}
 	}
 }
 
@@ -203,8 +210,13 @@ func (m *Model) refreshCurrentDocument(content []byte) {
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
 	m.resetCursorSync()
+	m.updateEditorStyler(m.currentFile)
 	if req := m.findRequestByKey(m.activeRequestKey); req != nil {
 		m.currentRequest = req
 	}
 	m.dirty = false
+}
+
+func (m *Model) updateEditorStyler(path string) {
+	m.editor.SetRuneStyler(selectEditorRuneStyler(path, m.theme.EditorMetadata))
 }

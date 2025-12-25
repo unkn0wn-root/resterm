@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -22,11 +23,22 @@ func expandStatusText(r *vars.Resolver, raw string) string {
 	return strings.TrimSpace(expanded)
 }
 
-func (m *Model) statusResolver(doc *restfile.Document, req *restfile.Request, env string, extras ...map[string]string) *vars.Resolver {
-	return m.buildDisplayResolver(doc, req, env, extras...)
+func (m *Model) statusResolver(
+	doc *restfile.Document,
+	req *restfile.Request,
+	env string,
+	extras ...map[string]string,
+) *vars.Resolver {
+	base := m.rtsBase(doc, "")
+	return m.buildDisplayResolver(context.Background(), doc, req, env, base, nil, extras...)
 }
 
-func (m *Model) statusRequestTarget(doc *restfile.Document, req *restfile.Request, env string, extras ...map[string]string) string {
+func (m *Model) statusRequestTarget(
+	doc *restfile.Document,
+	req *restfile.Request,
+	env string,
+	extras ...map[string]string,
+) string {
 	if req == nil {
 		return ""
 	}
@@ -38,7 +50,12 @@ func (m *Model) statusRequestTarget(doc *restfile.Document, req *restfile.Reques
 	return target
 }
 
-func (m *Model) statusRequestTitle(doc *restfile.Document, req *restfile.Request, env string, extras ...map[string]string) string {
+func (m *Model) statusRequestTitle(
+	doc *restfile.Document,
+	req *restfile.Request,
+	env string,
+	extras ...map[string]string,
+) string {
 	if req == nil {
 		return ""
 	}

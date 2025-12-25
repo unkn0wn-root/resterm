@@ -1,0 +1,25 @@
+export fn mutate(request, vars, env) {
+  let mode = (env.has("name") and env.get("name") == "prod") ? "strict" : "debug"
+  let trace = "trace-" + uuid()
+
+  request.setMethod("POST")
+  request.setURL(query.merge(request.url, {mode: mode, pre: "1"}))
+  request.setHeader("Content-Type", "application/json")
+  request.setHeader("X-Mode", mode)
+  request.addHeader("X-Trace-Id", trace)
+  request.removeHeader("X-Remove-Me")
+  request.setQueryParam("mutated", "true")
+
+  let body = {
+    mode: mode,
+    trace: trace,
+    token: vars.get("api.token") ?? "none"
+  }
+  request.setBody(json.stringify(body, 2))
+
+  vars.set("pre_request_mode", mode)
+  vars.global.set("pre_request_token", trace, true)
+  if vars.global.has("stale.value") {
+    vars.global.delete("stale.value")
+  }
+}
