@@ -78,15 +78,15 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
-	return r.expandTemplates(input, r.exprPos, true)
+	return r.expandTemplates(input, r.exprPos, true, true)
 }
 
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
-	return r.expandTemplates(input, pos, true)
+	return r.expandTemplates(input, pos, true, true)
 }
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
-	return r.expandTemplates(input, r.exprPos, false)
+	return r.expandTemplates(input, r.exprPos, false, false)
 }
 
 func (r *Resolver) SetExprEval(fn ExprEval) {
@@ -97,7 +97,7 @@ func (r *Resolver) SetExprPos(pos ExprPos) {
 	r.exprPos = pos
 }
 
-func (r *Resolver) expandTemplates(input string, pos ExprPos, allowDynamic bool) (string, error) {
+func (r *Resolver) expandTemplates(input string, pos ExprPos, allowDynamic, allowExpr bool) (string, error) {
 	var firstErr error
 	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
 		sub := templateVarPattern.FindStringSubmatch(match)
@@ -109,6 +109,12 @@ func (r *Resolver) expandTemplates(input string, pos ExprPos, allowDynamic bool)
 			return match
 		}
 		if strings.HasPrefix(name, "=") {
+			if !allowExpr {
+				if firstErr == nil {
+					firstErr = fmt.Errorf("expressions not allowed")
+				}
+				return match
+			}
 			expr := strings.TrimSpace(name[1:])
 			if expr == "" {
 				if firstErr == nil {

@@ -259,21 +259,137 @@ func applyPatchQuery(req *restfile.Request, q map[string]*string) error {
 	if req == nil || len(q) == 0 {
 		return nil
 	}
+	raw := strings.TrimSpace(req.URL)
+	if raw == "" {
+		return nil
+	}
+	if !hasTpl(raw) && applyPatchQueryURL(req, q) {
+		return nil
+	}
+	applyPatchQueryLoose(req, q)
+	return nil
+}
+
+func applyPatchQueryURL(req *restfile.Request, q map[string]*string) bool {
 	parsed, err := url.Parse(req.URL)
 	if err != nil {
-		return fmt.Errorf("invalid url after @apply: %w", err)
+		return false
 	}
-	query := parsed.Query()
+	vals := parsed.Query()
+	applyQueryPatch(vals, q)
+	parsed.RawQuery = vals.Encode()
+	req.URL = parsed.String()
+	return true
+}
+
+func applyPatchQueryLoose(req *restfile.Request, q map[string]*string) {
+	base, qs, frag := splitURL(req.URL)
+	vals, enc := parseQuery(qs)
+	applyQueryPatch(vals, q)
+	qs = encodeQuery(vals, enc)
+	req.URL = joinURL(base, qs, frag)
+}
+
+func applyQueryPatch(vals url.Values, q map[string]*string) {
 	for key, val := range q {
 		if val == nil {
-			query.Del(key)
+			vals.Del(key)
 		} else {
-			query.Set(key, *val)
+			vals.Set(key, *val)
 		}
 	}
-	parsed.RawQuery = query.Encode()
-	req.URL = parsed.String()
-	return nil
+}
+
+func hasTpl(raw string) bool {
+	return strings.Contains(raw, "{{")
+}
+
+func splitURL(raw string) (string, string, string) {
+	base := raw
+	frag := ""
+	qs := ""
+	if idx := strings.Index(base, "#"); idx >= 0 {
+		frag = base[idx+1:]
+		base = base[:idx]
+	}
+	if idx := strings.Index(base, "?"); idx >= 0 {
+		qs = base[idx+1:]
+		base = base[:idx]
+	}
+	return base, qs, frag
+}
+
+func parseQuery(qs string) (url.Values, bool) {
+	if qs == "" {
+		return url.Values{}, true
+	}
+	vals, err := url.ParseQuery(qs)
+	if err == nil {
+		return vals, true
+	}
+	return parseQueryLoose(qs), false
+}
+
+func parseQueryLoose(qs string) url.Values {
+	vals := url.Values{}
+	for _, part := range strings.Split(qs, "&") {
+		if part == "" {
+			continue
+		}
+		kv := strings.SplitN(part, "=", 2)
+		key := kv[0]
+		if key == "" {
+			continue
+		}
+		val := ""
+		if len(kv) == 2 {
+			val = kv[1]
+		}
+		vals.Add(key, val)
+	}
+	return vals
+}
+
+func encodeQuery(vals url.Values, enc bool) string {
+	if len(vals) == 0 {
+		return ""
+	}
+	if enc {
+		return vals.Encode()
+	}
+	return encodeQueryLoose(vals)
+}
+
+func encodeQueryLoose(vals url.Values) string {
+	if len(vals) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(vals))
+	for key, list := range vals {
+		if len(list) == 0 {
+			parts = append(parts, key)
+			continue
+		}
+		for _, val := range list {
+			if val == "" {
+				parts = append(parts, key+"=")
+			} else {
+				parts = append(parts, key+"="+val)
+			}
+		}
+	}
+	return strings.Join(parts, "&")
+}
+
+func joinURL(base, qs, frag string) string {
+	out := base
+	if qs != "" {
+		out += "?" + qs
+	}
+	if frag != "" {
+		out += "#" + frag
+	}
+	return out
 }
 
 func applyPatchHeaders(req *restfile.Request, set map[string][]string, del map[string]struct{}) {

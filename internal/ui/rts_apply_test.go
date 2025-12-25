@@ -124,6 +124,43 @@ func TestRunRTSApplyOrder(t *testing.T) {
 	}
 }
 
+func TestRunRTSApplyTemplatedURLQuery(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://{{host}}/path?keep=1#frag",
+		LineRange: restfile.LineRange{Start: 1, End: 3},
+		Metadata: restfile.RequestMetadata{
+			Applies: []restfile.ApplySpec{{
+				Expression: `{query: {"q": "a", "keep": null}}`,
+				Line:       1,
+				Col:        1,
+			}},
+		},
+	}
+
+	if err := model.runRTSApply(context.Background(), nil, req, "", "", nil, nil); err != nil {
+		t.Fatalf("runRTSApply: %v", err)
+	}
+	if !strings.Contains(req.URL, "{{host}}") {
+		t.Fatalf("expected template to be preserved, got %q", req.URL)
+	}
+	if !strings.Contains(req.URL, "#frag") {
+		t.Fatalf("expected fragment to be preserved, got %q", req.URL)
+	}
+	q := queryFromURL(req.URL)
+	vals, err := url.ParseQuery(q)
+	if err != nil {
+		t.Fatalf("parse query: %v", err)
+	}
+	if vals.Get("q") != "a" {
+		t.Fatalf("expected query q=a, got %q", vals.Get("q"))
+	}
+	if _, ok := vals["keep"]; ok {
+		t.Fatalf("expected keep query param deleted")
+	}
+}
+
 func findReqVar(req *restfile.Request, name string) (restfile.Variable, bool) {
 	if req == nil {
 		return restfile.Variable{}, false
@@ -134,4 +171,16 @@ func findReqVar(req *restfile.Request, name string) (restfile.Variable, bool) {
 		}
 	}
 	return restfile.Variable{}, false
+}
+
+func queryFromURL(raw string) string {
+	idx := strings.Index(raw, "?")
+	if idx == -1 {
+		return ""
+	}
+	qs := raw[idx+1:]
+	if cut := strings.Index(qs, "#"); cut >= 0 {
+		qs = qs[:cut]
+	}
+	return qs
 }

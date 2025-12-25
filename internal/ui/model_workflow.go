@@ -195,6 +195,14 @@ func workflowStepExtras(
 	return out
 }
 
+func (m *Model) wfVars(doc *restfile.Document, req *restfile.Request, env string, extra map[string]string) map[string]string {
+	base := m.collectVariables(doc, req, env)
+	if len(extra) == 0 {
+		return base
+	}
+	return mergeVariableMaps(base, extra)
+}
+
 func workflowLoopKeys(state *workflowState, name string) (string, string) {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -553,6 +561,7 @@ func (m *Model) executeWorkflowRequestStep(
 	extraVars := workflowStepExtras(state, step, nil)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
+	v := m.wfVars(state.doc, req, envName, extraVars)
 
 	if step.When != nil {
 		shouldRun, reason, err := m.evalCondition(
@@ -562,7 +571,7 @@ func (m *Model) executeWorkflowRequestStep(
 			envName,
 			options.BaseDir,
 			step.When,
-			extraVars,
+			v,
 			nil,
 		)
 		if err != nil {
@@ -604,7 +613,7 @@ func (m *Model) executeWorkflowRequestStep(
 			envName,
 			options.BaseDir,
 			*spec,
-			extraVars,
+			v,
 			nil,
 		)
 		if err != nil {
@@ -670,6 +679,7 @@ func (m *Model) executeWorkflowIfStep(
 	extraVars := workflowStepExtras(state, step, nil)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
+	v := m.wfVars(state.doc, nil, envName, extraVars)
 
 	evalBranch := func(cond string, line int, tag string) (bool, error) {
 		cond = strings.TrimSpace(cond)
@@ -686,7 +696,7 @@ func (m *Model) executeWorkflowIfStep(
 			cond,
 			tag+" "+cond,
 			pos,
-			extraVars,
+			v,
 			nil,
 		)
 		if err != nil {
@@ -774,6 +784,7 @@ func (m *Model) executeWorkflowIfStep(
 		return batchCmds([]tea.Cmd{errCmd, next})
 	}
 	if spec != nil {
+		rv := m.wfVars(state.doc, req, envName, extraVars)
 		items, err := m.evalForEachItems(
 			ctx,
 			state.doc,
@@ -781,7 +792,7 @@ func (m *Model) executeWorkflowIfStep(
 			envName,
 			options.BaseDir,
 			*spec,
-			extraVars,
+			rv,
 			nil,
 		)
 		if err != nil {
@@ -843,6 +854,7 @@ func (m *Model) executeWorkflowSwitchStep(
 	extraVars := workflowStepExtras(state, step, nil)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
+	v := m.wfVars(state.doc, nil, envName, extraVars)
 
 	expr := strings.TrimSpace(step.Switch.Expr)
 	if expr == "" {
@@ -862,7 +874,7 @@ func (m *Model) executeWorkflowSwitchStep(
 		expr,
 		"@switch "+expr,
 		switchPos,
-		extraVars,
+		v,
 		nil,
 	)
 	if err != nil {
@@ -893,7 +905,7 @@ func (m *Model) executeWorkflowSwitchStep(
 			caseExpr,
 			"@case "+caseExpr,
 			casePos,
-			extraVars,
+			v,
 			nil,
 		)
 		if err != nil {
@@ -957,6 +969,7 @@ func (m *Model) executeWorkflowSwitchStep(
 		return batchCmds([]tea.Cmd{errCmd, next})
 	}
 	if spec != nil {
+		rv := m.wfVars(state.doc, req, envName, extraVars)
 		items, err := m.evalForEachItems(
 			ctx,
 			state.doc,
@@ -964,7 +977,7 @@ func (m *Model) executeWorkflowSwitchStep(
 			envName,
 			options.BaseDir,
 			*spec,
-			extraVars,
+			rv,
 			nil,
 		)
 		if err != nil {
@@ -1051,6 +1064,7 @@ func (m *Model) executeWorkflowLoopIteration(
 			extraVars[loop.reqVarKey] = itemStr
 		}
 		extraVals := map[string]rts.Value{loop.varName: item}
+		v := m.wfVars(state.doc, loop.request, envName, extraVars)
 
 		if loop.step.When != nil {
 			shouldRun, reason, err := m.evalCondition(
@@ -1060,7 +1074,7 @@ func (m *Model) executeWorkflowLoopIteration(
 				envName,
 				options.BaseDir,
 				loop.step.When,
-				extraVars,
+				v,
 				extraVals,
 			)
 			if err != nil {
