@@ -177,7 +177,11 @@ func TestProfileCancelStopsRun(t *testing.T) {
 		t.Fatalf("expected warning level for cancellation, got %v", model.statusMessage.level)
 	}
 	if len(state.successes) != 0 || len(state.failures) != 0 {
-		t.Fatalf("expected no successes or failures recorded on cancel, got %d success %d failure", len(state.successes), len(state.failures))
+		t.Fatalf(
+			"expected no successes or failures recorded on cancel, got %d success %d failure",
+			len(state.successes),
+			len(state.failures),
+		)
 	}
 	if model.responseLatest == nil {
 		t.Fatalf("expected response snapshot to be populated on cancel")
@@ -186,7 +190,10 @@ func TestProfileCancelStopsRun(t *testing.T) {
 		t.Fatalf("expected canceled status in response stats, got %q", model.responseLatest.stats)
 	}
 	if body := strings.ToLower(model.responseLatest.pretty); !strings.Contains(body, "canceled") {
-		t.Fatalf("expected response body to show cancellation summary, got %q", model.responseLatest.pretty)
+		t.Fatalf(
+			"expected response body to show cancellation summary, got %q",
+			model.responseLatest.pretty,
+		)
 	}
 }
 
@@ -203,7 +210,12 @@ func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
 
 	model := New(Config{})
 	model.ready = true
-	prev := &responseSnapshot{pretty: "old response", raw: "old response", headers: "old response", ready: true}
+	prev := &responseSnapshot{
+		pretty:  "old response",
+		raw:     "old response",
+		headers: "old response",
+		ready:   true,
+	}
 	model.responseLatest = prev
 
 	cmd := model.startProfileRun(doc, req, httpclient.Options{})
@@ -213,8 +225,12 @@ func TestProfileStartShowsProgressPlaceholder(t *testing.T) {
 	if model.responseLatest != prev {
 		t.Fatalf("expected previous response snapshot to remain unchanged during progress")
 	}
-	if !strings.Contains(model.statusMessage.text, "warmup 0/1") && !strings.Contains(model.statusMessage.text, "Profiling") {
-		t.Fatalf("expected status message to reflect profiling start, got %q", model.statusMessage.text)
+	if !strings.Contains(model.statusMessage.text, "warmup 0/1") &&
+		!strings.Contains(model.statusMessage.text, "Profiling") {
+		t.Fatalf(
+			"expected status message to reflect profiling start, got %q",
+			model.statusMessage.text,
+		)
 	}
 }
 

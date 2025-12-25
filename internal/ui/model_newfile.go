@@ -130,6 +130,11 @@ func (m *Model) submitNewFile() tea.Cmd {
 	if fromSave {
 		label = "Saved"
 	}
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s %s", label, filepath.Base(finalPath)), level: statusSuccess})
+	m.setStatusMessage(
+		statusMsg{
+			text:  fmt.Sprintf("%s %s", label, filepath.Base(finalPath)),
+			level: statusSuccess,
+		},
+	)
 	return batchCommands(focusCmd, cmd)
 }

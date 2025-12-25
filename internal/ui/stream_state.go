@@ -97,7 +97,10 @@ func (ls *liveSession) addBookmark(label string) {
 	if ls.paused && ls.pausedIndex >= 0 {
 		idx = ls.pausedIndex
 	}
-	ls.bookmarks = append(ls.bookmarks, streamBookmark{Index: idx, Label: strings.TrimSpace(label), Created: time.Now()})
+	ls.bookmarks = append(
+		ls.bookmarks,
+		streamBookmark{Index: idx, Label: strings.TrimSpace(label), Created: time.Now()},
+	)
 	ls.bookmarkIdx = len(ls.bookmarks) - 1
 }
 

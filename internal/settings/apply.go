@@ -12,7 +12,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func ApplyGRPCSettings(opts *grpcclient.Options, settings map[string]string, resolver *vars.Resolver) error {
+func ApplyGRPCSettings(
+	opts *grpcclient.Options,
+	settings map[string]string,
+	resolver *vars.Resolver,
+) error {
 	if opts == nil {
 		return nil
 	}
@@ -34,7 +38,11 @@ func ApplyGRPCSettings(opts *grpcclient.Options, settings map[string]string, res
 	return nil
 }
 
-func ApplyHTTPSettings(opts *httpclient.Options, settings map[string]string, resolver *vars.Resolver) error {
+func ApplyHTTPSettings(
+	opts *httpclient.Options,
+	settings map[string]string,
+	resolver *vars.Resolver,
+) error {
 	if opts == nil {
 		return nil
 	}
@@ -78,7 +86,12 @@ func ApplyHTTPSettings(opts *httpclient.Options, settings map[string]string, res
 	return nil
 }
 
-func applyTLSSettings(cfg *tlsconfig.Files, settings map[string]string, resolver *vars.Resolver, prefix string) error {
+func applyTLSSettings(
+	cfg *tlsconfig.Files,
+	settings map[string]string,
+	resolver *vars.Resolver,
+	prefix string,
+) error {
 	if cfg == nil || len(settings) == 0 {
 		return nil
 	}
@@ -107,14 +120,24 @@ func applyTLSSettings(cfg *tlsconfig.Files, settings map[string]string, resolver
 		case string(tlsconfig.RootModeReplace):
 			cfg.RootMode = tlsconfig.RootModeReplace
 		default:
-			return errdef.New(errdef.CodeHTTP, "invalid %s-root-mode %q (use append or replace)", prefixLower, rawMode)
+			return errdef.New(
+				errdef.CodeHTTP,
+				"invalid %s-root-mode %q (use append or replace)",
+				prefixLower,
+				rawMode,
+			)
 		}
 	}
 
 	if b, ok := resolveBool(norm, prefixLower+"-insecure"); ok {
 		cfg.Insecure = b
 	}
-	val, err := resolveSetting(norm, prefixLower+"-client-cert", prefixLower+" client cert", resolve)
+	val, err := resolveSetting(
+		norm,
+		prefixLower+"-client-cert",
+		prefixLower+" client cert",
+		resolve,
+	)
 	if err != nil {
 		return err
 	}
@@ -168,7 +191,11 @@ func firstSetting(m map[string]string, keys ...string) string {
 	return ""
 }
 
-func resolveSetting(norm map[string]string, key, label string, expand func(string, string) (string, error)) (string, error) {
+func resolveSetting(
+	norm map[string]string,
+	key, label string,
+	expand func(string, string) (string, error),
+) (string, error) {
 	raw, ok := norm[key]
 	if !ok {
 		return "", nil

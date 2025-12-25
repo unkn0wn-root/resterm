@@ -132,7 +132,10 @@ func TestParseForRange(t *testing.T) {
 }
 
 func TestParseForConstInitRejected(t *testing.T) {
-	if _, err := ParseModule("test", []byte("for const i = 0; i < 1; i = i + 1 { }\n")); err == nil {
+	if _, err := ParseModule(
+		"test",
+		[]byte("for const i = 0; i < 1; i = i + 1 { }\n"),
+	); err == nil {
 		t.Fatalf("expected const in for init to error")
 	}
 	if _, err := ParseModule("test", []byte("for const i range items { }\n")); err == nil {

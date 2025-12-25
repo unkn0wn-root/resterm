@@ -57,7 +57,10 @@ pane_active_foreground = "#335577"
 		t.Fatalf("expected author QA, got %q", oceanic.Metadata.Author)
 	}
 	if oceanic.Theme.PaneActiveForeground != "#335577" {
-		t.Fatalf("expected pane active foreground override, got %q", oceanic.Theme.PaneActiveForeground)
+		t.Fatalf(
+			"expected pane active foreground override, got %q",
+			oceanic.Theme.PaneActiveForeground,
+		)
 	}
 
 	duplicate, ok := catalog.Get("oceanic-1")
@@ -68,7 +71,10 @@ pane_active_foreground = "#335577"
 		t.Fatalf("expected JSON theme color override, got %q", duplicate.Theme.PaneBorderFocusFile)
 	}
 	if duplicate.Theme.EditorMetadata.CommentMarker != "#123123" {
-		t.Fatalf("expected metadata override from JSON theme, got %q", duplicate.Theme.EditorMetadata.CommentMarker)
+		t.Fatalf(
+			"expected metadata override from JSON theme, got %q",
+			duplicate.Theme.EditorMetadata.CommentMarker,
+		)
 	}
 }
 

@@ -107,7 +107,10 @@ func TestNavigatorIgnoresLinesOutsideRequests(t *testing.T) {
 	m.moveCursorToLine(1)
 
 	if sel := m.navigator.Selected(); sel == nil || sel.ID != firstID {
-		t.Fatalf("expected navigator to keep first request selected on non-request line, got %#v", sel)
+		t.Fatalf(
+			"expected navigator to keep first request selected on non-request line, got %#v",
+			sel,
+		)
 	}
 }
 
@@ -130,7 +133,10 @@ func TestNavigatorFollowsCursorAtEOF(t *testing.T) {
 		t.Fatalf("expected navigator to select last request at EOF, got %#v", sel)
 	}
 	if key := requestKey(m.doc.Requests[1]); m.activeRequestKey != key {
-		t.Fatalf("expected active request to follow last request at EOF, got %s", m.activeRequestKey)
+		t.Fatalf(
+			"expected active request to follow last request at EOF, got %s",
+			m.activeRequestKey,
+		)
 	}
 }
 
@@ -415,7 +421,9 @@ func TestNavigatorTextFilterRespectsWordBoundaries(t *testing.T) {
 		}
 	}
 	if foundPost {
-		t.Fatalf("expected POST request with 'together' in description to be excluded when filtering GET")
+		t.Fatalf(
+			"expected POST request with 'together' in description to be excluded when filtering GET",
+		)
 	}
 }
 
@@ -492,7 +500,8 @@ func TestNavigatorFilterLoadsOtherFiles(t *testing.T) {
 	}
 	found := false
 	for _, child := range node.Children {
-		if child.Kind == navigator.KindRequest && strings.Contains(strings.ToLower(child.Title), "second") {
+		if child.Kind == navigator.KindRequest &&
+			strings.Contains(strings.ToLower(child.Title), "second") {
 			found = true
 			break
 		}
@@ -506,7 +515,11 @@ func TestNavigatorEscClearsFilters(t *testing.T) {
 	model := New(Config{})
 	m := &model
 	m.navigator = navigator.New[any]([]*navigator.Node[any]{
-		{ID: "file:/tmp/a", Kind: navigator.KindFile, Payload: navigator.Payload[any]{FilePath: "/tmp/a"}},
+		{
+			ID:      "file:/tmp/a",
+			Kind:    navigator.KindFile,
+			Payload: navigator.Payload[any]{FilePath: "/tmp/a"},
+		},
 	})
 	m.ensureNavigatorFilter()
 	m.navigatorFilter.SetValue("abc")
@@ -541,7 +554,13 @@ func TestNavigatorFilterTypingIgnoresNavShortcuts(t *testing.T) {
 			Payload:  navigator.Payload[any]{FilePath: "/tmp/a"},
 			Expanded: true,
 			Children: []*navigator.Node[any]{
-				{ID: "req:/tmp/a:0", Kind: navigator.KindRequest, Title: "get", Method: "GET", Payload: navigator.Payload[any]{FilePath: "/tmp/a"}},
+				{
+					ID:      "req:/tmp/a:0",
+					Kind:    navigator.KindRequest,
+					Title:   "get",
+					Method:  "GET",
+					Payload: navigator.Payload[any]{FilePath: "/tmp/a"},
+				},
 			},
 		},
 	})
@@ -637,10 +656,17 @@ func TestNavigatorRequestEnterSendsFromSidebar(t *testing.T) {
 		t.Fatalf("expected navigator selection to be a request, got %v", sel)
 	}
 	if _, ok := m.navigator.Selected().Payload.Data.(*restfile.Request); !ok {
-		t.Fatalf("expected navigator selection payload to be request, got %T", m.navigator.Selected().Payload.Data)
+		t.Fatalf(
+			"expected navigator selection payload to be request, got %T",
+			m.navigator.Selected().Payload.Data,
+		)
 	}
 	if sel := m.navigator.Selected(); sel == nil || !samePath(sel.Payload.FilePath, m.currentFile) {
-		t.Fatalf("expected navigator selection to target current file, got %v vs %q", sel, m.currentFile)
+		t.Fatalf(
+			"expected navigator selection to target current file, got %v vs %q",
+			sel,
+			m.currentFile,
+		)
 	}
 	if m.activeRequestKey == "" {
 		t.Fatalf("expected active request to remain selected after navigator sync")
@@ -656,7 +682,13 @@ func TestNavigatorRequestEnterSendsFromSidebar(t *testing.T) {
 			path = sel.Payload.FilePath
 		}
 		items := m.requestList.Items()
-		t.Fatalf("expected request list selection, got %d (items=%d path=%q current=%q)", idx, len(items), path, m.currentFile)
+		t.Fatalf(
+			"expected request list selection, got %d (items=%d path=%q current=%q)",
+			idx,
+			len(items),
+			path,
+			m.currentFile,
+		)
 	}
 	if _, ok := m.requestList.SelectedItem().(requestListItem); !ok {
 		t.Fatalf("expected request list item to be selected")
@@ -669,7 +701,10 @@ func TestNavigatorRequestEnterSendsFromSidebar(t *testing.T) {
 }
 
 func TestNavigatorRequestLJumpsToDefinition(t *testing.T) {
-	content := strings.Repeat("\n", 5) + "### example\n# @name getExample\nGET https://example.com\n"
+	content := strings.Repeat(
+		"\n",
+		5,
+	) + "### example\n# @name getExample\nGET https://example.com\n"
 	model := newTestModelWithDoc(content)
 	m := model
 	m.currentFile = "/tmp/sample.http"

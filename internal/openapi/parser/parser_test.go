@@ -34,7 +34,8 @@ func TestLoaderParse(t *testing.T) {
 	if len(spec.SecuritySchemes) != 3 {
 		t.Fatalf("expected 3 security schemes, got %d", len(spec.SecuritySchemes))
 	}
-	if scheme, ok := spec.SecuritySchemes["bearerAuth"]; !ok || scheme.Type != model.SecurityHTTP || scheme.Subtype != "bearer" {
+	if scheme, ok := spec.SecuritySchemes["bearerAuth"]; !ok || scheme.Type != model.SecurityHTTP ||
+		scheme.Subtype != "bearer" {
 		t.Fatalf("bearer scheme not parsed correctly: %#v", scheme)
 	}
 	if scheme, ok := spec.SecuritySchemes["oauthDemo"]; !ok || scheme.Type != model.SecurityOAuth2 {
@@ -80,7 +81,8 @@ func TestLoaderParse(t *testing.T) {
 		t.Fatalf("header example not derived from enum")
 	}
 
-	if listDevices.Security == nil || len(listDevices.Security) != 1 || listDevices.Security[0].SchemeName != "bearerAuth" {
+	if listDevices.Security == nil || len(listDevices.Security) != 1 ||
+		listDevices.Security[0].SchemeName != "bearerAuth" {
 		t.Fatalf("listDevices security not captured: %#v", listDevices.Security)
 	}
 

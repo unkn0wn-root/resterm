@@ -24,7 +24,11 @@ type GenerateOptions struct {
 	Write    WriterOptions
 }
 
-func (s *Service) GenerateHTTPFile(ctx context.Context, specPath, outputPath string, opts GenerateOptions) error {
+func (s *Service) GenerateHTTPFile(
+	ctx context.Context,
+	specPath, outputPath string,
+	opts GenerateOptions,
+) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}

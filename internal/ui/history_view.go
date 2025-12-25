@@ -75,7 +75,8 @@ func compareSummary(entry history.Entry) string {
 	segments := make([]string, 0, len(entry.Compare.Results))
 	for _, res := range entry.Compare.Results {
 		label := res.Environment
-		if entry.Compare.Baseline != "" && strings.EqualFold(entry.Compare.Baseline, res.Environment) {
+		if entry.Compare.Baseline != "" &&
+			strings.EqualFold(entry.Compare.Baseline, res.Environment) {
 			label += "*"
 		}
 		status := strings.TrimSpace(res.Status)

@@ -21,11 +21,23 @@ type rtsPreMut struct {
 	globs map[string]string
 }
 
-func newRTSPreMut(out *scripts.PreRequestOutput, req *rts.Req, vars map[string]string, globs map[string]string) *rtsPreMut {
+func newRTSPreMut(
+	out *scripts.PreRequestOutput,
+	req *rts.Req,
+	vars map[string]string,
+	globs map[string]string,
+) *rtsPreMut {
 	return &rtsPreMut{out: out, req: req, vars: vars, globs: globs}
 }
 
-func (m *Model) runRTSPreRequest(ctx context.Context, doc *restfile.Document, req *restfile.Request, envName, base string, vars map[string]string, globals map[string]scripts.GlobalValue) (scripts.PreRequestOutput, error) {
+func (m *Model) runRTSPreRequest(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	vars map[string]string,
+	globals map[string]scripts.GlobalValue,
+) (scripts.PreRequestOutput, error) {
 	out := scripts.PreRequestOutput{}
 	if req == nil {
 		return out, nil

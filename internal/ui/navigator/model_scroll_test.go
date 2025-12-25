@@ -26,7 +26,11 @@ func TestNavigatorTypewriterScroll(t *testing.T) {
 
 	m.Move(1)
 	if m.offset != 2 || local() != 1 {
-		t.Fatalf("expected offset to advance with buffer, got local %d offset %d", local(), m.offset)
+		t.Fatalf(
+			"expected offset to advance with buffer, got local %d offset %d",
+			local(),
+			m.offset,
+		)
 	}
 
 	m.Move(1)

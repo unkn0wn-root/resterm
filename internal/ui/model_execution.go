@@ -190,11 +190,15 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 
 	if cloned.Metadata.ForEach != nil {
 		if spec := m.compareSpecForRequest(cloned); spec != nil {
-			m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"})
+			m.setStatusMessage(
+				statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"},
+			)
 			return nil
 		}
 		if cloned.Metadata.Profile != nil {
-			m.setStatusMessage(statusMsg{level: statusWarn, text: "@profile cannot run alongside @for-each"})
+			m.setStatusMessage(
+				statusMsg{level: statusWarn, text: "@profile cannot run alongside @for-each"},
+			)
 			return nil
 		}
 		if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
@@ -208,7 +212,9 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 
 	if spec := m.compareSpecForRequest(cloned); spec != nil {
 		if cloned.Metadata.Profile != nil {
-			m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"})
+			m.setStatusMessage(
+				statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"},
+			)
 			return nil
 		}
 		return m.startCompareRun(doc, cloned, spec, options)
@@ -256,7 +262,9 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	}
 
 	if req.Metadata.ForEach != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"},
+		)
 		return nil
 	}
 	if req.Metadata.Profile != nil {
@@ -302,7 +310,14 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 
 // Accept an environment override so compare sweeps can force a per-iteration
 // scope without mutating the global environment selection.
-func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, options httpclient.Options, envOverride string, extraVals map[string]rts.Value, extras ...map[string]string) tea.Cmd {
+func (m *Model) executeRequest(
+	doc *restfile.Document,
+	req *restfile.Request,
+	options httpclient.Options,
+	envOverride string,
+	extraVals map[string]rts.Value,
+	extras ...map[string]string,
+) tea.Cmd {
 	options = m.resolveHTTPOptions(options)
 
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
@@ -340,13 +355,26 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		defer sendCancel()
 
 		if req != nil && req.Metadata.When != nil {
-			shouldRun, reason, err := m.evalCondition(sendCtx, doc, req, envName, options.BaseDir, req.Metadata.When, baseVars, extraVals)
+			shouldRun, reason, err := m.evalCondition(
+				sendCtx,
+				doc,
+				req,
+				envName,
+				options.BaseDir,
+				req.Metadata.When,
+				baseVars,
+				extraVals,
+			)
 			if err != nil {
 				tag := "@when"
 				if req.Metadata.When.Negate {
 					tag = "@skip-if"
 				}
-				return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "%s", tag), executed: req, environment: envName}
+				return responseMsg{
+					err:         errdef.Wrap(errdef.CodeScript, err, "%s", tag),
+					executed:    req,
+					environment: envName,
+				}
 			}
 			if !shouldRun {
 				return responseMsg{
@@ -360,13 +388,32 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		}
 
 		preVars := cloneStringMap(baseVars)
-		if err := m.runRTSApply(sendCtx, doc, req, envName, options.BaseDir, preVars, extraVals); err != nil {
+		if err := m.runRTSApply(
+			sendCtx,
+			doc,
+			req,
+			envName,
+			options.BaseDir,
+			preVars,
+			extraVals,
+		); err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "@apply"), executed: req}
 		}
 		preGlobals := m.collectGlobalValues(doc, envName)
-		rtsResult, err := m.runRTSPreRequest(sendCtx, doc, req, envName, options.BaseDir, preVars, preGlobals)
+		rtsResult, err := m.runRTSPreRequest(
+			sendCtx,
+			doc,
+			req,
+			envName,
+			options.BaseDir,
+			preVars,
+			preGlobals,
+		)
 		if err != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request rts script"), executed: req}
+			return responseMsg{
+				err:      errdef.Wrap(errdef.CodeScript, err, "pre-request rts script"),
+				executed: req,
+			}
 		}
 
 		if err := applyPreRequestOutput(req, rtsResult); err != nil {
@@ -394,7 +441,10 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			Context:   sendCtx,
 		})
 		if err != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "pre-request script"), executed: req}
+			return responseMsg{
+				err:      errdef.Wrap(errdef.CodeScript, err, "pre-request script"),
+				executed: req,
+			}
 		}
 
 		if err := applyPreRequestOutput(req, preResult); err != nil {
@@ -418,7 +468,14 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 			}
 		}
 
-		resolver := m.buildResolver(sendCtx, doc, req, envName, options.BaseDir, extraVals, resolverExtras...)
+		resolver := m.buildResolver(
+			sendCtx,
+			doc,
+			req,
+			envName,
+			options.BaseDir,
+			extraVals,
+			resolverExtras...)
 		sshPlan, err := m.resolveSSH(doc, req, resolver, envName)
 		if err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"), executed: req}
@@ -459,7 +516,14 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 		}
 
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
-		if err := m.ensureOAuth(sendCtx, req, resolver, options, envName, effectiveTimeout); err != nil {
+		if err := m.ensureOAuth(
+			sendCtx,
+			req,
+			resolver,
+			options,
+			envName,
+			effectiveTimeout,
+		); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
@@ -508,20 +572,42 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 			respForScripts := grpcScriptResponse(req, grpcResp)
 			var captures captureResult
-			if err := m.applyCaptures(doc, req, resolver, respForScripts, nil, &captures, envName); err != nil {
+			if err := m.applyCaptures(
+				doc,
+				req,
+				resolver,
+				respForScripts,
+				nil,
+				&captures,
+				envName,
+			); err != nil {
 				return responseMsg{err: err, executed: req}
 			}
 
 			updatedVars := m.collectVariables(doc, req, envName)
 			testVars := mergeVariableMaps(updatedVars, scriptVars)
 			testGlobals := m.collectGlobalValues(doc, envName)
-			asserts, assertErr := m.runAsserts(ctx, doc, req, envName, options.BaseDir, testVars, extraVals, rtsGRPC(grpcResp), nil, nil)
-			tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
-				Response:  respForScripts,
-				Variables: testVars,
-				Globals:   testGlobals,
-				BaseDir:   options.BaseDir,
-			})
+			asserts, assertErr := m.runAsserts(
+				ctx,
+				doc,
+				req,
+				envName,
+				options.BaseDir,
+				testVars,
+				extraVals,
+				rtsGRPC(grpcResp),
+				nil,
+				nil,
+			)
+			tests, globalChanges, testErr := runner.RunTests(
+				req.Metadata.Scripts,
+				scripts.TestInput{
+					Response:  respForScripts,
+					Variables: testVars,
+					Globals:   testGlobals,
+					BaseDir:   options.BaseDir,
+				},
+			)
 			m.applyGlobalMutations(globalChanges, envName)
 
 			return responseMsg{
@@ -582,19 +668,41 @@ func (m *Model) executeRequest(doc *restfile.Document, req *restfile.Request, op
 
 		streamInfo, streamErr := streamInfoFromResponse(req, response)
 		if streamErr != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript"), executed: req}
+			return responseMsg{
+				err:      errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript"),
+				executed: req,
+			}
 		}
 
 		respForScripts := httpScriptResponse(response)
 		var captures captureResult
-		if err := m.applyCaptures(doc, req, resolver, respForScripts, streamInfo, &captures, envName); err != nil {
+		if err := m.applyCaptures(
+			doc,
+			req,
+			resolver,
+			respForScripts,
+			streamInfo,
+			&captures,
+			envName,
+		); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
 		updatedVars := m.collectVariables(doc, req, envName)
 		testVars := mergeVariableMaps(updatedVars, scriptVars)
 		testGlobals := m.collectGlobalValues(doc, envName)
-		asserts, assertErr := m.runAsserts(ctx, doc, req, envName, options.BaseDir, testVars, extraVals, rtsHTTP(response), rtsTrace(response), rtsStream(streamInfo))
+		asserts, assertErr := m.runAsserts(
+			ctx,
+			doc,
+			req,
+			envName,
+			options.BaseDir,
+			testVars,
+			extraVals,
+			rtsHTTP(response),
+			rtsTrace(response),
+			rtsStream(streamInfo),
+		)
 		traceInput := scripts.NewTraceInput(response.Timeline, req.Metadata.Trace)
 		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
 			Response:  respForScripts,
@@ -828,7 +936,14 @@ func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Durat
 	return base
 }
 
-func (m *Model) buildResolver(ctx context.Context, doc *restfile.Document, req *restfile.Request, envName, base string, extraVals map[string]rts.Value, extras ...map[string]string) *vars.Resolver {
+func (m *Model) buildResolver(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	extraVals map[string]rts.Value,
+	extras ...map[string]string,
+) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -904,7 +1019,14 @@ func (m *Model) buildResolver(ctx context.Context, doc *restfile.Document, req *
 
 // buildDisplayResolver is a best-effort resolver for UI/status rendering that
 // avoids expanding secret values.
-func (m *Model) buildDisplayResolver(ctx context.Context, doc *restfile.Document, req *restfile.Request, envName, base string, extraVals map[string]rts.Value, extras ...map[string]string) *vars.Resolver {
+func (m *Model) buildDisplayResolver(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	extraVals map[string]rts.Value,
+	extras ...map[string]string,
+) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -992,7 +1114,12 @@ func (m *Model) buildDisplayResolver(ctx context.Context, doc *restfile.Document
 	return res
 }
 
-func (m *Model) resolveSSH(doc *restfile.Document, req *restfile.Request, resolver *vars.Resolver, envName string) (*ssh.Plan, error) {
+func (m *Model) resolveSSH(
+	doc *restfile.Document,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	envName string,
+) (*ssh.Plan, error) {
 	if req == nil || req.SSH == nil {
 		return nil, nil
 	}
@@ -1046,7 +1173,11 @@ func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
 	return doc.SSH
 }
 
-func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Document, envName string) {
+func (m *Model) mergeFileRuntimeVars(
+	target map[string]string,
+	doc *restfile.Document,
+	envName string,
+) {
 	if target == nil || m.fileVars == nil {
 		return
 	}
@@ -1065,7 +1196,11 @@ func (m *Model) mergeFileRuntimeVars(target map[string]string, doc *restfile.Doc
 
 // mergeFileRuntimeVarsSafe merges runtime file vars while skipping secrets so UI
 // previews do not leak them.
-func (m *Model) mergeFileRuntimeVarsSafe(target map[string]string, doc *restfile.Document, envName string) {
+func (m *Model) mergeFileRuntimeVarsSafe(
+	target map[string]string,
+	doc *restfile.Document,
+	envName string,
+) {
 	if target == nil || m.fileVars == nil {
 		return
 	}
@@ -1085,7 +1220,11 @@ func (m *Model) mergeFileRuntimeVarsSafe(target map[string]string, doc *restfile
 	}
 }
 
-func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request, envName string) map[string]string {
+func (m *Model) collectVariables(
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName string,
+) map[string]string {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	result := make(map[string]string)
 	if env := vars.EnvValues(m.cfg.EnvironmentSet, resolvedEnv); env != nil {
@@ -1124,7 +1263,10 @@ func (m *Model) collectVariables(doc *restfile.Document, req *restfile.Request, 
 	return result
 }
 
-func (m *Model) collectGlobalValues(doc *restfile.Document, envName string) map[string]scripts.GlobalValue {
+func (m *Model) collectGlobalValues(
+	doc *restfile.Document,
+	envName string,
+) map[string]scripts.GlobalValue {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	globals := make(map[string]scripts.GlobalValue)
 	if doc != nil {
@@ -1144,7 +1286,11 @@ func (m *Model) collectGlobalValues(doc *restfile.Document, envName string) map[
 				if name == "" {
 					name = key
 				}
-				globals[name] = scripts.GlobalValue{Name: name, Value: entry.Value, Secret: entry.Secret}
+				globals[name] = scripts.GlobalValue{
+					Name:   name,
+					Value:  entry.Value,
+					Secret: entry.Secret,
+				}
 			}
 		}
 	}
@@ -1194,12 +1340,18 @@ func (m *Model) buildGlobalSummary() string {
 			if name == "" {
 				name = key
 			}
-			entries = append(entries, summaryEntry{name: name, value: value.Value, secret: value.Secret})
+			entries = append(
+				entries,
+				summaryEntry{name: name, value: value.Value, secret: value.Secret},
+			)
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 		parts := make([]string, 0, len(entries))
 		for _, entry := range entries {
-			parts = append(parts, fmt.Sprintf("%s=%s", entry.name, maskSecret(entry.value, entry.secret)))
+			parts = append(
+				parts,
+				fmt.Sprintf("%s=%s", entry.name, maskSecret(entry.value, entry.secret)),
+			)
 		}
 		segments = append(segments, "Globals: "+strings.Join(parts, ", "))
 	}
@@ -1211,13 +1363,19 @@ func (m *Model) buildGlobalSummary() string {
 			if name == "" {
 				continue
 			}
-			entries = append(entries, summaryEntry{name: name, value: global.Value, secret: global.Secret})
+			entries = append(
+				entries,
+				summaryEntry{name: name, value: global.Value, secret: global.Secret},
+			)
 		}
 		if len(entries) > 0 {
 			sort.Slice(entries, func(i, j int) bool { return entries[i].name < entries[j].name })
 			parts := make([]string, 0, len(entries))
 			for _, entry := range entries {
-				parts = append(parts, fmt.Sprintf("%s=%s", entry.name, maskSecret(entry.value, entry.secret)))
+				parts = append(
+					parts,
+					fmt.Sprintf("%s=%s", entry.name, maskSecret(entry.value, entry.secret)),
+				)
 			}
 			segments = append(segments, "Doc: "+strings.Join(parts, ", "))
 		}
@@ -1246,7 +1404,9 @@ func (m *Model) clearGlobalValues() tea.Cmd {
 		label = "default"
 	}
 
-	m.setStatusMessage(statusMsg{level: statusInfo, text: fmt.Sprintf("Cleared globals for %s", label)})
+	m.setStatusMessage(
+		statusMsg{level: statusInfo, text: fmt.Sprintf("Cleared globals for %s", label)},
+	)
 	return nil
 }
 
@@ -1280,7 +1440,12 @@ func (r *captureResult) addRequest(name, value string, secret bool) {
 		r.requestVars = make(map[string]restfile.Variable)
 	}
 	key := strings.ToLower(name)
-	r.requestVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeRequest}
+	r.requestVars[key] = restfile.Variable{
+		Name:   name,
+		Value:  value,
+		Secret: secret,
+		Scope:  restfile.ScopeRequest,
+	}
 }
 
 func (r *captureResult) addFile(name, value string, secret bool) {
@@ -1298,7 +1463,12 @@ func (r *captureResult) addFile(name, value string, secret bool) {
 	}
 
 	key := strings.ToLower(name)
-	r.fileVars[key] = restfile.Variable{Name: name, Value: value, Secret: secret, Scope: restfile.ScopeFile}
+	r.fileVars[key] = restfile.Variable{
+		Name:   name,
+		Value:  value,
+		Secret: secret,
+		Scope:  restfile.ScopeFile,
+	}
 }
 
 func (m *Model) applyCaptures(
@@ -1326,13 +1496,25 @@ func (m *Model) applyCaptures(
 		}
 		switch capture.Scope {
 		case restfile.CaptureScopeRequest:
-			upsertVariable(&req.Variables, restfile.ScopeRequest, capture.Name, value, capture.Secret)
+			upsertVariable(
+				&req.Variables,
+				restfile.ScopeRequest,
+				capture.Name,
+				value,
+				capture.Secret,
+			)
 			if result != nil {
 				result.addRequest(capture.Name, value, capture.Secret)
 			}
 		case restfile.CaptureScopeFile:
 			if doc != nil {
-				upsertVariable(&doc.Variables, restfile.ScopeFile, capture.Name, value, capture.Secret)
+				upsertVariable(
+					&doc.Variables,
+					restfile.ScopeFile,
+					capture.Name,
+					value,
+					capture.Secret,
+				)
 			}
 			if result != nil {
 				result.addFile(capture.Name, value, capture.Secret)
@@ -1666,7 +1848,12 @@ func formatCaptureValue(value interface{}) (string, error) {
 	}
 }
 
-func upsertVariable(list *[]restfile.Variable, scope restfile.VariableScope, name, value string, secret bool) {
+func upsertVariable(
+	list *[]restfile.Variable,
+	scope restfile.VariableScope,
+	name, value string,
+	secret bool,
+) {
 	lower := strings.ToLower(name)
 	vars := *list
 	for i := range vars {
@@ -1680,7 +1867,14 @@ func upsertVariable(list *[]restfile.Variable, scope restfile.VariableScope, nam
 	*list = append(vars, restfile.Variable{Name: name, Value: value, Scope: scope, Secret: secret})
 }
 
-func (m *Model) ensureOAuth(ctx context.Context, req *restfile.Request, resolver *vars.Resolver, opts httpclient.Options, envName string, timeout time.Duration) error {
+func (m *Model) ensureOAuth(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts httpclient.Options,
+	envName string,
+	timeout time.Duration,
+) error {
 	if req == nil || req.Metadata.Auth == nil {
 		return nil
 	}
@@ -1699,7 +1893,10 @@ func (m *Model) ensureOAuth(ctx context.Context, req *restfile.Request, resolver
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	cfg = m.oauth.MergeCachedConfig(envKey, cfg)
 	if cfg.TokenURL == "" {
-		return errdef.New(errdef.CodeHTTP, "@auth oauth2 requires token_url (include it once per cache_key to seed the cache)")
+		return errdef.New(
+			errdef.CodeHTTP,
+			"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
+		)
 	}
 
 	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
@@ -1714,7 +1911,12 @@ func (m *Model) ensureOAuth(ctx context.Context, req *restfile.Request, resolver
 	tokenTimeout := timeout
 	if grant == "authorization_code" && tokenTimeout < 2*time.Minute {
 		tokenTimeout = 2 * time.Minute
-		m.setStatusMessage(statusMsg{level: statusInfo, text: "Open browser to complete OAuth (auth code/PKCE). Press send again to cancel."})
+		m.setStatusMessage(
+			statusMsg{
+				level: statusInfo,
+				text:  "Open browser to complete OAuth (auth code/PKCE). Press send again to cancel.",
+			},
+		)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, tokenTimeout)
@@ -1745,7 +1947,10 @@ func (m *Model) ensureOAuth(ctx context.Context, req *restfile.Request, resolver
 	return nil
 }
 
-func (m *Model) buildOAuthConfig(auth *restfile.AuthSpec, resolver *vars.Resolver) (oauth.Config, error) {
+func (m *Model) buildOAuthConfig(
+	auth *restfile.AuthSpec,
+	resolver *vars.Resolver,
+) (oauth.Config, error) {
 	cfg := oauth.Config{Extra: make(map[string]string)}
 	if auth == nil {
 		return cfg, errdef.New(errdef.CodeHTTP, "missing oauth spec")
@@ -2142,7 +2347,11 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 	return &clone
 }
 
-func (m *Model) requestAtCursor(doc *restfile.Document, content string, cursorLine int) (*restfile.Request, bool) {
+func (m *Model) requestAtCursor(
+	doc *restfile.Document,
+	content string,
+	cursorLine int,
+) (*restfile.Request, bool) {
 	if req, _ := requestAtLine(doc, cursorLine); req != nil {
 		return req, false
 	}

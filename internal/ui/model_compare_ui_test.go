@@ -47,6 +47,9 @@ func TestSelectCompareFocusPinsSnapshots(t *testing.T) {
 		t.Fatalf("expected primary pane to switch to diff tab")
 	}
 	if model.compareRowIndex != 1 {
-		t.Fatalf("expected compareRowIndex to remain at selected row, got %d", model.compareRowIndex)
+		t.Fatalf(
+			"expected compareRowIndex to remain at selected row, got %d",
+			model.compareRowIndex,
+		)
 	}
 }

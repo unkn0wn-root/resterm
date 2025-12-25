@@ -66,7 +66,12 @@ func TestServiceGenerateHTTPFileMissingSpec(t *testing.T) {
 		Writer:    writer.NewFileWriter(),
 	}
 	dest := filepath.Join(t.TempDir(), "out.http")
-	if err := svc.GenerateHTTPFile(context.Background(), "missing.yaml", dest, openapi.GenerateOptions{}); err == nil {
+	if err := svc.GenerateHTTPFile(
+		context.Background(),
+		"missing.yaml",
+		dest,
+		openapi.GenerateOptions{},
+	); err == nil {
 		t.Fatalf("expected missing spec error")
 	}
 }

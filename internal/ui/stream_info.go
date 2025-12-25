@@ -9,7 +9,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
-func streamInfoFromResponse(req *restfile.Request, resp *httpclient.Response) (*scripts.StreamInfo, error) {
+func streamInfoFromResponse(
+	req *restfile.Request,
+	resp *httpclient.Response,
+) (*scripts.StreamInfo, error) {
 	if req == nil || resp == nil {
 		return nil, nil
 	}

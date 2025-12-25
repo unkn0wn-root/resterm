@@ -80,7 +80,12 @@ func TestInjectBodyIncludes(t *testing.T) {
 func TestInjectBodyIncludesFallback(t *testing.T) {
 	client := &Client{fs: mapFS{"workspace/payload.json": []byte("hi")}}
 	body := "@payload.json"
-	processed, err := client.injectBodyIncludes(body, "/does/not/exist", []string{"workspace"}, true)
+	processed, err := client.injectBodyIncludes(
+		body,
+		"/does/not/exist",
+		[]string{"workspace"},
+		true,
+	)
 	if err != nil {
 		t.Fatalf("inject body includes with fallback: %v", err)
 	}
@@ -135,19 +140,40 @@ func TestPrepareBodyNoFallbackDisallowsRawPath(t *testing.T) {
 
 func TestResolveFileLookup(t *testing.T) {
 	base := "/base"
-	fallbacks, allowRaw := resolveFileLookup(base, Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}})
+	fallbacks, allowRaw := resolveFileLookup(
+		base,
+		Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}},
+	)
 	if len(fallbacks) != 0 || allowRaw {
-		t.Fatalf("expected no fallbacks and raw disallowed when NoFallback with base dir, got %v allowRaw=%v", fallbacks, allowRaw)
+		t.Fatalf(
+			"expected no fallbacks and raw disallowed when NoFallback with base dir, got %v allowRaw=%v",
+			fallbacks,
+			allowRaw,
+		)
 	}
 
-	fallbacks, allowRaw = resolveFileLookup("", Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}})
+	fallbacks, allowRaw = resolveFileLookup(
+		"",
+		Options{NoFallback: true, FallbackBaseDirs: []string{"/fb"}},
+	)
 	if len(fallbacks) != 0 || !allowRaw {
-		t.Fatalf("expected raw allowed when base dir empty even if NoFallback, got %v allowRaw=%v", fallbacks, allowRaw)
+		t.Fatalf(
+			"expected raw allowed when base dir empty even if NoFallback, got %v allowRaw=%v",
+			fallbacks,
+			allowRaw,
+		)
 	}
 
-	fallbacks, allowRaw = resolveFileLookup(base, Options{NoFallback: false, FallbackBaseDirs: []string{"/fb"}})
+	fallbacks, allowRaw = resolveFileLookup(
+		base,
+		Options{NoFallback: false, FallbackBaseDirs: []string{"/fb"}},
+	)
 	if len(fallbacks) != 1 || fallbacks[0] != "/fb" || !allowRaw {
-		t.Fatalf("expected fallbacks preserved and raw allowed when fallback enabled, got %v allowRaw=%v", fallbacks, allowRaw)
+		t.Fatalf(
+			"expected fallbacks preserved and raw allowed when fallback enabled, got %v allowRaw=%v",
+			fallbacks,
+			allowRaw,
+		)
 	}
 }
 
@@ -159,7 +185,10 @@ func TestApplyAuthenticationBasic(t *testing.T) {
 		t.Fatalf("build request: %v", err)
 	}
 
-	auth := &restfile.AuthSpec{Type: "basic", Params: map[string]string{"username": "alice", "password": "secret"}}
+	auth := &restfile.AuthSpec{
+		Type:   "basic",
+		Params: map[string]string{"username": "alice", "password": "secret"},
+	}
 	resolver := vars.NewResolver()
 	client.applyAuthentication(httpReq, resolver, auth)
 	if got := httpReq.Header.Get("Authorization"); !strings.HasPrefix(got, "Basic ") {
@@ -244,7 +273,9 @@ func TestPrepareGraphQLGetWithTemplatedURL(t *testing.T) {
 		Variables:     "{ \"flag\": true }",
 		OperationName: "Ping",
 	}
-	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"base": "https://example.com"}))
+	resolver := vars.NewResolver(
+		vars.NewMapProvider("env", map[string]string{"base": "https://example.com"}),
+	)
 	if _, err := client.prepareBody(req, resolver, Options{}); err != nil {
 		t.Fatalf("prepare graphQL body (GET with template): %v", err)
 	}
@@ -317,7 +348,10 @@ func TestLoadRootCAsMergesSystemAndCustom(t *testing.T) {
 	caPath := filepath.Join(tmpDir, "ca.pem")
 	writeTestCA(t, caPath)
 
-	tlsCfg, err := tlsconfig.Build(tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeAppend}, tmpDir)
+	tlsCfg, err := tlsconfig.Build(
+		tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeAppend},
+		tmpDir,
+	)
 	if err != nil {
 		t.Fatalf("tlsconfig build: %v", err)
 	}
@@ -337,7 +371,10 @@ func TestLoadRootCAsReplace(t *testing.T) {
 	caPath := filepath.Join(tmpDir, "ca.pem")
 	writeTestCA(t, caPath)
 
-	tlsCfg, err := tlsconfig.Build(tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeReplace}, tmpDir)
+	tlsCfg, err := tlsconfig.Build(
+		tlsconfig.Files{RootCAs: []string{caPath}, RootMode: tlsconfig.RootModeReplace},
+		tmpDir,
+	)
 	if err != nil {
 		t.Fatalf("tlsconfig build: %v", err)
 	}
@@ -403,7 +440,11 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 				}
 				time.Sleep(200 * time.Microsecond)
 				if trace.DNSDone != nil {
-					trace.DNSDone(httptrace.DNSDoneInfo{Addrs: []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}}})
+					trace.DNSDone(
+						httptrace.DNSDoneInfo{
+							Addrs: []net.IPAddr{{IP: net.ParseIP("93.184.216.34")}},
+						},
+					)
 				}
 				time.Sleep(200 * time.Microsecond)
 				if trace.ConnectStart != nil {
@@ -451,7 +492,12 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 
 	req := &restfile.Request{Method: http.MethodGet, URL: "https://example.com"}
 	budget := nettrace.Budget{Total: 10 * time.Microsecond}
-	resp, err := client.Execute(context.Background(), req, vars.NewResolver(), Options{Trace: true, TraceBudget: &budget})
+	resp, err := client.Execute(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		Options{Trace: true, TraceBudget: &budget},
+	)
 	if err != nil {
 		t.Fatalf("execute request: %v", err)
 	}
@@ -487,10 +533,18 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 		t.Fatalf("expected overall timeline duration > 0, got %v", resp.Timeline.Duration)
 	}
 	if resp.Duration < resp.Timeline.Duration {
-		t.Fatalf("expected response duration %v to be >= timeline duration %v", resp.Duration, resp.Timeline.Duration)
+		t.Fatalf(
+			"expected response duration %v to be >= timeline duration %v",
+			resp.Duration,
+			resp.Timeline.Duration,
+		)
 	}
-	if diff := resp.Duration - resp.Timeline.Duration; diff > time.Millisecond || diff < -time.Millisecond {
-		t.Fatalf("expected response duration and timeline duration to match within 1ms, got diff %v", diff)
+	if diff := resp.Duration - resp.Timeline.Duration; diff > time.Millisecond ||
+		diff < -time.Millisecond {
+		t.Fatalf(
+			"expected response duration and timeline duration to match within 1ms, got diff %v",
+			diff,
+		)
 	}
 }
 
@@ -592,24 +646,26 @@ func TestExecuteSSE(t *testing.T) {
 			"data: hello world",
 			"",
 		}, "\n") + "\n"
-		return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			resp := &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(stream)),
-			}
-			resp.Header.Set("Content-Type", "text/event-stream")
-			finalReq := req.Clone(req.Context())
-			parsed, err := url.Parse("https://final.example.com/events")
-			if err != nil {
-				return nil, err
-			}
-			finalReq.URL = parsed
-			resp.Request = finalReq
-			return resp, nil
-		})}, nil
+		return &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				resp := &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(stream)),
+				}
+				resp.Header.Set("Content-Type", "text/event-stream")
+				finalReq := req.Clone(req.Context())
+				parsed, err := url.Parse("https://final.example.com/events")
+				if err != nil {
+					return nil, err
+				}
+				finalReq.URL = parsed
+				resp.Request = finalReq
+				return resp, nil
+			}),
+		}, nil
 	}
 
 	req := &restfile.Request{
@@ -644,7 +700,10 @@ func TestExecuteSSE(t *testing.T) {
 		t.Fatalf("expected at least one event, got %d", transcript.Summary.EventCount)
 	}
 	if transcript.Events[transcript.Summary.EventCount-1].Event != "greet" {
-		t.Fatalf("expected final event to be greet, got %s", transcript.Events[len(transcript.Events)-1].Event)
+		t.Fatalf(
+			"expected final event to be greet, got %s",
+			transcript.Events[len(transcript.Events)-1].Event,
+		)
 	}
 }
 
@@ -713,18 +772,20 @@ func TestExecuteSSEMaxBytes(t *testing.T) {
 	maxBytes := len(first)
 	client.httpFactory = func(Options) (*http.Client, error) {
 		stream := first + second
-		return &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
-			resp := &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(stream)),
-				Request:    req,
-			}
-			resp.Header.Set("Content-Type", "text/event-stream")
-			return resp, nil
-		})}, nil
+		return &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				resp := &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(stream)),
+					Request:    req,
+				}
+				resp.Header.Set("Content-Type", "text/event-stream")
+				return resp, nil
+			}),
+		}, nil
 	}
 
 	req := &restfile.Request{
@@ -748,7 +809,10 @@ func TestExecuteSSEMaxBytes(t *testing.T) {
 		t.Fatalf("expected max bytes limit reason, got %q", transcript.Summary.Reason)
 	}
 	if transcript.Summary.EventCount != 1 {
-		t.Fatalf("expected exactly one event before byte limit, got %d", transcript.Summary.EventCount)
+		t.Fatalf(
+			"expected exactly one event before byte limit, got %d",
+			transcript.Summary.EventCount,
+		)
 	}
 }
 
@@ -786,7 +850,12 @@ func TestStartSSEPublishesEvents(t *testing.T) {
 		URL:    "https://example.com/events",
 		SSE:    &restfile.SSERequest{},
 	}
-	handle, fallback, err := client.StartSSE(context.Background(), req, vars.NewResolver(), Options{})
+	handle, fallback, err := client.StartSSE(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		Options{},
+	)
 	if err != nil {
 		t.Fatalf("start sse: %v", err)
 	}

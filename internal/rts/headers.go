@@ -2,14 +2,16 @@ package rts
 
 import "strings"
 
-func builtinHeadersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibHeadersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "headers.normalize(h)"); err != nil {
 		return Null(), err
 	}
+
 	m, err := dictArg(ctx, pos, args[0], "headers.normalize(h)")
 	if err != nil {
 		return Null(), err
 	}
+
 	out, err := normHeaders(ctx, pos, m, "headers.normalize(h)")
 	if err != nil {
 		return Null(), err
@@ -17,18 +19,21 @@ func builtinHeadersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(out), nil
 }
 
-func builtinHeadersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibHeadersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "headers.get(h, name)"); err != nil {
 		return Null(), err
 	}
+
 	m, err := dictArg(ctx, pos, args[0], "headers.get(h, name)")
 	if err != nil || m == nil {
 		return Null(), err
 	}
+
 	name, err := keyArg(ctx, pos, args[1], "headers.get(h, name)")
 	if err != nil {
 		return Null(), err
 	}
+
 	val, ok, err := findHeader(ctx, pos, m, name)
 	if err != nil || !ok {
 		return Null(), err
@@ -36,18 +41,21 @@ func builtinHeadersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return headValue(ctx, pos, val)
 }
 
-func builtinHeadersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibHeadersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "headers.has(h, name)"); err != nil {
 		return Null(), err
 	}
+
 	m, err := dictArg(ctx, pos, args[0], "headers.has(h, name)")
 	if err != nil || m == nil {
 		return Bool(false), err
 	}
+
 	name, err := keyArg(ctx, pos, args[1], "headers.has(h, name)")
 	if err != nil {
 		return Null(), err
 	}
+
 	val, ok, err := findHeader(ctx, pos, m, name)
 	if err != nil || !ok {
 		return Bool(false), err
@@ -56,6 +64,7 @@ func builtinHeadersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err != nil {
 		return Null(), err
 	}
+
 	switch checked.K {
 	case VNull:
 		return Bool(false), nil
@@ -68,64 +77,76 @@ func builtinHeadersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 }
 
-func builtinHeadersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibHeadersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 3, "headers.set(h, name, value)"); err != nil {
 		return Null(), err
 	}
+
 	m, err := dictArg(ctx, pos, args[0], "headers.set(h, name, value)")
 	if err != nil {
 		return Null(), err
 	}
+
 	name, err := keyArg(ctx, pos, args[1], "headers.set(h, name, value)")
 	if err != nil {
 		return Null(), err
 	}
+
 	val, err := headerValue(ctx, pos, args[2])
 	if err != nil {
 		return Null(), err
 	}
+
 	out := cloneDict(m)
 	out[strings.ToLower(name)] = val
 	return Dict(out), nil
 }
 
-func builtinHeadersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibHeadersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "headers.remove(h, name)"); err != nil {
 		return Null(), err
 	}
+
 	m, err := dictArg(ctx, pos, args[0], "headers.remove(h, name)")
 	if err != nil {
 		return Null(), err
 	}
+
 	name, err := keyArg(ctx, pos, args[1], "headers.remove(h, name)")
 	if err != nil {
 		return Null(), err
 	}
+
 	out := cloneDict(m)
 	delete(out, strings.ToLower(name))
 	return Dict(out), nil
 }
 
-func builtinHeadersMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibHeadersMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "headers.merge(a, b)"); err != nil {
 		return Null(), err
 	}
+
 	a, err := dictArg(ctx, pos, args[0], "headers.merge(a, b)")
 	if err != nil {
 		return Null(), err
 	}
+
 	b, err := dictArg(ctx, pos, args[1], "headers.merge(a, b)")
 	if err != nil {
 		return Null(), err
 	}
+
 	na, err := normHeaders(ctx, pos, a, "headers.merge(a, b)")
 	if err != nil {
 		return Null(), err
 	}
+
 	nb, err := normHeaders(ctx, pos, b, "headers.merge(a, b)")
 	if err != nil {
 		return Null(), err
 	}
+
 	out := cloneDict(na)
 	for k, v := range nb {
 		if v.K == VNull {
@@ -141,6 +162,7 @@ func normHeaders(ctx *Ctx, pos Pos, m map[string]Value, sig string) (map[string]
 	if len(m) == 0 {
 		return map[string]Value{}, nil
 	}
+
 	out := make(map[string]Value, len(m))
 	for k, v := range m {
 		name, err := mapKey(ctx, pos, k, sig)

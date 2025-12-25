@@ -24,7 +24,13 @@ type globalObj struct {
 	mut  GlobalMut
 }
 
-func newVarsObj(name string, vars map[string]string, globals map[string]string, mut VarsMut, gmut GlobalMut) *varsObj {
+func newVarsObj(
+	name string,
+	vars map[string]string,
+	globals map[string]string,
+	mut VarsMut,
+	gmut GlobalMut,
+) *varsObj {
 	if strings.TrimSpace(name) == "" {
 		name = "vars"
 	}
@@ -251,7 +257,14 @@ func (o *globalObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCountRange(ctx, pos, args, 2, 3, o.name+".set(name, value[, secret])"); err != nil {
+	if err := argCountRange(
+		ctx,
+		pos,
+		args,
+		2,
+		3,
+		o.name+".set(name, value[, secret])",
+	); err != nil {
 		return Null(), err
 	}
 	if o.mut == nil {
@@ -268,7 +281,12 @@ func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	secret := false
 	if len(args) == 3 {
 		if args[2].K != VBool {
-			return Null(), rtErr(ctx, pos, "%s.set(name, value[, secret]) expects secret bool", o.name)
+			return Null(), rtErr(
+				ctx,
+				pos,
+				"%s.set(name, value[, secret]) expects secret bool",
+				o.name,
+			)
 		}
 		secret = args[2].B
 	}

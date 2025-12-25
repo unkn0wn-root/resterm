@@ -52,80 +52,80 @@ type nsSpec struct {
 
 func stdlibCoreSpec() map[string]NativeFunc {
 	return map[string]NativeFunc{
-		"fail":     builtinFail,
-		"len":      builtinLen,
-		"contains": builtinContains,
-		"match":    builtinMatch,
-		"str":      builtinStr,
-		"default":  builtinDefault,
-		"uuid":     builtinUUID,
+		"fail":     stdlibFail,
+		"len":      stdlibLen,
+		"contains": stdlibContains,
+		"match":    stdlibMatch,
+		"str":      stdlibStr,
+		"default":  stdlibDefault,
+		"uuid":     stdlibUUID,
 	}
 }
 
 func stdlibNSpecs() []nsSpec {
 	return []nsSpec{
 		{name: "base64", top: true, fns: map[string]NativeFunc{
-			"encode": builtinB64Enc,
-			"decode": builtinB64Dec,
+			"encode": stdlibB64Enc,
+			"decode": stdlibB64Dec,
 		}},
 		{name: "url", top: true, fns: map[string]NativeFunc{
-			"encode": builtinURLEnc,
-			"decode": builtinURLDec,
+			"encode": stdlibURLEnc,
+			"decode": stdlibURLDec,
 		}},
 		{name: "time", top: true, fns: map[string]NativeFunc{
-			"nowISO": builtinTimeNowISO,
-			"format": builtinTimeFormat,
+			"nowISO": stdlibTimeNowISO,
+			"format": stdlibTimeFormat,
 		}},
 		{name: "json", top: true, fns: map[string]NativeFunc{
-			"file":      builtinJSONFile,
-			"parse":     builtinJSONParse,
-			"stringify": builtinJSONStringify,
-			"get":       builtinJSONGet,
+			"file":      stdlibJSONFile,
+			"parse":     stdlibJSONParse,
+			"stringify": stdlibJSONStringify,
+			"get":       stdlibJSONGet,
 		}},
 		{name: "headers", top: true, fns: map[string]NativeFunc{
-			"get":       builtinHeadersGet,
-			"has":       builtinHeadersHas,
-			"set":       builtinHeadersSet,
-			"remove":    builtinHeadersRemove,
-			"merge":     builtinHeadersMerge,
-			"normalize": builtinHeadersNormalize,
+			"get":       stdlibHeadersGet,
+			"has":       stdlibHeadersHas,
+			"set":       stdlibHeadersSet,
+			"remove":    stdlibHeadersRemove,
+			"merge":     stdlibHeadersMerge,
+			"normalize": stdlibHeadersNormalize,
 		}},
 		{name: "query", top: true, fns: map[string]NativeFunc{
-			"parse":  builtinQueryParse,
-			"encode": builtinQueryEncode,
-			"merge":  builtinQueryMerge,
+			"parse":  stdlibQueryParse,
+			"encode": stdlibQueryEncode,
+			"merge":  stdlibQueryMerge,
 		}},
 		{name: "text", fns: map[string]NativeFunc{
-			"lower":      builtinTextLower,
-			"upper":      builtinTextUpper,
-			"trim":       builtinTextTrim,
-			"split":      builtinTextSplit,
-			"join":       builtinTextJoin,
-			"replace":    builtinTextReplace,
-			"startsWith": builtinTextStartsWith,
-			"endsWith":   builtinTextEndsWith,
+			"lower":      stdlibTextLower,
+			"upper":      stdlibTextUpper,
+			"trim":       stdlibTextTrim,
+			"split":      stdlibTextSplit,
+			"join":       stdlibTextJoin,
+			"replace":    stdlibTextReplace,
+			"startsWith": stdlibTextStartsWith,
+			"endsWith":   stdlibTextEndsWith,
 		}},
 		{name: "list", fns: map[string]NativeFunc{
-			"append": builtinListAppend,
-			"concat": builtinListConcat,
-			"sort":   builtinListSort,
+			"append": stdlibListAppend,
+			"concat": stdlibListConcat,
+			"sort":   stdlibListSort,
 		}},
 		{name: "dict", fns: map[string]NativeFunc{
-			"keys":   builtinDictKeys,
-			"values": builtinDictValues,
-			"items":  builtinDictItems,
-			"set":    builtinDictSet,
-			"merge":  builtinDictMerge,
-			"remove": builtinDictRemove,
+			"keys":   stdlibDictKeys,
+			"values": stdlibDictValues,
+			"items":  stdlibDictItems,
+			"set":    stdlibDictSet,
+			"merge":  stdlibDictMerge,
+			"remove": stdlibDictRemove,
 		}},
 		{name: "math", fns: map[string]NativeFunc{
-			"abs":   builtinMathAbs,
-			"min":   builtinMathMin,
-			"max":   builtinMathMax,
-			"clamp": builtinMathClamp,
-			"floor": builtinMathFloor,
-			"ceil":  builtinMathCeil,
-			"round": builtinMathRound,
+			"abs":   stdlibMathAbs,
+			"min":   stdlibMathMin,
+			"max":   stdlibMathMax,
+			"clamp": stdlibMathClamp,
+			"floor": stdlibMathFloor,
+			"ceil":  stdlibMathCeil,
+			"round": stdlibMathRound,
 		}},
 	}
 }
@@ -193,7 +193,7 @@ func NativeNamed(name string, f NativeFunc) Value {
 	})
 }
 
-func builtinFail(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibFail(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	msg := "fail()"
 	if len(args) == 1 {
 		s, err := toStr(ctx, pos, args[0])
@@ -207,7 +207,7 @@ func builtinFail(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Null(), rtErr(ctx, pos, "%s", msg)
 }
 
-func builtinLen(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibLen(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "len(x) expects 1 arg")
 	}
@@ -223,7 +223,7 @@ func builtinLen(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 }
 
-func builtinContains(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibContains(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 2 {
 		return Null(), rtErr(ctx, pos, "contains(a, b) expects 2 args")
 	}
@@ -253,7 +253,7 @@ func builtinContains(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 }
 
-func builtinMatch(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMatch(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 2 {
 		return Null(), rtErr(ctx, pos, "match(pattern, text) expects 2 args")
 	}
@@ -279,7 +279,7 @@ func builtinMatch(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Bool(re.MatchString(txt)), nil
 }
 
-func builtinStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "str(x) expects 1 arg")
 	}
@@ -291,7 +291,7 @@ func builtinStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(s), nil
 }
 
-func builtinDefault(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDefault(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 2 {
 		return Null(), rtErr(ctx, pos, "default(a, b) expects 2 args")
 	}
@@ -301,7 +301,7 @@ func builtinDefault(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return args[1], nil
 }
 
-func builtinB64Enc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibB64Enc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "base64.encode(x) expects 1 arg")
 	}
@@ -313,7 +313,7 @@ func builtinB64Enc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(base64.StdEncoding.EncodeToString([]byte(s))), nil
 }
 
-func builtinB64Dec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibB64Dec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "base64.decode(x) expects 1 arg")
 	}
@@ -330,7 +330,7 @@ func builtinB64Dec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(string(b)), nil
 }
 
-func builtinURLEnc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibURLEnc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "url.encode(x) expects 1 arg")
 	}
@@ -342,7 +342,7 @@ func builtinURLEnc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(url.QueryEscape(s)), nil
 }
 
-func builtinURLDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibURLDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "url.decode(x) expects 1 arg")
 	}
@@ -359,7 +359,7 @@ func builtinURLDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(res), nil
 }
 
-func builtinTimeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTimeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 0 {
 		return Null(), rtErr(ctx, pos, "time.nowISO() expects 0 args")
 	}
@@ -369,7 +369,7 @@ func builtinTimeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(ctx.Now().UTC().Format(time.RFC3339)), nil
 }
 
-func builtinTimeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTimeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "time.format(layout) expects 1 arg")
 	}
@@ -385,7 +385,7 @@ func builtinTimeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(ctx.Now().Format(layout)), nil
 }
 
-func builtinUUID(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibUUID(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 0 {
 		return Null(), rtErr(ctx, pos, "uuid() expects 0 args")
 	}
@@ -417,7 +417,7 @@ func randUUID() (string, error) {
 	return id.String(), nil
 }
 
-func builtinJSONFile(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibJSONFile(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 1 {
 		return Null(), rtErr(ctx, pos, "json.file(path) expects 1 arg")
 	}

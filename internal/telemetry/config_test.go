@@ -29,7 +29,8 @@ func TestConfigFromEnv(t *testing.T) {
 	if cfg.DialTimeout != 10*time.Second {
 		t.Fatalf("unexpected dial timeout %s", cfg.DialTimeout)
 	}
-	if len(cfg.Headers) != 2 || cfg.Headers["x-api-key"] != "secret" || cfg.Headers["x-tenant"] != "demo" {
+	if len(cfg.Headers) != 2 || cfg.Headers["x-api-key"] != "secret" ||
+		cfg.Headers["x-tenant"] != "demo" {
 		t.Fatalf("unexpected headers: %#v", cfg.Headers)
 	}
 }

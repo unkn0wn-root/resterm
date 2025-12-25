@@ -45,7 +45,11 @@ func TestScrollResponseIgnoredInEditorFocus(t *testing.T) {
 		t.Fatalf("expected editor focus to ignore gg, but handled with cmd %v", cmd)
 	}
 	if pane.viewport.YOffset != offset {
-		t.Fatalf("expected editor focus to ignore gg, offset changed from %d to %d", offset, pane.viewport.YOffset)
+		t.Fatalf(
+			"expected editor focus to ignore gg, offset changed from %d to %d",
+			offset,
+			pane.viewport.YOffset,
+		)
 	}
 }
 
@@ -59,7 +63,11 @@ func TestScrollResponseIgnoresHistoryTab(t *testing.T) {
 
 	model.scrollResponseToTop()
 	if pane.viewport.YOffset != offset {
-		t.Fatalf("expected history tab to ignore gg, offset changed from %d to %d", offset, pane.viewport.YOffset)
+		t.Fatalf(
+			"expected history tab to ignore gg, offset changed from %d to %d",
+			offset,
+			pane.viewport.YOffset,
+		)
 	}
 }
 
@@ -98,7 +106,11 @@ func TestScrollShortcutUsesNavigatorWhenFocused(t *testing.T) {
 		t.Fatalf("expected navigator selection to move to top, got %+v", sel)
 	}
 	if pane.viewport.YOffset != responseOffset {
-		t.Fatalf("expected navigator gg to leave response offset %d, got %d", responseOffset, pane.viewport.YOffset)
+		t.Fatalf(
+			"expected navigator gg to leave response offset %d, got %d",
+			responseOffset,
+			pane.viewport.YOffset,
+		)
 	}
 
 	if _, handled := model.scrollShortcutToEdge(false); !handled {

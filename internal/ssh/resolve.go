@@ -56,7 +56,11 @@ func Resolve(
 	return &cfg, nil
 }
 
-func lookupProfile(profiles []restfile.SSHProfile, name string, scope restfile.SSHScope) (*restfile.SSHProfile, bool) {
+func lookupProfile(
+	profiles []restfile.SSHProfile,
+	name string,
+	scope restfile.SSHScope,
+) (*restfile.SSHProfile, bool) {
 	for i := range profiles {
 		p := profiles[i]
 		if p.Scope != scope {

@@ -88,7 +88,11 @@ func TestWorkflowStatsCanceledEntries(t *testing.T) {
 	render := view.render(80)
 	plain := stripANSIEscape(render.content)
 	if strings.Count(plain, workflowStatusCanceled) != 2 {
-		t.Fatalf("expected two canceled steps, got %d content=%q", strings.Count(plain, workflowStatusCanceled), plain)
+		t.Fatalf(
+			"expected two canceled steps, got %d content=%q",
+			strings.Count(plain, workflowStatusCanceled),
+			plain,
+		)
 	}
 	if !strings.Contains(plain, "2. Two "+workflowStatusCanceled) {
 		t.Fatalf("expected second step to be marked canceled, got %q", plain)
@@ -133,7 +137,11 @@ func TestWorkflowStatsRenderWrappedIndent(t *testing.T) {
 	}
 
 	if len(messageLines) < 2 {
-		t.Fatalf("expected wrapped message to span multiple lines, matched=%v content=%q", messageLines, stripANSIEscape(render.content))
+		t.Fatalf(
+			"expected wrapped message to span multiple lines, matched=%v content=%q",
+			messageLines,
+			stripANSIEscape(render.content),
+		)
 	}
 	if !strings.HasPrefix(messageLines[0], "    ") {
 		t.Fatalf("expected first message line to retain base indent, got %q", messageLines[0])
@@ -238,14 +246,25 @@ func TestWorkflowStatsSelectVisibleStartAdvancesWhenStartInView(t *testing.T) {
 	pane.viewport.SetContent(strings.Repeat("x\n", 12))
 	pane.viewport.SetYOffset(0)
 	if view.selectVisibleStart(pane, render, 1) {
-		t.Fatalf("expected selection to stay when next section start not visible (sel=%d offset=%d bottom=%d)", view.selected, pane.viewport.YOffset, pane.viewport.YOffset+pane.viewport.Height-1)
+		t.Fatalf(
+			"expected selection to stay when next section start not visible (sel=%d offset=%d bottom=%d)",
+			view.selected,
+			pane.viewport.YOffset,
+			pane.viewport.YOffset+pane.viewport.Height-1,
+		)
 	}
 	if view.selected != 0 {
 		t.Fatalf("expected selection to remain 0, got %d", view.selected)
 	}
 
-	pane.viewport.SetYOffset(1)                  // viewport covers lines 1..3, start of entry 2 is 3
-	_ = view.selectVisibleStart(pane, render, 1) // may or may not move depending on buffer; allow either
+	pane.viewport.SetYOffset(
+		1,
+	) // viewport covers lines 1..3, start of entry 2 is 3
+	_ = view.selectVisibleStart(
+		pane,
+		render,
+		1,
+	) // may or may not move depending on buffer; allow either
 }
 
 func TestWorkflowStatsSelectVisibleStartMovesUpward(t *testing.T) {
@@ -270,7 +289,11 @@ func TestWorkflowStatsSelectVisibleStartMovesUpward(t *testing.T) {
 	_ = view.selectVisibleStart(pane, render, -1) // allow staying or moving depending on buffer
 
 	pane.viewport.SetYOffset(0)
-	_ = view.selectVisibleStart(pane, render, -1) // allow either; selection movement now buffer-dependent
+	_ = view.selectVisibleStart(
+		pane,
+		render,
+		-1,
+	) // allow either; selection movement now buffer-dependent
 }
 
 func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
@@ -286,10 +309,42 @@ func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
 			{step: restfile.WorkflowStep{Name: "Step 4"}},
 		},
 		results: []workflowStepResult{
-			{Step: restfile.WorkflowStep{Name: "Step 1"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("one\n", 10))}},
-			{Step: restfile.WorkflowStep{Name: "Step 2"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("two\n", 10))}},
-			{Step: restfile.WorkflowStep{Name: "Step 3"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("three\n", 16))}},
-			{Step: restfile.WorkflowStep{Name: "Step 4"}, Success: true, HTTP: &httpclient.Response{Status: "200 OK", StatusCode: 200, Body: []byte(strings.Repeat("four\n", 20))}},
+			{
+				Step:    restfile.WorkflowStep{Name: "Step 1"},
+				Success: true,
+				HTTP: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body:       []byte(strings.Repeat("one\n", 10)),
+				},
+			},
+			{
+				Step:    restfile.WorkflowStep{Name: "Step 2"},
+				Success: true,
+				HTTP: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body:       []byte(strings.Repeat("two\n", 10)),
+				},
+			},
+			{
+				Step:    restfile.WorkflowStep{Name: "Step 3"},
+				Success: true,
+				HTTP: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body:       []byte(strings.Repeat("three\n", 16)),
+				},
+			},
+			{
+				Step:    restfile.WorkflowStep{Name: "Step 4"},
+				Success: true,
+				HTTP: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: 200,
+					Body:       []byte(strings.Repeat("four\n", 20)),
+				},
+			},
 		},
 		start: time.Now(),
 		end:   time.Now(),
@@ -315,7 +370,11 @@ func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
 	}
 	model.responsePanes[responsePanePrimary] = pane
 
-	if err := model.syncWorkflowStatsPane(&model.responsePanes[responsePanePrimary], width, snapshot); err != nil {
+	if err := model.syncWorkflowStatsPane(
+		&model.responsePanes[responsePanePrimary],
+		width,
+		snapshot,
+	); err != nil {
 		t.Fatalf("syncWorkflowStatsPane error: %v", err)
 	}
 
@@ -343,7 +402,11 @@ func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
 	render := view.render(width)
 	startLast := render.metrics[len(render.metrics)-1].start
 	if primaryPane.viewport.YOffset < startLast {
-		t.Fatalf("expected to be scrolled into the last entry, got offset %d startLast %d", primaryPane.viewport.YOffset, startLast)
+		t.Fatalf(
+			"expected to be scrolled into the last entry, got offset %d startLast %d",
+			primaryPane.viewport.YOffset,
+			startLast,
+		)
 	}
 
 	model.jumpWorkflowStatsSelection(-1)
@@ -352,6 +415,11 @@ func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
 	height = primaryPane.viewport.Height
 	start := render.metrics[len(render.metrics)-2].start
 	if start < current || start > current+height-1 {
-		t.Fatalf("expected viewport to show entry 3 start (line %d) within [%d,%d]", start, current, current+height-1)
+		t.Fatalf(
+			"expected viewport to show entry 3 start (line %d) within [%d,%d]",
+			start,
+			current,
+			current+height-1,
+		)
 	}
 }

@@ -197,7 +197,9 @@ func (m *Model) handleStreamEvents(msg streamEventMsg) {
 		}
 	}
 	if m.sending {
-		m.setStatusMessage(statusMsg{text: "Streaming response (receiving events)", level: statusInfo})
+		m.setStatusMessage(
+			statusMsg{text: "Streaming response (receiving events)", level: statusInfo},
+		)
 	}
 	m.refreshStreamPanes()
 }
@@ -211,7 +213,16 @@ func (m *Model) handleStreamState(msg streamStateMsg) {
 	if msg.err != nil || msg.state == stream.StateFailed {
 		level = statusWarn
 	}
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Stream %s: %s", msg.sessionID, streamStateString(msg.state, msg.err)), level: level})
+	m.setStatusMessage(
+		statusMsg{
+			text: fmt.Sprintf(
+				"Stream %s: %s",
+				msg.sessionID,
+				streamStateString(msg.state, msg.err),
+			),
+			level: level,
+		},
+	)
 	m.refreshStreamPanes()
 }
 
@@ -247,7 +258,9 @@ func (m *Model) handleStreamComplete(msg streamCompleteMsg) {
 		m.streamFilterInput.SetValue("")
 		m.streamFilterInput.Blur()
 	}
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Stream %s completed", msg.sessionID), level: statusSuccess})
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("Stream %s completed", msg.sessionID), level: statusSuccess},
+	)
 	m.refreshStreamPanes()
 }
 
@@ -287,7 +300,12 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if ls != nil {
 				ls.filter = strings.TrimSpace(m.streamFilterInput.Value())
 				if ls.filter != "" {
-					m.setStatusMessage(statusMsg{text: fmt.Sprintf("Stream filter applied: %s", ls.filter), level: statusInfo})
+					m.setStatusMessage(
+						statusMsg{
+							text:  fmt.Sprintf("Stream filter applied: %s", ls.filter),
+							level: statusInfo,
+						},
+					)
 				} else {
 					m.setStatusMessage(statusMsg{text: "Stream filter cleared", level: statusInfo})
 				}
@@ -337,7 +355,9 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		m.streamFilterInput.CursorEnd()
 		m.streamFilterInput.Focus()
-		m.setStatusMessage(statusMsg{text: "Filter stream (Enter to apply, Esc to cancel)", level: statusInfo})
+		m.setStatusMessage(
+			statusMsg{text: "Filter stream (Enter to apply, Esc to cancel)", level: statusInfo},
+		)
 		m.refreshStreamPanes()
 		return nil, true
 	case "ctrl+b":
@@ -346,7 +366,9 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		}
 		label := fmt.Sprintf("Bookmark %d", len(ls.bookmarks)+1)
 		ls.addBookmark(label)
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Bookmark added: %s", label), level: statusInfo})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("Bookmark added: %s", label), level: statusInfo},
+		)
 		m.refreshStreamPanes()
 		return nil, true
 	case "ctrl+up":
@@ -359,7 +381,9 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if bm.Index >= 0 && bm.Index <= len(ls.events) {
 				ls.pausedIndex = bm.Index
 			}
-			m.setStatusMessage(statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo})
+			m.setStatusMessage(
+				statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo},
+			)
 			if pane != nil {
 				pane.followLatest = false
 			}
@@ -376,7 +400,9 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			if bm.Index >= 0 && bm.Index <= len(ls.events) {
 				ls.pausedIndex = bm.Index
 			}
-			m.setStatusMessage(statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo})
+			m.setStatusMessage(
+				statusMsg{text: fmt.Sprintf("Bookmark: %s", bookmarkLabel(*bm)), level: statusInfo},
+			)
 			if pane != nil {
 				pane.followLatest = false
 			}
@@ -535,7 +561,9 @@ func (m *Model) formatStreamContent(ls *liveSession) string {
 		builder.WriteByte('\n')
 	}
 	if len(ls.bookmarks) > 0 {
-		builder.WriteString(th.StreamSummary.Render(fmt.Sprintf("Bookmarks: %d", len(ls.bookmarks))))
+		builder.WriteString(
+			th.StreamSummary.Render(fmt.Sprintf("Bookmarks: %d", len(ls.bookmarks))),
+		)
 		builder.WriteByte('\n')
 	}
 	if ls.err != nil {
@@ -568,7 +596,12 @@ func (m *Model) formatStreamContent(ls *liveSession) string {
 				labelStyled := th.StreamSummary.Render(fmt.Sprintf("★ %s", labelText))
 				line = lipgloss.JoinHorizontal(lipgloss.Left, labelStyled, " ", line)
 			} else {
-				line = lipgloss.JoinHorizontal(lipgloss.Left, th.StreamSummary.Render("★"), " ", line)
+				line = lipgloss.JoinHorizontal(
+					lipgloss.Left,
+					th.StreamSummary.Render("★"),
+					" ",
+					line,
+				)
 			}
 		}
 		builder.WriteString(line)
@@ -623,13 +656,20 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 		comment := strings.TrimSpace(evt.SSE.Comment)
 		trimmedPayload := strings.TrimSpace(string(evt.Payload))
 		if evt.SSE.ID != "" {
-			parts = append(parts, th.StreamSummary.Render(fmt.Sprintf("id=%s", truncatePreview(evt.SSE.ID))))
+			parts = append(
+				parts,
+				th.StreamSummary.Render(fmt.Sprintf("id=%s", truncatePreview(evt.SSE.ID))),
+			)
 		}
 		nameStyled := th.StreamEventName.Render(name)
 		if trimmedPayload == "" {
 			payloadStyled := th.StreamData.Render("<empty>")
 			if comment != "" {
-				payloadStyled = lipgloss.JoinHorizontal(lipgloss.Left, payloadStyled, th.StreamSummary.Render(fmt.Sprintf("// %s", truncatePreview(comment))))
+				payloadStyled = lipgloss.JoinHorizontal(
+					lipgloss.Left,
+					payloadStyled,
+					th.StreamSummary.Render(fmt.Sprintf("// %s", truncatePreview(comment))),
+				)
 			}
 			parts = append(parts, nameStyled, payloadStyled)
 			return strings.Join(filterEmpty(parts), " ")
@@ -638,7 +678,9 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			indented := indentMultiline(formatted, streamJSONIndent)
 			block := nameStyled + "\n" + th.StreamData.Render(indented)
 			if comment != "" {
-				block += "\n" + th.StreamSummary.Render(fmt.Sprintf("// %s", truncatePreview(comment)))
+				block += "\n" + th.StreamSummary.Render(
+					fmt.Sprintf("// %s", truncatePreview(comment)),
+				)
 			}
 			parts = append(parts, block)
 			return strings.Join(filterEmpty(parts), " ")
@@ -646,7 +688,11 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 		payload := fmt.Sprintf("\"%s\"", truncatePreview(trimmedPayload))
 		payloadStyled := th.StreamData.Render(payload)
 		if comment != "" {
-			payloadStyled = lipgloss.JoinHorizontal(lipgloss.Left, payloadStyled, th.StreamSummary.Render(fmt.Sprintf("// %s", truncatePreview(comment))))
+			payloadStyled = lipgloss.JoinHorizontal(
+				lipgloss.Left,
+				payloadStyled,
+				th.StreamSummary.Render(fmt.Sprintf("// %s", truncatePreview(comment))),
+			)
 		}
 		parts = append(parts, nameStyled, payloadStyled)
 		return strings.Join(filterEmpty(parts), " ")
@@ -682,7 +728,12 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 				preview = "<empty>"
 			}
 			size := fmt.Sprintf("%d bytes", len(evt.Payload))
-			parts = append(parts, typeStyled, th.StreamBinary.Render(size), th.StreamBinary.Render(truncatePreview(preview)))
+			parts = append(
+				parts,
+				typeStyled,
+				th.StreamBinary.Render(size),
+				th.StreamBinary.Render(truncatePreview(preview)),
+			)
 		case "close":
 			reason := strings.TrimSpace(evt.Metadata[wsMetaCloseReason])
 			code := evt.Metadata[wsMetaCloseCode]
@@ -699,7 +750,11 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 			}
 			parts = append(parts, style.Render(info))
 		default:
-			parts = append(parts, typeStyled, th.StreamSummary.Render(fmt.Sprintf("(%d bytes)", len(evt.Payload))))
+			parts = append(
+				parts,
+				typeStyled,
+				th.StreamSummary.Render(fmt.Sprintf("(%d bytes)", len(evt.Payload))),
+			)
 		}
 	default:
 		parts = append(parts, th.StreamSummary.Render("event"))
@@ -813,7 +868,8 @@ func matchesFilter(filter string, evt *stream.Event) bool {
 			return true
 		}
 		if evt.Metadata != nil {
-			if typ, ok := evt.Metadata[wsMetaType]; ok && strings.Contains(strings.ToLower(typ), filter) {
+			if typ, ok := evt.Metadata[wsMetaType]; ok &&
+				strings.Contains(strings.ToLower(typ), filter) {
 				return true
 			}
 		}
@@ -864,7 +920,8 @@ func (m *Model) refreshStreamPanes() {
 			streamContent = "<stream idle>\n"
 		}
 		width := pane.viewport.Width
-		if m.streamFilterActive && sessionID != "" && sessionID == m.sessionIDForRequest(m.currentRequest) {
+		if m.streamFilterActive && sessionID != "" &&
+			sessionID == m.sessionIDForRequest(m.currentRequest) {
 			if !strings.HasSuffix(streamContent, "\n") {
 				streamContent += "\n"
 			}
@@ -874,7 +931,12 @@ func (m *Model) refreshStreamPanes() {
 			m.streamFilterInput = filterInput
 		}
 		wrappedStream := wrapStructuredContent(streamContent, width)
-		pane.wrapCache[responseTabStream] = cachedWrap{width: width, content: wrappedStream, base: streamContent, valid: true}
+		pane.wrapCache[responseTabStream] = cachedWrap{
+			width:   width,
+			content: wrappedStream,
+			base:    streamContent,
+			valid:   true,
+		}
 		decorated := m.applyResponseContentStyles(responseTabStream, wrappedStream)
 		console := m.consoleForPane(id)
 		if console != nil {

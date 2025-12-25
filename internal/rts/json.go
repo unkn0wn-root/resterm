@@ -5,17 +5,20 @@ import (
 	"strings"
 )
 
-func builtinJSONParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibJSONParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "json.parse(text)"); err != nil {
 		return Null(), err
 	}
+
 	if args[0].K != VStr {
 		return Null(), rtErr(ctx, pos, "json.parse(text) expects string")
 	}
+
 	txt := args[0].S
 	if ctx != nil && ctx.Lim.MaxStr > 0 && len(txt) > ctx.Lim.MaxStr {
 		return Null(), rtErr(ctx, pos, "text too long")
 	}
+
 	var raw any
 	if err := json.Unmarshal([]byte(txt), &raw); err != nil {
 		return Null(), rtErr(ctx, pos, "invalid json")
@@ -23,27 +26,30 @@ func builtinJSONParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return fromIface(ctx, pos, raw)
 }
 
-func builtinJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCountRange(ctx, pos, args, 1, 2, "json.stringify(value[, indent])"); err != nil {
 		return Null(), err
 	}
+
 	raw, err := jsonIface(ctx, pos, args[0])
 	if err != nil {
 		return Null(), err
 	}
-	var data []byte
+
+	var (
+		data   []byte
+		indent string
+	)
 	if len(args) == 2 {
-		indent, err := jsonIndent(ctx, pos, args[1])
+		indent, err = jsonIndent(ctx, pos, args[1])
 		if err != nil {
 			return Null(), err
 		}
-		if indent == "" {
-			data, err = json.Marshal(raw)
-		} else {
-			data, err = json.MarshalIndent(raw, "", indent)
-		}
-	} else {
+	}
+	if indent == "" {
 		data, err = json.Marshal(raw)
+	} else {
+		data, err = json.MarshalIndent(raw, "", indent)
 	}
 	if err != nil {
 		return Null(), rtErr(ctx, pos, "json stringify failed")
@@ -54,7 +60,7 @@ func builtinJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(string(data)), nil
 }
 
-func builtinJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCountRange(ctx, pos, args, 1, 2, "json.get(value[, path])"); err != nil {
 		return Null(), err
 	}

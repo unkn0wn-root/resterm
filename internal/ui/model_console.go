@@ -80,7 +80,12 @@ type websocketConsole struct {
 	active     bool
 }
 
-func newWebsocketConsole(sessionID string, session *stream.Session, sender *httpclient.WebSocketSender, baseDir string) *websocketConsole {
+func newWebsocketConsole(
+	sessionID string,
+	session *stream.Session,
+	sender *httpclient.WebSocketSender,
+	baseDir string,
+) *websocketConsole {
 	input := bubbletextarea.New()
 	input.SetHeight(consoleInputMultiLineHeight)
 	input.SetWidth(defaultConsoleWidth())
@@ -220,7 +225,9 @@ func (wc *websocketConsole) view(width int, th theme.Theme) string {
 	var builder strings.Builder
 	builder.WriteString(title)
 	builder.WriteByte('\n')
-	builder.WriteString(lipgloss.JoinHorizontal(lipgloss.Left, modeLabel, " ", modeValue, " ", help))
+	builder.WriteString(
+		lipgloss.JoinHorizontal(lipgloss.Left, modeLabel, " ", modeValue, " ", help),
+	)
 	builder.WriteByte('\n')
 	if wc.status != "" {
 		builder.WriteString(th.StreamConsoleStatus.Render(wc.status))
@@ -341,7 +348,11 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 			defer cancel()
 			return wc.sender.SendBinary(ctx, payload, meta)
 		}
-		return send, fmt.Sprintf("Sent file %s (%d bytes)", filepath.Base(resolved), len(data)), rawPath, nil
+		return send, fmt.Sprintf(
+			"Sent file %s (%d bytes)",
+			filepath.Base(resolved),
+			len(data),
+		), rawPath, nil
 	default:
 		value := wc.input.Value()
 		meta[wsMetaType] = "text"
@@ -354,7 +365,13 @@ func (wc *websocketConsole) payload() (func() error, string, string, error) {
 	}
 }
 
-func (m *Model) ensureWebSocketConsole(sessionID string, session *stream.Session, sender *httpclient.WebSocketSender, req *restfile.Request, baseDir string) {
+func (m *Model) ensureWebSocketConsole(
+	sessionID string,
+	session *stream.Session,
+	sender *httpclient.WebSocketSender,
+	req *restfile.Request,
+	baseDir string,
+) {
 	if sessionID == "" || sender == nil {
 		return
 	}
@@ -461,7 +478,9 @@ func (m *Model) toggleWebSocketConsole() tea.Cmd {
 	}
 	sender := m.wsSenders[sessionID]
 	if sender == nil {
-		m.setStatusMessage(statusMsg{text: "Websocket session not ready for console", level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: "Websocket session not ready for console", level: statusWarn},
+		)
 		return nil
 	}
 	baseDir := m.sessionBaseDir(m.currentRequest)
@@ -474,7 +493,9 @@ func (m *Model) toggleWebSocketConsole() tea.Cmd {
 		if cmd := m.focusStreamPane(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		m.setStatusMessage(statusMsg{text: "Websocket console ready (F2 to cycle mode)", level: statusInfo})
+		m.setStatusMessage(
+			statusMsg{text: "Websocket console ready (F2 to cycle mode)", level: statusInfo},
+		)
 	} else {
 		if m.wsConsole.active {
 			m.wsConsole.blur()
@@ -533,7 +554,10 @@ func (m *Model) sendConsolePing() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := console.sendContext()
 		defer cancel()
-		err := console.sender.Ping(ctx, map[string]string{wsMetaType: "ping", wsMetaStep: "interactive"})
+		err := console.sender.Ping(
+			ctx,
+			map[string]string{wsMetaType: "ping", wsMetaStep: "interactive"},
+		)
 		return wsConsoleResultMsg{err: err, status: "Ping sent", mode: mode}
 	}
 }
@@ -549,7 +573,12 @@ func (m *Model) sendConsoleClose() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := console.sendContext()
 		defer cancel()
-		err := console.sender.Close(ctx, websocket.StatusNormalClosure, "interactive close", map[string]string{wsMetaType: "close", wsMetaStep: "interactive"})
+		err := console.sender.Close(
+			ctx,
+			websocket.StatusNormalClosure,
+			"interactive close",
+			map[string]string{wsMetaType: "close", wsMetaStep: "interactive"},
+		)
 		return wsConsoleResultMsg{err: err, status: "Close frame sent", mode: mode}
 	}
 }
@@ -594,7 +623,9 @@ func (m *Model) handleConsoleResult(msg wsConsoleResultMsg) {
 		mode = m.wsConsole.mode
 	}
 	if msg.payload != "" {
-		m.wsConsole.prependHistory(consoleHistoryEntry{Mode: mode, Payload: msg.payload, Time: time.Now()})
+		m.wsConsole.prependHistory(
+			consoleHistoryEntry{Mode: mode, Payload: msg.payload, Time: time.Now()},
+		)
 	}
 	m.wsConsole.input.SetValue("")
 	m.wsConsole.input.SetCursor(0)

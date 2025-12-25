@@ -169,11 +169,19 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 	if current == "" {
 		current = "unknown"
 	}
-	if _, werr := fmt.Fprintf(u.out, "Updating resterm %s → %s\n", current, res.Info.Version); werr != nil {
+	if _, werr := fmt.Fprintf(
+		u.out,
+		"Updating resterm %s → %s\n",
+		current,
+		res.Info.Version,
+	); werr != nil {
 		log.Printf("print update header failed: %v", werr)
 	}
 	if !res.HasSum {
-		if _, werr := fmt.Fprintln(u.out, "Warning: checksum not published; proceeding without verification."); werr != nil {
+		if _, werr := fmt.Fprintln(
+			u.out,
+			"Warning: checksum not published; proceeding without verification.",
+		); werr != nil {
 			log.Printf("print checksum warning failed: %v", werr)
 		}
 	}
@@ -195,7 +203,11 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 		log.Printf("print binary verification failed: %v", werr)
 	}
 	if st.Pending {
-		if _, werr := fmt.Fprintf(u.out, "Update staged at %s. Restart resterm to complete.\n", st.NewPath); werr != nil {
+		if _, werr := fmt.Fprintf(
+			u.out,
+			"Update staged at %s. Restart resterm to complete.\n",
+			st.NewPath,
+		); werr != nil {
 			log.Printf("print staged path failed: %v", werr)
 		}
 	}

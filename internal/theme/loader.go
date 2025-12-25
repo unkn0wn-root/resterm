@@ -106,7 +106,10 @@ func LoadCatalog(dirs []string) (Catalog, error) {
 			continue
 		}
 		if err != nil {
-			combinedErr = errors.Join(combinedErr, fmt.Errorf("themes: read directory %q: %w", dir, err))
+			combinedErr = errors.Join(
+				combinedErr,
+				fmt.Errorf("themes: read directory %q: %w", dir, err),
+			)
 			continue
 		}
 		for _, entry := range entries {

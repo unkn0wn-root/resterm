@@ -34,32 +34,34 @@ func startEchoWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		t.Fatalf("listen: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
-		if err != nil {
-			t.Fatalf("websocket accept failed: %v", err)
-		}
-		defer func() {
-			if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-				t.Logf("close websocket: %v", err)
-			}
-		}()
-
-		ctx := r.Context()
-		for {
-			typ, data, err := conn.Read(ctx)
+	srv := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
 			if err != nil {
-				return
+				t.Fatalf("websocket accept failed: %v", err)
 			}
-			switch typ {
-			case websocket.MessageText, websocket.MessageBinary:
-				store.add(string(data))
-				if err := conn.Write(ctx, typ, data); err != nil {
+			defer func() {
+				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
+					t.Logf("close websocket: %v", err)
+				}
+			}()
+
+			ctx := r.Context()
+			for {
+				typ, data, err := conn.Read(ctx)
+				if err != nil {
 					return
 				}
+				switch typ {
+				case websocket.MessageText, websocket.MessageBinary:
+					store.add(string(data))
+					if err := conn.Write(ctx, typ, data); err != nil {
+						return
+					}
+				}
 			}
-		}
-	}))
+		}),
+	)
 	srv.Listener = ln
 	srv.Start()
 
@@ -75,18 +77,20 @@ func startSilentWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
-		if err != nil {
-			t.Fatalf("websocket accept failed: %v", err)
-		}
-		defer func() {
-			if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-				t.Logf("close websocket: %v", err)
+	srv := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				t.Fatalf("websocket accept failed: %v", err)
 			}
-		}()
-		<-r.Context().Done()
-	}))
+			defer func() {
+				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
+					t.Logf("close websocket: %v", err)
+				}
+			}()
+			<-r.Context().Done()
+		}),
+	)
 	srv.Listener = ln
 	srv.Start()
 
@@ -291,11 +295,19 @@ func TestStartWebSocketInteractive(t *testing.T) {
 	message := "hello resterm"
 	pongPayload := "ack"
 
-	if err := handle.Sender.SendText(session.Context(), message, map[string]string{wsMetaType: "text"}); err != nil {
+	if err := handle.Sender.SendText(
+		session.Context(),
+		message,
+		map[string]string{wsMetaType: "text"},
+	); err != nil {
 		t.Fatalf("SendText failed: %v", err)
 	}
 
-	if err := handle.Sender.Pong(session.Context(), pongPayload, map[string]string{wsMetaStep: "interactive"}); err != nil {
+	if err := handle.Sender.Pong(
+		session.Context(),
+		pongPayload,
+		map[string]string{wsMetaStep: "interactive"},
+	); err != nil {
 		t.Fatalf("Pong failed: %v", err)
 	}
 
@@ -328,7 +340,12 @@ loop:
 		}
 	}
 
-	if err := handle.Sender.Close(session.Context(), websocket.StatusNormalClosure, "done", map[string]string{wsMetaType: "close"}); err != nil {
+	if err := handle.Sender.Close(
+		session.Context(),
+		websocket.StatusNormalClosure,
+		"done",
+		map[string]string{wsMetaType: "close"},
+	); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
 
@@ -339,7 +356,12 @@ loop:
 	}
 
 	if !receivedSend || !receivedEcho || !receivedPong {
-		t.Fatalf("expected to observe send, receive and pong events, got send=%v receive=%v pong=%v", receivedSend, receivedEcho, receivedPong)
+		t.Fatalf(
+			"expected to observe send, receive and pong events, got send=%v receive=%v pong=%v",
+			receivedSend,
+			receivedEcho,
+			receivedPong,
+		)
 	}
 }
 
@@ -427,7 +449,11 @@ func TestStartWebSocketHandshakeTimeoutScope(t *testing.T) {
 	}
 
 	message := "post-timeout ping"
-	if err := handle.Sender.SendText(session.Context(), message, map[string]string{wsMetaType: "text"}); err != nil {
+	if err := handle.Sender.SendText(
+		session.Context(),
+		message,
+		map[string]string{wsMetaType: "text"},
+	); err != nil {
 		t.Fatalf("SendText after handshake timeout failed: %v", err)
 	}
 
@@ -449,7 +475,12 @@ loop:
 		}
 	}
 
-	if err := handle.Sender.Close(session.Context(), websocket.StatusNormalClosure, "done", map[string]string{wsMetaType: "close"}); err != nil {
+	if err := handle.Sender.Close(
+		session.Context(),
+		websocket.StatusNormalClosure,
+		"done",
+		map[string]string{wsMetaType: "close"},
+	); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
 

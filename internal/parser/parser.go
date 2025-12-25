@@ -18,8 +18,10 @@ import (
 )
 
 var (
-	variableLineRe = regexp.MustCompile(`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`)
-	nameValueRe    = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
+	variableLineRe = regexp.MustCompile(
+		`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`,
+	)
+	nameValueRe = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
 func Parse(path string, data []byte) *restfile.Document {
@@ -553,7 +555,10 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	}
 }
 
-func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
+func (b *documentBuilder) parseCaptureDirective(
+	rest string,
+	line int,
+) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
 		return restfile.CaptureSpec{}, false
@@ -961,7 +966,10 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 			}
 		}
 		if match == "" {
-			return nil, fmt.Errorf("@compare baseline %q must match one of the environments", baseline)
+			return nil, fmt.Errorf(
+				"@compare baseline %q must match one of the environments",
+				baseline,
+			)
 		}
 		baseline = match
 	}
@@ -1079,29 +1087,60 @@ func parseScopeToken(token string) (string, bool) {
 	return tok, secret
 }
 
+func isAlpha(r rune) bool {
+	return (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+func isIdentStartRune(r rune) bool {
+	return r == '_' || isAlpha(r)
+}
+
+func isIdentRune(r rune) bool {
+	return isIdentStartRune(r) || isDigit(r)
+}
+
+func isOptionKeyRune(r rune) bool {
+	return r == '_' || r == '-' || r == '.' || isAlpha(r) || isDigit(r)
+}
+
 func isIdent(value string) bool {
 	if strings.TrimSpace(value) == "" {
 		return false
 	}
 	for i, r := range value {
 		if i == 0 {
-			if !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')) {
+			if !isIdentStartRune(r) {
 				return false
 			}
 			continue
 		}
-		if !(r == '_' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+		if !isIdentRune(r) {
 			return false
 		}
 	}
 	return true
 }
 
-func (b *documentBuilder) addScopedVariable(name, value string, line int, scope restfile.VariableScope, secret bool) bool {
+func (b *documentBuilder) addScopedVariable(
+	name, value string,
+	line int,
+	scope restfile.VariableScope,
+	secret bool,
+) bool {
 	if name == "" {
 		return true
 	}
-	variable := restfile.Variable{Name: name, Value: value, Line: line, Scope: scope, Secret: secret}
+	variable := restfile.Variable{
+		Name:   name,
+		Value:  value,
+		Line:   line,
+		Scope:  scope,
+		Secret: secret,
+	}
 	switch scope {
 	case restfile.ScopeGlobal:
 		b.globalVars = append(b.globalVars, variable)
@@ -1492,7 +1531,7 @@ func isOptionToken(token string) bool {
 	}
 	key := token[:idx]
 	for _, r := range key {
-		if !(r == '_' || r == '-' || r == '.' || (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9')) {
+		if !isOptionKeyRune(r) {
 			return false
 		}
 	}
@@ -1677,7 +1716,8 @@ func contains(list []string, value string) bool {
 func (r *requestBuilder) appendScriptLine(kind, lang, body string) {
 	kind = normScriptKind(kind)
 	lang = normScriptLang(lang)
-	if r.scriptBufferKind != "" && (!strings.EqualFold(r.scriptBufferKind, kind) || !strings.EqualFold(r.scriptBufferLang, lang)) {
+	if r.scriptBufferKind != "" &&
+		(!strings.EqualFold(r.scriptBufferKind, kind) || !strings.EqualFold(r.scriptBufferLang, lang)) {
 		r.flushPendingScript()
 	}
 	if r.scriptBufferKind == "" {
@@ -1883,14 +1923,17 @@ func (r *requestBuilder) build() *restfile.Request {
 	vars := append([]restfile.Variable(nil), r.variables...)
 
 	req := &restfile.Request{
-		Metadata:     r.metadata,
-		Method:       r.http.Method(),
-		URL:          strings.TrimSpace(r.http.URL()),
-		Headers:      r.http.HeaderMap(),
-		Body:         restfile.BodySource{},
-		Variables:    vars,
-		Settings:     map[string]string{},
-		LineRange:    restfile.LineRange{Start: r.startLine, End: r.startLine + len(r.originalLines) - 1},
+		Metadata:  r.metadata,
+		Method:    r.http.Method(),
+		URL:       strings.TrimSpace(r.http.URL()),
+		Headers:   r.http.HeaderMap(),
+		Body:      restfile.BodySource{},
+		Variables: vars,
+		Settings:  map[string]string{},
+		LineRange: restfile.LineRange{
+			Start: r.startLine,
+			End:   r.startLine + len(r.originalLines) - 1,
+		},
 		OriginalText: strings.Join(r.originalLines, "\n"),
 	}
 
@@ -2153,7 +2196,10 @@ func (s *workflowBuilder) handleDirective(key, rest string, line int) (bool, str
 		if err != "" {
 			return true, err
 		}
-		s.openIf.elifs = append(s.openIf.elifs, restfile.WorkflowIfBranch{Cond: cond, Run: run, Fail: fail, Line: line})
+		s.openIf.elifs = append(
+			s.openIf.elifs,
+			restfile.WorkflowIfBranch{Cond: cond, Run: run, Fail: fail, Line: line},
+		)
 		s.touch(line)
 		return true, ""
 	case "else":
@@ -2236,7 +2282,10 @@ func (b *workflowSwitchBuilder) addCase(rest string, line int) string {
 	if err != "" {
 		return err
 	}
-	b.cases = append(b.cases, restfile.WorkflowSwitchCase{Expr: expr, Run: run, Fail: fail, Line: line})
+	b.cases = append(
+		b.cases,
+		restfile.WorkflowSwitchCase{Expr: expr, Run: run, Fail: fail, Line: line},
+	)
 	return ""
 }
 

@@ -81,7 +81,8 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 		return batchCommands(out, m.setFocus(focusEditor))
 	}
 
-	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.navigatorFilter.Focused() && navigatorFilterConsumesKey(keyMsg) {
+	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.navigatorFilter.Focused() &&
+		navigatorFilterConsumesKey(keyMsg) {
 		return applyFilter(nil)
 	}
 

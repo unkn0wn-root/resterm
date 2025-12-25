@@ -69,7 +69,18 @@ func (m *Model) evalForEachItems(
 		return nil, fmt.Errorf("@for-each expression missing")
 	}
 	pos := m.rtsPosForLine(doc, req, spec.Line)
-	val, err := m.rtsEvalValue(ctx, doc, req, envName, base, expr, "@for-each "+expr, pos, vars, extraVals)
+	val, err := m.rtsEvalValue(
+		ctx,
+		doc,
+		req,
+		envName,
+		base,
+		expr,
+		"@for-each "+expr,
+		pos,
+		vars,
+		extraVals,
+	)
 	if err != nil {
 		return nil, err
 	}

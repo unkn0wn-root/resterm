@@ -62,12 +62,18 @@ func (s *profileState) failureCount() int {
 	return count
 }
 
-func (m *Model) startProfileRun(doc *restfile.Document, req *restfile.Request, options httpclient.Options) tea.Cmd {
+func (m *Model) startProfileRun(
+	doc *restfile.Document,
+	req *restfile.Request,
+	options httpclient.Options,
+) tea.Cmd {
 	if req == nil {
 		return nil
 	}
 	if req.GRPC != nil {
-		m.setStatusMessage(statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
+		)
 		return m.executeRequest(doc, req, options, "", nil)
 	}
 
@@ -113,7 +119,12 @@ func (m *Model) startProfileRun(doc *restfile.Document, req *restfile.Request, o
 	m.statusPulseBase = strings.TrimSpace(profileProgressLabel(state))
 	m.statusPulseFrame = 0
 
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s warmup 0/%d", state.messageBase, state.warmup), level: statusInfo})
+	m.setStatusMessage(
+		statusMsg{
+			text:  fmt.Sprintf("%s warmup 0/%d", state.messageBase, state.warmup),
+			level: statusInfo,
+		},
+	)
 	execCmd := m.executeProfileIteration()
 	if tick := m.startStatusPulse(); tick != nil {
 		return tea.Batch(execCmd, tick)
@@ -245,7 +256,10 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
 		m.sending = true
 		if state.delay > 0 {
-			next := tea.Tick(state.delay, func(time.Time) tea.Msg { return profileNextIterationMsg{} })
+			next := tea.Tick(
+				state.delay,
+				func(time.Time) tea.Msg { return profileNextIterationMsg{} },
+			)
 			if tick := m.startStatusPulse(); tick != nil {
 				return tea.Batch(next, tick)
 			}
@@ -332,7 +346,12 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 			cmds = append(cmds, cmd)
 		}
 	} else if msg.response != nil {
-		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
+		if cmd := m.consumeHTTPResponse(
+			msg.response,
+			msg.tests,
+			msg.scriptErr,
+			msg.environment,
+		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else {
@@ -420,10 +439,22 @@ func buildProfileSummary(state *profileState) string {
 		if measuredPlanned == 0 {
 			measuredPlanned = mt.measured
 		}
-		return fmt.Sprintf("Profiling canceled after %d/%d runs (%d/%d measured)", mt.total, planned, mt.measured, measuredPlanned)
+		return fmt.Sprintf(
+			"Profiling canceled after %d/%d runs (%d/%d measured)",
+			mt.total,
+			planned,
+			mt.measured,
+			measuredPlanned,
+		)
 	}
 
-	return fmt.Sprintf("Profiling complete: %d/%d success (%d failure, %d warmup)", mt.success, state.spec.Count, mt.failures, mt.warmup)
+	return fmt.Sprintf(
+		"Profiling complete: %d/%d success (%d failure, %d warmup)",
+		mt.success,
+		state.spec.Count,
+		mt.failures,
+		mt.warmup,
+	)
 }
 
 func (m *Model) buildProfileReport(state *profileState, stats analysis.LatencyStats) string {
@@ -729,7 +760,11 @@ func writeProfileSummary(b *strings.Builder, state *profileState, mt profileMetr
 	writeProfileRow(b, "Success", mt.successRate)
 	writeProfileRow(b, "Window", formatProfileWindow(mt))
 	if state.delay > 0 {
-		writeProfileRow(b, "Delay", fmt.Sprintf("%s between runs", formatDurationShort(state.delay)))
+		writeProfileRow(
+			b,
+			"Delay",
+			fmt.Sprintf("%s between runs", formatDurationShort(state.delay)),
+		)
 	}
 	writeProfileRow(b, "Throughput", formatProfileThroughput(mt))
 	if mt.success == 0 {
@@ -768,7 +803,10 @@ func formatProfileWindow(mt profileMetrics) string {
 		if mt.measured != 1 {
 			runLabel = "runs"
 		}
-		parts = append(parts, fmt.Sprintf("%d %s in %s", mt.measured, runLabel, formatDurationShort(mt.elapsed)))
+		parts = append(
+			parts,
+			fmt.Sprintf("%d %s in %s", mt.measured, runLabel, formatDurationShort(mt.elapsed)),
+		)
 	} else if mt.elapsed > 0 {
 		parts = append(parts, formatDurationShort(mt.elapsed))
 	}

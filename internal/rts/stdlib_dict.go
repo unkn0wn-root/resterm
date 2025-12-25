@@ -2,7 +2,7 @@ package rts
 
 import "sort"
 
-func builtinDictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "dict.keys(dict)"); err != nil {
 		return Null(), err
 	}
@@ -28,7 +28,7 @@ func builtinDictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func builtinDictValues(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDictValues(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "dict.values(dict)"); err != nil {
 		return Null(), err
 	}
@@ -57,7 +57,7 @@ func builtinDictValues(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func builtinDictItems(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDictItems(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "dict.items(dict)"); err != nil {
 		return Null(), err
 	}
@@ -92,7 +92,7 @@ func builtinDictItems(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func builtinDictSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDictSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 3, "dict.set(dict, key, value)"); err != nil {
 		return Null(), err
 	}
@@ -115,7 +115,7 @@ func builtinDictSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(out), nil
 }
 
-func builtinDictMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDictMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "dict.merge(a, b)"); err != nil {
 		return Null(), err
 	}
@@ -141,7 +141,7 @@ func builtinDictMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(out), nil
 }
 
-func builtinDictRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibDictRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "dict.remove(dict, key)"); err != nil {
 		return Null(), err
 	}

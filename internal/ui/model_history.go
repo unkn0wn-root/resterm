@@ -63,7 +63,13 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		} else {
 			m.lastError = nil
 		}
-		cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment)
+		cmd := m.consumeGRPCResponse(
+			msg.grpc,
+			msg.tests,
+			msg.scriptErr,
+			msg.executed,
+			msg.environment,
+		)
 		m.recordGRPCHistory(msg.grpc, msg.executed, msg.requestText, msg.environment)
 		return cmd
 	}
@@ -250,7 +256,12 @@ func requestErrorNote(code errdef.Code) string {
 	}
 }
 
-func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error, environment string) tea.Cmd {
+func (m *Model) consumeHTTPResponse(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+	environment string,
+) tea.Cmd {
 	m.lastGRPC = nil
 	m.lastResponse = resp
 
@@ -296,13 +307,21 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 
 	var traceSpec *restfile.TraceSpec
 	if resp != nil {
-		if cloned := cloneTraceSpec(traceSpecFromRequest(resp.Request)); cloned != nil && cloned.Enabled {
+		if cloned := cloneTraceSpec(
+			traceSpecFromRequest(resp.Request),
+		); cloned != nil &&
+			cloned.Enabled {
 			traceSpec = cloned
 		}
 	}
 	var timeline timelineReport
 	if resp != nil && resp.Timeline != nil {
-		timeline = buildTimelineReport(resp.Timeline, traceSpec, resp.TraceReport, newTimelineStyles(&m.theme))
+		timeline = buildTimelineReport(
+			resp.Timeline,
+			traceSpec,
+			resp.TraceReport,
+			newTimelineStyles(&m.theme),
+		)
 	}
 
 	statusLevel := statusSuccess
@@ -330,7 +349,12 @@ func (m *Model) consumeHTTPResponse(resp *httpclient.Response, tests []scripts.T
 	if len(timeline.breaches) > 0 {
 		primary := timeline.breaches[0]
 		overrun := primary.Over.Round(time.Millisecond)
-		statusText = fmt.Sprintf("%s – trace budget breach %s (+%s)", statusText, humanPhaseName(primary.Kind), overrun)
+		statusText = fmt.Sprintf(
+			"%s – trace budget breach %s (+%s)",
+			statusText,
+			humanPhaseName(primary.Kind),
+			overrun,
+		)
 		if len(timeline.breaches) > 1 {
 			statusText = fmt.Sprintf("%s (%d total)", statusText, len(timeline.breaches))
 		}
@@ -451,10 +475,20 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		}
 		pane.invalidateCaches()
 		if msg.width > 0 && pane.viewport.Width == msg.width {
-			pane.wrapCache[responseTabPretty] = cachedWrap{width: msg.width, content: msg.prettyWrapped, base: ensureTrailingNewline(msg.pretty), valid: true}
+			pane.wrapCache[responseTabPretty] = cachedWrap{
+				width:   msg.width,
+				content: msg.prettyWrapped,
+				base:    ensureTrailingNewline(msg.pretty),
+				valid:   true,
+			}
 			rawWrapped := wrapContentForTab(responseTabRaw, snapshot.raw, msg.width)
 			pane.ensureRawWrapCache()
-			pane.rawWrapCache[snapshot.rawMode] = cachedWrap{width: msg.width, content: rawWrapped, base: ensureTrailingNewline(snapshot.raw), valid: true}
+			pane.rawWrapCache[snapshot.rawMode] = cachedWrap{
+				width:   msg.width,
+				content: rawWrapped,
+				base:    ensureTrailingNewline(snapshot.raw),
+				valid:   true,
+			}
 
 			headersBase := ensureTrailingNewline(msg.headers)
 			headersContent := msg.headersWrapped
@@ -462,7 +496,12 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 				headersBase = ensureTrailingNewline(msg.requestHeaders)
 				headersContent = msg.requestHeadersWrapped
 			}
-			pane.wrapCache[responseTabHeaders] = cachedWrap{width: msg.width, content: headersContent, base: headersBase, valid: true}
+			pane.wrapCache[responseTabHeaders] = cachedWrap{
+				width:   msg.width,
+				content: headersContent,
+				base:    headersBase,
+				valid:   true,
+			}
 		}
 		if strings.TrimSpace(snapshot.stats) != "" {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
@@ -505,7 +544,13 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 	return m.scheduleResponseLoadingTick()
 }
 
-func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.TestResult, scriptErr error, req *restfile.Request, environment string) tea.Cmd {
+func (m *Model) consumeGRPCResponse(
+	resp *grpcclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+	req *restfile.Request,
+	environment string,
+) tea.Cmd {
 	m.lastResponse = nil
 	m.lastGRPC = resp
 	m.responseLoading = false
@@ -556,7 +601,11 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	}
 	headersContent := strings.TrimRight(headersBuilder.String(), "\n")
 
-	statusLine := fmt.Sprintf("gRPC %s - %s", strings.TrimPrefix(req.GRPC.FullMethod, "/"), resp.StatusCode.String())
+	statusLine := fmt.Sprintf(
+		"gRPC %s - %s",
+		strings.TrimPrefix(req.GRPC.FullMethod, "/"),
+		resp.StatusCode.String(),
+	)
 	if resp.StatusMessage != "" {
 		statusLine += " (" + resp.StatusMessage + ")"
 	}
@@ -648,7 +697,12 @@ func (m *Model) consumeGRPCResponse(resp *grpcclient.Response, tests []scripts.T
 	return m.syncResponsePanes()
 }
 
-func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Request, requestText string, environment string) {
+func (m *Model) recordHTTPHistory(
+	resp *httpclient.Response,
+	req *restfile.Request,
+	requestText string,
+	environment string,
+) {
 	if m.historyStore == nil || resp == nil || req == nil {
 		return
 	}
@@ -694,13 +748,18 @@ func (m *Model) recordHTTPHistory(resp *httpclient.Response, req *restfile.Reque
 	}
 	entry.Trace = history.NewTraceSummary(resp.Timeline, resp.TraceReport)
 	if err := m.historyStore.Append(entry); err != nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
 }
 
-func (m *Model) recordSkippedHistory(req *restfile.Request, requestText, environment, reason string) {
+func (m *Model) recordSkippedHistory(
+	req *restfile.Request,
+	requestText, environment, reason string,
+) {
 	if m.historyStore == nil || req == nil {
 		return
 	}
@@ -740,7 +799,9 @@ func (m *Model) recordSkippedHistory(req *restfile.Request, requestText, environ
 		Tags:        tags,
 	}
 	if err := m.historyStore.Append(entry); err != nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
@@ -755,7 +816,12 @@ func formatBinaryHistorySnippet(meta binaryview.Meta, size int) string {
 	return fmt.Sprintf("<binary body %s>", sizeText)
 }
 
-func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Request, requestText string, environment string) {
+func (m *Model) recordGRPCHistory(
+	resp *grpcclient.Response,
+	req *restfile.Request,
+	requestText string,
+	environment string,
+) {
 	if m.historyStore == nil || resp == nil || req == nil {
 		return
 	}
@@ -794,7 +860,9 @@ func (m *Model) recordGRPCHistory(resp *grpcclient.Response, req *restfile.Reque
 	}
 
 	if err := m.historyStore.Append(entry); err != nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
@@ -859,7 +927,9 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	}
 
 	if err := m.historyStore.Append(entry); err != nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
 		return
 	}
 	m.historySelectedID = entry.ID
@@ -926,7 +996,12 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 	return entry
 }
 
-func buildCompareHTTPSnippet(resp *httpclient.Response, req *restfile.Request, env string, m *Model) string {
+func buildCompareHTTPSnippet(
+	resp *httpclient.Response,
+	req *restfile.Request,
+	env string,
+	m *Model,
+) string {
 	if resp == nil {
 		return ""
 	}
@@ -938,7 +1013,12 @@ func buildCompareHTTPSnippet(resp *httpclient.Response, req *restfile.Request, e
 	return redactHistoryText(snippet, secrets, false)
 }
 
-func buildCompareGRPCSnippet(resp *grpcclient.Response, req *restfile.Request, env string, m *Model) string {
+func buildCompareGRPCSnippet(
+	resp *grpcclient.Response,
+	req *restfile.Request,
+	env string,
+	m *Model,
+) string {
 	if resp == nil {
 		return ""
 	}
@@ -1149,7 +1229,11 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 
 // Hydrate compare snapshots straight from history so the compare tab can render
 // immediately even when no live response is available.
-func (m *Model) populateCompareSnapshotsFromHistory(entry history.Entry, bundle *compareBundle, preferredEnv string) string {
+func (m *Model) populateCompareSnapshotsFromHistory(
+	entry history.Entry,
+	bundle *compareBundle,
+	preferredEnv string,
+) string {
 	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
 		return strings.TrimSpace(preferredEnv)
 	}
@@ -1170,7 +1254,10 @@ func (m *Model) populateCompareSnapshotsFromHistory(entry history.Entry, bundle 
 	return selected
 }
 
-func buildHistoryCompareSnapshot(res history.CompareResult, bundle *compareBundle) *responseSnapshot {
+func buildHistoryCompareSnapshot(
+	res history.CompareResult,
+	bundle *compareBundle,
+) *responseSnapshot {
 	env := strings.TrimSpace(res.Environment)
 	if env == "" {
 		return nil
@@ -1446,10 +1533,25 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 			displayWidth = defaultResponseViewportWidth
 		}
 		wrapped := wrapToWidth(preview, displayWidth)
-		pane.wrapCache[responseTabPretty] = cachedWrap{width: displayWidth, content: wrapped, base: ensureTrailingNewline(snapshot.pretty), valid: true}
+		pane.wrapCache[responseTabPretty] = cachedWrap{
+			width:   displayWidth,
+			content: wrapped,
+			base:    ensureTrailingNewline(snapshot.pretty),
+			valid:   true,
+		}
 		pane.ensureRawWrapCache()
-		pane.rawWrapCache[snapshot.rawMode] = cachedWrap{width: displayWidth, content: wrapped, base: ensureTrailingNewline(snapshot.raw), valid: true}
-		pane.wrapCache[responseTabHeaders] = cachedWrap{width: displayWidth, content: wrapped, base: ensureTrailingNewline(snapshot.headers), valid: true}
+		pane.rawWrapCache[snapshot.rawMode] = cachedWrap{
+			width:   displayWidth,
+			content: wrapped,
+			base:    ensureTrailingNewline(snapshot.raw),
+			valid:   true,
+		}
+		pane.wrapCache[responseTabHeaders] = cachedWrap{
+			width:   displayWidth,
+			content: wrapped,
+			base:    ensureTrailingNewline(snapshot.headers),
+			valid:   true,
+		}
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
 		pane.wrapCache[responseTabStats] = cachedWrap{}
 		pane.viewport.SetContent(wrapped)
@@ -1686,7 +1788,9 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		compareBundle = bundleFromHistory(entry)
 	}
 	if strings.TrimSpace(requestText) == "" {
-		m.setStatusMessage(statusMsg{text: "History entry missing request payload", level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{text: "History entry missing request payload", level: statusWarn},
+		)
 		return nil
 	}
 
@@ -1723,7 +1827,9 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		if label == "" {
 			label = "history request"
 		}
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Loaded %s from history", label), level: statusInfo})
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("Loaded %s from history", label), level: statusInfo},
+		)
 		if compareBundle != nil {
 			focusEnv := strings.TrimSpace(targetEnv)
 			if focusEnv == "" && len(compareBundle.Rows) > 0 {

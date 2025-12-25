@@ -267,7 +267,11 @@ func (m Model) renderFilePane() string {
 
 	listView := navigator.ListView(m.navigator, m.theme, contentWidth, listHeight, paneActive)
 	if listView == "" {
-		listView = centerBox(contentWidth, listHeight, m.theme.HeaderValue.Render("No requests discovered"))
+		listView = centerBox(
+			contentWidth,
+			listHeight,
+			m.theme.HeaderValue.Render("No requests discovered"),
+		)
 	}
 	listView = lipgloss.NewStyle().Width(contentWidth).Height(listHeight).Render(listView)
 
@@ -571,7 +575,10 @@ func (m Model) renderEditorPane() string {
 	style := m.theme.EditorBorder
 	collapsed := m.effectiveRegionCollapsed(paneRegionEditor)
 	if m.focus == focusEditor && m.editorInsertMode && !collapsed {
-		if items, selection, ok := m.editor.metadataHintsDisplay(metadataHintDisplayLimit); ok && len(items) > 0 {
+		if items, selection, ok := m.editor.metadataHintsDisplay(
+			metadataHintDisplayLimit,
+		); ok &&
+			len(items) > 0 {
 			overlay := m.buildMetadataHintOverlay(items, selection, m.editor.Width())
 			m.editor.SetOverlayLines(overlay)
 		} else {
@@ -706,7 +713,11 @@ func (m Model) renderResponsePane(availableWidth int) string {
 				secondaryWidth = clampPositive(secondaryPane.viewport.Width, columnWidth)
 			}
 			top := m.renderResponseColumn(responsePanePrimary, primaryFocused, primaryWidth)
-			bottom := m.renderResponseColumn(responsePaneSecondary, secondaryFocused, secondaryWidth)
+			bottom := m.renderResponseColumn(
+				responsePaneSecondary,
+				secondaryFocused,
+				secondaryWidth,
+			)
 			divider := m.renderResponseDividerHorizontal(top, bottom)
 			if divider != "" {
 				body = lipgloss.JoinVertical(lipgloss.Left, top, divider, bottom)
@@ -759,8 +770,16 @@ func (m Model) renderResponsePane(availableWidth int) string {
 					}
 				}
 			}
-			left := m.renderResponseColumn(responsePanePrimary, primaryFocused, clampPositive(primaryWidth, contentBudget))
-			right := m.renderResponseColumn(responsePaneSecondary, secondaryFocused, clampPositive(secondaryWidth, contentBudget))
+			left := m.renderResponseColumn(
+				responsePanePrimary,
+				primaryFocused,
+				clampPositive(primaryWidth, contentBudget),
+			)
+			right := m.renderResponseColumn(
+				responsePaneSecondary,
+				secondaryFocused,
+				clampPositive(secondaryWidth, contentBudget),
+			)
 			divider := m.renderResponseDivider(left, right)
 			if divider != "" {
 				body = lipgloss.JoinHorizontal(lipgloss.Top, left, divider, right)
@@ -926,7 +945,13 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	if contentLimit < 1 {
 		contentLimit = 1
 	}
-	rowContent := m.buildTabRowContent(tabs, pane.activeTab, focused, pane.followLatest, contentLimit)
+	rowContent := m.buildTabRowContent(
+		tabs,
+		pane.activeTab,
+		focused,
+		pane.followLatest,
+		contentLimit,
+	)
 	row := rowStyle.Render(rowContent)
 	row = clampLines(row, 1)
 	divider := m.theme.PaneDivider.Width(lineWidth).Render(strings.Repeat("─", lineWidth))
@@ -946,7 +971,13 @@ func (m Model) renderResponseDivider(left, right string) string {
 	return m.theme.PaneDivider.Render(line)
 }
 
-func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focused bool, followLatest bool, limit int) string {
+func (m Model) buildTabRowContent(
+	tabs []responseTab,
+	active responseTab,
+	focused bool,
+	followLatest bool,
+	limit int,
+) string {
 	if limit <= 0 {
 		limit = 1
 	}
@@ -1018,7 +1049,12 @@ func (m Model) buildTabRowContent(tabs []responseTab, active responseTab, focuse
 	return ""
 }
 
-func (m Model) buildStaticTabRow(tabs []responseTab, active responseTab, plan tabRowPlan, limit int) (string, bool) {
+func (m Model) buildStaticTabRow(
+	tabs []responseTab,
+	active responseTab,
+	plan tabRowPlan,
+	limit int,
+) (string, bool) {
 	segments := make([]string, 0, len(tabs))
 	for _, tab := range tabs {
 		full := m.responseTabLabel(tab)
@@ -1035,7 +1071,13 @@ func (m Model) buildStaticTabRow(tabs []responseTab, active responseTab, plan ta
 	return row, lipgloss.Width(row) <= limit && !strings.Contains(row, "\n")
 }
 
-func (m Model) buildAdaptiveTabRow(tabs []responseTab, active responseTab, focused bool, plan tabRowPlan, limit int) (string, bool) {
+func (m Model) buildAdaptiveTabRow(
+	tabs []responseTab,
+	active responseTab,
+	focused bool,
+	plan tabRowPlan,
+	limit int,
+) (string, bool) {
 	states := make([]tabLabelState, 0, len(tabs))
 	for _, tab := range tabs {
 		runes := []rune(m.responseTabLabel(tab))
@@ -1081,7 +1123,11 @@ func (m Model) buildAdaptiveTabRow(tabs []responseTab, active responseTab, focus
 	return row, true
 }
 
-func (m Model) renderTabRowFromStates(states []tabLabelState, plan tabRowPlan, focused bool) (string, int) {
+func (m Model) renderTabRowFromStates(
+	states []tabLabelState,
+	plan tabRowPlan,
+	focused bool,
+) (string, int) {
 	segments := make([]string, 0, len(states))
 	for _, state := range states {
 		length := state.length
@@ -1350,7 +1396,11 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 		Faint(true).
 		PaddingLeft(1).
 		Render(strings.ToUpper(mode))
-	reserved := lipgloss.Width(label) + lipgloss.Width(modeBadge) + 2 + searchCommandBarLeadingColorSpaces
+	reserved := lipgloss.Width(
+		label,
+	) + lipgloss.Width(
+		modeBadge,
+	) + 2 + searchCommandBarLeadingColorSpaces
 	inputWidth := width - reserved
 	if inputWidth < 4 {
 		inputWidth = maxInt(4, width-8)
@@ -1462,7 +1512,10 @@ func renderCommandBarContainer(
 		if innerMaxWidth > 0 {
 			leadingStyle = leadingStyle.MaxWidth(leadingSpaces)
 		}
-		innerSegments = append(innerSegments, leadingStyle.Render(strings.Repeat(" ", leadingSpaces)))
+		innerSegments = append(
+			innerSegments,
+			leadingStyle.Render(strings.Repeat(" ", leadingSpaces)),
+		)
 	}
 
 	contentStyle := baseStyle
@@ -2237,7 +2290,11 @@ func (m Model) renderFileChangeModal() string {
 	}
 	reloadKey := m.helpActionKey(bindings.ActionReloadFileFromDisk, "g Shift+R")
 	body := paddedLeftLine(contentWidth, 2, message)
-	info := fmt.Sprintf("%s Reload    %s Dismiss", m.theme.CommandBarHint.Render(reloadKey), m.theme.CommandBarHint.Render("Esc"))
+	info := fmt.Sprintf(
+		"%s Reload    %s Dismiss",
+		m.theme.CommandBarHint.Render(reloadKey),
+		m.theme.CommandBarHint.Render("Esc"),
+	)
 	infoLine := paddedLeftLine(contentWidth, 2, info)
 	title := m.theme.HeaderTitle.
 		Width(contentWidth).
@@ -2326,8 +2383,24 @@ func (m Model) renderHelpOverlay() string {
 			entries: sortedHelpEntries([]helpEntry{
 				{m.helpActionKey(bindings.ActionCycleFocusNext, "Tab"), "Cycle focus"},
 				{m.helpActionKey(bindings.ActionCycleFocusPrev, "Shift+Tab"), "Reverse focus"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleZoom, bindings.ActionClearZoom}, "g z / g Z"), "Zoom focused pane / reset zoom"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionFocusRequests, bindings.ActionFocusEditorNormal, bindings.ActionFocusResponse}, "g r / g i / g p"), "Focus navigator / editor / response"},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{bindings.ActionToggleZoom, bindings.ActionClearZoom},
+						"g z / g Z",
+					),
+					"Zoom focused pane / reset zoom",
+				},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionFocusRequests,
+							bindings.ActionFocusEditorNormal,
+							bindings.ActionFocusResponse,
+						},
+						"g r / g i / g p",
+					),
+					"Focus navigator / editor / response",
+				},
 			}),
 		},
 		{
@@ -2335,17 +2408,32 @@ func (m Model) renderHelpOverlay() string {
 			entries: sortedHelpEntries([]helpEntry{
 				{"Enter", "Run selected request"},
 				{"Space", "Preview selected request / toggle file expansion"},
-				{m.helpActionKey(bindings.ActionShowRequestDetails, "g ,"), "Show selected request details"},
+				{
+					m.helpActionKey(bindings.ActionShowRequestDetails, "g ,"),
+					"Show selected request details",
+				},
 				{m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"},
-				{m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"), "Cancel in-flight run/request"},
+				{
+					m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"),
+					"Cancel in-flight run/request",
+				},
 				{m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"},
-				{m.helpActionKey(bindings.ActionSaveLayout, "g Shift+L"), "Save layout to settings"},
+				{
+					m.helpActionKey(bindings.ActionSaveLayout, "g Shift+L"),
+					"Save layout to settings",
+				},
 				{m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"},
 				{m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"},
-				{m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"), "Refresh workspace"},
+				{
+					m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"),
+					"Refresh workspace",
+				},
 				{m.helpActionKey(bindings.ActionOpenTempDocument, "Ctrl+T"), "Temporary document"},
 				{m.helpActionKey(bindings.ActionReparseDocument, "Ctrl+P"), "Reparse document"},
-				{m.helpActionKey(bindings.ActionReloadFileFromDisk, "Ctrl+Alt+R"), "Reload file from disk"},
+				{
+					m.helpActionKey(bindings.ActionReloadFileFromDisk, "Ctrl+Alt+R"),
+					"Reload file from disk",
+				},
 				{m.helpActionKey(bindings.ActionQuitApp, "Ctrl+Q"), "Quit (Ctrl+D also works)"},
 				{m.helpActionKey(bindings.ActionToggleHelp, "?"), "Toggle this help"},
 			}),
@@ -2357,35 +2445,120 @@ func (m Model) renderHelpOverlay() string {
 				{"m", "Navigator: toggle method filter for selected request"},
 				{"t", "Navigator: toggle tag filters for selected item"},
 				{"l / r", "Navigator: jump to selected request in editor"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarHeightDecrease, bindings.ActionSidebarHeightIncrease}, "g j / g k"), "Collapse / expand current navigator branch"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionWorkflowHeightIncrease, bindings.ActionWorkflowHeightDecrease}, "g Shift+J / g Shift+K"), "Collapse all / expand all navigator branches"},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionSidebarHeightDecrease,
+							bindings.ActionSidebarHeightIncrease,
+						},
+						"g j / g k",
+					),
+					"Collapse / expand current navigator branch",
+				},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionWorkflowHeightIncrease,
+							bindings.ActionWorkflowHeightDecrease,
+						},
+						"g Shift+J / g Shift+K",
+					),
+					"Collapse all / expand all navigator branches",
+				},
 			}),
 		},
 		{
 			title: "Layout & View",
 			entries: sortedHelpEntries([]helpEntry{
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleResponseSplitVert, bindings.ActionToggleResponseSplitHorz}, "Ctrl+V / Ctrl+U"), "Split response vertically / horizontally"},
-				{m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"), "Pin or unpin focused response pane"},
-				{m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"), "Copy Pretty / Raw / Headers response tab"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionScrollResponseTop, bindings.ActionScrollResponseBottom}, "gg / G"), "Response tab: top / bottom"},
-				{m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"), "Toggle request/response headers view"},
-				{m.helpActionKey(bindings.ActionCycleRawView, "g b"), "Cycle raw view: text / hex / base64 (summary for large binary)"},
-				{m.helpActionKey(bindings.ActionShowRawDump, "g Shift+D"), "Load full raw dump (hex)"},
-				{m.helpActionKey(bindings.ActionSaveResponseBody, "g Shift+S"), "Save response body to file"},
-				{m.helpActionKey(bindings.ActionOpenResponseExternally, "g Shift+E"), "Open response in external app"},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionToggleResponseSplitVert,
+							bindings.ActionToggleResponseSplitHorz,
+						},
+						"Ctrl+V / Ctrl+U",
+					),
+					"Split response vertically / horizontally",
+				},
+				{
+					m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"),
+					"Pin or unpin focused response pane",
+				},
+				{
+					m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"),
+					"Copy Pretty / Raw / Headers response tab",
+				},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionScrollResponseTop,
+							bindings.ActionScrollResponseBottom,
+						},
+						"gg / G",
+					),
+					"Response tab: top / bottom",
+				},
+				{
+					m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"),
+					"Toggle request/response headers view",
+				},
+				{
+					m.helpActionKey(bindings.ActionCycleRawView, "g b"),
+					"Cycle raw view: text / hex / base64 (summary for large binary)",
+				},
+				{
+					m.helpActionKey(bindings.ActionShowRawDump, "g Shift+D"),
+					"Load full raw dump (hex)",
+				},
+				{
+					m.helpActionKey(bindings.ActionSaveResponseBody, "g Shift+S"),
+					"Save response body to file",
+				},
+				{
+					m.helpActionKey(bindings.ActionOpenResponseExternally, "g Shift+E"),
+					"Open response in external app",
+				},
 				{"Ctrl+F or Ctrl+B, ←/→", "Send future responses to selected pane"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionSidebarWidthDecrease, bindings.ActionSidebarWidthIncrease}, "g h / g l"), "Adjust editor/response width"},
-				{m.helpCombinedKey([]bindings.ActionID{bindings.ActionToggleSidebarCollapse, bindings.ActionToggleEditorCollapse, bindings.ActionToggleResponseCollapse}, "g1 / g2 / g3"), "Toggle sidebar / editor / response minimize"},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionSidebarWidthDecrease,
+							bindings.ActionSidebarWidthIncrease,
+						},
+						"g h / g l",
+					),
+					"Adjust editor/response width",
+				},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionToggleSidebarCollapse,
+							bindings.ActionToggleEditorCollapse,
+							bindings.ActionToggleResponseCollapse,
+						},
+						"g1 / g2 / g3",
+					),
+					"Toggle sidebar / editor / response minimize",
+				},
 			}),
 		},
 		{
 			title: "Environment & Themes",
 			entries: sortedHelpEntries([]helpEntry{
 				{m.helpActionKey(bindings.ActionShowGlobals, "Ctrl+G"), "Show globals summary"},
-				{m.helpActionKey(bindings.ActionClearGlobals, "Ctrl+Shift+G"), "Clear globals for environment"},
+				{
+					m.helpActionKey(bindings.ActionClearGlobals, "Ctrl+Shift+G"),
+					"Clear globals for environment",
+				},
 				{m.helpActionKey(bindings.ActionOpenEnvSelector, "Ctrl+E"), "Environment selector"},
-				{m.helpActionKey(bindings.ActionSelectTimelineTab, "Ctrl+Alt+L / g t"), "Timeline tab"},
-				{m.helpActionKey(bindings.ActionOpenThemeSelector, "Ctrl+Alt+T / g m"), "Theme selector"},
+				{
+					m.helpActionKey(bindings.ActionSelectTimelineTab, "Ctrl+Alt+L / g t"),
+					"Timeline tab",
+				},
+				{
+					m.helpActionKey(bindings.ActionOpenThemeSelector, "Ctrl+Alt+T / g m"),
+					"Theme selector",
+				},
 			}),
 		},
 		{

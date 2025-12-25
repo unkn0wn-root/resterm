@@ -36,7 +36,13 @@ func TestEvaluateWorkflowStep(t *testing.T) {
 			{step: restfile.WorkflowStep{OnFailure: restfile.WorkflowOnFailureStop}},
 		},
 	}
-	resp := responseMsg{response: &httpclient.Response{Status: "200 OK", StatusCode: 200, Duration: 20 * time.Millisecond}}
+	resp := responseMsg{
+		response: &httpclient.Response{
+			Status:     "200 OK",
+			StatusCode: 200,
+			Duration:   20 * time.Millisecond,
+		},
+	}
 	result := evaluateWorkflowStep(state, resp)
 	if !result.Success {
 		t.Fatalf("expected step success, got failure: %+v", result)
@@ -84,7 +90,14 @@ func TestWorkflowRunProgression(t *testing.T) {
 	}
 
 	// simulate successful first step
-	resp := responseMsg{response: &httpclient.Response{Status: "200 OK", StatusCode: 200, Duration: 15 * time.Millisecond}, executed: current}
+	resp := responseMsg{
+		response: &httpclient.Response{
+			Status:     "200 OK",
+			StatusCode: 200,
+			Duration:   15 * time.Millisecond,
+		},
+		executed: current,
+	}
 	model.handleWorkflowResponse(resp)
 	if model.workflowRun == nil {
 		t.Fatalf("expected workflow to continue after first step")
@@ -102,7 +115,10 @@ func TestWorkflowRunProgression(t *testing.T) {
 	}
 
 	// simulate failure on second step
-	failure := responseMsg{response: &httpclient.Response{Status: "500 Internal Server Error", StatusCode: 500}, executed: second}
+	failure := responseMsg{
+		response: &httpclient.Response{Status: "500 Internal Server Error", StatusCode: 500},
+		executed: second,
+	}
 	model.handleWorkflowResponse(failure)
 	if model.workflowRun != nil {
 		t.Fatalf("expected workflow run to finish after failure")

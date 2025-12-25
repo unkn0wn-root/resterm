@@ -27,7 +27,8 @@ func TestNormalizeProfileDefaults(t *testing.T) {
 	if !cfg.Agent {
 		t.Fatalf("expected agent default true")
 	}
-	if cfg.KnownHosts == "" || !strings.HasSuffix(cfg.KnownHosts, filepath.Join(".ssh", "known_hosts")) {
+	if cfg.KnownHosts == "" ||
+		!strings.HasSuffix(cfg.KnownHosts, filepath.Join(".ssh", "known_hosts")) {
 		t.Fatalf("unexpected known hosts %q", cfg.KnownHosts)
 	}
 	if cfg.Timeout != defaultTimeout {
@@ -115,17 +116,23 @@ func TestNormalizeProfileRejectsInvalidNumbers(t *testing.T) {
 		}
 	})
 	t.Run("timeout", func(t *testing.T) {
-		if _, err := NormalizeProfile(restfile.SSHProfile{Host: "h", TimeoutStr: "nope"}); err == nil {
+		if _, err := NormalizeProfile(
+			restfile.SSHProfile{Host: "h", TimeoutStr: "nope"},
+		); err == nil {
 			t.Fatalf("expected timeout error")
 		}
 	})
 	t.Run("keepalive", func(t *testing.T) {
-		if _, err := NormalizeProfile(restfile.SSHProfile{Host: "h", KeepAliveStr: "-5s"}); err == nil {
+		if _, err := NormalizeProfile(
+			restfile.SSHProfile{Host: "h", KeepAliveStr: "-5s"},
+		); err == nil {
 			t.Fatalf("expected keepalive error")
 		}
 	})
 	t.Run("retries", func(t *testing.T) {
-		if _, err := NormalizeProfile(restfile.SSHProfile{Host: "h", RetriesStr: "-2"}); err == nil {
+		if _, err := NormalizeProfile(
+			restfile.SSHProfile{Host: "h", RetriesStr: "-2"},
+		); err == nil {
 			t.Fatalf("expected retries error")
 		}
 	})

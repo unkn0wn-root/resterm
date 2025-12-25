@@ -123,10 +123,13 @@ func TestRenderTimelinePlacesTotalFirst(t *testing.T) {
 	rowLine := ""
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if trimmed == "" || strings.HasPrefix(trimmed, "Timeline") || strings.HasPrefix(trimmed, "Started:") || strings.HasPrefix(trimmed, "Completed:") {
+		if trimmed == "" || strings.HasPrefix(trimmed, "Timeline") ||
+			strings.HasPrefix(trimmed, "Started:") ||
+			strings.HasPrefix(trimmed, "Completed:") {
 			continue
 		}
-		if strings.Contains(line, string(barGlyphFilled)) || strings.Contains(line, string(barGlyphEmpty)) {
+		if strings.Contains(line, string(barGlyphFilled)) ||
+			strings.Contains(line, string(barGlyphEmpty)) {
 			rowLine = trimmed
 			break
 		}

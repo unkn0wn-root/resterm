@@ -27,7 +27,12 @@ func TestRequestHostObject(t *testing.T) {
 	if v.K != VStr || v.S != "GET" {
 		t.Fatalf("expected method GET")
 	}
-	v, err = e.Eval(context.Background(), rt, "request.header(\"x-test\")", Pos{Path: "test", Line: 1, Col: 1})
+	v, err = e.Eval(
+		context.Background(),
+		rt,
+		"request.header(\"x-test\")",
+		Pos{Path: "test", Line: 1, Col: 1},
+	)
 	if err != nil {
 		t.Fatalf("eval request.header: %v", err)
 	}
@@ -46,7 +51,11 @@ func TestRequestHostObject(t *testing.T) {
 func TestRequestHostObjectInModule(t *testing.T) {
 	dir := t.TempDir()
 	modPath := filepath.Join(dir, "mod.rts")
-	if err := os.WriteFile(modPath, []byte("export fn method() { return request.method }"), 0o644); err != nil {
+	if err := os.WriteFile(
+		modPath,
+		[]byte("export fn method() { return request.method }"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
 	e := NewEng()

@@ -1,6 +1,7 @@
 package rts
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"sort"
@@ -39,7 +40,7 @@ func Exec(ctx *Ctx, mod *Mod, pre map[string]Value) (*Comp, error) {
 		return nil, fmt.Errorf("nil module")
 	}
 	if ctx == nil {
-		ctx = NewCtx(nil, Limits{})
+		ctx = NewCtx(context.Background(), Limits{})
 	}
 	vm := &VM{ctx: ctx}
 	env := NewEnv(nil)
@@ -121,7 +122,13 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 		if env.HasLocal(s.Name) {
 			return rtErr(vm.ctx, s.Pos(), "name already defined: %q", s.Name)
 		}
-		fn := &Func{Name: s.Name, Args: append([]string(nil), s.Params...), Body: s.Body, Env: env, Pos: s.Pos()}
+		fn := &Func{
+			Name: s.Name,
+			Args: append([]string(nil), s.Params...),
+			Body: s.Body,
+			Env:  env,
+			Pos:  s.Pos(),
+		}
 		v := Fn(fn)
 		env.DefConst(s.Name, v)
 		if s.Exported && exp != nil {
@@ -246,7 +253,13 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 			if err := vm.tick(s.Pos()); err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(env, rng.Key, Num(float64(i)), rng.Declare, s.Pos()); err != nil {
+			if err := vm.assignRangeVar(
+				env,
+				rng.Key,
+				Num(float64(i)),
+				rng.Declare,
+				s.Pos(),
+			); err != nil {
 				return err
 			}
 			if err := vm.assignRangeVar(env, rng.Val, it, rng.Declare, s.Pos()); err != nil {
@@ -299,10 +312,22 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 			if err := vm.tick(s.Pos()); err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(env, rng.Key, Num(float64(idx)), rng.Declare, s.Pos()); err != nil {
+			if err := vm.assignRangeVar(
+				env,
+				rng.Key,
+				Num(float64(idx)),
+				rng.Declare,
+				s.Pos(),
+			); err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(env, rng.Val, Str(string(r)), rng.Declare, s.Pos()); err != nil {
+			if err := vm.assignRangeVar(
+				env,
+				rng.Val,
+				Str(string(r)),
+				rng.Declare,
+				s.Pos(),
+			); err != nil {
 				return err
 			}
 			if err := vm.execBlock(env, exp, s.Body); err != nil {

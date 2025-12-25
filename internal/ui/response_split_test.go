@@ -57,16 +57,28 @@ func TestComputeDiffForHeadersIncludesBody(t *testing.T) {
 	model.responseSplit = true
 
 	left := &responseSnapshot{
-		pretty:  ensureTrailingNewline("Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}"),
-		raw:     ensureTrailingNewline("Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}"),
-		headers: ensureTrailingNewline("Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\nHeaders:\nContent-Type: application/json"),
-		ready:   true,
+		pretty: ensureTrailingNewline(
+			"Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}",
+		),
+		raw: ensureTrailingNewline(
+			"Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}",
+		),
+		headers: ensureTrailingNewline(
+			"Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\nHeaders:\nContent-Type: application/json",
+		),
+		ready: true,
 	}
 	right := &responseSnapshot{
-		pretty:  ensureTrailingNewline("Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}"),
-		raw:     ensureTrailingNewline("Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}"),
-		headers: ensureTrailingNewline("Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\nHeaders:\nContent-Type: application/json"),
-		ready:   true,
+		pretty: ensureTrailingNewline(
+			"Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}",
+		),
+		raw: ensureTrailingNewline(
+			"Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}",
+		),
+		headers: ensureTrailingNewline(
+			"Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\nHeaders:\nContent-Type: application/json",
+		),
+		ready: true,
 	}
 
 	model.responsePanes[0].snapshot = left
@@ -79,7 +91,8 @@ func TestComputeDiffForHeadersIncludesBody(t *testing.T) {
 		t.Fatalf("expected diff availability")
 	}
 	plain := stripANSIEscape(diff)
-	if !strings.Contains(plain, "\"value\": \"one\"") || !strings.Contains(plain, "\"value\": \"two\"") {
+	if !strings.Contains(plain, "\"value\": \"one\"") ||
+		!strings.Contains(plain, "\"value\": \"two\"") {
 		t.Fatalf("expected body diff, got %q", plain)
 	}
 	if !strings.Contains(plain, "Headers") {
@@ -169,7 +182,8 @@ func TestComputeDiffForPrettyDetectsLeadingWhitespaceChanges(t *testing.T) {
 	if strings.Contains(plain, "shared line") {
 		// shared line should appear only as context without diff markers
 		for _, line := range strings.Split(plain, "\n") {
-			if strings.Contains(line, "shared line") && len(line) > 0 && line[0] != ' ' && line[0] != '@' {
+			if strings.Contains(line, "shared line") && len(line) > 0 && line[0] != ' ' &&
+				line[0] != '@' {
 				t.Fatalf("expected shared line to appear only in context, got %q", line)
 			}
 		}

@@ -2,7 +2,7 @@ package rts
 
 import "sort"
 
-func builtinListAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibListAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "list.append(list, item)"); err != nil {
 		return Null(), err
 	}
@@ -19,7 +19,7 @@ func builtinListAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func builtinListConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibListConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "list.concat(a, b)"); err != nil {
 		return Null(), err
 	}
@@ -40,7 +40,7 @@ func builtinListConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func builtinListSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibListSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "list.sort(list)"); err != nil {
 		return Null(), err
 	}

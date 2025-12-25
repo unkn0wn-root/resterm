@@ -27,7 +27,18 @@ func TestRunAsserts(t *testing.T) {
 		Body:   []byte(`{"ok":true}`),
 	}
 
-	results, err := model.runAsserts(context.Background(), doc, req, "", "", map[string]string{}, nil, resp, nil, nil)
+	results, err := model.runAsserts(
+		context.Background(),
+		doc,
+		req,
+		"",
+		"",
+		map[string]string{},
+		nil,
+		resp,
+		nil,
+		nil,
+	)
 	if err != nil {
 		t.Fatalf("run asserts: %v", err)
 	}

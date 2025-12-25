@@ -85,7 +85,8 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	if httpOpts.RootMode != tlsconfig.RootModeAppend {
 		t.Fatalf("expected root mode append, got %q", httpOpts.RootMode)
 	}
-	if len(httpOpts.RootCAs) != 2 || httpOpts.RootCAs[0] != "a.pem" || httpOpts.RootCAs[1] != "b.pem" {
+	if len(httpOpts.RootCAs) != 2 || httpOpts.RootCAs[0] != "a.pem" ||
+		httpOpts.RootCAs[1] != "b.pem" {
 		t.Fatalf("unexpected root CAs: %+v", httpOpts.RootCAs)
 	}
 	if httpOpts.ClientCert != "cert.pem" || httpOpts.ClientKey != "key.pem" {

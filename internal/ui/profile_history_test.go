@@ -42,7 +42,11 @@ func TestBuildProfileResults(t *testing.T) {
 			t.Fatalf("expected latency stats")
 		}
 		if len(res.Percentiles) != len(stats.Percentiles) {
-			t.Fatalf("expected %d percentiles, got %d", len(stats.Percentiles), len(res.Percentiles))
+			t.Fatalf(
+				"expected %d percentiles, got %d",
+				len(stats.Percentiles),
+				len(res.Percentiles),
+			)
 		}
 		for i := 1; i < len(res.Percentiles); i++ {
 			if res.Percentiles[i-1].Percentile > res.Percentiles[i].Percentile {
@@ -101,7 +105,13 @@ func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 		t.Fatalf("expected latency stats to be stored")
 	}
 	if entry.Status != resp.Status || entry.StatusCode != resp.StatusCode {
-		t.Fatalf("expected status %s (%d), got %s (%d)", resp.Status, resp.StatusCode, entry.Status, entry.StatusCode)
+		t.Fatalf(
+			"expected status %s (%d), got %s (%d)",
+			resp.Status,
+			resp.StatusCode,
+			entry.Status,
+			entry.StatusCode,
+		)
 	}
 	if strings.TrimSpace(entry.RequestText) == "" {
 		t.Fatalf("expected request text to be recorded")

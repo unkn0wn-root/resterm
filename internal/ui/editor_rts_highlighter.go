@@ -79,7 +79,8 @@ func (s *rtsRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Style {
 	}
 
 	lineHash := hashRunes(line)
-	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash && cached.length == len(line) {
+	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash &&
+		cached.length == len(line) {
 		return cached.styles
 	}
 

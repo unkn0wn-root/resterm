@@ -25,7 +25,16 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 	if len(options) == 0 {
 		t.Fatal("expected ws subcommand options")
 	}
-	expected := []string{"send", "send-json", "send-base64", "send-file", "ping", "pong", "wait", "close"}
+	expected := []string{
+		"send",
+		"send-json",
+		"send-base64",
+		"send-file",
+		"ping",
+		"pong",
+		"wait",
+		"close",
+	}
 	for _, label := range expected {
 		if !hintOptionsContain(options, label) {
 			t.Fatalf("expected ws subcommand %q", label)

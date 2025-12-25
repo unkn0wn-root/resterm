@@ -95,6 +95,11 @@ func TestClearResponseSearchOnEsc(t *testing.T) {
 		t.Fatalf("expected \"Search cleared\" status, got %q", status.text)
 	}
 	if pane.search.hasQuery() || pane.search.active || len(pane.search.matches) != 0 {
-		t.Fatalf("expected search state cleared, got query=%q active=%v matches=%d", pane.search.query, pane.search.active, len(pane.search.matches))
+		t.Fatalf(
+			"expected search state cleared, got query=%q active=%v matches=%d",
+			pane.search.query,
+			pane.search.active,
+			len(pane.search.matches),
+		)
 	}
 }

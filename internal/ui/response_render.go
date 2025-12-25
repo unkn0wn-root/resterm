@@ -73,7 +73,13 @@ func nextResponseRenderToken() string {
 	return fmt.Sprintf("render-%d", id)
 }
 
-func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scripts.TestResult, scriptErr error, width int) tea.Cmd {
+func renderHTTPResponseCmd(
+	token string,
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+	width int,
+) tea.Cmd {
 	if resp == nil {
 		return nil
 	}
@@ -103,26 +109,30 @@ func renderHTTPResponseCmd(token string, resp *httpclient.Response, tests []scri
 		rawMode := views.rawMode
 		requestHeaders := buildHTTPRequestHeadersView(respCopy)
 		return responseRenderedMsg{
-			token:                 token,
-			pretty:                pretty,
-			raw:                   raw,
-			rawSummary:            rawSummary,
-			headers:               headers,
-			requestHeaders:        requestHeaders,
-			width:                 targetWidth,
-			prettyWrapped:         wrapContentForTab(responseTabPretty, pretty, targetWidth),
-			rawWrapped:            wrapContentForTab(responseTabRaw, raw, targetWidth),
-			headersWrapped:        wrapContentForTab(responseTabHeaders, headers, targetWidth),
-			requestHeadersWrapped: wrapContentForTab(responseTabHeaders, requestHeaders, targetWidth),
-			body:                  append([]byte(nil), respCopy.Body...),
-			meta:                  meta,
-			contentType:           ct,
-			rawText:               rawText,
-			rawHex:                rawHex,
-			rawBase64:             rawBase64,
-			rawMode:               rawMode,
-			headersMap:            headersMap,
-			effectiveURL:          effectiveURL,
+			token:          token,
+			pretty:         pretty,
+			raw:            raw,
+			rawSummary:     rawSummary,
+			headers:        headers,
+			requestHeaders: requestHeaders,
+			width:          targetWidth,
+			prettyWrapped:  wrapContentForTab(responseTabPretty, pretty, targetWidth),
+			rawWrapped:     wrapContentForTab(responseTabRaw, raw, targetWidth),
+			headersWrapped: wrapContentForTab(responseTabHeaders, headers, targetWidth),
+			requestHeadersWrapped: wrapContentForTab(
+				responseTabHeaders,
+				requestHeaders,
+				targetWidth,
+			),
+			body:         append([]byte(nil), respCopy.Body...),
+			meta:         meta,
+			contentType:  ct,
+			rawText:      rawText,
+			rawHex:       rawHex,
+			rawBase64:    rawBase64,
+			rawMode:      rawMode,
+			headersMap:   headersMap,
+			effectiveURL: effectiveURL,
 		}
 	}
 }
@@ -322,7 +332,13 @@ type bodyViews struct {
 	ct        string
 }
 
-func buildBodyViews(body []byte, contentType string, meta *binaryview.Meta, viewBody []byte, viewContentType string) bodyViews {
+func buildBodyViews(
+	body []byte,
+	contentType string,
+	meta *binaryview.Meta,
+	viewBody []byte,
+	viewContentType string,
+) bodyViews {
 	var detected binaryview.Meta
 	if meta == nil {
 		detected = binaryview.Analyze(body, contentType)
@@ -465,19 +481,44 @@ func renderBinarySummary(meta binaryview.Meta) string {
 		statsHeadingStyle.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
 	}
 	if strings.TrimSpace(meta.MIME) != "" {
-		lines = append(lines, renderLabelValue("MIME", strings.TrimSpace(meta.MIME), statsLabelStyle, statsValueStyle))
+		lines = append(
+			lines,
+			renderLabelValue(
+				"MIME",
+				strings.TrimSpace(meta.MIME),
+				statsLabelStyle,
+				statsValueStyle,
+			),
+		)
 	}
 	if strings.TrimSpace(meta.DecodeErr) != "" {
-		lines = append(lines, statsWarnStyle.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)))
+		lines = append(
+			lines,
+			statsWarnStyle.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)),
+		)
 	}
 	if meta.PreviewHex != "" {
-		lines = append(lines, renderLabelValue("Preview hex", meta.PreviewHex, statsLabelStyle, statsMessageStyle))
+		lines = append(
+			lines,
+			renderLabelValue("Preview hex", meta.PreviewHex, statsLabelStyle, statsMessageStyle),
+		)
 	}
 	if meta.PreviewB64 != "" {
-		lines = append(lines, renderLabelValue("Preview base64", meta.PreviewB64, statsLabelStyle, statsMessageStyle))
+		lines = append(
+			lines,
+			renderLabelValue("Preview base64", meta.PreviewB64, statsLabelStyle, statsMessageStyle),
+		)
 	}
 	if modes := rawViewModeLabels(meta, meta.Size); len(modes) > 0 {
-		lines = append(lines, renderLabelValue("Raw tab", strings.Join(modes, " / "), statsLabelStyle, statsValueStyle))
+		lines = append(
+			lines,
+			renderLabelValue(
+				"Raw tab",
+				strings.Join(modes, " / "),
+				statsLabelStyle,
+				statsValueStyle,
+			),
+		)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -511,7 +552,9 @@ func formatHTTPHeaders(headers http.Header, colored bool) string {
 			if strings.TrimSpace(joined) == "" {
 				builder.WriteString(statsLabelStyle.Render(name + ":"))
 			} else {
-				builder.WriteString(renderLabelValue(name, joined, statsLabelStyle, statsHeaderValueStyle))
+				builder.WriteString(
+					renderLabelValue(name, joined, statsLabelStyle, statsHeaderValueStyle),
+				)
 			}
 		} else {
 			if strings.TrimSpace(joined) == "" {

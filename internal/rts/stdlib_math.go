@@ -2,7 +2,7 @@ package rts
 
 import "math"
 
-func builtinMathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "math.abs(x)"); err != nil {
 		return Null(), err
 	}
@@ -13,7 +13,7 @@ func builtinMathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(math.Abs(n)), nil
 }
 
-func builtinMathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "math.min(a, b)"); err != nil {
 		return Null(), err
 	}
@@ -28,7 +28,7 @@ func builtinMathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(math.Min(a, b)), nil
 }
 
-func builtinMathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "math.max(a, b)"); err != nil {
 		return Null(), err
 	}
@@ -43,7 +43,7 @@ func builtinMathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(math.Max(a, b)), nil
 }
 
-func builtinMathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 3, "math.clamp(x, min, max)"); err != nil {
 		return Null(), err
 	}
@@ -71,7 +71,7 @@ func builtinMathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(x), nil
 }
 
-func builtinMathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "math.floor(x)"); err != nil {
 		return Null(), err
 	}
@@ -82,7 +82,7 @@ func builtinMathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(math.Floor(n)), nil
 }
 
-func builtinMathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "math.ceil(x)"); err != nil {
 		return Null(), err
 	}
@@ -93,7 +93,7 @@ func builtinMathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(math.Ceil(n)), nil
 }
 
-func builtinMathRound(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibMathRound(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "math.round(x)"); err != nil {
 		return Null(), err
 	}

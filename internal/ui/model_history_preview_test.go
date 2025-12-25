@@ -38,10 +38,17 @@ func TestOpenHistoryPreviewResetsState(t *testing.T) {
 
 	_ = model.renderHistoryPreviewModal()
 	if model.historyPreviewViewport.Width == 0 || model.historyPreviewViewport.Height == 0 {
-		t.Fatalf("expected viewport dimensions to be set, got %dx%d", model.historyPreviewViewport.Width, model.historyPreviewViewport.Height)
+		t.Fatalf(
+			"expected viewport dimensions to be set, got %dx%d",
+			model.historyPreviewViewport.Width,
+			model.historyPreviewViewport.Height,
+		)
 	}
 	if model.historyPreviewViewport.YOffset != 0 {
-		t.Fatalf("expected viewport offset reset to 0, got %d", model.historyPreviewViewport.YOffset)
+		t.Fatalf(
+			"expected viewport offset reset to 0, got %d",
+			model.historyPreviewViewport.YOffset,
+		)
 	}
 }
 
@@ -51,9 +58,14 @@ func TestHistoryPreviewScrolling(t *testing.T) {
 	model.width = 100
 	model.height = 30
 	entry := history.Entry{RequestName: "Scroll"}
-	entry.ProfileResults = &history.ProfileResults{Percentiles: make([]history.ProfilePercentile, 0, 50)}
+	entry.ProfileResults = &history.ProfileResults{
+		Percentiles: make([]history.ProfilePercentile, 0, 50),
+	}
 	for i := 0; i < 50; i++ {
-		entry.ProfileResults.Percentiles = append(entry.ProfileResults.Percentiles, history.ProfilePercentile{Percentile: i, Value: time.Duration(i)})
+		entry.ProfileResults.Percentiles = append(
+			entry.ProfileResults.Percentiles,
+			history.ProfilePercentile{Percentile: i, Value: time.Duration(i)},
+		)
 	}
 	model.openHistoryPreview(entry)
 	_ = model.renderHistoryPreviewModal()

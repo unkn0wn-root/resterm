@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-func builtinQueryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibQueryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "query.parse(urlOrQuery)"); err != nil {
 		return Null(), err
 	}
@@ -23,7 +23,7 @@ func builtinQueryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(valuesDict(vals)), nil
 }
 
-func builtinQueryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibQueryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "query.encode(map)"); err != nil {
 		return Null(), err
 	}
@@ -48,7 +48,7 @@ func builtinQueryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(vals.Encode()), nil
 }
 
-func builtinQueryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibQueryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "query.merge(url, map)"); err != nil {
 		return Null(), err
 	}

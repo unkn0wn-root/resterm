@@ -125,7 +125,12 @@ func (m *manager) Start(ctx context.Context, info RequestStart) (context.Context
 
 	attrs := buildSpanAttributes(info)
 	spanName := spanNameFor(info)
-	ctx, span := m.tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient), trace.WithAttributes(attrs...))
+	ctx, span := m.tracer.Start(
+		ctx,
+		spanName,
+		trace.WithSpanKind(trace.SpanKindClient),
+		trace.WithAttributes(attrs...),
+	)
 	return ctx, &requestSpan{span: span}
 }
 
@@ -151,13 +156,20 @@ func (rs *requestSpan) RecordTrace(tl *nettrace.Timeline, report *nettrace.Repor
 
 	rs.span.SetAttributes(attribute.Int64("resterm.trace.duration_ms", tl.Duration.Milliseconds()))
 	if !tl.Started.IsZero() {
-		rs.span.SetAttributes(attribute.String("resterm.trace.started_at", tl.Started.Format(time.RFC3339Nano)))
+		rs.span.SetAttributes(
+			attribute.String("resterm.trace.started_at", tl.Started.Format(time.RFC3339Nano)),
+		)
 	}
 	if !tl.Completed.IsZero() {
-		rs.span.SetAttributes(attribute.String("resterm.trace.completed_at", tl.Completed.Format(time.RFC3339Nano)))
+		rs.span.SetAttributes(
+			attribute.String("resterm.trace.completed_at", tl.Completed.Format(time.RFC3339Nano)),
+		)
 	}
 	if strings.TrimSpace(tl.Err) != "" {
-		rs.span.AddEvent("resterm.trace.error", trace.WithAttributes(attribute.String("resterm.error", tl.Err)))
+		rs.span.AddEvent(
+			"resterm.trace.error",
+			trace.WithAttributes(attribute.String("resterm.error", tl.Err)),
+		)
 	}
 
 	for _, phase := range tl.Phases {
@@ -225,7 +237,9 @@ func (rs *requestSpan) End(result RequestResult) {
 		}
 	}
 
-	if result.Err == nil && (result.Report == nil || len(result.Report.BudgetReport.Breaches) == 0) && result.StatusCode >= 400 {
+	if result.Err == nil &&
+		(result.Report == nil || len(result.Report.BudgetReport.Breaches) == 0) &&
+		result.StatusCode >= 400 {
 		statusCode = codes.Error
 		statusMsg = fmt.Sprintf("HTTP %d", result.StatusCode)
 	}
@@ -330,17 +344,29 @@ func buildSpanAttributes(info RequestStart) []attribute.KeyValue {
 			attrs = append(attrs, attribute.String("resterm.request.description", desc))
 		}
 		if len(meta.Tags) > 0 {
-			attrs = append(attrs, attribute.String("resterm.request.tags", strings.Join(meta.Tags, ",")))
+			attrs = append(
+				attrs,
+				attribute.String("resterm.request.tags", strings.Join(meta.Tags, ",")),
+			)
 		}
 	}
 
 	if info.Budget != nil {
 		budget := info.Budget.Clone()
 		if budget.Total > 0 {
-			attrs = append(attrs, attribute.Int64("resterm.trace.budget.total_ms", budget.Total.Milliseconds()))
+			attrs = append(
+				attrs,
+				attribute.Int64("resterm.trace.budget.total_ms", budget.Total.Milliseconds()),
+			)
 		}
 		if budget.Tolerance > 0 {
-			attrs = append(attrs, attribute.Int64("resterm.trace.budget.tolerance_ms", budget.Tolerance.Milliseconds()))
+			attrs = append(
+				attrs,
+				attribute.Int64(
+					"resterm.trace.budget.tolerance_ms",
+					budget.Tolerance.Milliseconds(),
+				),
+			)
 		}
 		for phase, limit := range budget.Phases {
 			key := fmt.Sprintf("resterm.trace.budget.%s_ms", phase)

@@ -22,7 +22,10 @@ func (m *Model) copyResponseTab() tea.Cmd {
 
 func (m *Model) responseCopyPayload() (string, string, *statusMsg) {
 	if m.focus != focusResponse {
-		return "", "", &statusMsg{text: "Focus the response pane to copy its contents", level: statusInfo}
+		return "", "", &statusMsg{
+			text:  "Focus the response pane to copy its contents",
+			level: statusInfo,
+		}
 	}
 
 	pane := m.focusedPane()
@@ -37,7 +40,10 @@ func (m *Model) responseCopyPayload() (string, string, *statusMsg) {
 
 	label, ok := responseCopyTabLabel(pane.activeTab)
 	if !ok {
-		return "", "", &statusMsg{text: "Copy works only in Pretty, Raw, or Headers tabs", level: statusInfo}
+		return "", "", &statusMsg{
+			text:  "Copy works only in Pretty, Raw, or Headers tabs",
+			level: statusInfo,
+		}
 	}
 
 	content, _ := m.paneContentForTab(m.responsePaneFocus, pane.activeTab)

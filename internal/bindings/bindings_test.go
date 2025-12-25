@@ -21,7 +21,11 @@ func TestDefaultMapContainsExpectedBindings(t *testing.T) {
 		t.Fatalf("expected ctrl+c -> ActionCancelRun, got %+v (ok=%v)", binding, ok)
 	}
 
-	if binding, ok := m.ResolveChord("g", "s"); !ok || binding.Action != ActionSetMainSplitHorizontal {
+	if binding, ok := m.ResolveChord(
+		"g",
+		"s",
+	); !ok ||
+		binding.Action != ActionSetMainSplitHorizontal {
 		t.Fatalf("expected g s -> ActionSetMainSplitHorizontal, got %+v (ok=%v)", binding, ok)
 	}
 

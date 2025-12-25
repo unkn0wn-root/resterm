@@ -50,7 +50,11 @@ func TestFileWriter(t *testing.T) {
 	}
 
 	if strings.TrimSpace(string(got)) != strings.TrimSpace(string(want)) {
-		t.Fatalf("generated content does not match golden.\nGot:\n%s\nWant:\n%s", string(got), string(want))
+		t.Fatalf(
+			"generated content does not match golden.\nGot:\n%s\nWant:\n%s",
+			string(got),
+			string(want),
+		)
 	}
 
 	if err := fw.WriteDocument(context.Background(), doc, dest, opts); err == nil {

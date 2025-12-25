@@ -53,7 +53,13 @@ func (s *responseSearchState) hasQuery() bool {
 	return strings.TrimSpace(s.query) != ""
 }
 
-func (s *responseSearchState) prepare(query string, isRegex bool, tab responseTab, snapshotID string, width int) {
+func (s *responseSearchState) prepare(
+	query string,
+	isRegex bool,
+	tab responseTab,
+	snapshotID string,
+	width int,
+) {
 	s.query = query
 	s.isRegex = isRegex
 	s.tab = tab
@@ -105,7 +111,13 @@ func (s *responseSearchState) computeMatches(content string) error {
 	return nil
 }
 
-func decorateResponseContent(content string, matches []searchMatch, highlight lipgloss.Style, active lipgloss.Style, current int) string {
+func decorateResponseContent(
+	content string,
+	matches []searchMatch,
+	highlight lipgloss.Style,
+	active lipgloss.Style,
+	current int,
+) string {
 	if len(matches) == 0 {
 		return content
 	}

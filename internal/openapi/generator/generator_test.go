@@ -34,7 +34,8 @@ func TestBuilderGenerate(t *testing.T) {
 		t.Fatalf("expected 3 requests, got %d", len(doc.Requests))
 	}
 
-	if len(doc.Variables) == 0 || doc.Variables[0].Name != openapi.DefaultBaseURLVariable || doc.Variables[0].Value != "https://api.example.com/v1" {
+	if len(doc.Variables) == 0 || doc.Variables[0].Name != openapi.DefaultBaseURLVariable ||
+		doc.Variables[0].Value != "https://api.example.com/v1" {
 		t.Fatalf("unexpected base variable: %#v", doc.Variables)
 	}
 	if len(doc.Globals) == 0 {
@@ -136,15 +137,22 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 						Style:    "form",
 						Explode:  &explode,
 						Example:  model.Example{Value: []any{"red", "blue"}, HasValue: true},
-						Schema:   &model.SchemaRef{Payload: &openapi3.SchemaRef{Value: arraySchema}},
+						Schema: &model.SchemaRef{
+							Payload: &openapi3.SchemaRef{Value: arraySchema},
+						},
 					},
 					{
 						Name:     "filters",
 						Location: model.InQuery,
 						Style:    "deepObject",
 						Explode:  &explode,
-						Example:  model.Example{Value: map[string]any{"name": "gizmo", "owner": "alice"}, HasValue: true},
-						Schema:   &model.SchemaRef{Payload: &openapi3.SchemaRef{Value: objectSchema}},
+						Example: model.Example{
+							Value:    map[string]any{"name": "gizmo", "owner": "alice"},
+							HasValue: true,
+						},
+						Schema: &model.SchemaRef{
+							Payload: &openapi3.SchemaRef{Value: objectSchema},
+						},
 					},
 				},
 			},
@@ -237,7 +245,10 @@ func TestBuilderGenerateOAuthAuthorizationCode(t *testing.T) {
 		t.Fatalf("unexpected auth_url %s", params[openapi.OAuthParamAuthURL])
 	}
 	if params[openapi.OAuthParamCodeMethod] != "s256" {
-		t.Fatalf("expected code_challenge_method s256, got %s", params[openapi.OAuthParamCodeMethod])
+		t.Fatalf(
+			"expected code_challenge_method s256, got %s",
+			params[openapi.OAuthParamCodeMethod],
+		)
 	}
 
 	wantGlobals := map[string]bool{

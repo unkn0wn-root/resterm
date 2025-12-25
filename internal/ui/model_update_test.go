@@ -135,7 +135,11 @@ func TestHandleKeyGhShrinksEditor(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	if model.editor.Width() >= initialEditor {
-		t.Fatalf("expected gh to shrink editor width, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected gh to shrink editor width, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 }
 
@@ -150,7 +154,11 @@ func TestHandleKeyGlExpandsEditor(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	if model.editor.Width() <= initialEditor {
-		t.Fatalf("expected gl to expand editor width, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected gl to expand editor width, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 }
 
@@ -171,7 +179,11 @@ func TestHandleKeyGhCanRepeatWithoutPrefix(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	second := model.editor.Width()
 	if second >= first {
-		t.Fatalf("expected repeated h to continue shrinking editor, previous %d new %d", first, second)
+		t.Fatalf(
+			"expected repeated h to continue shrinking editor, previous %d new %d",
+			first,
+			second,
+		)
 	}
 	if !model.repeatChordActive {
 		t.Fatalf("expected chord repeat to remain active after repeated action")
@@ -191,7 +203,11 @@ func TestHandleKeyGhIgnoredInInsertMode(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 	if model.editor.Width() != initialEditor {
-		t.Fatalf("expected gh chord to be ignored in insert mode, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected gh chord to be ignored in insert mode, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 	if model.hasPendingChord {
 		t.Fatalf("expected pending chord state to clear when insert mode intercepts")
@@ -218,10 +234,18 @@ func TestHandleKeyGhShrinksSidebarWhenFocused(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
 
 	if model.sidebarWidthPx >= initialSidebar {
-		t.Fatalf("expected gh to shrink sidebar width, initial %d new %d", initialSidebar, model.sidebarWidthPx)
+		t.Fatalf(
+			"expected gh to shrink sidebar width, initial %d new %d",
+			initialSidebar,
+			model.sidebarWidthPx,
+		)
 	}
 	if model.editor.Width() <= initialEditor {
-		t.Fatalf("expected editor width to grow after sidebar shrinks, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to grow after sidebar shrinks, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 }
 
@@ -239,10 +263,18 @@ func TestHandleKeyGlExpandsSidebarWhenFocused(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 
 	if model.sidebarWidthPx <= initialSidebar {
-		t.Fatalf("expected gl to expand sidebar width, initial %d new %d", initialSidebar, model.sidebarWidthPx)
+		t.Fatalf(
+			"expected gl to expand sidebar width, initial %d new %d",
+			initialSidebar,
+			model.sidebarWidthPx,
+		)
 	}
 	if model.editor.Width() >= initialEditor {
-		t.Fatalf("expected editor width to shrink after sidebar expands, initial %d new %d", initialEditor, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to shrink after sidebar expands, initial %d new %d",
+			initialEditor,
+			model.editor.Width(),
+		)
 	}
 }
 
@@ -259,7 +291,11 @@ func TestRunEditorResizeBlockedByZoom(t *testing.T) {
 		t.Fatalf("expected resize command to be suppressed while zoomed")
 	}
 	if model.editor.Width() != initial {
-		t.Fatalf("expected editor width to remain unchanged while zoomed, initial %d new %d", initial, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to remain unchanged while zoomed, initial %d new %d",
+			initial,
+			model.editor.Width(),
+		)
 	}
 	if !strings.Contains(model.statusMessage.text, "Disable zoom") {
 		t.Fatalf("expected zoom warning status, got %q", model.statusMessage.text)
@@ -281,7 +317,11 @@ func TestRunEditorResizeBlockedWhenCollapsed(t *testing.T) {
 		t.Fatalf("expected resize command to be suppressed while response collapsed")
 	}
 	if model.editor.Width() != initial {
-		t.Fatalf("expected editor width to remain unchanged while collapsed, initial %d new %d", initial, model.editor.Width())
+		t.Fatalf(
+			"expected editor width to remain unchanged while collapsed, initial %d new %d",
+			initial,
+			model.editor.Width(),
+		)
 	}
 	if !strings.Contains(model.statusMessage.text, "Expand panes") {
 		t.Fatalf("expected collapse warning status, got %q", model.statusMessage.text)
@@ -299,7 +339,11 @@ func TestHandleKeyGjAdjustsSidebar(t *testing.T) {
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
 	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
 	if model.fileList.Index() != initialIndex {
-		t.Fatalf("expected gj chord not to move file selection, initial %d new %d", initialIndex, model.fileList.Index())
+		t.Fatalf(
+			"expected gj chord not to move file selection, initial %d new %d",
+			initialIndex,
+			model.fileList.Index(),
+		)
 	}
 }
 
@@ -318,7 +362,11 @@ func TestHandleKeyGjCanRepeatWithoutPrefix(t *testing.T) {
 		t.Fatalf("expected chord repeat to remain active after repeated sidebar adjustment")
 	}
 	if model.fileList.Index() != initialIndex {
-		t.Fatalf("expected repeated gj not to move file selection, initial %d new %d", initialIndex, model.fileList.Index())
+		t.Fatalf(
+			"expected repeated gj not to move file selection, initial %d new %d",
+			initialIndex,
+			model.fileList.Index(),
+		)
 	}
 }
 
@@ -1001,10 +1049,18 @@ func TestMainSplitOrientationChord(t *testing.T) {
 	}
 	baselineHeight := model.paneContentHeight
 	if model.editorContentHeight != baselineHeight {
-		t.Fatalf("expected editor content height %d, got %d", baselineHeight, model.editorContentHeight)
+		t.Fatalf(
+			"expected editor content height %d, got %d",
+			baselineHeight,
+			model.editorContentHeight,
+		)
 	}
 	if model.responseContentHeight != baselineHeight {
-		t.Fatalf("expected response content height %d, got %d", baselineHeight, model.responseContentHeight)
+		t.Fatalf(
+			"expected response content height %d, got %d",
+			baselineHeight,
+			model.responseContentHeight,
+		)
 	}
 
 	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}}); cmd != nil {
@@ -1017,10 +1073,18 @@ func TestMainSplitOrientationChord(t *testing.T) {
 		t.Fatalf("expected g+s to switch to horizontal orientation")
 	}
 	if model.editorContentHeight >= baselineHeight {
-		t.Fatalf("expected editor content height to shrink below %d, got %d", baselineHeight, model.editorContentHeight)
+		t.Fatalf(
+			"expected editor content height to shrink below %d, got %d",
+			baselineHeight,
+			model.editorContentHeight,
+		)
 	}
 	if model.responseContentHeight >= baselineHeight {
-		t.Fatalf("expected response content height to shrink below %d, got %d", baselineHeight, model.responseContentHeight)
+		t.Fatalf(
+			"expected response content height to shrink below %d, got %d",
+			baselineHeight,
+			model.responseContentHeight,
+		)
 	}
 	frameAllowance := model.theme.EditorBorder.GetVerticalFrameSize() + model.theme.ResponseBorder.GetVerticalFrameSize()
 	expectedTotal := baselineHeight - frameAllowance
@@ -1042,10 +1106,18 @@ func TestMainSplitOrientationChord(t *testing.T) {
 		t.Fatalf("expected g+v to restore vertical orientation")
 	}
 	if model.editorContentHeight != baselineHeight {
-		t.Fatalf("expected editor height reset to %d, got %d", baselineHeight, model.editorContentHeight)
+		t.Fatalf(
+			"expected editor height reset to %d, got %d",
+			baselineHeight,
+			model.editorContentHeight,
+		)
 	}
 	if model.responseContentHeight != baselineHeight {
-		t.Fatalf("expected response height reset to %d, got %d", baselineHeight, model.responseContentHeight)
+		t.Fatalf(
+			"expected response height reset to %d, got %d",
+			baselineHeight,
+			model.responseContentHeight,
+		)
 	}
 }
 
@@ -1053,7 +1125,11 @@ func TestNavGateBlocksMismatchedKind(t *testing.T) {
 	model := newTestModelWithDoc(sampleRequestDoc)
 	m := model
 	m.navigator = navigator.New[any]([]*navigator.Node[any]{
-		{ID: "file:/tmp/a", Kind: navigator.KindFile, Payload: navigator.Payload[any]{FilePath: "/tmp/a"}},
+		{
+			ID:      "file:/tmp/a",
+			Kind:    navigator.KindFile,
+			Payload: navigator.Payload[any]{FilePath: "/tmp/a"},
+		},
 	})
 	if m.navGate(navigator.KindRequest, "") {
 		t.Fatalf("expected navGate to block non-request selection")
@@ -1065,7 +1141,11 @@ func TestNavGateBlocksDifferentFile(t *testing.T) {
 	m := model
 	m.currentFile = "/tmp/a.http"
 	m.navigator = navigator.New[any]([]*navigator.Node[any]{
-		{ID: "req:/tmp/b:0", Kind: navigator.KindRequest, Payload: navigator.Payload[any]{FilePath: "/tmp/b.http"}},
+		{
+			ID:      "req:/tmp/b:0",
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: "/tmp/b.http"},
+		},
 	})
 	if m.navGate(navigator.KindRequest, "warn") {
 		t.Fatalf("expected navGate to block request from different file")

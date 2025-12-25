@@ -96,12 +96,24 @@ func TestRunRTSApplyOrder(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Applies: []restfile.ApplySpec{
 				{Expression: `{headers: {"X-Test": "1"}}`, Line: 1, Col: 1},
-				{Expression: `{headers: {"X-Next": request.header("X-Test") + "b"}}`, Line: 2, Col: 1},
+				{
+					Expression: `{headers: {"X-Next": request.header("X-Test") + "b"}}`,
+					Line:       2,
+					Col:        1,
+				},
 			},
 		},
 	}
 
-	if err := model.runRTSApply(context.Background(), nil, req, "", "", map[string]string{}, nil); err != nil {
+	if err := model.runRTSApply(
+		context.Background(),
+		nil,
+		req,
+		"",
+		"",
+		map[string]string{},
+		nil,
+	); err != nil {
 		t.Fatalf("runRTSApply: %v", err)
 	}
 	if got := req.Headers.Get("X-Test"); got != "1" {

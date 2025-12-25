@@ -120,12 +120,19 @@ func (m *Model) handleReloadBinding(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.pendingChord = ""
 		m.pendingChordMsg = tea.KeyMsg{}
 		m.hasPendingChord = false
-		if binding, ok := m.bindingsMap.ResolveChord(prefix, key); ok && binding.Action == bindings.ActionReloadFileFromDisk {
+		if binding, ok := m.bindingsMap.ResolveChord(
+			prefix,
+			key,
+		); ok &&
+			binding.Action == bindings.ActionReloadFileFromDisk {
 			return m.runShortcutBinding(binding, msg)
 		}
 	}
 
-	if binding, ok := m.bindingsMap.MatchSingle(key); ok && binding.Action == bindings.ActionReloadFileFromDisk {
+	if binding, ok := m.bindingsMap.MatchSingle(
+		key,
+	); ok &&
+		binding.Action == bindings.ActionReloadFileFromDisk {
 		return m.runShortcutBinding(binding, msg)
 	}
 

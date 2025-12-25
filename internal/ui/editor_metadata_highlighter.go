@@ -150,7 +150,8 @@ func (s *metadataRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Styl
 	}
 
 	lineHash := hashRunes(line)
-	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash && cached.length == len(line) {
+	if cached, ok := s.cache[idx]; ok && cached.computed && cached.hash == lineHash &&
+		cached.length == len(line) {
 		return cached.styles
 	}
 
@@ -285,7 +286,12 @@ func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
 	return style, true
 }
 
-func (s *metadataRuneStyler) applySettingStyles(line []rune, styles *[]lipgloss.Style, styled *bool, start int) {
+func (s *metadataRuneStyler) applySettingStyles(
+	line []rune,
+	styles *[]lipgloss.Style,
+	styled *bool,
+	start int,
+) {
 	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
@@ -316,7 +322,12 @@ func (s *metadataRuneStyler) applySettingStyles(line []rune, styles *[]lipgloss.
 	}
 }
 
-func (s *metadataRuneStyler) applyTimeoutStyles(line []rune, styles *[]lipgloss.Style, styled *bool, start int) {
+func (s *metadataRuneStyler) applyTimeoutStyles(
+	line []rune,
+	styles *[]lipgloss.Style,
+	styled *bool,
+	start int,
+) {
 	if !s.settingValueEnabled {
 		return
 	}

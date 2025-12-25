@@ -49,7 +49,9 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.rebuildNavigator(nil)
 	m.dirty = false
 	m.watchFile(path, data)
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess})
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess},
+	)
 	m.syncHistory()
 	if len(m.requestItems) > 0 {
 		m.syncEditorWithRequestSelection(-1)
@@ -102,7 +104,10 @@ func (m *Model) saveFile() tea.Cmd {
 	m.watchFile(m.currentFile, content)
 	m.refreshCurrentDocument(content)
 	return func() tea.Msg {
-		return statusMsg{text: fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)), level: statusSuccess}
+		return statusMsg{
+			text:  fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)),
+			level: statusSuccess,
+		}
 	}
 }
 

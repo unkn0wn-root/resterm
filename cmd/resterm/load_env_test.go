@@ -30,7 +30,11 @@ func TestLoadEnvironmentExplicitDotEnv(t *testing.T) {
 func TestLoadEnvironmentIgnoresDotEnvDiscovery(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
-	if err := os.WriteFile(envPath, []byte("workspace=dev\nAPI_URL=https://api\n"), 0o644); err != nil {
+	if err := os.WriteFile(
+		envPath,
+		[]byte("workspace=dev\nAPI_URL=https://api\n"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write env file: %v", err)
 	}
 

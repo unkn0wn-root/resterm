@@ -2,7 +2,7 @@ package rts
 
 import "strings"
 
-func builtinTextLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "text.lower(s)"); err != nil {
 		return Null(), err
 	}
@@ -17,7 +17,7 @@ func builtinTextLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func builtinTextUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "text.upper(s)"); err != nil {
 		return Null(), err
 	}
@@ -32,7 +32,7 @@ func builtinTextUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func builtinTextTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "text.trim(s)"); err != nil {
 		return Null(), err
 	}
@@ -47,7 +47,7 @@ func builtinTextTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func builtinTextSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "text.split(s, sep)"); err != nil {
 		return Null(), err
 	}
@@ -73,7 +73,7 @@ func builtinTextSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func builtinTextJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "text.join(list, sep)"); err != nil {
 		return Null(), err
 	}
@@ -111,7 +111,7 @@ func builtinTextJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(res), nil
 }
 
-func builtinTextReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 3, "text.replace(s, old, new)"); err != nil {
 		return Null(), err
 	}
@@ -134,7 +134,7 @@ func builtinTextReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func builtinTextStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "text.startsWith(s, prefix)"); err != nil {
 		return Null(), err
 	}
@@ -149,7 +149,7 @@ func builtinTextStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Bool(strings.HasPrefix(s, p)), nil
 }
 
-func builtinTextEndsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func stdlibTextEndsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 2, "text.endsWith(s, suffix)"); err != nil {
 		return Null(), err
 	}

@@ -417,7 +417,10 @@ func New(cfg Config) Model {
 	}
 	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
 		initialStatus = statusMsg{
-			text:  fmt.Sprintf("Environment defaulted to %q - press Ctrl+E to change.", cfg.EnvironmentFallback),
+			text: fmt.Sprintf(
+				"Environment defaulted to %q - press Ctrl+E to change.",
+				cfg.EnvironmentFallback,
+			),
 			level: statusInfo,
 		}
 	}
@@ -559,7 +562,8 @@ func New(cfg Config) Model {
 	sshGlobals := newSSHStore()
 
 	updateVersion := strings.TrimSpace(cfg.Version)
-	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" && cfg.UpdateClient.Ready()
+	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" &&
+		cfg.UpdateClient.Ready()
 
 	model := Model{
 		cfg:                    cfg,
@@ -662,7 +666,8 @@ func New(cfg Config) Model {
 	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
 	model.applyThemeToLists()
-	if strings.TrimSpace(model.workspaceRoot) != "" && strings.TrimSpace(model.lastResponseSaveDir) == "" {
+	if strings.TrimSpace(model.workspaceRoot) != "" &&
+		strings.TrimSpace(model.lastResponseSaveDir) == "" {
 		model.lastResponseSaveDir = model.workspaceRoot
 	}
 

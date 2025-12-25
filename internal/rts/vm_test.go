@@ -29,7 +29,10 @@ func execModule(t *testing.T, src string) *Comp {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 10000})
+	ctx := NewCtx(
+		context.Background(),
+		Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 10000},
+	)
 	comp, err := Exec(ctx, m, Stdlib())
 	if err != nil {
 		t.Fatalf("exec: %v", err)

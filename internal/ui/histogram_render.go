@@ -135,7 +135,11 @@ func renderHistogramLegend(indent string) string {
 		fmt.Sprintf("%sLegend:", indent),
 		fmt.Sprintf("%sgreen <= p50", entryIndent),
 		fmt.Sprintf("%syellow between p50–p90", entryIndent),
-		fmt.Sprintf("%sred overlaps or exceeds p90 (faded when bucket <%d%% of busiest)", entryIndent, histogramFadePercent),
+		fmt.Sprintf(
+			"%sred overlaps or exceeds p90 (faded when bucket <%d%% of busiest)",
+			entryIndent,
+			histogramFadePercent,
+		),
 	}
 	return strings.Join(lines, "\n") + "\n"
 }

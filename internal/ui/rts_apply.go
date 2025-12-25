@@ -84,7 +84,11 @@ func (m *Model) parseApplyPatch(ctx context.Context, pos rts.Pos, v rts.Value) (
 	return p, nil
 }
 
-func (m *Model) parseApplyHeaders(ctx context.Context, pos rts.Pos, v rts.Value) (map[string][]string, map[string]struct{}, error) {
+func (m *Model) parseApplyHeaders(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+) (map[string][]string, map[string]struct{}, error) {
 	if v.K != rts.VDict {
 		return nil, nil, applyErr("headers", "expects dict")
 	}
@@ -124,7 +128,11 @@ func (m *Model) parseApplyHeaders(ctx context.Context, pos rts.Pos, v rts.Value)
 	return set, del, nil
 }
 
-func (m *Model) parseApplyQuery(ctx context.Context, pos rts.Pos, v rts.Value) (map[string]*string, error) {
+func (m *Model) parseApplyQuery(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+) (map[string]*string, error) {
 	if v.K != rts.VDict {
 		return nil, applyErr("query", "expects dict")
 	}
@@ -151,7 +159,11 @@ func (m *Model) parseApplyQuery(ctx context.Context, pos rts.Pos, v rts.Value) (
 	return out, nil
 }
 
-func (m *Model) parseApplyVars(ctx context.Context, pos rts.Pos, v rts.Value) (map[string]string, error) {
+func (m *Model) parseApplyVars(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+) (map[string]string, error) {
 	if v.K != rts.VDict {
 		return nil, applyErr("vars", "expects dict")
 	}
@@ -173,7 +185,12 @@ func (m *Model) parseApplyVars(ctx context.Context, pos rts.Pos, v rts.Value) (m
 	return out, nil
 }
 
-func (m *Model) applyScalar(ctx context.Context, pos rts.Pos, v rts.Value, field string) (string, error) {
+func (m *Model) applyScalar(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+	field string,
+) (string, error) {
 	switch v.K {
 	case rts.VStr, rts.VNum, rts.VBool:
 		s, err := m.rtsValueString(ctx, pos, v)
@@ -186,7 +203,12 @@ func (m *Model) applyScalar(ctx context.Context, pos rts.Pos, v rts.Value, field
 	}
 }
 
-func (m *Model) applyList(ctx context.Context, pos rts.Pos, v rts.Value, field string) ([]string, error) {
+func (m *Model) applyList(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+	field string,
+) ([]string, error) {
 	if v.K != rts.VList {
 		return nil, applyErr(field, "expects list")
 	}

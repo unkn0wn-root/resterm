@@ -62,8 +62,11 @@ func TestRequestListItemDescriptionFallbacks(t *testing.T) {
 		{
 			name: "rest templated path without description",
 			item: requestListItem{
-				request: &restfile.Request{Method: "get", URL: "http://localhost:8080/items/{{vars.workflow.itemId}}"},
-				line:    4,
+				request: &restfile.Request{
+					Method: "get",
+					URL:    "http://localhost:8080/items/{{vars.workflow.itemId}}",
+				},
+				line: 4,
 			},
 			expected: "GET /items/{{vars.workflow.itemId}}\nhttp://localhost:8080",
 		},

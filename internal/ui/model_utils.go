@@ -45,7 +45,9 @@ func (m *Model) filterEditorMessage(msg tea.Msg) tea.Msg {
 	return msg
 }
 
-var ansiSequenceRegex = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)")
+var ansiSequenceRegex = regexp.MustCompile(
+	"\x1b\\[[0-9;?]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)",
+)
 
 func stripANSIEscape(s string) string {
 	return ansiSequenceRegex.ReplaceAllString(s, "")
@@ -60,7 +62,9 @@ func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 	builder.WriteString(statsHeadingStyle.Render("Tests:") + "\n")
 	if scriptErr != nil {
 		errorLabel := statsWarnStyle.Render("[ERROR]")
-		builder.WriteString("  " + errorLabel + " " + statsMessageStyle.Render(scriptErr.Error()) + "\n")
+		builder.WriteString(
+			"  " + errorLabel + " " + statsMessageStyle.Render(scriptErr.Error()) + "\n",
+		)
 	}
 	for _, result := range results {
 		statusStyle := statsSuccessStyle
@@ -94,7 +98,11 @@ func buildRespSum(resp *httpclient.Response, tests []scripts.TestResult, scriptE
 	return buildRespSumWithLength(resp, tests, scriptErr, renderContentLengthLine)
 }
 
-func buildRespSumPretty(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) string {
+func buildRespSumPretty(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+) string {
 	return buildRespSumWithLength(resp, tests, scriptErr, renderContentLengthLinePretty)
 }
 
@@ -128,11 +136,17 @@ func buildRespSumWithLength(
 
 	if resp.Headers != nil {
 		if streamType := strings.TrimSpace(resp.Headers.Get(streamHeaderType)); streamType != "" {
-			lines = append(lines, renderLabelValue("Stream", streamType, statsLabelStyle, statsValueStyle))
+			lines = append(
+				lines,
+				renderLabelValue("Stream", streamType, statsLabelStyle, statsValueStyle),
+			)
 		}
 
 		if summary := strings.TrimSpace(resp.Headers.Get(streamHeaderSummary)); summary != "" {
-			lines = append(lines, renderLabelValue("Stream summary", summary, statsLabelStyle, statsMessageStyle))
+			lines = append(
+				lines,
+				renderLabelValue("Stream summary", summary, statsLabelStyle, statsMessageStyle),
+			)
 		}
 	}
 
@@ -141,7 +155,10 @@ func buildRespSumWithLength(
 		if dur <= 0 {
 			dur = resp.Duration
 		}
-		lines = append(lines, renderLabelValue("Duration", dur.String(), statsLabelStyle, statsDurationStyle))
+		lines = append(
+			lines,
+			renderLabelValue("Duration", dur.String(), statsLabelStyle, statsDurationStyle),
+		)
 	}
 
 	summary := strings.Join(lines, "\n")

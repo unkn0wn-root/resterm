@@ -91,7 +91,12 @@ type timelineRow struct {
 	Status   timelineStatus
 }
 
-func buildTimelineReport(tl *nettrace.Timeline, spec *restfile.TraceSpec, rep *nettrace.Report, styles timelineStyles) timelineReport {
+func buildTimelineReport(
+	tl *nettrace.Timeline,
+	spec *restfile.TraceSpec,
+	rep *nettrace.Report,
+	styles timelineStyles,
+) timelineReport {
 	report := timelineReport{styles: styles}
 	if tl == nil {
 		report.title = "Timeline"
@@ -163,7 +168,10 @@ func buildTimelineSummary(tl *nettrace.Timeline, styles timelineStyles) []string
 		styles.meta.Render(fmt.Sprintf("Started:   %s", formatTime(tl.Started))),
 	}
 	if !tl.Completed.IsZero() {
-		lines = append(lines, styles.meta.Render(fmt.Sprintf("Completed: %s", formatTime(tl.Completed))))
+		lines = append(
+			lines,
+			styles.meta.Render(fmt.Sprintf("Completed: %s", formatTime(tl.Completed))),
+		)
 	}
 	if trimmed := strings.TrimSpace(tl.Err); trimmed != "" {
 		lines = append(lines, styles.statusWarn.Render("Error: "+trimmed))
@@ -280,7 +288,11 @@ func humanPhaseName(kind nettrace.PhaseKind) string {
 	}
 }
 
-func applyBudgetToRows(rows []timelineRow, budget nettrace.Budget, breaches []nettrace.BudgetBreach) {
+func applyBudgetToRows(
+	rows []timelineRow,
+	budget nettrace.Budget,
+	breaches []nettrace.BudgetBreach,
+) {
 	breachMap := make(map[nettrace.PhaseKind]nettrace.BudgetBreach, len(breaches))
 	for _, br := range breaches {
 		breachMap[br.Kind] = br
@@ -358,8 +370,14 @@ func renderTimeline(report timelineReport, width int) string {
 		builder.WriteString(report.styles.statusWarn.Render("Budget breaches:"))
 		builder.WriteString("\n")
 		for _, br := range report.breaches {
-			msg := fmt.Sprintf("  %s: over by %s (limit %s)",
-				humanPhaseName(br.Kind), br.Over.Round(time.Millisecond), br.Limit.Round(time.Millisecond))
+			msg := fmt.Sprintf(
+				"  %s: over by %s (limit %s)",
+				humanPhaseName(
+					br.Kind,
+				),
+				br.Over.Round(time.Millisecond),
+				br.Limit.Round(time.Millisecond),
+			)
 			builder.WriteString(report.styles.meta.Render(msg))
 			builder.WriteString("\n")
 		}
@@ -373,7 +391,12 @@ func renderTimeline(report timelineReport, width int) string {
 	return strings.TrimRight(builder.String(), "\n") + "\n"
 }
 
-func renderTimelineRow(row timelineRow, total time.Duration, barWidth int, styles timelineStyles) string {
+func renderTimelineRow(
+	row timelineRow,
+	total time.Duration,
+	barWidth int,
+	styles timelineStyles,
+) string {
 	bar := renderTimelineBar(row.Duration, total, barWidth, row.Overrun > 0, styles)
 	status := renderTimelineStatus(row.Status, styles)
 	label := styles.phase.Render(fmt.Sprintf("%-16s", row.Name))
@@ -410,7 +433,13 @@ func renderTimelineRow(row timelineRow, total time.Duration, barWidth int, style
 	return builder.String()
 }
 
-func renderTimelineBar(duration time.Duration, total time.Duration, width int, warn bool, styles timelineStyles) string {
+func renderTimelineBar(
+	duration time.Duration,
+	total time.Duration,
+	width int,
+	warn bool,
+	styles timelineStyles,
+) string {
 	if width <= 0 {
 		return ""
 	}

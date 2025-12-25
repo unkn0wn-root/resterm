@@ -44,7 +44,11 @@ func (m *Model) jumpWorkflowStatsSelection(delta int) tea.Cmd {
 	return m.syncResponsePanes()
 }
 
-func (m *Model) selectWorkflowStatsByViewport(pane *responsePaneState, snapshot *responseSnapshot, direction int) tea.Cmd {
+func (m *Model) selectWorkflowStatsByViewport(
+	pane *responsePaneState,
+	snapshot *responseSnapshot,
+	direction int,
+) tea.Cmd {
 	if pane == nil || snapshot == nil || snapshot.workflowStats == nil {
 		return nil
 	}

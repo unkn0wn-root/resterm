@@ -71,7 +71,10 @@ func Load(dir string) (*Map, Source, error) {
 			continue
 		}
 		if err != nil {
-			accumulated = errors.Join(accumulated, fmt.Errorf("read bindings %q: %w", candidate.Path, err))
+			accumulated = errors.Join(
+				accumulated,
+				fmt.Errorf("read bindings %q: %w", candidate.Path, err),
+			)
 			continue
 		}
 
@@ -260,17 +263,30 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 			}
 			key := strings.Join(seq, " ⇒ ")
 			if _, ok := seen[key]; ok {
-				return nil, fmt.Errorf("action %s: duplicate binding %q", id, strings.Join(seq, " "))
+				return nil, fmt.Errorf(
+					"action %s: duplicate binding %q",
+					id,
+					strings.Join(seq, " "),
+				)
 			}
 			seen[key] = struct{}{}
 
-			ref := bindingRef{action: id, steps: append([]string(nil), seq...), repeatable: repeatable}
+			ref := bindingRef{
+				action:     id,
+				steps:      append([]string(nil), seq...),
+				repeatable: repeatable,
+			}
 			entry.bindings = append(entry.bindings, ref)
 
 			if len(seq) == 1 {
 				step := seq[0]
 				if existing, ok := single[step]; ok {
-					return nil, fmt.Errorf("binding %q assigned to both %s and %s", step, existing.action, id)
+					return nil, fmt.Errorf(
+						"binding %q assigned to both %s and %s",
+						step,
+						existing.action,
+						id,
+					)
 				}
 				single[step] = ref
 				continue
@@ -284,7 +300,13 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 				chords[prefix] = bucket
 			}
 			if existing, ok := bucket[next]; ok {
-				return nil, fmt.Errorf("binding %q %q assigned to both %s and %s", prefix, next, existing.action, id)
+				return nil, fmt.Errorf(
+					"binding %q %q assigned to both %s and %s",
+					prefix,
+					next,
+					existing.action,
+					id,
+				)
 			}
 			bucket[next] = ref
 			chordPrefixes[prefix] = struct{}{}
@@ -293,7 +315,11 @@ func buildMap(overrides map[ActionID][][]string) (*Map, error) {
 
 	for prefix := range chordPrefixes {
 		if existing, ok := single[prefix]; ok {
-			return nil, fmt.Errorf("key %q cannot be both a chord prefix and standalone shortcut (conflicts with %s)", prefix, existing.action)
+			return nil, fmt.Errorf(
+				"key %q cannot be both a chord prefix and standalone shortcut (conflicts with %s)",
+				prefix,
+				existing.action,
+			)
 		}
 	}
 

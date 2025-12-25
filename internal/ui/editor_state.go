@@ -379,7 +379,9 @@ func (e *requestEditor) SetMetadataHintsEnabled(enabled bool) {
 	}
 }
 
-func (e *requestEditor) metadataHintsDisplay(limit int) (items []hint.Hint, selection int, ok bool) {
+func (e *requestEditor) metadataHintsDisplay(
+	limit int,
+) (items []hint.Hint, selection int, ok bool) {
 	return e.metadataHints.display(limit)
 }
 

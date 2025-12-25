@@ -78,7 +78,7 @@ func NewCtx(ctx context.Context, lim Limits) *Ctx {
 
 func (c *Ctx) Clone() *Ctx {
 	if c == nil {
-		return NewCtx(nil, Limits{})
+		return NewCtx(context.Background(), Limits{})
 	}
 
 	n := NewCtx(c.Ctx, c.Lim)

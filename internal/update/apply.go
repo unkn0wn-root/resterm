@@ -193,11 +193,23 @@ func Apply(ctx context.Context, c Client, res Result, exe string) (SwapStatus, e
 	return apply(ctx, c, res, exe, nil)
 }
 
-func ApplyWithProgress(ctx context.Context, c Client, res Result, exe string, prog Progress) (SwapStatus, error) {
+func ApplyWithProgress(
+	ctx context.Context,
+	c Client,
+	res Result,
+	exe string,
+	prog Progress,
+) (SwapStatus, error) {
 	return apply(ctx, c, res, exe, prog)
 }
 
-func apply(ctx context.Context, c Client, res Result, exe string, prog Progress) (SwapStatus, error) {
+func apply(
+	ctx context.Context,
+	c Client,
+	res Result,
+	exe string,
+	prog Progress,
+) (SwapStatus, error) {
 	tmpPath, err := prepareTemp(filepath.Dir(exe))
 	if err != nil {
 		return SwapStatus{}, err

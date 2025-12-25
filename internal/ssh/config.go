@@ -76,7 +76,12 @@ func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
 	if err := parsePort(&cfg, p.PortStr); err != nil {
 		return Cfg{}, err
 	}
-	if err := parseDuration(&cfg.Timeout, &cfg.TimeoutRaw, p.TimeoutStr, defaultTimeout); err != nil {
+	if err := parseDuration(
+		&cfg.Timeout,
+		&cfg.TimeoutRaw,
+		p.TimeoutStr,
+		defaultTimeout,
+	); err != nil {
 		return Cfg{}, err
 	}
 	if err := parseDuration(&cfg.KeepAlive, &cfg.KeepAliveRaw, p.KeepAliveStr, 0); err != nil {

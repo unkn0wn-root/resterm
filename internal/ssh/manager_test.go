@@ -27,7 +27,11 @@ func (f *fakeClient) Dial(network, addr string) (net.Conn, error) {
 	return c1, nil
 }
 
-func (f *fakeClient) SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error) {
+func (f *fakeClient) SendRequest(
+	name string,
+	wantReply bool,
+	payload []byte,
+) (bool, []byte, error) {
 	f.requests.Add(1)
 	return true, nil, nil
 }
@@ -54,7 +58,11 @@ func (s *scriptedClient) Dial(network, addr string) (net.Conn, error) {
 	return c1, nil
 }
 
-func (s *scriptedClient) SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error) {
+func (s *scriptedClient) SendRequest(
+	name string,
+	wantReply bool,
+	payload []byte,
+) (bool, []byte, error) {
 	return true, nil, nil
 }
 
@@ -212,7 +220,14 @@ func TestDefaultKeyFallbackSkipsMissing(t *testing.T) {
 }
 
 func TestKeepAliveStops(t *testing.T) {
-	cfg := Cfg{Host: "h", Port: 22, User: "u", Pass: "p", Persist: true, KeepAlive: 5 * time.Millisecond}
+	cfg := Cfg{
+		Host:      "h",
+		Port:      22,
+		User:      "u",
+		Pass:      "p",
+		Persist:   true,
+		KeepAlive: 5 * time.Millisecond,
+	}
 	fc := &fakeClient{}
 
 	m := &Manager{

@@ -33,10 +33,12 @@ func cloneDict(in map[string]Value) map[string]Value {
 	if len(in) == 0 {
 		return map[string]Value{}
 	}
+
 	out := make(map[string]Value, len(in))
 	for k, v := range in {
 		out[k] = v
 	}
+
 	return out
 }
 
@@ -45,6 +47,7 @@ func keyArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
 	if err != nil {
 		return "", wrapErr(ctx, err)
 	}
+
 	k = strings.TrimSpace(k)
 	if k == "" {
 		return "", rtErr(ctx, pos, "%s expects non-empty key", sig)
@@ -95,9 +98,11 @@ func listArg(ctx *Ctx, pos Pos, v Value, sig string) ([]Value, error) {
 	if v.K == VNull {
 		return nil, nil
 	}
+
 	if v.K != VList {
 		return nil, rtErr(ctx, pos, "%s expects list", sig)
 	}
+
 	if err := chkList(ctx, pos, len(v.L)); err != nil {
 		return nil, err
 	}
@@ -108,6 +113,7 @@ func reqMsg(ctx *Ctx, pos Pos, args []Value) (string, error) {
 	if len(args) < 2 {
 		return "", nil
 	}
+
 	s, err := toStr(ctx, pos, args[1])
 	if err != nil {
 		return "", err

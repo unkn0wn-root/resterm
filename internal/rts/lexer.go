@@ -329,7 +329,18 @@ func (l *Lexer) scanString() (string, bool) {
 
 func semiOk(k Kind) bool {
 	switch k {
-	case IDENT, NUMBER, STRING, KW_TRUE, KW_FALSE, KW_NULL, RPAREN, RBRACK, RBRACE, KW_RETURN, KW_BREAK, KW_CONTINUE:
+	case IDENT,
+		NUMBER,
+		STRING,
+		KW_TRUE,
+		KW_FALSE,
+		KW_NULL,
+		RPAREN,
+		RBRACK,
+		RBRACE,
+		KW_RETURN,
+		KW_BREAK,
+		KW_CONTINUE:
 		return true
 	default:
 		return false

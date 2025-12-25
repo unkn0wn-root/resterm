@@ -109,7 +109,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			errText := typed.err.Error()
 			if errText != "" && errText != m.updateLastErr {
 				m.updateLastErr = errText
-				m.setStatusMessage(statusMsg{text: fmt.Sprintf("update check failed: %s", errText), level: statusWarn})
+				m.setStatusMessage(
+					statusMsg{
+						text:  fmt.Sprintf("update check failed: %s", errText),
+						level: statusWarn,
+					},
+				)
 			}
 		} else {
 			m.updateLastErr = ""
@@ -119,7 +124,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					res := *typed.res
 					m.updateInfo = &res
 					m.updateAnnounce = ver
-					m.setStatusMessage(statusMsg{text: fmt.Sprintf("Update available: %s (run `resterm --update`)", ver), level: statusInfo})
+					m.setStatusMessage(
+						statusMsg{
+							text: fmt.Sprintf(
+								"Update available: %s (run `resterm --update`)",
+								ver,
+							),
+							level: statusInfo,
+						},
+					)
 				}
 			}
 		}
@@ -453,7 +466,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if _, ok := msg.(tea.WindowSizeMsg); ok || (m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
+	if _, ok := msg.(tea.WindowSizeMsg); ok ||
+		(m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
 		var histCmd tea.Cmd
 		m.historyList, histCmd = m.historyList.Update(msg)
 		if m.historyJumpToLatest {
@@ -609,7 +623,10 @@ func (m *Model) confirmCrossFileNavigation(n *navigator.Node[any]) bool {
 		base = path
 	}
 	m.setStatusMessage(statusMsg{
-		text:  fmt.Sprintf("Unsaved changes will be discarded when opening %s. Press Enter/Space again to continue.", base),
+		text: fmt.Sprintf(
+			"Unsaved changes will be discarded when opening %s. Press Enter/Space again to continue.",
+			base,
+		),
 		level: statusWarn,
 	})
 	return false
@@ -1390,7 +1407,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				if entry, ok := m.selectedHistoryEntry(); ok {
 					m.openHistoryPreview(entry)
 				} else {
-					m.setStatusMessage(statusMsg{text: "No history entry selected", level: statusWarn})
+					m.setStatusMessage(
+						statusMsg{text: "No history entry selected", level: statusWarn},
+					)
 				}
 				return combine(nil)
 			}
@@ -1402,7 +1421,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			if pane.activeTab == responseTabStats {
 				snapshot := pane.snapshot
-				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
+					snapshot.workflowStats != nil {
 					if keyStr == "shift+j" || keyStr == "J" {
 						return combine(m.jumpWorkflowStatsSelection(1))
 					}
@@ -1427,7 +1447,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			if pane.activeTab == responseTabStats {
 				snapshot := pane.snapshot
-				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
+					snapshot.workflowStats != nil {
 					if keyStr == "shift+k" || keyStr == "K" {
 						return combine(m.jumpWorkflowStatsSelection(-1))
 					}
@@ -1471,7 +1492,8 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					return combine(m.loadHistorySelection(false))
 				case responseTabStats:
 					snapshot := pane.snapshot
-					if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow && snapshot.workflowStats != nil {
+					if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
+						snapshot.workflowStats != nil {
 						return combine(m.toggleWorkflowStatsExpansion())
 					}
 				}
@@ -1482,15 +1504,26 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			case "d":
 				if entry, ok := m.selectedHistoryEntry(); ok {
 					if deleted, err := m.deleteHistoryEntry(entry.ID); err != nil {
-						m.setStatusMessage(statusMsg{text: fmt.Sprintf("history delete error: %v", err), level: statusError})
+						m.setStatusMessage(
+							statusMsg{
+								text:  fmt.Sprintf("history delete error: %v", err),
+								level: statusError,
+							},
+						)
 					} else if deleted {
 						m.syncHistory()
-						m.setStatusMessage(statusMsg{text: "History entry deleted", level: statusInfo})
+						m.setStatusMessage(
+							statusMsg{text: "History entry deleted", level: statusInfo},
+						)
 					} else {
-						m.setStatusMessage(statusMsg{text: "History entry not found", level: statusWarn})
+						m.setStatusMessage(
+							statusMsg{text: "History entry not found", level: statusWarn},
+						)
 					}
 				} else {
-					m.setStatusMessage(statusMsg{text: "No history entry selected", level: statusWarn})
+					m.setStatusMessage(
+						statusMsg{text: "No history entry selected", level: statusWarn},
+					)
 				}
 				return combine(nil)
 			case "r", "R", "ctrl+r", "ctrl+R":
@@ -1651,9 +1684,13 @@ func (m *Model) runEditorResize(delta float64) tea.Cmd {
 	}
 	if bounded {
 		if delta < 0 {
-			m.setStatusMessage(statusMsg{text: "Editor already at minimum width", level: statusInfo})
+			m.setStatusMessage(
+				statusMsg{text: "Editor already at minimum width", level: statusInfo},
+			)
 		} else if delta > 0 {
-			m.setStatusMessage(statusMsg{text: "Editor already at maximum width", level: statusInfo})
+			m.setStatusMessage(
+				statusMsg{text: "Editor already at maximum width", level: statusInfo},
+			)
 		}
 	}
 	return nil
@@ -1666,9 +1703,13 @@ func (m *Model) runSidebarWidthResize(delta float64) tea.Cmd {
 	}
 	if bounded {
 		if delta < 0 {
-			m.setStatusMessage(statusMsg{text: "Sidebar already at minimum width", level: statusInfo})
+			m.setStatusMessage(
+				statusMsg{text: "Sidebar already at minimum width", level: statusInfo},
+			)
 		} else if delta > 0 {
-			m.setStatusMessage(statusMsg{text: "Sidebar already at maximum width", level: statusInfo})
+			m.setStatusMessage(
+				statusMsg{text: "Sidebar already at maximum width", level: statusInfo},
+			)
 		}
 	}
 	return nil

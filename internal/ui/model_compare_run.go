@@ -67,13 +67,22 @@ func (m *Model) resetCompareState() {
 // Clone the active request and reset compare bookkeeping so every environment
 // run starts from the same baseline and the diff panes are ready as
 // soon as responses arrive.
-func (m *Model) startCompareRun(doc *restfile.Document, req *restfile.Request, spec *restfile.CompareSpec, options httpclient.Options) tea.Cmd {
+func (m *Model) startCompareRun(
+	doc *restfile.Document,
+	req *restfile.Request,
+	spec *restfile.CompareSpec,
+	options httpclient.Options,
+) tea.Cmd {
 	if spec == nil || len(spec.Environments) < 2 {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: "Compare requires at least two environments"})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: "Compare requires at least two environments"},
+		)
 		return nil
 	}
 	if m.compareRun != nil {
-		m.setStatusMessage(statusMsg{level: statusWarn, text: "Another compare run is already active"})
+		m.setStatusMessage(
+			statusMsg{level: statusWarn, text: "Another compare run is already active"},
+		)
 		return nil
 	}
 
@@ -209,13 +218,24 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	} else if !canceled && msg.grpc != nil {
 		result.GRPC = msg.grpc
 		m.lastError = nil
-		if cmd := m.consumeGRPCResponse(msg.grpc, msg.tests, msg.scriptErr, msg.executed, msg.environment); cmd != nil {
+		if cmd := m.consumeGRPCResponse(
+			msg.grpc,
+			msg.tests,
+			msg.scriptErr,
+			msg.executed,
+			msg.environment,
+		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.response != nil {
 		result.Response = msg.response
 		m.lastError = nil
-		if cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment); cmd != nil {
+		if cmd := m.consumeHTTPResponse(
+			msg.response,
+			msg.tests,
+			msg.scriptErr,
+			msg.environment,
+		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else {
@@ -306,7 +326,9 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	} else if state.hasFailures() {
 		level = statusWarn
 	}
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("%s | %s", label, state.progressSummary()), level: level})
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("%s | %s", label, state.progressSummary()), level: level},
+	)
 	m.recordCompareHistory(state)
 	return nil
 }

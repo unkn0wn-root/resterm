@@ -90,7 +90,12 @@ func (m *Model) selectCompareFocus() tea.Cmd {
 	}
 	targetSnap := m.compareSnapshot(targetEnv)
 	if targetSnap == nil {
-		m.setStatusMessage(statusMsg{text: fmt.Sprintf("Response for %s unavailable", targetEnv), level: statusWarn})
+		m.setStatusMessage(
+			statusMsg{
+				text:  fmt.Sprintf("Response for %s unavailable", targetEnv),
+				level: statusWarn,
+			},
+		)
 		return nil
 	}
 	baselineSnap := m.compareSnapshot(baselineEnv)
@@ -119,7 +124,9 @@ func (m *Model) selectCompareFocus() tea.Cmd {
 	m.compareRowIndex = compareRowIndexForEnv(bundle, targetEnv)
 	m.invalidateCompareTabCaches()
 	m.ensureCompareRowVisible(pane, bundle)
-	m.setStatusMessage(statusMsg{text: fmt.Sprintf("Compare %s ↔ %s", targetEnv, baselineEnv), level: statusInfo})
+	m.setStatusMessage(
+		statusMsg{text: fmt.Sprintf("Compare %s ↔ %s", targetEnv, baselineEnv), level: statusInfo},
+	)
 	cmds = append(cmds, m.syncResponsePanes())
 	return tea.Batch(cmds...)
 }

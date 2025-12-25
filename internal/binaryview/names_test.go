@@ -10,7 +10,11 @@ func TestFilenameHintDisposition(t *testing.T) {
 }
 
 func TestFilenameHintDispositionRFC5987(t *testing.T) {
-	name := FilenameHint(`attachment; filename*=UTF-8''d%20%5Ba%5D.txt`, "", "application/octet-stream")
+	name := FilenameHint(
+		`attachment; filename*=UTF-8''d%20%5Ba%5D.txt`,
+		"",
+		"application/octet-stream",
+	)
 	if name != "d [a].txt" {
 		t.Fatalf("expected decoded RFC 5987 filename, got %q", name)
 	}

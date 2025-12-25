@@ -6,7 +6,9 @@ import (
 	"strings"
 )
 
-var methodRe = regexp.MustCompile(`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|WS|WSS)\b`)
+var methodRe = regexp.MustCompile(
+	`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|WS|WSS)\b`,
+)
 
 func IsMethodLine(line string) bool {
 	return methodRe.MatchString(line)

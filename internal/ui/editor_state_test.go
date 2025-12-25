@@ -112,7 +112,11 @@ func TestRequestEditorMotionGG(t *testing.T) {
 	}
 	pos := editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 2 {
-		t.Fatalf("expected cursor at line 0, column 2; got line %d, column %d", pos.Line, pos.Column)
+		t.Fatalf(
+			"expected cursor at line 0, column 2; got line %d, column %d",
+			pos.Line,
+			pos.Column,
+		)
 	}
 	if editor.pendingMotion != "" {
 		t.Fatalf("expected pending motion to be cleared, got %q", editor.pendingMotion)
@@ -127,7 +131,11 @@ func TestRequestEditorMotionG(t *testing.T) {
 	editor = applyMotion(t, editor, "G")
 	pos := editor.caretPosition()
 	if pos.Line != 2 || pos.Column != 3 {
-		t.Fatalf("expected cursor at last line first non-blank (2,3); got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf(
+			"expected cursor at last line first non-blank (2,3); got (%d,%d)",
+			pos.Line,
+			pos.Column,
+		)
 	}
 }
 
@@ -139,14 +147,22 @@ func TestRequestEditorMotionCaret(t *testing.T) {
 	editor = applyMotion(t, editor, "^")
 	pos := editor.caretPosition()
 	if pos.Line != 0 || pos.Column != 3 {
-		t.Fatalf("expected caret to move to first non-blank of line 0 (3); got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf(
+			"expected caret to move to first non-blank of line 0 (3); got (%d,%d)",
+			pos.Line,
+			pos.Column,
+		)
 	}
 
 	editorPtr.moveCursorTo(1, 0)
 	editor = applyMotion(t, editor, "^")
 	pos = editor.caretPosition()
 	if pos.Line != 1 || pos.Column != 4 {
-		t.Fatalf("expected caret to align after tab on line 1 (column 4); got (%d,%d)", pos.Line, pos.Column)
+		t.Fatalf(
+			"expected caret to align after tab on line 1 (column 4); got (%d,%d)",
+			pos.Line,
+			pos.Column,
+		)
 	}
 
 	editorPtr.moveCursorTo(2, 0)
@@ -356,7 +372,9 @@ func TestUndoRestoresViewStart(t *testing.T) {
 	editorPtr.moveCursorTo(45, 0)
 	start := editor.caretPosition()
 	editorPtr.startSelection(start, selectionManual)
-	editorPtr.selection.Update(cursorPosition{Line: 46, Column: 0, Offset: editor.offsetForPosition(46, 0)})
+	editorPtr.selection.Update(
+		cursorPosition{Line: 46, Column: 0, Offset: editor.offsetForPosition(46, 0)},
+	)
 	editorPtr.applySelectionHighlight()
 
 	editor, _ = editor.DeleteSelection()
@@ -446,7 +464,8 @@ func TestDeleteCharAtCursorRemovesSelection(t *testing.T) {
 	if evt.status == nil {
 		t.Fatalf("expected selection deletion status, got %+v", evt.status)
 	}
-	if evt.status.text != "Deleted selection" && !strings.Contains(evt.status.text, "Clipboard unavailable") {
+	if evt.status.text != "Deleted selection" &&
+		!strings.Contains(evt.status.text, "Clipboard unavailable") {
 		t.Fatalf("unexpected selection deletion status, got %+v", evt.status)
 	}
 	if editor.hasSelection() {
@@ -534,7 +553,11 @@ func TestPasteClipboardLinewiseRepeatedKeepsOrder(t *testing.T) {
 	}
 	pos := editor.caretPosition()
 	if pos.Line != 1 || pos.Column != 0 {
-		t.Fatalf("expected cursor on inserted line after first paste, got line %d col %d", pos.Line, pos.Column)
+		t.Fatalf(
+			"expected cursor on inserted line after first paste, got line %d col %d",
+			pos.Line,
+			pos.Column,
+		)
 	}
 
 	editor, _ = editor.PasteClipboard(true)
@@ -543,7 +566,11 @@ func TestPasteClipboardLinewiseRepeatedKeepsOrder(t *testing.T) {
 	}
 	pos = editor.caretPosition()
 	if pos.Line != 2 || pos.Column != 0 {
-		t.Fatalf("expected cursor on latest inserted line, got line %d col %d", pos.Line, pos.Column)
+		t.Fatalf(
+			"expected cursor on latest inserted line, got line %d col %d",
+			pos.Line,
+			pos.Column,
+		)
 	}
 }
 
@@ -970,7 +997,11 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 
 	wantContent := "# @trace dns<=50ms "
 	if got := editor.Value(); got != wantContent {
-		t.Fatalf("unexpected editor content after trace insertion:\nwant %q\n got %q", wantContent, got)
+		t.Fatalf(
+			"unexpected editor content after trace insertion:\nwant %q\n got %q",
+			wantContent,
+			got,
+		)
 	}
 
 	pos := editor.caretPosition()

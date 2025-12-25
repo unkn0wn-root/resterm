@@ -151,7 +151,12 @@ func (m *Model) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Use
 	return uses
 }
 
-func (m *Model) rtsVars(doc *restfile.Document, req *restfile.Request, envName string, extras ...map[string]string) map[string]string {
+func (m *Model) rtsVars(
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName string,
+	extras ...map[string]string,
+) map[string]string {
 	res := m.collectVariables(doc, req, envName)
 	for _, extra := range extras {
 		for k, v := range extra {
@@ -161,7 +166,12 @@ func (m *Model) rtsVars(doc *restfile.Document, req *restfile.Request, envName s
 	return res
 }
 
-func (m *Model) rtsVarsSafe(doc *restfile.Document, req *restfile.Request, envName string, extras ...map[string]string) map[string]string {
+func (m *Model) rtsVarsSafe(
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName string,
+	extras ...map[string]string,
+) map[string]string {
 	res := make(map[string]string)
 	if env := vars.EnvValues(m.cfg.EnvironmentSet, envName); len(env) > 0 {
 		for k, v := range env {
@@ -227,7 +237,13 @@ func rtsHTTP(resp *httpclient.Response) *rts.Resp {
 		vv := append([]string(nil), v...)
 		h[k] = vv
 	}
-	return &rts.Resp{Status: resp.Status, Code: resp.StatusCode, H: h, Body: resp.Body, URL: resp.EffectiveURL}
+	return &rts.Resp{
+		Status: resp.Status,
+		Code:   resp.StatusCode,
+		H:      h,
+		Body:   resp.Body,
+		URL:    resp.EffectiveURL,
+	}
 }
 
 func rtsTrace(resp *httpclient.Response) *rts.Trace {
@@ -270,7 +286,15 @@ func (m *Model) rtsTrace() *rts.Trace {
 	return nil
 }
 
-func (m *Model) rtsEval(ctx context.Context, doc *restfile.Document, req *restfile.Request, envName, base string, safe bool, extraVals map[string]rts.Value, extras ...map[string]string) vars.ExprEval {
+func (m *Model) rtsEval(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	safe bool,
+	extraVals map[string]rts.Value,
+	extras ...map[string]string,
+) vars.ExprEval {
 	if m.rtsEng == nil {
 		m.rtsEng = rts.NewEng()
 	}
