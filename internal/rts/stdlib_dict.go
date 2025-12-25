@@ -11,22 +11,16 @@ func stdlibDictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err != nil {
 		return Null(), err
 	}
-	if len(m) == 0 {
-		return List(nil), nil
-	}
-	if err := chkList(ctx, pos, len(m)); err != nil {
+	keys, err := dictKeys(ctx, pos, m)
+	if err != nil {
 		return Null(), err
 	}
-
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	if len(keys) == 0 {
+		return List(nil), nil
 	}
-
-	sort.Strings(keys)
-	out := make([]Value, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, Str(k))
+	out := make([]Value, len(keys))
+	for i, k := range keys {
+		out[i] = Str(k)
 	}
 	return List(out), nil
 }
@@ -40,22 +34,16 @@ func stdlibDictValues(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err != nil {
 		return Null(), err
 	}
-	if len(m) == 0 {
-		return List(nil), nil
-	}
-	if err := chkList(ctx, pos, len(m)); err != nil {
+	keys, err := dictKeys(ctx, pos, m)
+	if err != nil {
 		return Null(), err
 	}
-
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	if len(keys) == 0 {
+		return List(nil), nil
 	}
-
-	sort.Strings(keys)
-	out := make([]Value, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, m[k])
+	out := make([]Value, len(keys))
+	for i, k := range keys {
+		out[i] = m[k]
 	}
 	return List(out), nil
 }
@@ -69,28 +57,19 @@ func stdlibDictItems(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err != nil {
 		return Null(), err
 	}
-
-	if len(m) == 0 {
-		return List(nil), nil
-	}
-
-	if err := chkList(ctx, pos, len(m)); err != nil {
+	keys, err := dictKeys(ctx, pos, m)
+	if err != nil {
 		return Null(), err
 	}
-
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+	if len(keys) == 0 {
+		return List(nil), nil
 	}
-
-	sort.Strings(keys)
-	out := make([]Value, 0, len(keys))
-	for _, k := range keys {
-		item := map[string]Value{
+	out := make([]Value, len(keys))
+	for i, k := range keys {
+		out[i] = Dict(map[string]Value{
 			"key":   Str(k),
 			"value": m[k],
-		}
-		out = append(out, Dict(item))
+		})
 	}
 	return List(out), nil
 }
@@ -165,4 +144,19 @@ func stdlibDictRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 	return Dict(out), nil
+}
+
+func dictKeys(ctx *Ctx, pos Pos, m map[string]Value) ([]string, error) {
+	if len(m) == 0 {
+		return nil, nil
+	}
+	if err := chkList(ctx, pos, len(m)); err != nil {
+		return nil, err
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys, nil
 }

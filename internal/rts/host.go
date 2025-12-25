@@ -12,11 +12,7 @@ type mapObj struct {
 }
 
 func newMapObj(name string, src map[string]string) *mapObj {
-	out := make(map[string]string, len(src))
-	for k, v := range src {
-		out[strings.ToLower(k)] = v
-	}
-	return &mapObj{name: name, m: out}
+	return &mapObj{name: name, m: lowerMap(src)}
 }
 
 func (o *mapObj) TypeName() string { return o.name }
@@ -31,11 +27,7 @@ func (o *mapObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".require", o.requireFn), true
 	}
 
-	v, ok := o.m[strings.ToLower(name)]
-	if !ok {
-		return Null(), false
-	}
-	return Str(v), true
+	return mapMember(o.m, name)
 }
 
 func (o *mapObj) CallMember(name string, args []Value) (Value, error) {
@@ -43,63 +35,19 @@ func (o *mapObj) CallMember(name string, args []Value) (Value, error) {
 }
 
 func (o *mapObj) Index(key Value) (Value, error) {
-	k, err := toKey(Pos{}, key)
-	if err != nil {
-		return Null(), err
-	}
-
-	v, ok := o.m[strings.ToLower(k)]
-	if !ok {
-		return Null(), nil
-	}
-	return Str(v), nil
+	return mapIndex(o.m, key)
 }
 
 func (o *mapObj) getFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "%s.get(name) expects 1 arg", o.name)
-	}
-
-	k, err := toKey(pos, args[0])
-	if err != nil {
-		return Null(), wrapErr(ctx, err)
-	}
-
-	v, ok := o.m[strings.ToLower(k)]
-	if !ok {
-		return Null(), nil
-	}
-	return Str(v), nil
+	return mapGet(ctx, pos, args, o.name, o.m)
 }
 
 func (o *mapObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "%s.has(name) expects 1 arg", o.name)
-	}
-
-	k, err := toKey(pos, args[0])
-	if err != nil {
-		return Null(), wrapErr(ctx, err)
-	}
-
-	_, ok := o.m[strings.ToLower(k)]
-	return Bool(ok), nil
+	return mapHas(ctx, pos, args, o.name, o.m)
 }
 
 func (o *mapObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := o.name + ".require(name[, msg])"
-	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
-		return Null(), err
-	}
-	k, err := keyArg(ctx, pos, args[0], sig)
-	if err != nil {
-		return Null(), err
-	}
-	v, ok := o.m[strings.ToLower(k)]
-	if ok && strings.TrimSpace(v) != "" {
-		return Str(v), nil
-	}
-	return Null(), reqErr(ctx, pos, o.name, k, args)
+	return mapRequire(ctx, pos, args, o.name, o.m)
 }
 
 type Resp struct {

@@ -300,54 +300,15 @@ func reqQuery(r *Req) map[string]Value {
 	if r == nil {
 		return map[string]Value{}
 	}
-	q := r.Q
-	if len(q) == 0 && r.URL != "" {
-		q = parseReqQuery(r.URL)
+	vals := url.Values(r.Q)
+	if len(vals) == 0 && r.URL != "" {
+		q, err := parseQuery(r.URL)
+		if err == nil {
+			vals = q
+		}
 	}
-	if len(q) == 0 {
+	if len(vals) == 0 {
 		return map[string]Value{}
 	}
-	out := make(map[string]Value, len(q))
-	for k, v := range q {
-		if len(v) == 0 {
-			out[k] = Str("")
-			continue
-		}
-		if len(v) == 1 {
-			out[k] = Str(v[0])
-			continue
-		}
-		items := make([]Value, 0, len(v))
-		for _, it := range v {
-			items = append(items, Str(it))
-		}
-		out[k] = List(items)
-	}
-	return out
-}
-
-func parseReqQuery(raw string) map[string][]string {
-	idx := strings.Index(raw, "?")
-	if idx < 0 {
-		return nil
-	}
-	q := raw[idx+1:]
-	if cut := strings.Index(q, "#"); cut >= 0 {
-		q = q[:cut]
-	}
-	if strings.TrimSpace(q) == "" {
-		return nil
-	}
-	vals, err := url.ParseQuery(q)
-	if err != nil || len(vals) == 0 {
-		return nil
-	}
-	out := make(map[string][]string, len(vals))
-	for k, v := range vals {
-		if len(v) == 0 {
-			continue
-		}
-		out[k] = append([]string(nil), v...)
-	}
-	return out
+	return valuesDict(vals)
 }

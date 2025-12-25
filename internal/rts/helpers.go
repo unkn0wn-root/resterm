@@ -30,16 +30,7 @@ func dictArg(ctx *Ctx, pos Pos, v Value, sig string) (map[string]Value, error) {
 }
 
 func cloneDict(in map[string]Value) map[string]Value {
-	if len(in) == 0 {
-		return map[string]Value{}
-	}
-
-	out := make(map[string]Value, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-
-	return out
+	return cloneMap(in)
 }
 
 func keyArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {

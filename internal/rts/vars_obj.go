@@ -50,17 +50,6 @@ func newGlobalObj(name string, globals map[string]string, mut GlobalMut) *global
 	return &globalObj{name: name, m: lowerMap(globals), mut: mut}
 }
 
-func lowerMap(src map[string]string) map[string]string {
-	if len(src) == 0 {
-		return map[string]string{}
-	}
-	out := make(map[string]string, len(src))
-	for k, v := range src {
-		out[lowerKey(k)] = v
-	}
-	return out
-}
-
 func (o *varsObj) TypeName() string { return o.name }
 
 func (o *varsObj) GetMember(name string) (Value, bool) {
@@ -77,12 +66,7 @@ func (o *varsObj) GetMember(name string) (Value, bool) {
 		return Obj(o.g), true
 	}
 
-	key := lowerKey(name)
-	v, ok := o.m[key]
-	if !ok {
-		return Null(), false
-	}
-	return Str(v), true
+	return mapMember(o.m, name)
 }
 
 func (o *varsObj) CallMember(name string, args []Value) (Value, error) {
@@ -90,62 +74,19 @@ func (o *varsObj) CallMember(name string, args []Value) (Value, error) {
 }
 
 func (o *varsObj) Index(key Value) (Value, error) {
-	k, err := toKey(Pos{}, key)
-	if err != nil {
-		return Null(), err
-	}
-	lk := lowerKey(k)
-	v, ok := o.m[lk]
-	if !ok {
-		return Null(), nil
-	}
-	return Str(v), nil
+	return mapIndex(o.m, key)
 }
 
 func (o *varsObj) getFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, o.name+".get(name)"); err != nil {
-		return Null(), err
-	}
-	k, err := toKey(pos, args[0])
-	if err != nil {
-		return Null(), wrapErr(ctx, err)
-	}
-	key := lowerKey(k)
-	v, ok := o.m[key]
-	if !ok {
-		return Null(), nil
-	}
-	return Str(v), nil
+	return mapGet(ctx, pos, args, o.name, o.m)
 }
 
 func (o *varsObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, o.name+".has(name)"); err != nil {
-		return Null(), err
-	}
-	k, err := toKey(pos, args[0])
-	if err != nil {
-		return Null(), wrapErr(ctx, err)
-	}
-	key := lowerKey(k)
-	_, ok := o.m[key]
-	return Bool(ok), nil
+	return mapHas(ctx, pos, args, o.name, o.m)
 }
 
 func (o *varsObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := o.name + ".require(name[, msg])"
-	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
-		return Null(), err
-	}
-	k, err := keyArg(ctx, pos, args[0], sig)
-	if err != nil {
-		return Null(), err
-	}
-	key := lowerKey(k)
-	v, ok := o.m[key]
-	if ok && strings.TrimSpace(v) != "" {
-		return Str(v), nil
-	}
-	return Null(), reqErr(ctx, pos, o.name, k, args)
+	return mapRequire(ctx, pos, args, o.name, o.m)
 }
 
 func (o *varsObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
@@ -185,12 +126,7 @@ func (o *globalObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".require", o.requireFn), true
 	}
 
-	key := lowerKey(name)
-	v, ok := o.m[key]
-	if !ok {
-		return Null(), false
-	}
-	return Str(v), true
+	return mapMember(o.m, name)
 }
 
 func (o *globalObj) CallMember(name string, args []Value) (Value, error) {
@@ -198,62 +134,19 @@ func (o *globalObj) CallMember(name string, args []Value) (Value, error) {
 }
 
 func (o *globalObj) Index(key Value) (Value, error) {
-	k, err := toKey(Pos{}, key)
-	if err != nil {
-		return Null(), err
-	}
-	lk := lowerKey(k)
-	v, ok := o.m[lk]
-	if !ok {
-		return Null(), nil
-	}
-	return Str(v), nil
+	return mapIndex(o.m, key)
 }
 
 func (o *globalObj) getFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, o.name+".get(name)"); err != nil {
-		return Null(), err
-	}
-	k, err := toKey(pos, args[0])
-	if err != nil {
-		return Null(), wrapErr(ctx, err)
-	}
-	key := lowerKey(k)
-	v, ok := o.m[key]
-	if !ok {
-		return Null(), nil
-	}
-	return Str(v), nil
+	return mapGet(ctx, pos, args, o.name, o.m)
 }
 
 func (o *globalObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, o.name+".has(name)"); err != nil {
-		return Null(), err
-	}
-	k, err := toKey(pos, args[0])
-	if err != nil {
-		return Null(), wrapErr(ctx, err)
-	}
-	key := lowerKey(k)
-	_, ok := o.m[key]
-	return Bool(ok), nil
+	return mapHas(ctx, pos, args, o.name, o.m)
 }
 
 func (o *globalObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := o.name + ".require(name[, msg])"
-	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
-		return Null(), err
-	}
-	k, err := keyArg(ctx, pos, args[0], sig)
-	if err != nil {
-		return Null(), err
-	}
-	key := lowerKey(k)
-	v, ok := o.m[key]
-	if ok && strings.TrimSpace(v) != "" {
-		return Str(v), nil
-	}
-	return Null(), reqErr(ctx, pos, o.name, k, args)
+	return mapRequire(ctx, pos, args, o.name, o.m)
 }
 
 func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
