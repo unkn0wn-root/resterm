@@ -6,6 +6,7 @@ func stdlibDictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, "dict.keys(dict)"); err != nil {
 		return Null(), err
 	}
+
 	m, err := dictArg(ctx, pos, args[0], "dict.keys(dict)")
 	if err != nil {
 		return Null(), err
@@ -16,10 +17,12 @@ func stdlibDictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := chkList(ctx, pos, len(m)); err != nil {
 		return Null(), err
 	}
+
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}
+
 	sort.Strings(keys)
 	out := make([]Value, 0, len(keys))
 	for _, k := range keys {
@@ -155,6 +158,7 @@ func stdlibDictRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err != nil {
 		return Null(), err
 	}
+
 	out := cloneDict(m)
 	delete(out, key)
 	if err := chkDict(ctx, pos, len(out)); err != nil {

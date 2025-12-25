@@ -165,6 +165,7 @@ func stdlibWithReq(req *requestObj) map[string]Value {
 			top++
 		}
 	}
+
 	out := make(map[string]Value, len(core)+top+2)
 	addVals(out, core)
 	std := &objMap{name: "stdlib", m: make(map[string]Value, len(core)+len(spec))}
@@ -176,6 +177,7 @@ func stdlibWithReq(req *requestObj) map[string]Value {
 		}
 		std.m[s.name] = Obj(o)
 	}
+
 	out["stdlib"] = Obj(std)
 	if req != nil {
 		out["request"] = Obj(req)
