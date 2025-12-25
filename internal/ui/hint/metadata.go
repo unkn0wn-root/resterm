@@ -27,7 +27,7 @@ var MetaCatalog = []Hint{
 	{Label: "@const", Summary: "Define a reusable constant"},
 	{Label: "@use", Summary: "Import a RestermScript module"},
 	{Label: "@script", Summary: "Start a pre-request or test script block"},
-	{Label: "@apply", Summary: "Apply a RestermLang patch before pre-request scripts"},
+	{Label: "@apply", Summary: "Apply a RestermScript patch before pre-request scripts"},
 	{
 		Label:   "@when",
 		Aliases: []string{"@skip-if"},
@@ -71,6 +71,36 @@ var MetaCatalog = []Hint{
 	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
 }
 
+var scriptHints = []Hint{
+	{Label: "pre-request", Summary: "Run script before the request"},
+	{Label: "test", Summary: "Run script after the response"},
+	{
+		Label:   "lang=rts",
+		Aliases: []string{"language=rts"},
+		Summary: "Use RestermScript (RST)",
+	},
+	{
+		Label:   "lang=js",
+		Aliases: []string{"language=js"},
+		Summary: "Use JavaScript (Goja)",
+	},
+}
+
+var workflowRunHints = []Hint{
+	{
+		Label:      "run=",
+		Summary:    "Run workflow step",
+		Insert:     "run=StepName",
+		CursorBack: len("StepName"),
+	},
+	{
+		Label:      "fail=",
+		Summary:    "Fail workflow branch with message",
+		Insert:     "fail=\"message\"",
+		CursorBack: len("\"message\""),
+	},
+}
+
 var metaSub = map[string][]Hint{
 	"body": {
 		{Label: "expand", Summary: "Expand templates before sending the body"},
@@ -96,10 +126,12 @@ var metaSub = map[string][]Hint{
 			CursorBack: len("250ms"),
 		},
 	},
-	"script": {
-		{Label: "pre-request", Summary: "Run script before the request"},
-		{Label: "test", Summary: "Run script after the response"},
-	},
+	"script":  scriptHints,
+	"if":      workflowRunHints,
+	"elif":    workflowRunHints,
+	"else":    workflowRunHints,
+	"case":    workflowRunHints,
+	"default": workflowRunHints,
 	"trace": {
 		{Label: "enabled=true", Summary: "Turn tracing on"},
 		{Label: "enabled=false", Summary: "Turn tracing off"},
