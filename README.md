@@ -110,13 +110,7 @@ GET https://api.example.com/users/{{= auth.userId(vars.get("user")) }}
 Authorization: Bearer {{= auth.token(env.get("token")) }}
 ```
 
-What it adds to Resterm:
-- **Bounded execution** with step limits and no network or file writes by default (file reads are opt-in through `json.file`).
-- **Clear intent** for request-time logic: computed headers, conditional steps, assertions, and simple loops live next to the request.
-- **Reusable helpers** via `.rts` modules without dragging in a whole JS toolchain.
-- **Debuggability** with errors that point to file/line/column and show a call stack.
-
-Full reference: `docs/restermscript.md`.
+Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 ## Installation
 
