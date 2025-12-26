@@ -563,6 +563,50 @@ func TestNavigatorBuildsDirectoryTree(t *testing.T) {
 	}
 }
 
+func TestNavigatorDirFirstSort(t *testing.T) {
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, "alpha")
+	nested := filepath.Join(dir, "beta")
+	rootFile := filepath.Join(tmp, "zeta.http")
+	dirFile := filepath.Join(dir, "a.http")
+	nestedFile := filepath.Join(nested, "b.http")
+
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", nested, err)
+	}
+	writeSampleFile(t, rootFile, "### root\nGET https://example.com\n")
+	writeSampleFile(t, dirFile, "### a\nGET https://example.com/a\n")
+	writeSampleFile(t, nestedFile, "### b\nGET https://example.com/b\n")
+
+	model := New(Config{WorkspaceRoot: tmp, Recursive: true})
+	m := &model
+
+	rows := m.navigator.Rows()
+	if len(rows) < 2 {
+		t.Fatalf("expected at least 2 rows, got %d", len(rows))
+	}
+	if rows[0].Node == nil || rows[0].Node.Kind != navigator.KindDir {
+		t.Fatalf("expected first row to be dir, got %+v", rows[0].Node)
+	}
+	if rows[1].Node == nil || rows[1].Node.Kind != navigator.KindFile {
+		t.Fatalf("expected second row to be file, got %+v", rows[1].Node)
+	}
+
+	dirNode := m.navigator.Find("dir:" + dir)
+	if dirNode == nil {
+		t.Fatalf("expected dir node for %s", dir)
+	}
+	if len(dirNode.Children) < 2 {
+		t.Fatalf("expected dir node to have children, got %d", len(dirNode.Children))
+	}
+	if dirNode.Children[0].Kind != navigator.KindDir || dirNode.Children[0].Title != "beta" {
+		t.Fatalf("expected nested dir first under %s", dir)
+	}
+	if dirNode.Children[1].Kind != navigator.KindFile || dirNode.Children[1].Title != "a.http" {
+		t.Fatalf("expected file after dir under %s", dir)
+	}
+}
+
 func TestNavigatorEscClearsFilters(t *testing.T) {
 	model := New(Config{})
 	m := &model

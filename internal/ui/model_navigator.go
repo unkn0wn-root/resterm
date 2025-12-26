@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -76,6 +77,7 @@ func (m *Model) buildNavTree(entries []filesvc.FileEntry) []*navigator.Node[any]
 		}
 		add(p, m.buildFileNode(e))
 	}
+	sortNavNodes(root)
 	return root
 }
 
@@ -540,6 +542,55 @@ func samePath(a, b string) bool {
 		return false
 	}
 	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func sortNavNodes(nodes []*navigator.Node[any]) {
+	if len(nodes) == 0 {
+		return
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		a := nodes[i]
+		b := nodes[j]
+		wa := navKindRank(a)
+		wb := navKindRank(b)
+		if wa != wb {
+			return wa < wb
+		}
+		at := ""
+		bt := ""
+		if a != nil {
+			at = a.Title
+		}
+		if b != nil {
+			bt = b.Title
+		}
+		if at == bt {
+			if a == nil || b == nil {
+				return a != nil
+			}
+			return a.ID < b.ID
+		}
+		return at < bt
+	})
+	for _, n := range nodes {
+		if n != nil && n.Kind == navigator.KindDir {
+			sortNavNodes(n.Children)
+		}
+	}
+}
+
+func navKindRank(n *navigator.Node[any]) int {
+	if n == nil {
+		return 2
+	}
+	switch n.Kind {
+	case navigator.KindDir:
+		return 0
+	case navigator.KindFile:
+		return 1
+	default:
+		return 2
+	}
 }
 
 func relParts(name string) []string {
