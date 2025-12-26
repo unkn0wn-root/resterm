@@ -446,6 +446,35 @@ If `SSH_AUTH_SOCK` is set, the SSH agent is also used by default.
 | `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
 
+### RestermScript (RST)
+
+RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. It is separate from Goja `@script` blocks and is the default for directive logic. Full reference: `docs/restermscript.md`.
+
+#### Request-scoped RST directives
+
+| Directive | Syntax | Description |
+| --- | --- | --- |
+| `@use` | `# @use ./rts/helpers.rts as helpers` | Import an RST module (valid at file or request scope). |
+| `@apply` | `# @apply {headers: {"X-Test": "1"}}` | Apply a patch to method/url/headers/query/body/vars before pre-request scripts. |
+| `@when` | `# @when vars.has("token")` | Run the request only when the expression is truthy. |
+| `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |
+| `@assert` | `# @assert response.statusCode == 200` | Evaluate an assertion after the response arrives. |
+| `@for-each` | `# @for-each json.file("users.json") as user` | Repeat the request for each item in a list. |
+| `@script pre-request lang=rts` | `# @script pre-request lang=rts` | Run a pre-request RST block with request/vars mutation helpers. |
+
+#### Workflow-only RST directives
+
+| Directive | Syntax | Description |
+| --- | --- | --- |
+| `@if` / `@elif` / `@else` | `# @if last.statusCode == 200 run=StepOK` | Branch workflow steps based on expressions. |
+| `@switch` / `@case` / `@default` | `# @switch last.statusCode` | Choose a workflow branch based on a switch expression. |
+| `@for-each` | `# @for-each json.file("users.json") as user` | Repeat a workflow step for each item in a list. |
+
+Notes:
+
+- `@when` / `@skip-if` gate requests; `@if` / `@switch` branch workflows.
+- `@for-each` is available in both contexts; it repeats a request or a workflow step depending on scope.
+
 ### Transport settings example
 
 ```http
