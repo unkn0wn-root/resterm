@@ -9,6 +9,14 @@
 </p>
 
 <p align="center">
+  <strong>Resterm Script</strong>
+</p>
+
+<p align="center">
+  <img src="_media/restermscript.png" alt="Screenshot of resterm with resterm rcript" width="720" />
+</p>
+
+<p align="center">
   <strong>Trace and Timeline</strong>
 </p>
 
