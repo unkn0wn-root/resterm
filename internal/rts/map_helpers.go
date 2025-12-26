@@ -2,6 +2,20 @@ package rts
 
 import "strings"
 
+type ms struct {
+	g string
+	h string
+	r string
+}
+
+func newMS(n string) ms {
+	return ms{
+		g: n + ".get(name)",
+		h: n + ".has(name)",
+		r: n + ".require(name[, msg])",
+	}
+}
+
 func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 	if len(m) == 0 {
 		return map[K]V{}
@@ -49,8 +63,7 @@ func mapIndex(m map[string]string, key Value) (Value, error) {
 	return Str(v), nil
 }
 
-func mapGet(ctx *Ctx, pos Pos, args []Value, name string, m map[string]string) (Value, error) {
-	sig := name + ".get(name)"
+func mapGet(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, sig); err != nil {
 		return Null(), err
 	}
@@ -65,8 +78,7 @@ func mapGet(ctx *Ctx, pos Pos, args []Value, name string, m map[string]string) (
 	return Str(v), nil
 }
 
-func mapHas(ctx *Ctx, pos Pos, args []Value, name string, m map[string]string) (Value, error) {
-	sig := name + ".has(name)"
+func mapHas(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (Value, error) {
 	if err := argCount(ctx, pos, args, 1, sig); err != nil {
 		return Null(), err
 	}
@@ -78,8 +90,7 @@ func mapHas(ctx *Ctx, pos Pos, args []Value, name string, m map[string]string) (
 	return Bool(ok), nil
 }
 
-func mapRequire(ctx *Ctx, pos Pos, args []Value, name string, m map[string]string) (Value, error) {
-	sig := name + ".require(name[, msg])"
+func mapRequire(ctx *Ctx, pos Pos, args []Value, sig, obj string, m map[string]string) (Value, error) {
 	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
 		return Null(), err
 	}
@@ -91,5 +102,5 @@ func mapRequire(ctx *Ctx, pos Pos, args []Value, name string, m map[string]strin
 	if ok && strings.TrimSpace(v) != "" {
 		return Str(v), nil
 	}
-	return Null(), reqErr(ctx, pos, name, k, args)
+	return Null(), reqErr(ctx, pos, obj, k, args)
 }

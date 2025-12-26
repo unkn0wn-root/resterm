@@ -300,15 +300,12 @@ func reqQuery(r *Req) map[string]Value {
 	if r == nil {
 		return map[string]Value{}
 	}
-	vals := url.Values(r.Q)
-	if len(vals) == 0 && r.URL != "" {
-		q, err := parseQuery(r.URL)
-		if err == nil {
-			vals = q
-		}
+	qv := url.Values(r.Q)
+	if len(qv) == 0 && r.URL != "" {
+		qv = parseURLQuery(r.URL)
 	}
-	if len(vals) == 0 {
+	if len(qv) == 0 {
 		return map[string]Value{}
 	}
-	return valuesDict(vals)
+	return valuesDict(qv)
 }

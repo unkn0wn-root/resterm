@@ -16,12 +16,14 @@ type varsObj struct {
 	m    map[string]string
 	g    *globalObj
 	mut  VarsMut
+	s    ms
 }
 
 type globalObj struct {
 	name string
 	m    map[string]string
 	mut  GlobalMut
+	s    ms
 }
 
 func newVarsObj(
@@ -38,6 +40,7 @@ func newVarsObj(
 		name: name,
 		m:    lowerMap(vars),
 		mut:  mut,
+		s:    newMS(name),
 	}
 	v.g = newGlobalObj(name+".global", globals, gmut)
 	return v
@@ -47,7 +50,7 @@ func newGlobalObj(name string, globals map[string]string, mut GlobalMut) *global
 	if strings.TrimSpace(name) == "" {
 		name = "vars.global"
 	}
-	return &globalObj{name: name, m: lowerMap(globals), mut: mut}
+	return &globalObj{name: name, m: lowerMap(globals), mut: mut, s: newMS(name)}
 }
 
 func (o *varsObj) TypeName() string { return o.name }
@@ -78,15 +81,15 @@ func (o *varsObj) Index(key Value) (Value, error) {
 }
 
 func (o *varsObj) getFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapGet(ctx, pos, args, o.name, o.m)
+	return mapGet(ctx, pos, args, o.s.g, o.m)
 }
 
 func (o *varsObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapHas(ctx, pos, args, o.name, o.m)
+	return mapHas(ctx, pos, args, o.s.h, o.m)
 }
 
 func (o *varsObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapRequire(ctx, pos, args, o.name, o.m)
+	return mapRequire(ctx, pos, args, o.s.r, o.name, o.m)
 }
 
 func (o *varsObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
@@ -138,15 +141,15 @@ func (o *globalObj) Index(key Value) (Value, error) {
 }
 
 func (o *globalObj) getFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapGet(ctx, pos, args, o.name, o.m)
+	return mapGet(ctx, pos, args, o.s.g, o.m)
 }
 
 func (o *globalObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapHas(ctx, pos, args, o.name, o.m)
+	return mapHas(ctx, pos, args, o.s.h, o.m)
 }
 
 func (o *globalObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapRequire(ctx, pos, args, o.name, o.m)
+	return mapRequire(ctx, pos, args, o.s.r, o.name, o.m)
 }
 
 func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {

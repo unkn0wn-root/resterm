@@ -9,10 +9,11 @@ import (
 type mapObj struct {
 	name string
 	m    map[string]string
+	s    ms
 }
 
 func newMapObj(name string, src map[string]string) *mapObj {
-	return &mapObj{name: name, m: lowerMap(src)}
+	return &mapObj{name: name, m: lowerMap(src), s: newMS(name)}
 }
 
 func (o *mapObj) TypeName() string { return o.name }
@@ -39,15 +40,15 @@ func (o *mapObj) Index(key Value) (Value, error) {
 }
 
 func (o *mapObj) getFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapGet(ctx, pos, args, o.name, o.m)
+	return mapGet(ctx, pos, args, o.s.g, o.m)
 }
 
 func (o *mapObj) hasFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapHas(ctx, pos, args, o.name, o.m)
+	return mapHas(ctx, pos, args, o.s.h, o.m)
 }
 
 func (o *mapObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return mapRequire(ctx, pos, args, o.name, o.m)
+	return mapRequire(ctx, pos, args, o.s.r, o.name, o.m)
 }
 
 type Resp struct {
