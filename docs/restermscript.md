@@ -1,13 +1,13 @@
-# RestermScript (RST) Technical Reference
+# RestermScript Technical Reference
 
-RestermScript (or RST which you will see quite often throughout the docs) is Resterm's built in expression language for templates, directives, and reusable modules. It is designed to be small, bounded, and easy to review inside request files. JavaScript via Goja is still available, but RestermScript is the preferred option when you want predictable behavior, clear errors, and safe execution.
+RestermScript (or RTS which you will see quite often throughout the docs) is Resterm's built in expression language for templates, directives, and reusable modules. It is designed to be small, bounded, and easy to review inside request files. JavaScript via Goja is still available, but RestermScript is the preferred option when you want predictable behavior, clear errors, and safe execution.
 
 ## Why this even exists
 
-- RST is bounded and predictable because expressions run with strict step limits, cannot perform network operations or file writes, and only read files via `json.file` when file access is enabled.
-- RST is safe because it avoids arbitrary evaluation and does not expose system APIs.
-- RST is clear because the syntax is small and purpose built for request files.
-- RST is debuggable because errors include file, line, and column information along with a call stack.
+- RTS is bounded and predictable because expressions run with strict step limits, cannot perform network operations or file writes, and only read files via `json.file` when file access is enabled.
+- RTS is safe because it avoids arbitrary evaluation and does not expose system APIs.
+- RTS is clear because the syntax is small and purpose built for request files.
+- RTS is debuggable because errors include file, line, and column information along with a call stack.
 
 ## When to use it
 
@@ -141,7 +141,7 @@ This pattern is most useful for optional files, optional JSON bodies, or helper 
 
 ### Types and truthiness
 
-RST has several runtime types.
+RTS has several runtime types.
 
 - Null represents the absence of a value.
 - Bool represents true or false.
@@ -203,7 +203,7 @@ Conditionals evaluate each branch in order and execute the first branch whose co
 
 ### for loops
 
-RST supports several loop forms.
+RTS supports several loop forms.
 
 ```
 for { ... }
@@ -258,7 +258,7 @@ Modules run with stdlib only. The `request` object is available when the host pr
 
 ## Stdlib
 
-RST provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The stdlib is available as `stdlib`; core helpers and namespaces (`base64`, `url`, `time`, `json`, `headers`, `query`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `stdlib`.
+RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The stdlib is available as `stdlib`; core helpers and namespaces (`base64`, `url`, `time`, `json`, `headers`, `query`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `stdlib`.
 
 ### Core helpers
 
