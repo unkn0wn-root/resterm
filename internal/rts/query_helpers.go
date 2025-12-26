@@ -6,15 +6,35 @@ import (
 )
 
 func parseQuery(txt string) (url.Values, error) {
-	if strings.Contains(txt, "?") || strings.Contains(txt, "://") {
+	if hasURLMarkers(txt) {
 		u, err := url.Parse(txt)
 		if err != nil {
 			return nil, err
 		}
 		return u.Query(), nil
 	}
-	trimmed := strings.TrimPrefix(txt, "?")
-	return url.ParseQuery(trimmed)
+	tr := strings.TrimPrefix(txt, "?")
+	return url.ParseQuery(tr)
+}
+
+func parseURLQuery(raw string) url.Values {
+	u := strings.TrimSpace(raw)
+	if u == "" {
+		return url.Values{}
+	}
+	if !hasURLMarkers(u) {
+		return url.Values{}
+	}
+
+	vals, err := parseQuery(u)
+	if err != nil {
+		return url.Values{}
+	}
+	return vals
+}
+
+func hasURLMarkers(s string) bool {
+	return strings.Contains(s, "?") || strings.Contains(s, "://")
 }
 
 func valuesDict(vals url.Values) map[string]Value {

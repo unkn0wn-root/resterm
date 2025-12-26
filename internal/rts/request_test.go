@@ -9,6 +9,7 @@ import (
 
 func TestRequestHostObject(t *testing.T) {
 	e := NewEng()
+	p := Pos{Path: "test", Line: 1, Col: 1}
 	rt := RT{
 		Env:  map[string]string{},
 		Vars: map[string]string{},
@@ -20,7 +21,7 @@ func TestRequestHostObject(t *testing.T) {
 			},
 		},
 	}
-	v, err := e.Eval(context.Background(), rt, "request.method", Pos{Path: "test", Line: 1, Col: 1})
+	v, err := e.Eval(context.Background(), rt, "request.method", p)
 	if err != nil {
 		t.Fatalf("eval request.method: %v", err)
 	}
@@ -31,7 +32,7 @@ func TestRequestHostObject(t *testing.T) {
 		context.Background(),
 		rt,
 		"request.header(\"x-test\")",
-		Pos{Path: "test", Line: 1, Col: 1},
+		p,
 	)
 	if err != nil {
 		t.Fatalf("eval request.header: %v", err)
@@ -39,12 +40,28 @@ func TestRequestHostObject(t *testing.T) {
 	if v.K != VStr || v.S != "ok" {
 		t.Fatalf("expected header ok")
 	}
-	v, err = e.Eval(context.Background(), rt, "request.query.p", Pos{Path: "test", Line: 1, Col: 1})
+	v, err = e.Eval(context.Background(), rt, "request.query.p", p)
 	if err != nil {
 		t.Fatalf("eval request.query: %v", err)
 	}
 	if v.K != VStr || v.S != "1" {
 		t.Fatalf("expected query value 1")
+	}
+	rt.Req.URL = "/path?p=2"
+	v, err = e.Eval(context.Background(), rt, "request.query.p", p)
+	if err != nil {
+		t.Fatalf("eval request.query relative: %v", err)
+	}
+	if v.K != VStr || v.S != "2" {
+		t.Fatalf("expected query value 2")
+	}
+	rt.Req.URL = "/path"
+	v, err = e.Eval(context.Background(), rt, "stdlib.dict.keys(request.query)", p)
+	if err != nil {
+		t.Fatalf("eval request.query keys: %v", err)
+	}
+	if v.K != VList || len(v.L) != 0 {
+		t.Fatalf("expected empty query keys")
 	}
 }
 
