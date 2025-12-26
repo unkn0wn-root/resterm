@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -26,10 +27,7 @@ func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
 		prevNav = m.navigator
 	}
 
-	nodes := make([]*navigator.Node[any], 0, len(entries))
-	for _, entry := range entries {
-		nodes = append(nodes, m.buildFileNode(entry))
-	}
+	nodes := m.buildNavTree(entries)
 	if prevNav != nil {
 		applyNavigatorExpansion(nodes, prevNav)
 	}
@@ -45,13 +43,64 @@ func navigatorRequestID(path string, idx int) string {
 	return fmt.Sprintf("req:%s:%d", path, idx)
 }
 
+func (m *Model) buildNavTree(entries []filesvc.FileEntry) []*navigator.Node[any] {
+	if len(entries) == 0 {
+		return nil
+	}
+
+	root := make([]*navigator.Node[any], 0, len(entries))
+	dirs := make(map[string]*navigator.Node[any])
+	add := func(p, c *navigator.Node[any]) {
+		if p == nil {
+			root = append(root, c)
+			return
+		}
+		p.Children = append(p.Children, c)
+	}
+	for _, e := range entries {
+		parts := relParts(e.Name)
+		if len(parts) == 0 {
+			continue
+		}
+
+		var p *navigator.Node[any]
+		rel := ""
+		for i := 0; i < len(parts)-1; i++ {
+			rel = filepath.Join(rel, parts[i])
+			d, ok := dirs[rel]
+			if !ok {
+				d = m.buildDirNode(parts[i], filepath.Join(m.workspaceRoot, rel))
+				dirs[rel] = d
+				add(p, d)
+			}
+			p = d
+		}
+		add(p, m.buildFileNode(e))
+	}
+	sortNavNodes(root)
+	return root
+}
+
+func (m *Model) buildDirNode(name, path string) *navigator.Node[any] {
+	return &navigator.Node[any]{
+		ID:      "dir:" + path,
+		Title:   name,
+		Kind:    navigator.KindDir,
+		Payload: navigator.Payload[any]{FilePath: path},
+	}
+}
+
 func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 	id := "file:" + entry.Path
 	node := &navigator.Node[any]{
 		ID:      id,
-		Title:   entry.Name,
+		Title:   filepath.Base(entry.Name),
 		Kind:    navigator.KindFile,
 		Payload: navigator.Payload[any]{FilePath: entry.Path, Data: entry},
+	}
+
+	if !filesvc.IsRequestFile(entry.Path) {
+		return node
 	}
 
 	if doc, ok := m.cachedDoc(entry.Path); ok && doc != nil {
@@ -68,6 +117,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil
 	}
+
 	nodes := make([]*navigator.Node[any], 0, len(doc.Requests)+len(doc.Workflows))
 	for idx, req := range doc.Requests {
 		resolver := m.statusResolver(doc, req, m.cfg.EnvironmentName)
@@ -79,6 +129,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 		if !hasName && strings.TrimSpace(title) == strings.TrimSpace(target) {
 			target = ""
 		}
+
 		badges := requestBadges(req)
 		nodes = append(nodes, &navigator.Node[any]{
 			ID:      navigatorRequestID(filePath, idx),
@@ -99,6 +150,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 		if title == "" {
 			title = fmt.Sprintf("Workflow %d", idx+1)
 		}
+
 		desc := condense(strings.TrimSpace(wf.Description), 80)
 		badges := []string{fmt.Sprintf("%d steps", len(wf.Steps))}
 		nodes = append(nodes, &navigator.Node[any]{
@@ -176,11 +228,13 @@ func (m *Model) loadDocFor(path string) *restfile.Document {
 	if doc, ok := m.cachedDoc(path); ok {
 		return doc
 	}
+
 	data, err := os.ReadFile(path)
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: fmt.Sprintf("open failed: %v", err), level: statusError})
 		return nil
 	}
+
 	doc := parser.Parse(path, data)
 	m.cacheDoc(path, doc)
 	return doc
@@ -188,6 +242,9 @@ func (m *Model) loadDocFor(path string) *restfile.Document {
 
 func (m *Model) expandNavigatorFile(path string) {
 	if m.navigator == nil {
+		return
+	}
+	if !filesvc.IsRequestFile(path) {
 		return
 	}
 
@@ -209,14 +266,20 @@ func (m *Model) ensureNavigatorRequestsForFile(path string) {
 	if m.navigator == nil || path == "" {
 		return
 	}
+	if !filesvc.IsRequestFile(path) {
+		return
+	}
+
 	node := m.navigator.Find("file:" + path)
 	if node == nil {
 		return
 	}
+
 	if len(node.Children) == 0 {
 		m.expandNavigatorFile(path)
 		node = m.navigator.Find("file:" + path)
 	}
+
 	if node != nil && !node.Expanded {
 		node.Expanded = true
 		m.navigator.Refresh()
@@ -227,6 +290,7 @@ func (m *Model) ensureNavigatorDataForFilter() {
 	if m.navigator == nil {
 		return
 	}
+
 	filter := strings.TrimSpace(m.navigatorFilter.Value())
 	need := filter != "" || len(m.navigator.MethodFilters()) > 0 ||
 		len(m.navigator.TagFilters()) > 0
@@ -261,6 +325,7 @@ func requestBadges(req *restfile.Request) []string {
 	if req == nil {
 		return nil
 	}
+
 	var b []string
 	switch {
 	case req.WebSocket != nil:
@@ -271,6 +336,7 @@ func requestBadges(req *restfile.Request) []string {
 		b = append(b, "gRPC")
 	default:
 	}
+
 	if req.Metadata.Compare != nil {
 		b = append(b, "CMP")
 	}
@@ -287,6 +353,7 @@ func (m *Model) syncNavigatorSelection() {
 	if m.navigator == nil {
 		return
 	}
+
 	n := m.navigator.Selected()
 	m.syncNavigatorFocus(n)
 	if n == nil {
@@ -295,6 +362,7 @@ func (m *Model) syncNavigatorSelection() {
 		m.workflowList.Select(-1)
 		return
 	}
+
 	path := n.Payload.FilePath
 	switch n.Kind {
 	case navigator.KindRequest:
@@ -346,6 +414,9 @@ func (m *Model) syncNavigatorSelection() {
 		}
 		m.setActiveRequest(nil)
 		m.requestList.Select(-1)
+	case navigator.KindDir:
+		m.setActiveRequest(nil)
+		m.requestList.Select(-1)
 	default:
 		m.setActiveRequest(nil)
 		m.requestList.Select(-1)
@@ -361,7 +432,7 @@ func (m *Model) syncNavigatorFocus(n *navigator.Node[any]) {
 		_ = m.setFocus(focusRequests)
 	case navigator.KindWorkflow:
 		_ = m.setFocus(focusWorkflows)
-	case navigator.KindFile:
+	case navigator.KindFile, navigator.KindDir:
 		_ = m.setFocus(focusFile)
 	}
 }
@@ -398,6 +469,7 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	if line == m.lastCursorLine && m.lastCursorFile == m.currentFile && m.lastCursorDoc == m.doc {
 		return
 	}
+
 	req, reqIdx := requestAtLine(m.doc, line)
 	if req == nil && len(m.doc.Requests) > 0 {
 		lastIdx := len(m.doc.Requests) - 1
@@ -447,6 +519,7 @@ func applyNavigatorExpansion(nodes []*navigator.Node[any], prev *navigator.Model
 	if prev == nil || len(nodes) == 0 {
 		return
 	}
+
 	var walk func(n *navigator.Node[any])
 	walk = func(n *navigator.Node[any]) {
 		if n == nil {
@@ -469,4 +542,71 @@ func samePath(a, b string) bool {
 		return false
 	}
 	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func sortNavNodes(nodes []*navigator.Node[any]) {
+	if len(nodes) == 0 {
+		return
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		a := nodes[i]
+		b := nodes[j]
+		wa := navKindRank(a)
+		wb := navKindRank(b)
+		if wa != wb {
+			return wa < wb
+		}
+		at := ""
+		bt := ""
+		if a != nil {
+			at = a.Title
+		}
+		if b != nil {
+			bt = b.Title
+		}
+		if at == bt {
+			if a == nil || b == nil {
+				return a != nil
+			}
+			return a.ID < b.ID
+		}
+		return at < bt
+	})
+	for _, n := range nodes {
+		if n != nil && n.Kind == navigator.KindDir {
+			sortNavNodes(n.Children)
+		}
+	}
+}
+
+func navKindRank(n *navigator.Node[any]) int {
+	if n == nil {
+		return 2
+	}
+	switch n.Kind {
+	case navigator.KindDir:
+		return 0
+	case navigator.KindFile:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func relParts(name string) []string {
+	clean := filepath.Clean(name)
+	if clean == "" || clean == "." {
+		return nil
+	}
+
+	clean = filepath.ToSlash(clean)
+	parts := strings.Split(clean, "/")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p == "" || p == "." {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }

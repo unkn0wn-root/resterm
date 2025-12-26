@@ -77,3 +77,22 @@ func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 		t.Fatalf("expected request summary to remain in list row, got %q", clean)
 	}
 }
+
+func TestRenderRTSUsesModuleIndicator(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:    KindFile,
+			Title:   "mod.rts",
+			Payload: Payload[any]{FilePath: "/tmp/mod.rts"},
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false)
+	clean := ansi.Strip(out)
+	if strings.Contains(clean, "▸") || strings.Contains(clean, "▾") {
+		t.Fatalf("expected rts row without caret, got %q", clean)
+	}
+	if !strings.Contains(clean, "•") {
+		t.Fatalf("expected rts indicator, got %q", clean)
+	}
+}

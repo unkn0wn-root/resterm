@@ -9,6 +9,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
@@ -1721,11 +1722,24 @@ func (m *Model) runSidebarResize(delta float64) tea.Cmd {
 	}
 	if delta > 0 {
 		if n := m.navigator.Selected(); n != nil {
-			if n.Kind == navigator.KindFile && len(n.Children) == 0 {
-				m.expandNavigatorFile(n.Payload.FilePath)
+			switch n.Kind {
+			case navigator.KindFile:
+				if filesvc.IsRequestFile(n.Payload.FilePath) {
+					if len(n.Children) == 0 {
+						m.expandNavigatorFile(n.Payload.FilePath)
+						if refreshed := m.navigator.Find(n.ID); refreshed != nil {
+							n = refreshed
+						}
+					}
+					n.Expanded = true
+					m.navigator.Refresh()
+				}
+			case navigator.KindDir:
+				if !n.Expanded {
+					n.Expanded = true
+					m.navigator.Refresh()
+				}
 			}
-			n.Expanded = true
-			m.navigator.Refresh()
 		}
 	} else if delta < 0 {
 		if n := m.navigator.Selected(); n != nil && n.Expanded {

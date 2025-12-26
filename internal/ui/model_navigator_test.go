@@ -511,6 +511,102 @@ func TestNavigatorFilterLoadsOtherFiles(t *testing.T) {
 	}
 }
 
+func TestNavigatorBuildsDirectoryTree(t *testing.T) {
+	tmp := t.TempDir()
+	root := filepath.Join(tmp, "root.http")
+	dir := filepath.Join(tmp, "rtsfiles")
+	nested := filepath.Join(dir, "nested")
+	fileA := filepath.Join(dir, "one.http")
+	fileB := filepath.Join(dir, "mod.rts")
+	fileC := filepath.Join(nested, "two.http")
+
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", nested, err)
+	}
+	writeSampleFile(t, root, "### root\nGET https://example.com\n")
+	writeSampleFile(t, fileA, "### one\nGET https://example.com/one\n")
+	writeSampleFile(t, fileB, "export const x = 1\n")
+	writeSampleFile(t, fileC, "### two\nGET https://example.com/two\n")
+
+	model := New(Config{WorkspaceRoot: tmp, Recursive: true})
+	m := &model
+
+	dirID := "dir:" + dir
+	dirNode := m.navigator.Find(dirID)
+	if dirNode == nil || dirNode.Kind != navigator.KindDir {
+		t.Fatalf("expected directory node for %s", dir)
+	}
+
+	findChild := func(n *navigator.Node[any], id string) *navigator.Node[any] {
+		for _, c := range n.Children {
+			if c != nil && c.ID == id {
+				return c
+			}
+		}
+		return nil
+	}
+
+	childA := findChild(dirNode, "file:"+fileA)
+	if childA == nil || childA.Title != "one.http" {
+		t.Fatalf("expected child file %s with title one.http", fileA)
+	}
+	childB := findChild(dirNode, "file:"+fileB)
+	if childB == nil || childB.Title != "mod.rts" {
+		t.Fatalf("expected child file %s with title mod.rts", fileB)
+	}
+	childDir := findChild(dirNode, "dir:"+nested)
+	if childDir == nil || childDir.Kind != navigator.KindDir || childDir.Title != "nested" {
+		t.Fatalf("expected nested directory node %s", nested)
+	}
+	if nestedChild := findChild(childDir, "file:"+fileC); nestedChild == nil {
+		t.Fatalf("expected nested file %s under %s", fileC, nested)
+	}
+}
+
+func TestNavigatorDirFirstSort(t *testing.T) {
+	tmp := t.TempDir()
+	dir := filepath.Join(tmp, "alpha")
+	nested := filepath.Join(dir, "beta")
+	rootFile := filepath.Join(tmp, "zeta.http")
+	dirFile := filepath.Join(dir, "a.http")
+	nestedFile := filepath.Join(nested, "b.http")
+
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("mkdir %s: %v", nested, err)
+	}
+	writeSampleFile(t, rootFile, "### root\nGET https://example.com\n")
+	writeSampleFile(t, dirFile, "### a\nGET https://example.com/a\n")
+	writeSampleFile(t, nestedFile, "### b\nGET https://example.com/b\n")
+
+	model := New(Config{WorkspaceRoot: tmp, Recursive: true})
+	m := &model
+
+	rows := m.navigator.Rows()
+	if len(rows) < 2 {
+		t.Fatalf("expected at least 2 rows, got %d", len(rows))
+	}
+	if rows[0].Node == nil || rows[0].Node.Kind != navigator.KindDir {
+		t.Fatalf("expected first row to be dir, got %+v", rows[0].Node)
+	}
+	if rows[1].Node == nil || rows[1].Node.Kind != navigator.KindFile {
+		t.Fatalf("expected second row to be file, got %+v", rows[1].Node)
+	}
+
+	dirNode := m.navigator.Find("dir:" + dir)
+	if dirNode == nil {
+		t.Fatalf("expected dir node for %s", dir)
+	}
+	if len(dirNode.Children) < 2 {
+		t.Fatalf("expected dir node to have children, got %d", len(dirNode.Children))
+	}
+	if dirNode.Children[0].Kind != navigator.KindDir || dirNode.Children[0].Title != "beta" {
+		t.Fatalf("expected nested dir first under %s", dir)
+	}
+	if dirNode.Children[1].Kind != navigator.KindFile || dirNode.Children[1].Title != "a.http" {
+		t.Fatalf("expected file after dir under %s", dir)
+	}
+}
+
 func TestNavigatorEscClearsFilters(t *testing.T) {
 	model := New(Config{})
 	m := &model
