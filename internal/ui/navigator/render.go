@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -18,6 +19,7 @@ func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) 
 	if width < 1 {
 		width = 1
 	}
+
 	m.SetViewportHeight(height)
 	rows := m.VisibleRows()
 	var out []string
@@ -40,26 +42,21 @@ func renderRow(
 	if n == nil {
 		return ""
 	}
+
 	pad := strings.Repeat("  ", row.Level)
-	icon := " "
-	if n.Kind != KindWorkflow && (len(n.Children) > 0 || n.Kind == KindFile || n.Count > 0) {
-		if n.Expanded {
-			icon = "▾"
-		} else {
-			icon = "▸"
-		}
-	}
-	parts := []string{pad, icon}
+	parts := []string{pad, rowIcon(n)}
 	if n.Kind == KindWorkflow {
 		parts = append(parts, renderWorkflowBadge(th))
 	}
 	if n.Method != "" {
 		parts = append(parts, renderMethodBadge(n.Method, th))
 	}
+
 	title := n.Title
 	if n.Kind == KindFile && n.Count > 0 {
 		title = fmt.Sprintf("%s (%d)", title, n.Count)
 	}
+
 	titleStyle := th.NavigatorTitle
 	descStyle := th.NavigatorSubtitle
 	if selected {
@@ -70,6 +67,7 @@ func renderRow(
 		titleStyle = titleStyle.Faint(true)
 		descStyle = descStyle.Faint(true)
 	}
+
 	parts = append(parts, " ", titleStyle.Render(title))
 	showTarget := n.Target != "" && !compact
 	if n.Kind == KindRequest && n.HasName {
@@ -81,6 +79,7 @@ func renderRow(
 	if len(n.Badges) > 0 {
 		parts = append(parts, " ", renderBadges(n.Badges, th))
 	}
+
 	line := strings.Join(parts, "")
 	truncated := ansi.Truncate(line, width, "")
 	indicator := ""
@@ -94,6 +93,38 @@ func renderRow(
 		truncated += indicator
 	}
 	return lipgloss.NewStyle().Width(width).Render(truncated)
+}
+
+func rowIcon(n *Node[any]) string {
+	if n == nil {
+		return " "
+	}
+	switch n.Kind {
+	case KindWorkflow:
+		return " "
+	case KindDir:
+		if len(n.Children) == 0 {
+			return " "
+		}
+		return caret(n.Expanded)
+	case KindFile:
+		if filesvc.IsRTSFile(n.Payload.FilePath) {
+			return "•"
+		}
+		return caret(n.Expanded)
+	default:
+		if len(n.Children) > 0 || n.Count > 0 {
+			return caret(n.Expanded)
+		}
+		return " "
+	}
+}
+
+func caret(expanded bool) string {
+	if expanded {
+		return "▾"
+	}
+	return "▸"
 }
 
 func renderMethodBadge(method string, th theme.Theme) string {
@@ -111,6 +142,7 @@ func renderBadges(badges []string, th theme.Theme) string {
 	if len(badges) == 0 {
 		return ""
 	}
+
 	badgeStyle := th.NavigatorBadge.Padding(0, 0)
 	parts := make([]string, 0, len(badges))
 	for _, b := range badges {
@@ -120,6 +152,7 @@ func renderBadges(badges []string, th theme.Theme) string {
 		}
 		parts = append(parts, badgeStyle.Render(label))
 	}
+
 	sep := th.NavigatorSubtitle.Render(", ")
 	return strings.Join(parts, sep)
 }

@@ -8,17 +8,40 @@ import (
 	"strings"
 )
 
+const (
+	extHTTP = ".http"
+	extREST = ".rest"
+	extRTS  = ".rts"
+)
+
 type FileEntry struct {
 	Name string
 	Path string
 }
 
+func IsRequestFile(path string) bool {
+	ext := fileExt(path)
+	return ext == extHTTP || ext == extREST
+}
+
+func IsRTSFile(path string) bool {
+	return fileExt(path) == extRTS
+}
+
+func IsSupportedFile(path string) bool {
+	ext := fileExt(path)
+	switch ext {
+	case extHTTP, extREST, extRTS:
+		return true
+	default:
+		return false
+	}
+}
+
 func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	var entries []FileEntry
-	exts := map[string]struct{}{".http": {}, ".rest": {}, ".rts": {}}
 	include := func(name string) bool {
-		_, ok := exts[strings.ToLower(filepath.Ext(name))]
-		return ok
+		return IsSupportedFile(name)
 	}
 
 	appendEntry := func(name, path string) {
@@ -67,4 +90,8 @@ func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	})
 
 	return entries, nil
+}
+
+func fileExt(path string) string {
+	return strings.ToLower(filepath.Ext(path))
 }

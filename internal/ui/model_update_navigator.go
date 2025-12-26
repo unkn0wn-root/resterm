@@ -125,22 +125,19 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			n := m.navigator.Selected()
-			if n != nil && n.Kind == navigator.KindFile {
+			if n == nil {
+				return nil
+			}
+			switch n.Kind {
+			case navigator.KindFile:
 				path := n.Payload.FilePath
 				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
 					cmd = m.openFile(path)
 				}
-				if len(n.Children) == 0 {
-					m.expandNavigatorFile(path)
-				}
-				if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
-					n = refreshed
-				}
-				if n != nil && len(n.Children) > 0 && !n.Expanded {
-					n.Expanded = true
-					m.navigator.Refresh()
-				}
-			} else {
+				m.navExpandFile(n, false)
+			case navigator.KindDir:
+				m.navExpandDir(n, false)
+			default:
 				m.navigator.ToggleExpanded()
 			}
 		case "enter":
@@ -149,44 +146,32 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				return nil
 			}
 			n := m.navigator.Selected()
-			if n == nil || n.Kind != navigator.KindFile {
+			if n == nil {
+				return nil
+			}
+			switch n.Kind {
+			case navigator.KindFile:
+				path := n.Payload.FilePath
+				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
+					cmd = m.openFile(path)
+				}
+				m.navExpandFile(n, false)
+			case navigator.KindDir:
+				m.navExpandDir(n, false)
+			default:
 				// Let main key handling drive request/workflow actions.
 				return nil
 			}
-			path := n.Payload.FilePath
-			if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
-				cmd = m.openFile(path)
-			}
-			if len(n.Children) == 0 {
-				m.expandNavigatorFile(path)
-			}
-			if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
-				n = refreshed
-			}
-			if n != nil && len(n.Children) > 0 && !n.Expanded {
-				n.Expanded = true
-				m.navigator.Refresh()
-			}
 		case " ":
 			n := m.navigator.Selected()
-			if n == nil || n.Kind != navigator.KindFile {
+			if n == nil {
 				return nil
 			}
-			path := n.Payload.FilePath
-			hasChildren := len(n.Children) > 0
-			if !hasChildren {
-				m.expandNavigatorFile(path)
-				if refreshed := m.navigator.Find("file:" + path); refreshed != nil {
-					n = refreshed
-				}
-			}
-			if n != nil && len(n.Children) > 0 {
-				if hasChildren {
-					n.Expanded = !n.Expanded
-				} else {
-					n.Expanded = true
-				}
-				m.navigator.Refresh()
+			switch n.Kind {
+			case navigator.KindFile:
+				m.navExpandFile(n, true)
+			case navigator.KindDir:
+				m.navExpandDir(n, true)
 			}
 		case "left", "h":
 			n := m.navigator.Selected()
@@ -218,4 +203,48 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 	}
 
 	return applyFilter(cmd)
+}
+
+func (m *Model) navExpandFile(n *navigator.Node[any], toggle bool) {
+	if m.navigator == nil || n == nil {
+		return
+	}
+	has := len(n.Children) > 0
+	if !has {
+		m.expandNavigatorFile(n.Payload.FilePath)
+		if refreshed := m.navigator.Find(n.ID); refreshed != nil {
+			n = refreshed
+		}
+	}
+	if n == nil || len(n.Children) == 0 {
+		return
+	}
+	changed := false
+	if toggle && has {
+		n.Expanded = !n.Expanded
+		changed = true
+	} else if !n.Expanded {
+		n.Expanded = true
+		changed = true
+	}
+	if changed {
+		m.navigator.Refresh()
+	}
+}
+
+func (m *Model) navExpandDir(n *navigator.Node[any], toggle bool) {
+	if m.navigator == nil || n == nil || len(n.Children) == 0 {
+		return
+	}
+	changed := false
+	if toggle {
+		n.Expanded = !n.Expanded
+		changed = true
+	} else if !n.Expanded {
+		n.Expanded = true
+		changed = true
+	}
+	if changed {
+		m.navigator.Refresh()
+	}
 }

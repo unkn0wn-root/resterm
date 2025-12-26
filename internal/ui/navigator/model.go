@@ -14,9 +14,9 @@ const (
 	KindFile Kind = iota
 	KindRequest
 	KindWorkflow
+	KindDir
 )
 
-// Payload holds optional metadata for a node.
 type Payload[T any] struct {
 	FilePath string
 	Data     T
@@ -266,6 +266,7 @@ func (m *Model[T]) VisibleRows() []Flat[T] {
 	if m.offset < 0 {
 		m.offset = 0
 	}
+
 	end := m.offset + m.viewHeight
 	if end > len(m.flat) {
 		end = len(m.flat)
@@ -376,9 +377,11 @@ func visible[T any](
 			}
 		}
 	}
+
 	if !matches && !childMatch {
 		return nil, false
 	}
+
 	self := Flat[T]{Node: n, Level: level}
 	if len(childRows) == 0 {
 		return []Flat[T]{self}, true
@@ -401,21 +404,25 @@ func nodeMatches[T any](
 			if !methods[strings.ToUpper(n.Method)] {
 				return false
 			}
-		case KindWorkflow, KindFile:
+		case KindWorkflow, KindFile, KindDir:
 		default:
 		}
 	}
+
 	if len(tags) > 0 && !containsAnyTag(n.Tags, tags) {
 		return false
 	}
+
 	filter = strings.TrimSpace(filter)
 	if filter == "" {
 		return true
 	}
+
 	queryTokens := filterTokens(filter)
 	if len(queryTokens) == 0 {
 		return true
 	}
+
 	candidateTokens := nodeTokens(n)
 	for _, q := range queryTokens {
 		if !tokenInCandidates(q, candidateTokens) {
