@@ -354,6 +354,31 @@ func TestNavigatorEmptyFileStaysCollapsed(t *testing.T) {
 	}
 }
 
+func TestNavigatorLFocusesEditorForRTS(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "a.http")
+	fileB := filepath.Join(tmp, "helpers.rts")
+	content := "### req\nGET https://example.com\n"
+	writeSampleFile(t, fileA, content)
+	writeSampleFile(t, fileB, "fn add(a, b) { return a + b }\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+
+	selectNavigatorID(t, m, "file:"+fileB)
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	if m.focus != focusEditor {
+		t.Fatalf("expected focus to move to editor, got %v", m.focus)
+	}
+	if filepath.Clean(m.currentFile) != filepath.Clean(fileB) {
+		t.Fatalf("expected current file %s, got %s", fileB, m.currentFile)
+	}
+}
+
 func TestNavigatorMethodFilterExcludesMismatchedRequests(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "a.http")
