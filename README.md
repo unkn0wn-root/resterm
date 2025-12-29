@@ -57,7 +57,7 @@ TL;DR why resterm:
 - Everything lives in plain files (.http/.rest) - **no cloud or account - everything stays local**.
 - **Built-in SSH tunnels** for HTTP/gRPC/WebSocket/SSE.
 - **OAuth 2.0 built-in** - client credentials, password grant, authorization code + PKCE with automatic browser flow and token refresh.
-- **RestermScript (RTS)** resterm focused custom scripting lang for safe, predictable request-time logic (templates, directives, workflows). If you want JavaScript instead - this works to.
+- **RestermScript (RTS)** resterm focused custom scripting lang for safe, predictable request-time logic (templates, directives, workflows). If you want JavaScript instead - this works too.
 - Fast iteration loop with _explorer_ + _history_ + _diff/compare_ + _captures/workflows_.
 - **Debuggable** - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
 
