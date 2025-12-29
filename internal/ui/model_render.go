@@ -894,6 +894,9 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	} else {
 		content = pane.viewport.View()
 	}
+	if send := m.sendingView(pane, contentWidth, contentHeight); send != "" {
+		content = send
+	}
 	content = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
 		MaxHeight(contentHeight).
@@ -1053,6 +1056,8 @@ func (m Model) buildTabRowContent(
 
 var tabSpinFrames = []string{"⠋", "⠙", "⠹"}
 
+const responseSendingBase = "Sending request"
+
 func (m Model) tabSpinner() string {
 	if !m.sending || len(tabSpinFrames) == 0 {
 		return ""
@@ -1064,28 +1069,25 @@ func (m Model) tabSpinner() string {
 	return tabSpinFrames[idx%len(tabSpinFrames)]
 }
 
+func (m Model) sendingView(pane *responsePaneState, width, height int) string {
+	if pane == nil || !pane.followLatest || pane.activeTab == responseTabHistory {
+		return ""
+	}
+	spin := m.tabSpinner()
+	if spin == "" {
+		return ""
+	}
+	msg := responseSendingBase + " " + spin
+	centered := centerContent(msg, width, height)
+	return m.applyResponseContentStyles(pane.activeTab, centered)
+}
+
 func (m Model) tabBadgeText(mode string) string {
-	b := strings.ToUpper(strings.TrimSpace(mode))
-	if b == "" {
-		return b
-	}
-	s := m.tabSpinner()
-	if s == "" {
-		return b
-	}
-	return b + " " + s
+	return strings.ToUpper(strings.TrimSpace(mode))
 }
 
 func (m Model) tabBadgeShort(mode string) string {
-	b := firstRuneUpper(mode)
-	if b == "" {
-		return b
-	}
-	s := m.tabSpinner()
-	if s == "" {
-		return b
-	}
-	return b + s
+	return firstRuneUpper(mode)
 }
 
 func (m Model) buildStaticTabRow(

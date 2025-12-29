@@ -138,30 +138,46 @@ func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 	}
 }
 
-func TestTabBadgeTextAddsSpinner(t *testing.T) {
-	if len(tabSpinFrames) < 2 {
-		t.Fatalf("expected tab spinner frames")
-	}
+func TestTabBadgeTextOmitsSpinner(t *testing.T) {
 	m := &Model{}
 	m.sending = true
 	m.statusPulseFrame = 1
 	got := m.tabBadgeText("Live")
-	want := "LIVE " + tabSpinFrames[1]
+	want := "LIVE"
 	if got != want {
 		t.Fatalf("expected badge %q, got %q", want, got)
 	}
 }
 
-func TestTabBadgeShortAddsSpinner(t *testing.T) {
-	if len(tabSpinFrames) == 0 {
-		t.Fatalf("expected tab spinner frames")
-	}
+func TestTabBadgeShortOmitsSpinner(t *testing.T) {
 	m := &Model{}
 	m.sending = true
 	m.statusPulseFrame = 0
 	got := m.tabBadgeShort("Pinned")
-	want := "P" + tabSpinFrames[0]
+	want := "P"
 	if got != want {
 		t.Fatalf("expected short badge %q, got %q", want, got)
+	}
+}
+
+func TestResponsePaneShowsSendingSpinner(t *testing.T) {
+	if len(tabSpinFrames) < 2 {
+		t.Fatalf("expected tab spinner frames")
+	}
+	snap := &responseSnapshot{pretty: ensureTrailingNewline("ok"), ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	model.sending = true
+	model.statusPulseFrame = 1
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 40
+	pane.viewport.Height = 10
+
+	view := model.renderResponseColumn(responsePanePrimary, true, 40)
+	plain := ansi.Strip(view)
+	if !strings.Contains(plain, responseSendingBase) {
+		t.Fatalf("expected sending message, got %q", plain)
+	}
+	if !strings.Contains(plain, tabSpinFrames[1]) {
+		t.Fatalf("expected spinner frame, got %q", plain)
 	}
 }
