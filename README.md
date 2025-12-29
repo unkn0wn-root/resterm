@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="_media/restermscript.png" alt="Screenshot of resterm with resterm rcript" width="720" />
+  <img src="_media/resterm_script.png" alt="Screenshot of resterm with resterm rcript" width="720" />
 </p>
 
 <p align="center">
