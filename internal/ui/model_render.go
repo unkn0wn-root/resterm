@@ -27,7 +27,7 @@ var headerSegmentIcons = map[string]string{
 	"workspace": "▣",
 	"env":       "⬢",
 	"requests":  "⇄",
-	"active":    "⚡",
+	"active":    "★",
 	"tests":     "✓",
 }
 
@@ -985,6 +985,8 @@ func (m Model) buildTabRowContent(
 	if followLatest {
 		mode = "Live"
 	}
+	badge := m.tabBadgeText(mode)
+	shortBadge := m.tabBadgeShort(mode)
 	baseBadgeStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#A6A1BB"))
 	if !focused || m.focus != focusResponse {
@@ -995,7 +997,7 @@ func (m Model) buildTabRowContent(
 			activeStyle:   m.theme.TabActive,
 			inactiveStyle: m.theme.TabInactive,
 			badgeStyle:    baseBadgeStyle.PaddingLeft(2),
-			badgeText:     strings.ToUpper(mode),
+			badgeText:     badge,
 			labelFn: func(full string, isActive bool) string {
 				text := full
 				if isActive && focused {
@@ -1008,14 +1010,14 @@ func (m Model) buildTabRowContent(
 			activeStyle:   m.theme.TabActive.Padding(0, 1),
 			inactiveStyle: m.theme.TabInactive.Padding(0),
 			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
-			badgeText:     strings.ToUpper(mode),
+			badgeText:     badge,
 			adaptive:      true,
 		},
 		{
 			activeStyle:   m.theme.TabActive.Padding(0),
 			inactiveStyle: m.theme.TabInactive.Padding(0),
 			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
-			badgeText:     firstRuneUpper(mode),
+			badgeText:     shortBadge,
 			labelFn: func(full string, isActive bool) string {
 				label := firstRuneUpper(full)
 				if label == "" {
@@ -1047,6 +1049,43 @@ func (m Model) buildTabRowContent(
 		}
 	}
 	return ""
+}
+
+var tabSpinFrames = []string{"⠋", "⠙", "⠹"}
+
+func (m Model) tabSpinner() string {
+	if !m.sending || len(tabSpinFrames) == 0 {
+		return ""
+	}
+	idx := m.statusPulseFrame
+	if idx < 0 {
+		idx = 0
+	}
+	return tabSpinFrames[idx%len(tabSpinFrames)]
+}
+
+func (m Model) tabBadgeText(mode string) string {
+	b := strings.ToUpper(strings.TrimSpace(mode))
+	if b == "" {
+		return b
+	}
+	s := m.tabSpinner()
+	if s == "" {
+		return b
+	}
+	return b + " " + s
+}
+
+func (m Model) tabBadgeShort(mode string) string {
+	b := firstRuneUpper(mode)
+	if b == "" {
+		return b
+	}
+	s := m.tabSpinner()
+	if s == "" {
+		return b
+	}
+	return b + s
 }
 
 func (m Model) buildStaticTabRow(

@@ -41,7 +41,7 @@ func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
 	}
 	out := renderRow(node, false, th, 80, true, false)
 	clean := ansi.Strip(out)
-	if strings.Contains(clean, "▸") || strings.Contains(clean, "▾") {
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected workflow row without caret, got %q", clean)
 	}
 	if !strings.Contains(clean, "WF") {
@@ -78,6 +78,46 @@ func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 	}
 }
 
+func TestRenderRowShowsDirIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:     KindDir,
+			Title:    "rts",
+			Expanded: false,
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconDirClosed) {
+		t.Fatalf("expected directory icon, got %q", clean)
+	}
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
+		t.Fatalf("expected directory row without caret, got %q", clean)
+	}
+}
+
+func TestRenderRowShowsRTSIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:  KindFile,
+			Title: "apply_patch.rts",
+			Payload: Payload[any]{
+				FilePath: "apply_patch.rts",
+			},
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconRTS) {
+		t.Fatalf("expected rts icon, got %q", clean)
+	}
+	if strings.Contains(clean, "•") {
+		t.Fatalf("expected rts row without bullet icon, got %q", clean)
+	}
+}
+
 func TestRenderRTSUsesModuleIndicator(t *testing.T) {
 	th := theme.DefaultTheme()
 	row := Flat[any]{
@@ -89,10 +129,10 @@ func TestRenderRTSUsesModuleIndicator(t *testing.T) {
 	}
 	out := renderRow(row, false, th, 80, true, false)
 	clean := ansi.Strip(out)
-	if strings.Contains(clean, "▸") || strings.Contains(clean, "▾") {
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected rts row without caret, got %q", clean)
 	}
-	if !strings.Contains(clean, "•") {
-		t.Fatalf("expected rts indicator, got %q", clean)
+	if !strings.Contains(clean, iconRTS) {
+		t.Fatalf("expected rts icon, got %q", clean)
 	}
 }
