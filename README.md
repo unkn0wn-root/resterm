@@ -41,7 +41,7 @@
 </p>
 
 <p align="center">
-  <strong>OAuth browser demo</strong>
+  <strong>OAuth browser demo (old UI design)</strong>
 </p>
 
 <p align="center">
@@ -57,7 +57,7 @@ TL;DR why resterm:
 - Everything lives in plain files (.http/.rest) - **no cloud or account - everything stays local**.
 - **Built-in SSH tunnels** for HTTP/gRPC/WebSocket/SSE.
 - **OAuth 2.0 built-in** - client credentials, password grant, authorization code + PKCE with automatic browser flow and token refresh.
-- **RestermScript (RTS)** resterm focused custom scripting lang for safe, predictable request-time logic (templates, directives, workflows).
+- **RestermScript (RTS)** resterm focused custom scripting lang for safe, predictable request-time logic (templates, directives, workflows). If you want JavaScript instead - this works to.
 - Fast iteration loop with _explorer_ + _history_ + _diff/compare_ + _captures/workflows_.
 - **Debuggable** - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
 
@@ -74,9 +74,9 @@ TL;DR why resterm:
 ---
 
 **Deep dive**
+- [RestermScript?](#restermscript)
 - [OAuth 2.0](#feature-snapshots)
 - [Workflows & scripting](#feature-snapshots)
-- [Why RestermScript?](#why-restermscript)
 - [Compare runs](#feature-snapshots)
 - [Tracing & timeline](#feature-snapshots)
 - [Streaming (WebSocket & SSE)](#feature-snapshots)
@@ -103,22 +103,6 @@ TL;DR why resterm:
 - **SSH tunnels** route HTTP/gRPC/WebSocket/SSE traffic through bastions with host key verification, keep-alives, retries, and persistent tunnels.
 - **File Watcher** with automatic file change detection: Resterm warns when the current file changes or goes missing on disk and lets you reload from disk (`g Shift+R`) or keep your buffer, plus a shortcut for quick workspace rescan (files) (`g Shift+O`).
 - **Custom theming & bindings** if you want to make a resterm more alligned with your taste.
-
-## Why RestermScript?
-
-RestermScript (RTS) is the small expression language behind templates, directives, and reusable `.rts` modules. It exists because request files need a bit of logic, but a full JavaScript runtime is heavier than most workflows need and harder to review at a glance. RTS keeps the logic tight, readable, and predictable, so you can open a `.http` file and understand exactly what will happen.
-
-Quick example:
-
-```http
-# @use ./rts/auth.rts as auth
-# @when env.has("feature")
-# @assert response.statusCode == 200
-GET https://api.example.com/users/{{= auth.userId(vars.get("user")) }}
-Authorization: Bearer {{= auth.token(env.get("token")) }}
-```
-
-Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 ## Installation
 
@@ -339,6 +323,22 @@ If you copied the command from a shell, prefixes like `sudo` or `$` are ignored 
 - **Environments:** JSON files (`resterm.env.json`) are auto-discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace; prefer JSON when you need multiple environments in one file.
 - **Flags you probebly reach for most:** `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-openapi`, `--http-out` (see docs for the full list).
 - **Config storage:** `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`). Themes and keybindings live under this directory when you customize them.
+
+## RestermScript
+
+RestermScript (RTS) is the small expression language behind templates, directives, and reusable `.rts` modules. It exists because request files need a bit of logic, but a full JavaScript runtime is heavier than most workflows need and harder to review at a glance. RTS keeps the logic tight, readable, and predictable, so you can open a `.http` file and understand exactly what will happen.
+
+Quick example:
+
+```http
+# @use ./rts/auth.rts as auth
+# @when env.has("feature")
+# @assert response.statusCode == 200
+GET https://api.example.com/users/{{= auth.userId(vars.get("user")) }}
+Authorization: Bearer {{= auth.token(env.get("token")) }}
+```
+
+Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 ## Feature snapshots
 
