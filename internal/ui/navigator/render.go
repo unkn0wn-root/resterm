@@ -13,8 +13,8 @@ import (
 
 const (
 	iconNone        = " "
-	iconCaretClosed = "⇄"
-	iconCaretOpen   = "↗"
+	iconCaretClosed = "▸"
+	iconCaretOpen   = "▾"
 	iconDirClosed   = "📁"
 	iconDirOpen     = "📂"
 	iconRTS         = "λ"
