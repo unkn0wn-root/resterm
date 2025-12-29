@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.13.5](https://github.com/unkn0wn-root/resterm/compare/v0.13.4...v0.13.5) (2025-12-29)
+
+
+### Features
+
+* add more methods/func coloring to rts editor ([b6ed022](https://github.com/unkn0wn-root/resterm/commit/b6ed022e9b911ea453d6e09240635fe1ff82fcc3))
+
+
+### Bug Fixes
+
+* don't expand file that has no children ([d865d5b](https://github.com/unkn0wn-root/resterm/commit/d865d5b6dd55972a1f423b0ad50cf15d77d1fd3b))
+* when pressing 'l' on .rts file, set focus to the editor ([8b2ad88](https://github.com/unkn0wn-root/resterm/commit/8b2ad88b0326b8f595878a75b0feb7b0a3d9c8ae))
+
 ### [0.13.4](https://github.com/unkn0wn-root/resterm/compare/v0.13.3...v0.13.4) (2025-12-29)
 
 ### [0.13.3](https://github.com/unkn0wn-root/resterm/compare/v0.13.2...v0.13.3) (2025-12-29)
