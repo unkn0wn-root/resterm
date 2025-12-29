@@ -25,6 +25,10 @@ type rtsRuneStyler struct {
 	keywordLiteralEnabled bool
 	keywordLogicalStyle   lipgloss.Style
 	keywordLogicalEnabled bool
+	fnStyle               lipgloss.Style
+	fnEnabled             bool
+	methStyle             lipgloss.Style
+	methEnabled           bool
 	numberStyle           lipgloss.Style
 	numberEnabled         bool
 	cache                 map[int]lineCache
@@ -69,6 +73,19 @@ func newRTSRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
 		s.numberEnabled = true
 	}
 
+	if c := pickColor(p.SettingKey, p.RTSKeywordControl, p.DirectiveDefault, p.RequestLine); c != "" {
+		s.fnStyle = lipgloss.NewStyle().Foreground(c).Bold(true)
+		s.fnEnabled = true
+	}
+	if c := pickColor(p.SettingValue, p.Value); c != "" {
+		s.methStyle = lipgloss.NewStyle().Foreground(c)
+		s.methEnabled = true
+	}
+	if !s.methEnabled && s.fnEnabled {
+		s.methStyle = s.fnStyle
+		s.methEnabled = true
+	}
+
 	return s
 }
 
@@ -101,20 +118,34 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 			styled = true
 		}
 	}
+	paint := func(start, end int, style lipgloss.Style) {
+		if start < 0 {
+			start = 0
+		}
+		if end > len(line) {
+			end = len(line)
+		}
+		if start >= end {
+			return
+		}
+		ensureStyles()
+		for j := start; j < end; j++ {
+			styles[j] = style
+		}
+	}
 
 	var quote rune
+	wantFn := false
 	for i := 0; i < len(line); {
 		ch := line[i]
 
 		if quote != 0 {
 			if s.stringEnabled {
-				ensureStyles()
-				styles[i] = s.stringStyle
+				paint(i, i+1, s.stringStyle)
 			}
 			if ch == '\\' && i+1 < len(line) {
 				if s.stringEnabled {
-					ensureStyles()
-					styles[i+1] = s.stringStyle
+					paint(i+1, i+2, s.stringStyle)
 				}
 				i += 2
 				continue
@@ -126,11 +157,14 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 			continue
 		}
 
+		if wantFn && !unicode.IsSpace(ch) && !isRTSIdentStart(ch) {
+			wantFn = false
+		}
+
 		if ch == '"' || ch == '\'' {
 			quote = ch
 			if s.stringEnabled {
-				ensureStyles()
-				styles[i] = s.stringStyle
+				paint(i, i+1, s.stringStyle)
 			}
 			i++
 			continue
@@ -138,10 +172,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 
 		if ch == '#' {
 			if s.commentEnabled {
-				ensureStyles()
-				for j := i; j < len(line); j++ {
-					styles[j] = s.commentStyle
-				}
+				paint(i, len(line), s.commentStyle)
 			}
 			break
 		}
@@ -151,15 +182,27 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 			for i < len(line) && isRTSIdent(line[i]) {
 				i++
 			}
-			class := rts.KeywordClassOf(string(line[start:i]))
+			token := string(line[start:i])
+			class := rts.KeywordClassOf(token)
 			if class != rts.KeywordNone {
 				if style, ok := s.keywordStyleForClass(class); ok {
-					ensureStyles()
-					for j := start; j < i; j++ {
-						styles[j] = style
-					}
+					paint(start, i, style)
+				}
+				if token == "fn" {
+					wantFn = true
+				} else {
+					wantFn = false
+				}
+				continue
+			}
+			call := isRTSCall(line, i)
+			if wantFn || call {
+				style, ok := s.nameStyle(line, start, wantFn)
+				if ok {
+					paint(start, i, style)
 				}
 			}
+			wantFn = false
 			continue
 		}
 
@@ -169,10 +212,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 				i++
 			}
 			if s.numberEnabled {
-				ensureStyles()
-				for j := start; j < i; j++ {
-					styles[j] = s.numberStyle
-				}
+				paint(start, i, s.numberStyle)
 			}
 			continue
 		}
@@ -184,6 +224,38 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 		return nil
 	}
 	return styles
+}
+
+func (s *rtsRuneStyler) nameStyle(
+	line []rune,
+	start int,
+	isFn bool,
+) (lipgloss.Style, bool) {
+	if isFn {
+		if s.fnEnabled {
+			return s.fnStyle, true
+		}
+		if s.methEnabled {
+			return s.methStyle, true
+		}
+		return lipgloss.Style{}, false
+	}
+	if isRTSMethod(line, start) {
+		if s.methEnabled {
+			return s.methStyle, true
+		}
+		if s.fnEnabled {
+			return s.fnStyle, true
+		}
+		return lipgloss.Style{}, false
+	}
+	if s.fnEnabled {
+		return s.fnStyle, true
+	}
+	if s.methEnabled {
+		return s.methStyle, true
+	}
+	return lipgloss.Style{}, false
 }
 
 func (s *rtsRuneStyler) keywordStyleForClass(class rts.KeywordClass) (lipgloss.Style, bool) {
@@ -221,4 +293,32 @@ func isRTSIdentStart(ch rune) bool {
 
 func isRTSIdent(ch rune) bool {
 	return ch == '_' || unicode.IsLetter(ch) || unicode.IsDigit(ch)
+}
+
+func isRTSCall(line []rune, end int) bool {
+	i := skipSpace(line, end)
+	return i < len(line) && line[i] == '('
+}
+
+func isRTSMethod(line []rune, start int) bool {
+	i := prevNonSpace(line, start-1)
+	return i >= 0 && line[i] == '.'
+}
+
+func prevNonSpace(line []rune, idx int) int {
+	for i := idx; i >= 0; i-- {
+		if !unicode.IsSpace(line[i]) {
+			return i
+		}
+	}
+	return -1
+}
+
+func pickColor(colors ...lipgloss.Color) lipgloss.Color {
+	for _, c := range colors {
+		if c != "" {
+			return c
+		}
+	}
+	return ""
 }
