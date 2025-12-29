@@ -11,6 +11,15 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
+const (
+	iconNone        = " "
+	iconCaretClosed = "▸"
+	iconCaretOpen   = "▾"
+	iconDirClosed   = "📁"
+	iconDirOpen     = "📂"
+	iconRTS         = "λ"
+)
+
 // ListView renders the navigator list with an optional height constraint.
 func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) string {
 	if m == nil {
@@ -97,34 +106,38 @@ func renderRow(
 
 func rowIcon(n *Node[any]) string {
 	if n == nil {
-		return " "
+		return iconNone
 	}
 	switch n.Kind {
 	case KindWorkflow:
-		return " "
+		return iconNone
 	case KindDir:
-		if len(n.Children) == 0 {
-			return " "
-		}
-		return caret(n.Expanded)
+		return dirIcon(n.Expanded)
 	case KindFile:
 		if filesvc.IsRTSFile(n.Payload.FilePath) {
-			return "•"
+			return iconRTS
 		}
 		return caret(n.Expanded)
 	default:
 		if len(n.Children) > 0 || n.Count > 0 {
 			return caret(n.Expanded)
 		}
-		return " "
+		return iconNone
 	}
 }
 
 func caret(expanded bool) string {
 	if expanded {
-		return "▾"
+		return iconCaretOpen
 	}
-	return "▸"
+	return iconCaretClosed
+}
+
+func dirIcon(expanded bool) string {
+	if expanded {
+		return iconDirOpen
+	}
+	return iconDirClosed
 }
 
 func renderMethodBadge(method string, th theme.Theme) string {
