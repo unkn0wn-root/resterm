@@ -6,6 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
@@ -133,6 +134,9 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				path := n.Payload.FilePath
 				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
 					cmd = m.openFile(path)
+				}
+				if filesvc.IsRTSFile(path) {
+					return applyJump(cmd, true)
 				}
 				m.navExpandFile(n, false)
 			case navigator.KindDir:
