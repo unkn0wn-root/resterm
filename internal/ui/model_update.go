@@ -1725,20 +1725,10 @@ func (m *Model) runSidebarResize(delta float64) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				if filesvc.IsRequestFile(n.Payload.FilePath) {
-					if len(n.Children) == 0 {
-						m.expandNavigatorFile(n.Payload.FilePath)
-						if refreshed := m.navigator.Find(n.ID); refreshed != nil {
-							n = refreshed
-						}
-					}
-					n.Expanded = true
-					m.navigator.Refresh()
+					m.navExpandFile(n, false)
 				}
 			case navigator.KindDir:
-				if !n.Expanded {
-					n.Expanded = true
-					m.navigator.Refresh()
-				}
+				m.navExpandDir(n, false)
 			}
 		}
 	} else if delta < 0 {

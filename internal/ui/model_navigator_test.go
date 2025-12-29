@@ -329,6 +329,31 @@ func TestNavigatorRightDoesNotCollapseFile(t *testing.T) {
 	}
 }
 
+func TestNavigatorEmptyFileStaysCollapsed(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "empty.http")
+	writeSampleFile(t, file, "")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: file})
+	m := &model
+
+	selectNavigatorID(t, m, "file:"+file)
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRight}); cmd != nil {
+		cmd()
+	}
+
+	node := m.navigator.Find("file:" + file)
+	if node == nil {
+		t.Fatalf("expected node for %s", file)
+	}
+	if node.Expanded {
+		t.Fatalf("expected %s to stay collapsed", file)
+	}
+	if len(node.Children) != 0 {
+		t.Fatalf("expected no children for %s", file)
+	}
+}
+
 func TestNavigatorMethodFilterExcludesMismatchedRequests(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "a.http")

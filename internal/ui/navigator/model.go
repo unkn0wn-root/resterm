@@ -227,7 +227,14 @@ func (m *Model[T]) SelectByID(id string) bool {
 // ToggleExpanded toggles expansion on the selected node.
 func (m *Model[T]) ToggleExpanded() {
 	n := m.Selected()
-	if n == nil || len(n.Children) == 0 {
+	if n == nil {
+		return
+	}
+	if len(n.Children) == 0 {
+		if n.Expanded {
+			n.Expanded = false
+			m.refresh()
+		}
 		return
 	}
 	n.Expanded = !n.Expanded

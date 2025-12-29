@@ -106,7 +106,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 	if doc, ok := m.cachedDoc(entry.Path); ok && doc != nil {
 		node.Count = len(doc.Requests)
 		node.Children = m.buildRequestNodes(doc, entry.Path)
-		if filepath.Clean(entry.Path) == filepath.Clean(m.currentFile) {
+		if samePath(entry.Path, m.currentFile) && navHasKids(node) {
 			node.Expanded = true
 		}
 	}
@@ -279,9 +279,18 @@ func (m *Model) ensureNavigatorRequestsForFile(path string) {
 		m.expandNavigatorFile(path)
 		node = m.navigator.Find("file:" + path)
 	}
-
-	if node != nil && !node.Expanded {
-		node.Expanded = true
+	if node == nil {
+		return
+	}
+	if navHasKids(node) {
+		if !node.Expanded {
+			node.Expanded = true
+			m.navigator.Refresh()
+		}
+		return
+	}
+	if node.Expanded {
+		node.Expanded = false
 		m.navigator.Refresh()
 	}
 }
@@ -525,7 +534,7 @@ func applyNavigatorExpansion(nodes []*navigator.Node[any], prev *navigator.Model
 		if n == nil {
 			return
 		}
-		if old := prev.Find(n.ID); old != nil && old.Expanded {
+		if old := prev.Find(n.ID); old != nil && old.Expanded && navHasKids(n) {
 			n.Expanded = true
 		}
 		for _, c := range n.Children {
@@ -535,6 +544,10 @@ func applyNavigatorExpansion(nodes []*navigator.Node[any], prev *navigator.Model
 	for _, n := range nodes {
 		walk(n)
 	}
+}
+
+func navHasKids(n *navigator.Node[any]) bool {
+	return n != nil && len(n.Children) > 0
 }
 
 func samePath(a, b string) bool {
