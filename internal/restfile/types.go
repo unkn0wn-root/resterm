@@ -130,21 +130,21 @@ type MetadataPair struct {
 }
 
 type GRPCRequest struct {
-	Target        string
-	Package       string
-	Service       string
-	Method        string
-	FullMethod    string
-	DescriptorSet string
-	UseReflection bool
-	Plaintext     bool
-	PlaintextSet  bool
-	Authority     string
-	Message       string
-	MessageFile   string
+	Target             string
+	Package            string
+	Service            string
+	Method             string
+	FullMethod         string
+	DescriptorSet      string
+	UseReflection      bool
+	Plaintext          bool
+	PlaintextSet       bool
+	Authority          string
+	Message            string
+	MessageFile        string
 	MessageExpanded    string
 	MessageExpandedSet bool
-	Metadata      []MetadataPair
+	Metadata           []MetadataPair
 }
 
 type RequestMetadata struct {

@@ -80,7 +80,7 @@ func TestCollectMetadataIncludesValidKeys(t *testing.T) {
 	}
 	req := &restfile.Request{
 		Headers: http.Header{
-			"X-Req-Id":     []string{"b"},
+			"X-Req-Id": []string{"b"},
 		},
 	}
 
@@ -139,6 +139,22 @@ func TestCollectMetadataInvalidKey(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid characters") {
 		t.Fatalf("expected invalid character detail, got %v", err)
+	}
+}
+
+func TestResolveMessagePrefersExpanded(t *testing.T) {
+	client := NewClient()
+	grpcReq := &restfile.GRPCRequest{
+		MessageFile:        "msg.json",
+		MessageExpanded:    `{"id":"abc"}`,
+		MessageExpandedSet: true,
+	}
+	got, err := client.resolveMessage(grpcReq, "")
+	if err != nil {
+		t.Fatalf("resolve message: %v", err)
+	}
+	if got != `{"id":"abc"}` {
+		t.Fatalf("expected expanded message, got %q", got)
 	}
 }
 
