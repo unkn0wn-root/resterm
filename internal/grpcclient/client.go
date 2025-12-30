@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -55,6 +56,16 @@ type Response struct {
 	Duration        time.Duration
 }
 
+type StreamHook func(*stream.Session)
+
+const (
+	grpcMetaMethod   = "grpc.method"
+	grpcMetaMsgType  = "grpc.msg.type"
+	grpcMetaMsgIndex = "grpc.msg.index"
+	grpcMetaStatus   = "grpc.status"
+	grpcMetaReason   = "grpc.reason"
+)
+
 type Client struct{}
 
 func NewClient() *Client {
@@ -66,6 +77,7 @@ func (c *Client) Execute(
 	req *restfile.Request,
 	grpcReq *restfile.GRPCRequest,
 	options Options,
+	hook StreamHook,
 ) (resp *Response, err error) {
 	if grpcReq == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "missing grpc metadata")
@@ -136,6 +148,20 @@ func (c *Client) Execute(
 		return nil, err
 	}
 
+	if isStreaming(methodDesc) {
+		return c.executeStream(ctx, conn, req, grpcReq, methodDesc, messageJSON, hook)
+	}
+	return c.executeUnary(ctx, conn, req, grpcReq, methodDesc, messageJSON)
+}
+
+func (c *Client) executeUnary(
+	ctx context.Context,
+	conn *grpc.ClientConn,
+	req *restfile.Request,
+	grpcReq *restfile.GRPCRequest,
+	methodDesc protoreflect.MethodDescriptor,
+	messageJSON string,
+) (*Response, error) {
 	inputMsg := dynamicpb.NewMessage(methodDesc.Input())
 	stripped := strings.TrimSpace(messageJSON)
 	if stripped != "" {
@@ -162,17 +188,7 @@ func (c *Client) Execute(
 		grpc.Header(&headerMD),
 		grpc.Trailer(&trailerMD),
 	)
-	duration := time.Since(start)
-
-	resp = &Response{
-		Headers:         copyMetadata(headerMD),
-		Trailers:        copyMetadata(trailerMD),
-		StatusCode:      codes.OK,
-		StatusMessage:   "OK",
-		ContentType:     "application/json",
-		WireContentType: "application/grpc+proto",
-		Duration:        duration,
-	}
+	resp := newResponse(headerMD, trailerMD, time.Since(start))
 
 	if invokeErr != nil {
 		st, ok := status.FromError(invokeErr)
@@ -183,12 +199,7 @@ func (c *Client) Execute(
 		return resp, errdef.Wrap(errdef.CodeHTTP, invokeErr, "invoke grpc method")
 	}
 
-	marshalled, err := protojson.MarshalOptions{
-		Multiline:       true,
-		EmitUnpopulated: true,
-	}.Marshal(
-		outputMsg,
-	)
+	marshalled, err := marshalMsg(outputMsg)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode grpc response")
 	}
@@ -201,12 +212,7 @@ func (c *Client) Execute(
 	if len(resp.Body) == 0 {
 		resp.Body = marshalled
 	}
-	if resp.Headers == nil {
-		resp.Headers = make(map[string][]string)
-	}
-	if len(resp.Headers["Content-Type"]) == 0 && strings.TrimSpace(resp.ContentType) != "" {
-		resp.Headers["Content-Type"] = []string{resp.ContentType}
-	}
+	ensureContentType(resp)
 	return resp, nil
 }
 

@@ -12,6 +12,7 @@ type Kind int
 const (
 	KindSSE Kind = iota
 	KindWebSocket
+	KindGRPC
 )
 
 type Direction int

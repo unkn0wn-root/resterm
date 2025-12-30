@@ -29,6 +29,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/traceutil"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -558,7 +559,10 @@ func (m *Model) executeRequest(
 				grpcOpts.SSH = sshPlan
 			}
 
-			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts)
+			hook := func(session *stream.Session) {
+				m.attachGRPCSession(session, req)
+			}
+			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts, hook)
 			if grpcErr != nil {
 				return responseMsg{
 					grpc:        grpcResp,
