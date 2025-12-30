@@ -80,6 +80,7 @@ TL;DR why resterm:
 - [Compare runs](#feature-snapshots)
 - [Tracing & timeline](#feature-snapshots)
 - [Streaming (WebSocket & SSE)](#feature-snapshots)
+- [gRPC](#feature-snapshots)
 - [OpenAPI import](#feature-snapshots)
 - [Theming & bindings](#feature-snapshots)
 - [SSH Tunnels](#feature-snapshots)
@@ -89,7 +90,7 @@ TL;DR why resterm:
 - **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
 - **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).
 - **Variable** scopes with `@global` (environment-wide), `@var file` (document), `@var request` (per-call), plus compile-time constants (`@const`), captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
-- **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, metadata).
+- **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, streaming, metadata, body expansion).
 - **WebSockets and SSE** with scripted `@ws` steps, automatic transcripts and an interactive console for ad-hoc frames.
 - **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
 - **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
@@ -348,6 +349,7 @@ Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 - **Compare runs:** Run the same request across environments with `@compare` or `--compare`, then diff responses side by side (`g+c`). Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
 - **Tracing & timeline:** Add `@trace` with budgets to capture DNS/connect/TLS/TTFB/transfer timings, visualize overruns, and optionally export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
 - **Streaming (WebSocket & SSE):** Use `@websocket` + `@ws` steps or `@sse` to script and record streams. The Stream tab keeps transcripts and an interactive console. Docs: [`docs/resterm.md#streaming-sse--websocket`](./docs/resterm.md#streaming-sse--websocket).
+- **gRPC streaming:** Unary and streaming calls (client/server/bidi) with Stream tab transcripts, plus template expansion for gRPC body files. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
 - **OpenAPI import:** Convert an OpenAPI 3 spec into `.http` collections from the CLI (`--from-openapi`). Docs: [`docs/resterm.md#importing-openapi-specs`](./docs/resterm.md#importing-openapi-specs).
 - **Theming & bindings:** Optional customization via `themes/*.toml` and `bindings.toml/json` under the config dir; defaults are ready to use. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
 

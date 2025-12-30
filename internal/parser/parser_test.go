@@ -1134,11 +1134,44 @@ GRPC localhost:50051
 	if !grpc.PlaintextSet {
 		t.Fatalf("expected plaintext directive to be marked as set")
 	}
-	if grpc.Metadata["authorization"] != "Bearer 123" {
+	found := false
+	for _, pair := range grpc.Metadata {
+		if pair.Key == "authorization" && pair.Value == "Bearer 123" {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Fatalf("expected metadata to be captured")
 	}
 	if strings.TrimSpace(grpc.Message) == "" {
 		t.Fatalf("expected message body to be captured")
+	}
+}
+
+func TestParseGRPCMetadataRepeats(t *testing.T) {
+	src := `# @grpc my.pkg.UserService/GetUser
+# @grpc-metadata x-id: one
+# @grpc-metadata x-id: two
+GRPC localhost:50051
+{}`
+
+	doc := Parse("grpc.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	grpc := doc.Requests[0].GRPC
+	if grpc == nil {
+		t.Fatalf("expected grpc metadata")
+	}
+	if len(grpc.Metadata) != 2 {
+		t.Fatalf("expected 2 metadata entries, got %d", len(grpc.Metadata))
+	}
+	if grpc.Metadata[0].Key != "x-id" || grpc.Metadata[0].Value != "one" {
+		t.Fatalf("unexpected first metadata entry: %#v", grpc.Metadata[0])
+	}
+	if grpc.Metadata[1].Key != "x-id" || grpc.Metadata[1].Value != "two" {
+		t.Fatalf("unexpected second metadata entry: %#v", grpc.Metadata[1])
 	}
 }
 

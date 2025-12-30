@@ -819,12 +819,17 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 
 Supplying any gRPC TLS setting (roots, client cert/key, insecure) automatically enables TLS unless you explicitly force plaintext with `@grpc-plaintext true`.
 
-The request body contains protobuf JSON. Use `< payload.json` to load from disk. Responses display message JSON, headers, and trailers; history stores method, status, and timing alongside HTTP calls.
+Reserved transport metadata keys (`grpc-*`, `content-type`, `user-agent`, `te`, etc.) are rejected in `@grpc-metadata` (and gRPC headers). Use `@timeout` / `@setting timeout` to apply deadlines.
+
+The request body contains protobuf JSON. Use `< payload.json` to load from disk, and add `# @body expand` if the file includes templates. Responses display message JSON, headers, and trailers; history stores method, status, and timing alongside HTTP calls.
+
+Streaming (server/client/bidi) is supported. Unary/server streaming requests use a single JSON object, while client/bidi streaming requests send a JSON array of message objects. Streaming responses return a JSON array, and the Stream tab shows a per-message transcript with a summary.
 
 Example:
 
 ```http
 ### Generate Report Over gRPC
+# @timeout 5s
 # @grpc analytics.ReportingService/GenerateReport
 # @grpc-reflection true
 # @grpc-plaintext true
@@ -837,6 +842,20 @@ GRPC {{grpc.host}}
   "tenantId": "{{tenant.id}}",
   "reportId": "rep-{{$uuid}}"
 }
+```
+
+Streaming example:
+
+```http
+### Bidi Stream Chat
+# @grpc chat.ChatService/Stream
+# @grpc-plaintext true
+GRPC {{grpc.host}}
+
+[
+  {"message": "hello"},
+  {"message": "again"}
+]
 ```
 
 ---

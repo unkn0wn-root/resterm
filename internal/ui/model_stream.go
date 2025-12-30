@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -47,6 +48,14 @@ func (m *Model) attachStreamSession(session *stream.Session) {
 	m.sessionHandles[id] = session
 	go m.runStreamSession(session)
 	m.emitStreamMsg(streamReadyMsg{sessionID: id})
+}
+
+func (m *Model) attachGRPCSession(session *stream.Session, req *restfile.Request) {
+	if session == nil {
+		return
+	}
+	m.recordSessionMapping(req, session)
+	m.attachStreamSession(session)
 }
 
 func (m *Model) runStreamSession(session *stream.Session) {
@@ -624,6 +633,9 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 	if evt == nil {
 		return ""
 	}
+	if evt.Kind == stream.KindGRPC {
+		return m.renderGRPCEvent(evt)
+	}
 	th := m.theme
 	timestamp := th.StreamTimestamp.Render(evt.Timestamp.Format("15:04:05.000"))
 	symbol, dirStyle := m.streamDirectionStyle(evt.Direction)
@@ -763,6 +775,84 @@ func (m *Model) renderStreamEvent(evt *stream.Event) string {
 	return strings.Join(filterEmpty(parts), " ")
 }
 
+func (m *Model) renderGRPCEvent(evt *stream.Event) string {
+	if evt == nil {
+		return ""
+	}
+	th := m.theme
+	timestamp := th.StreamTimestamp.Render(evt.Timestamp.Format("15:04:05.000"))
+	symbol, dirStyle := m.streamDirectionStyle(evt.Direction)
+	direction := dirStyle.Render(symbol)
+	parts := []string{timestamp, direction}
+
+	if evt.Direction == stream.DirNA {
+		summary := grpcSummaryLine(evt.Metadata)
+		if summary != "" {
+			parts = append(parts, th.StreamSummary.Render(summary))
+		}
+		return strings.Join(filterEmpty(parts), " ")
+	}
+
+	if method := grpcMetaVal(evt.Metadata, grpcclient.MetaMethod); method != "" {
+		parts = append(parts, th.StreamSummary.Render(method))
+	}
+
+	label := grpcLabel(evt.Metadata)
+	if label == "" {
+		label = "message"
+	}
+	nameStyled := th.StreamEventName.Render(label)
+	payload := strings.TrimSpace(string(evt.Payload))
+	if payload == "" {
+		parts = append(parts, nameStyled, th.StreamData.Render("<empty>"))
+		return strings.Join(filterEmpty(parts), " ")
+	}
+	if formatted, ok := formatJSONForStream(evt.Payload); ok {
+		block := nameStyled + "\n" + th.StreamData.Render(indentMultiline(formatted, streamJSONIndent))
+		parts = append(parts, block)
+		return strings.Join(filterEmpty(parts), " ")
+	}
+	quoted := fmt.Sprintf("\"%s\"", truncatePreview(payload))
+	parts = append(parts, nameStyled, th.StreamData.Render(quoted))
+	return strings.Join(filterEmpty(parts), " ")
+}
+
+func grpcMetaVal(md map[string]string, key string) string {
+	if md == nil {
+		return ""
+	}
+	return strings.TrimSpace(md[key])
+}
+
+func grpcLabel(md map[string]string) string {
+	typ := grpcMetaVal(md, grpcclient.MetaMsgType)
+	idx := grpcMetaVal(md, grpcclient.MetaMsgIndex)
+	if typ == "" {
+		return idx
+	}
+	if idx == "" {
+		return typ
+	}
+	return typ + "#" + idx
+}
+
+func grpcSummaryLine(md map[string]string) string {
+	method := grpcMetaVal(md, grpcclient.MetaMethod)
+	status := grpcMetaVal(md, grpcclient.MetaStatus)
+	reason := grpcMetaVal(md, grpcclient.MetaReason)
+	summary := "summary"
+	if method != "" {
+		summary += " " + method
+	}
+	if status != "" {
+		summary += " status=" + status
+	}
+	if reason != "" {
+		summary += " reason=" + truncatePreview(reason)
+	}
+	return summary
+}
+
 func (m *Model) streamDirectionStyle(dir stream.Direction) (string, lipgloss.Style) {
 	switch dir {
 	case stream.DirSend:
@@ -879,6 +969,8 @@ func matchesFilter(filter string, evt *stream.Event) bool {
 				return true
 			}
 		}
+	case stream.KindGRPC:
+		return strings.Contains(strings.ToLower(string(evt.Payload)), filter)
 	}
 	return false
 }

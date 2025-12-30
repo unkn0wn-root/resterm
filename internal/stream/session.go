@@ -114,6 +114,8 @@ func buildSessionID(kind Kind) string {
 		prefix = "sse"
 	case KindWebSocket:
 		prefix = "ws"
+	case KindGRPC:
+		prefix = "grpc"
 	}
 	seq := atomic.AddUint64(&sessionCounter, 1)
 	return prefix + "-" + time.Now().UTC().Format("20060102T150405.000000Z") + "-" + itoa(seq)

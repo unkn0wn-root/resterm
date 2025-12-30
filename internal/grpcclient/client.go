@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -55,6 +56,17 @@ type Response struct {
 	Duration        time.Duration
 }
 
+type StreamHook func(*stream.Session)
+
+// gRPC stream event metadata keys.
+const (
+	MetaMethod   = "grpc.method"
+	MetaMsgType  = "grpc.msg.type"
+	MetaMsgIndex = "grpc.msg.index"
+	MetaStatus   = "grpc.status"
+	MetaReason   = "grpc.reason"
+)
+
 type Client struct{}
 
 func NewClient() *Client {
@@ -66,6 +78,7 @@ func (c *Client) Execute(
 	req *restfile.Request,
 	grpcReq *restfile.GRPCRequest,
 	options Options,
+	hook StreamHook,
 ) (resp *Response, err error) {
 	if grpcReq == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "missing grpc metadata")
@@ -136,6 +149,20 @@ func (c *Client) Execute(
 		return nil, err
 	}
 
+	if isStreaming(methodDesc) {
+		return c.executeStream(ctx, conn, req, grpcReq, methodDesc, messageJSON, hook)
+	}
+	return c.executeUnary(ctx, conn, req, grpcReq, methodDesc, messageJSON)
+}
+
+func (c *Client) executeUnary(
+	ctx context.Context,
+	conn *grpc.ClientConn,
+	req *restfile.Request,
+	grpcReq *restfile.GRPCRequest,
+	methodDesc protoreflect.MethodDescriptor,
+	messageJSON string,
+) (*Response, error) {
 	inputMsg := dynamicpb.NewMessage(methodDesc.Input())
 	stripped := strings.TrimSpace(messageJSON)
 	if stripped != "" {
@@ -148,7 +175,9 @@ func (c *Client) Execute(
 	trailerMD := metadata.MD{}
 
 	callCtx := ctx
-	if metaPairs := collectMetadata(grpcReq, req); len(metaPairs) > 0 {
+	if metaPairs, err := collectMetadata(grpcReq, req); err != nil {
+		return nil, err
+	} else if len(metaPairs) > 0 {
 		callCtx = metadata.NewOutgoingContext(callCtx, metadata.Pairs(metaPairs...))
 	}
 
@@ -162,17 +191,7 @@ func (c *Client) Execute(
 		grpc.Header(&headerMD),
 		grpc.Trailer(&trailerMD),
 	)
-	duration := time.Since(start)
-
-	resp = &Response{
-		Headers:         copyMetadata(headerMD),
-		Trailers:        copyMetadata(trailerMD),
-		StatusCode:      codes.OK,
-		StatusMessage:   "OK",
-		ContentType:     "application/json",
-		WireContentType: "application/grpc+proto",
-		Duration:        duration,
-	}
+	resp := newResponse(headerMD, trailerMD, time.Since(start))
 
 	if invokeErr != nil {
 		st, ok := status.FromError(invokeErr)
@@ -183,12 +202,7 @@ func (c *Client) Execute(
 		return resp, errdef.Wrap(errdef.CodeHTTP, invokeErr, "invoke grpc method")
 	}
 
-	marshalled, err := protojson.MarshalOptions{
-		Multiline:       true,
-		EmitUnpopulated: true,
-	}.Marshal(
-		outputMsg,
-	)
+	marshalled, err := marshalMsg(outputMsg)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode grpc response")
 	}
@@ -201,12 +215,7 @@ func (c *Client) Execute(
 	if len(resp.Body) == 0 {
 		resp.Body = marshalled
 	}
-	if resp.Headers == nil {
-		resp.Headers = make(map[string][]string)
-	}
-	if len(resp.Headers["Content-Type"]) == 0 && strings.TrimSpace(resp.ContentType) != "" {
-		resp.Headers["Content-Type"] = []string{resp.ContentType}
-	}
+	ensureContentType(resp)
 	return resp, nil
 }
 
@@ -277,6 +286,9 @@ func (c *Client) loadDescriptorSet(
 }
 
 func (c *Client) resolveMessage(grpcReq *restfile.GRPCRequest, baseDir string) (string, error) {
+	if grpcReq.MessageExpandedSet {
+		return grpcReq.MessageExpanded, nil
+	}
 	if grpcReq.Message != "" {
 		return grpcReq.Message, nil
 	}
@@ -386,6 +398,15 @@ func fetchDescriptorsViaReflection(
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "receive reflection response")
 	}
 
+	if errResp := response.GetErrorResponse(); errResp != nil {
+		code := codes.Code(errResp.GetErrorCode()).String()
+		msg := strings.TrimSpace(errResp.GetErrorMessage())
+		if msg == "" {
+			return nil, errdef.New(errdef.CodeHTTP, "grpc reflection error %s", code)
+		}
+		return nil, errdef.New(errdef.CodeHTTP, "grpc reflection error %s: %s", code, msg)
+	}
+
 	fileResp := response.GetFileDescriptorResponse()
 	if fileResp == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "reflection response missing descriptors")
@@ -426,32 +447,6 @@ func hasTLS(opts Options) bool {
 		return true
 	}
 	return false
-}
-
-func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []string {
-	pairs := []string{}
-	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
-		for k, v := range grpcReq.Metadata {
-			key := strings.ToLower(strings.TrimSpace(k))
-			if key == "" {
-				continue
-			}
-			pairs = append(pairs, key, v)
-		}
-	}
-
-	if req != nil && len(req.Headers) > 0 {
-		for k, values := range req.Headers {
-			key := strings.ToLower(strings.TrimSpace(k))
-			if key == "" {
-				continue
-			}
-			for _, v := range values {
-				pairs = append(pairs, key, v)
-			}
-		}
-	}
-	return pairs
 }
 
 func copyMetadata(md metadata.MD) map[string][]string {
