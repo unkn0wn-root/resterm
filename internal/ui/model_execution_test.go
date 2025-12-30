@@ -47,7 +47,9 @@ func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
 			Target:     " localhost:50051 ",
 			FullMethod: "/pkg.Service/GetUser",
 			Message:    "{\"id\":\"{{userId}}\"}",
-			Metadata:   map[string]string{"authorization": "Bearer {{token}}"},
+			Metadata: []restfile.MetadataPair{
+				{Key: "authorization", Value: "Bearer {{token}}"},
+			},
 		},
 	}
 

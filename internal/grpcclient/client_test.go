@@ -94,20 +94,17 @@ func TestCollectMetadataFiltersHeaders(t *testing.T) {
 	if firstVal(got["x-trace-id"]) != "a" {
 		t.Fatalf("expected x-trace-id metadata, got %#v", got["x-trace-id"])
 	}
-	if firstVal(got["grpc-timeout"]) != "1s" {
-		t.Fatalf("expected grpc-timeout metadata, got %#v", got["grpc-timeout"])
-	}
 	if firstVal(got["x-req-id"]) != "b" {
 		t.Fatalf("expected x-req-id header metadata, got %#v", got["x-req-id"])
+	}
+	if _, ok := got["grpc-timeout"]; ok {
+		t.Fatalf("expected grpc-timeout metadata to be filtered")
 	}
 	if _, ok := got["content-type"]; ok {
 		t.Fatalf("expected content-type header to be filtered")
 	}
 	if _, ok := got["user-agent"]; ok {
 		t.Fatalf("expected user-agent header to be filtered")
-	}
-	if _, ok := got["grpc-timeout"]; ok && len(got["grpc-timeout"]) > 1 {
-		t.Fatalf("expected grpc-timeout from headers to be filtered")
 	}
 	if _, ok := got["bad key"]; ok {
 		t.Fatalf("expected invalid keys to be filtered")

@@ -447,7 +447,7 @@ func hasTLS(opts Options) bool {
 func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []string {
 	pairs := []string{}
 	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
-		pairs = appendMetaPairs(pairs, grpcReq.Metadata, true)
+		pairs = appendMetaPairs(pairs, grpcReq.Metadata)
 	}
 
 	if req != nil && len(req.Headers) > 0 {
@@ -459,14 +459,10 @@ func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []str
 func appendMetaPairs(
 	pairs []string,
 	meta []restfile.MetadataPair,
-	allowReserved bool,
 ) []string {
 	for _, pair := range meta {
 		key := normMetaKey(pair.Key)
-		if key == "" || !validMetaKey(key) {
-			continue
-		}
-		if !allowReserved && isReservedMetaKey(key) {
+		if key == "" || !validMetaKey(key) || isReservedMetaKey(key) {
 			continue
 		}
 		pairs = append(pairs, key, pair.Value)

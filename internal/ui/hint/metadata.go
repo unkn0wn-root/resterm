@@ -60,12 +60,12 @@ var MetaCatalog = []Hint{
 		Summary: "Provide GraphQL variables (JSON)",
 	},
 	{Label: "@query", Aliases: []string{"@graphql-query"}, Summary: "Inline a GraphQL query"},
-	{Label: "@grpc", Summary: "Configure the gRPC service target"},
+	{Label: "@grpc", Summary: "Configure the gRPC method (supports streaming)"},
 	{Label: "@grpc-descriptor", Summary: "Load a gRPC descriptor set"},
 	{Label: "@grpc-reflection", Summary: "Toggle gRPC reflection"},
 	{Label: "@grpc-plaintext", Summary: "Force plaintext gRPC transport"},
 	{Label: "@grpc-authority", Summary: "Set gRPC authority override"},
-	{Label: "@grpc-metadata", Summary: "Attach gRPC metadata headers"},
+	{Label: "@grpc-metadata", Summary: "Attach gRPC metadata (repeatable; reserved keys ignored)"},
 	{Label: "@sse", Summary: "Enable Server-Sent Events streaming"},
 	{Label: "@websocket", Summary: "Enable WebSocket streaming"},
 	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
@@ -103,7 +103,7 @@ var workflowRunHints = []Hint{
 
 var metaSub = map[string][]Hint{
 	"body": {
-		{Label: "expand", Summary: "Expand templates before sending the body"},
+		{Label: "expand", Summary: "Expand templates before sending body (incl. gRPC files)"},
 		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},
 	},
 	"profile": {
