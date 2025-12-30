@@ -72,42 +72,73 @@ func TestFetchDescriptorsReflectionError(t *testing.T) {
 	}
 }
 
-func TestCollectMetadataFiltersHeaders(t *testing.T) {
+func TestCollectMetadataIncludesValidKeys(t *testing.T) {
 	grpcReq := &restfile.GRPCRequest{
 		Metadata: []restfile.MetadataPair{
-			{Key: "x-trace-id", Value: "a"},
-			{Key: "grpc-timeout", Value: "1s"},
-			{Key: "bad key", Value: "skip"},
+			{Key: "X.Trace-Id", Value: "a"},
 		},
 	}
 	req := &restfile.Request{
 		Headers: http.Header{
-			"Content-Type": []string{"application/json"},
-			"User-Agent":   []string{"agent"},
 			"X-Req-Id":     []string{"b"},
-			"Grpc-Timeout": []string{"2s"},
-			"Bad Key":      []string{"drop"},
 		},
 	}
 
-	got := pairMap(collectMetadata(grpcReq, req))
-	if firstVal(got["x-trace-id"]) != "a" {
-		t.Fatalf("expected x-trace-id metadata, got %#v", got["x-trace-id"])
+	pairs, err := collectMetadata(grpcReq, req)
+	if err != nil {
+		t.Fatalf("collect metadata: %v", err)
+	}
+	got := pairMap(pairs)
+	if firstVal(got["x.trace-id"]) != "a" {
+		t.Fatalf("expected x.trace-id metadata, got %#v", got["x.trace-id"])
 	}
 	if firstVal(got["x-req-id"]) != "b" {
 		t.Fatalf("expected x-req-id header metadata, got %#v", got["x-req-id"])
 	}
-	if _, ok := got["grpc-timeout"]; ok {
-		t.Fatalf("expected grpc-timeout metadata to be filtered")
+}
+
+func TestCollectMetadataReservedTimeout(t *testing.T) {
+	grpcReq := &restfile.GRPCRequest{
+		Metadata: []restfile.MetadataPair{
+			{Key: "grpc-timeout", Value: "1s"},
+		},
 	}
-	if _, ok := got["content-type"]; ok {
-		t.Fatalf("expected content-type header to be filtered")
+	_, err := collectMetadata(grpcReq, &restfile.Request{})
+	if err == nil {
+		t.Fatalf("expected reserved timeout error")
 	}
-	if _, ok := got["user-agent"]; ok {
-		t.Fatalf("expected user-agent header to be filtered")
+	if !strings.Contains(err.Error(), "@timeout") {
+		t.Fatalf("expected @timeout guidance, got %v", err)
 	}
-	if _, ok := got["bad key"]; ok {
-		t.Fatalf("expected invalid keys to be filtered")
+}
+
+func TestCollectMetadataReservedHeader(t *testing.T) {
+	req := &restfile.Request{
+		Headers: http.Header{
+			"Content-Type": []string{"application/json"},
+		},
+	}
+	_, err := collectMetadata(&restfile.GRPCRequest{}, req)
+	if err == nil {
+		t.Fatalf("expected reserved header error")
+	}
+	if !strings.Contains(err.Error(), "from headers") {
+		t.Fatalf("expected header context, got %v", err)
+	}
+}
+
+func TestCollectMetadataInvalidKey(t *testing.T) {
+	grpcReq := &restfile.GRPCRequest{
+		Metadata: []restfile.MetadataPair{
+			{Key: "bad key", Value: "skip"},
+		},
+	}
+	_, err := collectMetadata(grpcReq, &restfile.Request{})
+	if err == nil {
+		t.Fatalf("expected invalid key error")
+	}
+	if !strings.Contains(err.Error(), "invalid characters") {
+		t.Fatalf("expected invalid character detail, got %v", err)
 	}
 }
 

@@ -2168,6 +2168,15 @@ func (m *Model) prepareGRPCRequest(
 		grpcReq.MessageFile = req.Body.FilePath
 		grpcReq.Message = ""
 	}
+	grpcReq.MessageExpanded = ""
+	grpcReq.MessageExpandedSet = false
+
+	if err := grpcclient.ValidateMetaPairs(grpcReq.Metadata); err != nil {
+		return err
+	}
+	if err := grpcclient.ValidateHeaderPairs(req.Headers); err != nil {
+		return err
+	}
 
 	if resolver != nil {
 		target, err := resolver.ExpandTemplates(grpcReq.Target)
@@ -2188,8 +2197,8 @@ func (m *Model) prepareGRPCRequest(
 			if err != nil {
 				return err
 			}
-			grpcReq.Message = expanded
-			grpcReq.MessageFile = ""
+			grpcReq.MessageExpanded = expanded
+			grpcReq.MessageExpandedSet = true
 		}
 		if len(grpcReq.Metadata) > 0 {
 			for i := range grpcReq.Metadata {

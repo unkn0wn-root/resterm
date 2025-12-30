@@ -43,7 +43,9 @@ func (c *Client) executeStream(
 	hook StreamHook,
 ) (*Response, error) {
 	callCtx := ctx
-	if metaPairs := collectMetadata(grpcReq, req); len(metaPairs) > 0 {
+	if metaPairs, err := collectMetadata(grpcReq, req); err != nil {
+		return nil, err
+	} else if len(metaPairs) > 0 {
 		callCtx = metadata.NewOutgoingContext(callCtx, metadata.Pairs(metaPairs...))
 	}
 	callCtx, cancel := context.WithCancel(callCtx)

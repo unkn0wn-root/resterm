@@ -142,6 +142,8 @@ type GRPCRequest struct {
 	Authority     string
 	Message       string
 	MessageFile   string
+	MessageExpanded    string
+	MessageExpandedSet bool
 	Metadata      []MetadataPair
 }
 

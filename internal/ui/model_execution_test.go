@@ -322,11 +322,17 @@ func TestPrepareGRPCRequestExpandsMessageFile(t *testing.T) {
 	if err := model.prepareGRPCRequest(req, resolver, dir); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
-	if req.GRPC.MessageFile != "" {
-		t.Fatalf("expected message file to be cleared after expansion")
+	if req.GRPC.MessageFile != "msg.json" {
+		t.Fatalf("expected message file to be preserved, got %q", req.GRPC.MessageFile)
 	}
-	if req.GRPC.Message != `{"id":"abc"}` {
-		t.Fatalf("expected expanded message, got %q", req.GRPC.Message)
+	if req.GRPC.Message != "" {
+		t.Fatalf("expected inline message to stay empty, got %q", req.GRPC.Message)
+	}
+	if !req.GRPC.MessageExpandedSet {
+		t.Fatalf("expected expanded message to be set")
+	}
+	if req.GRPC.MessageExpanded != `{"id":"abc"}` {
+		t.Fatalf("expected expanded message, got %q", req.GRPC.MessageExpanded)
 	}
 }
 
