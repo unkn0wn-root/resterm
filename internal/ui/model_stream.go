@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"nhooyr.io/websocket"
 
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -24,11 +25,6 @@ const (
 	streamSummaryReasonKey   = "resterm.summary.reason"
 	streamSummaryBytesKey    = "resterm.summary.bytes"
 	streamSummaryEventsKey   = "resterm.summary.events"
-	grpcMetaMethod           = "grpc.method"
-	grpcMetaMsgType          = "grpc.msg.type"
-	grpcMetaMsgIndex         = "grpc.msg.index"
-	grpcMetaStatus           = "grpc.status"
-	grpcMetaReason           = "grpc.reason"
 	streamJSONIndent         = "  "
 )
 
@@ -797,7 +793,7 @@ func (m *Model) renderGRPCEvent(evt *stream.Event) string {
 		return strings.Join(filterEmpty(parts), " ")
 	}
 
-	if method := grpcMetaVal(evt.Metadata, grpcMetaMethod); method != "" {
+	if method := grpcMetaVal(evt.Metadata, grpcclient.MetaMethod); method != "" {
 		parts = append(parts, th.StreamSummary.Render(method))
 	}
 
@@ -829,8 +825,8 @@ func grpcMetaVal(md map[string]string, key string) string {
 }
 
 func grpcLabel(md map[string]string) string {
-	typ := grpcMetaVal(md, grpcMetaMsgType)
-	idx := grpcMetaVal(md, grpcMetaMsgIndex)
+	typ := grpcMetaVal(md, grpcclient.MetaMsgType)
+	idx := grpcMetaVal(md, grpcclient.MetaMsgIndex)
 	if typ == "" {
 		return idx
 	}
@@ -841,9 +837,9 @@ func grpcLabel(md map[string]string) string {
 }
 
 func grpcSummaryLine(md map[string]string) string {
-	method := grpcMetaVal(md, grpcMetaMethod)
-	status := grpcMetaVal(md, grpcMetaStatus)
-	reason := grpcMetaVal(md, grpcMetaReason)
+	method := grpcMetaVal(md, grpcclient.MetaMethod)
+	status := grpcMetaVal(md, grpcclient.MetaStatus)
+	reason := grpcMetaVal(md, grpcclient.MetaReason)
 	summary := "summary"
 	if method != "" {
 		summary += " " + method

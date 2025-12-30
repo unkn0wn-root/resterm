@@ -819,7 +819,7 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 
 Supplying any gRPC TLS setting (roots, client cert/key, insecure) automatically enables TLS unless you explicitly force plaintext with `@grpc-plaintext true`.
 
-Reserved transport metadata keys (`grpc-*`, `content-type`, `user-agent`, `te`, etc.) are ignored in `@grpc-metadata`. Use `@timeout` / `@setting timeout` to apply deadlines.
+Reserved transport metadata keys (`grpc-*`, `content-type`, `user-agent`, `te`, etc.) are rejected in `@grpc-metadata` (and gRPC headers). Use `@timeout` / `@setting timeout` to apply deadlines.
 
 The request body contains protobuf JSON. Use `< payload.json` to load from disk, and add `# @body expand` if the file includes templates. Responses display message JSON, headers, and trailers; history stores method, status, and timing alongside HTTP calls.
 

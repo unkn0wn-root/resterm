@@ -363,12 +363,12 @@ func publishMsg(
 	if session == nil {
 		return
 	}
-	meta := map[string]string{grpcMetaMethod: method}
+	meta := map[string]string{MetaMethod: method}
 	if msgType != "" {
-		meta[grpcMetaMsgType] = msgType
+		meta[MetaMsgType] = msgType
 	}
 	if idx >= 0 {
-		meta[grpcMetaMsgIndex] = strconv.Itoa(idx)
+		meta[MetaMsgIndex] = strconv.Itoa(idx)
 	}
 	session.Publish(&stream.Event{
 		Kind:      stream.KindGRPC,
@@ -405,15 +405,15 @@ func publishSummary(session *stream.Session, method string, st *status.Status) {
 	if session == nil {
 		return
 	}
-	meta := map[string]string{grpcMetaMethod: method}
+	meta := map[string]string{MetaMethod: method}
 	if st != nil {
 		code := st.Code().String()
 		if code != "" {
-			meta[grpcMetaStatus] = code
+			meta[MetaStatus] = code
 		}
 		msg := strings.TrimSpace(st.Message())
 		if msg != "" {
-			meta[grpcMetaReason] = msg
+			meta[MetaReason] = msg
 		}
 	}
 	session.Publish(&stream.Event{

@@ -58,12 +58,13 @@ type Response struct {
 
 type StreamHook func(*stream.Session)
 
+// gRPC stream event metadata keys.
 const (
-	grpcMetaMethod   = "grpc.method"
-	grpcMetaMsgType  = "grpc.msg.type"
-	grpcMetaMsgIndex = "grpc.msg.index"
-	grpcMetaStatus   = "grpc.status"
-	grpcMetaReason   = "grpc.reason"
+	MetaMethod   = "grpc.method"
+	MetaMsgType  = "grpc.msg.type"
+	MetaMsgIndex = "grpc.msg.index"
+	MetaStatus   = "grpc.status"
+	MetaReason   = "grpc.reason"
 )
 
 type Client struct{}
