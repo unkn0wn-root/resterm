@@ -194,8 +194,6 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		if hadCurrent && state.index < state.total {
 			state.index++
 		}
-		m.statusPulseBase = ""
-		m.statusPulseFrame = 0
 		m.sending = false
 		return m.finalizeProfileRun(msg, state)
 	}
@@ -208,8 +206,6 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		m.lastError = nil
 		m.lastResponse = nil
 		m.lastGRPC = nil
-		m.statusPulseBase = ""
-		m.statusPulseFrame = 0
 		m.sending = false
 		return m.finalizeProfileRun(msg, state)
 	}
@@ -325,8 +321,7 @@ func profileProgressLabel(state *profileState) string {
 func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd {
 	m.profileRun = nil
 	m.sending = false
-	m.statusPulseBase = ""
-	m.statusPulseFrame = 0
+	m.stopStatusPulseIfIdle()
 
 	report := ""
 	var stats analysis.LatencyStats

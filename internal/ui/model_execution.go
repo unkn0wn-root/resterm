@@ -96,8 +96,7 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 	}
 
 	m.sending = false
-	m.statusPulseBase = ""
-	m.statusPulseFrame = 0
+	m.stopStatusPulse()
 
 	var cmds []tea.Cmd
 	if cmd := m.cancelProfileRun(status); cmd != nil {
@@ -874,8 +873,21 @@ const (
 	streamHeaderSummary = "X-Resterm-Stream-Summary"
 )
 
+func (m *Model) stopStatusPulse() {
+	m.statusPulseOn = false
+	m.statusPulseBase = ""
+	m.statusPulseFrame = 0
+}
+
+func (m *Model) stopStatusPulseIfIdle() {
+	if m.hasActiveRun() {
+		return
+	}
+	m.stopStatusPulse()
+}
+
 func (m *Model) scheduleStatusPulse() tea.Cmd {
-	if !m.sending {
+	if !m.statusPulseOn || !m.hasActiveRun() {
 		return nil
 	}
 	seq := m.statusPulseSeq
@@ -885,6 +897,10 @@ func (m *Model) scheduleStatusPulse() tea.Cmd {
 }
 
 func (m *Model) startStatusPulse() tea.Cmd {
+	if m.statusPulseOn {
+		return nil
+	}
+	m.statusPulseOn = true
 	m.statusPulseSeq++
 	m.statusPulseFrame = 0
 	return m.scheduleStatusPulse()
@@ -894,7 +910,8 @@ func (m *Model) handleStatusPulse(msg statusPulseMsg) tea.Cmd {
 	if msg.seq != m.statusPulseSeq {
 		return nil
 	}
-	if !m.sending {
+	if !m.statusPulseOn || !m.hasActiveRun() {
+		m.stopStatusPulse()
 		return nil
 	}
 

@@ -537,7 +537,6 @@ func (m *Model) executeWorkflowRequest(
 	label := workflowStepLabel(step, state.currentBranch, iter, total)
 	message := fmt.Sprintf("%s %d/%d: %s", title, state.index+1, len(state.steps), label)
 	m.statusPulseBase = message
-	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: message, level: statusInfo})
 	m.sending = true
 
@@ -1134,8 +1133,6 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 	}
 	current := state.current
 	state.current = nil
-	m.statusPulseBase = ""
-	m.statusPulseFrame = 0
 	m.sending = false
 
 	canceled := state.canceled || isCanceled(msg.err)
@@ -1383,8 +1380,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	statsView := newWorkflowStatsView(state)
 	m.workflowRun = nil
 	m.sending = false
-	m.statusPulseBase = ""
-	m.statusPulseFrame = 0
+	m.stopStatusPulseIfIdle()
 	m.setStatusMessage(statusMsg{text: summary, level: workflowStatusLevel(state)})
 	if state == nil || state.origin != workflowOriginForEach {
 		m.recordWorkflowHistory(state, summary, report)
