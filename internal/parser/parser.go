@@ -1951,6 +1951,7 @@ func (r *requestBuilder) build() *restfile.Request {
 			if mime != "" {
 				req.Body.MimeType = mime
 			}
+			req.Body.Options = r.bodyOptions
 			if r.settings != nil {
 				req.Settings = r.settings
 			}

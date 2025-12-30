@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"net/http/httptrace"
 	"net/url"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,7 +52,7 @@ func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
 	}
 
 	var model Model
-	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 
@@ -186,7 +188,7 @@ func TestPrepareGRPCRequestUsesBodyOverride(t *testing.T) {
 	}
 
 	var model Model
-	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.FullMethod != "/UserService/Create" {
@@ -208,7 +210,7 @@ func TestPrepareGRPCRequestNormalizesSchemedTarget(t *testing.T) {
 	}
 
 	var model Model
-	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.Target != "localhost:8082" {
@@ -230,7 +232,7 @@ func TestPrepareGRPCRequestNormalizesSecureSchemes(t *testing.T) {
 	}
 
 	var model Model
-	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.Target != "api.example.com:8443" {
@@ -255,7 +257,7 @@ func TestNormalizeGRPCTargetPreservesQuery(t *testing.T) {
 	}
 
 	var model Model
-	if err := model.prepareGRPCRequest(req, vars.NewResolver()); err != nil {
+	if err := model.prepareGRPCRequest(req, vars.NewResolver(), ""); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.Target != "localhost:9000/service?alt=blue" {
@@ -280,11 +282,45 @@ func TestPrepareGRPCRequestExpandsDescriptorSet(t *testing.T) {
 	}
 
 	var model Model
-	if err := model.prepareGRPCRequest(req, resolver); err != nil {
+	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
 		t.Fatalf("prepareGRPCRequest returned error: %v", err)
 	}
 	if req.GRPC.DescriptorSet != "./testdata/example.protoset" {
 		t.Fatalf("expected descriptor set to be expanded, got %q", req.GRPC.DescriptorSet)
+	}
+}
+
+func TestPrepareGRPCRequestExpandsMessageFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "msg.json")
+	if err := os.WriteFile(path, []byte(`{"id":"{{userId}}"}`), 0o600); err != nil {
+		t.Fatalf("write message file: %v", err)
+	}
+
+	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
+		"userId": "abc",
+	}))
+	req := &restfile.Request{
+		Method: "GRPC",
+		Body: restfile.BodySource{
+			FilePath: "msg.json",
+			Options:  restfile.BodyOptions{ExpandTemplates: true},
+		},
+		GRPC: &restfile.GRPCRequest{
+			Target:     "localhost:50051",
+			FullMethod: "/pkg.Service/Get",
+		},
+	}
+
+	var model Model
+	if err := model.prepareGRPCRequest(req, resolver, dir); err != nil {
+		t.Fatalf("prepareGRPCRequest returned error: %v", err)
+	}
+	if req.GRPC.MessageFile != "" {
+		t.Fatalf("expected message file to be cleared after expansion")
+	}
+	if req.GRPC.Message != `{"id":"abc"}` {
+		t.Fatalf("expected expanded message, got %q", req.GRPC.Message)
 	}
 }
 

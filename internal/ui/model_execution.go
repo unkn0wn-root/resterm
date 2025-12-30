@@ -545,7 +545,7 @@ func (m *Model) executeRequest(
 		}()
 
 		if req.GRPC != nil {
-			if err := m.prepareGRPCRequest(req, resolver); err != nil {
+			if err := m.prepareGRPCRequest(req, resolver, grpcOpts.BaseDir); err != nil {
 				return responseMsg{err: err, executed: req}
 			}
 		}
@@ -2137,7 +2137,11 @@ func cloneStringMap(input map[string]string) map[string]string {
 	return clone
 }
 
-func (m *Model) prepareGRPCRequest(req *restfile.Request, resolver *vars.Resolver) error {
+func (m *Model) prepareGRPCRequest(
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	baseDir string,
+) error {
 	grpcReq := req.GRPC
 	if grpcReq == nil {
 		return nil
@@ -2178,6 +2182,14 @@ func (m *Model) prepareGRPCRequest(req *restfile.Request, resolver *vars.Resolve
 				return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc message")
 			}
 			grpcReq.Message = expanded
+		}
+		if req.Body.Options.ExpandTemplates && strings.TrimSpace(grpcReq.MessageFile) != "" {
+			expanded, err := expandGRPCMessageFile(grpcReq.MessageFile, baseDir, resolver)
+			if err != nil {
+				return err
+			}
+			grpcReq.Message = expanded
+			grpcReq.MessageFile = ""
 		}
 		if len(grpcReq.Metadata) > 0 {
 			for key, value := range grpcReq.Metadata {
@@ -2223,6 +2235,29 @@ func (m *Model) prepareGRPCRequest(req *restfile.Request, resolver *vars.Resolve
 	}
 	req.URL = grpcReq.Target
 	return nil
+}
+
+func expandGRPCMessageFile(
+	path string,
+	baseDir string,
+	resolver *vars.Resolver,
+) (string, error) {
+	if resolver == nil {
+		return "", nil
+	}
+	full := path
+	if !filepath.IsAbs(full) && baseDir != "" {
+		full = filepath.Join(baseDir, full)
+	}
+	data, err := os.ReadFile(full)
+	if err != nil {
+		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read grpc message file %s", path)
+	}
+	expanded, err := resolver.ExpandTemplates(string(data))
+	if err != nil {
+		return "", errdef.Wrap(errdef.CodeHTTP, err, "expand grpc message file")
+	}
+	return expanded, nil
 }
 
 func normalizeGRPCTarget(target string, grpcReq *restfile.GRPCRequest) string {
