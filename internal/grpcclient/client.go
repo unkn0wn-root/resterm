@@ -3,6 +3,7 @@ package grpcclient
 import (
 	"context"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -392,6 +393,15 @@ func fetchDescriptorsViaReflection(
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "receive reflection response")
 	}
 
+	if errResp := response.GetErrorResponse(); errResp != nil {
+		code := codes.Code(errResp.GetErrorCode()).String()
+		msg := strings.TrimSpace(errResp.GetErrorMessage())
+		if msg == "" {
+			return nil, errdef.New(errdef.CodeHTTP, "grpc reflection error %s", code)
+		}
+		return nil, errdef.New(errdef.CodeHTTP, "grpc reflection error %s: %s", code, msg)
+	}
+
 	fileResp := response.GetFileDescriptorResponse()
 	if fileResp == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "reflection response missing descriptors")
@@ -437,27 +447,89 @@ func hasTLS(opts Options) bool {
 func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []string {
 	pairs := []string{}
 	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
-		for _, pair := range grpcReq.Metadata {
-			key := strings.ToLower(strings.TrimSpace(pair.Key))
-			if key == "" {
-				continue
-			}
-			pairs = append(pairs, key, pair.Value)
-		}
+		pairs = appendMetaPairs(pairs, grpcReq.Metadata, true)
 	}
 
 	if req != nil && len(req.Headers) > 0 {
-		for k, values := range req.Headers {
-			key := strings.ToLower(strings.TrimSpace(k))
-			if key == "" {
-				continue
-			}
-			for _, v := range values {
-				pairs = append(pairs, key, v)
-			}
+		pairs = appendHeaderPairs(pairs, req.Headers)
+	}
+	return pairs
+}
+
+func appendMetaPairs(
+	pairs []string,
+	meta []restfile.MetadataPair,
+	allowReserved bool,
+) []string {
+	for _, pair := range meta {
+		key := normMetaKey(pair.Key)
+		if key == "" || !validMetaKey(key) {
+			continue
+		}
+		if !allowReserved && isReservedMetaKey(key) {
+			continue
+		}
+		pairs = append(pairs, key, pair.Value)
+	}
+	return pairs
+}
+
+func appendHeaderPairs(pairs []string, hdr http.Header) []string {
+	for key, values := range hdr {
+		norm := normMetaKey(key)
+		if norm == "" || !validMetaKey(norm) || isReservedMetaKey(norm) {
+			continue
+		}
+		for _, value := range values {
+			pairs = append(pairs, norm, value)
 		}
 	}
 	return pairs
+}
+
+func normMetaKey(key string) string {
+	return strings.ToLower(strings.TrimSpace(key))
+}
+
+func validMetaKey(key string) bool {
+	if key == "" {
+		return false
+	}
+	for i := 0; i < len(key); i++ {
+		c := key[i]
+		if c >= 'a' && c <= 'z' {
+			continue
+		}
+		if c >= '0' && c <= '9' {
+			continue
+		}
+		if c == '-' || c == '_' {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func isReservedMetaKey(key string) bool {
+	if strings.HasPrefix(key, "grpc-") || strings.HasPrefix(key, ":") {
+		return true
+	}
+	switch key {
+	case "content-type",
+		"user-agent",
+		"te",
+		"authority",
+		"host",
+		"connection",
+		"keep-alive",
+		"proxy-connection",
+		"transfer-encoding",
+		"upgrade":
+		return true
+	default:
+		return false
+	}
 }
 
 func copyMetadata(md metadata.MD) map[string][]string {
