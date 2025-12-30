@@ -149,7 +149,6 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 
 	m.sending = true
 	m.statusPulseBase = state.statusLine()
-	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
 	runCmd := m.withEnvironment(env, func() tea.Cmd {
@@ -173,8 +172,6 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	currentReq := state.current
 	currentEnv := state.currentEnv
 	state.current = nil
-	m.statusPulseBase = ""
-	m.statusPulseFrame = 0
 	m.sending = false
 
 	canceled := state.canceled || isCanceled(msg.err)
@@ -279,8 +276,7 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	m.lastCompareResults = state.results
 	m.lastCompareSpec = cloneCompareSpec(state.spec)
 	m.sending = false
-	m.statusPulseBase = ""
-	m.statusPulseFrame = 0
+	m.stopStatusPulseIfIdle()
 
 	if secondary := m.pane(responsePaneSecondary); secondary != nil {
 		secondary.followLatest = true

@@ -860,6 +860,7 @@ func TestCancelActiveRunsStopsSend(t *testing.T) {
 	model.sending = true
 	model.statusPulseBase = "Sending test"
 	model.statusPulseFrame = 2
+	model.statusPulseOn = true
 
 	canceled := false
 	model.sendCancel = func() { canceled = true }
@@ -878,6 +879,9 @@ func TestCancelActiveRunsStopsSend(t *testing.T) {
 			model.statusPulseFrame,
 		)
 	}
+	if model.statusPulseOn {
+		t.Fatalf("expected pulse to stop")
+	}
 	if !canceled {
 		t.Fatalf("expected sendCancel to be invoked")
 	}
@@ -894,6 +898,38 @@ func TestCancelActiveRunsNoopWhenIdle(t *testing.T) {
 	}
 	if model.statusMessage.text != "" {
 		t.Fatalf("did not expect status message, got %q", model.statusMessage.text)
+	}
+}
+
+func TestStartStatusPulseIdempotent(t *testing.T) {
+	m := New(Config{})
+	m.sending = true
+	cmd := m.startStatusPulse()
+	if cmd == nil {
+		t.Fatalf("expected startStatusPulse to return command")
+	}
+	if !m.statusPulseOn {
+		t.Fatalf("expected pulse to start")
+	}
+	m.statusPulseFrame = 2
+
+	cmd2 := m.startStatusPulse()
+	if cmd2 != nil {
+		t.Fatalf("expected startStatusPulse to be idempotent")
+	}
+	if m.statusPulseFrame != 2 {
+		t.Fatalf("expected pulse frame preserved, got %d", m.statusPulseFrame)
+	}
+}
+
+func TestScheduleStatusPulseWhenRunActive(t *testing.T) {
+	m := New(Config{})
+	m.statusPulseOn = true
+	m.workflowRun = &workflowState{}
+
+	cmd := m.scheduleStatusPulse()
+	if cmd == nil {
+		t.Fatalf("expected scheduleStatusPulse to return command")
 	}
 }
 

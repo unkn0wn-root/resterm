@@ -61,11 +61,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case responseMsg:
 		m.sending = false
 		m.sendCancel = nil
-		m.statusPulseBase = ""
-		m.statusPulseFrame = 0
 		if cmd := m.handleResponseMessage(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+		m.stopStatusPulseIfIdle()
 	case statusMsg:
 		m.setStatusMessage(typed)
 	case statusPulseMsg:
