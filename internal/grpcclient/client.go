@@ -437,12 +437,12 @@ func hasTLS(opts Options) bool {
 func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) []string {
 	pairs := []string{}
 	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
-		for k, v := range grpcReq.Metadata {
-			key := strings.ToLower(strings.TrimSpace(k))
+		for _, pair := range grpcReq.Metadata {
+			key := strings.ToLower(strings.TrimSpace(pair.Key))
 			if key == "" {
 				continue
 			}
-			pairs = append(pairs, key, v)
+			pairs = append(pairs, key, pair.Value)
 		}
 	}
 

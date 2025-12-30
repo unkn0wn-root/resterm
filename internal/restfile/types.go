@@ -124,6 +124,11 @@ type SSHSpec struct {
 	Inline *SSHProfile
 }
 
+type MetadataPair struct {
+	Key   string
+	Value string
+}
+
 type GRPCRequest struct {
 	Target        string
 	Package       string
@@ -137,7 +142,7 @@ type GRPCRequest struct {
 	Authority     string
 	Message       string
 	MessageFile   string
-	Metadata      map[string]string
+	Metadata      []MetadataPair
 }
 
 type RequestMetadata struct {

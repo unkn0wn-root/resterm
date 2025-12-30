@@ -1134,7 +1134,14 @@ GRPC localhost:50051
 	if !grpc.PlaintextSet {
 		t.Fatalf("expected plaintext directive to be marked as set")
 	}
-	if grpc.Metadata["authorization"] != "Bearer 123" {
+	found := false
+	for _, pair := range grpc.Metadata {
+		if pair.Key == "authorization" && pair.Value == "Bearer 123" {
+			found = true
+			break
+		}
+	}
+	if !found {
 		t.Fatalf("expected metadata to be captured")
 	}
 	if strings.TrimSpace(grpc.Message) == "" {

@@ -26,9 +26,12 @@ func IsMethodLine(line string) bool {
 
 func (b *Builder) EnsureRequest() *restfile.GRPCRequest {
 	if b.request == nil {
-		b.request = &restfile.GRPCRequest{Metadata: map[string]string{}, UseReflection: true}
+		b.request = &restfile.GRPCRequest{
+			Metadata:      []restfile.MetadataPair{},
+			UseReflection: true,
+		}
 	} else if b.request.Metadata == nil {
-		b.request.Metadata = map[string]string{}
+		b.request.Metadata = []restfile.MetadataPair{}
 	}
 	return b.request
 }
@@ -94,7 +97,10 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 				key := strings.TrimSpace(rest[:idx])
 				value := strings.TrimSpace(rest[idx+1:])
 				if key != "" {
-					req.Metadata[key] = value
+					req.Metadata = append(req.Metadata, restfile.MetadataPair{
+						Key:   key,
+						Value: value,
+					})
 				}
 			}
 		}
@@ -140,11 +146,9 @@ func (b *Builder) Finalize(
 
 	grpcCopy := *b.request
 	if len(grpcCopy.Metadata) > 0 {
-		metadataCopy := make(map[string]string, len(grpcCopy.Metadata))
-		for k, v := range grpcCopy.Metadata {
-			metadataCopy[k] = v
-		}
-		grpcCopy.Metadata = metadataCopy
+		meta := make([]restfile.MetadataPair, len(grpcCopy.Metadata))
+		copy(meta, grpcCopy.Metadata)
+		grpcCopy.Metadata = meta
 	}
 	if b.messageFromFile != "" {
 		grpcCopy.MessageFile = b.messageFromFile

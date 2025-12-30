@@ -65,12 +65,16 @@ func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
 	if req.GRPC.MessageFile != "" {
 		t.Fatalf("expected message file to be cleared when inline body provided")
 	}
-	if want := "Bearer abcd"; req.GRPC.Metadata["authorization"] != want {
-		t.Fatalf(
-			"expected metadata to be expanded to %q, got %q",
-			want,
-			req.GRPC.Metadata["authorization"],
-		)
+	want := "Bearer abcd"
+	found := false
+	for _, pair := range req.GRPC.Metadata {
+		if pair.Key == "authorization" && pair.Value == want {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected metadata to be expanded to %q", want)
 	}
 }
 
