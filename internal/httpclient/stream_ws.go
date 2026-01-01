@@ -105,15 +105,7 @@ func (c *Client) StartWebSocket(
 	}
 
 	wsOpts := req.WebSocket.Options
-	var (
-		handshakeCtx    context.Context
-		handshakeCancel context.CancelFunc
-	)
-	if wsOpts.HandshakeTimeout > 0 {
-		handshakeCtx, handshakeCancel = context.WithTimeout(ctx, wsOpts.HandshakeTimeout)
-	} else {
-		handshakeCtx, handshakeCancel = context.WithCancel(ctx)
-	}
+	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout)
 	defer handshakeCancel()
 
 	httpReq, effectiveOpts, err := c.prepareHTTPRequest(handshakeCtx, req, resolver, opts)
@@ -134,18 +126,7 @@ func (c *Client) StartWebSocket(
 	}
 	client.Timeout = 0
 
-	dialOpts := &websocket.DialOptions{
-		HTTPHeader:   httpReq.Header.Clone(),
-		Subprotocols: append([]string(nil), wsOpts.Subprotocols...),
-		HTTPClient:   client,
-	}
-	if wsOpts.CompressionSet {
-		if wsOpts.Compression {
-			dialOpts.CompressionMode = websocket.CompressionNoContextTakeover
-		} else {
-			dialOpts.CompressionMode = websocket.CompressionDisabled
-		}
-	}
+	dialOpts := wsDialOptions(httpReq, wsOpts, client)
 
 	dial := c.wsDial
 	if dial == nil {
@@ -170,33 +151,17 @@ func (c *Client) StartWebSocket(
 	handshakeCancel()
 	sessionCtx, sessionCancel := context.WithCancel(ctx)
 
-	reqMeta := captureReqMeta(httpReq, resp)
-
-	effURL := httpReq.URL.String()
-	if resp != nil && resp.Request != nil && resp.Request.URL != nil {
-		effURL = resp.Request.URL.String()
-	}
-
-	meta := StreamMeta{
-		Status:         "101 Switching Protocols",
-		StatusCode:     http.StatusSwitchingProtocols,
-		Proto:          "HTTP/1.1",
-		EffectiveURL:   effURL,
-		ConnectedAt:    time.Now(),
-		Request:        req,
-		BaseDir:        effectiveOpts.BaseDir,
-		RequestHeaders: reqMeta.headers,
-		RequestMethod:  reqMeta.method,
-		RequestHost:    reqMeta.host,
-		RequestLength:  reqMeta.length,
-		RequestTE:      reqMeta.te,
-	}
-	if resp != nil {
-		meta.Status = resp.Status
-		meta.StatusCode = resp.StatusCode
-		meta.Proto = resp.Proto
-		meta.Headers = resp.Header.Clone()
-	}
+	meta := buildStreamMeta(
+		req,
+		httpReq,
+		resp,
+		effectiveOpts.BaseDir,
+		metaDefaults{
+			status: "101 Switching Protocols",
+			code:   http.StatusSwitchingProtocols,
+			proto:  "HTTP/1.1",
+		},
+	)
 
 	session := stream.NewSession(sessionCtx, stream.KindWebSocket, stream.Config{})
 	session.MarkOpen()
@@ -225,6 +190,30 @@ func (c *Client) StartWebSocket(
 	return &WebSocketHandle{Session: session, Meta: meta, Sender: sender}, nil, nil
 }
 
+func wsDialOptions(
+	req *http.Request,
+	wsOpts restfile.WebSocketOptions,
+	client *http.Client,
+) *websocket.DialOptions {
+	var hdr http.Header
+	if req != nil {
+		hdr = cloneHdr(req.Header)
+	}
+	opts := &websocket.DialOptions{
+		HTTPHeader:   hdr,
+		Subprotocols: append([]string(nil), wsOpts.Subprotocols...),
+		HTTPClient:   client,
+	}
+	if wsOpts.CompressionSet {
+		if wsOpts.Compression {
+			opts.CompressionMode = websocket.CompressionNoContextTakeover
+		} else {
+			opts.CompressionMode = websocket.CompressionDisabled
+		}
+	}
+	return opts
+}
+
 func (c *Client) ExecuteWebSocket(
 	ctx context.Context,
 	req *restfile.Request,
@@ -251,6 +240,9 @@ func (c *Client) CompleteWebSocket(
 	if handle == nil || handle.Session == nil || handle.Sender == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "websocket session not available")
 	}
+	if req == nil || req.WebSocket == nil {
+		return nil, errdef.New(errdef.CodeHTTP, "websocket request missing")
+	}
 
 	session := handle.Session
 	listener := session.Subscribe()
@@ -271,105 +263,14 @@ func (c *Client) CompleteWebSocket(
 
 	sender := handle.Sender
 	wsReq := req.WebSocket
-	wsOpts := wsReq.Options
-	recvWindow := 250 * time.Millisecond
-	if wsOpts.IdleTimeout > 0 {
-		half := wsOpts.IdleTimeout / 2
-		if half > 0 && half < recvWindow {
-			recvWindow = half
-		}
-	}
 
 	baseDir := handle.Meta.BaseDir
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	fallbacks, allowRaw := resolveFileLookup(baseDir, opts)
-
-	closedByScript := false
-	for idx, step := range wsReq.Steps {
-		sender.touch()
-
-		if err := ensureSessionAlive(session); err != nil {
-			return nil, err
-		}
-
-		label := fmt.Sprintf("%d:%s", idx+1, string(step.Type))
-		meta := map[string]string{wsMetaStep: label}
-		switch step.Type {
-		case restfile.WebSocketStepSendText:
-			meta[wsMetaType] = "text"
-			if err := sender.SendText(session.Context(), step.Value, meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			waitForWindow(session.Context(), recvWindow)
-		case restfile.WebSocketStepSendJSON:
-			payload := strings.TrimSpace(step.Value)
-			if payload == "" {
-				payload = "{}"
-			}
-			meta[wsMetaType] = "json"
-			if err := sender.SendJSON(session.Context(), payload, meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			waitForWindow(session.Context(), recvWindow)
-		case restfile.WebSocketStepSendBase64:
-			meta[wsMetaType] = "binary"
-			if err := sender.SendBase64(session.Context(), step.Value, meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			waitForWindow(session.Context(), recvWindow)
-		case restfile.WebSocketStepSendFile:
-			data, _, readErr := c.readFileWithFallback(
-				step.File,
-				baseDir,
-				fallbacks,
-				allowRaw,
-				"websocket payload file",
-			)
-			if readErr != nil {
-				session.Cancel()
-				return nil, readErr
-			}
-			meta[wsMetaType] = "binary"
-			if err := sender.SendBinary(session.Context(), data, meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			waitForWindow(session.Context(), recvWindow)
-		case restfile.WebSocketStepPing:
-			meta[wsMetaType] = "ping"
-			if err := sender.Ping(session.Context(), meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			waitForWindow(session.Context(), recvWindow)
-		case restfile.WebSocketStepPong:
-			if err := sender.Pong(session.Context(), step.Value, meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			waitForWindow(session.Context(), recvWindow)
-		case restfile.WebSocketStepWait:
-			if err := waitForDuration(session.Context(), step.Duration); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-		case restfile.WebSocketStepClose:
-			meta[wsMetaType] = "close"
-			code := websocket.StatusNormalClosure
-			if step.Code != 0 {
-				code = websocket.StatusCode(step.Code)
-			}
-			if err := sender.Close(session.Context(), code, step.Reason, meta); err != nil {
-				session.Cancel()
-				return nil, err
-			}
-			closedByScript = true
-		}
+	closedByScript, err := c.runWSSteps(session, sender, wsReq, baseDir, opts)
+	if err != nil {
+		return nil, err
 	}
 
 	if !closedByScript {
@@ -405,9 +306,9 @@ func (c *Client) CompleteWebSocket(
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode websocket transcript")
 	}
 
-	headers := http.Header{}
-	if handle.Meta.Headers != nil {
-		headers = handle.Meta.Headers.Clone()
+	headers := cloneHdr(handle.Meta.Headers)
+	if headers == nil {
+		headers = make(http.Header)
 	}
 	headers.Set("Content-Type", "application/json; charset=utf-8")
 	headers.Set(streamHeaderType, "websocket")
@@ -417,34 +318,133 @@ func (c *Client) CompleteWebSocket(
 		transcript.Summary.ReceivedCount,
 		transcript.Summary.ClosedBy))
 
-	status := handle.Meta.Status
-	if status == "" {
-		status = "101 Switching Protocols"
+	meta := handle.Meta
+	if meta.Status == "" {
+		meta.Status = "101 Switching Protocols"
 	}
-	statusCode := handle.Meta.StatusCode
-	if statusCode == 0 {
-		statusCode = http.StatusSwitchingProtocols
+	if meta.StatusCode == 0 {
+		meta.StatusCode = http.StatusSwitchingProtocols
+	}
+	if meta.Proto == "" {
+		meta.Proto = "HTTP/1.1"
+	}
+	return streamResp(meta, headers, body, acc.summary.Duration), nil
+}
+
+func wsRecvWindow(opts restfile.WebSocketOptions) time.Duration {
+	win := 250 * time.Millisecond
+	if opts.IdleTimeout <= 0 {
+		return win
+	}
+	half := opts.IdleTimeout / 2
+	if half > 0 && half < win {
+		return half
+	}
+	return win
+}
+
+func (c *Client) runWSSteps(
+	session *stream.Session,
+	sender *WebSocketSender,
+	wsReq *restfile.WebSocketRequest,
+	baseDir string,
+	opts Options,
+) (bool, error) {
+	if wsReq == nil {
+		return false, errdef.New(errdef.CodeHTTP, "websocket request missing")
 	}
 
-	var reqHeaders http.Header
-	if handle.Meta.RequestHeaders != nil {
-		reqHeaders = handle.Meta.RequestHeaders.Clone()
+	ctx := session.Context()
+	recvWindow := wsRecvWindow(wsReq.Options)
+	fallbacks, allowRaw := resolveFileLookup(baseDir, opts)
+	closedByScript := false
+
+	for idx, step := range wsReq.Steps {
+		sender.touch()
+
+		if err := ensureSessionAlive(session); err != nil {
+			return false, err
+		}
+
+		label := fmt.Sprintf("%d:%s", idx+1, string(step.Type))
+		meta := map[string]string{wsMetaStep: label}
+		switch step.Type {
+		case restfile.WebSocketStepSendText:
+			meta[wsMetaType] = "text"
+			if err := sender.SendText(ctx, step.Value, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			waitForWindow(ctx, recvWindow)
+		case restfile.WebSocketStepSendJSON:
+			payload := strings.TrimSpace(step.Value)
+			if payload == "" {
+				payload = "{}"
+			}
+			meta[wsMetaType] = "json"
+			if err := sender.SendJSON(ctx, payload, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			waitForWindow(ctx, recvWindow)
+		case restfile.WebSocketStepSendBase64:
+			meta[wsMetaType] = "binary"
+			if err := sender.SendBase64(ctx, step.Value, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			waitForWindow(ctx, recvWindow)
+		case restfile.WebSocketStepSendFile:
+			data, _, readErr := c.readFileWithFallback(
+				step.File,
+				baseDir,
+				fallbacks,
+				allowRaw,
+				"websocket payload file",
+			)
+			if readErr != nil {
+				session.Cancel()
+				return false, readErr
+			}
+			meta[wsMetaType] = "binary"
+			if err := sender.SendBinary(ctx, data, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			waitForWindow(ctx, recvWindow)
+		case restfile.WebSocketStepPing:
+			meta[wsMetaType] = "ping"
+			if err := sender.Ping(ctx, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			waitForWindow(ctx, recvWindow)
+		case restfile.WebSocketStepPong:
+			if err := sender.Pong(ctx, step.Value, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			waitForWindow(ctx, recvWindow)
+		case restfile.WebSocketStepWait:
+			if err := waitForDuration(ctx, step.Duration); err != nil {
+				session.Cancel()
+				return false, err
+			}
+		case restfile.WebSocketStepClose:
+			meta[wsMetaType] = "close"
+			code := websocket.StatusNormalClosure
+			if step.Code != 0 {
+				code = websocket.StatusCode(step.Code)
+			}
+			if err := sender.Close(ctx, code, step.Reason, meta); err != nil {
+				session.Cancel()
+				return false, err
+			}
+			closedByScript = true
+		}
 	}
-	return &Response{
-		Status:         status,
-		StatusCode:     statusCode,
-		Proto:          handle.Meta.Proto,
-		Headers:        headers,
-		ReqMethod:      handle.Meta.RequestMethod,
-		RequestHeaders: reqHeaders,
-		ReqHost:        handle.Meta.RequestHost,
-		ReqLen:         handle.Meta.RequestLength,
-		ReqTE:          append([]string(nil), handle.Meta.RequestTE...),
-		Body:           body,
-		Duration:       acc.summary.Duration,
-		EffectiveURL:   handle.Meta.EffectiveURL,
-		Request:        req,
-	}, nil
+
+	return closedByScript, nil
 }
 
 func buildWebSocketFallback(
@@ -469,26 +469,7 @@ func buildWebSocketFallback(
 		body = data
 	}
 
-	effectiveURL := ""
-	if httpResp.Request != nil && httpResp.Request.URL != nil {
-		effectiveURL = httpResp.Request.URL.String()
-	}
-	meta := captureReqMeta(httpResp.Request, httpResp)
-	return &Response{
-		Status:         httpResp.Status,
-		StatusCode:     httpResp.StatusCode,
-		Proto:          httpResp.Proto,
-		Headers:        httpResp.Header.Clone(),
-		ReqMethod:      meta.method,
-		RequestHeaders: meta.headers,
-		ReqHost:        meta.host,
-		ReqLen:         meta.length,
-		ReqTE:          meta.te,
-		Body:           body,
-		Duration:       time.Since(started),
-		EffectiveURL:   effectiveURL,
-		Request:        req,
-	}, nil
+	return respFromHTTP(httpResp.Request, httpResp, req, body, time.Since(started)), nil
 }
 
 func waitForWindow(ctx context.Context, d time.Duration) {
