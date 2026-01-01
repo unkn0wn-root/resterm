@@ -548,6 +548,33 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 	}
 }
 
+func TestExecuteEffectiveURLFallback(t *testing.T) {
+	client := NewClient(nil)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("ok")),
+				Request:    nil,
+			}
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	}
+
+	req := &restfile.Request{Method: http.MethodGet, URL: "https://example.com"}
+	resp, err := client.Execute(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("execute request: %v", err)
+	}
+	if resp.EffectiveURL != "https://example.com" {
+		t.Fatalf("expected effective url to use request, got %q", resp.EffectiveURL)
+	}
+}
+
 func TestCaptureReqMetaPrefersResponseRequest(t *testing.T) {
 	sent, err := http.NewRequest("POST", "https://old.example.com/items", strings.NewReader("body"))
 	if err != nil {
@@ -634,6 +661,16 @@ func (b *slowBody) Read(p []byte) (int, error) {
 }
 
 func (b *slowBody) Close() error { return nil }
+
+type errBody struct {
+	err error
+}
+
+func (e errBody) Read(p []byte) (int, error) {
+	return 0, e.err
+}
+
+func (e errBody) Close() error { return nil }
 
 func TestExecuteSSE(t *testing.T) {
 	client := NewClient(nil)
@@ -762,6 +799,47 @@ func TestExecuteSSEIdleTimeout(t *testing.T) {
 	}
 	if transcript.Summary.Reason != "timeout:idle" {
 		t.Fatalf("expected idle timeout reason, got %q", transcript.Summary.Reason)
+	}
+}
+
+func TestExecuteSSEReadErrorSummary(t *testing.T) {
+	client := NewClient(nil)
+	boom := errors.New("boom")
+	client.httpFactory = func(Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			resp := &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       errBody{err: boom},
+				Request:    req,
+			}
+			resp.Header.Set("Content-Type", "text/event-stream")
+			return resp, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE:    &restfile.SSERequest{},
+	}
+	resp, err := client.ExecuteSSE(context.Background(), req, vars.NewResolver(), Options{})
+	if err != nil {
+		t.Fatalf("execute sse read error: %v", err)
+	}
+
+	var transcript SSETranscript
+	if err := json.Unmarshal(resp.Body, &transcript); err != nil {
+		t.Fatalf("unmarshal transcript: %v", err)
+	}
+	if transcript.Summary.Reason == "" || transcript.Summary.Reason == "eof" {
+		t.Fatalf("expected error reason, got %q", transcript.Summary.Reason)
+	}
+	if !strings.Contains(transcript.Summary.Reason, "read sse stream") {
+		t.Fatalf("expected read error in reason, got %q", transcript.Summary.Reason)
 	}
 }
 

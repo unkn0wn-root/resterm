@@ -60,15 +60,7 @@ func (c *Client) StartSSE(
 	}
 
 	streamOpts := req.SSE.Options
-	var (
-		streamCtx context.Context
-		cancel    context.CancelFunc
-	)
-	if streamOpts.TotalTimeout > 0 {
-		streamCtx, cancel = context.WithTimeout(ctx, streamOpts.TotalTimeout)
-	} else {
-		streamCtx, cancel = context.WithCancel(ctx)
-	}
+	streamCtx, cancel := ctxWithTimeout(ctx, streamOpts.TotalTimeout)
 
 	httpReq, effectiveOpts, err := c.prepareHTTPRequest(streamCtx, req, resolver, opts)
 	if err != nil {
@@ -98,13 +90,6 @@ func (c *Client) StartSSE(
 		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "perform sse request")
 	}
 
-	effURL := ""
-	if httpResp.Request != nil && httpResp.Request.URL != nil {
-		effURL = httpResp.Request.URL.String()
-	} else if httpReq.URL != nil {
-		effURL = httpReq.URL.String()
-	}
-
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
 	if httpResp.StatusCode >= 400 || !strings.Contains(contentType, "text/event-stream") {
 		body, readErr := io.ReadAll(httpResp.Body)
@@ -116,41 +101,10 @@ func (c *Client) StartSSE(
 		if closeErr != nil {
 			return nil, nil, errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
 		}
-		meta := captureReqMeta(httpReq, httpResp)
-		return nil, &Response{
-			Status:         httpResp.Status,
-			StatusCode:     httpResp.StatusCode,
-			Proto:          httpResp.Proto,
-			Headers:        httpResp.Header.Clone(),
-			ReqMethod:      meta.method,
-			RequestHeaders: meta.headers,
-			ReqHost:        meta.host,
-			ReqLen:         meta.length,
-			ReqTE:          meta.te,
-			Body:           body,
-			Duration:       time.Since(start),
-			EffectiveURL:   effURL,
-			Request:        req,
-		}, nil
+		return nil, respFromHTTP(httpReq, httpResp, req, body, time.Since(start)), nil
 	}
 
-	reqMeta := captureReqMeta(httpReq, httpResp)
-
-	meta := StreamMeta{
-		Status:         httpResp.Status,
-		StatusCode:     httpResp.StatusCode,
-		Proto:          httpResp.Proto,
-		Headers:        httpResp.Header.Clone(),
-		RequestHeaders: reqMeta.headers,
-		RequestMethod:  reqMeta.method,
-		RequestHost:    reqMeta.host,
-		RequestLength:  reqMeta.length,
-		RequestTE:      reqMeta.te,
-		EffectiveURL:   effURL,
-		ConnectedAt:    time.Now(),
-		Request:        req,
-		BaseDir:        effectiveOpts.BaseDir,
-	}
+	meta := buildStreamMeta(req, httpReq, httpResp, effectiveOpts.BaseDir, metaDefaults{})
 
 	session := stream.NewSession(streamCtx, stream.KindSSE, stream.Config{})
 	session.MarkOpen()
@@ -208,13 +162,20 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	if acc.summary.EventCount == 0 {
 		acc.summary.EventCount = len(acc.events)
 	}
+	state, serr := session.State()
 	if acc.summary.Reason == "" {
-		if state, serr := session.State(); serr != nil {
+		if serr != nil {
 			acc.summary.Reason = serr.Error()
 		} else if state == stream.StateFailed {
 			acc.summary.Reason = "error"
 		} else {
 			acc.summary.Reason = "eof"
+		}
+	} else if acc.summary.Reason == "eof" && (state == stream.StateFailed || serr != nil) {
+		if serr != nil {
+			acc.summary.Reason = serr.Error()
+		} else {
+			acc.summary.Reason = "error"
 		}
 	}
 
@@ -224,7 +185,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode sse transcript")
 	}
 
-	headers := handle.Meta.Headers.Clone()
+	headers := cloneHdr(handle.Meta.Headers)
 	if headers == nil {
 		headers = make(http.Header)
 	}
@@ -240,25 +201,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		),
 	)
 
-	var reqHeaders http.Header
-	if handle.Meta.RequestHeaders != nil {
-		reqHeaders = handle.Meta.RequestHeaders.Clone()
-	}
-	return &Response{
-		Status:         handle.Meta.Status,
-		StatusCode:     handle.Meta.StatusCode,
-		Proto:          handle.Meta.Proto,
-		Headers:        headers,
-		ReqMethod:      handle.Meta.RequestMethod,
-		RequestHeaders: reqHeaders,
-		ReqHost:        handle.Meta.RequestHost,
-		ReqLen:         handle.Meta.RequestLength,
-		ReqTE:          append([]string(nil), handle.Meta.RequestTE...),
-		Body:           body,
-		Duration:       acc.summary.Duration,
-		EffectiveURL:   handle.Meta.EffectiveURL,
-		Request:        handle.Meta.Request,
-	}, nil
+	return streamResp(handle.Meta, headers, body, acc.summary.Duration), nil
 }
 
 // Idle timer watches for activity resets - each incoming byte triggers a reset.
@@ -275,44 +218,11 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 		eventCount int
 	)
 
-	idleReset := make(chan struct{}, 1)
-	var idleTimer *time.Timer
-	idleEnabled := opts.IdleTimeout > 0
-	if idleEnabled {
-		idleTimer = time.NewTimer(opts.IdleTimeout)
-		go func() {
-			defer idleTimer.Stop()
-			for {
-				select {
-				case <-ctx.Done():
-					return
-				case <-idleTimer.C:
-					summary.Reason = "timeout:idle"
-					session.Cancel()
-					return
-				case _, ok := <-idleReset:
-					if !ok {
-						return
-					}
-					if !idleTimer.Stop() {
-						select {
-						case <-idleTimer.C:
-						default:
-						}
-					}
-					idleTimer.Reset(opts.IdleTimeout)
-				}
-			}
-		}()
-	} else {
-		close(idleReset)
-	}
-
-	defer func() {
-		if idleEnabled {
-			close(idleReset)
-		}
-	}()
+	idleReset, stopIdle := startIdleWatch(ctx, opts.IdleTimeout, func() {
+		summary.Reason = "timeout:idle"
+		session.Cancel()
+	})
+	defer stopIdle()
 
 	for {
 		if opts.MaxBytes > 0 && byteCount >= opts.MaxBytes {
@@ -325,7 +235,7 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 		line, err := reader.ReadString('\n')
 		if len(line) > 0 {
 			byteCount += int64(len(line))
-			if idleEnabled {
+			if idleReset != nil {
 				select {
 				case idleReset <- struct{}{}:
 				default:
@@ -403,6 +313,48 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 	session.Close(closeErr)
 }
 
+func startIdleWatch(
+	ctx context.Context,
+	d time.Duration,
+	onTimeout func(),
+) (chan<- struct{}, func()) {
+	if d <= 0 {
+		return nil, func() {}
+	}
+	if onTimeout == nil {
+		onTimeout = func() {}
+	}
+
+	reset := make(chan struct{}, 1)
+	stop := make(chan struct{})
+	timer := time.NewTimer(d)
+
+	go func() {
+		defer timer.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-stop:
+				return
+			case <-timer.C:
+				onTimeout()
+				return
+			case <-reset:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				timer.Reset(d)
+			}
+		}
+	}()
+
+	return reset, func() { close(stop) }
+}
+
 type sseAccumulator struct {
 	events  []SSEEvent
 	summary SSESummary
@@ -411,7 +363,7 @@ type sseAccumulator struct {
 func newSSEAccumulator() *sseAccumulator {
 	return &sseAccumulator{
 		events:  make([]SSEEvent, 0, 16),
-		summary: SSESummary{Reason: "eof"},
+		summary: SSESummary{},
 	}
 }
 
