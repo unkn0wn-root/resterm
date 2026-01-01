@@ -27,6 +27,15 @@ const (
 	sseMetaEvents = "resterm.summary.events"
 )
 
+const (
+	sseReasonEOF       = "eof"
+	sseReasonErr       = "error"
+	sseReasonIdle      = "timeout:idle"
+	sseReasonMaxBytes  = "limit:max_bytes"
+	sseReasonMaxEvents = "limit:max_events"
+	sseReasonCanceled  = "context_canceled"
+)
+
 type SSEEvent struct {
 	Index     int       `json:"index"`
 	ID        string    `json:"id,omitempty"`
@@ -167,15 +176,15 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		if serr != nil {
 			acc.summary.Reason = serr.Error()
 		} else if state == stream.StateFailed {
-			acc.summary.Reason = "error"
+			acc.summary.Reason = sseReasonErr
 		} else {
-			acc.summary.Reason = "eof"
+			acc.summary.Reason = sseReasonEOF
 		}
-	} else if acc.summary.Reason == "eof" && (state == stream.StateFailed || serr != nil) {
+	} else if acc.summary.Reason == sseReasonEOF && (state == stream.StateFailed || serr != nil) {
 		if serr != nil {
 			acc.summary.Reason = serr.Error()
 		} else {
-			acc.summary.Reason = "error"
+			acc.summary.Reason = sseReasonErr
 		}
 	}
 
@@ -209,7 +218,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SSEOptions) {
 	ctx := session.Context()
 	reader := bufio.NewReader(body)
-	summary := SSESummary{Reason: "eof"}
+	summary := SSESummary{Reason: sseReasonEOF}
 
 	var (
 		builder    sseEventBuilder
@@ -219,15 +228,15 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 	)
 
 	idleReset, stopIdle := startIdleWatch(ctx, opts.IdleTimeout, func() {
-		summary.Reason = "timeout:idle"
+		summary.Reason = sseReasonIdle
 		session.Cancel()
 	})
 	defer stopIdle()
 
 	for {
 		if opts.MaxBytes > 0 && byteCount >= opts.MaxBytes {
-			if summary.Reason == "" || summary.Reason == "eof" {
-				summary.Reason = "limit:max_bytes"
+			if summary.Reason == "" || summary.Reason == sseReasonEOF {
+				summary.Reason = sseReasonMaxBytes
 			}
 			break
 		}
@@ -257,7 +266,7 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 				index++
 				eventCount++
 				if opts.MaxEvents > 0 && eventCount >= opts.MaxEvents {
-					summary.Reason = "limit:max_events"
+					summary.Reason = sseReasonMaxEvents
 					break
 				}
 			}
@@ -269,8 +278,8 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 		}
 
 		if limitReached {
-			if summary.Reason == "" || summary.Reason == "eof" {
-				summary.Reason = "limit:max_bytes"
+			if summary.Reason == "" || summary.Reason == sseReasonEOF {
+				summary.Reason = sseReasonMaxBytes
 			}
 			break
 		}
@@ -284,8 +293,8 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 		}
 
 		if ctx.Err() != nil {
-			if summary.Reason == "" || summary.Reason == "eof" {
-				summary.Reason = "context_canceled"
+			if summary.Reason == "" || summary.Reason == sseReasonEOF {
+				summary.Reason = sseReasonCanceled
 			}
 			break
 		}
@@ -307,7 +316,7 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 	})
 
 	var closeErr error
-	if ctx.Err() != nil && summary.Reason == "context_canceled" {
+	if ctx.Err() != nil && summary.Reason == sseReasonCanceled {
 		closeErr = ctx.Err()
 	}
 	session.Close(closeErr)

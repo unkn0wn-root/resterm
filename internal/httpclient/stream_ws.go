@@ -240,9 +240,6 @@ func (c *Client) CompleteWebSocket(
 	if handle == nil || handle.Session == nil || handle.Sender == nil {
 		return nil, errdef.New(errdef.CodeHTTP, "websocket session not available")
 	}
-	if req == nil || req.WebSocket == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "websocket request missing")
-	}
 
 	session := handle.Session
 	listener := session.Subscribe()
@@ -262,13 +259,12 @@ func (c *Client) CompleteWebSocket(
 	}()
 
 	sender := handle.Sender
-	wsReq := req.WebSocket
 
 	baseDir := handle.Meta.BaseDir
 	if baseDir == "" {
 		baseDir = opts.BaseDir
 	}
-	closedByScript, err := c.runWSSteps(session, sender, wsReq, baseDir, opts)
+	closedByScript, err := c.runWSSteps(session, sender, req, baseDir, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -346,14 +342,15 @@ func wsRecvWindow(opts restfile.WebSocketOptions) time.Duration {
 func (c *Client) runWSSteps(
 	session *stream.Session,
 	sender *WebSocketSender,
-	wsReq *restfile.WebSocketRequest,
+	req *restfile.Request,
 	baseDir string,
 	opts Options,
 ) (bool, error) {
-	if wsReq == nil {
+	if req == nil || req.WebSocket == nil {
 		return false, errdef.New(errdef.CodeHTTP, "websocket request missing")
 	}
 
+	wsReq := req.WebSocket
 	ctx := session.Context()
 	recvWindow := wsRecvWindow(wsReq.Options)
 	fallbacks, allowRaw := resolveFileLookup(baseDir, opts)

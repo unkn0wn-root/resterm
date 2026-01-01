@@ -491,8 +491,8 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 	b.request = &requestBuilder{
 		startLine:         line,
 		metadata:          restfile.RequestMetadata{Tags: []string{}},
-		currentScriptKind: "test",
-		currentScriptLang: "js",
+		currentScriptKind: defaultScriptKind,
+		currentScriptLang: defaultScriptLang,
 		http:              httpbuilder.New(),
 		graphql:           graphqlbuilder.New(),
 		grpc:              grpcbuilder.New(),

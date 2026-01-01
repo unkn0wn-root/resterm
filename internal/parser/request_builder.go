@@ -9,6 +9,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+const (
+	defaultScriptKind = "test"
+	defaultScriptLang = "js"
+)
+
 type requestBuilder struct {
 	startLine         int
 	endLine           int
@@ -33,7 +38,7 @@ type requestBuilder struct {
 func normScriptKind(kind string) string {
 	out := strings.ToLower(strings.TrimSpace(kind))
 	if out == "" {
-		return "test"
+		return defaultScriptKind
 	}
 	return out
 }
@@ -42,9 +47,9 @@ func normScriptLang(lang string) string {
 	out := strings.ToLower(strings.TrimSpace(lang))
 	switch out {
 	case "":
-		return "js"
+		return defaultScriptLang
 	case "javascript":
-		return "js"
+		return defaultScriptLang
 	case "restermlang":
 		return "rts"
 	default:
