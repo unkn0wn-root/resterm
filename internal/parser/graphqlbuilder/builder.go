@@ -25,11 +25,10 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 	case "graphql":
 		if rest == "" || strings.EqualFold(rest, "true") {
 			b.enabled = true
+			return true
 		} else if strings.EqualFold(rest, "false") {
-			b.enabled = false
-			b.collectVariables = false
-			b.variablesLines = nil
-			b.variablesFile = ""
+			b.disable()
+			return true
 		}
 		return true
 	case "operation", "graphql-operation":
@@ -73,6 +72,16 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		return true
 	}
 	return false
+}
+
+func (b *Builder) disable() {
+	b.enabled = false
+	b.operation = ""
+	b.collectVariables = false
+	b.variablesLines = nil
+	b.variablesFile = ""
+	b.queryLines = nil
+	b.queryFile = ""
 }
 
 func (b *Builder) Enabled() bool {

@@ -264,12 +264,12 @@ func parseTokens(tokens []string) (*restfile.Request, error) {
 				if err != nil {
 					return nil, err
 				}
-				if err := body.addRaw(val); err != nil {
+				if err := body.addBinary(val); err != nil {
 					return nil, err
 				}
 				continue
 			case strings.HasPrefix(tok, "--data-binary="):
-				if err := body.addRaw(tok[len("--data-binary="):]); err != nil {
+				if err := body.addBinary(tok[len("--data-binary="):]); err != nil {
 					return nil, err
 				}
 				continue
@@ -453,6 +453,14 @@ func (b *bodyBuilder) addData(val string, guess bool) error {
 	}
 	if guess && looksLikeForm(val) {
 		return b.addFormValues(val)
+	}
+	return b.addRaw(val)
+}
+
+func (b *bodyBuilder) addBinary(val string) error {
+	trim := strings.TrimSpace(val)
+	if strings.HasPrefix(trim, "@") {
+		return b.addFile(strings.TrimPrefix(trim, "@"))
 	}
 	return b.addRaw(val)
 }
