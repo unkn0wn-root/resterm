@@ -73,7 +73,12 @@ func newRTSRuneStyler(p theme.EditorMetadataPalette) textarea.RuneStyler {
 		s.numberEnabled = true
 	}
 
-	if c := pickColor(p.SettingKey, p.RTSKeywordControl, p.DirectiveDefault, p.RequestLine); c != "" {
+	if c := pickColor(
+		p.SettingKey,
+		p.RTSKeywordControl,
+		p.DirectiveDefault,
+		p.RequestLine,
+	); c != "" {
 		s.fnStyle = lipgloss.NewStyle().Foreground(c).Bold(true)
 		s.fnEnabled = true
 	}
