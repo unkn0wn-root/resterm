@@ -69,6 +69,16 @@ func TestParseCommandDataFile(t *testing.T) {
 	}
 }
 
+func TestParseCommandDataBinaryFile(t *testing.T) {
+	req, err := ParseCommand("curl https://example.com --data-binary @payload.bin")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if req.Body.FilePath != "payload.bin" {
+		t.Fatalf("expected file body, got %q", req.Body.FilePath)
+	}
+}
+
 func TestParseCommandCompressedAddsHeader(t *testing.T) {
 	req, err := ParseCommand("curl --compressed https://example.com")
 	if err != nil {

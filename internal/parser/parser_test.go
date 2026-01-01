@@ -100,6 +100,24 @@ GET https://example.com/api
 	}
 }
 
+func TestSplitAssertEscapes(t *testing.T) {
+	expr, msg := splitAssert(`contains(body, "a=>b") => "ok"`)
+	if expr != `contains(body, "a=>b")` {
+		t.Fatalf("unexpected expr: %q", expr)
+	}
+	if msg != "ok" {
+		t.Fatalf("unexpected msg: %q", msg)
+	}
+
+	expr, msg = splitAssert(`contains(body, "a\"=>b") => "ok"`)
+	if expr != `contains(body, "a\"=>b")` {
+		t.Fatalf("unexpected escaped expr: %q", expr)
+	}
+	if msg != "ok" {
+		t.Fatalf("unexpected escaped msg: %q", msg)
+	}
+}
+
 func TestParseScriptLang(t *testing.T) {
 	src := `# @script pre-request lang=rts
 > request.setHeader("X-Test", "1")
@@ -1028,6 +1046,20 @@ GET https://example.org
 	}
 }
 
+func TestParseScannerError(t *testing.T) {
+	line := strings.Repeat("a", maxScanToken+1)
+	doc := Parse("long.http", []byte(line))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors for oversized line")
+	}
+	if !strings.Contains(doc.Errors[0].Message, "line exceeds") {
+		t.Fatalf("unexpected error message: %q", doc.Errors[0].Message)
+	}
+	if doc.Errors[0].Line != 1 {
+		t.Fatalf("expected error at line 1, got %d", doc.Errors[0].Line)
+	}
+}
+
 func TestParseGraphQLRequest(t *testing.T) {
 	src := `# @name GraphQLExample
 # @graphql
@@ -1070,6 +1102,36 @@ query FetchUser($id: ID!) {
 	}
 	if strings.Contains(gql.Query, "# @variables") {
 		t.Fatalf("expected directives stripped from query")
+	}
+}
+
+func TestParseGraphQLDisableResetsState(t *testing.T) {
+	src := `# @graphql
+POST https://example.com/graphql
+
+query First {
+  user { id }
+}
+# @graphql false
+# @graphql
+query Second {
+  user { name }
+}
+`
+	doc := Parse("graphql-reset.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.GraphQL == nil {
+		t.Fatalf("expected GraphQL body")
+	}
+	query := req.Body.GraphQL.Query
+	if strings.Contains(query, "First") {
+		t.Fatalf("unexpected stale query: %q", query)
+	}
+	if !strings.Contains(query, "Second") {
+		t.Fatalf("expected query to contain second block, got %q", query)
 	}
 }
 
