@@ -90,7 +90,13 @@ func mapHas(ctx *Ctx, pos Pos, args []Value, sig string, m map[string]string) (V
 	return Bool(ok), nil
 }
 
-func mapRequire(ctx *Ctx, pos Pos, args []Value, sig, obj string, m map[string]string) (Value, error) {
+func mapRequire(
+	ctx *Ctx,
+	pos Pos,
+	args []Value,
+	sig, obj string,
+	m map[string]string,
+) (Value, error) {
 	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
 		return Null(), err
 	}

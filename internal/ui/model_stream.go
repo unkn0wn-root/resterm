@@ -808,7 +808,9 @@ func (m *Model) renderGRPCEvent(evt *stream.Event) string {
 		return strings.Join(filterEmpty(parts), " ")
 	}
 	if formatted, ok := formatJSONForStream(evt.Payload); ok {
-		block := nameStyled + "\n" + th.StreamData.Render(indentMultiline(formatted, streamJSONIndent))
+		block := nameStyled + "\n" + th.StreamData.Render(
+			indentMultiline(formatted, streamJSONIndent),
+		)
 		parts = append(parts, block)
 		return strings.Join(filterEmpty(parts), " ")
 	}
