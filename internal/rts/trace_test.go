@@ -90,6 +90,27 @@ func TestTraceEnabled(t *testing.T) {
 				Duration: 20 * time.Millisecond,
 			},
 		},
+		Details: &nettrace.TraceDetails{
+			Connection: &nettrace.ConnDetails{
+				Reused:        true,
+				IdleTime:      5 * time.Millisecond,
+				ResolvedAddrs: []string{"93.184.216.34"},
+				Protocol:      "HTTP/2.0",
+			},
+			TLS: &nettrace.TLSDetails{
+				Version:  "TLS 1.3",
+				Cipher:   "TLS_AES_128_GCM_SHA256",
+				Verified: true,
+				Certificates: []nettrace.TLSCert{
+					{
+						Subject:  "example.com",
+						Issuer:   "Example CA",
+						NotAfter: t0.Add(24 * time.Hour),
+						Serial:   "01",
+					},
+				},
+			},
+		},
 	}
 	bud := nettrace.Budget{
 		Total:     60 * time.Millisecond,
@@ -129,5 +150,21 @@ func TestTraceEnabled(t *testing.T) {
 	v = evalTrace(t, rt, "len(trace.phaseNames())")
 	if v.K != VNum || v.N != 7 {
 		t.Fatalf("expected 7 phase names, got %+v", v)
+	}
+	v = evalTrace(t, rt, "trace.connection().available")
+	if v.K != VBool || v.B != true {
+		t.Fatalf("expected connection details, got %+v", v)
+	}
+	v = evalTrace(t, rt, "trace.connection().protocol")
+	if v.K != VStr || v.S != "HTTP/2.0" {
+		t.Fatalf("unexpected protocol, got %+v", v)
+	}
+	v = evalTrace(t, rt, "trace.tls().version")
+	if v.K != VStr || v.S != "TLS 1.3" {
+		t.Fatalf("unexpected tls version, got %+v", v)
+	}
+	v = evalTrace(t, rt, "len(trace.tls().certs)")
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected 1 tls cert, got %+v", v)
 	}
 }

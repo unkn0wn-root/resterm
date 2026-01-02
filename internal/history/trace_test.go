@@ -24,6 +24,33 @@ func TestNewTraceSummary(t *testing.T) {
 				Meta:     nettrace.PhaseMeta{Addr: "93.184.216.34:443"},
 			},
 		},
+		Details: &nettrace.TraceDetails{
+			Connection: &nettrace.ConnDetails{
+				Reused:        true,
+				IdleTime:      5 * time.Millisecond,
+				DialAddr:      "93.184.216.34:443",
+				ResolvedAddrs: []string{"93.184.216.34"},
+				Protocol:      "HTTP/2.0",
+			},
+			TLS: &nettrace.TLSDetails{
+				Version:    "TLS 1.3",
+				Cipher:     "TLS_AES_128_GCM_SHA256",
+				ALPN:       "h2",
+				ServerName: "example.com",
+				Resumed:    true,
+				Verified:   true,
+				Certificates: []nettrace.TLSCert{
+					{
+						Subject:   "example.com",
+						Issuer:    "Example CA",
+						SANs:      []string{"example.com"},
+						NotBefore: time.Unix(0, 0),
+						NotAfter:  time.Unix(0, int64(24*time.Hour)),
+						Serial:    "01",
+					},
+				},
+			},
+		},
 	}
 
 	report := nettrace.NewReport(tl, nettrace.Budget{Total: 10 * time.Millisecond})
@@ -52,6 +79,15 @@ func TestNewTraceSummary(t *testing.T) {
 	if len(summary.Breaches) == 0 {
 		t.Fatalf("expected breach to be present")
 	}
+	if summary.Details == nil || summary.Details.Connection == nil || summary.Details.TLS == nil {
+		t.Fatalf("expected trace details to be captured")
+	}
+	if summary.Details.Connection.Protocol != "HTTP/2.0" {
+		t.Fatalf("unexpected protocol: %s", summary.Details.Connection.Protocol)
+	}
+	if got := summary.Details.TLS.Certificates[0].Subject; got != "example.com" {
+		t.Fatalf("unexpected cert subject: %s", got)
+	}
 }
 
 func TestNewTraceSummaryNil(t *testing.T) {
@@ -77,6 +113,13 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 				Meta:     nettrace.PhaseMeta{Addr: "93.184.216.34:443"},
 			},
 			{Kind: nettrace.PhaseTransfer, Duration: 30 * time.Millisecond},
+		},
+		Details: &nettrace.TraceDetails{
+			Connection: &nettrace.ConnDetails{
+				LocalAddr:  "127.0.0.1:5353",
+				RemoteAddr: "93.184.216.34:443",
+				Protocol:   "HTTP/1.1",
+			},
 		},
 	}
 	budget := nettrace.Budget{
@@ -110,6 +153,12 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 		if phase.Meta.Addr != tl.Phases[i].Meta.Addr {
 			t.Fatalf("phase %d addr mismatch", i)
 		}
+	}
+	if rebuilt.Details == nil || rebuilt.Details.Connection == nil {
+		t.Fatalf("expected trace details to round trip")
+	}
+	if rebuilt.Details.Connection.Protocol != "HTTP/1.1" {
+		t.Fatalf("unexpected protocol after round trip: %s", rebuilt.Details.Connection.Protocol)
 	}
 	rebuiltReport := summary.Report()
 	if rebuiltReport == nil {

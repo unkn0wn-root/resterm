@@ -39,6 +39,7 @@ type Timeline struct {
 	Duration  time.Duration
 	Err       string
 	Phases    []Phase
+	Details   *TraceDetails
 }
 
 func (tl *Timeline) Clone() *Timeline {
@@ -54,6 +55,7 @@ func (tl *Timeline) Clone() *Timeline {
 		Duration:  tl.Duration,
 		Err:       tl.Err,
 		Phases:    ph,
+		Details:   tl.Details.Clone(),
 	}
 }
 

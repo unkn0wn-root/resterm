@@ -1,6 +1,7 @@
 ### Happy path
 # @name trace-ok
 # @description Demonstrates trace budgets that pass comfortably.
+# Timeline tip: open the Timeline tab to see Connection/TLS panels (reuse, protocol, certs).
 # @trace dns<=40ms connect<=120ms ttfb<=300ms total<=600ms tolerance=25ms
 GET https://httpbin.org/delay/0.05
 Accept: application/json

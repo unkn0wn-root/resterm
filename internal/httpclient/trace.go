@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptrace"
+	"sync"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -16,11 +17,15 @@ type traceSession struct {
 	reqBodyActive  bool
 	ttfbActive     bool
 	transferActive bool
+	mu             sync.Mutex
+	conn           *nettrace.ConnDetails
+	tls            *nettrace.TLSDetails
 }
 
 func newTraceSession() *traceSession {
 	s := &traceSession{collector: nettrace.NewCollector()}
 	s.trace = &httptrace.ClientTrace{
+		GetConn:              s.onGetConn,
 		DNSStart:             s.onDNSStart,
 		DNSDone:              s.onDNSDone,
 		ConnectStart:         s.onConnectStart,
@@ -42,6 +47,17 @@ func (s *traceSession) bind(req *http.Request) *http.Request {
 
 	ctx := httptrace.WithClientTrace(req.Context(), s.trace)
 	return req.WithContext(ctx)
+}
+
+func (s *traceSession) onGetConn(hostPort string) {
+	if hostPort == "" {
+		return
+	}
+	s.withConn(func(conn *nettrace.ConnDetails) {
+		if conn.DialAddr == "" {
+			conn.DialAddr = hostPort
+		}
+	})
 }
 
 func (s *traceSession) onDNSStart(info httptrace.DNSStartInfo) {
@@ -66,6 +82,11 @@ func (s *traceSession) onDNSDone(info httptrace.DNSDoneInfo) {
 			meta.Cached = true
 		}
 	})
+	if len(info.Addrs) > 0 {
+		s.withConn(func(conn *nettrace.ConnDetails) {
+			conn.ResolvedAddrs = mergeIPs(conn.ResolvedAddrs, info.Addrs)
+		})
+	}
 	s.collector.End(nettrace.PhaseDNS, now, info.Err)
 	if info.Err != nil {
 		s.collector.Fail(info.Err)
@@ -80,6 +101,16 @@ func (s *traceSession) onConnectStart(network, addr string) {
 			meta.Addr = addr
 		})
 	}
+	if network != "" || addr != "" {
+		s.withConn(func(conn *nettrace.ConnDetails) {
+			if network != "" {
+				conn.Network = network
+			}
+			if addr != "" {
+				conn.DialAddr = addr
+			}
+		})
+	}
 }
 
 func (s *traceSession) onConnectDone(network, addr string, err error) {
@@ -90,6 +121,15 @@ func (s *traceSession) onConnectDone(network, addr string, err error) {
 }
 
 func (s *traceSession) onGotConn(info httptrace.GotConnInfo) {
+	s.withConn(func(conn *nettrace.ConnDetails) {
+		conn.Reused = info.Reused
+		conn.WasIdle = info.WasIdle
+		conn.IdleTime = info.IdleTime
+		if info.Conn != nil {
+			conn.LocalAddr = localAddrString(info.Conn)
+			conn.RemoteAddr = addrString(info.Conn)
+		}
+	})
 	if !info.Reused {
 		return
 	}
@@ -114,6 +154,7 @@ func (s *traceSession) onTLSHandshakeDone(state tls.ConnectionState, err error) 
 	if err != nil {
 		s.collector.Fail(err)
 	}
+	s.withTLS(state)
 }
 
 func (s *traceSession) onWroteHeaders() {
@@ -170,9 +211,17 @@ func (s *traceSession) fail(err error) {
 	s.collector.Fail(err)
 }
 
-func (s *traceSession) complete() *nettrace.Timeline {
+func (s *traceSession) complete(extra traceExtras) *nettrace.Timeline {
 	s.collector.Complete(time.Now())
-	return s.collector.Timeline()
+	tl := s.collector.Timeline()
+	if tl == nil {
+		return nil
+	}
+	details := s.detailsSnapshot()
+	if details = applyTraceExtras(details, extra); details != nil {
+		tl.Details = details
+	}
+	return tl
 }
 
 func addrString(conn net.Conn) string {
@@ -180,4 +229,11 @@ func addrString(conn net.Conn) string {
 		return ""
 	}
 	return conn.RemoteAddr().String()
+}
+
+func localAddrString(conn net.Conn) string {
+	if conn == nil {
+		return ""
+	}
+	return conn.LocalAddr().String()
 }
