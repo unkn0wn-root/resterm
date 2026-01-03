@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.15.0](https://github.com/unkn0wn-root/resterm/compare/v0.14.2...v0.15.0) (2026-01-03)
+
+
+### Features
+
+* add tls to trace ([103e7cb](https://github.com/unkn0wn-root/resterm/commit/103e7cb25c09294c6ff968bd51b39c36462f45fb))
+
 ### [0.14.2](https://github.com/unkn0wn-root/resterm/compare/v0.14.1...v0.14.2) (2026-01-01)
 
 ### [0.14.1](https://github.com/unkn0wn-root/resterm/compare/v0.13.6...v0.14.1) (2025-12-30)
