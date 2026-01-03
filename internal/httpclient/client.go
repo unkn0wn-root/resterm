@@ -120,6 +120,8 @@ func (c *Client) Execute(
 		return nil, err
 	}
 
+	proxy := proxyForRequest(httpReq, effectiveOpts, client)
+
 	var (
 		timeline    *nettrace.Timeline
 		traceSess   *traceSession
@@ -184,7 +186,7 @@ func (c *Client) Execute(
 		duration := time.Since(start)
 		if traceSess != nil {
 			traceSess.fail(err)
-			timeline = traceSess.complete()
+			timeline = traceSess.complete(buildTraceExtras(httpReq, nil, effectiveOpts, proxy))
 			traceReport = buildTraceReport(timeline)
 		}
 		return &Response{
@@ -212,13 +214,13 @@ func (c *Client) Execute(
 	if err != nil {
 		if traceSess != nil {
 			traceSess.fail(err)
-			traceSess.complete()
+			traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
 		}
 		return nil, errdef.Wrap(errdef.CodeHTTP, err, "read response body")
 	}
 
 	if traceSess != nil {
-		timeline = traceSess.complete()
+		timeline = traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
 		traceReport = buildTraceReport(timeline)
 	}
 	duration := time.Since(start)

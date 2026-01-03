@@ -141,3 +141,59 @@ func TestRenderTimelinePlacesTotalFirst(t *testing.T) {
 		t.Fatalf("expected total row to appear first, got %q", rowLine)
 	}
 }
+
+func TestRenderTimelineDetails(t *testing.T) {
+	t0 := time.Unix(0, 0)
+	tl := &nettrace.Timeline{
+		Started:   t0,
+		Completed: t0,
+		Duration:  90 * time.Millisecond,
+		Phases: []nettrace.Phase{
+			{Kind: nettrace.PhaseDNS, Duration: 30 * time.Millisecond},
+			{Kind: nettrace.PhaseConnect, Duration: 60 * time.Millisecond},
+		},
+		Details: &nettrace.TraceDetails{
+			Connection: &nettrace.ConnDetails{
+				DialAddr:      "93.184.216.34:443",
+				LocalAddr:     "127.0.0.1:50000",
+				RemoteAddr:    "93.184.216.34:443",
+				ResolvedAddrs: []string{"93.184.216.34"},
+				Proxy:         "http://proxy.local:8080",
+				ProxyTunnel:   true,
+				Protocol:      "HTTP/2.0",
+			},
+			TLS: &nettrace.TLSDetails{
+				Version:    "TLS 1.3",
+				Cipher:     "TLS_AES_128_GCM_SHA256",
+				ALPN:       "h2",
+				ServerName: "example.com",
+				Verified:   true,
+				Certificates: []nettrace.TLSCert{
+					{
+						Subject:  "example.com",
+						Issuer:   "Example CA",
+						SANs:     []string{"example.com", "www.example.com"},
+						NotAfter: t0.Add(30 * 24 * time.Hour),
+					},
+				},
+			},
+		},
+	}
+
+	report := buildTimelineReport(tl, nil, nil, newTimelineStyles(nil))
+	output := renderTimeline(report, 80)
+	for _, want := range []string{
+		"Connection",
+		"TLS",
+		"protocol",
+		"proxy",
+		"tunnel",
+		"TLS 1.3",
+		"chain (1):",
+		"exp 1970-01-31 (in 30d)",
+	} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected output to contain %q, got %q", want, output)
+		}
+	}
+}

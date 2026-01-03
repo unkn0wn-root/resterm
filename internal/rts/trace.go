@@ -100,6 +100,10 @@ func (o *traceObj) GetMember(name string) (Value, bool) {
 		return NativeNamed("trace.phaseNames", o.phaseNamesFn), true
 	case "budgets":
 		return NativeNamed("trace.budgets", o.budgetsFn), true
+	case "connection":
+		return NativeNamed("trace.connection", o.connFn), true
+	case "tls":
+		return NativeNamed("trace.tls", o.tlsFn), true
 	case "breaches":
 		return NativeNamed("trace.breaches", o.breachesFn), true
 	case "withinBudget":
@@ -244,6 +248,66 @@ func (o *traceObj) phaseNamesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) 
 	return fromIface(ctx, pos, out)
 }
 
+func (o *traceObj) connFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	if err := ensureNoArgs(ctx, pos, args, "trace.connection"); err != nil {
+		return Null(), err
+	}
+	if o.tl == nil || o.tl.Details == nil || o.tl.Details.Connection == nil {
+		return traceUnavailable(), nil
+	}
+	conn := o.tl.Details.Connection
+	res := map[string]any{
+		"available":     true,
+		"reused":        conn.Reused,
+		"wasIdle":       conn.WasIdle,
+		"idleMs":        durMs(conn.IdleTime),
+		"idleSeconds":   conn.IdleTime.Seconds(),
+		"idleString":    conn.IdleTime.String(),
+		"network":       conn.Network,
+		"dialAddr":      conn.DialAddr,
+		"localAddr":     conn.LocalAddr,
+		"remoteAddr":    conn.RemoteAddr,
+		"resolvedAddrs": toIfaceList(conn.ResolvedAddrs),
+		"proxy":         conn.Proxy,
+		"proxyTunnel":   conn.ProxyTunnel,
+		"ssh":           conn.SSH,
+		"protocol":      conn.Protocol,
+	}
+	return fromIface(ctx, pos, res)
+}
+
+func (o *traceObj) tlsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	if err := ensureNoArgs(ctx, pos, args, "trace.tls"); err != nil {
+		return Null(), err
+	}
+	if o.tl == nil || o.tl.Details == nil || o.tl.Details.TLS == nil {
+		return traceUnavailable(), nil
+	}
+	det := o.tl.Details.TLS
+	certs := make([]any, 0, len(det.Certificates))
+	for _, cert := range det.Certificates {
+		certs = append(certs, map[string]any{
+			"subject":   cert.Subject,
+			"issuer":    cert.Issuer,
+			"sans":      toIfaceList(cert.SANs),
+			"notBefore": cert.NotBefore.Format(time.RFC3339Nano),
+			"notAfter":  cert.NotAfter.Format(time.RFC3339Nano),
+			"serial":    cert.Serial,
+		})
+	}
+	res := map[string]any{
+		"available":  true,
+		"version":    det.Version,
+		"cipher":     det.Cipher,
+		"alpn":       det.ALPN,
+		"serverName": det.ServerName,
+		"resumed":    det.Resumed,
+		"verified":   det.Verified,
+		"certs":      certs,
+	}
+	return fromIface(ctx, pos, res)
+}
+
 func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(args) != 0 {
 		return Null(), rtErr(ctx, pos, "trace.budgets() expects 0 args")
@@ -293,6 +357,28 @@ func (o *traceObj) withinFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), rtErr(ctx, pos, "trace.withinBudget() expects 0 args")
 	}
 	return Bool(len(o.br) == 0), nil
+}
+
+func toIfaceList(items []string) []any {
+	if len(items) == 0 {
+		return nil
+	}
+	out := make([]any, len(items))
+	for i, item := range items {
+		out[i] = item
+	}
+	return out
+}
+
+func ensureNoArgs(ctx *Ctx, pos Pos, args []Value, name string) error {
+	if len(args) != 0 {
+		return rtErr(ctx, pos, "%s() expects 0 args", name)
+	}
+	return nil
+}
+
+func traceUnavailable() Value {
+	return Dict(map[string]Value{"available": Bool(false)})
 }
 
 func (o *traceObj) hasBudFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {

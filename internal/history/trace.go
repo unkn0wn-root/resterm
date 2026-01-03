@@ -13,6 +13,7 @@ type TraceSummary struct {
 	Duration  time.Duration `json:"duration"`
 	Error     string        `json:"error,omitempty"`
 	Phases    []TracePhase  `json:"phases,omitempty"`
+	Details   *TraceDetails `json:"details,omitempty"`
 	Budgets   *TraceBudget  `json:"budgets,omitempty"`
 	Breaches  []TraceBreach `json:"breaches,omitempty"`
 }
@@ -28,6 +29,45 @@ type TracePhaseMeta struct {
 	Addr   string `json:"addr,omitempty"`
 	Reused bool   `json:"reused,omitempty"`
 	Cached bool   `json:"cached,omitempty"`
+}
+
+type TraceDetails struct {
+	Connection *TraceConn `json:"connection,omitempty"`
+	TLS        *TraceTLS  `json:"tls,omitempty"`
+}
+
+type TraceConn struct {
+	Reused        bool          `json:"reused,omitempty"`
+	WasIdle       bool          `json:"wasIdle,omitempty"`
+	IdleTime      time.Duration `json:"idleTime,omitempty"`
+	Network       string        `json:"network,omitempty"`
+	DialAddr      string        `json:"dialAddr,omitempty"`
+	LocalAddr     string        `json:"localAddr,omitempty"`
+	RemoteAddr    string        `json:"remoteAddr,omitempty"`
+	ResolvedAddrs []string      `json:"resolvedAddrs,omitempty"`
+	Proxy         string        `json:"proxy,omitempty"`
+	ProxyTunnel   bool          `json:"proxyTunnel,omitempty"`
+	SSH           string        `json:"ssh,omitempty"`
+	Protocol      string        `json:"protocol,omitempty"`
+}
+
+type TraceTLS struct {
+	Version      string      `json:"version,omitempty"`
+	Cipher       string      `json:"cipher,omitempty"`
+	ALPN         string      `json:"alpn,omitempty"`
+	ServerName   string      `json:"serverName,omitempty"`
+	Resumed      bool        `json:"resumed,omitempty"`
+	Verified     bool        `json:"verified,omitempty"`
+	Certificates []TraceCert `json:"certificates,omitempty"`
+}
+
+type TraceCert struct {
+	Subject   string    `json:"subject,omitempty"`
+	Issuer    string    `json:"issuer,omitempty"`
+	SANs      []string  `json:"sans,omitempty"`
+	NotBefore time.Time `json:"notBefore,omitempty"`
+	NotAfter  time.Time `json:"notAfter,omitempty"`
+	Serial    string    `json:"serial,omitempty"`
 }
 
 type TraceBudget struct {
@@ -54,6 +94,7 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 		Duration:  tl.Duration,
 		Error:     tl.Err,
 	}
+	summary.Details = traceDetailsFromTimeline(tl.Details)
 
 	if len(tl.Phases) == 0 {
 		return summary
@@ -120,6 +161,7 @@ func (s *TraceSummary) Timeline() *nettrace.Timeline {
 		Duration:  s.Duration,
 		Err:       s.Error,
 	}
+	tl.Details = traceDetailsToTimeline(s.Details)
 	if len(s.Phases) == 0 {
 		return tl
 	}
@@ -214,4 +256,147 @@ func (s *TraceSummary) Report() *nettrace.Report {
 	}
 	rep.BudgetReport.Breaches = breaches
 	return rep
+}
+
+func traceDetailsFromTimeline(details *nettrace.TraceDetails) *TraceDetails {
+	if details == nil {
+		return nil
+	}
+	out := &TraceDetails{
+		Connection: connFromTimeline(details.Connection),
+		TLS:        tlsFromTimeline(details.TLS),
+	}
+	if out.Connection == nil && out.TLS == nil {
+		return nil
+	}
+	return out
+}
+
+func traceDetailsToTimeline(details *TraceDetails) *nettrace.TraceDetails {
+	if details == nil {
+		return nil
+	}
+	out := &nettrace.TraceDetails{
+		Connection: connToTimeline(details.Connection),
+		TLS:        tlsToTimeline(details.TLS),
+	}
+	if out.Connection == nil && out.TLS == nil {
+		return nil
+	}
+	return out
+}
+
+func connFromTimeline(c *nettrace.ConnDetails) *TraceConn {
+	if c == nil {
+		return nil
+	}
+	return &TraceConn{
+		Reused:        c.Reused,
+		WasIdle:       c.WasIdle,
+		IdleTime:      c.IdleTime,
+		Network:       c.Network,
+		DialAddr:      c.DialAddr,
+		LocalAddr:     c.LocalAddr,
+		RemoteAddr:    c.RemoteAddr,
+		ResolvedAddrs: cloneStrings(c.ResolvedAddrs),
+		Proxy:         c.Proxy,
+		ProxyTunnel:   c.ProxyTunnel,
+		SSH:           c.SSH,
+		Protocol:      c.Protocol,
+	}
+}
+
+func tlsFromTimeline(t *nettrace.TLSDetails) *TraceTLS {
+	if t == nil {
+		return nil
+	}
+	return &TraceTLS{
+		Version:      t.Version,
+		Cipher:       t.Cipher,
+		ALPN:         t.ALPN,
+		ServerName:   t.ServerName,
+		Resumed:      t.Resumed,
+		Verified:     t.Verified,
+		Certificates: certsFromTimeline(t.Certificates),
+	}
+}
+
+func certsFromTimeline(certs []nettrace.TLSCert) []TraceCert {
+	if len(certs) == 0 {
+		return nil
+	}
+	out := make([]TraceCert, len(certs))
+	for i, cert := range certs {
+		out[i] = TraceCert{
+			Subject:   cert.Subject,
+			Issuer:    cert.Issuer,
+			SANs:      cloneStrings(cert.SANs),
+			NotBefore: cert.NotBefore,
+			NotAfter:  cert.NotAfter,
+			Serial:    cert.Serial,
+		}
+	}
+	return out
+}
+
+func connToTimeline(c *TraceConn) *nettrace.ConnDetails {
+	if c == nil {
+		return nil
+	}
+	return &nettrace.ConnDetails{
+		Reused:        c.Reused,
+		WasIdle:       c.WasIdle,
+		IdleTime:      c.IdleTime,
+		Network:       c.Network,
+		DialAddr:      c.DialAddr,
+		LocalAddr:     c.LocalAddr,
+		RemoteAddr:    c.RemoteAddr,
+		ResolvedAddrs: cloneStrings(c.ResolvedAddrs),
+		Proxy:         c.Proxy,
+		ProxyTunnel:   c.ProxyTunnel,
+		SSH:           c.SSH,
+		Protocol:      c.Protocol,
+	}
+}
+
+func tlsToTimeline(t *TraceTLS) *nettrace.TLSDetails {
+	if t == nil {
+		return nil
+	}
+	return &nettrace.TLSDetails{
+		Version:      t.Version,
+		Cipher:       t.Cipher,
+		ALPN:         t.ALPN,
+		ServerName:   t.ServerName,
+		Resumed:      t.Resumed,
+		Verified:     t.Verified,
+		Certificates: certsToTimeline(t.Certificates),
+	}
+}
+
+func certsToTimeline(certs []TraceCert) []nettrace.TLSCert {
+	if len(certs) == 0 {
+		return nil
+	}
+	out := make([]nettrace.TLSCert, len(certs))
+	for i, cert := range certs {
+		out[i] = nettrace.TLSCert{
+			Subject:   cert.Subject,
+			Issuer:    cert.Issuer,
+			SANs:      cloneStrings(cert.SANs),
+			NotBefore: cert.NotBefore,
+			NotAfter:  cert.NotAfter,
+			Serial:    cert.Serial,
+		}
+	}
+	return out
+}
+
+func cloneStrings(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
 }

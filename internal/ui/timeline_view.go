@@ -76,6 +76,8 @@ type timelineReport struct {
 	totalLimit    time.Duration
 	totalDuration time.Duration
 	hasBudget     bool
+	details       *nettrace.TraceDetails
+	detailsNow    time.Time
 	styles        timelineStyles
 }
 
@@ -111,6 +113,10 @@ func buildTimelineReport(
 	report.summary = buildTimelineSummary(tl, styles)
 	rows := buildTimelineRows(tl)
 	report.totalDuration = tl.Duration
+	if tl.Details != nil {
+		report.details = tl.Details.Clone()
+	}
+	report.detailsNow = timelineDetailsClock(tl)
 
 	var (
 		budget    nettrace.Budget
@@ -388,6 +394,20 @@ func renderTimeline(report timelineReport, width int) string {
 		builder.WriteString("\n")
 	}
 
+	if details := renderTraceDetails(
+		report.details,
+		report.styles,
+		report.detailsNow,
+	); len(
+		details,
+	) > 0 {
+		builder.WriteString("\n")
+		for _, line := range details {
+			builder.WriteString(line)
+			builder.WriteString("\n")
+		}
+	}
+
 	return strings.TrimRight(builder.String(), "\n") + "\n"
 }
 
@@ -550,4 +570,17 @@ func formatTime(t time.Time) string {
 		return ""
 	}
 	return t.Format(time.RFC3339Nano)
+}
+
+func timelineDetailsClock(tl *nettrace.Timeline) time.Time {
+	if tl == nil {
+		return time.Now()
+	}
+	if !tl.Completed.IsZero() {
+		return tl.Completed
+	}
+	if !tl.Started.IsZero() {
+		return tl.Started
+	}
+	return time.Now()
 }
