@@ -108,7 +108,10 @@ func renderTLSDetails(tls *nettrace.TLSDetails, styles timelineStyles, now time.
 	if len(tls.Certificates) == 0 {
 		return lines
 	}
-	lines = append(lines, "  "+styles.meta.Render(fmt.Sprintf("chain (%d):", len(tls.Certificates))))
+	lines = append(
+		lines,
+		"  "+styles.meta.Render(fmt.Sprintf("chain (%d):", len(tls.Certificates))),
+	)
 	for i, cert := range tls.Certificates {
 		lines = append(lines, renderCertLines(i, cert, styles, now)...)
 	}

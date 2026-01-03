@@ -394,7 +394,13 @@ func renderTimeline(report timelineReport, width int) string {
 		builder.WriteString("\n")
 	}
 
-	if details := renderTraceDetails(report.details, report.styles, report.detailsNow); len(details) > 0 {
+	if details := renderTraceDetails(
+		report.details,
+		report.styles,
+		report.detailsNow,
+	); len(
+		details,
+	) > 0 {
 		builder.WriteString("\n")
 		for _, line := range details {
 			builder.WriteString(line)
