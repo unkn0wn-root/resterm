@@ -114,6 +114,45 @@ func TestHorizontalScrollMargin(t *testing.T) {
 	}
 }
 
+func TestHorizontalScrollMarginStartsBeforeOverflow(t *testing.T) {
+	textarea := newTextArea()
+	textarea.Prompt = ""
+	textarea.ShowLineNumbers = false
+	textarea.SetHeight(1)
+	textarea.SetWidth(20)
+	textarea.CharLimit = 0
+
+	margin := min(horizontalScrollMargin, textarea.Width()/2)
+	if margin == 0 {
+		t.Fatalf("test requires positive horizontal scroll margin")
+	}
+
+	threshold := textarea.Width() - margin
+	textarea.SetValue(strings.Repeat("x", threshold))
+	textarea.CursorEnd()
+	if textarea.horizOffset != 0 {
+		t.Fatalf("expected no offset at threshold, got %d", textarea.horizOffset)
+	}
+
+	textarea.SetValue(strings.Repeat("x", threshold+1))
+	textarea.CursorEnd()
+	if textarea.horizOffset != 1 {
+		t.Fatalf("expected offset 1 once within margin, got %d", textarea.horizOffset)
+	}
+
+	textarea.SetValue(strings.Repeat("x", textarea.Width()))
+	textarea.CursorEnd()
+	if textarea.horizOffset != margin {
+		t.Fatalf("expected offset %d at width, got %d", margin, textarea.horizOffset)
+	}
+
+	textarea.SetValue(strings.Repeat("x", textarea.Width()+1))
+	textarea.CursorEnd()
+	if textarea.horizOffset != margin+1 {
+		t.Fatalf("expected offset %d after overflow, got %d", margin+1, textarea.horizOffset)
+	}
+}
+
 func TestExtendingLongLinePreservesContent(t *testing.T) {
 	textarea := newTextArea()
 	textarea.Prompt = ""
