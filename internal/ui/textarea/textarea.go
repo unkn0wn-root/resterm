@@ -1024,8 +1024,21 @@ func (m *Model) repositionView() {
 	}
 }
 
+func hMargin(w int) int {
+	if w <= 0 || w <= horizontalScrollMargin+1 {
+		return 0
+	}
+	m := horizontalScrollMargin
+	maxM := max(0, (w-1)/2)
+	if m > maxM {
+		m = maxM
+	}
+	return m
+}
+
 func (m *Model) repositionHorizontal() {
-	if m.width <= 0 {
+	w := m.width
+	if w <= 0 {
 		m.horizOffset = 0
 		return
 	}
@@ -1035,25 +1048,13 @@ func (m *Model) repositionHorizontal() {
 	}
 
 	line := m.value[m.row]
-
-	margin := horizontalScrollMargin
-	if m.width > 0 {
-		maxMargin := max(0, (m.width-1)/2)
-		if margin > maxMargin {
-			margin = maxMargin
-		}
-	} else {
-		margin = 0
+	lw := visualWidth(line)
+	mm := hMargin(w)
+	if lw <= w-mm {
+		m.horizOffset = 0
+		return
 	}
-
-	lineWidth := visualWidth(line)
-	if lineWidth <= m.width {
-		margin = 0
-	}
-	if m.width <= horizontalScrollMargin+1 {
-		margin = 0
-	}
-	maxOffset := max(0, lineWidth+margin-m.width)
+	maxOffset := max(0, lw+mm-w)
 
 	cursorLeft := visualWidthUntil(line, m.col)
 	cursorWidth := 1
@@ -1061,13 +1062,13 @@ func (m *Model) repositionHorizontal() {
 		cursorWidth = safeRuneWidth(line[m.col])
 	}
 
-	leftBoundary := m.horizOffset + margin
-	rightBoundary := m.horizOffset + m.width - margin
+	leftBoundary := m.horizOffset + mm
+	rightBoundary := m.horizOffset + w - mm
 
 	if cursorLeft < leftBoundary {
-		m.horizOffset = cursorLeft - margin
+		m.horizOffset = cursorLeft - mm
 	} else if cursorLeft+cursorWidth > rightBoundary {
-		m.horizOffset = cursorLeft + cursorWidth + margin - m.width
+		m.horizOffset = cursorLeft + cursorWidth + mm - w
 	}
 
 	if m.horizOffset > maxOffset {

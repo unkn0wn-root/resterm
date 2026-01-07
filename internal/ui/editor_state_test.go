@@ -184,7 +184,6 @@ func TestRequestEditorMotionE(t *testing.T) {
 		t.Fatalf("expected end of first word at column 3; got (%d,%d)", pos.Line, pos.Column)
 	}
 
-	editorPtr.moveCursorTo(0, 4)
 	editor = applyMotion(t, editor, "e")
 	pos = editor.caretPosition()
 	if pos.Line != 0 {
@@ -194,12 +193,80 @@ func TestRequestEditorMotionE(t *testing.T) {
 		t.Fatalf("expected end of second word at column %d; got %d", want, pos.Column)
 	}
 
-	final := utf8.RuneCountInString("word another")
-	editorPtr.moveCursorTo(0, final)
 	editor = applyMotion(t, editor, "e")
 	pos = editor.caretPosition()
 	if pos.Line != 1 || pos.Column != 3 {
 		t.Fatalf("expected e to advance to end of next line; got (%d,%d)", pos.Line, pos.Column)
+	}
+}
+
+func TestRequestEditorMotionWordEnds(t *testing.T) {
+	content := "foo,bar baz"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor = applyMotion(t, editor, "e")
+	pos := editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 2 {
+		t.Fatalf("expected end of foo at column 2; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "e")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 3 {
+		t.Fatalf("expected end of comma word at column 3; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "e")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 6 {
+		t.Fatalf("expected end of bar at column 6; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editorPtr.moveCursorTo(0, 0)
+	editor = applyMotion(t, editor, "E")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 6 {
+		t.Fatalf("expected end of foo,bar at column 6; got (%d,%d)", pos.Line, pos.Column)
+	}
+}
+
+func TestRequestEditorMotionWordStarts(t *testing.T) {
+	content := "foo, bar baz"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor = applyMotion(t, editor, "w")
+	pos := editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 3 {
+		t.Fatalf("expected comma start at column 3; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "w")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 5 {
+		t.Fatalf("expected bar start at column 5; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "b")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 3 {
+		t.Fatalf("expected comma start at column 3; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editorPtr.moveCursorTo(0, 0)
+	editor = applyMotion(t, editor, "W")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 5 {
+		t.Fatalf("expected bar start at column 5; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "B")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 0 {
+		t.Fatalf("expected foo start at column 0; got (%d,%d)", pos.Line, pos.Column)
 	}
 }
 
@@ -287,6 +354,23 @@ func TestRequestEditorDeleteSelectionRequiresSelection(t *testing.T) {
 	}
 	if got := updated.Value(); got != "alpha" {
 		t.Fatalf("expected content to remain unchanged, got %q", got)
+	}
+}
+
+func TestRequestEditorVisualYankIncludesCaretRune(t *testing.T) {
+	editor := newTestEditor("Align")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, _ = editor.ToggleVisual()
+	editor, cmd := editor.YankSelection()
+	_ = editorEventFromCmd(t, cmd)
+
+	if got := editor.registerText; got != "A" {
+		t.Fatalf("expected visual yank to capture caret rune, got %q", got)
+	}
+	if editor.hasSelection() {
+		t.Fatalf("expected selection to clear after yank")
 	}
 }
 
@@ -510,6 +594,28 @@ func TestPasteClipboardInsertsAfterCursor(t *testing.T) {
 	}
 }
 
+func TestPasteClipboardInsertsBeforeCursorMovesCaretToEnd(t *testing.T) {
+	if err := clipboard.WriteAll("ZZ"); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("abc")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 1)
+
+	editor, cmd := editor.PasteClipboard(false)
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil {
+		t.Fatal("expected paste status, got nil")
+	}
+	if got := editor.Value(); got != "aZZbc" {
+		t.Fatalf("expected clipboard pasted before character, got %q", got)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 2 {
+		t.Fatalf("expected cursor at end of paste, got (%d,%d)", pos.Line, pos.Column)
+	}
+}
+
 func TestPasteClipboardLinewisePreservesFollowingLine(t *testing.T) {
 	if err := clipboard.WriteAll(""); err != nil {
 		t.Skipf("clipboard unavailable: %v", err)
@@ -536,6 +642,29 @@ func TestPasteClipboardLinewisePreservesFollowingLine(t *testing.T) {
 	}
 	if pos.Column != 0 {
 		t.Fatalf("expected cursor at column 0 of inserted line, got column %d", pos.Column)
+	}
+}
+
+func TestPasteClipboardLinewiseBeforeInsertsAboveLine(t *testing.T) {
+	if err := clipboard.WriteAll(""); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("first\nsecond\nthird")
+	editor.registerText = "alpha\n"
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 3)
+
+	editor, cmd := editor.PasteClipboard(false)
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil {
+		t.Fatal("expected paste status, got nil")
+	}
+	if got := editor.Value(); got != "first\nalpha\nsecond\nthird" {
+		t.Fatalf("expected linewise paste above cursor line, got %q", got)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 1 || pos.Column != 0 {
+		t.Fatalf("expected cursor on inserted line, got line %d col %d", pos.Line, pos.Column)
 	}
 }
 
