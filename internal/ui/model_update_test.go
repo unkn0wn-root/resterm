@@ -557,6 +557,41 @@ func TestDeleteOperatorDB(t *testing.T) {
 	}
 }
 
+func TestChangeOperatorCw(t *testing.T) {
+	model := newTestModelWithDoc("alpha beta")
+	model.ready = true
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
+
+	sendKeys(t, model, "c", "w")
+
+	if !model.editorInsertMode {
+		t.Fatalf("expected change to enter insert mode")
+	}
+	if got := model.editor.Value(); got != " beta" {
+		t.Fatalf("expected cw to change word, got %q", got)
+	}
+	if model.operator.active {
+		t.Fatal("expected operator state to clear after change")
+	}
+}
+
+func TestChangeOperatorCj(t *testing.T) {
+	model := newTestModelWithDoc("first\nsecond\nthird")
+	model.ready = true
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
+
+	sendKeys(t, model, "c", "j")
+
+	if !model.editorInsertMode {
+		t.Fatalf("expected change to enter insert mode")
+	}
+	if got := model.editor.Value(); got != "\nthird" {
+		t.Fatalf("expected cj to change two lines, got %q", got)
+	}
+}
+
 func TestDeleteOperatorDollar(t *testing.T) {
 	model := newTestModelWithDoc("alpha beta")
 	model.ready = true
@@ -907,18 +942,14 @@ func TestHandleKeyXDeletesCharacter(t *testing.T) {
 	}
 }
 
-func TestHandleKeyCChangesLineAndEntersInsert(t *testing.T) {
+func TestHandleKeyCCChangesLineAndEntersInsert(t *testing.T) {
 	model := newTestModelWithDoc("alpha\nbeta")
 	model.ready = true
 	_ = model.setFocus(focusEditor)
 	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
 
-	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if cmd == nil {
-		t.Fatalf("expected command for c")
-	}
-	_ = cmd()
+	sendKeys(t, model, "c", "c")
 	if !model.editorInsertMode {
 		t.Fatalf("expected change to enter insert mode")
 	}

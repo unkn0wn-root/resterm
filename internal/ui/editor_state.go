@@ -283,6 +283,14 @@ type deleteMotionSpec struct {
 	linewise            bool
 }
 
+type motionSpan struct {
+	startLine int
+	endLine   int
+	start     int
+	end       int
+	linewise  bool
+}
+
 func (e requestEditor) hasSelection() bool {
 	return e.mode != selectionNone
 }
@@ -847,67 +855,100 @@ func (e requestEditor) DeleteSelection() (requestEditor, tea.Cmd) {
 	return e, nil
 }
 
+func (e requestEditor) linewiseSpan(startLine, endLine int) (motionSpan, bool) {
+	if startLine > endLine {
+		startLine, endLine = endLine, startLine
+	}
+	lineStart, _, startIdx := e.lineBounds(startLine)
+	_, lineEnd, endIdx := e.lineBounds(endLine)
+	startOffset := e.clampOffset(lineStart)
+	endOffset := e.clampOffset(lineEnd)
+	if startOffset >= endOffset {
+		return motionSpan{}, false
+	}
+	return motionSpan{
+		startLine: startIdx,
+		endLine:   endIdx,
+		start:     startOffset,
+		end:       endOffset,
+		linewise:  true,
+	}, true
+}
+
+func (e requestEditor) charwiseSpan(
+	startOffset int,
+	endOffset int,
+	spec deleteMotionSpec,
+	includeSpaceAfterWord bool,
+	runes []rune,
+) (motionSpan, bool) {
+	if startOffset == endOffset {
+		return motionSpan{}, false
+	}
+	if startOffset < endOffset {
+		if spec.includeFinalForward {
+			endOffset = nextRuneOffset(runes, endOffset)
+		}
+		// Delete uses Vim-like word motion that also consumes trailing spaces.
+		if includeSpaceAfterWord && (spec.command == "w" || spec.command == "W") {
+			for endOffset < len(runes) {
+				r := runes[endOffset]
+				if r == '\n' || !unicode.IsSpace(r) {
+					break
+				}
+				endOffset++
+			}
+		}
+	} else {
+		startOffset, endOffset = endOffset, startOffset
+	}
+
+	startOffset = e.clampOffset(startOffset)
+	endOffset = e.clampOffset(endOffset)
+	if startOffset >= endOffset {
+		return motionSpan{}, false
+	}
+	return motionSpan{start: startOffset, end: endOffset}, true
+}
+
+func (e requestEditor) motionSpan(
+	anchor cursorPosition,
+	target cursorPosition,
+	spec deleteMotionSpec,
+	includeSpaceAfterWord bool,
+) (motionSpan, bool) {
+	if spec.linewise {
+		return e.linewiseSpan(anchor.Line, target.Line)
+	}
+	runes := []rune(e.Value())
+	return e.charwiseSpan(
+		anchor.Offset,
+		target.Offset,
+		spec,
+		includeSpaceAfterWord,
+		runes,
+	)
+}
+
 func (e requestEditor) DeleteMotion(
 	anchor cursorPosition,
 	spec deleteMotionSpec,
 ) (requestEditor, tea.Cmd) {
-	value := e.Value()
-	runes := []rune(value)
 	target := e.caretPosition()
-	startOffset := anchor.Offset
-	endOffset := target.Offset
-
-	if spec.linewise {
-		startLine := anchor.Line
-		endLine := target.Line
-		if startLine > endLine {
-			startLine, endLine = endLine, startLine
-		}
-
-		lineStart, _, _ := e.lineBounds(startLine)
-		_, lineEnd, _ := e.lineBounds(endLine)
-		startOffset = e.clampOffset(lineStart)
-		endOffset = e.clampOffset(lineEnd)
-		if startOffset >= endOffset {
-			return e, statusCmd(statusWarn, "Nothing to delete")
-		}
-	} else {
-		if startOffset == endOffset {
-			return e, statusCmd(statusWarn, "Nothing to delete")
-		}
-		if startOffset < endOffset {
-			if spec.includeFinalForward {
-				endOffset = nextRuneOffset(runes, endOffset)
-			}
-			if spec.command == "w" || spec.command == "W" {
-				for endOffset < len(runes) {
-					r := runes[endOffset]
-					if r == '\n' || !unicode.IsSpace(r) {
-						break
-					}
-					endOffset++
-				}
-			}
-		} else {
-			startOffset, endOffset = endOffset, startOffset
-		}
-
-		startOffset = e.clampOffset(startOffset)
-		endOffset = e.clampOffset(endOffset)
-		if startOffset >= endOffset {
-			return e, statusCmd(statusWarn, "Nothing to delete")
-		}
+	span, ok := e.motionSpan(anchor, target, spec, true)
+	if !ok {
+		return e, statusCmd(statusWarn, "Nothing to delete")
 	}
 
 	editorPtr := &e
-	removed, ok := editorPtr.deleteRange(startOffset, endOffset)
+	removed, ok := editorPtr.deleteRange(span.start, span.end)
 	if !ok {
 		return e, statusCmd(statusWarn, "Nothing to delete")
 	}
 
 	editorPtr.pendingMotion = ""
 	summary := "Deleted text"
-	if spec.linewise {
+	if span.linewise {
 		summary = "Deleted lines"
 	}
 
@@ -915,9 +956,100 @@ func (e requestEditor) DeleteMotion(
 	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
 }
 
-func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
+func (e *requestEditor) changeLines(startLine, endLine int) (string, bool) {
+	value := e.Value()
+	lines := strings.Split(value, "\n")
+	if len(lines) == 0 {
+		return "", false
+	}
+	if startLine > endLine {
+		startLine, endLine = endLine, startLine
+	}
+
+	startOffset, _, startIdx := e.lineBounds(startLine)
+	_, endOffset, endIdx := e.lineBounds(endLine)
+	startLine = startIdx
+	endLine = endIdx
+
+	startOffset = e.clampOffset(startOffset)
+	endOffset = e.clampOffset(endOffset)
+	if startOffset >= endOffset {
+		return "", false
+	}
+
+	runes := []rune(value)
+	removed := string(runes[startOffset:endOffset])
+
+	prevView := e.ViewStart()
+	e.pushUndoSnapshot()
+
+	if startLine < 0 {
+		startLine = 0
+	}
+	if startLine >= len(lines) {
+		startLine = len(lines) - 1
+	}
+	if endLine < startLine {
+		endLine = startLine
+	}
+	if endLine >= len(lines) {
+		endLine = len(lines) - 1
+	}
+
+	// Replace the changed line range with a single blank line for insert.
+	lines = append(lines[:startLine], append([]string{""}, lines[endLine+1:]...)...)
+	newValue := strings.Join(lines, "\n")
+
+	e.SetValue(newValue)
+	e.SetViewStart(prevView)
+	e.clearSelection()
+	targetLine := startLine
+	if targetLine >= len(lines) {
+		targetLine = len(lines) - 1
+	}
+	if targetLine < 0 {
+		targetLine = 0
+	}
+	e.moveCursorTo(targetLine, 0)
+	e.applySelectionHighlight()
+	return removed, true
+}
+
+func (e requestEditor) ChangeMotion(
+	anchor cursorPosition,
+	spec deleteMotionSpec,
+) (requestEditor, tea.Cmd) {
+	target := e.caretPosition()
+	span, ok := e.motionSpan(anchor, target, spec, false)
+	if !ok {
+		return e, statusCmd(statusWarn, "Nothing to change")
+	}
+
+	editorPtr := &e
+	var removed string
+	if span.linewise {
+		// Linewise change collapses the range into a single blank line.
+		removed, ok = editorPtr.changeLines(span.startLine, span.endLine)
+	} else {
+		removed, ok = editorPtr.deleteRange(span.start, span.end)
+	}
+	if !ok {
+		return e, statusCmd(statusWarn, "Nothing to change")
+	}
+
+	editorPtr.pendingMotion = ""
+	summary := "Changed text"
+	if span.linewise {
+		summary = "Changed lines"
+	}
+
+	status := editorPtr.writeClipboardWithFallback(removed, summary)
+	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+}
+
+func classifyMotion(keys []string, action string) (deleteMotionSpec, error) {
 	if len(keys) == 0 {
-		return deleteMotionSpec{}, fmt.Errorf("delete motion requires a target")
+		return deleteMotionSpec{}, fmt.Errorf("%s motion requires a target", action)
 	}
 
 	first := keys[0]
@@ -927,7 +1059,8 @@ func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
 	case "g":
 		if len(keys) != 2 {
 			return deleteMotionSpec{}, fmt.Errorf(
-				"unsupported delete motion sequence %v",
+				"unsupported %s motion sequence %v",
+				action,
 				keys,
 			)
 		}
@@ -938,7 +1071,8 @@ func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
 			return spec, nil
 		default:
 			return deleteMotionSpec{}, fmt.Errorf(
-				"unsupported delete motion sequence g%v",
+				"unsupported %s motion sequence g%v",
+				action,
 				keys[1:],
 			)
 		}
@@ -969,13 +1103,46 @@ func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
 	default:
 		if len(keys) > 1 {
 			return deleteMotionSpec{}, fmt.Errorf(
-				"unsupported delete motion sequence %v",
+				"unsupported %s motion sequence %v",
+				action,
 				keys,
 			)
 		}
 	}
 
-	return deleteMotionSpec{}, fmt.Errorf("unsupported delete motion %q", first)
+	return deleteMotionSpec{}, fmt.Errorf("unsupported %s motion %q", action, first)
+}
+
+func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
+	return classifyMotion(keys, "delete")
+}
+
+func mapChangeMotionKey(key string) string {
+	switch key {
+	case "w":
+		// Vim cw behaves like ce: change to end of word without trailing spaces.
+		return "e"
+	case "W":
+		// Same for WORD motion in Vim.
+		return "E"
+	default:
+		return key
+	}
+}
+
+func mapChangeMotionKeys(keys []string) []string {
+	if len(keys) == 0 {
+		return keys
+	}
+	// Avoid mutating the original motion slice when mapping cw/cW.
+	mapped := make([]string, len(keys))
+	copy(mapped, keys)
+	mapped[0] = mapChangeMotionKey(mapped[0])
+	return mapped
+}
+
+func classifyChangeMotion(keys []string) (deleteMotionSpec, error) {
+	return classifyMotion(mapChangeMotionKeys(keys), "change")
 }
 
 func (e requestEditor) DeleteCurrentLine() (requestEditor, tea.Cmd) {
@@ -1116,29 +1283,12 @@ func (e requestEditor) ChangeCurrentLine() (requestEditor, tea.Cmd) {
 		return e, statusCmd(statusWarn, "Nothing to change")
 	}
 
-	prevView := e.ViewStart()
-	start, end, line := e.lineBounds(e.Line())
-	runes := []rune(e.Value())
-	segment := string(runes[start:end])
-	e.pushUndoSnapshot()
-
-	lines := strings.Split(e.Value(), "\n")
-	if line < 0 {
-		line = 0
-	}
-	if line >= len(lines) {
-		line = len(lines) - 1
-	}
-
-	lines[line] = ""
-	newValue := strings.Join(lines, "\n")
-	e.SetValue(newValue)
-	e.SetViewStart(prevView)
-	e.clearSelection()
 	editorPtr := &e
-	editorPtr.moveCursorTo(line, 0)
-	e.applySelectionHighlight()
-	status := (&e).writeClipboardWithFallback(segment, "Changed line")
+	removed, ok := editorPtr.changeLines(e.Line(), e.Line())
+	if !ok {
+		return e, statusCmd(statusWarn, "Nothing to change")
+	}
+	status := editorPtr.writeClipboardWithFallback(removed, "Changed line")
 	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
 }
 
