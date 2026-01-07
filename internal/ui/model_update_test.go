@@ -515,6 +515,48 @@ func TestDeleteOperatorDb(t *testing.T) {
 	}
 }
 
+func TestDeleteOperatorDW(t *testing.T) {
+	model := newTestModelWithDoc("foo, bar baz")
+	model.ready = true
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
+
+	sendKeys(t, model, "d", "W")
+
+	if got := model.editor.Value(); got != "bar baz" {
+		t.Fatalf("expected dW to remove WORD, got %q", got)
+	}
+}
+
+func TestDeleteOperatorDE(t *testing.T) {
+	model := newTestModelWithDoc("foo,bar baz")
+	model.ready = true
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
+
+	sendKeys(t, model, "d", "E")
+
+	if got := model.editor.Value(); got != " baz" {
+		t.Fatalf("expected dE to remove to end of WORD, got %q", got)
+	}
+}
+
+func TestDeleteOperatorDB(t *testing.T) {
+	model := newTestModelWithDoc("foo, bar")
+	model.ready = true
+	_ = model.setFocus(focusEditor)
+	_ = model.setInsertMode(false, false)
+
+	editorPtr := &model.editor
+	editorPtr.moveCursorTo(0, len("foo, "))
+
+	sendKeys(t, model, "d", "B")
+
+	if got := model.editor.Value(); got != "bar" {
+		t.Fatalf("expected dB to remove previous WORD, got %q", got)
+	}
+}
+
 func TestDeleteOperatorDollar(t *testing.T) {
 	model := newTestModelWithDoc("alpha beta")
 	model.ready = true

@@ -2606,7 +2606,7 @@ func (m Model) renderHelpOverlay() string {
 			title: "Editor motions",
 			entries: []helpEntry{
 				{"h / j / k / l", "Move left / down / up / right"},
-				{"w / b / e", "Next word / previous word / word end"},
+				{"w / b / e", "Word forward / back / end (W / B / E for WORD)"},
 				{"0 / ^ / $", "Line start / first non-blank / line end"},
 				{"gg / G", "Top / bottom of buffer"},
 				{"Ctrl+f / Ctrl+b", "Page down / up (Ctrl+d / Ctrl+u half-page)"},

@@ -629,7 +629,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		if cmd := e.executeMotion(move); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-	case "e":
+	case "e", "E", "w", "W", "b", "B":
 		if e.metadataHints.active {
 			break
 		}
@@ -640,7 +640,18 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		if !e.isVisualMode() {
 			e.clearSelection()
 		}
-		if cmd := e.executeMotion(func() { e.moveToWordEnd() }); cmd != nil {
+		key := keyMsg.String()
+		big := key == "E" || key == "W" || key == "B"
+		var move func()
+		switch key {
+		case "e", "E":
+			move = func() { e.moveToWordEnd(big) }
+		case "w", "W":
+			move = func() { e.moveToWordNext(big) }
+		case "b", "B":
+			move = func() { e.moveToWordStart(big) }
+		}
+		if cmd := e.executeMotion(move); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case "ctrl+f":
@@ -868,7 +879,7 @@ func (e requestEditor) DeleteMotion(
 			if spec.includeFinalForward {
 				endOffset = nextRuneOffset(runes, endOffset)
 			}
-			if spec.command == "w" {
+			if spec.command == "w" || spec.command == "W" {
 				for endOffset < len(runes) {
 					r := runes[endOffset]
 					if r == '\n' || !unicode.IsSpace(r) {
@@ -931,13 +942,12 @@ func classifyDeleteMotion(keys []string) (deleteMotionSpec, error) {
 				keys[1:],
 			)
 		}
-	case "w":
+	case "w", "W":
+		return spec, nil
+	case "e", "E":
 		spec.includeFinalForward = true
 		return spec, nil
-	case "e":
-		spec.includeFinalForward = true
-		return spec, nil
-	case "b":
+	case "b", "B":
 		return spec, nil
 	case "j", "k", "G":
 		spec.linewise = true
@@ -1406,7 +1416,7 @@ func (e requestEditor) HandleMotion(
 	case "f", "t", "T":
 		e.pendingMotion = command
 		return e, nil, true
-	case "G", "^", "e", "ctrl+f", "ctrl+b", "ctrl+d", "ctrl+u":
+	case "G", "^", "e", "E", "w", "W", "b", "B", "ctrl+f", "ctrl+b", "ctrl+d", "ctrl+u":
 		msg := tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(command)}
 		updated, cmd := e.Update(msg)
 		updated.pendingMotion = ""
@@ -1423,10 +1433,6 @@ func (e requestEditor) HandleMotion(
 		msg = tea.KeyMsg{Type: tea.KeyDown}
 	case "k":
 		msg = tea.KeyMsg{Type: tea.KeyUp}
-	case "w":
-		msg = tea.KeyMsg{Type: tea.KeyRight, Alt: true}
-	case "b":
-		msg = tea.KeyMsg{Type: tea.KeyLeft, Alt: true}
 	case "0":
 		msg = tea.KeyMsg{Type: tea.KeyHome}
 	case "$":
@@ -1810,7 +1816,37 @@ func (e *requestEditor) moveToLineStartNonBlank() {
 	e.moveCursorTo(line, col)
 }
 
-func (e *requestEditor) moveToWordEnd() {
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+func wordClass(r rune, big bool) int {
+	if unicode.IsSpace(r) {
+		return 0
+	}
+	if big || isWordRune(r) {
+		return 1
+	}
+	return 2
+}
+
+func segEnd(runes []rune, idx int, big bool) int {
+	cls := wordClass(runes[idx], big)
+	for idx+1 < len(runes) && wordClass(runes[idx+1], big) == cls {
+		idx++
+	}
+	return idx
+}
+
+func segStart(runes []rune, idx int, big bool) int {
+	cls := wordClass(runes[idx], big)
+	for idx-1 >= 0 && wordClass(runes[idx-1], big) == cls {
+		idx--
+	}
+	return idx
+}
+
+func (e *requestEditor) moveToWordEnd(big bool) {
 	value := e.Value()
 	runes := []rune(value)
 	if len(runes) == 0 {
@@ -1818,11 +1854,11 @@ func (e *requestEditor) moveToWordEnd() {
 	}
 	pos := e.caretPosition()
 	idx := pos.Offset
-	if idx >= len(runes) {
-		idx = len(runes) - 1
-	}
 	if idx < 0 {
 		idx = 0
+	}
+	if idx >= len(runes) {
+		idx = len(runes) - 1
 	}
 
 	if unicode.IsSpace(runes[idx]) {
@@ -1832,12 +1868,104 @@ func (e *requestEditor) moveToWordEnd() {
 		if idx >= len(runes) {
 			return
 		}
+		idx = segEnd(runes, idx, big)
+		line, col := positionForOffset(value, idx)
+		e.moveCursorTo(line, col)
+		return
 	}
 
-	for idx+1 < len(runes) && !unicode.IsSpace(runes[idx+1]) {
+	cls := wordClass(runes[idx], big)
+	if idx+1 < len(runes) && wordClass(runes[idx+1], big) == cls {
+		idx = segEnd(runes, idx, big)
+		line, col := positionForOffset(value, idx)
+		e.moveCursorTo(line, col)
+		return
+	}
+
+	idx++
+	for idx < len(runes) && unicode.IsSpace(runes[idx]) {
 		idx++
 	}
+	if idx >= len(runes) {
+		return
+	}
+	idx = segEnd(runes, idx, big)
+	line, col := positionForOffset(value, idx)
+	e.moveCursorTo(line, col)
+}
 
+func (e *requestEditor) moveToWordNext(big bool) {
+	value := e.Value()
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return
+	}
+	pos := e.caretPosition()
+	idx := pos.Offset
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(runes) {
+		return
+	}
+	if unicode.IsSpace(runes[idx]) {
+		for idx < len(runes) && unicode.IsSpace(runes[idx]) {
+			idx++
+		}
+	} else {
+		idx = segEnd(runes, idx, big) + 1
+		for idx < len(runes) && unicode.IsSpace(runes[idx]) {
+			idx++
+		}
+	}
+	line, col := positionForOffset(value, idx)
+	e.moveCursorTo(line, col)
+}
+
+func (e *requestEditor) moveToWordStart(big bool) {
+	value := e.Value()
+	runes := []rune(value)
+	if len(runes) == 0 {
+		return
+	}
+	pos := e.caretPosition()
+	idx := pos.Offset
+	if idx < 0 {
+		idx = 0
+	}
+	if idx >= len(runes) {
+		idx = len(runes) - 1
+	}
+
+	if unicode.IsSpace(runes[idx]) {
+		for idx >= 0 && unicode.IsSpace(runes[idx]) {
+			idx--
+		}
+		if idx < 0 {
+			return
+		}
+		idx = segStart(runes, idx, big)
+		line, col := positionForOffset(value, idx)
+		e.moveCursorTo(line, col)
+		return
+	}
+
+	cls := wordClass(runes[idx], big)
+	if idx-1 >= 0 && wordClass(runes[idx-1], big) == cls {
+		idx = segStart(runes, idx, big)
+		line, col := positionForOffset(value, idx)
+		e.moveCursorTo(line, col)
+		return
+	}
+
+	idx--
+	for idx >= 0 && unicode.IsSpace(runes[idx]) {
+		idx--
+	}
+	if idx < 0 {
+		return
+	}
+	idx = segStart(runes, idx, big)
 	line, col := positionForOffset(value, idx)
 	e.moveCursorTo(line, col)
 }

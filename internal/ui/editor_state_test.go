@@ -184,7 +184,6 @@ func TestRequestEditorMotionE(t *testing.T) {
 		t.Fatalf("expected end of first word at column 3; got (%d,%d)", pos.Line, pos.Column)
 	}
 
-	editorPtr.moveCursorTo(0, 4)
 	editor = applyMotion(t, editor, "e")
 	pos = editor.caretPosition()
 	if pos.Line != 0 {
@@ -194,12 +193,80 @@ func TestRequestEditorMotionE(t *testing.T) {
 		t.Fatalf("expected end of second word at column %d; got %d", want, pos.Column)
 	}
 
-	final := utf8.RuneCountInString("word another")
-	editorPtr.moveCursorTo(0, final)
 	editor = applyMotion(t, editor, "e")
 	pos = editor.caretPosition()
 	if pos.Line != 1 || pos.Column != 3 {
 		t.Fatalf("expected e to advance to end of next line; got (%d,%d)", pos.Line, pos.Column)
+	}
+}
+
+func TestRequestEditorMotionWordEnds(t *testing.T) {
+	content := "foo,bar baz"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor = applyMotion(t, editor, "e")
+	pos := editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 2 {
+		t.Fatalf("expected end of foo at column 2; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "e")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 3 {
+		t.Fatalf("expected end of comma word at column 3; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "e")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 6 {
+		t.Fatalf("expected end of bar at column 6; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editorPtr.moveCursorTo(0, 0)
+	editor = applyMotion(t, editor, "E")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 6 {
+		t.Fatalf("expected end of foo,bar at column 6; got (%d,%d)", pos.Line, pos.Column)
+	}
+}
+
+func TestRequestEditorMotionWordStarts(t *testing.T) {
+	content := "foo, bar baz"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor = applyMotion(t, editor, "w")
+	pos := editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 3 {
+		t.Fatalf("expected comma start at column 3; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "w")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 5 {
+		t.Fatalf("expected bar start at column 5; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "b")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 3 {
+		t.Fatalf("expected comma start at column 3; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editorPtr.moveCursorTo(0, 0)
+	editor = applyMotion(t, editor, "W")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 5 {
+		t.Fatalf("expected bar start at column 5; got (%d,%d)", pos.Line, pos.Column)
+	}
+
+	editor = applyMotion(t, editor, "B")
+	pos = editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 0 {
+		t.Fatalf("expected foo start at column 0; got (%d,%d)", pos.Line, pos.Column)
 	}
 }
 
