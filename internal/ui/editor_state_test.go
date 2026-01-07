@@ -577,6 +577,28 @@ func TestPasteClipboardInsertsAfterCursor(t *testing.T) {
 	}
 }
 
+func TestPasteClipboardInsertsBeforeCursorMovesCaretToEnd(t *testing.T) {
+	if err := clipboard.WriteAll("ZZ"); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("abc")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 1)
+
+	editor, cmd := editor.PasteClipboard(false)
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil {
+		t.Fatal("expected paste status, got nil")
+	}
+	if got := editor.Value(); got != "aZZbc" {
+		t.Fatalf("expected clipboard pasted before character, got %q", got)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 0 || pos.Column != 2 {
+		t.Fatalf("expected cursor at end of paste, got (%d,%d)", pos.Line, pos.Column)
+	}
+}
+
 func TestPasteClipboardLinewisePreservesFollowingLine(t *testing.T) {
 	if err := clipboard.WriteAll(""); err != nil {
 		t.Skipf("clipboard unavailable: %v", err)
@@ -603,6 +625,29 @@ func TestPasteClipboardLinewisePreservesFollowingLine(t *testing.T) {
 	}
 	if pos.Column != 0 {
 		t.Fatalf("expected cursor at column 0 of inserted line, got column %d", pos.Column)
+	}
+}
+
+func TestPasteClipboardLinewiseBeforeInsertsAboveLine(t *testing.T) {
+	if err := clipboard.WriteAll(""); err != nil {
+		t.Skipf("clipboard unavailable: %v", err)
+	}
+	editor := newTestEditor("first\nsecond\nthird")
+	editor.registerText = "alpha\n"
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 3)
+
+	editor, cmd := editor.PasteClipboard(false)
+	evt := editorEventFromCmd(t, cmd)
+	if evt.status == nil {
+		t.Fatal("expected paste status, got nil")
+	}
+	if got := editor.Value(); got != "first\nalpha\nsecond\nthird" {
+		t.Fatalf("expected linewise paste above cursor line, got %q", got)
+	}
+	pos := editor.caretPosition()
+	if pos.Line != 1 || pos.Column != 0 {
+		t.Fatalf("expected cursor on inserted line, got line %d col %d", pos.Line, pos.Column)
 	}
 }
 

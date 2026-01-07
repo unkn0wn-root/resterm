@@ -1330,6 +1330,8 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 				insertPos = len(runes)
 			}
 		}
+	} else if linewise {
+		insertPos = e.offsetForPosition(cursor.Line, 0)
 	}
 
 	if insertPos < 0 {
@@ -1359,11 +1361,8 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 		}
 	} else {
 		destOffset := insertStart
-		if after {
-			destOffset = insertEnd
-			if insertLen > 0 {
-				destOffset = insertEnd - 1
-			}
+		if insertLen > 0 {
+			destOffset = insertEnd - 1
 		}
 		destOffset = editorPtr.clampOffset(destOffset)
 		targetLine, targetCol = positionForOffset(newValue, destOffset)
