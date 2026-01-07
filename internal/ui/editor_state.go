@@ -353,7 +353,16 @@ func (e requestEditor) selectionOffsets() (int, int, bool) {
 		_, lineEnd, _ := e.lineBounds(end.Line)
 		return lineStart, lineEnd, true
 	}
-	return start.Offset, end.Offset, true
+	startOffset := start.Offset
+	endOffset := end.Offset
+	if e.isVisualMode() && startOffset == endOffset {
+		// Visual mode should include the rune under the cursor.
+		runes := []rune(e.Value())
+		if startOffset >= 0 && startOffset < len(runes) {
+			endOffset = nextRuneOffset(runes, startOffset)
+		}
+	}
+	return startOffset, endOffset, true
 }
 
 func (e requestEditor) selectionSummaryRange() (

@@ -357,6 +357,23 @@ func TestRequestEditorDeleteSelectionRequiresSelection(t *testing.T) {
 	}
 }
 
+func TestRequestEditorVisualYankIncludesCaretRune(t *testing.T) {
+	editor := newTestEditor("Align")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, _ = editor.ToggleVisual()
+	editor, cmd := editor.YankSelection()
+	_ = editorEventFromCmd(t, cmd)
+
+	if got := editor.registerText; got != "A" {
+		t.Fatalf("expected visual yank to capture caret rune, got %q", got)
+	}
+	if editor.hasSelection() {
+		t.Fatalf("expected selection to clear after yank")
+	}
+}
+
 func TestRequestEditorUndoRestoresDeletion(t *testing.T) {
 	editor := newTestEditor("alpha")
 	editorPtr := &editor
