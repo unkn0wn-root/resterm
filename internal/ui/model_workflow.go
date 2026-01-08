@@ -538,13 +538,11 @@ func (m *Model) executeWorkflowRequest(
 	message := fmt.Sprintf("%s %d/%d: %s", title, state.index+1, len(state.steps), label)
 	m.statusPulseBase = message
 	m.setStatusMessage(statusMsg{text: message, level: statusInfo})
-	m.sending = true
+	spin := m.startSending()
 
 	cmd := m.executeRequest(state.doc, clone, options, "", extraVals, extraVars)
-	if tick := m.startStatusPulse(); tick != nil {
-		return tea.Batch(cmd, tick)
-	}
-	return cmd
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{cmd, pulse, spin})
 }
 
 func (m *Model) executeWorkflowRequestStep(
@@ -1133,7 +1131,7 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 	}
 	current := state.current
 	state.current = nil
-	m.sending = false
+	m.stopSending()
 
 	canceled := state.canceled || isCanceled(msg.err)
 	inLoop := state.loop != nil
@@ -1379,7 +1377,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	summary := workflowSummary(state)
 	statsView := newWorkflowStatsView(state)
 	m.workflowRun = nil
-	m.sending = false
+	m.stopSending()
 	m.stopStatusPulseIfIdle()
 	m.setStatusMessage(statusMsg{text: summary, level: workflowStatusLevel(state)})
 	if state == nil || state.origin != workflowOriginForEach {

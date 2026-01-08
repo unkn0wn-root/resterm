@@ -1822,7 +1822,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	m.scriptError = nil
 
 	if !send {
-		m.sending = false
+		m.stopSending()
 		label := strings.TrimSpace(m.statusRequestTitle(doc, req, targetEnv))
 		if label == "" {
 			label = "history request"
@@ -1870,14 +1870,15 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		return m.presentHistoryEntry(entry, req)
 	}
 
-	m.sending = true
+	spin := m.startSending()
 	replayTarget := m.statusRequestTarget(doc, req, targetEnv)
 	replayText := "Replaying"
 	if trimmed := strings.TrimSpace(replayTarget); trimmed != "" {
 		replayText = fmt.Sprintf("Replaying %s", trimmed)
 	}
 	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
-	return m.executeRequest(doc, req, options, "", nil)
+	cmd := m.executeRequest(doc, req, options, "", nil)
+	return batchCmds([]tea.Cmd{cmd, spin})
 }
 
 func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {

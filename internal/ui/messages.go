@@ -12,6 +12,10 @@ import (
 type statusPulseMsg struct {
 	seq int
 }
+
+type tabSpinMsg struct {
+	seq int
+}
 type profileNextIterationMsg struct{}
 type updateTickMsg struct{}
 

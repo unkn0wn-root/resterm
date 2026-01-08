@@ -59,7 +59,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case responseMsg:
-		m.sending = false
+		m.stopSending()
 		m.sendCancel = nil
 		if cmd := m.handleResponseMessage(typed); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -69,6 +69,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.setStatusMessage(typed)
 	case statusPulseMsg:
 		if cmd := m.handleStatusPulse(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case tabSpinMsg:
+		if cmd := m.handleTabSpin(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case responseRenderedMsg:

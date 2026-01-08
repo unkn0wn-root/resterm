@@ -167,7 +167,7 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 	snap := &responseSnapshot{pretty: ensureTrailingNewline("ok"), ready: true}
 	model := newModelWithResponseTab(responseTabPretty, snap)
 	model.sending = true
-	model.statusPulseFrame = 1
+	model.tabSpinIdx = 1
 	pane := model.pane(responsePanePrimary)
 	pane.viewport.Width = 40
 	pane.viewport.Height = 10

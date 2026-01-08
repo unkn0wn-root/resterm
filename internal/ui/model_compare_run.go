@@ -107,7 +107,7 @@ func (m *Model) startCompareRun(
 	m.lastCompareResults = nil
 	m.lastCompareSpec = nil
 	m.compareBundle = nil
-	m.sending = true
+	spin := m.startSending()
 	m.statusPulseBase = state.label
 	m.statusPulseFrame = -1
 
@@ -124,10 +124,10 @@ func (m *Model) startCompareRun(
 	if cmd := m.executeCompareIteration(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	if len(cmds) == 0 {
-		return nil
+	if spin != nil {
+		cmds = append(cmds, spin)
 	}
-	return tea.Batch(cmds...)
+	return batchCmds(cmds)
 }
 
 // Each iteration swaps in its own environment so resolvers see the right values
@@ -147,7 +147,7 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	state.currentEnv = env
 	state.requestText = renderRequestText(clone)
 
-	m.sending = true
+	spin := m.startSending()
 	m.statusPulseBase = state.statusLine()
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
@@ -155,10 +155,8 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 		return m.executeRequest(state.doc, clone, state.options, env, nil)
 	})
 
-	if tick := m.startStatusPulse(); tick != nil {
-		return tea.Batch(runCmd, tick)
-	}
-	return runCmd
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{runCmd, pulse, spin})
 }
 
 // Snapshot each iteration immediately so the compare tab and diff panes can
@@ -172,7 +170,7 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	currentReq := state.current
 	currentEnv := state.currentEnv
 	state.current = nil
-	m.sending = false
+	m.stopSending()
 
 	canceled := state.canceled || isCanceled(msg.err)
 	if canceled {
@@ -275,7 +273,7 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	m.compareRun = nil
 	m.lastCompareResults = state.results
 	m.lastCompareSpec = cloneCompareSpec(state.spec)
-	m.sending = false
+	m.stopSending()
 	m.stopStatusPulseIfIdle()
 
 	if secondary := m.pane(responsePaneSecondary); secondary != nil {
