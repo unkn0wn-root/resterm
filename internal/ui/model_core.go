@@ -258,6 +258,9 @@ type Model struct {
 	statusPulseFrame int
 	statusPulseSeq   int
 	statusPulseOn    bool
+	tabSpinIdx       int
+	tabSpinSeq       int
+	tabSpinOn        bool
 	lastResponse     *httpclient.Response
 	lastGRPC         *grpcclient.Response
 	lastError        error

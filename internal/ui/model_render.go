@@ -1054,7 +1054,18 @@ func (m Model) buildTabRowContent(
 	return ""
 }
 
-var tabSpinFrames = []string{"⠋", "⠙", "⠹"}
+var tabSpinFrames = []string{
+	"⠋",
+	"⠙",
+	"⠹",
+	"⠸",
+	"⠼",
+	"⠴",
+	"⠦",
+	"⠧",
+	"⠇",
+	"⠏",
+}
 
 const responseSendingBase = "Sending request"
 
@@ -1062,7 +1073,7 @@ func (m Model) tabSpinner() string {
 	if !m.sending || len(tabSpinFrames) == 0 {
 		return ""
 	}
-	idx := m.statusPulseFrame
+	idx := m.tabSpinIdx
 	if idx < 0 {
 		idx = 0
 	}

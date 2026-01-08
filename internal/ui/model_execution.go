@@ -96,7 +96,7 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 		status = "Canceling..."
 	}
 
-	m.sending = false
+	m.stopSending()
 	m.stopStatusPulse()
 
 	var cmds []tea.Cmd
@@ -231,7 +231,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		return m.startProfileRun(doc, cloned, options)
 	}
 
-	m.sending = true
+	spin := m.startSending()
 	target := m.statusRequestTarget(doc, cloned, "")
 	base := "Sending"
 	if trimmed := strings.TrimSpace(target); trimmed != "" {
@@ -242,10 +242,8 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
 	execCmd := m.executeRequest(doc, cloned, options, "", nil)
-	if tick := m.startStatusPulse(); tick != nil {
-		return tea.Batch(execCmd, tick)
-	}
-	return execCmd
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{execCmd, pulse, spin})
 }
 
 // Allow CLI-level compare flags to kick off a sweep even when the request lacks
@@ -872,10 +870,21 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 }
 
 const statusPulseInterval = 1 * time.Second
+const tabSpinInterval = 100 * time.Millisecond
 const (
 	streamHeaderType    = "X-Resterm-Stream-Type"
 	streamHeaderSummary = "X-Resterm-Stream-Summary"
 )
+
+func (m *Model) startSending() tea.Cmd {
+	m.sending = true
+	return m.startTabSpin()
+}
+
+func (m *Model) stopSending() {
+	m.sending = false
+	m.stopTabSpin()
+}
 
 func (m *Model) stopStatusPulse() {
 	m.statusPulseOn = false
@@ -908,6 +917,46 @@ func (m *Model) startStatusPulse() tea.Cmd {
 	m.statusPulseSeq++
 	m.statusPulseFrame = 0
 	return m.scheduleStatusPulse()
+}
+
+func (m *Model) stopTabSpin() {
+	m.tabSpinOn = false
+	m.tabSpinIdx = 0
+}
+
+func (m *Model) scheduleTabSpin() tea.Cmd {
+	if !m.tabSpinOn || !m.sending || len(tabSpinFrames) == 0 {
+		return nil
+	}
+	seq := m.tabSpinSeq
+	return tea.Tick(tabSpinInterval, func(time.Time) tea.Msg {
+		return tabSpinMsg{seq: seq}
+	})
+}
+
+func (m *Model) startTabSpin() tea.Cmd {
+	if m.tabSpinOn || !m.sending || len(tabSpinFrames) == 0 {
+		return nil
+	}
+	m.tabSpinOn = true
+	m.tabSpinSeq++
+	m.tabSpinIdx = 0
+	return m.scheduleTabSpin()
+}
+
+func (m *Model) handleTabSpin(msg tabSpinMsg) tea.Cmd {
+	if msg.seq != m.tabSpinSeq {
+		return nil
+	}
+	if !m.tabSpinOn || !m.sending || len(tabSpinFrames) == 0 {
+		m.stopTabSpin()
+		return nil
+	}
+	m.tabSpinIdx++
+	if m.tabSpinIdx >= len(tabSpinFrames) {
+		m.tabSpinIdx = 0
+	}
+	return m.scheduleTabSpin()
 }
 
 func (m *Model) handleStatusPulse(msg statusPulseMsg) tea.Cmd {

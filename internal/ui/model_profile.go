@@ -115,7 +115,7 @@ func (m *Model) startProfileRun(
 	state.messageBase = fmt.Sprintf("Profiling %s", title)
 
 	m.profileRun = state
-	m.sending = true
+	spin := m.startSending()
 	m.statusPulseBase = strings.TrimSpace(profileProgressLabel(state))
 	m.statusPulseFrame = 0
 
@@ -126,10 +126,8 @@ func (m *Model) startProfileRun(
 		},
 	)
 	execCmd := m.executeProfileIteration()
-	if tick := m.startStatusPulse(); tick != nil {
-		return tea.Batch(execCmd, tick)
-	}
-	return execCmd
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{execCmd, pulse, spin})
 }
 
 func (m *Model) executeProfileIteration() tea.Cmd {
@@ -194,7 +192,7 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		if hadCurrent && state.index < state.total {
 			state.index++
 		}
-		m.sending = false
+		m.stopSending()
 		return m.finalizeProfileRun(msg, state)
 	}
 
@@ -206,7 +204,7 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		m.lastError = nil
 		m.lastResponse = nil
 		m.lastGRPC = nil
-		m.sending = false
+		m.stopSending()
 		return m.finalizeProfileRun(msg, state)
 	}
 
@@ -250,22 +248,18 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 		progressText := profileProgressLabel(state)
 		m.statusPulseBase = progressText
 		m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
-		m.sending = true
+		spin := m.startSending()
 		if state.delay > 0 {
 			next := tea.Tick(
 				state.delay,
 				func(time.Time) tea.Msg { return profileNextIterationMsg{} },
 			)
-			if tick := m.startStatusPulse(); tick != nil {
-				return tea.Batch(next, tick)
-			}
-			return next
+			pulse := m.startStatusPulse()
+			return batchCmds([]tea.Cmd{next, pulse, spin})
 		}
 		exec := m.executeProfileIteration()
-		if tick := m.startStatusPulse(); tick != nil {
-			return tea.Batch(exec, tick)
-		}
-		return exec
+		pulse := m.startStatusPulse()
+		return batchCmds([]tea.Cmd{exec, pulse, spin})
 	}
 
 	return m.finalizeProfileRun(msg, state)
@@ -320,7 +314,7 @@ func profileProgressLabel(state *profileState) string {
 
 func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd {
 	m.profileRun = nil
-	m.sending = false
+	m.stopSending()
 	m.stopStatusPulseIfIdle()
 
 	report := ""
