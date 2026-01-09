@@ -141,6 +141,13 @@ func (m *Model) collapsedStatusLabel(r paneRegion) string {
 	}
 }
 
+func (m *Model) restorePane(r paneRegion) tea.Cmd {
+	if !m.collapseState(r) {
+		return nil
+	}
+	return m.togglePaneCollapse(r)
+}
+
 func (m *Model) togglePaneCollapse(r paneRegion) tea.Cmd {
 	current := m.collapseState(r)
 	res := m.setCollapseState(r, !current)
