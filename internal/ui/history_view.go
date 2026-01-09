@@ -85,14 +85,13 @@ func historyBaseLine(entry history.Entry) string {
 }
 
 func historyDescriptionLines(entry history.Entry) []string {
-	var lines []string
+	lines := []string{historyBaseLine(entry)}
 	if desc := strings.TrimSpace(entry.Description); desc != "" {
 		lines = append(lines, condense(desc, 80))
 	}
 	if tags := joinTags(entry.Tags, 5); tags != "" {
 		lines = append(lines, tags)
 	}
-	lines = append(lines, historyBaseLine(entry))
 	return lines
 }
 

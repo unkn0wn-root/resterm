@@ -531,7 +531,7 @@ func New(cfg Config) Model {
 	workflowList.DisableQuitKeybindings()
 
 	historySelected := make(map[string]struct{})
-	histDelegate := historyDelegateForTheme(th, 3, historySelected)
+	histDelegate := historyDelegateForTheme(th, 2, historySelected)
 	historyList := list.New(nil, histDelegate, 0, 0)
 	historyList.SetShowStatusBar(false)
 	historyList.SetShowHelp(false)

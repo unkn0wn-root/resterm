@@ -71,7 +71,7 @@ func (m *Model) applyThemeToLists() {
 	applyListTheme(m.theme, &m.fileList, false, 0)
 	applyListTheme(m.theme, &m.requestList, !m.reqCompactMode(), 3)
 	applyListTheme(m.theme, &m.workflowList, !m.wfCompactMode(), 3)
-	applyHistoryListTheme(m.theme, &m.historyList, 3, m.historySelected)
+	applyHistoryListTheme(m.theme, &m.historyList, 2, m.historySelected)
 	m.historyList.Styles.PaginationStyle = mergeListStyle(
 		list.DefaultStyles().PaginationStyle,
 		m.theme.ListItemDescription,
