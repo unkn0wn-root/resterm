@@ -20,6 +20,7 @@ type Entry struct {
 	ExecutedAt     time.Time       `json:"executedAt"`
 	Environment    string          `json:"environment"`
 	RequestName    string          `json:"requestName"`
+	FilePath       string          `json:"filePath"`
 	Method         string          `json:"method"`
 	URL            string          `json:"url"`
 	Status         string          `json:"status"`
@@ -97,43 +98,15 @@ func NewStore(path string, maxEntries int) *Store {
 func (s *Store) Load() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.loaded {
-		return nil
-	}
-
-	data, err := os.ReadFile(s.path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			s.entries = []Entry{}
-			s.loaded = true
-			return nil
-		}
-		return errdef.Wrap(errdef.CodeHistory, err, "read history")
-	}
-
-	if len(data) == 0 {
-		s.entries = []Entry{}
-		s.loaded = true
-		return nil
-	}
-
-	if err := json.Unmarshal(data, &s.entries); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "parse history")
-	}
-
-	s.sortEntriesLocked()
-	s.loaded = true
-	return nil
+	return s.ensureLoadedLocked()
 }
 
 func (s *Store) Append(entry Entry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.loaded {
-		if err := s.Load(); err != nil {
-			return err
-		}
+	if err := s.ensureLoadedLocked(); err != nil {
+		return err
 	}
 
 	s.entries = append([]Entry{entry}, s.entries...)
@@ -160,10 +133,8 @@ func (s *Store) Delete(id string) (bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if !s.loaded {
-		if err := s.Load(); err != nil {
-			return false, err
-		}
+	if err := s.ensureLoadedLocked(); err != nil {
+		return false, err
 	}
 
 	idx := -1
@@ -229,6 +200,30 @@ func (s *Store) ByWorkflow(name string) []Entry {
 	return matched
 }
 
+func (s *Store) ByFile(path string) []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return nil
+	}
+	cleaned := filepath.Clean(trimmed)
+
+	var matched []Entry
+	for _, entry := range s.entries {
+		if entry.FilePath == "" {
+			continue
+		}
+		if filepath.Clean(entry.FilePath) == cleaned {
+			matched = append(matched, entry)
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return newerFirst(matched[i], matched[j])
+	})
+	return matched
+}
+
 func (s *Store) persist() error {
 	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
 		return errdef.Wrap(errdef.CodeFilesystem, err, "create history dir")
@@ -258,6 +253,36 @@ func (s *Store) sortEntriesLocked() {
 	sort.SliceStable(s.entries, func(i, j int) bool {
 		return newerFirst(s.entries[i], s.entries[j])
 	})
+}
+
+func (s *Store) ensureLoadedLocked() error {
+	if s.loaded {
+		return nil
+	}
+
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			s.entries = []Entry{}
+			s.loaded = true
+			return nil
+		}
+		return errdef.Wrap(errdef.CodeHistory, err, "read history")
+	}
+
+	if len(data) == 0 {
+		s.entries = []Entry{}
+		s.loaded = true
+		return nil
+	}
+
+	if err := json.Unmarshal(data, &s.entries); err != nil {
+		return errdef.Wrap(errdef.CodeHistory, err, "parse history")
+	}
+
+	s.sortEntriesLocked()
+	s.loaded = true
+	return nil
 }
 
 func NormalizeWorkflowName(name string) string {

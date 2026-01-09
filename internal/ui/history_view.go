@@ -15,33 +15,92 @@ type historyItem struct {
 	entry history.Entry
 }
 
-func (h historyItem) Title() string {
-	ts := h.entry.ExecutedAt.Format("15:04:05")
-	if h.entry.Method == restfile.HistoryMethodCompare && h.entry.Compare != nil {
-		count := len(h.entry.Compare.Results)
-		return fmt.Sprintf("%s Compare (%d env)", ts, count)
+const (
+	historyDateFormat = "02-01-2006"
+	historyTimeFormat = "15:04:05"
+)
+
+type historyTitleParts struct {
+	line   string
+	prefix string
+	code   string
+	suffix string
+}
+
+func buildHistoryTitleParts(entry history.Entry) historyTitleParts {
+	return buildHistoryTitlePartsAt(entry, time.Now())
+}
+
+func buildHistoryTitlePartsAt(entry history.Entry, now time.Time) historyTitleParts {
+	ts := historyTimestampLabel(entry.ExecutedAt, now)
+	if entry.Method == restfile.HistoryMethodCompare && entry.Compare != nil {
+		count := len(entry.Compare.Results)
+		return historyTitleParts{line: fmt.Sprintf("%s Compare (%d env)", ts, count)}
 	}
-	return fmt.Sprintf("%s %s (%d)", ts, h.entry.Status, h.entry.StatusCode)
+	return historyTitleParts{
+		prefix: fmt.Sprintf("%s %s (", ts, entry.Status),
+		code:   fmt.Sprintf("%d", entry.StatusCode),
+		suffix: ")",
+	}
+}
+
+func historyTitleText(entry history.Entry) string {
+	parts := buildHistoryTitleParts(entry)
+	if parts.line != "" {
+		return parts.line
+	}
+	return parts.prefix + parts.code + parts.suffix
+}
+
+func historyTimestampLabel(at, now time.Time) string {
+	if at.IsZero() {
+		return ""
+	}
+	if now.IsZero() {
+		now = time.Now()
+	}
+	loc := now.Location()
+	at = at.In(loc)
+	now = now.In(loc)
+	if sameDay(at, now) {
+		return at.Format(historyTimeFormat)
+	}
+	return fmt.Sprintf("%s %s", at.Format(historyDateFormat), at.Format(historyTimeFormat))
+}
+
+func sameDay(a, b time.Time) bool {
+	return a.Year() == b.Year() && a.YearDay() == b.YearDay()
+}
+
+func historyBaseLine(entry history.Entry) string {
+	dur := entry.Duration.Truncate(time.Millisecond)
+	base := fmt.Sprintf("%s %s [%s]", entry.Method, entry.URL, dur)
+	if env := strings.TrimSpace(entry.Environment); env != "" {
+		base = fmt.Sprintf("%s | env:%s", base, env)
+	}
+	if entry.Method == restfile.HistoryMethodCompare && entry.Compare != nil {
+		base = fmt.Sprintf("%s | %s", base, compareSummary(entry))
+	}
+	return base
+}
+
+func historyDescriptionLines(entry history.Entry) []string {
+	lines := []string{historyBaseLine(entry)}
+	if desc := strings.TrimSpace(entry.Description); desc != "" {
+		lines = append(lines, condense(desc, 80))
+	}
+	if tags := joinTags(entry.Tags, 5); tags != "" {
+		lines = append(lines, tags)
+	}
+	return lines
+}
+
+func (h historyItem) Title() string {
+	return historyTitleText(h.entry)
 }
 
 func (h historyItem) Description() string {
-	dur := h.entry.Duration.Truncate(time.Millisecond)
-	base := fmt.Sprintf("%s %s [%s]", h.entry.Method, h.entry.URL, dur)
-	if env := strings.TrimSpace(h.entry.Environment); env != "" {
-		base = fmt.Sprintf("%s | env:%s", base, env)
-	}
-	if h.entry.Method == restfile.HistoryMethodCompare && h.entry.Compare != nil {
-		base = fmt.Sprintf("%s | %s", base, compareSummary(h.entry))
-	}
-	var lines []string
-	if desc := strings.TrimSpace(h.entry.Description); desc != "" {
-		lines = append(lines, condense(desc, 80))
-	}
-	if tags := joinTags(h.entry.Tags, 5); tags != "" {
-		lines = append(lines, tags)
-	}
-	lines = append(lines, base)
-	return strings.Join(lines, "\n")
+	return strings.Join(historyDescriptionLines(h.entry), "\n")
 }
 
 func (h historyItem) FilterValue() string {

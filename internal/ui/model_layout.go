@@ -402,7 +402,11 @@ func (m *Model) applyLayout() tea.Cmd {
 	}
 	historyWidth := maxInt(historyPane.viewport.Width, 1)
 	historyHeight := maxInt(historyPane.viewport.Height, 1)
-	m.historyList.SetSize(historyWidth, historyHeight)
+	listHeight := historyHeight - m.historyHeaderHeight()
+	if listHeight < 1 {
+		listHeight = 1
+	}
+	m.historyList.SetSize(historyWidth, listHeight)
 	if len(m.envList.Items()) > 0 {
 		envWidth := minInt(40, m.width-6)
 		if envWidth < 20 {

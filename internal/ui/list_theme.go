@@ -38,8 +38,32 @@ func listDelegateForTheme(th theme.Theme, showDescription bool, height int) list
 	return delegate
 }
 
+func historyDelegateForTheme(
+	th theme.Theme,
+	height int,
+	selected map[string]struct{},
+) historyDelegate {
+	delegate := list.NewDefaultDelegate()
+	delegate.ShowDescription = true
+	if height > 0 {
+		delegate.SetHeight(height)
+	}
+	delegate.Styles = listItemStylesForTheme(th)
+	return historyDelegate{DefaultDelegate: delegate, th: th, selected: selected}
+}
+
 func applyListTheme(th theme.Theme, model *list.Model, showDescription bool, height int) {
 	delegate := listDelegateForTheme(th, showDescription, height)
+	model.SetDelegate(delegate)
+}
+
+func applyHistoryListTheme(
+	th theme.Theme,
+	model *list.Model,
+	height int,
+	selected map[string]struct{},
+) {
+	delegate := historyDelegateForTheme(th, height, selected)
 	model.SetDelegate(delegate)
 }
 
@@ -47,7 +71,15 @@ func (m *Model) applyThemeToLists() {
 	applyListTheme(m.theme, &m.fileList, false, 0)
 	applyListTheme(m.theme, &m.requestList, !m.reqCompactMode(), 3)
 	applyListTheme(m.theme, &m.workflowList, !m.wfCompactMode(), 3)
-	applyListTheme(m.theme, &m.historyList, true, 3)
+	applyHistoryListTheme(m.theme, &m.historyList, 2, m.historySelected)
+	m.historyList.Styles.PaginationStyle = mergeListStyle(
+		list.DefaultStyles().PaginationStyle,
+		m.theme.ListItemDescription,
+	)
+	m.historyList.Styles.ArabicPagination = mergeListStyle(
+		list.DefaultStyles().ArabicPagination,
+		m.theme.ListItemDescription,
+	)
 	applyListTheme(m.theme, &m.envList, false, 0)
 	applyListTheme(m.theme, &m.themeList, true, 3)
 }

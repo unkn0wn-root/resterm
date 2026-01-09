@@ -1264,12 +1264,32 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 
 	contentWidth := maxInt(pane.viewport.Width, 1)
 	contentHeight := maxInt(pane.viewport.Height, 1)
+	header := m.renderHistoryHeader(contentWidth)
+	filter := m.renderHistoryFilterLine(contentWidth)
+	filterSep := dividerLine(m.theme.PaneDivider, contentWidth)
+	bodyHeight := contentHeight - m.historyHeaderHeight()
+	if bodyHeight < 1 {
+		bodyHeight = 1
+	}
 
 	if len(m.historyEntries) == 0 {
-		body := lipgloss.NewStyle().
+		msg := lipgloss.NewStyle().
+			MaxWidth(contentWidth).
+			MaxHeight(bodyHeight).
+			Render(m.historyEmptyMessage())
+		listView := lipgloss.Place(
+			contentWidth,
+			bodyHeight,
+			lipgloss.Top,
+			lipgloss.Left,
+			msg,
+			lipgloss.WithWhitespaceChars(" "),
+		)
+		body := lipgloss.JoinVertical(lipgloss.Left, header, filter, filterSep, listView)
+		body = lipgloss.NewStyle().
 			MaxWidth(contentWidth).
 			MaxHeight(contentHeight).
-			Render("No history yet. Execute a request to populate this view.")
+			Render(body)
 		return lipgloss.Place(
 			contentWidth,
 			contentHeight,
@@ -1283,9 +1303,9 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 	listView := m.historyList.View()
 	listView = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
+		MaxHeight(bodyHeight).
 		Render(listView)
-
-	body := layoutHistoryContent(listView, "", contentHeight)
+	body := lipgloss.JoinVertical(lipgloss.Left, header, filter, filterSep, listView)
 	body = lipgloss.NewStyle().
 		MaxWidth(contentWidth).
 		MaxHeight(contentHeight).
@@ -1301,52 +1321,21 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 	)
 }
 
-func layoutHistoryContent(listView, snippetView string, maxHeight int) string {
-	height := maxInt(maxHeight, 1)
-	if snippetView == "" {
-		return lipgloss.NewStyle().
-			MaxHeight(height).
-			Render(listView)
-	}
+func (m Model) renderHistoryHeader(width int) string {
+	scope := historyScopeLabel(m.historyScope)
+	sortLabel := historySortLabel(m.historySort)
+	text := fmt.Sprintf("Scope (c): %s  Sort (s): %s", scope, sortLabel)
+	return m.theme.HeaderValue.Width(width).MaxHeight(1).Render(text)
+}
 
-	snippet := lipgloss.NewStyle().
-		MaxHeight(height).
-		Render(snippetView)
-	snippetHeight := lipgloss.Height(snippet)
-	if snippetHeight >= height {
-		return snippet
+func (m Model) renderHistoryFilterLine(width int) string {
+	input := m.historyFilterInput
+	if width > 2 {
+		input.Width = width - 2
+	} else {
+		input.Width = width
 	}
-
-	listHeight := height - snippetHeight
-	if listHeight <= 0 {
-		return snippet
-	}
-
-	trimmedList := lipgloss.NewStyle().
-		MaxHeight(listHeight).
-		Render(listView)
-	trimmedListHeight := lipgloss.Height(trimmedList)
-	if trimmedListHeight == 0 {
-		return snippet
-	}
-
-	remaining := height - trimmedListHeight
-	if remaining <= 0 {
-		return trimmedList
-	}
-
-	trimmedSnippet := lipgloss.NewStyle().
-		MaxHeight(remaining).
-		Render(snippet)
-	if lipgloss.Height(trimmedSnippet) == 0 {
-		return trimmedList
-	}
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		trimmedList,
-		trimmedSnippet,
-	)
+	return lipgloss.NewStyle().Width(width).Render(input.View())
 }
 
 func clampPositive(value, maxValue int) int {
@@ -2592,6 +2581,19 @@ func (m Model) renderHelpOverlay() string {
 					),
 					"Toggle sidebar / editor / response minimize",
 				},
+			}),
+		},
+		{
+			title: "History",
+			entries: sortedHelpEntries([]helpEntry{
+				{"c", "History: cycle scope"},
+				{"s", "History: toggle sort"},
+				{"/", "History: filter (Enter apply, Esc clear)"},
+				{"Space", "History: toggle selection"},
+				{"Enter", "History: load entry"},
+				{"p", "History: preview entry"},
+				{"d", "History: delete selection"},
+				{"r", "History: replay entry"},
 			}),
 		},
 		{

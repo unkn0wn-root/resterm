@@ -130,6 +130,43 @@ func TestOpenTemporaryDocumentResetsState(t *testing.T) {
 	}
 }
 
+func TestOpenFileSetsHistoryScopeToRequest(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	fileA := filepath.Join(tmp, "a.http")
+	fileB := filepath.Join(tmp, "b.http")
+	if err := os.WriteFile(fileA, []byte("GET https://a.test\n"), 0o644); err != nil {
+		t.Fatalf("write file A: %v", err)
+	}
+	if err := os.WriteFile(fileB, []byte("GET https://b.test\n"), 0o644); err != nil {
+		t.Fatalf("write file B: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th})
+	m := &model
+	m.historyScope = historyScopeGlobal
+
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	if m.historyScope != historyScopeRequest {
+		t.Fatalf("expected history scope request, got %v", m.historyScope)
+	}
+	if m.currentRequest == nil || m.currentRequest.URL != "https://a.test" {
+		t.Fatalf("expected current request for file A, got %#v", m.currentRequest)
+	}
+
+	if cmd := m.openFile(fileB); cmd != nil {
+		cmd()
+	}
+	if m.historyScope != historyScopeRequest {
+		t.Fatalf("expected history scope request after file B, got %v", m.historyScope)
+	}
+	if m.currentRequest == nil || m.currentRequest.URL != "https://b.test" {
+		t.Fatalf("expected current request for file B, got %#v", m.currentRequest)
+	}
+}
+
 func TestReloadWarnUpdatesFileChangeModal(t *testing.T) {
 	tmp := t.TempDir()
 	th := theme.DefaultTheme()

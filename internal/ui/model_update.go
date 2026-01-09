@@ -472,14 +472,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok ||
 		(m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
-		var histCmd tea.Cmd
-		m.historyList, histCmd = m.historyList.Update(msg)
-		if m.historyJumpToLatest {
-			m.selectNewestHistoryEntry()
-			m.historyJumpToLatest = false
+		skipHist := false
+		if _, ok := msg.(tea.KeyMsg); ok {
+			if m.historyFilterActive || m.historyBlockKey {
+				skipHist = true
+			}
 		}
-		m.captureHistorySelection()
-		cmds = append(cmds, histCmd)
+		if !skipHist {
+			var histCmd tea.Cmd
+			m.historyList, histCmd = m.historyList.Update(msg)
+			if m.historyJumpToLatest {
+				m.selectNewestHistoryEntry()
+				m.historyJumpToLatest = false
+			}
+			m.captureHistorySelection()
+			cmds = append(cmds, histCmd)
+		}
 	}
 
 	if winMsg, ok := msg.(tea.WindowSizeMsg); ok {
@@ -514,6 +522,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.historyBlockKey = false
+	}
 	return m, tea.Batch(cmds...)
 }
 
@@ -1060,6 +1071,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 	}
 
+	if cmd, handled := m.handleHistoryFilterKey(msg); handled {
+		m.resetChordState()
+		return combine(cmd)
+	}
+
 	if m.operator.active {
 		m.suppressEditorKey = true
 		cmd := m.handleOperatorKey(msg)
@@ -1082,6 +1098,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		if !m.hasPendingChord && m.repeatChordActive && shortcutKey != "" {
 			if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, shortcutKey, msg); handled {
 				m.suppressListKey = true
+				m.blockHistoryKey()
 				return combine(chordCmd)
 			}
 			m.repeatChordActive = false
@@ -1096,6 +1113,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if shortcutKey != "" {
 				if handled, chordCmd := m.resolveChord(prefix, shortcutKey, msg); handled {
 					m.suppressListKey = true
+					m.blockHistoryKey()
 					return combine(chordCmd)
 				}
 			}
@@ -1109,6 +1127,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			m.pendingChordMsg = msg
 			m.hasPendingChord = true
 			m.suppressListKey = true
+			m.blockHistoryKey()
 			return combine(nil)
 		}
 	}
@@ -1409,6 +1428,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			cmd := m.openSearchPrompt()
 			return combine(cmd)
 		case "esc":
+			if pane != nil && pane.activeTab == responseTabHistory {
+				if m.clearHistoryFilter(false) {
+					return combine(nil)
+				}
+			}
 			return combine(m.clearResponseSearch())
 		case "n":
 			cmd := m.advanceResponseSearch()
@@ -1512,7 +1536,64 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		}
 		if pane != nil && pane.activeTab == responseTabHistory {
 			switch keyStr := msg.String(); keyStr {
+			case "c":
+				m.cycleHistoryScope()
+				m.blockHistoryKey()
+				return combine(nil)
+			case "s":
+				m.toggleHistorySort()
+				m.blockHistoryKey()
+				return combine(nil)
+			case "/":
+				m.openHistoryFilter()
+				return combine(nil)
+			case " ", "space":
+				m.toggleHistorySelection()
+				m.blockHistoryKey()
+				return combine(nil)
 			case "d":
+				if len(m.historySelected) > 0 {
+					deleted, failed, err := m.deleteSelectedHistoryEntries()
+					m.clearHistorySelections()
+					if deleted > 0 || failed > 0 {
+						m.syncHistory()
+					}
+					if err != nil {
+						level := statusError
+						if deleted > 0 {
+							level = statusWarn
+						}
+						m.setStatusMessage(
+							statusMsg{
+								text: fmt.Sprintf(
+									"Deleted %d history entries, failed %d: %v",
+									deleted,
+									failed,
+									err,
+								),
+								level: level,
+							},
+						)
+						return combine(nil)
+					}
+					if deleted == 0 {
+						m.setStatusMessage(
+							statusMsg{text: "History entries not found", level: statusWarn},
+						)
+						return combine(nil)
+					}
+					label := "entries"
+					if deleted == 1 {
+						label = "entry"
+					}
+					m.setStatusMessage(
+						statusMsg{
+							text:  fmt.Sprintf("Deleted %d history %s", deleted, label),
+							level: statusInfo,
+						},
+					)
+					return combine(nil)
+				}
 				if entry, ok := m.selectedHistoryEntry(); ok {
 					if deleted, err := m.deleteHistoryEntry(entry.ID); err != nil {
 						m.setStatusMessage(
