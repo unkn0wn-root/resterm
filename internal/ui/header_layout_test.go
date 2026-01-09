@@ -19,7 +19,7 @@ func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	if got := lipgloss.Width(line); got > width {
 		t.Fatalf("expected width <= %d, got %d", width, got)
 	}
-	if !strings.Contains(line, "Latency") {
+	if !strings.Contains(line, "⏱") {
 		t.Fatalf("expected right text to be present, got %q", line)
 	}
 }
