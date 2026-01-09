@@ -10,7 +10,7 @@ import (
 func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	left := []string{"RESTERM", "ENV", "WORKSPACE"}
 	sep := " "
-	right := "Latency: -"
+	right := "⏱"
 	width := 20
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
@@ -27,7 +27,7 @@ func TestBuildHeaderLineFitsWidth(t *testing.T) {
 func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 	left := []string{"BRAND", "ONE", "TWO", "THREE"}
 	sep := " "
-	right := "Latency: -"
+	right := "⏱"
 	width := 16
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "THREE") {
