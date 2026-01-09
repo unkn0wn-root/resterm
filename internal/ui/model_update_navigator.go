@@ -43,6 +43,9 @@ func (m *Model) navReqJumpCmd() navJumpResult {
 		}
 		return navJumpResult{ok: true}
 	}
+	if cmd := m.restorePane(paneRegionEditor); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	m.jumpToNavigatorRequest(req, true)
 	if len(cmds) > 0 {
 		return navJumpResult{cmd: tea.Batch(cmds...), ok: true, focus: true}

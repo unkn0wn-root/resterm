@@ -174,6 +174,11 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		}
 	}
 
+	rc := m.restorePane(paneRegionResponse)
+	wrap := func(cmd tea.Cmd) tea.Cmd {
+		return batchCommands(rc, cmd)
+	}
+
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
@@ -193,13 +198,13 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 			m.setStatusMessage(
 				statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"},
 			)
-			return nil
+			return wrap(nil)
 		}
 		if cloned.Metadata.Profile != nil {
 			m.setStatusMessage(
 				statusMsg{level: statusWarn, text: "@profile cannot run alongside @for-each"},
 			)
-			return nil
+			return wrap(nil)
 		}
 		if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 			options.Trace = true
@@ -207,7 +212,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 				options.TraceBudget = &budget
 			}
 		}
-		return m.startForEachRun(doc, cloned, options)
+		return wrap(m.startForEachRun(doc, cloned, options))
 	}
 
 	if spec := m.compareSpecForRequest(cloned); spec != nil {
@@ -215,9 +220,9 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 			m.setStatusMessage(
 				statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"},
 			)
-			return nil
+			return wrap(nil)
 		}
-		return m.startCompareRun(doc, cloned, spec, options)
+		return wrap(m.startCompareRun(doc, cloned, spec, options))
 	}
 
 	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
@@ -228,7 +233,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	}
 
 	if cloned.Metadata.Profile != nil {
-		return m.startProfileRun(doc, cloned, options)
+		return wrap(m.startProfileRun(doc, cloned, options))
 	}
 
 	spin := m.startSending()
@@ -243,7 +248,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 
 	execCmd := m.executeRequest(doc, cloned, options, "", nil)
 	pulse := m.startStatusPulse()
-	return batchCmds([]tea.Cmd{execCmd, pulse, spin})
+	return wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 }
 
 // Allow CLI-level compare flags to kick off a sweep even when the request lacks

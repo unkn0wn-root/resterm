@@ -876,10 +876,20 @@ func TestNavigatorRequestLJumpsToDefinition(t *testing.T) {
 		},
 	})
 
+	if res := m.setCollapseState(paneRegionEditor, true); res.blocked {
+		t.Fatalf("expected editor collapse to be allowed")
+	}
+	if !m.collapseState(paneRegionEditor) {
+		t.Fatalf("expected editor to start collapsed")
+	}
+
 	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
 		cmd()
 	}
 
+	if m.collapseState(paneRegionEditor) {
+		t.Fatalf("expected editor to be restored")
+	}
 	if m.focus != focusEditor {
 		t.Fatalf("expected focus to move to editor, got %v", m.focus)
 	}

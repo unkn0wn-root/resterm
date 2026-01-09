@@ -701,7 +701,7 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 | Parameter | Required | Default | Description |
 | --- | --- | --- | --- |
 | `token_url` | Yes | - | Token endpoint URL. Must be provided at least once per `cache_key`. |
-| `auth_url` | For auth code | — | Authorization endpoint. Required when `grant=authorization_code`. |
+| `auth_url` | For auth code | - | Authorization endpoint. Required when `grant=authorization_code`. |
 | `client_id` | Yes | - | Your application's client ID. |
 | `client_secret` | No | - | Client secret (omit for public clients using PKCE). |
 | `grant` | No | `client_credentials` | Grant type: `client_credentials`, `password`, or `authorization_code`. |
