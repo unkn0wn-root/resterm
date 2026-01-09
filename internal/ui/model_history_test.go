@@ -166,7 +166,7 @@ func TestLoadHistorySelectionComparePrefersFailure(t *testing.T) {
 	}
 
 	model.historyEntries = []history.Entry{entry}
-	model.historyList.SetItems(makeHistoryItems(model.historyEntries))
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries, model.historyScope))
 	model.historyList.Select(0)
 
 	cmd := model.loadHistorySelection(false)
@@ -207,7 +207,7 @@ func TestLoadHistorySelectionCompareHydratesSnapshots(t *testing.T) {
 	}
 
 	model.historyEntries = []history.Entry{entry}
-	model.historyList.SetItems(makeHistoryItems(model.historyEntries))
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries, model.historyScope))
 	model.historyList.Select(0)
 
 	cmd := model.loadHistorySelection(false)

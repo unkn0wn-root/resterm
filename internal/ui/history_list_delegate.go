@@ -50,7 +50,7 @@ func (d historyDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	descFrame := newHistoryLineFrame(descStyle, width)
 
 	marker := historySelectionMarker(d.selected, hi.entry.ID)
-	title := renderHistoryTitleLine(hi.entry, titleSeg, titleFrame, marker)
+	title := renderHistoryTitleLine(hi, titleSeg, titleFrame, marker)
 	_, _ = io.WriteString(w, title)
 
 	if !d.ShowDescription {
@@ -160,16 +160,17 @@ func (f historyLineFrame) render(segStyle lipgloss.Style, content string) string
 }
 
 func renderHistoryTitleLine(
-	entry history.Entry,
+	item historyItem,
 	base lipgloss.Style,
 	frame historyLineFrame,
 	marker string,
 ) string {
-	parts := buildHistoryTitleParts(entry)
+	parts := buildHistoryTitleParts(item)
 	content := ""
 	if parts.line != "" {
 		content = base.Render(marker) + base.Render(parts.line)
 	} else {
+		entry := item.entry
 		codeStyle := historyStatusStyle(base, entry.StatusCode, entry.Status)
 		content = base.Render(marker+parts.prefix) +
 			codeStyle.Render(parts.code) +
