@@ -1472,9 +1472,6 @@ func (m *Model) toggleHistorySelection() {
 		m.setStatusMessage(statusMsg{text: "No history entry selected", level: statusWarn})
 		return
 	}
-	if m.historySelected == nil {
-		m.historySelected = make(map[string]struct{})
-	}
 	if _, ok := m.historySelected[entry.ID]; ok {
 		delete(m.historySelected, entry.ID)
 	} else {
@@ -1519,25 +1516,31 @@ func (m *Model) clearHistorySelections() {
 	}
 }
 
-func (m *Model) deleteSelectedHistoryEntries() (int, error) {
+func (m *Model) deleteSelectedHistoryEntries() (int, int, error) {
 	if m.historyStore == nil || len(m.historySelected) == 0 {
-		return 0, nil
+		return 0, 0, nil
 	}
 	ids := make([]string, 0, len(m.historySelected))
 	for id := range m.historySelected {
 		ids = append(ids, id)
 	}
 	deleted := 0
+	failed := 0
+	var firstErr error
 	for _, id := range ids {
 		ok, err := m.historyStore.Delete(id)
 		if err != nil {
-			return deleted, err
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
 		if ok {
 			deleted++
 		}
 	}
-	return deleted, nil
+	return deleted, failed, firstErr
 }
 
 func (m *Model) handleHistoryFilterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
@@ -1561,9 +1564,22 @@ func (m *Model) handleHistoryFilterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		if val == "" {
 			m.setStatusMessage(statusMsg{text: "History filter cleared", level: statusInfo})
 		} else {
-			m.setStatusMessage(
-				statusMsg{text: fmt.Sprintf("History filter: %s", val), level: statusInfo},
-			)
+			_, invalid := parseHistoryFilterAt(val, time.Now())
+			if len(invalid) > 0 {
+				m.setStatusMessage(
+					statusMsg{
+						text: fmt.Sprintf(
+							"Invalid date filter: %s (use DD-MM-YYYY, MM-DD-YYYY, or DD-MMM-YYYY)",
+							strings.Join(invalid, ", "),
+						),
+						level: statusWarn,
+					},
+				)
+			} else {
+				m.setStatusMessage(
+					statusMsg{text: fmt.Sprintf("History filter: %s", val), level: statusInfo},
+				)
+			}
 		}
 		return nil, true
 	case "esc":

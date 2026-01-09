@@ -2,6 +2,7 @@ package ui
 
 import (
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -30,24 +31,13 @@ func (m *Model) historyEntriesForFileScope() []history.Entry {
 }
 
 func historyPathTargets(path string, workspaceRoot string) map[string]struct{} {
-	clean := strings.TrimSpace(path)
-	if clean == "" {
+	variants := historyPathVariants(path, workspaceRoot)
+	if len(variants) == 0 {
 		return nil
 	}
-	clean = filepath.Clean(clean)
-	if clean == "." {
-		return nil
-	}
-	targets := map[string]struct{}{clean: {}}
-	if filepath.IsAbs(clean) {
-		return targets
-	}
-	if workspaceRoot != "" {
-		targets[filepath.Clean(filepath.Join(workspaceRoot, clean))] = struct{}{}
-		return targets
-	}
-	if abs, err := filepath.Abs(clean); err == nil {
-		targets[filepath.Clean(abs)] = struct{}{}
+	targets := make(map[string]struct{}, len(variants))
+	for _, variant := range variants {
+		targets[variant] = struct{}{}
 	}
 	return targets
 }
@@ -72,30 +62,63 @@ func historyPathMatches(path string, targets map[string]struct{}, workspaceRoot 
 	if len(targets) == 0 {
 		return false
 	}
+	for _, variant := range historyPathVariants(path, workspaceRoot) {
+		if _, ok := targets[variant]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func historyPathVariants(path string, workspaceRoot string) []string {
 	clean := strings.TrimSpace(path)
 	if clean == "" {
-		return false
+		return nil
 	}
 	clean = filepath.Clean(clean)
 	if clean == "." {
-		return false
+		return nil
 	}
-	if _, ok := targets[clean]; ok {
-		return true
+	seen := make(map[string]struct{}, 3)
+	add := func(value string) {
+		value = historyNormalizePath(value)
+		if value == "" {
+			return
+		}
+		seen[value] = struct{}{}
 	}
 	if filepath.IsAbs(clean) {
-		return false
+		add(clean)
+	} else {
+		add(clean)
+		if root := strings.TrimSpace(workspaceRoot); root != "" {
+			add(filepath.Join(root, clean))
+		} else if abs, err := filepath.Abs(clean); err == nil {
+			add(abs)
+		}
 	}
-	if workspaceRoot != "" {
-		joined := filepath.Clean(filepath.Join(workspaceRoot, clean))
-		_, ok := targets[joined]
-		return ok
+	if len(seen) == 0 {
+		return nil
 	}
-	if abs, err := filepath.Abs(clean); err == nil {
-		_, ok := targets[filepath.Clean(abs)]
-		return ok
+	out := make([]string, 0, len(seen))
+	for value := range seen {
+		out = append(out, value)
 	}
-	return false
+	return out
+}
+
+func historyNormalizePath(path string) string {
+	if path == "" {
+		return ""
+	}
+	clean := filepath.Clean(path)
+	if clean == "." {
+		return ""
+	}
+	if runtime.GOOS == "windows" {
+		clean = strings.ToLower(clean)
+	}
+	return clean
 }
 
 func historyEntryMatchesLegacy(

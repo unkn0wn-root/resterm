@@ -478,9 +478,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				skipHist = true
 			}
 		}
-		if skipHist {
-			m.historyBlockKey = false
-		} else {
+		if !skipHist {
 			var histCmd tea.Cmd
 			m.historyList, histCmd = m.historyList.Update(msg)
 			if m.historyJumpToLatest {
@@ -524,6 +522,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if _, ok := msg.(tea.KeyMsg); ok {
+		m.historyBlockKey = false
+	}
 	return m, tea.Batch(cmds...)
 }
 
@@ -1422,17 +1423,17 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			}
 		}
-	switch keyStr {
-	case "shift+f", "F":
-		cmd := m.openSearchPrompt()
-		return combine(cmd)
-	case "esc":
-		if pane != nil && pane.activeTab == responseTabHistory {
-			if m.clearHistoryFilter(false) {
-				return combine(nil)
+		switch keyStr {
+		case "shift+f", "F":
+			cmd := m.openSearchPrompt()
+			return combine(cmd)
+		case "esc":
+			if pane != nil && pane.activeTab == responseTabHistory {
+				if m.clearHistoryFilter(false) {
+					return combine(nil)
+				}
 			}
-		}
-		return combine(m.clearResponseSearch())
+			return combine(m.clearResponseSearch())
 		case "n":
 			cmd := m.advanceResponseSearch()
 			return combine(cmd)
@@ -1552,21 +1553,29 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			case "d":
 				if len(m.historySelected) > 0 {
-					deleted, err := m.deleteSelectedHistoryEntries()
+					deleted, failed, err := m.deleteSelectedHistoryEntries()
+					m.clearHistorySelections()
+					if deleted > 0 || failed > 0 {
+						m.syncHistory()
+					}
 					if err != nil {
+						level := statusError
+						if deleted > 0 {
+							level = statusWarn
+						}
 						m.setStatusMessage(
 							statusMsg{
-								text:  fmt.Sprintf("history delete error: %v", err),
-								level: statusError,
+								text: fmt.Sprintf(
+									"Deleted %d history entries, failed %d: %v",
+									deleted,
+									failed,
+									err,
+								),
+								level: level,
 							},
 						)
-						if deleted > 0 {
-							m.syncHistory()
-						}
 						return combine(nil)
 					}
-					m.clearHistorySelections()
-					m.syncHistory()
 					if deleted == 0 {
 						m.setStatusMessage(
 							statusMsg{text: "History entries not found", level: statusWarn},

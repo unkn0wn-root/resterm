@@ -9,7 +9,7 @@ import (
 
 type historyFilter struct {
 	method string
-	date   *historyDateRange
+	dates  []historyDateRange
 	tokens []string
 }
 
@@ -36,14 +36,16 @@ func filterHistoryEntries(entries []history.Entry, query string) []history.Entry
 }
 
 func parseHistoryFilter(query string) historyFilter {
-	return parseHistoryFilterAt(query, time.Now())
+	filter, _ := parseHistoryFilterAt(query, time.Now())
+	return filter
 }
 
-func parseHistoryFilterAt(query string, now time.Time) historyFilter {
+func parseHistoryFilterAt(query string, now time.Time) (historyFilter, []string) {
 	filter := historyFilter{}
+	var invalidDates []string
 	fields := strings.Fields(query)
 	if len(fields) == 0 {
-		return filter
+		return filter, nil
 	}
 	var textParts []string
 	for i := 0; i < len(fields); i++ {
@@ -71,9 +73,12 @@ func parseHistoryFilterAt(query string, now time.Time) historyFilter {
 		case "method":
 			filter.method = strings.ToUpper(val)
 		case "date":
-			if rng, ok := parseHistoryDate(val, now); ok {
-				filter.date = &rng
+			if ranges, ok := parseHistoryDateRanges(val, now); ok {
+				filter.dates = appendHistoryDateRanges(filter.dates, ranges)
 			} else {
+				if val != "" {
+					invalidDates = append(invalidDates, val)
+				}
 				textParts = append(textParts, token)
 				if consumedNext {
 					textParts = append(textParts, val)
@@ -87,7 +92,7 @@ func parseHistoryFilterAt(query string, now time.Time) historyFilter {
 		}
 	}
 	filter.tokens = historyFilterTokens(strings.Join(textParts, " "))
-	return filter
+	return filter, invalidDates
 }
 
 func splitHistoryFilterToken(token string) (string, string, bool) {
@@ -103,7 +108,7 @@ func splitHistoryFilterToken(token string) (string, string, bool) {
 }
 
 func (f historyFilter) empty() bool {
-	return f.method == "" && f.date == nil && len(f.tokens) == 0
+	return f.method == "" && len(f.dates) == 0 && len(f.tokens) == 0
 }
 
 func historyFilterTokens(text string) []string {
@@ -117,8 +122,17 @@ func historyEntryMatchesFilter(entry history.Entry, filter historyFilter) bool {
 	if filter.method != "" && !historyMethodMatchesFilter(entry.Method, filter.method) {
 		return false
 	}
-	if filter.date != nil && !filter.date.contains(entry.ExecutedAt) {
-		return false
+	if len(filter.dates) > 0 {
+		matched := false
+		for _, rng := range filter.dates {
+			if rng.contains(entry.ExecutedAt) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
 	}
 	if len(filter.tokens) == 0 {
 		return true
@@ -160,24 +174,69 @@ func historyEntrySearchText(entry history.Entry) string {
 	return strings.ToLower(strings.Join(parts, " "))
 }
 
-func parseHistoryDate(value string, now time.Time) (historyDateRange, bool) {
+func parseHistoryDateRanges(value string, now time.Time) ([]historyDateRange, bool) {
 	if strings.TrimSpace(value) == "" {
-		return historyDateRange{}, false
+		return nil, false
 	}
 	lowered := strings.ToLower(value)
 	switch lowered {
 	case "today":
-		return dateRangeForDay(now), true
+		return []historyDateRange{dateRangeForDay(now)}, true
 	case "yesterday":
-		return dateRangeForDay(now.AddDate(0, 0, -1)), true
+		return []historyDateRange{dateRangeForDay(now.AddDate(0, 0, -1))}, true
 	default:
-		loc := now.Location()
-		parsed, err := time.ParseInLocation("02-01-2006", value, loc)
-		if err != nil {
-			return historyDateRange{}, false
+		ranges := make([]historyDateRange, 0, 4)
+		layouts := []string{
+			"02-01-2006",
+			"01-02-2006",
+			"02-Jan-2006",
+			"2-Jan-2006",
+			"02-January-2006",
+			"2-January-2006",
 		}
-		return dateRangeForDay(parsed), true
+		for _, layout := range layouts {
+			if rng, ok := parseHistoryDateLayout(layout, value, now); ok {
+				ranges = appendHistoryDateRanges(ranges, []historyDateRange{rng})
+			}
+		}
+		if len(ranges) == 0 {
+			return nil, false
+		}
+		return ranges, true
 	}
+}
+
+func parseHistoryDateLayout(layout, value string, now time.Time) (historyDateRange, bool) {
+	loc := now.Location()
+	parsed, err := time.ParseInLocation(layout, value, loc)
+	if err != nil {
+		return historyDateRange{}, false
+	}
+	return dateRangeForDay(parsed), true
+}
+
+func appendHistoryDateRanges(
+	dst []historyDateRange,
+	ranges []historyDateRange,
+) []historyDateRange {
+	if len(ranges) == 0 {
+		return dst
+	}
+	if len(dst) == 0 {
+		return append(dst, ranges...)
+	}
+	seen := make(map[time.Time]struct{}, len(dst)+len(ranges))
+	for _, r := range dst {
+		seen[r.start] = struct{}{}
+	}
+	for _, r := range ranges {
+		if _, ok := seen[r.start]; ok {
+			continue
+		}
+		seen[r.start] = struct{}{}
+		dst = append(dst, r)
+	}
+	return dst
 }
 
 func dateRangeForDay(day time.Time) historyDateRange {

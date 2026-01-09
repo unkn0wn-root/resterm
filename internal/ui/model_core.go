@@ -498,7 +498,7 @@ func New(cfg Config) Model {
 	navFilter.Blur()
 
 	historyFilter := textinput.New()
-	historyFilter.Placeholder = "method:GET date:10-01-2024 users"
+	historyFilter.Placeholder = "method:GET date:05-Jun-2024 users"
 	historyFilter.CharLimit = 0
 	historyFilter.Prompt = "Filter: "
 	historyFilter.SetCursor(0)
