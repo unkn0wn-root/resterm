@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.16.1](https://github.com/unkn0wn-root/resterm/compare/v0.16.0...v0.16.1) (2026-01-09)
+
+
+### Features
+
+* add latency ascii to headers ([7bb18e1](https://github.com/unkn0wn-root/resterm/commit/7bb18e1d5f4b3df7c9dc74ead41f1ba1c0bfb2cd))
+* **history:** add 'gg' and 'G' to jump to first and last and PageUp/Down to jump between pages ([96b2259](https://github.com/unkn0wn-root/resterm/commit/96b225946b0deef833a5bb70d093e1832be0a8ff))
+* sending request brings back response tab when minimized ([1872d3a](https://github.com/unkn0wn-root/resterm/commit/1872d3a3b422bb65779eb89ffa94c599d68b118a))
+* use status message for unnamed requests in global/file scope ([8eecf3d](https://github.com/unkn0wn-root/resterm/commit/8eecf3d09284473a240a99af35471b46bece0202))
+
+
+### Bug Fixes
+
+* opening request unminimize editor ([6a261be](https://github.com/unkn0wn-root/resterm/commit/6a261beebb6ede3ab8b9bbaecb4c438ce1c6b54d))
+
 ## [0.16.0](https://github.com/unkn0wn-root/resterm/compare/v0.15.2...v0.16.0) (2026-01-09)
 
 ### [0.15.2](https://github.com/unkn0wn-root/resterm/compare/v0.15.1...v0.15.2) (2026-01-08)
