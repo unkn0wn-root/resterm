@@ -17,8 +17,8 @@ type historyItem struct {
 }
 
 const (
-	historyDateFormat = "02-01-2006"
-	historyTimeFormat = "15:04:05"
+	historyDateFormat   = "02-01-2006"
+	historyTimeFormat   = "15:04:05"
 	historyUnnamedLabel = "unnamed"
 )
 
