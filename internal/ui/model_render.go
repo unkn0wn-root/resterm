@@ -1338,54 +1338,6 @@ func (m Model) renderHistoryFilterLine(width int) string {
 	return lipgloss.NewStyle().Width(width).Render(input.View())
 }
 
-func layoutHistoryContent(listView, snippetView string, maxHeight int) string {
-	height := maxInt(maxHeight, 1)
-	if snippetView == "" {
-		return lipgloss.NewStyle().
-			MaxHeight(height).
-			Render(listView)
-	}
-
-	snippet := lipgloss.NewStyle().
-		MaxHeight(height).
-		Render(snippetView)
-	snippetHeight := lipgloss.Height(snippet)
-	if snippetHeight >= height {
-		return snippet
-	}
-
-	listHeight := height - snippetHeight
-	if listHeight <= 0 {
-		return snippet
-	}
-
-	trimmedList := lipgloss.NewStyle().
-		MaxHeight(listHeight).
-		Render(listView)
-	trimmedListHeight := lipgloss.Height(trimmedList)
-	if trimmedListHeight == 0 {
-		return snippet
-	}
-
-	remaining := height - trimmedListHeight
-	if remaining <= 0 {
-		return trimmedList
-	}
-
-	trimmedSnippet := lipgloss.NewStyle().
-		MaxHeight(remaining).
-		Render(snippet)
-	if lipgloss.Height(trimmedSnippet) == 0 {
-		return trimmedList
-	}
-
-	return lipgloss.JoinVertical(
-		lipgloss.Left,
-		trimmedList,
-		trimmedSnippet,
-	)
-}
-
 func clampPositive(value, maxValue int) int {
 	if value < 1 {
 		value = 1
