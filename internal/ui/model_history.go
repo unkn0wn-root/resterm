@@ -1352,7 +1352,7 @@ func (m *Model) syncHistory() {
 	entries = sortHistoryEntries(entries, m.historySort)
 	m.historyEntries = entries
 	m.pruneHistorySelections()
-	m.historyList.SetItems(makeHistoryItems(m.historyEntries))
+	m.historyList.SetItems(makeHistoryItems(m.historyEntries, m.historyScope))
 	m.restoreHistorySelection()
 }
 

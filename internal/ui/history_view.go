@@ -13,11 +13,13 @@ import (
 
 type historyItem struct {
 	entry history.Entry
+	scope historyScope
 }
 
 const (
-	historyDateFormat = "02-01-2006"
-	historyTimeFormat = "15:04:05"
+	historyDateFormat   = "02-01-2006"
+	historyTimeFormat   = "15:04:05"
+	historyUnnamedLabel = "unnamed"
 )
 
 type historyTitleParts struct {
@@ -27,25 +29,50 @@ type historyTitleParts struct {
 	suffix string
 }
 
-func buildHistoryTitleParts(entry history.Entry) historyTitleParts {
-	return buildHistoryTitlePartsAt(entry, time.Now())
+func buildHistoryTitleParts(item historyItem) historyTitleParts {
+	return buildHistoryTitlePartsAt(item, time.Now())
 }
 
-func buildHistoryTitlePartsAt(entry history.Entry, now time.Time) historyTitleParts {
+func buildHistoryTitlePartsAt(item historyItem, now time.Time) historyTitleParts {
+	entry := item.entry
 	ts := historyTimestampLabel(entry.ExecutedAt, now)
 	if entry.Method == restfile.HistoryMethodCompare && entry.Compare != nil {
 		count := len(entry.Compare.Results)
 		return historyTitleParts{line: fmt.Sprintf("%s Compare (%d env)", ts, count)}
 	}
+	label := historyTitleLabel(item)
 	return historyTitleParts{
-		prefix: fmt.Sprintf("%s %s (", ts, entry.Status),
+		prefix: fmt.Sprintf("%s %s (", ts, label),
 		code:   fmt.Sprintf("%d", entry.StatusCode),
 		suffix: ")",
 	}
 }
 
-func historyTitleText(entry history.Entry) string {
-	parts := buildHistoryTitleParts(entry)
+func historyTitleLabel(item historyItem) string {
+	entry := item.entry
+	scope := item.scope
+	status := strings.TrimSpace(entry.Status)
+	// Treat workflow entries as workflow scope even in Global/File lists.
+	if entry.Method == restfile.HistoryMethodWorkflow {
+		scope = historyScopeWorkflow
+	}
+	switch scope {
+	case historyScopeRequest, historyScopeWorkflow:
+		return status
+	}
+	name := strings.TrimSpace(entry.RequestName)
+	url := strings.TrimSpace(entry.URL)
+	if name != "" && (url == "" || !strings.EqualFold(name, url)) {
+		return name
+	}
+	if status == "" {
+		return historyUnnamedLabel
+	}
+	return fmt.Sprintf("%s (%s)", status, historyUnnamedLabel)
+}
+
+func historyTitleText(item historyItem) string {
+	parts := buildHistoryTitleParts(item)
 	if parts.line != "" {
 		return parts.line
 	}
@@ -96,7 +123,7 @@ func historyDescriptionLines(entry history.Entry) []string {
 }
 
 func (h historyItem) Title() string {
-	return historyTitleText(h.entry)
+	return historyTitleText(h)
 }
 
 func (h historyItem) Description() string {
@@ -119,10 +146,10 @@ func (h historyItem) FilterValue() string {
 	return strings.Join(parts, " ")
 }
 
-func makeHistoryItems(entries []history.Entry) []list.Item {
+func makeHistoryItems(entries []history.Entry, scope historyScope) []list.Item {
 	items := make([]list.Item, len(entries))
 	for i, e := range entries {
-		items[i] = historyItem{entry: e}
+		items[i] = historyItem{entry: e, scope: scope}
 	}
 	return items
 }

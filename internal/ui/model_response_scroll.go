@@ -7,6 +7,11 @@ func (m *Model) scrollShortcutToEdge(top bool) (tea.Cmd, bool) {
 	case focusEditor:
 		return nil, false
 	case focusResponse:
+		pane := m.focusedPane()
+		if pane != nil && pane.activeTab == responseTabHistory {
+			m.scrollHistoryToEdge(top)
+			return nil, true
+		}
 		return m.scrollResponseToEdge(top), true
 	case focusFile, focusRequests, focusWorkflows:
 		return nil, m.scrollNavigatorToEdge(top)
@@ -38,6 +43,26 @@ func (m *Model) scrollResponseToEdge(top bool) tea.Cmd {
 	}
 	pane.setCurrPosition()
 	return nil
+}
+
+func (m *Model) scrollHistoryToEdge(top bool) {
+	if m.focus != focusResponse {
+		return
+	}
+	pane := m.focusedPane()
+	if pane == nil || pane.activeTab != responseTabHistory {
+		return
+	}
+	visible := m.historyList.VisibleItems()
+	if len(visible) == 0 {
+		return
+	}
+	if top {
+		m.historyList.Select(0)
+	} else {
+		m.historyList.Select(len(visible) - 1)
+	}
+	m.captureHistorySelection()
 }
 
 func (m *Model) scrollNavigatorToEdge(top bool) bool {
