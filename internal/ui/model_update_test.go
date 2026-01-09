@@ -47,10 +47,19 @@ func TestHandleKeyEnterInViewModeSends(t *testing.T) {
 	_ = model.setFocus(focusEditor)
 	_ = model.setInsertMode(false, false)
 	model.moveCursorToLine(2)
+	if res := model.setCollapseState(paneRegionResponse, true); res.blocked {
+		t.Fatalf("expected response collapse to be allowed")
+	}
+	if !model.collapseState(paneRegionResponse) {
+		t.Fatalf("expected response to start collapsed")
+	}
 
 	cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatalf("expected enter key to trigger command in view mode")
+	}
+	if model.collapseState(paneRegionResponse) {
+		t.Fatalf("expected response pane to be restored")
 	}
 }
 
