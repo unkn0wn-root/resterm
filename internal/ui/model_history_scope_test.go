@@ -22,10 +22,14 @@ func TestSyncHistoryScopeRequest(t *testing.T) {
 	model.historyScope = historyScopeRequest
 
 	t1 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
-	if err := store.Append(history.Entry{ID: "1", ExecutedAt: t1, RequestName: "alpha"}); err != nil {
+	if err := store.Append(
+		history.Entry{ID: "1", ExecutedAt: t1, RequestName: "alpha"},
+	); err != nil {
 		t.Fatalf("append alpha: %v", err)
 	}
-	if err := store.Append(history.Entry{ID: "2", ExecutedAt: t1, RequestName: "beta"}); err != nil {
+	if err := store.Append(
+		history.Entry{ID: "2", ExecutedAt: t1, RequestName: "beta"},
+	); err != nil {
 		t.Fatalf("append beta: %v", err)
 	}
 
@@ -84,13 +88,19 @@ func TestSyncHistoryScopeFileMatchesLegacyEntries(t *testing.T) {
 	if err := store.Append(history.Entry{ID: "1", ExecutedAt: t1, FilePath: fileA}); err != nil {
 		t.Fatalf("append file A: %v", err)
 	}
-	if err := store.Append(history.Entry{ID: "2", ExecutedAt: t1, FilePath: filepath.Join("api", "a.http")}); err != nil {
+	if err := store.Append(
+		history.Entry{ID: "2", ExecutedAt: t1, FilePath: filepath.Join("api", "a.http")},
+	); err != nil {
 		t.Fatalf("append relative file A: %v", err)
 	}
-	if err := store.Append(history.Entry{ID: "3", ExecutedAt: t1, RequestName: "alpha"}); err != nil {
+	if err := store.Append(
+		history.Entry{ID: "3", ExecutedAt: t1, RequestName: "alpha"},
+	); err != nil {
 		t.Fatalf("append legacy alpha: %v", err)
 	}
-	if err := store.Append(history.Entry{ID: "4", ExecutedAt: t1, RequestName: "beta"}); err != nil {
+	if err := store.Append(
+		history.Entry{ID: "4", ExecutedAt: t1, RequestName: "beta"},
+	); err != nil {
 		t.Fatalf("append legacy beta: %v", err)
 	}
 
