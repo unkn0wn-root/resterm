@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
@@ -68,6 +69,39 @@ func TestScrollResponseIgnoresHistoryTab(t *testing.T) {
 			offset,
 			pane.viewport.YOffset,
 		)
+	}
+}
+
+func TestScrollHistoryShortcutToEdge(t *testing.T) {
+	model := New(Config{})
+	model.focus = focusResponse
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatalf("expected primary pane")
+	}
+	pane.activeTab = responseTabHistory
+
+	model.historyEntries = []history.Entry{
+		{ID: "1"},
+		{ID: "2"},
+		{ID: "3"},
+	}
+	model.historyList.SetItems(makeHistoryItems(model.historyEntries, model.historyScope))
+	model.historyList.Select(1)
+
+	if _, handled := model.scrollShortcutToEdge(true); !handled {
+		t.Fatalf("expected gg to be handled for history")
+	}
+	if idx := model.historyList.Index(); idx != 0 {
+		t.Fatalf("expected history gg to select first item, got %d", idx)
+	}
+
+	if _, handled := model.scrollShortcutToEdge(false); !handled {
+		t.Fatalf("expected G to be handled for history")
+	}
+	if idx := model.historyList.Index(); idx != len(model.historyEntries)-1 {
+		t.Fatalf("expected history G to select last item, got %d", idx)
 	}
 }
 

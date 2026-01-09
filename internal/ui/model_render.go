@@ -2537,7 +2537,7 @@ func (m Model) renderHelpOverlay() string {
 						},
 						"gg / G",
 					),
-					"Response tab: top / bottom",
+					"Response/History tab: top / bottom",
 				},
 				{
 					m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"),
@@ -2590,6 +2590,7 @@ func (m Model) renderHelpOverlay() string {
 				{"s", "History: toggle sort"},
 				{"/", "History: filter (Enter apply, Esc clear)"},
 				{"Space", "History: toggle selection"},
+				{"PgUp / PgDn", "History: prev / next page"},
 				{"Enter", "History: load entry"},
 				{"p", "History: preview entry"},
 				{"d", "History: delete selection"},
