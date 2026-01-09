@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/paginator"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -211,6 +212,9 @@ type Model struct {
 	editorContentHeight      int
 	responseContentHeight    int
 	historyList              list.Model
+	historyFilterInput       textinput.Model
+	historyFilterActive      bool
+	historyBlockKey          bool
 	envList                  list.Model
 	themeList                list.Model
 
@@ -289,9 +293,13 @@ type Model struct {
 	settingsHandle      config.SettingsHandle
 	historyStore        *history.Store
 	historyEntries      []history.Entry
+	historyScopeCount   int
 	historySelectedID   string
+	historySelected     map[string]struct{}
 	historyJumpToLatest bool
 	historyWorkflowName string
+	historyScope        historyScope
+	historySort         historySort
 	requestItems        []requestListItem
 	workflowItems       []workflowListItem
 	showWorkflow        bool
@@ -489,6 +497,16 @@ func New(cfg Config) Model {
 	navFilter.SetCursor(0)
 	navFilter.Blur()
 
+	historyFilter := textinput.New()
+	historyFilter.Placeholder = "method:GET date:10-01-2024 users"
+	historyFilter.CharLimit = 0
+	historyFilter.Prompt = "Filter: "
+	historyFilter.SetCursor(0)
+	historyFilter.Blur()
+	historyFilter.PlaceholderStyle = th.HeaderValue.Faint(true)
+	historyFilter.PromptStyle = th.HeaderValue
+	historyFilter.TextStyle = th.HeaderValue
+
 	primaryViewport := viewport.New(0, 0)
 	primaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
 	secondaryViewport := viewport.New(0, 0)
@@ -512,12 +530,16 @@ func New(cfg Config) Model {
 	workflowList.SetShowTitle(false)
 	workflowList.DisableQuitKeybindings()
 
-	histDelegate := listDelegateForTheme(th, true, 3)
+	historySelected := make(map[string]struct{})
+	histDelegate := historyDelegateForTheme(th, 3, historySelected)
 	historyList := list.New(nil, histDelegate, 0, 0)
 	historyList.SetShowStatusBar(false)
 	historyList.SetShowHelp(false)
+	historyList.SetFilteringEnabled(false)
 	historyList.SetShowTitle(false)
 	historyList.DisableQuitKeybindings()
+	historyList.Paginator.Type = paginator.Arabic
+	historyList.Paginator.ArabicFormat = "%d/%d"
 
 	envItems := makeEnvItems(cfg.EnvironmentSet)
 	envList := list.New(envItems, listDelegateForTheme(th, false, 0), 0, 0)
@@ -590,6 +612,7 @@ func New(cfg Config) Model {
 		docCache:               make(map[string]navDocCache),
 		editor:                 editor,
 		historyList:            historyList,
+		historyFilterInput:     historyFilter,
 		envList:                envList,
 		themeList:              themeList,
 		historyPreviewViewport: &previewViewport,
@@ -615,6 +638,9 @@ func New(cfg Config) Model {
 		workflowSplit:            workflowSplitDefault,
 		editorSplit:              editorSplitDefault,
 		historyStore:             cfg.History,
+		historySelected:          historySelected,
+		historyScope:             historyScopeGlobal,
+		historySort:              historySortNewest,
 		currentFile:              cfg.FilePath,
 		lastCursorLine:           -1,
 		statusMessage:            initialStatus,
@@ -665,6 +691,7 @@ func New(cfg Config) Model {
 	if model.historyStore != nil {
 		_ = model.historyStore.Load()
 	}
+	model.setHistoryScopeForFile(model.currentFile)
 	model.syncHistory()
 	model.watchFile(cfg.FilePath, []byte(cfg.InitialContent))
 	model.startFileWatcher()

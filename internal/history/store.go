@@ -20,6 +20,7 @@ type Entry struct {
 	ExecutedAt     time.Time       `json:"executedAt"`
 	Environment    string          `json:"environment"`
 	RequestName    string          `json:"requestName"`
+	FilePath       string          `json:"filePath"`
 	Method         string          `json:"method"`
 	URL            string          `json:"url"`
 	Status         string          `json:"status"`
@@ -220,6 +221,30 @@ func (s *Store) ByWorkflow(name string) []Entry {
 	for _, entry := range s.entries {
 		if entry.Method == restfile.HistoryMethodWorkflow &&
 			strings.EqualFold(NormalizeWorkflowName(entry.RequestName), trimmed) {
+			matched = append(matched, entry)
+		}
+	}
+	sort.SliceStable(matched, func(i, j int) bool {
+		return newerFirst(matched[i], matched[j])
+	})
+	return matched
+}
+
+func (s *Store) ByFile(path string) []Entry {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	trimmed := strings.TrimSpace(path)
+	if trimmed == "" {
+		return nil
+	}
+	cleaned := filepath.Clean(trimmed)
+
+	var matched []Entry
+	for _, entry := range s.entries {
+		if entry.FilePath == "" {
+			continue
+		}
+		if filepath.Clean(entry.FilePath) == cleaned {
 			matched = append(matched, entry)
 		}
 	}

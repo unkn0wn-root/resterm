@@ -736,6 +736,7 @@ func (m *Model) recordHTTPHistory(
 		ExecutedAt:  time.Now(),
 		Environment: environment,
 		RequestName: requestIdentifier(req),
+		FilePath:    m.historyFilePath(),
 		Method:      req.Method,
 		URL:         req.URL,
 		Status:      resp.Status,
@@ -788,6 +789,7 @@ func (m *Model) recordSkippedHistory(
 		ExecutedAt:  time.Now(),
 		Environment: environment,
 		RequestName: requestIdentifier(req),
+		FilePath:    m.historyFilePath(),
 		Method:      req.Method,
 		URL:         req.URL,
 		Status:      "SKIPPED",
@@ -848,6 +850,7 @@ func (m *Model) recordGRPCHistory(
 		ExecutedAt:  time.Now(),
 		Environment: environment,
 		RequestName: requestIdentifier(req),
+		FilePath:    m.historyFilePath(),
 		Method:      req.Method,
 		URL:         req.URL,
 		Status:      resp.StatusCode.String(),
@@ -892,6 +895,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 		ExecutedAt:  time.Now(),
 		RequestName: requestIdentifier(baseReq),
+		FilePath:    m.historyFilePath(),
 		Method:      restfile.HistoryMethodCompare,
 		URL:         baseReq.URL,
 		Description: strings.TrimSpace(baseReq.Metadata.Description),
@@ -1332,29 +1336,256 @@ func historyResultStatus(res history.CompareResult) string {
 func (m *Model) syncHistory() {
 	if m.historyStore == nil {
 		m.historyEntries = nil
+		m.historyScopeCount = 0
 		m.historyList.SetItems(nil)
 		m.historySelectedID = ""
 		m.historyList.Select(-1)
 		return
 	}
 
-	identifier := ""
-	if m.currentRequest != nil {
-		identifier = requestIdentifier(m.currentRequest)
+	entries := m.historyEntriesForScope()
+	m.historyScopeCount = len(entries)
+	filter := strings.TrimSpace(m.historyFilterInput.Value())
+	if filter != "" {
+		entries = filterHistoryEntries(entries, filter)
+	}
+	entries = sortHistoryEntries(entries, m.historySort)
+	m.historyEntries = entries
+	m.pruneHistorySelections()
+	m.historyList.SetItems(makeHistoryItems(m.historyEntries))
+	m.restoreHistorySelection()
+}
+
+func (m *Model) historyEntriesForScope() []history.Entry {
+	switch m.historyScope {
+	case historyScopeWorkflow:
+		name := history.NormalizeWorkflowName(m.historyWorkflowName)
+		if name == "" {
+			return nil
+		}
+		return m.historyStore.ByWorkflow(name)
+	case historyScopeRequest:
+		if m.currentRequest == nil {
+			return nil
+		}
+		identifier := requestIdentifier(m.currentRequest)
+		if identifier == "" {
+			return nil
+		}
+		return m.historyStore.ByRequest(identifier)
+	case historyScopeFile:
+		return m.historyEntriesForFileScope()
+	default:
+		return m.historyStore.Entries()
+	}
+}
+
+func (m Model) historyHeaderHeight() int {
+	return 3
+}
+
+func (m Model) historyEmptyMessage() string {
+	filter := strings.TrimSpace(m.historyFilterInput.Value())
+	if filter != "" && m.historyScopeCount > 0 {
+		return "No history entries match this filter."
+	}
+	switch m.historyScope {
+	case historyScopeWorkflow:
+		if strings.TrimSpace(m.historyWorkflowName) == "" {
+			return "No workflow selected."
+		}
+	case historyScopeRequest:
+		if m.currentRequest == nil {
+			return "No request selected."
+		}
+	case historyScopeFile:
+		if strings.TrimSpace(m.historyFilePath()) == "" {
+			return "No file selected."
+		}
+	}
+	return "No history yet. Execute a request to populate this view."
+}
+
+func (m *Model) blockHistoryKey() {
+	if m.focus != focusResponse {
+		return
+	}
+	pane := m.focusedPane()
+	if pane == nil || pane.activeTab != responseTabHistory {
+		return
+	}
+	m.historyBlockKey = true
+}
+
+func (m *Model) cycleHistoryScope() {
+	m.historyScope = m.historyScope.next()
+	if m.ready {
+		m.syncHistory()
+	}
+	m.setStatusMessage(
+		statusMsg{
+			text:  fmt.Sprintf("History scope: %s", historyScopeLabel(m.historyScope)),
+			level: statusInfo,
+		},
+	)
+}
+
+func (m *Model) toggleHistorySort() {
+	m.historySort = m.historySort.toggle()
+	if m.ready {
+		m.syncHistory()
+	}
+	m.setStatusMessage(
+		statusMsg{
+			text:  fmt.Sprintf("History sort: %s", historySortLabel(m.historySort)),
+			level: statusInfo,
+		},
+	)
+}
+
+func (m *Model) openHistoryFilter() {
+	m.historyFilterActive = true
+	m.historyFilterInput.CursorEnd()
+	m.historyFilterInput.Focus()
+	m.blockHistoryKey()
+	m.setStatusMessage(
+		statusMsg{text: "Filter history (Enter to apply, Esc to clear)", level: statusInfo},
+	)
+}
+
+func (m *Model) clearHistoryFilter(force bool) bool {
+	hasFilter := strings.TrimSpace(m.historyFilterInput.Value()) != ""
+	if !force && !hasFilter {
+		return false
+	}
+	m.historyFilterActive = false
+	m.historyFilterInput.SetValue("")
+	m.historyFilterInput.Blur()
+	m.syncHistory()
+	m.setStatusMessage(statusMsg{text: "History filter cleared", level: statusInfo})
+	return true
+}
+
+func (m *Model) toggleHistorySelection() {
+	entry, ok := m.selectedHistoryEntry()
+	if !ok || entry.ID == "" {
+		m.setStatusMessage(statusMsg{text: "No history entry selected", level: statusWarn})
+		return
+	}
+	if m.historySelected == nil {
+		m.historySelected = make(map[string]struct{})
+	}
+	if _, ok := m.historySelected[entry.ID]; ok {
+		delete(m.historySelected, entry.ID)
+	} else {
+		m.historySelected[entry.ID] = struct{}{}
+	}
+	if len(m.historySelected) == 0 {
+		m.setStatusMessage(statusMsg{text: "History selection cleared", level: statusInfo})
+		return
+	}
+	label := "entries"
+	if len(m.historySelected) == 1 {
+		label = "entry"
+	}
+	m.setStatusMessage(
+		statusMsg{
+			text:  fmt.Sprintf("Selected %d history %s", len(m.historySelected), label),
+			level: statusInfo,
+		},
+	)
+}
+
+func (m *Model) pruneHistorySelections() {
+	if len(m.historySelected) == 0 {
+		return
+	}
+	keep := make(map[string]struct{}, len(m.historyEntries))
+	for _, entry := range m.historyEntries {
+		if entry.ID != "" {
+			keep[entry.ID] = struct{}{}
+		}
+	}
+	for id := range m.historySelected {
+		if _, ok := keep[id]; !ok {
+			delete(m.historySelected, id)
+		}
+	}
+}
+
+func (m *Model) clearHistorySelections() {
+	for id := range m.historySelected {
+		delete(m.historySelected, id)
+	}
+}
+
+func (m *Model) deleteSelectedHistoryEntries() (int, error) {
+	if m.historyStore == nil || len(m.historySelected) == 0 {
+		return 0, nil
+	}
+	ids := make([]string, 0, len(m.historySelected))
+	for id := range m.historySelected {
+		ids = append(ids, id)
+	}
+	deleted := 0
+	for _, id := range ids {
+		ok, err := m.historyStore.Delete(id)
+		if err != nil {
+			return deleted, err
+		}
+		if ok {
+			deleted++
+		}
+	}
+	return deleted, nil
+}
+
+func (m *Model) handleHistoryFilterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.historyFilterActive {
+		return nil, false
+	}
+	if m.focus != focusResponse {
+		return nil, false
+	}
+	pane := m.focusedPane()
+	if pane == nil || pane.activeTab != responseTabHistory {
+		return nil, false
 	}
 
-	var entries []history.Entry
-	switch {
-	case history.NormalizeWorkflowName(m.historyWorkflowName) != "":
-		entries = m.historyStore.ByWorkflow(m.historyWorkflowName)
-	case identifier != "":
-		entries = m.historyStore.ByRequest(identifier)
+	switch msg.String() {
+	case "enter":
+		m.historyFilterActive = false
+		m.historyFilterInput.Blur()
+		m.syncHistory()
+		val := strings.TrimSpace(m.historyFilterInput.Value())
+		if val == "" {
+			m.setStatusMessage(statusMsg{text: "History filter cleared", level: statusInfo})
+		} else {
+			m.setStatusMessage(
+				statusMsg{text: fmt.Sprintf("History filter: %s", val), level: statusInfo},
+			)
+		}
+		return nil, true
+	case "esc":
+		m.clearHistoryFilter(true)
+		return nil, true
 	default:
-		entries = m.historyStore.Entries()
+		updated := m.historyFilterInput
+		updated, cmd := updated.Update(msg)
+		m.historyFilterInput = updated
+		m.syncHistory()
+		return cmd, true
 	}
-	m.historyEntries = entries
-	m.historyList.SetItems(makeHistoryItems(entries))
-	m.restoreHistorySelection()
+}
+
+func (m *Model) historyFilePath() string {
+	if path := strings.TrimSpace(m.currentFile); path != "" {
+		return path
+	}
+	if m.doc != nil {
+		return strings.TrimSpace(m.doc.Path)
+	}
+	return ""
 }
 
 func (m *Model) syncRequestList(doc *restfile.Document) {
@@ -1398,13 +1629,10 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 		m.streamFilterActive = false
 		m.streamFilterInput.SetValue("")
 		m.streamFilterInput.Blur()
-		return
-	}
-	if m.historyWorkflowName != "" {
-		m.historyWorkflowName = ""
-		if m.ready {
+		if m.historyScope == historyScopeRequest && m.ready {
 			m.syncHistory()
 		}
+		return
 	}
 	prev := m.activeRequestKey
 	m.currentRequest = req
@@ -1436,6 +1664,9 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 		}
 		if summary != "" {
 			m.setStatusMessage(statusMsg{text: summary, level: statusInfo})
+		}
+		if m.historyScope == historyScopeRequest && m.ready {
+			m.syncHistory()
 		}
 	}
 }
@@ -1725,12 +1956,17 @@ func (m *Model) restoreHistorySelection() {
 }
 
 func (m *Model) selectNewestHistoryEntry() {
-	m.historyList.Select(0)
 	if len(m.historyEntries) == 0 {
 		m.historySelectedID = ""
+		m.historyList.Select(-1)
 		return
 	}
-	m.historySelectedID = m.historyEntries[0].ID
+	idx := 0
+	if m.historySort == historySortOldest {
+		idx = len(m.historyEntries) - 1
+	}
+	m.historyList.Select(idx)
+	m.historySelectedID = m.historyEntries[idx].ID
 }
 
 func (m *Model) replayHistorySelection() tea.Cmd {

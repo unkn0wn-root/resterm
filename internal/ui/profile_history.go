@@ -69,6 +69,7 @@ func (m *Model) buildProfileHistoryEntry(
 		ExecutedAt:     now,
 		Environment:    msg.environment,
 		RequestName:    requestIdentifier(req),
+		FilePath:       m.historyFilePath(),
 		Method:         req.Method,
 		URL:            req.URL,
 		Status:         status,

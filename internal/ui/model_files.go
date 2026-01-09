@@ -52,11 +52,19 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.setStatusMessage(
 		statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess},
 	)
+	m.setHistoryScopeForFile(path)
 	m.syncHistory()
 	if len(m.requestItems) > 0 {
 		m.syncEditorWithRequestSelection(-1)
 	}
 	return nil
+}
+
+func (m *Model) setHistoryScopeForFile(path string) {
+	if !filesvc.IsRequestFile(path) {
+		return
+	}
+	m.historyScope = historyScopeRequest
 }
 
 func (m *Model) openTemporaryDocument() tea.Cmd {

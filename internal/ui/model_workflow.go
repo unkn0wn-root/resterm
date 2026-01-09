@@ -1681,6 +1681,7 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 		ExecutedAt:  time.Now(),
 		Environment: m.cfg.EnvironmentName,
 		RequestName: workflowName,
+		FilePath:    m.historyFilePath(),
 		Method:      restfile.HistoryMethodWorkflow,
 		URL:         workflowName,
 		Status:      summary,
@@ -1700,19 +1701,31 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 		)
 		return
 	}
-	m.historyWorkflowName = workflowName
 	m.historySelectedID = entry.ID
 	m.historyJumpToLatest = false
-	m.syncHistory()
-	m.historyList.Select(0)
+	m.setHistoryWorkflow(workflowName)
 }
 
 func (m *Model) setHistoryWorkflow(name string) {
 	trimmed := history.NormalizeWorkflowName(name)
-	if m.historyWorkflowName == trimmed {
+	if trimmed == "" {
+		if m.historyWorkflowName == "" && m.historyScope != historyScopeWorkflow {
+			return
+		}
+		m.historyWorkflowName = ""
+		if m.historyScope == historyScopeWorkflow {
+			m.historyScope = historyScopeRequest
+		}
+		if m.ready {
+			m.syncHistory()
+		}
+		return
+	}
+	if m.historyWorkflowName == trimmed && m.historyScope == historyScopeWorkflow {
 		return
 	}
 	m.historyWorkflowName = trimmed
+	m.historyScope = historyScopeWorkflow
 	if m.ready {
 		m.syncHistory()
 	}
