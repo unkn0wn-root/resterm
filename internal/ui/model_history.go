@@ -28,6 +28,8 @@ const responseLoadingTickInterval = 200 * time.Millisecond
 type responseLoadingTickMsg struct{}
 
 func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
+	m.recordResponseLatency(msg)
+
 	if state := m.compareRun; state != nil {
 		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
 			return m.handleCompareResponse(msg)
@@ -104,6 +106,19 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment)
 	m.recordHTTPHistory(msg.response, msg.executed, msg.requestText, msg.environment)
 	return cmd
+}
+
+func (m *Model) recordResponseLatency(msg responseMsg) {
+	if m.latencySeries == nil {
+		return
+	}
+	if msg.response != nil {
+		m.latencySeries.add(msg.response.Duration)
+		return
+	}
+	if msg.grpc != nil {
+		m.latencySeries.add(msg.grpc.Duration)
+	}
 }
 
 func (m *Model) consumeRequestError(err error) tea.Cmd {

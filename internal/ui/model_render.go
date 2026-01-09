@@ -1668,18 +1668,22 @@ func (m Model) renderHeader() string {
 	}
 
 	separator := m.theme.HeaderSeparator.Render(" ")
-	joined := segments[0]
-	for i := 1; i < len(segments); i++ {
-		joined = lipgloss.JoinHorizontal(
-			lipgloss.Top,
-			joined,
-			separator,
-			segments[i],
-		)
+
+	rightText := ""
+	if m.latencySeries != nil {
+		rightText = m.latencySeries.render()
 	}
 
-	width := maxInt(m.width, lipgloss.Width(joined))
-	return m.theme.Header.Width(width).Render(joined)
+	totalWidth := maxInt(m.width, 1)
+	contentWidth := headerContentWidth(totalWidth, m.theme.Header)
+	headerLine := buildHeaderLine(
+		segments,
+		separator,
+		rightText,
+		m.theme.HeaderValue,
+		contentWidth,
+	)
+	return m.theme.Header.Width(totalWidth).Render(headerLine)
 }
 
 func (m Model) renderHeaderButton(idx int, label, value string) string {

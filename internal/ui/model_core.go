@@ -268,6 +268,7 @@ type Model struct {
 	lastResponse     *httpclient.Response
 	lastGRPC         *grpcclient.Response
 	lastError        error
+	latencySeries    *latencySeries
 
 	scriptRunner    *scripts.Runner
 	rtsEng          *rts.Eng
@@ -644,6 +645,7 @@ func New(cfg Config) Model {
 		currentFile:              cfg.FilePath,
 		lastCursorLine:           -1,
 		statusMessage:            initialStatus,
+		latencySeries:            newLatencySeries(10),
 		scriptRunner:             scripts.NewRunner(nil),
 		rtsEng:                   rts.NewEng(),
 		globals:                  newGlobalStore(),
