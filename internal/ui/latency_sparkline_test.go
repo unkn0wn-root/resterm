@@ -13,6 +13,84 @@ func TestLatencySeriesRenderPlaceholder(t *testing.T) {
 	}
 }
 
+func TestLatencySeriesRenderPadsToCap(t *testing.T) {
+	s := newLatencySeries(4)
+	s.add(1 * time.Millisecond)
+	s.add(4 * time.Millisecond)
+	got := s.render()
+	parts := strings.SplitN(got, " ", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected latency format, got %q", got)
+	}
+
+	bars := parts[0]
+	if n := len([]rune(bars)); n != 4 {
+		t.Fatalf("expected 4 bars, got %d (%q)", n, bars)
+	}
+	if !strings.HasPrefix(bars, latFill(2)) {
+		t.Fatalf("expected padded bars, got %q", bars)
+	}
+	if !strings.HasSuffix(got, "4ms") {
+		t.Fatalf("expected last duration suffix, got %q", got)
+	}
+}
+
+func TestLatencySeriesRenderSingleSample(t *testing.T) {
+	s := newLatencySeries(4)
+	s.add(50 * time.Millisecond)
+	got := s.render()
+	parts := strings.SplitN(got, " ", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected latency format, got %q", got)
+	}
+
+	bars := []rune(parts[0])
+	if n := len(bars); n != 4 {
+		t.Fatalf("expected 4 bars, got %d (%q)", n, parts[0])
+	}
+	if bars[len(bars)-1] == latencyLevels[0] {
+		t.Fatalf("expected bar for first sample, got %q", parts[0])
+	}
+}
+
+func TestLatencySeriesRenderGrowsFromPlaceholder(t *testing.T) {
+	s := newLatencySeries(10)
+	s.add(10 * time.Millisecond)
+	got := s.render()
+	parts := strings.SplitN(got, " ", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected latency format, got %q", got)
+	}
+	if n := len([]rune(parts[0])); n != latPlaceholderBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
+	}
+
+	for i := 0; i < 5; i++ {
+		s.add(10 * time.Millisecond)
+	}
+
+	got = s.render()
+	parts = strings.SplitN(got, " ", 2)
+	if len(parts) != 2 {
+		t.Fatalf("expected latency format, got %q", got)
+	}
+	if n := len([]rune(parts[0])); n != 6 {
+		t.Fatalf("expected 6 bars, got %d (%q)", n, parts[0])
+	}
+}
+
+func TestLatCurveLiftsMid(t *testing.T) {
+	if got := latCurve(0.25); got <= 0.25 {
+		t.Fatalf("expected mid values lifted, got %f", got)
+	}
+	if got := latCurve(0); got != 0 {
+		t.Fatalf("expected 0 to remain, got %f", got)
+	}
+	if got := latCurve(1); got != 1 {
+		t.Fatalf("expected 1 to remain, got %f", got)
+	}
+}
+
 func TestLatencySeriesRolls(t *testing.T) {
 	s := newLatencySeries(2)
 	s.add(1 * time.Millisecond)
@@ -31,6 +109,7 @@ func TestLatencySeriesRenderSparkline(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		s.add(time.Duration(i) * time.Millisecond)
 	}
+
 	got := s.render()
 	if !strings.HasPrefix(got, "▁▂▄▆█ ") {
 		t.Fatalf("expected sparkline prefix, got %q", got)

@@ -16,6 +16,10 @@ type statusPulseMsg struct {
 type tabSpinMsg struct {
 	seq int
 }
+
+type latencyAnimMsg struct {
+	seq int
+}
 type profileNextIterationMsg struct{}
 type updateTickMsg struct{}
 

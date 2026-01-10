@@ -269,6 +269,10 @@ type Model struct {
 	lastGRPC         *grpcclient.Response
 	lastError        error
 	latencySeries    *latencySeries
+	latAnimOn        bool
+	latAnimSeq       int
+	latAnimFrame     int
+	latAnimStart     time.Time
 
 	scriptRunner    *scripts.Runner
 	rtsEng          *rts.Eng
@@ -645,7 +649,7 @@ func New(cfg Config) Model {
 		currentFile:              cfg.FilePath,
 		lastCursorLine:           -1,
 		statusMessage:            initialStatus,
-		latencySeries:            newLatencySeries(10),
+		latencySeries:            newLatencySeries(latCap),
 		scriptRunner:             scripts.NewRunner(nil),
 		rtsEng:                   rts.NewEng(),
 		globals:                  newGlobalStore(),
@@ -703,6 +707,7 @@ func New(cfg Config) Model {
 		strings.TrimSpace(model.lastResponseSaveDir) == "" {
 		model.lastResponseSaveDir = model.workspaceRoot
 	}
+	model.initLatencyAnim()
 
 	return model
 }
