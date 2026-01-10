@@ -10,7 +10,7 @@ import (
 func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	left := []string{"RESTERM", "ENV", "WORKSPACE"}
 	sep := " "
-	right := "⏱"
+	right := latencyPlaceholder
 	width := 20
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
@@ -19,14 +19,14 @@ func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	if got := lipgloss.Width(line); got > width {
 		t.Fatalf("expected width <= %d, got %d", width, got)
 	}
-	if !strings.Contains(line, "⏱") {
+	if !strings.Contains(line, "▁") {
 		t.Fatalf("expected right text to be present, got %q", line)
 	}
 }
 
 func TestBuildHeaderLineRightOnly(t *testing.T) {
 	sep := " "
-	right := "⏱"
+	right := latencyPlaceholder
 	width := 4
 	line := buildHeaderLine(nil, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
@@ -35,7 +35,7 @@ func TestBuildHeaderLineRightOnly(t *testing.T) {
 	if got := lipgloss.Width(line); got > width {
 		t.Fatalf("expected width <= %d, got %d", width, got)
 	}
-	if !strings.Contains(line, "⏱") {
+	if !strings.Contains(line, "▁") {
 		t.Fatalf("expected right text to be present, got %q", line)
 	}
 }
@@ -43,7 +43,7 @@ func TestBuildHeaderLineRightOnly(t *testing.T) {
 func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 	left := []string{"BRAND", "ONE", "TWO", "THREE"}
 	sep := " "
-	right := "⏱"
+	right := latencyPlaceholder
 	width := 16
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "THREE") {
@@ -57,10 +57,10 @@ func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 func TestBuildHeaderLineNarrowWidthDropsRight(t *testing.T) {
 	left := []string{"BRAND", "ONE"}
 	sep := " "
-	right := "⏱"
+	right := latencyPlaceholder
 	width := 4
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
-	if strings.Contains(line, "⏱") {
+	if strings.Contains(line, "▁") {
 		t.Fatalf("expected right text to be dropped, got %q", line)
 	}
 	if got := lipgloss.Width(line); got > width {
@@ -73,7 +73,7 @@ func TestBuildHeaderLineLeftOnly(t *testing.T) {
 	sep := " "
 	width := 10
 	line := buildHeaderLine(left, sep, "", lipgloss.NewStyle(), width)
-	if strings.Contains(line, "Latency") {
+	if strings.Contains(line, "▁") {
 		t.Fatalf("expected no right text, got %q", line)
 	}
 	if got := lipgloss.Width(line); got > width {
