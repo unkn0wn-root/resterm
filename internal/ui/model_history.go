@@ -109,15 +109,12 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 }
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
-	if m.latencySeries == nil {
-		return
-	}
 	if msg.response != nil {
-		m.latencySeries.add(msg.response.Duration)
+		m.addLatency(msg.response.Duration)
 		return
 	}
 	if msg.grpc != nil {
-		m.latencySeries.add(msg.grpc.Duration)
+		m.addLatency(msg.grpc.Duration)
 	}
 }
 

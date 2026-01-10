@@ -1670,8 +1670,10 @@ func (m Model) renderHeader() string {
 	separator := m.theme.HeaderSeparator.Render(" ")
 
 	rightText := ""
+	rightStyle := m.theme.HeaderValue
 	if m.latencySeries != nil {
-		rightText = m.latencySeries.render()
+		rightText = m.latencyText()
+		rightStyle = m.latencyStyle()
 	}
 
 	totalWidth := maxInt(m.width, 1)
@@ -1680,7 +1682,7 @@ func (m Model) renderHeader() string {
 		segments,
 		separator,
 		rightText,
-		m.theme.HeaderValue,
+		rightStyle,
 		contentWidth,
 	)
 	return m.theme.Header.Width(totalWidth).Render(headerLine)
