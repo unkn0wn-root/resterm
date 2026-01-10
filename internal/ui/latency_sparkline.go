@@ -73,7 +73,11 @@ func (s *latencySeries) render() string {
 		bars = latFill(pad) + bars
 	}
 	v, _ := s.last()
-	return bars + " " + formatDurationShort(v)
+	rounded := v.Round(time.Millisecond)
+	if rounded <= 0 {
+		rounded = v
+	}
+	return bars + " " + formatDurationShort(rounded)
 }
 
 func (s *latencySeries) bounds() (time.Duration, time.Duration) {
