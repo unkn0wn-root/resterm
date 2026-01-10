@@ -21,6 +21,22 @@ func headerContentWidth(total int, style lipgloss.Style) int {
 	return width
 }
 
+func styleRight(text string, st lipgloss.Style, max int) (string, int) {
+	if max <= 0 {
+		return "", 0
+	}
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return "", 0
+	}
+	t = truncateToWidth(t, maxInt(1, max-st.GetHorizontalFrameSize()))
+	if strings.TrimSpace(t) == "" {
+		return "", 0
+	}
+	s := st.Render(t)
+	return s, lipgloss.Width(s)
+}
+
 func buildHeaderLine(
 	left []string,
 	sep string,
@@ -32,43 +48,28 @@ func buildHeaderLine(
 		return ""
 	}
 	if len(left) == 0 {
-		right = strings.TrimSpace(right)
-		if right == "" {
+		rs, _ := styleRight(right, rightStyle, width)
+		if rs == "" {
 			return ""
 		}
-		right = truncateToWidth(right, maxInt(1, width-rightStyle.GetHorizontalFrameSize()))
-		if strings.TrimSpace(right) == "" {
-			return ""
-		}
-		return trimHeaderLine(rightStyle.Render(right), width)
+		return trimHeaderLine(rs, width)
 	}
 	sepW := lipgloss.Width(sep)
-	lw := headerSegmentWidths(left)
-	right = strings.TrimSpace(right)
-	if right == "" {
-		line, _ := fitHeaderSegments(left, lw, sep, sepW, width)
-		return trimHeaderLine(line, width)
+	sw := headerSegmentWidths(left)
+	leftLine := func() string {
+		return fitHeaderLine(left, sw, sep, sepW, width, width)
 	}
-
-	brandW := lw[0]
-	maxRight := width - headerGap - brandW
-	if maxRight < 1 {
-		line, _ := fitHeaderSegments(left, lw, sep, sepW, width)
-		return trimHeaderLine(line, width)
+	mr := width - headerGap - sw[0]
+	if mr < 1 {
+		return leftLine()
 	}
-	rightText := truncateToWidth(
-		right,
-		maxInt(1, maxRight-rightStyle.GetHorizontalFrameSize()),
-	)
-	if strings.TrimSpace(rightText) == "" {
-		line, _ := fitHeaderSegments(left, lw, sep, sepW, width)
-		return trimHeaderLine(line, width)
+	rs, rw := styleRight(right, rightStyle, mr)
+	if rs == "" {
+		return leftLine()
 	}
-	rightStyled := rightStyle.Render(rightText)
-	rightW := lipgloss.Width(rightStyled)
-	maxLeft := width - headerGap - rightW
-	line, leftW := fitHeaderSegments(left, lw, sep, sepW, maxLeft)
-	pad := width - leftW - rightW
+	ml := width - headerGap - rw
+	line, lw := fitHeaderSegments(left, sw, sep, sepW, ml)
+	pad := width - lw - rw
 	if pad < headerGap {
 		pad = headerGap
 	}
@@ -76,8 +77,13 @@ func buildHeaderLine(
 		lipgloss.Center,
 		line,
 		strings.Repeat(" ", pad),
-		rightStyled,
+		rs,
 	)
+	return trimHeaderLine(line, width)
+}
+
+func fitHeaderLine(segs []string, sw []int, sep string, sepW int, max int, width int) string {
+	line, _ := fitHeaderSegments(segs, sw, sep, sepW, max)
 	return trimHeaderLine(line, width)
 }
 
