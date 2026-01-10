@@ -8,7 +8,7 @@ import (
 
 func TestLatencySeriesRenderPlaceholder(t *testing.T) {
 	s := newLatencySeries(4)
-	if got := s.render(); got != "⏱" {
+	if got := s.render(); got != latencyPlaceholder {
 		t.Fatalf("expected placeholder, got %q", got)
 	}
 }

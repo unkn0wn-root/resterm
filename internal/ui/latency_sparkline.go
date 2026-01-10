@@ -11,6 +11,8 @@ type latencySeries struct {
 	cap  int
 }
 
+const latencyPlaceholder = "▁▁▁▁ ms"
+
 func newLatencySeries(capacity int) *latencySeries {
 	if capacity < 1 {
 		capacity = 1
@@ -37,7 +39,7 @@ func (s *latencySeries) render() string {
 		return ""
 	}
 	if len(s.vals) == 0 {
-		return "⏱"
+		return latencyPlaceholder
 	}
 	min, max := s.bounds()
 	return sparkline(s.vals, min, max) + " " + formatDurationShort(s.vals[len(s.vals)-1])
