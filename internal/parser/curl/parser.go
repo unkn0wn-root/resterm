@@ -1,10 +1,11 @@
 package curl
 
 import (
-	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"hash"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -15,348 +16,214 @@ import (
 )
 
 func ParseCommand(command string) (*restfile.Request, error) {
-	tokens, err := splitTokens(command)
+	reqs, err := ParseCommands(command)
 	if err != nil {
 		return nil, err
 	}
-	return parseTokens(tokens)
+	if len(reqs) == 0 {
+		return nil, fmt.Errorf("curl command missing URL")
+	}
+	return reqs[0], nil
+}
+
+func ParseCommands(command string) ([]*restfile.Request, error) {
+	tok, err := splitTokens(command)
+	if err != nil {
+		return nil, err
+	}
+
+	cmd, err := parseCmd(tok)
+	if err != nil {
+		return nil, err
+	}
+	return normCmd(cmd)
+}
+
+type lexState struct {
+	inS    bool
+	inD    bool
+	ansi   bool
+	esc    bool
+	skipNL bool
+	buf    strings.Builder
+	out    []string
+}
+
+func (st *lexState) add(r rune) {
+	st.buf.WriteRune(r)
+}
+
+func (st *lexState) flush() {
+	if st.buf.Len() == 0 {
+		return
+	}
+	st.out = append(st.out, st.buf.String())
+	st.buf.Reset()
 }
 
 // Shell-style tokenization with single quotes (literal), double quotes (escape-aware),
-// and backslash escaping. Single quotes disable escaping so \'doesn\'t terminate the quote.
+// ANSI-C $'...' quoting, and backslash escaping. Single quotes disable escaping.
 // Double quotes respect backslashes so you can have \"inside\" strings.
 func splitTokens(input string) ([]string, error) {
-	var args []string
-	var current strings.Builder
-	inSingle := false
-	inDouble := false
-	escaped := false
+	st := &lexState{}
+	rs := []rune(input)
 
-	flush := func() {
-		if current.Len() == 0 {
-			return
-		}
-		args = append(args, current.String())
-		current.Reset()
-	}
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
 
-	for _, r := range input {
-		switch {
-		case escaped:
-			current.WriteRune(r)
-			escaped = false
-		case r == '\\':
-			if inSingle {
-				current.WriteRune(r)
-			} else {
-				escaped = true
+		if st.skipNL {
+			st.skipNL = false
+			if r == '\n' {
+				continue
 			}
-		case r == '\'':
-			if !inDouble {
-				if inSingle {
-					inSingle = false
-				} else {
-					inSingle = true
+		}
+
+		if st.esc {
+			if st.ansi {
+				val, err := ansiEsc(rs, &i)
+				if err != nil {
+					return nil, err
+				}
+				st.add(val)
+			} else if isLineBreak(r) {
+				if r == '\r' {
+					st.skipNL = true
 				}
 			} else {
-				current.WriteRune(r)
+				st.add(r)
 			}
-		case r == '"':
-			if !inSingle {
-				if inDouble {
-					inDouble = false
-				} else {
-					inDouble = true
-				}
-			} else {
-				current.WriteRune(r)
-			}
-		case isWhitespace(r):
-			if inSingle || inDouble {
-				current.WriteRune(r)
-			} else {
-				flush()
-			}
-		default:
-			current.WriteRune(r)
+			st.esc = false
+			continue
 		}
+
+		if st.ansi {
+			switch r {
+			case '\\':
+				st.esc = true
+			case '\'':
+				st.ansi = false
+			default:
+				st.add(r)
+			}
+			continue
+		}
+
+		if r == '\\' {
+			if st.inS {
+				st.add(r)
+			} else {
+				st.esc = true
+			}
+			continue
+		}
+
+		if r == '\'' {
+			if !st.inD {
+				st.inS = !st.inS
+			} else {
+				st.add(r)
+			}
+			continue
+		}
+
+		if r == '"' {
+			if !st.inS {
+				st.inD = !st.inD
+			} else {
+				st.add(r)
+			}
+			continue
+		}
+
+		if !st.inS && !st.inD && r == '$' && i+1 < len(rs) && rs[i+1] == '\'' {
+			st.ansi = true
+			i++
+			continue
+		}
+
+		if isWhitespace(r) {
+			if st.inS || st.inD {
+				st.add(r)
+			} else {
+				st.flush()
+			}
+			continue
+		}
+
+		st.add(r)
 	}
 
-	if escaped {
+	if st.esc {
 		return nil, fmt.Errorf("unterminated escape sequence")
 	}
 
-	if inSingle || inDouble {
+	if st.inS || st.inD || st.ansi {
 		return nil, fmt.Errorf("unterminated quoted string")
 	}
 
-	flush()
-	return args, nil
+	st.flush()
+	return st.out, nil
 }
 
-func parseTokens(tokens []string) (*restfile.Request, error) {
-	idx, err := findCurlIndex(tokens)
-	if err != nil {
-		return nil, err
+func ansiEsc(rs []rune, i *int) (rune, error) {
+	if *i >= len(rs) {
+		return 0, fmt.Errorf("unterminated escape sequence")
 	}
-
-	var target string
-	var basic string
-
-	req := &restfile.Request{Method: "GET"}
-	headers := make(http.Header)
-	body := newBodyBuilder()
-	compressed := false
-	explicitMethod := false
-	positionalOnly := false
-
-	for i := idx + 1; i < len(tokens); i++ {
-		tok := tokens[i]
-		if tok == "" {
-			continue
-		}
-
-		if !positionalOnly {
-			switch {
-			case tok == "--":
-				positionalOnly = true
-				continue
-			case tok == "-X" || tok == "--request":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				req.Method = strings.ToUpper(val)
-				explicitMethod = true
-				continue
-			case strings.HasPrefix(tok, "-X") && len(tok) > 2:
-				req.Method = strings.ToUpper(tok[2:])
-				explicitMethod = true
-				continue
-			case strings.HasPrefix(tok, "--request="):
-				req.Method = strings.ToUpper(tok[len("--request="):])
-				explicitMethod = true
-				continue
-			case tok == "-H" || tok == "--header":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				addHeader(headers, val)
-				continue
-			case strings.HasPrefix(tok, "-H") && len(tok) > 2:
-				addHeader(headers, tok[2:])
-				continue
-			case strings.HasPrefix(tok, "--header="):
-				addHeader(headers, tok[len("--header="):])
-				continue
-			case tok == "-u" || tok == "--user":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				basic = val
-				continue
-			case strings.HasPrefix(tok, "-u") && len(tok) > 2:
-				basic = tok[2:]
-				continue
-			case strings.HasPrefix(tok, "--user="):
-				basic = tok[len("--user="):]
-				continue
-			case tok == "-I" || tok == "--head":
-				req.Method = "HEAD"
-				explicitMethod = true
-				continue
-			case tok == "--compressed":
-				compressed = true
-				continue
-			case tok == "--url":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				target = val
-				continue
-			case strings.HasPrefix(tok, "--url="):
-				target = tok[len("--url="):]
-				continue
-			case tok == "--json":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addJSON(val); err != nil {
-					return nil, err
-				}
-				ensureJSONHeader(headers)
-				continue
-			case strings.HasPrefix(tok, "--json="):
-				if err := body.addJSON(tok[len("--json="):]); err != nil {
-					return nil, err
-				}
-				ensureJSONHeader(headers)
-				continue
-			case tok == "--data-json":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addJSON(val); err != nil {
-					return nil, err
-				}
-				ensureJSONHeader(headers)
-				continue
-			case strings.HasPrefix(tok, "--data-json="):
-				if err := body.addJSON(tok[len("--data-json="):]); err != nil {
-					return nil, err
-				}
-				ensureJSONHeader(headers)
-				continue
-			case tok == "-d" || tok == "--data" || tok == "--data-ascii":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addData(val, true); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "-d") && len(tok) > 2:
-				if err := body.addData(tok[2:], true); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "--data="):
-				if err := body.addData(tok[len("--data="):], true); err != nil {
-					return nil, err
-				}
-				continue
-			case tok == "--data-urlencode":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addURLEncoded(val); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "--data-urlencode="):
-				if err := body.addURLEncoded(tok[len("--data-urlencode="):]); err != nil {
-					return nil, err
-				}
-				continue
-			case tok == "--data-raw":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addRaw(val); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "--data-raw="):
-				if err := body.addRaw(tok[len("--data-raw="):]); err != nil {
-					return nil, err
-				}
-				continue
-			case tok == "--data-binary":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addBinary(val); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "--data-binary="):
-				if err := body.addBinary(tok[len("--data-binary="):]); err != nil {
-					return nil, err
-				}
-				continue
-			case tok == "-F" || tok == "--form":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addFormPart(val, false); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "-F") && len(tok) > 2:
-				if err := body.addFormPart(tok[2:], false); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "--form="):
-				if err := body.addFormPart(tok[len("--form="):], false); err != nil {
-					return nil, err
-				}
-				continue
-			case tok == "--form-string":
-				val, err := consumeNext(tokens, &i, tok)
-				if err != nil {
-					return nil, err
-				}
-				if err := body.addFormPart(val, true); err != nil {
-					return nil, err
-				}
-				continue
-			case strings.HasPrefix(tok, "--form-string="):
-				if err := body.addFormPart(tok[len("--form-string="):], true); err != nil {
-					return nil, err
-				}
-				continue
-			case (strings.HasPrefix(tok, "http://") || strings.HasPrefix(tok, "https://")) && target == "":
-				target = tok
-				continue
-			}
-		}
-
-		if target == "" {
-			target = tok
-			continue
-		}
-		if err := body.addRaw(tok); err != nil {
-			return nil, err
-		}
+	r := rs[*i]
+	switch r {
+	case 'n':
+		return '\n', nil
+	case 'r':
+		return '\r', nil
+	case 't':
+		return '\t', nil
+	case '\\':
+		return '\\', nil
+	case '\'':
+		return '\'', nil
+	case '"':
+		return '"', nil
+	case 'x':
+		return readHex(rs, i, 2)
+	case 'u':
+		return readHex(rs, i, 4)
+	default:
+		return r, nil
 	}
+}
 
-	if target == "" {
-		return nil, fmt.Errorf("curl command missing URL")
+func readHex(rs []rune, i *int, n int) (rune, error) {
+	if *i+n >= len(rs) {
+		return 0, fmt.Errorf("invalid hex escape")
 	}
-
-	if body.hasContent() && !explicitMethod && strings.EqualFold(req.Method, "GET") {
-		req.Method = "POST"
-	}
-
-	if err := body.apply(req, headers); err != nil {
-		return nil, err
-	}
-
-	req.URL = sanitizeURL(target)
-	if len(headers) > 0 {
-		req.Headers = headers
-	}
-
-	if basic != "" {
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
+	val := 0
+	for j := 0; j < n; j++ {
+		r := rs[*i+1+j]
+		d, ok := hexVal(r)
+		if !ok {
+			return 0, fmt.Errorf("invalid hex escape")
 		}
-		if req.Headers.Get("Authorization") == "" {
-			req.Headers.Set("Authorization", buildBasicAuthHeader(basic))
-		}
+		val = val*16 + d
 	}
+	*i += n
+	return rune(val), nil
+}
 
-	if compressed {
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		if req.Headers.Get("Accept-Encoding") == "" {
-			req.Headers.Set("Accept-Encoding", "gzip, deflate, br")
-		}
+func hexVal(r rune) (int, bool) {
+	switch {
+	case r >= '0' && r <= '9':
+		return int(r - '0'), true
+	case r >= 'a' && r <= 'f':
+		return int(r-'a') + 10, true
+	case r >= 'A' && r <= 'F':
+		return int(r-'A') + 10, true
+	default:
+		return 0, false
 	}
+}
 
-	return req, nil
+func isLineBreak(r rune) bool {
+	return r == '\n' || r == '\r'
 }
 
 func ensureJSONHeader(h http.Header) {
@@ -386,10 +253,12 @@ func findCurlIndex(tokens []string) (int, error) {
 		if trimmed == "" {
 			continue
 		}
+
 		lower := strings.ToLower(trimmed)
 		if lower == "curl" {
 			return i, nil
 		}
+
 		switch lower {
 		case "sudo", "env", "command", "time", "noglob":
 			continue
@@ -547,6 +416,27 @@ func (b *bodyBuilder) hasContent() bool {
 	}
 }
 
+func (b *bodyBuilder) query() (string, error) {
+	switch b.kind {
+	case bodyKindNone:
+		return "", nil
+	case bodyKindRaw:
+		return strings.Join(b.raw, "&"), nil
+	case bodyKindForm:
+		pairs := make([]string, 0, len(b.form))
+		for _, f := range b.form {
+			pairs = append(pairs, f.encode())
+		}
+		return strings.Join(pairs, "&"), nil
+	case bodyKindMultipart:
+		return "", fmt.Errorf("multipart body cannot be mapped to query")
+	case bodyKindFile:
+		return "", fmt.Errorf("file body cannot be mapped to query")
+	default:
+		return "", nil
+	}
+}
+
 func (b *bodyBuilder) apply(req *restfile.Request, headers http.Header) error {
 	if !b.hasContent() {
 		req.Body = restfile.BodySource{}
@@ -659,12 +549,14 @@ func parseMultipartPart(raw string, literal bool) (multipartPart, error) {
 		if opt == "" {
 			continue
 		}
+
 		kv := strings.SplitN(opt, "=", 2)
 		key := strings.ToLower(strings.TrimSpace(kv[0]))
 		value := ""
 		if len(kv) == 2 {
 			value = strings.TrimSpace(kv[1])
 		}
+
 		switch key {
 		case "type":
 			part.ctype = value
@@ -689,7 +581,7 @@ func buildMultipartBody(parts []multipartPart) (string, string) {
 		return "", ""
 	}
 
-	boundary := makeBoundary()
+	boundary := makeBoundary(parts)
 	var b strings.Builder
 	for _, p := range parts {
 		b.WriteString("--")
@@ -724,12 +616,34 @@ func buildMultipartBody(parts []multipartPart) (string, string) {
 	return b.String(), boundary
 }
 
-func makeBoundary() string {
-	buf := make([]byte, 12)
-	if _, err := rand.Read(buf); err != nil {
+func makeBoundary(parts []multipartPart) string {
+	if len(parts) == 0 {
 		return "resterm-boundary"
 	}
-	return "resterm-" + hex.EncodeToString(buf)
+	h := sha256.New()
+	for _, p := range parts {
+		addHash(h, p.name)
+		addHash(h, p.val)
+		addHash(h, p.file)
+		addHash(h, p.ctype)
+		addHash(h, p.fname)
+		if p.fileMode {
+			_, _ = h.Write([]byte{1})
+		} else {
+			_, _ = h.Write([]byte{0})
+		}
+	}
+	sum := h.Sum(nil)
+	return "resterm-" + hex.EncodeToString(sum[:12])
+}
+
+func addHash(h hash.Hash, v string) {
+	if v == "" {
+		_, _ = h.Write([]byte{0})
+		return
+	}
+	_, _ = h.Write([]byte(v))
+	_, _ = h.Write([]byte{0})
 }
 
 func escapeQuotes(v string) string {
@@ -746,10 +660,12 @@ func splitHeader(header string) (string, string) {
 	if len(parts) == 0 {
 		return "", ""
 	}
+
 	name := strings.TrimSpace(parts[0])
 	if name == "" {
 		return "", ""
 	}
+
 	value := ""
 	if len(parts) > 1 {
 		value = strings.TrimSpace(parts[1])

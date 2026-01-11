@@ -248,7 +248,7 @@ curl \
   -d '{"user":"demo","password":"pass"}'
 ```
 
-Resterm recognizes common curl flags (`-X`, `--request`, `-H`, `--header`, `-d/--data*`, `--json`, `--url`, `-u/--user`, `--head`, `--compressed`, `-F/--form`) and converts them into a structured request. Multiline commands joined with backslashes are supported.
+Resterm recognizes common curl flags (`-X`, `--request`, `-H`, `--header`, `-d/--data*`, `--json`, `--url`, `-u/--user`, `--head`, `--compressed`, `-F/--form`) and converts them into a structured request. Multiline commands joined with backslashes are supported. For larger curl scripts or multiple commands, use the CLI importer (`--from-curl`).
 
 ---
 
@@ -1088,12 +1088,31 @@ Run `resterm --help` for the latest list. Core flags:
 | `--proxy <url>` | HTTP proxy URL. |
 | `--compare <envs>` | Default comma/space-delimited environments for manual compare runs (`g+c`). |
 | `--compare-base <env>` | Baseline environment name when `--compare` is set (defaults to the first target). |
+| `--from-curl <command|path>` | Generate a `.http` file from a curl command or file (`-` reads stdin). |
 | `--from-openapi <spec>` | Generate a `.http` collection from an OpenAPI document. |
-| `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http`). |
+| `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http` for OpenAPI or `curl.http` for curl imports). |
 | `--openapi-base-var <name>` | Override the base URL variable injected into the generated file (`baseUrl` by default). |
 | `--openapi-resolve-refs` | Resolve external `$ref` pointers before generation. |
 | `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default. |
 | `--openapi-server-index <n>` | Choose which server entry (0-based) seeds the base URL. |
+
+### Importing curl commands
+
+```bash
+resterm --from-curl "curl https://example.com -H 'X-Test: 1'" --http-out example.http
+```
+
+```bash
+resterm --from-curl ./requests.curl --http-out requests.http
+```
+
+```bash
+cat requests.curl | resterm --from-curl - --http-out requests.http
+```
+
+- Files can contain multiple curl commands; a blank line or a new line starting with `curl` starts a new request.
+- Common shell prefixes (`sudo`, `env`, `time`, `command`, and prompts like `$`) are ignored.
+- Unsupported curl flags are preserved as `Warning:` lines in the generated header.
 
 ### Importing OpenAPI specs
 
@@ -1211,6 +1230,7 @@ Explore `_examples/` for ready-to-run:
 - `transport.http` - timeout, proxy, and `@no-log` samples.
 - `compare.http` - demonstrates `@compare` directives and CLI-triggered multi-environment sweeps.
 - `workflows.http` - end-to-end workflow with captures, overrides, and expectations.
+- `curl-import.http` - sample output generated from curl commands via the CLI importer.
 
 Open one in Resterm, switch to the appropriate environment (`resterm.env.json`), and send requests to see each feature in action.
 

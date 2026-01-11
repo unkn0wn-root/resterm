@@ -1,0 +1,9 @@
+# Source:
+# curl https://example.com -H 'X-Test: 1' -u user:pass -k --silent
+# Warning: unsupported flag --silent (ignored)
+
+### GET https://example.com
+# @auth basic user pass
+# @setting http-insecure true
+GET https://example.com
+X-Test: 1

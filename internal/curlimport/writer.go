@@ -1,9 +1,8 @@
-package writer
+package curlimport
 
 import (
 	"context"
 
-	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
 )
@@ -17,10 +16,10 @@ func NewFileWriter() *FileWriter {
 func (w *FileWriter) WriteDocument(
 	ctx context.Context,
 	doc *restfile.Document,
-	destination string,
-	opts openapi.WriterOptions,
+	dst string,
+	opts WriterOptions,
 ) error {
-	return restwriter.WriteDocument(ctx, doc, destination, restwriter.Options{
+	return restwriter.WriteDocument(ctx, doc, dst, restwriter.Options{
 		OverwriteExisting: opts.OverwriteExisting,
 		HeaderComment:     opts.HeaderComment,
 	})
