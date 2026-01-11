@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/parser/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const errWriterNotConfigured = "curlimport: writer not configured"
@@ -114,22 +115,5 @@ func uniqSorted(in []string) []string {
 		}
 	}
 	sort.Strings(out)
-	out = dedupe(out)
-	return out
-}
-
-func dedupe(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := in[:1]
-	last := in[0]
-	for _, v := range in[1:] {
-		if v == last {
-			continue
-		}
-		out = append(out, v)
-		last = v
-	}
-	return out
+	return util.DedupeSortedStrings(out)
 }

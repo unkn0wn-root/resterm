@@ -16,3 +16,20 @@ func DedupeNonEmptyStrings(values []string) []string {
 	}
 	return out
 }
+
+// DedupeSortedStrings removes consecutive duplicates from a sorted slice.
+func DedupeSortedStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	out := values[:1]
+	last := values[0]
+	for _, v := range values[1:] {
+		if v == last {
+			continue
+		}
+		out = append(out, v)
+		last = v
+	}
+	return out
+}
