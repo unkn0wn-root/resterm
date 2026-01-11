@@ -1,0 +1,13 @@
+# Source:
+# curl -G https://api.example.com/search -d q=hello -H 'X-Flag: yes'
+# curl https://api.example.com/login --json '{"user":"demo","password":"pass"}'
+
+### GET https://api.example.com/search?q=hello
+GET https://api.example.com/search?q=hello
+X-Flag: yes
+
+### POST https://api.example.com/login
+POST https://api.example.com/login
+Content-Type: application/json
+
+{"user":"demo","password":"pass"}

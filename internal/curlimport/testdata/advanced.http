@@ -1,0 +1,90 @@
+# Source:
+# curl --compressed -G "https://api.example.com/search?existing=1" \
+# -d 'q=hello' --data-urlencode 'note=hello world' \
+# -H 'X-Flag: yes' -A 'resterm-agent' -e 'https://ref.example.com' -b 'a=b' -u user:pass \
+# -k -L -x http://proxy.local --max-time 2.5 --connect-timeout 3 --max-redirs 7 --retry 2 \
+# --retry-delay 1.5 --retry-max-time 9 --retry-connrefused \
+# --http1.1 --http2 --http2-prior-knowledge --http3 \
+# --resolve example.com:443:1.2.3.4 --connect-to example.com:443:alt.example.com:444 \
+# --interface eth0 --dns-servers 1.1.1.1,8.8.8.8 \
+# -o out.txt -D headers.txt --stderr err.log --trace trace.log --trace-ascii trace.txt \
+# -i -v -S -O --cacert /tmp/ca.pem --cert /tmp/client.pem --key /tmp/client.key \
+# --next https://api.example.com/json --json '{"ok":true}' -H 'X-Json: 1' \
+# --next https://api.example.com/upload -T payload.bin -s
+# sudo -u root -p "prompt here" curl https://api.example.com/multi \
+# -H 'X-Multi: 1' \
+# -F file=@payload.json -F caption=hello --form-string memo='Testing resterm' --silent
+# Warning: unsupported flag --connect-timeout (ignored)
+# Warning: unsupported flag --connect-to (ignored)
+# Warning: unsupported flag --dns-servers (ignored)
+# Warning: unsupported flag --http1.1 (ignored)
+# Warning: unsupported flag --http2 (ignored)
+# Warning: unsupported flag --http2-prior-knowledge (ignored)
+# Warning: unsupported flag --http3 (ignored)
+# Warning: unsupported flag --interface (ignored)
+# Warning: unsupported flag --max-redirs (ignored)
+# Warning: unsupported flag --resolve (ignored)
+# Warning: unsupported flag --retry (ignored)
+# Warning: unsupported flag --retry-connrefused (ignored)
+# Warning: unsupported flag --retry-delay (ignored)
+# Warning: unsupported flag --retry-max-time (ignored)
+# Warning: unsupported flag --silent (ignored)
+# Warning: unsupported flag --stderr (ignored)
+# Warning: unsupported flag --trace (ignored)
+# Warning: unsupported flag --trace-ascii (ignored)
+# Warning: unsupported flag -D (ignored)
+# Warning: unsupported flag -O (ignored)
+# Warning: unsupported flag -S (ignored)
+# Warning: unsupported flag -i (ignored)
+# Warning: unsupported flag -o (ignored)
+# Warning: unsupported flag -s (ignored)
+# Warning: unsupported flag -v (ignored)
+
+### GET https://api.example.com/search?existing=1&q=hello&note=hello+world
+# @auth basic user pass
+# @setting followredirects true
+# @setting http-client-cert /tmp/client.pem
+# @setting http-client-key /tmp/client.key
+# @setting http-insecure true
+# @setting http-root-cas /tmp/ca.pem
+# @setting proxy http://proxy.local
+# @setting timeout 2.5s
+GET https://api.example.com/search?existing=1&q=hello&note=hello+world
+Accept-Encoding: gzip, deflate, br
+Cookie: a=b
+Referer: https://ref.example.com
+User-Agent: resterm-agent
+X-Flag: yes
+
+
+### POST https://api.example.com/json
+POST https://api.example.com/json
+Content-Type: application/json
+X-Json: 1
+
+{"ok":true}
+
+### PUT https://api.example.com/upload
+PUT https://api.example.com/upload
+
+< payload.bin
+
+### POST https://api.example.com/multi
+POST https://api.example.com/multi
+Content-Type: multipart/form-data; boundary=resterm-ee6384aa8ef0a712606e3e9e
+X-Multi: 1
+
+--resterm-ee6384aa8ef0a712606e3e9e
+Content-Disposition: form-data; name="file"; filename="payload.json"
+Content-Type: application/octet-stream
+
+@payload.json
+--resterm-ee6384aa8ef0a712606e3e9e
+Content-Disposition: form-data; name="caption"
+
+hello
+--resterm-ee6384aa8ef0a712606e3e9e
+Content-Disposition: form-data; name="memo"
+
+Testing resterm
+--resterm-ee6384aa8ef0a712606e3e9e--
