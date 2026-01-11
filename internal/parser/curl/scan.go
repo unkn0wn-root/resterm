@@ -404,7 +404,14 @@ func sudoOptArg(tok string) bool {
 			return false
 		}
 		switch name {
-		case "--user", "--group", "--host", "--prompt", "--close-from", "--command", "--chdir", "--login-class":
+		case "--user",
+			"--group",
+			"--host",
+			"--prompt",
+			"--close-from",
+			"--command",
+			"--chdir",
+			"--login-class":
 			return true
 		default:
 			return false

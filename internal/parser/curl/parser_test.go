@@ -57,7 +57,8 @@ func TestParseCommandBasicAuth(t *testing.T) {
 	if req.Metadata.Auth.Type != "basic" {
 		t.Fatalf("expected basic auth, got %q", req.Metadata.Auth.Type)
 	}
-	if req.Metadata.Auth.Params["username"] != "user" || req.Metadata.Auth.Params["password"] != "pass" {
+	if req.Metadata.Auth.Params["username"] != "user" ||
+		req.Metadata.Auth.Params["password"] != "pass" {
 		t.Fatalf("unexpected auth params: %#v", req.Metadata.Auth.Params)
 	}
 	if req.Headers.Get("Authorization") != "" {
