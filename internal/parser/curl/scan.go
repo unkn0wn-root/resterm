@@ -97,10 +97,10 @@ func IsStartLine(line string) bool {
 	if line == "" {
 		return false
 	}
-	line = stripPromptLine(line)
+	line = stripPromptPrefix(line)
 	line = stripCurlPrefixes(line)
 	line = strings.TrimSpace(line)
-	return strings.HasPrefix(line, "curl ") || line == "curl"
+	return strings.HasPrefix(line, cmdCurl+" ") || line == cmdCurl
 }
 
 type scanState struct {
@@ -173,16 +173,6 @@ func lineContinues(v string) bool {
 	return count%2 == 1
 }
 
-func stripPromptLine(line string) string {
-	line = strings.TrimSpace(line)
-	for _, prefix := range []string{"$", "%", ">", "!"} {
-		if strings.HasPrefix(line, prefix) {
-			line = strings.TrimSpace(line[len(prefix):])
-		}
-	}
-	return line
-}
-
 func stripCurlPrefixes(line string) string {
 	line = strings.TrimSpace(line)
 	for {
@@ -191,11 +181,11 @@ func stripCurlPrefixes(line string) string {
 			return ""
 		}
 		switch strings.ToLower(tok) {
-		case "sudo", "command", "time", "noglob":
+		case cmdSudo, cmdCommand, cmdTime, cmdNoGlob:
 			// skip wrapper flags/args so copied shell commands still resolve to the curl token.
 			line = stripPrefix(tok, rest)
 			continue
-		case "env":
+		case cmdEnv:
 			// consume env exports/options first so we return the actual curl command.
 			line = stripEnv(rest)
 			continue
@@ -313,13 +303,13 @@ func nextTok(line string) (string, string) {
 
 func stripPrefix(tok, rest string) string {
 	switch strings.ToLower(tok) {
-	case "sudo":
+	case cmdSudo:
 		return stripSudo(rest)
-	case "command":
+	case cmdCommand:
 		return stripCommand(rest)
-	case "time":
+	case cmdTime:
 		return stripTime(rest)
-	case "noglob":
+	case cmdNoGlob:
 		return strings.TrimSpace(rest)
 	default:
 		return strings.TrimSpace(rest)

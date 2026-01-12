@@ -227,8 +227,8 @@ func isLineBreak(r rune) bool {
 }
 
 func ensureJSONHeader(h http.Header) {
-	if h.Get("Content-Type") == "" {
-		h.Set("Content-Type", "application/json")
+	if h.Get(headerContentType) == "" {
+		h.Set(headerContentType, mimeJSON)
 	}
 }
 
@@ -247,7 +247,7 @@ func consumeNext(tokens []string, idx *int, flag string) (string, error) {
 	return tokens[*idx], nil
 }
 
-func findCurlIndex(tokens []string) (int, error) {
+func findCurlIndex(tokens []string) (int, bool) {
 	for i, tok := range tokens {
 		trimmed := strings.TrimSpace(stripPromptPrefix(tok))
 		if trimmed == "" {
@@ -255,16 +255,16 @@ func findCurlIndex(tokens []string) (int, error) {
 		}
 
 		lower := strings.ToLower(trimmed)
-		if lower == "curl" {
-			return i, nil
+		if lower == cmdCurl {
+			return i, true
 		}
 
 		switch lower {
-		case "sudo", "env", "command", "time", "noglob":
+		case cmdSudo, cmdEnv, cmdCommand, cmdTime, cmdNoGlob:
 			continue
 		}
 	}
-	return -1, fmt.Errorf("not a curl command")
+	return 0, false
 }
 
 type bodyKind int
@@ -454,8 +454,8 @@ func (b *bodyBuilder) apply(req *restfile.Request, headers http.Header) error {
 		for _, f := range b.form {
 			pairs = append(pairs, f.encode())
 		}
-		if headers.Get("Content-Type") == "" {
-			headers.Set("Content-Type", "application/x-www-form-urlencoded")
+		if headers.Get(headerContentType) == "" {
+			headers.Set(headerContentType, mimeFormURLEncoded)
 		}
 		body := strings.Join(pairs, "&")
 		req.Body = restfile.BodySource{Text: body}
@@ -464,13 +464,13 @@ func (b *bodyBuilder) apply(req *restfile.Request, headers http.Header) error {
 		if boundary == "" {
 			return fmt.Errorf("multipart body is empty")
 		}
-		headers.Set("Content-Type", fmt.Sprintf("multipart/form-data; boundary=%s", boundary))
+		headers.Set(headerContentType, mimeMultipartForm+"; boundary="+boundary)
 		req.Body = restfile.BodySource{Text: body}
 	default:
 		req.Body = restfile.BodySource{}
 	}
 
-	if ct := headers.Get("Content-Type"); ct != "" {
+	if ct := headers.Get(headerContentType); ct != "" {
 		req.Body.MimeType = ct
 	}
 	return nil
@@ -570,7 +570,7 @@ func parseMultipartPart(raw string, literal bool) (multipartPart, error) {
 			part.fname = filepath.Base(part.file)
 		}
 		if part.ctype == "" {
-			part.ctype = "application/octet-stream"
+			part.ctype = mimeOctetStream
 		}
 	}
 	return part, nil
@@ -618,7 +618,7 @@ func buildMultipartBody(parts []multipartPart) (string, string) {
 
 func makeBoundary(parts []multipartPart) string {
 	if len(parts) == 0 {
-		return "resterm-boundary"
+		return multipartBoundaryDefault
 	}
 	h := sha256.New()
 	for _, p := range parts {
@@ -634,7 +634,7 @@ func makeBoundary(parts []multipartPart) string {
 		}
 	}
 	sum := h.Sum(nil)
-	return "resterm-" + hex.EncodeToString(sum[:12])
+	return multipartBoundaryPrefix + hex.EncodeToString(sum[:12])
 }
 
 func addHash(h hash.Hash, v string) {
@@ -652,7 +652,7 @@ func escapeQuotes(v string) string {
 
 func buildBasicAuthHeader(creds string) string {
 	encoded := base64.StdEncoding.EncodeToString([]byte(creds))
-	return fmt.Sprintf("Basic %s", encoded)
+	return authHeaderBasicPrefix + encoded
 }
 
 func splitHeader(header string) (string, string) {
@@ -675,8 +675,7 @@ func splitHeader(header string) (string, string) {
 
 func stripPromptPrefix(token string) string {
 	trimmed := strings.TrimSpace(token)
-	prefixes := []string{"$", "%", ">", "!"}
-	for _, prefix := range prefixes {
+	for _, prefix := range promptPrefixes {
 		if strings.HasPrefix(trimmed, prefix) {
 			trimmed = strings.TrimSpace(trimmed[len(prefix):])
 		}
@@ -694,7 +693,7 @@ func isWhitespace(r rune) bool {
 }
 
 func sanitizeURL(raw string) string {
-	return strings.Trim(raw, "\"'")
+	return strings.Trim(raw, urlQuoteChars)
 }
 
 func VisibleHeaders(headers http.Header) []string {

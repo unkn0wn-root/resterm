@@ -47,9 +47,9 @@ var defs = map[string]*optDef{
 	"request":         {key: "request", kind: optVal, fn: optReq},
 	"header":          {key: "header", kind: optVal, fn: optHdr},
 	"user":            {key: "user", kind: optVal, fn: optUser},
-	"user-agent":      {key: "user-agent", kind: optVal, fn: optHdrKey("User-Agent")},
-	"referer":         {key: "referer", kind: optVal, fn: optHdrKey("Referer")},
-	"cookie":          {key: "cookie", kind: optVal, fn: optHdrKey("Cookie")},
+	"user-agent":      {key: "user-agent", kind: optVal, fn: optHdrKey(headerUserAgent)},
+	"referer":         {key: "referer", kind: optVal, fn: optHdrKey(headerReferer)},
+	"cookie":          {key: "cookie", kind: optVal, fn: optHdrKey(headerCookie)},
 	"head":            {key: "head", kind: optNone, fn: optHead},
 	"compressed":      {key: "compressed", kind: optNone, fn: optComp},
 	"url":             {key: "url", kind: optVal, fn: optURL},
@@ -295,8 +295,8 @@ func normSeg(seg Seg) (*restfile.Request, []string, error) {
 		if req.Headers == nil {
 			req.Headers = make(http.Header)
 		}
-		if req.Headers.Get("Accept-Encoding") == "" {
-			req.Headers.Set("Accept-Encoding", "gzip, deflate, br")
+		if req.Headers.Get(headerAcceptEncoding) == "" {
+			req.Headers.Set(headerAcceptEncoding, acceptEncodingDefault)
 		}
 	}
 
@@ -315,10 +315,6 @@ func applyOpt(st *segState, opt Opt) error {
 
 func applyPos(st *segState, val string) error {
 	if st.url == "" {
-		if strings.HasPrefix(val, "http://") || strings.HasPrefix(val, "https://") {
-			st.url = val
-			return nil
-		}
 		st.url = val
 		return nil
 	}
@@ -529,14 +525,14 @@ func applyUser(req *restfile.Request, usr string) {
 	if req == nil || strings.TrimSpace(usr) == "" {
 		return
 	}
-	if req.Headers != nil && req.Headers.Get("Authorization") != "" {
+	if req.Headers != nil && req.Headers.Get(headerAuthorization) != "" {
 		return
 	}
 
 	user, pass, ok := strings.Cut(usr, ":")
 	if ok {
 		req.Metadata.Auth = &restfile.AuthSpec{
-			Type: "basic",
+			Type: authTypeBasic,
 			Params: map[string]string{
 				"username": user,
 				"password": pass,
@@ -547,7 +543,7 @@ func applyUser(req *restfile.Request, usr string) {
 	if req.Headers == nil {
 		req.Headers = make(http.Header)
 	}
-	req.Headers.Set("Authorization", buildBasicAuthHeader(usr))
+	req.Headers.Set(headerAuthorization, buildBasicAuthHeader(usr))
 }
 
 func warnUnk(unk []string) []string {

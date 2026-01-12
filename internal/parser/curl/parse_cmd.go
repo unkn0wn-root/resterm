@@ -5,9 +5,9 @@ import (
 )
 
 func parseCmd(tok []string) (*Cmd, error) {
-	idx, err := findCurlIndex(tok)
-	if err != nil {
-		return nil, err
+	idx, ok := findCurlIndex(tok)
+	if !ok {
+		return nil, errNotCurlCommand
 	}
 
 	cmd := &Cmd{}
