@@ -34,6 +34,18 @@ func ParseCommands(command string) ([]*restfile.Request, error) {
 	return normCmd(cmd)
 }
 
+func VisibleHeaders(headers http.Header) []string {
+	if len(headers) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(headers))
+	for k := range headers {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func ensureJSONHeader(h http.Header) {
 	if h.Get(headerContentType) == "" {
 		h.Set(headerContentType, mimeJSON)
@@ -110,16 +122,4 @@ func stripPromptPrefix(token string) string {
 
 func sanitizeURL(raw string) string {
 	return strings.Trim(raw, urlQuoteChars)
-}
-
-func VisibleHeaders(headers http.Header) []string {
-	if len(headers) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(headers))
-	for k := range headers {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

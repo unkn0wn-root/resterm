@@ -46,6 +46,23 @@ type bodyBuilder struct {
 	file  string
 }
 
+func (k bodyKind) String() string {
+	switch k {
+	case bodyKindNone:
+		return "none"
+	case bodyKindRaw:
+		return "raw"
+	case bodyKindForm:
+		return "form"
+	case bodyKindMultipart:
+		return "multipart"
+	case bodyKindFile:
+		return "file"
+	default:
+		return "unknown"
+	}
+}
+
 func newBodyBuilder() *bodyBuilder {
 	return &bodyBuilder{kind: bodyKindNone}
 }
@@ -56,7 +73,7 @@ func (b *bodyBuilder) ensureKind(kind bodyKind) error {
 		return nil
 	}
 	if b.kind != kind {
-		return fmt.Errorf("conflicting body flags")
+		return fmt.Errorf("conflicting body flags: cannot use %s with %s", b.kind, kind)
 	}
 	return nil
 }
