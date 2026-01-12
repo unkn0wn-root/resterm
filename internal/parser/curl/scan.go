@@ -156,25 +156,10 @@ func stripCurlPrefixes(line string) string {
 }
 
 func stripEnv(line string) string {
-	line = strings.TrimSpace(line)
-	for {
-		tok, rest := nextTok(line)
-		if tok == "" {
-			return ""
-		}
-		if tok == "--" {
-			return strings.TrimSpace(rest)
-		}
-		if strings.HasPrefix(tok, "-") {
-			line = skipOpt(rest, tok, envOptArg(tok))
-			continue
-		}
-		if isAssign(tok) {
-			line = rest
-			continue
-		}
-		return line
-	}
+	return stripWithRule(line, stripRule{
+		optArg:     envOptArg,
+		skipAssign: true,
+	})
 }
 
 func isAssign(tok string) bool {
@@ -231,24 +216,12 @@ func stripPrefix(tok, rest string) string {
 	}
 }
 
-func stripSudo(line string) string {
-	line = strings.TrimSpace(line)
-	for {
-		tok, rest := nextTok(line)
-		if tok == "" {
-			return ""
-		}
-		if tok == "--" {
-			return strings.TrimSpace(rest)
-		}
-		if !strings.HasPrefix(tok, "-") {
-			return line
-		}
-		line = skipOpt(rest, tok, sudoOptArg(tok))
-	}
+type stripRule struct {
+	optArg     func(string) bool
+	skipAssign bool
 }
 
-func stripCommand(line string) string {
+func stripWithRule(line string, rule stripRule) string {
 	line = strings.TrimSpace(line)
 	for {
 		tok, rest := nextTok(line)
@@ -259,6 +232,14 @@ func stripCommand(line string) string {
 			return strings.TrimSpace(rest)
 		}
 		if strings.HasPrefix(tok, "-") {
+			need := false
+			if rule.optArg != nil {
+				need = rule.optArg(tok)
+			}
+			line = skipOpt(rest, tok, need)
+			continue
+		}
+		if rule.skipAssign && isAssign(tok) {
 			line = rest
 			continue
 		}
@@ -266,22 +247,16 @@ func stripCommand(line string) string {
 	}
 }
 
+func stripSudo(line string) string {
+	return stripWithRule(line, stripRule{optArg: sudoOptArg})
+}
+
+func stripCommand(line string) string {
+	return stripWithRule(line, stripRule{})
+}
+
 func stripTime(line string) string {
-	line = strings.TrimSpace(line)
-	for {
-		tok, rest := nextTok(line)
-		if tok == "" {
-			return ""
-		}
-		if tok == "--" {
-			return strings.TrimSpace(rest)
-		}
-		if strings.HasPrefix(tok, "-") {
-			line = skipOpt(rest, tok, timeOptArg(tok))
-			continue
-		}
-		return line
-	}
+	return stripWithRule(line, stripRule{optArg: timeOptArg})
 }
 
 func skipOpt(rest, tok string, need bool) string {
