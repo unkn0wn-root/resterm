@@ -300,7 +300,7 @@ func sudoOptArg(tok string) bool {
 	if strings.HasPrefix(tok, "-") && len(tok) >= 2 {
 		switch tok[1] {
 		case 'u', 'g', 'h', 'p', 'C', 'c', 'U':
-			return len(tok) == 2
+			return len(tok) == shortOptTokenLen
 		default:
 			return false
 		}
@@ -324,7 +324,7 @@ func envOptArg(tok string) bool {
 	if strings.HasPrefix(tok, "-") && len(tok) >= 2 {
 		switch tok[1] {
 		case 'u', 'C':
-			return len(tok) == 2
+			return len(tok) == shortOptTokenLen
 		default:
 			return false
 		}
@@ -348,7 +348,7 @@ func timeOptArg(tok string) bool {
 	if strings.HasPrefix(tok, "-") && len(tok) >= 2 {
 		switch tok[1] {
 		case 'f', 'o':
-			return len(tok) == 2
+			return len(tok) == shortOptTokenLen
 		default:
 			return false
 		}

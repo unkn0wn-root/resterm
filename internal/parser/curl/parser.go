@@ -571,7 +571,7 @@ func makeBoundary(parts []multipartPart) string {
 		}
 	}
 	sum := h.Sum(nil)
-	return multipartBoundaryPrefix + hex.EncodeToString(sum[:12])
+	return multipartBoundaryPrefix + hex.EncodeToString(sum[:boundaryHashLength])
 }
 
 func addHash(h hash.Hash, v string) {

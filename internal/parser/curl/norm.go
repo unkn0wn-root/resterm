@@ -5,14 +5,12 @@ import (
 	"maps"
 	"net/http"
 	"net/url"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/settings"
-	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type optKind int
@@ -40,7 +38,7 @@ type segState struct {
 	zip  bool
 	get  bool
 	set  map[string]string
-	w    []string
+	warn *WarningCollector
 }
 
 var defs = map[string]*optDef{
@@ -244,7 +242,7 @@ func normSegRes(seg Seg) (Res, error) {
 	if err != nil {
 		return Res{}, err
 	}
-	return Res{Req: req, Warn: mergeWarn(warnUnk(seg.Unk), warn)}, nil
+	return Res{Req: req, Warn: warn}, nil
 }
 
 func normSeg(seg Seg) (*restfile.Request, []string, error) {
@@ -253,7 +251,9 @@ func normSeg(seg Seg) (*restfile.Request, []string, error) {
 		hdr:  make(http.Header),
 		body: newBodyBuilder(),
 		set:  map[string]string{},
+		warn: newWarningCollector(),
 	}
+	st.warn.UnknownFlags(seg.Unk)
 
 	for _, it := range seg.Items {
 		if it.IsOpt {
@@ -302,7 +302,7 @@ func normSeg(seg Seg) (*restfile.Request, []string, error) {
 
 	applyUser(req, st.usr)
 	applySettings(req, st.set)
-	return req, st.w, nil
+	return req, st.warn.List(), nil
 }
 
 func applyOpt(st *segState, opt Opt) error {
@@ -505,7 +505,7 @@ func setKV(st *segState, k, v string) {
 	}
 
 	if !settings.IsHTTPKey(key) {
-		addWarn(st, "unsupported setting "+key+" (ignored)")
+		st.warn.Setting(key)
 		return
 	}
 	st.set[key] = val
@@ -546,64 +546,9 @@ func applyUser(req *restfile.Request, usr string) {
 	req.Headers.Set(headerAuthorization, buildBasicAuthHeader(usr))
 }
 
-func warnUnk(unk []string) []string {
-	if len(unk) == 0 {
-		return nil
-	}
-
-	seen := make(map[string]struct{}, len(unk))
-	out := make([]string, 0, len(unk))
-	for _, raw := range unk {
-		v := strings.TrimSpace(raw)
-		if v == "" {
-			continue
-		}
-		if _, ok := seen[v]; ok {
-			continue
-		}
-		seen[v] = struct{}{}
-		out = append(out, "unsupported flag "+v)
-	}
-	sort.Strings(out)
-	return out
-}
-
-func mergeWarn(a, b []string) []string {
-	out := make([]string, 0, len(a)+len(b))
-	for _, v := range a {
-		if t := strings.TrimSpace(v); t != "" {
-			out = append(out, t)
-		}
-	}
-	for _, v := range b {
-		if t := strings.TrimSpace(v); t != "" {
-			out = append(out, t)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	sort.Strings(out)
-	return util.DedupeSortedStrings(out)
-}
-
-func addWarn(st *segState, msg string) {
-	if st == nil {
-		return
-	}
-	if strings.TrimSpace(msg) == "" {
-		return
-	}
-	st.w = append(st.w, msg)
-}
-
-func warnFlagMsg(flag string) string {
-	return "unsupported flag " + flag + " (ignored)"
-}
-
 func optWarn(flag string) optFn {
 	return func(st *segState, _ string) error {
-		addWarn(st, warnFlagMsg(flag))
+		st.warn.Flag(flag)
 		return nil
 	}
 }
@@ -613,7 +558,7 @@ func optWarnVal(flag string) optFn {
 		if strings.TrimSpace(val) == "" {
 			return fmt.Errorf("empty %s", strings.TrimLeft(flag, "-"))
 		}
-		addWarn(st, warnFlagMsg(flag))
+		st.warn.Flag(flag)
 		return nil
 	}
 }
@@ -629,7 +574,7 @@ func warnDur(st *segState, n, val string) error {
 	if _, err := durSec(val); err != nil {
 		return err
 	}
-	addWarn(st, warnFlagMsg("--"+n))
+	st.warn.Flag("--" + n)
 	return nil
 }
 
@@ -641,7 +586,7 @@ func warnInt(st *segState, n, val string) error {
 	if _, err := strconv.Atoi(raw); err != nil {
 		return fmt.Errorf("invalid %s %q", n, raw)
 	}
-	addWarn(st, warnFlagMsg("--"+n))
+	st.warn.Flag("--" + n)
 	return nil
 }
 

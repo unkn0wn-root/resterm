@@ -31,7 +31,9 @@ const (
 const (
 	multipartBoundaryDefault = "resterm-boundary"
 	multipartBoundaryPrefix  = "resterm-"
+	boundaryHashLength       = 12 // bytes of SHA-256 used for multipart boundary
 	urlQuoteChars            = "\"'"
 	authTypeBasic            = "basic"
 	authHeaderBasicPrefix    = "Basic "
+	shortOptTokenLen         = 2 // length of "-x" when the value is separate
 )
