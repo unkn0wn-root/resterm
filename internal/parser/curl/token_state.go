@@ -1,7 +1,7 @@
 package curl
 
 type tokenOptions struct {
-	decodeANSI bool
+	decodeANSI            bool
 	allowLineContinuation bool
 }
 
