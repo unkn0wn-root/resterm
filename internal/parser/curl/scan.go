@@ -104,62 +104,22 @@ func IsStartLine(line string) bool {
 }
 
 type scanState struct {
-	inS  bool
-	inD  bool
-	ansi bool
-	esc  bool
+	token TokenState
 }
 
 func (s *scanState) consume(v string) {
 	rs := []rune(v)
 	for i := 0; i < len(rs); i++ {
-		r := rs[i]
-		if s.esc {
-			s.esc = false
-			continue
-		}
-		if s.ansi {
-			switch r {
-			case '\\':
-				s.esc = true
-			case '\'':
-				s.ansi = false
-			}
-			continue
-		}
-		if r == '\\' {
-			if s.inS {
-				continue
-			}
-			s.esc = true
-			continue
-		}
-		if r == '\'' {
-			if !s.inD {
-				s.inS = !s.inS
-			}
-			continue
-		}
-		if r == '"' {
-			if !s.inS {
-				s.inD = !s.inD
-			}
-			continue
-		}
-		if !s.inS && !s.inD && r == '$' && i+1 < len(rs) && rs[i+1] == '\'' {
-			s.ansi = true
-			i++
-			continue
-		}
+		_, _ = s.token.advance(rs, &i, tokenOptions{})
 	}
 }
 
 func (s *scanState) open() bool {
-	return s.inS || s.inD || s.ansi
+	return s.token.Open()
 }
 
 func (s *scanState) resetEsc() {
-	s.esc = false
+	s.token.ResetEscape()
 }
 
 func lineContinues(v string) bool {
@@ -235,64 +195,19 @@ func nextTok(line string) (string, string) {
 	// parse a single shell style token to handle quoted prefix args without splitting on spaces.
 	rs := []rune(line)
 	var b strings.Builder
-	inS := false
-	inD := false
-	ansi := false
-	esc := false
+	var st TokenState
 	i := 0
 	for i < len(rs) {
 		r := rs[i]
-		if esc {
-			b.WriteRune(r)
-			esc = false
-			i++
-			continue
-		}
-		if ansi {
-			switch r {
-			case '\\':
-				esc = true
-			case '\'':
-				ansi = false
-			default:
-				b.WriteRune(r)
+		step, _ := st.advance(rs, &i, tokenOptions{})
+		if step.handled {
+			if step.emit {
+				b.WriteRune(step.r)
 			}
 			i++
 			continue
 		}
-		if r == '\\' {
-			if inS {
-				b.WriteRune(r)
-			} else {
-				esc = true
-			}
-			i++
-			continue
-		}
-		if r == '\'' {
-			if !inD {
-				inS = !inS
-			} else {
-				b.WriteRune(r)
-			}
-			i++
-			continue
-		}
-		if r == '"' {
-			if !inS {
-				inD = !inD
-			} else {
-				b.WriteRune(r)
-			}
-			i++
-			continue
-		}
-		if !inS && !inD && r == '$' && i+1 < len(rs) && rs[i+1] == '\'' {
-			ansi = true
-			i += 2
-			continue
-		}
-		if !inS && !inD && isWhitespace(r) {
+		if !st.InQuote() && isWhitespace(r) {
 			break
 		}
 		b.WriteRune(r)

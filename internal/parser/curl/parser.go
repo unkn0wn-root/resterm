@@ -40,13 +40,9 @@ func ParseCommands(command string) ([]*restfile.Request, error) {
 }
 
 type lexState struct {
-	inS    bool
-	inD    bool
-	ansi   bool
-	esc    bool
-	skipNL bool
-	buf    strings.Builder
-	out    []string
+	token TokenState
+	buf   strings.Builder
+	out   []string
 }
 
 func (st *lexState) add(r rune) {
@@ -67,82 +63,23 @@ func (st *lexState) flush() {
 func splitTokens(input string) ([]string, error) {
 	st := &lexState{}
 	rs := []rune(input)
+	opts := tokenOptions{decodeANSI: true, allowLineContinuation: true}
 
 	for i := 0; i < len(rs); i++ {
 		r := rs[i]
-
-		if st.skipNL {
-			st.skipNL = false
-			if r == '\n' {
-				continue
-			}
+		step, err := st.token.advance(rs, &i, opts)
+		if err != nil {
+			return nil, err
 		}
-
-		if st.esc {
-			if st.ansi {
-				val, err := ansiEsc(rs, &i)
-				if err != nil {
-					return nil, err
-				}
-				st.add(val)
-			} else if isLineBreak(r) {
-				if r == '\r' {
-					st.skipNL = true
-				}
-			} else {
-				st.add(r)
+		if step.handled {
+			if step.emit {
+				st.add(step.r)
 			}
-			st.esc = false
-			continue
-		}
-
-		if st.ansi {
-			switch r {
-			case '\\':
-				st.esc = true
-			case '\'':
-				st.ansi = false
-			default:
-				st.add(r)
-			}
-			continue
-		}
-
-		if r == '\\' {
-			if st.inS {
-				st.add(r)
-			} else {
-				st.esc = true
-			}
-			continue
-		}
-
-		if r == '\'' {
-			if !st.inD {
-				st.inS = !st.inS
-			} else {
-				st.add(r)
-			}
-			continue
-		}
-
-		if r == '"' {
-			if !st.inS {
-				st.inD = !st.inD
-			} else {
-				st.add(r)
-			}
-			continue
-		}
-
-		if !st.inS && !st.inD && r == '$' && i+1 < len(rs) && rs[i+1] == '\'' {
-			st.ansi = true
-			i++
 			continue
 		}
 
 		if isWhitespace(r) {
-			if st.inS || st.inD {
+			if st.token.InQuote() {
 				st.add(r)
 			} else {
 				st.flush()
@@ -153,11 +90,11 @@ func splitTokens(input string) ([]string, error) {
 		st.add(r)
 	}
 
-	if st.esc {
+	if st.token.Escaping() {
 		return nil, fmt.Errorf("unterminated escape sequence")
 	}
 
-	if st.inS || st.inD || st.ansi {
+	if st.token.Open() {
 		return nil, fmt.Errorf("unterminated quoted string")
 	}
 
