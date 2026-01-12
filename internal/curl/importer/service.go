@@ -1,4 +1,4 @@
-package curlimport
+package importer
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/curl"
+	"github.com/unkn0wn-root/resterm/internal/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )

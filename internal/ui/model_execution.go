@@ -18,12 +18,12 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/curl"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
-	"github.com/unkn0wn-root/resterm/internal/parser/curl"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -874,8 +874,10 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 	}
 }
 
-const statusPulseInterval = 1 * time.Second
-const tabSpinInterval = 100 * time.Millisecond
+const (
+	statusPulseInterval = 1 * time.Second
+	tabSpinInterval     = 100 * time.Millisecond
+)
 const (
 	streamHeaderType    = "X-Resterm-Stream-Type"
 	streamHeaderSummary = "X-Resterm-Stream-Summary"

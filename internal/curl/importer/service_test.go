@@ -1,4 +1,4 @@
-package curlimport
+package importer
 
 import (
 	"context"
