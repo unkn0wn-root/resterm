@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.18.1](https://github.com/unkn0wn-root/resterm/compare/v0.17.2...v0.18.1) (2026-01-13)
+
+
+### Features
+
+* extend std lib and docs ([326c536](https://github.com/unkn0wn-root/resterm/commit/326c5362340edbe730617e70c766d898a5caebd2))
+
 ### [0.17.2](https://github.com/unkn0wn-root/resterm/compare/v0.17.1...v0.17.2) (2026-01-13)
 
 
