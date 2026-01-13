@@ -3,10 +3,15 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestLatencyAnimTextFinal(t *testing.T) {
-	got := latencyAnimText(latAnimDuration, latCap)
+	got := latencyAnimText(latAnimTotalDuration-time.Millisecond, latCap)
+	if got != latencyPlaceholder {
+		t.Fatalf("expected placeholder, got %q", got)
+	}
+	got = latencyAnimText(latAnimTotalDuration, latCap)
 	if got != latencyPlaceholder {
 		t.Fatalf("expected placeholder, got %q", got)
 	}
@@ -14,27 +19,57 @@ func TestLatencyAnimTextFinal(t *testing.T) {
 
 func TestLatencyAnimTextShape(t *testing.T) {
 	got := latencyAnimText(0, latCap)
-	if !strings.HasSuffix(got, " ms") {
-		t.Fatalf("expected ms suffix, got %q", got)
+	bars, val := splitAnim(t, got)
+	if n := len([]rune(bars)); n != latCap {
+		t.Fatalf("expected %d bars, got %d (%q)", latCap, n, bars)
 	}
-
-	trimmed := strings.TrimSuffix(got, " ms")
-	if n := len([]rune(trimmed)); n != latCap {
-		t.Fatalf("expected %d bars, got %d (%q)", latCap, n, trimmed)
+	if !latAnimHasUnit(val) {
+		t.Fatalf("expected duration suffix, got %q", val)
 	}
 }
 
-func TestLatencyAnimBarsShrink(t *testing.T) {
-	max := latCap
-	if got := latAnimBars(0, max); got != max {
-		t.Fatalf("expected max bars, got %d", got)
+func TestLatencyAnimTextFade(t *testing.T) {
+	mid := latAnimDuration + latAnimFadeDuration/2
+	got := latencyAnimText(mid, latCap)
+	if got == "" {
+		t.Fatalf("expected fade text, got empty")
 	}
+	bars, val := splitAnim(t, got)
+	if n := len([]rune(bars)); n != latCap {
+		t.Fatalf("expected %d bars, got %d (%q)", latCap, n, bars)
+	}
+	if !latAnimHasUnit(val) {
+		t.Fatalf("expected duration suffix, got %q", val)
+	}
+}
 
-	mid := latAnimBars(latAnimDuration/2, max)
-	if mid >= max || mid < latPlaceholderBars {
-		t.Fatalf("expected mid bars between %d and %d, got %d", latPlaceholderBars, max, mid)
+func TestLatencyAnimTextDown(t *testing.T) {
+	el := latAnimFadeEnd + latAnimPlaceDuration/2
+	got := latencyAnimText(el, latCap)
+	bars, val := splitAnim(t, got)
+	if n := len([]rune(bars)); n >= latCap || n < latPlaceholderBars {
+		t.Fatalf("expected bars shrink, got %d (%q)", n, bars)
 	}
-	if got := latAnimBars(latAnimDuration, max); got != latPlaceholderBars {
-		t.Fatalf("expected placeholder bars, got %d", got)
+	if !strings.HasSuffix(val, "ms") {
+		t.Fatalf("expected ms suffix, got %q", val)
 	}
+}
+
+func splitAnim(t *testing.T, s string) (string, string) {
+	t.Helper()
+	bars, val, ok := strings.Cut(s, " ")
+	if !ok || bars == "" || val == "" {
+		t.Fatalf("expected bars and value, got %q", s)
+	}
+	return bars, val
+}
+
+func latAnimHasUnit(s string) bool {
+	if strings.HasSuffix(s, "ms") {
+		return strings.TrimSuffix(s, "ms") != ""
+	}
+	if strings.HasSuffix(s, "s") {
+		return strings.TrimSuffix(s, "s") != ""
+	}
+	return false
 }

@@ -29,7 +29,7 @@ func (m Model) latencyStyle() lipgloss.Style {
 		if m.latAnimOn {
 			return latAnimStyle(m.theme, el)
 		}
-		if !m.latAnimStart.IsZero() && el >= latAnimDuration {
+		if !m.latAnimStart.IsZero() {
 			return latAnimStyle(m.theme, el)
 		}
 		return st
@@ -44,11 +44,7 @@ func (m Model) latencyStyle() lipgloss.Style {
 func latAnimStyle(th theme.Theme, el time.Duration) lipgloss.Style {
 	st := th.HeaderValue
 	p := latAnimProgress(el)
-	wn := latAnimWarnP
-	ok := latAnimOkP
-	if ok < wn {
-		ok = wn
-	}
+	wn, ok := latAnimThresholds()
 	if p >= ok {
 		return st.Foreground(latFg(th.Success, latOkFg))
 	}
