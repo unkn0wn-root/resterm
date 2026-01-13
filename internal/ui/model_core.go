@@ -271,7 +271,6 @@ type Model struct {
 	latencySeries    *latencySeries
 	latAnimOn        bool
 	latAnimSeq       int
-	latAnimFrame     int
 	latAnimStart     time.Time
 
 	scriptRunner    *scripts.Runner

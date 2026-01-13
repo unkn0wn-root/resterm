@@ -46,17 +46,21 @@ func stdlibJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			return Null(), err
 		}
 	}
+
 	if indent == "" {
 		data, err = json.Marshal(raw)
 	} else {
 		data, err = json.MarshalIndent(raw, "", indent)
 	}
+
 	if err != nil {
 		return Null(), rtErr(ctx, pos, "json stringify failed")
 	}
+
 	if ctx != nil && ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
 		return Null(), rtErr(ctx, pos, "string too long")
 	}
+
 	return Str(string(data)), nil
 }
 
@@ -64,10 +68,12 @@ func stdlibJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := argCountRange(ctx, pos, args, 1, 2, "json.get(value[, path])"); err != nil {
 		return Null(), err
 	}
+
 	raw, err := jsonIface(ctx, pos, args[0])
 	if err != nil {
 		return Null(), err
 	}
+
 	path := ""
 	if len(args) == 2 {
 		p, err := strArg(ctx, pos, args[1], "json.get(value[, path])")
@@ -79,11 +85,33 @@ func stdlibJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if path == "" {
 		return fromIface(ctx, pos, raw)
 	}
+
 	val, ok := jsonGet(raw, path)
 	if !ok {
 		return Null(), nil
 	}
+
 	return fromIface(ctx, pos, val)
+}
+
+func stdlibJSONHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := "json.has(value, path)"
+	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+		return Null(), err
+	}
+
+	raw, err := jsonIface(ctx, pos, args[0])
+	if err != nil {
+		return Null(), err
+	}
+
+	path, err := strArg(ctx, pos, args[1], sig)
+	if err != nil {
+		return Null(), err
+	}
+
+	_, ok := jsonGet(raw, path)
+	return Bool(ok), nil
 }
 
 func jsonIndent(ctx *Ctx, pos Pos, v Value) (string, error) {

@@ -258,7 +258,7 @@ Modules run with stdlib only. The `request` object is available when the host pr
 
 ## Stdlib
 
-RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The stdlib is available as `stdlib`; core helpers and namespaces (`base64`, `url`, `time`, `json`, `headers`, `query`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `stdlib`.
+RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The stdlib is available as `stdlib`; core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `stdlib`.
 
 ### Core helpers
 
@@ -268,19 +268,37 @@ RTS provides a small standard library that covers common request needs without e
 - `stdlib.match(pattern, text)` applies a regular expression to text and returns true when it matches.
 - `stdlib.str(x)` converts a value to a string, using JSON for lists and dicts.
 - `stdlib.default(a, b)` returns `a` unless it is null, otherwise it returns `b`.
+- `stdlib.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
+- `stdlib.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
+- `stdlib.bool(x[, def])` converts a value to a bool, or returns `def` when conversion fails.
+- `stdlib.typeof(x)` returns the type name.
 - `stdlib.uuid()` generates a UUID and requires random generation to be enabled.
+
+### Crypto helpers
+
+- `stdlib.crypto.sha256(text)` returns a hex encoded SHA-256 digest.
+- `stdlib.crypto.hmacSha256(key, text)` returns a hex encoded HMAC-SHA256 digest.
 
 ### Encoding and URL helpers
 
 - `stdlib.base64.encode(x)` encodes a string to base64.
 - `stdlib.base64.decode(x)` decodes a base64 string.
+- `stdlib.encoding.hex.encode(x)` encodes a string to hex.
+- `stdlib.encoding.hex.decode(x)` decodes a hex string.
+- `stdlib.encoding.base64url.encode(x)` encodes a string to base64url (no padding).
+- `stdlib.encoding.base64url.decode(x)` decodes a base64url string.
 - `stdlib.url.encode(x)` percent encodes a string for URL use.
 - `stdlib.url.decode(x)` decodes a percent encoded string.
 
 ### Time helpers
 
 - `stdlib.time.nowISO()` returns the current time in ISO 8601 format.
+- `stdlib.time.nowUnix()` returns the current time as unix seconds.
+- `stdlib.time.nowUnixMs()` returns the current time as unix milliseconds.
 - `stdlib.time.format(layout)` formats the current time with the given layout string.
+- `stdlib.time.parse(layout, value)` parses the time string and returns unix seconds (fractional).
+- `stdlib.time.formatUnix(ts, layout)` formats a unix timestamp with the given layout.
+- `stdlib.time.addUnix(ts, seconds)` adds seconds to a unix timestamp.
 
 ### JSON helpers
 
@@ -288,6 +306,7 @@ RTS provides a small standard library that covers common request needs without e
 - `stdlib.json.parse(text)` parses a JSON string into RestermScript values.
 - `stdlib.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
 - `stdlib.json.get(value[, path])` returns the value at a dot or `[index]` path (optional leading `$`) and returns null when missing.
+- `stdlib.json.has(value, path)` returns true when a value exists at the path.
 
 ### Text helpers
 
@@ -305,6 +324,12 @@ RTS provides a small standard library that covers common request needs without e
 - `stdlib.list.append(list, item)` returns a new list with `item` appended.
 - `stdlib.list.concat(a, b)` returns a new list with `b` appended to `a`.
 - `stdlib.list.sort(list)` returns a sorted copy (numbers or strings only).
+- `stdlib.list.map(list, fn)` returns a new list with `fn(item)` applied to each value.
+- `stdlib.list.filter(list, fn)` returns a new list of values where `fn(item)` is truthy.
+- `stdlib.list.any(list, fn)` returns true if any value makes `fn(item)` truthy.
+- `stdlib.list.all(list, fn)` returns true if all values make `fn(item)` truthy.
+- `stdlib.list.slice(list, start[, end])` returns a slice of the list.
+- `stdlib.list.unique(list)` returns a list of unique primitive values.
 
 ### Dict helpers
 
@@ -314,6 +339,10 @@ RTS provides a small standard library that covers common request needs without e
 - `stdlib.dict.set(dict, key, value)` returns a new dict with `key` set.
 - `stdlib.dict.merge(a, b)` returns a new dict with `b` applied over `a`.
 - `stdlib.dict.remove(dict, key)` returns a new dict without `key`.
+- `stdlib.dict.get(dict, key[, def])` returns `def` or null when missing.
+- `stdlib.dict.has(dict, key)` returns true when a key exists.
+- `stdlib.dict.pick(dict, keys)` returns a dict with the specified keys.
+- `stdlib.dict.omit(dict, keys)` returns a dict without the specified keys.
 
 ### Math helpers
 
