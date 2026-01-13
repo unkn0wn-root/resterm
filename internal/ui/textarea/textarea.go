@@ -7,6 +7,7 @@ package textarea
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -443,6 +444,7 @@ func (m *Model) InsertRune(r rune) {
 
 // insertRunesFromUserInput inserts runes at the current cursor position.
 func (m *Model) insertRunesFromUserInput(runes []rune) {
+	runes = normalizeLineEndings(runes)
 	// Clean up any special characters in the input provided by the
 	// clipboard. This avoids bugs due to e.g. tab characters and
 	// whatnot.
@@ -528,6 +530,26 @@ func (m *Model) insertRunesFromUserInput(runes []rune) {
 	m.value[m.row] = append(m.value[m.row], tail...)
 
 	m.SetCursor(m.col)
+}
+
+func normalizeLineEndings(runes []rune) []rune {
+	if !slices.Contains(runes, '\r') {
+		return runes
+	}
+
+	n := make([]rune, 0, len(runes))
+	for i := 0; i < len(runes); i++ {
+		r := runes[i]
+		if r == '\r' {
+			if i+1 < len(runes) && runes[i+1] == '\n' {
+				i++
+			}
+			n = append(n, '\n')
+			continue
+		}
+		n = append(n, r)
+	}
+	return n
 }
 
 // Value returns the value of the text input.
