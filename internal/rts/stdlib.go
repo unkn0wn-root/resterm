@@ -58,12 +58,20 @@ func stdlibCoreSpec() map[string]NativeFunc {
 		"match":    stdlibMatch,
 		"str":      stdlibStr,
 		"default":  stdlibDefault,
+		"num":      stdlibNum,
+		"int":      stdlibInt,
+		"bool":     stdlibBool,
+		"typeof":   stdlibTypeof,
 		"uuid":     stdlibUUID,
 	}
 }
 
 func stdlibNSpecs() []nsSpec {
 	return []nsSpec{
+		{name: "crypto", top: true, fns: map[string]NativeFunc{
+			"sha256":     stdlibSHA256,
+			"hmacSha256": stdlibHMACSHA256,
+		}},
 		{name: "base64", top: true, fns: map[string]NativeFunc{
 			"encode": stdlibB64Enc,
 			"decode": stdlibB64Dec,
@@ -73,14 +81,20 @@ func stdlibNSpecs() []nsSpec {
 			"decode": stdlibURLDec,
 		}},
 		{name: "time", top: true, fns: map[string]NativeFunc{
-			"nowISO": stdlibTimeNowISO,
-			"format": stdlibTimeFormat,
+			"nowISO":     stdlibTimeNowISO,
+			"nowUnix":    stdlibTimeNowUnix,
+			"nowUnixMs":  stdlibTimeNowUnixMs,
+			"format":     stdlibTimeFormat,
+			"parse":      stdlibTimeParse,
+			"formatUnix": stdlibTimeFormatUnix,
+			"addUnix":    stdlibTimeAddUnix,
 		}},
 		{name: "json", top: true, fns: map[string]NativeFunc{
 			"file":      stdlibJSONFile,
 			"parse":     stdlibJSONParse,
 			"stringify": stdlibJSONStringify,
 			"get":       stdlibJSONGet,
+			"has":       stdlibJSONHas,
 		}},
 		{name: "headers", top: true, fns: map[string]NativeFunc{
 			"get":       stdlibHeadersGet,
@@ -109,6 +123,12 @@ func stdlibNSpecs() []nsSpec {
 			"append": stdlibListAppend,
 			"concat": stdlibListConcat,
 			"sort":   stdlibListSort,
+			"map":    stdlibListMap,
+			"filter": stdlibListFilter,
+			"any":    stdlibListAny,
+			"all":    stdlibListAll,
+			"slice":  stdlibListSlice,
+			"unique": stdlibListUnique,
 		}},
 		{name: "dict", fns: map[string]NativeFunc{
 			"keys":   stdlibDictKeys,
@@ -117,6 +137,10 @@ func stdlibNSpecs() []nsSpec {
 			"set":    stdlibDictSet,
 			"merge":  stdlibDictMerge,
 			"remove": stdlibDictRemove,
+			"get":    stdlibDictGet,
+			"has":    stdlibDictHas,
+			"pick":   stdlibDictPick,
+			"omit":   stdlibDictOmit,
 		}},
 		{name: "math", fns: map[string]NativeFunc{
 			"abs":   stdlibMathAbs,
@@ -179,6 +203,9 @@ func stdlibWithReq(req *requestObj) map[string]Value {
 	}
 
 	out["stdlib"] = Obj(std)
+	enc := mkEncObj()
+	out["encoding"] = Obj(enc)
+	std.m["encoding"] = Obj(enc)
 	if req != nil {
 		out["request"] = Obj(req)
 	}
@@ -362,29 +389,31 @@ func stdlibURLDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func stdlibTimeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "time.nowISO() expects 0 args")
+	sig := "time.nowISO()"
+	if err := argCount(ctx, pos, args, 0, sig); err != nil {
+		return Null(), err
 	}
-	if ctx == nil || ctx.Now == nil {
-		return Null(), rtErr(ctx, pos, "time not available")
-	}
-	return Str(ctx.Now().UTC().Format(time.RFC3339)), nil
-}
-
-func stdlibTimeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "time.format(layout) expects 1 arg")
-	}
-
-	if ctx == nil || ctx.Now == nil {
-		return Null(), rtErr(ctx, pos, "time not available")
-	}
-
-	layout, err := toStr(ctx, pos, args[0])
+	t, err := nowT(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	return Str(ctx.Now().Format(layout)), nil
+	return fmtTime(ctx, pos, t.UTC(), time.RFC3339)
+}
+
+func stdlibTimeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := "time.format(layout)"
+	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+		return Null(), err
+	}
+	t, err := nowT(ctx, pos)
+	if err != nil {
+		return Null(), err
+	}
+	layout, err := strArg(ctx, pos, args[0], sig)
+	if err != nil {
+		return Null(), err
+	}
+	return fmtTime(ctx, pos, t, layout)
 }
 
 func stdlibUUID(ctx *Ctx, pos Pos, args []Value) (Value, error) {
