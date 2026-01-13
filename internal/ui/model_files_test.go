@@ -195,3 +195,48 @@ func TestReloadWarnUpdatesFileChangeModal(t *testing.T) {
 		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
 	}
 }
+
+func TestOpenFileNormalizesCRLF(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "windows.http")
+	contentWithCRLF := "###\r\nGET https://httpbin.org/get\r\n\r\n###\r\nPOST https://httpbin.org/post\r\nContent-Type: application/json\r\n\r\n{\r\n  \"test\": true\r\n}\r\n\r\n###\r\n"
+	if err := os.WriteFile(path, []byte(contentWithCRLF), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th})
+	m := &model
+	if cmd := m.openFile(path); cmd != nil {
+		cmd()
+	}
+
+	want := "###\nGET https://httpbin.org/get\n\n###\nPOST https://httpbin.org/post\nContent-Type: application/json\n\n{\n  \"test\": true\n}\n\n###\n"
+	got := m.editor.Value()
+	if got != want {
+		t.Fatalf("unexpected editor content\nwant: %q\ngot:  %q", want, got)
+	}
+}
+
+func TestReloadFileNormalizesCRLF(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "reload-test.http")
+	contentWithCRLF := "###\r\nGET https://api.example.com/test\r\n\r\n###\r\nPOST https://api.example.com/echo\r\nContent-Type: application/json\r\n\r\n{\r\n  \"key\": \"value\"\r\n}\r\n\r\n###\r\n"
+	if err := os.WriteFile(path, []byte(contentWithCRLF), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th, FilePath: path, InitialContent: "old content"})
+	m := &model
+	m.dirty = false
+	if cmd := m.reloadFileFromDisk(); cmd != nil {
+		cmd()
+	}
+
+	want := "###\nGET https://api.example.com/test\n\n###\nPOST https://api.example.com/echo\nContent-Type: application/json\n\n{\n  \"key\": \"value\"\n}\n\n###\n"
+	got := m.editor.Value()
+	if got != want {
+		t.Fatalf("unexpected editor content\nwant: %q\ngot:  %q", want, got)
+	}
+}

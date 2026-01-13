@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 )
+
+func normalizeContent(data []byte) []byte {
+	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+}
 
 func (m *Model) openSelectedFile() tea.Cmd {
 	path := selectedFilePath(m.fileList.SelectedItem())
@@ -35,7 +40,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.resetCursorSync()
 	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
-	m.editor.SetValue(string(data))
+	m.editor.SetValue(string(normalizeContent(data)))
 	m.editor.undoStack = nil
 	m.editor.SetViewStart(0)
 	m.editor.moveCursorTo(0, 0)
@@ -199,7 +204,7 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	m.closeFileChangeModal()
 	_ = m.setInsertMode(false, false)
 	m.editor.ClearSelection()
-	m.editor.SetValue(string(data))
+	m.editor.SetValue(string(normalizeContent(data)))
 	m.editor.undoStack = nil
 	m.editor.SetViewStart(0)
 	m.editor.moveCursorTo(0, 0)
