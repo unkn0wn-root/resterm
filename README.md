@@ -9,11 +9,11 @@
 </p>
 
 <p align="center">
-  <strong>Resterm Script</strong>
+  <strong>Workflows</strong>
 </p>
 
 <p align="center">
-  <img src="_media/resterm_script.png" alt="Screenshot of resterm with resterm rcript" width="720" />
+  <img src="_media/resterm_workflow.png" alt="Screenshot of resterm TUI with Workflow" width="720" />
 </p>
 
 <p align="center">
@@ -25,19 +25,19 @@
 </p>
 
 <p align="center">
-  <strong>Workflows</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_workflow.png" alt="Screenshot of resterm TUI with Workflow" width="720" />
-</p>
-
-<p align="center">
   <strong>Profiler</strong>
 </p>
 
 <p align="center">
   <img src="_media/resterm_profiler.png" alt="Screenshot of resterm profiler" width="720" />
+</p>
+
+<p align="center">
+  <strong>Resterm Script</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_script.png" alt="Screenshot of resterm with resterm rcript" width="720" />
 </p>
 
 <p align="center">
