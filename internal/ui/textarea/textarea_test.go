@@ -273,6 +273,18 @@ func TestSetValue(t *testing.T) {
 	}
 }
 
+func TestSetValueNormalizesCRLF(t *testing.T) {
+	textarea := newTextArea()
+	textarea.SetValue("Foo\r\nBar\r\nBaz")
+
+	if got := textarea.Value(); got != "Foo\nBar\nBaz" {
+		t.Fatalf("expected CRLF normalized, got %q", got)
+	}
+	if textarea.LineCount() != 3 {
+		t.Fatalf("expected 3 lines after normalization, got %d", textarea.LineCount())
+	}
+}
+
 func TestInsertString(t *testing.T) {
 	textarea := newTextArea()
 
