@@ -61,17 +61,21 @@ func queryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
+
 	if na.arg(0).K != VStr {
 		return Null(), rtErr(ctx, pos, "query.merge(url, map) expects string url")
 	}
+
 	m, err := na.dict(1)
 	if err != nil {
 		return Null(), err
 	}
+
 	u, err := url.Parse(strings.TrimSpace(na.arg(0).S))
 	if err != nil {
 		return Null(), rtErr(ctx, pos, "invalid url")
 	}
+
 	vals := u.Query()
 	for k, v := range m {
 		key, err := na.mapKey(k)
@@ -82,10 +86,12 @@ func queryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			vals.Del(key)
 			continue
 		}
+
 		items, err := queryValues(ctx, pos, v)
 		if err != nil {
 			return Null(), err
 		}
+
 		vals.Del(key)
 		for _, it := range items {
 			vals.Add(key, it)

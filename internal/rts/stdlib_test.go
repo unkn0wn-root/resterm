@@ -163,7 +163,11 @@ func TestStdlibTimeExtras(t *testing.T) {
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected time.parse unix")
 	}
-	v = evalExprCtx(t, ctx, "time.parse(\"2006-01-02T15:04:05.000Z07:00\", \"1970-01-01T00:00:01.250Z\")")
+	v = evalExprCtx(
+		t,
+		ctx,
+		"time.parse(\"2006-01-02T15:04:05.000Z07:00\", \"1970-01-01T00:00:01.250Z\")",
+	)
 	if v.K != VNum || v.N != 1.25 {
 		t.Fatalf("expected time.parse fractional")
 	}
