@@ -1365,7 +1365,7 @@ func (m Model) renderCommandBar() string {
 		{key: "Enter", label: "Run/Send"},
 		{key: "^C", label: "Cancel"},
 		{key: "^S", label: "Save"},
-		{key: "^N", label: "New File"},
+		{key: "^N", label: "New"},
 		{key: "^O", label: "Open"},
 		{key: "^Q", label: "Quit"},
 		{key: "g s/v", label: "Split"},
