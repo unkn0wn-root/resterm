@@ -1362,7 +1362,7 @@ func (m Model) renderCommandBar() string {
 	}
 	segments := []hint{
 		{key: "Tab", label: "Focus"},
-		{key: "Enter", label: "Run/Send"},
+		{key: "Enter", label: "Run"},
 		{key: "^C", label: "Cancel"},
 		{key: "^S", label: "Save"},
 		{key: "^N", label: "New"},
