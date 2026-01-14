@@ -3,6 +3,8 @@ package rts
 import (
 	"net/url"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
 
 var querySpec = nsSpec{name: "query", top: true, fns: map[string]NativeFunc{
@@ -71,19 +73,15 @@ func queryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 
-	u, err := url.Parse(strings.TrimSpace(na.arg(0).S))
-	if err != nil {
-		return Null(), rtErr(ctx, pos, "invalid url")
-	}
-
-	vals := u.Query()
+	raw := strings.TrimSpace(na.arg(0).S)
+	patch := make(map[string][]string, len(m))
 	for k, v := range m {
 		key, err := na.mapKey(k)
 		if err != nil {
 			return Null(), err
 		}
 		if v.K == VNull {
-			vals.Del(key)
+			patch[key] = nil
 			continue
 		}
 
@@ -92,13 +90,17 @@ func queryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			return Null(), err
 		}
 
-		vals.Del(key)
-		for _, it := range items {
-			vals.Add(key, it)
+		if len(items) == 0 {
+			patch[key] = nil
+			continue
 		}
+		patch[key] = items
 	}
-	u.RawQuery = vals.Encode()
-	return Str(u.String()), nil
+	merged, err := urltpl.MergeQuery(raw, patch)
+	if err != nil {
+		return Null(), rtErr(ctx, pos, "invalid url")
+	}
+	return Str(merged), nil
 }
 
 func queryValues(ctx *Ctx, pos Pos, v Value) ([]string, error) {

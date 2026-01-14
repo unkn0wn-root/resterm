@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -31,6 +30,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -2370,17 +2370,9 @@ func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) 
 	}
 
 	if len(out.Query) > 0 {
-		parsed, err := url.Parse(req.URL)
-		if err != nil {
+		if err := applyPreRequestQuery(req, out.Query); err != nil {
 			return errdef.Wrap(errdef.CodeScript, err, "invalid url after script")
 		}
-
-		query := parsed.Query()
-		for key, value := range out.Query {
-			query.Set(key, value)
-		}
-		parsed.RawQuery = query.Encode()
-		req.URL = parsed.String()
 	}
 	if out.Headers != nil {
 		if req.Headers == nil {
@@ -2399,6 +2391,27 @@ func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) 
 		req.Body.GraphQL = nil
 	}
 	setRequestVars(req, out.Variables)
+	return nil
+}
+
+func applyPreRequestQuery(req *restfile.Request, q map[string]string) error {
+	if req == nil || len(q) == 0 {
+		return nil
+	}
+	raw := strings.TrimSpace(req.URL)
+	patch := make(map[string]*string, len(q))
+	for key, value := range q {
+		val := value
+		patch[key] = &val
+	}
+	updated, err := urltpl.PatchQuery(raw, patch)
+	if err != nil {
+		return err
+	}
+	if raw == "" && updated == "" {
+		return nil
+	}
+	req.URL = updated
 	return nil
 }
 

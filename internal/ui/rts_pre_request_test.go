@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -67,5 +68,40 @@ vars.global.delete("old")`,
 	}
 	if gv, ok := out.Globals["old"]; !ok || !gv.Delete {
 		t.Fatalf("expected old to be marked deleted, got %#v", gv)
+	}
+}
+
+func TestRunRTSPreRequestPreservesTemplatedURL(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{
+		Method:    "POST",
+		URL:       "{{base_url}}/anything",
+		LineRange: restfile.LineRange{Start: 1, End: 5},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{{
+				Kind: "pre-request",
+				Lang: "rts",
+				Body: `request.setURL(query.merge(request.url, {mode: "debug", pre: "1"}))
+request.setQueryParam("mutated", "true")`,
+			}},
+		},
+	}
+
+	out, err := model.runRTSPreRequest(context.Background(), nil, req, "", "", nil, nil)
+	if err != nil {
+		t.Fatalf("runRTSPreRequest: %v", err)
+	}
+	if err := applyPreRequestOutput(req, out); err != nil {
+		t.Fatalf("applyPreRequestOutput: %v", err)
+	}
+
+	if !strings.Contains(req.URL, "{{base_url}}") {
+		t.Fatalf("expected templated base_url preserved, got %q", req.URL)
+	}
+	if strings.Contains(req.URL, "%7B%7B") || strings.Contains(req.URL, "%7D%7D") {
+		t.Fatalf("expected template braces to remain unescaped, got %q", req.URL)
+	}
+	if !strings.Contains(req.URL, "mode=debug") || !strings.Contains(req.URL, "mutated=true") {
+		t.Fatalf("expected merged query params, got %q", req.URL)
 	}
 }
