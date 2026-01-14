@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.18.4](https://github.com/unkn0wn-root/resterm/compare/v0.18.3...v0.18.4) (2026-01-14)
+
+
+### Bug Fixes
+
+* template expansion via rts scripts and stdlib ([6799099](https://github.com/unkn0wn-root/resterm/commit/6799099e8f7ea005301980b9c585d0202225edc2))
+
 ### [0.18.3](https://github.com/unkn0wn-root/resterm/compare/v0.18.2...v0.18.3) (2026-01-14)
 
 ### [0.18.2](https://github.com/unkn0wn-root/resterm/compare/v0.18.1...v0.18.2) (2026-01-13)
