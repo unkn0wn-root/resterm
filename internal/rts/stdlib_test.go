@@ -285,6 +285,19 @@ func TestStdlibQueryHelpers(t *testing.T) {
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected query length 1")
 	}
+	v = evalExprCtx(t, ctx, "query.merge(\"{{host}}/path?keep=1\", {q: \"x\"})")
+	if v.K != VStr {
+		t.Fatalf("expected query.merge to return string")
+	}
+	if !strings.Contains(v.S, "{{host}}") {
+		t.Fatalf("expected templated host preserved, got %q", v.S)
+	}
+	if strings.Contains(v.S, "%7B%7B") || strings.Contains(v.S, "%7D%7D") {
+		t.Fatalf("expected template braces to remain unescaped, got %q", v.S)
+	}
+	if !strings.Contains(v.S, "keep=1") || !strings.Contains(v.S, "q=x") {
+		t.Fatalf("expected merged query params, got %q", v.S)
+	}
 }
 
 func TestStdlibTextHelpers(t *testing.T) {

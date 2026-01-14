@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
 
 type rtsPreMut struct {
@@ -297,17 +297,16 @@ func setReqQuery(req *rts.Req, name, value string) {
 		req.Q = make(map[string][]string)
 	}
 	req.Q[name] = []string{value}
-	if req.URL == "" {
+	raw := strings.TrimSpace(req.URL)
+	if raw == "" {
 		return
 	}
-	parsed, err := url.Parse(req.URL)
+	val := value
+	updated, err := urltpl.PatchQuery(raw, map[string]*string{name: &val})
 	if err != nil {
 		return
 	}
-	query := parsed.Query()
-	query.Set(name, value)
-	parsed.RawQuery = query.Encode()
-	req.URL = parsed.String()
+	req.URL = updated
 }
 
 func lowerKey(name string) string {
