@@ -23,7 +23,7 @@ const (
 )
 
 var headerSegmentIcons = map[string]string{
-	"resterm":   "◈",
+	"resterm":   ">_",
 	"workspace": "▣",
 	"env":       "⬢",
 	"requests":  "⇄",
