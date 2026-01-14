@@ -1,6 +1,9 @@
 package rts
 
-import "strings"
+import (
+	"maps"
+	"strings"
+)
 
 type ms struct {
 	g string
@@ -20,11 +23,7 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 	if len(m) == 0 {
 		return map[K]V{}
 	}
-	out := make(map[K]V, len(m))
-	for k, v := range m {
-		out[k] = v
-	}
-	return out
+	return maps.Clone(m)
 }
 
 func lowerMap(src map[string]string) map[string]string {

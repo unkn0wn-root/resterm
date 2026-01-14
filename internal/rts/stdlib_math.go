@@ -2,68 +2,82 @@ package rts
 
 import "math"
 
-func stdlibMathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "math.abs(x)"); err != nil {
+var mathSpec = nsSpec{name: "math", fns: map[string]NativeFunc{
+	"abs":   mathAbs,
+	"min":   mathMin,
+	"max":   mathMax,
+	"clamp": mathClamp,
+	"floor": mathFloor,
+	"ceil":  mathCeil,
+	"round": mathRound,
+}}
+
+func mathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.abs(x)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	n, err := numArg(ctx, pos, args[0], "math.abs(x)")
+	n, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}
 	return Num(math.Abs(n)), nil
 }
 
-func stdlibMathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "math.min(a, b)"); err != nil {
+func mathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.min(a, b)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	a, err := numArg(ctx, pos, args[0], "math.min(a, b)")
+	a, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	b, err := numArg(ctx, pos, args[1], "math.min(a, b)")
+	b, err := na.num(1)
 	if err != nil {
 		return Null(), err
 	}
 	return Num(math.Min(a, b)), nil
 }
 
-func stdlibMathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "math.max(a, b)"); err != nil {
+func mathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.max(a, b)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	a, err := numArg(ctx, pos, args[0], "math.max(a, b)")
+	a, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	b, err := numArg(ctx, pos, args[1], "math.max(a, b)")
+	b, err := na.num(1)
 	if err != nil {
 		return Null(), err
 	}
 	return Num(math.Max(a, b)), nil
 }
 
-func stdlibMathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 3, "math.clamp(x, min, max)"); err != nil {
+func mathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.clamp(x, min, max)")
+	if err := na.count(3); err != nil {
 		return Null(), err
 	}
 
-	x, err := numArg(ctx, pos, args[0], "math.clamp(x, min, max)")
+	x, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	lo, err := numArg(ctx, pos, args[1], "math.clamp(x, min, max)")
+	lo, err := na.num(1)
 	if err != nil {
 		return Null(), err
 	}
 
-	hi, err := numArg(ctx, pos, args[2], "math.clamp(x, min, max)")
+	hi, err := na.num(2)
 	if err != nil {
 		return Null(), err
 	}
@@ -79,36 +93,39 @@ func stdlibMathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(x), nil
 }
 
-func stdlibMathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "math.floor(x)"); err != nil {
+func mathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.floor(x)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	n, err := numArg(ctx, pos, args[0], "math.floor(x)")
+	n, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}
 	return Num(math.Floor(n)), nil
 }
 
-func stdlibMathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "math.ceil(x)"); err != nil {
+func mathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.ceil(x)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	n, err := numArg(ctx, pos, args[0], "math.ceil(x)")
+	n, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}
 	return Num(math.Ceil(n)), nil
 }
 
-func stdlibMathRound(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "math.round(x)"); err != nil {
+func mathRound(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "math.round(x)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	n, err := numArg(ctx, pos, args[0], "math.round(x)")
+	n, err := na.num(0)
 	if err != nil {
 		return Null(), err
 	}

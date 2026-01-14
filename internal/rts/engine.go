@@ -45,7 +45,7 @@ func NewEng() *Eng {
 		reqObj: newRequestObj("request"),
 	}
 	e.Stdlib = func() map[string]Value {
-		return stdlibWithReq(e.reqObj)
+		return buildStdlib(e.reqObj)
 	}
 	e.C.SetStdlib(e.Stdlib)
 	return e
@@ -57,7 +57,7 @@ func (e *Eng) ensure() {
 	}
 	if e.Stdlib == nil {
 		e.Stdlib = func() map[string]Value {
-			return stdlibWithReq(e.reqObj)
+			return buildStdlib(e.reqObj)
 		}
 	}
 	if e.C == nil {
@@ -194,12 +194,5 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 }
 
 func cloneVals(src map[string]Value) map[string]Value {
-	if len(src) == 0 {
-		return map[string]Value{}
-	}
-	out := make(map[string]Value, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
-	return out
+	return cloneMap(src)
 }

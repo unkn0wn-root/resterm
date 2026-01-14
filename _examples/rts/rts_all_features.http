@@ -6,9 +6,9 @@
 # @use ./apply_patch.rts as apply
 # @use ./pre_request.rts as pre
 
-### RTS Core Expressions + Stdlib
+### RTS Core Expressions + Standard Library
 # @name RTS_Core
-# @description Exercises expressions, operators, stdlib, and module calls.
+# @description Exercises expressions, operators, rts stdlib, and module calls.
 # @assert response.statusCode == 200
 # @assert response.json("args.mode") == helpers.mode(env)
 # @assert response.json("args.tag") == loops.sampleTag

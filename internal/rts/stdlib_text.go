@@ -2,12 +2,24 @@ package rts
 
 import "strings"
 
-func stdlibTextLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "text.lower(s)"); err != nil {
+var textSpec = nsSpec{name: "text", fns: map[string]NativeFunc{
+	"lower":      textLower,
+	"upper":      textUpper,
+	"trim":       textTrim,
+	"split":      textSplit,
+	"join":       textJoin,
+	"replace":    textReplace,
+	"startsWith": textStartsWith,
+	"endsWith":   textEndsWith,
+}}
+
+func textLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.lower(s)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.lower(s)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -19,12 +31,13 @@ func stdlibTextLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func stdlibTextUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "text.upper(s)"); err != nil {
+func textUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.upper(s)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.upper(s)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -36,12 +49,13 @@ func stdlibTextUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func stdlibTextTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "text.trim(s)"); err != nil {
+func textTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.trim(s)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.trim(s)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -53,17 +67,18 @@ func stdlibTextTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func stdlibTextSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "text.split(s, sep)"); err != nil {
+func textSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.split(s, sep)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.split(s, sep)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	sep, err := strArg(ctx, pos, args[1], "text.split(s, sep)")
+	sep, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -83,13 +98,14 @@ func stdlibTextSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func stdlibTextJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "text.join(list, sep)"); err != nil {
+func textJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.join(list, sep)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
 	var items []Value
-	src := args[0]
+	src := na.arg(0)
 	if src.K == VNull {
 		items = nil
 	} else if src.K != VList {
@@ -98,7 +114,7 @@ func stdlibTextJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		items = src.L
 	}
 
-	sep, err := strArg(ctx, pos, args[1], "text.join(list, sep)")
+	sep, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -125,22 +141,23 @@ func stdlibTextJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(res), nil
 }
 
-func stdlibTextReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 3, "text.replace(s, old, new)"); err != nil {
+func textReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.replace(s, old, new)")
+	if err := na.count(3); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.replace(s, old, new)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	old, err := strArg(ctx, pos, args[1], "text.replace(s, old, new)")
+	old, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
 
-	nw, err := strArg(ctx, pos, args[2], "text.replace(s, old, new)")
+	nw, err := na.str(2)
 	if err != nil {
 		return Null(), err
 	}
@@ -152,34 +169,36 @@ func stdlibTextReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func stdlibTextStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "text.startsWith(s, prefix)"); err != nil {
+func textStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.startsWith(s, prefix)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.startsWith(s, prefix)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	p, err := strArg(ctx, pos, args[1], "text.startsWith(s, prefix)")
+	p, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
 	return Bool(strings.HasPrefix(s, p)), nil
 }
 
-func stdlibTextEndsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "text.endsWith(s, suffix)"); err != nil {
+func textEndsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "text.endsWith(s, suffix)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], "text.endsWith(s, suffix)")
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	suf, err := strArg(ctx, pos, args[1], "text.endsWith(s, suffix)")
+	suf, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}

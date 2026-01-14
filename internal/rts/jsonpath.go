@@ -11,7 +11,7 @@ type jseg struct {
 	isI bool
 }
 
-func jsonGet(v any, path string) (any, bool) {
+func jsonPathGet(v any, path string) (any, bool) {
 	p := strings.TrimSpace(path)
 	if p == "" {
 		return v, true

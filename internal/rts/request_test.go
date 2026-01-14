@@ -56,7 +56,7 @@ func TestRequestHostObject(t *testing.T) {
 		t.Fatalf("expected query value 2")
 	}
 	rt.Req.URL = "/path"
-	v, err = e.Eval(context.Background(), rt, "stdlib.dict.keys(request.query)", p)
+	v, err = e.Eval(context.Background(), rt, "rts.dict.keys(request.query)", p)
 	if err != nil {
 		t.Fatalf("eval request.query keys: %v", err)
 	}

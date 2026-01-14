@@ -2,19 +2,66 @@ package rts
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 )
 
-func stdlibJSONParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "json.parse(text)"); err != nil {
+var jsonSpec = nsSpec{name: "json", top: true, fns: map[string]NativeFunc{
+	"file":      jsonFile,
+	"parse":     jsonParse,
+	"stringify": jsonStringify,
+	"get":       jsonGet,
+	"has":       jsonHas,
+}}
+
+func jsonFile(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "json.file(path)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	if args[0].K != VStr {
+	if ctx == nil || ctx.ReadFile == nil {
+		return Null(), rtErr(ctx, pos, "file access not available")
+	}
+
+	p, err := na.toStr(0)
+	if err != nil {
+		return Null(), err
+	}
+
+	path := p
+	if !filepath.IsAbs(path) && ctx.BaseDir != "" {
+		path = filepath.Join(ctx.BaseDir, path)
+	}
+
+	data, err := ctx.ReadFile(path)
+	if err != nil {
+		return Null(), rtErr(ctx, pos, "file read failed")
+	}
+
+	if ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
+		return Null(), rtErr(ctx, pos, "file too large")
+	}
+
+	var raw any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return Null(), rtErr(ctx, pos, "invalid json")
+	}
+
+	return fromIface(ctx, pos, raw)
+}
+
+func jsonParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "json.parse(text)")
+	if err := na.count(1); err != nil {
+		return Null(), err
+	}
+
+	if na.arg(0).K != VStr {
 		return Null(), rtErr(ctx, pos, "json.parse(text) expects string")
 	}
 
-	txt := args[0].S
+	txt := na.arg(0).S
 	if ctx != nil && ctx.Lim.MaxStr > 0 && len(txt) > ctx.Lim.MaxStr {
 		return Null(), rtErr(ctx, pos, "text too long")
 	}
@@ -26,12 +73,13 @@ func stdlibJSONParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return fromIface(ctx, pos, raw)
 }
 
-func stdlibJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCountRange(ctx, pos, args, 1, 2, "json.stringify(value[, indent])"); err != nil {
+func jsonStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "json.stringify(value[, indent])")
+	if err := na.countRange(1, 2); err != nil {
 		return Null(), err
 	}
 
-	raw, err := jsonIface(ctx, pos, args[0])
+	raw, err := jsonIface(ctx, pos, na.arg(0))
 	if err != nil {
 		return Null(), err
 	}
@@ -41,7 +89,7 @@ func stdlibJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		indent string
 	)
 	if len(args) == 2 {
-		indent, err = jsonIndent(ctx, pos, args[1])
+		indent, err = jsonIndent(ctx, pos, na.arg(1))
 		if err != nil {
 			return Null(), err
 		}
@@ -64,19 +112,20 @@ func stdlibJSONStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(string(data)), nil
 }
 
-func stdlibJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCountRange(ctx, pos, args, 1, 2, "json.get(value[, path])"); err != nil {
+func jsonGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "json.get(value[, path])")
+	if err := na.countRange(1, 2); err != nil {
 		return Null(), err
 	}
 
-	raw, err := jsonIface(ctx, pos, args[0])
+	raw, err := jsonIface(ctx, pos, na.arg(0))
 	if err != nil {
 		return Null(), err
 	}
 
 	path := ""
 	if len(args) == 2 {
-		p, err := strArg(ctx, pos, args[1], "json.get(value[, path])")
+		p, err := na.str(1)
 		if err != nil {
 			return Null(), err
 		}
@@ -86,7 +135,7 @@ func stdlibJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return fromIface(ctx, pos, raw)
 	}
 
-	val, ok := jsonGet(raw, path)
+	val, ok := jsonPathGet(raw, path)
 	if !ok {
 		return Null(), nil
 	}
@@ -94,23 +143,23 @@ func stdlibJSONGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return fromIface(ctx, pos, val)
 }
 
-func stdlibJSONHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "json.has(value, path)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func jsonHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "json.has(value, path)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	raw, err := jsonIface(ctx, pos, args[0])
+	raw, err := jsonIface(ctx, pos, na.arg(0))
 	if err != nil {
 		return Null(), err
 	}
 
-	path, err := strArg(ctx, pos, args[1], sig)
+	path, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
 
-	_, ok := jsonGet(raw, path)
+	_, ok := jsonPathGet(raw, path)
 	return Bool(ok), nil
 }
 

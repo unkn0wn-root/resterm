@@ -2,34 +2,45 @@ package rts
 
 import "strings"
 
-func stdlibHeadersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "headers.normalize(h)"); err != nil {
+var headersSpec = nsSpec{name: "headers", top: true, fns: map[string]NativeFunc{
+	"get":       headersGet,
+	"has":       headersHas,
+	"set":       headersSet,
+	"remove":    headersRemove,
+	"merge":     headersMerge,
+	"normalize": headersNormalize,
+}}
+
+func headersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "headers.normalize(h)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	m, err := dictArg(ctx, pos, args[0], "headers.normalize(h)")
+	m, err := na.dict(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	out, err := normHeaders(ctx, pos, m, "headers.normalize(h)")
+	out, err := normHeaders(ctx, pos, m, na.sig)
 	if err != nil {
 		return Null(), err
 	}
 	return Dict(out), nil
 }
 
-func stdlibHeadersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "headers.get(h, name)"); err != nil {
+func headersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "headers.get(h, name)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	m, err := dictArg(ctx, pos, args[0], "headers.get(h, name)")
+	m, err := na.dict(0)
 	if err != nil || m == nil {
 		return Null(), err
 	}
 
-	name, err := keyArg(ctx, pos, args[1], "headers.get(h, name)")
+	name, err := na.key(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -41,17 +52,18 @@ func stdlibHeadersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return headValue(ctx, pos, val)
 }
 
-func stdlibHeadersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "headers.has(h, name)"); err != nil {
+func headersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "headers.has(h, name)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	m, err := dictArg(ctx, pos, args[0], "headers.has(h, name)")
+	m, err := na.dict(0)
 	if err != nil || m == nil {
 		return Bool(false), err
 	}
 
-	name, err := keyArg(ctx, pos, args[1], "headers.has(h, name)")
+	name, err := na.key(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -77,22 +89,23 @@ func stdlibHeadersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 }
 
-func stdlibHeadersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 3, "headers.set(h, name, value)"); err != nil {
+func headersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "headers.set(h, name, value)")
+	if err := na.count(3); err != nil {
 		return Null(), err
 	}
 
-	m, err := dictArg(ctx, pos, args[0], "headers.set(h, name, value)")
+	m, err := na.dict(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	name, err := keyArg(ctx, pos, args[1], "headers.set(h, name, value)")
+	name, err := na.key(1)
 	if err != nil {
 		return Null(), err
 	}
 
-	val, err := headerValue(ctx, pos, args[2])
+	val, err := headerValue(ctx, pos, na.arg(2))
 	if err != nil {
 		return Null(), err
 	}
@@ -102,17 +115,18 @@ func stdlibHeadersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(out), nil
 }
 
-func stdlibHeadersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "headers.remove(h, name)"); err != nil {
+func headersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "headers.remove(h, name)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	m, err := dictArg(ctx, pos, args[0], "headers.remove(h, name)")
+	m, err := na.dict(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	name, err := keyArg(ctx, pos, args[1], "headers.remove(h, name)")
+	name, err := na.key(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -122,33 +136,34 @@ func stdlibHeadersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(out), nil
 }
 
-func stdlibHeadersMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "headers.merge(a, b)"); err != nil {
+func headersMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "headers.merge(a, b)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	a, err := dictArg(ctx, pos, args[0], "headers.merge(a, b)")
+	a, err := na.dict(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	b, err := dictArg(ctx, pos, args[1], "headers.merge(a, b)")
+	b, err := na.dict(1)
 	if err != nil {
 		return Null(), err
 	}
 
-	na, err := normHeaders(ctx, pos, a, "headers.merge(a, b)")
+	normA, err := normHeaders(ctx, pos, a, na.sig)
 	if err != nil {
 		return Null(), err
 	}
 
-	nb, err := normHeaders(ctx, pos, b, "headers.merge(a, b)")
+	normB, err := normHeaders(ctx, pos, b, na.sig)
 	if err != nil {
 		return Null(), err
 	}
 
-	out := cloneDict(na)
-	for k, v := range nb {
+	out := cloneDict(normA)
+	for k, v := range normB {
 		if v.K == VNull {
 			delete(out, k)
 			continue

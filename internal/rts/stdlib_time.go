@@ -5,15 +5,37 @@ import (
 	"time"
 )
 
+var timeSpec = nsSpec{name: "time", top: true, fns: map[string]NativeFunc{
+	"nowISO":     timeNowISO,
+	"nowUnix":    timeNowUnix,
+	"nowUnixMs":  timeNowUnixMs,
+	"format":     timeFormat,
+	"parse":      timeParse,
+	"formatUnix": timeFormatUnix,
+	"addUnix":    timeAddUnix,
+}}
+
 const (
 	maxI  = float64(^uint64(0) >> 1)
 	minI  = -maxI - 1
 	nsSec = int64(time.Second)
 )
 
-func stdlibTimeNowUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "time.nowUnix()"
-	if err := argCount(ctx, pos, args, 0, sig); err != nil {
+func timeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.nowISO()")
+	if err := na.count(0); err != nil {
+		return Null(), err
+	}
+	t, err := nowT(ctx, pos)
+	if err != nil {
+		return Null(), err
+	}
+	return fmtTime(ctx, pos, t.UTC(), time.RFC3339)
+}
+
+func timeNowUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.nowUnix()")
+	if err := na.count(0); err != nil {
 		return Null(), err
 	}
 
@@ -24,9 +46,9 @@ func stdlibTimeNowUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(float64(t.Unix())), nil
 }
 
-func stdlibTimeNowUnixMs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "time.nowUnixMs()"
-	if err := argCount(ctx, pos, args, 0, sig); err != nil {
+func timeNowUnixMs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.nowUnixMs()")
+	if err := na.count(0); err != nil {
 		return Null(), err
 	}
 
@@ -39,18 +61,34 @@ func stdlibTimeNowUnixMs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(float64(n)), nil
 }
 
-func stdlibTimeParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "time.parse(layout, value)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func timeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.format(layout)")
+	if err := na.count(1); err != nil {
+		return Null(), err
+	}
+	t, err := nowT(ctx, pos)
+	if err != nil {
+		return Null(), err
+	}
+	layout, err := na.str(0)
+	if err != nil {
+		return Null(), err
+	}
+	return fmtTime(ctx, pos, t, layout)
+}
+
+func timeParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.parse(layout, value)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	layout, err := strArg(ctx, pos, args[0], sig)
+	layout, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	val, err := strArg(ctx, pos, args[1], sig)
+	val, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -64,18 +102,18 @@ func stdlibTimeParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Num(sec), nil
 }
 
-func stdlibTimeFormatUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "time.formatUnix(ts, layout)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func timeFormatUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.formatUnix(ts, layout)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	layout, err := strArg(ctx, pos, args[1], sig)
+	layout, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}
 
-	sec, ns, err := splitUnix(ctx, pos, args[0], sig)
+	sec, ns, err := splitUnix(ctx, pos, na.arg(0), na.sig)
 	if err != nil {
 		return Null(), err
 	}
@@ -84,25 +122,25 @@ func stdlibTimeFormatUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return fmtTime(ctx, pos, t, layout)
 }
 
-func stdlibTimeAddUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "time.addUnix(ts, seconds)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func timeAddUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.addUnix(ts, seconds)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	a, err := numF(ctx, pos, args[0], sig)
+	a, err := numF(ctx, pos, na.arg(0), na.sig)
 	if err != nil {
 		return Null(), err
 	}
 
-	b, err := numF(ctx, pos, args[1], sig)
+	b, err := numF(ctx, pos, na.arg(1), na.sig)
 	if err != nil {
 		return Null(), err
 	}
 
 	out := a + b
 	if math.IsNaN(out) || math.IsInf(out, 0) {
-		return Null(), rtErr(ctx, pos, "%s expects finite number", sig)
+		return Null(), rtErr(ctx, pos, "%s expects finite number", na.sig)
 	}
 
 	return Num(out), nil

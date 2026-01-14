@@ -8,11 +8,7 @@ type ModObj struct {
 }
 
 func NewModObj(name string, exp map[string]Value) *ModObj {
-	cp := make(map[string]Value, len(exp))
-	for k, v := range exp {
-		cp[k] = v
-	}
-	return &ModObj{name: name, exp: cp}
+	return &ModObj{name: name, exp: cloneMap(exp)}
 }
 
 func (m *ModObj) TypeName() string { return "module:" + m.name }

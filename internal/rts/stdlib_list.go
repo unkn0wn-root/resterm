@@ -6,36 +6,50 @@ import (
 	"strconv"
 )
 
-func stdlibListAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "list.append(list, item)"); err != nil {
+var listSpec = nsSpec{name: "list", fns: map[string]NativeFunc{
+	"append": listAppend,
+	"concat": listConcat,
+	"sort":   listSort,
+	"map":    listMap,
+	"filter": listFilter,
+	"any":    listAny,
+	"all":    listAll,
+	"slice":  listSlice,
+	"unique": listUnique,
+}}
+
+func listAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.append(list, item)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], "list.append(list, item)")
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
 
 	out := make([]Value, 0, len(items)+1)
 	out = append(out, items...)
-	out = append(out, args[1])
+	out = append(out, na.arg(1))
 	if err := chkList(ctx, pos, len(out)); err != nil {
 		return Null(), err
 	}
 	return List(out), nil
 }
 
-func stdlibListConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "list.concat(a, b)"); err != nil {
+func listConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.concat(a, b)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	a, err := listArg(ctx, pos, args[0], "list.concat(a, b)")
+	a, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	b, err := listArg(ctx, pos, args[1], "list.concat(a, b)")
+	b, err := na.list(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -49,12 +63,13 @@ func stdlibListConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func stdlibListSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "list.sort(list)"); err != nil {
+func listSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.sort(list)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], "list.sort(list)")
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -87,19 +102,19 @@ func stdlibListSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func stdlibListMap(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "list.map(list, fn)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func listMap(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.map(list, fn)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], sig)
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	fn := args[1]
-	if err := fnChk(ctx, pos, fn, sig); err != nil {
+	fn := na.arg(1)
+	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
 		return Null(), err
 	}
 	if len(items) == 0 {
@@ -123,19 +138,19 @@ func stdlibListMap(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func stdlibListFilter(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "list.filter(list, fn)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func listFilter(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.filter(list, fn)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], sig)
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	fn := args[1]
-	if err := fnChk(ctx, pos, fn, sig); err != nil {
+	fn := na.arg(1)
+	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
 		return Null(), err
 	}
 	if len(items) == 0 {
@@ -161,19 +176,19 @@ func stdlibListFilter(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func stdlibListAny(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "list.any(list, fn)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func listAny(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.any(list, fn)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], sig)
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	fn := args[1]
-	if err := fnChk(ctx, pos, fn, sig); err != nil {
+	fn := na.arg(1)
+	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
 		return Null(), err
 	}
 	for _, it := range items {
@@ -191,19 +206,19 @@ func stdlibListAny(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Bool(false), nil
 }
 
-func stdlibListAll(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "list.all(list, fn)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func listAll(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.all(list, fn)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], sig)
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	fn := args[1]
-	if err := fnChk(ctx, pos, fn, sig); err != nil {
+	fn := na.arg(1)
+	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
 		return Null(), err
 	}
 	for _, it := range items {
@@ -221,13 +236,13 @@ func stdlibListAll(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Bool(true), nil
 }
 
-func stdlibListSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "list.slice(list, start[, end])"
-	if err := argCountRange(ctx, pos, args, 2, 3, sig); err != nil {
+func listSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.slice(list, start[, end])")
+	if err := na.countRange(2, 3); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], sig)
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -235,14 +250,14 @@ func stdlibListSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return List(nil), nil
 	}
 
-	st, err := intNum(ctx, pos, args[1], sig)
+	st, err := intNum(ctx, pos, na.arg(1), na.sig)
 	if err != nil {
 		return Null(), err
 	}
 
 	en := len(items)
 	if len(args) == 3 {
-		en, err = intNum(ctx, pos, args[2], sig)
+		en, err = intNum(ctx, pos, na.arg(2), na.sig)
 		if err != nil {
 			return Null(), err
 		}
@@ -261,13 +276,13 @@ func stdlibListSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return List(out), nil
 }
 
-func stdlibListUnique(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "list.unique(list)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+func listUnique(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "list.unique(list)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	items, err := listArg(ctx, pos, args[0], sig)
+	items, err := na.list(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -282,7 +297,7 @@ func stdlibListUnique(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			return Null(), err
 		}
 
-		k, err := keyVal(ctx, pos, it, sig)
+		k, err := keyVal(ctx, pos, it, na.sig)
 		if err != nil {
 			return Null(), err
 		}

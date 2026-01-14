@@ -5,14 +5,21 @@ import (
 	"strings"
 )
 
-func stdlibQueryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "query.parse(urlOrQuery)"); err != nil {
+var querySpec = nsSpec{name: "query", top: true, fns: map[string]NativeFunc{
+	"parse":  queryParse,
+	"encode": queryEncode,
+	"merge":  queryMerge,
+}}
+
+func queryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "query.parse(urlOrQuery)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
-	if args[0].K != VStr {
+	if na.arg(0).K != VStr {
 		return Null(), rtErr(ctx, pos, "query.parse(urlOrQuery) expects string")
 	}
-	txt := strings.TrimSpace(args[0].S)
+	txt := strings.TrimSpace(na.arg(0).S)
 	if txt == "" {
 		return Dict(map[string]Value{}), nil
 	}
@@ -23,17 +30,18 @@ func stdlibQueryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Dict(valuesDict(vals)), nil
 }
 
-func stdlibQueryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, "query.encode(map)"); err != nil {
+func queryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "query.encode(map)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
-	m, err := dictArg(ctx, pos, args[0], "query.encode(map)")
+	m, err := na.dict(0)
 	if err != nil {
 		return Null(), err
 	}
 	vals := url.Values{}
 	for k, v := range m {
-		key, err := mapKey(ctx, pos, k, "query.encode(map)")
+		key, err := na.mapKey(k)
 		if err != nil {
 			return Null(), err
 		}
@@ -48,24 +56,25 @@ func stdlibQueryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(vals.Encode()), nil
 }
 
-func stdlibQueryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, "query.merge(url, map)"); err != nil {
+func queryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "query.merge(url, map)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
-	if args[0].K != VStr {
+	if na.arg(0).K != VStr {
 		return Null(), rtErr(ctx, pos, "query.merge(url, map) expects string url")
 	}
-	m, err := dictArg(ctx, pos, args[1], "query.merge(url, map)")
+	m, err := na.dict(1)
 	if err != nil {
 		return Null(), err
 	}
-	u, err := url.Parse(strings.TrimSpace(args[0].S))
+	u, err := url.Parse(strings.TrimSpace(na.arg(0).S))
 	if err != nil {
 		return Null(), rtErr(ctx, pos, "invalid url")
 	}
 	vals := u.Query()
 	for k, v := range m {
-		key, err := mapKey(ctx, pos, k, "query.merge(url, map)")
+		key, err := na.mapKey(k)
 		if err != nil {
 			return Null(), err
 		}

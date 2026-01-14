@@ -7,13 +7,13 @@ import (
 
 func mkEncObj() *objMap {
 	hx := mkObj("encoding.hex", map[string]NativeFunc{
-		"encode": stdlibHexEnc,
-		"decode": stdlibHexDec,
+		"encode": encodingHexEncode,
+		"decode": encodingHexDecode,
 	})
 
 	bu := mkObj("encoding.base64url", map[string]NativeFunc{
-		"encode": stdlibB64URLEnc,
-		"decode": stdlibB64URLDec,
+		"encode": encodingBase64urlEncode,
+		"decode": encodingBase64urlDecode,
 	})
 
 	return &objMap{
@@ -25,26 +25,26 @@ func mkEncObj() *objMap {
 	}
 }
 
-func stdlibHexEnc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "encoding.hex.encode(text)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+func encodingHexEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "encoding.hex.encode(text)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], sig)
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 	return hexVal(ctx, pos, []byte(s))
 }
 
-func stdlibHexDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "encoding.hex.decode(text)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+func encodingHexDecode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "encoding.hex.decode(text)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], sig)
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -61,13 +61,13 @@ func stdlibHexDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(res), nil
 }
 
-func stdlibB64URLEnc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "encoding.base64url.encode(text)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+func encodingBase64urlEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "encoding.base64url.encode(text)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], sig)
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -79,13 +79,13 @@ func stdlibB64URLEnc(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return Str(out), nil
 }
 
-func stdlibB64URLDec(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "encoding.base64url.decode(text)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+func encodingBase64urlDecode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "encoding.base64url.decode(text)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], sig)
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}

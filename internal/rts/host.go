@@ -204,7 +204,7 @@ func (o *respObj) jsonFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		path = p
 	}
 
-	val, ok := jsonGet(o.jv, path)
+	val, ok := jsonPathGet(o.jv, path)
 	if !ok {
 		return Null(), nil
 	}

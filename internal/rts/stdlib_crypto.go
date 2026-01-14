@@ -6,13 +6,18 @@ import (
 	"encoding/hex"
 )
 
-func stdlibSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "crypto.sha256(text)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+var cryptoSpec = nsSpec{name: "crypto", top: true, fns: map[string]NativeFunc{
+	"sha256":     cryptoSHA256,
+	"hmacSha256": cryptoHMACSHA256,
+}}
+
+func cryptoSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "crypto.sha256(text)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
-	s, err := strArg(ctx, pos, args[0], sig)
+	s, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -21,18 +26,18 @@ func stdlibSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return hexVal(ctx, pos, sum[:])
 }
 
-func stdlibHMACSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "crypto.hmacSha256(key, text)"
-	if err := argCount(ctx, pos, args, 2, sig); err != nil {
+func cryptoHMACSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "crypto.hmacSha256(key, text)")
+	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	key, err := strArg(ctx, pos, args[0], sig)
+	key, err := na.str(0)
 	if err != nil {
 		return Null(), err
 	}
 
-	msg, err := strArg(ctx, pos, args[1], sig)
+	msg, err := na.str(1)
 	if err != nil {
 		return Null(), err
 	}

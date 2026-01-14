@@ -131,9 +131,13 @@ func TestStdlibTypes(t *testing.T) {
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected bool default")
 	}
+	v = evalExprCtx(t, ctx, "typeof(rts)")
+	if v.K != VStr || v.S != "rts" {
+		t.Fatalf("expected typeof rts")
+	}
 	v = evalExprCtx(t, ctx, "typeof(stdlib)")
 	if v.K != VStr || v.S != "stdlib" {
-		t.Fatalf("expected typeof stdlib")
+		t.Fatalf("expected typeof stdlib alias")
 	}
 }
 
@@ -281,87 +285,87 @@ func TestStdlibQueryHelpers(t *testing.T) {
 
 func TestStdlibTextHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	v := evalExprCtx(t, ctx, "stdlib.text.lower(\"AbC\")")
+	v := evalExprCtx(t, ctx, "rts.text.lower(\"AbC\")")
 	if v.K != VStr || v.S != "abc" {
 		t.Fatalf("expected lower abc")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.upper(\"AbC\")")
+	v = evalExprCtx(t, ctx, "rts.text.upper(\"AbC\")")
 	if v.K != VStr || v.S != "ABC" {
 		t.Fatalf("expected upper ABC")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.trim(\"  a \\t\")")
+	v = evalExprCtx(t, ctx, "rts.text.trim(\"  a \\t\")")
 	if v.K != VStr || v.S != "a" {
 		t.Fatalf("expected trim a")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.split(\"a,b\", \",\")[1]")
+	v = evalExprCtx(t, ctx, "rts.text.split(\"a,b\", \",\")[1]")
 	if v.K != VStr || v.S != "b" {
 		t.Fatalf("expected split b")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.join([\"a\",\"b\"], \"-\")")
+	v = evalExprCtx(t, ctx, "rts.text.join([\"a\",\"b\"], \"-\")")
 	if v.K != VStr || v.S != "a-b" {
 		t.Fatalf("expected join a-b")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.replace(\"a-b\", \"-\", \":\")")
+	v = evalExprCtx(t, ctx, "rts.text.replace(\"a-b\", \"-\", \":\")")
 	if v.K != VStr || v.S != "a:b" {
 		t.Fatalf("expected replace a:b")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.startsWith(\"hello\", \"he\")")
+	v = evalExprCtx(t, ctx, "rts.text.startsWith(\"hello\", \"he\")")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected startsWith true")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.text.endsWith(\"hello\", \"lo\")")
+	v = evalExprCtx(t, ctx, "rts.text.endsWith(\"hello\", \"lo\")")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected endsWith true")
 	}
 	v = evalExprCtx(t, ctx, "stdlib.text.lower(\"XY\")")
 	if v.K != VStr || v.S != "xy" {
-		t.Fatalf("expected stdlib text lower")
+		t.Fatalf("expected stdlib alias text lower")
 	}
 }
 
 func TestStdlibListDictHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	v := evalExprCtx(t, ctx, "stdlib.list.append([1,2], 3)[2]")
+	v := evalExprCtx(t, ctx, "rts.list.append([1,2], 3)[2]")
 	if v.K != VNum || v.N != 3 {
 		t.Fatalf("expected list.append to add 3")
 	}
-	v = evalExprCtx(t, ctx, "len(stdlib.list.concat([1], [2,3]))")
+	v = evalExprCtx(t, ctx, "len(rts.list.concat([1], [2,3]))")
 	if v.K != VNum || v.N != 3 {
 		t.Fatalf("expected list.concat length 3")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.list.sort([3,1,2])[0]")
+	v = evalExprCtx(t, ctx, "rts.list.sort([3,1,2])[0]")
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected list.sort numbers")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.list.sort([\"b\",\"a\"])[0]")
+	v = evalExprCtx(t, ctx, "rts.list.sort([\"b\",\"a\"])[0]")
 	if v.K != VStr || v.S != "a" {
 		t.Fatalf("expected list.sort strings")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.keys({b:1, a:2})[0]")
+	v = evalExprCtx(t, ctx, "rts.dict.keys({b:1, a:2})[0]")
 	if v.K != VStr || v.S != "a" {
 		t.Fatalf("expected dict.keys sorted")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.values({b:1, a:2})[0]")
+	v = evalExprCtx(t, ctx, "rts.dict.values({b:1, a:2})[0]")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected dict.values sorted")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.items({a:1})[0].key")
+	v = evalExprCtx(t, ctx, "rts.dict.items({a:1})[0].key")
 	if v.K != VStr || v.S != "a" {
 		t.Fatalf("expected dict.items key")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.items({a:1})[0].value")
+	v = evalExprCtx(t, ctx, "rts.dict.items({a:1})[0].value")
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected dict.items value")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.set({a:1}, \"b\", 2).b")
+	v = evalExprCtx(t, ctx, "rts.dict.set({a:1}, \"b\", 2).b")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected dict.set b=2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.merge({a:1}, {a:2, b:3}).a")
+	v = evalExprCtx(t, ctx, "rts.dict.merge({a:1}, {a:2, b:3}).a")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected dict.merge to override")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.remove({a:1,b:2}, \"a\").a")
+	v = evalExprCtx(t, ctx, "rts.dict.remove({a:1,b:2}, \"a\").a")
 	if v.K != VNull {
 		t.Fatalf("expected dict.remove to drop key")
 	}
@@ -370,67 +374,67 @@ func TestStdlibListDictHelpers(t *testing.T) {
 func TestStdlibListDictExtras(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	mod := "fn add1(x) { return x + 1 }\nfn even(x) { return x % 2 == 0 }\nfn gt3(x) { return x > 3 }\n"
-	v := evalExprMod(t, ctx, mod, "stdlib.list.map([1,2], add1)[1]")
+	v := evalExprMod(t, ctx, mod, "rts.list.map([1,2], add1)[1]")
 	if v.K != VNum || v.N != 3 {
 		t.Fatalf("expected list.map")
 	}
-	v = evalExprMod(t, ctx, mod, "len(stdlib.list.filter([1,2,3,4], even))")
+	v = evalExprMod(t, ctx, mod, "len(rts.list.filter([1,2,3,4], even))")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected list.filter length 2")
 	}
-	v = evalExprMod(t, ctx, mod, "stdlib.list.any([1,2,3,4], gt3)")
+	v = evalExprMod(t, ctx, mod, "rts.list.any([1,2,3,4], gt3)")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected list.any true")
 	}
-	v = evalExprMod(t, ctx, mod, "stdlib.list.any([], gt3)")
+	v = evalExprMod(t, ctx, mod, "rts.list.any([], gt3)")
 	if v.K != VBool || v.B != false {
 		t.Fatalf("expected list.any empty false")
 	}
-	v = evalExprMod(t, ctx, mod, "stdlib.list.all([2,4], even)")
+	v = evalExprMod(t, ctx, mod, "rts.list.all([2,4], even)")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected list.all true")
 	}
-	v = evalExprMod(t, ctx, mod, "stdlib.list.all([], even)")
+	v = evalExprMod(t, ctx, mod, "rts.list.all([], even)")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected list.all empty true")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.list.slice([1,2,3,4], 1, 3)[0]")
+	v = evalExprCtx(t, ctx, "rts.list.slice([1,2,3,4], 1, 3)[0]")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected list.slice 2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.list.slice([1,2,3,4], -2)[0]")
+	v = evalExprCtx(t, ctx, "rts.list.slice([1,2,3,4], -2)[0]")
 	if v.K != VNum || v.N != 3 {
 		t.Fatalf("expected list.slice -2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.list.unique([1,1,2,1])[1]")
+	v = evalExprCtx(t, ctx, "rts.list.unique([1,1,2,1])[1]")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected list.unique")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.get({a:1}, \"a\")")
+	v = evalExprCtx(t, ctx, "rts.dict.get({a:1}, \"a\")")
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected dict.get a")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.get({a:1}, \"b\", 2)")
+	v = evalExprCtx(t, ctx, "rts.dict.get({a:1}, \"b\", 2)")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected dict.get default")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.has({a:1}, \"a\")")
+	v = evalExprCtx(t, ctx, "rts.dict.has({a:1}, \"a\")")
 	if v.K != VBool || v.B != true {
 		t.Fatalf("expected dict.has true")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.pick({a:1,b:2,c:3}, [\"a\",\"c\"]).b")
+	v = evalExprCtx(t, ctx, "rts.dict.pick({a:1,b:2,c:3}, [\"a\",\"c\"]).b")
 	if v.K != VNull {
 		t.Fatalf("expected dict.pick b null")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.pick({a:1}, \"a\").a")
+	v = evalExprCtx(t, ctx, "rts.dict.pick({a:1}, \"a\").a")
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected dict.pick string key")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.omit({a:1,b:2,c:3}, [\"b\",\"c\"]).a")
+	v = evalExprCtx(t, ctx, "rts.dict.omit({a:1,b:2,c:3}, [\"b\",\"c\"]).a")
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected dict.omit a")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.dict.omit({a:1,b:2,c:3}, [\"b\",\"c\"]).b")
+	v = evalExprCtx(t, ctx, "rts.dict.omit({a:1,b:2,c:3}, [\"b\",\"c\"]).b")
 	if v.K != VNull {
 		t.Fatalf("expected dict.omit b null")
 	}
@@ -438,35 +442,35 @@ func TestStdlibListDictExtras(t *testing.T) {
 
 func TestStdlibMathHelpers(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	v := evalExprCtx(t, ctx, "stdlib.math.abs(-2)")
+	v := evalExprCtx(t, ctx, "rts.math.abs(-2)")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected math.abs 2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.min(2, -1)")
+	v = evalExprCtx(t, ctx, "rts.math.min(2, -1)")
 	if v.K != VNum || v.N != -1 {
 		t.Fatalf("expected math.min -1")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.max(2, -1)")
+	v = evalExprCtx(t, ctx, "rts.math.max(2, -1)")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected math.max 2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.clamp(5, 1, 3)")
+	v = evalExprCtx(t, ctx, "rts.math.clamp(5, 1, 3)")
 	if v.K != VNum || v.N != 3 {
 		t.Fatalf("expected math.clamp high 3")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.clamp(2, 1, 3)")
+	v = evalExprCtx(t, ctx, "rts.math.clamp(2, 1, 3)")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected math.clamp mid 2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.floor(1.8)")
+	v = evalExprCtx(t, ctx, "rts.math.floor(1.8)")
 	if v.K != VNum || v.N != 1 {
 		t.Fatalf("expected math.floor 1")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.ceil(1.2)")
+	v = evalExprCtx(t, ctx, "rts.math.ceil(1.2)")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected math.ceil 2")
 	}
-	v = evalExprCtx(t, ctx, "stdlib.math.round(1.5)")
+	v = evalExprCtx(t, ctx, "rts.math.round(1.5)")
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected math.round 2")
 	}

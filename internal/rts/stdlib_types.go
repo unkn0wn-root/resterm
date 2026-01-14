@@ -6,24 +6,24 @@ import (
 	"strings"
 )
 
-func stdlibNum(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func coreNum(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return conv(ctx, pos, args, "num(x[, def])", "expects number/string/bool", numTry, Num)
 }
 
-func stdlibInt(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func coreInt(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return conv(ctx, pos, args, "int(x[, def])", "expects int/string/bool", intTry, Num)
 }
 
-func stdlibBool(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+func coreBool(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return conv(ctx, pos, args, "bool(x[, def])", "expects bool/number/string", boolTry, Bool)
 }
 
-func stdlibTypeof(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	sig := "typeof(x)"
-	if err := argCount(ctx, pos, args, 1, sig); err != nil {
+func coreTypeof(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "typeof(x)")
+	if err := na.count(1); err != nil {
 		return Null(), err
 	}
-	return Str(typeName(args[0])), nil
+	return Str(typeName(na.arg(0))), nil
 }
 
 type cfn[T any] func(Value) (T, bool)

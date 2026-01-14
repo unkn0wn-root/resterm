@@ -45,7 +45,7 @@ Directives evaluate expressions to decide whether a request runs or whether an a
 # @use ./rts/helpers.rts as helpers
 ```
 
-Modules are compiled once and expose only exported names through the alias. Modules execute with stdlib; when the host provides a `request` object it is available (read-only outside pre-request scripts). Modules do not automatically see `env`, `vars`, `last`, `response`, `trace`, or `stream`, so pass values into module functions explicitly.
+Modules are compiled once and expose only exported names through the alias. Modules execute with `rts`; `stdlib` remains as a deprecated alias. When the host provides a `request` object it is available (read-only outside pre-request scripts). Modules do not automatically see `env`, `vars`, `last`, `response`, `trace`, or `stream`, so pass values into module functions explicitly.
 
 4) Apply patches
 
@@ -254,105 +254,105 @@ export fn authHeader(token) {
 Authorization: {{= helpers.authHeader(vars.get("auth.token")) }}
 ```
 
-Modules run with stdlib only. The `request` object is available when the host provides it, but `env`, `vars`, `last`, `response`, `trace`, and `stream` are not. Pass values in as arguments when you need extra context.
+Modules run with `rts` only. The `request` object is available when the host provides it, but `env`, `vars`, `last`, `response`, `trace`, and `stream` are not. Pass values in as arguments when you need extra context. `stdlib` remains available as a deprecated alias.
 
-## Stdlib
+## Standard library
 
-RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The stdlib is available as `stdlib`; core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `stdlib`.
+RTS provides a small standard library that covers common request needs without enabling file writes or network access. It keeps expressions small, readable, and predictable. The standard library is available as `rts`; `stdlib` remains as a deprecated alias. Core helpers and namespaces (`crypto`, `base64`, `url`, `time`, `json`, `headers`, `query`, `encoding`) are also exposed at top level for convenience. `text`, `list`, `dict`, and `math` are available only under `rts`.
 
 ### Core helpers
 
-- `stdlib.fail(msg)` stops evaluation and returns an error message.
-- `stdlib.len(x)` returns the length of a string, list, or dict.
-- `stdlib.contains(haystack, needle)` checks whether a value is contained in a string, list, or dict.
-- `stdlib.match(pattern, text)` applies a regular expression to text and returns true when it matches.
-- `stdlib.str(x)` converts a value to a string, using JSON for lists and dicts.
-- `stdlib.default(a, b)` returns `a` unless it is null, otherwise it returns `b`.
-- `stdlib.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
-- `stdlib.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
-- `stdlib.bool(x[, def])` converts a value to a bool, or returns `def` when conversion fails.
-- `stdlib.typeof(x)` returns the type name.
-- `stdlib.uuid()` generates a UUID and requires random generation to be enabled.
+- `rts.fail(msg)` stops evaluation and returns an error message.
+- `rts.len(x)` returns the length of a string, list, or dict.
+- `rts.contains(haystack, needle)` checks whether a value is contained in a string, list, or dict.
+- `rts.match(pattern, text)` applies a regular expression to text and returns true when it matches.
+- `rts.str(x)` converts a value to a string, using JSON for lists and dicts.
+- `rts.default(a, b)` returns `a` unless it is null, otherwise it returns `b`.
+- `rts.num(x[, def])` converts a value to a number, or returns `def` when conversion fails.
+- `rts.int(x[, def])` converts a value to an integer, or returns `def` when conversion fails.
+- `rts.bool(x[, def])` converts a value to a bool, or returns `def` when conversion fails.
+- `rts.typeof(x)` returns the type name.
+- `rts.uuid()` generates a UUID and requires random generation to be enabled.
 
 ### Crypto helpers
 
-- `stdlib.crypto.sha256(text)` returns a hex encoded SHA-256 digest.
-- `stdlib.crypto.hmacSha256(key, text)` returns a hex encoded HMAC-SHA256 digest.
+- `rts.crypto.sha256(text)` returns a hex encoded SHA-256 digest.
+- `rts.crypto.hmacSha256(key, text)` returns a hex encoded HMAC-SHA256 digest.
 
 ### Encoding and URL helpers
 
-- `stdlib.base64.encode(x)` encodes a string to base64.
-- `stdlib.base64.decode(x)` decodes a base64 string.
-- `stdlib.encoding.hex.encode(x)` encodes a string to hex.
-- `stdlib.encoding.hex.decode(x)` decodes a hex string.
-- `stdlib.encoding.base64url.encode(x)` encodes a string to base64url (no padding).
-- `stdlib.encoding.base64url.decode(x)` decodes a base64url string.
-- `stdlib.url.encode(x)` percent encodes a string for URL use.
-- `stdlib.url.decode(x)` decodes a percent encoded string.
+- `rts.base64.encode(x)` encodes a string to base64.
+- `rts.base64.decode(x)` decodes a base64 string.
+- `rts.encoding.hex.encode(x)` encodes a string to hex.
+- `rts.encoding.hex.decode(x)` decodes a hex string.
+- `rts.encoding.base64url.encode(x)` encodes a string to base64url (no padding).
+- `rts.encoding.base64url.decode(x)` decodes a base64url string.
+- `rts.url.encode(x)` percent encodes a string for URL use.
+- `rts.url.decode(x)` decodes a percent encoded string.
 
 ### Time helpers
 
-- `stdlib.time.nowISO()` returns the current time in ISO 8601 format.
-- `stdlib.time.nowUnix()` returns the current time as unix seconds.
-- `stdlib.time.nowUnixMs()` returns the current time as unix milliseconds.
-- `stdlib.time.format(layout)` formats the current time with the given layout string.
-- `stdlib.time.parse(layout, value)` parses the time string and returns unix seconds (fractional).
-- `stdlib.time.formatUnix(ts, layout)` formats a unix timestamp with the given layout.
-- `stdlib.time.addUnix(ts, seconds)` adds seconds to a unix timestamp.
+- `rts.time.nowISO()` returns the current time in ISO 8601 format.
+- `rts.time.nowUnix()` returns the current time as unix seconds.
+- `rts.time.nowUnixMs()` returns the current time as unix milliseconds.
+- `rts.time.format(layout)` formats the current time with the given layout string.
+- `rts.time.parse(layout, value)` parses the time string and returns unix seconds (fractional).
+- `rts.time.formatUnix(ts, layout)` formats a unix timestamp with the given layout.
+- `rts.time.addUnix(ts, seconds)` adds seconds to a unix timestamp.
 
 ### JSON helpers
 
-- `stdlib.json.file(path)` reads and parses JSON using the request base directory (only when file access is enabled).
-- `stdlib.json.parse(text)` parses a JSON string into RestermScript values.
-- `stdlib.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
-- `stdlib.json.get(value[, path])` returns the value at a dot or `[index]` path (optional leading `$`) and returns null when missing.
-- `stdlib.json.has(value, path)` returns true when a value exists at the path.
+- `rts.json.file(path)` reads and parses JSON using the request base directory (only when file access is enabled).
+- `rts.json.parse(text)` parses a JSON string into RestermScript values.
+- `rts.json.stringify(value[, indent])` converts a value to JSON text. `indent` can be a string or a number (0-32).
+- `rts.json.get(value[, path])` returns the value at a dot or `[index]` path (optional leading `$`) and returns null when missing.
+- `rts.json.has(value, path)` returns true when a value exists at the path.
 
 ### Text helpers
 
-- `stdlib.text.lower(s)` returns a lowercased string.
-- `stdlib.text.upper(s)` returns an uppercased string.
-- `stdlib.text.trim(s)` trims leading and trailing whitespace.
-- `stdlib.text.split(s, sep)` splits a string into a list.
-- `stdlib.text.join(list, sep)` joins list items with a separator (items may be strings, numbers, or bools).
-- `stdlib.text.replace(s, old, new)` replaces all occurrences of `old` with `new`.
-- `stdlib.text.startsWith(s, prefix)` returns true when a string starts with `prefix`.
-- `stdlib.text.endsWith(s, suffix)` returns true when a string ends with `suffix`.
+- `rts.text.lower(s)` returns a lowercased string.
+- `rts.text.upper(s)` returns an uppercased string.
+- `rts.text.trim(s)` trims leading and trailing whitespace.
+- `rts.text.split(s, sep)` splits a string into a list.
+- `rts.text.join(list, sep)` joins list items with a separator (items may be strings, numbers, or bools).
+- `rts.text.replace(s, old, new)` replaces all occurrences of `old` with `new`.
+- `rts.text.startsWith(s, prefix)` returns true when a string starts with `prefix`.
+- `rts.text.endsWith(s, suffix)` returns true when a string ends with `suffix`.
 
 ### List helpers
 
-- `stdlib.list.append(list, item)` returns a new list with `item` appended.
-- `stdlib.list.concat(a, b)` returns a new list with `b` appended to `a`.
-- `stdlib.list.sort(list)` returns a sorted copy (numbers or strings only).
-- `stdlib.list.map(list, fn)` returns a new list with `fn(item)` applied to each value.
-- `stdlib.list.filter(list, fn)` returns a new list of values where `fn(item)` is truthy.
-- `stdlib.list.any(list, fn)` returns true if any value makes `fn(item)` truthy.
-- `stdlib.list.all(list, fn)` returns true if all values make `fn(item)` truthy.
-- `stdlib.list.slice(list, start[, end])` returns a slice of the list.
-- `stdlib.list.unique(list)` returns a list of unique primitive values.
+- `rts.list.append(list, item)` returns a new list with `item` appended.
+- `rts.list.concat(a, b)` returns a new list with `b` appended to `a`.
+- `rts.list.sort(list)` returns a sorted copy (numbers or strings only).
+- `rts.list.map(list, fn)` returns a new list with `fn(item)` applied to each value.
+- `rts.list.filter(list, fn)` returns a new list of values where `fn(item)` is truthy.
+- `rts.list.any(list, fn)` returns true if any value makes `fn(item)` truthy.
+- `rts.list.all(list, fn)` returns true if all values make `fn(item)` truthy.
+- `rts.list.slice(list, start[, end])` returns a slice of the list.
+- `rts.list.unique(list)` returns a list of unique primitive values.
 
 ### Dict helpers
 
-- `stdlib.dict.keys(dict)` returns a sorted list of keys.
-- `stdlib.dict.values(dict)` returns values ordered by sorted keys.
-- `stdlib.dict.items(dict)` returns a list of `{key, value}` entries ordered by key.
-- `stdlib.dict.set(dict, key, value)` returns a new dict with `key` set.
-- `stdlib.dict.merge(a, b)` returns a new dict with `b` applied over `a`.
-- `stdlib.dict.remove(dict, key)` returns a new dict without `key`.
-- `stdlib.dict.get(dict, key[, def])` returns `def` or null when missing.
-- `stdlib.dict.has(dict, key)` returns true when a key exists.
-- `stdlib.dict.pick(dict, keys)` returns a dict with the specified keys.
-- `stdlib.dict.omit(dict, keys)` returns a dict without the specified keys.
+- `rts.dict.keys(dict)` returns a sorted list of keys.
+- `rts.dict.values(dict)` returns values ordered by sorted keys.
+- `rts.dict.items(dict)` returns a list of `{key, value}` entries ordered by key.
+- `rts.dict.set(dict, key, value)` returns a new dict with `key` set.
+- `rts.dict.merge(a, b)` returns a new dict with `b` applied over `a`.
+- `rts.dict.remove(dict, key)` returns a new dict without `key`.
+- `rts.dict.get(dict, key[, def])` returns `def` or null when missing.
+- `rts.dict.has(dict, key)` returns true when a key exists.
+- `rts.dict.pick(dict, keys)` returns a dict with the specified keys.
+- `rts.dict.omit(dict, keys)` returns a dict without the specified keys.
 
 ### Math helpers
 
-- `stdlib.math.abs(x)` returns the absolute value.
-- `stdlib.math.min(a, b)` returns the smaller value.
-- `stdlib.math.max(a, b)` returns the larger value.
-- `stdlib.math.clamp(x, min, max)` clamps `x` into the range.
-- `stdlib.math.floor(x)` returns the largest integer <= x.
-- `stdlib.math.ceil(x)` returns the smallest integer >= x.
-- `stdlib.math.round(x)` rounds to the nearest integer (half away from zero).
+- `rts.math.abs(x)` returns the absolute value.
+- `rts.math.min(a, b)` returns the smaller value.
+- `rts.math.max(a, b)` returns the larger value.
+- `rts.math.clamp(x, min, max)` clamps `x` into the range.
+- `rts.math.floor(x)` returns the largest integer <= x.
+- `rts.math.ceil(x)` returns the smallest integer >= x.
+- `rts.math.round(x)` rounds to the nearest integer (half away from zero).
 
 ## Host objects for request evaluation
 
