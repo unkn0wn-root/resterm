@@ -67,11 +67,7 @@ func (s *latencySeries) render() string {
 	}
 
 	min, max := s.bounds()
-	width := latWidth(s.cap, len(s.vals))
 	bars := sparkline(s.vals, min, max)
-	if pad := width - len(s.vals); pad > 0 {
-		bars = latFill(pad) + bars
-	}
 	v, _ := s.last()
 	rounded := v.Round(time.Millisecond)
 	if rounded <= 0 {
@@ -166,24 +162,6 @@ func latPlaceholder(n int) string {
 		n = 1
 	}
 	return latFill(n) + " ms"
-}
-
-func latWidth(capacity, count int) int {
-	if capacity < 1 {
-		capacity = 1
-	}
-	if count < 0 {
-		count = 0
-	}
-
-	width := count
-	if width < latPlaceholderBars {
-		width = latPlaceholderBars
-	}
-	if width > capacity {
-		width = capacity
-	}
-	return width
 }
 
 func latClamp(lo, hi time.Duration, n int) (time.Duration, time.Duration) {

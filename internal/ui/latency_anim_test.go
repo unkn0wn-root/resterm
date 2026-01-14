@@ -3,55 +3,47 @@ package ui
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestLatencyAnimTextFinal(t *testing.T) {
-	got := latencyAnimText(latAnimTotalDuration-time.Millisecond, latCap)
-	if got != latencyPlaceholder {
-		t.Fatalf("expected placeholder, got %q", got)
-	}
-	got = latencyAnimText(latAnimTotalDuration, latCap)
-	if got != latencyPlaceholder {
-		t.Fatalf("expected placeholder, got %q", got)
+	got := latencyAnimText(latAnimTotal(), latCap)
+	if got != "" {
+		t.Fatalf("expected empty, got %q", got)
 	}
 }
 
-func TestLatencyAnimTextShape(t *testing.T) {
+func TestLatencyAnimTextBurst(t *testing.T) {
 	got := latencyAnimText(0, latCap)
 	bars, val := splitAnim(t, got)
-	if n := len([]rune(bars)); n != latCap {
-		t.Fatalf("expected %d bars, got %d (%q)", latCap, n, bars)
+	if n := len([]rune(bars)); n != len(latAnimSeq(0)) {
+		t.Fatalf("expected %d bars, got %d (%q)", len(latAnimSeq(0)), n, bars)
 	}
 	if !latAnimHasUnit(val) {
 		t.Fatalf("expected duration suffix, got %q", val)
 	}
 }
 
-func TestLatencyAnimTextFade(t *testing.T) {
-	mid := latAnimDuration + latAnimFadeDuration/2
-	got := latencyAnimText(mid, latCap)
-	if got == "" {
-		t.Fatalf("expected fade text, got empty")
-	}
-	bars, val := splitAnim(t, got)
-	if n := len([]rune(bars)); n != latCap {
-		t.Fatalf("expected %d bars, got %d (%q)", latCap, n, bars)
-	}
+func TestLatencyAnimTextCollapse(t *testing.T) {
+	start := latAnimColStart()
+	base := latencyAnimText(start, latCap)
+	bars, val := splitAnim(t, base)
 	if !latAnimHasUnit(val) {
 		t.Fatalf("expected duration suffix, got %q", val)
 	}
-}
 
-func TestLatencyAnimTextDown(t *testing.T) {
-	el := latAnimFadeEnd + latAnimPlaceDuration/2
-	got := latencyAnimText(el, latCap)
-	bars, val := splitAnim(t, got)
-	if n := len([]rune(bars)); n >= latCap || n < latPlaceholderBars {
-		t.Fatalf("expected bars shrink, got %d (%q)", n, bars)
+	mid := latencyAnimText(start+latAnimCol/2, latCap)
+	midBars, midVal := splitAnim(t, mid)
+	if !latAnimHasUnit(midVal) {
+		t.Fatalf("expected duration suffix, got %q", midVal)
 	}
-	if !strings.HasSuffix(val, "ms") {
-		t.Fatalf("expected ms suffix, got %q", val)
+	if midBars == "" {
+		t.Fatalf("expected bars during collapse, got empty")
+	}
+	if midBars == bars {
+		t.Fatalf("expected bars to collapse, got %q", midBars)
+	}
+	if n := len([]rune(midBars)); n != len([]rune(bars)) {
+		t.Fatalf("expected collapse to keep width, got %d", n)
 	}
 }
 
