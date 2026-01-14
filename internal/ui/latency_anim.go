@@ -3,33 +3,33 @@ package ui
 import (
 	"fmt"
 	"math"
-	"strings"
+	"math/rand"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 )
 
 const (
-	latAnimDuration      = 2400 * time.Millisecond
-	latAnimFadeDuration  = 600 * time.Millisecond
-	latAnimPlaceDuration = 450 * time.Millisecond
-	latAnimFadeEnd       = latAnimDuration + latAnimFadeDuration
-	latAnimTotalDuration = latAnimFadeEnd + latAnimPlaceDuration
-	latAnimTickFast      = 70 * time.Millisecond
-	latAnimTickSlow      = 110 * time.Millisecond
-	latAnimStartHz       = 1.4
-	latAnimEndHz         = 0.95
-	latAnimBaseHi        = 0.6
-	latAnimBaseLo        = 0.0
-	latAnimHiDur         = 3200 * time.Millisecond
-	latAnimMidDur        = 1800 * time.Millisecond
-	latAnimLoDur         = 380 * time.Millisecond
-	latAnimMinDur        = 120 * time.Millisecond
-	latAnimJitHi         = 0.45
-	latAnimJitMid        = 0.22
-	latAnimJitLo         = 0.1
-	latAnimJitMin        = 0.04
+	latAnimHold = 280 * time.Millisecond
+	latAnimCol  = 420 * time.Millisecond
+	latAnimTick = 45 * time.Millisecond
+	latAnimHi   = 700 * time.Millisecond
+	latAnimLo   = 280 * time.Millisecond
+	latAnimJit  = 1.0
 )
+
+var latAnimSteps = []time.Duration{
+	0,
+	120 * time.Millisecond,
+	220 * time.Millisecond,
+	200 * time.Millisecond,
+	200 * time.Millisecond,
+	200 * time.Millisecond,
+	200 * time.Millisecond,
+	200 * time.Millisecond,
+}
+
+var latAnimVals = latAnimRand(len(latAnimSteps), latAnimHi, latAnimLo)
 
 func (m *Model) initLatencyAnim() {
 	m.latAnimOn = true
@@ -60,7 +60,7 @@ func (m Model) latencyText() string {
 	if m.latAnimOn {
 		return latencyAnimText(time.Since(m.latAnimStart), s.cap)
 	}
-	return latencyPlaceholder
+	return ""
 }
 
 func (m Model) latencyAnimTickCmd() tea.Cmd {
@@ -71,14 +71,13 @@ func (m Model) latencyAnimTickCmd() tea.Cmd {
 
 	el := time.Since(m.latAnimStart)
 	seq := m.latAnimSeq
-	if el >= latAnimTotalDuration {
+	if el >= latAnimTotal() {
 		return func() tea.Msg {
 			return latencyAnimMsg{seq: seq}
 		}
 	}
 
-	d := latAnimTick(el)
-	return tea.Tick(d, func(time.Time) tea.Msg {
+	return tea.Tick(latAnimTick, func(time.Time) tea.Msg {
 		return latencyAnimMsg{seq: seq}
 	})
 }
@@ -96,7 +95,7 @@ func (m *Model) handleLatencyAnim(msg latencyAnimMsg) tea.Cmd {
 	}
 
 	el := time.Since(m.latAnimStart)
-	if el >= latAnimTotalDuration {
+	if el >= latAnimTotal() {
 		m.stopLatencyAnim()
 		return nil
 	}
@@ -107,126 +106,139 @@ func latencyAnimText(el time.Duration, max int) string {
 	if max < 1 {
 		max = latPlaceholderBars
 	}
-	if el >= latAnimTotalDuration {
-		if max > latPlaceholderBars {
-			max = latPlaceholderBars
+	if el >= latAnimTotal() {
+		return ""
+	}
+
+	vals := latAnimSeq(el)
+	if len(vals) == 0 {
+		return ""
+	}
+
+	w := min(max, len(vals))
+	bars := latAnimBars(vals, w)
+	last := vals[len(vals)-1]
+	lab := latAnimFmt(last)
+
+	p := 0.0
+	start := latAnimColStart()
+	if el > start {
+		if latAnimCol <= 0 || el >= start+latAnimCol {
+			p = 1
+		} else {
+			p = float64(el-start) / float64(latAnimCol)
 		}
-		return latPlaceholder(max)
 	}
-	if el >= latAnimFadeEnd {
-		return latAnimPlaceText(el, max)
-	}
-	p := latAnimProgress(el)
-	amp := latAnimAmp(el)
-	hz := latAnimHz(p)
-	base := latAnimBase(p)
-	out := latAnimWave(el, max, amp, hz, base)
-	val := latAnimVal(el, hz)
-	return string(out) + " " + val
-}
 
-func latAnimWave(el time.Duration, max int, amp, hz, base float64) []rune {
-	ph := latAnimPhase(el, hz)
-	out := make([]rune, max)
-	for i := 0; i < max; i++ {
-		v := math.Sin(ph + float64(i)*1.35)
-		if v < 0 {
-			v = -v
+	if p > 0 {
+		bars = latAnimColBars(bars, p)
+		if bars == "" {
+			return ""
 		}
-		v = base + (1-base)*v
-		v *= amp
-		out[i] = latencyLevels[latAnimLevelIdx(v)]
 	}
-	return out
+	return bars + " " + lab
 }
 
-func latAnimLevelIdx(v float64) int {
-	if v < 0 {
-		v = 0
+func latAnimSeq(el time.Duration) []time.Duration {
+	n := min(len(latAnimVals), len(latAnimSteps))
+	if n <= 0 {
+		return nil
 	}
-	if v > 1 {
-		v = 1
+
+	count := 1
+	if el > 0 {
+		var t time.Duration
+		for i := 1; i < n; i++ {
+			t += latAnimSteps[i]
+			if el < t {
+				break
+			}
+			count = i + 1
+		}
 	}
-	idx := int(v*float64(len(latencyLevels)-1) + 0.5)
-	if idx < 0 {
-		return 0
-	}
-	if idx >= len(latencyLevels) {
-		return len(latencyLevels) - 1
-	}
-	return idx
+	return latAnimVals[:count]
 }
 
-func latAnimAmp(el time.Duration) float64 {
-	return latAnimLerp(1, 0, latAnimOutP(el))
+func latAnimBars(vals []time.Duration, max int) string {
+	if len(vals) == 0 || max <= 0 {
+		return ""
+	}
+	if max < len(vals) {
+		vals = vals[len(vals)-max:]
+	}
+
+	hi := vals[0]
+	for _, v := range vals[1:] {
+		if v > hi {
+			hi = v
+		}
+	}
+	if hi <= 0 {
+		hi = time.Millisecond
+	}
+
+	bars := sparkline(vals, 0, hi)
+	if pad := max - len(vals); pad > 0 {
+		bars = latFill(pad) + bars
+	}
+	return bars
 }
 
-func latAnimVal(el time.Duration, hz float64) string {
-	d := latAnimDur(el, hz)
-	return latAnimFmt(d)
-}
+func latAnimColBars(bars string, p float64) string {
+	if p <= 0 {
+		return bars
+	}
+	if p >= 1 {
+		return ""
+	}
 
-func latAnimDur(el time.Duration, hz float64) time.Duration {
-	b := latAnimBaseDur(el)
-	j := latAnimJit(el, hz)
-	v := time.Duration(float64(b) * j)
-	if v < latAnimMinDur {
-		return latAnimMinDur
+	rs := []rune(bars)
+	if len(rs) == 0 {
+		return ""
 	}
-	return v
-}
+	p = 0.5 - 0.5*math.Cos(math.Pi*p)
+	if p <= 0 {
+		return bars
+	}
 
-func latAnimBaseDur(el time.Duration) time.Duration {
-	p := latAnimProgress(el)
-	wn, ok := latAnimThresholds()
-	var d time.Duration
-	if p <= wn {
-		d = latAnimLerpDur(latAnimHiDur, latAnimMidDur, latAnimNorm(p, wn))
-	} else if p <= ok {
-		d = latAnimLerpDur(latAnimMidDur, latAnimLoDur, latAnimNorm(p-wn, ok-wn))
-	} else {
-		d = latAnimLoDur
-	}
-	f := latAnimFadeP(el)
-	if f > 0 {
-		d = latAnimLerpDur(d, latAnimMinDur, f)
-	}
-	return d
-}
+	scale := 1 - p
+	for i, r := range rs {
+		idx := -1
+		for j, lvl := range latencyLevels {
+			if r == lvl {
+				idx = j
+				break
+			}
+		}
+		if idx < 0 {
+			continue
+		}
 
-func latAnimOutP(el time.Duration) float64 {
-	if el <= 0 {
-		return 0
+		n := int(math.Round(float64(idx) * scale))
+		if n < 0 {
+			n = 0
+		}
+		if n >= len(latencyLevels) {
+			n = len(latencyLevels) - 1
+		}
+		rs[i] = latencyLevels[n]
 	}
-	if el >= latAnimFadeEnd {
-		return 1
-	}
-	if latAnimFadeEnd <= 0 {
-		return 1
-	}
-	return float64(el) / float64(latAnimFadeEnd)
-}
-
-func latAnimTick(el time.Duration) time.Duration {
-	p := latAnimProgress(el)
-	wn, ok := latAnimThresholds()
-	if p <= wn {
-		return latAnimTickFast
-	}
-	if p >= ok {
-		return latAnimTickSlow
-	}
-	return latAnimLerpDur(latAnimTickFast, latAnimTickSlow, latAnimNorm(p-wn, ok-wn))
+	return string(rs)
 }
 
 func latAnimProgress(el time.Duration) float64 {
 	if el <= 0 {
 		return 0
 	}
-	if el >= latAnimDuration {
+
+	d := latAnimBurst()
+	if d <= 0 {
 		return 1
 	}
-	return float64(el) / float64(latAnimDuration)
+	if el >= d {
+		return 1
+	}
+	return float64(el) / float64(d)
 }
 
 func latAnimThresholds() (float64, float64) {
@@ -238,152 +250,61 @@ func latAnimThresholds() (float64, float64) {
 	return wn, ok
 }
 
-func latAnimFadeP(el time.Duration) float64 {
-	if el <= latAnimDuration {
+func latAnimBurst() time.Duration {
+	n := min(len(latAnimVals), len(latAnimSteps))
+	if n < 2 {
 		return 0
 	}
-	if el >= latAnimFadeEnd {
-		return 1
+
+	var total time.Duration
+	for i := 1; i < n; i++ {
+		total += latAnimSteps[i]
 	}
-	if latAnimFadeDuration <= 0 {
-		return 1
-	}
-	return float64(el-latAnimDuration) / float64(latAnimFadeDuration)
+	return total
 }
 
-func latAnimPlaceP(el time.Duration) float64 {
-	if el <= latAnimFadeEnd {
-		return 0
+func latAnimRand(n int, hi, lo time.Duration) []time.Duration {
+	if n <= 0 {
+		return nil
 	}
-	if el >= latAnimTotalDuration {
-		return 1
+	if hi < lo {
+		hi, lo = lo, hi
 	}
-	if latAnimPlaceDuration <= 0 {
-		return 1
-	}
-	return float64(el-latAnimFadeEnd) / float64(latAnimPlaceDuration)
-}
 
-func latAnimPlaceText(el time.Duration, max int) string {
-	p := latAnimPlaceP(el)
-	n := latAnimPlaceBars(max, p)
-	val := latAnimPlaceVal(el, p)
-	return latFill(n) + " " + val
-}
+	vals := make([]time.Duration, n)
+	if n == 1 {
+		vals[0] = hi
+		return vals
+	}
 
-func latAnimPlaceBars(max int, p float64) int {
-	if max < 1 {
-		return 0
+	span := hi - lo
+	if span <= 0 {
+		for i := range vals {
+			vals[i] = hi
+		}
+		return vals
 	}
-	min := latPlaceholderBars
-	if max < min {
-		min = max
-	}
-	if p <= 0 {
-		return max
-	}
-	if p >= 1 {
-		return min
-	}
-	n := latAnimLerp(float64(max), float64(min), p)
-	return int(math.Round(n))
-}
 
-func latAnimPlaceVal(el time.Duration, p float64) string {
-	val := latAnimVal(el, latAnimEndHz)
-	return latAnimTrim(val, p)
-}
-
-func latAnimTrim(val string, p float64) string {
-	if p <= 0 {
-		return val
+	vals[0] = hi
+	vals[n-1] = lo
+	st := float64(span) / float64(n-1)
+	jit := st * latAnimJit
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	hf := float64(hi)
+	lf := float64(lo)
+	for i := 1; i < n-1; i++ {
+		base := hf - st*float64(i)
+		off := (r.Float64()*2 - 1) * jit
+		v := base + off
+		if v < lf {
+			v = lf
+		}
+		if v > hf {
+			v = hf
+		}
+		vals[i] = time.Duration(v)
 	}
-	if p >= 1 {
-		return "ms"
-	}
-	if !strings.HasSuffix(val, "ms") {
-		return val
-	}
-	num := strings.TrimSuffix(val, "ms")
-	if num == "" {
-		return "ms"
-	}
-	n := len(num)
-	keep := int(math.Round(float64(n) * (1 - p)))
-	if keep <= 0 {
-		return "ms"
-	}
-	if keep >= n {
-		return val
-	}
-	return num[:keep] + "ms"
-}
-
-func latAnimHz(p float64) float64 {
-	return latAnimLerp(latAnimStartHz, latAnimEndHz, p)
-}
-
-func latAnimBase(p float64) float64 {
-	return latAnimLerp(latAnimBaseHi, latAnimBaseLo, p)
-}
-
-func latAnimLerp(a, b, p float64) float64 {
-	if p <= 0 {
-		return a
-	}
-	if p >= 1 {
-		return b
-	}
-	return a + (b-a)*p
-}
-
-func latAnimLerpDur(a, b time.Duration, p float64) time.Duration {
-	if p <= 0 {
-		return a
-	}
-	if p >= 1 {
-		return b
-	}
-	return time.Duration(float64(a) + (float64(b)-float64(a))*p)
-}
-
-func latAnimNorm(p, d float64) float64 {
-	if d <= 0 {
-		return 1
-	}
-	if p <= 0 {
-		return 0
-	}
-	return p / d
-}
-
-func latAnimJit(el time.Duration, hz float64) float64 {
-	a := latAnimJitAmp(el)
-	ph := latAnimPhase(el, hz)
-	j := 0.6*math.Sin(ph) + 0.4*math.Sin(ph*1.7+1.1)
-	return 1 + a*j
-}
-
-func latAnimJitAmp(el time.Duration) float64 {
-	p := latAnimProgress(el)
-	wn, ok := latAnimThresholds()
-	var a float64
-	if p <= wn {
-		a = latAnimJitHi
-	} else if p <= ok {
-		a = latAnimLerp(latAnimJitHi, latAnimJitMid, latAnimNorm(p-wn, ok-wn))
-	} else {
-		a = latAnimJitLo
-	}
-	f := latAnimFadeP(el)
-	if f > 0 {
-		a = latAnimLerp(a, latAnimJitMin, f)
-	}
-	return a
-}
-
-func latAnimPhase(el time.Duration, hz float64) float64 {
-	return 2 * math.Pi * hz * el.Seconds()
+	return vals
 }
 
 func latAnimFmt(d time.Duration) string {
@@ -396,4 +317,12 @@ func latAnimFmt(d time.Duration) string {
 	}
 	s := float64(d) / float64(time.Second)
 	return fmt.Sprintf("%.2fs", s)
+}
+
+func latAnimColStart() time.Duration {
+	return latAnimBurst() + latAnimHold
+}
+
+func latAnimTotal() time.Duration {
+	return latAnimColStart() + latAnimCol
 }
