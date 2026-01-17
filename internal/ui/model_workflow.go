@@ -1233,6 +1233,19 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 	return batchCmds(cmds)
 }
 
+func hasStatusExp(exp map[string]string) bool {
+	if len(exp) == 0 {
+		return false
+	}
+	if _, ok := exp["status"]; ok {
+		return true
+	}
+	if _, ok := exp["statuscode"]; ok {
+		return true
+	}
+	return false
+}
+
 func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepResult {
 	if state == nil {
 		return workflowStepResult{
@@ -1275,31 +1288,45 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 	}
 
 	status := ""
-	duration := time.Since(state.stepStart)
-	success := true
 	message := ""
+	errMsg := ""
+	success := true
+	duration := time.Since(state.stepStart)
 	httpResp := cloneHTTPResponse(msg.response)
 	grpcResp := cloneGRPCResponse(msg.grpc)
 	tests := append([]scripts.TestResult(nil), msg.tests...)
+	hasExp := hasStatusExp(step.Expect)
+	hasResp := msg.response != nil || msg.grpc != nil
+	hasErr := msg.err != nil
+	if hasErr {
+		errMsg = strings.TrimSpace(errdef.Message(msg.err))
+		if errMsg == "" {
+			errMsg = "request failed"
+		}
+	}
 
 	if msg.response != nil {
 		status = msg.response.Status
 		if msg.response.Duration > 0 {
 			duration = msg.response.Duration
 		}
-		if msg.response.StatusCode >= 400 {
+		if msg.response.StatusCode >= 400 && !hasErr && !hasExp {
 			success = false
 			message = fmt.Sprintf("unexpected status code %d", msg.response.StatusCode)
 		}
-	} else if msg.err != nil {
-		success = false
-		status = errdef.Message(msg.err)
-		message = status
 	} else if msg.grpc != nil {
 		status = msg.grpc.StatusCode.String()
 	} else {
+		if !hasErr {
+			success = false
+			message = "request failed"
+		}
+	}
+
+	if hasErr {
 		success = false
-		message = "request failed"
+		status = errMsg
+		message = errMsg
 	}
 
 	if success && msg.scriptErr != nil {
@@ -1320,29 +1347,36 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 		}
 	}
 
-	if exp, ok := step.Expect["status"]; ok {
-		expected := strings.TrimSpace(exp)
-		if strings.TrimSpace(status) == "" ||
-			!strings.EqualFold(expected, strings.TrimSpace(status)) {
-			success = false
-			if expected != "" {
-				message = fmt.Sprintf("expected status %s", expected)
+	if hasResp && !hasErr {
+		if exp, ok := step.Expect["status"]; ok {
+			expected := strings.TrimSpace(exp)
+			trimmedStatus := strings.TrimSpace(status)
+			if expected == "" {
+				success = false
+				message = "invalid expected status"
+			} else if trimmedStatus == "" ||
+				!strings.EqualFold(expected, trimmedStatus) {
+				success = false
+				if expected != "" {
+					message = fmt.Sprintf("expected status %s", expected)
+				}
 			}
 		}
-	}
-	if exp, ok := step.Expect["statuscode"]; ok {
-		expectedCode, err := strconv.Atoi(strings.TrimSpace(exp))
-		if err != nil {
-			message = fmt.Sprintf("invalid expected status code %q", exp)
-			success = false
-		} else {
-			actual := 0
-			if msg.response != nil {
-				actual = msg.response.StatusCode
-			}
-			if actual != expectedCode {
+
+		if exp, ok := step.Expect["statuscode"]; ok {
+			expectedCode, err := strconv.Atoi(strings.TrimSpace(exp))
+			if err != nil {
+				message = fmt.Sprintf("invalid expected status code %q", exp)
 				success = false
-				message = fmt.Sprintf("expected status code %d", expectedCode)
+			} else {
+				actual := 0
+				if msg.response != nil {
+					actual = msg.response.StatusCode
+				}
+				if actual != expectedCode {
+					success = false
+					message = fmt.Sprintf("expected status code %d", expectedCode)
+				}
 			}
 		}
 	}

@@ -954,7 +954,7 @@ func TestParseWorkflowDirectives(t *testing.T) {
 	src := `# @workflow provision-account on-failure=continue
 # @description Provision new account flow
 # @tag smoke regression
-# @step Authenticate using=AuthLogin expect.status="200 OK"
+# @step Authenticate using=AuthLogin expect.status="200 OK" expect.statusCode=200
 # @step CreateProfile using=CreateUser on-failure=stop vars.request.name={{vars.global.username}} expect.status="201 Created"
 # @step Audit using=AuditLog capture=global.auditId
 
@@ -996,6 +996,9 @@ GET https://example.com/audit
 	if step0.Expect["status"] != "200 OK" {
 		t.Fatalf("expected first step expect.status=200 OK, got %q", step0.Expect["status"])
 	}
+	if step0.Expect["statuscode"] != "200" {
+		t.Fatalf("expected first step expect.statuscode=200, got %q", step0.Expect["statuscode"])
+	}
 	step1 := workflow.Steps[1]
 	if step1.OnFailure != restfile.WorkflowOnFailureStop {
 		t.Fatalf("expected second step on-failure=stop, got %s", step1.OnFailure)
@@ -1019,6 +1022,57 @@ GET https://example.com/audit
 	}
 	if len(doc.Requests) != 3 {
 		t.Fatalf("expected 3 requests parsed, got %d", len(doc.Requests))
+	}
+}
+
+func TestParseWorkflowExpectErrors(t *testing.T) {
+	src := `# @workflow demo
+# @step EmptyStatus using=Req expect.status=""
+# @step EmptyCode using=Req expect.statuscode=
+# @step BadCode using=Req expect.statuscode=abc
+# @step Mixed using=Req expect.status="200 OK" expect.statuscode=200
+
+### Req
+GET https://example.com
+`
+	doc := Parse("workflow-errors.http", []byte(src))
+	if len(doc.Errors) != 3 {
+		t.Fatalf("expected 3 parse errors, got %v", doc.Errors)
+	}
+	for _, want := range []string{
+		"expect.status requires a value",
+		"expect.statuscode requires a value",
+		"expect.statuscode must be an integer",
+	} {
+		found := false
+		for _, err := range doc.Errors {
+			if strings.Contains(err.Message, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected parse error containing %q, got %v", want, doc.Errors)
+		}
+	}
+	if len(doc.Workflows) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(doc.Workflows))
+	}
+	workflow := doc.Workflows[0]
+	if len(workflow.Steps) != 4 {
+		t.Fatalf("expected 4 steps, got %d", len(workflow.Steps))
+	}
+	for i := 0; i < 3; i++ {
+		if len(workflow.Steps[i].Expect) != 0 {
+			t.Fatalf("expected step %d to have no expectations, got %v", i+1, workflow.Steps[i].Expect)
+		}
+	}
+	mixed := workflow.Steps[3]
+	if mixed.Expect["status"] != "200 OK" {
+		t.Fatalf("expected mixed step expect.status=200 OK, got %q", mixed.Expect["status"])
+	}
+	if mixed.Expect["statuscode"] != "200" {
+		t.Fatalf("expected mixed step expect.statuscode=200, got %q", mixed.Expect["statuscode"])
 	}
 }
 

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -31,27 +32,98 @@ func buildWorkflowDoc() *restfile.Document {
 }
 
 func TestEvaluateWorkflowStep(t *testing.T) {
-	state := &workflowState{
-		steps: []workflowStepRuntime{
-			{step: restfile.WorkflowStep{OnFailure: restfile.WorkflowOnFailureStop}},
-		},
+	mkState := func() *workflowState {
+		return &workflowState{
+			steps: []workflowStepRuntime{
+				{step: restfile.WorkflowStep{OnFailure: restfile.WorkflowOnFailureStop}},
+			},
+		}
 	}
-	resp := responseMsg{
-		response: &httpclient.Response{
-			Status:     "200 OK",
-			StatusCode: 200,
-			Duration:   20 * time.Millisecond,
+	boom := errors.New("boom")
+	cases := []struct {
+		name string
+		exp  map[string]string
+		rsp  bool
+		code int
+		st   string
+		err  error
+		ok   bool
+		msg  string
+	}{
+		{name: "ok default", rsp: true, code: 200, st: "200 OK", ok: true},
+		{name: "fail default 400", rsp: true, code: 400, st: "400 Bad Request", ok: false},
+		{
+			name: "expect statuscode 400",
+			exp:  map[string]string{"statuscode": "400"},
+			rsp:  true,
+			code: 400,
+			st:   "400 Bad Request",
+			ok:   true,
 		},
-	}
-	result := evaluateWorkflowStep(state, resp)
-	if !result.Success {
-		t.Fatalf("expected step success, got failure: %+v", result)
+		{
+			name: "expect status 400",
+			exp:  map[string]string{"status": "400 Bad Request"},
+			rsp:  true,
+			code: 400,
+			st:   "400 Bad Request",
+			ok:   true,
+		},
+		{
+			name: "expect mismatch",
+			exp:  map[string]string{"statuscode": "500"},
+			rsp:  true,
+			code: 200,
+			st:   "200 OK",
+			ok:   false,
+		},
+		{
+			name: "expect status empty",
+			exp:  map[string]string{"status": ""},
+			rsp:  true,
+			code: 200,
+			st:   "200 OK",
+			ok:   false,
+			msg:  "invalid expected status",
+		},
+		{
+			name: "err skips expect",
+			exp:  map[string]string{"statuscode": "200"},
+			err:  boom,
+			ok:   false,
+			msg:  "boom",
+		},
+		{
+			name: "err with response",
+			exp:  map[string]string{"statuscode": "200"},
+			rsp:  true,
+			code: 200,
+			st:   "200 OK",
+			err:  boom,
+			ok:   false,
+			msg:  "boom",
+		},
 	}
 
-	state.steps[0].step.Expect = map[string]string{"statuscode": "500"}
-	failure := evaluateWorkflowStep(state, resp)
-	if failure.Success {
-		t.Fatalf("expected step failure due to status code expectation")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			st := mkState()
+			st.steps[0].step.Expect = tc.exp
+			msg := responseMsg{err: tc.err}
+			if tc.rsp {
+				msg.response = &httpclient.Response{
+					Status:     tc.st,
+					StatusCode: tc.code,
+					Duration:   20 * time.Millisecond,
+				}
+			}
+			res := evaluateWorkflowStep(st, msg)
+			if res.Success != tc.ok {
+				t.Fatalf("expected success %v, got %v: %+v", tc.ok, res.Success, res)
+			}
+			if tc.msg != "" && res.Message != tc.msg {
+				t.Fatalf("expected message %q, got %q", tc.msg, res.Message)
+			}
+		})
 	}
 }
 
