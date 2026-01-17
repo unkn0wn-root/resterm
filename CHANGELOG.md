@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.18.6](https://github.com/unkn0wn-root/resterm/compare/v0.18.5...v0.18.6) (2026-01-17)
+
+
+### Bug Fixes
+
+* validate workflow expect values ([ac0570d](https://github.com/unkn0wn-root/resterm/commit/ac0570d78dfe77b78ed2ae85eff05f65fa7d3d70))
+* workflow expect status handling ([4e12f64](https://github.com/unkn0wn-root/resterm/commit/4e12f643cc33577e78636fcb91fed940e9fb95fb))
+
 ### [0.18.5](https://github.com/unkn0wn-root/resterm/compare/v0.18.4...v0.18.5) (2026-01-14)
 
 ### [0.18.4](https://github.com/unkn0wn-root/resterm/compare/v0.18.3...v0.18.4) (2026-01-14)
