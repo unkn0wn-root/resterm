@@ -77,6 +77,15 @@ func TestEvaluateWorkflowStep(t *testing.T) {
 			ok:   false,
 		},
 		{
+			name: "expect status empty",
+			exp:  map[string]string{"status": ""},
+			rsp:  true,
+			code: 200,
+			st:   "200 OK",
+			ok:   false,
+			msg:  "invalid expected status",
+		},
+		{
 			name: "err skips expect",
 			exp:  map[string]string{"statuscode": "200"},
 			err:  boom,

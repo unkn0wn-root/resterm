@@ -1350,8 +1350,12 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 	if hasResp && !hasErr {
 		if exp, ok := step.Expect["status"]; ok {
 			expected := strings.TrimSpace(exp)
-			if strings.TrimSpace(status) == "" ||
-				!strings.EqualFold(expected, strings.TrimSpace(status)) {
+			trimmedStatus := strings.TrimSpace(status)
+			if expected == "" {
+				success = false
+				message = "invalid expected status"
+			} else if trimmedStatus == "" ||
+				!strings.EqualFold(expected, trimmedStatus) {
 				success = false
 				if expected != "" {
 					message = fmt.Sprintf("expected status %s", expected)

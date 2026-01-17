@@ -606,6 +606,7 @@ Key directives and tokens:
 - `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
 - Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
 - `expect.status` supports quoted or escaped values, so you can write `expect.status="201 Created"` alongside `expect.statuscode=201`.
+- `expect.status` / `expect.statuscode` require non-empty values, and `expect.statuscode` must be numeric.
 
 > **Tip:** Workflow assignments are expanded once when the request executes. If you need helpers such as `{{$uuid}}`, place them directly in the request/template or compute them via a pre-request script before assigning the value.
 > **Tip:** Options are parsed like CLI flags; wrap values in quotes or escape spaces (`\ `) to keep text together (e.g. `expect.status="201 Created"`).

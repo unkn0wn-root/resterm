@@ -1,10 +1,33 @@
 package parser
 
 import (
+	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
+
+type expectValidator func(raw string) error
+
+var expectValidators = map[string]expectValidator{
+	"status": func(raw string) error {
+		if strings.TrimSpace(raw) == "" {
+			return fmt.Errorf("expect.status requires a value")
+		}
+		return nil
+	},
+	"statuscode": func(raw string) error {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			return fmt.Errorf("expect.statuscode requires a value")
+		}
+		if _, err := strconv.Atoi(trimmed); err != nil {
+			return fmt.Errorf("expect.statuscode must be an integer, got %q", raw)
+		}
+		return nil
+	},
+}
 
 type workflowBuilder struct {
 	startLine      int
@@ -403,7 +426,9 @@ func (s *workflowBuilder) addStep(line int, rest string) string {
 		}
 		delete(options, "on-failure")
 	}
+	expectErr := ""
 	if len(options) > 0 {
+		var expectErrors []string
 		leftover := make(map[string]string)
 		for key, value := range options {
 			switch {
@@ -411,6 +436,12 @@ func (s *workflowBuilder) addStep(line int, rest string) string {
 				suffix := strings.TrimPrefix(key, "expect.")
 				if suffix == "" {
 					continue
+				}
+				if validate, ok := expectValidators[suffix]; ok {
+					if err := validate(value); err != nil {
+						expectErrors = append(expectErrors, err.Error())
+						continue
+					}
 				}
 				if step.Expect == nil {
 					step.Expect = make(map[string]string)
@@ -432,6 +463,9 @@ func (s *workflowBuilder) addStep(line int, rest string) string {
 		if len(leftover) > 0 {
 			step.Options = leftover
 		}
+		if len(expectErrors) > 0 {
+			expectErr = strings.Join(expectErrors, "; ")
+		}
 	}
 	if s.pendingWhen != nil {
 		step.When = s.pendingWhen
@@ -448,7 +482,7 @@ func (s *workflowBuilder) addStep(line int, rest string) string {
 	}
 	s.workflow.Steps = append(s.workflow.Steps, step)
 	s.touch(line)
-	return ""
+	return expectErr
 }
 
 func (s *workflowBuilder) build(line int) restfile.Workflow {
