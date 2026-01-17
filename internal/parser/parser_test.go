@@ -954,7 +954,7 @@ func TestParseWorkflowDirectives(t *testing.T) {
 	src := `# @workflow provision-account on-failure=continue
 # @description Provision new account flow
 # @tag smoke regression
-# @step Authenticate using=AuthLogin expect.status="200 OK"
+# @step Authenticate using=AuthLogin expect.status="200 OK" expect.statusCode=200
 # @step CreateProfile using=CreateUser on-failure=stop vars.request.name={{vars.global.username}} expect.status="201 Created"
 # @step Audit using=AuditLog capture=global.auditId
 
@@ -995,6 +995,9 @@ GET https://example.com/audit
 	}
 	if step0.Expect["status"] != "200 OK" {
 		t.Fatalf("expected first step expect.status=200 OK, got %q", step0.Expect["status"])
+	}
+	if step0.Expect["statuscode"] != "200" {
+		t.Fatalf("expected first step expect.statuscode=200, got %q", step0.Expect["statuscode"])
 	}
 	step1 := workflow.Steps[1]
 	if step1.OnFailure != restfile.WorkflowOnFailureStop {
