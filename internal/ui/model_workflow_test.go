@@ -52,11 +52,47 @@ func TestEvaluateWorkflowStep(t *testing.T) {
 	}{
 		{name: "ok default", rsp: true, code: 200, st: "200 OK", ok: true},
 		{name: "fail default 400", rsp: true, code: 400, st: "400 Bad Request", ok: false},
-		{name: "expect statuscode 400", exp: map[string]string{"statuscode": "400"}, rsp: true, code: 400, st: "400 Bad Request", ok: true},
-		{name: "expect status 400", exp: map[string]string{"status": "400 Bad Request"}, rsp: true, code: 400, st: "400 Bad Request", ok: true},
-		{name: "expect mismatch", exp: map[string]string{"statuscode": "500"}, rsp: true, code: 200, st: "200 OK", ok: false},
-		{name: "err skips expect", exp: map[string]string{"statuscode": "200"}, err: boom, ok: false, msg: "boom"},
-		{name: "err with response", exp: map[string]string{"statuscode": "200"}, rsp: true, code: 200, st: "200 OK", err: boom, ok: false, msg: "boom"},
+		{
+			name: "expect statuscode 400",
+			exp:  map[string]string{"statuscode": "400"},
+			rsp:  true,
+			code: 400,
+			st:   "400 Bad Request",
+			ok:   true,
+		},
+		{
+			name: "expect status 400",
+			exp:  map[string]string{"status": "400 Bad Request"},
+			rsp:  true,
+			code: 400,
+			st:   "400 Bad Request",
+			ok:   true,
+		},
+		{
+			name: "expect mismatch",
+			exp:  map[string]string{"statuscode": "500"},
+			rsp:  true,
+			code: 200,
+			st:   "200 OK",
+			ok:   false,
+		},
+		{
+			name: "err skips expect",
+			exp:  map[string]string{"statuscode": "200"},
+			err:  boom,
+			ok:   false,
+			msg:  "boom",
+		},
+		{
+			name: "err with response",
+			exp:  map[string]string{"statuscode": "200"},
+			rsp:  true,
+			code: 200,
+			st:   "200 OK",
+			err:  boom,
+			ok:   false,
+			msg:  "boom",
+		},
 	}
 
 	for _, tc := range cases {
