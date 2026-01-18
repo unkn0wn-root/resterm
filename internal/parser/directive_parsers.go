@@ -26,41 +26,41 @@ func parseApplySpec(rest string, line int) (restfile.ApplySpec, bool) {
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
 	f := splitAuthFields(rest)
-	if len(f) == 0 {
+	n := len(f)
+	switch n {
+	case 0:
 		return restfile.UseSpec{}, fmt.Errorf("@use requires a path")
-	}
-	if len(f) == 1 {
+	case 1:
 		p := strings.TrimSpace(f[0])
 		if p == "" {
 			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path")
 		}
 		return restfile.UseSpec{Path: p, Line: line}, nil
-	}
-	if len(f) == 2 {
+	case 2:
 		if strings.EqualFold(f[1], "as") {
 			return restfile.UseSpec{}, fmt.Errorf("@use requires an alias after 'as'")
 		}
 		return restfile.UseSpec{}, fmt.Errorf("@use must be '<path>' or '<path> as <alias>'")
-	}
-	if len(f) > 3 {
+	case 3:
+		if !strings.EqualFold(f[1], "as") {
+			return restfile.UseSpec{}, fmt.Errorf("@use must use 'as' to define an alias")
+		}
+		p := strings.TrimSpace(f[0])
+		a := strings.TrimSpace(f[2])
+		if p == "" || a == "" {
+			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
+		}
+		if !isIdent(a) {
+			return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", a)
+		}
+		return restfile.UseSpec{
+			Path:  p,
+			Alias: a,
+			Line:  line,
+		}, nil
+	default:
 		return restfile.UseSpec{}, fmt.Errorf("@use has too many tokens")
 	}
-	if !strings.EqualFold(f[1], "as") {
-		return restfile.UseSpec{}, fmt.Errorf("@use must use 'as' to define an alias")
-	}
-	p := strings.TrimSpace(f[0])
-	a := strings.TrimSpace(f[2])
-	if p == "" || a == "" {
-		return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
-	}
-	if !isIdent(a) {
-		return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", a)
-	}
-	return restfile.UseSpec{
-		Path:  p,
-		Alias: a,
-		Line:  line,
-	}, nil
 }
 
 func parseConditionSpec(rest string, line int, negate bool) (*restfile.ConditionSpec, error) {
