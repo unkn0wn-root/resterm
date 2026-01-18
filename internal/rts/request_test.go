@@ -166,3 +166,23 @@ func TestModuleAliasMissingName(t *testing.T) {
 		t.Fatalf("expected missing module name error, got %v", err)
 	}
 }
+
+func TestModuleAliasModuleNotFirst(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "mod.rts")
+	src := []byte("let x = 1\nmodule mod\nexport let y = 2\n")
+	if err := os.WriteFile(p, src, 0o644); err != nil {
+		t.Fatalf("write module: %v", err)
+	}
+	e := NewEng()
+	rt := RT{
+		Env:     map[string]string{},
+		Vars:    map[string]string{},
+		BaseDir: dir,
+		Uses:    []Use{{Path: "mod.rts"}},
+	}
+	_, err := e.Eval(context.Background(), rt, "1", Pos{Path: "test", Line: 1, Col: 1})
+	if err == nil || !strings.Contains(err.Error(), "module must appear before statements") {
+		t.Fatalf("expected module not-first error, got %v", err)
+	}
+}

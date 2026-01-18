@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -87,5 +88,30 @@ func TestModCacheReload(t *testing.T) {
 	v = m3.Exp["x"]
 	if v.K != VNum || v.N != 2 {
 		t.Fatalf("expected x=2")
+	}
+}
+
+func TestUseAliasCollisionBeforeParse(t *testing.T) {
+	dir := t.TempDir()
+	fs := &memFS{files: map[string]*memFile{}}
+	p1 := filepath.Join(dir, "a.rts")
+	p2 := filepath.Join(dir, "b.rts")
+	fs.files[p1] = &memFile{data: []byte("module mod\nexport let x ="), mod: time.Unix(10, 0)}
+	fs.files[p2] = &memFile{data: []byte("module mod\nexport let y ="), mod: time.Unix(10, 0)}
+
+	e := NewEng()
+	e.C = NewCache(fs)
+	e.C.SetStdlib(e.Stdlib)
+
+	rt := RT{
+		BaseDir: dir,
+		Uses: []Use{
+			{Path: "a.rts"},
+			{Path: "b.rts"},
+		},
+	}
+	_, err := e.Eval(context.Background(), rt, "1", Pos{Path: "test", Line: 1, Col: 1})
+	if err == nil || !strings.Contains(err.Error(), "alias already defined: mod") {
+		t.Fatalf("expected alias collision error, got %v", err)
 	}
 }
