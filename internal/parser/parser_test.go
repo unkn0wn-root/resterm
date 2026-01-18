@@ -1064,7 +1064,11 @@ GET https://example.com
 	}
 	for i := 0; i < 3; i++ {
 		if len(workflow.Steps[i].Expect) != 0 {
-			t.Fatalf("expected step %d to have no expectations, got %v", i+1, workflow.Steps[i].Expect)
+			t.Fatalf(
+				"expected step %d to have no expectations, got %v",
+				i+1,
+				workflow.Steps[i].Expect,
+			)
 		}
 	}
 	mixed := workflow.Steps[3]
@@ -1073,6 +1077,46 @@ GET https://example.com
 	}
 	if mixed.Expect["statuscode"] != "200" {
 		t.Fatalf("expected mixed step expect.statuscode=200, got %q", mixed.Expect["statuscode"])
+	}
+}
+
+func TestParseWorkflowWhenForEach(t *testing.T) {
+	src := `# @workflow demo
+# @skip-if vars.user.disabled
+# @step Guard using=CheckUser
+# @for-each item in vars.items
+# @step Each using=ProcessItem
+
+### CheckUser
+GET https://example.com/user
+
+### ProcessItem
+POST https://example.com/items
+`
+	doc := Parse("workflow-when-each.http", []byte(src))
+	if len(doc.Workflows) != 1 {
+		t.Fatalf("expected 1 workflow, got %d", len(doc.Workflows))
+	}
+	wf := doc.Workflows[0]
+	if len(wf.Steps) != 2 {
+		t.Fatalf("expected 2 steps, got %d", len(wf.Steps))
+	}
+	st0 := wf.Steps[0]
+	if st0.When == nil {
+		t.Fatalf("expected first step to have @skip-if condition")
+	}
+	if !st0.When.Negate || st0.When.Expression != "vars.user.disabled" {
+		t.Fatalf("unexpected condition: %+v", st0.When)
+	}
+	st1 := wf.Steps[1]
+	if st1.Kind != restfile.WorkflowStepKindForEach {
+		t.Fatalf("expected second step kind for-each, got %s", st1.Kind)
+	}
+	if st1.ForEach == nil {
+		t.Fatalf("expected second step for-each spec")
+	}
+	if st1.ForEach.Var != "item" || st1.ForEach.Expr != "vars.items" {
+		t.Fatalf("unexpected for-each spec: %+v", st1.ForEach)
 	}
 }
 

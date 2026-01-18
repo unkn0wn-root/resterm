@@ -112,7 +112,7 @@ func workflowRunDisplayName(state *workflowState) string {
 	if state == nil {
 		return label
 	}
-	name := strings.TrimSpace(state.workflow.Name)
+	name := state.workflow.Name
 	if name == "" {
 		return label
 	}
@@ -134,14 +134,21 @@ func makeWorkflowResult(
 		Message: message,
 		Err:     err,
 	}
-	if iter, total := workflowIterationInfo(state); total > 0 {
+	wfMeta(state, &res)
+	return res
+}
+
+func wfMeta(st *workflowState, res *workflowStepResult) {
+	if st == nil || res == nil {
+		return
+	}
+	if iter, total := workflowIterationInfo(st); total > 0 {
 		res.Iteration = iter
 		res.Total = total
 	}
-	if state != nil && state.currentBranch != "" {
-		res.Branch = state.currentBranch
+	if st.currentBranch != "" {
+		res.Branch = st.currentBranch
 	}
-	return res
 }
 
 func workflowForEachSpec(step restfile.WorkflowStep, req *restfile.Request) (*forEachSpec, error) {
@@ -165,29 +172,57 @@ func workflowForEachSpec(step restfile.WorkflowStep, req *restfile.Request) (*fo
 	return spec, nil
 }
 
+func workflowStepVars(step restfile.WorkflowStep) map[string]string {
+	if len(step.Vars) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(step.Vars))
+	for key, value := range step.Vars {
+		if key == "" {
+			continue
+		}
+		if !strings.HasPrefix(key, "vars.") {
+			key = "vars." + key
+		}
+		out[key] = value
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func workflowApplyVars(st *workflowState, vars map[string]string) {
+	if st == nil || len(vars) == 0 {
+		return
+	}
+	if st.vars == nil {
+		st.vars = make(map[string]string)
+	}
+	for key, value := range vars {
+		if strings.HasPrefix(key, "vars.workflow.") {
+			st.vars[key] = value
+		}
+	}
+}
+
 func workflowStepExtras(
-	state *workflowState,
-	step restfile.WorkflowStep,
+	st *workflowState,
+	stepVars map[string]string,
 	extra map[string]string,
 ) map[string]string {
-	out := make(map[string]string)
-	if state != nil {
-		for key, value := range state.vars {
+	size := len(stepVars) + len(extra)
+	if st != nil {
+		size += len(st.vars)
+	}
+	out := make(map[string]string, size)
+	if st != nil {
+		for key, value := range st.vars {
 			out[key] = value
 		}
 	}
-	for key, value := range step.Vars {
-		trimmed := strings.TrimSpace(key)
-		if trimmed == "" {
-			continue
-		}
-		if !strings.HasPrefix(trimmed, "vars.") {
-			trimmed = "vars." + trimmed
-		}
-		out[trimmed] = value
-		if state != nil && strings.HasPrefix(trimmed, "vars.workflow.") {
-			state.vars[trimmed] = value
-		}
+	for key, value := range stepVars {
+		out[key] = value
 	}
 	for key, value := range extra {
 		out[key] = value
@@ -208,17 +243,99 @@ func (m *Model) wfVars(
 	return mergeVariableMaps(base, extra)
 }
 
-func workflowLoopKeys(state *workflowState, name string) (string, string) {
-	name = strings.TrimSpace(name)
+func workflowLoopKeys(st *workflowState, name string) (string, string) {
 	if name == "" {
 		return "", ""
 	}
 	reqKey := "vars.request." + name
 	wfKey := ""
-	if state != nil && state.loopVarsWorkflow {
+	if st != nil && st.loopVarsWorkflow {
 		wfKey = "vars.workflow." + name
 	}
 	return reqKey, wfKey
+}
+
+func (m *Model) wfErr(
+	st *workflowState,
+	step restfile.WorkflowStep,
+	tag string,
+	err error,
+) tea.Cmd {
+	wrapped := errdef.Wrap(errdef.CodeScript, err, "%s", tag)
+	m.lastError = wrapped
+	cmd := m.consumeRequestError(wrapped)
+	next := m.advanceWorkflow(
+		st,
+		makeWorkflowResult(st, step, false, false, wrapped.Error(), wrapped),
+	)
+	return batchCmds([]tea.Cmd{cmd, next})
+}
+
+func (m *Model) wfSkip(st *workflowState, step restfile.WorkflowStep, reason string) tea.Cmd {
+	cmd := m.consumeSkippedRequest(reason)
+	next := m.advanceWorkflow(st, makeWorkflowResult(st, step, false, true, reason, nil))
+	return batchCmds([]tea.Cmd{cmd, next})
+}
+
+func (m *Model) wfRunReq(
+	st *workflowState,
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	opts httpclient.Options,
+	env string,
+	ctx context.Context,
+	xv map[string]string,
+) tea.Cmd {
+	spec, err := workflowForEachSpec(step, req)
+	if err != nil {
+		return m.wfErr(st, step, "@for-each", err)
+	}
+	if spec == nil {
+		return m.executeWorkflowRequest(st, step, req, opts, xv, nil)
+	}
+	v := m.wfVars(st.doc, req, env, xv)
+	items, err := m.evalForEachItems(
+		ctx,
+		st.doc,
+		req,
+		env,
+		opts.BaseDir,
+		*spec,
+		v,
+		nil,
+	)
+	if err != nil {
+		return m.wfErr(st, step, "@for-each", err)
+	}
+	if len(items) == 0 {
+		return m.wfSkip(st, step, "for-each produced no items")
+	}
+
+	loopStep := step
+	resetSpec := loopStep.Kind != restfile.WorkflowStepKindForEach
+	if resetSpec {
+		loopStep.Kind = restfile.WorkflowStepKindForEach
+	}
+	if resetSpec || loopStep.ForEach == nil {
+		loopStep.ForEach = &restfile.WorkflowForEach{
+			Expr: spec.Expr,
+			Var:  spec.Var,
+			Line: spec.Line,
+		}
+	}
+	name := spec.Var
+	reqKey, wfKey := workflowLoopKeys(st, name)
+	st.loop = &workflowLoopState{
+		step:      loopStep,
+		request:   req,
+		items:     items,
+		index:     0,
+		varName:   name,
+		reqVarKey: reqKey,
+		wfVarKey:  wfKey,
+		line:      spec.Line,
+	}
+	return m.executeWorkflowLoopIteration(st, opts)
 }
 
 func (s *workflowState) matches(req *restfile.Request) bool {
@@ -296,7 +413,7 @@ func (m *Model) startForEachRun(
 		return nil
 	}
 
-	label := strings.TrimSpace(requestBaseTitle(req))
+	label := requestBaseTitle(req)
 	step := restfile.WorkflowStep{
 		Kind:      restfile.WorkflowStepKindRequest,
 		Name:      label,
@@ -347,7 +464,7 @@ func (m *Model) prepareWorkflowSteps(
 		}
 		switch step.Kind {
 		case restfile.WorkflowStepKindRequest, restfile.WorkflowStepKindForEach:
-			key := strings.ToLower(strings.TrimSpace(step.Using))
+			key := strings.ToLower(step.Using)
 			if key == "" {
 				return nil, nil, fmt.Errorf(
 					"workflow %s: step %d missing 'using' request",
@@ -455,7 +572,6 @@ func validateWorkflowBranchRuns(
 	lookup map[string]*restfile.Request,
 	run string,
 ) error {
-	run = strings.TrimSpace(run)
 	if run == "" {
 		return nil
 	}
@@ -518,183 +634,108 @@ func (m *Model) advanceWorkflow(state *workflowState, result workflowStepResult)
 }
 
 func (m *Model) executeWorkflowRequest(
-	state *workflowState,
+	st *workflowState,
 	step restfile.WorkflowStep,
 	req *restfile.Request,
-	options httpclient.Options,
-	extraVars map[string]string,
-	extraVals map[string]rts.Value,
+	opts httpclient.Options,
+	xv map[string]string,
+	vals map[string]rts.Value,
 ) tea.Cmd {
-	if state == nil || req == nil {
+	if st == nil || req == nil {
 		return nil
 	}
 	clone := cloneRequest(req)
-	state.current = clone
-	state.stepStart = time.Now()
+	st.current = clone
+	st.stepStart = time.Now()
 
-	title := workflowRunDisplayName(state)
-	iter, total := workflowIterationInfo(state)
-	label := workflowStepLabel(step, state.currentBranch, iter, total)
-	message := fmt.Sprintf("%s %d/%d: %s", title, state.index+1, len(state.steps), label)
+	title := workflowRunDisplayName(st)
+	iter, total := workflowIterationInfo(st)
+	label := workflowStepLabel(step, st.currentBranch, iter, total)
+	message := fmt.Sprintf("%s %d/%d: %s", title, st.index+1, len(st.steps), label)
 	m.statusPulseBase = message
 	m.setStatusMessage(statusMsg{text: message, level: statusInfo})
 	spin := m.startSending()
 
-	cmd := m.executeRequest(state.doc, clone, options, "", extraVals, extraVars)
+	cmd := m.executeRequest(st.doc, clone, opts, "", vals, xv)
 	pulse := m.startStatusPulse()
 	return batchCmds([]tea.Cmd{cmd, pulse, spin})
 }
 
 func (m *Model) executeWorkflowRequestStep(
-	state *workflowState,
-	runtime workflowStepRuntime,
-	options httpclient.Options,
+	st *workflowState,
+	rt workflowStepRuntime,
+	opts httpclient.Options,
 ) tea.Cmd {
-	step := runtime.step
-	req := runtime.request
+	step := rt.step
+	req := rt.request
 	if req == nil {
 		err := fmt.Errorf("workflow step missing request")
 		return m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, err.Error(), err),
+			st,
+			makeWorkflowResult(st, step, false, false, err.Error(), err),
 		)
 	}
-	state.currentBranch = ""
-	extraVars := workflowStepExtras(state, step, nil)
-	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	st.currentBranch = ""
+	stepVars := workflowStepVars(step)
+	workflowApplyVars(st, stepVars)
+	xv := workflowStepExtras(st, stepVars, nil)
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
-	v := m.wfVars(state.doc, req, envName, extraVars)
+	v := m.wfVars(st.doc, req, env, xv)
 
 	if step.When != nil {
 		shouldRun, reason, err := m.evalCondition(
 			ctx,
-			state.doc,
+			st.doc,
 			req,
-			envName,
-			options.BaseDir,
+			env,
+			opts.BaseDir,
 			step.When,
 			v,
 			nil,
 		)
 		if err != nil {
-			wrapped := errdef.Wrap(errdef.CodeScript, err, "@when")
-			m.lastError = wrapped
-			errCmd := m.consumeRequestError(wrapped)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-			)
-			return batchCmds([]tea.Cmd{errCmd, next})
+			return m.wfErr(st, step, "@when", err)
 		}
 		if !shouldRun {
-			skipCmd := m.consumeSkippedRequest(reason)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, true, reason, nil),
-			)
-			return batchCmds([]tea.Cmd{skipCmd, next})
+			return m.wfSkip(st, step, reason)
 		}
 	}
 
-	spec, err := workflowForEachSpec(step, req)
-	if err != nil {
-		wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-		m.lastError = wrapped
-		errCmd := m.consumeRequestError(wrapped)
-		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-		)
-		return batchCmds([]tea.Cmd{errCmd, next})
-	}
-	if spec != nil {
-		items, err := m.evalForEachItems(
-			ctx,
-			state.doc,
-			req,
-			envName,
-			options.BaseDir,
-			*spec,
-			v,
-			nil,
-		)
-		if err != nil {
-			wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-			m.lastError = wrapped
-			errCmd := m.consumeRequestError(wrapped)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-			)
-			return batchCmds([]tea.Cmd{errCmd, next})
-		}
-		if len(items) == 0 {
-			reason := "for-each produced no items"
-			skipCmd := m.consumeSkippedRequest(reason)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, true, reason, nil),
-			)
-			return batchCmds([]tea.Cmd{skipCmd, next})
-		}
-
-		loopStep := step
-		if loopStep.Kind != restfile.WorkflowStepKindForEach {
-			loopStep.Kind = restfile.WorkflowStepKindForEach
-			loopStep.ForEach = &restfile.WorkflowForEach{
-				Expr: spec.Expr,
-				Var:  spec.Var,
-				Line: spec.Line,
-			}
-		}
-		name := strings.TrimSpace(spec.Var)
-		reqVarKey, wfVarKey := workflowLoopKeys(state, name)
-		state.loop = &workflowLoopState{
-			step:      loopStep,
-			request:   req,
-			items:     items,
-			index:     0,
-			varName:   name,
-			reqVarKey: reqVarKey,
-			wfVarKey:  wfVarKey,
-			line:      spec.Line,
-		}
-		return m.executeWorkflowLoopIteration(state, options)
-	}
-
-	return m.executeWorkflowRequest(state, step, req, options, extraVars, nil)
+	return m.wfRunReq(st, step, req, opts, env, ctx, xv)
 }
 
 func (m *Model) executeWorkflowIfStep(
-	state *workflowState,
+	st *workflowState,
 	step restfile.WorkflowStep,
-	options httpclient.Options,
+	opts httpclient.Options,
 ) tea.Cmd {
 	if step.If == nil {
 		err := fmt.Errorf("workflow @if missing definition")
 		return m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, err.Error(), err),
+			st,
+			makeWorkflowResult(st, step, false, false, err.Error(), err),
 		)
 	}
-	state.currentBranch = ""
-	extraVars := workflowStepExtras(state, step, nil)
-	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	st.currentBranch = ""
+	stepVars := workflowStepVars(step)
+	workflowApplyVars(st, stepVars)
+	xv := workflowStepExtras(st, stepVars, nil)
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
-	v := m.wfVars(state.doc, nil, envName, extraVars)
+	v := m.wfVars(st.doc, nil, env, xv)
 
 	evalBranch := func(cond string, line int, tag string) (bool, error) {
-		cond = strings.TrimSpace(cond)
 		if cond == "" {
 			return false, fmt.Errorf("%s expression missing", tag)
 		}
-		pos := m.rtsPosForLine(state.doc, nil, line)
+		pos := m.rtsPosForLine(st.doc, nil, line)
 		val, err := m.rtsEvalValue(
 			ctx,
-			state.doc,
+			st.doc,
 			nil,
-			envName,
-			options.BaseDir,
+			env,
+			opts.BaseDir,
 			cond,
 			tag+" "+cond,
 			pos,
@@ -710,14 +751,7 @@ func (m *Model) executeWorkflowIfStep(
 	var branch *restfile.WorkflowIfBranch
 	ok, err := evalBranch(step.If.Then.Cond, step.If.Then.Line, "@if")
 	if err != nil {
-		wrapped := errdef.Wrap(errdef.CodeScript, err, "@if")
-		m.lastError = wrapped
-		errCmd := m.consumeRequestError(wrapped)
-		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-		)
-		return batchCmds([]tea.Cmd{errCmd, next})
+		return m.wfErr(st, step, "@if", err)
 	}
 	if ok {
 		branch = &step.If.Then
@@ -726,14 +760,7 @@ func (m *Model) executeWorkflowIfStep(
 			el := &step.If.Elifs[i]
 			ok, err = evalBranch(el.Cond, el.Line, "@elif")
 			if err != nil {
-				wrapped := errdef.Wrap(errdef.CodeScript, err, "@elif")
-				m.lastError = wrapped
-				errCmd := m.consumeRequestError(wrapped)
-				next := m.advanceWorkflow(
-					state,
-					makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-				)
-				return batchCmds([]tea.Cmd{errCmd, next})
+				return m.wfErr(st, step, "@elif", err)
 			}
 			if ok {
 				branch = el
@@ -746,133 +773,68 @@ func (m *Model) executeWorkflowIfStep(
 	}
 	if branch == nil {
 		reason := "no @if branch matched"
-		skipCmd := m.consumeSkippedRequest(reason)
-		next := m.advanceWorkflow(state, makeWorkflowResult(state, step, false, true, reason, nil))
-		return batchCmds([]tea.Cmd{skipCmd, next})
+		return m.wfSkip(st, step, reason)
 	}
-	if strings.TrimSpace(branch.Fail) != "" {
-		message := strings.TrimSpace(branch.Fail)
+	if branch.Fail != "" {
+		message := branch.Fail
 		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, message, fmt.Errorf("%s", message)),
+			st,
+			makeWorkflowResult(st, step, false, false, message, fmt.Errorf("%s", message)),
 		)
 		return next
 	}
-	run := strings.TrimSpace(branch.Run)
+	run := branch.Run
 	if run == "" {
 		reason := "no @if run target"
-		skipCmd := m.consumeSkippedRequest(reason)
-		next := m.advanceWorkflow(state, makeWorkflowResult(state, step, false, true, reason, nil))
-		return batchCmds([]tea.Cmd{skipCmd, next})
+		return m.wfSkip(st, step, reason)
 	}
-	req := state.requests[strings.ToLower(run)]
+	req := st.requests[strings.ToLower(run)]
 	if req == nil {
 		err := fmt.Errorf("request %s not found", run)
 		return m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, err.Error(), err),
+			st,
+			makeWorkflowResult(st, step, false, false, err.Error(), err),
 		)
 	}
-	state.currentBranch = run
-	spec, err := workflowForEachSpec(step, req)
-	if err != nil {
-		wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-		m.lastError = wrapped
-		errCmd := m.consumeRequestError(wrapped)
-		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-		)
-		return batchCmds([]tea.Cmd{errCmd, next})
-	}
-	if spec != nil {
-		rv := m.wfVars(state.doc, req, envName, extraVars)
-		items, err := m.evalForEachItems(
-			ctx,
-			state.doc,
-			req,
-			envName,
-			options.BaseDir,
-			*spec,
-			rv,
-			nil,
-		)
-		if err != nil {
-			wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-			m.lastError = wrapped
-			errCmd := m.consumeRequestError(wrapped)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-			)
-			return batchCmds([]tea.Cmd{errCmd, next})
-		}
-		if len(items) == 0 {
-			reason := "for-each produced no items"
-			skipCmd := m.consumeSkippedRequest(reason)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, true, reason, nil),
-			)
-			return batchCmds([]tea.Cmd{skipCmd, next})
-		}
-		loopStep := step
-		loopStep.Kind = restfile.WorkflowStepKindForEach
-		loopStep.ForEach = &restfile.WorkflowForEach{
-			Expr: spec.Expr,
-			Var:  spec.Var,
-			Line: spec.Line,
-		}
-		name := strings.TrimSpace(spec.Var)
-		reqVarKey, wfVarKey := workflowLoopKeys(state, name)
-		state.loop = &workflowLoopState{
-			step:      loopStep,
-			request:   req,
-			items:     items,
-			index:     0,
-			varName:   name,
-			reqVarKey: reqVarKey,
-			wfVarKey:  wfVarKey,
-			line:      spec.Line,
-		}
-		return m.executeWorkflowLoopIteration(state, options)
-	}
-	return m.executeWorkflowRequest(state, step, req, options, extraVars, nil)
+	st.currentBranch = run
+	return m.wfRunReq(st, step, req, opts, env, ctx, xv)
 }
 
 func (m *Model) executeWorkflowSwitchStep(
-	state *workflowState,
+	st *workflowState,
 	step restfile.WorkflowStep,
-	options httpclient.Options,
+	opts httpclient.Options,
 ) tea.Cmd {
 	if step.Switch == nil {
 		err := fmt.Errorf("workflow @switch missing definition")
 		return m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, err.Error(), err),
+			st,
+			makeWorkflowResult(st, step, false, false, err.Error(), err),
 		)
 	}
-	state.currentBranch = ""
-	extraVars := workflowStepExtras(state, step, nil)
-	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	st.currentBranch = ""
+	stepVars := workflowStepVars(step)
+	workflowApplyVars(st, stepVars)
+	xv := workflowStepExtras(st, stepVars, nil)
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
-	v := m.wfVars(state.doc, nil, envName, extraVars)
+	v := m.wfVars(st.doc, nil, env, xv)
 
-	expr := strings.TrimSpace(step.Switch.Expr)
+	expr := step.Switch.Expr
 	if expr == "" {
 		err := fmt.Errorf("@switch expression missing")
 		return m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, err.Error(), err),
+			st,
+			makeWorkflowResult(st, step, false, false, err.Error(), err),
 		)
 	}
-	switchPos := m.rtsPosForLine(state.doc, nil, step.Switch.Line)
+	switchPos := m.rtsPosForLine(st.doc, nil, step.Switch.Line)
 	switchVal, err := m.rtsEvalValue(
 		ctx,
-		state.doc,
+		st.doc,
 		nil,
-		envName,
-		options.BaseDir,
+		env,
+		opts.BaseDir,
 		expr,
 		"@switch "+expr,
 		switchPos,
@@ -880,30 +842,23 @@ func (m *Model) executeWorkflowSwitchStep(
 		nil,
 	)
 	if err != nil {
-		wrapped := errdef.Wrap(errdef.CodeScript, err, "@switch")
-		m.lastError = wrapped
-		errCmd := m.consumeRequestError(wrapped)
-		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-		)
-		return batchCmds([]tea.Cmd{errCmd, next})
+		return m.wfErr(st, step, "@switch", err)
 	}
 
 	var selected *restfile.WorkflowSwitchCase
 	for i := range step.Switch.Cases {
 		c := &step.Switch.Cases[i]
-		caseExpr := strings.TrimSpace(c.Expr)
+		caseExpr := c.Expr
 		if caseExpr == "" {
 			continue
 		}
-		casePos := m.rtsPosForLine(state.doc, nil, c.Line)
+		casePos := m.rtsPosForLine(st.doc, nil, c.Line)
 		caseVal, err := m.rtsEvalValue(
 			ctx,
-			state.doc,
+			st.doc,
 			nil,
-			envName,
-			options.BaseDir,
+			env,
+			opts.BaseDir,
 			caseExpr,
 			"@case "+caseExpr,
 			casePos,
@@ -911,14 +866,7 @@ func (m *Model) executeWorkflowSwitchStep(
 			nil,
 		)
 		if err != nil {
-			wrapped := errdef.Wrap(errdef.CodeScript, err, "@case")
-			m.lastError = wrapped
-			errCmd := m.consumeRequestError(wrapped)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-			)
-			return batchCmds([]tea.Cmd{errCmd, next})
+			return m.wfErr(st, step, "@case", err)
 		}
 		if rts.ValueEqual(switchVal, caseVal) {
 			selected = c
@@ -930,257 +878,214 @@ func (m *Model) executeWorkflowSwitchStep(
 	}
 	if selected == nil {
 		reason := "no @switch case matched"
-		skipCmd := m.consumeSkippedRequest(reason)
-		next := m.advanceWorkflow(state, makeWorkflowResult(state, step, false, true, reason, nil))
-		return batchCmds([]tea.Cmd{skipCmd, next})
+		return m.wfSkip(st, step, reason)
 	}
 
-	if strings.TrimSpace(selected.Fail) != "" {
-		message := strings.TrimSpace(selected.Fail)
+	if selected.Fail != "" {
+		message := selected.Fail
 		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, message, fmt.Errorf("%s", message)),
+			st,
+			makeWorkflowResult(st, step, false, false, message, fmt.Errorf("%s", message)),
 		)
 		return next
 	}
-	run := strings.TrimSpace(selected.Run)
+	run := selected.Run
 	if run == "" {
 		reason := "no @switch run target"
-		skipCmd := m.consumeSkippedRequest(reason)
-		next := m.advanceWorkflow(state, makeWorkflowResult(state, step, false, true, reason, nil))
-		return batchCmds([]tea.Cmd{skipCmd, next})
+		return m.wfSkip(st, step, reason)
 	}
-	req := state.requests[strings.ToLower(run)]
+	req := st.requests[strings.ToLower(run)]
 	if req == nil {
 		err := fmt.Errorf("request %s not found", run)
 		return m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, err.Error(), err),
+			st,
+			makeWorkflowResult(st, step, false, false, err.Error(), err),
 		)
 	}
-	state.currentBranch = run
-	spec, err := workflowForEachSpec(step, req)
-	if err != nil {
-		wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-		m.lastError = wrapped
-		errCmd := m.consumeRequestError(wrapped)
-		next := m.advanceWorkflow(
-			state,
-			makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-		)
-		return batchCmds([]tea.Cmd{errCmd, next})
-	}
-	if spec != nil {
-		rv := m.wfVars(state.doc, req, envName, extraVars)
-		items, err := m.evalForEachItems(
-			ctx,
-			state.doc,
-			req,
-			envName,
-			options.BaseDir,
-			*spec,
-			rv,
-			nil,
-		)
-		if err != nil {
-			wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-			m.lastError = wrapped
-			errCmd := m.consumeRequestError(wrapped)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, false, wrapped.Error(), wrapped),
-			)
-			return batchCmds([]tea.Cmd{errCmd, next})
-		}
-		if len(items) == 0 {
-			reason := "for-each produced no items"
-			skipCmd := m.consumeSkippedRequest(reason)
-			next := m.advanceWorkflow(
-				state,
-				makeWorkflowResult(state, step, false, true, reason, nil),
-			)
-			return batchCmds([]tea.Cmd{skipCmd, next})
-		}
-		loopStep := step
-		loopStep.Kind = restfile.WorkflowStepKindForEach
-		loopStep.ForEach = &restfile.WorkflowForEach{
-			Expr: spec.Expr,
-			Var:  spec.Var,
-			Line: spec.Line,
-		}
-		name := strings.TrimSpace(spec.Var)
-		reqVarKey, wfVarKey := workflowLoopKeys(state, name)
-		state.loop = &workflowLoopState{
-			step:      loopStep,
-			request:   req,
-			items:     items,
-			index:     0,
-			varName:   name,
-			reqVarKey: reqVarKey,
-			wfVarKey:  wfVarKey,
-			line:      spec.Line,
-		}
-		return m.executeWorkflowLoopIteration(state, options)
-	}
-	return m.executeWorkflowRequest(state, step, req, options, extraVars, nil)
+	st.currentBranch = run
+	return m.wfRunReq(st, step, req, opts, env, ctx, xv)
 }
 
 func (m *Model) executeWorkflowLoopIteration(
-	state *workflowState,
-	options httpclient.Options,
+	st *workflowState,
+	opts httpclient.Options,
 ) tea.Cmd {
-	loop := state.loop
+	loop := st.loop
 	if loop == nil {
 		return m.executeWorkflowStep()
 	}
-	envName := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	ctx := context.Background()
-	var pending []tea.Cmd
+	var cmds []tea.Cmd
 
 	for loop.index < len(loop.items) {
 		item := loop.items[loop.index]
-		extraVars := workflowStepExtras(state, loop.step, nil)
-		pos := m.rtsPosForLine(state.doc, loop.request, loop.line)
+		stepVars := workflowStepVars(loop.step)
+		workflowApplyVars(st, stepVars)
+		xv := workflowStepExtras(st, stepVars, nil)
+		pos := m.rtsPosForLine(st.doc, loop.request, loop.line)
 		itemStr, err := m.rtsValueString(ctx, pos, item)
 		if err != nil {
 			wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
 			m.lastError = wrapped
 			if cmd := m.consumeRequestError(wrapped); cmd != nil {
-				pending = append(pending, cmd)
+				cmds = append(cmds, cmd)
 			}
-			res := makeWorkflowResult(state, loop.step, false, false, wrapped.Error(), wrapped)
-			state.results = append(state.results, res)
+			res := makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped)
+			st.results = append(st.results, res)
 			if loop.step.OnFailure != restfile.WorkflowOnFailureContinue {
-				state.loop = nil
-				state.currentBranch = ""
-				return batchCmds(append(pending, m.finalizeWorkflowRun(state)))
+				st.loop = nil
+				st.currentBranch = ""
+				return batchCmds(append(cmds, m.finalizeWorkflowRun(st)))
 			}
 			loop.index++
 			continue
 		}
 		if loop.wfVarKey != "" {
-			state.vars[loop.wfVarKey] = itemStr
-			extraVars[loop.wfVarKey] = itemStr
+			st.vars[loop.wfVarKey] = itemStr
+			xv[loop.wfVarKey] = itemStr
 		}
 		if loop.reqVarKey != "" {
-			extraVars[loop.reqVarKey] = itemStr
+			xv[loop.reqVarKey] = itemStr
 		}
-		extraVals := map[string]rts.Value{loop.varName: item}
-		v := m.wfVars(state.doc, loop.request, envName, extraVars)
+		vals := map[string]rts.Value{loop.varName: item}
+		v := m.wfVars(st.doc, loop.request, env, xv)
 
 		if loop.step.When != nil {
 			shouldRun, reason, err := m.evalCondition(
 				ctx,
-				state.doc,
+				st.doc,
 				loop.request,
-				envName,
-				options.BaseDir,
+				env,
+				opts.BaseDir,
 				loop.step.When,
 				v,
-				extraVals,
+				vals,
 			)
 			if err != nil {
 				wrapped := errdef.Wrap(errdef.CodeScript, err, "@when")
 				m.lastError = wrapped
 				if cmd := m.consumeRequestError(wrapped); cmd != nil {
-					pending = append(pending, cmd)
+					cmds = append(cmds, cmd)
 				}
-				res := makeWorkflowResult(state, loop.step, false, false, wrapped.Error(), wrapped)
-				state.results = append(state.results, res)
+				res := makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped)
+				st.results = append(st.results, res)
 				if loop.step.OnFailure != restfile.WorkflowOnFailureContinue {
-					state.loop = nil
-					state.currentBranch = ""
-					return batchCmds(append(pending, m.finalizeWorkflowRun(state)))
+					st.loop = nil
+					st.currentBranch = ""
+					return batchCmds(append(cmds, m.finalizeWorkflowRun(st)))
 				}
 				loop.index++
 				continue
 			}
 			if !shouldRun {
 				if cmd := m.consumeSkippedRequest(reason); cmd != nil {
-					pending = append(pending, cmd)
+					cmds = append(cmds, cmd)
 				}
-				res := makeWorkflowResult(state, loop.step, false, true, reason, nil)
-				state.results = append(state.results, res)
+				res := makeWorkflowResult(st, loop.step, false, true, reason, nil)
+				st.results = append(st.results, res)
 				loop.index++
 				continue
 			}
 		}
 
 		cmd := m.executeWorkflowRequest(
-			state,
+			st,
 			loop.step,
 			loop.request,
-			options,
-			extraVars,
-			extraVals,
+			opts,
+			xv,
+			vals,
 		)
-		return batchCmds(append(pending, cmd))
+		return batchCmds(append(cmds, cmd))
 	}
 
-	state.loop = nil
-	state.currentBranch = ""
-	state.index++
+	st.loop = nil
+	st.currentBranch = ""
+	st.index++
 	next := m.executeWorkflowStep()
-	return batchCmds(append(pending, next))
+	return batchCmds(append(cmds, next))
 }
 
 func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
-	state := m.workflowRun
-	if state == nil {
+	st := m.workflowRun
+	if st == nil {
 		return nil
 	}
-	current := state.current
-	state.current = nil
+	cur := st.current
+	st.current = nil
 	m.stopSending()
 
-	canceled := state.canceled || isCanceled(msg.err)
-	inLoop := state.loop != nil
+	canceled := st.canceled || isCanceled(msg.err)
+	inLoop := st.loop != nil
 
-	var cmds []tea.Cmd
 	if canceled {
-		state.canceled = true
+		st.canceled = true
 		m.lastError = nil
 		msg.err = nil
-		if strings.TrimSpace(state.cancelReason) == "" {
-			state.cancelReason = "Workflow canceled"
+		if strings.TrimSpace(st.cancelReason) == "" {
+			st.cancelReason = "Workflow canceled"
 		}
-		if current != nil && state.index < len(state.steps) {
-			state.index++
-		}
-	} else {
-		switch {
-		case msg.skipped:
-			m.lastError = nil
-			if cmd := m.consumeSkippedRequest(msg.skipReason); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		case msg.err != nil:
-			if cmd := m.consumeRequestError(msg.err); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		case msg.response != nil:
-			if cmd := m.consumeHTTPResponse(
-				msg.response,
-				msg.tests,
-				msg.scriptErr,
-				msg.environment,
-			); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		case msg.grpc != nil:
-			if cmd := m.consumeGRPCResponse(
-				msg.grpc,
-				msg.tests,
-				msg.scriptErr,
-				msg.executed,
-				msg.environment,
-			); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
+		if cur != nil && st.index < len(st.steps) {
+			st.index++
 		}
 	}
 
-	if !canceled && state.origin == workflowOriginForEach {
+	var cmds []tea.Cmd
+	if !canceled {
+		cmds = append(cmds, m.wfConsume(st, msg)...)
+	}
+
+	if canceled {
+		if next := m.finalizeWorkflowRun(st); next != nil {
+			cmds = append(cmds, next)
+		}
+		return batchCmds(cmds)
+	}
+
+	result := evaluateWorkflowStep(st, msg)
+	st.results = append(st.results, result)
+	next := m.wfAdvanceResp(st, result, inLoop)
+	if next != nil {
+		cmds = append(cmds, next)
+	}
+	return batchCmds(cmds)
+}
+
+func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
+	var cmds []tea.Cmd
+	switch {
+	case msg.skipped:
+		m.lastError = nil
+		if cmd := m.consumeSkippedRequest(msg.skipReason); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case msg.err != nil:
+		if cmd := m.consumeRequestError(msg.err); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case msg.response != nil:
+		if cmd := m.consumeHTTPResponse(
+			msg.response,
+			msg.tests,
+			msg.scriptErr,
+			msg.environment,
+		); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case msg.grpc != nil:
+		if cmd := m.consumeGRPCResponse(
+			msg.grpc,
+			msg.tests,
+			msg.scriptErr,
+			msg.executed,
+			msg.environment,
+		); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
+
+	if st != nil && st.origin == workflowOriginForEach {
 		switch {
 		case msg.skipped:
 			m.recordSkippedHistory(msg.executed, msg.requestText, msg.environment, msg.skipReason)
@@ -1190,47 +1095,38 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 			m.recordGRPCHistory(msg.grpc, msg.executed, msg.requestText, msg.environment)
 		}
 	}
+	return cmds
+}
 
-	if canceled {
-		if next := m.finalizeWorkflowRun(state); next != nil {
-			cmds = append(cmds, next)
-		}
-		return batchCmds(cmds)
-	}
-
-	result := evaluateWorkflowStep(state, msg)
-	state.results = append(state.results, result)
+func (m *Model) wfAdvanceResp(
+	st *workflowState,
+	result workflowStepResult,
+	inLoop bool,
+) tea.Cmd {
 	shouldStop := !result.Skipped && !result.Success &&
 		result.Step.OnFailure != restfile.WorkflowOnFailureContinue
 
-	var next tea.Cmd
 	if shouldStop {
-		state.loop = nil
-		state.currentBranch = ""
-		next = m.finalizeWorkflowRun(state)
-	} else if inLoop && state.loop != nil {
-		state.loop.index++
-		if state.loop.index >= len(state.loop.items) {
-			state.loop = nil
-			state.currentBranch = ""
-			state.index++
-			next = m.executeWorkflowStep()
-		} else {
-			next = m.executeWorkflowStep()
-		}
-	} else {
-		state.currentBranch = ""
-		state.index++
-		if state.index >= len(state.steps) {
-			next = m.finalizeWorkflowRun(state)
-		} else {
-			next = m.executeWorkflowStep()
-		}
+		st.loop = nil
+		st.currentBranch = ""
+		return m.finalizeWorkflowRun(st)
 	}
-	if next != nil {
-		cmds = append(cmds, next)
+	if inLoop && st.loop != nil {
+		st.loop.index++
+		if st.loop.index >= len(st.loop.items) {
+			st.loop = nil
+			st.currentBranch = ""
+			st.index++
+			return m.executeWorkflowStep()
+		}
+		return m.executeWorkflowStep()
 	}
-	return batchCmds(cmds)
+	st.currentBranch = ""
+	st.index++
+	if st.index >= len(st.steps) {
+		return m.finalizeWorkflowRun(st)
+	}
+	return m.executeWorkflowStep()
 }
 
 func hasStatusExp(exp map[string]string) bool {
@@ -1246,30 +1142,30 @@ func hasStatusExp(exp map[string]string) bool {
 	return false
 }
 
-func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepResult {
-	if state == nil {
+func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult {
+	if st == nil {
 		return workflowStepResult{
 			Success: false,
-			Skipped: msg.skipped,
+			Skipped: rm.skipped,
 			Message: "workflow state missing",
 			Err:     errdef.New(errdef.CodeUI, "workflow state missing"),
 		}
 	}
-	if state.index < 0 || state.index >= len(state.steps) {
+	if st.index < 0 || st.index >= len(st.steps) {
 		return workflowStepResult{
 			Success: false,
-			Skipped: msg.skipped,
+			Skipped: rm.skipped,
 			Message: "workflow state missing",
 			Err:     errdef.New(errdef.CodeUI, "workflow state missing"),
 		}
 	}
-	step := state.steps[state.index].step
-	if msg.skipped {
+	step := st.steps[st.index].step
+	if rm.skipped {
 		res := workflowStepResult{
 			Step:      step,
 			Success:   false,
 			Skipped:   true,
-			Message:   strings.TrimSpace(msg.skipReason),
+			Message:   strings.TrimSpace(rm.skipReason),
 			Duration:  0,
 			HTTP:      nil,
 			GRPC:      nil,
@@ -1277,70 +1173,64 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 			ScriptErr: nil,
 			Err:       nil,
 		}
-		if iter, total := workflowIterationInfo(state); total > 0 {
-			res.Iteration = iter
-			res.Total = total
-		}
-		if state.currentBranch != "" {
-			res.Branch = state.currentBranch
-		}
+		wfMeta(st, &res)
 		return res
 	}
 
-	status := ""
-	message := ""
-	errMsg := ""
-	success := true
-	duration := time.Since(state.stepStart)
-	httpResp := cloneHTTPResponse(msg.response)
-	grpcResp := cloneGRPCResponse(msg.grpc)
-	tests := append([]scripts.TestResult(nil), msg.tests...)
-	hasExp := hasStatusExp(step.Expect)
-	hasResp := msg.response != nil || msg.grpc != nil
-	hasErr := msg.err != nil
+	var (
+		status, msg, emsg string
+		ok                = true
+		dur               = time.Since(st.stepStart)
+		http              = cloneHTTPResponse(rm.response)
+		grpc              = cloneGRPCResponse(rm.grpc)
+		tests             = append([]scripts.TestResult(nil), rm.tests...)
+		hasExp            = hasStatusExp(step.Expect)
+		hasResp           = rm.response != nil || rm.grpc != nil
+		hasErr            = rm.err != nil
+	)
 	if hasErr {
-		errMsg = strings.TrimSpace(errdef.Message(msg.err))
-		if errMsg == "" {
-			errMsg = "request failed"
+		emsg = strings.TrimSpace(errdef.Message(rm.err))
+		if emsg == "" {
+			emsg = "request failed"
 		}
 	}
 
-	if msg.response != nil {
-		status = msg.response.Status
-		if msg.response.Duration > 0 {
-			duration = msg.response.Duration
+	if rm.response != nil {
+		status = rm.response.Status
+		if rm.response.Duration > 0 {
+			dur = rm.response.Duration
 		}
-		if msg.response.StatusCode >= 400 && !hasErr && !hasExp {
-			success = false
-			message = fmt.Sprintf("unexpected status code %d", msg.response.StatusCode)
+		if rm.response.StatusCode >= 400 && !hasErr && !hasExp {
+			ok = false
+			msg = fmt.Sprintf("unexpected status code %d", rm.response.StatusCode)
 		}
-	} else if msg.grpc != nil {
-		status = msg.grpc.StatusCode.String()
+	} else if rm.grpc != nil {
+		status = rm.grpc.StatusCode.String()
 	} else {
 		if !hasErr {
-			success = false
-			message = "request failed"
+			ok = false
+			msg = "request failed"
 		}
 	}
 
 	if hasErr {
-		success = false
-		status = errMsg
-		message = errMsg
+		ok = false
+		status = emsg
+		msg = emsg
 	}
 
-	if success && msg.scriptErr != nil {
-		success = false
-		message = msg.scriptErr.Error()
+	if ok && rm.scriptErr != nil {
+		ok = false
+		msg = rm.scriptErr.Error()
 	}
-	if success {
-		for _, test := range msg.tests {
+	if ok {
+		for _, test := range rm.tests {
 			if !test.Passed {
-				success = false
+				ok = false
 				if strings.TrimSpace(test.Message) != "" {
-					message = test.Message
+					msg = test.Message
 				} else {
-					message = fmt.Sprintf("test failed: %s", test.Name)
+					msg = fmt.Sprintf("test failed: %s", test.Name)
 				}
 				break
 			}
@@ -1348,34 +1238,34 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 	}
 
 	if hasResp && !hasErr {
-		if exp, ok := step.Expect["status"]; ok {
+		if exp, okExp := step.Expect["status"]; okExp {
 			expected := strings.TrimSpace(exp)
 			trimmedStatus := strings.TrimSpace(status)
 			if expected == "" {
-				success = false
-				message = "invalid expected status"
+				ok = false
+				msg = "invalid expected status"
 			} else if trimmedStatus == "" ||
 				!strings.EqualFold(expected, trimmedStatus) {
-				success = false
+				ok = false
 				if expected != "" {
-					message = fmt.Sprintf("expected status %s", expected)
+					msg = fmt.Sprintf("expected status %s", expected)
 				}
 			}
 		}
 
-		if exp, ok := step.Expect["statuscode"]; ok {
+		if exp, okExp := step.Expect["statuscode"]; okExp {
 			expectedCode, err := strconv.Atoi(strings.TrimSpace(exp))
 			if err != nil {
-				message = fmt.Sprintf("invalid expected status code %q", exp)
-				success = false
+				msg = fmt.Sprintf("invalid expected status code %q", exp)
+				ok = false
 			} else {
 				actual := 0
-				if msg.response != nil {
-					actual = msg.response.StatusCode
+				if rm.response != nil {
+					actual = rm.response.StatusCode
 				}
 				if actual != expectedCode {
-					success = false
-					message = fmt.Sprintf("expected status code %d", expectedCode)
+					ok = false
+					msg = fmt.Sprintf("expected status code %d", expectedCode)
 				}
 			}
 		}
@@ -1383,23 +1273,17 @@ func evaluateWorkflowStep(state *workflowState, msg responseMsg) workflowStepRes
 
 	res := workflowStepResult{
 		Step:      step,
-		Success:   success,
+		Success:   ok,
 		Status:    status,
-		Duration:  duration,
-		Message:   message,
-		HTTP:      httpResp,
-		GRPC:      grpcResp,
+		Duration:  dur,
+		Message:   msg,
+		HTTP:      http,
+		GRPC:      grpc,
 		Tests:     tests,
-		ScriptErr: msg.scriptErr,
-		Err:       msg.err,
+		ScriptErr: rm.scriptErr,
+		Err:       rm.err,
 	}
-	if iter, total := workflowIterationInfo(state); total > 0 {
-		res.Iteration = iter
-		res.Total = total
-	}
-	if state.currentBranch != "" {
-		res.Branch = state.currentBranch
-	}
+	wfMeta(st, &res)
 	return res
 }
 
@@ -1543,7 +1427,7 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 		return ""
 	}
 	label := workflowRunLabel(state)
-	name := strings.TrimSpace(state.workflow.Name)
+	name := state.workflow.Name
 	if name == "" {
 		name = label
 	}
@@ -1574,21 +1458,20 @@ func displayStepName(step restfile.WorkflowStep) string {
 	case restfile.WorkflowStepKindSwitch:
 		return "@switch"
 	case restfile.WorkflowStepKindForEach:
-		if using := strings.TrimSpace(step.Using); using != "" {
-			return using
+		if step.Using != "" {
+			return step.Using
 		}
 		return "@for-each"
 	default:
-		return strings.TrimSpace(step.Using)
+		return step.Using
 	}
 }
 
 func workflowStepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
-	label := strings.TrimSpace(displayStepName(step))
+	label := displayStepName(step)
 	if label == "" {
 		label = "step"
 	}
-	branch = strings.TrimSpace(branch)
 	if branch != "" {
 		label = fmt.Sprintf("%s -> %s", label, branch)
 	}
@@ -1723,7 +1606,7 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 		Duration:    time.Since(state.start),
 		BodySnippet: report,
 		RequestText: workflowDefinition(state),
-		Description: strings.TrimSpace(state.workflow.Description),
+		Description: state.workflow.Description,
 		Tags:        normalizedTags(state.workflow.Tags),
 	}
 	if entry.RequestName == "" {
@@ -1770,7 +1653,7 @@ func workflowDefinition(state *workflowState) string {
 		return ""
 	}
 	var builder strings.Builder
-	name := strings.TrimSpace(state.workflow.Name)
+	name := state.workflow.Name
 	if name == "" {
 		name = fmt.Sprintf("workflow-%d", state.start.Unix())
 	}
@@ -1785,10 +1668,10 @@ func workflowDefinition(state *workflowState) string {
 		}
 	}
 	builder.WriteString("\n")
-	if desc := strings.TrimSpace(state.workflow.Description); desc != "" {
+	if desc := state.workflow.Description; desc != "" {
 		for _, line := range strings.Split(desc, "\n") {
 			builder.WriteString("# @description ")
-			builder.WriteString(strings.TrimSpace(line))
+			builder.WriteString(line)
 			builder.WriteString("\n")
 		}
 	}
@@ -1839,12 +1722,12 @@ func (w workflowDefinitionWriter) appendIf(block *restfile.WorkflowIf) {
 		return
 	}
 	w.builder.WriteString("# @if ")
-	w.builder.WriteString(strings.TrimSpace(block.Then.Cond))
+	w.builder.WriteString(block.Then.Cond)
 	w.builder.WriteString(w.runFailSuffix(block.Then.Run, block.Then.Fail))
 	w.builder.WriteString("\n")
 	for _, branch := range block.Elifs {
 		w.builder.WriteString("# @elif ")
-		w.builder.WriteString(strings.TrimSpace(branch.Cond))
+		w.builder.WriteString(branch.Cond)
 		w.builder.WriteString(w.runFailSuffix(branch.Run, branch.Fail))
 		w.builder.WriteString("\n")
 	}
@@ -1860,11 +1743,11 @@ func (w workflowDefinitionWriter) appendSwitch(block *restfile.WorkflowSwitch) {
 		return
 	}
 	w.builder.WriteString("# @switch ")
-	w.builder.WriteString(strings.TrimSpace(block.Expr))
+	w.builder.WriteString(block.Expr)
 	w.builder.WriteString("\n")
 	for _, branch := range block.Cases {
 		w.builder.WriteString("# @case ")
-		w.builder.WriteString(strings.TrimSpace(branch.Expr))
+		w.builder.WriteString(branch.Expr)
 		w.builder.WriteString(w.runFailSuffix(branch.Run, branch.Fail))
 		w.builder.WriteString("\n")
 	}
@@ -1887,14 +1770,14 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 		w.builder.WriteString("# ")
 		w.builder.WriteString(tag)
 		w.builder.WriteString(" ")
-		w.builder.WriteString(strings.TrimSpace(step.When.Expression))
+		w.builder.WriteString(step.When.Expression)
 		w.builder.WriteString("\n")
 	}
 	if step.ForEach != nil {
 		w.builder.WriteString("# @for-each ")
-		w.builder.WriteString(strings.TrimSpace(step.ForEach.Expr))
+		w.builder.WriteString(step.ForEach.Expr)
 		w.builder.WriteString(" as ")
-		w.builder.WriteString(strings.TrimSpace(step.ForEach.Var))
+		w.builder.WriteString(step.ForEach.Var)
 		w.builder.WriteString("\n")
 	}
 	w.builder.WriteString("# @step ")
@@ -1903,7 +1786,7 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 		w.builder.WriteString(" ")
 	}
 	w.builder.WriteString("using=")
-	w.builder.WriteString(strings.TrimSpace(step.Using))
+	w.builder.WriteString(step.Using)
 	if step.OnFailure != w.defaultOnFailure {
 		w.builder.WriteString(" on-failure=")
 		w.builder.WriteString(string(step.OnFailure))
@@ -1930,8 +1813,6 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 }
 
 func (w workflowDefinitionWriter) runFailSuffix(run, fail string) string {
-	run = strings.TrimSpace(run)
-	fail = strings.TrimSpace(fail)
 	if run != "" {
 		return " run=" + w.formatOption(run)
 	}
@@ -1942,7 +1823,6 @@ func (w workflowDefinitionWriter) runFailSuffix(run, fail string) string {
 }
 
 func (w workflowDefinitionWriter) formatOption(value string) string {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return value
 	}
