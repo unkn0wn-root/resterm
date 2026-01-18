@@ -112,7 +112,7 @@ func workflowRunDisplayName(state *workflowState) string {
 	if state == nil {
 		return label
 	}
-	name := strings.TrimSpace(state.workflow.Name)
+	name := state.workflow.Name
 	if name == "" {
 		return label
 	}
@@ -177,16 +177,15 @@ func workflowStepExtras(
 		}
 	}
 	for key, value := range step.Vars {
-		trimmed := strings.TrimSpace(key)
-		if trimmed == "" {
+		if key == "" {
 			continue
 		}
-		if !strings.HasPrefix(trimmed, "vars.") {
-			trimmed = "vars." + trimmed
+		if !strings.HasPrefix(key, "vars.") {
+			key = "vars." + key
 		}
-		out[trimmed] = value
-		if state != nil && strings.HasPrefix(trimmed, "vars.workflow.") {
-			state.vars[trimmed] = value
+		out[key] = value
+		if state != nil && strings.HasPrefix(key, "vars.workflow.") {
+			state.vars[key] = value
 		}
 	}
 	for key, value := range extra {
@@ -209,7 +208,6 @@ func (m *Model) wfVars(
 }
 
 func workflowLoopKeys(state *workflowState, name string) (string, string) {
-	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", ""
 	}
@@ -296,7 +294,7 @@ func (m *Model) startForEachRun(
 		return nil
 	}
 
-	label := strings.TrimSpace(requestBaseTitle(req))
+	label := requestBaseTitle(req)
 	step := restfile.WorkflowStep{
 		Kind:      restfile.WorkflowStepKindRequest,
 		Name:      label,
@@ -347,7 +345,7 @@ func (m *Model) prepareWorkflowSteps(
 		}
 		switch step.Kind {
 		case restfile.WorkflowStepKindRequest, restfile.WorkflowStepKindForEach:
-			key := strings.ToLower(strings.TrimSpace(step.Using))
+			key := strings.ToLower(step.Using)
 			if key == "" {
 				return nil, nil, fmt.Errorf(
 					"workflow %s: step %d missing 'using' request",
@@ -455,7 +453,6 @@ func validateWorkflowBranchRuns(
 	lookup map[string]*restfile.Request,
 	run string,
 ) error {
-	run = strings.TrimSpace(run)
 	if run == "" {
 		return nil
 	}
@@ -647,7 +644,7 @@ func (m *Model) executeWorkflowRequestStep(
 				Line: spec.Line,
 			}
 		}
-		name := strings.TrimSpace(spec.Var)
+		name := spec.Var
 		reqVarKey, wfVarKey := workflowLoopKeys(state, name)
 		state.loop = &workflowLoopState{
 			step:      loopStep,
@@ -684,7 +681,6 @@ func (m *Model) executeWorkflowIfStep(
 	v := m.wfVars(state.doc, nil, envName, extraVars)
 
 	evalBranch := func(cond string, line int, tag string) (bool, error) {
-		cond = strings.TrimSpace(cond)
 		if cond == "" {
 			return false, fmt.Errorf("%s expression missing", tag)
 		}
@@ -750,15 +746,15 @@ func (m *Model) executeWorkflowIfStep(
 		next := m.advanceWorkflow(state, makeWorkflowResult(state, step, false, true, reason, nil))
 		return batchCmds([]tea.Cmd{skipCmd, next})
 	}
-	if strings.TrimSpace(branch.Fail) != "" {
-		message := strings.TrimSpace(branch.Fail)
+	if branch.Fail != "" {
+		message := branch.Fail
 		next := m.advanceWorkflow(
 			state,
 			makeWorkflowResult(state, step, false, false, message, fmt.Errorf("%s", message)),
 		)
 		return next
 	}
-	run := strings.TrimSpace(branch.Run)
+	run := branch.Run
 	if run == "" {
 		reason := "no @if run target"
 		skipCmd := m.consumeSkippedRequest(reason)
@@ -823,7 +819,7 @@ func (m *Model) executeWorkflowIfStep(
 			Var:  spec.Var,
 			Line: spec.Line,
 		}
-		name := strings.TrimSpace(spec.Var)
+		name := spec.Var
 		reqVarKey, wfVarKey := workflowLoopKeys(state, name)
 		state.loop = &workflowLoopState{
 			step:      loopStep,
@@ -858,7 +854,7 @@ func (m *Model) executeWorkflowSwitchStep(
 	ctx := context.Background()
 	v := m.wfVars(state.doc, nil, envName, extraVars)
 
-	expr := strings.TrimSpace(step.Switch.Expr)
+	expr := step.Switch.Expr
 	if expr == "" {
 		err := fmt.Errorf("@switch expression missing")
 		return m.advanceWorkflow(
@@ -893,7 +889,7 @@ func (m *Model) executeWorkflowSwitchStep(
 	var selected *restfile.WorkflowSwitchCase
 	for i := range step.Switch.Cases {
 		c := &step.Switch.Cases[i]
-		caseExpr := strings.TrimSpace(c.Expr)
+		caseExpr := c.Expr
 		if caseExpr == "" {
 			continue
 		}
@@ -935,15 +931,15 @@ func (m *Model) executeWorkflowSwitchStep(
 		return batchCmds([]tea.Cmd{skipCmd, next})
 	}
 
-	if strings.TrimSpace(selected.Fail) != "" {
-		message := strings.TrimSpace(selected.Fail)
+	if selected.Fail != "" {
+		message := selected.Fail
 		next := m.advanceWorkflow(
 			state,
 			makeWorkflowResult(state, step, false, false, message, fmt.Errorf("%s", message)),
 		)
 		return next
 	}
-	run := strings.TrimSpace(selected.Run)
+	run := selected.Run
 	if run == "" {
 		reason := "no @switch run target"
 		skipCmd := m.consumeSkippedRequest(reason)
@@ -1008,7 +1004,7 @@ func (m *Model) executeWorkflowSwitchStep(
 			Var:  spec.Var,
 			Line: spec.Line,
 		}
-		name := strings.TrimSpace(spec.Var)
+		name := spec.Var
 		reqVarKey, wfVarKey := workflowLoopKeys(state, name)
 		state.loop = &workflowLoopState{
 			step:      loopStep,
@@ -1543,7 +1539,7 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 		return ""
 	}
 	label := workflowRunLabel(state)
-	name := strings.TrimSpace(state.workflow.Name)
+	name := state.workflow.Name
 	if name == "" {
 		name = label
 	}
@@ -1574,21 +1570,20 @@ func displayStepName(step restfile.WorkflowStep) string {
 	case restfile.WorkflowStepKindSwitch:
 		return "@switch"
 	case restfile.WorkflowStepKindForEach:
-		if using := strings.TrimSpace(step.Using); using != "" {
-			return using
+		if step.Using != "" {
+			return step.Using
 		}
 		return "@for-each"
 	default:
-		return strings.TrimSpace(step.Using)
+		return step.Using
 	}
 }
 
 func workflowStepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
-	label := strings.TrimSpace(displayStepName(step))
+	label := displayStepName(step)
 	if label == "" {
 		label = "step"
 	}
-	branch = strings.TrimSpace(branch)
 	if branch != "" {
 		label = fmt.Sprintf("%s -> %s", label, branch)
 	}
@@ -1723,7 +1718,7 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 		Duration:    time.Since(state.start),
 		BodySnippet: report,
 		RequestText: workflowDefinition(state),
-		Description: strings.TrimSpace(state.workflow.Description),
+		Description: state.workflow.Description,
 		Tags:        normalizedTags(state.workflow.Tags),
 	}
 	if entry.RequestName == "" {
@@ -1770,7 +1765,7 @@ func workflowDefinition(state *workflowState) string {
 		return ""
 	}
 	var builder strings.Builder
-	name := strings.TrimSpace(state.workflow.Name)
+	name := state.workflow.Name
 	if name == "" {
 		name = fmt.Sprintf("workflow-%d", state.start.Unix())
 	}
@@ -1785,10 +1780,10 @@ func workflowDefinition(state *workflowState) string {
 		}
 	}
 	builder.WriteString("\n")
-	if desc := strings.TrimSpace(state.workflow.Description); desc != "" {
+	if desc := state.workflow.Description; desc != "" {
 		for _, line := range strings.Split(desc, "\n") {
 			builder.WriteString("# @description ")
-			builder.WriteString(strings.TrimSpace(line))
+			builder.WriteString(line)
 			builder.WriteString("\n")
 		}
 	}
@@ -1839,12 +1834,12 @@ func (w workflowDefinitionWriter) appendIf(block *restfile.WorkflowIf) {
 		return
 	}
 	w.builder.WriteString("# @if ")
-	w.builder.WriteString(strings.TrimSpace(block.Then.Cond))
+	w.builder.WriteString(block.Then.Cond)
 	w.builder.WriteString(w.runFailSuffix(block.Then.Run, block.Then.Fail))
 	w.builder.WriteString("\n")
 	for _, branch := range block.Elifs {
 		w.builder.WriteString("# @elif ")
-		w.builder.WriteString(strings.TrimSpace(branch.Cond))
+		w.builder.WriteString(branch.Cond)
 		w.builder.WriteString(w.runFailSuffix(branch.Run, branch.Fail))
 		w.builder.WriteString("\n")
 	}
@@ -1860,11 +1855,11 @@ func (w workflowDefinitionWriter) appendSwitch(block *restfile.WorkflowSwitch) {
 		return
 	}
 	w.builder.WriteString("# @switch ")
-	w.builder.WriteString(strings.TrimSpace(block.Expr))
+	w.builder.WriteString(block.Expr)
 	w.builder.WriteString("\n")
 	for _, branch := range block.Cases {
 		w.builder.WriteString("# @case ")
-		w.builder.WriteString(strings.TrimSpace(branch.Expr))
+		w.builder.WriteString(branch.Expr)
 		w.builder.WriteString(w.runFailSuffix(branch.Run, branch.Fail))
 		w.builder.WriteString("\n")
 	}
@@ -1887,14 +1882,14 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 		w.builder.WriteString("# ")
 		w.builder.WriteString(tag)
 		w.builder.WriteString(" ")
-		w.builder.WriteString(strings.TrimSpace(step.When.Expression))
+		w.builder.WriteString(step.When.Expression)
 		w.builder.WriteString("\n")
 	}
 	if step.ForEach != nil {
 		w.builder.WriteString("# @for-each ")
-		w.builder.WriteString(strings.TrimSpace(step.ForEach.Expr))
+		w.builder.WriteString(step.ForEach.Expr)
 		w.builder.WriteString(" as ")
-		w.builder.WriteString(strings.TrimSpace(step.ForEach.Var))
+		w.builder.WriteString(step.ForEach.Var)
 		w.builder.WriteString("\n")
 	}
 	w.builder.WriteString("# @step ")
@@ -1903,7 +1898,7 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 		w.builder.WriteString(" ")
 	}
 	w.builder.WriteString("using=")
-	w.builder.WriteString(strings.TrimSpace(step.Using))
+	w.builder.WriteString(step.Using)
 	if step.OnFailure != w.defaultOnFailure {
 		w.builder.WriteString(" on-failure=")
 		w.builder.WriteString(string(step.OnFailure))
@@ -1930,8 +1925,6 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 }
 
 func (w workflowDefinitionWriter) runFailSuffix(run, fail string) string {
-	run = strings.TrimSpace(run)
-	fail = strings.TrimSpace(fail)
 	if run != "" {
 		return " run=" + w.formatOption(run)
 	}
@@ -1942,7 +1935,6 @@ func (w workflowDefinitionWriter) runFailSuffix(run, fail string) string {
 }
 
 func (w workflowDefinitionWriter) formatOption(value string) string {
-	value = strings.TrimSpace(value)
 	if value == "" {
 		return value
 	}
