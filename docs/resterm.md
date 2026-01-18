@@ -454,7 +454,7 @@ RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. I
 
 | Directive | Syntax | Description |
 | --- | --- | --- |
-| `@use` | `# @use ./rts/helpers.rts as helpers` | Import an RST module (valid at file or request scope). |
+| `@use` | `# @use ./rts/helpers.rts [as helpers]` | Import an RST module (valid at file or request scope); the alias defaults to the module name. |
 | `@apply` | `# @apply {headers: {"X-Test": "1"}}` | Apply a patch to method/url/headers/query/body/vars before pre-request scripts. |
 | `@when` | `# @when vars.has("token")` | Run the request only when the expression is truthy. |
 | `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |

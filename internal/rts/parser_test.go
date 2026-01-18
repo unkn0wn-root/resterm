@@ -198,3 +198,35 @@ func TestParseBreakContinueOutsideLoop(t *testing.T) {
 		t.Fatalf("expected break outside loop error in fn")
 	}
 }
+
+func TestParseModuleDecl(t *testing.T) {
+	src := "module mod\nexport let x = 1\n"
+	m, err := ParseModule("test", []byte(src))
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if m.Name != "mod" {
+		t.Fatalf("expected module name mod, got %q", m.Name)
+	}
+	if m.NamePos.Line != 1 || m.NamePos.Col != 1 {
+		t.Fatalf("unexpected module pos: %v", m.NamePos)
+	}
+}
+
+func TestParseModuleDeclNotFirst(t *testing.T) {
+	if _, err := ParseModule("test", []byte("let x = 1\nmodule mod\n")); err == nil {
+		t.Fatalf("expected module not-first error")
+	}
+}
+
+func TestParseModuleDeclMissingName(t *testing.T) {
+	if _, err := ParseModule("test", []byte("module\n")); err == nil {
+		t.Fatalf("expected module missing name error")
+	}
+}
+
+func TestParseModuleDeclDuplicate(t *testing.T) {
+	if _, err := ParseModule("test", []byte("module a\nmodule b\n")); err == nil {
+		t.Fatalf("expected module duplicate error")
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -97,5 +98,71 @@ func TestRequestHostObjectInModule(t *testing.T) {
 	}
 	if v.K != VStr || v.S != "POST" {
 		t.Fatalf("expected method POST")
+	}
+}
+
+func TestModuleAliasFromHeader(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "mod.rts")
+	src := []byte("module mod\nexport fn ok() { return 1 }\n")
+	if err := os.WriteFile(p, src, 0o644); err != nil {
+		t.Fatalf("write module: %v", err)
+	}
+	e := NewEng()
+	rt := RT{
+		Env:     map[string]string{},
+		Vars:    map[string]string{},
+		BaseDir: dir,
+		Uses:    []Use{{Path: "mod.rts"}},
+	}
+	v, err := e.Eval(context.Background(), rt, "mod.ok()", Pos{Path: "test", Line: 1, Col: 1})
+	if err != nil {
+		t.Fatalf("eval module: %v", err)
+	}
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected ok() = 1")
+	}
+}
+
+func TestModuleAliasOverride(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "mod.rts")
+	src := []byte("module mod\nexport fn ok() { return 1 }\n")
+	if err := os.WriteFile(p, src, 0o644); err != nil {
+		t.Fatalf("write module: %v", err)
+	}
+	e := NewEng()
+	rt := RT{
+		Env:     map[string]string{},
+		Vars:    map[string]string{},
+		BaseDir: dir,
+		Uses:    []Use{{Path: "mod.rts", Alias: "alt"}},
+	}
+	v, err := e.Eval(context.Background(), rt, "alt.ok()", Pos{Path: "test", Line: 1, Col: 1})
+	if err != nil {
+		t.Fatalf("eval module: %v", err)
+	}
+	if v.K != VNum || v.N != 1 {
+		t.Fatalf("expected ok() = 1")
+	}
+}
+
+func TestModuleAliasMissingName(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "mod.rts")
+	src := []byte("export let x = 1\n")
+	if err := os.WriteFile(p, src, 0o644); err != nil {
+		t.Fatalf("write module: %v", err)
+	}
+	e := NewEng()
+	rt := RT{
+		Env:     map[string]string{},
+		Vars:    map[string]string{},
+		BaseDir: dir,
+		Uses:    []Use{{Path: "mod.rts"}},
+	}
+	_, err := e.Eval(context.Background(), rt, "1", Pos{Path: "test", Line: 1, Col: 1})
+	if err == nil || !strings.Contains(err.Error(), "missing module name") {
+		t.Fatalf("expected missing module name error, got %v", err)
 	}
 }

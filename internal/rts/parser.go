@@ -64,11 +64,31 @@ func (p *Parser) parseMod() *Mod {
 			p.next()
 			continue
 		}
+		if p.cur.K == KW_MODULE {
+			if m.Name != "" || len(m.Stmts) > 0 {
+				p.fail(p.cur.P, "module must appear before statements")
+			}
+			nm, pos := p.parseModDecl()
+			m.Name = nm
+			m.NamePos = pos
+			p.skipSemi()
+			continue
+		}
 		st := p.parseStmt()
 		m.Stmts = append(m.Stmts, st)
 		p.skipSemi()
 	}
 	return m
+}
+
+func (p *Parser) parseModDecl() (string, Pos) {
+	pos := p.expect(KW_MODULE).P
+	if p.cur.K != IDENT {
+		p.fail(p.cur.P, "module requires a name")
+	}
+	nm := p.cur.Lit
+	p.next()
+	return nm, pos
 }
 
 func (p *Parser) parseExprOnly() Expr {

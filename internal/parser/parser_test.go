@@ -1493,3 +1493,23 @@ GET https://example.com/api
 		t.Fatalf("expected trace disabled")
 	}
 }
+
+func TestParseUseDirectiveNoAlias(t *testing.T) {
+	src := `# @use ./rts/helpers.rts
+GET https://example.com
+`
+	d := Parse("use.http", []byte(src))
+	if len(d.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", d.Errors)
+	}
+	if len(d.Uses) != 1 {
+		t.Fatalf("expected 1 use, got %d", len(d.Uses))
+	}
+	sp := d.Uses[0]
+	if sp.Path != "./rts/helpers.rts" {
+		t.Fatalf("unexpected use path: %q", sp.Path)
+	}
+	if sp.Alias != "" {
+		t.Fatalf("expected empty alias, got %q", sp.Alias)
+	}
+}

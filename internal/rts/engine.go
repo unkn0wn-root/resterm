@@ -178,17 +178,25 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 	}
 
 	for _, u := range rt.Uses {
-		if u.Alias == "" {
-			return nil, rtErr(cx, pos, "missing module alias")
-		}
-		if _, ok := pre[u.Alias]; ok {
-			return nil, rtErr(cx, pos, "alias already defined: %s", u.Alias)
-		}
-		comp, _, err := e.C.Load(cx, rt.BaseDir, u.Path)
+		cp, _, err := e.C.Load(cx, rt.BaseDir, u.Path)
 		if err != nil {
 			return nil, err
 		}
-		pre[u.Alias] = Obj(NewModObj(u.Alias, comp.Exp))
+		al := u.Alias
+		if al == "" {
+			al = cp.Mod.Name
+			if al == "" {
+				p := cp.Mod.NamePos
+				if p.Line == 0 {
+					p = Pos{Path: cp.Mod.Path, Line: 1, Col: 1}
+				}
+				return nil, rtErr(cx, p, "missing module name (add 'module <name>' at top of file)")
+			}
+		}
+		if _, ok := pre[al]; ok {
+			return nil, rtErr(cx, pos, "alias already defined: %s", al)
+		}
+		pre[al] = Obj(NewModObj(al, cp.Exp))
 	}
 	return pre, nil
 }
