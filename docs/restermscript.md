@@ -42,10 +42,11 @@ Directives evaluate expressions to decide whether a request runs or whether an a
 3) Modules
 
 ```
+# @use ./rts/helpers.rts
 # @use ./rts/helpers.rts as helpers
 ```
 
-Modules are compiled once and expose only exported names through the alias. Modules execute with `rts`; `stdlib` remains as a deprecated alias. When the host provides a `request` object it is available (read-only outside pre-request scripts). Modules do not automatically see `env`, `vars`, `last`, `response`, `trace`, or `stream`, so pass values into module functions explicitly.
+Modules are compiled once and expose only exported names through the alias (explicit or module name). Modules execute with `rts`; `stdlib` remains as a deprecated alias. When the host provides a `request` object it is available (read-only outside pre-request scripts). Modules do not automatically see `env`, `vars`, `last`, `response`, `trace`, or `stream`, so pass values into module functions explicitly.
 
 4) Apply patches
 
@@ -80,7 +81,7 @@ Identifiers start with a letter or `_` and can contain letters, digits, and `_` 
 Keywords:
 
 ```
-export fn let const if elif else try return for break continue range
+export module fn let const if elif else try return for break continue range
 true false null and or not
 ```
 
@@ -235,22 +236,24 @@ for let i, ch range "go" {
 
 Modules are `.rts` files and they are imported with `@use`.
 
+- `module <name>` declares the module name (required when importing without `as`, and it must be the first statement).
 - `export` exposes a name from a module.
-- `@use ./path.rts as alias` imports a module into a request or file.
-- Aliases are required because they avoid name collisions and make references explicit.
+- `@use ./path.rts` or `@use ./path.rts as alias` imports a module into a request or file.
+- If you omit `as`, the module name becomes the alias.
 - Modules are cached, so top level mutable state can persist across runs.
 
 Example:
 
 ```rts
 // helpers.rts
+module helpers
 export fn authHeader(token) {
   return token ? "Bearer " + token : ""
 }
 ```
 
 ```http
-# @use ./rts/helpers.rts as helpers
+# @use ./rts/helpers.rts
 Authorization: {{= helpers.authHeader(vars.get("auth.token")) }}
 ```
 
@@ -391,10 +394,11 @@ Resterm exposes host objects when evaluating templates, directives, `@apply`, as
 ### @use
 
 ```
+# @use ./rts/helpers.rts
 # @use ./rts/helpers.rts as helpers
 ```
 
-`@use` is valid at file or request scope, and it requires an alias.
+`@use` is valid at file or request scope. If you omit `as`, the module name declared with `module <name>` becomes the alias.
 
 ### @apply
 
@@ -482,18 +486,19 @@ Authorization: {{= "Bearer " + vars.get("auth.token") }}
 ### Reusable module logic
 
 ```rts
+module users
 export fn label(user) {
   return (user.name ?? "unknown") + " <" + (user.email ?? "n/a") + ">"
 }
 ```
 
 ```http
-# @use ./rts/users.rts as users
+# @use ./rts/users.rts
 X-User: {{= users.label(user) }}
 ```
 
 ## Design constraints and why they exist
 
-RestermScript prioritizes predictable evaluation and safe execution. It does not allow file writes or network access, and file reads are limited to `json.file` when enabled. It does not allow member assignment because it reduces side effects and simplifies the interpreter. It requires alias-only imports because that avoids name collisions and keeps modules explicit. It keeps host objects read-only in most contexts because request evaluation should remain declarative. It sorts dict keys during `range` to keep iteration order deterministic across runs.
+RestermScript prioritizes predictable evaluation and safe execution. It does not allow file writes or network access, and file reads are limited to `json.file` when enabled. It does not allow member assignment because it reduces side effects and simplifies the interpreter. It requires an explicit alias or module name to avoid name collisions and keep imports explicit. It keeps host objects read-only in most contexts because request evaluation should remain declarative. It sorts dict keys during `range` to keep iteration order deterministic across runs.
 
 If you need full scripting or side effects, use JavaScript `@script` blocks. For everything else, RestermScript is the safer and more readable choice.

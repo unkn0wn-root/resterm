@@ -129,7 +129,7 @@ func (m *Model) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Use
 		for _, spec := range doc.Uses {
 			path := strings.TrimSpace(spec.Path)
 			alias := strings.TrimSpace(spec.Alias)
-			if path == "" || alias == "" {
+			if path == "" {
 				continue
 			}
 			uses = append(uses, rts.Use{Path: path, Alias: alias})
@@ -139,7 +139,7 @@ func (m *Model) rtsUses(doc *restfile.Document, req *restfile.Request) []rts.Use
 		for _, spec := range req.Metadata.Uses {
 			path := strings.TrimSpace(spec.Path)
 			alias := strings.TrimSpace(spec.Alias)
-			if path == "" || alias == "" {
+			if path == "" {
 				continue
 			}
 			uses = append(uses, rts.Use{Path: path, Alias: alias})

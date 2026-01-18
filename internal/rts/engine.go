@@ -177,18 +177,16 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 		pre[k] = v
 	}
 
-	for _, u := range rt.Uses {
-		if u.Alias == "" {
-			return nil, rtErr(cx, pos, "missing module alias")
-		}
-		if _, ok := pre[u.Alias]; ok {
-			return nil, rtErr(cx, pos, "alias already defined: %s", u.Alias)
-		}
-		comp, _, err := e.C.Load(cx, rt.BaseDir, u.Path)
+	uses, err := e.resolveUses(cx, rt, pre, pos)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range uses {
+		cp, _, err := e.C.Load(cx, rt.BaseDir, u.Path)
 		if err != nil {
 			return nil, err
 		}
-		pre[u.Alias] = Obj(NewModObj(u.Alias, comp.Exp))
+		pre[u.Alias] = Obj(NewModObj(u.Alias, cp.Exp))
 	}
 	return pre, nil
 }

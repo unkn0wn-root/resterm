@@ -11,6 +11,7 @@ const (
 	STRING
 
 	KW_EXPORT
+	KW_MODULE
 	KW_FN
 	KW_LET
 	KW_CONST
@@ -89,6 +90,8 @@ func (k Kind) String() string {
 		return "STRING"
 	case KW_EXPORT:
 		return "export"
+	case KW_MODULE:
+		return "module"
 	case KW_FN:
 		return "fn"
 	case KW_LET:
@@ -182,6 +185,7 @@ func (k Kind) String() string {
 
 var kw = map[string]Kind{
 	"export":   KW_EXPORT,
+	"module":   KW_MODULE,
 	"fn":       KW_FN,
 	"let":      KW_LET,
 	"const":    KW_CONST,
@@ -219,7 +223,7 @@ func KeywordClassOf(name string) KeywordClass {
 
 func keywordClassForKind(k Kind) KeywordClass {
 	switch k {
-	case KW_EXPORT, KW_FN, KW_LET, KW_CONST:
+	case KW_EXPORT, KW_MODULE, KW_FN, KW_LET, KW_CONST:
 		return KeywordDecl
 	case KW_IF, KW_ELIF, KW_ELSE, KW_RETURN, KW_FOR, KW_BREAK, KW_CONTINUE, KW_RANGE, KW_TRY:
 		return KeywordControl

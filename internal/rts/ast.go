@@ -1,8 +1,10 @@
 package rts
 
 type Mod struct {
-	Path  string
-	Stmts []Stmt
+	Path    string
+	Name    string
+	NamePos Pos
+	Stmts   []Stmt
 }
 
 type Stmt interface {

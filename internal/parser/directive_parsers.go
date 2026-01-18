@@ -25,29 +25,42 @@ func parseApplySpec(rest string, line int) (restfile.ApplySpec, bool) {
 }
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
-	fields := splitAuthFields(rest)
-	if len(fields) < 3 {
-		return restfile.UseSpec{}, fmt.Errorf("@use requires a path and alias")
-	}
-	if !strings.EqualFold(fields[1], "as") {
-		return restfile.UseSpec{}, fmt.Errorf("@use must use 'as' to define an alias")
-	}
-	if len(fields) > 3 {
+	f := splitAuthFields(rest)
+	n := len(f)
+	switch n {
+	case 0:
+		return restfile.UseSpec{}, fmt.Errorf("@use requires a path")
+	case 1:
+		p := strings.TrimSpace(f[0])
+		if p == "" {
+			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path")
+		}
+		return restfile.UseSpec{Path: p, Line: line}, nil
+	case 2:
+		if strings.EqualFold(f[1], "as") {
+			return restfile.UseSpec{}, fmt.Errorf("@use requires an alias after 'as'")
+		}
+		return restfile.UseSpec{}, fmt.Errorf("@use must be '<path>' or '<path> as <alias>'")
+	case 3:
+		if !strings.EqualFold(f[1], "as") {
+			return restfile.UseSpec{}, fmt.Errorf("@use must use 'as' to define an alias")
+		}
+		p := strings.TrimSpace(f[0])
+		a := strings.TrimSpace(f[2])
+		if p == "" || a == "" {
+			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
+		}
+		if !isIdent(a) {
+			return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", a)
+		}
+		return restfile.UseSpec{
+			Path:  p,
+			Alias: a,
+			Line:  line,
+		}, nil
+	default:
 		return restfile.UseSpec{}, fmt.Errorf("@use has too many tokens")
 	}
-	path := strings.TrimSpace(fields[0])
-	alias := strings.TrimSpace(fields[2])
-	if path == "" || alias == "" {
-		return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
-	}
-	if !isIdent(alias) {
-		return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", alias)
-	}
-	return restfile.UseSpec{
-		Path:  path,
-		Alias: alias,
-		Line:  line,
-	}, nil
 }
 
 func parseConditionSpec(rest string, line int, negate bool) (*restfile.ConditionSpec, error) {
