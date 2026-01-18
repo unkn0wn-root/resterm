@@ -1064,7 +1064,11 @@ GET https://example.com
 	}
 	for i := 0; i < 3; i++ {
 		if len(workflow.Steps[i].Expect) != 0 {
-			t.Fatalf("expected step %d to have no expectations, got %v", i+1, workflow.Steps[i].Expect)
+			t.Fatalf(
+				"expected step %d to have no expectations, got %v",
+				i+1,
+				workflow.Steps[i].Expect,
+			)
 		}
 	}
 	mixed := workflow.Steps[3]

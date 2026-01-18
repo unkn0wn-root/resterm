@@ -255,7 +255,12 @@ func workflowLoopKeys(st *workflowState, name string) (string, string) {
 	return reqKey, wfKey
 }
 
-func (m *Model) wfErr(st *workflowState, step restfile.WorkflowStep, tag string, err error) tea.Cmd {
+func (m *Model) wfErr(
+	st *workflowState,
+	step restfile.WorkflowStep,
+	tag string,
+	err error,
+) tea.Cmd {
 	wrapped := errdef.Wrap(errdef.CodeScript, err, "%s", tag)
 	m.lastError = wrapped
 	cmd := m.consumeRequestError(wrapped)
@@ -1174,14 +1179,14 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 
 	var (
 		status, msg, emsg string
-		ok     = true
-		dur    = time.Since(st.stepStart)
-		http   = cloneHTTPResponse(rm.response)
-		grpc   = cloneGRPCResponse(rm.grpc)
-		tests  = append([]scripts.TestResult(nil), rm.tests...)
-		hasExp = hasStatusExp(step.Expect)
-		hasResp = rm.response != nil || rm.grpc != nil
-		hasErr  = rm.err != nil
+		ok                = true
+		dur               = time.Since(st.stepStart)
+		http              = cloneHTTPResponse(rm.response)
+		grpc              = cloneGRPCResponse(rm.grpc)
+		tests             = append([]scripts.TestResult(nil), rm.tests...)
+		hasExp            = hasStatusExp(step.Expect)
+		hasResp           = rm.response != nil || rm.grpc != nil
+		hasErr            = rm.err != nil
 	)
 	if hasErr {
 		emsg = strings.TrimSpace(errdef.Message(rm.err))
