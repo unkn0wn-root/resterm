@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 )
 
 var methodRe = regexp.MustCompile(
@@ -14,22 +16,27 @@ func IsMethodLine(line string) bool {
 	return methodRe.MatchString(line)
 }
 
-func ParseMethodLine(line string) (method string, url string, ok bool) {
+func ParseMethodLine(line string) (method string, url string, ver httpver.Version, ok bool) {
 	if !IsMethodLine(line) {
-		return "", "", false
+		return "", "", httpver.Unknown, false
 	}
 
 	fields := strings.Fields(line)
 	if len(fields) < 2 {
-		return "", "", false
+		return "", "", httpver.Unknown, false
 	}
 
 	method = strings.ToUpper(fields[0])
 	if method == "WS" || method == "WSS" {
 		method = http.MethodGet
 	}
-	url = strings.Join(fields[1:], " ")
-	return method, url, true
+
+	urlFields, ver := httpver.SplitToken(fields[1:])
+	if len(urlFields) == 0 {
+		return "", "", httpver.Unknown, false
+	}
+	url = strings.Join(urlFields, " ")
+	return method, url, ver, true
 }
 
 func ParseWebSocketURLLine(line string) (url string, ok bool) {

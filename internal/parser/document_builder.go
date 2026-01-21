@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
@@ -222,12 +223,13 @@ func (b *documentBuilder) handleMethodLine(lineNumber int, line string) bool {
 		return true
 	}
 
-	if method, url, ok := httpbuilder.ParseMethodLine(line); ok {
+	if method, url, ver, ok := httpbuilder.ParseMethodLine(line); ok {
 		if !b.ensureRequest(lineNumber) {
 			return true
 		}
 
 		b.request.http.SetMethodAndURL(method, url)
+		b.request.settings = httpver.SetIfMissing(b.request.settings, ver)
 		b.appendLine(line)
 		return true
 	}

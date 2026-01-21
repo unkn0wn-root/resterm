@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -2768,6 +2769,7 @@ func inlineRequestFromLine(raw string, lineNumber int) *restfile.Request {
 	url := ""
 
 	fields := strings.Fields(trimmed)
+	fields, ver := httpver.SplitToken(fields)
 	if len(fields) == 1 {
 		url = fields[0]
 	} else if len(fields) >= 2 {
@@ -2779,7 +2781,7 @@ func inlineRequestFromLine(raw string, lineNumber int) *restfile.Request {
 	}
 
 	if url == "" {
-		url = trimmed
+		url = strings.Join(fields, " ")
 	}
 
 	url = strings.Trim(url, "\"'")
@@ -2795,6 +2797,7 @@ func inlineRequestFromLine(raw string, lineNumber int) *restfile.Request {
 			End:   lineNumber,
 		},
 		OriginalText: raw,
+		Settings:     httpver.SetIfMissing(nil, ver),
 	}
 }
 

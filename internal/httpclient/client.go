@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -26,6 +27,7 @@ type Options struct {
 	RootMode           tlsconfig.RootMode
 	ClientCert         string
 	ClientKey          string
+	HTTPVersion        httpver.Version
 	BaseDir            string
 	FallbackBaseDirs   []string
 	NoFallback         bool
@@ -199,6 +201,22 @@ func (c *Client) Execute(
 				err,
 				"perform request",
 			)
+	}
+	if verErr := checkHTTPVersion(httpResp, effectiveOpts.HTTPVersion); verErr != nil {
+		duration := time.Since(start)
+		if traceSess != nil {
+			traceSess.fail(verErr)
+			traceSess.finishTransfer(verErr)
+			timeline = traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
+			traceReport = buildTraceReport(timeline)
+		}
+		_ = httpResp.Body.Close()
+		return &Response{
+			Request:     req,
+			Duration:    duration,
+			Timeline:    timeline,
+			TraceReport: traceReport,
+		}, verErr
 	}
 
 	defer func() {

@@ -68,6 +68,49 @@ GET https://example.com/api
 	}
 }
 
+func TestParseMethodLineWithHTTPVersion(t *testing.T) {
+	src := `###
+
+GET http://127.0.0.1:5001/games HTTP/1.1
+
+###
+
+GET http://127.0.0.1:5001/games/1 HTTP/1.1
+`
+
+	doc := Parse("version.http", []byte(src))
+	if len(doc.Requests) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(doc.Requests))
+	}
+
+	if doc.Requests[0].URL != "http://127.0.0.1:5001/games" {
+		t.Fatalf("unexpected first url: %q", doc.Requests[0].URL)
+	}
+	if doc.Requests[1].URL != "http://127.0.0.1:5001/games/1" {
+		t.Fatalf("unexpected second url: %q", doc.Requests[1].URL)
+	}
+	if doc.Requests[0].Settings["http-version"] != "1.1" {
+		t.Fatalf("expected http-version=1.1, got %q", doc.Requests[0].Settings["http-version"])
+	}
+	if doc.Requests[1].Settings["http-version"] != "1.1" {
+		t.Fatalf("expected http-version=1.1, got %q", doc.Requests[1].Settings["http-version"])
+	}
+}
+
+func TestHTTPVersionSettingOverridesRequestLine(t *testing.T) {
+	src := `GET https://example.com HTTP/1.1
+# @setting http-version 2
+`
+
+	doc := Parse("override.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if doc.Requests[0].Settings["http-version"] != "2" {
+		t.Fatalf("expected http-version=2, got %q", doc.Requests[0].Settings["http-version"])
+	}
+}
+
 func TestParseAssertDirective(t *testing.T) {
 	src := `# @assert status == 200
 # @assert contains(header("Content-Type"), "json") => "content type"

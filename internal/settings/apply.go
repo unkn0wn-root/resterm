@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -65,6 +66,17 @@ func ApplyHTTPSettings(
 		return nil
 	}
 	norm := normalize(settings)
+	if raw := firstSetting(norm, httpver.Key); raw != "" {
+		v, ok := httpver.ParseValue(raw)
+		if !ok {
+			return errdef.New(
+				errdef.CodeHTTP,
+				"invalid http-version %q (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
+				raw,
+			)
+		}
+		opts.HTTPVersion = v
+	}
 	if value, ok := norm["timeout"]; ok {
 		if dur, err := time.ParseDuration(value); err == nil {
 			opts.Timeout = dur

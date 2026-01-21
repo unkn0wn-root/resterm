@@ -98,6 +98,11 @@ func (c *Client) StartSSE(
 		cancel()
 		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "perform sse request")
 	}
+	if verErr := checkHTTPVersion(httpResp, effectiveOpts.HTTPVersion); verErr != nil {
+		_ = httpResp.Body.Close()
+		cancel()
+		return nil, nil, verErr
+	}
 
 	contentType := strings.ToLower(httpResp.Header.Get("Content-Type"))
 	if httpResp.StatusCode >= 400 || !strings.Contains(contentType, "text/event-stream") {

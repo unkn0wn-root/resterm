@@ -145,6 +145,20 @@ func TestRequestAtCursorFallsBackToLastRequest(t *testing.T) {
 	}
 }
 
+func TestInlineRequestStripsHTTPVersionToken(t *testing.T) {
+	content := "http://example.com HTTP/1.1"
+	req := buildInlineRequest(content, 1)
+	if req == nil {
+		t.Fatalf("expected inline request to be parsed")
+	}
+	if req.Method != "GET" || req.URL != "http://example.com" {
+		t.Fatalf("unexpected request %s %s", req.Method, req.URL)
+	}
+	if req.Settings["http-version"] != "1.1" {
+		t.Fatalf("expected http-version=1.1, got %q", req.Settings["http-version"])
+	}
+}
+
 func TestInlineCurlRequestSingleLine(t *testing.T) {
 	content := "curl https://example.com"
 	req := buildInlineRequest(content, 1)

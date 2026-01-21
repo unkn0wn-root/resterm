@@ -1044,6 +1044,7 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 
 - Global defaults are passed via CLI flags (`--timeout`, `--follow`, `--insecure`, `--proxy`).
 - Per-request overrides use `@setting`, `@settings`, or `@timeout`.
+- HTTP version: `@setting http-version 1.1` (accepts `1.0`, `1.1`, `2`, `HTTP/1.1`, `HTTP/2`). A trailing `HTTP/1.1` on the request line also sets the version; explicit settings win. `2` is strict and fails if the response is not HTTP/2. WebSocket requests require `1.1`.
 - Requests inherit a shared cookie jar; cookies persist across sessions.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.

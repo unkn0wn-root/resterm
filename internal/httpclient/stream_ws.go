@@ -113,6 +113,10 @@ func (c *Client) StartWebSocket(
 		handshakeCancel()
 		return nil, nil, err
 	}
+	if verErr := checkWebSocketHTTPVersion(effectiveOpts.HTTPVersion); verErr != nil {
+		handshakeCancel()
+		return nil, nil, verErr
+	}
 
 	factory := c.resolveHTTPFactory()
 	if factory == nil {

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -40,10 +41,13 @@ func (c *Client) prepareHTTPRequest(
 		}
 	}
 
+	effectiveOpts := applyRequestSettings(opts, req.Settings)
+
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, bodyReader)
 	if err != nil {
 		return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "build request")
 	}
+	applyHTTPVersion(httpReq, effectiveOpts.HTTPVersion)
 
 	if req.Headers != nil {
 		for name, values := range req.Headers {
@@ -66,7 +70,6 @@ func (c *Client) prepareHTTPRequest(
 	}
 
 	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-	effectiveOpts := applyRequestSettings(opts, req.Settings)
 	return httpReq, effectiveOpts, nil
 }
 
@@ -207,6 +210,27 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 			effective.InsecureSkipVerify = b
 		}
 	}
+	if value, ok := norm[httpver.Key]; ok {
+		if v, ok := httpver.ParseValue(value); ok {
+			effective.HTTPVersion = v
+		}
+	}
 
 	return effective
+}
+
+func applyHTTPVersion(req *http.Request, v httpver.Version) {
+	if req == nil {
+		return
+	}
+	switch v {
+	case httpver.V10:
+		req.Proto = "HTTP/1.0"
+		req.ProtoMajor = 1
+		req.ProtoMinor = 0
+	case httpver.V11:
+		req.Proto = "HTTP/1.1"
+		req.ProtoMajor = 1
+		req.ProtoMinor = 1
+	}
 }

@@ -8,6 +8,7 @@ func TestIsHTTPKey(t *testing.T) {
 		"proxy",
 		"followredirects",
 		"insecure",
+		"http-version",
 		"http-root-cas",
 		"HTTP-CLIENT-CERT",
 	}

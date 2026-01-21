@@ -370,6 +370,12 @@ var metaSub = map[string][]Hint{
 			CursorBack: len("true"),
 		},
 		{
+			Label:      "http-version=",
+			Summary:    "HTTP protocol version (1.0|1.1|2)",
+			Insert:     "http-version=1.1",
+			CursorBack: len("1.1"),
+		},
+		{
 			Label:      "http-insecure=",
 			Summary:    "Skip TLS verify (HTTP)",
 			Insert:     "http-insecure=true",
@@ -454,6 +460,12 @@ var metaSub = map[string][]Hint{
 			Summary:    "Skip TLS verify (HTTP)",
 			Insert:     "insecure=true",
 			CursorBack: len("true"),
+		},
+		{
+			Label:      "http-version=",
+			Summary:    "HTTP protocol version (1.0|1.1|2)",
+			Insert:     "http-version=1.1",
+			CursorBack: len("1.1"),
 		},
 		{
 			Label:      "http-insecure=",
