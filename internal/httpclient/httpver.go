@@ -25,6 +25,32 @@ func checkHTTPVersion(resp *http.Response, v httpver.Version) error {
 	return nil
 }
 
+func checkHTTPVersionRequest(req *http.Request, v httpver.Version) error {
+	if v != httpver.V2 {
+		return nil
+	}
+	if req == nil || req.URL == nil {
+		return nil
+	}
+	if strings.EqualFold(req.URL.Scheme, "http") {
+		return errdef.New(errdef.CodeHTTP, "http-version=2 requires https (h2c is not supported)")
+	}
+	return nil
+}
+
+func resolveHTTPVersion(opts Options, settings map[string]string) httpver.Version {
+	v := opts.HTTPVersion
+	if len(settings) == 0 {
+		return v
+	}
+	if raw, ok := settings[httpver.Key]; ok {
+		if parsed, ok := httpver.ParseValue(raw); ok {
+			v = parsed
+		}
+	}
+	return v
+}
+
 func checkWebSocketHTTPVersion(v httpver.Version) error {
 	switch v {
 	case httpver.V10:

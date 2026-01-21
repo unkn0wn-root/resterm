@@ -103,6 +103,10 @@ func (c *Client) StartWebSocket(
 	if req == nil || req.WebSocket == nil {
 		return nil, nil, errdef.New(errdef.CodeHTTP, "websocket metadata missing")
 	}
+	norm := normalizeSettings(req.Settings)
+	if verErr := checkWebSocketHTTPVersion(resolveHTTPVersion(opts, norm)); verErr != nil {
+		return nil, nil, verErr
+	}
 
 	wsOpts := req.WebSocket.Options
 	handshakeCtx, handshakeCancel := ctxWithTimeout(ctx, wsOpts.HandshakeTimeout)
@@ -112,10 +116,6 @@ func (c *Client) StartWebSocket(
 	if err != nil {
 		handshakeCancel()
 		return nil, nil, err
-	}
-	if verErr := checkWebSocketHTTPVersion(effectiveOpts.HTTPVersion); verErr != nil {
-		handshakeCancel()
-		return nil, nil, verErr
 	}
 
 	factory := c.resolveHTTPFactory()
