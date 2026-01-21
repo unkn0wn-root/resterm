@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.19.1](https://github.com/unkn0wn-root/resterm/compare/v0.18.6...v0.19.1) (2026-01-21)
+
+
+### Features
+
+* http-version setting with strict HTTP/2 enforcement ([5a58adc](https://github.com/unkn0wn-root/resterm/commit/5a58adc42dee2d0b59e4048229f19df6a19b796c))
+* **restermscript:** add top level module def ([ce2c670](https://github.com/unkn0wn-root/resterm/commit/ce2c67026c38aa34e6ecedd9bc581f41efee5fb9))
+* **rts:** add preflight `[@use](https://github.com/use)` alias resolution ([3e4fd66](https://github.com/unkn0wn-root/resterm/commit/3e4fd66f531cbfe534d5b53d8858b3b9b82afd54))
+
 ### [0.18.6](https://github.com/unkn0wn-root/resterm/compare/v0.18.5...v0.18.6) (2026-01-17)
 
 
