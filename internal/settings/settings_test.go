@@ -6,6 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 )
 
@@ -21,6 +22,7 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 	left, err := applier.ApplyAll(map[string]string{
 		"timeout":        "3s",
 		"http-insecure":  "true",
+		"http-version":   "2",
 		"grpc-insecure":  "true",
 		"feature.flag":   "on",
 		"proxy":          "http://proxy",
@@ -38,6 +40,9 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 	}
 	if httpOpts.ProxyURL != "http://proxy" {
 		t.Fatalf("expected proxy to be set, got %q", httpOpts.ProxyURL)
+	}
+	if httpOpts.HTTPVersion != httpver.V2 {
+		t.Fatalf("expected http version 2, got %v", httpOpts.HTTPVersion)
 	}
 	if !grpcOpts.Insecure {
 		t.Fatalf("expected grpc insecure to be set")
@@ -58,6 +63,7 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 		"proxy":            "http://proxy",
 		"followredirects":  "false",
 		"insecure":         "true",
+		"http-version":     "1.1",
 		"http-root-mode":   "append",
 		"http-root-cas":    "a.pem,b.pem",
 		"http-client-cert": "cert.pem",
@@ -81,6 +87,9 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	}
 	if !httpOpts.InsecureSkipVerify {
 		t.Fatalf("expected insecure skip verify true")
+	}
+	if httpOpts.HTTPVersion != httpver.V11 {
+		t.Fatalf("expected http version 1.1, got %v", httpOpts.HTTPVersion)
 	}
 	if httpOpts.RootMode != tlsconfig.RootModeAppend {
 		t.Fatalf("expected root mode append, got %q", httpOpts.RootMode)

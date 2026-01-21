@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -40,9 +41,15 @@ func (c *Client) prepareHTTPRequest(
 		}
 	}
 
+	effectiveOpts := applyRequestSettings(opts, req.Settings)
+
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, bodyReader)
 	if err != nil {
 		return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "build request")
+	}
+	applyHTTPVersion(httpReq, effectiveOpts.HTTPVersion)
+	if verErr := checkHTTPVersionRequest(httpReq, effectiveOpts.HTTPVersion); verErr != nil {
+		return nil, effectiveOpts, verErr
 	}
 
 	if req.Headers != nil {
@@ -66,7 +73,6 @@ func (c *Client) prepareHTTPRequest(
 	}
 
 	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-	effectiveOpts := applyRequestSettings(opts, req.Settings)
 	return httpReq, effectiveOpts, nil
 }
 
@@ -176,15 +182,12 @@ func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
 }
 
 func applyRequestSettings(opts Options, settings map[string]string) Options {
-	if len(settings) == 0 {
+	norm := normalizeSettings(settings)
+	if len(norm) == 0 {
 		return opts
 	}
 
 	effective := opts
-	norm := make(map[string]string, len(settings))
-	for k, v := range settings {
-		norm[strings.ToLower(k)] = v
-	}
 
 	if value, ok := norm["timeout"]; ok {
 		if dur, err := time.ParseDuration(value); err == nil {
@@ -207,6 +210,42 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 			effective.InsecureSkipVerify = b
 		}
 	}
+	if v := resolveHTTPVersion(opts, norm); v != httpver.Unknown {
+		effective.HTTPVersion = v
+	}
 
 	return effective
+}
+
+func normalizeSettings(settings map[string]string) map[string]string {
+	if len(settings) == 0 {
+		return nil
+	}
+	norm := make(map[string]string, len(settings))
+	for k, v := range settings {
+		key := strings.ToLower(strings.TrimSpace(k))
+		if key == "" {
+			continue
+		}
+		norm[key] = v
+	}
+	return norm
+}
+
+func applyHTTPVersion(req *http.Request, v httpver.Version) {
+	if req == nil {
+		return
+	}
+	switch v {
+	case httpver.V10:
+		req.Proto = "HTTP/1.0"
+		req.ProtoMajor = 1
+		req.ProtoMinor = 0
+	case httpver.V11:
+		req.Proto = "HTTP/1.1"
+		req.ProtoMajor = 1
+		req.ProtoMinor = 1
+	case httpver.V2:
+		// HTTP/2 is negotiated by the transport; net/http ignores req.Proto for h2.
+	}
 }

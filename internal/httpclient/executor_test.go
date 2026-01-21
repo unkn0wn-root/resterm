@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -39,6 +40,7 @@ func TestApplyRequestSettings(t *testing.T) {
 		"proxy":           "http://localhost:8080",
 		"followredirects": "false",
 		"insecure":        "true",
+		"http-version":    "2",
 	}
 
 	effective := applyRequestSettings(opts, settings)
@@ -53,6 +55,9 @@ func TestApplyRequestSettings(t *testing.T) {
 	}
 	if effective.ProxyURL != "http://localhost:8080" {
 		t.Fatalf("unexpected proxy url: %s", effective.ProxyURL)
+	}
+	if effective.HTTPVersion != httpver.V2 {
+		t.Fatalf("expected http version 2, got %v", effective.HTTPVersion)
 	}
 }
 
