@@ -27,53 +27,7 @@ func (c *Client) prepareHTTPRequest(
 	if err != nil {
 		return nil, opts, err
 	}
-
-	expandedURL := strings.TrimSpace(req.URL)
-	if expandedURL == "" {
-		return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
-	}
-	if req.Body.GraphQL == nil || !strings.EqualFold(req.Method, "GET") {
-		if resolver != nil {
-			expandedURL, err = resolver.ExpandTemplates(expandedURL)
-			if err != nil {
-				return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
-			}
-		}
-	}
-
-	effectiveOpts := applyRequestSettings(opts, req.Settings)
-
-	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, bodyReader)
-	if err != nil {
-		return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "build request")
-	}
-	applyHTTPVersion(httpReq, effectiveOpts.HTTPVersion)
-	if verErr := checkHTTPVersionRequest(httpReq, effectiveOpts.HTTPVersion); verErr != nil {
-		return nil, effectiveOpts, verErr
-	}
-
-	if req.Headers != nil {
-		for name, values := range req.Headers {
-			for _, value := range values {
-				finalValue := value
-				if resolver != nil {
-					if expanded, expandErr := resolver.ExpandTemplates(value); expandErr == nil {
-						finalValue = expanded
-					}
-				}
-				httpReq.Header.Add(name, finalValue)
-			}
-		}
-	}
-
-	if req.Body.GraphQL != nil && !strings.EqualFold(req.Method, "GET") {
-		if httpReq.Header.Get("Content-Type") == "" {
-			httpReq.Header.Set("Content-Type", "application/json")
-		}
-	}
-
-	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-	return httpReq, effectiveOpts, nil
+	return c.buildHTTPRequest(ctx, req, resolver, opts, bodyReader)
 }
 
 func (c *Client) applyAuthentication(
