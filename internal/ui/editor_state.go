@@ -377,7 +377,7 @@ func (e requestEditor) selectionSummaryRange() (
 		lineStart, _, startIdx := e.lineBounds(start.Line)
 		_, lineEnd, endIdx := e.lineBounds(end.Line)
 		start = cursorPosition{Line: startIdx, Column: 0, Offset: lineStart}
-		endLen := e.Model.LineLength(endIdx)
+		endLen := e.LineLength(endIdx)
 		endCol := 0
 		if endLen > 0 {
 			endCol = endLen - 1
@@ -426,7 +426,7 @@ func (e *requestEditor) refreshMetadataHints() {
 		return
 	}
 	line := e.Line()
-	lineRunes := e.Model.LineRunes(line)
+	lineRunes := e.LineRunes(line)
 	lineLen := len(lineRunes)
 	info := e.LineInfo()
 	column := info.StartColumn + info.ColumnOffset
@@ -1227,7 +1227,7 @@ func (e requestEditor) DeleteToLineEnd() (requestEditor, tea.Cmd) {
 		return e, statusCmd(statusWarn, "Nothing to delete")
 	}
 
-	lineLen := e.Model.LineLength(cursor.Line)
+	lineLen := e.LineLength(cursor.Line)
 	end := e.offsetForPosition(cursor.Line, lineLen)
 	if end < start {
 		end = start
@@ -1373,7 +1373,7 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 	targetCol := 0
 	if linewise {
 		targetLine, _ = editorPtr.positionForOffset(insertStart)
-		targetCol = firstNonWhitespaceColumnRunes(editorPtr.Model.LineRunes(targetLine))
+		targetCol = firstNonWhitespaceColumnRunes(editorPtr.LineRunes(targetLine))
 	} else {
 		destOffset := insertStart
 		if insertLen > 0 {
@@ -1453,7 +1453,7 @@ func (e requestEditor) lineBounds(requested int) (start int, end int, idx int) {
 
 	start = e.offsetForPosition(idx, 0)
 	if idx == lineCount-1 {
-		end = e.Model.RuneCount()
+		end = e.RuneCount()
 	} else {
 		end = e.offsetForPosition(idx+1, 0)
 	}
@@ -1472,7 +1472,7 @@ func (e requestEditor) executeFindMotion(
 		return e, nil
 	}
 
-	row := e.Model.LineRunes(cursor.Line)
+	row := e.LineRunes(cursor.Line)
 	if len(row) == 0 {
 		return e, statusCmd(statusWarn, "Line is empty")
 	}
@@ -1933,7 +1933,7 @@ func (e *requestEditor) moveCursorTo(line, column int) {
 	if column < 0 {
 		column = 0
 	}
-	lineRunes := e.Model.LineLength(line)
+	lineRunes := e.LineLength(line)
 	if column > lineRunes {
 		column = lineRunes
 	}
@@ -1943,7 +1943,7 @@ func (e *requestEditor) moveCursorTo(line, column int) {
 func (e *requestEditor) moveToBufferTop() {
 	line := 0
 	col := 0
-	if lineRunes := e.Model.LineRunes(0); len(lineRunes) > 0 {
+	if lineRunes := e.LineRunes(0); len(lineRunes) > 0 {
 		col = firstNonWhitespaceColumnRunes(lineRunes)
 	}
 	e.moveCursorTo(line, col)
@@ -1956,7 +1956,7 @@ func (e *requestEditor) moveToBufferBottom() {
 		return
 	}
 	line := lineCount - 1
-	col := firstNonWhitespaceColumnRunes(e.Model.LineRunes(line))
+	col := firstNonWhitespaceColumnRunes(e.LineRunes(line))
 	e.moveCursorTo(line, col)
 }
 
@@ -1973,7 +1973,7 @@ func (e *requestEditor) moveToLineStartNonBlank() {
 	if line >= lineCount {
 		line = lineCount - 1
 	}
-	col := firstNonWhitespaceColumnRunes(e.Model.LineRunes(line))
+	col := firstNonWhitespaceColumnRunes(e.LineRunes(line))
 	e.moveCursorTo(line, col)
 }
 
@@ -2180,11 +2180,11 @@ func (e *requestEditor) moveLines(delta int) {
 }
 
 func (e requestEditor) offsetForPosition(line, column int) int {
-	return e.Model.OffsetForPosition(line, column)
+	return e.OffsetForPosition(line, column)
 }
 
 func (e requestEditor) positionForOffset(offset int) (int, int) {
-	return e.Model.PositionForOffset(offset)
+	return e.PositionForOffset(offset)
 }
 
 func firstNonWhitespaceColumnRunes(runes []rune) int {
@@ -2201,7 +2201,7 @@ func (e requestEditor) clampOffset(offset int) int {
 		return 0
 	}
 
-	total := e.Model.RuneCount()
+	total := e.RuneCount()
 	if offset > total {
 		return total
 	}
@@ -2311,7 +2311,7 @@ func (e *requestEditor) jumpToSearchIndex(index int) tea.Cmd {
 
 	match := e.search.matches[index]
 	start := e.clampOffset(match.start)
-	line, col := e.Model.PositionForOffset(start)
+	line, col := e.PositionForOffset(start)
 	e.search.index = index
 	e.search.active = true
 	return e.executeMotion(func() {
