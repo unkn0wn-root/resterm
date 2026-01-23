@@ -376,9 +376,8 @@ func (e requestEditor) selectionSummaryRange() (
 	if e.isVisualLineMode() {
 		lineStart, _, startIdx := e.lineBounds(start.Line)
 		_, lineEnd, endIdx := e.lineBounds(end.Line)
-		value := e.Value()
 		start = cursorPosition{Line: startIdx, Column: 0, Offset: lineStart}
-		endLen := lineLength(value, endIdx)
+		endLen := e.LineLength(endIdx)
 		endCol := 0
 		if endLen > 0 {
 			endCol = endLen - 1
@@ -426,24 +425,33 @@ func (e *requestEditor) refreshMetadataHints() {
 		e.metadataHints.deactivate()
 		return
 	}
-	value := e.Value()
-	runes := []rune(value)
-	caret := e.caretPosition()
-	if caret.Offset <= 0 || caret.Offset > len(runes) {
+	line := e.Line()
+	lineRunes := e.LineRunes(line)
+	lineLen := len(lineRunes)
+	info := e.LineInfo()
+	column := info.StartColumn + info.ColumnOffset
+	if column < 0 {
+		column = 0
+	}
+	if column > lineLen {
+		column = lineLen
+	}
+	if column == 0 || lineLen == 0 {
 		e.metadataHints.deactivate()
 		return
 	}
-	anchor := hint.Anchor(runes, caret.Offset)
-	if anchor == -1 {
+
+	anchor := hint.Anchor(lineRunes, column)
+	if anchor < 0 {
 		e.metadataHints.deactivate()
 		return
 	}
-	if !hint.InDirectiveContext(runes, anchor) {
+	if !hint.InDirectiveContext(lineRunes, anchor) {
 		e.metadataHints.deactivate()
 		return
 	}
-	queryRunes := runes[anchor+1 : caret.Offset]
-	if caret.Offset < len(runes) && hint.IsQueryRune(runes[caret.Offset]) {
+	queryRunes := lineRunes[anchor+1 : column]
+	if column < lineLen && hint.IsQueryRune(lineRunes[column]) {
 		// Caret sits before additional directive characters; keep existing hints.
 		return
 	}
@@ -461,7 +469,8 @@ func (e *requestEditor) refreshMetadataHints() {
 	if ctx.Mode == hint.ModeSubcommand {
 		insertAnchor = anchor + 1 + ctx.TokenStart
 	}
-	e.metadataHints.update(insertAnchor, filtered, ctx)
+	lineStart := e.offsetForPosition(line, 0)
+	e.metadataHints.update(lineStart+insertAnchor, filtered, ctx)
 }
 
 func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
@@ -525,8 +534,8 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	e.SetValue(newValue)
 	e.SetViewStart(prevView)
 	if placeholderStart >= 0 && placeholderEnd > placeholderStart {
-		startLine, startCol := positionForOffset(newValue, placeholderStart)
-		endLine, endCol := positionForOffset(newValue, placeholderEnd)
+		startLine, startCol := e.positionForOffset(placeholderStart)
+		endLine, endCol := e.positionForOffset(placeholderEnd)
 		startPos := cursorPosition{Line: startLine, Column: startCol, Offset: placeholderStart}
 		endPos := cursorPosition{Line: endLine, Column: endCol, Offset: placeholderEnd}
 		e.startSelection(endPos, selectionManual)
@@ -535,7 +544,7 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	} else {
 		e.clearSelection()
 	}
-	line, col := positionForOffset(newValue, newOffset)
+	line, col := e.positionForOffset(newOffset)
 	e.moveCursorTo(line, col)
 	e.applySelectionHighlight()
 	e.metadataHints.deactivate()
@@ -1218,7 +1227,7 @@ func (e requestEditor) DeleteToLineEnd() (requestEditor, tea.Cmd) {
 		return e, statusCmd(statusWarn, "Nothing to delete")
 	}
 
-	lineLen := lineLength(value, cursor.Line)
+	lineLen := e.LineLength(cursor.Line)
 	end := e.offsetForPosition(cursor.Line, lineLen)
 	if end < start {
 		end = start
@@ -1363,18 +1372,15 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 	targetLine := 0
 	targetCol := 0
 	if linewise {
-		targetLine, _ = positionForOffset(newValue, insertStart)
-		lines := strings.Split(newValue, "\n")
-		if targetLine >= 0 && targetLine < len(lines) {
-			targetCol = firstNonWhitespaceColumn(lines[targetLine])
-		}
+		targetLine, _ = editorPtr.positionForOffset(insertStart)
+		targetCol = firstNonWhitespaceColumnRunes(editorPtr.LineRunes(targetLine))
 	} else {
 		destOffset := insertStart
 		if insertLen > 0 {
 			destOffset = insertEnd - 1
 		}
 		destOffset = editorPtr.clampOffset(destOffset)
-		targetLine, targetCol = positionForOffset(newValue, destOffset)
+		targetLine, targetCol = editorPtr.positionForOffset(destOffset)
 	}
 
 	editorPtr.moveCursorTo(targetLine, targetCol)
@@ -1432,9 +1438,8 @@ func (e requestEditor) RedoLastChange() (requestEditor, tea.Cmd) {
 }
 
 func (e requestEditor) lineBounds(requested int) (start int, end int, idx int) {
-	value := e.Value()
-	lines := strings.Split(value, "\n")
-	if len(lines) == 0 {
+	lineCount := e.LineCount()
+	if lineCount == 0 {
 		return 0, 0, 0
 	}
 
@@ -1442,14 +1447,13 @@ func (e requestEditor) lineBounds(requested int) (start int, end int, idx int) {
 	if idx < 0 {
 		idx = 0
 	}
-	if idx >= len(lines) {
-		idx = len(lines) - 1
+	if idx >= lineCount {
+		idx = lineCount - 1
 	}
 
 	start = e.offsetForPosition(idx, 0)
-	runes := []rune(value)
-	if idx == len(lines)-1 {
-		end = len(runes)
+	if idx == lineCount-1 {
+		end = e.RuneCount()
 	} else {
 		end = e.offsetForPosition(idx+1, 0)
 	}
@@ -1463,12 +1467,12 @@ func (e requestEditor) executeFindMotion(
 	forward := kind == "f" || kind == "t"
 	till := kind == "t" || kind == "T"
 	cursor := e.caretPosition()
-	lines := strings.Split(e.Value(), "\n")
-	if cursor.Line < 0 || cursor.Line >= len(lines) {
+	lineCount := e.LineCount()
+	if cursor.Line < 0 || cursor.Line >= lineCount {
 		return e, nil
 	}
 
-	row := []rune(lines[cursor.Line])
+	row := e.LineRunes(cursor.Line)
 	if len(row) == 0 {
 		return e, statusCmd(statusWarn, "Line is empty")
 	}
@@ -1856,7 +1860,7 @@ func (e *requestEditor) removeSelection() (string, bool) {
 	e.SetValue(newValue)
 	e.clearSelection()
 
-	line, col := positionForOffset(newValue, startOffset)
+	line, col := e.positionForOffset(startOffset)
 	if e.isVisualLineMode() {
 		col = 0
 	}
@@ -1900,7 +1904,7 @@ func (e *requestEditor) deleteRange(startOffset, endOffset int) (string, bool) {
 	e.SetValue(newValue)
 	e.SetViewStart(prevView)
 	e.clearSelection()
-	line, col := positionForOffset(newValue, startOffset)
+	line, col := e.positionForOffset(startOffset)
 	e.moveCursorTo(line, col)
 	e.applySelectionHighlight()
 	return removed, true
@@ -1929,7 +1933,7 @@ func (e *requestEditor) moveCursorTo(line, column int) {
 	if column < 0 {
 		column = 0
 	}
-	lineRunes := lineLength(e.Value(), line)
+	lineRunes := e.LineLength(line)
 	if column > lineRunes {
 		column = lineRunes
 	}
@@ -1939,27 +1943,26 @@ func (e *requestEditor) moveCursorTo(line, column int) {
 func (e *requestEditor) moveToBufferTop() {
 	line := 0
 	col := 0
-	lines := strings.Split(e.Value(), "\n")
-	if len(lines) > 0 {
-		col = firstNonWhitespaceColumn(lines[0])
+	if lineRunes := e.LineRunes(0); len(lineRunes) > 0 {
+		col = firstNonWhitespaceColumnRunes(lineRunes)
 	}
 	e.moveCursorTo(line, col)
 }
 
 func (e *requestEditor) moveToBufferBottom() {
-	lines := strings.Split(e.Value(), "\n")
-	if len(lines) == 0 {
+	lineCount := e.LineCount()
+	if lineCount <= 0 {
 		e.moveCursorTo(0, 0)
 		return
 	}
-	line := len(lines) - 1
-	col := firstNonWhitespaceColumn(lines[line])
+	line := lineCount - 1
+	col := firstNonWhitespaceColumnRunes(e.LineRunes(line))
 	e.moveCursorTo(line, col)
 }
 
 func (e *requestEditor) moveToLineStartNonBlank() {
-	lines := strings.Split(e.Value(), "\n")
-	if len(lines) == 0 {
+	lineCount := e.LineCount()
+	if lineCount <= 0 {
 		e.moveCursorTo(0, 0)
 		return
 	}
@@ -1967,10 +1970,10 @@ func (e *requestEditor) moveToLineStartNonBlank() {
 	if line < 0 {
 		line = 0
 	}
-	if line >= len(lines) {
-		line = len(lines) - 1
+	if line >= lineCount {
+		line = lineCount - 1
 	}
-	col := firstNonWhitespaceColumn(lines[line])
+	col := firstNonWhitespaceColumnRunes(e.LineRunes(line))
 	e.moveCursorTo(line, col)
 }
 
@@ -2027,7 +2030,7 @@ func (e *requestEditor) moveToWordEnd(big bool) {
 			return
 		}
 		idx = segEnd(runes, idx, big)
-		line, col := positionForOffset(value, idx)
+		line, col := e.positionForOffset(idx)
 		e.moveCursorTo(line, col)
 		return
 	}
@@ -2035,7 +2038,7 @@ func (e *requestEditor) moveToWordEnd(big bool) {
 	cls := wordClass(runes[idx], big)
 	if idx+1 < len(runes) && wordClass(runes[idx+1], big) == cls {
 		idx = segEnd(runes, idx, big)
-		line, col := positionForOffset(value, idx)
+		line, col := e.positionForOffset(idx)
 		e.moveCursorTo(line, col)
 		return
 	}
@@ -2048,7 +2051,7 @@ func (e *requestEditor) moveToWordEnd(big bool) {
 		return
 	}
 	idx = segEnd(runes, idx, big)
-	line, col := positionForOffset(value, idx)
+	line, col := e.positionForOffset(idx)
 	e.moveCursorTo(line, col)
 }
 
@@ -2076,7 +2079,7 @@ func (e *requestEditor) moveToWordNext(big bool) {
 			idx++
 		}
 	}
-	line, col := positionForOffset(value, idx)
+	line, col := e.positionForOffset(idx)
 	e.moveCursorTo(line, col)
 }
 
@@ -2103,7 +2106,7 @@ func (e *requestEditor) moveToWordStart(big bool) {
 			return
 		}
 		idx = segStart(runes, idx, big)
-		line, col := positionForOffset(value, idx)
+		line, col := e.positionForOffset(idx)
 		e.moveCursorTo(line, col)
 		return
 	}
@@ -2111,7 +2114,7 @@ func (e *requestEditor) moveToWordStart(big bool) {
 	cls := wordClass(runes[idx], big)
 	if idx-1 >= 0 && wordClass(runes[idx-1], big) == cls {
 		idx = segStart(runes, idx, big)
-		line, col := positionForOffset(value, idx)
+		line, col := e.positionForOffset(idx)
 		e.moveCursorTo(line, col)
 		return
 	}
@@ -2124,7 +2127,7 @@ func (e *requestEditor) moveToWordStart(big bool) {
 		return
 	}
 	idx = segStart(runes, idx, big)
-	line, col := positionForOffset(value, idx)
+	line, col := e.positionForOffset(idx)
 	e.moveCursorTo(line, col)
 }
 
@@ -2177,53 +2180,14 @@ func (e *requestEditor) moveLines(delta int) {
 }
 
 func (e requestEditor) offsetForPosition(line, column int) int {
-	if line < 0 {
-		return 0
-	}
-	lines := strings.Split(e.Value(), "\n")
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-	if line >= len(lines) {
-		line = len(lines) - 1
-	}
-
-	offset := 0
-	for i := 0; i < line; i++ {
-		offset += utf8.RuneCountInString(lines[i]) + 1
-	}
-
-	col := column
-	if col < 0 {
-		col = 0
-	}
-
-	lineLen := utf8.RuneCountInString(lines[line])
-	if col > lineLen {
-		col = lineLen
-	}
-	offset += col
-	return offset
+	return e.OffsetForPosition(line, column)
 }
 
-func lineLength(value string, line int) int {
-	lines := strings.Split(value, "\n")
-	if len(lines) == 0 {
-		return 0
-	}
-
-	if line < 0 {
-		line = 0
-	}
-
-	if line >= len(lines) {
-		line = len(lines) - 1
-	}
-	return utf8.RuneCountInString(lines[line])
+func (e requestEditor) positionForOffset(offset int) (int, int) {
+	return e.PositionForOffset(offset)
 }
 
-func firstNonWhitespaceColumn(line string) int {
-	runes := []rune(line)
+func firstNonWhitespaceColumnRunes(runes []rune) int {
 	for i, r := range runes {
 		if !unicode.IsSpace(r) {
 			return i
@@ -2232,37 +2196,12 @@ func firstNonWhitespaceColumn(line string) int {
 	return 0
 }
 
-func positionForOffset(value string, offset int) (int, int) {
-	if offset < 0 {
-		offset = 0
-	}
-
-	lines := strings.Split(value, "\n")
-	if len(lines) == 0 {
-		return 0, 0
-	}
-
-	remaining := offset
-	for i, line := range lines {
-		lineLen := utf8.RuneCountInString(line)
-		if remaining <= lineLen {
-			return i, remaining
-		}
-		remaining -= lineLen + 1
-		if remaining < 0 {
-			return i, lineLen
-		}
-	}
-	last := len(lines) - 1
-	return last, utf8.RuneCountInString(lines[last])
-}
-
 func (e requestEditor) clampOffset(offset int) int {
 	if offset < 0 {
 		return 0
 	}
 
-	total := utf8.RuneCountInString(e.Value())
+	total := e.RuneCount()
 	if offset > total {
 		return total
 	}
@@ -2372,7 +2311,7 @@ func (e *requestEditor) jumpToSearchIndex(index int) tea.Cmd {
 
 	match := e.search.matches[index]
 	start := e.clampOffset(match.start)
-	line, col := positionForOffset(e.Value(), start)
+	line, col := e.PositionForOffset(start)
 	e.search.index = index
 	e.search.active = true
 	return e.executeMotion(func() {
