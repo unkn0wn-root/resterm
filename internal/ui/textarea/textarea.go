@@ -582,6 +582,94 @@ func (m *Model) LineCount() int {
 	return len(m.value)
 }
 
+// LineRunes returns the runes for the requested line. The slice must be treated as read-only.
+func (m *Model) LineRunes(line int) []rune {
+	if len(m.value) == 0 {
+		return nil
+	}
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(m.value) {
+		line = len(m.value) - 1
+	}
+	return m.value[line]
+}
+
+// LineLength returns the number of runes on the requested line.
+func (m *Model) LineLength(line int) int {
+	return len(m.LineRunes(line))
+}
+
+// RuneCount returns the total number of runes, including newline separators.
+func (m *Model) RuneCount() int {
+	if len(m.value) == 0 {
+		return 0
+	}
+	total := 0
+	for i, line := range m.value {
+		total += len(line)
+		if i < len(m.value)-1 {
+			total++
+		}
+	}
+	return total
+}
+
+// OffsetForPosition returns the rune offset for the given line and column.
+func (m *Model) OffsetForPosition(line, column int) int {
+	if len(m.value) == 0 {
+		return 0
+	}
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(m.value) {
+		line = len(m.value) - 1
+	}
+
+	offset := 0
+	for i := 0; i < line; i++ {
+		offset += len(m.value[i]) + 1
+	}
+
+	col := column
+	if col < 0 {
+		col = 0
+	}
+
+	lineLen := len(m.value[line])
+	if col > lineLen {
+		col = lineLen
+	}
+	offset += col
+	return offset
+}
+
+// PositionForOffset returns the line and column for the given rune offset.
+func (m *Model) PositionForOffset(offset int) (int, int) {
+	if offset < 0 {
+		offset = 0
+	}
+	if len(m.value) == 0 {
+		return 0, 0
+	}
+
+	remaining := offset
+	for i, line := range m.value {
+		lineLen := len(line)
+		if remaining <= lineLen {
+			return i, remaining
+		}
+		remaining -= lineLen + 1
+		if remaining < 0 {
+			return i, lineLen
+		}
+	}
+	last := len(m.value) - 1
+	return last, len(m.value[last])
+}
+
 // Line returns the line position.
 func (m Model) Line() int {
 	return m.row

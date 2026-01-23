@@ -1029,6 +1029,42 @@ func TestRequestEditorMetadataHintsSuggestAndAccept(t *testing.T) {
 	}
 }
 
+func TestRequestEditorMetadataHintsSecondLineAnchor(t *testing.T) {
+	editor := newTestEditor("GET https://example.com\n# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	keys := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'@'}},
+		{Type: tea.KeyRunes, Runes: []rune{'n'}},
+		{Type: tea.KeyRunes, Runes: []rune{'a'}},
+	}
+	for _, key := range keys {
+		var cmd tea.Cmd
+		editor, cmd = editor.Update(key)
+		if cmd != nil {
+			cmd()
+		}
+	}
+
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to activate on the second line")
+	}
+
+	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatal("expected autocomplete acceptance to mark editor dirty")
+	}
+	if got := editor.Value(); got != "GET https://example.com\n# @name " {
+		t.Fatalf("expected @name completion on second line, got %q", got)
+	}
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to close after acceptance")
+	}
+}
+
 func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor

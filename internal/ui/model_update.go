@@ -1303,7 +1303,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				editorPtr := &m.editor
 				editorPtr.ClearSelection()
 				pos := editorPtr.caretPosition()
-				lineLen := lineLength(editorPtr.Value(), pos.Line)
+				lineLen := editorPtr.LineLength(pos.Line)
 				targetCol := pos.Column
 				if targetCol < lineLen {
 					targetCol++
