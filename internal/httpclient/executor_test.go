@@ -70,7 +70,8 @@ func TestInjectBodyIncludes(t *testing.T) {
 	}
 
 	body := "part1\n@payload.json\n@{notIncluded}\n"
-	processed, err := client.injectBodyIncludes(body, baseDir, nil, true)
+	lookup := newFileLookup(baseDir, Options{})
+	processed, err := client.injectBodyIncludes(body, lookup)
 	if err != nil {
 		t.Fatalf("inject body includes: %v", err)
 	}
@@ -85,12 +86,11 @@ func TestInjectBodyIncludes(t *testing.T) {
 func TestInjectBodyIncludesFallback(t *testing.T) {
 	client := &Client{fs: mapFS{"workspace/payload.json": []byte("hi")}}
 	body := "@payload.json"
-	processed, err := client.injectBodyIncludes(
-		body,
+	lookup := newFileLookup(
 		"/does/not/exist",
-		[]string{"workspace"},
-		true,
+		Options{FallbackBaseDirs: []string{"workspace"}},
 	)
+	processed, err := client.injectBodyIncludes(body, lookup)
 	if err != nil {
 		t.Fatalf("inject body includes with fallback: %v", err)
 	}
@@ -209,14 +209,14 @@ func TestPrepareGraphQLPostBody(t *testing.T) {
 		Variables: "{ \"id\": \"{{id}}\" }",
 	}
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"id": "123"}))
-	reader, err := client.prepareBody(req, resolver, Options{})
+	plan, err := client.prepareBody(req, resolver, Options{})
 	if err != nil {
 		t.Fatalf("prepare graphQL body: %v", err)
 	}
-	if reader == nil {
+	if plan.rd == nil {
 		t.Fatalf("expected reader for POST graphQL body")
 	}
-	data, err := io.ReadAll(reader)
+	data, err := io.ReadAll(plan.rd)
 	if err != nil {
 		t.Fatalf("read payload: %v", err)
 	}
@@ -244,16 +244,16 @@ func TestPrepareGraphQLGetQueryParameters(t *testing.T) {
 		Variables:     "{ \"flag\": true }",
 		OperationName: "Ping",
 	}
-	reader, err := client.prepareBody(req, vars.NewResolver(), Options{})
+	plan, err := client.prepareBody(req, vars.NewResolver(), Options{})
 	if err != nil {
 		t.Fatalf("prepare graphQL body (GET): %v", err)
 	}
-	if reader != nil {
+	if plan.rd != nil {
 		t.Fatalf("expected nil reader for GET graphql request")
 	}
-	parsed, err := url.Parse(req.URL)
+	parsed, err := url.Parse(plan.url)
 	if err != nil {
-		t.Fatalf("parse mutated url: %v", err)
+		t.Fatalf("parse graphql url: %v", err)
 	}
 	values := parsed.Query()
 	if values.Get("existing") != "1" {
@@ -281,15 +281,16 @@ func TestPrepareGraphQLGetWithTemplatedURL(t *testing.T) {
 	resolver := vars.NewResolver(
 		vars.NewMapProvider("env", map[string]string{"base": "https://example.com"}),
 	)
-	if _, err := client.prepareBody(req, resolver, Options{}); err != nil {
+	plan, err := client.prepareBody(req, resolver, Options{})
+	if err != nil {
 		t.Fatalf("prepare graphQL body (GET with template): %v", err)
 	}
-	parsed, err := url.Parse(req.URL)
+	parsed, err := url.Parse(plan.url)
 	if err != nil {
-		t.Fatalf("parse mutated url: %v", err)
+		t.Fatalf("parse graphql url: %v", err)
 	}
 	if parsed.Scheme != "https" || parsed.Host != "example.com" {
-		t.Fatalf("expected url to be expanded, got %s", req.URL)
+		t.Fatalf("expected url to be expanded, got %s", plan.url)
 	}
 	values := parsed.Query()
 	if values.Get("query") == "" || values.Get("variables") == "" {
@@ -309,11 +310,11 @@ func TestPrepareBodyFileExpandTemplates(t *testing.T) {
 	req.Body.FilePath = "payload.json"
 	req.Body.Options.ExpandTemplates = true
 	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"id": "123"}))
-	reader, err := client.prepareBody(req, resolver, Options{})
+	plan, err := client.prepareBody(req, resolver, Options{})
 	if err != nil {
 		t.Fatalf("prepare body: %v", err)
 	}
-	data, err := io.ReadAll(reader)
+	data, err := io.ReadAll(plan.rd)
 	if err != nil {
 		t.Fatalf("read body: %v", err)
 	}

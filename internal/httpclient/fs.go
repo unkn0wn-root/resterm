@@ -23,6 +23,21 @@ func (OSFileSystem) ReadFile(name string) ([]byte, error) {
 	return os.ReadFile(name)
 }
 
+type fileLookup struct {
+	baseDir   string
+	fallbacks []string
+	allowRaw  bool
+}
+
+func newFileLookup(baseDir string, opts Options) fileLookup {
+	fallbacks, allowRaw := resolveFileLookup(baseDir, opts)
+	return fileLookup{baseDir: baseDir, fallbacks: fallbacks, allowRaw: allowRaw}
+}
+
+func (lookup fileLookup) read(c *Client, path, label string) ([]byte, string, error) {
+	return c.readFileWithFallback(path, lookup.baseDir, lookup.fallbacks, lookup.allowRaw, label)
+}
+
 func (c *Client) readFileWithFallback(
 	path string,
 	baseDir string,
@@ -96,9 +111,7 @@ func (c *Client) readFileWithFallback(
 // @{variable} syntax is left alone so template expansion can handle it.
 func (c *Client) injectBodyIncludes(
 	body string,
-	baseDir string,
-	fallbacks []string,
-	allowRaw bool,
+	lookup fileLookup,
 ) (string, error) {
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
@@ -117,13 +130,7 @@ func (c *Client) injectBodyIncludes(
 			!strings.HasPrefix(trimmed, "@{") {
 			includePath := strings.TrimSpace(trimmed[1:])
 			if includePath != "" {
-				data, _, err := c.readFileWithFallback(
-					includePath,
-					baseDir,
-					fallbacks,
-					allowRaw,
-					"include body file",
-				)
+				data, _, err := lookup.read(c, includePath, "include body file")
 				if err != nil {
 					return "", err
 				}

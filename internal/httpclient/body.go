@@ -12,60 +12,59 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+type bodyPlan struct {
+	rd  io.Reader
+	url string
+}
+
 func (c *Client) prepareBody(
 	req *restfile.Request,
 	resolver *vars.Resolver,
 	opts Options,
-) (io.Reader, error) {
+) (bodyPlan, error) {
 	if req.Body.GraphQL != nil {
 		return c.prepareGraphQLBody(req, resolver, opts)
 	}
 
-	fallbacks, allowRaw := resolveFileLookup(opts.BaseDir, opts)
+	lookup := newFileLookup(opts.BaseDir, opts)
 
 	switch {
 	case req.Body.FilePath != "":
-		data, _, err := c.readFileWithFallback(
-			req.Body.FilePath,
-			opts.BaseDir,
-			fallbacks,
-			allowRaw,
-			"body file",
-		)
+		data, _, err := lookup.read(c, req.Body.FilePath, "body file")
 		if err != nil {
-			return nil, err
+			return bodyPlan{}, err
 		}
 
 		if resolver != nil && req.Body.Options.ExpandTemplates {
 			text := string(data)
 			expanded, err := resolver.ExpandTemplates(text)
 			if err != nil {
-				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body file templates")
+				return bodyPlan{}, errdef.Wrap(errdef.CodeHTTP, err, "expand body file templates")
 			}
 
-			processed, procErr := c.injectBodyIncludes(expanded, opts.BaseDir, fallbacks, allowRaw)
+			processed, procErr := c.injectBodyIncludes(expanded, lookup)
 			if procErr != nil {
-				return nil, procErr
+				return bodyPlan{}, procErr
 			}
-			return strings.NewReader(processed), nil
+			return bodyPlan{rd: strings.NewReader(processed)}, nil
 		}
-		return bytes.NewReader(data), nil
+		return bodyPlan{rd: bytes.NewReader(data)}, nil
 	case req.Body.Text != "":
 		expanded := req.Body.Text
 		if resolver != nil {
 			var err error
 			expanded, err = resolver.ExpandTemplates(req.Body.Text)
 			if err != nil {
-				return nil, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
+				return bodyPlan{}, errdef.Wrap(errdef.CodeHTTP, err, "expand body template")
 			}
 		}
-		processed, err := c.injectBodyIncludes(expanded, opts.BaseDir, fallbacks, allowRaw)
+		processed, err := c.injectBodyIncludes(expanded, lookup)
 		if err != nil {
-			return nil, err
+			return bodyPlan{}, err
 		}
-		return strings.NewReader(processed), nil
+		return bodyPlan{rd: strings.NewReader(processed)}, nil
 	default:
-		return nil, nil
+		return bodyPlan{}, nil
 	}
 }
 
@@ -75,48 +74,49 @@ func (c *Client) prepareGraphQLBody(
 	req *restfile.Request,
 	resolver *vars.Resolver,
 	opts Options,
-) (io.Reader, error) {
+) (bodyPlan, error) {
 	gql := req.Body.GraphQL
-	fallbacks, allowRaw := resolveFileLookup(opts.BaseDir, opts)
+	lookup := newFileLookup(opts.BaseDir, opts)
 
-	query, err := c.gqlQuery(gql, resolver, opts.BaseDir, fallbacks, allowRaw)
+	query, err := c.gqlQuery(gql, resolver, lookup)
 	if err != nil {
-		return nil, err
+		return bodyPlan{}, err
 	}
 
 	op, err := gqlOpName(gql, resolver)
 	if err != nil {
-		return nil, err
+		return bodyPlan{}, err
 	}
 
-	varsMap, varsJSON, err := c.gqlVars(gql, resolver, opts.BaseDir, fallbacks, allowRaw)
+	varsMap, varsJSON, err := c.gqlVars(gql, resolver, lookup)
 	if err != nil {
-		return nil, err
+		return bodyPlan{}, err
 	}
 
 	if strings.EqualFold(req.Method, "GET") {
-		if err := setGraphQLQuery(req, resolver, query, op, varsJSON); err != nil {
-			return nil, err
+		url, err := buildGraphQLURL(req.URL, resolver, query, op, varsJSON)
+		if err != nil {
+			return bodyPlan{}, err
 		}
-		return nil, nil
+		return bodyPlan{url: url}, nil
 	}
 
-	return buildGraphQLPayload(query, op, varsMap)
+	reader, err := buildGraphQLPayload(query, op, varsMap)
+	if err != nil {
+		return bodyPlan{}, err
+	}
+	return bodyPlan{rd: reader}, nil
 }
 
 func (c *Client) gqlQuery(
 	gql *restfile.GraphQLBody,
 	resolver *vars.Resolver,
-	baseDir string,
-	fallbacks []string,
-	allowRaw bool,
+	lookup fileLookup,
 ) (string, error) {
 	query, err := c.graphQLSectionContent(
 		gql.Query,
 		gql.QueryFile,
-		baseDir,
-		fallbacks,
-		allowRaw,
+		lookup,
 		"GraphQL query",
 	)
 	if err != nil {
@@ -154,16 +154,12 @@ func gqlOpName(gql *restfile.GraphQLBody, resolver *vars.Resolver) (string, erro
 func (c *Client) gqlVars(
 	gql *restfile.GraphQLBody,
 	resolver *vars.Resolver,
-	baseDir string,
-	fallbacks []string,
-	allowRaw bool,
+	lookup fileLookup,
 ) (map[string]interface{}, string, error) {
 	raw, err := c.graphQLSectionContent(
 		gql.Variables,
 		gql.VariablesFile,
-		baseDir,
-		fallbacks,
-		allowRaw,
+		lookup,
 		"GraphQL variables",
 	)
 	if err != nil {
@@ -195,26 +191,26 @@ func (c *Client) gqlVars(
 	return parsed, string(normalised), nil
 }
 
-func setGraphQLQuery(
-	req *restfile.Request,
+func buildGraphQLURL(
+	rawURL string,
 	resolver *vars.Resolver,
 	query, op, varsJSON string,
-) error {
-	expandedURL := strings.TrimSpace(req.URL)
+) (string, error) {
+	expandedURL := strings.TrimSpace(rawURL)
 	if resolver != nil {
 		if expanded, expandErr := resolver.ExpandTemplates(expandedURL); expandErr == nil {
 			expandedURL = strings.TrimSpace(expanded)
 		} else {
-			return errdef.Wrap(errdef.CodeHTTP, expandErr, "expand graphql request url")
+			return "", errdef.Wrap(errdef.CodeHTTP, expandErr, "expand graphql request url")
 		}
 	}
 	if expandedURL == "" {
-		return errdef.New(errdef.CodeHTTP, "graphql request url is empty")
+		return "", errdef.New(errdef.CodeHTTP, "graphql request url is empty")
 	}
 
 	parsedURL, urlErr := url.Parse(expandedURL)
 	if urlErr != nil {
-		return errdef.Wrap(errdef.CodeHTTP, urlErr, "parse graphql request url")
+		return "", errdef.Wrap(errdef.CodeHTTP, urlErr, "parse graphql request url")
 	}
 
 	values := parsedURL.Query()
@@ -232,8 +228,7 @@ func setGraphQLQuery(
 	}
 
 	parsedURL.RawQuery = values.Encode()
-	req.URL = parsedURL.String()
-	return nil
+	return parsedURL.String(), nil
 }
 
 func buildGraphQLPayload(
@@ -260,9 +255,8 @@ func buildGraphQLPayload(
 }
 
 func (c *Client) graphQLSectionContent(
-	inline, filePath, baseDir string,
-	fallbacks []string,
-	allowRaw bool,
+	inline, filePath string,
+	lookup fileLookup,
 	label string,
 ) (string, error) {
 	inline = strings.TrimSpace(inline)
@@ -274,13 +268,7 @@ func (c *Client) graphQLSectionContent(
 		return "", nil
 	}
 
-	data, _, err := c.readFileWithFallback(
-		filePath,
-		baseDir,
-		fallbacks,
-		allowRaw,
-		strings.ToLower(label),
-	)
+	data, _, err := lookup.read(c, filePath, strings.ToLower(label))
 	if err != nil {
 		return "", err
 	}

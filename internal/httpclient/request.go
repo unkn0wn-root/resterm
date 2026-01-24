@@ -23,11 +23,21 @@ func (c *Client) prepareHTTPRequest(
 		return nil, opts, errdef.New(errdef.CodeHTTP, "request is nil")
 	}
 
-	bodyReader, err := c.prepareBody(req, resolver, opts)
+	effective := applyRequestSettings(opts, req.Settings)
+	return c.prepareHTTPRequestWithOpts(ctx, req, resolver, effective)
+}
+
+func (c *Client) prepareHTTPRequestWithOpts(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+) (*http.Request, Options, error) {
+	plan, err := c.prepareBody(req, resolver, opts)
 	if err != nil {
 		return nil, opts, err
 	}
-	return c.buildHTTPRequest(ctx, req, resolver, opts, bodyReader)
+	return c.buildHTTPRequest(ctx, req, resolver, opts, plan.rd, plan.url)
 }
 
 func (c *Client) applyAuthentication(

@@ -54,6 +54,23 @@ func (c *Client) resolveHTTPFactory() func(Options) (*http.Client, error) {
 	return c.buildHTTPClient
 }
 
+func (c *Client) httpClient(opts Options) (*http.Client, error) {
+	factory := c.resolveHTTPFactory()
+	if factory == nil {
+		return nil, errdef.New(errdef.CodeHTTP, "http client factory unavailable")
+	}
+	return factory(opts)
+}
+
+func (c *Client) streamClient(opts Options) (*http.Client, error) {
+	client, err := c.httpClient(opts)
+	if err != nil {
+		return nil, err
+	}
+	client.Timeout = 0
+	return client, nil
+}
+
 func NewClient(fs FileSystem) *Client {
 	if fs == nil {
 		fs = OSFileSystem{}
@@ -112,12 +129,7 @@ func (c *Client) Execute(
 		return nil, err
 	}
 
-	factory := c.resolveHTTPFactory()
-	if factory == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "http client factory unavailable")
-	}
-
-	client, err := factory(effectiveOpts)
+	client, err := c.httpClient(effectiveOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -130,56 +142,15 @@ func (c *Client) Execute(
 		traceReport *nettrace.Report
 	)
 
-	instrumenter := c.telemetry
-	if !effectiveOpts.Trace || instrumenter == nil {
-		instrumenter = telemetry.Noop()
-	}
-
-	var budgetCopy *nettrace.Budget
-	if effectiveOpts.TraceBudget != nil {
-		clone := effectiveOpts.TraceBudget.Clone()
-		budgetCopy = &clone
-	}
-
-	spanCtx, requestSpan := instrumenter.Start(httpReq.Context(), telemetry.RequestStart{
-		Request:     req,
-		HTTPRequest: httpReq,
-		Budget:      budgetCopy,
-	})
-	httpReq = httpReq.WithContext(spanCtx)
+	httpReq, requestSpan := c.startRequestSpan(req, httpReq, effectiveOpts)
 
 	defer func() {
-		if requestSpan == nil {
-			return
-		}
-		if timeline != nil || traceReport != nil {
-			requestSpan.RecordTrace(timeline, traceReport)
-		}
-		statusCode := 0
-		if resp != nil {
-			statusCode = resp.StatusCode
-		}
-		requestSpan.End(telemetry.RequestResult{
-			Err:        err,
-			StatusCode: statusCode,
-			Report:     traceReport,
-		})
+		endRequestSpan(requestSpan, resp, err, timeline, traceReport)
 	}()
 
 	if effectiveOpts.Trace {
 		traceSess = newTraceSession()
 		httpReq = traceSess.bind(httpReq)
-	}
-
-	buildTraceReport := func(tl *nettrace.Timeline) *nettrace.Report {
-		if tl == nil {
-			return nil
-		}
-		var budget nettrace.Budget
-		if effectiveOpts.TraceBudget != nil {
-			budget = effectiveOpts.TraceBudget.Clone()
-		}
-		return nettrace.NewReport(tl, budget)
 	}
 
 	start := time.Now()
@@ -189,7 +160,7 @@ func (c *Client) Execute(
 		if traceSess != nil {
 			traceSess.fail(err)
 			timeline = traceSess.complete(buildTraceExtras(httpReq, nil, effectiveOpts, proxy))
-			traceReport = buildTraceReport(timeline)
+			traceReport = buildTraceReport(timeline, effectiveOpts.TraceBudget)
 		}
 		return &Response{
 				Request:     req,
@@ -208,7 +179,7 @@ func (c *Client) Execute(
 			traceSess.fail(verErr)
 			traceSess.finishTransfer(verErr)
 			timeline = traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
-			traceReport = buildTraceReport(timeline)
+			traceReport = buildTraceReport(timeline, effectiveOpts.TraceBudget)
 		}
 		_ = httpResp.Body.Close()
 		return &Response{
@@ -239,29 +210,74 @@ func (c *Client) Execute(
 
 	if traceSess != nil {
 		timeline = traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
-		traceReport = buildTraceReport(timeline)
+		traceReport = buildTraceReport(timeline, effectiveOpts.TraceBudget)
 	}
 	duration := time.Since(start)
 
-	meta := captureReqMeta(httpReq, httpResp)
-
-	resp = &Response{
-		Status:         httpResp.Status,
-		StatusCode:     httpResp.StatusCode,
-		Proto:          httpResp.Proto,
-		Headers:        httpResp.Header.Clone(),
-		ReqMethod:      meta.method,
-		RequestHeaders: meta.headers,
-		ReqHost:        meta.host,
-		ReqLen:         meta.length,
-		ReqTE:          meta.te,
-		Body:           body,
-		EffectiveURL:   effURL(httpReq, httpResp),
-		Request:        req,
-		Timeline:       timeline,
-		TraceReport:    traceReport,
-	}
-	resp.Duration = duration
+	resp = respFromHTTP(httpReq, httpResp, req, body, duration)
+	resp.Timeline = timeline
+	resp.TraceReport = traceReport
 
 	return resp, nil
+}
+
+func (c *Client) startRequestSpan(
+	req *restfile.Request,
+	httpReq *http.Request,
+	opts Options,
+) (*http.Request, telemetry.RequestSpan) {
+	instrumenter := c.telemetry
+	if !opts.Trace || instrumenter == nil {
+		instrumenter = telemetry.Noop()
+	}
+
+	spanCtx, requestSpan := instrumenter.Start(httpReq.Context(), telemetry.RequestStart{
+		Request:     req,
+		HTTPRequest: httpReq,
+		Budget:      cloneBudget(opts.TraceBudget),
+	})
+	return httpReq.WithContext(spanCtx), requestSpan
+}
+
+func cloneBudget(budget *nettrace.Budget) *nettrace.Budget {
+	if budget == nil {
+		return nil
+	}
+	clone := budget.Clone()
+	return &clone
+}
+
+func buildTraceReport(tl *nettrace.Timeline, budget *nettrace.Budget) *nettrace.Report {
+	if tl == nil {
+		return nil
+	}
+	var reportBudget nettrace.Budget
+	if budget != nil {
+		reportBudget = budget.Clone()
+	}
+	return nettrace.NewReport(tl, reportBudget)
+}
+
+func endRequestSpan(
+	span telemetry.RequestSpan,
+	resp *Response,
+	err error,
+	timeline *nettrace.Timeline,
+	report *nettrace.Report,
+) {
+	if span == nil {
+		return
+	}
+	if timeline != nil || report != nil {
+		span.RecordTrace(timeline, report)
+	}
+	statusCode := 0
+	if resp != nil {
+		statusCode = resp.StatusCode
+	}
+	span.End(telemetry.RequestResult{
+		Err:        err,
+		StatusCode: statusCode,
+		Report:     report,
+	})
 }
