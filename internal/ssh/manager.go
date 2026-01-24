@@ -18,6 +18,12 @@ import (
 
 const dialRetryDelay = 150 * time.Millisecond
 
+var defaultKeyPaths = []string{
+	filepath.Join(userHomeDir(), ".ssh", "id_ed25519"),
+	filepath.Join(userHomeDir(), ".ssh", "id_rsa"),
+	filepath.Join(userHomeDir(), ".ssh", "id_ecdsa"),
+}
+
 type Client interface {
 	Dial(network, addr string) (net.Conn, error)
 	SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error)
@@ -39,6 +45,24 @@ type entry struct {
 	stop     chan struct{}
 }
 
+func newEntry(cfg Cfg, cli Client, now time.Time) *entry {
+	ent := &entry{cfg: cfg, cli: cli, lastUsed: now, stop: make(chan struct{})}
+	if cfg.KeepAlive > 0 {
+		go keepAliveLoop(cli, cfg.KeepAlive, ent.stop)
+	}
+	return ent
+}
+
+func (e *entry) touch(now time.Time) {
+	if e != nil {
+		e.lastUsed = now
+	}
+}
+
+func (e *entry) close() error {
+	return closeEntry(e)
+}
+
 func NewManager() *Manager {
 	return &Manager{
 		cache: make(map[string]*entry),
@@ -53,7 +77,7 @@ func (m *Manager) Close() error {
 	defer m.mu.Unlock()
 	var errs []error
 	for key, ent := range m.cache {
-		if err := closeEntry(ent); err != nil {
+		if err := ent.close(); err != nil {
 			errs = append(errs, err)
 		}
 		delete(m.cache, key)
@@ -97,7 +121,7 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 	m.purgeLocked()
 	ent := m.cache[key]
 	if ent != nil {
-		ent.lastUsed = m.now()
+		ent.touch(m.now())
 		cli := ent.cli
 		m.mu.Unlock()
 		if conn, err := cli.Dial(network, addr); err == nil {
@@ -105,7 +129,7 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 		}
 
 		m.mu.Lock()
-		_ = closeEntry(ent)
+		_ = ent.close()
 		delete(m.cache, key)
 	}
 	m.mu.Unlock()
@@ -115,14 +139,11 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 		return nil, err
 	}
 
-	ent = &entry{cfg: cfg, cli: cli, lastUsed: m.now(), stop: make(chan struct{})}
-	if cfg.KeepAlive > 0 {
-		go keepAliveLoop(cli, cfg.KeepAlive, ent.stop)
-	}
+	ent = newEntry(cfg, cli, m.now())
 
 	conn, err := cli.Dial(network, addr)
 	if err != nil {
-		_ = closeEntry(ent)
+		_ = ent.close()
 		return nil, err
 	}
 
@@ -164,7 +185,7 @@ func (m *Manager) purgeLocked() {
 	now := m.now()
 	for key, ent := range m.cache {
 		if now.Sub(ent.lastUsed) > m.ttl {
-			_ = closeEntry(ent)
+			_ = ent.close()
 			delete(m.cache, key)
 		}
 	}
@@ -179,15 +200,21 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 		return nil, err
 	}
 
-	auth, err := authMethods(cfg)
+	auth, closeAuth, err := authMethods(cfg)
 	if err != nil {
 		_ = netConn.Close()
+		if closeAuth != nil {
+			_ = closeAuth()
+		}
 		return nil, err
 	}
 
 	hostKeyCb, err := hostKeyCallback(cfg)
 	if err != nil {
 		_ = netConn.Close()
+		if closeAuth != nil {
+			_ = closeAuth()
+		}
 		return nil, err
 	}
 
@@ -204,23 +231,28 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 	conn, chans, reqs, err := xssh.NewClientConn(netConn, addr, sshCfg)
 	if err != nil {
 		_ = netConn.Close()
+		if closeAuth != nil {
+			_ = closeAuth()
+		}
 		return nil, err
 	}
-	return xssh.NewClient(conn, chans, reqs), nil
+	cli := xssh.NewClient(conn, chans, reqs)
+	return wrapClient(cli, closeAuth), nil
 }
 
-func authMethods(cfg Cfg) ([]xssh.AuthMethod, error) {
+func authMethods(cfg Cfg) ([]xssh.AuthMethod, func() error, error) {
 	var methods []xssh.AuthMethod
+	var closers []func() error
 
 	if cfg.KeyPath != "" {
 		keyData, err := os.ReadFile(cfg.KeyPath)
 		if err != nil {
-			return nil, fmt.Errorf("read ssh key: %w", err)
+			return nil, closeAll(closers), fmt.Errorf("read ssh key: %w", err)
 		}
 
 		signer, err := parseKey(keyData, cfg.KeyPass)
 		if err != nil {
-			return nil, err
+			return nil, closeAll(closers), err
 		}
 
 		methods = append(methods, xssh.PublicKeys(signer))
@@ -236,6 +268,7 @@ func authMethods(cfg Cfg) ([]xssh.AuthMethod, error) {
 		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 			conn, err := net.Dial("unix", sock)
 			if err == nil {
+				closers = append(closers, conn.Close)
 				methods = append(methods, xssh.PublicKeysCallback(agent.NewClient(conn).Signers))
 			}
 		}
@@ -246,9 +279,27 @@ func authMethods(cfg Cfg) ([]xssh.AuthMethod, error) {
 	}
 
 	if len(methods) == 0 {
-		return nil, errors.New("no ssh auth methods")
+		return nil, closeAll(closers), errors.New("no ssh auth methods")
 	}
-	return methods, nil
+	return methods, closeAll(closers), nil
+}
+
+func closeAll(fns []func() error) func() error {
+	if len(fns) == 0 {
+		return nil
+	}
+	return func() error {
+		var errs []error
+		for _, fn := range fns {
+			if fn == nil {
+				continue
+			}
+			if err := fn(); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		return errors.Join(errs...)
+	}
 }
 
 func parseKey(data []byte, pass string) (xssh.Signer, error) {
@@ -259,12 +310,7 @@ func parseKey(data []byte, pass string) (xssh.Signer, error) {
 }
 
 func loadDefaultKey(pass string) xssh.Signer {
-	paths := []string{
-		filepath.Join(userHomeDir(), ".ssh", "id_ed25519"),
-		filepath.Join(userHomeDir(), ".ssh", "id_rsa"),
-		filepath.Join(userHomeDir(), ".ssh", "id_ecdsa"),
-	}
-	for _, p := range paths {
+	for _, p := range defaultKeyPaths {
 		data, err := os.ReadFile(p)
 		if err != nil {
 			continue
@@ -354,11 +400,32 @@ func (c *wrappedConn) Close() error {
 			errs = append(errs, err)
 		}
 	}
-	if len(errs) == 0 {
-		return nil
+	return errors.Join(errs...)
+}
+
+type clientWrap struct {
+	Client
+	closeFn func() error
+}
+
+func wrapClient(cli Client, closeFn func() error) Client {
+	if closeFn == nil {
+		return cli
 	}
-	if len(errs) == 1 {
-		return errs[0]
+	return &clientWrap{Client: cli, closeFn: closeFn}
+}
+
+func (c *clientWrap) Close() error {
+	var errs []error
+	if c.Client != nil {
+		if err := c.Client.Close(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	if c.closeFn != nil {
+		if err := c.closeFn(); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	return errors.Join(errs...)
 }

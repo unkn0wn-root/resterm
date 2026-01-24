@@ -44,7 +44,26 @@ type Cfg struct {
 }
 
 func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
-	cfg := Cfg{
+	cfg := baseCfg(p)
+	cfg.Name = fallback(cfg.Name, "default")
+	if cfg.Host == "" {
+		return Cfg{}, errors.New("ssh host is required")
+	}
+
+	applyAuth(&cfg, p)
+
+	if err := resolvePaths(&cfg, p); err != nil {
+		return Cfg{}, err
+	}
+	if err := parseCfg(&cfg, p); err != nil {
+		return Cfg{}, err
+	}
+
+	return cfg, nil
+}
+
+func baseCfg(p restfile.SSHProfile) Cfg {
+	return Cfg{
 		Name:         strings.TrimSpace(p.Name),
 		Host:         strings.TrimSpace(p.Host),
 		Port:         defaultPort,
@@ -60,21 +79,17 @@ func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
 		KeepAliveRaw: strings.TrimSpace(p.KeepAliveStr),
 		RetriesRaw:   strings.TrimSpace(p.RetriesStr),
 	}
+}
 
-	cfg.Name = fallback(cfg.Name, "default")
-	if cfg.Host == "" {
-		return Cfg{}, errors.New("ssh host is required")
-	}
-
+func applyAuth(cfg *Cfg, p restfile.SSHProfile) {
 	trimmedAllowEmpty(&cfg.User, p.User)
 	rawIfSet(&cfg.Pass, p.Pass)
 	rawIfSet(&cfg.KeyPass, p.KeyPass)
+}
 
-	if err := resolvePaths(&cfg, p); err != nil {
-		return Cfg{}, err
-	}
-	if err := parsePort(&cfg, p.PortStr); err != nil {
-		return Cfg{}, err
+func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
+	if err := parsePort(cfg, p.PortStr); err != nil {
+		return err
 	}
 	if err := parseDuration(
 		&cfg.Timeout,
@@ -82,16 +97,15 @@ func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
 		p.TimeoutStr,
 		defaultTimeout,
 	); err != nil {
-		return Cfg{}, err
+		return err
 	}
 	if err := parseDuration(&cfg.KeepAlive, &cfg.KeepAliveRaw, p.KeepAliveStr, 0); err != nil {
-		return Cfg{}, err
+		return err
 	}
-	if err := parseRetries(&cfg, p.RetriesStr); err != nil {
-		return Cfg{}, err
+	if err := parseRetries(cfg, p.RetriesStr); err != nil {
+		return err
 	}
-
-	return cfg, nil
+	return nil
 }
 
 func parsePort(cfg *Cfg, raw string) error {
