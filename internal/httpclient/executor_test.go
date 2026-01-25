@@ -251,6 +251,9 @@ func TestPrepareGraphQLGetQueryParameters(t *testing.T) {
 	if plan.rd != nil {
 		t.Fatalf("expected nil reader for GET graphql request")
 	}
+	if req.URL != plan.url {
+		t.Fatalf("expected request url to be updated, got %q", req.URL)
+	}
 	parsed, err := url.Parse(plan.url)
 	if err != nil {
 		t.Fatalf("parse graphql url: %v", err)
@@ -284,6 +287,9 @@ func TestPrepareGraphQLGetWithTemplatedURL(t *testing.T) {
 	plan, err := client.prepareBody(req, resolver, Options{})
 	if err != nil {
 		t.Fatalf("prepare graphQL body (GET with template): %v", err)
+	}
+	if req.URL != plan.url {
+		t.Fatalf("expected request url to be updated, got %q", req.URL)
 	}
 	parsed, err := url.Parse(plan.url)
 	if err != nil {

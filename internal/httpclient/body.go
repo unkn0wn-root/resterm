@@ -98,6 +98,7 @@ func (c *Client) prepareGraphQLBody(
 		if err != nil {
 			return bodyPlan{}, err
 		}
+		req.URL = url
 		return bodyPlan{url: url}, nil
 	}
 

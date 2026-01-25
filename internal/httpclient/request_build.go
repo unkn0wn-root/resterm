@@ -81,6 +81,12 @@ func (c *Client) buildHTTPRequest(
 				return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
 			}
 		}
+	} else if resolver != nil {
+		var err error
+		expandedURL, err = resolver.ExpandTemplates(expandedURL)
+		if err != nil {
+			return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
+		}
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, body)
