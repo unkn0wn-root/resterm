@@ -71,17 +71,11 @@ func (c *Client) buildHTTPRequest(
 	expandedURL := strings.TrimSpace(urlOverride)
 	if expandedURL == "" {
 		expandedURL = strings.TrimSpace(req.URL)
-		if expandedURL == "" {
-			return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
-		}
-		if resolver != nil {
-			var err error
-			expandedURL, err = resolver.ExpandTemplates(expandedURL)
-			if err != nil {
-				return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
-			}
-		}
-	} else if resolver != nil {
+	}
+	if expandedURL == "" {
+		return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
+	}
+	if resolver != nil {
 		var err error
 		expandedURL, err = resolver.ExpandTemplates(expandedURL)
 		if err != nil {
