@@ -21,26 +21,26 @@ func Resolve(
 	}
 
 	var merged restfile.SSHProfile
-	var found bool
+	var useFound bool
 
-	if name := strings.TrimSpace(spec.Use); name != "" {
-		if prof, ok := lookupProfile(fileProfiles, name, restfile.SSHScopeFile); ok {
+	use := strings.TrimSpace(spec.Use)
+	if use != "" {
+		if prof, ok := lookupProfile(fileProfiles, use, restfile.SSHScopeFile); ok {
 			merged = *prof
-			found = true
-		} else if prof, ok := lookupProfile(globalProfiles, name, restfile.SSHScopeGlobal); ok {
+			useFound = true
+		} else if prof, ok := lookupProfile(globalProfiles, use, restfile.SSHScopeGlobal); ok {
 			merged = *prof
-			found = true
+			useFound = true
 		}
-		merged.Name = name
+		merged.Name = use
 	}
 
 	if spec.Inline != nil {
 		merged = mergeProfile(merged, *spec.Inline)
-		found = true
 	}
 
-	if strings.TrimSpace(spec.Use) != "" && !found {
-		return nil, fmt.Errorf("ssh profile %q not found", spec.Use)
+	if use != "" && !useFound {
+		return nil, fmt.Errorf("ssh profile %q not found", use)
 	}
 
 	expanded, err := expandProfile(merged, resolver)

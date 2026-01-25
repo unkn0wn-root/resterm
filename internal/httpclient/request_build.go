@@ -23,25 +23,33 @@ func (c *Client) BuildHTTPRequest(
 		return nil, opts, nil, errdef.New(errdef.CodeHTTP, "request is nil")
 	}
 
-	bodyReader, err := c.prepareBody(req, resolver, opts)
+	effective := applyRequestSettings(opts, req.Settings)
+	plan, err := c.prepareBody(req, resolver, effective)
 	if err != nil {
 		return nil, opts, nil, err
 	}
 
 	var body []byte
-	if bodyReader != nil {
-		body, err = io.ReadAll(bodyReader)
+	if plan.rd != nil {
+		body, err = io.ReadAll(plan.rd)
 		if err != nil {
 			return nil, opts, nil, errdef.Wrap(errdef.CodeHTTP, err, "read request body")
 		}
 	}
 
 	var reader io.Reader
-	if bodyReader != nil {
+	if plan.rd != nil {
 		reader = bytes.NewReader(body)
 	}
 
-	httpReq, effective, err := c.buildHTTPRequest(ctx, req, resolver, opts, reader)
+	httpReq, effective, err := c.buildHTTPRequest(
+		ctx,
+		req,
+		resolver,
+		effective,
+		reader,
+		plan.url,
+	)
 	if err != nil {
 		return nil, effective, nil, err
 	}
@@ -54,34 +62,34 @@ func (c *Client) buildHTTPRequest(
 	resolver *vars.Resolver,
 	opts Options,
 	body io.Reader,
+	urlOverride string,
 ) (*http.Request, Options, error) {
 	if req == nil {
 		return nil, opts, errdef.New(errdef.CodeHTTP, "request is nil")
 	}
 
-	expandedURL := strings.TrimSpace(req.URL)
+	expandedURL := strings.TrimSpace(urlOverride)
+	if expandedURL == "" {
+		expandedURL = strings.TrimSpace(req.URL)
+	}
 	if expandedURL == "" {
 		return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
 	}
-	if req.Body.GraphQL == nil || !strings.EqualFold(req.Method, "GET") {
-		if resolver != nil {
-			var err error
-			expandedURL, err = resolver.ExpandTemplates(expandedURL)
-			if err != nil {
-				return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
-			}
+	if resolver != nil {
+		var err error
+		expandedURL, err = resolver.ExpandTemplates(expandedURL)
+		if err != nil {
+			return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
 		}
 	}
-
-	effectiveOpts := applyRequestSettings(opts, req.Settings)
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, body)
 	if err != nil {
 		return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "build request")
 	}
-	applyHTTPVersion(httpReq, effectiveOpts.HTTPVersion)
-	if verErr := checkHTTPVersionRequest(httpReq, effectiveOpts.HTTPVersion); verErr != nil {
-		return nil, effectiveOpts, verErr
+	applyHTTPVersion(httpReq, opts.HTTPVersion)
+	if verErr := checkHTTPVersionRequest(httpReq, opts.HTTPVersion); verErr != nil {
+		return nil, opts, verErr
 	}
 
 	if req.Headers != nil {
@@ -105,5 +113,5 @@ func (c *Client) buildHTTPRequest(
 	}
 
 	c.applyAuthentication(httpReq, resolver, req.Metadata.Auth)
-	return httpReq, effectiveOpts, nil
+	return httpReq, opts, nil
 }
