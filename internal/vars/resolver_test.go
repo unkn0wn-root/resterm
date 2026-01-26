@@ -1,6 +1,10 @@
 package vars
 
-import "testing"
+import (
+	"strconv"
+	"testing"
+	"time"
+)
 
 func TestExpandTemplatesStatic(t *testing.T) {
 	t.Parallel()
@@ -96,6 +100,7 @@ func TestDynamicHelpersCaseInsensitive(t *testing.T) {
 		"{{$UUID}}":             "",
 		"{{$Guid}}":             "",
 		"{{$TIMESTAMPISO8601}}": "",
+		"{{$timestampMS}}":      "",
 		"{{$randomINT}}":        "",
 	}
 
@@ -107,6 +112,99 @@ func TestDynamicHelpersCaseInsensitive(t *testing.T) {
 		if out == input {
 			t.Fatalf("expected %s to expand, got %q", input, out)
 		}
+	}
+}
+
+func TestDynamicTimestampOffset(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	start := time.Now()
+	out, err := resolver.ExpandTemplates("{{ $timestamp + 2s }}")
+	end := time.Now()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	parsed, err := strconv.ParseInt(out, 10, 64)
+	if err != nil {
+		t.Fatalf("expected unix seconds, got %q", out)
+	}
+	min := start.Add(2 * time.Second).Unix()
+	max := end.Add(2 * time.Second).Unix()
+	if parsed < min || parsed > max {
+		t.Fatalf("expected %d to be between %d and %d", parsed, min, max)
+	}
+}
+
+func TestDynamicTimestampISOOffset(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	start := time.Now()
+	out, err := resolver.ExpandTemplates("{{ $timestampISO8601 - 1h }}")
+	end := time.Now()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	parsed, err := time.Parse(time.RFC3339, out)
+	if err != nil {
+		t.Fatalf("expected rfc3339, got %q", out)
+	}
+	min := start.Add(-1 * time.Hour).Unix()
+	max := end.Add(-1 * time.Hour).Unix()
+	if parsed.Unix() < min || parsed.Unix() > max {
+		t.Fatalf("expected %v to be between %d and %d", parsed, min, max)
+	}
+}
+
+func TestSplitDynamicOffsetNoSpace(t *testing.T) {
+	t.Parallel()
+
+	base, offset, ok := splitDynamicOffset("$timestampISO8601-1h")
+	if !ok {
+		t.Fatalf("expected offset parse to succeed")
+	}
+	if base != "$timestampISO8601" {
+		t.Fatalf("expected base to be $timestampISO8601, got %q", base)
+	}
+	if offset != -1*time.Hour {
+		t.Fatalf("expected -1h offset, got %v", offset)
+	}
+}
+
+func TestSplitDynamicOffsetHyphenatedBase(t *testing.T) {
+	t.Parallel()
+
+	base, offset, ok := splitDynamicOffset("$my-custom-var + 1h")
+	if !ok {
+		t.Fatalf("expected offset parse to succeed")
+	}
+	if base != "$my-custom-var" {
+		t.Fatalf("expected base to be $my-custom-var, got %q", base)
+	}
+	if offset != time.Hour {
+		t.Fatalf("expected 1h offset, got %v", offset)
+	}
+}
+
+func TestDynamicTimestampMs(t *testing.T) {
+	t.Parallel()
+
+	resolver := NewResolver()
+	start := time.Now()
+	out, err := resolver.ExpandTemplates("{{ $timestampMs }}")
+	end := time.Now()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	parsed, err := strconv.ParseInt(out, 10, 64)
+	if err != nil {
+		t.Fatalf("expected unix milliseconds, got %q", out)
+	}
+	min := start.UnixNano() / int64(time.Millisecond)
+	max := end.UnixNano() / int64(time.Millisecond)
+	if parsed < min || parsed > max {
+		t.Fatalf("expected %d to be between %d and %d", parsed, min, max)
 	}
 }
 

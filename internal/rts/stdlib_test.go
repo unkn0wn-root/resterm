@@ -183,6 +183,14 @@ func TestStdlibTimeExtras(t *testing.T) {
 	if v.K != VNum || v.N != 3.75 {
 		t.Fatalf("expected time.addUnix")
 	}
+	v = evalExprCtx(t, ctx, "time.addUnix(1.5, \"2.25s\")")
+	if v.K != VNum || v.N != 3.75 {
+		t.Fatalf("expected time.addUnix duration string")
+	}
+	v = evalExprCtx(t, ctx, "time.duration(\"1h30m\")")
+	if v.K != VNum || v.N != 5400 {
+		t.Fatalf("expected time.duration")
+	}
 }
 
 func TestStdlibJSONFile(t *testing.T) {

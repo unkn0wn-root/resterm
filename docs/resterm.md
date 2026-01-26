@@ -308,7 +308,9 @@ When expanding `{{variable}}` templates, Resterm looks in:
 7. Selected environment JSON.
 8. OS environment variables (case-sensitive with an uppercase fallback).
 
-Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
+Dynamic helpers are also available: `{{$uuid}}` (alias `{{$guid}}`), `{{$timestamp}}` (Unix seconds), `{{$timestampMs}}` (Unix milliseconds), `{{$timestampISO8601}}`, and `{{$randomInt}}`.
+
+Timestamp helpers accept optional offsets: `{{$timestamp + 6d}}`, `{{$timestampISO8601 - 90m}}`, `{{$timestampMs + 2h}}`. Supported units are the standard Go duration units plus `d` (days) and `w` (weeks).
 
 ---
 

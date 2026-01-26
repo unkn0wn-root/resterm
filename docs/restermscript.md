@@ -301,7 +301,8 @@ RTS provides a small standard library that covers common request needs without e
 - `rts.time.format(layout)` formats the current time with the given layout string.
 - `rts.time.parse(layout, value)` parses the time string and returns unix seconds (fractional).
 - `rts.time.formatUnix(ts, layout)` formats a unix timestamp with the given layout.
-- `rts.time.addUnix(ts, seconds)` adds seconds to a unix timestamp.
+- `rts.time.addUnix(ts, secondsOrDuration)` adds seconds (number) or a duration string to a unix timestamp.
+- `rts.time.duration(value)` parses a duration string (including `d` and `w`) and returns seconds.
 
 ### JSON helpers
 

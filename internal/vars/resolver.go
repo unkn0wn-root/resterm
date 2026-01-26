@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
 type Provider interface {
@@ -161,19 +163,71 @@ func (r *Resolver) expandTemplates(
 }
 
 func resolveDynamic(name string) (string, bool) {
-	switch strings.ToLower(name) {
-	case "$timestamp":
-		return fmt.Sprintf("%d", time.Now().Unix()), true
-	case "$timestampiso8601":
-		return time.Now().UTC().Format(time.RFC3339), true
+	if base, offset, ok := splitDynamicOffset(name); ok {
+		return resolveDynamicBase(base, offset)
+	}
+	return resolveDynamicBase(name, 0)
+}
+
+func resolveDynamicBase(name string, offset time.Duration) (string, bool) {
+	lower := strings.ToLower(strings.TrimSpace(name))
+	switch lower {
+	case "$timestamp", "$timestampiso8601", "$timestampms":
+		t := time.Now().Add(offset)
+		switch lower {
+		case "$timestamp":
+			return fmt.Sprintf("%d", t.Unix()), true
+		case "$timestampms":
+			return fmt.Sprintf("%d", t.UnixNano()/int64(time.Millisecond)), true
+		default:
+			return t.UTC().Format(time.RFC3339), true
+		}
 	case "$randomint":
+		if offset != 0 {
+			return "", false
+		}
 		n, _ := rand.Int(rand.Reader, big.NewInt(1<<62))
 		return n.String(), true
 	case "$uuid", "$guid":
+		if offset != 0 {
+			return "", false
+		}
 		return generateUUID(), true
 	default:
 		return "", false
 	}
+}
+
+// splits "$helper +/- duration" into base name and signed offset.
+// "$timestampISO8601 - 90m" -> base "$timestampISO8601", offset -90m.
+func splitDynamicOffset(name string) (string, time.Duration, bool) {
+	trimmed := strings.TrimSpace(name)
+	if trimmed == "" {
+		return "", 0, false
+	}
+	for opIdx := len(trimmed) - 1; opIdx > 0; opIdx-- {
+		ch := trimmed[opIdx]
+		if ch != '+' && ch != '-' {
+			continue
+		}
+		base := strings.TrimSpace(trimmed[:opIdx])
+		if base == "" {
+			continue
+		}
+		raw := strings.TrimSpace(trimmed[opIdx+1:])
+		if raw == "" {
+			continue
+		}
+		dur, ok := duration.Parse(raw)
+		if !ok {
+			continue
+		}
+		if ch == '-' {
+			dur = -dur
+		}
+		return base, dur, true
+	}
+	return "", 0, false
 }
 
 type MapProvider struct {
