@@ -3,8 +3,8 @@ package parser
 import (
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -78,11 +78,11 @@ func (b *wsBuilder) reset() {
 func (b *wsBuilder) applyOption(name, value string) {
 	switch normKey(name) {
 	case wsOptTimeout:
-		if dur, err := time.ParseDuration(value); err == nil && dur >= 0 {
+		if dur, ok := duration.Parse(value); ok && dur >= 0 {
 			b.opts.HandshakeTimeout = dur
 		}
 	case wsOptIdle, wsOptIdleAlt:
-		if dur, err := time.ParseDuration(value); err == nil && dur >= 0 {
+		if dur, ok := duration.Parse(value); ok && dur >= 0 {
 			b.opts.IdleTimeout = dur
 		}
 	case wsOptMaxMsg:
@@ -185,8 +185,8 @@ func parseWSPong(rest string, step *restfile.WebSocketStep) bool {
 
 func parseWSWait(rest string, step *restfile.WebSocketStep) bool {
 	step.Type = restfile.WebSocketStepWait
-	dur, err := time.ParseDuration(rest)
-	if err != nil || dur < 0 {
+	dur, ok := duration.Parse(rest)
+	if !ok || dur < 0 {
 		return false
 	}
 	step.Duration = dur

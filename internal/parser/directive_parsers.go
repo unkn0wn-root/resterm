@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -210,7 +211,7 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 	}
 
 	if raw, ok := params["delay"]; ok {
-		if dur, err := time.ParseDuration(strings.TrimSpace(raw)); err == nil && dur >= 0 {
+		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			spec.Delay = dur
 		}
 	}
@@ -367,8 +368,8 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 }
 
 func parseDuration(value string) time.Duration {
-	dur, err := time.ParseDuration(strings.TrimSpace(value))
-	if err != nil {
+	dur, ok := duration.Parse(value)
+	if !ok {
 		return 0
 	}
 	return dur

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -146,14 +146,14 @@ func applySSHOptions(prof *restfile.SSHProfile, opts map[string]string) {
 	if raw := strings.TrimSpace(opts["timeout"]); raw != "" {
 		prof.TimeoutStr = raw
 		prof.Timeout.Set = true
-		if dur, err := time.ParseDuration(raw); err == nil && dur >= 0 {
+		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			prof.Timeout.Val = dur
 		}
 	}
 	if raw := strings.TrimSpace(opts["keepalive"]); raw != "" {
 		prof.KeepAliveStr = raw
 		prof.KeepAlive.Set = true
-		if dur, err := time.ParseDuration(raw); err == nil && dur >= 0 {
+		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			prof.KeepAlive.Val = dur
 		}
 	}

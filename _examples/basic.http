@@ -20,6 +20,19 @@ Accept: application/json
   "userId": 1
 }
 
+### Timestamp Helpers
+# @name timestampHelpers
+POST {{base.url}}/anything/time
+Content-Type: application/json
+Accept: application/json
+
+{
+  "now_unix": "{{$timestamp}}",
+  "now_unix_plus_6d": "{{$timestamp + 6d}}",
+  "now_iso_minus_90m": "{{$timestampISO8601 - 90m}}",
+  "now_unix_ms": "{{$timestampMs}}"
+}
+
 ### Bearer Auth Example
 # @name bearerEcho
 # @auth bearer {{auth.token}}

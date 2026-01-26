@@ -2,8 +2,8 @@ package parser
 
 import (
 	"strings"
-	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -46,14 +46,14 @@ func (b *sseBuilder) HandleDirective(key, rest string) bool {
 func (b *sseBuilder) applyOption(name, value string) {
 	switch strings.ToLower(name) {
 	case "duration", "timeout":
-		if dur, err := time.ParseDuration(value); err == nil {
+		if dur, ok := duration.Parse(value); ok {
 			if dur < 0 {
 				return
 			}
 			b.options.TotalTimeout = dur
 		}
 	case "idle", "idle-timeout":
-		if dur, err := time.ParseDuration(value); err == nil {
+		if dur, ok := duration.Parse(value); ok {
 			if dur < 0 {
 				return
 			}

@@ -3,6 +3,8 @@ package rts
 import (
 	"math"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
 var timeSpec = nsSpec{name: "time", top: true, fns: map[string]NativeFunc{
@@ -13,6 +15,7 @@ var timeSpec = nsSpec{name: "time", top: true, fns: map[string]NativeFunc{
 	"parse":      timeParse,
 	"formatUnix": timeFormatUnix,
 	"addUnix":    timeAddUnix,
+	"duration":   timeDuration,
 }}
 
 const (
@@ -133,7 +136,7 @@ func timeAddUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 
-	b, err := numF(ctx, pos, na.arg(1), na.sig)
+	b, err := durationSecondsArg(ctx, pos, na.arg(1), na.sig)
 	if err != nil {
 		return Null(), err
 	}
@@ -144,6 +147,18 @@ func timeAddUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	return Num(out), nil
+}
+
+func timeDuration(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.duration(value)")
+	if err := na.count(1); err != nil {
+		return Null(), err
+	}
+	sec, err := durationSecondsArg(ctx, pos, na.arg(0), na.sig)
+	if err != nil {
+		return Null(), err
+	}
+	return Num(sec), nil
 }
 
 func nowT(ctx *Ctx, pos Pos) (time.Time, error) {
@@ -170,6 +185,21 @@ func numF(ctx *Ctx, pos Pos, v Value, sig string) (float64, error) {
 		return 0, rtErr(ctx, pos, "%s expects finite number", sig)
 	}
 	return n, nil
+}
+
+func durationSecondsArg(ctx *Ctx, pos Pos, v Value, sig string) (float64, error) {
+	switch v.K {
+	case VNum:
+		return numF(ctx, pos, v, sig)
+	case VStr:
+		dur, ok := duration.Parse(v.S)
+		if !ok {
+			return 0, rtErr(ctx, pos, "%s expects duration string", sig)
+		}
+		return dur.Seconds(), nil
+	default:
+		return 0, rtErr(ctx, pos, "%s expects number or duration string", sig)
+	}
 }
 
 func splitUnix(ctx *Ctx, pos Pos, v Value, sig string) (int64, int64, error) {

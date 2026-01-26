@@ -37,6 +37,19 @@ X-Url: {{= url.encode("a b") }}
 X-Time: {{= time.nowISO() }}
 X-Trace-Id: {{= helpers.traceId() }}
 
+### RTS Time Helpers
+# @name RTS_TimeHelpers
+# @description Shows duration parsing and timestamp math.
+# @assert response.json("json.offset_seconds") == 5400
+# @assert match("^\\d{4}-\\d{2}-\\d{2}T", response.json("json.expires_iso"))
+POST {{base_url}}/anything/time
+Content-Type: application/json
+
+{
+  "offset_seconds": {{= time.duration("1h30m") }},
+  "expires_iso": "{{= time.formatUnix(time.addUnix(time.nowUnix(), '6d'), '2006-01-02T15:04:05Z07:00') }}"
+}
+
 ### RTS Pre-request Mutation
 # @name RTS_PreRequest
 # @description Mutates request, vars, and globals in pre-request.
