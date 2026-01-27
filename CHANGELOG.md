@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.19.2](https://github.com/unkn0wn-root/resterm/compare/v0.19.1...v0.19.2) (2026-01-27)
+
+
+### Features
+
+* add duration offsets for timestamps and RTS time helpers ([c3679e6](https://github.com/unkn0wn-root/resterm/commit/c3679e6ed865bc9ec131be817ba9195baeda710f))
+
+
+### Bug Fixes
+
+* **editor:** make visual selection inclusive ([35fe52b](https://github.com/unkn0wn-root/resterm/commit/35fe52bdbbc952e465947e7f29f2d3c6258c7dbf))
+* **httpclient:** preserve graphql GET URL mutation and expand override templates ([4307853](https://github.com/unkn0wn-root/resterm/commit/4307853c7944d226c3115ee4d5cd91af3bab1d53))
+
 ### [0.19.1](https://github.com/unkn0wn-root/resterm/compare/v0.18.6...v0.19.1) (2026-01-21)
 
 
