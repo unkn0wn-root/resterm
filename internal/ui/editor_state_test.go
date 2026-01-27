@@ -374,6 +374,26 @@ func TestRequestEditorVisualYankIncludesCaretRune(t *testing.T) {
 	}
 }
 
+func TestRequestEditorVisualYankIncludesLastRune(t *testing.T) {
+	editor := newTestEditor("abc")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, _ = editor.ToggleVisual()
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
+
+	editor, cmd := editor.YankSelection()
+	_ = editorEventFromCmd(t, cmd)
+
+	if got := editor.registerText; got != "abc" {
+		t.Fatalf("expected visual yank to include last rune, got %q", got)
+	}
+	if editor.hasSelection() {
+		t.Fatalf("expected selection to clear after yank")
+	}
+}
+
 func TestRequestEditorUndoRestoresDeletion(t *testing.T) {
 	editor := newTestEditor("alpha")
 	editorPtr := &editor
