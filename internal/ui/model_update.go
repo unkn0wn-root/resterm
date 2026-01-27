@@ -1425,6 +1425,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(nil)
 		}
 		pane := m.focusedPane()
+		if cmd, handled := m.handleResponseSelectionKey(msg, pane); handled {
+			return combine(cmd)
+		}
 		if pane != nil && pane.activeTab == responseTabCompare {
 			if cmd := m.handleCompareTabKey(msg, pane); cmd != nil {
 				return combine(cmd)

@@ -132,6 +132,31 @@ func TestWrapContentForTabRawMaintainsIndentOnWrap(t *testing.T) {
 	}
 }
 
+func TestWrapContentForTabMapTracksWrappedLines(t *testing.T) {
+	content := "hello world\nok"
+	wrapped, spans, rev := wrapContentForTabMap(
+		responseTabPretty,
+		content,
+		5,
+	)
+	lines := strings.Split(wrapped, "\n")
+	if len(spans) != 2 {
+		t.Fatalf("expected 2 base lines, got %d", len(spans))
+	}
+	if len(lines) == 0 {
+		t.Fatalf("expected wrapped lines")
+	}
+	if len(rev) != len(lines) {
+		t.Fatalf("expected rev len %d, got %d", len(lines), len(rev))
+	}
+	if spans[0].end <= spans[0].start {
+		t.Fatalf("expected first line to wrap, got span %+v", spans[0])
+	}
+	if spans[1].start <= spans[0].end {
+		t.Fatalf("expected second line to start after first, got %+v", spans[1])
+	}
+}
+
 func TestWrapToWidthRetainsMultilineIndentationAndColor(t *testing.T) {
 	content := strings.Join([]string{
 		"    {",

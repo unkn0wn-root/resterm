@@ -34,6 +34,7 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			ListItemTitle:       &StyleSpec{Foreground: strPtr("#222233")},
 			ListItemDescription: &StyleSpec{Foreground: strPtr("#9999aa")},
 			ResponseContentRaw:  &StyleSpec{Foreground: strPtr("#abcdef")},
+			ResponseSelection:   &StyleSpec{Background: strPtr("#101010")},
 			StreamContent:       &StyleSpec{Foreground: strPtr("#123123")},
 		},
 	}
@@ -78,6 +79,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if color := updated.ResponseContentRaw.GetForeground(); color != lipgloss.Color("#abcdef") {
 		t.Errorf("expected raw response foreground #abcdef, got %v", color)
+	}
+	if color := updated.ResponseSelection.GetBackground(); color != lipgloss.Color("#101010") {
+		t.Errorf("expected response selection background #101010, got %v", color)
 	}
 	if color := updated.StreamContent.GetForeground(); color != lipgloss.Color("#123123") {
 		t.Errorf("expected stream content foreground #123123, got %v", color)

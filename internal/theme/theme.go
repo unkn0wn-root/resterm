@@ -87,6 +87,7 @@ type Theme struct {
 	ResponseContent               lipgloss.Style
 	ResponseContentRaw            lipgloss.Style
 	ResponseContentHeaders        lipgloss.Style
+	ResponseSelection             lipgloss.Style
 	StreamContent                 lipgloss.Style
 	StreamTimestamp               lipgloss.Style
 	StreamDirectionSend           lipgloss.Style
@@ -345,6 +346,7 @@ func DefaultTheme() Theme {
 		ResponseContent:        lipgloss.NewStyle(),
 		ResponseContentRaw:     lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		ResponseContentHeaders: lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),
+		ResponseSelection:      lipgloss.NewStyle().Background(lipgloss.Color("#3A2B52")),
 		StreamContent:          lipgloss.NewStyle(),
 		StreamTimestamp:        lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
 		StreamDirectionSend: lipgloss.NewStyle().

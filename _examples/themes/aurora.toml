@@ -90,6 +90,9 @@ foreground = "#96d4a7"
 [styles.response_content_headers]
 foreground = "#34d399"
 
+[styles.response_selection]
+background = "#3a2b52"
+
 [colors]
 pane_border_focus_file = "#38bdf8"
 pane_border_focus_requests = "#34d399"
