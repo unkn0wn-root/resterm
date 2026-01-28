@@ -608,8 +608,13 @@ func (m *Model) resetChordState() {
 	m.hasPendingChord = false
 	m.pendingChord = ""
 	m.pendingChordMsg = tea.KeyMsg{}
+	m.clearRepeatChord()
+}
+
+func (m *Model) clearRepeatChord() {
 	m.repeatChordActive = false
 	m.repeatChordPrefix = ""
+	m.repeatChordKey = ""
 }
 
 func (m *Model) navGate(kind navigator.Kind, warn string) bool {
@@ -1109,13 +1114,14 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 
 	if allowChord {
 		if !m.hasPendingChord && m.repeatChordActive && shortcutKey != "" {
-			if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, shortcutKey, msg); handled {
-				m.suppressListKey = true
-				m.blockHistoryKey()
-				return combine(chordCmd)
+			if shortcutKey == m.repeatChordKey {
+				if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, shortcutKey, msg); handled {
+					m.suppressListKey = true
+					m.blockHistoryKey()
+					return combine(chordCmd)
+				}
 			}
-			m.repeatChordActive = false
-			m.repeatChordPrefix = ""
+			m.clearRepeatChord()
 		}
 		if m.hasPendingChord {
 			storedMsg := m.pendingChordMsg
@@ -1134,8 +1140,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			m.suppressListKey = true
 			keyStr = msg.String()
 		} else if m.canStartChord(msg, shortcutKey) {
-			m.repeatChordActive = false
-			m.repeatChordPrefix = ""
+			m.clearRepeatChord()
 			m.pendingChord = shortcutKey
 			m.pendingChordMsg = msg
 			m.hasPendingChord = true
@@ -1249,8 +1254,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					m.suppressEditorKey = true
 					return combine(cmd)
 				}
-				m.repeatChordActive = false
-				m.repeatChordPrefix = ""
+				m.clearRepeatChord()
 				m.startOperator("d")
 				m.suppressEditorKey = true
 				m.suppressListKey = true
@@ -1271,8 +1275,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					m.suppressEditorKey = true
 					return combine(cmd)
 				}
-				m.repeatChordActive = false
-				m.repeatChordPrefix = ""
+				m.clearRepeatChord()
 				m.startOperator("c")
 				m.suppressEditorKey = true
 				m.suppressListKey = true
@@ -1704,10 +1707,10 @@ func (m *Model) resolveChord(prefix string, next string, msg tea.KeyMsg) (bool, 
 	}
 	if binding.Repeatable {
 		m.repeatChordPrefix = prefix
+		m.repeatChordKey = next
 		m.repeatChordActive = true
 	} else {
-		m.repeatChordActive = false
-		m.repeatChordPrefix = ""
+		m.clearRepeatChord()
 	}
 	cmd, handled := m.runShortcutBinding(binding, msg)
 	if !handled {

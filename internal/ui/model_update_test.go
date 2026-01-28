@@ -199,6 +199,48 @@ func TestHandleKeyGhCanRepeatWithoutPrefix(t *testing.T) {
 	}
 }
 
+func TestRepeatChordRequiresSameKey(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 160
+	model.height = 50
+	model.ready = true
+	_ = model.setFocus(focusEditor)
+	_ = model.applyLayout()
+	model.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:       "file:/tmp/a.http",
+			Kind:     navigator.KindFile,
+			Payload:  navigator.Payload[any]{FilePath: "/tmp/a.http"},
+			Expanded: true,
+			Children: []*navigator.Node[any]{
+				{
+					ID:      "req:/tmp/a.http:0",
+					Kind:    navigator.KindRequest,
+					Payload: navigator.Payload[any]{FilePath: "/tmp/a.http"},
+				},
+			},
+		},
+	})
+	sel := model.navigator.Selected()
+	if sel == nil || !sel.Expanded {
+		t.Fatalf("expected expanded navigator selection")
+	}
+
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'g'}})
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'h'}})
+	if !model.repeatChordActive {
+		t.Fatalf("expected repeat chord to be active after gh")
+	}
+
+	_ = model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}})
+	if model.repeatChordActive {
+		t.Fatalf("expected repeat chord to clear on non-matching key")
+	}
+	if !sel.Expanded {
+		t.Fatalf("expected navigator expansion to remain unchanged")
+	}
+}
+
 func TestHandleKeyGhIgnoredInInsertMode(t *testing.T) {
 	model := New(Config{WorkspaceRoot: t.TempDir()})
 	model.width = 160

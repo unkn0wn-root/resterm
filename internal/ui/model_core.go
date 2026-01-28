@@ -325,6 +325,7 @@ type Model struct {
 	pendingChordMsg        tea.KeyMsg
 	hasPendingChord        bool
 	repeatChordPrefix      string
+	repeatChordKey         string
 	repeatChordActive      bool
 	operator               operatorState
 	suppressListKey        bool
