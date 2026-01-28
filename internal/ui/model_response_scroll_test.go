@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
@@ -152,5 +153,135 @@ func TestScrollShortcutUsesNavigatorWhenFocused(t *testing.T) {
 	}
 	if sel := model.navigator.Selected(); sel == nil || sel.ID != "req:2" {
 		t.Fatalf("expected navigator selection to move to bottom, got %+v", sel)
+	}
+}
+
+func TestScrollResponseToEdgeUpdatesCursor(t *testing.T) {
+	snap := &responseSnapshot{id: "snap", ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 40
+	pane.viewport.Height = 3
+
+	content := "one\ntwo\nthree\nfour\nfive\nsix"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, pane.viewport.Width),
+	)
+	pane.viewport.SetContent(content)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 4,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	model.scrollResponseToTop()
+	if pane.cursor.line != 0 {
+		t.Fatalf("expected cursor to move to top line, got %d", pane.cursor.line)
+	}
+
+	model.scrollResponseToBottom()
+	expected := len(strings.Split(content, "\n")) - 1
+	if pane.cursor.line != expected {
+		t.Fatalf("expected cursor to move to bottom line %d, got %d", expected, pane.cursor.line)
+	}
+}
+
+func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
+	snap := &responseSnapshot{id: "snap", ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 20
+	pane.viewport.Height = 3
+
+	content := "one\ntwo\nthree\nfour\nfive"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, pane.viewport.Width),
+	)
+	pane.viewport.SetContent(content)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 0,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+
+	cache := pane.wrapCache[responseTabPretty]
+	expected := cache.rev[pane.viewport.YOffset]
+	if pane.cursor.line != expected {
+		t.Fatalf(
+			"expected cursor to follow viewport to line %d, got %d",
+			expected,
+			pane.cursor.line,
+		)
+	}
+}
+
+func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
+	snap := &responseSnapshot{id: "snap", ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 20
+	pane.viewport.Height = 3
+
+	content := "one\ntwo\nthree\nfour\nfive\nsix"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, pane.viewport.Width),
+	)
+	pane.viewport.SetContent(content)
+	pane.viewport.SetYOffset(1)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 2,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+
+	if pane.cursor.line != 3 {
+		t.Fatalf(
+			"expected cursor to stay on middle row after scroll, got line %d",
+			pane.cursor.line,
+		)
+	}
+}
+
+func TestResponseArrowScrollBringsCursorIntoView(t *testing.T) {
+	snap := &responseSnapshot{id: "snap", ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 20
+	pane.viewport.Height = 3
+
+	content := "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, pane.viewport.Width),
+	)
+	pane.viewport.SetContent(content)
+	pane.viewport.SetYOffset(3)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 0,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+
+	cache := pane.wrapCache[responseTabPretty]
+	expected := cache.rev[pane.viewport.YOffset]
+	if pane.cursor.line != expected {
+		t.Fatalf("expected cursor to snap into view at line %d, got %d", expected, pane.cursor.line)
 	}
 }

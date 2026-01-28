@@ -157,6 +157,29 @@ func TestWrapContentForTabMapTracksWrappedLines(t *testing.T) {
 	}
 }
 
+func TestTrimBlankLine(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "NoTrailingNewline", input: "ok", want: "ok"},
+		{name: "LF", input: "ok\n", want: "ok"},
+		{name: "CRLF", input: "ok\r\n", want: "ok"},
+		{name: "DoubleNewline", input: "ok\n\n", want: "ok\n"},
+		{name: "Empty", input: "", want: ""},
+		{name: "OnlyNewline", input: "\n", want: ""},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := trimBlankLine(tc.input); got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
 func TestWrapToWidthRetainsMultilineIndentationAndColor(t *testing.T) {
 	content := strings.Join([]string{
 		"    {",
