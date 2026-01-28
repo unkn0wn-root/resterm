@@ -215,7 +215,11 @@ func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
 	cache := pane.wrapCache[responseTabPretty]
 	expected := cache.rev[pane.viewport.YOffset]
 	if pane.cursor.line != expected {
-		t.Fatalf("expected cursor to follow viewport to line %d, got %d", expected, pane.cursor.line)
+		t.Fatalf(
+			"expected cursor to follow viewport to line %d, got %d",
+			expected,
+			pane.cursor.line,
+		)
 	}
 }
 
@@ -244,7 +248,10 @@ func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
 	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
 
 	if pane.cursor.line != 3 {
-		t.Fatalf("expected cursor to stay on middle row after scroll, got line %d", pane.cursor.line)
+		t.Fatalf(
+			"expected cursor to stay on middle row after scroll, got line %d",
+			pane.cursor.line,
+		)
 	}
 }
 

@@ -661,7 +661,11 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	return ensureTrailingNewline(text), true
 }
 
-func (m *Model) decorateResponseCursor(p *responsePaneState, tab responseTab, content string) string {
+func (m *Model) decorateResponseCursor(
+	p *responsePaneState,
+	tab responseTab,
+	content string,
+) string {
 	if p == nil || content == "" || !respTabSel(tab) {
 		return content
 	}
@@ -706,7 +710,11 @@ func (m *Model) decorateResponseCursor(p *responsePaneState, tab responseTab, co
 	return builder.String()
 }
 
-func (m *Model) decorateResponseSelection(p *responsePaneState, tab responseTab, content string) string {
+func (m *Model) decorateResponseSelection(
+	p *responsePaneState,
+	tab responseTab,
+	content string,
+) string {
 	if p == nil || !p.sel.on || !respTabSel(tab) || content == "" {
 		return content
 	}
