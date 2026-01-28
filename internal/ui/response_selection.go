@@ -360,7 +360,7 @@ func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap)
 	total := len(cache.rev)
 	off := p.viewport.YOffset
 	h := p.viewport.Height
-	p.viewport.SetYOffset(scroll.Reveal(span.start, span.end, off, h, total))
+	p.viewport.SetYOffset(scroll.Align(span.start, off, h, total))
 	p.setCurrPosition()
 	return m.syncResponsePane(m.responsePaneFocus)
 }
@@ -493,7 +493,7 @@ func (m *Model) setRespCursorLine(p *responsePaneState, line int, cache cachedWr
 	total := len(cache.rev)
 	off := p.viewport.YOffset
 	h := p.viewport.Height
-	p.viewport.SetYOffset(scroll.Reveal(span.start, span.end, off, h, total))
+	p.viewport.SetYOffset(scroll.Align(span.start, off, h, total))
 	p.setCurrPosition()
 	return m.syncResponsePane(m.responsePaneFocus)
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
+	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
 func TestResponseSelectionDoesNotShiftLines(t *testing.T) {
@@ -122,6 +123,81 @@ func TestResponseCursorDecoratesGutter(t *testing.T) {
 	want := " one\n▌two\n three"
 	if got != want {
 		t.Fatalf("expected cursor gutter %q, got %q", want, got)
+	}
+}
+
+func TestResponseCursorScrollsSmoothlyOnLongLine(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabRaw
+	pane.viewport.Width = 8
+	pane.viewport.Height = 3
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap", rawMode: rawViewText}
+
+	content := "one\n" + strings.Repeat("a", 30) + "\nthree"
+	pane.rawWrapCache = map[rawViewMode]cachedWrap{
+		rawViewText: wrapCache(
+			responseTabRaw,
+			content,
+			responseWrapWidth(responseTabRaw, pane.viewport.Width),
+		),
+	}
+
+	_ = model.moveRespCursor(pane, 1)
+	prevOff := pane.viewport.YOffset
+	_ = model.moveRespCursor(pane, 1)
+
+	cache := pane.rawWrapCache[rawViewText]
+	if !model.cursorValid(pane, responseTabRaw) {
+		t.Fatal("expected cursor to be active")
+	}
+	span := cache.spans[pane.cursor.line]
+	expected := scroll.Align(span.start, prevOff, pane.viewport.Height, len(cache.rev))
+	if pane.viewport.YOffset != expected {
+		t.Fatalf("expected smooth scroll offset %d, got %d", expected, pane.viewport.YOffset)
+	}
+}
+
+func TestResponseSelectionScrollsSmoothlyOnLongLine(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabRaw
+	pane.viewport.Width = 8
+	pane.viewport.Height = 3
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap", rawMode: rawViewText}
+
+	content := "one\n" + strings.Repeat("a", 30) + "\nthree"
+	pane.rawWrapCache = map[rawViewMode]cachedWrap{
+		rawViewText: wrapCache(
+			responseTabRaw,
+			content,
+			responseWrapWidth(responseTabRaw, pane.viewport.Width),
+		),
+	}
+	pane.sel = respSel{
+		on:   true,
+		a:    0,
+		c:    0,
+		tab:  responseTabRaw,
+		sid:  "snap",
+		mode: rawViewText,
+	}
+
+	prevOff := pane.viewport.YOffset
+	_ = model.moveRespSel(pane, 1)
+
+	cache := pane.rawWrapCache[rawViewText]
+	if !model.selValid(pane, responseTabRaw) {
+		t.Fatal("expected selection to be active")
+	}
+	span := cache.spans[pane.sel.c]
+	expected := scroll.Align(span.start, prevOff, pane.viewport.Height, len(cache.rev))
+	if pane.viewport.YOffset != expected {
+		t.Fatalf("expected smooth scroll offset %d, got %d", expected, pane.viewport.YOffset)
 	}
 }
 
