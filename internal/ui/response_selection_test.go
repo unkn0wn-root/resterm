@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestResponseSelectionDoesNotShiftLines(t *testing.T) {
@@ -38,6 +39,12 @@ func TestResponseSelectionDoesNotShiftLines(t *testing.T) {
 }
 
 func TestResponseSelectionRestoresBaseStyleAfterLine(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
 	model := New(Config{})
 	model.ready = true
 	model.theme.ResponseContent = lipgloss.NewStyle().Foreground(lipgloss.Color("#ff00ff"))
@@ -71,9 +78,18 @@ func TestResponseSelectionRestoresBaseStyleAfterLine(t *testing.T) {
 	if selSuffix == "" || basePrefix == "" {
 		t.Fatalf("expected selection and base styles to emit SGR sequences")
 	}
-	expected := selSuffix + basePrefix + "\n" + "two"
-	if !strings.Contains(got, expected) {
+	lines := strings.Split(got, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected at least two lines, got %q", got)
+	}
+	if !strings.HasSuffix(lines[0], selSuffix+basePrefix) {
 		t.Fatalf("expected base style to resume after selection line, got %q", got)
+	}
+	if !strings.HasPrefix(lines[1], basePrefix) {
+		t.Fatalf("expected base style prefix on following line, got %q", got)
+	}
+	if stripped := stripANSIEscape(lines[1]); stripped != "two" {
+		t.Fatalf("expected follow-up line text %q, got %q", "two", stripped)
 	}
 }
 

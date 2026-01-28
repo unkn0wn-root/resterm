@@ -241,6 +241,7 @@ func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 	if p.snapshot == nil || !p.snapshot.ready {
 		return statusCmd(statusWarn, "No response available")
 	}
+
 	line := 0
 	if m.cursorValid(p, tab) {
 		line = p.cursor.line
@@ -251,6 +252,7 @@ func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 			return statusCmd(statusWarn, "Selection unavailable")
 		}
 	}
+
 	if cache, ok := m.selCache(p, tab); ok && len(cache.spans) > 0 {
 		if line < 0 {
 			line = 0
@@ -259,6 +261,7 @@ func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 			line = len(cache.spans) - 1
 		}
 	}
+
 	p.sel = respSel{
 		on:   true,
 		a:    line,
@@ -284,10 +287,12 @@ func (m *Model) moveRespSel(p *responsePaneState, delta int) tea.Cmd {
 	if p == nil || !m.selValid(p, p.activeTab) {
 		return nil
 	}
+
 	cache, ok := m.selCache(p, p.activeTab)
 	if !ok || len(cache.spans) == 0 {
 		return nil
 	}
+
 	max := len(cache.spans) - 1
 	line := p.sel.c + delta
 	if line < 0 {
@@ -303,14 +308,17 @@ func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 	if p == nil || !m.selValid(p, p.activeTab) {
 		return nil
 	}
+
 	cache, ok := m.selCache(p, p.activeTab)
 	if !ok || len(cache.rev) == 0 || len(cache.spans) == 0 {
 		return nil
 	}
+
 	step := p.viewport.Height
 	if step < 1 {
 		step = 1
 	}
+
 	cur := p.sel.c
 	if cur < 0 {
 		cur = 0
@@ -318,6 +326,7 @@ func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 	if cur >= len(cache.spans) {
 		cur = len(cache.spans) - 1
 	}
+
 	span := cache.spans[cur]
 	pos := span.start + (step * dir)
 	if pos < 0 {
@@ -330,11 +339,7 @@ func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 	return m.setRespSelLine(p, line, cache)
 }
 
-func (m *Model) setRespSelLine(
-	p *responsePaneState,
-	line int,
-	cache cachedWrap,
-) tea.Cmd {
+func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap) tea.Cmd {
 	if p == nil || !p.sel.on {
 		return nil
 	}
@@ -367,11 +372,13 @@ func (m *Model) copyRespSel(p *responsePaneState) tea.Cmd {
 		}
 		return statusCmd(statusInfo, "No selection to copy")
 	}
+
 	text, ok := m.respSelText(p)
 	if !ok {
 		p.sel.clear()
 		return statusCmd(statusInfo, "No selection to copy")
 	}
+
 	m.seedRespCursorFromSelection(p)
 	size := formatByteSize(int64(len(text)))
 	msg := fmt.Sprintf("Copied selection (%s)", size)
@@ -383,10 +390,12 @@ func (m *Model) seedRespCursorFromSelection(p *responsePaneState) {
 	if p == nil {
 		return
 	}
+
 	tab := p.activeTab
 	if !m.selValid(p, tab) {
 		return
 	}
+
 	p.cursor = respCursor{
 		on:   true,
 		line: p.sel.c,
@@ -420,6 +429,7 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	if p == nil {
 		return nil
 	}
+
 	tab := p.activeTab
 	if !respTabSel(tab) {
 		return nil
@@ -430,6 +440,7 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	if p.cursor.on && !m.cursorValid(p, tab) {
 		p.cursor.clear()
 	}
+
 	cache, ok := m.selCache(p, tab)
 	if !ok || len(cache.spans) == 0 {
 		return nil
@@ -438,6 +449,7 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 		line := clamp(p.cursor.line+delta, 0, len(cache.spans)-1)
 		return m.setRespCursorLine(p, line, cache)
 	}
+
 	line, ok := m.respCursorSeedLine(p, tab, delta)
 	if !ok {
 		return nil
@@ -446,14 +458,11 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	return m.setRespCursorLine(p, line, cache)
 }
 
-func (m *Model) setRespCursorLine(
-	p *responsePaneState,
-	line int,
-	cache cachedWrap,
-) tea.Cmd {
+func (m *Model) setRespCursorLine(p *responsePaneState, line int, cache cachedWrap) tea.Cmd {
 	if p == nil {
 		return nil
 	}
+
 	tab := p.activeTab
 	if !respTabSel(tab) || p.snapshot == nil || !p.snapshot.ready {
 		return nil
@@ -470,6 +479,7 @@ func (m *Model) setRespCursorLine(
 	if m.cursorValid(p, tab) && p.cursor.line == line {
 		return nil
 	}
+
 	p.cursor = respCursor{
 		on:   true,
 		line: line,
@@ -478,6 +488,7 @@ func (m *Model) setRespCursorLine(
 		hdr:  p.headersView,
 		mode: p.snapshot.rawMode,
 	}
+
 	span := cache.spans[line]
 	total := len(cache.rev)
 	off := p.viewport.YOffset
@@ -491,6 +502,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	if p == nil || !m.selValid(p, p.activeTab) {
 		return "", false
 	}
+
 	labelTab := p.activeTab
 	content, _ := m.paneContentForTab(m.responsePaneFocus, labelTab)
 	plain := stripANSIEscape(content)
@@ -510,11 +522,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	return ensureTrailingNewline(text), true
 }
 
-func (m *Model) decorateResponseCursor(
-	p *responsePaneState,
-	tab responseTab,
-	content string,
-) string {
+func (m *Model) decorateResponseCursor(p *responsePaneState, tab responseTab, content string) string {
 	if p == nil || content == "" || !respTabSel(tab) {
 		return content
 	}
@@ -558,11 +566,7 @@ func (m *Model) decorateResponseCursor(
 	return builder.String()
 }
 
-func (m *Model) decorateResponseSelection(
-	p *responsePaneState,
-	tab responseTab,
-	content string,
-) string {
+func (m *Model) decorateResponseSelection(p *responsePaneState, tab responseTab, content string) string {
 	if p == nil || !p.sel.on || !respTabSel(tab) || content == "" {
 		return content
 	}
@@ -570,20 +574,24 @@ func (m *Model) decorateResponseSelection(
 		p.sel.clear()
 		return content
 	}
+
 	cache, ok := m.selCache(p, tab)
 	if !ok || len(cache.spans) == 0 {
 		return content
 	}
+
 	start, end := p.sel.rng()
 	if start < 0 {
 		start = 0
 	}
+
 	if end >= len(cache.spans) {
 		end = len(cache.spans) - 1
 	}
 	if start > end {
 		return content
 	}
+
 	lines := strings.Split(content, "\n")
 	if len(lines) == 0 {
 		return content
@@ -614,6 +622,7 @@ func (m *Model) decorateResponseSelection(
 	if prefix == "" {
 		return content
 	}
+
 	basePrefix, _ := styleSGR(m.respBaseStyle(tab))
 	if basePrefix != "" {
 		if suffix == "" {
@@ -664,11 +673,7 @@ func (m *Model) respMarkerLine(p *responsePaneState, tab responseTab) (int, bool
 	return 0, false
 }
 
-func (m *Model) respCursorSeedLine(
-	p *responsePaneState,
-	tab responseTab,
-	delta int,
-) (int, bool) {
+func (m *Model) respCursorSeedLine(p *responsePaneState, tab responseTab, delta int) (int, bool) {
 	if delta < 0 {
 		return m.selLineBottom(p, tab)
 	}
@@ -682,10 +687,12 @@ func (m *Model) respCursorGutter(tab responseTab) (string, string) {
 	if basePrefix != "" {
 		blank = basePrefix + blank
 	}
+
 	marker := responseCursorMarker
 	if responseCursorGutterWidth > 1 {
 		marker = marker + strings.Repeat(" ", responseCursorGutterWidth-1)
 	}
+
 	style := m.theme.ResponseCursor.Inherit(base)
 	prefix, suffix := styleSGR(style)
 	if prefix == "" {
@@ -694,6 +701,7 @@ func (m *Model) respCursorGutter(tab responseTab) (string, string) {
 		}
 		return marker, blank
 	}
+
 	styled := prefix + marker + suffix
 	if basePrefix != "" {
 		styled += basePrefix
@@ -775,6 +783,7 @@ func applySelectionToLine(line, prefix, suffix string) string {
 	if len(indices) == 0 {
 		return prefix + line + suffix
 	}
+
 	var builder strings.Builder
 	builder.Grow(len(line) + len(prefix)*(len(indices)+1) + len(suffix))
 	builder.WriteString(prefix)
