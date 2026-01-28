@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -21,11 +22,6 @@ type respSel struct {
 	hdr  headersViewMode
 	mode rawViewMode
 }
-
-const (
-	responseCursorGutterWidth = 1
-	responseCursorMarker      = "▌"
-)
 
 type respCursor struct {
 	on   bool
@@ -83,9 +79,6 @@ func respTabSel(tab responseTab) bool {
 func responseWrapWidth(tab responseTab, width int) int {
 	if width <= 0 {
 		return width
-	}
-	if respTabSel(tab) && width > responseCursorGutterWidth {
-		return width - responseCursorGutterWidth
 	}
 	return width
 }
@@ -425,6 +418,152 @@ func (m *Model) cursorValid(p *responsePaneState, tab responseTab) bool {
 	return true
 }
 
+func respViewportHeight(p *responsePaneState) int {
+	if p == nil {
+		return 1
+	}
+	h := p.viewport.Height
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+func clampViewportOffset(offset, totalRows, height int) int {
+	if totalRows <= 0 {
+		return 0
+	}
+	maxOff := totalRows - height
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	if offset < 0 {
+		return 0
+	}
+	if offset > maxOff {
+		return maxOff
+	}
+	return offset
+}
+
+func cursorRowForLine(cache cachedWrap, line int) int {
+	if len(cache.spans) == 0 {
+		return 0
+	}
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(cache.spans) {
+		line = len(cache.spans) - 1
+	}
+	return cache.spans[line].start
+}
+
+func cursorLineForRow(cache cachedWrap, row int) int {
+	if len(cache.rev) == 0 {
+		return 0
+	}
+	if row < 0 {
+		row = 0
+	}
+	if row >= len(cache.rev) {
+		row = len(cache.rev) - 1
+	}
+	return cache.rev[row]
+}
+
+func (m *Model) followRespCursorOnScroll(
+	p *responsePaneState,
+	prevOffset int,
+	newOffset int,
+) bool {
+	cache, ok, cleared := m.activeRespCursorCache(p)
+	if cleared {
+		return true
+	}
+	if !ok {
+		return false
+	}
+
+	h := respViewportHeight(p)
+	total := len(cache.rev)
+	prevOffset = clampViewportOffset(prevOffset, total, h)
+	newOffset = clampViewportOffset(newOffset, total, h)
+	if prevOffset == newOffset {
+		return false
+	}
+
+	cursorRow := cursorRowForLine(cache, p.cursor.line)
+	screenRow := clamp(cursorRow-prevOffset, 0, h-1)
+	targetRow := clamp(newOffset+screenRow, 0, total-1)
+	return m.setRespCursor(p, cursorLineForRow(cache, targetRow))
+}
+
+func (m *Model) syncRespCursorToEdge(p *responsePaneState, top bool) bool {
+	cache, ok, cleared := m.activeRespCursorCache(p)
+	if cleared {
+		return true
+	}
+	if !ok {
+		return false
+	}
+	h := respViewportHeight(p)
+	row := p.viewport.YOffset
+	if !top {
+		row += h - 1
+	}
+	row = clamp(row, 0, len(cache.rev)-1)
+	return m.setRespCursor(p, cursorLineForRow(cache, row))
+}
+
+func (m *Model) activeRespCursorCache(
+	p *responsePaneState,
+) (cachedWrap, bool, bool) {
+	if p == nil || !p.cursor.on || p.sel.on {
+		return cachedWrap{}, false, false
+	}
+	tab := p.activeTab
+	if !respTabSel(tab) {
+		return cachedWrap{}, false, false
+	}
+	if p.snapshot == nil || !p.snapshot.ready {
+		return cachedWrap{}, false, false
+	}
+	prev := p.cursor
+	if !m.cursorValid(p, tab) {
+		p.cursor.clear()
+		return cachedWrap{}, false, prev != p.cursor
+	}
+	cache, ok := m.selCache(p, tab)
+	if !ok || len(cache.spans) == 0 || len(cache.rev) == 0 {
+		return cachedWrap{}, false, false
+	}
+	return cache, true, false
+}
+
+func (m *Model) setRespCursor(p *responsePaneState, line int) bool {
+	if p == nil || p.snapshot == nil {
+		return false
+	}
+	tab := p.activeTab
+	if !respTabSel(tab) {
+		return false
+	}
+	if line < 0 {
+		line = 0
+	}
+	prev := p.cursor
+	p.cursor = respCursor{
+		on:   true,
+		line: line,
+		tab:  tab,
+		sid:  p.snapshot.id,
+		hdr:  p.headersView,
+		mode: p.snapshot.rawMode,
+	}
+	return prev != p.cursor
+}
+
 func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	if p == nil {
 		return nil
@@ -526,9 +665,6 @@ func (m *Model) decorateResponseCursor(p *responsePaneState, tab responseTab, co
 	if p == nil || content == "" || !respTabSel(tab) {
 		return content
 	}
-	if responseCursorGutterWidth <= 0 {
-		return content
-	}
 	if p.cursor.on && !m.cursorValid(p, tab) {
 		p.cursor.clear()
 	}
@@ -549,16 +685,20 @@ func (m *Model) decorateResponseCursor(p *responsePaneState, tab responseTab, co
 		markerRow = -1
 	}
 
-	marker, blank := m.respCursorGutter(tab)
+	cursorPrefix, cursorSuffix, restorePrefix := m.respCursorSGR(tab)
+	if cursorPrefix == "" {
+		return content
+	}
 	var builder strings.Builder
-	builder.Grow(len(content) + len(lines)*len(blank))
+	builder.Grow(len(content) + len(cursorPrefix) + len(cursorSuffix))
 	for i, line := range lines {
 		if i == markerRow {
-			builder.WriteString(marker)
+			builder.WriteString(
+				applyCursorToLine(line, cursorPrefix, cursorSuffix, restorePrefix),
+			)
 		} else {
-			builder.WriteString(blank)
+			builder.WriteString(line)
 		}
-		builder.WriteString(line)
 		if i < len(lines)-1 {
 			builder.WriteByte('\n')
 		}
@@ -660,6 +800,23 @@ func (m *Model) respBaseStyle(tab responseTab) lipgloss.Style {
 	return base
 }
 
+func (m *Model) respCursorSGR(tab responseTab) (string, string, string) {
+	base := m.respBaseStyle(tab)
+	restorePrefix, _ := styleSGR(base)
+	style := ensureRespCursorStyle(m.theme.ResponseCursor)
+	cursorPrefix, cursorSuffix := styleSGR(style)
+	return cursorPrefix, cursorSuffix, restorePrefix
+}
+
+func ensureRespCursorStyle(style lipgloss.Style) lipgloss.Style {
+	if !style.GetReverse() {
+		if _, bgUnset := style.GetBackground().(lipgloss.NoColor); bgUnset {
+			style = style.Reverse(true)
+		}
+	}
+	return style
+}
+
 func (m *Model) respMarkerLine(p *responsePaneState, tab responseTab) (int, bool) {
 	if p == nil {
 		return 0, false
@@ -678,35 +835,6 @@ func (m *Model) respCursorSeedLine(p *responsePaneState, tab responseTab, delta 
 		return m.selLineBottom(p, tab)
 	}
 	return m.selLineTop(p, tab)
-}
-
-func (m *Model) respCursorGutter(tab responseTab) (string, string) {
-	base := m.respBaseStyle(tab)
-	basePrefix, _ := styleSGR(base)
-	blank := strings.Repeat(" ", responseCursorGutterWidth)
-	if basePrefix != "" {
-		blank = basePrefix + blank
-	}
-
-	marker := responseCursorMarker
-	if responseCursorGutterWidth > 1 {
-		marker = marker + strings.Repeat(" ", responseCursorGutterWidth-1)
-	}
-
-	style := m.theme.ResponseCursor.Inherit(base)
-	prefix, suffix := styleSGR(style)
-	if prefix == "" {
-		if basePrefix != "" {
-			marker = basePrefix + marker
-		}
-		return marker, blank
-	}
-
-	styled := prefix + marker + suffix
-	if basePrefix != "" {
-		styled += basePrefix
-	}
-	return styled, blank
 }
 
 func styleSGR(style lipgloss.Style) (string, string) {
@@ -804,6 +932,90 @@ func applySelectionToLine(line, prefix, suffix string) string {
 	}
 	builder.WriteString(suffix)
 	return builder.String()
+}
+
+func applyCursorToLine(line, prefix, suffix, restorePrefix string) string {
+	if prefix == "" {
+		return line
+	}
+	head, runeSeg, tail, ok := splitFirstVisibleRune(line)
+	if !ok {
+		_, trailing := detachTrailingANSIPrefix(line)
+		var builder strings.Builder
+		builder.Grow(len(line) + len(prefix) + len(suffix) + len(restorePrefix) + len(trailing) + 1)
+		if restorePrefix != "" {
+			builder.WriteString(restorePrefix)
+		}
+		builder.WriteString(prefix)
+		builder.WriteByte(' ')
+		if suffix != "" {
+			builder.WriteString(suffix)
+		}
+		if restorePrefix != "" {
+			builder.WriteString(restorePrefix)
+		}
+		if trailing != "" {
+			builder.WriteString(trailing)
+		}
+		return builder.String()
+	}
+
+	restore := leadingSGRPrefix(head)
+	if restore == "" {
+		restore = restorePrefix
+	}
+	var builder strings.Builder
+	builder.Grow(len(line) + len(prefix) + len(suffix) + len(restore))
+	builder.WriteString(head)
+	builder.WriteString(prefix)
+	builder.WriteString(runeSeg)
+	if suffix != "" {
+		builder.WriteString(suffix)
+	}
+	if restore != "" {
+		builder.WriteString(restore)
+	}
+	builder.WriteString(tail)
+	return builder.String()
+}
+
+func leadingSGRPrefix(line string) string {
+	if line == "" {
+		return ""
+	}
+	var builder strings.Builder
+	index := 0
+	for index < len(line) {
+		if loc := ansiSequenceRegex.FindStringIndex(line[index:]); loc != nil && loc[0] == 0 {
+			seq := line[index : index+loc[1]]
+			if isSGR(seq) {
+				builder.WriteString(seq)
+			}
+			index += loc[1]
+			continue
+		}
+		break
+	}
+	return builder.String()
+}
+
+func splitFirstVisibleRune(line string) (string, string, string, bool) {
+	if line == "" {
+		return "", "", "", false
+	}
+	index := 0
+	for index < len(line) {
+		if loc := ansiSequenceRegex.FindStringIndex(line[index:]); loc != nil && loc[0] == 0 {
+			index += loc[1]
+			continue
+		}
+		_, size := utf8.DecodeRuneInString(line[index:])
+		if size <= 0 {
+			size = 1
+		}
+		return line[:index], line[index : index+size], line[index+size:], true
+	}
+	return line, "", "", false
 }
 
 func isSGR(seq string) bool {

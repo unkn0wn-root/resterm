@@ -94,11 +94,17 @@ func TestResponseSelectionRestoresBaseStyleAfterLine(t *testing.T) {
 	}
 }
 
-func TestResponseCursorDecoratesGutter(t *testing.T) {
+func TestResponseCursorDecoratesInline(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
 	model := New(Config{})
 	model.ready = true
 	model.theme.ResponseContent = lipgloss.NewStyle()
-	model.theme.ResponseCursor = lipgloss.NewStyle()
+	model.theme.ResponseCursor = lipgloss.NewStyle().Background(lipgloss.Color("#00ff00"))
 
 	pane := model.pane(responsePanePrimary)
 	pane.activeTab = responseTabPretty
@@ -120,9 +126,55 @@ func TestResponseCursorDecoratesGutter(t *testing.T) {
 	}
 
 	got := model.decorateResponseCursor(pane, responseTabPretty, content)
-	want := " one\n▌two\n three"
-	if got != want {
-		t.Fatalf("expected cursor gutter %q, got %q", want, got)
+	if stripped := stripANSIEscape(got); stripped != content {
+		t.Fatalf("expected cursor to avoid extra width, got %q", stripped)
+	}
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected cursor styling to emit ANSI codes")
+	}
+}
+
+func TestResponseCursorDecoratesEmptyLine(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := New(Config{})
+	model.ready = true
+	model.theme.ResponseContent = lipgloss.NewStyle()
+	model.theme.ResponseCursor = lipgloss.NewStyle().Background(lipgloss.Color("#00ff00"))
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 10
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
+
+	content := "\n"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 0,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	got := model.decorateResponseCursor(pane, responseTabPretty, content)
+	lines := strings.Split(got, "\n")
+	if len(lines) == 0 {
+		t.Fatalf("expected decorated content to keep empty line")
+	}
+	if stripped := stripANSIEscape(lines[0]); stripped != " " {
+		t.Fatalf("expected cursor to render a single cell on empty line, got %q", stripped)
+	}
+	if !strings.Contains(got, "\x1b[") {
+		t.Fatalf("expected cursor styling to emit ANSI codes")
 	}
 }
 

@@ -1028,7 +1028,6 @@ func (m *Model) refreshStreamPanes() {
 		pane.wrapCache[responseTabStream] = cachedWrap{
 			width:   width,
 			content: wrappedStream,
-			base:    streamContent,
 			valid:   true,
 		}
 		decorated := m.applyResponseContentStyles(responseTabStream, wrappedStream)

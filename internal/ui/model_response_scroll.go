@@ -42,6 +42,9 @@ func (m *Model) scrollResponseToEdge(top bool) tea.Cmd {
 		pane.viewport.GotoBottom()
 	}
 	pane.setCurrPosition()
+	if m.syncRespCursorToEdge(pane, top) {
+		return m.syncResponsePane(m.responsePaneFocus)
+	}
 	return nil
 }
 
@@ -88,4 +91,17 @@ func isScrollableResponsePane(pane *responsePaneState) bool {
 	default:
 		return false
 	}
+}
+
+func (m *Model) scrollResponseViewport(pane *responsePaneState, scrollFn func()) tea.Cmd {
+	if pane == nil || scrollFn == nil {
+		return nil
+	}
+	prevOffset := pane.viewport.YOffset
+	scrollFn()
+	pane.setCurrPosition()
+	if m.followRespCursorOnScroll(pane, prevOffset, pane.viewport.YOffset) {
+		return m.syncResponsePane(m.responsePaneFocus)
+	}
+	return nil
 }

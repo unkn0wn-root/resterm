@@ -562,7 +562,6 @@ func (m *Model) syncWorkflowStatsPane(
 	pane.wrapCache[responseTabStats] = cachedWrap{
 		width:   width,
 		content: render.content,
-		base:    render.content,
 		valid:   true,
 	}
 	decorated := m.decorateResponseContentForPane(

@@ -515,15 +515,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			skipViewport := false
 			if keyMsg, ok := msg.(tea.KeyMsg); ok {
 				switch keyMsg.String() {
-				case "j", "k":
+				case "j", "k", "down", "up", "pgdown", "pgup":
 					skipViewport = true
 				}
 			}
 			if !skipViewport {
 				var paneCmd tea.Cmd
+				prevOffset := pane.viewport.YOffset
 				pane.viewport, paneCmd = pane.viewport.Update(msg)
 				if paneCmd != nil {
 					cmds = append(cmds, paneCmd)
+				}
+				if pane.viewport.YOffset != prevOffset {
+					if m.followRespCursorOnScroll(pane, prevOffset, pane.viewport.YOffset) {
+						cmds = append(cmds, m.syncResponsePane(m.responsePaneFocus))
+					}
 				}
 			}
 		}
@@ -1489,9 +1495,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
-			pane.viewport.ScrollDown(1)
-			pane.setCurrPosition()
-			return combine(nil)
+			return combine(m.scrollResponseViewport(pane, func() {
+				pane.viewport.ScrollDown(1)
+			}))
 		case "up", "k", "shift+k", "K":
 			if pane == nil {
 				return combine(nil)
@@ -1521,9 +1527,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
-			pane.viewport.ScrollUp(1)
-			pane.setCurrPosition()
-			return combine(nil)
+			return combine(m.scrollResponseViewport(pane, func() {
+				pane.viewport.ScrollUp(1)
+			}))
 		case "pgdown":
 			if pane == nil {
 				return combine(nil)
@@ -1531,9 +1537,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane.activeTab == responseTabHistory {
 				break
 			}
-			pane.viewport.PageDown()
-			pane.setCurrPosition()
-			return combine(nil)
+			return combine(m.scrollResponseViewport(pane, func() {
+				pane.viewport.PageDown()
+			}))
 		case "pgup":
 			if pane == nil {
 				return combine(nil)
@@ -1541,9 +1547,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane.activeTab == responseTabHistory {
 				break
 			}
-			pane.viewport.PageUp()
-			pane.setCurrPosition()
-			return combine(nil)
+			return combine(m.scrollResponseViewport(pane, func() {
+				pane.viewport.PageUp()
+			}))
 		case "left", "ctrl+h", "h":
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
 		case "right", "ctrl+l", "l":
