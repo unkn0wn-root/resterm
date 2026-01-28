@@ -17,7 +17,11 @@ func TestParse(t *testing.T) {
 		{name: "hours", input: "1h", want: time.Hour},
 		{name: "mixed", input: "1h30m", want: time.Hour + 30*time.Minute},
 		{name: "days", input: "2d", want: 48 * time.Hour},
-		{name: "weeks", input: "1w2d3h4m5s", want: 9*24*time.Hour + 3*time.Hour + 4*time.Minute + 5*time.Second},
+		{
+			name:  "weeks",
+			input: "1w2d3h4m5s",
+			want:  9*24*time.Hour + 3*time.Hour + 4*time.Minute + 5*time.Second,
+		},
 		{name: "decimal", input: "1.5d", want: 36 * time.Hour},
 		{name: "spaces", input: "1h 30m", want: time.Hour + 30*time.Minute},
 		{name: "negative", input: "-6d", want: -6 * 24 * time.Hour},

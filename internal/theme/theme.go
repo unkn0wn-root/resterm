@@ -348,9 +348,11 @@ func DefaultTheme() Theme {
 		ResponseContentRaw:     lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		ResponseContentHeaders: lipgloss.NewStyle().Foreground(lipgloss.Color("#C7C4E0")),
 		ResponseSelection:      lipgloss.NewStyle().Background(lipgloss.Color("#3A2B52")),
-		ResponseCursor:         lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Bold(true),
-		StreamContent:          lipgloss.NewStyle(),
-		StreamTimestamp:        lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
+		ResponseCursor: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#A6A1BB")).
+			Bold(true),
+		StreamContent:   lipgloss.NewStyle(),
+		StreamTimestamp: lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
 		StreamDirectionSend: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FF6E6E")).
 			Bold(true),

@@ -498,7 +498,11 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		if msg.width > 0 && pane.viewport.Width == msg.width {
 			prettyWidth := responseWrapWidth(responseTabPretty, msg.width)
 			prettyBase := ensureTrailingNewline(msg.pretty)
-			pane.wrapCache[responseTabPretty] = wrapCache(responseTabPretty, prettyBase, prettyWidth)
+			pane.wrapCache[responseTabPretty] = wrapCache(
+				responseTabPretty,
+				prettyBase,
+				prettyWidth,
+			)
 			rawWidth := responseWrapWidth(responseTabRaw, msg.width)
 			rawBase := ensureTrailingNewline(snapshot.raw)
 			pane.ensureRawWrapCache()
