@@ -103,7 +103,7 @@ func TestResponseCursorDecoratesGutter(t *testing.T) {
 	}
 
 	got := model.decorateResponseCursor(pane, responseTabPretty, content)
-	want := " one\n>two\n three"
+	want := " one\n▌two\n three"
 	if got != want {
 		t.Fatalf("expected cursor gutter %q, got %q", want, got)
 	}

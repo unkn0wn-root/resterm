@@ -24,7 +24,7 @@ type respSel struct {
 
 const (
 	responseCursorGutterWidth = 1
-	responseCursorMarker      = ">"
+	responseCursorMarker      = "▌"
 )
 
 type respCursor struct {
