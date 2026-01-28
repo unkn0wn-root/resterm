@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.20.0](https://github.com/unkn0wn-root/resterm/compare/v0.19.2...v0.20.0) (2026-01-28)
+
+
+### Features
+
+* add copy selection to response tab ([5495b0c](https://github.com/unkn0wn-root/resterm/commit/5495b0cd409e3c6768e5ac55e4d4e5b871187cae))
+* add cursor ([e568e6c](https://github.com/unkn0wn-root/resterm/commit/e568e6c218615971baac9812bb670c1a4a07c4eb))
+
+
+### Bug Fixes
+
+* scrolling with cursor enabled ([a756f0b](https://github.com/unkn0wn-root/resterm/commit/a756f0b15264e13d4a718e0e35a99c826eba3fb0))
+* scrolling with cursor enabled ([4b6c23f](https://github.com/unkn0wn-root/resterm/commit/4b6c23f51f1496dffc88afa97e4ceec709c4952e))
+* tests ([c133745](https://github.com/unkn0wn-root/resterm/commit/c133745e2d64c8d611539e76cf222095fd884621))
+
 ### [0.19.2](https://github.com/unkn0wn-root/resterm/compare/v0.19.1...v0.19.2) (2026-01-27)
 
 
