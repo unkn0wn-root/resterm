@@ -22,8 +22,43 @@ type respSel struct {
 	mode rawViewMode
 }
 
+const (
+	responseCursorGutterWidth = 1
+	responseCursorMarker      = ">"
+)
+
+type respCursor struct {
+	on   bool
+	line int
+	tab  responseTab
+	sid  string
+	hdr  headersViewMode
+	mode rawViewMode
+}
+
+type respCursorKey struct {
+	tab  responseTab
+	hdr  headersViewMode
+	mode rawViewMode
+}
+
 func (s *respSel) clear() {
 	*s = respSel{}
+}
+
+func (c *respCursor) clear() {
+	*c = respCursor{}
+}
+
+func (c respCursor) key() respCursorKey {
+	return respCursorKeyFor(c.tab, c.hdr, c.mode)
+}
+
+func cursorMatchesSnapshot(cur respCursor, snap *responseSnapshot) bool {
+	if snap == nil || !snap.ready {
+		return false
+	}
+	return cur.sid == snap.id
 }
 
 func (s respSel) rng() (int, int) {
@@ -43,6 +78,26 @@ func respTabSel(tab responseTab) bool {
 	default:
 		return false
 	}
+}
+
+func responseWrapWidth(tab responseTab, width int) int {
+	if width <= 0 {
+		return width
+	}
+	if respTabSel(tab) && width > responseCursorGutterWidth {
+		return width - responseCursorGutterWidth
+	}
+	return width
+}
+
+func respCursorKeyFor(tab responseTab, hdr headersViewMode, mode rawViewMode) respCursorKey {
+	if tab != responseTabHeaders {
+		hdr = 0
+	}
+	if tab != responseTabRaw {
+		mode = 0
+	}
+	return respCursorKey{tab: tab, hdr: hdr, mode: mode}
 }
 
 func (m *Model) handleResponseSelectionKey(
@@ -149,11 +204,23 @@ func (m *Model) selCache(p *responsePaneState, tab responseTab) (cachedWrap, boo
 }
 
 func (m *Model) selLineTop(p *responsePaneState, tab responseTab) (int, bool) {
+	return m.selLineAt(p, tab, p.viewport.YOffset)
+}
+
+func (m *Model) selLineBottom(p *responsePaneState, tab responseTab) (int, bool) {
+	h := p.viewport.Height
+	if h < 1 {
+		h = 1
+	}
+	return m.selLineAt(p, tab, p.viewport.YOffset+h-1)
+}
+
+func (m *Model) selLineAt(p *responsePaneState, tab responseTab, offset int) (int, bool) {
 	cache, ok := m.selCache(p, tab)
 	if !ok || len(cache.rev) == 0 {
 		return 0, false
 	}
-	off := p.viewport.YOffset
+	off := offset
 	if off < 0 {
 		off = 0
 	}
@@ -174,9 +241,23 @@ func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 	if p.snapshot == nil || !p.snapshot.ready {
 		return statusCmd(statusWarn, "No response available")
 	}
-	line, ok := m.selLineTop(p, tab)
-	if !ok {
-		return statusCmd(statusWarn, "Selection unavailable")
+	line := 0
+	if m.cursorValid(p, tab) {
+		line = p.cursor.line
+	} else {
+		var ok bool
+		line, ok = m.selLineTop(p, tab)
+		if !ok {
+			return statusCmd(statusWarn, "Selection unavailable")
+		}
+	}
+	if cache, ok := m.selCache(p, tab); ok && len(cache.spans) > 0 {
+		if line < 0 {
+			line = 0
+		}
+		if line >= len(cache.spans) {
+			line = len(cache.spans) - 1
+		}
 	}
 	p.sel = respSel{
 		on:   true,
@@ -194,6 +275,7 @@ func (m *Model) clearRespSel(p *responsePaneState) tea.Cmd {
 	if p == nil || !p.sel.on {
 		return nil
 	}
+	m.seedRespCursorFromSelection(p)
 	p.sel.clear()
 	return m.syncResponsePane(m.responsePaneFocus)
 }
@@ -290,10 +372,119 @@ func (m *Model) copyRespSel(p *responsePaneState) tea.Cmd {
 		p.sel.clear()
 		return statusCmd(statusInfo, "No selection to copy")
 	}
+	m.seedRespCursorFromSelection(p)
 	size := formatByteSize(int64(len(text)))
 	msg := fmt.Sprintf("Copied selection (%s)", size)
 	p.sel.clear()
 	return (&m.editor).copyToClipboard(text, msg)
+}
+
+func (m *Model) seedRespCursorFromSelection(p *responsePaneState) {
+	if p == nil {
+		return
+	}
+	tab := p.activeTab
+	if !m.selValid(p, tab) {
+		return
+	}
+	p.cursor = respCursor{
+		on:   true,
+		line: p.sel.c,
+		tab:  tab,
+		sid:  p.snapshot.id,
+		hdr:  p.headersView,
+		mode: p.snapshot.rawMode,
+	}
+}
+
+func (m *Model) cursorValid(p *responsePaneState, tab responseTab) bool {
+	if p == nil || !p.cursor.on {
+		return false
+	}
+	if !respTabSel(tab) {
+		return false
+	}
+	if p.cursor.tab != tab || !cursorMatchesSnapshot(p.cursor, p.snapshot) {
+		return false
+	}
+	if tab == responseTabHeaders && p.cursor.hdr != p.headersView {
+		return false
+	}
+	if tab == responseTabRaw && p.cursor.mode != p.snapshot.rawMode {
+		return false
+	}
+	return true
+}
+
+func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	tab := p.activeTab
+	if !respTabSel(tab) {
+		return nil
+	}
+	if p.snapshot == nil || !p.snapshot.ready {
+		return nil
+	}
+	if p.cursor.on && !m.cursorValid(p, tab) {
+		p.cursor.clear()
+	}
+	cache, ok := m.selCache(p, tab)
+	if !ok || len(cache.spans) == 0 {
+		return nil
+	}
+	if m.cursorValid(p, tab) {
+		line := clamp(p.cursor.line+delta, 0, len(cache.spans)-1)
+		return m.setRespCursorLine(p, line, cache)
+	}
+	line, ok := m.respCursorSeedLine(p, tab, delta)
+	if !ok {
+		return nil
+	}
+	line = clamp(line, 0, len(cache.spans)-1)
+	return m.setRespCursorLine(p, line, cache)
+}
+
+func (m *Model) setRespCursorLine(
+	p *responsePaneState,
+	line int,
+	cache cachedWrap,
+) tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	tab := p.activeTab
+	if !respTabSel(tab) || p.snapshot == nil || !p.snapshot.ready {
+		return nil
+	}
+	if len(cache.spans) == 0 {
+		return nil
+	}
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(cache.spans) {
+		line = len(cache.spans) - 1
+	}
+	if m.cursorValid(p, tab) && p.cursor.line == line {
+		return nil
+	}
+	p.cursor = respCursor{
+		on:   true,
+		line: line,
+		tab:  tab,
+		sid:  p.snapshot.id,
+		hdr:  p.headersView,
+		mode: p.snapshot.rawMode,
+	}
+	span := cache.spans[line]
+	total := len(cache.rev)
+	off := p.viewport.YOffset
+	h := p.viewport.Height
+	p.viewport.SetYOffset(scroll.Reveal(span.start, span.end, off, h, total))
+	p.setCurrPosition()
+	return m.syncResponsePane(m.responsePaneFocus)
 }
 
 func (m *Model) respSelText(p *responsePaneState) (string, bool) {
@@ -317,6 +508,54 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	}
 	text := strings.Join(lines[start:end+1], "\n")
 	return ensureTrailingNewline(text), true
+}
+
+func (m *Model) decorateResponseCursor(
+	p *responsePaneState,
+	tab responseTab,
+	content string,
+) string {
+	if p == nil || content == "" || !respTabSel(tab) {
+		return content
+	}
+	if responseCursorGutterWidth <= 0 {
+		return content
+	}
+	if p.cursor.on && !m.cursorValid(p, tab) {
+		p.cursor.clear()
+	}
+
+	markerRow := -1
+	if markerLine, ok := m.respMarkerLine(p, tab); ok {
+		if cache, ok := m.selCache(p, tab); ok && len(cache.spans) > 0 {
+			markerLine = clamp(markerLine, 0, len(cache.spans)-1)
+			markerRow = cache.spans[markerLine].start
+		}
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) == 0 {
+		return content
+	}
+	if markerRow >= len(lines) {
+		markerRow = -1
+	}
+
+	marker, blank := m.respCursorGutter(tab)
+	var builder strings.Builder
+	builder.Grow(len(content) + len(lines)*len(blank))
+	for i, line := range lines {
+		if i == markerRow {
+			builder.WriteString(marker)
+		} else {
+			builder.WriteString(blank)
+		}
+		builder.WriteString(line)
+		if i < len(lines)-1 {
+			builder.WriteByte('\n')
+		}
+	}
+	return builder.String()
 }
 
 func (m *Model) decorateResponseSelection(
@@ -410,6 +649,56 @@ func (m *Model) respBaseStyle(tab responseTab) lipgloss.Style {
 		base = m.theme.ResponseContentHeaders.Inherit(base)
 	}
 	return base
+}
+
+func (m *Model) respMarkerLine(p *responsePaneState, tab responseTab) (int, bool) {
+	if p == nil {
+		return 0, false
+	}
+	if p.sel.on && m.selValid(p, tab) {
+		return p.sel.c, true
+	}
+	if p.cursor.on && m.cursorValid(p, tab) {
+		return p.cursor.line, true
+	}
+	return 0, false
+}
+
+func (m *Model) respCursorSeedLine(
+	p *responsePaneState,
+	tab responseTab,
+	delta int,
+) (int, bool) {
+	if delta < 0 {
+		return m.selLineBottom(p, tab)
+	}
+	return m.selLineTop(p, tab)
+}
+
+func (m *Model) respCursorGutter(tab responseTab) (string, string) {
+	base := m.respBaseStyle(tab)
+	basePrefix, _ := styleSGR(base)
+	blank := strings.Repeat(" ", responseCursorGutterWidth)
+	if basePrefix != "" {
+		blank = basePrefix + blank
+	}
+	marker := responseCursorMarker
+	if responseCursorGutterWidth > 1 {
+		marker = marker + strings.Repeat(" ", responseCursorGutterWidth-1)
+	}
+	style := m.theme.ResponseCursor.Inherit(base)
+	prefix, suffix := styleSGR(style)
+	if prefix == "" {
+		if basePrefix != "" {
+			marker = basePrefix + marker
+		}
+		return marker, blank
+	}
+	styled := prefix + marker + suffix
+	if basePrefix != "" {
+		styled += basePrefix
+	}
+	return styled, blank
 }
 
 func styleSGR(style lipgloss.Style) (string, string) {

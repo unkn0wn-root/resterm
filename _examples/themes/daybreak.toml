@@ -93,6 +93,10 @@ foreground = "#047857"
 [styles.response_selection]
 background = "#e2e8f0"
 
+[styles.response_cursor]
+foreground = "#6b7280"
+bold = true
+
 [colors]
 pane_border_focus_file = "#2563eb"
 pane_border_focus_requests = "#0d9488"

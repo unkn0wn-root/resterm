@@ -18,7 +18,11 @@ func TestResponseSelectionDoesNotShiftLines(t *testing.T) {
 	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
 
 	content := "abc\ndef"
-	pane.wrapCache[responseTabPretty] = wrapCache(responseTabPretty, content, 80)
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
 	pane.sel = respSel{
 		on:  true,
 		a:   0,
@@ -46,7 +50,11 @@ func TestResponseSelectionRestoresBaseStyleAfterLine(t *testing.T) {
 	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
 
 	content := "one\ntwo"
-	pane.wrapCache[responseTabPretty] = wrapCache(responseTabPretty, content, 80)
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
 	pane.sel = respSel{
 		on:  true,
 		a:   0,
@@ -66,5 +74,121 @@ func TestResponseSelectionRestoresBaseStyleAfterLine(t *testing.T) {
 	expected := selSuffix + basePrefix + "\n" + "two"
 	if !strings.Contains(got, expected) {
 		t.Fatalf("expected base style to resume after selection line, got %q", got)
+	}
+}
+
+func TestResponseCursorDecoratesGutter(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.theme.ResponseContent = lipgloss.NewStyle()
+	model.theme.ResponseCursor = lipgloss.NewStyle()
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 10
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
+
+	content := "one\ntwo\nthree"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 1,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	got := model.decorateResponseCursor(pane, responseTabPretty, content)
+	want := " one\n>two\n three"
+	if got != want {
+		t.Fatalf("expected cursor gutter %q, got %q", want, got)
+	}
+}
+
+func TestResponseSelectionStartsAtCursorLine(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 10
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
+
+	content := "one\ntwo\nthree"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
+	pane.cursor = respCursor{
+		on:   true,
+		line: 2,
+		tab:  responseTabPretty,
+		sid:  "snap",
+	}
+
+	_ = model.startRespSel(pane)
+	if !pane.sel.on {
+		t.Fatal("expected selection to start")
+	}
+	if pane.sel.a != 2 || pane.sel.c != 2 {
+		t.Fatalf("expected selection at line 2, got anchor=%d caret=%d", pane.sel.a, pane.sel.c)
+	}
+}
+
+func TestMoveResponseCursorSeedsFromTop(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 10
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
+
+	content := "one\ntwo\nthree"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
+
+	_ = model.moveRespCursor(pane, 1)
+	if !pane.cursor.on {
+		t.Fatal("expected cursor to be active")
+	}
+	if pane.cursor.line != 0 {
+		t.Fatalf("expected cursor line 0, got %d", pane.cursor.line)
+	}
+}
+
+func TestMoveResponseCursorSeedsFromBottom(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 10
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
+
+	content := "one\ntwo\nthree"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
+
+	_ = model.moveRespCursor(pane, -1)
+	if !pane.cursor.on {
+		t.Fatal("expected cursor to be active")
+	}
+	if pane.cursor.line != 2 {
+		t.Fatalf("expected cursor line 2, got %d", pane.cursor.line)
 	}
 }

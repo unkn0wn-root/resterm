@@ -489,13 +489,22 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		if pane.sel.on {
 			pane.sel.clear()
 		}
+		if pane.cursor.on {
+			pane.cursor.clear()
+		}
+		if pane.cursorStore != nil {
+			pane.cursorStore = make(map[respCursorKey]respCursor)
+		}
 		if msg.width > 0 && pane.viewport.Width == msg.width {
+			prettyWidth := responseWrapWidth(responseTabPretty, msg.width)
 			prettyBase := ensureTrailingNewline(msg.pretty)
-			pane.wrapCache[responseTabPretty] = wrapCache(responseTabPretty, prettyBase, msg.width)
+			pane.wrapCache[responseTabPretty] = wrapCache(responseTabPretty, prettyBase, prettyWidth)
+			rawWidth := responseWrapWidth(responseTabRaw, msg.width)
 			rawBase := ensureTrailingNewline(snapshot.raw)
 			pane.ensureRawWrapCache()
-			pane.rawWrapCache[snapshot.rawMode] = wrapCache(responseTabRaw, rawBase, msg.width)
+			pane.rawWrapCache[snapshot.rawMode] = wrapCache(responseTabRaw, rawBase, rawWidth)
 
+			headersWidth := responseWrapWidth(responseTabHeaders, msg.width)
 			headersBase := ensureTrailingNewline(msg.headers)
 			if pane.headersView == headersViewRequest {
 				headersBase = ensureTrailingNewline(msg.requestHeaders)
@@ -503,7 +512,7 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 			pane.wrapCache[responseTabHeaders] = wrapCache(
 				responseTabHeaders,
 				headersBase,
-				msg.width,
+				headersWidth,
 			)
 		}
 		if strings.TrimSpace(snapshot.stats) != "" {
@@ -1783,11 +1792,23 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 			displayWidth = defaultResponseViewportWidth
 		}
 		content := ensureTrailingNewline(preview)
-		prettyCache := wrapCache(responseTabPretty, content, displayWidth)
+		prettyCache := wrapCache(
+			responseTabPretty,
+			content,
+			responseWrapWidth(responseTabPretty, displayWidth),
+		)
 		pane.wrapCache[responseTabPretty] = prettyCache
 		pane.ensureRawWrapCache()
-		pane.rawWrapCache[snapshot.rawMode] = wrapCache(responseTabRaw, content, displayWidth)
-		pane.wrapCache[responseTabHeaders] = wrapCache(responseTabHeaders, content, displayWidth)
+		pane.rawWrapCache[snapshot.rawMode] = wrapCache(
+			responseTabRaw,
+			content,
+			responseWrapWidth(responseTabRaw, displayWidth),
+		)
+		pane.wrapCache[responseTabHeaders] = wrapCache(
+			responseTabHeaders,
+			content,
+			responseWrapWidth(responseTabHeaders, displayWidth),
+		)
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
 		pane.wrapCache[responseTabStats] = cachedWrap{}
 		pane.viewport.SetContent(prettyCache.content)
