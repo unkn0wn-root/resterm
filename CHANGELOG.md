@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.20.1](https://github.com/unkn0wn-root/resterm/compare/v0.20.0...v0.20.1) (2026-01-28)
+
+
+### Bug Fixes
+
+* repeatable chord to require matching key ([91a8a29](https://github.com/unkn0wn-root/resterm/commit/91a8a2902ac56da59e2818a9a30e9d90639646ab))
+
 ## [0.20.0](https://github.com/unkn0wn-root/resterm/compare/v0.19.2...v0.20.0) (2026-01-28)
 
 
