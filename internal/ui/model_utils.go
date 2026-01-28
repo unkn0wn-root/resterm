@@ -334,6 +334,66 @@ func wrapContentForTab(tab responseTab, content string, width int) string {
 	}
 }
 
+func wrapContentForTabMap(
+	tab responseTab,
+	content string,
+	width int,
+) (string, []lineSpan, []int) {
+	lines := strings.Split(content, "\n")
+	wrapped := make([]string, 0, len(lines))
+	spans := make([]lineSpan, len(lines))
+	rev := make([]int, 0, len(lines))
+
+	for i, line := range lines {
+		segments := wrapLineForTab(tab, line, width)
+		if len(segments) == 0 {
+			segments = []string{""}
+		}
+		start := len(wrapped)
+		for _, seg := range segments {
+			wrapped = append(wrapped, seg)
+			rev = append(rev, i)
+		}
+		spans[i] = lineSpan{start: start, end: len(wrapped) - 1}
+	}
+
+	return strings.Join(wrapped, "\n"), spans, rev
+}
+
+func wrapLineForTab(tab responseTab, line string, width int) []string {
+	switch tab {
+	case responseTabRaw:
+		return wrapPreformattedLine(line, width)
+	case responseTabPretty:
+		return wrapStructuredLine(line, width)
+	case responseTabDiff:
+		return wrapDiffLine(line, width)
+	default:
+		return wrapLineSegments(line, width)
+	}
+}
+
+func wrapCache(tab responseTab, content string, width int) cachedWrap {
+	if !respTabSel(tab) {
+		wrapped := wrapContentForTab(tab, content, width)
+		return cachedWrap{
+			width:   width,
+			content: wrapped,
+			base:    content,
+			valid:   true,
+		}
+	}
+	wrapped, spans, rev := wrapContentForTabMap(tab, content, width)
+	return cachedWrap{
+		width:   width,
+		content: wrapped,
+		base:    content,
+		valid:   true,
+		spans:   spans,
+		rev:     rev,
+	}
+}
+
 func wrapPreformattedContent(content string, width int) string {
 	if width <= 0 {
 		return content

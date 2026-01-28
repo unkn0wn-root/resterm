@@ -77,6 +77,15 @@ func (m *Model) setFocus(target paneFocus) tea.Cmd {
 	}
 	prev := m.focus
 	m.focus = target
+	clearedSel := false
+	if prev == focusResponse && target != focusResponse {
+		for _, id := range m.visiblePaneIDs() {
+			if pane := m.pane(id); pane != nil && pane.sel.on {
+				pane.sel.clear()
+				clearedSel = true
+			}
+		}
+	}
 	if target != focusResponse {
 		m.responsePaneChord = false
 	}
@@ -107,6 +116,11 @@ func (m *Model) setFocus(target paneFocus) tea.Cmd {
 	if target == focusResponse {
 		m.ensurePaneFocusValid()
 		m.setLivePane(m.responsePaneFocus)
+	}
+	if clearedSel {
+		if cmd := m.syncResponsePanes(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 	return batchCommands(cmds...)
 }

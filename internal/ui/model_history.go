@@ -486,34 +486,38 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 			continue
 		}
 		pane.invalidateCaches()
+		if pane.sel.on {
+			pane.sel.clear()
+		}
+		if pane.cursor.on {
+			pane.cursor.clear()
+		}
+		if pane.cursorStore != nil {
+			pane.cursorStore = make(map[respCursorKey]respCursor)
+		}
 		if msg.width > 0 && pane.viewport.Width == msg.width {
-			pane.wrapCache[responseTabPretty] = cachedWrap{
-				width:   msg.width,
-				content: msg.prettyWrapped,
-				base:    ensureTrailingNewline(msg.pretty),
-				valid:   true,
-			}
-			rawWrapped := wrapContentForTab(responseTabRaw, snapshot.raw, msg.width)
+			prettyWidth := responseWrapWidth(responseTabPretty, msg.width)
+			prettyBase := ensureTrailingNewline(msg.pretty)
+			pane.wrapCache[responseTabPretty] = wrapCache(
+				responseTabPretty,
+				prettyBase,
+				prettyWidth,
+			)
+			rawWidth := responseWrapWidth(responseTabRaw, msg.width)
+			rawBase := ensureTrailingNewline(snapshot.raw)
 			pane.ensureRawWrapCache()
-			pane.rawWrapCache[snapshot.rawMode] = cachedWrap{
-				width:   msg.width,
-				content: rawWrapped,
-				base:    ensureTrailingNewline(snapshot.raw),
-				valid:   true,
-			}
+			pane.rawWrapCache[snapshot.rawMode] = wrapCache(responseTabRaw, rawBase, rawWidth)
 
+			headersWidth := responseWrapWidth(responseTabHeaders, msg.width)
 			headersBase := ensureTrailingNewline(msg.headers)
-			headersContent := msg.headersWrapped
 			if pane.headersView == headersViewRequest {
 				headersBase = ensureTrailingNewline(msg.requestHeaders)
-				headersContent = msg.requestHeadersWrapped
 			}
-			pane.wrapCache[responseTabHeaders] = cachedWrap{
-				width:   msg.width,
-				content: headersContent,
-				base:    headersBase,
-				valid:   true,
-			}
+			pane.wrapCache[responseTabHeaders] = wrapCache(
+				responseTabHeaders,
+				headersBase,
+				headersWidth,
+			)
 		}
 		if strings.TrimSpace(snapshot.stats) != "" {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
@@ -1791,29 +1795,27 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 		if displayWidth <= 0 {
 			displayWidth = defaultResponseViewportWidth
 		}
-		wrapped := wrapToWidth(preview, displayWidth)
-		pane.wrapCache[responseTabPretty] = cachedWrap{
-			width:   displayWidth,
-			content: wrapped,
-			base:    ensureTrailingNewline(snapshot.pretty),
-			valid:   true,
-		}
+		content := ensureTrailingNewline(preview)
+		prettyCache := wrapCache(
+			responseTabPretty,
+			content,
+			responseWrapWidth(responseTabPretty, displayWidth),
+		)
+		pane.wrapCache[responseTabPretty] = prettyCache
 		pane.ensureRawWrapCache()
-		pane.rawWrapCache[snapshot.rawMode] = cachedWrap{
-			width:   displayWidth,
-			content: wrapped,
-			base:    ensureTrailingNewline(snapshot.raw),
-			valid:   true,
-		}
-		pane.wrapCache[responseTabHeaders] = cachedWrap{
-			width:   displayWidth,
-			content: wrapped,
-			base:    ensureTrailingNewline(snapshot.headers),
-			valid:   true,
-		}
+		pane.rawWrapCache[snapshot.rawMode] = wrapCache(
+			responseTabRaw,
+			content,
+			responseWrapWidth(responseTabRaw, displayWidth),
+		)
+		pane.wrapCache[responseTabHeaders] = wrapCache(
+			responseTabHeaders,
+			content,
+			responseWrapWidth(responseTabHeaders, displayWidth),
+		)
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
 		pane.wrapCache[responseTabStats] = cachedWrap{}
-		pane.viewport.SetContent(wrapped)
+		pane.viewport.SetContent(prettyCache.content)
 	}
 
 	m.testResults = nil

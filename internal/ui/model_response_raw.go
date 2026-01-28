@@ -62,6 +62,16 @@ func (m *Model) setRawMode(snap *responseSnapshot, mode rawViewMode, msg string)
 
 	m.forEachSnapshotPane(snap, func(p *responsePaneState) {
 		p.markRawViewStale()
+		if p.sel.on && p.sel.tab == responseTabRaw {
+			p.sel.clear()
+		}
+		if p.cursor.on && p.cursor.tab == responseTabRaw {
+			p.stashCursor()
+			p.cursor.clear()
+		}
+		if p.activeTab == responseTabRaw {
+			p.restoreCursor(responseTabRaw)
+		}
 	})
 	m.invalidateDiffCaches()
 
@@ -98,6 +108,16 @@ func (m *Model) loadRawDumpAsync(snap *responseSnapshot, mode rawViewMode) tea.C
 
 	m.forEachSnapshotPane(snap, func(p *responsePaneState) {
 		p.invalidateRawCache(mode)
+		if p.sel.on && p.sel.tab == responseTabRaw {
+			p.sel.clear()
+		}
+		if p.cursor.on && p.cursor.tab == responseTabRaw {
+			p.stashCursor()
+			p.cursor.clear()
+		}
+		if p.activeTab == responseTabRaw {
+			p.restoreCursor(responseTabRaw)
+		}
 	})
 	m.invalidateDiffCaches()
 

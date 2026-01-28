@@ -2642,6 +2642,16 @@ func (m Model) renderHelpOverlay() string {
 			},
 		},
 		{
+			title: "Response selection",
+			entries: []helpEntry{
+				{"j / k", "Response: move cursor (no selection)"},
+				{"v / V", "Response: start selection at cursor"},
+				{"j / k / ↑ / ↓", "Response: extend selection"},
+				{"y / c", "Response: copy selection"},
+				{"Esc", "Response: clear selection"},
+			},
+		},
+		{
 			title: "Search",
 			entries: []helpEntry{
 				{"Shift+F", "Open search prompt (Ctrl+R toggles regex)"},

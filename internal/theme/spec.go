@@ -72,6 +72,8 @@ type StylesSpec struct {
 	ResponseContent               *StyleSpec `json:"response_content"                 toml:"response_content"`
 	ResponseContentRaw            *StyleSpec `json:"response_content_raw"             toml:"response_content_raw"`
 	ResponseContentHeaders        *StyleSpec `json:"response_content_headers"         toml:"response_content_headers"`
+	ResponseSelection             *StyleSpec `json:"response_selection"               toml:"response_selection"`
+	ResponseCursor                *StyleSpec `json:"response_cursor"                  toml:"response_cursor"`
 	StreamContent                 *StyleSpec `json:"stream_content"                   toml:"stream_content"`
 	StreamTimestamp               *StyleSpec `json:"stream_timestamp"                 toml:"stream_timestamp"`
 	StreamDirectionSend           *StyleSpec `json:"stream_direction_send"            toml:"stream_direction_send"`
@@ -421,6 +423,20 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		"response_content_headers",
 		&cloned.ResponseContentHeaders,
 		spec.Styles.ResponseContentHeaders,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"response_selection",
+		&cloned.ResponseSelection,
+		spec.Styles.ResponseSelection,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"response_cursor",
+		&cloned.ResponseCursor,
+		spec.Styles.ResponseCursor,
 	); err != nil {
 		return Theme{}, err
 	}

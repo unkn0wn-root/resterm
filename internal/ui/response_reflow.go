@@ -29,8 +29,8 @@ type responseReflowStartMsg struct {
 }
 
 type responseReflowDoneMsg struct {
-	req     responseReflowReq
-	wrapped string
+	req   responseReflowReq
+	cache cachedWrap
 }
 
 var responseReflowSeq uint64
@@ -126,8 +126,8 @@ func (m *Model) handleResponseReflowStart(msg responseReflowStartMsg) tea.Cmd {
 
 func responseReflowCmd(req responseReflowReq) tea.Cmd {
 	return func() tea.Msg {
-		wrapped := wrapContentForTab(req.tab, req.content, req.width)
-		return responseReflowDoneMsg{req: req, wrapped: wrapped}
+		cache := wrapCache(req.tab, req.content, req.width)
+		return responseReflowDoneMsg{req: req, cache: cache}
 	}
 }
 
@@ -143,23 +143,13 @@ func (m *Model) handleResponseReflowDone(msg responseReflowDoneMsg) tea.Cmd {
 	}
 	if req.tab == responseTabRaw {
 		pane.ensureRawWrapCache()
-		pane.rawWrapCache[req.mode] = cachedWrap{
-			width:   req.width,
-			content: msg.wrapped,
-			base:    req.content,
-			valid:   true,
-		}
+		pane.rawWrapCache[req.mode] = msg.cache
 	} else {
-		pane.wrapCache[req.tab] = cachedWrap{
-			width:   req.width,
-			content: msg.wrapped,
-			base:    req.content,
-			valid:   true,
-		}
+		pane.wrapCache[req.tab] = msg.cache
 	}
 	pane.reflow = responseReflowState{}
 	if pane.activeTab == req.tab {
-		m.applyPaneContent(pane, req.tab, msg.wrapped, req.width, snap.ready, snap.id)
+		m.applyPaneContent(pane, req.tab, msg.cache.content, req.width, snap.ready, snap.id)
 	}
 	return nil
 }

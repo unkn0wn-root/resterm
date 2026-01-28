@@ -76,6 +76,9 @@ type responsePaneState struct {
 	headersView    headersViewMode
 	headerScroll   map[headersViewMode]int
 	reflow         responseReflowState
+	sel            respSel
+	cursor         respCursor
+	cursorStore    map[respCursorKey]respCursor
 }
 
 type responseReflowState struct {
@@ -99,7 +102,38 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		tabScroll:      make(map[responseTab]int),
 		headersView:    headersViewResponse,
 		headerScroll:   make(map[headersViewMode]int),
+		cursorStore:    make(map[respCursorKey]respCursor),
 	}
+}
+
+func (pane *responsePaneState) stashCursor() {
+	if pane == nil || !pane.cursor.on {
+		return
+	}
+	if pane.cursorStore == nil {
+		pane.cursorStore = make(map[respCursorKey]respCursor)
+	}
+	pane.cursorStore[pane.cursor.key()] = pane.cursor
+}
+
+func (pane *responsePaneState) restoreCursor(tab responseTab) {
+	if pane == nil || pane.cursorStore == nil {
+		if pane != nil {
+			pane.cursor.clear()
+		}
+		return
+	}
+	mode := rawViewMode(0)
+	if pane.snapshot != nil {
+		mode = pane.snapshot.rawMode
+	}
+	key := respCursorKeyFor(tab, pane.headersView, mode)
+	stored, ok := pane.cursorStore[key]
+	if !ok || !cursorMatchesSnapshot(stored, pane.snapshot) {
+		pane.cursor.clear()
+		return
+	}
+	pane.cursor = stored
 }
 
 func (pane *responsePaneState) invalidateCaches() {
@@ -154,6 +188,11 @@ func (pane *responsePaneState) invalidateRawCache(mode rawViewMode) {
 func (pane *responsePaneState) setActiveTab(tab responseTab) {
 	if pane.activeTab != tab {
 		pane.setCurrPosition()
+		if pane.sel.on {
+			pane.sel.clear()
+		}
+		pane.stashCursor()
+		pane.restoreCursor(tab)
 	}
 	pane.activeTab = tab
 	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders ||
@@ -170,7 +209,16 @@ func (pane *responsePaneState) setHeadersView(mode headersViewMode) {
 	if pane.headersView == mode {
 		return
 	}
+	if pane.activeTab == responseTabHeaders {
+		pane.stashCursor()
+	}
 	pane.headersView = mode
+	if pane.sel.on {
+		pane.sel.clear()
+	}
+	if pane.activeTab == responseTabHeaders {
+		pane.restoreCursor(responseTabHeaders)
+	}
 	if pane.wrapCache != nil {
 		pane.wrapCache[responseTabHeaders] = cachedWrap{}
 	}
@@ -311,6 +359,8 @@ func (m *Model) applyPaneContent(
 		snapshotID,
 	)
 	decorated = m.applyResponseContentStyles(tab, decorated)
+	decorated = m.decorateResponseSelection(pane, tab, decorated)
+	decorated = m.decorateResponseCursor(pane, tab, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
 	ensureResponseMatchInView(pane, content)
@@ -397,6 +447,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
 	}
+	wrapWidth := responseWrapWidth(tab, width)
 	height := pane.viewport.Height
 
 	if tab == responseTabStats {
@@ -416,15 +467,17 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 
 	content, cacheKey := m.paneContentForTab(id, tab)
 	if content == "" {
-		centered := centerContent(noResponseMessage, width, height)
-		wrapped := wrapToWidth(centered, width)
-		pane.wrapCache[cacheKey] = cachedWrap{
-			width:   width,
-			content: wrapped,
-			base:    centered,
-			valid:   true,
-		}
-		m.applyPaneContent(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+		centered := centerContent(noResponseMessage, wrapWidth, height)
+		cache := wrapCache(cacheKey, centered, wrapWidth)
+		pane.wrapCache[cacheKey] = cache
+		m.applyPaneContent(
+			pane,
+			cacheKey,
+			cache.content,
+			wrapWidth,
+			snapshotReady,
+			snapshotID,
+		)
 		return nil
 	}
 
@@ -433,15 +486,15 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		mode := snap.rawMode
 
 		if snap.rawLoading && (mode == rawViewHex || mode == rawViewBase64) {
-			reflowing := centerContent(responseReflowingMessage, width, height)
-			m.applyPaneContent(pane, cacheKey, reflowing, width, snapshotReady, snapshotID)
+			reflowing := centerContent(responseReflowingMessage, wrapWidth, height)
+			m.applyPaneContent(pane, cacheKey, reflowing, wrapWidth, snapshotReady, snapshotID)
 			return nil
 		}
 
 		pane.ensureRawWrapCache()
 		cache := pane.rawWrapCache[mode]
-		if cache.valid && cache.width == width {
-			m.applyPaneContent(pane, cacheKey, cache.content, width, snapshotReady, snapshotID)
+		if cache.valid && cache.width == wrapWidth {
+			m.applyPaneContent(pane, cacheKey, cache.content, wrapWidth, snapshotReady, snapshotID)
 			return nil
 		}
 
@@ -449,47 +502,51 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			req := responseReflowReq{
 				paneID:     id,
 				tab:        cacheKey,
-				width:      width,
+				width:      wrapWidth,
 				content:    content,
 				snapshotID: snapshotID,
 				mode:       mode,
 				headers:    pane.headersView,
 			}
 
-			delay := reflowDelay(pane, cacheKey, width, mode)
+			delay := reflowDelay(pane, cacheKey, wrapWidth, mode)
 			if cmd := m.scheduleResponseReflow(pane, req, delay); cmd != nil {
-				reflowing := centerContent(responseReflowingMessage, width, height)
-				m.applyPaneContent(pane, cacheKey, reflowing, width, false, snapshotID)
+				reflowing := centerContent(responseReflowingMessage, wrapWidth, height)
+				m.applyPaneContent(pane, cacheKey, reflowing, wrapWidth, false, snapshotID)
 				return cmd
 			}
 			return nil
 		}
 
-		wrapped := wrapContentForTab(cacheKey, content, width)
-		pane.rawWrapCache[mode] = cachedWrap{
-			width:   width,
-			content: wrapped,
-			base:    content,
-			valid:   true,
-		}
-		m.applyPaneContent(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+		cache = wrapCache(cacheKey, content, wrapWidth)
+		pane.rawWrapCache[mode] = cache
+		m.applyPaneContent(
+			pane,
+			cacheKey,
+			cache.content,
+			wrapWidth,
+			snapshotReady,
+			snapshotID,
+		)
 		return nil
 	}
 
 	cache := pane.wrapCache[cacheKey]
-	if cache.valid && cache.width == width {
-		m.applyPaneContent(pane, cacheKey, cache.content, width, snapshotReady, snapshotID)
+	if cache.valid && cache.width == wrapWidth {
+		m.applyPaneContent(pane, cacheKey, cache.content, wrapWidth, snapshotReady, snapshotID)
 		return nil
 	}
 
-	wrapped := wrapContentForTab(cacheKey, content, width)
-	pane.wrapCache[cacheKey] = cachedWrap{
-		width:   width,
-		content: wrapped,
-		base:    content,
-		valid:   true,
-	}
-	m.applyPaneContent(pane, cacheKey, wrapped, width, snapshotReady, snapshotID)
+	cache = wrapCache(cacheKey, content, wrapWidth)
+	pane.wrapCache[cacheKey] = cache
+	m.applyPaneContent(
+		pane,
+		cacheKey,
+		cache.content,
+		wrapWidth,
+		snapshotReady,
+		snapshotID,
+	)
 	return nil
 }
 
@@ -573,15 +630,7 @@ func (m *Model) applyResponseContentStyles(tab responseTab, content string) stri
 	if tab == responseTabStream {
 		return m.theme.StreamContent.Render(content)
 	}
-	styled := m.theme.ResponseContent.Render(content)
-	switch tab {
-	case responseTabRaw:
-		return m.theme.ResponseContentRaw.Render(styled)
-	case responseTabHeaders:
-		return m.theme.ResponseContentHeaders.Render(styled)
-	default:
-		return styled
-	}
+	return m.respBaseStyle(tab).Render(content)
 }
 
 func ensureResponseMatchInView(pane *responsePaneState, base string) {

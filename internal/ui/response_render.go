@@ -41,29 +41,32 @@ type cachedWrap struct {
 	content string
 	base    string
 	valid   bool
+	spans   []lineSpan
+	rev     []int
+}
+
+type lineSpan struct {
+	start int
+	end   int
 }
 
 type responseRenderedMsg struct {
-	token                 string
-	pretty                string
-	raw                   string
-	rawSummary            string
-	headers               string
-	requestHeaders        string
-	width                 int
-	prettyWrapped         string
-	rawWrapped            string
-	headersWrapped        string
-	requestHeadersWrapped string
-	body                  []byte
-	meta                  binaryview.Meta
-	contentType           string
-	rawText               string
-	rawHex                string
-	rawBase64             string
-	rawMode               rawViewMode
-	headersMap            http.Header
-	effectiveURL          string
+	token          string
+	pretty         string
+	raw            string
+	rawSummary     string
+	headers        string
+	requestHeaders string
+	width          int
+	body           []byte
+	meta           binaryview.Meta
+	contentType    string
+	rawText        string
+	rawHex         string
+	rawBase64      string
+	rawMode        rawViewMode
+	headersMap     http.Header
+	effectiveURL   string
 }
 
 var responseRenderSeq uint64
@@ -116,23 +119,15 @@ func renderHTTPResponseCmd(
 			headers:        headers,
 			requestHeaders: requestHeaders,
 			width:          targetWidth,
-			prettyWrapped:  wrapContentForTab(responseTabPretty, pretty, targetWidth),
-			rawWrapped:     wrapContentForTab(responseTabRaw, raw, targetWidth),
-			headersWrapped: wrapContentForTab(responseTabHeaders, headers, targetWidth),
-			requestHeadersWrapped: wrapContentForTab(
-				responseTabHeaders,
-				requestHeaders,
-				targetWidth,
-			),
-			body:         append([]byte(nil), respCopy.Body...),
-			meta:         meta,
-			contentType:  ct,
-			rawText:      rawText,
-			rawHex:       rawHex,
-			rawBase64:    rawBase64,
-			rawMode:      rawMode,
-			headersMap:   headersMap,
-			effectiveURL: effectiveURL,
+			body:           append([]byte(nil), respCopy.Body...),
+			meta:           meta,
+			contentType:    ct,
+			rawText:        rawText,
+			rawHex:         rawHex,
+			rawBase64:      rawBase64,
+			rawMode:        rawMode,
+			headersMap:     headersMap,
+			effectiveURL:   effectiveURL,
 		}
 	}
 }
