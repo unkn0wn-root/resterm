@@ -157,7 +157,7 @@ func TestWrapContentForTabMapTracksWrappedLines(t *testing.T) {
 	}
 }
 
-func TestTrimBlankLine(t *testing.T) {
+func TestTrimTrailingNewline(t *testing.T) {
 	cases := []struct {
 		name  string
 		input string
@@ -173,10 +173,50 @@ func TestTrimBlankLine(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := trimBlankLine(tc.input); got != tc.want {
+			if got := trimTrailingNewline(tc.input); got != tc.want {
 				t.Fatalf("expected %q, got %q", tc.want, got)
 			}
 		})
+	}
+}
+
+func TestTrimSyntheticNewline(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		syn   bool
+		want  string
+	}{
+		{name: "KeepWhenNotSynthetic", input: "ok\n", syn: false, want: "ok\n"},
+		{name: "TrimWhenSynthetic", input: "ok\n", syn: true, want: "ok"},
+		{name: "EmptySynthetic", input: "\n", syn: true, want: ""},
+		{name: "NoNewlineSynthetic", input: "ok", syn: true, want: "ok"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := trimSyntheticNewline(tc.input, tc.syn); got != tc.want {
+				t.Fatalf("expected %q, got %q", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestDisplayContentKeepsRealTrailingNewline(t *testing.T) {
+	content := "ok\n"
+	display := displayContent(content)
+	wrapped := wrapContentForTab(responseTabPretty, display, 10)
+	if !strings.HasSuffix(wrapped, "\n") {
+		t.Fatalf("expected wrapped content to keep trailing newline, got %q", wrapped)
+	}
+}
+
+func TestDisplayContentOmitsSyntheticTrailingNewline(t *testing.T) {
+	content := "ok"
+	display := displayContent(content)
+	wrapped := wrapContentForTab(responseTabPretty, display, 10)
+	if strings.HasSuffix(wrapped, "\n") {
+		t.Fatalf("expected wrapped content without trailing newline, got %q", wrapped)
 	}
 }
 

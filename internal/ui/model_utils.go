@@ -321,9 +321,7 @@ func wrapToWidth(content string, width int) string {
 	return strings.Join(wrapped, "\n")
 }
 
-// trimBlankLine removes one trailing line break so the UI
-// doesn't show the virtual newline we keep for copy/selection.
-func trimBlankLine(content string) string {
+func trimTrailingNewline(content string) string {
 	if content == "" {
 		return content
 	}
@@ -338,8 +336,14 @@ func trimBlankLine(content string) string {
 	return content[:end]
 }
 
+func trimSyntheticNewline(content string, syn bool) string {
+	if !syn {
+		return content
+	}
+	return trimTrailingNewline(content)
+}
+
 func wrapContentForTab(tab responseTab, content string, width int) string {
-	content = trimBlankLine(content)
 	switch tab {
 	case responseTabRaw:
 		return wrapPreformattedContent(content, width)
@@ -357,7 +361,6 @@ func wrapContentForTabMap(
 	content string,
 	width int,
 ) (string, []lineSpan, []int) {
-	content = trimBlankLine(content)
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
 	spans := make([]lineSpan, len(lines))

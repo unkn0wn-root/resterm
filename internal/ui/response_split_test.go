@@ -57,25 +57,25 @@ func TestComputeDiffForHeadersIncludesBody(t *testing.T) {
 	model.responseSplit = true
 
 	left := &responseSnapshot{
-		pretty: ensureTrailingNewline(
+		pretty: withTrailingNewline(
 			"Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}",
 		),
-		raw: ensureTrailingNewline(
+		raw: withTrailingNewline(
 			"Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\n{\n  \"value\": \"one\"\n}",
 		),
-		headers: ensureTrailingNewline(
+		headers: withTrailingNewline(
 			"Status: 201 Created\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 3ms\n\nHeaders:\nContent-Type: application/json",
 		),
 		ready: true,
 	}
 	right := &responseSnapshot{
-		pretty: ensureTrailingNewline(
+		pretty: withTrailingNewline(
 			"Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}",
 		),
-		raw: ensureTrailingNewline(
+		raw: withTrailingNewline(
 			"Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\n{\n  \"value\": \"two\"\n}",
 		),
-		headers: ensureTrailingNewline(
+		headers: withTrailingNewline(
 			"Status: 200 OK\nContent-Length: 15 bytes\nURL: http://localhost/items\nDuration: 4ms\n\nHeaders:\nContent-Type: application/json",
 		),
 		ready: true,
@@ -105,13 +105,13 @@ func TestComputeDiffRawUsesRawView(t *testing.T) {
 	model.responseSplit = true
 
 	left := &responseSnapshot{
-		raw:    ensureTrailingNewline("raw-body-1"),
-		pretty: ensureTrailingNewline("pretty-body-1"),
+		raw:    withTrailingNewline("raw-body-1"),
+		pretty: withTrailingNewline("pretty-body-1"),
 		ready:  true,
 	}
 	right := &responseSnapshot{
-		raw:    ensureTrailingNewline("raw-body-2"),
-		pretty: ensureTrailingNewline("pretty-body-2"),
+		raw:    withTrailingNewline("raw-body-2"),
+		pretty: withTrailingNewline("pretty-body-2"),
 		ready:  true,
 	}
 
@@ -158,13 +158,13 @@ func TestComputeDiffForPrettyDetectsLeadingWhitespaceChanges(t *testing.T) {
 	prettyB, rawB := viewsB.pretty, viewsB.raw
 
 	model.responsePanes[0].snapshot = &responseSnapshot{
-		pretty: ensureTrailingNewline(prettyA),
-		raw:    ensureTrailingNewline(rawA),
+		pretty: withTrailingNewline(prettyA),
+		raw:    withTrailingNewline(rawA),
 		ready:  true,
 	}
 	model.responsePanes[1].snapshot = &responseSnapshot{
-		pretty: ensureTrailingNewline(prettyB),
-		raw:    ensureTrailingNewline(rawB),
+		pretty: withTrailingNewline(prettyB),
+		raw:    withTrailingNewline(rawB),
 		ready:  true,
 	}
 

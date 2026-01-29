@@ -177,7 +177,7 @@ func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
 	hex := binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
 	snap := &responseSnapshot{
 		rawSummary: "Status: 200 OK",
-		raw:        ensureTrailingNewline(hex),
+		raw:        withTrailingNewline(hex),
 		rawHex:     hex,
 		rawMode:    rawViewHex,
 		body:       body,
@@ -202,8 +202,8 @@ func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
 func TestAsyncReflowScopedToRawTab(t *testing.T) {
 	heavy := strings.Repeat("A", responseReflowLimit+1)
 	snap := &responseSnapshot{
-		pretty:  ensureTrailingNewline(heavy),
-		raw:     ensureTrailingNewline("raw"),
+		pretty:  withTrailingNewline(heavy),
+		raw:     withTrailingNewline("raw"),
 		rawMode: rawViewText,
 		ready:   true,
 	}
@@ -227,7 +227,7 @@ func TestRawAsyncReflowSkipsTextMode(t *testing.T) {
 	heavy := strings.Repeat("A", responseReflowLimit+1)
 	snap := &responseSnapshot{
 		rawSummary: "Status: 200 OK",
-		raw:        ensureTrailingNewline(heavy),
+		raw:        withTrailingNewline(heavy),
 		rawMode:    rawViewText,
 		body:       []byte(heavy),
 		ready:      true,

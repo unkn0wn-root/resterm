@@ -26,9 +26,9 @@ func newModelWithResponseTab(tab responseTab, snap *responseSnapshot) *Model {
 
 func TestResponseCopyPayloadStripsANSI(t *testing.T) {
 	snap := &responseSnapshot{
-		pretty:  ensureTrailingNewline("\x1b[31mStatus\x1b[0m 200 OK"),
-		raw:     ensureTrailingNewline("raw"),
-		headers: ensureTrailingNewline("Headers:\nX-Test: ok"),
+		pretty:  withTrailingNewline("\x1b[31mStatus\x1b[0m 200 OK"),
+		raw:     withTrailingNewline("raw"),
+		headers: withTrailingNewline("Headers:\nX-Test: ok"),
 		ready:   true,
 	}
 	model := newModelWithResponseTab(responseTabPretty, snap)
@@ -50,8 +50,8 @@ func TestResponseCopyPayloadStripsANSI(t *testing.T) {
 
 func TestResponseCopyPayloadHeadersFallback(t *testing.T) {
 	snap := &responseSnapshot{
-		pretty:  ensureTrailingNewline("pretty"),
-		raw:     ensureTrailingNewline("raw"),
+		pretty:  withTrailingNewline("pretty"),
+		raw:     withTrailingNewline("raw"),
 		headers: "",
 		ready:   true,
 	}
@@ -71,10 +71,10 @@ func TestResponseCopyPayloadHeadersFallback(t *testing.T) {
 
 func TestResponseCopyPayloadRequestHeaders(t *testing.T) {
 	snap := &responseSnapshot{
-		pretty:         ensureTrailingNewline("pretty"),
-		raw:            ensureTrailingNewline("raw"),
-		headers:        ensureTrailingNewline("Headers:\nX-Resp: ok"),
-		requestHeaders: ensureTrailingNewline("Headers:\nCookie: demo=1"),
+		pretty:         withTrailingNewline("pretty"),
+		raw:            withTrailingNewline("raw"),
+		headers:        withTrailingNewline("Headers:\nX-Resp: ok"),
+		requestHeaders: withTrailingNewline("Headers:\nCookie: demo=1"),
 		ready:          true,
 	}
 	model := newModelWithResponseTab(responseTabHeaders, snap)
@@ -100,10 +100,10 @@ func TestCopyResponseTabWritesClipboard(t *testing.T) {
 	if err := clipboard.WriteAll(""); err != nil {
 		t.Skipf("clipboard unavailable: %v", err)
 	}
-	body := ensureTrailingNewline("Status: 200 OK\n\n{}")
+	body := withTrailingNewline("Status: 200 OK\n\n{}")
 	snap := &responseSnapshot{
 		pretty: body,
-		raw:    ensureTrailingNewline("raw-body"),
+		raw:    withTrailingNewline("raw-body"),
 		ready:  true,
 	}
 	model := newModelWithResponseTab(responseTabPretty, snap)
@@ -131,8 +131,8 @@ func TestCopyResponseTabWritesClipboard(t *testing.T) {
 
 func TestCopyResponseTabRequiresFocus(t *testing.T) {
 	snap := &responseSnapshot{
-		pretty: ensureTrailingNewline("status"),
-		raw:    ensureTrailingNewline("raw"),
+		pretty: withTrailingNewline("status"),
+		raw:    withTrailingNewline("raw"),
 		ready:  true,
 	}
 	model := newModelWithResponseTab(responseTabPretty, snap)

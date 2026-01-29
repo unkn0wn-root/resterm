@@ -92,14 +92,14 @@ func (m *Model) responseSearchContent(
 	tab responseTab,
 	width int,
 ) (string, responseTab, string) {
-	content, cacheKey := m.paneContentForTab(paneID, tab)
+	content, cacheKey := m.paneContentForTabDisplay(paneID, tab)
 	if tab == responseTabStats {
 		if pane := m.pane(paneID); pane != nil {
 			snap := pane.snapshot
 			if snap != nil && snap.statsKind == statsReportKindWorkflow &&
 				snap.workflowStats != nil {
 				render := snap.workflowStats.render(width)
-				content = ensureTrailingNewline(render.content)
+				content = displayContent(render.content)
 				cacheKey = responseTabStats
 				return content, cacheKey, content
 			}

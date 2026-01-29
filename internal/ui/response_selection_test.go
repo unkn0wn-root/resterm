@@ -39,6 +39,29 @@ func TestResponseSelectionDoesNotShiftLines(t *testing.T) {
 	}
 }
 
+func TestResponseCursorNoopWithoutCursorOrSelection(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+
+	pane := model.pane(responsePanePrimary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 10
+	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
+
+	content := "one\ntwo"
+	pane.wrapCache[responseTabPretty] = wrapCache(
+		responseTabPretty,
+		content,
+		responseWrapWidth(responseTabPretty, 80),
+	)
+
+	got := model.decorateResponseCursor(pane, responseTabPretty, content)
+	if got != content {
+		t.Fatalf("expected cursor decoration to be a no-op, got %q", got)
+	}
+}
+
 func TestResponseSelectionRestoresBaseStyleAfterLine(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

@@ -645,7 +645,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	labelTab := p.activeTab
 	content, _ := m.paneContentForTab(m.responsePaneFocus, labelTab)
 	plain := stripANSIEscape(content)
-	base := ensureTrailingNewline(plain)
+	base := withTrailingNewline(plain)
 	lines := strings.Split(base, "\n")
 	start, end := p.sel.rng()
 	if start < 0 {
@@ -658,7 +658,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 		return "", false
 	}
 	text := strings.Join(lines[start:end+1], "\n")
-	return ensureTrailingNewline(text), true
+	return withTrailingNewline(text), true
 }
 
 func (m *Model) decorateResponseCursor(
@@ -667,6 +667,9 @@ func (m *Model) decorateResponseCursor(
 	content string,
 ) string {
 	if p == nil || content == "" || !respTabSel(tab) {
+		return content
+	}
+	if !p.cursor.on && !p.sel.on {
 		return content
 	}
 	if p.cursor.on && !m.cursorValid(p, tab) {

@@ -465,7 +465,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		snapshotID = pane.snapshot.id
 	}
 
-	content, cacheKey := m.paneContentForTab(id, tab)
+	content, cacheKey := m.paneContentForTabDisplay(id, tab)
 	if content == "" {
 		centered := centerContent(noResponseMessage, wrapWidth, height)
 		cache := wrapCache(cacheKey, centered, wrapWidth)
@@ -647,7 +647,10 @@ func ensureResponseMatchInView(pane *responsePaneState, base string) {
 	ensureResponseMatchVisible(&pane.viewport, base, pane.search.matches[idx])
 }
 
-func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, responseTab) {
+func (m *Model) paneContentBaseForTab(
+	id responsePaneID,
+	tab responseTab,
+) (string, responseTab) {
 	pane := m.pane(id)
 	if pane == nil {
 		return "", tab
@@ -657,7 +660,7 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 		if content == "" {
 			content = "<stream idle>\n"
 		}
-		return ensureTrailingNewline(content), tab
+		return content, tab
 	}
 	snapshot := pane.snapshot
 	if snapshot == nil {
@@ -669,20 +672,20 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 
 	switch tab {
 	case responseTabPretty:
-		return ensureTrailingNewline(snapshot.pretty), tab
+		return snapshot.pretty, tab
 	case responseTabRaw:
-		return ensureTrailingNewline(snapshot.raw), tab
+		return snapshot.raw, tab
 	case responseTabHeaders:
 		if pane != nil && pane.headersView == headersViewRequest {
 			if strings.TrimSpace(snapshot.requestHeaders) == "" {
 				return "<no request headers>\n", tab
 			}
-			return ensureTrailingNewline(snapshot.requestHeaders), tab
+			return snapshot.requestHeaders, tab
 		}
 		if strings.TrimSpace(snapshot.headers) == "" {
 			return "<no headers>\n", tab
 		}
-		return ensureTrailingNewline(snapshot.headers), tab
+		return snapshot.headers, tab
 	case responseTabStats:
 		if strings.TrimSpace(snapshot.stats) == "" {
 			return "<no stats>\n", tab
@@ -700,7 +703,7 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 				content = snapshot.statsColored
 			}
 		}
-		return ensureTrailingNewline(content), tab
+		return content, tab
 	case responseTabTimeline:
 		if snapshot.timeline == nil {
 			return "Trace data unavailable.\n", tab
@@ -714,7 +717,7 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 		)
 		snapshot.traceReport = report
 		content := renderTimeline(report, pane.viewport.Width)
-		return ensureTrailingNewline(content), tab
+		return content, tab
 	case responseTabCompare:
 		bundle := snapshot.compareBundle
 		if bundle == nil {
@@ -724,7 +727,7 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 			return "Compare data unavailable.\n", tab
 		}
 		content := renderCompareBundle(bundle, m.compareFocusEnv(snapshot))
-		return ensureTrailingNewline(content), tab
+		return content, tab
 	case responseTabDiff:
 		baseTab := pane.ensureContentTab()
 		if diff, ok := m.computeDiffFor(id, baseTab); ok {
@@ -734,6 +737,19 @@ func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, r
 	default:
 		return "", tab
 	}
+}
+
+func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, responseTab) {
+	content, tab := m.paneContentBaseForTab(id, tab)
+	return withTrailingNewline(content), tab
+}
+
+func (m *Model) paneContentForTabDisplay(
+	id responsePaneID,
+	tab responseTab,
+) (string, responseTab) {
+	content, tab := m.paneContentBaseForTab(id, tab)
+	return displayContent(content), tab
 }
 
 func (m *Model) computeDiffFor(id responsePaneID, baseTab responseTab) (string, bool) {
@@ -759,8 +775,8 @@ func (m *Model) computeDiffFor(id responsePaneID, baseTab responseTab) (string, 
 
 	var sections []string
 	appendDiff := func(title, lhs, rhs, lhsLabel, rhsLabel string) {
-		leftContent := ensureTrailingNewline(lhs)
-		rightContent := ensureTrailingNewline(rhs)
+		leftContent := withTrailingNewline(lhs)
+		rightContent := withTrailingNewline(rhs)
 		if leftContent == rightContent {
 			return
 		}
@@ -852,14 +868,24 @@ func (m *Model) compareFocusEnv(snapshot *responseSnapshot) string {
 	return ""
 }
 
-func ensureTrailingNewline(content string) string {
+func addTrailingNewline(content string) (string, bool) {
 	if content == "" {
-		return "\n"
+		return "\n", true
 	}
 	if strings.HasSuffix(content, "\n") {
-		return content
+		return content, false
 	}
-	return content + "\n"
+	return content + "\n", true
+}
+
+func withTrailingNewline(content string) string {
+	out, _ := addTrailingNewline(content)
+	return out
+}
+
+func displayContent(content string) string {
+	out, syn := addTrailingNewline(content)
+	return trimSyntheticNewline(out, syn)
 }
 
 func wrapDiffContent(content string, width int) string {
