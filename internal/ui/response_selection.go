@@ -261,16 +261,10 @@ func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 		return statusCmd(statusWarn, "No response available")
 	}
 
-	line := 0
-	if m.cursorValid(p, tab) {
-		line = p.cursor.line
-	} else {
-		var ok bool
-		line, ok = m.selLineTop(p, tab)
-		if !ok {
-			return statusCmd(statusWarn, "Selection unavailable")
-		}
+	if !m.cursorValid(p, tab) {
+		return statusCmd(statusInfo, "Activate cursor to start selection")
 	}
+	line := p.cursor.line
 
 	if cache, ok := m.selCache(p, tab); ok && len(cache.spans) > 0 {
 		if line < 0 {

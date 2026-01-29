@@ -211,13 +211,15 @@ func TestResponseSelectionScrollsSmoothlyOnLongLine(t *testing.T) {
 	pane.snapshot = &responseSnapshot{ready: true, id: "snap", rawMode: rawViewText}
 
 	content := "one\n" + strings.Repeat("a", 30) + "\nthree"
+	cache := wrapCache(
+		responseTabRaw,
+		content,
+		responseWrapWidth(responseTabRaw, pane.viewport.Width),
+	)
 	pane.rawWrapCache = map[rawViewMode]cachedWrap{
-		rawViewText: wrapCache(
-			responseTabRaw,
-			content,
-			responseWrapWidth(responseTabRaw, pane.viewport.Width),
-		),
+		rawViewText: cache,
 	}
+	pane.viewport.SetContent(cache.content)
 	pane.sel = respSel{
 		on:   true,
 		a:    0,
@@ -230,7 +232,7 @@ func TestResponseSelectionScrollsSmoothlyOnLongLine(t *testing.T) {
 	prevOff := pane.viewport.YOffset
 	_ = model.moveRespSel(pane, 1)
 
-	cache := pane.rawWrapCache[rawViewText]
+	cache = pane.rawWrapCache[rawViewText]
 	if !model.selValid(pane, responseTabRaw) {
 		t.Fatal("expected selection to be active")
 	}
