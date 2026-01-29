@@ -2644,11 +2644,10 @@ func (m Model) renderHelpOverlay() string {
 		{
 			title: "Response selection",
 			entries: []helpEntry{
-				{"j / k", "Response: move cursor (no selection)"},
-				{"v / V", "Response: start selection at cursor"},
-				{"j / k / ↑ / ↓", "Response: extend selection"},
+				{"v / V", "Response: show cursor / start selection"},
+				{"j / k / ↑ / ↓", "Response: move cursor / extend selection"},
 				{"y / c", "Response: copy selection"},
-				{"Esc", "Response: clear selection"},
+				{"Esc", "Response: clear selection (again clears cursor)"},
 			},
 		},
 		{

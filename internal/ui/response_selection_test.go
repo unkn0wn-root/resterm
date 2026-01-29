@@ -6,7 +6,6 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
 func TestResponseSelectionDoesNotShiftLines(t *testing.T) {
@@ -201,40 +200,6 @@ func TestResponseCursorDecoratesEmptyLine(t *testing.T) {
 	}
 }
 
-func TestResponseCursorScrollsSmoothlyOnLongLine(t *testing.T) {
-	model := New(Config{})
-	model.ready = true
-
-	pane := model.pane(responsePanePrimary)
-	pane.activeTab = responseTabRaw
-	pane.viewport.Width = 8
-	pane.viewport.Height = 3
-	pane.snapshot = &responseSnapshot{ready: true, id: "snap", rawMode: rawViewText}
-
-	content := "one\n" + strings.Repeat("a", 30) + "\nthree"
-	pane.rawWrapCache = map[rawViewMode]cachedWrap{
-		rawViewText: wrapCache(
-			responseTabRaw,
-			content,
-			responseWrapWidth(responseTabRaw, pane.viewport.Width),
-		),
-	}
-
-	_ = model.moveRespCursor(pane, 1)
-	prevOff := pane.viewport.YOffset
-	_ = model.moveRespCursor(pane, 1)
-
-	cache := pane.rawWrapCache[rawViewText]
-	if !model.cursorValid(pane, responseTabRaw) {
-		t.Fatal("expected cursor to be active")
-	}
-	span := cache.spans[pane.cursor.line]
-	expected := scroll.Align(span.start, prevOff, pane.viewport.Height, len(cache.rev))
-	if pane.viewport.YOffset != expected {
-		t.Fatalf("expected smooth scroll offset %d, got %d", expected, pane.viewport.YOffset)
-	}
-}
-
 func TestResponseSelectionScrollsSmoothlyOnLongLine(t *testing.T) {
 	model := New(Config{})
 	model.ready = true
@@ -270,7 +235,14 @@ func TestResponseSelectionScrollsSmoothlyOnLongLine(t *testing.T) {
 		t.Fatal("expected selection to be active")
 	}
 	span := cache.spans[pane.sel.c]
-	expected := scroll.Align(span.start, prevOff, pane.viewport.Height, len(cache.rev))
+	expected := spanOffsetWithBufDir(
+		span,
+		prevOff,
+		pane.viewport.Height,
+		len(cache.rev),
+		respScrollBuf(pane.viewport.Height),
+		1,
+	)
 	if pane.viewport.YOffset != expected {
 		t.Fatalf("expected smooth scroll offset %d, got %d", expected, pane.viewport.YOffset)
 	}
@@ -308,7 +280,7 @@ func TestResponseSelectionStartsAtCursorLine(t *testing.T) {
 	}
 }
 
-func TestMoveResponseCursorSeedsFromTop(t *testing.T) {
+func TestResponseCursorStartsAtSafeRow(t *testing.T) {
 	model := New(Config{})
 	model.ready = true
 
@@ -316,46 +288,33 @@ func TestMoveResponseCursorSeedsFromTop(t *testing.T) {
 	pane.activeTab = responseTabPretty
 	pane.viewport.Width = 80
 	pane.viewport.Height = 10
+	pane.viewport.SetYOffset(1)
 	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
 
-	content := "one\ntwo\nthree"
-	pane.wrapCache[responseTabPretty] = wrapCache(
+	lines := make([]string, 12)
+	for i := range lines {
+		lines[i] = "line"
+	}
+	content := strings.Join(lines, "\n")
+	cache := wrapCache(
 		responseTabPretty,
 		content,
 		responseWrapWidth(responseTabPretty, 80),
 	)
+	pane.wrapCache[responseTabPretty] = cache
 
-	_ = model.moveRespCursor(pane, 1)
+	_ = model.startRespCursor(pane)
 	if !pane.cursor.on {
 		t.Fatal("expected cursor to be active")
 	}
-	if pane.cursor.line != 0 {
-		t.Fatalf("expected cursor line 0, got %d", pane.cursor.line)
-	}
-}
-
-func TestMoveResponseCursorSeedsFromBottom(t *testing.T) {
-	model := New(Config{})
-	model.ready = true
-
-	pane := model.pane(responsePanePrimary)
-	pane.activeTab = responseTabPretty
-	pane.viewport.Width = 80
-	pane.viewport.Height = 10
-	pane.snapshot = &responseSnapshot{ready: true, id: "snap"}
-
-	content := "one\ntwo\nthree"
-	pane.wrapCache[responseTabPretty] = wrapCache(
-		responseTabPretty,
-		content,
-		responseWrapWidth(responseTabPretty, 80),
+	row := seedRow(
+		pane.viewport.YOffset,
+		pane.viewport.Height,
+		len(cache.rev),
+		respScrollBuf(pane.viewport.Height),
 	)
-
-	_ = model.moveRespCursor(pane, -1)
-	if !pane.cursor.on {
-		t.Fatal("expected cursor to be active")
-	}
-	if pane.cursor.line != 2 {
-		t.Fatalf("expected cursor line 2, got %d", pane.cursor.line)
+	expected := cache.rev[row]
+	if pane.cursor.line != expected {
+		t.Fatalf("expected cursor at line %d, got %d", expected, pane.cursor.line)
 	}
 }
