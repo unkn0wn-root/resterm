@@ -91,6 +91,9 @@ func respCursorKeyFor(tab responseTab, hdr headersViewMode, mode rawViewMode) re
 	return respCursorKey{tab: tab, hdr: hdr, mode: mode}
 }
 
+// This handler is the single gate for cursor/selection hotkeys. It tries to keep
+// selection state consistent with the active tab and snapshot, and it treats
+// non-selectable tabs as a hard boundary to avoid mutating hidden state.
 func (m *Model) handleResponseSelectionKey(
 	msg tea.KeyMsg,
 	p *responsePaneState,
@@ -249,6 +252,9 @@ func (m *Model) selLineAt(p *responsePaneState, tab responseTab, offset int) (in
 	return cache.rev[off], true
 }
 
+// Starting a selection is only allowed when a valid cursor exists and the active
+// snapshot is ready. We normalize the line into range here because caches can
+// change size between key presses and render cycles.
 func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 	if p == nil {
 		return nil
@@ -317,6 +323,9 @@ func (m *Model) moveRespSel(p *responsePaneState, delta int) tea.Cmd {
 	return m.setRespSelLine(p, line, cache, delta)
 }
 
+// Page-move selection by screen height rather than by wrapped line. The wrapping
+// cache maps visible rows back to logical lines, so we jump by rows and then map
+// to the closest logical line to keep the selection stable as wrapping changes.
 func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 	if p == nil || !m.selValid(p, p.activeTab) {
 		return nil
@@ -352,6 +361,9 @@ func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 	return m.setRespSelLine(p, line, cache, dir)
 }
 
+// This is the central "commit" step for selection movement. It clamps the logical
+// line, updates the selection, and then adjusts the viewport so the selected span
+// stays visible with a small buffer in the direction of travel.
 func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap, dir int) tea.Cmd {
 	if p == nil || !p.sel.on {
 		return nil
@@ -368,6 +380,7 @@ func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap,
 	if line == p.sel.c {
 		return nil
 	}
+
 	prev := p.sel.c
 	p.sel.c = line
 	span := cache.spans[line]
@@ -426,6 +439,9 @@ func (m *Model) seedRespCursorFromSelection(p *responsePaneState) {
 	}
 }
 
+// Seed the cursor from the current viewport position so that the user sees a
+// visible caret immediately. The seedRow helper balances buffer and center
+// placement so the cursor doesn't jump unpredictably near edges.
 func (m *Model) startRespCursor(p *responsePaneState) tea.Cmd {
 	if p == nil {
 		return nil
@@ -538,6 +554,9 @@ func cursorLineForRow(cache cachedWrap, row int) int {
 	return cache.rev[row]
 }
 
+// When the viewport scrolls, keep the cursor on the
+// same visual screen row so it appears "stuck" to the content the user is tracking.
+// This avoids a cursor that drifts relative to the visible text.
 func (m *Model) followRespCursorOnScroll(
 	p *responsePaneState,
 	prevOffset int,
@@ -568,6 +587,9 @@ func (m *Model) followRespCursorOnScroll(
 	return m.setRespCursor(p, cursorLineForRow(cache, targetRow))
 }
 
+// Force the cursor to the visible top or bottom row. This is used for commands
+// like "go to top/bottom of view" and uses the wrapping cache to map rows back
+// to logical lines.
 func (m *Model) syncRespCursorToEdge(p *responsePaneState, top bool) bool {
 	if p == nil {
 		return false
@@ -588,12 +610,16 @@ func (m *Model) syncRespCursorToEdge(p *responsePaneState, top bool) bool {
 	return m.setRespCursor(p, cursorLineForRow(cache, row))
 }
 
+// This helper centralizes the "is the cursor usable right now?" checks and returns
+// the wrapping cache only when the cursor is active and valid. It also reports
+// whether it cleared stale cursor state so callers can react.
 func (m *Model) activeRespCursorCache(
 	p *responsePaneState,
 ) (cachedWrap, bool, bool) {
 	if p == nil || !p.cursor.on || p.sel.on {
 		return cachedWrap{}, false, false
 	}
+
 	tab := p.activeTab
 	if !respTabSel(tab) {
 		return cachedWrap{}, false, false
@@ -601,11 +627,13 @@ func (m *Model) activeRespCursorCache(
 	if p.snapshot == nil || !p.snapshot.ready {
 		return cachedWrap{}, false, false
 	}
+
 	prev := p.cursor
 	if !m.cursorValid(p, tab) {
 		p.cursor.clear()
 		return cachedWrap{}, false, prev != p.cursor
 	}
+
 	cache, ok := m.selCache(p, tab)
 	if !ok || len(cache.spans) == 0 || len(cache.rev) == 0 {
 		return cachedWrap{}, false, false
@@ -636,6 +664,9 @@ func (m *Model) setRespCursor(p *responsePaneState, line int) bool {
 	return prev != p.cursor
 }
 
+// Cursor movement is allowed even when the cursor is currently inactive.
+// In that case we seed it from the viewport so a single keypress both activates and moves.
+// This keeps the UI responsive without requiring an explicit "start cursor" step.
 func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	if p == nil {
 		return nil
@@ -669,6 +700,9 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	return m.setRespCursorLine(p, line, cache, delta)
 }
 
+// Similar to selection movement, this commits a new cursor line and scrolls the
+// viewport so the cursor stays in view. The direction is used to bias the buffer
+// so movement feels natural when paging.
 func (m *Model) setRespCursorLine(
 	p *responsePaneState,
 	line int,
@@ -734,6 +768,9 @@ func respScrollBuf(h int) int {
 	return 4
 }
 
+// Choose a row within the current viewport to seed the cursor. We prefer the top
+// buffer area for consistency but fall back to the visual middle when the buffer
+// collapses (e.g., tiny viewports or large buffers).
 func seedRow(off, h, total, buf int) int {
 	if h <= 0 || total <= 0 {
 		return 0
@@ -762,6 +799,10 @@ func seedRow(off, h, total, buf int) int {
 	return clamp(mid, 0, total-1)
 }
 
+// Given a target span, compute the best viewport offset so that the span is visible
+// and a small buffer is preserved. The buffer is biased toward the direction of
+// movement to reduce jitter when the user scrolls quickly.
+// @ToDo: Feature me - this Frankenstein of yours is ugly but it works. Needs refactor some day.
 func spanOffsetWithBufDir(span lineSpan, off, h, total, buf, dir int) int {
 	if h <= 0 || total <= 0 {
 		return 0
@@ -819,27 +860,9 @@ func spanOffsetWithBufDir(span lineSpan, off, h, total, buf, dir int) int {
 	return off
 }
 
-func moveDir(prev, next int) int {
-	if next > prev {
-		return 1
-	}
-	if next < prev {
-		return -1
-	}
-	return 0
-}
-
-func normDir(dir int) int {
-	switch {
-	case dir > 0:
-		return 1
-	case dir < 0:
-		return -1
-	default:
-		return 0
-	}
-}
-
+// Extract the selected text from the rendered content so we preserve what the user
+// actually saw (including wrapping boundaries). We strip ANSI first so clipboard
+// output is plain text and stable across terminals.
 func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	if p == nil || !m.selValid(p, p.activeTab) {
 		return "", false
@@ -864,6 +887,9 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	return withTrailingNewline(text), true
 }
 
+// Render the cursor as an inline SGR decoration on the "marker" row. We do the
+// decoration on the already-rendered content to avoid coupling cursor logic to
+// the response rendering pipeline.
 func (m *Model) decorateResponseCursor(
 	p *responsePaneState,
 	tab responseTab,
@@ -922,6 +948,9 @@ func (m *Model) decorateResponseCursor(
 	return builder.String()
 }
 
+// Selection highlighting works by mapping logical lines to wrapped rows and then
+// applying an SGR prefix/suffix to each affected row. This preserves wrapping and
+// lets us handle ANSI safely without re-rendering the response.
 func (m *Model) decorateResponseSelection(
 	p *responsePaneState,
 	tab responseTab,
@@ -1057,6 +1086,9 @@ func (m *Model) respCursorSeedLine(p *responsePaneState, tab responseTab, delta 
 	return m.selLineTop(p, tab)
 }
 
+// Convert a lipgloss style into a pair of SGR prefix/suffix strings. We apply the
+// style to a sentinel rune and split around it so we can reuse the exact escape
+// sequences without guessing at the renderer's reset behavior.
 func styleSGR(style lipgloss.Style) (string, string) {
 	profile := lipgloss.DefaultRenderer().ColorProfile()
 	st := profile.String()
@@ -1117,6 +1149,9 @@ func toTermenvColor(profile termenv.Profile, c lipgloss.TerminalColor) termenv.C
 	}
 }
 
+// Selection highlighting must coexist with existing ANSI sequences. We reapply the
+// selection prefix after every SGR sequence so the highlight doesn't get "canceled"
+// by styles that appear inside the line.
 func applySelectionToLine(line, prefix, suffix string) string {
 	if prefix == "" {
 		return line
@@ -1154,6 +1189,9 @@ func applySelectionToLine(line, prefix, suffix string) string {
 	return builder.String()
 }
 
+// Cursor highlighting targets the first visible rune. We preserve any leading ANSI
+// styles and restore them after the cursor so the rest of the line renders exactly
+// as before.
 func applyCursorToLine(line, prefix, suffix, restorePrefix string) string {
 	if prefix == "" {
 		return line
@@ -1219,6 +1257,8 @@ func leadingSGRPrefix(line string) string {
 	return builder.String()
 }
 
+// Split the line into: leading ANSI codes, the first visible rune, and the tail.
+// This lets us decorate the first printable character without breaking ANSI runs.
 func splitFirstVisibleRune(line string) (string, string, string, bool) {
 	if line == "" {
 		return "", "", "", false
@@ -1246,4 +1286,25 @@ func isSGR(seq string) bool {
 		return false
 	}
 	return strings.HasPrefix(seq, "\x1b[")
+}
+
+func moveDir(prev, next int) int {
+	if next > prev {
+		return 1
+	}
+	if next < prev {
+		return -1
+	}
+	return 0
+}
+
+func normDir(dir int) int {
+	switch {
+	case dir > 0:
+		return 1
+	case dir < 0:
+		return -1
+	default:
+		return 0
+	}
 }
