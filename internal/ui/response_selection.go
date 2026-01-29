@@ -669,7 +669,12 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	return m.setRespCursorLine(p, line, cache, delta)
 }
 
-func (m *Model) setRespCursorLine(p *responsePaneState, line int, cache cachedWrap, dir int) tea.Cmd {
+func (m *Model) setRespCursorLine(
+	p *responsePaneState,
+	line int,
+	cache cachedWrap,
+	dir int,
+) tea.Cmd {
 	if p == nil {
 		return nil
 	}

@@ -1115,7 +1115,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if allowChord {
 		if !m.hasPendingChord && m.repeatChordActive && shortcutKey != "" {
 			if shortcutKey == m.repeatChordKey {
-				if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, shortcutKey, msg); handled {
+				if handled, chordCmd := m.resolveChord(
+					m.repeatChordPrefix,
+					shortcutKey,
+					msg,
+				); handled {
 					m.suppressListKey = true
 					m.blockHistoryKey()
 					return combine(chordCmd)
