@@ -164,6 +164,7 @@ func TestScrollResponseToEdgeUpdatesCursor(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive\nsix"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -197,6 +198,7 @@ func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -231,6 +233,7 @@ func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive\nsix"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -263,6 +266,7 @@ func TestResponseArrowScrollBringsCursorIntoView(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
