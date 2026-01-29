@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
@@ -164,6 +163,7 @@ func TestScrollResponseToEdgeUpdatesCursor(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive\nsix"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -189,7 +189,7 @@ func TestScrollResponseToEdgeUpdatesCursor(t *testing.T) {
 	}
 }
 
-func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
+func TestResponseScrollKeepsCursorInView(t *testing.T) {
 	snap := &responseSnapshot{id: "snap", ready: true}
 	model := newModelWithResponseTab(responseTabPretty, snap)
 	pane := model.pane(responsePanePrimary)
@@ -197,6 +197,7 @@ func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -210,7 +211,9 @@ func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
 		sid:  "snap",
 	}
 
-	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	model.scrollResponseViewport(pane, func() {
+		pane.viewport.ScrollDown(1)
+	})
 
 	cache := pane.wrapCache[responseTabPretty]
 	expected := cache.rev[pane.viewport.YOffset]
@@ -223,7 +226,7 @@ func TestResponseArrowScrollKeepsCursorInView(t *testing.T) {
 	}
 }
 
-func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
+func TestResponseScrollPreservesCursorRow(t *testing.T) {
 	snap := &responseSnapshot{id: "snap", ready: true}
 	model := newModelWithResponseTab(responseTabPretty, snap)
 	pane := model.pane(responsePanePrimary)
@@ -231,6 +234,7 @@ func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive\nsix"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -245,7 +249,9 @@ func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
 		sid:  "snap",
 	}
 
-	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	model.scrollResponseViewport(pane, func() {
+		pane.viewport.ScrollDown(1)
+	})
 
 	if pane.cursor.line != 3 {
 		t.Fatalf(
@@ -255,7 +261,7 @@ func TestResponseArrowScrollPreservesCursorRow(t *testing.T) {
 	}
 }
 
-func TestResponseArrowScrollBringsCursorIntoView(t *testing.T) {
+func TestResponseScrollBringsCursorIntoView(t *testing.T) {
 	snap := &responseSnapshot{id: "snap", ready: true}
 	model := newModelWithResponseTab(responseTabPretty, snap)
 	pane := model.pane(responsePanePrimary)
@@ -263,6 +269,7 @@ func TestResponseArrowScrollBringsCursorIntoView(t *testing.T) {
 	pane.viewport.Height = 3
 
 	content := "one\ntwo\nthree\nfour\nfive\nsix\nseven\neight"
+	pane.snapshot.pretty = content
 	pane.wrapCache[responseTabPretty] = wrapCache(
 		responseTabPretty,
 		content,
@@ -277,7 +284,9 @@ func TestResponseArrowScrollBringsCursorIntoView(t *testing.T) {
 		sid:  "snap",
 	}
 
-	model.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	model.scrollResponseViewport(pane, func() {
+		pane.viewport.ScrollDown(1)
+	})
 
 	cache := pane.wrapCache[responseTabPretty]
 	expected := cache.rev[pane.viewport.YOffset]

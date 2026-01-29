@@ -164,7 +164,7 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 	if len(tabSpinFrames) < 2 {
 		t.Fatalf("expected tab spinner frames")
 	}
-	snap := &responseSnapshot{pretty: ensureTrailingNewline("ok"), ready: true}
+	snap := &responseSnapshot{pretty: withTrailingNewline("ok"), ready: true}
 	model := newModelWithResponseTab(responseTabPretty, snap)
 	model.sending = true
 	model.tabSpinIdx = 1

@@ -9,8 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
-
-	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
 type respSel struct {
@@ -104,24 +102,45 @@ func (m *Model) handleResponseSelectionKey(
 	if p.sel.on && !m.selValid(p, tab) {
 		p.sel.clear()
 	}
+	if p.cursor.on && !m.cursorValid(p, tab) {
+		p.cursor.clear()
+	}
 	key := msg.String()
 
 	if !respTabSel(tab) {
-		if key == "esc" && p.sel.on {
-			cmd := m.clearRespSel(p)
-			return cmd, true
+		if key == "esc" {
+			if p.sel.on {
+				cmd := m.clearRespSel(p)
+				return cmd, true
+			}
+			if p.cursor.on {
+				p.cursor.clear()
+				return m.syncResponsePane(m.responsePaneFocus), true
+			}
 		}
 		return nil, false
 	}
 
 	switch key {
 	case "v", "V":
-		cmd := m.startRespSel(p)
+		if p.sel.on {
+			cmd := m.clearRespSel(p)
+			return cmd, true
+		}
+		if m.cursorValid(p, tab) {
+			cmd := m.startRespSel(p)
+			return cmd, true
+		}
+		cmd := m.startRespCursor(p)
 		return cmd, true
 	case "esc":
 		if p.sel.on {
 			cmd := m.clearRespSel(p)
 			return cmd, true
+		}
+		if p.cursor.on {
+			p.cursor.clear()
+			return m.syncResponsePane(m.responsePaneFocus), true
 		}
 		return nil, false
 	case "y", "c":
@@ -132,19 +151,26 @@ func (m *Model) handleResponseSelectionKey(
 		return batchCommands(cmd, m.syncResponsePane(m.responsePaneFocus)), true
 	}
 
-	if !p.sel.on {
-		return nil, false
+	if p.sel.on {
+		switch key {
+		case "down", "j", "shift+j", "J":
+			return m.moveRespSel(p, 1), true
+		case "up", "k", "shift+k", "K":
+			return m.moveRespSel(p, -1), true
+		case "pgdown":
+			return m.moveRespSelWrap(p, 1), true
+		case "pgup":
+			return m.moveRespSelWrap(p, -1), true
+		}
 	}
 
-	switch key {
-	case "down", "j", "shift+j", "J":
-		return m.moveRespSel(p, 1), true
-	case "up", "k", "shift+k", "K":
-		return m.moveRespSel(p, -1), true
-	case "pgdown":
-		return m.moveRespSelWrap(p, 1), true
-	case "pgup":
-		return m.moveRespSelWrap(p, -1), true
+	if p.cursor.on {
+		switch key {
+		case "down", "j":
+			return m.moveRespCursor(p, 1), true
+		case "up", "k":
+			return m.moveRespCursor(p, -1), true
+		}
 	}
 
 	return nil, false
@@ -235,16 +261,10 @@ func (m *Model) startRespSel(p *responsePaneState) tea.Cmd {
 		return statusCmd(statusWarn, "No response available")
 	}
 
-	line := 0
-	if m.cursorValid(p, tab) {
-		line = p.cursor.line
-	} else {
-		var ok bool
-		line, ok = m.selLineTop(p, tab)
-		if !ok {
-			return statusCmd(statusWarn, "Selection unavailable")
-		}
+	if !m.cursorValid(p, tab) {
+		return statusCmd(statusInfo, "Activate cursor to start selection")
 	}
+	line := p.cursor.line
 
 	if cache, ok := m.selCache(p, tab); ok && len(cache.spans) > 0 {
 		if line < 0 {
@@ -294,7 +314,7 @@ func (m *Model) moveRespSel(p *responsePaneState, delta int) tea.Cmd {
 	if line > max {
 		line = max
 	}
-	return m.setRespSelLine(p, line, cache)
+	return m.setRespSelLine(p, line, cache, delta)
 }
 
 func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
@@ -329,10 +349,10 @@ func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 		pos = len(cache.rev) - 1
 	}
 	line := cache.rev[pos]
-	return m.setRespSelLine(p, line, cache)
+	return m.setRespSelLine(p, line, cache, dir)
 }
 
-func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap) tea.Cmd {
+func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap, dir int) tea.Cmd {
 	if p == nil || !p.sel.on {
 		return nil
 	}
@@ -348,12 +368,19 @@ func (m *Model) setRespSelLine(p *responsePaneState, line int, cache cachedWrap)
 	if line == p.sel.c {
 		return nil
 	}
+	prev := p.sel.c
 	p.sel.c = line
 	span := cache.spans[line]
 	total := len(cache.rev)
 	off := p.viewport.YOffset
 	h := p.viewport.Height
-	p.viewport.SetYOffset(scroll.Align(span.start, off, h, total))
+	move := normDir(dir)
+	if move == 0 {
+		move = moveDir(prev, line)
+	}
+	p.viewport.SetYOffset(
+		spanOffsetWithBufDir(span, off, h, total, respScrollBuf(h), move),
+	)
 	p.setCurrPosition()
 	return m.syncResponsePane(m.responsePaneFocus)
 }
@@ -372,9 +399,9 @@ func (m *Model) copyRespSel(p *responsePaneState) tea.Cmd {
 		return statusCmd(statusInfo, "No selection to copy")
 	}
 
-	m.seedRespCursorFromSelection(p)
 	size := formatByteSize(int64(len(text)))
 	msg := fmt.Sprintf("Copied selection (%s)", size)
+	m.seedRespCursorFromSelection(p)
 	p.sel.clear()
 	return (&m.editor).copyToClipboard(text, msg)
 }
@@ -397,6 +424,45 @@ func (m *Model) seedRespCursorFromSelection(p *responsePaneState) {
 		hdr:  p.headersView,
 		mode: p.snapshot.rawMode,
 	}
+}
+
+func (m *Model) startRespCursor(p *responsePaneState) tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	tab := p.activeTab
+	if !respTabSel(tab) {
+		return nil
+	}
+	if p.snapshot == nil || !p.snapshot.ready {
+		return statusCmd(statusWarn, "No response available")
+	}
+	if p.cursor.on && !m.cursorValid(p, tab) {
+		p.cursor.clear()
+	}
+
+	cache, ok := m.selCache(p, tab)
+	if !ok || len(cache.rev) == 0 || len(cache.spans) == 0 {
+		return statusCmd(statusWarn, "Selection unavailable")
+	}
+	row := seedRow(
+		p.viewport.YOffset,
+		p.viewport.Height,
+		len(cache.rev),
+		respScrollBuf(p.viewport.Height),
+	)
+	line := cache.rev[row]
+	line = clamp(line, 0, len(cache.spans)-1)
+
+	p.cursor = respCursor{
+		on:   true,
+		line: line,
+		tab:  tab,
+		sid:  p.snapshot.id,
+		hdr:  p.headersView,
+		mode: p.snapshot.rawMode,
+	}
+	return m.syncResponsePane(m.responsePaneFocus)
 }
 
 func (m *Model) cursorValid(p *responsePaneState, tab responseTab) bool {
@@ -477,6 +543,9 @@ func (m *Model) followRespCursorOnScroll(
 	prevOffset int,
 	newOffset int,
 ) bool {
+	if p == nil {
+		return false
+	}
 	cache, ok, cleared := m.activeRespCursorCache(p)
 	if cleared {
 		return true
@@ -500,6 +569,9 @@ func (m *Model) followRespCursorOnScroll(
 }
 
 func (m *Model) syncRespCursorToEdge(p *responsePaneState, top bool) bool {
+	if p == nil {
+		return false
+	}
 	cache, ok, cleared := m.activeRespCursorCache(p)
 	if cleared {
 		return true
@@ -586,7 +658,7 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 	}
 	if m.cursorValid(p, tab) {
 		line := clamp(p.cursor.line+delta, 0, len(cache.spans)-1)
-		return m.setRespCursorLine(p, line, cache)
+		return m.setRespCursorLine(p, line, cache, delta)
 	}
 
 	line, ok := m.respCursorSeedLine(p, tab, delta)
@@ -594,10 +666,15 @@ func (m *Model) moveRespCursor(p *responsePaneState, delta int) tea.Cmd {
 		return nil
 	}
 	line = clamp(line, 0, len(cache.spans)-1)
-	return m.setRespCursorLine(p, line, cache)
+	return m.setRespCursorLine(p, line, cache, delta)
 }
 
-func (m *Model) setRespCursorLine(p *responsePaneState, line int, cache cachedWrap) tea.Cmd {
+func (m *Model) setRespCursorLine(
+	p *responsePaneState,
+	line int,
+	cache cachedWrap,
+	dir int,
+) tea.Cmd {
 	if p == nil {
 		return nil
 	}
@@ -619,6 +696,10 @@ func (m *Model) setRespCursorLine(p *responsePaneState, line int, cache cachedWr
 		return nil
 	}
 
+	prev := line
+	if m.cursorValid(p, tab) {
+		prev = p.cursor.line
+	}
 	p.cursor = respCursor{
 		on:   true,
 		line: line,
@@ -632,9 +713,131 @@ func (m *Model) setRespCursorLine(p *responsePaneState, line int, cache cachedWr
 	total := len(cache.rev)
 	off := p.viewport.YOffset
 	h := p.viewport.Height
-	p.viewport.SetYOffset(scroll.Align(span.start, off, h, total))
+	move := normDir(dir)
+	if move == 0 {
+		move = moveDir(prev, line)
+	}
+	p.viewport.SetYOffset(
+		spanOffsetWithBufDir(span, off, h, total, respScrollBuf(h), move),
+	)
 	p.setCurrPosition()
 	return m.syncResponsePane(m.responsePaneFocus)
+}
+
+func respScrollBuf(h int) int {
+	if h <= 1 {
+		return 0
+	}
+	if h <= 4 {
+		return h - 1
+	}
+	return 4
+}
+
+func seedRow(off, h, total, buf int) int {
+	if h <= 0 || total <= 0 {
+		return 0
+	}
+	if h > total {
+		h = total
+	}
+	max := total - h
+	if max < 0 {
+		max = 0
+	}
+	off = clamp(off, 0, max)
+	if buf < 0 {
+		buf = 0
+	}
+	if buf > h-1 {
+		buf = h - 1
+	}
+
+	top := off + buf
+	bot := off + h - 1 - buf
+	if top <= bot {
+		return clamp(top, 0, total-1)
+	}
+	mid := off + (h-1)/2
+	return clamp(mid, 0, total-1)
+}
+
+func spanOffsetWithBufDir(span lineSpan, off, h, total, buf, dir int) int {
+	if h <= 0 || total <= 0 {
+		return 0
+	}
+	if h > total {
+		h = total
+	}
+	max := total - h
+	if max < 0 {
+		max = 0
+	}
+	off = clamp(off, 0, max)
+
+	start := span.start
+	end := span.end
+	if start < 0 {
+		start = 0
+	}
+	if end < start {
+		end = start
+	}
+	if end >= total {
+		end = total - 1
+	}
+
+	if buf < 0 {
+		buf = 0
+	}
+	if buf > h-1 {
+		buf = h - 1
+	}
+
+	bufTop := buf
+	bufBot := buf
+	if dir > 0 {
+		bufTop = 0
+	} else if dir < 0 {
+		bufBot = 0
+	}
+
+	top := off + bufTop
+	bot := off + h - 1 - bufBot
+	if start <= bot && end >= top {
+		return off
+	}
+
+	if end < top {
+		target := end - bufTop
+		return clamp(target, 0, max)
+	}
+	if start > bot {
+		target := start - (h - 1 - bufBot)
+		return clamp(target, 0, max)
+	}
+	return off
+}
+
+func moveDir(prev, next int) int {
+	if next > prev {
+		return 1
+	}
+	if next < prev {
+		return -1
+	}
+	return 0
+}
+
+func normDir(dir int) int {
+	switch {
+	case dir > 0:
+		return 1
+	case dir < 0:
+		return -1
+	default:
+		return 0
+	}
 }
 
 func (m *Model) respSelText(p *responsePaneState) (string, bool) {
@@ -645,7 +848,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	labelTab := p.activeTab
 	content, _ := m.paneContentForTab(m.responsePaneFocus, labelTab)
 	plain := stripANSIEscape(content)
-	base := ensureTrailingNewline(plain)
+	base := withTrailingNewline(plain)
 	lines := strings.Split(base, "\n")
 	start, end := p.sel.rng()
 	if start < 0 {
@@ -658,7 +861,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 		return "", false
 	}
 	text := strings.Join(lines[start:end+1], "\n")
-	return ensureTrailingNewline(text), true
+	return withTrailingNewline(text), true
 }
 
 func (m *Model) decorateResponseCursor(
@@ -669,8 +872,17 @@ func (m *Model) decorateResponseCursor(
 	if p == nil || content == "" || !respTabSel(tab) {
 		return content
 	}
+	if !p.cursor.on && !p.sel.on {
+		return content
+	}
 	if p.cursor.on && !m.cursorValid(p, tab) {
 		p.cursor.clear()
+	}
+	if p.sel.on && !m.selValid(p, tab) {
+		p.sel.clear()
+	}
+	if !p.cursor.on && !p.sel.on {
+		return content
 	}
 
 	markerRow := -1

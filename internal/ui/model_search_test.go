@@ -18,9 +18,9 @@ func TestRetreatResponseSearchWrap(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:      "snap-1",
-		pretty:  ensureTrailingNewline("foo bar\nfoo baz\nfoo"),
-		raw:     ensureTrailingNewline("foo bar\nfoo baz\nfoo"),
-		headers: ensureTrailingNewline("Status: 200 OK"),
+		pretty:  withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		raw:     withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		headers: withTrailingNewline("Status: 200 OK"),
 		ready:   true,
 	}
 
@@ -73,9 +73,9 @@ func TestClearResponseSearchOnEsc(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:      "snap-1",
-		pretty:  ensureTrailingNewline("foo bar\nfoo baz\nfoo"),
-		raw:     ensureTrailingNewline("foo bar\nfoo baz\nfoo"),
-		headers: ensureTrailingNewline("Status: 200 OK"),
+		pretty:  withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		raw:     withTrailingNewline("foo bar\nfoo baz\nfoo"),
+		headers: withTrailingNewline("Status: 200 OK"),
 		ready:   true,
 	}
 

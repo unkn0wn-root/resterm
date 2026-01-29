@@ -347,7 +347,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 		summary := buildProfileSummary(state)
 		body := report
 		if canceled && strings.TrimSpace(summary) != "" {
-			body = ensureTrailingNewline(summary)
+			body = summary
 		}
 		snapshot := &responseSnapshot{
 			pretty:         body,
@@ -373,7 +373,7 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 
 		if canceled {
 			summary := buildProfileSummary(state)
-			body := ensureTrailingNewline(summary)
+			body := summary
 			m.responseLatest.pretty = body
 			m.responseLatest.raw = body
 			m.responseLatest.headers = body

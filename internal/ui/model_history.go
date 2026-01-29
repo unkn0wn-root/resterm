@@ -497,21 +497,21 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		}
 		if msg.width > 0 && pane.viewport.Width == msg.width {
 			prettyWidth := responseWrapWidth(responseTabPretty, msg.width)
-			prettyBase := ensureTrailingNewline(msg.pretty)
+			prettyBase := displayContent(msg.pretty)
 			pane.wrapCache[responseTabPretty] = wrapCache(
 				responseTabPretty,
 				prettyBase,
 				prettyWidth,
 			)
 			rawWidth := responseWrapWidth(responseTabRaw, msg.width)
-			rawBase := ensureTrailingNewline(snapshot.raw)
+			rawBase := displayContent(snapshot.raw)
 			pane.ensureRawWrapCache()
 			pane.rawWrapCache[snapshot.rawMode] = wrapCache(responseTabRaw, rawBase, rawWidth)
 
 			headersWidth := responseWrapWidth(responseTabHeaders, msg.width)
-			headersBase := ensureTrailingNewline(msg.headers)
+			headersBase := displayContent(msg.headers)
 			if pane.headersView == headersViewRequest {
-				headersBase = ensureTrailingNewline(msg.requestHeaders)
+				headersBase = displayContent(msg.requestHeaders)
 			}
 			pane.wrapCache[responseTabHeaders] = wrapCache(
 				responseTabHeaders,
@@ -1286,9 +1286,9 @@ func buildHistoryCompareSnapshot(
 	headers := formatHistoryCompareHeaders(env, res)
 	return &responseSnapshot{
 		id:            nextResponseRenderToken(),
-		pretty:        ensureTrailingNewline(summary),
-		raw:           ensureTrailingNewline(summary),
-		headers:       ensureTrailingNewline(headers),
+		pretty:        summary,
+		raw:           summary,
+		headers:       headers,
 		ready:         true,
 		environment:   env,
 		compareBundle: bundle,
@@ -1795,7 +1795,7 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 		if displayWidth <= 0 {
 			displayWidth = defaultResponseViewportWidth
 		}
-		content := ensureTrailingNewline(preview)
+		content := displayContent(preview)
 		prettyCache := wrapCache(
 			responseTabPretty,
 			content,
@@ -2204,7 +2204,7 @@ func (m *Model) applyHistorySnapshot(snap *responseSnapshot) {
 		if pane.activeTab == responseTabHistory {
 			continue
 		}
-		pane.viewport.SetContent(ensureTrailingNewline(snap.pretty))
+		pane.viewport.SetContent(displayContent(snap.pretty))
 		pane.viewport.GotoTop()
 		pane.setCurrPosition()
 	}

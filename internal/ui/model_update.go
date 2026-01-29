@@ -1115,7 +1115,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if allowChord {
 		if !m.hasPendingChord && m.repeatChordActive && shortcutKey != "" {
 			if shortcutKey == m.repeatChordKey {
-				if handled, chordCmd := m.resolveChord(m.repeatChordPrefix, shortcutKey, msg); handled {
+				if handled, chordCmd := m.resolveChord(
+					m.repeatChordPrefix,
+					shortcutKey,
+					msg,
+				); handled {
 					m.suppressListKey = true
 					m.blockHistoryKey()
 					return combine(chordCmd)
@@ -1489,12 +1493,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					return combine(m.selectWorkflowStatsByViewport(pane, snapshot, 1))
 				}
 			}
-			if keyStr == "j" && respTabSel(pane.activeTab) {
-				if cmd := m.moveRespCursor(pane, 1); cmd != nil {
-					return combine(cmd)
-				}
-				return combine(nil)
-			}
 			if pane.activeTab == responseTabHistory {
 				return combine(nil)
 			}
@@ -1520,12 +1518,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 					pane.setCurrPosition()
 					return combine(m.selectWorkflowStatsByViewport(pane, snapshot, -1))
 				}
-			}
-			if keyStr == "k" && respTabSel(pane.activeTab) {
-				if cmd := m.moveRespCursor(pane, -1); cmd != nil {
-					return combine(cmd)
-				}
-				return combine(nil)
 			}
 			if pane.activeTab == responseTabHistory {
 				return combine(nil)
