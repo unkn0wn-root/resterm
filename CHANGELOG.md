@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.20.2](https://github.com/unkn0wn-root/resterm/compare/v0.20.1...v0.20.2) (2026-01-29)
+
+
+### Features
+
+* activate cursor with v ([506a162](https://github.com/unkn0wn-root/resterm/commit/506a1622c49c219928518df60facba40fe25714e))
+
+
+### Bug Fixes
+
+* tests ([79bfc73](https://github.com/unkn0wn-root/resterm/commit/79bfc73363aa7f94caaeaef5c6e8da47c184acaa))
+* **ui:** preserve real trailing newlines and skip idle cursor decoration ([4b45f42](https://github.com/unkn0wn-root/resterm/commit/4b45f42dbca9ce33be3809897ce767e992a46117))
+
 ### [0.20.1](https://github.com/unkn0wn-root/resterm/compare/v0.20.0...v0.20.1) (2026-01-28)
 
 
