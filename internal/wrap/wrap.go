@@ -17,9 +17,20 @@ const (
 	Pre
 )
 
-const contUnit = "  "
+const ContinuationUnit = "  "
 
-var contUnitB = []byte(contUnit)
+const (
+	// SGR extended color selectors.
+	sgrExtForeground = 38 // foreground color
+	sgrExtBackground = 48 // background color
+	sgrExtUnderline  = 58 // underline color
+
+	// SGR extended color modes (after 38/48/58).
+	sgrExtPalette = 5 // 256-color palette: 38/48/58;5;N
+	sgrExtRGB     = 2 // truecolor: 38/48/58;2;R;G;B
+)
+
+var contUnitB = []byte(ContinuationUnit)
 
 type Span struct {
 	S int
@@ -186,6 +197,7 @@ type lw struct {
 	w1   int
 	ap   []byte
 	ansi bool
+	pref bool
 	keep bool
 	out  func([]byte)
 	buf  []byte
@@ -272,6 +284,41 @@ func (l *lw) addTok(ctx context.Context, tb []byte, tw int, sp bool) bool {
 			l.hns = true
 		}
 		return true
+	}
+	if l.pref && !sp && l.cw > 0 && tw <= l.w {
+		rem := l.w - l.cw
+		if rem > 0 {
+			seg, rest, sw, ok := l.spl(ctx, tb, rem)
+			if !ok {
+				return false
+			}
+			if len(seg) == 0 && len(rest) == len(tb) {
+				seg = tb[:1]
+				rest = tb[1:]
+				sw = 1
+			}
+			l.buf = append(l.buf, seg...)
+			if sw > 0 {
+				l.cw += sw
+				if l.ansi {
+					l.ap = updState(l.ap, seg)
+				}
+				l.has = true
+				if !sp {
+					l.hns = true
+				}
+			}
+			tb = rest
+			if len(tb) == 0 {
+				return true
+			}
+			if sw > 0 {
+				l.emitWrap()
+			}
+		} else {
+			l.emitWrap()
+		}
+		return l.addTok(ctx, tb, tokW(tb), sp)
 	}
 	if tw > l.w {
 		if l.cw > 0 {
@@ -417,6 +464,9 @@ func wrapLine(
 		keep: keep,
 		out:  out,
 		buf:  make([]byte, 0, len(b)+len(p0)+len(p1)),
+	}
+	if len(p0) > 0 || len(p1) > 0 {
+		l.pref = true
 	}
 
 	if isASCII(b) {
@@ -623,45 +673,110 @@ func updSGR(ap []byte, seq []byte) []byte {
 	if len(seq) < 3 {
 		return ap
 	}
-	if isSGRReset(seq) {
+	rst, oth := sgrFlags(seq)
+	if rst && !oth {
 		return ap[:0]
+	}
+	if rst {
+		ap = ap[:0]
 	}
 	ap = append(ap, seq...)
 	return ap
 }
 
 /*
-We only treat plain resets as resets: ESC[m and ESC[0m. Other sequences like
-ESC[38;5;0m are valid colors and must *not* clear the active state.
+We treat reset (param 0 or empty) as a reset only when it appears as a standalone
+parameter. Values inside extended color sequences (38/48/58;5;n or 38/48/58;2;r;g;b)
+must not clear the active state (e.g., ESC[38;5;0m is a valid color, not a reset).
 */
-func isSGRReset(b []byte) bool {
+func sgrFlags(b []byte) (bool, bool) {
 	if len(b) < 3 || b[len(b)-1] != 'm' {
-		return false
+		return false, false
 	}
 	if len(b) == 3 {
-		return true
+		return true, false
 	}
 	params := b[2 : len(b)-1]
 	if len(params) == 0 {
-		return true
+		return true, false
 	}
+
+	vals := make([]int, 0, 8)
 	num := -1
-	for i := range params {
-		if params[i] == ';' {
-			break
+	for i := 0; i < len(params); i++ {
+		c := params[i]
+		switch {
+		case c == ';':
+			if num < 0 {
+				vals = append(vals, 0)
+			} else {
+				vals = append(vals, num)
+				num = -1
+			}
+		case c >= '0' && c <= '9':
+			if num < 0 {
+				num = int(c - '0')
+			} else {
+				num = num*10 + int(c-'0')
+			}
+		default:
+			if num >= 0 {
+				vals = append(vals, num)
+				num = -1
+			}
+			vals = append(vals, -1)
 		}
-		if params[i] < '0' || params[i] > '9' {
-			return false
-		}
-		if num < 0 {
-			num = 0
-		}
-		num = num*10 + int(params[i]-'0')
 	}
 	if num < 0 {
-		return true
+		if params[len(params)-1] == ';' {
+			vals = append(vals, 0)
+		}
+	} else {
+		vals = append(vals, num)
 	}
-	return num == 0
+
+	reset := false
+	other := false
+	for i := 0; i < len(vals); {
+		p := vals[i]
+		// Handle extended color sequences: 38/48/58;5;N or 38/48/58;2;R;G;B.
+		if p == sgrExtForeground || p == sgrExtBackground || p == sgrExtUnderline {
+			if i+1 < len(vals) {
+				switch vals[i+1] {
+				case sgrExtPalette:
+					other = true
+					i += 3
+					continue
+				case sgrExtRGB:
+					other = true
+					i += 5
+					continue
+				}
+			}
+			other = true
+			i++
+			continue
+		}
+		if p == 0 {
+			reset = true
+		} else if p == -1 {
+			other = true
+		} else {
+			other = true
+		}
+		i++
+	}
+	return reset, other
+}
+
+func tokW(b []byte) int {
+	if len(b) == 0 {
+		return 0
+	}
+	if isASCII(b) {
+		return len(b)
+	}
+	return visW(b)
 }
 
 func cutASCII(_ context.Context, b []byte, lim int) ([]byte, []byte, int, bool) {

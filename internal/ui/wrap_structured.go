@@ -6,7 +6,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/wrap"
 )
 
-const wrapContinuationUnit = "  "
+const wrapContinuationUnit = wrap.ContinuationUnit
 
 func wrapStructuredContent(content string, width int) string {
 	out, _ := wrapStructuredContentCtx(context.Background(), content, width)
