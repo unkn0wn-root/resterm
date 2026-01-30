@@ -208,9 +208,13 @@ func TestResponseSelectionScrollsSmoothlyOnLongLine(t *testing.T) {
 	pane.activeTab = responseTabRaw
 	pane.viewport.Width = 8
 	pane.viewport.Height = 3
-	pane.snapshot = &responseSnapshot{ready: true, id: "snap", rawMode: rawViewText}
-
 	content := "one\n" + strings.Repeat("a", 30) + "\nthree"
+	pane.snapshot = &responseSnapshot{
+		ready:   true,
+		id:      "snap",
+		rawMode: rawViewText,
+		raw:     content,
+	}
 	cache := wrapCache(
 		responseTabRaw,
 		content,

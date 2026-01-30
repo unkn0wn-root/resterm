@@ -119,7 +119,8 @@ func reflowDelay(
 		}
 		return 0
 	}
-	if cache := pane.wrapCache[tab]; cache.valid && cache.width != width {
+	cache := pane.cacheForTab(tab, mode, pane.headersView)
+	if cache.valid && cache.width != width {
 		return respReflowDelay
 	}
 	return 0
