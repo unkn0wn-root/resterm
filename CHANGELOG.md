@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.20.3](https://github.com/unkn0wn-root/resterm/compare/v0.20.2...v0.20.3) (2026-01-30)
+
+
+### Features
+
+* async wrap ([d7f5ade](https://github.com/unkn0wn-root/resterm/commit/d7f5ade878f1ee96a5952a1e9ce583e88dd83d5d))
+* **ui:** async response formatting with ctx ([c75151b](https://github.com/unkn0wn-root/resterm/commit/c75151b107b42e1bb393111171f087ec7caaa426))
+
+
+### Bug Fixes
+
+* tests and use new cacheForTab ([747f83b](https://github.com/unkn0wn-root/resterm/commit/747f83b3c75e354251063e3c97919ecbddfc77e1))
+
 ### [0.20.2](https://github.com/unkn0wn-root/resterm/compare/v0.20.1...v0.20.2) (2026-01-29)
 
 
