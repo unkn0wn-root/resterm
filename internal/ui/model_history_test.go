@@ -323,6 +323,8 @@ func drainResponseCommands(t *testing.T, model *Model, initial tea.Cmd) {
 			queue = append(queue, collectMsgs(typed)...)
 		case statusMsg:
 			// ignore status updates
+		case tabSpinMsg:
+			// ignore spinner ticks in tests
 		case responseLoadingTickMsg:
 			if follow := model.handleResponseLoadingTick(); follow != nil {
 				queue = append(queue, collectMsgs(follow)...)

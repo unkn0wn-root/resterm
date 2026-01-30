@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,16 +16,27 @@ import (
 )
 
 func prettifyBody(body []byte, contentType string) string {
+	return prettifyBodyCtx(nil, body, contentType)
+}
+
+func prettifyBodyCtx(ctx context.Context, body []byte, contentType string) string {
 	ct := strings.ToLower(contentType)
 	source := string(body)
 	lexer := ""
 
+	if ctxDone(ctx) {
+		return source
+	}
+
 	switch {
 	case strings.Contains(ct, "json"):
-		if formatted, ok := renderJSONAsJS(body); ok {
+		if formatted, ok := renderJSONAsJSCtx(ctx, body); ok {
 			source = formatted
 			lexer = "javascript"
 		} else {
+			if ctxDone(ctx) {
+				return source
+			}
 			var buf bytes.Buffer
 			if err := json.Indent(&buf, body, "", "  "); err == nil {
 				source = buf.String()
@@ -41,7 +53,7 @@ func prettifyBody(body []byte, contentType string) string {
 		lexer = "javascript"
 	}
 
-	if lexer == "" {
+	if lexer == "" || ctxDone(ctx) {
 		return source
 	}
 
@@ -53,8 +65,18 @@ func prettifyBody(body []byte, contentType string) string {
 }
 
 func renderJSONAsJS(body []byte) (string, bool) {
+	return renderJSONAsJSCtx(nil, body)
+}
+
+func renderJSONAsJSCtx(ctx context.Context, body []byte) (string, bool) {
+	if ctxDone(ctx) {
+		return "", false
+	}
 	if formatted, err := js.FormatValue(string(body)); err == nil {
 		return formatted, true
+	}
+	if ctxDone(ctx) {
+		return "", false
 	}
 	dec := json.NewDecoder(bytes.NewReader(body))
 	dec.UseNumber()
@@ -180,4 +202,8 @@ func highlight(content, lexer string) (string, bool) {
 		return "", false
 	}
 	return buf.String(), true
+}
+
+func ctxDone(ctx context.Context) bool {
+	return ctx != nil && ctx.Err() != nil
 }

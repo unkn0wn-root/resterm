@@ -205,21 +205,15 @@ func (m *Model) selCache(p *responsePaneState, tab responseTab) (cachedWrap, boo
 	if p == nil {
 		return cachedWrap{}, false
 	}
+	mode := rawViewText
 	if tab == responseTabRaw {
 		if p.snapshot == nil {
 			return cachedWrap{}, false
 		}
-		if p.rawWrapCache == nil {
-			return cachedWrap{}, false
-		}
-		cache, ok := p.rawWrapCache[p.snapshot.rawMode]
-		if !ok || !cache.valid {
-			return cachedWrap{}, false
-		}
-		return cache, true
+		mode = p.snapshot.rawMode
 	}
-	cache, ok := p.wrapCache[tab]
-	if !ok || !cache.valid {
+	cache := p.cacheForTab(tab, mode, p.headersView)
+	if !cache.valid {
 		return cachedWrap{}, false
 	}
 	return cache, true
