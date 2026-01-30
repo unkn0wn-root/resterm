@@ -32,6 +32,10 @@ type responseReflowKey struct {
 	headers headersViewMode
 }
 
+type responseReflowCancelState struct {
+	snapshotID string
+}
+
 func reflowKey(tab responseTab, mode rawViewMode, headers headersViewMode) responseReflowKey {
 	if tab != responseTabRaw {
 		mode = 0
@@ -40,6 +44,39 @@ func reflowKey(tab responseTab, mode rawViewMode, headers headersViewMode) respo
 		headers = 0
 	}
 	return responseReflowKey{tab: tab, mode: mode, headers: headers}
+}
+
+func markReflowCanceled(
+	pane *responsePaneState,
+	key responseReflowKey,
+	snapshotID string,
+) {
+	if pane == nil || snapshotID == "" {
+		return
+	}
+	if pane.reflowCanceled == nil {
+		pane.reflowCanceled = make(map[responseReflowKey]responseReflowCancelState)
+	}
+	pane.reflowCanceled[key] = responseReflowCancelState{snapshotID: snapshotID}
+}
+
+func reflowCanceled(
+	pane *responsePaneState,
+	key responseReflowKey,
+	snapshotID string,
+) bool {
+	if pane == nil || pane.reflowCanceled == nil {
+		return false
+	}
+	state, ok := pane.reflowCanceled[key]
+	if !ok {
+		return false
+	}
+	if snapshotID == "" || state.snapshotID != snapshotID {
+		delete(pane.reflowCanceled, key)
+		return false
+	}
+	return true
 }
 
 func reflowKeyForReq(req responseReflowReq) responseReflowKey {

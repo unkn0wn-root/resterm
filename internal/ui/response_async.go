@@ -153,11 +153,11 @@ func (m *Model) respRflCmd(req responseReflowReq) tea.Cmd {
 		}
 		defer rt.rflRel()
 
-		if ctx != nil && ctx.Err() != nil {
+		if ctxDone(ctx) {
 			return nil
 		}
-		cache := wrapCache(req.tab, req.content, req.width)
-		if ctx != nil && ctx.Err() != nil {
+		cache, ok := wrapCacheCtx(ctx, req.tab, req.content, req.width)
+		if !ok || ctxDone(ctx) {
 			return nil
 		}
 		return responseReflowDoneMsg{req: req, cache: cache}

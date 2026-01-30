@@ -1,26 +1,39 @@
 package ui
 
 import (
+	"context"
 	"strings"
 	"unicode/utf8"
 )
 
 const wrapContinuationUnit = "  "
 
-func wrapStructuredSegments(line string, width int, prefix string, prefixWidth int) []string {
+func wrapStructuredSegmentsCtx(
+	ctx context.Context,
+	line string,
+	width int,
+	prefix string,
+	prefixWidth int,
+) ([]string, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if width <= 0 {
-		return []string{line}
+		return []string{line}, true
 	}
 	if line == "" {
-		return []string{""}
+		return []string{""}, true
 	}
 	if visibleWidth(line) <= width && prefix == "" {
-		return []string{line}
+		return []string{line}, true
 	}
 
-	tokens := tokenizeLine(line)
+	tokens, ok := tokenizeLineCtx(ctx, line)
+	if !ok {
+		return nil, false
+	}
 	if len(tokens) == 0 {
-		return []string{""}
+		return []string{""}, true
 	}
 
 	var current strings.Builder
@@ -55,6 +68,9 @@ func wrapStructuredSegments(line string, width int, prefix string, prefixWidth i
 	}
 
 	for _, tok := range tokens {
+		if ctxDone(ctx) {
+			return nil, false
+		}
 		text := tok.text
 		if pendingANSIPrefix != "" {
 			text = pendingANSIPrefix + text
@@ -86,6 +102,9 @@ func wrapStructuredSegments(line string, width int, prefix string, prefixWidth i
 		}
 
 		for {
+			if ctxDone(ctx) {
+				return nil, false
+			}
 			available := width - currentWidth
 			if available <= 0 {
 				emit(true)
@@ -109,7 +128,10 @@ func wrapStructuredSegments(line string, width int, prefix string, prefixWidth i
 				break
 			}
 
-			segment, rest := splitSegment(text, available)
+			segment, rest, ok := splitSegmentCtx(ctx, text, available)
+			if !ok {
+				return nil, false
+			}
 			if segment == "" {
 				segment = text
 				rest = ""
@@ -146,30 +168,52 @@ func wrapStructuredSegments(line string, width int, prefix string, prefixWidth i
 	}
 
 	if len(segments) == 0 {
-		return []string{""}
+		return []string{""}, true
 	}
-	return segments
+	return segments, true
 }
 
 func wrapStructuredContent(content string, width int) string {
+	out, _ := wrapStructuredContentCtx(context.Background(), content, width)
+	return out
+}
+
+func wrapStructuredContentCtx(ctx context.Context, content string, width int) (string, bool) {
 	if width <= 0 {
-		return content
+		return content, true
+	}
+	if ctxDone(ctx) {
+		return "", false
 	}
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
 	for _, line := range lines {
-		segments := wrapStructuredLine(line, width)
+		if ctxDone(ctx) {
+			return "", false
+		}
+		segments, ok := wrapStructuredLineCtx(ctx, line, width)
+		if !ok {
+			return "", false
+		}
 		wrapped = append(wrapped, segments...)
 	}
-	return strings.Join(wrapped, "\n")
+	return strings.Join(wrapped, "\n"), true
 }
 
 func wrapStructuredLine(line string, width int) []string {
+	segments, _ := wrapStructuredLineCtx(context.Background(), line, width)
+	return segments
+}
+
+func wrapStructuredLineCtx(ctx context.Context, line string, width int) ([]string, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if width <= 0 {
-		return []string{line}
+		return []string{line}, true
 	}
 	prefix, prefixWidth := structuredContinuationPrefix(line, width)
-	return wrapStructuredSegments(line, width, prefix, prefixWidth)
+	return wrapStructuredSegmentsCtx(ctx, line, width, prefix, prefixWidth)
 }
 
 func structuredContinuationPrefix(line string, width int) (string, int) {

@@ -79,6 +79,7 @@ type responsePaneState struct {
 	headersView      headersViewMode
 	headerScroll     map[headersViewMode]int
 	reflow           map[responseReflowKey]responseReflowState
+	reflowCanceled   map[responseReflowKey]responseReflowCancelState
 	sel              respSel
 	cursor           respCursor
 	cursorStore      map[respCursorKey]respCursor
@@ -108,6 +109,7 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 		headersView:      headersViewResponse,
 		headerScroll:     make(map[headersViewMode]int),
 		reflow:           make(map[responseReflowKey]responseReflowState),
+		reflowCanceled:   make(map[responseReflowKey]responseReflowCancelState),
 		cursorStore:      make(map[respCursorKey]respCursor),
 	}
 }
@@ -159,6 +161,9 @@ func (pane *responsePaneState) invalidateCaches() {
 	clearReflowAll(pane)
 	if pane.reflow != nil {
 		pane.reflow = make(map[responseReflowKey]responseReflowState)
+	}
+	if pane.reflowCanceled != nil {
+		pane.reflowCanceled = make(map[responseReflowKey]responseReflowCancelState)
 	}
 	pane.search.invalidate()
 	if pane.tabScroll != nil {
@@ -424,6 +429,24 @@ func (m *Model) queueReflow(
 	return cmd
 }
 
+func (m *Model) applyReflowCanceled(
+	pane *responsePaneState,
+	tab responseTab,
+	width int,
+	height int,
+	snapshotReady bool,
+	snapshotID string,
+) {
+	if pane == nil {
+		return
+	}
+	if responseReflowCanceledText == "" {
+		return
+	}
+	content := centerContent(responseReflowCanceledText, width, height)
+	m.applyPaneContent(pane, tab, content, width, snapshotReady, snapshotID)
+}
+
 func (m *Model) applyPaneContent(
 	pane *responsePaneState,
 	tab responseTab,
@@ -576,6 +599,11 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			return nil
 		}
 
+		if reflowCanceled(pane, reflowKey(cacheKey, mode, pane.headersView), snapshotID) {
+			m.applyReflowCanceled(pane, cacheKey, wrapWidth, height, snapshotReady, snapshotID)
+			return nil
+		}
+
 		cache := pane.cacheForTab(cacheKey, mode, pane.headersView)
 		if cache.valid && cache.width == wrapWidth {
 			m.applyPaneContent(pane, cacheKey, cache.content, wrapWidth, snapshotReady, snapshotID)
@@ -622,6 +650,10 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 	}
 
 	mode := rawViewText
+	if reflowCanceled(pane, reflowKey(cacheKey, mode, pane.headersView), snapshotID) {
+		m.applyReflowCanceled(pane, cacheKey, wrapWidth, height, snapshotReady, snapshotID)
+		return nil
+	}
 	cache := pane.cacheForTab(cacheKey, mode, pane.headersView)
 	if cache.valid && cache.width == wrapWidth {
 		m.applyPaneContent(pane, cacheKey, cache.content, wrapWidth, snapshotReady, snapshotID)
@@ -1005,48 +1037,71 @@ func displayContent(content string) string {
 }
 
 func wrapDiffContent(content string, width int) string {
+	out, _ := wrapDiffContentCtx(context.Background(), content, width)
+	return out
+}
+
+func wrapDiffContentCtx(ctx context.Context, content string, width int) (string, bool) {
 	if width <= 0 {
-		return content
+		return content, true
+	}
+	if ctxDone(ctx) {
+		return "", false
 	}
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
 	for _, line := range lines {
-		segments := wrapDiffLine(line, width)
+		if ctxDone(ctx) {
+			return "", false
+		}
+		segments, ok := wrapDiffLineCtx(ctx, line, width)
+		if !ok {
+			return "", false
+		}
 		wrapped = append(wrapped, segments...)
 	}
-	return strings.Join(wrapped, "\n")
+	return strings.Join(wrapped, "\n"), true
 }
 
-func wrapDiffLine(line string, width int) []string {
+func wrapDiffLineCtx(ctx context.Context, line string, width int) ([]string, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if width <= 0 {
-		return []string{line}
+		return []string{line}, true
 	}
 	if line == "" {
-		return []string{""}
+		return []string{""}, true
 	}
 	if visibleWidth(line) <= width {
-		return []string{line}
+		return []string{line}, true
 	}
 	marker, markerWidth, remainder, ok := splitDiffMarker(line)
 	if !ok {
-		return wrapLineSegments(line, width)
+		return wrapLineSegmentsCtx(ctx, line, width)
 	}
 	if markerWidth >= width {
-		return wrapLineSegments(line, width)
+		return wrapLineSegmentsCtx(ctx, line, width)
 	}
 	segmentWidth := width - markerWidth
 	if segmentWidth <= 0 {
-		return wrapLineSegments(line, width)
+		return wrapLineSegmentsCtx(ctx, line, width)
 	}
-	segments := wrapLineSegments(remainder, segmentWidth)
+	segments, ok := wrapLineSegmentsCtx(ctx, remainder, segmentWidth)
+	if !ok {
+		return nil, false
+	}
 	if len(segments) == 0 {
-		return []string{marker}
+		return []string{marker}, true
 	}
 	result := make([]string, len(segments))
 	for i, seg := range segments {
+		if ctxDone(ctx) {
+			return nil, false
+		}
 		result[i] = marker + seg
 	}
-	return result
+	return result, true
 }
 
 func splitDiffMarker(line string) (marker string, markerWidth int, remainder string, ok bool) {

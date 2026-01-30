@@ -26,6 +26,7 @@ const (
 	responseFormattingBase         = "Formatting response"
 	responseFormattingCanceledText = "Formatting canceled"
 	responseReflowingMessage       = "Reflowing response"
+	responseReflowCanceledText     = "Reflow canceled.\nRun request again to render."
 	defaultResponseViewportWidth   = 80
 )
 

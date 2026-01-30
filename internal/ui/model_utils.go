@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -307,20 +308,6 @@ func makeReadOnlyKeyMap(base textarea.KeyMap) textarea.KeyMap {
 	return read
 }
 
-func wrapToWidth(content string, width int) string {
-	if width <= 0 {
-		return content
-	}
-
-	lines := strings.Split(content, "\n")
-	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
-		segments := wrapLineSegments(line, width)
-		wrapped = append(wrapped, segments...)
-	}
-	return strings.Join(wrapped, "\n")
-}
-
 func trimTrailingNewline(content string) string {
 	if content == "" {
 		return content
@@ -343,16 +330,54 @@ func trimSyntheticNewline(content string, syn bool) string {
 	return trimTrailingNewline(content)
 }
 
+func wrapToWidth(content string, width int) string {
+	out, _ := wrapToWidthCtx(context.Background(), content, width)
+	return out
+}
+
+func wrapToWidthCtx(ctx context.Context, content string, width int) (string, bool) {
+	if width <= 0 {
+		return content, true
+	}
+	if ctxDone(ctx) {
+		return "", false
+	}
+
+	lines := strings.Split(content, "\n")
+	wrapped := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if ctxDone(ctx) {
+			return "", false
+		}
+		segments, ok := wrapLineSegmentsCtx(ctx, line, width)
+		if !ok {
+			return "", false
+		}
+		wrapped = append(wrapped, segments...)
+	}
+	return strings.Join(wrapped, "\n"), true
+}
+
 func wrapContentForTab(tab responseTab, content string, width int) string {
+	out, _ := wrapContentForTabCtx(context.Background(), tab, content, width)
+	return out
+}
+
+func wrapContentForTabCtx(
+	ctx context.Context,
+	tab responseTab,
+	content string,
+	width int,
+) (string, bool) {
 	switch tab {
 	case responseTabRaw:
-		return wrapPreformattedContent(content, width)
+		return wrapPreformattedContentCtx(ctx, content, width)
 	case responseTabDiff:
-		return wrapDiffContent(content, width)
+		return wrapDiffContentCtx(ctx, content, width)
 	case responseTabPretty:
-		return wrapStructuredContent(content, width)
+		return wrapStructuredContentCtx(ctx, content, width)
 	default:
-		return wrapToWidth(content, width)
+		return wrapToWidthCtx(ctx, content, width)
 	}
 }
 
@@ -361,119 +386,191 @@ func wrapContentForTabMap(
 	content string,
 	width int,
 ) (string, []lineSpan, []int) {
+	out, spans, rev, _ := wrapContentForTabMapCtx(context.Background(), tab, content, width)
+	return out, spans, rev
+}
+
+func wrapContentForTabMapCtx(
+	ctx context.Context,
+	tab responseTab,
+	content string,
+	width int,
+) (string, []lineSpan, []int, bool) {
+	if ctxDone(ctx) {
+		return "", nil, nil, false
+	}
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
 	spans := make([]lineSpan, len(lines))
 	rev := make([]int, 0, len(lines))
 
 	for i, line := range lines {
-		segments := wrapLineForTab(tab, line, width)
+		if ctxDone(ctx) {
+			return "", nil, nil, false
+		}
+		segments, ok := wrapLineForTabCtx(ctx, tab, line, width)
+		if !ok {
+			return "", nil, nil, false
+		}
 		if len(segments) == 0 {
 			segments = []string{""}
 		}
 		start := len(wrapped)
 		for _, seg := range segments {
+			if ctxDone(ctx) {
+				return "", nil, nil, false
+			}
 			wrapped = append(wrapped, seg)
 			rev = append(rev, i)
 		}
 		spans[i] = lineSpan{start: start, end: len(wrapped) - 1}
 	}
 
-	return strings.Join(wrapped, "\n"), spans, rev
+	return strings.Join(wrapped, "\n"), spans, rev, true
 }
 
-func wrapLineForTab(tab responseTab, line string, width int) []string {
+func wrapLineForTabCtx(
+	ctx context.Context,
+	tab responseTab,
+	line string,
+	width int,
+) ([]string, bool) {
 	switch tab {
 	case responseTabRaw:
-		return wrapPreformattedLine(line, width)
+		return wrapPreformattedLineCtx(ctx, line, width)
 	case responseTabPretty:
-		return wrapStructuredLine(line, width)
+		return wrapStructuredLineCtx(ctx, line, width)
 	case responseTabDiff:
-		return wrapDiffLine(line, width)
+		return wrapDiffLineCtx(ctx, line, width)
 	default:
-		return wrapLineSegments(line, width)
+		return wrapLineSegmentsCtx(ctx, line, width)
 	}
 }
 
 func wrapCache(tab responseTab, content string, width int) cachedWrap {
+	cache, _ := wrapCacheCtx(context.Background(), tab, content, width)
+	return cache
+}
+
+func wrapCacheCtx(
+	ctx context.Context,
+	tab responseTab,
+	content string,
+	width int,
+) (cachedWrap, bool) {
+	if ctxDone(ctx) {
+		return cachedWrap{}, false
+	}
 	if !respTabSel(tab) {
-		wrapped := wrapContentForTab(tab, content, width)
+		wrapped, ok := wrapContentForTabCtx(ctx, tab, content, width)
+		if !ok {
+			return cachedWrap{}, false
+		}
 		return cachedWrap{
 			width:   width,
 			content: wrapped,
 			valid:   true,
-		}
+		}, true
 	}
-	wrapped, spans, rev := wrapContentForTabMap(tab, content, width)
+	wrapped, spans, rev, ok := wrapContentForTabMapCtx(ctx, tab, content, width)
+	if !ok {
+		return cachedWrap{}, false
+	}
 	return cachedWrap{
 		width:   width,
 		content: wrapped,
 		valid:   true,
 		spans:   spans,
 		rev:     rev,
-	}
+	}, true
 }
 
 func wrapPreformattedContent(content string, width int) string {
+	out, _ := wrapPreformattedContentCtx(context.Background(), content, width)
+	return out
+}
+
+func wrapPreformattedContentCtx(ctx context.Context, content string, width int) (string, bool) {
 	if width <= 0 {
-		return content
+		return content, true
+	}
+	if ctxDone(ctx) {
+		return "", false
 	}
 
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
 	for _, line := range lines {
-		segments := wrapPreformattedLine(line, width)
+		if ctxDone(ctx) {
+			return "", false
+		}
+		segments, ok := wrapPreformattedLineCtx(ctx, line, width)
+		if !ok {
+			return "", false
+		}
 		wrapped = append(wrapped, segments...)
 	}
-	return strings.Join(wrapped, "\n")
+	return strings.Join(wrapped, "\n"), true
 }
 
-func wrapPreformattedLine(line string, width int) []string {
+func wrapPreformattedLineCtx(ctx context.Context, line string, width int) ([]string, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if width <= 0 {
-		return []string{line}
+		return []string{line}, true
 	}
 	if line == "" {
-		return []string{""}
+		return []string{""}, true
 	}
 	if visibleWidth(line) <= width {
-		return []string{line}
+		return []string{line}, true
 	}
 
 	indent := leadingIndent(line)
 	if indent == "" {
-		return wrapLineSegments(line, width)
+		return wrapLineSegmentsCtx(ctx, line, width)
 	}
 
 	indentWidth := visibleWidth(indent)
 	available := width - indentWidth
 	if available <= 0 {
-		return wrapLineSegments(line, width)
+		return wrapLineSegmentsCtx(ctx, line, width)
 	}
 
 	body := line[len(indent):]
 	if body == "" {
-		return []string{indent}
+		return []string{indent}, true
 	}
 
 	segments := make([]string, 0, (len(line)/width)+1)
 	remaining := body
 	for len(remaining) > 0 {
-		segment, rest := splitSegment(remaining, available)
+		if ctxDone(ctx) {
+			return nil, false
+		}
+		segment, rest, ok := splitSegmentCtx(ctx, remaining, available)
+		if !ok {
+			return nil, false
+		}
 		segments = append(segments, indent+segment)
 		if rest == "" || rest == remaining {
 			if rest == "" {
 				break
 			}
-			fallback := wrapLineSegments(rest, width)
+			fallback, ok := wrapLineSegmentsCtx(ctx, rest, width)
+			if !ok {
+				return nil, false
+			}
 			segments = append(segments, fallback...)
 			break
 		}
 		remaining = rest
 	}
 	if len(segments) == 0 {
-		return []string{""}
+		return []string{""}, true
 	}
-	return segments
+	return segments, true
 }
 
 func leadingIndent(line string) string {
@@ -493,19 +590,30 @@ func leadingIndent(line string) string {
 }
 
 func wrapLineSegments(line string, width int) []string {
+	segments, _ := wrapLineSegmentsCtx(context.Background(), line, width)
+	return segments
+}
+
+func wrapLineSegmentsCtx(ctx context.Context, line string, width int) ([]string, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if width <= 0 {
-		return []string{line}
+		return []string{line}, true
 	}
 	if line == "" {
-		return []string{""}
+		return []string{""}, true
 	}
 	if visibleWidth(line) <= width {
-		return []string{line}
+		return []string{line}, true
 	}
 
-	tokens := tokenizeLine(line)
+	tokens, ok := tokenizeLineCtx(ctx, line)
+	if !ok {
+		return nil, false
+	}
 	if len(tokens) == 0 {
-		return []string{""}
+		return []string{""}, true
 	}
 
 	var current strings.Builder
@@ -534,6 +642,9 @@ func wrapLineSegments(line string, width int) []string {
 	}
 
 	for _, tok := range tokens {
+		if ctxDone(ctx) {
+			return nil, false
+		}
 		text := tok.text
 		tokWidth := tok.width
 		if text == "" {
@@ -551,7 +662,10 @@ func wrapLineSegments(line string, width int) []string {
 				if remaining <= 0 {
 					flush()
 				} else {
-					segment, rest := splitSegment(text, remaining)
+					segment, rest, ok := splitSegmentCtx(ctx, text, remaining)
+					if !ok {
+						return nil, false
+					}
 					if segment != "" {
 						current.WriteString(segment)
 						currentWidth += visibleWidth(segment)
@@ -573,7 +687,10 @@ func wrapLineSegments(line string, width int) []string {
 				}
 			}
 			if tokWidth > width {
-				parts := splitLongToken(text, width)
+				parts, ok := splitLongTokenCtx(ctx, text, width)
+				if !ok {
+					return nil, false
+				}
 				if !tok.isSpace {
 					lineHasNonSpace = true
 				}
@@ -610,20 +727,26 @@ func wrapLineSegments(line string, width int) []string {
 	}
 
 	if len(segments) == 0 {
-		return []string{""}
+		return []string{""}, true
 	}
-	return segments
+	return segments, true
 }
 
-func splitSegment(s string, width int) (string, string) {
+func splitSegmentCtx(ctx context.Context, s string, width int) (string, string, bool) {
+	if ctxDone(ctx) {
+		return "", "", false
+	}
 	if width <= 0 || visibleWidth(s) <= width {
-		return s, ""
+		return s, "", true
 	}
 
 	var builder strings.Builder
 	currentWidth := 0
 	index := 0
 	for index < len(s) {
+		if ctxDone(ctx) {
+			return "", "", false
+		}
 		if loc := ansiSequenceRegex.FindStringIndex(s[index:]); loc != nil && loc[0] == 0 {
 			seq := s[index : index+loc[1]]
 			builder.WriteString(seq)
@@ -664,18 +787,27 @@ func splitSegment(s string, width int) (string, string) {
 			rest = rest[size:]
 		}
 	}
-	return segment, rest
+	return segment, rest, true
 }
 
-func splitLongToken(token string, width int) []string {
+func splitLongTokenCtx(ctx context.Context, token string, width int) ([]string, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if width <= 0 {
-		return []string{token}
+		return []string{token}, true
 	}
 
 	remaining := token
 	parts := make([]string, 0, (len(token)/width)+1)
 	for len(remaining) > 0 {
-		segment, rest := splitSegment(remaining, width)
+		if ctxDone(ctx) {
+			return nil, false
+		}
+		segment, rest, ok := splitSegmentCtx(ctx, remaining, width)
+		if !ok {
+			return nil, false
+		}
 		if segment == "" && rest == "" {
 			break
 		}
@@ -687,9 +819,9 @@ func splitLongToken(token string, width int) []string {
 		remaining = rest
 	}
 	if len(parts) == 0 {
-		return []string{""}
+		return []string{""}, true
 	}
-	return parts
+	return parts, true
 }
 
 type textToken struct {
@@ -698,9 +830,12 @@ type textToken struct {
 	isSpace bool
 }
 
-func tokenizeLine(line string) []textToken {
+func tokenizeLineCtx(ctx context.Context, line string) ([]textToken, bool) {
+	if ctxDone(ctx) {
+		return nil, false
+	}
 	if line == "" {
-		return nil
+		return nil, true
 	}
 
 	var tokens []textToken
@@ -725,6 +860,9 @@ func tokenizeLine(line string) []textToken {
 
 	index := 0
 	for index < len(line) {
+		if ctxDone(ctx) {
+			return nil, false
+		}
 		if loc := ansiSequenceRegex.FindStringIndex(line[index:]); loc != nil && loc[0] == 0 {
 			seq := line[index : index+loc[1]]
 			builder.WriteString(seq)
@@ -753,7 +891,7 @@ func tokenizeLine(line string) []textToken {
 	}
 
 	flush()
-	return tokens
+	return tokens, true
 }
 
 func centerContent(content string, width, height int) string {
