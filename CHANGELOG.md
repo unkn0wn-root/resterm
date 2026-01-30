@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.21.1](https://github.com/unkn0wn-root/resterm/compare/v0.20.3...v0.21.1) (2026-01-30)
+
+
+### Features
+
+* rewrite response wrapping logic ([a461e21](https://github.com/unkn0wn-root/resterm/commit/a461e21cab1a6141dba9e831d0f36bcbab2cb851))
+
+
+### Bug Fixes
+
+* preserve ANSI colors across wraps and avoid indent-only lines ([423df16](https://github.com/unkn0wn-root/resterm/commit/423df16db73c01b646f71ad6f775cead30f436fc))
+
 ### [0.20.3](https://github.com/unkn0wn-root/resterm/compare/v0.20.2...v0.20.3) (2026-01-30)
 
 
