@@ -80,6 +80,9 @@ func (m *Model) cancelStatus() string {
 	if m.responseLoading {
 		return "Canceling response formatting..."
 	}
+	if m.hasReflowPending() {
+		return "Canceling response reflow..."
+	}
 	return "Canceling..."
 }
 
@@ -107,7 +110,7 @@ func (m Model) spinnerActive() bool {
 }
 
 func (m *Model) cancelActiveRuns() tea.Cmd {
-	if !m.hasActiveRun() && !m.responseLoading {
+	if !m.hasActiveRun() && !m.responseLoading && !m.hasReflowPending() {
 		return nil
 	}
 	return m.cancelRuns(m.cancelStatus())
@@ -138,8 +141,53 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
+	if cmd := m.cancelResponseReflow(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 
 	return batchCmds(cmds)
+}
+
+func (m *Model) cancelResponseReflow() tea.Cmd {
+	canceled := false
+	for i := range m.responsePanes {
+		pane := &m.responsePanes[i]
+		if len(pane.reflow) == 0 {
+			continue
+		}
+		wasActive := m.reflowActiveForPane(pane)
+		for key, state := range pane.reflow {
+			markReflowCanceled(pane, key, state.snapshotID)
+		}
+		clearReflowAll(pane)
+		canceled = true
+
+		if wasActive {
+			m.showReflowCanceled(pane)
+		}
+	}
+	if !canceled {
+		return nil
+	}
+	m.respSpinStop()
+	if !m.hasActiveRun() && !m.responseLoading && !m.hasReflowPending() {
+		m.setStatusMessage(statusMsg{})
+	}
+	return nil
+}
+
+func (m *Model) showReflowCanceled(pane *responsePaneState) {
+	if pane == nil {
+		return
+	}
+	tab := pane.activeTab
+	if tab == responseTabHistory {
+		return
+	}
+
+	_, ww, h := paneDims(pane, tab)
+	sr, sid := paneSnap(pane)
+	m.applyReflowCanceled(pane, tab, ww, h, sr, sid)
 }
 
 func (m *Model) cancelProfileRun(reason string) tea.Cmd {
