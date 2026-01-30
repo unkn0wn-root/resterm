@@ -146,7 +146,7 @@ func buildHTTPResponseViews(
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
-	return buildHTTPResponseViewsCtx(nil, resp, tests, scriptErr)
+	return buildHTTPResponseViewsCtx(context.Background(), resp, tests, scriptErr)
 }
 
 func buildHTTPResponseViewsCtx(
@@ -287,7 +287,14 @@ func buildBodyViews(
 	viewBody []byte,
 	viewContentType string,
 ) bodyViews {
-	return buildBodyViewsCtx(nil, body, contentType, meta, viewBody, viewContentType)
+	return buildBodyViewsCtx(
+		context.Background(),
+		body,
+		contentType,
+		meta,
+		viewBody,
+		viewContentType,
+	)
 }
 
 func buildBodyViewsCtx(

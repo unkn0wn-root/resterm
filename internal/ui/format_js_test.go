@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 )
@@ -20,9 +21,9 @@ func TestRenderJSONAsJSFormatsEmbeddedObjectStrings(t *testing.T) {
 		t.Fatalf("failed to marshal body: %v", err)
 	}
 
-	got, ok := renderJSONAsJS(body)
+	got, ok := renderJSONAsJSCtx(context.Background(), body)
 	if !ok {
-		t.Fatalf("renderJSONAsJS returned !ok")
+		t.Fatalf("renderJSONAsJSCtx returned !ok")
 	}
 
 	want := `{

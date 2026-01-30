@@ -16,7 +16,7 @@ import (
 )
 
 func prettifyBody(body []byte, contentType string) string {
-	return prettifyBodyCtx(nil, body, contentType)
+	return prettifyBodyCtx(context.Background(), body, contentType)
 }
 
 func prettifyBodyCtx(ctx context.Context, body []byte, contentType string) string {
@@ -62,10 +62,6 @@ func prettifyBodyCtx(ctx context.Context, body []byte, contentType string) strin
 	}
 
 	return source
-}
-
-func renderJSONAsJS(body []byte) (string, bool) {
-	return renderJSONAsJSCtx(nil, body)
 }
 
 func renderJSONAsJSCtx(ctx context.Context, body []byte) (string, bool) {

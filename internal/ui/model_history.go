@@ -1886,7 +1886,11 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 			responseTabHeaders,
 			rawViewText,
 			pane.headersView,
-			wrapCache(responseTabHeaders, content, responseWrapWidth(responseTabHeaders, displayWidth)),
+			wrapCache(
+				responseTabHeaders,
+				content,
+				responseWrapWidth(responseTabHeaders, displayWidth),
+			),
 		)
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
 		pane.wrapCache[responseTabStats] = cachedWrap{}

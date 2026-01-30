@@ -594,7 +594,15 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			}
 
 			delay := reflowDelay(pane, cacheKey, wrapWidth, mode)
-			if cmd := m.queueReflow(pane, req, delay, wrapWidth, height, false, snapshotID); cmd != nil {
+			if cmd := m.queueReflow(
+				pane,
+				req,
+				delay,
+				wrapWidth,
+				height,
+				false,
+				snapshotID,
+			); cmd != nil {
 				return cmd
 			}
 			return nil
@@ -631,7 +639,15 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			headers:    pane.headersView,
 		}
 		delay := reflowDelay(pane, cacheKey, wrapWidth, mode)
-		if cmd := m.queueReflow(pane, req, delay, wrapWidth, height, false, snapshotID); cmd != nil {
+		if cmd := m.queueReflow(
+			pane,
+			req,
+			delay,
+			wrapWidth,
+			height,
+			false,
+			snapshotID,
+		); cmd != nil {
 			return cmd
 		}
 		return nil
