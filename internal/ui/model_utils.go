@@ -461,10 +461,6 @@ func wrapPreformattedContentCtx(ctx context.Context, content string, width int) 
 	return res.S, true
 }
 
-func wrapPreformattedLineCtx(ctx context.Context, line string, width int) ([]string, bool) {
-	return wrap.Line(ctx, line, width, wrap.Pre)
-}
-
 func leadingIndent(line string) string {
 	if line == "" {
 		return ""

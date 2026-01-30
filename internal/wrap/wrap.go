@@ -106,7 +106,6 @@ func Wrap(ctx context.Context, s string, w int, m Mode, mp bool) (Res, bool) {
 		if mp {
 			if n == 0 {
 				rv = append(rv, ln)
-				n = 1
 			}
 			sp = append(sp, Span{S: start, E: len(rv) - 1})
 		}
