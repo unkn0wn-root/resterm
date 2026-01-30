@@ -179,25 +179,7 @@ func wrapStructuredContent(content string, width int) string {
 }
 
 func wrapStructuredContentCtx(ctx context.Context, content string, width int) (string, bool) {
-	if width <= 0 {
-		return content, true
-	}
-	if ctxDone(ctx) {
-		return "", false
-	}
-	lines := strings.Split(content, "\n")
-	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if ctxDone(ctx) {
-			return "", false
-		}
-		segments, ok := wrapStructuredLineCtx(ctx, line, width)
-		if !ok {
-			return "", false
-		}
-		wrapped = append(wrapped, segments...)
-	}
-	return strings.Join(wrapped, "\n"), true
+	return wrapLinesCtx(ctx, content, width, wrapStructuredLineCtx)
 }
 
 func wrapStructuredLine(line string, width int) []string {

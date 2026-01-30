@@ -160,7 +160,6 @@ func (m *Model) cancelResponseReflow() tea.Cmd {
 			markReflowCanceled(pane, key, state.snapshotID)
 		}
 		clearReflowAll(pane)
-		pane.reflow = make(map[responseReflowKey]responseReflowState)
 		canceled = true
 
 		if wasActive {
@@ -186,21 +185,9 @@ func (m *Model) showReflowCanceled(pane *responsePaneState) {
 		return
 	}
 
-	width := pane.viewport.Width
-	if width <= 0 {
-		width = defaultResponseViewportWidth
-	}
-	wrapWidth := responseWrapWidth(tab, width)
-	height := pane.viewport.Height
-
-	snapshotReady := false
-	snapshotID := ""
-	if pane.snapshot != nil {
-		snapshotReady = pane.snapshot.ready
-		snapshotID = pane.snapshot.id
-	}
-
-	m.applyReflowCanceled(pane, tab, wrapWidth, height, snapshotReady, snapshotID)
+	_, ww, h := paneDims(pane, tab)
+	sr, sid := paneSnap(pane)
+	m.applyReflowCanceled(pane, tab, ww, h, sr, sid)
 }
 
 func (m *Model) cancelProfileRun(reason string) tea.Cmd {

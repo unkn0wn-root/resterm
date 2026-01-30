@@ -429,6 +429,26 @@ func (m *Model) queueReflow(
 	return cmd
 }
 
+func paneDims(p *responsePaneState, tab responseTab) (int, int, int) {
+	if p == nil {
+		return 0, 0, 0
+	}
+	w := p.viewport.Width
+	if w <= 0 {
+		w = defaultResponseViewportWidth
+	}
+	ww := responseWrapWidth(tab, w)
+	h := p.viewport.Height
+	return w, ww, h
+}
+
+func paneSnap(p *responsePaneState) (bool, string) {
+	if p == nil || p.snapshot == nil {
+		return false, ""
+	}
+	return p.snapshot.ready, p.snapshot.id
+}
+
 func (m *Model) applyReflowCanceled(
 	pane *responsePaneState,
 	tab responseTab,
@@ -445,6 +465,26 @@ func (m *Model) applyReflowCanceled(
 	}
 	content := centerContent(responseReflowCanceledText, width, height)
 	m.applyPaneContent(pane, tab, content, width, snapshotReady, snapshotID)
+}
+
+type rflCancelCtx struct {
+	tab       responseTab
+	mode      rawViewMode
+	width     int
+	height    int
+	snapReady bool
+	snapID    string
+}
+
+func (m *Model) applyRflCancel(p *responsePaneState, c rflCancelCtx) bool {
+	if p == nil {
+		return false
+	}
+	if !reflowCanceled(p, reflowKey(c.tab, c.mode, p.headersView), c.snapID) {
+		return false
+	}
+	m.applyReflowCanceled(p, c.tab, c.width, c.height, c.snapReady, c.snapID)
+	return true
 }
 
 func (m *Model) applyPaneContent(
@@ -551,40 +591,30 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		return nil
 	}
 
-	width := pane.viewport.Width
-	if width <= 0 {
-		width = defaultResponseViewportWidth
-	}
-	wrapWidth := responseWrapWidth(tab, width)
-	height := pane.viewport.Height
+	w, ww, h := paneDims(pane, tab)
 
 	if tab == responseTabStats {
 		snapshot := pane.snapshot
 		if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
 			snapshot.workflowStats != nil {
-			return m.syncWorkflowStatsPane(pane, width, snapshot)
+			return m.syncWorkflowStatsPane(pane, w, snapshot)
 		}
 	}
 
-	snapshotID := ""
-	snapshotReady := false
-	if pane.snapshot != nil {
-		snapshotReady = pane.snapshot.ready
-		snapshotID = pane.snapshot.id
-	}
+	sr, sid := paneSnap(pane)
 
 	content, cacheKey := m.paneContentForTabDisplay(id, tab)
 	if content == "" {
-		centered := centerContent(noResponseMessage, wrapWidth, height)
-		cache := wrapCache(cacheKey, centered, wrapWidth)
+		centered := centerContent(noResponseMessage, ww, h)
+		cache := wrapCache(cacheKey, centered, ww)
 		pane.setCacheForTab(cacheKey, rawViewText, pane.headersView, cache)
 		m.applyPaneContent(
 			pane,
 			cacheKey,
 			cache.content,
-			wrapWidth,
-			snapshotReady,
-			snapshotID,
+			ww,
+			sr,
+			sid,
 		)
 		return nil
 	}
@@ -594,19 +624,25 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		mode := snap.rawMode
 
 		if snap.rawLoading && (mode == rawViewHex || mode == rawViewBase64) {
-			reflowing := centerContent(m.responseReflowMessage(), wrapWidth, height)
-			m.applyPaneContent(pane, cacheKey, reflowing, wrapWidth, snapshotReady, snapshotID)
+			reflowing := centerContent(m.responseReflowMessage(), ww, h)
+			m.applyPaneContent(pane, cacheKey, reflowing, ww, sr, sid)
 			return nil
 		}
 
-		if reflowCanceled(pane, reflowKey(cacheKey, mode, pane.headersView), snapshotID) {
-			m.applyReflowCanceled(pane, cacheKey, wrapWidth, height, snapshotReady, snapshotID)
+		if m.applyRflCancel(pane, rflCancelCtx{
+			tab:       cacheKey,
+			mode:      mode,
+			width:     ww,
+			height:    h,
+			snapReady: sr,
+			snapID:    sid,
+		}) {
 			return nil
 		}
 
 		cache := pane.cacheForTab(cacheKey, mode, pane.headersView)
-		if cache.valid && cache.width == wrapWidth {
-			m.applyPaneContent(pane, cacheKey, cache.content, wrapWidth, snapshotReady, snapshotID)
+		if cache.valid && cache.width == ww {
+			m.applyPaneContent(pane, cacheKey, cache.content, ww, sr, sid)
 			return nil
 		}
 
@@ -614,49 +650,55 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			req := responseReflowReq{
 				paneID:     id,
 				tab:        cacheKey,
-				width:      wrapWidth,
+				width:      ww,
 				content:    content,
-				snapshotID: snapshotID,
+				snapshotID: sid,
 				mode:       mode,
 				headers:    pane.headersView,
 			}
 
-			delay := reflowDelay(pane, cacheKey, wrapWidth, mode)
+			delay := reflowDelay(pane, cacheKey, ww, mode)
 			if cmd := m.queueReflow(
 				pane,
 				req,
 				delay,
-				wrapWidth,
-				height,
+				ww,
+				h,
 				false,
-				snapshotID,
+				sid,
 			); cmd != nil {
 				return cmd
 			}
 			return nil
 		}
 
-		cache = wrapCache(cacheKey, content, wrapWidth)
+		cache = wrapCache(cacheKey, content, ww)
 		pane.setCacheForTab(cacheKey, mode, pane.headersView, cache)
 		m.applyPaneContent(
 			pane,
 			cacheKey,
 			cache.content,
-			wrapWidth,
-			snapshotReady,
-			snapshotID,
+			ww,
+			sr,
+			sid,
 		)
 		return nil
 	}
 
 	mode := rawViewText
-	if reflowCanceled(pane, reflowKey(cacheKey, mode, pane.headersView), snapshotID) {
-		m.applyReflowCanceled(pane, cacheKey, wrapWidth, height, snapshotReady, snapshotID)
+	if m.applyRflCancel(pane, rflCancelCtx{
+		tab:       cacheKey,
+		mode:      mode,
+		width:     ww,
+		height:    h,
+		snapReady: sr,
+		snapID:    sid,
+	}) {
 		return nil
 	}
 	cache := pane.cacheForTab(cacheKey, mode, pane.headersView)
-	if cache.valid && cache.width == wrapWidth {
-		m.applyPaneContent(pane, cacheKey, cache.content, wrapWidth, snapshotReady, snapshotID)
+	if cache.valid && cache.width == ww {
+		m.applyPaneContent(pane, cacheKey, cache.content, ww, sr, sid)
 		return nil
 	}
 
@@ -664,36 +706,36 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		req := responseReflowReq{
 			paneID:     id,
 			tab:        cacheKey,
-			width:      wrapWidth,
+			width:      ww,
 			content:    content,
-			snapshotID: snapshotID,
+			snapshotID: sid,
 			mode:       mode,
 			headers:    pane.headersView,
 		}
-		delay := reflowDelay(pane, cacheKey, wrapWidth, mode)
+		delay := reflowDelay(pane, cacheKey, ww, mode)
 		if cmd := m.queueReflow(
 			pane,
 			req,
 			delay,
-			wrapWidth,
-			height,
+			ww,
+			h,
 			false,
-			snapshotID,
+			sid,
 		); cmd != nil {
 			return cmd
 		}
 		return nil
 	}
 
-	cache = wrapCache(cacheKey, content, wrapWidth)
+	cache = wrapCache(cacheKey, content, ww)
 	pane.setCacheForTab(cacheKey, mode, pane.headersView, cache)
 	m.applyPaneContent(
 		pane,
 		cacheKey,
 		cache.content,
-		wrapWidth,
-		snapshotReady,
-		snapshotID,
+		ww,
+		sr,
+		sid,
 	)
 	return nil
 }
@@ -1042,25 +1084,7 @@ func wrapDiffContent(content string, width int) string {
 }
 
 func wrapDiffContentCtx(ctx context.Context, content string, width int) (string, bool) {
-	if width <= 0 {
-		return content, true
-	}
-	if ctxDone(ctx) {
-		return "", false
-	}
-	lines := strings.Split(content, "\n")
-	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if ctxDone(ctx) {
-			return "", false
-		}
-		segments, ok := wrapDiffLineCtx(ctx, line, width)
-		if !ok {
-			return "", false
-		}
-		wrapped = append(wrapped, segments...)
-	}
-	return strings.Join(wrapped, "\n"), true
+	return wrapLinesCtx(ctx, content, width, wrapDiffLineCtx)
 }
 
 func wrapDiffLineCtx(ctx context.Context, line string, width int) ([]string, bool) {

@@ -330,32 +330,37 @@ func trimSyntheticNewline(content string, syn bool) string {
 	return trimTrailingNewline(content)
 }
 
-func wrapToWidth(content string, width int) string {
-	out, _ := wrapToWidthCtx(context.Background(), content, width)
-	return out
-}
+type wrapLineFn func(context.Context, string, int) ([]string, bool)
 
-func wrapToWidthCtx(ctx context.Context, content string, width int) (string, bool) {
+func wrapLinesCtx(ctx context.Context, content string, width int, fn wrapLineFn) (string, bool) {
 	if width <= 0 {
 		return content, true
 	}
 	if ctxDone(ctx) {
 		return "", false
 	}
-
 	lines := strings.Split(content, "\n")
 	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
+	for _, ln := range lines {
 		if ctxDone(ctx) {
 			return "", false
 		}
-		segments, ok := wrapLineSegmentsCtx(ctx, line, width)
+		segs, ok := fn(ctx, ln, width)
 		if !ok {
 			return "", false
 		}
-		wrapped = append(wrapped, segments...)
+		wrapped = append(wrapped, segs...)
 	}
 	return strings.Join(wrapped, "\n"), true
+}
+
+func wrapToWidth(content string, width int) string {
+	out, _ := wrapToWidthCtx(context.Background(), content, width)
+	return out
+}
+
+func wrapToWidthCtx(ctx context.Context, content string, width int) (string, bool) {
+	return wrapLinesCtx(ctx, content, width, wrapLineSegmentsCtx)
 }
 
 func wrapContentForTab(tab responseTab, content string, width int) string {
@@ -491,26 +496,7 @@ func wrapPreformattedContent(content string, width int) string {
 }
 
 func wrapPreformattedContentCtx(ctx context.Context, content string, width int) (string, bool) {
-	if width <= 0 {
-		return content, true
-	}
-	if ctxDone(ctx) {
-		return "", false
-	}
-
-	lines := strings.Split(content, "\n")
-	wrapped := make([]string, 0, len(lines))
-	for _, line := range lines {
-		if ctxDone(ctx) {
-			return "", false
-		}
-		segments, ok := wrapPreformattedLineCtx(ctx, line, width)
-		if !ok {
-			return "", false
-		}
-		wrapped = append(wrapped, segments...)
-	}
-	return strings.Join(wrapped, "\n"), true
+	return wrapLinesCtx(ctx, content, width, wrapPreformattedLineCtx)
 }
 
 func wrapPreformattedLineCtx(ctx context.Context, line string, width int) ([]string, bool) {
