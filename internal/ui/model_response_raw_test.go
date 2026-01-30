@@ -190,7 +190,9 @@ func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
 		t.Fatalf("expected async reflow command for heavy raw content")
 	}
 	pane := model.pane(responsePanePrimary)
-	if pane.reflow.token == "" || pane.reflow.tab != responseTabRaw {
+	key := reflowKey(responseTabRaw, rawViewHex, 0)
+	state, ok := pane.reflow[key]
+	if !ok || state.token == "" || state.tab != responseTabRaw {
 		t.Fatalf("expected reflow state to be set for raw tab, got %+v", pane.reflow)
 	}
 	view := pane.viewport.View()
@@ -199,8 +201,8 @@ func TestRawAsyncReflowShowsPlaceholder(t *testing.T) {
 	}
 }
 
-func TestAsyncReflowScopedToRawTab(t *testing.T) {
-	heavy := strings.Repeat("A", responseReflowLimit+1)
+func TestAsyncReflowAllowedForPrettyTab(t *testing.T) {
+	heavy := strings.Repeat("A", responseWrapAsyncLimit+1)
 	snap := &responseSnapshot{
 		pretty:  withTrailingNewline(heavy),
 		raw:     withTrailingNewline("raw"),
@@ -210,20 +212,45 @@ func TestAsyncReflowScopedToRawTab(t *testing.T) {
 	model := newModelWithResponseTab(responseTabPretty, snap)
 
 	cmd := model.syncResponsePanes()
-	if cmd != nil {
-		t.Fatalf("expected no async reflow for non-raw tab, got command")
+	if cmd == nil {
+		t.Fatalf("expected async reflow for pretty tab")
 	}
 	pane := model.pane(responsePanePrimary)
-	if pane.reflow.token != "" {
-		t.Fatalf("expected no reflow state for non-raw tab, got %+v", pane.reflow)
+	key := reflowKey(responseTabPretty, 0, 0)
+	state, ok := pane.reflow[key]
+	if !ok || state.token == "" || state.tab != responseTabPretty {
+		t.Fatalf("expected reflow state for pretty tab, got %+v", pane.reflow)
 	}
 	view := pane.viewport.View()
-	if strings.Contains(view, responseReflowingMessage) {
-		t.Fatalf("did not expect reflow placeholder in non-raw tab view, got %q", view)
+	if !strings.Contains(view, responseReflowingMessage) {
+		t.Fatalf("expected reflow placeholder in pretty tab view, got %q", view)
 	}
 }
 
-func TestRawAsyncReflowSkipsTextMode(t *testing.T) {
+func TestAsyncWrapAllowlist(t *testing.T) {
+	cases := []struct {
+		tab  responseTab
+		want bool
+	}{
+		{responseTabPretty, true},
+		{responseTabHeaders, false},
+		{responseTabStats, true},
+		{responseTabTimeline, true},
+		{responseTabCompare, true},
+		{responseTabDiff, true},
+		{responseTabRaw, true},
+		{responseTabStream, false},
+		{responseTabHistory, false},
+	}
+
+	for _, tc := range cases {
+		if got := tabAllowsAsyncWrap(tc.tab); got != tc.want {
+			t.Fatalf("tabAllowsAsyncWrap(%v)=%v, want %v", tc.tab, got, tc.want)
+		}
+	}
+}
+
+func TestRawAsyncReflowForTextMode(t *testing.T) {
 	heavy := strings.Repeat("A", responseReflowLimit+1)
 	snap := &responseSnapshot{
 		rawSummary: "Status: 200 OK",
@@ -235,16 +262,18 @@ func TestRawAsyncReflowSkipsTextMode(t *testing.T) {
 	model := newModelWithResponseTab(responseTabRaw, snap)
 
 	cmd := model.syncResponsePanes()
-	if cmd != nil {
-		t.Fatalf("expected no async reflow command for text raw, got %v", cmd)
+	if cmd == nil {
+		t.Fatalf("expected async reflow command for text raw")
 	}
 	pane := model.pane(responsePanePrimary)
-	if pane.reflow.token != "" {
-		t.Fatalf("expected no reflow state for text raw, got %+v", pane.reflow)
+	key := reflowKey(responseTabRaw, rawViewText, 0)
+	state, ok := pane.reflow[key]
+	if !ok || state.token == "" || state.tab != responseTabRaw {
+		t.Fatalf("expected reflow state for text raw, got %+v", pane.reflow)
 	}
 	view := pane.viewport.View()
-	if strings.Contains(view, responseReflowingMessage) {
-		t.Fatalf("did not expect reflow placeholder for text raw, got %q", view)
+	if !strings.Contains(view, responseReflowingMessage) {
+		t.Fatalf("expected reflow placeholder for text raw, got %q", view)
 	}
 }
 

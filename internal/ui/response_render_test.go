@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -23,7 +24,8 @@ func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
 		EffectiveURL: "https://example.com/items",
 	}
 
-	cmd := renderHTTPResponseCmd("token", resp, nil, nil, 12)
+	model := New(Config{})
+	cmd := model.respFmtCmd(context.Background(), "token", resp, nil, nil, 12)
 	if cmd == nil {
 		t.Fatalf("expected command")
 	}

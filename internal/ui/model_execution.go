@@ -77,6 +77,9 @@ func (m *Model) cancelStatus() string {
 	if m.sending {
 		return "Canceling in-progress request..."
 	}
+	if m.responseLoading {
+		return "Canceling response formatting..."
+	}
 	return "Canceling..."
 }
 
@@ -84,8 +87,27 @@ func (m *Model) hasActiveRun() bool {
 	return m.sending || m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil
 }
 
+func (m Model) hasReflowPending() bool {
+	for i := range m.responsePanes {
+		pane := &m.responsePanes[i]
+		if pane.reflow == nil {
+			continue
+		}
+		for _, state := range pane.reflow {
+			if reflowStateLive(pane, state) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (m Model) spinnerActive() bool {
+	return m.sending || m.responseLoading || m.hasReflowPending()
+}
+
 func (m *Model) cancelActiveRuns() tea.Cmd {
-	if !m.hasActiveRun() {
+	if !m.hasActiveRun() && !m.responseLoading {
 		return nil
 	}
 	return m.cancelRuns(m.cancelStatus())
@@ -111,6 +133,11 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 		cmds = append(cmds, cmd)
 	}
 	m.cancelInFlightSend(status)
+	if m.responseLoading {
+		if cmd := m.cancelResponseFormatting(""); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	}
 
 	return batchCmds(cmds)
 }
@@ -891,7 +918,7 @@ func (m *Model) startSending() tea.Cmd {
 
 func (m *Model) stopSending() {
 	m.sending = false
-	m.stopTabSpin()
+	m.stopTabSpinIfIdle()
 }
 
 func (m *Model) stopStatusPulse() {
@@ -932,8 +959,15 @@ func (m *Model) stopTabSpin() {
 	m.tabSpinIdx = 0
 }
 
+func (m *Model) stopTabSpinIfIdle() {
+	if m.spinnerActive() {
+		return
+	}
+	m.stopTabSpin()
+}
+
 func (m *Model) scheduleTabSpin() tea.Cmd {
-	if !m.tabSpinOn || !m.sending || len(tabSpinFrames) == 0 {
+	if !m.tabSpinOn || !m.spinnerActive() || len(tabSpinFrames) == 0 {
 		return nil
 	}
 	seq := m.tabSpinSeq
@@ -943,7 +977,7 @@ func (m *Model) scheduleTabSpin() tea.Cmd {
 }
 
 func (m *Model) startTabSpin() tea.Cmd {
-	if m.tabSpinOn || !m.sending || len(tabSpinFrames) == 0 {
+	if m.tabSpinOn || !m.spinnerActive() || len(tabSpinFrames) == 0 {
 		return nil
 	}
 	m.tabSpinOn = true
@@ -956,7 +990,7 @@ func (m *Model) handleTabSpin(msg tabSpinMsg) tea.Cmd {
 	if msg.seq != m.tabSpinSeq {
 		return nil
 	}
-	if !m.tabSpinOn || !m.sending || len(tabSpinFrames) == 0 {
+	if !m.tabSpinOn || !m.spinnerActive() || len(tabSpinFrames) == 0 {
 		m.stopTabSpin()
 		return nil
 	}

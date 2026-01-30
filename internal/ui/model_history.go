@@ -282,9 +282,7 @@ func (m *Model) consumeHTTPResponse(
 	}
 
 	if resp == nil {
-		m.responseLoading = false
-		m.responseLoadingFrame = 0
-		m.responseRenderToken = ""
+		m.abortResponseFormatting()
 		m.responseLatest = nil
 		m.responsePending = nil
 		target := m.responseTargetPane()
@@ -309,6 +307,8 @@ func (m *Model) consumeHTTPResponse(
 		m.setLivePane(target)
 		return nil
 	}
+
+	m.abortResponseFormatting()
 
 	failureCount := 0
 	for _, result := range tests {
@@ -416,16 +416,76 @@ func (m *Model) consumeHTTPResponse(
 		primaryWidth = defaultResponseViewportWidth
 	}
 
-	cmds := []tea.Cmd{renderHTTPResponseCmd(token, resp, tests, scriptErr, primaryWidth)}
-	if tick := m.scheduleResponseLoadingTick(); tick != nil {
-		cmds = append(cmds, tick)
-	}
-	return tea.Batch(cmds...)
+	formatCtx, cancel := context.WithCancel(context.Background())
+	m.responseRenderCancel = cancel
+
+	return m.respCmd(m.respFmtCmd(formatCtx, token, resp, tests, scriptErr, primaryWidth))
 }
 
 func (m *Model) responseLoadingMessage() string {
-	dots := (m.responseLoadingFrame % 3) + 1
-	return responseFormattingBase + strings.Repeat(".", dots)
+	spin := m.tabSpinner()
+	if spin == "" {
+		return responseFormattingBase
+	}
+	return responseFormattingBase + " " + spin
+}
+
+func (m *Model) responseReflowMessage() string {
+	spin := m.tabSpinner()
+	if spin == "" {
+		return responseReflowingMessage
+	}
+	return responseReflowingMessage + " " + spin
+}
+
+func (m *Model) abortResponseFormatting() {
+	if m.responseRenderCancel != nil {
+		m.responseRenderCancel()
+		m.responseRenderCancel = nil
+	}
+	if m.responseRenderToken != "" && m.responseTokens != nil {
+		delete(m.responseTokens, m.responseRenderToken)
+	}
+	m.responseRenderToken = ""
+	m.responseLoading = false
+	m.responseLoadingFrame = 0
+	m.respSpinStop()
+}
+
+func (m *Model) cancelResponseFormatting(reason string) tea.Cmd {
+	pending := m.responsePending
+	previous := m.responsePrevious
+	m.abortResponseFormatting()
+	m.responsePending = nil
+
+	if pending != nil && !pending.ready {
+		switch {
+		case previous != nil && previous.ready:
+			for _, id := range m.visiblePaneIDs() {
+				pane := m.pane(id)
+				if pane == nil || pane.snapshot != pending {
+					continue
+				}
+				pane.snapshot = previous
+				pane.invalidateCaches()
+			}
+			m.responseLatest = previous
+		default:
+			canceled := responseFormattingCanceledText
+			pending.pretty = canceled
+			pending.raw = canceled
+			pending.rawSummary = canceled
+			pending.headers = canceled
+			pending.requestHeaders = canceled
+			pending.ready = true
+			m.responseLatest = pending
+		}
+	}
+
+	if strings.TrimSpace(reason) != "" {
+		m.setStatusMessage(statusMsg{text: reason, level: statusInfo})
+	}
+	return m.syncResponsePanes()
 }
 
 func (m *Model) scheduleResponseLoadingTick() tea.Cmd {
@@ -478,7 +538,9 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 	m.responseRenderToken = ""
 	m.responseLoading = false
 	m.responseLoadingFrame = 0
+	m.responseRenderCancel = nil
 	m.responseLatest = snapshot
+	m.respSpinStop()
 
 	for _, id := range m.visiblePaneIDs() {
 		pane := m.pane(id)
@@ -498,26 +560,38 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 		if msg.width > 0 && pane.viewport.Width == msg.width {
 			prettyWidth := responseWrapWidth(responseTabPretty, msg.width)
 			prettyBase := displayContent(msg.pretty)
-			pane.wrapCache[responseTabPretty] = wrapCache(
-				responseTabPretty,
-				prettyBase,
-				prettyWidth,
-			)
+			if shouldInlineWrap(responseTabPretty, prettyBase) {
+				pane.setCacheForTab(
+					responseTabPretty,
+					rawViewText,
+					pane.headersView,
+					wrapCache(responseTabPretty, prettyBase, prettyWidth),
+				)
+			}
 			rawWidth := responseWrapWidth(responseTabRaw, msg.width)
 			rawBase := displayContent(snapshot.raw)
-			pane.ensureRawWrapCache()
-			pane.rawWrapCache[snapshot.rawMode] = wrapCache(responseTabRaw, rawBase, rawWidth)
+			if shouldInlineWrap(responseTabRaw, rawBase) {
+				pane.setCacheForTab(
+					responseTabRaw,
+					snapshot.rawMode,
+					pane.headersView,
+					wrapCache(responseTabRaw, rawBase, rawWidth),
+				)
+			}
 
 			headersWidth := responseWrapWidth(responseTabHeaders, msg.width)
 			headersBase := displayContent(msg.headers)
 			if pane.headersView == headersViewRequest {
 				headersBase = displayContent(msg.requestHeaders)
 			}
-			pane.wrapCache[responseTabHeaders] = wrapCache(
-				responseTabHeaders,
-				headersBase,
-				headersWidth,
-			)
+			if shouldInlineWrap(responseTabHeaders, headersBase) {
+				pane.setCacheForTab(
+					responseTabHeaders,
+					rawViewText,
+					pane.headersView,
+					wrapCache(responseTabHeaders, headersBase, headersWidth),
+				)
+			}
 		}
 		if strings.TrimSpace(snapshot.stats) != "" {
 			pane.wrapCache[responseTabStats] = cachedWrap{}
@@ -1801,17 +1875,22 @@ func (m *Model) applyPreview(preview string, statusText string) tea.Cmd {
 			content,
 			responseWrapWidth(responseTabPretty, displayWidth),
 		)
-		pane.wrapCache[responseTabPretty] = prettyCache
-		pane.ensureRawWrapCache()
-		pane.rawWrapCache[snapshot.rawMode] = wrapCache(
+		pane.setCacheForTab(responseTabPretty, rawViewText, pane.headersView, prettyCache)
+		pane.setCacheForTab(
 			responseTabRaw,
-			content,
-			responseWrapWidth(responseTabRaw, displayWidth),
+			snapshot.rawMode,
+			pane.headersView,
+			wrapCache(responseTabRaw, content, responseWrapWidth(responseTabRaw, displayWidth)),
 		)
-		pane.wrapCache[responseTabHeaders] = wrapCache(
+		pane.setCacheForTab(
 			responseTabHeaders,
-			content,
-			responseWrapWidth(responseTabHeaders, displayWidth),
+			rawViewText,
+			pane.headersView,
+			wrapCache(
+				responseTabHeaders,
+				content,
+				responseWrapWidth(responseTabHeaders, displayWidth),
+			),
 		)
 		pane.wrapCache[responseTabDiff] = cachedWrap{}
 		pane.wrapCache[responseTabStats] = cachedWrap{}

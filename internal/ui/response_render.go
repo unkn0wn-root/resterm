@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
@@ -23,9 +23,10 @@ import (
 )
 
 const (
-	responseFormattingBase       = "Formatting response"
-	responseReflowingMessage     = "Reflowing response..."
-	defaultResponseViewportWidth = 80
+	responseFormattingBase         = "Formatting response"
+	responseFormattingCanceledText = "Formatting canceled"
+	responseReflowingMessage       = "Reflowing response"
+	defaultResponseViewportWidth   = 80
 )
 
 const (
@@ -73,62 +74,6 @@ var responseRenderSeq uint64
 func nextResponseRenderToken() string {
 	id := atomic.AddUint64(&responseRenderSeq, 1)
 	return fmt.Sprintf("render-%d", id)
-}
-
-func renderHTTPResponseCmd(
-	token string,
-	resp *httpclient.Response,
-	tests []scripts.TestResult,
-	scriptErr error,
-	width int,
-) tea.Cmd {
-	if resp == nil {
-		return nil
-	}
-
-	respCopy := cloneHTTPResponse(resp)
-	testsCopy := append([]scripts.TestResult(nil), tests...)
-
-	if width <= 0 {
-		width = defaultResponseViewportWidth
-	}
-
-	targetWidth := width
-	headersMap := cloneHeaders(respCopy.Headers)
-	effectiveURL := strings.TrimSpace(respCopy.EffectiveURL)
-
-	return func() tea.Msg {
-		views := buildHTTPResponseViews(respCopy, testsCopy, scriptErr)
-		pretty := views.pretty
-		raw := views.raw
-		headers := views.headers
-		rawSummary := views.rawSummary
-		meta := views.meta
-		ct := views.contentType
-		rawText := views.rawText
-		rawHex := views.rawHex
-		rawBase64 := views.rawBase64
-		rawMode := views.rawMode
-		requestHeaders := buildHTTPRequestHeadersView(respCopy)
-		return responseRenderedMsg{
-			token:          token,
-			pretty:         pretty,
-			raw:            raw,
-			rawSummary:     rawSummary,
-			headers:        headers,
-			requestHeaders: requestHeaders,
-			width:          targetWidth,
-			body:           append([]byte(nil), respCopy.Body...),
-			meta:           meta,
-			contentType:    ct,
-			rawText:        rawText,
-			rawHex:         rawHex,
-			rawBase64:      rawBase64,
-			rawMode:        rawMode,
-			headersMap:     headersMap,
-			effectiveURL:   effectiveURL,
-		}
-	}
 }
 
 func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
@@ -201,6 +146,15 @@ func buildHTTPResponseViews(
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
+	return buildHTTPResponseViewsCtx(context.Background(), resp, tests, scriptErr)
+}
+
+func buildHTTPResponseViewsCtx(
+	ctx context.Context,
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+) responseViews {
 	if resp == nil {
 		return responseViews{
 			pretty:     noResponseMessage,
@@ -221,7 +175,7 @@ func buildHTTPResponseViews(
 		contentType = resp.Headers.Get("Content-Type")
 	}
 	meta := binaryview.Analyze(resp.Body, contentType)
-	bv := buildBodyViews(resp.Body, contentType, &meta, nil, "")
+	bv := buildBodyViewsCtx(ctx, resp.Body, contentType, &meta, nil, "")
 
 	headersSectionColored := ""
 	if coloredHeaders != "" {
@@ -333,6 +287,24 @@ func buildBodyViews(
 	viewBody []byte,
 	viewContentType string,
 ) bodyViews {
+	return buildBodyViewsCtx(
+		context.Background(),
+		body,
+		contentType,
+		meta,
+		viewBody,
+		viewContentType,
+	)
+}
+
+func buildBodyViewsCtx(
+	ctx context.Context,
+	body []byte,
+	contentType string,
+	meta *binaryview.Meta,
+	viewBody []byte,
+	viewContentType string,
+) bodyViews {
 	var detected binaryview.Meta
 	if meta == nil {
 		detected = binaryview.Analyze(body, contentType)
@@ -393,7 +365,7 @@ func buildBodyViews(
 			rawMode = rawViewHex
 		}
 	} else {
-		prettyBody = trimResponseBody(prettifyBody(decoded, viewContentType))
+		prettyBody = trimResponseBody(prettifyBodyCtx(ctx, decoded, viewContentType))
 	}
 	rawMode = clampRawViewMode(localMeta, sz, rawMode)
 	if rawMode == rawViewHex && rawHex == "" {
