@@ -1084,7 +1084,37 @@ func wrapDiffContent(content string, width int) string {
 }
 
 func wrapDiffContentCtx(ctx context.Context, content string, width int) (string, bool) {
-	return wrapLinesCtx(ctx, content, width, wrapDiffLineCtx)
+	if width <= 0 {
+		return content, true
+	}
+	if ctxDone(ctx) {
+		return "", false
+	}
+	var out strings.Builder
+	out.Grow(len(content) + len(content)/8)
+
+	b := []byte(content)
+	ls := 0
+	first := true
+	for i := 0; i <= len(b); i++ {
+		if i != len(b) && b[i] != '\n' {
+			continue
+		}
+		line := string(b[ls:i])
+		ls = i + 1
+		segs, ok := wrapDiffLineCtx(ctx, line, width)
+		if !ok {
+			return "", false
+		}
+		for _, seg := range segs {
+			if !first {
+				out.WriteByte('\n')
+			}
+			first = false
+			out.WriteString(seg)
+		}
+	}
+	return out.String(), true
 }
 
 func wrapDiffLineCtx(ctx context.Context, line string, width int) ([]string, bool) {
