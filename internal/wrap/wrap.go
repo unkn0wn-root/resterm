@@ -757,13 +757,12 @@ func sgrFlags(b []byte) (bool, bool) {
 			i++
 			continue
 		}
-		if p == 0 {
-			reset = true
-		} else if p == -1 {
-			other = true
-		} else {
-			other = true
-		}
+			switch p {
+			case 0:
+				reset = true
+			default:
+				other = true
+			}
 		i++
 	}
 	return reset, other

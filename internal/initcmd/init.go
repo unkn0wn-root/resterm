@@ -65,7 +65,9 @@ func Run(opt Opt) error {
 		if err != nil {
 			return err
 		}
-		report(opt.Out, act, f.Path, opt.DryRun)
+		if err := report(opt.Out, act, f.Path, opt.DryRun); err != nil {
+			return err
+		}
 	}
 
 	if tmpl.AddGitignore && !opt.NoGitignore {
@@ -73,7 +75,9 @@ func Run(opt Opt) error {
 		if err != nil {
 			return err
 		}
-		report(opt.Out, act, gitignoreFile, opt.DryRun)
+		if err := report(opt.Out, act, gitignoreFile, opt.DryRun); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -107,7 +111,9 @@ func listTemplates(w io.Writer) error {
 		}
 	}
 	for _, t := range tpls {
-		fmt.Fprintf(w, "%-*s  %s\n", width, t.Name, t.Description)
+		if _, err := fmt.Fprintf(w, "%-*s  %s\n", width, t.Name, t.Description); err != nil {
+			return fmt.Errorf("init: list templates: %w", err)
+		}
 	}
 	return nil
 }
@@ -304,13 +310,16 @@ func appendGitignore(data []byte, add string) []byte {
 	return append(data, []byte(add)...)
 }
 
-func report(w io.Writer, act, path string, dry bool) {
+func report(w io.Writer, act, path string, dry bool) error {
 	if w == nil || act == "" {
-		return
+		return nil
 	}
 	prefix := ""
 	if dry {
 		prefix = "dry-run: "
 	}
-	fmt.Fprintf(w, "%s%s %s\n", prefix, act, path)
+	if _, err := fmt.Fprintf(w, "%s%s %s\n", prefix, act, path); err != nil {
+		return fmt.Errorf("init: report %s %s: %w", act, path, err)
+	}
+	return nil
 }
