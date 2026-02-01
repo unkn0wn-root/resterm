@@ -46,3 +46,28 @@ func TestLoadEnvironmentIgnoresDotEnvDiscovery(t *testing.T) {
 		t.Fatalf("resolved path = %q, want empty", resolved)
 	}
 }
+
+func TestHandleInitSubcommandAmbiguousFile(t *testing.T) {
+	dir := t.TempDir()
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(cwd)
+	})
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "init"), []byte("data"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	handled, err := handleInitSubcommand([]string{"init"})
+	if !handled {
+		t.Fatalf("expected init to be handled")
+	}
+	if err == nil {
+		t.Fatalf("expected ambiguity error")
+	}
+}
