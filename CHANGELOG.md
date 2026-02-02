@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.21.2](https://github.com/unkn0wn-root/resterm/compare/v0.21.1...v0.21.2) (2026-02-02)
+
+
+### Features
+
+* add brew detect to resterm update ([2090caf](https://github.com/unkn0wn-root/resterm/commit/2090cafcb2b652de0107043d7ca53ff58aa99ed6))
+* add resterm init cmd ([7388603](https://github.com/unkn0wn-root/resterm/commit/73886035c62aeaa37ee68f4f2898b775c289c51f))
+
+
+### Bug Fixes
+
+* golci ([10e9440](https://github.com/unkn0wn-root/resterm/commit/10e9440a4a93a74df816289886b8d44b3268381a))
+* resterm placeholder on startup ([9970a9d](https://github.com/unkn0wn-root/resterm/commit/9970a9d27e9a3a0ca34c1a28cb2d6b9b25780635))
+
 ### [0.21.1](https://github.com/unkn0wn-root/resterm/compare/v0.20.3...v0.21.1) (2026-01-30)
 
 
