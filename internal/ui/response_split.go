@@ -605,8 +605,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 
 	content, cacheKey := m.paneContentForTabDisplay(id, tab)
 	if content == "" {
-		centered := centerContent(noResponseMessage, ww, h)
-		cache := wrapCache(cacheKey, centered, ww)
+		cache := logoPlaceholderCache(ww, h)
 		pane.setCacheForTab(cacheKey, rawViewText, pane.headersView, cache)
 		m.applyPaneContent(
 			pane,
@@ -1323,8 +1322,7 @@ func (m *Model) togglePaneFollowLatest(id responsePaneID) tea.Cmd {
 		if width <= 0 {
 			width = defaultResponseViewportWidth
 		}
-		centered := centerContent(noResponseMessage, width, pane.viewport.Height)
-		pane.viewport.SetContent(wrapToWidth(centered, width))
+		pane.viewport.SetContent(logoPlaceholder(width, pane.viewport.Height))
 	} else if !pane.snapshot.ready {
 		pane.viewport.SetContent(m.responseLoadingMessage())
 	}

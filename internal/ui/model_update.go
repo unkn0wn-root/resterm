@@ -137,10 +137,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.updateAnnounce = ver
 					m.setStatusMessage(
 						statusMsg{
-							text: fmt.Sprintf(
-								"Update available: %s (run `resterm --update`)",
-								ver,
-							),
+							text:  m.updateNotice(ver),
 							level: statusInfo,
 						},
 					)
@@ -1958,4 +1955,12 @@ func (m *Model) runRedoLastChange() tea.Cmd {
 	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.RedoLastChange()
 	})
+}
+
+func (m *Model) updateNotice(ver string) string {
+	cmd := strings.TrimSpace(m.updateCmd)
+	if cmd == "" {
+		cmd = "resterm --update"
+	}
+	return fmt.Sprintf("Update available: %s (run `%s`)", ver, cmd)
 }

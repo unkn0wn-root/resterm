@@ -198,7 +198,18 @@ func main() {
 		log.Fatalf("update client: %v", err)
 	}
 
+	src := installSrc()
+	cmd := updCmd(src)
+
 	if checkUpdate || doUpdate {
+		if doUpdate && src == srcBrew {
+			_ = rtfmt.Fprintln(
+				os.Stderr,
+				rtfmt.LogHandler(log.Printf, "update block write failed: %v"),
+				updBlock(cmd),
+			)
+			os.Exit(1)
+		}
 		u := newCLIUpdater(upClient, version)
 		ctx := context.Background()
 		res, ok, err := u.check(ctx)
@@ -229,7 +240,7 @@ func main() {
 			_ = rtfmt.Fprintln(
 				os.Stdout,
 				rtfmt.LogHandler(log.Printf, "update hint write failed: %v"),
-				"Run `resterm --update` to install.",
+				updHint(cmd),
 			)
 			os.Exit(0)
 		}
@@ -485,6 +496,7 @@ func main() {
 		Version:             version,
 		UpdateClient:        upClient,
 		EnableUpdate:        updateEnabled,
+		UpdateCmd:           cmd,
 		CompareTargets:      compareTargets,
 		CompareBase:         compareBaseline,
 		Bindings:            bindingMap,
