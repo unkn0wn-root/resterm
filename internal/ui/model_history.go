@@ -298,8 +298,7 @@ func (m *Model) consumeHTTPResponse(
 				if width <= 0 {
 					width = defaultResponseViewportWidth
 				}
-				centered := centerContent(noResponseMessage, width, pane.viewport.Height)
-				pane.viewport.SetContent(wrapToWidth(centered, width))
+				pane.viewport.SetContent(logoPlaceholder(width, pane.viewport.Height))
 				pane.viewport.GotoTop()
 				pane.setCurrPosition()
 			}

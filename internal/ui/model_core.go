@@ -517,9 +517,9 @@ func New(cfg Config) Model {
 	historyFilter.TextStyle = th.HeaderValue
 
 	primaryViewport := viewport.New(0, 0)
-	primaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
+	primaryViewport.SetContent(logoPlaceholder(0, 0))
 	secondaryViewport := viewport.New(0, 0)
-	secondaryViewport.SetContent(centerContent(noResponseMessage, 0, 0))
+	secondaryViewport.SetContent(logoPlaceholder(0, 0))
 
 	reqDelegate := listDelegateForTheme(th, true, 3)
 	requestList := list.New(nil, reqDelegate, 0, 0)
