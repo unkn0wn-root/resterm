@@ -7,9 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
-	"unicode/utf8"
 )
 
 // Opt describes how the init command should run.
@@ -39,45 +37,48 @@ type template struct {
 	AddGitignore bool
 }
 
+type runner struct {
+	o Opt
+	t template
+}
+
 // Run orchestrates the init flow: validate input, ensure the directory,
 // write files, and optionally update .gitignore.
-func Run(opt Opt) error {
-	opt = withDefaults(opt)
-	if opt.List {
-		return listTemplates(opt.Out)
+func Run(o Opt) error {
+	r := newRunner(o)
+	return r.run()
+}
+
+func newRunner(o Opt) *runner {
+	o = withDefaults(o)
+	return &runner{o: o}
+}
+
+func (r *runner) run() error {
+	if r.o.List {
+		return listTemplates(r.o.Out)
 	}
 
-	tmpl, ok := findTemplate(opt.Template)
+	t, ok := findTemplate(r.o.Template)
 	if !ok {
-		return unknownTemplateErr(opt.Template)
+		return unknownTemplateErr(r.o.Template)
 	}
+	r.t = t
 
-	if err := ensureDir(opt.Dir, opt.DryRun); err != nil {
+	if err := r.ensureDir(); err != nil {
 		return err
 	}
 
-	if err := preflight(opt.Dir, tmpl.Files, opt.Force); err != nil {
+	if err := r.preflight(); err != nil {
 		return err
 	}
 
-	for _, f := range tmpl.Files {
-		act, err := writeFile(opt.Dir, f, opt.Force, opt.DryRun)
-		if err != nil {
-			return err
-		}
-		if err := report(opt.Out, act, f.Path, opt.DryRun); err != nil {
-			return err
-		}
+	if err := r.writeFiles(); err != nil {
+		return err
 	}
 
-	if tmpl.AddGitignore && !opt.NoGitignore {
-		act, err := ensureGitignore(opt.Dir, gitignoreEntry, opt.DryRun)
-		if err != nil {
-			return err
-		}
-		if err := report(opt.Out, act, gitignoreFile, opt.DryRun); err != nil {
-			return err
-		}
+	if r.t.AddGitignore && !r.o.NoGitignore {
+		return r.writeGitignore()
 	}
 
 	return nil
@@ -104,12 +105,7 @@ func normalizeTemplateName(name string) string {
 
 func listTemplates(w io.Writer) error {
 	tpls := templateList()
-	width := 0
-	for _, t := range tpls {
-		if nameWidth := utf8.RuneCountInString(t.Name); nameWidth > width {
-			width = nameWidth
-		}
-	}
+	width := templateWidth()
 	for _, t := range tpls {
 		if _, err := fmt.Fprintf(w, "%-*s  %s\n", width, t.Name, t.Description); err != nil {
 			return fmt.Errorf("init: list templates: %w", err)
@@ -118,64 +114,52 @@ func listTemplates(w io.Writer) error {
 	return nil
 }
 
-func findTemplate(name string) (template, bool) {
-	for _, t := range templateList() {
-		if t.Name == name {
-			return t, true
-		}
-	}
-	return template{}, false
-}
-
-func templateNames() []string {
-	tpls := templateList()
-	out := make([]string, 0, len(tpls))
-	for _, t := range tpls {
-		out = append(out, t.Name)
-	}
-	sort.Strings(out)
-	return out
-}
-
 func unknownTemplateErr(name string) error {
 	if name == "" {
 		name = "(empty)"
 	}
-	return fmt.Errorf("init: unknown template %q (available: %s)", name, strings.Join(templateNames(), ", "))
+	return fmt.Errorf(
+		"init: unknown template %q (available: %s)",
+		name,
+		strings.Join(templateNames(), ", "),
+	)
 }
 
-func ensureDir(dir string, dry bool) error {
-	info, err := os.Stat(dir)
+func (r *runner) ensureDir() error {
+	d := r.o.Dir
+	info, err := os.Stat(d)
 	if err == nil {
 		if !info.IsDir() {
-			return fmt.Errorf("init: %s is not a directory", dir)
+			return fmt.Errorf("init: %s is not a directory", d)
 		}
 		return nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("init: stat %s: %w", dir, err)
+		return fmt.Errorf("init: stat %s: %w", d, err)
 	}
-	if dry {
+	if r.o.DryRun {
 		return nil
 	}
-	if err = os.MkdirAll(dir, dirPerm); err != nil {
-		return fmt.Errorf("init: create %s: %w", dir, err)
+	if err = os.MkdirAll(d, dirPerm); err != nil {
+		return fmt.Errorf("init: create %s: %w", d, err)
 	}
 	return nil
 }
 
-func preflight(dir string, specs []fileSpec, force bool) error {
-	var conflicts []string
-	for _, f := range specs {
-		path := filepath.Join(dir, f.Path)
-		info, err := os.Stat(path)
+func (r *runner) preflight() error {
+	d := r.o.Dir
+	force := r.o.Force
+	var cs []string
+	for _, f := range r.t.Files {
+		p := filepath.Join(d, f.Path)
+		info, err := os.Stat(p)
 		if err == nil {
 			if info.IsDir() {
-				conflicts = append(conflicts, f.Path+" (dir)")
+				cs = append(cs, f.Path+" (dir)")
 				continue
 			}
 			if !force {
-				conflicts = append(conflicts, f.Path)
+				cs = append(cs, f.Path)
 			}
 			continue
 		}
@@ -184,57 +168,113 @@ func preflight(dir string, specs []fileSpec, force bool) error {
 		}
 		return fmt.Errorf("init: stat %s: %w", f.Path, err)
 	}
-	if len(conflicts) == 0 {
+	if len(cs) == 0 {
 		return nil
 	}
-	return fmt.Errorf("init: files already exist: %s (use --force to overwrite)", strings.Join(conflicts, ", "))
+	return fmt.Errorf(
+		"init: files already exist: %s (use --force to overwrite)",
+		strings.Join(cs, ", "),
+	)
 }
 
-func writeFile(dir string, f fileSpec, force bool, dry bool) (string, error) {
-	path := filepath.Join(dir, f.Path)
-	_, err := os.Stat(path)
-	exists := err == nil
+func (r *runner) writeFiles() error {
+	for _, f := range r.t.Files {
+		act, err := r.writeFile(f)
+		if err != nil {
+			return err
+		}
+		if err := r.report(act, f.Path); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *runner) writeFile(f fileSpec) (string, error) {
+	p := filepath.Join(r.o.Dir, f.Path)
+	_, err := os.Stat(p)
+	ex := err == nil
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", fmt.Errorf("init: stat %s: %w", f.Path, err)
 	}
+	if ex && !r.o.Force {
+		return "", fmt.Errorf("init: write %s: %w", f.Path, os.ErrExist)
+	}
 
 	act := actionCreate
-	if exists {
+	if ex {
 		act = actionOverwrite
 	}
-	if dry {
+	if r.o.DryRun {
 		return act, nil
 	}
 
-	if err = os.MkdirAll(filepath.Dir(path), dirPerm); err != nil {
+	if err = os.MkdirAll(filepath.Dir(p), dirPerm); err != nil {
 		return "", fmt.Errorf("init: create dir for %s: %w", f.Path, err)
 	}
 
-	flag := os.O_WRONLY | os.O_CREATE
-	if force {
-		flag |= os.O_TRUNC
-	} else {
-		flag |= os.O_EXCL
-	}
-
-	file, err := os.OpenFile(path, flag, f.Mode)
-	if err != nil {
-		return "", fmt.Errorf("init: write %s: %w", f.Path, err)
-	}
-
-	defer func() {
-		_ = file.Close()
-	}()
-
-	if _, err = io.WriteString(file, f.Data); err != nil {
+	if err = writeAtomic(p, f.Mode, f.Data, r.o.Force); err != nil {
 		return "", fmt.Errorf("init: write %s: %w", f.Path, err)
 	}
 	return act, nil
 }
 
-func ensureGitignore(dir, entry string, dry bool) (string, error) {
-	path := filepath.Join(dir, gitignoreFile)
-	data, err := os.ReadFile(path)
+func writeAtomic(p string, m fs.FileMode, data string, force bool) (err error) {
+	d := filepath.Dir(p)
+	f, err := os.CreateTemp(d, ".resterm-*")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	defer func() {
+		_ = f.Close()
+		if err != nil {
+			_ = os.Remove(tmp)
+		}
+	}()
+	if err = f.Chmod(m); err != nil {
+		return err
+	}
+	if _, err = io.WriteString(f, data); err != nil {
+		return err
+	}
+	if err = f.Sync(); err != nil {
+		return err
+	}
+	if err = f.Close(); err != nil {
+		return err
+	}
+	if !force {
+		if _, err = os.Stat(p); err == nil {
+			return os.ErrExist
+		}
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+	}
+	if err = os.Rename(tmp, p); err == nil {
+		return nil
+	}
+	if !force || !os.IsExist(err) {
+		return err
+	}
+	if err = os.Remove(p); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return os.Rename(tmp, p)
+}
+
+func (r *runner) writeGitignore() error {
+	act, err := r.ensureGitignore(gitignoreEntry)
+	if err != nil {
+		return err
+	}
+	return r.report(act, gitignoreFile)
+}
+
+func (r *runner) ensureGitignore(entry string) (string, error) {
+	p := filepath.Join(r.o.Dir, gitignoreFile)
+	data, err := os.ReadFile(p)
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return "", fmt.Errorf("init: read .gitignore: %w", err)
 	}
@@ -243,22 +283,32 @@ func ensureGitignore(dir, entry string, dry bool) (string, error) {
 		if hasGitignoreEntry(string(data), entry) {
 			return actionSkip, nil
 		}
-		if dry {
+		if r.o.DryRun {
 			return actionAppend, nil
 		}
 
-		add := entry + "\n"
-		buf := appendGitignore(data, add)
-		if err = os.WriteFile(path, buf, filePerm); err != nil {
+		f, err := os.OpenFile(p, os.O_WRONLY|os.O_APPEND, 0)
+		if err != nil {
+			return "", fmt.Errorf("init: update .gitignore: %w", err)
+		}
+		defer func() {
+			_ = f.Close()
+		}()
+		if len(data) > 0 && data[len(data)-1] != '\n' {
+			if _, err = io.WriteString(f, "\n"); err != nil {
+				return "", fmt.Errorf("init: update .gitignore: %w", err)
+			}
+		}
+		if _, err = io.WriteString(f, entry+"\n"); err != nil {
 			return "", fmt.Errorf("init: update .gitignore: %w", err)
 		}
 		return actionAppend, nil
 	}
 
-	if dry {
+	if r.o.DryRun {
 		return actionCreate, nil
 	}
-	if err = os.WriteFile(path, []byte(entry+"\n"), filePerm); err != nil {
+	if err = os.WriteFile(p, []byte(entry+"\n"), filePerm); err != nil {
 		return "", fmt.Errorf("init: create .gitignore: %w", err)
 	}
 	return actionCreate, nil
@@ -300,25 +350,15 @@ func trailingCommentOrEmpty(rest string) bool {
 	return strings.HasPrefix(rest, "#")
 }
 
-func appendGitignore(data []byte, add string) []byte {
-	if len(data) == 0 {
-		return []byte(add)
-	}
-	if data[len(data)-1] != '\n' {
-		data = append(data, '\n')
-	}
-	return append(data, []byte(add)...)
-}
-
-func report(w io.Writer, act, path string, dry bool) error {
-	if w == nil || act == "" {
+func (r *runner) report(act, path string) error {
+	if r.o.Out == nil || act == "" {
 		return nil
 	}
 	prefix := ""
-	if dry {
+	if r.o.DryRun {
 		prefix = "dry-run: "
 	}
-	if _, err := fmt.Fprintf(w, "%s%s %s\n", prefix, act, path); err != nil {
+	if _, err := fmt.Fprintf(r.o.Out, "%s%s %s\n", prefix, act, path); err != nil {
 		return fmt.Errorf("init: report %s %s: %w", act, path, err)
 	}
 	return nil

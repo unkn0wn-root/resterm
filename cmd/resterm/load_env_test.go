@@ -71,3 +71,9 @@ func TestHandleInitSubcommandAmbiguousFile(t *testing.T) {
 		t.Fatalf("expected ambiguity error")
 	}
 }
+
+func TestRunInitListArgs(t *testing.T) {
+	if err := runInit([]string{"--list", "extra"}); err == nil {
+		t.Fatalf("expected error for extra args")
+	}
+}
