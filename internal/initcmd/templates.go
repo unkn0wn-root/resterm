@@ -29,8 +29,14 @@ func newTplCache() tplCache {
 			AddGitignore: true,
 		},
 		{
-			Name:        "standard",
-			Description: describeTemplate(fileRequests, fileEnv, fileEnvExample, fileRTSHelpers, fileHelp),
+			Name: "standard",
+			Description: describeTemplate(
+				fileRequests,
+				fileEnv,
+				fileEnvExample,
+				fileRTSHelpers,
+				fileHelp,
+			),
 			Files: []fileSpec{
 				{Path: fileRequests, Data: reqHTTPStandard, Mode: filePerm},
 				{Path: fileEnv, Data: envJSON, Mode: filePerm},
@@ -217,6 +223,8 @@ func buildHelpMD() string {
 	b.WriteString("- `")
 	b.WriteString(fileRTSHelpers)
 	b.WriteString("` shows a RestermScript module example.\n")
-	b.WriteString("- See docs in [docs/resterm.md](https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md) for details.\n")
+	b.WriteString(
+		"- See docs in [docs/resterm.md](https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md) for details.\n",
+	)
 	return b.String()
 }

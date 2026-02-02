@@ -118,7 +118,11 @@ func unknownTemplateErr(name string) error {
 	if name == "" {
 		name = "(empty)"
 	}
-	return fmt.Errorf("init: unknown template %q (available: %s)", name, strings.Join(templateNames(), ", "))
+	return fmt.Errorf(
+		"init: unknown template %q (available: %s)",
+		name,
+		strings.Join(templateNames(), ", "),
+	)
 }
 
 func (r *runner) ensureDir() error {
@@ -167,7 +171,10 @@ func (r *runner) preflight() error {
 	if len(cs) == 0 {
 		return nil
 	}
-	return fmt.Errorf("init: files already exist: %s (use --force to overwrite)", strings.Join(cs, ", "))
+	return fmt.Errorf(
+		"init: files already exist: %s (use --force to overwrite)",
+		strings.Join(cs, ", "),
+	)
 }
 
 func (r *runner) writeFiles() error {
