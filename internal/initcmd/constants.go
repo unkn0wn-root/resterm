@@ -1,5 +1,7 @@
 package initcmd
 
+import "io/fs"
+
 const (
 	DefaultDir      = "."
 	DefaultTemplate = "standard"
@@ -16,13 +18,6 @@ const (
 )
 
 const (
-	dirPerm  = 0o755
-	filePerm = 0o644
-)
-
-const (
-	actionCreate    = "create"
-	actionOverwrite = "overwrite"
-	actionAppend    = "append"
-	actionSkip      = "skip"
+	dirPerm  fs.FileMode = 0o755
+	filePerm fs.FileMode = 0o644
 )
