@@ -137,7 +137,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.updateAnnounce = ver
 					m.setStatusMessage(
 						statusMsg{
-							text: m.updateNotice(ver),
+							text:  m.updateNotice(ver),
 							level: statusInfo,
 						},
 					)

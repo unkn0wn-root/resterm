@@ -45,11 +45,23 @@ func TestLogoPlaceholderCacheMapping(t *testing.T) {
 	}
 	lines := strings.Split(cache.content, "\n")
 	if len(lines) != len(cache.spans) || len(lines) != len(cache.rev) {
-		t.Fatalf("expected cache mappings for %d lines, got spans=%d rev=%d", len(lines), len(cache.spans), len(cache.rev))
+		t.Fatalf(
+			"expected cache mappings for %d lines, got spans=%d rev=%d",
+			len(lines),
+			len(cache.spans),
+			len(cache.rev),
+		)
 	}
 	for i := range lines {
 		if cache.spans[i].start != i || cache.spans[i].end != i {
-			t.Fatalf("span %d: want %d..%d, got %d..%d", i, i, i, cache.spans[i].start, cache.spans[i].end)
+			t.Fatalf(
+				"span %d: want %d..%d, got %d..%d",
+				i,
+				i,
+				i,
+				cache.spans[i].start,
+				cache.spans[i].end,
+			)
 		}
 		if cache.rev[i] != i {
 			t.Fatalf("rev %d: want %d, got %d", i, i, cache.rev[i])
