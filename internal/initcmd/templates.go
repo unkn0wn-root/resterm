@@ -217,7 +217,6 @@ func buildHelpMD() string {
 	b.WriteString("- `")
 	b.WriteString(fileRTSHelpers)
 	b.WriteString("` shows a RestermScript module example.\n")
-	b.WriteString("- See docs/resterm.md and docs/restermscript.md for details.\n")
-	b.WriteString("Docs: README.md and docs/resterm.md.\n")
+	b.WriteString("- See docs in [docs/resterm.md](https://github.com/unkn0wn-root/resterm/blob/main/docs/resterm.md) for details.\n")
 	return b.String()
 }
