@@ -32,61 +32,85 @@ func initTargetExists() bool {
 }
 
 func runInit(args []string) error {
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: resterm init [flags] [dir]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Templates:")
-		_ = initcmd.Run(initcmd.Opt{List: true, Out: os.Stderr})
-	}
-
-	var (
-		dir   string
-		tpl   string
-		force bool
-		dry   bool
-		list  bool
-		noGi  bool
-	)
-
-	fs.StringVar(&dir, "dir", initcmd.DefaultDir, "Target directory")
-	fs.StringVar(&tpl, "template", initcmd.DefaultTemplate, "Template to use")
-	fs.BoolVar(&force, "force", false, "Overwrite existing files")
-	fs.BoolVar(&dry, "dry-run", false, "Print actions without writing files")
-	fs.BoolVar(&list, "list", false, "List available templates")
-	fs.BoolVar(&noGi, "no-gitignore", false, "Do not touch .gitignore")
-
-	if err := fs.Parse(args); err != nil {
+	c := newInitCmd()
+	if err := c.parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
 		return err
 	}
+	return c.run()
+}
 
-	if list {
+type initCmd struct {
+	fs    *flag.FlagSet
+	dir   string
+	tpl   string
+	force bool
+	dry   bool
+	list  bool
+	noGi  bool
+}
+
+func newInitCmd() *initCmd {
+	c := &initCmd{}
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	c.fs = fs
+	c.bind()
+	fs.Usage = c.usage
+	return c
+}
+
+func (c *initCmd) bind() {
+	c.fs.StringVar(&c.dir, "dir", initcmd.DefaultDir, "Target directory")
+	c.fs.StringVar(&c.tpl, "template", initcmd.DefaultTemplate, "Template to use")
+	c.fs.BoolVar(&c.force, "force", false, "Overwrite existing files")
+	c.fs.BoolVar(&c.dry, "dry-run", false, "Print actions without writing files")
+	c.fs.BoolVar(&c.list, "list", false, "List available templates")
+	c.fs.BoolVar(&c.noGi, "no-gitignore", false, "Do not touch .gitignore")
+}
+
+func (c *initCmd) parse(args []string) error {
+	return c.fs.Parse(args)
+}
+
+func (c *initCmd) run() error {
+	extra := c.fs.Args()
+	if c.list {
+		if len(extra) > 0 {
+			return fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " "))
+		}
 		return initcmd.Run(initcmd.Opt{List: true, Out: os.Stdout})
 	}
-
-	extra := fs.Args()
 	if len(extra) > 0 {
-		if dir == initcmd.DefaultDir && len(extra) == 1 {
-			dir = extra[0]
+		if c.dir == initcmd.DefaultDir && len(extra) == 1 {
+			c.dir = extra[0]
 		} else {
 			return fmt.Errorf("init: unexpected args: %s", strings.Join(extra, " "))
 		}
 	}
 
-	op := initcmd.Opt{
-		Dir:         dir,
-		Template:    tpl,
-		Force:       force,
-		DryRun:      dry,
-		NoGitignore: noGi,
+	o := initcmd.Opt{
+		Dir:         c.dir,
+		Template:    c.tpl,
+		Force:       c.force,
+		DryRun:      c.dry,
+		NoGitignore: c.noGi,
 		Out:         os.Stdout,
 	}
-	return initcmd.Run(op)
+	return initcmd.Run(o)
+}
+
+func (c *initCmd) usage() {
+	fmt.Fprintln(os.Stderr, "Usage: resterm init [flags] [dir]")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Flags:")
+	out := c.fs.Output()
+	c.fs.SetOutput(os.Stderr)
+	c.fs.PrintDefaults()
+	c.fs.SetOutput(out)
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Templates:")
+	_ = initcmd.Run(initcmd.Opt{List: true, Out: os.Stderr})
 }

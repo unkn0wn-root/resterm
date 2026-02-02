@@ -1,35 +1,80 @@
 package initcmd
 
-import "strings"
+import (
+	"sort"
+	"strings"
+	"unicode/utf8"
+)
 
 var helpMD = buildHelpMD()
 
-var templates = []template{
-	{
-		Name:        "minimal",
-		Description: describeTemplate(fileRequests, fileEnv),
-		Files: []fileSpec{
-			{Path: fileRequests, Data: reqHTTPMinimal, Mode: filePerm},
-			{Path: fileEnv, Data: envJSON, Mode: filePerm},
+type tplCache struct {
+	list  []template
+	by    map[string]template
+	names []string
+	width int
+}
+
+var tc = newTplCache()
+
+func newTplCache() tplCache {
+	list := []template{
+		{
+			Name:        "minimal",
+			Description: describeTemplate(fileRequests, fileEnv),
+			Files: []fileSpec{
+				{Path: fileRequests, Data: reqHTTPMinimal, Mode: filePerm},
+				{Path: fileEnv, Data: envJSON, Mode: filePerm},
+			},
+			AddGitignore: true,
 		},
-		AddGitignore: true,
-	},
-	{
-		Name:        "standard",
-		Description: describeTemplate(fileRequests, fileEnv, fileEnvExample, fileRTSHelpers, fileHelp),
-		Files: []fileSpec{
-			{Path: fileRequests, Data: reqHTTPStandard, Mode: filePerm},
-			{Path: fileEnv, Data: envJSON, Mode: filePerm},
-			{Path: fileEnvExample, Data: envExampleJSON, Mode: filePerm},
-			{Path: fileRTSHelpers, Data: helpersRTS, Mode: filePerm},
-			{Path: fileHelp, Data: helpMD, Mode: filePerm},
+		{
+			Name:        "standard",
+			Description: describeTemplate(fileRequests, fileEnv, fileEnvExample, fileRTSHelpers, fileHelp),
+			Files: []fileSpec{
+				{Path: fileRequests, Data: reqHTTPStandard, Mode: filePerm},
+				{Path: fileEnv, Data: envJSON, Mode: filePerm},
+				{Path: fileEnvExample, Data: envExampleJSON, Mode: filePerm},
+				{Path: fileRTSHelpers, Data: helpersRTS, Mode: filePerm},
+				{Path: fileHelp, Data: helpMD, Mode: filePerm},
+			},
+			AddGitignore: true,
 		},
-		AddGitignore: true,
-	},
+	}
+	by := make(map[string]template, len(list))
+	names := make([]string, 0, len(list))
+	width := 0
+	for _, t := range list {
+		by[t.Name] = t
+		names = append(names, t.Name)
+		if w := utf8.RuneCountInString(t.Name); w > width {
+			width = w
+		}
+	}
+	sort.Strings(names)
+	return tplCache{list: list, by: by, names: names, width: width}
 }
 
 func templateList() []template {
-	return cloneTemplates(templates)
+	return cloneTemplates(tc.list)
+}
+
+func findTemplate(name string) (template, bool) {
+	t, ok := tc.by[name]
+	if !ok {
+		return template{}, false
+	}
+	return cloneTemplate(t), true
+}
+
+func templateNames() []string {
+	out := make([]string, len(tc.names))
+	copy(out, tc.names)
+	return out
+}
+
+func templateWidth() int {
+	return tc.width
 }
 
 func describeTemplate(files ...string) string {
@@ -42,14 +87,19 @@ func cloneTemplates(src []template) []template {
 	}
 	out := make([]template, len(src))
 	for i, t := range src {
-		out[i] = t
-		if len(t.Files) == 0 {
-			continue
-		}
-		files := make([]fileSpec, len(t.Files))
-		copy(files, t.Files)
-		out[i].Files = files
+		out[i] = cloneTemplate(t)
 	}
+	return out
+}
+
+func cloneTemplate(t template) template {
+	out := t
+	if len(t.Files) == 0 {
+		return out
+	}
+	files := make([]fileSpec, len(t.Files))
+	copy(files, t.Files)
+	out.Files = files
 	return out
 }
 
