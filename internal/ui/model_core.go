@@ -158,6 +158,7 @@ type Config struct {
 	Version             string
 	UpdateClient        update.Client
 	EnableUpdate        bool
+	UpdateCmd           string
 	CompareTargets      []string
 	CompareBase         string
 	Bindings            *bindings.Map
@@ -282,6 +283,7 @@ type Model struct {
 	oauth           *oauth.Manager
 	updateClient    update.Client
 	updateVersion   string
+	updateCmd       string
 	updateEnabled   bool
 	updateBusy      bool
 	updateAnnounce  string
@@ -595,6 +597,10 @@ func New(cfg Config) Model {
 	sshGlobals := newSSHStore()
 
 	updateVersion := strings.TrimSpace(cfg.Version)
+	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
+	if updateCmd == "" {
+		updateCmd = "resterm --update"
+	}
 	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" &&
 		cfg.UpdateClient.Ready()
 
@@ -660,6 +666,7 @@ func New(cfg Config) Model {
 		oauth:                    oauth.NewManager(client),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,
+		updateCmd:                updateCmd,
 		updateEnabled:            updateEnabled,
 		editorInsertMode:         false,
 		editorWriteKeyMap:        writeKeyMap,
