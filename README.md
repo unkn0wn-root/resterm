@@ -189,7 +189,35 @@ The first command reports whether a newer release is available; the second downl
 
 ## Quick Start
 
-If you just want to hit an API **right now**, you don’t need any files.
+### Bootstrap a new project
+
+The fastest way to get started is to run `resterm init` in an empty folder. This creates a starter set of files so you can send requests right away.
+
+```bash
+mkdir my-api && cd my-api
+resterm init
+resterm
+```
+
+By default it uses the `standard` template, which writes:
+
+- `requests.http` - sample requests with captures and variables
+- `resterm.env.json` - environment file with `dev` and `prod` entries
+- `resterm.env.example.json` - a copy with placeholder tokens
+- `rts/helpers.rts` - a small RestermScript module
+- `RESTERM.md` - quickstart notes
+
+The environment file is added to `.gitignore` automatically so you don't accidentally commit secrets. If you only need the essentials, pass `--template minimal` to skip the helper files.
+
+```bash
+resterm init --template minimal
+```
+
+Run `resterm init --list` to see all available templates.
+
+### Manual setup
+
+If you just want to hit an API **right now**, you don't need any files.
 
 1. **Start Resterm**
 

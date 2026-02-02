@@ -3,6 +3,7 @@
 ## Index
 - [Installation](#installation)
 - [Quick Start](#quick-start)
+- [Initializing a Project](#initializing-a-project)
 - [UI Tour](#ui-tour)
 - [Workspaces & Files](#workspaces--files)
 - [Variables and Environments](#variables-and-environments)
@@ -67,6 +68,55 @@ Content-Type: application/json
   "note": "created from Resterm"
 }
 ```
+
+---
+
+## Initializing a Project
+
+The `resterm init` command creates a starter set of files in a directory so you can begin working with requests immediately.
+
+```bash
+mkdir my-api && cd my-api
+resterm init
+```
+
+This writes files based on the selected template. Two templates are available:
+
+| Template | Files created |
+| --- | --- |
+| `standard` (default) | `requests.http`, `resterm.env.json`, `resterm.env.example.json`, `rts/helpers.rts`, `RESTERM.md` |
+| `minimal` | `requests.http`, `resterm.env.json` |
+
+Both templates add `resterm.env.json` to `.gitignore` so secrets stay out of version control. If you prefer to manage `.gitignore` yourself, pass `--no-gitignore`.
+
+### Flags
+
+| Flag | Description |
+| --- | --- |
+| `-dir <path>` | Target directory. You can also pass the path as a positional argument. |
+| `-template <name>` | Template to use (`standard` or `minimal`). |
+| `-force` | Overwrite existing files instead of aborting. |
+| `-dry-run` | Print actions without writing anything. |
+| `-no-gitignore` | Skip updating `.gitignore`. |
+| `-list` | Print available templates and exit. |
+
+### Examples
+
+```bash
+# Create files in a subdirectory
+resterm init ./api-tests
+
+# Use the minimal template
+resterm init --template minimal
+
+# Preview what would be created
+resterm init --dry-run
+
+# Overwrite existing files
+resterm init --force
+```
+
+Once the files exist, run `resterm` in the same directory to open the workspace. Press `Ctrl+E` to switch between the `dev` and `prod` environments defined in `resterm.env.json`.
 
 ---
 
@@ -1077,7 +1127,13 @@ Body helpers:
 
 ## CLI Reference
 
-Run `resterm --help` for the latest list. Core flags:
+Run `resterm --help` for the latest list.
+
+### Subcommands
+
+**`resterm init [dir]`** - Bootstrap a new project with starter files. See [Initializing a Project](#initializing-a-project) for details.
+
+### Core flags
 
 | Flag | Description |
 | --- | --- |
