@@ -23,9 +23,7 @@ func (b *documentBuilder) handleSSH(line int, rest string) {
 	}
 
 	if res.scope == restfile.SSHScopeRequest {
-		if !b.ensureRequest(line) {
-			return
-		}
+		b.ensureRequest(line)
 		if b.request.ssh != nil {
 			b.addError(line, "@ssh already defined for this request")
 			return

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 	"time"
@@ -12,8 +13,8 @@ import (
 
 func parseApplySpec(rest string, line int) (restfile.ApplySpec, bool) {
 	expr := strings.TrimSpace(rest)
-	if strings.HasPrefix(expr, "=") {
-		expr = strings.TrimSpace(strings.TrimPrefix(expr, "="))
+	if after, ok := strings.CutPrefix(expr, "="); ok {
+		expr = strings.TrimSpace(after)
 	}
 	if expr == "" {
 		return restfile.ApplySpec{}, false
@@ -153,9 +154,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if len(fields) < 2 {
 			return nil
 		}
-		for key, value := range parseKeyValuePairs(fields[1:]) {
-			params[key] = value
-		}
+		maps.Copy(params, parseKeyValuePairs(fields[1:]))
 		if params["token_url"] == "" && params["cache_key"] == "" {
 			return nil
 		}
