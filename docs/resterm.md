@@ -809,6 +809,40 @@ Add `# @script pre-request` or `# @script test` followed by lines that start wit
 > request.setBody(JSON.stringify({ scope: "reports" }, null, 2));
 ```
 
+You can also use a brace block (`{% ... %}`) to avoid prefixing every line with `>`.
+
+```http
+# @script test
+> {%
+client.test("status ok", function () {
+  tests.assert(response.statusCode === 200, "status code");
+});
+%}
+```
+
+Lines inside the block don't need `>` (but a leading `>` is still stripped if present).
+The `{% ... %}` block is only for inline script content. Script file includes must be written as their own `> < ./path.js` line outside the block.
+
+Allowed example:
+
+```http
+# @script test
+> < ./scripts/pre.js
+> {%
+client.test("ok", function () {});
+%}
+```
+
+Disallowed example:
+
+```http
+# @script test
+> {%
+> < ./scripts/pre.js
+client.test("ok", function () {});
+%}
+```
+
 Reference external scripts with `> < ./scripts/pre.js`.
 
 See [Scripting API](#scripting-api) for available helpers.

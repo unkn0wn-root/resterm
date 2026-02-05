@@ -904,6 +904,195 @@ GET https://example.com/api
 	}
 }
 
+func TestParseScriptBlockBraces(t *testing.T) {
+	src := `# @name Scripted
+# @script test
+> {%
+client.test("ok", function () {
+tests.assert(response.statusCode === 200, "ok");
+});
+%}
+GET https://example.com/api
+`
+
+	doc := Parse("scriptblock.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	script := req.Metadata.Scripts[0]
+	if script.Kind != "test" {
+		t.Fatalf("expected test script, got %s", script.Kind)
+	}
+	expected := "client.test(\"ok\", function () {\n" +
+		"tests.assert(response.statusCode === 200, \"ok\");\n" +
+		"});"
+	if script.Body != expected {
+		t.Fatalf("unexpected script body: %q", script.Body)
+	}
+}
+
+func TestParseScriptInlineBraces(t *testing.T) {
+	src := `# @script test
+> {% client.test("ok"); %}
+GET https://example.com/api
+`
+
+	doc := Parse("inline-braces.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	body := req.Metadata.Scripts[0].Body
+	if body != "{% client.test(\"ok\"); %}" {
+		t.Fatalf("unexpected inline script body: %q", body)
+	}
+}
+
+func TestParseScriptBlockMissingEnd(t *testing.T) {
+	src := `# @script test
+> {%
+client.test("ok", function () {});
+### Next
+GET https://example.com/next
+`
+
+	doc := Parse("missing-end.http", []byte(src))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors")
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if doc.Requests[0].URL != "https://example.com/next" {
+		t.Fatalf("unexpected request url: %q", doc.Requests[0].URL)
+	}
+	if doc.Errors[0].Message != "script block missing %}" {
+		t.Fatalf("unexpected error message: %q", doc.Errors[0].Message)
+	}
+}
+
+func TestParseScriptBlockUnicodeWhitespaceStart(t *testing.T) {
+	src := "# @script test\n" +
+		">\u00A0{%\n" +
+		"tests.assert(true, \"ok\");\n" +
+		"%}\n" +
+		"GET https://example.com\n"
+
+	doc := Parse("unicode-start.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	scripts := doc.Requests[0].Metadata.Scripts
+	if len(scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(scripts))
+	}
+	if scripts[0].Body != `tests.assert(true, "ok");` {
+		t.Fatalf("unexpected script body: %q", scripts[0].Body)
+	}
+}
+
+func TestParseScriptBlockUnicodeWhitespaceEnd(t *testing.T) {
+	src := "# @script test\n" +
+		"> {%\n" +
+		"tests.assert(true, \"ok\");\n" +
+		">\u2003%}\n" +
+		"GET https://example.com\n"
+
+	doc := Parse("unicode-end.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	scripts := doc.Requests[0].Metadata.Scripts
+	if len(scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(scripts))
+	}
+	if scripts[0].Body != `tests.assert(true, "ok");` {
+		t.Fatalf("unexpected script body: %q", scripts[0].Body)
+	}
+}
+
+func TestParseScriptBlockMarkersInsideBlockComment(t *testing.T) {
+	src := `/*
+> {%
+tests.assert(true, "ignored");
+%}
+*/
+GET https://example.com
+`
+
+	doc := Parse("commented-script.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if len(doc.Requests[0].Metadata.Scripts) != 0 {
+		t.Fatalf("expected no scripts from commented block, got %d", len(doc.Requests[0].Metadata.Scripts))
+	}
+}
+
+func TestParseScriptBlockEndWithPrefix(t *testing.T) {
+	src := `# @script test
+> {%
+tests.assert(true, "ok");
+> %}
+GET https://example.com
+`
+
+	doc := Parse("script-end-prefix.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	scripts := doc.Requests[0].Metadata.Scripts
+	if len(scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(scripts))
+	}
+	if scripts[0].Body != `tests.assert(true, "ok");` {
+		t.Fatalf("unexpected script body: %q", scripts[0].Body)
+	}
+}
+
+func TestParseScriptBlockEndWithComment(t *testing.T) {
+	src := `# @script test
+> {%
+tests.assert(true, "ok");
+%} // end
+GET https://example.com
+`
+
+	doc := Parse("script-end-comment.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	scripts := doc.Requests[0].Metadata.Scripts
+	if len(scripts) != 1 {
+		t.Fatalf("expected 1 script, got %d", len(scripts))
+	}
+	if scripts[0].Body != `tests.assert(true, "ok");` {
+		t.Fatalf("unexpected script body: %q", scripts[0].Body)
+	}
+}
+
 func TestParseScriptFileInclude(t *testing.T) {
 	src := `# @name FileScript
 # @script test

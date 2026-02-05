@@ -2,6 +2,7 @@ package parser
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -108,9 +109,7 @@ func (b *workflowBuilder) applyOptions(opts map[string]string) {
 	if b.wf.Options == nil {
 		b.wf.Options = make(map[string]string, len(opts))
 	}
-	for key, value := range opts {
-		b.wf.Options[key] = value
-	}
+	maps.Copy(b.wf.Options, opts)
 }
 
 func (b *workflowBuilder) handleDirective(key, rest string, line int) (bool, string) {

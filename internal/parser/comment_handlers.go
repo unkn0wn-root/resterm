@@ -43,9 +43,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		return
 	}
 
-	if !b.ensureRequest(line) {
-		return
-	}
+	b.ensureRequest(line)
 	if b.handleRequestBuilderDirective(key, rest) {
 		return
 	}
@@ -194,25 +192,14 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.request.metadata.Auth = spec
 		}
 	case "settings":
-		if b.inRequest {
-			b.request.settings = applySettingsTokens(b.request.settings, rest)
-		} else {
-			b.fileSettings = applySettingsTokens(b.fileSettings, rest)
-		}
+		b.request.settings = applySettingsTokens(b.request.settings, rest)
 	case "setting":
 		key, value := splitDirective(rest)
 		if key != "" {
-			if b.inRequest {
-				if b.request.settings == nil {
-					b.request.settings = make(map[string]string)
-				}
-				b.request.settings[key] = value
-			} else {
-				if b.fileSettings == nil {
-					b.fileSettings = make(map[string]string)
-				}
-				b.fileSettings[key] = value
+			if b.request.settings == nil {
+				b.request.settings = make(map[string]string)
 			}
+			b.request.settings[key] = value
 		}
 	case "timeout":
 		if b.request.settings == nil {
@@ -245,7 +232,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.addError(line, "@apply expression missing")
 		}
 	case "capture":
-		if capture, ok := b.parseCaptureDirective(rest, line); ok {
+		if capture, ok := b.parseCaptureDirective(rest); ok {
 			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
 		}
 	case "assert":
@@ -286,9 +273,6 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.request.metadata.Trace = spec
 		}
 	case "compare":
-		if !b.ensureRequest(line) {
-			return
-		}
 		if b.request.metadata.Compare != nil {
 			b.addError(line, "@compare directive already defined for this request")
 			return

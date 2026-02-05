@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"maps"
 	"net/http"
 	"strings"
 
@@ -9,20 +10,23 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type documentBuilder struct {
-	doc          *restfile.Document
-	inRequest    bool
-	request      *requestBuilder
-	fileVars     []restfile.Variable
-	globalVars   []restfile.Variable
-	fileSettings map[string]string
-	consts       []restfile.Constant
-	sshDefs      []restfile.SSHProfile
-	fileUses     []restfile.UseSpec
-	inBlock      bool
-	workflow     *workflowBuilder
+	doc                  *restfile.Document
+	inRequest            bool
+	request              *requestBuilder
+	fileVars             []restfile.Variable
+	globalVars           []restfile.Variable
+	fileSettings         map[string]string
+	consts               []restfile.Constant
+	sshDefs              []restfile.SSHProfile
+	fileUses             []restfile.UseSpec
+	inBlock              bool
+	workflow             *workflowBuilder
+	inScriptBlock        bool
+	scriptBlockStartLine int
 }
 
 func newDocumentBuilder(doc *restfile.Document) *documentBuilder {
@@ -45,6 +49,20 @@ func (b *documentBuilder) addError(line int, message string) {
 
 func (b *documentBuilder) processLine(lineNumber int, line string) {
 	trimmed := strings.TrimSpace(line)
+
+	if b.inBlock {
+		if b.handleBlockComment(lineNumber, line, trimmed) {
+			return
+		}
+	}
+
+	if b.inScriptBlock {
+		if b.handleScriptBlockLine(lineNumber, line, trimmed) {
+			return
+		}
+	} else if b.handleScriptBlockStart(lineNumber, line, trimmed) {
+		return
+	}
 
 	b.flushScriptIfNeeded(trimmed)
 
@@ -208,9 +226,7 @@ func (b *documentBuilder) handleBodyContinuation(line string) bool {
 
 func (b *documentBuilder) handleMethodLine(lineNumber int, line string) bool {
 	if grpcbuilder.IsMethodLine(line) {
-		if !b.ensureRequest(lineNumber) {
-			return true
-		}
+		b.ensureRequest(lineNumber)
 		fields := strings.Fields(line)
 		target := ""
 		if len(fields) > 1 {
@@ -224,9 +240,7 @@ func (b *documentBuilder) handleMethodLine(lineNumber int, line string) bool {
 	}
 
 	if method, url, ver, ok := httpbuilder.ParseMethodLine(line); ok {
-		if !b.ensureRequest(lineNumber) {
-			return true
-		}
+		b.ensureRequest(lineNumber)
 
 		b.request.http.SetMethodAndURL(method, url)
 		b.request.settings = httpver.SetIfMissing(b.request.settings, ver)
@@ -235,9 +249,7 @@ func (b *documentBuilder) handleMethodLine(lineNumber int, line string) bool {
 	}
 
 	if url, ok := httpbuilder.ParseWebSocketURLLine(line); ok {
-		if !b.ensureRequest(lineNumber) {
-			return true
-		}
+		b.ensureRequest(lineNumber)
 
 		b.request.http.SetMethodAndURL(http.MethodGet, url)
 		b.appendLine(line)
@@ -263,7 +275,8 @@ func (b *documentBuilder) handleHeaderLine(line string) bool {
 }
 
 func (b *documentBuilder) handleDescriptionLine(lineNumber int, line, trimmed string) bool {
-	if !b.ensureRequest(lineNumber) || b.request.http.HasMethod() {
+	b.ensureRequest(lineNumber)
+	if b.request.http.HasMethod() {
 		return false
 	}
 	if b.request.metadata.Description != "" {
@@ -310,10 +323,7 @@ func parseBlockCommentLine(trimmed string, start bool) (string, bool) {
 	return working, closed
 }
 
-func (b *documentBuilder) parseCaptureDirective(
-	rest string,
-	line int,
-) (restfile.CaptureSpec, bool) {
+func (b *documentBuilder) parseCaptureDirective(rest string) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
 		return restfile.CaptureSpec{}, false
@@ -362,33 +372,118 @@ func (b *documentBuilder) parseAssertDirective(rest string, line int) (restfile.
 	}, true
 }
 
-func (b *documentBuilder) handleScript(line int, rawLine string) {
-	if !b.ensureRequest(line) {
+func (b *documentBuilder) handleScript(ln int, raw string) {
+	body, ok := trimScriptLine(raw, false)
+	if !ok {
 		return
+	}
+	b.addScript(ln, body, true)
+}
+
+func (b *documentBuilder) addScript(ln int, body string, inc bool) {
+	b.ensureRequest(ln)
+	k := b.request.currentScriptKind
+	l := b.request.currentScriptLang
+	if inc {
+		if p, ok := scriptInc(body); ok {
+			b.request.appendScriptInclude(k, l, p)
+			return
+		}
+	}
+	b.request.appendScriptLine(k, l, body)
+}
+
+func scriptInc(body string) (string, bool) {
+	h := util.TrimLeftSpace(body)
+	if !strings.HasPrefix(h, "<") {
+		return "", false
+	}
+	p := strings.TrimSpace(strings.TrimPrefix(h, "<"))
+	if p == "" {
+		return "", false
+	}
+	return p, true
+}
+
+func trimScriptLine(raw string, allow bool) (string, bool) {
+	s := util.TrimLeftSpace(raw)
+	if after, ok := strings.CutPrefix(s, ">"); ok {
+		b := util.TrimLeadingSpaceOnce(after)
+		return util.TrimRightSpace(b), true
+	}
+	if allow {
+		return util.TrimRightSpace(raw), true
+	}
+	return "", false
+}
+
+func (b *documentBuilder) handleScriptBlockStart(ln int, line, tr string) bool {
+	if !isSBStart(tr) {
+		return false
+	}
+	b.ensureRequest(ln)
+	b.inScriptBlock = true
+	b.scriptBlockStartLine = ln
+	b.appendLine(line)
+	return true
+}
+
+func (b *documentBuilder) handleScriptBlockLine(ln int, line, tr string) bool {
+	if isSBEnd(tr) {
+		b.appendLine(line)
+		b.endSB(false)
+		return true
 	}
 
-	stripped := strings.TrimLeft(rawLine, " \t")
-	if !strings.HasPrefix(stripped, ">") {
+	if b.handleSeparator(ln, tr) {
+		return true
+	}
+
+	body, _ := trimScriptLine(line, true)
+	b.addScript(ln, body, false)
+	b.appendLine(line)
+	return true
+}
+
+func (b *documentBuilder) endSB(err bool) {
+	if !b.inScriptBlock {
 		return
 	}
-	body := strings.TrimPrefix(stripped, ">")
-	if len(body) > 0 {
-		if body[0] == ' ' || body[0] == '\t' {
-			body = body[1:]
-		}
+	if err {
+		b.addError(b.scriptBlockStartLine, "script block missing %}")
 	}
-	body = strings.TrimRight(body, " \t")
-	kind := b.request.currentScriptKind
-	lang := b.request.currentScriptLang
-	trimmedHead := strings.TrimLeft(body, " \t")
-	if strings.HasPrefix(trimmedHead, "<") {
-		path := strings.TrimSpace(strings.TrimPrefix(trimmedHead, "<"))
-		if path != "" {
-			b.request.appendScriptInclude(kind, lang, path)
-		}
-		return
+	b.inScriptBlock = false
+	b.scriptBlockStartLine = 0
+	if b.request != nil {
+		b.request.flushPendingScript()
 	}
-	b.request.appendScriptLine(kind, lang, body)
+}
+
+func isSBStart(trimmed string) bool {
+	if !strings.HasPrefix(trimmed, ">") {
+		return false
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(trimmed, ">"))
+	return rest == "{%"
+}
+
+func isSBEnd(trimmed string) bool {
+	if after, ok := strings.CutPrefix(trimmed, ">"); ok {
+		trimmed = util.TrimLeftSpace(after)
+	}
+	if !strings.HasPrefix(trimmed, "%}") {
+		return false
+	}
+	rest := strings.TrimPrefix(trimmed, "%}")
+	if rest == "" {
+		return true
+	}
+	rest = util.TrimLeftSpace(rest)
+	if rest == "" {
+		return true
+	}
+	_, ok := stripComment(rest)
+	return ok
 }
 
 func (b *documentBuilder) addScopedVariable(
@@ -413,9 +508,7 @@ func (b *documentBuilder) addScopedVariable(
 	case restfile.ScopeFile:
 		b.fileVars = append(b.fileVars, variable)
 	case restfile.ScopeRequest:
-		if !b.ensureRequest(line) {
-			return false
-		}
+		b.ensureRequest(line)
 		b.request.variables = append(b.request.variables, variable)
 	default:
 		return false
@@ -466,8 +559,8 @@ func (b *documentBuilder) handleBodyLine(line string) {
 	}
 
 	trimmed := strings.TrimSpace(line)
-	if strings.HasPrefix(trimmed, "<") {
-		b.request.http.SetBodyFromFile(strings.TrimSpace(strings.TrimPrefix(trimmed, "<")))
+	if after, ok := strings.CutPrefix(trimmed, "<"); ok {
+		b.request.http.SetBodyFromFile(strings.TrimSpace(after))
 		return
 	}
 	if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
@@ -480,9 +573,9 @@ func (b *documentBuilder) handleBodyLine(line string) {
 	b.request.http.AppendBodyLine(line)
 }
 
-func (b *documentBuilder) ensureRequest(line int) bool {
+func (b *documentBuilder) ensureRequest(line int) {
 	if b.inRequest {
-		return true
+		return
 	}
 
 	if b.workflow != nil {
@@ -501,7 +594,6 @@ func (b *documentBuilder) ensureRequest(line int) bool {
 		sse:               newSSEBuilder(),
 		websocket:         newWebSocketBuilder(),
 	}
-	return true
 }
 
 func (b *documentBuilder) appendLine(line string) {
@@ -518,6 +610,8 @@ func (b *documentBuilder) flushRequest(_ int) {
 	if !b.inRequest {
 		return
 	}
+
+	b.endSB(true)
 
 	b.request.flushPendingScript()
 
@@ -555,9 +649,7 @@ func (b *documentBuilder) finish() {
 		if b.doc.Settings == nil {
 			b.doc.Settings = make(map[string]string, len(b.fileSettings))
 		}
-		for k, v := range b.fileSettings {
-			b.doc.Settings[k] = v
-		}
+		maps.Copy(b.doc.Settings, b.fileSettings)
 	}
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
@@ -584,9 +676,7 @@ func (b *documentBuilder) flushFileSettings() {
 	if b.doc.Settings == nil {
 		b.doc.Settings = make(map[string]string, len(b.fileSettings))
 	}
-	for k, v := range b.fileSettings {
-		b.doc.Settings[k] = v
-	}
+	maps.Copy(b.doc.Settings, b.fileSettings)
 	b.fileSettings = nil
 }
 

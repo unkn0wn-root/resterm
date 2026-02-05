@@ -161,8 +161,8 @@ func parseWSSendBase64(rest string, step *restfile.WebSocketStep) bool {
 
 func parseWSSendFile(rest string, step *restfile.WebSocketStep) bool {
 	step.Type = restfile.WebSocketStepSendFile
-	if strings.HasPrefix(rest, "<") {
-		rest = trim(strings.TrimPrefix(rest, "<"))
+	if after, ok := strings.CutPrefix(rest, "<"); ok {
+		rest = trim(after)
 	}
 	if rest == "" {
 		return false
