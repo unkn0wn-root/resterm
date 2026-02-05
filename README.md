@@ -1,298 +1,127 @@
 <h1 align="center">Resterm</h1>
 
 <p align="center">
-  <em>a terminal-based REST/GraphQL/gRPC/WebSocket/SSE client.</em>
+  <em>A terminal-first client for REST, GraphQL, gRPC, WebSocket, and SSE.</em>
 </p>
 
 <p align="center">
-  <img src="_media/resterm_base.png" alt="Screenshot of resterm TUI base" width="720" />
+  <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-<p align="center">
-  <strong>Workflows</strong>
-</p>
+Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels** and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
-<p align="center">
-  <img src="_media/resterm_workflow.png" alt="Screenshot of resterm TUI with Workflow" width="720" />
-</p>
+Quick links are [Installation](#installation), [Quick Start](#quick-start), [Screenshots](#screenshot-tour), [Features](#features-at-a-glance), and [Documentation](#documentation).
 
-<p align="center">
-  <strong>Trace and Timeline</strong>
-</p>
+## Why Resterm
 
-<p align="center">
-  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of resterm with timeline" width="720" />
-</p>
-
-<p align="center">
-  <strong>Profiler</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_profiler.png" alt="Screenshot of resterm profiler" width="720" />
-</p>
-
-<p align="center">
-  <strong>Resterm Script</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_script.png" alt="Screenshot of resterm with resterm rcript" width="720" />
-</p>
-
-<p align="center">
-  <strong>OAuth browser demo (old UI design)</strong>
-</p>
-
-<p align="center">
-  <img src="_media/oauth.gif"
-       alt="Resterm OAuth flow"
-       width="720" />
-</p>
-
-**Resterm** is a terminal client for working with **HTTP**, **GraphQL**, **gRPC**, **WebSocket** and **SSE**. No cloud sync, no signups, no heavy desktop app. If you live on the keyboard - this is your home.
-
-TL;DR why resterm:
-- Resterm is **keyboard driven**.
-- Everything lives in plain files (.http/.rest) - **no cloud or account - everything stays local**.
-- **Built-in SSH tunnels** for HTTP/gRPC/WebSocket/SSE.
-- **OAuth 2.0 built-in** - client credentials, password grant, authorization code + PKCE with automatic browser flow and token refresh.
-- **RestermScript (RTS)** resterm focused custom scripting lang for safe, predictable request-time logic (templates, directives, workflows). If you want JavaScript instead - this works too.
-- Fast iteration loop with _explorer_ + _history_ + _diff/compare_ + _captures/workflows_.
-- **Debuggable** - timeline tracing, profiler, streaming transcripts and inline scripts/tests.
-
-## Index
-**Up & Running**
-- [Features](#features)
-- [Installation](#installation)
-  - [Quick Install](#quick-install)
-  - [Manual Installation](#manual-installation)
-- [Update](#update)
-- [Quick Start](#quick-start)
-- [Quick Configuration Overview](#quick-configuration-overview)
-
----
-
-**Deep dive**
-- [RestermScript?](#restermscript)
-- [OAuth 2.0](#feature-snapshots)
-- [Workflows & scripting](#feature-snapshots)
-- [Compare runs](#feature-snapshots)
-- [Tracing & timeline](#feature-snapshots)
-- [Streaming (WebSocket & SSE)](#feature-snapshots)
-- [gRPC](#feature-snapshots)
-- [OpenAPI import](#feature-snapshots)
-- [Theming & bindings](#feature-snapshots)
-- [SSH Tunnels](#feature-snapshots)
-- [Documentation](#documentation)
-
-## Features
-- **Workspace** navigator that filters `.http` / `.rest` files, supports recursion and keeps request lists in sync as you edit.
-- **Editor** with inline syntax highlighting, search (`Ctrl+F`), clipboard motions, and inline metadata completions (type `@` for contextual hints).
-- **Variable** scopes with `@global` (environment-wide), `@var file` (document), `@var request` (per-call), plus compile-time constants (`@const`), captures, JavaScript hooks, and multi-step workflows with per-step expectations and overrides.
-- **GraphQL** helpers (`@graphql`, `@variables`, `@query`) and gRPC directives (`@grpc`, `@grpc-descriptor`, reflection, streaming, metadata, body expansion).
-- **WebSockets and SSE** with scripted `@ws` steps, automatic transcripts and an interactive console for ad-hoc frames.
-- **OpenAPI importer** converts OpenAPI specs into Resterm-ready `.http` collections from the CLI.
-- **Inline** requests and **curl** import for one-off calls (`Ctrl+Enter` on a URL or curl block).
-- **Pretty/Raw/Header/Diff/History/Stream** views with optional split panes, pinned comparisons, and live event playback.
-- **Binary responses** show size and type hints with hex and base64 previews, let you change Raw view modes, and include shortcuts to save with a path prompt (`g Shift+S`) or open externally (`g Shift+E`).
-- **OAuth 2.0** with automatic token management - client credentials, password grant, and authorization code + PKCE. Tokens are cached per environment, refreshed automatically, and injected into requests without manual steps.
-- **Latency** with `@profile` to benchmark endpoints and render histograms right inside the TUI.
-- **Tracing and Timeline** with `@trace` to enable request tracing.
-- **Multi-step workflows** compose several named requests (`@workflow` + `@step`) with per-step overrides and expectations.
-- **Multi-environment compare** via `@compare` directives or the global `--compare` flag.
-- **SSH tunnels** route HTTP/gRPC/WebSocket/SSE traffic through bastions with host key verification, keep-alives, retries, and persistent tunnels.
-- **File Watcher** with automatic file change detection: Resterm warns when the current file changes or goes missing on disk and lets you reload from disk (`g Shift+R`) or keep your buffer, plus a shortcut for quick workspace rescan (files) (`g Shift+O`).
-- **Custom theming & bindings** if you want to make a resterm more alligned with your taste.
-
-## Installation
-
-### Quick Install
-
-**Linux / macOS:**
-
-**Homebrew:**
-
-```bash
-brew install resterm
-```
-
-> [!NOTE]
-> Homebrew installs should be updated with Homebrew (`brew upgrade resterm`). The built-in `resterm --update` command is for binaries installed from GitHub releases/install scripts (not via brew).
-
-**Shell script:**
-
-> [!IMPORTANT]
-> Pre-built Linux binaries depend on glibc **2.32 or newer**. If you run an older distro, build from source on a machine with a newer glibc toolchain or upgrade glibc before using the release archives.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
-```
-
-or with `wget`:
-
-```bash
-wget -qO- https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
-```
-
-**Windows (PowerShell):**
-
-```powershell
-iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
-```
-
-These scripts will automatically detect your architecture, download the latest release, and install the binary.
-
-### Manual Installation
-
-> [!NOTE]
-> The manual install helper uses `curl` and `jq`. Install `jq` with your package manager (`brew install jq`, `sudo apt install jq`, etc.).
-
-#### Linux / macOS
-
-```bash
-# Detect latest tag
-LATEST_TAG=$(curl -fsSL https://api.github.com/repos/unkn0wn-root/resterm/releases/latest | jq -r .tag_name)
-
-# Download the matching binary (Darwin/Linux + amd64/arm64)
-curl -fL -o resterm "https://github.com/unkn0wn-root/resterm/releases/download/${LATEST_TAG}/resterm_$(uname -s)_$(uname -m)"
-
-# Make it executable and move it onto your PATH
-chmod +x resterm
-sudo install -m 0755 resterm /usr/local/bin/resterm
-```
-
-#### Windows (PowerShell)
-
-```powershell
-$latest = Invoke-RestMethod https://api.github.com/repos/unkn0wn-root/resterm/releases/latest
-$asset  = $latest.assets | Where-Object { $_.name -like 'resterm_Windows_*' } | Select-Object -First 1
-Invoke-WebRequest -Uri $asset.browser_download_url -OutFile resterm.exe
-# Optionally relocate to a directory on PATH, e.g.:
-Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
-```
-
-#### From source
-
-```bash
-go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
-```
-
-## Update
-
-```bash
-resterm --check-update
-resterm --update
-```
-
-The first command reports whether a newer release is available; the second downloads and installs it (Windows users receive a staged binary to swap on restart).
+- Requests live in plain `.http` / `.rest` files.
+- Requests are declarative, so you describe what should happen in files and Resterm executes it the same way every time, more like a small API language than a one-off UI.
+- The UI is fully keyboard-driven so no mouse support is intentional.
+- OAuth 2.0 flows and SSH tunnels are built in so no extra tools are needed.
+- Timeline tracing, profiling, and streaming transcripts make debugging first-class.
+- Resterm is meant to be Git-driven so cloud sync and accounts are avoided by default.
+- There is no AI integration and there will never be.
 
 ## Quick Start
 
-### Bootstrap a new project
-
-The fastest way to get started is to run `resterm init` in an empty folder. This creates a starter set of files so you can send requests right away.
-
-```bash
-mkdir my-api && cd my-api
-resterm init
-resterm
-```
-
-By default it uses the `standard` template, which writes:
-
-- `requests.http` - sample requests with captures and variables
-- `resterm.env.json` - environment file with `dev` and `prod` entries
-- `resterm.env.example.json` - a copy with placeholder tokens
-- `rts/helpers.rts` - a small RestermScript module
-- `RESTERM.md` - quickstart notes
-
-The environment file is added to `.gitignore` automatically so you don't accidentally commit secrets. If you only need the essentials, pass `--template minimal` to skip the helper files.
-
-```bash
-resterm init --template minimal
-```
-
-Run `resterm init --list` to see all available templates.
-
-### Manual setup
-
-If you just want to hit an API **right now**, you don't need any files.
-
-1. **Start Resterm**
+1. Install Resterm using the command that matches your OS.
 
    ```bash
-   # In a project directory (no files required)
+   # macOS (Homebrew)
+   brew install resterm
+
+   # Linux (install script)
+   curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
+   ```
+
+   ```powershell
+   # Windows (PowerShell)
+   iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
+   ```
+
+2. Bootstrap a tiny workspace.
+
+   ```bash
+   mkdir my-api && cd my-api
+   resterm init
+   ```
+
+3. Run it and send your first request.
+
+   ```bash
    resterm
-
-   # Or explicitly point to a workspace
-   resterm --workspace path/to/project
    ```
 
-2. **Type a minimal request**
+   Press `Ctrl+Enter` in the editor to send the highlighted request.
 
-   - Focus the editor pane (use `Tab` if needed).
-   - Press `i` or `a` and type a simple request, for example:
+If you do not want files yet, just run `resterm`, type a URL in the editor, and press `Ctrl+Enter`.
+If you already have a curl command, paste it into the editor and press `Ctrl+Enter` to import it.
 
-     ```http
-     GET https://httpbin.org/status/204
-     ```
+## Key files
 
-3. **Send it**
+These are the files you will see most often in a Resterm workspace.
 
-   - Press `Ctrl+Enter` to send the request.
-   - The response appears in the response pane on the right.
+- `.http` / `.rest` files store your requests, metadata, and named steps.
+- `resterm.env.json` holds environment variables and secrets for one or more environments.
+- `resterm.env.example.json` is a safe template you can commit and share.
+- `.rts` files contain RestermScript helpers for reuse and small bits of logic.
+- `RESTERM.md` is optional project notes created by `resterm init`.
 
-4. **Move around**
+## Inline curl import
 
-   - `Tab` / `Shift+Tab` - cycle focus between sidebar, editor, and response.
-   - `g+p` - jump directly to the response pane.
-   - `g+i` - jump back to the editor.
+Paste a curl command into the editor and press `Ctrl+Enter` to convert it into a structured request. Resterm understands common flags, merges repeated data segments, and keeps multipart uploads intact.
 
-That’s enough to be productive: open Resterm, type a URL, hit `Ctrl+Enter`, see the response.
+```bash
+curl \
+  --compressed \
+  --url "https://httpbin.org/post?source=resterm&case=multipart" \
+  --request POST \
+  -H "Accept: application/json" \
+  -H "X-Client: resterm-dev" \
+  --user resterm:test123 \
+  -F file=@README.md \
+  --form-string memo='Testing resterm inline curl
+with multiline value' \
+  --form-string meta='{"env":"test","attempt":1}'
+```
 
----
+If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically.
 
-### Quick Start (but with files)
+## Features at glance
 
-If you work with **`.http` / `.rest` files**, Resterm will discover and use them.
+Protocols and transports cover the following.
 
-1. **Open a directory with request files**
+- HTTP, GraphQL, gRPC, WebSocket, and SSE are supported out of the box.
+- SSH tunnels include host key verification, keep-alives, retries, and persistent sessions.
 
-   - Create or open a directory that contains `.http` / `.rest` files
-     (see `_examples/` in this repo for samples).
-   - Run:
+Workspace and files focus on the following.
 
-     ```bash
-     resterm
-     # or
-     resterm --workspace path/to/project
-     ```
+- `.http` / `.rest` files are discovered automatically and the request list stays in sync as you edit.
+- The request editor includes inline syntax highlighting, search, and contextual metadata hints.
+- Environment files are treated as first-class input. `resterm init` adds _resterm.env.json_ to _.gitignore_ but any custom env files passed via the CLI are **not** ignored automatically.
 
-2. **Pick and send a request**
+Automation and reuse include the following.
 
-   - Use the **sidebar** to select a request from your `.http` / `.rest` files.
-   - Press `Ctrl+Enter` to send it.
-   - The response shows up in the right pane.
+- Variables, captures, constants, and multi-step workflows.
+- RestermScript (RTS) and optional JavaScript hooks handle request-time logic.
+- Curl commands and OpenAPI specs can be imported directly into request collections.
 
-3. **Minimal request file example**
+Debugging and inspection provide the following.
 
-   ```http
-   ### Status check
-   # @name status
-   GET https://httpbin.org/status/204
-   User-Agent: resterm
+- Pretty/raw/header/diff/history views are available with split panes.
+- Streaming transcripts are recorded and an interactive console is available for WebSocket and SSE.
+- Timeline tracing and profiling help find slow or flaky endpoints.
 
-   ### Authenticated echo
-   # @name bearerEcho
-   # @auth bearer {{auth.token}}
-   GET https://httpbin.org/bearer
-   Accept: application/json
-   ```
+Security and auth cover the following.
 
----
+- OAuth 2.0 client credentials, password grant, and authorization code + PKCE are supported.
+- Tokens are cached per environment and refreshed automatically.
 
-### Navigation & Layout Cheat Sheet
+Customization includes the following.
+
+- Custom themes and keybindings.
+
+## Navigation & layout cheat sheet
 
 A few keys that make Resterm feel “native” quickly:
 
@@ -326,62 +155,205 @@ A few keys that make Resterm feel “native” quickly:
 > - `Tab` / `Shift+Tab` - switch panes
 > - `g+p` - jump to response
 
+## Screenshot tour
 
-## Inline curl import
+<details>
+<summary>See the UI in action</summary>
 
-Drop a curl command into the editor and press `Ctrl+Enter` anywhere inside to turn it into a structured request. Resterm understands common flags (`-X`, `-H`, `--data*`, `--json`, `--url`, `--user`, `--compressed`, `-F/--form`, etc.), merges repeated data segments, and respects multipart uploads.
+<p align="center">
+  <strong>Workflows</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_workflow.png" alt="Screenshot of Resterm with Workflow" width="720" />
+</p>
+
+<p align="center">
+  <strong>Trace and Timeline</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of Resterm with timeline" width="720" />
+</p>
+
+<p align="center">
+  <strong>Profiler</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_profiler.png" alt="Screenshot of Resterm profiler" width="720" />
+</p>
+
+<p align="center">
+  <strong>RestermScript</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_script.png" alt="Screenshot of Resterm with RestermScript" width="720" />
+</p>
+
+<p align="center">
+  <strong>OAuth browser demo (old UI design)</strong>
+</p>
+
+<p align="center">
+  <img src="_media/oauth.gif" alt="Resterm OAuth flow" width="720" />
+</p>
+
+</details>
+
+## Installation
+
+### Quick install
+
+**Linux / macOS (Homebrew)**
 
 ```bash
-curl \
-  --compressed \
-  --url "https://httpbin.org/post?source=resterm&case=multipart" \
-  --request POST \
-  -H "Accept: application/json" \
-  -H "X-Client: resterm-dev" \
-  --user resterm:test123 \
-  -F file=@README.md \
-  --form-string memo='Testing resterm inline curl
-with multiline value' \
-  --form-string meta='{"env":"test","attempt":1}'
+brew install resterm
 ```
 
-If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically. Resterm loads the file attachment, preserves multiline form fields, and applies compression/auth headers without extra tweaks.
+> [!NOTE]
+> Homebrew installs should be updated with Homebrew (`brew upgrade resterm`). The built-in `resterm --update` command is for binaries installed from GitHub releases or install scripts.
+
+**Linux / macOS (Shell script)**
+
+> [!IMPORTANT]
+> Pre-built Linux binaries depend on glibc **2.32 or newer**. If you run an older distro, build from source on a machine with a newer glibc toolchain or upgrade glibc before using the release archives.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
+```
+
+or with `wget`:
+
+```bash
+wget -qO- https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
+```
+
+**Windows (PowerShell)**
+
+```powershell
+iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
+```
+
+These scripts detect your architecture, download the latest release, and install the binary.
+
+### Manual installation
+
+> [!NOTE]
+> The manual install helper uses `curl` and `jq`. Install `jq` with your package manager (`brew install jq`, `sudo apt install jq`, etc.).
+
+**Linux / macOS**
+
+```bash
+# Detect latest tag
+LATEST_TAG=$(curl -fsSL https://api.github.com/repos/unkn0wn-root/resterm/releases/latest | jq -r .tag_name)
+
+# Download the matching binary (Darwin/Linux + amd64/arm64)
+curl -fL -o resterm "https://github.com/unkn0wn-root/resterm/releases/download/${LATEST_TAG}/resterm_$(uname -s)_$(uname -m)"
+
+# Make it executable and move it onto your PATH
+chmod +x resterm
+sudo install -m 0755 resterm /usr/local/bin/resterm
+```
+
+**Windows (PowerShell)**
+
+```powershell
+$latest = Invoke-RestMethod https://api.github.com/repos/unkn0wn-root/resterm/releases/latest
+$asset  = $latest.assets | Where-Object { $_.name -like 'resterm_Windows_*' } | Select-Object -First 1
+Invoke-WebRequest -Uri $asset.browser_download_url -OutFile resterm.exe
+# Optionally relocate to a directory on PATH, e.g.:
+Move-Item resterm.exe "$env:USERPROFILE\bin\resterm.exe"
+```
+
+### From source
+
+```bash
+go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
+```
+
+## Update
+
+```bash
+resterm --check-update
+resterm --update
+```
+
+The first command reports whether a newer release is available. The second downloads and installs it (Windows users receive a staged binary to swap on restart).
 
 ## Quick Configuration Overview
 
-- **Environments:** JSON files (`resterm.env.json`) are auto-discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace; prefer JSON when you need multiple environments in one file.
-- **Flags you probebly reach for most:** `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-curl`, `--from-openapi`, `--http-out` (see docs for the full list).
-- **Config storage:** `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` (override with `RESTERM_CONFIG_DIR`). Themes and keybindings live under this directory when you customize them.
+- Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. Prefer JSON when you need multiple environments in one file.
+- Flags you probably reach for most are `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-curl`, `--from-openapi`, and `--http-out`.
+- Config is stored at `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` and can be overridden with `RESTERM_CONFIG_DIR`.
 
 ## RestermScript
 
-RestermScript (RTS) is the small expression language behind templates, directives, and reusable `.rts` modules. It exists because request files need a bit of logic, but a full JavaScript runtime is heavier than most workflows need and harder to review at a glance. RTS keeps the logic tight, readable, and predictable, so you can open a `.http` file and understand exactly what will happen.
+RestermScript (RTS) is a small expression language built specifically for Resterm. Because it targets Resterm features directly, it can evolve alongside Resterm and stay symbiotic with the request format, workflows, and directives. JavaScript hooks are still available when you want them, but RTS is the default because it is readable, predictable, and focused on Resterm’s domain.
 
-Quick example:
+Quick example (RTS module + request):
+
+```rts
+// rts/helpers.rts
+module helpers
+export fn authHeader(token) {
+  return token ? "Bearer " + token : ""
+}
+```
 
 ```http
-# @use ./rts/auth.rts as auth
+# @use ./rts/helpers.rts
 # @when env.has("feature")
 # @assert response.statusCode == 200
-GET https://api.example.com/users/{{= auth.userId(vars.get("user")) }}
-Authorization: Bearer {{= auth.token(env.get("token")) }}
+GET https://api.example.com/users/{{= vars.get("user") }}
+Authorization: {{= helpers.authHeader(vars.get("auth.token")) }}
 ```
 
 Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
-## Feature snapshots
+## Deep dive
 
-- **OAuth 2.0:** Full OAuth support with three grant types - client credentials for service-to-service calls, password grant for legacy systems, and authorization code + PKCE for user login flows. For auth code flows, Resterm opens your system browser, spins up a local callback server on `127.0.0.1`, captures the redirect and exchanges the code automatically. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
-- **SSH jumps/tunnels:** Route HTTP/gRPC/WebSocket/SSE through bastions with `@ssh` profiles (persist/keepalive/host-key/retries). Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
-- **Workflows & scripting:** Chain requests with `@workflow`/`@step`, pass data between steps, and add lightweight JS hooks. Docs + sample: [`docs/resterm.md#workflows-multi-step-workflows`](./docs/resterm.md#workflows-multi-step-workflows) and `_examples/workflows.http`.
-- **Compare runs:** Run the same request across environments with `@compare` or `--compare`, then diff responses side by side (`g+c`). Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
-- **Tracing & timeline:** Add `@trace` with budgets to capture DNS/connect/TLS/TTFB/transfer timings, visualize overruns, and optionally export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
-- **Streaming (WebSocket & SSE):** Use `@websocket` + `@ws` steps or `@sse` to script and record streams. The Stream tab keeps transcripts and an interactive console. Docs: [`docs/resterm.md#streaming-sse--websocket`](./docs/resterm.md#streaming-sse--websocket).
-- **gRPC streaming:** Unary and streaming calls (client/server/bidi) with Stream tab transcripts, plus template expansion for gRPC body files. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
-- **Curl import:** Convert curl commands or files into `.http` from the CLI (`--from-curl`). Docs: [`docs/resterm.md#importing-curl-commands`](./docs/resterm.md#importing-curl-commands).
-- **OpenAPI import:** Convert an OpenAPI 3 spec into `.http` collections from the CLI (`--from-openapi`). Docs: [`docs/resterm.md#importing-openapi-specs`](./docs/resterm.md#importing-openapi-specs).
-- **Theming & bindings:** Optional customization via `themes/*.toml` and `bindings.toml/json` under the config dir; defaults are ready to use. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
+#### OAuth 2.0
+
+Resterm supports client credentials, password grant, and authorization code + PKCE. For auth code flows, it opens your system browser, spins up a local callback server on `127.0.0.1`, captures the redirect, and exchanges the code automatically. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
+
+#### Workflows and scripting
+
+Chain requests with `@workflow` and `@step`, pass data between steps, and add lightweight JS hooks where needed. Docs + sample: [`docs/resterm.md#workflows-multi-step-workflows`](./docs/resterm.md#workflows-multi-step-workflows) and `_examples/workflows.http`.
+
+#### Compare runs
+
+Run the same request across environments with `@compare` or `--compare`, then diff responses side by side with `g+c`. Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
+
+#### Tracing and timeline
+
+Add `@trace` with budgets to capture DNS, connect, TLS, TTFB, and transfer timings. Resterm visualizes overruns and can export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
+
+#### Streaming (WebSocket and SSE)
+
+Use `@websocket` with `@ws` steps or `@sse` to script and record streams. The Stream tab keeps transcripts and includes an interactive console. Docs: [`docs/resterm.md#streaming-sse--websocket`](./docs/resterm.md#streaming-sse--websocket).
+
+#### gRPC
+
+Resterm supports unary and streaming calls with transcripts, metadata, and body expansion for gRPC files. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
+
+#### OpenAPI import
+
+Convert OpenAPI 3 specs into Resterm-ready `.http` collections from the CLI with `--from-openapi`. Docs: [`docs/resterm.md#importing-openapi-specs`](./docs/resterm.md#importing-openapi-specs).
+
+#### Curl import
+
+Convert curl commands into `.http` files from the CLI with `--from-curl`. Docs: [`docs/resterm.md#importing-curl-commands`](./docs/resterm.md#importing-curl-commands).
+
+#### SSH tunnels
+
+Route HTTP, gRPC, WebSocket, and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
+
+#### Theming and bindings
+
+Customize colors and keybindings via `themes/*.toml` and `bindings.toml` or `bindings.json` under the config directory. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
 
 ## Documentation
 
-The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
+The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings, and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
