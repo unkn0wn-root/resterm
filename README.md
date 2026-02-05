@@ -16,7 +16,7 @@ Quick links are [Installation](#installation), [Quick Start](#quick-start), [Scr
 
 - Requests live in plain `.http` / `.rest` files.
 - Requests are declarative, so you describe what should happen in files and Resterm executes it the same way every time, more like a small API language than a one-off UI.
-- The UI is fully keyboard-driven so no mouse support is intentional.
+- The UI is fully keyboard-driven.
 - OAuth 2.0 flows and SSH tunnels are built in so no extra tools are needed.
 - Timeline tracing, profiling, and streaming transcripts make debugging first-class.
 - Resterm is meant to be Git-driven so cloud sync and accounts are avoided by default.
@@ -27,7 +27,7 @@ Quick links are [Installation](#installation), [Quick Start](#quick-start), [Scr
 1. Install Resterm using the command that matches your OS.
 
    ```bash
-   # macOS (Homebrew)
+   # Linux/macOS (Homebrew)
    brew install resterm
 
    # Linux (install script)
@@ -203,8 +203,6 @@ A few keys that make Resterm feel “native” quickly:
 </details>
 
 ## Installation
-
-### Quick install
 
 **Linux / macOS (Homebrew)**
 
