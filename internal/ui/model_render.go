@@ -28,8 +28,16 @@ var headerSegmentIcons = map[string]string{
 	"env":       "⬢",
 	"requests":  "⇄",
 	"active":    "◧",
-	"tests":     "✓",
+	"tests":     "⧗",
 }
+
+type testStatus string
+
+const (
+	testStatusPass  testStatus = "pass"
+	testStatusFail  testStatus = "fail"
+	testStatusError testStatus = "error"
+)
 
 func headerIconFor(label string) string {
 	key := strings.ToLower(strings.TrimSpace(label))
@@ -40,11 +48,18 @@ func headerIconFor(label string) string {
 }
 
 func headerLabelText(label string) string {
+	return headerLabelTextWithIcon(label, "")
+}
+
+func headerLabelTextWithIcon(label, iconOverride string) string {
 	labelText := strings.ToUpper(strings.TrimSpace(label))
 	if labelText == "" {
 		labelText = "—"
 	}
-	icon := headerIconFor(label)
+	icon := iconOverride
+	if icon == "" {
+		icon = headerIconFor(label)
+	}
 	if icon == "" {
 		return labelText
 	}
@@ -1713,6 +1728,7 @@ func (m Model) renderHeader() string {
 	type segment struct {
 		label string
 		value string
+		icon  string
 	}
 
 	segmentsData := []segment{
@@ -1722,8 +1738,12 @@ func (m Model) renderHeader() string {
 		{label: "Active", value: request},
 	}
 
-	if summary, ok := m.headerTestSummary(); ok {
-		segmentsData = append(segmentsData, segment{label: "Tests", value: summary})
+	if summary, status, ok := m.headerTestStatus(); ok {
+		segmentsData = append(segmentsData, segment{
+			label: "Tests",
+			value: summary,
+			icon:  headerTestIcon(status),
+		})
 	}
 
 	segments := make([]string, 0, len(segmentsData)+1)
@@ -1731,7 +1751,7 @@ func (m Model) renderHeader() string {
 	brandSegment := m.theme.HeaderBrand.Render(brandLabel)
 	segments = append(segments, brandSegment)
 	for i, seg := range segmentsData {
-		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value))
+		segments = append(segments, m.renderHeaderButton(i, seg.label, seg.value, seg.icon))
 	}
 
 	separator := m.theme.HeaderSeparator.Render(" ")
@@ -1755,9 +1775,9 @@ func (m Model) renderHeader() string {
 	return m.theme.Header.Width(totalWidth).Render(headerLine)
 }
 
-func (m Model) renderHeaderButton(idx int, label, value string) string {
+func (m Model) renderHeaderButton(idx int, label, value, icon string) string {
 	palette := m.theme.HeaderSegment(idx)
-	labelText := headerLabelText(label)
+	labelText := headerLabelTextWithIcon(label, icon)
 	valueText := strings.TrimSpace(value)
 	if strings.HasPrefix(valueText, tabIndicatorPrefix) {
 		valueText = strings.TrimSpace(
@@ -1828,12 +1848,12 @@ func (m Model) renderHeaderButton(idx int, label, value string) string {
 	return button.Render(content)
 }
 
-func (m Model) headerTestSummary() (string, bool) {
+func (m Model) headerTestStatus() (string, testStatus, bool) {
 	if m.scriptError != nil {
-		return "error", true
+		return "error", testStatusError, true
 	}
 	if len(m.testResults) == 0 {
-		return "", false
+		return "", "", false
 	}
 	failures := 0
 	for _, result := range m.testResults {
@@ -1842,9 +1862,22 @@ func (m Model) headerTestSummary() (string, bool) {
 		}
 	}
 	if failures > 0 {
-		return fmt.Sprintf("%d fail", failures), true
+		return fmt.Sprintf("%d fail", failures), testStatusFail, true
 	}
-	return fmt.Sprintf("%d pass", len(m.testResults)), true
+	return fmt.Sprintf("%d pass", len(m.testResults)), testStatusPass, true
+}
+
+func headerTestIcon(status testStatus) string {
+	switch status {
+	case testStatusPass:
+		return "✔"
+	case testStatusFail:
+		return "✗"
+	case testStatusError:
+		return "⚠"
+	default:
+		return headerIconFor("tests")
+	}
 }
 
 func (m Model) renderStatusBar() string {
