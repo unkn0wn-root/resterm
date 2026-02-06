@@ -43,6 +43,25 @@ type Res struct {
 	Rv []int
 }
 
+func modePrefix(line []byte, w int, m Mode) (body, p0, p1 []byte, w0, w1 int) {
+	body = line
+	switch m {
+	case Structured:
+		p1, w1 = structPref(line, w)
+	case Pre:
+		ind := leadIndent(line)
+		if len(ind) > 0 {
+			iw := visW(ind)
+			if iw < w {
+				p0, w0 = ind, iw
+				p1, w1 = ind, iw
+				body = line[len(ind):]
+			}
+		}
+	}
+	return
+}
+
 /*
 This is the core wrapper for full content blocks. It streams line-by-line and
 emits wrapped segments directly into a buffer to avoid building large
@@ -82,24 +101,7 @@ func Wrap(ctx context.Context, s string, w int, m Mode, mp bool) (Res, bool) {
 		line := b[ls:i]
 		ls = i + 1
 
-		body := line
-		var p0, p1 []byte
-		var w0, w1 int
-
-		switch m {
-		case Structured:
-			p1, w1 = structPref(line, w)
-		case Pre:
-			ind := leadIndent(line)
-			if len(ind) > 0 {
-				iw := visW(ind)
-				if iw < w {
-					p0, w0 = ind, iw
-					p1, w1 = ind, iw
-					body = line[len(ind):]
-				}
-			}
-		}
+		body, p0, p1, w0, w1 := modePrefix(line, w, m)
 
 		start := len(rv)
 		n, ok := wrapLine(ctx, body, w, p0, w0, p1, w1, false, func(seg []byte) {
@@ -140,24 +142,7 @@ func Line(ctx context.Context, s string, w int, m Mode) ([]string, bool) {
 	}
 
 	b := []byte(s)
-	body := b
-	var p0, p1 []byte
-	var w0, w1 int
-
-	switch m {
-	case Structured:
-		p1, w1 = structPref(b, w)
-	case Pre:
-		ind := leadIndent(b)
-		if len(ind) > 0 {
-			iw := visW(ind)
-			if iw < w {
-				p0, w0 = ind, iw
-				p1, w1 = ind, iw
-				body = b[len(ind):]
-			}
-		}
-	}
+	body, p0, p1, w0, w1 := modePrefix(b, w, m)
 
 	segs := make([]string, 0, 4)
 	n, ok := wrapLine(ctx, body, w, p0, w0, p1, w1, false, func(seg []byte) {
@@ -252,6 +237,56 @@ func (l *lw) emitWrap() {
 	l.start(true)
 }
 
+func (l *lw) writeBytes(b []byte, w int, sp bool) {
+	l.buf = append(l.buf, b...)
+	if w > 0 {
+		l.cw += w
+		if l.ansi {
+			l.ap = updState(l.ap, b)
+		}
+		l.has = true
+		if !sp {
+			l.hns = true
+		}
+	}
+}
+
+func (l *lw) splitAt(ctx context.Context, b []byte, lim int) ([]byte, []byte, int, bool) {
+	seg, rest, sw, ok := l.spl(ctx, b, lim)
+	if !ok {
+		return nil, nil, 0, false
+	}
+	if len(seg) == 0 && len(rest) == len(b) {
+		return b[:1], b[1:], 1, true
+	}
+	return seg, rest, sw, true
+}
+
+/*
+fillRemaining splits tb to fill the remaining space on the current line,
+emits a wrap, and returns the unconsumed bytes. A nil return means the
+token was fully consumed.
+*/
+func (l *lw) fillRemaining(ctx context.Context, tb []byte, sp bool) ([]byte, bool) {
+	rem := l.w - l.cw
+	if rem > 0 {
+		seg, rest, sw, ok := l.splitAt(ctx, tb, rem)
+		if !ok {
+			return nil, false
+		}
+		l.writeBytes(seg, sw, sp)
+		if len(rest) == 0 {
+			return nil, true
+		}
+		if sw > 0 {
+			l.emitWrap()
+		}
+		return rest, true
+	}
+	l.emitWrap()
+	return tb, true
+}
+
 /*
 addTok() appends a token into the current segment or splits it as needed.
 The tricky part is long tokens (tw > line width). For those, we fill any
@@ -274,86 +309,29 @@ func (l *lw) addTok(ctx context.Context, tb []byte, tw int, sp bool) bool {
 		return true
 	}
 	if l.cw+tw <= l.w {
-		l.buf = append(l.buf, tb...)
-		l.cw += tw
-		if l.ansi {
-			l.ap = updState(l.ap, tb)
-		}
-		l.has = true
-		if !sp {
-			l.hns = true
-		}
+		l.writeBytes(tb, tw, sp)
 		return true
 	}
 	if l.pref && !sp && l.cw > 0 && tw <= l.w {
-		rem := l.w - l.cw
-		if rem > 0 {
-			seg, rest, sw, ok := l.spl(ctx, tb, rem)
-			if !ok {
-				return false
-			}
-			if len(seg) == 0 && len(rest) == len(tb) {
-				seg = tb[:1]
-				rest = tb[1:]
-				sw = 1
-			}
-			l.buf = append(l.buf, seg...)
-			if sw > 0 {
-				l.cw += sw
-				if l.ansi {
-					l.ap = updState(l.ap, seg)
-				}
-				l.has = true
-				if !sp {
-					l.hns = true
-				}
-			}
-			tb = rest
-			if len(tb) == 0 {
-				return true
-			}
-			if sw > 0 {
-				l.emitWrap()
-			}
-		} else {
-			l.emitWrap()
+		rest, ok := l.fillRemaining(ctx, tb, sp)
+		if !ok {
+			return false
 		}
-		return l.addTok(ctx, tb, tokW(tb), sp)
+		if rest == nil {
+			return true
+		}
+		return l.addTok(ctx, rest, tokW(rest), sp)
 	}
 	if tw > l.w {
 		if l.cw > 0 {
-			rem := l.w - l.cw
-			if rem > 0 {
-				seg, rest, sw, ok := l.spl(ctx, tb, rem)
-				if !ok {
-					return false
-				}
-				if len(seg) == 0 && len(rest) == len(tb) {
-					seg = tb[:1]
-					rest = tb[1:]
-					sw = 1
-				}
-				l.buf = append(l.buf, seg...)
-				if sw > 0 {
-					l.cw += sw
-					if l.ansi {
-						l.ap = updState(l.ap, seg)
-					}
-					l.has = true
-					if !sp {
-						l.hns = true
-					}
-				}
-				tb = rest
-				if len(tb) == 0 {
-					return true
-				}
-				if sw > 0 {
-					l.emitWrap()
-				}
-			} else {
-				l.emitWrap()
+			rest, ok := l.fillRemaining(ctx, tb, sp)
+			if !ok {
+				return false
 			}
+			if rest == nil {
+				return true
+			}
+			tb = rest
 		}
 		rest := tb
 		for len(rest) > 0 {
@@ -368,26 +346,11 @@ func (l *lw) addTok(ctx context.Context, tb []byte, tw int, sp bool) bool {
 					lim = l.w
 				}
 			}
-			seg, rem, sw, ok := l.spl(ctx, rest, lim)
+			seg, rem, sw, ok := l.splitAt(ctx, rest, lim)
 			if !ok {
 				return false
 			}
-			if len(seg) == 0 && len(rem) == len(rest) {
-				seg = rest[:1]
-				rem = rest[1:]
-				sw = 1
-			}
-			l.buf = append(l.buf, seg...)
-			if sw > 0 {
-				l.cw += sw
-				if l.ansi {
-					l.ap = updState(l.ap, seg)
-				}
-				l.has = true
-				if !sp {
-					l.hns = true
-				}
-			}
+			l.writeBytes(seg, sw, sp)
 			rest = rem
 			if len(rest) > 0 && sw > 0 {
 				l.emitWrap()
@@ -401,15 +364,7 @@ func (l *lw) addTok(ctx context.Context, tb []byte, tw int, sp bool) bool {
 	if sp && l.hns && !l.keep {
 		return true
 	}
-	l.buf = append(l.buf, tb...)
-	l.cw += tw
-	if l.ansi {
-		l.ap = updState(l.ap, tb)
-	}
-	l.has = true
-	if !sp {
-		l.hns = true
-	}
+	l.writeBytes(tb, tw, sp)
 	return true
 }
 
@@ -560,11 +515,7 @@ func wrapUTF(ctx context.Context, b []byte, l *lw) (int, bool) {
 			i += n
 			continue
 		}
-		r, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-			r = rune(b[i])
-		}
+		r, sz := decRune(b[i:])
 		sp := unicode.IsSpace(r)
 		if ts == 0 {
 			if len(pp) > 0 {
@@ -641,10 +592,7 @@ func updState(ap []byte, b []byte) []byte {
 			i += n
 			continue
 		}
-		_, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-		}
+		_, sz := decRune(b[i:])
 		i += sz
 	}
 	return ap
@@ -810,11 +758,7 @@ func cutUTF(ctx context.Context, b []byte, lim int) ([]byte, []byte, int, bool) 
 			i += n
 			continue
 		}
-		r, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-			r = rune(b[i])
-		}
+		r, sz := decRune(b[i:])
 		rw := rw(r)
 		if w+rw > lim {
 			break
@@ -826,11 +770,7 @@ func cutUTF(ctx context.Context, b []byte, lim int) ([]byte, []byte, int, bool) 
 		if n := scanEsc(b, 0); n > 0 {
 			i = n
 		} else {
-			r, sz := utf8.DecodeRune(b)
-			if sz <= 0 {
-				sz = 1
-				r = rune(b[0])
-			}
+			r, sz := decRune(b)
 			i = sz
 			w = rw(r)
 		}
@@ -855,14 +795,18 @@ func rw(r rune) int {
 	return w
 }
 
+func decRune(b []byte) (rune, int) {
+	r, sz := utf8.DecodeRune(b)
+	if sz <= 0 {
+		return rune(b[0]), 1
+	}
+	return r, sz
+}
+
 func leadIndent(b []byte) []byte {
 	i := 0
 	for i < len(b) {
-		r, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-			r = rune(b[i])
-		}
+		r, sz := decRune(b[i:])
 		if r == ' ' || r == '\t' {
 			i += sz
 			continue
@@ -901,11 +845,7 @@ func leadWSANSI(b []byte) []byte {
 			i += n
 			continue
 		}
-		r, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-			r = rune(b[i])
-		}
+		r, sz := decRune(b[i:])
 		if r == ' ' || r == '\t' {
 			out = append(out, b[i:i+sz]...)
 			i += sz
@@ -931,11 +871,7 @@ func visW(b []byte) int {
 			i += n
 			continue
 		}
-		r, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-			r = rune(b[i])
-		}
+		r, sz := decRune(b[i:])
 		rw := runewidth.RuneWidth(r)
 		if rw > 0 {
 			w += rw
@@ -958,10 +894,7 @@ func trimANSISuffix(b []byte) ([]byte, []byte) {
 			i += n
 			continue
 		}
-		_, sz := utf8.DecodeRune(b[i:])
-		if sz <= 0 {
-			sz = 1
-		}
+		_, sz := decRune(b[i:])
 		i += sz
 	}
 	if len(rs) == 0 {

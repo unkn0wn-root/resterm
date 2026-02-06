@@ -414,6 +414,13 @@ func scriptLangToken(tok string) (string, bool) {
 	}
 }
 
+func setInMap(m *map[string]string, key, value string) {
+	if *m == nil {
+		*m = make(map[string]string)
+	}
+	(*m)[key] = value
+}
+
 func contains(list []string, value string) bool {
 	for _, item := range list {
 		if strings.EqualFold(item, value) {

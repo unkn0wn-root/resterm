@@ -97,6 +97,10 @@ func (r *requestBuilder) appendScriptInclude(kind, lang, path string) {
 	})
 }
 
+func (r *requestBuilder) dispatchBodyLine(line string) bool {
+	return r.graphql.HandleBodyLine(line) || r.grpc.HandleBodyLine(line)
+}
+
 func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	value := strings.TrimSpace(rest)
 	if value == "" {

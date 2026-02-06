@@ -105,41 +105,37 @@ func (r *Resolver) expandTemplates(
 	allowDynamic, allowExpr bool,
 ) (string, error) {
 	var firstErr error
-	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
-		sub := templateVarPattern.FindStringSubmatch(match)
+	var match string
+	fail := func(err error) string {
+		if firstErr == nil {
+			firstErr = err
+		}
+		return match
+	}
+	result := templateVarPattern.ReplaceAllStringFunc(input, func(m string) string {
+		match = m
+		sub := templateVarPattern.FindStringSubmatch(m)
 		if len(sub) < 2 {
-			return match
+			return m
 		}
 		name := strings.TrimSpace(sub[1])
 		if name == "" {
-			return match
+			return m
 		}
 		if strings.HasPrefix(name, "=") {
 			if !allowExpr {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("expressions not allowed")
-				}
-				return match
+				return fail(fmt.Errorf("expressions not allowed"))
 			}
 			expr := strings.TrimSpace(name[1:])
 			if expr == "" {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("empty expression")
-				}
-				return match
+				return fail(fmt.Errorf("empty expression"))
 			}
 			if r.expr == nil {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("expressions not enabled")
-				}
-				return match
+				return fail(fmt.Errorf("expressions not enabled"))
 			}
 			val, err := r.expr(expr, pos)
 			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				return match
+				return fail(err)
 			}
 			return val
 		}
@@ -154,10 +150,7 @@ func (r *Resolver) expandTemplates(
 		if value, ok := r.Resolve(name); ok {
 			return value
 		}
-		if firstErr == nil {
-			firstErr = fmt.Errorf("undefined variable: %s", name)
-		}
-		return match
+		return fail(fmt.Errorf("undefined variable: %s", name))
 	})
 	return result, firstErr
 }
@@ -256,6 +249,10 @@ func (p *MapProvider) Label() string {
 type EnvProvider struct{}
 
 func (EnvProvider) Resolve(name string) (string, bool) {
+	return lookupOSEnv(name)
+}
+
+func lookupOSEnv(name string) (string, bool) {
 	if value, ok := os.LookupEnv(name); ok {
 		return value, true
 	}

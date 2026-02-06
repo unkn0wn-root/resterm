@@ -205,9 +205,7 @@ func (b *documentBuilder) handleBlankLine(line, trimmed string) bool {
 		if !b.request.http.HasMethod() {
 		} else if !b.request.http.HeaderDone() {
 			b.request.markHeadersDone()
-		} else if b.request.graphql.HandleBodyLine(line) {
-		} else if b.request.grpc.HandleBodyLine(line) {
-		} else {
+		} else if !b.request.dispatchBodyLine(line) {
 			b.request.http.AppendBodyLine("")
 		}
 		b.appendLine(line)
@@ -551,10 +549,7 @@ func (b *documentBuilder) addConstant(name, value string, line int) {
 }
 
 func (b *documentBuilder) handleBodyLine(line string) {
-	if b.request.graphql.HandleBodyLine(line) {
-		return
-	}
-	if b.request.grpc.HandleBodyLine(line) {
+	if b.request.dispatchBodyLine(line) {
 		return
 	}
 
@@ -645,12 +640,7 @@ func (b *documentBuilder) flushWorkflow(line int) {
 func (b *documentBuilder) finish() {
 	b.flushRequest(0)
 	b.flushWorkflow(0)
-	if len(b.fileSettings) > 0 {
-		if b.doc.Settings == nil {
-			b.doc.Settings = make(map[string]string, len(b.fileSettings))
-		}
-		maps.Copy(b.doc.Settings, b.fileSettings)
-	}
+	b.flushFileSettings()
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
@@ -663,10 +653,7 @@ func (b *documentBuilder) handleFileSetting(rest string) {
 	if keyName == "" {
 		return
 	}
-	if b.fileSettings == nil {
-		b.fileSettings = make(map[string]string)
-	}
-	b.fileSettings[keyName] = value
+	setInMap(&b.fileSettings, keyName, value)
 }
 
 func (b *documentBuilder) flushFileSettings() {

@@ -86,36 +86,29 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 	if idx := strings.LastIndex(trimmed, " as "); idx >= 0 {
 		expr := strings.TrimSpace(trimmed[:idx])
 		name := strings.TrimSpace(trimmed[idx+4:])
-		if expr == "" || name == "" {
-			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
-		}
-		if !isIdent(name) {
-			return nil, fmt.Errorf("@for-each name %q is invalid", name)
-		}
-		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+		return buildForEachSpec(expr, name, line, "<expr> as <name>")
 	}
 	if idx := strings.Index(trimmed, " in "); idx >= 0 {
 		name := strings.TrimSpace(trimmed[:idx])
 		expr := strings.TrimSpace(trimmed[idx+4:])
-		if expr == "" || name == "" {
-			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
-		}
-		if !isIdent(name) {
-			return nil, fmt.Errorf("@for-each name %q is invalid", name)
-		}
-		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+		return buildForEachSpec(expr, name, line, "<name> in <expr>")
 	}
 	return nil, fmt.Errorf("@for-each must use 'as' or 'in'")
 }
 
-func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
-	lowered := strings.ToLower(strings.TrimSpace(token))
-	secret := false
-	if strings.HasSuffix(lowered, "-secret") {
-		secret = true
-		lowered = strings.TrimSuffix(lowered, "-secret")
+func buildForEachSpec(expr, name string, line int, syntax string) (*restfile.ForEachSpec, error) {
+	if expr == "" || name == "" {
+		return nil, fmt.Errorf("@for-each requires '%s'", syntax)
 	}
-	switch lowered {
+	if !isIdent(name) {
+		return nil, fmt.Errorf("@for-each name %q is invalid", name)
+	}
+	return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
+}
+
+func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
+	scopeStr, secret := parseScopeToken(token)
+	switch scopeStr {
 	case "request":
 		return restfile.CaptureScopeRequest, secret, true
 	case "file":
@@ -250,17 +243,9 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 		if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
 			name := normalizeTracePhaseName(parts[0])
 			dur := parseDuration(parts[1])
-			if dur <= 0 {
-				continue
+			if dur > 0 {
+				setTraceBudget(spec, name, dur)
 			}
-			if name == "total" {
-				spec.Budgets.Total = dur
-				continue
-			}
-			if spec.Budgets.Phases == nil {
-				spec.Budgets.Phases = make(map[string]time.Duration)
-			}
-			spec.Budgets.Phases[name] = dur
 			continue
 		}
 
@@ -281,19 +266,9 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 					spec.Budgets.Tolerance = dur
 				}
 			default:
-				dur := parseDuration(val)
-				if dur <= 0 {
-					continue
+				if dur := parseDuration(val); dur > 0 {
+					setTraceBudget(spec, normalizeTracePhaseName(key), dur)
 				}
-				name := normalizeTracePhaseName(key)
-				if name == "total" {
-					spec.Budgets.Total = dur
-					continue
-				}
-				if spec.Budgets.Phases == nil {
-					spec.Budgets.Phases = make(map[string]time.Duration)
-				}
-				spec.Budgets.Phases[name] = dur
 			}
 		}
 	}
@@ -364,6 +339,17 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 		Environments: envs,
 		Baseline:     baseline,
 	}, nil
+}
+
+func setTraceBudget(spec *restfile.TraceSpec, name string, dur time.Duration) {
+	if name == "total" {
+		spec.Budgets.Total = dur
+		return
+	}
+	if spec.Budgets.Phases == nil {
+		spec.Budgets.Phases = make(map[string]time.Duration)
+	}
+	spec.Budgets.Phases[name] = dur
 }
 
 func parseDuration(value string) time.Duration {

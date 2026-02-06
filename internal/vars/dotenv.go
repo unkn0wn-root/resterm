@@ -303,10 +303,7 @@ func resolveDotEnvRef(name string, resolved map[string]string, lineNumber int) (
 		return value, nil
 	}
 	// allow OS envs fallbacks so sensitive values can stay outside the dotenv file and be passed at launch time
-	if envValue, ok := os.LookupEnv(name); ok {
-		return envValue, nil
-	}
-	if envValue, ok := os.LookupEnv(strings.ToUpper(name)); ok {
+	if envValue, ok := lookupOSEnv(name); ok {
 		return envValue, nil
 	}
 	return "", errdef.New(

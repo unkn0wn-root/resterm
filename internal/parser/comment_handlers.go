@@ -1,10 +1,20 @@
 package parser
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
+
+func setOnce[T any](b *documentBuilder, target **T, value *T, line int, directive string) bool {
+	if *target != nil {
+		b.addError(line, fmt.Sprintf("@%s directive already defined for this request", directive))
+		return false
+	}
+	*target = value
+	return true
+}
 
 func (b *documentBuilder) handleComment(line int, text string) {
 	if !strings.HasPrefix(text, "@") {
@@ -196,29 +206,15 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 	case "setting":
 		key, value := splitDirective(rest)
 		if key != "" {
-			if b.request.settings == nil {
-				b.request.settings = make(map[string]string)
-			}
-			b.request.settings[key] = value
+			setInMap(&b.request.settings, key, value)
 		}
 	case "timeout":
-		if b.request.settings == nil {
-			b.request.settings = make(map[string]string)
-		}
-		b.request.settings["timeout"] = rest
+		setInMap(&b.request.settings, "timeout", rest)
 	case "var":
 		name, value := parseNameValue(rest)
-		if name == "" {
-			return
+		if name != "" {
+			b.addScopedVariable(name, value, line, restfile.ScopeRequest, false)
 		}
-		variable := restfile.Variable{
-			Name:   name,
-			Value:  value,
-			Line:   line,
-			Scope:  restfile.ScopeRequest,
-			Secret: false,
-		}
-		b.request.variables = append(b.request.variables, variable)
 	case "script":
 		if rest != "" {
 			kind, lang := parseScriptSpec(rest)
@@ -248,22 +244,14 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.addError(line, err.Error())
 			return
 		}
-		if b.request.metadata.When != nil {
-			b.addError(line, "@when directive already defined for this request")
-			return
-		}
-		b.request.metadata.When = spec
+		setOnce(b, &b.request.metadata.When, spec, line, "when")
 	case "for-each":
 		spec, err := parseForEachSpec(rest, line)
 		if err != nil {
 			b.addError(line, err.Error())
 			return
 		}
-		if b.request.metadata.ForEach != nil {
-			b.addError(line, "@for-each directive already defined for this request")
-			return
-		}
-		b.request.metadata.ForEach = spec
+		setOnce(b, &b.request.metadata.ForEach, spec, line, "for-each")
 	case "profile":
 		if spec := parseProfileSpec(rest); spec != nil {
 			b.request.metadata.Profile = spec
@@ -273,15 +261,11 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.request.metadata.Trace = spec
 		}
 	case "compare":
-		if b.request.metadata.Compare != nil {
-			b.addError(line, "@compare directive already defined for this request")
-			return
-		}
 		spec, err := parseCompareDirective(rest)
 		if err != nil {
 			b.addError(line, err.Error())
 			return
 		}
-		b.request.metadata.Compare = spec
+		setOnce(b, &b.request.metadata.Compare, spec, line, "compare")
 	}
 }

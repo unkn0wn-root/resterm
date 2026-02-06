@@ -84,26 +84,25 @@ func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
 			}
 			flattenEnvValue(childKey, item, out)
 		}
-	case string:
-		if prefix != "" {
-			out[prefix] = v
-		}
-	case float64:
-		if prefix != "" {
-			out[prefix] = strconv.FormatFloat(v, 'f', -1, 64)
-		}
-	case bool:
-		if prefix != "" {
-			out[prefix] = strconv.FormatBool(v)
-		}
-	case nil:
-		if prefix != "" {
-			out[prefix] = ""
-		}
 	default:
 		if prefix != "" {
-			out[prefix] = fmt.Sprintf("%v", v)
+			out[prefix] = stringifyLeaf(v)
 		}
+	}
+}
+
+func stringifyLeaf(value interface{}) string {
+	switch v := value.(type) {
+	case string:
+		return v
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(v)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
 	}
 }
 
@@ -119,32 +118,6 @@ func ResolveEnvironment(paths []string) (EnvironmentSet, string, error) {
 		}
 	}
 	return nil, "", nil
-}
-
-type EnvironmentProvider struct {
-	name    string
-	values  map[string]string
-	backing string
-}
-
-func NewEnvironmentProvider(name string, values map[string]string, backing string) Provider {
-	return &EnvironmentProvider{
-		name:    name,
-		values:  values,
-		backing: backing,
-	}
-}
-
-func (p *EnvironmentProvider) Resolve(name string) (string, bool) {
-	value, ok := p.values[name]
-	return value, ok
-}
-
-func (p *EnvironmentProvider) Label() string {
-	if p.backing == "" {
-		return fmt.Sprintf("env:%s", p.name)
-	}
-	return fmt.Sprintf("env:%s (%s)", p.name, filepath.Base(p.backing))
 }
 
 // SelectEnv returns the effective environment name, preferring the explicit override
