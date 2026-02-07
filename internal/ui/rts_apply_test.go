@@ -25,7 +25,7 @@ func TestRunRTSApplyPatch(t *testing.T) {
 		LineRange: restfile.LineRange{Start: 1, End: 4},
 		Metadata: restfile.RequestMetadata{
 			Applies: []restfile.ApplySpec{{
-				Expression: `{method: "post", url: "https://example.com/new?seed=1", headers: {"X-Test": "1", "X-Old": null, "X-List": ["a", "b"]}, query: {"q": "a", "keep": null}, body: {a: 1}, vars: {"token": "abc"}}`,
+				Expression: `{method: "post", url: "https://example.com/new?seed=1", headers: {"X-Test": "1", "X-Old": null, "X-List": ["a", "b"]}, query: {"q": "a", "keep": null}, body: {a: 1}, auth: {type: "oauth2", cache_key: "myapi"}, settings: {timeout: "3s", followredirects: false}, vars: {"token": "abc"}}`,
 				Line:       1,
 				Col:        1,
 			}},
@@ -75,6 +75,21 @@ func TestRunRTSApplyPatch(t *testing.T) {
 	if strings.TrimSpace(req.Body.FilePath) != "" {
 		t.Fatalf("expected body file cleared, got %q", req.Body.FilePath)
 	}
+	if req.Metadata.Auth == nil {
+		t.Fatalf("expected auth to be set")
+	}
+	if req.Metadata.Auth.Type != "oauth2" {
+		t.Fatalf("expected oauth2 auth type, got %q", req.Metadata.Auth.Type)
+	}
+	if req.Metadata.Auth.Params["cache_key"] != "myapi" {
+		t.Fatalf("expected cache_key myapi, got %q", req.Metadata.Auth.Params["cache_key"])
+	}
+	if req.Settings["timeout"] != "3s" {
+		t.Fatalf("expected timeout setting 3s, got %q", req.Settings["timeout"])
+	}
+	if req.Settings["followredirects"] != "false" {
+		t.Fatalf("expected followredirects false, got %q", req.Settings["followredirects"])
+	}
 
 	if vars["token"] != "abc" || vars["existing"] != "1" {
 		t.Fatalf("unexpected vars map: %#v", vars)
@@ -121,6 +136,37 @@ func TestRunRTSApplyOrder(t *testing.T) {
 	}
 	if got := req.Headers.Get("X-Next"); got != "1b" {
 		t.Fatalf("expected X-Next header 1b, got %q", got)
+	}
+}
+
+func TestRunRTSApplyClearsAuthAndDeletesSetting(t *testing.T) {
+	m := New(Config{})
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com",
+		LineRange: restfile.LineRange{Start: 1, End: 2},
+		Settings:  map[string]string{"timeout": "5s"},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "old"},
+			},
+			Applies: []restfile.ApplySpec{{
+				Expression: `{auth: null, settings: {timeout: null}}`,
+				Line:       1,
+				Col:        1,
+			}},
+		},
+	}
+
+	if err := m.runRTSApply(context.Background(), nil, req, "", "", nil, nil); err != nil {
+		t.Fatalf("runRTSApply: %v", err)
+	}
+	if req.Metadata.Auth != nil {
+		t.Fatalf("expected auth to be cleared")
+	}
+	if _, ok := req.Settings["timeout"]; ok {
+		t.Fatalf("expected timeout setting to be deleted")
 	}
 }
 
@@ -187,6 +233,85 @@ func TestRunRTSApplyTemplatedQueryPreservesTemplate(t *testing.T) {
 	}
 	if !strings.Contains(req.URL, "q=x") {
 		t.Fatalf("expected query q=x, got %q", req.URL)
+	}
+}
+
+func TestRunRTSApplyUseProfiles(t *testing.T) {
+	m := New(Config{})
+	doc := &restfile.Document{
+		Path: "/tmp/patches.http",
+		Patches: []restfile.PatchProfile{
+			{
+				Scope:      restfile.PatchScopeFile,
+				Name:       "jsonApi",
+				Expression: `{method: "post", headers: {"X-From": "file"}}`,
+				Line:       1,
+				Col:        1,
+			},
+		},
+	}
+	if m.patchGlobals != nil {
+		m.patchGlobals.set("/tmp/other.http", []restfile.PatchProfile{
+			{
+				Scope:      restfile.PatchScopeGlobal,
+				Name:       "jsonApi",
+				Expression: `{method: "delete", headers: {"X-From": "global"}}`,
+			},
+			{
+				Scope:      restfile.PatchScopeGlobal,
+				Name:       "authProd",
+				Expression: `{headers: {"Authorization": "Bearer abc"}}`,
+			},
+		})
+	}
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com",
+		LineRange: restfile.LineRange{Start: 5, End: 8},
+		Metadata: restfile.RequestMetadata{
+			Applies: []restfile.ApplySpec{{
+				Uses: []string{"jsonApi", "authProd"},
+				Line: 5,
+				Col:  1,
+			}},
+		},
+	}
+
+	if err := m.runRTSApply(context.Background(), doc, req, "", "", nil, nil); err != nil {
+		t.Fatalf("runRTSApply: %v", err)
+	}
+	if req.Method != "POST" {
+		t.Fatalf("expected file patch to win and set method POST, got %q", req.Method)
+	}
+	if got := req.Headers.Get("X-From"); got != "file" {
+		t.Fatalf("expected file header value, got %q", got)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer abc" {
+		t.Fatalf("expected auth header from global profile, got %q", got)
+	}
+}
+
+func TestRunRTSApplyUseMissingProfile(t *testing.T) {
+	m := New(Config{})
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com",
+		LineRange: restfile.LineRange{Start: 1, End: 2},
+		Metadata: restfile.RequestMetadata{
+			Applies: []restfile.ApplySpec{{
+				Uses: []string{"missing"},
+				Line: 1,
+				Col:  1,
+			}},
+		},
+	}
+
+	err := m.runRTSApply(context.Background(), nil, req, "", "", nil, nil)
+	if err == nil {
+		t.Fatalf("expected missing profile error")
+	}
+	if !strings.Contains(err.Error(), `use="missing" not found`) {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

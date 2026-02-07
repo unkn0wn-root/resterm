@@ -1,0 +1,13 @@
+# @global base_url https://httpbin.org
+
+# @patch file jsonApi {headers: {"Accept":"application/json","Content-Type":"application/json"}}
+# @patch file strict {settings: {timeout:"3s", followredirects:false}}
+# @patch global authProd {auth: {type:"oauth2", cache_key:"myapi"}}
+
+### Reusable apply profiles
+# @name RTS_ApplyProfiles
+# @apply use=jsonApi,use=authProd,use=strict
+# @assert request.header("Accept") == "application/json"
+POST {{base_url}}/anything
+
+{"hello":"world"}

@@ -61,16 +61,9 @@ func lookupProfile(
 	name string,
 	scope restfile.SSHScope,
 ) (*restfile.SSHProfile, bool) {
-	for i := range profiles {
-		p := profiles[i]
-		if p.Scope != scope {
-			continue
-		}
-		if strings.EqualFold(strings.TrimSpace(p.Name), strings.TrimSpace(name)) {
-			return &p, true
-		}
-	}
-	return nil, false
+	sf := func(p restfile.SSHProfile) restfile.SSHScope { return p.Scope }
+	nf := func(p restfile.SSHProfile) string { return p.Name }
+	return restfile.LookupNamedScoped(profiles, name, scope, sf, nf)
 }
 
 func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfile.SSHProfile {

@@ -136,7 +136,7 @@ func isSubcommandRune(r rune) bool {
 		return true
 	}
 	switch r {
-	case '=', '<', '>':
+	case '=', '<', '>', ',':
 		return true
 	default:
 		return false

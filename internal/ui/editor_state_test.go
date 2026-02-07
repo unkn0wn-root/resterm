@@ -1299,6 +1299,27 @@ func TestAnalyzeMetadataHintContextSupportsChainedProfileParams(t *testing.T) {
 	}
 }
 
+func TestAnalyzeMetadataHintContextSupportsApplyUseComma(t *testing.T) {
+	query := []rune("apply use=jsonApi,use")
+	ctx, ok := hint.AnalyzeContext(query)
+	if !ok {
+		t.Fatal("expected analyzeMetadataHintContext to accept comma-separated apply use")
+	}
+	if ctx.Mode != hint.ModeSubcommand {
+		t.Fatalf("expected subcommand mode, got %v", ctx.Mode)
+	}
+	if ctx.BaseKey != "apply" {
+		t.Fatalf("expected base key apply, got %q", ctx.BaseKey)
+	}
+	if ctx.Query != "use=jsonapi,use" {
+		t.Fatalf("unexpected query %q", ctx.Query)
+	}
+	wantStart := len([]rune("apply "))
+	if ctx.TokenStart != wantStart {
+		t.Fatalf("expected token start %d, got %d", wantStart, ctx.TokenStart)
+	}
+}
+
 func TestRequestEditorExitSearchMode(t *testing.T) {
 	content := "foo\nbar\nfoo"
 	editor := newTestEditor(content)

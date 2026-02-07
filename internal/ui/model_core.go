@@ -181,6 +181,7 @@ type Model struct {
 	grpcOptions        grpcclient.Options
 	sshMgr             *ssh.Manager
 	sshGlobals         *sshStore
+	patchGlobals       *patchStore
 	workspaceRoot      string
 	workspaceRecursive bool
 
@@ -595,6 +596,7 @@ func New(cfg Config) Model {
 		sshMgr = ssh.NewManager()
 	}
 	sshGlobals := newSSHStore()
+	patchGlobals := newPatchStore()
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
@@ -614,6 +616,7 @@ func New(cfg Config) Model {
 		grpcOptions:            cfg.GRPCOptions,
 		sshMgr:                 sshMgr,
 		sshGlobals:             sshGlobals,
+		patchGlobals:           patchGlobals,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,
@@ -702,6 +705,7 @@ func New(cfg Config) Model {
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
 	model.syncSSHGlobals(model.doc)
+	model.syncPatchGlobals(model.doc)
 	model.syncRequestList(model.doc)
 	model.rebuildNavigator(entries)
 	if model.historyStore != nil {

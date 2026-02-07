@@ -202,11 +202,101 @@ GET https://example.com
 	if spec.Expression != `{headers: {"X-Test": "1"}}` {
 		t.Fatalf("unexpected apply expression: %q", spec.Expression)
 	}
+	if len(spec.Uses) != 0 {
+		t.Fatalf("expected no apply uses, got %#v", spec.Uses)
+	}
 	if spec.Line != 1 {
 		t.Fatalf("expected line 1, got %d", spec.Line)
 	}
 	if spec.Col != 1 {
 		t.Fatalf("expected col 1, got %d", spec.Col)
+	}
+}
+
+func TestParseApplyUseChain(t *testing.T) {
+	src := `# @apply use=jsonApi,use=authProd,use=strict
+GET https://example.com
+`
+	doc := Parse("apply-use.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	ap := doc.Requests[0].Metadata.Applies
+	if len(ap) != 1 {
+		t.Fatalf("expected 1 apply directive, got %d", len(ap))
+	}
+	sp := ap[0]
+	if sp.Expression != "" {
+		t.Fatalf("expected empty expression for use chain, got %q", sp.Expression)
+	}
+	want := []string{"jsonApi", "authProd", "strict"}
+	if len(sp.Uses) != len(want) {
+		t.Fatalf("unexpected apply uses: %#v", sp.Uses)
+	}
+	for i, v := range want {
+		if sp.Uses[i] != v {
+			t.Fatalf("expected use %q at index %d, got %q", v, i, sp.Uses[i])
+		}
+	}
+}
+
+func TestParseApplyUseInvalidToken(t *testing.T) {
+	src := `# @apply use=ok,bad=oops
+GET https://example.com
+`
+	doc := Parse("apply-use-bad.http", []byte(src))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors")
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if got := len(doc.Requests[0].Metadata.Applies); got != 0 {
+		t.Fatalf("expected 0 apply directives on error, got %d", got)
+	}
+}
+
+func TestParsePatchProfiles(t *testing.T) {
+	src := `# @patch file jsonApi {headers: {"Accept":"application/json"}}
+# @patch global strict {settings: {timeout:"3s"}}
+GET https://example.com
+`
+	doc := Parse("patch.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Patches) != 2 {
+		t.Fatalf("expected 2 patch profiles, got %d", len(doc.Patches))
+	}
+	if doc.Patches[0].Scope != restfile.PatchScopeFile {
+		t.Fatalf("expected first patch to be file scope, got %v", doc.Patches[0].Scope)
+	}
+	if doc.Patches[0].Name != "jsonApi" {
+		t.Fatalf("unexpected first patch name %q", doc.Patches[0].Name)
+	}
+	if doc.Patches[1].Scope != restfile.PatchScopeGlobal {
+		t.Fatalf("expected second patch to be global scope, got %v", doc.Patches[1].Scope)
+	}
+	if doc.Patches[1].Name != "strict" {
+		t.Fatalf("unexpected second patch name %q", doc.Patches[1].Name)
+	}
+}
+
+func TestParsePatchInsideRequestErrors(t *testing.T) {
+	src := `### sample
+# @name Sample
+# @patch file local {headers: {"X-Test":"1"}}
+GET https://example.com
+`
+	doc := Parse("patch-request.http", []byte(src))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors")
+	}
+	if len(doc.Patches) != 0 {
+		t.Fatalf("expected no patch profiles when declared in request, got %d", len(doc.Patches))
 	}
 }
 

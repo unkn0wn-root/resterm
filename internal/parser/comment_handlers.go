@@ -39,6 +39,9 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if b.handleSSHDirective(line, key, rest) {
 		return
 	}
+	if b.handlePatchDirective(line, key, rest) {
+		return
+	}
 	if b.handleFileSettingsDirective(key, rest) {
 		return
 	}
@@ -112,6 +115,23 @@ func (b *documentBuilder) handleSSHDirective(line int, key, rest string) bool {
 		return false
 	}
 	b.handleSSH(line, rest)
+	return true
+}
+
+func (b *documentBuilder) handlePatchDirective(line int, key, rest string) bool {
+	if key != "patch" {
+		return false
+	}
+	if b.inRequest {
+		b.addError(line, "@patch must be declared outside a request")
+		return true
+	}
+	spec, err := parsePatchSpec(rest, line)
+	if err != nil {
+		b.addError(line, err.Error())
+		return true
+	}
+	b.patchDefs = append(b.patchDefs, spec)
 	return true
 }
 
@@ -226,11 +246,12 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.request.currentScriptLang = lang
 		}
 	case "apply":
-		if spec, ok := parseApplySpec(rest, line); ok {
-			b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
-		} else {
-			b.addError(line, "@apply expression missing")
+		spec, err := parseApplySpec(rest, line)
+		if err != nil {
+			b.addError(line, err.Error())
+			return
 		}
+		b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
 	case "capture":
 		if capture, ok := b.parseCaptureDirective(rest); ok {
 			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
