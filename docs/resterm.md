@@ -507,7 +507,9 @@ RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. I
 | Directive | Syntax | Description |
 | --- | --- | --- |
 | `@use` | `# @use ./rts/helpers.rts [as helpers]` | Import an RST module (valid at file or request scope); the alias defaults to the module name. |
-| `@apply` | `# @apply {headers: {"X-Test": "1"}}` | Apply a patch to method/url/headers/query/body/vars before pre-request scripts. |
+| `@patch` | `# @patch file jsonApi {headers: {"Accept":"application/json"}}` | Define reusable `@apply` patch profiles at `file` or `global` scope. |
+| `@apply` | `# @apply {headers: {"X-Test": "1"}}` | Apply an inline patch to method/url/headers/query/body/auth/settings/vars before pre-request scripts. |
+| `@apply` | `# @apply use=jsonApi,use=authProd` | Reuse named `@patch` profiles; entries run left-to-right and resolve file scope first, then globals. |
 | `@when` | `# @when vars.has("token")` | Run the request only when the expression is truthy. |
 | `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |
 | `@assert` | `# @assert response.statusCode == 200` | Evaluate an assertion after the response arrives. |

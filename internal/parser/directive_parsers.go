@@ -11,19 +11,118 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func parseApplySpec(rest string, line int) (restfile.ApplySpec, bool) {
-	expr := strings.TrimSpace(rest)
-	if after, ok := strings.CutPrefix(expr, "="); ok {
-		expr = strings.TrimSpace(after)
+func parseApplySpec(rest string, line int) (restfile.ApplySpec, error) {
+	raw := strings.TrimSpace(rest)
+	if after, ok := strings.CutPrefix(raw, "="); ok {
+		raw = strings.TrimSpace(after)
 	}
-	if expr == "" {
-		return restfile.ApplySpec{}, false
+	if raw == "" {
+		return restfile.ApplySpec{}, fmt.Errorf("@apply expression missing")
+	}
+	l := strings.ToLower(raw)
+	if strings.HasPrefix(l, "use=") {
+		us, err := parseApplyUses(raw)
+		if err != nil {
+			return restfile.ApplySpec{}, err
+		}
+		return restfile.ApplySpec{
+			Uses: us,
+			Line: line,
+			Col:  1,
+		}, nil
 	}
 	return restfile.ApplySpec{
-		Expression: expr,
+		Expression: raw,
 		Line:       line,
 		Col:        1,
-	}, true
+	}, nil
+}
+
+func parseApplyUses(raw string) ([]string, error) {
+	ps := strings.Split(raw, ",")
+	us := make([]string, 0, len(ps))
+	for _, p := range ps {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return nil, fmt.Errorf("@apply has an empty use token")
+		}
+		k, v, ok := strings.Cut(p, "=")
+		if !ok {
+			return nil, fmt.Errorf("@apply token %q must be use=<name>", p)
+		}
+		if !strings.EqualFold(strings.TrimSpace(k), "use") {
+			return nil, fmt.Errorf("@apply token %q must be use=<name>", p)
+		}
+		n := strings.TrimSpace(trimQuotes(v))
+		if !validPatchName(n) {
+			return nil, fmt.Errorf("@apply use name %q is invalid", n)
+		}
+		us = append(us, n)
+	}
+	if len(us) == 0 {
+		return nil, fmt.Errorf("@apply use= requires at least one profile name")
+	}
+	return us, nil
+}
+
+func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
+	scTok, rem := splitFirst(rest)
+	if scTok == "" {
+		return restfile.PatchProfile{}, fmt.Errorf(
+			"@patch requires '<scope> <name> <expression>'",
+		)
+	}
+	sc, ok := parsePatchScope(scTok)
+	if !ok {
+		return restfile.PatchProfile{}, fmt.Errorf("@patch scope must be file or global")
+	}
+	n, rem := splitFirst(rem)
+	n = strings.TrimSpace(n)
+	if !validPatchName(n) {
+		return restfile.PatchProfile{}, fmt.Errorf("@patch name %q is invalid", n)
+	}
+	ex := strings.TrimSpace(rem)
+	if after, ok := strings.CutPrefix(ex, "="); ok {
+		ex = strings.TrimSpace(after)
+	}
+	if ex == "" {
+		return restfile.PatchProfile{}, fmt.Errorf("@patch %q expression missing", n)
+	}
+	return restfile.PatchProfile{
+		Scope:      sc,
+		Name:       n,
+		Expression: ex,
+		Line:       line,
+		Col:        1,
+	}, nil
+}
+
+func parsePatchScope(tok string) (restfile.PatchScope, bool) {
+	switch strings.ToLower(strings.TrimSpace(tok)) {
+	case "file":
+		return restfile.PatchScopeFile, true
+	case "global":
+		return restfile.PatchScopeGlobal, true
+	default:
+		return 0, false
+	}
+}
+
+func validPatchName(n string) bool {
+	n = strings.TrimSpace(n)
+	if n == "" {
+		return false
+	}
+	for _, r := range n {
+		if isIdentRune(r) {
+			continue
+		}
+		if r == '-' || r == '.' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {

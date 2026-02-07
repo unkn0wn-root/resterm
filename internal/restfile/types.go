@@ -92,6 +92,13 @@ const (
 	SSHScopeGlobal
 )
 
+type PatchScope int
+
+const (
+	PatchScopeFile PatchScope = iota
+	PatchScopeGlobal
+)
+
 type SSHOpt[T any] struct {
 	Val T
 	Set bool
@@ -210,6 +217,15 @@ type AssertSpec struct {
 }
 
 type ApplySpec struct {
+	Uses       []string
+	Expression string
+	Line       int
+	Col        int
+}
+
+type PatchProfile struct {
+	Scope      PatchScope
+	Name       string
 	Expression string
 	Line       int
 	Col        int
@@ -289,6 +305,7 @@ type Document struct {
 	Globals   []Variable
 	Constants []Constant
 	SSH       []SSHProfile
+	Patches   []PatchProfile
 	Settings  map[string]string
 	Uses      []UseSpec
 	Requests  []*Request

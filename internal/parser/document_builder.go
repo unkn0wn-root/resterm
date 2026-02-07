@@ -22,6 +22,7 @@ type documentBuilder struct {
 	fileSettings         map[string]string
 	consts               []restfile.Constant
 	sshDefs              []restfile.SSHProfile
+	patchDefs            []restfile.PatchProfile
 	fileUses             []restfile.UseSpec
 	inBlock              bool
 	workflow             *workflowBuilder
@@ -656,6 +657,7 @@ func (b *documentBuilder) finish() {
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
 	b.doc.Uses = append(b.doc.Uses, b.fileUses...)
 	b.doc.SSH = append(b.doc.SSH, b.sshDefs...)
+	b.doc.Patches = append(b.doc.Patches, b.patchDefs...)
 }
 
 func (b *documentBuilder) handleFileSetting(rest string) {

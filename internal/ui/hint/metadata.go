@@ -27,7 +27,11 @@ var MetaCatalog = []Hint{
 	{Label: "@const", Summary: "Define a reusable constant"},
 	{Label: "@use", Summary: "Import a RestermScript module"},
 	{Label: "@script", Summary: "Start a pre-request or test script block"},
-	{Label: "@apply", Summary: "Apply a RestermScript patch before pre-request scripts"},
+	{Label: "@patch", Summary: "Define a reusable apply profile at file/global scope"},
+	{
+		Label:   "@apply",
+		Summary: "Apply an inline patch or reuse profiles (use=...) before pre-request scripts",
+	},
 	{
 		Label:   "@when",
 		Aliases: []string{"@skip-if"},
@@ -105,6 +109,24 @@ var workflowRunHints = []Hint{
 }
 
 var metaSub = map[string][]Hint{
+	"apply": {
+		{
+			Label:      "use=",
+			Summary:    "Reference a named patch profile",
+			Insert:     "use=jsonApi",
+			CursorBack: len("jsonApi"),
+		},
+	},
+	"patch": {
+		{
+			Label:   "file",
+			Summary: "Define a file-scoped reusable patch profile",
+		},
+		{
+			Label:   "global",
+			Summary: "Define a workspace-global reusable patch profile",
+		},
+	},
 	"body": {
 		{Label: "expand", Summary: "Expand templates before sending body (incl. gRPC files)"},
 		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},

@@ -259,6 +259,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
 	m.syncSSHGlobals(doc)
+	m.syncPatchGlobals(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -367,6 +368,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
 	m.syncSSHGlobals(doc)
+	m.syncPatchGlobals(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -1331,6 +1333,21 @@ func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
 		return nil
 	}
 	return doc.SSH
+}
+
+func (m *Model) syncPatchGlobals(doc *restfile.Document) {
+	if m.patchGlobals == nil {
+		return
+	}
+	path := m.documentRuntimePath(doc)
+	m.patchGlobals.set(path, docPatchProfiles(doc))
+}
+
+func docPatchProfiles(doc *restfile.Document) []restfile.PatchProfile {
+	if doc == nil {
+		return nil
+	}
+	return doc.Patches
 }
 
 func (m *Model) mergeFileRuntimeVars(
@@ -2516,7 +2533,16 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 	clone.Metadata.Tags = append([]string(nil), req.Metadata.Tags...)
 	clone.Metadata.Scripts = append([]restfile.ScriptBlock(nil), req.Metadata.Scripts...)
 	clone.Metadata.Uses = append([]restfile.UseSpec(nil), req.Metadata.Uses...)
-	clone.Metadata.Applies = append([]restfile.ApplySpec(nil), req.Metadata.Applies...)
+	if len(req.Metadata.Applies) > 0 {
+		clone.Metadata.Applies = make([]restfile.ApplySpec, len(req.Metadata.Applies))
+		copy(clone.Metadata.Applies, req.Metadata.Applies)
+		for i := range clone.Metadata.Applies {
+			clone.Metadata.Applies[i].Uses = append(
+				[]string(nil),
+				req.Metadata.Applies[i].Uses...,
+			)
+		}
+	}
 	clone.Metadata.Asserts = append([]restfile.AssertSpec(nil), req.Metadata.Asserts...)
 	clone.Metadata.Captures = append([]restfile.CaptureSpec(nil), req.Metadata.Captures...)
 	if req.Metadata.When != nil {

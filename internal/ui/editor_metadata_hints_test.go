@@ -8,7 +8,7 @@ import (
 )
 
 func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
-	required := []string{"@body", "@const", "@variables", "@query", "@trace"}
+	required := []string{"@body", "@const", "@variables", "@query", "@trace", "@patch"}
 	labels := make(map[string]struct{}, len(hint.MetaCatalog))
 	for _, option := range hint.MetaCatalog {
 		labels[option.Label] = struct{}{}
@@ -72,6 +72,14 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 		if !strings.HasPrefix(option.Label, "tot") {
 			t.Fatalf("expected tot* suggestion, got %q", option.Label)
 		}
+	}
+
+	applyOptions := hint.MetaOptions("apply", "")
+	if len(applyOptions) == 0 {
+		t.Fatal("expected apply subcommand options")
+	}
+	if !hintOptionsContain(applyOptions, "use=") {
+		t.Fatalf("expected apply use= suggestion, got %v", applyOptions)
 	}
 }
 

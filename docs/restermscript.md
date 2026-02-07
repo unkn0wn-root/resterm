@@ -405,15 +405,33 @@ Resterm exposes host objects when evaluating templates, directives, `@apply`, as
 
 ```
 # @apply {headers: {"Authorization": "Bearer " + vars.get("auth.token")}}
+# @apply use=jsonApi,use=authProd
 ```
 
 `@apply` is a request scoped directive and you can use it multiple times in a request. Each apply expression is evaluated in order before pre-request scripts. The expression must return a dict patch with specific keys.
+
+You can also reference reusable named patches with `use=`. Comma-separated `use=` entries run left-to-right inside the same `@apply` line.
+
+### @patch
+
+```
+# @patch file jsonApi {headers: {"Accept":"application/json","Content-Type":"application/json"}}
+# @patch global authProd {auth: {type:"oauth2", cache_key:"myapi"}}
+```
+
+`@patch` defines reusable patch expressions for `@apply use=...`.
+
+- Scope must be `file` or `global`.
+- Resolution for `@apply use=name` is file scope first, then global scope.
+- Patch names are case-insensitive when resolving.
 
 - `method` expects a string and replaces the HTTP method, and Resterm uppercases it.
 - `url` expects a string and replaces the request URL.
 - `headers` expects a dict where values are strings, numbers, bools, or lists of those; null deletes a header.
 - `query` expects a dict where values are strings, numbers, or bools; null deletes the key.
 - `body` accepts any value. Strings are used as is, and other values are converted with `str()`.
+- `auth` expects a dict with `type` plus optional params. Use `null` to clear auth for that run.
+- `settings` expects a dict where values are strings, numbers, or bools; null deletes a setting key.
 - `vars` expects a dict and sets request scope variables for this run (values are strings, numbers, or bools).
 
 ### @when and @skip-if

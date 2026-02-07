@@ -18,6 +18,9 @@ type applyPatch struct {
 	headerDels map[string]struct{}
 	query      map[string]*string
 	body       *string
+	auth       *restfile.AuthSpec
+	authSet    bool
+	settings   map[string]*string
 	vars       map[string]string
 }
 
@@ -68,6 +71,24 @@ func (m *Model) parseApplyPatch(ctx context.Context, pos rts.Pos, v rts.Value) (
 				return applyPatch{}, applyErr("body", err.Error())
 			}
 			p.body = &s
+		case "auth":
+			if val.K == rts.VNull {
+				p.auth = nil
+				p.authSet = true
+				break
+			}
+			a, err := m.parseApplyAuth(ctx, pos, val)
+			if err != nil {
+				return applyPatch{}, err
+			}
+			p.auth = a
+			p.authSet = true
+		case "settings":
+			s, err := m.parseApplySettings(ctx, pos, val)
+			if err != nil {
+				return applyPatch{}, err
+			}
+			p.settings = s
 		case "vars":
 			vars, err := m.parseApplyVars(ctx, pos, val)
 			if err != nil {
@@ -185,6 +206,71 @@ func (m *Model) parseApplyVars(
 	return out, nil
 }
 
+func (m *Model) parseApplyAuth(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+) (*restfile.AuthSpec, error) {
+	if v.K != rts.VDict {
+		return nil, applyErr("auth", "expects dict")
+	}
+	var typ string
+	pm := make(map[string]string)
+	for k, val := range v.M {
+		key := applyKey(k)
+		if key == "" {
+			return nil, applyErr("auth", "expects non-empty key")
+		}
+		s, err := m.applyScalar(ctx, pos, val, "auth."+key)
+		if err != nil {
+			return nil, err
+		}
+		if key == "type" {
+			typ = strings.ToLower(strings.TrimSpace(s))
+			continue
+		}
+		pm[key] = s
+	}
+	if strings.TrimSpace(typ) == "" {
+		return nil, applyErr("auth", "requires type")
+	}
+	if len(pm) == 0 {
+		pm = nil
+	}
+	return &restfile.AuthSpec{Type: typ, Params: pm}, nil
+}
+
+func (m *Model) parseApplySettings(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+) (map[string]*string, error) {
+	if v.K != rts.VDict {
+		return nil, applyErr("settings", "expects dict")
+	}
+	out := make(map[string]*string)
+	for k, val := range v.M {
+		key := strings.ToLower(strings.TrimSpace(k))
+		if key == "" {
+			return nil, applyErr("settings", "expects non-empty key")
+		}
+		if val.K == rts.VNull {
+			out[key] = nil
+			continue
+		}
+		s, err := m.applyScalar(ctx, pos, val, "settings."+key)
+		if err != nil {
+			return nil, err
+		}
+		cp := s
+		out[key] = &cp
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
 func (m *Model) applyScalar(
 	ctx context.Context,
 	pos rts.Pos,
@@ -237,6 +323,8 @@ func applyPatchToRequest(req *restfile.Request, vars map[string]string, p applyP
 	}
 	applyPatchHeaders(req, p.headers, p.headerDels)
 	applyPatchBody(req, p.body)
+	applyPatchAuth(req, p.auth, p.authSet)
+	applyPatchSettings(req, p.settings)
 	applyPatchVars(req, vars, p.vars)
 	return nil
 }
@@ -298,6 +386,41 @@ func applyPatchBody(req *restfile.Request, val *string) {
 	req.Body.GraphQL = nil
 }
 
+func applyPatchAuth(req *restfile.Request, a *restfile.AuthSpec, set bool) {
+	if req == nil || !set {
+		return
+	}
+	if a == nil {
+		req.Metadata.Auth = nil
+		return
+	}
+	cp := *a
+	if len(a.Params) > 0 {
+		pm := make(map[string]string, len(a.Params))
+		for k, v := range a.Params {
+			pm[k] = v
+		}
+		cp.Params = pm
+	}
+	req.Metadata.Auth = &cp
+}
+
+func applyPatchSettings(req *restfile.Request, in map[string]*string) {
+	if req == nil || len(in) == 0 {
+		return
+	}
+	if req.Settings == nil {
+		req.Settings = make(map[string]string, len(in))
+	}
+	for k, v := range in {
+		if v == nil {
+			delete(req.Settings, k)
+			continue
+		}
+		req.Settings[k] = *v
+	}
+}
+
 func applyPatchVars(req *restfile.Request, vars map[string]string, in map[string]string) {
 	if req == nil || len(in) == 0 {
 		return
@@ -344,6 +467,76 @@ func applyErr(field, msg string) error {
 	return fmt.Errorf("@apply %s: %s", field, msg)
 }
 
+type applyExpr struct {
+	ex string
+	ps rts.Pos
+	st string
+}
+
+func (m *Model) applyExprs(
+	doc *restfile.Document,
+	req *restfile.Request,
+	sp restfile.ApplySpec,
+	idx int,
+) ([]applyExpr, error) {
+	if len(sp.Uses) > 0 {
+		out := make([]applyExpr, 0, len(sp.Uses))
+		for _, n := range sp.Uses {
+			pf, ok := m.findPatchProfile(doc, n)
+			if !ok {
+				return nil, fmt.Errorf("@apply use=%q not found", n)
+			}
+			ex := strings.TrimSpace(pf.Expression)
+			if ex == "" {
+				return nil, fmt.Errorf("@apply use=%q has an empty expression", n)
+			}
+			ps := m.rtsPosForLine(doc, req, pf.Line)
+			if pf.Col > 0 {
+				ps.Col = pf.Col
+			}
+			out = append(out, applyExpr{
+				ex: ex,
+				ps: ps,
+				st: fmt.Sprintf("@apply %d use=%s", idx+1, n),
+			})
+		}
+		return out, nil
+	}
+
+	ex := strings.TrimSpace(sp.Expression)
+	if ex == "" {
+		return nil, nil
+	}
+	ps := m.rtsPosForLine(doc, req, sp.Line)
+	if sp.Col > 0 {
+		ps.Col = sp.Col
+	}
+	return []applyExpr{{
+		ex: ex,
+		ps: ps,
+		st: fmt.Sprintf("@apply %d", idx+1),
+	}}, nil
+}
+
+func (m *Model) findPatchProfile(doc *restfile.Document, n string) (*restfile.PatchProfile, bool) {
+	fs := docPatchProfiles(doc)
+	gs := append([]restfile.PatchProfile(nil), fs...)
+	if m.patchGlobals != nil {
+		gs = append(gs, m.patchGlobals.all()...)
+	}
+	sf := func(p restfile.PatchProfile) restfile.PatchScope { return p.Scope }
+	nf := func(p restfile.PatchProfile) string { return p.Name }
+	return restfile.ResolveNamedScoped(
+		fs,
+		gs,
+		n,
+		restfile.PatchScopeFile,
+		restfile.PatchScopeGlobal,
+		sf,
+		nf,
+	)
+}
+
 func (m *Model) runRTSApply(
 	ctx context.Context,
 	doc *restfile.Document,
@@ -359,25 +552,36 @@ func (m *Model) runRTSApply(
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		expr := strings.TrimSpace(spec.Expression)
-		if expr == "" {
-			continue
-		}
-		pos := m.rtsPosForLine(doc, req, spec.Line)
-		if spec.Col > 0 {
-			pos.Col = spec.Col
-		}
-		site := fmt.Sprintf("@apply %d", idx+1)
-		val, err := m.rtsEvalValue(ctx, doc, req, envName, base, expr, site, pos, vars, extraVals)
+		es, err := m.applyExprs(doc, req, spec, idx)
 		if err != nil {
 			return err
 		}
-		patch, err := m.parseApplyPatch(ctx, pos, val)
-		if err != nil {
-			return err
-		}
-		if err := applyPatchToRequest(req, vars, patch); err != nil {
-			return err
+		for _, e := range es {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			val, err := m.rtsEvalValue(
+				ctx,
+				doc,
+				req,
+				envName,
+				base,
+				e.ex,
+				e.st,
+				e.ps,
+				vars,
+				extraVals,
+			)
+			if err != nil {
+				return err
+			}
+			patch, err := m.parseApplyPatch(ctx, e.ps, val)
+			if err != nil {
+				return err
+			}
+			if err := applyPatchToRequest(req, vars, patch); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
