@@ -1131,7 +1131,10 @@ GET https://example.com
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 	if len(doc.Requests[0].Metadata.Scripts) != 0 {
-		t.Fatalf("expected no scripts from commented block, got %d", len(doc.Requests[0].Metadata.Scripts))
+		t.Fatalf(
+			"expected no scripts from commented block, got %d",
+			len(doc.Requests[0].Metadata.Scripts),
+		)
 	}
 }
 
