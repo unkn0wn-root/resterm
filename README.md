@@ -10,7 +10,7 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels** and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links are [Installation](#installation), [Quick Start](#quick-start), [Screenshots](#screenshot-tour), [Features](#features-at-a-glance), and [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start),[Features](#overview), and [Documentation](#documentation).
 
 ## Why Resterm
 
@@ -21,6 +21,53 @@ Quick links are [Installation](#installation), [Quick Start](#quick-start), [Scr
 - Timeline tracing, profiling, and streaming transcripts make debugging first-class.
 - Resterm is meant to be Git-driven so cloud sync and accounts are avoided by default.
 - There is no AI integration and there will never be.
+
+## Screenshot tour
+
+<details>
+<summary>See the UI in action</summary>
+
+<p align="center">
+  <strong>Workflows</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_workflow.png" alt="Screenshot of Resterm with Workflow" width="720" />
+</p>
+
+<p align="center">
+  <strong>Trace and Timeline</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of Resterm with timeline" width="720" />
+</p>
+
+<p align="center">
+  <strong>Profiler</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_profiler.png" alt="Screenshot of Resterm profiler" width="720" />
+</p>
+
+<p align="center">
+  <strong>RestermScript</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_script.png" alt="Screenshot of Resterm with RestermScript" width="720" />
+</p>
+
+<p align="center">
+  <strong>OAuth browser demo (old UI design)</strong>
+</p>
+
+<p align="center">
+  <img src="_media/oauth.gif" alt="Resterm OAuth flow" width="720" />
+</p>
+
+</details>
 
 ## Quick Start
 
@@ -67,27 +114,7 @@ These are the files you will see most often in a Resterm workspace.
 - `.rts` files contain RestermScript helpers for reuse and small bits of logic.
 - `RESTERM.md` is optional project notes created by `resterm init`.
 
-## Inline curl import
-
-Paste a curl command into the editor and press `Ctrl+Enter` to convert it into a structured request. Resterm understands common flags, merges repeated data segments, and keeps multipart uploads intact.
-
-```bash
-curl \
-  --compressed \
-  --url "https://httpbin.org/post?source=resterm&case=multipart" \
-  --request POST \
-  -H "Accept: application/json" \
-  -H "X-Client: resterm-dev" \
-  --user resterm:test123 \
-  -F file=@README.md \
-  --form-string memo='Testing resterm inline curl
-with multiline value' \
-  --form-string meta='{"env":"test","attempt":1}'
-```
-
-If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically.
-
-## Features at glance
+## Overview
 
 Protocols and transports cover the following.
 
@@ -154,53 +181,6 @@ A few keys that make Resterm feel “native” quickly:
 > - `Ctrl+Enter` - send request
 > - `Tab` / `Shift+Tab` - switch panes
 > - `g+p` - jump to response
-
-## Screenshot tour
-
-<details>
-<summary>See the UI in action</summary>
-
-<p align="center">
-  <strong>Workflows</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_workflow.png" alt="Screenshot of Resterm with Workflow" width="720" />
-</p>
-
-<p align="center">
-  <strong>Trace and Timeline</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_trace_timeline.png" alt="Screenshot of Resterm with timeline" width="720" />
-</p>
-
-<p align="center">
-  <strong>Profiler</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_profiler.png" alt="Screenshot of Resterm profiler" width="720" />
-</p>
-
-<p align="center">
-  <strong>RestermScript</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm_script.png" alt="Screenshot of Resterm with RestermScript" width="720" />
-</p>
-
-<p align="center">
-  <strong>OAuth browser demo (old UI design)</strong>
-</p>
-
-<p align="center">
-  <img src="_media/oauth.gif" alt="Resterm OAuth flow" width="720" />
-</p>
-
-</details>
 
 ## Installation
 
@@ -285,6 +265,26 @@ The first command reports whether a newer release is available. The second downl
 - Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. Prefer JSON when you need multiple environments in one file.
 - Flags you probably reach for most are `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-curl`, `--from-openapi`, and `--http-out`.
 - Config is stored at `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` and can be overridden with `RESTERM_CONFIG_DIR`.
+
+## Inline curl import
+
+Paste a curl command into the editor and press `Ctrl+Enter` to convert it into a structured request. Resterm understands common flags, merges repeated data segments, and keeps multipart uploads intact.
+
+```bash
+curl \
+  --compressed \
+  --url "https://httpbin.org/post?source=resterm&case=multipart" \
+  --request POST \
+  -H "Accept: application/json" \
+  -H "X-Client: resterm-dev" \
+  --user resterm:test123 \
+  -F file=@README.md \
+  --form-string memo='Testing resterm inline curl
+with multiline value' \
+  --form-string meta='{"env":"test","attempt":1}'
+```
+
+If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically.
 
 ## RestermScript
 
