@@ -10,13 +10,12 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels** and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start),[Features](#overview), and [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview), and [Documentation](#documentation).
 
 ## Why Resterm
 
 - Requests live in plain `.http` / `.rest` files.
-- Requests are declarative, so you describe what should happen in files and Resterm executes it the same way every time, more like a small API language than a one-off UI.
-- The UI is fully keyboard-driven.
+- Declarative approach, so you describe what should happen in files and Resterm executes it the same way every time, more like a small API language than a one-off UI.
 - OAuth 2.0 flows and SSH tunnels are built in so no extra tools are needed.
 - Timeline tracing, profiling, and streaming transcripts make debugging first-class.
 - Resterm is meant to be Git-driven so cloud sync and accounts are avoided by default.
@@ -118,8 +117,8 @@ These are the files you will see most often in a Resterm workspace.
 
 Protocols and transports cover the following.
 
-- HTTP, GraphQL, gRPC, WebSocket, and SSE are supported out of the box.
-- SSH tunnels include host key verification, keep-alives, retries, and persistent sessions.
+- `HTTP`, `GraphQL`, `gRPC`, `WebSocket`, and `SSE` are supported out of the box.
+- `SSH tunnels` include host key verification, keep-alives, retries, and persistent sessions.
 
 Workspace and files focus on the following.
 
@@ -135,7 +134,7 @@ Automation and reuse include the following.
 
 Debugging and inspection provide the following.
 
-- Pretty/raw/header/diff/history views are available with split panes.
+- `Pretty/raw/header/diff/history` views are available with split panes.
 - Streaming transcripts are recorded and an interactive console is available for WebSocket and SSE.
 - Timeline tracing and profiling help find slow or flaky endpoints.
 
