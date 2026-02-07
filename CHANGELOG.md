@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.21.4](https://github.com/unkn0wn-root/resterm/compare/v0.21.3...v0.21.4) (2026-02-07)
+
+
+### Features
+
+* add [@patch](https://github.com/patch) profiles and extend [@apply](https://github.com/apply) with use=, auth, settings ([4265b56](https://github.com/unkn0wn-root/resterm/commit/4265b566241ef969805180210ea4cd858978a463))
+
 ### [0.21.3](https://github.com/unkn0wn-root/resterm/compare/v0.21.2...v0.21.3) (2026-02-05)
 
 ### [0.21.2](https://github.com/unkn0wn-root/resterm/compare/v0.21.1...v0.21.2) (2026-02-02)
