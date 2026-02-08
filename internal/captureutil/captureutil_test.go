@@ -56,7 +56,16 @@ func TestIsLegacyTemplate(t *testing.T) {
 	if !IsLegacyTemplate(`{{response.json.token}}`) {
 		t.Fatalf("expected legacy template syntax to be detected")
 	}
+	if !IsLegacyTemplate(`Bearer {{response.json.token}}`) {
+		t.Fatalf("expected mixed literal+template legacy syntax to be detected")
+	}
 	if IsLegacyTemplate(`response.json.token`) {
 		t.Fatalf("expected plain RST expression not to be detected as legacy")
+	}
+	if IsLegacyTemplate(`contains(response.text(), "{{token}}")`) {
+		t.Fatalf("expected quoted template markers in RST expression not to be detected as legacy")
+	}
+	if IsLegacyTemplate(`"{{response.json.token}}"`) {
+		t.Fatalf("expected quoted literal template markers not to be detected as legacy")
 	}
 }

@@ -963,6 +963,20 @@ GET https://example.com
 	}
 }
 
+func TestParseCaptureDirectiveStrictDoesNotWarnOnQuotedTemplateMarkers(t *testing.T) {
+	src := `# @setting capture.strict true
+# @capture global note contains(response.text(), "{{token}}")
+GET https://example.com
+`
+	doc := Parse("capture-strict-rst-quoted.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if hasParseMessage(doc.Warnings, "legacy template syntax while capture.strict=true") {
+		t.Fatalf("did not expect strict legacy warning for quoted markers, got %v", doc.Warnings)
+	}
+}
+
 func TestParseOAuth2AuthSpec(t *testing.T) {
 	spec := parseAuthSpec(
 		`oauth2 token_url="https://auth.example.com/token" client_id=my-client client_secret="s3cr3t" scope="read write" grant=password username=jane password=pwd client_auth=body audience=https://api.example.com`,

@@ -1196,6 +1196,38 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesRSTKeepsQuotedTemplateMarkersLiteral(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"token":"abc123"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "quoted",
+				Expression: `"{{response.json.token}}"`,
+			}},
+		},
+	}
+
+	if err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	}); err != nil {
+		t.Fatalf("applyCaptures rst quoted template markers: %v", err)
+	}
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected one request capture, got %d", len(req.Variables))
+	}
+	if req.Variables[0].Value != "{{response.json.token}}" {
+		t.Fatalf("expected literal quoted markers, got %q", req.Variables[0].Value)
+	}
+}
+
 func TestApplyCapturesRSTStreamExpression(t *testing.T) {
 	model := Model{}
 	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "101"}

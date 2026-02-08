@@ -18,7 +18,40 @@ type strictAliasState struct {
 
 func IsLegacyTemplate(ex string) bool {
 	s := strings.TrimSpace(ex)
-	return strings.Contains(s, "{{") && strings.Contains(s, "}}")
+	if s == "" {
+		return false
+	}
+	var q byte
+	esc := false
+	for i := 0; i+1 < len(s); i++ {
+		ch := s[i]
+		if q != 0 {
+			if esc {
+				esc = false
+				continue
+			}
+			if ch == '\\' {
+				esc = true
+				continue
+			}
+			if ch == q {
+				q = 0
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			q = ch
+			continue
+		}
+		if ch != '{' || s[i+1] != '{' {
+			continue
+		}
+		if strings.Index(s[i+2:], "}}") < 0 {
+			return false
+		}
+		return true
+	}
+	return false
 }
 
 func StrictEnabled(ss ...map[string]string) bool {
