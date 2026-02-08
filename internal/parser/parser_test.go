@@ -851,6 +851,41 @@ GET https://example.com
 	if cap.Expression != "{{response.json.json.token}}" {
 		t.Fatalf("unexpected capture expression %q", cap.Expression)
 	}
+	if cap.Line != 2 || cap.Col != 1 {
+		t.Fatalf("unexpected capture pos line=%d col=%d", cap.Line, cap.Col)
+	}
+}
+
+func TestParseCaptureDirectiveRSTExpression(t *testing.T) {
+	src := `# @name Capture
+# @capture global-secret auth.token = response.json.token
+GET https://example.com
+`
+
+	doc := Parse("capture-rst.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Captures) != 1 {
+		t.Fatalf("expected 1 capture, got %d", len(req.Metadata.Captures))
+	}
+	cap := req.Metadata.Captures[0]
+	if cap.Scope != restfile.CaptureScopeGlobal {
+		t.Fatalf("expected global capture scope, got %v", cap.Scope)
+	}
+	if !cap.Secret {
+		t.Fatalf("expected secret capture")
+	}
+	if cap.Name != "auth.token" {
+		t.Fatalf("expected capture name auth.token, got %q", cap.Name)
+	}
+	if cap.Expression != "response.json.token" {
+		t.Fatalf("unexpected capture expression %q", cap.Expression)
+	}
+	if cap.Line != 2 || cap.Col != 1 {
+		t.Fatalf("unexpected capture pos line=%d col=%d", cap.Line, cap.Col)
+	}
 }
 
 func TestParseOAuth2AuthSpec(t *testing.T) {

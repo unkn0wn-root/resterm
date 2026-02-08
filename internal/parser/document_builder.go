@@ -324,7 +324,7 @@ func parseBlockCommentLine(trimmed string, start bool) (string, bool) {
 	return working, closed
 }
 
-func (b *documentBuilder) parseCaptureDirective(rest string) (restfile.CaptureSpec, bool) {
+func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
 		return restfile.CaptureSpec{}, false
@@ -357,6 +357,8 @@ func (b *documentBuilder) parseCaptureDirective(rest string) (restfile.CaptureSp
 		Name:       name,
 		Expression: expression,
 		Secret:     secret,
+		Line:       line,
+		Col:        1,
 	}, true
 }
 

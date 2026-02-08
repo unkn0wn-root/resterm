@@ -208,6 +208,8 @@ type CaptureSpec struct {
 	Name       string
 	Expression string
 	Secret     bool
+	Line       int
+	Col        int
 }
 
 type AssertSpec struct {

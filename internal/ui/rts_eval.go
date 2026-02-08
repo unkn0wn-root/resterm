@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -269,6 +270,25 @@ func rtsGRPC(resp *grpcclient.Response) *rts.Resp {
 	return &rts.Resp{Status: resp.StatusMessage, Code: int(resp.StatusCode), H: h, Body: resp.Body}
 }
 
+func rtsScriptResp(resp *scripts.Response) *rts.Resp {
+	if resp == nil {
+		return nil
+	}
+	h := make(map[string][]string, len(resp.Header))
+	for k, v := range resp.Header {
+		vv := append([]string(nil), v...)
+		h[k] = vv
+	}
+	b := append([]byte(nil), resp.Body...)
+	return &rts.Resp{
+		Status: resp.Status,
+		Code:   resp.Code,
+		H:      h,
+		Body:   b,
+		URL:    resp.URL,
+	}
+}
+
 func (m *Model) rtsLast() *rts.Resp {
 	if m.lastResponse != nil {
 		return rtsHTTP(m.lastResponse)
@@ -286,6 +306,47 @@ func (m *Model) rtsTrace() *rts.Trace {
 	return nil
 }
 
+func (m *Model) rtsRT(
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	v map[string]string,
+	x map[string]rts.Value,
+	site string,
+	safe bool,
+	resp *rts.Resp,
+	res *rts.Resp,
+	tr *rts.Trace,
+	st *rts.Stream,
+) rts.RT {
+	base = m.rtsBase(doc, base)
+	if resp == nil {
+		resp = m.rtsLast()
+	}
+	if res == nil {
+		res = resp
+	}
+	if tr == nil {
+		tr = m.rtsTrace()
+	}
+	return rts.RT{
+		Env:         m.rtsEnv(envName),
+		Vars:        v,
+		Globals:     globalValues(m.collectGlobalValues(doc, envName), safe),
+		Resp:        resp,
+		Res:         res,
+		Trace:       tr,
+		Stream:      st,
+		Req:         m.rtsReq(req),
+		BaseDir:     base,
+		ReadFile:    os.ReadFile,
+		AllowRandom: true,
+		Site:        site,
+		Uses:        m.rtsUses(doc, req),
+		Extra:       x,
+	}
+}
+
 func (m *Model) rtsEval(
 	ctx context.Context,
 	doc *restfile.Document,
@@ -298,32 +359,27 @@ func (m *Model) rtsEval(
 	if m.rtsEng == nil {
 		m.rtsEng = rts.NewEng()
 	}
-	base = m.rtsBase(doc, base)
-	env := m.rtsEnv(envName)
-	var vmap map[string]string
+	var v map[string]string
 	if safe {
-		vmap = m.rtsVarsSafe(doc, req, envName, extras...)
+		v = m.rtsVarsSafe(doc, req, envName, extras...)
 	} else {
-		vmap = m.rtsVars(doc, req, envName, extras...)
+		v = m.rtsVars(doc, req, envName, extras...)
 	}
-	gvals := globalValues(m.collectGlobalValues(doc, envName), safe)
-	last := m.rtsLast()
-	trace := m.rtsTrace()
 	return func(expr string, pos vars.ExprPos) (string, error) {
-		rt := rts.RT{
-			Env:         env,
-			Vars:        vmap,
-			Globals:     gvals,
-			Resp:        last,
-			Trace:       trace,
-			Req:         m.rtsReq(req),
-			BaseDir:     base,
-			ReadFile:    os.ReadFile,
-			AllowRandom: true,
-			Site:        "{{= " + expr + " }}",
-			Uses:        m.rtsUses(doc, req),
-			Extra:       extraVals,
-		}
+		rt := m.rtsRT(
+			doc,
+			req,
+			envName,
+			base,
+			v,
+			extraVals,
+			"{{= "+expr+" }}",
+			safe,
+			nil,
+			nil,
+			nil,
+			nil,
+		)
 		rp := rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
 		return m.rtsEng.EvalStr(ctx, rt, expr, rp)
 	}
@@ -341,25 +397,22 @@ func (m *Model) rtsEvalValue(
 	if m.rtsEng == nil {
 		m.rtsEng = rts.NewEng()
 	}
-	base = m.rtsBase(doc, base)
 	if vars == nil {
 		vars = m.rtsVars(doc, req, envName)
 	}
-	gvals := globalValues(m.collectGlobalValues(doc, envName), false)
-	rt := rts.RT{
-		Env:         m.rtsEnv(envName),
-		Vars:        vars,
-		Globals:     gvals,
-		Resp:        m.rtsLast(),
-		Res:         m.rtsLast(),
-		Trace:       m.rtsTrace(),
-		Req:         m.rtsReq(req),
-		BaseDir:     base,
-		ReadFile:    os.ReadFile,
-		AllowRandom: true,
-		Site:        site,
-		Uses:        m.rtsUses(doc, req),
-		Extra:       extraVals,
-	}
+	rt := m.rtsRT(
+		doc,
+		req,
+		envName,
+		base,
+		vars,
+		extraVals,
+		site,
+		false,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
 	return m.rtsEng.Eval(ctx, rt, expr, pos)
 }

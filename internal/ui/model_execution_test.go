@@ -1040,7 +1040,13 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures, ""); err != nil {
+	if err := model.applyCaptures(captureRun{
+		doc:  doc,
+		req:  req,
+		res:  resolver,
+		resp: resp,
+		out:  &captures,
+	}); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
 	}
 
@@ -1114,6 +1120,116 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
+	model := Model{
+		cfg:      Config{EnvironmentName: "dev"},
+		globals:  newGlobalStore(),
+		fileVars: newFileStore(),
+	}
+
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Header: http.Header{
+			"X-Amzn-Trace-Id": {"t-123"},
+		},
+		Body: []byte(`{"token":"abc123","data":{"id":"u-1"}}`),
+	}
+	doc := &restfile.Document{Path: "./capture-rst.http"}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{
+				{
+					Scope:      restfile.CaptureScopeGlobal,
+					Name:       "auth.token",
+					Expression: `response.json.token`,
+					Secret:     true,
+					Line:       2,
+				},
+				{
+					Scope:      restfile.CaptureScopeFile,
+					Name:       "user.id",
+					Expression: `response.json.data.id`,
+					Line:       3,
+				},
+				{
+					Scope:      restfile.CaptureScopeRequest,
+					Name:       "trace",
+					Expression: `response.headers["x-amzn-trace-id"]`,
+					Line:       4,
+				},
+			},
+		},
+	}
+
+	var captures captureResult
+	if err := model.applyCaptures(captureRun{
+		doc:  doc,
+		req:  req,
+		resp: resp,
+		out:  &captures,
+	}); err != nil {
+		t.Fatalf("applyCaptures rst: %v", err)
+	}
+
+	gl := model.globals.snapshot("dev")
+	if len(gl) != 1 {
+		t.Fatalf("expected one global capture, got %d", len(gl))
+	}
+	var g globalValue
+	for _, v := range gl {
+		g = v
+	}
+	if g.Value != "abc123" {
+		t.Fatalf("expected token capture, got %q", g.Value)
+	}
+	if !g.Secret {
+		t.Fatalf("expected secret global capture")
+	}
+
+	if len(doc.Variables) != 1 || doc.Variables[0].Value != "u-1" {
+		t.Fatalf("expected file capture u-1, got %+v", doc.Variables)
+	}
+	if len(req.Variables) != 1 || req.Variables[0].Value != "t-123" {
+		t.Fatalf("expected request trace capture, got %+v", req.Variables)
+	}
+}
+
+func TestApplyCapturesRSTStreamExpression(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "101"}
+	stream := &scripts.StreamInfo{
+		Kind: "websocket",
+		Events: []map[string]interface{}{
+			{"text": "hello"},
+			{"text": "world"},
+		},
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "last",
+				Expression: "stream.events()[1].text",
+			}},
+		},
+	}
+
+	var captures captureResult
+	if err := model.applyCaptures(captureRun{
+		req:    req,
+		resp:   resp,
+		stream: stream,
+		out:    &captures,
+	}); err != nil {
+		t.Fatalf("applyCaptures stream rst: %v", err)
+	}
+	if len(req.Variables) != 1 || req.Variables[0].Value != "world" {
+		t.Fatalf("expected stream capture world, got %+v", req.Variables)
+	}
+}
+
 func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	model := Model{
 		cfg:      Config{EnvironmentName: "dev"},
@@ -1145,7 +1261,13 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, nil, resp, nil, &captures, "stage"); err != nil {
+	if err := model.applyCaptures(captureRun{
+		doc:  doc,
+		req:  req,
+		resp: resp,
+		out:  &captures,
+		env:  "stage",
+	}); err != nil {
 		t.Fatalf("applyCaptures stage: %v", err)
 	}
 
@@ -1188,7 +1310,12 @@ func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
 		},
 	}
 	var captures captureResult
-	if err := model.applyCaptures(nil, req, nil, resp, stream, &captures, ""); err != nil {
+	if err := model.applyCaptures(captureRun{
+		req:    req,
+		resp:   resp,
+		stream: stream,
+		out:    &captures,
+	}); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 	if len(req.Variables) == 0 || req.Variables[len(req.Variables)-1].Value != "change" {
@@ -1241,7 +1368,14 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	doc := &restfile.Document{Path: "./stream.http"}
 	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures, ""); err != nil {
+	if err := model.applyCaptures(captureRun{
+		doc:    doc,
+		req:    req,
+		res:    resolver,
+		resp:   resp,
+		stream: streamInfo,
+		out:    &captures,
+	}); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 
