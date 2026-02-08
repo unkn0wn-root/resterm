@@ -587,23 +587,28 @@ Append `-secret` (`global-secret`, `file-secret`, `request-secret`) to mask stor
 
 Expressions can reference:
 
-- `{{response.status}}`, `{{response.statuscode}}`
-- `{{response.body}}`
-- `{{response.headers.<Header-Name>}}`
-- `{{response.json.path}}` (dot/bracket navigation into JSON)
-- `{{stream.kind}}`, `{{stream.summary.sentCount}}`, `{{stream.events[0].text}}` for streaming transcripts (available when the request used `@sse` or `@websocket`)
-- Any template variables resolvable by the current stack
+- `response.statusCode`, `response.statusText`, `response.text()`
+- `response.headers["Header-Name"]` or `response.header("Header-Name")`
+- `response.json.path` shorthand (equivalent to `response.json().path`)
+- `stream.kind()`, `stream.summary().sentCount`, `stream.events()[0].text` for streaming transcripts (available when the request used `@sse` or `@websocket`)
+- `vars.*`, `env.*`, `last.*`, imported `@use` modules, and other RestermScript helpers
 
 Example:
 
 ```http
 ### Seed session
 # @name AnalyticsSeedSession
-# @capture global-secret analytics.sessionToken {{response.json.json.sessionToken}}
-# @capture file analytics.lastJobId {{response.json.json.jobId}}
-# @capture request analytics.trace {{response.json.headers.X-Amzn-Trace-Id}}
+# @capture global-secret analytics.sessionToken = response.json.sessionToken
+# @capture file analytics.lastJobId = response.json.jobId
+# @capture request analytics.trace = response.headers["x-amzn-trace-id"]
 POST https://httpbin.org/anything/analytics/sessions
 ```
+
+Legacy template captures such as `{{response.json.token}}` remain supported for compatibility.
+
+Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string. In strict mode, Resterm also warns when legacy `{{...}}` capture syntax is used.
+
+`capture.strict` is the canonical key. `capture-strict` and `capture_strict` are accepted for compatibility. When multiple aliases are present, precedence is `capture.strict` > `capture-strict` > `capture_strict`.
 
 ### Body content
 
@@ -1019,7 +1024,7 @@ Capture values at runtime and reuse them in subsequent requests:
 
 ```http
 ### Login
-# @capture global-secret auth.token {{response.json.token}}
+# @capture global-secret auth.token = response.json.token
 POST {{base.url}}/login
 
 {

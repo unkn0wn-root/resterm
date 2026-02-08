@@ -140,7 +140,7 @@ Authorization: Bearer {{auth.token}}
 
 ### Capture value from response
 # @name CaptureToken
-# @capture file-secret auth.token {{response.json.uuid}}
+# @capture file-secret auth.token = response.json.uuid
 GET {{base.url}}/uuid
 
 ### Reuse captured value

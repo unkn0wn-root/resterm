@@ -2,17 +2,13 @@ package ui
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -655,16 +651,24 @@ func (m *Model) executeRequest(
 			}
 
 			respForScripts := grpcScriptResponse(req, grpcResp)
+			capVars := mergeVariableMaps(m.collectVariables(doc, req, envName), scriptVars)
+			for _, extra := range extras {
+				if len(extra) == 0 {
+					continue
+				}
+				capVars = mergeVariableMaps(capVars, extra)
+			}
 			var captures captureResult
-			if err := m.applyCaptures(
-				doc,
-				req,
-				resolver,
-				respForScripts,
-				nil,
-				&captures,
-				envName,
-			); err != nil {
+			if err := m.applyCaptures(captureRun{
+				doc:  doc,
+				req:  req,
+				res:  resolver,
+				resp: respForScripts,
+				out:  &captures,
+				env:  envName,
+				v:    capVars,
+				x:    extraVals,
+			}); err != nil {
 				return responseMsg{err: err, executed: req}
 			}
 
@@ -759,16 +763,25 @@ func (m *Model) executeRequest(
 		}
 
 		respForScripts := httpScriptResponse(response)
+		capVars := mergeVariableMaps(m.collectVariables(doc, req, envName), scriptVars)
+		for _, extra := range extras {
+			if len(extra) == 0 {
+				continue
+			}
+			capVars = mergeVariableMaps(capVars, extra)
+		}
 		var captures captureResult
-		if err := m.applyCaptures(
-			doc,
-			req,
-			resolver,
-			respForScripts,
-			streamInfo,
-			&captures,
-			envName,
-		); err != nil {
+		if err := m.applyCaptures(captureRun{
+			doc:    doc,
+			req:    req,
+			res:    resolver,
+			resp:   respForScripts,
+			stream: streamInfo,
+			out:    &captures,
+			env:    envName,
+			v:      capVars,
+			x:      extraVals,
+		}); err != nil {
 			return responseMsg{err: err, executed: req}
 		}
 
@@ -1598,450 +1611,6 @@ func maskSecret(value string, secret bool) string {
 		return "•••"
 	}
 	return value
-}
-
-type captureResult struct {
-	requestVars map[string]restfile.Variable
-	fileVars    map[string]restfile.Variable
-}
-
-func (r *captureResult) addRequest(name, value string, secret bool) {
-	if r == nil {
-		return
-	}
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
-	}
-	if r.requestVars == nil {
-		r.requestVars = make(map[string]restfile.Variable)
-	}
-	key := strings.ToLower(name)
-	r.requestVars[key] = restfile.Variable{
-		Name:   name,
-		Value:  value,
-		Secret: secret,
-		Scope:  restfile.ScopeRequest,
-	}
-}
-
-func (r *captureResult) addFile(name, value string, secret bool) {
-	if r == nil {
-		return
-	}
-
-	name = strings.TrimSpace(name)
-	if name == "" {
-		return
-	}
-
-	if r.fileVars == nil {
-		r.fileVars = make(map[string]restfile.Variable)
-	}
-
-	key := strings.ToLower(name)
-	r.fileVars[key] = restfile.Variable{
-		Name:   name,
-		Value:  value,
-		Secret: secret,
-		Scope:  restfile.ScopeFile,
-	}
-}
-
-func (m *Model) applyCaptures(
-	doc *restfile.Document,
-	req *restfile.Request,
-	resolver *vars.Resolver,
-	resp *scripts.Response,
-	stream *scripts.StreamInfo,
-	result *captureResult,
-	envName string,
-) error {
-	if req == nil || resp == nil {
-		return nil
-	}
-	if len(req.Metadata.Captures) == 0 {
-		return nil
-	}
-
-	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-	ctx := newCaptureContext(resp, stream)
-	for _, capture := range req.Metadata.Captures {
-		value, err := ctx.evaluate(capture.Expression, resolver)
-		if err != nil {
-			return errdef.Wrap(errdef.CodeScript, err, "evaluate capture %s", capture.Name)
-		}
-		switch capture.Scope {
-		case restfile.CaptureScopeRequest:
-			upsertVariable(
-				&req.Variables,
-				restfile.ScopeRequest,
-				capture.Name,
-				value,
-				capture.Secret,
-			)
-			if result != nil {
-				result.addRequest(capture.Name, value, capture.Secret)
-			}
-		case restfile.CaptureScopeFile:
-			if doc != nil {
-				upsertVariable(
-					&doc.Variables,
-					restfile.ScopeFile,
-					capture.Name,
-					value,
-					capture.Secret,
-				)
-			}
-			if result != nil {
-				result.addFile(capture.Name, value, capture.Secret)
-			}
-		case restfile.CaptureScopeGlobal:
-			if m.globals != nil {
-				m.globals.set(envKey, capture.Name, value, capture.Secret)
-			}
-		}
-	}
-
-	if result != nil && len(result.fileVars) > 0 && m.fileVars != nil {
-		path := m.documentRuntimePath(doc)
-		for _, entry := range result.fileVars {
-			m.fileVars.set(envKey, path, entry.Name, entry.Value, entry.Secret)
-		}
-	}
-
-	return nil
-}
-
-type captureContext struct {
-	response  *scripts.Response
-	body      string
-	headers   http.Header
-	stream    *scripts.StreamInfo
-	jsonOnce  sync.Once
-	jsonValue interface{}
-	jsonErr   error
-}
-
-var captureTemplatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
-
-func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo) *captureContext {
-	body := ""
-	if resp != nil {
-		body = string(resp.Body)
-	}
-
-	var headers http.Header
-	if resp != nil {
-		headers = cloneHeader(resp.Header)
-	}
-	return &captureContext{response: resp, body: body, headers: headers, stream: stream}
-}
-
-func (c *captureContext) evaluate(expr string, resolver *vars.Resolver) (string, error) {
-	var firstErr error
-	expanded := captureTemplatePattern.ReplaceAllStringFunc(expr, func(match string) string {
-		name := strings.TrimSpace(captureTemplatePattern.FindStringSubmatch(match)[1])
-		if name == "" {
-			return match
-		}
-
-		if strings.HasPrefix(strings.ToLower(name), "response.") {
-			value, err := c.lookupResponse(strings.TrimSpace(name[len("response."):]))
-			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				return match
-			}
-			return value
-		}
-
-		if strings.HasPrefix(strings.ToLower(name), "stream.") {
-			value, err := c.lookupStream(strings.TrimSpace(name[len("stream."):]))
-			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				return match
-			}
-			return value
-		}
-
-		if resolver != nil {
-			res, err := resolver.ExpandTemplates(match)
-			if err == nil {
-				return res
-			}
-			if firstErr == nil {
-				firstErr = err
-			}
-		}
-		return match
-	})
-
-	if firstErr != nil {
-		return "", firstErr
-	}
-	return expanded, nil
-}
-
-func (c *captureContext) lookupResponse(path string) (string, error) {
-	switch strings.ToLower(path) {
-	case "body":
-		return c.body, nil
-	case "status":
-		if c.response != nil {
-			return c.response.Status, nil
-		}
-		return "", nil
-	case "statuscode":
-		if c.response != nil {
-			return strconv.Itoa(c.response.Code), nil
-		}
-		return "", nil
-	}
-	if strings.HasPrefix(strings.ToLower(path), "headers.") {
-		key := path[len("headers."):]
-		if c.headers == nil {
-			return "", fmt.Errorf("header %s not available", key)
-		}
-		values := c.headers.Values(key)
-		if len(values) == 0 {
-			values = c.headers.Values(http.CanonicalHeaderKey(key))
-		}
-		if len(values) == 0 {
-			return "", fmt.Errorf("header %s not found", key)
-		}
-		return strings.Join(values, ", "), nil
-	}
-	if strings.HasPrefix(strings.ToLower(path), "json") {
-		return c.lookupJSON(path), nil
-	}
-	return "", fmt.Errorf("unsupported response reference %q", path)
-}
-
-func (c *captureContext) lookupStream(path string) (string, error) {
-	if c.stream == nil {
-		return "", fmt.Errorf("stream data not available")
-	}
-
-	trimmed := strings.TrimSpace(path)
-	if trimmed == "" {
-		return "", fmt.Errorf("stream reference empty")
-	}
-
-	lower := strings.ToLower(trimmed)
-	if lower == "kind" {
-		return c.stream.Kind, nil
-	}
-
-	if strings.HasPrefix(lower, "summary.") {
-		key := strings.TrimSpace(trimmed[len("summary."):])
-		value, ok := caseLookup(c.stream.Summary, key)
-		if !ok {
-			return "", fmt.Errorf("stream summary field %s not found", key)
-		}
-		return formatCaptureValue(value)
-	}
-
-	if strings.HasPrefix(lower, "events[") {
-		inner := trimmed[len("events["):]
-		closeIdx := strings.Index(inner, "]")
-		if closeIdx <= 0 {
-			return "", fmt.Errorf("invalid stream events reference")
-		}
-		count := len(c.stream.Events)
-		if count == 0 {
-			return "", fmt.Errorf("stream events empty")
-		}
-		indexText := strings.TrimSpace(inner[:closeIdx])
-		idx, err := strconv.Atoi(indexText)
-		if err != nil {
-			return "", fmt.Errorf("stream event index %s invalid", indexText)
-		}
-		if idx < 0 {
-			idx = count + idx
-		}
-		if idx < 0 || idx >= count {
-			return "", fmt.Errorf("stream event index %s out of range", indexText)
-		}
-		event := c.stream.Events[idx]
-		remainder := strings.TrimSpace(inner[closeIdx+1:])
-		remainder = strings.TrimPrefix(remainder, ".")
-		remainder = strings.TrimSpace(remainder)
-		if remainder == "" {
-			return formatCaptureValue(event)
-		}
-		value, ok := caseLookup(event, remainder)
-		if !ok {
-			return "", fmt.Errorf("stream event field %s not found", remainder)
-		}
-		return formatCaptureValue(value)
-	}
-
-	return "", fmt.Errorf("unsupported stream reference %q", path)
-}
-
-func (c *captureContext) lookupJSON(path string) string {
-	c.jsonOnce.Do(func() {
-		if strings.TrimSpace(c.body) == "" {
-			c.jsonErr = fmt.Errorf("response body empty")
-			return
-		}
-		var data interface{}
-		if err := json.Unmarshal([]byte(c.body), &data); err != nil {
-			c.jsonErr = err
-			return
-		}
-		c.jsonValue = data
-	})
-	if c.jsonErr != nil {
-		return ""
-	}
-
-	trimmed := strings.TrimSpace(path[len("json"):])
-	if trimmed == "" {
-		return c.body
-	}
-
-	trimmed = strings.TrimPrefix(trimmed, ".")
-	current := c.jsonValue
-	for _, segment := range splitJSONPath(trimmed) {
-		switch typed := current.(type) {
-		case map[string]interface{}:
-			val, ok := typed[segment.name]
-			if !ok {
-				return ""
-			}
-			current = val
-		case []interface{}:
-			if segment.index == nil {
-				return ""
-			}
-			idx := *segment.index
-			if idx < 0 || idx >= len(typed) {
-				return ""
-			}
-			current = typed[idx]
-		default:
-			return ""
-		}
-	}
-	return stringifyJSONValue(current)
-}
-
-type jsonPathSegment struct {
-	name  string
-	index *int
-}
-
-func splitJSONPath(path string) []jsonPathSegment {
-	parts := strings.Split(path, ".")
-	segments := make([]jsonPathSegment, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		segment := jsonPathSegment{}
-		if bracket := strings.Index(part, "["); bracket != -1 {
-			segment.name = part[:bracket]
-			end := strings.Index(part[bracket:], "]")
-			if end > 1 {
-				idxStr := part[bracket+1 : bracket+end]
-				if n, err := strconv.Atoi(idxStr); err == nil {
-					segment.index = &n
-				}
-			}
-		} else {
-			segment.name = part
-		}
-		segments = append(segments, segment)
-	}
-	return segments
-}
-
-func stringifyJSONValue(value interface{}) string {
-	switch v := value.(type) {
-	case nil:
-		return ""
-	case string:
-		return v
-	case bool:
-		return strconv.FormatBool(v)
-	case float64:
-		if float64(int64(v)) == v {
-			return strconv.FormatInt(int64(v), 10)
-		}
-		return strconv.FormatFloat(v, 'f', -1, 64)
-	default:
-		data, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Sprint(v)
-		}
-		return string(data)
-	}
-}
-
-func caseLookup(m map[string]interface{}, key string) (interface{}, bool) {
-	if m == nil {
-		return nil, false
-	}
-	if value, ok := m[key]; ok {
-		return value, true
-	}
-	lower := strings.ToLower(key)
-	for k, v := range m {
-		if strings.ToLower(k) == lower {
-			return v, true
-		}
-	}
-	return nil, false
-}
-
-func formatCaptureValue(value interface{}) (string, error) {
-	if value == nil {
-		return "", nil
-	}
-	switch v := value.(type) {
-	case string:
-		return v, nil
-	case fmt.Stringer:
-		return v.String(), nil
-	case bool:
-		return strconv.FormatBool(v), nil
-	case int, int8, int16, int32, int64:
-		return fmt.Sprintf("%d", v), nil
-	case uint, uint8, uint16, uint32, uint64:
-		return fmt.Sprintf("%d", v), nil
-	case float32, float64:
-		return fmt.Sprintf("%v", v), nil
-	default:
-		data, err := json.Marshal(v)
-		if err != nil {
-			return fmt.Sprint(v), nil
-		}
-		return string(data), nil
-	}
-}
-
-func upsertVariable(
-	list *[]restfile.Variable,
-	scope restfile.VariableScope,
-	name, value string,
-	secret bool,
-) {
-	lower := strings.ToLower(name)
-	vars := *list
-	for i := range vars {
-		if strings.ToLower(vars[i].Name) == lower {
-			vars[i].Value = value
-			vars[i].Scope = scope
-			vars[i].Secret = secret
-			return
-		}
-	}
-	*list = append(vars, restfile.Variable{Name: name, Value: value, Scope: scope, Secret: secret})
 }
 
 func (m *Model) ensureOAuth(

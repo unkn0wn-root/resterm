@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -65,7 +64,6 @@ func (m *Model) runAsserts(
 	if m.rtsEng == nil {
 		m.rtsEng = rts.NewEng()
 	}
-	base = m.rtsBase(doc, base)
 	if vars == nil {
 		vars = m.rtsVars(doc, req, envName)
 	}
@@ -81,20 +79,18 @@ func (m *Model) runAsserts(
 		extra[k] = v
 	}
 
-	rt := rts.RT{
-		Env:         m.rtsEnv(envName),
-		Vars:        vars,
-		Resp:        resp,
-		Res:         resp,
-		Trace:       trace,
-		Stream:      stream,
-		Req:         m.rtsReq(req),
-		BaseDir:     base,
-		ReadFile:    os.ReadFile,
-		AllowRandom: true,
-		Uses:        m.rtsUses(doc, req),
-		Extra:       extra,
-	}
+	rt := m.rtsRT(rtsRTIn{
+		doc:  doc,
+		req:  req,
+		env:  envName,
+		base: base,
+		v:    vars,
+		x:    extra,
+		resp: resp,
+		res:  resp,
+		tr:   trace,
+		st:   stream,
+	})
 
 	results := make([]scripts.TestResult, 0, len(req.Metadata.Asserts))
 	for _, as := range req.Metadata.Asserts {

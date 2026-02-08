@@ -1040,7 +1040,13 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, nil, &captures, ""); err != nil {
+	if err := model.applyCaptures(captureRun{
+		doc:  doc,
+		req:  req,
+		res:  resolver,
+		resp: resp,
+		out:  &captures,
+	}); err != nil {
 		t.Fatalf("applyCaptures: %v", err)
 	}
 
@@ -1114,6 +1120,371 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
+	model := Model{
+		cfg:      Config{EnvironmentName: "dev"},
+		globals:  newGlobalStore(),
+		fileVars: newFileStore(),
+	}
+
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Header: http.Header{
+			"X-Amzn-Trace-Id": {"t-123"},
+		},
+		Body: []byte(`{"token":"abc123","data":{"id":"u-1"}}`),
+	}
+	doc := &restfile.Document{Path: "./capture-rst.http"}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{
+				{
+					Scope:      restfile.CaptureScopeGlobal,
+					Name:       "auth.token",
+					Expression: `response.json.token`,
+					Secret:     true,
+					Line:       2,
+				},
+				{
+					Scope:      restfile.CaptureScopeFile,
+					Name:       "user.id",
+					Expression: `response.json.data.id`,
+					Line:       3,
+				},
+				{
+					Scope:      restfile.CaptureScopeRequest,
+					Name:       "trace",
+					Expression: `response.headers["x-amzn-trace-id"]`,
+					Line:       4,
+				},
+			},
+		},
+	}
+
+	var captures captureResult
+	if err := model.applyCaptures(captureRun{
+		doc:  doc,
+		req:  req,
+		resp: resp,
+		out:  &captures,
+	}); err != nil {
+		t.Fatalf("applyCaptures rst: %v", err)
+	}
+
+	gl := model.globals.snapshot("dev")
+	if len(gl) != 1 {
+		t.Fatalf("expected one global capture, got %d", len(gl))
+	}
+	var g globalValue
+	for _, v := range gl {
+		g = v
+	}
+	if g.Value != "abc123" {
+		t.Fatalf("expected token capture, got %q", g.Value)
+	}
+	if !g.Secret {
+		t.Fatalf("expected secret global capture")
+	}
+
+	if len(doc.Variables) != 1 || doc.Variables[0].Value != "u-1" {
+		t.Fatalf("expected file capture u-1, got %+v", doc.Variables)
+	}
+	if len(req.Variables) != 1 || req.Variables[0].Value != "t-123" {
+		t.Fatalf("expected request trace capture, got %+v", req.Variables)
+	}
+}
+
+func TestApplyCapturesRSTKeepsQuotedTemplateMarkersLiteral(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"token":"abc123"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "quoted",
+				Expression: `"{{response.json.token}}"`,
+			}},
+		},
+	}
+
+	if err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	}); err != nil {
+		t.Fatalf("applyCaptures rst quoted template markers: %v", err)
+	}
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected one request capture, got %d", len(req.Variables))
+	}
+	if req.Variables[0].Value != "{{response.json.token}}" {
+		t.Fatalf("expected literal quoted markers, got %q", req.Variables[0].Value)
+	}
+}
+
+func TestApplyCapturesRSTStreamExpression(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "101"}
+	stream := &scripts.StreamInfo{
+		Kind: "websocket",
+		Events: []map[string]interface{}{
+			{"text": "hello"},
+			{"text": "world"},
+		},
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "last",
+				Expression: "stream.events()[1].text",
+			}},
+		},
+	}
+
+	var captures captureResult
+	if err := model.applyCaptures(captureRun{
+		req:    req,
+		resp:   resp,
+		stream: stream,
+		out:    &captures,
+	}); err != nil {
+		t.Fatalf("applyCaptures stream rst: %v", err)
+	}
+	if len(req.Variables) != 1 || req.Variables[0].Value != "world" {
+		t.Fatalf("expected stream capture world, got %+v", req.Variables)
+	}
+}
+
+func TestApplyCapturesStrictModeFailsOnMissingJSONPath(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"token":"abc123"}`),
+	}
+	req := &restfile.Request{
+		Method: "POST",
+		URL:    "https://example.com/login",
+		Metadata: restfile.RequestMetadata{
+			Name: "Login",
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "auth.token",
+				Expression: "{{response.json.missing.token}}",
+				Line:       7,
+			}},
+		},
+		Settings: map[string]string{
+			"capture.strict": "true",
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected strict capture to fail on missing json path")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		`evaluate capture "auth.token"`,
+		`request="Login"`,
+		`line=7`,
+		`expr="{{response.json.missing.token}}"`,
+		`json path "json.missing.token" failed at "json.missing"`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("expected error to include %q, got %q", want, msg)
+		}
+	}
+}
+
+func TestApplyCapturesNonStrictKeepsLegacyMissingJSONEmpty(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"token":"abc123"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "auth.token",
+				Expression: "{{response.json.missing.token}}",
+			}},
+		},
+	}
+
+	if err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	}); err != nil {
+		t.Fatalf("expected non-strict capture to stay backward compatible, got: %v", err)
+	}
+	if len(req.Variables) != 1 {
+		t.Fatalf("expected one request variable, got %d", len(req.Variables))
+	}
+	if req.Variables[0].Value != "" {
+		t.Fatalf("expected missing json path to resolve empty in non-strict mode")
+	}
+}
+
+func TestApplyCapturesErrorIncludesNormalizedExpression(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"token":"abc123"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Name: "BrokenCapture",
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "token",
+				Expression: "response.json.token[",
+				Line:       5,
+			}},
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected invalid capture expression to fail")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		`evaluate capture "token"`,
+		`request="BrokenCapture"`,
+		`line=5`,
+		`expr="response.json.token["`,
+		`norm="response.json().token["`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("expected error to include %q, got %q", want, msg)
+		}
+	}
+}
+
+func TestApplyCapturesStrictModeSupportsMultiIndexJSONPath(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"m":[["a","b"],["c","d"]]}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "v",
+				Expression: "{{response.json.m[0][1]}}",
+			}},
+		},
+		Settings: map[string]string{
+			"capture.strict": "true",
+		},
+	}
+
+	if err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	}); err != nil {
+		t.Fatalf("expected strict multi-index capture to succeed, got: %v", err)
+	}
+	if len(req.Variables) != 1 || req.Variables[0].Value != "b" {
+		t.Fatalf("expected capture value b, got %+v", req.Variables)
+	}
+}
+
+func TestApplyCapturesStrictModeFailsOnMalformedJSONPath(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"items":[1,2,3]}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "v",
+				Expression: "{{response.json.items[}}",
+				Line:       9,
+			}},
+		},
+		Settings: map[string]string{
+			"capture.strict": "true",
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected malformed strict json path to fail")
+	}
+	if !strings.Contains(err.Error(), "missing closing bracket") {
+		t.Fatalf("expected malformed path detail in error, got %q", err.Error())
+	}
+}
+
+func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"foo":{"bar":"ok"}}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "v",
+				Expression: "{{response.json.foo]bar}}",
+				Line:       11,
+			}},
+		},
+		Settings: map[string]string{
+			"capture.strict": "true",
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected malformed strict json path to fail")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, `json path "json.foo]bar"`) {
+		t.Fatalf("expected malformed path in error, got %q", msg)
+	}
+	if !strings.Contains(msg, "got ']'") {
+		t.Fatalf("expected offending char detail in error, got %q", msg)
+	}
+}
+
 func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	model := Model{
 		cfg:      Config{EnvironmentName: "dev"},
@@ -1145,7 +1516,13 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, nil, resp, nil, &captures, "stage"); err != nil {
+	if err := model.applyCaptures(captureRun{
+		doc:  doc,
+		req:  req,
+		resp: resp,
+		out:  &captures,
+		env:  "stage",
+	}); err != nil {
 		t.Fatalf("applyCaptures stage: %v", err)
 	}
 
@@ -1188,7 +1565,12 @@ func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
 		},
 	}
 	var captures captureResult
-	if err := model.applyCaptures(nil, req, nil, resp, stream, &captures, ""); err != nil {
+	if err := model.applyCaptures(captureRun{
+		req:    req,
+		resp:   resp,
+		stream: stream,
+		out:    &captures,
+	}); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 	if len(req.Variables) == 0 || req.Variables[len(req.Variables)-1].Value != "change" {
@@ -1241,7 +1623,14 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	doc := &restfile.Document{Path: "./stream.http"}
 	resolver := model.buildResolver(context.Background(), doc, req, "", "", nil)
 	var captures captureResult
-	if err := model.applyCaptures(doc, req, resolver, resp, streamInfo, &captures, ""); err != nil {
+	if err := model.applyCaptures(captureRun{
+		doc:    doc,
+		req:    req,
+		res:    resolver,
+		resp:   resp,
+		stream: streamInfo,
+		out:    &captures,
+	}); err != nil {
 		t.Fatalf("applyCaptures stream: %v", err)
 	}
 

@@ -8,6 +8,15 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+func hasParseMessage(list []restfile.ParseError, sub string) bool {
+	for _, e := range list {
+		if strings.Contains(e.Message, sub) {
+			return true
+		}
+	}
+	return false
+}
+
 func TestParseAuthAndSettings(t *testing.T) {
 	src := `# @name Sample
 # @auth bearer token-123
@@ -850,6 +859,121 @@ GET https://example.com
 	}
 	if cap.Expression != "{{response.json.json.token}}" {
 		t.Fatalf("unexpected capture expression %q", cap.Expression)
+	}
+	if cap.Line != 2 {
+		t.Fatalf("unexpected capture line=%d", cap.Line)
+	}
+}
+
+func TestParseCaptureDirectiveRSTExpression(t *testing.T) {
+	src := `# @name Capture
+# @capture global-secret auth.token = response.json.token
+GET https://example.com
+`
+
+	doc := Parse("capture-rst.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Captures) != 1 {
+		t.Fatalf("expected 1 capture, got %d", len(req.Metadata.Captures))
+	}
+	cap := req.Metadata.Captures[0]
+	if cap.Scope != restfile.CaptureScopeGlobal {
+		t.Fatalf("expected global capture scope, got %v", cap.Scope)
+	}
+	if !cap.Secret {
+		t.Fatalf("expected secret capture")
+	}
+	if cap.Name != "auth.token" {
+		t.Fatalf("expected capture name auth.token, got %q", cap.Name)
+	}
+	if cap.Expression != "response.json.token" {
+		t.Fatalf("unexpected capture expression %q", cap.Expression)
+	}
+	if cap.Line != 2 {
+		t.Fatalf("unexpected capture line=%d", cap.Line)
+	}
+}
+
+func TestParseCaptureDirectiveWarnsOnUnknownScope(t *testing.T) {
+	src := `# @capture planet auth.token response.json.token
+GET https://example.com
+`
+	doc := Parse("capture-warn-scope.http", []byte(src))
+	if len(doc.Warnings) == 0 {
+		t.Fatalf("expected warning for invalid capture scope")
+	}
+	if !hasParseMessage(doc.Warnings, `scope "planet" is invalid`) {
+		t.Fatalf("expected scope warning, got %v", doc.Warnings)
+	}
+}
+
+func TestParseCaptureDirectiveWarnsOnMissingExpression(t *testing.T) {
+	src := `# @capture global auth.token
+GET https://example.com
+`
+	doc := Parse("capture-warn-empty.http", []byte(src))
+	if len(doc.Warnings) == 0 {
+		t.Fatalf("expected warning for missing capture expression")
+	}
+	if !hasParseMessage(doc.Warnings, "missing expression") {
+		t.Fatalf("expected missing-expression warning, got %v", doc.Warnings)
+	}
+}
+
+func TestParseCaptureDirectiveWarnsOnSuspiciousJSONPath(t *testing.T) {
+	src := `# @capture global auth.token response.json..token
+GET https://example.com
+`
+	doc := Parse("capture-warn-json-dotdot.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if len(doc.Requests[0].Metadata.Captures) != 1 {
+		t.Fatalf("expected capture to still parse")
+	}
+	if !hasParseMessage(doc.Warnings, "double dot after json") {
+		t.Fatalf("expected json-path warning, got %v", doc.Warnings)
+	}
+}
+
+func TestParseCaptureDirectiveDoesNotWarnOnQuotedDoubleDot(t *testing.T) {
+	src := `# @capture global note contains("response.json..token", "x")
+GET https://example.com
+`
+	doc := Parse("capture-warn-json-quoted.http", []byte(src))
+	if hasParseMessage(doc.Warnings, "double dot after json") {
+		t.Fatalf("did not expect double-dot warning for quoted string, got %v", doc.Warnings)
+	}
+}
+
+func TestParseCaptureDirectiveWarnsOnLegacyWhenStrictEnabled(t *testing.T) {
+	src := `# @setting capture.strict true
+# @capture global auth.token {{response.json.token}}
+GET https://example.com
+`
+	doc := Parse("capture-warn-strict.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if !hasParseMessage(doc.Warnings, "legacy template syntax while capture.strict=true") {
+		t.Fatalf("expected strict legacy warning, got %v", doc.Warnings)
+	}
+}
+
+func TestParseCaptureDirectiveStrictDoesNotWarnOnQuotedTemplateMarkers(t *testing.T) {
+	src := `# @setting capture.strict true
+# @capture global note contains(response.text(), "{{token}}")
+GET https://example.com
+`
+	doc := Parse("capture-strict-rst-quoted.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if hasParseMessage(doc.Warnings, "legacy template syntax while capture.strict=true") {
+		t.Fatalf("did not expect strict legacy warning for quoted markers, got %v", doc.Warnings)
 	}
 }
 

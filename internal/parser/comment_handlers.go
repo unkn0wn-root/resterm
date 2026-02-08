@@ -253,7 +253,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		}
 		b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
 	case "capture":
-		if capture, ok := b.parseCaptureDirective(rest); ok {
+		if capture, ok := b.parseCaptureDirective(rest, line); ok {
 			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
 		}
 	case "assert":
