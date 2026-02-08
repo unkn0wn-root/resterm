@@ -364,7 +364,11 @@ type captureContext struct {
 
 var captureTemplatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
-func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo, strict bool) *captureContext {
+func newCaptureContext(
+	resp *scripts.Response,
+	stream *scripts.StreamInfo,
+	strict bool,
+) *captureContext {
 	body := ""
 	if resp != nil {
 		body = string(resp.Body)

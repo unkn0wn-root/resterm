@@ -339,7 +339,10 @@ func parseBlockCommentLine(trimmed string, start bool) (string, bool) {
 	return working, closed
 }
 
-func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
+func (b *documentBuilder) parseCaptureDirective(
+	rest string,
+	line int,
+) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
 		b.addWarning(line, "@capture missing scope (use request, file, or global)")

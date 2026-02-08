@@ -46,7 +46,7 @@ func IsLegacyTemplate(ex string) bool {
 		if ch != '{' || s[i+1] != '{' {
 			continue
 		}
-		if strings.Index(s[i+2:], "}}") < 0 {
+		if !strings.Contains(s[i+2:], "}}") {
 			return false
 		}
 		return true
