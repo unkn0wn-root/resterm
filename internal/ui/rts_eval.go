@@ -306,44 +306,50 @@ func (m *Model) rtsTrace() *rts.Trace {
 	return nil
 }
 
-func (m *Model) rtsRT(
-	doc *restfile.Document,
-	req *restfile.Request,
-	envName, base string,
-	v map[string]string,
-	x map[string]rts.Value,
-	site string,
-	safe bool,
-	resp *rts.Resp,
-	res *rts.Resp,
-	tr *rts.Trace,
-	st *rts.Stream,
-) rts.RT {
-	base = m.rtsBase(doc, base)
+type rtsRTIn struct {
+	doc  *restfile.Document
+	req  *restfile.Request
+	env  string
+	base string
+	v    map[string]string
+	x    map[string]rts.Value
+	site string
+	safe bool
+	resp *rts.Resp
+	res  *rts.Resp
+	tr   *rts.Trace
+	st   *rts.Stream
+}
+
+func (m *Model) rtsRT(in rtsRTIn) rts.RT {
+	base := m.rtsBase(in.doc, in.base)
+	resp := in.resp
 	if resp == nil {
 		resp = m.rtsLast()
 	}
+	res := in.res
 	if res == nil {
 		res = resp
 	}
+	tr := in.tr
 	if tr == nil {
 		tr = m.rtsTrace()
 	}
 	return rts.RT{
-		Env:         m.rtsEnv(envName),
-		Vars:        v,
-		Globals:     globalValues(m.collectGlobalValues(doc, envName), safe),
+		Env:         m.rtsEnv(in.env),
+		Vars:        in.v,
+		Globals:     globalValues(m.collectGlobalValues(in.doc, in.env), in.safe),
 		Resp:        resp,
 		Res:         res,
 		Trace:       tr,
-		Stream:      st,
-		Req:         m.rtsReq(req),
+		Stream:      in.st,
+		Req:         m.rtsReq(in.req),
 		BaseDir:     base,
 		ReadFile:    os.ReadFile,
 		AllowRandom: true,
-		Site:        site,
-		Uses:        m.rtsUses(doc, req),
-		Extra:       x,
+		Site:        in.site,
+		Uses:        m.rtsUses(in.doc, in.req),
+		Extra:       in.x,
 	}
 }
 
@@ -366,20 +372,16 @@ func (m *Model) rtsEval(
 		v = m.rtsVars(doc, req, envName, extras...)
 	}
 	return func(expr string, pos vars.ExprPos) (string, error) {
-		rt := m.rtsRT(
-			doc,
-			req,
-			envName,
-			base,
-			v,
-			extraVals,
-			"{{= "+expr+" }}",
-			safe,
-			nil,
-			nil,
-			nil,
-			nil,
-		)
+		rt := m.rtsRT(rtsRTIn{
+			doc:  doc,
+			req:  req,
+			env:  envName,
+			base: base,
+			v:    v,
+			x:    extraVals,
+			site: "{{= " + expr + " }}",
+			safe: safe,
+		})
 		rp := rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
 		return m.rtsEng.EvalStr(ctx, rt, expr, rp)
 	}
@@ -400,19 +402,14 @@ func (m *Model) rtsEvalValue(
 	if vars == nil {
 		vars = m.rtsVars(doc, req, envName)
 	}
-	rt := m.rtsRT(
-		doc,
-		req,
-		envName,
-		base,
-		vars,
-		extraVals,
-		site,
-		false,
-		nil,
-		nil,
-		nil,
-		nil,
-	)
+	rt := m.rtsRT(rtsRTIn{
+		doc:  doc,
+		req:  req,
+		env:  envName,
+		base: base,
+		v:    vars,
+		x:    extraVals,
+		site: site,
+	})
 	return m.rtsEng.Eval(ctx, rt, expr, pos)
 }

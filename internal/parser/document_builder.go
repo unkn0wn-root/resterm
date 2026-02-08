@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"fmt"
 	"maps"
 	"net/http"
 	"strings"
@@ -43,6 +44,20 @@ func (b *documentBuilder) addError(line int, message string) {
 		return
 	}
 	b.doc.Errors = append(b.doc.Errors, restfile.ParseError{
+		Line:    line,
+		Message: msg,
+	})
+}
+
+func (b *documentBuilder) addWarning(line int, message string) {
+	if b == nil || b.doc == nil {
+		return
+	}
+	msg := strings.TrimSpace(message)
+	if msg == "" {
+		return
+	}
+	b.doc.Warnings = append(b.doc.Warnings, restfile.ParseError{
 		Line:    line,
 		Message: msg,
 	})
@@ -327,29 +342,41 @@ func parseBlockCommentLine(trimmed string, start bool) (string, bool) {
 func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile.CaptureSpec, bool) {
 	scopeToken, remainder := splitDirective(rest)
 	if scopeToken == "" {
+		b.addWarning(line, "@capture missing scope (use request, file, or global)")
 		return restfile.CaptureSpec{}, false
 	}
 	scope, secret, ok := parseCaptureScope(scopeToken)
 	if !ok {
+		b.addWarning(
+			line,
+			fmt.Sprintf(
+				"@capture scope %q is invalid (use request, file, global, with optional -secret)",
+				scopeToken,
+			),
+		)
 		return restfile.CaptureSpec{}, false
 	}
 	trimmed := strings.TrimSpace(remainder)
 	if trimmed == "" {
+		b.addWarning(line, "@capture missing '<name> <expression>'")
 		return restfile.CaptureSpec{}, false
 	}
 	nameEnd := strings.IndexAny(trimmed, " \t")
 	if nameEnd == -1 {
+		b.addWarning(line, "@capture missing expression after capture name")
 		return restfile.CaptureSpec{}, false
 	}
 	name := strings.TrimSpace(trimmed[:nameEnd])
 	expression := strings.TrimSpace(trimmed[nameEnd:])
 	if expression == "" {
+		b.addWarning(line, "@capture expression missing")
 		return restfile.CaptureSpec{}, false
 	}
 	if strings.HasPrefix(expression, "=") {
 		expression = strings.TrimSpace(expression[1:])
 	}
 	if expression == "" {
+		b.addWarning(line, "@capture expression missing after '='")
 		return restfile.CaptureSpec{}, false
 	}
 	return restfile.CaptureSpec{
@@ -358,7 +385,6 @@ func (b *documentBuilder) parseCaptureDirective(rest string, line int) (restfile
 		Expression: expression,
 		Secret:     secret,
 		Line:       line,
-		Col:        1,
 	}, true
 }
 
@@ -619,6 +645,7 @@ func (b *documentBuilder) flushRequest(_ int) {
 	b.request.flushPendingScript()
 
 	req := b.request.build()
+	b.lintRequestCaptures(req)
 	if req.Method != "" && req.URL != "" {
 		b.doc.Requests = append(b.doc.Requests, req)
 	}

@@ -79,7 +79,18 @@ func (m *Model) runAsserts(
 		extra[k] = v
 	}
 
-	rt := m.rtsRT(doc, req, envName, base, vars, extra, "", false, resp, resp, trace, stream)
+	rt := m.rtsRT(rtsRTIn{
+		doc:  doc,
+		req:  req,
+		env:  envName,
+		base: base,
+		v:    vars,
+		x:    extra,
+		resp: resp,
+		res:  resp,
+		tr:   trace,
+		st:   stream,
+	})
 
 	results := make([]scripts.TestResult, 0, len(req.Metadata.Asserts))
 	for _, as := range req.Metadata.Asserts {

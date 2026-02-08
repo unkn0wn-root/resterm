@@ -209,7 +209,6 @@ type CaptureSpec struct {
 	Expression string
 	Secret     bool
 	Line       int
-	Col        int
 }
 
 type AssertSpec struct {
@@ -313,6 +312,7 @@ type Document struct {
 	Requests  []*Request
 	Workflows []Workflow
 	Errors    []ParseError
+	Warnings  []ParseDiagnostic
 	Raw       []byte
 }
 
@@ -397,6 +397,8 @@ type ParseError struct {
 	Column  int
 	Message string
 }
+
+type ParseDiagnostic = ParseError
 
 func (e ParseError) Error() string {
 	return e.Message

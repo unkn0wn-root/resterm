@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/unkn0wn-root/resterm/internal/captureutil"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -32,6 +33,12 @@ type captureRun struct {
 	env    string
 	v      map[string]string
 	x      map[string]rts.Value
+}
+
+type captureExpr struct {
+	raw    string
+	norm   string
+	legacy bool
 }
 
 func (r *captureResult) addRequest(name, value string, secret bool) {
@@ -83,16 +90,28 @@ func (m *Model) applyCaptures(in captureRun) error {
 	}
 
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, in.env, m.cfg.EnvironmentName)
-	lc := newCaptureContext(in.resp, in.stream)
+	st := captureutil.StrictEnabled(in.req.Settings)
+	lc := newCaptureContext(in.resp, in.stream, st)
 	rr := rtsScriptResp(in.resp)
 	rs := rtsStream(in.stream)
 	if in.v == nil {
 		in.v = m.collectVariables(in.doc, in.req, in.env)
 	}
 	for _, c := range in.req.Metadata.Captures {
-		value, err := m.captureValue(in.doc, in.req, in.res, in.env, c, in.v, in.x, rr, rs, lc)
+		value, ex, err := m.captureValue(
+			in.doc,
+			in.req,
+			in.res,
+			in.env,
+			c,
+			in.v,
+			in.x,
+			rr,
+			rs,
+			lc,
+		)
 		if err != nil {
-			return errdef.Wrap(errdef.CodeScript, err, "evaluate capture %s", c.Name)
+			return errdef.Wrap(errdef.CodeScript, err, "%s", captureErrCtx(in.req, c, ex))
 		}
 		switch c.Scope {
 		case restfile.CaptureScopeRequest:
@@ -135,18 +154,20 @@ func (m *Model) captureValue(
 	rr *rts.Resp,
 	rs *rts.Stream,
 	lc *captureContext,
-) (string, error) {
-	ex := strings.TrimSpace(c.Expression)
-	if ex == "" {
-		return "", nil
+) (string, captureExpr, error) {
+	ex := parseCaptureExpr(c.Expression)
+	if ex.raw == "" {
+		return "", ex, nil
 	}
-	if legacyCaptureExpr(ex) {
+	if ex.legacy {
 		if lc == nil {
-			return "", fmt.Errorf("capture context not available")
+			return "", ex, fmt.Errorf("capture context not available")
 		}
-		return lc.evaluate(ex, resolver)
+		val, err := lc.evaluate(ex.raw, resolver)
+		return val, ex, err
 	}
-	return m.captureRSTValue(doc, req, env, c, ex, v, x, rr, rs)
+	val, err := m.captureRSTValue(doc, req, env, c, ex.norm, v, x, rr, rs)
+	return val, ex, err
 }
 
 func (m *Model) captureRSTValue(
@@ -163,27 +184,83 @@ func (m *Model) captureRSTValue(
 	if m.rtsEng == nil {
 		m.rtsEng = rts.NewEng()
 	}
-	ex = normCaptureRSTExpr(ex)
 	ps := m.rtsPosForLine(doc, req, c.Line)
-	rt := m.rtsRT(
-		doc,
-		req,
-		env,
-		"",
-		v,
-		x,
-		"@capture "+ex,
-		false,
-		rr,
-		rr,
-		nil,
-		rs,
-	)
+	rt := m.rtsRT(rtsRTIn{
+		doc:  doc,
+		req:  req,
+		env:  env,
+		v:    v,
+		x:    x,
+		site: "@capture " + ex,
+		resp: rr,
+		res:  rr,
+		st:   rs,
+	})
 	return m.rtsEng.EvalStr(context.Background(), rt, ex, ps)
 }
 
 func legacyCaptureExpr(ex string) bool {
-	return strings.Contains(ex, "{{") && strings.Contains(ex, "}}")
+	return captureutil.IsLegacyTemplate(ex)
+}
+
+func parseCaptureExpr(raw string) captureExpr {
+	ex := strings.TrimSpace(raw)
+	if ex == "" {
+		return captureExpr{}
+	}
+	if legacyCaptureExpr(ex) {
+		return captureExpr{
+			raw:    ex,
+			norm:   ex,
+			legacy: true,
+		}
+	}
+	return captureExpr{
+		raw:  ex,
+		norm: normCaptureRSTExpr(ex),
+	}
+}
+
+func captureErrCtx(req *restfile.Request, c restfile.CaptureSpec, ex captureExpr) string {
+	lbl := captureReqLabel(req)
+	if ex.norm != "" && ex.norm != ex.raw {
+		return fmt.Sprintf(
+			"evaluate capture %q (request=%q line=%d expr=%q norm=%q)",
+			c.Name,
+			lbl,
+			c.Line,
+			ex.raw,
+			ex.norm,
+		)
+	}
+	return fmt.Sprintf(
+		"evaluate capture %q (request=%q line=%d expr=%q)",
+		c.Name,
+		lbl,
+		c.Line,
+		ex.raw,
+	)
+}
+
+func captureReqLabel(req *restfile.Request) string {
+	if req == nil {
+		return ""
+	}
+	if name := strings.TrimSpace(req.Metadata.Name); name != "" {
+		return name
+	}
+	m := strings.ToUpper(strings.TrimSpace(req.Method))
+	u := strings.TrimSpace(req.URL)
+	switch {
+	case m == "" && u == "":
+		return ""
+	case m == "":
+		return u
+	case u == "":
+		return m
+	default:
+		return m + " " + u
+	}
 }
 
 func normCaptureRSTExpr(ex string) string {
@@ -279,6 +356,7 @@ type captureContext struct {
 	body      string
 	headers   http.Header
 	stream    *scripts.StreamInfo
+	strict    bool
 	jsonOnce  sync.Once
 	jsonValue any
 	jsonErr   error
@@ -286,7 +364,7 @@ type captureContext struct {
 
 var captureTemplatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
-func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo) *captureContext {
+func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo, strict bool) *captureContext {
 	body := ""
 	if resp != nil {
 		body = string(resp.Body)
@@ -296,7 +374,13 @@ func newCaptureContext(resp *scripts.Response, stream *scripts.StreamInfo) *capt
 	if resp != nil {
 		headers = cloneHeader(resp.Header)
 	}
-	return &captureContext{response: resp, body: body, headers: headers, stream: stream}
+	return &captureContext{
+		response: resp,
+		body:     body,
+		headers:  headers,
+		stream:   stream,
+		strict:   strict,
+	}
 }
 
 func (c *captureContext) evaluate(ex string, resolver *vars.Resolver) (string, error) {
@@ -378,7 +462,7 @@ func (c *captureContext) lookupResponse(path string) (string, error) {
 		return strings.Join(values, ", "), nil
 	}
 	if strings.HasPrefix(lp, "json") {
-		return c.lookupJSON(path), nil
+		return c.lookupJSON(path)
 	}
 	return "", fmt.Errorf("unsupported response reference %q", path)
 }
@@ -441,7 +525,7 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 	return "", fmt.Errorf("unsupported stream reference %q", path)
 }
 
-func (c *captureContext) lookupJSON(path string) string {
+func (c *captureContext) lookupJSON(path string) (string, error) {
 	c.jsonOnce.Do(func() {
 		if strings.TrimSpace(c.body) == "" {
 			c.jsonErr = fmt.Errorf("response body empty")
@@ -455,68 +539,161 @@ func (c *captureContext) lookupJSON(path string) string {
 		c.jsonValue = data
 	})
 	if c.jsonErr != nil {
-		return ""
+		if c.strict {
+			return "", fmt.Errorf("json unavailable: %w", c.jsonErr)
+		}
+		return "", nil
 	}
 
 	trimmed := strings.TrimSpace(path[len("json"):])
 	if trimmed == "" {
-		return c.body
+		return c.body, nil
 	}
 
+	full := "json" + trimmed
 	trimmed = strings.TrimPrefix(trimmed, ".")
+	segments, err := splitJSONPath(trimmed)
+	if err != nil {
+		return c.jsonPathFail(full, "json", err.Error())
+	}
 	current := c.jsonValue
-	for _, segment := range splitJSONPath(trimmed) {
+	seen := "json"
+	for _, segment := range segments {
+		seen = jsonPathAppend(seen, segment)
 		switch typed := current.(type) {
 		case map[string]any:
+			if segment.name == "" {
+				return c.jsonPathFail(full, seen, "missing object key")
+			}
 			val, ok := typed[segment.name]
 			if !ok {
-				return ""
+				return c.jsonPathFail(full, seen, "segment not found")
 			}
 			current = val
 		case []any:
-			if segment.index == nil {
-				return ""
+			if segment.name != "" {
+				return c.jsonPathFail(full, seen, "cannot access object key on array")
 			}
-			idx := *segment.index
-			if idx < 0 || idx >= len(typed) {
-				return ""
+			if !segment.hasIndex {
+				return c.jsonPathFail(full, seen, "missing array index")
 			}
-			current = typed[idx]
+			if segment.index < 0 || segment.index >= len(typed) {
+				return c.jsonPathFail(
+					full,
+					seen,
+					fmt.Sprintf("index %d out of range", segment.index),
+				)
+			}
+			current = typed[segment.index]
 		default:
-			return ""
+			return c.jsonPathFail(full, seen, "cannot traverse non-container value")
 		}
 	}
-	return stringifyJSONValue(current)
+	return stringifyJSONValue(current), nil
 }
 
 type jsonPathSegment struct {
-	name  string
-	index *int
+	name     string
+	index    int
+	hasIndex bool
 }
 
-func splitJSONPath(path string) []jsonPathSegment {
-	parts := strings.Split(path, ".")
-	segments := make([]jsonPathSegment, 0, len(parts))
-	for _, part := range parts {
-		if part == "" {
-			continue
-		}
-		segment := jsonPathSegment{}
-		if bracket := strings.Index(part, "["); bracket != -1 {
-			segment.name = part[:bracket]
-			end := strings.Index(part[bracket:], "]")
-			if end > 1 {
-				idxStr := part[bracket+1 : bracket+end]
-				if n, err := strconv.Atoi(idxStr); err == nil {
-					segment.index = &n
-				}
+func splitJSONPath(path string) ([]jsonPathSegment, error) {
+	segments := make([]jsonPathSegment, 0, 8)
+	for i := 0; i < len(path); {
+		switch path[i] {
+		case '.':
+			return nil, fmt.Errorf("empty path segment")
+		case '[':
+			segment, next, err := parseJSONIndex(path, i)
+			if err != nil {
+				return nil, err
 			}
-		} else {
-			segment.name = part
+			segments = append(segments, segment)
+			i = next
+		default:
+			start := i
+			for i < len(path) && path[i] != '.' && path[i] != '[' && path[i] != ']' {
+				i++
+			}
+			name := strings.TrimSpace(path[start:i])
+			if name == "" {
+				return nil, fmt.Errorf("empty path segment")
+			}
+			segments = append(segments, jsonPathSegment{name: name})
 		}
-		segments = append(segments, segment)
+		if i >= len(path) {
+			break
+		}
+		switch path[i] {
+		case '.':
+			i++
+			if i >= len(path) {
+				return nil, fmt.Errorf("empty path segment")
+			}
+		case '[':
+			// Index segments can chain, e.g. a[0][1]
+		default:
+			return nil, fmt.Errorf(
+				"expected '.' or '[' between path segments, got %q",
+				path[i],
+			)
+		}
 	}
-	return segments
+	return segments, nil
+}
+
+func parseJSONIndex(path string, start int) (jsonPathSegment, int, error) {
+	closeIdx := strings.IndexByte(path[start:], ']')
+	if closeIdx < 0 {
+		return jsonPathSegment{}, 0, fmt.Errorf("missing closing bracket")
+	}
+	closeIdx += start
+	idxStr := strings.TrimSpace(path[start+1 : closeIdx])
+	if idxStr == "" {
+		return jsonPathSegment{}, 0, fmt.Errorf("empty array index")
+	}
+	idx, err := strconv.Atoi(idxStr)
+	if err != nil {
+		return jsonPathSegment{}, 0, fmt.Errorf("invalid array index %q", idxStr)
+	}
+	return jsonPathSegment{index: idx, hasIndex: true}, closeIdx + 1, nil
+}
+
+func jsonPathAppend(base string, segment jsonPathSegment) string {
+	idx := ""
+	if segment.hasIndex {
+		idx = strconv.Itoa(segment.index)
+	}
+	g := len(base) + len(segment.name)
+	if segment.name != "" && base != "" {
+		g++
+	}
+	if idx != "" {
+		g += len(idx) + 2
+	}
+	var b strings.Builder
+	b.Grow(g)
+	b.WriteString(base)
+	if segment.name != "" {
+		if base != "" {
+			b.WriteByte('.')
+		}
+		b.WriteString(segment.name)
+	}
+	if idx != "" {
+		b.WriteByte('[')
+		b.WriteString(idx)
+		b.WriteByte(']')
+	}
+	return b.String()
+}
+
+func (c *captureContext) jsonPathFail(full, seen, msg string) (string, error) {
+	if !c.strict {
+		return "", nil
+	}
+	return "", fmt.Errorf("json path %q failed at %q: %s", full, seen, msg)
 }
 
 func stringifyJSONValue(value any) string {
