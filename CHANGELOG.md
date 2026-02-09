@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.21.5](https://github.com/unkn0wn-root/resterm/compare/v0.21.4...v0.21.5) (2026-02-09)
+
+
+### Features
+
+* **capture:** add strict mode and better warnings ([b58c0da](https://github.com/unkn0wn-root/resterm/commit/b58c0da313570acbb53312b4add4e2e662b9a2bd))
+* **capture:** support RST expressions and extract capture evaluator ([cf2cb31](https://github.com/unkn0wn-root/resterm/commit/cf2cb31ad3f1793b36a1402d755e0c2b029568ba))
+
+
+### Bug Fixes
+
+* **capture:** avoid false legacy template detection for quoted markers ([5fa6938](https://github.com/unkn0wn-root/resterm/commit/5fa69388110394e6b6ee291e2806675a37cd7cc4))
+* lint ([aa0cf1b](https://github.com/unkn0wn-root/resterm/commit/aa0cf1b73b00c7175c84a973fe507a8dac700865))
+
 ### [0.21.4](https://github.com/unkn0wn-root/resterm/compare/v0.21.3...v0.21.4) (2026-02-07)
 
 
