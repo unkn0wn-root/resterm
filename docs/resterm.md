@@ -604,9 +604,11 @@ Example:
 POST https://httpbin.org/anything/analytics/sessions
 ```
 
-Legacy template captures such as `{{response.json.token}}` remain supported for compatibility.
+Template captures such as `{{response.json.token}}` remain supported and can be used alongside RTS capture expressions.
 
-Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string. In strict mode, Resterm also warns when legacy `{{...}}` capture syntax is used.
+Set `# @setting capture.strict true` to make capture-path misses fail instead of silently resolving to an empty string.
+
+Do not mix unquoted template markers and RTS call syntax in the same capture expression (for example `contains({{name}}, "x")`). Use pure RTS (`contains(vars.get("name") ?? "", "x")`) or a template expression (`{{= contains(...) }}`).
 
 `capture.strict` is the canonical key. `capture-strict` and `capture_strict` are accepted for compatibility. When multiple aliases are present, precedence is `capture.strict` > `capture-strict` > `capture_strict`.
 

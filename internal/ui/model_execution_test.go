@@ -1228,6 +1228,98 @@ func TestApplyCapturesRSTKeepsQuotedTemplateMarkersLiteral(t *testing.T) {
 	}
 }
 
+func TestApplyCapturesFailsOnMixedTemplateRTSCall(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"name":"alice"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "mixed",
+				Expression: `contains({{name}}, "ali")`,
+				Mode:       restfile.CaptureExprModeTemplate,
+			}},
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected mixed template/rts call syntax to fail")
+	}
+	if !strings.Contains(err.Error(), "mixed capture syntax is not supported") {
+		t.Fatalf("expected mixed-syntax error, got %q", err.Error())
+	}
+}
+
+func TestApplyCapturesFailsOnMixedTemplateRTSCallAutoMode(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"name":"alice"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "mixed",
+				Expression: `contains({{name}}, "ali")`,
+			}},
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected mixed template/rts call syntax to fail in auto mode")
+	}
+	if !strings.Contains(err.Error(), "mixed capture syntax is not supported") {
+		t.Fatalf("expected mixed-syntax error, got %q", err.Error())
+	}
+}
+
+func TestApplyCapturesFailsOnMixedTemplateRTSSingleArgCall(t *testing.T) {
+	model := Model{}
+	resp := &scripts.Response{
+		Kind:   scripts.ResponseKindHTTP,
+		Status: "200 OK",
+		Code:   200,
+		Body:   []byte(`{"name":"alice"}`),
+	}
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Captures: []restfile.CaptureSpec{{
+				Scope:      restfile.CaptureScopeRequest,
+				Name:       "mixed",
+				Expression: `contains({{name}})`,
+				Mode:       restfile.CaptureExprModeTemplate,
+			}},
+		},
+	}
+
+	err := model.applyCaptures(captureRun{
+		req:  req,
+		resp: resp,
+	})
+	if err == nil {
+		t.Fatalf("expected mixed single-arg template/rts call syntax to fail")
+	}
+	if !strings.Contains(err.Error(), "mixed capture syntax is not supported") {
+		t.Fatalf("expected mixed-syntax error, got %q", err.Error())
+	}
+}
+
 func TestApplyCapturesRSTStreamExpression(t *testing.T) {
 	model := Model{}
 	resp := &scripts.Response{Kind: scripts.ResponseKindHTTP, Status: "101"}
@@ -1308,7 +1400,7 @@ func TestApplyCapturesStrictModeFailsOnMissingJSONPath(t *testing.T) {
 	}
 }
 
-func TestApplyCapturesNonStrictKeepsLegacyMissingJSONEmpty(t *testing.T) {
+func TestApplyCapturesNonStrictKeepsTemplateMissingJSONEmpty(t *testing.T) {
 	model := Model{}
 	resp := &scripts.Response{
 		Kind:   scripts.ResponseKindHTTP,

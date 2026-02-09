@@ -36,9 +36,34 @@ type captureRun struct {
 }
 
 type captureExpr struct {
-	raw    string
-	norm   string
-	legacy bool
+	raw  string
+	norm string
+	mode restfile.CaptureExprMode
+}
+
+type captureValueIn struct {
+	doc      *restfile.Document
+	req      *restfile.Request
+	resolver *vars.Resolver
+	env      string
+	spec     restfile.CaptureSpec
+	v        map[string]string
+	x        map[string]rts.Value
+	rr       *rts.Resp
+	rs       *rts.Stream
+	lc       *captureContext
+}
+
+type captureRTSIn struct {
+	doc  *restfile.Document
+	req  *restfile.Request
+	env  string
+	spec restfile.CaptureSpec
+	ex   string
+	v    map[string]string
+	x    map[string]rts.Value
+	rr   *rts.Resp
+	rs   *rts.Stream
 }
 
 func (r *captureResult) addRequest(name, value string, secret bool) {
@@ -98,18 +123,18 @@ func (m *Model) applyCaptures(in captureRun) error {
 		in.v = m.collectVariables(in.doc, in.req, in.env)
 	}
 	for _, c := range in.req.Metadata.Captures {
-		value, ex, err := m.captureValue(
-			in.doc,
-			in.req,
-			in.res,
-			in.env,
-			c,
-			in.v,
-			in.x,
-			rr,
-			rs,
-			lc,
-		)
+		value, ex, err := m.captureValue(captureValueIn{
+			doc:      in.doc,
+			req:      in.req,
+			resolver: in.res,
+			env:      in.env,
+			spec:     c,
+			v:        in.v,
+			x:        in.x,
+			rr:       rr,
+			rs:       rs,
+			lc:       lc,
+		})
 		if err != nil {
 			return errdef.Wrap(errdef.CodeScript, err, "%s", captureErrCtx(in.req, c, ex))
 		}
@@ -143,81 +168,87 @@ func (m *Model) applyCaptures(in captureRun) error {
 	return nil
 }
 
-func (m *Model) captureValue(
-	doc *restfile.Document,
-	req *restfile.Request,
-	resolver *vars.Resolver,
-	env string,
-	c restfile.CaptureSpec,
-	v map[string]string,
-	x map[string]rts.Value,
-	rr *rts.Resp,
-	rs *rts.Stream,
-	lc *captureContext,
-) (string, captureExpr, error) {
-	ex := parseCaptureExpr(c.Expression)
+func (m *Model) captureValue(in captureValueIn) (string, captureExpr, error) {
+	ex := parseCaptureExpr(in.spec.Expression, in.spec.Mode)
 	if ex.raw == "" {
 		return "", ex, nil
 	}
-	if ex.legacy {
-		if lc == nil {
+	if ex.mode == restfile.CaptureExprModeTemplate {
+		if captureutil.MixedTemplateRTSCall(ex.raw) {
+			return "", ex, fmt.Errorf(
+				"mixed capture syntax is not supported; use pure RTS or {{= ... }}",
+			)
+		}
+		if in.lc == nil {
 			return "", ex, fmt.Errorf("capture context not available")
 		}
-		val, err := lc.evaluate(ex.raw, resolver)
+		val, err := in.lc.evaluate(ex.raw, in.resolver)
 		return val, ex, err
 	}
-	val, err := m.captureRSTValue(doc, req, env, c, ex.norm, v, x, rr, rs)
+	val, err := m.captureRTSValue(captureRTSIn{
+		doc:  in.doc,
+		req:  in.req,
+		env:  in.env,
+		spec: in.spec,
+		ex:   ex.norm,
+		v:    in.v,
+		x:    in.x,
+		rr:   in.rr,
+		rs:   in.rs,
+	})
 	return val, ex, err
 }
 
-func (m *Model) captureRSTValue(
-	doc *restfile.Document,
-	req *restfile.Request,
-	env string,
-	c restfile.CaptureSpec,
-	ex string,
-	v map[string]string,
-	x map[string]rts.Value,
-	rr *rts.Resp,
-	rs *rts.Stream,
-) (string, error) {
+func (m *Model) captureRTSValue(in captureRTSIn) (string, error) {
 	if m.rtsEng == nil {
 		m.rtsEng = rts.NewEng()
 	}
-	ps := m.rtsPosForLine(doc, req, c.Line)
+	ps := m.rtsPosForLine(in.doc, in.req, in.spec.Line)
 	rt := m.rtsRT(rtsRTIn{
-		doc:  doc,
-		req:  req,
-		env:  env,
-		v:    v,
-		x:    x,
-		site: "@capture " + ex,
-		resp: rr,
-		res:  rr,
-		st:   rs,
+		doc:  in.doc,
+		req:  in.req,
+		env:  in.env,
+		v:    in.v,
+		x:    in.x,
+		site: "@capture " + in.ex,
+		resp: in.rr,
+		res:  in.rr,
+		st:   in.rs,
 	})
-	return m.rtsEng.EvalStr(context.Background(), rt, ex, ps)
+	return m.rtsEng.EvalStr(context.Background(), rt, in.ex, ps)
 }
 
-func legacyCaptureExpr(ex string) bool {
-	return captureutil.IsLegacyTemplate(ex)
-}
-
-func parseCaptureExpr(raw string) captureExpr {
+func parseCaptureExpr(raw string, mode restfile.CaptureExprMode) captureExpr {
 	ex := strings.TrimSpace(raw)
 	if ex == "" {
 		return captureExpr{}
 	}
-	if legacyCaptureExpr(ex) {
+	switch mode {
+	case restfile.CaptureExprModeTemplate:
 		return captureExpr{
-			raw:    ex,
-			norm:   ex,
-			legacy: true,
+			raw:  ex,
+			norm: ex,
+			mode: restfile.CaptureExprModeTemplate,
 		}
-	}
-	return captureExpr{
-		raw:  ex,
-		norm: normCaptureRSTExpr(ex),
+	case restfile.CaptureExprModeRTS:
+		return captureExpr{
+			raw:  ex,
+			norm: normCaptureRTSExpr(ex),
+			mode: restfile.CaptureExprModeRTS,
+		}
+	default:
+		if captureutil.HasUnquotedTemplateMarker(ex) {
+			return captureExpr{
+				raw:  ex,
+				norm: ex,
+				mode: restfile.CaptureExprModeTemplate,
+			}
+		}
+		return captureExpr{
+			raw:  ex,
+			norm: normCaptureRTSExpr(ex),
+			mode: restfile.CaptureExprModeRTS,
+		}
 	}
 }
 
@@ -263,7 +294,7 @@ func captureReqLabel(req *restfile.Request) string {
 	}
 }
 
-func normCaptureRSTExpr(ex string) string {
+func normCaptureRTSExpr(ex string) string {
 	if ex == "" {
 		return ex
 	}

@@ -43,29 +43,35 @@ func TestStrictEnabledConflictingCanonicalizedKeysSafeDefault(t *testing.T) {
 	}
 }
 
-func TestSuspiciousJSONDoubleDotIgnoresQuoted(t *testing.T) {
-	if SuspiciousJSONDoubleDot(`contains("response.json..token", "x")`) {
-		t.Fatalf("expected quoted content not to trigger suspicious lint")
+func TestHasJSONPathDoubleDotIgnoresQuoted(t *testing.T) {
+	if HasJSONPathDoubleDot(`contains("response.json..token", "x")`) {
+		t.Fatalf("expected quoted content not to trigger double-dot detection")
 	}
-	if !SuspiciousJSONDoubleDot(`response.json..token`) {
-		t.Fatalf("expected direct double-dot path to trigger suspicious lint")
+	if !HasJSONPathDoubleDot(`response.json..token`) {
+		t.Fatalf("expected direct double-dot path to be detected")
 	}
 }
 
-func TestIsLegacyTemplate(t *testing.T) {
-	if !IsLegacyTemplate(`{{response.json.token}}`) {
-		t.Fatalf("expected legacy template syntax to be detected")
+func TestHasUnquotedTemplateMarker(t *testing.T) {
+	if !HasUnquotedTemplateMarker(`Bearer {{response.json.token}}`) {
+		t.Fatalf("expected unquoted marker to be detected")
 	}
-	if !IsLegacyTemplate(`Bearer {{response.json.token}}`) {
-		t.Fatalf("expected mixed literal+template legacy syntax to be detected")
+	if HasUnquotedTemplateMarker(`contains(response.text(), "{{token}}")`) {
+		t.Fatalf("expected quoted marker not to be detected")
 	}
-	if IsLegacyTemplate(`response.json.token`) {
-		t.Fatalf("expected plain RST expression not to be detected as legacy")
+}
+
+func TestMixedTemplateRTSCall(t *testing.T) {
+	if !MixedTemplateRTSCall(`contains({{name}}, "x")`) {
+		t.Fatalf("expected mixed template+call form to be detected")
 	}
-	if IsLegacyTemplate(`contains(response.text(), "{{token}}")`) {
-		t.Fatalf("expected quoted template markers in RST expression not to be detected as legacy")
+	if !MixedTemplateRTSCall(`contains({{name}})`) {
+		t.Fatalf("expected single-arg mixed template+call form to be detected")
 	}
-	if IsLegacyTemplate(`"{{response.json.token}}"`) {
-		t.Fatalf("expected quoted literal template markers not to be detected as legacy")
+	if MixedTemplateRTSCall(`Bearer {{name}}`) {
+		t.Fatalf("did not expect plain template literal to be flagged")
+	}
+	if MixedTemplateRTSCall(`contains(response.text(), "{{token}}")`) {
+		t.Fatalf("did not expect quoted marker to be flagged")
 	}
 }

@@ -11,23 +11,23 @@ func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {
 	if b == nil || req == nil || len(req.Metadata.Captures) == 0 {
 		return
 	}
-	st := captureutil.StrictEnabled(b.doc.Settings, b.fileSettings, req.Settings)
 	for _, c := range req.Metadata.Captures {
-		if captureutil.SuspiciousJSONDoubleDot(c.Expression) {
+		if captureutil.HasJSONPathDoubleDot(c.Expression) {
 			b.addWarning(
 				c.Line,
 				fmt.Sprintf(
-					"@capture %q expression %q looks suspicious (double dot after json)",
+					"@capture %q expression %q has double dot after json (use response.json.<field>)",
 					c.Name,
 					c.Expression,
 				),
 			)
 		}
-		if st && captureutil.IsLegacyTemplate(c.Expression) {
+		if c.Mode == restfile.CaptureExprModeTemplate &&
+			captureutil.MixedTemplateRTSCall(c.Expression) {
 			b.addWarning(
 				c.Line,
 				fmt.Sprintf(
-					"@capture %q uses legacy template syntax while capture.strict=true",
+					"@capture %q mixes template markers with RTS call syntax; use pure RTS or {{= ... }}",
 					c.Name,
 				),
 			)
