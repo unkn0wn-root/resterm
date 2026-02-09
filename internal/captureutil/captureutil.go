@@ -1,7 +1,20 @@
 package captureutil
 
 import (
+	"regexp"
 	"strings"
+)
+
+const (
+	templateOpen  = "{{"
+	templateClose = "}}"
+
+	templateOpenLen  = len(templateOpen)
+	templateCloseLen = len(templateClose)
+)
+
+var mixedTemplateCallPattern = regexp.MustCompile(
+	`^\s*[A-Za-z_][A-Za-z0-9_.]*\s*\(`,
 )
 
 var strictKeys = []string{
@@ -10,48 +23,117 @@ var strictKeys = []string{
 	"capture_strict",
 }
 
+var jsonDoubleDotPrefixes = []string{
+	"response.json..",
+	"last.json..",
+}
+
 type strictAliasState struct {
 	set      bool
 	val      bool
 	conflict bool
 }
 
-func IsLegacyTemplate(ex string) bool {
-	s := strings.TrimSpace(ex)
-	if s == "" {
+type exprScanner struct {
+	s   string
+	i   int
+	q   byte
+	esc bool
+}
+
+func newExprScanner(s string) *exprScanner {
+	return &exprScanner{s: s}
+}
+
+func (sc *exprScanner) done() bool {
+	return sc == nil || sc.i >= len(sc.s)
+}
+
+func (sc *exprScanner) ch() byte {
+	return sc.s[sc.i]
+}
+
+func (sc *exprScanner) advance(n int) {
+	sc.i += n
+}
+
+func (sc *exprScanner) inQuoted(ch byte) bool {
+	if sc == nil || sc.q == 0 {
 		return false
 	}
-	var q byte
-	esc := false
-	for i := 0; i+1 < len(s); i++ {
-		ch := s[i]
-		if q != 0 {
-			if esc {
-				esc = false
-				continue
-			}
-			if ch == '\\' {
-				esc = true
-				continue
-			}
-			if ch == q {
-				q = 0
-			}
-			continue
-		}
-		if ch == '"' || ch == '\'' {
-			q = ch
-			continue
-		}
-		if ch != '{' || s[i+1] != '{' {
-			continue
-		}
-		if !strings.Contains(s[i+2:], "}}") {
-			return false
-		}
+	if sc.esc {
+		sc.esc = false
 		return true
 	}
-	return false
+	if ch == '\\' {
+		sc.esc = true
+		return true
+	}
+	if ch == sc.q {
+		sc.q = 0
+	}
+	return true
+}
+
+func (sc *exprScanner) openQuote(ch byte) bool {
+	if sc == nil || !isQuote(ch) {
+		return false
+	}
+	sc.q = ch
+	return true
+}
+
+func (sc *exprScanner) templateEnd() (int, bool) {
+	if sc == nil || !hasTemplateOpenAt(sc.s, sc.i) {
+		return 0, false
+	}
+	return nextTemplateEnd(sc.s, sc.i)
+}
+
+func HasUnquotedTemplateMarker(ex string) bool {
+	_, has := stripUnquotedTemplateSegments(ex)
+	return has
+}
+
+func MixedTemplateRTSCall(ex string) bool {
+	rem, has := stripUnquotedTemplateSegments(ex)
+	if !has {
+		return false
+	}
+	return mixedTemplateCallPattern.MatchString(strings.TrimSpace(rem))
+}
+
+func stripUnquotedTemplateSegments(ex string) (string, bool) {
+	s := strings.TrimSpace(ex)
+	if s == "" {
+		return "", false
+	}
+	sc := newExprScanner(s)
+	var b strings.Builder
+	b.Grow(len(s))
+	has := false
+
+	for !sc.done() {
+		ch := sc.ch()
+		if sc.inQuoted(ch) {
+			b.WriteByte(ch)
+			sc.advance(1)
+			continue
+		}
+		if sc.openQuote(ch) {
+			b.WriteByte(ch)
+			sc.advance(1)
+			continue
+		}
+		if end, ok := sc.templateEnd(); ok {
+			has = true
+			sc.i = end
+			continue
+		}
+		b.WriteByte(ch)
+		sc.advance(1)
+	}
+	return b.String(), has
 }
 
 func StrictEnabled(ss ...map[string]string) bool {
@@ -133,43 +215,32 @@ func parseBool(raw string) (bool, bool) {
 	}
 }
 
-func SuspiciousJSONDoubleDot(ex string) bool {
+func HasJSONPathDoubleDot(ex string) bool {
 	s := strings.TrimSpace(ex)
 	if s == "" {
 		return false
 	}
-	var q byte
-	esc := false
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if q != 0 {
-			if esc {
-				esc = false
-				continue
-			}
-			if ch == '\\' {
-				esc = true
-				continue
-			}
-			if ch == q {
-				q = 0
-			}
+	sc := newExprScanner(s)
+	for !sc.done() {
+		ch := sc.ch()
+		if sc.inQuoted(ch) {
+			sc.advance(1)
 			continue
 		}
-		if ch == '"' || ch == '\'' {
-			q = ch
+		if sc.openQuote(ch) {
+			sc.advance(1)
 			continue
 		}
-		if hasJSONDoubleDotPrefix(s, i) {
+		if hasJSONDoubleDotPrefix(s, sc.i) {
 			return true
 		}
+		sc.advance(1)
 	}
 	return false
 }
 
 func hasJSONDoubleDotPrefix(s string, i int) bool {
-	ps := []string{"response.json..", "last.json.."}
-	for _, p := range ps {
+	for _, p := range jsonDoubleDotPrefixes {
 		if !prefixFold(s, i, p) {
 			continue
 		}
@@ -203,4 +274,24 @@ func ident(b byte) bool {
 		return true
 	}
 	return b == '_'
+}
+
+func isQuote(ch byte) bool {
+	return ch == '"' || ch == '\''
+}
+
+func hasTemplateOpenAt(s string, i int) bool {
+	return i+templateOpenLen <= len(s) && s[i:i+templateOpenLen] == templateOpen
+}
+
+func nextTemplateEnd(s string, start int) (int, bool) {
+	if !hasTemplateOpenAt(s, start) {
+		return 0, false
+	}
+	bodyStart := start + templateOpenLen
+	closeRel := strings.Index(s[bodyStart:], templateClose)
+	if closeRel < 0 {
+		return 0, false
+	}
+	return bodyStart + closeRel + templateCloseLen, true
 }

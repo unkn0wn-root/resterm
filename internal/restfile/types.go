@@ -203,10 +203,19 @@ const (
 	CaptureScopeGlobal
 )
 
+type CaptureExprMode uint8
+
+const (
+	CaptureExprModeAuto CaptureExprMode = iota
+	CaptureExprModeTemplate
+	CaptureExprModeRTS
+)
+
 type CaptureSpec struct {
 	Scope      CaptureScope
 	Name       string
 	Expression string
+	Mode       CaptureExprMode
 	Secret     bool
 	Line       int
 }

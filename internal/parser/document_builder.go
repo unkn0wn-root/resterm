@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/captureutil"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
@@ -386,9 +387,17 @@ func (b *documentBuilder) parseCaptureDirective(
 		Scope:      scope,
 		Name:       name,
 		Expression: expression,
+		Mode:       captureExprMode(expression),
 		Secret:     secret,
 		Line:       line,
 	}, true
+}
+
+func captureExprMode(ex string) restfile.CaptureExprMode {
+	if captureutil.HasUnquotedTemplateMarker(ex) {
+		return restfile.CaptureExprModeTemplate
+	}
+	return restfile.CaptureExprModeRTS
 }
 
 func (b *documentBuilder) parseAssertDirective(rest string, line int) (restfile.AssertSpec, bool) {

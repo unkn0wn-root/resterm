@@ -860,6 +860,9 @@ GET https://example.com
 	if cap.Expression != "{{response.json.json.token}}" {
 		t.Fatalf("unexpected capture expression %q", cap.Expression)
 	}
+	if cap.Mode != restfile.CaptureExprModeTemplate {
+		t.Fatalf("expected template capture mode, got %v", cap.Mode)
+	}
 	if cap.Line != 2 {
 		t.Fatalf("unexpected capture line=%d", cap.Line)
 	}
@@ -892,6 +895,9 @@ GET https://example.com
 	if cap.Expression != "response.json.token" {
 		t.Fatalf("unexpected capture expression %q", cap.Expression)
 	}
+	if cap.Mode != restfile.CaptureExprModeRTS {
+		t.Fatalf("expected RTS capture mode, got %v", cap.Mode)
+	}
 	if cap.Line != 2 {
 		t.Fatalf("unexpected capture line=%d", cap.Line)
 	}
@@ -923,7 +929,7 @@ GET https://example.com
 	}
 }
 
-func TestParseCaptureDirectiveWarnsOnSuspiciousJSONPath(t *testing.T) {
+func TestParseCaptureDirectiveWarnsOnJSONPathDoubleDot(t *testing.T) {
 	src := `# @capture global auth.token response.json..token
 GET https://example.com
 `
@@ -949,7 +955,7 @@ GET https://example.com
 	}
 }
 
-func TestParseCaptureDirectiveWarnsOnLegacyWhenStrictEnabled(t *testing.T) {
+func TestParseCaptureDirectiveStrictAllowsTemplateSyntax(t *testing.T) {
 	src := `# @setting capture.strict true
 # @capture global auth.token {{response.json.token}}
 GET https://example.com
@@ -958,8 +964,8 @@ GET https://example.com
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
-	if !hasParseMessage(doc.Warnings, "legacy template syntax while capture.strict=true") {
-		t.Fatalf("expected strict legacy warning, got %v", doc.Warnings)
+	if len(doc.Warnings) != 0 {
+		t.Fatalf("did not expect warnings, got %v", doc.Warnings)
 	}
 }
 
@@ -972,8 +978,42 @@ GET https://example.com
 	if len(doc.Requests) != 1 {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
-	if hasParseMessage(doc.Warnings, "legacy template syntax while capture.strict=true") {
-		t.Fatalf("did not expect strict legacy warning for quoted markers, got %v", doc.Warnings)
+	if len(doc.Warnings) != 0 {
+		t.Fatalf("did not expect warnings for quoted markers, got %v", doc.Warnings)
+	}
+	cap := doc.Requests[0].Metadata.Captures[0]
+	if cap.Mode != restfile.CaptureExprModeRTS {
+		t.Fatalf("expected quoted-marker expression to stay RTS mode, got %v", cap.Mode)
+	}
+}
+
+func TestParseCaptureDirectiveWarnsOnMixedTemplateRTSCall(t *testing.T) {
+	src := `# @capture request mixed contains({{name}}, "x")
+GET https://example.com
+`
+	doc := Parse("capture-warn-mixed.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if !hasParseMessage(doc.Warnings, "mixes template markers with RTS call syntax") {
+		t.Fatalf("expected mixed-syntax warning, got %v", doc.Warnings)
+	}
+	cap := doc.Requests[0].Metadata.Captures[0]
+	if cap.Mode != restfile.CaptureExprModeTemplate {
+		t.Fatalf("expected template mode for mixed expression, got %v", cap.Mode)
+	}
+}
+
+func TestParseCaptureDirectiveWarnsOnMixedTemplateRTSSingleArgCall(t *testing.T) {
+	src := `# @capture request mixed contains({{name}})
+GET https://example.com
+`
+	doc := Parse("capture-warn-mixed-single-arg.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if !hasParseMessage(doc.Warnings, "mixes template markers with RTS call syntax") {
+		t.Fatalf("expected mixed-syntax warning, got %v", doc.Warnings)
 	}
 }
 
