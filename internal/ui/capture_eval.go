@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -16,6 +15,16 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
+)
+
+const (
+	captureResponsePrefix = "response."
+	captureStreamPrefix   = "stream."
+	captureHeadersPrefix  = "headers."
+	captureJSONPrefix     = "json"
+	streamKindField       = "kind"
+	streamSummaryPrefix   = "summary."
+	streamEventsPrefix    = "events["
 )
 
 type captureResult struct {
@@ -382,6 +391,16 @@ func captureIdentByte(b byte) bool {
 	return b == '_'
 }
 
+func cutFoldPrefix(s, prefix string) (string, bool) {
+	if len(s) <= len(prefix) {
+		return "", false
+	}
+	if !strings.EqualFold(s[:len(prefix)], prefix) {
+		return "", false
+	}
+	return s[len(prefix):], true
+}
+
 type captureContext struct {
 	response  *scripts.Response
 	body      string
@@ -392,8 +411,6 @@ type captureContext struct {
 	jsonValue any
 	jsonErr   error
 }
-
-var captureTemplatePattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 func newCaptureContext(
 	resp *scripts.Response,
@@ -420,14 +437,13 @@ func newCaptureContext(
 
 func (c *captureContext) evaluate(ex string, resolver *vars.Resolver) (string, error) {
 	var firstErr error
-	expanded := captureTemplatePattern.ReplaceAllStringFunc(ex, func(match string) string {
-		name := strings.TrimSpace(captureTemplatePattern.FindStringSubmatch(match)[1])
+	expanded := vars.ReplaceTemplateVars(ex, func(match, name string) string {
 		if name == "" {
 			return match
 		}
 
-		if strings.HasPrefix(strings.ToLower(name), "response.") {
-			value, err := c.lookupResponse(strings.TrimSpace(name[len("response."):]))
+		if rest, ok := cutFoldPrefix(name, captureResponsePrefix); ok {
+			value, err := c.lookupResponse(strings.TrimSpace(rest))
 			if err != nil {
 				if firstErr == nil {
 					firstErr = err
@@ -437,8 +453,8 @@ func (c *captureContext) evaluate(ex string, resolver *vars.Resolver) (string, e
 			return value
 		}
 
-		if strings.HasPrefix(strings.ToLower(name), "stream.") {
-			value, err := c.lookupStream(strings.TrimSpace(name[len("stream."):]))
+		if rest, ok := cutFoldPrefix(name, captureStreamPrefix); ok {
+			value, err := c.lookupStream(strings.TrimSpace(rest))
 			if err != nil {
 				if firstErr == nil {
 					firstErr = err
@@ -482,21 +498,18 @@ func (c *captureContext) lookupResponse(path string) (string, error) {
 		}
 		return "", nil
 	}
-	if strings.HasPrefix(lp, "headers.") {
-		key := path[len("headers."):]
+	if strings.HasPrefix(lp, captureHeadersPrefix) {
+		key := path[len(captureHeadersPrefix):]
 		if c.headers == nil {
 			return "", fmt.Errorf("header %s not available", key)
 		}
 		values := c.headers.Values(key)
 		if len(values) == 0 {
-			values = c.headers.Values(http.CanonicalHeaderKey(key))
-		}
-		if len(values) == 0 {
 			return "", fmt.Errorf("header %s not found", key)
 		}
 		return strings.Join(values, ", "), nil
 	}
-	if strings.HasPrefix(lp, "json") {
+	if strings.HasPrefix(lp, captureJSONPrefix) {
 		return c.lookupJSON(path)
 	}
 	return "", fmt.Errorf("unsupported response reference %q", path)
@@ -511,20 +524,18 @@ func (c *captureContext) lookupStream(path string) (string, error) {
 		return "", fmt.Errorf("stream reference empty")
 	}
 
-	lower := strings.ToLower(trimmed)
-	if lower == "kind" {
+	if strings.EqualFold(trimmed, streamKindField) {
 		return c.stream.Kind, nil
 	}
-	if strings.HasPrefix(lower, "summary.") {
-		key := strings.TrimSpace(trimmed[len("summary."):])
+	if rest, ok := cutFoldPrefix(trimmed, streamSummaryPrefix); ok {
+		key := strings.TrimSpace(rest)
 		value, ok := caseLookup(c.stream.Summary, key)
 		if !ok {
 			return "", fmt.Errorf("stream summary field %s not found", key)
 		}
 		return formatCaptureValue(value)
 	}
-	if strings.HasPrefix(lower, "events[") {
-		inner := trimmed[len("events["):]
+	if inner, ok := cutFoldPrefix(trimmed, streamEventsPrefix); ok {
 		closeIdx := strings.Index(inner, "]")
 		if closeIdx <= 0 {
 			return "", fmt.Errorf("invalid stream events reference")
@@ -564,14 +575,14 @@ func (c *captureContext) lookupJSON(path string) (string, error) {
 	c.jsonOnce.Do(func() {
 		if strings.TrimSpace(c.body) == "" {
 			c.jsonErr = fmt.Errorf("response body empty")
-			return
+		} else {
+			var data any
+			if err := json.Unmarshal([]byte(c.body), &data); err != nil {
+				c.jsonErr = err
+			} else {
+				c.jsonValue = data
+			}
 		}
-		var data any
-		if err := json.Unmarshal([]byte(c.body), &data); err != nil {
-			c.jsonErr = err
-			return
-		}
-		c.jsonValue = data
 	})
 	if c.jsonErr != nil {
 		if c.strict {
@@ -580,19 +591,19 @@ func (c *captureContext) lookupJSON(path string) (string, error) {
 		return "", nil
 	}
 
-	trimmed := strings.TrimSpace(path[len("json"):])
+	trimmed := strings.TrimSpace(path[len(captureJSONPrefix):])
 	if trimmed == "" {
 		return c.body, nil
 	}
 
-	full := "json" + trimmed
+	full := captureJSONPrefix + trimmed
 	trimmed = strings.TrimPrefix(trimmed, ".")
 	segments, err := splitJSONPath(trimmed)
 	if err != nil {
-		return c.jsonPathFail(full, "json", err.Error())
+		return c.jsonPathFail(full, captureJSONPrefix, err.Error())
 	}
 	current := c.jsonValue
-	seen := "json"
+	seen := captureJSONPrefix
 	for _, segment := range segments {
 		seen = jsonPathAppend(seen, segment)
 		switch typed := current.(type) {
@@ -612,14 +623,18 @@ func (c *captureContext) lookupJSON(path string) (string, error) {
 			if !segment.hasIndex {
 				return c.jsonPathFail(full, seen, "missing array index")
 			}
-			if segment.index < 0 || segment.index >= len(typed) {
+			idx := segment.index
+			if idx < 0 {
+				idx = len(typed) + idx
+			}
+			if idx < 0 || idx >= len(typed) {
 				return c.jsonPathFail(
 					full,
 					seen,
 					fmt.Sprintf("index %d out of range", segment.index),
 				)
 			}
-			current = typed[segment.index]
+			current = typed[idx]
 		default:
 			return c.jsonPathFail(full, seen, "cannot traverse non-container value")
 		}

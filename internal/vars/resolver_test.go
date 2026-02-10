@@ -1,7 +1,9 @@
 package vars
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -235,6 +237,58 @@ func TestExpandTemplatesExprMissing(t *testing.T) {
 	_, err := resolver.ExpandTemplates("{{= 1 }}")
 	if err == nil {
 		t.Fatalf("expected error for missing expr evaluator")
+	}
+}
+
+func TestEnvRefResolver(t *testing.T) {
+	key := "RESTERM_TEST_ENV_REF"
+	t.Setenv(key, "super-secret")
+
+	resolver := NewResolver(NewMapProvider("envfile", map[string]string{
+		"auth.password": "env:" + key,
+	}))
+	resolver.AddRefResolver(EnvRefResolver)
+
+	out, err := resolver.ExpandTemplates("{{auth.password}}")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "super-secret" {
+		t.Fatalf("expected env ref to resolve, got %q", out)
+	}
+}
+
+func TestEnvRefResolverUppercaseFallback(t *testing.T) {
+	key := "RESTERM_TEST_ENV_REF_UPPER"
+	t.Setenv(key, "works")
+
+	resolver := NewResolver(NewMapProvider("envfile", map[string]string{
+		"auth.password": "env:" + strings.ToLower(key),
+	}))
+	resolver.AddRefResolver(EnvRefResolver)
+
+	out, err := resolver.ExpandTemplates("{{auth.password}}")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != "works" {
+		t.Fatalf("expected uppercase fallback to resolve, got %q", out)
+	}
+}
+
+func TestEnvRefResolverMissingReturnsUndefined(t *testing.T) {
+	key := fmt.Sprintf("RESTERM_TEST_MISSING_ENV_REF_%d", time.Now().UnixNano())
+	resolver := NewResolver(NewMapProvider("envfile", map[string]string{
+		"auth.password": "env:" + key,
+	}))
+	resolver.AddRefResolver(EnvRefResolver)
+
+	out, err := resolver.ExpandTemplates("{{auth.password}}")
+	if err == nil {
+		t.Fatalf("expected undefined variable error")
+	}
+	if out != "{{auth.password}}" {
+		t.Fatalf("expected unresolved template placeholder, got %q", out)
 	}
 }
 

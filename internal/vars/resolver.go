@@ -12,6 +12,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
+var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+
 type Provider interface {
 	Resolve(name string) (string, bool)
 	Label() string
@@ -27,6 +29,7 @@ type ExprEval func(expr string, pos ExprPos) (string, error)
 
 type Resolver struct {
 	providers []Provider
+	refs      []RefResolver
 	expr      ExprEval
 	exprPos   ExprPos
 }
@@ -45,7 +48,7 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 	}
 	for _, provider := range r.providers {
 		if value, ok := provider.Resolve(trimmed); ok {
-			return value, true
+			return r.applyRefs(value)
 		}
 	}
 	if !strings.Contains(trimmed, ".") {
@@ -70,14 +73,25 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 				continue
 			}
 			if value, ok := provider.Resolve(subject); ok {
-				return value, true
+				return r.applyRefs(value)
 			}
 		}
 	}
 	return "", false
 }
 
-var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
+// applyRefs runs the value through registered ref resolvers. The first
+// resolver that claims the value (handled==true) wins. If no resolver
+// handles the value it is returned as-is.
+func (r *Resolver) applyRefs(value string) (string, bool) {
+	for _, ref := range r.refs {
+		resolved, handled, found := ref(value)
+		if handled {
+			return resolved, found
+		}
+	}
+	return value, true
+}
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	return r.expandTemplates(input, r.exprPos, true, true)
@@ -89,6 +103,10 @@ func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) 
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
 	return r.expandTemplates(input, r.exprPos, false, false)
+}
+
+func (r *Resolver) AddRefResolver(fn RefResolver) {
+	r.refs = append(r.refs, fn)
 }
 
 func (r *Resolver) SetExprEval(fn ExprEval) {
@@ -105,12 +123,7 @@ func (r *Resolver) expandTemplates(
 	allowDynamic, allowExpr bool,
 ) (string, error) {
 	var firstErr error
-	result := templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
-		sub := templateVarPattern.FindStringSubmatch(match)
-		if len(sub) < 2 {
-			return match
-		}
-		name := strings.TrimSpace(sub[1])
+	result := ReplaceTemplateVars(input, func(match, name string) string {
 		if name == "" {
 			return match
 		}
@@ -264,6 +277,19 @@ func (EnvProvider) Resolve(name string) (string, bool) {
 
 func (EnvProvider) Label() string {
 	return "env"
+}
+
+func ReplaceTemplateVars(input string, fn func(match, name string) string) string {
+	if fn == nil {
+		return input
+	}
+	return templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
+		sub := templateVarPattern.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		return fn(match, strings.TrimSpace(sub[1]))
+	})
 }
 
 func generateUUID() string {
