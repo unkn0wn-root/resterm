@@ -1187,6 +1187,7 @@ func (m *Model) buildResolver(
 
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
+	res.AddRefResolver(vars.EnvRefResolver)
 	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, false, extraVals, extras...))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res
@@ -1284,6 +1285,7 @@ func (m *Model) buildDisplayResolver(
 
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
+	res.AddRefResolver(vars.EnvRefResolver)
 	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, true, extraVals, extras...))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res
