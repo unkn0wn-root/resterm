@@ -1145,7 +1145,9 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 - Requests inherit a shared cookie jar; cookies persist across sessions.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
-- History is stored in `${RESTERM_CONFIG_DIR}/history.json` (defaults to the platform config directory) and retains up to ~500 entries. Set `RESTERM_CONFIG_DIR` to relocate it.
+- History is stored in `${RESTERM_CONFIG_DIR}/history.db` (defaults to the platform config directory) and has no fixed entry cap. Set `RESTERM_CONFIG_DIR` to relocate it.
+- On first launch after upgrading, Resterm imports `${RESTERM_CONFIG_DIR}/history.json` into `history.db` automatically when present.
+- If the SQLite history file is detected as corrupted, Resterm quarantines it to `history.db.corrupt-<timestamp>` and initializes a fresh `history.db`.
 - Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
 - File-level defaults: place `# @setting key value` or `# @settings key1=val1 ...` before the first request to apply to all requests in that file. Request-level overrides still win.
 - Settings are generic. Today the recognized prefixes are transport/TLS (`http-*`, `grpc-*`, `timeout`, `proxy`, `followredirects`, `insecure`). Future features can add more prefixes; unknown keys are ignored for now to stay forward-compatible.
@@ -1177,6 +1179,12 @@ Run `resterm --help` for the latest list.
 ### Subcommands
 
 **`resterm init [dir]`** - Bootstrap a new project with starter files. See [Initializing a Project](#initializing-a-project) for details.
+**`resterm history export --out <path>`** - Export persisted history to JSON.
+**`resterm history import --in <path>`** - Import history entries from a JSON export.
+**`resterm history backup --out <path>`** - Create a SQLite-consistent backup copy of `history.db`.
+**`resterm history stats`** - Print schema version, row counts, and file sizes.
+**`resterm history check [--full]`** - Run SQLite integrity checks on history storage.
+**`resterm history compact`** - Run WAL checkpoint + VACUUM to compact `history.db`.
 
 ### Core flags
 
@@ -1241,7 +1249,7 @@ resterm \
 ## Configuration
 
 - Config directory: `$HOME/Library/Application Support/resterm` (macOS), `%APPDATA%\resterm` (Windows), or `$HOME/.config/resterm` (Linux/Unix). Override with `RESTERM_CONFIG_DIR`.
-- History file: `<config-dir>/history.json` (max ~500 entries by default).
+- History file: `<config-dir>/history.db` (no fixed entry limit).
 - Settings file: `<config-dir>/settings.toml` (created when you first change preferences such as the default theme).
 - Theme directory: `<config-dir>/themes/` (override with `RESTERM_THEMES_DIR`). Drop `.toml` or `.json` files here to make them available in the selector.
 - Runtime globals and file captures are scoped per environment and document; they are released when you clear globals or switch environments.

@@ -6,12 +6,13 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestSyncHistoryScopeRequest(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 
 	reqA := &restfile.Request{
@@ -44,7 +45,7 @@ func TestSyncHistoryScopeRequest(t *testing.T) {
 
 func TestSyncHistoryScopeFile(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 
 	fileA := filepath.Join(dir, "a.http")
@@ -69,19 +70,14 @@ func TestSyncHistoryScopeFile(t *testing.T) {
 	}
 }
 
-func TestSyncHistoryScopeFileMatchesLegacyEntries(t *testing.T) {
+func TestSyncHistoryScopeFileMatchesPathVariantsOnly(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 
 	fileA := filepath.Join(dir, "api", "a.http")
 	model.currentFile = fileA
 	model.workspaceRoot = dir
-	model.doc = &restfile.Document{
-		Requests: []*restfile.Request{
-			{Metadata: restfile.RequestMetadata{Name: "alpha"}, URL: "https://alpha.test"},
-		},
-	}
 	model.historyScope = historyScopeFile
 
 	t1 := time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC)
@@ -105,26 +101,28 @@ func TestSyncHistoryScopeFileMatchesLegacyEntries(t *testing.T) {
 	}
 
 	model.syncHistory()
-	if len(model.historyEntries) != 3 {
-		t.Fatalf("expected 3 entries, got %d", len(model.historyEntries))
+	if len(model.historyEntries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(model.historyEntries))
 	}
 	got := map[string]struct{}{}
 	for _, entry := range model.historyEntries {
 		got[entry.ID] = struct{}{}
 	}
-	for _, id := range []string{"1", "2", "3"} {
+	for _, id := range []string{"1", "2"} {
 		if _, ok := got[id]; !ok {
 			t.Fatalf("expected entry %q in file scope", id)
 		}
 	}
-	if _, ok := got["4"]; ok {
-		t.Fatalf("did not expect legacy beta entry to match file scope")
+	for _, id := range []string{"3", "4"} {
+		if _, ok := got[id]; ok {
+			t.Fatalf("did not expect request-name-only entry %q in file scope", id)
+		}
 	}
 }
 
 func TestSyncHistorySortOrder(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 
 	t1 := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)

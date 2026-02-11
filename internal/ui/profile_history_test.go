@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
-	"github.com/unkn0wn-root/resterm/internal/history"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -61,7 +61,7 @@ func TestBuildProfileResults(t *testing.T) {
 
 func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	req := &restfile.Request{
 		Method: "GET",
@@ -123,7 +123,7 @@ func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 
 func TestRecordProfileHistorySkipsNoLog(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	req := &restfile.Request{
 		Method: "GET",
