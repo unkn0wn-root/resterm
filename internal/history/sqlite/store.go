@@ -34,8 +34,7 @@ const (
 )
 
 type Store struct {
-	p   string
-	max int
+	p string
 
 	mu  sync.Mutex
 	db  *sql.DB
@@ -51,11 +50,8 @@ type RecoverInfo struct {
 
 var _ history.Store = (*Store)(nil)
 
-func New(path string, max int) *Store {
-	if max <= 0 {
-		max = 200
-	}
-	return &Store{p: path, max: max}
+func New(path string) *Store {
+	return &Store{p: path}
 }
 
 func (s *Store) Load() error {
@@ -106,36 +102,12 @@ func (s *Store) Append(e history.Entry) error {
 		return errdef.Wrap(errdef.CodeHistory, err, "insert history row")
 	}
 
-	if err := trimMax(tx, s.max); err != nil {
-		return err
-	}
-
 	if err := tx.Commit(); err != nil {
 		return errdef.Wrap(errdef.CodeHistory, err, "commit history tx")
 	}
 	return nil
 }
 
-func trimMax(tx *sql.Tx, max int) error {
-	if max <= 0 {
-		return nil
-	}
-	// Keep only the newest rows using the same order used by reads.
-	// Numeric IDs break timestamp ties first, and plain text IDs keep
-	// ordering stable for older rows that never had numeric values.
-	_, err := tx.Exec(
-		`DELETE FROM hist WHERE id IN (
-			SELECT id FROM hist
-			ORDER BY exec_ns DESC, id_num DESC, id DESC
-			LIMIT -1 OFFSET ?
-		)`,
-		max,
-	)
-	if err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "trim history rows")
-	}
-	return nil
-}
 
 func (s *Store) Entries() []history.Entry {
 	return s.list("", nil)
@@ -216,7 +188,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 	if strings.TrimSpace(where) != "" {
 		q += " " + where
 	}
-	// This ordering is shared across list, trim, and migration paths so
+	// This ordering is shared across list and migration paths so
 	// every caller sees the same history precedence for tied timestamps.
 	q += ` ORDER BY exec_ns DESC, id_num DESC, id DESC`
 

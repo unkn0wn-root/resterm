@@ -15,7 +15,7 @@ import (
 func TestByFileFiltersAndSorts(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
-	s := New(p, 10)
+	s := New(p)
 
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
@@ -48,35 +48,10 @@ func TestByFileFiltersAndSorts(t *testing.T) {
 	}
 }
 
-func TestTrimMax(t *testing.T) {
-	dir := t.TempDir()
-	p := filepath.Join(dir, "history.db")
-	s := New(p, 2)
-	if err := s.Load(); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	t1 := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)
-	t2 := t1.Add(1 * time.Minute)
-	t3 := t2.Add(1 * time.Minute)
-
-	_ = s.Append(history.Entry{ID: "1", ExecutedAt: t1})
-	_ = s.Append(history.Entry{ID: "2", ExecutedAt: t2})
-	_ = s.Append(history.Entry{ID: "3", ExecutedAt: t3})
-
-	got := s.Entries()
-	if len(got) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(got))
-	}
-	if got[0].ID != "3" || got[1].ID != "2" {
-		t.Fatalf("expected retained rows 3,2 got %q,%q", got[0].ID, got[1].ID)
-	}
-}
-
 func TestDelete(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
-	s := New(p, 10)
+	s := New(p)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -100,7 +75,7 @@ func TestDelete(t *testing.T) {
 func TestByRequestSkipsWorkflowRows(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
-	s := New(p, 10)
+	s := New(p)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -138,7 +113,7 @@ func TestByRequestSkipsWorkflowRows(t *testing.T) {
 func TestByWorkflowCaseInsensitive(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
-	s := New(p, 10)
+	s := New(p)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -171,7 +146,7 @@ func TestByWorkflowCaseInsensitive(t *testing.T) {
 func TestAppendConcurrent(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
-	s := New(p, 5000)
+	s := New(p)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 
 func TestHistoryListSkipsBlockedKey(t *testing.T) {
 	dir := t.TempDir()
-	store := histdb.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	model.ready = true
 	model.focus = focusResponse
@@ -49,7 +49,7 @@ func TestHistoryListSkipsBlockedKey(t *testing.T) {
 
 func TestHistoryEscClearsFilter(t *testing.T) {
 	dir := t.TempDir()
-	store := histdb.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	model.ready = true
 	model.focus = focusResponse
@@ -82,7 +82,7 @@ func TestHistoryEscClearsFilter(t *testing.T) {
 
 func TestHistoryMultiSelectDelete(t *testing.T) {
 	dir := t.TempDir()
-	store := histdb.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	model.ready = true
 	model.focus = focusResponse

@@ -157,7 +157,7 @@ func TestSelectCompareHistoryResultPrefersFailure(t *testing.T) {
 
 func TestRecordCompareHistoryPersists(t *testing.T) {
 	tmp := t.TempDir()
-	store := histdb.New(filepath.Join(tmp, "history.db"), 10)
+	store := histdb.New(filepath.Join(tmp, "history.db"))
 	model := New(Config{History: store})
 
 	req := &restfile.Request{

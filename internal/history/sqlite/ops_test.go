@@ -12,7 +12,7 @@ func TestStatsCheckCompact(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")
 
-	s := New(p, 10)
+	s := New(p)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}

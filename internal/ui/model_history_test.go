@@ -89,7 +89,7 @@ func TestFormatHistorySnippetHandlesStyleOnly(t *testing.T) {
 
 func TestRecordCompareHistoryAppendsEntry(t *testing.T) {
 	tmp := t.TempDir()
-	store := histdb.New(filepath.Join(tmp, "history.db"), 10)
+	store := histdb.New(filepath.Join(tmp, "history.db"))
 	model := New(Config{History: store})
 
 	req := &restfile.Request{

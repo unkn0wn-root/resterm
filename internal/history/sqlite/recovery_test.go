@@ -17,7 +17,7 @@ func TestLoadRecoversCorruptDB(t *testing.T) {
 		t.Fatalf("write corrupt db: %v", err)
 	}
 
-	s := New(p, 10)
+	s := New(p)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}

@@ -61,7 +61,7 @@ func TestBuildProfileResults(t *testing.T) {
 
 func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 	dir := t.TempDir()
-	store := histdb.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	req := &restfile.Request{
 		Method: "GET",
@@ -123,7 +123,7 @@ func TestRecordProfileHistoryStoresEntry(t *testing.T) {
 
 func TestRecordProfileHistorySkipsNoLog(t *testing.T) {
 	dir := t.TempDir()
-	store := histdb.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	model := New(Config{History: store})
 	req := &restfile.Request{
 		Method: "GET",

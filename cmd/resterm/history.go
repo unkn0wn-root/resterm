@@ -14,9 +14,6 @@ import (
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
-const (
-	historyMax = 500
-)
 
 func handleHistorySubcommand(args []string) (bool, error) {
 	if len(args) == 0 || args[0] != "history" {
@@ -300,7 +297,7 @@ func openHistoryStore(migrate bool) (*histdb.Store, error) {
 	// This centralizes all history startup behavior used by CLI maintenance commands.
 	// It loads the database, prints recovery warnings, and optionally runs legacy import.
 	// On migration failure the store is closed before returning.
-	s := histdb.New(config.HistoryPath(), historyMax)
+	s := histdb.New(config.HistoryPath())
 	if err := s.Load(); err != nil {
 		return nil, fmt.Errorf("history: load store: %w", err)
 	}

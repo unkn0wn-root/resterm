@@ -17,7 +17,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 	dstDB := filepath.Join(dir, "dst.db")
 	out := filepath.Join(dir, "hist.json")
 
-	src := New(srcDB, 10)
+	src := New(srcDB)
 	if err := src.Load(); err != nil {
 		t.Fatalf("load src: %v", err)
 	}
@@ -35,7 +35,7 @@ func TestExportImportRoundTrip(t *testing.T) {
 		t.Fatalf("expected 2 exported rows, got %d", n)
 	}
 
-	dst := New(dstDB, 10)
+	dst := New(dstDB)
 	if err := dst.Load(); err != nil {
 		t.Fatalf("load dst: %v", err)
 	}
@@ -56,47 +56,12 @@ func TestExportImportRoundTrip(t *testing.T) {
 	}
 }
 
-func TestImportJSONTrimmedByMax(t *testing.T) {
-	dir := t.TempDir()
-	db := filepath.Join(dir, "hist.db")
-	in := filepath.Join(dir, "in.json")
-
-	s := New(db, 1)
-	if err := s.Load(); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	src := []history.Entry{
-		{ID: "1", ExecutedAt: time.Now().Add(-time.Minute)},
-		{ID: "2", ExecutedAt: time.Now()},
-	}
-	data, _ := enc(src)
-	if err := os.WriteFile(in, data, 0o644); err != nil {
-		t.Fatalf("write in: %v", err)
-	}
-
-	n, err := s.ImportJSON(in)
-	if err != nil {
-		t.Fatalf("import: %v", err)
-	}
-	if n != 2 {
-		t.Fatalf("expected 2 imported rows, got %d", n)
-	}
-	got := s.Entries()
-	if len(got) != 1 {
-		t.Fatalf("expected 1 row after trim, got %d", len(got))
-	}
-	if got[0].ID != "2" {
-		t.Fatalf("expected newest row ID 2, got %q", got[0].ID)
-	}
-}
-
 func TestBackup(t *testing.T) {
 	dir := t.TempDir()
 	db := filepath.Join(dir, "hist.db")
 	out := filepath.Join(dir, "hist.bak.db")
 
-	s := New(db, 10)
+	s := New(db)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -115,7 +80,7 @@ func TestBackup(t *testing.T) {
 		t.Fatalf("expected non-empty backup file")
 	}
 
-	cpy := New(out, 10)
+	cpy := New(out)
 	if err := cpy.Load(); err != nil {
 		t.Fatalf("load backup db: %v", err)
 	}
@@ -132,7 +97,7 @@ func TestBackupSamePathRejected(t *testing.T) {
 	dir := t.TempDir()
 	db := filepath.Join(dir, "hist.db")
 
-	s := New(db, 10)
+	s := New(db)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -150,7 +115,7 @@ func TestExportJSONKeepsTargetOnWriteError(t *testing.T) {
 	db := filepath.Join(dir, "hist.db")
 	out := filepath.Join(dir, "out.json")
 
-	s := New(db, 10)
+	s := New(db)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -184,7 +149,7 @@ func TestExportJSONValidPayload(t *testing.T) {
 	db := filepath.Join(dir, "hist.db")
 	out := filepath.Join(dir, "out.json")
 
-	s := New(db, 10)
+	s := New(db)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}

@@ -13,7 +13,7 @@ import (
 
 func TestDeleteHistoryEntryRemovesFromStore(t *testing.T) {
 	dir := t.TempDir()
-	store := histdb.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"))
 	if err := store.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}

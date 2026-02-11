@@ -1145,7 +1145,7 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 - Requests inherit a shared cookie jar; cookies persist across sessions.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
-- History is stored in `${RESTERM_CONFIG_DIR}/history.db` (defaults to the platform config directory) and retains up to ~500 entries. Set `RESTERM_CONFIG_DIR` to relocate it.
+- History is stored in `${RESTERM_CONFIG_DIR}/history.db` (defaults to the platform config directory) and has no fixed entry cap. Set `RESTERM_CONFIG_DIR` to relocate it.
 - On first launch after upgrading, Resterm imports `${RESTERM_CONFIG_DIR}/history.json` into `history.db` automatically when present.
 - If the SQLite history file is detected as corrupted, Resterm quarantines it to `history.db.corrupt-<timestamp>` and initializes a fresh `history.db`.
 - Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
@@ -1249,7 +1249,7 @@ resterm \
 ## Configuration
 
 - Config directory: `$HOME/Library/Application Support/resterm` (macOS), `%APPDATA%\resterm` (Windows), or `$HOME/.config/resterm` (Linux/Unix). Override with `RESTERM_CONFIG_DIR`.
-- History file: `<config-dir>/history.db` (max ~500 entries by default).
+- History file: `<config-dir>/history.db` (no fixed entry limit).
 - Settings file: `<config-dir>/settings.toml` (created when you first change preferences such as the default theme).
 - Theme directory: `<config-dir>/themes/` (override with `RESTERM_THEMES_DIR`). Drop `.toml` or `.json` files here to make them available in the selector.
 - Runtime globals and file captures are scoped per environment and document; they are released when you clear globals or switch environments.

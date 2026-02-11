@@ -23,7 +23,7 @@ func TestMigrateJSONImportsOnce(t *testing.T) {
 	}
 	writeLegacyJSON(t, jsonPath, src)
 
-	s := New(dbPath, 10)
+	s := New(dbPath)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -59,7 +59,7 @@ func TestMigrateJSONSkipsWhenDBHasRows(t *testing.T) {
 		{ID: "2", ExecutedAt: time.Now(), Method: "POST", URL: "https://two.test"},
 	})
 
-	s := New(dbPath, 10)
+	s := New(dbPath)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -79,47 +79,12 @@ func TestMigrateJSONSkipsWhenDBHasRows(t *testing.T) {
 	}
 }
 
-func TestMigrateJSONTrimmedByMax(t *testing.T) {
-	dir := t.TempDir()
-	dbPath := filepath.Join(dir, "history.db")
-	jsonPath := filepath.Join(dir, "history.json")
-
-	t1 := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)
-	t2 := t1.Add(1 * time.Minute)
-	t3 := t2.Add(1 * time.Minute)
-	writeLegacyJSON(t, jsonPath, []history.Entry{
-		{ID: "1", ExecutedAt: t1},
-		{ID: "2", ExecutedAt: t2},
-		{ID: "3", ExecutedAt: t3},
-	})
-
-	s := New(dbPath, 2)
-	if err := s.Load(); err != nil {
-		t.Fatalf("load: %v", err)
-	}
-
-	n, err := s.MigrateJSON(jsonPath)
-	if err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	if n != 3 {
-		t.Fatalf("expected 3 inserted before trim, got %d", n)
-	}
-	got := s.Entries()
-	if len(got) != 2 {
-		t.Fatalf("expected 2 rows after trim, got %d", len(got))
-	}
-	if got[0].ID != "3" || got[1].ID != "2" {
-		t.Fatalf("expected retained rows 3,2 got %q,%q", got[0].ID, got[1].ID)
-	}
-}
-
 func TestMigrateJSONMissingFile(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "history.db")
 	jsonPath := filepath.Join(dir, "missing.json")
 
-	s := New(dbPath, 10)
+	s := New(dbPath)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -141,7 +106,7 @@ func TestMigrateJSONSkipsLegacyReadAfterDone(t *testing.T) {
 		{ID: "1", ExecutedAt: time.Now(), Method: "GET", URL: "https://one.test"},
 	})
 
-	s := New(dbPath, 10)
+	s := New(dbPath)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
@@ -178,7 +143,7 @@ func TestMigrateJSONInvalidData(t *testing.T) {
 		t.Fatalf("write legacy: %v", err)
 	}
 
-	s := New(dbPath, 10)
+	s := New(dbPath)
 	if err := s.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}

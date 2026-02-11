@@ -105,9 +105,6 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		}
 	}
 
-	if err := trimMax(tx, s.max); err != nil {
-		return 0, err
-	}
 	if err := metaSet(tx, metaMigJSON, time.Now().UTC().Format(time.RFC3339)); err != nil {
 		return 0, err
 	}

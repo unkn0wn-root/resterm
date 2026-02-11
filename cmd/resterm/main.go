@@ -427,7 +427,7 @@ func main() {
 		DefaultPlaintextSet: true,
 	}
 
-	historyStore := histdb.New(config.HistoryPath(), historyMax)
+	historyStore := histdb.New(config.HistoryPath())
 	// History failures should never block the UI startup path.
 	// We log issues and keep running with an empty in-memory view.
 	if err := historyStore.Load(); err != nil {

@@ -74,7 +74,7 @@ func TestRunHistoryE2E(t *testing.T) {
 	srcDir := t.TempDir()
 	t.Setenv("RESTERM_CONFIG_DIR", srcDir)
 
-	src := histdb.New(filepath.Join(srcDir, "history.db"), historyMax)
+	src := histdb.New(filepath.Join(srcDir, "history.db"))
 	if err := src.Load(); err != nil {
 		t.Fatalf("load src: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestRunHistoryE2E(t *testing.T) {
 		t.Fatalf("unexpected backup output: %q", stdout)
 	}
 
-	bak := histdb.New(backupPath, historyMax)
+	bak := histdb.New(backupPath)
 	if err := bak.Load(); err != nil {
 		t.Fatalf("load backup db: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestRunHistoryE2E(t *testing.T) {
 		t.Fatalf("unexpected import output: %q", stdout)
 	}
 
-	dst := histdb.New(filepath.Join(dstDir, "history.db"), historyMax)
+	dst := histdb.New(filepath.Join(dstDir, "history.db"))
 	if err := dst.Load(); err != nil {
 		t.Fatalf("load dst: %v", err)
 	}

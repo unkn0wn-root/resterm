@@ -77,9 +77,6 @@ func (s *Store) ImportJSON(path string) (int, error) {
 		n++
 	}
 
-	if err := trimMax(tx, s.max); err != nil {
-		return 0, err
-	}
 	if err := tx.Commit(); err != nil {
 		return 0, errdef.Wrap(errdef.CodeHistory, err, "commit history import tx")
 	}
