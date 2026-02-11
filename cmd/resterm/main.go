@@ -22,7 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/config"
 	curl "github.com/unkn0wn-root/resterm/internal/curl/importer"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/generator"
@@ -427,7 +427,7 @@ func main() {
 		DefaultPlaintextSet: true,
 	}
 
-	historyStore := historysqlite.New(config.HistoryPath(), historyMax)
+	historyStore := histdb.New(config.HistoryPath(), historyMax)
 	// History failures should never block the UI startup path.
 	// We log issues and keep running with an empty in-memory view.
 	if err := historyStore.Load(); err != nil {

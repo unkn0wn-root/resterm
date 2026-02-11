@@ -6,13 +6,13 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
-	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestSyncHistoryScopeRequest(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 
 	reqA := &restfile.Request{
@@ -45,7 +45,7 @@ func TestSyncHistoryScopeRequest(t *testing.T) {
 
 func TestSyncHistoryScopeFile(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 
 	fileA := filepath.Join(dir, "a.http")
@@ -72,7 +72,7 @@ func TestSyncHistoryScopeFile(t *testing.T) {
 
 func TestSyncHistoryScopeFileMatchesPathVariantsOnly(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 
 	fileA := filepath.Join(dir, "api", "a.http")
@@ -122,7 +122,7 @@ func TestSyncHistoryScopeFileMatchesPathVariantsOnly(t *testing.T) {
 
 func TestSyncHistorySortOrder(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 
 	t1 := time.Date(2024, 1, 1, 9, 0, 0, 0, time.UTC)

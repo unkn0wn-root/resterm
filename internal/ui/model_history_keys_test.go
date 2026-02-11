@@ -8,12 +8,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
-	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
 func TestHistoryListSkipsBlockedKey(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 	model.ready = true
 	model.focus = focusResponse
@@ -49,7 +49,7 @@ func TestHistoryListSkipsBlockedKey(t *testing.T) {
 
 func TestHistoryEscClearsFilter(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 	model.ready = true
 	model.focus = focusResponse
@@ -82,7 +82,7 @@ func TestHistoryEscClearsFilter(t *testing.T) {
 
 func TestHistoryMultiSelectDelete(t *testing.T) {
 	dir := t.TempDir()
-	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
+	store := histdb.New(filepath.Join(dir, "history.db"), 10)
 	model := New(Config{History: store})
 	model.ready = true
 	model.focus = focusResponse

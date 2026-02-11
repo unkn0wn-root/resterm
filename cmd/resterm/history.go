@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
-	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
 const (
@@ -296,11 +296,11 @@ func runHistoryCheck(args []string) error {
 	return nil
 }
 
-func openHistoryStore(migrate bool) (*historysqlite.Store, error) {
+func openHistoryStore(migrate bool) (*histdb.Store, error) {
 	// This centralizes all history startup behavior used by CLI maintenance commands.
 	// It loads the database, prints recovery warnings, and optionally runs legacy import.
 	// On migration failure the store is closed before returning.
-	s := historysqlite.New(config.HistoryPath(), historyMax)
+	s := histdb.New(config.HistoryPath(), historyMax)
 	if err := s.Load(); err != nil {
 		return nil, fmt.Errorf("history: load store: %w", err)
 	}
@@ -364,7 +364,7 @@ Subcommands:
 `)
 }
 
-func printHistoryRecoveryWarning(w io.Writer, rec *historysqlite.RecoverInfo) error {
+func printHistoryRecoveryWarning(w io.Writer, rec *histdb.RecoverInfo) error {
 	if rec == nil {
 		return nil
 	}
