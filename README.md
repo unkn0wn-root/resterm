@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <em>A terminal-first client for REST, GraphQL, gRPC, WebSocket, and SSE.</em>
+  <em>A terminal client for REST, GraphQL, gRPC, WebSocket, and SSE.</em>
 </p>
 
 <p align="center">
@@ -18,11 +18,16 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 ## Why Resterm
 
-- Requests live in plain `.http` / `.rest` files.
-- Declarative approach, so you describe what should happen in files and Resterm executes it the same way every time, more like a small API language than a one-off UI.
-- OAuth 2.0 flows and SSH tunnels are built in so no extra tools are needed.
-- Timeline tracing, profiling, and streaming transcripts make debugging first-class.
-- Resterm is meant to be Git-driven so cloud sync and accounts are avoided by default.
+- Requests live in plain `.http` / `.rest` files - version them, review them, share them.
+- Declarative by design: you describe what should happen and Resterm executes it the same way every time, more like a small API language than a one-off UI.
+- **Conditional logic** built into the request format - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each` for data-driven runs.
+- **Multi-step workflows** chain requests with `@workflow` / `@step`, pass data between steps, and branch on results.
+- **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`) wire responses into subsequent requests and validate them inline.
+- **RestermScript** - a small, safe expression language purpose. Built for request files, with reusable `.rts` modules.
+- **OAuth 2.0** (client credentials, password, auth code + PKCE) and **SSH tunnels** are built in so no extra tools needed.
+- **Timeline tracing**, **profiling**, and **compare runs** across environments.
+- **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
+- No cloud sync, no accounts, no telemetry. Everything stays local.
 - There is no AI integration and there will never be.
 
 ## Screenshot tour
