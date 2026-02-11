@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+## [0.22.0](https://github.com/unkn0wn-root/resterm/compare/v0.21.5...v0.22.0) (2026-02-11)
+
+
+### Features
+
+* **squashed:** sqlite for history ([a8c9d4b](https://github.com/unkn0wn-root/resterm/commit/a8c9d4bd15ec6243e590c63ee49e28313338234f))
+
+
+### Bug Fixes
+
+* **history:** print subcommand help and skip legacy JSON reads after migration ([db6ba1c](https://github.com/unkn0wn-root/resterm/commit/db6ba1cc7913a825f22a0ea4c0b4cc7cd033dd11))
+
 ### [0.21.5](https://github.com/unkn0wn-root/resterm/compare/v0.21.4...v0.21.5) (2026-02-09)
 
 
