@@ -45,7 +45,7 @@ func (e *Error) Unwrap() error {
 	return e.Err
 }
 
-func Wrap(code Code, err error, format string, args ...interface{}) error {
+func Wrap(code Code, err error, format string, args ...any) error {
 	if err == nil {
 		return nil
 	}
@@ -57,7 +57,7 @@ func Wrap(code Code, err error, format string, args ...interface{}) error {
 	return &Error{Code: ensureCode(code), Message: msg, Err: err}
 }
 
-func New(code Code, format string, args ...interface{}) error {
+func New(code Code, format string, args ...any) error {
 	msg := format
 	if len(args) > 0 {
 		msg = fmt.Sprintf(format, args...)

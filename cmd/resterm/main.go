@@ -22,7 +22,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/config"
 	curl "github.com/unkn0wn-root/resterm/internal/curl/importer"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
-	"github.com/unkn0wn-root/resterm/internal/history"
+	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/generator"
@@ -43,6 +43,14 @@ var (
 )
 
 func main() {
+	if handled, err := handleHistorySubcommand(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if handled, err := handleInitSubcommand(os.Args[1:]); handled {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -419,10 +427,30 @@ func main() {
 		DefaultPlaintextSet: true,
 	}
 
-	historyStore := history.NewStore(config.HistoryPath(), 500)
+	historyStore := historysqlite.New(config.HistoryPath(), historyMax)
+	// History failures should never block the UI startup path.
+	// We log issues and keep running with an empty in-memory view.
 	if err := historyStore.Load(); err != nil {
 		log.Printf("history load error: %v", err)
+	} else if rec := historyStore.RecoveryInfo(); rec != nil {
+		log.Printf("history db recovered: %s -> %s", rec.Path, rec.Backup)
 	}
+	// Migration is also best effort at startup so existing workflows
+	// can continue even when legacy files are malformed.
+	if n, err := historyStore.MigrateJSON(config.LegacyHistoryPath()); err != nil {
+		log.Printf("history migration error: %v", err)
+	} else if n > 0 {
+		log.Printf(
+			"history migration imported %d entries from %s",
+			n,
+			config.LegacyHistoryPath(),
+		)
+	}
+	defer func() {
+		if err := historyStore.Close(); err != nil {
+			log.Printf("history close error: %v", err)
+		}
+	}()
 
 	compareTargets, compareErr := parseCompareTargets(compareTargetsRaw)
 	if compareErr != nil {

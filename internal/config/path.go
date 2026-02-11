@@ -27,5 +27,9 @@ func Dir() string {
 }
 
 func HistoryPath() string {
+	return filepath.Join(Dir(), "history.db")
+}
+
+func LegacyHistoryPath() string {
 	return filepath.Join(Dir(), "history.json")
 }

@@ -152,7 +152,7 @@ type Config struct {
 	HTTPOptions         httpclient.Options
 	GRPCOptions         grpcclient.Options
 	SSHManager          *ssh.Manager
-	History             *history.Store
+	History             history.Store
 	WorkspaceRoot       string
 	Recursive           bool
 	Version             string
@@ -300,7 +300,7 @@ type Model struct {
 
 	activeThemeKey      string
 	settingsHandle      config.SettingsHandle
-	historyStore        *history.Store
+	historyStore        history.Store
 	historyEntries      []history.Entry
 	historyScopeCount   int
 	historySelectedID   string

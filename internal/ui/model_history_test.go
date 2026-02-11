@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
+	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -88,7 +89,7 @@ func TestFormatHistorySnippetHandlesStyleOnly(t *testing.T) {
 
 func TestRecordCompareHistoryAppendsEntry(t *testing.T) {
 	tmp := t.TempDir()
-	store := history.NewStore(filepath.Join(tmp, "history.json"), 10)
+	store := historysqlite.New(filepath.Join(tmp, "history.db"), 10)
 	model := New(Config{History: store})
 
 	req := &restfile.Request{

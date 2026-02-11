@@ -8,11 +8,12 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
+	historysqlite "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
 func TestDeleteHistoryEntryRemovesFromStore(t *testing.T) {
 	dir := t.TempDir()
-	store := history.NewStore(filepath.Join(dir, "history.json"), 10)
+	store := historysqlite.New(filepath.Join(dir, "history.db"), 10)
 	if err := store.Load(); err != nil {
 		t.Fatalf("load: %v", err)
 	}
