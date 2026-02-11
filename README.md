@@ -1,4 +1,8 @@
-<h1 align="center">Resterm</h1>
+<h1 align="center">
+  <img src="_media/resterm_logo.png" alt="Resterm" width="200" />
+  <br>
+  Resterm
+</h1>
 
 <p align="center">
   <em>A terminal-first client for REST, GraphQL, gRPC, WebSocket, and SSE.</em>
