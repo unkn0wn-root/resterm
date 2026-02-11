@@ -133,6 +133,43 @@ func TestMigrateJSONMissingFile(t *testing.T) {
 	}
 }
 
+func TestMigrateJSONSkipsLegacyReadAfterDone(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "history.db")
+	jsonPath := filepath.Join(dir, "history.json")
+	writeLegacyJSON(t, jsonPath, []history.Entry{
+		{ID: "1", ExecutedAt: time.Now(), Method: "GET", URL: "https://one.test"},
+	})
+
+	s := New(dbPath, 10)
+	if err := s.Load(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	n, err := s.MigrateJSON(jsonPath)
+	if err != nil {
+		t.Fatalf("migrate first: %v", err)
+	}
+	if n != 1 {
+		t.Fatalf("expected 1 imported row, got %d", n)
+	}
+
+	if err := os.Remove(jsonPath); err != nil {
+		t.Fatalf("remove legacy file: %v", err)
+	}
+	if err := os.Mkdir(jsonPath, 0o755); err != nil {
+		t.Fatalf("replace legacy file with dir: %v", err)
+	}
+
+	n, err = s.MigrateJSON(jsonPath)
+	if err != nil {
+		t.Fatalf("migrate second: expected marker short-circuit, got %v", err)
+	}
+	if n != 0 {
+		t.Fatalf("expected 0 imported rows on second run, got %d", n)
+	}
+}
+
 func TestMigrateJSONInvalidData(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "history.db")

@@ -37,6 +37,21 @@ func TestRunHistoryUnknownSubcommand(t *testing.T) {
 	}
 }
 
+func TestRunHistoryHelpFlagShowsUsage(t *testing.T) {
+	stdout, stderr, err := captureHistoryIO(t, func() error {
+		return runHistory([]string{"-h"})
+	})
+	if err != nil {
+		t.Fatalf("help flag: %v", err)
+	}
+	if strings.TrimSpace(stderr) != "" {
+		t.Fatalf("expected empty stderr on help flag, got %q", stderr)
+	}
+	if !strings.Contains(stdout, "Usage: resterm history <export|import|backup|stats|check|compact> [flags]") {
+		t.Fatalf("expected history usage in stdout, got %q", stdout)
+	}
+}
+
 func TestRunHistoryMaintenanceCommands(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("RESTERM_CONFIG_DIR", dir)
@@ -260,6 +275,24 @@ func TestRunHistoryFlagErrorsHaveCommandPrefix(t *testing.T) {
 		if !strings.Contains(err.Error(), tc.want) {
 			t.Fatalf("expected error %q to contain %q", err.Error(), tc.want)
 		}
+	}
+}
+
+func TestRunHistorySubcommandHelpShowsUsage(t *testing.T) {
+	stdout, stderr, err := captureHistoryIO(t, func() error {
+		return runHistory([]string{"export", "-h"})
+	})
+	if err != nil {
+		t.Fatalf("export -h: %v", err)
+	}
+	if strings.TrimSpace(stdout) != "" {
+		t.Fatalf("expected empty stdout on help, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "Usage: resterm history export [flags]") {
+		t.Fatalf("expected usage in stderr, got %q", stderr)
+	}
+	if !strings.Contains(stderr, "-out") {
+		t.Fatalf("expected --out flag in help output, got %q", stderr)
 	}
 }
 

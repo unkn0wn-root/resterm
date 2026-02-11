@@ -44,6 +44,11 @@ func runHistory(args []string) error {
 	}
 	op := strings.TrimSpace(strings.ToLower(args[0]))
 	switch op {
+	case "-h", "--help", "help":
+		if err := writeln(os.Stdout, historyUsageText()); err != nil {
+			return fmt.Errorf("history: write output: %w", err)
+		}
+		return nil
 	case "export":
 		return runHistoryExport(args[1:])
 	case "import":
@@ -322,7 +327,27 @@ func newHistoryFlagSet(name string) *flag.FlagSet {
 	// Errors are formatted manually so each subcommand can keep a clear
 	// and consistent prefix in user-facing output.
 	fs.SetOutput(io.Discard)
+	// Help output still goes to stderr so `-h` behaves like a normal CLI.
+	fs.Usage = func() {
+		printHistoryFlagSetUsage(os.Stderr, fs)
+	}
 	return fs
+}
+
+func printHistoryFlagSetUsage(w io.Writer, fs *flag.FlagSet) {
+	if _, err := fmt.Fprintf(w, "Usage: resterm %s [flags]\n", fs.Name()); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, ""); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "Flags:"); err != nil {
+		return
+	}
+	out := fs.Output()
+	fs.SetOutput(w)
+	fs.PrintDefaults()
+	fs.SetOutput(out)
 }
 
 func historyUsageText() string {

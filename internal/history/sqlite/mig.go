@@ -32,14 +32,6 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	}
 	path = filepath.Clean(path)
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return 0, nil
-		}
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "read legacy history")
-	}
-
 	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {
 		return 0, errdef.Wrap(errdef.CodeHistory, err, "begin history migration tx")
@@ -54,6 +46,14 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 	}
 	if done {
 		return 0, nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return 0, nil
+		}
+		return 0, errdef.Wrap(errdef.CodeHistory, err, "read legacy history")
 	}
 
 	if len(bytes.TrimSpace(data)) == 0 {
