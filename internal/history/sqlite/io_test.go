@@ -47,7 +47,10 @@ func TestExportImportRoundTrip(t *testing.T) {
 		t.Fatalf("expected 2 imported rows, got %d", n)
 	}
 
-	got := dst.Entries()
+	got, err := dst.Entries()
+	if err != nil {
+		t.Fatalf("dst entries: %v", err)
+	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 rows in dst, got %d", len(got))
 	}
@@ -84,7 +87,10 @@ func TestBackup(t *testing.T) {
 	if err := cpy.Load(); err != nil {
 		t.Fatalf("load backup db: %v", err)
 	}
-	got := cpy.Entries()
+	got, err := cpy.Entries()
+	if err != nil {
+		t.Fatalf("backup entries: %v", err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 row in backup db, got %d", len(got))
 	}
@@ -103,6 +109,27 @@ func TestBackupSamePathRejected(t *testing.T) {
 	}
 	if err := s.Backup(db); err == nil {
 		t.Fatalf("expected same-path backup error")
+	}
+}
+
+func TestBackupQuotedPath(t *testing.T) {
+	dir := t.TempDir()
+	db := filepath.Join(dir, "hist.db")
+	out := filepath.Join(dir, "quoted'snapshot.db")
+
+	s := New(db)
+	if err := s.Load(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now()}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	if err := s.Backup(out); err != nil {
+		t.Fatalf("backup: %v", err)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Fatalf("stat backup: %v", err)
 	}
 }
 

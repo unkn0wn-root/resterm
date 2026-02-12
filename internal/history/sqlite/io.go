@@ -16,11 +16,11 @@ func (s *Store) ExportJSON(path string) (int, error) {
 		return 0, err
 	}
 
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return 0, errdef.Wrap(errdef.CodeHistory, errors.New("empty path"), "export history")
+	var err error
+	path, err = cleanPath(path, "export history")
+	if err != nil {
+		return 0, err
 	}
-	path = filepath.Clean(path)
 
 	es, err := s.rows("", nil)
 	if err != nil {
@@ -42,11 +42,11 @@ func (s *Store) ImportJSON(path string) (int, error) {
 		return 0, err
 	}
 
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return 0, errdef.Wrap(errdef.CodeHistory, errors.New("empty path"), "import history")
+	var err error
+	path, err = cleanPath(path, "import history")
+	if err != nil {
+		return 0, err
 	}
-	path = filepath.Clean(path)
 
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -85,17 +85,17 @@ func (s *Store) ImportJSON(path string) (int, error) {
 
 func (s *Store) Backup(path string) error {
 	// Backup writes a full SQLite snapshot to another file.
-	// It checkpoints WAL first and rejects same-path targets to avoid self-overwrite.
+	// It rejects same-path targets to avoid self-overwrite.
 	// The result is a standalone database that can be opened directly.
 	if err := s.ensure(); err != nil {
 		return err
 	}
 
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return errdef.Wrap(errdef.CodeHistory, errors.New("empty path"), "backup history")
+	var err error
+	path, err = cleanPath(path, "backup history")
+	if err != nil {
+		return err
 	}
-	path = filepath.Clean(path)
 
 	// The destination must be different from the live database path.
 	// Removing an existing file is part of backup preparation.
@@ -113,16 +113,20 @@ func (s *Store) Backup(path string) error {
 		return errdef.Wrap(errdef.CodeFilesystem, err, "remove existing backup")
 	}
 
-	// Force WAL pages back into the main file before snapshotting so the
-	// copy always includes committed rows that were still in the journal.
-	if _, err := s.db.Exec(`PRAGMA wal_checkpoint(FULL);`); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "checkpoint history db")
-	}
-	q := "VACUUM INTO '" + escSQLStr(path) + "'"
-	if _, err := s.db.Exec(q); err != nil {
+	// VACUUM INTO accepts a scalar expression for the output path.
+	// Using a bound value avoids SQL text interpolation and escaping logic.
+	if _, err := s.db.Exec(`VACUUM INTO ?`, path); err != nil {
 		return errdef.Wrap(errdef.CodeHistory, err, "backup history db")
 	}
 	return nil
+}
+
+func cleanPath(path string, op string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", errdef.Wrap(errdef.CodeHistory, errors.New("empty path"), "%s", op)
+	}
+	return filepath.Clean(path), nil
 }
 
 func writeFileAtom(path string, data []byte, perm os.FileMode) error {
@@ -155,10 +159,6 @@ func writeFileAtom(path string, data []byte, perm os.FileMode) error {
 		return errdef.Wrap(errdef.CodeFilesystem, err, "replace export file")
 	}
 	return nil
-}
-
-func escSQLStr(v string) string {
-	return strings.ReplaceAll(v, "'", "''")
 }
 
 func samePath(a, b string) bool {

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
@@ -185,40 +186,20 @@ func runHistoryStats(args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := writef(os.Stdout, "History DB: %s\n", st.Path); err != nil {
-		return fmt.Errorf("history stats: write output: %w", err)
-	}
-	if err := writef(os.Stdout, "Schema: %d\n", st.Schema); err != nil {
-		return fmt.Errorf("history stats: write output: %w", err)
-	}
-	if err := writef(os.Stdout, "Rows: %d\n", st.Rows); err != nil {
-		return fmt.Errorf("history stats: write output: %w", err)
-	}
+	var b strings.Builder
+	_, _ = fmt.Fprintf(&b, "History DB: %s\n", st.Path)
+	_, _ = fmt.Fprintf(&b, "Schema: %d\n", st.Schema)
+	_, _ = fmt.Fprintf(&b, "Rows: %d\n", st.Rows)
 	if !st.Oldest.IsZero() {
-		if err := writef(
-			os.Stdout,
-			"Oldest: %s\n",
-			st.Oldest.UTC().Format(time.RFC3339),
-		); err != nil {
-			return fmt.Errorf("history stats: write output: %w", err)
-		}
+		_, _ = fmt.Fprintf(&b, "Oldest: %s\n", st.Oldest.UTC().Format(time.RFC3339))
 	}
 	if !st.Newest.IsZero() {
-		if err := writef(
-			os.Stdout,
-			"Newest: %s\n",
-			st.Newest.UTC().Format(time.RFC3339),
-		); err != nil {
-			return fmt.Errorf("history stats: write output: %w", err)
-		}
+		_, _ = fmt.Fprintf(&b, "Newest: %s\n", st.Newest.UTC().Format(time.RFC3339))
 	}
-	if err := writef(os.Stdout, "DB Size: %s\n", byteLabel(st.DBBytes)); err != nil {
-		return fmt.Errorf("history stats: write output: %w", err)
-	}
-	if err := writef(os.Stdout, "WAL Size: %s\n", byteLabel(st.WALBytes)); err != nil {
-		return fmt.Errorf("history stats: write output: %w", err)
-	}
-	if err := writef(os.Stdout, "SHM Size: %s\n", byteLabel(st.SHMBytes)); err != nil {
+	_, _ = fmt.Fprintf(&b, "DB Size: %s\n", byteLabel(st.DBBytes))
+	_, _ = fmt.Fprintf(&b, "WAL Size: %s\n", byteLabel(st.WALBytes))
+	_, _ = fmt.Fprintf(&b, "SHM Size: %s\n", byteLabel(st.SHMBytes))
+	if _, err := io.WriteString(os.Stdout, b.String()); err != nil {
 		return fmt.Errorf("history stats: write output: %w", err)
 	}
 	return nil
@@ -300,7 +281,7 @@ func runHistoryCheck(args []string) error {
 	return nil
 }
 
-func openHistoryStore(migrate bool) (*histdb.Store, error) {
+func openHistoryStore(migrate bool) (history.MaintenanceStore, error) {
 	// This centralizes all history startup behavior used by CLI maintenance commands.
 	// It loads the database, prints recovery warnings, and optionally runs legacy import.
 	// On migration failure the store is closed before returning.

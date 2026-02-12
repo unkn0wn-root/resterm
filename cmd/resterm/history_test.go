@@ -141,7 +141,9 @@ func TestRunHistoryE2E(t *testing.T) {
 	if err := bak.Load(); err != nil {
 		t.Fatalf("load backup db: %v", err)
 	}
-	if got := bak.Entries(); len(got) != 2 {
+	if got, err := bak.Entries(); err != nil {
+		t.Fatalf("backup entries: %v", err)
+	} else if len(got) != 2 {
 		t.Fatalf("expected 2 rows in backup db, got %d", len(got))
 	}
 	_ = bak.Close()
@@ -166,7 +168,9 @@ func TestRunHistoryE2E(t *testing.T) {
 	if err := dst.Load(); err != nil {
 		t.Fatalf("load dst: %v", err)
 	}
-	if got := dst.Entries(); len(got) != 2 {
+	if got, err := dst.Entries(); err != nil {
+		t.Fatalf("dst entries: %v", err)
+	} else if len(got) != 2 {
 		t.Fatalf("expected 2 rows in dst db, got %d", len(got))
 	}
 	_ = dst.Close()

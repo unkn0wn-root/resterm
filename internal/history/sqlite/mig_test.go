@@ -35,7 +35,9 @@ func TestMigrateJSONImportsOnce(t *testing.T) {
 	if n != 2 {
 		t.Fatalf("expected 2 imported rows, got %d", n)
 	}
-	if got := s.Entries(); len(got) != 2 {
+	if got, err := s.Entries(); err != nil {
+		t.Fatalf("entries after first migrate: %v", err)
+	} else if len(got) != 2 {
 		t.Fatalf("expected 2 rows after import, got %d", len(got))
 	}
 
@@ -46,7 +48,9 @@ func TestMigrateJSONImportsOnce(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("expected 0 imported rows on second run, got %d", n)
 	}
-	if got := s.Entries(); len(got) != 2 {
+	if got, err := s.Entries(); err != nil {
+		t.Fatalf("entries after second migrate: %v", err)
+	} else if len(got) != 2 {
 		t.Fatalf("expected 2 rows after second import, got %d", len(got))
 	}
 }
@@ -74,7 +78,9 @@ func TestMigrateJSONSkipsWhenDBHasRows(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("expected 0 imported rows when DB not empty, got %d", n)
 	}
-	if got := s.Entries(); len(got) != 1 {
+	if got, err := s.Entries(); err != nil {
+		t.Fatalf("entries after skip: %v", err)
+	} else if len(got) != 1 {
 		t.Fatalf("expected original rows only, got %d", len(got))
 	}
 }
@@ -151,7 +157,9 @@ func TestMigrateJSONInvalidData(t *testing.T) {
 	if _, err := s.MigrateJSON(jsonPath); err == nil {
 		t.Fatalf("expected migrate parse error")
 	}
-	if got := s.Entries(); len(got) != 0 {
+	if got, err := s.Entries(); err != nil {
+		t.Fatalf("entries after failed migrate: %v", err)
+	} else if len(got) != 0 {
 		t.Fatalf("expected no rows after failed migration, got %d", len(got))
 	}
 }

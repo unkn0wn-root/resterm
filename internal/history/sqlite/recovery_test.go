@@ -42,7 +42,11 @@ func TestLoadRecoversCorruptDB(t *testing.T) {
 	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now(), Method: "GET"}); err != nil {
 		t.Fatalf("append after recover: %v", err)
 	}
-	if n := len(s.Entries()); n != 1 {
+	es, err := s.Entries()
+	if err != nil {
+		t.Fatalf("entries after recover: %v", err)
+	}
+	if n := len(es); n != 1 {
 		t.Fatalf("expected 1 row after append, got %d", n)
 	}
 }

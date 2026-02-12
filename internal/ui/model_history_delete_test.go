@@ -43,7 +43,10 @@ func TestDeleteHistoryEntryRemovesFromStore(t *testing.T) {
 	updated, _ := model.Update(msg)
 	model = updated.(Model)
 
-	entries := store.Entries()
+	entries, err := store.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
 	if len(entries) != 0 {
 		t.Fatalf("expected store to be empty, got %d entries", len(entries))
 	}

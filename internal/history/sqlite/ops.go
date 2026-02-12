@@ -2,40 +2,29 @@ package sqlite
 
 import (
 	"os"
-	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
-type Stats struct {
-	Path     string
-	Schema   int
-	Rows     int64
-	Oldest   time.Time
-	Newest   time.Time
-	DBBytes  int64
-	WALBytes int64
-	SHMBytes int64
-}
-
-func (s *Store) Stats() (Stats, error) {
+func (s *Store) Stats() (history.Stats, error) {
 	if err := s.ensure(); err != nil {
-		return Stats{}, err
+		return history.Stats{}, err
 	}
 
-	st := Stats{Path: s.p}
+	st := history.Stats{Path: s.p}
 	var minNS, maxNS int64
 	if err := s.db.QueryRow(
 		`SELECT COUNT(*), COALESCE(MIN(exec_ns), 0), COALESCE(MAX(exec_ns), 0) FROM hist`,
 	).Scan(&st.Rows, &minNS, &maxNS); err != nil {
-		return Stats{}, errdef.Wrap(errdef.CodeHistory, err, "query history stats")
+		return history.Stats{}, errdef.Wrap(errdef.CodeHistory, err, "query history stats")
 	}
 	st.Oldest = nsToTime(minNS)
 	st.Newest = nsToTime(maxNS)
 
 	v, err := schemaVersion(s.db)
 	if err != nil {
-		return Stats{}, err
+		return history.Stats{}, err
 	}
 	st.Schema = v
 	st.DBBytes = fileSize(s.p)
