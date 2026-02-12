@@ -14,7 +14,6 @@ import (
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 )
 
-
 func handleHistorySubcommand(args []string) (bool, error) {
 	if len(args) == 0 || args[0] != "history" {
 		return false, nil
@@ -196,12 +195,20 @@ func runHistoryStats(args []string) error {
 		return fmt.Errorf("history stats: write output: %w", err)
 	}
 	if !st.Oldest.IsZero() {
-		if err := writef(os.Stdout, "Oldest: %s\n", st.Oldest.UTC().Format(time.RFC3339)); err != nil {
+		if err := writef(
+			os.Stdout,
+			"Oldest: %s\n",
+			st.Oldest.UTC().Format(time.RFC3339),
+		); err != nil {
 			return fmt.Errorf("history stats: write output: %w", err)
 		}
 	}
 	if !st.Newest.IsZero() {
-		if err := writef(os.Stdout, "Newest: %s\n", st.Newest.UTC().Format(time.RFC3339)); err != nil {
+		if err := writef(
+			os.Stdout,
+			"Newest: %s\n",
+			st.Newest.UTC().Format(time.RFC3339),
+		); err != nil {
 			return fmt.Errorf("history stats: write output: %w", err)
 		}
 	}
