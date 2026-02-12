@@ -3,8 +3,8 @@ package sqlite
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"strconv"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
@@ -16,6 +16,44 @@ const (
 type mig struct {
 	ver int
 	qs  []string
+}
+
+type integrityCheckStatus uint8
+
+const (
+	integrityCheckStatusOK integrityCheckStatus = iota + 1
+	integrityCheckStatusFailed
+)
+
+type integrityCheckResult struct {
+	status integrityCheckStatus
+	detail string
+}
+
+func parseIntegrityCheckResult(v string) integrityCheckResult {
+	s := strings.TrimSpace(v)
+	if s == "ok" {
+		return integrityCheckResult{status: integrityCheckStatusOK}
+	}
+	return integrityCheckResult{
+		status: integrityCheckStatusFailed,
+		detail: s,
+	}
+}
+
+type integrityCheckError struct {
+	Check  string
+	Result string
+}
+
+func (e *integrityCheckError) Error() string {
+	if e == nil {
+		return ""
+	}
+	if e.Result == "" {
+		return "history " + e.Check + " failed"
+	}
+	return "history " + e.Check + " failed: " + e.Result
 }
 
 // These are applied on every open because several settings are
@@ -173,10 +211,12 @@ func applyMigration(db *sql.DB, m mig) error {
 }
 
 func checkDB(db *sql.DB, full bool) error {
+	checkName := "quick_check"
 	q := `PRAGMA quick_check;`
 	// Quick checks are cheap enough for regular startup validation.
 	// Full checks stay opt in because they are much slower on big files.
 	if full {
+		checkName = "integrity_check"
 		q = `PRAGMA integrity_check;`
 	}
 
@@ -192,11 +232,16 @@ func checkDB(db *sql.DB, full bool) error {
 		if err := rs.Scan(&v); err != nil {
 			return errdef.Wrap(errdef.CodeHistory, err, "scan history integrity check")
 		}
-		if v == "ok" {
+		r := parseIntegrityCheckResult(v)
+		if r.status == integrityCheckStatusOK {
 			ok = true
 			continue
 		}
-		return errdef.New(errdef.CodeHistory, "history integrity check failed: %s", v)
+		return errdef.Wrap(
+			errdef.CodeHistory,
+			&integrityCheckError{Check: checkName, Result: r.detail},
+			"run history integrity check",
+		)
 	}
 	if err := rs.Err(); err != nil {
 		return errdef.Wrap(errdef.CodeHistory, err, "iterate history integrity check")
@@ -204,7 +249,7 @@ func checkDB(db *sql.DB, full bool) error {
 	if !ok {
 		return errdef.Wrap(
 			errdef.CodeHistory,
-			errors.New("empty integrity check result"),
+			&integrityCheckError{Check: checkName, Result: "empty result"},
 			"run history integrity check",
 		)
 	}

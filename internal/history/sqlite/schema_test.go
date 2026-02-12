@@ -6,6 +6,35 @@ import (
 	"testing"
 )
 
+func TestParseIntegrityCheckResult(t *testing.T) {
+	t.Run("ok", func(t *testing.T) {
+		r := parseIntegrityCheckResult("ok")
+		if r.status != integrityCheckStatusOK {
+			t.Fatalf("expected OK status, got %v", r.status)
+		}
+		if r.detail != "" {
+			t.Fatalf("expected empty detail for OK result, got %q", r.detail)
+		}
+	})
+
+	t.Run("failed", func(t *testing.T) {
+		r := parseIntegrityCheckResult("malformed page")
+		if r.status != integrityCheckStatusFailed {
+			t.Fatalf("expected failed status, got %v", r.status)
+		}
+		if r.detail != "malformed page" {
+			t.Fatalf("expected failure detail to round trip, got %q", r.detail)
+		}
+	})
+
+	t.Run("trimmed", func(t *testing.T) {
+		r := parseIntegrityCheckResult("  ok  ")
+		if r.status != integrityCheckStatusOK {
+			t.Fatalf("expected OK status for trimmed result, got %v", r.status)
+		}
+	})
+}
+
 func TestMigrateSchemaFromV1(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "history.db")

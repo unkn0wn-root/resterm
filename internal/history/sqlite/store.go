@@ -13,7 +13,8 @@ import (
 	"sync"
 	"time"
 
-	_ "modernc.org/sqlite"
+	sqlitedrv "modernc.org/sqlite"
+	sqlite3 "modernc.org/sqlite/lib"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -107,7 +108,6 @@ func (s *Store) Append(e history.Entry) error {
 	}
 	return nil
 }
-
 
 func (s *Store) Entries() []history.Entry {
 	return s.list("", nil)
@@ -494,25 +494,24 @@ func isCorruptErr(err error) bool {
 	if err == nil {
 		return false
 	}
-	// Error text differs by SQLite build and version, so the check uses
-	// a set of known corruption phrases instead of one exact message.
-	s := strings.ToLower(err.Error())
-	if strings.Contains(s, "file is not a database") {
+
+	var integErr *integrityCheckError
+	if errors.As(err, &integErr) {
 		return true
 	}
-	if strings.Contains(s, "database disk image is malformed") {
-		return true
+
+	var se *sqlitedrv.Error
+	if errors.As(err, &se) {
+		code := se.Code()
+		if code == sqlite3.SQLITE_IOERR_CORRUPTFS {
+			return true
+		}
+		switch code & 0xff {
+		case sqlite3.SQLITE_CORRUPT, sqlite3.SQLITE_NOTADB:
+			return true
+		}
 	}
-	if strings.Contains(s, "database corrupted") {
-		return true
-	}
-	if strings.Contains(s, "database corrupt") {
-		return true
-	}
-	if strings.Contains(s, "is encrypted or is not a database") {
-		return true
-	}
-	return strings.Contains(s, "malformed")
+	return false
 }
 
 func quarantineDB(path string) (string, error) {
