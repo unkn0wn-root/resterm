@@ -56,52 +56,35 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		return 0, errdef.Wrap(errdef.CodeHistory, err, "read legacy history")
 	}
 
-	if len(bytes.TrimSpace(data)) == 0 {
-		if err := metaSet(tx, metaMigJSON, time.Now().UTC().Format(time.RFC3339)); err != nil {
-			return 0, err
-		}
-		if err := tx.Commit(); err != nil {
-			return 0, errdef.Wrap(errdef.CodeHistory, err, "commit history migration tx")
-		}
-		return 0, nil
-	}
-
-	existing, err := rowCount(tx)
-	if err != nil {
-		return 0, err
-	}
-	// If SQLite already has rows we treat it as the source of truth and
-	// only stamp completion, which avoids merging two diverged histories.
-	if existing > 0 {
-		if err := metaSet(tx, metaMigJSON, time.Now().UTC().Format(time.RFC3339)); err != nil {
-			return 0, err
-		}
-		if err := tx.Commit(); err != nil {
-			return 0, errdef.Wrap(errdef.CodeHistory, err, "commit history migration tx")
-		}
-		return 0, nil
-	}
-
-	es, err := dec[[]history.Entry](data)
-	if err != nil {
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "parse legacy history")
-	}
-
 	n := 0
-	for _, e := range es {
-		r, err := mkRow(e)
+	if len(bytes.TrimSpace(data)) != 0 {
+		existing, err := rowCount(tx)
 		if err != nil {
 			return 0, err
 		}
-		// Duplicate IDs from legacy data are ignored so one bad file does
-		// not abort the whole migration transaction.
-		res, err := insertRow(tx, qIgnore, &r)
-		if err != nil {
-			return 0, errdef.Wrap(errdef.CodeHistory, err, "insert migrated history row")
-		}
-		ra, err := res.RowsAffected()
-		if err == nil && ra > 0 {
-			n++
+		// If SQLite already has rows we treat it as the source of truth and
+		// only stamp completion, which avoids merging two diverged histories.
+		if existing == 0 {
+			es, err := dec[[]history.Entry](data)
+			if err != nil {
+				return 0, errdef.Wrap(errdef.CodeHistory, err, "parse legacy history")
+			}
+			for _, e := range es {
+				r, err := mkRow(e)
+				if err != nil {
+					return 0, err
+				}
+				// Duplicate IDs from legacy data are ignored so one bad file does
+				// not abort the whole migration transaction.
+				res, err := insertRow(tx, qIgnore, &r)
+				if err != nil {
+					return 0, errdef.Wrap(errdef.CodeHistory, err, "insert migrated history row")
+				}
+				ra, err := res.RowsAffected()
+				if err == nil && ra > 0 {
+					n++
+				}
+			}
 		}
 	}
 

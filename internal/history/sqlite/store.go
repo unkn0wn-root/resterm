@@ -1,11 +1,9 @@
 package sqlite
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -50,6 +48,7 @@ type RecoverInfo struct {
 }
 
 var _ history.Store = (*Store)(nil)
+var _ history.MaintenanceStore = (*Store)(nil)
 
 func New(path string) *Store {
 	return &Store{p: path}
@@ -93,62 +92,52 @@ func (s *Store) Append(e history.Entry) error {
 		return err
 	}
 
-	tx, err := s.db.BeginTx(context.Background(), nil)
-	if err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "begin history tx")
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err = insertRow(tx, qReplace, &r); err != nil {
+	if _, err = insertRow(s.db, qReplace, &r); err != nil {
 		return errdef.Wrap(errdef.CodeHistory, err, "insert history row")
-	}
-
-	if err := tx.Commit(); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "commit history tx")
 	}
 	return nil
 }
 
-func (s *Store) Entries() []history.Entry {
-	return s.list("", nil)
+func (s *Store) Entries() ([]history.Entry, error) {
+	return s.rows("", nil)
 }
 
-func (s *Store) ByRequest(id string) []history.Entry {
+func (s *Store) ByRequest(id string) ([]history.Entry, error) {
 	id = strings.TrimSpace(id)
 	if id == "" {
-		return s.Entries()
+		return nil, nil
 	}
 	// Workflow runs use this same field for workflow names, so they are
 	// excluded here to keep request history filtering precise.
-	return s.list(
+	return s.rows(
 		`WHERE method != ? AND (req_name = ? OR url = ?)`,
 		[]any{restfile.HistoryMethodWorkflow, id, id},
 	)
 }
 
-func (s *Store) ByWorkflow(name string) []history.Entry {
+func (s *Store) ByWorkflow(name string) ([]history.Entry, error) {
 	name = history.NormalizeWorkflowName(name)
 	if name == "" {
-		return nil
+		return nil, nil
 	}
 	// Matching trims and lowercases both sides because saved names can
 	// vary in spacing and case across edited files.
-	return s.list(
+	return s.rows(
 		`WHERE method = ? AND LOWER(TRIM(req_name)) = LOWER(TRIM(?))`,
 		[]any{restfile.HistoryMethodWorkflow, name},
 	)
 }
 
-func (s *Store) ByFile(path string) []history.Entry {
+func (s *Store) ByFile(path string) ([]history.Entry, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil
+		return nil, nil
 	}
 	n := history.NormPath(path)
 	if n == "" {
-		return nil
+		return nil, nil
 	}
-	return s.list(`WHERE file_norm = ?`, []any{n})
+	return s.rows(`WHERE file_norm = ?`, []any{n})
 }
 
 func (s *Store) Delete(id string) (bool, error) {
@@ -165,15 +154,6 @@ func (s *Store) Delete(id string) (bool, error) {
 		return false, errdef.Wrap(errdef.CodeHistory, err, "history rows affected")
 	}
 	return n > 0, nil
-}
-
-func (s *Store) list(where string, args []any) []history.Entry {
-	es, err := s.rows(where, args)
-	if err != nil {
-		slog.Error("history query failed", "err", err)
-		return nil
-	}
-	return es
 }
 
 func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
@@ -368,8 +348,12 @@ func (r *row) args() []any {
 	}
 }
 
-func insertRow(tx *sql.Tx, q string, r *row) (sql.Result, error) {
-	return tx.Exec(q, r.args()...)
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func insertRow(db execer, q string, r *row) (sql.Result, error) {
+	return db.Exec(q, r.args()...)
 }
 
 func parseIDNum(id string) int64 {

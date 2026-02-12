@@ -8,18 +8,18 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
-func (m *Model) historyEntriesForFileScope() []history.Entry {
+func (m *Model) historyEntriesForFileScope() ([]history.Entry, error) {
 	if m.historyStore == nil {
-		return nil
+		return nil, nil
 	}
 	path := strings.TrimSpace(m.historyFilePath())
 	if path == "" {
-		return nil
+		return nil, nil
 	}
 
 	vars := historyPathVariants(path, m.workspaceRoot)
 	if len(vars) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	// One entry can match more than one path variant, so dedupe IDs
@@ -27,7 +27,10 @@ func (m *Model) historyEntriesForFileScope() []history.Entry {
 	seen := make(map[string]struct{}, history.InitCap)
 	out := make([]history.Entry, 0, history.InitCap)
 	for _, v := range vars {
-		es := m.historyStore.ByFile(v)
+		es, err := m.historyStore.ByFile(v)
+		if err != nil {
+			return nil, err
+		}
 		for _, e := range es {
 			id := strings.TrimSpace(e.ID)
 			if id == "" {
@@ -41,12 +44,12 @@ func (m *Model) historyEntriesForFileScope() []history.Entry {
 		}
 	}
 	if len(out) < 2 {
-		return out
+		return out, nil
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		return historyEntryNewerFirst(out[i], out[j])
 	})
-	return out
+	return out, nil
 }
 
 func historyPathVariants(path string, workspaceRoot string) []string {

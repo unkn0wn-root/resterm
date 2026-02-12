@@ -128,7 +128,11 @@ func TestHistoryMultiSelectDelete(t *testing.T) {
 	model = updated.(Model)
 
 	remaining := map[string]struct{}{}
-	for _, entry := range store.Entries() {
+	entries, err := store.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
+	for _, entry := range entries {
 		remaining[entry.ID] = struct{}{}
 	}
 	if len(remaining) != 3-len(selected) {

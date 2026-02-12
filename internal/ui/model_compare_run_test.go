@@ -186,7 +186,10 @@ func TestRecordCompareHistoryPersists(t *testing.T) {
 	}
 
 	model.recordCompareHistory(state)
-	entries := store.Entries()
+	entries, err := store.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
 	if len(entries) != 1 {
 		t.Fatalf("expected 1 entry, got %d", len(entries))
 	}

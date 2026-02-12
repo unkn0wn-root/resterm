@@ -36,14 +36,21 @@ func TestByFileFiltersAndSorts(t *testing.T) {
 		t.Fatalf("append 3: %v", err)
 	}
 
-	got := s.ByFile(filepath.Join(dir, ".", "a.http"))
+	got, err := s.ByFile(filepath.Join(dir, ".", "a.http"))
+	if err != nil {
+		t.Fatalf("by file: %v", err)
+	}
 	if len(got) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(got))
 	}
 	if got[0].ID != "2" || got[1].ID != "1" {
 		t.Fatalf("expected 2 then 1, got %q then %q", got[0].ID, got[1].ID)
 	}
-	if len(s.ByFile("")) != 0 {
+	empty, err := s.ByFile("")
+	if err != nil {
+		t.Fatalf("by file blank: %v", err)
+	}
+	if len(empty) != 0 {
 		t.Fatalf("expected empty result for blank file path")
 	}
 }
@@ -67,7 +74,11 @@ func TestDelete(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected delete to return true")
 	}
-	if len(s.Entries()) != 0 {
+	got, err := s.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
+	if len(got) != 0 {
 		t.Fatalf("expected empty rows after delete")
 	}
 }
@@ -93,7 +104,10 @@ func TestByRequestSkipsWorkflowRows(t *testing.T) {
 		RequestName: "alpha",
 	})
 
-	got := s.ByRequest("alpha")
+	got, err := s.ByRequest("alpha")
+	if err != nil {
+		t.Fatalf("by request alpha: %v", err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(got))
 	}
@@ -101,7 +115,10 @@ func TestByRequestSkipsWorkflowRows(t *testing.T) {
 		t.Fatalf("expected ID 1, got %q", got[0].ID)
 	}
 
-	got = s.ByRequest("https://alpha.test")
+	got, err = s.ByRequest("https://alpha.test")
+	if err != nil {
+		t.Fatalf("by request url: %v", err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(got))
 	}
@@ -134,7 +151,10 @@ func TestByWorkflowCaseInsensitive(t *testing.T) {
 		RequestName: "deploy",
 	})
 
-	got := s.ByWorkflow("deploy")
+	got, err := s.ByWorkflow("deploy")
+	if err != nil {
+		t.Fatalf("by workflow: %v", err)
+	}
 	if len(got) != 1 {
 		t.Fatalf("expected 1 row, got %d", len(got))
 	}
@@ -178,9 +198,48 @@ func TestAppendConcurrent(t *testing.T) {
 	}
 	wg.Wait()
 
-	got := s.Entries()
+	got, err := s.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
 	want := workers * perWorker
 	if len(got) != want {
 		t.Fatalf("expected %d rows, got %d", want, len(got))
+	}
+}
+
+func TestByRequestBlankReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "history.db")
+	s := New(p)
+	if err := s.Load(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if err := s.Append(history.Entry{ID: "1", ExecutedAt: time.Now(), Method: "GET"}); err != nil {
+		t.Fatalf("append: %v", err)
+	}
+
+	got, err := s.ByRequest("")
+	if err != nil {
+		t.Fatalf("by request blank: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("expected empty rows for blank request id")
+	}
+}
+
+func TestEntriesReturnsErrorOnQueryFailure(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "history.db")
+	s := New(p)
+	if err := s.Load(); err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if _, err := s.db.Exec(`DROP TABLE hist`); err != nil {
+		t.Fatalf("drop table: %v", err)
+	}
+
+	if _, err := s.Entries(); err == nil {
+		t.Fatalf("expected query error")
 	}
 }

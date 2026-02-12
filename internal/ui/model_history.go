@@ -1432,7 +1432,21 @@ func (m *Model) syncHistory() {
 		return
 	}
 
-	entries := m.historyEntriesForScope()
+	entries, err := m.historyEntriesForScope()
+	if err != nil {
+		m.historyEntries = nil
+		m.historyScopeCount = 0
+		m.historyList.SetItems(nil)
+		m.historySelectedID = ""
+		m.historyList.Select(-1)
+		m.setStatusMessage(
+			statusMsg{
+				text:  fmt.Sprintf("History query failed: %v", err),
+				level: statusWarn,
+			},
+		)
+		return
+	}
 	m.historyScopeCount = len(entries)
 	filter := strings.TrimSpace(m.historyFilterInput.Value())
 	if filter != "" {
@@ -1445,21 +1459,21 @@ func (m *Model) syncHistory() {
 	m.restoreHistorySelection()
 }
 
-func (m *Model) historyEntriesForScope() []history.Entry {
+func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 	switch m.historyScope {
 	case historyScopeWorkflow:
 		name := history.NormalizeWorkflowName(m.historyWorkflowName)
 		if name == "" {
-			return nil
+			return nil, nil
 		}
 		return m.historyStore.ByWorkflow(name)
 	case historyScopeRequest:
 		if m.currentRequest == nil {
-			return nil
+			return nil, nil
 		}
 		identifier := requestIdentifier(m.currentRequest)
 		if identifier == "" {
-			return nil
+			return nil, nil
 		}
 		return m.historyStore.ByRequest(identifier)
 	case historyScopeFile:
