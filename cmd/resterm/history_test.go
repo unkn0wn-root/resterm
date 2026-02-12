@@ -47,7 +47,10 @@ func TestRunHistoryHelpFlagShowsUsage(t *testing.T) {
 	if strings.TrimSpace(stderr) != "" {
 		t.Fatalf("expected empty stderr on help flag, got %q", stderr)
 	}
-	if !strings.Contains(stdout, "Usage: resterm history <export|import|backup|stats|check|compact> [flags]") {
+	if !strings.Contains(
+		stdout,
+		"Usage: resterm history <export|import|backup|stats|check|compact> [flags]",
+	) {
 		t.Fatalf("expected history usage in stdout, got %q", stdout)
 	}
 }
