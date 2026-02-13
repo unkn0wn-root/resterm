@@ -43,6 +43,14 @@ var (
 )
 
 func main() {
+	if handled, err := handleCollectionSubcommand(os.Args[1:]); handled {
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if handled, err := handleHistorySubcommand(os.Args[1:]); handled {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)

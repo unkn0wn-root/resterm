@@ -14,14 +14,14 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels** and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview), and [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Collection sharing](#sharing-collections), [Features](#overview), and [Documentation](#documentation).
 
 ## Why Resterm
 
-- Requests live in plain `.http` / `.rest` files - version them, review them, share them.
-- Declarative by design: you describe what should happen and Resterm executes it the same way every time, more like a small API language than a one-off UI.
-- **Conditional logic** built into the request format - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each` for data-driven runs.
-- **Multi-step workflows** chain requests with `@workflow` / `@step`, pass data between steps, and branch on results.
+- Requests live in plain `.http` / `.rest` files.
+- You describe what should happen and Resterm executes it the same way every time, more like a small API language than a one-off UI.
+- **Conditional logic** - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each`.
+- **Multi-step workflows** with `@workflow` / `@step`.
 - **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`) wire responses into subsequent requests and validate them inline.
 - **RestermScript** - a small, safe expression language purpose. Built for request files, with reusable `.rts` modules.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE) and **SSH tunnels** are built in so no extra tools needed.
@@ -274,6 +274,63 @@ The first command reports whether a newer release is available. The second downl
 - Flags you probably reach for most are `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-curl`, `--from-openapi`, and `--http-out`.
 - Config is stored at `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` and can be overridden with `RESTERM_CONFIG_DIR`.
 
+## Sharing collections
+
+You can export a workspace into a Git-friendly Resterm bundle. The exported bundle always includes a `manifest.json` with checksums, so imports can verify file integrity before writing anything.
+
+When Resterm sees `resterm.env.example.json` in your workspace, it includes that file as-is. If only `resterm.env.json` exists, Resterm generates `resterm.env.example.json` automatically and replaces values with `REPLACE_ME` placeholders so secrets are not exported.
+
+### Export a bundle
+
+Run this command from anywhere:
+
+```bash
+resterm collection export \
+  --workspace ./my-api \
+  --out ./shared/my-api-bundle \
+  --recursive \
+  --name "my-api-v1"
+```
+
+After export, the output directory will look similar to this:
+
+```text
+shared/my-api-bundle/
+  manifest.json
+  requests.http
+  rts/helpers.rts
+  payloads/create-user.json
+  resterm.env.example.json
+```
+
+You can commit that directory directly:
+
+```bash
+git add shared/my-api-bundle
+git commit -m "Resterm collection bundle"
+```
+
+### Import a bundle
+
+You can import the bundle into a local workspace with:
+
+```bash
+resterm collection import \
+  --in ./shared/my-api-bundle \
+  --workspace ./my-local-api
+```
+
+If you want to preview actions first, you can run:
+
+```bash
+resterm collection import \
+  --in ./shared/my-api-bundle \
+  --workspace ./my-local-api \
+  --dry-run
+```
+
+If files already exist and should be replaced intentionally, add `--force`.
+
 ## Inline curl import
 
 Paste a curl command into the editor and press `Ctrl+Enter` to convert it into a structured request. Resterm understands common flags, merges repeated data segments, and keeps multipart uploads intact.
@@ -347,6 +404,10 @@ Resterm supports unary and streaming calls with transcripts, metadata, and body 
 #### OpenAPI import
 
 Convert OpenAPI 3 specs into Resterm-ready `.http` collections from the CLI with `--from-openapi`. Docs: [`docs/resterm.md#importing-openapi-specs`](./docs/resterm.md#importing-openapi-specs).
+
+#### Collection sharing
+
+Export a portable Resterm-native bundle with `resterm collection export` and import it into another workspace with `resterm collection import`. Docs: [`docs/resterm.md#collection-sharing`](./docs/resterm.md#collection-sharing).
 
 #### Curl import
 
