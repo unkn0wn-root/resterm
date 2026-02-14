@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -352,6 +353,51 @@ func TestBuildHTTPClientSSHLeavesTLSDialerNil(t *testing.T) {
 	}
 	if transport.DialTLSContext != nil {
 		t.Fatalf("expected DialTLSContext to remain nil so TLS handshakes run normally")
+	}
+}
+
+func TestBuildHTTPClientK8sLeavesTLSDialerNil(t *testing.T) {
+	client := NewClient(nil)
+	mgr := &k8s.Manager{}
+	opts := Options{
+		K8s: &k8s.Plan{
+			Manager: mgr,
+			Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+		},
+	}
+
+	httpClient, err := client.buildHTTPClient(opts)
+	if err != nil {
+		t.Fatalf("build http client: %v", err)
+	}
+	transport, ok := httpClient.Transport.(*http.Transport)
+	if !ok {
+		t.Fatalf("unexpected transport type %T", httpClient.Transport)
+	}
+	if transport.DialContext == nil {
+		t.Fatalf("expected k8s dialer to be set on DialContext")
+	}
+	if transport.DialTLSContext != nil {
+		t.Fatalf("expected DialTLSContext to remain nil so TLS handshakes run normally")
+	}
+}
+
+func TestBuildHTTPClientRejectsSSHAndK8s(t *testing.T) {
+	client := NewClient(nil)
+	opts := Options{
+		SSH: &ssh.Plan{
+			Manager: &ssh.Manager{},
+			Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+		},
+		K8s: &k8s.Plan{
+			Manager: &k8s.Manager{},
+			Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+		},
+	}
+
+	_, err := client.buildHTTPClient(opts)
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("expected conflict error, got %v", err)
 	}
 }
 

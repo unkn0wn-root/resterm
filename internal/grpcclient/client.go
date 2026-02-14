@@ -2,17 +2,18 @@ package grpcclient
 
 import (
 	"context"
-	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials"
@@ -41,6 +42,7 @@ type Options struct {
 	Insecure            bool
 	RootMode            tlsconfig.RootMode
 	SSH                 *ssh.Plan
+	K8s                 *k8s.Plan
 }
 
 type Response struct {
@@ -115,14 +117,25 @@ func (c *Client) Execute(
 		}
 		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
 	}
-	if plan := options.SSH; plan != nil && plan.Active() {
+	sshOn := options.SSH != nil && options.SSH.Active()
+	k8sOn := options.K8s != nil && options.K8s.Active()
+	if tunnel.HasConflict(sshOn, k8sOn) {
+		return nil, errdef.New(errdef.CodeHTTP, "ssh and k8s transports cannot be combined")
+	}
+
+	appendTunnelDialer := func(dial tunnel.DialContextFunc) {
+		dialOpts = append(dialOpts, tunnel.GRPCDialOption(dial))
+	}
+
+	if sshOn {
+		plan := options.SSH
 		cfgCopy := *plan.Config
-		dialOpts = append(
-			dialOpts,
-			grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
-				return plan.Manager.DialContext(ctx, cfgCopy, "tcp", addr)
-			}),
-		)
+		appendTunnelDialer(tunnel.DialerFor(plan.Manager, cfgCopy))
+	}
+	if k8sOn {
+		plan := options.K8s
+		cfgCopy := *plan.Config
+		appendTunnelDialer(tunnel.DialerFor(plan.Manager, cfgCopy))
 	}
 	if grpcReq.Authority != "" {
 		dialOpts = append(dialOpts, grpc.WithAuthority(grpcReq.Authority))

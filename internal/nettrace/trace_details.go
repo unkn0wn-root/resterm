@@ -33,6 +33,7 @@ type ConnDetails struct {
 	Proxy         string
 	ProxyTunnel   bool
 	SSH           string
+	K8s           string
 	Protocol      string
 }
 

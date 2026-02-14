@@ -917,6 +917,34 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	}
 }
 
+func TestExecuteRequestRejectsSSHAndK8sBeforeResolve(t *testing.T) {
+	model := Model{
+		cfg:          Config{EnvironmentName: "dev"},
+		scriptRunner: scripts.NewRunner(nil),
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+		SSH:    &restfile.SSHSpec{},
+		K8s:    &restfile.K8sSpec{},
+	}
+
+	cmd := model.executeRequest(nil, req, httpclient.Options{}, "", nil)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg := cmd()
+	resp, ok := msg.(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg, got %T", msg)
+	}
+	if resp.err == nil || !strings.Contains(resp.err.Error(), "@ssh cannot be combined with @k8s") {
+		t.Fatalf("expected transport conflict error, got %v", resp.err)
+	}
+}
+
 func TestCancelActiveRunsStopsSend(t *testing.T) {
 	model := New(Config{})
 	model.sending = true

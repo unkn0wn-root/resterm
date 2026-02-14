@@ -1,0 +1,23 @@
+# @k8s global cluster-api namespace=default service=api port=http context=kind-dev persist retries=2 pod_running_timeout=30s
+# @k8s file payments namespace=payments deployment=payments-api port=https container=api
+
+### Health through shared service profile
+# @k8s use=cluster-api
+GET http://api.default.svc.cluster.local/v1/health
+Accept: application/json
+
+### One-off statefulset target with named port
+# @k8s namespace=default statefulset=postgres port=pgsql
+GET http://postgres.default.svc.cluster.local:5432/healthz
+
+### Override selected profile target and port
+# @k8s use=cluster-api target=pod:api-server-0 port=8080
+GET http://api.default.svc.cluster.local/v1/version
+
+### Deployment profile over gRPC
+# @k8s use=payments
+# @grpc testservices.inventory.ProjectService/Seed
+# @grpc-descriptor ./descriptors/testservices.protoset
+GRPC passthrough:///payments-api.payments.svc.cluster.local:8082
+
+{}

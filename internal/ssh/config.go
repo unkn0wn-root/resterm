@@ -4,13 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/profileutil"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -45,7 +44,7 @@ type Cfg struct {
 
 func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
 	cfg := baseCfg(p)
-	cfg.Name = fallback(cfg.Name, "default")
+	cfg.Name = profileutil.Fallback(cfg.Name, "default")
 	if cfg.Host == "" {
 		return Cfg{}, errors.New("ssh host is required")
 	}
@@ -88,85 +87,39 @@ func applyAuth(cfg *Cfg, p restfile.SSHProfile) {
 }
 
 func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
-	if err := parsePort(cfg, p.PortStr); err != nil {
+	if err := profileutil.ParsePort("ssh", &cfg.Port, &cfg.PortRaw, p.PortStr); err != nil {
 		return err
 	}
-	if err := parseDuration(
+	if err := profileutil.ParseDuration(
+		"ssh",
 		&cfg.Timeout,
 		&cfg.TimeoutRaw,
 		p.TimeoutStr,
-		defaultTimeout,
 	); err != nil {
 		return err
 	}
-	if err := parseDuration(&cfg.KeepAlive, &cfg.KeepAliveRaw, p.KeepAliveStr, 0); err != nil {
+	if err := profileutil.ParseDuration(
+		"ssh",
+		&cfg.KeepAlive,
+		&cfg.KeepAliveRaw,
+		p.KeepAliveStr,
+	); err != nil {
 		return err
 	}
-	if err := parseRetries(cfg, p.RetriesStr); err != nil {
+	if err := profileutil.ParseRetries("ssh", &cfg.Retries, &cfg.RetriesRaw, p.RetriesStr); err != nil {
 		return err
 	}
 	return nil
 }
 
-func parsePort(cfg *Cfg, raw string) error {
-	val := strings.TrimSpace(raw)
-	if val == "" {
-		return nil
-	}
-
-	cfg.PortRaw = val
-	n, err := strconv.Atoi(val)
-	if err != nil || n <= 0 || n > 65535 {
-		return fmt.Errorf("invalid ssh port: %q", val)
-	}
-
-	cfg.Port = n
-	return nil
-}
-
-func parseDuration(target *time.Duration, rawOut *string, raw string, def time.Duration) error {
-	val := strings.TrimSpace(raw)
-	if val == "" {
-		if def > 0 && *target == 0 {
-			*target = def
-		}
-		return nil
-	}
-
-	*rawOut = val
-	dur, err := time.ParseDuration(val)
-	if err != nil || dur < 0 {
-		return fmt.Errorf("invalid ssh duration: %q", val)
-	}
-
-	*target = dur
-	return nil
-}
-
-func parseRetries(cfg *Cfg, raw string) error {
-	val := strings.TrimSpace(raw)
-	if val == "" {
-		return nil
-	}
-
-	cfg.RetriesRaw = val
-	n, err := strconv.Atoi(val)
-	if err != nil || n < 0 {
-		return fmt.Errorf("invalid ssh retries: %q", val)
-	}
-
-	cfg.Retries = n
-	return nil
-}
-
-func defaultAgent(opt restfile.SSHOpt[bool]) bool {
+func defaultAgent(opt restfile.Opt[bool]) bool {
 	if opt.Set {
 		return opt.Val
 	}
 	return true
 }
 
-func defaultStrict(opt restfile.SSHOpt[bool]) bool {
+func defaultStrict(opt restfile.Opt[bool]) bool {
 	if opt.Set {
 		return opt.Val
 	}
@@ -174,11 +127,7 @@ func defaultStrict(opt restfile.SSHOpt[bool]) bool {
 }
 
 func defaultKnownHosts() (string, error) {
-	home := userHomeDir()
-	if home == "" {
-		return "", errors.New("cannot resolve home directory for known_hosts")
-	}
-	return expandPath(filepath.Join(home, ".ssh", "known_hosts"))
+	return profileutil.ExpandPath("~/.ssh/known_hosts", "cannot resolve home directory for known_hosts")
 }
 
 func userHomeDir() string {
@@ -198,9 +147,9 @@ func cacheKey(cfg Cfg) string {
 		cfg.User,
 		authFingerprint(cfg),
 		cfg.KnownHosts,
-		boolKey(cfg.Strict),
-		boolKey(cfg.Agent),
-		boolKey(cfg.Persist),
+		profileutil.BoolKey(cfg.Strict),
+		profileutil.BoolKey(cfg.Agent),
+		profileutil.BoolKey(cfg.Persist),
 		cfg.Timeout.String(),
 		cfg.KeepAlive.String(),
 		strconv.Itoa(cfg.Retries),
@@ -233,34 +182,9 @@ func hashSecret(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func boolKey(b bool) string {
-	if b {
-		return "1"
-	}
-	return "0"
-}
-
-func expandPath(p string) (string, error) {
-	path := strings.TrimSpace(p)
-	if path == "" {
-		return "", nil
-	}
-
-	if strings.HasPrefix(path, "~") {
-		home := userHomeDir()
-		if home == "" {
-			return "", errors.New("cannot resolve home directory for ssh path")
-		}
-		path = filepath.Join(home, strings.TrimPrefix(path, "~"))
-	}
-
-	path = os.ExpandEnv(path)
-	return filepath.Clean(path), nil
-}
-
 func resolvePaths(cfg *Cfg, p restfile.SSHProfile) error {
 	if p.Key != "" {
-		keyPath, err := expandPath(p.Key)
+		keyPath, err := profileutil.ExpandPath(p.Key, "cannot resolve home directory for ssh path")
 		if err != nil {
 			return err
 		}
@@ -276,19 +200,12 @@ func resolvePaths(cfg *Cfg, p restfile.SSHProfile) error {
 		return nil
 	}
 
-	kh, err := expandPath(cfg.KnownHosts)
+	kh, err := profileutil.ExpandPath(cfg.KnownHosts, "cannot resolve home directory for ssh path")
 	if err != nil {
 		return err
 	}
 	cfg.KnownHosts = kh
 	return nil
-}
-
-func fallback(val, def string) string {
-	if val == "" {
-		return def
-	}
-	return val
 }
 
 func trimmedAllowEmpty(target *string, val string) {

@@ -558,6 +558,27 @@ GET http://example.com
 	}
 }
 
+func TestParseSSHGlobalProfileAliases(t *testing.T) {
+	src := `# @ssh global edge host=10.0.0.5 user=ops pass=secret known-hosts=/tmp/kh strict-hostkey=false
+GET http://example.com
+`
+	doc := Parse("ssh_aliases.http", []byte(src))
+	if len(doc.SSH) != 1 {
+		t.Fatalf("expected 1 ssh profile, got %d", len(doc.SSH))
+	}
+
+	prof := doc.SSH[0]
+	if prof.Pass != "secret" {
+		t.Fatalf("unexpected pass %q", prof.Pass)
+	}
+	if prof.KnownHosts != "/tmp/kh" {
+		t.Fatalf("unexpected known-hosts %q", prof.KnownHosts)
+	}
+	if !prof.Strict.Set || prof.Strict.Val {
+		t.Fatalf("expected strict-hostkey=false to be set")
+	}
+}
+
 func TestParseSSHRequestUseOverride(t *testing.T) {
 	src := `### jump
 # @ssh use=edge host={{api_host}} strict_hostkey=false retries=3
@@ -631,6 +652,301 @@ GRPC passthrough:///grpc-internal:8082
 	}
 	if req.SSH.Use != "jump" {
 		t.Fatalf("unexpected ssh use %q", req.SSH.Use)
+	}
+}
+
+func TestParseK8sGlobalProfile(t *testing.T) {
+	src := `# @k8s global cluster-api namespace=default pod=api-server port=8080 context=kind-dev kubeconfig=~/.kube/config local_port=18080 address=127.0.0.1 pod_running_timeout=30s retries=2 persist
+GET http://example.com
+`
+	doc := Parse("k8s.http", []byte(src))
+	if len(doc.K8s) != 1 {
+		t.Fatalf("expected 1 k8s profile, got %d", len(doc.K8s))
+	}
+
+	prof := doc.K8s[0]
+	if prof.Scope != restfile.K8sScopeGlobal {
+		t.Fatalf("expected global scope, got %v", prof.Scope)
+	}
+	if prof.Name != "cluster-api" {
+		t.Fatalf("expected profile name cluster-api, got %q", prof.Name)
+	}
+	if prof.Namespace != "default" {
+		t.Fatalf("unexpected namespace %q", prof.Namespace)
+	}
+	if prof.Target != "pod:api-server" {
+		t.Fatalf("unexpected target %q", prof.Target)
+	}
+	if prof.Pod != "api-server" {
+		t.Fatalf("unexpected pod %q", prof.Pod)
+	}
+	if prof.Port != 8080 || prof.PortStr != "8080" {
+		t.Fatalf("unexpected port %d (%q)", prof.Port, prof.PortStr)
+	}
+	if prof.Context != "kind-dev" {
+		t.Fatalf("unexpected context %q", prof.Context)
+	}
+	if prof.Kubeconfig != "~/.kube/config" {
+		t.Fatalf("unexpected kubeconfig %q", prof.Kubeconfig)
+	}
+	if prof.LocalPort != 18080 || prof.LocalPortStr != "18080" {
+		t.Fatalf("unexpected local port %d (%q)", prof.LocalPort, prof.LocalPortStr)
+	}
+	if prof.Address != "127.0.0.1" {
+		t.Fatalf("unexpected address %q", prof.Address)
+	}
+	if !prof.PodWait.Set || prof.PodWaitStr != "30s" {
+		t.Fatalf("expected pod_running_timeout to be captured")
+	}
+	if !prof.Retries.Set || prof.RetriesStr != "2" {
+		t.Fatalf("expected retries to be captured")
+	}
+	if !prof.Persist.Set || !prof.Persist.Val {
+		t.Fatalf("expected persist=true to be captured")
+	}
+}
+
+func TestParseK8sGlobalProfileAliases(t *testing.T) {
+	src := `# @k8s global cluster-api ns=default svc=api port=8080 kube-context=kind-dev config=~/.kube/config localport=18080 bind=127.0.0.1 podwait=30s retries=2 persist
+GET http://example.com
+`
+	doc := Parse("k8s_aliases.http", []byte(src))
+	if len(doc.K8s) != 1 {
+		t.Fatalf("expected 1 k8s profile, got %d", len(doc.K8s))
+	}
+
+	prof := doc.K8s[0]
+	if prof.Namespace != "default" {
+		t.Fatalf("unexpected namespace %q", prof.Namespace)
+	}
+	if prof.Target != "service:api" {
+		t.Fatalf("unexpected target %q", prof.Target)
+	}
+	if prof.Context != "kind-dev" {
+		t.Fatalf("unexpected context %q", prof.Context)
+	}
+	if prof.Kubeconfig != "~/.kube/config" {
+		t.Fatalf("unexpected kubeconfig %q", prof.Kubeconfig)
+	}
+	if prof.LocalPort != 18080 || prof.LocalPortStr != "18080" {
+		t.Fatalf("unexpected local port %d (%q)", prof.LocalPort, prof.LocalPortStr)
+	}
+	if prof.Address != "127.0.0.1" {
+		t.Fatalf("unexpected address %q", prof.Address)
+	}
+	if !prof.PodWait.Set || prof.PodWaitStr != "30s" {
+		t.Fatalf("expected podwait alias to be captured")
+	}
+}
+
+func TestParseK8sAliasValidationErrors(t *testing.T) {
+	localPortSrc := `### bad
+# @k8s pod=api port=8080 local-port=99999
+GET http://example.com
+`
+	doc := Parse("k8s_bad_local_port_alias.http", []byte(localPortSrc))
+	if !hasParseMessage(doc.Errors, "invalid @k8s local-port") {
+		t.Fatalf("expected local-port parse error, got %v", doc.Errors)
+	}
+
+	podWaitSrc := `### bad
+# @k8s pod=api port=8080 pod-running-timeout=bad
+GET http://example.com
+`
+	doc = Parse("k8s_bad_podwait_alias.http", []byte(podWaitSrc))
+	if !hasParseMessage(doc.Errors, "invalid @k8s pod-running-timeout") {
+		t.Fatalf("expected pod-running-timeout parse error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sRequestUseOverride(t *testing.T) {
+	src := `### k8s req
+# @k8s use=cluster-api pod={{pod_name}} port=8081
+GET http://example.com
+`
+	doc := Parse("k8s_req.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	req := doc.Requests[0]
+	if req.K8s == nil {
+		t.Fatalf("expected k8s spec on request")
+	}
+	if req.K8s.Use != "cluster-api" {
+		t.Fatalf("unexpected use %q", req.K8s.Use)
+	}
+	if req.K8s.Inline == nil {
+		t.Fatalf("expected inline overrides")
+	}
+	if req.K8s.Inline.Scope != restfile.K8sScopeRequest {
+		t.Fatalf("expected request scope inline, got %v", req.K8s.Inline.Scope)
+	}
+	if req.K8s.Inline.Pod != "{{pod_name}}" {
+		t.Fatalf("unexpected inline pod %q", req.K8s.Inline.Pod)
+	}
+	if req.K8s.Inline.Target != "pod:{{pod_name}}" {
+		t.Fatalf("unexpected inline target %q", req.K8s.Inline.Target)
+	}
+	if req.K8s.Inline.Port != 8081 || req.K8s.Inline.PortStr != "8081" {
+		t.Fatalf("unexpected inline port %d (%q)", req.K8s.Inline.Port, req.K8s.Inline.PortStr)
+	}
+}
+
+func TestParseK8sRequestDefaultsNamespace(t *testing.T) {
+	src := `### k8s req
+# @k8s pod=api-server port=8080
+GET http://example.com
+`
+	doc := Parse("k8s_req_default_ns.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	req := doc.Requests[0]
+	if req.K8s == nil || req.K8s.Inline == nil {
+		t.Fatalf("expected inline k8s profile")
+	}
+	if req.K8s.Inline.Namespace != "default" {
+		t.Fatalf("expected default namespace, got %q", req.K8s.Inline.Namespace)
+	}
+}
+
+func TestParseK8sRejectsMissingTarget(t *testing.T) {
+	src := `### bad
+# @k8s namespace=default
+GET http://example.com
+`
+	doc := Parse("k8s_missing_target.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "@k8s requires target and port or use=") {
+		t.Fatalf("expected missing target parse error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sAllowsNamedPort(t *testing.T) {
+	src := `### bad
+# @k8s pod=api-server port=abc
+GET http://example.com
+`
+	doc := Parse("k8s_named_port.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected named port to parse, got errors: %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 || doc.Requests[0].K8s == nil || doc.Requests[0].K8s.Inline == nil {
+		t.Fatalf("expected inline k8s profile")
+	}
+	in := doc.Requests[0].K8s.Inline
+	if in.Port != 0 || in.PortStr != "abc" {
+		t.Fatalf("unexpected named port parse: %d (%q)", in.Port, in.PortStr)
+	}
+}
+
+func TestParseK8sRejectsMalformedNamedPort(t *testing.T) {
+	src := `### bad
+# @k8s pod=api-server port=!!!
+GET http://example.com
+`
+	doc := Parse("k8s_bad_named_port.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "invalid @k8s port") {
+		t.Fatalf("expected bad named port parse error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sRequestIgnoresPersist(t *testing.T) {
+	src := `### req
+# @k8s pod=api-server port=8080 persist
+GET http://example.com
+`
+	doc := Parse("k8s_req_persist.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.K8s == nil || req.K8s.Inline == nil {
+		t.Fatalf("expected inline k8s profile")
+	}
+	if req.K8s.Inline.Persist.Set {
+		t.Fatalf("request persist should be ignored")
+	}
+}
+
+func TestParseK8sGlobalRequiresTarget(t *testing.T) {
+	src := `# @k8s global api namespace=default
+GET http://example.com
+`
+	doc := Parse("k8s_global_missing_target.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "@k8s global scope requires target and port") {
+		t.Fatalf("expected global scope target parse error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sServiceTarget(t *testing.T) {
+	src := `### svc
+# @k8s service=api port=http
+GET http://example.com
+`
+	doc := Parse("k8s_service_target.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	in := doc.Requests[0].K8s.Inline
+	if in == nil {
+		t.Fatalf("expected inline k8s profile")
+	}
+	if in.Target != "service:api" {
+		t.Fatalf("unexpected target %q", in.Target)
+	}
+	if in.Pod != "" {
+		t.Fatalf("expected pod empty for service target, got %q", in.Pod)
+	}
+}
+
+func TestParseK8sRejectsMultipleTargets(t *testing.T) {
+	src := `### bad
+# @k8s pod=api-0 service=api port=8080
+GET http://example.com
+`
+	doc := Parse("k8s_target_conflict.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "multiple @k8s targets specified") {
+		t.Fatalf("expected multiple target error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sRejectsUnknownTargetKind(t *testing.T) {
+	src := `### bad
+# @k8s target=job:api port=8080
+GET http://example.com
+`
+	doc := Parse("k8s_bad_target_kind.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "invalid @k8s target") {
+		t.Fatalf("expected invalid target parse error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sAndSSHConflict(t *testing.T) {
+	src := `### conflict
+# @k8s pod=api-server port=8080
+# @ssh host=1.2.3.4 user=ops
+GET http://example.com
+`
+	doc := Parse("k8s_ssh_conflict.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "@ssh cannot be combined with @k8s on the same request") {
+		t.Fatalf("expected conflict parse error, got %v", doc.Errors)
+	}
+}
+
+func TestParseSSHAndK8sConflict(t *testing.T) {
+	src := `### conflict
+# @ssh host=1.2.3.4 user=ops
+# @k8s pod=api-server port=8080
+GET http://example.com
+`
+	doc := Parse("ssh_k8s_conflict.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "@k8s cannot be combined with @ssh on the same request") {
+		t.Fatalf("expected conflict parse error, got %v", doc.Errors)
 	}
 }
 

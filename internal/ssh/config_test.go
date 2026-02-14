@@ -49,9 +49,9 @@ func TestNormalizeProfileValues(t *testing.T) {
 		TimeoutStr:   "5s",
 		KeepAliveStr: "2s",
 		RetriesStr:   "3",
-		Agent:        restfile.SSHOpt[bool]{Val: false, Set: true},
-		Strict:       restfile.SSHOpt[bool]{Val: false, Set: true},
-		Persist:      restfile.SSHOpt[bool]{Val: true, Set: true},
+		Agent:        restfile.Opt[bool]{Val: false, Set: true},
+		Strict:       restfile.Opt[bool]{Val: false, Set: true},
+		Persist:      restfile.Opt[bool]{Val: true, Set: true},
 	}
 
 	cfg, err := NormalizeProfile(p)
@@ -85,6 +85,24 @@ func TestNormalizeProfileValues(t *testing.T) {
 	}
 	if cfg.Retries != 3 || cfg.RetriesRaw != "3" {
 		t.Fatalf("retries parse failed: %d raw=%q", cfg.Retries, cfg.RetriesRaw)
+	}
+}
+
+func TestNormalizeProfileAcceptsExtendedDurations(t *testing.T) {
+	p := restfile.SSHProfile{
+		Host:         "jump",
+		TimeoutStr:   "1d",
+		KeepAliveStr: "2w",
+	}
+	cfg, err := NormalizeProfile(p)
+	if err != nil {
+		t.Fatalf("normalize err: %v", err)
+	}
+	if cfg.Timeout != 24*time.Hour || cfg.TimeoutRaw != "1d" {
+		t.Fatalf("timeout parse failed: %v raw=%q", cfg.Timeout, cfg.TimeoutRaw)
+	}
+	if cfg.KeepAlive != 14*24*time.Hour || cfg.KeepAliveRaw != "2w" {
+		t.Fatalf("keepalive parse failed: %v raw=%q", cfg.KeepAlive, cfg.KeepAliveRaw)
 	}
 }
 

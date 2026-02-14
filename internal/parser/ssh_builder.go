@@ -24,6 +24,10 @@ func (b *documentBuilder) handleSSH(line int, rest string) {
 
 	if res.scope == restfile.SSHScopeRequest {
 		b.ensureRequest(line)
+		if b.request.k8s != nil {
+			b.addError(line, "@ssh cannot be combined with @k8s on the same request")
+			return
+		}
 		if b.request.ssh != nil {
 			b.addError(line, "@ssh already defined for this request")
 			return
@@ -71,7 +75,7 @@ func parseSSHDirective(rest string) (sshDirective, error) {
 	applySSHOptions(&prof, opts)
 	if scope == restfile.SSHScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking tunnels.
-		prof.Persist = restfile.SSHOpt[bool]{}
+		prof.Persist = restfile.Opt[bool]{}
 	}
 
 	if scope != restfile.SSHScopeRequest {
@@ -96,86 +100,62 @@ func parseSSHDirective(rest string) (sshDirective, error) {
 }
 
 func parseSSHScope(token string) (restfile.SSHScope, bool) {
-	switch strings.ToLower(strings.TrimSpace(token)) {
-	case "global":
-		return restfile.SSHScopeGlobal, true
-	case "file":
-		return restfile.SSHScopeFile, true
-	case "request":
-		return restfile.SSHScopeRequest, true
-	default:
-		return 0, false
-	}
+	return parseDirectiveScope(
+		token,
+		restfile.SSHScopeRequest,
+		restfile.SSHScopeFile,
+		restfile.SSHScopeGlobal,
+	)
 }
 
 func applySSHOptions(prof *restfile.SSHProfile, opts map[string]string) {
-	if host := strings.TrimSpace(opts["host"]); host != "" {
+	if host, ok := firstOpt(opts, "host"); ok {
 		prof.Host = host
 	}
-	if port := strings.TrimSpace(opts["port"]); port != "" {
+	if port, ok := firstOpt(opts, "port"); ok {
 		prof.PortStr = port
 		if n, err := strconv.Atoi(port); err == nil && n > 0 {
 			prof.Port = n
 		}
 	}
-	if user := strings.TrimSpace(opts["user"]); user != "" {
+	if user, ok := firstOpt(opts, "user"); ok {
 		prof.User = user
 	}
-	if pw := strings.TrimSpace(opts["password"]); pw != "" {
-		prof.Pass = pw
-	} else if pw := strings.TrimSpace(opts["pass"]); pw != "" {
+	if pw, ok := firstOpt(opts, "password", "pass"); ok {
 		prof.Pass = pw
 	}
-	if key := strings.TrimSpace(opts["key"]); key != "" {
+	if key, ok := firstOpt(opts, "key"); ok {
 		prof.Key = key
 	}
-	if kp := strings.TrimSpace(opts["passphrase"]); kp != "" {
+	if kp, ok := firstOpt(opts, "passphrase"); ok {
 		prof.KeyPass = kp
 	}
-	setSSHBool(&prof.Agent, opts, "agent")
-	if kh := strings.TrimSpace(opts["known_hosts"]); kh != "" {
-		prof.KnownHosts = kh
-	} else if kh := strings.TrimSpace(opts["known-hosts"]); kh != "" {
+	setOptBool(&prof.Agent, opts, "agent")
+	if kh, ok := firstOpt(opts, "known_hosts", "known-hosts"); ok {
 		prof.KnownHosts = kh
 	}
-	setSSHBool(&prof.Strict, opts, "strict_hostkey", "strict-hostkey", "strict_host_key")
-	setSSHBool(&prof.Persist, opts, "persist")
+	setOptBool(&prof.Strict, opts, "strict_hostkey", "strict-hostkey", "strict_host_key")
+	setOptBool(&prof.Persist, opts, "persist")
 
-	if raw := strings.TrimSpace(opts["timeout"]); raw != "" {
+	if raw, ok := firstOpt(opts, "timeout"); ok {
 		prof.TimeoutStr = raw
 		prof.Timeout.Set = true
 		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			prof.Timeout.Val = dur
 		}
 	}
-	if raw := strings.TrimSpace(opts["keepalive"]); raw != "" {
+	if raw, ok := firstOpt(opts, "keepalive"); ok {
 		prof.KeepAliveStr = raw
 		prof.KeepAlive.Set = true
 		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			prof.KeepAlive.Val = dur
 		}
 	}
-	if raw := strings.TrimSpace(opts["retries"]); raw != "" {
+	if raw, ok := firstOpt(opts, "retries"); ok {
 		prof.RetriesStr = raw
 		prof.Retries.Set = true
 		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
 			prof.Retries.Val = n
-		}
-	}
-}
-
-func setSSHBool(opt *restfile.SSHOpt[bool], opts map[string]string, keys ...string) {
-	for _, key := range keys {
-		if raw, ok := opts[key]; ok {
-			opt.Set = true
-			val := true
-			if raw != "" {
-				if parsed, ok := parseBool(raw); ok {
-					val = parsed
-				}
-			}
-			opt.Val = val
-			return
 		}
 	}
 }
@@ -206,12 +186,10 @@ func sshInlineSet(prof restfile.SSHProfile) bool {
 }
 
 func sshScopeLabel(scope restfile.SSHScope) string {
-	switch scope {
-	case restfile.SSHScopeGlobal:
-		return "global"
-	case restfile.SSHScopeFile:
-		return "file"
-	default:
-		return "request"
-	}
+	return directiveScopeLabel(
+		scope,
+		restfile.SSHScopeRequest,
+		restfile.SSHScopeFile,
+		restfile.SSHScopeGlobal,
+	)
 }

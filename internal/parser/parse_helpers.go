@@ -1,6 +1,10 @@
 package parser
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+)
 
 func trim(s string) string {
 	return strings.TrimSpace(s)
@@ -38,6 +42,39 @@ func popOptAny(opts map[string]string, keys ...string) string {
 		delete(opts, key)
 	}
 	return out
+}
+
+func firstOpt(opts map[string]string, keys ...string) (string, bool) {
+	_, value, ok := firstOptWithKey(opts, keys...)
+	return value, ok
+}
+
+func firstOptWithKey(opts map[string]string, keys ...string) (string, string, bool) {
+	for _, key := range keys {
+		value := strings.TrimSpace(opts[key])
+		if value != "" {
+			return key, value, true
+		}
+	}
+	return "", "", false
+}
+
+func setOptBool(opt *restfile.Opt[bool], opts map[string]string, keys ...string) {
+	for _, key := range keys {
+		raw, ok := opts[key]
+		if !ok {
+			continue
+		}
+		opt.Set = true
+		value := true
+		if raw != "" {
+			if parsed, ok := parseBool(raw); ok {
+				value = parsed
+			}
+		}
+		opt.Val = value
+		return
+	}
 }
 
 func splitCSV(s string) []string {

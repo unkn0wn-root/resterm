@@ -76,6 +76,7 @@ func renderConnDetails(conn *nettrace.ConnDetails, styles timelineStyles) []stri
 		appendDetailValue(&lines, "proxy", proxy, styles)
 	}
 	appendDetailValue(&lines, "ssh", strings.TrimSpace(conn.SSH), styles)
+	appendDetailValue(&lines, "k8s", strings.TrimSpace(conn.K8s), styles)
 	return lines
 }
 
@@ -278,6 +279,7 @@ func hasConnDetails(c *nettrace.ConnDetails) bool {
 		c.RemoteAddr,
 		c.Proxy,
 		c.SSH,
+		c.K8s,
 		c.Protocol,
 	)
 }

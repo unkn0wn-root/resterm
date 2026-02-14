@@ -44,8 +44,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.activeRequestTitle = ""
 	m.activeRequestKey = ""
 	m.doc = parser.Parse(path, data)
-	m.syncSSHGlobals(m.doc)
-	m.syncPatchGlobals(m.doc)
+	m.syncAllGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
 	m.dirty = false
@@ -85,8 +84,7 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.editor.ClearSelection()
 	m.resetCursorSync()
 	m.doc = parser.Parse("", nil)
-	m.syncSSHGlobals(m.doc)
-	m.syncPatchGlobals(m.doc)
+	m.syncAllGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.dirty = false
 	m.syncHistory()
@@ -161,8 +159,7 @@ func (m *Model) ensureWorkspaceFile(path string) bool {
 
 func (m *Model) reparseDocument() tea.Cmd {
 	m.doc = parser.Parse(m.currentFile, []byte(m.editor.Value()))
-	m.syncSSHGlobals(m.doc)
-	m.syncPatchGlobals(m.doc)
+	m.syncAllGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
 	m.resetCursorSync()
@@ -217,8 +214,7 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 
 func (m *Model) refreshCurrentDocument(content []byte) {
 	m.doc = parser.Parse(m.currentFile, content)
-	m.syncSSHGlobals(m.doc)
-	m.syncPatchGlobals(m.doc)
+	m.syncAllGlobals(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
 	m.resetCursorSync()

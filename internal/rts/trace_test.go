@@ -95,6 +95,7 @@ func TestTraceEnabled(t *testing.T) {
 				Reused:        true,
 				IdleTime:      5 * time.Millisecond,
 				ResolvedAddrs: []string{"93.184.216.34"},
+				K8s:           "default/api:8080",
 				Protocol:      "HTTP/2.0",
 			},
 			TLS: &nettrace.TLSDetails{
@@ -158,6 +159,10 @@ func TestTraceEnabled(t *testing.T) {
 	v = evalTrace(t, rt, "trace.connection().protocol")
 	if v.K != VStr || v.S != "HTTP/2.0" {
 		t.Fatalf("unexpected protocol, got %+v", v)
+	}
+	v = evalTrace(t, rt, "trace.connection().k8s")
+	if v.K != VStr || v.S != "default/api:8080" {
+		t.Fatalf("unexpected k8s detail, got %+v", v)
 	}
 	v = evalTrace(t, rt, "trace.tls().version")
 	if v.K != VStr || v.S != "TLS 1.3" {

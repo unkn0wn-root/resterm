@@ -2,9 +2,9 @@ package ssh
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/profileutil"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -35,12 +35,12 @@ func Resolve(
 		merged.Name = use
 	}
 
-	if spec.Inline != nil {
-		merged = mergeProfile(merged, *spec.Inline)
-	}
-
 	if use != "" && !useFound {
 		return nil, fmt.Errorf("ssh profile %q not found", use)
+	}
+
+	if spec.Inline != nil {
+		merged = mergeProfile(merged, *spec.Inline)
 	}
 
 	expanded, err := expandProfile(merged, resolver)
@@ -68,19 +68,19 @@ func lookupProfile(
 
 func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfile.SSHProfile {
 	out := base
-	setIf(&out.Name, override.Name)
-	setIf(&out.Host, override.Host)
-	setIf(&out.PortStr, override.PortStr)
+	profileutil.SetIf(&out.Name, override.Name)
+	profileutil.SetIf(&out.Host, override.Host)
+	profileutil.SetIf(&out.PortStr, override.PortStr)
 
 	if override.PortStr != "" {
 		out.Port = override.Port
 	}
 
-	setIf(&out.User, override.User)
-	setIf(&out.Pass, override.Pass)
-	setIf(&out.Key, override.Key)
-	setIf(&out.KeyPass, override.KeyPass)
-	setIf(&out.KnownHosts, override.KnownHosts)
+	profileutil.SetIf(&out.User, override.User)
+	profileutil.SetIf(&out.Pass, override.Pass)
+	profileutil.SetIf(&out.Key, override.Key)
+	profileutil.SetIf(&out.KeyPass, override.KeyPass)
+	profileutil.SetIf(&out.KnownHosts, override.KnownHosts)
 	if override.Agent.Set {
 		out.Agent = override.Agent
 	}
@@ -90,30 +90,19 @@ func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfi
 	if override.Persist.Set {
 		out.Persist = override.Persist
 	}
-	if optSet(override.Timeout, override.TimeoutStr) {
+	if profileutil.OptSet(override.Timeout, override.TimeoutStr) {
 		out.Timeout = override.Timeout
 		out.TimeoutStr = override.TimeoutStr
 	}
-	if optSet(override.KeepAlive, override.KeepAliveStr) {
+	if profileutil.OptSet(override.KeepAlive, override.KeepAliveStr) {
 		out.KeepAlive = override.KeepAlive
 		out.KeepAliveStr = override.KeepAliveStr
 	}
-	if optSet(override.Retries, override.RetriesStr) {
+	if profileutil.OptSet(override.Retries, override.RetriesStr) {
 		out.Retries = override.Retries
 		out.RetriesStr = override.RetriesStr
 	}
 	return out
-}
-
-func setIf(dst *string, val string) {
-	if strings.TrimSpace(val) == "" {
-		return
-	}
-	*dst = val
-}
-
-func optSet[T any](opt restfile.SSHOpt[T], raw string) bool {
-	return opt.Set || strings.TrimSpace(raw) != ""
 }
 
 func expandProfile(p restfile.SSHProfile, resolver *vars.Resolver) (restfile.SSHProfile, error) {
@@ -136,7 +125,7 @@ func expandProfile(p restfile.SSHProfile, resolver *vars.Resolver) (restfile.SSH
 		if val == "" {
 			continue
 		}
-		expanded, err := expandValue(val, resolver)
+		expanded, err := profileutil.ExpandValue(val, resolver)
 		if err != nil {
 			return restfile.SSHProfile{}, err
 		}
@@ -144,27 +133,4 @@ func expandProfile(p restfile.SSHProfile, resolver *vars.Resolver) (restfile.SSH
 	}
 
 	return p, nil
-}
-
-func expandValue(raw string, resolver *vars.Resolver) (string, error) {
-	trimmed := strings.TrimSpace(raw)
-	if strings.HasPrefix(strings.ToLower(trimmed), "env:") {
-		key := strings.TrimSpace(trimmed[4:])
-		if key == "" {
-			return "", fmt.Errorf("empty env: token")
-		}
-		if v, ok := os.LookupEnv(key); ok {
-			return v, nil
-		}
-		if resolver != nil {
-			if v, ok := resolver.Resolve(key); ok {
-				return v, nil
-			}
-		}
-		return "", nil
-	}
-	if resolver == nil {
-		return trimmed, nil
-	}
-	return resolver.ExpandTemplates(trimmed)
 }

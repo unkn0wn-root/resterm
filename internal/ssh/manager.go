@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/connutil"
 	xssh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	knownhosts "golang.org/x/crypto/ssh/knownhosts"
@@ -111,7 +112,7 @@ func (m *Manager) dialOnce(ctx context.Context, cfg Cfg, network, addr string) (
 		return nil, err
 	}
 
-	return wrapConn(conn, cli.Close), nil
+	return connutil.WrapConn(conn, cli.Close), nil
 }
 
 func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
@@ -170,7 +171,7 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
 		default:
 		}
 		if i+1 < attempts {
-			if err := waitWithContext(ctx, dialRetryDelay); err != nil {
+			if err := connutil.WaitWithContext(ctx, dialRetryDelay); err != nil {
 				return nil, err
 			}
 		}
@@ -363,44 +364,6 @@ func closeEntry(ent *entry) error {
 		return ent.cli.Close()
 	}
 	return nil
-}
-
-func waitWithContext(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
-}
-
-type wrappedConn struct {
-	net.Conn
-	closeFn func() error
-}
-
-func wrapConn(c net.Conn, closer func() error) net.Conn {
-	return &wrappedConn{Conn: c, closeFn: closer}
-}
-
-func (c *wrappedConn) Close() error {
-	var errs []error
-	if c.Conn != nil {
-		if err := c.Conn.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if c.closeFn != nil {
-		if err := c.closeFn(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
 }
 
 type clientWrap struct {

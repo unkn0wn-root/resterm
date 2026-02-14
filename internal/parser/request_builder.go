@@ -33,6 +33,7 @@ type requestBuilder struct {
 	websocket         *wsBuilder
 	bodyOptions       restfile.BodyOptions
 	ssh               *restfile.SSHSpec
+	k8s               *restfile.K8sSpec
 }
 
 func normScriptKind(kind string) string {
@@ -145,6 +146,9 @@ func (r *requestBuilder) applyReqSettings(req *restfile.Request) {
 	}
 	if r.ssh != nil {
 		req.SSH = r.ssh
+	}
+	if r.k8s != nil {
+		req.K8s = r.k8s
 	}
 }
 

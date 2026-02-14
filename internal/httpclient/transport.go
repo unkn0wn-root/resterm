@@ -1,7 +1,6 @@
 package httpclient
 
 import (
-	"context"
 	"crypto/tls"
 	"net"
 	"net/http"
@@ -11,7 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
-	"golang.org/x/net/http2"
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 )
 
 const (
@@ -64,17 +63,34 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		transport.TLSClientConfig = tlsCfg
 	}
 
-	if sshPlan := opts.SSH; sshPlan != nil && sshPlan.Active() {
-		cfgCopy := *sshPlan.Config
-		dialer := func(ctx context.Context, network, address string) (net.Conn, error) {
-			return sshPlan.Manager.DialContext(ctx, cfgCopy, network, address)
+	sshOn := opts.SSH != nil && opts.SSH.Active()
+	k8sOn := opts.K8s != nil && opts.K8s.Active()
+	if tunnel.HasConflict(sshOn, k8sOn) {
+		return nil, errdef.New(errdef.CodeHTTP, "ssh and k8s transports cannot be combined")
+	}
+
+	applyTunnel := func(kind string, dial tunnel.DialContextFunc) error {
+		if err := tunnel.ApplyHTTPTransport(transport, opts.HTTPVersion, dial); err != nil {
+			return errdef.Wrap(errdef.CodeHTTP, err, "enable http2 over %s", kind)
 		}
-		transport.Proxy = nil
-		transport.DialContext = dialer
-		if opts.HTTPVersion != httpver.V10 && opts.HTTPVersion != httpver.V11 {
-			if err := http2.ConfigureTransport(transport); err != nil {
-				return nil, errdef.Wrap(errdef.CodeHTTP, err, "enable http2 over ssh")
-			}
+		return nil
+	}
+
+	if sshOn {
+		sshPlan := opts.SSH
+		cfgCopy := *sshPlan.Config
+		dial := tunnel.DialerFor(sshPlan.Manager, cfgCopy)
+		if err := applyTunnel("ssh", dial); err != nil {
+			return nil, err
+		}
+	}
+
+	if k8sOn {
+		k8sPlan := opts.K8s
+		cfgCopy := *k8sPlan.Config
+		dial := tunnel.DialerFor(k8sPlan.Manager, cfgCopy)
+		if err := applyTunnel("k8s", dial); err != nil {
+			return nil, err
 		}
 	}
 

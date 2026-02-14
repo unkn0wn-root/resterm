@@ -6,7 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 )
@@ -44,6 +46,26 @@ func TestShouldUsePlaintextDisabledWhenTLSConfigured(t *testing.T) {
 
 	if shouldUsePlaintext(req, opts) {
 		t.Fatalf("expected TLS settings to disable plaintext")
+	}
+}
+
+func TestExecuteRejectsSSHAndK8s(t *testing.T) {
+	client := NewClient()
+	grpcReq := &restfile.GRPCRequest{Target: "127.0.0.1:1", Plaintext: true, PlaintextSet: true}
+	opts := Options{
+		SSH: &ssh.Plan{
+			Manager: &ssh.Manager{},
+			Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+		},
+		K8s: &k8s.Plan{
+			Manager: &k8s.Manager{},
+			Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+		},
+	}
+
+	_, err := client.Execute(context.Background(), &restfile.Request{}, grpcReq, opts, nil)
+	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("expected transport conflict error, got %v", err)
 	}
 }
 

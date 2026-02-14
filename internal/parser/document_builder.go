@@ -24,6 +24,7 @@ type documentBuilder struct {
 	fileSettings         map[string]string
 	consts               []restfile.Constant
 	sshDefs              []restfile.SSHProfile
+	k8sDefs              []restfile.K8sProfile
 	patchDefs            []restfile.PatchProfile
 	fileUses             []restfile.UseSpec
 	inBlock              bool
@@ -698,6 +699,7 @@ func (b *documentBuilder) finish() {
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
 	b.doc.Uses = append(b.doc.Uses, b.fileUses...)
 	b.doc.SSH = append(b.doc.SSH, b.sshDefs...)
+	b.doc.K8s = append(b.doc.K8s, b.k8sDefs...)
 	b.doc.Patches = append(b.doc.Patches, b.patchDefs...)
 }
 

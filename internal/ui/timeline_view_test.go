@@ -160,6 +160,7 @@ func TestRenderTimelineDetails(t *testing.T) {
 				ResolvedAddrs: []string{"93.184.216.34"},
 				Proxy:         "http://proxy.local:8080",
 				ProxyTunnel:   true,
+				K8s:           "kind-dev default/api:8080",
 				Protocol:      "HTTP/2.0",
 			},
 			TLS: &nettrace.TLSDetails{
@@ -188,6 +189,8 @@ func TestRenderTimelineDetails(t *testing.T) {
 		"protocol",
 		"proxy",
 		"tunnel",
+		"k8s",
+		"default/api:8080",
 		"TLS 1.3",
 		"chain (1):",
 		"exp 1970-01-31 (in 30d)",

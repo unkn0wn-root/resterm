@@ -1,0 +1,1061 @@
+package k8s
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
+	"net/http"
+	"net/url"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode"
+
+	"github.com/unkn0wn-root/resterm/internal/connutil"
+	"github.com/unkn0wn-root/resterm/internal/profileutil"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/httpstream"
+	"k8s.io/apimachinery/pkg/util/intstr"
+	"k8s.io/apimachinery/pkg/util/wait"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/portforward"
+	spdytransport "k8s.io/client-go/transport/spdy"
+)
+
+const (
+	defaultDialRetryDelay = 150 * time.Millisecond
+	closeWaitWindow       = 3 * time.Second
+	podPollInterval       = 300 * time.Millisecond
+)
+
+type startFn func(context.Context, Cfg, loadCfg) (*session, error)
+type dialFn func(context.Context, string, string) (net.Conn, error)
+
+type Manager struct {
+	mu    sync.Mutex
+	cache map[string]*entry
+	ttl   time.Duration
+	now   func() time.Time
+	opt   LoadOpt
+	start startFn
+	dial  dialFn
+	// Test-tunable retry delay for reconnect attempts.
+	retryDelay time.Duration
+}
+
+type entry struct {
+	cfg      Cfg
+	ses      *session
+	lastUsed time.Time
+}
+
+type session struct {
+	cfg       Cfg
+	localAddr string
+	stopCh    chan struct{}
+	doneCh    chan struct{}
+
+	mu       sync.RWMutex
+	err      error
+	closed   sync.Once
+	finished sync.Once
+	closeFn  func() error
+}
+
+type fwdTarget struct {
+	pod  string
+	port int
+}
+
+type targetPod struct {
+	pod *corev1.Pod
+	svc *corev1.Service
+}
+
+func NewManager() *Manager {
+	dialer := &net.Dialer{}
+	return &Manager{
+		cache:      make(map[string]*entry),
+		ttl:        defaultTTL,
+		now:        time.Now,
+		start:      startSession,
+		dial:       dialer.DialContext,
+		retryDelay: defaultDialRetryDelay,
+	}
+}
+
+func (m *Manager) SetLoadOptions(opt LoadOpt) {
+	if m == nil {
+		return
+	}
+	opt.ExecAllowlist = append([]string(nil), opt.ExecAllowlist...)
+	m.mu.Lock()
+	m.opt = opt
+	m.mu.Unlock()
+}
+
+func (m *Manager) Close() error {
+	if m == nil {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var errs []error
+	for key, ent := range m.cache {
+		if err := ent.ses.close(); err != nil {
+			errs = append(errs, err)
+		}
+		delete(m.cache, key)
+	}
+	return errors.Join(errs...)
+}
+
+func (m *Manager) DialContext(
+	ctx context.Context,
+	cfg Cfg,
+	network, addr string,
+) (net.Conn, error) {
+	// The target address argument is intentionally ignored for k8s:
+	// traffic always goes through the active port-forward session.
+	_ = addr
+
+	if cfg.targetRef() == "" {
+		return nil, errors.New("k8s: target required")
+	}
+	if cfg.Port <= 0 && cfg.portRef() == "" {
+		return nil, errors.New("k8s: port required")
+	}
+	if cfg.Port > 65535 {
+		return nil, errors.New("k8s: port out of range")
+	}
+	cfg.Namespace = strings.TrimSpace(cfg.Namespace)
+	if cfg.Namespace == "" {
+		cfg.Namespace = defaultNamespace
+	}
+
+	load, err := m.loadCfg()
+	if err != nil {
+		return nil, err
+	}
+
+	if !cfg.Persist {
+		return m.dialOnce(ctx, cfg, load, network)
+	}
+	return m.dialCached(ctx, cfg, load, network)
+}
+
+func (m *Manager) dialOnce(
+	ctx context.Context,
+	cfg Cfg,
+	load loadCfg,
+	network string,
+) (net.Conn, error) {
+	ses, err := m.connect(ctx, cfg, load)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := m.dialSession(ctx, ses, network)
+	if err != nil {
+		_ = ses.close()
+		return nil, err
+	}
+	return connutil.WrapConn(conn, ses.close), nil
+}
+
+func (m *Manager) dialCached(
+	ctx context.Context,
+	cfg Cfg,
+	load loadCfg,
+	network string,
+) (net.Conn, error) {
+	key := cacheKey(cfg, load)
+
+	m.mu.Lock()
+	m.purgeLocked()
+	ent := m.cache[key]
+	if ent != nil {
+		ent.lastUsed = m.now()
+		ses := ent.ses
+		m.mu.Unlock()
+
+		if ses != nil && ses.alive() {
+			conn, err := m.dialSession(ctx, ses, network)
+			if err == nil {
+				return conn, nil
+			}
+		}
+
+		m.mu.Lock()
+		if cur := m.cache[key]; cur == ent {
+			_ = ent.ses.close()
+			delete(m.cache, key)
+		} else {
+			_ = ent.ses.close()
+		}
+	}
+	m.mu.Unlock()
+
+	ses, err := m.connect(ctx, cfg, load)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := m.dialSession(ctx, ses, network)
+	if err != nil {
+		_ = ses.close()
+		return nil, err
+	}
+
+	m.mu.Lock()
+	if cur := m.cache[key]; cur != nil && cur.ses != nil && cur.ses.alive() {
+		m.mu.Unlock()
+		_ = conn.Close()
+		_ = ses.close()
+		return m.dialSession(ctx, cur.ses, network)
+	}
+	m.cache[key] = &entry{cfg: cfg, ses: ses, lastUsed: m.now()}
+	m.mu.Unlock()
+
+	return conn, nil
+}
+
+func (m *Manager) connect(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	if m == nil || m.start == nil {
+		return nil, errors.New("k8s: manager unavailable")
+	}
+	attempts := cfg.Retries + 1
+	// Defensive for manually built Cfg values that bypass NormalizeProfile.
+	if attempts < 1 {
+		attempts = 1
+	}
+	retryDelay := m.retryDelay
+	if retryDelay <= 0 {
+		retryDelay = defaultDialRetryDelay
+	}
+
+	var lastErr error
+	for i := 0; i < attempts; i++ {
+		ses, err := m.start(ctx, cfg, load)
+		if err == nil {
+			return ses, nil
+		}
+		lastErr = err
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+		if i+1 < attempts {
+			if err := connutil.WaitWithContext(ctx, retryDelay); err != nil {
+				return nil, err
+			}
+		}
+	}
+	if lastErr == nil {
+		lastErr = errors.New("k8s: port-forward start failed")
+	}
+	return nil, lastErr
+}
+
+func (m *Manager) dialSession(ctx context.Context, ses *session, network string) (net.Conn, error) {
+	if m == nil || m.dial == nil {
+		return nil, errors.New("k8s: local dialer unavailable")
+	}
+	n, err := normalizeNetwork(network)
+	if err != nil {
+		return nil, err
+	}
+	addr := ses.localAddr
+	if addr == "" {
+		return nil, errors.New("k8s: local forward address unavailable")
+	}
+	return m.dial(ctx, n, addr)
+}
+
+func (m *Manager) purgeLocked() {
+	now := m.now()
+	for key, ent := range m.cache {
+		// Defensive: keep cache healthy even if malformed entries are injected in tests.
+		if ent == nil || ent.ses == nil {
+			delete(m.cache, key)
+			continue
+		}
+		expired := now.Sub(ent.lastUsed) > m.ttl
+		dead := !ent.ses.alive()
+		if !expired && !dead {
+			continue
+		}
+		_ = ent.ses.close()
+		delete(m.cache, key)
+	}
+}
+
+func (m *Manager) loadCfg() (loadCfg, error) {
+	if m == nil {
+		return loadCfg{}, errors.New("k8s: manager unavailable")
+	}
+	m.mu.Lock()
+	opt := m.opt
+	m.mu.Unlock()
+	opt.ExecAllowlist = append([]string(nil), opt.ExecAllowlist...)
+	return normalizeLoadOpt(opt)
+}
+
+func (s *session) alive() bool {
+	if s == nil || s.doneCh == nil {
+		return false
+	}
+	select {
+	case <-s.doneCh:
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *session) finish(err error) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.err = err
+	s.mu.Unlock()
+
+	s.finished.Do(func() {
+		if s.doneCh != nil {
+			close(s.doneCh)
+		}
+	})
+}
+
+func (s *session) close() error {
+	if s == nil {
+		return nil
+	}
+
+	s.closed.Do(func() {
+		if s.stopCh != nil {
+			close(s.stopCh)
+		}
+	})
+
+	var errs []error
+	if s.closeFn != nil {
+		if err := s.closeFn(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+
+	if s.doneCh != nil {
+		select {
+		case <-s.doneCh:
+		case <-time.After(closeWaitWindow):
+			errs = append(errs, errors.New("k8s: timeout closing port-forward"))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (s *session) errValue() error {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.err
+}
+
+func startSession(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	ns := strings.TrimSpace(cfg.Namespace)
+	if ns == "" {
+		return nil, errors.New("k8s: namespace required")
+	}
+
+	restCfg, err := RESTConfig(cfg, loadOptFromCfg(load))
+	if err != nil {
+		return nil, err
+	}
+
+	cs, err := kubernetes.NewForConfig(restCfg)
+	if err != nil {
+		return nil, fmt.Errorf("k8s: build client: %w", err)
+	}
+	rt, err := resolveForwardTarget(ctx, cs, ns, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	u := cs.CoreV1().
+		RESTClient().
+		Post().
+		Resource("pods").
+		Namespace(ns).
+		Name(rt.pod).
+		SubResource("portforward").
+		URL()
+	dialer, err := buildDialer(u, restCfg)
+	if err != nil {
+		return nil, err
+	}
+
+	addresses := bindAddrs(cfg.Address)
+	stopCh := make(chan struct{})
+	readyCh := make(chan struct{})
+	pf, err := portforward.NewOnAddresses(
+		dialer,
+		addresses,
+		[]string{formatPortSpec(cfg.LocalPort, rt.port)},
+		stopCh,
+		readyCh,
+		io.Discard,
+		io.Discard,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("k8s: build port-forwarder: %w", err)
+	}
+
+	ses := &session{
+		cfg:    cfg,
+		stopCh: stopCh,
+		doneCh: make(chan struct{}),
+	}
+	go func() {
+		ses.finish(pf.ForwardPorts())
+	}()
+
+	select {
+	case <-readyCh:
+	case <-ctx.Done():
+		_ = ses.close()
+		return nil, ctx.Err()
+	case <-ses.doneCh:
+		if err := ses.errValue(); err != nil {
+			return nil, err
+		}
+		return nil, errors.New("k8s: port-forward stopped before ready")
+	}
+
+	ports, err := pf.GetPorts()
+	if err != nil {
+		_ = ses.close()
+		return nil, fmt.Errorf("k8s: resolve forwarded ports: %w", err)
+	}
+	if len(ports) == 0 {
+		_ = ses.close()
+		return nil, errors.New("k8s: port-forward did not expose local ports")
+	}
+
+	host := dialHost(addresses)
+	ses.localAddr = net.JoinHostPort(host, strconv.Itoa(int(ports[0].Local)))
+	return ses, nil
+}
+
+func resolveForwardTarget(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	ns string,
+	cfg Cfg,
+) (fwdTarget, error) {
+	sel, err := waitTargetPod(ctx, cs, ns, cfg)
+	if err != nil {
+		return fwdTarget{}, err
+	}
+	rp, err := resolveRemotePort(cfg, sel.pod, sel.svc)
+	if err != nil {
+		return fwdTarget{}, err
+	}
+	return fwdTarget{pod: sel.pod.Name, port: rp}, nil
+}
+
+func waitTargetPod(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	namespace string,
+	cfg Cfg,
+) (targetPod, error) {
+	if cs == nil {
+		return targetPod{}, errors.New("k8s: client unavailable")
+	}
+	ns := strings.TrimSpace(namespace)
+	if ns == "" {
+		return targetPod{}, errors.New("k8s: namespace is required")
+	}
+	k, n := cfg.target()
+	if k == "" {
+		return targetPod{}, errors.New("k8s: target kind is required")
+	}
+	if n == "" {
+		return targetPod{}, errors.New("k8s: target name is required")
+	}
+	t := cfg.PodWait
+	id := targetID(k, n)
+
+	var out targetPod
+	check := func(ctx context.Context) (bool, error) {
+		sel, err := selectTargetPod(ctx, cs, ns, k, n)
+		if err != nil {
+			return false, err
+		}
+		if sel.pod == nil {
+			return false, nil
+		}
+		switch sel.pod.Status.Phase {
+		case corev1.PodRunning:
+			out = sel
+			return true, nil
+		case corev1.PodFailed, corev1.PodSucceeded:
+			if k != targetKindPod {
+				return false, nil
+			}
+			return false, fmt.Errorf(
+				"k8s: pod %s/%s is %s",
+				ns,
+				sel.pod.Name,
+				strings.ToLower(string(sel.pod.Status.Phase)),
+			)
+		default:
+			return false, nil
+		}
+	}
+
+	if t <= 0 {
+		ok, err := check(ctx)
+		if err != nil {
+			return targetPod{}, fmt.Errorf("k8s: check target %s/%s: %w", ns, id, err)
+		}
+		if !ok {
+			return targetPod{}, fmt.Errorf("k8s: target %s/%s has no running pods", ns, id)
+		}
+		return out, nil
+	}
+
+	err := wait.PollUntilContextTimeout(ctx, podPollInterval, t, true, check)
+	if err != nil {
+		return targetPod{}, fmt.Errorf("k8s: wait target %s/%s running: %w", ns, id, err)
+	}
+	return out, nil
+}
+
+func selectTargetPod(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	ns string,
+	k TargetKind,
+	name string,
+) (targetPod, error) {
+	switch k {
+	case targetKindPod:
+		p, err := cs.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return targetPod{}, nil
+			}
+			return targetPod{}, err
+		}
+		return targetPod{pod: p}, nil
+
+	case targetKindService:
+		svc, err := cs.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return targetPod{}, nil
+			}
+			return targetPod{}, err
+		}
+		ps, err := podsForService(ctx, cs, ns, svc)
+		if err != nil {
+			return targetPod{}, err
+		}
+		p := pickPod(ps)
+		return targetPod{pod: p, svc: svc}, nil
+
+	case targetKindDeployment:
+		d, err := cs.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return targetPod{}, nil
+			}
+			return targetPod{}, err
+		}
+		return targetBySelector(ctx, cs, ns, d.Spec.Selector, "deployment", ns, d.Name)
+
+	case targetKindStatefulSet:
+		s, err := cs.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			if apierrors.IsNotFound(err) {
+				return targetPod{}, nil
+			}
+			return targetPod{}, err
+		}
+		return targetBySelector(ctx, cs, ns, s.Spec.Selector, "statefulset", ns, s.Name)
+
+	default:
+		return targetPod{}, fmt.Errorf("k8s: unsupported target kind %q", k)
+	}
+}
+
+func targetBySelector(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	ns string,
+	sel *metav1.LabelSelector,
+	kind, objNS, objName string,
+) (targetPod, error) {
+	ps, err := podsForLabelSelector(ctx, cs, ns, sel, kind, objNS, objName)
+	if err != nil {
+		return targetPod{}, err
+	}
+	return targetPod{pod: pickPod(ps)}, nil
+}
+
+func podsForService(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	ns string,
+	svc *corev1.Service,
+) ([]corev1.Pod, error) {
+	if svc == nil {
+		return nil, errors.New("k8s: service is required")
+	}
+	if len(svc.Spec.Selector) == 0 {
+		return nil, fmt.Errorf("k8s: service %s/%s has no selector", ns, svc.Name)
+	}
+	sel := labels.SelectorFromSet(svc.Spec.Selector)
+	return listPods(ctx, cs, ns, sel.String())
+}
+
+func podsForLabelSelector(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	ns string,
+	sel *metav1.LabelSelector,
+	kind, objNS, objName string,
+) ([]corev1.Pod, error) {
+	if sel == nil {
+		return nil, fmt.Errorf("k8s: %s %s/%s has no selector", kind, objNS, objName)
+	}
+	s, err := metav1.LabelSelectorAsSelector(sel)
+	if err != nil {
+		return nil, fmt.Errorf("k8s: %s %s/%s selector: %w", kind, objNS, objName, err)
+	}
+	if s.Empty() {
+		return nil, fmt.Errorf("k8s: %s %s/%s has empty selector", kind, objNS, objName)
+	}
+	return listPods(ctx, cs, ns, s.String())
+}
+
+func listPods(
+	ctx context.Context,
+	cs kubernetes.Interface,
+	ns string,
+	sel string,
+) ([]corev1.Pod, error) {
+	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: sel})
+	if err != nil {
+		return nil, err
+	}
+	if pods == nil || len(pods.Items) == 0 {
+		return nil, nil
+	}
+	return pods.Items, nil
+}
+
+func pickPod(pods []corev1.Pod) *corev1.Pod {
+	if len(pods) == 0 {
+		return nil
+	}
+	active := make([]corev1.Pod, 0, len(pods))
+	for _, p := range pods {
+		if p.DeletionTimestamp != nil {
+			continue
+		}
+		active = append(active, p)
+	}
+	if len(active) == 0 {
+		return nil
+	}
+
+	sort.Slice(active, func(i, j int) bool {
+		a, b := podRank(active[i]), podRank(active[j])
+		if a != b {
+			return a < b
+		}
+		return active[i].Name < active[j].Name
+	})
+
+	out := active[0]
+	return &out
+}
+
+func podRank(p corev1.Pod) int {
+	const (
+		rankRunningReady = iota
+		rankRunningNotReady
+		rankPending
+		rankUnknown
+		rankOther
+	)
+	switch p.Status.Phase {
+	case corev1.PodRunning:
+		if podReady(p.Status.Conditions) {
+			return rankRunningReady
+		}
+		return rankRunningNotReady
+	case corev1.PodPending:
+		return rankPending
+	case corev1.PodUnknown:
+		return rankUnknown
+	default:
+		return rankOther
+	}
+}
+
+func podReady(conds []corev1.PodCondition) bool {
+	for _, c := range conds {
+		if c.Type == corev1.PodReady {
+			return c.Status == corev1.ConditionTrue
+		}
+	}
+	return false
+}
+
+func targetID(k TargetKind, n string) string {
+	return string(k) + "/" + n
+}
+
+func resolveRemotePort(cfg Cfg, pod *corev1.Pod, svc *corev1.Service) (int, error) {
+	if pod == nil {
+		return 0, errors.New("k8s: pod is required")
+	}
+	if svc == nil {
+		return resolvePodPort(cfg, pod)
+	}
+	return resolveServicePort(cfg, pod, svc)
+}
+
+func resolvePodPort(cfg Cfg, pod *corev1.Pod) (int, error) {
+	if cfg.Port > 0 {
+		return cfg.Port, nil
+	}
+	return podPortByName(pod, cfg.Container, cfg.PortName)
+}
+
+func resolveServicePort(cfg Cfg, pod *corev1.Pod, svc *corev1.Service) (int, error) {
+	sp, err := servicePortByCfg(cfg, svc)
+	if err != nil {
+		return 0, err
+	}
+	return serviceTargetPort(sp, pod, cfg.Container)
+}
+
+func servicePortByCfg(cfg Cfg, svc *corev1.Service) (corev1.ServicePort, error) {
+	if svc == nil {
+		return corev1.ServicePort{}, errors.New("k8s: service is required")
+	}
+	if len(svc.Spec.Ports) == 0 {
+		return corev1.ServicePort{}, fmt.Errorf(
+			"k8s: service %s/%s has no ports",
+			svc.Namespace,
+			svc.Name,
+		)
+	}
+	if cfg.Port > 0 {
+		var out []corev1.ServicePort
+		for _, sp := range svc.Spec.Ports {
+			if int(sp.Port) == cfg.Port {
+				out = append(out, sp)
+			}
+		}
+		return pickServicePort(out, svc, strconv.Itoa(cfg.Port))
+	}
+
+	name := strings.TrimSpace(cfg.PortName)
+	if name == "" {
+		return corev1.ServicePort{}, errors.New("k8s: port is required")
+	}
+
+	var byName []corev1.ServicePort
+	for _, sp := range svc.Spec.Ports {
+		if strings.TrimSpace(sp.Name) == name {
+			byName = append(byName, sp)
+		}
+	}
+	if len(byName) > 0 {
+		return pickServicePort(byName, svc, name)
+	}
+
+	var byTarget []corev1.ServicePort
+	for _, sp := range svc.Spec.Ports {
+		if sp.TargetPort.Type == intstr.String && strings.TrimSpace(sp.TargetPort.StrVal) == name {
+			byTarget = append(byTarget, sp)
+		}
+	}
+	return pickServicePort(byTarget, svc, name)
+}
+
+func pickServicePort(
+	ports []corev1.ServicePort,
+	svc *corev1.Service,
+	ref string,
+) (corev1.ServicePort, error) {
+	switch len(ports) {
+	case 0:
+		return corev1.ServicePort{}, fmt.Errorf(
+			"k8s: service %s/%s does not expose port %q",
+			svc.Namespace,
+			svc.Name,
+			ref,
+		)
+	case 1:
+		return ports[0], nil
+	default:
+		return corev1.ServicePort{}, fmt.Errorf(
+			"k8s: service %s/%s has multiple ports matching %q",
+			svc.Namespace,
+			svc.Name,
+			ref,
+		)
+	}
+}
+
+func serviceTargetPort(sp corev1.ServicePort, pod *corev1.Pod, cName string) (int, error) {
+	switch sp.TargetPort.Type {
+	case intstr.Int:
+		if sp.TargetPort.IntVal > 0 {
+			return int(sp.TargetPort.IntVal), nil
+		}
+	case intstr.String:
+		if v := strings.TrimSpace(sp.TargetPort.StrVal); v != "" {
+			return podPortByName(pod, cName, v)
+		}
+	}
+	if sp.Port <= 0 {
+		return 0, fmt.Errorf("k8s: service port %q is invalid", sp.Name)
+	}
+	return int(sp.Port), nil
+}
+
+func podPortByName(pod *corev1.Pod, cName, pName string) (int, error) {
+	if pod == nil {
+		return 0, errors.New("k8s: pod is required")
+	}
+	containerName := strings.TrimSpace(cName)
+	name := strings.TrimSpace(pName)
+	if name == "" {
+		return 0, errors.New("k8s: port is required")
+	}
+
+	cs, err := pickContainers(pod, containerName)
+	if err != nil {
+		return 0, err
+	}
+
+	type hit struct {
+		c string
+		p int32
+	}
+	var hits []hit
+	for _, c := range cs {
+		for _, cp := range c.Ports {
+			if strings.TrimSpace(cp.Name) != name {
+				continue
+			}
+			if cp.ContainerPort <= 0 || cp.ContainerPort > 65535 {
+				continue
+			}
+			hits = append(hits, hit{c: c.Name, p: cp.ContainerPort})
+		}
+	}
+	if len(hits) == 0 {
+		return 0, fmt.Errorf(
+			"k8s: pod %s/%s does not expose named port %q",
+			pod.Namespace,
+			pod.Name,
+			name,
+		)
+	}
+	if containerName == "" && len(hits) > 1 {
+		return 0, fmt.Errorf(
+			"k8s: pod %s/%s has ambiguous named port %q across containers",
+			pod.Namespace,
+			pod.Name,
+			name,
+		)
+	}
+	return int(hits[0].p), nil
+}
+
+func pickContainers(pod *corev1.Pod, cName string) ([]corev1.Container, error) {
+	if pod == nil {
+		return nil, errors.New("k8s: pod is required")
+	}
+	name := strings.TrimSpace(cName)
+	if name == "" {
+		return pod.Spec.Containers, nil
+	}
+	for _, c := range pod.Spec.Containers {
+		if c.Name == name {
+			return []corev1.Container{c}, nil
+		}
+	}
+	return nil, fmt.Errorf(
+		"k8s: pod %s/%s does not contain container %q",
+		pod.Namespace,
+		pod.Name,
+		name,
+	)
+}
+
+func buildDialer(u *url.URL, cfg *rest.Config) (httpstream.Dialer, error) {
+	if u == nil {
+		return nil, errors.New("k8s: port-forward url required")
+	}
+	if cfg == nil {
+		return nil, errors.New("k8s: rest config required")
+	}
+
+	rt, upgrader, err := spdytransport.RoundTripperFor(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("k8s: create spdy roundtripper: %w", err)
+	}
+	spdyDialer := spdytransport.NewDialer(
+		upgrader,
+		&http.Client{Transport: rt},
+		http.MethodPost,
+		u,
+	)
+
+	wsDialer, err := portforward.NewSPDYOverWebsocketDialer(u, cfg)
+	if err != nil {
+		return spdyDialer, nil
+	}
+	return portforward.NewFallbackDialer(wsDialer, spdyDialer, shouldFallback), nil
+}
+
+func shouldFallback(err error) bool {
+	if err == nil {
+		return false
+	}
+	if httpstream.IsUpgradeFailure(err) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "websocket") ||
+		strings.Contains(msg, "bad handshake") ||
+		strings.Contains(msg, "upgrade request required") ||
+		strings.Contains(msg, "unknown scheme")
+}
+
+func bindAddrs(raw string) []string {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return []string{defaultAddress}
+	}
+
+	// Accept comma/semicolon/whitespace lists to support programmatic use and
+	// future directive expansion without changing this layer.
+	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+		return r == ',' || r == ';' || unicode.IsSpace(r)
+	})
+	if len(parts) == 0 {
+		return []string{defaultAddress}
+	}
+
+	seen := map[string]struct{}{}
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		key := strings.ToLower(part)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, part)
+	}
+	if len(out) == 0 {
+		return []string{defaultAddress}
+	}
+	return out
+}
+
+func dialHost(addrs []string) string {
+	if len(addrs) == 0 {
+		return defaultAddress
+	}
+	host := strings.TrimSpace(addrs[0])
+	if strings.EqualFold(host, "localhost") {
+		return defaultAddress
+	}
+	if host == "" {
+		return defaultAddress
+	}
+	return host
+}
+
+func formatPortSpec(local, remote int) string {
+	if local > 0 {
+		return fmt.Sprintf("%d:%d", local, remote)
+	}
+	return fmt.Sprintf("0:%d", remote)
+}
+
+func normalizeNetwork(raw string) (string, error) {
+	network := strings.TrimSpace(raw)
+	if network == "" {
+		network = "tcp"
+	}
+	switch network {
+	case "tcp", "tcp4", "tcp6":
+		return network, nil
+	default:
+		return "", fmt.Errorf("k8s: unsupported network for port-forward %q", network)
+	}
+}
+
+func cacheKey(cfg Cfg, load loadCfg) string {
+	ns := strings.TrimSpace(cfg.Namespace)
+
+	parts := []string{
+		cfg.Label,
+		cfg.Name,
+		ns,
+		cfg.targetRef(),
+		cfg.portRef(),
+		cfg.Context,
+		cfg.Kubeconfig,
+		cfg.Container,
+		cfg.Address,
+		strconv.Itoa(cfg.LocalPort),
+		profileutil.BoolKey(cfg.Persist),
+		cfg.PodWait.String(),
+		strconv.Itoa(cfg.Retries),
+		string(load.policy),
+		profileutil.BoolKey(load.stdinUnavail),
+		load.stdinMsg,
+		strings.Join(load.allowlist, ","),
+	}
+	return strings.Join(parts, "|")
+}
+
+func loadOptFromCfg(cfg loadCfg) LoadOpt {
+	return LoadOpt{
+		ExecPolicy:             cfg.policy,
+		ExecAllowlist:          append([]string(nil), cfg.allowlist...),
+		StdinUnavailable:       cfg.stdinUnavail,
+		StdinUnavailableSet:    true,
+		StdinUnavailableReason: cfg.stdinMsg,
+	}
+}
