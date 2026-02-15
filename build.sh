@@ -10,7 +10,7 @@ VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE=$(date -u '+%Y-%m-%d %H:%M:%S UTC')
 
-LDFLAGS="-X 'main.version=${VERSION}' -X 'main.commit=${COMMIT}' -X 'main.date=${DATE}'"
+LDFLAGS="-s -w -X 'main.version=${VERSION}' -X 'main.commit=${COMMIT}' -X 'main.date=${DATE}'"
 
 platforms=(
   "darwin amd64"
@@ -43,7 +43,7 @@ for platform in "${platforms[@]}"; do
   fi
 
   echo "Building $output (version: $VERSION)"
-  GOOS="$goos" GOARCH="$goarch" go build -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
+  GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
 done
 
 echo ""
