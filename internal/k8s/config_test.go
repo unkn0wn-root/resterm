@@ -92,7 +92,12 @@ func TestNormalizeProfileTrimsWhitespace(t *testing.T) {
 			t.Fatalf("unexpected target %s/%s (%q)", cfg.TargetKind, cfg.TargetName, cfg.Pod)
 		}
 		if cfg.Port != 8080 || cfg.PortName != "" || cfg.PortRaw != "8080" {
-			t.Fatalf("unexpected port parse: %d name=%q raw=%q", cfg.Port, cfg.PortName, cfg.PortRaw)
+			t.Fatalf(
+				"unexpected port parse: %d name=%q raw=%q",
+				cfg.Port,
+				cfg.PortName,
+				cfg.PortRaw,
+			)
 		}
 	})
 
@@ -105,7 +110,12 @@ func TestNormalizeProfileTrimsWhitespace(t *testing.T) {
 			t.Fatalf("normalize err: %v", err)
 		}
 		if cfg.Port != 0 || cfg.PortName != "http" || cfg.PortRaw != "http" {
-			t.Fatalf("unexpected named port parse: %d name=%q raw=%q", cfg.Port, cfg.PortName, cfg.PortRaw)
+			t.Fatalf(
+				"unexpected named port parse: %d name=%q raw=%q",
+				cfg.Port,
+				cfg.PortName,
+				cfg.PortRaw,
+			)
 		}
 	})
 }
