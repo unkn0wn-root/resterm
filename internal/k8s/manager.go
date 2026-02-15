@@ -24,10 +24,12 @@ import (
 	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
-	"k8s.io/client-go/kubernetes"
+	appsv1client "k8s.io/client-go/kubernetes/typed/apps/v1"
+	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	spdytransport "k8s.io/client-go/transport/spdy"
+	"k8s.io/client-go/util/flowcontrol"
 )
 
 const (
@@ -269,15 +271,10 @@ func (m *Manager) dialCached(
 
 		m.mu.Lock()
 		if cur := m.cache[key]; cur != nil && cur.ses == ses {
-			closeErr := ses.close()
 			delete(m.cache, key)
-			m.mu.Unlock()
-			return nil, joinCleanupErr(err, closeErr)
-		} else {
-			closeErr := ses.close()
-			m.mu.Unlock()
-			return nil, joinCleanupErr(err, closeErr)
 		}
+		m.mu.Unlock()
+		return nil, joinCleanupErr(err, ses.close())
 	}
 }
 
@@ -461,16 +458,16 @@ func startSession(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) 
 		return nil, err
 	}
 
-	cs, err := kubernetes.NewForConfig(restCfg)
+	appsClient, coreClient, err := newTypedClients(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: build client: %w", err)
 	}
-	rt, err := resolveForwardTarget(ctx, cs, ns, cfg)
+	rt, err := resolveForwardTarget(ctx, appsClient, coreClient, ns, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	u := cs.CoreV1().
+	u := coreClient.
 		RESTClient().
 		Post().
 		Resource("pods").
@@ -534,13 +531,55 @@ func startSession(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) 
 	return ses, nil
 }
 
+func newTypedClients(cfg *rest.Config) (
+	appsv1client.AppsV1Interface,
+	corev1client.CoreV1Interface,
+	error,
+) {
+	if cfg == nil {
+		return nil, nil, errors.New("missing rest config")
+	}
+
+	configShallowCopy := *cfg
+	if configShallowCopy.UserAgent == "" {
+		configShallowCopy.UserAgent = rest.DefaultKubernetesUserAgent()
+	}
+
+	httpClient, err := rest.HTTPClientFor(&configShallowCopy)
+	if err != nil {
+		return nil, nil, err
+	}
+	if configShallowCopy.RateLimiter == nil && configShallowCopy.QPS > 0 {
+		if configShallowCopy.Burst <= 0 {
+			return nil, nil, fmt.Errorf(
+				"burst is required to be greater than 0 when RateLimiter is not set and QPS is set to greater than 0",
+			)
+		}
+		configShallowCopy.RateLimiter = flowcontrol.NewTokenBucketRateLimiter(
+			configShallowCopy.QPS,
+			configShallowCopy.Burst,
+		)
+	}
+
+	appsClient, err := appsv1client.NewForConfigAndClient(&configShallowCopy, httpClient)
+	if err != nil {
+		return nil, nil, err
+	}
+	coreClient, err := corev1client.NewForConfigAndClient(&configShallowCopy, httpClient)
+	if err != nil {
+		return nil, nil, err
+	}
+	return appsClient, coreClient, nil
+}
+
 func resolveForwardTarget(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	apps appsv1client.AppsV1Interface,
+	core corev1client.CoreV1Interface,
 	ns string,
 	cfg Cfg,
 ) (fwdTarget, error) {
-	sel, err := waitTargetPod(ctx, cs, ns, cfg)
+	sel, err := waitTargetPod(ctx, apps, core, ns, cfg)
 	if err != nil {
 		return fwdTarget{}, err
 	}
@@ -553,11 +592,12 @@ func resolveForwardTarget(
 
 func waitTargetPod(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	apps appsv1client.AppsV1Interface,
+	core corev1client.CoreV1Interface,
 	namespace string,
 	cfg Cfg,
 ) (targetPod, error) {
-	if cs == nil {
+	if core == nil {
 		return targetPod{}, errors.New("k8s: client unavailable")
 	}
 	ns := strings.TrimSpace(namespace)
@@ -576,7 +616,7 @@ func waitTargetPod(
 
 	var out targetPod
 	check := func(ctx context.Context) (bool, error) {
-		sel, err := selectTargetPod(ctx, cs, ns, k, n)
+		sel, err := selectTargetPod(ctx, apps, core, ns, k, n)
 		if err != nil {
 			return false, err
 		}
@@ -622,14 +662,15 @@ func waitTargetPod(
 
 func selectTargetPod(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	apps appsv1client.AppsV1Interface,
+	core corev1client.CoreV1Interface,
 	ns string,
 	k TargetKind,
 	name string,
 ) (targetPod, error) {
 	switch k {
 	case targetKindPod:
-		p, err := cs.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+		p, err := core.Pods(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return targetPod{}, nil
@@ -639,14 +680,14 @@ func selectTargetPod(
 		return targetPod{pod: p}, nil
 
 	case targetKindService:
-		svc, err := cs.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
+		svc, err := core.Services(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return targetPod{}, nil
 			}
 			return targetPod{}, err
 		}
-		ps, err := podsForService(ctx, cs, ns, svc)
+		ps, err := podsForService(ctx, core, ns, svc)
 		if err != nil {
 			return targetPod{}, err
 		}
@@ -654,24 +695,30 @@ func selectTargetPod(
 		return targetPod{pod: p, svc: svc}, nil
 
 	case targetKindDeployment:
-		d, err := cs.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
+		if apps == nil {
+			return targetPod{}, errors.New("k8s: client unavailable")
+		}
+		d, err := apps.Deployments(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return targetPod{}, nil
 			}
 			return targetPod{}, err
 		}
-		return targetBySelector(ctx, cs, ns, d.Spec.Selector, "deployment", ns, d.Name)
+		return targetBySelector(ctx, core, ns, d.Spec.Selector, "deployment", ns, d.Name)
 
 	case targetKindStatefulSet:
-		s, err := cs.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
+		if apps == nil {
+			return targetPod{}, errors.New("k8s: client unavailable")
+		}
+		s, err := apps.StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			if apierrors.IsNotFound(err) {
 				return targetPod{}, nil
 			}
 			return targetPod{}, err
 		}
-		return targetBySelector(ctx, cs, ns, s.Spec.Selector, "statefulset", ns, s.Name)
+		return targetBySelector(ctx, core, ns, s.Spec.Selector, "statefulset", ns, s.Name)
 
 	default:
 		return targetPod{}, fmt.Errorf("k8s: unsupported target kind %q", k)
@@ -680,12 +727,12 @@ func selectTargetPod(
 
 func targetBySelector(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	core corev1client.CoreV1Interface,
 	ns string,
 	sel *metav1.LabelSelector,
 	kind, objNS, objName string,
 ) (targetPod, error) {
-	ps, err := podsForLabelSelector(ctx, cs, ns, sel, kind, objNS, objName)
+	ps, err := podsForLabelSelector(ctx, core, ns, sel, kind, objNS, objName)
 	if err != nil {
 		return targetPod{}, err
 	}
@@ -694,7 +741,7 @@ func targetBySelector(
 
 func podsForService(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	core corev1client.CoreV1Interface,
 	ns string,
 	svc *corev1.Service,
 ) ([]corev1.Pod, error) {
@@ -705,12 +752,12 @@ func podsForService(
 		return nil, fmt.Errorf("k8s: service %s/%s has no selector", ns, svc.Name)
 	}
 	sel := labels.SelectorFromSet(svc.Spec.Selector)
-	return listPods(ctx, cs, ns, sel.String())
+	return listPods(ctx, core, ns, sel.String())
 }
 
 func podsForLabelSelector(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	core corev1client.CoreV1Interface,
 	ns string,
 	sel *metav1.LabelSelector,
 	kind, objNS, objName string,
@@ -725,16 +772,16 @@ func podsForLabelSelector(
 	if s.Empty() {
 		return nil, fmt.Errorf("k8s: %s %s/%s has empty selector", kind, objNS, objName)
 	}
-	return listPods(ctx, cs, ns, s.String())
+	return listPods(ctx, core, ns, s.String())
 }
 
 func listPods(
 	ctx context.Context,
-	cs kubernetes.Interface,
+	core corev1client.CoreV1Interface,
 	ns string,
 	sel string,
 ) ([]corev1.Pod, error) {
-	pods, err := cs.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: sel})
+	pods, err := core.Pods(ns).List(ctx, metav1.ListOptions{LabelSelector: sel})
 	if err != nil {
 		return nil, err
 	}

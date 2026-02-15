@@ -693,7 +693,7 @@ func TestWaitTargetPodHonorsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := waitTargetPod(ctx, cs, "default", Cfg{
+	_, err := waitTargetPod(ctx, cs.AppsV1(), cs.CoreV1(), "default", Cfg{
 		TargetKind: targetKindPod,
 		TargetName: "api",
 		PodWait:    time.Second,
@@ -728,7 +728,7 @@ func TestResolveForwardTargetServiceNamedPort(t *testing.T) {
 		PortName:   "web",
 		PodWait:    0,
 	}
-	got, err := resolveForwardTarget(context.Background(), cs, "default", cfg)
+	got, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
 	if err != nil {
 		t.Fatalf("resolve target err: %v", err)
 	}
@@ -760,7 +760,7 @@ func TestResolveForwardTargetDeploymentPicksReadyPod(t *testing.T) {
 		PodWait:    0,
 	}
 
-	got, err := resolveForwardTarget(context.Background(), cs, "default", cfg)
+	got, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
 	if err != nil {
 		t.Fatalf("resolve target err: %v", err)
 	}
@@ -791,7 +791,7 @@ func TestResolveForwardTargetStatefulSetDeterministicPod(t *testing.T) {
 		PodWait:    0,
 	}
 
-	got, err := resolveForwardTarget(context.Background(), cs, "default", cfg)
+	got, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
 	if err != nil {
 		t.Fatalf("resolve target err: %v", err)
 	}
@@ -836,7 +836,7 @@ func TestResolveForwardTargetServiceNamedPortAmbiguousAcrossContainers(t *testin
 		PodWait:    0,
 	}
 
-	_, err := resolveForwardTarget(context.Background(), cs, "default", cfg)
+	_, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
 	if err == nil || !strings.Contains(err.Error(), "ambiguous named port") {
 		t.Fatalf("expected ambiguous named port error, got %v", err)
 	}
