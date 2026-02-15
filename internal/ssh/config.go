@@ -106,7 +106,12 @@ func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
 	); err != nil {
 		return err
 	}
-	if err := profileutil.ParseRetries("ssh", &cfg.Retries, &cfg.RetriesRaw, p.RetriesStr); err != nil {
+	if err := profileutil.ParseRetries(
+		"ssh",
+		&cfg.Retries,
+		&cfg.RetriesRaw,
+		p.RetriesStr,
+	); err != nil {
 		return err
 	}
 	return nil
@@ -127,7 +132,10 @@ func defaultStrict(opt restfile.Opt[bool]) bool {
 }
 
 func defaultKnownHosts() (string, error) {
-	return profileutil.ExpandPath("~/.ssh/known_hosts", "cannot resolve home directory for known_hosts")
+	return profileutil.ExpandPath(
+		"~/.ssh/known_hosts",
+		"cannot resolve home directory for known_hosts",
+	)
 }
 
 func userHomeDir() string {

@@ -25,7 +25,8 @@ func TestExpandPathSupportsHomeAndNamedUser(t *testing.T) {
 	}
 
 	current, err := user.Current()
-	if err != nil || strings.TrimSpace(current.Username) == "" || strings.TrimSpace(current.HomeDir) == "" {
+	if err != nil || strings.TrimSpace(current.Username) == "" ||
+		strings.TrimSpace(current.HomeDir) == "" {
 		t.Skip("current user lookup unavailable")
 	}
 	got, err = ExpandPath("~"+current.Username+"/.ssh/config", "home err")

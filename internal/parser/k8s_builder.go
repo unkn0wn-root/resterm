@@ -199,7 +199,12 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 
 	setOptBool(&prof.Persist, opts, "persist")
 
-	if key, raw, ok := firstOptWithKey(opts, "pod_running_timeout", "pod-running-timeout", "podwait"); ok {
+	if key, raw, ok := firstOptWithKey(
+		opts,
+		"pod_running_timeout",
+		"pod-running-timeout",
+		"podwait",
+	); ok {
 		prof.PodWaitStr = raw
 		prof.PodWait.Set = true
 		d, ok := duration.Parse(raw)

@@ -157,7 +157,12 @@ func TestResolveInlineTargetPodOverridesBasePod(t *testing.T) {
 		t.Fatalf("resolve err: %v", err)
 	}
 	if cfg.TargetKind != targetKindPod || cfg.TargetName != "api-1" || cfg.Pod != "api-1" {
-		t.Fatalf("expected pod target api-1, got %s/%s (%q)", cfg.TargetKind, cfg.TargetName, cfg.Pod)
+		t.Fatalf(
+			"expected pod target api-1, got %s/%s (%q)",
+			cfg.TargetKind,
+			cfg.TargetName,
+			cfg.Pod,
+		)
 	}
 	if cfg.Port != 9090 {
 		t.Fatalf("expected numeric port override, got %d", cfg.Port)

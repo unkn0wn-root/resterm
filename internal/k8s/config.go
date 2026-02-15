@@ -106,7 +106,12 @@ func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
 	if err := parsePortRef(cfg, p); err != nil {
 		return err
 	}
-	if err := profileutil.ParsePort("k8s local", &cfg.LocalPort, &cfg.LocalPortRaw, p.LocalPortStr); err != nil {
+	if err := profileutil.ParsePort(
+		"k8s local",
+		&cfg.LocalPort,
+		&cfg.LocalPortRaw,
+		p.LocalPortStr,
+	); err != nil {
 		return err
 	}
 	if err := profileutil.ParseDuration(
@@ -117,7 +122,12 @@ func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
 	); err != nil {
 		return err
 	}
-	if err := profileutil.ParseRetries("k8s", &cfg.Retries, &cfg.RetriesRaw, p.RetriesStr); err != nil {
+	if err := profileutil.ParseRetries(
+		"k8s",
+		&cfg.Retries,
+		&cfg.RetriesRaw,
+		p.RetriesStr,
+	); err != nil {
 		return err
 	}
 	return nil

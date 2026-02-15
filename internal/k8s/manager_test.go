@@ -689,7 +689,7 @@ func TestShouldFallback(t *testing.T) {
 }
 
 func TestWaitTargetPodHonorsContextCancel(t *testing.T) {
-	cs := fake.NewSimpleClientset()
+	cs := fake.NewClientset()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -704,7 +704,7 @@ func TestWaitTargetPodHonorsContextCancel(t *testing.T) {
 }
 
 func TestResolveForwardTargetServiceNamedPort(t *testing.T) {
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 			Spec: corev1.ServiceSpec{
@@ -741,7 +741,7 @@ func TestResolveForwardTargetServiceNamedPort(t *testing.T) {
 }
 
 func TestResolveForwardTargetDeploymentPicksReadyPod(t *testing.T) {
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&appsv1.Deployment{
 			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 			Spec: appsv1.DeploymentSpec{
@@ -773,7 +773,7 @@ func TestResolveForwardTargetDeploymentPicksReadyPod(t *testing.T) {
 }
 
 func TestResolveForwardTargetStatefulSetDeterministicPod(t *testing.T) {
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&appsv1.StatefulSet{
 			ObjectMeta: metav1.ObjectMeta{Name: "db", Namespace: "default"},
 			Spec: appsv1.StatefulSetSpec{
@@ -812,7 +812,7 @@ func TestResolveForwardTargetServiceNamedPortAmbiguousAcrossContainers(t *testin
 		},
 	})
 
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{Name: "api", Namespace: "default"},
 			Spec: corev1.ServiceSpec{

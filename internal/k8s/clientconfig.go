@@ -131,7 +131,9 @@ func normalizeLoadOpt(opt LoadOpt) (loadCfg, error) {
 		return loadCfg{}, fmt.Errorf("k8s: exec allowlist requires policy allowlist")
 	}
 	if pp == ExecPolicyAllowlist && len(al) == 0 {
-		return loadCfg{}, fmt.Errorf("k8s: exec allowlist policy requires at least one allowlist entry")
+		return loadCfg{}, fmt.Errorf(
+			"k8s: exec allowlist policy requires at least one allowlist entry",
+		)
 	}
 
 	noIn := true
