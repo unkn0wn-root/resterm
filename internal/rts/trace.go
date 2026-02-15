@@ -271,6 +271,7 @@ func (o *traceObj) connFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"proxy":         conn.Proxy,
 		"proxyTunnel":   conn.ProxyTunnel,
 		"ssh":           conn.SSH,
+		"k8s":           conn.K8s,
 		"protocol":      conn.Protocol,
 	}
 	return fromIface(ctx, pos, res)

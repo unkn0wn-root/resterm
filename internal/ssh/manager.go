@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/connutil"
 	xssh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	knownhosts "golang.org/x/crypto/ssh/knownhosts"
@@ -107,11 +108,10 @@ func (m *Manager) dialOnce(ctx context.Context, cfg Cfg, network, addr string) (
 
 	conn, err := cli.Dial(network, addr)
 	if err != nil {
-		_ = cli.Close()
-		return nil, err
+		return nil, joinCloseErr(err, cli.Close())
 	}
 
-	return wrapConn(conn, cli.Close), nil
+	return connutil.WrapConn(conn, cli.Close), nil
 }
 
 func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
@@ -143,8 +143,7 @@ func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string)
 
 	conn, err := cli.Dial(network, addr)
 	if err != nil {
-		_ = ent.close()
-		return nil, err
+		return nil, joinCloseErr(err, ent.close())
 	}
 
 	m.mu.Lock()
@@ -170,7 +169,7 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
 		default:
 		}
 		if i+1 < attempts {
-			if err := waitWithContext(ctx, dialRetryDelay); err != nil {
+			if err := connutil.WaitWithContext(ctx, dialRetryDelay); err != nil {
 				return nil, err
 			}
 		}
@@ -202,20 +201,20 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 
 	auth, closeAuth, err := authMethods(cfg)
 	if err != nil {
-		_ = netConn.Close()
+		cleanupErr := netConn.Close()
 		if closeAuth != nil {
-			_ = closeAuth()
+			cleanupErr = errors.Join(cleanupErr, closeAuth())
 		}
-		return nil, err
+		return nil, joinCloseErr(err, cleanupErr)
 	}
 
 	hostKeyCb, err := hostKeyCallback(cfg)
 	if err != nil {
-		_ = netConn.Close()
+		cleanupErr := netConn.Close()
 		if closeAuth != nil {
-			_ = closeAuth()
+			cleanupErr = errors.Join(cleanupErr, closeAuth())
 		}
-		return nil, err
+		return nil, joinCloseErr(err, cleanupErr)
 	}
 
 	sshCfg := &xssh.ClientConfig{
@@ -230,14 +229,24 @@ func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
 
 	conn, chans, reqs, err := xssh.NewClientConn(netConn, addr, sshCfg)
 	if err != nil {
-		_ = netConn.Close()
+		cleanupErr := netConn.Close()
 		if closeAuth != nil {
-			_ = closeAuth()
+			cleanupErr = errors.Join(cleanupErr, closeAuth())
 		}
-		return nil, err
+		return nil, joinCloseErr(err, cleanupErr)
 	}
 	cli := xssh.NewClient(conn, chans, reqs)
 	return wrapClient(cli, closeAuth), nil
+}
+
+func joinCloseErr(baseErr error, cleanupErr error) error {
+	if cleanupErr == nil {
+		return baseErr
+	}
+	if baseErr == nil {
+		return cleanupErr
+	}
+	return errors.Join(baseErr, cleanupErr)
 }
 
 func authMethods(cfg Cfg) ([]xssh.AuthMethod, func() error, error) {
@@ -363,44 +372,6 @@ func closeEntry(ent *entry) error {
 		return ent.cli.Close()
 	}
 	return nil
-}
-
-func waitWithContext(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	t := time.NewTimer(d)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
-}
-
-type wrappedConn struct {
-	net.Conn
-	closeFn func() error
-}
-
-func wrapConn(c net.Conn, closer func() error) net.Conn {
-	return &wrappedConn{Conn: c, closeFn: closer}
-}
-
-func (c *wrappedConn) Close() error {
-	var errs []error
-	if c.Conn != nil {
-		if err := c.Conn.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if c.closeFn != nil {
-		if err := c.closeFn(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
 }
 
 type clientWrap struct {

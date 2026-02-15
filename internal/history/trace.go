@@ -48,6 +48,7 @@ type TraceConn struct {
 	Proxy         string        `json:"proxy,omitempty"`
 	ProxyTunnel   bool          `json:"proxyTunnel,omitempty"`
 	SSH           string        `json:"ssh,omitempty"`
+	K8s           string        `json:"k8s,omitempty"`
 	Protocol      string        `json:"protocol,omitempty"`
 }
 
@@ -302,6 +303,7 @@ func connFromTimeline(c *nettrace.ConnDetails) *TraceConn {
 		Proxy:         c.Proxy,
 		ProxyTunnel:   c.ProxyTunnel,
 		SSH:           c.SSH,
+		K8s:           c.K8s,
 		Protocol:      c.Protocol,
 	}
 }
@@ -355,6 +357,7 @@ func connToTimeline(c *TraceConn) *nettrace.ConnDetails {
 		Proxy:         c.Proxy,
 		ProxyTunnel:   c.ProxyTunnel,
 		SSH:           c.SSH,
+		K8s:           c.K8s,
 		Protocol:      c.Protocol,
 	}
 }

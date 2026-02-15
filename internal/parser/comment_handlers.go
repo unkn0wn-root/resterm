@@ -39,6 +39,9 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if b.handleSSHDirective(line, key, rest) {
 		return
 	}
+	if b.handleK8sDirective(line, key, rest) {
+		return
+	}
 	if b.handlePatchDirective(line, key, rest) {
 		return
 	}
@@ -115,6 +118,14 @@ func (b *documentBuilder) handleSSHDirective(line int, key, rest string) bool {
 		return false
 	}
 	b.handleSSH(line, rest)
+	return true
+}
+
+func (b *documentBuilder) handleK8sDirective(line int, key, rest string) bool {
+	if key != "k8s" {
+		return false
+	}
+	b.handleK8s(line, rest)
 	return true
 }
 

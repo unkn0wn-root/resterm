@@ -12,7 +12,7 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels** and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
+Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels**, **Kubernetes port-forwarding**, and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
 Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview), and [Documentation](#documentation).
 
@@ -24,7 +24,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Multi-step workflows** chain requests with `@workflow` / `@step`, pass data between steps, and branch on results.
 - **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`) wire responses into subsequent requests and validate them inline.
 - **RestermScript** - a small, safe expression language purpose. Built for request files, with reusable `.rts` modules.
-- **OAuth 2.0** (client credentials, password, auth code + PKCE) and **SSH tunnels** are built in so no extra tools needed.
+- **OAuth 2.0** (client credentials, password, auth code + PKCE), **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools, no manual `kubectl port-forward` in another terminal.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -128,6 +128,7 @@ Protocols and transports cover the following.
 
 - `HTTP`, `GraphQL`, `gRPC`, `WebSocket`, and `SSE` are supported out of the box.
 - `SSH tunnels` include host key verification, keep-alives, retries, and persistent sessions.
+- `Kubernetes port-forwards` target pods, services, deployments, and statefulsets with named port resolution, pod readiness checks, retries, and persistent sessions.
 
 Workspace and files focus on the following.
 
@@ -354,7 +355,11 @@ Convert curl commands into `.http` files from the CLI with `--from-curl`. Docs: 
 
 #### SSH tunnels
 
-Route HTTP, gRPC, WebSocket, and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-jumps`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
+Route HTTP, gRPC, WebSocket, and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-tunnels`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
+
+#### Kubernetes port-forwards
+
+Route HTTP, gRPC, WebSocket, and SSE traffic through Kubernetes with `@k8s` profiles targeting pods/services/deployments/statefulsets. Docs: [`docs/resterm.md#kubernetes-port-forwards`](./docs/resterm.md#kubernetes-port-forwards) and `_examples/k8s.http`.
 
 #### Theming and bindings
 

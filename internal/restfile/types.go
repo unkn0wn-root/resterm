@@ -92,6 +92,14 @@ const (
 	SSHScopeGlobal
 )
 
+type K8sScope int
+
+const (
+	K8sScopeRequest K8sScope = iota
+	K8sScopeFile
+	K8sScopeGlobal
+)
+
 type PatchScope int
 
 const (
@@ -99,10 +107,14 @@ const (
 	PatchScopeGlobal
 )
 
-type SSHOpt[T any] struct {
+type Opt[T any] struct {
 	Val T
 	Set bool
 }
+
+type SSHOpt[T any] = Opt[T]
+
+type K8sOpt[T any] = Opt[T]
 
 type SSHProfile struct {
 	Scope        SSHScope
@@ -114,21 +126,47 @@ type SSHProfile struct {
 	Pass         string
 	Key          string
 	KeyPass      string
-	Agent        SSHOpt[bool]
+	Agent        Opt[bool]
 	KnownHosts   string
-	Strict       SSHOpt[bool]
-	Persist      SSHOpt[bool]
-	Timeout      SSHOpt[time.Duration]
+	Strict       Opt[bool]
+	Persist      Opt[bool]
+	Timeout      Opt[time.Duration]
 	TimeoutStr   string
-	KeepAlive    SSHOpt[time.Duration]
+	KeepAlive    Opt[time.Duration]
 	KeepAliveStr string
-	Retries      SSHOpt[int]
+	Retries      Opt[int]
 	RetriesStr   string
 }
 
 type SSHSpec struct {
 	Use    string
 	Inline *SSHProfile
+}
+
+type K8sProfile struct {
+	Scope        K8sScope
+	Name         string
+	Namespace    string
+	Target       string
+	Pod          string
+	Port         int
+	PortStr      string
+	Context      string
+	Kubeconfig   string
+	Container    string
+	Address      string
+	LocalPort    int
+	LocalPortStr string
+	Persist      Opt[bool]
+	PodWait      Opt[time.Duration]
+	PodWaitStr   string
+	Retries      Opt[int]
+	RetriesStr   string
+}
+
+type K8sSpec struct {
+	Use    string
+	Inline *K8sProfile
 }
 
 type MetadataPair struct {
@@ -255,6 +293,7 @@ type Request struct {
 	SSE          *SSERequest
 	WebSocket    *WebSocketRequest
 	SSH          *SSHSpec
+	K8s          *K8sSpec
 }
 
 type SSERequest struct {
@@ -315,6 +354,7 @@ type Document struct {
 	Globals   []Variable
 	Constants []Constant
 	SSH       []SSHProfile
+	K8s       []K8sProfile
 	Patches   []PatchProfile
 	Settings  map[string]string
 	Uses      []UseSpec

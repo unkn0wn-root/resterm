@@ -9,8 +9,10 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 )
@@ -20,6 +22,7 @@ type traceExtras struct {
 	proxy  string
 	tunnel bool
 	ssh    string
+	k8s    string
 	tls    *nettrace.TLSDetails
 }
 
@@ -71,7 +74,8 @@ func applyTraceExtras(details *nettrace.TraceDetails, extra traceExtras) *nettra
 	if details == nil {
 		details = &nettrace.TraceDetails{}
 	}
-	if details.Connection == nil && (extra.proto != "" || extra.proxy != "" || extra.ssh != "") {
+	if details.Connection == nil &&
+		(extra.proto != "" || extra.proxy != "" || extra.ssh != "" || extra.k8s != "") {
 		details.Connection = &nettrace.ConnDetails{}
 	}
 	if extra.proto != "" {
@@ -83,6 +87,9 @@ func applyTraceExtras(details *nettrace.TraceDetails, extra traceExtras) *nettra
 	}
 	if extra.ssh != "" {
 		details.Connection.SSH = extra.ssh
+	}
+	if extra.k8s != "" {
+		details.Connection.K8s = extra.k8s
 	}
 	if extra.tls != nil && details.TLS == nil {
 		details.TLS = extra.tls
@@ -113,11 +120,14 @@ func buildTraceExtras(
 	if opts.SSH != nil && opts.SSH.Active() {
 		extra.ssh = formatSSH(opts.SSH)
 	}
+	if opts.K8s != nil && opts.K8s.Active() {
+		extra.k8s = formatK8s(opts.K8s)
+	}
 	return extra
 }
 
 func proxyForRequest(req *http.Request, opts Options, client *http.Client) string {
-	if opts.SSH != nil && opts.SSH.Active() {
+	if (opts.SSH != nil && opts.SSH.Active()) || (opts.K8s != nil && opts.K8s.Active()) {
 		return ""
 	}
 	if opts.ProxyURL != "" {
@@ -179,6 +189,43 @@ func formatSSH(plan *ssh.Plan) string {
 		addr = fmt.Sprintf("%s:%d", addr, cfg.Port)
 	}
 	return addr
+}
+
+func formatK8s(plan *k8s.Plan) string {
+	if plan == nil || plan.Config == nil {
+		return ""
+	}
+	cfg := plan.Config
+	target := cfg.TargetName
+	kind := string(cfg.TargetKind)
+	if target == "" && cfg.Pod != "" {
+		target = cfg.Pod
+		kind = "pod"
+	}
+	if target == "" {
+		return ""
+	}
+	ns := cfg.Namespace
+	if kind == "" {
+		kind = "pod"
+	}
+	ref := target
+	if kind != "pod" {
+		ref = kind + "/" + target
+	}
+	if ns != "" {
+		ref = ns + "/" + ref
+	}
+	if cfg.Port > 0 {
+		ref += ":" + strconv.Itoa(cfg.Port)
+	} else if name := cfg.PortName; name != "" {
+		ref += ":" + name
+	}
+	ctx := cfg.Context
+	if ctx == "" {
+		return ref
+	}
+	return ctx + " " + ref
 }
 
 func mergeIPs(current []string, addrs []net.IPAddr) []string {

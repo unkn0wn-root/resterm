@@ -30,6 +30,7 @@ func TestNewTraceSummary(t *testing.T) {
 				IdleTime:      5 * time.Millisecond,
 				DialAddr:      "93.184.216.34:443",
 				ResolvedAddrs: []string{"93.184.216.34"},
+				K8s:           "kind-dev default/api:8080",
 				Protocol:      "HTTP/2.0",
 			},
 			TLS: &nettrace.TLSDetails{
@@ -85,6 +86,9 @@ func TestNewTraceSummary(t *testing.T) {
 	if summary.Details.Connection.Protocol != "HTTP/2.0" {
 		t.Fatalf("unexpected protocol: %s", summary.Details.Connection.Protocol)
 	}
+	if summary.Details.Connection.K8s != "kind-dev default/api:8080" {
+		t.Fatalf("unexpected k8s detail: %s", summary.Details.Connection.K8s)
+	}
 	if got := summary.Details.TLS.Certificates[0].Subject; got != "example.com" {
 		t.Fatalf("unexpected cert subject: %s", got)
 	}
@@ -118,6 +122,7 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 			Connection: &nettrace.ConnDetails{
 				LocalAddr:  "127.0.0.1:5353",
 				RemoteAddr: "93.184.216.34:443",
+				K8s:        "default/api:8080",
 				Protocol:   "HTTP/1.1",
 			},
 		},
@@ -159,6 +164,9 @@ func TestTraceSummaryRoundTrip(t *testing.T) {
 	}
 	if rebuilt.Details.Connection.Protocol != "HTTP/1.1" {
 		t.Fatalf("unexpected protocol after round trip: %s", rebuilt.Details.Connection.Protocol)
+	}
+	if rebuilt.Details.Connection.K8s != "default/api:8080" {
+		t.Fatalf("unexpected k8s after round trip: %s", rebuilt.Details.Connection.K8s)
 	}
 	rebuiltReport := summary.Report()
 	if rebuiltReport == nil {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -34,6 +35,7 @@ type Options struct {
 	Trace              bool
 	TraceBudget        *nettrace.Budget
 	SSH                *ssh.Plan
+	K8s                *k8s.Plan
 }
 
 type Client struct {
@@ -156,6 +158,9 @@ func (c *Client) Execute(
 	start := time.Now()
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
+		if effectiveOpts.K8s != nil {
+			err = k8s.AnnotateRequestError(err, start)
+		}
 		duration := time.Since(start)
 		if traceSess != nil {
 			traceSess.fail(err)

@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -27,6 +28,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -254,8 +256,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncSSHGlobals(doc)
-	m.syncPatchGlobals(doc)
+	m.syncAllGlobals(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -363,8 +364,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncSSHGlobals(doc)
-	m.syncPatchGlobals(doc)
+	m.syncAllGlobals(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -396,6 +396,14 @@ func (m *Model) executeRequest(
 	extras ...map[string]string,
 ) tea.Cmd {
 	options = m.resolveHTTPOptions(options)
+	if req != nil && tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
+		return func() tea.Msg {
+			return responseMsg{
+				err:      errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s"),
+				executed: req,
+			}
+		}
+	}
 
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
 		options.Trace = true
@@ -557,9 +565,12 @@ func (m *Model) executeRequest(
 		if err != nil {
 			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"), executed: req}
 		}
-		if sshPlan != nil {
-			options.SSH = sshPlan
+		k8sPlan, err := m.resolveK8s(doc, req, resolver, envName)
+		if err != nil {
+			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s"), executed: req}
 		}
+		options.SSH = sshPlan
+		options.K8s = k8sPlan
 
 		globalSettings := settings.FromEnv(m.cfg.EnvironmentSet, envName)
 		fileSettings := map[string]string{}
@@ -632,9 +643,8 @@ func (m *Model) executeRequest(
 				grpcOpts.DialTimeout = effectiveTimeout
 			}
 
-			if sshPlan != nil {
-				grpcOpts.SSH = sshPlan
-			}
+			grpcOpts.SSH = sshPlan
+			grpcOpts.K8s = k8sPlan
 
 			hook := func(session *stream.Session) {
 				m.attachGRPCSession(session, req)
@@ -1300,16 +1310,7 @@ func (m *Model) resolveSSH(
 	if req == nil || req.SSH == nil {
 		return nil, nil
 	}
-	if m.sshGlobals != nil {
-		path := m.documentRuntimePath(doc)
-		m.sshGlobals.set(path, docSSHProfiles(doc))
-	}
-
-	manager := m.sshMgr
-	if manager == nil {
-		manager = ssh.NewManager()
-		m.sshMgr = manager
-	}
+	manager := m.ensureSSHManager()
 	fileProfiles := docSSHProfiles(doc)
 	globalProfiles := []restfile.SSHProfile(nil)
 	if m.sshGlobals != nil {
@@ -1328,11 +1329,51 @@ func (m *Model) resolveSSH(
 	return &ssh.Plan{Manager: manager, Config: cfg}, nil
 }
 
+func (m *Model) resolveK8s(
+	doc *restfile.Document,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	envName string,
+) (*k8s.Plan, error) {
+	if req == nil || req.K8s == nil {
+		return nil, nil
+	}
+	manager := m.ensureK8sManager()
+	fileProfiles := docK8sProfiles(doc)
+	globalProfiles := []restfile.K8sProfile(nil)
+	if m.k8sGlobals != nil {
+		globalProfiles = m.k8sGlobals.all()
+	}
+	cfg, err := k8s.Resolve(req.K8s, fileProfiles, globalProfiles, resolver, envName)
+	if err != nil {
+		return nil, err
+	}
+	return &k8s.Plan{Manager: manager, Config: cfg}, nil
+}
+
 func (m *Model) documentRuntimePath(doc *restfile.Document) string {
 	if doc != nil && strings.TrimSpace(doc.Path) != "" {
 		return doc.Path
 	}
 	return m.currentFile
+}
+
+func (m *Model) ensureSSHManager() *ssh.Manager {
+	if m.sshMgr != nil {
+		return m.sshMgr
+	}
+	// Defensive for zero-value models used in tests and non-UI helpers.
+	m.sshMgr = ssh.NewManager()
+	return m.sshMgr
+}
+
+func (m *Model) ensureK8sManager() *k8s.Manager {
+	if m.k8sMgr != nil {
+		return m.k8sMgr
+	}
+	// Defensive for zero-value models used in tests and non-UI helpers.
+	m.k8sMgr = k8s.NewManager()
+	return m.k8sMgr
 }
 
 func (m *Model) syncSSHGlobals(doc *restfile.Document) {
@@ -1343,11 +1384,26 @@ func (m *Model) syncSSHGlobals(doc *restfile.Document) {
 	m.sshGlobals.set(path, docSSHProfiles(doc))
 }
 
+func (m *Model) syncK8sGlobals(doc *restfile.Document) {
+	if m.k8sGlobals == nil {
+		return
+	}
+	path := m.documentRuntimePath(doc)
+	m.k8sGlobals.set(path, docK8sProfiles(doc))
+}
+
 func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
 	if doc == nil {
 		return nil
 	}
 	return doc.SSH
+}
+
+func docK8sProfiles(doc *restfile.Document) []restfile.K8sProfile {
+	if doc == nil {
+		return nil
+	}
+	return doc.K8s
 }
 
 func (m *Model) syncPatchGlobals(doc *restfile.Document) {
@@ -1356,6 +1412,12 @@ func (m *Model) syncPatchGlobals(doc *restfile.Document) {
 	}
 	path := m.documentRuntimePath(doc)
 	m.patchGlobals.set(path, docPatchProfiles(doc))
+}
+
+func (m *Model) syncAllGlobals(doc *restfile.Document) {
+	m.syncSSHGlobals(doc)
+	m.syncK8sGlobals(doc)
+	m.syncPatchGlobals(doc)
 }
 
 func docPatchProfiles(doc *restfile.Document) []restfile.PatchProfile {

@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -152,6 +153,7 @@ type Config struct {
 	HTTPOptions         httpclient.Options
 	GRPCOptions         grpcclient.Options
 	SSHManager          *ssh.Manager
+	K8sManager          *k8s.Manager
 	History             history.Store
 	WorkspaceRoot       string
 	Recursive           bool
@@ -180,7 +182,9 @@ type Model struct {
 	grpcClient         *grpcclient.Client
 	grpcOptions        grpcclient.Options
 	sshMgr             *ssh.Manager
-	sshGlobals         *sshStore
+	sshGlobals         *namedStore[restfile.SSHProfile]
+	k8sMgr             *k8s.Manager
+	k8sGlobals         *namedStore[restfile.K8sProfile]
 	patchGlobals       *patchStore
 	workspaceRoot      string
 	workspaceRecursive bool
@@ -595,7 +599,12 @@ func New(cfg Config) Model {
 	if sshMgr == nil {
 		sshMgr = ssh.NewManager()
 	}
+	k8sMgr := cfg.K8sManager
+	if k8sMgr == nil {
+		k8sMgr = k8s.NewManager()
+	}
 	sshGlobals := newSSHStore()
+	k8sGlobals := newK8sStore()
 	patchGlobals := newPatchStore()
 
 	updateVersion := strings.TrimSpace(cfg.Version)
@@ -616,6 +625,8 @@ func New(cfg Config) Model {
 		grpcOptions:            cfg.GRPCOptions,
 		sshMgr:                 sshMgr,
 		sshGlobals:             sshGlobals,
+		k8sMgr:                 k8sMgr,
+		k8sGlobals:             k8sGlobals,
 		patchGlobals:           patchGlobals,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
@@ -704,8 +715,7 @@ func New(cfg Config) Model {
 	_ = model.setInsertMode(false, false)
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
-	model.syncSSHGlobals(model.doc)
-	model.syncPatchGlobals(model.doc)
+	model.syncAllGlobals(model.doc)
 	model.syncRequestList(model.doc)
 	model.rebuildNavigator(entries)
 	if model.historyStore != nil {
