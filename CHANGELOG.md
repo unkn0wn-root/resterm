@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.1](https://github.com/unkn0wn-root/resterm/compare/v0.22.0...v0.23.1) (2026-02-15)
+
+
+### Features
+
+* add Kubernetes port-forward support ([b630a46](https://github.com/unkn0wn-root/resterm/commit/b630a463746f4bcd20cc2bc9c21157a0f08caf79))
+
+
+### Bug Fixes
+
+* ci ([aea7a09](https://github.com/unkn0wn-root/resterm/commit/aea7a0993e29c9631a550fb089aa7f4b65d584f9))
+
 ## [0.22.0](https://github.com/unkn0wn-root/resterm/compare/v0.21.5...v0.22.0) (2026-02-11)
 
 
