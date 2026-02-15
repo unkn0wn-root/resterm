@@ -196,16 +196,16 @@ func formatK8s(plan *k8s.Plan) string {
 		return ""
 	}
 	cfg := plan.Config
-	target := strings.TrimSpace(cfg.TargetName)
-	kind := strings.TrimSpace(string(cfg.TargetKind))
-	if target == "" && strings.TrimSpace(cfg.Pod) != "" {
-		target = strings.TrimSpace(cfg.Pod)
+	target := cfg.TargetName
+	kind := string(cfg.TargetKind)
+	if target == "" && cfg.Pod != "" {
+		target = cfg.Pod
 		kind = "pod"
 	}
 	if target == "" {
 		return ""
 	}
-	ns := strings.TrimSpace(cfg.Namespace)
+	ns := cfg.Namespace
 	if kind == "" {
 		kind = "pod"
 	}
@@ -218,10 +218,10 @@ func formatK8s(plan *k8s.Plan) string {
 	}
 	if cfg.Port > 0 {
 		ref += ":" + strconv.Itoa(cfg.Port)
-	} else if name := strings.TrimSpace(cfg.PortName); name != "" {
+	} else if name := cfg.PortName; name != "" {
 		ref += ":" + name
 	}
-	ctx := strings.TrimSpace(cfg.Context)
+	ctx := cfg.Context
 	if ctx == "" {
 		return ref
 	}
