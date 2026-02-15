@@ -216,8 +216,6 @@ func policyFor(cf loadCfg) clientcmdapi.PluginPolicy {
 		for _, name := range cf.allowlist {
 			out.Allowlist = append(out.Allowlist, clientcmdapi.AllowlistEntry{Name: name})
 		}
-	default:
-		out.PolicyType = clientcmdapi.PluginPolicyAllowAll
 	}
 	return out
 }

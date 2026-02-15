@@ -203,5 +203,5 @@ func AnnotateRequestError(err error, startedAt time.Time) error {
 	if strings.Contains(err.Error(), pf.summary) {
 		return err
 	}
-	return fmt.Errorf("%w; %s", err, pf.summary)
+	return fmt.Errorf("%w | %s", err, pf.summary)
 }

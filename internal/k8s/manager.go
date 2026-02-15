@@ -8,7 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -806,12 +806,15 @@ func pickPod(pods []corev1.Pod) *corev1.Pod {
 		return nil
 	}
 
-	sort.Slice(active, func(i, j int) bool {
-		a, b := podRank(active[i]), podRank(active[j])
-		if a != b {
-			return a < b
+	slices.SortFunc(active, func(a, b corev1.Pod) int {
+		ar, br := podRank(a), podRank(b)
+		if ar < br {
+			return -1
 		}
-		return active[i].Name < active[j].Name
+		if ar > br {
+			return 1
+		}
+		return strings.Compare(a.Name, b.Name)
 	})
 
 	out := active[0]
@@ -1095,9 +1098,6 @@ func bindAddrs(raw string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(parts))
 	for _, part := range parts {
-		if part == "" {
-			continue
-		}
 		key := strings.ToLower(part)
 		if _, ok := seen[key]; ok {
 			continue
