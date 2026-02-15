@@ -19,10 +19,12 @@ jobs:
           go-version-file: go.mod
       - name: Run tests
         run: go test ./...
+      - name: Install golangci-lint
+        run: |
+          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+        run: golangci-lint run
 
   release-builds:
     if: github.event_name == 'release'
