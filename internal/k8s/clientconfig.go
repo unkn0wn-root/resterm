@@ -95,6 +95,8 @@ func RESTConfig(cfg Cfg, opt LoadOpt) (*rest.Config, error) {
 }
 
 func loadRaw(cfg Cfg) (clientcmdapi.Config, *clientcmd.ConfigOverrides, error) {
+	cfg = normalizeCfg(cfg)
+
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if cfg.Kubeconfig != "" {
 		rules.ExplicitPath = cfg.Kubeconfig

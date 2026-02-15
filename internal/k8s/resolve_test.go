@@ -78,6 +78,32 @@ func TestResolveExpandsEnvAndTemplates(t *testing.T) {
 	}
 }
 
+func TestResolveTrimsExpandedWhitespace(t *testing.T) {
+	t.Setenv("K8S_POD", " api-x ")
+	t.Setenv("K8S_PORT", " 8080 ")
+
+	spec := &restfile.K8sSpec{
+		Inline: &restfile.K8sProfile{
+			Namespace: " default ",
+			Pod:       "env:K8S_POD",
+			PortStr:   "env:K8S_PORT",
+		},
+	}
+	cfg, err := Resolve(spec, nil, nil, nil, "")
+	if err != nil {
+		t.Fatalf("resolve err: %v", err)
+	}
+	if cfg.Namespace != "default" {
+		t.Fatalf("expected namespace default, got %q", cfg.Namespace)
+	}
+	if cfg.TargetKind != targetKindPod || cfg.TargetName != "api-x" || cfg.Pod != "api-x" {
+		t.Fatalf("unexpected target %s/%s (%q)", cfg.TargetKind, cfg.TargetName, cfg.Pod)
+	}
+	if cfg.Port != 8080 || cfg.PortName != "" || cfg.PortRaw != "8080" {
+		t.Fatalf("unexpected port parse: %d name=%q raw=%q", cfg.Port, cfg.PortName, cfg.PortRaw)
+	}
+}
+
 func TestResolvePrefersFileScopeProfile(t *testing.T) {
 	spec := &restfile.K8sSpec{Use: "api"}
 	fileProfiles := []restfile.K8sProfile{

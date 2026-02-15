@@ -77,7 +77,7 @@ func NormalizeProfile(p restfile.K8sProfile) (Cfg, error) {
 		cfg.Kubeconfig = path
 	}
 
-	return cfg, nil
+	return normalizeCfg(cfg), nil
 }
 
 func baseCfg(p restfile.K8sProfile) Cfg {
@@ -100,6 +100,33 @@ func baseCfg(p restfile.K8sProfile) Cfg {
 		PodWaitRaw:   strings.TrimSpace(p.PodWaitStr),
 		RetriesRaw:   strings.TrimSpace(p.RetriesStr),
 	}
+}
+
+func trimStrings(fields ...*string) {
+	for _, field := range fields {
+		*field = strings.TrimSpace(*field)
+	}
+}
+
+func normalizeCfg(cfg Cfg) Cfg {
+	trimStrings(
+		&cfg.Name,
+		&cfg.Namespace,
+		&cfg.TargetName,
+		&cfg.Pod,
+		&cfg.PortName,
+		&cfg.Context,
+		&cfg.Kubeconfig,
+		&cfg.Container,
+		&cfg.Address,
+		&cfg.PortRaw,
+		&cfg.LocalPortRaw,
+		&cfg.PodWaitRaw,
+		&cfg.RetriesRaw,
+		&cfg.Label,
+	)
+	cfg.TargetKind = normalizeTargetKind(cfg.TargetKind)
+	return cfg
 }
 
 func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {

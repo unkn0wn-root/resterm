@@ -138,6 +138,10 @@ func (m *Manager) DialContext(
 	// The target address argument is intentionally ignored for k8s:
 	// traffic always goes through the active port-forward session.
 	_ = addr
+	cfg = normalizeCfg(cfg)
+	if cfg.Namespace == "" {
+		cfg.Namespace = defaultNamespace
+	}
 
 	if cfg.targetRef() == "" {
 		return nil, errors.New("k8s: target required")
@@ -147,10 +151,6 @@ func (m *Manager) DialContext(
 	}
 	if cfg.Port > 65535 {
 		return nil, errors.New("k8s: port out of range")
-	}
-	cfg.Namespace = strings.TrimSpace(cfg.Namespace)
-	if cfg.Namespace == "" {
-		cfg.Namespace = defaultNamespace
 	}
 
 	load, err := m.loadCfg()
@@ -448,7 +448,7 @@ func (s *session) errValue() error {
 }
 
 func startSession(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
-	ns := strings.TrimSpace(cfg.Namespace)
+	ns := cfg.Namespace
 	if ns == "" {
 		return nil, errors.New("k8s: namespace required")
 	}
@@ -600,7 +600,7 @@ func waitTargetPod(
 	if core == nil {
 		return targetPod{}, errors.New("k8s: client unavailable")
 	}
-	ns := strings.TrimSpace(namespace)
+	ns := namespace
 	if ns == "" {
 		return targetPod{}, errors.New("k8s: namespace is required")
 	}
@@ -903,7 +903,7 @@ func servicePortByCfg(cfg Cfg, svc *corev1.Service) (corev1.ServicePort, error) 
 		return pickServicePort(out, svc, strconv.Itoa(cfg.Port))
 	}
 
-	name := strings.TrimSpace(cfg.PortName)
+	name := cfg.PortName
 	if name == "" {
 		return corev1.ServicePort{}, errors.New("k8s: port is required")
 	}
@@ -973,8 +973,8 @@ func podPortByName(pod *corev1.Pod, cName, pName string) (int, error) {
 	if pod == nil {
 		return 0, errors.New("k8s: pod is required")
 	}
-	containerName := strings.TrimSpace(cName)
-	name := strings.TrimSpace(pName)
+	containerName := cName
+	name := pName
 	if name == "" {
 		return 0, errors.New("k8s: port is required")
 	}
@@ -1023,7 +1023,7 @@ func pickContainers(pod *corev1.Pod, cName string) ([]corev1.Container, error) {
 	if pod == nil {
 		return nil, errors.New("k8s: pod is required")
 	}
-	name := strings.TrimSpace(cName)
+	name := cName
 	if name == "" {
 		return pod.Spec.Containers, nil
 	}
@@ -1081,14 +1081,13 @@ func shouldFallback(err error) bool {
 }
 
 func bindAddrs(raw string) []string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
+	if raw == "" {
 		return []string{defaultAddress}
 	}
 
 	// Accept comma/semicolon/whitespace lists to support programmatic use and
 	// future directive expansion without changing this layer.
-	parts := strings.FieldsFunc(trimmed, func(r rune) bool {
+	parts := strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == ';' || unicode.IsSpace(r)
 	})
 	if len(parts) == 0 {
@@ -1146,7 +1145,7 @@ func normalizeNetwork(raw string) (string, error) {
 }
 
 func cacheKey(cfg Cfg, load loadCfg) string {
-	ns := strings.TrimSpace(cfg.Namespace)
+	ns := cfg.Namespace
 
 	parts := []string{
 		cfg.Label,

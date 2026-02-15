@@ -556,6 +556,46 @@ func TestDialRejectsUnsupportedNetwork(t *testing.T) {
 	}
 }
 
+func TestDialNormalizesCfgBoundary(t *testing.T) {
+	m := NewManager()
+	var got Cfg
+	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+		got = cfg
+		return stubSession(cfg, "127.0.0.1:18080"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	cfg := Cfg{
+		Namespace: " default ",
+		Pod:       " api ",
+		Port:      8080,
+		Container: " app ",
+		Address:   " 127.0.0.1 ",
+	}
+	conn, err := m.DialContext(context.Background(), cfg, " tcp ", "")
+	if err != nil {
+		t.Fatalf("dial err: %v", err)
+	}
+	_ = conn.Close()
+
+	if got.Namespace != "default" {
+		t.Fatalf("expected normalized namespace, got %q", got.Namespace)
+	}
+	if got.Pod != "api" {
+		t.Fatalf("expected normalized pod, got %q", got.Pod)
+	}
+	if got.Container != "app" {
+		t.Fatalf("expected normalized container, got %q", got.Container)
+	}
+	if got.Address != "127.0.0.1" {
+		t.Fatalf("expected normalized address, got %q", got.Address)
+	}
+}
+
 func TestDialRejectsOutOfRangePort(t *testing.T) {
 	m := NewManager()
 	cfg := Cfg{Namespace: "default", Pod: "api", Port: 70000}

@@ -74,6 +74,42 @@ func TestNormalizeProfileValues(t *testing.T) {
 	}
 }
 
+func TestNormalizeProfileTrimsWhitespace(t *testing.T) {
+	t.Run("target and numeric port", func(t *testing.T) {
+		cfg, err := NormalizeProfile(restfile.K8sProfile{
+			Namespace: " default ",
+			Target:    "pod:api",
+			Pod:       " api ",
+			PortStr:   " 8080 ",
+		})
+		if err != nil {
+			t.Fatalf("normalize err: %v", err)
+		}
+		if cfg.Namespace != "default" {
+			t.Fatalf("expected default namespace, got %q", cfg.Namespace)
+		}
+		if cfg.TargetKind != targetKindPod || cfg.TargetName != "api" || cfg.Pod != "api" {
+			t.Fatalf("unexpected target %s/%s (%q)", cfg.TargetKind, cfg.TargetName, cfg.Pod)
+		}
+		if cfg.Port != 8080 || cfg.PortName != "" || cfg.PortRaw != "8080" {
+			t.Fatalf("unexpected port parse: %d name=%q raw=%q", cfg.Port, cfg.PortName, cfg.PortRaw)
+		}
+	})
+
+	t.Run("named port", func(t *testing.T) {
+		cfg, err := NormalizeProfile(restfile.K8sProfile{
+			Pod:     "api",
+			PortStr: " http ",
+		})
+		if err != nil {
+			t.Fatalf("normalize err: %v", err)
+		}
+		if cfg.Port != 0 || cfg.PortName != "http" || cfg.PortRaw != "http" {
+			t.Fatalf("unexpected named port parse: %d name=%q raw=%q", cfg.Port, cfg.PortName, cfg.PortRaw)
+		}
+	})
+}
+
 func TestNormalizeProfileExpandsKubeconfigPath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
