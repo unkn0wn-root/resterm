@@ -51,7 +51,7 @@ jobs:
           COMMIT="${GITHUB_SHA::7}"
           DATE="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 
-          LDFLAGS="-X 'main.version=${VERSION}' -X 'main.commit=${COMMIT}' -X 'main.date=${DATE}'"
+          LDFLAGS="-s -w -X 'main.version=${VERSION}' -X 'main.commit=${COMMIT}' -X 'main.date=${DATE}'"
 
           case "$GOOS" in
             darwin) goos_label="Darwin" ;;
@@ -70,7 +70,7 @@ jobs:
           fi
 
           echo "Building version $VERSION"
-          GOOS="$GOOS" GOARCH="$GOARCH" go build -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
+          GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
           sha256sum "$output" | awk '{print $1}' > "${output}.sha256"
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v1
