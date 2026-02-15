@@ -158,6 +158,9 @@ func (c *Client) Execute(
 	start := time.Now()
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
+		if effectiveOpts.K8s != nil {
+			err = k8s.AnnotateRequestError(err, start)
+		}
 		duration := time.Since(start)
 		if traceSess != nil {
 			traceSess.fail(err)
