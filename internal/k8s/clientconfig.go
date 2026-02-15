@@ -172,7 +172,14 @@ func normalizeAllowlist(raw []string) []string {
 	if len(out) == 0 {
 		return nil
 	}
-	slices.Sort(out)
+	slices.SortFunc(out, func(a, b string) int {
+		la := strings.ToLower(a)
+		lb := strings.ToLower(b)
+		if la == lb {
+			return strings.Compare(a, b)
+		}
+		return strings.Compare(la, lb)
+	})
 	return out
 }
 

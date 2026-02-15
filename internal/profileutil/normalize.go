@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -82,15 +83,54 @@ func ExpandPath(path, homeErr string) (string, error) {
 		return "", nil
 	}
 	if strings.HasPrefix(p, "~") {
-		home, err := os.UserHomeDir()
+		home, tail, err := resolveTildeHome(p)
 		if err != nil {
 			if strings.TrimSpace(homeErr) == "" {
 				homeErr = "cannot resolve home directory"
 			}
 			return "", errors.New(homeErr)
 		}
-		p = filepath.Join(home, strings.TrimPrefix(p, "~"))
+		if tail == "" {
+			p = home
+		} else {
+			p = filepath.Join(home, tail)
+		}
 	}
 	p = os.ExpandEnv(p)
 	return filepath.Clean(p), nil
+}
+
+func resolveTildeHome(path string) (home string, tail string, err error) {
+	if path == "~" {
+		home, err = os.UserHomeDir()
+		return home, "", err
+	}
+
+	rest := strings.TrimPrefix(path, "~")
+	if strings.HasPrefix(rest, "/") || strings.HasPrefix(rest, "\\") {
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return "", "", err
+		}
+		return home, strings.TrimLeft(rest, `/\`), nil
+	}
+
+	username := rest
+	if i := strings.IndexAny(rest, `/\`); i >= 0 {
+		username = rest[:i]
+		tail = strings.TrimLeft(rest[i:], `/\`)
+	}
+	if username == "" {
+		home, err = os.UserHomeDir()
+		if err != nil {
+			return "", "", err
+		}
+		return home, tail, nil
+	}
+
+	usr, err := user.Lookup(username)
+	if err != nil {
+		return "", "", err
+	}
+	return usr.HomeDir, tail, nil
 }

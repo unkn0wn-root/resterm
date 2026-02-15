@@ -194,8 +194,17 @@ func (c Cfg) target() (TargetKind, string) {
 		k = targetKindPod
 		n = strings.TrimSpace(c.Pod)
 	}
-	k = k8starget.ParseKind(string(k))
+	k = normalizeTargetKind(k)
 	return k, n
+}
+
+func normalizeTargetKind(k TargetKind) TargetKind {
+	switch k {
+	case targetKindPod, targetKindService, targetKindDeployment, targetKindStatefulSet:
+		return k
+	default:
+		return k8starget.ParseKind(string(k))
+	}
 }
 
 func (c Cfg) targetRef() string {

@@ -30,12 +30,18 @@ func ExpandValue(raw string, resolver *vars.Resolver) (string, error) {
 		if v, ok := os.LookupEnv(key); ok {
 			return v, nil
 		}
+		if v, ok := os.LookupEnv(strings.ToUpper(key)); ok {
+			return v, nil
+		}
 		if resolver != nil {
 			if v, ok := resolver.Resolve(key); ok {
 				return v, nil
 			}
+			if v, ok := resolver.Resolve(strings.ToUpper(key)); ok {
+				return v, nil
+			}
 		}
-		return "", nil
+		return "", fmt.Errorf("undefined env variable: %s", key)
 	}
 	if resolver == nil {
 		return r, nil

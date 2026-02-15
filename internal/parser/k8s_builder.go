@@ -11,9 +11,10 @@ import (
 )
 
 type k8sDirective struct {
-	scope   restfile.K8sScope
-	profile restfile.K8sProfile
-	spec    *restfile.K8sSpec
+	scope          restfile.K8sScope
+	profile        restfile.K8sProfile
+	spec           *restfile.K8sSpec
+	persistIgnored bool
 }
 
 func (b *documentBuilder) handleK8s(line int, rest string) {
@@ -32,6 +33,9 @@ func (b *documentBuilder) handleK8s(line int, rest string) {
 		if b.request.k8s != nil {
 			b.addError(line, "@k8s already defined for this request")
 			return
+		}
+		if res.persistIgnored {
+			b.addWarning(line, "@k8s request scope ignores persist")
 		}
 		b.request.k8s = res.spec
 		return
@@ -79,6 +83,7 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 
 	if scope == restfile.K8sScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking forwarders.
+		res.persistIgnored = prof.Persist.Set
 		prof.Persist = restfile.Opt[bool]{}
 	} else {
 		if strings.TrimSpace(prof.Namespace) == "" {
@@ -143,12 +148,14 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 		{kind: k8starget.StatefulSet, keys: []string{"statefulset", "sts"}},
 	}
 	for _, ta := range targetAliases {
-		v, ok := firstOpt(opts, ta.keys...)
-		if !ok {
-			continue
-		}
-		if err := setK8sTarget(prof, ta.kind, v); err != nil {
-			return err
+		for _, key := range ta.keys {
+			v := strings.TrimSpace(opts[key])
+			if v == "" {
+				continue
+			}
+			if err := setK8sTarget(prof, ta.kind, v); err != nil {
+				return err
+			}
 		}
 	}
 

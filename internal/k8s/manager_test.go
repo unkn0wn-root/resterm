@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -92,6 +93,75 @@ func TestDialPersistentCaches(t *testing.T) {
 	}
 }
 
+func TestDialPersistentCoalescesConcurrentReconnects(t *testing.T) {
+	m := NewManager()
+	starts := atomic.Int32{}
+	dials := atomic.Int32{}
+
+	startReady := make(chan struct{})
+	startRelease := make(chan struct{})
+
+	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+		if starts.Add(1) != 1 {
+			return nil, errors.New("unexpected extra session start")
+		}
+		close(startReady)
+		<-startRelease
+		return stubSession(cfg, "127.0.0.1:18080"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		dials.Add(1)
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+
+	const workers = 5
+	errCh := make(chan error, workers)
+	var wg sync.WaitGroup
+	wg.Add(workers)
+
+	for i := 0; i < workers; i++ {
+		go func() {
+			defer wg.Done()
+			conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
+			if err != nil {
+				errCh <- err
+				return
+			}
+			_ = conn.Close()
+		}()
+	}
+
+	select {
+	case <-startReady:
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for first start")
+	}
+
+	if starts.Load() != 1 {
+		t.Fatalf("expected exactly one in-flight start, got %d", starts.Load())
+	}
+	close(startRelease)
+
+	wg.Wait()
+	close(errCh)
+	for err := range errCh {
+		if err != nil {
+			t.Fatalf("unexpected concurrent dial error: %v", err)
+		}
+	}
+
+	if starts.Load() != 1 {
+		t.Fatalf("expected one shared start, got %d", starts.Load())
+	}
+	if dials.Load() != workers {
+		t.Fatalf("expected %d local dials, got %d", workers, dials.Load())
+	}
+}
+
 func TestDialPersistentReconnectsAfterSessionDone(t *testing.T) {
 	m := NewManager()
 	starts := atomic.Int32{}
@@ -171,7 +241,7 @@ func TestDialPersistentReconnectsAfterDialFailure(t *testing.T) {
 	}
 }
 
-func TestDialCachedKeepsReplacedEntryOnReconnectFailure(t *testing.T) {
+func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	m := NewManager()
 	t.Cleanup(func() { _ = m.Close() })
 
@@ -191,12 +261,18 @@ func TestDialCachedKeepsReplacedEntryOnReconnectFailure(t *testing.T) {
 	dialHit := make(chan struct{})
 	dialCont := make(chan struct{})
 	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
-		if address != oldSes.localAddr {
+		switch address {
+		case oldSes.localAddr:
+			close(dialHit)
+			<-dialCont
+			return nil, errBoom
+		case keepSes.localAddr:
+			c1, c2 := net.Pipe()
+			_ = c2.Close()
+			return c1, nil
+		default:
 			return nil, errors.New("unexpected dial address")
 		}
-		close(dialHit)
-		<-dialCont
-		return nil, errBoom
 	}
 
 	starts := atomic.Int32{}
@@ -205,10 +281,15 @@ func TestDialCachedKeepsReplacedEntryOnReconnectFailure(t *testing.T) {
 		return nil, errBoom
 	}
 
+	connCh := make(chan net.Conn, 1)
 	errCh := make(chan error, 1)
 	go func() {
-		_, err := m.DialContext(context.Background(), cfg, "tcp", "")
-		errCh <- err
+		conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
+		if err != nil {
+			errCh <- err
+			return
+		}
+		connCh <- conn
 	}()
 
 	select {
@@ -222,18 +303,24 @@ func TestDialCachedKeepsReplacedEntryOnReconnectFailure(t *testing.T) {
 	m.mu.Unlock()
 	close(dialCont)
 
-	if err := <-errCh; !errors.Is(err, errBoom) {
-		t.Fatalf("expected reconnect failure, got %v", err)
+	select {
+	case err := <-errCh:
+		t.Fatalf("expected dial success via replacement, got %v", err)
+	case conn := <-connCh:
+		_ = conn.Close()
+	case <-time.After(time.Second):
+		t.Fatalf("timed out waiting for replacement dial")
 	}
-	if starts.Load() != 1 {
-		t.Fatalf("expected one reconnect start attempt, got %d", starts.Load())
+
+	if starts.Load() != 0 {
+		t.Fatalf("expected no reconnect attempt, got %d", starts.Load())
 	}
 
 	m.mu.Lock()
 	cur := m.cache[key]
 	m.mu.Unlock()
 	if cur == nil || cur.ses != keepSes {
-		t.Fatalf("expected replaced cached session to be preserved")
+		t.Fatalf("expected replacement cached session to be preserved")
 	}
 }
 
@@ -321,11 +408,11 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 		t.Fatalf("timed out waiting for dial completion")
 	}
 
-	if starts.Load() != 1 {
-		t.Fatalf("expected one reconnect start attempt, got %d", starts.Load())
+	if starts.Load() != 0 {
+		t.Fatalf("expected no reconnect attempt, got %d", starts.Load())
 	}
-	if reconnectClosed.Load() != 1 {
-		t.Fatalf("expected reconnect session to be closed when replacement exists")
+	if reconnectClosed.Load() != 0 {
+		t.Fatalf("expected no reconnect session lifecycle when replacement exists")
 	}
 
 	m.mu.Lock()

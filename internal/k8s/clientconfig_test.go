@@ -98,6 +98,19 @@ func TestApplyExecPolicy(t *testing.T) {
 	}
 }
 
+func TestNormalizeAllowlistDedupAndSortCaseInsensitive(t *testing.T) {
+	got := normalizeAllowlist([]string{"kubelogin", "AWS", "aws", "Az", "az"})
+	want := []string{"AWS", "Az", "kubelogin"}
+	if len(got) != len(want) {
+		t.Fatalf("unexpected allowlist length: got %v want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("unexpected allowlist order: got %v want %v", got, want)
+		}
+	}
+}
+
 func TestRawConfigAppliesContextOverrideAndExecPolicy(t *testing.T) {
 	cfgData := clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{

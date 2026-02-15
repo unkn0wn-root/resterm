@@ -629,6 +629,9 @@ GET http://example.com
 	if req.SSH.Inline.Persist.Set {
 		t.Fatalf("request persist should be ignored")
 	}
+	if !hasParseMessage(doc.Warnings, "@ssh request scope ignores persist") {
+		t.Fatalf("expected warning for ignored ssh persist, got %v", doc.Warnings)
+	}
 }
 
 func TestParseSSHWithGRPCRequest(t *testing.T) {
@@ -852,6 +855,17 @@ GET http://example.com
 	}
 }
 
+func TestParseK8sRejectsPartialTemplatePort(t *testing.T) {
+	src := `### bad
+# @k8s pod=api-server port={{port_name
+GET http://example.com
+`
+	doc := Parse("k8s_bad_template_port.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "invalid @k8s port") {
+		t.Fatalf("expected partial-template port parse error, got %v", doc.Errors)
+	}
+}
+
 func TestParseK8sRequestIgnoresPersist(t *testing.T) {
 	src := `### req
 # @k8s pod=api-server port=8080 persist
@@ -867,6 +881,9 @@ GET http://example.com
 	}
 	if req.K8s.Inline.Persist.Set {
 		t.Fatalf("request persist should be ignored")
+	}
+	if !hasParseMessage(doc.Warnings, "@k8s request scope ignores persist") {
+		t.Fatalf("expected warning for ignored k8s persist, got %v", doc.Warnings)
 	}
 }
 
@@ -912,6 +929,17 @@ GET http://example.com
 	doc := Parse("k8s_target_conflict.http", []byte(src))
 	if !hasParseMessage(doc.Errors, "multiple @k8s targets specified") {
 		t.Fatalf("expected multiple target error, got %v", doc.Errors)
+	}
+}
+
+func TestParseK8sRejectsConflictingTargetAliases(t *testing.T) {
+	src := `### bad
+# @k8s service=api svc=api-canary port=8080
+GET http://example.com
+`
+	doc := Parse("k8s_target_alias_conflict.http", []byte(src))
+	if !hasParseMessage(doc.Errors, "multiple @k8s targets specified") {
+		t.Fatalf("expected alias conflict error, got %v", doc.Errors)
 	}
 }
 

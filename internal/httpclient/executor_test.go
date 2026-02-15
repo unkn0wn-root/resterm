@@ -401,6 +401,38 @@ func TestBuildHTTPClientRejectsSSHAndK8s(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPClientRejectsProxyWithTunnel(t *testing.T) {
+	client := NewClient(nil)
+
+	t.Run("ssh", func(t *testing.T) {
+		opts := Options{
+			ProxyURL: "http://localhost:8080",
+			SSH: &ssh.Plan{
+				Manager: &ssh.Manager{},
+				Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+			},
+		}
+		_, err := client.buildHTTPClient(opts)
+		if err == nil || !strings.Contains(err.Error(), "proxy cannot be combined") {
+			t.Fatalf("expected proxy+tunnel validation error, got %v", err)
+		}
+	})
+
+	t.Run("k8s", func(t *testing.T) {
+		opts := Options{
+			ProxyURL: "http://localhost:8080",
+			K8s: &k8s.Plan{
+				Manager: &k8s.Manager{},
+				Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+			},
+		}
+		_, err := client.buildHTTPClient(opts)
+		if err == nil || !strings.Contains(err.Error(), "proxy cannot be combined") {
+			t.Fatalf("expected proxy+tunnel validation error, got %v", err)
+		}
+	})
+}
+
 func TestLoadRootCAsMergesSystemAndCustom(t *testing.T) {
 	tmpDir := t.TempDir()
 	caPath := filepath.Join(tmpDir, "ca.pem")

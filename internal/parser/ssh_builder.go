@@ -10,9 +10,10 @@ import (
 )
 
 type sshDirective struct {
-	scope   restfile.SSHScope
-	profile restfile.SSHProfile
-	spec    *restfile.SSHSpec
+	scope          restfile.SSHScope
+	profile        restfile.SSHProfile
+	spec           *restfile.SSHSpec
+	persistIgnored bool
 }
 
 func (b *documentBuilder) handleSSH(line int, rest string) {
@@ -31,6 +32,9 @@ func (b *documentBuilder) handleSSH(line int, rest string) {
 		if b.request.ssh != nil {
 			b.addError(line, "@ssh already defined for this request")
 			return
+		}
+		if res.persistIgnored {
+			b.addWarning(line, "@ssh request scope ignores persist")
 		}
 		b.request.ssh = res.spec
 		return
@@ -75,6 +79,7 @@ func parseSSHDirective(rest string) (sshDirective, error) {
 	applySSHOptions(&prof, opts)
 	if scope == restfile.SSHScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking tunnels.
+		res.persistIgnored = prof.Persist.Set
 		prof.Persist = restfile.Opt[bool]{}
 	}
 

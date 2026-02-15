@@ -31,9 +31,10 @@ import (
 )
 
 const (
-	defaultDialRetryDelay = 150 * time.Millisecond
-	closeWaitWindow       = 3 * time.Second
-	podPollInterval       = 300 * time.Millisecond
+	defaultDialRetryDelay   = 150 * time.Millisecond
+	defaultLocalDialTimeout = 10 * time.Second
+	closeWaitWindow         = 3 * time.Second
+	podPollInterval         = 300 * time.Millisecond
 )
 
 type startFn func(context.Context, Cfg, loadCfg) (*session, error)
@@ -42,11 +43,14 @@ type dialFn func(context.Context, string, string) (net.Conn, error)
 type Manager struct {
 	mu    sync.Mutex
 	cache map[string]*entry
-	ttl   time.Duration
-	now   func() time.Time
-	opt   LoadOpt
-	start startFn
-	dial  dialFn
+	// In-flight session starts keyed by cache key. Waiters block on the channel
+	// to avoid duplicate reconnect work under contention.
+	inflight map[string]chan struct{}
+	ttl      time.Duration
+	now      func() time.Time
+	opt      LoadOpt
+	start    startFn
+	dial     dialFn
 	// Test-tunable retry delay for reconnect attempts.
 	retryDelay time.Duration
 }
@@ -81,9 +85,10 @@ type targetPod struct {
 }
 
 func NewManager() *Manager {
-	dialer := &net.Dialer{}
+	dialer := &net.Dialer{Timeout: defaultLocalDialTimeout}
 	return &Manager{
 		cache:      make(map[string]*entry),
+		inflight:   make(map[string]chan struct{}),
 		ttl:        defaultTTL,
 		now:        time.Now,
 		start:      startSession,
@@ -115,6 +120,10 @@ func (m *Manager) Close() error {
 			errs = append(errs, err)
 		}
 		delete(m.cache, key)
+	}
+	for key, ch := range m.inflight {
+		close(ch)
+		delete(m.inflight, key)
 	}
 	return errors.Join(errs...)
 }
@@ -166,8 +175,7 @@ func (m *Manager) dialOnce(
 
 	conn, err := m.dialSession(ctx, ses, network)
 	if err != nil {
-		_ = ses.close()
-		return nil, err
+		return nil, joinCleanupErr(err, ses.close())
 	}
 	return connutil.WrapConn(conn, ses.close), nil
 }
@@ -180,53 +188,119 @@ func (m *Manager) dialCached(
 ) (net.Conn, error) {
 	key := cacheKey(cfg, load)
 
-	m.mu.Lock()
-	m.purgeLocked()
-	ent := m.cache[key]
-	if ent != nil {
-		ent.lastUsed = m.now()
-		ses := ent.ses
-		m.mu.Unlock()
+	for {
+		m.mu.Lock()
+		m.purgeLocked()
+		ent := m.cache[key]
+		if ent != nil {
+			ent.lastUsed = m.now()
+			ses := ent.ses
+			m.mu.Unlock()
 
-		if ses != nil && ses.alive() {
-			conn, err := m.dialSession(ctx, ses, network)
-			if err == nil {
-				return conn, nil
+			if ses != nil && ses.alive() {
+				conn, err := m.dialSession(ctx, ses, network)
+				if err == nil {
+					return conn, nil
+				}
+			}
+
+			m.mu.Lock()
+			if cur := m.cache[key]; cur == ent {
+				_ = ent.ses.close()
+				delete(m.cache, key)
+			} else {
+				_ = ent.ses.close()
+			}
+			m.mu.Unlock()
+			continue
+		}
+
+		waitCh, waiting := m.inflight[key]
+		if waiting {
+			m.mu.Unlock()
+			select {
+			case <-waitCh:
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
 			}
 		}
 
+		token := make(chan struct{})
+		m.inflight[key] = token
+		m.mu.Unlock()
+
+		ses, err := m.connect(ctx, cfg, load)
+		if err != nil {
+			m.releaseInflight(key, token)
+			return nil, err
+		}
+
 		m.mu.Lock()
-		if cur := m.cache[key]; cur == ent {
-			_ = ent.ses.close()
+		if cur := m.cache[key]; cur != nil && cur.ses != nil && cur.ses.alive() {
+			m.mu.Unlock()
+			_ = ses.close()
+			m.releaseInflight(key, token)
+
+			conn, dialErr := m.dialSession(ctx, cur.ses, network)
+			if dialErr == nil {
+				return conn, nil
+			}
+
+			m.mu.Lock()
+			if latest := m.cache[key]; latest == cur {
+				_ = cur.ses.close()
+				delete(m.cache, key)
+			} else {
+				_ = cur.ses.close()
+			}
+			m.mu.Unlock()
+			continue
+		}
+
+		m.cache[key] = &entry{cfg: cfg, ses: ses, lastUsed: m.now()}
+		m.mu.Unlock()
+		m.releaseInflight(key, token)
+
+		conn, err := m.dialSession(ctx, ses, network)
+		if err == nil {
+			return conn, nil
+		}
+
+		m.mu.Lock()
+		if cur := m.cache[key]; cur != nil && cur.ses == ses {
+			closeErr := ses.close()
 			delete(m.cache, key)
+			m.mu.Unlock()
+			return nil, joinCleanupErr(err, closeErr)
 		} else {
-			_ = ent.ses.close()
+			closeErr := ses.close()
+			m.mu.Unlock()
+			return nil, joinCleanupErr(err, closeErr)
 		}
 	}
-	m.mu.Unlock()
+}
 
-	ses, err := m.connect(ctx, cfg, load)
-	if err != nil {
-		return nil, err
+func (m *Manager) releaseInflight(key string, token chan struct{}) {
+	if m == nil || token == nil {
+		return
 	}
-
-	conn, err := m.dialSession(ctx, ses, network)
-	if err != nil {
-		_ = ses.close()
-		return nil, err
-	}
-
 	m.mu.Lock()
-	if cur := m.cache[key]; cur != nil && cur.ses != nil && cur.ses.alive() {
-		m.mu.Unlock()
-		_ = conn.Close()
-		_ = ses.close()
-		return m.dialSession(ctx, cur.ses, network)
+	defer m.mu.Unlock()
+	if cur, ok := m.inflight[key]; ok && cur == token {
+		delete(m.inflight, key)
+		close(token)
 	}
-	m.cache[key] = &entry{cfg: cfg, ses: ses, lastUsed: m.now()}
-	m.mu.Unlock()
+}
 
-	return conn, nil
+func joinCleanupErr(baseErr error, cleanupErr error) error {
+	if cleanupErr == nil {
+		return baseErr
+	}
+	if baseErr == nil {
+		return cleanupErr
+	}
+	return errors.Join(baseErr, cleanupErr)
 }
 
 func (m *Manager) connect(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
@@ -437,8 +511,7 @@ func startSession(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) 
 	select {
 	case <-readyCh:
 	case <-ctx.Done():
-		_ = ses.close()
-		return nil, ctx.Err()
+		return nil, joinCleanupErr(ctx.Err(), ses.close())
 	case <-ses.doneCh:
 		if err := ses.errValue(); err != nil {
 			return nil, err
@@ -448,12 +521,12 @@ func startSession(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) 
 
 	ports, err := pf.GetPorts()
 	if err != nil {
-		_ = ses.close()
-		return nil, fmt.Errorf("k8s: resolve forwarded ports: %w", err)
+		baseErr := fmt.Errorf("k8s: resolve forwarded ports: %w", err)
+		return nil, joinCleanupErr(baseErr, ses.close())
 	}
 	if len(ports) == 0 {
-		_ = ses.close()
-		return nil, errors.New("k8s: port-forward did not expose local ports")
+		baseErr := errors.New("k8s: port-forward did not expose local ports")
+		return nil, joinCleanupErr(baseErr, ses.close())
 	}
 
 	host := dialHost(addresses)

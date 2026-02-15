@@ -72,7 +72,7 @@ func IsValidPortName(raw string) bool {
 		return false
 	}
 	if strings.Contains(val, "{{") || strings.Contains(val, "}}") {
-		return true
+		return hasBalancedTemplateDelims(val)
 	}
 
 	hasAlnum := false
@@ -89,4 +89,24 @@ func IsValidPortName(raw string) bool {
 		}
 	}
 	return hasAlnum
+}
+
+func hasBalancedTemplateDelims(val string) bool {
+	depth := 0
+	for i := 0; i < len(val); {
+		switch {
+		case strings.HasPrefix(val[i:], "{{"):
+			depth++
+			i += 2
+		case strings.HasPrefix(val[i:], "}}"):
+			if depth == 0 {
+				return false
+			}
+			depth--
+			i += 2
+		default:
+			i++
+		}
+	}
+	return depth == 0
 }

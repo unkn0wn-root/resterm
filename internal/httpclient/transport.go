@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
@@ -67,6 +68,12 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	k8sOn := opts.K8s != nil && opts.K8s.Active()
 	if tunnel.HasConflict(sshOn, k8sOn) {
 		return nil, errdef.New(errdef.CodeHTTP, "ssh and k8s transports cannot be combined")
+	}
+	if strings.TrimSpace(opts.ProxyURL) != "" && (sshOn || k8sOn) {
+		return nil, errdef.New(
+			errdef.CodeHTTP,
+			"proxy cannot be combined with ssh or k8s tunneling",
+		)
 	}
 
 	applyTunnel := func(kind string, dial tunnel.DialContextFunc) error {

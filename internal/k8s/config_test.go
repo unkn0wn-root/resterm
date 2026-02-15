@@ -137,6 +137,12 @@ func TestNormalizeProfileRejectsInvalid(t *testing.T) {
 			t.Fatalf("expected bad named port error")
 		}
 	})
+	t.Run("bad partial template port token", func(t *testing.T) {
+		_, err := NormalizeProfile(restfile.K8sProfile{Pod: "api", PortStr: "{{port_name"})
+		if err == nil {
+			t.Fatalf("expected bad partial template port error")
+		}
+	})
 	t.Run("bad local port", func(t *testing.T) {
 		_, err := NormalizeProfile(
 			restfile.K8sProfile{Pod: "api", PortStr: "8080", LocalPortStr: "0"},
