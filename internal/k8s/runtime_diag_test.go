@@ -1,8 +1,10 @@
 package k8s
 
 import (
+	"context"
 	"errors"
 	"io"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -82,6 +84,47 @@ func TestAnnotateRequestErrorFromRuntimeHandleError(t *testing.T) {
 		t.Fatalf("expected runtime.HandleError capture, got %q", err.Error())
 	}
 }
+
+func TestBuildRuntimeDiagErrorHandlersFallbackDropsFirst(t *testing.T) {
+	got := buildRuntimeDiagErrorHandlers(
+		[]kruntime.ErrorHandler{
+			testErrHandlerA,
+			testErrHandlerB,
+			testErrHandlerC,
+		},
+	)
+	want := []kruntime.ErrorHandler{
+		captureRuntimeErr,
+		testErrHandlerB,
+		testErrHandlerC,
+	}
+	assertHandlerPtrs(t, got, want)
+}
+
+func assertHandlerPtrs(t *testing.T, got, want []kruntime.ErrorHandler) {
+	t.Helper()
+	if len(got) != len(want) {
+		t.Fatalf("unexpected handler count: got=%d want=%d", len(got), len(want))
+	}
+	for i := range want {
+		gptr := handlerPtr(got[i])
+		wptr := handlerPtr(want[i])
+		if gptr != wptr {
+			t.Fatalf("handler[%d] mismatch: got=%#x want=%#x", i, gptr, wptr)
+		}
+	}
+}
+
+func handlerPtr(h kruntime.ErrorHandler) uintptr {
+	if h == nil {
+		return 0
+	}
+	return reflect.ValueOf(h).Pointer()
+}
+
+func testErrHandlerA(_ context.Context, _ error, _ string, _ ...interface{}) {}
+func testErrHandlerB(_ context.Context, _ error, _ string, _ ...interface{}) {}
+func testErrHandlerC(_ context.Context, _ error, _ string, _ ...interface{}) {}
 
 func resetRuntimeDiagForTest() {
 	rtDiag.mu.Lock()

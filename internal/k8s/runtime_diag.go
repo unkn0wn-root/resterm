@@ -66,9 +66,6 @@ func newRing[T any](capacity int) ring[T] {
 }
 
 func (r *ring[T]) push(v T) {
-	if len(r.vals) == 0 {
-		return
-	}
 	r.vals[r.next] = v
 	r.next = (r.next + 1) % len(r.vals)
 	if r.n < len(r.vals) {
@@ -77,7 +74,7 @@ func (r *ring[T]) push(v T) {
 }
 
 func (r *ring[T]) eachNewest(fn func(T) bool) {
-	if len(r.vals) == 0 || r.n == 0 {
+	if r.n == 0 {
 		return
 	}
 	for i := 0; i < r.n; i++ {
@@ -93,16 +90,19 @@ func (r *ring[T]) eachNewest(fn func(T) bool) {
 
 func installRuntimeDiagCapture() {
 	diagInstallOnce.Do(func() {
-		prev := append([]kruntime.ErrorHandler(nil), kruntime.ErrorHandlers...)
-		hs := make([]kruntime.ErrorHandler, 0, len(prev))
-		hs = append(hs, captureRuntimeErr)
-		if len(prev) > 1 {
-			// Keep any non-logging follow-up handlers (like throttling) and drop
-			// the default stderr logger to protect the TUI frame.
-			hs = append(hs, prev[1:]...)
-		}
-		kruntime.ErrorHandlers = hs
+		kruntime.ErrorHandlers = buildRuntimeDiagErrorHandlers(kruntime.ErrorHandlers)
 	})
+}
+
+func buildRuntimeDiagErrorHandlers(prev []kruntime.ErrorHandler) []kruntime.ErrorHandler {
+	hs := make([]kruntime.ErrorHandler, 0, len(prev)+1)
+	hs = append(hs, captureRuntimeErr)
+	// Keep any non-logging follow-up handlers (like throttling) and drop the
+	// default stderr logger to protect the TUI frame.
+	if len(prev) > 1 {
+		hs = append(hs, prev[1:]...)
+	}
+	return hs
 }
 
 func captureRuntimeErr(_ context.Context, err error, _ string, _ ...interface{}) {
@@ -156,8 +156,8 @@ func summarizePFDetail(raw string) string {
 	v = podPattern.ReplaceAllString(v, "to pod ")
 	v = nsPattern.ReplaceAllString(v, "inside pod network namespace")
 
-	if i := strings.Index(v, "failed to connect to "); i >= 0 {
-		v = v[i:]
+	if _, after, ok := strings.Cut(v, "failed to connect to "); ok {
+		v = "failed to connect to " + after
 	}
 	const max = 220
 	if len(v) > max {
