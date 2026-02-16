@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.2](https://github.com/unkn0wn-root/resterm/compare/v0.23.1...v0.23.2) (2026-02-16)
+
+
+### Features
+
+* add $shared env vars ([87bceae](https://github.com/unkn0wn-root/resterm/commit/87bceae396e92f0477c0bdbbf52a8a7958dca65b))
+* add resterm import/export/pack/unpack collections ([6c87d67](https://github.com/unkn0wn-root/resterm/commit/6c87d6735217631c12226a1d427a7e0c36523dc3))
+* prevent $shared from being used as a concrete env ([0006fcb](https://github.com/unkn0wn-root/resterm/commit/0006fcbf0a267b7557681e78393cb98f7676c32c))
+
 ### [0.23.1](https://github.com/unkn0wn-root/resterm/compare/v0.22.0...v0.23.1) (2026-02-15)
 
 
