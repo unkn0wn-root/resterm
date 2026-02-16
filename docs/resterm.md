@@ -337,6 +337,28 @@ Example environment (`_examples/resterm.env.json`):
 
 Switch environments with `Ctrl+E`. If multiple environments exist, Resterm defaults to `dev`, `default`, or `local` when available.
 
+#### Shared variables (`$shared`)
+
+Use the reserved `$shared` key to define variables that apply to **all** environments. This avoids duplicating common values (auth credentials, token URLs, etc.) across every environment. Environment-specific values override `$shared` when names collide.
+
+```json
+{
+  "$shared": {
+    "api": { "version": "v2" },
+    "auth": { "clientId": "demo-client" }
+  },
+  "dev": {
+    "base": { "url": "https://dev.example.com" }
+  },
+  "prod": {
+    "base": { "url": "https://prod.example.com" },
+    "auth": { "clientId": "prod-client" }
+  }
+}
+```
+
+In this example `dev` inherits `auth.clientId=demo-client` from `$shared`, while `prod` overrides it with `prod-client`. Both environments receive `api.version=v2`. The `$shared` key itself never appears in the environment selector.
+
 #### Dotenv files via `--env-file`
 
 Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv file when you only need a single workspace:

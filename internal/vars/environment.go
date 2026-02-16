@@ -12,6 +12,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
 
+// SharedEnvKey is the reserved environment name whose variables are merged
+// as defaults into every other environment. Environment-specific values win.
+const SharedEnvKey = "$shared"
+
 type EnvironmentSet map[string]map[string]string
 
 func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
@@ -51,7 +55,29 @@ func loadJSONEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 	default:
 		return nil, errdef.New(errdef.CodeParse, "unsupported env file format: %T", raw)
 	}
+	applyShared(envs)
 	return envs, nil
+}
+
+// applyShared merges the $shared environment's values as defaults into every
+// other environment (environment-specific values take precedence), then removes
+// $shared from the set so it never appears as a selectable environment.
+func applyShared(envs EnvironmentSet) {
+	shared, ok := envs[SharedEnvKey]
+	if !ok {
+		return
+	}
+	for name, env := range envs {
+		if name == SharedEnvKey {
+			continue
+		}
+		for k, v := range shared {
+			if _, exists := env[k]; !exists {
+				env[k] = v
+			}
+		}
+	}
+	delete(envs, SharedEnvKey)
 }
 
 func flattenEnv(value interface{}) map[string]string {
