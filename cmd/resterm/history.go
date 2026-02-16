@@ -64,7 +64,7 @@ func runHistory(args []string) error {
 }
 
 func runHistoryExport(args []string) error {
-	fs := newHistoryFlagSet("history export")
+	fs := newSubcommandFlagSet("history export")
 	var out string
 	fs.StringVar(&out, "out", "", "Output JSON file path")
 	if err := fs.Parse(args); err != nil {
@@ -98,7 +98,7 @@ func runHistoryExport(args []string) error {
 }
 
 func runHistoryImport(args []string) error {
-	fs := newHistoryFlagSet("history import")
+	fs := newSubcommandFlagSet("history import")
 	var in string
 	fs.StringVar(&in, "in", "", "Input JSON file path")
 	if err := fs.Parse(args); err != nil {
@@ -132,7 +132,7 @@ func runHistoryImport(args []string) error {
 }
 
 func runHistoryBackup(args []string) error {
-	fs := newHistoryFlagSet("history backup")
+	fs := newSubcommandFlagSet("history backup")
 	var out string
 	fs.StringVar(&out, "out", "", "Output SQLite backup file path")
 	if err := fs.Parse(args); err != nil {
@@ -165,7 +165,7 @@ func runHistoryBackup(args []string) error {
 }
 
 func runHistoryStats(args []string) error {
-	fs := newHistoryFlagSet("history stats")
+	fs := newSubcommandFlagSet("history stats")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -206,7 +206,7 @@ func runHistoryStats(args []string) error {
 }
 
 func runHistoryCompact(args []string) error {
-	fs := newHistoryFlagSet("history compact")
+	fs := newSubcommandFlagSet("history compact")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -249,7 +249,7 @@ func runHistoryCompact(args []string) error {
 }
 
 func runHistoryCheck(args []string) error {
-	fs := newHistoryFlagSet("history check")
+	fs := newSubcommandFlagSet("history check")
 	var full bool
 	fs.BoolVar(&full, "full", false, "Use full integrity check")
 	if err := fs.Parse(args); err != nil {
@@ -305,34 +305,6 @@ func openHistoryStore(migrate bool) (history.MaintenanceStore, error) {
 		}
 	}
 	return s, nil
-}
-
-func newHistoryFlagSet(name string) *flag.FlagSet {
-	fs := flag.NewFlagSet(name, flag.ContinueOnError)
-	// Errors are formatted manually so each subcommand can keep a clear
-	// and consistent prefix in user-facing output.
-	fs.SetOutput(io.Discard)
-	// Help output still goes to stderr so `-h` behaves like a normal CLI.
-	fs.Usage = func() {
-		printHistoryFlagSetUsage(os.Stderr, fs)
-	}
-	return fs
-}
-
-func printHistoryFlagSetUsage(w io.Writer, fs *flag.FlagSet) {
-	if _, err := fmt.Fprintf(w, "Usage: resterm %s [flags]\n", fs.Name()); err != nil {
-		return
-	}
-	if _, err := fmt.Fprintln(w, ""); err != nil {
-		return
-	}
-	if _, err := fmt.Fprintln(w, "Flags:"); err != nil {
-		return
-	}
-	out := fs.Output()
-	fs.SetOutput(w)
-	fs.PrintDefaults()
-	fs.SetOutput(out)
 }
 
 func historyUsageText() string {

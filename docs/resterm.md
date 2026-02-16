@@ -18,6 +18,7 @@
 - [SSH Tunnels](#ssh-tunnels)
 - [Kubernetes Port-Forwards](#kubernetes-port-forwards)
 - [HTTP Transport & Settings](#http-transport--settings)
+- [Collection Sharing](#collection-sharing)
 - [Response History & Diffing](#response-history--diffing)
 - [CLI Reference](#cli-reference)
 - [Configuration](#configuration)
@@ -1251,6 +1252,96 @@ Body helpers:
 
 ---
 
+## Collection Sharing
+
+Resterm can export a portable, self-contained collection bundle that you can commit to Git and import anywhere else. This is useful when you want a reliable "same inputs, same requests" handoff between developers, CI jobs, or support environments.
+
+A bundle export contains your request files plus the files those requests depend on, such as RTS modules, script includes, payload files, GraphQL query/variables files, gRPC descriptor/message files, and WebSocket `send-file` payloads. Resterm writes a `manifest.json` file with per-file checksums, and import verifies those checksums before writing to disk.
+
+### What happens to environment files
+
+Resterm treats environment sharing as an explicit safe template flow:
+
+1. If `resterm.env.example.json` exists in the workspace, Resterm exports it exactly as written.
+2. If only `resterm.env.json` or `rest-client.env.json` exists, Resterm generates `resterm.env.example.json` and replaces every value with `REPLACE_ME`.
+3. If no environment file exists, Resterm still writes an empty `resterm.env.example.json` so the bundle shape remains predictable.
+
+### Export a collection bundle
+
+The following command exports recursively and names the bundle:
+
+```bash
+resterm collection export \
+  --workspace ./my-api \
+  --out ./shared/my-api-bundle \
+  --recursive \
+  --name "my-api-v1"
+```
+
+A typical bundle directory looks like this:
+
+```text
+shared/my-api-bundle/
+  manifest.json
+  requests.http
+  rts/helpers.rts
+  payloads/create-user.json
+  resterm.env.example.json
+```
+
+You can commit this directory directly to Git and open it in code review like any other project files.
+
+### Import a collection bundle
+
+You can import that bundle into a local workspace with:
+
+```bash
+resterm collection import \
+  --in ./shared/my-api-bundle \
+  --workspace ./my-local-api
+```
+
+If you want to inspect the plan before writing, run:
+
+```bash
+resterm collection import \
+  --in ./shared/my-api-bundle \
+  --workspace ./my-local-api \
+  --dry-run
+```
+
+If destination files already exist and replacement is intentional, you can add `--force`.
+
+### Pack a bundle into a zip archive
+
+If you want to hand off a single file instead of a directory, you can pack an existing bundle:
+
+```bash
+resterm collection pack \
+  --in ./shared/my-api-bundle \
+  --out ./shared/my-api-bundle.zip
+```
+
+This command reads and validates the bundle manifest and payload checksums before writing the archive, so you do not package a partially corrupted bundle by accident.
+
+### Unpack a zip archive back into a bundle directory
+
+You can unpack the archive before importing it:
+
+```bash
+resterm collection unpack \
+  --in ./shared/my-api-bundle.zip \
+  --out ./shared/my-api-bundle
+```
+
+Unpack validates archive paths, rejects unsafe entries (for example traversal paths and symlinks), validates checksums against `manifest.json`, and only then moves the unpacked bundle into place.
+
+### Safety and validation behavior
+
+Export, import, pack, and unpack all enforce path safety and integrity checks. Resterm rejects references that escape the workspace, rejects malicious traversal paths in manifests and archives, rejects symlink escapes, and fails operations if size or checksum validation does not match the manifest.
+
+---
+
 ## Response History & Diffing
 
 - Every successful request produces a history entry with request text, method, status, duration, and a body snippet (unless `@no-log` is set). Values injected from `-secret` captures and allowlisted sensitive headers (Authorization, Proxy-Authorization, `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, `X-Amz-Security-Token`, etc.) are masked automatically unless you opt-in with `@log-sensitive-headers`.
@@ -1268,6 +1359,10 @@ Run `resterm --help` for the latest list.
 ### Subcommands
 
 **`resterm init [dir]`** - Bootstrap a new project with starter files. See [Initializing a Project](#initializing-a-project) for details.
+**`resterm collection export --workspace <dir> --out <dir> [--name <name>] [--recursive] [--force]`** - Export a Git-friendly collection bundle directory.
+**`resterm collection import --in <dir> --workspace <dir> [--force] [--dry-run]`** - Import a collection bundle into a workspace.
+**`resterm collection pack --in <dir> --out <file.zip> [--force]`** - Pack a bundle directory into a zip archive.
+**`resterm collection unpack --in <file.zip> --out <dir> [--force]`** - Unpack and validate a bundle archive into a directory.
 **`resterm history export --out <path>`** - Export persisted history to JSON.
 **`resterm history import --in <path>`** - Import history entries from a JSON export.
 **`resterm history backup --out <path>`** - Create a SQLite-consistent backup copy of `history.db`.
@@ -1297,6 +1392,54 @@ Run `resterm --help` for the latest list.
 | `--openapi-resolve-refs` | Resolve external `$ref` pointers before generation. |
 | `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default. |
 | `--openapi-server-index <n>` | Choose which server entry (0-based) seeds the base URL. |
+
+### Collection export, import, pack, and unpack
+
+Use collection export/import when you want teammates to reproduce a request workspace without hand-copying dependencies. Use pack/unpack when you need a single archive file for transfer.
+
+```bash
+resterm collection export --workspace ./my-api --out ./shared/my-api-bundle --recursive
+resterm collection import --in ./shared/my-api-bundle --workspace ./my-local-api
+resterm collection pack --in ./shared/my-api-bundle --out ./shared/my-api-bundle.zip
+resterm collection unpack --in ./shared/my-api-bundle.zip --out ./shared/my-api-bundle
+```
+
+Export command flags:
+
+| Flag | Description |
+| --- | --- |
+| `--workspace <dir>` | Source workspace directory to scan. |
+| `--out <dir>` | Destination bundle directory to create. |
+| `--name <name>` | Optional bundle name stored in the manifest. |
+| `--recursive` | Recursively scan workspace for request files before dependency resolution. |
+| `--force` | Replace an existing output directory. |
+
+Import command flags:
+
+| Flag | Description |
+| --- | --- |
+| `--in <dir>` | Source bundle directory containing `manifest.json`. |
+| `--workspace <dir>` | Destination workspace directory to write files into. |
+| `--dry-run` | Validate and print planned operations without writing files. |
+| `--force` | Overwrite existing destination files. |
+
+Pack command flags:
+
+| Flag | Description |
+| --- | --- |
+| `--in <dir>` | Source bundle directory containing `manifest.json`. |
+| `--out <file.zip>` | Destination archive path to create. |
+| `--force` | Replace an existing archive file. |
+
+Unpack command flags:
+
+| Flag | Description |
+| --- | --- |
+| `--in <file.zip>` | Source archive file created by `collection pack`. |
+| `--out <dir>` | Destination bundle directory to create. |
+| `--force` | Replace an existing output directory. |
+
+The exporter includes referenced helper files automatically and always emits `resterm.env.example.json` in the bundle. Import validates checksums before writing files and rejects unsafe paths. Pack and unpack apply the same manifest and path safety guarantees so archive handoffs behave the same as directory handoffs.
 
 ### Importing curl commands
 

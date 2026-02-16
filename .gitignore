@@ -24,7 +24,7 @@ coverage/
 
 .gocache/
 
-resterm
+/resterm
 
 # test harness services
 _test_services/
