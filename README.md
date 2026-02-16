@@ -14,17 +14,16 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels**, **Kubernetes port-forwarding**, and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Collection sharing](#sharing-collections), [Features](#overview), and [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview) and [Documentation](#documentation).
 
 ## Why Resterm
 
 - Requests live in plain `.http` / `.rest` files.
-- You describe what should happen and Resterm executes it the same way every time, more like a small API language than a one-off UI.
 - **Conditional logic** - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each`.
 - **Multi-step workflows** with `@workflow` / `@step`.
-- **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`) wire responses into subsequent requests and validate them inline.
-- **RestermScript** - a small, safe expression language purpose. Built for request files, with reusable `.rts` modules.
-- **OAuth 2.0** (client credentials, password, auth code + PKCE), **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools, no manual `kubectl port-forward` in another terminal.
+- **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
+- **RestermScript** - a small, safe expression language purpose.
+- **OAuth 2.0** (client credentials, password, auth code + PKCE), **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -275,15 +274,13 @@ The first command reports whether a newer release is available. The second downl
 - Flags you probably reach for most are `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-curl`, `--from-openapi`, and `--http-out`.
 - Config is stored at `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` and can be overridden with `RESTERM_CONFIG_DIR`.
 
-## Sharing collections
+## Collections
 
 You can export a workspace into a Git-friendly Resterm bundle. The exported bundle always includes a `manifest.json` with checksums, so imports can verify file integrity before writing anything.
 
 When Resterm sees `resterm.env.example.json` in your workspace, it includes that file as-is. If only `resterm.env.json` exists, Resterm generates `resterm.env.example.json` automatically and replaces values with `REPLACE_ME` placeholders so secrets are not exported.
 
 ### Export a bundle
-
-Run this command from anywhere:
 
 ```bash
 resterm collection export \
@@ -293,27 +290,7 @@ resterm collection export \
   --name "my-api-v1"
 ```
 
-After export, the output directory will look similar to this:
-
-```text
-shared/my-api-bundle/
-  manifest.json
-  requests.http
-  rts/helpers.rts
-  payloads/create-user.json
-  resterm.env.example.json
-```
-
-You can commit that directory directly:
-
-```bash
-git add shared/my-api-bundle
-git commit -m "Resterm collection bundle"
-```
-
 ### Import a bundle
-
-You can import the bundle into a local workspace with:
 
 ```bash
 resterm collection import \
