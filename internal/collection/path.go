@@ -88,7 +88,7 @@ func hasWinDrive(p string) bool {
 		return false
 	}
 	a := p[0]
-	if !((a >= 'a' && a <= 'z') || (a >= 'A' && a <= 'Z')) {
+	if (a < 'a' || a > 'z') && (a < 'A' || a > 'Z') {
 		return false
 	}
 	return p[1] == ':'

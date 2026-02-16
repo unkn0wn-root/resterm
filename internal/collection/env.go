@@ -6,7 +6,11 @@ import (
 )
 
 func buildEnvTemplate(rootAbs, rootReal string) ([]byte, error) {
-	if data, ok, err := readWorkspaceFileIfExists(rootAbs, rootReal, defaultEnvTemplateFile); err != nil {
+	if data, ok, err := readWorkspaceFileIfExists(
+		rootAbs,
+		rootReal,
+		defaultEnvTemplateFile,
+	); err != nil {
 		return nil, err
 	} else if ok {
 		return data, nil

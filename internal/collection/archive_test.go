@@ -94,7 +94,9 @@ func TestPackBundleRejectsChecksumMismatch(t *testing.T) {
 		t.Fatalf("tamper bundle file: %v", err)
 	}
 
-	_, err = PackBundle(PackOptions{BundleDir: bund, OutFile: filepath.Join(t.TempDir(), "bundle.zip")})
+	_, err = PackBundle(
+		PackOptions{BundleDir: bund, OutFile: filepath.Join(t.TempDir(), "bundle.zip")},
+	)
 	if err == nil {
 		t.Fatalf("expected checksum mismatch")
 	}
@@ -106,7 +108,12 @@ func TestPackBundleRejectsChecksumMismatch(t *testing.T) {
 func TestUnpackBundleRejectsTraversalEntry(t *testing.T) {
 	arc := filepath.Join(t.TempDir(), "bad.zip")
 	makeZip(t, arc, []zipEnt{
-		{name: ManifestFile, data: []byte(`{"schema":"resterm.collection.bundle","version":1,"files":[{"path":"requests.http","role":"request","size":1,"digest":{"alg":"sha256","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}`)},
+		{
+			name: ManifestFile,
+			data: []byte(
+				`{"schema":"resterm.collection.bundle","version":1,"files":[{"path":"requests.http","role":"request","size":1,"digest":{"alg":"sha256","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}`,
+			),
+		},
 		{name: "../evil.txt", data: []byte("x")},
 	})
 
@@ -122,7 +129,12 @@ func TestUnpackBundleRejectsTraversalEntry(t *testing.T) {
 func TestUnpackBundleRejectsSymlinkEntry(t *testing.T) {
 	arc := filepath.Join(t.TempDir(), "bad-symlink.zip")
 	makeZip(t, arc, []zipEnt{
-		{name: ManifestFile, data: []byte(`{"schema":"resterm.collection.bundle","version":1,"files":[{"path":"requests.http","role":"request","size":1,"digest":{"alg":"sha256","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}`)},
+		{
+			name: ManifestFile,
+			data: []byte(
+				`{"schema":"resterm.collection.bundle","version":1,"files":[{"path":"requests.http","role":"request","size":1,"digest":{"alg":"sha256","value":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}}]}`,
+			),
+		},
 		{name: "requests.http", data: []byte("target"), mode: os.ModeSymlink | 0o777},
 	})
 
