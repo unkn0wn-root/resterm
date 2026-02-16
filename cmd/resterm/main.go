@@ -207,6 +207,9 @@ func main() {
 		}
 		os.Exit(0)
 	}
+	if err := validateReservedEnvironment(envName, "--env"); err != nil {
+		log.Fatalf("%v", err)
+	}
 
 	updateHTTP := &http.Client{Timeout: 60 * time.Second}
 	upClient, err := update.NewClient(updateHTTP, updateRepo)
@@ -462,9 +465,12 @@ func main() {
 
 	compareTargets, compareErr := parseCompareTargets(compareTargetsRaw)
 	if compareErr != nil {
-		log.Printf("invalid --compare value: %v", compareErr)
+		log.Fatalf("invalid --compare value: %v", compareErr)
 	}
 	compareBaseline = strings.TrimSpace(compareBaseline)
+	if err := validateReservedEnvironment(compareBaseline, "--compare-base"); err != nil {
+		log.Fatalf("invalid --compare-base value: %v", err)
+	}
 
 	settings, settingsHandle, err := config.LoadSettings()
 	if err != nil {
@@ -594,22 +600,32 @@ func parseCompareTargets(raw string) ([]string, error) {
 	seen := make(map[string]struct{}, len(fields))
 	targets := make([]string, 0, len(fields))
 	for _, field := range fields {
-		value := strings.TrimSpace(field)
-		if value == "" {
-			continue
+		if vars.IsReservedEnvironment(field) {
+			return nil, fmt.Errorf("environment %q is reserved for shared defaults", field)
 		}
-		lower := strings.ToLower(value)
+		lower := strings.ToLower(field)
 		if _, ok := seen[lower]; ok {
 			continue
 		}
 		seen[lower] = struct{}{}
-		targets = append(targets, value)
+		targets = append(targets, field)
 	}
 
 	if len(targets) < 2 {
 		return nil, fmt.Errorf("expected at least two environments, got %d", len(targets))
 	}
 	return targets, nil
+}
+
+func validateReservedEnvironment(value, flagName string) error {
+	if vars.IsReservedEnvironment(value) {
+		return fmt.Errorf(
+			"%s %q is reserved for shared defaults; choose a concrete environment",
+			flagName,
+			value,
+		)
+	}
+	return nil
 }
 
 func executableChecksum() (string, error) {
