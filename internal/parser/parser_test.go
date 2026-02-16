@@ -1459,6 +1459,44 @@ GET https://example.com
 	}
 }
 
+func TestParseCompareDirectiveRejectsSharedEnvironment(t *testing.T) {
+	src := `# @name Compare
+# @compare dev $shared
+GET https://example.com
+`
+
+	doc := Parse("compare.http", []byte(src))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors")
+	}
+	if !hasParseMessage(doc.Errors, "reserved for shared defaults") {
+		t.Fatalf("expected reserved-name parse error, got %v", doc.Errors)
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Compare != nil {
+		t.Fatalf("expected compare metadata to be nil on error")
+	}
+}
+
+func TestParseCompareDirectiveRejectsSharedBaseline(t *testing.T) {
+	src := `# @name Compare
+# @compare dev stage base=$shared
+GET https://example.com
+`
+
+	doc := Parse("compare.http", []byte(src))
+	if len(doc.Errors) == 0 {
+		t.Fatalf("expected parse errors")
+	}
+	if !hasParseMessage(doc.Errors, "reserved for shared defaults") {
+		t.Fatalf("expected reserved-name parse error, got %v", doc.Errors)
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Compare != nil {
+		t.Fatalf("expected compare metadata to be nil on error")
+	}
+}
+
 func TestParseMultiLineScripts(t *testing.T) {
 	src := `# @name Scripted
 # @script pre-request

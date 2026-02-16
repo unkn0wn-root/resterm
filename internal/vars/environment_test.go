@@ -3,6 +3,7 @@ package vars
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -102,5 +103,26 @@ func TestSharedMergesIntoAllEnvironments(t *testing.T) {
 	}
 	if prod["auth.clientId"] != "prod-client" {
 		t.Fatalf("prod should override auth.clientId, got %q", prod["auth.clientId"])
+	}
+}
+
+func TestLoadEnvironmentFileOnlySharedReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "env.json")
+	data := []byte(`{
+  "$shared": {
+    "base": { "url": "https://api.example.com" }
+  }
+}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	_, err := LoadEnvironmentFile(path)
+	if err == nil {
+		t.Fatalf("expected parse error for env file containing only $shared")
+	}
+	if !strings.Contains(err.Error(), `defines only "$shared"`) {
+		t.Fatalf("expected only-shared parse error, got %v", err)
 	}
 }

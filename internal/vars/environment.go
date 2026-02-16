@@ -18,6 +18,12 @@ const SharedEnvKey = "$shared"
 
 type EnvironmentSet map[string]map[string]string
 
+// IsReservedEnvironment reports whether the name is reserved for
+// framework behavior and cannot be selected as a concrete environment.
+func IsReservedEnvironment(name string) bool {
+	return strings.EqualFold(strings.TrimSpace(name), SharedEnvKey)
+}
+
 func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
 	if IsDotEnvPath(path) {
 		return loadDotEnvEnvironment(path)
@@ -41,21 +47,33 @@ func loadJSONEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read env file %s", path)
 	}
 
-	var raw interface{}
+	var raw any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, errdef.Wrap(errdef.CodeParse, err, "parse env file %s", path)
 	}
 
 	envs = make(EnvironmentSet)
 	switch v := raw.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for envName, value := range v {
 			envs[envName] = flattenEnv(value)
 		}
 	default:
 		return nil, errdef.New(errdef.CodeParse, "unsupported env file format: %T", raw)
 	}
+	hadShared := false
+	if _, ok := envs[SharedEnvKey]; ok {
+		hadShared = true
+	}
 	applyShared(envs)
+	if hadShared && len(envs) == 0 {
+		return nil, errdef.New(
+			errdef.CodeParse,
+			`env file %s defines only %q; add at least one concrete environment`,
+			path,
+			SharedEnvKey,
+		)
+	}
 	return envs, nil
 }
 
@@ -80,7 +98,7 @@ func applyShared(envs EnvironmentSet) {
 	delete(envs, SharedEnvKey)
 }
 
-func flattenEnv(value interface{}) map[string]string {
+func flattenEnv(value any) map[string]string {
 	result := make(map[string]string)
 	flattenEnvValue("", value, result)
 	return result
@@ -89,9 +107,9 @@ func flattenEnv(value interface{}) map[string]string {
 // Recursively walks through JSON structure to build dot-notation paths.
 // Nested objects become "parent.child" and arrays become "parent[0]".
 // Makes deeply nested config accessible via simple string keys.
-func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
+func flattenEnvValue(prefix string, value any, out map[string]string) {
 	switch v := value.(type) {
-	case map[string]interface{}:
+	case map[string]any:
 		for key, child := range v {
 			if key == "" {
 				continue
@@ -102,7 +120,7 @@ func flattenEnvValue(prefix string, value interface{}, out map[string]string) {
 			}
 			flattenEnvValue(next, child, out)
 		}
-	case []interface{}:
+	case []any:
 		for idx, item := range v {
 			childKey := strconv.Itoa(idx)
 			if prefix != "" {

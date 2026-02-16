@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func parseApplySpec(rest string, line int) (restfile.ApplySpec, error) {
@@ -422,11 +423,20 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 				if val == "" {
 					return nil, fmt.Errorf("@compare baseline cannot be empty")
 				}
+				if vars.IsReservedEnvironment(val) {
+					return nil, fmt.Errorf(
+						"@compare baseline %q is reserved for shared defaults",
+						val,
+					)
+				}
 				baseline = val
 			default:
 				return nil, fmt.Errorf("@compare unsupported option %q", key)
 			}
 			continue
+		}
+		if vars.IsReservedEnvironment(value) {
+			return nil, fmt.Errorf("@compare environment %q is reserved for shared defaults", value)
 		}
 		lowered := strings.ToLower(value)
 		if _, exists := seen[lowered]; exists {
