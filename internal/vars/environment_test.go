@@ -52,3 +52,55 @@ func TestLoadEnvironmentFileFlattensNestedObjects(t *testing.T) {
 		t.Fatalf("expected null to become empty string, got %q", dev["empty"])
 	}
 }
+
+func TestSharedMergesIntoAllEnvironments(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "env.json")
+	data := []byte(`{
+  "$shared": {
+    "api": { "version": "v2" },
+    "auth": { "clientId": "demo-client" }
+  },
+  "dev": {
+    "base": { "url": "https://dev.example.com" }
+  },
+  "prod": {
+    "base": { "url": "https://prod.example.com" },
+    "auth": { "clientId": "prod-client" }
+  }
+}`)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	envs, err := LoadEnvironmentFile(path)
+	if err != nil {
+		t.Fatalf("load env: %v", err)
+	}
+
+	// $shared must be removed from the set.
+	if _, ok := envs[SharedEnvKey]; ok {
+		t.Fatal("$shared should not appear in the returned EnvironmentSet")
+	}
+
+	// dev inherits shared values.
+	dev := envs["dev"]
+	if dev["api.version"] != "v2" {
+		t.Fatalf("dev should inherit api.version from $shared, got %q", dev["api.version"])
+	}
+	if dev["auth.clientId"] != "demo-client" {
+		t.Fatalf("dev should inherit auth.clientId from $shared, got %q", dev["auth.clientId"])
+	}
+	if dev["base.url"] != "https://dev.example.com" {
+		t.Fatalf("dev base.url wrong, got %q", dev["base.url"])
+	}
+
+	// prod overrides auth.clientId but inherits api.version.
+	prod := envs["prod"]
+	if prod["api.version"] != "v2" {
+		t.Fatalf("prod should inherit api.version from $shared, got %q", prod["api.version"])
+	}
+	if prod["auth.clientId"] != "prod-client" {
+		t.Fatalf("prod should override auth.clientId, got %q", prod["auth.clientId"])
+	}
+}
