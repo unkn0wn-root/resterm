@@ -99,7 +99,10 @@ func TestRunDispatchesHistorySubcommand(t *testing.T) {
 	if strings.TrimSpace(errOut) != "" {
 		t.Fatalf("expected empty stderr, got %q", errOut)
 	}
-	if !strings.Contains(out, "Usage: resterm history <export|import|backup|stats|check|compact> [flags]") {
+	if !strings.Contains(
+		out,
+		"Usage: resterm history <export|import|backup|stats|check|compact> [flags]",
+	) {
 		t.Fatalf("expected history usage in stdout, got %q", out)
 	}
 }
