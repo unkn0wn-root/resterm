@@ -223,10 +223,9 @@ func (l *lw) start(cont bool) {
 		if len(l.p1) > 0 && l.w1 < l.w {
 			l.buf = append(l.buf, l.p1...)
 			l.cw = l.w1
-			if l.ansi {
-				l.ap = updState(l.ap, l.p1)
-			}
 		}
+		// Keep prefix styling local to the indentation segment. If we merge p1
+		// into the active state, continuation text can inherit indent-only colors.
 		if len(l.ap) > 0 {
 			l.buf = append(l.buf, l.ap...)
 		}
@@ -916,7 +915,15 @@ func leadWSANSI(b []byte) []byte {
 	if len(out) == 0 {
 		return nil
 	}
-	clean, _ := trimANSISuffix(out)
+	clean, suf := trimANSISuffix(out)
+	// Keep an explicit reset when trailing ANSI contained one so continuation
+	// prefixes don't inherit outer styles (for example, bold from parent style).
+	if hasResetSGR(suf) {
+		// SGR 0 — resets all graphic attributes so prefix styling
+		// (bold, color, etc.) does not bleed into content tokens.
+		const resetAll = "\x1b[0m"
+		clean = append(append([]byte(nil), clean...), resetAll...)
+	}
 	return clean
 }
 
@@ -980,6 +987,26 @@ func trimANSISuffix(b []byte) ([]byte, []byte) {
 		return b, nil
 	}
 	return b[:end], b[end:]
+}
+
+func hasResetSGR(b []byte) bool {
+	i := 0
+	for i < len(b) {
+		n := scanEsc(b, i)
+		if n == 0 {
+			i++
+			continue
+		}
+		seq := b[i : i+n]
+		if isSGR(seq) {
+			r, o := sgrFlags(seq)
+			if r && !o {
+				return true
+			}
+		}
+		i += n
+	}
+	return false
 }
 
 func scanEsc(b []byte, i int) int {
