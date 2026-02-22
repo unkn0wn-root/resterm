@@ -40,6 +40,9 @@ const (
 	placeholderPassword     = "replace-with-password"
 	placeholderToken        = "replace-with-token"
 	placeholderAPIKey       = "replace-with-api-key"
+
+	defaultAPIKeyHeaderName = "X-API-Key"
+	jsonContentType         = "application/json"
 )
 
 func NewBuilder() *Builder {
@@ -331,17 +334,11 @@ func (rb *requestBuilder) serializeParamValue(
 			return strings.Join(values, " ")
 		case "pipeDelimited":
 			return strings.Join(values, "|")
-		case "form":
-			if explode {
-				return joinNameValuePairs(param.Name, values, "&")
-			}
-			return strings.Join(values, ",")
-		default:
-			if explode {
-				return joinNameValuePairs(param.Name, values, "&")
-			}
-			return strings.Join(values, ",")
 		}
+		if explode {
+			return joinNameValuePairs(param.Name, values, "&")
+		}
+		return strings.Join(values, ",")
 	case schemaObject:
 		fields := ensureStringMap(sample)
 		if len(fields) == 0 {
@@ -350,17 +347,11 @@ func (rb *requestBuilder) serializeParamValue(
 		switch style {
 		case "deepobject":
 			return joinDeepObject(param.Name, fields)
-		case "form":
-			if explode {
-				return joinObjectExplode(fields, "&")
-			}
-			return joinObjectKeyValueList(fields, ",")
-		default:
-			if explode {
-				return joinObjectExplode(fields, "&")
-			}
-			return joinObjectKeyValueList(fields, ",")
 		}
+		if explode {
+			return joinObjectExplode(fields, "&")
+		}
+		return joinObjectKeyValueList(fields, ",")
 	default:
 		switch v := sample.(type) {
 		case nil:
@@ -531,7 +522,7 @@ func (rb *requestBuilder) mapSecurity(req model.SecurityRequirement) *restfile.A
 			params["placement"] = "header"
 		}
 		if params["name"] == "" {
-			params["name"] = "X-API-Key"
+			params["name"] = defaultAPIKeyHeaderName
 		}
 		rb.builder.registerGlobal(globalAuthAPIKeyVar, placeholderAPIKey, true)
 		return &restfile.AuthSpec{Type: "apikey", Params: params}
@@ -875,9 +866,9 @@ func selectRequestMedia(media []model.MediaType) *model.MediaType {
 	if len(media) == 0 {
 		return nil
 	}
-	for _, mt := range media {
-		if strings.EqualFold(mt.ContentType, "application/json") {
-			return &mt
+	for i := range media {
+		if strings.EqualFold(media[i].ContentType, jsonContentType) {
+			return &media[i]
 		}
 	}
 	return &media[0]
@@ -896,7 +887,7 @@ func selectResponseContentType(responses []model.Response) (string, bool) {
 		statusScore := responseStatusScore(resp.StatusCode)
 		for _, mt := range resp.MediaTypes {
 			score := statusScore
-			if strings.EqualFold(mt.ContentType, "application/json") {
+			if strings.EqualFold(mt.ContentType, jsonContentType) {
 				score += 10
 			}
 			if score > bestScore {
@@ -1100,18 +1091,10 @@ func stringifyExample(value any, pretty bool) string {
 }
 
 func defaultParameterValue(param model.Parameter) string {
-	switch param.Location {
-	case model.InPath:
+	if param.Location == model.InPath {
 		return "sample"
-	case model.InQuery:
-		return ""
-	case model.InHeader:
-		return ""
-	case model.InCookie:
-		return ""
-	default:
-		return ""
 	}
+	return ""
 }
 
 func cloneStrings(values []string) []string {
