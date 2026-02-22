@@ -129,7 +129,10 @@ components:
 		t.Fatalf("read generated file: %v", err)
 	}
 	txt := string(got)
-	if !strings.Contains(txt, "Warning: OpenAPI compatibility rewrite: converted 1 header $ref occurrence(s)") {
+	if !strings.Contains(
+		txt,
+		"Warning: OpenAPI compatibility rewrite: converted 1 header $ref occurrence(s)",
+	) {
 		t.Fatalf("expected parser warning in output header, got:\n%s", txt)
 	}
 }

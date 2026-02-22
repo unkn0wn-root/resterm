@@ -318,19 +318,43 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 	rb := requestBuilder{}
 
 	arrayParam := model.Parameter{Name: "tags", Location: model.InQuery}
-	if got := rb.serializeParamValue(arrayParam, schemaArray, "form", false, []any{"red", "blue"}); got != "red,blue" {
+	if got := rb.serializeParamValue(
+		arrayParam,
+		schemaArray,
+		"form",
+		false,
+		[]any{"red", "blue"},
+	); got != "red,blue" {
 		t.Fatalf("unexpected array value: %s", got)
 	}
-	if got := rb.serializeParamValue(arrayParam, schemaArray, "custom", true, []any{"red", "blue"}); got != "tags=red&tags=blue" {
+	if got := rb.serializeParamValue(
+		arrayParam,
+		schemaArray,
+		"custom",
+		true,
+		[]any{"red", "blue"},
+	); got != "tags=red&tags=blue" {
 		t.Fatalf("unexpected exploded array value: %s", got)
 	}
 
 	objectParam := model.Parameter{Name: "filters", Location: model.InQuery}
 	sampleObject := map[string]any{"b": "2", "a": "1"}
-	if got := rb.serializeParamValue(objectParam, schemaObject, "deepobject", true, sampleObject); got != "filters[a]=1&filters[b]=2" {
+	if got := rb.serializeParamValue(
+		objectParam,
+		schemaObject,
+		"deepobject",
+		true,
+		sampleObject,
+	); got != "filters[a]=1&filters[b]=2" {
 		t.Fatalf("unexpected deepobject value: %s", got)
 	}
-	if got := rb.serializeParamValue(objectParam, schemaObject, "custom", false, sampleObject); got != "a,1,b,2" {
+	if got := rb.serializeParamValue(
+		objectParam,
+		schemaObject,
+		"custom",
+		false,
+		sampleObject,
+	); got != "a,1,b,2" {
 		t.Fatalf("unexpected object key/value value: %s", got)
 	}
 }

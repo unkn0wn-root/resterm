@@ -34,7 +34,8 @@ func TestConvertMediaTypeExplicitExamplePreferred(t *testing.T) {
 	if media.ContentType != "application/json" {
 		t.Fatalf("unexpected content type: %s", media.ContentType)
 	}
-	if !media.Example.HasValue || media.Example.Source != model.ExampleFromExplicit || media.Example.Value != "explicit" {
+	if !media.Example.HasValue || media.Example.Source != model.ExampleFromExplicit ||
+		media.Example.Value != "explicit" {
 		t.Fatalf("unexpected example: %#v", media.Example)
 	}
 	if media.Schema == nil || media.Schema.Identifier != "#/components/schemas/Demo" {
@@ -57,7 +58,8 @@ func TestConvertMediaTypeSchemaFallbackExample(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected media type conversion")
 	}
-	if !media.Example.HasValue || media.Example.Source != model.ExampleFromDefault || media.Example.Value != "schema-default" {
+	if !media.Example.HasValue || media.Example.Source != model.ExampleFromDefault ||
+		media.Example.Value != "schema-default" {
 		t.Fatalf("unexpected fallback example: %#v", media.Example)
 	}
 }
