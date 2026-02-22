@@ -59,30 +59,41 @@ func (s *Service) GenerateHTTPFile(
 	}
 
 	writeOpts := opts.Write
-	if warnProvider, ok := s.Generator.(interface{ Warnings() []string }); ok {
-		warnings := warnProvider.Warnings()
-		if len(warnings) > 0 {
-			var builder strings.Builder
-			existing := strings.TrimSpace(writeOpts.HeaderComment)
-			if existing != "" {
-				builder.WriteString(existing)
-				builder.WriteString("\n")
-			}
-			for _, warning := range warnings {
-				trimmed := strings.TrimSpace(warning)
-				if trimmed == "" {
-					continue
-				}
-				builder.WriteString("Warning: ")
-				builder.WriteString(trimmed)
-				builder.WriteString("\n")
-			}
-			writeOpts.HeaderComment = strings.TrimRight(builder.String(), "\n")
-		}
+	if warnProvider, ok := s.Parser.(Warner); ok {
+		writeOpts.HeaderComment = appendWarnings(writeOpts.HeaderComment, warnProvider.Warnings())
+	}
+	if warnProvider, ok := s.Generator.(Warner); ok {
+		writeOpts.HeaderComment = appendWarnings(writeOpts.HeaderComment, warnProvider.Warnings())
 	}
 
 	if err := s.Writer.WriteDocument(ctx, doc, outputPath, writeOpts); err != nil {
 		return err
 	}
 	return ctx.Err()
+}
+
+func appendWarnings(base string, ws []string) string {
+	if len(ws) == 0 {
+		return base
+	}
+
+	var b strings.Builder
+	txt := strings.TrimSpace(base)
+	if txt != "" {
+		b.WriteString(txt)
+	}
+
+	for _, w := range ws {
+		w = strings.TrimSpace(w)
+		if w == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString("Warning: ")
+		b.WriteString(w)
+	}
+
+	return b.String()
 }

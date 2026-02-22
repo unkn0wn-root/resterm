@@ -12,10 +12,16 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 )
 
-type Loader struct{}
+type Loader struct {
+	ws []string
+}
 
 func NewLoader() *Loader {
 	return &Loader{}
+}
+
+func (l *Loader) Warnings() []string {
+	return append([]string(nil), l.ws...)
 }
 
 func (l *Loader) Parse(
@@ -23,13 +29,13 @@ func (l *Loader) Parse(
 	path string,
 	opts openapi.ParseOptions,
 ) (*model.Spec, error) {
-	loader := openapi3.NewLoader()
-	loader.IsExternalRefsAllowed = opts.ResolveExternalRefs
+	l.ws = nil
 
-	document, err := loader.LoadFromFile(path)
+	document, ws, err := loadDoc(path, opts)
 	if err != nil {
 		return nil, fmt.Errorf("load OpenAPI spec: %w", err)
 	}
+	l.ws = append([]string(nil), ws...)
 
 	if err := document.Validate(ctx); err != nil {
 		return nil, fmt.Errorf("validate OpenAPI spec: %w", err)
@@ -319,22 +325,9 @@ func convertRequestBody(ref *openapi3.RequestBodyRef) *model.RequestBody {
 	sort.Strings(mediaTypes)
 
 	for _, mediaType := range mediaTypes {
-		mt := rb.Content[mediaType]
-		if mt == nil {
+		media, ok := convertMediaType(mediaType, rb.Content[mediaType])
+		if !ok {
 			continue
-		}
-		example := extractMediaTypeExample(mt)
-		media := model.MediaType{
-			ContentType: mediaType,
-			Example:     example,
-		}
-		if mt.Schema != nil {
-			media.Schema = &model.SchemaRef{Identifier: mt.Schema.Ref, Payload: mt.Schema}
-			if !media.Example.HasValue {
-				if ex, ok := extractExampleFromSchema(mt.Schema); ok {
-					media.Example = ex
-				}
-			}
 		}
 		result.MediaTypes = append(result.MediaTypes, media)
 	}
@@ -367,6 +360,27 @@ func extractMediaTypeExample(mt *openapi3.MediaType) model.Example {
 	return model.Example{}
 }
 
+func convertMediaType(contentType string, mt *openapi3.MediaType) (model.MediaType, bool) {
+	if mt == nil {
+		return model.MediaType{}, false
+	}
+
+	media := model.MediaType{
+		ContentType: contentType,
+		Example:     extractMediaTypeExample(mt),
+	}
+	if mt.Schema != nil {
+		media.Schema = &model.SchemaRef{Identifier: mt.Schema.Ref, Payload: mt.Schema}
+		if !media.Example.HasValue {
+			if ex, ok := extractExampleFromSchema(mt.Schema); ok {
+				media.Example = ex
+			}
+		}
+	}
+
+	return media, true
+}
+
 func convertResponses(responses *openapi3.Responses) []model.Response {
 	if responses == nil || responses.Len() == 0 {
 		return nil
@@ -396,22 +410,9 @@ func convertResponses(responses *openapi3.Responses) []model.Response {
 			}
 			sort.Strings(mediaTypes)
 			for _, mediaType := range mediaTypes {
-				mt := ref.Value.Content[mediaType]
-				if mt == nil {
+				media, ok := convertMediaType(mediaType, ref.Value.Content[mediaType])
+				if !ok {
 					continue
-				}
-				example := extractMediaTypeExample(mt)
-				media := model.MediaType{
-					ContentType: mediaType,
-					Example:     example,
-				}
-				if mt.Schema != nil {
-					media.Schema = &model.SchemaRef{Identifier: mt.Schema.Ref, Payload: mt.Schema}
-					if !media.Example.HasValue {
-						if ex, ok := extractExampleFromSchema(mt.Schema); ok {
-							media.Example = ex
-						}
-					}
 				}
 				resp.MediaTypes = append(resp.MediaTypes, media)
 			}

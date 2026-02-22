@@ -28,6 +28,10 @@ type DocumentWriter interface {
 	) error
 }
 
+type Warner interface {
+	Warnings() []string
+}
+
 type ParseOptions struct {
 	ResolveExternalRefs bool
 }

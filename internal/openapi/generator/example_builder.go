@@ -227,9 +227,7 @@ func defaultForType(ref *openapi3.SchemaRef) any {
 	switch types[0] {
 	case "string":
 		return "sample"
-	case "integer":
-		return 0
-	case "number":
+	case "integer", "number":
 		return 0
 	case "boolean":
 		return false

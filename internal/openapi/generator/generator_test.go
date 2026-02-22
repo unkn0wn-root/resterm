@@ -275,6 +275,66 @@ func TestBuilderGenerateOAuthAuthorizationCode(t *testing.T) {
 	}
 }
 
+func TestSelectRequestMedia(t *testing.T) {
+	t.Parallel()
+
+	media := []model.MediaType{
+		{ContentType: "text/plain"},
+		{ContentType: "application/json"},
+	}
+
+	selected := selectRequestMedia(media)
+	if selected == nil {
+		t.Fatalf("expected selected media type")
+	}
+	if selected.ContentType != "application/json" {
+		t.Fatalf("expected JSON media type, got %s", selected.ContentType)
+	}
+	if selected != &media[1] {
+		t.Fatalf("expected pointer to media[1]")
+	}
+}
+
+func TestSelectRequestMediaFallbackToFirst(t *testing.T) {
+	t.Parallel()
+
+	media := []model.MediaType{
+		{ContentType: "application/xml"},
+		{ContentType: "text/plain"},
+	}
+
+	selected := selectRequestMedia(media)
+	if selected == nil {
+		t.Fatalf("expected selected media type")
+	}
+	if selected != &media[0] {
+		t.Fatalf("expected pointer to first media type")
+	}
+}
+
+func TestSerializeParamValueDefaults(t *testing.T) {
+	t.Parallel()
+
+	rb := requestBuilder{}
+
+	arrayParam := model.Parameter{Name: "tags", Location: model.InQuery}
+	if got := rb.serializeParamValue(arrayParam, schemaArray, "form", false, []any{"red", "blue"}); got != "red,blue" {
+		t.Fatalf("unexpected array value: %s", got)
+	}
+	if got := rb.serializeParamValue(arrayParam, schemaArray, "custom", true, []any{"red", "blue"}); got != "tags=red&tags=blue" {
+		t.Fatalf("unexpected exploded array value: %s", got)
+	}
+
+	objectParam := model.Parameter{Name: "filters", Location: model.InQuery}
+	sampleObject := map[string]any{"b": "2", "a": "1"}
+	if got := rb.serializeParamValue(objectParam, schemaObject, "deepobject", true, sampleObject); got != "filters[a]=1&filters[b]=2" {
+		t.Fatalf("unexpected deepobject value: %s", got)
+	}
+	if got := rb.serializeParamValue(objectParam, schemaObject, "custom", false, sampleObject); got != "a,1,b,2" {
+		t.Fatalf("unexpected object key/value value: %s", got)
+	}
+}
+
 func findRequestByName(t *testing.T, doc *restfile.Document, name string) *restfile.Request {
 	t.Helper()
 	for _, req := range doc.Requests {
