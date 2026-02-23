@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/connutil"
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 	xssh "golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 	knownhosts "golang.org/x/crypto/ssh/knownhosts"
@@ -111,7 +111,7 @@ func (m *Manager) dialOnce(ctx context.Context, cfg Cfg, network, addr string) (
 		return nil, joinCloseErr(err, cli.Close())
 	}
 
-	return connutil.WrapConn(conn, cli.Close), nil
+	return tunnel.WrapConn(conn, cli.Close), nil
 }
 
 func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
@@ -169,7 +169,7 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
 		default:
 		}
 		if i+1 < attempts {
-			if err := connutil.WaitWithContext(ctx, dialRetryDelay); err != nil {
+			if err := tunnel.WaitWithContext(ctx, dialRetryDelay); err != nil {
 				return nil, err
 			}
 		}

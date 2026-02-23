@@ -16,7 +16,7 @@ import (
 	"unicode"
 
 	"github.com/unkn0wn-root/resterm/internal/connprofile"
-	"github.com/unkn0wn-root/resterm/internal/connutil"
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -179,7 +179,7 @@ func (m *Manager) dialOnce(
 	if err != nil {
 		return nil, joinCleanupErr(err, ses.close())
 	}
-	return connutil.WrapConn(conn, ses.close), nil
+	return tunnel.WrapConn(conn, ses.close), nil
 }
 
 func (m *Manager) dialCached(
@@ -328,7 +328,7 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg, load loadCfg) (*session,
 		default:
 		}
 		if i+1 < attempts {
-			if err := connutil.WaitWithContext(ctx, retryDelay); err != nil {
+			if err := tunnel.WaitWithContext(ctx, retryDelay); err != nil {
 				return nil, err
 			}
 		}

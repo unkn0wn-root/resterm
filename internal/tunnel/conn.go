@@ -1,4 +1,4 @@
-package connutil
+package tunnel
 
 import (
 	"context"
@@ -6,21 +6,6 @@ import (
 	"net"
 	"time"
 )
-
-func WaitWithContext(ctx context.Context, d time.Duration) error {
-	if d <= 0 {
-		return nil
-	}
-	timer := time.NewTimer(d)
-	defer timer.Stop()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-timer.C:
-		return nil
-	}
-}
 
 type wrappedConn struct {
 	net.Conn
@@ -44,4 +29,19 @@ func (c *wrappedConn) Close() error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func WaitWithContext(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
