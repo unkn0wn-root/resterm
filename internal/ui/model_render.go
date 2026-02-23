@@ -681,6 +681,7 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	if active {
 		style = style.
 			BorderForeground(lipgloss.Color("#6CC4C4")).
+			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
 		style = style.Faint(true)
