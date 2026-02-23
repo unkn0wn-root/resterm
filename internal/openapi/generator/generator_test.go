@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
-
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 	"github.com/unkn0wn-root/resterm/internal/openapi/parser"
@@ -113,15 +111,15 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 	builder := NewBuilder()
 	explode := true
 
-	arraySchema := &openapi3.Schema{
-		Type:  &openapi3.Types{"array"},
-		Items: &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+	arraySchema := &model.Schema{
+		Types: []string{"array"},
+		Items: &model.SchemaRef{Node: &model.Schema{Types: []string{"string"}}},
 	}
-	objectSchema := &openapi3.Schema{
-		Type: &openapi3.Types{"object"},
-		Properties: map[string]*openapi3.SchemaRef{
-			"name":  {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
-			"owner": {Value: &openapi3.Schema{Type: &openapi3.Types{"string"}}},
+	objectSchema := &model.Schema{
+		Types: []string{"object"},
+		Properties: map[string]*model.SchemaRef{
+			"name":  {Node: &model.Schema{Types: []string{"string"}}},
+			"owner": {Node: &model.Schema{Types: []string{"string"}}},
 		},
 	}
 
@@ -138,7 +136,7 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 						Explode:  &explode,
 						Example:  model.Example{Value: []any{"red", "blue"}, HasValue: true},
 						Schema: &model.SchemaRef{
-							Payload: &openapi3.SchemaRef{Value: arraySchema},
+							Node: arraySchema,
 						},
 					},
 					{
@@ -151,7 +149,7 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 							HasValue: true,
 						},
 						Schema: &model.SchemaRef{
-							Payload: &openapi3.SchemaRef{Value: objectSchema},
+							Node: objectSchema,
 						},
 					},
 				},
@@ -321,7 +319,7 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 	if got := rb.serializeParamValue(
 		arrayParam,
 		schemaArray,
-		"form",
+		pStyForm,
 		false,
 		[]any{"red", "blue"},
 	); got != "red,blue" {
@@ -330,7 +328,7 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 	if got := rb.serializeParamValue(
 		arrayParam,
 		schemaArray,
-		"custom",
+		pStyUnk,
 		true,
 		[]any{"red", "blue"},
 	); got != "tags=red&tags=blue" {
@@ -342,7 +340,7 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 	if got := rb.serializeParamValue(
 		objectParam,
 		schemaObject,
-		"deepobject",
+		pStyDeepObj,
 		true,
 		sampleObject,
 	); got != "filters[a]=1&filters[b]=2" {
@@ -351,7 +349,7 @@ func TestSerializeParamValueDefaults(t *testing.T) {
 	if got := rb.serializeParamValue(
 		objectParam,
 		schemaObject,
-		"custom",
+		pStyUnk,
 		false,
 		sampleObject,
 	); got != "a,1,b,2" {

@@ -4,8 +4,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/getkin/kin-openapi/openapi3"
-
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 )
 
@@ -23,50 +21,46 @@ func NewExampleBuilder() *ExampleBuilder {
 }
 
 func (b *ExampleBuilder) FromSchema(ref *model.SchemaRef) (any, bool) {
-	if ref == nil {
+	if ref == nil || ref.Node == nil {
 		return nil, false
 	}
-	raw, ok := ref.Payload.(*openapi3.SchemaRef)
-	if !ok {
-		return nil, false
-	}
-	return b.build(raw, 0)
+	return b.build(ref, 0)
 }
 
 // Depth limit prevents infinite recursion from circular schema references.
 // AllOf merges all schemas together since the result must satisfy all of them.
 // OneOf/AnyOf just pick the first option since we can't guess which variant to use.
-func (b *ExampleBuilder) build(ref *openapi3.SchemaRef, depth int) (any, bool) {
-	if ref == nil || ref.Value == nil {
+func (b *ExampleBuilder) build(ref *model.SchemaRef, depth int) (any, bool) {
+	if ref == nil || ref.Node == nil {
 		return nil, false
 	}
 	if depth >= b.maxDepth {
 		return nil, false
 	}
-	schema := ref.Value
-	if schema.Example != nil {
-		return schema.Example, true
+	sch := ref.Node
+	if sch.Example != nil {
+		return sch.Example, true
 	}
-	if schema.Default != nil {
-		return schema.Default, true
+	if sch.Default != nil {
+		return sch.Default, true
 	}
-	if len(schema.Enum) > 0 {
-		return schema.Enum[0], true
+	if len(sch.Enum) > 0 {
+		return sch.Enum[0], true
 	}
 
-	if len(schema.OneOf) > 0 {
-		if value, ok := b.build(schema.OneOf[0], depth+1); ok {
+	if len(sch.OneOf) > 0 {
+		if value, ok := b.build(sch.OneOf[0], depth+1); ok {
 			return value, true
 		}
 	}
-	if len(schema.AnyOf) > 0 {
-		if value, ok := b.build(schema.AnyOf[0], depth+1); ok {
+	if len(sch.AnyOf) > 0 {
+		if value, ok := b.build(sch.AnyOf[0], depth+1); ok {
 			return value, true
 		}
 	}
-	if len(schema.AllOf) > 0 {
+	if len(sch.AllOf) > 0 {
 		composed := make(map[string]any)
-		for _, candidate := range schema.AllOf {
+		for _, candidate := range sch.AllOf {
 			value, ok := b.build(candidate, depth+1)
 			if !ok {
 				continue
@@ -82,56 +76,56 @@ func (b *ExampleBuilder) build(ref *openapi3.SchemaRef, depth int) (any, bool) {
 		}
 	}
 
-	types := schema.Type.Slice()
+	types := sch.Types
 	if len(types) == 0 {
 		// assume object if properties defined, otherwise fallback to string
-		if len(schema.Properties) > 0 || schema.AdditionalProperties.Schema != nil {
-			types = []string{"object"}
-		} else if schema.Items != nil {
-			types = []string{"array"}
+		if len(sch.Properties) > 0 || sch.AdditionalProperties != nil {
+			types = []string{model.TypeObject}
+		} else if sch.Items != nil {
+			types = []string{model.TypeArray}
 		} else {
-			types = []string{"string"}
+			types = []string{model.TypeString}
 		}
 	}
 
 	switch types[0] {
-	case "string":
-		return exampleForString(schema), true
-	case "integer":
-		return exampleForInteger(schema), true
-	case "number":
-		return exampleForNumber(schema), true
-	case "boolean":
+	case model.TypeString:
+		return exampleForString(sch), true
+	case model.TypeInteger:
+		return exampleForInteger(sch), true
+	case model.TypeNumber:
+		return exampleForNumber(sch), true
+	case model.TypeBoolean:
 		return false, true
-	case "array":
-		if schema.Items == nil {
+	case model.TypeArray:
+		if sch.Items == nil {
 			return []any{}, true
 		}
-		value, ok := b.build(schema.Items, depth+1)
+		value, ok := b.build(sch.Items, depth+1)
 		if !ok {
-			value = defaultForType(schema.Items)
+			value = defaultForType(sch.Items)
 		}
 		return []any{value}, true
-	case "object":
-		return b.exampleForObject(schema, depth+1)
+	case model.TypeObject:
+		return b.exampleForObject(sch, depth+1)
 	default:
 		return nil, false
 	}
 }
 
-func (b *ExampleBuilder) exampleForObject(schema *openapi3.Schema, depth int) (any, bool) {
-	if schema == nil {
+func (b *ExampleBuilder) exampleForObject(sch *model.Schema, depth int) (any, bool) {
+	if sch == nil {
 		return nil, false
 	}
 	result := make(map[string]any)
 
-	keys := make([]string, 0, len(schema.Properties))
-	for name := range schema.Properties {
+	keys := make([]string, 0, len(sch.Properties))
+	for name := range sch.Properties {
 		keys = append(keys, name)
 	}
 	sort.Strings(keys)
 	for _, name := range keys {
-		prop := schema.Properties[name]
+		prop := sch.Properties[name]
 		if prop == nil {
 			continue
 		}
@@ -142,10 +136,10 @@ func (b *ExampleBuilder) exampleForObject(schema *openapi3.Schema, depth int) (a
 		result[name] = value
 	}
 
-	if schema.AdditionalProperties.Schema != nil {
-		value, ok := b.build(schema.AdditionalProperties.Schema, depth)
+	if sch.AdditionalProperties != nil {
+		value, ok := b.build(sch.AdditionalProperties, depth)
 		if !ok {
-			value = defaultForType(schema.AdditionalProperties.Schema)
+			value = defaultForType(sch.AdditionalProperties)
 		}
 		result["additionalProperty"] = value
 	}
@@ -156,11 +150,11 @@ func (b *ExampleBuilder) exampleForObject(schema *openapi3.Schema, depth int) (a
 	return result, true
 }
 
-func exampleForString(schema *openapi3.Schema) string {
-	if schema == nil {
+func exampleForString(sch *model.Schema) string {
+	if sch == nil {
 		return ""
 	}
-	switch strings.ToLower(schema.Format) {
+	switch strings.ToLower(sch.Format) {
 	case "uuid":
 		return "00000000-0000-4000-8000-000000000000"
 	case "date":
@@ -178,62 +172,68 @@ func exampleForString(schema *openapi3.Schema) string {
 	case "ipv6":
 		return "2001:db8::1"
 	}
-	if len(schema.Enum) > 0 {
-		if value, ok := schema.Enum[0].(string); ok {
+	if len(sch.Enum) > 0 {
+		if value, ok := sch.Enum[0].(string); ok {
 			return value
 		}
 	}
-	if schema.Pattern != "" {
-		return schema.Pattern
+	if sch.Pattern != "" {
+		return sch.Pattern
 	}
-	return "sample"
+	return defaultSampleValue
 }
 
-func exampleForInteger(schema *openapi3.Schema) int64 {
-	if schema == nil {
+func exampleForInteger(sch *model.Schema) int64 {
+	if sch == nil {
 		return 0
 	}
-	if schema.Min != nil {
-		return int64(*schema.Min)
+	if sch.Min != nil {
+		return int64(*sch.Min)
+	}
+	if sch.Max != nil {
+		return int64(*sch.Max)
 	}
 	return 0
 }
 
-func exampleForNumber(schema *openapi3.Schema) float64 {
-	if schema == nil {
+func exampleForNumber(sch *model.Schema) float64 {
+	if sch == nil {
 		return 0
 	}
-	if schema.Min != nil {
-		return *schema.Min
+	if sch.Min != nil {
+		return *sch.Min
+	}
+	if sch.Max != nil {
+		return *sch.Max
 	}
 	return 0
 }
 
-func defaultForType(ref *openapi3.SchemaRef) any {
-	if ref == nil || ref.Value == nil {
+func defaultForType(ref *model.SchemaRef) any {
+	if ref == nil || ref.Node == nil {
 		return nil
 	}
-	schema := ref.Value
-	if schema.Default != nil {
-		return schema.Default
+	sch := ref.Node
+	if sch.Default != nil {
+		return sch.Default
 	}
-	if len(schema.Enum) > 0 {
-		return schema.Enum[0]
+	if len(sch.Enum) > 0 {
+		return sch.Enum[0]
 	}
-	types := schema.Type.Slice()
+	types := sch.Types
 	if len(types) == 0 {
 		return nil
 	}
 	switch types[0] {
-	case "string":
-		return "sample"
-	case "integer", "number":
+	case model.TypeString:
+		return defaultSampleValue
+	case model.TypeInteger, model.TypeNumber:
 		return 0
-	case "boolean":
+	case model.TypeBoolean:
 		return false
-	case "array":
+	case model.TypeArray:
 		return []any{}
-	case "object":
+	case model.TypeObject:
 		return map[string]any{}
 	default:
 		return nil

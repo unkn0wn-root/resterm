@@ -25,6 +25,7 @@ const (
 	MethodHead    HTTPMethod = "HEAD"
 	MethodOptions HTTPMethod = "OPTIONS"
 	MethodTrace   HTTPMethod = "TRACE"
+	MethodQuery   HTTPMethod = "QUERY"
 )
 
 type Operation struct {
@@ -49,6 +50,23 @@ const (
 	InQuery  ParameterLocation = "query"
 	InHeader ParameterLocation = "header"
 	InCookie ParameterLocation = "cookie"
+)
+
+const (
+	TypeString  = "string"
+	TypeInteger = "integer"
+	TypeNumber  = "number"
+	TypeBoolean = "boolean"
+	TypeArray   = "array"
+	TypeObject  = "object"
+)
+
+const (
+	StyleForm           = "form"
+	StyleSimple         = "simple"
+	StyleDeepObject     = "deepObject"
+	StyleSpaceDelimited = "spaceDelimited"
+	StylePipeDelimited  = "pipeDelimited"
 )
 
 type Parameter struct {
@@ -98,7 +116,32 @@ type Example struct {
 
 type SchemaRef struct {
 	Identifier string
-	Payload    any
+	Node       *Schema
+}
+
+type Schema struct {
+	Title                string
+	Description          string
+	Types                []string
+	Format               string
+	Pattern              string
+	Example              any
+	Default              any
+	Enum                 []any
+	Min                  *float64
+	Max                  *float64
+	MinLen               *int64
+	MaxLen               *int64
+	Required             []string
+	Nullable             *bool
+	ReadOnly             *bool
+	WriteOnly            *bool
+	Items                *SchemaRef
+	Properties           map[string]*SchemaRef
+	AdditionalProperties *SchemaRef
+	OneOf                []*SchemaRef
+	AnyOf                []*SchemaRef
+	AllOf                []*SchemaRef
 }
 
 type SecuritySchemeType string

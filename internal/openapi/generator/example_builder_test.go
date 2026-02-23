@@ -3,8 +3,6 @@ package generator
 import (
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
-
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 )
 
@@ -26,8 +24,8 @@ func TestExampleBuilderStringFormatsDeterministic(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			schema := &openapi3.Schema{Type: &openapi3.Types{"string"}, Format: tc.format}
-			ref := &model.SchemaRef{Payload: &openapi3.SchemaRef{Value: schema}}
+			sch := &model.Schema{Types: []string{"string"}, Format: tc.format}
+			ref := &model.SchemaRef{Node: sch}
 
 			value, ok := builder.FromSchema(ref)
 			if !ok {
@@ -55,5 +53,35 @@ func TestExampleBuilderStringFormatsDeterministic(t *testing.T) {
 				t.Fatalf("non-deterministic example for %s: %s", tc.format, got2)
 			}
 		})
+	}
+}
+
+func TestExampleBuilderHandlesRecursiveSchema(t *testing.T) {
+	t.Parallel()
+
+	ref := &model.SchemaRef{
+		Node: &model.Schema{
+			Types:      []string{"object"},
+			Properties: map[string]*model.SchemaRef{},
+		},
+	}
+	ref.Node.Properties["next"] = ref
+
+	builder := NewExampleBuilder()
+	got, ok := builder.FromSchema(ref)
+	if !ok {
+		t.Fatalf("expected example for recursive schema")
+	}
+
+	obj, ok := got.(map[string]any)
+	if !ok {
+		t.Fatalf("expected object example, got %T", got)
+	}
+	next, ok := obj["next"]
+	if !ok {
+		t.Fatalf("expected next property in example")
+	}
+	if _, ok := next.(map[string]any); !ok {
+		t.Fatalf("expected next fallback object, got %T", next)
 	}
 }
