@@ -98,7 +98,11 @@ func validateOps(ops []model.Operation) error {
 	return errors.Join(errs...)
 }
 
-func collectOperations(ctx context.Context, doc *h3.Document, sm *schMap) ([]model.Operation, error) {
+func collectOperations(
+	ctx context.Context,
+	doc *h3.Document,
+	sm *schMap,
+) ([]model.Operation, error) {
 	if doc == nil || doc.Paths == nil || orderedmap.Len(doc.Paths.PathItems) == 0 {
 		return nil, nil
 	}
@@ -169,13 +173,17 @@ func collectExtraPathOps(item *h3.PathItem) []opEnt {
 	}
 
 	low := item.GoLow()
-	if low == nil || low.AdditionalOperations.Value == nil || low.AdditionalOperations.Value.Len() == 0 {
+	if low == nil {
+		return nil
+	}
+	lowOps := low.AdditionalOperations.Value
+	if lowOps == nil || lowOps.Len() == 0 {
 		return nil
 	}
 
-	names = make([]string, 0, low.AdditionalOperations.Value.Len())
-	extra := make(map[string]*h3.Operation, low.AdditionalOperations.Value.Len())
-	for key, ref := range low.AdditionalOperations.Value.FromOldest() {
+	names = make([]string, 0, lowOps.Len())
+	extra := make(map[string]*h3.Operation, lowOps.Len())
+	for key, ref := range lowOps.FromOldest() {
 		name := strings.ToUpper(strings.TrimSpace(key.Value))
 		if name == "" || ref.Value == nil {
 			continue

@@ -135,7 +135,7 @@ func TestInferSchemaType(t *testing.T) {
 			name: "structural object fallback remains non-explicit",
 			sch: &Schema{
 				Properties: map[string]*SchemaRef{
-					"id": &SchemaRef{Node: &Schema{Types: []SchemaType{TypeString}}},
+					"id": {Node: &Schema{Types: []SchemaType{TypeString}}},
 				},
 			},
 			want: SchemaTypeInfo{PrimaryType: TypeObject},
