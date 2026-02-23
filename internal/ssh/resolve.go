@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/profileutil"
+	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -68,19 +68,19 @@ func lookupProfile(
 
 func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfile.SSHProfile {
 	out := base
-	profileutil.SetIf(&out.Name, override.Name)
-	profileutil.SetIf(&out.Host, override.Host)
-	profileutil.SetIf(&out.PortStr, override.PortStr)
+	connprofile.SetIf(&out.Name, override.Name)
+	connprofile.SetIf(&out.Host, override.Host)
+	connprofile.SetIf(&out.PortStr, override.PortStr)
 
 	if override.PortStr != "" {
 		out.Port = override.Port
 	}
 
-	profileutil.SetIf(&out.User, override.User)
-	profileutil.SetIf(&out.Pass, override.Pass)
-	profileutil.SetIf(&out.Key, override.Key)
-	profileutil.SetIf(&out.KeyPass, override.KeyPass)
-	profileutil.SetIf(&out.KnownHosts, override.KnownHosts)
+	connprofile.SetIf(&out.User, override.User)
+	connprofile.SetIf(&out.Pass, override.Pass)
+	connprofile.SetIf(&out.Key, override.Key)
+	connprofile.SetIf(&out.KeyPass, override.KeyPass)
+	connprofile.SetIf(&out.KnownHosts, override.KnownHosts)
 	if override.Agent.Set {
 		out.Agent = override.Agent
 	}
@@ -90,15 +90,15 @@ func mergeProfile(base restfile.SSHProfile, override restfile.SSHProfile) restfi
 	if override.Persist.Set {
 		out.Persist = override.Persist
 	}
-	if profileutil.OptSet(override.Timeout, override.TimeoutStr) {
+	if connprofile.OptSet(override.Timeout, override.TimeoutStr) {
 		out.Timeout = override.Timeout
 		out.TimeoutStr = override.TimeoutStr
 	}
-	if profileutil.OptSet(override.KeepAlive, override.KeepAliveStr) {
+	if connprofile.OptSet(override.KeepAlive, override.KeepAliveStr) {
 		out.KeepAlive = override.KeepAlive
 		out.KeepAliveStr = override.KeepAliveStr
 	}
-	if profileutil.OptSet(override.Retries, override.RetriesStr) {
+	if connprofile.OptSet(override.Retries, override.RetriesStr) {
 		out.Retries = override.Retries
 		out.RetriesStr = override.RetriesStr
 	}
@@ -125,7 +125,7 @@ func expandProfile(p restfile.SSHProfile, resolver *vars.Resolver) (restfile.SSH
 		if val == "" {
 			continue
 		}
-		expanded, err := profileutil.ExpandValue(val, resolver)
+		expanded, err := connprofile.ExpandValue(val, resolver)
 		if err != nil {
 			return restfile.SSHProfile{}, err
 		}

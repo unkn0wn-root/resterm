@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	k8starget "github.com/unkn0wn-root/resterm/internal/k8s/target"
-	"github.com/unkn0wn-root/resterm/internal/profileutil"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -70,8 +70,8 @@ func lookupProfile(
 func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfile.K8sProfile {
 	out := base
 
-	profileutil.SetIf(&out.Name, override.Name)
-	profileutil.SetIf(&out.Namespace, override.Namespace)
+	connprofile.SetIf(&out.Name, override.Name)
+	connprofile.SetIf(&out.Namespace, override.Namespace)
 
 	// Target and Pod override precedence:
 	// 1) Target overrides clear Pod by default.
@@ -101,10 +101,10 @@ func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfi
 		out.Port = override.Port
 	}
 
-	profileutil.SetIf(&out.Context, override.Context)
-	profileutil.SetIf(&out.Kubeconfig, override.Kubeconfig)
-	profileutil.SetIf(&out.Container, override.Container)
-	profileutil.SetIf(&out.Address, override.Address)
+	connprofile.SetIf(&out.Context, override.Context)
+	connprofile.SetIf(&out.Kubeconfig, override.Kubeconfig)
+	connprofile.SetIf(&out.Container, override.Container)
+	connprofile.SetIf(&out.Address, override.Address)
 
 	if v := strings.TrimSpace(override.LocalPortStr); v != "" {
 		out.LocalPortStr = v
@@ -114,11 +114,11 @@ func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfi
 	if override.Persist.Set {
 		out.Persist = override.Persist
 	}
-	if profileutil.OptSet(override.PodWait, override.PodWaitStr) {
+	if connprofile.OptSet(override.PodWait, override.PodWaitStr) {
 		out.PodWait = override.PodWait
 		out.PodWaitStr = override.PodWaitStr
 	}
-	if profileutil.OptSet(override.Retries, override.RetriesStr) {
+	if connprofile.OptSet(override.Retries, override.RetriesStr) {
 		out.Retries = override.Retries
 		out.RetriesStr = override.RetriesStr
 	}
@@ -147,7 +147,7 @@ func expandProfile(p restfile.K8sProfile, resolver *vars.Resolver) (restfile.K8s
 		if val == "" {
 			continue
 		}
-		expanded, err := profileutil.ExpandValue(val, resolver)
+		expanded, err := connprofile.ExpandValue(val, resolver)
 		if err != nil {
 			return restfile.K8sProfile{}, err
 		}

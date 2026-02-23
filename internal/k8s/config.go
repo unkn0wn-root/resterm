@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	k8starget "github.com/unkn0wn-root/resterm/internal/k8s/target"
-	"github.com/unkn0wn-root/resterm/internal/profileutil"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -54,7 +54,7 @@ type Cfg struct {
 
 func NormalizeProfile(p restfile.K8sProfile) (Cfg, error) {
 	cfg := baseCfg(p)
-	cfg.Name = profileutil.Fallback(cfg.Name, "default")
+	cfg.Name = connprofile.Fallback(cfg.Name, "default")
 	if err := parseTarget(&cfg, p); err != nil {
 		return Cfg{}, err
 	}
@@ -67,7 +67,7 @@ func NormalizeProfile(p restfile.K8sProfile) (Cfg, error) {
 	}
 
 	if cfg.Kubeconfig != "" {
-		path, err := profileutil.ExpandPath(
+		path, err := connprofile.ExpandPath(
 			cfg.Kubeconfig,
 			"cannot resolve home directory for kubeconfig path",
 		)
@@ -83,14 +83,14 @@ func NormalizeProfile(p restfile.K8sProfile) (Cfg, error) {
 func baseCfg(p restfile.K8sProfile) Cfg {
 	return Cfg{
 		Name:      strings.TrimSpace(p.Name),
-		Namespace: profileutil.Fallback(strings.TrimSpace(p.Namespace), defaultNamespace),
+		Namespace: connprofile.Fallback(strings.TrimSpace(p.Namespace), defaultNamespace),
 		Pod:       strings.TrimSpace(p.Pod),
 		// Keep numeric Port as a fallback for programmatic callers that set only Port.
 		Port:         p.Port,
 		Context:      strings.TrimSpace(p.Context),
 		Kubeconfig:   strings.TrimSpace(p.Kubeconfig),
 		Container:    strings.TrimSpace(p.Container),
-		Address:      profileutil.Fallback(strings.TrimSpace(p.Address), defaultAddress),
+		Address:      connprofile.Fallback(strings.TrimSpace(p.Address), defaultAddress),
 		LocalPort:    p.LocalPort,
 		Persist:      p.Persist.Set && p.Persist.Val,
 		PodWait:      defaultPodWait,
@@ -133,7 +133,7 @@ func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
 	if err := parsePortRef(cfg, p); err != nil {
 		return err
 	}
-	if err := profileutil.ParsePort(
+	if err := connprofile.ParsePort(
 		"k8s local",
 		&cfg.LocalPort,
 		&cfg.LocalPortRaw,
@@ -141,7 +141,7 @@ func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
 	); err != nil {
 		return err
 	}
-	if err := profileutil.ParseDuration(
+	if err := connprofile.ParseDuration(
 		"k8s pod wait",
 		&cfg.PodWait,
 		&cfg.PodWaitRaw,
@@ -149,7 +149,7 @@ func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
 	); err != nil {
 		return err
 	}
-	if err := profileutil.ParseRetries(
+	if err := connprofile.ParseRetries(
 		"k8s",
 		&cfg.Retries,
 		&cfg.RetriesRaw,

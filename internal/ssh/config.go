@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/profileutil"
+	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -44,7 +44,7 @@ type Cfg struct {
 
 func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
 	cfg := baseCfg(p)
-	cfg.Name = profileutil.Fallback(cfg.Name, "default")
+	cfg.Name = connprofile.Fallback(cfg.Name, "default")
 	if cfg.Host == "" {
 		return Cfg{}, errors.New("ssh host is required")
 	}
@@ -87,10 +87,10 @@ func applyAuth(cfg *Cfg, p restfile.SSHProfile) {
 }
 
 func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
-	if err := profileutil.ParsePort("ssh", &cfg.Port, &cfg.PortRaw, p.PortStr); err != nil {
+	if err := connprofile.ParsePort("ssh", &cfg.Port, &cfg.PortRaw, p.PortStr); err != nil {
 		return err
 	}
-	if err := profileutil.ParseDuration(
+	if err := connprofile.ParseDuration(
 		"ssh",
 		&cfg.Timeout,
 		&cfg.TimeoutRaw,
@@ -98,7 +98,7 @@ func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
 	); err != nil {
 		return err
 	}
-	if err := profileutil.ParseDuration(
+	if err := connprofile.ParseDuration(
 		"ssh",
 		&cfg.KeepAlive,
 		&cfg.KeepAliveRaw,
@@ -106,7 +106,7 @@ func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
 	); err != nil {
 		return err
 	}
-	if err := profileutil.ParseRetries(
+	if err := connprofile.ParseRetries(
 		"ssh",
 		&cfg.Retries,
 		&cfg.RetriesRaw,
@@ -132,7 +132,7 @@ func defaultStrict(opt restfile.Opt[bool]) bool {
 }
 
 func defaultKnownHosts() (string, error) {
-	return profileutil.ExpandPath(
+	return connprofile.ExpandPath(
 		"~/.ssh/known_hosts",
 		"cannot resolve home directory for known_hosts",
 	)
@@ -155,9 +155,9 @@ func cacheKey(cfg Cfg) string {
 		cfg.User,
 		authFingerprint(cfg),
 		cfg.KnownHosts,
-		profileutil.BoolKey(cfg.Strict),
-		profileutil.BoolKey(cfg.Agent),
-		profileutil.BoolKey(cfg.Persist),
+		connprofile.BoolKey(cfg.Strict),
+		connprofile.BoolKey(cfg.Agent),
+		connprofile.BoolKey(cfg.Persist),
 		cfg.Timeout.String(),
 		cfg.KeepAlive.String(),
 		strconv.Itoa(cfg.Retries),
@@ -192,7 +192,7 @@ func hashSecret(secret string) string {
 
 func resolvePaths(cfg *Cfg, p restfile.SSHProfile) error {
 	if p.Key != "" {
-		keyPath, err := profileutil.ExpandPath(p.Key, "cannot resolve home directory for ssh path")
+		keyPath, err := connprofile.ExpandPath(p.Key, "cannot resolve home directory for ssh path")
 		if err != nil {
 			return err
 		}
@@ -208,7 +208,7 @@ func resolvePaths(cfg *Cfg, p restfile.SSHProfile) error {
 		return nil
 	}
 
-	kh, err := profileutil.ExpandPath(cfg.KnownHosts, "cannot resolve home directory for ssh path")
+	kh, err := connprofile.ExpandPath(cfg.KnownHosts, "cannot resolve home directory for ssh path")
 	if err != nil {
 		return err
 	}

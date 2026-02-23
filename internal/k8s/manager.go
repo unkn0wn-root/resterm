@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/unkn0wn-root/resterm/internal/connprofile"
 	"github.com/unkn0wn-root/resterm/internal/connutil"
-	"github.com/unkn0wn-root/resterm/internal/profileutil"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -1158,11 +1158,11 @@ func cacheKey(cfg Cfg, load loadCfg) string {
 		cfg.Container,
 		cfg.Address,
 		strconv.Itoa(cfg.LocalPort),
-		profileutil.BoolKey(cfg.Persist),
+		connprofile.BoolKey(cfg.Persist),
 		cfg.PodWait.String(),
 		strconv.Itoa(cfg.Retries),
 		string(load.policy),
-		profileutil.BoolKey(load.stdinUnavail),
+		connprofile.BoolKey(load.stdinUnavail),
 		load.stdinMsg,
 		strings.Join(load.allowlist, ","),
 	}

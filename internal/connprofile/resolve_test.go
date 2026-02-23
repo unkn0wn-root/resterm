@@ -1,4 +1,4 @@
-package profileutil
+package connprofile
 
 import (
 	"os"
