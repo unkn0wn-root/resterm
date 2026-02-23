@@ -1,10 +1,10 @@
 package generator
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -12,15 +12,45 @@ const (
 	sampleDateTimeValue = "2000-01-02T15:04:05Z"
 )
 
-type ExampleBuilder struct {
+type stringFormat string
+
+const (
+	fmtUUID          stringFormat = "uuid"
+	fmtDate          stringFormat = "date"
+	fmtDateTime      stringFormat = "date-time"
+	fmtDateTimeAlias stringFormat = "datetime"
+	fmtEmail         stringFormat = "email"
+	fmtURI           stringFormat = "uri"
+	fmtURL           stringFormat = "url"
+	fmtHostname      stringFormat = "hostname"
+	fmtIPv4          stringFormat = "ipv4"
+	fmtIPv6          stringFormat = "ipv6"
+)
+
+var strFmtSamples = map[stringFormat]string{
+	fmtUUID:          "00000000-0000-4000-8000-000000000000",
+	fmtDate:          sampleDateValue,
+	fmtDateTime:      sampleDateTimeValue,
+	fmtDateTimeAlias: sampleDateTimeValue,
+	fmtEmail:         "user@example.com",
+	fmtURI:           "https://example.com/resource",
+	fmtURL:           "https://example.com/resource",
+	fmtHostname:      "example.com",
+	fmtIPv4:          "127.0.0.1",
+	fmtIPv6:          "2001:db8::1",
+}
+
+type schemaSampler struct {
 	maxDepth int
 }
 
-func NewExampleBuilder() *ExampleBuilder {
-	return &ExampleBuilder{maxDepth: 6}
+func newSchemaSampler() *schemaSampler {
+	return &schemaSampler{maxDepth: 6}
 }
 
-func (b *ExampleBuilder) FromSchema(ref *model.SchemaRef) (any, bool) {
+// schemaSampler synthesizes deterministic sample values from schemas when
+// explicit OpenAPI examples/defaults/enums are missing.
+func (b *schemaSampler) FromSchema(ref *model.SchemaRef) (any, bool) {
 	if ref == nil || ref.Node == nil {
 		return nil, false
 	}
@@ -30,7 +60,7 @@ func (b *ExampleBuilder) FromSchema(ref *model.SchemaRef) (any, bool) {
 // Depth limit prevents infinite recursion from circular schema references.
 // AllOf merges all schemas together since the result must satisfy all of them.
 // OneOf/AnyOf just pick the first option since we can't guess which variant to use.
-func (b *ExampleBuilder) build(ref *model.SchemaRef, depth int) (any, bool) {
+func (b *schemaSampler) build(ref *model.SchemaRef, depth int) (any, bool) {
 	if ref == nil || ref.Node == nil {
 		return nil, false
 	}
@@ -76,25 +106,13 @@ func (b *ExampleBuilder) build(ref *model.SchemaRef, depth int) (any, bool) {
 		}
 	}
 
-	types := sch.Types
-	if len(types) == 0 {
-		// assume object if properties defined, otherwise fallback to string
-		if len(sch.Properties) > 0 || sch.AdditionalProperties != nil {
-			types = []string{model.TypeObject}
-		} else if sch.Items != nil {
-			types = []string{model.TypeArray}
-		} else {
-			types = []string{model.TypeString}
-		}
-	}
-
-	switch types[0] {
+	switch model.InferSchemaType(sch, model.TypeString) {
 	case model.TypeString:
-		return exampleForString(sch), true
+		return sampleForString(sch), true
 	case model.TypeInteger:
-		return exampleForInteger(sch), true
+		return sampleForInteger(sch), true
 	case model.TypeNumber:
-		return exampleForNumber(sch), true
+		return sampleForNumber(sch), true
 	case model.TypeBoolean:
 		return false, true
 	case model.TypeArray:
@@ -107,23 +125,19 @@ func (b *ExampleBuilder) build(ref *model.SchemaRef, depth int) (any, bool) {
 		}
 		return []any{value}, true
 	case model.TypeObject:
-		return b.exampleForObject(sch, depth+1)
+		return b.sampleForObject(sch, depth+1)
 	default:
 		return nil, false
 	}
 }
 
-func (b *ExampleBuilder) exampleForObject(sch *model.Schema, depth int) (any, bool) {
+func (b *schemaSampler) sampleForObject(sch *model.Schema, depth int) (any, bool) {
 	if sch == nil {
 		return nil, false
 	}
 	result := make(map[string]any)
 
-	keys := make([]string, 0, len(sch.Properties))
-	for name := range sch.Properties {
-		keys = append(keys, name)
-	}
-	sort.Strings(keys)
+	keys := util.SortedKeys(sch.Properties)
 	for _, name := range keys {
 		prop := sch.Properties[name]
 		if prop == nil {
@@ -150,27 +164,13 @@ func (b *ExampleBuilder) exampleForObject(sch *model.Schema, depth int) (any, bo
 	return result, true
 }
 
-func exampleForString(sch *model.Schema) string {
+func sampleForString(sch *model.Schema) string {
 	if sch == nil {
 		return ""
 	}
-	switch strings.ToLower(sch.Format) {
-	case "uuid":
-		return "00000000-0000-4000-8000-000000000000"
-	case "date":
-		return sampleDateValue
-	case "date-time", "datetime":
-		return sampleDateTimeValue
-	case "email":
-		return "user@example.com"
-	case "uri", "url":
-		return "https://example.com/resource"
-	case "hostname":
-		return "example.com"
-	case "ipv4":
-		return "127.0.0.1"
-	case "ipv6":
-		return "2001:db8::1"
+	k := stringFormat(strings.ToLower(strings.TrimSpace(sch.Format)))
+	if v, ok := strFmtSamples[k]; ok {
+		return v
 	}
 	if len(sch.Enum) > 0 {
 		if value, ok := sch.Enum[0].(string); ok {
@@ -183,30 +183,30 @@ func exampleForString(sch *model.Schema) string {
 	return defaultSampleValue
 }
 
-func exampleForInteger(sch *model.Schema) int64 {
-	if sch == nil {
-		return 0
-	}
-	if sch.Min != nil {
-		return int64(*sch.Min)
-	}
-	if sch.Max != nil {
-		return int64(*sch.Max)
-	}
-	return 0
+type numericSample interface {
+	~int64 | ~float64
 }
 
-func exampleForNumber(sch *model.Schema) float64 {
+func sampleNumeric[T numericSample](sch *model.Schema, cvt func(float64) T) T {
+	var z T
 	if sch == nil {
-		return 0
+		return z
 	}
 	if sch.Min != nil {
-		return *sch.Min
+		return cvt(*sch.Min)
 	}
 	if sch.Max != nil {
-		return *sch.Max
+		return cvt(*sch.Max)
 	}
-	return 0
+	return z
+}
+
+func sampleForInteger(sch *model.Schema) int64 {
+	return sampleNumeric(sch, func(f float64) int64 { return int64(f) })
+}
+
+func sampleForNumber(sch *model.Schema) float64 {
+	return sampleNumeric(sch, func(f float64) float64 { return f })
 }
 
 func defaultForType(ref *model.SchemaRef) any {
@@ -214,17 +214,21 @@ func defaultForType(ref *model.SchemaRef) any {
 		return nil
 	}
 	sch := ref.Node
+	// Keep fallback precedence aligned with build(): example -> default -> enum.
+	if sch.Example != nil {
+		return sch.Example
+	}
 	if sch.Default != nil {
 		return sch.Default
 	}
 	if len(sch.Enum) > 0 {
 		return sch.Enum[0]
 	}
-	types := sch.Types
-	if len(types) == 0 {
+	t := model.InferSchemaType(sch, "")
+	if t == "" {
 		return nil
 	}
-	switch types[0] {
+	switch t {
 	case model.TypeString:
 		return defaultSampleValue
 	case model.TypeInteger, model.TypeNumber:

@@ -6,10 +6,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 )
 
-func TestExampleBuilderStringFormatsDeterministic(t *testing.T) {
+func TestSchemaSamplerStringFormatsDeterministic(t *testing.T) {
 	t.Parallel()
 
-	builder := NewExampleBuilder()
+	sampler := newSchemaSampler()
 
 	tests := []struct {
 		name     string
@@ -24,10 +24,10 @@ func TestExampleBuilderStringFormatsDeterministic(t *testing.T) {
 	for _, tc := range tests {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
-			sch := &model.Schema{Types: []string{"string"}, Format: tc.format}
+			sch := &model.Schema{Types: []model.SchemaType{model.TypeString}, Format: tc.format}
 			ref := &model.SchemaRef{Node: sch}
 
-			value, ok := builder.FromSchema(ref)
+			value, ok := sampler.FromSchema(ref)
 			if !ok {
 				t.Fatalf("expected example for format %s", tc.format)
 			}
@@ -41,7 +41,7 @@ func TestExampleBuilderStringFormatsDeterministic(t *testing.T) {
 				t.Fatalf("unexpected example for %s: %s", tc.format, got)
 			}
 
-			value2, ok := builder.FromSchema(ref)
+			value2, ok := sampler.FromSchema(ref)
 			if !ok {
 				t.Fatalf("second retrieval failed for %s", tc.format)
 			}
@@ -56,19 +56,19 @@ func TestExampleBuilderStringFormatsDeterministic(t *testing.T) {
 	}
 }
 
-func TestExampleBuilderHandlesRecursiveSchema(t *testing.T) {
+func TestSchemaSamplerHandlesRecursiveSchema(t *testing.T) {
 	t.Parallel()
 
 	ref := &model.SchemaRef{
 		Node: &model.Schema{
-			Types:      []string{"object"},
+			Types:      []model.SchemaType{model.TypeObject},
 			Properties: map[string]*model.SchemaRef{},
 		},
 	}
 	ref.Node.Properties["next"] = ref
 
-	builder := NewExampleBuilder()
-	got, ok := builder.FromSchema(ref)
+	sampler := newSchemaSampler()
+	got, ok := sampler.FromSchema(ref)
 	if !ok {
 		t.Fatalf("expected example for recursive schema")
 	}

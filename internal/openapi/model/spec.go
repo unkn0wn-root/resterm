@@ -1,5 +1,7 @@
 package model
 
+import "strings"
+
 type Spec struct {
 	Title           string
 	Version         string
@@ -52,13 +54,15 @@ const (
 	InCookie ParameterLocation = "cookie"
 )
 
+type SchemaType string
+
 const (
-	TypeString  = "string"
-	TypeInteger = "integer"
-	TypeNumber  = "number"
-	TypeBoolean = "boolean"
-	TypeArray   = "array"
-	TypeObject  = "object"
+	TypeString  SchemaType = "string"
+	TypeInteger SchemaType = "integer"
+	TypeNumber  SchemaType = "number"
+	TypeBoolean SchemaType = "boolean"
+	TypeArray   SchemaType = "array"
+	TypeObject  SchemaType = "object"
 )
 
 const (
@@ -122,7 +126,7 @@ type SchemaRef struct {
 type Schema struct {
 	Title                string
 	Description          string
-	Types                []string
+	Types                []SchemaType
 	Format               string
 	Pattern              string
 	Example              any
@@ -142,6 +146,38 @@ type Schema struct {
 	OneOf                []*SchemaRef
 	AnyOf                []*SchemaRef
 	AllOf                []*SchemaRef
+}
+
+func InferSchemaType(sch *Schema, d SchemaType) SchemaType {
+	if sch == nil {
+		return d
+	}
+	if len(sch.Types) > 0 {
+		if t := normalizeSchemaType(sch.Types[0]); t != "" {
+			return t
+		}
+	}
+	if len(sch.Properties) > 0 || sch.AdditionalProperties != nil {
+		return TypeObject
+	}
+	if sch.Items != nil {
+		return TypeArray
+	}
+	return d
+}
+
+func normalizeSchemaType(t SchemaType) SchemaType {
+	s := strings.ToLower(strings.TrimSpace(string(t)))
+	if s == "" {
+		return ""
+	}
+	n := SchemaType(s)
+	switch n {
+	case TypeString, TypeInteger, TypeNumber, TypeBoolean, TypeArray, TypeObject:
+		return n
+	default:
+		return n
+	}
 }
 
 type SecuritySchemeType string

@@ -15,6 +15,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const parRefPre = "#/components/parameters/"
@@ -47,7 +48,7 @@ func newHdrFix(root map[string]any) *hdrFix {
 
 	com := mapAt(root, "components")
 	prm := mapAt(com, "parameters")
-	for _, k := range sortedKeys(prm) {
+	for _, k := range util.SortedKeys(prm) {
 		h, ok := hdrParam(prm, k, map[string]bool{k: true})
 		if ok {
 			fx.pm[k] = h
@@ -75,7 +76,7 @@ func (fx *hdrFix) walk(root map[string]any) {
 	}
 
 	pts := mapAt(root, "paths")
-	for _, p := range sortedKeys(pts) {
+	for _, p := range util.SortedKeys(pts) {
 		pi := mapAt(pts, p)
 		if len(pi) == 0 {
 			continue
@@ -100,7 +101,7 @@ func (fx *hdrFix) walkPi(pi map[string]any, seg []string) {
 	}
 
 	extra := mapAt(pi, "additionalOperations")
-	for _, name := range sortedKeys(extra) {
+	for _, name := range util.SortedKeys(extra) {
 		op := mapAt(extra, name)
 		if len(op) == 0 {
 			continue
@@ -109,7 +110,7 @@ func (fx *hdrFix) walkPi(pi map[string]any, seg []string) {
 		fx.walkOp(op, segAdd(seg, "additionalOperations", name))
 	}
 
-	for _, key := range sortedKeys(pi) {
+	for _, key := range util.SortedKeys(pi) {
 		lk := strings.ToLower(key)
 		if seen[lk] {
 			continue
@@ -136,7 +137,7 @@ func (fx *hdrFix) walkOp(op map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) walkRs(rs map[string]any, seg []string) {
-	for _, code := range sortedKeys(rs) {
+	for _, code := range util.SortedKeys(rs) {
 		r := mapAt(rs, code)
 		if len(r) == 0 {
 			continue
@@ -148,7 +149,7 @@ func (fx *hdrFix) walkRs(rs map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) walkRbs(rbs map[string]any, seg []string) {
-	for _, k := range sortedKeys(rbs) {
+	for _, k := range util.SortedKeys(rbs) {
 		rb := mapAt(rbs, k)
 		if len(rb) == 0 {
 			continue
@@ -159,13 +160,13 @@ func (fx *hdrFix) walkRbs(rbs map[string]any, seg []string) {
 
 func (fx *hdrFix) walkRb(rb map[string]any, seg []string) {
 	cnt := mapAt(rb, "content")
-	for _, mt := range sortedKeys(cnt) {
+	for _, mt := range util.SortedKeys(cnt) {
 		m := mapAt(cnt, mt)
 		if len(m) == 0 {
 			continue
 		}
 		enc := mapAt(m, "encoding")
-		for _, fld := range sortedKeys(enc) {
+		for _, fld := range util.SortedKeys(enc) {
 			e := mapAt(enc, fld)
 			if len(e) == 0 {
 				continue
@@ -180,7 +181,7 @@ func (fx *hdrFix) walkRb(rb map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) walkCbs(cbs map[string]any, seg []string) {
-	for _, cbn := range sortedKeys(cbs) {
+	for _, cbn := range util.SortedKeys(cbs) {
 		cb := mapAt(cbs, cbn)
 		if len(cb) == 0 {
 			continue
@@ -188,7 +189,7 @@ func (fx *hdrFix) walkCbs(cbs map[string]any, seg []string) {
 		if _, ok := strAt(cb, "$ref"); ok {
 			continue
 		}
-		for _, exp := range sortedKeys(cb) {
+		for _, exp := range util.SortedKeys(cb) {
 			pi := mapAt(cb, exp)
 			if len(pi) == 0 {
 				continue
@@ -199,7 +200,7 @@ func (fx *hdrFix) walkCbs(cbs map[string]any, seg []string) {
 }
 
 func (fx *hdrFix) fixHs(hs map[string]any, seg []string) {
-	for _, hk := range sortedKeys(hs) {
+	for _, hk := range util.SortedKeys(hs) {
 		h := mapAt(hs, hk)
 		if len(h) == 0 {
 			continue
@@ -416,18 +417,6 @@ func strAt(m map[string]any, k string) (string, bool) {
 		return "", false
 	}
 	return s, true
-}
-
-func sortedKeys[M ~map[K]V, K ~string, V any](m M) []K {
-	if len(m) == 0 {
-		return nil
-	}
-	ks := make([]K, 0, len(m))
-	for k := range m {
-		ks = append(ks, k)
-	}
-	sort.Slice(ks, func(i, j int) bool { return ks[i] < ks[j] })
-	return ks
 }
 
 func parName(ref string) (string, bool) {
