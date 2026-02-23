@@ -106,7 +106,10 @@ func (b *schemaSampler) build(ref *model.SchemaRef, depth int) (any, bool) {
 		}
 	}
 
-	switch model.InferSchemaType(sch, model.TypeString) {
+	typeInfo := model.InferSchemaType(sch, model.TypeString)
+	switch typeInfo.PrimaryType {
+	case model.TypeNull:
+		return nil, true
 	case model.TypeString:
 		return sampleForString(sch), true
 	case model.TypeInteger:
@@ -224,11 +227,13 @@ func defaultForType(ref *model.SchemaRef) any {
 	if len(sch.Enum) > 0 {
 		return sch.Enum[0]
 	}
-	t := model.InferSchemaType(sch, "")
-	if t == "" {
+	typeInfo := model.InferSchemaType(sch, "")
+	if typeInfo.PrimaryType == "" {
 		return nil
 	}
-	switch t {
+	switch typeInfo.PrimaryType {
+	case model.TypeNull:
+		return nil
 	case model.TypeString:
 		return defaultSampleValue
 	case model.TypeInteger, model.TypeNumber:

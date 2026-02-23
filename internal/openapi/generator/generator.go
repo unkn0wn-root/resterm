@@ -269,11 +269,11 @@ func (rb *requestBuilder) buildParamBinding(param model.Parameter, varName strin
 
 func (rb *requestBuilder) inferSchemaKind(param model.Parameter) schemaKind {
 	sch := parameterSchema(param)
-	t := model.InferSchemaType(sch, "")
-	if t == "" {
+	typeInfo := model.InferSchemaType(sch, "")
+	if typeInfo.PrimaryType == "" {
 		return schemaPrimitive
 	}
-	switch t {
+	switch typeInfo.PrimaryType {
 	case model.TypeArray:
 		return schemaArray
 	case model.TypeObject:

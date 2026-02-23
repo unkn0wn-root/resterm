@@ -149,22 +149,55 @@ type Schema struct {
 	AllOf                []*SchemaRef
 }
 
-func InferSchemaType(sch *Schema, d SchemaType) SchemaType {
+// SchemaTypeInfo captures normalized schema type inference details.
+// PrimaryType is the non-null concrete type when available, TypeNull for null-only schemas,
+// or the caller-provided default when no type could be inferred.
+type SchemaTypeInfo struct {
+	PrimaryType SchemaType
+	Nullable    bool
+	Explicit    bool
+}
+
+func InferSchemaType(sch *Schema, d SchemaType) SchemaTypeInfo {
+	info := SchemaTypeInfo{PrimaryType: d}
 	if sch == nil {
-		return d
+		return info
 	}
+	if sch.Nullable != nil && *sch.Nullable {
+		info.Nullable = true
+	}
+	hasConcrete := false
 	for _, raw := range sch.Types {
-		if t := normalizeSchemaType(raw); t != "" && t != TypeNull {
-			return t
+		t := normalizeSchemaType(raw)
+		switch t {
+		case "":
+			continue
+		case TypeNull:
+			info.Nullable = true
+			if info.PrimaryType == d {
+				info.PrimaryType = TypeNull
+				info.Explicit = true
+			}
+		default:
+			if !hasConcrete {
+				info.PrimaryType = t
+				info.Explicit = true
+				hasConcrete = true
+			}
 		}
 	}
+	if info.Explicit {
+		return info
+	}
 	if len(sch.Properties) > 0 || sch.AdditionalProperties != nil {
-		return TypeObject
+		info.PrimaryType = TypeObject
+		return info
 	}
 	if sch.Items != nil {
-		return TypeArray
+		info.PrimaryType = TypeArray
+		return info
 	}
-	return d
+	return info
 }
 
 func normalizeSchemaType(t SchemaType) SchemaType {

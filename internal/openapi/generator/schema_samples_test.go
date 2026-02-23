@@ -85,3 +85,45 @@ func TestSchemaSamplerHandlesRecursiveSchema(t *testing.T) {
 		t.Fatalf("expected next fallback object, got %T", next)
 	}
 }
+
+func TestSchemaSamplerNullTypeProducesNull(t *testing.T) {
+	t.Parallel()
+
+	sampler := newSchemaSampler()
+	ref := &model.SchemaRef{
+		Node: &model.Schema{
+			Types: []model.SchemaType{model.TypeNull},
+		},
+	}
+
+	got, ok := sampler.FromSchema(ref)
+	if !ok {
+		t.Fatalf("expected sample for null schema")
+	}
+	if got != nil {
+		t.Fatalf("expected nil sample for null schema, got %T (%v)", got, got)
+	}
+}
+
+func TestSchemaSamplerNullStringUnionPrefersConcreteType(t *testing.T) {
+	t.Parallel()
+
+	sampler := newSchemaSampler()
+	ref := &model.SchemaRef{
+		Node: &model.Schema{
+			Types: []model.SchemaType{model.TypeNull, model.TypeString},
+		},
+	}
+
+	got, ok := sampler.FromSchema(ref)
+	if !ok {
+		t.Fatalf("expected sample for null/string union")
+	}
+	s, ok := got.(string)
+	if !ok {
+		t.Fatalf("expected string sample for null/string union, got %T", got)
+	}
+	if s == "" {
+		t.Fatalf("expected non-empty string sample for null/string union")
+	}
+}
