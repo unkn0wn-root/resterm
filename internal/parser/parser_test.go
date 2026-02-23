@@ -2365,6 +2365,28 @@ GET https://example.com/api
 	}
 }
 
+func TestParseTraceDirectiveSkipsEmptyPhaseNames(t *testing.T) {
+	src := `# @trace <=50ms =100ms total<=400ms
+GET https://example.com/api
+`
+
+	doc := Parse("trace-empty-phase.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	spec := req.Metadata.Trace
+	if spec == nil {
+		t.Fatalf("expected trace metadata")
+	}
+	if spec.Budgets.Total != 400*time.Millisecond {
+		t.Fatalf("unexpected total budget: %v", spec.Budgets.Total)
+	}
+	if len(spec.Budgets.Phases) != 0 {
+		t.Fatalf("expected no phase budgets, got %v", spec.Budgets.Phases)
+	}
+}
+
 func TestParseUseDirectiveNoAlias(t *testing.T) {
 	src := `# @use ./rts/helpers.rts
 GET https://example.com

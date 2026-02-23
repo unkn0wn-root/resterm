@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -348,12 +349,12 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 		}
 
 		if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
-			name := normalizeTracePhaseName(parts[0])
+			name := tracebudget.NormalizePhase(parts[0])
 			dur := parseDuration(parts[1])
-			if dur <= 0 {
+			if name == "" || dur <= 0 {
 				continue
 			}
-			if name == "total" {
+			if name == tracebudget.TotalPhase {
 				spec.Budgets.Total = dur
 				continue
 			}
@@ -385,8 +386,11 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 				if dur <= 0 {
 					continue
 				}
-				name := normalizeTracePhaseName(key)
-				if name == "total" {
+				name := tracebudget.NormalizePhase(key)
+				if name == "" {
+					continue
+				}
+				if name == tracebudget.TotalPhase {
 					spec.Budgets.Total = dur
 					continue
 				}
@@ -481,27 +485,4 @@ func parseDuration(value string) time.Duration {
 		return 0
 	}
 	return dur
-}
-
-func normalizeTracePhaseName(name string) string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "dns", "lookup", "name":
-		return "dns"
-	case "connect", "dial":
-		return "connect"
-	case "tls", "handshake":
-		return "tls"
-	case "headers", "request_headers", "req_headers", "header":
-		return "request_headers"
-	case "body", "request_body", "req_body":
-		return "request_body"
-	case "ttfb", "first_byte", "wait":
-		return "ttfb"
-	case "transfer", "download":
-		return "transfer"
-	case "total", "overall":
-		return "total"
-	default:
-		return strings.ToLower(strings.TrimSpace(name))
-	}
 }

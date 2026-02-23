@@ -1,4 +1,4 @@
-package traceutil
+package tracebudget
 
 import (
 	"testing"
@@ -8,7 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func TestBudgetFromSpecNormalizesPhases(t *testing.T) {
+func TestFromSpecNormalizesPhases(t *testing.T) {
 	spec := &restfile.TraceSpec{Enabled: true}
 	spec.Budgets.Total = 100 * time.Millisecond
 	spec.Budgets.Phases = map[string]time.Duration{
@@ -17,7 +17,7 @@ func TestBudgetFromSpecNormalizesPhases(t *testing.T) {
 		"transfer": 50 * time.Millisecond,
 	}
 
-	budget, ok := BudgetFromSpec(spec)
+	budget, ok := FromSpec(spec)
 	if !ok {
 		t.Fatalf("expected budget to be detected")
 	}
@@ -32,14 +32,14 @@ func TestBudgetFromSpecNormalizesPhases(t *testing.T) {
 	}
 }
 
-func TestBudgetFromSpecDisabled(t *testing.T) {
+func TestFromSpecDisabled(t *testing.T) {
 	spec := &restfile.TraceSpec{Enabled: false}
-	if _, ok := BudgetFromSpec(spec); ok {
+	if _, ok := FromSpec(spec); ok {
 		t.Fatalf("expected disabled spec to skip budget")
 	}
 }
 
-func TestBudgetFromTraceBudgetClampsNegative(t *testing.T) {
+func TestFromTraceClampsNegative(t *testing.T) {
 	b := restfile.TraceBudget{
 		Total:     -5 * time.Millisecond,
 		Tolerance: -10 * time.Millisecond,
@@ -49,7 +49,7 @@ func TestBudgetFromTraceBudgetClampsNegative(t *testing.T) {
 		},
 	}
 
-	budget := BudgetFromTraceBudget(b)
+	budget := FromTrace(b)
 	if budget.Total != 0 {
 		t.Fatalf("expected total to clamp to 0, got %v", budget.Total)
 	}
@@ -64,5 +64,23 @@ func TestBudgetFromTraceBudgetClampsNegative(t *testing.T) {
 	}
 	if budget.Phases[nettrace.PhaseTransfer] != 30*time.Millisecond {
 		t.Fatalf("expected transfer phase to remain, got %v", budget.Phases[nettrace.PhaseTransfer])
+	}
+}
+
+func TestNormalizePhase(t *testing.T) {
+	cs := map[string]string{
+		" DNS ":      "dns",
+		"header":     "request_headers",
+		"req_body":   "request_body",
+		"first_byte": "ttfb",
+		"overall":    "total",
+		"custom":     "custom",
+		"":           "",
+	}
+	for in, want := range cs {
+		got := NormalizePhase(in)
+		if got != want {
+			t.Fatalf("NormalizePhase(%q) = %q, want %q", in, got, want)
+		}
 	}
 }

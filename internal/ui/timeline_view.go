@@ -12,7 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 )
 
 const (
@@ -126,14 +126,14 @@ func buildTimelineReport(
 
 	if rep != nil {
 		budget = rep.Budget
-		hasBudget = traceutil.HasBudget(budget)
+		hasBudget = tracebudget.HasBudget(budget)
 		if len(rep.BudgetReport.Breaches) > 0 {
 			breaches = append([]nettrace.BudgetBreach(nil), rep.BudgetReport.Breaches...)
 		}
 	}
 
 	if !hasBudget && spec != nil {
-		if b, ok := traceutil.BudgetFromSpec(spec); ok {
+		if b, ok := tracebudget.FromSpec(spec); ok {
 			budget = b
 			hasBudget = true
 		}

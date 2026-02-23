@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
-	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 )
 
 type TraceSummary struct {
@@ -117,7 +117,7 @@ func NewTraceSummary(tl *nettrace.Timeline, rep *nettrace.Report) *TraceSummary 
 
 	if rep != nil {
 		budget := rep.Budget.Clone()
-		if traceutil.HasBudget(budget) {
+		if tracebudget.HasBudget(budget) {
 			bud := &TraceBudget{Total: budget.Total, Tolerance: budget.Tolerance}
 			if len(budget.Phases) > 0 {
 				phases := make(map[string]time.Duration, len(budget.Phases))

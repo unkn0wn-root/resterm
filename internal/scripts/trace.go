@@ -6,7 +6,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 )
 
 // TraceInput carries timeline and budget information into the scripting runtime.
@@ -133,7 +133,7 @@ func evaluateTraceBudget(tl *nettrace.Timeline, budget TraceBudget) nettrace.Bud
 			raw.Phases[name] = dur
 		}
 	}
-	converted := traceutil.BudgetFromTraceBudget(raw)
+	converted := tracebudget.FromTrace(raw)
 	return nettrace.EvaluateBudget(tl, converted)
 }
 

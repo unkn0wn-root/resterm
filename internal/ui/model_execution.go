@@ -27,7 +27,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
-	"github.com/unkn0wn-root/resterm/internal/traceutil"
+	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -282,7 +282,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 		}
 		if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 			options.Trace = true
-			if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
+			if budget, ok := tracebudget.FromSpec(cloned.Metadata.Trace); ok {
 				options.TraceBudget = &budget
 			}
 		}
@@ -301,7 +301,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 
 	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 		options.Trace = true
-		if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
+		if budget, ok := tracebudget.FromSpec(cloned.Metadata.Trace); ok {
 			options.TraceBudget = &budget
 		}
 	}
@@ -377,7 +377,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	}
 	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
 		options.Trace = true
-		if budget, ok := traceutil.BudgetFromSpec(cloned.Metadata.Trace); ok {
+		if budget, ok := tracebudget.FromSpec(cloned.Metadata.Trace); ok {
 			options.TraceBudget = &budget
 		}
 	}
@@ -407,7 +407,7 @@ func (m *Model) executeRequest(
 
 	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
 		options.Trace = true
-		if budget, ok := traceutil.BudgetFromSpec(req.Metadata.Trace); ok {
+		if budget, ok := tracebudget.FromSpec(req.Metadata.Trace); ok {
 			options.TraceBudget = &budget
 		}
 	}
