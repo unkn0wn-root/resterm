@@ -1,4 +1,4 @@
-package captureutil
+package capture
 
 import "testing"
 

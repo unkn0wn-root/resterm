@@ -3,7 +3,7 @@ package parser
 import (
 	"fmt"
 
-	"github.com/unkn0wn-root/resterm/internal/captureutil"
+	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -12,7 +12,7 @@ func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {
 		return
 	}
 	for _, c := range req.Metadata.Captures {
-		if captureutil.HasJSONPathDoubleDot(c.Expression) {
+		if capture.HasJSONPathDoubleDot(c.Expression) {
 			b.addWarning(
 				c.Line,
 				fmt.Sprintf(
@@ -23,7 +23,7 @@ func (b *documentBuilder) lintRequestCaptures(req *restfile.Request) {
 			)
 		}
 		if c.Mode == restfile.CaptureExprModeTemplate &&
-			captureutil.MixedTemplateRTSCall(c.Expression) {
+			capture.MixedTemplateRTSCall(c.Expression) {
 			b.addWarning(
 				c.Line,
 				fmt.Sprintf(

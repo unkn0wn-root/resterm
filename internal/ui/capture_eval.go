@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/unkn0wn-root/resterm/internal/captureutil"
+	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -124,7 +124,7 @@ func (m *Model) applyCaptures(in captureRun) error {
 	}
 
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, in.env, m.cfg.EnvironmentName)
-	st := captureutil.StrictEnabled(in.req.Settings)
+	st := capture.StrictEnabled(in.req.Settings)
 	lc := newCaptureContext(in.resp, in.stream, st)
 	rr := rtsScriptResp(in.resp)
 	rs := rtsStream(in.stream)
@@ -183,7 +183,7 @@ func (m *Model) captureValue(in captureValueIn) (string, captureExpr, error) {
 		return "", ex, nil
 	}
 	if ex.mode == restfile.CaptureExprModeTemplate {
-		if captureutil.MixedTemplateRTSCall(ex.raw) {
+		if capture.MixedTemplateRTSCall(ex.raw) {
 			return "", ex, fmt.Errorf(
 				"mixed capture syntax is not supported; use pure RTS or {{= ... }}",
 			)
@@ -246,7 +246,7 @@ func parseCaptureExpr(raw string, mode restfile.CaptureExprMode) captureExpr {
 			mode: restfile.CaptureExprModeRTS,
 		}
 	default:
-		if captureutil.HasUnquotedTemplateMarker(ex) {
+		if capture.HasUnquotedTemplateMarker(ex) {
 			return captureExpr{
 				raw:  ex,
 				norm: ex,
