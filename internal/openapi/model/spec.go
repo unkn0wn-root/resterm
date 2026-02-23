@@ -1,5 +1,7 @@
 package model
 
+import "strings"
+
 type Spec struct {
 	Title           string
 	Version         string
@@ -52,13 +54,16 @@ const (
 	InCookie ParameterLocation = "cookie"
 )
 
+type SchemaType string
+
 const (
-	TypeString  = "string"
-	TypeInteger = "integer"
-	TypeNumber  = "number"
-	TypeBoolean = "boolean"
-	TypeArray   = "array"
-	TypeObject  = "object"
+	TypeString  SchemaType = "string"
+	TypeInteger SchemaType = "integer"
+	TypeNumber  SchemaType = "number"
+	TypeBoolean SchemaType = "boolean"
+	TypeArray   SchemaType = "array"
+	TypeObject  SchemaType = "object"
+	TypeNull    SchemaType = "null"
 )
 
 const (
@@ -122,7 +127,7 @@ type SchemaRef struct {
 type Schema struct {
 	Title                string
 	Description          string
-	Types                []string
+	Types                []SchemaType
 	Format               string
 	Pattern              string
 	Example              any
@@ -142,6 +147,71 @@ type Schema struct {
 	OneOf                []*SchemaRef
 	AnyOf                []*SchemaRef
 	AllOf                []*SchemaRef
+}
+
+// SchemaTypeInfo captures normalized schema type inference details.
+// PrimaryType is the non-null concrete type when available, TypeNull for null-only schemas,
+// or the caller-provided default when no type could be inferred.
+type SchemaTypeInfo struct {
+	PrimaryType SchemaType
+	Nullable    bool
+	Explicit    bool
+}
+
+func InferSchemaType(sch *Schema, d SchemaType) SchemaTypeInfo {
+	info := SchemaTypeInfo{PrimaryType: d}
+	if sch == nil {
+		return info
+	}
+	if sch.Nullable != nil && *sch.Nullable {
+		info.Nullable = true
+	}
+	hasConcrete := false
+	for _, raw := range sch.Types {
+		t := normalizeSchemaType(raw)
+		switch t {
+		case "":
+			continue
+		case TypeNull:
+			info.Nullable = true
+			if info.PrimaryType == d {
+				info.PrimaryType = TypeNull
+				info.Explicit = true
+			}
+		default:
+			if !hasConcrete {
+				info.PrimaryType = t
+				info.Explicit = true
+				hasConcrete = true
+			}
+		}
+	}
+	if info.Explicit {
+		return info
+	}
+	if len(sch.Properties) > 0 || sch.AdditionalProperties != nil {
+		info.PrimaryType = TypeObject
+		return info
+	}
+	if sch.Items != nil {
+		info.PrimaryType = TypeArray
+		return info
+	}
+	return info
+}
+
+func normalizeSchemaType(t SchemaType) SchemaType {
+	s := strings.ToLower(strings.TrimSpace(string(t)))
+	if s == "" {
+		return ""
+	}
+	n := SchemaType(s)
+	switch n {
+	case TypeString, TypeInteger, TypeNumber, TypeBoolean, TypeArray, TypeObject, TypeNull:
+		return n
+	default:
+		return ""
+	}
 }
 
 type SecuritySchemeType string

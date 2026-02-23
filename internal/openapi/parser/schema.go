@@ -56,20 +56,20 @@ func (m *schMap) toSch(src *hbase.Schema) *model.Schema {
 	out := &model.Schema{
 		Title:       src.Title,
 		Description: src.Description,
-		Types:       model.CloneStrs(src.Type),
+		Types:       model.SchemaTypesFromStrings(src.Type),
 		Format:      src.Format,
 		Pattern:     src.Pattern,
 		Example:     nodeAny(src.Example, m.warn, "schema example"),
 		Default:     nodeAny(src.Default, m.warn, "schema default"),
 		Enum:        nodesAny(src.Enum, m.warn, "schema enum"),
-		Min:         cpNum(src.Minimum),
-		Max:         cpNum(src.Maximum),
-		MinLen:      cpI64(src.MinLength),
-		MaxLen:      cpI64(src.MaxLength),
+		Min:         clonePtr(src.Minimum),
+		Max:         clonePtr(src.Maximum),
+		MinLen:      clonePtr(src.MinLength),
+		MaxLen:      clonePtr(src.MaxLength),
 		Required:    model.CloneStrs(src.Required),
-		Nullable:    cpBool(src.Nullable),
-		ReadOnly:    cpBool(src.ReadOnly),
-		WriteOnly:   cpBool(src.WriteOnly),
+		Nullable:    clonePtr(src.Nullable),
+		ReadOnly:    clonePtr(src.ReadOnly),
+		WriteOnly:   clonePtr(src.WriteOnly),
 	}
 
 	if item := dynRef(src.Items); item != nil {
@@ -126,23 +126,7 @@ func nodesAny(src []*yaml.Node, warn func(string), ctx string) []any {
 	return out
 }
 
-func cpNum(src *float64) *float64 {
-	if src == nil {
-		return nil
-	}
-	out := *src
-	return &out
-}
-
-func cpI64(src *int64) *int64 {
-	if src == nil {
-		return nil
-	}
-	out := *src
-	return &out
-}
-
-func cpBool(src *bool) *bool {
+func clonePtr[T any](src *T) *T {
 	if src == nil {
 		return nil
 	}

@@ -112,14 +112,14 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 	explode := true
 
 	arraySchema := &model.Schema{
-		Types: []string{"array"},
-		Items: &model.SchemaRef{Node: &model.Schema{Types: []string{"string"}}},
+		Types: []model.SchemaType{model.TypeArray},
+		Items: &model.SchemaRef{Node: &model.Schema{Types: []model.SchemaType{model.TypeString}}},
 	}
 	objectSchema := &model.Schema{
-		Types: []string{"object"},
+		Types: []model.SchemaType{model.TypeObject},
 		Properties: map[string]*model.SchemaRef{
-			"name":  {Node: &model.Schema{Types: []string{"string"}}},
-			"owner": {Node: &model.Schema{Types: []string{"string"}}},
+			"name":  {Node: &model.Schema{Types: []model.SchemaType{model.TypeString}}},
+			"owner": {Node: &model.Schema{Types: []model.SchemaType{model.TypeString}}},
 		},
 	}
 
@@ -186,6 +186,50 @@ func TestBuilderGenerateQueryParameterStyles(t *testing.T) {
 		t.Fatalf("missing query_filters variable")
 	} else if value.Value != "filters[name]=gizmo&filters[owner]=alice" {
 		t.Fatalf("unexpected query_filters value: %s", value.Value)
+	}
+}
+
+func TestBuilderGenerateCaseInsensitiveSchemaTypes(t *testing.T) {
+	t.Parallel()
+
+	b := NewBuilder()
+	spec := &model.Spec{
+		Operations: []model.Operation{
+			{
+				Method: model.MethodGet,
+				Path:   "/items",
+				Parameters: []model.Parameter{
+					{
+						Name:     "tags",
+						Location: model.InQuery,
+						Schema: &model.SchemaRef{
+							Node: &model.Schema{
+								Types: []model.SchemaType{" ARRAY "},
+								Items: &model.SchemaRef{
+									Node: &model.Schema{Types: []model.SchemaType{"STRING"}},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	doc, err := b.Generate(context.Background(), spec, openapi.GeneratorOptions{})
+	if err != nil {
+		t.Fatalf("generate spec: %v", err)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	v, ok := findVariable(req.Variables, "query_tags")
+	if !ok {
+		t.Fatalf("missing query_tags variable")
+	}
+	if v.Value != "tags=sample" {
+		t.Fatalf("unexpected query_tags value: %q", v.Value)
 	}
 }
 

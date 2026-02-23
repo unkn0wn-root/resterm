@@ -6,6 +6,8 @@ import (
 	hbase "github.com/pb33f/libopenapi/datamodel/high/base"
 	"github.com/pb33f/libopenapi/orderedmap"
 	yaml "go.yaml.in/yaml/v4"
+
+	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 )
 
 func TestSchMapToRefCyclic(t *testing.T) {
@@ -80,7 +82,7 @@ func TestSchMapToRefCopiesSchemaFields(t *testing.T) {
 	if sch.Description != "Primary login email" {
 		t.Fatalf("unexpected description: %q", sch.Description)
 	}
-	if len(sch.Types) != 1 || sch.Types[0] != "string" {
+	if len(sch.Types) != 1 || sch.Types[0] != model.TypeString {
 		t.Fatalf("unexpected types: %#v", sch.Types)
 	}
 	if sch.Format != "email" {
