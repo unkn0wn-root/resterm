@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
-	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/pb33f/libopenapi"
+	"github.com/pb33f/libopenapi/datamodel"
+	v3 "github.com/pb33f/libopenapi/datamodel/high/v3"
 	"gopkg.in/yaml.v3"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi"
@@ -18,65 +19,16 @@ import (
 
 const parRefPre = "#/components/parameters/"
 
-func loadDoc(path string, opts openapi.ParseOptions) (*openapi3.T, []string, error) {
-	ld := openapi3.NewLoader()
-	ld.IsExternalRefsAllowed = opts.ResolveExternalRefs
-
-	doc, err := ld.LoadFromFile(path)
-	if err == nil {
-		return doc, nil, nil
-	}
-
-	raw, rErr := os.ReadFile(path)
-	if rErr != nil {
-		return nil, nil, compatErr(err, "read spec file", rErr)
-	}
-	if !bytes.Contains(raw, []byte(parRefPre)) {
-		return nil, nil, err
-	}
-
-	raw2, ws, n, fErr := fixHdrRefs(raw)
-	if fErr != nil {
-		return nil, nil, compatErr(err, "rewrite spec", fErr)
-	}
-	if n == 0 {
-		return nil, nil, compatErr(err, "no header-ref rewrite candidates found", nil)
-	}
-
-	ld2 := openapi3.NewLoader()
-	ld2.IsExternalRefsAllowed = opts.ResolveExternalRefs
-
-	loc := &url.URL{Path: filepath.ToSlash(path)}
-	doc, dErr := ld2.LoadFromDataWithPath(raw2, loc)
-	if dErr != nil {
-		return nil, nil, compatErr(err, "load rewritten spec", dErr)
-	}
-
-	return doc, ws, nil
-}
-
-func fixHdrRefs(raw []byte) ([]byte, []string, int, error) {
-	codec := detectCodec(raw)
-
-	var root map[string]any
-	if err := unmarshalSpec(codec, raw, &root); err != nil {
-		return nil, nil, 0, err
-	}
-	if len(root) == 0 {
-		return raw, nil, 0, nil
-	}
-
-	fx := newHdrFix(root)
-	fx.walk(root)
-	if fx.n == 0 {
-		return raw, nil, 0, nil
-	}
-
-	out, err := marshalSpec(codec, root)
-	if err != nil {
-		return nil, nil, 0, err
-	}
-	return out, fx.warns(), fx.n, nil
+var pathMs = [...]string{
+	"get",
+	"put",
+	"post",
+	"delete",
+	"options",
+	"head",
+	"patch",
+	"trace",
+	"query",
 }
 
 type hdrFix struct {
@@ -103,41 +55,6 @@ func newHdrFix(root map[string]any) *hdrFix {
 	}
 
 	return fx
-}
-
-func hdrParam(prm map[string]any, key string, seen map[string]bool) (map[string]any, bool) {
-	p := mapAt(prm, key)
-	if len(p) == 0 {
-		return nil, false
-	}
-	if ref, ok := strAt(p, "$ref"); ok {
-		next, ok := parName(ref)
-		if !ok || seen[next] {
-			return nil, false
-		}
-		seen[next] = true
-		h, ok := hdrParam(prm, next, seen)
-		if !ok {
-			return nil, false
-		}
-		h2 := cloneAnyMap(h)
-		for k, v := range p {
-			if strings.HasPrefix(k, "x-") {
-				h2[k] = cloneVal(v)
-			}
-		}
-		return h2, true
-	}
-
-	in, ok := strAt(p, "in")
-	if !ok || !strings.EqualFold(in, "header") {
-		return nil, false
-	}
-
-	h := cloneAnyMap(p)
-	delete(h, "name")
-	delete(h, "in")
-	return h, true
 }
 
 func (fx *hdrFix) walk(root map[string]any) {
@@ -168,12 +85,41 @@ func (fx *hdrFix) walk(root map[string]any) {
 }
 
 func (fx *hdrFix) walkPi(pi map[string]any, seg []string) {
-	for _, m := range []string{"get", "put", "post", "delete", "options", "head", "patch", "trace"} {
+	seen := make(map[string]bool)
+	add := func(key string, op map[string]any, path []string) {
+		if len(op) == 0 {
+			return
+		}
+		seen[strings.ToLower(key)] = true
+		fx.walkOp(op, path)
+	}
+
+	for _, m := range pathMs {
 		op := mapAt(pi, m)
+		add(m, op, segAdd(seg, m))
+	}
+
+	extra := mapAt(pi, "additionalOperations")
+	for _, name := range sortedKeys(extra) {
+		op := mapAt(extra, name)
 		if len(op) == 0 {
 			continue
 		}
-		fx.walkOp(op, segAdd(seg, m))
+		seen[strings.ToLower(name)] = true
+		fx.walkOp(op, segAdd(seg, "additionalOperations", name))
+	}
+
+	for _, key := range sortedKeys(pi) {
+		lk := strings.ToLower(key)
+		if seen[lk] {
+			continue
+		}
+		switch lk {
+		case "$ref", "summary", "description", "servers", "parameters", "additionaloperations":
+			continue
+		}
+		op := mapAt(pi, key)
+		add(key, op, segAdd(seg, key))
 	}
 }
 
@@ -309,6 +255,132 @@ func (fx *hdrFix) warns() []string {
 		)
 	}
 	return ws
+}
+
+func loadDoc(path string, opts openapi.ParseOptions) (*v3.Document, []string, error) {
+	raw, rErr := os.ReadFile(path)
+	if rErr != nil {
+		return nil, nil, fmt.Errorf("read spec file: %w", rErr)
+	}
+
+	if bytes.Contains(raw, []byte(parRefPre)) {
+		raw2, ws, n, fErr := fixHdrRefs(raw)
+		if fErr == nil && n > 0 {
+			doc, err := buildDoc(path, raw2, opts)
+			if err == nil {
+				return doc, ws, nil
+			}
+
+			doc2, err2 := buildDoc(path, raw, opts)
+			if err2 == nil {
+				return doc2, nil, nil
+			}
+			return nil, nil, compatErr(err2, "load rewritten spec", err)
+		}
+
+		doc, err := buildDoc(path, raw, opts)
+		if err == nil {
+			return doc, nil, nil
+		}
+		if fErr != nil {
+			return nil, nil, compatErr(err, "rewrite spec", fErr)
+		}
+		if n == 0 {
+			return nil, nil, compatErr(err, "no header-ref rewrite candidates found", nil)
+		}
+		return nil, nil, err
+	}
+
+	doc, err := buildDoc(path, raw, opts)
+	if err != nil {
+		return nil, nil, err
+	}
+	return doc, nil, nil
+}
+
+func buildDoc(path string, raw []byte, opts openapi.ParseOptions) (*v3.Document, error) {
+	cfg := datamodel.NewDocumentConfiguration()
+	cfg.SkipExternalRefResolution = !opts.ResolveExternalRefs
+	if opts.ResolveExternalRefs {
+		cp := filepath.Clean(path)
+		cfg.AllowFileReferences = true
+		cfg.BasePath = filepath.Dir(cp)
+		cfg.SpecFilePath = cp
+	}
+
+	doc, err := libopenapi.NewDocumentWithConfiguration(raw, cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	mod, mErr := doc.BuildV3Model()
+	if mErr != nil {
+		return nil, mErr
+	}
+	if mod == nil {
+		return nil, fmt.Errorf("build OpenAPI model: nil model")
+	}
+
+	return &mod.Model, nil
+}
+
+func fixHdrRefs(raw []byte) ([]byte, []string, int, error) {
+	codec := detectCodec(raw)
+
+	var root map[string]any
+	if err := unmarshalSpec(codec, raw, &root); err != nil {
+		return nil, nil, 0, err
+	}
+	if len(root) == 0 {
+		return raw, nil, 0, nil
+	}
+
+	fx := newHdrFix(root)
+	fx.walk(root)
+	if fx.n == 0 {
+		return raw, nil, 0, nil
+	}
+
+	out, err := marshalSpec(codec, root)
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	return out, fx.warns(), fx.n, nil
+}
+
+func hdrParam(prm map[string]any, key string, seen map[string]bool) (map[string]any, bool) {
+	p := mapAt(prm, key)
+	if len(p) == 0 {
+		return nil, false
+	}
+	if ref, ok := strAt(p, "$ref"); ok {
+		next, ok := parName(ref)
+		if !ok || seen[next] {
+			return nil, false
+		}
+		seen[next] = true
+		h, ok := hdrParam(prm, next, seen)
+		if !ok {
+			return nil, false
+		}
+		h2 := cloneAnyMap(h)
+		for k, v := range p {
+			if strings.HasPrefix(k, "x-") {
+				h2[k] = cloneVal(v)
+			}
+		}
+		return h2, true
+	}
+
+	in, ok := strAt(p, "in")
+	if !ok || !strings.EqualFold(in, "header") {
+		return nil, false
+	}
+
+	h := cloneAnyMap(p)
+	delete(h, "name")
+	delete(h, "in")
+	return h, true
 }
 
 func mapAt(m map[string]any, k string) map[string]any {

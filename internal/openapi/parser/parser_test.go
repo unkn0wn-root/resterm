@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/getkin/kin-openapi/openapi3"
-	"gopkg.in/yaml.v3"
+	hbase "github.com/pb33f/libopenapi/datamodel/high/base"
+	h3 "github.com/pb33f/libopenapi/datamodel/high/v3"
+	yamlv4 "go.yaml.in/yaml/v4"
+	yamlv3 "gopkg.in/yaml.v3"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
@@ -17,17 +19,12 @@ import (
 func TestConvertMediaTypeExplicitExamplePreferred(t *testing.T) {
 	t.Parallel()
 
-	mt := &openapi3.MediaType{
-		Example: "explicit",
-		Schema: &openapi3.SchemaRef{
-			Ref: "#/components/schemas/Demo",
-			Value: &openapi3.Schema{
-				Default: "schema-default",
-			},
-		},
+	mt := &h3.MediaType{
+		Example: node("explicit"),
+		Schema:  hbase.CreateSchemaProxyRef("#/components/schemas/Demo"),
 	}
 
-	media, ok := convertMediaType("application/json", mt)
+	media, ok := convertMediaType("application/json", mt, newSchMap())
 	if !ok {
 		t.Fatalf("expected media type conversion")
 	}
@@ -46,15 +43,13 @@ func TestConvertMediaTypeExplicitExamplePreferred(t *testing.T) {
 func TestConvertMediaTypeSchemaFallbackExample(t *testing.T) {
 	t.Parallel()
 
-	mt := &openapi3.MediaType{
-		Schema: &openapi3.SchemaRef{
-			Value: &openapi3.Schema{
-				Default: "schema-default",
-			},
-		},
+	mt := &h3.MediaType{
+		Schema: hbase.CreateSchemaProxy(&hbase.Schema{
+			Default: node("schema-default"),
+		}),
 	}
 
-	media, ok := convertMediaType("application/json", mt)
+	media, ok := convertMediaType("application/json", mt, newSchMap())
 	if !ok {
 		t.Fatalf("expected media type conversion")
 	}
@@ -177,6 +172,36 @@ func TestLoaderParse(t *testing.T) {
 	}
 }
 
+func TestLoaderParseRejectsOperationWithoutResponses(t *testing.T) {
+	t.Parallel()
+
+	spec := `openapi: 3.0.3
+info:
+  title: Invalid
+  version: 1.0.0
+paths:
+  /demo:
+    get:
+      operationId: broken
+`
+	p := filepath.Join(t.TempDir(), "invalid.yaml")
+	if err := os.WriteFile(p, []byte(spec), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	loader := NewLoader()
+	_, err := loader.Parse(context.Background(), p, openapi.ParseOptions{})
+	if err == nil {
+		t.Fatalf("expected Parse() error")
+	}
+	if !strings.Contains(err.Error(), "validate OpenAPI spec") {
+		t.Fatalf("expected validation error, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "operation must define at least one response") {
+		t.Fatalf("expected missing responses detail, got: %v", err)
+	}
+}
+
 func TestLoaderParseHeaderRefParamCompat(t *testing.T) {
 	t.Parallel()
 
@@ -228,7 +253,7 @@ components:
 	}
 }
 
-func TestLoaderParseHeaderRefParamCompatRejectsNonHeaderParam(t *testing.T) {
+func TestLoaderParseHeaderRefParamCompatSkipsNonHeaderParam(t *testing.T) {
 	t.Parallel()
 
 	spec := `openapi: 3.0.3
@@ -258,18 +283,15 @@ components:
 	}
 
 	loader := NewLoader()
-	_, err := loader.Parse(context.Background(), p, openapi.ParseOptions{})
-	if err == nil {
-		t.Fatalf("expected Parse() error for non-header parameter ref")
+	got, err := loader.Parse(context.Background(), p, openapi.ParseOptions{})
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "expecting ref to header object") {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if !strings.Contains(err.Error(), "compat fallback: no header-ref rewrite candidates found") {
-		t.Fatalf("expected compat fallback detail in error, got: %v", err)
+	if got == nil || len(got.Operations) != 1 {
+		t.Fatalf("expected parsed operation, got %#v", got)
 	}
 	if len(loader.Warnings()) != 0 {
-		t.Fatalf("expected no warnings on failed rewrite, got %v", loader.Warnings())
+		t.Fatalf("expected no rewrite warnings, got %v", loader.Warnings())
 	}
 }
 
@@ -359,7 +381,7 @@ components:
 	}
 
 	var root map[string]any
-	if err := yaml.Unmarshal(out, &root); err != nil {
+	if err := yamlv3.Unmarshal(out, &root); err != nil {
 		t.Fatalf("unmarshal rewritten spec: %v", err)
 	}
 
@@ -481,6 +503,64 @@ func TestLoaderParseHeaderRefParamCompatJSON(t *testing.T) {
 	}
 }
 
+func TestLoaderParseHeaderRefParamCompatQueryAndAdditionalOps(t *testing.T) {
+	t.Parallel()
+
+	spec := `openapi: 3.2.0
+info:
+  title: Header Compat Query + Additional
+  version: 1.0.0
+paths:
+  /demo:
+    query:
+      operationId: queryDemo
+      responses:
+        '200':
+          description: ok
+          headers:
+            credential:
+              $ref: '#/components/parameters/credential'
+    additionalOperations:
+      SEARCH:
+        operationId: searchDemo
+        responses:
+          '200':
+            description: ok
+            headers:
+              credential:
+                $ref: '#/components/parameters/credential'
+components:
+  parameters:
+    credential:
+      name: credential
+      in: header
+      required: true
+      schema:
+        type: string
+`
+	p := filepath.Join(t.TempDir(), "spec.yaml")
+	if err := os.WriteFile(p, []byte(spec), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	loader := NewLoader()
+	got, err := loader.Parse(context.Background(), p, openapi.ParseOptions{})
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got == nil || len(got.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %#v", got)
+	}
+
+	ws := loader.Warnings()
+	if len(ws) != 1 {
+		t.Fatalf("expected 1 warning, got %d (%v)", len(ws), ws)
+	}
+	if !strings.Contains(ws[0], "converted 2 header $ref occurrence(s)") {
+		t.Fatalf("warning missing rewrite count for query/additional ops: %q", ws[0])
+	}
+}
+
 func TestFixHdrRefsKeepsJSONEncoding(t *testing.T) {
 	t.Parallel()
 
@@ -559,4 +639,64 @@ components:
 	if !strings.Contains(err.Error(), "compat fallback: rewrite spec") {
 		t.Fatalf("expected compat rewrite detail in error, got: %v", err)
 	}
+}
+
+func TestLoaderParseOpenAPI32Methods(t *testing.T) {
+	t.Parallel()
+
+	spec := `openapi: 3.2.0
+info:
+  title: OpenAPI 3.2 Methods
+  version: 1.0.0
+paths:
+  /events:
+    query:
+      operationId: queryEvents
+      responses:
+        '200':
+          description: ok
+    additionalOperations:
+      SEARCH:
+        operationId: searchEvents
+        responses:
+          '200':
+            description: ok
+`
+	p := filepath.Join(t.TempDir(), "spec.yaml")
+	if err := os.WriteFile(p, []byte(spec), 0o644); err != nil {
+		t.Fatalf("write spec: %v", err)
+	}
+
+	ldr := NewLoader()
+	got, err := ldr.Parse(context.Background(), p, openapi.ParseOptions{})
+	if err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if got == nil {
+		t.Fatalf("Parse() returned nil spec")
+	}
+	if len(got.Operations) != 2 {
+		t.Fatalf("expected 2 operations, got %d", len(got.Operations))
+	}
+
+	ops := make(map[string]model.Operation)
+	for _, op := range got.Operations {
+		ops[op.ID] = op
+	}
+	if op, ok := ops["queryEvents"]; !ok {
+		t.Fatalf("query operation missing")
+	} else if op.Method != model.MethodQuery {
+		t.Fatalf("expected QUERY method, got %s", op.Method)
+	}
+	if op, ok := ops["searchEvents"]; !ok {
+		t.Fatalf("additional operation missing")
+	} else if string(op.Method) != "SEARCH" {
+		t.Fatalf("expected SEARCH method, got %s", op.Method)
+	}
+}
+
+func node(v any) *yamlv4.Node {
+	n := &yamlv4.Node{}
+	_ = n.Encode(v)
+	return n
 }

@@ -1496,7 +1496,7 @@ resterm \
 - `openapi-test.yml` in the repository is a comprehensive spec that exercises callbacks, complex query styles, and mixed security schemes—perfect for smoke-testing the converter.
 
 > [!NOTE]
-> Resterm's converter is powered by [`kin-openapi`](https://github.com/getkin/kin-openapi), which currently validates OpenAPI documents up to **v3.0.1**. Work on v3.1 support is ongoing progress in [getkin/kin-openapi#1102](https://github.com/getkin/kin-openapi/pull/1102).
+> Resterm's converter is powered by [`libopenapi`](https://github.com/pb33f/libopenapi) and supports OpenAPI **v3.0**, **v3.1**, and **v3.2** inputs.
 
 ---
 
