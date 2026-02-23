@@ -63,6 +63,7 @@ const (
 	TypeBoolean SchemaType = "boolean"
 	TypeArray   SchemaType = "array"
 	TypeObject  SchemaType = "object"
+	TypeNull    SchemaType = "null"
 )
 
 const (
@@ -152,8 +153,8 @@ func InferSchemaType(sch *Schema, d SchemaType) SchemaType {
 	if sch == nil {
 		return d
 	}
-	if len(sch.Types) > 0 {
-		if t := normalizeSchemaType(sch.Types[0]); t != "" {
+	for _, raw := range sch.Types {
+		if t := normalizeSchemaType(raw); t != "" && t != TypeNull {
 			return t
 		}
 	}
@@ -173,10 +174,10 @@ func normalizeSchemaType(t SchemaType) SchemaType {
 	}
 	n := SchemaType(s)
 	switch n {
-	case TypeString, TypeInteger, TypeNumber, TypeBoolean, TypeArray, TypeObject:
+	case TypeString, TypeInteger, TypeNumber, TypeBoolean, TypeArray, TypeObject, TypeNull:
 		return n
 	default:
-		return n
+		return ""
 	}
 }
 
