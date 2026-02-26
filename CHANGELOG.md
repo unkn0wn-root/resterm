@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.23.6](https://github.com/unkn0wn-root/resterm/compare/v0.23.5...v0.23.6) (2026-02-26)
+
+
+### Bug Fixes
+
+* **parser:** ignore unknown commented directives outside req so trailing shorthand vars stay file-scoped ([af3c080](https://github.com/unkn0wn-root/resterm/commit/af3c080d7c4d00a9909fa32deb0c99090cdc9346))
+
 ### [0.23.5](https://github.com/unkn0wn-root/resterm/compare/v0.23.4...v0.23.5) (2026-02-23)
 
 ### [0.23.4](https://github.com/unkn0wn-root/resterm/compare/v0.23.3...v0.23.4) (2026-02-22)
