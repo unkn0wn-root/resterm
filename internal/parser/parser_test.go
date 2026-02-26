@@ -1037,6 +1037,40 @@ Header: value
 	}
 }
 
+func TestUnknownCommentDirectiveDoesNotSwallowTrailingFileVars(t *testing.T) {
+	src := `###
+# @name FusionAuthLogin
+POST https://example.com/login
+Content-Type: application/json
+
+{"loginId":"{{admin_email}}"}
+
+###
+@hostname=http://localhost:3000
+# @hostname=https://staging.example.com
+@admin_email=admin@example.com
+`
+
+	doc := Parse("unknown-comment-directive.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if len(doc.Variables) != 2 {
+		t.Fatalf("expected 2 file variables, got %d", len(doc.Variables))
+	}
+
+	fileVars := map[string]restfile.Variable{}
+	for _, v := range doc.Variables {
+		fileVars[v.Name] = v
+	}
+	if v, ok := fileVars["hostname"]; !ok || v.Scope != restfile.ScopeFile {
+		t.Fatalf("expected hostname as file variable, got %#v", v)
+	}
+	if v, ok := fileVars["admin_email"]; !ok || v.Scope != restfile.ScopeFile {
+		t.Fatalf("expected admin_email as file variable, got %#v", v)
+	}
+}
+
 func TestShorthandAfterBodyStaysRequestScoped(t *testing.T) {
 	src := `### reset
 POST https://example.com
