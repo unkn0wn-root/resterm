@@ -30,7 +30,7 @@ type LoadOpt struct {
 	StdinUnavailableReason string
 }
 
-type loadCfg struct {
+type loadSettings struct {
 	policy       ExecPolicy
 	allowlist    []string
 	stdinUnavail bool
@@ -118,22 +118,22 @@ func loadRaw(cfg Cfg) (clientcmdapi.Config, *clientcmd.ConfigOverrides, error) {
 	return raw, ovs, nil
 }
 
-func normalizeLoadOpt(opt LoadOpt) (loadCfg, error) {
+func normalizeLoadOpt(opt LoadOpt) (loadSettings, error) {
 	pl := opt.ExecPolicy
 	if pl == "" {
 		pl = ExecPolicyAllowAll
 	}
 	pp, err := ParseExecPolicy(string(pl))
 	if err != nil {
-		return loadCfg{}, err
+		return loadSettings{}, err
 	}
 
 	al := normalizeAllowlist(opt.ExecAllowlist)
 	if len(al) > 0 && pp != ExecPolicyAllowlist {
-		return loadCfg{}, fmt.Errorf("k8s: exec allowlist requires policy allowlist")
+		return loadSettings{}, fmt.Errorf("k8s: exec allowlist requires policy allowlist")
 	}
 	if pp == ExecPolicyAllowlist && len(al) == 0 {
-		return loadCfg{}, fmt.Errorf(
+		return loadSettings{}, fmt.Errorf(
 			"k8s: exec allowlist policy requires at least one allowlist entry",
 		)
 	}
@@ -147,7 +147,7 @@ func normalizeLoadOpt(opt LoadOpt) (loadCfg, error) {
 		msg = defaultExecStdinMsg
 	}
 
-	return loadCfg{
+	return loadSettings{
 		policy:       pp,
 		allowlist:    al,
 		stdinUnavail: noIn,
@@ -187,7 +187,7 @@ func normalizeAllowlist(raw []string) []string {
 	return out
 }
 
-func applyExecPolicy(raw *clientcmdapi.Config, cf loadCfg) {
+func applyExecPolicy(raw *clientcmdapi.Config, cf loadSettings) {
 	if raw == nil {
 		return
 	}
@@ -207,7 +207,7 @@ func applyExecPolicy(raw *clientcmdapi.Config, cf loadCfg) {
 	}
 }
 
-func policyFor(cf loadCfg) clientcmdapi.PluginPolicy {
+func policyFor(cf loadSettings) clientcmdapi.PluginPolicy {
 	out := clientcmdapi.PluginPolicy{
 		PolicyType: clientcmdapi.PluginPolicyAllowAll,
 	}

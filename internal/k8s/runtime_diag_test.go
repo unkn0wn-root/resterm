@@ -122,9 +122,9 @@ func handlerPtr(h kruntime.ErrorHandler) uintptr {
 	return reflect.ValueOf(h).Pointer()
 }
 
-func testErrHandlerA(_ context.Context, _ error, _ string, _ ...interface{}) {}
-func testErrHandlerB(_ context.Context, _ error, _ string, _ ...interface{}) {}
-func testErrHandlerC(_ context.Context, _ error, _ string, _ ...interface{}) {}
+func testErrHandlerA(_ context.Context, _ error, _ string, _ ...any) {}
+func testErrHandlerB(_ context.Context, _ error, _ string, _ ...any) {}
+func testErrHandlerC(_ context.Context, _ error, _ string, _ ...any) {}
 
 func resetRuntimeDiagForTest() {
 	rtDiag.mu.Lock()
