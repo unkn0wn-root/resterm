@@ -105,7 +105,7 @@ func buildRuntimeDiagErrorHandlers(prev []kruntime.ErrorHandler) []kruntime.Erro
 	return hs
 }
 
-func captureRuntimeErr(_ context.Context, err error, _ string, _ ...interface{}) {
+func captureRuntimeErr(_ context.Context, err error, _ string, _ ...any) {
 	pushRuntimeErr(time.Now(), err)
 }
 

@@ -298,10 +298,7 @@ func joinCleanupErr(baseErr error, cleanupErr error) error {
 }
 
 func (m *Manager) connect(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
-	attempts := cfg.Retries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
+	attempts := max(cfg.Retries+1, 1)
 
 	retryDelay := m.retryDelay
 	if retryDelay <= 0 {
