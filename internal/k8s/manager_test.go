@@ -25,10 +25,9 @@ func TestDialNonPersistentClosesSessionOnConnClose(t *testing.T) {
 	starts := atomic.Int32{}
 	closes := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		starts.Add(1)
 		return &session{
-			cfg:       cfg,
 			localAddr: "127.0.0.1:18080",
 			closeFn: func() error {
 				closes.Add(1)
@@ -62,7 +61,7 @@ func TestDialPersistentCaches(t *testing.T) {
 	starts := atomic.Int32{}
 	dials := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		starts.Add(1)
 		return stubSession(cfg, "127.0.0.1:18080"), nil
 	}
@@ -101,7 +100,7 @@ func TestDialPersistentCoalescesConcurrentReconnects(t *testing.T) {
 	startReady := make(chan struct{})
 	startRelease := make(chan struct{})
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		if starts.Add(1) != 1 {
 			return nil, errors.New("unexpected extra session start")
 		}
@@ -167,7 +166,7 @@ func TestDialPersistentReconnectsAfterSessionDone(t *testing.T) {
 	starts := atomic.Int32{}
 	var s1 *session
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		n := starts.Add(1)
 		s := stubSession(cfg, "127.0.0.1:"+strconv.Itoa(18080+int(n)))
 		if n == 1 {
@@ -205,7 +204,7 @@ func TestDialPersistentReconnectsAfterDialFailure(t *testing.T) {
 	starts := atomic.Int32{}
 	dials := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		n := starts.Add(1)
 		addr := "127.0.0.1:18081"
 		if n > 1 {
@@ -246,7 +245,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
-	load, err := m.loadCfg()
+	load, err := m.loadSettings()
 	if err != nil {
 		t.Fatalf("load cfg err: %v", err)
 	}
@@ -255,7 +254,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	oldSes := stubSession(cfg, "127.0.0.1:18081")
 	keepSes := stubSession(cfg, "127.0.0.1:18082")
 	m.mu.Lock()
-	m.cache[key] = &entry{cfg: cfg, ses: oldSes, lastUsed: m.now()}
+	m.cache[key] = &cacheEntry{ses: oldSes, lastUsed: m.now()}
 	m.mu.Unlock()
 
 	dialHit := make(chan struct{})
@@ -276,7 +275,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	}
 
 	starts := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		starts.Add(1)
 		return nil, errBoom
 	}
@@ -299,7 +298,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.cache[key] = &entry{cfg: cfg, ses: keepSes, lastUsed: m.now()}
+	m.cache[key] = &cacheEntry{ses: keepSes, lastUsed: m.now()}
 	m.mu.Unlock()
 	close(dialCont)
 
@@ -329,7 +328,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 	t.Cleanup(func() { _ = m.Close() })
 
 	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
-	load, err := m.loadCfg()
+	load, err := m.loadSettings()
 	if err != nil {
 		t.Fatalf("load cfg err: %v", err)
 	}
@@ -349,7 +348,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.cache[key] = &entry{cfg: cfg, ses: oldSes, lastUsed: m.now()}
+	m.cache[key] = &cacheEntry{ses: oldSes, lastUsed: m.now()}
 	m.mu.Unlock()
 
 	dialHit := make(chan struct{})
@@ -370,7 +369,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 	}
 
 	starts := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		if starts.Add(1) > 1 {
 			return nil, errors.New("unexpected reconnect attempt")
 		}
@@ -395,7 +394,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 	}
 
 	m.mu.Lock()
-	m.cache[key] = &entry{cfg: cfg, ses: keepSes, lastUsed: m.now()}
+	m.cache[key] = &cacheEntry{ses: keepSes, lastUsed: m.now()}
 	m.mu.Unlock()
 	close(dialCont)
 
@@ -427,7 +426,7 @@ func TestDialRetry(t *testing.T) {
 	m := NewManager()
 	m.retryDelay = time.Millisecond
 	starts := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		if starts.Add(1) < 2 {
 			return nil, errBoom
 		}
@@ -462,7 +461,7 @@ func TestDialRetryHonorsContextCancel(t *testing.T) {
 	m.retryDelay = time.Millisecond
 	starts := atomic.Int32{}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		starts.Add(1)
 		cancel()
 		return nil, errBoom
@@ -494,7 +493,7 @@ func TestDialPersistentCacheKeyIncludesTargetAndPortRef(t *testing.T) {
 	starts := atomic.Int32{}
 	dials := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		n := starts.Add(1)
 		return stubSession(cfg, "127.0.0.1:"+strconv.Itoa(19080+int(n))), nil
 	}
@@ -559,7 +558,7 @@ func TestDialRejectsUnsupportedNetwork(t *testing.T) {
 func TestDialNormalizesCfgBoundary(t *testing.T) {
 	m := NewManager()
 	var got Cfg
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		got = cfg
 		return stubSession(cfg, "127.0.0.1:18080"), nil
 	}
@@ -613,7 +612,7 @@ func TestCacheTTL(t *testing.T) {
 
 	starts := atomic.Int32{}
 	closes := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		starts.Add(1)
 		s := stubSession(cfg, "127.0.0.1:18080")
 		s.closeFn = func() error {
@@ -657,7 +656,7 @@ func TestCacheTTL(t *testing.T) {
 func TestManagerClose(t *testing.T) {
 	m := NewManager()
 	closes := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadCfg) (*session, error) {
+	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
 		s := stubSession(cfg, "127.0.0.1:18080")
 		s.closeFn = func() error {
 			closes.Add(1)
@@ -884,7 +883,6 @@ func TestResolveForwardTargetServiceNamedPortAmbiguousAcrossContainers(t *testin
 
 func stubSession(cfg Cfg, addr string) *session {
 	s := &session{
-		cfg:       cfg,
 		localAddr: addr,
 		stopCh:    make(chan struct{}),
 		doneCh:    make(chan struct{}),

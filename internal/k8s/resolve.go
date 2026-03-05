@@ -21,27 +21,9 @@ func Resolve(
 		return nil, nil
 	}
 
-	var merged restfile.K8sProfile
-	var useFound bool
-
-	use := strings.TrimSpace(spec.Use)
-	if use != "" {
-		if prof, ok := lookupProfile(fileProfiles, use, restfile.K8sScopeFile); ok {
-			merged = *prof
-			useFound = true
-		} else if prof, ok := lookupProfile(globalProfiles, use, restfile.K8sScopeGlobal); ok {
-			merged = *prof
-			useFound = true
-		}
-		merged.Name = use
-	}
-
-	if use != "" && !useFound {
-		return nil, fmt.Errorf("k8s: profile %q not found", use)
-	}
-
-	if spec.Inline != nil {
-		merged = mergeProfile(merged, *spec.Inline)
+	merged, err := resolveProfileSpec(spec, fileProfiles, globalProfiles)
+	if err != nil {
+		return nil, err
 	}
 
 	expanded, err := expandProfile(merged, resolver)
@@ -55,6 +37,45 @@ func Resolve(
 	}
 	cfg.Label = strings.TrimSpace(envLabel)
 	return &cfg, nil
+}
+
+func resolveProfileSpec(
+	spec *restfile.K8sSpec,
+	fileProfiles []restfile.K8sProfile,
+	globalProfiles []restfile.K8sProfile,
+) (restfile.K8sProfile, error) {
+	use := strings.TrimSpace(spec.Use)
+	if use == "" {
+		if spec.Inline == nil {
+			return restfile.K8sProfile{}, nil
+		}
+		return *spec.Inline, nil
+	}
+
+	base, ok := lookupNamedProfile(fileProfiles, globalProfiles, use)
+	if !ok {
+		return restfile.K8sProfile{}, fmt.Errorf("k8s: profile %q not found", use)
+	}
+	base.Name = use
+
+	if spec.Inline == nil {
+		return base, nil
+	}
+	return mergeProfile(base, *spec.Inline), nil
+}
+
+func lookupNamedProfile(
+	fileProfiles []restfile.K8sProfile,
+	globalProfiles []restfile.K8sProfile,
+	name string,
+) (restfile.K8sProfile, bool) {
+	if prof, ok := lookupProfile(fileProfiles, name, restfile.K8sScopeFile); ok {
+		return *prof, true
+	}
+	if prof, ok := lookupProfile(globalProfiles, name, restfile.K8sScopeGlobal); ok {
+		return *prof, true
+	}
+	return restfile.K8sProfile{}, false
 }
 
 func lookupProfile(
@@ -127,7 +148,8 @@ func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfi
 }
 
 func expandProfile(p restfile.K8sProfile, resolver *vars.Resolver) (restfile.K8sProfile, error) {
-	fields := []*string{
+	if err := expandProfileFields(
+		resolver,
 		&p.Name,
 		&p.Namespace,
 		&p.Target,
@@ -140,19 +162,24 @@ func expandProfile(p restfile.K8sProfile, resolver *vars.Resolver) (restfile.K8s
 		&p.LocalPortStr,
 		&p.PodWaitStr,
 		&p.RetriesStr,
+	); err != nil {
+		return restfile.K8sProfile{}, err
 	}
+	return p, nil
+}
 
+func expandProfileFields(resolver *vars.Resolver, fields ...*string) error {
 	for _, field := range fields {
 		val := strings.TrimSpace(*field)
 		if val == "" {
 			continue
 		}
+
 		expanded, err := connprofile.ExpandValue(val, resolver)
 		if err != nil {
-			return restfile.K8sProfile{}, err
+			return err
 		}
 		*field = expanded
 	}
-
-	return p, nil
+	return nil
 }

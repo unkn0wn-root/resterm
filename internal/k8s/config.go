@@ -55,26 +55,18 @@ type Cfg struct {
 func NormalizeProfile(p restfile.K8sProfile) (Cfg, error) {
 	cfg := baseCfg(p)
 	cfg.Name = connprofile.Fallback(cfg.Name, "default")
+
 	if err := parseTarget(&cfg, p); err != nil {
 		return Cfg{}, err
 	}
-
-	if err := parseCfg(&cfg, p); err != nil {
+	if err := parseProfileOptions(&cfg, p); err != nil {
 		return Cfg{}, err
 	}
-	if cfg.Port == 0 && cfg.PortName == "" {
-		return Cfg{}, errors.New("k8s: port is required")
+	if err := validateProfile(cfg); err != nil {
+		return Cfg{}, err
 	}
-
-	if cfg.Kubeconfig != "" {
-		path, err := connprofile.ExpandPath(
-			cfg.Kubeconfig,
-			"cannot resolve home directory for kubeconfig path",
-		)
-		if err != nil {
-			return Cfg{}, err
-		}
-		cfg.Kubeconfig = path
+	if err := expandKubeconfigPath(&cfg); err != nil {
+		return Cfg{}, err
 	}
 
 	return normalizeCfg(cfg), nil
@@ -129,7 +121,7 @@ func normalizeCfg(cfg Cfg) Cfg {
 	return cfg
 }
 
-func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
+func parseProfileOptions(cfg *Cfg, p restfile.K8sProfile) error {
 	if err := parsePortRef(cfg, p); err != nil {
 		return err
 	}
@@ -161,38 +153,69 @@ func parseCfg(cfg *Cfg, p restfile.K8sProfile) error {
 }
 
 func parseTarget(cfg *Cfg, p restfile.K8sProfile) error {
+	kind, name, err := targetFromProfile(p)
+	if err != nil {
+		return err
+	}
+
+	cfg.TargetKind = kind
+	cfg.TargetName = name
+	if kind == targetKindPod {
+		cfg.Pod = name
+	} else {
+		cfg.Pod = ""
+	}
+	return nil
+}
+
+func targetFromProfile(p restfile.K8sProfile) (TargetKind, string, error) {
 	rawTarget := strings.TrimSpace(p.Target)
 	rawPod := strings.TrimSpace(p.Pod)
 
 	var (
-		k TargetKind
-		n string
+		kind TargetKind
+		name string
 	)
 	if rawTarget != "" {
-		pk, pn, err := k8starget.ParseRef(rawTarget)
+		parsedKind, parsedName, err := k8starget.ParseRef(rawTarget)
 		if err != nil {
-			return err
+			return "", "", err
 		}
-		k, n = pk, pn
+		kind, name = parsedKind, parsedName
 	}
 	if rawPod != "" {
-		if k != "" && (k != targetKindPod || n != rawPod) {
-			return errors.New("k8s: target conflicts with pod")
+		if kind != "" && (kind != targetKindPod || name != rawPod) {
+			return "", "", errors.New("k8s: target conflicts with pod")
 		}
-		k = targetKindPod
-		n = rawPod
+		kind = targetKindPod
+		name = rawPod
 	}
-	if k == "" || n == "" {
-		return errors.New("k8s: target is required")
+	if kind == "" || name == "" {
+		return "", "", errors.New("k8s: target is required")
+	}
+	return kind, name, nil
+}
+
+func validateProfile(cfg Cfg) error {
+	if cfg.Port == 0 && cfg.PortName == "" {
+		return errors.New("k8s: port is required")
+	}
+	return nil
+}
+
+func expandKubeconfigPath(cfg *Cfg) error {
+	if cfg == nil || cfg.Kubeconfig == "" {
+		return nil
 	}
 
-	cfg.TargetKind = k
-	cfg.TargetName = n
-	if k == targetKindPod {
-		cfg.Pod = n
-	} else {
-		cfg.Pod = ""
+	path, err := connprofile.ExpandPath(
+		cfg.Kubeconfig,
+		"cannot resolve home directory for kubeconfig path",
+	)
+	if err != nil {
+		return err
 	}
+	cfg.Kubeconfig = path
 	return nil
 }
 
