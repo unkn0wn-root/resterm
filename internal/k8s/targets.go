@@ -100,7 +100,12 @@ func waitTargetPod(
 	if cfg.PodWait <= 0 {
 		ok, err := check(ctx)
 		if err != nil {
-			return selectedTarget{}, fmt.Errorf("k8s: check target %s/%s: %w", namespace, targetRef, err)
+			return selectedTarget{}, fmt.Errorf(
+				"k8s: check target %s/%s: %w",
+				namespace,
+				targetRef,
+				err,
+			)
 		}
 		if !ok {
 			return selectedTarget{}, fmt.Errorf(
@@ -112,7 +117,13 @@ func waitTargetPod(
 		return out, nil
 	}
 
-	if err := wait.PollUntilContextTimeout(ctx, podPollInterval, cfg.PodWait, true, check); err != nil {
+	if err := wait.PollUntilContextTimeout(
+		ctx,
+		podPollInterval,
+		cfg.PodWait,
+		true,
+		check,
+	); err != nil {
 		return selectedTarget{}, fmt.Errorf(
 			"k8s: wait target %s/%s running: %w",
 			namespace,

@@ -259,7 +259,7 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 		EffectiveURL: "https://example.com",
 	}
 
-	cmd := model.consumeHTTPResponse(resp, nil, nil, "")
+	cmd := model.consumeHTTPResponse(resp, nil, nil, "", nil)
 	if cmd == nil {
 		t.Fatalf("expected consumeHTTPResponse to return render command")
 	}
@@ -358,7 +358,7 @@ func TestToggleResponseSplitConfiguresSecondaryPane(t *testing.T) {
 		EffectiveURL: "https://example.com",
 	}
 
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp, nil, nil, "", nil))
 	if model.responseLatest == nil || !model.responseLatest.ready {
 		t.Fatalf("expected latest snapshot to be ready")
 	}
@@ -459,7 +459,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/one",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(first, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(first, nil, nil, "", nil))
 	if model.diffAvailable() {
 		t.Fatalf("diff should be unavailable before split")
 	}
@@ -478,7 +478,7 @@ func TestDiffTabAvailableAfterDualResponses(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/two",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(second, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(second, nil, nil, "", nil))
 	if !model.diffAvailable() {
 		t.Fatalf("expected diff to be available after second response")
 	}
@@ -516,7 +516,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/one",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, "", nil))
 
 	primary := model.pane(responsePanePrimary)
 	if primary == nil || primary.snapshot == nil ||
@@ -538,7 +538,7 @@ func TestResponsesFollowLastFocusedPane(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/two",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, "", nil))
 
 	secondary := model.pane(responsePaneSecondary)
 	if secondary == nil || secondary.snapshot == nil ||
@@ -569,7 +569,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		Body:         []byte("first"),
 		EffectiveURL: "https://example.com/a",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp1, nil, nil, "", nil))
 	primary := model.pane(responsePanePrimary)
 	firstSnapshot := primary.snapshot
 	if firstSnapshot == nil {
@@ -598,7 +598,7 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		Body:         []byte("second"),
 		EffectiveURL: "https://example.com/b",
 	}
-	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, ""))
+	drainResponseCommands(t, &model, model.consumeHTTPResponse(resp2, nil, nil, "", nil))
 	if primary.snapshot != firstSnapshot {
 		t.Fatalf("expected pinned pane to retain original snapshot")
 	}

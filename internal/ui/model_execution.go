@@ -15,6 +15,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/curl"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
@@ -233,17 +234,20 @@ func (m *Model) cancelCompareRun(reason string) tea.Cmd {
 	return nil
 }
 
-func (m *Model) sendActiveRequest() tea.Cmd {
-	if cmd := m.cancelActiveRuns(); cmd != nil {
-		return cmd
-	}
+type activeReqExec struct {
+	doc  *restfile.Document
+	req  *restfile.Request
+	opts httpclient.Options
+	wrap func(tea.Cmd) tea.Cmd
+}
 
+func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
 	cursorLine := currentCursorLine(m.editor)
 	req, _ := m.requestAtCursor(doc, content, cursorLine)
 	if req == nil {
-		return func() tea.Msg {
+		return nil, func() tea.Msg {
 			return statusMsg{text: "No request at cursor", level: statusWarn}
 		}
 	}
@@ -262,56 +266,69 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.currentRequest = cloned
 	m.testResults = nil
 	m.scriptError = nil
-	options := m.cfg.HTTPOptions
-	if options.BaseDir == "" && m.currentFile != "" {
-		options.BaseDir = filepath.Dir(m.currentFile)
+
+	opts := m.cfg.HTTPOptions
+	if opts.BaseDir == "" && m.currentFile != "" {
+		opts.BaseDir = filepath.Dir(m.currentFile)
 	}
 
-	if cloned.Metadata.ForEach != nil {
-		if spec := m.compareSpecForRequest(cloned); spec != nil {
+	return &activeReqExec{doc: doc, req: cloned, opts: opts, wrap: wrap}, nil
+}
+
+func (m *Model) sendActiveRequest() tea.Cmd {
+	if cmd := m.cancelActiveRuns(); cmd != nil {
+		return cmd
+	}
+	st, cmd := m.prepareActiveRequestExec()
+	if cmd != nil {
+		return cmd
+	}
+
+	if st.req.Metadata.ForEach != nil {
+		if spec := m.compareSpecForRequest(st.req); spec != nil {
 			m.setStatusMessage(
 				statusMsg{level: statusWarn, text: "@compare cannot run alongside @for-each"},
 			)
-			return wrap(nil)
+			return st.wrap(nil)
 		}
-		if cloned.Metadata.Profile != nil {
+		if st.req.Metadata.Profile != nil {
 			m.setStatusMessage(
 				statusMsg{level: statusWarn, text: "@profile cannot run alongside @for-each"},
 			)
-			return wrap(nil)
+			return st.wrap(nil)
 		}
-		if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
-			options.Trace = true
-			if budget, ok := tracebudget.FromSpec(cloned.Metadata.Trace); ok {
-				options.TraceBudget = &budget
+		if st.req.Metadata.Trace != nil && st.req.Metadata.Trace.Enabled {
+			st.opts.Trace = true
+			if budget, ok := tracebudget.FromSpec(st.req.Metadata.Trace); ok {
+				st.opts.TraceBudget = &budget
 			}
 		}
-		return wrap(m.startForEachRun(doc, cloned, options))
+		return st.wrap(m.startForEachRun(st.doc, st.req, st.opts))
 	}
 
-	if spec := m.compareSpecForRequest(cloned); spec != nil {
-		if cloned.Metadata.Profile != nil {
+	if spec := m.compareSpecForRequest(st.req); spec != nil {
+		if st.req.Metadata.Profile != nil {
 			m.setStatusMessage(
 				statusMsg{level: statusWarn, text: "@compare cannot run alongside @profile"},
 			)
-			return wrap(nil)
+			return st.wrap(nil)
 		}
-		return wrap(m.startCompareRun(doc, cloned, spec, options))
+		return st.wrap(m.startCompareRun(st.doc, st.req, spec, st.opts))
 	}
 
-	if cloned.Metadata.Trace != nil && cloned.Metadata.Trace.Enabled {
-		options.Trace = true
-		if budget, ok := tracebudget.FromSpec(cloned.Metadata.Trace); ok {
-			options.TraceBudget = &budget
+	if st.req.Metadata.Trace != nil && st.req.Metadata.Trace.Enabled {
+		st.opts.Trace = true
+		if budget, ok := tracebudget.FromSpec(st.req.Metadata.Trace); ok {
+			st.opts.TraceBudget = &budget
 		}
 	}
 
-	if cloned.Metadata.Profile != nil {
-		return wrap(m.startProfileRun(doc, cloned, options))
+	if st.req.Metadata.Profile != nil {
+		return st.wrap(m.startProfileRun(st.doc, st.req, st.opts))
 	}
 
 	spin := m.startSending()
-	target := m.statusRequestTarget(doc, cloned, "")
+	target := m.statusRequestTarget(st.doc, st.req, "")
 	base := "Sending"
 	if trimmed := strings.TrimSpace(target); trimmed != "" {
 		base = fmt.Sprintf("Sending %s", trimmed)
@@ -320,9 +337,34 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-	execCmd := m.executeRequest(doc, cloned, options, "", nil)
+	execCmd := m.executeRequest(st.doc, st.req, st.opts, "", nil)
 	pulse := m.startStatusPulse()
-	return wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
+	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
+}
+
+func (m *Model) explainActiveRequest() tea.Cmd {
+	if cmd := m.cancelActiveRuns(); cmd != nil {
+		return cmd
+	}
+
+	st, cmd := m.prepareActiveRequestExec()
+	if cmd != nil {
+		return cmd
+	}
+
+	spin := m.startSending()
+	target := m.statusRequestTarget(st.doc, st.req, "")
+	base := "Preparing explain preview"
+	if trimmed := strings.TrimSpace(target); trimmed != "" {
+		base = fmt.Sprintf("Preparing explain for %s", trimmed)
+	}
+	m.statusPulseBase = base
+	m.statusPulseFrame = -1
+	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
+
+	execCmd := m.executeExplain(st.doc, st.req, st.opts, "", nil)
+	pulse := m.startStatusPulse()
+	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 }
 
 // Allow CLI-level compare flags to kick off a sweep even when the request lacks
@@ -385,6 +427,13 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	return m.startCompareRun(doc, cloned, spec, options)
 }
 
+type execMode uint8
+
+const (
+	execModeSend execMode = iota
+	execModeExplain
+)
+
 // Accept an environment override so compare sweeps can force a per-iteration
 // scope without mutating the global environment selection.
 func (m *Model) executeRequest(
@@ -395,12 +444,116 @@ func (m *Model) executeRequest(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
+	return m.executeWithMode(
+		doc,
+		req,
+		options,
+		envOverride,
+		extraVals,
+		execModeSend,
+		extras...,
+	)
+}
+
+func (m *Model) executeExplain(
+	doc *restfile.Document,
+	req *restfile.Request,
+	options httpclient.Options,
+	envOverride string,
+	extraVals map[string]rts.Value,
+	extras ...map[string]string,
+) tea.Cmd {
+	return m.executeWithMode(
+		doc,
+		req,
+		options,
+		envOverride,
+		extraVals,
+		execModeExplain,
+		extras...,
+	)
+}
+
+func (m *Model) finalizeExplainReport(
+	rep *xplain.Report,
+	req *restfile.Request,
+	envName string,
+	preview bool,
+	st xplain.Status,
+	decision string,
+	err error,
+	tr *vars.Trace,
+	mergedSettings map[string]string,
+	sshPlan *ssh.Plan,
+	k8sPlan *k8s.Plan,
+) *xplain.Report {
+	if rep == nil {
+		return nil
+	}
+	if tr != nil {
+		finalizeExplainVars(rep, tr)
+	}
+	if rep.Final == nil {
+		setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+	}
+	fail := rep.Failure
+	if err != nil && strings.TrimSpace(fail) == "" {
+		fail = err.Error()
+	}
+	if strings.TrimSpace(decision) == "" {
+		decision = rep.Decision
+	}
+	if strings.TrimSpace(decision) == "" {
+		switch st {
+		case xplain.StatusSkipped:
+			decision = "Request skipped"
+		case xplain.StatusError:
+			decision = "Request preparation failed"
+		default:
+			if preview {
+				decision = "Explain preview ready"
+			} else {
+				decision = "Request prepared"
+			}
+		}
+	}
+	setExplainDecision(rep, st, decision, fail)
+	return m.redactExplainReport(rep, envName, req)
+}
+
+func (m *Model) executeWithMode(
+	doc *restfile.Document,
+	req *restfile.Request,
+	options httpclient.Options,
+	envOverride string,
+	extraVals map[string]rts.Value,
+	mode execMode,
+	extras ...map[string]string,
+) tea.Cmd {
 	options = m.resolveHTTPOptions(options)
+	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
+	preview := mode == execModeExplain
 	if req != nil && tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
+		rep := newExplainReport(req, envName)
+		err := errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s")
+		addExplainStage(
+			rep,
+			"route",
+			xplain.StageError,
+			"route configuration invalid",
+			nil,
+			nil,
+			err.Error(),
+		)
+		setExplainPrepared(rep, req, nil, nil, nil)
+		setExplainDecision(rep, xplain.StatusError, "Route resolution failed", err.Error())
+		rep = m.redactExplainReport(rep, envName, req)
 		return func() tea.Msg {
 			return responseMsg{
-				err:      errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s"),
-				executed: req,
+				err:         err,
+				executed:    req,
+				environment: envName,
+				explain:     rep,
 			}
 		}
 	}
@@ -417,7 +570,6 @@ func (m *Model) executeRequest(
 	m.sendCancel = sendCancel
 
 	// selecting env this way lets compare overrides win without persisting the change.
-	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
 	baseVars := m.collectVariables(doc, req, envName)
 	if len(extras) > 0 {
 		for _, extra := range extras {
@@ -429,11 +581,76 @@ func (m *Model) executeRequest(
 			}
 		}
 	}
+	hasRTSPre := false
+	hasJSPre := false
+	for _, block := range req.Metadata.Scripts {
+		if isRTSPre(block) {
+			hasRTSPre = true
+		}
+		if strings.ToLower(block.Kind) == "pre-request" && scriptLang(block.Lang) == "js" {
+			hasJSPre = true
+		}
+	}
+
+	rep := newExplainReport(req, envName)
+	if preview && req != nil {
+		if req.Metadata.ForEach != nil {
+			addExplainWarn(rep, "@for-each iterations are not expanded in explain preview")
+		}
+		if req.Metadata.Compare != nil {
+			addExplainWarn(rep, "@compare sweep is not executed in explain preview")
+		}
+		if req.Metadata.Profile != nil {
+			addExplainWarn(rep, "@profile run is not executed in explain preview")
+		}
+	}
+	var (
+		tr             *vars.Trace
+		mergedSettings map[string]string
+		sshPlan        *ssh.Plan
+		k8sPlan        *k8s.Plan
+	)
+
+	finishExplain := func(
+		st xplain.Status,
+		decision string,
+		err error,
+		tr *vars.Trace,
+		mergedSettings map[string]string,
+		sshPlan *ssh.Plan,
+		k8sPlan *k8s.Plan,
+	) *xplain.Report {
+		return m.finalizeExplainReport(
+			rep,
+			req,
+			envName,
+			preview,
+			st,
+			decision,
+			err,
+			tr,
+			mergedSettings,
+			sshPlan,
+			k8sPlan,
+		)
+	}
 
 	return func() tea.Msg {
 		select {
 		case <-sendCtx.Done():
-			return responseMsg{err: context.Canceled, executed: req}
+			return responseMsg{
+				err:      context.Canceled,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Request canceled",
+					context.Canceled,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		default:
 		}
 
@@ -455,12 +672,37 @@ func (m *Model) executeRequest(
 				if req.Metadata.When.Negate {
 					tag = "@skip-if"
 				}
+				addExplainStage(
+					rep,
+					tag,
+					xplain.StageError,
+					"condition evaluation failed",
+					nil,
+					nil,
+					err.Error(),
+				)
 				return responseMsg{
 					err:         errdef.Wrap(errdef.CodeScript, err, "%s", tag),
 					executed:    req,
 					environment: envName,
+					explain: finishExplain(
+						xplain.StatusError,
+						"Condition evaluation failed",
+						err,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
 				}
 			}
+			stageStatus := xplain.StageOK
+			sum := "condition passed"
+			if !shouldRun {
+				stageStatus = xplain.StageSkipped
+				sum = "condition blocked request"
+			}
+			addExplainStage(rep, "condition", stageStatus, sum, nil, nil, reason)
 			if !shouldRun {
 				return responseMsg{
 					executed:    req,
@@ -468,11 +710,21 @@ func (m *Model) executeRequest(
 					environment: envName,
 					skipped:     true,
 					skipReason:  reason,
+					explain: finishExplain(
+						xplain.StatusSkipped,
+						reason,
+						nil,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
 				}
 			}
 		}
 
 		preVars := cloneStringMap(baseVars)
+		applyBefore := cloneRequestIf(req, len(req.Metadata.Applies) > 0)
 		if err := m.runRTSApply(
 			sendCtx,
 			doc,
@@ -482,9 +734,34 @@ func (m *Model) executeRequest(
 			preVars,
 			extraVals,
 		); err != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeScript, err, "@apply"), executed: req}
+			addExplainStage(
+				rep,
+				"@apply",
+				xplain.StageError,
+				"apply failed",
+				applyBefore,
+				req,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      errdef.Wrap(errdef.CodeScript, err, "@apply"),
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Apply failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
+		}
+		if len(req.Metadata.Applies) > 0 {
+			addExplainStage(rep, "@apply", xplain.StageOK, "apply complete", applyBefore, req)
 		}
 		preGlobals := m.collectGlobalValues(doc, envName)
+		rtsBefore := cloneRequestIf(req, hasRTSPre)
 		rtsResult, err := m.runRTSPreRequest(
 			sendCtx,
 			doc,
@@ -495,18 +772,79 @@ func (m *Model) executeRequest(
 			preGlobals,
 		)
 		if err != nil {
+			addExplainStage(
+				rep,
+				"rts pre-request",
+				xplain.StageError,
+				"RTS pre-request failed",
+				rtsBefore,
+				req,
+				err.Error(),
+			)
 			return responseMsg{
 				err:      errdef.Wrap(errdef.CodeScript, err, "pre-request rts script"),
 				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"RTS pre-request failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
 			}
 		}
 
 		if err := applyPreRequestOutput(req, rtsResult); err != nil {
-			return responseMsg{err: err, executed: req}
+			addExplainStage(
+				rep,
+				"rts pre-request",
+				xplain.StageError,
+				"RTS pre-request output invalid",
+				rtsBefore,
+				req,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"RTS pre-request failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
+		}
+		if hasRTSPre {
+			addExplainStage(
+				rep,
+				"rts pre-request",
+				xplain.StageOK,
+				"RTS pre-request complete",
+				rtsBefore,
+				req,
+			)
 		}
 
 		if err := sendCtx.Err(); err != nil {
-			return responseMsg{err: err, executed: req}
+			return responseMsg{
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Request canceled",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 
 		if len(rtsResult.Globals) > 0 {
@@ -518,6 +856,7 @@ func (m *Model) executeRequest(
 			preVars = m.collectVariables(doc, req, envName)
 		}
 
+		jsBefore := cloneRequestIf(req, hasJSPre)
 		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
 			Request:   req,
 			Variables: preVars,
@@ -526,18 +865,79 @@ func (m *Model) executeRequest(
 			Context:   sendCtx,
 		})
 		if err != nil {
+			addExplainStage(
+				rep,
+				"js pre-request",
+				xplain.StageError,
+				"JS pre-request failed",
+				jsBefore,
+				req,
+				err.Error(),
+			)
 			return responseMsg{
 				err:      errdef.Wrap(errdef.CodeScript, err, "pre-request script"),
 				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"JS pre-request failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
 			}
 		}
 
 		if err := applyPreRequestOutput(req, preResult); err != nil {
-			return responseMsg{err: err, executed: req}
+			addExplainStage(
+				rep,
+				"js pre-request",
+				xplain.StageError,
+				"JS pre-request output invalid",
+				jsBefore,
+				req,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"JS pre-request failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
+		}
+		if hasJSPre {
+			addExplainStage(
+				rep,
+				"js pre-request",
+				xplain.StageOK,
+				"JS pre-request complete",
+				jsBefore,
+				req,
+			)
 		}
 
 		if err := sendCtx.Err(); err != nil {
-			return responseMsg{err: err, executed: req}
+			return responseMsg{
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Request canceled",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 
 		m.applyGlobalMutations(preResult.Globals, envName)
@@ -561,24 +961,85 @@ func (m *Model) executeRequest(
 			options.BaseDir,
 			extraVals,
 			resolverExtras...)
-		sshPlan, err := m.resolveSSH(doc, req, resolver, envName)
+		tr = vars.NewTrace()
+		resolver.SetTrace(tr)
+		sshPlan, err = m.resolveSSH(doc, req, resolver, envName)
 		if err != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"), executed: req}
+			addExplainStage(
+				rep,
+				"route",
+				xplain.StageError,
+				"ssh resolution failed",
+				nil,
+				nil,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"),
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Route resolution failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
-		k8sPlan, err := m.resolveK8s(doc, req, resolver, envName)
+		k8sPlan, err = m.resolveK8s(doc, req, resolver, envName)
 		if err != nil {
-			return responseMsg{err: errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s"), executed: req}
+			addExplainStage(
+				rep,
+				"route",
+				xplain.StageError,
+				"k8s resolution failed",
+				nil,
+				nil,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s"),
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Route resolution failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 		options.SSH = sshPlan
 		options.K8s = k8sPlan
+		if route := explainRoute(sshPlan, k8sPlan); route != nil {
+			notes := append([]string{route.Summary}, route.Notes...)
+			addExplainStage(rep, "route", xplain.StageOK, route.Kind, nil, nil, notes...)
+			if sshPlan != nil && sshPlan.Active() && sshPlan.Config != nil &&
+				!sshPlan.Config.Strict {
+				addExplainWarn(rep, "@ssh strict_hostkey=false (insecure)")
+			}
+		}
 
 		globalSettings := settings.FromEnv(m.cfg.EnvironmentSet, envName)
 		fileSettings := map[string]string{}
 		if doc != nil && doc.Settings != nil {
 			fileSettings = doc.Settings
 		}
-		mergedSettings := settings.Merge(globalSettings, fileSettings, req.Settings)
+		settingsBefore := cloneRequest(req)
+		mergedSettings = settings.Merge(globalSettings, fileSettings, req.Settings)
 		req.Settings = mergedSettings
+		addExplainStage(
+			rep,
+			"settings",
+			xplain.StageOK,
+			"effective settings merged",
+			settingsBefore,
+			req,
+		)
 
 		var grpcOpts grpcclient.Options
 		useGRPC := req.GRPC != nil
@@ -600,10 +1061,32 @@ func (m *Model) executeRequest(
 		}
 		applier := settings.New(handlers...)
 		if _, err := applier.ApplyAll(mergedSettings); err != nil {
-			return responseMsg{err: err, executed: req}
+			addExplainStage(
+				rep,
+				"settings",
+				xplain.StageError,
+				"settings application failed",
+				nil,
+				nil,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Settings application failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
+		authBefore := cloneRequestIf(req, req != nil && req.Metadata.Auth != nil)
 		if err := m.ensureOAuth(
 			sendCtx,
 			req,
@@ -612,7 +1095,154 @@ func (m *Model) executeRequest(
 			envName,
 			effectiveTimeout,
 		); err != nil {
-			return responseMsg{err: err, executed: req}
+			addExplainStage(
+				rep,
+				"auth",
+				xplain.StageError,
+				"auth injection failed",
+				authBefore,
+				req,
+				err.Error(),
+			)
+			return responseMsg{
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Auth preparation failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
+		}
+		if req.Metadata.Auth != nil {
+			addExplainStage(rep, "auth", xplain.StageOK, "auth prepared", authBefore, req)
+		}
+
+		if req.GRPC != nil {
+			grpcBefore := cloneRequest(req)
+			if err := m.prepareGRPCRequest(req, resolver, grpcOpts.BaseDir); err != nil {
+				addExplainStage(
+					rep,
+					"grpc prepare",
+					xplain.StageError,
+					"gRPC preparation failed",
+					grpcBefore,
+					req,
+					err.Error(),
+				)
+				return responseMsg{
+					err:      err,
+					executed: req,
+					explain: finishExplain(
+						xplain.StatusError,
+						"gRPC preparation failed",
+						err,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
+				}
+			}
+			addExplainStage(
+				rep,
+				"grpc prepare",
+				xplain.StageOK,
+				"gRPC request prepared",
+				grpcBefore,
+				req,
+			)
+		}
+
+		if req.WebSocket != nil {
+			wsBefore := cloneRequest(req)
+			if err := m.expandWebSocketSteps(req, resolver); err != nil {
+				addExplainStage(
+					rep,
+					"websocket prepare",
+					xplain.StageError,
+					"WebSocket preparation failed",
+					wsBefore,
+					req,
+					err.Error(),
+				)
+				return responseMsg{
+					err:      err,
+					executed: req,
+					explain: finishExplain(
+						xplain.StatusError,
+						"WebSocket preparation failed",
+						err,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
+				}
+			}
+			addExplainStage(
+				rep,
+				"websocket prepare",
+				xplain.StageOK,
+				"WebSocket request prepared",
+				wsBefore,
+				req,
+			)
+		}
+
+		if preview {
+			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+			if req.GRPC == nil {
+				if err := m.prepareExplainHTTPPreview(
+					sendCtx,
+					rep,
+					req,
+					resolver,
+					options,
+				); err != nil {
+					addExplainStage(
+						rep,
+						"http prepare",
+						xplain.StageError,
+						"HTTP request build failed",
+						nil,
+						nil,
+						err.Error(),
+					)
+					return responseMsg{
+						err:      err,
+						executed: req,
+						explain: finishExplain(
+							xplain.StatusError,
+							"HTTP preparation failed",
+							err,
+							tr,
+							mergedSettings,
+							sshPlan,
+							k8sPlan,
+						),
+					}
+				}
+			}
+			return responseMsg{
+				executed:    req,
+				requestText: renderRequestText(req),
+				environment: envName,
+				preview:     true,
+				explain: finishExplain(
+					xplain.StatusReady,
+					"Explain preview ready. No request was sent.",
+					nil,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 
 		var (
@@ -633,12 +1263,6 @@ func (m *Model) executeRequest(
 		}()
 
 		if req.GRPC != nil {
-			if err := m.prepareGRPCRequest(req, resolver, grpcOpts.BaseDir); err != nil {
-				return responseMsg{err: err, executed: req}
-			}
-		}
-
-		if req.GRPC != nil {
 			if grpcOpts.DialTimeout == 0 {
 				grpcOpts.DialTimeout = effectiveTimeout
 			}
@@ -651,12 +1275,22 @@ func (m *Model) executeRequest(
 			}
 			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts, hook)
 			if grpcErr != nil {
+				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
 				return responseMsg{
 					grpc:        grpcResp,
 					err:         grpcErr,
 					executed:    req,
 					requestText: renderRequestText(req),
 					environment: envName,
+					explain: finishExplain(
+						xplain.StatusError,
+						"gRPC request failed",
+						grpcErr,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
 				}
 			}
 
@@ -679,7 +1313,30 @@ func (m *Model) executeRequest(
 				v:    capVars,
 				x:    extraVals,
 			}); err != nil {
-				return responseMsg{err: err, executed: req}
+				addExplainStage(
+					rep,
+					"captures",
+					xplain.StageError,
+					"capture evaluation failed",
+					nil,
+					nil,
+					err.Error(),
+				)
+				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+				return responseMsg{
+					err:         err,
+					executed:    req,
+					environment: envName,
+					explain: finishExplain(
+						xplain.StatusError,
+						"Capture evaluation failed",
+						err,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
+				}
 			}
 
 			updatedVars := m.collectVariables(doc, req, envName)
@@ -707,6 +1364,8 @@ func (m *Model) executeRequest(
 				},
 			)
 			m.applyGlobalMutations(globalChanges, envName)
+			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+			setExplainGRPC(rep, req)
 
 			return responseMsg{
 				grpc:        grpcResp,
@@ -715,18 +1374,36 @@ func (m *Model) executeRequest(
 				executed:    req,
 				requestText: renderRequestText(req),
 				environment: envName,
+				explain: finishExplain(
+					xplain.StatusReady,
+					"gRPC request sent",
+					nil,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
 			}
 		}
 
 		var response *httpclient.Response
 		switch {
 		case req.WebSocket != nil:
-			if err := m.expandWebSocketSteps(req, resolver); err != nil {
-				return responseMsg{err: err, executed: req}
-			}
 			handle, fallback, startErr := client.StartWebSocket(ctx, req, resolver, options)
 			if startErr != nil {
-				return responseMsg{err: startErr, executed: req}
+				return responseMsg{
+					err:      startErr,
+					executed: req,
+					explain: finishExplain(
+						xplain.StatusError,
+						"WebSocket request failed",
+						startErr,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
+				}
 			}
 			if fallback != nil {
 				response = fallback
@@ -749,7 +1426,19 @@ func (m *Model) executeRequest(
 		case req.SSE != nil:
 			handle, fallback, startErr := client.StartSSE(ctx, req, resolver, options)
 			if startErr != nil {
-				return responseMsg{err: startErr, executed: req}
+				return responseMsg{
+					err:      startErr,
+					executed: req,
+					explain: finishExplain(
+						xplain.StatusError,
+						"SSE request failed",
+						startErr,
+						tr,
+						mergedSettings,
+						sshPlan,
+						k8sPlan,
+					),
+				}
 			}
 			if fallback != nil {
 				response = fallback
@@ -761,14 +1450,44 @@ func (m *Model) executeRequest(
 			response, err = client.Execute(ctx, req, resolver, options)
 		}
 		if err != nil {
-			return responseMsg{response: response, err: err, executed: req}
+			if response != nil {
+				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+				setExplainHTTP(rep, response)
+			} else {
+				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+			}
+			return responseMsg{
+				response: response,
+				err:      err,
+				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"HTTP request failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 
 		streamInfo, streamErr := streamInfoFromResponse(req, response)
 		if streamErr != nil {
+			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+			setExplainHTTP(rep, response)
 			return responseMsg{
 				err:      errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript"),
 				executed: req,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Stream decoding failed",
+					streamErr,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
 			}
 		}
 
@@ -792,7 +1511,31 @@ func (m *Model) executeRequest(
 			v:      capVars,
 			x:      extraVals,
 		}); err != nil {
-			return responseMsg{err: err, executed: req}
+			addExplainStage(
+				rep,
+				"captures",
+				xplain.StageError,
+				"capture evaluation failed",
+				nil,
+				nil,
+				err.Error(),
+			)
+			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+			setExplainHTTP(rep, response)
+			return responseMsg{
+				err:         err,
+				executed:    req,
+				environment: envName,
+				explain: finishExplain(
+					xplain.StatusError,
+					"Capture evaluation failed",
+					err,
+					tr,
+					mergedSettings,
+					sshPlan,
+					k8sPlan,
+				),
+			}
 		}
 
 		updatedVars := m.collectVariables(doc, req, envName)
@@ -820,6 +1563,8 @@ func (m *Model) executeRequest(
 			Trace:     traceInput,
 		})
 		m.applyGlobalMutations(globalChanges, envName)
+		setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+		setExplainHTTP(rep, response)
 
 		return responseMsg{
 			response:    response,
@@ -828,8 +1573,42 @@ func (m *Model) executeRequest(
 			executed:    req,
 			requestText: renderRequestText(req),
 			environment: envName,
+			explain: finishExplain(
+				xplain.StatusReady,
+				"HTTP request sent",
+				nil,
+				tr,
+				mergedSettings,
+				sshPlan,
+				k8sPlan,
+			),
 		}
 	}
+}
+
+func (m *Model) prepareExplainHTTPPreview(
+	ctx context.Context,
+	rep *xplain.Report,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts httpclient.Options,
+) error {
+	if rep == nil || req == nil {
+		return nil
+	}
+	c := m.client
+	if c == nil {
+		c = httpclient.NewClient(nil)
+	}
+	httpReq, _, body, err := c.BuildHTTPRequest(ctx, req, resolver, opts)
+	if err != nil {
+		return err
+	}
+	if req.SSE != nil && httpReq.Header.Get("Accept") == "" {
+		httpReq.Header.Set("Accept", "text/event-stream")
+	}
+	setExplainHTTPPrepared(rep, req, httpReq, body)
+	return nil
 }
 
 func streamingPlaceholderResponse(meta httpclient.StreamMeta) *httpclient.Response {
@@ -2225,6 +3004,13 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 		clone.WebSocket = &wsCopy
 	}
 	return &clone
+}
+
+func cloneRequestIf(req *restfile.Request, enabled bool) *restfile.Request {
+	if !enabled {
+		return nil
+	}
+	return cloneRequest(req)
 }
 
 func (m *Model) requestAtCursor(

@@ -993,6 +993,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.clearZoomCmd(), true
 	case bindings.ActionCopyResponseTab:
 		return m.copyResponseTab(), true
+	case bindings.ActionExplainRequest:
+		return m.explainActiveRequest(), true
 	case bindings.ActionToggleHeaderPreview:
 		return m.toggleHeaderPreview(), true
 	case bindings.ActionCycleRawView:

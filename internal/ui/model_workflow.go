@@ -263,7 +263,7 @@ func (m *Model) wfErr(
 ) tea.Cmd {
 	wrapped := errdef.Wrap(errdef.CodeScript, err, "%s", tag)
 	m.lastError = wrapped
-	cmd := m.consumeRequestError(wrapped)
+	cmd := m.consumeRequestError(wrapped, nil)
 	next := m.advanceWorkflow(
 		st,
 		makeWorkflowResult(st, step, false, false, wrapped.Error(), wrapped),
@@ -272,7 +272,7 @@ func (m *Model) wfErr(
 }
 
 func (m *Model) wfSkip(st *workflowState, step restfile.WorkflowStep, reason string) tea.Cmd {
-	cmd := m.consumeSkippedRequest(reason)
+	cmd := m.consumeSkippedRequest(reason, nil)
 	next := m.advanceWorkflow(st, makeWorkflowResult(st, step, false, true, reason, nil))
 	return batchCmds([]tea.Cmd{cmd, next})
 }
@@ -928,7 +928,7 @@ func (m *Model) executeWorkflowLoopIteration(
 		if err != nil {
 			wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
 			m.lastError = wrapped
-			if cmd := m.consumeRequestError(wrapped); cmd != nil {
+			if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 			res := makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped)
@@ -965,7 +965,7 @@ func (m *Model) executeWorkflowLoopIteration(
 			if err != nil {
 				wrapped := errdef.Wrap(errdef.CodeScript, err, "@when")
 				m.lastError = wrapped
-				if cmd := m.consumeRequestError(wrapped); cmd != nil {
+				if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 				res := makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped)
@@ -979,7 +979,7 @@ func (m *Model) executeWorkflowLoopIteration(
 				continue
 			}
 			if !shouldRun {
-				if cmd := m.consumeSkippedRequest(reason); cmd != nil {
+				if cmd := m.consumeSkippedRequest(reason, nil); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
 				res := makeWorkflowResult(st, loop.step, false, true, reason, nil)
@@ -1057,11 +1057,11 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 	switch {
 	case msg.skipped:
 		m.lastError = nil
-		if cmd := m.consumeSkippedRequest(msg.skipReason); cmd != nil {
+		if cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case msg.err != nil:
-		if cmd := m.consumeRequestError(msg.err); cmd != nil {
+		if cmd := m.consumeRequestError(msg.err, msg.explain); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case msg.response != nil:
@@ -1070,6 +1070,7 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 			msg.tests,
 			msg.scriptErr,
 			msg.environment,
+			msg.explain,
 		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -1080,6 +1081,7 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 			msg.scriptErr,
 			msg.executed,
 			msg.environment,
+			msg.explain,
 		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

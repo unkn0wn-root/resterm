@@ -89,6 +89,21 @@ type Theme struct {
 	ResponseContentHeaders        lipgloss.Style
 	ResponseSelection             lipgloss.Style
 	ResponseCursor                lipgloss.Style
+	ExplainLabel                  lipgloss.Style
+	ExplainValue                  lipgloss.Style
+	ExplainMuted                  lipgloss.Style
+	ExplainSectionTitle           lipgloss.Style
+	ExplainSectionBorder          lipgloss.Style
+	ExplainBadgeReady             lipgloss.Style
+	ExplainBadgeSkipped           lipgloss.Style
+	ExplainBadgeError             lipgloss.Style
+	ExplainStageOK                lipgloss.Style
+	ExplainStageSkipped           lipgloss.Style
+	ExplainStageError             lipgloss.Style
+	ExplainChangeAdd              lipgloss.Style
+	ExplainChangeRemove           lipgloss.Style
+	ExplainChangeUpdate           lipgloss.Style
+	ExplainWarning                lipgloss.Style
 	StreamContent                 lipgloss.Style
 	StreamTimestamp               lipgloss.Style
 	StreamDirectionSend           lipgloss.Style
@@ -350,6 +365,48 @@ func DefaultTheme() Theme {
 		ResponseSelection:      lipgloss.NewStyle().Background(lipgloss.Color("#3A2B52")),
 		ResponseCursor: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#A6A1BB")).
+			Bold(true),
+		ExplainLabel:        lipgloss.NewStyle().Foreground(lipgloss.Color("#8FD3FF")).Bold(true),
+		ExplainValue:        lipgloss.NewStyle().Foreground(lipgloss.Color("#F3F0FF")),
+		ExplainMuted:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
+		ExplainSectionTitle: lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
+		ExplainSectionBorder: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#4F4670")),
+		ExplainBadgeReady: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#062311")).
+			Background(lipgloss.Color("#6EF17E")).
+			Bold(true).
+			Padding(0, 1),
+		ExplainBadgeSkipped: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#2B1C00")).
+			Background(lipgloss.Color("#FFD46A")).
+			Bold(true).
+			Padding(0, 1),
+		ExplainBadgeError: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#280B0B")).
+			Background(lipgloss.Color("#FF8A8A")).
+			Bold(true).
+			Padding(0, 1),
+		ExplainStageOK: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6EF17E")).
+			Bold(true),
+		ExplainStageSkipped: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFD46A")).
+			Bold(true),
+		ExplainStageError: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6E6E")).
+			Bold(true),
+		ExplainChangeAdd: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#6EF17E")).
+			Bold(true),
+		ExplainChangeRemove: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FF6E6E")).
+			Bold(true),
+		ExplainChangeUpdate: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#7D56F4")).
+			Bold(true),
+		ExplainWarning: lipgloss.NewStyle().
+			Foreground(lipgloss.Color("#FFD46A")).
 			Bold(true),
 		StreamContent:   lipgloss.NewStyle(),
 		StreamTimestamp: lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),

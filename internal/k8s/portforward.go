@@ -99,7 +99,10 @@ func startSession(ctx context.Context, cfg Cfg, load loadSettings) (*session, er
 		return nil, joinCleanupErr(baseErr, ses.close())
 	}
 
-	ses.localAddr = net.JoinHostPort(addressedDialHost(addresses), strconv.Itoa(int(ports[0].Local)))
+	ses.localAddr = net.JoinHostPort(
+		addressedDialHost(addresses),
+		strconv.Itoa(int(ports[0].Local)),
+	)
 	return ses, nil
 }
 

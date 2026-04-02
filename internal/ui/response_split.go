@@ -14,6 +14,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -24,6 +25,18 @@ const (
 	responsePanePrimary responsePaneID = iota
 	responsePaneSecondary
 )
+
+type explainRenderCache struct {
+	styled   string
+	width    int
+	themeKey string
+}
+
+type explainState struct {
+	plain  string
+	report *xplain.Report
+	cache  explainRenderCache
+}
 
 type responseSnapshot struct {
 	id              string
@@ -38,6 +51,7 @@ type responseSnapshot struct {
 	rawLoadingMode  rawViewMode
 	headers         string
 	requestHeaders  string
+	explain         explainState
 	stats           string
 	statsColored    string
 	statsColorize   bool
@@ -266,6 +280,7 @@ func (pane *responsePaneState) setActiveTab(tab responseTab) {
 	}
 	pane.activeTab = tab
 	if tab == responseTabPretty || tab == responseTabRaw || tab == responseTabHeaders ||
+		tab == responseTabExplain ||
 		tab == responseTabStream ||
 		tab == responseTabTimeline {
 		pane.lastContentTab = tab
@@ -600,6 +615,12 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			return m.syncWorkflowStatsPane(pane, w, snapshot)
 		}
 	}
+	if tab == responseTabExplain && !pane.search.hasQuery() {
+		snapshot := pane.snapshot
+		if snapshot != nil && snapshot.explain.report != nil {
+			return m.syncExplainPane(pane, ww, snapshot)
+		}
+	}
 
 	sr, sid := paneSnap(pane)
 
@@ -875,6 +896,17 @@ func (m *Model) paneContentBaseForTab(
 			return "<no headers>\n", tab
 		}
 		return snapshot.headers, tab
+	case responseTabExplain:
+		if snapshot.explain.report == nil {
+			return "<no explain>\n", tab
+		}
+		if strings.TrimSpace(snapshot.explain.plain) == "" {
+			snapshot.explain.plain = renderExplainReport(snapshot.explain.report)
+		}
+		if strings.TrimSpace(snapshot.explain.plain) == "" {
+			return "<no explain>\n", tab
+		}
+		return snapshot.explain.plain, tab
 	case responseTabStats:
 		if strings.TrimSpace(snapshot.stats) == "" {
 			return "<no stats>\n", tab

@@ -86,7 +86,7 @@ func isScrollableResponsePane(pane *responsePaneState) bool {
 		return false
 	}
 	switch pane.activeTab {
-	case responseTabPretty, responseTabRaw, responseTabHeaders:
+	case responseTabPretty, responseTabRaw, responseTabHeaders, responseTabExplain:
 		return true
 	default:
 		return false

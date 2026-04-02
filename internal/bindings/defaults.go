@@ -44,6 +44,7 @@ var (
 	ActionToggleZoom              ActionID = "toggle_zoom"
 	ActionClearZoom               ActionID = "clear_zoom"
 	ActionSendRequest             ActionID = "send_request"
+	ActionExplainRequest          ActionID = "explain_request"
 	ActionCancelRun               ActionID = "cancel_run"
 	ActionCopyResponseTab         ActionID = "copy_response_tab"
 	ActionToggleHeaderPreview     ActionID = "toggle_header_preview"
@@ -102,6 +103,7 @@ var definitions = []definition{
 	def(ActionToggleZoom, false, "g z"),
 	def(ActionClearZoom, false, "g shift+z"),
 	def(ActionSendRequest, false, "ctrl+enter", "cmd+enter", "alt+enter", "ctrl+j", "ctrl+m"),
+	def(ActionExplainRequest, false, "g x"),
 	def(ActionCancelRun, false, "ctrl+c"),
 	def(ActionCopyResponseTab, false, "ctrl+shift+c", "g y"),
 	def(ActionToggleHeaderPreview, false, "g shift+h"),

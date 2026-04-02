@@ -8,6 +8,30 @@ import (
 	"time"
 )
 
+type countingProvider struct {
+	label string
+	vals  map[string]string
+	seen  []string
+}
+
+func newCountingProvider(label string, vals map[string]string) *countingProvider {
+	normalized := make(map[string]string, len(vals))
+	for key, value := range vals {
+		normalized[strings.ToLower(strings.TrimSpace(key))] = value
+	}
+	return &countingProvider{label: label, vals: normalized}
+}
+
+func (p *countingProvider) Resolve(name string) (string, bool) {
+	p.seen = append(p.seen, strings.TrimSpace(name))
+	value, ok := p.vals[strings.ToLower(strings.TrimSpace(name))]
+	return value, ok
+}
+
+func (p *countingProvider) Label() string {
+	return p.label
+}
+
 func TestExpandTemplatesStatic(t *testing.T) {
 	t.Parallel()
 
@@ -58,6 +82,44 @@ func TestExpandTemplatesWithProviderLabel(t *testing.T) {
 	}
 	if expanded != "123" {
 		t.Fatalf("expected value 123, got %q", expanded)
+	}
+}
+
+func TestResolveStopsAtFirstDirectMatchWithoutTrace(t *testing.T) {
+	t.Parallel()
+
+	first := newCountingProvider("env", map[string]string{"token": "env-token"})
+	second := newCountingProvider("file", map[string]string{"token": "file-token"})
+	resolver := NewResolver(first, second)
+
+	out, ok := resolver.Resolve("token")
+	if !ok {
+		t.Fatal("expected token to resolve")
+	}
+	if out != "env-token" {
+		t.Fatalf("expected env-token, got %q", out)
+	}
+	if len(second.seen) != 0 {
+		t.Fatalf("expected second provider to be skipped, got lookups %v", second.seen)
+	}
+}
+
+func TestResolveStopsAtFirstPrefixedMatchWithoutTrace(t *testing.T) {
+	t.Parallel()
+
+	first := newCountingProvider("env", map[string]string{"token": "env-token"})
+	second := newCountingProvider("env", map[string]string{"token": "file-token"})
+	resolver := NewResolver(first, second)
+
+	out, ok := resolver.Resolve("env.token")
+	if !ok {
+		t.Fatal("expected namespaced token to resolve")
+	}
+	if out != "env-token" {
+		t.Fatalf("expected env-token, got %q", out)
+	}
+	if got := second.seen; len(got) != 1 || got[0] != "env.token" {
+		t.Fatalf("expected second provider to skip subject lookup, got %v", got)
 	}
 }
 

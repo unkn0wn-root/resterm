@@ -55,6 +55,7 @@ const (
 	responseTabPretty responseTab = iota
 	responseTabRaw
 	responseTabHeaders
+	responseTabExplain
 	responseTabStream
 	responseTabStats
 	responseTabTimeline

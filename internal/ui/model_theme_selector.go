@@ -79,5 +79,5 @@ func (m *Model) applyThemeSelection() tea.Cmd {
 		label = humaniseKey(def.Key)
 	}
 	m.setStatusMessage(statusMsg{level: statusInfo, text: fmt.Sprintf("Theme set to %s", label)})
-	return nil
+	return m.syncResponsePanes()
 }

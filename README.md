@@ -181,6 +181,7 @@ A few keys that make Resterm feel “native” quickly:
   - When response pane is focused:
     - `Ctrl+Shift+C` or `g y` - copy the entire Pretty/Raw/Headers tab
       to the clipboard (no mouse selection needed).
+  - `g x` - build an Explain preview for the active request without sending it.
 
 ---
 
