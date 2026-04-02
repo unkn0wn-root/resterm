@@ -201,13 +201,13 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	var cmds []tea.Cmd
 	if !canceled && msg.skipped {
 		m.lastError = nil
-		if cmd := m.consumeSkippedRequest(msg.skipReason); cmd != nil {
+		if cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.err != nil {
 		result.Err = msg.err
 		m.lastError = msg.err
-		if cmd := m.consumeRequestError(msg.err); cmd != nil {
+		if cmd := m.consumeRequestError(msg.err, msg.explain); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	} else if !canceled && msg.grpc != nil {
@@ -219,6 +219,7 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 			msg.scriptErr,
 			msg.executed,
 			msg.environment,
+			msg.explain,
 		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
@@ -230,6 +231,7 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 			msg.tests,
 			msg.scriptErr,
 			msg.environment,
+			msg.explain,
 		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}

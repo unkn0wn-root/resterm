@@ -32,6 +32,7 @@ type Resolver struct {
 	refs      []RefResolver
 	expr      ExprEval
 	exprPos   ExprPos
+	trace     *Trace
 }
 
 func NewResolver(providers ...Provider) *Resolver {
@@ -46,15 +47,43 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 	if trimmed == "" {
 		return "", false
 	}
-	for _, provider := range r.providers {
-		if value, ok := provider.Resolve(trimmed); ok {
-			return r.applyRefs(value)
+	if r.trace == nil {
+		for _, provider := range r.providers {
+			if value, ok := provider.Resolve(trimmed); ok {
+				return r.applyRefs(value)
+			}
+		}
+	} else {
+		var hits []string
+		var raw string
+		for _, provider := range r.providers {
+			if value, ok := provider.Resolve(trimmed); ok {
+				label := providerLabel(provider)
+				hits = append(hits, label)
+				if len(hits) == 1 {
+					raw = value
+				}
+			}
+		}
+		if len(hits) > 0 {
+			resolved, found := r.applyRefs(raw)
+			r.traceVar(ResolveTrace{
+				Name:     trimmed,
+				Source:   hits[0],
+				Value:    resolved,
+				Shadowed: hits[1:],
+				Uses:     1,
+			})
+			return resolved, found
 		}
 	}
 	if !strings.Contains(trimmed, ".") {
 		return "", false
 	}
+
 	lowered := strings.ToLower(trimmed)
+	var hits []string
+	var raw string
 	for _, provider := range r.providers {
 		label := strings.TrimSpace(provider.Label())
 		if label == "" {
@@ -73,9 +102,27 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 				continue
 			}
 			if value, ok := provider.Resolve(subject); ok {
-				return r.applyRefs(value)
+				if r.trace == nil {
+					return r.applyRefs(value)
+				}
+				label = providerLabel(provider)
+				hits = append(hits, label)
+				if len(hits) == 1 {
+					raw = value
+				}
 			}
 		}
+	}
+	if len(hits) > 0 {
+		resolved, found := r.applyRefs(raw)
+		r.traceVar(ResolveTrace{
+			Name:     trimmed,
+			Source:   hits[0],
+			Value:    resolved,
+			Shadowed: hits[1:],
+			Uses:     1,
+		})
+		return resolved, found
 	}
 	return "", false
 }
@@ -93,6 +140,17 @@ func (r *Resolver) applyRefs(value string) (string, bool) {
 	return value, true
 }
 
+func providerLabel(p Provider) string {
+	if p == nil {
+		return ""
+	}
+	label := strings.TrimSpace(p.Label())
+	if label == "" {
+		return "provider"
+	}
+	return label
+}
+
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
 	return r.expandTemplates(input, r.exprPos, true, true)
 }
@@ -107,6 +165,10 @@ func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
 
 func (r *Resolver) AddRefResolver(fn RefResolver) {
 	r.refs = append(r.refs, fn)
+}
+
+func (r *Resolver) SetTrace(tr *Trace) {
+	r.trace = tr
 }
 
 func (r *Resolver) SetExprEval(fn ExprEval) {
@@ -161,12 +223,20 @@ func (r *Resolver) expandTemplates(
 				return value
 			}
 			if dynamic, ok := resolveDynamic(name); ok {
+				r.traceVar(ResolveTrace{
+					Name:    name,
+					Source:  "dynamic",
+					Value:   dynamic,
+					Dynamic: true,
+					Uses:    1,
+				})
 				return dynamic
 			}
 		}
 		if value, ok := r.Resolve(name); ok {
 			return value
 		}
+		r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})
 		if firstErr == nil {
 			firstErr = fmt.Errorf("undefined variable: %s", name)
 		}
@@ -180,6 +250,13 @@ func resolveDynamic(name string) (string, bool) {
 		return resolveDynamicBase(base, offset)
 	}
 	return resolveDynamicBase(name, 0)
+}
+
+func (r *Resolver) traceVar(it ResolveTrace) {
+	if r == nil || r.trace == nil {
+		return
+	}
+	r.trace.Add(it)
 }
 
 func resolveDynamicBase(name string, offset time.Duration) (string, bool) {

@@ -36,6 +36,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			ResponseContentRaw:  &StyleSpec{Foreground: strPtr("#abcdef")},
 			ResponseSelection:   &StyleSpec{Background: strPtr("#101010")},
 			ResponseCursor:      &StyleSpec{Foreground: strPtr("#010203")},
+			ExplainLabel:        &StyleSpec{Foreground: strPtr("#bada55")},
+			ExplainBadgeError:   &StyleSpec{Background: strPtr("#220000")},
+			ExplainWarning:      &StyleSpec{Foreground: strPtr("#ffaa00")},
 			StreamContent:       &StyleSpec{Foreground: strPtr("#123123")},
 		},
 	}
@@ -86,6 +89,15 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if color := updated.ResponseCursor.GetForeground(); color != lipgloss.Color("#010203") {
 		t.Errorf("expected response cursor foreground #010203, got %v", color)
+	}
+	if color := updated.ExplainLabel.GetForeground(); color != lipgloss.Color("#bada55") {
+		t.Errorf("expected explain label foreground #bada55, got %v", color)
+	}
+	if color := updated.ExplainBadgeError.GetBackground(); color != lipgloss.Color("#220000") {
+		t.Errorf("expected explain badge error background #220000, got %v", color)
+	}
+	if color := updated.ExplainWarning.GetForeground(); color != lipgloss.Color("#ffaa00") {
+		t.Errorf("expected explain warning foreground #ffaa00, got %v", color)
 	}
 	if color := updated.StreamContent.GetForeground(); color != lipgloss.Color("#123123") {
 		t.Errorf("expected stream content foreground #123123, got %v", color)

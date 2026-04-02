@@ -14,6 +14,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -50,11 +51,20 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	m.testResults = msg.tests
 	m.scriptError = msg.scriptErr
 
+	if msg.preview {
+		m.lastError = nil
+		m.lastResponse = nil
+		m.lastGRPC = nil
+		m.testResults = nil
+		m.scriptError = nil
+		return m.consumeExplainPreview(msg.environment, msg.explain)
+	}
+
 	if msg.skipped {
 		m.lastError = nil
 		m.testResults = nil
 		m.scriptError = nil
-		cmd := m.consumeSkippedRequest(msg.skipReason)
+		cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain)
 		m.recordSkippedHistory(msg.executed, msg.requestText, msg.environment, msg.skipReason)
 		return cmd
 	}
@@ -71,6 +81,7 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 			msg.scriptErr,
 			msg.executed,
 			msg.environment,
+			msg.explain,
 		)
 		m.recordGRPCHistory(msg.grpc, msg.executed, msg.requestText, msg.environment)
 		return cmd
@@ -97,13 +108,19 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 			text = "Request canceled"
 		}
 
-		cmd := m.consumeRequestError(msg.err)
+		cmd := m.consumeRequestError(msg.err, msg.explain)
 		m.suppressNextErrorModal = true
 		m.setStatusMessage(statusMsg{text: text, level: level})
 		return cmd
 	}
 
-	cmd := m.consumeHTTPResponse(msg.response, msg.tests, msg.scriptErr, msg.environment)
+	cmd := m.consumeHTTPResponse(
+		msg.response,
+		msg.tests,
+		msg.scriptErr,
+		msg.environment,
+		msg.explain,
+	)
 	m.recordHTTPHistory(msg.response, msg.executed, msg.requestText, msg.environment)
 	return cmd
 }
@@ -118,7 +135,7 @@ func (m *Model) recordResponseLatency(msg responseMsg) {
 	}
 }
 
-func (m *Model) consumeRequestError(err error) tea.Cmd {
+func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
 	if err == nil {
 		return nil
 	}
@@ -168,7 +185,10 @@ func (m *Model) consumeRequestError(err error) tea.Cmd {
 		pretty:  pretty,
 		raw:     raw,
 		headers: headers,
-		ready:   true,
+		explain: explainState{
+			report: rep,
+		},
+		ready: true,
 	}
 	m.responseLatest = snapshot
 	m.responsePending = nil
@@ -190,7 +210,7 @@ func (m *Model) consumeRequestError(err error) tea.Cmd {
 	return m.syncResponsePanes()
 }
 
-func (m *Model) consumeSkippedRequest(reason string) tea.Cmd {
+func (m *Model) consumeSkippedRequest(reason string, rep *xplain.Report) tea.Cmd {
 	if m.responseLatest != nil && m.responseLatest.ready {
 		m.responsePrevious = m.responseLatest
 	}
@@ -219,7 +239,10 @@ func (m *Model) consumeSkippedRequest(reason string) tea.Cmd {
 		pretty:  pretty,
 		raw:     raw,
 		headers: headers,
-		ready:   true,
+		explain: explainState{
+			report: rep,
+		},
+		ready: true,
 	}
 	m.responseLatest = snapshot
 	m.responsePending = nil
@@ -239,6 +262,66 @@ func (m *Model) consumeSkippedRequest(reason string) tea.Cmd {
 	m.setLivePane(target)
 
 	m.setStatusMessage(statusMsg{text: detail, level: statusWarn})
+	return m.syncResponsePanes()
+}
+
+func (m *Model) consumeExplainPreview(env string, rep *xplain.Report) tea.Cmd {
+	if rep == nil {
+		return nil
+	}
+	if m.responseLatest != nil && m.responseLatest.ready {
+		m.responsePrevious = m.responseLatest
+	}
+
+	m.responseLoading = false
+	m.responseLoadingFrame = 0
+	m.responsePending = nil
+	m.responseRenderToken = ""
+	if m.responseTokens != nil {
+		for key := range m.responseTokens {
+			delete(m.responseTokens, key)
+		}
+	}
+
+	detail := "Explain preview ready. No request was sent."
+	if txt := strings.TrimSpace(rep.Decision); txt != "" {
+		detail = txt
+	}
+
+	pretty := joinSections("Explain Preview", detail, "Open the Explain tab to inspect the prepared request.")
+	raw := joinSections("Explain Preview", detail)
+	headers := joinSections("Explain Preview", "No request was sent.")
+
+	snapshot := &responseSnapshot{
+		id:      nextResponseRenderToken(),
+		pretty:  pretty,
+		raw:     raw,
+		headers: headers,
+		explain: explainState{
+			report: rep,
+		},
+		ready:       true,
+		environment: env,
+	}
+	m.responseLatest = snapshot
+	m.responsePending = nil
+
+	target := m.responseTargetPane()
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil {
+			continue
+		}
+		if id == target {
+			pane.snapshot = snapshot
+			pane.invalidateCaches()
+			pane.setActiveTab(responseTabExplain)
+			pane.viewport.GotoTop()
+			pane.setCurrPosition()
+		}
+	}
+	m.setLivePane(target)
+	m.setStatusMessage(statusMsg{text: detail, level: statusInfo})
 	return m.syncResponsePanes()
 }
 
@@ -273,6 +356,7 @@ func (m *Model) consumeHTTPResponse(
 	tests []scripts.TestResult,
 	scriptErr error,
 	environment string,
+	rep *xplain.Report,
 ) tea.Cmd {
 	m.lastGRPC = nil
 	m.lastResponse = resp
@@ -375,7 +459,13 @@ func (m *Model) consumeHTTPResponse(
 	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel})
 
 	token := nextResponseRenderToken()
-	snapshot := &responseSnapshot{id: token, environment: environment}
+	snapshot := &responseSnapshot{
+		id:          token,
+		environment: environment,
+		explain: explainState{
+			report: rep,
+		},
+	}
 	m.responseRenderToken = token
 	m.responsePending = snapshot
 	m.responseLatest = snapshot
@@ -639,6 +729,7 @@ func (m *Model) consumeGRPCResponse(
 	scriptErr error,
 	req *restfile.Request,
 	environment string,
+	rep *xplain.Report,
 ) tea.Cmd {
 	m.lastResponse = nil
 	m.lastGRPC = resp
@@ -724,10 +815,13 @@ func (m *Model) consumeGRPCResponse(
 	bv := buildBodyViews(rawBody, rawContentType, &meta, viewBody, viewContentType)
 
 	snapshot := &responseSnapshot{
-		pretty:      joinSections(statusLine, bv.pretty),
-		raw:         joinSections(statusLine, bv.raw),
-		rawSummary:  statusLine,
-		headers:     joinSections(statusLine, headersContent),
+		pretty:     joinSections(statusLine, bv.pretty),
+		raw:        joinSections(statusLine, bv.raw),
+		rawSummary: statusLine,
+		headers:    joinSections(statusLine, headersContent),
+		explain: explainState{
+			report: rep,
+		},
 		ready:       true,
 		environment: environment,
 		body:        rawBody,

@@ -29,6 +29,14 @@ func TestDefaultMapContainsExpectedBindings(t *testing.T) {
 		t.Fatalf("expected g s -> ActionSetMainSplitHorizontal, got %+v (ok=%v)", binding, ok)
 	}
 
+	if binding, ok := m.ResolveChord(
+		"g",
+		"x",
+	); !ok ||
+		binding.Action != ActionExplainRequest {
+		t.Fatalf("expected g x -> ActionExplainRequest, got %+v (ok=%v)", binding, ok)
+	}
+
 	if !m.HasChordPrefix("g") {
 		t.Fatalf("expected HasChordPrefix('g') to be true")
 	}

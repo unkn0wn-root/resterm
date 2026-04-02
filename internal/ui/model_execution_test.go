@@ -422,7 +422,7 @@ func TestConsumeGRPCResponseUsesBinaryBody(t *testing.T) {
 		WireContentType: "application/grpc+proto",
 	}
 
-	cmd := model.consumeGRPCResponse(resp, nil, nil, req, "")
+	cmd := model.consumeGRPCResponse(resp, nil, nil, req, "", nil)
 	if cmd != nil {
 		collectMsgs(cmd)
 	}

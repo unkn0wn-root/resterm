@@ -2561,6 +2561,10 @@ func (m Model) renderHelpOverlay() string {
 				},
 				{m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"},
 				{
+					m.helpActionKey(bindings.ActionExplainRequest, "g x"),
+					"Prepare Explain preview (no request sent)",
+				},
+				{
 					m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"),
 					"Cancel in-flight run/request",
 				},

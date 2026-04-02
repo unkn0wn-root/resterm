@@ -55,6 +55,9 @@ func indexOfResponseTab(tabs []responseTab, target responseTab) int {
 
 func (m *Model) availableResponseTabs() []responseTab {
 	tabs := []responseTab{responseTabPretty, responseTabRaw, responseTabHeaders}
+	if m.snapshotHasExplain() {
+		tabs = append(tabs, responseTabExplain)
+	}
 	if m.hasActiveStream() {
 		tabs = append(tabs, responseTabStream)
 	}
@@ -82,6 +85,8 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 		return "Raw"
 	case responseTabHeaders:
 		return "Headers"
+	case responseTabExplain:
+		return "Explain"
 	case responseTabStream:
 		return "Stream"
 	case responseTabStats:
@@ -131,6 +136,19 @@ func (m *Model) snapshotHasStats() bool {
 		return true
 	}
 	return false
+}
+
+func (m *Model) snapshotHasExplain() bool {
+	for _, id := range m.visiblePaneIDs() {
+		pane := m.pane(id)
+		if pane == nil || pane.snapshot == nil {
+			continue
+		}
+		if pane.snapshot.explain.report != nil {
+			return true
+		}
+	}
+	return m.responseLatest != nil && m.responseLatest.explain.report != nil
 }
 
 func (m *Model) snapshotHasTimeline() bool {

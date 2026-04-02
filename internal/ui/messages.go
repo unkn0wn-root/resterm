@@ -1,6 +1,7 @@
 package ui
 
 import (
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -43,6 +44,8 @@ type responseMsg struct {
 	environment string
 	skipped     bool
 	skipReason  string
+	preview     bool
+	explain     *xplain.Report
 }
 
 type statusMsg struct {

@@ -8,6 +8,7 @@ func tabAllowsOverlay(tab responseTab) bool {
 	case responseTabPretty,
 		responseTabRaw,
 		responseTabHeaders,
+		responseTabExplain,
 		responseTabStream,
 		responseTabStats,
 		responseTabTimeline,
@@ -23,6 +24,7 @@ func tabAllowsAsyncWrap(tab responseTab) bool {
 	switch tab {
 	case responseTabPretty,
 		responseTabRaw,
+		responseTabExplain,
 		responseTabStats,
 		responseTabTimeline,
 		responseTabCompare,

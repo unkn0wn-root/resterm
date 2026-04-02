@@ -74,6 +74,21 @@ type StylesSpec struct {
 	ResponseContentHeaders        *StyleSpec `json:"response_content_headers"         toml:"response_content_headers"`
 	ResponseSelection             *StyleSpec `json:"response_selection"               toml:"response_selection"`
 	ResponseCursor                *StyleSpec `json:"response_cursor"                  toml:"response_cursor"`
+	ExplainLabel                  *StyleSpec `json:"explain_label"                    toml:"explain_label"`
+	ExplainValue                  *StyleSpec `json:"explain_value"                    toml:"explain_value"`
+	ExplainMuted                  *StyleSpec `json:"explain_muted"                    toml:"explain_muted"`
+	ExplainSectionTitle           *StyleSpec `json:"explain_section_title"            toml:"explain_section_title"`
+	ExplainSectionBorder          *StyleSpec `json:"explain_section_border"           toml:"explain_section_border"`
+	ExplainBadgeReady             *StyleSpec `json:"explain_badge_ready"              toml:"explain_badge_ready"`
+	ExplainBadgeSkipped           *StyleSpec `json:"explain_badge_skipped"            toml:"explain_badge_skipped"`
+	ExplainBadgeError             *StyleSpec `json:"explain_badge_error"              toml:"explain_badge_error"`
+	ExplainStageOK                *StyleSpec `json:"explain_stage_ok"                 toml:"explain_stage_ok"`
+	ExplainStageSkipped           *StyleSpec `json:"explain_stage_skipped"            toml:"explain_stage_skipped"`
+	ExplainStageError             *StyleSpec `json:"explain_stage_error"              toml:"explain_stage_error"`
+	ExplainChangeAdd              *StyleSpec `json:"explain_change_add"               toml:"explain_change_add"`
+	ExplainChangeRemove           *StyleSpec `json:"explain_change_remove"            toml:"explain_change_remove"`
+	ExplainChangeUpdate           *StyleSpec `json:"explain_change_update"            toml:"explain_change_update"`
+	ExplainWarning                *StyleSpec `json:"explain_warning"                  toml:"explain_warning"`
 	StreamContent                 *StyleSpec `json:"stream_content"                   toml:"stream_content"`
 	StreamTimestamp               *StyleSpec `json:"stream_timestamp"                 toml:"stream_timestamp"`
 	StreamDirectionSend           *StyleSpec `json:"stream_direction_send"            toml:"stream_direction_send"`
@@ -437,6 +452,95 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		"response_cursor",
 		&cloned.ResponseCursor,
 		spec.Styles.ResponseCursor,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("explain_label", &cloned.ExplainLabel, spec.Styles.ExplainLabel); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("explain_value", &cloned.ExplainValue, spec.Styles.ExplainValue); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("explain_muted", &cloned.ExplainMuted, spec.Styles.ExplainMuted); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_section_title",
+		&cloned.ExplainSectionTitle,
+		spec.Styles.ExplainSectionTitle,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_section_border",
+		&cloned.ExplainSectionBorder,
+		spec.Styles.ExplainSectionBorder,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_badge_ready",
+		&cloned.ExplainBadgeReady,
+		spec.Styles.ExplainBadgeReady,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_badge_skipped",
+		&cloned.ExplainBadgeSkipped,
+		spec.Styles.ExplainBadgeSkipped,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_badge_error",
+		&cloned.ExplainBadgeError,
+		spec.Styles.ExplainBadgeError,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("explain_stage_ok", &cloned.ExplainStageOK, spec.Styles.ExplainStageOK); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_stage_skipped",
+		&cloned.ExplainStageSkipped,
+		spec.Styles.ExplainStageSkipped,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_stage_error",
+		&cloned.ExplainStageError,
+		spec.Styles.ExplainStageError,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_change_add",
+		&cloned.ExplainChangeAdd,
+		spec.Styles.ExplainChangeAdd,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_change_remove",
+		&cloned.ExplainChangeRemove,
+		spec.Styles.ExplainChangeRemove,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_change_update",
+		&cloned.ExplainChangeUpdate,
+		spec.Styles.ExplainChangeUpdate,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"explain_warning",
+		&cloned.ExplainWarning,
+		spec.Styles.ExplainWarning,
 	); err != nil {
 		return Theme{}, err
 	}
