@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.24.1](https://github.com/unkn0wn-root/resterm/compare/v0.23.6...v0.24.1) (2026-04-02)
+
+
+### Features
+
+* add Explain preview for request inspection ([8cd0ea5](https://github.com/unkn0wn-root/resterm/commit/8cd0ea5263731bed0630cf2cae987139764c0c7b))
+
 ### [0.23.6](https://github.com/unkn0wn-root/resterm/compare/v0.23.5...v0.23.6) (2026-02-26)
 
 
