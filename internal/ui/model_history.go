@@ -288,7 +288,11 @@ func (m *Model) consumeExplainPreview(env string, rep *xplain.Report) tea.Cmd {
 		detail = txt
 	}
 
-	pretty := joinSections("Explain Preview", detail, "Open the Explain tab to inspect the prepared request.")
+	pretty := joinSections(
+		"Explain Preview",
+		detail,
+		"Open the Explain tab to inspect the prepared request.",
+	)
 	raw := joinSections("Explain Preview", detail)
 	headers := joinSections("Explain Preview", "No request was sent.")
 

@@ -189,10 +189,13 @@ func TestRenderExplainReportUsesCompactOperatorLayout(t *testing.T) {
 			},
 		},
 		Final: &xplain.Final{
-			Mode:     "sent",
-			Method:   "POST",
-			URL:      "https://example.com/final",
-			Settings: []xplain.Pair{{Key: "insecure", Value: "false"}, {Key: "timeout", Value: "5s"}},
+			Mode:   "sent",
+			Method: "POST",
+			URL:    "https://example.com/final",
+			Settings: []xplain.Pair{
+				{Key: "insecure", Value: "false"},
+				{Key: "timeout", Value: "5s"},
+			},
 			Headers: []xplain.Header{
 				{Name: "Authorization", Value: "****"},
 				{Name: "X-Mode", Value: "debug"},
@@ -311,7 +314,10 @@ func TestSyncResponsePaneExplainUsesStyledRenderer(t *testing.T) {
 		t.Fatalf("expected explain viewport to use styled summary layout, got %q", plain)
 	}
 	if !strings.Contains(plain, "FINAL REQUEST") {
-		t.Fatalf("expected explain viewport to include final request section, got %q", ansi.Strip(view))
+		t.Fatalf(
+			"expected explain viewport to include final request section, got %q",
+			ansi.Strip(view),
+		)
 	}
 }
 
@@ -360,7 +366,12 @@ func TestRenderExplainReportNormalizesStageLabelsForUsers(t *testing.T) {
 
 	rep := &xplain.Report{
 		Stages: []xplain.Stage{
-			{Name: "route", Status: xplain.StageOK, Summary: "direct", Notes: []string{"direct connection"}},
+			{
+				Name:    "route",
+				Status:  xplain.StageOK,
+				Summary: "direct",
+				Notes:   []string{"direct connection"},
+			},
 			{Name: "settings", Status: xplain.StageOK, Summary: "effective settings merged"},
 		},
 	}
@@ -441,7 +452,11 @@ func TestApplyResponseSearchOnExplainUsesPlainContent(t *testing.T) {
 		t.Fatal("expected search status")
 	}
 	if !pane.search.active || len(pane.search.matches) == 0 {
-		t.Fatalf("expected explain search matches, got active=%v matches=%d", pane.search.active, len(pane.search.matches))
+		t.Fatalf(
+			"expected explain search matches, got active=%v matches=%d",
+			pane.search.active,
+			len(pane.search.matches),
+		)
 	}
 }
 

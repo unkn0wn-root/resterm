@@ -499,7 +499,11 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("explain_stage_ok", &cloned.ExplainStageOK, spec.Styles.ExplainStageOK); err != nil {
+	if err := apply(
+		"explain_stage_ok",
+		&cloned.ExplainStageOK,
+		spec.Styles.ExplainStageOK,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply(

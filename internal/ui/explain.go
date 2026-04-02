@@ -819,7 +819,10 @@ func addExplainChange(out *[]xplain.Change, field, before, after string) {
 	if before == after {
 		return
 	}
-	*out = append(*out, xplain.Change{Field: field, Before: clipExplain(before), After: clipExplain(after)})
+	*out = append(
+		*out,
+		xplain.Change{Field: field, Before: clipExplain(before), After: clipExplain(after)},
+	)
 }
 
 func addExplainBodyChange(out *[]xplain.Change, a, b *restfile.Request) {
@@ -918,7 +921,10 @@ func explainReqBody(req *restfile.Request) (string, string) {
 	}
 	switch {
 	case req.GRPC != nil:
-		if s := strings.TrimSpace(req.GRPC.MessageExpanded); req.GRPC.MessageExpandedSet && s != "" {
+		if s := strings.TrimSpace(
+			req.GRPC.MessageExpanded,
+		); req.GRPC.MessageExpandedSet &&
+			s != "" {
 			note := "gRPC message"
 			if path := strings.TrimSpace(req.GRPC.MessageFile); path != "" {
 				note = "expanded gRPC message from " + path
@@ -1109,7 +1115,10 @@ func explainWebSocketDetails(ws *restfile.WebSocketRequest) []xplain.Pair {
 	opts := ws.Options
 	out := make([]xplain.Pair, 0, 5)
 	if opts.HandshakeTimeout > 0 {
-		out = append(out, xplain.Pair{Key: "Handshake Timeout", Value: opts.HandshakeTimeout.String()})
+		out = append(
+			out,
+			xplain.Pair{Key: "Handshake Timeout", Value: opts.HandshakeTimeout.String()},
+		)
 	}
 	if opts.IdleTimeout > 0 {
 		out = append(out, xplain.Pair{Key: "Idle Timeout", Value: opts.IdleTimeout.String()})
@@ -1406,15 +1415,27 @@ func (m *Model) redactExplainReport(
 				rep.Final.Headers[i].Value = mask
 				continue
 			}
-			rep.Final.Headers[i].Value = redactHistoryText(rep.Final.Headers[i].Value, secrets, false)
+			rep.Final.Headers[i].Value = redactHistoryText(
+				rep.Final.Headers[i].Value,
+				secrets,
+				false,
+			)
 		}
 		for i := range rep.Final.Settings {
-			rep.Final.Settings[i].Value = redactHistoryText(rep.Final.Settings[i].Value, secrets, false)
+			rep.Final.Settings[i].Value = redactHistoryText(
+				rep.Final.Settings[i].Value,
+				secrets,
+				false,
+			)
 		}
 		if rep.Final.Route != nil {
 			rep.Final.Route.Summary = redactHistoryText(rep.Final.Route.Summary, secrets, false)
 			for i := range rep.Final.Route.Notes {
-				rep.Final.Route.Notes[i] = redactHistoryText(rep.Final.Route.Notes[i], secrets, false)
+				rep.Final.Route.Notes[i] = redactHistoryText(
+					rep.Final.Route.Notes[i],
+					secrets,
+					false,
+				)
 			}
 		}
 	}

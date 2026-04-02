@@ -392,7 +392,8 @@ func (m *Model) syncExplainPane(
 		key = "default"
 	}
 	content := snapshot.explain.cache.styled
-	if content == "" || snapshot.explain.cache.width != width || snapshot.explain.cache.themeKey != key {
+	if content == "" || snapshot.explain.cache.width != width ||
+		snapshot.explain.cache.themeKey != key {
 		content = renderExplainStyled(snapshot.explain.report, width, m.theme)
 		snapshot.explain.cache = explainRenderCache{
 			styled:   content,

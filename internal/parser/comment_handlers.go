@@ -49,10 +49,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		return
 	}
 
-	startedRequest := false
-	if !b.inRequest {
-		startedRequest = true
-	}
+	startedRequest := !b.inRequest
 	b.ensureRequest(line)
 	if b.handleRequestBuilderDirective(key, rest) {
 		return

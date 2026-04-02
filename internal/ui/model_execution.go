@@ -914,7 +914,14 @@ func (m *Model) executeWithMode(
 			}
 		}
 		if hasJSPre {
-			addExplainStage(rep, "js pre-request", xplain.StageOK, "JS pre-request complete", jsBefore, req)
+			addExplainStage(
+				rep,
+				"js pre-request",
+				xplain.StageOK,
+				"JS pre-request complete",
+				jsBefore,
+				req,
+			)
 		}
 
 		if err := sendCtx.Err(); err != nil {
@@ -958,7 +965,15 @@ func (m *Model) executeWithMode(
 		resolver.SetTrace(tr)
 		sshPlan, err = m.resolveSSH(doc, req, resolver, envName)
 		if err != nil {
-			addExplainStage(rep, "route", xplain.StageError, "ssh resolution failed", nil, nil, err.Error())
+			addExplainStage(
+				rep,
+				"route",
+				xplain.StageError,
+				"ssh resolution failed",
+				nil,
+				nil,
+				err.Error(),
+			)
 			return responseMsg{
 				err:      errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"),
 				executed: req,
@@ -975,7 +990,15 @@ func (m *Model) executeWithMode(
 		}
 		k8sPlan, err = m.resolveK8s(doc, req, resolver, envName)
 		if err != nil {
-			addExplainStage(rep, "route", xplain.StageError, "k8s resolution failed", nil, nil, err.Error())
+			addExplainStage(
+				rep,
+				"route",
+				xplain.StageError,
+				"k8s resolution failed",
+				nil,
+				nil,
+				err.Error(),
+			)
 			return responseMsg{
 				err:      errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s"),
 				executed: req,
@@ -995,7 +1018,8 @@ func (m *Model) executeWithMode(
 		if route := explainRoute(sshPlan, k8sPlan); route != nil {
 			notes := append([]string{route.Summary}, route.Notes...)
 			addExplainStage(rep, "route", xplain.StageOK, route.Kind, nil, nil, notes...)
-			if sshPlan != nil && sshPlan.Active() && sshPlan.Config != nil && !sshPlan.Config.Strict {
+			if sshPlan != nil && sshPlan.Active() && sshPlan.Config != nil &&
+				!sshPlan.Config.Strict {
 				addExplainWarn(rep, "@ssh strict_hostkey=false (insecure)")
 			}
 		}
@@ -1008,7 +1032,14 @@ func (m *Model) executeWithMode(
 		settingsBefore := cloneRequest(req)
 		mergedSettings = settings.Merge(globalSettings, fileSettings, req.Settings)
 		req.Settings = mergedSettings
-		addExplainStage(rep, "settings", xplain.StageOK, "effective settings merged", settingsBefore, req)
+		addExplainStage(
+			rep,
+			"settings",
+			xplain.StageOK,
+			"effective settings merged",
+			settingsBefore,
+			req,
+		)
 
 		var grpcOpts grpcclient.Options
 		useGRPC := req.GRPC != nil
@@ -1030,7 +1061,15 @@ func (m *Model) executeWithMode(
 		}
 		applier := settings.New(handlers...)
 		if _, err := applier.ApplyAll(mergedSettings); err != nil {
-			addExplainStage(rep, "settings", xplain.StageError, "settings application failed", nil, nil, err.Error())
+			addExplainStage(
+				rep,
+				"settings",
+				xplain.StageError,
+				"settings application failed",
+				nil,
+				nil,
+				err.Error(),
+			)
 			return responseMsg{
 				err:      err,
 				executed: req,
@@ -1056,7 +1095,15 @@ func (m *Model) executeWithMode(
 			envName,
 			effectiveTimeout,
 		); err != nil {
-			addExplainStage(rep, "auth", xplain.StageError, "auth injection failed", authBefore, req, err.Error())
+			addExplainStage(
+				rep,
+				"auth",
+				xplain.StageError,
+				"auth injection failed",
+				authBefore,
+				req,
+				err.Error(),
+			)
 			return responseMsg{
 				err:      err,
 				executed: req,
@@ -1101,7 +1148,14 @@ func (m *Model) executeWithMode(
 					),
 				}
 			}
-			addExplainStage(rep, "grpc prepare", xplain.StageOK, "gRPC request prepared", grpcBefore, req)
+			addExplainStage(
+				rep,
+				"grpc prepare",
+				xplain.StageOK,
+				"gRPC request prepared",
+				grpcBefore,
+				req,
+			)
 		}
 
 		if req.WebSocket != nil {
@@ -1143,7 +1197,13 @@ func (m *Model) executeWithMode(
 		if preview {
 			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
 			if req.GRPC == nil {
-				if err := m.prepareExplainHTTPPreview(sendCtx, rep, req, resolver, options); err != nil {
+				if err := m.prepareExplainHTTPPreview(
+					sendCtx,
+					rep,
+					req,
+					resolver,
+					options,
+				); err != nil {
 					addExplainStage(
 						rep,
 						"http prepare",
