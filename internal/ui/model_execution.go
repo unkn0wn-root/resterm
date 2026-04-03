@@ -615,10 +615,6 @@ func (m *Model) executeWithMode(
 		st xplain.Status,
 		decision string,
 		err error,
-		tr *vars.Trace,
-		mergedSettings map[string]string,
-		sshPlan *ssh.Plan,
-		k8sPlan *k8s.Plan,
 	) *xplain.Report {
 		return m.finalizeExplainReport(
 			rep,
@@ -645,10 +641,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Request canceled",
 					context.Canceled,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		default:
@@ -689,10 +681,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"Condition evaluation failed",
 						err,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -714,10 +702,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusSkipped,
 						reason,
 						nil,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -750,10 +734,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Apply failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -788,10 +768,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"RTS pre-request failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -813,10 +789,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"RTS pre-request failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -839,10 +811,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Request canceled",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -881,10 +849,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"JS pre-request failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -906,10 +870,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"JS pre-request failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -932,10 +892,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Request canceled",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -981,10 +937,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Route resolution failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1006,10 +958,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Route resolution failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1077,10 +1025,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Settings application failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1111,10 +1055,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Auth preparation failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1141,10 +1081,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"gRPC preparation failed",
 						err,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -1177,10 +1113,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"WebSocket preparation failed",
 						err,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -1220,10 +1152,6 @@ func (m *Model) executeWithMode(
 							xplain.StatusError,
 							"HTTP preparation failed",
 							err,
-							tr,
-							mergedSettings,
-							sshPlan,
-							k8sPlan,
 						),
 					}
 				}
@@ -1237,10 +1165,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusReady,
 					"Explain preview ready. No request was sent.",
 					nil,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1286,10 +1210,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"gRPC request failed",
 						grpcErr,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -1331,10 +1251,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"Capture evaluation failed",
 						err,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -1378,10 +1294,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusReady,
 					"gRPC request sent",
 					nil,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1398,10 +1310,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"WebSocket request failed",
 						startErr,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -1433,10 +1341,6 @@ func (m *Model) executeWithMode(
 						xplain.StatusError,
 						"SSE request failed",
 						startErr,
-						tr,
-						mergedSettings,
-						sshPlan,
-						k8sPlan,
 					),
 				}
 			}
@@ -1464,10 +1368,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"HTTP request failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1483,10 +1383,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Stream decoding failed",
 					streamErr,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1530,10 +1426,6 @@ func (m *Model) executeWithMode(
 					xplain.StatusError,
 					"Capture evaluation failed",
 					err,
-					tr,
-					mergedSettings,
-					sshPlan,
-					k8sPlan,
 				),
 			}
 		}
@@ -1577,10 +1469,6 @@ func (m *Model) executeWithMode(
 				xplain.StatusReady,
 				"HTTP request sent",
 				nil,
-				tr,
-				mergedSettings,
-				sshPlan,
-				k8sPlan,
 			),
 		}
 	}
