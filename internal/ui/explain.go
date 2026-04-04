@@ -19,6 +19,129 @@ import (
 
 const explainClip = 512
 
+const (
+	explainStageApply            = "@apply"
+	explainStageCondition        = "condition"
+	explainStageRoute            = "route"
+	explainStageSettings         = "settings"
+	explainStageAuth             = "auth"
+	explainStageRTSPreRequest    = "rts pre-request"
+	explainStageJSPreRequest     = "js pre-request"
+	explainStageGRPCPrepare      = "grpc prepare"
+	explainStageHTTPPrepare      = "http prepare"
+	explainStageWebSocketPrepare = "websocket prepare"
+	explainStageCaptures         = "captures"
+)
+
+const (
+	explainRouteKindDirect = "direct"
+	explainRouteKindSSH    = "ssh"
+	explainRouteKindK8s    = "k8s"
+)
+
+const (
+	explainSummaryApplyComplete             = "apply complete"
+	explainSummaryApplyFailed               = "apply failed"
+	explainSummaryConditionPassed           = "condition passed"
+	explainSummaryConditionBlockedRequest   = "condition blocked request"
+	explainSummaryConditionEvaluationFailed = "condition evaluation failed"
+	explainSummaryRouteSSHResolutionFailed  = "ssh resolution failed"
+	explainSummaryRouteK8sResolutionFailed  = "k8s resolution failed"
+	explainSummaryRouteConfigInvalid        = "route configuration invalid"
+	explainSummarySettingsMerged            = "effective settings merged"
+	explainSummarySettingsApplyFailed       = "settings application failed"
+	explainSummaryAuthPrepared              = "auth prepared"
+	explainSummaryAuthInjectionFailed       = "auth injection failed"
+	explainSummaryOAuthTokenFetchSkipped    = "oauth token fetch skipped"
+	explainSummaryAuthTypeNotApplied        = "auth type not applied"
+	explainSummaryRTSPreRequestComplete     = "RTS pre-request complete"
+	explainSummaryRTSPreRequestFailed       = "RTS pre-request failed"
+	explainSummaryRTSPreRequestOutputBad    = "RTS pre-request output invalid"
+	explainSummaryJSPreRequestComplete      = "JS pre-request complete"
+	explainSummaryJSPreRequestFailed        = "JS pre-request failed"
+	explainSummaryJSPreRequestOutputBad     = "JS pre-request output invalid"
+	explainSummaryGRPCRequestPrepared       = "gRPC request prepared"
+	explainSummaryGRPCPrepareFailed         = "gRPC preparation failed"
+	explainSummaryHTTPRequestPrepared       = "HTTP request prepared"
+	explainSummaryHTTPRequestBuildFailed    = "HTTP request build failed"
+	explainSummaryWebSocketRequestPrepared  = "WebSocket request prepared"
+	explainSummaryWebSocketPrepareFailed    = "WebSocket preparation failed"
+	explainSummaryCaptureEvaluationFailed   = "capture evaluation failed"
+)
+
+func explainKey(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+var explainStageDisplayNames = map[string]string{
+	explainKey(explainStageApply):            "Apply",
+	explainKey(explainStageCondition):        "Condition",
+	explainKey(explainStageRoute):            "Route",
+	explainKey(explainStageSettings):         "Settings",
+	explainKey(explainStageAuth):             "Authentication",
+	explainKey(explainStageRTSPreRequest):    "RTS Pre-request",
+	explainKey(explainStageJSPreRequest):     "JavaScript Pre-request",
+	explainKey(explainStageGRPCPrepare):      "gRPC Request",
+	explainKey(explainStageHTTPPrepare):      "HTTP Request",
+	explainKey(explainStageWebSocketPrepare): "WebSocket Request",
+	explainKey(explainStageCaptures):         "Captures",
+}
+
+var explainStageSummaryDisplay = map[string]map[string]string{
+	explainKey(explainStageApply): {
+		explainKey(explainSummaryApplyComplete): "Applied request mutations",
+		explainKey(explainSummaryApplyFailed):   "Failed to apply request mutations",
+	},
+	explainKey(explainStageCondition): {
+		explainKey(explainSummaryConditionPassed):           "Condition matched",
+		explainKey(explainSummaryConditionBlockedRequest):   "Condition skipped this request",
+		explainKey(explainSummaryConditionEvaluationFailed): "Failed to evaluate condition",
+	},
+	explainKey(explainStageRoute): {
+		explainKey(explainRouteKindDirect):                 "Direct connection",
+		explainKey(explainRouteKindSSH):                    "SSH route resolved",
+		explainKey(explainRouteKindK8s):                    "Kubernetes route resolved",
+		explainKey(explainSummaryRouteSSHResolutionFailed): "Failed to resolve SSH route",
+		explainKey(explainSummaryRouteK8sResolutionFailed): "Failed to resolve Kubernetes route",
+		explainKey(explainSummaryRouteConfigInvalid):       "Invalid route configuration",
+	},
+	explainKey(explainStageSettings): {
+		explainKey(explainSummarySettingsMerged):      "Merged environment, file, and request settings",
+		explainKey(explainSummarySettingsApplyFailed): "Failed to apply merged settings",
+	},
+	explainKey(explainStageAuth): {
+		explainKey(explainSummaryAuthPrepared):           "Prepared authentication",
+		explainKey(explainSummaryAuthInjectionFailed):    "Failed to prepare authentication",
+		explainKey(explainSummaryOAuthTokenFetchSkipped): "Skipped OAuth token fetch for explain preview",
+		explainKey(explainSummaryAuthTypeNotApplied):     "Authentication type is not applied",
+	},
+	explainKey(explainStageRTSPreRequest): {
+		explainKey(explainSummaryRTSPreRequestComplete):  "Applied RTS pre-request script",
+		explainKey(explainSummaryRTSPreRequestFailed):    "RTS pre-request script failed",
+		explainKey(explainSummaryRTSPreRequestOutputBad): "RTS pre-request script returned invalid output",
+	},
+	explainKey(explainStageJSPreRequest): {
+		explainKey(explainSummaryJSPreRequestComplete):  "Applied JavaScript pre-request script",
+		explainKey(explainSummaryJSPreRequestFailed):    "JavaScript pre-request script failed",
+		explainKey(explainSummaryJSPreRequestOutputBad): "JavaScript pre-request script returned invalid output",
+	},
+	explainKey(explainStageGRPCPrepare): {
+		explainKey(explainSummaryGRPCRequestPrepared): "Prepared gRPC request",
+		explainKey(explainSummaryGRPCPrepareFailed):   "Failed to prepare gRPC request",
+	},
+	explainKey(explainStageHTTPPrepare): {
+		explainKey(explainSummaryHTTPRequestPrepared):    "Prepared HTTP request",
+		explainKey(explainSummaryHTTPRequestBuildFailed): "Failed to prepare HTTP request",
+	},
+	explainKey(explainStageWebSocketPrepare): {
+		explainKey(explainSummaryWebSocketRequestPrepared): "Prepared WebSocket request",
+		explainKey(explainSummaryWebSocketPrepareFailed):   "Failed to prepare WebSocket request",
+	},
+	explainKey(explainStageCaptures): {
+		explainKey(explainSummaryCaptureEvaluationFailed): "Failed to evaluate captures",
+	},
+}
+
 func newExplainReport(req *restfile.Request, env string) *xplain.Report {
 	rep := &xplain.Report{
 		Env:    strings.TrimSpace(env),
@@ -91,9 +214,9 @@ func addExplainPreparedHTTPStage(
 		return
 	}
 	appendExplainStage(rep, xplain.Stage{
-		Name:    "http prepare",
+		Name:    explainStageHTTPPrepare,
 		Status:  xplain.StageOK,
-		Summary: "HTTP request prepared",
+		Summary: explainSummaryHTTPRequestPrepared,
 		Changes: explainBuiltHTTPChanges(req, httpReq, body),
 		Notes:   explainNotes(notes),
 	})
@@ -109,9 +232,9 @@ func addExplainSentHTTPStage(
 		return
 	}
 	appendExplainStage(rep, xplain.Stage{
-		Name:    "http prepare",
+		Name:    explainStageHTTPPrepare,
 		Status:  xplain.StageOK,
-		Summary: "HTTP request prepared",
+		Summary: explainSummaryHTTPRequestPrepared,
 		Changes: explainSentHTTPChanges(req, resp),
 		Notes:   explainNotes(notes),
 	})
@@ -674,129 +797,17 @@ func explainPairsLabel(xs []xplain.Pair) string {
 }
 
 func explainDisplayStageName(name string) string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "@apply":
-		return "Apply"
-	case "condition":
-		return "Condition"
-	case "route":
-		return "Route"
-	case "settings":
-		return "Settings"
-	case "auth":
-		return "Authentication"
-	case "rts pre-request":
-		return "RTS Pre-request"
-	case "js pre-request":
-		return "JavaScript Pre-request"
-	case "grpc prepare":
-		return "gRPC Request"
-	case "http prepare":
-		return "HTTP Request"
-	case "websocket prepare":
-		return "WebSocket Request"
-	case "captures":
-		return "Captures"
-	default:
-		return explainTitleWords(name)
+	if display, ok := explainStageDisplayNames[explainKey(name)]; ok {
+		return display
 	}
+	return explainTitleWords(name)
 }
 
 func explainDisplayStageSummary(st xplain.Stage) string {
-	name := strings.ToLower(strings.TrimSpace(st.Name))
 	sum := strings.TrimSpace(st.Summary)
-	switch name {
-	case "@apply":
-		switch strings.ToLower(sum) {
-		case "apply complete":
-			return "Applied request mutations"
-		case "apply failed":
-			return "Failed to apply request mutations"
-		}
-	case "condition":
-		switch strings.ToLower(sum) {
-		case "condition passed":
-			return "Condition matched"
-		case "condition blocked request":
-			return "Condition skipped this request"
-		case "condition evaluation failed":
-			return "Failed to evaluate condition"
-		}
-	case "route":
-		switch strings.ToLower(sum) {
-		case "direct":
-			return "Direct connection"
-		case "ssh":
-			return "SSH route resolved"
-		case "k8s":
-			return "Kubernetes route resolved"
-		case "ssh resolution failed":
-			return "Failed to resolve SSH route"
-		case "k8s resolution failed":
-			return "Failed to resolve Kubernetes route"
-		case "route configuration invalid":
-			return "Invalid route configuration"
-		}
-	case "settings":
-		switch strings.ToLower(sum) {
-		case "effective settings merged":
-			return "Merged environment, file, and request settings"
-		case "settings application failed":
-			return "Failed to apply merged settings"
-		}
-	case "auth":
-		switch strings.ToLower(sum) {
-		case "auth prepared":
-			return "Prepared authentication"
-		case "auth injection failed":
-			return "Failed to prepare authentication"
-		case "oauth token fetch skipped":
-			return "Skipped OAuth token fetch for explain preview"
-		case "auth type not applied":
-			return "Authentication type is not applied"
-		}
-	case "rts pre-request":
-		switch strings.ToLower(sum) {
-		case "rts pre-request complete":
-			return "Applied RTS pre-request script"
-		case "rts pre-request failed":
-			return "RTS pre-request script failed"
-		case "rts pre-request output invalid":
-			return "RTS pre-request script returned invalid output"
-		}
-	case "js pre-request":
-		switch strings.ToLower(sum) {
-		case "js pre-request complete":
-			return "Applied JavaScript pre-request script"
-		case "js pre-request failed":
-			return "JavaScript pre-request script failed"
-		case "js pre-request output invalid":
-			return "JavaScript pre-request script returned invalid output"
-		}
-	case "grpc prepare":
-		switch strings.ToLower(sum) {
-		case "grpc request prepared":
-			return "Prepared gRPC request"
-		case "grpc preparation failed":
-			return "Failed to prepare gRPC request"
-		}
-	case "http prepare":
-		switch strings.ToLower(sum) {
-		case "http request prepared":
-			return "Prepared HTTP request"
-		case "http request build failed":
-			return "Failed to prepare HTTP request"
-		}
-	case "websocket prepare":
-		switch strings.ToLower(sum) {
-		case "websocket request prepared":
-			return "Prepared WebSocket request"
-		case "websocket preparation failed":
-			return "Failed to prepare WebSocket request"
-		}
-	case "captures":
-		if strings.EqualFold(sum, "capture evaluation failed") {
-			return "Failed to evaluate captures"
+	if displayBySummary, ok := explainStageSummaryDisplay[explainKey(st.Name)]; ok {
+		if display, ok := displayBySummary[explainKey(sum)]; ok {
+			return display
 		}
 	}
 	return sum
@@ -807,7 +818,7 @@ func explainDisplayStageNotes(st xplain.Stage) []string {
 	if len(notes) == 0 {
 		return nil
 	}
-	if strings.EqualFold(strings.TrimSpace(st.Name), "route") {
+	if explainKey(st.Name) == explainStageRoute {
 		sum := strings.TrimSpace(explainDisplayStageSummary(st))
 		var out []string
 		for _, note := range notes {
@@ -1342,7 +1353,7 @@ func explainRoute(sp *ssh.Plan, kp *k8s.Plan) *xplain.Route {
 		if !cfg.Strict {
 			notes = append(notes, "strict_hostkey=false")
 		}
-		return &xplain.Route{Kind: "ssh", Summary: sum, Notes: notes}
+		return &xplain.Route{Kind: explainRouteKindSSH, Summary: sum, Notes: notes}
 	case kp != nil && kp.Active():
 		cfg := kp.Config
 		if cfg == nil {
@@ -1367,9 +1378,9 @@ func explainRoute(sp *ssh.Plan, kp *k8s.Plan) *xplain.Route {
 		if cfg.Container != "" {
 			notes = append(notes, "container="+cfg.Container)
 		}
-		return &xplain.Route{Kind: "k8s", Summary: sum, Notes: notes}
+		return &xplain.Route{Kind: explainRouteKindK8s, Summary: sum, Notes: notes}
 	default:
-		return &xplain.Route{Kind: "direct", Summary: "direct connection"}
+		return &xplain.Route{Kind: explainRouteKindDirect, Summary: "direct connection"}
 	}
 }
 

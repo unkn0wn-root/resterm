@@ -809,9 +809,9 @@ func (m *Model) executeWithMode(
 		err := errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s")
 		explain := newExplainBuilder(m, req, envName, preview)
 		explain.stage(
-			"route",
+			explainStageRoute,
 			xplain.StageError,
-			"route configuration invalid",
+			explainSummaryRouteConfigInvalid,
 			nil,
 			nil,
 			err.Error(),
@@ -958,7 +958,7 @@ func (e *execContext) evaluateCondition() *responseMsg {
 		e.explain.stage(
 			tag,
 			xplain.StageError,
-			"condition evaluation failed",
+			explainSummaryConditionEvaluationFailed,
 			nil,
 			nil,
 			err.Error(),
@@ -970,12 +970,12 @@ func (e *execContext) evaluateCondition() *responseMsg {
 	}
 
 	stageStatus := xplain.StageOK
-	summary := "condition passed"
+	summary := explainSummaryConditionPassed
 	if !shouldRun {
 		stageStatus = xplain.StageSkipped
-		summary = "condition blocked request"
+		summary = explainSummaryConditionBlockedRequest
 	}
-	e.explain.stage("condition", stageStatus, summary, nil, nil, reason)
+	e.explain.stage(explainStageCondition, stageStatus, summary, nil, nil, reason)
 	if shouldRun {
 		return nil
 	}
@@ -1001,9 +1001,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		e.extraVals,
 	); err != nil {
 		e.explain.stage(
-			"@apply",
+			explainStageApply,
 			xplain.StageError,
-			"apply failed",
+			explainSummaryApplyFailed,
 			applyBefore,
 			e.req,
 			err.Error(),
@@ -1014,7 +1014,13 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		return &msg
 	}
 	if len(e.req.Metadata.Applies) > 0 {
-		e.explain.stage("@apply", xplain.StageOK, "apply complete", applyBefore, e.req)
+		e.explain.stage(
+			explainStageApply,
+			xplain.StageOK,
+			explainSummaryApplyComplete,
+			applyBefore,
+			e.req,
+		)
 	}
 
 	rtsBefore := cloneRequestIf(e.req, e.hasRTSPre)
@@ -1029,9 +1035,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	)
 	if err != nil {
 		e.explain.stage(
-			"rts pre-request",
+			explainStageRTSPreRequest,
 			xplain.StageError,
-			"RTS pre-request failed",
+			explainSummaryRTSPreRequestFailed,
 			rtsBefore,
 			e.req,
 			err.Error(),
@@ -1043,9 +1049,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	}
 	if err := applyPreRequestOutput(e.req, rtsResult); err != nil {
 		e.explain.stage(
-			"rts pre-request",
+			explainStageRTSPreRequest,
 			xplain.StageError,
-			"RTS pre-request output invalid",
+			explainSummaryRTSPreRequestOutputBad,
 			rtsBefore,
 			e.req,
 			err.Error(),
@@ -1056,9 +1062,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	}
 	if e.hasRTSPre {
 		e.explain.stage(
-			"rts pre-request",
+			explainStageRTSPreRequest,
 			xplain.StageOK,
-			"RTS pre-request complete",
+			explainSummaryRTSPreRequestComplete,
 			rtsBefore,
 			e.req,
 		)
@@ -1082,9 +1088,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	})
 	if err != nil {
 		e.explain.stage(
-			"js pre-request",
+			explainStageJSPreRequest,
 			xplain.StageError,
-			"JS pre-request failed",
+			explainSummaryJSPreRequestFailed,
 			jsBefore,
 			e.req,
 			err.Error(),
@@ -1096,9 +1102,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	}
 	if err := applyPreRequestOutput(e.req, preResult); err != nil {
 		e.explain.stage(
-			"js pre-request",
+			explainStageJSPreRequest,
 			xplain.StageError,
-			"JS pre-request output invalid",
+			explainSummaryJSPreRequestOutputBad,
 			jsBefore,
 			e.req,
 			err.Error(),
@@ -1109,9 +1115,9 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	}
 	if e.hasJSPre {
 		e.explain.stage(
-			"js pre-request",
+			explainStageJSPreRequest,
 			xplain.StageOK,
-			"JS pre-request complete",
+			explainSummaryJSPreRequestComplete,
 			jsBefore,
 			e.req,
 		)
@@ -1169,7 +1175,14 @@ func (e *execContext) resolveRoute() *responseMsg {
 
 	e.sshPlan, err = e.model.resolveSSH(e.doc, e.req, e.resolver, e.envName)
 	if err != nil {
-		e.explain.stage("route", xplain.StageError, "ssh resolution failed", nil, nil, err.Error())
+		e.explain.stage(
+			explainStageRoute,
+			xplain.StageError,
+			explainSummaryRouteSSHResolutionFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
 
 		msg := e.errorResponse(err, "Route resolution failed")
 		msg.err = errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh")
@@ -1178,7 +1191,14 @@ func (e *execContext) resolveRoute() *responseMsg {
 
 	e.k8sPlan, err = e.model.resolveK8s(e.doc, e.req, e.resolver, e.envName)
 	if err != nil {
-		e.explain.stage("route", xplain.StageError, "k8s resolution failed", nil, nil, err.Error())
+		e.explain.stage(
+			explainStageRoute,
+			xplain.StageError,
+			explainSummaryRouteK8sResolutionFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
 
 		msg := e.errorResponse(err, "Route resolution failed")
 		msg.err = errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s")
@@ -1191,7 +1211,7 @@ func (e *execContext) resolveRoute() *responseMsg {
 
 	if route := explainRoute(e.sshPlan, e.k8sPlan); route != nil {
 		notes := append([]string{route.Summary}, route.Notes...)
-		e.explain.stage("route", xplain.StageOK, route.Kind, nil, nil, notes...)
+		e.explain.stage(explainStageRoute, xplain.StageOK, route.Kind, nil, nil, notes...)
 		if e.sshPlan != nil && e.sshPlan.Active() && e.sshPlan.Config != nil &&
 			!e.sshPlan.Config.Strict {
 			e.explain.warn("@ssh strict_hostkey=false (insecure)")
@@ -1231,7 +1251,13 @@ func (e *execContext) applySettings() *responseMsg {
 	e.mergedSettings = settings.Merge(globalSettings, fileSettings, requestSettings)
 	e.req.Settings = e.mergedSettings
 	e.explain.setSettings(e.mergedSettings)
-	e.explain.stage("settings", xplain.StageOK, "effective settings merged", settingsBefore, e.req)
+	e.explain.stage(
+		explainStageSettings,
+		xplain.StageOK,
+		explainSummarySettingsMerged,
+		settingsBefore,
+		e.req,
+	)
 
 	handlers := []settings.Handler{
 		settings.HTTPHandler(&e.options, e.resolver),
@@ -1242,9 +1268,9 @@ func (e *execContext) applySettings() *responseMsg {
 
 	if _, err := settings.New(handlers...).ApplyAll(e.mergedSettings); err != nil {
 		e.explain.stage(
-			"settings",
+			explainStageSettings,
 			xplain.StageError,
-			"settings application failed",
+			explainSummarySettingsApplyFailed,
 			nil,
 			nil,
 			err.Error(),
@@ -1270,9 +1296,9 @@ func (e *execContext) prepareAuthentication() *responseMsg {
 		authPreview, err := e.model.prepareExplainAuthPreview(e.req, e.resolver, e.envName)
 		if err != nil {
 			e.explain.stage(
-				"auth",
+				explainStageAuth,
 				xplain.StageError,
-				"auth injection failed",
+				explainSummaryAuthInjectionFailed,
 				authBefore,
 				e.req,
 				err.Error(),
@@ -1283,7 +1309,7 @@ func (e *execContext) prepareAuthentication() *responseMsg {
 		}
 		e.explain.addSecrets(authPreview.extraSecrets...)
 		e.explain.stage(
-			"auth",
+			explainStageAuth,
 			authPreview.status,
 			authPreview.summary,
 			authBefore,
@@ -1302,9 +1328,9 @@ func (e *execContext) prepareAuthentication() *responseMsg {
 		e.effectiveTimeout,
 	); err != nil {
 		e.explain.stage(
-			"auth",
+			explainStageAuth,
 			xplain.StageError,
-			"auth injection failed",
+			explainSummaryAuthInjectionFailed,
 			authBefore,
 			e.req,
 			err.Error(),
@@ -1315,7 +1341,7 @@ func (e *execContext) prepareAuthentication() *responseMsg {
 	}
 
 	e.explain.addSecrets(explainInjectedAuthSecrets(e.req.Metadata.Auth, authBefore, e.req)...)
-	e.explain.stage("auth", xplain.StageOK, "auth prepared", authBefore, e.req)
+	e.explain.stage(explainStageAuth, xplain.StageOK, explainSummaryAuthPrepared, authBefore, e.req)
 	return nil
 }
 
@@ -1324,9 +1350,9 @@ func (e *execContext) prepareProtocolRequests() *responseMsg {
 		grpcBefore := cloneRequest(e.req)
 		if err := e.model.prepareGRPCRequest(e.req, e.resolver, e.grpcOpts.BaseDir); err != nil {
 			e.explain.stage(
-				"grpc prepare",
+				explainStageGRPCPrepare,
 				xplain.StageError,
-				"gRPC preparation failed",
+				explainSummaryGRPCPrepareFailed,
 				grpcBefore,
 				e.req,
 				err.Error(),
@@ -1335,16 +1361,22 @@ func (e *execContext) prepareProtocolRequests() *responseMsg {
 			msg := e.errorResponse(err, "gRPC preparation failed")
 			return &msg
 		}
-		e.explain.stage("grpc prepare", xplain.StageOK, "gRPC request prepared", grpcBefore, e.req)
+		e.explain.stage(
+			explainStageGRPCPrepare,
+			xplain.StageOK,
+			explainSummaryGRPCRequestPrepared,
+			grpcBefore,
+			e.req,
+		)
 	}
 
 	if e.req.WebSocket != nil {
 		wsBefore := cloneRequest(e.req)
 		if err := e.model.expandWebSocketSteps(e.req, e.resolver); err != nil {
 			e.explain.stage(
-				"websocket prepare",
+				explainStageWebSocketPrepare,
 				xplain.StageError,
-				"WebSocket preparation failed",
+				explainSummaryWebSocketPrepareFailed,
 				wsBefore,
 				e.req,
 				err.Error(),
@@ -1354,9 +1386,9 @@ func (e *execContext) prepareProtocolRequests() *responseMsg {
 			return &msg
 		}
 		e.explain.stage(
-			"websocket prepare",
+			explainStageWebSocketPrepare,
 			xplain.StageOK,
-			"WebSocket request prepared",
+			explainSummaryWebSocketRequestPrepared,
 			wsBefore,
 			e.req,
 		)
@@ -1393,9 +1425,9 @@ func (e *execContext) previewResponse() tea.Msg {
 			e.options,
 		); err != nil {
 			e.explain.stage(
-				"http prepare",
+				explainStageHTTPPrepare,
 				xplain.StageError,
-				"HTTP request build failed",
+				explainSummaryHTTPRequestBuildFailed,
 				nil,
 				nil,
 				err.Error(),
@@ -1463,9 +1495,9 @@ func (e *execContext) executeGRPC() tea.Msg {
 		x:    e.extraVals,
 	}); err != nil {
 		e.explain.stage(
-			"captures",
+			explainStageCaptures,
 			xplain.StageError,
-			"capture evaluation failed",
+			explainSummaryCaptureEvaluationFailed,
 			nil,
 			nil,
 			err.Error(),
@@ -1615,9 +1647,9 @@ func (e *execContext) executeHTTP() tea.Msg {
 		x:      e.extraVals,
 	}); err != nil {
 		e.explain.stage(
-			"captures",
+			explainStageCaptures,
 			xplain.StageError,
-			"capture evaluation failed",
+			explainSummaryCaptureEvaluationFailed,
 			nil,
 			nil,
 			err.Error(),
@@ -2742,7 +2774,7 @@ func (m *Model) prepareExplainAuthPreview(
 	case "", "basic", "bearer", "apikey", "api-key", "header":
 		return explainAuthPreviewResult{
 			status:  xplain.StageOK,
-			summary: "auth prepared",
+			summary: explainSummaryAuthPrepared,
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
 		}, nil
 	case "oauth2":
@@ -2774,7 +2806,7 @@ func (m *Model) prepareExplainAuthPreview(
 		if req.Headers != nil && req.Headers.Get(header) != "" {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
-				summary: "auth prepared",
+				summary: explainSummaryAuthPrepared,
 				notes:   []string{"auth header already set on request"},
 			}, nil
 		}
@@ -2783,7 +2815,7 @@ func (m *Model) prepareExplainAuthPreview(
 		if !ok {
 			return explainAuthPreviewResult{
 				status:  xplain.StageSkipped,
-				summary: "oauth token fetch skipped",
+				summary: explainSummaryOAuthTokenFetchSkipped,
 				notes: []string{
 					"OAuth token acquisition is skipped in explain preview",
 					fmt.Sprintf("%s is omitted without a cached token", header),
@@ -2806,7 +2838,7 @@ func (m *Model) prepareExplainAuthPreview(
 
 		return explainAuthPreviewResult{
 			status:  xplain.StageOK,
-			summary: "auth prepared",
+			summary: explainSummaryAuthPrepared,
 			notes:   []string{"used cached OAuth token for explain preview"},
 			extraSecrets: []string{
 				token.AccessToken,
@@ -2816,7 +2848,7 @@ func (m *Model) prepareExplainAuthPreview(
 	default:
 		return explainAuthPreviewResult{
 			status:  xplain.StageSkipped,
-			summary: "auth type not applied",
+			summary: explainSummaryAuthTypeNotApplied,
 			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
 		}, nil
 	}
