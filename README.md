@@ -59,6 +59,14 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 </p>
 
 <p align="center">
+  <strong>Explain</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm_explain.png" alt="Screenshot of Resterm Explain Tab" width="720" />
+</p>
+
+<p align="center">
   <strong>RestermScript</strong>
 </p>
 
