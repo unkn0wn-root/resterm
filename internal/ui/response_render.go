@@ -525,9 +525,9 @@ func formatHTTPHeaders(headers http.Header, colored bool) string {
 			}
 		} else {
 			if strings.TrimSpace(joined) == "" {
-				builder.WriteString(fmt.Sprintf("%s:", name))
+				fmt.Fprintf(&builder, "%s:", name)
 			} else {
-				builder.WriteString(fmt.Sprintf("%s: %s", name, joined))
+				fmt.Fprintf(&builder, "%s: %s", name, joined)
 			}
 		}
 		builder.WriteString("\n")

@@ -12,11 +12,135 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 const explainClip = 512
+
+const (
+	explainStageApply            = "@apply"
+	explainStageCondition        = "condition"
+	explainStageRoute            = "route"
+	explainStageSettings         = "settings"
+	explainStageAuth             = "auth"
+	explainStageRTSPreRequest    = "rts pre-request"
+	explainStageJSPreRequest     = "js pre-request"
+	explainStageGRPCPrepare      = "grpc prepare"
+	explainStageHTTPPrepare      = "http prepare"
+	explainStageWebSocketPrepare = "websocket prepare"
+	explainStageCaptures         = "captures"
+)
+
+const (
+	explainRouteKindDirect = "direct"
+	explainRouteKindSSH    = "ssh"
+	explainRouteKindK8s    = "k8s"
+)
+
+const (
+	explainSummaryApplyComplete             = "apply complete"
+	explainSummaryApplyFailed               = "apply failed"
+	explainSummaryConditionPassed           = "condition passed"
+	explainSummaryConditionBlockedRequest   = "condition blocked request"
+	explainSummaryConditionEvaluationFailed = "condition evaluation failed"
+	explainSummaryRouteSSHResolutionFailed  = "ssh resolution failed"
+	explainSummaryRouteK8sResolutionFailed  = "k8s resolution failed"
+	explainSummaryRouteConfigInvalid        = "route configuration invalid"
+	explainSummarySettingsMerged            = "effective settings merged"
+	explainSummarySettingsApplyFailed       = "settings application failed"
+	explainSummaryAuthPrepared              = "auth prepared"
+	explainSummaryAuthInjectionFailed       = "auth injection failed"
+	explainSummaryOAuthTokenFetchSkipped    = "oauth token fetch skipped"
+	explainSummaryAuthTypeNotApplied        = "auth type not applied"
+	explainSummaryRTSPreRequestComplete     = "RTS pre-request complete"
+	explainSummaryRTSPreRequestFailed       = "RTS pre-request failed"
+	explainSummaryRTSPreRequestOutputBad    = "RTS pre-request output invalid"
+	explainSummaryJSPreRequestComplete      = "JS pre-request complete"
+	explainSummaryJSPreRequestFailed        = "JS pre-request failed"
+	explainSummaryJSPreRequestOutputBad     = "JS pre-request output invalid"
+	explainSummaryGRPCRequestPrepared       = "gRPC request prepared"
+	explainSummaryGRPCPrepareFailed         = "gRPC preparation failed"
+	explainSummaryHTTPRequestPrepared       = "HTTP request prepared"
+	explainSummaryHTTPRequestBuildFailed    = "HTTP request build failed"
+	explainSummaryWebSocketRequestPrepared  = "WebSocket request prepared"
+	explainSummaryWebSocketPrepareFailed    = "WebSocket preparation failed"
+	explainSummaryCaptureEvaluationFailed   = "capture evaluation failed"
+)
+
+func explainKey(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
+}
+
+var explainStageDisplayNames = map[string]string{
+	explainKey(explainStageApply):            "Apply",
+	explainKey(explainStageCondition):        "Condition",
+	explainKey(explainStageRoute):            "Route",
+	explainKey(explainStageSettings):         "Settings",
+	explainKey(explainStageAuth):             "Authentication",
+	explainKey(explainStageRTSPreRequest):    "RTS Pre-request",
+	explainKey(explainStageJSPreRequest):     "JavaScript Pre-request",
+	explainKey(explainStageGRPCPrepare):      "gRPC Request",
+	explainKey(explainStageHTTPPrepare):      "HTTP Request",
+	explainKey(explainStageWebSocketPrepare): "WebSocket Request",
+	explainKey(explainStageCaptures):         "Captures",
+}
+
+var explainStageSummaryDisplay = map[string]map[string]string{
+	explainKey(explainStageApply): {
+		explainKey(explainSummaryApplyComplete): "Applied request mutations",
+		explainKey(explainSummaryApplyFailed):   "Failed to apply request mutations",
+	},
+	explainKey(explainStageCondition): {
+		explainKey(explainSummaryConditionPassed):           "Condition matched",
+		explainKey(explainSummaryConditionBlockedRequest):   "Condition skipped this request",
+		explainKey(explainSummaryConditionEvaluationFailed): "Failed to evaluate condition",
+	},
+	explainKey(explainStageRoute): {
+		explainKey(explainRouteKindDirect):                 "Direct connection",
+		explainKey(explainRouteKindSSH):                    "SSH route resolved",
+		explainKey(explainRouteKindK8s):                    "Kubernetes route resolved",
+		explainKey(explainSummaryRouteSSHResolutionFailed): "Failed to resolve SSH route",
+		explainKey(explainSummaryRouteK8sResolutionFailed): "Failed to resolve Kubernetes route",
+		explainKey(explainSummaryRouteConfigInvalid):       "Invalid route configuration",
+	},
+	explainKey(explainStageSettings): {
+		explainKey(explainSummarySettingsMerged):      "Merged environment, file, and request settings",
+		explainKey(explainSummarySettingsApplyFailed): "Failed to apply merged settings",
+	},
+	explainKey(explainStageAuth): {
+		explainKey(explainSummaryAuthPrepared):           "Prepared authentication",
+		explainKey(explainSummaryAuthInjectionFailed):    "Failed to prepare authentication",
+		explainKey(explainSummaryOAuthTokenFetchSkipped): "Skipped OAuth token fetch for explain preview",
+		explainKey(explainSummaryAuthTypeNotApplied):     "Authentication type is not applied",
+	},
+	explainKey(explainStageRTSPreRequest): {
+		explainKey(explainSummaryRTSPreRequestComplete):  "Applied RTS pre-request script",
+		explainKey(explainSummaryRTSPreRequestFailed):    "RTS pre-request script failed",
+		explainKey(explainSummaryRTSPreRequestOutputBad): "RTS pre-request script returned invalid output",
+	},
+	explainKey(explainStageJSPreRequest): {
+		explainKey(explainSummaryJSPreRequestComplete):  "Applied JavaScript pre-request script",
+		explainKey(explainSummaryJSPreRequestFailed):    "JavaScript pre-request script failed",
+		explainKey(explainSummaryJSPreRequestOutputBad): "JavaScript pre-request script returned invalid output",
+	},
+	explainKey(explainStageGRPCPrepare): {
+		explainKey(explainSummaryGRPCRequestPrepared): "Prepared gRPC request",
+		explainKey(explainSummaryGRPCPrepareFailed):   "Failed to prepare gRPC request",
+	},
+	explainKey(explainStageHTTPPrepare): {
+		explainKey(explainSummaryHTTPRequestPrepared):    "Prepared HTTP request",
+		explainKey(explainSummaryHTTPRequestBuildFailed): "Failed to prepare HTTP request",
+	},
+	explainKey(explainStageWebSocketPrepare): {
+		explainKey(explainSummaryWebSocketRequestPrepared): "Prepared WebSocket request",
+		explainKey(explainSummaryWebSocketPrepareFailed):   "Failed to prepare WebSocket request",
+	},
+	explainKey(explainStageCaptures): {
+		explainKey(explainSummaryCaptureEvaluationFailed): "Failed to evaluate captures",
+	},
+}
 
 func newExplainReport(req *restfile.Request, env string) *xplain.Report {
 	rep := &xplain.Report{
@@ -53,12 +177,18 @@ func addExplainStage(
 	if rep == nil {
 		return
 	}
-	stage := xplain.Stage{
+	appendExplainStage(rep, xplain.Stage{
 		Name:    strings.TrimSpace(name),
 		Status:  st,
 		Summary: strings.TrimSpace(sum),
 		Changes: explainReqChanges(before, after),
 		Notes:   explainNotes(notes),
+	})
+}
+
+func appendExplainStage(rep *xplain.Report, stage xplain.Stage) {
+	if rep == nil {
+		return
 	}
 	if stage.Summary == "" {
 		switch {
@@ -71,6 +201,43 @@ func addExplainStage(
 		}
 	}
 	rep.Stages = append(rep.Stages, stage)
+}
+
+func addExplainPreparedHTTPStage(
+	rep *xplain.Report,
+	req *restfile.Request,
+	httpReq *http.Request,
+	body []byte,
+	notes ...string,
+) {
+	if rep == nil || httpReq == nil {
+		return
+	}
+	appendExplainStage(rep, xplain.Stage{
+		Name:    explainStageHTTPPrepare,
+		Status:  xplain.StageOK,
+		Summary: explainSummaryHTTPRequestPrepared,
+		Changes: explainBuiltHTTPChanges(req, httpReq, body),
+		Notes:   explainNotes(notes),
+	})
+}
+
+func addExplainSentHTTPStage(
+	rep *xplain.Report,
+	req *restfile.Request,
+	resp *httpclient.Response,
+	notes ...string,
+) {
+	if rep == nil || resp == nil {
+		return
+	}
+	appendExplainStage(rep, xplain.Stage{
+		Name:    explainStageHTTPPrepare,
+		Status:  xplain.StageOK,
+		Summary: explainSummaryHTTPRequestPrepared,
+		Changes: explainSentHTTPChanges(req, resp),
+		Notes:   explainNotes(notes),
+	})
 }
 
 func addExplainWarn(rep *xplain.Report, msg string) {
@@ -630,116 +797,17 @@ func explainPairsLabel(xs []xplain.Pair) string {
 }
 
 func explainDisplayStageName(name string) string {
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case "@apply":
-		return "Apply"
-	case "condition":
-		return "Condition"
-	case "route":
-		return "Route"
-	case "settings":
-		return "Settings"
-	case "auth":
-		return "Authentication"
-	case "rts pre-request":
-		return "RTS Pre-request"
-	case "js pre-request":
-		return "JavaScript Pre-request"
-	case "grpc prepare":
-		return "gRPC Request"
-	case "websocket prepare":
-		return "WebSocket Request"
-	case "captures":
-		return "Captures"
-	default:
-		return explainTitleWords(name)
+	if display, ok := explainStageDisplayNames[explainKey(name)]; ok {
+		return display
 	}
+	return explainTitleWords(name)
 }
 
 func explainDisplayStageSummary(st xplain.Stage) string {
-	name := strings.ToLower(strings.TrimSpace(st.Name))
 	sum := strings.TrimSpace(st.Summary)
-	switch name {
-	case "@apply":
-		switch strings.ToLower(sum) {
-		case "apply complete":
-			return "Applied request mutations"
-		case "apply failed":
-			return "Failed to apply request mutations"
-		}
-	case "condition":
-		switch strings.ToLower(sum) {
-		case "condition passed":
-			return "Condition matched"
-		case "condition blocked request":
-			return "Condition skipped this request"
-		case "condition evaluation failed":
-			return "Failed to evaluate condition"
-		}
-	case "route":
-		switch strings.ToLower(sum) {
-		case "direct":
-			return "Direct connection"
-		case "ssh":
-			return "SSH route resolved"
-		case "k8s":
-			return "Kubernetes route resolved"
-		case "ssh resolution failed":
-			return "Failed to resolve SSH route"
-		case "k8s resolution failed":
-			return "Failed to resolve Kubernetes route"
-		case "route configuration invalid":
-			return "Invalid route configuration"
-		}
-	case "settings":
-		switch strings.ToLower(sum) {
-		case "effective settings merged":
-			return "Merged environment, file, and request settings"
-		case "settings application failed":
-			return "Failed to apply merged settings"
-		}
-	case "auth":
-		switch strings.ToLower(sum) {
-		case "auth prepared":
-			return "Prepared authentication"
-		case "auth injection failed":
-			return "Failed to prepare authentication"
-		}
-	case "rts pre-request":
-		switch strings.ToLower(sum) {
-		case "rts pre-request complete":
-			return "Applied RTS pre-request script"
-		case "rts pre-request failed":
-			return "RTS pre-request script failed"
-		case "rts pre-request output invalid":
-			return "RTS pre-request script returned invalid output"
-		}
-	case "js pre-request":
-		switch strings.ToLower(sum) {
-		case "js pre-request complete":
-			return "Applied JavaScript pre-request script"
-		case "js pre-request failed":
-			return "JavaScript pre-request script failed"
-		case "js pre-request output invalid":
-			return "JavaScript pre-request script returned invalid output"
-		}
-	case "grpc prepare":
-		switch strings.ToLower(sum) {
-		case "grpc request prepared":
-			return "Prepared gRPC request"
-		case "grpc preparation failed":
-			return "Failed to prepare gRPC request"
-		}
-	case "websocket prepare":
-		switch strings.ToLower(sum) {
-		case "websocket request prepared":
-			return "Prepared WebSocket request"
-		case "websocket preparation failed":
-			return "Failed to prepare WebSocket request"
-		}
-	case "captures":
-		if strings.EqualFold(sum, "capture evaluation failed") {
-			return "Failed to evaluate captures"
+	if displayBySummary, ok := explainStageSummaryDisplay[explainKey(st.Name)]; ok {
+		if display, ok := displayBySummary[explainKey(sum)]; ok {
+			return display
 		}
 	}
 	return sum
@@ -750,7 +818,7 @@ func explainDisplayStageNotes(st xplain.Stage) []string {
 	if len(notes) == 0 {
 		return nil
 	}
-	if strings.EqualFold(strings.TrimSpace(st.Name), "route") {
+	if explainKey(st.Name) == explainStageRoute {
 		sum := strings.TrimSpace(explainDisplayStageSummary(st))
 		var out []string
 		for _, note := range notes {
@@ -810,6 +878,44 @@ func explainReqChanges(a, b *restfile.Request) []xplain.Change {
 	addExplainSettingChanges(&out, reqSettings(a), reqSettings(b))
 	addExplainVarChanges(&out, reqVars(a), reqVars(b))
 	addExplainGRPCChanges(&out, a, b)
+	return out
+}
+
+func explainBuiltHTTPChanges(
+	req *restfile.Request,
+	httpReq *http.Request,
+	body []byte,
+) []xplain.Change {
+	if httpReq == nil {
+		return nil
+	}
+	var out []xplain.Change
+	addExplainChange(&out, "method", reqMethod(req), strings.TrimSpace(httpReq.Method))
+	url := ""
+	if httpReq.URL != nil {
+		url = strings.TrimSpace(httpReq.URL.String())
+	}
+	addExplainChange(&out, "url", reqURL(req), url)
+	addExplainHeaderChanges(&out, reqHeaders(req), httpReq.Header)
+	beforeBody, beforeNote := explainReqBody(req)
+	afterBody, afterNote, ok := explainBuiltBody(req, body)
+	if ok || beforeNote != "" {
+		addExplainChange(&out, "body.note", beforeNote, afterNote)
+	}
+	if ok || beforeBody != "" {
+		addExplainChange(&out, "body", beforeBody, afterBody)
+	}
+	return out
+}
+
+func explainSentHTTPChanges(req *restfile.Request, resp *httpclient.Response) []xplain.Change {
+	if resp == nil {
+		return nil
+	}
+	var out []xplain.Change
+	addExplainChange(&out, "method", reqMethod(req), strings.TrimSpace(resp.ReqMethod))
+	addExplainChange(&out, "url", reqURL(req), strings.TrimSpace(resp.EffectiveURL))
+	addExplainHeaderChanges(&out, reqHeaders(req), resp.RequestHeaders)
 	return out
 }
 
@@ -1247,7 +1353,7 @@ func explainRoute(sp *ssh.Plan, kp *k8s.Plan) *xplain.Route {
 		if !cfg.Strict {
 			notes = append(notes, "strict_hostkey=false")
 		}
-		return &xplain.Route{Kind: "ssh", Summary: sum, Notes: notes}
+		return &xplain.Route{Kind: explainRouteKindSSH, Summary: sum, Notes: notes}
 	case kp != nil && kp.Active():
 		cfg := kp.Config
 		if cfg == nil {
@@ -1272,9 +1378,9 @@ func explainRoute(sp *ssh.Plan, kp *k8s.Plan) *xplain.Route {
 		if cfg.Container != "" {
 			notes = append(notes, "container="+cfg.Container)
 		}
-		return &xplain.Route{Kind: "k8s", Summary: sum, Notes: notes}
+		return &xplain.Route{Kind: explainRouteKindK8s, Summary: sum, Notes: notes}
 	default:
-		return &xplain.Route{Kind: "direct", Summary: "direct connection"}
+		return &xplain.Route{Kind: explainRouteKindDirect, Summary: "direct connection"}
 	}
 }
 
@@ -1361,10 +1467,11 @@ func clipExplain(s string) string {
 	if s == "" {
 		return ""
 	}
-	if len(s) <= explainClip {
+	runes := []rune(s)
+	if len(runes) <= explainClip {
 		return s
 	}
-	return strings.TrimSpace(s[:explainClip]) + " ..."
+	return strings.TrimSpace(string(runes[:explainClip])) + " ..."
 }
 
 func (m *Model) redactExplainReport(
@@ -1372,10 +1479,20 @@ func (m *Model) redactExplainReport(
 	env string,
 	req *restfile.Request,
 ) *xplain.Report {
+	return m.redactExplainReportWithState(rep, env, req, nil)
+}
+
+func (m *Model) redactExplainReportWithState(
+	rep *xplain.Report,
+	env string,
+	req *restfile.Request,
+	globals map[string]scripts.GlobalValue,
+	extras ...string,
+) *xplain.Report {
 	if rep == nil {
 		return nil
 	}
-	secrets := m.secretValuesForEnvironment(env, req)
+	secrets := m.explainSecretsForRedaction(env, req, globals, extras)
 	mask := maskSecret("", true)
 
 	rep.Name = redactHistoryText(rep.Name, secrets, false)
@@ -1390,15 +1507,17 @@ func (m *Model) redactExplainReport(
 	for i := range rep.Stages {
 		rep.Stages[i].Summary = redactHistoryText(rep.Stages[i].Summary, secrets, false)
 		for j := range rep.Stages[i].Changes {
-			rep.Stages[i].Changes[j].Before = redactHistoryText(
+			rep.Stages[i].Changes[j].Before = redactExplainChangeValue(
+				rep.Stages[i].Changes[j].Field,
 				rep.Stages[i].Changes[j].Before,
 				secrets,
-				false,
+				mask,
 			)
-			rep.Stages[i].Changes[j].After = redactHistoryText(
+			rep.Stages[i].Changes[j].After = redactExplainChangeValue(
+				rep.Stages[i].Changes[j].Field,
 				rep.Stages[i].Changes[j].After,
 				secrets,
-				false,
+				mask,
 			)
 		}
 		for j := range rep.Stages[i].Notes {
@@ -1428,6 +1547,19 @@ func (m *Model) redactExplainReport(
 				false,
 			)
 		}
+		for i := range rep.Final.Details {
+			rawKey := rep.Final.Details[i].Key
+			rawValue := rep.Final.Details[i].Value
+			rep.Final.Details[i].Key = redactHistoryText(rawKey, secrets, false)
+			if shouldMaskExplainPair(rawKey, rawValue) {
+				rep.Final.Details[i].Value = mask
+				continue
+			}
+			rep.Final.Details[i].Value = redactHistoryText(rawValue, secrets, false)
+		}
+		for i := range rep.Final.Steps {
+			rep.Final.Steps[i] = redactHistoryText(rep.Final.Steps[i], secrets, false)
+		}
 		if rep.Final.Route != nil {
 			rep.Final.Route.Summary = redactHistoryText(rep.Final.Route.Summary, secrets, false)
 			for i := range rep.Final.Route.Notes {
@@ -1443,4 +1575,74 @@ func (m *Model) redactExplainReport(
 		rep.Warnings[i] = redactHistoryText(rep.Warnings[i], secrets, false)
 	}
 	return rep
+}
+
+func (m *Model) explainSecretsForRedaction(
+	env string,
+	req *restfile.Request,
+	globals map[string]scripts.GlobalValue,
+	extras []string,
+) []string {
+	values := make(map[string]struct{})
+	add := func(value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		values[value] = struct{}{}
+	}
+
+	for _, value := range m.secretValuesForEnvironment(env, req) {
+		add(value)
+	}
+	for _, entry := range globals {
+		if entry.Secret && !entry.Delete {
+			add(entry.Value)
+		}
+	}
+	for _, value := range extras {
+		add(value)
+	}
+	if len(values) == 0 {
+		return nil
+	}
+
+	secrets := make([]string, 0, len(values))
+	for value := range values {
+		secrets = append(secrets, value)
+	}
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	return secrets
+}
+
+func redactExplainChangeValue(field, value string, secrets []string, mask string) string {
+	if header, ok := explainHeaderField(field); ok && shouldMaskHistoryHeader(header) {
+		if strings.TrimSpace(value) == "" {
+			return value
+		}
+		return mask
+	}
+	return redactHistoryText(value, secrets, false)
+}
+
+func explainHeaderField(field string) (string, bool) {
+	field = strings.TrimSpace(field)
+	if !strings.HasPrefix(strings.ToLower(field), "header.") {
+		return "", false
+	}
+	name := strings.TrimSpace(field[len("header."):])
+	if name == "" {
+		return "", false
+	}
+	return textproto.CanonicalMIMEHeaderKey(name), true
+}
+
+func shouldMaskExplainPair(key, value string) bool {
+	if !strings.EqualFold(strings.TrimSpace(key), "Metadata") {
+		return false
+	}
+	name, _, ok := strings.Cut(value, ":")
+	if !ok {
+		return false
+	}
+	return shouldMaskHistoryHeader(strings.TrimSpace(name))
 }

@@ -434,6 +434,274 @@ const (
 	execModeExplain
 )
 
+type explainFinalizeInput struct {
+	report         *xplain.Report
+	request        *restfile.Request
+	envName        string
+	preview        bool
+	status         xplain.Status
+	decision       string
+	err            error
+	trace          *vars.Trace
+	mergedSettings map[string]string
+	sshPlan        *ssh.Plan
+	k8sPlan        *k8s.Plan
+	globals        map[string]scripts.GlobalValue
+	extraSecrets   []string
+}
+
+type explainAuthPreviewResult struct {
+	status       xplain.StageStatus
+	summary      string
+	notes        []string
+	extraSecrets []string
+}
+
+type explainBuilder struct {
+	model          *Model
+	request        *restfile.Request
+	envName        string
+	preview        bool
+	report         *xplain.Report
+	trace          *vars.Trace
+	mergedSettings map[string]string
+	sshPlan        *ssh.Plan
+	k8sPlan        *k8s.Plan
+	globals        map[string]scripts.GlobalValue
+	extraSecrets   []string
+}
+
+type execContext struct {
+	// Immutable execution inputs.
+	model     *Model
+	doc       *restfile.Document
+	req       *restfile.Request
+	envName   string
+	options   httpclient.Options
+	extraVals map[string]rts.Value
+	extras    []map[string]string
+	preview   bool
+
+	// Execution services and lifetime control.
+	client     *httpclient.Client
+	runner     *scripts.Runner
+	sendCtx    context.Context
+	sendCancel context.CancelFunc
+
+	// State derived before request preparation.
+	baseVars     map[string]string
+	storeGlobals map[string]scripts.GlobalValue
+	hasRTSPre    bool
+	hasJSPre     bool
+	scriptVars   map[string]string
+
+	// State populated during request preparation.
+	resolver       *vars.Resolver
+	trace          *vars.Trace
+	mergedSettings map[string]string
+	sshPlan        *ssh.Plan
+	k8sPlan        *k8s.Plan
+
+	// Execution mode selected from the prepared request.
+	useGRPC          bool
+	grpcOpts         grpcclient.Options
+	effectiveTimeout time.Duration
+
+	// Explain/report state shared across phases.
+	explain *explainBuilder
+}
+
+func newExplainBuilder(
+	m *Model,
+	req *restfile.Request,
+	envName string,
+	preview bool,
+) *explainBuilder {
+	b := &explainBuilder{
+		model:   m,
+		request: req,
+		envName: envName,
+		preview: preview,
+		report:  newExplainReport(req, envName),
+	}
+	if !preview || req == nil {
+		return b
+	}
+	if req.Metadata.ForEach != nil {
+		b.warn("@for-each iterations are not expanded in explain preview")
+	}
+	if req.Metadata.Compare != nil {
+		b.warn("@compare sweep is not executed in explain preview")
+	}
+	if req.Metadata.Profile != nil {
+		b.warn("@profile run is not executed in explain preview")
+	}
+	return b
+}
+
+func newExecContext(
+	m *Model,
+	doc *restfile.Document,
+	req *restfile.Request,
+	options httpclient.Options,
+	envName string,
+	preview bool,
+	extraVals map[string]rts.Value,
+	extras []map[string]string,
+) *execContext {
+	client := m.client
+	if client == nil {
+		client = httpclient.NewClient(nil)
+	}
+	runner := m.scriptRunner
+	if runner == nil {
+		runner = scripts.NewRunner(nil)
+	}
+	sendCtx, sendCancel := context.WithCancel(context.Background())
+	m.sendCancel = sendCancel
+
+	baseVars := m.collectVariables(doc, req, envName)
+	applyExtraVariables(baseVars, extras)
+
+	hasRTSPre, hasJSPre := detectPreRequestScripts(req)
+	explain := newExplainBuilder(m, req, envName, preview)
+	if req != nil &&
+		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTSPre || hasJSPre) {
+		explain.warn(
+			"Variable trace covers template resolution only; RTS/JS script internals are not traced",
+		)
+	}
+
+	storeGlobals := m.collectStoredGlobalValues(envName)
+	explain.globals = effectiveGlobalValues(doc, storeGlobals)
+
+	return &execContext{
+		model:        m,
+		doc:          doc,
+		req:          req,
+		options:      options,
+		envName:      envName,
+		extraVals:    extraVals,
+		extras:       extras,
+		preview:      preview,
+		client:       client,
+		runner:       runner,
+		sendCtx:      sendCtx,
+		sendCancel:   sendCancel,
+		baseVars:     baseVars,
+		storeGlobals: storeGlobals,
+		hasRTSPre:    hasRTSPre,
+		hasJSPre:     hasJSPre,
+		explain:      explain,
+	}
+}
+
+func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
+	if req == nil {
+		return false, false
+	}
+	hasRTSPre := false
+	hasJSPre := false
+	for _, block := range req.Metadata.Scripts {
+		if isRTSPre(block) {
+			hasRTSPre = true
+		}
+		if strings.ToLower(block.Kind) == "pre-request" && scriptLang(block.Lang) == "js" {
+			hasJSPre = true
+		}
+	}
+	return hasRTSPre, hasJSPre
+}
+
+func applyExtraVariables(base map[string]string, extras []map[string]string) {
+	if base == nil || len(extras) == 0 {
+		return
+	}
+	for _, extra := range extras {
+		for key, value := range extra {
+			if key == "" {
+				continue
+			}
+			base[key] = value
+		}
+	}
+}
+
+func (b *explainBuilder) warn(msg string) {
+	addExplainWarn(b.report, msg)
+}
+
+func (b *explainBuilder) stage(
+	name string,
+	st xplain.StageStatus,
+	sum string,
+	before *restfile.Request,
+	after *restfile.Request,
+	notes ...string,
+) {
+	addExplainStage(b.report, name, st, sum, before, after, notes...)
+}
+
+func (b *explainBuilder) sentHTTP(
+	req *restfile.Request,
+	resp *httpclient.Response,
+	notes ...string,
+) {
+	addExplainSentHTTPStage(b.report, req, resp, notes...)
+}
+
+func (b *explainBuilder) setSettings(mergedSettings map[string]string) {
+	b.mergedSettings = mergedSettings
+}
+
+func (b *explainBuilder) setRoute(sshPlan *ssh.Plan, k8sPlan *k8s.Plan) {
+	b.sshPlan = sshPlan
+	b.k8sPlan = k8sPlan
+}
+
+func (b *explainBuilder) addSecrets(values ...string) {
+	for _, value := range values {
+		if strings.TrimSpace(value) == "" {
+			continue
+		}
+		b.extraSecrets = append(b.extraSecrets, value)
+	}
+}
+
+func (b *explainBuilder) setPrepared(req *restfile.Request) {
+	setExplainPrepared(b.report, req, b.mergedSettings, b.sshPlan, b.k8sPlan)
+}
+
+func (b *explainBuilder) setGRPC(req *restfile.Request) {
+	setExplainGRPC(b.report, req)
+}
+
+func (b *explainBuilder) setHTTP(resp *httpclient.Response) {
+	setExplainHTTP(b.report, resp)
+}
+
+func (b *explainBuilder) finish(
+	status xplain.Status,
+	decision string,
+	err error,
+) *xplain.Report {
+	return b.model.finalizeExplainReport(explainFinalizeInput{
+		report:         b.report,
+		request:        b.request,
+		envName:        b.envName,
+		preview:        b.preview,
+		status:         status,
+		decision:       decision,
+		err:            err,
+		trace:          b.trace,
+		mergedSettings: b.mergedSettings,
+		sshPlan:        b.sshPlan,
+		k8sPlan:        b.k8sPlan,
+		globals:        b.globals,
+		extraSecrets:   b.extraSecrets,
+	})
+}
+
 // Accept an environment override so compare sweeps can force a per-iteration
 // scope without mutating the global environment selection.
 func (m *Model) executeRequest(
@@ -474,51 +742,46 @@ func (m *Model) executeExplain(
 	)
 }
 
-func (m *Model) finalizeExplainReport(
-	rep *xplain.Report,
-	req *restfile.Request,
-	envName string,
-	preview bool,
-	st xplain.Status,
-	decision string,
-	err error,
-	tr *vars.Trace,
-	mergedSettings map[string]string,
-	sshPlan *ssh.Plan,
-	k8sPlan *k8s.Plan,
-) *xplain.Report {
-	if rep == nil {
+func (m *Model) finalizeExplainReport(in explainFinalizeInput) *xplain.Report {
+	if in.report == nil {
 		return nil
 	}
-	if tr != nil {
-		finalizeExplainVars(rep, tr)
+	if in.trace != nil {
+		finalizeExplainVars(in.report, in.trace)
 	}
-	if rep.Final == nil {
-		setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+	if in.report.Final == nil {
+		setExplainPrepared(in.report, in.request, in.mergedSettings, in.sshPlan, in.k8sPlan)
 	}
-	fail := rep.Failure
-	if err != nil && strings.TrimSpace(fail) == "" {
-		fail = err.Error()
+	fail := in.report.Failure
+	if in.err != nil && strings.TrimSpace(fail) == "" {
+		fail = in.err.Error()
+	}
+	decision := in.decision
+	if strings.TrimSpace(decision) == "" {
+		decision = in.report.Decision
 	}
 	if strings.TrimSpace(decision) == "" {
-		decision = rep.Decision
-	}
-	if strings.TrimSpace(decision) == "" {
-		switch st {
+		switch in.status {
 		case xplain.StatusSkipped:
 			decision = "Request skipped"
 		case xplain.StatusError:
 			decision = "Request preparation failed"
 		default:
-			if preview {
+			if in.preview {
 				decision = "Explain preview ready"
 			} else {
 				decision = "Request prepared"
 			}
 		}
 	}
-	setExplainDecision(rep, st, decision, fail)
-	return m.redactExplainReport(rep, envName, req)
+	setExplainDecision(in.report, in.status, decision, fail)
+	return m.redactExplainReportWithState(
+		in.report,
+		in.envName,
+		in.request,
+		in.globals,
+		in.extraSecrets...,
+	)
 }
 
 func (m *Model) executeWithMode(
@@ -533,21 +796,27 @@ func (m *Model) executeWithMode(
 	options = m.resolveHTTPOptions(options)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
 	preview := mode == execModeExplain
-	if req != nil && tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
-		rep := newExplainReport(req, envName)
+	if req == nil {
+		err := errdef.New(errdef.CodeUI, "request is nil")
+		return func() tea.Msg {
+			return responseMsg{
+				err:         err,
+				environment: envName,
+			}
+		}
+	}
+	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
 		err := errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s")
-		addExplainStage(
-			rep,
-			"route",
+		explain := newExplainBuilder(m, req, envName, preview)
+		explain.stage(
+			explainStageRoute,
 			xplain.StageError,
-			"route configuration invalid",
+			explainSummaryRouteConfigInvalid,
 			nil,
 			nil,
 			err.Error(),
 		)
-		setExplainPrepared(rep, req, nil, nil, nil)
-		setExplainDecision(rep, xplain.StatusError, "Route resolution failed", err.Error())
-		rep = m.redactExplainReport(rep, envName, req)
+		rep := explain.finish(xplain.StatusError, "Route resolution failed", err)
 		return func() tea.Msg {
 			return responseMsg{
 				err:         err,
@@ -558,920 +827,875 @@ func (m *Model) executeWithMode(
 		}
 	}
 
-	if req != nil && req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
+	if req.Metadata.Trace != nil && req.Metadata.Trace.Enabled {
 		options.Trace = true
 		if budget, ok := tracebudget.FromSpec(req.Metadata.Trace); ok {
 			options.TraceBudget = &budget
 		}
 	}
-	client := m.client
-	runner := m.scriptRunner
-	sendCtx, sendCancel := context.WithCancel(context.Background())
-	m.sendCancel = sendCancel
+	exec := newExecContext(m, doc, req, options, envName, preview, extraVals, extras)
+	return exec.cmd()
+}
 
-	// selecting env this way lets compare overrides win without persisting the change.
-	baseVars := m.collectVariables(doc, req, envName)
-	if len(extras) > 0 {
-		for _, extra := range extras {
-			for key, value := range extra {
-				if key == "" {
-					continue
-				}
-				baseVars[key] = value
-			}
-		}
+func (e *execContext) cmd() tea.Cmd {
+	return func() tea.Msg {
+		return e.run()
 	}
-	hasRTSPre := false
-	hasJSPre := false
-	for _, block := range req.Metadata.Scripts {
-		if isRTSPre(block) {
-			hasRTSPre = true
-		}
-		if strings.ToLower(block.Kind) == "pre-request" && scriptLang(block.Lang) == "js" {
-			hasJSPre = true
-		}
+}
+
+func (e *execContext) run() tea.Msg {
+	if msg := e.pendingCancel(); msg != nil {
+		return *msg
 	}
 
-	rep := newExplainReport(req, envName)
-	if preview && req != nil {
-		if req.Metadata.ForEach != nil {
-			addExplainWarn(rep, "@for-each iterations are not expanded in explain preview")
+	defer e.sendCancel()
+
+	if msg := e.evaluateCondition(); msg != nil {
+		return *msg
+	}
+	if msg := e.runPreRequestScripts(); msg != nil {
+		return *msg
+	}
+	if msg := e.prepareRequest(); msg != nil {
+		return *msg
+	}
+	if e.preview {
+		return e.previewResponse()
+	}
+	if e.useGRPC {
+		return e.executeGRPC()
+	}
+	return e.executeHTTP()
+}
+
+func (e *execContext) baseResponse() responseMsg {
+	return responseMsg{
+		executed:    e.req,
+		environment: e.envName,
+	}
+}
+
+func (e *execContext) requestText() string {
+	return renderRequestText(e.req)
+}
+
+func (e *execContext) errorResponse(cause error, decision string) responseMsg {
+	msg := e.baseResponse()
+	msg.err = cause
+	msg.explain = e.explain.finish(xplain.StatusError, decision, cause)
+	return msg
+}
+
+func (e *execContext) pendingCancel() *responseMsg {
+	select {
+	case <-e.sendCtx.Done():
+		msg := e.errorResponse(context.Canceled, "Request canceled")
+		return &msg
+	default:
+		return nil
+	}
+}
+
+func (e *execContext) canceledResponse(err error) *responseMsg {
+	msg := e.errorResponse(err, "Request canceled")
+	return &msg
+}
+
+func (e *execContext) currentVariables() map[string]string {
+	current := e.model.collectVariablesWithStoreGlobals(
+		e.doc,
+		e.req,
+		e.envName,
+		e.storeGlobals,
+	)
+	applyExtraVariables(current, e.extras)
+	return current
+}
+
+func (e *execContext) currentGlobalValues() map[string]scripts.GlobalValue {
+	return effectiveGlobalValues(e.doc, e.storeGlobals)
+}
+
+func (e *execContext) captureVariables() map[string]string {
+	capVars := mergeVariableMaps(e.model.collectVariables(e.doc, e.req, e.envName), e.scriptVars)
+	applyExtraVariables(capVars, e.extras)
+	return capVars
+}
+
+func (e *execContext) applyRuntimeGlobals(changes map[string]scripts.GlobalValue) {
+	if len(changes) == 0 {
+		return
+	}
+	if e.preview {
+		e.storeGlobals = mergeGlobalValues(e.storeGlobals, changes)
+	} else {
+		e.model.applyGlobalMutations(changes, e.envName)
+		e.storeGlobals = e.model.collectStoredGlobalValues(e.envName)
+	}
+	e.explain.globals = e.currentGlobalValues()
+}
+
+func (e *execContext) evaluateCondition() *responseMsg {
+	if e.req.Metadata.When == nil {
+		return nil
+	}
+
+	shouldRun, reason, err := e.model.evalCondition(
+		e.sendCtx,
+		e.doc,
+		e.req,
+		e.envName,
+		e.options.BaseDir,
+		e.req.Metadata.When,
+		e.baseVars,
+		e.extraVals,
+	)
+	if err != nil {
+		tag := "@when"
+		if e.req.Metadata.When.Negate {
+			tag = "@skip-if"
 		}
-		if req.Metadata.Compare != nil {
-			addExplainWarn(rep, "@compare sweep is not executed in explain preview")
-		}
-		if req.Metadata.Profile != nil {
-			addExplainWarn(rep, "@profile run is not executed in explain preview")
+		e.explain.stage(
+			tag,
+			xplain.StageError,
+			explainSummaryConditionEvaluationFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "Condition evaluation failed")
+		msg.err = errdef.Wrap(errdef.CodeScript, err, "%s", tag)
+		return &msg
+	}
+
+	stageStatus := xplain.StageOK
+	summary := explainSummaryConditionPassed
+	if !shouldRun {
+		stageStatus = xplain.StageSkipped
+		summary = explainSummaryConditionBlockedRequest
+	}
+	e.explain.stage(explainStageCondition, stageStatus, summary, nil, nil, reason)
+	if shouldRun {
+		return nil
+	}
+
+	msg := e.baseResponse()
+	msg.requestText = e.requestText()
+	msg.skipped = true
+	msg.skipReason = reason
+	msg.explain = e.explain.finish(xplain.StatusSkipped, reason, nil)
+	return &msg
+}
+
+func (e *execContext) runPreRequestScripts() *responseMsg {
+	preVars := cloneStringMap(e.baseVars)
+	applyBefore := cloneRequestIf(e.req, len(e.req.Metadata.Applies) > 0)
+	if err := e.model.runRTSApply(
+		e.sendCtx,
+		e.doc,
+		e.req,
+		e.envName,
+		e.options.BaseDir,
+		preVars,
+		e.extraVals,
+	); err != nil {
+		e.explain.stage(
+			explainStageApply,
+			xplain.StageError,
+			explainSummaryApplyFailed,
+			applyBefore,
+			e.req,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "Apply failed")
+		msg.err = errdef.Wrap(errdef.CodeScript, err, "@apply")
+		return &msg
+	}
+	if len(e.req.Metadata.Applies) > 0 {
+		e.explain.stage(
+			explainStageApply,
+			xplain.StageOK,
+			explainSummaryApplyComplete,
+			applyBefore,
+			e.req,
+		)
+	}
+
+	rtsBefore := cloneRequestIf(e.req, e.hasRTSPre)
+	rtsResult, err := e.model.runRTSPreRequest(
+		e.sendCtx,
+		e.doc,
+		e.req,
+		e.envName,
+		e.options.BaseDir,
+		preVars,
+		cloneGlobalValues(e.currentGlobalValues()),
+	)
+	if err != nil {
+		e.explain.stage(
+			explainStageRTSPreRequest,
+			xplain.StageError,
+			explainSummaryRTSPreRequestFailed,
+			rtsBefore,
+			e.req,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "RTS pre-request failed")
+		msg.err = errdef.Wrap(errdef.CodeScript, err, "pre-request rts script")
+		return &msg
+	}
+	if err := applyPreRequestOutput(e.req, rtsResult); err != nil {
+		e.explain.stage(
+			explainStageRTSPreRequest,
+			xplain.StageError,
+			explainSummaryRTSPreRequestOutputBad,
+			rtsBefore,
+			e.req,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "RTS pre-request failed")
+		return &msg
+	}
+	if e.hasRTSPre {
+		e.explain.stage(
+			explainStageRTSPreRequest,
+			xplain.StageOK,
+			explainSummaryRTSPreRequestComplete,
+			rtsBefore,
+			e.req,
+		)
+	}
+	if err := e.sendCtx.Err(); err != nil {
+		return e.canceledResponse(err)
+	}
+
+	e.applyRuntimeGlobals(rtsResult.Globals)
+	if len(rtsResult.Globals) > 0 || len(rtsResult.Variables) > 0 {
+		preVars = e.currentVariables()
+	}
+
+	jsBefore := cloneRequestIf(e.req, e.hasJSPre)
+	preResult, err := e.runner.RunPreRequest(e.req.Metadata.Scripts, scripts.PreRequestInput{
+		Request:   e.req,
+		Variables: preVars,
+		Globals:   cloneGlobalValues(e.currentGlobalValues()),
+		BaseDir:   e.options.BaseDir,
+		Context:   e.sendCtx,
+	})
+	if err != nil {
+		e.explain.stage(
+			explainStageJSPreRequest,
+			xplain.StageError,
+			explainSummaryJSPreRequestFailed,
+			jsBefore,
+			e.req,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "JS pre-request failed")
+		msg.err = errdef.Wrap(errdef.CodeScript, err, "pre-request script")
+		return &msg
+	}
+	if err := applyPreRequestOutput(e.req, preResult); err != nil {
+		e.explain.stage(
+			explainStageJSPreRequest,
+			xplain.StageError,
+			explainSummaryJSPreRequestOutputBad,
+			jsBefore,
+			e.req,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "JS pre-request failed")
+		return &msg
+	}
+	if e.hasJSPre {
+		e.explain.stage(
+			explainStageJSPreRequest,
+			xplain.StageOK,
+			explainSummaryJSPreRequestComplete,
+			jsBefore,
+			e.req,
+		)
+	}
+	if err := e.sendCtx.Err(); err != nil {
+		return e.canceledResponse(err)
+	}
+
+	e.applyRuntimeGlobals(preResult.Globals)
+	e.scriptVars = mergeVariableMaps(rtsResult.Variables, preResult.Variables)
+	return nil
+}
+
+func (e *execContext) buildResolver() {
+	resolverExtras := make([]map[string]string, 0, len(e.extras)+1)
+	if len(e.scriptVars) > 0 {
+		resolverExtras = append(resolverExtras, e.scriptVars)
+	}
+	for _, extra := range e.extras {
+		if len(extra) > 0 {
+			resolverExtras = append(resolverExtras, extra)
 		}
 	}
-	var (
-		tr             *vars.Trace
-		mergedSettings map[string]string
-		sshPlan        *ssh.Plan
-		k8sPlan        *k8s.Plan
+
+	if e.preview {
+		e.resolver = e.model.buildResolverWithGlobals(
+			e.sendCtx,
+			e.doc,
+			e.req,
+			e.envName,
+			e.options.BaseDir,
+			e.extraVals,
+			e.storeGlobals,
+			resolverExtras...,
+		)
+	} else {
+		e.resolver = e.model.buildResolver(
+			e.sendCtx,
+			e.doc,
+			e.req,
+			e.envName,
+			e.options.BaseDir,
+			e.extraVals,
+			resolverExtras...,
+		)
+	}
+
+	e.trace = vars.NewTrace()
+	e.resolver.SetTrace(e.trace)
+	e.explain.trace = e.trace
+}
+
+func (e *execContext) resolveRoute() *responseMsg {
+	var err error
+
+	e.sshPlan, err = e.model.resolveSSH(e.doc, e.req, e.resolver, e.envName)
+	if err != nil {
+		e.explain.stage(
+			explainStageRoute,
+			xplain.StageError,
+			explainSummaryRouteSSHResolutionFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "Route resolution failed")
+		msg.err = errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh")
+		return &msg
+	}
+
+	e.k8sPlan, err = e.model.resolveK8s(e.doc, e.req, e.resolver, e.envName)
+	if err != nil {
+		e.explain.stage(
+			explainStageRoute,
+			xplain.StageError,
+			explainSummaryRouteK8sResolutionFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "Route resolution failed")
+		msg.err = errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s")
+		return &msg
+	}
+
+	e.options.SSH = e.sshPlan
+	e.options.K8s = e.k8sPlan
+	e.explain.setRoute(e.sshPlan, e.k8sPlan)
+
+	if route := explainRoute(e.sshPlan, e.k8sPlan); route != nil {
+		notes := append([]string{route.Summary}, route.Notes...)
+		e.explain.stage(explainStageRoute, xplain.StageOK, route.Kind, nil, nil, notes...)
+		if e.sshPlan != nil && e.sshPlan.Active() && e.sshPlan.Config != nil &&
+			!e.sshPlan.Config.Strict {
+			e.explain.warn("@ssh strict_hostkey=false (insecure)")
+		}
+	}
+
+	return nil
+}
+
+func (e *execContext) configureGRPCOptions() {
+	e.useGRPC = e.req.GRPC != nil
+	if !e.useGRPC {
+		return
+	}
+
+	e.grpcOpts = e.model.grpcOptions
+	if e.grpcOpts.BaseDir != "" {
+		return
+	}
+	e.grpcOpts.BaseDir = e.options.BaseDir
+	if e.grpcOpts.BaseDir == "" && e.model.currentFile != "" {
+		e.grpcOpts.BaseDir = filepath.Dir(e.model.currentFile)
+	}
+}
+
+func (e *execContext) applySettings() *responseMsg {
+	e.configureGRPCOptions()
+
+	globalSettings := settings.FromEnv(e.model.cfg.EnvironmentSet, e.envName)
+	fileSettings := map[string]string{}
+	if e.doc != nil && e.doc.Settings != nil {
+		fileSettings = e.doc.Settings
+	}
+	requestSettings := e.req.Settings
+
+	settingsBefore := cloneRequest(e.req)
+	e.mergedSettings = settings.Merge(globalSettings, fileSettings, requestSettings)
+	e.req.Settings = e.mergedSettings
+	e.explain.setSettings(e.mergedSettings)
+	e.explain.stage(
+		explainStageSettings,
+		xplain.StageOK,
+		explainSummarySettingsMerged,
+		settingsBefore,
+		e.req,
 	)
 
-	finishExplain := func(
-		st xplain.Status,
-		decision string,
-		err error,
-	) *xplain.Report {
-		return m.finalizeExplainReport(
-			rep,
-			req,
-			envName,
-			preview,
-			st,
-			decision,
-			err,
-			tr,
-			mergedSettings,
-			sshPlan,
-			k8sPlan,
+	handlers := []settings.Handler{
+		settings.HTTPHandler(&e.options, e.resolver),
+	}
+	if e.useGRPC {
+		handlers = append(handlers, settings.GRPCHandler(&e.grpcOpts, e.resolver))
+	}
+
+	if _, err := settings.New(handlers...).ApplyAll(e.mergedSettings); err != nil {
+		e.explain.stage(
+			explainStageSettings,
+			xplain.StageError,
+			explainSummarySettingsApplyFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "Settings application failed")
+		return &msg
+	}
+
+	e.effectiveTimeout = defaultTimeout(resolveRequestTimeout(e.req, e.options.Timeout))
+	return nil
+}
+
+func (e *execContext) prepareAuthentication() *responseMsg {
+	if e.req.Metadata.Auth == nil {
+		return nil
+	}
+
+	e.explain.addSecrets(explainAuthSecretValues(e.req.Metadata.Auth, e.resolver)...)
+
+	authBefore := cloneRequest(e.req)
+	if e.preview {
+		authPreview, err := e.model.prepareExplainAuthPreview(e.req, e.resolver, e.envName)
+		if err != nil {
+			e.explain.stage(
+				explainStageAuth,
+				xplain.StageError,
+				explainSummaryAuthInjectionFailed,
+				authBefore,
+				e.req,
+				err.Error(),
+			)
+
+			msg := e.errorResponse(err, "Auth preparation failed")
+			return &msg
+		}
+		e.explain.addSecrets(authPreview.extraSecrets...)
+		e.explain.stage(
+			explainStageAuth,
+			authPreview.status,
+			authPreview.summary,
+			authBefore,
+			e.req,
+			authPreview.notes...,
+		)
+		return nil
+	}
+
+	if err := e.model.ensureOAuth(
+		e.sendCtx,
+		e.req,
+		e.resolver,
+		e.options,
+		e.envName,
+		e.effectiveTimeout,
+	); err != nil {
+		e.explain.stage(
+			explainStageAuth,
+			xplain.StageError,
+			explainSummaryAuthInjectionFailed,
+			authBefore,
+			e.req,
+			err.Error(),
+		)
+
+		msg := e.errorResponse(err, "Auth preparation failed")
+		return &msg
+	}
+
+	e.explain.addSecrets(explainInjectedAuthSecrets(e.req.Metadata.Auth, authBefore, e.req)...)
+	e.explain.stage(explainStageAuth, xplain.StageOK, explainSummaryAuthPrepared, authBefore, e.req)
+	return nil
+}
+
+func (e *execContext) prepareProtocolRequests() *responseMsg {
+	if e.req.GRPC != nil {
+		grpcBefore := cloneRequest(e.req)
+		if err := e.model.prepareGRPCRequest(e.req, e.resolver, e.grpcOpts.BaseDir); err != nil {
+			e.explain.stage(
+				explainStageGRPCPrepare,
+				xplain.StageError,
+				explainSummaryGRPCPrepareFailed,
+				grpcBefore,
+				e.req,
+				err.Error(),
+			)
+
+			msg := e.errorResponse(err, "gRPC preparation failed")
+			return &msg
+		}
+		e.explain.stage(
+			explainStageGRPCPrepare,
+			xplain.StageOK,
+			explainSummaryGRPCRequestPrepared,
+			grpcBefore,
+			e.req,
 		)
 	}
 
-	return func() tea.Msg {
-		select {
-		case <-sendCtx.Done():
-			return responseMsg{
-				err:      context.Canceled,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Request canceled",
-					context.Canceled,
-				),
-			}
-		default:
-		}
-
-		defer sendCancel()
-
-		if req != nil && req.Metadata.When != nil {
-			shouldRun, reason, err := m.evalCondition(
-				sendCtx,
-				doc,
-				req,
-				envName,
-				options.BaseDir,
-				req.Metadata.When,
-				baseVars,
-				extraVals,
-			)
-			if err != nil {
-				tag := "@when"
-				if req.Metadata.When.Negate {
-					tag = "@skip-if"
-				}
-				addExplainStage(
-					rep,
-					tag,
-					xplain.StageError,
-					"condition evaluation failed",
-					nil,
-					nil,
-					err.Error(),
-				)
-				return responseMsg{
-					err:         errdef.Wrap(errdef.CodeScript, err, "%s", tag),
-					executed:    req,
-					environment: envName,
-					explain: finishExplain(
-						xplain.StatusError,
-						"Condition evaluation failed",
-						err,
-					),
-				}
-			}
-			stageStatus := xplain.StageOK
-			sum := "condition passed"
-			if !shouldRun {
-				stageStatus = xplain.StageSkipped
-				sum = "condition blocked request"
-			}
-			addExplainStage(rep, "condition", stageStatus, sum, nil, nil, reason)
-			if !shouldRun {
-				return responseMsg{
-					executed:    req,
-					requestText: renderRequestText(req),
-					environment: envName,
-					skipped:     true,
-					skipReason:  reason,
-					explain: finishExplain(
-						xplain.StatusSkipped,
-						reason,
-						nil,
-					),
-				}
-			}
-		}
-
-		preVars := cloneStringMap(baseVars)
-		applyBefore := cloneRequestIf(req, len(req.Metadata.Applies) > 0)
-		if err := m.runRTSApply(
-			sendCtx,
-			doc,
-			req,
-			envName,
-			options.BaseDir,
-			preVars,
-			extraVals,
-		); err != nil {
-			addExplainStage(
-				rep,
-				"@apply",
+	if e.req.WebSocket != nil {
+		wsBefore := cloneRequest(e.req)
+		if err := e.model.expandWebSocketSteps(e.req, e.resolver); err != nil {
+			e.explain.stage(
+				explainStageWebSocketPrepare,
 				xplain.StageError,
-				"apply failed",
-				applyBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      errdef.Wrap(errdef.CodeScript, err, "@apply"),
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Apply failed",
-					err,
-				),
-			}
-		}
-		if len(req.Metadata.Applies) > 0 {
-			addExplainStage(rep, "@apply", xplain.StageOK, "apply complete", applyBefore, req)
-		}
-		preGlobals := m.collectGlobalValues(doc, envName)
-		rtsBefore := cloneRequestIf(req, hasRTSPre)
-		rtsResult, err := m.runRTSPreRequest(
-			sendCtx,
-			doc,
-			req,
-			envName,
-			options.BaseDir,
-			preVars,
-			preGlobals,
-		)
-		if err != nil {
-			addExplainStage(
-				rep,
-				"rts pre-request",
-				xplain.StageError,
-				"RTS pre-request failed",
-				rtsBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      errdef.Wrap(errdef.CodeScript, err, "pre-request rts script"),
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"RTS pre-request failed",
-					err,
-				),
-			}
-		}
-
-		if err := applyPreRequestOutput(req, rtsResult); err != nil {
-			addExplainStage(
-				rep,
-				"rts pre-request",
-				xplain.StageError,
-				"RTS pre-request output invalid",
-				rtsBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"RTS pre-request failed",
-					err,
-				),
-			}
-		}
-		if hasRTSPre {
-			addExplainStage(
-				rep,
-				"rts pre-request",
-				xplain.StageOK,
-				"RTS pre-request complete",
-				rtsBefore,
-				req,
-			)
-		}
-
-		if err := sendCtx.Err(); err != nil {
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Request canceled",
-					err,
-				),
-			}
-		}
-
-		if len(rtsResult.Globals) > 0 {
-			m.applyGlobalMutations(rtsResult.Globals, envName)
-			preGlobals = m.collectGlobalValues(doc, envName)
-		}
-
-		if len(rtsResult.Globals) > 0 || len(rtsResult.Variables) > 0 {
-			preVars = m.collectVariables(doc, req, envName)
-		}
-
-		jsBefore := cloneRequestIf(req, hasJSPre)
-		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
-			Request:   req,
-			Variables: preVars,
-			Globals:   preGlobals,
-			BaseDir:   options.BaseDir,
-			Context:   sendCtx,
-		})
-		if err != nil {
-			addExplainStage(
-				rep,
-				"js pre-request",
-				xplain.StageError,
-				"JS pre-request failed",
-				jsBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      errdef.Wrap(errdef.CodeScript, err, "pre-request script"),
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"JS pre-request failed",
-					err,
-				),
-			}
-		}
-
-		if err := applyPreRequestOutput(req, preResult); err != nil {
-			addExplainStage(
-				rep,
-				"js pre-request",
-				xplain.StageError,
-				"JS pre-request output invalid",
-				jsBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"JS pre-request failed",
-					err,
-				),
-			}
-		}
-		if hasJSPre {
-			addExplainStage(
-				rep,
-				"js pre-request",
-				xplain.StageOK,
-				"JS pre-request complete",
-				jsBefore,
-				req,
-			)
-		}
-
-		if err := sendCtx.Err(); err != nil {
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Request canceled",
-					err,
-				),
-			}
-		}
-
-		m.applyGlobalMutations(preResult.Globals, envName)
-
-		scriptVars := mergeVariableMaps(rtsResult.Variables, preResult.Variables)
-		resolverExtras := make([]map[string]string, 0, len(extras)+1)
-		if len(scriptVars) > 0 {
-			resolverExtras = append(resolverExtras, scriptVars)
-		}
-		for _, extra := range extras {
-			if len(extra) > 0 {
-				resolverExtras = append(resolverExtras, extra)
-			}
-		}
-
-		resolver := m.buildResolver(
-			sendCtx,
-			doc,
-			req,
-			envName,
-			options.BaseDir,
-			extraVals,
-			resolverExtras...)
-		tr = vars.NewTrace()
-		resolver.SetTrace(tr)
-		sshPlan, err = m.resolveSSH(doc, req, resolver, envName)
-		if err != nil {
-			addExplainStage(
-				rep,
-				"route",
-				xplain.StageError,
-				"ssh resolution failed",
-				nil,
-				nil,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh"),
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Route resolution failed",
-					err,
-				),
-			}
-		}
-		k8sPlan, err = m.resolveK8s(doc, req, resolver, envName)
-		if err != nil {
-			addExplainStage(
-				rep,
-				"route",
-				xplain.StageError,
-				"k8s resolution failed",
-				nil,
-				nil,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s"),
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Route resolution failed",
-					err,
-				),
-			}
-		}
-		options.SSH = sshPlan
-		options.K8s = k8sPlan
-		if route := explainRoute(sshPlan, k8sPlan); route != nil {
-			notes := append([]string{route.Summary}, route.Notes...)
-			addExplainStage(rep, "route", xplain.StageOK, route.Kind, nil, nil, notes...)
-			if sshPlan != nil && sshPlan.Active() && sshPlan.Config != nil &&
-				!sshPlan.Config.Strict {
-				addExplainWarn(rep, "@ssh strict_hostkey=false (insecure)")
-			}
-		}
-
-		globalSettings := settings.FromEnv(m.cfg.EnvironmentSet, envName)
-		fileSettings := map[string]string{}
-		if doc != nil && doc.Settings != nil {
-			fileSettings = doc.Settings
-		}
-		settingsBefore := cloneRequest(req)
-		mergedSettings = settings.Merge(globalSettings, fileSettings, req.Settings)
-		req.Settings = mergedSettings
-		addExplainStage(
-			rep,
-			"settings",
-			xplain.StageOK,
-			"effective settings merged",
-			settingsBefore,
-			req,
-		)
-
-		var grpcOpts grpcclient.Options
-		useGRPC := req.GRPC != nil
-		if useGRPC {
-			grpcOpts = m.grpcOptions
-			if grpcOpts.BaseDir == "" {
-				grpcOpts.BaseDir = options.BaseDir
-				if grpcOpts.BaseDir == "" && m.currentFile != "" {
-					grpcOpts.BaseDir = filepath.Dir(m.currentFile)
-				}
-			}
-		}
-
-		handlers := []settings.Handler{
-			settings.HTTPHandler(&options, resolver),
-		}
-		if useGRPC {
-			handlers = append(handlers, settings.GRPCHandler(&grpcOpts, resolver))
-		}
-		applier := settings.New(handlers...)
-		if _, err := applier.ApplyAll(mergedSettings); err != nil {
-			addExplainStage(
-				rep,
-				"settings",
-				xplain.StageError,
-				"settings application failed",
-				nil,
-				nil,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Settings application failed",
-					err,
-				),
-			}
-		}
-
-		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
-		authBefore := cloneRequestIf(req, req != nil && req.Metadata.Auth != nil)
-		if err := m.ensureOAuth(
-			sendCtx,
-			req,
-			resolver,
-			options,
-			envName,
-			effectiveTimeout,
-		); err != nil {
-			addExplainStage(
-				rep,
-				"auth",
-				xplain.StageError,
-				"auth injection failed",
-				authBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Auth preparation failed",
-					err,
-				),
-			}
-		}
-		if req.Metadata.Auth != nil {
-			addExplainStage(rep, "auth", xplain.StageOK, "auth prepared", authBefore, req)
-		}
-
-		if req.GRPC != nil {
-			grpcBefore := cloneRequest(req)
-			if err := m.prepareGRPCRequest(req, resolver, grpcOpts.BaseDir); err != nil {
-				addExplainStage(
-					rep,
-					"grpc prepare",
-					xplain.StageError,
-					"gRPC preparation failed",
-					grpcBefore,
-					req,
-					err.Error(),
-				)
-				return responseMsg{
-					err:      err,
-					executed: req,
-					explain: finishExplain(
-						xplain.StatusError,
-						"gRPC preparation failed",
-						err,
-					),
-				}
-			}
-			addExplainStage(
-				rep,
-				"grpc prepare",
-				xplain.StageOK,
-				"gRPC request prepared",
-				grpcBefore,
-				req,
-			)
-		}
-
-		if req.WebSocket != nil {
-			wsBefore := cloneRequest(req)
-			if err := m.expandWebSocketSteps(req, resolver); err != nil {
-				addExplainStage(
-					rep,
-					"websocket prepare",
-					xplain.StageError,
-					"WebSocket preparation failed",
-					wsBefore,
-					req,
-					err.Error(),
-				)
-				return responseMsg{
-					err:      err,
-					executed: req,
-					explain: finishExplain(
-						xplain.StatusError,
-						"WebSocket preparation failed",
-						err,
-					),
-				}
-			}
-			addExplainStage(
-				rep,
-				"websocket prepare",
-				xplain.StageOK,
-				"WebSocket request prepared",
+				explainSummaryWebSocketPrepareFailed,
 				wsBefore,
-				req,
+				e.req,
+				err.Error(),
 			)
-		}
 
-		if preview {
-			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-			if req.GRPC == nil {
-				if err := m.prepareExplainHTTPPreview(
-					sendCtx,
-					rep,
-					req,
-					resolver,
-					options,
-				); err != nil {
-					addExplainStage(
-						rep,
-						"http prepare",
-						xplain.StageError,
-						"HTTP request build failed",
-						nil,
-						nil,
-						err.Error(),
-					)
-					return responseMsg{
-						err:      err,
-						executed: req,
-						explain: finishExplain(
-							xplain.StatusError,
-							"HTTP preparation failed",
-							err,
-						),
-					}
-				}
-			}
-			return responseMsg{
-				executed:    req,
-				requestText: renderRequestText(req),
-				environment: envName,
-				preview:     true,
-				explain: finishExplain(
-					xplain.StatusReady,
-					"Explain preview ready. No request was sent.",
-					nil,
-				),
-			}
+			msg := e.errorResponse(err, "WebSocket preparation failed")
+			return &msg
 		}
-
-		var (
-			ctx          context.Context
-			cancel       context.CancelFunc
-			cancelActive = true
+		e.explain.stage(
+			explainStageWebSocketPrepare,
+			xplain.StageOK,
+			explainSummaryWebSocketRequestPrepared,
+			wsBefore,
+			e.req,
 		)
+	}
 
-		if req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
-			ctx, cancel = context.WithCancel(sendCtx)
-		} else {
-			ctx, cancel = context.WithTimeout(sendCtx, effectiveTimeout)
-		}
-		defer func() {
-			if cancelActive {
-				cancel()
-			}
-		}()
+	return nil
+}
 
-		if req.GRPC != nil {
-			if grpcOpts.DialTimeout == 0 {
-				grpcOpts.DialTimeout = effectiveTimeout
-			}
+func (e *execContext) prepareRequest() *responseMsg {
+	e.buildResolver()
+	if msg := e.resolveRoute(); msg != nil {
+		return msg
+	}
+	if msg := e.applySettings(); msg != nil {
+		return msg
+	}
+	if msg := e.prepareAuthentication(); msg != nil {
+		return msg
+	}
+	if msg := e.prepareProtocolRequests(); msg != nil {
+		return msg
+	}
+	return nil
+}
 
-			grpcOpts.SSH = sshPlan
-			grpcOpts.K8s = k8sPlan
-
-			hook := func(session *stream.Session) {
-				m.attachGRPCSession(session, req)
-			}
-			grpcResp, grpcErr := m.grpcClient.Execute(ctx, req, req.GRPC, grpcOpts, hook)
-			if grpcErr != nil {
-				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-				return responseMsg{
-					grpc:        grpcResp,
-					err:         grpcErr,
-					executed:    req,
-					requestText: renderRequestText(req),
-					environment: envName,
-					explain: finishExplain(
-						xplain.StatusError,
-						"gRPC request failed",
-						grpcErr,
-					),
-				}
-			}
-
-			respForScripts := grpcScriptResponse(req, grpcResp)
-			capVars := mergeVariableMaps(m.collectVariables(doc, req, envName), scriptVars)
-			for _, extra := range extras {
-				if len(extra) == 0 {
-					continue
-				}
-				capVars = mergeVariableMaps(capVars, extra)
-			}
-			var captures captureResult
-			if err := m.applyCaptures(captureRun{
-				doc:  doc,
-				req:  req,
-				res:  resolver,
-				resp: respForScripts,
-				out:  &captures,
-				env:  envName,
-				v:    capVars,
-				x:    extraVals,
-			}); err != nil {
-				addExplainStage(
-					rep,
-					"captures",
-					xplain.StageError,
-					"capture evaluation failed",
-					nil,
-					nil,
-					err.Error(),
-				)
-				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-				return responseMsg{
-					err:         err,
-					executed:    req,
-					environment: envName,
-					explain: finishExplain(
-						xplain.StatusError,
-						"Capture evaluation failed",
-						err,
-					),
-				}
-			}
-
-			updatedVars := m.collectVariables(doc, req, envName)
-			testVars := mergeVariableMaps(updatedVars, scriptVars)
-			testGlobals := m.collectGlobalValues(doc, envName)
-			asserts, assertErr := m.runAsserts(
-				ctx,
-				doc,
-				req,
-				envName,
-				options.BaseDir,
-				testVars,
-				extraVals,
-				rtsGRPC(grpcResp),
-				nil,
-				nil,
-			)
-			tests, globalChanges, testErr := runner.RunTests(
-				req.Metadata.Scripts,
-				scripts.TestInput{
-					Response:  respForScripts,
-					Variables: testVars,
-					Globals:   testGlobals,
-					BaseDir:   options.BaseDir,
-				},
-			)
-			m.applyGlobalMutations(globalChanges, envName)
-			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-			setExplainGRPC(rep, req)
-
-			return responseMsg{
-				grpc:        grpcResp,
-				tests:       append(asserts, tests...),
-				scriptErr:   mergeErr(assertErr, testErr),
-				executed:    req,
-				requestText: renderRequestText(req),
-				environment: envName,
-				explain: finishExplain(
-					xplain.StatusReady,
-					"gRPC request sent",
-					nil,
-				),
-			}
-		}
-
-		var response *httpclient.Response
-		switch {
-		case req.WebSocket != nil:
-			handle, fallback, startErr := client.StartWebSocket(ctx, req, resolver, options)
-			if startErr != nil {
-				return responseMsg{
-					err:      startErr,
-					executed: req,
-					explain: finishExplain(
-						xplain.StatusError,
-						"WebSocket request failed",
-						startErr,
-					),
-				}
-			}
-			if fallback != nil {
-				response = fallback
-			} else {
-				m.attachWebSocketHandle(handle, req)
-				if len(req.WebSocket.Steps) == 0 {
-					if handle != nil && handle.Session != nil {
-						sessionDone := handle.Session.Done()
-						go func() {
-							<-sessionDone
-							cancel()
-						}()
-						cancelActive = false
-					}
-					response = streamingPlaceholderResponse(handle.Meta)
-				} else {
-					response, err = client.CompleteWebSocket(ctx, handle, req, options)
-				}
-			}
-		case req.SSE != nil:
-			handle, fallback, startErr := client.StartSSE(ctx, req, resolver, options)
-			if startErr != nil {
-				return responseMsg{
-					err:      startErr,
-					executed: req,
-					explain: finishExplain(
-						xplain.StatusError,
-						"SSE request failed",
-						startErr,
-					),
-				}
-			}
-			if fallback != nil {
-				response = fallback
-			} else {
-				m.attachSSEHandle(handle, req)
-				response, err = httpclient.CompleteSSE(handle)
-			}
-		default:
-			response, err = client.Execute(ctx, req, resolver, options)
-		}
-		if err != nil {
-			if response != nil {
-				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-				setExplainHTTP(rep, response)
-			} else {
-				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-			}
-			return responseMsg{
-				response: response,
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"HTTP request failed",
-					err,
-				),
-			}
-		}
-
-		streamInfo, streamErr := streamInfoFromResponse(req, response)
-		if streamErr != nil {
-			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-			setExplainHTTP(rep, response)
-			return responseMsg{
-				err:      errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript"),
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Stream decoding failed",
-					streamErr,
-				),
-			}
-		}
-
-		respForScripts := httpScriptResponse(response)
-		capVars := mergeVariableMaps(m.collectVariables(doc, req, envName), scriptVars)
-		for _, extra := range extras {
-			if len(extra) == 0 {
-				continue
-			}
-			capVars = mergeVariableMaps(capVars, extra)
-		}
-		var captures captureResult
-		if err := m.applyCaptures(captureRun{
-			doc:    doc,
-			req:    req,
-			res:    resolver,
-			resp:   respForScripts,
-			stream: streamInfo,
-			out:    &captures,
-			env:    envName,
-			v:      capVars,
-			x:      extraVals,
-		}); err != nil {
-			addExplainStage(
-				rep,
-				"captures",
+func (e *execContext) previewResponse() tea.Msg {
+	e.explain.setPrepared(e.req)
+	if e.req.GRPC == nil {
+		if err := e.model.prepareExplainHTTPPreview(
+			e.sendCtx,
+			e.explain.report,
+			e.req,
+			e.resolver,
+			e.options,
+		); err != nil {
+			e.explain.stage(
+				explainStageHTTPPrepare,
 				xplain.StageError,
-				"capture evaluation failed",
+				explainSummaryHTTPRequestBuildFailed,
 				nil,
 				nil,
 				err.Error(),
 			)
-			setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-			setExplainHTTP(rep, response)
-			return responseMsg{
-				err:         err,
-				executed:    req,
-				environment: envName,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Capture evaluation failed",
-					err,
-				),
-			}
-		}
 
-		updatedVars := m.collectVariables(doc, req, envName)
-		testVars := mergeVariableMaps(updatedVars, scriptVars)
-		testGlobals := m.collectGlobalValues(doc, envName)
-		asserts, assertErr := m.runAsserts(
-			ctx,
-			doc,
-			req,
-			envName,
-			options.BaseDir,
-			testVars,
-			extraVals,
-			rtsHTTP(response),
-			rtsTrace(response),
-			rtsStream(streamInfo),
+			msg := e.errorResponse(err, "HTTP preparation failed")
+			return msg
+		}
+	}
+
+	msg := e.baseResponse()
+	msg.requestText = e.requestText()
+	msg.preview = true
+	msg.explain = e.explain.finish(
+		xplain.StatusReady,
+		"Explain preview ready. No request was sent.",
+		nil,
+	)
+	return msg
+}
+
+func (e *execContext) executeGRPC() tea.Msg {
+	grpcClient := e.model.grpcClient
+	if grpcClient == nil {
+		err := errdef.New(errdef.CodeHTTP, "gRPC client is not initialised")
+		e.explain.setPrepared(e.req)
+
+		msg := e.errorResponse(err, "gRPC request failed")
+		msg.requestText = e.requestText()
+		return msg
+	}
+
+	ctx, cancel := context.WithTimeout(e.sendCtx, e.effectiveTimeout)
+	defer cancel()
+
+	if e.grpcOpts.DialTimeout == 0 {
+		e.grpcOpts.DialTimeout = e.effectiveTimeout
+	}
+	e.grpcOpts.SSH = e.sshPlan
+	e.grpcOpts.K8s = e.k8sPlan
+
+	hook := func(session *stream.Session) {
+		e.model.attachGRPCSession(session, e.req)
+	}
+	grpcResp, grpcErr := grpcClient.Execute(ctx, e.req, e.req.GRPC, e.grpcOpts, hook)
+	if grpcErr != nil {
+		e.explain.setPrepared(e.req)
+
+		msg := e.errorResponse(grpcErr, "gRPC request failed")
+		msg.grpc = grpcResp
+		msg.requestText = e.requestText()
+		return msg
+	}
+
+	respForScripts := grpcScriptResponse(e.req, grpcResp)
+	var captures captureResult
+	if err := e.model.applyCaptures(captureRun{
+		doc:  e.doc,
+		req:  e.req,
+		res:  e.resolver,
+		resp: respForScripts,
+		out:  &captures,
+		env:  e.envName,
+		v:    e.captureVariables(),
+		x:    e.extraVals,
+	}); err != nil {
+		e.explain.stage(
+			explainStageCaptures,
+			xplain.StageError,
+			explainSummaryCaptureEvaluationFailed,
+			nil,
+			nil,
+			err.Error(),
 		)
-		traceInput := scripts.NewTraceInput(response.Timeline, req.Metadata.Trace)
-		tests, globalChanges, testErr := runner.RunTests(req.Metadata.Scripts, scripts.TestInput{
+		e.explain.setPrepared(e.req)
+
+		msg := e.errorResponse(err, "Capture evaluation failed")
+		return msg
+	}
+
+	updatedVars := e.model.collectVariables(e.doc, e.req, e.envName)
+	testVars := mergeVariableMaps(updatedVars, e.scriptVars)
+	testGlobals := e.model.collectGlobalValues(e.doc, e.envName)
+	asserts, assertErr := e.model.runAsserts(
+		ctx,
+		e.doc,
+		e.req,
+		e.envName,
+		e.options.BaseDir,
+		testVars,
+		e.extraVals,
+		rtsGRPC(grpcResp),
+		nil,
+		nil,
+	)
+	tests, globalChanges, testErr := e.runner.RunTests(
+		e.req.Metadata.Scripts,
+		scripts.TestInput{
 			Response:  respForScripts,
 			Variables: testVars,
 			Globals:   testGlobals,
-			BaseDir:   options.BaseDir,
-			Stream:    streamInfo,
-			Trace:     traceInput,
-		})
-		m.applyGlobalMutations(globalChanges, envName)
-		setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
-		setExplainHTTP(rep, response)
+			BaseDir:   e.options.BaseDir,
+		},
+	)
+	e.applyRuntimeGlobals(globalChanges)
+	e.explain.setPrepared(e.req)
+	e.explain.setGRPC(e.req)
 
-		return responseMsg{
-			response:    response,
-			tests:       append(asserts, tests...),
-			scriptErr:   mergeErr(assertErr, testErr),
-			executed:    req,
-			requestText: renderRequestText(req),
-			environment: envName,
-			explain: finishExplain(
-				xplain.StatusReady,
-				"HTTP request sent",
-				nil,
-			),
-		}
+	msg := e.baseResponse()
+	msg.grpc = grpcResp
+	msg.tests = append(asserts, tests...)
+	msg.scriptErr = mergeErr(assertErr, testErr)
+	msg.requestText = e.requestText()
+	msg.explain = e.explain.finish(xplain.StatusReady, "gRPC request sent", nil)
+	return msg
+}
+
+func (e *execContext) executeHTTP() tea.Msg {
+	var (
+		ctx          context.Context
+		cancel       context.CancelFunc
+		cancelActive = true
+	)
+
+	if e.req.WebSocket != nil && len(e.req.WebSocket.Steps) == 0 {
+		ctx, cancel = context.WithCancel(e.sendCtx)
+	} else {
+		ctx, cancel = context.WithTimeout(e.sendCtx, e.effectiveTimeout)
 	}
+	defer func() {
+		if cancelActive {
+			cancel()
+		}
+	}()
+
+	var (
+		response *httpclient.Response
+		err      error
+	)
+
+	switch {
+	case e.req.WebSocket != nil:
+		handle, fallback, startErr := e.client.StartWebSocket(ctx, e.req, e.resolver, e.options)
+		if startErr != nil {
+			msg := e.errorResponse(startErr, "WebSocket request failed")
+			return msg
+		}
+		if fallback != nil {
+			response = fallback
+		} else {
+			e.model.attachWebSocketHandle(handle, e.req)
+			if len(e.req.WebSocket.Steps) == 0 {
+				if handle != nil && handle.Session != nil {
+					sessionDone := handle.Session.Done()
+					go func() {
+						<-sessionDone
+						cancel()
+					}()
+					cancelActive = false
+				}
+				response = streamingPlaceholderResponse(handle.Meta)
+			} else {
+				response, err = e.client.CompleteWebSocket(ctx, handle, e.req, e.options)
+			}
+		}
+	case e.req.SSE != nil:
+		handle, fallback, startErr := e.client.StartSSE(ctx, e.req, e.resolver, e.options)
+		if startErr != nil {
+			msg := e.errorResponse(startErr, "SSE request failed")
+			return msg
+		}
+		if fallback != nil {
+			response = fallback
+		} else {
+			e.model.attachSSEHandle(handle, e.req)
+			response, err = httpclient.CompleteSSE(handle)
+		}
+	default:
+		response, err = e.client.Execute(ctx, e.req, e.resolver, e.options)
+	}
+
+	if response != nil {
+		e.explain.sentHTTP(e.req, response)
+	}
+	if err != nil {
+		e.explain.setPrepared(e.req)
+		if response != nil {
+			e.explain.setHTTP(response)
+		}
+
+		msg := e.errorResponse(err, "HTTP request failed")
+		msg.response = response
+		return msg
+	}
+
+	streamInfo, streamErr := streamInfoFromResponse(e.req, response)
+	if streamErr != nil {
+		e.explain.setPrepared(e.req)
+		e.explain.setHTTP(response)
+
+		msg := e.errorResponse(streamErr, "Stream decoding failed")
+		msg.err = errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript")
+		return msg
+	}
+
+	respForScripts := httpScriptResponse(response)
+	var captures captureResult
+	if err := e.model.applyCaptures(captureRun{
+		doc:    e.doc,
+		req:    e.req,
+		res:    e.resolver,
+		resp:   respForScripts,
+		stream: streamInfo,
+		out:    &captures,
+		env:    e.envName,
+		v:      e.captureVariables(),
+		x:      e.extraVals,
+	}); err != nil {
+		e.explain.stage(
+			explainStageCaptures,
+			xplain.StageError,
+			explainSummaryCaptureEvaluationFailed,
+			nil,
+			nil,
+			err.Error(),
+		)
+		e.explain.setPrepared(e.req)
+		e.explain.setHTTP(response)
+
+		msg := e.errorResponse(err, "Capture evaluation failed")
+		return msg
+	}
+
+	updatedVars := e.model.collectVariables(e.doc, e.req, e.envName)
+	testVars := mergeVariableMaps(updatedVars, e.scriptVars)
+	testGlobals := e.model.collectGlobalValues(e.doc, e.envName)
+	asserts, assertErr := e.model.runAsserts(
+		ctx,
+		e.doc,
+		e.req,
+		e.envName,
+		e.options.BaseDir,
+		testVars,
+		e.extraVals,
+		rtsHTTP(response),
+		rtsTrace(response),
+		rtsStream(streamInfo),
+	)
+	traceInput := scripts.NewTraceInput(response.Timeline, e.req.Metadata.Trace)
+	tests, globalChanges, testErr := e.runner.RunTests(e.req.Metadata.Scripts, scripts.TestInput{
+		Response:  respForScripts,
+		Variables: testVars,
+		Globals:   testGlobals,
+		BaseDir:   e.options.BaseDir,
+		Stream:    streamInfo,
+		Trace:     traceInput,
+	})
+	e.applyRuntimeGlobals(globalChanges)
+	e.explain.setPrepared(e.req)
+	e.explain.setHTTP(response)
+
+	msg := e.baseResponse()
+	msg.response = response
+	msg.tests = append(asserts, tests...)
+	msg.scriptErr = mergeErr(assertErr, testErr)
+	msg.requestText = e.requestText()
+	msg.explain = e.explain.finish(xplain.StatusReady, "HTTP request sent", nil)
+	return msg
 }
 
 func (m *Model) prepareExplainHTTPPreview(
@@ -1495,6 +1719,7 @@ func (m *Model) prepareExplainHTTPPreview(
 	if req.SSE != nil && httpReq.Header.Get("Accept") == "" {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	}
+	addExplainPreparedHTTPStage(rep, req, httpReq, body)
 	setExplainHTTPPrepared(rep, req, httpReq, body)
 	return nil
 }
@@ -1796,6 +2021,18 @@ func (m *Model) buildResolver(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
+	return m.buildResolverWithGlobals(ctx, doc, req, envName, base, extraVals, nil, extras...)
+}
+
+func (m *Model) buildResolverWithGlobals(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	extraVals map[string]rts.Value,
+	globals map[string]scripts.GlobalValue,
+	extras ...map[string]string,
+) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -1823,7 +2060,11 @@ func (m *Model) buildResolver(
 		}
 	}
 
-	if m.globals != nil {
+	if globals != nil {
+		if values := globalValueMap(globals); len(values) > 0 {
+			providers = append(providers, vars.NewMapProvider("global", values))
+		}
+	} else if m.globals != nil {
 		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {
@@ -2146,6 +2387,20 @@ func (m *Model) collectVariables(
 	req *restfile.Request,
 	envName string,
 ) map[string]string {
+	return m.collectVariablesWithStoreGlobals(
+		doc,
+		req,
+		envName,
+		m.collectStoredGlobalValues(envName),
+	)
+}
+
+func (m *Model) collectVariablesWithStoreGlobals(
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName string,
+	storeGlobals map[string]scripts.GlobalValue,
+) map[string]string {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	result := make(map[string]string)
 	if env := vars.EnvValues(m.cfg.EnvironmentSet, resolvedEnv); env != nil {
@@ -2164,16 +2419,8 @@ func (m *Model) collectVariables(
 	}
 
 	m.mergeFileRuntimeVars(result, doc, resolvedEnv)
-	if m.globals != nil {
-		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
-			for key, entry := range snapshot {
-				name := entry.Name
-				if strings.TrimSpace(name) == "" {
-					name = key
-				}
-				result[name] = entry.Value
-			}
-		}
+	for name, value := range globalValueMap(storeGlobals) {
+		result[name] = value
 	}
 
 	if req != nil {
@@ -2188,7 +2435,10 @@ func (m *Model) collectGlobalValues(
 	doc *restfile.Document,
 	envName string,
 ) map[string]scripts.GlobalValue {
-	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	return effectiveGlobalValues(doc, m.collectStoredGlobalValues(envName))
+}
+
+func collectDocumentGlobalValues(doc *restfile.Document) map[string]scripts.GlobalValue {
 	globals := make(map[string]scripts.GlobalValue)
 	if doc != nil {
 		for _, v := range doc.Globals {
@@ -2199,7 +2449,15 @@ func (m *Model) collectGlobalValues(
 			globals[name] = scripts.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
 		}
 	}
+	if len(globals) == 0 {
+		return nil
+	}
+	return globals
+}
 
+func (m *Model) collectStoredGlobalValues(envName string) map[string]scripts.GlobalValue {
+	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	globals := make(map[string]scripts.GlobalValue)
 	if m.globals != nil {
 		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			for key, entry := range snapshot {
@@ -2215,12 +2473,85 @@ func (m *Model) collectGlobalValues(
 			}
 		}
 	}
-
 	if len(globals) == 0 {
 		return nil
 	}
-
 	return globals
+}
+
+func effectiveGlobalValues(
+	doc *restfile.Document,
+	storeGlobals map[string]scripts.GlobalValue,
+) map[string]scripts.GlobalValue {
+	return mergeGlobalValues(collectDocumentGlobalValues(doc), storeGlobals)
+}
+
+func cloneGlobalValues(src map[string]scripts.GlobalValue) map[string]scripts.GlobalValue {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]scripts.GlobalValue, len(src))
+	for key, value := range src {
+		out[key] = value
+	}
+	return out
+}
+
+func mergeGlobalValues(
+	base map[string]scripts.GlobalValue,
+	changes map[string]scripts.GlobalValue,
+) map[string]scripts.GlobalValue {
+	if len(base) == 0 && len(changes) == 0 {
+		return nil
+	}
+	out := cloneGlobalValues(base)
+	if out == nil {
+		out = make(map[string]scripts.GlobalValue, len(changes))
+	}
+	for key, change := range changes {
+		name := strings.TrimSpace(change.Name)
+		if name == "" {
+			name = strings.TrimSpace(key)
+		}
+		if name == "" {
+			continue
+		}
+		for existing := range out {
+			if strings.EqualFold(strings.TrimSpace(existing), name) {
+				delete(out, existing)
+			}
+		}
+		if change.Delete {
+			continue
+		}
+		change.Name = name
+		out[name] = change
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func globalValueMap(globals map[string]scripts.GlobalValue) map[string]string {
+	if len(globals) == 0 {
+		return nil
+	}
+	values := make(map[string]string, len(globals))
+	for key, entry := range globals {
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			name = strings.TrimSpace(key)
+		}
+		if name == "" || entry.Delete {
+			continue
+		}
+		values[name] = entry.Value
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
 }
 
 func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue, envName string) {
@@ -2342,6 +2673,185 @@ func maskSecret(value string, secret bool) string {
 		return "•••"
 	}
 	return value
+}
+
+func explainAuthSecretValues(auth *restfile.AuthSpec, resolver *vars.Resolver) []string {
+	if auth == nil || len(auth.Params) == 0 {
+		return nil
+	}
+
+	expand := func(key string) string {
+		value := strings.TrimSpace(auth.Params[key])
+		if value == "" {
+			return ""
+		}
+		if resolver == nil {
+			return value
+		}
+		expanded, err := resolver.ExpandTemplates(value)
+		if err != nil {
+			return value
+		}
+		return strings.TrimSpace(expanded)
+	}
+
+	values := make(map[string]struct{})
+	add := func(value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		values[value] = struct{}{}
+	}
+
+	switch strings.ToLower(strings.TrimSpace(auth.Type)) {
+	case "basic":
+		add(expand("password"))
+	case "bearer":
+		add(expand("token"))
+	case "apikey", "api-key", "header":
+		add(expand("value"))
+	case "oauth2":
+		for _, key := range []string{"client_secret", "password", "refresh_token", "access_token"} {
+			add(expand(key))
+		}
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func explainInjectedAuthSecrets(
+	auth *restfile.AuthSpec,
+	before *restfile.Request,
+	after *restfile.Request,
+) []string {
+	if auth == nil || after == nil {
+		return nil
+	}
+	header := "Authorization"
+	if strings.EqualFold(strings.TrimSpace(auth.Type), "oauth2") {
+		if name := strings.TrimSpace(auth.Params["header"]); name != "" {
+			header = name
+		}
+	}
+	beforeValue := headerValue(reqHeaders(before), header)
+	afterValue := headerValue(reqHeaders(after), header)
+	if strings.TrimSpace(afterValue) == "" || afterValue == beforeValue {
+		return nil
+	}
+
+	values := []string{afterValue}
+	if strings.EqualFold(header, "authorization") {
+		_, token, ok := strings.Cut(afterValue, " ")
+		if ok {
+			token = strings.TrimSpace(token)
+			if token != "" {
+				values = append(values, token)
+			}
+		}
+	}
+	return values
+}
+
+func (m *Model) prepareExplainAuthPreview(
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	envName string,
+) (explainAuthPreviewResult, error) {
+	if req == nil || req.Metadata.Auth == nil {
+		return explainAuthPreviewResult{}, nil
+	}
+
+	auth := req.Metadata.Auth
+	kind := strings.ToLower(strings.TrimSpace(auth.Type))
+	switch kind {
+	case "", "basic", "bearer", "apikey", "api-key", "header":
+		return explainAuthPreviewResult{
+			status:  xplain.StageOK,
+			summary: explainSummaryAuthPrepared,
+			notes:   []string{"auth headers/query are applied during HTTP request build"},
+		}, nil
+	case "oauth2":
+		if m.oauth == nil {
+			return explainAuthPreviewResult{}, errdef.New(
+				errdef.CodeHTTP,
+				"oauth support is not initialised",
+			)
+		}
+
+		cfg, err := m.buildOAuthConfig(auth, resolver)
+		if err != nil {
+			return explainAuthPreviewResult{}, err
+		}
+
+		envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+		cfg = m.oauth.MergeCachedConfig(envKey, cfg)
+		if cfg.TokenURL == "" {
+			return explainAuthPreviewResult{}, errdef.New(
+				errdef.CodeHTTP,
+				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
+			)
+		}
+
+		header := strings.TrimSpace(cfg.Header)
+		if header == "" {
+			header = "Authorization"
+		}
+		if req.Headers != nil && req.Headers.Get(header) != "" {
+			return explainAuthPreviewResult{
+				status:  xplain.StageOK,
+				summary: explainSummaryAuthPrepared,
+				notes:   []string{"auth header already set on request"},
+			}, nil
+		}
+
+		token, ok := m.oauth.CachedToken(envKey, cfg)
+		if !ok {
+			return explainAuthPreviewResult{
+				status:  xplain.StageSkipped,
+				summary: explainSummaryOAuthTokenFetchSkipped,
+				notes: []string{
+					"OAuth token acquisition is skipped in explain preview",
+					fmt.Sprintf("%s is omitted without a cached token", header),
+				},
+			}, nil
+		}
+
+		if req.Headers == nil {
+			req.Headers = make(http.Header)
+		}
+		value := token.AccessToken
+		if strings.EqualFold(header, "authorization") {
+			typeValue := strings.TrimSpace(token.TokenType)
+			if typeValue == "" {
+				typeValue = "Bearer"
+			}
+			value = strings.TrimSpace(typeValue) + " " + token.AccessToken
+		}
+		req.Headers.Set(header, value)
+
+		return explainAuthPreviewResult{
+			status:  xplain.StageOK,
+			summary: explainSummaryAuthPrepared,
+			notes:   []string{"used cached OAuth token for explain preview"},
+			extraSecrets: []string{
+				token.AccessToken,
+				value,
+			},
+		}, nil
+	default:
+		return explainAuthPreviewResult{
+			status:  xplain.StageSkipped,
+			summary: explainSummaryAuthTypeNotApplied,
+			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
+		}, nil
+	}
 }
 
 func (m *Model) ensureOAuth(
@@ -2939,7 +3449,7 @@ func renderRequestText(req *restfile.Request) string {
 	}
 
 	builder := strings.Builder{}
-	builder.WriteString(fmt.Sprintf("%s %s\n", req.Method, req.URL))
+	fmt.Fprintf(&builder, "%s %s\n", req.Method, req.URL)
 	headerNames := make([]string, 0, len(req.Headers))
 	for name := range req.Headers {
 		headerNames = append(headerNames, name)
@@ -2947,7 +3457,7 @@ func renderRequestText(req *restfile.Request) string {
 	sort.Strings(headerNames)
 	for _, name := range headerNames {
 		for _, value := range req.Headers[name] {
-			builder.WriteString(fmt.Sprintf("%s: %s\n", name, value))
+			fmt.Fprintf(&builder, "%s: %s\n", name, value)
 		}
 	}
 
@@ -2972,14 +3482,14 @@ func renderRequestText(req *restfile.Request) string {
 			builder.WriteString("# @grpc-reflection false\n")
 		}
 		if grpc.PlaintextSet {
-			builder.WriteString(fmt.Sprintf("# @grpc-plaintext %t\n", grpc.Plaintext))
+			fmt.Fprintf(&builder, "# @grpc-plaintext %t\n", grpc.Plaintext)
 		}
 		if grpc.Authority != "" {
 			builder.WriteString("# @grpc-authority " + grpc.Authority + "\n")
 		}
 		if len(grpc.Metadata) > 0 {
 			for _, pair := range grpc.Metadata {
-				builder.WriteString(fmt.Sprintf("# @grpc-metadata %s: %s\n", pair.Key, pair.Value))
+				fmt.Fprintf(&builder, "# @grpc-metadata %s: %s\n", pair.Key, pair.Value)
 			}
 		}
 		builder.WriteString("\n")

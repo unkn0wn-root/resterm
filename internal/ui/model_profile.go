@@ -501,7 +501,7 @@ func formatLatencyRow(items []string, widths []int) string {
 		if i > 0 {
 			builder.WriteString("  ")
 		}
-		builder.WriteString(fmt.Sprintf("%-*s", widths[i], item))
+		fmt.Fprintf(&builder, "%-*s", widths[i], item)
 	}
 	return builder.String()
 }

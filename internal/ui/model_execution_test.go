@@ -611,6 +611,114 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 	}
 }
 
+func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
+	model := New(Config{EnvironmentName: "dev"})
+	model.globals.set("dev", "token", "global-token", false)
+
+	var seenHeader string
+	model.client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			seenHeader = req.Header.Get("X-Seen")
+			return &http.Response{
+				Status:     "200 OK",
+				StatusCode: http.StatusOK,
+				Proto:      "HTTP/1.1",
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("ok")),
+				Request:    req,
+			}, nil
+		})
+		return &http.Client{Transport: transport}, nil
+	})
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+		Variables: []restfile.Variable{
+			{Name: "token", Value: "request-token"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				{
+					Kind: "pre-request",
+					Lang: "rts",
+					Body: `vars.global.set("other", "1", false)`,
+				},
+				{
+					Kind: "pre-request",
+					Body: `request.setHeader("X-Seen", vars.get("token"));`,
+				},
+			},
+		},
+	}
+
+	msg, ok := model.executeRequest(nil, req, httpclient.Options{}, "", nil)().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error from executeRequest: %v", msg.err)
+	}
+	if got := seenHeader; got != "request-token" {
+		t.Fatalf("expected request var to win over global, got %q", got)
+	}
+}
+
+func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
+	model := New(Config{EnvironmentName: "dev"})
+	model.globals.set("dev", "token", "global-token", false)
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+		Variables: []restfile.Variable{
+			{Name: "token", Value: "request-token"},
+		},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{
+				{
+					Kind: "pre-request",
+					Lang: "rts",
+					Body: `vars.global.set("other", "1", false)`,
+				},
+				{
+					Kind: "pre-request",
+					Body: `request.setHeader("X-Seen", vars.get("token"));`,
+				},
+			},
+		},
+	}
+
+	msg, ok := model.executeExplain(nil, req, httpclient.Options{}, "", nil)().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error from executeExplain: %v", msg.err)
+	}
+	if !msg.preview {
+		t.Fatalf("expected preview response")
+	}
+	if got := msg.executed.Headers.Get("X-Seen"); got != "request-token" {
+		t.Fatalf("expected preview request var to win over global, got %q", got)
+	}
+	if msg.explain == nil || msg.explain.Final == nil {
+		t.Fatalf("expected explain report with final request")
+	}
+	found := false
+	for _, header := range msg.explain.Final.Headers {
+		if header.Name == "X-Seen" {
+			found = true
+			if header.Value != "request-token" {
+				t.Fatalf("expected explain header to use request var, got %q", header.Value)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected explain preview to include X-Seen header")
+	}
+}
+
 func TestResolveRequestTimeout(t *testing.T) {
 	req := &restfile.Request{Settings: map[string]string{"timeout": "5s"}}
 	if got := resolveRequestTimeout(req, 30*time.Second); got != 5*time.Second {
@@ -914,6 +1022,26 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	}
 	if !errors.Is(resp.err, context.Canceled) {
 		t.Fatalf("expected cancellation error, got %v", resp.err)
+	}
+}
+
+func TestExecuteRequestRejectsNilRequest(t *testing.T) {
+	model := Model{
+		cfg: Config{EnvironmentName: "dev"},
+	}
+
+	cmd := model.executeRequest(nil, nil, httpclient.Options{}, "", nil)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg := cmd()
+	resp, ok := msg.(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg, got %T", msg)
+	}
+	if resp.err == nil || !strings.Contains(resp.err.Error(), "request is nil") {
+		t.Fatalf("expected nil request error, got %v", resp.err)
 	}
 }
 

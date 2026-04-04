@@ -516,13 +516,13 @@ func buildWorkflowGRPCDetail(result workflowStepResult) string {
 	if len(resp.Headers) > 0 {
 		builder.WriteString("Headers:\n")
 		for name, values := range resp.Headers {
-			builder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
+			fmt.Fprintf(&builder, "%s: %s\n", name, strings.Join(values, ", "))
 		}
 	}
 	if len(resp.Trailers) > 0 {
 		builder.WriteString("Trailers:\n")
 		for name, values := range resp.Trailers {
-			builder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
+			fmt.Fprintf(&builder, "%s: %s\n", name, strings.Join(values, ", "))
 		}
 	}
 

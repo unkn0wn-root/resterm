@@ -21,18 +21,16 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 	var builder strings.Builder
 
 	for i, bucket := range bins {
-		builder.WriteString(rowIndent)
-		builder.WriteString(fmt.Sprintf("%-*s", layout.fromWidth, layout.from[i]))
-		builder.WriteString(" – ")
-		builder.WriteString(fmt.Sprintf("%-*s", layout.toWidth, layout.to[i]))
-		builder.WriteString(" | ")
-		builder.WriteString(renderHistogramBar(bucket.Count, layout.maxCount))
-		builder.WriteString(" (")
-		builder.WriteString(fmt.Sprintf("%-*s", layout.countWidth, layout.counts[i]))
-		builder.WriteString(")")
-		builder.WriteString(" ")
-		builder.WriteString(fmt.Sprintf("%*s", layout.percentWidth, layout.percents[i]))
-		builder.WriteString("\n")
+		fmt.Fprintf(
+			&builder,
+			"%s%-*s – %-*s | %s (%-*s) %*s\n",
+			rowIndent,
+			layout.fromWidth, layout.from[i],
+			layout.toWidth, layout.to[i],
+			renderHistogramBar(bucket.Count, layout.maxCount),
+			layout.countWidth, layout.counts[i],
+			layout.percentWidth, layout.percents[i],
+		)
 	}
 
 	return builder.String()

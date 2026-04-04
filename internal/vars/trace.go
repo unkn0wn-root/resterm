@@ -52,12 +52,23 @@ func (t *Trace) Add(it ResolveTrace) {
 		return
 	}
 
-	cur.Uses++
+	if it.Uses <= 0 {
+		it.Uses = 1
+	}
+	cur.Uses += it.Uses
 	if cur.Missing && !it.Missing {
 		cur.Source = it.Source
 		cur.Value = it.Value
 		cur.Missing = false
 		cur.Dynamic = it.Dynamic
+	} else if !it.Missing {
+		if cur.Source == "" {
+			cur.Source = it.Source
+		}
+		if cur.Value == "" {
+			cur.Value = it.Value
+		}
+		cur.Dynamic = cur.Dynamic || it.Dynamic
 	}
 	for _, s := range it.Shadowed {
 		s = strings.TrimSpace(s)

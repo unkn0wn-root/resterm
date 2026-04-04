@@ -768,7 +768,7 @@ func (m *Model) consumeGRPCResponse(
 	if len(resp.Headers) > 0 {
 		headersBuilder.WriteString("Headers:\n")
 		for name, values := range resp.Headers {
-			headersBuilder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
+			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
 			if strings.EqualFold(name, "Content-Type") && contentType == "" && len(values) > 0 {
 				contentType = strings.TrimSpace(values[0])
 			}
@@ -780,7 +780,7 @@ func (m *Model) consumeGRPCResponse(
 		}
 		headersBuilder.WriteString("Trailers:\n")
 		for name, values := range resp.Trailers {
-			headersBuilder.WriteString(fmt.Sprintf("%s: %s\n", name, strings.Join(values, ", ")))
+			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
 		}
 	}
 	headersContent := strings.TrimRight(headersBuilder.String(), "\n")

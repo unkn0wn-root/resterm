@@ -1433,17 +1433,17 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 	if name == "" {
 		name = label
 	}
-	builder.WriteString(fmt.Sprintf("%s: %s\n", label, name))
-	builder.WriteString(fmt.Sprintf("Started: %s\n", state.start.Format(time.RFC3339)))
+	fmt.Fprintf(&builder, "%s: %s\n", label, name)
+	fmt.Fprintf(&builder, "Started: %s\n", state.start.Format(time.RFC3339))
 	if !state.end.IsZero() {
-		builder.WriteString(fmt.Sprintf("Ended: %s\n", state.end.Format(time.RFC3339)))
+		fmt.Fprintf(&builder, "Ended: %s\n", state.end.Format(time.RFC3339))
 	}
-	builder.WriteString(fmt.Sprintf("Steps: %d\n\n", len(state.steps)))
+	fmt.Fprintf(&builder, "Steps: %d\n\n", len(state.steps))
 	for _, entry := range buildWorkflowStatsEntries(state) {
 		builder.WriteString(workflowStepLine(entry.index, entry.result))
 		builder.WriteString("\n")
 		if strings.TrimSpace(entry.result.Message) != "" {
-			builder.WriteString(fmt.Sprintf("    %s\n", entry.result.Message))
+			fmt.Fprintf(&builder, "    %s\n", entry.result.Message)
 		}
 	}
 	return strings.TrimRight(builder.String(), "\n")
@@ -1666,7 +1666,7 @@ func workflowDefinition(state *workflowState) string {
 	}
 	for key, value := range state.workflow.Options {
 		if strings.HasPrefix(key, "vars.") {
-			builder.WriteString(fmt.Sprintf(" %s=%s", key, value))
+			fmt.Fprintf(&builder, " %s=%s", key, value)
 		}
 	}
 	builder.WriteString("\n")

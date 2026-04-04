@@ -140,6 +140,17 @@ func (m *Manager) Token(
 	return token, nil
 }
 
+// CachedToken returns a valid cached token for the config when one is already
+// available. It never refreshes or performs network I/O.
+func (m *Manager) CachedToken(env string, cfg Config) (Token, bool) {
+	key := m.cacheKey(env, cfg)
+	token, ok := m.cachedToken(key)
+	if !ok || !token.valid() {
+		return Token{}, false
+	}
+	return token, true
+}
+
 func (m *Manager) obtainToken(
 	ctx context.Context,
 	key string,
