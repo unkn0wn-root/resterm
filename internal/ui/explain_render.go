@@ -12,9 +12,10 @@ import (
 )
 
 func renderExplainStyled(rep *xplain.Report, width int, th theme.Theme) string {
-	if rep == nil {
-		return ""
-	}
+	return renderExplainStyledView(buildExplainView(rep), width, th)
+}
+
+func renderExplainStyledView(v explainView, width int, th theme.Theme) string {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
 	}
@@ -22,7 +23,6 @@ func renderExplainStyled(rep *xplain.Report, width int, th theme.Theme) string {
 		width = 36
 	}
 
-	v := buildExplainView(rep)
 	st := newExplainStyles(th)
 	bodyW := width - 2
 	if bodyW < 20 {
@@ -394,7 +394,7 @@ func (m *Model) syncExplainPane(
 	content := snapshot.explain.cache.styled
 	if content == "" || snapshot.explain.cache.width != width ||
 		snapshot.explain.cache.themeKey != key {
-		content = renderExplainStyled(snapshot.explain.report, width, m.theme)
+		content = renderExplainStyledView(snapshot.explain.ensureView(), width, m.theme)
 		snapshot.explain.cache = explainRenderCache{
 			styled:   content,
 			width:    width,

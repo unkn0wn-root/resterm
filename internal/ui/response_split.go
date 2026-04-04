@@ -34,6 +34,7 @@ type explainRenderCache struct {
 
 type explainState struct {
 	plain  string
+	view   *explainView
 	report *xplain.Report
 	cache  explainRenderCache
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -53,12 +54,18 @@ func addExplainStage(
 	if rep == nil {
 		return
 	}
-	stage := xplain.Stage{
+	appendExplainStage(rep, xplain.Stage{
 		Name:    strings.TrimSpace(name),
 		Status:  st,
 		Summary: strings.TrimSpace(sum),
 		Changes: explainReqChanges(before, after),
 		Notes:   explainNotes(notes),
+	})
+}
+
+func appendExplainStage(rep *xplain.Report, stage xplain.Stage) {
+	if rep == nil {
+		return
 	}
 	if stage.Summary == "" {
 		switch {
@@ -71,6 +78,43 @@ func addExplainStage(
 		}
 	}
 	rep.Stages = append(rep.Stages, stage)
+}
+
+func addExplainPreparedHTTPStage(
+	rep *xplain.Report,
+	req *restfile.Request,
+	httpReq *http.Request,
+	body []byte,
+	notes ...string,
+) {
+	if rep == nil || httpReq == nil {
+		return
+	}
+	appendExplainStage(rep, xplain.Stage{
+		Name:    "http prepare",
+		Status:  xplain.StageOK,
+		Summary: "HTTP request prepared",
+		Changes: explainBuiltHTTPChanges(req, httpReq, body),
+		Notes:   explainNotes(notes),
+	})
+}
+
+func addExplainSentHTTPStage(
+	rep *xplain.Report,
+	req *restfile.Request,
+	resp *httpclient.Response,
+	notes ...string,
+) {
+	if rep == nil || resp == nil {
+		return
+	}
+	appendExplainStage(rep, xplain.Stage{
+		Name:    "http prepare",
+		Status:  xplain.StageOK,
+		Summary: "HTTP request prepared",
+		Changes: explainSentHTTPChanges(req, resp),
+		Notes:   explainNotes(notes),
+	})
 }
 
 func addExplainWarn(rep *xplain.Report, msg string) {
@@ -647,6 +691,8 @@ func explainDisplayStageName(name string) string {
 		return "JavaScript Pre-request"
 	case "grpc prepare":
 		return "gRPC Request"
+	case "http prepare":
+		return "HTTP Request"
 	case "websocket prepare":
 		return "WebSocket Request"
 	case "captures":
@@ -704,6 +750,10 @@ func explainDisplayStageSummary(st xplain.Stage) string {
 			return "Prepared authentication"
 		case "auth injection failed":
 			return "Failed to prepare authentication"
+		case "oauth token fetch skipped":
+			return "Skipped OAuth token fetch for explain preview"
+		case "auth type not applied":
+			return "Authentication type is not applied"
 		}
 	case "rts pre-request":
 		switch strings.ToLower(sum) {
@@ -729,6 +779,13 @@ func explainDisplayStageSummary(st xplain.Stage) string {
 			return "Prepared gRPC request"
 		case "grpc preparation failed":
 			return "Failed to prepare gRPC request"
+		}
+	case "http prepare":
+		switch strings.ToLower(sum) {
+		case "http request prepared":
+			return "Prepared HTTP request"
+		case "http request build failed":
+			return "Failed to prepare HTTP request"
 		}
 	case "websocket prepare":
 		switch strings.ToLower(sum) {
@@ -810,6 +867,44 @@ func explainReqChanges(a, b *restfile.Request) []xplain.Change {
 	addExplainSettingChanges(&out, reqSettings(a), reqSettings(b))
 	addExplainVarChanges(&out, reqVars(a), reqVars(b))
 	addExplainGRPCChanges(&out, a, b)
+	return out
+}
+
+func explainBuiltHTTPChanges(
+	req *restfile.Request,
+	httpReq *http.Request,
+	body []byte,
+) []xplain.Change {
+	if httpReq == nil {
+		return nil
+	}
+	var out []xplain.Change
+	addExplainChange(&out, "method", reqMethod(req), strings.TrimSpace(httpReq.Method))
+	url := ""
+	if httpReq.URL != nil {
+		url = strings.TrimSpace(httpReq.URL.String())
+	}
+	addExplainChange(&out, "url", reqURL(req), url)
+	addExplainHeaderChanges(&out, reqHeaders(req), httpReq.Header)
+	beforeBody, beforeNote := explainReqBody(req)
+	afterBody, afterNote, ok := explainBuiltBody(req, body)
+	if ok || beforeNote != "" {
+		addExplainChange(&out, "body.note", beforeNote, afterNote)
+	}
+	if ok || beforeBody != "" {
+		addExplainChange(&out, "body", beforeBody, afterBody)
+	}
+	return out
+}
+
+func explainSentHTTPChanges(req *restfile.Request, resp *httpclient.Response) []xplain.Change {
+	if resp == nil {
+		return nil
+	}
+	var out []xplain.Change
+	addExplainChange(&out, "method", reqMethod(req), strings.TrimSpace(resp.ReqMethod))
+	addExplainChange(&out, "url", reqURL(req), strings.TrimSpace(resp.EffectiveURL))
+	addExplainHeaderChanges(&out, reqHeaders(req), resp.RequestHeaders)
 	return out
 }
 
@@ -1361,21 +1456,28 @@ func clipExplain(s string) string {
 	if s == "" {
 		return ""
 	}
-	if len(s) <= explainClip {
+	runes := []rune(s)
+	if len(runes) <= explainClip {
 		return s
 	}
-	return strings.TrimSpace(s[:explainClip]) + " ..."
+	return strings.TrimSpace(string(runes[:explainClip])) + " ..."
 }
 
-func (m *Model) redactExplainReport(
+func (m *Model) redactExplainReport(rep *xplain.Report, env string, req *restfile.Request) *xplain.Report {
+	return m.redactExplainReportWithState(rep, env, req, nil)
+}
+
+func (m *Model) redactExplainReportWithState(
 	rep *xplain.Report,
 	env string,
 	req *restfile.Request,
+	globals map[string]scripts.GlobalValue,
+	extras ...string,
 ) *xplain.Report {
 	if rep == nil {
 		return nil
 	}
-	secrets := m.secretValuesForEnvironment(env, req)
+	secrets := m.explainSecretsForRedaction(env, req, globals, extras)
 	mask := maskSecret("", true)
 
 	rep.Name = redactHistoryText(rep.Name, secrets, false)
@@ -1390,15 +1492,17 @@ func (m *Model) redactExplainReport(
 	for i := range rep.Stages {
 		rep.Stages[i].Summary = redactHistoryText(rep.Stages[i].Summary, secrets, false)
 		for j := range rep.Stages[i].Changes {
-			rep.Stages[i].Changes[j].Before = redactHistoryText(
+			rep.Stages[i].Changes[j].Before = redactExplainChangeValue(
+				rep.Stages[i].Changes[j].Field,
 				rep.Stages[i].Changes[j].Before,
 				secrets,
-				false,
+				mask,
 			)
-			rep.Stages[i].Changes[j].After = redactHistoryText(
+			rep.Stages[i].Changes[j].After = redactExplainChangeValue(
+				rep.Stages[i].Changes[j].Field,
 				rep.Stages[i].Changes[j].After,
 				secrets,
-				false,
+				mask,
 			)
 		}
 		for j := range rep.Stages[i].Notes {
@@ -1428,6 +1532,19 @@ func (m *Model) redactExplainReport(
 				false,
 			)
 		}
+		for i := range rep.Final.Details {
+			rawKey := rep.Final.Details[i].Key
+			rawValue := rep.Final.Details[i].Value
+			rep.Final.Details[i].Key = redactHistoryText(rawKey, secrets, false)
+			if shouldMaskExplainPair(rawKey, rawValue) {
+				rep.Final.Details[i].Value = mask
+				continue
+			}
+			rep.Final.Details[i].Value = redactHistoryText(rawValue, secrets, false)
+		}
+		for i := range rep.Final.Steps {
+			rep.Final.Steps[i] = redactHistoryText(rep.Final.Steps[i], secrets, false)
+		}
 		if rep.Final.Route != nil {
 			rep.Final.Route.Summary = redactHistoryText(rep.Final.Route.Summary, secrets, false)
 			for i := range rep.Final.Route.Notes {
@@ -1443,4 +1560,74 @@ func (m *Model) redactExplainReport(
 		rep.Warnings[i] = redactHistoryText(rep.Warnings[i], secrets, false)
 	}
 	return rep
+}
+
+func (m *Model) explainSecretsForRedaction(
+	env string,
+	req *restfile.Request,
+	globals map[string]scripts.GlobalValue,
+	extras []string,
+) []string {
+	values := make(map[string]struct{})
+	add := func(value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		values[value] = struct{}{}
+	}
+
+	for _, value := range m.secretValuesForEnvironment(env, req) {
+		add(value)
+	}
+	for _, entry := range globals {
+		if entry.Secret && !entry.Delete {
+			add(entry.Value)
+		}
+	}
+	for _, value := range extras {
+		add(value)
+	}
+	if len(values) == 0 {
+		return nil
+	}
+
+	secrets := make([]string, 0, len(values))
+	for value := range values {
+		secrets = append(secrets, value)
+	}
+	sort.Slice(secrets, func(i, j int) bool { return len(secrets[i]) > len(secrets[j]) })
+	return secrets
+}
+
+func redactExplainChangeValue(field, value string, secrets []string, mask string) string {
+	if header, ok := explainHeaderField(field); ok && shouldMaskHistoryHeader(header) {
+		if strings.TrimSpace(value) == "" {
+			return value
+		}
+		return mask
+	}
+	return redactHistoryText(value, secrets, false)
+}
+
+func explainHeaderField(field string) (string, bool) {
+	field = strings.TrimSpace(field)
+	if !strings.HasPrefix(strings.ToLower(field), "header.") {
+		return "", false
+	}
+	name := strings.TrimSpace(field[len("header."):])
+	if name == "" {
+		return "", false
+	}
+	return textproto.CanonicalMIMEHeaderKey(name), true
+}
+
+func shouldMaskExplainPair(key, value string) bool {
+	if !strings.EqualFold(strings.TrimSpace(key), "Metadata") {
+		return false
+	}
+	name, _, ok := strings.Cut(value, ":")
+	if !ok {
+		return false
+	}
+	return shouldMaskHistoryHeader(strings.TrimSpace(name))
 }

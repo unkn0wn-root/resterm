@@ -65,6 +65,17 @@ type explainVarView struct {
 	Dynamic  bool
 }
 
+func (s *explainState) ensureView() explainView {
+	if s == nil || s.report == nil {
+		return explainView{}
+	}
+	if s.view == nil {
+		v := buildExplainView(s.report)
+		s.view = &v
+	}
+	return *s.view
+}
+
 func buildExplainView(rep *xplain.Report) explainView {
 	v := explainView{
 		Result: explainResult(rep),

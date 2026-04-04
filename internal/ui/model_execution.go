@@ -434,6 +434,29 @@ const (
 	execModeExplain
 )
 
+type explainFinalizeInput struct {
+	report         *xplain.Report
+	request        *restfile.Request
+	envName        string
+	preview        bool
+	status         xplain.Status
+	decision       string
+	err            error
+	trace          *vars.Trace
+	mergedSettings map[string]string
+	sshPlan        *ssh.Plan
+	k8sPlan        *k8s.Plan
+	globals        map[string]scripts.GlobalValue
+	extraSecrets   []string
+}
+
+type explainAuthPreviewResult struct {
+	status       xplain.StageStatus
+	summary      string
+	notes        []string
+	extraSecrets []string
+}
+
 // Accept an environment override so compare sweeps can force a per-iteration
 // scope without mutating the global environment selection.
 func (m *Model) executeRequest(
@@ -474,51 +497,46 @@ func (m *Model) executeExplain(
 	)
 }
 
-func (m *Model) finalizeExplainReport(
-	rep *xplain.Report,
-	req *restfile.Request,
-	envName string,
-	preview bool,
-	st xplain.Status,
-	decision string,
-	err error,
-	tr *vars.Trace,
-	mergedSettings map[string]string,
-	sshPlan *ssh.Plan,
-	k8sPlan *k8s.Plan,
-) *xplain.Report {
-	if rep == nil {
+func (m *Model) finalizeExplainReport(in explainFinalizeInput) *xplain.Report {
+	if in.report == nil {
 		return nil
 	}
-	if tr != nil {
-		finalizeExplainVars(rep, tr)
+	if in.trace != nil {
+		finalizeExplainVars(in.report, in.trace)
 	}
-	if rep.Final == nil {
-		setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
+	if in.report.Final == nil {
+		setExplainPrepared(in.report, in.request, in.mergedSettings, in.sshPlan, in.k8sPlan)
 	}
-	fail := rep.Failure
-	if err != nil && strings.TrimSpace(fail) == "" {
-		fail = err.Error()
+	fail := in.report.Failure
+	if in.err != nil && strings.TrimSpace(fail) == "" {
+		fail = in.err.Error()
+	}
+	decision := in.decision
+	if strings.TrimSpace(decision) == "" {
+		decision = in.report.Decision
 	}
 	if strings.TrimSpace(decision) == "" {
-		decision = rep.Decision
-	}
-	if strings.TrimSpace(decision) == "" {
-		switch st {
+		switch in.status {
 		case xplain.StatusSkipped:
 			decision = "Request skipped"
 		case xplain.StatusError:
 			decision = "Request preparation failed"
 		default:
-			if preview {
+			if in.preview {
 				decision = "Explain preview ready"
 			} else {
 				decision = "Request prepared"
 			}
 		}
 	}
-	setExplainDecision(rep, st, decision, fail)
-	return m.redactExplainReport(rep, envName, req)
+	setExplainDecision(in.report, in.status, decision, fail)
+	return m.redactExplainReportWithState(
+		in.report,
+		in.envName,
+		in.request,
+		in.globals,
+		in.extraSecrets...,
+	)
 }
 
 func (m *Model) executeWithMode(
@@ -547,7 +565,7 @@ func (m *Model) executeWithMode(
 		)
 		setExplainPrepared(rep, req, nil, nil, nil)
 		setExplainDecision(rep, xplain.StatusError, "Route resolution failed", err.Error())
-		rep = m.redactExplainReport(rep, envName, req)
+		rep = m.redactExplainReportWithState(rep, envName, req, nil)
 		return func() tea.Msg {
 			return responseMsg{
 				err:         err,
@@ -604,11 +622,19 @@ func (m *Model) executeWithMode(
 			addExplainWarn(rep, "@profile run is not executed in explain preview")
 		}
 	}
+	if req != nil && (req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTSPre || hasJSPre) {
+		addExplainWarn(
+			rep,
+			"Variable trace covers template resolution only; RTS/JS script internals are not traced",
+		)
+	}
 	var (
 		tr             *vars.Trace
 		mergedSettings map[string]string
 		sshPlan        *ssh.Plan
 		k8sPlan        *k8s.Plan
+		runtimeGlobals = m.collectGlobalValues(doc, envName)
+		extraSecrets   []string
 	)
 
 	finishExplain := func(
@@ -616,19 +642,21 @@ func (m *Model) executeWithMode(
 		decision string,
 		err error,
 	) *xplain.Report {
-		return m.finalizeExplainReport(
-			rep,
-			req,
-			envName,
-			preview,
-			st,
-			decision,
-			err,
-			tr,
-			mergedSettings,
-			sshPlan,
-			k8sPlan,
-		)
+		return m.finalizeExplainReport(explainFinalizeInput{
+			report:         rep,
+			request:        req,
+			envName:        envName,
+			preview:        preview,
+			status:         st,
+			decision:       decision,
+			err:            err,
+			trace:          tr,
+			mergedSettings: mergedSettings,
+			sshPlan:        sshPlan,
+			k8sPlan:        k8sPlan,
+			globals:        runtimeGlobals,
+			extraSecrets:   extraSecrets,
+		})
 	}
 
 	return func() tea.Msg {
@@ -740,7 +768,6 @@ func (m *Model) executeWithMode(
 		if len(req.Metadata.Applies) > 0 {
 			addExplainStage(rep, "@apply", xplain.StageOK, "apply complete", applyBefore, req)
 		}
-		preGlobals := m.collectGlobalValues(doc, envName)
 		rtsBefore := cloneRequestIf(req, hasRTSPre)
 		rtsResult, err := m.runRTSPreRequest(
 			sendCtx,
@@ -749,7 +776,7 @@ func (m *Model) executeWithMode(
 			envName,
 			options.BaseDir,
 			preVars,
-			preGlobals,
+			cloneGlobalValues(runtimeGlobals),
 		)
 		if err != nil {
 			addExplainStage(
@@ -816,19 +843,23 @@ func (m *Model) executeWithMode(
 		}
 
 		if len(rtsResult.Globals) > 0 {
-			m.applyGlobalMutations(rtsResult.Globals, envName)
-			preGlobals = m.collectGlobalValues(doc, envName)
+			if preview {
+				runtimeGlobals = mergeGlobalValues(runtimeGlobals, rtsResult.Globals)
+			} else {
+				m.applyGlobalMutations(rtsResult.Globals, envName)
+				runtimeGlobals = m.collectGlobalValues(doc, envName)
+			}
 		}
 
 		if len(rtsResult.Globals) > 0 || len(rtsResult.Variables) > 0 {
-			preVars = m.collectVariables(doc, req, envName)
+			preVars = mergeVariableMaps(m.collectVariables(doc, req, envName), globalValueMap(runtimeGlobals))
 		}
 
 		jsBefore := cloneRequestIf(req, hasJSPre)
 		preResult, err := runner.RunPreRequest(req.Metadata.Scripts, scripts.PreRequestInput{
 			Request:   req,
 			Variables: preVars,
-			Globals:   preGlobals,
+			Globals:   cloneGlobalValues(runtimeGlobals),
 			BaseDir:   options.BaseDir,
 			Context:   sendCtx,
 		})
@@ -896,7 +927,14 @@ func (m *Model) executeWithMode(
 			}
 		}
 
-		m.applyGlobalMutations(preResult.Globals, envName)
+		if len(preResult.Globals) > 0 {
+			if preview {
+				runtimeGlobals = mergeGlobalValues(runtimeGlobals, preResult.Globals)
+			} else {
+				m.applyGlobalMutations(preResult.Globals, envName)
+				runtimeGlobals = m.collectGlobalValues(doc, envName)
+			}
+		}
 
 		scriptVars := mergeVariableMaps(rtsResult.Variables, preResult.Variables)
 		resolverExtras := make([]map[string]string, 0, len(extras)+1)
@@ -909,14 +947,29 @@ func (m *Model) executeWithMode(
 			}
 		}
 
-		resolver := m.buildResolver(
-			sendCtx,
-			doc,
-			req,
-			envName,
-			options.BaseDir,
-			extraVals,
-			resolverExtras...)
+		var resolver *vars.Resolver
+		if preview {
+			resolver = m.buildResolverWithGlobals(
+				sendCtx,
+				doc,
+				req,
+				envName,
+				options.BaseDir,
+				extraVals,
+				runtimeGlobals,
+				resolverExtras...,
+			)
+		} else {
+			resolver = m.buildResolver(
+				sendCtx,
+				doc,
+				req,
+				envName,
+				options.BaseDir,
+				extraVals,
+				resolverExtras...,
+			)
+		}
 		tr = vars.NewTrace()
 		resolver.SetTrace(tr)
 		sshPlan, err = m.resolveSSH(doc, req, resolver, envName)
@@ -1030,36 +1083,72 @@ func (m *Model) executeWithMode(
 		}
 
 		effectiveTimeout := defaultTimeout(resolveRequestTimeout(req, options.Timeout))
-		authBefore := cloneRequestIf(req, req != nil && req.Metadata.Auth != nil)
-		if err := m.ensureOAuth(
-			sendCtx,
-			req,
-			resolver,
-			options,
-			envName,
-			effectiveTimeout,
-		); err != nil {
-			addExplainStage(
-				rep,
-				"auth",
-				xplain.StageError,
-				"auth injection failed",
-				authBefore,
-				req,
-				err.Error(),
-			)
-			return responseMsg{
-				err:      err,
-				executed: req,
-				explain: finishExplain(
-					xplain.StatusError,
-					"Auth preparation failed",
-					err,
-				),
-			}
-		}
 		if req.Metadata.Auth != nil {
-			addExplainStage(rep, "auth", xplain.StageOK, "auth prepared", authBefore, req)
+			extraSecrets = append(extraSecrets, explainAuthSecretValues(req.Metadata.Auth, resolver)...)
+			authBefore := cloneRequest(req)
+			if preview {
+				authPreview, err := m.prepareExplainAuthPreview(req, resolver, envName)
+				if err != nil {
+					addExplainStage(
+						rep,
+						"auth",
+						xplain.StageError,
+						"auth injection failed",
+						authBefore,
+						req,
+						err.Error(),
+					)
+					return responseMsg{
+						err:      err,
+						executed: req,
+						explain: finishExplain(
+							xplain.StatusError,
+							"Auth preparation failed",
+							err,
+						),
+					}
+				}
+				extraSecrets = append(extraSecrets, authPreview.extraSecrets...)
+				addExplainStage(
+					rep,
+					"auth",
+					authPreview.status,
+					authPreview.summary,
+					authBefore,
+					req,
+					authPreview.notes...,
+				)
+			} else {
+				if err := m.ensureOAuth(
+					sendCtx,
+					req,
+					resolver,
+					options,
+					envName,
+					effectiveTimeout,
+				); err != nil {
+					addExplainStage(
+						rep,
+						"auth",
+						xplain.StageError,
+						"auth injection failed",
+						authBefore,
+						req,
+						err.Error(),
+					)
+					return responseMsg{
+						err:      err,
+						executed: req,
+						explain: finishExplain(
+							xplain.StatusError,
+							"Auth preparation failed",
+							err,
+						),
+					}
+				}
+				extraSecrets = append(extraSecrets, explainInjectedAuthSecrets(req.Metadata.Auth, authBefore, req)...)
+				addExplainStage(rep, "auth", xplain.StageOK, "auth prepared", authBefore, req)
+			}
 		}
 
 		if req.GRPC != nil {
@@ -1353,6 +1442,9 @@ func (m *Model) executeWithMode(
 		default:
 			response, err = client.Execute(ctx, req, resolver, options)
 		}
+		if response != nil {
+			addExplainSentHTTPStage(rep, req, response)
+		}
 		if err != nil {
 			if response != nil {
 				setExplainPrepared(rep, req, mergedSettings, sshPlan, k8sPlan)
@@ -1495,6 +1587,7 @@ func (m *Model) prepareExplainHTTPPreview(
 	if req.SSE != nil && httpReq.Header.Get("Accept") == "" {
 		httpReq.Header.Set("Accept", "text/event-stream")
 	}
+	addExplainPreparedHTTPStage(rep, req, httpReq, body)
 	setExplainHTTPPrepared(rep, req, httpReq, body)
 	return nil
 }
@@ -1796,6 +1889,18 @@ func (m *Model) buildResolver(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
+	return m.buildResolverWithGlobals(ctx, doc, req, envName, base, extraVals, nil, extras...)
+}
+
+func (m *Model) buildResolverWithGlobals(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	extraVals map[string]rts.Value,
+	globals map[string]scripts.GlobalValue,
+	extras ...map[string]string,
+) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -1823,7 +1928,11 @@ func (m *Model) buildResolver(
 		}
 	}
 
-	if m.globals != nil {
+	if globals != nil {
+		if values := globalValueMap(globals); len(values) > 0 {
+			providers = append(providers, vars.NewMapProvider("global", values))
+		}
+	} else if m.globals != nil {
 		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {
@@ -2223,6 +2332,74 @@ func (m *Model) collectGlobalValues(
 	return globals
 }
 
+func cloneGlobalValues(src map[string]scripts.GlobalValue) map[string]scripts.GlobalValue {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make(map[string]scripts.GlobalValue, len(src))
+	for key, value := range src {
+		out[key] = value
+	}
+	return out
+}
+
+func mergeGlobalValues(
+	base map[string]scripts.GlobalValue,
+	changes map[string]scripts.GlobalValue,
+) map[string]scripts.GlobalValue {
+	if len(base) == 0 && len(changes) == 0 {
+		return nil
+	}
+	out := cloneGlobalValues(base)
+	if out == nil {
+		out = make(map[string]scripts.GlobalValue, len(changes))
+	}
+	for key, change := range changes {
+		name := strings.TrimSpace(change.Name)
+		if name == "" {
+			name = strings.TrimSpace(key)
+		}
+		if name == "" {
+			continue
+		}
+		for existing := range out {
+			if strings.EqualFold(strings.TrimSpace(existing), name) {
+				delete(out, existing)
+			}
+		}
+		if change.Delete {
+			continue
+		}
+		change.Name = name
+		out[name] = change
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func globalValueMap(globals map[string]scripts.GlobalValue) map[string]string {
+	if len(globals) == 0 {
+		return nil
+	}
+	values := make(map[string]string, len(globals))
+	for key, entry := range globals {
+		name := strings.TrimSpace(entry.Name)
+		if name == "" {
+			name = strings.TrimSpace(key)
+		}
+		if name == "" || entry.Delete {
+			continue
+		}
+		values[name] = entry.Value
+	}
+	if len(values) == 0 {
+		return nil
+	}
+	return values
+}
+
 func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue, envName string) {
 	if len(changes) == 0 || m.globals == nil {
 		return
@@ -2342,6 +2519,185 @@ func maskSecret(value string, secret bool) string {
 		return "•••"
 	}
 	return value
+}
+
+func explainAuthSecretValues(auth *restfile.AuthSpec, resolver *vars.Resolver) []string {
+	if auth == nil || len(auth.Params) == 0 {
+		return nil
+	}
+
+	expand := func(key string) string {
+		value := strings.TrimSpace(auth.Params[key])
+		if value == "" {
+			return ""
+		}
+		if resolver == nil {
+			return value
+		}
+		expanded, err := resolver.ExpandTemplates(value)
+		if err != nil {
+			return value
+		}
+		return strings.TrimSpace(expanded)
+	}
+
+	values := make(map[string]struct{})
+	add := func(value string) {
+		if strings.TrimSpace(value) == "" {
+			return
+		}
+		values[value] = struct{}{}
+	}
+
+	switch strings.ToLower(strings.TrimSpace(auth.Type)) {
+	case "basic":
+		add(expand("password"))
+	case "bearer":
+		add(expand("token"))
+	case "apikey", "api-key", "header":
+		add(expand("value"))
+	case "oauth2":
+		for _, key := range []string{"client_secret", "password", "refresh_token", "access_token"} {
+			add(expand(key))
+		}
+	}
+
+	if len(values) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	return out
+}
+
+func explainInjectedAuthSecrets(
+	auth *restfile.AuthSpec,
+	before *restfile.Request,
+	after *restfile.Request,
+) []string {
+	if auth == nil || after == nil {
+		return nil
+	}
+	header := "Authorization"
+	if strings.EqualFold(strings.TrimSpace(auth.Type), "oauth2") {
+		if name := strings.TrimSpace(auth.Params["header"]); name != "" {
+			header = name
+		}
+	}
+	beforeValue := headerValue(reqHeaders(before), header)
+	afterValue := headerValue(reqHeaders(after), header)
+	if strings.TrimSpace(afterValue) == "" || afterValue == beforeValue {
+		return nil
+	}
+
+	values := []string{afterValue}
+	if strings.EqualFold(header, "authorization") {
+		_, token, ok := strings.Cut(afterValue, " ")
+		if ok {
+			token = strings.TrimSpace(token)
+			if token != "" {
+				values = append(values, token)
+			}
+		}
+	}
+	return values
+}
+
+func (m *Model) prepareExplainAuthPreview(
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	envName string,
+) (explainAuthPreviewResult, error) {
+	if req == nil || req.Metadata.Auth == nil {
+		return explainAuthPreviewResult{}, nil
+	}
+
+	auth := req.Metadata.Auth
+	kind := strings.ToLower(strings.TrimSpace(auth.Type))
+	switch kind {
+	case "", "basic", "bearer", "apikey", "api-key", "header":
+		return explainAuthPreviewResult{
+			status:  xplain.StageOK,
+			summary: "auth prepared",
+			notes:   []string{"auth headers/query are applied during HTTP request build"},
+		}, nil
+	case "oauth2":
+		if m.oauth == nil {
+			return explainAuthPreviewResult{}, errdef.New(
+				errdef.CodeHTTP,
+				"oauth support is not initialised",
+			)
+		}
+
+		cfg, err := m.buildOAuthConfig(auth, resolver)
+		if err != nil {
+			return explainAuthPreviewResult{}, err
+		}
+
+		envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+		cfg = m.oauth.MergeCachedConfig(envKey, cfg)
+		if cfg.TokenURL == "" {
+			return explainAuthPreviewResult{}, errdef.New(
+				errdef.CodeHTTP,
+				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
+			)
+		}
+
+		header := strings.TrimSpace(cfg.Header)
+		if header == "" {
+			header = "Authorization"
+		}
+		if req.Headers != nil && req.Headers.Get(header) != "" {
+			return explainAuthPreviewResult{
+				status:  xplain.StageOK,
+				summary: "auth prepared",
+				notes:   []string{"auth header already set on request"},
+			}, nil
+		}
+
+		token, ok := m.oauth.CachedToken(envKey, cfg)
+		if !ok {
+			return explainAuthPreviewResult{
+				status:  xplain.StageSkipped,
+				summary: "oauth token fetch skipped",
+				notes: []string{
+					"OAuth token acquisition is skipped in explain preview",
+					fmt.Sprintf("%s is omitted without a cached token", header),
+				},
+			}, nil
+		}
+
+		if req.Headers == nil {
+			req.Headers = make(http.Header)
+		}
+		value := token.AccessToken
+		if strings.EqualFold(header, "authorization") {
+			typeValue := strings.TrimSpace(token.TokenType)
+			if typeValue == "" {
+				typeValue = "Bearer"
+			}
+			value = strings.TrimSpace(typeValue) + " " + token.AccessToken
+		}
+		req.Headers.Set(header, value)
+
+		return explainAuthPreviewResult{
+			status:  xplain.StageOK,
+			summary: "auth prepared",
+			notes:   []string{"used cached OAuth token for explain preview"},
+			extraSecrets: []string{
+				token.AccessToken,
+				value,
+			},
+		}, nil
+	default:
+		return explainAuthPreviewResult{
+			status:  xplain.StageSkipped,
+			summary: "auth type not applied",
+			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
+		}, nil
+	}
 }
 
 func (m *Model) ensureOAuth(

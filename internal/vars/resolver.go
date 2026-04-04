@@ -74,6 +74,7 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 				Value:    resolved,
 				Shadowed: hits[1:],
 				Uses:     1,
+				Missing:  !found,
 			})
 			return resolved, found
 		}
@@ -122,6 +123,7 @@ func (r *Resolver) Resolve(name string) (string, bool) {
 			Value:    resolved,
 			Shadowed: hits[1:],
 			Uses:     1,
+			Missing:  !found,
 		})
 		return resolved, found
 	}
