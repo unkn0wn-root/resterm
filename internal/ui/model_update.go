@@ -1078,6 +1078,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		return tea.Batch(prefixCmd, c)
 	}
 
+	if m.showHelp {
+		return combine(m.handleHelpKey(msg))
+	}
+
 	if m.isNavigatorFiltering() {
 		m.resetChordState()
 		switch keyStr {
@@ -1151,42 +1155,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			m.blockHistoryKey()
 			return combine(nil)
 		}
-	}
-
-	if m.showHelp && !m.helpJustOpened {
-		vp := m.helpViewport
-		switch keyStr {
-		case "ctrl+q", "ctrl+d":
-			return combine(tea.Quit)
-		case "esc", "?", "shift+/":
-			m.showHelp = false
-			m.helpJustOpened = false
-		case "down", "j":
-			if vp != nil {
-				vp.ScrollDown(1)
-			}
-		case "up", "k":
-			if vp != nil {
-				vp.ScrollUp(1)
-			}
-		case "pgdown", "ctrl+f":
-			if vp != nil {
-				vp.ScrollDown(maxInt(1, vp.Height))
-			}
-		case "pgup", "ctrl+b", "ctrl+u":
-			if vp != nil {
-				vp.ScrollUp(maxInt(1, vp.Height))
-			}
-		case "home":
-			if vp != nil {
-				vp.GotoTop()
-			}
-		case "end":
-			if vp != nil {
-				vp.GotoBottom()
-			}
-		}
-		return combine(nil)
 	}
 
 	if cmd, handled := m.handleStreamKey(msg); handled {

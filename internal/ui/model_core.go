@@ -238,6 +238,7 @@ type Model struct {
 	showThemeSelector      bool
 	showHelp               bool
 	helpJustOpened         bool
+	helpFilter             textinput.Model
 	showNewFileModal       bool
 	showLayoutSaveModal    bool
 	showOpenModal          bool
@@ -511,6 +512,13 @@ func New(cfg Config) Model {
 	navFilter.SetCursor(0)
 	navFilter.Blur()
 
+	helpFilter := textinput.New()
+	helpFilter.Placeholder = "Search..."
+	helpFilter.CharLimit = 0
+	helpFilter.Prompt = ""
+	helpFilter.SetCursor(0)
+	helpFilter.Blur()
+
 	historyFilter := textinput.New()
 	historyFilter.Placeholder = "method:GET date:05-Jun-2024 users"
 	historyFilter.CharLimit = 0
@@ -645,6 +653,7 @@ func New(cfg Config) Model {
 		historyPreviewViewport: &previewViewport,
 		requestDetailViewport:  &detailViewport,
 		helpViewport:           &helpViewport,
+		helpFilter:             helpFilter,
 		activeThemeKey:         activeTheme,
 		settingsHandle:         cfg.SettingsHandle,
 		responsePanes: [2]responsePaneState{

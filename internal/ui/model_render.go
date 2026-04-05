@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -2512,279 +2511,53 @@ func (m Model) renderHelpOverlay() string {
 		maxBodyHeight = 6
 	}
 
-	bodyHeight := maxInt(min(28, maxBodyHeight), 6)
-
 	header := func(text string, align lipgloss.Position) string {
 		return m.theme.HeaderTitle.
 			Width(viewWidth).
 			Align(align).
 			Render(text)
 	}
+	title := header("Key Bindings", lipgloss.Center)
+	subtitle := m.theme.HeaderValue.
+		Width(viewWidth).
+		Align(lipgloss.Center).
+		Render("/ search • Esc clear/close • ↑/↓ scroll • PgUp/PgDn page")
+	filterView := m.renderHelpFilter(viewWidth)
 
-	sections := []struct {
-		title   string
-		entries []helpEntry
-	}{
-		{
-			title: "Navigation & Focus",
-			entries: sortedHelpEntries([]helpEntry{
-				{m.helpActionKey(bindings.ActionCycleFocusNext, "Tab"), "Cycle focus"},
-				{m.helpActionKey(bindings.ActionCycleFocusPrev, "Shift+Tab"), "Reverse focus"},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{bindings.ActionToggleZoom, bindings.ActionClearZoom},
-						"g z / g Z",
-					),
-					"Zoom focused pane / reset zoom",
-				},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionFocusRequests,
-							bindings.ActionFocusEditorNormal,
-							bindings.ActionFocusResponse,
-						},
-						"g r / g i / g p",
-					),
-					"Focus navigator / editor / response",
-				},
-			}),
-		},
-		{
-			title: "Requests & Files",
-			entries: sortedHelpEntries([]helpEntry{
-				{"Enter", "Run selected request"},
-				{"Space", "Preview selected request / toggle file expansion"},
-				{
-					m.helpActionKey(bindings.ActionShowRequestDetails, "g ,"),
-					"Show selected request details",
-				},
-				{m.helpActionKey(bindings.ActionSendRequest, "Ctrl+Enter"), "Send active request"},
-				{
-					m.helpActionKey(bindings.ActionExplainRequest, "g x"),
-					"Prepare Explain preview (no request sent)",
-				},
-				{
-					m.helpActionKey(bindings.ActionCancelRun, "Ctrl+C"),
-					"Cancel in-flight run/request",
-				},
-				{m.helpActionKey(bindings.ActionSaveFile, "Ctrl+S"), "Save current file"},
-				{
-					m.helpActionKey(bindings.ActionSaveLayout, "g Shift+L"),
-					"Save layout to settings",
-				},
-				{m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"},
-				{m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"},
-				{
-					m.helpActionKey(bindings.ActionReloadWorkspace, "Ctrl+Shift+O"),
-					"Refresh workspace",
-				},
-				{m.helpActionKey(bindings.ActionOpenTempDocument, "Ctrl+T"), "Temporary document"},
-				{m.helpActionKey(bindings.ActionReparseDocument, "Ctrl+P"), "Reparse document"},
-				{
-					m.helpActionKey(bindings.ActionReloadFileFromDisk, "Ctrl+Alt+R"),
-					"Reload file from disk",
-				},
-				{m.helpActionKey(bindings.ActionQuitApp, "Ctrl+Q"), "Quit (Ctrl+D also works)"},
-				{m.helpActionKey(bindings.ActionToggleHelp, "?"), "Toggle this help"},
-			}),
-		},
-		{
-			title: "Navigator & Filters",
-			entries: sortedHelpEntries([]helpEntry{
-				{"/ (Esc clears)", "Focus navigator filter / reset filters"},
-				{"m", "Navigator: toggle method filter for selected request"},
-				{"t", "Navigator: toggle tag filters for selected item"},
-				{"l / r", "Navigator: jump to selected request in editor"},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionSidebarHeightDecrease,
-							bindings.ActionSidebarHeightIncrease,
-						},
-						"g j / g k",
-					),
-					"Collapse / expand current navigator branch",
-				},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionWorkflowHeightIncrease,
-							bindings.ActionWorkflowHeightDecrease,
-						},
-						"g Shift+J / g Shift+K",
-					),
-					"Collapse all / expand all navigator branches",
-				},
-			}),
-		},
-		{
-			title: "Layout & View",
-			entries: sortedHelpEntries([]helpEntry{
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionToggleResponseSplitVert,
-							bindings.ActionToggleResponseSplitHorz,
-						},
-						"Ctrl+V / Ctrl+U",
-					),
-					"Split response vertically / horizontally",
-				},
-				{
-					m.helpActionKey(bindings.ActionTogglePaneFollowLatest, "Ctrl+Shift+V"),
-					"Pin or unpin focused response pane",
-				},
-				{
-					m.helpActionKey(bindings.ActionCopyResponseTab, "Ctrl+Shift+C"),
-					"Copy Pretty / Raw / Headers response tab",
-				},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionScrollResponseTop,
-							bindings.ActionScrollResponseBottom,
-						},
-						"gg / G",
-					),
-					"Response/History tab: top / bottom",
-				},
-				{
-					m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"),
-					"Toggle request/response headers view",
-				},
-				{
-					m.helpActionKey(bindings.ActionCycleRawView, "g b"),
-					"Cycle raw view: text / hex / base64 (summary for large binary)",
-				},
-				{
-					m.helpActionKey(bindings.ActionShowRawDump, "g Shift+D"),
-					"Load full raw dump (hex)",
-				},
-				{
-					m.helpActionKey(bindings.ActionSaveResponseBody, "g Shift+S"),
-					"Save response body to file",
-				},
-				{
-					m.helpActionKey(bindings.ActionOpenResponseExternally, "g Shift+E"),
-					"Open response in external app",
-				},
-				{"Ctrl+F or Ctrl+B, ←/→", "Send future responses to selected pane"},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionSidebarWidthDecrease,
-							bindings.ActionSidebarWidthIncrease,
-						},
-						"g h / g l",
-					),
-					"Adjust editor/response width",
-				},
-				{
-					m.helpCombinedKey(
-						[]bindings.ActionID{
-							bindings.ActionToggleSidebarCollapse,
-							bindings.ActionToggleEditorCollapse,
-							bindings.ActionToggleResponseCollapse,
-						},
-						"g1 / g2 / g3",
-					),
-					"Toggle sidebar / editor / response minimize",
-				},
-			}),
-		},
-		{
-			title: "History",
-			entries: sortedHelpEntries([]helpEntry{
-				{"c", "History: cycle scope"},
-				{"s", "History: toggle sort"},
-				{"/", "History: filter (Enter apply, Esc clear)"},
-				{"Space", "History: toggle selection"},
-				{"PgUp / PgDn", "History: prev / next page"},
-				{"Enter", "History: load entry"},
-				{"p", "History: preview entry"},
-				{"d", "History: delete selection"},
-				{"r", "History: replay entry"},
-			}),
-		},
-		{
-			title: "Environment & Themes",
-			entries: sortedHelpEntries([]helpEntry{
-				{m.helpActionKey(bindings.ActionShowGlobals, "Ctrl+G"), "Show globals summary"},
-				{
-					m.helpActionKey(bindings.ActionClearGlobals, "Ctrl+Shift+G"),
-					"Clear globals for environment",
-				},
-				{m.helpActionKey(bindings.ActionOpenEnvSelector, "Ctrl+E"), "Environment selector"},
-				{
-					m.helpActionKey(bindings.ActionSelectTimelineTab, "Ctrl+Alt+L / g t"),
-					"Timeline tab",
-				},
-				{
-					m.helpActionKey(bindings.ActionOpenThemeSelector, "Ctrl+Alt+T / g m"),
-					"Theme selector",
-				},
-			}),
-		},
-		{
-			title: "Editor motions",
-			entries: []helpEntry{
-				{"h / j / k / l", "Move left / down / up / right"},
-				{"w / b / e", "Word forward / back / end (W / B / E for WORD)"},
-				{"0 / ^ / $", "Line start / first non-blank / line end"},
-				{"gg / G", "Top / bottom of buffer"},
-				{"Ctrl+f / Ctrl+b", "Page down / up (Ctrl+d / Ctrl+u half-page)"},
-				{"v / V / y", "Visual select (char / line) / yank selection"},
-				{"d / c + motion", "Delete / change via Vim motions (dw, db, cw, c$)"},
-				{"dd / D / x / cc", "Delete line / to end / char / change line"},
-				{"a", "Append after cursor (enter insert mode)"},
-				{"p / P", "Paste after / before cursor"},
-				{"f / t / T", "Find character (forward / till / backward)"},
-				{"u / Ctrl+r", "Undo / redo last edit"},
-			},
-		},
-		{
-			title: "Response selection",
-			entries: []helpEntry{
-				{"v / V", "Response: show cursor / start selection"},
-				{"j / k / ↑ / ↓", "Response: move cursor / extend selection"},
-				{"y / c", "Response: copy selection"},
-				{"Esc", "Response: clear selection (again clears cursor)"},
-			},
-		},
-		{
-			title: "Search",
-			entries: []helpEntry{
-				{"Shift+F", "Open search prompt (Ctrl+R toggles regex)"},
-				{"n / p", "Next / previous match (wraps around)"},
-			},
-		},
-	}
-
-	rows := []string{
-		header("Key Bindings", lipgloss.Center),
-		m.theme.HeaderValue.Render("Esc closes • ↑/↓ scroll • PgUp/PgDn page"),
+	top := lipgloss.JoinVertical(
+		lipgloss.Left,
+		title,
+		subtitle,
 		"",
+		filterView,
+		"",
+	)
+	topView := lipgloss.NewStyle().
+		Padding(0, 2).
+		Width(contentWidth).
+		Render(top)
+
+	bodyHeight := maxBodyHeight - lipgloss.Height(topView)
+	if bodyHeight > 28 {
+		bodyHeight = 28
+	}
+	if bodyHeight < 6 {
+		bodyHeight = 6
 	}
 
-	var orderedSections []struct {
-		title   string
-		entries []helpEntry
-	}
-	for _, section := range sections {
-		if len(section.entries) == 0 {
-			continue
-		}
-		orderedSections = append(orderedSections, section)
-	}
-
-	for idx, section := range orderedSections {
-		rows = append(rows, header(section.title, lipgloss.Left))
-		for _, entry := range section.entries {
-			rows = append(rows, helpRow(m, entry.key, entry.description))
-		}
-		if idx < len(orderedSections)-1 {
-			rows = append(rows, "")
+	sections := m.filteredHelpSections()
+	rows := make([]string, 0, len(sections)*8)
+	if len(sections) == 0 {
+		rows = append(rows, m.theme.HeaderValue.Render("No help entries match the current filter."))
+	} else {
+		for idx, section := range sections {
+			rows = append(rows, header(section.title, lipgloss.Left))
+			for _, entry := range section.entries {
+				rows = append(rows, helpRow(m, entry.key, entry.description))
+			}
+			if idx < len(sections)-1 {
+				rows = append(rows, "")
+			}
 		}
 	}
 	body := lipgloss.JoinVertical(lipgloss.Left, rows...)
@@ -2797,18 +2570,42 @@ func (m Model) renderHelpOverlay() string {
 		bodyView = lipgloss.NewStyle().
 			Padding(0, 2).
 			Width(contentWidth).
+			Height(bodyHeight).
 			Render(vp.View())
 	} else {
 		bodyView = lipgloss.NewStyle().
 			Padding(0, 2).
 			Width(contentWidth).
+			Height(bodyHeight).
 			Render(body)
 	}
 
-	box := m.theme.BrowserBorder.Width(width).Render(bodyView)
+	content := lipgloss.JoinVertical(lipgloss.Left, topView, bodyView)
+	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+	)
+}
+
+func (m Model) renderHelpFilter(width int) string {
+	if width < 16 {
+		width = 16
+	}
+	m.helpFilter.Width = width
+	input := lipgloss.NewStyle().
+		Width(width).
+		Render(m.helpFilter.View())
+
+	hintText := "Type to filter the help • Enter done • Esc clear/close"
+	if !m.helpFilter.Focused() {
+		hintText = "/ or Shift+F to search • Esc clear/close"
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		input,
+		m.theme.HeaderValue.Faint(true).Width(width).Render(hintText),
 	)
 }
 
@@ -2967,47 +2764,6 @@ func (m Model) renderResponseSaveModal() string {
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
 		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
-	)
-}
-
-type helpEntry struct {
-	key         string
-	description string
-}
-
-func sortedHelpEntries(entries []helpEntry) []helpEntry {
-	cleaned := make([]helpEntry, 0, len(entries))
-	for _, entry := range entries {
-		key := strings.TrimSpace(entry.key)
-		description := strings.TrimSpace(entry.description)
-		if key == "" || description == "" {
-			continue
-		}
-		cleaned = append(cleaned, helpEntry{
-			key:         key,
-			description: description,
-		})
-	}
-
-	sort.Slice(cleaned, func(i, j int) bool {
-		return strings.ToLower(cleaned[i].key) < strings.ToLower(cleaned[j].key)
-	})
-
-	return cleaned
-}
-
-func helpRow(m Model, key, description string) string {
-	keyStyled := m.theme.HeaderTitle.
-		Width(helpKeyColumnWidth).
-		Align(lipgloss.Left).
-		Render(key)
-	descStyled := m.theme.HeaderValue.
-		PaddingLeft(6).
-		Render(description)
-	return lipgloss.JoinHorizontal(
-		lipgloss.Left,
-		keyStyled,
-		descStyled,
 	)
 }
 
