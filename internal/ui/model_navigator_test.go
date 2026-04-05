@@ -281,6 +281,59 @@ func TestNavigatorEnterDoesNotCollapseFile(t *testing.T) {
 	}
 }
 
+func TestNavigatorIncludesActiveEnvFile(t *testing.T) {
+	tmp := t.TempDir()
+	reqFile := filepath.Join(tmp, "sample.http")
+	envFile := filepath.Join(tmp, "resterm.env.json")
+	writeSampleFile(t, reqFile, "GET https://example.com\n")
+	writeSampleFile(t, envFile, "{\n  \"dev\": {\"baseUrl\": \"https://example.com\"}\n}\n")
+
+	model := New(Config{
+		WorkspaceRoot:   tmp,
+		FilePath:        reqFile,
+		EnvironmentFile: envFile,
+	})
+	m := &model
+
+	node := m.navigator.Find("file:" + envFile)
+	if node == nil {
+		t.Fatalf("expected navigator node for %s", envFile)
+	}
+	if len(node.Children) != 0 {
+		t.Fatalf("expected env file to remain a leaf node")
+	}
+	if got := strings.Join(node.Badges, ","); got != "ENV,ACTIVE" {
+		t.Fatalf("expected ENV and ACTIVE badges, got %q", got)
+	}
+}
+
+func TestNavigatorIncludesExplicitEnvFileInsideWorkspace(t *testing.T) {
+	tmp := t.TempDir()
+	reqFile := filepath.Join(tmp, "sample.http")
+	envDir := filepath.Join(tmp, "config")
+	envFile := filepath.Join(envDir, ".env.local")
+	if err := os.MkdirAll(envDir, 0o755); err != nil {
+		t.Fatalf("mkdir config: %v", err)
+	}
+	writeSampleFile(t, reqFile, "GET https://example.com\n")
+	writeSampleFile(t, envFile, "workspace=dev\nAPI_URL=https://example.com\n")
+
+	model := New(Config{
+		WorkspaceRoot:   tmp,
+		FilePath:        reqFile,
+		EnvironmentFile: envFile,
+	})
+	m := &model
+
+	node := m.navigator.Find("file:" + envFile)
+	if node == nil {
+		t.Fatalf("expected navigator node for explicit env file %s", envFile)
+	}
+	if got := strings.Join(node.Badges, ","); got != "ENV,ACTIVE" {
+		t.Fatalf("expected ENV and ACTIVE badges, got %q", got)
+	}
+}
+
 func TestNavigatorRightDoesNotCollapseFile(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "a.http")

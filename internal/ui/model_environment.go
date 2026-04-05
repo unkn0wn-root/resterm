@@ -33,16 +33,14 @@ func (m *Model) toggleHelp() {
 	if m.showHelp {
 		m.showHelp = false
 		m.helpJustOpened = false
+		m.clearHelpFilter()
 		return
 	}
 	m.showHelp = true
 	m.helpJustOpened = true
 	m.showEnvSelector = false
 	m.showThemeSelector = false
-	if vp := m.helpViewport; vp != nil {
-		vp.SetYOffset(0)
-		vp.GotoTop()
-	}
+	m.clearHelpFilter()
 }
 
 func (m *Model) applyEnvironmentSelection() tea.Cmd {

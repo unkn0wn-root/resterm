@@ -17,7 +17,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -239,6 +238,7 @@ type Model struct {
 	showThemeSelector      bool
 	showHelp               bool
 	helpJustOpened         bool
+	helpFilter             textinput.Model
 	showNewFileModal       bool
 	showLayoutSaveModal    bool
 	showOpenModal          bool
@@ -436,7 +436,7 @@ func New(cfg Config) Model {
 		}
 	}
 
-	entries, err := filesvc.ListRequestFiles(workspace, cfg.Recursive)
+	entries, err := listWorkspaceEntries(workspace, cfg.Recursive, cfg.EnvironmentFile)
 	var initialStatus statusMsg
 	if err != nil {
 		initialStatus = statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusWarn}
@@ -511,6 +511,13 @@ func New(cfg Config) Model {
 	navFilter.Prompt = ""
 	navFilter.SetCursor(0)
 	navFilter.Blur()
+
+	helpFilter := textinput.New()
+	helpFilter.Placeholder = "Search..."
+	helpFilter.CharLimit = 0
+	helpFilter.Prompt = ""
+	helpFilter.SetCursor(0)
+	helpFilter.Blur()
 
 	historyFilter := textinput.New()
 	historyFilter.Placeholder = "method:GET date:05-Jun-2024 users"
@@ -646,6 +653,7 @@ func New(cfg Config) Model {
 		historyPreviewViewport: &previewViewport,
 		requestDetailViewport:  &detailViewport,
 		helpViewport:           &helpViewport,
+		helpFilter:             helpFilter,
 		activeThemeKey:         activeTheme,
 		settingsHandle:         cfg.SettingsHandle,
 		responsePanes: [2]responsePaneState{

@@ -18,6 +18,7 @@ const (
 	iconDirClosed   = "📁"
 	iconDirOpen     = "📂"
 	iconRTS         = "λ"
+	iconEnv         = "⚙"
 )
 
 // ListView renders the navigator list with an optional height constraint.
@@ -114,8 +115,11 @@ func rowIcon(n *Node[any]) string {
 	case KindDir:
 		return dirIcon(n.Expanded)
 	case KindFile:
-		if filesvc.IsRTSFile(n.Payload.FilePath) {
+		switch fileKind(n) {
+		case filesvc.FileKindScript:
 			return iconRTS
+		case filesvc.FileKindEnv:
+			return iconEnv
 		}
 		return caret(n.Expanded)
 	default:
@@ -123,6 +127,20 @@ func rowIcon(n *Node[any]) string {
 			return caret(n.Expanded)
 		}
 		return iconNone
+	}
+}
+
+func fileKind(n *Node[any]) filesvc.FileKind {
+	if entry, ok := n.Payload.Data.(filesvc.FileEntry); ok {
+		return entry.Kind
+	}
+	switch {
+	case filesvc.IsRTSFile(n.Payload.FilePath):
+		return filesvc.FileKindScript
+	case filesvc.IsEnvJSONFile(n.Payload.FilePath):
+		return filesvc.FileKindEnv
+	default:
+		return filesvc.FileKindRequest
 	}
 }
 

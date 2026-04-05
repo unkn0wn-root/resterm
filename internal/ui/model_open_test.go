@@ -89,3 +89,24 @@ func TestSubmitOpenPathRejectsInvalidFile(t *testing.T) {
 		t.Fatalf("modal should remain open on error")
 	}
 }
+
+func TestSubmitOpenPathOpensEnvFile(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, ".env.local")
+	if err := os.WriteFile(file, []byte("workspace=dev\nAPI_URL=https://example.com\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	th := theme.DefaultTheme()
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th, EnvironmentFile: file})
+	m := &model
+	m.openOpenModal()
+	m.openPathInput.SetValue(file)
+	if cmd := m.submitOpenPath(); cmd != nil {
+		cmd()
+	}
+
+	if m.currentFile != file {
+		t.Fatalf("expected current file %q, got %q", file, m.currentFile)
+	}
+}

@@ -96,6 +96,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 		ID:      id,
 		Title:   filepath.Base(entry.Name),
 		Kind:    navigator.KindFile,
+		Badges:  fileEntryBadges(entry, m.cfg.EnvironmentFile),
 		Payload: navigator.Payload[any]{FilePath: entry.Path, Data: entry},
 	}
 
@@ -111,6 +112,18 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 		}
 	}
 	return node
+}
+
+func fileEntryBadges(entry filesvc.FileEntry, activeEnvFile string) []string {
+	if entry.Kind != filesvc.FileKindEnv {
+		return nil
+	}
+
+	badges := []string{"ENV"}
+	if samePath(entry.Path, activeEnvFile) {
+		badges = append(badges, "ACTIVE")
+	}
+	return badges
 }
 
 func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*navigator.Node[any] {
@@ -554,7 +567,19 @@ func samePath(a, b string) bool {
 	if a == "" || b == "" {
 		return false
 	}
-	return filepath.Clean(a) == filepath.Clean(b)
+
+	cleanA := filepath.Clean(a)
+	cleanB := filepath.Clean(b)
+	if cleanA == cleanB {
+		return true
+	}
+
+	absA, errA := filepath.Abs(cleanA)
+	absB, errB := filepath.Abs(cleanB)
+	if errA != nil || errB != nil {
+		return false
+	}
+	return absA == absB
 }
 
 func sortNavNodes(nodes []*navigator.Node[any]) {

@@ -120,7 +120,7 @@ func (m *Model) saveFile() tea.Cmd {
 }
 
 func (m *Model) reloadWorkspace() tea.Cmd {
-	entries, err := filesvc.ListRequestFiles(m.workspaceRoot, m.workspaceRecursive)
+	entries, err := m.listWorkspaceEntries()
 	if err != nil {
 		return func() tea.Msg {
 			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
@@ -137,7 +137,7 @@ func (m *Model) selectFileByPath(path string) bool {
 	items := m.fileList.Items()
 	for i, item := range items {
 		if fi, ok := item.(fileItem); ok {
-			if filepath.Clean(fi.entry.Path) == filepath.Clean(path) {
+			if samePath(fi.entry.Path, path) {
 				m.fileList.Select(i)
 				return true
 			}
