@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.24.3](https://github.com/unkn0wn-root/resterm/compare/v0.24.2...v0.24.3) (2026-04-05)
+
+
+### Features
+
+* surface environment files in workspace navigator and file listing ([7566c80](https://github.com/unkn0wn-root/resterm/commit/7566c807aabcb99cd04d7a9051be9bc8b504d6e1))
+* **ui:** add search/filter to help overlay ([395beb0](https://github.com/unkn0wn-root/resterm/commit/395beb01ae3525366f858ff1708ba7f9ac2818ef))
+
 ### [0.24.2](https://github.com/unkn0wn-root/resterm/compare/v0.24.1...v0.24.2) (2026-04-04)
 
 ### [0.24.1](https://github.com/unkn0wn-root/resterm/compare/v0.23.6...v0.24.1) (2026-04-02)
