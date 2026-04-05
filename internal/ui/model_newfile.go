@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
 )
 
 var newFileExtensions = []string{".http", ".rest"}
@@ -116,7 +114,7 @@ func (m *Model) submitNewFile() tea.Cmd {
 
 	fromSave := m.newFileFromSave
 	m.closeNewFileModal()
-	entries, err := filesvc.ListRequestFiles(m.workspaceRoot, m.workspaceRecursive)
+	entries, err := m.listWorkspaceEntries()
 	if err != nil {
 		return func() tea.Msg {
 			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}

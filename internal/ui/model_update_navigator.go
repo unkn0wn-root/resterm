@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -135,7 +134,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
+				if path != "" && !samePath(path, m.currentFile) {
 					cmd = m.openFile(path)
 				}
 				if filesvc.IsRTSFile(path) {
@@ -159,7 +158,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && filepath.Clean(path) != filepath.Clean(m.currentFile) {
+				if path != "" && !samePath(path, m.currentFile) {
 					cmd = m.openFile(path)
 				}
 				m.navExpandFile(n, false)

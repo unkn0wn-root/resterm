@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (m *Model) openOpenModal() {
@@ -52,8 +53,8 @@ func (m *Model) submitOpenPath() tea.Cmd {
 		return m.applyOpenDirectory(resolved)
 	}
 
-	if !isSupportedRequestFile(resolved) {
-		m.openPathError = "Only .http or .rest files are supported"
+	if !m.isSupportedOpenPath(resolved) {
+		m.openPathError = "Only request, RTS, or env files are supported"
 		return nil
 	}
 
@@ -99,13 +100,14 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.requestItems = nil
 	m.requestList.Select(-1)
 
-	entries, err := filesvc.ListRequestFiles(dir, m.workspaceRecursive)
+	entries, err := listWorkspaceEntries(dir, m.workspaceRecursive, m.cfg.EnvironmentFile)
 	if err != nil {
 		return func() tea.Msg {
 			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
 		}
 	}
 	m.fileList.SetItems(makeFileItems(entries))
+	m.rebuildNavigator(entries)
 	if len(entries) > 0 {
 		m.fileList.Select(0)
 	} else {
@@ -130,7 +132,7 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	m.cfg.FilePath = path
 	m.cfg.Recursive = m.workspaceRecursive
 
-	entries, err := filesvc.ListRequestFiles(dir, m.workspaceRecursive)
+	entries, err := listWorkspaceEntries(dir, m.workspaceRecursive, m.cfg.EnvironmentFile)
 	if err != nil {
 		return func() tea.Msg {
 			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
@@ -142,9 +144,21 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	return batchCommands(focusCmd, m.openFile(path))
 }
 
-func isSupportedRequestFile(path string) bool {
-	ext := strings.ToLower(filepath.Ext(path))
-	return ext == ".http" || ext == ".rest"
+func (m *Model) isSupportedOpenPath(path string) bool {
+	switch {
+	case filesvc.IsRequestFile(path):
+		return true
+	case filesvc.IsRTSFile(path):
+		return true
+	case filesvc.IsEnvJSONFile(path):
+		return true
+	case vars.IsDotEnvPath(path):
+		return true
+	case samePath(path, m.cfg.EnvironmentFile):
+		return true
+	default:
+		return false
+	}
 }
 
 func expandHome(path string) string {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -134,5 +135,35 @@ func TestRenderRTSUsesModuleIndicator(t *testing.T) {
 	}
 	if !strings.Contains(clean, iconRTS) {
 		t.Fatalf("expected rts icon, got %q", clean)
+	}
+}
+
+func TestRenderRowShowsEnvIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindFile,
+			Title:  "resterm.env.json",
+			Badges: []string{"ENV", "ACTIVE"},
+			Payload: Payload[any]{
+				FilePath: "/tmp/resterm.env.json",
+				Data: filesvc.FileEntry{
+					Name: "resterm.env.json",
+					Path: "/tmp/resterm.env.json",
+					Kind: filesvc.FileKindEnv,
+				},
+			},
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconEnv) {
+		t.Fatalf("expected env icon, got %q", clean)
+	}
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
+		t.Fatalf("expected env row without caret, got %q", clean)
+	}
+	if !strings.Contains(clean, "ENV") || !strings.Contains(clean, "ACTIVE") {
+		t.Fatalf("expected env badges, got %q", clean)
 	}
 }

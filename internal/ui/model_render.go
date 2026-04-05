@@ -285,7 +285,7 @@ func (m Model) renderFilePane() string {
 		listView = centerBox(
 			contentWidth,
 			listHeight,
-			m.theme.HeaderValue.Render("No requests discovered"),
+			m.theme.HeaderValue.Render("No workspace files discovered"),
 		)
 	}
 	listView = lipgloss.NewStyle().Width(contentWidth).Height(listHeight).Render(listView)
@@ -2894,7 +2894,7 @@ func (m Model) renderOpenModal() string {
 		"",
 		lipgloss.NewStyle().
 			Padding(0, 2).
-			Render("Enter a path to a .http/.rest file or a folder"),
+			Render("Enter a path to a request, RTS, env file, or a folder"),
 		lipgloss.NewStyle().
 			Padding(0, 2).
 			Render(inputView),

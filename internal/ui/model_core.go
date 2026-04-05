@@ -17,7 +17,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
-	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -436,7 +435,7 @@ func New(cfg Config) Model {
 		}
 	}
 
-	entries, err := filesvc.ListRequestFiles(workspace, cfg.Recursive)
+	entries, err := listWorkspaceEntries(workspace, cfg.Recursive, cfg.EnvironmentFile)
 	var initialStatus statusMsg
 	if err != nil {
 		initialStatus = statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusWarn}
