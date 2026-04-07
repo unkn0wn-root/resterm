@@ -189,10 +189,6 @@ func verifyVersion(ctx context.Context, path, want string) error {
 	return nil
 }
 
-func Apply(ctx context.Context, c Client, res Result, exe string) (SwapStatus, error) {
-	return apply(ctx, c, res, exe, nil)
-}
-
 func ApplyWithProgress(
 	ctx context.Context,
 	c Client,

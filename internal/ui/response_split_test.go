@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,7 +12,10 @@ import (
 
 func TestWrapDiffContentPreservesMarkers(t *testing.T) {
 	diff := "--- a\n+++ b\n-" + strings.Repeat("x", 40) + "\n+" + strings.Repeat("y", 40)
-	wrapped := wrapDiffContent(diff, 12)
+	wrapped, ok := wrapDiffContentCtx(context.Background(), diff, 12)
+	if !ok {
+		t.Fatal("expected wrap to complete")
+	}
 	lines := strings.Split(wrapped, "\n")
 	for _, line := range lines {
 		switch {
@@ -33,7 +37,10 @@ func TestWrapDiffContentPreservesMarkers(t *testing.T) {
 
 func TestWrapDiffContentHandlesContextLines(t *testing.T) {
 	diff := " " + strings.Repeat("ctx ", 6)
-	wrapped := wrapDiffContent(diff, 8)
+	wrapped, ok := wrapDiffContentCtx(context.Background(), diff, 8)
+	if !ok {
+		t.Fatal("expected wrap to complete")
+	}
 	for _, line := range strings.Split(wrapped, "\n") {
 		if line == "" {
 			continue
@@ -46,7 +53,10 @@ func TestWrapDiffContentHandlesContextLines(t *testing.T) {
 
 func TestWrapDiffContentFallback(t *testing.T) {
 	diff := "+short"
-	wrapped := wrapDiffContent(diff, 10)
+	wrapped, ok := wrapDiffContentCtx(context.Background(), diff, 10)
+	if !ok {
+		t.Fatal("expected wrap to complete")
+	}
 	if wrapped != diff {
 		t.Fatalf("expected short diff to remain unchanged, got %q", wrapped)
 	}

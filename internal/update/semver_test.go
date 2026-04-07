@@ -19,14 +19,18 @@ func TestParseSemverInvalid(t *testing.T) {
 }
 
 func TestSemverCompare(t *testing.T) {
-	less, err := compareSemver("1.2.3", "1.2.4")
+	less, err := parseSemver("1.2.3")
 	if err != nil {
-		t.Fatalf("compare error: %v", err)
+		t.Fatalf("parse error: %v", err)
 	}
-	if less >= 0 {
-		t.Fatal("expected -1")
+	more, err := parseSemver("1.2.4")
+	if err != nil {
+		t.Fatalf("parse error: %v", err)
 	}
-	if _, err := compareSemver("1.a", "1.1"); err == nil {
+	if !less.lt(more) {
+		t.Fatal("expected 1.2.3 to sort below 1.2.4")
+	}
+	if _, err := parseSemver("1.a"); err == nil {
 		t.Fatal("expected error")
 	}
 }

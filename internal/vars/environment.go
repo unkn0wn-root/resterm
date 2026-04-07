@@ -165,32 +165,6 @@ func ResolveEnvironment(paths []string) (EnvironmentSet, string, error) {
 	return nil, "", nil
 }
 
-type EnvironmentProvider struct {
-	name    string
-	values  map[string]string
-	backing string
-}
-
-func NewEnvironmentProvider(name string, values map[string]string, backing string) Provider {
-	return &EnvironmentProvider{
-		name:    name,
-		values:  values,
-		backing: backing,
-	}
-}
-
-func (p *EnvironmentProvider) Resolve(name string) (string, bool) {
-	value, ok := p.values[name]
-	return value, ok
-}
-
-func (p *EnvironmentProvider) Label() string {
-	if p.backing == "" {
-		return fmt.Sprintf("env:%s", p.name)
-	}
-	return fmt.Sprintf("env:%s (%s)", p.name, filepath.Base(p.backing))
-}
-
 // SelectEnv returns the effective environment name, preferring the explicit override
 // when provided, then falling back to the current selection. Empty strings are ignored.
 func SelectEnv(set EnvironmentSet, override, current string) string {

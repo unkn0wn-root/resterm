@@ -1110,11 +1110,6 @@ func displayContent(content string) string {
 	return trimSyntheticNewline(out, syn)
 }
 
-func wrapDiffContent(content string, width int) string {
-	out, _ := wrapDiffContentCtx(context.Background(), content, width)
-	return out
-}
-
 func wrapDiffContentCtx(ctx context.Context, content string, width int) (string, bool) {
 	if width <= 0 {
 		return content, true

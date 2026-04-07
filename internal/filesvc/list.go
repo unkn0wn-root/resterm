@@ -61,16 +61,6 @@ func IsEnvJSONFile(path string) bool {
 	return base == defaultEnvSourceFile || base == altEnvSourceFile
 }
 
-func IsSupportedFile(path string) bool {
-	ext := fileExt(path)
-	switch ext {
-	case extHTTP, extREST, extRTS:
-		return true
-	default:
-		return false
-	}
-}
-
 func ListRequestFiles(root string, recursive bool) ([]FileEntry, error) {
 	return listFiles(root, recursive, classifyRequestFile, "")
 }

@@ -15,11 +15,6 @@ const (
 	tokenMaxAttempts = 8
 )
 
-// HasTemplate reports whether the string contains a template marker.
-func HasTemplate(s string) bool {
-	return strings.Contains(s, "{{")
-}
-
 func PatchQuery(raw string, patch map[string]*string) (string, error) {
 	if len(patch) == 0 {
 		return raw, nil

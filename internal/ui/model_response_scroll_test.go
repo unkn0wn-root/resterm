@@ -19,12 +19,12 @@ func TestScrollResponseToTopAndBottom(t *testing.T) {
 		t.Fatalf("expected bottom navigation to move offset")
 	}
 
-	model.scrollResponseToTop()
+	model.scrollResponseToEdge(true)
 	if pane.viewport.YOffset != 0 {
 		t.Fatalf("expected gg to jump to top, got offset %d", pane.viewport.YOffset)
 	}
 
-	model.scrollResponseToBottom()
+	model.scrollResponseToEdge(false)
 	if pane.viewport.YOffset == 0 {
 		t.Fatalf("expected G to jump to bottom")
 	}
@@ -62,7 +62,7 @@ func TestScrollResponseIgnoresHistoryTab(t *testing.T) {
 	pane.viewport.GotoBottom()
 	offset := pane.viewport.YOffset
 
-	model.scrollResponseToTop()
+	model.scrollResponseToEdge(true)
 	if pane.viewport.YOffset != offset {
 		t.Fatalf(
 			"expected history tab to ignore gg, offset changed from %d to %d",
@@ -177,12 +177,12 @@ func TestScrollResponseToEdgeUpdatesCursor(t *testing.T) {
 		sid:  "snap",
 	}
 
-	model.scrollResponseToTop()
+	model.scrollResponseToEdge(true)
 	if pane.cursor.line != 0 {
 		t.Fatalf("expected cursor to move to top line, got %d", pane.cursor.line)
 	}
 
-	model.scrollResponseToBottom()
+	model.scrollResponseToEdge(false)
 	expected := len(strings.Split(content, "\n")) - 1
 	if pane.cursor.line != expected {
 		t.Fatalf("expected cursor to move to bottom line %d, got %d", expected, pane.cursor.line)

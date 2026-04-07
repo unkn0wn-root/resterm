@@ -63,18 +63,6 @@ func PrefixMatcher(prefixes ...string) Matcher {
 	}
 }
 
-func ExactMatcher(keys ...string) Matcher {
-	return func(key string) bool {
-		lower := strings.ToLower(strings.TrimSpace(key))
-		for _, k := range keys {
-			if lower == strings.ToLower(strings.TrimSpace(k)) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
 type ResolverProvider interface {
 	Resolver() *vars.Resolver
 }

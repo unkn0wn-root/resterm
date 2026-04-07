@@ -85,13 +85,6 @@ func (ls *liveSession) setPaused(paused bool) {
 	}
 }
 
-func (ls *liveSession) visibleEvents() []*stream.Event {
-	if !ls.paused || ls.pausedIndex < 0 || ls.pausedIndex > len(ls.events) {
-		return ls.events
-	}
-	return ls.events[:ls.pausedIndex]
-}
-
 func (ls *liveSession) addBookmark(label string) {
 	idx := len(ls.events)
 	if ls.paused && ls.pausedIndex >= 0 {

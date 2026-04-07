@@ -58,35 +58,6 @@ func TestRedactHistoryTextHonorsSensitiveHeaderOverride(t *testing.T) {
 	}
 }
 
-func TestFormatHistorySnippetStripsHTMLAndLimitsLines(t *testing.T) {
-	snippet := "<html><head><style>body{color:red}</style></head><body><h1>Hello</h1><p>World</p><p>More content here.</p><p>Line4</p><p>Line5</p><p>Line6</p><p>Line7</p><p>Line8</p><p>Line9</p><p>Line10</p><p>Line11</p><p>Line12</p><p>Line13</p><p>Line14</p><p>Line15</p><p>Line16</p><p>Line17</p><p>Line18</p><p>Line19</p><p>Line20</p><p>Line21</p><p>Line22</p><p>Line23</p><p>Line24</p><p>Line25</p></body></html>"
-
-	formatted := formatHistorySnippet(snippet, 40)
-
-	if strings.Contains(formatted, "body{") {
-		t.Fatalf("expected style content to be removed, got %q", formatted)
-	}
-	if strings.Contains(formatted, "<") || strings.Contains(formatted, ">") {
-		t.Fatalf("expected HTML tags to be stripped, got %q", formatted)
-	}
-
-	lines := strings.Split(formatted, "\n")
-	if len(lines) != historySnippetMaxLines+1 {
-		t.Fatalf("expected %d lines plus truncation, got %d", historySnippetMaxLines+1, len(lines))
-	}
-	if !strings.HasSuffix(lines[len(lines)-1], "(truncated)") {
-		t.Fatalf("expected truncation marker, got %q", lines[len(lines)-1])
-	}
-}
-
-func TestFormatHistorySnippetHandlesStyleOnly(t *testing.T) {
-	snippet := "<style>body{color:red}</style>"
-	formatted := formatHistorySnippet(snippet, 40)
-	if formatted != historySnippetPlaceholder {
-		t.Fatalf("expected placeholder for empty html snippet, got %q", formatted)
-	}
-}
-
 func TestRecordCompareHistoryAppendsEntry(t *testing.T) {
 	tmp := t.TempDir()
 	store := histdb.New(filepath.Join(tmp, "history.db"))

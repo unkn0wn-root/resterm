@@ -48,7 +48,7 @@ func TestApplyPOSIX(t *testing.T) {
 		t.Fatalf("write stub: %v", err)
 	}
 
-	st, err := Apply(context.Background(), cl, res, exe)
+	st, err := ApplyWithProgress(context.Background(), cl, res, exe, nil)
 	if err != nil {
 		t.Fatalf("apply err: %v", err)
 	}

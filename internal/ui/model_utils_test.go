@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"net/http"
 	"strings"
@@ -134,11 +135,15 @@ func TestWrapContentForTabRawMaintainsIndentOnWrap(t *testing.T) {
 
 func TestWrapContentForTabMapTracksWrappedLines(t *testing.T) {
 	content := "hello world\nok"
-	wrapped, spans, rev := wrapContentForTabMap(
+	wrapped, spans, rev, ok := wrapContentForTabMapCtx(
+		context.Background(),
 		responseTabPretty,
 		content,
 		5,
 	)
+	if !ok {
+		t.Fatalf("expected wrapped lines")
+	}
 	lines := strings.Split(wrapped, "\n")
 	if len(spans) != 2 {
 		t.Fatalf("expected 2 base lines, got %d", len(spans))
