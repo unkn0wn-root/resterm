@@ -1474,14 +1474,6 @@ func clipExplain(s string) string {
 	return strings.TrimSpace(string(runes[:explainClip])) + " ..."
 }
 
-func (m *Model) redactExplainReport(
-	rep *xplain.Report,
-	env string,
-	req *restfile.Request,
-) *xplain.Report {
-	return m.redactExplainReportWithState(rep, env, req, nil)
-}
-
 func (m *Model) redactExplainReportWithState(
 	rep *xplain.Report,
 	env string,

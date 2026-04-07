@@ -63,7 +63,7 @@ func TestRedactExplainReportMasksSecretsAndSensitiveHeaders(t *testing.T) {
 		Warnings: []string{"warn top-secret"},
 	}
 
-	got := model.redactExplainReport(rep, "", req)
+	got := model.redactExplainReportWithState(rep, "", req, nil)
 	mask := maskSecret("", true)
 
 	if got.Final == nil {
@@ -258,7 +258,7 @@ func TestRenderExplainStyledUsesThemeDecorations(t *testing.T) {
 		Vars:   []xplain.Var{{Name: "token", Source: "request", Value: "masked"}},
 	}
 
-	out := renderExplainStyled(rep, 80, theme.DefaultTheme())
+	out := renderExplainStyledView(buildExplainView(rep), 80, theme.DefaultTheme())
 	if out == renderExplainReport(rep) {
 		t.Fatalf("expected styled explain output to differ from plain report, got %q", out)
 	}
@@ -407,7 +407,7 @@ func TestRenderExplainStyledWrapsCleanlyInNarrowWidth(t *testing.T) {
 		},
 	}
 
-	out := ansi.Strip(renderExplainStyled(rep, 44, theme.DefaultTheme()))
+	out := ansi.Strip(renderExplainStyledView(buildExplainView(rep), 44, theme.DefaultTheme()))
 	if !strings.Contains(out, "SUMMARY") || !strings.Contains(out, "FINAL REQUEST") {
 		t.Fatalf("expected narrow explain output to preserve section structure, got %q", out)
 	}

@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"unicode"
 
@@ -433,18 +432,4 @@ func NormalizeKeyString(raw string) string {
 		return ""
 	}
 	return normalized
-}
-
-func actionIDs() []ActionID {
-	ids := make([]ActionID, 0, len(definitions))
-	for _, def := range definitions {
-		ids = append(ids, def.id)
-	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	return ids
-}
-
-// KnownActions returns the sorted list of action identifiers.
-func KnownActions() []ActionID {
-	return actionIDs()
 }

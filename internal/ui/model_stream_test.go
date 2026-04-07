@@ -32,27 +32,33 @@ func TestLiveSessionPause(t *testing.T) {
 	ls := newLiveSession("s", 10)
 	evt := &stream.Event{Kind: stream.KindSSE, Direction: stream.DirReceive, Payload: []byte("one")}
 	ls.append([]*stream.Event{evt})
-	if len(ls.visibleEvents()) != 1 {
-		t.Fatalf("expected visible events while running")
+	if len(ls.events) != 1 {
+		t.Fatalf("expected one event while running")
 	}
 	ls.setPaused(true)
 	if !ls.paused {
 		t.Fatalf("expected paused flag to set")
 	}
-	if len(ls.visibleEvents()) != 1 {
-		t.Fatalf("expected existing events visible when paused")
+	if ls.pausedIndex != 1 {
+		t.Fatalf("expected paused index to capture current position, got %d", ls.pausedIndex)
 	}
 	ls.append(
 		[]*stream.Event{
 			{Kind: stream.KindSSE, Direction: stream.DirReceive, Payload: []byte("two")},
 		},
 	)
-	if len(ls.visibleEvents()) != 1 {
-		t.Fatalf("expected new events hidden while paused")
+	if len(ls.events) != 2 {
+		t.Fatalf("expected buffered events to grow while paused")
+	}
+	if ls.pausedIndex != 1 {
+		t.Fatalf("expected pause boundary to stay fixed while paused, got %d", ls.pausedIndex)
 	}
 	ls.setPaused(false)
-	if len(ls.visibleEvents()) != 2 {
-		t.Fatalf("expected all events visible after resume")
+	if ls.pausedIndex != -1 {
+		t.Fatalf("expected paused index reset after resume, got %d", ls.pausedIndex)
+	}
+	if len(ls.events) != 2 {
+		t.Fatalf("expected all events available after resume")
 	}
 }
 

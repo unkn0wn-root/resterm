@@ -1,8 +1,6 @@
 package nettrace
 
 import (
-	"errors"
-	"sort"
 	"sync"
 	"time"
 )
@@ -167,49 +165,4 @@ func (c *Collector) Timeline() *Timeline {
 		timeline.Duration = timeline.Completed.Sub(timeline.Started)
 	}
 	return timeline
-}
-
-func (c *Collector) Merge(other *Collector) error {
-	if other == nil {
-		return nil
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	other.mu.Lock()
-	defer other.mu.Unlock()
-
-	if len(other.active) > 0 {
-		return errors.New("cannot merge collector with active phases")
-	}
-
-	c.phases = append(c.phases, other.phases...)
-	if other.started.Before(c.started) || c.started.IsZero() {
-		c.started = other.started
-	}
-
-	if other.finished.After(c.finished) {
-		c.finished = other.finished
-	}
-
-	if c.err == "" {
-		c.err = other.err
-	}
-	return nil
-}
-
-func (c *Collector) SortedPhases() []Phase {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	ph := make([]Phase, len(c.phases))
-	copy(ph, c.phases)
-	sort.SliceStable(ph, func(i, j int) bool {
-		if ph[i].Start.Equal(ph[j].Start) {
-			return ph[i].End.Before(ph[j].End)
-		}
-		return ph[i].Start.Before(ph[j].Start)
-	})
-	return ph
 }

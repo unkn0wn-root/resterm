@@ -73,17 +73,6 @@ func CodeOf(err error) Code {
 	return CodeUnknown
 }
 
-func Is(err error, code Code) bool {
-	if err == nil {
-		return false
-	}
-	var e *Error
-	if stdErrors.As(err, &e) {
-		return e.Code == code
-	}
-	return false
-}
-
 func Message(err error) string {
 	if err == nil {
 		return ""

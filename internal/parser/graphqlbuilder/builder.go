@@ -84,10 +84,6 @@ func (b *Builder) disable() {
 	b.queryFile = ""
 }
 
-func (b *Builder) Enabled() bool {
-	return b.enabled
-}
-
 func (b *Builder) HandleBodyLine(line string) bool {
 	if !b.enabled {
 		return false

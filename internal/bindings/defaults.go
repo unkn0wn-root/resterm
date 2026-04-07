@@ -3,7 +3,7 @@ package bindings
 import "fmt"
 
 var (
-	// Action identifiers exposed via KnownActions for docs/config validation.
+	// Action identifiers used across runtime bindings and UI help rendering.
 	ActionCycleFocusNext          ActionID = "cycle_focus_next"
 	ActionCycleFocusPrev          ActionID = "cycle_focus_prev"
 	ActionOpenEnvSelector         ActionID = "open_env_selector"

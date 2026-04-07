@@ -206,12 +206,6 @@ var kw = map[string]Kind{
 	"not":      KW_NOT,
 }
 
-// IsKeyword reports whether name is a RestermScript keyword.
-func IsKeyword(name string) bool {
-	_, ok := kw[name]
-	return ok
-}
-
 // KeywordClassOf returns the keyword class for name, or KeywordNone.
 func KeywordClassOf(name string) KeywordClass {
 	k, ok := kw[name]

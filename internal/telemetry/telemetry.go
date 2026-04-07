@@ -64,14 +64,6 @@ func WithSpanProcessor(proc sdktrace.SpanProcessor) Option {
 	}
 }
 
-func WithExporter(exp sdktrace.SpanExporter) Option {
-	return func(opts *providerOptions) {
-		if exp != nil {
-			opts.exporter = exp
-		}
-	}
-}
-
 type manager struct {
 	tracer   trace.Tracer
 	provider *sdktrace.TracerProvider

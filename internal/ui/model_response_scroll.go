@@ -20,14 +20,6 @@ func (m *Model) scrollShortcutToEdge(top bool) (tea.Cmd, bool) {
 	}
 }
 
-func (m *Model) scrollResponseToTop() tea.Cmd {
-	return m.scrollResponseToEdge(true)
-}
-
-func (m *Model) scrollResponseToBottom() tea.Cmd {
-	return m.scrollResponseToEdge(false)
-}
-
 func (m *Model) scrollResponseToEdge(top bool) tea.Cmd {
 	if m.focus != focusResponse {
 		return nil

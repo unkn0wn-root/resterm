@@ -126,3 +126,32 @@ func TestLoadEnvironmentFileOnlySharedReturnsError(t *testing.T) {
 		t.Fatalf("expected only-shared parse error, got %v", err)
 	}
 }
+
+func TestIsReservedEnvironmentTrimsWhitespace(t *testing.T) {
+	if !IsReservedEnvironment("  $shared\t") {
+		t.Fatal("expected trimmed reserved environment name to be recognized")
+	}
+}
+
+func TestSelectEnvTrimsInputs(t *testing.T) {
+	set := EnvironmentSet{"dev": {"base.url": "https://api.dev"}}
+
+	if got := SelectEnv(set, "  stage  ", "dev"); got != "stage" {
+		t.Fatalf("SelectEnv override = %q, want %q", got, "stage")
+	}
+	if got := SelectEnv(set, "", "  dev  "); got != "dev" {
+		t.Fatalf("SelectEnv current = %q, want %q", got, "dev")
+	}
+}
+
+func TestEnvValuesTrimsName(t *testing.T) {
+	set := EnvironmentSet{"dev": {"base.url": "https://api.dev"}}
+
+	env := EnvValues(set, "  dev  ")
+	if env == nil {
+		t.Fatal("expected trimmed environment lookup to succeed")
+	}
+	if env["base.url"] != "https://api.dev" {
+		t.Fatalf("unexpected env values: %#v", env)
+	}
+}

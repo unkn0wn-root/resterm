@@ -71,22 +71,3 @@ func (a semver) lt(b semver) bool {
 	}
 	return a.pre < b.pre
 }
-
-func compareSemver(a, b string) (int, error) {
-	la, err := parseSemver(a)
-	if err != nil {
-		return 0, err
-	}
-	lb, err := parseSemver(b)
-	if err != nil {
-		return 0, err
-	}
-	switch {
-	case la.lt(lb):
-		return -1, nil
-	case lb.lt(la):
-		return 1, nil
-	default:
-		return 0, nil
-	}
-}

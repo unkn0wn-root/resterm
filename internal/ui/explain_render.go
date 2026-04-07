@@ -11,10 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
-func renderExplainStyled(rep *xplain.Report, width int, th theme.Theme) string {
-	return renderExplainStyledView(buildExplainView(rep), width, th)
-}
-
 func renderExplainStyledView(v explainView, width int, th theme.Theme) string {
 	if width <= 0 {
 		width = defaultResponseViewportWidth

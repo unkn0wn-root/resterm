@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -32,18 +31,6 @@ func ParseCommands(command string) ([]*restfile.Request, error) {
 		return nil, err
 	}
 	return normCmd(cmd)
-}
-
-func VisibleHeaders(headers http.Header) []string {
-	if len(headers) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(headers))
-	for k := range headers {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func ensureJSONHeader(h http.Header) {

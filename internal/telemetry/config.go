@@ -70,34 +70,6 @@ func ConfigFromEnv(getenv func(string) string) Config {
 	return cfg
 }
 
-func MergeHeaders(dst map[string]string, src map[string]string) map[string]string {
-	if len(src) == 0 {
-		if len(dst) == 0 {
-			return nil
-		}
-
-		cloned := make(map[string]string, len(dst))
-		for k, v := range dst {
-			cloned[k] = v
-		}
-		return cloned
-	}
-
-	merged := make(map[string]string, len(dst)+len(src))
-	for k, v := range dst {
-		merged[k] = v
-	}
-
-	for k, v := range src {
-		key := strings.TrimSpace(k)
-		if key == "" {
-			continue
-		}
-		merged[key] = strings.TrimSpace(v)
-	}
-	return merged
-}
-
 func ParseHeaders(spec string) (map[string]string, error) {
 	if strings.TrimSpace(spec) == "" {
 		return nil, nil
