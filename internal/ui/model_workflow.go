@@ -1090,11 +1090,29 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 	if st != nil && st.origin == workflowOriginForEach {
 		switch {
 		case msg.skipped:
-			m.recordSkippedHistory(msg.executed, msg.requestText, msg.environment, msg.skipReason)
+			m.recordSkippedHistory(
+				msg.executed,
+				msg.requestText,
+				msg.environment,
+				msg.skipReason,
+				msg.runtimeSecrets...,
+			)
 		case msg.response != nil:
-			m.recordHTTPHistory(msg.response, msg.executed, msg.requestText, msg.environment)
+			m.recordHTTPHistory(
+				msg.response,
+				msg.executed,
+				msg.requestText,
+				msg.environment,
+				msg.runtimeSecrets...,
+			)
 		case msg.grpc != nil:
-			m.recordGRPCHistory(msg.grpc, msg.executed, msg.requestText, msg.environment)
+			m.recordGRPCHistory(
+				msg.grpc,
+				msg.executed,
+				msg.requestText,
+				msg.environment,
+				msg.runtimeSecrets...,
+			)
 		}
 	}
 	return cmds

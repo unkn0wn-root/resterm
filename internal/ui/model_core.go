@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -286,6 +287,7 @@ type Model struct {
 	scriptError     error
 	globals         *globalStore
 	fileVars        *fileStore
+	authCmd         *authcmd.Manager
 	oauth           *oauth.Manager
 	updateClient    update.Client
 	updateVersion   string
@@ -686,6 +688,7 @@ func New(cfg Config) Model {
 		rtsEng:                   rts.NewEng(),
 		globals:                  newGlobalStore(),
 		fileVars:                 newFileStore(),
+		authCmd:                  authcmd.NewManager(),
 		oauth:                    oauth.NewManager(client),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,

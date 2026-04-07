@@ -34,18 +34,19 @@ const (
 )
 
 type responseMsg struct {
-	response    *httpclient.Response
-	grpc        *grpcclient.Response
-	err         error
-	tests       []scripts.TestResult
-	scriptErr   error
-	executed    *restfile.Request
-	requestText string
-	environment string
-	skipped     bool
-	skipReason  string
-	preview     bool
-	explain     *xplain.Report
+	response       *httpclient.Response
+	grpc           *grpcclient.Response
+	err            error
+	tests          []scripts.TestResult
+	scriptErr      error
+	executed       *restfile.Request
+	requestText    string
+	runtimeSecrets []string
+	environment    string
+	skipped        bool
+	skipReason     string
+	preview        bool
+	explain        *xplain.Report
 }
 
 type statusMsg struct {

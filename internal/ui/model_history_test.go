@@ -58,6 +58,52 @@ func TestRedactHistoryTextHonorsSensitiveHeaderOverride(t *testing.T) {
 	}
 }
 
+func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
+	tmp := t.TempDir()
+	store := histdb.New(filepath.Join(tmp, "history.db"))
+	model := New(Config{History: store})
+
+	req := &restfile.Request{
+		Method:  "GET",
+		URL:     "https://example.com/registry",
+		Headers: http.Header{"X-Registry-Token": {"Token token-123"}},
+		Metadata: restfile.RequestMetadata{
+			AllowSensitiveHeaders: true,
+		},
+	}
+	resp := &httpclient.Response{
+		Status:     "200 OK",
+		StatusCode: 200,
+		Headers:    http.Header{"Content-Type": []string{"application/json"}},
+		Body:       []byte(`{"ok":true}`),
+	}
+
+	model.recordHTTPHistory(
+		resp,
+		req,
+		"GET https://example.com/registry\nX-Registry-Token: Token token-123\n\n",
+		"dev",
+		"token-123",
+		"Token token-123",
+	)
+
+	entries, err := store.Entries()
+	if err != nil {
+		t.Fatalf("entries: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(entries))
+	}
+
+	mask := maskSecret("", true)
+	if strings.Contains(entries[0].RequestText, "token-123") {
+		t.Fatalf("expected runtime token to be redacted, got %q", entries[0].RequestText)
+	}
+	if !strings.Contains(entries[0].RequestText, "X-Registry-Token: "+mask) {
+		t.Fatalf("expected custom header value to be masked, got %q", entries[0].RequestText)
+	}
+}
+
 func TestRecordCompareHistoryAppendsEntry(t *testing.T) {
 	tmp := t.TempDir()
 	store := histdb.New(filepath.Join(tmp, "history.db"))

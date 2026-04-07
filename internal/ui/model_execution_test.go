@@ -16,8 +16,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
@@ -978,6 +980,223 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	case <-done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("ensureOAuth did not return after cancellation")
+	}
+}
+
+func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
+	var calls int32
+	var seen authcmd.Config
+
+	model := Model{
+		cfg:         Config{EnvironmentName: "dev"},
+		authCmd:     authcmd.NewManager(),
+		globals:     newGlobalStore(),
+		currentFile: "/tmp/example.http",
+	}
+	model.authCmd.SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		seen = cfg
+		return []byte("token-basic"), nil
+	})
+
+	auth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
+		"argv":      `["gh","auth","token"]`,
+		"cache_key": "github",
+	}}
+	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+
+	res, err := model.ensureCommandAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		"",
+		5*time.Second,
+	)
+	if err != nil {
+		t.Fatalf("ensureCommandAuth: %v", err)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
+		t.Fatalf("expected bearer header, got %q", got)
+	}
+	if res.Token != "token-basic" {
+		t.Fatalf("expected token result, got %q", res.Token)
+	}
+	if seen.Dir != "/tmp" {
+		t.Fatalf("expected command dir /tmp, got %q", seen.Dir)
+	}
+	if seen.Timeout != 5*time.Second {
+		t.Fatalf("expected timeout 5s, got %s", seen.Timeout)
+	}
+
+	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+	if _, err := model.ensureCommandAuth(
+		context.Background(),
+		req2,
+		vars.NewResolver(),
+		"",
+		5*time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth second: %v", err)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected cached command auth result, got %d calls", calls)
+	}
+}
+
+func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
+	called := int32(0)
+
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		authCmd: authcmd.NewManager(),
+		globals: newGlobalStore(),
+	}
+	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&called, 1)
+		return []byte("token-basic"), nil
+	})
+
+	req := &restfile.Request{
+		Headers: http.Header{"Authorization": {"Bearer manual"}},
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+				"argv": `["gh","auth","token"]`,
+			}},
+		},
+	}
+
+	if _, err := model.ensureCommandAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth with existing header: %v", err)
+	}
+	if atomic.LoadInt32(&called) != 0 {
+		t.Fatalf("expected no command auth execution, got %d", called)
+	}
+	if req.Headers.Get("Authorization") != "Bearer manual" {
+		t.Fatalf("expected header to remain unchanged")
+	}
+}
+
+func TestBuildCommandAuthConfigExpandsArgvAfterJSONDecode(t *testing.T) {
+	model := Model{
+		cfg:         Config{EnvironmentName: "dev"},
+		globals:     newGlobalStore(),
+		currentFile: "/tmp/example.http",
+	}
+
+	auth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
+		"argv": `["aws","--profile","{{aws.profile}}","ecr","get-login-password"]`,
+	}}
+	resolver := vars.NewResolver(vars.NewMapProvider("aws", map[string]string{
+		"profile": `qa"blue\team`,
+	}))
+
+	cfg, err := model.buildCommandAuthConfig(auth, resolver, 5*time.Second)
+	if err != nil {
+		t.Fatalf("buildCommandAuthConfig: %v", err)
+	}
+
+	if got := cfg.Argv[2]; got != `qa"blue\team` {
+		t.Fatalf("expected expanded argv value with quotes and slashes preserved, got %q", got)
+	}
+	if cfg.Timeout != 5*time.Second {
+		t.Fatalf("expected timeout 5s, got %s", cfg.Timeout)
+	}
+}
+
+func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
+	var calls int32
+
+	model := Model{
+		cfg:         Config{EnvironmentName: "dev"},
+		authCmd:     authcmd.NewManager(),
+		globals:     newGlobalStore(),
+		currentFile: "/tmp/example.http",
+	}
+	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return []byte("token-basic"), nil
+	})
+
+	auth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
+		"argv":      `["gh","auth","token"]`,
+		"cache_key": "github",
+	}}
+
+	prime := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+	if _, err := model.ensureCommandAuth(
+		context.Background(),
+		prime,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth prime: %v", err)
+	}
+
+	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+	preview, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
+	if err != nil {
+		t.Fatalf("prepareExplainAuthPreview: %v", err)
+	}
+	if preview.status != xplain.StageOK {
+		t.Fatalf("expected preview ok, got %v", preview.status)
+	}
+	if preview.summary != explainSummaryAuthPrepared {
+		t.Fatalf("expected auth prepared summary, got %q", preview.summary)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
+		t.Fatalf("expected cached auth header, got %q", got)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected preview to reuse cache only, got %d executions", calls)
+	}
+	if len(preview.extraSecrets) == 0 {
+		t.Fatalf("expected preview secrets to include cached auth values")
+	}
+}
+
+func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
+	called := int32(0)
+
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		authCmd: authcmd.NewManager(),
+		globals: newGlobalStore(),
+	}
+	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&called, 1)
+		return []byte("token-basic"), nil
+	})
+
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+				"argv": `["gh","auth","token"]`,
+			}},
+		},
+	}
+
+	preview, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
+	if err != nil {
+		t.Fatalf("prepareExplainAuthPreview: %v", err)
+	}
+	if preview.status != xplain.StageSkipped {
+		t.Fatalf("expected preview skip, got %v", preview.status)
+	}
+	if preview.summary != explainSummaryCommandAuthExecutionSkipped {
+		t.Fatalf("expected command skip summary, got %q", preview.summary)
+	}
+	if req.Headers.Get("Authorization") != "" {
+		t.Fatalf("expected no auth header injection without cache")
+	}
+	if atomic.LoadInt32(&called) != 0 {
+		t.Fatalf("expected preview to skip command execution, got %d calls", called)
 	}
 }
 

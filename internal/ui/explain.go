@@ -40,33 +40,34 @@ const (
 )
 
 const (
-	explainSummaryApplyComplete             = "apply complete"
-	explainSummaryApplyFailed               = "apply failed"
-	explainSummaryConditionPassed           = "condition passed"
-	explainSummaryConditionBlockedRequest   = "condition blocked request"
-	explainSummaryConditionEvaluationFailed = "condition evaluation failed"
-	explainSummaryRouteSSHResolutionFailed  = "ssh resolution failed"
-	explainSummaryRouteK8sResolutionFailed  = "k8s resolution failed"
-	explainSummaryRouteConfigInvalid        = "route configuration invalid"
-	explainSummarySettingsMerged            = "effective settings merged"
-	explainSummarySettingsApplyFailed       = "settings application failed"
-	explainSummaryAuthPrepared              = "auth prepared"
-	explainSummaryAuthInjectionFailed       = "auth injection failed"
-	explainSummaryOAuthTokenFetchSkipped    = "oauth token fetch skipped"
-	explainSummaryAuthTypeNotApplied        = "auth type not applied"
-	explainSummaryRTSPreRequestComplete     = "RTS pre-request complete"
-	explainSummaryRTSPreRequestFailed       = "RTS pre-request failed"
-	explainSummaryRTSPreRequestOutputBad    = "RTS pre-request output invalid"
-	explainSummaryJSPreRequestComplete      = "JS pre-request complete"
-	explainSummaryJSPreRequestFailed        = "JS pre-request failed"
-	explainSummaryJSPreRequestOutputBad     = "JS pre-request output invalid"
-	explainSummaryGRPCRequestPrepared       = "gRPC request prepared"
-	explainSummaryGRPCPrepareFailed         = "gRPC preparation failed"
-	explainSummaryHTTPRequestPrepared       = "HTTP request prepared"
-	explainSummaryHTTPRequestBuildFailed    = "HTTP request build failed"
-	explainSummaryWebSocketRequestPrepared  = "WebSocket request prepared"
-	explainSummaryWebSocketPrepareFailed    = "WebSocket preparation failed"
-	explainSummaryCaptureEvaluationFailed   = "capture evaluation failed"
+	explainSummaryApplyComplete               = "apply complete"
+	explainSummaryApplyFailed                 = "apply failed"
+	explainSummaryConditionPassed             = "condition passed"
+	explainSummaryConditionBlockedRequest     = "condition blocked request"
+	explainSummaryConditionEvaluationFailed   = "condition evaluation failed"
+	explainSummaryRouteSSHResolutionFailed    = "ssh resolution failed"
+	explainSummaryRouteK8sResolutionFailed    = "k8s resolution failed"
+	explainSummaryRouteConfigInvalid          = "route configuration invalid"
+	explainSummarySettingsMerged              = "effective settings merged"
+	explainSummarySettingsApplyFailed         = "settings application failed"
+	explainSummaryAuthPrepared                = "auth prepared"
+	explainSummaryAuthInjectionFailed         = "auth injection failed"
+	explainSummaryOAuthTokenFetchSkipped      = "oauth token fetch skipped"
+	explainSummaryCommandAuthExecutionSkipped = "command auth execution skipped"
+	explainSummaryAuthTypeNotApplied          = "auth type not applied"
+	explainSummaryRTSPreRequestComplete       = "RTS pre-request complete"
+	explainSummaryRTSPreRequestFailed         = "RTS pre-request failed"
+	explainSummaryRTSPreRequestOutputBad      = "RTS pre-request output invalid"
+	explainSummaryJSPreRequestComplete        = "JS pre-request complete"
+	explainSummaryJSPreRequestFailed          = "JS pre-request failed"
+	explainSummaryJSPreRequestOutputBad       = "JS pre-request output invalid"
+	explainSummaryGRPCRequestPrepared         = "gRPC request prepared"
+	explainSummaryGRPCPrepareFailed           = "gRPC preparation failed"
+	explainSummaryHTTPRequestPrepared         = "HTTP request prepared"
+	explainSummaryHTTPRequestBuildFailed      = "HTTP request build failed"
+	explainSummaryWebSocketRequestPrepared    = "WebSocket request prepared"
+	explainSummaryWebSocketPrepareFailed      = "WebSocket preparation failed"
+	explainSummaryCaptureEvaluationFailed     = "capture evaluation failed"
 )
 
 func explainKey(s string) string {
@@ -110,10 +111,11 @@ var explainStageSummaryDisplay = map[string]map[string]string{
 		explainKey(explainSummarySettingsApplyFailed): "Failed to apply merged settings",
 	},
 	explainKey(explainStageAuth): {
-		explainKey(explainSummaryAuthPrepared):           "Prepared authentication",
-		explainKey(explainSummaryAuthInjectionFailed):    "Failed to prepare authentication",
-		explainKey(explainSummaryOAuthTokenFetchSkipped): "Skipped OAuth token fetch for explain preview",
-		explainKey(explainSummaryAuthTypeNotApplied):     "Authentication type is not applied",
+		explainKey(explainSummaryAuthPrepared):                "Prepared authentication",
+		explainKey(explainSummaryAuthInjectionFailed):         "Failed to prepare authentication",
+		explainKey(explainSummaryOAuthTokenFetchSkipped):      "Skipped OAuth token fetch for explain preview",
+		explainKey(explainSummaryCommandAuthExecutionSkipped): "Skipped command auth execution for explain preview",
+		explainKey(explainSummaryAuthTypeNotApplied):          "Authentication type is not applied",
 	},
 	explainKey(explainStageRTSPreRequest): {
 		explainKey(explainSummaryRTSPreRequestComplete):  "Applied RTS pre-request script",

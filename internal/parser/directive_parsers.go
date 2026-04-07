@@ -265,6 +265,14 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if params["client_auth"] == "" {
 			params["client_auth"] = "basic"
 		}
+	case "command":
+		if len(fields) < 2 {
+			return nil
+		}
+		maps.Copy(params, parseKeyValuePairs(fields[1:]))
+		if params["argv"] == "" {
+			return nil
+		}
 	default:
 		if len(fields) >= 2 {
 			params["header"] = fields[0]

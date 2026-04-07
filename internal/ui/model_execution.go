@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/curl"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
@@ -473,14 +474,15 @@ type explainBuilder struct {
 
 type execContext struct {
 	// Immutable execution inputs.
-	model     *Model
-	doc       *restfile.Document
-	req       *restfile.Request
-	envName   string
-	options   httpclient.Options
-	extraVals map[string]rts.Value
-	extras    []map[string]string
-	preview   bool
+	model          *Model
+	doc            *restfile.Document
+	req            *restfile.Request
+	envName        string
+	options        httpclient.Options
+	extraVals      map[string]rts.Value
+	extras         []map[string]string
+	preview        bool
+	runtimeSecrets []string
 
 	// Execution services and lifetime control.
 	client     *httpclient.Client
@@ -870,8 +872,10 @@ func (e *execContext) run() tea.Msg {
 
 func (e *execContext) baseResponse() responseMsg {
 	return responseMsg{
-		executed:    e.req,
-		environment: e.envName,
+		executed:       e.req,
+		requestText:    "",
+		runtimeSecrets: append([]string(nil), e.runtimeSecrets...),
+		environment:    e.envName,
 	}
 }
 
@@ -1319,28 +1323,56 @@ func (e *execContext) prepareAuthentication() *responseMsg {
 		return nil
 	}
 
-	if err := e.model.ensureOAuth(
-		e.sendCtx,
-		e.req,
-		e.resolver,
-		e.options,
-		e.envName,
-		e.effectiveTimeout,
-	); err != nil {
-		e.explain.stage(
-			explainStageAuth,
-			xplain.StageError,
-			explainSummaryAuthInjectionFailed,
-			authBefore,
+	var extraSecrets []string
+	switch strings.ToLower(strings.TrimSpace(e.req.Metadata.Auth.Type)) {
+	case "command":
+		res, err := e.model.ensureCommandAuth(
+			e.sendCtx,
 			e.req,
-			err.Error(),
+			e.resolver,
+			e.envName,
+			e.effectiveTimeout,
 		)
+		if err != nil {
+			e.explain.stage(
+				explainStageAuth,
+				xplain.StageError,
+				explainSummaryAuthInjectionFailed,
+				authBefore,
+				e.req,
+				err.Error(),
+			)
 
-		msg := e.errorResponse(err, "Auth preparation failed")
-		return &msg
+			msg := e.errorResponse(err, "Auth preparation failed")
+			return &msg
+		}
+		extraSecrets = commandAuthSecrets(res)
+	default:
+		if err := e.model.ensureOAuth(
+			e.sendCtx,
+			e.req,
+			e.resolver,
+			e.options,
+			e.envName,
+			e.effectiveTimeout,
+		); err != nil {
+			e.explain.stage(
+				explainStageAuth,
+				xplain.StageError,
+				explainSummaryAuthInjectionFailed,
+				authBefore,
+				e.req,
+				err.Error(),
+			)
+
+			msg := e.errorResponse(err, "Auth preparation failed")
+			return &msg
+		}
+		extraSecrets = explainInjectedAuthSecrets(e.req.Metadata.Auth, authBefore, e.req)
 	}
 
-	e.explain.addSecrets(explainInjectedAuthSecrets(e.req.Metadata.Auth, authBefore, e.req)...)
+	e.explain.addSecrets(extraSecrets...)
+	e.runtimeSecrets = append(e.runtimeSecrets, extraSecrets...)
 	e.explain.stage(explainStageAuth, xplain.StageOK, explainSummaryAuthPrepared, authBefore, e.req)
 	return nil
 }
@@ -2759,6 +2791,24 @@ func explainInjectedAuthSecrets(
 	return values
 }
 
+func commandAuthSecrets(res authcmd.Result) []string {
+	tok := strings.TrimSpace(res.Token)
+	val := strings.TrimSpace(res.Value)
+
+	switch {
+	case tok == "" && val == "":
+		return nil
+	case tok == val:
+		return []string{tok}
+	case tok == "":
+		return []string{val}
+	case val == "":
+		return []string{tok}
+	default:
+		return []string{tok, val}
+	}
+}
+
 func (m *Model) prepareExplainAuthPreview(
 	req *restfile.Request,
 	resolver *vars.Resolver,
@@ -2776,6 +2826,52 @@ func (m *Model) prepareExplainAuthPreview(
 			status:  xplain.StageOK,
 			summary: explainSummaryAuthPrepared,
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
+		}, nil
+	case "command":
+		if m.authCmd == nil {
+			return explainAuthPreviewResult{}, errdef.New(
+				errdef.CodeHTTP,
+				"command auth support is not initialised",
+			)
+		}
+
+		cfg, err := m.buildCommandAuthConfig(auth, resolver, 0)
+		if err != nil {
+			return explainAuthPreviewResult{}, err
+		}
+
+		header := cfg.Header
+		if req.Headers != nil && req.Headers.Get(header) != "" {
+			return explainAuthPreviewResult{
+				status:  xplain.StageOK,
+				summary: explainSummaryAuthPrepared,
+				notes:   []string{"auth header already set on request"},
+			}, nil
+		}
+
+		envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+		res, ok := m.authCmd.Cached(envKey, cfg)
+		if !ok {
+			return explainAuthPreviewResult{
+				status:  xplain.StageSkipped,
+				summary: explainSummaryCommandAuthExecutionSkipped,
+				notes: []string{
+					"Command auth execution is skipped in explain preview",
+					fmt.Sprintf("%s is omitted without a cached command auth result", header),
+				},
+			}, nil
+		}
+
+		if req.Headers == nil {
+			req.Headers = make(http.Header)
+		}
+		req.Headers.Set(res.Header, res.Value)
+
+		return explainAuthPreviewResult{
+			status:       xplain.StageOK,
+			summary:      explainSummaryAuthPrepared,
+			notes:        []string{"used cached command auth result for explain preview"},
+			extraSecrets: commandAuthSecrets(res),
 		}, nil
 	case "oauth2":
 		if m.oauth == nil {
@@ -2852,6 +2948,49 @@ func (m *Model) prepareExplainAuthPreview(
 			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
 		}, nil
 	}
+}
+
+func (m *Model) ensureCommandAuth(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	envName string,
+	timeout time.Duration,
+) (authcmd.Result, error) {
+	if req == nil || req.Metadata.Auth == nil {
+		return authcmd.Result{}, nil
+	}
+	if !strings.EqualFold(req.Metadata.Auth.Type, "command") {
+		return authcmd.Result{}, nil
+	}
+	if m.authCmd == nil {
+		return authcmd.Result{}, errdef.New(errdef.CodeHTTP, "command auth support is not initialised")
+	}
+
+	cfg, err := m.buildCommandAuthConfig(req.Metadata.Auth, resolver, timeout)
+	if err != nil {
+		return authcmd.Result{}, err
+	}
+
+	header := cfg.Header
+	if req.Headers != nil && req.Headers.Get(header) != "" {
+		return authcmd.Result{}, nil
+	}
+
+	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	res, err := m.authCmd.Resolve(ctx, envKey, cfg)
+	if err != nil {
+		return authcmd.Result{}, errdef.Wrap(errdef.CodeHTTP, err, "resolve command auth")
+	}
+	if req.Headers == nil {
+		req.Headers = make(http.Header)
+	}
+	if req.Headers.Get(res.Header) != "" {
+		return authcmd.Result{}, nil
+	}
+
+	req.Headers.Set(res.Header, res.Value)
+	return res, nil
 }
 
 func (m *Model) ensureOAuth(
@@ -2932,6 +3071,60 @@ func (m *Model) ensureOAuth(
 
 	req.Headers.Set(header, value)
 	return nil
+}
+
+func (m *Model) buildCommandAuthConfig(
+	auth *restfile.AuthSpec,
+	resolver *vars.Resolver,
+	timeout time.Duration,
+) (authcmd.Config, error) {
+	cfg := authcmd.Config{}
+	if auth == nil {
+		return cfg, errdef.New(errdef.CodeHTTP, "missing command auth spec")
+	}
+
+	params := make(map[string]string, len(auth.Params))
+	for key, raw := range auth.Params {
+		key = strings.ToLower(strings.TrimSpace(key))
+		if key == "" {
+			continue
+		}
+		value := strings.TrimSpace(raw)
+		if value == "" {
+			continue
+		}
+		if resolver != nil && key != "argv" {
+			expanded, err := resolver.ExpandTemplates(value)
+			if err != nil {
+				return cfg, errdef.Wrap(errdef.CodeHTTP, err, "expand command auth param %s", key)
+			}
+			value = strings.TrimSpace(expanded)
+		}
+		params[key] = value
+	}
+
+	dir := ""
+	if m.currentFile != "" {
+		dir = filepath.Dir(m.currentFile)
+	}
+	cfg, err := authcmd.Parse(params, dir)
+	if err != nil {
+		return cfg, err
+	}
+	if resolver != nil {
+		for i, arg := range cfg.Argv {
+			expanded, err := resolver.ExpandTemplates(arg)
+			if err != nil {
+				return cfg, errdef.Wrap(errdef.CodeHTTP, err, "expand command auth argv[%d]", i)
+			}
+			cfg.Argv[i] = expanded
+		}
+	}
+	cfg, err = authcmd.Finalize(cfg)
+	if err != nil {
+		return cfg, err
+	}
+	return cfg.WithBaseTimeout(timeout), nil
 }
 
 func (m *Model) buildOAuthConfig(

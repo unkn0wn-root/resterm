@@ -1445,6 +1445,29 @@ func TestParseOAuth2AuthSpecCacheOnly(t *testing.T) {
 	}
 }
 
+func TestParseCommandAuthSpec(t *testing.T) {
+	spec := parseAuthSpec(
+		`command argv='["gh","auth","token"]' header=Authorization cache_key=github timeout=5s`,
+	)
+	if spec == nil {
+		t.Fatalf("expected command auth spec")
+	}
+	if spec.Type != "command" {
+		t.Fatalf("unexpected auth type %q", spec.Type)
+	}
+	checks := map[string]string{
+		"argv":      `["gh","auth","token"]`,
+		"header":    "Authorization",
+		"cache_key": "github",
+		"timeout":   "5s",
+	}
+	for key, expected := range checks {
+		if spec.Params[key] != expected {
+			t.Fatalf("expected %s=%q, got %q", key, expected, spec.Params[key])
+		}
+	}
+}
+
 func TestParseCompareDirective(t *testing.T) {
 	src := `# @name Compare
 # @compare dev stage prod base=stage

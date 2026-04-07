@@ -11,6 +11,20 @@ type jseg struct {
 	isI bool
 }
 
+type segResult struct {
+	seg  jseg
+	next int
+	ok   bool
+	stop bool
+}
+
+type idxResult struct {
+	idx  int
+	next int
+	ok   bool
+	stop bool
+}
+
 func jsonPathGet(v any, path string) (any, bool) {
 	p := strings.TrimSpace(path)
 	if p == "" {
@@ -52,6 +66,12 @@ func jsonPathGet(v any, path string) (any, bool) {
 	return cur, true
 }
 
+// JSONPathGet resolves a value using the same lightweight JSON path semantics
+// used by the RTS runtime.
+func JSONPathGet(v any, path string) (any, bool) {
+	return jsonPathGet(v, path)
+}
+
 func splitPath(p string) []jseg {
 	var out []jseg
 	buf := strings.Builder{}
@@ -62,14 +82,14 @@ func splitPath(p string) []jseg {
 			out = addSeg(out, &buf)
 		case '[':
 			out = addSeg(out, &buf)
-			seg, ni, ok, stop := readSeg(p, i)
-			if stop {
+			res := readSeg(p, i)
+			if res.stop {
 				return out
 			}
-			if ok {
-				out = append(out, seg)
+			if res.ok {
+				out = append(out, res.seg)
 			}
-			i = ni
+			i = res.next
 		default:
 			buf.WriteByte(ch)
 		}
@@ -87,41 +107,45 @@ func addSeg(out []jseg, buf *strings.Builder) []jseg {
 	return out
 }
 
-func readSeg(p string, i int) (jseg, int, bool, bool) {
+func readSeg(p string, i int) segResult {
 	if i+1 >= len(p) {
-		return jseg{}, 0, false, true
+		return segResult{stop: true}
 	}
 	i++
 	if q := p[i]; q == '"' || q == '\'' {
 		key, ni, ok := readQ(p, i)
 		if !ok {
-			return jseg{}, 0, false, true
+			return segResult{stop: true}
 		}
-		return jseg{key: key}, ni, true, false
+		return segResult{seg: jseg{key: key}, next: ni, ok: true}
 	}
-	idx, ni, ok, stop := readIdx(p, i)
-	if stop {
-		return jseg{}, 0, false, true
+	res := readIdx(p, i)
+	if res.stop {
+		return segResult{stop: true}
 	}
-	if ok {
-		return jseg{idx: idx, isI: true}, ni, true, false
+	if res.ok {
+		return segResult{
+			seg:  jseg{idx: res.idx, isI: true},
+			next: res.next,
+			ok:   true,
+		}
 	}
-	return jseg{}, ni, false, false
+	return segResult{next: res.next}
 }
 
-func readIdx(p string, i int) (int, int, bool, bool) {
+func readIdx(p string, i int) idxResult {
 	j := i
 	for j < len(p) && p[j] != ']' {
 		j++
 	}
 	if j >= len(p) {
-		return 0, 0, false, true
+		return idxResult{stop: true}
 	}
 	idx, err := strconv.Atoi(strings.TrimSpace(p[i:j]))
 	if err != nil {
-		return 0, j, false, false
+		return idxResult{next: j}
 	}
-	return idx, j, true, false
+	return idxResult{idx: idx, next: j, ok: true}
 }
 
 func readQ(p string, i int) (string, int, bool) {
