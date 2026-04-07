@@ -2,7 +2,6 @@ package vars
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,6 +17,11 @@ const SharedEnvKey = "$shared"
 
 type EnvironmentSet map[string]map[string]string
 
+var environmentFileCandidates = [...]string{
+	"rest-client.env.json",
+	"resterm.env.json",
+}
+
 // IsReservedEnvironment reports whether the name is reserved for
 // framework behavior and cannot be selected as a concrete environment.
 func IsReservedEnvironment(name string) bool {
@@ -31,7 +35,30 @@ func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
 	return loadJSONEnvironmentFile(path)
 }
 
-func loadJSONEnvironmentFile(path string) (envs EnvironmentSet, err error) {
+func loadJSONEnvironmentFile(path string) (EnvironmentSet, error) {
+	raw, err := readJSONEnvironment(path)
+	if err != nil {
+		return nil, err
+	}
+
+	envs, err := parseEnvironmentSet(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	hadShared := applyShared(envs)
+	if hadShared && len(envs) == 0 {
+		return nil, errdef.New(
+			errdef.CodeParse,
+			`env file %s defines only %q; add at least one concrete environment`,
+			path,
+			SharedEnvKey,
+		)
+	}
+	return envs, nil
+}
+
+func readJSONEnvironment(path string) (raw any, err error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "open env file %s", path)
@@ -47,43 +74,33 @@ func loadJSONEnvironmentFile(path string) (envs EnvironmentSet, err error) {
 		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read env file %s", path)
 	}
 
-	var raw any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return nil, errdef.Wrap(errdef.CodeParse, err, "parse env file %s", path)
 	}
+	return raw, nil
+}
 
-	envs = make(EnvironmentSet)
-	switch v := raw.(type) {
-	case map[string]any:
-		for envName, value := range v {
-			envs[envName] = flattenEnv(value)
-		}
-	default:
+func parseEnvironmentSet(raw any) (EnvironmentSet, error) {
+	obj, ok := raw.(map[string]any)
+	if !ok {
 		return nil, errdef.New(errdef.CodeParse, "unsupported env file format: %T", raw)
 	}
-	hadShared := false
-	if _, ok := envs[SharedEnvKey]; ok {
-		hadShared = true
-	}
-	applyShared(envs)
-	if hadShared && len(envs) == 0 {
-		return nil, errdef.New(
-			errdef.CodeParse,
-			`env file %s defines only %q; add at least one concrete environment`,
-			path,
-			SharedEnvKey,
-		)
+
+	envs := make(EnvironmentSet, len(obj))
+	for envName, value := range obj {
+		envs[envName] = flattenEnv(value)
 	}
 	return envs, nil
 }
 
 // applyShared merges the $shared environment's values as defaults into every
 // other environment (environment-specific values take precedence), then removes
-// $shared from the set so it never appears as a selectable environment.
-func applyShared(envs EnvironmentSet) {
+// $shared from the set so it never appears as a selectable environment. It
+// reports whether the set contained $shared.
+func applyShared(envs EnvironmentSet) bool {
 	shared, ok := envs[SharedEnvKey]
 	if !ok {
-		return
+		return false
 	}
 	for name, env := range envs {
 		if name == SharedEnvKey {
@@ -96,6 +113,7 @@ func applyShared(envs EnvironmentSet) {
 		}
 	}
 	delete(envs, SharedEnvKey)
+	return true
 }
 
 func flattenEnv(value any) map[string]string {
@@ -114,47 +132,52 @@ func flattenEnvValue(prefix string, value any, out map[string]string) {
 			if key == "" {
 				continue
 			}
-			next := key
-			if prefix != "" {
-				next = prefix + "." + key
-			}
-			flattenEnvValue(next, child, out)
+			flattenEnvValue(envPath(prefix, key), child, out)
 		}
 	case []any:
 		for idx, item := range v {
-			childKey := strconv.Itoa(idx)
-			if prefix != "" {
-				childKey = fmt.Sprintf("%s[%d]", prefix, idx)
-			}
-			flattenEnvValue(childKey, item, out)
-		}
-	case string:
-		if prefix != "" {
-			out[prefix] = v
-		}
-	case float64:
-		if prefix != "" {
-			out[prefix] = strconv.FormatFloat(v, 'f', -1, 64)
-		}
-	case bool:
-		if prefix != "" {
-			out[prefix] = strconv.FormatBool(v)
-		}
-	case nil:
-		if prefix != "" {
-			out[prefix] = ""
+			flattenEnvValue(envIndexPath(prefix, idx), item, out)
 		}
 	default:
-		if prefix != "" {
-			out[prefix] = fmt.Sprintf("%v", v)
-		}
+		setFlattenedValue(prefix, v, out)
+	}
+}
+
+func envPath(prefix, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
+}
+
+func envIndexPath(prefix string, idx int) string {
+	index := strconv.Itoa(idx)
+	if prefix == "" {
+		return index
+	}
+	return prefix + "[" + index + "]"
+}
+
+func setFlattenedValue(key string, value any, out map[string]string) {
+	if key == "" {
+		return
+	}
+
+	switch v := value.(type) {
+	case string:
+		out[key] = v
+	case float64:
+		out[key] = strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		out[key] = strconv.FormatBool(v)
+	case nil:
+		out[key] = ""
 	}
 }
 
 func ResolveEnvironment(paths []string) (EnvironmentSet, string, error) {
-	candidates := []string{"rest-client.env.json", "resterm.env.json"}
 	for _, dir := range paths {
-		for _, candidate := range candidates {
+		for _, candidate := range environmentFileCandidates {
 			p := filepath.Join(dir, candidate)
 			if _, err := os.Stat(p); err == nil {
 				envs, loadErr := LoadEnvironmentFile(p)
