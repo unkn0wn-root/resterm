@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -80,15 +81,23 @@ func TestAuthCmdHelperProcess(t *testing.T) {
 
 	switch args[0] {
 	case "stdout":
-		fmt.Fprint(os.Stdout, args[1])
+		if _, err := fmt.Fprint(os.Stdout, args[1]); err != nil {
+			t.Fatalf("write stdout: %v", err)
+		}
 		os.Exit(0)
 	case "stderr-exit":
-		fmt.Fprint(os.Stderr, args[2])
+		if _, err := fmt.Fprint(os.Stderr, args[2]); err != nil {
+			t.Fatalf("write stderr: %v", err)
+		}
 		os.Exit(2)
 	case "stdout-repeat":
-		count := 0
-		fmt.Sscanf(args[2], "%d", &count)
-		fmt.Fprint(os.Stdout, strings.Repeat(args[1], count))
+		count, err := strconv.Atoi(args[2])
+		if err != nil {
+			t.Fatalf("parse repeat count %q: %v", args[2], err)
+		}
+		if _, err := fmt.Fprint(os.Stdout, strings.Repeat(args[1], count)); err != nil {
+			t.Fatalf("write repeated stdout: %v", err)
+		}
 		os.Exit(0)
 	default:
 		os.Exit(3)
