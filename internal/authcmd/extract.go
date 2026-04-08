@@ -75,7 +75,10 @@ func extractJSON(cfg Config, out []byte, now time.Time) (string, string, time.Ti
 		return "", "", time.Time{}, err
 	}
 	if !ok || tok == "" {
-		return "", "", time.Time{}, errdef.New(errdef.CodeHTTP, "token_path must resolve to a non-empty scalar")
+		return "", "", time.Time{}, errdef.New(
+			errdef.CodeHTTP,
+			"token_path must resolve to a non-empty scalar",
+		)
 	}
 
 	typ, _, err := scalarAt(doc, cfg.TypePath, "type_path")

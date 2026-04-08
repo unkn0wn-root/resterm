@@ -46,7 +46,10 @@ func TestRenderCommandAuth(t *testing.T) {
 	}
 
 	out := Render(doc, Options{})
-	if !strings.Contains(out, `# @auth command argv=["gh","auth","token"] cache_key=github timeout=5s`) {
+	if !strings.Contains(
+		out,
+		`# @auth command argv=["gh","auth","token"] cache_key=github timeout=5s`,
+	) {
 		t.Fatalf("expected command auth in output: %q", out)
 	}
 }

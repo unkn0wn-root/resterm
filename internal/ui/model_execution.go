@@ -2964,7 +2964,10 @@ func (m *Model) ensureCommandAuth(
 		return authcmd.Result{}, nil
 	}
 	if m.authCmd == nil {
-		return authcmd.Result{}, errdef.New(errdef.CodeHTTP, "command auth support is not initialised")
+		return authcmd.Result{}, errdef.New(
+			errdef.CodeHTTP,
+			"command auth support is not initialised",
+		)
 	}
 
 	cfg, err := m.buildCommandAuthConfig(req.Metadata.Auth, resolver, timeout)

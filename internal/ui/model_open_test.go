@@ -93,7 +93,11 @@ func TestSubmitOpenPathRejectsInvalidFile(t *testing.T) {
 func TestSubmitOpenPathOpensEnvFile(t *testing.T) {
 	tmp := t.TempDir()
 	file := filepath.Join(tmp, ".env.local")
-	if err := os.WriteFile(file, []byte("workspace=dev\nAPI_URL=https://example.com\n"), 0o644); err != nil {
+	if err := os.WriteFile(
+		file,
+		[]byte("workspace=dev\nAPI_URL=https://example.com\n"),
+		0o644,
+	); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 

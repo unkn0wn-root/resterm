@@ -38,7 +38,9 @@ func TestRun(t *testing.T) {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
 			cfg := Config{
-				Argv: append([]string{os.Args[0], "-test.run=TestAuthCmdHelperProcess", "--"}, tt.args...),
+				Argv: append(
+					[]string{os.Args[0], "-test.run=TestAuthCmdHelperProcess", "--"},
+					tt.args...),
 			}
 			out, err := run(context.Background(), cfg)
 			if tt.err != "" {

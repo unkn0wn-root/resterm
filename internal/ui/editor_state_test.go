@@ -1140,6 +1140,63 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 	}
 }
 
+func TestRequestEditorMetadataHintsSuggestAuthSubcommands(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	keys := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'@'}},
+		{Type: tea.KeyRunes, Runes: []rune{'a'}},
+		{Type: tea.KeyRunes, Runes: []rune{'u'}},
+		{Type: tea.KeyRunes, Runes: []rune{'t'}},
+		{Type: tea.KeyRunes, Runes: []rune{'h'}},
+		{Type: tea.KeyRunes, Runes: []rune{' '}},
+	}
+	for _, key := range keys {
+		var cmd tea.Cmd
+		editor, cmd = editor.Update(key)
+		if cmd != nil {
+			cmd()
+		}
+	}
+
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to activate for @auth directive")
+	}
+	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
+		t.Fatalf("expected subcommand hint mode, got %v", editor.metadataHints.ctx.Mode)
+	}
+
+	labels := collectHintLabels(editor.metadataHints.filtered)
+	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "token_url=", "argv="} {
+		if !labels[label] {
+			t.Fatalf("expected auth subcommand %q in suggestions", label)
+		}
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
+	if len(editor.metadataHints.filtered) == 0 {
+		t.Fatal("expected filtered auth subcommand suggestions after typing prefix")
+	}
+	if got := editor.metadataHints.filtered[editor.metadataHints.selection].Label; got != "command" {
+		t.Fatalf("expected first suggestion to be command, got %q", got)
+	}
+
+	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	evt := editorEventFromCmd(t, cmd)
+	if !evt.dirty {
+		t.Fatal("expected accepting auth hint to mark editor dirty")
+	}
+	if got := editor.Value(); !strings.HasPrefix(got, "# @auth command argv=") {
+		t.Fatalf("expected editor content to include auth command skeleton, got %q", got)
+	}
+	if editor.metadataHints.active {
+		t.Fatal("expected metadata hints to close after auth acceptance")
+	}
+}
+
 func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor

@@ -100,9 +100,23 @@ func TestConfigTimeoutFor(t *testing.T) {
 		want time.Duration
 	}{
 		{name: "uses base", base: 5 * time.Second, want: 5 * time.Second},
-		{name: "uses command timeout when smaller", cfg: Config{Timeout: 3 * time.Second}, base: 5 * time.Second, want: 3 * time.Second},
-		{name: "keeps base when command timeout larger", cfg: Config{Timeout: 7 * time.Second}, base: 5 * time.Second, want: 5 * time.Second},
-		{name: "uses command timeout when base missing", cfg: Config{Timeout: 2 * time.Second}, want: 2 * time.Second},
+		{
+			name: "uses command timeout when smaller",
+			cfg:  Config{Timeout: 3 * time.Second},
+			base: 5 * time.Second,
+			want: 3 * time.Second,
+		},
+		{
+			name: "keeps base when command timeout larger",
+			cfg:  Config{Timeout: 7 * time.Second},
+			base: 5 * time.Second,
+			want: 5 * time.Second,
+		},
+		{
+			name: "uses command timeout when base missing",
+			cfg:  Config{Timeout: 2 * time.Second},
+			want: 2 * time.Second,
+		},
 	}
 
 	for _, tt := range tests {

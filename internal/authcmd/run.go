@@ -108,7 +108,12 @@ func run(ctx context.Context, cfg Config) (runOutput, error) {
 				cfg.Timeout,
 			)
 		}
-		return runOutput{}, errdef.Wrap(errdef.CodeHTTP, runCtx.Err(), "run command %q", cfg.commandName())
+		return runOutput{}, errdef.Wrap(
+			errdef.CodeHTTP,
+			runCtx.Err(),
+			"run command %q",
+			cfg.commandName(),
+		)
 	}
 
 	var exitErr *exec.ExitError
