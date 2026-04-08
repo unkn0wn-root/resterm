@@ -29,3 +29,34 @@ func TestRenderSettings(t *testing.T) {
 		t.Fatalf("expected request setting in output: %q", out)
 	}
 }
+
+func TestRenderCommandAuth(t *testing.T) {
+	doc := &restfile.Document{
+		Requests: []*restfile.Request{{
+			Method: "GET",
+			URL:    "https://example.com",
+			Metadata: restfile.RequestMetadata{
+				Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+					"argv":      `["gh","auth","token"]`,
+					"cache_key": "github",
+					"timeout":   "5s",
+				}},
+			},
+		}},
+	}
+
+	out := Render(doc, Options{})
+	if !strings.Contains(
+		out,
+		`# @auth command argv=["gh","auth","token"] cache_key=github timeout=5s`,
+	) {
+		t.Fatalf("expected command auth in output: %q", out)
+	}
+}
+
+func TestFormatAuthParamPrefersSingleQuotesForJSONLikeValues(t *testing.T) {
+	got := formatAuthParam("argv", `["tool","arg with space"]`)
+	if got != `argv='["tool","arg with space"]'` {
+		t.Fatalf("unexpected formatted auth param %q", got)
+	}
+}

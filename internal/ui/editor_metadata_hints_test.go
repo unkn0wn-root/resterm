@@ -21,6 +21,34 @@ func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
 }
 
 func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
+	authOptions := hint.MetaOptions("auth", "")
+	if len(authOptions) == 0 {
+		t.Fatal("expected auth subcommand options")
+	}
+	for _, label := range []string{
+		"basic",
+		"bearer",
+		"apikey",
+		"oauth2",
+		"command",
+		"token_url=",
+		"argv=",
+		"cache_key=",
+	} {
+		if !hintOptionsContain(authOptions, label) {
+			t.Fatalf("missing auth subcommand %q", label)
+		}
+	}
+	filteredAuth := hint.MetaOptions("auth", "com")
+	if len(filteredAuth) == 0 {
+		t.Fatal("expected filtered auth subcommand results")
+	}
+	for _, option := range filteredAuth {
+		if !strings.HasPrefix(option.Label, "com") {
+			t.Fatalf("expected com* suggestion, got %q", option.Label)
+		}
+	}
+
 	options := hint.MetaOptions("ws", "")
 	if len(options) == 0 {
 		t.Fatal("expected ws subcommand options")

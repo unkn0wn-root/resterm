@@ -128,7 +128,7 @@ func validPatchName(n string) bool {
 }
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
-	f := splitAuthFields(rest)
+	f := tokenizeFields(rest)
 	n := len(f)
 	switch n {
 	case 0:
@@ -229,7 +229,7 @@ func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
 }
 
 func parseAuthSpec(rest string) *restfile.AuthSpec {
-	fields := splitAuthFields(rest)
+	fields := tokenizeFields(rest)
 	if len(fields) == 0 {
 		return nil
 	}
@@ -265,6 +265,14 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if params["client_auth"] == "" {
 			params["client_auth"] = "basic"
 		}
+	case "command":
+		if len(fields) < 2 {
+			return nil
+		}
+		maps.Copy(params, parseKeyValuePairs(fields[1:]))
+		if params["argv"] == "" {
+			return nil
+		}
 	default:
 		if len(fields) >= 2 {
 			params["header"] = fields[0]
@@ -287,7 +295,7 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 		return spec
 	}
 
-	fields := splitAuthFields(trimmed)
+	fields := tokenizeFields(trimmed)
 	params := parseKeyValuePairs(fields)
 
 	if spec.Count == 0 {
@@ -332,7 +340,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 		return spec
 	}
 
-	fields := splitAuthFields(trimmed)
+	fields := tokenizeFields(trimmed)
 	for _, field := range fields {
 		value := strings.TrimSpace(field)
 		if value == "" {
@@ -409,7 +417,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 }
 
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
-	fields := splitAuthFields(rest)
+	fields := tokenizeFields(rest)
 	envs := make([]string, 0, len(fields))
 	seen := make(map[string]struct{})
 	var baseline string

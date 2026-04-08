@@ -53,7 +53,7 @@ func parseSSHDirective(rest string) (sshDirective, error) {
 		return res, fmt.Errorf("@ssh requires options")
 	}
 
-	fields := tokenizeOptionTokens(trimmed)
+	fields := tokenizeFieldsEscaped(trimmed)
 	if len(fields) == 0 {
 		return res, fmt.Errorf("@ssh requires options")
 	}

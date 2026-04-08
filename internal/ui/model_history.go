@@ -65,7 +65,13 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.testResults = nil
 		m.scriptError = nil
 		cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain)
-		m.recordSkippedHistory(msg.executed, msg.requestText, msg.environment, msg.skipReason)
+		m.recordSkippedHistory(
+			msg.executed,
+			msg.requestText,
+			msg.environment,
+			msg.skipReason,
+			msg.runtimeSecrets...,
+		)
 		return cmd
 	}
 
@@ -83,7 +89,13 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 			msg.environment,
 			msg.explain,
 		)
-		m.recordGRPCHistory(msg.grpc, msg.executed, msg.requestText, msg.environment)
+		m.recordGRPCHistory(
+			msg.grpc,
+			msg.executed,
+			msg.requestText,
+			msg.environment,
+			msg.runtimeSecrets...,
+		)
 		return cmd
 	}
 
@@ -121,7 +133,13 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		msg.environment,
 		msg.explain,
 	)
-	m.recordHTTPHistory(msg.response, msg.executed, msg.requestText, msg.environment)
+	m.recordHTTPHistory(
+		msg.response,
+		msg.executed,
+		msg.requestText,
+		msg.environment,
+		msg.runtimeSecrets...,
+	)
 	return cmd
 }
 
@@ -889,12 +907,13 @@ func (m *Model) recordHTTPHistory(
 	req *restfile.Request,
 	requestText string,
 	environment string,
+	extraSecrets ...string,
 ) {
 	if m.historyStore == nil || resp == nil || req == nil {
 		return
 	}
 
-	secrets := m.secretValuesForRedaction(req)
+	secrets := m.secretValuesForRedaction(req, extraSecrets...)
 	maskHeaders := !req.Metadata.AllowSensitiveHeaders
 
 	snippet := "<body suppressed>"
@@ -947,6 +966,7 @@ func (m *Model) recordHTTPHistory(
 func (m *Model) recordSkippedHistory(
 	req *restfile.Request,
 	requestText, environment, reason string,
+	extraSecrets ...string,
 ) {
 	if m.historyStore == nil || req == nil {
 		return
@@ -956,7 +976,7 @@ func (m *Model) recordSkippedHistory(
 		requestText = renderRequestText(req)
 	}
 
-	secrets := m.secretValuesForRedaction(req)
+	secrets := m.secretValuesForRedaction(req, extraSecrets...)
 	maskHeaders := !req.Metadata.AllowSensitiveHeaders
 	redacted := redactHistoryText(requestText, secrets, maskHeaders)
 
@@ -1010,12 +1030,13 @@ func (m *Model) recordGRPCHistory(
 	req *restfile.Request,
 	requestText string,
 	environment string,
+	extraSecrets ...string,
 ) {
 	if m.historyStore == nil || resp == nil || req == nil {
 		return
 	}
 
-	secrets := m.secretValuesForRedaction(req)
+	secrets := m.secretValuesForRedaction(req, extraSecrets...)
 	maskHeaders := !req.Metadata.AllowSensitiveHeaders
 
 	snippet := resp.Message
@@ -1220,7 +1241,7 @@ func buildCompareGRPCSnippet(
 	return redactHistoryText(resp.Message, secrets, false)
 }
 
-func (m *Model) secretValuesForRedaction(req *restfile.Request) []string {
+func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...string) []string {
 	values := make(map[string]struct{})
 	add := func(value string) {
 		if strings.TrimSpace(value) == "" {
@@ -1269,6 +1290,9 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request) []string {
 				}
 			}
 		}
+	}
+	for _, value := range extraSecrets {
+		add(value)
 	}
 
 	if len(values) == 0 {

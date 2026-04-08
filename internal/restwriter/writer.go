@@ -253,6 +253,13 @@ func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
 		}
 		b.WriteString("# @auth oauth2 ")
 		b.WriteString(strings.Join(formatted, " "))
+	case "command":
+		formatted := formatCommandParams(auth.Params)
+		if len(formatted) == 0 {
+			return
+		}
+		b.WriteString("# @auth command ")
+		b.WriteString(strings.Join(formatted, " "))
 	default:
 		return
 	}
@@ -277,29 +284,52 @@ func renderSettings(b *strings.Builder, set map[string]string) {
 	}
 }
 
+var oauthParamOrder = []string{
+	"token_url",
+	"auth_url",
+	"redirect_uri",
+	"client_id",
+	"client_secret",
+	"scope",
+	"audience",
+	"resource",
+	"grant",
+	"username",
+	"password",
+	"client_auth",
+	"cache_key",
+	"code_verifier",
+	"code_challenge_method",
+	"state",
+}
+
+var commandParamOrder = []string{
+	"argv",
+	"format",
+	"header",
+	"scheme",
+	"token_path",
+	"type_path",
+	"expiry_path",
+	"expires_in_path",
+	"cache_key",
+	"ttl",
+	"timeout",
+}
+
 func formatOAuthParams(params map[string]string) []string {
+	return formatOrderedParams(params, oauthParamOrder)
+}
+
+func formatCommandParams(params map[string]string) []string {
+	return formatOrderedParams(params, commandParamOrder)
+}
+
+func formatOrderedParams(params map[string]string, ordered []string) []string {
 	if len(params) == 0 {
 		return nil
 	}
 
-	ordered := []string{
-		"token_url",
-		"auth_url",
-		"redirect_uri",
-		"client_id",
-		"client_secret",
-		"scope",
-		"audience",
-		"resource",
-		"grant",
-		"username",
-		"password",
-		"client_auth",
-		"cache_key",
-		"code_verifier",
-		"code_challenge_method",
-		"state",
-	}
 	seen := make(map[string]struct{}, len(ordered))
 
 	var parts []string
@@ -311,6 +341,7 @@ func formatOAuthParams(params map[string]string) []string {
 		parts = append(parts, formatAuthParam(key, val))
 		seen[key] = struct{}{}
 	}
+
 	var extra []string
 	for key, raw := range params {
 		lower := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
@@ -331,8 +362,13 @@ func formatOAuthParams(params map[string]string) []string {
 }
 
 func formatAuthParam(key, val string) string {
-	if strings.ContainsAny(val, " \t") && !strings.Contains(val, "\"") {
-		val = "\"" + val + "\""
+	if strings.ContainsAny(val, " \t") {
+		switch {
+		case !strings.Contains(val, "'"):
+			val = "'" + val + "'"
+		case !strings.Contains(val, "\""):
+			val = `"` + val + `"`
+		}
 	}
 	return fmt.Sprintf("%s=%s", key, val)
 }

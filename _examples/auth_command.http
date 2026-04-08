@@ -1,0 +1,32 @@
+### GitHub CLI Token
+# @name GitHubCLIToken
+# @tag auth command
+# @description Uses the GitHub CLI token printer. Run `gh auth login` outside Resterm first.
+# @auth command argv=["gh","auth","token"] cache_key=github-cli
+GET https://api.github.com/user
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+
+### Structured JSON Output
+# @name CommandJSONToken
+# @tag auth command
+# @description Parses token, token type, and expiry fields from JSON stdout.
+# @auth command argv=["mycli","auth","print","--json"] format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+GET https://example.com/projects
+Accept: application/json
+
+### Custom Header Injection
+# @name CommandCustomHeader
+# @tag auth command
+# @description Sends a raw token to a custom header instead of Authorization.
+# @auth command argv=["aws","--profile","{{aws.profile}}","ecr","get-login-password"] header=X-Registry-Token cache_key=ecr ttl=10m
+GET https://example.com/registry
+Accept: application/json
+
+### Fixed Scheme Override
+# @name CommandFixedScheme
+# @tag auth command
+# @description Overrides token_type with a fixed scheme string.
+# @auth command argv=["mycli","auth","print","--json"] format=json token_path=data.token type_path=data.token_type header=Authorization scheme=Token cache_key=custom-scheme
+GET https://example.com/audit
+Accept: application/json

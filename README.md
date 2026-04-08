@@ -12,7 +12,7 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels**, **Kubernetes port-forwarding**, and **OAuth 2.0**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
+Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
 
 Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview) and [Documentation](#documentation).
 
@@ -23,7 +23,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Multi-step workflows** with `@workflow` / `@step`.
 - **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
 - **RestermScript** - a small, safe expression language purpose.
-- **OAuth 2.0** (client credentials, password, auth code + PKCE), **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
+- **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -158,7 +158,8 @@ Debugging and inspection provide the following.
 Security and auth cover the following.
 
 - OAuth 2.0 client credentials, password grant, and authorization code + PKCE are supported.
-- Tokens are cached per environment and refreshed automatically.
+- Command-backed auth can reuse existing CLIs without wrapping a shell.
+- Tokens can be cached per environment, and OAuth tokens are refreshed automatically.
 
 Customization includes the following.
 
