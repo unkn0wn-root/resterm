@@ -15,7 +15,7 @@ import (
 func extract(cfg Config, out []byte, now time.Time) (Result, error) {
 	cred, err := extractCredential(cfg, out, now)
 	if err != nil {
-		return Result{Header: cfg.headerName()}, err
+		return Result{Header: cfg.HeaderName()}, err
 	}
 	return renderResult(cfg, cred), nil
 }
@@ -226,7 +226,7 @@ func buildHeaderValue(cfg Config, header, tok, typ string) (string, string) {
 
 func renderResult(cfg Config, cred credential) Result {
 	cfg = cfg.normalize()
-	header := cfg.headerName()
+	header := cfg.HeaderName()
 	value, typ := buildHeaderValue(cfg, header, cred.Token, cred.Type)
 	return Result{
 		Header: header,

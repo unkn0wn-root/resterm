@@ -50,9 +50,6 @@ func (cfg Config) normalize() Config {
 	cfg.Dir = trim(cfg.Dir)
 	cfg.Format = normalizeConfigFormat(cfg.Format)
 	cfg.Header = trim(cfg.Header)
-	if cfg.Header == "" {
-		cfg.Header = defaultHeader
-	}
 	cfg.Scheme = trim(cfg.Scheme)
 	cfg.TokenPath = trim(cfg.TokenPath)
 	cfg.TypePath = trim(cfg.TypePath)
@@ -73,7 +70,7 @@ func (cfg Config) WithBaseTimeout(base time.Duration) Config {
 	return cfg
 }
 
-func (cfg Config) headerName() string {
+func (cfg Config) HeaderName() string {
 	if cfg.Header != "" {
 		return cfg.Header
 	}
@@ -108,7 +105,9 @@ func (cfg Config) commandName() string {
 
 func normalizeConfigFormat(raw Format) Format {
 	switch strings.ToLower(strings.TrimSpace(string(raw))) {
-	case "", string(FormatText):
+	case "":
+		return ""
+	case string(FormatText):
 		return FormatText
 	case string(FormatJSON):
 		return FormatJSON

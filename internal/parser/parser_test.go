@@ -1491,6 +1491,22 @@ func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
 	}
 }
 
+func TestParseCommandAuthSpecCacheOnly(t *testing.T) {
+	spec := parseAuthSpec(`command cache_key=github header=X-Token`)
+	if spec == nil {
+		t.Fatalf("expected command auth spec")
+	}
+	if spec.Type != "command" {
+		t.Fatalf("unexpected auth type %q", spec.Type)
+	}
+	if spec.Params["cache_key"] != "github" {
+		t.Fatalf("expected cache_key github, got %q", spec.Params["cache_key"])
+	}
+	if spec.Params["argv"] != "" {
+		t.Fatalf("expected argv to be empty, got %q", spec.Params["argv"])
+	}
+}
+
 func TestParseCompareDirective(t *testing.T) {
 	src := `# @name Compare
 # @compare dev stage prod base=stage

@@ -1082,6 +1082,63 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 	}
 }
 
+func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
+	var calls int32
+
+	model := Model{
+		cfg:         Config{EnvironmentName: "dev"},
+		authCmd:     authcmd.NewManager(),
+		globals:     newGlobalStore(),
+		currentFile: "/tmp/example.http",
+	}
+	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		return []byte("token-basic"), nil
+	})
+
+	seedAuth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
+		"argv":      `["gh","auth","token"]`,
+		"cache_key": "github",
+		"header":    "X-Registry-Token",
+		"scheme":    "Token",
+	}}
+	cacheOnlyAuth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
+		"cache_key": "github",
+	}}
+
+	seedReq := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: seedAuth}}
+	if _, err := model.ensureCommandAuth(
+		context.Background(),
+		seedReq,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth seed: %v", err)
+	}
+
+	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: cacheOnlyAuth}}
+	res, err := model.ensureCommandAuth(
+		context.Background(),
+		req,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	)
+	if err != nil {
+		t.Fatalf("ensureCommandAuth cache-only: %v", err)
+	}
+	if got := req.Headers.Get("X-Registry-Token"); got != "Token token-basic" {
+		t.Fatalf("expected inherited seeded header, got %q", got)
+	}
+	if res.Header != "X-Registry-Token" || res.Value != "Token token-basic" {
+		t.Fatalf("unexpected command auth result %#v", res)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected cache-only reuse to skip execution, got %d calls", calls)
+	}
+}
+
 func TestBuildCommandAuthConfigExpandsArgvAfterJSONDecode(t *testing.T) {
 	model := Model{
 		cfg:         Config{EnvironmentName: "dev"},
@@ -1126,6 +1183,8 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 	auth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
 		"argv":      `["gh","auth","token"]`,
 		"cache_key": "github",
+		"header":    "X-Registry-Token",
+		"scheme":    "Token",
 	}}
 
 	prime := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
@@ -1139,7 +1198,12 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 		t.Fatalf("ensureCommandAuth prime: %v", err)
 	}
 
-	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: &restfile.AuthSpec{
+		Type: "command",
+		Params: map[string]string{
+			"cache_key": "github",
+		},
+	}}}
 	preview, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
 	if err != nil {
 		t.Fatalf("prepareExplainAuthPreview: %v", err)
@@ -1150,7 +1214,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 	if preview.summary != explainSummaryAuthPrepared {
 		t.Fatalf("expected auth prepared summary, got %q", preview.summary)
 	}
-	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
+	if got := req.Headers.Get("X-Registry-Token"); got != "Token token-basic" {
 		t.Fatalf("expected cached auth header, got %q", got)
 	}
 	if atomic.LoadInt32(&calls) != 1 {
@@ -1158,6 +1222,30 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 	}
 	if len(preview.extraSecrets) == 0 {
 		t.Fatalf("expected preview secrets to include cached auth values")
+	}
+}
+
+func TestPrepareExplainAuthPreviewCommandCacheOnlyRequiresSeed(t *testing.T) {
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		authCmd: authcmd.NewManager(),
+		globals: newGlobalStore(),
+	}
+
+	req := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Auth: &restfile.AuthSpec{Type: "command", Params: map[string]string{
+				"cache_key": "github",
+			}},
+		},
+	}
+
+	_, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got := err.Error(); !strings.Contains(got, "seed the cache") {
+		t.Fatalf("expected seed hint, got %q", got)
 	}
 }
 

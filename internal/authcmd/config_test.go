@@ -20,8 +20,8 @@ func TestConfigHeaderName(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			if got := tt.cfg.headerName(); got != tt.want {
-				t.Fatalf("headerName() = %q, want %q", got, tt.want)
+			if got := tt.cfg.HeaderName(); got != tt.want {
+				t.Fatalf("HeaderName() = %q, want %q", got, tt.want)
 			}
 		})
 	}
