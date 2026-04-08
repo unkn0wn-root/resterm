@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.2](https://github.com/unkn0wn-root/resterm/compare/v0.25.1...v0.25.2) (2026-04-08)
+
+
+### Features
+
+* make auth command reuse already cached key via cache_key ([19a3335](https://github.com/unkn0wn-root/resterm/commit/19a3335f57dc62af5f750b2bd80f35e3f2eada63))
+
 ### [0.25.1](https://github.com/unkn0wn-root/resterm/compare/v0.24.3...v0.25.1) (2026-04-08)
 
 
