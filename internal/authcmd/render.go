@@ -5,13 +5,6 @@ import (
 	"time"
 )
 
-func (cfg outputConfig) headerName() string {
-	if cfg.Header != "" {
-		return cfg.Header
-	}
-	return defaultHeader
-}
-
 func effectiveExpiry(cred credential, ttl time.Duration) time.Time {
 	if !cred.Expiry.IsZero() {
 		return cred.Expiry

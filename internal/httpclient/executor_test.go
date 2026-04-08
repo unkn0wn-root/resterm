@@ -202,6 +202,25 @@ func TestApplyAuthenticationBasic(t *testing.T) {
 	}
 }
 
+func TestApplyAuthenticationBearer(t *testing.T) {
+	client := NewClient(nil)
+	req := restfile.Request{Method: "GET", URL: "https://example.com"}
+	httpReq, err := http.NewRequestWithContext(context.Background(), req.Method, req.URL, nil)
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+
+	auth := &restfile.AuthSpec{
+		Type:   "bearer",
+		Params: map[string]string{"token": "token-123"},
+	}
+	resolver := vars.NewResolver()
+	client.applyAuthentication(httpReq, resolver, auth)
+	if got := httpReq.Header.Get("Authorization"); got != "Bearer token-123" {
+		t.Fatalf("expected bearer auth header, got %q", got)
+	}
+}
+
 func TestPrepareGraphQLPostBody(t *testing.T) {
 	client := NewClient(nil)
 	req := &restfile.Request{Method: "POST", URL: "https://example.com/graphql"}

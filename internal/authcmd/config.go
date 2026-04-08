@@ -198,13 +198,13 @@ func (seed cacheSeed) diff(other cacheSeed) (string, bool) {
 	}
 }
 
-func (cmd commandConfig) inheritedFrom(base commandConfig) commandConfig {
-	if len(cmd.Argv) == 0 && len(base.Argv) > 0 {
-		cmd.Argv = append([]string(nil), base.Argv...)
+func (cfg commandConfig) inheritedFrom(base commandConfig) commandConfig {
+	if len(cfg.Argv) == 0 && len(base.Argv) > 0 {
+		cfg.Argv = append([]string(nil), base.Argv...)
 	}
-	cmd.Dir = inheritIfZero(cmd.Dir, base.Dir)
-	cmd.Timeout = inheritIfZero(cmd.Timeout, base.Timeout)
-	return cmd
+	cfg.Dir = inheritIfZero(cfg.Dir, base.Dir)
+	cfg.Timeout = inheritIfZero(cfg.Timeout, base.Timeout)
+	return cfg
 }
 
 func (cfg extractConfig) inheritedFrom(base extractConfig) extractConfig {
@@ -216,6 +216,13 @@ func (cfg extractConfig) inheritedFrom(base extractConfig) extractConfig {
 	cfg.ExpiryPath = inheritIfZero(cfg.ExpiryPath, base.ExpiryPath)
 	cfg.ExpiresInPath = inheritIfZero(cfg.ExpiresInPath, base.ExpiresInPath)
 	return cfg
+}
+
+func (cfg outputConfig) headerName() string {
+	if cfg.Header != "" {
+		return cfg.Header
+	}
+	return defaultHeader
 }
 
 func inheritIfZero[T comparable](cur, base T) T {
