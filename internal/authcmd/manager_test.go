@@ -93,13 +93,51 @@ func TestManagerResolveTTLRefreshesExpiredEntry(t *testing.T) {
 	}
 }
 
+func TestManagerResolveExpiresInUsesFetchCompletionTime(t *testing.T) {
+	t.Parallel()
+
+	times := []time.Time{
+		time.Unix(100, 0),
+		time.Unix(140, 0),
+	}
+	var nowCalls int
+
+	mgr := NewManager()
+	mgr.now = func() time.Time {
+		if nowCalls >= len(times) {
+			return times[len(times)-1]
+		}
+		ts := times[nowCalls]
+		nowCalls++
+		return ts
+	}
+	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
+		return []byte(`{"access_token":"abc","expires_in":"60"}`), nil
+	})
+
+	res, err := mgr.Resolve(context.Background(), "dev", Config{
+		Argv:          []string{"tool"},
+		Format:        FormatJSON,
+		TokenPath:     "access_token",
+		ExpiresInPath: "expires_in",
+		CacheKey:      "shared",
+	})
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	want := times[1].Add(time.Minute)
+	if !res.Expiry.Equal(want) {
+		t.Fatalf("expected expiry %s, got %s", want, res.Expiry)
+	}
+}
+
 func TestManagerCachedUsesPreviewCacheOnly(t *testing.T) {
 	t.Parallel()
 
 	mgr := NewManager()
 	mgr.now = func() time.Time { return time.Unix(100, 0) }
 	cfg := Config{Argv: []string{"gh"}, CacheKey: "github"}
-	mgr.store(cacheKey("dev", cfg.normalize()), cfg.normalize(), credential{
+	mgr.store(cacheEntryKey("dev", cfg.normalize()), cfg.normalize(), credential{
 		Token:     "abc",
 		FetchedAt: time.Unix(90, 0),
 	})
@@ -308,7 +346,7 @@ func TestManagerResolveUnseededCacheOnlyFails(t *testing.T) {
 	}
 }
 
-func TestManagerMergeCachedConfig(t *testing.T) {
+func TestManagerPrepareInheritsCachedConfig(t *testing.T) {
 	t.Parallel()
 
 	mgr := NewManager()
@@ -323,15 +361,19 @@ func TestManagerMergeCachedConfig(t *testing.T) {
 		TTL:       time.Minute,
 		Timeout:   3 * time.Second,
 	}
-	mgr.store(cacheKey("dev", base), base, credential{
+	mgr.store(cacheEntryKey("dev", base), base, credential{
 		Token:     "abc",
 		FetchedAt: time.Unix(100, 0),
 	})
 
-	merged := mgr.MergeCachedConfig("dev", Config{
+	prep, err := mgr.Prepare("dev", Config{
 		CacheKey: "github",
 		Header:   "Authorization",
 	})
+	if err != nil {
+		t.Fatalf("Prepare() error = %v", err)
+	}
+	merged := prep.cfg
 
 	if len(merged.Argv) != 3 || merged.Argv[0] != "gh" {
 		t.Fatalf("expected argv to be inherited, got %#v", merged.Argv)

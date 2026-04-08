@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
@@ -14,47 +16,45 @@ import (
 const (
 	maxStdoutBytes = 256 << 10
 	maxStderrBytes = 32 << 10
+
+	defaultCommandName = "command"
 )
 
-type runOutput struct {
-	stdout []byte
-	stderr string
-}
+type runCancel func(error)
 
 type limitBuf struct {
 	buf    bytes.Buffer
 	kind   string
 	limit  int
-	cancel context.CancelFunc
+	cancel runCancel
 	err    error
 }
 
-func newLimitBuf(kind string, limit int, cancel context.CancelFunc) *limitBuf {
+func newLimitBuf(kind string, limit int, cancel runCancel) *limitBuf {
 	return &limitBuf{kind: kind, limit: limit, cancel: cancel}
 }
 
 func (b *limitBuf) Write(p []byte) (int, error) {
 	room := b.limit - b.buf.Len()
 	if room <= 0 {
-		b.setErr()
-		return 0, b.err
+		return 0, b.overflowErr()
 	}
 	if len(p) > room {
 		_, _ = b.buf.Write(p[:room])
-		b.setErr()
-		return room, b.err
+		return room, b.overflowErr()
 	}
 	return b.buf.Write(p)
 }
 
-func (b *limitBuf) setErr() {
+func (b *limitBuf) overflowErr() error {
 	if b.err != nil {
-		return
+		return b.err
 	}
 	b.err = errdef.New(errdef.CodeHTTP, "%s exceeded %s", b.kind, sizeLabel(b.limit))
 	if b.cancel != nil {
-		b.cancel()
+		b.cancel(b.err)
 	}
+	return b.err
 }
 
 func (b *limitBuf) Bytes() []byte {
@@ -65,21 +65,20 @@ func (b *limitBuf) String() string {
 	return b.buf.String()
 }
 
-func run(ctx context.Context, cfg Config) (runOutput, error) {
+func (cfg commandConfig) name() string {
 	if len(cfg.Argv) == 0 {
-		return runOutput{}, errdef.New(errdef.CodeHTTP, "missing command argv")
+		return defaultCommandName
+	}
+	return filepath.Base(cfg.Argv[0])
+}
+
+func run(ctx context.Context, cfg commandConfig) ([]byte, error) {
+	if len(cfg.Argv) == 0 {
+		return nil, errdef.New(errdef.CodeHTTP, "missing command argv")
 	}
 
-	var (
-		runCtx context.Context
-		cancel context.CancelFunc
-	)
-	if cfg.Timeout > 0 {
-		runCtx, cancel = context.WithTimeout(ctx, cfg.Timeout)
-	} else {
-		runCtx, cancel = context.WithCancel(ctx)
-	}
-	defer cancel()
+	runCtx, cancel := newRunContext(ctx, cfg.Timeout)
+	defer cancel(nil)
 
 	cmd := exec.CommandContext(runCtx, cfg.Argv[0], cfg.Argv[1:]...)
 	if cfg.Dir != "" {
@@ -92,51 +91,14 @@ func run(ctx context.Context, cfg Config) (runOutput, error) {
 	cmd.Stderr = stderr
 
 	err := cmd.Run()
-	if limErr := firstRunErr(stdout.err, stderr.err); limErr != nil {
-		return runOutput{}, limErr
-	}
 	if err == nil {
-		return runOutput{stdout: stdout.Bytes(), stderr: stderr.String()}, nil
-	}
-
-	if runCtx.Err() != nil {
-		if cfg.Timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-			return runOutput{}, errdef.New(
-				errdef.CodeHTTP,
-				"command %q timed out after %s",
-				cfg.commandName(),
-				cfg.Timeout,
-			)
+		if cause := runCause(runCtx); cause != nil {
+			return nil, cause
 		}
-		return runOutput{}, errdef.Wrap(
-			errdef.CodeHTTP,
-			runCtx.Err(),
-			"run command %q",
-			cfg.commandName(),
-		)
+		return stdout.Bytes(), nil
 	}
 
-	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) {
-		return runOutput{}, errdef.New(
-			errdef.CodeHTTP,
-			"command %q exited with status %d%s",
-			cfg.commandName(),
-			exitErr.ExitCode(),
-			stderrSuffix(stderr.String()),
-		)
-	}
-
-	return runOutput{}, errdef.Wrap(errdef.CodeHTTP, err, "run command %q", cfg.commandName())
-}
-
-func firstRunErr(errs ...error) error {
-	for _, err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	return nil, mapRunError(runCtx, cfg, err, stderr.String())
 }
 
 func stderrSuffix(text string) string {
@@ -152,4 +114,76 @@ func sizeLabel(n int) string {
 		return fmt.Sprintf("%d KiB", n>>10)
 	}
 	return fmt.Sprintf("%d bytes", n)
+}
+
+func newRunContext(ctx context.Context, timeout time.Duration) (context.Context, runCancel) {
+	baseCtx, cancelCause := context.WithCancelCause(ctx)
+	if timeout <= 0 {
+		return baseCtx, runCancel(cancelCause)
+	}
+
+	timeoutCtx, cancelTimeout := context.WithTimeout(baseCtx, timeout)
+	return timeoutCtx, func(err error) {
+		if err != nil {
+			cancelCause(err)
+		}
+		cancelTimeout()
+		cancelCause(nil)
+	}
+}
+
+func runCause(runCtx context.Context) error {
+	cause := context.Cause(runCtx)
+	if ignoreCause(cause) {
+		return nil
+	}
+	return cause
+}
+
+func ignoreCause(err error) bool {
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, context.Canceled):
+		return true
+	case errors.Is(err, context.DeadlineExceeded):
+		return true
+	default:
+		return false
+	}
+}
+
+func mapRunError(runCtx context.Context, cfg commandConfig, err error, stderr string) error {
+	if cause := runCause(runCtx); cause != nil {
+		return cause
+	}
+	if runCtx.Err() != nil {
+		if cfg.Timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			return errdef.New(
+				errdef.CodeHTTP,
+				"command %q timed out after %s",
+				cfg.name(),
+				cfg.Timeout,
+			)
+		}
+		return errdef.Wrap(
+			errdef.CodeHTTP,
+			runCtx.Err(),
+			"run command %q",
+			cfg.name(),
+		)
+	}
+
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return errdef.New(
+			errdef.CodeHTTP,
+			"command %q exited with status %d%s",
+			cfg.name(),
+			exitErr.ExitCode(),
+			stderrSuffix(stderr),
+		)
+	}
+
+	return errdef.Wrap(errdef.CodeHTTP, err, "run command %q", cfg.name())
 }

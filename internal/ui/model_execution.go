@@ -2832,9 +2832,7 @@ func (m *Model) prepareExplainAuthPreview(
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
-		cfg := prep.Config()
-
-		header := cfg.HeaderName()
+		header := prep.HeaderName()
 		if req.Headers != nil && req.Headers.Get(header) != "" {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
@@ -2963,9 +2961,7 @@ func (m *Model) ensureCommandAuth(
 	if err != nil {
 		return authcmd.Result{}, err
 	}
-	cfg := prep.Config()
-
-	header := cfg.HeaderName()
+	header := prep.HeaderName()
 	if req.Headers != nil && req.Headers.Get(header) != "" {
 		return authcmd.Result{}, nil
 	}

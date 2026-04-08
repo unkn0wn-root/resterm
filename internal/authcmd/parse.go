@@ -48,10 +48,7 @@ func Parse(params map[string]string, dir string) (Config, error) {
 	if err := validateParsed(cfg); err != nil {
 		return cfg, err
 	}
-	if cfg.usesCache() {
-		return cfg, nil
-	}
-	return Finalize(cfg)
+	return parsedConfig(cfg)
 }
 
 func Finalize(cfg Config) (Config, error) {
@@ -60,6 +57,13 @@ func Finalize(cfg Config) (Config, error) {
 		return cfg, err
 	}
 	return cfg, nil
+}
+
+func parsedConfig(cfg Config) (Config, error) {
+	if cfg.hasCacheKey() {
+		return cfg, nil
+	}
+	return Finalize(cfg)
 }
 
 func parseArgv(raw string) ([]string, error) {
@@ -110,7 +114,7 @@ func validate(cfg Config) error {
 }
 
 func validateParsed(cfg Config) error {
-	if len(cfg.Argv) == 0 && !cfg.usesCache() {
+	if len(cfg.Argv) == 0 && !cfg.hasCacheKey() {
 		return missingArgvError(cfg)
 	}
 	if len(cfg.Argv) > 0 && cfg.Argv[0] == "" {
@@ -134,21 +138,25 @@ func validateParsed(cfg Config) error {
 	if cfg.Timeout < 0 {
 		return errdef.New(errdef.CodeHTTP, "timeout must not be negative")
 	}
-	if cfg.TTL > 0 && !cfg.usesCache() {
+	if cfg.TTL > 0 && !cfg.hasCacheKey() {
 		return errdef.New(errdef.CodeHTTP, "ttl requires cache_key")
 	}
 	return nil
 }
 
 func effectiveFormat(cfg Config) Format {
-	if cfg.Format == "" {
+	return effectiveFormatValue(cfg.Format)
+}
+
+func effectiveFormatValue(raw Format) Format {
+	if raw == "" {
 		return FormatText
 	}
-	return cfg.Format
+	return raw
 }
 
 func missingArgvError(cfg Config) error {
-	if cfg.usesCache() {
+	if cfg.hasCacheKey() {
 		return errdef.New(
 			errdef.CodeHTTP,
 			"@auth command requires argv (include it once per cache_key to seed the cache)",
