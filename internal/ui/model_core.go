@@ -184,6 +184,7 @@ type Model struct {
 	grpcOptions        grpcclient.Options
 	sshMgr             *ssh.Manager
 	sshGlobals         *namedStore[restfile.SSHProfile]
+	authGlobals        *authStore
 	k8sMgr             *k8s.Manager
 	k8sGlobals         *namedStore[restfile.K8sProfile]
 	patchGlobals       *patchStore
@@ -614,6 +615,7 @@ func New(cfg Config) Model {
 		k8sMgr = k8s.NewManager()
 	}
 	sshGlobals := newSSHStore()
+	authGlobals := newAuthStore()
 	k8sGlobals := newK8sStore()
 	patchGlobals := newPatchStore()
 
@@ -635,6 +637,7 @@ func New(cfg Config) Model {
 		grpcOptions:            cfg.GRPCOptions,
 		sshMgr:                 sshMgr,
 		sshGlobals:             sshGlobals,
+		authGlobals:            authGlobals,
 		k8sMgr:                 k8sMgr,
 		k8sGlobals:             k8sGlobals,
 		patchGlobals:           patchGlobals,

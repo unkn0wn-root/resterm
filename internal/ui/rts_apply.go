@@ -392,17 +392,11 @@ func applyPatchAuth(req *restfile.Request, a *restfile.AuthSpec, set bool) {
 	}
 	if a == nil {
 		req.Metadata.Auth = nil
+		req.Metadata.AuthDisabled = true
 		return
 	}
-	cp := *a
-	if len(a.Params) > 0 {
-		pm := make(map[string]string, len(a.Params))
-		for k, v := range a.Params {
-			pm[k] = v
-		}
-		cp.Params = pm
-	}
-	req.Metadata.Auth = &cp
+	req.Metadata.Auth = restfile.CloneAuthSpec(a)
+	req.Metadata.AuthDisabled = false
 }
 
 func applyPatchSettings(req *restfile.Request, in map[string]*string) {

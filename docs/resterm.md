@@ -874,6 +874,14 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 | Command | `# @auth command argv=["gh","auth","token"]` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
 | OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE). |
 
+Scopes:
+
+- Bare `@auth ...` is request-scoped.
+- `@auth request ...` is an explicit request-scoped form.
+- `@auth file ...` defines inherited auth for later requests in the same document.
+- `@auth global ...` defines workspace-global inherited auth; file-scoped auth wins when both exist.
+- `@auth none` disables inherited auth for the current request.
+
 #### OAuth 2.0 parameters
 
 | Parameter | Required | Default | Description |
@@ -1191,6 +1199,19 @@ Example test block:
 
 Use `@auth bearer {{token}}` or `Authorization: Bearer {{token}}` headers. Combine with `@global` or environment values for reuse.
 
+When you want one auth definition to apply to many requests, scope it:
+
+```http
+# @auth file bearer {{auth.token}}
+
+### Inherits file auth
+GET {{base.url}}/profile
+
+### Opt out for one request
+# @auth none
+GET {{base.url}}/public
+```
+
 ### Captured tokens
 
 Capture values at runtime and reuse them in subsequent requests:
@@ -1309,6 +1330,22 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 ### Command-backed auth
 
 Use `@auth command` when your existing CLI already knows how reterive or print tokens.
+
+To apply command auth to every request in a file, define it once with file scope:
+
+```http
+# @auth file command argv=["gh","auth","token"] cache_key=github-cli
+
+### User
+GET https://api.github.com/user
+
+### Repos
+GET https://api.github.com/user/repos
+
+### Public endpoint without inherited auth
+# @auth none
+GET https://api.github.com/rate_limit
+```
 
 ```http
 ### Seed a reusable command-auth slot
@@ -1688,7 +1725,8 @@ Explore `_examples/` for ready-to-run:
 - `graphql.http` - inline and file-based GraphQL requests.
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `k8s.http` - Kubernetes profile scopes, non-pod targets, named ports, and gRPC over `@k8s`.
-- `auth_command.http` - command-backed auth with `gh auth token`, JSON output parsing, and custom header examples.
+- `auth_scopes.http` - default auth inheritance across global/file/request scopes plus `@auth none`.
+- `auth_command.http` - command-backed auth with global defaults, `gh auth token`, patch-based reuse, JSON output parsing, and custom header examples.
 - `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
 - `transport.http` - timeout, proxy, and `@no-log` samples.
 - `compare.http` - demonstrates `@compare` directives and CLI-triggered multi-environment sweeps.

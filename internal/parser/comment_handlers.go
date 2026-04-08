@@ -36,6 +36,9 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if b.handleConstDirective(line, key, rest) {
 		return
 	}
+	if b.handleAuthDirective(line, key, rest) {
+		return
+	}
 	if b.handleSSHDirective(line, key, rest) {
 		return
 	}
@@ -119,6 +122,54 @@ func (b *documentBuilder) handleConstDirective(line int, key, rest string) bool 
 	if name, value := parseNameValue(rest); name != "" {
 		b.addConstant(name, value, line)
 	}
+	return true
+}
+
+func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
+	if key != "auth" {
+		return false
+	}
+
+	dir, ok, err := parseAuthDirective(rest)
+	if !ok {
+		return true
+	}
+	if err != nil {
+		b.addError(line, err.Error())
+		return true
+	}
+
+	switch dir.Scope {
+	case restfile.AuthScopeFile, restfile.AuthScopeGlobal:
+		if b.inRequest {
+			b.addError(
+				line,
+				"@auth "+restfile.AuthScopeLabel(dir.Scope)+" scope must be declared outside a request",
+			)
+			return true
+		}
+		if dir.Disable || dir.Spec == nil {
+			return true
+		}
+		b.authDefs = append(b.authDefs, restfile.AuthProfile{
+			Scope: dir.Scope,
+			Name:  dir.Name,
+			Spec:  restfile.CloneAuthSpecValue(*dir.Spec),
+			Line:  line,
+		})
+	case restfile.AuthScopeRequest:
+		b.ensureRequest(line)
+		if dir.Disable {
+			b.request.metadata.Auth = nil
+			b.request.metadata.AuthDisabled = true
+			return true
+		}
+		if dir.Spec != nil {
+			b.request.metadata.Auth = restfile.CloneAuthSpec(dir.Spec)
+			b.request.metadata.AuthDisabled = false
+		}
+	}
+
 	return true
 }
 
@@ -229,12 +280,6 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		}
 		if value, ok := parseBool(rest); ok {
 			b.request.metadata.AllowSensitiveHeaders = value
-		}
-		return true
-	case "auth":
-		spec := parseAuthSpec(rest)
-		if spec != nil {
-			b.request.metadata.Auth = spec
 		}
 		return true
 	case "settings":

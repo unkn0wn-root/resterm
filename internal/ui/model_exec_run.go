@@ -407,6 +407,7 @@ func (e *execContext) evaluateCondition() *responseMsg {
 }
 
 func (e *execContext) runPreRequestScripts() *responseMsg {
+	e.model.resolveInheritedAuth(e.doc, e.req)
 	preVars := cloneStringMap(e.baseVars)
 	applyBefore := cloneRequestIf(e.req, len(e.req.Metadata.Applies) > 0)
 	if err := e.model.runRTSApply(
