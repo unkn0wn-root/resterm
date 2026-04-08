@@ -871,7 +871,7 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
 | API key | `# @auth apikey header X-API-Key {{key}}` | `placement` can be `header` or `query`. Defaults to `X-API-Key` header if name omitted. |
 | Custom header | `# @auth Authorization CustomValue` | Arbitrary header/value pair. |
-| Command | `# @auth command argv='["gh","auth","token"]'` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
+| Command | `# @auth command argv=["gh","auth","token"]` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
 | OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE). |
 
 #### OAuth 2.0 parameters
@@ -948,7 +948,7 @@ Examples:
 ```http
 ### GitHub CLI token
 # Requires `gh auth login` to be done outside Resterm first.
-# @auth command argv='["gh","auth","token"]' cache_key=github-cli
+# @auth command argv=["gh","auth","token"] cache_key=github-cli
 GET https://api.github.com/user
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28
@@ -956,13 +956,13 @@ X-GitHub-Api-Version: 2022-11-28
 
 ```http
 ### JSON command output
-# @auth command argv='["mycli","auth","print","--json"]' format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+# @auth command argv=["mycli","auth","print","--json"] format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
 GET https://example.com/projects
 ```
 
 ```http
 ### Custom header with TTL fallback
-# @auth command argv='["aws","--profile","{{aws.profile}}","ecr","get-login-password"]' header=X-Registry-Token cache_key=ecr ttl=10m
+# @auth command argv=["aws","--profile","{{aws.profile}}","ecr","get-login-password"] header=X-Registry-Token cache_key=ecr ttl=10m
 GET https://example.com/registry
 ```
 
@@ -1301,7 +1301,7 @@ Use `@auth command` when your existing CLI already knows how reterive or print t
 
 ```http
 ### GitHub CLI profile
-# @auth command argv='["gh","auth","token"]' cache_key=github-cli
+# @auth command argv=["gh","auth","token"] cache_key=github-cli
 GET https://api.github.com/user
 Accept: application/vnd.github+json
 ```
@@ -1310,7 +1310,7 @@ Structured output works too:
 
 ```http
 ### Internal CLI with JSON output
-# @auth command argv='["mycli","auth","print","--json"]' format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+# @auth command argv=["mycli","auth","print","--json"] format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
 GET https://api.example.com/projects
 ```
 
