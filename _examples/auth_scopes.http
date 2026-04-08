@@ -1,0 +1,36 @@
+# @global auth.globalToken demo-global-token
+# @global auth.fileToken demo-file-token
+
+# @auth global bearer {{auth.globalToken}}
+
+### Global Default Auth
+# @name AuthGlobalDefault
+# @tag auth scopes global
+# @description Inherits the global default because no file-scoped auth has been defined yet.
+GET https://httpbin.org/anything/auth/global-default
+Accept: application/json
+
+# @auth file bearer {{auth.fileToken}}
+
+### File Default Auth
+# @name AuthFileDefault
+# @tag auth scopes file
+# @description Inherits the file default, which overrides the earlier global default for later requests in this document.
+GET https://httpbin.org/anything/auth/file-default
+Accept: application/json
+
+### Explicit Request Override
+# @name AuthRequestOverride
+# @tag auth scopes request
+# @description Uses explicit request-scoped auth instead of the inherited file default.
+# @auth request bearer request-token-{{$uuid}}
+GET https://httpbin.org/anything/auth/request-override
+Accept: application/json
+
+### Disable Inherited Auth
+# @name AuthNone
+# @tag auth scopes none
+# @description Disables inherited auth for this request with @auth none.
+# @auth none
+GET https://httpbin.org/anything/auth/no-auth
+Accept: application/json

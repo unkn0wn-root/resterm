@@ -1725,7 +1725,8 @@ Explore `_examples/` for ready-to-run:
 - `graphql.http` - inline and file-based GraphQL requests.
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `k8s.http` - Kubernetes profile scopes, non-pod targets, named ports, and gRPC over `@k8s`.
-- `auth_command.http` - command-backed auth with `gh auth token`, JSON output parsing, and custom header examples.
+- `auth_scopes.http` - default auth inheritance across global/file/request scopes plus `@auth none`.
+- `auth_command.http` - command-backed auth with global defaults, `gh auth token`, patch-based reuse, JSON output parsing, and custom header examples.
 - `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
 - `transport.http` - timeout, proxy, and `@no-log` samples.
 - `compare.http` - demonstrates `@compare` directives and CLI-triggered multi-environment sweeps.
