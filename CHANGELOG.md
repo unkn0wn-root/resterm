@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.26.1](https://github.com/unkn0wn-root/resterm/compare/v0.25.2...v0.26.1) (2026-04-08)
+
+
+### Features
+
+* add global auth ([80d1acf](https://github.com/unkn0wn-root/resterm/commit/80d1acfcbf0d1ebdba80a60156d73ab91a3f1ed4))
+
+
+### Bug Fixes
+
+* **auth:** same type, same receiver name ([08a9a0f](https://github.com/unkn0wn-root/resterm/commit/08a9a0f203c57d5c0234acbe60070a2f4d487f31))
+
 ### [0.25.2](https://github.com/unkn0wn-root/resterm/compare/v0.25.1...v0.25.2) (2026-04-08)
 
 
