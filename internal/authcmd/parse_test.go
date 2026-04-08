@@ -21,11 +21,11 @@ func TestParse(t *testing.T) {
 			},
 			check: func(t *testing.T, cfg Config) {
 				t.Helper()
-				if cfg.Format != FormatText {
+				if effectiveFormat(cfg) != FormatText {
 					t.Fatalf("expected text format, got %q", cfg.Format)
 				}
-				if cfg.Header != "Authorization" {
-					t.Fatalf("expected Authorization header, got %q", cfg.Header)
+				if cfg.HeaderName() != "Authorization" {
+					t.Fatalf("expected Authorization header, got %q", cfg.HeaderName())
 				}
 				if got := len(cfg.Argv); got != 3 {
 					t.Fatalf("expected 3 argv entries, got %d", got)
@@ -63,6 +63,21 @@ func TestParse(t *testing.T) {
 				}
 				if cfg.Timeout != 3*time.Second {
 					t.Fatalf("expected timeout 3s, got %s", cfg.Timeout)
+				}
+			},
+		},
+		{
+			name: "cache only reuse",
+			params: map[string]string{
+				"cache_key": "github",
+			},
+			check: func(t *testing.T, cfg Config) {
+				t.Helper()
+				if len(cfg.Argv) != 0 {
+					t.Fatalf("expected argv to stay empty, got %#v", cfg.Argv)
+				}
+				if cfg.CacheKey != "github" {
+					t.Fatalf("expected cache key github, got %q", cfg.CacheKey)
 				}
 			},
 		},
@@ -168,6 +183,14 @@ func TestParseErrors(t *testing.T) {
 			want: "token_path is required",
 		},
 		{
+			name: "cache only json defers token path validation",
+			params: map[string]string{
+				"cache_key": "github",
+				"format":    "json",
+			},
+			want: "",
+		},
+		{
 			name: "ttl without cache key",
 			params: map[string]string{
 				"argv": `["gh","auth","token"]`,
@@ -212,6 +235,12 @@ func TestParseErrors(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			_, err := Parse(tt.params, "")
+			if tt.want == "" {
+				if err != nil {
+					t.Fatalf("Parse() unexpected error = %v", err)
+				}
+				return
+			}
 			if err == nil {
 				t.Fatal("expected error")
 			}

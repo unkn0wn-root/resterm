@@ -270,7 +270,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 			return nil
 		}
 		maps.Copy(params, parseKeyValuePairs(fields[1:]))
-		if params["argv"] == "" {
+		if params["argv"] == "" && params["cache_key"] == "" {
 			return nil
 		}
 	default:

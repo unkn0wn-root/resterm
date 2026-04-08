@@ -3,6 +3,7 @@ package authcmd
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -71,12 +72,12 @@ func TestManagerResolveTTLRefreshesExpiredEntry(t *testing.T) {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	now = now.Add(30 * time.Second)
-	second, err := mgr.Resolve(context.Background(), "dev", cfg)
+	second, err := mgr.Resolve(context.Background(), "dev", Config{CacheKey: "github"})
 	if err != nil {
 		t.Fatalf("Resolve() cached error = %v", err)
 	}
 	now = now.Add(40 * time.Second)
-	third, err := mgr.Resolve(context.Background(), "dev", cfg)
+	third, err := mgr.Resolve(context.Background(), "dev", Config{CacheKey: "github"})
 	if err != nil {
 		t.Fatalf("Resolve() refreshed error = %v", err)
 	}
@@ -98,12 +99,15 @@ func TestManagerCachedUsesPreviewCacheOnly(t *testing.T) {
 	mgr := NewManager()
 	mgr.now = func() time.Time { return time.Unix(100, 0) }
 	cfg := Config{Argv: []string{"gh"}, CacheKey: "github"}
-	mgr.store(cacheKey("dev", cfg.normalize()), credential{
+	mgr.store(cacheKey("dev", cfg.normalize()), cfg.normalize(), credential{
 		Token:     "abc",
 		FetchedAt: time.Unix(90, 0),
 	})
 
-	res, ok := mgr.Cached(" dev ", Config{Argv: []string{"gh"}, CacheKey: " github "})
+	res, ok, err := mgr.Cached(" dev ", Config{CacheKey: " github "})
+	if err != nil {
+		t.Fatalf("Cached() error = %v", err)
+	}
 	if !ok {
 		t.Fatal("expected cached result")
 	}
@@ -179,8 +183,10 @@ func TestManagerResolveRendersCachedCredentialPerRequestConfig(t *testing.T) {
 	authCfg := base
 	authCfg.Scheme = "Token"
 
-	customCfg := base
-	customCfg.Header = "X-Registry-Token"
+	customCfg := Config{
+		CacheKey: "github",
+		Header:   "X-Registry-Token",
+	}
 
 	first, err := mgr.Resolve(context.Background(), "dev", authCfg)
 	if err != nil {
@@ -194,7 +200,7 @@ func TestManagerResolveRendersCachedCredentialPerRequestConfig(t *testing.T) {
 	if first.Header != "Authorization" || first.Value != "Token token-1" {
 		t.Fatalf("unexpected auth result %#v", first)
 	}
-	if second.Header != "X-Registry-Token" || second.Value != "token-1" {
+	if second.Header != "X-Registry-Token" || second.Value != "Token token-1" {
 		t.Fatalf("unexpected custom result %#v", second)
 	}
 	if got := calls.Load(); got != 1 {
@@ -202,7 +208,7 @@ func TestManagerResolveRendersCachedCredentialPerRequestConfig(t *testing.T) {
 	}
 }
 
-func TestManagerResolveSeparatesCacheByResolvedArgv(t *testing.T) {
+func TestManagerResolveRejectsConflictingArgv(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
@@ -227,27 +233,23 @@ func TestManagerResolveSeparatesCacheByResolvedArgv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(alphaCfg) error = %v", err)
 	}
-	beta, err := mgr.Resolve(context.Background(), "dev", betaCfg)
-	if err != nil {
-		t.Fatalf("Resolve(betaCfg) error = %v", err)
-	}
-	alphaAgain, err := mgr.Resolve(context.Background(), "dev", alphaCfg)
-	if err != nil {
-		t.Fatalf("Resolve(alphaCfg) second error = %v", err)
-	}
 
-	if alpha.Token != "alpha" || beta.Token != "beta" {
-		t.Fatalf("unexpected tokens alpha=%q beta=%q", alpha.Token, beta.Token)
+	_, err = mgr.Resolve(context.Background(), "dev", betaCfg)
+	if err == nil {
+		t.Fatal("expected conflict error")
 	}
-	if alphaAgain.Token != alpha.Token {
-		t.Fatalf("expected alpha cache hit, got %q then %q", alpha.Token, alphaAgain.Token)
+	if got := err.Error(); got == "" || !containsAll(got, `cache_key "shared"`, "argv") {
+		t.Fatalf("unexpected conflict error %q", got)
 	}
-	if got := calls.Load(); got != 2 {
-		t.Fatalf("expected 2 command executions, got %d", got)
+	if alpha.Token != "alpha" {
+		t.Fatalf("unexpected alpha token %q", alpha.Token)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected 1 command execution, got %d", got)
 	}
 }
 
-func TestManagerResolveSeparatesCacheByExtractionConfig(t *testing.T) {
+func TestManagerResolveRejectsConflictingExtractionConfig(t *testing.T) {
 	t.Parallel()
 
 	var calls atomic.Int32
@@ -276,16 +278,75 @@ func TestManagerResolveSeparatesCacheByExtractionConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve(alphaCfg) error = %v", err)
 	}
-	beta, err := mgr.Resolve(context.Background(), "dev", betaCfg)
-	if err != nil {
-		t.Fatalf("Resolve(betaCfg) error = %v", err)
-	}
 
-	if alpha.Token != "token-a" || beta.Token != "token-b" {
-		t.Fatalf("unexpected tokens alpha=%q beta=%q", alpha.Token, beta.Token)
+	_, err = mgr.Resolve(context.Background(), "dev", betaCfg)
+	if err == nil {
+		t.Fatal("expected conflict error")
 	}
-	if got := calls.Load(); got != 2 {
-		t.Fatalf("expected 2 command executions, got %d", got)
+	if got := err.Error(); got == "" || !containsAll(got, `cache_key "shared"`, "token_path") {
+		t.Fatalf("unexpected conflict error %q", got)
+	}
+	if alpha.Token != "token-a" {
+		t.Fatalf("unexpected alpha token %q", alpha.Token)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("expected 1 command execution, got %d", got)
+	}
+}
+
+func TestManagerResolveUnseededCacheOnlyFails(t *testing.T) {
+	t.Parallel()
+
+	mgr := NewManager()
+
+	_, err := mgr.Resolve(context.Background(), "dev", Config{CacheKey: "github"})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got := err.Error(); !containsAll(got, "requires argv", "seed the cache") {
+		t.Fatalf("unexpected error %q", got)
+	}
+}
+
+func TestManagerMergeCachedConfig(t *testing.T) {
+	t.Parallel()
+
+	mgr := NewManager()
+	base := Config{
+		Argv:      []string{"gh", "auth", "token"},
+		Dir:       "/tmp/project",
+		Format:    FormatJSON,
+		Header:    "X-Seeded",
+		Scheme:    "Token",
+		TokenPath: "access_token",
+		CacheKey:  "github",
+		TTL:       time.Minute,
+		Timeout:   3 * time.Second,
+	}
+	mgr.store(cacheKey("dev", base), base, credential{
+		Token:     "abc",
+		FetchedAt: time.Unix(100, 0),
+	})
+
+	merged := mgr.MergeCachedConfig("dev", Config{
+		CacheKey: "github",
+		Header:   "Authorization",
+	})
+
+	if len(merged.Argv) != 3 || merged.Argv[0] != "gh" {
+		t.Fatalf("expected argv to be inherited, got %#v", merged.Argv)
+	}
+	if merged.Format != FormatJSON || merged.TokenPath != "access_token" {
+		t.Fatalf("expected extraction config to be inherited, got %#v", merged)
+	}
+	if merged.Header != "Authorization" {
+		t.Fatalf("expected request header override to win, got %q", merged.Header)
+	}
+	if merged.Scheme != "Token" {
+		t.Fatalf("expected scheme to be inherited, got %q", merged.Scheme)
+	}
+	if merged.Timeout != 3*time.Second {
+		t.Fatalf("expected timeout to be inherited, got %s", merged.Timeout)
 	}
 }
 
@@ -349,4 +410,13 @@ func TestManagerResolveDeduplicatesInflightCalls(t *testing.T) {
 	if got := calls.Load(); got != 1 {
 		t.Fatalf("expected 1 inflight run, got %d", got)
 	}
+}
+
+func containsAll(s string, parts ...string) bool {
+	for _, part := range parts {
+		if !strings.Contains(s, part) {
+			return false
+		}
+	}
+	return true
 }

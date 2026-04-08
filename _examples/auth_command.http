@@ -1,9 +1,30 @@
+### Reusable Command Auth Profile
+# @patch global githubCliAuth {auth: {type: "command", argv: '["gh","auth","token"]', cache_key: "github-cli"}}
+
+### GitHub CLI Token Via @apply
+# @name GitHubCLITokenPatched
+# @tag auth command
+# @description Reuses command-backed bearer auth through a global apply profile.
+# @apply use=githubCliAuth
+GET https://api.github.com/user
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+
 ### GitHub CLI Token
 # @name GitHubCLIToken
 # @tag auth command
 # @description Uses the GitHub CLI token printer. Run `gh auth login` outside Resterm first.
 # @auth command argv=["gh","auth","token"] cache_key=github-cli
 GET https://api.github.com/user
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+
+### GitHub CLI Token Reuse
+# @name GitHubCLITokenReuse
+# @tag auth command
+# @description Reuses the seeded github-cli command auth slot without repeating argv.
+# @auth command cache_key=github-cli
+GET https://api.github.com/user/repos
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28
 

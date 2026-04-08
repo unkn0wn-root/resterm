@@ -2828,19 +2828,13 @@ func (m *Model) prepareExplainAuthPreview(
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
 		}, nil
 	case "command":
-		if m.authCmd == nil {
-			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeHTTP,
-				"command auth support is not initialised",
-			)
-		}
-
-		cfg, err := m.buildCommandAuthConfig(auth, resolver, 0)
+		prep, err := m.prepareCommandAuth(auth, resolver, envName, 0)
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
+		cfg := prep.Config()
 
-		header := cfg.Header
+		header := cfg.HeaderName()
 		if req.Headers != nil && req.Headers.Get(header) != "" {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
@@ -2849,8 +2843,10 @@ func (m *Model) prepareExplainAuthPreview(
 			}, nil
 		}
 
-		envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-		res, ok := m.authCmd.Cached(envKey, cfg)
+		res, ok, err := m.authCmd.CachedPrepared(prep)
+		if err != nil {
+			return explainAuthPreviewResult{}, err
+		}
 		if !ok {
 			return explainAuthPreviewResult{
 				status:  xplain.StageSkipped,
@@ -2963,25 +2959,18 @@ func (m *Model) ensureCommandAuth(
 	if !strings.EqualFold(req.Metadata.Auth.Type, "command") {
 		return authcmd.Result{}, nil
 	}
-	if m.authCmd == nil {
-		return authcmd.Result{}, errdef.New(
-			errdef.CodeHTTP,
-			"command auth support is not initialised",
-		)
-	}
-
-	cfg, err := m.buildCommandAuthConfig(req.Metadata.Auth, resolver, timeout)
+	prep, err := m.prepareCommandAuth(req.Metadata.Auth, resolver, envName, timeout)
 	if err != nil {
 		return authcmd.Result{}, err
 	}
+	cfg := prep.Config()
 
-	header := cfg.Header
+	header := cfg.HeaderName()
 	if req.Headers != nil && req.Headers.Get(header) != "" {
 		return authcmd.Result{}, nil
 	}
 
-	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-	res, err := m.authCmd.Resolve(ctx, envKey, cfg)
+	res, err := m.authCmd.ResolvePrepared(ctx, prep)
 	if err != nil {
 		return authcmd.Result{}, errdef.Wrap(errdef.CodeHTTP, err, "resolve command auth")
 	}
@@ -2994,6 +2983,28 @@ func (m *Model) ensureCommandAuth(
 
 	req.Headers.Set(res.Header, res.Value)
 	return res, nil
+}
+
+func (m *Model) prepareCommandAuth(
+	auth *restfile.AuthSpec,
+	resolver *vars.Resolver,
+	envName string,
+	timeout time.Duration,
+) (authcmd.Prepared, error) {
+	if m.authCmd == nil {
+		return authcmd.Prepared{}, errdef.New(
+			errdef.CodeHTTP,
+			"command auth support is not initialised",
+		)
+	}
+
+	cfg, err := m.buildCommandAuthConfig(auth, resolver, timeout)
+	if err != nil {
+		return authcmd.Prepared{}, err
+	}
+
+	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
+	return m.authCmd.Prepare(envKey, cfg)
 }
 
 func (m *Model) ensureOAuth(
@@ -3122,10 +3133,6 @@ func (m *Model) buildCommandAuthConfig(
 			}
 			cfg.Argv[i] = expanded
 		}
-	}
-	cfg, err = authcmd.Finalize(cfg)
-	if err != nil {
-		return cfg, err
 	}
 	return cfg.WithBaseTimeout(timeout), nil
 }

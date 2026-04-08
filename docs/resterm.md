@@ -924,7 +924,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 
 | Parameter | Required | Default | Description |
 | --- | --- | --- | --- |
-| `argv` | Yes | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. |
+| `argv` | Yes for the first use of a `cache_key` | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. Once a `cache_key` has been seeded, follow-up directives may omit `argv` and reuse the stored command config. |
 | `format` | No | `text` | Parse `stdout` as `text` or `json`. |
 | `header` | No | `Authorization` | Target header name. |
 | `scheme` | No | auto | Explicit prefix for the final header value. When omitted, `Authorization` defaults to `Bearer`, while custom headers get the raw token. |
@@ -932,13 +932,15 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 | `type_path` | No | - | Optional token type for `Authorization` headers when `scheme` is omitted. |
 | `expiry_path` | No | - | Optional absolute expiry value (RFC3339, RFC3339Nano, Unix seconds, or Unix milliseconds). |
 | `expires_in_path` | No | - | Optional relative lifetime in seconds. |
-| `cache_key` | No | - | Enables in-memory cache reuse per environment. |
+| `cache_key` | No | - | Enables in-memory cache reuse per environment and names a reusable command-auth slot. Seed it once with the full command/extraction config, then reuse it with `cache_key` only on later requests. Reusing the same `cache_key` with different command/extraction settings is rejected. |
 | `ttl` | No | - | Cache fallback TTL when the command output has no expiry fields. Requires `cache_key`. |
 | `timeout` | No | request timeout | Per-command timeout, bounded by the request timeout. |
 
 #### Command auth behavior
 
 - Resterm runs `@auth command` without a shell. Pipes, redirects, globbing, and shell interpolation are intentionally not supported.
+- With `cache_key`, the first full directive seeds a reusable command-auth config for that environment. Later directives can use only `cache_key`; empty fields inherit from the seeded config.
+- Reusing the same `cache_key` with different acquisition settings (`argv`, `format`, JSON paths, `ttl`, and related source fields) fails fast. `header`, `scheme`, and `timeout` can still vary per request.
 - Explain preview never executes commands. It only injects a header when a valid cached result already exists.
 - Text mode accepts exactly one non-empty line from `stdout`. Multi-line output fails with an error and should be switched to `format=json`.
 - Successful command output is treated as secret. Resterm redacts the raw token and the final injected header value in explain/history views.
@@ -950,6 +952,15 @@ Examples:
 # Requires `gh auth login` to be done outside Resterm first.
 # @auth command argv=["gh","auth","token"] cache_key=github-cli
 GET https://api.github.com/user
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+```
+
+```http
+### Reuse a seeded command-auth slot
+# After the first request seeds github-cli, later requests can reference only the cache key.
+# @auth command cache_key=github-cli
+GET https://api.github.com/user/repos
 Accept: application/vnd.github+json
 X-GitHub-Api-Version: 2022-11-28
 ```
@@ -1300,9 +1311,16 @@ When `header` is set to something other than `Authorization`, Resterm injects ju
 Use `@auth command` when your existing CLI already knows how reterive or print tokens.
 
 ```http
-### GitHub CLI profile
+### Seed a reusable command-auth slot
 # @auth command argv=["gh","auth","token"] cache_key=github-cli
 GET https://api.github.com/user
+Accept: application/vnd.github+json
+```
+
+```http
+### Reuse it later with cache_key only
+# @auth command cache_key=github-cli
+GET https://api.github.com/user/repos
 Accept: application/vnd.github+json
 ```
 
@@ -1321,6 +1339,7 @@ Key points:
 - Interactive login flows are not supported. Authenticate the CLI outside Resterm first, then use the non-interactive token-printing command.
 - Custom headers are supported with `header=...`; `Authorization` defaults to `Bearer <token>`.
 - Add `cache_key` when you want preview support and in-memory reuse across requests in the same environment.
+- `cache_key` now behaves like OAuth: it names a reusable slot. Seed it once, then reuse it. If the cache has not been seeded yet, Resterm errors with `@auth command requires argv (include it once per cache_key to seed the cache)`.
 
 ---
 
