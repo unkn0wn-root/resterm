@@ -871,6 +871,7 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 | Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
 | API key | `# @auth apikey header X-API-Key {{key}}` | `placement` can be `header` or `query`. Defaults to `X-API-Key` header if name omitted. |
 | Custom header | `# @auth Authorization CustomValue` | Arbitrary header/value pair. |
+| Command | `# @auth command argv='["gh","auth","token"]'` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
 | OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE). |
 
 #### OAuth 2.0 parameters
@@ -918,6 +919,52 @@ GET {{base.url}}/projects
 ```
 
 If you skip `token_url` on a follow-up directive and the cache hasn’t been seeded yet, Resterm will error with `@auth oauth2 requires token_url (include it once per cache_key to seed the cache)`.
+
+#### Command auth parameters
+
+| Parameter | Required | Default | Description |
+| --- | --- | --- | --- |
+| `argv` | Yes | - | JSON array of command arguments. Use outer single quotes in `.http` files: `argv='["gh","auth","token"]'`. |
+| `format` | No | `text` | Parse `stdout` as `text` or `json`. |
+| `header` | No | `Authorization` | Target header name. |
+| `scheme` | No | auto | Explicit prefix for the final header value. When omitted, `Authorization` defaults to `Bearer`, while custom headers get the raw token. |
+| `token_path` | For `format=json` | - | JSON path to the token value. Uses the same JSON path behavior as RTS captures and helpers. |
+| `type_path` | No | - | Optional token type for `Authorization` headers when `scheme` is omitted. |
+| `expiry_path` | No | - | Optional absolute expiry value (RFC3339, RFC3339Nano, Unix seconds, or Unix milliseconds). |
+| `expires_in_path` | No | - | Optional relative lifetime in seconds. |
+| `cache_key` | No | - | Enables in-memory cache reuse per environment. |
+| `ttl` | No | - | Cache fallback TTL when the command output has no expiry fields. Requires `cache_key`. |
+| `timeout` | No | request timeout | Per-command timeout, bounded by the request timeout. |
+
+#### Command auth behavior
+
+- Resterm runs `@auth command` without a shell. Pipes, redirects, globbing, and shell interpolation are intentionally not supported.
+- Explain preview never executes commands. It only injects a header when a valid cached result already exists.
+- Text mode accepts exactly one non-empty line from `stdout`. Multi-line output fails with an error and should be switched to `format=json`.
+- Successful command output is treated as secret. Resterm redacts the raw token and the final injected header value in explain/history views.
+
+Examples:
+
+```http
+### GitHub CLI token
+# Requires `gh auth login` to be done outside Resterm first.
+# @auth command argv='["gh","auth","token"]' cache_key=github-cli
+GET https://api.github.com/user
+Accept: application/vnd.github+json
+X-GitHub-Api-Version: 2022-11-28
+```
+
+```http
+### JSON command output
+# @auth command argv='["mycli","auth","print","--json"]' format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+GET https://example.com/projects
+```
+
+```http
+### Custom header with TTL fallback
+# @auth command argv='["aws","--profile","{{aws.profile}}","ecr","get-login-password"]' header=X-Registry-Token cache_key=ecr ttl=10m
+GET https://example.com/registry
+```
 
 ### Scripting (`@script`)
 
@@ -1247,6 +1294,33 @@ GET https://api.example.com/data
 ```
 
 When `header` is set to something other than `Authorization`, Resterm injects just the raw token (without the "Bearer " prefix). When using the default `Authorization` header, the full `Bearer <token>` format is used.
+
+### Command-backed auth
+
+Use `@auth command` when your existing CLI already knows how reterive or print tokens.
+
+```http
+### GitHub CLI profile
+# @auth command argv='["gh","auth","token"]' cache_key=github-cli
+GET https://api.github.com/user
+Accept: application/vnd.github+json
+```
+
+Structured output works too:
+
+```http
+### Internal CLI with JSON output
+# @auth command argv='["mycli","auth","print","--json"]' format=json token_path=access_token type_path=token_type expires_in_path=expires_in cache_key=myapi
+GET https://api.example.com/projects
+```
+
+Key points:
+
+- Commands run during auth preparation, before the request is sent.
+- The command inherits Resterm's environment and runs with the request file's directory as its working directory.
+- Interactive login flows are not supported. Authenticate the CLI outside Resterm first, then use the non-interactive token-printing command.
+- Custom headers are supported with `header=...`; `Authorization` defaults to `Bearer <token>`.
+- Add `cache_key` when you want preview support and in-memory reuse across requests in the same environment.
 
 ---
 
@@ -1595,6 +1669,7 @@ Explore `_examples/` for ready-to-run:
 - `graphql.http` - inline and file-based GraphQL requests.
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `k8s.http` - Kubernetes profile scopes, non-pod targets, named ports, and gRPC over `@k8s`.
+- `auth_command.http` - command-backed auth with `gh auth token`, JSON output parsing, and custom header examples.
 - `oauth2.http` - manual capture vs using the `@auth oauth2` directive.
 - `transport.http` - timeout, proxy, and `@no-log` samples.
 - `compare.http` - demonstrates `@compare` directives and CLI-triggered multi-environment sweeps.
