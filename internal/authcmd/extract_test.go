@@ -6,13 +6,21 @@ import (
 	"time"
 )
 
+func extractResult(cfg Config, out []byte, now time.Time) (Result, error) {
+	cred, err := extractCredential(cfg.extract(), out, now)
+	if err != nil {
+		return Result{Header: cfg.HeaderName()}, err
+	}
+	return renderResult(cfg.output(), cred), nil
+}
+
 func TestExtractText(t *testing.T) {
 	t.Parallel()
 
 	cfg := Config{}
-	res, err := extract(cfg, []byte("\n token-123 \n"), time.Now())
+	res, err := extractResult(cfg, []byte("\n token-123 \n"), time.Now())
 	if err != nil {
-		t.Fatalf("extract() error = %v", err)
+		t.Fatalf("extractResult() error = %v", err)
 	}
 	if res.Token != "token-123" {
 		t.Fatalf("expected token, got %q", res.Token)
@@ -28,7 +36,7 @@ func TestExtractText(t *testing.T) {
 func TestExtractTextRejectsMultipleValues(t *testing.T) {
 	t.Parallel()
 
-	_, err := extract(Config{}, []byte("a\nb\n"), time.Now())
+	_, err := extractResult(Config{}, []byte("a\nb\n"), time.Now())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -45,13 +53,13 @@ func TestExtractJSON(t *testing.T) {
 		ExpiresInPath: "expires_in",
 	}
 
-	res, err := extract(
+	res, err := extractResult(
 		cfg,
 		[]byte(`{"access_token":"abc","token_type":"Token","expires_in":"60"}`),
 		now,
 	)
 	if err != nil {
-		t.Fatalf("extract() error = %v", err)
+		t.Fatalf("extractResult() error = %v", err)
 	}
 	if res.Token != "abc" {
 		t.Fatalf("expected token, got %q", res.Token)
@@ -75,7 +83,7 @@ func TestExtractJSONRejectsTrailingGarbage(t *testing.T) {
 		TokenPath: "token",
 	}
 
-	_, err := extract(cfg, []byte(`{"token":"abc"} trailing`), time.Now())
+	_, err := extractResult(cfg, []byte(`{"token":"abc"} trailing`), time.Now())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -90,7 +98,7 @@ func TestExtractJSONRejectsInvalidExpiresIn(t *testing.T) {
 		ExpiresInPath: "expires_in",
 	}
 
-	_, err := extract(cfg, []byte(`{"token":"abc","expires_in":"soon"}`), time.Now())
+	_, err := extractResult(cfg, []byte(`{"token":"abc","expires_in":"soon"}`), time.Now())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -109,9 +117,9 @@ func TestExtractJSONCustomHeaderUsesRawToken(t *testing.T) {
 		TypePath:  "token_type",
 	}
 
-	res, err := extract(cfg, []byte(`{"token":"abc","token_type":"Bearer"}`), time.Now())
+	res, err := extractResult(cfg, []byte(`{"token":"abc","token_type":"Bearer"}`), time.Now())
 	if err != nil {
-		t.Fatalf("extract() error = %v", err)
+		t.Fatalf("extractResult() error = %v", err)
 	}
 	if res.Value != "abc" {
 		t.Fatalf("expected raw token, got %q", res.Value)
@@ -131,9 +139,9 @@ func TestExtractJSONSchemeOverridesType(t *testing.T) {
 		Scheme:    "Token",
 	}
 
-	res, err := extract(cfg, []byte(`{"token":"abc","token_type":"Bearer"}`), time.Now())
+	res, err := extractResult(cfg, []byte(`{"token":"abc","token_type":"Bearer"}`), time.Now())
 	if err != nil {
-		t.Fatalf("extract() error = %v", err)
+		t.Fatalf("extractResult() error = %v", err)
 	}
 	if res.Value != "Token abc" {
 		t.Fatalf("expected explicit scheme, got %q", res.Value)
@@ -165,6 +173,11 @@ func TestParseExpiry(t *testing.T) {
 			name: "unix millis",
 			in:   "1712491200123",
 			want: time.UnixMilli(1712491200123),
+		},
+		{
+			name: "negative unix millis",
+			in:   "-1712491200123",
+			want: time.UnixMilli(-1712491200123),
 		},
 	}
 

@@ -38,7 +38,7 @@ func TestRun(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			cfg := Config{
+			cfg := commandConfig{
 				Argv: append(
 					[]string{os.Args[0], "-test.run=TestAuthCmdHelperProcess", "--"},
 					tt.args...),
@@ -56,7 +56,7 @@ func TestRun(t *testing.T) {
 			if err != nil {
 				t.Fatalf("run() error = %v", err)
 			}
-			if got := string(out.stdout); got != tt.want {
+			if got := string(out); got != tt.want {
 				t.Fatalf("stdout = %q, want %q", got, tt.want)
 			}
 		})

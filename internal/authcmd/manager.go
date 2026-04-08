@@ -6,91 +6,82 @@ import (
 	"time"
 )
 
-type runFunc func(context.Context, Config) (runOutput, error)
+type Result struct {
+	Header string
+	Value  string
+	Token  string
+	Type   string
+	Expiry time.Time
+}
 
-type call struct {
+type execFunc func(context.Context, Config) ([]byte, error)
+
+type inflightCall struct {
 	done chan struct{}
 	cred credential
 	cfg  Config
 	err  error
 }
 
-type entry struct {
+type cacheRecord struct {
 	cred credential
 	cfg  Config
 }
 
+type resolvePlan struct {
+	result  Result
+	wait    *inflightCall
+	start   *inflightCall
+	seedCfg Config
+	hit     bool
+}
+
 type Prepared struct {
-	key string
-	cfg Config
+	entryKey string
+	cfg      Config
 }
 
 type Manager struct {
 	mu       sync.Mutex
-	cache    map[string]entry
-	inflight map[string]*call
+	cache    map[string]cacheRecord
+	inflight map[string]*inflightCall
 	now      func() time.Time
-	run      runFunc
+	exec     execFunc
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		cache:    make(map[string]entry),
-		inflight: make(map[string]*call),
+		cache:    make(map[string]cacheRecord),
+		inflight: make(map[string]*inflightCall),
 		now:      time.Now,
-		run:      run,
+		exec: func(ctx context.Context, cfg Config) ([]byte, error) {
+			return run(ctx, cfg.command())
+		},
 	}
 }
 
-func (m *Manager) SetRunFunc(fn func(context.Context, Config) (runOutput, error)) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if fn == nil {
-		m.run = run
-		return
-	}
-	m.run = fn
+func (p Prepared) HeaderName() string {
+	return p.cfg.HeaderName()
 }
 
 func (m *Manager) SetExecFunc(fn func(context.Context, Config) ([]byte, error)) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if fn == nil {
-		m.run = run
+		m.exec = func(ctx context.Context, cfg Config) ([]byte, error) {
+			return run(ctx, cfg.command())
+		}
 		return
 	}
-	m.run = func(ctx context.Context, cfg Config) (runOutput, error) {
-		out, err := fn(ctx, cfg)
-		if err != nil {
-			return runOutput{}, err
-		}
-		return runOutput{stdout: append([]byte(nil), out...)}, nil
-	}
-}
-
-func (m *Manager) MergeCachedConfig(env string, cfg Config) Config {
-	cfg = cfg.normalize()
-	key := cacheKey(env, cfg)
-	if key == "" {
-		return cfg
-	}
-	ent, ok := m.cacheEntry(key)
-	if !ok {
-		return cfg
-	}
-	return mergeCfg(ent.cfg, cfg)
-}
-
-func (p Prepared) Config() Config {
-	return p.cfg
+	m.exec = fn
 }
 
 func (m *Manager) Prepare(env string, cfg Config) (Prepared, error) {
-	key, cfg, err := m.prepare(env, cfg)
+	entryKey, cfg, err := m.prepareConfig(env, cfg)
 	if err != nil {
 		return Prepared{}, err
 	}
-	return Prepared{key: key, cfg: cfg}, nil
+	return Prepared{entryKey: entryKey, cfg: cfg}, nil
 }
 
 func (m *Manager) Cached(env string, cfg Config) (Result, bool, error) {
@@ -102,29 +93,12 @@ func (m *Manager) Cached(env string, cfg Config) (Result, bool, error) {
 }
 
 func (m *Manager) CachedPrepared(prep Prepared) (Result, bool, error) {
-	key := prep.key
+	entryKey := prep.entryKey
 	cfg := prep.cfg
-	if key == "" {
+	if entryKey == "" {
 		return Result{}, false, nil
 	}
-
-	now := m.now()
-	m.mu.Lock()
-	ent, ok := m.cache[key]
-	if !ok {
-		m.mu.Unlock()
-		return Result{}, false, nil
-	}
-	if field, same := sameSeed(ent.cfg, cfg); !same {
-		m.mu.Unlock()
-		return Result{}, false, conflictError(cfg, field)
-	}
-	cred, ok := cachedEntry(ent, cfg, now)
-	m.mu.Unlock()
-	if !ok {
-		return Result{}, false, nil
-	}
-	return renderResult(cfg, cred), true, nil
+	return m.cachedPreparedResult(entryKey, cfg, m.now())
 }
 
 func (m *Manager) Resolve(ctx context.Context, env string, cfg Config) (Result, error) {
@@ -136,104 +110,71 @@ func (m *Manager) Resolve(ctx context.Context, env string, cfg Config) (Result, 
 }
 
 func (m *Manager) ResolvePrepared(ctx context.Context, prep Prepared) (Result, error) {
-	key := prep.key
+	entryKey := prep.entryKey
 	cfg := prep.cfg
-	if key == "" {
-		cred, err := m.fetch(ctx, cfg)
+	if entryKey == "" {
+		cred, err := m.fetchCredential(ctx, cfg)
 		if err != nil {
 			return Result{}, err
 		}
-		return renderResult(cfg, cred), nil
+		return renderResult(cfg.output(), cred), nil
 	}
 
-	now := m.now()
-	m.mu.Lock()
-	seed := cfg
-	if ent, ok := m.cache[key]; ok {
-		if field, same := sameSeed(ent.cfg, cfg); !same {
-			m.mu.Unlock()
-			return Result{}, conflictError(cfg, field)
-		}
-		if cred, ok := cachedEntry(ent, cfg, now); ok {
-			m.mu.Unlock()
-			return renderResult(cfg, cred), nil
-		}
-		seed = ent.cfg
-	}
-	if c, ok := m.inflight[key]; ok {
-		if field, same := sameSeed(c.cfg, cfg); !same {
-			m.mu.Unlock()
-			return Result{}, conflictError(cfg, field)
-		}
-		done := c.done
-		m.mu.Unlock()
-		select {
-		case <-ctx.Done():
-			return Result{}, ctx.Err()
-		case <-done:
-			if c.err != nil {
-				return Result{}, c.err
-			}
-			return renderResult(cfg, c.cred), nil
-		}
-	}
-
-	c := &call{done: make(chan struct{}), cfg: seed}
-	m.inflight[key] = c
-	m.mu.Unlock()
-
-	cred, err := m.fetch(ctx, cfg)
-	if err == nil {
-		m.store(key, seed, cred)
-	}
-	c.cred = cred
-	c.err = err
-	close(c.done)
-
-	m.mu.Lock()
-	delete(m.inflight, key)
-	m.mu.Unlock()
-
+	action, err := m.planResolve(entryKey, cfg, m.now())
 	if err != nil {
 		return Result{}, err
 	}
-	return renderResult(cfg, cred), nil
+	if action.hit {
+		return action.result, nil
+	}
+	if action.wait != nil {
+		return m.waitResolve(ctx, cfg, action.wait)
+	}
+	return m.resolveByFetch(ctx, entryKey, cfg, action.seedCfg, action.start)
 }
 
-func (m *Manager) fetch(ctx context.Context, cfg Config) (credential, error) {
-	now := m.now()
-	out, err := m.run(ctx, cfg)
+func (m *Manager) fetchCredential(ctx context.Context, cfg Config) (credential, error) {
+	out, err := m.exec(ctx, cfg)
 	if err != nil {
 		return credential{}, err
 	}
 
-	cred, err := extractCredential(cfg, out.stdout, now)
+	fetchedAt := m.now()
+	cred, err := extractCredential(cfg.extract(), out, fetchedAt)
 	if err != nil {
 		return credential{}, err
 	}
-	cred.FetchedAt = now
+	cred.FetchedAt = fetchedAt
 	return cred, nil
 }
 
-func cachedEntry(ent entry, cfg Config, now time.Time) (credential, bool) {
+func cachedCredential(ent cacheRecord, ttl time.Duration, now time.Time) (credential, bool) {
 	if ent.cred == (credential{}) {
 		return credential{}, false
 	}
-	if !validAt(ent.cred, cfg, now) {
+	if !validAt(ent.cred, ttl, now) {
 		return credential{}, false
 	}
 	return ent.cred, true
 }
 
+func resolveCacheRecord(ent cacheRecord, cfg Config, now time.Time) (credential, bool, error) {
+	if field, same := ent.cfg.cacheSeedDiff(cfg); !same {
+		return credential{}, false, conflictError(cfg, field)
+	}
+	cred, ok := cachedCredential(ent, cfg.TTL, now)
+	return cred, ok, nil
+}
+
 func (m *Manager) store(key string, cfg Config, cred credential) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.cache[key] = entry{cred: cred, cfg: cfg}
+	m.cache[key] = cacheRecord{cred: cred, cfg: cfg}
 }
 
-func (m *Manager) cacheEntry(key string) (entry, bool) {
+func (m *Manager) lookupCacheRecord(key string) (cacheRecord, bool) {
 	if key == "" {
-		return entry{}, false
+		return cacheRecord{}, false
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -241,26 +182,115 @@ func (m *Manager) cacheEntry(key string) (entry, bool) {
 	return ent, ok
 }
 
-func (m *Manager) prepare(env string, cfg Config) (string, Config, error) {
+func (m *Manager) prepareConfig(env string, cfg Config) (string, Config, error) {
+	var err error
+
 	cfg = cfg.normalize()
-	key := cacheKey(env, cfg)
-	if key == "" {
-		cfg, err := Finalize(cfg)
+	entryKey := cacheEntryKey(env, cfg)
+	if entryKey == "" {
+		cfg, err = Finalize(cfg)
 		return "", cfg, err
 	}
 
-	ent, ok := m.cacheEntry(key)
+	ent, ok := m.lookupCacheRecord(entryKey)
 	if ok {
-		cfg = mergeCfg(ent.cfg, cfg)
+		cfg = cfg.inheritedFrom(ent.cfg)
 	}
-	cfg, err := Finalize(cfg)
+	cfg, err = Finalize(cfg)
 	if err != nil {
-		return key, cfg, err
+		return entryKey, cfg, err
 	}
 	if ok {
-		if field, same := sameSeed(ent.cfg, cfg); !same {
-			return key, cfg, conflictError(cfg, field)
+		if field, same := ent.cfg.cacheSeedDiff(cfg); !same {
+			return entryKey, cfg, conflictError(cfg, field)
 		}
 	}
-	return key, cfg, nil
+	return entryKey, cfg, nil
+}
+
+func (m *Manager) cachedPreparedResult(entryKey string, cfg Config, now time.Time) (Result, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	ent, ok := m.cache[entryKey]
+	if !ok {
+		return Result{}, false, nil
+	}
+	cred, ok, err := resolveCacheRecord(ent, cfg, now)
+	if err != nil {
+		return Result{}, false, err
+	}
+	if !ok {
+		return Result{}, false, nil
+	}
+	return renderResult(cfg.output(), cred), true, nil
+}
+
+func (m *Manager) planResolve(entryKey string, cfg Config, now time.Time) (resolvePlan, error) {
+	action := resolvePlan{seedCfg: cfg}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if ent, ok := m.cache[entryKey]; ok {
+		cred, ok, err := resolveCacheRecord(ent, cfg, now)
+		if err != nil {
+			return resolvePlan{}, err
+		}
+		if ok {
+			action.result = renderResult(cfg.output(), cred)
+			action.hit = true
+			return action, nil
+		}
+		action.seedCfg = ent.cfg
+	}
+
+	if c, ok := m.inflight[entryKey]; ok {
+		if field, same := c.cfg.cacheSeedDiff(cfg); !same {
+			return resolvePlan{}, conflictError(cfg, field)
+		}
+		action.wait = c
+		return action, nil
+	}
+
+	action.start = &inflightCall{done: make(chan struct{}), cfg: action.seedCfg}
+	m.inflight[entryKey] = action.start
+	return action, nil
+}
+
+func (m *Manager) waitResolve(ctx context.Context, cfg Config, c *inflightCall) (Result, error) {
+	select {
+	case <-ctx.Done():
+		return Result{}, ctx.Err()
+	case <-c.done:
+		if c.err != nil {
+			return Result{}, c.err
+		}
+		return renderResult(cfg.output(), c.cred), nil
+	}
+}
+
+func (m *Manager) resolveByFetch(
+	ctx context.Context,
+	entryKey string,
+	cfg Config,
+	seed Config,
+	c *inflightCall,
+) (Result, error) {
+	cred, err := m.fetchCredential(ctx, cfg)
+	if err == nil {
+		m.store(entryKey, seed, cred)
+	}
+	c.cred = cred
+	c.err = err
+	close(c.done)
+
+	m.mu.Lock()
+	delete(m.inflight, entryKey)
+	m.mu.Unlock()
+
+	if err != nil {
+		return Result{}, err
+	}
+	return renderResult(cfg.output(), cred), nil
 }

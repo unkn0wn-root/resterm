@@ -12,28 +12,30 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
-func extract(cfg Config, out []byte, now time.Time) (Result, error) {
-	cred, err := extractCredential(cfg, out, now)
-	if err != nil {
-		return Result{Header: cfg.HeaderName()}, err
-	}
-	return renderResult(cfg, cred), nil
+const unixMillisThreshold = int64(1_000_000_000_000)
+
+type credential struct {
+	Token     string
+	Type      string
+	Expiry    time.Time
+	FetchedAt time.Time
 }
 
-func extractCredential(cfg Config, out []byte, now time.Time) (credential, error) {
-	cred := credential{}
-
-	var err error
+func extractCredential(cfg extractConfig, out []byte, now time.Time) (credential, error) {
 	switch cfg.Format {
 	case FormatJSON:
-		cred.Token, cred.Type, cred.Expiry, err = extractJSON(cfg, out, now)
+		return extractJSONCredential(cfg, out, now)
 	default:
-		cred.Token, err = extractText(out)
+		return extractTextCredential(out)
 	}
+}
+
+func extractTextCredential(out []byte) (credential, error) {
+	tok, err := extractText(out)
 	if err != nil {
-		return cred, err
+		return credential{}, err
 	}
-	return cred, nil
+	return credential{Token: tok}, nil
 }
 
 func extractText(out []byte) (string, error) {
@@ -64,18 +66,18 @@ func extractText(out []byte) (string, error) {
 	}
 }
 
-func extractJSON(cfg Config, out []byte, now time.Time) (string, string, time.Time, error) {
+func extractJSONCredential(cfg extractConfig, out []byte, now time.Time) (credential, error) {
 	doc, err := decodeJSON(out)
 	if err != nil {
-		return "", "", time.Time{}, err
+		return credential{}, err
 	}
 
 	tok, ok, err := scalarAt(doc, cfg.TokenPath, "token_path")
 	if err != nil {
-		return "", "", time.Time{}, err
+		return credential{}, err
 	}
 	if !ok || tok == "" {
-		return "", "", time.Time{}, errdef.New(
+		return credential{}, errdef.New(
 			errdef.CodeHTTP,
 			"token_path must resolve to a non-empty scalar",
 		)
@@ -83,14 +85,18 @@ func extractJSON(cfg Config, out []byte, now time.Time) (string, string, time.Ti
 
 	typ, _, err := scalarAt(doc, cfg.TypePath, "type_path")
 	if err != nil {
-		return "", "", time.Time{}, err
+		return credential{}, err
 	}
 
 	exp, err := expiryAt(doc, cfg, now)
 	if err != nil {
-		return "", "", time.Time{}, err
+		return credential{}, err
 	}
-	return tok, typ, exp, nil
+	return credential{
+		Token:  tok,
+		Type:   typ,
+		Expiry: exp,
+	}, nil
 }
 
 func decodeJSON(out []byte) (any, error) {
@@ -145,7 +151,7 @@ func scalarString(v any) (string, bool) {
 	}
 }
 
-func expiryAt(doc any, cfg Config, now time.Time) (time.Time, error) {
+func expiryAt(doc any, cfg extractConfig, now time.Time) (time.Time, error) {
 	if cfg.ExpiryPath != "" {
 		val, ok, err := scalarAt(doc, cfg.ExpiryPath, "expiry_path")
 		if err != nil {
@@ -186,13 +192,19 @@ func parseExpiry(raw string) (time.Time, error) {
 	}
 
 	if num, err := strconv.ParseInt(src, 10, 64); err == nil {
-		if abs64(num) >= 1_000_000_000_000 {
-			return time.UnixMilli(num), nil
-		}
-		return time.Unix(num, 0), nil
+		return parseUnixExpiry(num), nil
 	}
 
 	return time.Time{}, errdef.New(errdef.CodeHTTP, "unsupported expiry value %q", raw)
+}
+
+// expiry_path accepts both Unix seconds and Unix milliseconds.
+// Treat 13 digit or larger magnitudes as ms so negative timestamps work too.
+func parseUnixExpiry(num int64) time.Time {
+	if num <= -unixMillisThreshold || num >= unixMillisThreshold {
+		return time.UnixMilli(num)
+	}
+	return time.Unix(num, 0)
 }
 
 func parseSeconds(raw string) (time.Duration, error) {
@@ -209,37 +221,4 @@ func parseSeconds(raw string) (time.Duration, error) {
 		return 0, errdef.New(errdef.CodeHTTP, "expires_in must be greater than zero")
 	}
 	return time.Duration(val * float64(time.Second)), nil
-}
-
-func buildHeaderValue(cfg Config, header, tok, typ string) (string, string) {
-	if cfg.Scheme != "" {
-		return cfg.Scheme + " " + tok, cfg.Scheme
-	}
-	if strings.EqualFold(header, "authorization") {
-		if typ == "" {
-			typ = defaultScheme
-		}
-		return typ + " " + tok, typ
-	}
-	return tok, ""
-}
-
-func renderResult(cfg Config, cred credential) Result {
-	cfg = cfg.normalize()
-	header := cfg.HeaderName()
-	value, typ := buildHeaderValue(cfg, header, cred.Token, cred.Type)
-	return Result{
-		Header: header,
-		Value:  value,
-		Token:  cred.Token,
-		Type:   typ,
-		Expiry: effectiveExpiry(cred, cfg),
-	}
-}
-
-func abs64(v int64) int64 {
-	if v < 0 {
-		return -v
-	}
-	return v
 }

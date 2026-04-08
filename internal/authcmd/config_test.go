@@ -27,13 +27,13 @@ func TestConfigHeaderName(t *testing.T) {
 	}
 }
 
-func TestConfigUsesCache(t *testing.T) {
+func TestConfigHasCacheKey(t *testing.T) {
 	t.Parallel()
 
-	if (Config{}).usesCache() {
+	if (Config{}).hasCacheKey() {
 		t.Fatal("expected empty config to skip cache")
 	}
-	if !(Config{CacheKey: " key "}).usesCache() {
+	if !(Config{CacheKey: " key "}).hasCacheKey() {
 		t.Fatal("expected non-empty cache key to enable cache")
 	}
 }
