@@ -54,7 +54,7 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 		return res, fmt.Errorf("@k8s requires options")
 	}
 
-	fields := tokenizeOptionTokens(trimmed)
+	fields := tokenizeFieldsEscaped(trimmed)
 	if len(fields) == 0 {
 		return res, fmt.Errorf("@k8s requires options")
 	}

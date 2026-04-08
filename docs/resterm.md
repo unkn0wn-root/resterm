@@ -924,7 +924,7 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 
 | Parameter | Required | Default | Description |
 | --- | --- | --- | --- |
-| `argv` | Yes | - | JSON array of command arguments. Use outer single quotes in `.http` files: `argv='["gh","auth","token"]'`. |
+| `argv` | Yes | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. |
 | `format` | No | `text` | Parse `stdout` as `text` or `json`. |
 | `header` | No | `Authorization` | Target header name. |
 | `scheme` | No | auto | Explicit prefix for the final header value. When omitted, `Authorization` defaults to `Bearer`, while custom headers get the raw token. |

@@ -1468,6 +1468,29 @@ func TestParseCommandAuthSpec(t *testing.T) {
 	}
 }
 
+func TestParseCommandAuthSpecBareJSONArgv(t *testing.T) {
+	spec := parseAuthSpec(
+		`command argv=["gh", "auth", "token"] header=Authorization cache_key=github timeout=5s`,
+	)
+	if spec == nil {
+		t.Fatalf("expected command auth spec")
+	}
+	if spec.Type != "command" {
+		t.Fatalf("unexpected auth type %q", spec.Type)
+	}
+	checks := map[string]string{
+		"argv":      `["gh", "auth", "token"]`,
+		"header":    "Authorization",
+		"cache_key": "github",
+		"timeout":   "5s",
+	}
+	for key, expected := range checks {
+		if spec.Params[key] != expected {
+			t.Fatalf("expected %s=%q, got %q", key, expected, spec.Params[key])
+		}
+	}
+}
+
 func TestParseCompareDirective(t *testing.T) {
 	src := `# @name Compare
 # @compare dev stage prod base=stage
@@ -2179,6 +2202,18 @@ func TestParseOptionTokensQuotedValues(t *testing.T) {
 	}
 	if got := opts["flag"]; got != "true" {
 		t.Fatalf("expected bare flag to default to true, got %q", got)
+	}
+}
+
+func TestParseOptionTokensBareJSONValue(t *testing.T) {
+	input := `argv=["gh", "auth", "token"] mode=json`
+	opts := parseOptionTokens(input)
+
+	if got := opts["argv"]; got != `["gh", "auth", "token"]` {
+		t.Fatalf("expected argv JSON preserved, got %q", got)
+	}
+	if got := opts["mode"]; got != "json" {
+		t.Fatalf("expected mode=json, got %q", got)
 	}
 }
 

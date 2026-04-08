@@ -7,40 +7,17 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-// Splits on spaces but keeps quoted strings together.
-// Quotes themselves get stripped - "hello resterm" becomes a single field: hello resterm
-func splitAuthFields(input string) []string {
-	var fields []string
-	var current strings.Builder
-	inQuote := false
-	var quoteRune rune
+type directiveFieldMode uint8
 
-	flush := func() {
-		if current.Len() > 0 {
-			fields = append(fields, current.String())
-			current.Reset()
-		}
-	}
+const (
+	directiveFieldPlain directiveFieldMode = iota
+	directiveFieldEscaped
+)
 
-	for _, r := range input {
-		switch {
-		case inQuote:
-			if r == quoteRune {
-				inQuote = false
-			} else {
-				current.WriteRune(r)
-			}
-		case unicode.IsSpace(r):
-			flush()
-		case r == '"' || r == '\'':
-			inQuote = true
-			quoteRune = r
-		default:
-			current.WriteRune(r)
-		}
-	}
-	flush()
-	return fields
+// Tokenizes fields on spaces while keeping quoted values together.
+// Quotes themselves get stripped, so `"hello resterm"` becomes `hello resterm`.
+func tokenizeFields(input string) []string {
+	return tokenizeFieldsWithMode(input, directiveFieldPlain)
 }
 
 func parseKeyValuePairs(fields []string) map[string]string {
@@ -212,7 +189,7 @@ func parseOptionTokens(input string) map[string]string {
 	if trimmed == "" {
 		return map[string]string{}
 	}
-	tokens := tokenizeOptionTokens(trimmed)
+	tokens := tokenizeFieldsEscaped(trimmed)
 	if len(tokens) == 0 {
 		return map[string]string{}
 	}
@@ -237,7 +214,7 @@ func parseOptionTokens(input string) map[string]string {
 }
 
 func splitExprOptions(input string) (string, map[string]string) {
-	tokens := splitAuthFields(strings.TrimSpace(input))
+	tokens := tokenizeFields(strings.TrimSpace(input))
 	if len(tokens) == 0 {
 		return "", map[string]string{}
 	}
@@ -287,13 +264,22 @@ func applySettingsTokens(dst map[string]string, raw string) map[string]string {
 	return dst
 }
 
-// Like splitAuthFields but handles backslash escapes.
+// Like tokenizeFields but also treats backslashes as escapes.
 // A trailing backslash gets preserved if nothing follows it.
-func tokenizeOptionTokens(input string) []string {
+func tokenizeFieldsEscaped(input string) []string {
+	return tokenizeFieldsWithMode(input, directiveFieldEscaped)
+}
+
+func tokenizeFieldsWithMode(input string, mode directiveFieldMode) []string {
 	var tokens []string
 	var current strings.Builder
 	var quote rune
+	var last rune
+	hasLast := false
 	escaping := false
+	var jsonClosers []rune
+	inJSONString := false
+	jsonEscaped := false
 
 	flush := func() {
 		if current.Len() == 0 {
@@ -301,31 +287,94 @@ func tokenizeOptionTokens(input string) []string {
 		}
 		tokens = append(tokens, current.String())
 		current.Reset()
+		last = 0
+		hasLast = false
+	}
+
+	write := func(r rune) {
+		current.WriteRune(r)
+		last = r
+		hasLast = true
+	}
+
+	startsQuotedValue := func() bool {
+		return current.Len() == 0 || (hasLast && last == '=')
+	}
+
+	startsJSONValue := func(r rune) bool {
+		return (r == '[' || r == '{') && hasLast && last == '='
+	}
+
+	pushJSONCloser := func(r rune) {
+		switch r {
+		case '[':
+			jsonClosers = append(jsonClosers, ']')
+		case '{':
+			jsonClosers = append(jsonClosers, '}')
+		}
+	}
+
+	popJSONCloser := func(r rune) {
+		if len(jsonClosers) == 0 {
+			return
+		}
+		// this tokenizer groups JSON like directive values but does not validate them.
+		// On a mismatched closer we keep the token open and leave JSON validation to the
+		// downstream parser for that specific field.
+		if jsonClosers[len(jsonClosers)-1] != r {
+			return
+		}
+		jsonClosers = jsonClosers[:len(jsonClosers)-1]
 	}
 
 	for _, r := range input {
 		switch {
+		case len(jsonClosers) > 0:
+			write(r)
+			switch {
+			case inJSONString:
+				if jsonEscaped {
+					jsonEscaped = false
+					continue
+				}
+				if r == '\\' {
+					jsonEscaped = true
+					continue
+				}
+				if r == '"' {
+					inJSONString = false
+				}
+			case r == '"':
+				inJSONString = true
+			case r == '[' || r == '{':
+				pushJSONCloser(r)
+			default:
+				popJSONCloser(r)
+			}
 		case escaping:
-			current.WriteRune(r)
+			write(r)
 			escaping = false
-		case r == '\\':
+		case mode == directiveFieldEscaped && r == '\\':
 			escaping = true
 		case quote != 0:
 			if r == quote {
 				quote = 0
 				break
 			}
-			current.WriteRune(r)
-		case r == '"' || r == '\'':
+			write(r)
+		case startsJSONValue(r):
+			write(r)
+			pushJSONCloser(r)
+		case (r == '"' || r == '\'') && startsQuotedValue():
 			quote = r
 		case unicode.IsSpace(r):
 			flush()
 		default:
-			current.WriteRune(r)
+			write(r)
 		}
 	}
 	if escaping {
-		current.WriteRune('\\')
+		write('\\')
 	}
 	flush()
 	return tokens
@@ -375,7 +424,7 @@ func parseTagList(text string) []string {
 }
 
 func parseScriptSpec(rest string) (string, string) {
-	fields := splitAuthFields(rest)
+	fields := tokenizeFields(rest)
 	kind := ""
 	lang := ""
 	for _, field := range fields {
