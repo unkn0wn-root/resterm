@@ -318,6 +318,14 @@ func (m *Model) syncSSHGlobals(doc *restfile.Document) {
 	m.sshGlobals.set(path, docSSHProfiles(doc))
 }
 
+func (m *Model) syncAuthGlobals(doc *restfile.Document) {
+	if m.authGlobals == nil {
+		return
+	}
+	path := m.documentRuntimePath(doc)
+	m.authGlobals.set(path, docAuthProfiles(doc))
+}
+
 func (m *Model) syncK8sGlobals(doc *restfile.Document) {
 	if m.k8sGlobals == nil {
 		return
@@ -331,6 +339,13 @@ func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
 		return nil
 	}
 	return doc.SSH
+}
+
+func docAuthProfiles(doc *restfile.Document) []restfile.AuthProfile {
+	if doc == nil {
+		return nil
+	}
+	return doc.Auth
 }
 
 func docK8sProfiles(doc *restfile.Document) []restfile.K8sProfile {
@@ -350,6 +365,7 @@ func (m *Model) syncPatchGlobals(doc *restfile.Document) {
 
 func (m *Model) syncAllGlobals(doc *restfile.Document) {
 	m.syncSSHGlobals(doc)
+	m.syncAuthGlobals(doc)
 	m.syncK8sGlobals(doc)
 	m.syncPatchGlobals(doc)
 }

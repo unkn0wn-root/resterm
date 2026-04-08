@@ -37,6 +37,21 @@ type AuthSpec struct {
 	Params map[string]string
 }
 
+type AuthScope int
+
+const (
+	AuthScopeRequest AuthScope = iota
+	AuthScopeFile
+	AuthScopeGlobal
+)
+
+type AuthProfile struct {
+	Scope AuthScope
+	Name  string
+	Spec  AuthSpec
+	Line  int
+}
+
 type ScriptBlock struct {
 	Kind     string
 	Lang     string
@@ -199,6 +214,7 @@ type RequestMetadata struct {
 	NoLog                 bool
 	AllowSensitiveHeaders bool
 	Auth                  *AuthSpec
+	AuthDisabled          bool
 	Scripts               []ScriptBlock
 	Uses                  []UseSpec
 	Applies               []ApplySpec
@@ -353,6 +369,7 @@ type Document struct {
 	Variables []Variable
 	Globals   []Variable
 	Constants []Constant
+	Auth      []AuthProfile
 	SSH       []SSHProfile
 	K8s       []K8sProfile
 	Patches   []PatchProfile

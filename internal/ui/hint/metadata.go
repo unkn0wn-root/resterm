@@ -112,6 +112,28 @@ var workflowRunHints = []Hint{
 var metaSub = map[string][]Hint{
 	"auth": {
 		{
+			Label:      "request",
+			Summary:    "Make the auth directive explicitly request-scoped",
+			Insert:     "request bearer {{token}}",
+			CursorBack: len("bearer {{token}}"),
+		},
+		{
+			Label:      "file",
+			Summary:    "Define auth inherited by later requests in this file",
+			Insert:     "file bearer {{token}}",
+			CursorBack: len("bearer {{token}}"),
+		},
+		{
+			Label:      "global",
+			Summary:    "Define auth inherited across the workspace",
+			Insert:     "global bearer {{token}}",
+			CursorBack: len("bearer {{token}}"),
+		},
+		{
+			Label:   "none",
+			Summary: "Disable inherited auth for the current request",
+		},
+		{
 			Label:      "basic",
 			Summary:    "Basic auth with username and password",
 			Insert:     "basic user pass",

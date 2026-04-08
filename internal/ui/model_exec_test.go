@@ -737,6 +737,119 @@ func TestResolveRequestTimeout(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
+	model := Model{
+		cfg:         Config{EnvironmentName: "dev"},
+		globals:     newGlobalStore(),
+		authGlobals: newAuthStore(),
+	}
+	doc := &restfile.Document{
+		Path: "/tmp/inherited-auth.http",
+		Auth: []restfile.AuthProfile{{
+			Scope: restfile.AuthScopeFile,
+			Spec: restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "file-token"},
+			},
+			Line: 1,
+		}},
+	}
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com",
+		LineRange: restfile.LineRange{Start: 2, End: 3},
+	}
+
+	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", false, nil, nil)
+	if msg := exec.runPreRequestScripts(); msg != nil {
+		t.Fatalf("runPreRequestScripts: %v", msg.err)
+	}
+	exec.buildResolver()
+
+	client := httpclient.NewClient(nil)
+	httpReq, _, _, err := client.BuildHTTPRequest(
+		context.Background(),
+		req,
+		exec.resolver,
+		httpclient.Options{},
+	)
+	if err != nil {
+		t.Fatalf("BuildHTTPRequest: %v", err)
+	}
+	if got := httpReq.Header.Get("Authorization"); got != "Bearer file-token" {
+		t.Fatalf("expected inherited bearer header, got %q", got)
+	}
+}
+
+func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
+	model := Model{
+		cfg:         Config{EnvironmentName: "dev"},
+		globals:     newGlobalStore(),
+		authGlobals: newAuthStore(),
+	}
+	model.authGlobals.set("/tmp/other.http", []restfile.AuthProfile{{
+		Scope: restfile.AuthScopeGlobal,
+		Spec: restfile.AuthSpec{
+			Type:   "bearer",
+			Params: map[string]string{"token": "global-token"},
+		},
+		Line: 1,
+	}})
+
+	req := &restfile.Request{}
+	model.resolveInheritedAuth(&restfile.Document{Path: "/tmp/current.http"}, req)
+
+	if req.Metadata.Auth == nil {
+		t.Fatalf("expected inherited global auth")
+	}
+	if got := req.Metadata.Auth.Params["token"]; got != "global-token" {
+		t.Fatalf("expected global token, got %q", got)
+	}
+}
+
+func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
+	model := Model{
+		cfg:          Config{EnvironmentName: "dev"},
+		globals:      newGlobalStore(),
+		authGlobals:  newAuthStore(),
+		patchGlobals: newPatchStore(),
+	}
+	doc := &restfile.Document{
+		Path: "/tmp/inherited-auth-apply.http",
+		Auth: []restfile.AuthProfile{{
+			Scope: restfile.AuthScopeFile,
+			Spec: restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "file-token"},
+			},
+			Line: 1,
+		}},
+	}
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com",
+		LineRange: restfile.LineRange{Start: 2, End: 4},
+		Metadata: restfile.RequestMetadata{
+			Applies: []restfile.ApplySpec{{
+				Expression: `{auth: null}`,
+				Line:       2,
+				Col:        1,
+			}},
+		},
+	}
+
+	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", false, nil, nil)
+	if msg := exec.runPreRequestScripts(); msg != nil {
+		t.Fatalf("runPreRequestScripts: %v", msg.err)
+	}
+	if req.Metadata.Auth != nil {
+		t.Fatalf("expected @apply to clear inherited auth")
+	}
+	if !req.Metadata.AuthDisabled {
+		t.Fatalf("expected cleared inherited auth to stay disabled for this execution")
+	}
+}
+
 func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	var calls int32
 	var lastAuth string

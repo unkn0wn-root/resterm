@@ -228,6 +228,75 @@ func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
 	}
 }
 
+type authDirective struct {
+	Scope   restfile.AuthScope
+	Name    string
+	Spec    *restfile.AuthSpec
+	Disable bool
+}
+
+func parseAuthDirective(rest string) (authDirective, bool, error) {
+	dir := authDirective{Scope: restfile.AuthScopeRequest}
+	trimmed := strings.TrimSpace(rest)
+	if trimmed == "" {
+		return dir, false, nil
+	}
+
+	fields := tokenizeFields(trimmed)
+	if len(fields) == 0 {
+		return dir, false, nil
+	}
+
+	explicitScope := false
+	if scope, ok := parseAuthScope(fields[0]); ok {
+		dir.Scope = scope
+		explicitScope = true
+		fields = fields[1:]
+		if len(fields) == 0 {
+			return dir, true, fmt.Errorf(
+				"@auth %s scope requires an auth spec",
+				restfile.AuthScopeLabel(scope),
+			)
+		}
+	}
+
+	if strings.EqualFold(fields[0], "none") {
+		if dir.Scope != restfile.AuthScopeRequest {
+			return dir, true, fmt.Errorf(
+				"@auth %s scope does not support none",
+				restfile.AuthScopeLabel(dir.Scope),
+			)
+		}
+		if len(fields) != 1 {
+			return dir, true, fmt.Errorf("@auth none does not accept additional tokens")
+		}
+		dir.Disable = true
+		return dir, true, nil
+	}
+
+	spec := parseAuthSpec(strings.Join(fields, " "))
+	if spec == nil {
+		if explicitScope {
+			return dir, true, fmt.Errorf(
+				"@auth %s scope requires a valid auth spec",
+				restfile.AuthScopeLabel(dir.Scope),
+			)
+		}
+		return dir, false, nil
+	}
+	dir.Spec = spec
+	return dir, true, nil
+}
+
+func parseAuthScope(token string) (restfile.AuthScope, bool) {
+	return parseDirectiveScope(
+		token,
+		restfile.AuthScopeRequest,
+		restfile.AuthScopeFile,
+		restfile.AuthScopeGlobal,
+	)
+}
+
 func parseAuthSpec(rest string) *restfile.AuthSpec {
 	fields := tokenizeFields(rest)
 	if len(fields) == 0 {

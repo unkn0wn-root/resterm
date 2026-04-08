@@ -85,6 +85,7 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 
 	clone.Variables = append([]restfile.Variable(nil), req.Variables...)
 	clone.Metadata.Tags = append([]string(nil), req.Metadata.Tags...)
+	clone.Metadata.Auth = restfile.CloneAuthSpec(req.Metadata.Auth)
 	clone.Metadata.Scripts = append([]restfile.ScriptBlock(nil), req.Metadata.Scripts...)
 	clone.Metadata.Uses = append([]restfile.UseSpec(nil), req.Metadata.Uses...)
 	if len(req.Metadata.Applies) > 0 {

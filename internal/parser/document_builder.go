@@ -23,6 +23,7 @@ type documentBuilder struct {
 	globalVars           []restfile.Variable
 	fileSettings         map[string]string
 	consts               []restfile.Constant
+	authDefs             []restfile.AuthProfile
 	sshDefs              []restfile.SSHProfile
 	k8sDefs              []restfile.K8sProfile
 	patchDefs            []restfile.PatchProfile
@@ -697,6 +698,7 @@ func (b *documentBuilder) finish() {
 	b.doc.Variables = append(b.doc.Variables, b.fileVars...)
 	b.doc.Globals = append(b.doc.Globals, b.globalVars...)
 	b.doc.Constants = append(b.doc.Constants, b.consts...)
+	b.doc.Auth = append(b.doc.Auth, b.authDefs...)
 	b.doc.Uses = append(b.doc.Uses, b.fileUses...)
 	b.doc.SSH = append(b.doc.SSH, b.sshDefs...)
 	b.doc.K8s = append(b.doc.K8s, b.k8sDefs...)

@@ -126,6 +126,44 @@ func commandAuthSecrets(res authcmd.Result) []string {
 	}
 }
 
+func lookupDefaultAuthProfile(
+	xs []restfile.AuthProfile,
+	scope restfile.AuthScope,
+) (*restfile.AuthProfile, bool) {
+	for i := len(xs) - 1; i >= 0; i-- {
+		profile := &xs[i]
+		if profile.Scope != scope {
+			continue
+		}
+		if strings.TrimSpace(profile.Name) != "" {
+			continue
+		}
+		return profile, true
+	}
+	return nil, false
+}
+
+func (m *Model) resolveInheritedAuth(doc *restfile.Document, req *restfile.Request) {
+	if req == nil || req.Metadata.Auth != nil || req.Metadata.AuthDisabled {
+		return
+	}
+
+	if profile, ok := lookupDefaultAuthProfile(docAuthProfiles(doc), restfile.AuthScopeFile); ok {
+		req.Metadata.Auth = restfile.CloneAuthSpec(&profile.Spec)
+		return
+	}
+	if profile, ok := lookupDefaultAuthProfile(docAuthProfiles(doc), restfile.AuthScopeGlobal); ok {
+		req.Metadata.Auth = restfile.CloneAuthSpec(&profile.Spec)
+		return
+	}
+	if m.authGlobals == nil {
+		return
+	}
+	if profile, ok := lookupDefaultAuthProfile(m.authGlobals.all(), restfile.AuthScopeGlobal); ok {
+		req.Metadata.Auth = restfile.CloneAuthSpec(&profile.Spec)
+	}
+}
+
 func (m *Model) prepareExplainAuthPreview(
 	req *restfile.Request,
 	resolver *vars.Resolver,

@@ -77,6 +77,81 @@ GET https://example.com/api
 	}
 }
 
+func TestParseFileScopedAuthDirective(t *testing.T) {
+	src := `# @auth file command argv=["gh","auth","token"] cache_key=github
+GET https://example.com
+`
+
+	doc := Parse("file-auth.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Auth) != 1 {
+		t.Fatalf("expected 1 auth profile, got %d", len(doc.Auth))
+	}
+	prof := doc.Auth[0]
+	if prof.Scope != restfile.AuthScopeFile {
+		t.Fatalf("expected file scope, got %v", prof.Scope)
+	}
+	if prof.Spec.Type != "command" {
+		t.Fatalf("expected command auth type, got %q", prof.Spec.Type)
+	}
+	if prof.Spec.Params["cache_key"] != "github" {
+		t.Fatalf("expected cache_key github, got %q", prof.Spec.Params["cache_key"])
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	if doc.Requests[0].Metadata.Auth != nil {
+		t.Fatalf("expected request auth to remain unset until execution")
+	}
+}
+
+func TestParseRequestAuthNone(t *testing.T) {
+	src := `# @auth none
+GET https://example.com
+`
+
+	doc := Parse("request-auth-none.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Auth != nil {
+		t.Fatalf("expected request auth to be cleared")
+	}
+	if !req.Metadata.AuthDisabled {
+		t.Fatalf("expected request auth to be explicitly disabled")
+	}
+}
+
+func TestParseExplicitRequestScopedAuth(t *testing.T) {
+	src := `# @auth request bearer token-123
+GET https://example.com
+`
+
+	doc := Parse("request-auth-explicit.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Metadata.Auth == nil {
+		t.Fatalf("expected request auth metadata")
+	}
+	if req.Metadata.Auth.Type != "bearer" {
+		t.Fatalf("expected bearer auth, got %q", req.Metadata.Auth.Type)
+	}
+	if req.Metadata.AuthDisabled {
+		t.Fatalf("expected auth disable flag to remain false")
+	}
+}
+
 func TestParseMethodLineWithHTTPVersion(t *testing.T) {
 	src := `###
 
