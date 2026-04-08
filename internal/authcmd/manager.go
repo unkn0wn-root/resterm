@@ -208,7 +208,11 @@ func (m *Manager) prepareConfig(env string, cfg Config) (string, Config, error) 
 	return entryKey, cfg, nil
 }
 
-func (m *Manager) cachedPreparedResult(entryKey string, cfg Config, now time.Time) (Result, bool, error) {
+func (m *Manager) cachedPreparedResult(
+	entryKey string,
+	cfg Config,
+	now time.Time,
+) (Result, bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
