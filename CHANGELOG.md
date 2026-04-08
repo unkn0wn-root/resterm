@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.25.1](https://github.com/unkn0wn-root/resterm/compare/v0.24.3...v0.25.1) (2026-04-08)
+
+
+### Features
+
+* add auth hints to the editor ([14a263e](https://github.com/unkn0wn-root/resterm/commit/14a263e032c34ac16ffddfe75bafa64f1bb69574))
+* authcmd ([48e4472](https://github.com/unkn0wn-root/resterm/commit/48e4472f975ad1376a85ad7465acd362b2227e6e))
+
+
+### Bug Fixes
+
+* allow unquoted JSON argv in [@auth](https://github.com/auth) command ([f4bc1a0](https://github.com/unkn0wn-root/resterm/commit/f4bc1a097e32e035d136b70441bfe7394bc688d5))
+* **lint:** run_test.go ([fb2366b](https://github.com/unkn0wn-root/resterm/commit/fb2366b71d3cfcc9ba3a84355e0eb980a2e12a46))
+
 ### [0.24.3](https://github.com/unkn0wn-root/resterm/compare/v0.24.2...v0.24.3) (2026-04-05)
 
 
