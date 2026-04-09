@@ -485,7 +485,7 @@ func (m *Model) armWebSocketCommandMode() tea.Cmd {
 	}
 	m.wsCommandChord = true
 	m.setStatusMessage(statusMsg{
-		text:  "WebSocket commands: i console, p ping, c close, l clear, Esc cancel",
+		text:  "WebSocket: [i] console | [p] ping | [c] close | [l] clear | [Esc] cancel",
 		level: statusInfo,
 	})
 	return m.focusStreamPane()
