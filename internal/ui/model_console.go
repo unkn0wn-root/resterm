@@ -220,7 +220,7 @@ func (wc *websocketConsole) view(width int, th theme.Theme) string {
 	title := th.StreamConsoleTitle.Render("WebSocket Console")
 	modeLabel := th.StreamSummary.Render("Mode:")
 	modeValue := th.StreamConsoleMode.Render(strings.ToUpper(wc.mode.String()))
-	help := th.StreamSummary.Render("(Ctrl+S send, Enter newline, F2 cycle, Ctrl+I toggle)")
+	help := th.StreamSummary.Render("(Ctrl+S send, Enter newline, F2 cycle, Esc exit)")
 
 	var builder strings.Builder
 	builder.WriteString(title)
@@ -497,7 +497,8 @@ func (m *Model) handleWebSocketCommandChord(msg tea.KeyMsg) (tea.Cmd, bool) {
 	}
 	m.wsCommandChord = false
 
-	switch msg.String() {
+	key := msg.String()
+	switch key {
 	case "esc":
 		m.setStatusMessage(statusMsg{text: "WebSocket command canceled", level: statusInfo})
 		return nil, true
@@ -510,7 +511,16 @@ func (m *Model) handleWebSocketCommandChord(msg tea.KeyMsg) (tea.Cmd, bool) {
 	case "l":
 		return m.clearStreamBufferCmd(), true
 	default:
-		return nil, false
+		if key == "" {
+			key = "<unknown>"
+		}
+		m.setStatusMessage(
+			statusMsg{
+				text:  fmt.Sprintf("Unknown WebSocket command: %s", key),
+				level: statusWarn,
+			},
+		)
+		return nil, true
 	}
 }
 

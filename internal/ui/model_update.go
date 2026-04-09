@@ -605,6 +605,7 @@ func (m *Model) resetChordState() {
 	m.hasPendingChord = false
 	m.pendingChord = ""
 	m.pendingChordMsg = tea.KeyMsg{}
+	m.wsCommandChord = false
 	m.clearRepeatChord()
 }
 
@@ -1398,6 +1399,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			default:
 				m.responsePaneChord = false
+				return combine(nil)
 			}
 		}
 		if keyStr == "ctrl+f" || keyStr == "ctrl+b" {

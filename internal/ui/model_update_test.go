@@ -1162,6 +1162,65 @@ func TestResponsePaneFocusChord(t *testing.T) {
 	}
 }
 
+func TestResponsePaneFocusChordSwallowsUnknownKey(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	_ = model.setFocus(focusResponse)
+	if out := model.toggleResponseSplitVertical(); out != nil {
+		collectMsgs(out)
+	}
+	if !model.responseSplit {
+		t.Fatalf("expected split to be enabled")
+	}
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected primary response pane")
+	}
+	pane.viewport.SetContent(strings.Repeat("line\n", 80))
+	pane.viewport.GotoTop()
+
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyCtrlF}); cmd != nil {
+		collectMsgs(cmd)
+	}
+	if !model.responsePaneChord {
+		t.Fatal("expected response pane chord to be armed")
+	}
+
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'j'}}); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.responsePaneChord {
+		t.Fatal("expected response pane chord to clear after unknown key")
+	}
+	if pane.viewport.YOffset != 0 {
+		t.Fatalf("expected unknown chord key to be swallowed, got offset %d", pane.viewport.YOffset)
+	}
+}
+
+func TestResetChordStateClearsWebSocketCommandChord(t *testing.T) {
+	model := New(Config{})
+	model.wsCommandChord = true
+	model.hasPendingChord = true
+	model.pendingChord = "g"
+
+	model.resetChordState()
+
+	if model.wsCommandChord {
+		t.Fatal("expected websocket command chord to be cleared")
+	}
+	if model.hasPendingChord || model.pendingChord != "" {
+		t.Fatal("expected standard chord state to be cleared")
+	}
+}
+
 func TestWebSocketConsoleTypingDoesNotStartChord(t *testing.T) {
 	model := New(Config{})
 	req := &restfile.Request{Method: "GET", URL: "ws://example.test"}
@@ -1238,6 +1297,33 @@ func TestWebSocketCommandChordClearsStreamBuffer(t *testing.T) {
 	}
 	if len(ls.events) != 0 {
 		t.Fatalf("expected stream buffer to be cleared, got %d events", len(ls.events))
+	}
+}
+
+func TestWebSocketCommandChordSwallowsUnknownKey(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{Method: "GET", URL: "ws://example.test"}
+
+	model.currentRequest = req
+	model.requestSessions = map[*restfile.Request]string{req: "ws-1"}
+	model.responsePanes[0].activeTab = responseTabStream
+	_ = model.setFocus(focusResponse)
+
+	sendKeys(t, &model, "g", "w")
+	if !model.wsCommandChord {
+		t.Fatal("expected g w to arm websocket command mode")
+	}
+
+	sendKeys(t, &model, "x")
+
+	if model.wsCommandChord {
+		t.Fatal("expected websocket command mode to clear after unknown key")
+	}
+	if !strings.Contains(model.statusMessage.text, "Unknown WebSocket command: x") {
+		t.Fatalf("expected unknown-command status, got %q", model.statusMessage.text)
+	}
+	if model.statusMessage.level != statusWarn {
+		t.Fatalf("expected warning status, got %v", model.statusMessage.level)
 	}
 }
 
