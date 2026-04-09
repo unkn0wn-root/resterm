@@ -7,7 +7,10 @@ import (
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
@@ -1156,6 +1159,85 @@ func TestResponsePaneFocusChord(t *testing.T) {
 				t.Fatalf("expected chord to clear after navigation")
 			}
 		})
+	}
+}
+
+func TestWebSocketConsoleTypingDoesNotStartChord(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{Method: "GET", URL: "ws://example.test"}
+
+	model.currentRequest = req
+	model.requestSessions = map[*restfile.Request]string{req: "ws-1"}
+	model.wsConsole = newWebsocketConsole("ws-1", nil, nil, "")
+	model.responsePanes[0].activeTab = responseTabStream
+	_ = model.setFocus(focusResponse)
+
+	sendKeys(t, &model, "g", "w")
+
+	if model.hasPendingChord {
+		t.Fatal("expected console typing to avoid starting a chord")
+	}
+	if model.wsConsole == nil || !model.wsConsole.active {
+		t.Fatal("expected websocket console to remain active while typing")
+	}
+	if got := model.wsConsole.input.Value(); got != "gw" {
+		t.Fatalf("expected console input to receive typed text, got %q", got)
+	}
+}
+
+func TestWebSocketCommandChordTogglesConsole(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{Method: "GET", URL: "ws://example.test"}
+
+	model.currentRequest = req
+	model.requestSessions = map[*restfile.Request]string{req: "ws-1"}
+	model.wsSenders = map[string]*httpclient.WebSocketSender{
+		"ws-1": {},
+	}
+	model.responsePanes[0].activeTab = responseTabStream
+	_ = model.setFocus(focusResponse)
+
+	sendKeys(t, &model, "g", "w")
+	if !model.wsCommandChord {
+		t.Fatal("expected g w to arm websocket command mode")
+	}
+
+	sendKeys(t, &model, "i")
+	if model.wsCommandChord {
+		t.Fatal("expected websocket command mode to clear after command")
+	}
+	if model.wsConsole == nil || !model.wsConsole.active {
+		t.Fatal("expected websocket console to become active")
+	}
+}
+
+func TestWebSocketCommandChordClearsStreamBuffer(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{Method: "GET", URL: "ws://example.test"}
+
+	model.currentRequest = req
+	model.requestSessions = map[*restfile.Request]string{req: "ws-1"}
+	model.liveSessions = map[string]*liveSession{
+		"ws-1": {
+			id:        "ws-1",
+			events:    []*stream.Event{{Payload: []byte("hello")}},
+			maxEvents: 100,
+		},
+	}
+	model.responsePanes[0].activeTab = responseTabStream
+	_ = model.setFocus(focusResponse)
+
+	sendKeys(t, &model, "g", "w", "l")
+
+	if model.wsCommandChord {
+		t.Fatal("expected websocket command mode to clear after command")
+	}
+	ls := model.liveSessions["ws-1"]
+	if ls == nil {
+		t.Fatal("expected live session to remain present")
+	}
+	if len(ls.events) != 0 {
+		t.Fatalf("expected stream buffer to be cleared, got %d events", len(ls.events))
 	}
 }
 

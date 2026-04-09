@@ -142,7 +142,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Cycle focus (navigator -> editor -> response) | `Tab` / `Shift+Tab` |
 | Focus navigator / editor / response panes | `g+r` / `g+i` / `g+p` |
 | Open timeline tab | `Ctrl+Alt+L` (or `g+t`) |
-| Toggle WebSocket console (Stream tab) | `Ctrl+I` |
+| WebSocket commands (Stream tab) | `g+w`, then `i`/`p`/`c`/`l` |
 | Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
 | Collapse / expand current navigator branch | `g+j` / `g+k` |
 | Collapse all / expand all in navigator | `g+Shift+J` / `g+Shift+K` |
@@ -226,7 +226,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `focus_requests` / `focus_response` / `focus_editor_normal` | Jump directly to a pane. | `g r`, `g p`, `g i` | ✗ |
 | `set_main_split_horizontal` / `set_main_split_vertical` | Stack vs side-by-side editor/response. | `g s`, `g v` | ✗ |
 | `start_compare_run` | Trigger compare sweep for the current request. | `g c` | ✗ |
-| `toggle_ws_console` | Toggle the WebSocket console. | `g w` | ✗ |
+| `toggle_ws_console` | Enter WebSocket command mode (`i` console, `p` ping, `c` close, `l` clear). | `g w` | ✗ |
 | `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
 | `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
 
@@ -243,7 +243,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
 
-When a request opens a stream, the Stream tab becomes available. Use `Ctrl+I` to reveal the WebSocket console inside the Stream tab, `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, arrow keys to replay recent payloads, `Ctrl+P` to send ping, and `Ctrl+W` to close the session.
+When a request opens a stream, the Stream tab becomes available. Use `g+w` to enter WebSocket command mode, then press `i` to toggle the console, `p` to send ping, `c` to close the socket, or `l` to clear the live buffer. If the console is actively focused for typing, press `Esc` first so text entry is not interrupted. Inside the console, use `F2` to switch payload modes (text, JSON, base64, file), `Ctrl+S` or `Ctrl+Enter` to send frames, and the arrow keys to replay recent payloads.
 
 Use `Ctrl+V` or `Ctrl+U` to split the response pane. The secondary pane can be pinned so subsequent calls populate only the primary pane, making comparisons easy.
 
@@ -860,7 +860,7 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 ### Stream tab, history, and console
 
 - The Stream tab appears automatically whenever a streaming session is active. Scroll to review frames, press `b` to bookmark important events, and switch tabs with the arrow keys (`Ctrl+H` / `Ctrl+L`).
-- Toggle the interactive WebSocket console with `Ctrl+I` while the Stream tab is focused. Cycle payload modes with `F2` (text → JSON → base64 → file), send payloads with `Ctrl+S` or `Ctrl+Enter`, reuse previous payloads with the arrow keys, issue ping frames via `Ctrl+P`, close gracefully with `Ctrl+W`, and clear the live buffer with `Ctrl+L`.
+- While the Stream tab is focused, use `g+w` then `i` to toggle the interactive WebSocket console, `p` to send ping, `c` to close gracefully, or `l` to clear the live buffer. If the console is focused for typing, press `Esc` first. Inside the console, cycle payload modes with `F2`, send payloads with `Ctrl+S` or `Ctrl+Enter`, and reuse previous payloads with the arrow keys.
 - Completed transcripts are saved alongside the request in history with summary headers (`X-Resterm-Stream-Type`, `X-Resterm-Stream-Summary`). Scripts and captures can access the same data via `stream.*` templates and APIs (see [Scripting](#scripting-api)).
 
 ### Authentication directives

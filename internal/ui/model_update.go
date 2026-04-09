@@ -980,7 +980,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionStartCompareRun:
 		return m.startConfigCompareFromEditor(), true
 	case bindings.ActionToggleWebsocketConsole:
-		return m.toggleWebSocketConsole(), true
+		return m.armWebSocketCommandMode(), true
 	case bindings.ActionToggleSidebarCollapse:
 		return m.togglePaneCollapse(paneRegionSidebar), true
 	case bindings.ActionToggleEditorCollapse:
@@ -1113,6 +1113,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 
 	if m.focus != focusFile && m.focus != focusRequests && m.focus != focusWorkflows {
 		m.suppressListKey = false
+	}
+
+	if cmd, handled := m.handleWebSocketCommandChord(msg); handled {
+		return combine(cmd)
 	}
 
 	if allowChord {
@@ -1642,6 +1646,9 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 
 func (m *Model) canStartChord(msg tea.KeyMsg, key string) bool {
 	if key == "" || m.bindingsMap == nil {
+		return false
+	}
+	if m.websocketConsoleCapturesInput() {
 		return false
 	}
 	if !m.bindingsMap.HasChordPrefix(key) {

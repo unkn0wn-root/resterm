@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/http/httptrace"
 	"net/url"
 	"os"
@@ -28,12 +29,41 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
+	"nhooyr.io/websocket"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
+}
+
+func startUIWebSocketServer(t *testing.T) (*httptest.Server, func()) {
+	t.Helper()
+
+	ln, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+		if err != nil {
+			t.Fatalf("websocket accept failed: %v", err)
+		}
+		defer func() {
+			if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
+				t.Logf("close websocket: %v", err)
+			}
+		}()
+		<-r.Context().Done()
+	}))
+	srv.Listener = ln
+	srv.Start()
+
+	return srv, func() {
+		srv.Close()
+	}
 }
 
 func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
@@ -1442,6 +1472,63 @@ func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	}
 	if !errors.Is(resp.err, context.Canceled) {
 		t.Fatalf("expected cancellation error, got %v", resp.err)
+	}
+}
+
+func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
+	srv, cleanup := startUIWebSocketServer(t)
+	defer cleanup()
+
+	wsURL := strings.Replace(srv.URL, "http", "ws", 1) + "/ws/chat"
+	model := New(Config{})
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    wsURL,
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{},
+		},
+	}
+
+	cmd := model.executeRequest(nil, req, httpclient.Options{}, "", nil)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg := cmd()
+	resp, ok := msg.(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg, got %T", msg)
+	}
+	if resp.err != nil {
+		t.Fatalf("unexpected error: %v", resp.err)
+	}
+	if resp.response == nil {
+		t.Fatalf("expected placeholder websocket response")
+	}
+	if got := resp.response.Headers.Get(streamHeaderType); got != "websocket" {
+		t.Fatalf("expected websocket placeholder header, got %q", got)
+	}
+
+	sessionID := model.sessionIDForRequest(req)
+	if sessionID == "" {
+		t.Fatalf("expected websocket session to be recorded")
+	}
+	session := model.sessionHandles[sessionID]
+	if session == nil {
+		t.Fatalf("expected websocket session handle for %s", sessionID)
+	}
+
+	select {
+	case <-session.Done():
+		t.Fatal("interactive websocket session canceled immediately after request returned")
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	session.Cancel()
+	select {
+	case <-session.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for websocket session shutdown")
 	}
 }
 
