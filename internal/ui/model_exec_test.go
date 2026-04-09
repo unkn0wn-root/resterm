@@ -46,18 +46,20 @@ func startUIWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 		t.Fatalf("listen: %v", err)
 	}
 
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
-		if err != nil {
-			t.Fatalf("websocket accept failed: %v", err)
-		}
-		defer func() {
-			if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
-				t.Logf("close websocket: %v", err)
+	srv := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				t.Fatalf("websocket accept failed: %v", err)
 			}
-		}()
-		<-r.Context().Done()
-	}))
+			defer func() {
+				if err := conn.Close(websocket.StatusNormalClosure, "bye"); err != nil {
+					t.Logf("close websocket: %v", err)
+				}
+			}()
+			<-r.Context().Done()
+		}),
+	)
 	srv.Listener = ln
 	srv.Start()
 
