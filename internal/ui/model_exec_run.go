@@ -264,7 +264,11 @@ func (e *execContext) run() tea.Msg {
 		return *msg
 	}
 
-	defer e.sendCancel()
+	defer func() {
+		if e.sendCancel != nil {
+			e.sendCancel()
+		}
+	}()
 
 	if msg := e.evaluateCondition(); msg != nil {
 		return *msg
@@ -1029,10 +1033,17 @@ func (e *execContext) executeHTTP() tea.Msg {
 			if len(e.req.WebSocket.Steps) == 0 {
 				if handle != nil && handle.Session != nil {
 					sessionDone := handle.Session.Done()
+					releaseSend := e.sendCancel
 					go func() {
 						<-sessionDone
 						cancel()
+						if releaseSend != nil {
+							releaseSend()
+						}
 					}()
+					// Interactive websocket sessions must outlive the initial request
+					// command so the Stream tab and console stay attached.
+					e.sendCancel = nil
 					cancelActive = false
 				}
 				response = streamingPlaceholderResponse(handle.Meta)

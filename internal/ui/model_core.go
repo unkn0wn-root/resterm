@@ -209,6 +209,7 @@ type Model struct {
 	responseSplitOrientation responseSplitOrientation
 	responsePaneFocus        responsePaneID
 	responsePaneChord        bool
+	wsCommandChord           bool
 	sidebarCollapsed         bool
 	editorCollapsed          bool
 	responseCollapsed        bool

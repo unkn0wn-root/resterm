@@ -88,6 +88,7 @@ func (m *Model) setFocus(target paneFocus) tea.Cmd {
 	}
 	if target != focusResponse {
 		m.responsePaneChord = false
+		m.wsCommandChord = false
 	}
 	if target == focusEditor {
 		if m.editorInsertMode {

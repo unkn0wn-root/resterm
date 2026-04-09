@@ -220,7 +220,7 @@ func (wc *websocketConsole) view(width int, th theme.Theme) string {
 	title := th.StreamConsoleTitle.Render("WebSocket Console")
 	modeLabel := th.StreamSummary.Render("Mode:")
 	modeValue := th.StreamConsoleMode.Render(strings.ToUpper(wc.mode.String()))
-	help := th.StreamSummary.Render("(Ctrl+S send, Enter newline, F2 cycle, Ctrl+I toggle)")
+	help := th.StreamSummary.Render("(Ctrl+S send, Enter newline, F2 cycle, Esc exit)")
 
 	var builder strings.Builder
 	builder.WriteString(title)
@@ -397,9 +397,6 @@ func (m *Model) ensureWebSocketConsole(
 func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	key := msg.String()
 	sessionID := m.sessionIDForRequest(m.currentRequest)
-	if key == "ctrl+i" || key == "ctrl+alt+i" || key == "alt+ctrl+i" {
-		return m.toggleWebSocketConsole(), true
-	}
 
 	console := m.wsConsole
 	if console == nil || console.sessionID != sessionID {
@@ -436,15 +433,6 @@ func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		console.clearStatus()
 		m.refreshStreamPanes()
 		return nil, true
-	case "ctrl+p":
-		console.clearStatus()
-		return m.sendConsolePing(), true
-	case "ctrl+w":
-		console.clearStatus()
-		return m.sendConsoleClose(), true
-	case "ctrl+l":
-		console.clearStatus()
-		return m.clearStreamBufferCmd(), true
 	case "up":
 		if console.historyPrev() {
 			console.clearStatus()
@@ -467,6 +455,73 @@ func (m *Model) handleWebSocketConsoleKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	console.input = updated
 	m.refreshStreamPanes()
 	return cmd, true
+}
+
+func (m *Model) websocketConsoleCapturesInput() bool {
+	if m == nil || m.focus != focusResponse {
+		return false
+	}
+	console := m.wsConsole
+	if console == nil || !console.active {
+		return false
+	}
+	pane := m.pane(responsePanePrimary)
+	if pane == nil || pane.activeTab != responseTabStream {
+		return false
+	}
+	sessionID := m.sessionIDForRequest(m.currentRequest)
+	if sessionID == "" {
+		return false
+	}
+	return console.sessionID == sessionID
+}
+
+func (m *Model) armWebSocketCommandMode() tea.Cmd {
+	sessionID := m.sessionIDForRequest(m.currentRequest)
+	if sessionID == "" {
+		m.wsCommandChord = false
+		m.setStatusMessage(statusMsg{text: "No active websocket stream", level: statusWarn})
+		return nil
+	}
+	m.wsCommandChord = true
+	m.setStatusMessage(statusMsg{
+		text:  "WebSocket: [i] console | [p] ping | [c] close | [l] clear | [Esc] cancel",
+		level: statusInfo,
+	})
+	return m.focusStreamPane()
+}
+
+func (m *Model) handleWebSocketCommandChord(msg tea.KeyMsg) (tea.Cmd, bool) {
+	if !m.wsCommandChord {
+		return nil, false
+	}
+	m.wsCommandChord = false
+
+	key := msg.String()
+	switch key {
+	case "esc":
+		m.setStatusMessage(statusMsg{text: "WebSocket command canceled", level: statusInfo})
+		return nil, true
+	case "i":
+		return m.toggleWebSocketConsole(), true
+	case "p":
+		return m.sendConsolePing(), true
+	case "c":
+		return m.sendConsoleClose(), true
+	case "l":
+		return m.clearStreamBufferCmd(), true
+	default:
+		if key == "" {
+			key = "<unknown>"
+		}
+		m.setStatusMessage(
+			statusMsg{
+				text:  fmt.Sprintf("Unknown WebSocket command: %s", key),
+				level: statusWarn,
+			},
+		)
+		return nil, true
+	}
 }
 
 func (m *Model) toggleWebSocketConsole() tea.Cmd {

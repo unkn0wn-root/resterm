@@ -144,7 +144,9 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 		if b.inRequest {
 			b.addError(
 				line,
-				"@auth "+restfile.AuthScopeLabel(dir.Scope)+" scope must be declared outside a request",
+				"@auth "+restfile.AuthScopeLabel(
+					dir.Scope,
+				)+" scope must be declared outside a request",
 			)
 			return true
 		}
