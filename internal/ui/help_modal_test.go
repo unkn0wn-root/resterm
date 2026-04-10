@@ -47,6 +47,25 @@ func TestFilteredHelpSectionsMatchesSectionTitle(t *testing.T) {
 	t.Fatalf("expected History section in %+v", sections)
 }
 
+func TestFilteredHelpSectionsMatchesWebSocketCommands(t *testing.T) {
+	model := New(Config{})
+	model.helpFilter.SetValue("websocket ping")
+
+	sections := model.filteredHelpSections()
+	if len(sections) != 1 {
+		t.Fatalf("expected one matching section, got %+v", sections)
+	}
+	if sections[0].title != "Streaming & WebSocket" {
+		t.Fatalf("expected Streaming & WebSocket section, got %q", sections[0].title)
+	}
+	if len(sections[0].entries) != 1 {
+		t.Fatalf("expected one matching entry, got %+v", sections[0].entries)
+	}
+	if got := sections[0].entries[0].description; got != "WebSocket commands: console / ping / close / clear" {
+		t.Fatalf("unexpected help entry %q", got)
+	}
+}
+
 func TestHelpKeySearchFocusOwnsChordKeys(t *testing.T) {
 	model := New(Config{})
 	model.showHelp = true
