@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -285,6 +286,26 @@ func (m Model) helpSections() []helpSection {
 					),
 					"Toggle sidebar / editor / response minimize",
 				},
+			}),
+		},
+		{
+			title: "Streaming & WebSocket",
+			entries: sortedHelpEntries([]helpEntry{
+				{"Ctrl+Space", "Stream tab: pause or resume live follow"},
+				{"Ctrl+F", "Stream tab: filter events (Enter apply, Esc cancel)"},
+				{"Ctrl+B", "Stream tab: add bookmark"},
+				{"Ctrl+Up / Ctrl+Down", "Stream tab: previous / next bookmark"},
+				{
+					fmt.Sprintf(
+						"%s, then i / p / c / l",
+						m.helpActionKey(bindings.ActionToggleWebsocketConsole, "g w"),
+					),
+					"WebSocket commands: console / ping / close / clear",
+				},
+				{"F2", "WebSocket console: cycle payload mode"},
+				{"Ctrl+S / Ctrl+Enter", "WebSocket console: send payload"},
+				{"Up / Down", "WebSocket console: previous / next payload"},
+				{"Esc", "WebSocket console: exit input focus"},
 			}),
 		},
 		{
