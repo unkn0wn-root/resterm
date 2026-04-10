@@ -341,6 +341,39 @@ func TestManagerRefreshToken(t *testing.T) {
 	}
 }
 
+func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
+	mgr := NewManager(nil)
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		AuthURL:   "https://auth.local/auth",
+		ClientID:  "client",
+		GrantType: "authorization_code",
+		CacheKey:  "github",
+		Extra:     map[string]string{"audience": "https://api.local"},
+	}
+	mgr.storeToken("github", cfg, Token{
+		AccessToken:  "expired-token",
+		RefreshToken: "refresh-1",
+		Expiry:       time.Now().Add(-time.Hour),
+		Raw:          map[string]any{"scope": "repo"},
+	})
+
+	snap := mgr.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("expected one snapshot entry, got %+v", snap)
+	}
+
+	restored := NewManager(nil)
+	restored.Restore(snap)
+	if !restored.CanHeadless("dev", Config{CacheKey: "github"}) {
+		t.Fatalf("expected restored refresh token to allow headless auth")
+	}
+	merged := restored.MergeCachedConfig("dev", Config{CacheKey: "github"})
+	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL || merged.ClientID != cfg.ClientID {
+		t.Fatalf("expected restored config to merge, got %#v", merged)
+	}
+}
+
 func TestManagerAuthorizationCodePKCE(t *testing.T) {
 	mgr := NewManager(nil)
 	var tokenForm url.Values

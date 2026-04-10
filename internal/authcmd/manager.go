@@ -2,6 +2,7 @@ package authcmd
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"time"
 )
@@ -39,6 +40,15 @@ type resolvePlan struct {
 type Prepared struct {
 	entryKey string
 	cfg      Config
+}
+
+type SnapshotEntry struct {
+	Key       string    `json:"key"`
+	Config    Config    `json:"config"`
+	Token     string    `json:"token"`
+	Type      string    `json:"type,omitempty"`
+	Expiry    time.Time `json:"expiry,omitempty"`
+	FetchedAt time.Time `json:"fetchedAt,omitempty"`
 }
 
 type Manager struct {
@@ -131,6 +141,69 @@ func (m *Manager) ResolvePrepared(ctx context.Context, prep Prepared) (Result, e
 		return m.waitResolve(ctx, cfg, action.wait)
 	}
 	return m.resolveByFetch(ctx, entryKey, cfg, action.seedCfg, action.start)
+}
+
+func (m *Manager) Snapshot() []SnapshotEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.cache) == 0 {
+		return nil
+	}
+	out := make([]SnapshotEntry, 0, len(m.cache))
+	for key, ent := range m.cache {
+		if ent.cred == (credential{}) {
+			continue
+		}
+		out = append(out, SnapshotEntry{
+			Key:       key,
+			Config:    ent.cfg,
+			Token:     ent.cred.Token,
+			Type:      ent.cred.Type,
+			Expiry:    ent.cred.Expiry,
+			FetchedAt: ent.cred.FetchedAt,
+		})
+	}
+	slices.SortFunc(out, func(a, b SnapshotEntry) int {
+		switch {
+		case a.Key < b.Key:
+			return -1
+		case a.Key > b.Key:
+			return 1
+		default:
+			return 0
+		}
+	})
+	return out
+}
+
+func (m *Manager) Restore(entries []SnapshotEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cache == nil {
+		m.cache = make(map[string]cacheRecord)
+	}
+	for key := range m.cache {
+		delete(m.cache, key)
+	}
+	for _, entry := range entries {
+		key := trim(entry.Key)
+		if key == "" {
+			continue
+		}
+		cfg := entry.Config.normalize()
+		cred := credential{
+			Token:     entry.Token,
+			Type:      entry.Type,
+			Expiry:    entry.Expiry,
+			FetchedAt: entry.FetchedAt,
+		}
+		if cred == (credential{}) {
+			continue
+		}
+		m.cache[key] = cacheRecord{cred: cred, cfg: cfg}
+	}
 }
 
 func (m *Manager) fetchCredential(ctx context.Context, cfg Config) (credential, error) {

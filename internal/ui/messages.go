@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -21,7 +23,9 @@ type tabSpinMsg struct {
 type latencyAnimMsg struct {
 	seq int
 }
+
 type profileNextIterationMsg struct{}
+
 type updateTickMsg struct{}
 
 type statusLevel int
@@ -36,6 +40,8 @@ const (
 type responseMsg struct {
 	response       *httpclient.Response
 	grpc           *grpcclient.Response
+	stream         *scripts.StreamInfo
+	transcript     []byte
 	err            error
 	tests          []scripts.TestResult
 	scriptErr      error
@@ -47,6 +53,7 @@ type responseMsg struct {
 	skipReason     string
 	preview        bool
 	explain        *xplain.Report
+	historyDone    bool
 }
 
 type statusMsg struct {
@@ -89,4 +96,18 @@ type rawDumpLoadedMsg struct {
 	snapshot *responseSnapshot
 	mode     rawViewMode
 	content  string
+}
+
+type runReqMsg struct {
+	res engine.RequestResult
+	err error
+}
+
+type runEvtMsg struct {
+	evt core.Evt
+}
+
+type runWorkerDoneMsg struct {
+	runID string
+	err   error
 }

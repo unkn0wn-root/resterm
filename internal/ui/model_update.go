@@ -27,6 +27,9 @@ func (m Model) Init() tea.Cmd {
 	if cmd := m.nextFileWatchMsgCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if cmd := m.nextRunMsgCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if cmd := m.nextStreamMsgCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -68,6 +71,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		m.stopStatusPulseIfIdle()
+	case runReqMsg:
+		m.stopSending()
+		m.sendCancel = nil
+		if cmd := m.handleRunReqMsg(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		m.stopStatusPulseIfIdle()
+	case runEvtMsg:
+		if cmd := m.handleRunEvt(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		cmds = append(cmds, m.nextRunMsgCmd())
+	case runWorkerDoneMsg:
+		if cmd := m.handleRunWorkerDone(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		cmds = append(cmds, m.nextRunMsgCmd())
 	case statusMsg:
 		m.setStatusMessage(typed)
 	case statusPulseMsg:

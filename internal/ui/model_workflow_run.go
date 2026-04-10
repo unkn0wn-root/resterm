@@ -10,8 +10,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -21,6 +23,8 @@ import (
 )
 
 type workflowState struct {
+	id               string
+	core             bool
 	doc              *restfile.Document
 	options          httpclient.Options
 	workflow         restfile.Workflow
@@ -39,6 +43,8 @@ type workflowState struct {
 	stepStart        time.Time
 	canceled         bool
 	cancelReason     string
+	pendingExplain   *xplain.Report
+	src              *restfile.Request
 }
 
 type workflowStepRuntime struct {
@@ -57,36 +63,11 @@ type workflowLoopState struct {
 	line      int
 }
 
-type workflowStepResult struct {
-	Step      restfile.WorkflowStep
-	Success   bool
-	Canceled  bool
-	Skipped   bool
-	Status    string
-	Duration  time.Duration
-	Message   string
-	Iteration int
-	Total     int
-	Branch    string
-	HTTP      *httpclient.Response
-	GRPC      *grpcclient.Response
-	Tests     []scripts.TestResult
-	ScriptErr error
-	Err       error
-}
-
 type workflowOrigin int
 
 const (
 	workflowOriginWorkflow workflowOrigin = iota
 	workflowOriginForEach
-)
-
-const (
-	workflowStatusPass     = "[PASS]"
-	workflowStatusFail     = "[FAIL]"
-	workflowStatusCanceled = "[CANCELED]"
-	workflowStatusSkipped  = "[SKIPPED]"
 )
 
 func workflowIterationInfo(state *workflowState) (int, int) {
@@ -151,6 +132,68 @@ func wfMeta(st *workflowState, res *workflowStepResult) {
 	}
 }
 
+func workflowOriginForMode(mode core.Mode) workflowOrigin {
+	if mode == core.ModeForEach {
+		return workflowOriginForEach
+	}
+	return workflowOriginWorkflow
+}
+
+func workflowStateFromPlan(
+	pl *core.WorkflowPlan,
+	opts httpclient.Options,
+	useCore bool,
+) *workflowState {
+	if pl == nil {
+		return nil
+	}
+	steps := make([]workflowStepRuntime, 0, len(pl.Steps))
+	for _, item := range pl.Steps {
+		steps = append(steps, workflowStepRuntime{
+			step:    item.Step,
+			request: item.Req,
+		})
+	}
+	st := &workflowState{
+		id:               strings.TrimSpace(pl.Run.ID),
+		core:             useCore,
+		doc:              pl.Doc,
+		options:          opts,
+		workflow:         pl.Workflow,
+		steps:            steps,
+		vars:             cloneStringMap(pl.Vars),
+		requests:         pl.Reqs,
+		origin:           workflowOriginForMode(pl.Run.Mode),
+		loopVarsWorkflow: pl.WfVars,
+		start:            time.Now(),
+	}
+	if st.vars == nil {
+		st.vars = make(map[string]string)
+	}
+	return st
+}
+
+func workflowPlanNeedsUIDrivenRun(pl *core.WorkflowPlan) bool {
+	if pl == nil {
+		return false
+	}
+	for _, item := range pl.Steps {
+		if requestNeedsUIDrivenRun(item.Req) {
+			return true
+		}
+	}
+	for _, req := range pl.Reqs {
+		if requestNeedsUIDrivenRun(req) {
+			return true
+		}
+	}
+	return false
+}
+
+func requestNeedsUIDrivenRun(req *restfile.Request) bool {
+	return req != nil && req.WebSocket != nil && len(req.WebSocket.Steps) == 0
+}
+
 func workflowForEachSpec(step restfile.WorkflowStep, req *restfile.Request) (*forEachSpec, error) {
 	var spec *forEachSpec
 	if step.Kind == restfile.WorkflowStepKindForEach {
@@ -192,14 +235,14 @@ func workflowStepVars(step restfile.WorkflowStep) map[string]string {
 	return out
 }
 
-func workflowApplyVars(st *workflowState, vars map[string]string) {
-	if st == nil || len(vars) == 0 {
+func workflowApplyVars(st *workflowState, vals map[string]string) {
+	if st == nil || len(vals) == 0 {
 		return
 	}
 	if st.vars == nil {
 		st.vars = make(map[string]string)
 	}
-	for key, value := range vars {
+	for key, value := range vals {
 		if strings.HasPrefix(key, "vars.workflow.") {
 			st.vars[key] = value
 		}
@@ -293,6 +336,7 @@ func (m *Model) wfRunReq(
 	if spec == nil {
 		return m.executeWorkflowRequest(st, step, req, opts, xv, nil)
 	}
+
 	v := m.wfVars(st.doc, req, env, xv)
 	items, err := m.evalForEachItems(
 		ctx,
@@ -369,34 +413,22 @@ func (m *Model) startWorkflowRun(
 	if key := workflowKey(&workflow); key != "" {
 		m.activeWorkflowKey = key
 	}
-
-	stepRuntimes, lookup, err := m.prepareWorkflowSteps(doc, workflow)
+	if options.BaseDir == "" && m.currentFile != "" {
+		options.BaseDir = filepath.Dir(m.currentFile)
+	}
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	pl, err := core.PrepareWorkflow(doc, workflow, core.RunMeta{
+		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
+		Env: env,
+	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-
-	state := &workflowState{
-		doc:              doc,
-		options:          options,
-		workflow:         workflow,
-		steps:            stepRuntimes,
-		vars:             make(map[string]string),
-		requests:         lookup,
-		origin:           workflowOriginWorkflow,
-		loopVarsWorkflow: true,
-		start:            time.Now(),
+	if workflowPlanNeedsUIDrivenRun(pl) {
+		return m.startWorkflowUIDrivenState(workflowStateFromPlan(pl, options, false))
 	}
-	for key, value := range workflow.Options {
-		if strings.HasPrefix(key, "vars.") {
-			state.vars[key] = value
-		}
-	}
-	m.workflowRun = state
-	m.statusPulseBase = ""
-	m.statusPulseFrame = -1
-
-	return m.executeWorkflowStep()
+	return m.startWorkflowCoreRun(pl, options)
 }
 
 func (m *Model) startForEachRun(
@@ -412,173 +444,369 @@ func (m *Model) startForEachRun(
 		m.setStatusMessage(statusMsg{text: "Another run is already active", level: statusWarn})
 		return nil
 	}
+	if options.BaseDir == "" && m.currentFile != "" {
+		options.BaseDir = filepath.Dir(m.currentFile)
+	}
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	pl, err := core.PrepareForEach(doc, req, core.RunMeta{
+		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
+		Env: env,
+	})
+	if err != nil {
+		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
+		return nil
+	}
+	if workflowPlanNeedsUIDrivenRun(pl) {
+		return m.startWorkflowUIDrivenState(workflowStateFromPlan(pl, options, false))
+	}
+	return m.startWorkflowCoreRun(pl, options)
+}
 
-	label := requestBaseTitle(req)
-	step := restfile.WorkflowStep{
-		Kind:      restfile.WorkflowStepKindRequest,
-		Name:      label,
-		OnFailure: restfile.WorkflowOnFailureStop,
-		Line:      req.LineRange.Start,
+func (m *Model) startWorkflowUIDrivenState(st *workflowState) tea.Cmd {
+	if st == nil {
+		return nil
 	}
-	workflow := restfile.Workflow{
-		Name:             label,
-		DefaultOnFailure: restfile.WorkflowOnFailureStop,
-		Steps:            []restfile.WorkflowStep{step},
-	}
-	state := &workflowState{
-		doc:              doc,
-		options:          options,
-		workflow:         workflow,
-		steps:            []workflowStepRuntime{{step: step, request: req}},
-		vars:             make(map[string]string),
-		origin:           workflowOriginForEach,
-		loopVarsWorkflow: false,
-		start:            time.Now(),
-	}
-	m.workflowRun = state
+	m.workflowRun = st
 	m.statusPulseBase = ""
 	m.statusPulseFrame = -1
-
 	return m.executeWorkflowStep()
 }
 
-func (m *Model) prepareWorkflowSteps(
-	doc *restfile.Document,
-	workflow restfile.Workflow,
-) ([]workflowStepRuntime, map[string]*restfile.Request, error) {
-	if len(doc.Requests) == 0 {
-		return nil, nil, fmt.Errorf("workflow %s: no requests defined", workflow.Name)
+func (m *Model) startWorkflowCoreRun(pl *core.WorkflowPlan, opts httpclient.Options) tea.Cmd {
+	st := workflowStateFromPlan(pl, opts, true)
+	if st == nil {
+		return nil
 	}
-	lookup := make(map[string]*restfile.Request)
-	for _, req := range doc.Requests {
-		name := strings.TrimSpace(req.Metadata.Name)
-		if name == "" {
-			continue
-		}
-		lookup[strings.ToLower(name)] = req
+	rq := m.requestSvc(opts)
+	if rq == nil {
+		return nil
 	}
-	steps := make([]workflowStepRuntime, 0, len(workflow.Steps))
-	for idx, step := range workflow.Steps {
-		if step.Kind == "" {
-			step.Kind = restfile.WorkflowStepKindRequest
-		}
-		switch step.Kind {
-		case restfile.WorkflowStepKindRequest, restfile.WorkflowStepKindForEach:
-			key := strings.ToLower(step.Using)
-			if key == "" {
-				return nil, nil, fmt.Errorf(
-					"workflow %s: step %d missing 'using' request",
-					workflow.Name,
-					idx+1,
-				)
-			}
-			req, ok := lookup[key]
-			if !ok {
-				return nil, nil, fmt.Errorf(
-					"workflow %s: request %s not found",
-					workflow.Name,
-					step.Using,
-				)
-			}
-			if step.Kind == restfile.WorkflowStepKindForEach && step.ForEach == nil {
-				return nil, nil, fmt.Errorf(
-					"workflow %s: step %d missing @for-each spec",
-					workflow.Name,
-					idx+1,
-				)
-			}
-			steps = append(steps, workflowStepRuntime{step: step, request: req})
-		case restfile.WorkflowStepKindIf:
-			if step.If == nil {
-				return nil, nil, fmt.Errorf(
-					"workflow %s: step %d missing @if definition",
-					workflow.Name,
-					idx+1,
-				)
-			}
-			if err := validateWorkflowBranchRuns(
-				workflow.Name,
-				idx+1,
-				lookup,
-				step.If.Then.Run,
-			); err != nil {
-				return nil, nil, err
-			}
-			for _, branch := range step.If.Elifs {
-				if err := validateWorkflowBranchRuns(
-					workflow.Name,
-					idx+1,
-					lookup,
-					branch.Run,
-				); err != nil {
-					return nil, nil, err
-				}
-			}
-			if step.If.Else != nil {
-				if err := validateWorkflowBranchRuns(
-					workflow.Name,
-					idx+1,
-					lookup,
-					step.If.Else.Run,
-				); err != nil {
-					return nil, nil, err
-				}
-			}
-			steps = append(steps, workflowStepRuntime{step: step})
-		case restfile.WorkflowStepKindSwitch:
-			if step.Switch == nil {
-				return nil, nil, fmt.Errorf(
-					"workflow %s: step %d missing @switch definition",
-					workflow.Name,
-					idx+1,
-				)
-			}
-			for _, branch := range step.Switch.Cases {
-				if err := validateWorkflowBranchRuns(
-					workflow.Name,
-					idx+1,
-					lookup,
-					branch.Run,
-				); err != nil {
-					return nil, nil, err
-				}
-			}
-			if step.Switch.Default != nil {
-				if err := validateWorkflowBranchRuns(
-					workflow.Name,
-					idx+1,
-					lookup,
-					step.Switch.Default.Run,
-				); err != nil {
-					return nil, nil, err
-				}
-			}
-			steps = append(steps, workflowStepRuntime{step: step})
-		default:
-			return nil, nil, fmt.Errorf(
-				"workflow %s: step %d has unknown kind %q",
-				workflow.Name,
-				idx+1,
-				step.Kind,
-			)
-		}
-	}
-	return steps, lookup, nil
+	m.workflowRun = st
+	m.statusPulseBase = ""
+	m.statusPulseFrame = -1
+	ch := m.runMsgChan
+	return m.startRunWorker(st.id, func(ctx context.Context) error {
+		return core.RunPlan(ctx, rq, runSink(ch), pl)
+	})
 }
 
-func validateWorkflowBranchRuns(
-	workflowName string,
-	stepIndex int,
-	lookup map[string]*restfile.Request,
-	run string,
-) error {
-	if run == "" {
+func (m *Model) handleRunEvt(msg runEvtMsg) tea.Cmd {
+	if msg.evt == nil {
 		return nil
 	}
-	if _, ok := lookup[strings.ToLower(run)]; ok {
+	switch core.MetaOf(msg.evt).Run.Mode {
+	case core.ModeWorkflow, core.ModeForEach:
+		return m.handleWorkflowRunEvt(msg.evt)
+	case core.ModeCompare:
+		return m.handleCompareRunEvt(msg.evt)
+	case core.ModeProfile:
+		return m.handleProfileRunEvt(msg.evt)
+	default:
 		return nil
 	}
-	return fmt.Errorf("workflow %s: step %d request %s not found", workflowName, stepIndex, run)
+}
+
+func (m *Model) handleRunWorkerDone(msg runWorkerDoneMsg) tea.Cmd {
+	if st := m.profileRun; st != nil && st.core {
+		if st.id != "" && msg.runID != "" && st.id != msg.runID {
+			return nil
+		}
+		m.sendCancel = nil
+		if msg.err != nil && !st.canceled {
+			return m.handleRunErr(msg.err)
+		}
+		return nil
+	}
+	if st := m.workflowRun; st != nil && st.core {
+		if st.id != "" && msg.runID != "" && st.id != msg.runID {
+			return nil
+		}
+		m.sendCancel = nil
+		if msg.err != nil && !st.canceled {
+			return m.handleRunErr(msg.err)
+		}
+		return nil
+	}
+	if st := m.compareRun; st != nil && st.core {
+		if st.id != "" && msg.runID != "" && st.id != msg.runID {
+			return nil
+		}
+		m.sendCancel = nil
+		if msg.err != nil && !st.canceled {
+			return m.handleRunErr(msg.err)
+		}
+		return nil
+	}
+	m.sendCancel = nil
+	if msg.err != nil {
+		return m.handleRunErr(msg.err)
+	}
+	return nil
+}
+
+func (m *Model) handleWorkflowRunEvt(evt core.Evt) tea.Cmd {
+	st := m.workflowRun
+	if st == nil || !st.core || evt == nil {
+		return nil
+	}
+	meta := core.MetaOf(evt)
+	if st.id != "" && meta.Run.ID != "" && st.id != meta.Run.ID {
+		return nil
+	}
+	switch v := evt.(type) {
+	case core.RunStart:
+		st.start = v.Meta.At
+	case core.WfStepStart:
+		m.handleWorkflowStepStart(st, v)
+	case core.ReqStart:
+		return m.handleWorkflowReqStart(st, v)
+	case core.ReqDone:
+		return m.handleWorkflowReqDone(st, v)
+	case core.WfStepDone:
+		m.handleWorkflowStepDone(st, v)
+	case core.RunDone:
+		return m.handleWorkflowRunDone(st, v)
+	}
+	return nil
+}
+
+func (m *Model) handleWorkflowStepStart(st *workflowState, evt core.WfStepStart) {
+	if st == nil {
+		return
+	}
+	st.index = evt.Step.Index
+	st.stepStart = evt.Meta.At
+	st.current = nil
+	st.currentBranch = evt.Step.Branch
+	st.pendingExplain = nil
+	st.src = nil
+	if evt.Step.Iter > 0 && evt.Step.Total > 0 {
+		step, req := workflowRuntimeAt(st, evt.Step.Index)
+		if evt.Request != nil {
+			req = evt.Request
+		}
+		st.loop = &workflowLoopState{
+			step:    step,
+			request: req,
+			items:   make([]rts.Value, evt.Step.Total),
+			index:   evt.Step.Iter - 1,
+		}
+		return
+	}
+	st.loop = nil
+}
+
+func (m *Model) handleWorkflowReqStart(st *workflowState, evt core.ReqStart) tea.Cmd {
+	if st == nil {
+		return nil
+	}
+	st.current = cloneRequest(evt.Request)
+	st.src = st.current
+	title := workflowRunDisplayName(st)
+	msg := fmt.Sprintf("%s %d/%d: %s", title, st.index+1, len(st.steps), evt.Req.Label)
+	m.statusPulseBase = msg
+	m.setStatusMessage(statusMsg{text: msg, level: statusInfo})
+	spin := m.startSending()
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{spin, pulse})
+}
+
+func (m *Model) handleWorkflowReqDone(st *workflowState, evt core.ReqDone) tea.Cmd {
+	if st == nil {
+		return nil
+	}
+	st.current = nil
+	msg := m.responseMsgFromRunState(evt.Result, st.origin == workflowOriginForEach)
+	st.pendingExplain = msg.explain
+	m.recordResponseLatency(msg)
+	if isCanceled(evt.Result.Err) {
+		m.lastError = nil
+		return nil
+	}
+	return batchCmds(m.wfConsume(st, msg))
+}
+
+func (m *Model) handleWorkflowStepDone(st *workflowState, evt core.WfStepDone) {
+	if st == nil {
+		return
+	}
+	step, _ := workflowRuntimeAt(st, evt.Step.Index)
+	res := workflowResultFromRun(
+		step,
+		evt.Step,
+		evt.Result,
+		workflowStepDuration(st, evt.Meta.At),
+	)
+	res.Explain = st.pendingExplain
+	st.pendingExplain = nil
+	res.Src = cloneRequest(st.src)
+	st.src = nil
+	st.currentBranch = ""
+	if evt.Step.Iter <= 0 || evt.Step.Iter >= evt.Step.Total {
+		st.loop = nil
+	}
+	if res.Canceled {
+		st.canceled = true
+		return
+	}
+	st.results = append(st.results, res)
+}
+
+func (m *Model) handleWorkflowRunDone(st *workflowState, evt core.RunDone) tea.Cmd {
+	if st == nil {
+		return nil
+	}
+	st.end = evt.Meta.At
+	st.current = nil
+	st.currentBranch = ""
+	st.loop = nil
+	if evt.Canceled {
+		st.canceled = true
+	}
+	m.sendCancel = nil
+	m.stopSending()
+	return m.finalizeWorkflowRun(st)
+}
+
+func workflowRuntimeAt(st *workflowState, i int) (restfile.WorkflowStep, *restfile.Request) {
+	if st == nil || i < 0 || i >= len(st.steps) {
+		return restfile.WorkflowStep{}, nil
+	}
+	return st.steps[i].step, st.steps[i].request
+}
+
+func workflowStepDuration(st *workflowState, at time.Time) time.Duration {
+	if st == nil || st.stepStart.IsZero() || at.IsZero() || at.Before(st.stepStart) {
+		return 0
+	}
+	return at.Sub(st.stepStart)
+}
+
+func workflowResultFromRun(
+	step restfile.WorkflowStep,
+	meta core.StepMeta,
+	res engine.RequestResult,
+	dur time.Duration,
+) workflowStepResult {
+	out := workflowStepResult{
+		Step:       step,
+		Duration:   dur,
+		Iteration:  meta.Iter,
+		Total:      meta.Total,
+		Branch:     meta.Branch,
+		Req:        cloneRequest(res.Executed),
+		HTTP:       cloneHTTPResponse(res.Response),
+		GRPC:       cloneGRPCResponse(res.GRPC),
+		Stream:     cloneStreamInfo(res.Stream),
+		Transcript: append([]byte(nil), res.Transcript...),
+		Tests:      append([]scripts.TestResult(nil), res.Tests...),
+		ScriptErr:  res.ScriptErr,
+		Err:        res.Err,
+	}
+	if res.Skipped {
+		out.Skipped = true
+		out.Message = strings.TrimSpace(res.SkipReason)
+		return out
+	}
+	if res.Err != nil && isCanceled(res.Err) {
+		out.Canceled = true
+		out.Err = nil
+		return out
+	}
+
+	hasExp := hasStatusExp(step.Expect)
+	hasResp := res.Response != nil || res.GRPC != nil || res.Stream != nil || len(res.Transcript) > 0
+	hasProto := res.Response != nil || res.GRPC != nil
+	ok := true
+	switch {
+	case res.Response != nil:
+		out.Status = res.Response.Status
+		if res.Response.Duration > 0 {
+			out.Duration = res.Response.Duration
+		}
+		if res.Response.StatusCode >= 400 && res.Err == nil && !hasExp {
+			ok = false
+			out.Message = fmt.Sprintf("unexpected status code %d", res.Response.StatusCode)
+		}
+	case res.GRPC != nil:
+		out.Status = res.GRPC.StatusCode.String()
+		if res.GRPC.Duration > 0 {
+			out.Duration = res.GRPC.Duration
+		}
+	case res.Stream != nil || len(res.Transcript) > 0:
+		out.Status = strings.TrimSpace(streamSummaryText(res.Stream))
+		if out.Status == "" {
+			out.Status = "stream completed"
+		}
+	default:
+		if res.Err == nil {
+			ok = false
+			out.Message = "request failed"
+		}
+	}
+
+	if res.Err != nil {
+		ok = false
+		out.Status = strings.TrimSpace(errdef.Message(res.Err))
+		if out.Status == "" {
+			out.Status = "request failed"
+		}
+		out.Message = out.Status
+	}
+	if ok && res.ScriptErr != nil {
+		ok = false
+		out.Message = res.ScriptErr.Error()
+	}
+	if ok {
+		for _, test := range res.Tests {
+			if !test.Passed {
+				ok = false
+				if strings.TrimSpace(test.Message) != "" {
+					out.Message = test.Message
+				} else {
+					out.Message = fmt.Sprintf("test failed: %s", test.Name)
+				}
+				break
+			}
+		}
+	}
+	if hasProto && res.Err == nil {
+		if exp, okExp := step.Expect["status"]; okExp {
+			want := strings.TrimSpace(exp)
+			got := strings.TrimSpace(out.Status)
+			if want == "" {
+				ok = false
+				out.Message = "invalid expected status"
+			} else if got == "" || !strings.EqualFold(want, got) {
+				ok = false
+				out.Message = fmt.Sprintf("expected status %s", want)
+			}
+		}
+		if exp, okExp := step.Expect["statuscode"]; okExp {
+			want, err := strconv.Atoi(strings.TrimSpace(exp))
+			if err != nil {
+				ok = false
+				out.Message = fmt.Sprintf("invalid expected status code %q", exp)
+			} else {
+				got := 0
+				switch {
+				case res.Response != nil:
+					got = res.Response.StatusCode
+				case res.GRPC != nil:
+					got = int(res.GRPC.StatusCode)
+				}
+				if got != want {
+					ok = false
+					out.Message = fmt.Sprintf("expected status code %d", want)
+				}
+			}
+		}
+	}
+	if !hasResp && res.Err == nil {
+		ok = false
+	}
+	out.Success = ok
+	return out
 }
 
 func (m *Model) executeWorkflowStep() tea.Cmd {
@@ -772,21 +1000,17 @@ func (m *Model) executeWorkflowIfStep(
 		branch = step.If.Else
 	}
 	if branch == nil {
-		reason := "no @if branch matched"
-		return m.wfSkip(st, step, reason)
+		return m.wfSkip(st, step, "no @if branch matched")
 	}
 	if branch.Fail != "" {
-		message := branch.Fail
-		next := m.advanceWorkflow(
+		return m.advanceWorkflow(
 			st,
-			makeWorkflowResult(st, step, false, false, message, fmt.Errorf("%s", message)),
+			makeWorkflowResult(st, step, false, false, branch.Fail, fmt.Errorf("%s", branch.Fail)),
 		)
-		return next
 	}
 	run := branch.Run
 	if run == "" {
-		reason := "no @if run target"
-		return m.wfSkip(st, step, reason)
+		return m.wfSkip(st, step, "no @if run target")
 	}
 	req := st.requests[strings.ToLower(run)]
 	if req == nil {
@@ -848,8 +1072,7 @@ func (m *Model) executeWorkflowSwitchStep(
 	var selected *restfile.WorkflowSwitchCase
 	for i := range step.Switch.Cases {
 		c := &step.Switch.Cases[i]
-		caseExpr := c.Expr
-		if caseExpr == "" {
+		if c.Expr == "" {
 			continue
 		}
 		casePos := m.rtsPosForLine(st.doc, nil, c.Line)
@@ -859,8 +1082,8 @@ func (m *Model) executeWorkflowSwitchStep(
 			nil,
 			env,
 			opts.BaseDir,
-			caseExpr,
-			"@case "+caseExpr,
+			c.Expr,
+			"@case "+c.Expr,
 			casePos,
 			v,
 			nil,
@@ -877,22 +1100,17 @@ func (m *Model) executeWorkflowSwitchStep(
 		selected = step.Switch.Default
 	}
 	if selected == nil {
-		reason := "no @switch case matched"
-		return m.wfSkip(st, step, reason)
+		return m.wfSkip(st, step, "no @switch case matched")
 	}
-
 	if selected.Fail != "" {
-		message := selected.Fail
-		next := m.advanceWorkflow(
+		return m.advanceWorkflow(
 			st,
-			makeWorkflowResult(st, step, false, false, message, fmt.Errorf("%s", message)),
+			makeWorkflowResult(st, step, false, false, selected.Fail, fmt.Errorf("%s", selected.Fail)),
 		)
-		return next
 	}
 	run := selected.Run
 	if run == "" {
-		reason := "no @switch run target"
-		return m.wfSkip(st, step, reason)
+		return m.wfSkip(st, step, "no @switch run target")
 	}
 	req := st.requests[strings.ToLower(run)]
 	if req == nil {
@@ -931,8 +1149,7 @@ func (m *Model) executeWorkflowLoopIteration(
 			if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
-			res := makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped)
-			st.results = append(st.results, res)
+			st.results = append(st.results, makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped))
 			if loop.step.OnFailure != restfile.WorkflowOnFailureContinue {
 				st.loop = nil
 				st.currentBranch = ""
@@ -968,8 +1185,7 @@ func (m *Model) executeWorkflowLoopIteration(
 				if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-				res := makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped)
-				st.results = append(st.results, res)
+				st.results = append(st.results, makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped))
 				if loop.step.OnFailure != restfile.WorkflowOnFailureContinue {
 					st.loop = nil
 					st.currentBranch = ""
@@ -982,39 +1198,29 @@ func (m *Model) executeWorkflowLoopIteration(
 				if cmd := m.consumeSkippedRequest(reason, nil); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-				res := makeWorkflowResult(st, loop.step, false, true, reason, nil)
-				st.results = append(st.results, res)
+				st.results = append(st.results, makeWorkflowResult(st, loop.step, false, true, reason, nil))
 				loop.index++
 				continue
 			}
 		}
 
-		cmd := m.executeWorkflowRequest(
-			st,
-			loop.step,
-			loop.request,
-			opts,
-			xv,
-			vals,
-		)
+		cmd := m.executeWorkflowRequest(st, loop.step, loop.request, opts, xv, vals)
 		return batchCmds(append(cmds, cmd))
 	}
 
 	st.loop = nil
 	st.currentBranch = ""
 	st.index++
-	next := m.executeWorkflowStep()
-	return batchCmds(append(cmds, next))
+	return batchCmds(append(cmds, m.executeWorkflowStep()))
 }
 
-func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
+func (m *Model) handleWorkflowUIDrivenResponse(msg responseMsg) tea.Cmd {
 	st := m.workflowRun
 	if st == nil {
 		return nil
 	}
 	cur := st.current
 	st.current = nil
-	m.stopSending()
 
 	canceled := st.canceled || isCanceled(msg.err)
 	inLoop := st.loop != nil
@@ -1044,9 +1250,10 @@ func (m *Model) handleWorkflowResponse(msg responseMsg) tea.Cmd {
 	}
 
 	result := evaluateWorkflowStep(st, msg)
+	result.Explain = msg.explain
+	result.Src = cloneRequest(cur)
 	st.results = append(st.results, result)
-	next := m.wfAdvanceResp(st, result, inLoop)
-	if next != nil {
+	if next := m.wfAdvanceResp(st, result, inLoop); next != nil {
 		cmds = append(cmds, next)
 	}
 	return batchCmds(cmds)
@@ -1085,9 +1292,18 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case msg.stream != nil || len(msg.transcript) > 0:
+		m.applyRunSnapshot(newStreamSnapshot(msg.stream, msg.transcript, msg.environment), nil, nil)
 	}
 
 	if st != nil && st.origin == workflowOriginForEach {
+		if msg.historyDone {
+			prev := workflowHistoryCount(m.historyStore())
+			m.syncRecordedHistory()
+			if workflowHistoryCount(m.historyStore()) > prev {
+				return cmds
+			}
+		}
 		switch {
 		case msg.skipped:
 			m.recordSkippedHistory(
@@ -1116,6 +1332,17 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 		}
 	}
 	return cmds
+}
+
+func workflowHistoryCount(hs history.Store) int {
+	if hs == nil {
+		return 0
+	}
+	es, err := hs.Entries()
+	if err != nil {
+		return 0
+	}
+	return len(es)
 }
 
 func (m *Model) wfAdvanceResp(
@@ -1163,7 +1390,7 @@ func hasStatusExp(exp map[string]string) bool {
 }
 
 func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult {
-	if st == nil {
+	if st == nil || st.index < 0 || st.index >= len(st.steps) {
 		return workflowStepResult{
 			Success: false,
 			Skipped: rm.skipped,
@@ -1171,14 +1398,7 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 			Err:     errdef.New(errdef.CodeUI, "workflow state missing"),
 		}
 	}
-	if st.index < 0 || st.index >= len(st.steps) {
-		return workflowStepResult{
-			Success: false,
-			Skipped: rm.skipped,
-			Message: "workflow state missing",
-			Err:     errdef.New(errdef.CodeUI, "workflow state missing"),
-		}
-	}
+
 	step := st.steps[st.index].step
 	if rm.skipped {
 		res := workflowStepResult{
@@ -1187,8 +1407,6 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 			Skipped:   true,
 			Message:   strings.TrimSpace(rm.skipReason),
 			Duration:  0,
-			HTTP:      nil,
-			GRPC:      nil,
 			Tests:     nil,
 			ScriptErr: nil,
 			Err:       nil,
@@ -1203,9 +1421,13 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		dur               = time.Since(st.stepStart)
 		http              = cloneHTTPResponse(rm.response)
 		grpc              = cloneGRPCResponse(rm.grpc)
+		req               = cloneRequest(rm.executed)
+		stream            = cloneStreamInfo(rm.stream)
+		transcript        = append([]byte(nil), rm.transcript...)
 		tests             = append([]scripts.TestResult(nil), rm.tests...)
 		hasExp            = hasStatusExp(step.Expect)
-		hasResp           = rm.response != nil || rm.grpc != nil
+		hasResp           = rm.response != nil || rm.grpc != nil || rm.stream != nil || len(rm.transcript) > 0
+		hasProtoResp      = rm.response != nil || rm.grpc != nil
 		hasErr            = rm.err != nil
 	)
 	if hasErr {
@@ -1215,7 +1437,8 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		}
 	}
 
-	if rm.response != nil {
+	switch {
+	case rm.response != nil:
 		status = rm.response.Status
 		if rm.response.Duration > 0 {
 			dur = rm.response.Duration
@@ -1224,9 +1447,14 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 			ok = false
 			msg = fmt.Sprintf("unexpected status code %d", rm.response.StatusCode)
 		}
-	} else if rm.grpc != nil {
+	case rm.grpc != nil:
 		status = rm.grpc.StatusCode.String()
-	} else {
+	case rm.stream != nil || len(rm.transcript) > 0:
+		status = strings.TrimSpace(streamSummaryText(rm.stream))
+		if status == "" {
+			status = "stream completed"
+		}
+	default:
 		if !hasErr {
 			ok = false
 			msg = "request failed"
@@ -1238,7 +1466,6 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		status = emsg
 		msg = emsg
 	}
-
 	if ok && rm.scriptErr != nil {
 		ok = false
 		msg = rm.scriptErr.Error()
@@ -1257,22 +1484,18 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		}
 	}
 
-	if hasResp && !hasErr {
+	if hasProtoResp && !hasErr {
 		if exp, okExp := step.Expect["status"]; okExp {
 			expected := strings.TrimSpace(exp)
 			trimmedStatus := strings.TrimSpace(status)
 			if expected == "" {
 				ok = false
 				msg = "invalid expected status"
-			} else if trimmedStatus == "" ||
-				!strings.EqualFold(expected, trimmedStatus) {
+			} else if trimmedStatus == "" || !strings.EqualFold(expected, trimmedStatus) {
 				ok = false
-				if expected != "" {
-					msg = fmt.Sprintf("expected status %s", expected)
-				}
+				msg = fmt.Sprintf("expected status %s", expected)
 			}
 		}
-
 		if exp, okExp := step.Expect["statuscode"]; okExp {
 			expectedCode, err := strconv.Atoi(strings.TrimSpace(exp))
 			if err != nil {
@@ -1292,16 +1515,22 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 	}
 
 	res := workflowStepResult{
-		Step:      step,
-		Success:   ok,
-		Status:    status,
-		Duration:  dur,
-		Message:   msg,
-		HTTP:      http,
-		GRPC:      grpc,
-		Tests:     tests,
-		ScriptErr: rm.scriptErr,
-		Err:       rm.err,
+		Step:       step,
+		Success:    ok,
+		Status:     status,
+		Duration:   dur,
+		Message:    msg,
+		Req:        req,
+		HTTP:       http,
+		GRPC:       grpc,
+		Stream:     stream,
+		Transcript: transcript,
+		Tests:      tests,
+		ScriptErr:  rm.scriptErr,
+		Err:        rm.err,
+	}
+	if !hasResp && !hasErr {
+		res.Success = false
 	}
 	wfMeta(st, &res)
 	return res
@@ -1314,6 +1543,7 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	report := m.buildWorkflowReport(state)
 	summary := workflowSummary(state)
 	statsView := newWorkflowStatsView(state)
+	explain := workflowExplainReport(state)
 	m.workflowRun = nil
 	m.stopSending()
 	m.stopStatusPulseIfIdle()
@@ -1323,13 +1553,15 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 	}
 
 	if m.responseLatest != nil {
+		m.responseLatest.explain = explainState{report: explain}
 		m.responseLatest.stats = report
 		m.responseLatest.statsColored = ""
 		m.responseLatest.statsColorize = true
 		m.responseLatest.statsKind = statsReportKindWorkflow
 		m.responseLatest.workflowStats = statsView
 	} else {
-		snapshot := &responseSnapshot{
+		m.responseLatest = &responseSnapshot{
+			explain:        explainState{report: explain},
 			pretty:         report,
 			raw:            report,
 			headers:        report,
@@ -1341,7 +1573,6 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 			workflowStats:  statsView,
 			ready:          true,
 		}
-		m.responseLatest = snapshot
 		m.responsePending = nil
 	}
 
@@ -1350,7 +1581,6 @@ func (m *Model) finalizeWorkflowRun(state *workflowState) tea.Cmd {
 		m.invalidateWorkflowStatsCaches(m.responseLatest)
 		cmd = m.activateWorkflowStatsView(m.responseLatest)
 	}
-
 	return cmd
 }
 
@@ -1441,175 +1671,537 @@ func workflowStatusLevel(state *workflowState) statusLevel {
 	return statusSuccess
 }
 
-func (m *Model) buildWorkflowReport(state *workflowState) string {
-	var builder strings.Builder
+func workflowExplainReport(state *workflowState) *xplain.Report {
 	if state == nil {
-		return ""
-	}
-	label := workflowRunLabel(state)
-	name := state.workflow.Name
-	if name == "" {
-		name = label
-	}
-	fmt.Fprintf(&builder, "%s: %s\n", label, name)
-	fmt.Fprintf(&builder, "Started: %s\n", state.start.Format(time.RFC3339))
-	if !state.end.IsZero() {
-		fmt.Fprintf(&builder, "Ended: %s\n", state.end.Format(time.RFC3339))
-	}
-	fmt.Fprintf(&builder, "Steps: %d\n\n", len(state.steps))
-	for _, entry := range buildWorkflowStatsEntries(state) {
-		builder.WriteString(workflowStepLine(entry.index, entry.result))
-		builder.WriteString("\n")
-		if strings.TrimSpace(entry.result.Message) != "" {
-			fmt.Fprintf(&builder, "    %s\n", entry.result.Message)
-		}
-	}
-	return strings.TrimRight(builder.String(), "\n")
-}
-
-func displayStepName(step restfile.WorkflowStep) string {
-	name := strings.TrimSpace(step.Name)
-	if name != "" {
-		return name
-	}
-	switch step.Kind {
-	case restfile.WorkflowStepKindIf:
-		return "@if"
-	case restfile.WorkflowStepKindSwitch:
-		return "@switch"
-	case restfile.WorkflowStepKindForEach:
-		if step.Using != "" {
-			return step.Using
-		}
-		return "@for-each"
-	default:
-		return step.Using
-	}
-}
-
-func workflowStepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
-	label := displayStepName(step)
-	if label == "" {
-		label = "step"
-	}
-	if branch != "" {
-		label = fmt.Sprintf("%s -> %s", label, branch)
-	}
-	if iter > 0 && total > 0 {
-		label = fmt.Sprintf("%s (%d/%d)", label, iter, total)
-	}
-	return label
-}
-
-func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
-	if resp == nil {
 		return nil
 	}
-	headers := make(map[string][]string, len(resp.Headers))
-	for key, values := range resp.Headers {
-		headers[key] = append([]string(nil), values...)
+	title := strings.TrimSpace(workflowRunDisplayName(state))
+	if title == "" {
+		title = "Workflow"
 	}
-	trailers := make(map[string][]string, len(resp.Trailers))
-	for key, values := range resp.Trailers {
-		trailers[key] = append([]string(nil), values...)
+	entries := buildWorkflowStatsEntries(state)
+	rep := &xplain.Report{
+		Name:     title,
+		URL:      title,
+		Env:      workflowExplainEnv(state, entries),
+		Status:   workflowExplainStatus(state, entries),
+		Decision: workflowSummary(state),
+		Failure:  workflowExplainFailure(state, entries),
+		Vars:     workflowExplainVars(entries),
+		Warnings: workflowExplainWarnings(entries),
 	}
-	return &grpcclient.Response{
-		Message:         resp.Message,
-		Body:            append([]byte(nil), resp.Body...),
-		Wire:            append([]byte(nil), resp.Wire...),
-		ContentType:     resp.ContentType,
-		WireContentType: resp.WireContentType,
-		Headers:         headers,
-		Trailers:        trailers,
-		StatusCode:      resp.StatusCode,
-		StatusMessage:   resp.StatusMessage,
-		Duration:        resp.Duration,
+	for _, entry := range entries {
+		rep.Stages = append(rep.Stages, workflowExplainStages(entry.result)...)
 	}
+	return rep
 }
 
-func (m *Model) syncWorkflowList(doc *restfile.Document) bool {
-	items, listItems := buildWorkflowItems(doc)
-	m.workflowItems = items
-	visible := len(listItems) > 0
-	if !visible {
-		m.workflowList.SetItems(nil)
-		m.workflowList.Select(-1)
-		m.activeWorkflowKey = ""
-		m.setHistoryWorkflow("")
-		changed := m.setWorkflowShown(false)
-		if m.focus == focusWorkflows {
-			m.resetWorkflowFocus(doc)
+func workflowExplainEnv(state *workflowState, entries []workflowStatsEntry) string {
+	for _, entry := range entries {
+		rep := entry.result.Explain
+		if rep == nil {
+			continue
 		}
-		return changed
-	}
-	m.workflowList.SetItems(listItems)
-	if !m.selectWorkflowItemByKey(m.activeWorkflowKey) {
-		m.workflowList.Select(0)
-		if len(m.workflowItems) > 0 {
-			m.activeWorkflowKey = workflowKey(m.workflowItems[0].workflow)
+		if env := strings.TrimSpace(rep.Env); env != "" {
+			return env
 		}
 	}
-	changed := m.setWorkflowShown(true)
-	return changed
+	return ""
 }
 
-func (m *Model) setWorkflowShown(visible bool) bool {
-	if m.showWorkflow == visible {
+func workflowExplainStatus(state *workflowState, entries []workflowStatsEntry) xplain.Status {
+	if state != nil && state.canceled {
+		return xplain.StatusError
+	}
+	if len(entries) == 0 {
+		return xplain.StatusReady
+	}
+	allSkipped := true
+	for _, entry := range entries {
+		result := entry.result
+		switch {
+		case result.Canceled:
+			return xplain.StatusError
+		case result.Skipped:
+			continue
+		case !result.Success:
+			return xplain.StatusError
+		default:
+			allSkipped = false
+		}
+	}
+	if allSkipped {
+		return xplain.StatusSkipped
+	}
+	return xplain.StatusReady
+}
+
+func workflowExplainFailure(state *workflowState, entries []workflowStatsEntry) string {
+	if state != nil && state.canceled {
+		return strings.TrimSpace(state.cancelReason)
+	}
+	for i := len(entries) - 1; i >= 0; i-- {
+		result := entries[i].result
+		if result.Canceled {
+			if msg := strings.TrimSpace(result.Message); msg != "" {
+				return msg
+			}
+			continue
+		}
+		if result.Skipped || result.Success {
+			continue
+		}
+		if rep := result.Explain; rep != nil {
+			if failure := strings.TrimSpace(rep.Failure); failure != "" {
+				return failure
+			}
+		}
+		if result.ScriptErr != nil {
+			return result.ScriptErr.Error()
+		}
+		if result.Err != nil {
+			return result.Err.Error()
+		}
+		if msg := strings.TrimSpace(result.Message); msg != "" {
+			return msg
+		}
+		if status := strings.TrimSpace(result.Status); status != "" {
+			return status
+		}
+	}
+	return ""
+}
+
+func workflowExplainWarnings(entries []workflowStatsEntry) []string {
+	var out []string
+	for _, entry := range entries {
+		rep := entry.result.Explain
+		if rep == nil {
+			continue
+		}
+		label := workflowStepLabel(
+			entry.result.Step,
+			entry.result.Branch,
+			entry.result.Iteration,
+			entry.result.Total,
+		)
+		for _, warn := range rep.Warnings {
+			warn = strings.TrimSpace(warn)
+			if warn == "" {
+				continue
+			}
+			if label != "" {
+				warn = label + ": " + warn
+			}
+			out = appendWorkflowExplainNote(out, warn)
+		}
+	}
+	return out
+}
+
+func workflowExplainVars(entries []workflowStatsEntry) []xplain.Var {
+	var (
+		out   []xplain.Var
+		index = make(map[string]int)
+	)
+	for _, entry := range entries {
+		rep := entry.result.Explain
+		if rep == nil {
+			continue
+		}
+		for _, v := range rep.Vars {
+			key := normalizedExplainKey(v.Name) + "\x00" + normalizedExplainKey(v.Source)
+			if idx, ok := index[key]; ok {
+				curr := &out[idx]
+				curr.Uses += v.Uses
+				curr.Missing = curr.Missing || v.Missing
+				curr.Dynamic = curr.Dynamic || v.Dynamic
+				if strings.TrimSpace(curr.Value) == "" {
+					curr.Value = v.Value
+				}
+				for _, shadowed := range v.Shadowed {
+					if !containsString(curr.Shadowed, shadowed) {
+						curr.Shadowed = append(curr.Shadowed, shadowed)
+					}
+				}
+				continue
+			}
+			copyVar := v
+			copyVar.Shadowed = append([]string(nil), v.Shadowed...)
+			out = append(out, copyVar)
+			index[key] = len(out) - 1
+		}
+	}
+	return out
+}
+
+type wfExplainStage struct {
+	key string
+	st  xplain.Stage
+}
+
+func workflowExplainStages(r workflowStepResult) []xplain.Stage {
+	lbl := workflowStepLabel(r.Step, r.Branch, r.Iteration, r.Total)
+	xs := workflowExplainCloneStages(lbl, r.Explain)
+	xs = workflowExplainMergeDiffs(xs, lbl, r)
+	if workflowExplainNeedOutcome(r, xs) {
+		xs = append(xs, wfExplainStage{st: workflowExplainOutcomeStage(lbl, r)})
+	}
+	out := make([]xplain.Stage, 0, len(xs))
+	for _, x := range xs {
+		out = append(out, x.st)
+	}
+	return out
+}
+
+func workflowExplainCloneStages(lbl string, rep *xplain.Report) []wfExplainStage {
+	if rep == nil || len(rep.Stages) == 0 {
+		return nil
+	}
+	out := make([]wfExplainStage, 0, len(rep.Stages))
+	for _, s := range rep.Stages {
+		sum := explainDisplayStageSummary(s)
+		ns := append([]string(nil), explainDisplayStageNotes(s)...)
+		cs := append([]xplain.Change(nil), s.Changes...)
+		out = append(out, wfExplainStage{
+			key: explainKey(s.Name),
+			st: xplain.Stage{
+				Name:    workflowExplainStageName(lbl, s.Name),
+				Status:  s.Status,
+				Summary: sum,
+				Changes: cs,
+				Notes:   ns,
+			},
+		})
+	}
+	return out
+}
+
+func workflowExplainMergeDiffs(xs []wfExplainStage, lbl string, r workflowStepResult) []wfExplainStage {
+	if r.Src == nil || r.Req == nil {
+		return xs
+	}
+	cs := explainReqChanges(r.Src, r.Req)
+	if len(cs) == 0 {
+		return xs
+	}
+	sc, ac, pc := workflowExplainSplitDiffs(r.Src, cs)
+	var pre []wfExplainStage
+	xs, pre = workflowExplainMergeStage(
+		xs,
+		pre,
+		explainStageSettings,
+		workflowExplainStageText(explainStageSettings, explainSummarySettingsMerged),
+		lbl,
+		sc,
+	)
+	xs, pre = workflowExplainMergeStage(
+		xs,
+		pre,
+		explainStageAuth,
+		workflowExplainStageText(explainStageAuth, explainSummaryAuthPrepared),
+		lbl,
+		ac,
+	)
+	k := workflowExplainProtoStageKey(r.Req)
+	s := workflowExplainProtoStageSummary(k)
+	xs, pre = workflowExplainMergeStage(xs, pre, k, s, lbl, pc)
+	return append(pre, xs...)
+}
+
+func workflowExplainSplitDiffs(req *restfile.Request, cs []xplain.Change) (
+	sc []xplain.Change,
+	ac []xplain.Change,
+	pc []xplain.Change,
+) {
+	for _, c := range cs {
+		switch {
+		case strings.HasPrefix(c.Field, "setting."):
+			sc = append(sc, c)
+		case workflowExplainIsAuthChange(req, c):
+			ac = append(ac, c)
+		default:
+			pc = append(pc, c)
+		}
+	}
+	return sc, ac, pc
+}
+
+func workflowExplainIsAuthChange(req *restfile.Request, c xplain.Change) bool {
+	if !strings.HasPrefix(c.Field, "header.") {
 		return false
 	}
-	m.showWorkflow = visible
-	return true
-}
-
-func (m *Model) resetWorkflowFocus(doc *restfile.Document) {
-	if doc != nil && len(doc.Requests) > 0 {
-		_ = m.setFocus(focusRequests)
-		return
+	h := strings.TrimSpace(strings.TrimPrefix(c.Field, "header."))
+	if strings.EqualFold(h, "authorization") {
+		return true
 	}
-	if len(m.fileList.Items()) > 0 {
-		_ = m.setFocus(focusFile)
-		return
-	}
-	_ = m.setFocus(focusEditor)
-}
-
-func (m *Model) selectWorkflowItemByKey(key string) bool {
-	if key == "" {
+	if req == nil || req.Metadata.Auth == nil {
 		return false
 	}
-	for idx, item := range m.workflowItems {
-		if workflowKey(item.workflow) == key {
-			m.workflowList.Select(idx)
+	a := req.Metadata.Auth
+	switch strings.ToLower(strings.TrimSpace(a.Type)) {
+	case "header":
+		return strings.EqualFold(h, strings.TrimSpace(a.Params["header"]))
+	case "apikey", "api-key":
+		if !strings.EqualFold(strings.TrimSpace(a.Params["placement"]), "header") {
+			return false
+		}
+		n := strings.TrimSpace(a.Params["name"])
+		if n == "" {
+			n = "X-API-Key"
+		}
+		return strings.EqualFold(h, n)
+	default:
+		return false
+	}
+}
+
+func workflowExplainMergeStage(
+	xs []wfExplainStage,
+	pre []wfExplainStage,
+	key, sum, lbl string,
+	cs []xplain.Change,
+) ([]wfExplainStage, []wfExplainStage) {
+	if len(cs) == 0 {
+		return xs, pre
+	}
+	k := explainKey(key)
+	for i := range xs {
+		if xs[i].key != k {
+			continue
+		}
+		xs[i].st.Changes = prependExplainChangesUnique(xs[i].st.Changes, cs)
+		if strings.TrimSpace(xs[i].st.Summary) == "" {
+			xs[i].st.Summary = sum
+		}
+		return xs, pre
+	}
+	pre = append(pre, wfExplainStage{
+		key: k,
+		st: xplain.Stage{
+			Name:    workflowExplainStageName(lbl, key),
+			Status:  xplain.StageOK,
+			Summary: sum,
+			Changes: append([]xplain.Change(nil), cs...),
+		},
+	})
+	return xs, pre
+}
+
+func workflowExplainStageName(lbl, key string) string {
+	name := strings.TrimSpace(explainDisplayStageName(key))
+	if name == "" {
+		name = strings.TrimSpace(key)
+	}
+	lbl = strings.TrimSpace(lbl)
+	switch {
+	case lbl == "":
+		return name
+	case name == "":
+		return lbl
+	default:
+		return lbl + " / " + name
+	}
+}
+
+func workflowExplainStageText(key, sum string) string {
+	st := xplain.Stage{Name: key, Summary: sum}
+	txt := strings.TrimSpace(explainDisplayStageSummary(st))
+	if txt != "" {
+		return txt
+	}
+	return strings.TrimSpace(sum)
+}
+
+func workflowExplainProtoStageKey(req *restfile.Request) string {
+	switch {
+	case req != nil && req.GRPC != nil:
+		return explainStageGRPCPrepare
+	case req != nil && req.WebSocket != nil:
+		return explainStageWebSocketPrepare
+	default:
+		return explainStageHTTPPrepare
+	}
+}
+
+func workflowExplainProtoStageSummary(key string) string {
+	switch explainKey(key) {
+	case explainKey(explainStageGRPCPrepare):
+		return workflowExplainStageText(explainStageGRPCPrepare, explainSummaryGRPCRequestPrepared)
+	case explainKey(explainStageWebSocketPrepare):
+		return workflowExplainStageText(
+			explainStageWebSocketPrepare,
+			explainSummaryWebSocketRequestPrepared,
+		)
+	default:
+		return workflowExplainStageText(explainStageHTTPPrepare, explainSummaryHTTPRequestPrepared)
+	}
+}
+
+func workflowExplainNeedOutcome(r workflowStepResult, xs []wfExplainStage) bool {
+	if len(xs) == 0 {
+		return true
+	}
+	want := workflowExplainOutcomeStatus(r)
+	for _, x := range xs {
+		if x.st.Status == want {
+			return false
+		}
+	}
+	return want != xplain.StageOK
+}
+
+func workflowExplainOutcomeStage(lbl string, r workflowStepResult) xplain.Stage {
+	sum := workflowExplainOutcome(r)
+	return xplain.Stage{
+		Name:    strings.TrimSpace(lbl),
+		Status:  workflowExplainOutcomeStatus(r),
+		Summary: sum,
+		Notes:   workflowExplainOutcomeNotes(r, sum),
+	}
+}
+
+func workflowExplainOutcomeStatus(r workflowStepResult) xplain.StageStatus {
+	switch {
+	case r.Skipped:
+		return xplain.StageSkipped
+	case r.Canceled, !r.Success:
+		return xplain.StageError
+	default:
+		return xplain.StageOK
+	}
+}
+
+func workflowExplainOutcome(r workflowStepResult) string {
+	switch {
+	case r.Canceled:
+		if msg := strings.TrimSpace(r.Message); msg != "" {
+			return msg
+		}
+		return "canceled"
+	case r.Skipped:
+		if msg := strings.TrimSpace(r.Message); msg != "" {
+			return msg
+		}
+		return "skipped"
+	case !r.Success:
+		if msg := strings.TrimSpace(r.Message); msg != "" {
+			return msg
+		}
+		if status := strings.TrimSpace(r.Status); status != "" {
+			return status
+		}
+		return "failed"
+	default:
+		if status := strings.TrimSpace(r.Status); status != "" {
+			return status
+		}
+		if rep := r.Explain; rep != nil {
+			if decision := strings.TrimSpace(rep.Decision); decision != "" {
+				return decision
+			}
+		}
+		return "completed"
+	}
+}
+
+func workflowExplainOutcomeNotes(r workflowStepResult, sum string) []string {
+	rep := r.Explain
+	if rep == nil {
+		return nil
+	}
+	var notes []string
+	if decision := strings.TrimSpace(rep.Decision); decision != "" && decision != sum {
+		notes = appendWorkflowExplainNote(notes, decision)
+	}
+	if failure := strings.TrimSpace(rep.Failure); failure != "" {
+		notes = appendWorkflowExplainNote(notes, "Failure: "+failure)
+	}
+	for _, warn := range rep.Warnings {
+		warn = strings.TrimSpace(warn)
+		if warn == "" {
+			continue
+		}
+		notes = appendWorkflowExplainNote(notes, "Warning: "+warn)
+	}
+	return notes
+}
+
+func appendWorkflowExplainNote(out []string, note string) []string {
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return out
+	}
+	for _, existing := range out {
+		if existing == note {
+			return out
+		}
+	}
+	return append(out, note)
+}
+
+func containsString(xs []string, want string) bool {
+	for _, item := range xs {
+		if item == want {
 			return true
 		}
 	}
 	return false
 }
 
-func (m *Model) runSelectedWorkflow() tea.Cmd {
-	if m.doc == nil {
-		m.setStatusMessage(statusMsg{text: "No document loaded", level: statusWarn})
-		return nil
+func prependExplainChangesUnique(dst, src []xplain.Change) []xplain.Change {
+	if len(src) == 0 {
+		return dst
 	}
-	if m.workflowRun != nil {
-		m.setStatusMessage(statusMsg{text: "Workflow already running", level: statusWarn})
-		return nil
+	out := make([]xplain.Change, 0, len(src)+len(dst))
+	out = append(out, src...)
+	for _, d := range dst {
+		if hasExplainChange(out, d) {
+			continue
+		}
+		out = append(out, d)
 	}
-	item, ok := m.workflowList.SelectedItem().(workflowListItem)
-	if !ok || item.workflow == nil {
-		m.setStatusMessage(statusMsg{text: "No workflow selected", level: statusWarn})
-		return nil
+	return out
+}
+
+func hasExplainChange(xs []xplain.Change, want xplain.Change) bool {
+	for _, x := range xs {
+		if x.Field == want.Field && x.Before == want.Before && x.After == want.After {
+			return true
+		}
 	}
-	workflowCopy := *item.workflow
-	m.setHistoryWorkflow(workflowCopy.Name)
-	if key := workflowKey(item.workflow); key != "" {
-		m.activeWorkflowKey = key
+	return false
+}
+
+func (m *Model) buildWorkflowReport(state *workflowState) string {
+	if state == nil {
+		return ""
 	}
-	return m.startWorkflowRun(m.doc, workflowCopy, m.cfg.HTTPOptions)
+	var b strings.Builder
+	label := workflowRunLabel(state)
+	name := state.workflow.Name
+	if name == "" {
+		name = label
+	}
+	fmt.Fprintf(&b, "%s: %s\n", label, name)
+	fmt.Fprintf(&b, "Started: %s\n", state.start.Format(time.RFC3339))
+	if !state.end.IsZero() {
+		fmt.Fprintf(&b, "Ended: %s\n", state.end.Format(time.RFC3339))
+	}
+	fmt.Fprintf(&b, "Steps: %d\n\n", len(state.steps))
+	for _, entry := range buildWorkflowStatsEntries(state) {
+		b.WriteString(workflowStepLine(entry.index, entry.result))
+		b.WriteString("\n")
+		if strings.TrimSpace(entry.result.Message) != "" {
+			fmt.Fprintf(&b, "    %s\n", entry.result.Message)
+		}
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 func (m *Model) recordWorkflowHistory(state *workflowState, summary, report string) {
-	if m.historyStore == nil || state == nil {
+	hs := m.historyStore()
+	if hs == nil || state == nil {
 		return
 	}
 	workflowName := history.NormalizeWorkflowName(state.workflow.Name)
@@ -1622,7 +2214,6 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 		Method:      restfile.HistoryMethodWorkflow,
 		URL:         workflowName,
 		Status:      summary,
-		StatusCode:  0,
 		Duration:    time.Since(state.start),
 		BodySnippet: report,
 		RequestText: workflowDefinition(state),
@@ -1632,79 +2223,53 @@ func (m *Model) recordWorkflowHistory(state *workflowState, summary, report stri
 	if entry.RequestName == "" {
 		entry.RequestName = "Workflow"
 	}
-	if err := m.historyStore.Append(entry); err != nil {
+	if err := hs.Append(entry); err != nil {
 		m.setStatusMessage(
 			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
 		)
 		return
 	}
 	m.historySelectedID = entry.ID
-	m.historyJumpToLatest = false
 	m.setHistoryWorkflow(workflowName)
-}
-
-func (m *Model) setHistoryWorkflow(name string) {
-	trimmed := history.NormalizeWorkflowName(name)
-	if trimmed == "" {
-		if m.historyWorkflowName == "" && m.historyScope != historyScopeWorkflow {
-			return
-		}
-		m.historyWorkflowName = ""
-		if m.historyScope == historyScopeWorkflow {
-			m.historyScope = historyScopeRequest
-		}
-		if m.ready {
-			m.syncHistory()
-		}
-		return
-	}
-	if m.historyWorkflowName == trimmed && m.historyScope == historyScopeWorkflow {
-		return
-	}
-	m.historyWorkflowName = trimmed
-	m.historyScope = historyScopeWorkflow
-	if m.ready {
-		m.syncHistory()
-	}
 }
 
 func workflowDefinition(state *workflowState) string {
 	if state == nil {
 		return ""
 	}
-	var builder strings.Builder
+	var b strings.Builder
 	name := state.workflow.Name
 	if name == "" {
 		name = fmt.Sprintf("workflow-%d", state.start.Unix())
 	}
-	builder.WriteString("# @workflow ")
-	builder.WriteString(name)
+	b.WriteString("# @workflow ")
+	b.WriteString(name)
 	if state.workflow.DefaultOnFailure == restfile.WorkflowOnFailureContinue {
-		builder.WriteString(" on-failure=continue")
+		b.WriteString(" on-failure=continue")
 	}
 	for key, value := range state.workflow.Options {
 		if strings.HasPrefix(key, "vars.") {
-			fmt.Fprintf(&builder, " %s=%s", key, value)
+			fmt.Fprintf(&b, " %s=%s", key, value)
 		}
 	}
-	builder.WriteString("\n")
+	b.WriteString("\n")
 	if desc := state.workflow.Description; desc != "" {
 		for _, line := range strings.Split(desc, "\n") {
-			builder.WriteString("# @description ")
-			builder.WriteString(line)
-			builder.WriteString("\n")
+			b.WriteString("# @description ")
+			b.WriteString(line)
+			b.WriteString("\n")
 		}
 	}
 	if len(state.workflow.Tags) > 0 {
-		builder.WriteString("# @tag ")
-		builder.WriteString(strings.Join(state.workflow.Tags, " "))
-		builder.WriteString("\n")
+		b.WriteString("# @tag ")
+		b.WriteString(strings.Join(state.workflow.Tags, " "))
+		b.WriteString("\n")
 	}
-	writer := newWorkflowDefinitionWriter(&builder, state.workflow.DefaultOnFailure)
+	writer := newWorkflowDefinitionWriter(&b, state.workflow.DefaultOnFailure)
 	for _, step := range state.workflow.Steps {
 		writer.appendStep(step)
 	}
-	return strings.TrimRight(builder.String(), "\n")
+	return strings.TrimRight(b.String(), "\n")
 }
 
 type workflowDefinitionWriter struct {

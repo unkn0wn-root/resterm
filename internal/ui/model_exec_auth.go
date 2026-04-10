@@ -196,7 +196,14 @@ func (m *Model) prepareExplainAuthPreview(
 			}, nil
 		}
 
-		res, ok, err := m.authCmd.CachedPrepared(prep)
+		ac := m.authCmdMgr()
+		if ac == nil {
+			return explainAuthPreviewResult{}, errdef.New(
+				errdef.CodeHTTP,
+				"command auth support is not initialised",
+			)
+		}
+		res, ok, err := ac.CachedPrepared(prep)
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
@@ -223,7 +230,8 @@ func (m *Model) prepareExplainAuthPreview(
 			extraSecrets: commandAuthSecrets(res),
 		}, nil
 	case "oauth2":
-		if m.oauth == nil {
+		oa := m.oauthMgr()
+		if oa == nil {
 			return explainAuthPreviewResult{}, errdef.New(
 				errdef.CodeHTTP,
 				"oauth support is not initialised",
@@ -236,7 +244,7 @@ func (m *Model) prepareExplainAuthPreview(
 		}
 
 		envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-		cfg = m.oauth.MergeCachedConfig(envKey, cfg)
+		cfg = oa.MergeCachedConfig(envKey, cfg)
 		if cfg.TokenURL == "" {
 			return explainAuthPreviewResult{}, errdef.New(
 				errdef.CodeHTTP,
@@ -256,7 +264,7 @@ func (m *Model) prepareExplainAuthPreview(
 			}, nil
 		}
 
-		token, ok := m.oauth.CachedToken(envKey, cfg)
+		token, ok := oa.CachedToken(envKey, cfg)
 		if !ok {
 			return explainAuthPreviewResult{
 				status:  xplain.StageSkipped,
@@ -321,7 +329,11 @@ func (m *Model) ensureCommandAuth(
 		return authcmd.Result{}, nil
 	}
 
-	res, err := m.authCmd.ResolvePrepared(ctx, prep)
+	ac := m.authCmdMgr()
+	if ac == nil {
+		return authcmd.Result{}, errdef.New(errdef.CodeHTTP, "command auth support is not initialised")
+	}
+	res, err := ac.ResolvePrepared(ctx, prep)
 	if err != nil {
 		return authcmd.Result{}, errdef.Wrap(errdef.CodeHTTP, err, "resolve command auth")
 	}
@@ -342,7 +354,8 @@ func (m *Model) prepareCommandAuth(
 	envName string,
 	timeout time.Duration,
 ) (authcmd.Prepared, error) {
-	if m.authCmd == nil {
+	ac := m.authCmdMgr()
+	if ac == nil {
 		return authcmd.Prepared{}, errdef.New(
 			errdef.CodeHTTP,
 			"command auth support is not initialised",
@@ -355,7 +368,7 @@ func (m *Model) prepareCommandAuth(
 	}
 
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-	return m.authCmd.Prepare(envKey, cfg)
+	return ac.Prepare(envKey, cfg)
 }
 
 func (m *Model) ensureOAuth(
@@ -372,7 +385,8 @@ func (m *Model) ensureOAuth(
 	if !strings.EqualFold(req.Metadata.Auth.Type, "oauth2") {
 		return nil
 	}
-	if m.oauth == nil {
+	oa := m.oauthMgr()
+	if oa == nil {
 		return errdef.New(errdef.CodeHTTP, "oauth support is not initialised")
 	}
 
@@ -382,7 +396,7 @@ func (m *Model) ensureOAuth(
 	}
 
 	envKey := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-	cfg = m.oauth.MergeCachedConfig(envKey, cfg)
+	cfg = oa.MergeCachedConfig(envKey, cfg)
 	if cfg.TokenURL == "" {
 		return errdef.New(
 			errdef.CodeHTTP,
@@ -398,7 +412,6 @@ func (m *Model) ensureOAuth(
 	if req.Headers != nil && req.Headers.Get(header) != "" {
 		return nil
 	}
-
 	tokenTimeout := timeout
 	if grant == "authorization_code" && tokenTimeout < 2*time.Minute {
 		tokenTimeout = 2 * time.Minute
@@ -414,7 +427,7 @@ func (m *Model) ensureOAuth(
 
 	defer cancel()
 
-	token, err := m.oauth.Token(ctx, envKey, cfg, opts)
+	token, err := oa.Token(ctx, envKey, cfg, opts)
 	if err != nil {
 		return errdef.Wrap(errdef.CodeHTTP, err, "fetch oauth token")
 	}

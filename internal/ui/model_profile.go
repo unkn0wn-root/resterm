@@ -1,19 +1,26 @@
 package ui
 
 import (
+	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type profileState struct {
+	id            string
+	core          bool
 	base          *restfile.Request
 	doc           *restfile.Document
 	options       httpclient.Options
@@ -53,13 +60,39 @@ func (s *profileState) successCount() int {
 }
 
 func (s *profileState) failureCount() int {
-	count := 0
+	n := 0
 	for _, failure := range s.failures {
 		if !failure.Warmup {
-			count++
+			n++
 		}
 	}
-	return count
+	return n
+}
+
+func profileStateFromPlan(
+	pl *core.ProfilePlan,
+	opts httpclient.Options,
+	useCore bool,
+	msgBase string,
+) *profileState {
+	if pl == nil {
+		return nil
+	}
+	return &profileState{
+		id:          strings.TrimSpace(pl.Run.ID),
+		core:        useCore,
+		base:        cloneRequest(pl.Request),
+		doc:         pl.Doc,
+		options:     opts,
+		spec:        pl.Spec,
+		total:       pl.Total,
+		warmup:      pl.Spec.Warmup,
+		delay:       pl.Spec.Delay,
+		successes:   make([]time.Duration, 0, pl.Spec.Count),
+		failures:    make([]profileFailure, 0, pl.Spec.Count/2+1),
+		messageBase: msgBase,
+		start:       time.Now(),
+	}
 }
 
 func (m *Model) startProfileRun(
@@ -76,69 +109,72 @@ func (m *Model) startProfileRun(
 		)
 		return m.executeRequest(doc, req, options, "", nil)
 	}
-
-	spec := restfile.ProfileSpec{}
-	if req.Metadata.Profile != nil {
-		spec = *req.Metadata.Profile
-	}
-	if spec.Count <= 0 {
-		spec.Count = 10
-	}
-	if spec.Warmup < 0 {
-		spec.Warmup = 0
-	}
-	if spec.Delay < 0 {
-		spec.Delay = 0
-	}
-
-	total := spec.Count + spec.Warmup
-	if total <= 0 {
-		total = spec.Count
-	}
-
-	state := &profileState{
-		base:      cloneRequest(req),
-		doc:       doc,
-		options:   options,
-		spec:      spec,
-		total:     total,
-		warmup:    spec.Warmup,
-		delay:     spec.Delay,
-		successes: make([]time.Duration, 0, spec.Count),
-		failures:  make([]profileFailure, 0, spec.Count/2+1),
-		start:     time.Now(),
-	}
 	title := strings.TrimSpace(m.statusRequestTitle(doc, req, ""))
 	if title == "" {
 		title = requestBaseTitle(req)
 	}
-	state.messageBase = fmt.Sprintf("Profiling %s", title)
+	msgBase := fmt.Sprintf("Profiling %s", title)
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	pl, err := core.PrepareProfile(doc, req, core.RunMeta{
+		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
+		Env: env,
+	})
+	if err != nil {
+		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
+		return nil
+	}
+	state := profileStateFromPlan(pl, options, true, msgBase)
+	if requestNeedsUIDrivenRun(req) {
+		state.core = false
+		return m.startProfileUIDrivenState(state)
+	}
+	return m.startProfileCoreRun(pl, state)
+}
 
+func (m *Model) startProfileUIDrivenState(state *profileState) tea.Cmd {
+	if state == nil {
+		return nil
+	}
 	m.profileRun = state
 	spin := m.startSending()
 	m.statusPulseBase = strings.TrimSpace(profileProgressLabel(state))
 	m.statusPulseFrame = 0
-
-	m.setStatusMessage(
-		statusMsg{
-			text:  fmt.Sprintf("%s warmup 0/%d", state.messageBase, state.warmup),
-			level: statusInfo,
-		},
-	)
 	execCmd := m.executeProfileIteration()
 	pulse := m.startStatusPulse()
 	return batchCmds([]tea.Cmd{execCmd, pulse, spin})
 }
 
+func (m *Model) startProfileCoreRun(pl *core.ProfilePlan, state *profileState) tea.Cmd {
+	if pl == nil || state == nil {
+		return nil
+	}
+	rq := m.requestSvc(state.options)
+	if rq == nil {
+		return nil
+	}
+	m.profileRun = state
+	m.statusPulseFrame = 0
+	if state.total > 0 {
+		state.current = cloneRequest(state.base)
+		m.currentRequest = state.current
+		if state.index >= state.warmup && state.measuredStart.IsZero() {
+			state.measuredStart = time.Now()
+		}
+	}
+	m.statusPulseBase = strings.TrimSpace(profileProgressLabel(state))
+	m.showProfileProgress(state)
+	spin := m.startSending()
+	pulse := m.startStatusPulse()
+	ch := m.runMsgChan
+	worker := m.startRunWorker(state.id, func(ctx context.Context) error {
+		return core.RunProfile(ctx, rq, runSink(ch), pl)
+	})
+	return batchCmds([]tea.Cmd{worker, pulse, spin})
+}
+
 func (m *Model) executeProfileIteration() tea.Cmd {
 	state := m.profileRun
-	if state == nil {
-		return nil
-	}
-	if state.canceled {
-		return nil
-	}
-	if state.index >= state.total {
+	if state == nil || state.canceled || state.index >= state.total {
 		return nil
 	}
 
@@ -154,12 +190,89 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 	m.statusPulseBase = progressText
 	m.showProfileProgress(state)
 
-	cmd := m.executeRequest(state.doc, iterationReq, state.options, "", nil)
-	return cmd
+	return m.executeRequest(state.doc, iterationReq, state.options, "", nil)
 }
 
-func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
+func (m *Model) handleProfileUIDrivenResponse(msg responseMsg) tea.Cmd {
 	state := m.profileRun
+	if state == nil {
+		return nil
+	}
+	return m.consumeProfileResult(state, msg, time.Time{})
+}
+
+func (m *Model) handleProfileRunEvt(evt core.Evt) tea.Cmd {
+	state := m.profileRun
+	if state == nil || !state.core || evt == nil {
+		return nil
+	}
+	meta := core.MetaOf(evt)
+	if state.id != "" && meta.Run.ID != "" && state.id != meta.Run.ID {
+		return nil
+	}
+	switch v := evt.(type) {
+	case core.RunStart:
+		state.start = v.Meta.At
+	case core.ProIterStart:
+		return m.handleProfileIterStart(state, v)
+	case core.ProIterDone:
+		return m.handleProfileIterDone(state, v)
+	case core.RunDone:
+		return m.handleProfileRunDone(state, v)
+	}
+	return nil
+}
+
+func (m *Model) handleProfileIterStart(state *profileState, evt core.ProIterStart) tea.Cmd {
+	if state == nil {
+		return nil
+	}
+	state.current = cloneRequest(evt.Request)
+	m.currentRequest = state.current
+	if !evt.Iter.Warmup && state.measuredStart.IsZero() {
+		state.measuredStart = evt.Meta.At
+	}
+	m.statusPulseBase = strings.TrimSpace(profileProgressLabel(state))
+	m.showProfileProgress(state)
+	spin := m.startSending()
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{spin, pulse})
+}
+
+func (m *Model) handleProfileIterDone(state *profileState, evt core.ProIterDone) tea.Cmd {
+	if state == nil {
+		return nil
+	}
+	msg := m.responseMsgFromRunState(evt.Result, false)
+	m.recordResponseLatency(msg)
+	return m.consumeProfileResult(state, msg, evt.Meta.At)
+}
+
+func (m *Model) handleProfileRunDone(state *profileState, evt core.RunDone) tea.Cmd {
+	if state == nil {
+		return nil
+	}
+	m.sendCancel = nil
+	if evt.Canceled {
+		state.canceled = true
+		if strings.TrimSpace(state.cancelReason) == "" {
+			state.cancelReason = "Profiling canceled"
+		}
+	}
+	if m.profileRun != state {
+		return nil
+	}
+	if state.current == nil && (state.canceled || state.skipped || state.index >= state.total) {
+		return m.finalizeProfileRun(responseMsg{}, state)
+	}
+	return nil
+}
+
+func (m *Model) consumeProfileResult(
+	state *profileState,
+	msg responseMsg,
+	at time.Time,
+) tea.Cmd {
 	if state == nil {
 		return nil
 	}
@@ -217,7 +330,10 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 	warmup := state.index < state.warmup
 
 	if !warmup {
-		now := time.Now()
+		now := at
+		if now.IsZero() {
+			now = time.Now()
+		}
 		if state.measuredStart.IsZero() {
 			state.measuredStart = now
 		}
@@ -243,11 +359,13 @@ func (m *Model) handleProfileResponse(msg responseMsg) tea.Cmd {
 	}
 
 	state.index++
-
 	if state.index < state.total {
 		progressText := profileProgressLabel(state)
 		m.statusPulseBase = progressText
 		m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
+		if state.core {
+			return nil
+		}
 		spin := m.startSending()
 		if state.delay > 0 {
 			next := tea.Tick(
@@ -411,7 +529,6 @@ func buildProfileSummary(state *profileState) string {
 	if state == nil {
 		return "Profiling complete"
 	}
-
 	if state.skipped {
 		reason := strings.TrimSpace(state.skipReason)
 		if reason == "" {
@@ -419,6 +536,7 @@ func buildProfileSummary(state *profileState) string {
 		}
 		return fmt.Sprintf("Profiling skipped: %s", reason)
 	}
+
 	mt := profileMetricsFromState(state)
 	if state.canceled {
 		planned := state.total
@@ -479,31 +597,31 @@ func renderLatencyTable(stats analysis.LatencyStats) string {
 		}
 	}
 
-	var builder strings.Builder
-	builder.WriteString(formatLatencyRow(labels, widths))
-	builder.WriteString("\n")
-	builder.WriteString(formatLatencyRow(values, widths))
-	builder.WriteString("\n")
-	builder.WriteString("  mean: ")
-	builder.WriteString(formatDurationShort(stats.Mean))
-	builder.WriteString(" | median: ")
-	builder.WriteString(formatDurationShort(stats.Median))
-	builder.WriteString(" | stddev: ")
-	builder.WriteString(formatDurationShort(stats.StdDev))
-	builder.WriteString("\n")
-	return builder.String()
+	var b strings.Builder
+	b.WriteString(formatLatencyRow(labels, widths))
+	b.WriteString("\n")
+	b.WriteString(formatLatencyRow(values, widths))
+	b.WriteString("\n")
+	b.WriteString("  mean: ")
+	b.WriteString(formatDurationShort(stats.Mean))
+	b.WriteString(" | median: ")
+	b.WriteString(formatDurationShort(stats.Median))
+	b.WriteString(" | stddev: ")
+	b.WriteString(formatDurationShort(stats.StdDev))
+	b.WriteString("\n")
+	return b.String()
 }
 
 func formatLatencyRow(items []string, widths []int) string {
-	var builder strings.Builder
-	builder.WriteString("  ")
+	var b strings.Builder
+	b.WriteString("  ")
 	for i, item := range items {
 		if i > 0 {
-			builder.WriteString("  ")
+			b.WriteString("  ")
 		}
-		fmt.Fprintf(&builder, "%-*s", widths[i], item)
+		fmt.Fprintf(&b, "%-*s", widths[i], item)
 	}
-	return builder.String()
+	return b.String()
 }
 
 func percentileValue(stats analysis.LatencyStats, percentile int) time.Duration {
@@ -550,7 +668,6 @@ func profileMetricsFromState(state *profileState) profileMetrics {
 	}
 
 	measuredDuration := profileMeasuredDuration(state.successes, state.failures)
-
 	mt := profileMetrics{
 		success:          success,
 		failures:         failures,
@@ -570,10 +687,7 @@ func profileMetricsFromState(state *profileState) profileMetrics {
 }
 
 func profileCompletedRuns(state *profileState) int {
-	if state == nil {
-		return 0
-	}
-	if state.index < 0 {
+	if state == nil || state.index < 0 {
 		return 0
 	}
 	if state.total > 0 && state.index > state.total {
@@ -652,45 +766,12 @@ func writeProfileHeader(b *strings.Builder, title string) {
 	b.WriteString("\n\n")
 }
 
-func (m *Model) setResponseSnapshotContent(snapshot *responseSnapshot) {
-	if snapshot == nil {
-		return
-	}
-	m.responsePending = nil
-	m.responseRenderToken = ""
-	m.responseLoading = false
-	m.responseLoadingFrame = 0
-	m.lastResponse = nil
-	m.lastGRPC = nil
-	m.responseLatest = snapshot
-
-	target := m.responseTargetPane()
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil {
-			continue
-		}
-		pane.snapshot = snapshot
-		pane.invalidateCaches()
-		width := pane.viewport.Width
-		if width <= 0 {
-			width = defaultResponseViewportWidth
-		}
-		content := wrapToWidth(snapshot.pretty, width)
-		pane.viewport.SetContent(content)
-		pane.viewport.GotoTop()
-		pane.setCurrPosition()
-	}
-	m.setLivePane(target)
-}
-
 func (m *Model) showProfileProgress(state *profileState) {
 	if state == nil {
 		return
 	}
 	dots := profileProgressDots(m.statusPulseFrame)
-	text := profileProgressText(state, dots)
-	m.setStatusMessage(statusMsg{text: text, level: statusInfo})
+	m.setStatusMessage(statusMsg{text: profileProgressText(state, dots), level: statusInfo})
 }
 
 func profileProgressText(state *profileState, dots int) string {
@@ -800,7 +881,6 @@ func formatProfileWindow(mt profileMetrics) string {
 	} else if mt.elapsed > 0 {
 		parts = append(parts, formatDurationShort(mt.elapsed))
 	}
-
 	if mt.totalElapsed > 0 && mt.totalElapsed != mt.elapsed {
 		parts = append(parts, fmt.Sprintf("wall %s", formatDurationShort(mt.totalElapsed)))
 	}
@@ -856,7 +936,6 @@ func formatProfileFailure(failure profileFailure) string {
 
 	details := strings.TrimSpace(failure.Reason)
 	meta := formatFailureMeta(failure)
-
 	switch {
 	case details != "" && meta != "":
 		details = fmt.Sprintf("%s [%s]", details, meta)
@@ -879,16 +958,163 @@ func formatFailureMeta(failure profileFailure) string {
 	return strings.Join(parts, " | ")
 }
 
-func (m *Model) activateProfileStatsTab(snapshot *responseSnapshot) tea.Cmd {
-	if snapshot == nil {
+func (m *Model) recordProfileHistory(
+	st *profileState,
+	stats analysis.LatencyStats,
+	msg responseMsg,
+	report string,
+) {
+	hs := m.historyStore()
+	if hs == nil || st == nil || st.base == nil || st.base.Metadata.NoLog {
+		return
+	}
+
+	entry := m.buildProfileHistoryEntry(st, stats, msg, report)
+	if entry == nil {
+		return
+	}
+
+	if err := hs.Append(*entry); err != nil {
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
+		return
+	}
+	m.historySelectedID = entry.ID
+	m.syncHistory()
+}
+
+func (m *Model) buildProfileHistoryEntry(
+	st *profileState,
+	stats analysis.LatencyStats,
+	msg responseMsg,
+	report string,
+) *history.Entry {
+	req := st.base
+	if req == nil {
 		return nil
 	}
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil || pane.snapshot != snapshot {
-			continue
-		}
-		pane.setActiveTab(responseTabStats)
+
+	secrets := m.secretValuesForRedaction(req)
+	mask := !req.Metadata.AllowSensitiveHeaders
+	text := redactHistoryText(renderRequestText(req), secrets, mask)
+	status, code := profileHistoryStatus(st, msg)
+	now := time.Now()
+	dur := time.Duration(0)
+	if !st.start.IsZero() {
+		dur = now.Sub(st.start)
 	}
-	return m.syncResponsePanes()
+
+	return &history.Entry{
+		ID:             fmt.Sprintf("%d", now.UnixNano()),
+		ExecutedAt:     now,
+		Environment:    msg.environment,
+		RequestName:    requestIdentifier(req),
+		FilePath:       m.historyFilePath(),
+		Method:         req.Method,
+		URL:            req.URL,
+		Status:         status,
+		StatusCode:     code,
+		Duration:       dur,
+		BodySnippet:    "<profile run – see profileResults>",
+		RequestText:    text,
+		Description:    strings.TrimSpace(req.Metadata.Description),
+		Tags:           normalizedTags(req.Metadata.Tags),
+		ProfileResults: buildProfileResults(st, stats),
+	}
+}
+
+func profileHistoryStatus(st *profileState, msg responseMsg) (string, int) {
+	if st != nil && st.skipped {
+		reason := strings.TrimSpace(st.skipReason)
+		if reason == "" {
+			reason = "SKIPPED"
+		}
+		if !strings.EqualFold(reason, "skipped") {
+			return fmt.Sprintf("SKIPPED: %s", reason), 0
+		}
+		return "SKIPPED", 0
+	}
+	if st != nil && st.canceled {
+		completed := profileCompletedRuns(st)
+		total := st.total
+		if total == 0 {
+			total = st.spec.Count + st.warmup
+		}
+		if completed > 0 && total > 0 {
+			return fmt.Sprintf("Canceled at %d/%d", completed, total), 0
+		}
+		return strings.TrimSpace(st.cancelReason), 0
+	}
+
+	switch {
+	case msg.response != nil:
+		return msg.response.Status, msg.response.StatusCode
+	case msg.err != nil:
+		return errdef.Message(msg.err), 0
+	case msg.scriptErr != nil:
+		return strings.TrimSpace(msg.scriptErr.Error()), 0
+	case st != nil && len(st.failures) > 0:
+		last := st.failures[len(st.failures)-1]
+		status := strings.TrimSpace(last.Status)
+		if status == "" {
+			status = strings.TrimSpace(last.Reason)
+		}
+		if status == "" {
+			status = "profile failed"
+		}
+		return status, last.StatusCode
+	default:
+		return "profile completed", 0
+	}
+}
+
+func buildProfileResults(st *profileState, stats analysis.LatencyStats) *history.ProfileResults {
+	if st == nil {
+		return nil
+	}
+
+	totalRuns := profileCompletedRuns(st)
+	if totalRuns == 0 {
+		totalRuns = st.total
+	}
+	warmupRuns := profileCompletedWarmup(st)
+
+	res := &history.ProfileResults{
+		TotalRuns:      totalRuns,
+		WarmupRuns:     warmupRuns,
+		SuccessfulRuns: len(st.successes),
+		FailedRuns:     st.failureCount(),
+	}
+	if stats.Count == 0 {
+		return res
+	}
+
+	res.Latency = &history.ProfileLatency{
+		Count:  stats.Count,
+		Min:    stats.Min,
+		Max:    stats.Max,
+		Mean:   stats.Mean,
+		Median: stats.Median,
+		StdDev: stats.StdDev,
+	}
+
+	if len(stats.Percentiles) > 0 {
+		ps := make([]history.ProfilePercentile, 0, len(stats.Percentiles))
+		for p, v := range stats.Percentiles {
+			ps = append(ps, history.ProfilePercentile{Percentile: p, Value: v})
+		}
+		sort.Slice(ps, func(i, j int) bool { return ps[i].Percentile < ps[j].Percentile })
+		res.Percentiles = ps
+	}
+
+	if len(stats.Histogram) > 0 {
+		bins := make([]history.ProfileHistogramBin, len(stats.Histogram))
+		for i, b := range stats.Histogram {
+			bins[i] = history.ProfileHistogramBin{From: b.From, To: b.To, Count: b.Count}
+		}
+		res.Histogram = bins
+	}
+
+	return res
 }

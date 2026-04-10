@@ -161,16 +161,16 @@ func (m *Model) applyCaptures(in captureRun) error {
 				in.out.addFile(c.Name, value, c.Secret)
 			}
 		case restfile.CaptureScopeGlobal:
-			if m.globals != nil {
-				m.globals.set(envKey, c.Name, value, c.Secret)
+			if gs := m.globalsStore(); gs != nil {
+				gs.Set(envKey, c.Name, value, c.Secret)
 			}
 		}
 	}
 
-	if in.out != nil && len(in.out.fileVars) > 0 && m.fileVars != nil {
+	if fs := m.fileStore(); in.out != nil && len(in.out.fileVars) > 0 && fs != nil {
 		path := m.documentRuntimePath(in.doc)
 		for _, e := range in.out.fileVars {
-			m.fileVars.set(envKey, path, e.Name, e.Value, e.Secret)
+			fs.Set(envKey, path, e.Name, e.Value, e.Secret)
 		}
 	}
 

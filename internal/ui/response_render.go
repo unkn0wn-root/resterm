@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -126,6 +127,32 @@ func cloneHTTPResponse(resp *httpclient.Response) *httpclient.Response {
 		Request:        resp.Request,
 		Timeline:       timeline,
 		TraceReport:    traceReport,
+	}
+}
+
+func cloneGRPCResponse(resp *grpcclient.Response) *grpcclient.Response {
+	if resp == nil {
+		return nil
+	}
+	headers := make(map[string][]string, len(resp.Headers))
+	for key, values := range resp.Headers {
+		headers[key] = append([]string(nil), values...)
+	}
+	trailers := make(map[string][]string, len(resp.Trailers))
+	for key, values := range resp.Trailers {
+		trailers[key] = append([]string(nil), values...)
+	}
+	return &grpcclient.Response{
+		Message:         resp.Message,
+		Body:            append([]byte(nil), resp.Body...),
+		Wire:            append([]byte(nil), resp.Wire...),
+		ContentType:     resp.ContentType,
+		WireContentType: resp.WireContentType,
+		Headers:         headers,
+		Trailers:        trailers,
+		StatusCode:      resp.StatusCode,
+		StatusMessage:   resp.StatusMessage,
+		Duration:        resp.Duration,
 	}
 }
 

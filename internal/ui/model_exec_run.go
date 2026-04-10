@@ -8,7 +8,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -18,17 +20,9 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
-	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
 	"github.com/unkn0wn-root/resterm/internal/vars"
-)
-
-type execMode uint8
-
-const (
-	execModeSend execMode = iota
-	execModeExplain
 )
 
 type execContext struct {
@@ -40,7 +34,6 @@ type execContext struct {
 	options        httpclient.Options
 	extraVals      map[string]rts.Value
 	extras         []map[string]string
-	preview        bool
 	runtimeSecrets []string
 
 	// Execution services and lifetime control.
@@ -78,7 +71,6 @@ func newExecContext(
 	req *restfile.Request,
 	options httpclient.Options,
 	envName string,
-	preview bool,
 	extraVals map[string]rts.Value,
 	extras []map[string]string,
 ) *execContext {
@@ -97,7 +89,7 @@ func newExecContext(
 	applyExtraVariables(baseVars, extras)
 
 	hasRTSPre, hasJSPre := detectPreRequestScripts(req)
-	explain := newExplainBuilder(m, req, envName, preview)
+	explain := newExplainBuilder(m, req, envName, false)
 	if req != nil &&
 		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTSPre || hasJSPre) {
 		explain.warn(
@@ -116,7 +108,6 @@ func newExecContext(
 		envName:      envName,
 		extraVals:    extraVals,
 		extras:       extras,
-		preview:      preview,
 		client:       client,
 		runner:       runner,
 		sendCtx:      sendCtx,
@@ -170,15 +161,39 @@ func (m *Model) executeRequest(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
-	return m.executeWithMode(
-		doc,
-		req,
-		options,
-		envOverride,
-		extraVals,
-		execModeSend,
-		extras...,
-	)
+	options, envName, cmd := m.requestSetup(req, options, envOverride, false)
+	if cmd != nil {
+		return cmd
+	}
+	if req != nil && req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
+		exec := newExecContext(m, doc, req, options, envName, extraVals, extras)
+		return exec.cmdInteractive()
+	}
+
+	rq := m.requestSvc(options)
+	if rq == nil {
+		return nil
+	}
+	x := mergeRunExtras(extras...)
+	return m.runMsg(func(ctx context.Context) tea.Msg {
+		res, err := rq.ExecuteWith(doc, req, envName, rqeng.ExecOptions{
+			Extra:      x,
+			Values:     copyRunValues(extraVals),
+			Record:     false,
+			Ctx:        ctx,
+			AttachSSE:  m.attachSSEHandle,
+			AttachWS:   m.attachWebSocketHandle,
+			AttachGRPC: m.attachGRPCSession,
+		})
+		if err != nil {
+			return responseMsg{
+				err:         err,
+				executed:    cloneRequest(req),
+				environment: envName,
+			}
+		}
+		return m.responseMsgFromRunState(res, false)
+	})
 }
 
 func (m *Model) executeExplain(
@@ -189,32 +204,45 @@ func (m *Model) executeExplain(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
-	return m.executeWithMode(
-		doc,
-		req,
-		options,
-		envOverride,
-		extraVals,
-		execModeExplain,
-		extras...,
-	)
+	options, envName, cmd := m.requestSetup(req, options, envOverride, true)
+	if cmd != nil {
+		return cmd
+	}
+	rq := m.requestSvc(options)
+	if rq == nil {
+		return nil
+	}
+	x := mergeRunExtras(extras...)
+	return m.runMsg(func(ctx context.Context) tea.Msg {
+		res, err := rq.ExecuteWith(doc, req, envName, rqeng.ExecOptions{
+			Extra:  x,
+			Values: copyRunValues(extraVals),
+			Record: false,
+			Ctx:    ctx,
+			Mode:   rqeng.ExecModePreview,
+		})
+		if err != nil {
+			return responseMsg{
+				err:         err,
+				executed:    cloneRequest(req),
+				environment: envName,
+			}
+		}
+		return m.responseMsgFromRunState(res, false)
+	})
 }
 
-func (m *Model) executeWithMode(
-	doc *restfile.Document,
+func (m *Model) requestSetup(
 	req *restfile.Request,
 	options httpclient.Options,
 	envOverride string,
-	extraVals map[string]rts.Value,
-	mode execMode,
-	extras ...map[string]string,
-) tea.Cmd {
+	preview bool,
+) (httpclient.Options, string, tea.Cmd) {
 	options = m.resolveHTTPOptions(options)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
-	preview := mode == execModeExplain
 	if req == nil {
 		err := errdef.New(errdef.CodeUI, "request is nil")
-		return func() tea.Msg {
+		return options, envName, func() tea.Msg {
 			return responseMsg{
 				err:         err,
 				environment: envName,
@@ -233,7 +261,7 @@ func (m *Model) executeWithMode(
 			err.Error(),
 		)
 		rep := explain.finish(xplain.StatusError, "Route resolution failed", err)
-		return func() tea.Msg {
+		return options, envName, func() tea.Msg {
 			return responseMsg{
 				err:         err,
 				executed:    req,
@@ -249,43 +277,23 @@ func (m *Model) executeWithMode(
 			options.TraceBudget = &budget
 		}
 	}
-	exec := newExecContext(m, doc, req, options, envName, preview, extraVals, extras)
-	return exec.cmd()
+	return options, envName, nil
 }
 
-func (e *execContext) cmd() tea.Cmd {
+func (e *execContext) cmdInteractive() tea.Cmd {
 	return func() tea.Msg {
-		return e.run()
+		return e.runInteractive()
 	}
 }
 
-func (e *execContext) run() tea.Msg {
-	if msg := e.pendingCancel(); msg != nil {
-		return *msg
-	}
+func (e *execContext) runInteractive() tea.Msg {
+	return responseMsgFromExecResult(xexec.RunRequest(interactiveExecFlow{ctx: e}))
+}
 
-	defer func() {
-		if e.sendCancel != nil {
-			e.sendCancel()
-		}
-	}()
-
-	if msg := e.evaluateCondition(); msg != nil {
-		return *msg
+func (e *execContext) finish() {
+	if e.sendCancel != nil {
+		e.sendCancel()
 	}
-	if msg := e.runPreRequestScripts(); msg != nil {
-		return *msg
-	}
-	if msg := e.prepareRequest(); msg != nil {
-		return *msg
-	}
-	if e.preview {
-		return e.previewResponse()
-	}
-	if e.useGRPC {
-		return e.executeGRPC()
-	}
-	return e.executeHTTP()
 }
 
 func (e *execContext) baseResponse() responseMsg {
@@ -348,12 +356,8 @@ func (e *execContext) applyRuntimeGlobals(changes map[string]scripts.GlobalValue
 	if len(changes) == 0 {
 		return
 	}
-	if e.preview {
-		e.storeGlobals = mergeGlobalValues(e.storeGlobals, changes)
-	} else {
-		e.model.applyGlobalMutations(changes, e.envName)
-		e.storeGlobals = e.model.collectStoredGlobalValues(e.envName)
-	}
+	e.model.applyGlobalMutations(changes, e.envName)
+	e.storeGlobals = e.model.collectStoredGlobalValues(e.envName)
 	e.explain.globals = e.currentGlobalValues()
 }
 
@@ -565,28 +569,15 @@ func (e *execContext) buildResolver() {
 		}
 	}
 
-	if e.preview {
-		e.resolver = e.model.buildResolverWithGlobals(
-			e.sendCtx,
-			e.doc,
-			e.req,
-			e.envName,
-			e.options.BaseDir,
-			e.extraVals,
-			e.storeGlobals,
-			resolverExtras...,
-		)
-	} else {
-		e.resolver = e.model.buildResolver(
-			e.sendCtx,
-			e.doc,
-			e.req,
-			e.envName,
-			e.options.BaseDir,
-			e.extraVals,
-			resolverExtras...,
-		)
-	}
+	e.resolver = e.model.buildResolver(
+		e.sendCtx,
+		e.doc,
+		e.req,
+		e.envName,
+		e.options.BaseDir,
+		e.extraVals,
+		resolverExtras...,
+	)
 
 	e.trace = vars.NewTrace()
 	e.resolver.SetTrace(e.trace)
@@ -715,32 +706,6 @@ func (e *execContext) prepareAuthentication() *responseMsg {
 	e.explain.addSecrets(explainAuthSecretValues(e.req.Metadata.Auth, e.resolver)...)
 
 	authBefore := cloneRequest(e.req)
-	if e.preview {
-		authPreview, err := e.model.prepareExplainAuthPreview(e.req, e.resolver, e.envName)
-		if err != nil {
-			e.explain.stage(
-				explainStageAuth,
-				xplain.StageError,
-				explainSummaryAuthInjectionFailed,
-				authBefore,
-				e.req,
-				err.Error(),
-			)
-
-			msg := e.errorResponse(err, "Auth preparation failed")
-			return &msg
-		}
-		e.explain.addSecrets(authPreview.extraSecrets...)
-		e.explain.stage(
-			explainStageAuth,
-			authPreview.status,
-			authPreview.summary,
-			authBefore,
-			e.req,
-			authPreview.notes...,
-		)
-		return nil
-	}
 
 	var extraSecrets []string
 	switch strings.ToLower(strings.TrimSpace(e.req.Metadata.Auth.Type)) {
@@ -865,293 +830,174 @@ func (e *execContext) prepareRequest() *responseMsg {
 	return nil
 }
 
-func (e *execContext) previewResponse() tea.Msg {
-	e.explain.setPrepared(e.req)
-	if e.req.GRPC == nil {
-		if err := e.model.prepareExplainHTTPPreview(
-			e.sendCtx,
-			e.explain.report,
-			e.req,
-			e.resolver,
-			e.options,
-		); err != nil {
-			e.explain.stage(
-				explainStageHTTPPrepare,
-				xplain.StageError,
-				explainSummaryHTTPRequestBuildFailed,
-				nil,
-				nil,
-				err.Error(),
-			)
-
-			msg := e.errorResponse(err, "HTTP preparation failed")
-			return msg
-		}
-	}
-
-	msg := e.baseResponse()
-	msg.requestText = e.requestText()
-	msg.preview = true
-	msg.explain = e.explain.finish(
-		xplain.StatusReady,
-		"Explain preview ready. No request was sent.",
-		nil,
-	)
-	return msg
-}
-
-func (e *execContext) executeGRPC() tea.Msg {
-	grpcClient := e.model.grpcClient
-	if grpcClient == nil {
-		err := errdef.New(errdef.CodeHTTP, "gRPC client is not initialised")
-		e.explain.setPrepared(e.req)
-
-		msg := e.errorResponse(err, "gRPC request failed")
-		msg.requestText = e.requestText()
-		return msg
-	}
-
-	ctx, cancel := context.WithTimeout(e.sendCtx, e.effectiveTimeout)
-	defer cancel()
-
-	if e.grpcOpts.DialTimeout == 0 {
-		e.grpcOpts.DialTimeout = e.effectiveTimeout
-	}
-	e.grpcOpts.SSH = e.sshPlan
-	e.grpcOpts.K8s = e.k8sPlan
-
-	hook := func(session *stream.Session) {
-		e.model.attachGRPCSession(session, e.req)
-	}
-	grpcResp, grpcErr := grpcClient.Execute(ctx, e.req, e.req.GRPC, e.grpcOpts, hook)
-	if grpcErr != nil {
-		e.explain.setPrepared(e.req)
-
-		msg := e.errorResponse(grpcErr, "gRPC request failed")
-		msg.grpc = grpcResp
-		msg.requestText = e.requestText()
-		return msg
-	}
-
-	respForScripts := grpcScriptResponse(e.req, grpcResp)
-	var captures captureResult
-	if err := e.model.applyCaptures(captureRun{
-		doc:  e.doc,
-		req:  e.req,
-		res:  e.resolver,
-		resp: respForScripts,
-		out:  &captures,
-		env:  e.envName,
-		v:    e.captureVariables(),
-		x:    e.extraVals,
-	}); err != nil {
-		e.explain.stage(
-			explainStageCaptures,
-			xplain.StageError,
-			explainSummaryCaptureEvaluationFailed,
-			nil,
-			nil,
-			err.Error(),
-		)
-		e.explain.setPrepared(e.req)
-
-		msg := e.errorResponse(err, "Capture evaluation failed")
-		return msg
-	}
-
-	updatedVars := e.model.collectVariables(e.doc, e.req, e.envName)
-	testVars := mergeVariableMaps(updatedVars, e.scriptVars)
-	testGlobals := e.model.collectGlobalValues(e.doc, e.envName)
-	asserts, assertErr := e.model.runAsserts(
-		ctx,
-		e.doc,
-		e.req,
-		e.envName,
-		e.options.BaseDir,
-		testVars,
-		e.extraVals,
-		rtsGRPC(grpcResp),
-		nil,
-		nil,
-	)
-	tests, globalChanges, testErr := e.runner.RunTests(
-		e.req.Metadata.Scripts,
-		scripts.TestInput{
-			Response:  respForScripts,
-			Variables: testVars,
-			Globals:   testGlobals,
-			BaseDir:   e.options.BaseDir,
-		},
-	)
-	e.applyRuntimeGlobals(globalChanges)
-	e.explain.setPrepared(e.req)
-	e.explain.setGRPC(e.req)
-
-	msg := e.baseResponse()
-	msg.grpc = grpcResp
-	msg.tests = append(asserts, tests...)
-	msg.scriptErr = mergeErr(assertErr, testErr)
-	msg.requestText = e.requestText()
-	msg.explain = e.explain.finish(xplain.StatusReady, "gRPC request sent", nil)
-	return msg
-}
-
-func (e *execContext) executeHTTP() tea.Msg {
-	var (
-		ctx          context.Context
-		cancel       context.CancelFunc
-		cancelActive = true
-	)
-
-	if e.req.WebSocket != nil && len(e.req.WebSocket.Steps) == 0 {
-		ctx, cancel = context.WithCancel(e.sendCtx)
-	} else {
-		ctx, cancel = context.WithTimeout(e.sendCtx, e.effectiveTimeout)
-	}
+func (e *execContext) executeInteractiveWebSocket() responseMsg {
+	ctx, cancel := context.WithCancel(e.sendCtx)
+	cancelActive := true
 	defer func() {
 		if cancelActive {
 			cancel()
 		}
 	}()
 
-	var (
-		response *httpclient.Response
-		err      error
-	)
+	handle, fallback, startErr := e.client.StartWebSocket(ctx, e.req, e.resolver, e.options)
+	if startErr != nil {
+		msg := e.errorResponse(startErr, "WebSocket request failed")
+		msg.requestText = e.requestText()
+		return msg
+	}
+	if fallback != nil {
+		return e.successHTTPResponse(fallback, "HTTP request sent")
+	}
 
-	switch {
-	case e.req.WebSocket != nil:
-		handle, fallback, startErr := e.client.StartWebSocket(ctx, e.req, e.resolver, e.options)
-		if startErr != nil {
-			msg := e.errorResponse(startErr, "WebSocket request failed")
-			return msg
-		}
-		if fallback != nil {
-			response = fallback
-		} else {
-			e.model.attachWebSocketHandle(handle, e.req)
-			if len(e.req.WebSocket.Steps) == 0 {
-				if handle != nil && handle.Session != nil {
-					sessionDone := handle.Session.Done()
-					releaseSend := e.sendCancel
-					go func() {
-						<-sessionDone
-						cancel()
-						if releaseSend != nil {
-							releaseSend()
-						}
-					}()
-					// Interactive websocket sessions must outlive the initial request
-					// command so the Stream tab and console stay attached.
-					e.sendCancel = nil
-					cancelActive = false
-				}
-				response = streamingPlaceholderResponse(handle.Meta)
-			} else {
-				response, err = e.client.CompleteWebSocket(ctx, handle, e.req, e.options)
+	e.model.attachWebSocketHandle(handle, e.req)
+	if handle != nil && handle.Session != nil {
+		sessionDone := handle.Session.Done()
+		releaseSend := e.sendCancel
+		go func() {
+			<-sessionDone
+			cancel()
+			if releaseSend != nil {
+				releaseSend()
 			}
-		}
-	case e.req.SSE != nil:
-		handle, fallback, startErr := e.client.StartSSE(ctx, e.req, e.resolver, e.options)
-		if startErr != nil {
-			msg := e.errorResponse(startErr, "SSE request failed")
-			return msg
-		}
-		if fallback != nil {
-			response = fallback
-		} else {
-			e.model.attachSSEHandle(handle, e.req)
-			response, err = httpclient.CompleteSSE(handle)
-		}
-	default:
-		response, err = e.client.Execute(ctx, e.req, e.resolver, e.options)
+		}()
+		// Interactive websocket sessions must outlive the initial request
+		// command so the Stream tab and console stay attached.
+		e.sendCancel = nil
+		cancelActive = false
 	}
 
-	if response != nil {
-		e.explain.sentHTTP(e.req, response)
+	return e.successHTTPResponse(streamingPlaceholderResponse(handle.Meta), "HTTP request sent")
+}
+
+func (e *execContext) successHTTPResponse(
+	resp *httpclient.Response,
+	decision string,
+) responseMsg {
+	if resp != nil {
+		e.explain.sentHTTP(e.req, resp)
+		e.explain.setHTTP(resp)
 	}
-	if err != nil {
-		e.explain.setPrepared(e.req)
-		if response != nil {
-			e.explain.setHTTP(response)
-		}
-
-		msg := e.errorResponse(err, "HTTP request failed")
-		msg.response = response
-		return msg
-	}
-
-	streamInfo, streamErr := streamInfoFromResponse(e.req, response)
-	if streamErr != nil {
-		e.explain.setPrepared(e.req)
-		e.explain.setHTTP(response)
-
-		msg := e.errorResponse(streamErr, "Stream decoding failed")
-		msg.err = errdef.Wrap(errdef.CodeHTTP, streamErr, "decode stream transcript")
-		return msg
-	}
-
-	respForScripts := httpScriptResponse(response)
-	var captures captureResult
-	if err := e.model.applyCaptures(captureRun{
-		doc:    e.doc,
-		req:    e.req,
-		res:    e.resolver,
-		resp:   respForScripts,
-		stream: streamInfo,
-		out:    &captures,
-		env:    e.envName,
-		v:      e.captureVariables(),
-		x:      e.extraVals,
-	}); err != nil {
-		e.explain.stage(
-			explainStageCaptures,
-			xplain.StageError,
-			explainSummaryCaptureEvaluationFailed,
-			nil,
-			nil,
-			err.Error(),
-		)
-		e.explain.setPrepared(e.req)
-		e.explain.setHTTP(response)
-
-		msg := e.errorResponse(err, "Capture evaluation failed")
-		return msg
-	}
-
-	updatedVars := e.model.collectVariables(e.doc, e.req, e.envName)
-	testVars := mergeVariableMaps(updatedVars, e.scriptVars)
-	testGlobals := e.model.collectGlobalValues(e.doc, e.envName)
-	asserts, assertErr := e.model.runAsserts(
-		ctx,
-		e.doc,
-		e.req,
-		e.envName,
-		e.options.BaseDir,
-		testVars,
-		e.extraVals,
-		rtsHTTP(response),
-		rtsTrace(response),
-		rtsStream(streamInfo),
-	)
-	traceInput := scripts.NewTraceInput(response.Timeline, e.req.Metadata.Trace)
-	tests, globalChanges, testErr := e.runner.RunTests(e.req.Metadata.Scripts, scripts.TestInput{
-		Response:  respForScripts,
-		Variables: testVars,
-		Globals:   testGlobals,
-		BaseDir:   e.options.BaseDir,
-		Stream:    streamInfo,
-		Trace:     traceInput,
-	})
-	e.applyRuntimeGlobals(globalChanges)
 	e.explain.setPrepared(e.req)
-	e.explain.setHTTP(response)
 
 	msg := e.baseResponse()
-	msg.response = response
-	msg.tests = append(asserts, tests...)
-	msg.scriptErr = mergeErr(assertErr, testErr)
+	msg.response = resp
 	msg.requestText = e.requestText()
-	msg.explain = e.explain.finish(xplain.StatusReady, "HTTP request sent", nil)
+	msg.explain = e.explain.finish(xplain.StatusReady, strings.TrimSpace(decision), nil)
 	return msg
+}
+
+type interactiveExecFlow struct {
+	ctx *execContext
+}
+
+func (f interactiveExecFlow) PendingCancel() *xexec.RequestResult {
+	if f.ctx == nil {
+		return nil
+	}
+	return execResultFromResponseMsgPtr(f.ctx.pendingCancel())
+}
+
+func (f interactiveExecFlow) Finish() {
+	if f.ctx != nil {
+		f.ctx.finish()
+	}
+}
+
+func (f interactiveExecFlow) EvaluateCondition() *xexec.RequestResult {
+	if f.ctx == nil {
+		return nil
+	}
+	return execResultFromResponseMsgPtr(f.ctx.evaluateCondition())
+}
+
+func (f interactiveExecFlow) RunPreRequest() *xexec.RequestResult {
+	if f.ctx == nil {
+		return nil
+	}
+	return execResultFromResponseMsgPtr(f.ctx.runPreRequestScripts())
+}
+
+func (f interactiveExecFlow) PrepareRequest() *xexec.RequestResult {
+	if f.ctx == nil {
+		return nil
+	}
+	return execResultFromResponseMsgPtr(f.ctx.prepareRequest())
+}
+
+func (interactiveExecFlow) PreviewResult() xexec.RequestResult {
+	return xexec.RequestResult{}
+}
+
+func (f interactiveExecFlow) UseGRPC() bool {
+	return f.ctx != nil && f.ctx.req != nil && f.ctx.req.GRPC != nil
+}
+
+func (f interactiveExecFlow) IsInteractiveWebSocket() bool {
+	return f.ctx != nil &&
+		f.ctx.req != nil &&
+		f.ctx.req.WebSocket != nil &&
+		len(f.ctx.req.WebSocket.Steps) == 0
+}
+
+func (f interactiveExecFlow) ExecuteInteractiveWebSocket() xexec.RequestResult {
+	if f.ctx == nil {
+		return xexec.RequestResult{}
+	}
+	return execResultFromResponseMsg(f.ctx.executeInteractiveWebSocket())
+}
+
+func (interactiveExecFlow) ExecuteGRPC() xexec.RequestResult {
+	return xexec.RequestResult{}
+}
+
+func (interactiveExecFlow) ExecuteHTTP() xexec.RequestResult {
+	return xexec.RequestResult{}
+}
+
+func execResultFromResponseMsgPtr(msg *responseMsg) *xexec.RequestResult {
+	if msg == nil {
+		return nil
+	}
+	out := execResultFromResponseMsg(*msg)
+	return &out
+}
+
+func execResultFromResponseMsg(msg responseMsg) xexec.RequestResult {
+	return xexec.RequestResult{
+		Response:       msg.response,
+		GRPC:           msg.grpc,
+		Stream:         msg.stream,
+		Transcript:     append([]byte(nil), msg.transcript...),
+		Err:            msg.err,
+		Tests:          append([]scripts.TestResult(nil), msg.tests...),
+		ScriptErr:      msg.scriptErr,
+		Executed:       msg.executed,
+		RequestText:    msg.requestText,
+		RuntimeSecrets: append([]string(nil), msg.runtimeSecrets...),
+		Environment:    msg.environment,
+		Skipped:        msg.skipped,
+		SkipReason:     msg.skipReason,
+		Preview:        msg.preview,
+		Explain:        msg.explain,
+	}
+}
+
+func responseMsgFromExecResult(res xexec.RequestResult) responseMsg {
+	return responseMsg{
+		response:       res.Response,
+		grpc:           res.GRPC,
+		stream:         res.Stream,
+		transcript:     append([]byte(nil), res.Transcript...),
+		err:            res.Err,
+		tests:          append([]scripts.TestResult(nil), res.Tests...),
+		scriptErr:      res.ScriptErr,
+		executed:       res.Executed,
+		requestText:    res.RequestText,
+		runtimeSecrets: append([]string(nil), res.RuntimeSecrets...),
+		environment:    res.Environment,
+		skipped:        res.Skipped,
+		skipReason:     res.SkipReason,
+		preview:        res.Preview,
+		explain:        res.Explain,
+	}
 }

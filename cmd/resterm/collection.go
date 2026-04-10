@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/collection"
 )
 
@@ -14,20 +15,14 @@ func handleCollectionSubcommand(args []string) (bool, error) {
 	if len(args) == 0 || args[0] != "collection" {
 		return false, nil
 	}
-	if len(args) == 1 && collectionTargetExists() {
-		return true, fmt.Errorf(
-			"collection: found file named \"collection\" in the current directory; use `resterm -- collection` or `resterm ./collection` to open it, or pass a subcommand like `resterm collection export --workspace . --out ./bundle`",
+	if len(args) == 1 && cli.HasFileConflict("collection") {
+		return true, cli.CommandFileConflict(
+			"resterm",
+			"collection",
+			"pass a subcommand like `resterm collection export --workspace . --out ./bundle`",
 		)
 	}
 	return true, runCollection(args[1:])
-}
-
-func collectionTargetExists() bool {
-	info, err := os.Stat("collection")
-	if err != nil {
-		return false
-	}
-	return !info.IsDir()
 }
 
 func runCollection(args []string) error {
@@ -55,7 +50,7 @@ func runCollection(args []string) error {
 }
 
 func runCollectionExport(args []string) error {
-	fs := newSubcommandFlagSet("collection export")
+	fs := cli.NewSubcommandFlagSet("resterm", "collection export", os.Stderr)
 	var workspace string
 	var out string
 	var name string
@@ -121,7 +116,7 @@ func runCollectionExport(args []string) error {
 }
 
 func runCollectionImport(args []string) error {
-	fs := newSubcommandFlagSet("collection import")
+	fs := cli.NewSubcommandFlagSet("resterm", "collection import", os.Stderr)
 	var in string
 	var workspace string
 	var force bool
@@ -190,7 +185,7 @@ func runCollectionImport(args []string) error {
 }
 
 func runCollectionPack(args []string) error {
-	fs := newSubcommandFlagSet("collection pack")
+	fs := cli.NewSubcommandFlagSet("resterm", "collection pack", os.Stderr)
 	var in string
 	var out string
 	var force bool
@@ -242,7 +237,7 @@ func runCollectionPack(args []string) error {
 }
 
 func runCollectionUnpack(args []string) error {
-	fs := newSubcommandFlagSet("collection unpack")
+	fs := cli.NewSubcommandFlagSet("resterm", "collection unpack", os.Stderr)
 	var in string
 	var out string
 	var force bool

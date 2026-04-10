@@ -46,6 +46,12 @@ type Token struct {
 	Raw          map[string]any
 }
 
+type SnapshotEntry struct {
+	Key    string `json:"key"`
+	Config Config `json:"config"`
+	Token  Token  `json:"token"`
+}
+
 type Manager struct {
 	client *httpclient.Client
 
@@ -149,6 +155,64 @@ func (m *Manager) CachedToken(env string, cfg Config) (Token, bool) {
 		return Token{}, false
 	}
 	return token, true
+}
+
+// CanHeadless reports whether cfg can complete without an interactive auth-code
+// browser hop: either a valid cached token exists, or a cached refresh token
+// can be used to renew the session.
+func (m *Manager) CanHeadless(env string, cfg Config) bool {
+	key := m.cacheKey(env, cfg)
+	entry := m.cacheEntry(key)
+	if entry == nil {
+		return false
+	}
+	return entry.token.valid() || strings.TrimSpace(entry.token.RefreshToken) != ""
+}
+
+func (m *Manager) Snapshot() []SnapshotEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.cache) == 0 {
+		return nil
+	}
+	out := make([]SnapshotEntry, 0, len(m.cache))
+	for key, entry := range m.cache {
+		if entry == nil {
+			continue
+		}
+		out = append(out, SnapshotEntry{
+			Key:    key,
+			Config: cloneConfig(entry.cfg),
+			Token:  cloneToken(entry.token),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+func (m *Manager) Restore(entries []SnapshotEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cache == nil {
+		m.cache = make(map[string]*cacheEntry)
+	}
+	for key := range m.cache {
+		delete(m.cache, key)
+	}
+	for _, entry := range entries {
+		key := strings.TrimSpace(entry.Key)
+		if key == "" {
+			continue
+		}
+		cfg := cloneConfig(entry.Config)
+		token := cloneToken(entry.Token)
+		if strings.TrimSpace(token.AccessToken) == "" {
+			continue
+		}
+		m.cache[key] = &cacheEntry{cfg: cfg, token: token}
+	}
 }
 
 func (m *Manager) obtainToken(
@@ -287,6 +351,28 @@ func mergeExtras(base, override map[string]string) map[string]string {
 		merged[k] = v
 	}
 	return merged
+}
+
+func cloneConfig(cfg Config) Config {
+	out := cfg
+	if len(cfg.Extra) > 0 {
+		out.Extra = make(map[string]string, len(cfg.Extra))
+		for key, value := range cfg.Extra {
+			out.Extra[key] = value
+		}
+	}
+	return out
+}
+
+func cloneToken(tok Token) Token {
+	out := tok
+	if len(tok.Raw) > 0 {
+		out.Raw = make(map[string]any, len(tok.Raw))
+		for key, value := range tok.Raw {
+			out.Raw[key] = value
+		}
+	}
+	return out
 }
 
 func (m *Manager) cacheKey(env string, cfg Config) string {

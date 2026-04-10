@@ -4,10 +4,10 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/initcmd"
 )
 
@@ -15,20 +15,14 @@ func handleInitSubcommand(args []string) (bool, error) {
 	if len(args) == 0 || args[0] != "init" {
 		return false, nil
 	}
-	if len(args) == 1 && initTargetExists() {
-		return true, fmt.Errorf(
-			"init: found file named \"init\" in the current directory; use `resterm -- init` or `resterm ./init` to open it, or pass a flag like `resterm init --dir .` to run init",
+	if len(args) == 1 && cli.HasFileConflict("init") {
+		return true, cli.CommandFileConflict(
+			"resterm",
+			"init",
+			"pass a flag like `resterm init --dir .` to run init",
 		)
 	}
 	return true, runInit(args[1:])
-}
-
-func initTargetExists() bool {
-	info, err := os.Stat("init")
-	if err != nil {
-		return false
-	}
-	return !info.IsDir()
 }
 
 func runInit(args []string) error {
@@ -54,8 +48,7 @@ type initCmd struct {
 
 func newInitCmd() *initCmd {
 	c := &initCmd{}
-	fs := flag.NewFlagSet("init", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs := cli.NewFlagSet("init")
 	c.fs = fs
 	c.bind()
 	fs.Usage = c.usage

@@ -20,54 +20,54 @@ import (
 const explainClip = 512
 
 const (
-	explainStageApply            = "@apply"
-	explainStageCondition        = "condition"
-	explainStageRoute            = "route"
-	explainStageSettings         = "settings"
-	explainStageAuth             = "auth"
-	explainStageRTSPreRequest    = "rts pre-request"
-	explainStageJSPreRequest     = "js pre-request"
-	explainStageGRPCPrepare      = "grpc prepare"
-	explainStageHTTPPrepare      = "http prepare"
-	explainStageWebSocketPrepare = "websocket prepare"
-	explainStageCaptures         = "captures"
+	explainStageApply            = xplain.StageApply
+	explainStageCondition        = xplain.StageCondition
+	explainStageRoute            = xplain.StageRoute
+	explainStageSettings         = xplain.StageSettings
+	explainStageAuth             = xplain.StageAuth
+	explainStageRTSPreRequest    = xplain.StageRTSPreRequest
+	explainStageJSPreRequest     = xplain.StageJSPreRequest
+	explainStageGRPCPrepare      = xplain.StageGRPCPrepare
+	explainStageHTTPPrepare      = xplain.StageHTTPPrepare
+	explainStageWebSocketPrepare = xplain.StageWebSocketPrepare
+	explainStageCaptures         = xplain.StageCaptures
 )
 
 const (
-	explainRouteKindDirect = "direct"
-	explainRouteKindSSH    = "ssh"
-	explainRouteKindK8s    = "k8s"
+	explainRouteKindDirect = xplain.RouteKindDirect
+	explainRouteKindSSH    = xplain.RouteKindSSH
+	explainRouteKindK8s    = xplain.RouteKindK8s
 )
 
 const (
-	explainSummaryApplyComplete               = "apply complete"
-	explainSummaryApplyFailed                 = "apply failed"
-	explainSummaryConditionPassed             = "condition passed"
-	explainSummaryConditionBlockedRequest     = "condition blocked request"
-	explainSummaryConditionEvaluationFailed   = "condition evaluation failed"
-	explainSummaryRouteSSHResolutionFailed    = "ssh resolution failed"
-	explainSummaryRouteK8sResolutionFailed    = "k8s resolution failed"
-	explainSummaryRouteConfigInvalid          = "route configuration invalid"
-	explainSummarySettingsMerged              = "effective settings merged"
-	explainSummarySettingsApplyFailed         = "settings application failed"
-	explainSummaryAuthPrepared                = "auth prepared"
-	explainSummaryAuthInjectionFailed         = "auth injection failed"
-	explainSummaryOAuthTokenFetchSkipped      = "oauth token fetch skipped"
-	explainSummaryCommandAuthExecutionSkipped = "command auth execution skipped"
-	explainSummaryAuthTypeNotApplied          = "auth type not applied"
-	explainSummaryRTSPreRequestComplete       = "RTS pre-request complete"
-	explainSummaryRTSPreRequestFailed         = "RTS pre-request failed"
-	explainSummaryRTSPreRequestOutputBad      = "RTS pre-request output invalid"
-	explainSummaryJSPreRequestComplete        = "JS pre-request complete"
-	explainSummaryJSPreRequestFailed          = "JS pre-request failed"
-	explainSummaryJSPreRequestOutputBad       = "JS pre-request output invalid"
-	explainSummaryGRPCRequestPrepared         = "gRPC request prepared"
-	explainSummaryGRPCPrepareFailed           = "gRPC preparation failed"
-	explainSummaryHTTPRequestPrepared         = "HTTP request prepared"
-	explainSummaryHTTPRequestBuildFailed      = "HTTP request build failed"
-	explainSummaryWebSocketRequestPrepared    = "WebSocket request prepared"
-	explainSummaryWebSocketPrepareFailed      = "WebSocket preparation failed"
-	explainSummaryCaptureEvaluationFailed     = "capture evaluation failed"
+	explainSummaryApplyComplete               = xplain.SummaryApplyComplete
+	explainSummaryApplyFailed                 = xplain.SummaryApplyFailed
+	explainSummaryConditionPassed             = xplain.SummaryConditionPassed
+	explainSummaryConditionBlockedRequest     = xplain.SummaryConditionBlockedRequest
+	explainSummaryConditionEvaluationFailed   = xplain.SummaryConditionEvaluationFailed
+	explainSummaryRouteSSHResolutionFailed    = xplain.SummaryRouteSSHResolutionFailed
+	explainSummaryRouteK8sResolutionFailed    = xplain.SummaryRouteK8sResolutionFailed
+	explainSummaryRouteConfigInvalid          = xplain.SummaryRouteConfigInvalid
+	explainSummarySettingsMerged              = xplain.SummarySettingsMerged
+	explainSummarySettingsApplyFailed         = xplain.SummarySettingsApplyFailed
+	explainSummaryAuthPrepared                = xplain.SummaryAuthPrepared
+	explainSummaryAuthInjectionFailed         = xplain.SummaryAuthInjectionFailed
+	explainSummaryOAuthTokenFetchSkipped      = xplain.SummaryOAuthTokenFetchSkipped
+	explainSummaryCommandAuthExecutionSkipped = xplain.SummaryCommandAuthExecutionSkipped
+	explainSummaryAuthTypeNotApplied          = xplain.SummaryAuthTypeNotApplied
+	explainSummaryRTSPreRequestComplete       = xplain.SummaryRTSPreRequestComplete
+	explainSummaryRTSPreRequestFailed         = xplain.SummaryRTSPreRequestFailed
+	explainSummaryRTSPreRequestOutputBad      = xplain.SummaryRTSPreRequestOutputBad
+	explainSummaryJSPreRequestComplete        = xplain.SummaryJSPreRequestComplete
+	explainSummaryJSPreRequestFailed          = xplain.SummaryJSPreRequestFailed
+	explainSummaryJSPreRequestOutputBad       = xplain.SummaryJSPreRequestOutputBad
+	explainSummaryGRPCRequestPrepared         = xplain.SummaryGRPCRequestPrepared
+	explainSummaryGRPCPrepareFailed           = xplain.SummaryGRPCPrepareFailed
+	explainSummaryHTTPRequestPrepared         = xplain.SummaryHTTPRequestPrepared
+	explainSummaryHTTPRequestBuildFailed      = xplain.SummaryHTTPRequestBuildFailed
+	explainSummaryWebSocketRequestPrepared    = xplain.SummaryWebSocketRequestPrepared
+	explainSummaryWebSocketPrepareFailed      = xplain.SummaryWebSocketPrepareFailed
+	explainSummaryCaptureEvaluationFailed     = xplain.SummaryCaptureEvaluationFailed
 )
 
 func explainKey(s string) string {

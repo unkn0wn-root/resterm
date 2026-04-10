@@ -90,8 +90,8 @@ func (m *Model) buildResolverWithGlobals(
 		if values := globalValueMap(globals); len(values) > 0 {
 			providers = append(providers, vars.NewMapProvider("global", values))
 		}
-	} else if m.globals != nil {
-		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
+	} else if gs := m.globalsStore(); gs != nil {
+		if snapshot := gs.Snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {
 				name := entry.Name
@@ -177,8 +177,8 @@ func (m *Model) buildDisplayResolver(
 		}
 	}
 
-	if m.globals != nil {
-		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
+	if gs := m.globalsStore(); gs != nil {
+		if snapshot := gs.Snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {
 				if entry.Secret {
@@ -293,21 +293,11 @@ func (m *Model) documentRuntimePath(doc *restfile.Document) string {
 }
 
 func (m *Model) ensureSSHManager() *ssh.Manager {
-	if m.sshMgr != nil {
-		return m.sshMgr
-	}
-	// Defensive for zero-value models used in tests and non-UI helpers.
-	m.sshMgr = ssh.NewManager()
-	return m.sshMgr
+	return m.sshManager()
 }
 
 func (m *Model) ensureK8sManager() *k8s.Manager {
-	if m.k8sMgr != nil {
-		return m.k8sMgr
-	}
-	// Defensive for zero-value models used in tests and non-UI helpers.
-	m.k8sMgr = k8s.NewManager()
-	return m.k8sMgr
+	return m.k8sManager()
 }
 
 func (m *Model) syncSSHGlobals(doc *restfile.Document) {
@@ -382,12 +372,13 @@ func (m *Model) mergeFileRuntimeVars(
 	doc *restfile.Document,
 	envName string,
 ) {
-	if target == nil || m.fileVars == nil {
+	fs := m.fileStore()
+	if target == nil || fs == nil {
 		return
 	}
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	path := m.documentRuntimePath(doc)
-	if snapshot := m.fileVars.snapshot(resolvedEnv, path); len(snapshot) > 0 {
+	if snapshot := fs.Snapshot(resolvedEnv, path); len(snapshot) > 0 {
 		for key, entry := range snapshot {
 			name := strings.TrimSpace(entry.Name)
 			if name == "" {
@@ -405,12 +396,13 @@ func (m *Model) mergeFileRuntimeVarsSafe(
 	doc *restfile.Document,
 	envName string,
 ) {
-	if target == nil || m.fileVars == nil {
+	fs := m.fileStore()
+	if target == nil || fs == nil {
 		return
 	}
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	path := m.documentRuntimePath(doc)
-	if snapshot := m.fileVars.snapshot(resolvedEnv, path); len(snapshot) > 0 {
+	if snapshot := fs.Snapshot(resolvedEnv, path); len(snapshot) > 0 {
 		for key, entry := range snapshot {
 			if entry.Secret {
 				continue
@@ -500,8 +492,8 @@ func collectDocumentGlobalValues(doc *restfile.Document) map[string]scripts.Glob
 func (m *Model) collectStoredGlobalValues(envName string) map[string]scripts.GlobalValue {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	globals := make(map[string]scripts.GlobalValue)
-	if m.globals != nil {
-		if snapshot := m.globals.snapshot(resolvedEnv); len(snapshot) > 0 {
+	if gs := m.globalsStore(); gs != nil {
+		if snapshot := gs.Snapshot(resolvedEnv); len(snapshot) > 0 {
 			for key, entry := range snapshot {
 				name := strings.TrimSpace(entry.Name)
 				if name == "" {
@@ -597,7 +589,8 @@ func globalValueMap(globals map[string]scripts.GlobalValue) map[string]string {
 }
 
 func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue, envName string) {
-	if len(changes) == 0 || m.globals == nil {
+	gs := m.globalsStore()
+	if len(changes) == 0 || gs == nil {
 		return
 	}
 
@@ -608,10 +601,10 @@ func (m *Model) applyGlobalMutations(changes map[string]scripts.GlobalValue, env
 			continue
 		}
 		if change.Delete {
-			m.globals.delete(env, name)
+			gs.Delete(env, name)
 			continue
 		}
-		m.globals.set(env, name, change.Value, change.Secret)
+		gs.Set(env, name, change.Value, change.Secret)
 	}
 }
 
@@ -679,20 +672,22 @@ func (m *Model) buildGlobalSummary() string {
 }
 
 func (m *Model) globalsSnapshot() map[string]globalValue {
-	if m.globals == nil {
+	gs := m.globalsStore()
+	if gs == nil {
 		return nil
 	}
-	return m.globals.snapshot(m.cfg.EnvironmentName)
+	return gs.Snapshot(m.cfg.EnvironmentName)
 }
 
 func (m *Model) clearGlobalValues() tea.Cmd {
-	if m.globals == nil {
+	gs := m.globalsStore()
+	if gs == nil {
 		m.setStatusMessage(statusMsg{level: statusWarn, text: "No global store available"})
 		return nil
 	}
 
 	env := m.cfg.EnvironmentName
-	m.globals.clear(env)
+	gs.Clear(env)
 	label := env
 	if strings.TrimSpace(label) == "" {
 		label = "default"
