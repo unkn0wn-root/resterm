@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.26.2](https://github.com/unkn0wn-root/resterm/compare/v0.26.1...v0.26.2) (2026-04-10)
+
+
+### Features
+
+* add websocket mode bindings ([21c1553](https://github.com/unkn0wn-root/resterm/commit/21c1553cb818222cbc494bcb5f2746134cb485c2))
+
+
+### Bug Fixes
+
+* focus, keys chord stale and update help ([523d5e3](https://github.com/unkn0wn-root/resterm/commit/523d5e3bf417b9a89b240dce9caf3415d094f4bd))
+* websocket persistance conn ([32e58d1](https://github.com/unkn0wn-root/resterm/commit/32e58d169b0c0227c15762295a847ab39e067ec5))
+
 ### [0.26.1](https://github.com/unkn0wn-root/resterm/compare/v0.25.2...v0.26.1) (2026-04-08)
 
 
