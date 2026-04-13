@@ -1,6 +1,7 @@
 package headless
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -84,6 +85,49 @@ func TestWriteNilWriter(t *testing.T) {
 	}
 	if err := rep.WriteJUnit(nil); !errors.Is(err, ErrNilWriter) {
 		t.Fatalf("WriteJUnit(nil): got %v want %v", err, ErrNilWriter)
+	}
+}
+
+func TestReportWriteJSONUsesCanonicalStatusValues(t *testing.T) {
+	rep := &Report{
+		FilePath: "api.http",
+		Results: []Result{{
+			Name:     "wf",
+			Method:   "WORKFLOW",
+			Status:   StatusFail,
+			Canceled: true,
+			Steps: []Step{{
+				Name:     "step",
+				Status:   StatusFail,
+				Canceled: true,
+			}},
+		}},
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var got struct {
+		Results []struct {
+			Status   string `json:"status"`
+			Canceled bool   `json:"canceled"`
+			Steps    []struct {
+				Status   string `json:"status"`
+				Canceled bool   `json:"canceled"`
+			} `json:"steps"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if len(got.Results) != 1 || got.Results[0].Status != "fail" || !got.Results[0].Canceled {
+		t.Fatalf("unexpected result json: %+v", got.Results)
+	}
+	if len(got.Results[0].Steps) != 1 || got.Results[0].Steps[0].Status != "fail" ||
+		!got.Results[0].Steps[0].Canceled {
+		t.Fatalf("unexpected step json: %+v", got.Results[0].Steps)
 	}
 }
 

@@ -31,63 +31,24 @@ func reportTargetLabel(rep *Report) string {
 	return "request(s)"
 }
 
-func resultSkipped(item Result) bool {
-	return item.Status == StatusSkip
-}
-
-func resultFailed(item Result) bool {
-	if resultSkipped(item) {
-		return false
-	}
-	if item.Status == StatusFail || item.Canceled || item.Error != "" || item.ScriptError != "" ||
-		traceFailed(item.Trace) {
-		return true
-	}
-	return anyTestFailed(item.Tests)
-}
-
 func resultLabel(item Result) string {
 	switch {
-	case resultSkipped(item):
+	case item.Status == StatusSkip:
 		return "SKIP"
-	case resultFailed(item):
+	case item.Failed():
 		return "FAIL"
 	default:
 		return "PASS"
 	}
 }
 
-func stepSkipped(step Step) bool {
-	return step.Status == StatusSkip
-}
-
-func stepFailed(step Step) bool {
-	if stepSkipped(step) {
-		return false
-	}
-	if step.Canceled || step.Status == StatusFail || step.Error != "" || step.ScriptError != "" ||
-		traceFailed(step.Trace) {
-		return true
-	}
-	return anyTestFailed(step.Tests)
-}
-
-func anyTestFailed(tests []Test) bool {
-	for _, test := range tests {
-		if !test.Passed {
-			return true
-		}
-	}
-	return false
-}
-
 func stepLabel(step Step) string {
 	switch {
 	case step.Canceled:
 		return "CANCELED"
-	case stepSkipped(step):
+	case step.Status == StatusSkip:
 		return "SKIP"
-	case stepFailed(step):
+	case step.Failed():
 		return "FAIL"
 	default:
 		return "PASS"
@@ -166,7 +127,7 @@ func resultLine(item Result) string {
 	}
 	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
 	switch {
-	case resultSkipped(item):
+	case item.Status == StatusSkip:
 		if reason := item.SkipReason; reason != "" {
 			return fmt.Sprintf("%s [%s]", base, reason)
 		}
@@ -258,9 +219,9 @@ func profileLine(item Result) string {
 func stepCounts(steps []Step) (pass, fail, skip int) {
 	for _, step := range steps {
 		switch {
-		case stepSkipped(step):
+		case step.Status == StatusSkip:
 			skip++
-		case stepFailed(step):
+		case step.Failed():
 			fail++
 		default:
 			pass++
@@ -277,7 +238,7 @@ func stepLine(step Step) string {
 			return fmt.Sprintf("%s [%s]", base, msg)
 		}
 		return base
-	case stepSkipped(step):
+	case step.Status == StatusSkip:
 		if msg := step.SkipReason; msg != "" {
 			return fmt.Sprintf("%s [%s]", base, msg)
 		}
@@ -297,7 +258,7 @@ func stepLine(step Step) string {
 	if msg := traceFailureText(step.Trace); msg != "" {
 		return fmt.Sprintf("%s [%s]", base, msg)
 	}
-	if stepFailed(step) {
+	if step.Failed() {
 		if msg := step.Summary; msg != "" {
 			return fmt.Sprintf("%s [%s]", base, msg)
 		}
@@ -337,10 +298,6 @@ func failedTests(tests []Test) []Test {
 	return out
 }
 
-func traceFailed(info *Trace) bool {
-	return info != nil && len(info.Breaches) > 0
-}
-
 func traceFailureText(info *Trace) string {
 	if !traceFailed(info) {
 		return ""
@@ -373,13 +330,13 @@ func resultFailureMessage(item Result) string {
 	if failed := failedTests(item.Tests); len(failed) > 0 {
 		return testFailureMessage(failed)
 	}
-	if msg := traceFailureText(item.Trace); msg != "" && resultFailed(item) {
+	if msg := traceFailureText(item.Trace); msg != "" && item.Failed() {
 		return msg
 	}
-	if msg := item.Summary; msg != "" && resultFailed(item) {
+	if msg := item.Summary; msg != "" && item.Failed() {
 		return msg
 	}
-	if status := resultStatus(item); status != "" && resultFailed(item) {
+	if status := resultStatus(item); status != "" && item.Failed() {
 		return status
 	}
 	return ""
@@ -400,13 +357,13 @@ func stepFailureMessage(step Step) string {
 	if failed := failedTests(step.Tests); len(failed) > 0 {
 		return testFailureMessage(failed)
 	}
-	if msg := traceFailureText(step.Trace); msg != "" && stepFailed(step) {
+	if msg := traceFailureText(step.Trace); msg != "" && step.Failed() {
 		return msg
 	}
-	if msg := step.Summary; msg != "" && stepFailed(step) {
+	if msg := step.Summary; msg != "" && step.Failed() {
 		return msg
 	}
-	if status := stepStatus(step); status != "" && stepFailed(step) {
+	if status := stepStatus(step); status != "" && step.Failed() {
 		return status
 	}
 	return ""

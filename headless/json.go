@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"sort"
-	"strings"
 	"time"
 )
 
@@ -208,7 +207,7 @@ func (item Result) json() jsonResult {
 		Method:      requestMethodValue(item.Method),
 		Target:      item.Target,
 		Environment: item.Environment,
-		Status:      strings.ToLower(resultLabel(item)),
+		Status:      jsonStatus(item.Status, item.Failed()),
 		Summary:     item.Summary,
 		Canceled:    item.Canceled,
 		SkipReason:  item.SkipReason,
@@ -251,7 +250,7 @@ func (step Step) json() jsonStep {
 		Branch:      step.Branch,
 		Iteration:   step.Iteration,
 		Total:       step.Total,
-		Status:      strings.ToLower(stepLabel(step)),
+		Status:      jsonStatus(step.Status, step.Failed()),
 		Summary:     step.Summary,
 		Canceled:    step.Canceled,
 		SkipReason:  step.SkipReason,
@@ -275,6 +274,16 @@ func (step Step) json() jsonStep {
 		}
 	}
 	return out
+}
+
+func jsonStatus(status Status, failed bool) string {
+	if status.Valid() {
+		return string(status)
+	}
+	if failed {
+		return string(StatusFail)
+	}
+	return string(StatusPass)
 }
 
 func (h *HTTP) json() *jsonHTTP {

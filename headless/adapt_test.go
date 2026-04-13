@@ -253,6 +253,46 @@ func TestReportFromRunnerDetails(t *testing.T) {
 	}
 }
 
+func TestReportFromRunnerCanonicalizesStatus(t *testing.T) {
+	src := &runner.Report{
+		Results: []runner.Result{
+			{
+				Kind:   runner.ResultKindRequest,
+				Name:   "trace",
+				Method: "GET",
+				Passed: true,
+				Trace: &runner.TraceInfo{
+					Summary: &history.TraceSummary{
+						Breaches: []history.TraceBreach{{Kind: "total"}},
+					},
+				},
+			},
+			{
+				Kind:   runner.ResultKindWorkflow,
+				Name:   "wf",
+				Method: "WORKFLOW",
+				Passed: true,
+				Steps: []runner.StepResult{{
+					Name:     "step",
+					Passed:   true,
+					Canceled: true,
+				}},
+			},
+		},
+	}
+
+	got := reportFromRunner(src)
+	if got == nil || len(got.Results) != 2 {
+		t.Fatalf("unexpected report mapping: %+v", got)
+	}
+	if got.Results[0].Status != StatusFail {
+		t.Fatalf("expected trace breach to force fail status, got %+v", got.Results[0])
+	}
+	if got.Results[1].Steps[0].Status != StatusFail {
+		t.Fatalf("expected canceled step to keep fail status, got %+v", got.Results[1].Steps[0])
+	}
+}
+
 func TestReportFromRunnerClones(t *testing.T) {
 	src := &runner.Report{
 		Results: []runner.Result{{

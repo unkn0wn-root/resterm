@@ -113,11 +113,11 @@ func (item Result) junitCase() junitCase {
 		Time:      junitTime(item.Duration),
 		SystemOut: resultLine(item),
 	}
-	if resultSkipped(item) {
+	if item.Status == StatusSkip {
 		tc.Skipped = &junitSkipped{Message: skipMessage(item.SkipReason, item.Summary)}
 		return tc
 	}
-	if msg := resultFailureMessage(item); msg != "" && resultFailed(item) {
+	if msg := resultFailureMessage(item); msg != "" && item.Failed() {
 		tc.Failure = &junitFailure{Message: msg, Body: msg}
 	}
 	return tc
@@ -130,11 +130,11 @@ func (item Result) stepJUnitCase(step Step) junitCase {
 		Time:      junitTime(step.Duration),
 		SystemOut: stepLine(step),
 	}
-	if stepSkipped(step) {
+	if step.Status == StatusSkip {
 		tc.Skipped = &junitSkipped{Message: skipMessage(step.SkipReason, step.Summary)}
 		return tc
 	}
-	if msg := stepFailureMessage(step); msg != "" && (step.Canceled || stepFailed(step)) {
+	if msg := stepFailureMessage(step); msg != "" && (step.Canceled || step.Failed()) {
 		tc.Failure = &junitFailure{Message: msg, Body: msg}
 	}
 	return tc

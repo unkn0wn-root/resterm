@@ -208,7 +208,7 @@ func (item Result) json() jsonResult {
 		Method:      requestMethodValue(item.Method),
 		Target:      strings.TrimSpace(item.Target),
 		Environment: strings.TrimSpace(item.Environment),
-		Status:      strings.ToLower(resultLabel(item)),
+		Status:      jsonResultStatus(item),
 		Summary:     strings.TrimSpace(item.Summary),
 		Canceled:    item.Canceled,
 		SkipReason:  strings.TrimSpace(item.SkipReason),
@@ -275,7 +275,7 @@ func (step StepResult) json() jsonStep {
 		Branch:      strings.TrimSpace(step.Branch),
 		Iteration:   step.Iteration,
 		Total:       step.Total,
-		Status:      strings.ToLower(stepLabel(step)),
+		Status:      jsonStepStatus(step),
 		Summary:     strings.TrimSpace(step.Summary),
 		Canceled:    step.Canceled,
 		SkipReason:  strings.TrimSpace(step.SkipReason),
@@ -319,6 +319,26 @@ func (step StepResult) json() jsonStep {
 		}
 	}
 	return out
+}
+
+func jsonResultStatus(item Result) string {
+	if item.Skipped {
+		return "skip"
+	}
+	if resultFailed(item) {
+		return "fail"
+	}
+	return "pass"
+}
+
+func jsonStepStatus(step StepResult) string {
+	if step.Skipped {
+		return "skip"
+	}
+	if stepFailed(step) {
+		return "fail"
+	}
+	return "pass"
 }
 
 func jsonProfileInfo(prof *ProfileInfo) *jsonProfile {

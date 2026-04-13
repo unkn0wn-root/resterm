@@ -1,6 +1,7 @@
 package headless
 
 import (
+	"maps"
 	"strings"
 	"time"
 
@@ -41,7 +42,6 @@ func resultFromRunner(item runner.Result) Result {
 		Method:      strings.TrimSpace(item.Method),
 		Target:      strings.TrimSpace(item.Target),
 		Environment: strings.TrimSpace(item.Environment),
-		Status:      statusOf(item.Passed, item.Skipped),
 		Summary:     strings.TrimSpace(item.Summary),
 		Duration:    resultDur(item),
 		Canceled:    item.Canceled,
@@ -57,6 +57,32 @@ func resultFromRunner(item runner.Result) Result {
 		Profile:     profileFromRunner(item.Profile),
 		Steps:       stepsFromRunner(item.Steps),
 	}
+	out.Status = resultStatusOf(item)
+	return out
+}
+
+func stepFromRunner(step runner.StepResult) Step {
+	out := Step{
+		Name:        strings.TrimSpace(step.Name),
+		Method:      strings.TrimSpace(step.Method),
+		Target:      strings.TrimSpace(step.Target),
+		Environment: strings.TrimSpace(step.Environment),
+		Branch:      strings.TrimSpace(step.Branch),
+		Iteration:   step.Iteration,
+		Total:       step.Total,
+		Summary:     strings.TrimSpace(step.Summary),
+		Duration:    step.Duration,
+		Canceled:    step.Canceled,
+		SkipReason:  strings.TrimSpace(step.SkipReason),
+		Error:       errText(step.Err),
+		ScriptError: errText(step.ScriptErr),
+		HTTP:        httpFromRunner(step.Response),
+		GRPC:        grpcFromRunner(step.GRPC),
+		Stream:      streamFromRunner(step.Stream),
+		Trace:       traceFromRunner(step.Trace),
+		Tests:       testsFromRunner(step.Tests),
+	}
+	out.Status = stepStatusOf(step)
 	return out
 }
 
@@ -71,38 +97,44 @@ func stepsFromRunner(src []runner.StepResult) []Step {
 	return out
 }
 
-func stepFromRunner(step runner.StepResult) Step {
-	return Step{
-		Name:        strings.TrimSpace(step.Name),
-		Method:      strings.TrimSpace(step.Method),
-		Target:      strings.TrimSpace(step.Target),
-		Environment: strings.TrimSpace(step.Environment),
-		Branch:      strings.TrimSpace(step.Branch),
-		Iteration:   step.Iteration,
-		Total:       step.Total,
-		Status:      statusOf(step.Passed, step.Skipped),
-		Summary:     strings.TrimSpace(step.Summary),
-		Duration:    step.Duration,
-		Canceled:    step.Canceled,
-		SkipReason:  strings.TrimSpace(step.SkipReason),
-		Error:       errText(step.Err),
-		ScriptError: errText(step.ScriptErr),
-		HTTP:        httpFromRunner(step.Response),
-		GRPC:        grpcFromRunner(step.GRPC),
-		Stream:      streamFromRunner(step.Stream),
-		Trace:       traceFromRunner(step.Trace),
-		Tests:       testsFromRunner(step.Tests),
-	}
-}
-
-func statusOf(pass, skip bool) Status {
-	if skip {
+func resultStatusOf(item runner.Result) Status {
+	if item.Skipped {
 		return StatusSkip
 	}
-	if pass {
+	if item.Canceled || item.Err != nil || item.ScriptErr != nil || runnerTraceFailed(item.Trace) {
+		return StatusFail
+	}
+	for _, test := range item.Tests {
+		if !test.Passed {
+			return StatusFail
+		}
+	}
+	if item.Passed {
 		return StatusPass
 	}
 	return StatusFail
+}
+
+func stepStatusOf(step runner.StepResult) Status {
+	if step.Skipped {
+		return StatusSkip
+	}
+	if step.Canceled || step.Err != nil || step.ScriptErr != nil || runnerTraceFailed(step.Trace) {
+		return StatusFail
+	}
+	for _, test := range step.Tests {
+		if !test.Passed {
+			return StatusFail
+		}
+	}
+	if step.Passed {
+		return StatusPass
+	}
+	return StatusFail
+}
+
+func runnerTraceFailed(info *runner.TraceInfo) bool {
+	return info != nil && info.Summary != nil && len(info.Summary.Breaches) > 0
 }
 
 func errText(err error) string {
@@ -298,9 +330,7 @@ func cloneDurMap(src map[string]time.Duration) map[string]time.Duration {
 		return nil
 	}
 	out := make(map[string]time.Duration, len(src))
-	for key, value := range src {
-		out[key] = value
-	}
+	maps.Copy(out, src)
 	return out
 }
 

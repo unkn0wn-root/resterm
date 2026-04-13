@@ -74,6 +74,24 @@ func (s Status) Valid() bool {
 	}
 }
 
+// Failed reports whether the result represents a failure.
+func (r Result) Failed() bool {
+	if r.Status == StatusSkip {
+		return false
+	}
+	return r.Status == StatusFail || r.Canceled || r.Error != "" || r.ScriptError != "" ||
+		traceFailed(r.Trace) || anyTestFailed(r.Tests)
+}
+
+// Failed reports whether the step represents a failure.
+func (s Step) Failed() bool {
+	if s.Status == StatusSkip {
+		return false
+	}
+	return s.Status == StatusFail || s.Canceled || s.Error != "" || s.ScriptError != "" ||
+		traceFailed(s.Trace) || anyTestFailed(s.Tests)
+}
+
 type Report struct {
 	Version   string        `json:"version,omitempty"`
 	FilePath  string        `json:"filePath"`
@@ -86,6 +104,22 @@ type Report struct {
 	Passed    int           `json:"passed"`
 	Failed    int           `json:"failed"`
 	Skipped   int           `json:"skipped"`
+}
+
+// HasFailures reports whether the report contains any failed results.
+func (r *Report) HasFailures() bool {
+	if r == nil {
+		return false
+	}
+	if r.Failed > 0 {
+		return true
+	}
+	for _, item := range r.Results {
+		if item.Failed() {
+			return true
+		}
+	}
+	return false
 }
 
 type Result struct {
@@ -225,6 +259,19 @@ type TraceBreach struct {
 	Limit  time.Duration `json:"limit,omitempty"`
 	Actual time.Duration `json:"actual,omitempty"`
 	Over   time.Duration `json:"over,omitempty"`
+}
+
+func traceFailed(info *Trace) bool {
+	return info != nil && len(info.Breaches) > 0
+}
+
+func anyTestFailed(tests []Test) bool {
+	for _, test := range tests {
+		if !test.Passed {
+			return true
+		}
+	}
+	return false
 }
 
 // ErrUsage reports invalid input or options passed to the headless API.

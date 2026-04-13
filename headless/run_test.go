@@ -20,7 +20,9 @@ import (
 
 func TestRunRequestParity(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"ok":true}`)
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -61,9 +63,13 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/dev":
-			fmt.Fprint(w, `{"env":"dev"}`)
+			if _, err := fmt.Fprint(w, `{"env":"dev"}`); err != nil {
+				t.Fatalf("write response: %v", err)
+			}
 		case "/stage":
-			fmt.Fprint(w, `{"env":"stage"}`)
+			if _, err := fmt.Fprint(w, `{"env":"stage"}`); err != nil {
+				t.Fatalf("write response: %v", err)
+			}
 		default:
 			http.NotFound(w, r)
 		}
@@ -226,6 +232,28 @@ func TestRunnerOptRespectsExplicitBoolOptions(t *testing.T) {
 	}
 	if got.GRPCOptions.DefaultPlaintext {
 		t.Fatalf("expected plaintext=false, got %+v", got.GRPCOptions)
+	}
+}
+
+func TestRunUsesExplicitEmptyFileContent(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	if err := os.WriteFile(file, []byte("GET https://example.com/status\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	_, err := Run(context.Background(), Opt{
+		FilePath:    file,
+		FileContent: []byte{},
+	})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsUsageError(err) {
+		t.Fatalf("expected usage error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "no requests found") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -192,8 +193,8 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	}
 	start := time.Now()
 
-	data := append([]byte(nil), opts.FileContent...)
-	if len(data) == 0 {
+	data := bytes.Clone(opts.FileContent)
+	if data == nil {
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("read file: %w", err)

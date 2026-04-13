@@ -61,6 +61,9 @@ func TestZeroValues(t *testing.T) {
 	if rep.Results != nil {
 		t.Fatalf("expected nil zero-value results slice, got %+v", rep.Results)
 	}
+	if (&rep).HasFailures() {
+		t.Fatalf("expected zero-value report to have no failures: %+v", rep)
+	}
 
 	var item Result
 	if item.Status.Valid() {
@@ -195,6 +198,30 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 	if rep.Results[0].Profile == nil || rep.Results[0].Trace == nil ||
 		rep.Results[0].Stream == nil {
 		t.Fatalf("expected nested public values to be retained: %+v", rep.Results[0])
+	}
+}
+
+func TestReportHasFailures(t *testing.T) {
+	if (*Report)(nil).HasFailures() {
+		t.Fatal("expected nil report to have no failures")
+	}
+
+	if (&Report{Failed: 1}).HasFailures() == false {
+		t.Fatal("expected failed count to report failures")
+	}
+
+	rep := &Report{
+		Results: []Result{
+			{Status: StatusPass},
+			{Status: StatusFail},
+		},
+	}
+	if !rep.HasFailures() {
+		t.Fatalf("expected failed result to be detected: %+v", rep)
+	}
+
+	if (&Report{Results: []Result{{Status: StatusPass}}}).HasFailures() {
+		t.Fatal("expected passing results to report no failures")
 	}
 }
 

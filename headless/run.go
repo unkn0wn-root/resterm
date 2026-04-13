@@ -1,8 +1,10 @@
 package headless
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"time"
@@ -34,11 +36,11 @@ func Run(ctx context.Context, opt Opt) (*Report, error) {
 func runnerOpt(opt Opt) (runner.Options, error) {
 	path, err := absPath(opt.FilePath)
 	if err != nil {
-		return runner.Options{}, err
+		return runner.Options{}, ErrUsage{err: fmt.Errorf("resolve filePath: %w", err)}
 	}
 	work, err := workspacePath(path, opt.Workspace)
 	if err != nil {
-		return runner.Options{}, err
+		return runner.Options{}, ErrUsage{err: fmt.Errorf("resolve workspace: %w", err)}
 	}
 	envs, envFile, envName, err := envOpt(opt, path, work)
 	if err != nil {
@@ -55,7 +57,7 @@ func runnerOpt(opt Opt) (runner.Options, error) {
 	return runner.Options{
 		Version:         strings.TrimSpace(opt.Version),
 		FilePath:        path,
-		FileContent:     append([]byte(nil), opt.FileContent...),
+		FileContent:     bytes.Clone(opt.FileContent),
 		WorkspaceRoot:   work,
 		Recursive:       opt.Recursive,
 		ArtifactDir:     strings.TrimSpace(opt.ArtifactDir),
@@ -150,15 +152,7 @@ func envSet(src EnvSet) vars.EnvironmentSet {
 	}
 	out := make(vars.EnvironmentSet, len(src))
 	for env, vals := range src {
-		if vals == nil {
-			out[env] = nil
-			continue
-		}
-		cp := make(map[string]string, len(vals))
-		for key, val := range vals {
-			cp[key] = val
-		}
-		out[env] = cp
+		out[env] = maps.Clone(vals)
 	}
 	return out
 }
