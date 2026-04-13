@@ -346,12 +346,6 @@ func (e *execContext) currentGlobalValues() map[string]scripts.GlobalValue {
 	return effectiveGlobalValues(e.doc, e.storeGlobals)
 }
 
-func (e *execContext) captureVariables() map[string]string {
-	capVars := mergeVariableMaps(e.model.collectVariables(e.doc, e.req, e.envName), e.scriptVars)
-	applyExtraVariables(capVars, e.extras)
-	return capVars
-}
-
 func (e *execContext) applyRuntimeGlobals(changes map[string]scripts.GlobalValue) {
 	if len(changes) == 0 {
 		return

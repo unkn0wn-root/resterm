@@ -205,7 +205,6 @@ type execCtx struct {
 
 	sendCtx context.Context
 	cancel  context.CancelFunc
-	keep    bool
 	rel     func()
 
 	baseVars  map[string]string

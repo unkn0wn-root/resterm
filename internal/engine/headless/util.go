@@ -18,7 +18,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
 )
@@ -177,16 +176,6 @@ func copyBytes(src []byte) []byte {
 		return nil
 	}
 	return append([]byte(nil), src...)
-}
-
-func requestName(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	if name := strings.TrimSpace(req.Metadata.Name); name != "" {
-		return name
-	}
-	return requestTarget(req)
 }
 
 func requestTarget(req *restfile.Request) string {
@@ -709,32 +698,4 @@ func min(a, b int) int {
 		return a
 	}
 	return b
-}
-
-func mergeExtra(base map[string]string, more ...map[string]string) map[string]string {
-	n := len(base)
-	for _, m := range more {
-		n += len(m)
-	}
-	out := make(map[string]string, n)
-	for k, v := range base {
-		out[k] = v
-	}
-	for _, m := range more {
-		for k, v := range m {
-			out[k] = v
-		}
-	}
-	return out
-}
-
-func cloneValueMap(src map[string]rts.Value) map[string]rts.Value {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(map[string]rts.Value, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
-	return out
 }

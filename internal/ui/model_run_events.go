@@ -15,10 +15,6 @@ func emitQueuedMsg(ch chan tea.Msg, msg tea.Msg) {
 	ch <- msg
 }
 
-func (m *Model) emitRunMsg(msg tea.Msg) {
-	emitQueuedMsg(m.runMsgChan, msg)
-}
-
 func (m *Model) nextRunMsgCmd() tea.Cmd {
 	if m.runMsgChan == nil {
 		return nil

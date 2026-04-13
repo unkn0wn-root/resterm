@@ -83,10 +83,6 @@ func (e *Engine) fileDir(doc *restfile.Document) string {
 	return ""
 }
 
-func (e *Engine) docPath(doc *restfile.Document) string {
-	return e.filePath(doc)
-}
-
 func (e *Engine) envName(name string) string {
 	return vars.SelectEnv(e.cfg.EnvironmentSet, name, e.cfg.EnvironmentName)
 }

@@ -20,7 +20,9 @@ import (
 
 func TestEngineExecuteRequest(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"ok":true}`)
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 
@@ -41,7 +43,9 @@ func TestEngineExecuteRequest(t *testing.T) {
 
 func TestEngineExecuteCompareProfileAndWorkflow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprint(w, `{"ok":true}`)
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 

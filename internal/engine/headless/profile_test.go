@@ -26,10 +26,14 @@ func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 		mu.Unlock()
 		if cur == 2 {
 			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, `{"ok":false}`)
+			if _, err := fmt.Fprint(w, `{"ok":false}`); err != nil {
+				t.Fatalf("write response: %v", err)
+			}
 			return
 		}
-		fmt.Fprint(w, `{"ok":true}`)
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
 	}))
 	defer srv.Close()
 

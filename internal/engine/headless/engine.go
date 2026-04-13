@@ -2,7 +2,6 @@ package headless
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
@@ -316,16 +315,6 @@ func (e *Engine) filePath(doc *restfile.Document) string {
 		return doc.Path
 	}
 	return strings.TrimSpace(e.cfg.FilePath)
-}
-
-func (e *Engine) baseDir(doc *restfile.Document) string {
-	if dir := strings.TrimSpace(e.cfg.HTTPOptions.BaseDir); dir != "" {
-		return dir
-	}
-	if p := e.filePath(doc); p != "" {
-		return filepath.Dir(p)
-	}
-	return ""
 }
 
 func (e *Engine) history() history.Store {
