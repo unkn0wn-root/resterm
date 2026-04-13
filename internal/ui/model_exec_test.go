@@ -2441,8 +2441,10 @@ func TestClearGlobalValues(t *testing.T) {
 	model := Model{
 		cfg:     Config{EnvironmentName: "dev"},
 		globals: newGlobalStore(),
+		cookies: newCookieStore(),
 	}
 	model.globals.set("dev", "token", "value", false)
+	model.cookies.getOrCreate("dev")
 	if snap := model.globals.snapshot("dev"); len(snap) == 0 {
 		t.Fatalf("expected snapshot to contain entries before clearing")
 	}
@@ -2450,7 +2452,49 @@ func TestClearGlobalValues(t *testing.T) {
 	if snap := model.globals.snapshot("dev"); len(snap) != 0 {
 		t.Fatalf("expected globals to be cleared, got %v", snap)
 	}
-	if !strings.Contains(model.statusMessage.text, "Cleared globals") {
+	if !strings.Contains(model.statusMessage.text, "Cleared globals and cookies") {
+		t.Fatalf("expected confirmation message, got %q", model.statusMessage.text)
+	}
+	if model.statusMessage.level != statusInfo {
+		t.Fatalf("expected info level, got %v", model.statusMessage.level)
+	}
+}
+
+func TestClearGlobalValuesWithCookies(t *testing.T) {
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		globals: newGlobalStore(),
+		cookies: newCookieStore(),
+	}
+
+	u, _ := url.Parse("http://localhost")
+
+	cookieJarDev := model.cookies.getOrCreate("dev")
+	cookieJarDev.SetCookies(u, []*http.Cookie{{Name: "foo", Value: "bar"}})
+
+	cookieJarProd := model.cookies.getOrCreate("prod")
+	cookieJarProd.SetCookies(u, []*http.Cookie{{Name: "shaz", Value: "bot"}})
+
+	// Just a quick sanity check
+	if before := model.cookies.getOrCreate("dev").Cookies(u); len(before) != 1 || before[0].Name != "foo" {
+		t.Fatal("unexpected cookies in dev jar")
+	}
+	if before := model.cookies.getOrCreate("prod").Cookies(u); len(before) != 1 || before[0].Name != "shaz" {
+		t.Fatal("unexpected cookies in prod jar")
+	}
+
+	// Clean up
+	model.clearGlobalValues()
+
+	// Check the new state
+	if after := model.cookies.getOrCreate("dev").Cookies(u); len(after) != 0 {
+		t.Fatal("unexpected cookies in dev jar")
+	}
+	if after := model.cookies.getOrCreate("prod").Cookies(u); len(after) != 1 || after[0].Name != "shaz" {
+		t.Fatal("unexpected cookies in prod jar")
+	}
+
+	if !strings.Contains(model.statusMessage.text, "Cleared globals and cookies") {
 		t.Fatalf("expected confirmation message, got %q", model.statusMessage.text)
 	}
 	if model.statusMessage.level != statusInfo {
