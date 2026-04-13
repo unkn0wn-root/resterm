@@ -101,7 +101,7 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 		}
 	}
 
-	client := &http.Client{Transport: transport, Jar: c.jar}
+	client := &http.Client{Transport: transport, Jar: opts.CookieJar}
 	if opts.Timeout > 0 {
 		client.Timeout = opts.Timeout
 	}

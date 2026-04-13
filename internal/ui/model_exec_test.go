@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -2456,6 +2457,100 @@ func TestClearGlobalValues(t *testing.T) {
 		t.Fatalf("expected info level, got %v", model.statusMessage.level)
 	}
 }
+
+func TestExecuteCookiesAreIsolatedPerEnv(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Logf("Server received request: %s %s", r.Method, r.URL.Path)
+		t.Logf("Server received cookies: %v", r.Cookies())
+		if r.URL.Path == "/set" {
+			w.Header().Add("Set-Cookie", "session=dev123")
+		}
+		for _, cookie := range r.Cookies() {
+			fmt.Fprintf(w, "%s\n", cookie.String())
+			t.Logf("Server echoing cookie: %s", cookie.String())
+		}
+	}))
+	defer srv.Close()
+
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		cookies: newCookieStore(),
+	}
+
+	// First request: instruct the server to set a cookie
+
+	setCookieReq := &restfile.Request{
+		Method: http.MethodPost,
+		URL:    srv.URL + "/set",
+	}
+
+	cmd := model.executeRequest(nil, setCookieReq, httpclient.Options{}, "dev", nil)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg, ok := cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg, got %T", msg)
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	// Second request: call again, expect our cookie to be mirrored
+
+	getCookieReq := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    srv.URL + "/get",
+	}
+
+	cmd = model.executeRequest(nil, getCookieReq, httpclient.Options{}, "dev", nil)
+	msg, ok = cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString := strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "session=dev123" {
+		t.Fatalf("expected cookie session=dev123 in dev env, got %q", respBodyString)
+	}
+
+	// Third request: the same against a different env: no cookies should be sent
+
+	cmd = model.executeRequest(nil, getCookieReq, httpclient.Options{}, "prod", nil)
+	msg, ok = cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString = strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "" {
+		t.Fatalf("expected NO cookie in prod env, got %q", respBodyString)
+	}
+
+	// Fourth request: against the first env again, which should now include the cookie again
+
+	cmd = model.executeRequest(nil, getCookieReq, httpclient.Options{}, "dev", nil)
+	msg, ok = cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString = strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "session=dev123" {
+		t.Fatalf("expected cookie session=dev123 to persist in dev env, got %q", respBodyString)
+	}
+}
+
 func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 	model := New(Config{})
 

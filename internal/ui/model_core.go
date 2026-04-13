@@ -188,6 +188,7 @@ type Model struct {
 	k8sMgr             *k8s.Manager
 	k8sGlobals         *namedStore[restfile.K8sProfile]
 	patchGlobals       *patchStore
+	cookies            *cookieStore
 	workspaceRoot      string
 	workspaceRecursive bool
 
@@ -619,6 +620,7 @@ func New(cfg Config) Model {
 	authGlobals := newAuthStore()
 	k8sGlobals := newK8sStore()
 	patchGlobals := newPatchStore()
+	cookies := newCookieStore()
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
@@ -642,6 +644,7 @@ func New(cfg Config) Model {
 		k8sMgr:                 k8sMgr,
 		k8sGlobals:             k8sGlobals,
 		patchGlobals:           patchGlobals,
+		cookies:                cookies,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,

@@ -211,6 +211,11 @@ func (m *Model) executeWithMode(
 ) tea.Cmd {
 	options = m.resolveHTTPOptions(options)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
+	if m.cookies == nil {
+		options.CookieJar = nil
+	} else {
+		options.CookieJar = m.cookies.getOrCreate(envName)
+	}
 	preview := mode == execModeExplain
 	if req == nil {
 		err := errdef.New(errdef.CodeUI, "request is nil")
