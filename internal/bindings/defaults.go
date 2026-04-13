@@ -67,7 +67,7 @@ var definitions = []definition{
 	def(ActionCycleFocusPrev, false, "shift+tab"),
 	def(ActionOpenEnvSelector, false, "ctrl+e"),
 	def(ActionShowGlobals, false, "ctrl+g"),
-	def(ActionClearGlobals, false, "ctrl+shift+g"),
+	def(ActionClearGlobals, false, "ctrl+shift+g", "g shift+g"),
 	def(ActionSaveFile, false, "ctrl+s"),
 	def(ActionSaveLayout, false, "g shift+l"),
 	def(ActionToggleResponseSplitVert, false, "ctrl+v"),

@@ -168,7 +168,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Split response vertically / horizontally | `Ctrl+V` / `Ctrl+U` |
 | Pin or unpin response pane | `Ctrl+Shift+V` |
 | Choose target pane for next response | `Ctrl+F` or `Ctrl+B`, then arrow keys or `h` / `l` |
-| Show globals summary / clear globals | `Ctrl+G` / `Ctrl+Shift+G` |
+| Show globals summary / clear globals | `Ctrl+G` / `Ctrl+Shift+G` (or `g Shift+G`) |
 | Quit | `Ctrl+Q` (or `Ctrl+D`) |
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), visual selections with `v` / `V`, yank and delete operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
@@ -196,7 +196,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `cycle_focus_prev` | Cycle focus backward. | `shift+tab` |
 | `open_env_selector` | Open environment picker. | `ctrl+e` |
 | `show_globals` | Show global variable summary. | `ctrl+g` |
-| `clear_globals` | Clear global variables. | `ctrl+shift+g` |
+| `clear_globals` | Clear global variables. | `ctrl+shift+g`, `g shift+g` |
 | `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
 | `save_layout` | Prompt to persist current layout (splits, widths) to settings. | `g shift+l` |
 | `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `ctrl+v` |
@@ -272,7 +272,7 @@ Binary responses show size and type hints alongside quick previews. For large bi
 ### History and globals
 
 - The history pane persists responses along with their request and environment metadata. Entries survive restarts (stored under the config directory; see [Configuration](#configuration)).
-- `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` clears them for the active environment.
+- `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` (or `g Shift+G`) clears them for the active environment.
 - `Ctrl+E` opens the environment picker to switch between `resterm.env.json` (or `rest-client.env.json`) entries.
 
 ---
