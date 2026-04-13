@@ -48,19 +48,13 @@ type junitSkipped struct {
 }
 
 func (r *Report) WriteJUnit(w io.Writer) error {
-	if r == nil {
-		return nil
-	}
 	if w == nil {
-		w = io.Discard
+		return ErrNilWriter
 	}
 	_, _ = io.WriteString(w, xml.Header)
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
-	if err := enc.Encode(r.junit()); err != nil {
-		return err
-	}
-	return enc.Flush()
+	return enc.Encode(r.junit())
 }
 
 func (r *Report) junit() junitSuites {
@@ -85,7 +79,7 @@ func (item Result) junitSuite() junitSuite {
 		Tests:     len(cases),
 		Time:      junitTime(resultDuration(item)),
 		TestCases: cases,
-		SystemOut: strings.TrimSpace(item.Summary),
+		SystemOut: item.Summary,
 	}
 	for _, tc := range cases {
 		switch {
@@ -160,10 +154,10 @@ func resultFailureMessage(item Result) string {
 	if msg := traceFailureText(item.Trace); msg != "" && resultFailed(item) {
 		return msg
 	}
-	if msg := strings.TrimSpace(item.Summary); msg != "" && resultFailed(item) {
+	if msg := item.Summary; msg != "" && resultFailed(item) {
 		return msg
 	}
-	if status := strings.TrimSpace(resultStatus(item)); status != "" && resultFailed(item) {
+	if status := resultStatus(item); status != "" && resultFailed(item) {
 		return status
 	}
 	return ""
@@ -176,7 +170,7 @@ func stepFailureMessage(step StepResult) string {
 	case step.ScriptErr != nil:
 		return step.ScriptErr.Error()
 	case step.Canceled:
-		if msg := strings.TrimSpace(step.Summary); msg != "" {
+		if msg := step.Summary; msg != "" {
 			return msg
 		}
 		return "canceled"
@@ -187,10 +181,10 @@ func stepFailureMessage(step StepResult) string {
 	if msg := traceFailureText(step.Trace); msg != "" && stepFailed(step) {
 		return msg
 	}
-	if msg := strings.TrimSpace(step.Summary); msg != "" && !step.Passed {
+	if msg := step.Summary; msg != "" && !step.Passed {
 		return msg
 	}
-	if status := strings.TrimSpace(stepStatus(step)); status != "" && !step.Passed {
+	if status := stepStatus(step); status != "" && !step.Passed {
 		return status
 	}
 	return ""
@@ -201,8 +195,8 @@ func testFailureMessage(tests []scripts.TestResult) string {
 		return ""
 	}
 	first := tests[0]
-	name := strings.TrimSpace(first.Name)
-	msg := strings.TrimSpace(first.Message)
+	name := first.Name
+	msg := first.Message
 	switch {
 	case name != "" && msg != "":
 		return name + ": " + msg

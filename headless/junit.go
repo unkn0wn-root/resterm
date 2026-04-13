@@ -54,10 +54,7 @@ func (r *Report) WriteJUnit(w io.Writer) error {
 	_, _ = io.WriteString(w, xml.Header)
 	enc := xml.NewEncoder(w)
 	enc.Indent("", "  ")
-	if err := enc.Encode(r.junit()); err != nil {
-		return err
-	}
-	return enc.Flush()
+	return enc.Encode(r.junit())
 }
 
 func (r *Report) junit() junitSuites {

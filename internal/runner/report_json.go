@@ -168,11 +168,8 @@ type jsonStep struct {
 }
 
 func (r *Report) WriteJSON(w io.Writer) error {
-	if r == nil {
-		return nil
-	}
 	if w == nil {
-		w = io.Discard
+		return ErrNilWriter
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -181,9 +178,9 @@ func (r *Report) WriteJSON(w io.Writer) error {
 
 func (r *Report) json() jsonReport {
 	out := jsonReport{
-		Version:    strings.TrimSpace(r.Version),
+		Version:    r.Version,
 		FilePath:   r.FilePath,
-		EnvName:    strings.TrimSpace(r.EnvName),
+		EnvName:    r.EnvName,
 		StartedAt:  r.StartedAt,
 		EndedAt:    r.EndedAt,
 		DurationMs: durMS(r.Duration),
@@ -204,14 +201,14 @@ func (r *Report) json() jsonReport {
 func (item Result) json() jsonResult {
 	out := jsonResult{
 		Kind:        string(item.Kind),
-		Name:        strings.TrimSpace(item.Name),
+		Name:        item.Name,
 		Method:      requestMethodValue(item.Method),
-		Target:      strings.TrimSpace(item.Target),
-		Environment: strings.TrimSpace(item.Environment),
+		Target:      item.Target,
+		Environment: item.Environment,
 		Status:      jsonResultStatus(item),
-		Summary:     strings.TrimSpace(item.Summary),
+		Summary:     item.Summary,
 		Canceled:    item.Canceled,
-		SkipReason:  strings.TrimSpace(item.SkipReason),
+		SkipReason:  item.SkipReason,
 		DurationMs:  durMS(resultDuration(item)),
 	}
 	if item.Err != nil {
@@ -244,15 +241,15 @@ func (item Result) json() jsonResult {
 		out.Tests = make([]jsonTest, 0, len(item.Tests))
 		for _, test := range item.Tests {
 			out.Tests = append(out.Tests, jsonTest{
-				Name:      strings.TrimSpace(test.Name),
-				Message:   strings.TrimSpace(test.Message),
+				Name:      test.Name,
+				Message:   test.Message,
 				Passed:    test.Passed,
 				ElapsedMs: durMS(test.Elapsed),
 			})
 		}
 	}
 	if item.Compare != nil {
-		out.Compare = &jsonCompare{Baseline: strings.TrimSpace(item.Compare.Baseline)}
+		out.Compare = &jsonCompare{Baseline: item.Compare.Baseline}
 	}
 	if item.Profile != nil {
 		out.Profile = jsonProfileInfo(item.Profile)
@@ -268,17 +265,17 @@ func (item Result) json() jsonResult {
 
 func (step StepResult) json() jsonStep {
 	out := jsonStep{
-		Name:        strings.TrimSpace(step.Name),
+		Name:        step.Name,
 		Method:      requestMethodValue(step.Method),
-		Target:      strings.TrimSpace(step.Target),
-		Environment: strings.TrimSpace(step.Environment),
-		Branch:      strings.TrimSpace(step.Branch),
+		Target:      step.Target,
+		Environment: step.Environment,
+		Branch:      step.Branch,
 		Iteration:   step.Iteration,
 		Total:       step.Total,
 		Status:      jsonStepStatus(step),
-		Summary:     strings.TrimSpace(step.Summary),
+		Summary:     step.Summary,
 		Canceled:    step.Canceled,
-		SkipReason:  strings.TrimSpace(step.SkipReason),
+		SkipReason:  step.SkipReason,
 		DurationMs:  durMS(step.Duration),
 	}
 	if step.Err != nil {
@@ -311,8 +308,8 @@ func (step StepResult) json() jsonStep {
 		out.Tests = make([]jsonTest, 0, len(step.Tests))
 		for _, test := range step.Tests {
 			out.Tests = append(out.Tests, jsonTest{
-				Name:      strings.TrimSpace(test.Name),
-				Message:   strings.TrimSpace(test.Message),
+				Name:      test.Name,
+				Message:   test.Message,
 				Passed:    test.Passed,
 				ElapsedMs: durMS(test.Elapsed),
 			})
@@ -365,8 +362,8 @@ func jsonProfileInfo(prof *ProfileInfo) *jsonProfile {
 			out.Failures = append(out.Failures, jsonProfileFailure{
 				Iteration:  failure.Iteration,
 				Warmup:     failure.Warmup,
-				Reason:     strings.TrimSpace(failure.Reason),
-				Status:     strings.TrimSpace(failure.Status),
+				Reason:     failure.Reason,
+				Status:     failure.Status,
 				StatusCode: failure.StatusCode,
 				DurationMs: durMS(failure.Duration),
 			})
@@ -425,9 +422,9 @@ func jsonStreamInfo(info *StreamInfo) *jsonStream {
 		return nil
 	}
 	out := &jsonStream{
-		Kind:           strings.TrimSpace(info.Kind),
+		Kind:           info.Kind,
 		EventCount:     info.EventCount,
-		TranscriptPath: strings.TrimSpace(info.TranscriptPath),
+		TranscriptPath: info.TranscriptPath,
 	}
 	if len(info.Summary) > 0 {
 		out.Summary = jsonAnyMap(info.Summary)
@@ -442,7 +439,7 @@ func jsonTraceInfo(info *TraceInfo) *jsonTrace {
 	out := &jsonTrace{
 		DurationMs:   durMS(info.Summary.Duration),
 		Error:        strings.TrimSpace(info.Summary.Error),
-		ArtifactPath: strings.TrimSpace(info.ArtifactPath),
+		ArtifactPath: info.ArtifactPath,
 	}
 	if bud := info.Summary.Budgets; bud != nil {
 		out.Budgets = &jsonTraceBudget{

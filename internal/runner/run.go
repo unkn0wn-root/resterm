@@ -57,6 +57,9 @@ type UsageError struct {
 	err error
 }
 
+// ErrNilWriter reports an attempt to write a report to a nil io.Writer.
+var ErrNilWriter = errors.New("runner: nil writer")
+
 func (e UsageError) Error() string {
 	if e.err == nil {
 		return ""
@@ -212,6 +215,10 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	if work == "" {
 		work = filepath.Dir(path)
 	}
+	artifactDir, err := absCleanPath(opts.ArtifactDir)
+	if err != nil {
+		return nil, fmt.Errorf("resolve artifact dir: %w", err)
+	}
 	if opts.Profile && len(opts.CompareTargets) > 0 {
 		return nil, usageError("--profile cannot be combined with --compare")
 	}
@@ -241,9 +248,9 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	}
 
 	rep := &Report{
-		Version:   opts.Version,
+		Version:   strings.TrimSpace(opts.Version),
 		FilePath:  path,
-		EnvName:   opts.EnvName,
+		EnvName:   strings.TrimSpace(opts.EnvName),
 		StartedAt: start,
 	}
 
@@ -270,7 +277,7 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 		if err := saveRunnerState(exec, paths, opts); err != nil {
 			return nil, fmt.Errorf("save runner state: %w", err)
 		}
-		if err := rep.writeArtifacts(opts.ArtifactDir); err != nil {
+		if err := rep.writeArtifacts(artifactDir); err != nil {
 			return nil, err
 		}
 		return rep, nil
@@ -309,7 +316,7 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	if err := saveRunnerState(exec, paths, opts); err != nil {
 		return nil, fmt.Errorf("save runner state: %w", err)
 	}
-	if err := rep.writeArtifacts(opts.ArtifactDir); err != nil {
+	if err := rep.writeArtifacts(artifactDir); err != nil {
 		return nil, err
 	}
 	return rep, nil
@@ -320,9 +327,6 @@ func usageError(format string, args ...any) error {
 }
 
 func (r *Report) add(item Result) {
-	if r == nil {
-		return
-	}
 	r.Results = append(r.Results, item)
 	r.Total++
 	switch {
@@ -336,21 +340,18 @@ func (r *Report) add(item Result) {
 }
 
 func (r *Report) Success() bool {
-	return r != nil && r.Failed == 0
+	return r.Failed == 0
 }
 
 func (r *Report) WriteText(w io.Writer) error {
-	if r == nil {
-		return nil
-	}
 	if w == nil {
-		w = io.Discard
+		return ErrNilWriter
 	}
 	fileLabel := r.FilePath
 	if base := filepath.Base(fileLabel); base != "" {
 		fileLabel = base
 	}
-	envLabel := strings.TrimSpace(r.EnvName)
+	envLabel := r.EnvName
 	if envLabel == "" {
 		envLabel = "<default>"
 	}
@@ -396,9 +397,6 @@ func selectRequests(doc *restfile.Document, sel Select) ([]*restfile.Request, er
 		return nil, usageError("no requests found")
 	}
 
-	if strings.TrimSpace(sel.Workflow) != "" {
-		return nil, usageError("--workflow cannot be combined with --request, --tag, or --all")
-	}
 	if sel.All && (strings.TrimSpace(sel.Request) != "" || strings.TrimSpace(sel.Tag) != "") {
 		return nil, usageError("--all cannot be combined with --request or --tag")
 	}
@@ -503,96 +501,109 @@ func resultLine(item Result) string {
 		return profileLine(item)
 	}
 	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	switch {
-	case item.Skipped:
-		if reason := strings.TrimSpace(item.SkipReason); reason != "" {
-			return fmt.Sprintf("%s [%s]", base, reason)
+	return lineWithDetail(base, func() string {
+		switch {
+		case item.Skipped:
+			return item.SkipReason
+		case item.Err != nil:
+			return item.Err.Error()
+		case item.ScriptErr != nil:
+			return item.ScriptErr.Error()
 		}
-		return base
-	case item.Err != nil:
-		return fmt.Sprintf("%s [%s]", base, item.Err.Error())
-	case item.ScriptErr != nil:
-		return fmt.Sprintf("%s [%s]", base, item.ScriptErr.Error())
-	}
 
-	failed := failedTests(item.Tests)
-	if len(failed) > 0 {
-		return fmt.Sprintf("%s [%d test(s) failed]", base, len(failed))
-	}
-	if msg := traceFailureText(item.Trace); msg != "" {
-		return fmt.Sprintf("%s [%s]", base, msg)
-	}
+		failed := failedTests(item.Tests)
+		if len(failed) > 0 {
+			return fmt.Sprintf("%d test(s) failed", len(failed))
+		}
+		if msg := traceFailureText(item.Trace); msg != "" {
+			return msg
+		}
 
-	status := strings.TrimSpace(resultStatus(item))
-	dur := resultDuration(item)
-	if status == "" && dur <= 0 {
-		return base
-	}
-	if dur <= 0 {
-		return fmt.Sprintf("%s [%s]", base, status)
-	}
-	if status == "" {
-		return fmt.Sprintf("%s [%s]", base, dur)
-	}
-	return fmt.Sprintf("%s [%s in %s]", base, status, dur)
+		status := resultStatus(item)
+		dur := resultDuration(item)
+		switch {
+		case status == "" && dur <= 0:
+			return ""
+		case dur <= 0:
+			return status
+		case status == "":
+			return dur.String()
+		default:
+			return fmt.Sprintf("%s in %s", status, dur)
+		}
+	})
 }
 
 func workflowLine(item Result) string {
 	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	pass, fail, skip := stepCounts(item.Steps)
-	detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
-	if item.Canceled {
-		detail += ", canceled"
-	}
-	if dur := resultDuration(item); dur > 0 {
-		detail = fmt.Sprintf("%s in %s", detail, dur)
-	}
-	return fmt.Sprintf("%s [%s]", base, detail)
+	return lineWithDetail(base, func() string {
+		pass, fail, skip := stepCounts(item.Steps)
+		detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
+		if item.Canceled {
+			detail += ", canceled"
+		}
+		if dur := resultDuration(item); dur > 0 {
+			detail = fmt.Sprintf("%s in %s", detail, dur)
+		}
+		return detail
+	})
 }
 
 func compareLine(item Result) string {
 	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	pass, fail, skip := stepCounts(item.Steps)
-	detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
-	if item.Compare != nil {
-		if baseline := strings.TrimSpace(item.Compare.Baseline); baseline != "" {
-			detail = fmt.Sprintf("baseline: %s, %s", baseline, detail)
+	return lineWithDetail(base, func() string {
+		pass, fail, skip := stepCounts(item.Steps)
+		detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
+		if item.Compare != nil {
+			if baseline := item.Compare.Baseline; baseline != "" {
+				detail = fmt.Sprintf("baseline: %s, %s", baseline, detail)
+			}
 		}
-	}
-	if item.Canceled {
-		detail += ", canceled"
-	}
-	if dur := resultDuration(item); dur > 0 {
-		detail = fmt.Sprintf("%s in %s", detail, dur)
-	}
-	return fmt.Sprintf("%s [%s]", base, detail)
+		if item.Canceled {
+			detail += ", canceled"
+		}
+		if dur := resultDuration(item); dur > 0 {
+			detail = fmt.Sprintf("%s in %s", detail, dur)
+		}
+		return detail
+	})
 }
 
 func profileLine(item Result) string {
 	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	prof := item.Profile
-	if prof == nil || prof.Results == nil {
-		if summary := strings.TrimSpace(item.Summary); summary != "" {
-			return fmt.Sprintf("%s [%s]", base, summary)
+	return lineWithDetail(base, func() string {
+		prof := item.Profile
+		if prof == nil || prof.Results == nil {
+			return item.Summary
 		}
+		detail := fmt.Sprintf(
+			"%d total, %d success, %d failure",
+			prof.Results.TotalRuns,
+			prof.Results.SuccessfulRuns,
+			prof.Results.FailedRuns,
+		)
+		if prof.Results.WarmupRuns > 0 {
+			detail = fmt.Sprintf("%s, %d warmup", detail, prof.Results.WarmupRuns)
+		}
+		if item.Canceled {
+			detail += ", canceled"
+		}
+		if dur := resultDuration(item); dur > 0 {
+			detail = fmt.Sprintf("%s in %s", detail, dur)
+		}
+		return detail
+	})
+}
+
+func lineWithDetail(base string, detail func() string) string {
+	if detail == nil {
 		return base
 	}
-	detail := fmt.Sprintf(
-		"%d total, %d success, %d failure",
-		prof.Results.TotalRuns,
-		prof.Results.SuccessfulRuns,
-		prof.Results.FailedRuns,
-	)
-	if prof.Results.WarmupRuns > 0 {
-		detail = fmt.Sprintf("%s, %d warmup", detail, prof.Results.WarmupRuns)
+	text := detail()
+	if text == "" {
+		return base
 	}
-	if item.Canceled {
-		detail += ", canceled"
-	}
-	if dur := resultDuration(item); dur > 0 {
-		detail = fmt.Sprintf("%s in %s", detail, dur)
-	}
-	return fmt.Sprintf("%s [%s]", base, detail)
+	return fmt.Sprintf("%s [%s]", base, text)
 }
 
 func failedTests(tests []scripts.TestResult) []scripts.TestResult {
@@ -608,7 +619,7 @@ func failedTests(tests []scripts.TestResult) []scripts.TestResult {
 func resultStatus(item Result) string {
 	switch {
 	case item.Response != nil:
-		return item.Response.Status
+		return strings.TrimSpace(item.Response.Status)
 	case item.GRPC != nil:
 		status := item.GRPC.StatusCode.String()
 		if msg := strings.TrimSpace(item.GRPC.StatusMessage); msg != "" &&
@@ -703,11 +714,11 @@ func requestMethodValue(method string) string {
 }
 
 func resultName(item Result) string {
-	name := strings.TrimSpace(item.Name)
+	name := item.Name
 	if name != "" {
 		return name
 	}
-	target := strings.TrimSpace(item.Target)
+	target := item.Target
 	if target == "" {
 		return "<unnamed>"
 	}
@@ -766,13 +777,13 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		Response:    res.Response,
 		GRPC:        res.GRPC,
 		Err:         res.Err,
-		Tests:       append([]scripts.TestResult(nil), res.Tests...),
+		Tests:       cloneTests(res.Tests),
 		ScriptErr:   res.ScriptErr,
 		Skipped:     res.Skipped,
-		SkipReason:  res.SkipReason,
+		SkipReason:  strings.TrimSpace(res.SkipReason),
 		Stream:      streamResult(res.Stream),
 		Trace:       traceResult(res.Response),
-		transcript:  cloneBytes(res.Transcript),
+		transcript:  bytes.Clone(res.Transcript),
 	}
 	item.Passed = !item.Skipped && !requestFailed(item)
 	return item
@@ -819,7 +830,7 @@ func compareRunResult(req *restfile.Request, res engine.CompareResult, fallbackE
 }
 
 func compareDuration(rows []engine.CompareRow) time.Duration {
-	total := time.Duration(0)
+	var total time.Duration
 	for _, row := range rows {
 		total += row.Duration
 	}
@@ -837,15 +848,15 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 		Response:    row.Response,
 		GRPC:        row.GRPC,
 		Err:         row.Err,
-		Tests:       append([]scripts.TestResult(nil), row.Tests...),
+		Tests:       cloneTests(row.Tests),
 		ScriptErr:   row.ScriptErr,
 		Passed:      row.Success,
 		Skipped:     row.Skipped,
-		SkipReason:  row.SkipReason,
+		SkipReason:  strings.TrimSpace(row.SkipReason),
 		Canceled:    row.Canceled,
 		Stream:      streamResult(row.Stream),
 		Trace:       traceResult(row.Response),
-		transcript:  cloneBytes(row.Transcript),
+		transcript:  bytes.Clone(row.Transcript),
 	}
 }
 
@@ -957,15 +968,14 @@ func workflowStepResult(step engine.WorkflowStep) StepResult {
 		Response:   step.Response,
 		GRPC:       step.GRPC,
 		Err:        step.Err,
-		Tests:      append([]scripts.TestResult(nil), step.Tests...),
+		Tests:      cloneTests(step.Tests),
 		ScriptErr:  step.ScriptErr,
 		Passed:     step.Success,
 		Skipped:    step.Skipped,
-		SkipReason: "",
 		Canceled:   step.Canceled,
 		Stream:     streamResult(step.Stream),
 		Trace:      traceResult(step.Response),
-		transcript: cloneBytes(step.Transcript),
+		transcript: bytes.Clone(step.Transcript),
 	}
 }
 
@@ -1038,7 +1048,7 @@ func streamEventCount(info *scripts.StreamInfo) int {
 	}
 }
 
-func cloneStreamSummary(src map[string]interface{}) map[string]any {
+func cloneStreamSummary(src map[string]any) map[string]any {
 	if len(src) == 0 {
 		return nil
 	}
@@ -1049,31 +1059,31 @@ func cloneStreamSummary(src map[string]interface{}) map[string]any {
 	return out
 }
 
-func cloneBytes(src []byte) []byte {
+func cloneTests(src []scripts.TestResult) []scripts.TestResult {
 	if len(src) == 0 {
 		return nil
 	}
-	return append([]byte(nil), src...)
+	out := make([]scripts.TestResult, 0, len(src))
+	for _, test := range src {
+		out = append(out, scripts.TestResult{
+			Name:    strings.TrimSpace(test.Name),
+			Message: strings.TrimSpace(test.Message),
+			Passed:  test.Passed,
+			Elapsed: test.Elapsed,
+		})
+	}
+	return out
 }
 
 func (r *Report) writeArtifacts(dir string) error {
 	if r == nil {
 		return nil
 	}
-	dir = strings.TrimSpace(dir)
 	if dir == "" {
 		return nil
 	}
-	base := filepath.Clean(dir)
-	if !filepath.IsAbs(base) {
-		abs, err := filepath.Abs(base)
-		if err != nil {
-			return err
-		}
-		base = abs
-	}
-	streamsDir := filepath.Join(base, "streams")
-	tracesDir := filepath.Join(base, "traces")
+	streamsDir := filepath.Join(dir, "streams")
+	tracesDir := filepath.Join(dir, "traces")
 	for i := range r.Results {
 		item := &r.Results[i]
 		if path, err := writeStreamArtifact(
@@ -1243,62 +1253,56 @@ func stepLabel(step StepResult) string {
 
 func stepLine(step StepResult) string {
 	base := stepName(step)
-	switch {
-	case step.Canceled:
-		if msg := strings.TrimSpace(step.Summary); msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
+	return lineWithDetail(base, func() string {
+		switch {
+		case step.Canceled:
+			return step.Summary
+		case step.Skipped:
+			if step.SkipReason != "" {
+				return step.SkipReason
+			}
+			return step.Summary
+		case step.Err != nil:
+			return step.Err.Error()
+		case step.ScriptErr != nil:
+			return step.ScriptErr.Error()
 		}
-		return base
-	case step.Skipped:
-		if msg := strings.TrimSpace(step.SkipReason); msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
-		}
-		if msg := strings.TrimSpace(step.Summary); msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
-		}
-		return base
-	case step.Err != nil:
-		return fmt.Sprintf("%s [%s]", base, step.Err.Error())
-	case step.ScriptErr != nil:
-		return fmt.Sprintf("%s [%s]", base, step.ScriptErr.Error())
-	}
 
-	failed := failedTests(step.Tests)
-	if len(failed) > 0 {
-		return fmt.Sprintf("%s [%d test(s) failed]", base, len(failed))
-	}
-	if msg := traceFailureText(step.Trace); msg != "" {
-		return fmt.Sprintf("%s [%s]", base, msg)
-	}
-	if stepFailed(step) {
-		if msg := strings.TrimSpace(step.Summary); msg != "" {
-			return fmt.Sprintf("%s [%s]", base, msg)
+		failed := failedTests(step.Tests)
+		if len(failed) > 0 {
+			return fmt.Sprintf("%d test(s) failed", len(failed))
 		}
-	}
+		if msg := traceFailureText(step.Trace); msg != "" {
+			return msg
+		}
+		if stepFailed(step) {
+			return step.Summary
+		}
 
-	status := stepStatus(step)
-	dur := step.Duration
-	if status == "" && dur <= 0 {
-		return base
-	}
-	if dur <= 0 {
-		return fmt.Sprintf("%s [%s]", base, status)
-	}
-	if status == "" {
-		return fmt.Sprintf("%s [%s]", base, dur)
-	}
-	return fmt.Sprintf("%s [%s in %s]", base, status, dur)
+		status := stepStatus(step)
+		dur := step.Duration
+		switch {
+		case status == "" && dur <= 0:
+			return ""
+		case dur <= 0:
+			return status
+		case status == "":
+			return dur.String()
+		default:
+			return fmt.Sprintf("%s in %s", status, dur)
+		}
+	})
 }
 
 func stepName(step StepResult) string {
-	name := strings.TrimSpace(step.Name)
+	name := step.Name
 	if name != "" {
 		return name
 	}
-	if env := strings.TrimSpace(step.Environment); env != "" {
+	if env := step.Environment; env != "" {
 		return env
 	}
-	target := strings.TrimSpace(step.Target)
+	target := step.Target
 	if target != "" {
 		return target
 	}

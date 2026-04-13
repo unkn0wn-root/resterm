@@ -40,13 +40,9 @@ func resolveStatePaths(opts Options) (statePaths, error) {
 	if root == "" {
 		root = filepath.Join(config.Dir(), "runner")
 	}
-	root = filepath.Clean(root)
-	if !filepath.IsAbs(root) {
-		abs, err := filepath.Abs(root)
-		if err != nil {
-			return statePaths{}, err
-		}
-		root = abs
+	root, err := absCleanPath(root)
+	if err != nil {
+		return statePaths{}, err
 	}
 	return statePaths{
 		Root:    root,
@@ -68,9 +64,6 @@ func openHistoryStore(paths statePaths, opts Options) history.Store {
 }
 
 func loadRunnerState(h engine.Executor, paths statePaths, opts Options) error {
-	if h == nil {
-		return nil
-	}
 	if opts.PersistGlobals {
 		state, err := readRuntimeState(paths.Runtime)
 		if err != nil {
@@ -89,7 +82,7 @@ func loadRunnerState(h engine.Executor, paths statePaths, opts Options) error {
 }
 
 func saveRunnerState(h engine.Executor, paths statePaths, opts Options) error {
-	if h == nil || !usesStateDir(opts) {
+	if !usesStateDir(opts) {
 		return nil
 	}
 	if err := os.MkdirAll(paths.Root, 0o755); err != nil {
@@ -126,7 +119,7 @@ func readAuthState(path string) (engine.AuthState, error) {
 
 func readStateFile(path string, dst any) error {
 	path = strings.TrimSpace(path)
-	if path == "" || dst == nil {
+	if path == "" {
 		return nil
 	}
 	data, err := os.ReadFile(path)
