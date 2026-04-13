@@ -18,7 +18,12 @@ var _ engine.Executor = (*Engine)(nil)
 
 type reqExec interface {
 	Execute(*restfile.Document, *restfile.Request, string) (engine.RequestResult, error)
-	CollectVariables(*restfile.Document, *restfile.Request, string, ...map[string]string) map[string]string
+	CollectVariables(
+		*restfile.Document,
+		*restfile.Request,
+		string,
+		...map[string]string,
+	) map[string]string
 	ExecuteWith(
 		*restfile.Document,
 		*restfile.Request,

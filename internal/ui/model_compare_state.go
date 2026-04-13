@@ -271,7 +271,8 @@ func headersEqual(a, b http.Header) bool {
 }
 
 func compareResultSuccess(result *compareResult) bool {
-	if result == nil || result.Canceled || result.Skipped || result.Err != nil || result.ScriptErr != nil {
+	if result == nil || result.Canceled || result.Skipped || result.Err != nil ||
+		result.ScriptErr != nil {
 		return false
 	}
 	if countTestFailures(result.Tests) > 0 {

@@ -437,7 +437,15 @@ func (r *wfRun) runReqStep(
 					return true, nil
 				}
 				wrap := errdef.Wrap(errdef.CodeScript, err, "@when")
-				if err := r.emitStepStart(ctx, r.idx, step, req, branch, i+1, len(items)); err != nil {
+				if err := r.emitStepStart(
+					ctx,
+					r.idx,
+					step,
+					req,
+					branch,
+					i+1,
+					len(items),
+				); err != nil {
 					return false, err
 				}
 				if err := r.emitStepDone(
@@ -460,7 +468,15 @@ func (r *wfRun) runReqStep(
 				continue
 			}
 			if !ok {
-				if err := r.emitStepStart(ctx, r.idx, step, req, branch, i+1, len(items)); err != nil {
+				if err := r.emitStepStart(
+					ctx,
+					r.idx,
+					step,
+					req,
+					branch,
+					i+1,
+					len(items),
+				); err != nil {
 					return false, err
 				}
 				if err := r.emitStepDone(
@@ -639,11 +655,30 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 	}
 	req := r.pl.Reqs[run]
 	if req == nil {
-		res := engine.RequestResult{Err: fmt.Errorf("request %s not found", strings.TrimSpace(br.Run))}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, strings.TrimSpace(br.Run), 0, 0); err != nil {
+		res := engine.RequestResult{
+			Err: fmt.Errorf("request %s not found", strings.TrimSpace(br.Run)),
+		}
+		if err := r.emitStepStart(
+			ctx,
+			r.idx,
+			step,
+			nil,
+			strings.TrimSpace(br.Run),
+			0,
+			0,
+		); err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, strings.TrimSpace(br.Run), 0, 0, res); err != nil {
+		if err := r.emitStepDone(
+			ctx,
+			r.idx,
+			step,
+			nil,
+			strings.TrimSpace(br.Run),
+			0,
+			0,
+			res,
+		); err != nil {
 			return false, err
 		}
 		r.note(false, false, false)
@@ -658,7 +693,16 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 	if err != nil {
 		return false, err
 	}
-	if err := r.emitStepDone(ctx, r.idx, step, req, strings.TrimSpace(br.Run), 0, 0, out); err != nil {
+	if err := r.emitStepDone(
+		ctx,
+		r.idx,
+		step,
+		req,
+		strings.TrimSpace(br.Run),
+		0,
+		0,
+		out,
+	); err != nil {
 		return false, err
 	}
 	ok, skip, cancel := evalReq(step, out)
@@ -817,11 +861,30 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 	}
 	req := r.pl.Reqs[run]
 	if req == nil {
-		res := engine.RequestResult{Err: fmt.Errorf("request %s not found", strings.TrimSpace(sel.Run))}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, strings.TrimSpace(sel.Run), 0, 0); err != nil {
+		res := engine.RequestResult{
+			Err: fmt.Errorf("request %s not found", strings.TrimSpace(sel.Run)),
+		}
+		if err := r.emitStepStart(
+			ctx,
+			r.idx,
+			step,
+			nil,
+			strings.TrimSpace(sel.Run),
+			0,
+			0,
+		); err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, strings.TrimSpace(sel.Run), 0, 0, res); err != nil {
+		if err := r.emitStepDone(
+			ctx,
+			r.idx,
+			step,
+			nil,
+			strings.TrimSpace(sel.Run),
+			0,
+			0,
+			res,
+		); err != nil {
 			return false, err
 		}
 		r.note(false, false, false)
@@ -836,7 +899,16 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 	if err != nil {
 		return false, err
 	}
-	if err := r.emitStepDone(ctx, r.idx, step, req, strings.TrimSpace(sel.Run), 0, 0, out); err != nil {
+	if err := r.emitStepDone(
+		ctx,
+		r.idx,
+		step,
+		req,
+		strings.TrimSpace(sel.Run),
+		0,
+		0,
+		out,
+	); err != nil {
 		return false, err
 	}
 	ok, skip, cancel := evalReq(step, out)
@@ -858,7 +930,16 @@ func (r *wfRun) failBranch(
 	if e := r.emitStepStart(ctx, r.idx, step, nil, branch, 0, 0); e != nil {
 		return false, e
 	}
-	if e := r.emitStepDone(ctx, r.idx, step, nil, branch, 0, 0, engine.RequestResult{Err: err}); e != nil {
+	if e := r.emitStepDone(
+		ctx,
+		r.idx,
+		step,
+		nil,
+		branch,
+		0,
+		0,
+		engine.RequestResult{Err: err},
+	); e != nil {
 		return false, e
 	}
 	r.note(false, false, false)
@@ -1017,15 +1098,27 @@ func prepareWorkflow(
 			}
 			req := reqs[key]
 			if req == nil {
-				return nil, nil, fmt.Errorf("workflow %s: request %s not found", wf.Name, step.Using)
+				return nil, nil, fmt.Errorf(
+					"workflow %s: request %s not found",
+					wf.Name,
+					step.Using,
+				)
 			}
 			if step.Kind == restfile.WorkflowStepKindForEach && step.ForEach == nil {
-				return nil, nil, fmt.Errorf("workflow %s: step %d missing @for-each spec", wf.Name, i+1)
+				return nil, nil, fmt.Errorf(
+					"workflow %s: step %d missing @for-each spec",
+					wf.Name,
+					i+1,
+				)
 			}
 			out = append(out, WorkflowStepRuntime{Step: step, Req: req})
 		case restfile.WorkflowStepKindIf:
 			if step.If == nil {
-				return nil, nil, fmt.Errorf("workflow %s: step %d missing @if definition", wf.Name, i+1)
+				return nil, nil, fmt.Errorf(
+					"workflow %s: step %d missing @if definition",
+					wf.Name,
+					i+1,
+				)
 			}
 			if err := validateRun(wf.Name, i+1, reqs, step.If.Then.Run); err != nil {
 				return nil, nil, err
@@ -1174,7 +1267,11 @@ func applyVars(dst map[string]string, vals map[string]string) {
 	}
 }
 
-func stepExtras(base map[string]string, vals map[string]string, extra map[string]string) map[string]string {
+func stepExtras(
+	base map[string]string,
+	vals map[string]string,
+	extra map[string]string,
+) map[string]string {
 	n := len(base) + len(vals) + len(extra)
 	if n == 0 {
 		return nil

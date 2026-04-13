@@ -369,7 +369,8 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 		t.Fatalf("expected restored refresh token to allow headless auth")
 	}
 	merged := restored.MergeCachedConfig("dev", Config{CacheKey: "github"})
-	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL || merged.ClientID != cfg.ClientID {
+	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL ||
+		merged.ClientID != cfg.ClientID {
 		t.Fatalf("expected restored config to merge, got %#v", merged)
 	}
 }

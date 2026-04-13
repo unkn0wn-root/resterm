@@ -120,7 +120,16 @@ func TestRunRequestSelectsGRPCBeforeHTTP(t *testing.T) {
 	if got.SkipReason != "grpc" {
 		t.Fatalf("expected grpc result, got %+v", got)
 	}
-	want := []string{"pending", "condition", "pre", "prepare", "preview", "use-grpc", "grpc", "finish"}
+	want := []string{
+		"pending",
+		"condition",
+		"pre",
+		"prepare",
+		"preview",
+		"use-grpc",
+		"grpc",
+		"finish",
+	}
 	if len(order) != len(want) {
 		t.Fatalf("unexpected call order: got %v want %v", order, want)
 	}

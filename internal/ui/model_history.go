@@ -32,17 +32,20 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	m.recordResponseLatency(msg)
 
 	if state := m.compareRun; state != nil {
-		if !state.core && (state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
+		if !state.core &&
+			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
 			return m.handleCompareUIDrivenResponse(msg)
 		}
 	}
 	if state := m.workflowRun; state != nil {
-		if !state.core && (state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
+		if !state.core &&
+			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
 			return m.handleWorkflowUIDrivenResponse(msg)
 		}
 	}
 	if state := m.profileRun; state != nil {
-		if !state.core && (state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
+		if !state.core &&
+			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
 			return m.handleProfileUIDrivenResponse(msg)
 		}
 	}

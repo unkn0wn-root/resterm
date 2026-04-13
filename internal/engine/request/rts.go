@@ -810,7 +810,11 @@ type applyPatch struct {
 	vars       map[string]string
 }
 
-func (e *Engine) parseApplyPatch(ctx context.Context, pos rts.Pos, v rts.Value) (applyPatch, error) {
+func (e *Engine) parseApplyPatch(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+) (applyPatch, error) {
 	if v.K != rts.VDict {
 		return applyPatch{}, applyErr("", "expects dict")
 	}
@@ -887,7 +891,12 @@ func (e *Engine) parseApplyPatch(ctx context.Context, pos rts.Pos, v rts.Value) 
 	return p, nil
 }
 
-func (e *Engine) applyScalar(ctx context.Context, pos rts.Pos, v rts.Value, field string) (string, error) {
+func (e *Engine) applyScalar(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+	field string,
+) (string, error) {
 	switch v.K {
 	case rts.VStr, rts.VNum, rts.VBool:
 		s, err := e.rtsValueString(ctx, pos, v)
@@ -1071,7 +1080,12 @@ func (e *Engine) parseApplySettings(
 	return out, nil
 }
 
-func (e *Engine) applyList(ctx context.Context, pos rts.Pos, v rts.Value, field string) ([]string, error) {
+func (e *Engine) applyList(
+	ctx context.Context,
+	pos rts.Pos,
+	v rts.Value,
+	field string,
+) ([]string, error) {
 	if v.K != rts.VList {
 		return nil, applyErr(field, "expects list")
 	}
@@ -1281,7 +1295,10 @@ func (e *Engine) applyExprs(
 	}}, nil
 }
 
-func (e *Engine) findPatchProfile(doc *restfile.Document, name string) (*restfile.PatchProfile, bool) {
+func (e *Engine) findPatchProfile(
+	doc *restfile.Document,
+	name string,
+) (*restfile.PatchProfile, bool) {
 	fs := docPatchProfiles(doc)
 	sf := func(p restfile.PatchProfile) restfile.PatchScope { return p.Scope }
 	nf := func(p restfile.PatchProfile) string { return p.Name }

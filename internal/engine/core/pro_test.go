@@ -35,9 +35,27 @@ func TestRunProfileEmitsWarmupAndMeasuredIterations(t *testing.T) {
 
 	dep := &proDep{
 		res: []engine.RequestResult{
-			{Response: &httpclient.Response{Status: "200 OK", StatusCode: http.StatusOK, Duration: 3 * time.Millisecond}},
-			{Response: &httpclient.Response{Status: "200 OK", StatusCode: http.StatusOK, Duration: 4 * time.Millisecond}},
-			{Response: &httpclient.Response{Status: "200 OK", StatusCode: http.StatusOK, Duration: 5 * time.Millisecond}},
+			{
+				Response: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Duration:   3 * time.Millisecond,
+				},
+			},
+			{
+				Response: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Duration:   4 * time.Millisecond,
+				},
+			},
+			{
+				Response: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Duration:   5 * time.Millisecond,
+				},
+			},
 		},
 	}
 
@@ -169,8 +187,20 @@ func TestRunProfileCancelDuringDelayEmitsRunDone(t *testing.T) {
 
 	dep := &proDep{
 		res: []engine.RequestResult{
-			{Response: &httpclient.Response{Status: "200 OK", StatusCode: http.StatusOK, Duration: time.Millisecond}},
-			{Response: &httpclient.Response{Status: "200 OK", StatusCode: http.StatusOK, Duration: time.Millisecond}},
+			{
+				Response: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Duration:   time.Millisecond,
+				},
+			},
+			{
+				Response: &httpclient.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Duration:   time.Millisecond,
+				},
+			},
 		},
 	}
 

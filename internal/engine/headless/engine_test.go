@@ -108,22 +108,28 @@ func TestEngineExecuteRequestCapturesScriptedWebSocketTranscript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen: %v", err)
 	}
-	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
-		if err != nil {
-			t.Fatalf("websocket accept failed: %v", err)
-		}
-		defer func() {
-			_ = conn.Close(websocket.StatusNormalClosure, "done")
-		}()
-		_, data, err := conn.Read(r.Context())
-		if err != nil {
-			t.Fatalf("websocket read failed: %v", err)
-		}
-		if err := conn.Write(r.Context(), websocket.MessageText, []byte("pong:"+string(data))); err != nil {
-			t.Fatalf("websocket write failed: %v", err)
-		}
-	}))
+	srv := httptest.NewUnstartedServer(
+		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{InsecureSkipVerify: true})
+			if err != nil {
+				t.Fatalf("websocket accept failed: %v", err)
+			}
+			defer func() {
+				_ = conn.Close(websocket.StatusNormalClosure, "done")
+			}()
+			_, data, err := conn.Read(r.Context())
+			if err != nil {
+				t.Fatalf("websocket read failed: %v", err)
+			}
+			if err := conn.Write(
+				r.Context(),
+				websocket.MessageText,
+				[]byte("pong:"+string(data)),
+			); err != nil {
+				t.Fatalf("websocket write failed: %v", err)
+			}
+		}),
+	)
 	srv.Listener = ln
 	srv.Start()
 	defer srv.Close()

@@ -37,7 +37,10 @@ func resolveRequestTimeout(req *restfile.Request, base time.Duration) time.Durat
 	return base
 }
 
-func (e *Engine) resolveHTTPOptions(doc *restfile.Document, opts httpclient.Options) httpclient.Options {
+func (e *Engine) resolveHTTPOptions(
+	doc *restfile.Document,
+	opts httpclient.Options,
+) httpclient.Options {
 	if opts.BaseDir == "" && e.filePath(doc) != "" {
 		opts.BaseDir = filepath.Dir(e.filePath(doc))
 	}

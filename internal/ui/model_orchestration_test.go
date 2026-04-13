@@ -74,7 +74,12 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 		Meta: core.NewMeta(run, at.Add(10*time.Millisecond)),
 		Row:  core.RowMeta{Index: 0, Env: "dev", Base: true, Total: 2},
 		Result: engine.RequestResult{
-			Response:    testHTTPResp("https://example.com/items", 200, `{"env":"dev"}`, 10*time.Millisecond),
+			Response: testHTTPResp(
+				"https://example.com/items",
+				200,
+				`{"env":"dev"}`,
+				10*time.Millisecond,
+			),
 			Executed:    first,
 			RequestText: renderRequestText(first),
 			Environment: "dev",
@@ -304,7 +309,12 @@ func TestProfileRunWarmupProgressAdvancesToMeasuredStage(t *testing.T) {
 			Delay:       time.Second,
 		},
 		Result: engine.RequestResult{
-			Response:    testHTTPResp("https://example.com/profile", 200, `{"ok":true}`, 15*time.Millisecond),
+			Response: testHTTPResp(
+				"https://example.com/profile",
+				200,
+				`{"ok":true}`,
+				15*time.Millisecond,
+			),
 			Executed:    cur,
 			RequestText: renderRequestText(cur),
 		},
@@ -443,7 +453,12 @@ func TestProfileRunCancelWhileIdleBetweenRunsFinalizesImmediately(t *testing.T) 
 			Delay:       time.Second,
 		},
 		Result: engine.RequestResult{
-			Response:    testHTTPResp("https://example.com/profile", 200, `{"ok":true}`, 10*time.Millisecond),
+			Response: testHTTPResp(
+				"https://example.com/profile",
+				200,
+				`{"ok":true}`,
+				10*time.Millisecond,
+			),
 			Executed:    cur,
 			RequestText: renderRequestText(cur),
 		},
@@ -464,7 +479,10 @@ func TestProfileRunCancelWhileIdleBetweenRunsFinalizesImmediately(t *testing.T) 
 		t.Fatal("expected profile snapshot after idle cancel")
 	}
 	if !strings.Contains(m.responseLatest.pretty, "Profiling canceled after 1/3 runs") {
-		t.Fatalf("expected idle canceled summary in profile snapshot, got %q", m.responseLatest.pretty)
+		t.Fatalf(
+			"expected idle canceled summary in profile snapshot, got %q",
+			m.responseLatest.pretty,
+		)
 	}
 	if !strings.Contains(m.statusMessage.text, "Profiling canceled after 1/3 runs") {
 		t.Fatalf("expected idle canceled summary status, got %q", m.statusMessage.text)
@@ -586,7 +604,12 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 	}
 
 	first := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/branch", 200, `{"ok":true}`, 8*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/branch",
+			200,
+			`{"ok":true}`,
+			8*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[0]),
 		RequestText: renderRequestText(doc.Requests[0]),
 		Environment: "dev",
@@ -646,7 +669,12 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 	}
 
 	second := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/items/a", 200, `{"item":"a"}`, 9*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/items/a",
+			200,
+			`{"item":"a"}`,
+			9*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[1]),
 		RequestText: "GET https://example.com/items/a\n",
 		Environment: "dev",
@@ -704,7 +732,12 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 	}
 
 	third := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/items/b", 200, `{"item":"b"}`, 11*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/items/b",
+			200,
+			`{"item":"b"}`,
+			11*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[1]),
 		RequestText: "GET https://example.com/items/b\n",
 		Environment: "dev",
@@ -913,7 +946,12 @@ func TestWorkflowRunKeepsSpinnerActiveUntilRunDone(t *testing.T) {
 	}
 
 	res := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/one", 200, `{"ok":true}`, 9*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/one",
+			200,
+			`{"ok":true}`,
+			9*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[0]),
 		RequestText: "GET https://example.com/one\n",
 		Environment: "dev",
@@ -993,11 +1031,21 @@ func TestWorkflowUIDrivenResponseKeepsSpinnerActiveBetweenSteps(t *testing.T) {
 	m.sending = true
 
 	res := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/one", 200, `{"ok":true}`, 11*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/one",
+			200,
+			`{"ok":true}`,
+			11*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[0]),
 		RequestText: "GET https://example.com/one\n",
 		Environment: "dev",
-		Explain:     testRunExplain(doc.Requests[0], "dev", xplain.StatusReady, "HTTP request sent"),
+		Explain: testRunExplain(
+			doc.Requests[0],
+			"dev",
+			xplain.StatusReady,
+			"HTTP request sent",
+		),
 	}
 	_ = m.handleWorkflowUIDrivenResponse(m.responseMsgFromRunState(res, false))
 
@@ -1066,11 +1114,21 @@ func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 		Doc:  doc, Request: doc.Requests[0],
 	})
 	first := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/one", 200, `{"one":true}`, 8*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/one",
+			200,
+			`{"one":true}`,
+			8*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[0]),
 		RequestText: "GET https://example.com/one\n",
 		Environment: "dev",
-		Explain:     testRunExplain(doc.Requests[0], "dev", xplain.StatusReady, "HTTP request sent"),
+		Explain: testRunExplain(
+			doc.Requests[0],
+			"dev",
+			xplain.StatusReady,
+			"HTTP request sent",
+		),
 	}
 	applyRunEvt(t, &m, core.ReqDone{
 		Meta:   core.NewMeta(pl.Run, at.Add(8*time.Millisecond)),
@@ -1102,11 +1160,21 @@ func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 		Doc:  doc, Request: doc.Requests[1],
 	})
 	second := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/two", 200, `{"two":true}`, 9*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/two",
+			200,
+			`{"two":true}`,
+			9*time.Millisecond,
+		),
 		Executed:    cloneRequest(doc.Requests[1]),
 		RequestText: "GET https://example.com/two\n",
 		Environment: "dev",
-		Explain:     testRunExplain(doc.Requests[1], "dev", xplain.StatusReady, "HTTP request sent"),
+		Explain: testRunExplain(
+			doc.Requests[1],
+			"dev",
+			xplain.StatusReady,
+			"HTTP request sent",
+		),
 	}
 	applyRunEvt(t, &m, core.ReqDone{
 		Meta:   core.NewMeta(pl.Run, at.Add(18*time.Millisecond)),
@@ -1200,7 +1268,10 @@ func TestWorkflowExplainReportCarriesPerStepChangesAndVars(t *testing.T) {
 	if !strings.Contains(out, "set header Authorization = •••") {
 		t.Fatalf("expected auth header change in workflow explain, got %q", out)
 	}
-	if !strings.Contains(out, "change url: {{base_url}}/status/200 -> https://httpbin.org/status/200") {
+	if !strings.Contains(
+		out,
+		"change url: {{base_url}}/status/200 -> https://httpbin.org/status/200",
+	) {
 		t.Fatalf("expected URL expansion change in workflow explain, got %q", out)
 	}
 }
@@ -1335,7 +1406,12 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	}
 
 	first := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/items/a", 200, `{"item":"a"}`, 7*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/items/a",
+			200,
+			`{"item":"a"}`,
+			7*time.Millisecond,
+		),
 		Executed:    cloneRequest(req),
 		RequestText: "GET https://example.com/items/a\n",
 		Environment: "dev",
@@ -1384,7 +1460,12 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	}
 
 	second := engine.RequestResult{
-		Response:    testHTTPResp("https://example.com/items/b", 200, `{"item":"b"}`, 9*time.Millisecond),
+		Response: testHTTPResp(
+			"https://example.com/items/b",
+			200,
+			`{"item":"b"}`,
+			9*time.Millisecond,
+		),
 		Executed:    cloneRequest(req),
 		RequestText: "GET https://example.com/items/b\n",
 		Environment: "dev",

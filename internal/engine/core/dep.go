@@ -10,7 +10,12 @@ import (
 )
 
 type Dep interface {
-	CollectVariables(*restfile.Document, *restfile.Request, string, ...map[string]string) map[string]string
+	CollectVariables(
+		*restfile.Document,
+		*restfile.Request,
+		string,
+		...map[string]string,
+	) map[string]string
 	ExecuteWith(
 		*restfile.Document,
 		*restfile.Request,

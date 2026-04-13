@@ -39,7 +39,9 @@ func TestReportFromRunnerCounts(t *testing.T) {
 					Proto:      "HTTP/1.1",
 					Duration:   25 * time.Millisecond,
 				},
-				Tests: []scripts.TestResult{{Name: "status", Passed: true, Elapsed: time.Millisecond}},
+				Tests: []scripts.TestResult{
+					{Name: "status", Passed: true, Elapsed: time.Millisecond},
+				},
 				Stream: &runner.StreamInfo{
 					Kind:       "sse",
 					EventCount: 1,
@@ -58,27 +60,34 @@ func TestReportFromRunnerCounts(t *testing.T) {
 				Summary:    "canceled",
 				SkipReason: "",
 				Steps: []runner.StepResult{{
-					Name:       "Login",
-					Method:     "GET",
-					Target:     "/login",
-					Canceled:   true,
-					Summary:    "stop",
-					Passed:     false,
-					Duration:   10 * time.Millisecond,
-					Response:   &httpclient.Response{Status: "200 OK", StatusCode: 200, Proto: "HTTP/1.1"},
+					Name:     "Login",
+					Method:   "GET",
+					Target:   "/login",
+					Canceled: true,
+					Summary:  "stop",
+					Passed:   false,
+					Duration: 10 * time.Millisecond,
+					Response: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Proto:      "HTTP/1.1",
+					},
 					Tests:      []scripts.TestResult{{Name: "a", Passed: true}},
 					Trace:      &runner.TraceInfo{Summary: &history.TraceSummary{}},
 					SkipReason: "",
 				}},
 			},
 			{
-				Kind:       runner.ResultKindCompare,
-				Name:       "cmp",
-				Method:     "COMPARE",
-				Passed:     true,
-				Duration:   50 * time.Millisecond,
-				Compare:    &runner.CompareInfo{Baseline: "stage"},
-				Steps:      []runner.StepResult{{Name: "dev", Environment: "dev", Passed: true}, {Name: "stage", Environment: "stage", Passed: true}},
+				Kind:     runner.ResultKindCompare,
+				Name:     "cmp",
+				Method:   "COMPARE",
+				Passed:   true,
+				Duration: 50 * time.Millisecond,
+				Compare:  &runner.CompareInfo{Baseline: "stage"},
+				Steps: []runner.StepResult{
+					{Name: "dev", Environment: "dev", Passed: true},
+					{Name: "stage", Environment: "stage", Passed: true},
+				},
 				Summary:    "ok",
 				Canceled:   false,
 				SkipReason: "",
@@ -107,7 +116,8 @@ func TestReportFromRunnerCounts(t *testing.T) {
 	if got.Results[0].Kind != KindRequest || got.Results[0].Status != StatusPass {
 		t.Fatalf("unexpected request mapping: %+v", got.Results[0])
 	}
-	if got.Results[1].Kind != KindWorkflow || got.Results[1].Status != StatusFail || !got.Results[1].Canceled {
+	if got.Results[1].Kind != KindWorkflow || got.Results[1].Status != StatusFail ||
+		!got.Results[1].Canceled {
 		t.Fatalf("unexpected workflow mapping: %+v", got.Results[1])
 	}
 	if got.Results[2].Kind != KindCompare || got.Results[2].Status != StatusPass {
@@ -127,7 +137,10 @@ func TestReportFromRunnerDetails(t *testing.T) {
 				Method:  "COMPARE",
 				Passed:  true,
 				Compare: &runner.CompareInfo{Baseline: "stage"},
-				Steps:   []runner.StepResult{{Name: "dev", Environment: "dev", Passed: true}, {Name: "stage", Environment: "stage", Passed: true}},
+				Steps: []runner.StepResult{
+					{Name: "dev", Environment: "dev", Passed: true},
+					{Name: "stage", Environment: "stage", Passed: true},
+				},
 			},
 			{
 				Kind:     runner.ResultKindForEach,
@@ -144,10 +157,16 @@ func TestReportFromRunnerDetails(t *testing.T) {
 					Total:     3,
 					Passed:    true,
 					Duration:  15 * time.Millisecond,
-					GRPC:      &grpcclient.Response{StatusCode: codes.OK, StatusMessage: "ok", Duration: 15 * time.Millisecond},
-					Tests:     []scripts.TestResult{{Name: "ok", Passed: true}},
-					Stream:    &runner.StreamInfo{Kind: "ws", EventCount: 2},
-					Trace:     &runner.TraceInfo{Summary: &history.TraceSummary{Duration: 15 * time.Millisecond}},
+					GRPC: &grpcclient.Response{
+						StatusCode:    codes.OK,
+						StatusMessage: "ok",
+						Duration:      15 * time.Millisecond,
+					},
+					Tests:  []scripts.TestResult{{Name: "ok", Passed: true}},
+					Stream: &runner.StreamInfo{Kind: "ws", EventCount: 2},
+					Trace: &runner.TraceInfo{
+						Summary: &history.TraceSummary{Duration: 15 * time.Millisecond},
+					},
 				}},
 			},
 			{
@@ -172,8 +191,12 @@ func TestReportFromRunnerDetails(t *testing.T) {
 							Median: 2 * time.Millisecond,
 							StdDev: time.Millisecond,
 						},
-						Percentiles: []history.ProfilePercentile{{Percentile: 95, Value: 3 * time.Millisecond}},
-						Histogram:   []history.ProfileHistogramBin{{From: time.Millisecond, To: 3 * time.Millisecond, Count: 3}},
+						Percentiles: []history.ProfilePercentile{
+							{Percentile: 95, Value: 3 * time.Millisecond},
+						},
+						Histogram: []history.ProfileHistogramBin{
+							{From: time.Millisecond, To: 3 * time.Millisecond, Count: 3},
+						},
 					},
 					Failures: []runner.ProfileFailure{{
 						Iteration:  3,
@@ -196,7 +219,8 @@ func TestReportFromRunnerDetails(t *testing.T) {
 	if cmp.Compare == nil || cmp.Compare.Baseline != "stage" {
 		t.Fatalf("unexpected compare mapping: %+v", cmp)
 	}
-	if len(cmp.Steps) != 2 || cmp.Steps[0].Environment != "dev" || cmp.Steps[1].Environment != "stage" {
+	if len(cmp.Steps) != 2 || cmp.Steps[0].Environment != "dev" ||
+		cmp.Steps[1].Environment != "stage" {
 		t.Fatalf("unexpected compare steps: %+v", cmp.Steps)
 	}
 
@@ -208,7 +232,8 @@ func TestReportFromRunnerDetails(t *testing.T) {
 	if step.Branch != "if-true" || step.Iteration != 2 || step.Total != 3 {
 		t.Fatalf("unexpected workflow step mapping: %+v", step)
 	}
-	if step.GRPC == nil || step.GRPC.Code != codes.OK.String() || step.Stream == nil || step.Trace == nil {
+	if step.GRPC == nil || step.GRPC.Code != codes.OK.String() || step.Stream == nil ||
+		step.Trace == nil {
 		t.Fatalf("unexpected workflow protocol mapping: %+v", step)
 	}
 
@@ -222,7 +247,8 @@ func TestReportFromRunnerDetails(t *testing.T) {
 	if prof.Profile.Latency == nil || prof.Profile.Latency.Max != 3*time.Millisecond {
 		t.Fatalf("unexpected profile latency: %+v", prof.Profile)
 	}
-	if len(prof.Profile.Percentiles) != 1 || len(prof.Profile.Histogram) != 1 || len(prof.Profile.Failures) != 1 {
+	if len(prof.Profile.Percentiles) != 1 || len(prof.Profile.Histogram) != 1 ||
+		len(prof.Profile.Failures) != 1 {
 		t.Fatalf("unexpected profile detail mapping: %+v", prof.Profile)
 	}
 }
@@ -290,7 +316,8 @@ func TestReportFromRunnerClones(t *testing.T) {
 	if item.Stream.Summary["list"].([]any)[0] != "a" {
 		t.Fatalf("expected nested slice clone, got %+v", item.Stream.Summary)
 	}
-	if item.Trace == nil || item.Trace.Budget == nil || item.Trace.Budget.Phases["dns"] != time.Millisecond {
+	if item.Trace == nil || item.Trace.Budget == nil ||
+		item.Trace.Budget.Phases["dns"] != time.Millisecond {
 		t.Fatalf("expected trace budget clone, got %+v", item.Trace)
 	}
 }
@@ -381,7 +408,8 @@ func TestReportFromRunnerStrings(t *testing.T) {
 	}
 
 	item := got.Results[0]
-	if item.Name != "req" || item.Method != "GET" || item.Target != "https://example.com" || item.Environment != "dev" {
+	if item.Name != "req" || item.Method != "GET" || item.Target != "https://example.com" ||
+		item.Environment != "dev" {
 		t.Fatalf("expected result identity strings to be trimmed, got %+v", item)
 	}
 	if item.Summary != "ok" || item.SkipReason != "skipped" {
@@ -399,13 +427,19 @@ func TestReportFromRunnerStrings(t *testing.T) {
 	if item.Compare == nil || item.Compare.Baseline != "stage" {
 		t.Fatalf("expected compare to be trimmed, got %+v", item.Compare)
 	}
-	if item.Profile == nil || len(item.Profile.Failures) != 1 || item.Profile.Failures[0].Reason != "flaky" || item.Profile.Failures[0].Status != "500" {
+	if item.Profile == nil || len(item.Profile.Failures) != 1 ||
+		item.Profile.Failures[0].Reason != "flaky" ||
+		item.Profile.Failures[0].Status != "500" {
 		t.Fatalf("expected profile failures to be trimmed, got %+v", item.Profile)
 	}
-	if item.Stream == nil || item.Stream.Kind != "sse" || item.Stream.TranscriptPath != "stream.log" {
+	if item.Stream == nil || item.Stream.Kind != "sse" ||
+		item.Stream.TranscriptPath != "stream.log" {
 		t.Fatalf("expected stream strings to be trimmed, got %+v", item.Stream)
 	}
-	if item.Trace == nil || item.Trace.Error != "timeout" || item.Trace.ArtifactPath != "trace.json" || len(item.Trace.Breaches) != 1 || item.Trace.Breaches[0].Kind != "total" {
+	if item.Trace == nil || item.Trace.Error != "timeout" ||
+		item.Trace.ArtifactPath != "trace.json" ||
+		len(item.Trace.Breaches) != 1 ||
+		item.Trace.Breaches[0].Kind != "total" {
 		t.Fatalf("expected trace strings to be trimmed, got %+v", item.Trace)
 	}
 
@@ -413,7 +447,9 @@ func TestReportFromRunnerStrings(t *testing.T) {
 		t.Fatalf("expected one step, got %+v", item.Steps)
 	}
 	step := item.Steps[0]
-	if step.Name != "step" || step.Method != "POST" || step.Target != "/items" || step.Environment != "stage" || step.Branch != "branch-a" {
+	if step.Name != "step" || step.Method != "POST" || step.Target != "/items" ||
+		step.Environment != "stage" ||
+		step.Branch != "branch-a" {
 		t.Fatalf("expected step identity strings to be trimmed, got %+v", step)
 	}
 	if step.Summary != "retry" || step.SkipReason != "guard" {
@@ -422,7 +458,8 @@ func TestReportFromRunnerStrings(t *testing.T) {
 	if step.Error != "  step boom  " || step.ScriptError != "  step script  " {
 		t.Fatalf("expected step errors to be preserved, got %+v", step)
 	}
-	if step.GRPC == nil || step.GRPC.Code != codes.Internal.String() || step.GRPC.StatusMessage != "internal" {
+	if step.GRPC == nil || step.GRPC.Code != codes.Internal.String() ||
+		step.GRPC.StatusMessage != "internal" {
 		t.Fatalf("expected grpc strings to be trimmed, got %+v", step.GRPC)
 	}
 	if len(step.Tests) != 1 || step.Tests[0].Name != "step test" || step.Tests[0].Message != "bad" {
@@ -431,7 +468,10 @@ func TestReportFromRunnerStrings(t *testing.T) {
 	if step.Stream == nil || step.Stream.Kind != "ws" || step.Stream.TranscriptPath != "step.log" {
 		t.Fatalf("expected step stream strings to be trimmed, got %+v", step.Stream)
 	}
-	if step.Trace == nil || step.Trace.Error != "deadline" || step.Trace.ArtifactPath != "step-trace.json" || len(step.Trace.Breaches) != 1 || step.Trace.Breaches[0].Kind != "dns" {
+	if step.Trace == nil || step.Trace.Error != "deadline" ||
+		step.Trace.ArtifactPath != "step-trace.json" ||
+		len(step.Trace.Breaches) != 1 ||
+		step.Trace.Breaches[0].Kind != "dns" {
 		t.Fatalf("expected step trace strings to be trimmed, got %+v", step.Trace)
 	}
 }

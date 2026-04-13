@@ -133,7 +133,10 @@ func (e *Engine) ensureCommandAuth(
 
 	ac := e.rt.AuthCmd()
 	if ac == nil {
-		return authcmd.Result{}, errdef.New(errdef.CodeHTTP, "command auth support is not initialised")
+		return authcmd.Result{}, errdef.New(
+			errdef.CodeHTTP,
+			"command auth support is not initialised",
+		)
 	}
 	out, err := ac.ResolvePrepared(ctx, prep)
 	if err != nil {

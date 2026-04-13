@@ -254,7 +254,9 @@ func newExec(
 	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
 	if req != nil &&
 		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTS || hasJS) {
-		exp.warn("Variable trace covers template resolution only; RTS/JS script internals are not traced")
+		exp.warn(
+			"Variable trace covers template resolution only; RTS/JS script internals are not traced",
+		)
 	}
 	return &execCtx{
 		eng:       e,
@@ -812,7 +814,11 @@ func (f flow) PreviewResult() xexec.RequestResult {
 	out := x.base()
 	out.RequestText = x.reqText()
 	out.Preview = true
-	out.Explain = x.exp.finish(xplain.StatusReady, "Explain preview ready. No request was sent.", nil)
+	out.Explain = x.exp.finish(
+		xplain.StatusReady,
+		"Explain preview ready. No request was sent.",
+		nil,
+	)
 	return out
 }
 

@@ -82,7 +82,12 @@ func TestHandleResponseMessageSkippedRunKeepsCurrentTabAndExposesExplain(t *test
 		Environment: "dev",
 		Skipped:     true,
 		SkipReason:  "Condition evaluated to false.",
-		Explain:     testRunExplain(req, "dev", xplain.StatusSkipped, "Condition evaluated to false."),
+		Explain: testRunExplain(
+			req,
+			"dev",
+			xplain.StatusSkipped,
+			"Condition evaluated to false.",
+		),
 	}, false)
 
 	cmd := model.handleResponseMessage(msg)

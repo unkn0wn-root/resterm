@@ -108,9 +108,12 @@ func TestRunnerRunHTTPSSE(t *testing.T) {
 func TestRunnerRunHTTPRejectsInteractiveWebSocket(t *testing.T) {
 	run := Runner{}
 	res := run.RunHTTP(HTTPInput{
-		Client:           httpclient.NewClient(nil),
-		Context:          context.Background(),
-		Req:              &restfile.Request{URL: "wss://example.com", WebSocket: &restfile.WebSocketRequest{}},
+		Client:  httpclient.NewClient(nil),
+		Context: context.Background(),
+		Req: &restfile.Request{
+			URL:       "wss://example.com",
+			WebSocket: &restfile.WebSocketRequest{},
+		},
 		EffectiveTimeout: 1,
 	})
 	if res.Err == nil {

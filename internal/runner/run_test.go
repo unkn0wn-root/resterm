@@ -31,16 +31,18 @@ func TestRunSingleRequestDefaultSelection(t *testing.T) {
 
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				Status:     "204 No Content",
-				StatusCode: http.StatusNoContent,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "204 No Content",
+					StatusCode: http.StatusNoContent,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -87,17 +89,19 @@ func TestRunSelectRequestByName(t *testing.T) {
 	var seen string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			seen = req.URL.String()
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				seen = req.URL.String()
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -157,16 +161,18 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -211,25 +217,27 @@ func TestRunWorkflowByName(t *testing.T) {
 	var auth string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			hdr := make(http.Header)
-			body := "{}"
-			if req.URL.Path == "/login" {
-				hdr.Set("Content-Type", "application/json")
-				body = `{"token":"wf-123"}`
-			}
-			if req.URL.Path == "/use" {
-				auth = req.Header.Get("Authorization")
-			}
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     hdr,
-				Body:       io.NopCloser(strings.NewReader(body)),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				body := "{}"
+				if req.URL.Path == "/login" {
+					hdr.Set("Content-Type", "application/json")
+					body = `{"token":"wf-123"}`
+				}
+				if req.URL.Path == "/use" {
+					auth = req.Header.Get("Authorization")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -287,17 +295,19 @@ func TestRunRequestForEach(t *testing.T) {
 	var seen []string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			seen = append(seen, req.URL.Path)
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				seen = append(seen, req.URL.Path)
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -312,7 +322,17 @@ func TestRunRequestForEach(t *testing.T) {
 	if rep.Total != 1 || rep.Passed != 1 {
 		t.Fatalf("unexpected report counts: %+v", rep)
 	}
-	if want := []string{"/items/a", "/items/b", "/items/c"}; strings.Join(seen, ",") != strings.Join(want, ",") {
+	if want := []string{
+		"/items/a",
+		"/items/b",
+		"/items/c",
+	}; strings.Join(
+		seen,
+		",",
+	) != strings.Join(
+		want,
+		",",
+	) {
 		t.Fatalf("unexpected iteration targets: got %v want %v", seen, want)
 	}
 	if len(rep.Results) != 1 || rep.Results[0].Kind != ResultKindForEach {
@@ -346,19 +366,21 @@ func TestRunAllCarriesJSPreRequestGlobals(t *testing.T) {
 	var auth string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.Path == "/use" {
-				auth = req.Header.Get("Authorization")
-			}
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Path == "/use" {
+					auth = req.Header.Get("Authorization")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -400,25 +422,27 @@ func TestRunAllCarriesCapturesAcrossRequests(t *testing.T) {
 	var auth string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			body := "{}"
-			hdr := make(http.Header)
-			if req.URL.Path == "/login" {
-				hdr.Set("Content-Type", "application/json")
-				body = `{"token":"cap-123"}`
-			}
-			if req.URL.Path == "/use" {
-				auth = req.Header.Get("Authorization")
-			}
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     hdr,
-				Body:       io.NopCloser(strings.NewReader(body)),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				body := "{}"
+				hdr := make(http.Header)
+				if req.URL.Path == "/login" {
+					hdr.Set("Content-Type", "application/json")
+					body = `{"token":"cap-123"}`
+				}
+				if req.URL.Path == "/use" {
+					auth = req.Header.Get("Authorization")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -461,19 +485,21 @@ func TestRunAllCarriesRTSPreRequestGlobals(t *testing.T) {
 	var mode string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			if req.URL.Path == "/use" {
-				mode = req.Header.Get("X-Mode")
-			}
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				if req.URL.Path == "/use" {
+					mode = req.Header.Get("X-Mode")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -512,16 +538,18 @@ func TestReportWriteJSON(t *testing.T) {
 
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -572,13 +600,15 @@ func TestReportWriteJSON(t *testing.T) {
 		t.Fatalf("expected one result, got %+v", got.Results)
 	}
 	item := got.Results[0]
-	if item.Name != "json" || item.Method != "POST" || item.Target != "https://example.com/json?mode=1" {
+	if item.Name != "json" || item.Method != "POST" ||
+		item.Target != "https://example.com/json?mode=1" {
 		t.Fatalf("unexpected result identity: %+v", item)
 	}
 	if item.Status != "pass" || item.HTTP.StatusCode != http.StatusOK {
 		t.Fatalf("unexpected result status: %+v", item)
 	}
-	if len(item.Tests) != 1 || item.Tests[0].Name != "response.statusCode == 200" || !item.Tests[0].Passed {
+	if len(item.Tests) != 1 || item.Tests[0].Name != "response.statusCode == 200" ||
+		!item.Tests[0].Passed {
 		t.Fatalf("unexpected tests payload: %+v", item.Tests)
 	}
 }
@@ -608,22 +638,24 @@ func TestWorkflowWriteJSONIncludesSteps(t *testing.T) {
 
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			hdr := make(http.Header)
-			body := "{}"
-			if req.URL.Path == "/login" {
-				hdr.Set("Content-Type", "application/json")
-				body = `{"token":"wf-123"}`
-			}
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     hdr,
-				Body:       io.NopCloser(strings.NewReader(body)),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				body := "{}"
+				if req.URL.Path == "/login" {
+					hdr.Set("Content-Type", "application/json")
+					body = `{"token":"wf-123"}`
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -693,25 +725,27 @@ func TestRunAllCarriesStreamCapturesAndArtifacts(t *testing.T) {
 	var gotHdr string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			hdr := make(http.Header)
-			body := "{}"
-			if req.URL.Path == "/events" {
-				hdr.Set("Content-Type", "text/event-stream")
-				body = "data: hello\n\n"
-			}
-			if req.URL.Path == "/use" {
-				gotHdr = req.Header.Get("X-Stream-Count")
-			}
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     hdr,
-				Body:       io.NopCloser(strings.NewReader(body)),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				body := "{}"
+				if req.URL.Path == "/events" {
+					hdr.Set("Content-Type", "text/event-stream")
+					body = "data: hello\n\n"
+				}
+				if req.URL.Path == "/use" {
+					gotHdr = req.Header.Get("X-Stream-Count")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -799,17 +833,19 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 	var seen []string
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			seen = append(seen, req.URL.Host)
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(req.URL.Host)),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				seen = append(seen, req.URL.Host)
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader(req.URL.Host)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -827,7 +863,16 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if want := []string{"dev.example.com", "stage.example.com"}; strings.Join(seen, ",") != strings.Join(want, ",") {
+	if want := []string{
+		"dev.example.com",
+		"stage.example.com",
+	}; strings.Join(
+		seen,
+		",",
+	) != strings.Join(
+		want,
+		",",
+	) {
 		t.Fatalf("unexpected compare targets: got %v want %v", seen, want)
 	}
 	if rep.Total != 1 || rep.Passed != 1 {
@@ -843,7 +888,8 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 	if item.Compare == nil || item.Compare.Baseline != "stage" {
 		t.Fatalf("unexpected compare info: %+v", item.Compare)
 	}
-	if len(item.Steps) != 2 || item.Steps[0].Environment != "dev" || item.Steps[1].Environment != "stage" {
+	if len(item.Steps) != 2 || item.Steps[0].Environment != "dev" ||
+		item.Steps[1].Environment != "stage" {
 		t.Fatalf("unexpected compare steps: %+v", item.Steps)
 	}
 
@@ -902,17 +948,19 @@ func TestRunProfileMetadata(t *testing.T) {
 	count := 0
 	client := httpclient.NewClient(nil)
 	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-			count++
-			return &http.Response{
-				Status:     "200 OK",
-				StatusCode: http.StatusOK,
-				Proto:      "HTTP/1.1",
-				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader("{}")),
-				Request:    req,
-			}, nil
-		})}, nil
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				count++
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
 	})
 
 	rep, err := Run(Options{
@@ -1057,7 +1105,10 @@ func TestRunPersistOAuthAcrossInvocations(t *testing.T) {
 		case "/token":
 			tokenCalls++
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = io.WriteString(w, `{"access_token":"oauth-123","token_type":"Bearer","expires_in":3600}`)
+			_, _ = io.WriteString(
+				w,
+				`{"access_token":"oauth-123","token_type":"Bearer","expires_in":3600}`,
+			)
 		case "/seed":
 			_, _ = io.WriteString(w, `{"ok":true}`)
 		case "/use":
@@ -1281,7 +1332,10 @@ func TestRunRejectsUnseededHeadlessOAuthAuthorizationCode(t *testing.T) {
 	if len(rep.Results) != 1 || rep.Results[0].Err == nil {
 		t.Fatalf("expected request error result, got %+v", rep.Results)
 	}
-	if !strings.Contains(rep.Results[0].Err.Error(), "headless oauth authorization_code requires a cached or refreshable token") {
+	if !strings.Contains(
+		rep.Results[0].Err.Error(),
+		"headless oauth authorization_code requires a cached or refreshable token",
+	) {
 		t.Fatalf("unexpected oauth error: %v", rep.Results[0].Err)
 	}
 	if calls != 0 {

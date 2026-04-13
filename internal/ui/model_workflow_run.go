@@ -715,7 +715,8 @@ func workflowResultFromRun(
 	}
 
 	hasExp := hasStatusExp(step.Expect)
-	hasResp := res.Response != nil || res.GRPC != nil || res.Stream != nil || len(res.Transcript) > 0
+	hasResp := res.Response != nil || res.GRPC != nil || res.Stream != nil ||
+		len(res.Transcript) > 0
 	hasProto := res.Response != nil || res.GRPC != nil
 	ok := true
 	switch {
@@ -1105,7 +1106,14 @@ func (m *Model) executeWorkflowSwitchStep(
 	if selected.Fail != "" {
 		return m.advanceWorkflow(
 			st,
-			makeWorkflowResult(st, step, false, false, selected.Fail, fmt.Errorf("%s", selected.Fail)),
+			makeWorkflowResult(
+				st,
+				step,
+				false,
+				false,
+				selected.Fail,
+				fmt.Errorf("%s", selected.Fail),
+			),
 		)
 	}
 	run := selected.Run
@@ -1149,7 +1157,10 @@ func (m *Model) executeWorkflowLoopIteration(
 			if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
-			st.results = append(st.results, makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped))
+			st.results = append(
+				st.results,
+				makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped),
+			)
 			if loop.step.OnFailure != restfile.WorkflowOnFailureContinue {
 				st.loop = nil
 				st.currentBranch = ""
@@ -1185,7 +1196,10 @@ func (m *Model) executeWorkflowLoopIteration(
 				if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-				st.results = append(st.results, makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped))
+				st.results = append(
+					st.results,
+					makeWorkflowResult(st, loop.step, false, false, wrapped.Error(), wrapped),
+				)
 				if loop.step.OnFailure != restfile.WorkflowOnFailureContinue {
 					st.loop = nil
 					st.currentBranch = ""
@@ -1198,7 +1212,10 @@ func (m *Model) executeWorkflowLoopIteration(
 				if cmd := m.consumeSkippedRequest(reason, nil); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
-				st.results = append(st.results, makeWorkflowResult(st, loop.step, false, true, reason, nil))
+				st.results = append(
+					st.results,
+					makeWorkflowResult(st, loop.step, false, true, reason, nil),
+				)
 				loop.index++
 				continue
 			}
@@ -1426,9 +1443,10 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		transcript        = append([]byte(nil), rm.transcript...)
 		tests             = append([]scripts.TestResult(nil), rm.tests...)
 		hasExp            = hasStatusExp(step.Expect)
-		hasResp           = rm.response != nil || rm.grpc != nil || rm.stream != nil || len(rm.transcript) > 0
-		hasProtoResp      = rm.response != nil || rm.grpc != nil
-		hasErr            = rm.err != nil
+		hasResp           = rm.response != nil || rm.grpc != nil || rm.stream != nil ||
+			len(rm.transcript) > 0
+		hasProtoResp = rm.response != nil || rm.grpc != nil
+		hasErr       = rm.err != nil
 	)
 	if hasErr {
 		emsg = strings.TrimSpace(errdef.Message(rm.err))
@@ -1877,7 +1895,11 @@ func workflowExplainCloneStages(lbl string, rep *xplain.Report) []wfExplainStage
 	return out
 }
 
-func workflowExplainMergeDiffs(xs []wfExplainStage, lbl string, r workflowStepResult) []wfExplainStage {
+func workflowExplainMergeDiffs(
+	xs []wfExplainStage,
+	lbl string,
+	r workflowStepResult,
+) []wfExplainStage {
 	if r.Src == nil || r.Req == nil {
 		return xs
 	}

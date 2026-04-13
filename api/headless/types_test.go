@@ -147,7 +147,9 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 					StdDev: 500 * time.Microsecond,
 				},
 				Percentiles: []Percentile{{Percentile: 95, Value: 2 * time.Millisecond}},
-				Histogram:   []HistBin{{From: time.Millisecond, To: 2 * time.Millisecond, Count: 2}},
+				Histogram: []HistBin{
+					{From: time.Millisecond, To: 2 * time.Millisecond, Count: 2},
+				},
 				Failures: []ProfileFail{{
 					Iteration:  2,
 					Status:     "500",
@@ -190,7 +192,8 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 	if rep.Results[0].Kind != KindCompare || rep.Results[0].Status != StatusPass {
 		t.Fatalf("unexpected stable values: %+v", rep.Results[0])
 	}
-	if rep.Results[0].Profile == nil || rep.Results[0].Trace == nil || rep.Results[0].Stream == nil {
+	if rep.Results[0].Profile == nil || rep.Results[0].Trace == nil ||
+		rep.Results[0].Stream == nil {
 		t.Fatalf("expected nested public values to be retained: %+v", rep.Results[0])
 	}
 }

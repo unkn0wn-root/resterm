@@ -183,7 +183,13 @@ func profileReport(st *profileState, stats analysis.LatencyStats) string {
 	fmt.Fprintf(&b, "Profile: %s\n", requestBaseTitle(st.req))
 	fmt.Fprintf(&b, "Started: %s\n", st.start.Format(time.RFC3339))
 	fmt.Fprintf(&b, "Ended: %s\n", st.end.Format(time.RFC3339))
-	fmt.Fprintf(&b, "Runs: %d total (%d warmup, %d measured)\n", st.idx, st.spec.Warmup, len(st.ok)+len(st.fail))
+	fmt.Fprintf(
+		&b,
+		"Runs: %d total (%d warmup, %d measured)\n",
+		st.idx,
+		st.spec.Warmup,
+		len(st.ok)+len(st.fail),
+	)
 	fmt.Fprintf(&b, "Success: %d\n", len(st.ok))
 	fmt.Fprintf(&b, "Failures: %d\n", len(st.fail))
 	if stats.Count > 0 {

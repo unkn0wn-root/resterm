@@ -605,7 +605,10 @@ func explainReqBody(req *restfile.Request) (string, string) {
 	}
 	switch {
 	case req.GRPC != nil:
-		if s := strings.TrimSpace(req.GRPC.MessageExpanded); req.GRPC.MessageExpandedSet && s != "" {
+		if s := strings.TrimSpace(
+			req.GRPC.MessageExpanded,
+		); req.GRPC.MessageExpandedSet &&
+			s != "" {
 			note := "gRPC message"
 			if path := strings.TrimSpace(req.GRPC.MessageFile); path != "" {
 				note = "expanded gRPC message from " + path
@@ -796,16 +799,25 @@ func explainWebSocketDetails(ws *restfile.WebSocketRequest) []xplain.Pair {
 	opts := ws.Options
 	out := make([]xplain.Pair, 0, 5)
 	if opts.HandshakeTimeout > 0 {
-		out = append(out, xplain.Pair{Key: "Handshake Timeout", Value: opts.HandshakeTimeout.String()})
+		out = append(
+			out,
+			xplain.Pair{Key: "Handshake Timeout", Value: opts.HandshakeTimeout.String()},
+		)
 	}
 	if opts.IdleTimeout > 0 {
 		out = append(out, xplain.Pair{Key: "Idle Timeout", Value: opts.IdleTimeout.String()})
 	}
 	if opts.MaxMessageBytes > 0 {
-		out = append(out, xplain.Pair{Key: "Max Message Bytes", Value: fmt.Sprintf("%d", opts.MaxMessageBytes)})
+		out = append(
+			out,
+			xplain.Pair{Key: "Max Message Bytes", Value: fmt.Sprintf("%d", opts.MaxMessageBytes)},
+		)
 	}
 	if len(opts.Subprotocols) > 0 {
-		out = append(out, xplain.Pair{Key: "Subprotocols", Value: strings.Join(opts.Subprotocols, ", ")})
+		out = append(
+			out,
+			xplain.Pair{Key: "Subprotocols", Value: strings.Join(opts.Subprotocols, ", ")},
+		)
 	}
 	if opts.CompressionSet {
 		out = append(out, xplain.Pair{Key: "Compression", Value: explainToggle(opts.Compression)})

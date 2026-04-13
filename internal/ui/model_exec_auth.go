@@ -331,7 +331,10 @@ func (m *Model) ensureCommandAuth(
 
 	ac := m.authCmdMgr()
 	if ac == nil {
-		return authcmd.Result{}, errdef.New(errdef.CodeHTTP, "command auth support is not initialised")
+		return authcmd.Result{}, errdef.New(
+			errdef.CodeHTTP,
+			"command auth support is not initialised",
+		)
 	}
 	res, err := ac.ResolvePrepared(ctx, prep)
 	if err != nil {

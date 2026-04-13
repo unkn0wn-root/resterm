@@ -39,7 +39,8 @@ func resultFailed(item Result) bool {
 	if resultSkipped(item) {
 		return false
 	}
-	if item.Status == StatusFail || item.Canceled || item.Error != "" || item.ScriptError != "" || traceFailed(item.Trace) {
+	if item.Status == StatusFail || item.Canceled || item.Error != "" || item.ScriptError != "" ||
+		traceFailed(item.Trace) {
 		return true
 	}
 	return anyTestFailed(item.Tests)
@@ -64,7 +65,8 @@ func stepFailed(step Step) bool {
 	if stepSkipped(step) {
 		return false
 	}
-	if step.Canceled || step.Status == StatusFail || step.Error != "" || step.ScriptError != "" || traceFailed(step.Trace) {
+	if step.Canceled || step.Status == StatusFail || step.Error != "" || step.ScriptError != "" ||
+		traceFailed(step.Trace) {
 		return true
 	}
 	return anyTestFailed(step.Tests)
@@ -228,7 +230,8 @@ func compareLine(item Result) string {
 func profileLine(item Result) string {
 	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
 	prof := item.Profile
-	if prof == nil || (prof.TotalRuns == 0 && prof.WarmupRuns == 0 && prof.SuccessfulRuns == 0 && prof.FailedRuns == 0) {
+	if prof == nil ||
+		(prof.TotalRuns == 0 && prof.WarmupRuns == 0 && prof.SuccessfulRuns == 0 && prof.FailedRuns == 0) {
 		if summary := item.Summary; summary != "" {
 			return fmt.Sprintf("%s [%s]", base, summary)
 		}

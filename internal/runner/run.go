@@ -368,7 +368,13 @@ func (r *Report) WriteText(w io.Writer) error {
 			return err
 		}
 		for i, step := range item.Steps {
-			if _, err := fmt.Fprintf(w, "  %d. %s %s\n", i+1, stepLabel(step), stepLine(step)); err != nil {
+			if _, err := fmt.Fprintf(
+				w,
+				"  %d. %s %s\n",
+				i+1,
+				stepLabel(step),
+				stepLine(step),
+			); err != nil {
 				return err
 			}
 		}
