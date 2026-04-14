@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.27.1](https://github.com/unkn0wn-root/resterm/compare/v0.26.2...v0.27.1) (2026-04-14)
+
+
+### Features
+
+* add shared registry for globals/locals instead of relying on ui ([347ada6](https://github.com/unkn0wn-root/resterm/commit/347ada6c3d20d30de4a06fb655309326cd880560))
+* add websocket and streaming to help modal ([3039487](https://github.com/unkn0wn-root/resterm/commit/30394876ae6f79a810ccb3b7a1d19f11b18ff78c))
+* add websocket help test ([e4568de](https://github.com/unkn0wn-root/resterm/commit/e4568de0db57fd345adf9f87f8e6dd8e6c680020))
+* **engine,headless,api:** add headless execution engine and workflow runtime ([232f868](https://github.com/unkn0wn-root/resterm/commit/232f86888d5c770f829bf97197ec0d4bd48a77e3))
+* move api -> headless and fix some small issues ([cc7565b](https://github.com/unkn0wn-root/resterm/commit/cc7565b51ac5dba43b76eee645c8809fb3f3ac97))
+* **oauth:** centralize config normalization ([1eb53a9](https://github.com/unkn0wn-root/resterm/commit/1eb53a9e6c2a02425b2ec82a2235eb5a6759bc1b))
+
+
+### Bug Fixes
+
+* remove old unused code ([648685e](https://github.com/unkn0wn-root/resterm/commit/648685e33e74a674d81a175683ab84094e7f9da2))
+* revert changes made by initial headless runner in resterm ([44d0350](https://github.com/unkn0wn-root/resterm/commit/44d03504c25dda8d6f97306d225597ad1302f2c5))
+
 ### [0.26.2](https://github.com/unkn0wn-root/resterm/compare/v0.26.1...v0.26.2) (2026-04-10)
 
 
