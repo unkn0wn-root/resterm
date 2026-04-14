@@ -185,9 +185,55 @@ func TestRunPlanForEachMarksRequestRunsRecorded(t *testing.T) {
 	}
 }
 
+func TestRunPlanExecutionErrorMarksRunDoneUnsuccessful(t *testing.T) {
+	doc := &restfile.Document{
+		Path: "err.http",
+		Requests: []*restfile.Request{{
+			Method: "GET",
+			URL:    "https://example.com/fail",
+			Metadata: restfile.RequestMetadata{
+				Name: "fail",
+			},
+		}},
+	}
+	pl, err := PrepareWorkflow(doc, restfile.Workflow{
+		Name: "err",
+		Steps: []restfile.WorkflowStep{{
+			Kind:  restfile.WorkflowStepKindRequest,
+			Using: "fail",
+		}},
+	}, RunMeta{ID: "wf-err", Env: "dev"})
+	if err != nil {
+		t.Fatalf("PrepareWorkflow: %v", err)
+	}
+
+	wantErr := errors.New("transport failed")
+	dep := &fakeDep{execErr: wantErr}
+
+	var done RunDone
+	sink := SinkFunc(func(_ context.Context, e Evt) error {
+		if evt, ok := e.(RunDone); ok {
+			done = evt
+		}
+		return nil
+	})
+
+	err = RunPlan(context.Background(), dep, sink, pl)
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("expected execution error %v, got %v", wantErr, err)
+	}
+	if done.Success {
+		t.Fatalf("expected run-done to be unsuccessful, got %+v", done)
+	}
+	if done.Canceled || done.Skipped {
+		t.Fatalf("expected plain failure without canceled/skipped, got %+v", done)
+	}
+}
+
 type fakeDep struct {
-	rec  []bool
-	each map[string][]rts.Value
+	rec     []bool
+	each    map[string][]rts.Value
+	execErr error
 }
 
 func (d *fakeDep) CollectVariables(
@@ -217,6 +263,9 @@ func (d *fakeDep) ExecuteWith(
 	opt request.ExecOptions,
 ) (engine.RequestResult, error) {
 	d.rec = append(d.rec, opt.Record)
+	if d.execErr != nil {
+		return engine.RequestResult{}, d.execErr
+	}
 	body := `{"ok":true}`
 	if req != nil && strings.Contains(req.URL, "items") {
 		body = `{"item":true}`

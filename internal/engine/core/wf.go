@@ -45,6 +45,21 @@ type wfRun struct {
 	canceled bool
 }
 
+const (
+	wfTagWhen    = "@when"
+	wfTagForEach = "@for-each"
+	wfTagIf      = "@if"
+	wfTagElif    = "@elif"
+	wfTagSwitch  = "@switch"
+	wfTagCase    = "@case"
+
+	wfSkipIfNoBranch     = "no @if branch matched"
+	wfSkipIfNoRun        = "no @if run target"
+	wfSkipSwitchNoCase   = "no @switch case matched"
+	wfSkipSwitchNoRun    = "no @switch run target"
+	wfSkipForEachNoItems = "for-each produced no items"
+)
+
 func PrepareWorkflow(
 	doc *restfile.Document,
 	wf restfile.Workflow,
@@ -194,24 +209,23 @@ func (r *wfRun) runReqStep(
 		return true, nil
 	}
 	if req == nil {
-		res := engine.RequestResult{
-			Err: errdef.New(errdef.CodeUI, "workflow step missing request"),
-		}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, branch, 0, 0); err != nil {
+		ok, skip, cancel, err := r.emitManualStep(
+			ctx,
+			step,
+			nil,
+			branch,
+			0,
+			0,
+			engine.RequestResult{Err: errdef.New(errdef.CodeUI, "workflow step missing request")},
+		)
+		if err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, branch, 0, 0, res); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
 
-	vals := stepVars(step)
-	applyVars(r.vars, vals)
-	xv := stepExtras(r.vars, vals, nil)
-	vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, xv)
+	xv, vv := r.stepScope(step, req, nil)
+	stopOnFailure := step.OnFailure != restfile.WorkflowOnFailureContinue
 
 	if step.When != nil {
 		ok, reason, err := r.dep.EvalCondition(
@@ -230,45 +244,34 @@ func (r *wfRun) runReqStep(
 				r.idx++
 				return true, nil
 			}
-			wrap := errdef.Wrap(errdef.CodeScript, err, "@when")
-			if err := r.emitStepStart(ctx, r.idx, step, req, branch, 0, 0); err != nil {
-				return false, err
-			}
-			if err := r.emitStepDone(
+			ok, skip, cancel, emitErr := r.emitManualStep(
 				ctx,
-				r.idx,
 				step,
 				req,
 				branch,
 				0,
 				0,
-				engine.RequestResult{Err: wrap},
-			); err != nil {
-				return false, err
+				engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagWhen)},
+			)
+			if emitErr != nil {
+				return false, emitErr
 			}
-			r.note(false, false, false)
-			r.idx++
-			return step.OnFailure != restfile.WorkflowOnFailureContinue, nil
+			return r.finishStep(ok, skip, cancel, true, stopOnFailure), nil
 		}
 		if !ok {
-			if err := r.emitStepStart(ctx, r.idx, step, req, branch, 0, 0); err != nil {
-				return false, err
-			}
-			if err := r.emitStepDone(
+			ok, skip, cancel, emitErr := r.emitManualStep(
 				ctx,
-				r.idx,
 				step,
 				req,
 				branch,
 				0,
 				0,
 				engine.RequestResult{Skipped: true, SkipReason: reason},
-			); err != nil {
-				return false, err
+			)
+			if emitErr != nil {
+				return false, emitErr
 			}
-			r.note(false, true, false)
-			r.idx++
-			return false, nil
+			return r.finishStep(ok, skip, cancel, true, false), nil
 		}
 	}
 
@@ -279,45 +282,26 @@ func (r *wfRun) runReqStep(
 			r.idx++
 			return true, nil
 		}
-		wrap := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-		if err := r.emitStepStart(ctx, r.idx, step, req, branch, 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(
+		ok, skip, cancel, emitErr := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			req,
 			branch,
 			0,
 			0,
-			engine.RequestResult{Err: wrap},
-		); err != nil {
-			return false, err
+			engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagForEach)},
+		)
+		if emitErr != nil {
+			return false, emitErr
 		}
-		r.note(false, false, false)
-		r.idx++
-		return step.OnFailure != restfile.WorkflowOnFailureContinue, nil
+		return r.finishStep(ok, skip, cancel, true, stopOnFailure), nil
 	}
 	if spec == nil {
-		if err := r.emitStepStart(ctx, r.idx, step, req, branch, 0, 0); err != nil {
-			return false, err
-		}
-		out, err := r.execReq(ctx, r.idx, step, req, branch, 0, 0, xv, nil)
+		ok, skip, cancel, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
 		if err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(ctx, r.idx, step, req, branch, 0, 0, out); err != nil {
-			return false, err
-		}
-		ok, skip, cancel := evalReq(step, out)
-		r.note(ok, skip, cancel)
-		r.idx++
-		if cancel {
-			r.canceled = true
-			return true, nil
-		}
-		return !skip && !ok && step.OnFailure != restfile.WorkflowOnFailureContinue, nil
+		return r.finishStep(ok, skip, cancel, true, stopOnFailure), nil
 	}
 
 	items, err := r.dep.EvalForEachItems(
@@ -331,45 +315,34 @@ func (r *wfRun) runReqStep(
 		nil,
 	)
 	if err != nil {
-		wrap := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-		if err := r.emitStepStart(ctx, r.idx, step, req, branch, 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(
+		ok, skip, cancel, emitErr := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			req,
 			branch,
 			0,
 			0,
-			engine.RequestResult{Err: wrap},
-		); err != nil {
-			return false, err
+			engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagForEach)},
+		)
+		if emitErr != nil {
+			return false, emitErr
 		}
-		r.note(false, false, false)
-		r.idx++
-		return step.OnFailure != restfile.WorkflowOnFailureContinue, nil
+		return r.finishStep(ok, skip, cancel, true, stopOnFailure), nil
 	}
 	if len(items) == 0 {
-		if err := r.emitStepStart(ctx, r.idx, step, req, branch, 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(
+		ok, skip, cancel, emitErr := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			req,
 			branch,
 			0,
 			0,
-			engine.RequestResult{Skipped: true, SkipReason: "for-each produced no items"},
-		); err != nil {
-			return false, err
+			engine.RequestResult{Skipped: true, SkipReason: wfSkipForEachNoItems},
+		)
+		if emitErr != nil {
+			return false, emitErr
 		}
-		r.note(false, true, false)
-		r.idx++
-		return false, nil
+		return r.finishStep(ok, skip, cancel, true, false), nil
 	}
 
 	reqKey, wfKey := loopKeys(r.pl.WfVars, spec.Var)
@@ -381,24 +354,19 @@ func (r *wfRun) runReqStep(
 				r.idx++
 				return true, nil
 			}
-			wrap := errdef.Wrap(errdef.CodeScript, err, "@for-each")
-			if err := r.emitStepStart(ctx, r.idx, step, req, branch, i+1, len(items)); err != nil {
-				return false, err
-			}
-			if err := r.emitStepDone(
+			ok, skip, cancel, emitErr := r.emitManualStep(
 				ctx,
-				r.idx,
 				step,
 				req,
 				branch,
 				i+1,
 				len(items),
-				engine.RequestResult{Err: wrap},
-			); err != nil {
-				return false, err
+				engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagForEach)},
+			)
+			if emitErr != nil {
+				return false, emitErr
 			}
-			r.note(false, false, false)
-			if step.OnFailure != restfile.WorkflowOnFailureContinue {
+			if r.finishStep(ok, skip, cancel, false, stopOnFailure) {
 				r.idx++
 				return true, nil
 			}
@@ -436,84 +404,56 @@ func (r *wfRun) runReqStep(
 					r.idx++
 					return true, nil
 				}
-				wrap := errdef.Wrap(errdef.CodeScript, err, "@when")
-				if err := r.emitStepStart(
+				ok, skip, cancel, emitErr := r.emitManualStep(
 					ctx,
-					r.idx,
 					step,
 					req,
 					branch,
 					i+1,
 					len(items),
-				); err != nil {
-					return false, err
+					engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagWhen)},
+				)
+				if emitErr != nil {
+					return false, emitErr
 				}
-				if err := r.emitStepDone(
-					ctx,
-					r.idx,
-					step,
-					req,
-					branch,
-					i+1,
-					len(items),
-					engine.RequestResult{Err: wrap},
-				); err != nil {
-					return false, err
-				}
-				r.note(false, false, false)
-				if step.OnFailure != restfile.WorkflowOnFailureContinue {
+				if r.finishStep(ok, skip, cancel, false, stopOnFailure) {
 					r.idx++
 					return true, nil
 				}
 				continue
 			}
 			if !ok {
-				if err := r.emitStepStart(
+				ok, skip, cancel, emitErr := r.emitManualStep(
 					ctx,
-					r.idx,
-					step,
-					req,
-					branch,
-					i+1,
-					len(items),
-				); err != nil {
-					return false, err
-				}
-				if err := r.emitStepDone(
-					ctx,
-					r.idx,
 					step,
 					req,
 					branch,
 					i+1,
 					len(items),
 					engine.RequestResult{Skipped: true, SkipReason: reason},
-				); err != nil {
-					return false, err
+				)
+				if emitErr != nil {
+					return false, emitErr
 				}
-				r.note(false, true, false)
+				r.finishStep(ok, skip, cancel, false, false)
 				continue
 			}
 		}
 
-		if err := r.emitStepStart(ctx, r.idx, step, req, branch, i+1, len(items)); err != nil {
-			return false, err
-		}
-		out, err := r.execReq(ctx, r.idx, step, req, branch, i+1, len(items), loopVars, ev)
+		ok, skip, cancel, err := r.executeStepRequest(
+			ctx,
+			step,
+			req,
+			branch,
+			i+1,
+			len(items),
+			loopVars,
+			ev,
+		)
 		if err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(ctx, r.idx, step, req, branch, i+1, len(items), out); err != nil {
-			return false, err
-		}
-		ok, skip, cancel := evalReq(step, out)
-		r.note(ok, skip, cancel)
-		if cancel {
-			r.canceled = true
-			r.idx++
-			return true, nil
-		}
-		if !skip && !ok && step.OnFailure != restfile.WorkflowOnFailureContinue {
+		if r.finishStep(ok, skip, cancel, false, stopOnFailure) {
 			r.idx++
 			return true, nil
 		}
@@ -529,190 +469,109 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 		return true, nil
 	}
 	if step.If == nil {
-		res := engine.RequestResult{
-			Err: errdef.New(errdef.CodeUI, "workflow @if missing definition"),
-		}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, "", 0, 0, res); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
-	}
-
-	vals := stepVars(step)
-	applyVars(r.vars, vals)
-	xv := stepExtras(r.vars, vals, nil)
-	vv := r.dep.CollectVariables(r.pl.Doc, nil, r.pl.Run.Env, xv)
-	eval := func(expr string, line int, tag string) (bool, error) {
-		if strings.TrimSpace(expr) == "" {
-			return false, fmt.Errorf("%s expression missing", tag)
-		}
-		val, err := r.dep.EvalValue(
+		ok, skip, cancel, err := r.emitManualStep(
 			ctx,
-			r.pl.Doc,
+			step,
 			nil,
-			r.pl.Run.Env,
-			baseDir(r.pl.Doc),
-			expr,
-			tag+" "+expr,
-			r.dep.PosForLine(r.pl.Doc, nil, line),
-			vv,
-			nil,
+			"",
+			0,
+			0,
+			engine.RequestResult{Err: errdef.New(errdef.CodeUI, "workflow @if missing definition")},
 		)
 		if err != nil {
 			return false, err
 		}
-		return val.IsTruthy(), nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
 
-	var br *restfile.WorkflowIfBranch
-	ok, err := eval(step.If.Then.Cond, step.If.Then.Line, "@if")
+	xv, vv := r.stepScope(step, nil, nil)
+	br, err := r.selectIfBranch(ctx, step, vv)
 	if err != nil {
 		if ctx.Err() != nil {
 			r.canceled = true
 			return true, nil
 		}
-		return r.failBranch(ctx, step, "", errdef.Wrap(errdef.CodeScript, err, "@if"))
-	}
-	if ok {
-		br = &step.If.Then
-	} else {
-		for i := range step.If.Elifs {
-			item := &step.If.Elifs[i]
-			ok, err = eval(item.Cond, item.Line, "@elif")
-			if err != nil {
-				if ctx.Err() != nil {
-					r.canceled = true
-					return true, nil
-				}
-				return r.failBranch(ctx, step, "", errdef.Wrap(errdef.CodeScript, err, "@elif"))
-			}
-			if ok {
-				br = item
-				break
-			}
+		ok, skip, cancel, emitErr := r.emitManualStep(
+			ctx,
+			step,
+			nil,
+			"",
+			0,
+			0,
+			engine.RequestResult{Err: err},
+		)
+		if emitErr != nil {
+			return false, emitErr
 		}
-	}
-	if br == nil && step.If.Else != nil {
-		br = step.If.Else
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
 	if br == nil {
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(
+		ok, skip, cancel, err := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			nil,
 			"",
 			0,
 			0,
-			engine.RequestResult{Skipped: true, SkipReason: "no @if branch matched"},
-		); err != nil {
+			engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoBranch},
+		)
+		if err != nil {
 			return false, err
 		}
-		r.note(false, true, false)
-		r.idx++
-		return false, nil
+		return r.finishStep(ok, skip, cancel, true, false), nil
 	}
 	if msg := strings.TrimSpace(br.Fail); msg != "" {
-		res := engine.RequestResult{Err: fmt.Errorf("%s", msg)}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, "", 0, 0, res); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
-	}
-	run := strings.ToLower(strings.TrimSpace(br.Run))
-	if run == "" {
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(
+		ok, skip, cancel, err := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			nil,
 			"",
 			0,
 			0,
-			engine.RequestResult{Skipped: true, SkipReason: "no @if run target"},
-		); err != nil {
+			engine.RequestResult{Err: fmt.Errorf("%s", msg)},
+		)
+		if err != nil {
 			return false, err
 		}
-		r.note(false, true, false)
-		r.idx++
-		return false, nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
-	req := r.pl.Reqs[run]
+	branch, req := r.resolveBranchRequest(br.Run)
+	if branch == "" {
+		ok, skip, cancel, err := r.emitManualStep(
+			ctx,
+			step,
+			nil,
+			"",
+			0,
+			0,
+			engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoRun},
+		)
+		if err != nil {
+			return false, err
+		}
+		return r.finishStep(ok, skip, cancel, true, false), nil
+	}
 	if req == nil {
-		res := engine.RequestResult{
-			Err: fmt.Errorf("request %s not found", strings.TrimSpace(br.Run)),
-		}
-		if err := r.emitStepStart(
+		ok, skip, cancel, err := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			nil,
-			strings.TrimSpace(br.Run),
+			branch,
 			0,
 			0,
-		); err != nil {
+			engine.RequestResult{Err: fmt.Errorf("request %s not found", branch)},
+		)
+		if err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(
-			ctx,
-			r.idx,
-			step,
-			nil,
-			strings.TrimSpace(br.Run),
-			0,
-			0,
-			res,
-		); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
 
-	if err := r.emitStepStart(ctx, r.idx, step, req, strings.TrimSpace(br.Run), 0, 0); err != nil {
-		return false, err
-	}
-	out, err := r.execReq(ctx, r.idx, step, req, strings.TrimSpace(br.Run), 0, 0, xv, nil)
+	ok, skip, cancel, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
 	if err != nil {
 		return false, err
 	}
-	if err := r.emitStepDone(
-		ctx,
-		r.idx,
-		step,
-		req,
-		strings.TrimSpace(br.Run),
-		0,
-		0,
-		out,
-	); err != nil {
-		return false, err
-	}
-	ok, skip, cancel := evalReq(step, out)
-	r.note(ok, skip, cancel)
-	r.idx++
-	if cancel {
-		r.canceled = true
-		return true, nil
-	}
-	return !skip && !ok && step.OnFailure != restfile.WorkflowOnFailureContinue, nil
+	return r.finishStep(ok, skip, cancel, true, step.OnFailure != restfile.WorkflowOnFailureContinue), nil
 }
 
 func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool, error) {
@@ -721,230 +580,111 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 		return true, nil
 	}
 	if step.Switch == nil {
-		res := engine.RequestResult{
-			Err: errdef.New(errdef.CodeUI, "workflow @switch missing definition"),
-		}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
+		ok, skip, cancel, err := r.emitManualStep(
+			ctx,
+			step,
+			nil,
+			"",
+			0,
+			0,
+			engine.RequestResult{
+				Err: errdef.New(errdef.CodeUI, "workflow @switch missing definition"),
+			},
+		)
+		if err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, "", 0, 0, res); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
 
-	vals := stepVars(step)
-	applyVars(r.vars, vals)
-	xv := stepExtras(r.vars, vals, nil)
-	vv := r.dep.CollectVariables(r.pl.Doc, nil, r.pl.Run.Env, xv)
-	expr := strings.TrimSpace(step.Switch.Expr)
-	if expr == "" {
-		res := engine.RequestResult{
-			Err: errdef.New(errdef.CodeUI, "@switch expression missing"),
-		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, "", 0, 0, res); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
-	}
-
-	base, err := r.dep.EvalValue(
-		ctx,
-		r.pl.Doc,
-		nil,
-		r.pl.Run.Env,
-		baseDir(r.pl.Doc),
-		expr,
-		"@switch "+expr,
-		r.dep.PosForLine(r.pl.Doc, nil, step.Switch.Line),
-		vv,
-		nil,
-	)
+	xv, vv := r.stepScope(step, nil, nil)
+	sel, err := r.selectSwitchCase(ctx, step, vv)
 	if err != nil {
 		if ctx.Err() != nil {
 			r.canceled = true
 			return true, nil
 		}
-		return r.failBranch(ctx, step, "", errdef.Wrap(errdef.CodeScript, err, "@switch"))
-	}
-
-	var sel *restfile.WorkflowSwitchCase
-	for i := range step.Switch.Cases {
-		item := &step.Switch.Cases[i]
-		expr := strings.TrimSpace(item.Expr)
-		if expr == "" {
-			continue
-		}
-		val, err := r.dep.EvalValue(
+		ok, skip, cancel, emitErr := r.emitManualStep(
 			ctx,
-			r.pl.Doc,
+			step,
 			nil,
-			r.pl.Run.Env,
-			baseDir(r.pl.Doc),
-			expr,
-			"@case "+expr,
-			r.dep.PosForLine(r.pl.Doc, nil, item.Line),
-			vv,
+			"",
+			0,
+			0,
+			engine.RequestResult{Err: err},
+		)
+		if emitErr != nil {
+			return false, emitErr
+		}
+		return r.finishStep(ok, skip, cancel, true, true), nil
+	}
+	if sel == nil {
+		ok, skip, cancel, err := r.emitManualStep(
+			ctx,
+			step,
 			nil,
+			"",
+			0,
+			0,
+			engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoCase},
 		)
 		if err != nil {
-			if ctx.Err() != nil {
-				r.canceled = true
-				return true, nil
-			}
-			return r.failBranch(ctx, step, "", errdef.Wrap(errdef.CodeScript, err, "@case"))
-		}
-		if rts.ValueEqual(base, val) {
-			sel = item
-			break
-		}
-	}
-	if sel == nil {
-		sel = step.Switch.Default
-	}
-	if sel == nil {
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(
-			ctx,
-			r.idx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Skipped: true, SkipReason: "no @switch case matched"},
-		); err != nil {
-			return false, err
-		}
-		r.note(false, true, false)
-		r.idx++
-		return false, nil
+		return r.finishStep(ok, skip, cancel, true, false), nil
 	}
 	if msg := strings.TrimSpace(sel.Fail); msg != "" {
-		res := engine.RequestResult{Err: fmt.Errorf("%s", msg)}
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(ctx, r.idx, step, nil, "", 0, 0, res); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
-	}
-	run := strings.ToLower(strings.TrimSpace(sel.Run))
-	if run == "" {
-		if err := r.emitStepStart(ctx, r.idx, step, nil, "", 0, 0); err != nil {
-			return false, err
-		}
-		if err := r.emitStepDone(
+		ok, skip, cancel, err := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			nil,
 			"",
 			0,
 			0,
-			engine.RequestResult{Skipped: true, SkipReason: "no @switch run target"},
-		); err != nil {
+			engine.RequestResult{Err: fmt.Errorf("%s", msg)},
+		)
+		if err != nil {
 			return false, err
 		}
-		r.note(false, true, false)
-		r.idx++
-		return false, nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
-	req := r.pl.Reqs[run]
+	branch, req := r.resolveBranchRequest(sel.Run)
+	if branch == "" {
+		ok, skip, cancel, err := r.emitManualStep(
+			ctx,
+			step,
+			nil,
+			"",
+			0,
+			0,
+			engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoRun},
+		)
+		if err != nil {
+			return false, err
+		}
+		return r.finishStep(ok, skip, cancel, true, false), nil
+	}
 	if req == nil {
-		res := engine.RequestResult{
-			Err: fmt.Errorf("request %s not found", strings.TrimSpace(sel.Run)),
-		}
-		if err := r.emitStepStart(
+		ok, skip, cancel, err := r.emitManualStep(
 			ctx,
-			r.idx,
 			step,
 			nil,
-			strings.TrimSpace(sel.Run),
+			branch,
 			0,
 			0,
-		); err != nil {
+			engine.RequestResult{Err: fmt.Errorf("request %s not found", branch)},
+		)
+		if err != nil {
 			return false, err
 		}
-		if err := r.emitStepDone(
-			ctx,
-			r.idx,
-			step,
-			nil,
-			strings.TrimSpace(sel.Run),
-			0,
-			0,
-			res,
-		); err != nil {
-			return false, err
-		}
-		r.note(false, false, false)
-		r.idx++
-		return true, nil
+		return r.finishStep(ok, skip, cancel, true, true), nil
 	}
 
-	if err := r.emitStepStart(ctx, r.idx, step, req, strings.TrimSpace(sel.Run), 0, 0); err != nil {
-		return false, err
-	}
-	out, err := r.execReq(ctx, r.idx, step, req, strings.TrimSpace(sel.Run), 0, 0, xv, nil)
+	ok, skip, cancel, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
 	if err != nil {
 		return false, err
 	}
-	if err := r.emitStepDone(
-		ctx,
-		r.idx,
-		step,
-		req,
-		strings.TrimSpace(sel.Run),
-		0,
-		0,
-		out,
-	); err != nil {
-		return false, err
-	}
-	ok, skip, cancel := evalReq(step, out)
-	r.note(ok, skip, cancel)
-	r.idx++
-	if cancel {
-		r.canceled = true
-		return true, nil
-	}
-	return !skip && !ok && step.OnFailure != restfile.WorkflowOnFailureContinue, nil
-}
-
-func (r *wfRun) failBranch(
-	ctx context.Context,
-	step restfile.WorkflowStep,
-	branch string,
-	err error,
-) (bool, error) {
-	if e := r.emitStepStart(ctx, r.idx, step, nil, branch, 0, 0); e != nil {
-		return false, e
-	}
-	if e := r.emitStepDone(
-		ctx,
-		r.idx,
-		step,
-		nil,
-		branch,
-		0,
-		0,
-		engine.RequestResult{Err: err},
-	); e != nil {
-		return false, e
-	}
-	r.note(false, false, false)
-	r.idx++
-	return true, nil
+	return r.finishStep(ok, skip, cancel, true, step.OnFailure != restfile.WorkflowOnFailureContinue), nil
 }
 
 func (r *wfRun) execReq(
@@ -982,8 +722,197 @@ func (r *wfRun) execReq(
 	return out, nil
 }
 
+func (r *wfRun) stepScope(
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	extra map[string]string,
+) (map[string]string, map[string]string) {
+	vals := stepVars(step)
+	applyVars(r.vars, vals)
+	xv := stepExtras(r.vars, vals, extra)
+	vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, xv)
+	return xv, vv
+}
+
+func (r *wfRun) emitManualStep(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	branch string,
+	iter int,
+	total int,
+	out engine.RequestResult,
+) (bool, bool, bool, error) {
+	if err := r.emitStepStart(ctx, r.idx, step, req, branch, iter, total); err != nil {
+		return false, false, false, err
+	}
+	if err := r.emitStepDone(ctx, r.idx, step, req, branch, iter, total, out); err != nil {
+		return false, false, false, err
+	}
+	ok, skip, cancel := evalReq(step, out)
+	r.note(ok, skip, cancel)
+	return ok, skip, cancel, nil
+}
+
+func (r *wfRun) executeStepRequest(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	branch string,
+	iter int,
+	total int,
+	extra map[string]string,
+	vals map[string]rts.Value,
+) (bool, bool, bool, error) {
+	if err := r.emitStepStart(ctx, r.idx, step, req, branch, iter, total); err != nil {
+		return false, false, false, err
+	}
+	out, err := r.execReq(ctx, r.idx, step, req, branch, iter, total, extra, vals)
+	if err != nil {
+		return false, false, false, err
+	}
+	if err := r.emitStepDone(ctx, r.idx, step, req, branch, iter, total, out); err != nil {
+		return false, false, false, err
+	}
+	ok, skip, cancel := evalReq(step, out)
+	r.note(ok, skip, cancel)
+	return ok, skip, cancel, nil
+}
+
+func (r *wfRun) finishStep(
+	ok bool,
+	skip bool,
+	cancel bool,
+	advance bool,
+	stopOnFailure bool,
+) bool {
+	if advance {
+		r.idx++
+	}
+	if cancel {
+		r.canceled = true
+		return true
+	}
+	return !skip && !ok && stopOnFailure
+}
+
+func (r *wfRun) evalStepValue(
+	ctx context.Context,
+	req *restfile.Request,
+	line int,
+	tag string,
+	expr string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+) (rts.Value, error) {
+	expr = strings.TrimSpace(expr)
+	if expr == "" {
+		return rts.Value{}, fmt.Errorf("%s expression missing", tag)
+	}
+	return r.dep.EvalValue(
+		ctx,
+		r.pl.Doc,
+		req,
+		r.pl.Run.Env,
+		baseDir(r.pl.Doc),
+		expr,
+		tag+" "+expr,
+		r.dep.PosForLine(r.pl.Doc, req, line),
+		vv,
+		extra,
+	)
+}
+
+func (r *wfRun) evalStepBool(
+	ctx context.Context,
+	req *restfile.Request,
+	line int,
+	tag string,
+	expr string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+) (bool, error) {
+	val, err := r.evalStepValue(ctx, req, line, tag, expr, vv, extra)
+	if err != nil {
+		return false, err
+	}
+	return val.IsTruthy(), nil
+}
+
+func (r *wfRun) resolveBranchRequest(run string) (string, *restfile.Request) {
+	branch := strings.TrimSpace(run)
+	if branch == "" {
+		return "", nil
+	}
+	return branch, r.pl.Reqs[strings.ToLower(branch)]
+}
+
+func (r *wfRun) selectIfBranch(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	vv map[string]string,
+) (*restfile.WorkflowIfBranch, error) {
+	ok, err := r.evalStepBool(ctx, nil, step.If.Then.Line, wfTagIf, step.If.Then.Cond, vv, nil)
+	if err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, wfTagIf)
+	}
+	if ok {
+		return &step.If.Then, nil
+	}
+	for i := range step.If.Elifs {
+		item := &step.If.Elifs[i]
+		ok, err = r.evalStepBool(ctx, nil, item.Line, wfTagElif, item.Cond, vv, nil)
+		if err != nil {
+			return nil, errdef.Wrap(errdef.CodeScript, err, wfTagElif)
+		}
+		if ok {
+			return item, nil
+		}
+	}
+	if step.If.Else != nil {
+		return step.If.Else, nil
+	}
+	return nil, nil
+}
+
+func (r *wfRun) selectSwitchCase(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	vv map[string]string,
+) (*restfile.WorkflowSwitchCase, error) {
+	if strings.TrimSpace(step.Switch.Expr) == "" {
+		return nil, errdef.New(errdef.CodeUI, "@switch expression missing")
+	}
+	base, err := r.evalStepValue(
+		ctx,
+		nil,
+		step.Switch.Line,
+		wfTagSwitch,
+		step.Switch.Expr,
+		vv,
+		nil,
+	)
+	if err != nil {
+		return nil, errdef.Wrap(errdef.CodeScript, err, wfTagSwitch)
+	}
+	for i := range step.Switch.Cases {
+		item := &step.Switch.Cases[i]
+		expr := strings.TrimSpace(item.Expr)
+		if expr == "" {
+			continue
+		}
+		val, err := r.evalStepValue(ctx, nil, item.Line, wfTagCase, expr, vv, nil)
+		if err != nil {
+			return nil, errdef.Wrap(errdef.CodeScript, err, wfTagCase)
+		}
+		if rts.ValueEqual(base, val) {
+			return item, nil
+		}
+	}
+	return step.Switch.Default, nil
+}
+
 func (r *wfRun) note(ok, skip, cancel bool) {
-	r.done = true
 	r.seen = true
 	if !skip {
 		r.skip = false
