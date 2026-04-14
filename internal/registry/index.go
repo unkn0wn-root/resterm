@@ -18,41 +18,45 @@ type docSet[T any] struct {
 }
 
 type set[T any, S comparable] struct {
-	mu sync.RWMutex
-	by map[string]docSet[T]
-	ks []string
-	fs S
-	gs S
-	sc func(T) S
-	nm func(T) string
+	mu  sync.RWMutex
+	by  map[string]docSet[T]
+	ks  []string
+	fsc S
+	gsc S
+	sc  func(T) S
+	nm  func(T) string
 }
 
 func newSet[T any, S comparable](
-	fs S,
-	gs S,
+	fsc S,
+	gsc S,
 	sc func(T) S,
 	nm func(T) string,
 ) *set[T, S] {
 	return &set[T, S]{
-		by: make(map[string]docSet[T]),
-		fs: fs,
-		gs: gs,
-		sc: sc,
-		nm: nm,
+		by:  make(map[string]docSet[T]),
+		fsc: fsc,
+		gsc: gsc,
+		sc:  sc,
+		nm:  nm,
 	}
 }
 
-func (s *set[T, S]) split(xs []T) docSet[T] {
+func splitByScope[T any, S comparable](xs []T, fsc, gsc S, sc func(T) S) docSet[T] {
 	var out docSet[T]
 	for _, x := range xs {
-		switch s.sc(x) {
-		case s.fs:
+		switch sc(x) {
+		case fsc:
 			out.fs = append(out.fs, x)
-		case s.gs:
+		case gsc:
 			out.gs = append(out.gs, x)
 		}
 	}
 	return out
+}
+
+func (s *set[T, S]) split(xs []T) docSet[T] {
+	return splitByScope(xs, s.fsc, s.gsc, s.sc)
 }
 
 func (s *set[T, S]) load(src map[string][]T) {
@@ -482,37 +486,37 @@ func docPatch(doc *restfile.Document) []restfile.PatchProfile {
 }
 
 func ixSplitSSH(doc *restfile.Document) docSet[restfile.SSHProfile] {
-	return newSet(
+	return splitByScope(
+		docSSH(doc),
 		restfile.SSHScopeFile,
 		restfile.SSHScopeGlobal,
 		func(v restfile.SSHProfile) restfile.SSHScope { return v.Scope },
-		func(v restfile.SSHProfile) string { return v.Name },
-	).split(docSSH(doc))
+	)
 }
 
 func ixSplitAuth(doc *restfile.Document) docSet[restfile.AuthProfile] {
-	return newSet(
+	return splitByScope(
+		docAuth(doc),
 		restfile.AuthScopeFile,
 		restfile.AuthScopeGlobal,
 		func(v restfile.AuthProfile) restfile.AuthScope { return v.Scope },
-		func(v restfile.AuthProfile) string { return v.Name },
-	).split(docAuth(doc))
+	)
 }
 
 func ixSplitK8s(doc *restfile.Document) docSet[restfile.K8sProfile] {
-	return newSet(
+	return splitByScope(
+		docK8s(doc),
 		restfile.K8sScopeFile,
 		restfile.K8sScopeGlobal,
 		func(v restfile.K8sProfile) restfile.K8sScope { return v.Scope },
-		func(v restfile.K8sProfile) string { return v.Name },
-	).split(docK8s(doc))
+	)
 }
 
 func ixSplitPatch(doc *restfile.Document) docSet[restfile.PatchProfile] {
-	return newSet(
+	return splitByScope(
+		docPatch(doc),
 		restfile.PatchScopeFile,
 		restfile.PatchScopeGlobal,
 		func(v restfile.PatchProfile) restfile.PatchScope { return v.Scope },
-		func(v restfile.PatchProfile) string { return v.Name },
-	).split(docPatch(doc))
+	)
 }
