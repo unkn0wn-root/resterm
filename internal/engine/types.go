@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
+	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -32,6 +33,7 @@ type Config struct {
 	Recursive       bool
 	CompareTargets  []string
 	CompareBase     string
+	Registry        *registry.Index
 	Bindings        *bindings.Map
 }
 

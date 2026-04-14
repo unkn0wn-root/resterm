@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -37,6 +38,7 @@ type Engine struct {
 	gc   *grpcclient.Client
 	sc   *scripts.Runner
 	re   *rts.Eng
+	rg   *registry.Index
 	last lastState
 }
 
@@ -79,6 +81,7 @@ func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 		gc:  grpcclient.NewClient(),
 		sc:  scripts.NewRunner(nil),
 		re:  rts.NewEng(),
+		rg:  cfg.Registry,
 	}
 }
 
@@ -86,11 +89,17 @@ func (e *Engine) SetConfig(cfg engine.Config) {
 	if e == nil {
 		return
 	}
+	prev := e.cfg
 	e.cfg = cfg
 	if cfg.Client != nil {
 		e.hc = cfg.Client
 	} else if e.hc == nil {
 		e.hc = httpclient.NewClient(nil)
+	}
+	if cfg.Registry != nil {
+		e.rg = cfg.Registry
+	} else if prev.Registry != nil {
+		e.rg = nil
 	}
 }
 
@@ -112,6 +121,7 @@ func (e *Engine) ExecuteWith(
 		return engine.RequestResult{}, errdef.New(errdef.CodeUI, "request is nil")
 	}
 
+	e.syncRegistry(doc)
 	env = e.envName(env)
 	req = cloneRequest(req)
 	opts := e.resolveHTTPOptions(doc, e.cfg.HTTPOptions)

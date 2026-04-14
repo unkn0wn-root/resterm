@@ -250,6 +250,7 @@ func (m *Model) loadDocFor(path string) *restfile.Document {
 
 	doc := parser.Parse(path, data)
 	m.cacheDoc(path, doc)
+	m.syncRegistry(doc)
 	return doc
 }
 

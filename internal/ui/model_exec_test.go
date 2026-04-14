@@ -770,8 +770,7 @@ func TestResolveRequestTimeout(t *testing.T) {
 
 func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 	model := Model{
-		cfg:         Config{EnvironmentName: "dev"},
-		authGlobals: newAuthStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth.http",
@@ -813,17 +812,19 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 
 func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 	model := Model{
-		cfg:         Config{EnvironmentName: "dev"},
-		authGlobals: newAuthStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.authGlobals.set("/tmp/other.http", []restfile.AuthProfile{{
-		Scope: restfile.AuthScopeGlobal,
-		Spec: restfile.AuthSpec{
-			Type:   "bearer",
-			Params: map[string]string{"token": "global-token"},
-		},
-		Line: 1,
-	}})
+	model.registryIndex().Sync(&restfile.Document{
+		Path: "/tmp/other.http",
+		Auth: []restfile.AuthProfile{{
+			Scope: restfile.AuthScopeGlobal,
+			Spec: restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "global-token"},
+			},
+			Line: 1,
+		}},
+	})
 
 	req := &restfile.Request{}
 	model.resolveInheritedAuth(&restfile.Document{Path: "/tmp/current.http"}, req)
@@ -838,9 +839,7 @@ func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 
 func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 	model := Model{
-		cfg:          Config{EnvironmentName: "dev"},
-		authGlobals:  newAuthStore(),
-		patchGlobals: newPatchStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth-apply.http",

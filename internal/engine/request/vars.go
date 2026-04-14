@@ -410,7 +410,9 @@ func (e *Engine) resolveSSH(
 	if req == nil || req.SSH == nil {
 		return nil, nil
 	}
-	cfg, err := ssh.Resolve(req.SSH, docSSHProfiles(doc), nil, res, env)
+	ix := e.registryIndex()
+	fileProfiles, globalProfiles := ix.SSH(doc)
+	cfg, err := ssh.Resolve(req.SSH, fileProfiles, globalProfiles, res, env)
 	if err != nil {
 		return nil, err
 	}
@@ -426,39 +428,13 @@ func (e *Engine) resolveK8s(
 	if req == nil || req.K8s == nil {
 		return nil, nil
 	}
-	cfg, err := k8s.Resolve(req.K8s, docK8sProfiles(doc), nil, res, env)
+	ix := e.registryIndex()
+	fileProfiles, globalProfiles := ix.K8s(doc)
+	cfg, err := k8s.Resolve(req.K8s, fileProfiles, globalProfiles, res, env)
 	if err != nil {
 		return nil, err
 	}
 	return &k8s.Plan{Manager: e.rt.K8s(), Config: cfg}, nil
-}
-
-func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.SSH
-}
-
-func docK8sProfiles(doc *restfile.Document) []restfile.K8sProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.K8s
-}
-
-func docAuthProfiles(doc *restfile.Document) []restfile.AuthProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.Auth
-}
-
-func docPatchProfiles(doc *restfile.Document) []restfile.PatchProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.Patches
 }
 
 func (x *execCtx) configureGRPC() {

@@ -513,22 +513,7 @@ func (m *Model) applyExprs(
 }
 
 func (m *Model) findPatchProfile(doc *restfile.Document, n string) (*restfile.PatchProfile, bool) {
-	fs := docPatchProfiles(doc)
-	gs := append([]restfile.PatchProfile(nil), fs...)
-	if m.patchGlobals != nil {
-		gs = append(gs, m.patchGlobals.all()...)
-	}
-	sf := func(p restfile.PatchProfile) restfile.PatchScope { return p.Scope }
-	nf := func(p restfile.PatchProfile) string { return p.Name }
-	return restfile.ResolveNamedScoped(
-		fs,
-		gs,
-		n,
-		restfile.PatchScopeFile,
-		restfile.PatchScopeGlobal,
-		sf,
-		nf,
-	)
+	return m.registryIndex().PatchNamed(doc, n)
 }
 
 func (m *Model) runRTSApply(

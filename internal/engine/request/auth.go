@@ -15,32 +15,11 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func lookupDefaultAuthProfile(
-	xs []restfile.AuthProfile,
-	scope restfile.AuthScope,
-) (*restfile.AuthProfile, bool) {
-	for i := len(xs) - 1; i >= 0; i-- {
-		pf := &xs[i]
-		if pf.Scope != scope {
-			continue
-		}
-		if strings.TrimSpace(pf.Name) != "" {
-			continue
-		}
-		return pf, true
-	}
-	return nil, false
-}
-
 func (e *Engine) resolveInheritedAuth(doc *restfile.Document, req *restfile.Request) {
 	if req == nil || req.Metadata.Auth != nil || req.Metadata.AuthDisabled {
 		return
 	}
-	if pf, ok := lookupDefaultAuthProfile(docAuthProfiles(doc), restfile.AuthScopeFile); ok {
-		req.Metadata.Auth = restfile.CloneAuthSpec(&pf.Spec)
-		return
-	}
-	if pf, ok := lookupDefaultAuthProfile(docAuthProfiles(doc), restfile.AuthScopeGlobal); ok {
+	if pf, ok := e.registryIndex().DefaultAuth(doc); ok {
 		req.Metadata.Auth = restfile.CloneAuthSpec(&pf.Spec)
 	}
 }

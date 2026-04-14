@@ -1299,18 +1299,7 @@ func (e *Engine) findPatchProfile(
 	doc *restfile.Document,
 	name string,
 ) (*restfile.PatchProfile, bool) {
-	fs := docPatchProfiles(doc)
-	sf := func(p restfile.PatchProfile) restfile.PatchScope { return p.Scope }
-	nf := func(p restfile.PatchProfile) string { return p.Name }
-	return restfile.ResolveNamedScoped(
-		fs,
-		nil,
-		name,
-		restfile.PatchScopeFile,
-		restfile.PatchScopeGlobal,
-		sf,
-		nf,
-	)
+	return e.registryIndex().PatchNamed(doc, name)
 }
 
 func (e *Engine) runRTSApply(

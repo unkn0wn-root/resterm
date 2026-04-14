@@ -231,7 +231,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncAllGlobals(doc)
+	m.syncRegistry(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -399,7 +399,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncAllGlobals(doc)
+	m.syncRegistry(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned

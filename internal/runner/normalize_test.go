@@ -26,13 +26,15 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 			Passed:  false,
 		}},
 	}, " fallback ")
-	if gotReq.Name != "user lookup" || gotReq.Method != "GET" || gotReq.Target != "https://example.com/users" {
+	if gotReq.Name != "user lookup" || gotReq.Method != "GET" ||
+		gotReq.Target != "https://example.com/users" {
 		t.Fatalf("unexpected request result identity: %+v", gotReq)
 	}
 	if gotReq.Environment != "dev" || gotReq.SkipReason != "skipped" {
 		t.Fatalf("unexpected request result metadata: %+v", gotReq)
 	}
-	if len(gotReq.Tests) != 1 || gotReq.Tests[0].Name != "status" || gotReq.Tests[0].Message != "failed" {
+	if len(gotReq.Tests) != 1 || gotReq.Tests[0].Name != "status" ||
+		gotReq.Tests[0].Message != "failed" {
 		t.Fatalf("unexpected request tests: %+v", gotReq.Tests)
 	}
 

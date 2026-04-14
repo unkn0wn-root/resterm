@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -18,10 +16,6 @@ type fileVariable = rtrun.FileValue
 
 func newRuntime(cfg rtrun.Config) *rtrun.Runtime {
 	return rtrun.New(cfg)
-}
-
-func normalizeNameKey(name string) string {
-	return strings.ToLower(strings.TrimSpace(name))
 }
 
 func (m *Model) runtimeSvc() *rtrun.Runtime {

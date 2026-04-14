@@ -121,6 +121,105 @@ func TestRunSelectRequestByName(t *testing.T) {
 	}
 }
 
+func TestRunUsesWorkspaceGlobalPatchProfile(t *testing.T) {
+	dir := t.TempDir()
+	defs := filepath.Join(dir, "defs.http")
+	use := filepath.Join(dir, "use.http")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("X-Test"); got != "1" {
+			http.Error(w, "missing header", http.StatusBadRequest)
+			return
+		}
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	if err := os.WriteFile(
+		defs,
+		[]byte(`# @patch global addHdr {headers: {"X-Test": "1"}}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("write defs: %v", err)
+	}
+	if err := os.WriteFile(
+		use,
+		[]byte(strings.Join([]string{
+			"# @name use",
+			"# @apply use=addHdr",
+			"GET " + srv.URL,
+			"",
+		}, "\n")),
+		0o644,
+	); err != nil {
+		t.Fatalf("write use: %v", err)
+	}
+
+	rep, err := Run(Options{
+		FilePath:      use,
+		WorkspaceRoot: dir,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !rep.Success() {
+		t.Fatalf("expected report to pass, got %+v", rep)
+	}
+	if len(rep.Results) != 1 || rep.Results[0].Response == nil {
+		t.Fatalf("expected one HTTP result, got %+v", rep.Results)
+	}
+	if got := rep.Results[0].Response.StatusCode; got != http.StatusOK {
+		t.Fatalf("unexpected status code %d", got)
+	}
+}
+
+func TestRunUsesWorkspaceGlobalInheritedAuth(t *testing.T) {
+	dir := t.TempDir()
+	defs := filepath.Join(dir, "defs.http")
+	use := filepath.Join(dir, "use.http")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.Header.Get("Authorization"); got != "Bearer global-token" {
+			http.Error(w, "missing auth", http.StatusUnauthorized)
+			return
+		}
+		_, _ = io.WriteString(w, `{"ok":true}`)
+	}))
+	defer srv.Close()
+
+	if err := os.WriteFile(defs, []byte(`# @auth global bearer global-token`), 0o644); err != nil {
+		t.Fatalf("write defs: %v", err)
+	}
+	if err := os.WriteFile(
+		use,
+		[]byte(strings.Join([]string{
+			"# @name use",
+			"GET " + srv.URL,
+			"",
+		}, "\n")),
+		0o644,
+	); err != nil {
+		t.Fatalf("write use: %v", err)
+	}
+
+	rep, err := Run(Options{
+		FilePath:      use,
+		WorkspaceRoot: dir,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if !rep.Success() {
+		t.Fatalf("expected report to pass, got %+v", rep)
+	}
+	if len(rep.Results) != 1 || rep.Results[0].Response == nil {
+		t.Fatalf("expected one HTTP result, got %+v", rep.Results)
+	}
+	if got := rep.Results[0].Response.StatusCode; got != http.StatusOK {
+		t.Fatalf("unexpected status code %d", got)
+	}
+}
+
 func TestRunRejectsMultipleRequestsWithoutSelector(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")

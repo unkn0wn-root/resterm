@@ -245,11 +245,7 @@ func (m *Model) resolveSSH(
 		return nil, nil
 	}
 	manager := m.ensureSSHManager()
-	fileProfiles := docSSHProfiles(doc)
-	globalProfiles := []restfile.SSHProfile(nil)
-	if m.sshGlobals != nil {
-		globalProfiles = m.sshGlobals.all()
-	}
+	fileProfiles, globalProfiles := m.registryIndex().SSH(doc)
 	cfg, err := ssh.Resolve(req.SSH, fileProfiles, globalProfiles, resolver, envName)
 	if err != nil {
 		return nil, err
@@ -273,11 +269,7 @@ func (m *Model) resolveK8s(
 		return nil, nil
 	}
 	manager := m.ensureK8sManager()
-	fileProfiles := docK8sProfiles(doc)
-	globalProfiles := []restfile.K8sProfile(nil)
-	if m.k8sGlobals != nil {
-		globalProfiles = m.k8sGlobals.all()
-	}
+	fileProfiles, globalProfiles := m.registryIndex().K8s(doc)
 	cfg, err := k8s.Resolve(req.K8s, fileProfiles, globalProfiles, resolver, envName)
 	if err != nil {
 		return nil, err
@@ -298,73 +290,6 @@ func (m *Model) ensureSSHManager() *ssh.Manager {
 
 func (m *Model) ensureK8sManager() *k8s.Manager {
 	return m.k8sManager()
-}
-
-func (m *Model) syncSSHGlobals(doc *restfile.Document) {
-	if m.sshGlobals == nil {
-		return
-	}
-	path := m.documentRuntimePath(doc)
-	m.sshGlobals.set(path, docSSHProfiles(doc))
-}
-
-func (m *Model) syncAuthGlobals(doc *restfile.Document) {
-	if m.authGlobals == nil {
-		return
-	}
-	path := m.documentRuntimePath(doc)
-	m.authGlobals.set(path, docAuthProfiles(doc))
-}
-
-func (m *Model) syncK8sGlobals(doc *restfile.Document) {
-	if m.k8sGlobals == nil {
-		return
-	}
-	path := m.documentRuntimePath(doc)
-	m.k8sGlobals.set(path, docK8sProfiles(doc))
-}
-
-func docSSHProfiles(doc *restfile.Document) []restfile.SSHProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.SSH
-}
-
-func docAuthProfiles(doc *restfile.Document) []restfile.AuthProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.Auth
-}
-
-func docK8sProfiles(doc *restfile.Document) []restfile.K8sProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.K8s
-}
-
-func (m *Model) syncPatchGlobals(doc *restfile.Document) {
-	if m.patchGlobals == nil {
-		return
-	}
-	path := m.documentRuntimePath(doc)
-	m.patchGlobals.set(path, docPatchProfiles(doc))
-}
-
-func (m *Model) syncAllGlobals(doc *restfile.Document) {
-	m.syncSSHGlobals(doc)
-	m.syncAuthGlobals(doc)
-	m.syncK8sGlobals(doc)
-	m.syncPatchGlobals(doc)
-}
-
-func docPatchProfiles(doc *restfile.Document) []restfile.PatchProfile {
-	if doc == nil {
-		return nil
-	}
-	return doc.Patches
 }
 
 func (m *Model) mergeFileRuntimeVars(

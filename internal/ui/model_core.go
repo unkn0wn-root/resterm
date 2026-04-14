@@ -24,6 +24,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -185,10 +186,7 @@ type Model struct {
 	client             *httpclient.Client
 	grpcClient         *grpcclient.Client
 	grpcOptions        grpcclient.Options
-	sshGlobals         *namedStore[restfile.SSHProfile]
-	authGlobals        *authStore
-	k8sGlobals         *namedStore[restfile.K8sProfile]
-	patchGlobals       *patchStore
+	rg                 *registry.Index
 	workspaceRoot      string
 	workspaceRecursive bool
 
@@ -620,10 +618,8 @@ func New(cfg Config) Model {
 			K8sManager: k8sMgr,
 		})
 	}
-	sshGlobals := newSSHStore()
-	authGlobals := newAuthStore()
-	k8sGlobals := newK8sStore()
-	patchGlobals := newPatchStore()
+	rg := registry.New()
+	rg.Load(workspace, cfg.Recursive)
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
@@ -642,10 +638,7 @@ func New(cfg Config) Model {
 		client:                 client,
 		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
-		sshGlobals:             sshGlobals,
-		authGlobals:            authGlobals,
-		k8sGlobals:             k8sGlobals,
-		patchGlobals:           patchGlobals,
+		rg:                     rg,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,
@@ -731,7 +724,7 @@ func New(cfg Config) Model {
 	_ = model.setInsertMode(false, false)
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
-	model.syncAllGlobals(model.doc)
+	model.syncRegistry(model.doc)
 	model.syncRequestList(model.doc)
 	model.rebuildNavigator(entries)
 	if hs := model.historyStore(); hs != nil {
