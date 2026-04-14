@@ -34,7 +34,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 Resterm ships with a headless engine that can run requests, workflows, and assertions without the TUI.
 
 > [!NOTE]
-> **Resterm in CI/CD** Check out runner [resterm-runner](https://github.com/unkn0wn-root/resterm-runner)
+> If you want to run Resterm in your CI/CD - Check out runner [resterm-runner](https://github.com/unkn0wn-root/resterm-runner)
 
 ## Screenshot tour
 
