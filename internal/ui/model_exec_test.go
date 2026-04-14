@@ -2672,3 +2672,68 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 		t.Fatalf("expected timeline to be populated in snapshot")
 	}
 }
+
+func TestApplyNoCookiesSetting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, cookie := range r.Cookies() {
+			fmt.Fprintf(w, "%s\n", cookie.String())
+		}
+	}))
+	defer srv.Close()
+
+	model := Model{
+		cfg:     Config{EnvironmentName: "dev"},
+		cookies: newCookieStore(),
+	}
+
+	// Prepare the cookie jar
+	u, _ := url.Parse(srv.URL)
+	model.cookies.getOrCreate("dev").SetCookies(u, []*http.Cookie{
+		{Name: "foo", Value: "bar"},
+	})
+
+	// First request to check the cookie is set by default
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    srv.URL,
+	}
+
+	cmd := model.executeRequest(nil, req, httpclient.Options{NoFallback: true}, "dev", nil)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg, ok := cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString := strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "foo=bar" {
+		t.Fatalf("expected cookie foo=bar in dev env, got %q", respBodyString)
+	}
+
+	// Second request with setting to skip cookies
+	reqWithSetting := &restfile.Request{
+		Method:   "GET",
+		URL:      srv.URL,
+		Settings: map[string]string{"no-cookies": "true"},
+	}
+
+	cmd = model.executeRequest(nil, reqWithSetting, httpclient.Options{NoFallback: true}, "dev", nil)
+	msg, ok = cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString = strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "" {
+		t.Fatalf("expected no cookies to be sent, but got %q", respBodyString)
+	}
+}

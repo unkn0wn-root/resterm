@@ -6,7 +6,7 @@ import "strings"
 func IsHTTPKey(key string) bool {
 	k := strings.ToLower(strings.TrimSpace(key))
 	switch k {
-	case "timeout", "proxy", "followredirects", "insecure":
+	case "timeout", "proxy", "followredirects", "insecure", "no-cookies":
 		return true
 	default:
 		return strings.HasPrefix(k, "http-")
