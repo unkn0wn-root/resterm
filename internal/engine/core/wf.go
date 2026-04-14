@@ -571,7 +571,13 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 	if err != nil {
 		return false, err
 	}
-	return r.finishStep(ok, skip, cancel, true, step.OnFailure != restfile.WorkflowOnFailureContinue), nil
+	return r.finishStep(
+		ok,
+		skip,
+		cancel,
+		true,
+		step.OnFailure != restfile.WorkflowOnFailureContinue,
+	), nil
 }
 
 func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool, error) {
@@ -684,7 +690,13 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 	if err != nil {
 		return false, err
 	}
-	return r.finishStep(ok, skip, cancel, true, step.OnFailure != restfile.WorkflowOnFailureContinue), nil
+	return r.finishStep(
+		ok,
+		skip,
+		cancel,
+		true,
+		step.OnFailure != restfile.WorkflowOnFailureContinue,
+	), nil
 }
 
 func (r *wfRun) execReq(

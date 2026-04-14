@@ -35,12 +35,7 @@ func (s *Globals) Snapshot(env string) map[string]GlobalValue {
 
 	dst := make(map[string]GlobalValue, len(src))
 	for k, v := range src {
-		dst[k] = GlobalValue{
-			Name:      v.Name,
-			Value:     v.Value,
-			Secret:    v.Secret,
-			UpdatedAt: v.UpdatedAt,
-		}
+		dst[k] = GlobalValue(v)
 	}
 	return dst
 }

@@ -44,12 +44,11 @@ func prepareCompareSpec(spec *restfile.CompareSpec) *restfile.CompareSpec {
 	}
 
 	envs := normalizeCompareTargets(spec.Environments)
-	base, found := normalizeCompareBaseline(envs, spec.Baseline)
+	base, _ := normalizeCompareBaseline(envs, spec.Baseline)
 	switch {
 	case len(envs) == 0:
 	case base == "":
 		base = envs[0]
-	case found:
 	default:
 		// Preserve an explicit missing baseline so callers can keep the requested
 		// label while still falling back to the first row for effective diffing.

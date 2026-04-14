@@ -277,7 +277,8 @@ func TestManagerMergeCachedConfigCacheOnlyInheritsResolvedValues(t *testing.T) {
 	mgr.storeToken("github", base, Token{AccessToken: "cached"})
 
 	merged := mgr.MergeCachedConfig("dev", Config{CacheKey: " github "})
-	if merged.TokenURL != "https://auth.local/token" || merged.AuthURL != "https://auth.local/auth" {
+	if merged.TokenURL != "https://auth.local/token" ||
+		merged.AuthURL != "https://auth.local/auth" {
 		t.Fatalf("expected URLs to be normalized and inherited, got %#v", merged)
 	}
 	if merged.GrantType != GrantAuthorizationCode {
@@ -298,8 +299,10 @@ func TestManagerNormalizesDefaultGrantForCacheReuse(t *testing.T) {
 			return &httpclient.Response{
 				Status:     "200 OK",
 				StatusCode: 200,
-				Body:       []byte(`{"access_token":"cached-token","token_type":"Bearer","expires_in":3600}`),
-				Headers:    http.Header{},
+				Body: []byte(
+					`{"access_token":"cached-token","token_type":"Bearer","expires_in":3600}`,
+				),
+				Headers: http.Header{},
 			}, nil
 		},
 	)

@@ -36,12 +36,7 @@ func (s *Files) Snapshot(env, path string) map[string]FileValue {
 
 	dst := make(map[string]FileValue, len(src))
 	for k, v := range src {
-		dst[k] = FileValue{
-			Name:      v.Name,
-			Value:     v.Value,
-			Secret:    v.Secret,
-			UpdatedAt: v.UpdatedAt,
-		}
+		dst[k] = FileValue(v)
 	}
 	return dst
 }

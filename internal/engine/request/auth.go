@@ -52,7 +52,10 @@ var oauthConfigFields = []oauthConfigField{
 	{key: "header", set: func(cfg *oauth.Config, value string) { cfg.Header = value }},
 	{key: "cache_key", set: func(cfg *oauth.Config, value string) { cfg.CacheKey = value }},
 	{key: "code_verifier", set: func(cfg *oauth.Config, value string) { cfg.CodeVerifier = value }},
-	{key: "code_challenge_method", set: func(cfg *oauth.Config, value string) { cfg.CodeMethod = value }},
+	{
+		key: "code_challenge_method",
+		set: func(cfg *oauth.Config, value string) { cfg.CodeMethod = value },
+	},
 	{key: "state", set: func(cfg *oauth.Config, value string) { cfg.State = value }},
 }
 
