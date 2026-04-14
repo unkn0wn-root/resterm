@@ -64,7 +64,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	res, err := eng.ensureCommandAuth(
+	res, err := eng.EnsureCommandAuth(
 		context.Background(),
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
@@ -110,7 +110,7 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 		},
 	}
 
-	if _, err := eng.ensureCommandAuth(
+	if _, err := eng.EnsureCommandAuth(
 		context.Background(),
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
@@ -148,7 +148,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}}
 
 	seedReq := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: seedAuth}}
-	if _, err := eng.ensureCommandAuth(
+	if _, err := eng.EnsureCommandAuth(
 		context.Background(),
 		&restfile.Document{Path: "/tmp/example.http"},
 		seedReq,
@@ -160,7 +160,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}
 
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: cacheOnlyAuth}}
-	res, err := eng.ensureCommandAuth(
+	res, err := eng.EnsureCommandAuth(
 		context.Background(),
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
@@ -192,7 +192,7 @@ func TestBuildCommandAuthConfigExpandsArgvAfterJSONDecode(t *testing.T) {
 		"profile": `qa"blue\team`,
 	}))
 
-	cfg, err := eng.buildCommandAuthConfig(
+	cfg, err := eng.BuildCommandAuthConfig(
 		&restfile.Document{Path: "/tmp/example.http"},
 		auth,
 		resolver,
@@ -228,7 +228,7 @@ func TestBuildOAuthConfigExpandsKnownParamsAndExtra(t *testing.T) {
 		"max_age":   "300",
 	}))
 
-	cfg, err := eng.buildOAuthConfig(auth, resolver)
+	cfg, err := eng.BuildOAuthConfig(auth, resolver)
 	if err != nil {
 		t.Fatalf("buildOAuthConfig: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestEnsureCommandAuthWithoutRuntimeReturnsInitError(t *testing.T) {
 		},
 	}}}
 
-	_, err := (&Engine{}).ensureCommandAuth(
+	_, err := (&Engine{}).EnsureCommandAuth(
 		context.Background(),
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,

@@ -460,7 +460,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		return nil
 	}
 	x := f.ctx
-	x.eng.resolveInheritedAuth(x.doc, x.req)
+	x.eng.ResolveInheritedAuth(x.doc, x.req)
 
 	vv := cloneStringMap(x.baseVars)
 	var before *restfile.Request
@@ -664,7 +664,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	if x.req.Metadata.Auth == nil {
 		return nil
 	}
-	x.exp.addSecrets(authSecretValues(x.req.Metadata.Auth, x.res)...)
+	x.exp.addSecrets(AuthSecretValues(x.req.Metadata.Auth, x.res)...)
 	before := cloneRequest(x.req)
 	if x.preview() {
 		out, err := x.eng.prepareExplainAuthPreview(x.doc, x.req, x.res, x.env)
@@ -694,7 +694,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 	var secs []string
 	switch strings.ToLower(strings.TrimSpace(x.req.Metadata.Auth.Type)) {
 	case "command":
-		out, err := x.eng.ensureCommandAuth(x.sendCtx, x.doc, x.req, x.res, x.env, x.timeout)
+		out, err := x.eng.EnsureCommandAuth(x.sendCtx, x.doc, x.req, x.res, x.env, x.timeout)
 		if err != nil {
 			x.exp.stage(
 				xplain.StageAuth,
@@ -706,9 +706,9 @@ func (x *execCtx) prepareAuth() *xrunResult {
 			)
 			return x.fail(err, "Auth preparation failed")
 		}
-		secs = commandAuthSecrets(out)
+		secs = CommandAuthSecrets(out)
 	default:
-		if err := x.eng.ensureOAuth(x.sendCtx, x.req, x.res, x.opts, x.env, x.timeout); err != nil {
+		if err := x.eng.EnsureOAuth(x.sendCtx, x.req, x.res, x.opts, x.env, x.timeout); err != nil {
 			x.exp.stage(
 				xplain.StageAuth,
 				xplain.StageError,
@@ -719,7 +719,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 			)
 			return x.fail(err, "Auth preparation failed")
 		}
-		secs = injectedAuthSecrets(x.req.Metadata.Auth, before, x.req)
+		secs = InjectedAuthSecrets(x.req.Metadata.Auth, before, x.req)
 	}
 	x.exp.addSecrets(secs...)
 	x.runtimeSecrets = append(x.runtimeSecrets, secs...)

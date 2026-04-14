@@ -59,7 +59,7 @@ var oauthConfigFields = []oauthConfigField{
 	{key: "state", set: func(cfg *oauth.Config, value string) { cfg.State = value }},
 }
 
-func (e *Engine) resolveInheritedAuth(doc *restfile.Document, req *restfile.Request) {
+func (e *Engine) ResolveInheritedAuth(doc *restfile.Document, req *restfile.Request) {
 	if req == nil || requestAuth(req) != nil || req.Metadata.AuthDisabled {
 		return
 	}
@@ -68,7 +68,7 @@ func (e *Engine) resolveInheritedAuth(doc *restfile.Document, req *restfile.Requ
 	}
 }
 
-func commandAuthSecrets(res authcmd.Result) []string {
+func CommandAuthSecrets(res authcmd.Result) []string {
 	tok := strings.TrimSpace(res.Token)
 	val := strings.TrimSpace(res.Value)
 	switch {
@@ -85,7 +85,7 @@ func commandAuthSecrets(res authcmd.Result) []string {
 	}
 }
 
-func injectedAuthSecrets(
+func InjectedAuthSecrets(
 	auth *restfile.AuthSpec,
 	before *restfile.Request,
 	after *restfile.Request,
@@ -207,7 +207,7 @@ func (e *Engine) oauthManager() (*oauth.Manager, error) {
 	return oa, nil
 }
 
-func (e *Engine) ensureCommandAuth(
+func (e *Engine) EnsureCommandAuth(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
@@ -219,7 +219,7 @@ func (e *Engine) ensureCommandAuth(
 	if auth == nil {
 		return authcmd.Result{}, nil
 	}
-	prep, err := e.prepareCommandAuth(doc, auth, res, env, timeout)
+	prep, err := e.PrepareCommandAuth(doc, auth, res, env, timeout)
 	if err != nil {
 		return authcmd.Result{}, err
 	}
@@ -242,7 +242,7 @@ func (e *Engine) ensureCommandAuth(
 	return out, nil
 }
 
-func (e *Engine) prepareCommandAuth(
+func (e *Engine) PrepareCommandAuth(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
@@ -253,14 +253,14 @@ func (e *Engine) prepareCommandAuth(
 	if err != nil {
 		return authcmd.Prepared{}, err
 	}
-	cfg, err := e.buildCommandAuthConfig(doc, auth, res, timeout)
+	cfg, err := e.BuildCommandAuthConfig(doc, auth, res, timeout)
 	if err != nil {
 		return authcmd.Prepared{}, err
 	}
 	return ac.Prepare(e.envName(env), cfg)
 }
 
-func (e *Engine) ensureOAuth(
+func (e *Engine) EnsureOAuth(
 	ctx context.Context,
 	req *restfile.Request,
 	res *vars.Resolver,
@@ -276,7 +276,7 @@ func (e *Engine) ensureOAuth(
 	if err != nil {
 		return err
 	}
-	cfg, err := e.buildOAuthConfig(auth, res)
+	cfg, err := e.BuildOAuthConfig(auth, res)
 	if err != nil {
 		return err
 	}
@@ -319,7 +319,7 @@ func (e *Engine) oauthNeedsHeadlessSeed(oa *oauth.Manager, env string, cfg oauth
 	return !oa.CanHeadless(env, cfg)
 }
 
-func (e *Engine) buildCommandAuthConfig(
+func (e *Engine) BuildCommandAuthConfig(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
@@ -348,7 +348,7 @@ func (e *Engine) buildCommandAuthConfig(
 	return out.WithBaseTimeout(timeout), nil
 }
 
-func (e *Engine) buildOAuthConfig(
+func (e *Engine) BuildOAuthConfig(
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
 ) (oauth.Config, error) {
@@ -369,6 +369,22 @@ func (e *Engine) buildOAuthConfig(
 	}
 	cfg.Extra = extra
 	return cfg.Normalized(), nil
+}
+
+func (e *Engine) ResolveOAuthConfig(
+	auth *restfile.AuthSpec,
+	res *vars.Resolver,
+	env string,
+) (oauth.Config, error) {
+	oa, err := e.oauthManager()
+	if err != nil {
+		return oauth.Config{}, err
+	}
+	cfg, err := e.BuildOAuthConfig(auth, res)
+	if err != nil {
+		return oauth.Config{}, err
+	}
+	return oa.MergeCachedConfig(e.envName(env), cfg), nil
 }
 
 func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]string, error) {

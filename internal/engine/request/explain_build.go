@@ -27,6 +27,13 @@ type explainAuthPreviewResult struct {
 	extraSecrets []string
 }
 
+type ExplainAuthPreviewResult struct {
+	Status       xplain.StageStatus
+	Summary      string
+	Notes        []string
+	ExtraSecrets []string
+}
+
 type explainFinalizeInput struct {
 	report       *xplain.Report
 	doc          *restfile.Document
@@ -1023,7 +1030,7 @@ func clipExplain(s string) string {
 	return strings.TrimSpace(string(rs[:explainClip])) + " ..."
 }
 
-func authSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
+func AuthSecretValues(auth *restfile.AuthSpec, res *vars.Resolver) []string {
 	if auth == nil || len(auth.Params) == 0 {
 		return nil
 	}
@@ -1092,7 +1099,7 @@ func (e *Engine) prepareExplainAuthPreview(
 			notes:   []string{"auth headers/query are applied during HTTP request build"},
 		}, nil
 	case "command":
-		prep, err := e.prepareCommandAuth(doc, auth, res, env, 0)
+		prep, err := e.PrepareCommandAuth(doc, auth, res, env, 0)
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
@@ -1133,7 +1140,7 @@ func (e *Engine) prepareExplainAuthPreview(
 			status:       xplain.StageOK,
 			summary:      xplain.SummaryAuthPrepared,
 			notes:        []string{"used cached command auth result for explain preview"},
-			extraSecrets: commandAuthSecrets(out),
+			extraSecrets: CommandAuthSecrets(out),
 		}, nil
 	case "oauth2":
 		oa := e.rt.OAuth()
@@ -1143,7 +1150,7 @@ func (e *Engine) prepareExplainAuthPreview(
 				"oauth support is not initialised",
 			)
 		}
-		cfg, err := e.buildOAuthConfig(auth, res)
+		cfg, err := e.BuildOAuthConfig(auth, res)
 		if err != nil {
 			return explainAuthPreviewResult{}, err
 		}
@@ -1202,6 +1209,24 @@ func (e *Engine) prepareExplainAuthPreview(
 			notes:   []string{fmt.Sprintf("unsupported auth type %q is not applied", auth.Type)},
 		}, nil
 	}
+}
+
+func (e *Engine) PrepareExplainAuthPreview(
+	doc *restfile.Document,
+	req *restfile.Request,
+	res *vars.Resolver,
+	env string,
+) (ExplainAuthPreviewResult, error) {
+	out, err := e.prepareExplainAuthPreview(doc, req, res, env)
+	if err != nil {
+		return ExplainAuthPreviewResult{}, err
+	}
+	return ExplainAuthPreviewResult{
+		Status:       out.status,
+		Summary:      out.summary,
+		Notes:        append([]string(nil), out.notes...),
+		ExtraSecrets: append([]string(nil), out.extraSecrets...),
+	}, nil
 }
 
 func (e *Engine) prepareExplainHTTPPreview(
