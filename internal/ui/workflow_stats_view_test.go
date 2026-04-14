@@ -68,23 +68,38 @@ func TestWorkflowStatsRenderIndicators(t *testing.T) {
 }
 
 func TestWorkflowStatsCanceledEntries(t *testing.T) {
-	state := &workflowState{
-		workflow: restfile.Workflow{Name: "demo"},
-		steps: []workflowStepRuntime{
-			{step: restfile.WorkflowStep{Name: "One"}},
-			{step: restfile.WorkflowStep{Name: "Two"}},
-			{step: restfile.WorkflowStep{Name: "Three"}},
+	view := &workflowStatsView{
+		name:       "demo",
+		started:    time.Now(),
+		ended:      time.Now(),
+		totalSteps: 3,
+		entries: []workflowStatsEntry{
+			{
+				index: 0,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "One"},
+					Success: true,
+				},
+			},
+			{
+				index: 1,
+				result: workflowStepResult{
+					Step:     restfile.WorkflowStep{Name: "Two"},
+					Canceled: true,
+				},
+			},
+			{
+				index: 2,
+				result: workflowStepResult{
+					Step:     restfile.WorkflowStep{Name: "Three"},
+					Canceled: true,
+				},
+			},
 		},
-		results: []workflowStepResult{
-			{Step: restfile.WorkflowStep{Name: "One"}, Success: true},
-		},
-		canceled:     true,
-		cancelReason: "user canceled",
-		start:        time.Now(),
-		end:          time.Now(),
+		selected:    0,
+		expanded:    make(map[int]bool),
+		renderCache: make(map[int]workflowStatsRender),
 	}
-
-	view := newWorkflowStatsView(state)
 	render := view.render(80)
 	plain := stripANSIEscape(render.content)
 	if strings.Count(plain, workflowStatusCanceled) != 2 {
@@ -300,57 +315,65 @@ func TestWorkflowStatsJumpSelectionAlignsExpandedEntries(t *testing.T) {
 	width := 50
 	height := 8
 
-	state := &workflowState{
-		workflow: restfile.Workflow{Name: "wf"},
-		steps: []workflowStepRuntime{
-			{step: restfile.WorkflowStep{Name: "Step 1"}},
-			{step: restfile.WorkflowStep{Name: "Step 2"}},
-			{step: restfile.WorkflowStep{Name: "Step 3"}},
-			{step: restfile.WorkflowStep{Name: "Step 4"}},
+	view := &workflowStatsView{
+		name:       "wf",
+		started:    time.Now(),
+		ended:      time.Now(),
+		totalSteps: 4,
+		entries: []workflowStatsEntry{
+			{
+				index: 0,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Step 1"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Body:       []byte(strings.Repeat("one\n", 10)),
+					},
+				},
+			},
+			{
+				index: 1,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Step 2"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Body:       []byte(strings.Repeat("two\n", 10)),
+					},
+				},
+			},
+			{
+				index: 2,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Step 3"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Body:       []byte(strings.Repeat("three\n", 16)),
+					},
+				},
+			},
+			{
+				index: 3,
+				result: workflowStepResult{
+					Step:    restfile.WorkflowStep{Name: "Step 4"},
+					Success: true,
+					HTTP: &httpclient.Response{
+						Status:     "200 OK",
+						StatusCode: 200,
+						Body:       []byte(strings.Repeat("four\n", 20)),
+					},
+				},
+			},
 		},
-		results: []workflowStepResult{
-			{
-				Step:    restfile.WorkflowStep{Name: "Step 1"},
-				Success: true,
-				HTTP: &httpclient.Response{
-					Status:     "200 OK",
-					StatusCode: 200,
-					Body:       []byte(strings.Repeat("one\n", 10)),
-				},
-			},
-			{
-				Step:    restfile.WorkflowStep{Name: "Step 2"},
-				Success: true,
-				HTTP: &httpclient.Response{
-					Status:     "200 OK",
-					StatusCode: 200,
-					Body:       []byte(strings.Repeat("two\n", 10)),
-				},
-			},
-			{
-				Step:    restfile.WorkflowStep{Name: "Step 3"},
-				Success: true,
-				HTTP: &httpclient.Response{
-					Status:     "200 OK",
-					StatusCode: 200,
-					Body:       []byte(strings.Repeat("three\n", 16)),
-				},
-			},
-			{
-				Step:    restfile.WorkflowStep{Name: "Step 4"},
-				Success: true,
-				HTTP: &httpclient.Response{
-					Status:     "200 OK",
-					StatusCode: 200,
-					Body:       []byte(strings.Repeat("four\n", 20)),
-				},
-			},
-		},
-		start: time.Now(),
-		end:   time.Now(),
+		selected:    0,
+		expanded:    make(map[int]bool),
+		renderCache: make(map[int]workflowStatsRender),
 	}
-
-	view := newWorkflowStatsView(state)
 	snapshot := &responseSnapshot{
 		stats:         "workflow stats",
 		statsKind:     statsReportKindWorkflow,

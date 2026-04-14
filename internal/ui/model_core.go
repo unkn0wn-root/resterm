@@ -15,15 +15,16 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
+	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
-	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -165,6 +166,7 @@ type Config struct {
 	CompareTargets      []string
 	CompareBase         string
 	Bindings            *bindings.Map
+	Runtime             *rtrun.Runtime
 }
 
 type operatorState struct {
@@ -176,24 +178,22 @@ type operatorState struct {
 
 type Model struct {
 	cfg                Config
+	run                *rtrun.Runtime
+	rq                 *rqeng.Engine
 	bindingsMap        *bindings.Map
 	theme              theme.Theme
 	themeCatalog       theme.Catalog
 	client             *httpclient.Client
 	grpcClient         *grpcclient.Client
 	grpcOptions        grpcclient.Options
-	sshMgr             *ssh.Manager
-	sshGlobals         *namedStore[restfile.SSHProfile]
-	authGlobals        *authStore
-	k8sMgr             *k8s.Manager
-	k8sGlobals         *namedStore[restfile.K8sProfile]
-	patchGlobals       *patchStore
+	rg                 *registry.Index
 	cookies            *cookieStore
 	workspaceRoot      string
 	workspaceRecursive bool
 
 	fileWatcher   *watcher.Watcher
 	fileWatchChan chan tea.Msg
+	runMsgChan    chan tea.Msg
 
 	fileList                 list.Model
 	requestList              list.Model
@@ -288,10 +288,6 @@ type Model struct {
 	rtsEng          *rts.Eng
 	testResults     []scripts.TestResult
 	scriptError     error
-	globals         *globalStore
-	fileVars        *fileStore
-	authCmd         *authcmd.Manager
-	oauth           *oauth.Manager
 	updateClient    update.Client
 	updateVersion   string
 	updateCmd       string
@@ -310,7 +306,6 @@ type Model struct {
 
 	activeThemeKey      string
 	settingsHandle      config.SettingsHandle
-	historyStore        history.Store
 	historyEntries      []history.Entry
 	historyScopeCount   int
 	historySelectedID   string
@@ -374,12 +369,10 @@ type Model struct {
 	lastCursorLine     int
 	lastCursorFile     string
 	lastCursorDoc      *restfile.Document
+	compareBundle      *compareBundle
+	compareRun         *compareState
 	profileRun         *profileState
 	workflowRun        *workflowState
-	compareRun         *compareState
-	lastCompareResults []compareResult
-	lastCompareSpec    *restfile.CompareSpec
-	compareBundle      *compareBundle
 	activeRequestTitle string
 	activeRequestKey   string
 	activeWorkflowKey  string
@@ -429,6 +422,7 @@ func New(cfg Config) Model {
 	}
 	fileWatcher := watcher.New(watcher.Options{})
 	fileWatchChan := make(chan tea.Msg, 16)
+	runMsgChan := make(chan tea.Msg, 256)
 
 	workspace := cfg.WorkspaceRoot
 	if workspace == "" {
@@ -616,11 +610,19 @@ func New(cfg Config) Model {
 	if k8sMgr == nil {
 		k8sMgr = k8s.NewManager()
 	}
-	sshGlobals := newSSHStore()
-	authGlobals := newAuthStore()
-	k8sGlobals := newK8sStore()
-	patchGlobals := newPatchStore()
+	rg := registry.New()
+	rg.Load(workspace, cfg.Recursive)
 	cookies := newCookieStore()
+
+	run := cfg.Runtime
+	if run == nil {
+		run = newRuntime(rtrun.Config{
+			Client:     client,
+			History:    cfg.History,
+			SSHManager: sshMgr,
+			K8sManager: k8sMgr,
+		})
+	}
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
@@ -632,18 +634,14 @@ func New(cfg Config) Model {
 
 	model := Model{
 		cfg:                    cfg,
+		run:                    run,
 		bindingsMap:            bindingMap,
 		theme:                  th,
 		themeCatalog:           cfg.ThemeCatalog,
 		client:                 client,
 		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
-		sshMgr:                 sshMgr,
-		sshGlobals:             sshGlobals,
-		authGlobals:            authGlobals,
-		k8sMgr:                 k8sMgr,
-		k8sGlobals:             k8sGlobals,
-		patchGlobals:           patchGlobals,
+		rg:                     rg,
 		cookies:                cookies,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
@@ -653,6 +651,7 @@ func New(cfg Config) Model {
 		navigatorFilter:        navFilter,
 		fileWatcher:            fileWatcher,
 		fileWatchChan:          fileWatchChan,
+		runMsgChan:             runMsgChan,
 		docCache:               make(map[string]navDocCache),
 		editor:                 editor,
 		historyList:            historyList,
@@ -683,7 +682,6 @@ func New(cfg Config) Model {
 		sidebarSplit:             sidebarSplitDefault,
 		workflowSplit:            workflowSplitDefault,
 		editorSplit:              editorSplitDefault,
-		historyStore:             cfg.History,
 		historySelected:          historySelected,
 		historyScope:             historyScopeGlobal,
 		historySort:              historySortNewest,
@@ -693,10 +691,6 @@ func New(cfg Config) Model {
 		latencySeries:            newLatencySeries(latCap),
 		scriptRunner:             scripts.NewRunner(nil),
 		rtsEng:                   rts.NewEng(),
-		globals:                  newGlobalStore(),
-		fileVars:                 newFileStore(),
-		authCmd:                  authcmd.NewManager(),
-		oauth:                    oauth.NewManager(client),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,
 		updateCmd:                updateCmd,
@@ -734,11 +728,11 @@ func New(cfg Config) Model {
 	_ = model.setInsertMode(false, false)
 
 	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
-	model.syncAllGlobals(model.doc)
+	model.syncRegistry(model.doc)
 	model.syncRequestList(model.doc)
 	model.rebuildNavigator(entries)
-	if model.historyStore != nil {
-		_ = model.historyStore.Load()
+	if hs := model.historyStore(); hs != nil {
+		_ = hs.Load()
 	}
 	model.setHistoryScopeForFile(model.currentFile)
 	model.syncHistory()

@@ -53,11 +53,13 @@ func buildWorkflowStatsEntries(state *workflowState) []workflowStatsEntry {
 
 	for i := len(entries); i < total && i < len(state.steps); i++ {
 		step := state.steps[i].step
-		res := workflowStepResult{
-			Step:     step,
-			Canceled: true,
-		}
-		entries = append(entries, workflowStatsEntry{index: i, result: res})
+		entries = append(entries, workflowStatsEntry{
+			index: i,
+			result: workflowStepResult{
+				Step:     step,
+				Canceled: true,
+			},
+		})
 	}
 	return entries
 }
@@ -68,7 +70,6 @@ func newWorkflowStatsView(state *workflowState) *workflowStatsView {
 	}
 
 	entries := buildWorkflowStatsEntries(state)
-
 	selected := 0
 	if len(entries) == 0 {
 		selected = -1

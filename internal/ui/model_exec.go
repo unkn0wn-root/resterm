@@ -86,6 +86,7 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 	if status == "" {
 		status = "Canceling..."
 	}
+	hadRun := m.profileRun != nil || m.workflowRun != nil || m.compareRun != nil
 
 	m.stopSending()
 	m.stopStatusPulse()
@@ -100,7 +101,11 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 	if cmd := m.cancelCompareRun(status); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	m.cancelInFlightSend(status)
+	cancelText := status
+	if hadRun && !m.hasActiveRun() && !m.responseLoading && !m.hasReflowPending() {
+		cancelText = ""
+	}
+	m.cancelInFlightSend(cancelText)
 	if m.responseLoading {
 		if cmd := m.cancelResponseFormatting(""); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -111,48 +116,6 @@ func (m *Model) cancelRuns(status string) tea.Cmd {
 	}
 
 	return batchCmds(cmds)
-}
-
-func (m *Model) cancelResponseReflow() tea.Cmd {
-	canceled := false
-	for i := range m.responsePanes {
-		pane := &m.responsePanes[i]
-		if len(pane.reflow) == 0 {
-			continue
-		}
-		wasActive := m.reflowActiveForPane(pane)
-		for key, state := range pane.reflow {
-			markReflowCanceled(pane, key, state.snapshotID)
-		}
-		clearReflowAll(pane)
-		canceled = true
-
-		if wasActive {
-			m.showReflowCanceled(pane)
-		}
-	}
-	if !canceled {
-		return nil
-	}
-	m.respSpinStop()
-	if !m.hasActiveRun() && !m.responseLoading && !m.hasReflowPending() {
-		m.setStatusMessage(statusMsg{})
-	}
-	return nil
-}
-
-func (m *Model) showReflowCanceled(pane *responsePaneState) {
-	if pane == nil {
-		return
-	}
-	tab := pane.activeTab
-	if tab == responseTabHistory {
-		return
-	}
-
-	_, ww, h := paneDims(pane, tab)
-	sr, sid := paneSnap(pane)
-	m.applyReflowCanceled(pane, tab, ww, h, sr, sid)
 }
 
 func (m *Model) cancelProfileRun(reason string) tea.Cmd {
@@ -200,6 +163,48 @@ func (m *Model) cancelCompareRun(reason string) tea.Cmd {
 	return nil
 }
 
+func (m *Model) cancelResponseReflow() tea.Cmd {
+	canceled := false
+	for i := range m.responsePanes {
+		pane := &m.responsePanes[i]
+		if len(pane.reflow) == 0 {
+			continue
+		}
+		wasActive := m.reflowActiveForPane(pane)
+		for key, state := range pane.reflow {
+			markReflowCanceled(pane, key, state.snapshotID)
+		}
+		clearReflowAll(pane)
+		canceled = true
+
+		if wasActive {
+			m.showReflowCanceled(pane)
+		}
+	}
+	if !canceled {
+		return nil
+	}
+	m.respSpinStop()
+	if !m.hasActiveRun() && !m.responseLoading && !m.hasReflowPending() {
+		m.setStatusMessage(statusMsg{})
+	}
+	return nil
+}
+
+func (m *Model) showReflowCanceled(pane *responsePaneState) {
+	if pane == nil {
+		return
+	}
+	tab := pane.activeTab
+	if tab == responseTabHistory {
+		return
+	}
+
+	_, ww, h := paneDims(pane, tab)
+	sr, sid := paneSnap(pane)
+	m.applyReflowCanceled(pane, tab, ww, h, sr, sid)
+}
+
 type activeReqExec struct {
 	doc  *restfile.Document
 	req  *restfile.Request
@@ -226,7 +231,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncAllGlobals(doc)
+	m.syncRegistry(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -290,7 +295,29 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	}
 
 	if st.req.Metadata.Profile != nil {
-		return st.wrap(m.startProfileRun(st.doc, st.req, st.opts))
+		if st.req.GRPC != nil {
+			m.setStatusMessage(
+				statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
+			)
+		} else {
+			return st.wrap(m.startProfileRun(st.doc, st.req, st.opts))
+		}
+	}
+
+	if st.req.WebSocket != nil && len(st.req.WebSocket.Steps) == 0 {
+		spin := m.startSending()
+		target := m.statusRequestTarget(st.doc, st.req, "")
+		base := "Sending"
+		if trimmed := strings.TrimSpace(target); trimmed != "" {
+			base = fmt.Sprintf("Sending %s", trimmed)
+		}
+		m.statusPulseBase = base
+		m.statusPulseFrame = -1
+		m.setStatusMessage(statusMsg{text: base, level: statusInfo})
+
+		execCmd := m.executeRequest(st.doc, st.req, st.opts, "", nil)
+		pulse := m.startStatusPulse()
+		return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 	}
 
 	spin := m.startSending()
@@ -303,7 +330,7 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-	execCmd := m.executeRequest(st.doc, st.req, st.opts, "", nil)
+	execCmd := m.execRunReq(st.doc, st.req, st.opts, "", nil)
 	pulse := m.startStatusPulse()
 	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 }
@@ -372,7 +399,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	m.doc = doc
 	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncAllGlobals(doc)
+	m.syncRegistry(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -500,11 +527,6 @@ func (m *Model) handleStatusPulse(msg statusPulseMsg) tea.Cmd {
 	m.statusPulseFrame++
 	if m.statusPulseFrame >= 3 {
 		m.statusPulseFrame = 0
-	}
-
-	if m.profileRun != nil {
-		m.showProfileProgress(m.profileRun)
-		return m.scheduleStatusPulse()
 	}
 
 	base := strings.TrimSpace(m.statusPulseBase)

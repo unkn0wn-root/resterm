@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/cli"
 )
 
 func TestRunVersionFlag(t *testing.T) {
@@ -112,7 +114,7 @@ func TestRunInvalidFlagReturnsCodeTwo(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected parse error")
 	}
-	if c := exitCode(err); c != 2 {
+	if c := cli.ExitCode(err); c != 2 {
 		t.Fatalf("expected exit code 2, got %d (err=%v)", c, err)
 	}
 	if !strings.Contains(err.Error(), "flag provided but not defined") {

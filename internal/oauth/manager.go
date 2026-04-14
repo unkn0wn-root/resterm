@@ -46,6 +46,12 @@ type Token struct {
 	Raw          map[string]any
 }
 
+type SnapshotEntry struct {
+	Key    string `json:"key"`
+	Config Config `json:"config"`
+	Token  Token  `json:"token"`
+}
+
 type Manager struct {
 	client *httpclient.Client
 
@@ -101,34 +107,39 @@ func (m *Manager) Token(
 	cfg Config,
 	opts httpclient.Options,
 ) (Token, error) {
-	key := m.cacheKey(env, cfg)
+	cfg, key, fallback := m.lookupKeys(env, cfg)
 
-	if token, ok := m.cachedToken(key); ok && token.valid() {
+	if token, ok, usedKey := m.cachedToken(key, fallback); ok && token.valid() {
+		m.promoteCacheKey(key, usedKey)
 		return token, nil
 	}
 
 	m.mu.Lock()
-	if call, ok := m.inflight[key]; ok {
-		done := call.done
+	pending, ok := m.inflight[key]
+	if !ok && fallback != "" {
+		pending, ok = m.inflight[fallback]
+	}
+	if ok {
+		done := pending.done
 		m.mu.Unlock()
 		select {
 		case <-ctx.Done():
 			return Token{}, ctx.Err()
 		case <-done:
-			if call.err != nil {
-				return Token{}, call.err
+			if pending.err != nil {
+				return Token{}, pending.err
 			}
-			return call.token, nil
+			return pending.token, nil
 		}
 	}
-	call := &call{done: make(chan struct{})}
-	m.inflight[key] = call
+	pending = &call{done: make(chan struct{})}
+	m.inflight[key] = pending
 	m.mu.Unlock()
 
-	token, err := m.obtainToken(ctx, key, cfg, opts)
-	call.token = token
-	call.err = err
-	close(call.done)
+	token, err := m.obtainToken(ctx, key, fallback, cfg, opts)
+	pending.token = token
+	pending.err = err
+	close(pending.done)
 
 	m.mu.Lock()
 	delete(m.inflight, key)
@@ -143,25 +154,87 @@ func (m *Manager) Token(
 // CachedToken returns a valid cached token for the config when one is already
 // available. It never refreshes or performs network I/O.
 func (m *Manager) CachedToken(env string, cfg Config) (Token, bool) {
-	key := m.cacheKey(env, cfg)
-	token, ok := m.cachedToken(key)
+	_, key, fallback := m.lookupKeys(env, cfg)
+	token, ok, usedKey := m.cachedToken(key, fallback)
 	if !ok || !token.valid() {
 		return Token{}, false
 	}
+	m.promoteCacheKey(key, usedKey)
 	return token, true
+}
+
+// CanHeadless reports whether cfg can complete without an interactive auth-code
+// browser hop: either a valid cached token exists, or a cached refresh token
+// can be used to renew the session.
+func (m *Manager) CanHeadless(env string, cfg Config) bool {
+	_, key, fallback := m.lookupKeys(env, cfg)
+	entry, usedKey := m.cacheEntry(key, fallback)
+	if entry == nil {
+		return false
+	}
+	m.promoteCacheKey(key, usedKey)
+	return entry.token.valid() || strings.TrimSpace(entry.token.RefreshToken) != ""
+}
+
+func (m *Manager) Snapshot() []SnapshotEntry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if len(m.cache) == 0 {
+		return nil
+	}
+	out := make([]SnapshotEntry, 0, len(m.cache))
+	for key, entry := range m.cache {
+		if entry == nil {
+			continue
+		}
+		out = append(out, SnapshotEntry{
+			Key:    key,
+			Config: cloneConfig(entry.cfg),
+			Token:  cloneToken(entry.token),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
+}
+
+func (m *Manager) Restore(entries []SnapshotEntry) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.cache == nil {
+		m.cache = make(map[string]*cacheEntry)
+	}
+	for key := range m.cache {
+		delete(m.cache, key)
+	}
+	for _, entry := range entries {
+		key := strings.TrimSpace(entry.Key)
+		if key == "" {
+			continue
+		}
+		cfg := cloneConfig(entry.Config).Resolved()
+		token := cloneToken(entry.Token)
+		if strings.TrimSpace(token.AccessToken) == "" {
+			continue
+		}
+		m.cache[key] = &cacheEntry{cfg: cfg, token: token}
+	}
 }
 
 func (m *Manager) obtainToken(
 	ctx context.Context,
 	key string,
+	fallback string,
 	cfg Config,
 	opts httpclient.Options,
 ) (Token, error) {
-	if token, ok := m.cachedToken(key); ok && token.valid() {
+	if token, ok, usedKey := m.cachedToken(key, fallback); ok && token.valid() {
+		m.promoteCacheKey(key, usedKey)
 		return token, nil
 	}
 
-	entry := m.cacheEntry(key)
+	entry, usedKey := m.cacheEntry(key, fallback)
 	if entry != nil && entry.token.RefreshToken != "" {
 		if refreshed, err := m.refreshToken(
 			ctx,
@@ -170,11 +243,15 @@ func (m *Manager) obtainToken(
 			opts,
 		); err == nil {
 			m.storeToken(key, cfg, refreshed)
+			m.dropCacheKey(fallback)
+			if usedKey != "" && usedKey != key {
+				m.dropCacheKey(usedKey)
+			}
 			return refreshed, nil
 		}
 	}
 
-	if strings.EqualFold(strings.TrimSpace(cfg.GrantType), "authorization_code") {
+	if cfg.GrantType == GrantAuthorizationCode {
 		return m.requestAuthCodeToken(ctx, key, cfg, opts)
 	}
 
@@ -184,6 +261,7 @@ func (m *Manager) obtainToken(
 	}
 
 	m.storeToken(key, cfg, fetched)
+	m.dropCacheKey(fallback)
 	return fetched, nil
 }
 
@@ -201,23 +279,23 @@ func (m *Manager) SetRequestFunc(
 	m.do = fn
 }
 
-func (m *Manager) cachedToken(key string) (Token, bool) {
+func (m *Manager) cacheEntry(keys ...string) (*cacheEntry, string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	entry, ok := m.cache[key]
-	if !ok {
-		return Token{}, false
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		entry, ok := m.cache[key]
+		if ok {
+			return entry, key
+		}
 	}
-	return entry.token, true
-}
-
-func (m *Manager) cacheEntry(key string) *cacheEntry {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.cache[key]
+	return nil, ""
 }
 
 func (m *Manager) storeToken(key string, cfg Config, token Token) {
+	cfg = cfg.Resolved()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.cache == nil {
@@ -230,17 +308,24 @@ func (m *Manager) storeToken(key string, cfg Config, token Token) {
 // This allows follow-up requests to omit repeated parameters (auth_url, token_url, etc.) as long
 // as the initial request stored a config under the same cache_key.
 func (m *Manager) MergeCachedConfig(env string, cfg Config) Config {
-	if strings.TrimSpace(cfg.CacheKey) == "" {
-		return cfg
+	cfg = cfg.Normalized()
+	if cfg.CacheKey == "" {
+		return cfg.Resolved()
 	}
 
-	key := m.cacheKey(env, cfg)
-	entry := m.cacheEntry(key)
+	resolved := cfg.Resolved()
+	key := m.cacheKey(env, resolved)
+	fallback := m.cacheKey(env, cfg)
+	if fallback == key {
+		fallback = ""
+	}
+	entry, usedKey := m.cacheEntry(key, fallback)
 	if entry == nil {
-		return cfg
+		return resolved
 	}
+	m.promoteCacheKey(key, usedKey)
 
-	base := entry.cfg
+	base := entry.cfg.Normalized()
 	merged := cfg
 
 	merged.TokenURL = inheritIfEmpty(merged.TokenURL, base.TokenURL)
@@ -261,11 +346,11 @@ func (m *Manager) MergeCachedConfig(env string, cfg Config) Config {
 	merged.State = inheritIfEmpty(merged.State, base.State)
 
 	merged.Extra = mergeExtras(base.Extra, cfg.Extra)
-	return merged
+	return merged.Resolved()
 }
 
 func inheritIfEmpty(current, fallback string) string {
-	if strings.TrimSpace(current) != "" {
+	if current != "" {
 		return current
 	}
 	return fallback
@@ -281,7 +366,7 @@ func mergeExtras(base, override map[string]string) map[string]string {
 		merged[k] = v
 	}
 	for k, v := range override {
-		if strings.TrimSpace(v) == "" {
+		if v == "" {
 			continue
 		}
 		merged[k] = v
@@ -289,25 +374,48 @@ func mergeExtras(base, override map[string]string) map[string]string {
 	return merged
 }
 
+func cloneConfig(cfg Config) Config {
+	out := cfg
+	if len(cfg.Extra) > 0 {
+		out.Extra = make(map[string]string, len(cfg.Extra))
+		for key, value := range cfg.Extra {
+			out.Extra[key] = value
+		}
+	}
+	return out
+}
+
+func cloneToken(tok Token) Token {
+	out := tok
+	if len(tok.Raw) > 0 {
+		out.Raw = make(map[string]any, len(tok.Raw))
+		for key, value := range tok.Raw {
+			out.Raw[key] = value
+		}
+	}
+	return out
+}
+
 func (m *Manager) cacheKey(env string, cfg Config) string {
-	if strings.TrimSpace(cfg.CacheKey) != "" {
-		return strings.TrimSpace(cfg.CacheKey)
+	cfg = cfg.Normalized()
+	if cfg.CacheKey != "" {
+		return cfg.CacheKey
 	}
 
 	parts := []string{
 		strings.ToLower(strings.TrimSpace(env)),
-		strings.TrimSpace(cfg.TokenURL),
-		strings.TrimSpace(cfg.AuthURL),
-		strings.TrimSpace(cfg.RedirectURL),
-		strings.TrimSpace(cfg.ClientID),
-		strings.TrimSpace(cfg.Scope),
-		strings.TrimSpace(cfg.Audience),
-		strings.TrimSpace(cfg.Resource),
-		strings.ToLower(strings.TrimSpace(cfg.GrantType)),
-		strings.ToLower(strings.TrimSpace(cfg.CodeMethod)),
-		strings.TrimSpace(cfg.CodeVerifier),
-		strings.TrimSpace(cfg.Username),
-		strings.ToLower(strings.TrimSpace(cfg.ClientAuth)),
+		cfg.TokenURL,
+		cfg.AuthURL,
+		cfg.RedirectURL,
+		cfg.ClientID,
+		cfg.Scope,
+		cfg.Audience,
+		cfg.Resource,
+		cfg.GrantType,
+		cfg.CodeMethod,
+		cfg.CodeVerifier,
+		cfg.Username,
+		cfg.ClientAuth,
 	}
 	if len(cfg.Extra) > 0 {
 		keys := make([]string, 0, len(cfg.Extra))
@@ -327,10 +435,8 @@ func (m *Manager) requestToken(
 	cfg Config,
 	opts httpclient.Options,
 ) (Token, error) {
-	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
-	if grant == "" {
-		grant = "client_credentials"
-	}
+	cfg = cfg.Resolved()
+	grant := cfg.GrantType
 
 	form := url.Values{}
 	form.Set("grant_type", grant)
@@ -349,26 +455,26 @@ func (m *Manager) requestToken(
 		}
 	}
 
-	authMode := resolveClientAuth(grant, strings.TrimSpace(cfg.ClientAuth), cfg)
+	authMode := resolveClientAuth(grant, cfg.ClientAuth, cfg)
 
 	switch grant {
-	case "client_credentials":
+	case GrantClientCredentials:
 		if authMode.useBody {
 			form.Set("client_id", cfg.ClientID)
 			form.Set("client_secret", cfg.ClientSecret)
 		}
-	case "password":
+	case GrantPassword:
 		form.Set("username", cfg.Username)
 		form.Set("password", cfg.Password)
 		if authMode.useBody {
 			form.Set("client_id", cfg.ClientID)
 			form.Set("client_secret", cfg.ClientSecret)
 		}
-	case "authorization_code":
+	case GrantAuthorizationCode:
 		if cfg.Code == "" {
 			return Token{}, errdef.New(errdef.CodeHTTP, "missing authorization code")
 		}
-		if strings.TrimSpace(cfg.RedirectURL) == "" {
+		if cfg.RedirectURL == "" {
 			return Token{}, errdef.New(errdef.CodeHTTP, "authorization_code requires redirect_uri")
 		}
 		form.Set("code", cfg.Code)
@@ -427,21 +533,21 @@ type clientAuthMode struct {
 }
 
 func resolveClientAuth(grant, clientAuthRaw string, cfg Config) clientAuthMode {
-	mode := strings.ToLower(clientAuthRaw)
+	mode := clientAuthRaw
 	if mode == "" {
-		mode = "basic"
+		mode = ClientAuthBasic
 	}
 
-	useHeader := mode == "basic"
+	useHeader := mode == ClientAuthBasic
 	if useHeader && cfg.ClientSecret == "" &&
-		(clientAuthRaw == "" || grant == "authorization_code") {
+		(clientAuthRaw == "" || grant == GrantAuthorizationCode) {
 		useHeader = false
-		mode = "body"
+		mode = ClientAuthBody
 	}
 
 	return clientAuthMode{
 		useHeader: useHeader,
-		useBody:   mode == "body",
+		useBody:   mode == ClientAuthBody,
 	}
 }
 
@@ -451,6 +557,7 @@ func (m *Manager) refreshToken(
 	refresh string,
 	opts httpclient.Options,
 ) (Token, error) {
+	cfg = cfg.Resolved()
 	if refresh == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "missing refresh token")
 	}
@@ -476,8 +583,8 @@ func (m *Manager) refreshToken(
 	headers := make(http.Header)
 	headers.Set("Content-Type", "application/x-www-form-urlencoded")
 	headers.Set("Accept", "application/json")
-	clientAuth := strings.ToLower(strings.TrimSpace(cfg.ClientAuth))
-	if clientAuth == "basic" && cfg.ClientID != "" {
+	clientAuth := cfg.ClientAuth
+	if clientAuth == ClientAuthBasic && cfg.ClientID != "" {
 		credentials := cfg.ClientID + ":" + cfg.ClientSecret
 		encoded := base64.StdEncoding.EncodeToString([]byte(credentials))
 		headers.Set("Authorization", "Basic "+encoded)
@@ -506,6 +613,67 @@ func (m *Manager) refreshToken(
 		return Token{}, err
 	}
 	return token, nil
+}
+
+func (m *Manager) lookupKeys(env string, cfg Config) (Config, string, string) {
+	normalized := cfg.Normalized()
+	resolved := normalized.Resolved()
+	key := m.cacheKey(env, resolved)
+	fallback := m.cacheKey(env, normalized)
+	if fallback == key && resolved.CacheKey == "" && resolved.GrantType == GrantClientCredentials {
+		legacy := resolved
+		legacy.GrantType = ""
+		fallback = m.cacheKey(env, legacy)
+	}
+	if fallback == key {
+		fallback = ""
+	}
+	return resolved, key, fallback
+}
+
+func (m *Manager) cachedToken(keys ...string) (Token, bool, string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, key := range keys {
+		if key == "" {
+			continue
+		}
+		entry, ok := m.cache[key]
+		if ok {
+			return entry.token, true, key
+		}
+	}
+	return Token{}, false, ""
+}
+
+func (m *Manager) promoteCacheKey(primary, actual string) {
+	if primary == "" || actual == "" || primary == actual {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.cache == nil {
+		return
+	}
+	if _, ok := m.cache[primary]; ok {
+		delete(m.cache, actual)
+		return
+	}
+	entry, ok := m.cache[actual]
+	if !ok {
+		return
+	}
+	m.cache[primary] = entry
+	delete(m.cache, actual)
+}
+
+func (m *Manager) dropCacheKey(key string) {
+	if key == "" {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.cache, key)
 }
 
 func parseTokenResponse(body []byte) (Token, error) {

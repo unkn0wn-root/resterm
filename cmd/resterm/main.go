@@ -12,13 +12,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	curl "github.com/unkn0wn-root/resterm/internal/curl/importer"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -33,7 +33,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui"
 	"github.com/unkn0wn-root/resterm/internal/update"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 var (
@@ -42,37 +41,10 @@ var (
 	date    = "unknown"
 )
 
-type cliExitErr struct {
-	err  error
-	code int
-}
-
-type exitCoder interface {
-	ExitCode() int
-}
-
-func (e cliExitErr) Error() string {
-	if e.err == nil {
-		return ""
-	}
-	return e.err.Error()
-}
-
-func (e cliExitErr) Unwrap() error {
-	return e.err
-}
-
-func (e cliExitErr) ExitCode() int {
-	if e.code == 0 {
-		return 1
-	}
-	return e.code
-}
-
 func main() {
 	if err := run(os.Args[1:]); err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, err)
-		os.Exit(exitCode(err))
+		os.Exit(cli.ExitCode(err))
 	}
 }
 
@@ -119,8 +91,7 @@ func run(a []string) error {
 	traceOTInsecure = tc.Insecure
 	traceOTService = tc.ServiceName
 
-	fs := flag.NewFlagSet("resterm", flag.ContinueOnError)
-	fs.SetOutput(io.Discard)
+	fs := cli.NewFlagSet("resterm")
 	fs.StringVar(&filePath, "file", "", "Path to .http/.rest file to open")
 	fs.StringVar(&envName, "env", "", "Environment name to use")
 	fs.StringVar(&envFile, "env-file", "", "Path to environment file")
@@ -216,7 +187,7 @@ func run(a []string) error {
 			printMainUsage(os.Stderr, fs)
 			return nil
 		}
-		return cliExitErr{err: err, code: 2}
+		return cli.ExitErr{Err: err, Code: 2}
 	}
 
 	tc.Endpoint = strings.TrimSpace(traceOTEndpoint)
@@ -235,7 +206,7 @@ func run(a []string) error {
 		}
 		return nil
 	}
-	if err := validateReservedEnvironment(envName, "--env"); err != nil {
+	if err := cli.ValidateReservedEnvironment(envName, "--env"); err != nil {
 		return err
 	}
 
@@ -380,10 +351,10 @@ func run(a []string) error {
 		}
 	}
 
-	envSet, resolvedEnvFile := loadEnvironment(envFile, filePath, workspace)
+	envSet, resolvedEnvFile := cli.LoadEnvironment(envFile, filePath, workspace)
 	var envFallback string
 	if envName == "" && len(envSet) > 0 {
-		selected, notify := selectDefaultEnvironment(envSet)
+		selected, notify := cli.SelectDefaultEnvironment(envSet)
 		if selected != "" {
 			envName = selected
 			if notify {
@@ -450,12 +421,12 @@ func run(a []string) error {
 		}
 	}()
 
-	compareTargets, compareErr := parseCompareTargets(compareTargetsRaw)
+	compareTargets, compareErr := cli.ParseCompareTargets(compareTargetsRaw)
 	if compareErr != nil {
 		return fmt.Errorf("invalid --compare value: %w", compareErr)
 	}
 	compareBaseline = strings.TrimSpace(compareBaseline)
-	if err := validateReservedEnvironment(compareBaseline, "--compare-base"); err != nil {
+	if err := cli.ValidateReservedEnvironment(compareBaseline, "--compare-base"); err != nil {
 		return fmt.Errorf("invalid --compare-base value: %w", err)
 	}
 
@@ -549,93 +520,6 @@ func printMainUsage(w io.Writer, fs *flag.FlagSet) {
 	fs.SetOutput(w)
 	defer fs.SetOutput(out)
 	fs.PrintDefaults()
-}
-
-func exitCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	var ex exitCoder
-	if errors.As(err, &ex) {
-		return ex.ExitCode()
-	}
-	return 1
-}
-
-func loadEnvironment(
-	explicit string,
-	filePath string,
-	workspace string,
-) (vars.EnvironmentSet, string) {
-	if explicit != "" {
-		envs, err := vars.LoadEnvironmentFile(explicit)
-		if err != nil {
-			log.Printf("failed to load environment file %s: %v", explicit, err)
-			return nil, ""
-		}
-		return envs, explicit
-	}
-
-	var searchPaths []string
-	if filePath != "" {
-		searchPaths = append(searchPaths, filepath.Dir(filePath))
-	}
-	if workspace != "" {
-		searchPaths = append(searchPaths, workspace)
-	}
-	if cwd, err := os.Getwd(); err == nil {
-		searchPaths = append(searchPaths, cwd)
-	}
-
-	envs, path, err := vars.ResolveEnvironment(searchPaths)
-	if err != nil {
-		return nil, ""
-	}
-	return envs, path
-}
-
-func parseCompareTargets(raw string) ([]string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return nil, nil
-	}
-
-	replacer := strings.NewReplacer(",", " ", ";", " ")
-	clean := replacer.Replace(raw)
-	fields := strings.Fields(clean)
-	if len(fields) == 0 {
-		return nil, nil
-	}
-
-	seen := make(map[string]struct{}, len(fields))
-	targets := make([]string, 0, len(fields))
-	for _, field := range fields {
-		if vars.IsReservedEnvironment(field) {
-			return nil, fmt.Errorf("environment %q is reserved for shared defaults", field)
-		}
-		lower := strings.ToLower(field)
-		if _, ok := seen[lower]; ok {
-			continue
-		}
-		seen[lower] = struct{}{}
-		targets = append(targets, field)
-	}
-
-	if len(targets) < 2 {
-		return nil, fmt.Errorf("expected at least two environments, got %d", len(targets))
-	}
-	return targets, nil
-}
-
-func validateReservedEnvironment(value, flagName string) error {
-	if vars.IsReservedEnvironment(value) {
-		return fmt.Errorf(
-			"%s %q is reserved for shared defaults; choose a concrete environment",
-			flagName,
-			value,
-		)
-	}
-	return nil
 }
 
 func executableChecksum() (string, error) {
@@ -749,22 +633,4 @@ func defaultHTTPOutputPath(specPath string) string {
 		return specPath + ".http"
 	}
 	return strings.TrimSuffix(specPath, ext) + ".http"
-}
-
-func selectDefaultEnvironment(envs vars.EnvironmentSet) (string, bool) {
-	if len(envs) == 0 {
-		return "", false
-	}
-	preferred := []string{"dev", "default", "local"}
-	for _, name := range preferred {
-		if _, ok := envs[name]; ok {
-			return name, len(envs) > 1
-		}
-	}
-	names := make([]string, 0, len(envs))
-	for name := range envs {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names[0], len(envs) > 1
 }

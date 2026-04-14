@@ -454,6 +454,46 @@ func TestManagerResolveDeduplicatesInflightCalls(t *testing.T) {
 	}
 }
 
+func TestManagerSnapshotRestore(t *testing.T) {
+	t.Parallel()
+
+	mgr := NewManager()
+	cfg := Config{
+		Argv:     []string{"gh", "auth", "token"},
+		CacheKey: "github",
+		Header:   "X-Token",
+		Scheme:   "Token",
+		TTL:      time.Hour,
+	}
+	key := cacheEntryKey("dev", cfg.normalize())
+	mgr.store(key, cfg.normalize(), credential{
+		Token:     "abc",
+		Type:      "Token",
+		FetchedAt: time.Unix(100, 0),
+		Expiry:    time.Unix(200, 0),
+	})
+
+	snap := mgr.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("expected one snapshot entry, got %+v", snap)
+	}
+
+	restored := NewManager()
+	restored.now = func() time.Time { return time.Unix(150, 0) }
+	restored.Restore(snap)
+
+	res, ok, err := restored.Cached("dev", Config{CacheKey: "github"})
+	if err != nil {
+		t.Fatalf("Cached() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected restored cached auth result")
+	}
+	if res.Token != "abc" {
+		t.Fatalf("expected restored token, got %q", res.Token)
+	}
+}
+
 func containsAll(s string, parts ...string) bool {
 	for _, part := range parts {
 		if !strings.Contains(s, part) {

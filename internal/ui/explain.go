@@ -6,7 +6,6 @@ import (
 	"net/textproto"
 	"sort"
 	"strings"
-	"unicode/utf8"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -20,54 +19,54 @@ import (
 const explainClip = 512
 
 const (
-	explainStageApply            = "@apply"
-	explainStageCondition        = "condition"
-	explainStageRoute            = "route"
-	explainStageSettings         = "settings"
-	explainStageAuth             = "auth"
-	explainStageRTSPreRequest    = "rts pre-request"
-	explainStageJSPreRequest     = "js pre-request"
-	explainStageGRPCPrepare      = "grpc prepare"
-	explainStageHTTPPrepare      = "http prepare"
-	explainStageWebSocketPrepare = "websocket prepare"
-	explainStageCaptures         = "captures"
+	explainStageApply            = xplain.StageApply
+	explainStageCondition        = xplain.StageCondition
+	explainStageRoute            = xplain.StageRoute
+	explainStageSettings         = xplain.StageSettings
+	explainStageAuth             = xplain.StageAuth
+	explainStageRTSPreRequest    = xplain.StageRTSPreRequest
+	explainStageJSPreRequest     = xplain.StageJSPreRequest
+	explainStageGRPCPrepare      = xplain.StageGRPCPrepare
+	explainStageHTTPPrepare      = xplain.StageHTTPPrepare
+	explainStageWebSocketPrepare = xplain.StageWebSocketPrepare
+	explainStageCaptures         = xplain.StageCaptures
 )
 
 const (
-	explainRouteKindDirect = "direct"
-	explainRouteKindSSH    = "ssh"
-	explainRouteKindK8s    = "k8s"
+	explainRouteKindDirect = xplain.RouteKindDirect
+	explainRouteKindSSH    = xplain.RouteKindSSH
+	explainRouteKindK8s    = xplain.RouteKindK8s
 )
 
 const (
-	explainSummaryApplyComplete               = "apply complete"
-	explainSummaryApplyFailed                 = "apply failed"
-	explainSummaryConditionPassed             = "condition passed"
-	explainSummaryConditionBlockedRequest     = "condition blocked request"
-	explainSummaryConditionEvaluationFailed   = "condition evaluation failed"
-	explainSummaryRouteSSHResolutionFailed    = "ssh resolution failed"
-	explainSummaryRouteK8sResolutionFailed    = "k8s resolution failed"
-	explainSummaryRouteConfigInvalid          = "route configuration invalid"
-	explainSummarySettingsMerged              = "effective settings merged"
-	explainSummarySettingsApplyFailed         = "settings application failed"
-	explainSummaryAuthPrepared                = "auth prepared"
-	explainSummaryAuthInjectionFailed         = "auth injection failed"
-	explainSummaryOAuthTokenFetchSkipped      = "oauth token fetch skipped"
-	explainSummaryCommandAuthExecutionSkipped = "command auth execution skipped"
-	explainSummaryAuthTypeNotApplied          = "auth type not applied"
-	explainSummaryRTSPreRequestComplete       = "RTS pre-request complete"
-	explainSummaryRTSPreRequestFailed         = "RTS pre-request failed"
-	explainSummaryRTSPreRequestOutputBad      = "RTS pre-request output invalid"
-	explainSummaryJSPreRequestComplete        = "JS pre-request complete"
-	explainSummaryJSPreRequestFailed          = "JS pre-request failed"
-	explainSummaryJSPreRequestOutputBad       = "JS pre-request output invalid"
-	explainSummaryGRPCRequestPrepared         = "gRPC request prepared"
-	explainSummaryGRPCPrepareFailed           = "gRPC preparation failed"
-	explainSummaryHTTPRequestPrepared         = "HTTP request prepared"
-	explainSummaryHTTPRequestBuildFailed      = "HTTP request build failed"
-	explainSummaryWebSocketRequestPrepared    = "WebSocket request prepared"
-	explainSummaryWebSocketPrepareFailed      = "WebSocket preparation failed"
-	explainSummaryCaptureEvaluationFailed     = "capture evaluation failed"
+	explainSummaryApplyComplete               = xplain.SummaryApplyComplete
+	explainSummaryApplyFailed                 = xplain.SummaryApplyFailed
+	explainSummaryConditionPassed             = xplain.SummaryConditionPassed
+	explainSummaryConditionBlockedRequest     = xplain.SummaryConditionBlockedRequest
+	explainSummaryConditionEvaluationFailed   = xplain.SummaryConditionEvaluationFailed
+	explainSummaryRouteSSHResolutionFailed    = xplain.SummaryRouteSSHResolutionFailed
+	explainSummaryRouteK8sResolutionFailed    = xplain.SummaryRouteK8sResolutionFailed
+	explainSummaryRouteConfigInvalid          = xplain.SummaryRouteConfigInvalid
+	explainSummarySettingsMerged              = xplain.SummarySettingsMerged
+	explainSummarySettingsApplyFailed         = xplain.SummarySettingsApplyFailed
+	explainSummaryAuthPrepared                = xplain.SummaryAuthPrepared
+	explainSummaryAuthInjectionFailed         = xplain.SummaryAuthInjectionFailed
+	explainSummaryOAuthTokenFetchSkipped      = xplain.SummaryOAuthTokenFetchSkipped
+	explainSummaryCommandAuthExecutionSkipped = xplain.SummaryCommandAuthExecutionSkipped
+	explainSummaryAuthTypeNotApplied          = xplain.SummaryAuthTypeNotApplied
+	explainSummaryRTSPreRequestComplete       = xplain.SummaryRTSPreRequestComplete
+	explainSummaryRTSPreRequestFailed         = xplain.SummaryRTSPreRequestFailed
+	explainSummaryRTSPreRequestOutputBad      = xplain.SummaryRTSPreRequestOutputBad
+	explainSummaryJSPreRequestComplete        = xplain.SummaryJSPreRequestComplete
+	explainSummaryJSPreRequestFailed          = xplain.SummaryJSPreRequestFailed
+	explainSummaryJSPreRequestOutputBad       = xplain.SummaryJSPreRequestOutputBad
+	explainSummaryGRPCRequestPrepared         = xplain.SummaryGRPCRequestPrepared
+	explainSummaryGRPCPrepareFailed           = xplain.SummaryGRPCPrepareFailed
+	explainSummaryHTTPRequestPrepared         = xplain.SummaryHTTPRequestPrepared
+	explainSummaryHTTPRequestBuildFailed      = xplain.SummaryHTTPRequestBuildFailed
+	explainSummaryWebSocketRequestPrepared    = xplain.SummaryWebSocketRequestPrepared
+	explainSummaryWebSocketPrepareFailed      = xplain.SummaryWebSocketPrepareFailed
+	explainSummaryCaptureEvaluationFailed     = xplain.SummaryCaptureEvaluationFailed
 )
 
 func explainKey(s string) string {
@@ -205,25 +204,6 @@ func appendExplainStage(rep *xplain.Report, stage xplain.Stage) {
 	rep.Stages = append(rep.Stages, stage)
 }
 
-func addExplainPreparedHTTPStage(
-	rep *xplain.Report,
-	req *restfile.Request,
-	httpReq *http.Request,
-	body []byte,
-	notes ...string,
-) {
-	if rep == nil || httpReq == nil {
-		return
-	}
-	appendExplainStage(rep, xplain.Stage{
-		Name:    explainStageHTTPPrepare,
-		Status:  xplain.StageOK,
-		Summary: explainSummaryHTTPRequestPrepared,
-		Changes: explainBuiltHTTPChanges(req, httpReq, body),
-		Notes:   explainNotes(notes),
-	})
-}
-
 func addExplainSentHTTPStage(
 	rep *xplain.Report,
 	req *restfile.Request,
@@ -295,19 +275,6 @@ func setExplainPrepared(
 	rep.Final = final
 }
 
-func setExplainGRPC(rep *xplain.Report, req *restfile.Request) {
-	if rep == nil {
-		return
-	}
-	final := rep.Final
-	if final == nil {
-		final = &xplain.Final{}
-		rep.Final = final
-	}
-	fillExplainFinal(final, req)
-	final.Mode = "sent"
-}
-
 func setExplainHTTP(
 	rep *xplain.Report,
 	resp *httpclient.Response,
@@ -330,36 +297,6 @@ func setExplainHTTP(
 	if strings.TrimSpace(final.Protocol) == "" {
 		final.Protocol = "HTTP"
 	}
-}
-
-func setExplainHTTPPrepared(
-	rep *xplain.Report,
-	req *restfile.Request,
-	httpReq *http.Request,
-	body []byte,
-) {
-	if rep == nil || httpReq == nil {
-		return
-	}
-	final := rep.Final
-	if final == nil {
-		final = &xplain.Final{Mode: "prepared"}
-		rep.Final = final
-	}
-	if req != nil && strings.TrimSpace(final.Protocol) == "" {
-		final.Protocol = explainProtocol(req)
-	}
-	final.Method = strings.TrimSpace(httpReq.Method)
-	if httpReq.URL != nil {
-		final.URL = strings.TrimSpace(httpReq.URL.String())
-	}
-	final.Headers = explainHeaders(httpReq.Header)
-	txt, note, ok := explainBuiltBody(req, body)
-	if !ok {
-		return
-	}
-	final.Body = txt
-	final.BodyNote = note
 }
 
 func fillExplainFinal(final *xplain.Final, req *restfile.Request) {
@@ -883,33 +820,6 @@ func explainReqChanges(a, b *restfile.Request) []xplain.Change {
 	return out
 }
 
-func explainBuiltHTTPChanges(
-	req *restfile.Request,
-	httpReq *http.Request,
-	body []byte,
-) []xplain.Change {
-	if httpReq == nil {
-		return nil
-	}
-	var out []xplain.Change
-	addExplainChange(&out, "method", reqMethod(req), strings.TrimSpace(httpReq.Method))
-	url := ""
-	if httpReq.URL != nil {
-		url = strings.TrimSpace(httpReq.URL.String())
-	}
-	addExplainChange(&out, "url", reqURL(req), url)
-	addExplainHeaderChanges(&out, reqHeaders(req), httpReq.Header)
-	beforeBody, beforeNote := explainReqBody(req)
-	afterBody, afterNote, ok := explainBuiltBody(req, body)
-	if ok || beforeNote != "" {
-		addExplainChange(&out, "body.note", beforeNote, afterNote)
-	}
-	if ok || beforeBody != "" {
-		addExplainChange(&out, "body", beforeBody, afterBody)
-	}
-	return out
-}
-
 func explainSentHTTPChanges(req *restfile.Request, resp *httpclient.Response) []xplain.Change {
 	if resp == nil {
 		return nil
@@ -1059,38 +969,6 @@ func explainReqBody(req *restfile.Request) (string, string) {
 		return "", "< " + strings.TrimSpace(req.Body.FilePath)
 	}
 	return "", ""
-}
-
-func explainBuiltBody(req *restfile.Request, body []byte) (string, string, bool) {
-	if len(body) == 0 {
-		if req != nil && req.Body.GraphQL != nil && strings.EqualFold(req.Method, "GET") {
-			return "", "graphql query encoded in URL", true
-		}
-		return "", "", false
-	}
-
-	note := ""
-	switch {
-	case req != nil && req.Body.GraphQL != nil:
-		note = "graphql payload"
-	case req != nil && strings.TrimSpace(req.Body.FilePath) != "":
-		path := strings.TrimSpace(req.Body.FilePath)
-		note = "body from " + path
-		if req.Body.Options.ExpandTemplates {
-			note = "expanded body from " + path
-		}
-	}
-
-	if !utf8.Valid(body) {
-		if note == "" {
-			note = fmt.Sprintf("binary body (%d bytes)", len(body))
-		} else {
-			note = fmt.Sprintf("%s (%d bytes)", note, len(body))
-		}
-		return "", note, true
-	}
-
-	return clipExplain(string(body)), note, true
 }
 
 func explainHeaders(h http.Header) []xplain.Header {

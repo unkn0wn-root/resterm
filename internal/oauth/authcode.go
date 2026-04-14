@@ -36,7 +36,7 @@ func (m *Manager) requestAuthCodeToken(
 	cfg Config,
 	opts httpclient.Options,
 ) (Token, error) {
-	authURL := strings.TrimSpace(cfg.AuthURL)
+	authURL := cfg.AuthURL
 	if authURL == "" {
 		return Token{}, errdef.New(errdef.CodeHTTP, "authorization_code requires auth_url")
 	}

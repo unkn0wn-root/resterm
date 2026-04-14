@@ -24,7 +24,6 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -648,7 +647,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 
 func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
 	model := New(Config{EnvironmentName: "dev"})
-	model.globals.set("dev", "token", "global-token", false)
+	model.globalsStore().Set("dev", "token", "global-token", false)
 
 	var seenHeader string
 	model.client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
@@ -701,7 +700,7 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 
 func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
 	model := New(Config{EnvironmentName: "dev"})
-	model.globals.set("dev", "token", "global-token", false)
+	model.globalsStore().Set("dev", "token", "global-token", false)
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -772,9 +771,7 @@ func TestResolveRequestTimeout(t *testing.T) {
 
 func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 	model := Model{
-		cfg:         Config{EnvironmentName: "dev"},
-		globals:     newGlobalStore(),
-		authGlobals: newAuthStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth.http",
@@ -793,7 +790,7 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 		LineRange: restfile.LineRange{Start: 2, End: 3},
 	}
 
-	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", false, nil, nil)
+	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", nil, nil)
 	if msg := exec.runPreRequestScripts(); msg != nil {
 		t.Fatalf("runPreRequestScripts: %v", msg.err)
 	}
@@ -816,18 +813,19 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 
 func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 	model := Model{
-		cfg:         Config{EnvironmentName: "dev"},
-		globals:     newGlobalStore(),
-		authGlobals: newAuthStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.authGlobals.set("/tmp/other.http", []restfile.AuthProfile{{
-		Scope: restfile.AuthScopeGlobal,
-		Spec: restfile.AuthSpec{
-			Type:   "bearer",
-			Params: map[string]string{"token": "global-token"},
-		},
-		Line: 1,
-	}})
+	model.registryIndex().Sync(&restfile.Document{
+		Path: "/tmp/other.http",
+		Auth: []restfile.AuthProfile{{
+			Scope: restfile.AuthScopeGlobal,
+			Spec: restfile.AuthSpec{
+				Type:   "bearer",
+				Params: map[string]string{"token": "global-token"},
+			},
+			Line: 1,
+		}},
+	})
 
 	req := &restfile.Request{}
 	model.resolveInheritedAuth(&restfile.Document{Path: "/tmp/current.http"}, req)
@@ -842,10 +840,7 @@ func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 
 func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 	model := Model{
-		cfg:          Config{EnvironmentName: "dev"},
-		globals:      newGlobalStore(),
-		authGlobals:  newAuthStore(),
-		patchGlobals: newPatchStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth-apply.http",
@@ -871,7 +866,7 @@ func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 		},
 	}
 
-	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", false, nil, nil)
+	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", nil, nil)
 	if msg := exec.runPreRequestScripts(); msg != nil {
 		t.Fatalf("runPreRequestScripts: %v", msg.err)
 	}
@@ -889,12 +884,10 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	var lastForm url.Values
 
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		oauth:   oauth.NewManager(nil),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
-	model.oauth.SetRequestFunc(
+	model.oauthMgr().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			atomic.AddInt32(&calls, 1)
 			values, err := url.ParseQuery(req.Body.Text)
@@ -962,11 +955,9 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 	called := int32(0)
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		oauth:   oauth.NewManager(nil),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.oauth.SetRequestFunc(
+	model.oauthMgr().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			atomic.AddInt32(&called, 1)
 			return &httpclient.Response{
@@ -1016,11 +1007,9 @@ func copyValues(src url.Values) url.Values {
 func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	var requests int32
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		oauth:   oauth.NewManager(nil),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.oauth.SetRequestFunc(
+	model.oauthMgr().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			atomic.AddInt32(&requests, 1)
 			return &httpclient.Response{
@@ -1083,12 +1072,10 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 
 func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		oauth:   oauth.NewManager(nil),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
-	model.oauth.SetRequestFunc(
+	model.oauthMgr().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
@@ -1135,11 +1122,9 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 
 	model := Model{
 		cfg:         Config{EnvironmentName: "dev"},
-		authCmd:     authcmd.NewManager(),
-		globals:     newGlobalStore(),
 		currentFile: "/tmp/example.http",
 	}
-	model.authCmd.SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
+	model.authCmdMgr().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		seen = cfg
 		return []byte("token-basic"), nil
@@ -1193,11 +1178,9 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 	called := int32(0)
 
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		authCmd: authcmd.NewManager(),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&called, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1233,11 +1216,9 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 
 	model := Model{
 		cfg:         Config{EnvironmentName: "dev"},
-		authCmd:     authcmd.NewManager(),
-		globals:     newGlobalStore(),
 		currentFile: "/tmp/example.http",
 	}
-	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1288,7 +1269,6 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 func TestBuildCommandAuthConfigExpandsArgvAfterJSONDecode(t *testing.T) {
 	model := Model{
 		cfg:         Config{EnvironmentName: "dev"},
-		globals:     newGlobalStore(),
 		currentFile: "/tmp/example.http",
 	}
 
@@ -1317,11 +1297,9 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 
 	model := Model{
 		cfg:         Config{EnvironmentName: "dev"},
-		authCmd:     authcmd.NewManager(),
-		globals:     newGlobalStore(),
 		currentFile: "/tmp/example.http",
 	}
-	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1373,9 +1351,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 
 func TestPrepareExplainAuthPreviewCommandCacheOnlyRequiresSeed(t *testing.T) {
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		authCmd: authcmd.NewManager(),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	req := &restfile.Request{
@@ -1399,11 +1375,9 @@ func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
 	called := int32(0)
 
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		authCmd: authcmd.NewManager(),
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.authCmd.SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&called, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1653,7 +1627,7 @@ func TestStartStatusPulseIdempotent(t *testing.T) {
 func TestScheduleStatusPulseWhenRunActive(t *testing.T) {
 	m := New(Config{})
 	m.statusPulseOn = true
-	m.workflowRun = &workflowState{}
+	m.sending = true
 
 	cmd := m.scheduleStatusPulse()
 	if cmd == nil {
@@ -1663,9 +1637,7 @@ func TestScheduleStatusPulseWhenRunActive(t *testing.T) {
 
 func TestApplyCapturesStoresValues(t *testing.T) {
 	model := Model{
-		cfg:      Config{EnvironmentName: "dev"},
-		globals:  newGlobalStore(),
-		fileVars: newFileStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	resp := &scripts.Response{
@@ -1723,7 +1695,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		t.Fatalf("expected file capture to be recorded: %+v", captures.fileVars)
 	}
 
-	snapshot := model.globals.snapshot("dev")
+	snapshot := model.globalsStore().Snapshot("dev")
 	if len(snapshot) != 1 {
 		t.Fatalf("expected one global, got %d", len(snapshot))
 	}
@@ -1766,7 +1738,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		)
 	}
 
-	store := model.fileVars.snapshot("dev", "./sample.http")
+	store := model.fileStore().Snapshot("dev", "./sample.http")
 	if len(store) != 1 {
 		t.Fatalf("expected one stored file variable, got %d", len(store))
 	}
@@ -1788,9 +1760,7 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 
 func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 	model := Model{
-		cfg:      Config{EnvironmentName: "dev"},
-		globals:  newGlobalStore(),
-		fileVars: newFileStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	resp := &scripts.Response{
@@ -1839,7 +1809,7 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 		t.Fatalf("applyCaptures rst: %v", err)
 	}
 
-	gl := model.globals.snapshot("dev")
+	gl := model.globalsStore().Snapshot("dev")
 	if len(gl) != 1 {
 		t.Fatalf("expected one global capture, got %d", len(gl))
 	}
@@ -2245,9 +2215,7 @@ func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
 
 func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 	model := Model{
-		cfg:      Config{EnvironmentName: "dev"},
-		globals:  newGlobalStore(),
-		fileVars: newFileStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	resp := &scripts.Response{
@@ -2284,20 +2252,20 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 		t.Fatalf("applyCaptures stage: %v", err)
 	}
 
-	if len(model.globals.snapshot("dev")) != 0 {
+	if len(model.globalsStore().Snapshot("dev")) != 0 {
 		t.Fatalf("expected no globals in dev env after stage capture")
 	}
-	stageGlobals := model.globals.snapshot("stage")
+	stageGlobals := model.globalsStore().Snapshot("stage")
 	if len(stageGlobals) != 1 {
 		t.Fatalf("expected one global in stage, got %d", len(stageGlobals))
 	}
 
-	devStore := model.fileVars.snapshot("dev", "./capture-env.http")
+	devStore := model.fileStore().Snapshot("dev", "./capture-env.http")
 	if len(devStore) != 0 {
 		t.Fatalf("expected no file captures in dev store")
 	}
 
-	stageStore := model.fileVars.snapshot("stage", "./capture-env.http")
+	stageStore := model.fileStore().Snapshot("stage", "./capture-env.http")
 	if len(stageStore) != 1 {
 		t.Fatalf("expected one file capture in stage store, got %d", len(stageStore))
 	}
@@ -2338,9 +2306,7 @@ func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
 
 func TestApplyCapturesWithStreamData(t *testing.T) {
 	model := Model{
-		cfg:      Config{EnvironmentName: "dev"},
-		globals:  newGlobalStore(),
-		fileVars: newFileStore(),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	streamInfo := &scripts.StreamInfo{
@@ -2399,7 +2365,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 	if len(doc.Variables) == 0 || doc.Variables[0].Value != "2" {
 		t.Fatalf("expected file capture for received count, got %+v", doc.Variables)
 	}
-	snapshot := model.globals.snapshot("dev")
+	snapshot := model.globalsStore().Snapshot("dev")
 	if len(snapshot) != 1 {
 		t.Fatalf("expected one global capture, got %d", len(snapshot))
 	}
@@ -2414,8 +2380,7 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 
 func TestShowGlobalSummary(t *testing.T) {
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		globals: newGlobalStore(),
+		cfg: Config{EnvironmentName: "dev"},
 		doc: &restfile.Document{
 			Globals: []restfile.Variable{
 				{Name: "docVar", Value: "foo"},
@@ -2423,8 +2388,8 @@ func TestShowGlobalSummary(t *testing.T) {
 			},
 		},
 	}
-	model.globals.set("dev", "token", "secretValue", true)
-	model.globals.set("dev", "refresh", "xyz", false)
+	model.globalsStore().Set("dev", "token", "secretValue", true)
+	model.globalsStore().Set("dev", "refresh", "xyz", false)
 
 	model.showGlobalSummary()
 
@@ -2440,16 +2405,15 @@ func TestShowGlobalSummary(t *testing.T) {
 func TestClearGlobalValues(t *testing.T) {
 	model := Model{
 		cfg:     Config{EnvironmentName: "dev"},
-		globals: newGlobalStore(),
 		cookies: newCookieStore(),
 	}
-	model.globals.set("dev", "token", "value", false)
+	model.globalsStore().Set("dev", "token", "value", false)
 	model.cookies.getOrCreate("dev")
-	if snap := model.globals.snapshot("dev"); len(snap) == 0 {
+	if snap := model.globalsStore().Snapshot("dev"); len(snap) == 0 {
 		t.Fatalf("expected snapshot to contain entries before clearing")
 	}
 	model.clearGlobalValues()
-	if snap := model.globals.snapshot("dev"); len(snap) != 0 {
+	if snap := model.globalsStore().Snapshot("dev"); len(snap) != 0 {
 		t.Fatalf("expected globals to be cleared, got %v", snap)
 	}
 	if !strings.Contains(model.statusMessage.text, "Cleared globals and cookies") {
@@ -2461,11 +2425,8 @@ func TestClearGlobalValues(t *testing.T) {
 }
 
 func TestClearGlobalValuesWithCookies(t *testing.T) {
-	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
-		globals: newGlobalStore(),
-		cookies: newCookieStore(),
-	}
+	model := New(Config{EnvironmentName: "dev"})
+	model.cookies = newCookieStore()
 
 	u, _ := url.Parse("http://localhost")
 

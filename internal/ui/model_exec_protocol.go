@@ -1,19 +1,15 @@
 package ui
 
 import (
-	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
-	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -21,32 +17,6 @@ const (
 	streamHeaderType    = "X-Resterm-Stream-Type"
 	streamHeaderSummary = "X-Resterm-Stream-Summary"
 )
-
-func (m *Model) prepareExplainHTTPPreview(
-	ctx context.Context,
-	rep *xplain.Report,
-	req *restfile.Request,
-	resolver *vars.Resolver,
-	opts httpclient.Options,
-) error {
-	if rep == nil || req == nil {
-		return nil
-	}
-	c := m.client
-	if c == nil {
-		c = httpclient.NewClient(nil)
-	}
-	httpReq, _, body, err := c.BuildHTTPRequest(ctx, req, resolver, opts)
-	if err != nil {
-		return err
-	}
-	if req.SSE != nil && httpReq.Header.Get("Accept") == "" {
-		httpReq.Header.Set("Accept", "text/event-stream")
-	}
-	addExplainPreparedHTTPStage(rep, req, httpReq, body)
-	setExplainHTTPPrepared(rep, req, httpReq, body)
-	return nil
-}
 
 func streamingPlaceholderResponse(meta httpclient.StreamMeta) *httpclient.Response {
 	headers := meta.Headers.Clone()
@@ -118,77 +88,6 @@ func (m *Model) expandWebSocketSteps(req *restfile.Request, resolver *vars.Resol
 
 	req.WebSocket.Steps = steps
 	return nil
-}
-
-func httpScriptResponse(resp *httpclient.Response) *scripts.Response {
-	if resp == nil {
-		return nil
-	}
-	return &scripts.Response{
-		Kind:   scripts.ResponseKindHTTP,
-		Status: resp.Status,
-		Code:   resp.StatusCode,
-		URL:    resp.EffectiveURL,
-		Time:   resp.Duration,
-		Header: cloneHeader(resp.Headers),
-		Body:   append([]byte(nil), resp.Body...),
-	}
-}
-
-func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scripts.Response {
-	if resp == nil {
-		return nil
-	}
-
-	body := append([]byte(nil), resp.Body...)
-	if len(body) == 0 && strings.TrimSpace(resp.Message) != "" {
-		body = []byte(resp.Message)
-	}
-	wire := append([]byte(nil), resp.Wire...)
-	wireCT := strings.TrimSpace(resp.WireContentType)
-	ct := strings.TrimSpace(resp.ContentType)
-	if ct == "" {
-		ct = "application/json"
-	}
-
-	headers := make(http.Header)
-	for name, values := range resp.Headers {
-		for _, value := range values {
-			headers.Add(name, value)
-		}
-	}
-	for name, values := range resp.Trailers {
-		key := "Grpc-Trailer-" + name
-		for _, value := range values {
-			headers.Add(key, value)
-		}
-	}
-	if headers.Get("Content-Type") == "" && ct != "" {
-		headers.Set("Content-Type", ct)
-	}
-
-	status := resp.StatusCode.String()
-	if msg := strings.TrimSpace(resp.StatusMessage); msg != "" && !strings.EqualFold(msg, status) {
-		status = fmt.Sprintf("%s (%s)", status, msg)
-	}
-
-	target := ""
-	if req != nil && req.GRPC != nil {
-		target = strings.TrimSpace(req.GRPC.Target)
-	}
-
-	return &scripts.Response{
-		Kind:            scripts.ResponseKindGRPC,
-		Status:          status,
-		Code:            int(resp.StatusCode),
-		URL:             target,
-		Time:            resp.Duration,
-		Header:          headers,
-		Body:            body,
-		Wire:            wire,
-		WireContentType: wireCT,
-		ContentType:     ct,
-	}
 }
 
 func (m *Model) prepareGRPCRequest(
