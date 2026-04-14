@@ -3,9 +3,7 @@ package runtime
 import (
 	"cmp"
 	"path/filepath"
-	"slices"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
@@ -19,12 +17,11 @@ type FileValue struct {
 }
 
 type Files struct {
-	mu     sync.RWMutex
-	values map[string]map[string]FileValue
+	store scopedValueStore
 }
 
 func NewFiles() *Files {
-	return &Files{values: make(map[string]map[string]FileValue)}
+	return &Files{store: newScopedValueStore()}
 }
 
 func (s *Files) Snapshot(env, path string) map[string]FileValue {
@@ -32,18 +29,19 @@ func (s *Files) Snapshot(env, path string) map[string]FileValue {
 		return nil
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	key := fileKey(env, path)
-	src := s.values[key]
+	src := s.store.snapshot(fileKey(env, path))
 	if len(src) == 0 {
 		return nil
 	}
 
 	dst := make(map[string]FileValue, len(src))
 	for k, v := range src {
-		dst[k] = v
+		dst[k] = FileValue{
+			Name:      v.Name,
+			Value:     v.Value,
+			Secret:    v.Secret,
+			UpdatedAt: v.UpdatedAt,
+		}
 	}
 	return dst
 }
@@ -52,36 +50,15 @@ func (s *Files) Set(env, path, name, value string, secret bool) {
 	if s == nil {
 		return
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	key := fileKey(env, path)
-	if s.values[key] == nil {
-		s.values[key] = make(map[string]FileValue)
-	}
-	s.values[key][nameKey(name)] = FileValue{
-		Name:      strings.TrimSpace(name),
-		Value:     value,
-		Secret:    secret,
-		UpdatedAt: time.Now(),
-	}
+	s.store.set(fileKey(env, path), name, value, secret)
 }
 
 func (s *Files) ClearEnv(env string) {
 	if s == nil {
 		return
 	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	pfx := envKey(env) + "|"
-	for key := range s.values {
-		if strings.HasPrefix(key, pfx) {
-			delete(s.values, key)
-		}
-	}
+	s.store.clearIf(func(scope string) bool { return strings.HasPrefix(scope, pfx) })
 }
 
 func (s *Files) Entries() []engine.RuntimeFile {
@@ -89,24 +66,17 @@ func (s *Files) Entries() []engine.RuntimeFile {
 		return nil
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	out := make([]engine.RuntimeFile, 0, len(s.values))
-	for key, xs := range s.values {
+	return storeEntries(&s.store, func(key string, x storedValue) engine.RuntimeFile {
 		env, path := splitFileKey(key)
-		for _, x := range xs {
-			out = append(out, engine.RuntimeFile{
-				Env:       env,
-				Path:      path,
-				Name:      x.Name,
-				Value:     x.Value,
-				Secret:    x.Secret,
-				UpdatedAt: x.UpdatedAt,
-			})
+		return engine.RuntimeFile{
+			Env:       env,
+			Path:      path,
+			Name:      x.Name,
+			Value:     x.Value,
+			Secret:    x.Secret,
+			UpdatedAt: x.UpdatedAt,
 		}
-	}
-	slices.SortFunc(out, func(a, b engine.RuntimeFile) int {
+	}, func(a, b engine.RuntimeFile) int {
 		if n := cmp.Compare(a.Env, b.Env); n != 0 {
 			return n
 		}
@@ -115,7 +85,6 @@ func (s *Files) Entries() []engine.RuntimeFile {
 		}
 		return cmp.Compare(strings.ToLower(a.Name), strings.ToLower(b.Name))
 	})
-	return out
 }
 
 func (s *Files) Restore(xs []engine.RuntimeFile) {
@@ -123,26 +92,20 @@ func (s *Files) Restore(xs []engine.RuntimeFile) {
 		return
 	}
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.values = make(map[string]map[string]FileValue)
-	for _, x := range xs {
+	restoreStore(&s.store, xs, func(x engine.RuntimeFile) string {
+		return fileKey(x.Env, x.Path)
+	}, func(x engine.RuntimeFile) (storedValue, bool) {
 		name := strings.TrimSpace(x.Name)
 		if name == "" {
-			continue
+			return storedValue{}, false
 		}
-		key := fileKey(x.Env, x.Path)
-		if s.values[key] == nil {
-			s.values[key] = make(map[string]FileValue)
-		}
-		s.values[key][nameKey(name)] = FileValue{
+		return storedValue{
 			Name:      name,
 			Value:     x.Value,
 			Secret:    x.Secret,
 			UpdatedAt: x.UpdatedAt,
-		}
-	}
+		}, true
+	})
 }
 
 func fileKey(env, path string) string {

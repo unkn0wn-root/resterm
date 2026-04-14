@@ -59,6 +59,57 @@ func TestRuntimeStateRoundTrip(t *testing.T) {
 	}
 }
 
+func TestGlobalsDeleteAndClear(t *testing.T) {
+	gs := NewGlobals()
+	gs.Set("dev", "token", "abc", true)
+	gs.Set("dev", "refresh", "xyz", false)
+	gs.Set("prod", "token", "prod-token", true)
+
+	gs.Delete("dev", "token")
+
+	dev := gs.Snapshot("dev")
+	if len(dev) != 1 {
+		t.Fatalf("expected one dev global after delete, got %d", len(dev))
+	}
+	if _, ok := dev["token"]; ok {
+		t.Fatalf("expected token to be deleted from dev globals: %+v", dev)
+	}
+	if got := dev["refresh"].Value; got != "xyz" {
+		t.Fatalf("unexpected refresh value %q", got)
+	}
+
+	gs.Clear("dev")
+	if snap := gs.Snapshot("dev"); len(snap) != 0 {
+		t.Fatalf("expected dev globals to be cleared, got %+v", snap)
+	}
+	if snap := gs.Snapshot("prod"); len(snap) != 1 {
+		t.Fatalf("expected prod globals to remain, got %+v", snap)
+	}
+}
+
+func TestFilesClearEnvKeepsOtherEnvironments(t *testing.T) {
+	fs := NewFiles()
+	fs.Set("dev", "/tmp/a.http", "status", "200", false)
+	fs.Set("dev", "/tmp/b.http", "status", "201", false)
+	fs.Set("prod", "/tmp/a.http", "status", "500", true)
+
+	fs.ClearEnv("dev")
+
+	if snap := fs.Snapshot("dev", "/tmp/a.http"); len(snap) != 0 {
+		t.Fatalf("expected dev file state to be cleared, got %+v", snap)
+	}
+	if snap := fs.Snapshot("dev", "/tmp/b.http"); len(snap) != 0 {
+		t.Fatalf("expected all dev file state to be cleared, got %+v", snap)
+	}
+	prod := fs.Snapshot("prod", "/tmp/a.http")
+	if len(prod) != 1 {
+		t.Fatalf("expected prod file state to remain, got %+v", prod)
+	}
+	if got := prod["status"].Value; got != "500" {
+		t.Fatalf("unexpected prod file value %q", got)
+	}
+}
+
 func TestAuthStateRoundTrip(t *testing.T) {
 	now := time.Unix(1_700_000_000, 0)
 	st := engine.AuthState{
