@@ -21,10 +21,6 @@ platforms=(
   "windows arm64"
 )
 
-targets=(
-  "resterm ./cmd/resterm"
-)
-
 for platform in "${platforms[@]}"; do
   read -r goos goarch <<<"$platform"
 
@@ -41,17 +37,13 @@ for platform in "${platforms[@]}"; do
     *) goarch_label="$goarch" ;;
   esac
 
-  for target in "${targets[@]}"; do
-    read -r name pkg <<<"$target"
+  output="$OUT_DIR/resterm_${goos_label}_${goarch_label}"
+  if [[ "$goos" == "windows" ]]; then
+    output+=".exe"
+  fi
 
-    output="$OUT_DIR/${name}_${goos_label}_${goarch_label}"
-    if [[ "$goos" == "windows" ]]; then
-      output+=".exe"
-    fi
-
-    echo "Building $output (version: $VERSION)"
-    GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$LDFLAGS" -o "$output" "$pkg"
-  done
+  echo "Building $output (version: $VERSION)"
+  GOOS="$goos" GOARCH="$goarch" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
 done
 
 echo ""
