@@ -13,12 +13,10 @@ import (
 )
 
 type ComparePlan struct {
-	Run      RunMeta
-	Doc      *restfile.Document
-	Request  *restfile.Request
-	Spec     restfile.CompareSpec
-	Targets  []string
-	Baseline string
+	Run     RunMeta
+	Doc     *restfile.Document
+	Request *restfile.Request
+	Spec    restfile.CompareSpec
 }
 
 type cmpRun struct {
@@ -42,20 +40,16 @@ func PrepareCompare(
 	if req == nil {
 		return nil, fmt.Errorf("request is nil")
 	}
+	spec = prepareCompareSpec(spec)
 	if spec == nil || len(spec.Environments) < 2 {
 		return nil, fmt.Errorf("compare requires at least two environments")
 	}
 	run = normRun(run, ModeCompare, requestBaseTitle(req), run.Env)
 	out := &ComparePlan{
-		Run:      run,
-		Doc:      doc,
-		Request:  req,
-		Spec:     *spec,
-		Targets:  append([]string(nil), spec.Environments...),
-		Baseline: strings.TrimSpace(spec.Baseline),
-	}
-	if len(spec.Environments) > 0 {
-		out.Spec.Environments = append([]string(nil), spec.Environments...)
+		Run:     run,
+		Doc:     doc,
+		Request: req,
+		Spec:    *spec,
 	}
 	return out, nil
 }
@@ -109,17 +103,18 @@ func CompareBaseline(rows []engine.CompareRow, want string) string {
 	if want != "" || len(rows) == 0 {
 		return want
 	}
-	return rows[CompareBaseIndex(rows, "")].Environment
+	return rows[0].Environment
 }
 
 func (r *cmpRun) run(ctx context.Context) error {
-	for i, env := range r.pl.Targets {
+	total := len(r.pl.Spec.Environments)
+	for i, env := range r.pl.Spec.Environments {
 		if ctx.Err() != nil {
 			r.canceled = true
 			break
 		}
 		req := request.CloneRequest(r.pl.Request)
-		if err := r.emitRowStart(i, env, len(r.pl.Targets), req); err != nil {
+		if err := r.emitRowStart(i, env, total, req); err != nil {
 			return err
 		}
 		out, err := r.dep.ExecuteWith(
@@ -131,7 +126,7 @@ func (r *cmpRun) run(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := r.emitRowDone(i, env, len(r.pl.Targets), out); err != nil {
+		if err := r.emitRowDone(i, env, total, out); err != nil {
 			return err
 		}
 		ok, skip, cancel := compareOutcome(out)
@@ -171,18 +166,11 @@ func (r *cmpRun) base(i int, env string) bool {
 	if r == nil {
 		return false
 	}
-	want := strings.TrimSpace(r.pl.Baseline)
+	want := strings.TrimSpace(r.pl.Spec.Baseline)
 	if want == "" {
 		return i == 0
 	}
 	return strings.EqualFold(env, want)
-}
-
-func emitCtx(ctx context.Context) context.Context {
-	if ctx == nil {
-		return context.Background()
-	}
-	return context.WithoutCancel(ctx)
 }
 
 func compareOutcome(out engine.RequestResult) (bool, bool, bool) {

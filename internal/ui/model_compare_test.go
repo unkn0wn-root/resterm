@@ -4,11 +4,12 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
-	spec := buildConfigCompareSpec([]string{"dev", "stage", "prod"}, "")
+	spec := core.BuildCompareSpec([]string{"dev", "stage", "prod"}, "")
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -22,7 +23,7 @@ func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
 }
 
 func TestBuildConfigCompareSpecAppendsBaseline(t *testing.T) {
-	spec := buildConfigCompareSpec([]string{"dev", "stage"}, "prod")
+	spec := core.BuildCompareSpec([]string{"dev", "stage"}, "prod")
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -64,10 +65,13 @@ func TestCompareSpecForRequestPrefersConfig(t *testing.T) {
 }
 
 func TestNormalizeCompareTargets(t *testing.T) {
-	targets := normalizeCompareTargets([]string{"dev", "DEV", " stage ", ""})
+	spec := core.BuildCompareSpec([]string{"dev", "DEV", " stage ", ""}, "")
+	if spec == nil {
+		t.Fatalf("expected spec")
+	}
 	expect := []string{"dev", "stage"}
-	if !reflect.DeepEqual(expect, targets) {
-		t.Fatalf("unexpected targets: %#v", targets)
+	if !reflect.DeepEqual(expect, spec.Environments) {
+		t.Fatalf("unexpected targets: %#v", spec.Environments)
 	}
 }
 

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"testing"
 	"time"
 
@@ -126,6 +127,38 @@ func TestCompareBaselineHelpers(t *testing.T) {
 	}
 	if got := CompareBaseline(rows[:1], "missing"); got != "missing" {
 		t.Fatalf("expected missing baseline to stay requested, got %q", got)
+	}
+}
+
+func TestBuildCompareSpecNormalizesTargetsAndBaseline(t *testing.T) {
+	spec := BuildCompareSpec([]string{" dev ", "DEV", "", "stage"}, "STAGE")
+	if spec == nil {
+		t.Fatalf("expected spec")
+	}
+	expect := []string{"dev", "stage"}
+	if !reflect.DeepEqual(expect, spec.Environments) {
+		t.Fatalf("unexpected environments: %#v", spec.Environments)
+	}
+	if spec.Baseline != "stage" {
+		t.Fatalf("expected canonical baseline stage, got %q", spec.Baseline)
+	}
+}
+
+func TestPrepareCompareNormalizesPlanAndPreservesMissingBaseline(t *testing.T) {
+	req := &restfile.Request{Method: "GET", URL: "https://example.com"}
+	pl, err := PrepareCompare(nil, req, &restfile.CompareSpec{
+		Environments: []string{" dev ", "", "DEV", "stage"},
+		Baseline:     "missing",
+	}, RunMeta{})
+	if err != nil {
+		t.Fatalf("PrepareCompare: %v", err)
+	}
+	expect := []string{"dev", "stage"}
+	if !reflect.DeepEqual(expect, pl.Spec.Environments) {
+		t.Fatalf("unexpected environments: %#v", pl.Spec.Environments)
+	}
+	if pl.Spec.Baseline != "missing" {
+		t.Fatalf("expected missing baseline to be preserved, got %q", pl.Spec.Baseline)
 	}
 }
 

@@ -52,16 +52,13 @@ func compareStateFromPlan(
 		return nil
 	}
 	envs := append([]string(nil), pl.Spec.Environments...)
-	if len(envs) == 0 {
-		envs = append(envs, pl.Targets...)
-	}
 	return &compareState{
 		id:        strings.TrimSpace(pl.Run.ID),
 		core:      useCore,
 		doc:       pl.Doc,
 		base:      cloneRequest(pl.Request),
 		options:   opts,
-		spec:      cloneCompareSpec(&pl.Spec),
+		spec:      core.CloneCompareSpec(&pl.Spec),
 		envs:      envs,
 		originEnv: originEnv,
 		results:   make([]compareResult, 0, len(envs)),
