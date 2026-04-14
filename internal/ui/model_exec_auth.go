@@ -223,10 +223,7 @@ func (m *Model) prepareExplainAuthPreview(
 			)
 		}
 
-		header := strings.TrimSpace(cfg.Header)
-		if header == "" {
-			header = "Authorization"
-		}
+		header := cfg.Header
 		if req.Headers != nil && req.Headers.Get(header) != "" {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
@@ -378,11 +375,8 @@ func (m *Model) ensureOAuth(
 		)
 	}
 
-	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
+	grant := cfg.GrantType
 	header := cfg.Header
-	if strings.TrimSpace(header) == "" {
-		header = "Authorization"
-	}
 	if req.Headers != nil && req.Headers.Get(header) != "" {
 		return nil
 	}
@@ -589,5 +583,5 @@ func (m *Model) buildOAuthConfig(
 	if len(cfg.Extra) == 0 {
 		cfg.Extra = nil
 	}
-	return cfg, nil
+	return cfg.Normalized(), nil
 }

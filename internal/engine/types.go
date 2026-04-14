@@ -19,22 +19,23 @@ import (
 )
 
 type Config struct {
-	FilePath        string
-	Client          *httpclient.Client
-	EnvironmentSet  vars.EnvironmentSet
-	EnvironmentName string
-	EnvironmentFile string
-	HTTPOptions     httpclient.Options
-	GRPCOptions     grpcclient.Options
-	SSHManager      *ssh.Manager
-	K8sManager      *k8s.Manager
-	History         history.Store
-	WorkspaceRoot   string
-	Recursive       bool
-	CompareTargets  []string
-	CompareBase     string
-	Registry        *registry.Index
-	Bindings        *bindings.Map
+	FilePath              string
+	Client                *httpclient.Client
+	EnvironmentSet        vars.EnvironmentSet
+	EnvironmentName       string
+	EnvironmentFile       string
+	AllowInteractiveOAuth bool
+	HTTPOptions           httpclient.Options
+	GRPCOptions           grpcclient.Options
+	SSHManager            *ssh.Manager
+	K8sManager            *k8s.Manager
+	History               history.Store
+	WorkspaceRoot         string
+	Recursive             bool
+	CompareTargets        []string
+	CompareBase           string
+	Registry              *registry.Index
+	Bindings              *bindings.Map
 }
 
 type Executor interface {

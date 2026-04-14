@@ -182,15 +182,12 @@ func (e *Engine) ensureOAuth(
 			"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
 		)
 	}
-	grant := strings.ToLower(strings.TrimSpace(cfg.GrantType))
+	grant := cfg.GrantType
 	hdr := cfg.Header
-	if strings.TrimSpace(hdr) == "" {
-		hdr = "Authorization"
-	}
 	if req.Headers != nil && req.Headers.Get(hdr) != "" {
 		return nil
 	}
-	if grant == "authorization_code" && !oa.CanHeadless(env, cfg) {
+	if e.oauthNeedsHeadlessSeed(oa, env, cfg) {
 		return errdef.New(
 			errdef.CodeHTTP,
 			"headless oauth authorization_code requires a cached or refreshable token; seed it outside CI or use a non-interactive grant",
@@ -225,6 +222,20 @@ func (e *Engine) ensureOAuth(
 	}
 	req.Headers.Set(hdr, val)
 	return nil
+}
+
+func (e *Engine) allowInteractiveOAuth() bool {
+	return e != nil && e.cfg.AllowInteractiveOAuth
+}
+
+func (e *Engine) oauthNeedsHeadlessSeed(oa *oauth.Manager, env string, cfg oauth.Config) bool {
+	if cfg.GrantType != oauth.GrantAuthorizationCode {
+		return false
+	}
+	if e.allowInteractiveOAuth() || oa == nil {
+		return false
+	}
+	return !oa.CanHeadless(env, cfg)
 }
 
 func (e *Engine) buildCommandAuthConfig(
@@ -390,5 +401,5 @@ func (e *Engine) buildOAuthConfig(
 	if len(cfg.Extra) == 0 {
 		cfg.Extra = nil
 	}
-	return cfg, nil
+	return cfg.Normalized(), nil
 }

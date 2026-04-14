@@ -1155,10 +1155,7 @@ func (e *Engine) prepareExplainAuthPreview(
 				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
 			)
 		}
-		hdr := strings.TrimSpace(cfg.Header)
-		if hdr == "" {
-			hdr = "Authorization"
-		}
+		hdr := cfg.Header
 		if req.Headers != nil && req.Headers.Get(hdr) != "" {
 			return explainAuthPreviewResult{
 				status:  xplain.StageOK,
