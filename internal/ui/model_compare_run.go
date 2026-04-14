@@ -1,24 +1,26 @@
 package ui
 
 import (
-	"bytes"
+	"context"
 	"fmt"
-	"net/http"
-	"sort"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
+	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
-	"google.golang.org/grpc/codes"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type compareState struct {
+	id           string
+	core         bool
 	doc          *restfile.Document
 	base         *restfile.Request
 	options      httpclient.Options
@@ -35,38 +37,38 @@ type compareState struct {
 	cancelReason string
 }
 
-type compareResult struct {
-	Environment string
-	Response    *httpclient.Response
-	GRPC        *grpcclient.Response
-	Err         error
-	Tests       []scripts.TestResult
-	ScriptErr   error
-	Request     *restfile.Request
-	RequestText string
-	Canceled    bool
-	Skipped     bool
-	SkipReason  string
-}
-
 func (s *compareState) matches(req *restfile.Request) bool {
 	return s != nil && s.current != nil && req == s.current
 }
 
-func (m *Model) resetCompareState() {
-	if m.compareSnapshots != nil {
-		for k := range m.compareSnapshots {
-			delete(m.compareSnapshots, k)
-		}
+func compareStateFromPlan(
+	pl *core.ComparePlan,
+	opts httpclient.Options,
+	useCore bool,
+	originEnv string,
+	label string,
+) *compareState {
+	if pl == nil {
+		return nil
 	}
-	m.compareRowIndex = 0
-	m.compareSelectedEnv = ""
-	m.compareFocusedEnv = ""
+	envs := append([]string(nil), pl.Spec.Environments...)
+	if len(envs) == 0 {
+		envs = append(envs, pl.Targets...)
+	}
+	return &compareState{
+		id:        strings.TrimSpace(pl.Run.ID),
+		core:      useCore,
+		doc:       pl.Doc,
+		base:      cloneRequest(pl.Request),
+		options:   opts,
+		spec:      cloneCompareSpec(&pl.Spec),
+		envs:      envs,
+		originEnv: originEnv,
+		results:   make([]compareResult, 0, len(envs)),
+		label:     label,
+	}
 }
 
-// Clone the active request and reset compare bookkeeping so every environment
-// run starts from the same baseline and the diff panes are ready as
-// soon as responses arrive.
 func (m *Model) startCompareRun(
 	doc *restfile.Document,
 	req *restfile.Request,
@@ -86,28 +88,35 @@ func (m *Model) startCompareRun(
 		return nil
 	}
 
-	m.resetCompareState()
-
-	state := &compareState{
-		doc:       doc,
-		base:      cloneRequest(req),
-		options:   options,
-		spec:      cloneCompareSpec(spec),
-		envs:      append([]string(nil), spec.Environments...),
-		originEnv: m.cfg.EnvironmentName,
-		results:   make([]compareResult, 0, len(spec.Environments)),
-	}
 	title := strings.TrimSpace(m.statusRequestTitle(doc, req, ""))
 	if title == "" {
 		title = requestBaseTitle(req)
 	}
-	state.label = fmt.Sprintf("Compare %s", title)
+	label := fmt.Sprintf("Compare %s", title)
+	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
+	pl, err := core.PrepareCompare(doc, req, spec, core.RunMeta{
+		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
+		Env: env,
+	})
+	if err != nil {
+		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
+		return nil
+	}
+	state := compareStateFromPlan(pl, options, true, m.cfg.EnvironmentName, label)
+	if requestNeedsUIDrivenRun(req) {
+		state.core = false
+		return m.startCompareUIDrivenState(state)
+	}
+	return m.startCompareCoreRun(pl, state)
+}
 
-	m.compareRun = state
-	m.lastCompareResults = nil
-	m.lastCompareSpec = nil
+func (m *Model) beginCompareRun(state *compareState) []tea.Cmd {
+	if state == nil {
+		return nil
+	}
+	m.resetCompareState()
 	m.compareBundle = nil
-	spin := m.startSending()
+	m.compareRun = state
 	m.statusPulseBase = state.label
 	m.statusPulseFrame = -1
 
@@ -121,17 +130,49 @@ func (m *Model) startCompareRun(
 			cmds = append(cmds, cmd)
 		}
 	}
+	return cmds
+}
+
+func (m *Model) startCompareUIDrivenState(state *compareState) tea.Cmd {
+	if state == nil {
+		return nil
+	}
+	cmds := m.beginCompareRun(state)
 	if cmd := m.executeCompareIteration(); cmd != nil {
 		cmds = append(cmds, cmd)
-	}
-	if spin != nil {
-		cmds = append(cmds, spin)
 	}
 	return batchCmds(cmds)
 }
 
-// Each iteration swaps in its own environment so resolvers see the right values
-// without leaving the global selection changed afterward
+func (m *Model) startCompareCoreRun(pl *core.ComparePlan, state *compareState) tea.Cmd {
+	if pl == nil || state == nil {
+		return nil
+	}
+	rq := m.requestSvc(state.options)
+	if rq == nil {
+		return nil
+	}
+	cmds := m.beginCompareRun(state)
+	if len(state.envs) > 0 {
+		state.currentEnv = state.envs[0]
+		state.current = cloneRequest(state.base)
+		state.requestText = renderRequestText(state.current)
+		m.statusPulseBase = state.statusLine()
+		m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
+		if spin := m.startSending(); spin != nil {
+			cmds = append(cmds, spin)
+		}
+		if pulse := m.startStatusPulse(); pulse != nil {
+			cmds = append(cmds, pulse)
+		}
+	}
+	ch := m.runMsgChan
+	cmds = append(cmds, m.startRunWorker(state.id, func(ctx context.Context) error {
+		return core.RunCompare(ctx, rq, runSink(ch), pl)
+	}))
+	return batchCmds(cmds)
+}
+
 func (m *Model) executeCompareIteration() tea.Cmd {
 	state := m.compareRun
 	if state == nil {
@@ -159,16 +200,112 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	return batchCmds([]tea.Cmd{runCmd, pulse, spin})
 }
 
-// Snapshot each iteration immediately so the compare tab and diff panes can
-// revisit the response even while the sweep continues.
-func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
+func (m *Model) handleCompareUIDrivenResponse(msg responseMsg) tea.Cmd {
 	state := m.compareRun
 	if state == nil {
 		return nil
 	}
+	canceled, cmd := m.consumeCompareRow(state, state.current, state.currentEnv, msg)
+	var cmds []tea.Cmd
+	if cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 
-	currentReq := state.current
-	currentEnv := state.currentEnv
+	if canceled || state.index >= len(state.envs) {
+		if cmd := m.finalizeCompareRun(state); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		return batchCmds(cmds)
+	}
+
+	if cmd := m.executeCompareIteration(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	return batchCmds(cmds)
+}
+
+func (m *Model) handleCompareRunEvt(evt core.Evt) tea.Cmd {
+	st := m.compareRun
+	if st == nil || !st.core || evt == nil {
+		return nil
+	}
+	meta := core.MetaOf(evt)
+	if st.id != "" && meta.Run.ID != "" && st.id != meta.Run.ID {
+		return nil
+	}
+	switch v := evt.(type) {
+	case core.CmpRowStart:
+		return m.handleCompareRowStart(st, v)
+	case core.CmpRowDone:
+		return m.handleCompareRowDone(st, v)
+	case core.RunDone:
+		return m.handleCompareRunDone(st, v)
+	}
+	return nil
+}
+
+func (m *Model) handleCompareRowStart(st *compareState, evt core.CmpRowStart) tea.Cmd {
+	if st == nil {
+		return nil
+	}
+	st.index = evt.Row.Index
+	st.currentEnv = compareEnvAt(st, evt.Row.Index, evt.Row.Env)
+	st.current = cloneRequest(evt.Request)
+	st.requestText = renderRequestText(st.current)
+	m.statusPulseBase = st.statusLine()
+	m.setStatusMessage(statusMsg{text: st.statusLine(), level: statusInfo})
+	spin := m.startSending()
+	pulse := m.startStatusPulse()
+	return batchCmds([]tea.Cmd{spin, pulse})
+}
+
+func (m *Model) handleCompareRowDone(st *compareState, evt core.CmpRowDone) tea.Cmd {
+	if st == nil {
+		return nil
+	}
+	msg := m.responseMsgFromRunState(evt.Result, false)
+	env := st.currentEnv
+	if strings.TrimSpace(env) == "" {
+		env = compareEnvAt(st, evt.Row.Index, evt.Row.Env)
+	}
+	canceled, cmd := m.consumeCompareRow(st, st.current, env, msg)
+	if canceled || st.index >= len(st.envs) {
+		return batchCmds([]tea.Cmd{cmd, m.finalizeCompareRun(st)})
+	}
+	return cmd
+}
+
+func (m *Model) handleCompareRunDone(st *compareState, evt core.RunDone) tea.Cmd {
+	if st == nil {
+		return nil
+	}
+	if evt.Canceled {
+		st.canceled = true
+	}
+	m.sendCancel = nil
+	m.stopSending()
+	if m.compareRun != st {
+		return nil
+	}
+	return m.finalizeCompareRun(st)
+}
+
+func compareEnvAt(st *compareState, i int, fallback string) string {
+	if st != nil && i >= 0 && i < len(st.envs) {
+		return st.envs[i]
+	}
+	return fallback
+}
+
+func (m *Model) consumeCompareRow(
+	state *compareState,
+	currentReq *restfile.Request,
+	currentEnv string,
+	msg responseMsg,
+) (bool, tea.Cmd) {
+	if state == nil {
+		return false, nil
+	}
 	state.current = nil
 	m.stopSending()
 
@@ -187,6 +324,8 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 	}
 	result := compareResult{
 		Environment: currentEnv,
+		Stream:      cloneStreamInfo(msg.stream),
+		Transcript:  append([]byte(nil), msg.transcript...),
 		Tests:       append([]scripts.TestResult(nil), msg.tests...),
 		ScriptErr:   msg.scriptErr,
 		RequestText: state.requestText,
@@ -194,8 +333,14 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 		Skipped:     msg.skipped,
 		SkipReason:  msg.skipReason,
 	}
+	if currentReq == nil {
+		currentReq = msg.executed
+	}
 	if currentReq != nil {
 		result.Request = cloneRequest(currentReq)
+	}
+	if strings.TrimSpace(result.RequestText) == "" {
+		result.RequestText = strings.TrimSpace(msg.requestText)
 	}
 
 	var cmds []tea.Cmd
@@ -235,6 +380,9 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 		); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	} else if !canceled && (msg.stream != nil || len(msg.transcript) > 0) {
+		m.lastError = nil
+		m.applyRunSnapshot(newStreamSnapshot(msg.stream, msg.transcript, msg.environment), nil, nil)
 	} else {
 		m.lastError = nil
 	}
@@ -250,22 +398,9 @@ func (m *Model) handleCompareResponse(msg responseMsg) tea.Cmd {
 		level = statusWarn
 	}
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: level})
-
-	if canceled || state.index >= len(state.envs) {
-		if cmd := m.finalizeCompareRun(state); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		return batchCmds(cmds)
-	}
-
-	if cmd := m.executeCompareIteration(); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-	return batchCmds(cmds)
+	return canceled, batchCmds(cmds)
 }
 
-// Build the reusable bundle and history entry so panes and history reuse the
-// same frozen data instead of rehydrating adhoc
 func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	if state == nil {
 		return nil
@@ -273,8 +408,6 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 
 	m.cfg.EnvironmentName = state.originEnv
 	m.compareRun = nil
-	m.lastCompareResults = state.results
-	m.lastCompareSpec = cloneCompareSpec(state.spec)
 	m.stopSending()
 	m.stopStatusPulseIfIdle()
 
@@ -284,7 +417,7 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 		secondary.invalidateCaches()
 	}
 
-	if bundle := buildCompareBundle(state.results, state.spec); bundle != nil {
+	if bundle := buildCompareBundle(state.results, baselineFromSpec(state.spec)); bundle != nil {
 		m.compareBundle = bundle
 		if m.responseLatest != nil {
 			m.responseLatest.compareBundle = bundle
@@ -329,8 +462,6 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	return nil
 }
 
-// Temporarily swap the active environment so callers can run work under a
-// different scope without leaking the selection afterward.
 func (m *Model) withEnvironment(env string, fn func() tea.Cmd) tea.Cmd {
 	prev := m.cfg.EnvironmentName
 	m.cfg.EnvironmentName = env
@@ -338,16 +469,12 @@ func (m *Model) withEnvironment(env string, fn func() tea.Cmd) tea.Cmd {
 		m.cfg.EnvironmentName = prev
 		return nil
 	}
-
 	defer func() {
 		m.cfg.EnvironmentName = prev
 	}()
-
 	return fn()
 }
 
-// Keep the diff stable by pinning whichever response should act as the baseline
-// before the next iteration updates the live pane.
 func (m *Model) pinCompareReferencePane(state *compareState) {
 	if state == nil || !m.responseSplit {
 		return
@@ -383,240 +510,165 @@ func (m *Model) storeCompareSnapshot(env string) {
 	m.setCompareSnapshot(env, snap)
 }
 
-func (m *Model) setCompareSnapshot(env string, snap *responseSnapshot) {
-	trimmed := strings.TrimSpace(env)
-	if trimmed == "" || snap == nil {
+func (m *Model) recordCompareHistory(state *compareState) {
+	hs := m.historyStore()
+	if hs == nil || state == nil || len(state.results) == 0 {
 		return
 	}
-	if m.compareSnapshots == nil {
-		m.compareSnapshots = make(map[string]*responseSnapshot)
-	}
 
-	key := strings.ToLower(trimmed)
-	m.compareSnapshots[key] = snap
-	if strings.TrimSpace(snap.environment) == "" {
-		snap.environment = trimmed
-	}
-}
-
-func (m *Model) compareSnapshot(env string) *responseSnapshot {
-	if m.compareSnapshots == nil {
-		return nil
-	}
-
-	key := strings.ToLower(strings.TrimSpace(env))
-	if key == "" {
-		return nil
-	}
-	return m.compareSnapshots[key]
-}
-
-type compareBundle struct {
-	Baseline string
-	Rows     []compareRow
-}
-
-type compareRow struct {
-	Result   *compareResult
-	Status   string
-	Code     string
-	Duration time.Duration
-	Summary  string
-}
-
-// Condense raw iteration results into baseline-anchored rows so the compare tab
-// and history list can render summaries without recomputing deltas.
-func buildCompareBundle(results []compareResult, spec *restfile.CompareSpec) *compareBundle {
-	if len(results) == 0 {
-		return nil
-	}
-
-	var baselineName string
-	if spec != nil {
-		baselineName = strings.TrimSpace(spec.Baseline)
-	}
-
-	baseIdx := findBaselineIndex(results, baselineName)
-	if baseIdx < 0 {
-		baseIdx = 0
-	}
-
-	base := &results[baseIdx]
-	bundle := &compareBundle{
-		Baseline: base.Environment,
-		Rows:     make([]compareRow, 0, len(results)),
-	}
-	for i := range results {
-		res := &results[i]
-		status, code := compareRowStatus(res)
-		row := compareRow{
-			Result:   res,
-			Status:   status,
-			Code:     code,
-			Duration: compareRowDuration(res),
-			Summary:  summarizeCompareDelta(base, res),
-		}
-		bundle.Rows = append(bundle.Rows, row)
-	}
-	return bundle
-}
-
-func findBaselineIndex(results []compareResult, baseline string) int {
-	if strings.TrimSpace(baseline) == "" {
-		return -1
-	}
-	for idx := range results {
-		if strings.EqualFold(results[idx].Environment, baseline) {
-			return idx
-		}
-	}
-	return -1
-}
-
-func compareRowStatus(result *compareResult) (string, string) {
-	switch {
-	case result == nil:
-		return "n/a", "-"
-	case result.Canceled:
-		return "canceled", "-"
-	case result.Skipped:
-		return "skipped", "-"
-	case result.Err != nil:
-		return "error", ""
-	case result.Response != nil:
-		return result.Response.Status, fmt.Sprintf("%d", result.Response.StatusCode)
-	case result.GRPC != nil:
-		return result.GRPC.StatusCode.String(), fmt.Sprintf("%d", result.GRPC.StatusCode)
-	default:
-		return "pending", "-"
-	}
-}
-
-func compareRowDuration(result *compareResult) time.Duration {
-	switch {
-	case result == nil:
-		return 0
-	case result.Response != nil:
-		return result.Response.Duration
-	case result.GRPC != nil:
-		return result.GRPC.Duration
-	default:
-		return 0
-	}
-}
-
-func summarizeCompareDelta(base, target *compareResult) string {
-	if target == nil {
-		return "unavailable"
-	}
-	if base != nil && strings.EqualFold(base.Environment, target.Environment) {
-		return "baseline"
-	}
-	if target.Skipped {
-		reason := strings.TrimSpace(target.SkipReason)
-		if reason == "" {
-			return "skipped"
-		}
-		return fmt.Sprintf("skipped: %s", reason)
-	}
-	if base != nil && base.Skipped {
-		return "baseline skipped"
-	}
-	if target.Err != nil {
-		return fmt.Sprintf("error: %s", errdef.Message(target.Err))
-	}
-	if target.ScriptErr != nil {
-		return fmt.Sprintf("tests error: %v", target.ScriptErr)
-	}
-	if fails := countTestFailures(target.Tests); fails > 0 {
-		return fmt.Sprintf("%d test(s) failed", fails)
-	}
-
-	switch {
-	case target.Response != nil && base != nil && base.Response != nil:
-		return summarizeHTTPDelta(base.Response, target.Response)
-	case target.GRPC != nil && base != nil && base.GRPC != nil:
-		return summarizeGRPCDelta(base.GRPC, target.GRPC)
-	default:
-		return "unavailable"
-	}
-}
-
-func countTestFailures(tests []scripts.TestResult) int {
-	count := 0
-	for _, t := range tests {
-		if !t.Passed {
-			count++
-		}
-	}
-	return count
-}
-
-func summarizeHTTPDelta(base, target *httpclient.Response) string {
-	if base == nil || target == nil {
-		return "unavailable"
-	}
-
-	var deltas []string
-	if target.StatusCode != base.StatusCode {
-		deltas = append(deltas, "status")
-	}
-	if !bytes.Equal(target.Body, base.Body) {
-		deltas = append(deltas, "body")
-	}
-	if !headersEqual(target.Headers, base.Headers) {
-		deltas = append(deltas, "headers")
-	}
-	if len(deltas) == 0 {
-		return "match"
-	}
-	return strings.Join(deltas, ", ") + " differ"
-}
-
-func summarizeGRPCDelta(base, target *grpcclient.Response) string {
-	if base == nil || target == nil {
-		return "unavailable"
-	}
-
-	var deltas []string
-	if target.StatusCode != base.StatusCode {
-		deltas = append(deltas, "status")
-	}
-	if strings.TrimSpace(target.StatusMessage) != strings.TrimSpace(base.StatusMessage) {
-		deltas = append(deltas, "message")
-	}
-	if strings.TrimSpace(target.Message) != strings.TrimSpace(base.Message) {
-		deltas = append(deltas, "body")
-	}
-	if len(deltas) == 0 {
-		return "match"
-	}
-	return strings.Join(deltas, ", ") + " differ"
-}
-
-func headersEqual(a, b http.Header) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for key, values := range a {
-		other, ok := b[key]
-		if !ok {
-			return false
-		}
-		sortedValues := append([]string(nil), values...)
-		sortedOther := append([]string(nil), other...)
-		sort.Strings(sortedValues)
-		sort.Strings(sortedOther)
-		if len(sortedValues) != len(sortedOther) {
-			return false
-		}
-		for i := range sortedValues {
-			if sortedValues[i] != sortedOther[i] {
-				return false
+	baseReq := state.base
+	if baseReq == nil {
+		for _, res := range state.results {
+			if res.Request != nil {
+				baseReq = res.Request
+				break
 			}
 		}
 	}
-	return true
+	if baseReq == nil {
+		return
+	}
+
+	entry := history.Entry{
+		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
+		ExecutedAt:  time.Now(),
+		RequestName: requestIdentifier(baseReq),
+		FilePath:    m.historyFilePath(),
+		Method:      restfile.HistoryMethodCompare,
+		URL:         baseReq.URL,
+		Description: strings.TrimSpace(baseReq.Metadata.Description),
+		Tags:        normalizedTags(baseReq.Metadata.Tags),
+		Status:      state.progressSummary(),
+		RequestText: renderRequestText(baseReq),
+		Compare:     &history.CompareEntry{},
+	}
+	if state.canceled {
+		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.envs))
+		if strings.TrimSpace(state.label) != "" {
+			status = fmt.Sprintf("%s | %s", strings.TrimSpace(state.label), status)
+		}
+		entry.Status = status
+	}
+	if state.spec != nil {
+		entry.Compare.Baseline = state.spec.Baseline
+	}
+
+	var totalDur time.Duration
+	results := make([]history.CompareResult, 0, len(state.results))
+	for _, res := range state.results {
+		item := m.buildCompareHistoryResult(res)
+		if item.Duration > 0 {
+			totalDur += item.Duration
+		}
+		results = append(results, item)
+	}
+	entry.Compare.Results = results
+	entry.Duration = totalDur
+	if entry.Status == "" {
+		entry.Status = fmt.Sprintf("Compare %d env", len(results))
+	}
+
+	if err := hs.Append(entry); err != nil {
+		m.setStatusMessage(
+			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
+		)
+		return
+	}
+	m.historySelectedID = entry.ID
+	m.syncHistory()
+}
+
+func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareResult {
+	env := strings.TrimSpace(result.Environment)
+	status, _ := compareRowStatus(&result)
+
+	entry := history.CompareResult{
+		Environment: env,
+		Status:      status,
+		Duration:    compareRowDuration(&result),
+		RequestText: strings.TrimSpace(result.RequestText),
+	}
+
+	req := result.Request
+	if req != nil && strings.TrimSpace(entry.RequestText) == "" {
+		entry.RequestText = renderRequestText(req)
+	}
+	if req != nil {
+		secrets := m.secretValuesForEnvironment(env, req)
+		maskHeaders := !req.Metadata.AllowSensitiveHeaders
+		entry.RequestText = redactHistoryText(entry.RequestText, secrets, maskHeaders)
+	}
+
+	switch {
+	case result.Canceled:
+		entry.Error = "canceled"
+		entry.BodySnippet = entry.Error
+	case result.Skipped:
+		reason := strings.TrimSpace(result.SkipReason)
+		if reason == "" {
+			reason = "skipped"
+		}
+		entry.Error = reason
+		entry.BodySnippet = reason
+	case result.Err != nil:
+		entry.Error = errdef.Message(result.Err)
+		entry.BodySnippet = entry.Error
+	case result.Response != nil:
+		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, env, m)
+		entry.StatusCode = result.Response.StatusCode
+	case result.GRPC != nil:
+		entry.BodySnippet = buildCompareGRPCSnippet(result.GRPC, req, env, m)
+		entry.StatusCode = int(result.GRPC.StatusCode)
+	case result.Stream != nil || len(result.Transcript) > 0:
+		entry.BodySnippet = streamSummaryText(result.Stream)
+	default:
+		entry.BodySnippet = "No response captured"
+	}
+
+	const limit = 2000
+	if len(entry.BodySnippet) > limit {
+		entry.BodySnippet = entry.BodySnippet[:limit]
+	}
+	return entry
+}
+
+func buildCompareHTTPSnippet(
+	resp *httpclient.Response,
+	req *restfile.Request,
+	env string,
+	m *Model,
+) string {
+	if resp == nil {
+		return ""
+	}
+	if req != nil && req.Metadata.NoLog {
+		return "<body suppressed>"
+	}
+	secrets := m.secretValuesForEnvironment(env, req)
+	return redactHistoryText(string(resp.Body), secrets, false)
+}
+
+func buildCompareGRPCSnippet(
+	resp *grpcclient.Response,
+	req *restfile.Request,
+	env string,
+	m *Model,
+) string {
+	if resp == nil {
+		return ""
+	}
+	if req != nil && req.Metadata.NoLog {
+		return "<body suppressed>"
+	}
+	secrets := m.secretValuesForEnvironment(env, req)
+	return redactHistoryText(resp.Message, secrets, false)
+}
+
+func baselineFromSpec(spec *restfile.CompareSpec) string {
+	if spec == nil {
+		return ""
+	}
+	return strings.TrimSpace(spec.Baseline)
 }
 
 func (s *compareState) progressSummary() string {
@@ -655,7 +707,6 @@ func (s *compareState) statusLine() string {
 	if s == nil {
 		return ""
 	}
-
 	summary := strings.TrimSpace(s.progressSummary())
 	if summary == "" {
 		return s.label
@@ -667,35 +718,10 @@ func (s *compareState) hasFailures() bool {
 	if s == nil {
 		return false
 	}
-	for idx := range s.results {
-		if !compareResultSuccess(&s.results[idx]) {
+	for i := range s.results {
+		if !compareResultSuccess(&s.results[i]) {
 			return true
 		}
-	}
-	return false
-}
-
-func compareResultSuccess(result *compareResult) bool {
-	if result == nil {
-		return false
-	}
-	if result.Canceled {
-		return false
-	}
-	if result.Skipped {
-		return false
-	}
-	if result.Err != nil || result.ScriptErr != nil {
-		return false
-	}
-	if countTestFailures(result.Tests) > 0 {
-		return false
-	}
-	if resp := result.Response; resp != nil {
-		return resp.StatusCode < 400
-	}
-	if resp := result.GRPC; resp != nil {
-		return resp.StatusCode == codes.OK
 	}
 	return false
 }

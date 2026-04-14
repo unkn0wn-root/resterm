@@ -32,18 +32,21 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	m.recordResponseLatency(msg)
 
 	if state := m.compareRun; state != nil {
-		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
-			return m.handleCompareResponse(msg)
+		if !state.core &&
+			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
+			return m.handleCompareUIDrivenResponse(msg)
 		}
 	}
 	if state := m.workflowRun; state != nil {
-		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
-			return m.handleWorkflowResponse(msg)
+		if !state.core &&
+			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
+			return m.handleWorkflowUIDrivenResponse(msg)
 		}
 	}
 	if state := m.profileRun; state != nil {
-		if state.matches(msg.executed) || (msg.executed == nil && state.current != nil) {
-			return m.handleProfileResponse(msg)
+		if !state.core &&
+			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
+			return m.handleProfileUIDrivenResponse(msg)
 		}
 	}
 
@@ -65,13 +68,17 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.testResults = nil
 		m.scriptError = nil
 		cmd := m.consumeSkippedRequest(msg.skipReason, msg.explain)
-		m.recordSkippedHistory(
-			msg.executed,
-			msg.requestText,
-			msg.environment,
-			msg.skipReason,
-			msg.runtimeSecrets...,
-		)
+		if msg.historyDone {
+			m.syncRecordedHistory()
+		} else {
+			m.recordSkippedHistory(
+				msg.executed,
+				msg.requestText,
+				msg.environment,
+				msg.skipReason,
+				msg.runtimeSecrets...,
+			)
+		}
 		return cmd
 	}
 
@@ -89,13 +96,17 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 			msg.environment,
 			msg.explain,
 		)
-		m.recordGRPCHistory(
-			msg.grpc,
-			msg.executed,
-			msg.requestText,
-			msg.environment,
-			msg.runtimeSecrets...,
-		)
+		if msg.historyDone {
+			m.syncRecordedHistory()
+		} else {
+			m.recordGRPCHistory(
+				msg.grpc,
+				msg.executed,
+				msg.requestText,
+				msg.environment,
+				msg.runtimeSecrets...,
+			)
+		}
 		return cmd
 	}
 
@@ -133,13 +144,17 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		msg.environment,
 		msg.explain,
 	)
-	m.recordHTTPHistory(
-		msg.response,
-		msg.executed,
-		msg.requestText,
-		msg.environment,
-		msg.runtimeSecrets...,
-	)
+	if msg.historyDone {
+		m.syncRecordedHistory()
+	} else {
+		m.recordHTTPHistory(
+			msg.response,
+			msg.executed,
+			msg.requestText,
+			msg.environment,
+			msg.runtimeSecrets...,
+		)
+	}
 	return cmd
 }
 
@@ -909,7 +924,8 @@ func (m *Model) recordHTTPHistory(
 	environment string,
 	extraSecrets ...string,
 ) {
-	if m.historyStore == nil || resp == nil || req == nil {
+	hs := m.historyStore()
+	if hs == nil || resp == nil || req == nil {
 		return
 	}
 
@@ -954,7 +970,7 @@ func (m *Model) recordHTTPHistory(
 		Tags:        tags,
 	}
 	entry.Trace = history.NewTraceSummary(resp.Timeline, resp.TraceReport)
-	if err := m.historyStore.Append(entry); err != nil {
+	if err := hs.Append(entry); err != nil {
 		m.setStatusMessage(
 			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
 		)
@@ -968,7 +984,8 @@ func (m *Model) recordSkippedHistory(
 	requestText, environment, reason string,
 	extraSecrets ...string,
 ) {
-	if m.historyStore == nil || req == nil {
+	hs := m.historyStore()
+	if hs == nil || req == nil {
 		return
 	}
 
@@ -1007,7 +1024,7 @@ func (m *Model) recordSkippedHistory(
 		Description: desc,
 		Tags:        tags,
 	}
-	if err := m.historyStore.Append(entry); err != nil {
+	if err := hs.Append(entry); err != nil {
 		m.setStatusMessage(
 			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
 		)
@@ -1032,7 +1049,8 @@ func (m *Model) recordGRPCHistory(
 	environment string,
 	extraSecrets ...string,
 ) {
-	if m.historyStore == nil || resp == nil || req == nil {
+	hs := m.historyStore()
+	if hs == nil || resp == nil || req == nil {
 		return
 	}
 
@@ -1070,175 +1088,13 @@ func (m *Model) recordGRPCHistory(
 		Tags:        tags,
 	}
 
-	if err := m.historyStore.Append(entry); err != nil {
+	if err := hs.Append(entry); err != nil {
 		m.setStatusMessage(
 			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
 		)
 	}
 	m.historySelectedID = entry.ID
 	m.syncHistory()
-}
-
-// Store one bundled history entry per compare sweep so later views can rebuild
-// the tab and metadata without rerunning anything.
-func (m *Model) recordCompareHistory(state *compareState) {
-	if m.historyStore == nil || state == nil || len(state.results) == 0 {
-		return
-	}
-
-	baseReq := state.base
-	if baseReq == nil {
-		for _, res := range state.results {
-			if res.Request != nil {
-				baseReq = res.Request
-				break
-			}
-		}
-	}
-	if baseReq == nil {
-		return
-	}
-
-	entry := history.Entry{
-		ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
-		ExecutedAt:  time.Now(),
-		RequestName: requestIdentifier(baseReq),
-		FilePath:    m.historyFilePath(),
-		Method:      restfile.HistoryMethodCompare,
-		URL:         baseReq.URL,
-		Description: strings.TrimSpace(baseReq.Metadata.Description),
-		Tags:        normalizedTags(baseReq.Metadata.Tags),
-		Status:      state.progressSummary(),
-		RequestText: renderRequestText(baseReq),
-		Compare:     &history.CompareEntry{},
-	}
-	if state.canceled {
-		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.envs))
-		if strings.TrimSpace(state.label) != "" {
-			status = fmt.Sprintf("%s | %s", strings.TrimSpace(state.label), status)
-		}
-		entry.Status = status
-	}
-	if state.spec != nil {
-		entry.Compare.Baseline = state.spec.Baseline
-	}
-
-	var totalDur time.Duration
-	results := make([]history.CompareResult, 0, len(state.results))
-	for _, res := range state.results {
-		resultEntry := m.buildCompareHistoryResult(res)
-		if resultEntry.Duration > 0 {
-			totalDur += resultEntry.Duration
-		}
-		results = append(results, resultEntry)
-	}
-	entry.Compare.Results = results
-	entry.Duration = totalDur
-	if entry.Status == "" {
-		entry.Status = fmt.Sprintf("Compare %d env", len(results))
-	}
-
-	if err := m.historyStore.Append(entry); err != nil {
-		m.setStatusMessage(
-			statusMsg{text: fmt.Sprintf("history error: %v", err), level: statusWarn},
-		)
-		return
-	}
-	m.historySelectedID = entry.ID
-	m.syncHistory()
-}
-
-// Redact sensitive values and condense each env run into the snippet the
-// history list needs to show meaningful context.
-func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareResult {
-	env := strings.TrimSpace(result.Environment)
-	status, _ := compareRowStatus(&result)
-
-	entry := history.CompareResult{
-		Environment: env,
-		Status:      status,
-		Duration:    compareRowDuration(&result),
-		RequestText: strings.TrimSpace(result.RequestText),
-	}
-
-	req := result.Request
-	if req != nil && strings.TrimSpace(entry.RequestText) == "" {
-		entry.RequestText = renderRequestText(req)
-	}
-	if req != nil {
-		secrets := m.secretValuesForEnvironment(env, req)
-		maskHeaders := !req.Metadata.AllowSensitiveHeaders
-		entry.RequestText = redactHistoryText(entry.RequestText, secrets, maskHeaders)
-	}
-
-	switch {
-	case result.Canceled:
-		entry.Error = "canceled"
-		entry.BodySnippet = entry.Error
-		entry.StatusCode = 0
-	case result.Skipped:
-		reason := strings.TrimSpace(result.SkipReason)
-		if reason == "" {
-			reason = "skipped"
-		}
-		entry.Error = reason
-		entry.BodySnippet = reason
-		entry.StatusCode = 0
-	case result.Err != nil:
-		entry.Error = errdef.Message(result.Err)
-		entry.BodySnippet = entry.Error
-		entry.StatusCode = 0
-	case result.Response != nil:
-		req := result.Request
-		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, env, m)
-		entry.StatusCode = result.Response.StatusCode
-	case result.GRPC != nil:
-		req := result.Request
-		entry.BodySnippet = buildCompareGRPCSnippet(result.GRPC, req, env, m)
-		entry.StatusCode = int(result.GRPC.StatusCode)
-	default:
-		entry.BodySnippet = "No response captured"
-		entry.StatusCode = 0
-	}
-
-	const limit = 2000
-	if len(entry.BodySnippet) > limit {
-		entry.BodySnippet = entry.BodySnippet[:limit]
-	}
-	return entry
-}
-
-func buildCompareHTTPSnippet(
-	resp *httpclient.Response,
-	req *restfile.Request,
-	env string,
-	m *Model,
-) string {
-	if resp == nil {
-		return ""
-	}
-	if req != nil && req.Metadata.NoLog {
-		return "<body suppressed>"
-	}
-	secrets := m.secretValuesForEnvironment(env, req)
-	snippet := string(resp.Body)
-	return redactHistoryText(snippet, secrets, false)
-}
-
-func buildCompareGRPCSnippet(
-	resp *grpcclient.Response,
-	req *restfile.Request,
-	env string,
-	m *Model,
-) string {
-	if resp == nil {
-		return ""
-	}
-	if req != nil && req.Metadata.NoLog {
-		return "<body suppressed>"
-	}
-	secrets := m.secretValuesForEnvironment(env, req)
-	return redactHistoryText(resp.Message, secrets, false)
 }
 
 func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...string) []string {
@@ -1271,9 +1127,9 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...
 		}
 	}
 
-	if m.fileVars != nil {
+	if fs := m.fileStore(); fs != nil {
 		path := m.documentRuntimePath(m.doc)
-		if snapshot := m.fileVars.snapshot(m.cfg.EnvironmentName, path); len(snapshot) > 0 {
+		if snapshot := fs.Snapshot(m.cfg.EnvironmentName, path); len(snapshot) > 0 {
 			for _, entry := range snapshot {
 				if entry.Secret {
 					add(entry.Value)
@@ -1282,8 +1138,8 @@ func (m *Model) secretValuesForRedaction(req *restfile.Request, extraSecrets ...
 		}
 	}
 
-	if m.globals != nil {
-		if snapshot := m.globals.snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
+	if gs := m.globalsStore(); gs != nil {
+		if snapshot := gs.Snapshot(m.cfg.EnvironmentName); len(snapshot) > 0 {
 			for _, entry := range snapshot {
 				if entry.Secret {
 					add(entry.Value)
@@ -1545,7 +1401,8 @@ func historyResultStatus(res history.CompareResult) string {
 }
 
 func (m *Model) syncHistory() {
-	if m.historyStore == nil {
+	hs := m.historyStore()
+	if hs == nil {
 		m.historyEntries = nil
 		m.historyScopeCount = 0
 		m.historyList.SetItems(nil)
@@ -1582,13 +1439,17 @@ func (m *Model) syncHistory() {
 }
 
 func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
+	hs := m.historyStore()
+	if hs == nil {
+		return nil, nil
+	}
 	switch m.historyScope {
 	case historyScopeWorkflow:
 		name := history.NormalizeWorkflowName(m.historyWorkflowName)
 		if name == "" {
 			return nil, nil
 		}
-		return m.historyStore.ByWorkflow(name)
+		return hs.ByWorkflow(name)
 	case historyScopeRequest:
 		if m.currentRequest == nil {
 			return nil, nil
@@ -1597,11 +1458,11 @@ func (m *Model) historyEntriesForScope() ([]history.Entry, error) {
 		if identifier == "" {
 			return nil, nil
 		}
-		return m.historyStore.ByRequest(identifier)
+		return hs.ByRequest(identifier)
 	case historyScopeFile:
 		return m.historyEntriesForFileScope()
 	default:
-		return m.historyStore.Entries()
+		return hs.Entries()
 	}
 }
 
@@ -1742,7 +1603,8 @@ func (m *Model) clearHistorySelections() {
 }
 
 func (m *Model) deleteSelectedHistoryEntries() (int, int, error) {
-	if m.historyStore == nil || len(m.historySelected) == 0 {
+	hs := m.historyStore()
+	if hs == nil || len(m.historySelected) == 0 {
 		return 0, 0, nil
 	}
 	ids := make([]string, 0, len(m.historySelected))
@@ -1753,7 +1615,7 @@ func (m *Model) deleteSelectedHistoryEntries() (int, int, error) {
 	failed := 0
 	var firstErr error
 	for _, id := range ids {
-		ok, err := m.historyStore.Delete(id)
+		ok, err := hs.Delete(id)
 		if err != nil {
 			failed++
 			if firstErr == nil {
@@ -2221,10 +2083,11 @@ func (m *Model) deleteHistoryEntry(id string) (bool, error) {
 	if id == "" {
 		return false, nil
 	}
-	if m.historyStore == nil {
+	hs := m.historyStore()
+	if hs == nil {
 		return false, nil
 	}
-	deleted, err := m.historyStore.Delete(id)
+	deleted, err := hs.Delete(id)
 	if err != nil || !deleted {
 		return deleted, err
 	}
@@ -2315,22 +2178,20 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 			if focusEnv == "" && len(compareBundle.Rows) > 0 {
 				focusEnv = strings.TrimSpace(compareBundle.Rows[0].Result.Environment)
 			}
-			if m.compareRun == nil {
-				m.resetCompareState()
-				hydrated := m.populateCompareSnapshotsFromHistory(entry, compareBundle, focusEnv)
-				if hydrated != "" {
-					focusEnv = hydrated
-				}
-				m.compareBundle = compareBundle
-				if focusEnv != "" {
-					m.compareSelectedEnv = focusEnv
-					m.compareFocusedEnv = focusEnv
-					m.compareRowIndex = compareRowIndexForEnv(compareBundle, focusEnv)
-				} else {
-					m.compareRowIndex = 0
-				}
-				m.invalidateCompareTabCaches()
+			m.resetCompareState()
+			hydrated := m.populateCompareSnapshotsFromHistory(entry, compareBundle, focusEnv)
+			if hydrated != "" {
+				focusEnv = hydrated
 			}
+			m.compareBundle = compareBundle
+			if focusEnv != "" {
+				m.compareSelectedEnv = focusEnv
+				m.compareFocusedEnv = focusEnv
+				m.compareRowIndex = compareRowIndexForEnv(compareBundle, focusEnv)
+			} else {
+				m.compareRowIndex = 0
+			}
+			m.invalidateCompareTabCaches()
 			if focusEnv == "" {
 				focusEnv = targetEnv
 			}
@@ -2356,9 +2217,11 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	if trimmed := strings.TrimSpace(replayTarget); trimmed != "" {
 		replayText = fmt.Sprintf("Replaying %s", trimmed)
 	}
+	m.statusPulseBase = replayText
+	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
-	cmd := m.executeRequest(doc, req, options, "", nil)
-	return batchCmds([]tea.Cmd{cmd, spin})
+	cmd := m.execRunReq(doc, req, options, "", nil)
+	return batchCmds([]tea.Cmd{cmd, m.startStatusPulse(), spin})
 }
 
 func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {

@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/cli"
 )
 
 func TestLoadEnvironmentExplicitDotEnv(t *testing.T) {
@@ -14,7 +16,7 @@ func TestLoadEnvironmentExplicitDotEnv(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, resolved := loadEnvironment(envPath, "", dir)
+	envs, resolved := cli.LoadEnvironment(envPath, "", dir)
 	if resolved != envPath {
 		t.Fatalf("resolved path = %q, want %q", resolved, envPath)
 	}
@@ -38,7 +40,7 @@ func TestLoadEnvironmentIgnoresDotEnvDiscovery(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, resolved := loadEnvironment("", "", dir)
+	envs, resolved := cli.LoadEnvironment("", "", dir)
 	if envs != nil {
 		t.Fatalf("expected no auto-discovered envs, got %v", envs)
 	}

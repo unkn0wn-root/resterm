@@ -29,6 +29,13 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - No cloud sync, no accounts, no telemetry. Everything stays local.
 - There is no AI integration and there will never be.
 
+## Headless
+
+Resterm ships with a headless engine that can run requests, workflows, and assertions without the TUI.
+
+> [!NOTE]
+> If you want to run Resterm in your CI/CD - Check out runner [resterm-runner](https://github.com/unkn0wn-root/resterm-runner)
+
 ## Screenshot tour
 
 <details>

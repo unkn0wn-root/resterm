@@ -250,8 +250,9 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 			},
 		},
 	}
-	if m.patchGlobals != nil {
-		m.patchGlobals.set("/tmp/other.http", []restfile.PatchProfile{
+	m.registryIndex().Sync(&restfile.Document{
+		Path: "/tmp/other.http",
+		Patches: []restfile.PatchProfile{
 			{
 				Scope:      restfile.PatchScopeGlobal,
 				Name:       "jsonApi",
@@ -262,8 +263,8 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 				Name:       "authProd",
 				Expression: `{headers: {"Authorization": "Bearer abc"}}`,
 			},
-		})
-	}
+		},
+	})
 	req := &restfile.Request{
 		Method:    "GET",
 		URL:       "https://example.com",

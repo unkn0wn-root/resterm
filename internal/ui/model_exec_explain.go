@@ -115,10 +115,6 @@ func (b *explainBuilder) setPrepared(req *restfile.Request) {
 	setExplainPrepared(b.report, req, b.mergedSettings, b.sshPlan, b.k8sPlan)
 }
 
-func (b *explainBuilder) setGRPC(req *restfile.Request) {
-	setExplainGRPC(b.report, req)
-}
-
 func (b *explainBuilder) setHTTP(resp *httpclient.Response) {
 	setExplainHTTP(b.report, resp)
 }

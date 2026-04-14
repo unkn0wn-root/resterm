@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -117,14 +116,4 @@ func (m *Model) runAsserts(
 		return nil, nil
 	}
 	return results, nil
-}
-
-func mergeErr(a, b error) error {
-	if a == nil {
-		return b
-	}
-	if b == nil {
-		return a
-	}
-	return fmt.Errorf("%v; %v", a, b)
 }

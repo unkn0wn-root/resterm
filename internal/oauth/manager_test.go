@@ -264,6 +264,94 @@ func TestManagerMergeCachedConfig(t *testing.T) {
 	}
 }
 
+func TestManagerMergeCachedConfigCacheOnlyInheritsResolvedValues(t *testing.T) {
+	mgr := NewManager(nil)
+	base := Config{
+		TokenURL:  " https://auth.local/token ",
+		AuthURL:   " https://auth.local/auth ",
+		ClientID:  "client",
+		GrantType: " authorization_code ",
+		Header:    " X-Access-Token ",
+		CacheKey:  " github ",
+	}
+	mgr.storeToken("github", base, Token{AccessToken: "cached"})
+
+	merged := mgr.MergeCachedConfig("dev", Config{CacheKey: " github "})
+	if merged.TokenURL != "https://auth.local/token" || merged.AuthURL != "https://auth.local/auth" {
+		t.Fatalf("expected URLs to be normalized and inherited, got %#v", merged)
+	}
+	if merged.GrantType != GrantAuthorizationCode {
+		t.Fatalf("expected inherited grant type, got %q", merged.GrantType)
+	}
+	if merged.Header != "X-Access-Token" {
+		t.Fatalf("expected inherited header, got %q", merged.Header)
+	}
+}
+
+func TestManagerNormalizesDefaultGrantForCacheReuse(t *testing.T) {
+	mgr := NewManager(nil)
+	var calls int
+
+	mgr.SetRequestFunc(
+		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
+			calls++
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body:       []byte(`{"access_token":"cached-token","token_type":"Bearer","expires_in":3600}`),
+				Headers:    http.Header{},
+			}, nil
+		},
+	)
+
+	raw := (Config{
+		TokenURL:     "https://auth.local/token",
+		ClientID:     "client",
+		ClientSecret: "secret",
+	}).Normalized()
+	oldKey := mgr.cacheKey("dev", raw)
+	mgr.Restore([]SnapshotEntry{{
+		Key:    oldKey,
+		Config: raw,
+		Token: Token{
+			AccessToken: "restored-token",
+			TokenType:   "Bearer",
+			Expiry:      time.Now().Add(time.Hour),
+		},
+	}})
+
+	token, ok := mgr.CachedToken("dev", Config{
+		TokenURL:     "https://auth.local/token",
+		ClientID:     "client",
+		ClientSecret: "secret",
+		GrantType:    GrantClientCredentials,
+	})
+	if !ok {
+		t.Fatalf("expected restored token to be found via normalized grant")
+	}
+	if token.AccessToken != "restored-token" {
+		t.Fatalf("unexpected restored token %q", token.AccessToken)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	token, err := mgr.Token(ctx, "dev", Config{
+		TokenURL:     "https://auth.local/token",
+		ClientID:     "client",
+		ClientSecret: "secret",
+		GrantType:    GrantClientCredentials,
+	}, httpclient.Options{})
+	if err != nil {
+		t.Fatalf("token: %v", err)
+	}
+	if token.AccessToken != "restored-token" {
+		t.Fatalf("expected restored token reuse, got %q", token.AccessToken)
+	}
+	if calls != 0 {
+		t.Fatalf("expected restored cache reuse without network calls, got %d", calls)
+	}
+}
+
 func TestManagerRefreshToken(t *testing.T) {
 	mgr := NewManager(nil)
 	var grants []string
@@ -338,6 +426,40 @@ func TestManagerRefreshToken(t *testing.T) {
 
 	if len(grants) != 2 || grants[0] != "client_credentials" || grants[1] != "refresh_token" {
 		t.Fatalf("unexpected grants sequence %v", grants)
+	}
+}
+
+func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
+	mgr := NewManager(nil)
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		AuthURL:   "https://auth.local/auth",
+		ClientID:  "client",
+		GrantType: "authorization_code",
+		CacheKey:  "github",
+		Extra:     map[string]string{"audience": "https://api.local"},
+	}
+	mgr.storeToken("github", cfg, Token{
+		AccessToken:  "expired-token",
+		RefreshToken: "refresh-1",
+		Expiry:       time.Now().Add(-time.Hour),
+		Raw:          map[string]any{"scope": "repo"},
+	})
+
+	snap := mgr.Snapshot()
+	if len(snap) != 1 {
+		t.Fatalf("expected one snapshot entry, got %+v", snap)
+	}
+
+	restored := NewManager(nil)
+	restored.Restore(snap)
+	if !restored.CanHeadless("dev", Config{CacheKey: "github"}) {
+		t.Fatalf("expected restored refresh token to allow headless auth")
+	}
+	merged := restored.MergeCachedConfig("dev", Config{CacheKey: "github"})
+	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL ||
+		merged.ClientID != cfg.ClientID {
+		t.Fatalf("expected restored config to merge, got %#v", merged)
 	}
 }
 

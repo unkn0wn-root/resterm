@@ -197,8 +197,8 @@ func (m *Model) rtsVarsSafe(
 
 	m.mergeFileRuntimeVarsSafe(res, doc, envName)
 
-	if m.globals != nil {
-		if snap := m.globals.snapshot(envName); len(snap) > 0 {
+	if gs := m.globalsStore(); gs != nil {
+		if snap := gs.Snapshot(envName); len(snap) > 0 {
 			for k, e := range snap {
 				if e.Secret {
 					continue

@@ -104,59 +104,6 @@ func TestRecordHTTPHistoryRedactsRuntimeSecretInCustomHeader(t *testing.T) {
 	}
 }
 
-func TestRecordCompareHistoryAppendsEntry(t *testing.T) {
-	tmp := t.TempDir()
-	store := histdb.New(filepath.Join(tmp, "history.db"))
-	model := New(Config{History: store})
-
-	req := &restfile.Request{
-		Method:   "GET",
-		URL:      "https://example.com/data",
-		Metadata: restfile.RequestMetadata{Name: "Sample"},
-	}
-
-	state := &compareState{
-		base:  cloneRequest(req),
-		spec:  &restfile.CompareSpec{Baseline: "dev"},
-		envs:  []string{"dev"},
-		index: 1,
-		label: "Compare sample",
-		results: []compareResult{
-			{
-				Environment: "dev",
-				Response: &httpclient.Response{
-					Status:     "200 OK",
-					StatusCode: 200,
-					Body:       []byte(`{"ok":true}`),
-					Duration:   15 * time.Millisecond,
-				},
-				Request:     cloneRequest(req),
-				RequestText: "GET https://example.com/data\n",
-			},
-		},
-	}
-
-	model.recordCompareHistory(state)
-
-	entries, err := store.Entries()
-	if err != nil {
-		t.Fatalf("entries: %v", err)
-	}
-	if len(entries) != 1 {
-		t.Fatalf("expected 1 entry, got %d", len(entries))
-	}
-	entry := entries[0]
-	if entry.Method != restfile.HistoryMethodCompare {
-		t.Fatalf("expected compare method, got %s", entry.Method)
-	}
-	if entry.Compare == nil || len(entry.Compare.Results) != 1 {
-		t.Fatalf("expected compare metadata, got %#v", entry.Compare)
-	}
-	if entry.Compare.Results[0].Environment != "dev" {
-		t.Fatalf("expected result env dev, got %s", entry.Compare.Results[0].Environment)
-	}
-}
-
 func TestLoadHistorySelectionComparePrefersFailure(t *testing.T) {
 	model := New(Config{})
 	entry := history.Entry{

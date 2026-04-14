@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
@@ -19,20 +20,14 @@ func handleHistorySubcommand(args []string) (bool, error) {
 	if len(args) == 0 || args[0] != "history" {
 		return false, nil
 	}
-	if len(args) == 1 && historyTargetExists() {
-		return true, fmt.Errorf(
-			"history: found file named \"history\" in the current directory; use `resterm -- history` or `resterm ./history` to open it, or pass a subcommand like `resterm history export --out ./history.json`",
+	if len(args) == 1 && cli.HasFileConflict("history") {
+		return true, cli.CommandFileConflict(
+			"resterm",
+			"history",
+			"pass a subcommand like `resterm history export --out ./history.json`",
 		)
 	}
 	return true, runHistory(args[1:])
-}
-
-func historyTargetExists() bool {
-	info, err := os.Stat("history")
-	if err != nil {
-		return false
-	}
-	return !info.IsDir()
 }
 
 func runHistory(args []string) error {
@@ -64,7 +59,7 @@ func runHistory(args []string) error {
 }
 
 func runHistoryExport(args []string) error {
-	fs := newSubcommandFlagSet("history export")
+	fs := cli.NewSubcommandFlagSet("resterm", "history export", os.Stderr)
 	var out string
 	fs.StringVar(&out, "out", "", "Output JSON file path")
 	if err := fs.Parse(args); err != nil {
@@ -98,7 +93,7 @@ func runHistoryExport(args []string) error {
 }
 
 func runHistoryImport(args []string) error {
-	fs := newSubcommandFlagSet("history import")
+	fs := cli.NewSubcommandFlagSet("resterm", "history import", os.Stderr)
 	var in string
 	fs.StringVar(&in, "in", "", "Input JSON file path")
 	if err := fs.Parse(args); err != nil {
@@ -132,7 +127,7 @@ func runHistoryImport(args []string) error {
 }
 
 func runHistoryBackup(args []string) error {
-	fs := newSubcommandFlagSet("history backup")
+	fs := cli.NewSubcommandFlagSet("resterm", "history backup", os.Stderr)
 	var out string
 	fs.StringVar(&out, "out", "", "Output SQLite backup file path")
 	if err := fs.Parse(args); err != nil {
@@ -165,7 +160,7 @@ func runHistoryBackup(args []string) error {
 }
 
 func runHistoryStats(args []string) error {
-	fs := newSubcommandFlagSet("history stats")
+	fs := cli.NewSubcommandFlagSet("resterm", "history stats", os.Stderr)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -206,7 +201,7 @@ func runHistoryStats(args []string) error {
 }
 
 func runHistoryCompact(args []string) error {
-	fs := newSubcommandFlagSet("history compact")
+	fs := cli.NewSubcommandFlagSet("resterm", "history compact", os.Stderr)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
@@ -249,7 +244,7 @@ func runHistoryCompact(args []string) error {
 }
 
 func runHistoryCheck(args []string) error {
-	fs := newSubcommandFlagSet("history check")
+	fs := cli.NewSubcommandFlagSet("resterm", "history check", os.Stderr)
 	var full bool
 	fs.BoolVar(&full, "full", false, "Use full integrity check")
 	if err := fs.Parse(args); err != nil {

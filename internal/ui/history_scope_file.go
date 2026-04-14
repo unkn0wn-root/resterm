@@ -9,7 +9,8 @@ import (
 )
 
 func (m *Model) historyEntriesForFileScope() ([]history.Entry, error) {
-	if m.historyStore == nil {
+	hs := m.historyStore()
+	if hs == nil {
 		return nil, nil
 	}
 	path := strings.TrimSpace(m.historyFilePath())
@@ -27,7 +28,7 @@ func (m *Model) historyEntriesForFileScope() ([]history.Entry, error) {
 	seen := make(map[string]struct{}, history.InitCap)
 	out := make([]history.Entry, 0, history.InitCap)
 	for _, v := range vars {
-		es, err := m.historyStore.ByFile(v)
+		es, err := hs.ByFile(v)
 		if err != nil {
 			return nil, err
 		}
