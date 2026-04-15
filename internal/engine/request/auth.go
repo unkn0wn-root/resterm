@@ -15,8 +15,52 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func (e *Engine) resolveInheritedAuth(doc *restfile.Document, req *restfile.Request) {
-	if req == nil || req.Metadata.Auth != nil || req.Metadata.AuthDisabled {
+const (
+	authTypeCommand = "command"
+	authTypeOAuth2  = "oauth2"
+
+	authParamArgv = "argv"
+
+	errCommandAuthNotInitialized = "command auth support is not initialised"
+	errOAuthNotInitialized       = "oauth support is not initialised"
+	errMissingCommandAuthSpec    = "missing command auth spec"
+	errMissingOAuthSpec          = "missing oauth spec"
+	errOAuthTokenURLRequired     = "@auth oauth2 requires token_url (include it once per cache_key to seed the cache)"
+	errOAuthHeadlessSeedRequired = "headless oauth authorization_code requires a cached or refreshable token; seed it outside CI or use a non-interactive grant"
+
+	minOAuthAuthorizationCodeTimeout = 2 * time.Minute
+)
+
+type oauthConfigField struct {
+	key string
+	set func(*oauth.Config, string)
+}
+
+var oauthConfigFields = []oauthConfigField{
+	{key: "token_url", set: func(cfg *oauth.Config, value string) { cfg.TokenURL = value }},
+	{key: "auth_url", set: func(cfg *oauth.Config, value string) { cfg.AuthURL = value }},
+	{key: "redirect_uri", set: func(cfg *oauth.Config, value string) { cfg.RedirectURL = value }},
+	{key: "client_id", set: func(cfg *oauth.Config, value string) { cfg.ClientID = value }},
+	{key: "client_secret", set: func(cfg *oauth.Config, value string) { cfg.ClientSecret = value }},
+	{key: "scope", set: func(cfg *oauth.Config, value string) { cfg.Scope = value }},
+	{key: "audience", set: func(cfg *oauth.Config, value string) { cfg.Audience = value }},
+	{key: "resource", set: func(cfg *oauth.Config, value string) { cfg.Resource = value }},
+	{key: "username", set: func(cfg *oauth.Config, value string) { cfg.Username = value }},
+	{key: "password", set: func(cfg *oauth.Config, value string) { cfg.Password = value }},
+	{key: "client_auth", set: func(cfg *oauth.Config, value string) { cfg.ClientAuth = value }},
+	{key: "grant", set: func(cfg *oauth.Config, value string) { cfg.GrantType = value }},
+	{key: "header", set: func(cfg *oauth.Config, value string) { cfg.Header = value }},
+	{key: "cache_key", set: func(cfg *oauth.Config, value string) { cfg.CacheKey = value }},
+	{key: "code_verifier", set: func(cfg *oauth.Config, value string) { cfg.CodeVerifier = value }},
+	{
+		key: "code_challenge_method",
+		set: func(cfg *oauth.Config, value string) { cfg.CodeMethod = value },
+	},
+	{key: "state", set: func(cfg *oauth.Config, value string) { cfg.State = value }},
+}
+
+func (e *Engine) ResolveInheritedAuth(doc *restfile.Document, req *restfile.Request) {
+	if req == nil || requestAuth(req) != nil || req.Metadata.AuthDisabled {
 		return
 	}
 	if pf, ok := e.registryIndex().DefaultAuth(doc); ok {
@@ -24,7 +68,7 @@ func (e *Engine) resolveInheritedAuth(doc *restfile.Document, req *restfile.Requ
 	}
 }
 
-func commandAuthSecrets(res authcmd.Result) []string {
+func CommandAuthSecrets(res authcmd.Result) []string {
 	tok := strings.TrimSpace(res.Token)
 	val := strings.TrimSpace(res.Value)
 	switch {
@@ -41,7 +85,7 @@ func commandAuthSecrets(res authcmd.Result) []string {
 	}
 }
 
-func injectedAuthSecrets(
+func InjectedAuthSecrets(
 	auth *restfile.AuthSpec,
 	before *restfile.Request,
 	after *restfile.Request,
@@ -49,12 +93,7 @@ func injectedAuthSecrets(
 	if auth == nil || after == nil {
 		return nil
 	}
-	hdr := "Authorization"
-	if strings.EqualFold(strings.TrimSpace(auth.Type), "oauth2") {
-		if name := strings.TrimSpace(auth.Params["header"]); name != "" {
-			hdr = name
-		}
-	}
+	hdr := injectedAuthHeader(auth)
 	beforeVal := headerValue(reqHeaders(before), hdr)
 	afterVal := headerValue(reqHeaders(after), hdr)
 	if strings.TrimSpace(afterVal) == "" || afterVal == beforeVal {
@@ -80,6 +119,65 @@ func reqHeaders(req *restfile.Request) http.Header {
 	return req.Headers
 }
 
+func requestAuth(req *restfile.Request) *restfile.AuthSpec {
+	if req == nil {
+		return nil
+	}
+	return req.Metadata.Auth
+}
+
+func requestAuthOfType(req *restfile.Request, kind string) *restfile.AuthSpec {
+	auth := requestAuth(req)
+	if authKind(auth) != kind {
+		return nil
+	}
+	return auth
+}
+
+func authKind(auth *restfile.AuthSpec) string {
+	if auth == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(auth.Type))
+}
+
+func injectedAuthHeader(auth *restfile.AuthSpec) string {
+	if authKind(auth) != authTypeOAuth2 {
+		return oauth.DefaultHeader
+	}
+	if name := strings.TrimSpace(auth.Params["header"]); name != "" {
+		return name
+	}
+	return oauth.DefaultHeader
+}
+
+func headerPresent(h http.Header, name string) bool {
+	return h != nil && h.Get(name) != ""
+}
+
+func requestHeaderPresent(req *restfile.Request, name string) bool {
+	return headerPresent(reqHeaders(req), name)
+}
+
+func ensureReqHeaders(req *restfile.Request) http.Header {
+	if req == nil {
+		return nil
+	}
+	if req.Headers == nil {
+		req.Headers = make(http.Header)
+	}
+	return req.Headers
+}
+
+func setRequestHeaderIfMissing(req *restfile.Request, name, value string) bool {
+	headers := ensureReqHeaders(req)
+	if headers == nil || headerPresent(headers, name) {
+		return false
+	}
+	headers.Set(name, value)
+	return true
+}
+
 func headerValue(h http.Header, name string) string {
 	if h == nil {
 		return ""
@@ -87,7 +185,29 @@ func headerValue(h http.Header, name string) string {
 	return strings.TrimSpace(h.Get(name))
 }
 
-func (e *Engine) ensureCommandAuth(
+func (e *Engine) authCmdManager() (*authcmd.Manager, error) {
+	if e == nil || e.rt == nil {
+		return nil, errdef.New(errdef.CodeHTTP, errCommandAuthNotInitialized)
+	}
+	ac := e.rt.AuthCmd()
+	if ac == nil {
+		return nil, errdef.New(errdef.CodeHTTP, errCommandAuthNotInitialized)
+	}
+	return ac, nil
+}
+
+func (e *Engine) oauthManager() (*oauth.Manager, error) {
+	if e == nil || e.rt == nil {
+		return nil, errdef.New(errdef.CodeHTTP, errOAuthNotInitialized)
+	}
+	oa := e.rt.OAuth()
+	if oa == nil {
+		return nil, errdef.New(errdef.CodeHTTP, errOAuthNotInitialized)
+	}
+	return oa, nil
+}
+
+func (e *Engine) EnsureCommandAuth(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
@@ -95,64 +215,52 @@ func (e *Engine) ensureCommandAuth(
 	env string,
 	timeout time.Duration,
 ) (authcmd.Result, error) {
-	if req == nil || req.Metadata.Auth == nil {
+	auth := requestAuthOfType(req, authTypeCommand)
+	if auth == nil {
 		return authcmd.Result{}, nil
 	}
-	if !strings.EqualFold(req.Metadata.Auth.Type, "command") {
-		return authcmd.Result{}, nil
-	}
-	prep, err := e.prepareCommandAuth(doc, req.Metadata.Auth, res, env, timeout)
+	prep, err := e.PrepareCommandAuth(doc, auth, res, env, timeout)
 	if err != nil {
 		return authcmd.Result{}, err
 	}
 	hdr := prep.HeaderName()
-	if req.Headers != nil && req.Headers.Get(hdr) != "" {
+	if requestHeaderPresent(req, hdr) {
 		return authcmd.Result{}, nil
 	}
 
-	ac := e.rt.AuthCmd()
-	if ac == nil {
-		return authcmd.Result{}, errdef.New(
-			errdef.CodeHTTP,
-			"command auth support is not initialised",
-		)
+	ac, err := e.authCmdManager()
+	if err != nil {
+		return authcmd.Result{}, err
 	}
 	out, err := ac.ResolvePrepared(ctx, prep)
 	if err != nil {
 		return authcmd.Result{}, errdef.Wrap(errdef.CodeHTTP, err, "resolve command auth")
 	}
-	if req.Headers == nil {
-		req.Headers = make(http.Header)
-	}
-	if req.Headers.Get(out.Header) != "" {
+	if !setRequestHeaderIfMissing(req, out.Header, out.Value) {
 		return authcmd.Result{}, nil
 	}
-	req.Headers.Set(out.Header, out.Value)
 	return out, nil
 }
 
-func (e *Engine) prepareCommandAuth(
+func (e *Engine) PrepareCommandAuth(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
 	env string,
 	timeout time.Duration,
 ) (authcmd.Prepared, error) {
-	ac := e.rt.AuthCmd()
-	if ac == nil {
-		return authcmd.Prepared{}, errdef.New(
-			errdef.CodeHTTP,
-			"command auth support is not initialised",
-		)
+	ac, err := e.authCmdManager()
+	if err != nil {
+		return authcmd.Prepared{}, err
 	}
-	cfg, err := e.buildCommandAuthConfig(doc, auth, res, timeout)
+	cfg, err := e.BuildCommandAuthConfig(doc, auth, res, timeout)
 	if err != nil {
 		return authcmd.Prepared{}, err
 	}
 	return ac.Prepare(e.envName(env), cfg)
 }
 
-func (e *Engine) ensureOAuth(
+func (e *Engine) EnsureOAuth(
 	ctx context.Context,
 	req *restfile.Request,
 	res *vars.Resolver,
@@ -160,44 +268,32 @@ func (e *Engine) ensureOAuth(
 	env string,
 	timeout time.Duration,
 ) error {
-	if req == nil || req.Metadata.Auth == nil {
+	auth := requestAuthOfType(req, authTypeOAuth2)
+	if auth == nil {
 		return nil
 	}
-	if !strings.EqualFold(req.Metadata.Auth.Type, "oauth2") {
-		return nil
+	oa, err := e.oauthManager()
+	if err != nil {
+		return err
 	}
-	oa := e.rt.OAuth()
-	if oa == nil {
-		return errdef.New(errdef.CodeHTTP, "oauth support is not initialised")
-	}
-	cfg, err := e.buildOAuthConfig(req.Metadata.Auth, res)
+	cfg, err := e.BuildOAuthConfig(auth, res)
 	if err != nil {
 		return err
 	}
 	env = e.envName(env)
 	cfg = oa.MergeCachedConfig(env, cfg)
 	if cfg.TokenURL == "" {
-		return errdef.New(
-			errdef.CodeHTTP,
-			"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
-		)
+		return errdef.New(errdef.CodeHTTP, errOAuthTokenURLRequired)
 	}
-	grant := cfg.GrantType
 	hdr := cfg.Header
-	if req.Headers != nil && req.Headers.Get(hdr) != "" {
+	if requestHeaderPresent(req, hdr) {
 		return nil
 	}
 	if e.oauthNeedsHeadlessSeed(oa, env, cfg) {
-		return errdef.New(
-			errdef.CodeHTTP,
-			"headless oauth authorization_code requires a cached or refreshable token; seed it outside CI or use a non-interactive grant",
-		)
+		return errdef.New(errdef.CodeHTTP, errOAuthHeadlessSeedRequired)
 	}
 
-	tmo := timeout
-	if grant == "authorization_code" && tmo < 2*time.Minute {
-		tmo = 2 * time.Minute
-	}
+	tmo := oauthTimeout(cfg.GrantType, timeout)
 	ctx, cancel := context.WithTimeout(ctx, tmo)
 	defer cancel()
 
@@ -205,22 +301,7 @@ func (e *Engine) ensureOAuth(
 	if err != nil {
 		return errdef.Wrap(errdef.CodeHTTP, err, "fetch oauth token")
 	}
-	if req.Headers == nil {
-		req.Headers = make(http.Header)
-	}
-	if req.Headers.Get(hdr) != "" {
-		return nil
-	}
-
-	val := tok.AccessToken
-	if strings.EqualFold(hdr, "authorization") {
-		typ := strings.TrimSpace(tok.TokenType)
-		if typ == "" {
-			typ = "Bearer"
-		}
-		val = strings.TrimSpace(typ) + " " + tok.AccessToken
-	}
-	req.Headers.Set(hdr, val)
+	setRequestHeaderIfMissing(req, hdr, oauthHeaderValue(hdr, tok))
 	return nil
 }
 
@@ -238,7 +319,7 @@ func (e *Engine) oauthNeedsHeadlessSeed(oa *oauth.Manager, env string, cfg oauth
 	return !oa.CanHeadless(env, cfg)
 }
 
-func (e *Engine) buildCommandAuthConfig(
+func (e *Engine) BuildCommandAuthConfig(
 	doc *restfile.Document,
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
@@ -246,26 +327,11 @@ func (e *Engine) buildCommandAuthConfig(
 ) (authcmd.Config, error) {
 	cfg := authcmd.Config{}
 	if auth == nil {
-		return cfg, errdef.New(errdef.CodeHTTP, "missing command auth spec")
+		return cfg, errdef.New(errdef.CodeHTTP, errMissingCommandAuthSpec)
 	}
-	pm := make(map[string]string, len(auth.Params))
-	for k, raw := range auth.Params {
-		k = strings.ToLower(strings.TrimSpace(k))
-		if k == "" {
-			continue
-		}
-		val := strings.TrimSpace(raw)
-		if val == "" {
-			continue
-		}
-		if res != nil && k != "argv" {
-			out, err := res.ExpandTemplates(val)
-			if err != nil {
-				return cfg, errdef.Wrap(errdef.CodeHTTP, err, "expand command auth param %s", k)
-			}
-			val = strings.TrimSpace(out)
-		}
-		pm[k] = val
+	pm, err := commandAuthParams(auth, res)
+	if err != nil {
+		return cfg, err
 	}
 
 	dir := ""
@@ -276,130 +342,153 @@ func (e *Engine) buildCommandAuthConfig(
 	if err != nil {
 		return out, err
 	}
-	if res != nil {
-		for i, arg := range out.Argv {
-			val, err := res.ExpandTemplates(arg)
-			if err != nil {
-				return out, errdef.Wrap(errdef.CodeHTTP, err, "expand command auth argv[%d]", i)
-			}
-			out.Argv[i] = val
-		}
+	if err := expandCommandAuthArgv(out.Argv, res); err != nil {
+		return out, err
 	}
 	return out.WithBaseTimeout(timeout), nil
 }
 
-func (e *Engine) buildOAuthConfig(
+func (e *Engine) BuildOAuthConfig(
 	auth *restfile.AuthSpec,
 	res *vars.Resolver,
 ) (oauth.Config, error) {
-	cfg := oauth.Config{Extra: make(map[string]string)}
+	cfg := oauth.Config{}
 	if auth == nil {
-		return cfg, errdef.New(errdef.CodeHTTP, "missing oauth spec")
+		return cfg, errdef.New(errdef.CodeHTTP, errMissingOAuthSpec)
 	}
-	expand := func(key string) (string, error) {
-		val := auth.Params[key]
-		if strings.TrimSpace(val) == "" {
-			return "", nil
-		}
-		if res == nil {
-			return strings.TrimSpace(val), nil
-		}
-		out, err := res.ExpandTemplates(val)
-		if err != nil {
-			return "", errdef.Wrap(errdef.CodeHTTP, err, "expand oauth param %s", key)
-		}
-		return strings.TrimSpace(out), nil
-	}
-
-	var err error
-	if cfg.TokenURL, err = expand("token_url"); err != nil {
-		return cfg, err
-	}
-	if cfg.AuthURL, err = expand("auth_url"); err != nil {
-		return cfg, err
-	}
-	if cfg.RedirectURL, err = expand("redirect_uri"); err != nil {
-		return cfg, err
-	}
-	if cfg.ClientID, err = expand("client_id"); err != nil {
-		return cfg, err
-	}
-	if cfg.ClientSecret, err = expand("client_secret"); err != nil {
-		return cfg, err
-	}
-	if cfg.Scope, err = expand("scope"); err != nil {
-		return cfg, err
-	}
-	if cfg.Audience, err = expand("audience"); err != nil {
-		return cfg, err
-	}
-	if cfg.Resource, err = expand("resource"); err != nil {
-		return cfg, err
-	}
-	if cfg.Username, err = expand("username"); err != nil {
-		return cfg, err
-	}
-	if cfg.Password, err = expand("password"); err != nil {
-		return cfg, err
-	}
-	if cfg.ClientAuth, err = expand("client_auth"); err != nil {
-		return cfg, err
-	}
-	if cfg.GrantType, err = expand("grant"); err != nil {
-		return cfg, err
-	}
-	if cfg.Header, err = expand("header"); err != nil {
-		return cfg, err
-	}
-	if cfg.CacheKey, err = expand("cache_key"); err != nil {
-		return cfg, err
-	}
-	if cfg.CodeVerifier, err = expand("code_verifier"); err != nil {
-		return cfg, err
-	}
-	if cfg.CodeMethod, err = expand("code_challenge_method"); err != nil {
-		return cfg, err
-	}
-	if cfg.State, err = expand("state"); err != nil {
-		return cfg, err
-	}
-
-	known := map[string]struct{}{
-		"token_url":             {},
-		"auth_url":              {},
-		"redirect_uri":          {},
-		"client_id":             {},
-		"client_secret":         {},
-		"scope":                 {},
-		"audience":              {},
-		"resource":              {},
-		"username":              {},
-		"password":              {},
-		"client_auth":           {},
-		"grant":                 {},
-		"header":                {},
-		"cache_key":             {},
-		"code_verifier":         {},
-		"code_challenge_method": {},
-		"state":                 {},
-	}
-	for k, raw := range auth.Params {
-		if _, ok := known[strings.ToLower(k)]; ok {
-			continue
-		}
-		if strings.TrimSpace(raw) == "" {
-			continue
-		}
-		val, err := expand(k)
+	for _, field := range oauthConfigFields {
+		value, err := expandAuthParam(res, authTypeOAuth2, field.key, auth.Params[field.key])
 		if err != nil {
 			return cfg, err
 		}
-		if val != "" {
-			cfg.Extra[strings.ToLower(strings.ReplaceAll(k, "-", "_"))] = val
+		field.set(&cfg, value)
+	}
+	extra, err := oauthExtraParams(auth, res)
+	if err != nil {
+		return cfg, err
+	}
+	cfg.Extra = extra
+	return cfg.Normalized(), nil
+}
+
+func (e *Engine) ResolveOAuthConfig(
+	auth *restfile.AuthSpec,
+	res *vars.Resolver,
+	env string,
+) (oauth.Config, error) {
+	oa, err := e.oauthManager()
+	if err != nil {
+		return oauth.Config{}, err
+	}
+	cfg, err := e.BuildOAuthConfig(auth, res)
+	if err != nil {
+		return oauth.Config{}, err
+	}
+	return oa.MergeCachedConfig(e.envName(env), cfg), nil
+}
+
+func commandAuthParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]string, error) {
+	if auth == nil || len(auth.Params) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string, len(auth.Params))
+	for rawKey, rawValue := range auth.Params {
+		key := strings.ToLower(strings.TrimSpace(rawKey))
+		if key == "" {
+			continue
+		}
+
+		value := strings.TrimSpace(rawValue)
+		if value == "" {
+			continue
+		}
+		if key != authParamArgv {
+			var err error
+			value, err = expandAuthParam(res, authTypeCommand, key, value)
+			if err != nil {
+				return nil, err
+			}
+		}
+		out[key] = value
+	}
+	return out, nil
+}
+
+func expandCommandAuthArgv(argv []string, res *vars.Resolver) error {
+	if res == nil {
+		return nil
+	}
+	for i, arg := range argv {
+		value, err := res.ExpandTemplates(arg)
+		if err != nil {
+			return errdef.Wrap(errdef.CodeHTTP, err, "expand command auth argv[%d]", i)
+		}
+		argv[i] = value
+	}
+	return nil
+}
+
+func expandAuthParam(res *vars.Resolver, scope, key, raw string) (string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return "", nil
+	}
+	if res == nil {
+		return strings.TrimSpace(raw), nil
+	}
+	value, err := res.ExpandTemplates(raw)
+	if err != nil {
+		return "", errdef.Wrap(errdef.CodeHTTP, err, "expand %s param %s", scope, key)
+	}
+	return strings.TrimSpace(value), nil
+}
+
+func oauthExtraParams(auth *restfile.AuthSpec, res *vars.Resolver) (map[string]string, error) {
+	if auth == nil || len(auth.Params) == 0 {
+		return nil, nil
+	}
+	out := make(map[string]string)
+	for rawKey, rawValue := range auth.Params {
+		if isKnownOAuthParam(strings.ToLower(rawKey)) || strings.TrimSpace(rawValue) == "" {
+			continue
+		}
+		value, err := expandAuthParam(res, authTypeOAuth2, rawKey, rawValue)
+		if err != nil {
+			return nil, err
+		}
+		if value == "" {
+			continue
+		}
+		out[strings.ToLower(strings.ReplaceAll(rawKey, "-", "_"))] = value
+	}
+	if len(out) == 0 {
+		return nil, nil
+	}
+	return out, nil
+}
+
+func isKnownOAuthParam(key string) bool {
+	for _, field := range oauthConfigFields {
+		if field.key == key {
+			return true
 		}
 	}
-	if len(cfg.Extra) == 0 {
-		cfg.Extra = nil
+	return false
+}
+
+func oauthTimeout(grant string, timeout time.Duration) time.Duration {
+	if grant == oauth.GrantAuthorizationCode && timeout < minOAuthAuthorizationCodeTimeout {
+		return minOAuthAuthorizationCodeTimeout
 	}
-	return cfg.Normalized(), nil
+	return timeout
+}
+
+func oauthHeaderValue(header string, tok oauth.Token) string {
+	if !strings.EqualFold(header, oauth.DefaultHeader) {
+		return tok.AccessToken
+	}
+	typ := strings.TrimSpace(tok.TokenType)
+	if typ == "" {
+		typ = "Bearer"
+	}
+	return strings.TrimSpace(typ) + " " + tok.AccessToken
 }

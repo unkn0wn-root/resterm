@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -384,9 +385,9 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 		return nil
 	}
 
-	spec := buildConfigCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase)
+	spec := core.BuildCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase)
 	if spec == nil && req.Metadata.Compare != nil {
-		spec = cloneCompareSpec(req.Metadata.Compare)
+		spec = core.CloneCompareSpec(req.Metadata.Compare)
 	}
 	if spec == nil {
 		m.setStatusMessage(statusMsg{
