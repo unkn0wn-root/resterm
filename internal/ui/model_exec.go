@@ -31,7 +31,7 @@ func (m *Model) cancelStatus() string {
 		return "Canceling profile run..."
 	}
 	if state := m.workflowRun; state != nil {
-		name := strings.TrimSpace(state.workflow.Name)
+		name := strings.TrimSpace(workflowRunSubject(state))
 		if name == "" {
 			name = "workflow"
 		}
