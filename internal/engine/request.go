@@ -46,9 +46,6 @@ func ReqTitle(req *restfile.Request) string {
 	name := trim(req.Metadata.Name)
 	if name == "" {
 		name = ReqTarget(req)
-		if len(name) > 60 {
-			name = name[:57] + "..."
-		}
 	}
 	return ReqMethod(req) + " " + name
 }
@@ -95,15 +92,6 @@ func NormReq(req *restfile.Request) *restfile.Request {
 	return req
 }
 
-func NormWf(wf restfile.Workflow) restfile.Workflow {
-	wf.Name = trim(wf.Name)
-	wf.Tags = Tags(wf.Tags)
-	for i := range wf.Steps {
-		normWfStep(&wf.Steps[i])
-	}
-	return wf
-}
-
 func normBody(body *restfile.BodySource) {
 	body.FilePath = trim(body.FilePath)
 	body.MimeType = trim(body.MimeType)
@@ -140,11 +128,6 @@ func normWS(ws *restfile.WebSocketRequest) {
 	for i := range ws.Steps {
 		ws.Steps[i].File = trim(ws.Steps[i].File)
 	}
-}
-
-func normWfStep(step *restfile.WorkflowStep) {
-	step.Name = trim(step.Name)
-	step.Using = trim(step.Using)
 }
 
 func trim(s string) string {
