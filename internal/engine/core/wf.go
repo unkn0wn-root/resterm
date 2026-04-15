@@ -68,11 +68,12 @@ func PrepareWorkflow(
 	if doc == nil {
 		return nil, fmt.Errorf("no document loaded")
 	}
+	wf = engine.NormWf(wf)
 	steps, reqs, err := prepareWorkflow(doc, wf)
 	if err != nil {
 		return nil, err
 	}
-	run = normRun(run, ModeWorkflow, strings.TrimSpace(wf.Name), run.Env)
+	run = normRun(run, ModeWorkflow, wf.Name, run.Env)
 	out := &WorkflowPlan{
 		Run:      run,
 		Doc:      doc,
@@ -98,7 +99,7 @@ func PrepareForEach(
 	if doc == nil || req == nil {
 		return nil, fmt.Errorf("no request loaded")
 	}
-	name := requestBaseTitle(req)
+	name := engine.ReqTitle(req)
 	step := restfile.WorkflowStep{
 		Kind:      restfile.WorkflowStepKindRequest,
 		Name:      name,
@@ -1243,7 +1244,7 @@ func loopKeys(wfVars bool, name string) (string, string) {
 }
 
 func stepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
-	lbl := strings.TrimSpace(step.Name)
+	lbl := step.Name
 	if lbl == "" {
 		switch step.Kind {
 		case restfile.WorkflowStepKindIf:
@@ -1251,12 +1252,12 @@ func stepLabel(step restfile.WorkflowStep, branch string, iter, total int) strin
 		case restfile.WorkflowStepKindSwitch:
 			lbl = "@switch"
 		case restfile.WorkflowStepKindForEach:
-			lbl = strings.TrimSpace(step.Using)
+			lbl = step.Using
 			if lbl == "" {
 				lbl = "@for-each"
 			}
 		default:
-			lbl = strings.TrimSpace(step.Using)
+			lbl = step.Using
 		}
 	}
 	if lbl == "" {
@@ -1280,61 +1281,19 @@ func stepMeta(
 	total int,
 ) StepMeta {
 	step = stepOrDefault(step)
-	target := strings.TrimSpace(step.Using)
+	target := step.Using
 	if req != nil {
-		target = requestTarget(req)
+		target = engine.ReqTarget(req)
 	}
 	return StepMeta{
 		Index:  i,
-		Name:   strings.TrimSpace(step.Name),
+		Name:   step.Name,
 		Kind:   step.Kind,
 		Target: target,
 		Branch: branch,
 		Iter:   iter,
 		Total:  total,
 	}
-}
-
-func requestTarget(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	if req.GRPC != nil {
-		if m := strings.TrimSpace(req.GRPC.FullMethod); m != "" {
-			return m
-		}
-		if t := strings.TrimSpace(req.GRPC.Target); t != "" {
-			return t
-		}
-	}
-	return strings.TrimSpace(req.URL)
-}
-
-func requestBaseTitle(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	name := strings.TrimSpace(req.Metadata.Name)
-	if name == "" {
-		name = requestTarget(req)
-		if len(name) > 60 {
-			name = name[:57] + "..."
-		}
-	}
-	method := "REQ"
-	switch {
-	case req.GRPC != nil:
-		method = "GRPC"
-	case req.WebSocket != nil:
-		method = "WS"
-	case req.SSE != nil:
-		method = "SSE"
-	default:
-		if m := strings.ToUpper(strings.TrimSpace(req.Method)); m != "" {
-			method = m
-		}
-	}
-	return fmt.Sprintf("%s %s", method, name)
 }
 
 func cloneStrMap(src map[string]string) map[string]string {

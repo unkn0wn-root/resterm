@@ -229,9 +229,9 @@ func newExplainReport(req *restfile.Request, env string) *xplain.Report {
 	if req == nil {
 		return rep
 	}
-	rep.Name = strings.TrimSpace(req.Metadata.Name)
-	rep.Method = strings.TrimSpace(req.Method)
-	rep.URL = strings.TrimSpace(req.URL)
+	rep.Name = req.Metadata.Name
+	rep.Method = req.Method
+	rep.URL = req.URL
 	return rep
 }
 

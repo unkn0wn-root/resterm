@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
@@ -90,7 +91,7 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 		}
 		cp.WebSocket = &v
 	}
-	return &cp
+	return engine.NormReq(&cp)
 }
 
 func cloneHeader(h http.Header) http.Header {
@@ -321,33 +322,6 @@ func renderWebSocketStepLine(st restfile.WebSocketStep) string {
 	default:
 		return ""
 	}
-}
-
-func requestIdentifier(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	if strings.TrimSpace(req.Metadata.Name) != "" {
-		return req.Metadata.Name
-	}
-	return strings.TrimSpace(req.URL)
-}
-
-func normalizedTags(tags []string) []string {
-	if len(tags) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		tag = strings.TrimSpace(tag)
-		if tag != "" {
-			out = append(out, tag)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 func copyBytes(src []byte) []byte {

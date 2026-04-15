@@ -44,7 +44,7 @@ func PrepareCompare(
 	if spec == nil || len(spec.Environments) < 2 {
 		return nil, fmt.Errorf("compare requires at least two environments")
 	}
-	run = normRun(run, ModeCompare, requestBaseTitle(req), run.Env)
+	run = normRun(run, ModeCompare, engine.ReqTitle(req), run.Env)
 	out := &ComparePlan{
 		Run:     run,
 		Doc:     doc,

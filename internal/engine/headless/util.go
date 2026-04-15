@@ -178,84 +178,9 @@ func copyBytes(src []byte) []byte {
 	return append([]byte(nil), src...)
 }
 
-func requestTarget(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	if req.GRPC != nil {
-		if m := strings.TrimSpace(req.GRPC.FullMethod); m != "" {
-			return m
-		}
-		if t := strings.TrimSpace(req.GRPC.Target); t != "" {
-			return t
-		}
-	}
-	return strings.TrimSpace(req.URL)
-}
-
-func requestMethod(req *restfile.Request) string {
-	if req == nil {
-		return "REQ"
-	}
-	if req.GRPC != nil {
-		return "GRPC"
-	}
-	if req.WebSocket != nil {
-		return "WS"
-	}
-	if req.SSE != nil {
-		return "SSE"
-	}
-	if m := strings.ToUpper(strings.TrimSpace(req.Method)); m != "" {
-		return m
-	}
-	return "REQ"
-}
-
-func requestBaseTitle(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	name := strings.TrimSpace(req.Metadata.Name)
-	if name == "" {
-		name = requestTarget(req)
-		if len(name) > 60 {
-			name = name[:57] + "..."
-		}
-	}
-	return fmt.Sprintf("%s %s", requestMethod(req), name)
-}
-
-func requestIdentifier(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	if name := strings.TrimSpace(req.Metadata.Name); name != "" {
-		return name
-	}
-	return strings.TrimSpace(req.URL)
-}
-
-func normalizedTags(tags []string) []string {
-	if len(tags) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(tags))
-	for _, tag := range tags {
-		tag = strings.TrimSpace(tag)
-		if tag != "" {
-			out = append(out, tag)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
 func workflowLabel(step restfile.WorkflowStep) string {
-	if name := strings.TrimSpace(step.Name); name != "" {
-		return name
+	if step.Name != "" {
+		return step.Name
 	}
 	switch step.Kind {
 	case restfile.WorkflowStepKindIf:
@@ -263,12 +188,12 @@ func workflowLabel(step restfile.WorkflowStep) string {
 	case restfile.WorkflowStepKindSwitch:
 		return "@switch"
 	case restfile.WorkflowStepKindForEach:
-		if u := strings.TrimSpace(step.Using); u != "" {
-			return u
+		if step.Using != "" {
+			return step.Using
 		}
 		return "@for-each"
 	default:
-		return strings.TrimSpace(step.Using)
+		return step.Using
 	}
 }
 
@@ -301,7 +226,7 @@ func workflowStatus(res wfStepRes) string {
 
 func workflowLine(i int, res wfStepRes) string {
 	line := fmt.Sprintf("%d. %s %s", i+1, res.name, workflowStatus(res))
-	if strings.TrimSpace(res.status) != "" {
+	if res.status != "" {
 		line += fmt.Sprintf(" (%s)", res.status)
 	}
 	if res.dur > 0 {
@@ -343,11 +268,11 @@ func makeStepRes(
 	}
 	switch {
 	case res.execReq != nil:
-		res.method = requestMethod(res.execReq)
-		res.target = requestTarget(res.execReq)
+		res.method = engine.ReqMethod(res.execReq)
+		res.target = engine.ReqTarget(res.execReq)
 	case req != nil:
-		res.method = requestMethod(req)
-		res.target = requestTarget(req)
+		res.method = engine.ReqMethod(req)
+		res.target = engine.ReqTarget(req)
 	}
 	return evaluateStep(res)
 }
@@ -691,11 +616,4 @@ func buildProfileResults(st *profileState, stats analysis.LatencyStats) *history
 		}
 	}
 	return out
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }

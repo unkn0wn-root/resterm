@@ -124,7 +124,7 @@ func compareBase(spec *restfile.CompareSpec) string {
 	if spec == nil {
 		return ""
 	}
-	return strings.TrimSpace(spec.Baseline)
+	return spec.Baseline
 }
 
 func compareRunSummary(
@@ -134,13 +134,13 @@ func compareRunSummary(
 	canceled bool,
 ) string {
 	lbl := "Compare"
-	if title := strings.TrimSpace(requestBaseTitle(req)); title != "" {
+	if title := engine.ReqTitle(req); title != "" {
 		lbl = "Compare " + title
 	}
 	parts := make([]string, 0, len(rows))
 	for _, row := range rows {
 		name := row.Environment
-		if spec != nil && strings.EqualFold(strings.TrimSpace(spec.Baseline), name) {
+		if spec != nil && strings.EqualFold(spec.Baseline, name) {
 			name += "*"
 		}
 		switch {
@@ -198,7 +198,7 @@ func (e *Engine) recordCompare(
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
-		RequestName: requestIdentifier(req),
+		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      restfile.HistoryMethodCompare,
 		URL:         req.URL,
@@ -210,7 +210,7 @@ func (e *Engine) recordCompare(
 			!req.Metadata.AllowSensitiveHeaders,
 		),
 		Description: strings.TrimSpace(req.Metadata.Description),
-		Tags:        normalizedTags(req.Metadata.Tags),
+		Tags:        engine.Tags(req.Metadata.Tags),
 		Compare: &history.CompareEntry{
 			Baseline: out.Baseline,
 			Results:  make([]history.CompareResult, 0, len(out.Rows)),

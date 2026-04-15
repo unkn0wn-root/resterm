@@ -180,7 +180,7 @@ func profileReport(st *profileState, stats analysis.LatencyStats) string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "Profile: %s\n", requestBaseTitle(st.req))
+	fmt.Fprintf(&b, "Profile: %s\n", engine.ReqTitle(st.req))
 	fmt.Fprintf(&b, "Started: %s\n", st.start.Format(time.RFC3339))
 	fmt.Fprintf(&b, "Ended: %s\n", st.end.Format(time.RFC3339))
 	fmt.Fprintf(
@@ -243,7 +243,7 @@ func (e *Engine) recordProfile(
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
 		Environment: st.env,
-		RequestName: requestIdentifier(st.req),
+		RequestName: engine.ReqID(st.req),
 		FilePath:    e.filePath(doc),
 		Method:      st.req.Method,
 		URL:         st.req.URL,
@@ -257,7 +257,7 @@ func (e *Engine) recordProfile(
 			!st.req.Metadata.AllowSensitiveHeaders,
 		),
 		Description:    strings.TrimSpace(st.req.Metadata.Description),
-		Tags:           normalizedTags(st.req.Metadata.Tags),
+		Tags:           engine.Tags(st.req.Metadata.Tags),
 		ProfileResults: cloneProfileResults(out.Results),
 	}
 	_ = hs.Append(ent)
