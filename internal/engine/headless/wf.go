@@ -65,7 +65,7 @@ func newWfCollector(pl *core.WorkflowPlan) *wfCollector {
 	st := &wfState{
 		doc:  pl.Doc,
 		wf:   pl.Workflow,
-		env:  strings.TrimSpace(pl.Run.Env),
+		env:  pl.Run.Env,
 		kind: wfKindForPlan(pl.Run.Mode),
 		res:  make([]wfStepRes, 0, len(pl.Steps)),
 	}
@@ -156,11 +156,11 @@ func manualStepRes(
 	}
 	switch {
 	case out.execReq != nil:
-		out.method = requestMethod(out.execReq)
-		out.target = requestTarget(out.execReq)
+		out.method = engine.ReqMethod(out.execReq)
+		out.target = engine.ReqTarget(out.execReq)
 	case req != nil:
-		out.method = requestMethod(req)
-		out.target = requestTarget(req)
+		out.method = engine.ReqMethod(req)
+		out.target = engine.ReqTarget(req)
 	}
 	if out.skip {
 		out.msg = strings.TrimSpace(res.SkipReason)
@@ -177,7 +177,7 @@ func manualStepRes(
 func (e *Engine) buildWorkflowResult(st *wfState) *engine.WorkflowResult {
 	out := &engine.WorkflowResult{
 		Kind:        string(st.kind),
-		Name:        strings.TrimSpace(st.wf.Name),
+		Name:        st.wf.Name,
 		Environment: st.env,
 		Summary:     workflowSummary(st),
 		Report:      workflowReport(st),
@@ -215,7 +215,7 @@ func workflowSummary(st *wfState) string {
 	if st.kind == wfKindForEach {
 		title = "For-each"
 	}
-	if name := strings.TrimSpace(st.wf.Name); name != "" {
+	if name := st.wf.Name; name != "" {
 		title += " " + name
 	}
 	if st.canceled {
@@ -272,7 +272,7 @@ func workflowReport(st *wfState) string {
 	if st.kind == wfKindForEach {
 		label = "For-each"
 	}
-	name := strings.TrimSpace(st.wf.Name)
+	name := st.wf.Name
 	if name == "" {
 		name = label
 	}
@@ -315,7 +315,7 @@ func (e *Engine) recordWorkflow(st *wfState, out *engine.WorkflowResult) {
 		BodySnippet: out.Report,
 		RequestText: redactText(workflowDefinition(st), e.secretValues(st.doc, nil, st.env), true),
 		Description: strings.TrimSpace(st.wf.Description),
-		Tags:        normalizedTags(st.wf.Tags),
+		Tags:        engine.Tags(st.wf.Tags),
 	}
 	_ = hs.Append(ent)
 }
@@ -325,7 +325,7 @@ func workflowDefinition(st *wfState) string {
 		return ""
 	}
 	var b strings.Builder
-	name := strings.TrimSpace(st.wf.Name)
+	name := st.wf.Name
 	if name == "" {
 		name = fmt.Sprintf("workflow-%d", st.start.Unix())
 	}
@@ -371,7 +371,7 @@ func writeWorkflowStep(
 			fmt.Fprintf(b, "# @for-each %s as %s\n", step.ForEach.Expr, step.ForEach.Var)
 		}
 		b.WriteString("# @step ")
-		if name := strings.TrimSpace(step.Name); name != "" {
+		if name := step.Name; name != "" {
 			b.WriteString(name)
 			b.WriteString(" ")
 		}

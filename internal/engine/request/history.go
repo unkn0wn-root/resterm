@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -92,7 +93,7 @@ func (e *Engine) recordHTTP(
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
 		Environment: res.Environment,
-		RequestName: requestIdentifier(req),
+		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      req.Method,
 		URL:         req.URL,
@@ -102,7 +103,7 @@ func (e *Engine) recordHTTP(
 		BodySnippet: snip,
 		RequestText: txt,
 		Description: strings.TrimSpace(req.Metadata.Description),
-		Tags:        normalizedTags(req.Metadata.Tags),
+		Tags:        engine.Tags(req.Metadata.Tags),
 	}
 	ent.Trace = history.NewTraceSummary(resp.Timeline, resp.TraceReport)
 	_ = hs.Append(ent)
@@ -136,7 +137,7 @@ func (e *Engine) recordSkipped(
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
 		Environment: res.Environment,
-		RequestName: requestIdentifier(req),
+		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      req.Method,
 		URL:         req.URL,
@@ -144,7 +145,7 @@ func (e *Engine) recordSkipped(
 		BodySnippet: snip,
 		RequestText: txt,
 		Description: strings.TrimSpace(req.Metadata.Description),
-		Tags:        normalizedTags(req.Metadata.Tags),
+		Tags:        engine.Tags(req.Metadata.Tags),
 	}
 	_ = hs.Append(ent)
 }
@@ -175,7 +176,7 @@ func (e *Engine) recordGRPC(
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
 		Environment: res.Environment,
-		RequestName: requestIdentifier(req),
+		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      req.Method,
 		URL:         req.URL,
@@ -185,7 +186,7 @@ func (e *Engine) recordGRPC(
 		BodySnippet: snip,
 		RequestText: redactText(res.RequestText, secs, mask),
 		Description: strings.TrimSpace(req.Metadata.Description),
-		Tags:        normalizedTags(req.Metadata.Tags),
+		Tags:        engine.Tags(req.Metadata.Tags),
 	}
 	_ = hs.Append(ent)
 }
