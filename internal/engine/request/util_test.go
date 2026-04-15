@@ -80,7 +80,7 @@ func TestCloneRequestNorm(t *testing.T) {
 	}
 }
 
-func TestCloneRequestDeepCopiesNestedMutableFields(t *testing.T) {
+func TestCloneRequestDeepCopy(t *testing.T) {
 	in := &restfile.Request{
 		Headers:  http.Header{"X-Test": {"one"}},
 		Settings: map[string]string{"mode": "strict"},

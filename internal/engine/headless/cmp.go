@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -13,7 +14,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 func (e *Engine) executeCompare(
@@ -64,7 +64,7 @@ func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 		Stream:      cloneStream(out.Stream),
 		Transcript:  copyBytes(out.Transcript),
 		Err:         out.Err,
-		Tests:       append([]scripts.TestResult(nil), out.Tests...),
+		Tests:       slices.Clone(out.Tests),
 		ScriptErr:   out.ScriptErr,
 		Skipped:     out.Skipped,
 		SkipReason:  strings.TrimSpace(out.SkipReason),

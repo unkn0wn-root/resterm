@@ -89,6 +89,72 @@ func TestEngineExecuteCompareProfileAndWorkflow(t *testing.T) {
 	}
 }
 
+func TestWorkflowScriptErr(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	eng := New(engine.Config{})
+	doc, req := testDocumentRequest(srv.URL)
+	req.Metadata.Scripts = []restfile.ScriptBlock{
+		{
+			Kind: "test",
+			Body: `client.test("status", function() { tests.assert(response.statusCode === 200, "status code"); });`,
+		},
+		{
+			Kind: "test",
+			Body: `throw new Error("boom");`,
+		},
+	}
+
+	reqRes, err := eng.ExecuteRequest(doc, req, "")
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if reqRes.Err != nil {
+		t.Fatalf("unexpected request error: %v", reqRes.Err)
+	}
+	if reqRes.ScriptErr == nil {
+		t.Fatal("expected request script error")
+	}
+	if len(reqRes.Tests) == 0 {
+		t.Fatal("expected passing tests from earlier script block")
+	}
+	for _, test := range reqRes.Tests {
+		if !test.Passed {
+			t.Fatalf("expected earlier tests to pass, got %+v", reqRes.Tests)
+		}
+	}
+
+	wf := &restfile.Workflow{
+		Name: "smoke",
+		Steps: []restfile.WorkflowStep{{
+			Kind:  restfile.WorkflowStepKindRequest,
+			Using: "ok",
+		}},
+	}
+
+	out, err := eng.ExecuteWorkflow(doc, wf, "")
+	if err != nil {
+		t.Fatalf("ExecuteWorkflow: %v", err)
+	}
+	if out == nil || len(out.Steps) != 1 {
+		t.Fatalf("unexpected workflow result: %+v", out)
+	}
+	if out.Success {
+		t.Fatalf("expected workflow to fail on script error, got %+v", out)
+	}
+	if out.Steps[0].Success {
+		t.Fatalf("expected workflow step to fail on script error, got %+v", out.Steps[0])
+	}
+	if out.Steps[0].ScriptErr == nil {
+		t.Fatalf("expected workflow step script error, got %+v", out.Steps[0])
+	}
+}
+
 type streamSvc struct {
 	testgrpc.UnimplementedTestServiceServer
 }
