@@ -75,15 +75,6 @@ func (m *Model) ensureCommandAuth(
 	)
 }
 
-func (m *Model) prepareCommandAuth(
-	auth *restfile.AuthSpec,
-	resolver *vars.Resolver,
-	envName string,
-	timeout time.Duration,
-) (authcmd.Prepared, error) {
-	return m.requestSvc(httpclient.Options{}).PrepareCommandAuth(nil, auth, resolver, envName, timeout)
-}
-
 func (m *Model) ensureOAuth(
 	ctx context.Context,
 	req *restfile.Request,
@@ -120,11 +111,4 @@ func (m *Model) buildCommandAuthConfig(
 	timeout time.Duration,
 ) (authcmd.Config, error) {
 	return m.requestSvc(httpclient.Options{}).BuildCommandAuthConfig(nil, auth, resolver, timeout)
-}
-
-func (m *Model) buildOAuthConfig(
-	auth *restfile.AuthSpec,
-	resolver *vars.Resolver,
-) (oauth.Config, error) {
-	return m.requestSvc(httpclient.Options{}).BuildOAuthConfig(auth, resolver)
 }
