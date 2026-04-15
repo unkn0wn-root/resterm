@@ -187,7 +187,6 @@ type Model struct {
 	grpcClient         *grpcclient.Client
 	grpcOptions        grpcclient.Options
 	rg                 *registry.Index
-	cookies            *cookieStore
 	workspaceRoot      string
 	workspaceRecursive bool
 
@@ -612,7 +611,6 @@ func New(cfg Config) Model {
 	}
 	rg := registry.New()
 	rg.Load(workspace, cfg.Recursive)
-	cookies := newCookieStore()
 
 	run := cfg.Runtime
 	if run == nil {
@@ -642,7 +640,6 @@ func New(cfg Config) Model {
 		grpcClient:             grpcExec,
 		grpcOptions:            cfg.GRPCOptions,
 		rg:                     rg,
-		cookies:                cookies,
 		workspaceRoot:          workspace,
 		workspaceRecursive:     cfg.Recursive,
 		fileList:               fileList,

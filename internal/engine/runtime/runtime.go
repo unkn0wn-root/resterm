@@ -23,6 +23,7 @@ type Config struct {
 type Runtime struct {
 	gs *Globals
 	fs *Files
+	ck *Cookies
 	ac *authcmd.Manager
 	oa *oauth.Manager
 	hs history.Store
@@ -42,6 +43,7 @@ func New(cfg Config) *Runtime {
 	return &Runtime{
 		gs: NewGlobals(),
 		fs: NewFiles(),
+		ck: NewCookies(),
 		ac: authcmd.NewManager(),
 		oa: oauth.NewManager(cfg.Client),
 		hs: cfg.History,
@@ -167,6 +169,13 @@ func (r *Runtime) LoadAuthState(st engine.AuthState) {
 	if ac := r.AuthCmd(); ac != nil {
 		ac.Restore(st.Command)
 	}
+}
+
+func (r *Runtime) Cookies() *Cookies {
+	if r == nil {
+		return nil
+	}
+	return r.ck
 }
 
 func (r *Runtime) Close() error {

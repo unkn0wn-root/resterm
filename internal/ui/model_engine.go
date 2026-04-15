@@ -11,7 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (m *Model) runCfg(opts httpclient.Options) engine.Config {
@@ -74,12 +73,6 @@ func (m *Model) execRunReq(
 	vals map[string]rts.Value,
 	xs ...map[string]string,
 ) tea.Cmd {
-	envName := vars.SelectEnv(m.cfg.EnvironmentSet, env, m.cfg.EnvironmentName)
-	if m.cookies == nil {
-		opts.CookieJar = nil
-	} else {
-		opts.CookieJar = m.cookies.getOrCreate(envName)
-	}
 	rq := m.requestSvc(opts)
 	if rq == nil {
 		return nil

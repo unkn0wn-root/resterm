@@ -2405,10 +2405,9 @@ func TestShowGlobalSummary(t *testing.T) {
 func TestClearGlobalValues(t *testing.T) {
 	model := Model{
 		cfg:     Config{EnvironmentName: "dev"},
-		cookies: newCookieStore(),
 	}
 	model.globalsStore().Set("dev", "token", "value", false)
-	model.cookies.getOrCreate("dev")
+	model.cookieStore().GetOrCreate("dev")
 	if snap := model.globalsStore().Snapshot("dev"); len(snap) == 0 {
 		t.Fatalf("expected snapshot to contain entries before clearing")
 	}
@@ -2426,21 +2425,20 @@ func TestClearGlobalValues(t *testing.T) {
 
 func TestClearGlobalValuesWithCookies(t *testing.T) {
 	model := New(Config{EnvironmentName: "dev"})
-	model.cookies = newCookieStore()
 
 	u, _ := url.Parse("http://localhost")
 
-	cookieJarDev := model.cookies.getOrCreate("dev")
+	cookieJarDev := model.cookieStore().GetOrCreate("dev")
 	cookieJarDev.SetCookies(u, []*http.Cookie{{Name: "foo", Value: "bar"}})
 
-	cookieJarProd := model.cookies.getOrCreate("prod")
+	cookieJarProd := model.cookieStore().GetOrCreate("prod")
 	cookieJarProd.SetCookies(u, []*http.Cookie{{Name: "shaz", Value: "bot"}})
 
 	// Just a quick sanity check
-	if before := model.cookies.getOrCreate("dev").Cookies(u); len(before) != 1 || before[0].Name != "foo" {
+	if before := model.cookieStore().GetOrCreate("dev").Cookies(u); len(before) != 1 || before[0].Name != "foo" {
 		t.Fatal("unexpected cookies in dev jar")
 	}
-	if before := model.cookies.getOrCreate("prod").Cookies(u); len(before) != 1 || before[0].Name != "shaz" {
+	if before := model.cookieStore().GetOrCreate("prod").Cookies(u); len(before) != 1 || before[0].Name != "shaz" {
 		t.Fatal("unexpected cookies in prod jar")
 	}
 
@@ -2448,10 +2446,10 @@ func TestClearGlobalValuesWithCookies(t *testing.T) {
 	model.clearGlobalValues()
 
 	// Check the new state
-	if after := model.cookies.getOrCreate("dev").Cookies(u); len(after) != 0 {
+	if after := model.cookieStore().GetOrCreate("dev").Cookies(u); len(after) != 0 {
 		t.Fatal("unexpected cookies in dev jar")
 	}
-	if after := model.cookies.getOrCreate("prod").Cookies(u); len(after) != 1 || after[0].Name != "shaz" {
+	if after := model.cookieStore().GetOrCreate("prod").Cookies(u); len(after) != 1 || after[0].Name != "shaz" {
 		t.Fatal("unexpected cookies in prod jar")
 	}
 
@@ -2479,7 +2477,6 @@ func TestExecuteCookiesAreIsolatedPerEnv(t *testing.T) {
 
 	model := Model{
 		cfg:     Config{EnvironmentName: "dev"},
-		cookies: newCookieStore(),
 	}
 
 	// First request: instruct the server to set a cookie
@@ -2644,12 +2641,11 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 
 	model := Model{
 		cfg:     Config{EnvironmentName: "dev"},
-		cookies: newCookieStore(),
 	}
 
 	// Prepare the cookie jar
 	u, _ := url.Parse(srv.URL)
-	model.cookies.getOrCreate("dev").SetCookies(u, []*http.Cookie{
+	model.cookieStore().GetOrCreate("dev").SetCookies(u, []*http.Cookie{
 		{Name: "foo", Value: "bar"},
 	})
 

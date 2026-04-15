@@ -613,9 +613,10 @@ func (m *Model) clearGlobalValues() tea.Cmd {
 
 	env := m.cfg.EnvironmentName
 	gs.Clear(env)
-	if m.cookies != nil {
-		m.cookies.clear(env)
+	if cs := m.cookieStore(); cs != nil {
+		cs.Clear(env)
 	}
+
 	label := env
 	if strings.TrimSpace(label) == "" {
 		label = "default"
