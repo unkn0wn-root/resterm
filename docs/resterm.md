@@ -1,7 +1,6 @@
 # Resterm Documentation
 
 ## Index
-
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Initializing a Project](#initializing-a-project)
@@ -85,23 +84,23 @@ resterm init
 
 This writes files based on the selected template. Two templates are available:
 
-| Template             | Files created                                                                                    |
-| -------------------- | ------------------------------------------------------------------------------------------------ |
+| Template | Files created |
+| --- | --- |
 | `standard` (default) | `requests.http`, `resterm.env.json`, `resterm.env.example.json`, `rts/helpers.rts`, `RESTERM.md` |
-| `minimal`            | `requests.http`, `resterm.env.json`                                                              |
+| `minimal` | `requests.http`, `resterm.env.json` |
 
 Both templates add `resterm.env.json` to `.gitignore` so secrets stay out of version control. If you prefer to manage `.gitignore` yourself, pass `--no-gitignore`.
 
 ### Flags
 
-| Flag               | Description                                                            |
-| ------------------ | ---------------------------------------------------------------------- |
-| `-dir <path>`      | Target directory. You can also pass the path as a positional argument. |
-| `-template <name>` | Template to use (`standard` or `minimal`).                             |
-| `-force`           | Overwrite existing files instead of aborting.                          |
-| `-dry-run`         | Print actions without writing anything.                                |
-| `-no-gitignore`    | Skip updating `.gitignore`.                                            |
-| `-list`            | Print available templates and exit.                                    |
+| Flag | Description |
+| --- | --- |
+| `-dir <path>` | Target directory. You can also pass the path as a positional argument. |
+| `-template <name>` | Template to use (`standard` or `minimal`). |
+| `-force` | Overwrite existing files instead of aborting. |
+| `-dry-run` | Print actions without writing anything. |
+| `-no-gitignore` | Skip updating `.gitignore`. |
+| `-list` | Print available templates and exit. |
 
 ### Examples
 
@@ -135,42 +134,42 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 
 ### Core shortcuts
 
-| Action                                                             | Shortcut                                                                        |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| Send active request                                                | `Ctrl+Enter` / `Cmd+Enter` / `Alt+Enter` / `Ctrl+J` / `Ctrl+M`                  |
-| Toggle help overlay                                                | `?`                                                                             |
-| Toggle editor insert mode                                          | `i` / `Esc`                                                                     |
-| Cycle focus (navigator -> editor -> response)                      | `Tab` / `Shift+Tab`                                                             |
-| Focus navigator / editor / response panes                          | `g+r` / `g+i` / `g+p`                                                           |
-| Open timeline tab                                                  | `Ctrl+Alt+L` (or `g+t`)                                                         |
-| WebSocket commands (Stream tab)                                    | `g+w`, then `i`/`p`/`c`/`l`                                                     |
-| Adjust sidebar or editor width                                     | `g+h` / `g+l` (contextual)                                                      |
-| Collapse / expand current navigator branch                         | `g+j` / `g+k`                                                                   |
-| Collapse all / expand all in navigator                             | `g+Shift+J` / `g+Shift+K`                                                       |
-| Toggle sidebar / editor / response minimize                        | `g+1` / `g+2` / `g+3`                                                           |
-| Zoom focused pane / clear zoom                                     | `g+z` / `g+Z`                                                                   |
-| Stack/inline response pane                                         | `g+s` (stack) / `g+v` (inline)                                                  |
-| Jump to top/bottom of focused response tab                         | `g+g` / `G`                                                                     |
-| Cycle Raw tab mode (text / hex / base64, summary for large binary) | `g+b`                                                                           |
-| Load full Raw dump (hex)                                           | `g+Shift+D`                                                                     |
-| Save response body / open externally                               | `g+Shift+S` / `g+Shift+E`                                                       |
-| Run compare sweep (`@compare` or `--compare` targets)              | `g+c`                                                                           |
-| Navigator filter                                                   | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
-| Navigator: toggle method filter for selected request               | `m` (repeat to switch/clear)                                                    |
-| Navigator: toggle tag filters from selected item                   | `t` (repeat to toggle)                                                          |
-| Navigator: jump to selected request in editor                      | `l` / `r` (when a request is highlighted)                                       |
-| Open environment selector                                          | `Ctrl+E`                                                                        |
-| Save file                                                          | `Ctrl+S`                                                                        |
-| Save layout (prompt)                                               | `g+Shift+L`                                                                     |
-| Open file picker                                                   | `Ctrl+O`                                                                        |
-| New scratch buffer                                                 | `Ctrl+T`                                                                        |
-| Reparse current document                                           | `Ctrl+P` (also `Ctrl+Alt+P`)                                                    |
-| Refresh workspace files                                            | `Ctrl+Shift+O`                                                                  |
-| Split response vertically / horizontally                           | `Ctrl+V` / `Ctrl+U`                                                             |
-| Pin or unpin response pane                                         | `Ctrl+Shift+V`                                                                  |
-| Choose target pane for next response                               | `Ctrl+F` or `Ctrl+B`, then arrow keys or `h` / `l`                              |
-| Show globals and cookies summary / clear globals and cookies       | `Ctrl+G` / `Ctrl+Shift+G` (or `g Shift+G`)                                      |
-| Quit                                                               | `Ctrl+Q` (or `Ctrl+D`)                                                          |
+| Action | Shortcut |
+| --- | --- |
+| Send active request | `Ctrl+Enter` / `Cmd+Enter` / `Alt+Enter` / `Ctrl+J` / `Ctrl+M` |
+| Toggle help overlay | `?` |
+| Toggle editor insert mode | `i` / `Esc` |
+| Cycle focus (navigator -> editor -> response) | `Tab` / `Shift+Tab` |
+| Focus navigator / editor / response panes | `g+r` / `g+i` / `g+p` |
+| Open timeline tab | `Ctrl+Alt+L` (or `g+t`) |
+| WebSocket commands (Stream tab) | `g+w`, then `i`/`p`/`c`/`l` |
+| Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
+| Collapse / expand current navigator branch | `g+j` / `g+k` |
+| Collapse all / expand all in navigator | `g+Shift+J` / `g+Shift+K` |
+| Toggle sidebar / editor / response minimize | `g+1` / `g+2` / `g+3` |
+| Zoom focused pane / clear zoom | `g+z` / `g+Z` |
+| Stack/inline response pane | `g+s` (stack) / `g+v` (inline) |
+| Jump to top/bottom of focused response tab | `g+g` / `G` |
+| Cycle Raw tab mode (text / hex / base64, summary for large binary) | `g+b` |
+| Load full Raw dump (hex) | `g+Shift+D` |
+| Save response body / open externally | `g+Shift+S` / `g+Shift+E` |
+| Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
+| Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
+| Navigator: toggle method filter for selected request | `m` (repeat to switch/clear) |
+| Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
+| Navigator: jump to selected request in editor | `l` / `r` (when a request is highlighted) |
+| Open environment selector | `Ctrl+E` |
+| Save file | `Ctrl+S` |
+| Save layout (prompt) | `g+Shift+L` |
+| Open file picker | `Ctrl+O` |
+| New scratch buffer | `Ctrl+T` |
+| Reparse current document | `Ctrl+P` (also `Ctrl+Alt+P`) |
+| Refresh workspace files | `Ctrl+Shift+O` |
+| Split response vertically / horizontally | `Ctrl+V` / `Ctrl+U` |
+| Pin or unpin response pane | `Ctrl+Shift+V` |
+| Choose target pane for next response | `Ctrl+F` or `Ctrl+B`, then arrow keys or `h` / `l` |
+| Show globals summary / clear globals and cookies | `Ctrl+G` / `Ctrl+Shift+G` (or `g Shift+G`) |
+| Quit | `Ctrl+Q` (or `Ctrl+D`) |
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), visual selections with `v` / `V`, yank and delete operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
@@ -191,45 +190,45 @@ send_request = ["ctrl+enter", "cmd+enter"]
 
 #### Binding reference
 
-| Action ID                          | Description                                                           | Default bindings                                           |
-| ---------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `cycle_focus_next`                 | Cycle focus forward (skips editor insert mode).                       | `tab`                                                      |
-| `cycle_focus_prev`                 | Cycle focus backward.                                                 | `shift+tab`                                                |
-| `open_env_selector`                | Open environment picker.                                              | `ctrl+e`                                                   |
-| `show_globals`                     | Show global variable summary.                                         | `ctrl+g`                                                   |
-| `clear_globals`                    | Clear global variables.                                               | `ctrl+shift+g`, `g shift+g`                                |
-| `save_file`                        | Save the current `.http` / `.rest` file.                              | `ctrl+s`                                                   |
-| `save_layout`                      | Prompt to persist current layout (splits, widths) to settings.        | `g shift+l`                                                |
-| `toggle_response_split_vertical`   | Toggle response inline vs vertical split.                             | `ctrl+v`                                                   |
-| `toggle_response_split_horizontal` | Toggle response inline vs horizontal split.                           | `ctrl+u`                                                   |
-| `toggle_pane_follow_latest`        | Toggle follow-latest for the focused response pane.                   | `ctrl+shift+v`                                             |
-| `toggle_help`                      | Open/close the help overlay.                                          | `?` (aka `shift+/`)                                        |
-| `open_path_modal`                  | Open the “Open File” modal.                                           | `ctrl+o`                                                   |
-| `reload_workspace`                 | Rescan the workspace root(s).                                         | `ctrl+shift+o`, `g shift+o`                                |
-| `open_new_file_modal`              | Launch the “New Request” modal.                                       | `ctrl+n`                                                   |
-| `open_theme_selector`              | Open theme selector.                                                  | `ctrl+alt+t`, `g m`, `g shift+t`                           |
-| `open_temp_document`               | Open a scratch document.                                              | `ctrl+t`                                                   |
-| `reparse_document`                 | Reparse the active buffer.                                            | `ctrl+p`, `ctrl+alt+p`, `ctrl+shift+t`                     |
-| `reload_file_from_disk`            | Reload the active file from disk (discarding unsaved buffer changes). | `g shift+r`                                                |
-| `select_timeline_tab`              | Focus the Timeline tab.                                               | `ctrl+alt+l`, `g t`                                        |
-| `quit_app`                         | Quit Resterm.                                                         | `ctrl+q`, `ctrl+d`                                         |
-| `send_request`                     | Send the active request (single-step only).                           | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
-| `explain_request`                  | Prepare an Explain preview for the active request without sending it. | `g x`                                                      |
-| `cancel_run`                       | Cancel the in-flight request, compare, profile, or workflow run.      | `ctrl+c`                                                   |
-| `copy_response_tab`                | Copy the focused Pretty/Raw/Headers response tab to the clipboard.    | `ctrl+shift+c`, `g y`                                      |
-| `toggle_header_preview`            | Toggle request vs response headers in the Headers tab.                | `g shift+h`                                                |
+| Action ID | Description | Default bindings |
+| --- | --- | --- |
+| `cycle_focus_next` | Cycle focus forward (skips editor insert mode). | `tab` |
+| `cycle_focus_prev` | Cycle focus backward. | `shift+tab` |
+| `open_env_selector` | Open environment picker. | `ctrl+e` |
+| `show_globals` | Show global variable summary. | `ctrl+g` |
+| `clear_globals` | Clear global variables. | `ctrl+shift+g`, `g shift+g` |
+| `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
+| `save_layout` | Prompt to persist current layout (splits, widths) to settings. | `g shift+l` |
+| `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `ctrl+v` |
+| `toggle_response_split_horizontal` | Toggle response inline vs horizontal split. | `ctrl+u` |
+| `toggle_pane_follow_latest` | Toggle follow-latest for the focused response pane. | `ctrl+shift+v` |
+| `toggle_help` | Open/close the help overlay. | `?` (aka `shift+/`) |
+| `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
+| `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
+| `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
+| `open_theme_selector` | Open theme selector. | `ctrl+alt+t`, `g m`, `g shift+t` |
+| `open_temp_document` | Open a scratch document. | `ctrl+t` |
+| `reparse_document` | Reparse the active buffer. | `ctrl+p`, `ctrl+alt+p`, `ctrl+shift+t` |
+| `reload_file_from_disk` | Reload the active file from disk (discarding unsaved buffer changes). | `g shift+r` |
+| `select_timeline_tab` | Focus the Timeline tab. | `ctrl+alt+l`, `g t` |
+| `quit_app` | Quit Resterm. | `ctrl+q`, `ctrl+d` |
+| `send_request` | Send the active request (single-step only). | `ctrl+enter`, `cmd+enter`, `alt+enter`, `ctrl+j`, `ctrl+m` |
+| `explain_request` | Prepare an Explain preview for the active request without sending it. | `g x` |
+| `cancel_run` | Cancel the in-flight request, compare, profile, or workflow run. | `ctrl+c` |
+| `copy_response_tab` | Copy the focused Pretty/Raw/Headers response tab to the clipboard. | `ctrl+shift+c`, `g y` |
+| `toggle_header_preview` | Toggle request vs response headers in the Headers tab. | `g shift+h` |
 
-| Action ID                                                                         | Description                                                                 | Default bindings         | Repeatable |
-| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------ | ---------- |
-| `sidebar_width_decrease` / `sidebar_width_increase`                               | Shrink/grow sidebar width (editor split elsewhere).                         | `g h`, `g l`             | ✓          |
-| `sidebar_height_decrease` / `sidebar_height_increase`                             | Collapse / expand the selected navigator branch.                            | `g j`, `g k`             | ✓          |
-| `workflow_height_increase` / `workflow_height_decrease`                           | Collapse all / expand all navigator branches.                               | `g shift+j`, `g shift+k` | ✓          |
-| `focus_requests` / `focus_response` / `focus_editor_normal`                       | Jump directly to a pane.                                                    | `g r`, `g p`, `g i`      | ✗          |
-| `set_main_split_horizontal` / `set_main_split_vertical`                           | Stack vs side-by-side editor/response.                                      | `g s`, `g v`             | ✗          |
-| `start_compare_run`                                                               | Trigger compare sweep for the current request.                              | `g c`                    | ✗          |
-| `toggle_ws_console`                                                               | Enter WebSocket command mode (`i` console, `p` ping, `c` close, `l` clear). | `g w`                    | ✗          |
-| `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes.                                                      | `g 1`, `g 2`, `g 3`      | ✗          |
-| `toggle_zoom` / `clear_zoom`                                                      | Zoom current region / clear zoom.                                           | `g z`, `g shift+z`       | ✗          |
+| Action ID | Description | Default bindings | Repeatable |
+| --- | --- | --- | --- |
+| `sidebar_width_decrease` / `sidebar_width_increase` | Shrink/grow sidebar width (editor split elsewhere). | `g h`, `g l` | ✓ |
+| `sidebar_height_decrease` / `sidebar_height_increase` | Collapse / expand the selected navigator branch. | `g j`, `g k` | ✓ |
+| `workflow_height_increase` / `workflow_height_decrease` | Collapse all / expand all navigator branches. | `g shift+j`, `g shift+k` | ✓ |
+| `focus_requests` / `focus_response` / `focus_editor_normal` | Jump directly to a pane. | `g r`, `g p`, `g i` | ✗ |
+| `set_main_split_horizontal` / `set_main_split_vertical` | Stack vs side-by-side editor/response. | `g s`, `g v` | ✗ |
+| `start_compare_run` | Trigger compare sweep for the current request. | `g c` | ✗ |
+| `toggle_ws_console` | Enter WebSocket command mode (`i` console, `p` ping, `c` close, `l` clear). | `g w` | ✗ |
+| `toggle_sidebar_collapse` / `toggle_editor_collapse` / `toggle_response_collapse` | Collapse/expand panes. | `g 1`, `g 2`, `g 3` | ✗ |
+| `toggle_zoom` / `clear_zoom` | Zoom current region / clear zoom. | `g z`, `g shift+z` | ✗ |
 
 `send_request` participates in the editor’s “send on Ctrl+Enter” logic, so keep it single-step. All other actions can be remapped to any combination within the constraints above.
 
@@ -375,12 +374,12 @@ Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv
 
 When expanding `{{variable}}` templates, Resterm looks in:
 
-1. _File constants_ (`@const`).
+1. *File constants* (`@const`).
 2. Values set by scripts for the current execution (`vars.set` in pre-request or test scripts).
-3. _Request-scope_ variables (`@var request`, `@capture request`).
-4. _Runtime globals_ stored via captures or scripts (per environment).
-5. _Document globals_ (`@global`, `@var global`).
-6. _File scope_ declarations and `@capture file` values.
+3. *Request-scope* variables (`@var request`, `@capture request`).
+4. *Runtime globals* stored via captures or scripts (per environment).
+5. *Document globals* (`@global`, `@var global`).
+6. *File scope* declarations and `@capture file` values.
 7. Selected environment JSON.
 8. OS environment variables (case-sensitive with an uppercase fallback).
 
@@ -599,18 +598,18 @@ Troubleshooting:
 
 ### Metadata directives
 
-| Directive                | Syntax                                           | Description                                                                                                                  |
-| ------------------------ | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@name`                  | `# @name identifier`                             | Friendly name used in the navigator, history, and captures.                                                                  |
-| `@const`                 | `# @const name value`                            | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document.               |
-| `@description` / `@desc` | `# @description ...`                             | Multi-line description (lines concatenate with newline).                                                                     |
-| `@tag` / `@tags`         | `# @tag smoke billing`                           | Tags for grouping and filters (comma- or space-separated).                                                                   |
-| `@trace`                 | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets.                                                                       |
-| `@no-log`                | `# @no-log`                                      | Prevents the response body snippet from being stored in history.                                                             |
-| `@log-sensitive-headers` | `# @log-sensitive-headers [true                  | false]`                                                                                                                      | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
-| `@setting`               | `# @setting key value`                           | Generic settings (transport/TLS today: `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`, `http-*`, `grpc-*`). |
-| `@settings`              | `# @settings key1=val1 key2=val2 ...`            | Batch settings on one line; supports the same keys as `@setting` and future prefixes.                                        |
-| `@timeout`               | `# @timeout 5s`                                  | Equivalent to `@setting timeout 5s`.                                                                                         |
+| Directive | Syntax | Description |
+| --- | --- | --- |
+| `@name` | `# @name identifier` | Friendly name used in the navigator, history, and captures. |
+| `@const` | `# @const name value` | Compile-time constant resolved when the file is loaded; immutable and visible to all requests in the document. |
+| `@description` / `@desc` | `# @description ...` | Multi-line description (lines concatenate with newline). |
+| `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
+| `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
+| `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
+| `@log-sensitive-headers` | `# @log-sensitive-headers [true|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
+| `@setting` | `# @setting key value` | Generic settings (transport/TLS today: `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`, `http-*`, `grpc-*`). |
+| `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
+| `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
 
 ### RestermScript (RST)
 
@@ -618,25 +617,25 @@ RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. I
 
 #### Request-scoped RST directives
 
-| Directive                      | Syntax                                                           | Description                                                                                           |
-| ------------------------------ | ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `@use`                         | `# @use ./rts/helpers.rts [as helpers]`                          | Import an RST module (valid at file or request scope); the alias defaults to the module name.         |
-| `@patch`                       | `# @patch file jsonApi {headers: {"Accept":"application/json"}}` | Define reusable `@apply` patch profiles at `file` or `global` scope.                                  |
-| `@apply`                       | `# @apply {headers: {"X-Test": "1"}}`                            | Apply an inline patch to method/url/headers/query/body/auth/settings/vars before pre-request scripts. |
-| `@apply`                       | `# @apply use=jsonApi,use=authProd`                              | Reuse named `@patch` profiles; entries run left-to-right and resolve file scope first, then globals.  |
-| `@when`                        | `# @when vars.has("token")`                                      | Run the request only when the expression is truthy.                                                   |
-| `@skip-if`                     | `# @skip-if env.mode == "dry-run"`                               | Skip the request when the expression is truthy.                                                       |
-| `@assert`                      | `# @assert response.statusCode == 200`                           | Evaluate an assertion after the response arrives.                                                     |
-| `@for-each`                    | `# @for-each json.file("users.json") as user`                    | Repeat the request for each item in a list.                                                           |
-| `@script pre-request lang=rts` | `# @script pre-request lang=rts`                                 | Run a pre-request RST block with request/vars mutation helpers.                                       |
+| Directive | Syntax | Description |
+| --- | --- | --- |
+| `@use` | `# @use ./rts/helpers.rts [as helpers]` | Import an RST module (valid at file or request scope); the alias defaults to the module name. |
+| `@patch` | `# @patch file jsonApi {headers: {"Accept":"application/json"}}` | Define reusable `@apply` patch profiles at `file` or `global` scope. |
+| `@apply` | `# @apply {headers: {"X-Test": "1"}}` | Apply an inline patch to method/url/headers/query/body/auth/settings/vars before pre-request scripts. |
+| `@apply` | `# @apply use=jsonApi,use=authProd` | Reuse named `@patch` profiles; entries run left-to-right and resolve file scope first, then globals. |
+| `@when` | `# @when vars.has("token")` | Run the request only when the expression is truthy. |
+| `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |
+| `@assert` | `# @assert response.statusCode == 200` | Evaluate an assertion after the response arrives. |
+| `@for-each` | `# @for-each json.file("users.json") as user` | Repeat the request for each item in a list. |
+| `@script pre-request lang=rts` | `# @script pre-request lang=rts` | Run a pre-request RST block with request/vars mutation helpers. |
 
 #### Workflow-only RST directives
 
-| Directive                        | Syntax                                        | Description                                            |
-| -------------------------------- | --------------------------------------------- | ------------------------------------------------------ |
-| `@if` / `@elif` / `@else`        | `# @if last.statusCode == 200 run=StepOK`     | Branch workflow steps based on expressions.            |
-| `@switch` / `@case` / `@default` | `# @switch last.statusCode`                   | Choose a workflow branch based on a switch expression. |
-| `@for-each`                      | `# @for-each json.file("users.json") as user` | Repeat a workflow step for each item in a list.        |
+| Directive | Syntax | Description |
+| --- | --- | --- |
+| `@if` / `@elif` / `@else` | `# @if last.statusCode == 200 run=StepOK` | Branch workflow steps based on expressions. |
+| `@switch` / `@case` / `@default` | `# @switch last.statusCode` | Choose a workflow branch based on a switch expression. |
+| `@for-each` | `# @for-each json.file("users.json") as user` | Repeat a workflow step for each item in a list. |
 
 Notes:
 
@@ -682,12 +681,12 @@ Accept: application/json
 
 `@const`, `@var`, and `@global` provide static values evaluated before the request is sent. Constants resolve immediately when the file is parsed and cannot be overridden by captures or scripts; variables follow the usual resolution order and may be updated at runtime.
 
-| Scope    | Syntax                                                                                                               | Visibility                                                                          |
-| -------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
-| Constant | `# @const api.root https://api.example.com`                                                                          | Immutable for the lifetime of the document; available to every request in the file. |
-| Global   | `# @global api.token value` / `# @global-secret api.token value` / `# @var global api.token value`                   | Visible to every request and every file (per environment).                          |
-| File     | `# @file upload.root https://storage.example.com` / `# @file-secret upload.root ...` / `# @var file upload.root ...` | Visible to all requests in the same document only.                                  |
-| Request  | `# @request trace.id {{$uuid}}` / `# @request-secret trace.id ...` / `# @var request trace.id ...`                   | Visible only to the current request (useful for tests).                             |
+| Scope | Syntax | Visibility |
+| --- | --- | --- |
+| Constant | `# @const api.root https://api.example.com` | Immutable for the lifetime of the document; available to every request in the file. |
+| Global | `# @global api.token value` / `# @global-secret api.token value` / `# @var global api.token value` | Visible to every request and every file (per environment). |
+| File | `# @file upload.root https://storage.example.com` / `# @file-secret upload.root ...` / `# @var file upload.root ...` | Visible to all requests in the same document only. |
+| Request | `# @request trace.id {{$uuid}}` / `# @request-secret trace.id ...` / `# @var request trace.id ...` | Visible only to the current request (useful for tests). |
 
 Values are taken verbatim which means that quotes are not special, so `# @file greeting "hello world"` stores the quotes as part of the value. If you need spaces, just write them directly: `# @file greeting hello world`.
 
@@ -807,12 +806,12 @@ GET https://api.example.com/notifications
 
 `@sse` accepts the following options:
 
-| Token                       | Description                                                                         |
-| --------------------------- | ----------------------------------------------------------------------------------- |
-| `duration` / `timeout`      | Maximum lifetime of the stream. Resterm cancels the request once the timer elapses. |
-| `idle` / `idle-timeout`     | Maximum quiet period between events before the session is closed.                   |
-| `max-events`                | Stop reading after N events have been delivered.                                    |
-| `max-bytes` / `limit-bytes` | Cap the total payload size and close once the limit is exceeded.                    |
+| Token | Description |
+| --- | --- |
+| `duration` / `timeout` | Maximum lifetime of the stream. Resterm cancels the request once the timer elapses. |
+| `idle` / `idle-timeout` | Maximum quiet period between events before the session is closed. |
+| `max-events` | Stop reading after N events have been delivered. |
+| `max-bytes` / `limit-bytes` | Cap the total payload size and close once the limit is exceeded. |
 
 If the server responds with a non-2xx status or a non-`text/event-stream` content type, Resterm falls back to a standard HTTP response so you can inspect the error. Successful streams produce a transcript (events plus metadata) that appears in the Stream tab and is saved in history. The summary exposed to templates and scripts includes `eventCount`, `byteCount`, `duration`, and `reason` (for example `eof`, `timeout`, `idle-timeout`).
 
@@ -834,25 +833,25 @@ GET wss://chat.example.com/room
 
 Available WebSocket options:
 
-| Token               | Description                                                                                           |
-| ------------------- | ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `timeout`           | Handshake deadline (applies until the connection upgrades).                                           |
-| `idle-timeout`      | Idle timeout once the socket is open. Resets on any send or receive activity (0 leaves it unbounded). |
-| `max-message-bytes` | Upper bound on inbound frame sizes.                                                                   |
-| `subprotocols`      | Comma-separated list advertised during the handshake.                                                 |
-| `compression=<true  | false>`                                                                                               | Explicitly enable or disable per-message compression. |
+| Token | Description |
+| --- | --- |
+| `timeout` | Handshake deadline (applies until the connection upgrades). |
+| `idle-timeout` | Idle timeout once the socket is open. Resets on any send or receive activity (0 leaves it unbounded). |
+| `max-message-bytes` | Upper bound on inbound frame sizes. |
+| `subprotocols` | Comma-separated list advertised during the handshake. |
+| `compression=<true|false>` | Explicitly enable or disable per-message compression. |
 
 Supported `@ws` steps:
 
-| Step                                        | Effect                                                                  |
-| ------------------------------------------- | ----------------------------------------------------------------------- |
-| `@ws send <text>`                           | Send a UTF-8 text frame. Templates expand before sending.               |
-| `@ws send-json <object>`                    | Encode JSON and send it as text.                                        |
-| `@ws send-base64 <data>`                    | Decode base64 and send the result as binary.                            |
-| `@ws send-file <path>`                      | Send a file from disk (relative to the request file unless absolute).   |
-| `@ws ping [payload]` / `@ws pong [payload]` | Emit control frames (payload limited to 125 bytes).                     |
-| `@ws wait <duration>`                       | Pause for the specified duration (e.g. `500ms`).                        |
-| `@ws close [code] [reason]`                 | Close the connection with an optional status code (defaults to `1000`). |
+| Step | Effect |
+| --- | --- |
+| `@ws send <text>` | Send a UTF-8 text frame. Templates expand before sending. |
+| `@ws send-json <object>` | Encode JSON and send it as text. |
+| `@ws send-base64 <data>` | Decode base64 and send the result as binary. |
+| `@ws send-file <path>` | Send a file from disk (relative to the request file unless absolute). |
+| `@ws ping [payload]` / `@ws pong [payload]` | Emit control frames (payload limited to 125 bytes). |
+| `@ws wait <duration>` | Pause for the specified duration (e.g. `500ms`). |
+| `@ws close [code] [reason]` | Close the connection with an optional status code (defaults to `1000`). |
 
 Handshake failures surface the HTTP response so upgrade issues are easy to debug. Successful sessions stream events into the UI and history with metadata for direction, opcode, sizes, and close status. The summary exposed to templates and scripts includes `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, and `closeReason`.
 
@@ -866,14 +865,14 @@ Handshake failures surface the HTTP response so upgrade issues are easy to debug
 
 ### Authentication directives
 
-| Type          | Syntax                                       | Notes                                                                                                          |
-| ------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Basic         | `# @auth basic user pass`                    | Injects `Authorization: Basic …`. Templates expand inside parameters.                                          |
-| Bearer        | `# @auth bearer {{token}}`                   | Injects `Authorization: Bearer …`.                                                                             |
-| API key       | `# @auth apikey header X-API-Key {{key}}`    | `placement` can be `header` or `query`. Defaults to `X-API-Key` header if name omitted.                        |
-| Custom header | `# @auth Authorization CustomValue`          | Arbitrary header/value pair.                                                                                   |
-| Command       | `# @auth command argv=["gh","auth","token"]` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
-| OAuth 2.0     | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE).                |
+| Type | Syntax | Notes |
+| --- | --- | --- |
+| Basic | `# @auth basic user pass` | Injects `Authorization: Basic …`. Templates expand inside parameters. |
+| Bearer | `# @auth bearer {{token}}` | Injects `Authorization: Bearer …`. |
+| API key | `# @auth apikey header X-API-Key {{key}}` | `placement` can be `header` or `query`. Defaults to `X-API-Key` header if name omitted. |
+| Custom header | `# @auth Authorization CustomValue` | Arbitrary header/value pair. |
+| Command | `# @auth command argv=["gh","auth","token"]` | Runs a non-interactive command without a shell, parses `stdout`, and injects a header during auth preparation. |
+| OAuth 2.0 | `# @auth oauth2 token_url=... client_id=...` | Built-in token acquisition and caching (client_credentials/password/authorization_code + PKCE). |
 
 Scopes:
 
@@ -885,25 +884,25 @@ Scopes:
 
 #### OAuth 2.0 parameters
 
-| Parameter               | Required      | Default              | Description                                                                                                                                                                                                                |
-| ----------------------- | ------------- | -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `token_url`             | Yes           | -                    | Token endpoint URL. Must be provided at least once per `cache_key`.                                                                                                                                                        |
-| `auth_url`              | For auth code | -                    | Authorization endpoint. Required when `grant=authorization_code`.                                                                                                                                                          |
-| `client_id`             | Yes           | -                    | Your application's client ID.                                                                                                                                                                                              |
-| `client_secret`         | No            | -                    | Client secret (omit for public clients using PKCE).                                                                                                                                                                        |
-| `grant`                 | No            | `client_credentials` | Grant type: `client_credentials`, `password`, or `authorization_code`.                                                                                                                                                     |
-| `scope`                 | No            | -                    | Space-separated scopes to request.                                                                                                                                                                                         |
-| `audience`              | No            | -                    | Target API audience (Auth0, etc.).                                                                                                                                                                                         |
-| `resource`              | No            | -                    | Resource indicator (Azure AD, etc.).                                                                                                                                                                                       |
-| `client_auth`           | No            | `basic`              | How to send credentials: `basic` (Authorization header) or `body` (form fields). Falls back to `body` automatically for public clients.                                                                                    |
-| `header`                | No            | `Authorization`      | Which header receives the token. Use this when an API expects tokens in a custom header like `X-Access-Token`.                                                                                                             |
-| `username`              | For password  | -                    | Resource owner username (only for `grant=password`).                                                                                                                                                                       |
-| `password`              | For password  | -                    | Resource owner password (only for `grant=password`).                                                                                                                                                                       |
-| `cache_key`             | No            | auto                 | Override the cache identity. Useful when multiple requests should share the same token even if their parameters differ slightly. When omitted, Resterm derives the key from token URL, client ID, scope, and other fields. |
-| `redirect_uri`          | No            | auto                 | Callback URL for authorization code flow. See details below.                                                                                                                                                               |
-| `code_verifier`         | No            | auto                 | PKCE verifier (43-128 characters per RFC 7636). Auto-generated when omitted.                                                                                                                                               |
-| `code_challenge_method` | No            | `s256`               | PKCE method: `s256` (recommended) or `plain`.                                                                                                                                                                              |
-| `state`                 | No            | auto                 | CSRF protection token. Auto-generated when omitted.                                                                                                                                                                        |
+| Parameter | Required | Default | Description |
+| --- | --- | --- | --- |
+| `token_url` | Yes | - | Token endpoint URL. Must be provided at least once per `cache_key`. |
+| `auth_url` | For auth code | - | Authorization endpoint. Required when `grant=authorization_code`. |
+| `client_id` | Yes | - | Your application's client ID. |
+| `client_secret` | No | - | Client secret (omit for public clients using PKCE). |
+| `grant` | No | `client_credentials` | Grant type: `client_credentials`, `password`, or `authorization_code`. |
+| `scope` | No | - | Space-separated scopes to request. |
+| `audience` | No | - | Target API audience (Auth0, etc.). |
+| `resource` | No | - | Resource indicator (Azure AD, etc.). |
+| `client_auth` | No | `basic` | How to send credentials: `basic` (Authorization header) or `body` (form fields). Falls back to `body` automatically for public clients. |
+| `header` | No | `Authorization` | Which header receives the token. Use this when an API expects tokens in a custom header like `X-Access-Token`. |
+| `username` | For password | - | Resource owner username (only for `grant=password`). |
+| `password` | For password | - | Resource owner password (only for `grant=password`). |
+| `cache_key` | No | auto | Override the cache identity. Useful when multiple requests should share the same token even if their parameters differ slightly. When omitted, Resterm derives the key from token URL, client ID, scope, and other fields. |
+| `redirect_uri` | No | auto | Callback URL for authorization code flow. See details below. |
+| `code_verifier` | No | auto | PKCE verifier (43-128 characters per RFC 7636). Auto-generated when omitted. |
+| `code_challenge_method` | No | `s256` | PKCE method: `s256` (recommended) or `plain`. |
+| `state` | No | auto | CSRF protection token. Auto-generated when omitted. |
 
 Any additional `key=value` pairs are forwarded as extra form parameters to both the authorization and token endpoints.
 
@@ -931,19 +930,19 @@ If you skip `token_url` on a follow-up directive and the cache hasn’t been see
 
 #### Command auth parameters
 
-| Parameter         | Required                               | Default         | Description                                                                                                                                                                                                                                                                                                                                                |
-| ----------------- | -------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `argv`            | Yes for the first use of a `cache_key` | -               | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. Once a `cache_key` has been seeded, follow-up directives may omit `argv` and reuse the stored command config. |
-| `format`          | No                                     | `text`          | Parse `stdout` as `text` or `json`.                                                                                                                                                                                                                                                                                                                        |
-| `header`          | No                                     | `Authorization` | Target header name.                                                                                                                                                                                                                                                                                                                                        |
-| `scheme`          | No                                     | auto            | Explicit prefix for the final header value. When omitted, `Authorization` defaults to `Bearer`, while custom headers get the raw token.                                                                                                                                                                                                                    |
-| `token_path`      | For `format=json`                      | -               | JSON path to the token value. Uses the same JSON path behavior as RTS captures and helpers.                                                                                                                                                                                                                                                                |
-| `type_path`       | No                                     | -               | Optional token type for `Authorization` headers when `scheme` is omitted.                                                                                                                                                                                                                                                                                  |
-| `expiry_path`     | No                                     | -               | Optional absolute expiry value (RFC3339, RFC3339Nano, Unix seconds, or Unix milliseconds).                                                                                                                                                                                                                                                                 |
-| `expires_in_path` | No                                     | -               | Optional relative lifetime in seconds.                                                                                                                                                                                                                                                                                                                     |
-| `cache_key`       | No                                     | -               | Enables in-memory cache reuse per environment and names a reusable command-auth slot. Seed it once with the full command/extraction config, then reuse it with `cache_key` only on later requests. Reusing the same `cache_key` with different command/extraction settings is rejected.                                                                    |
-| `ttl`             | No                                     | -               | Cache fallback TTL when the command output has no expiry fields. Requires `cache_key`.                                                                                                                                                                                                                                                                     |
-| `timeout`         | No                                     | request timeout | Per-command timeout, bounded by the request timeout.                                                                                                                                                                                                                                                                                                       |
+| Parameter | Required | Default | Description |
+| --- | --- | --- | --- |
+| `argv` | Yes for the first use of a `cache_key` | - | JSON array of command arguments. Bare JSON works, for example `argv=["gh","auth","token"]`. Outer single quotes are also accepted and are useful when you want to preserve whitespace exactly, for example `argv='["gh", "auth", "token"]'`. Once a `cache_key` has been seeded, follow-up directives may omit `argv` and reuse the stored command config. |
+| `format` | No | `text` | Parse `stdout` as `text` or `json`. |
+| `header` | No | `Authorization` | Target header name. |
+| `scheme` | No | auto | Explicit prefix for the final header value. When omitted, `Authorization` defaults to `Bearer`, while custom headers get the raw token. |
+| `token_path` | For `format=json` | - | JSON path to the token value. Uses the same JSON path behavior as RTS captures and helpers. |
+| `type_path` | No | - | Optional token type for `Authorization` headers when `scheme` is omitted. |
+| `expiry_path` | No | - | Optional absolute expiry value (RFC3339, RFC3339Nano, Unix seconds, or Unix milliseconds). |
+| `expires_in_path` | No | - | Optional relative lifetime in seconds. |
+| `cache_key` | No | - | Enables in-memory cache reuse per environment and names a reusable command-auth slot. Seed it once with the full command/extraction config, then reuse it with `cache_key` only on later requests. Reusing the same `cache_key` with different command/extraction settings is rejected. |
+| `ttl` | No | - | Cache fallback TTL when the command output has no expiry fields. Requires `cache_key`. |
+| `timeout` | No | request timeout | Per-command timeout, bounded by the request timeout. |
 
 #### Command auth behavior
 
@@ -1048,12 +1047,12 @@ Enable GraphQL handling with `# @graphql` (requests start with it disabled). Res
 
 Available directives:
 
-| Directive                           | Description                                             |
-| ----------------------------------- | ------------------------------------------------------- | -------------------------------------------------- |
-| `@graphql [true                     | false]`                                                 | Enable/disable GraphQL processing for the request. |
-| `@operation` / `@graphql-operation` | Sets the `operationName`.                               |
-| `@variables`                        | Starts a variables block; inline JSON or `< file.json`. |
-| `@query`                            | Loads the query from a file instead of the inline body. |
+| Directive | Description |
+| --- | --- |
+| `@graphql [true|false]` | Enable/disable GraphQL processing for the request. |
+| `@operation` / `@graphql-operation` | Sets the `operationName`. |
+| `@variables` | Starts a variables block; inline JSON or `< file.json`. |
+| `@query` | Loads the query from a file instead of the inline body. |
 
 Example:
 
@@ -1082,18 +1081,18 @@ query FetchWorkspace($id: ID!) {
 
 gRPC requests start with a line such as `GRPC host:port`. Metadata directives describe the method and transport options.
 
-| Directive                                                          | Description                                                                                   |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `@grpc package.Service/Method`                                     | Fully qualified method to call.                                                               |
-| `@grpc-descriptor path/to/file.protoset`                           | Use a compiled descriptor set instead of server reflection.                                   |
-| `@grpc-reflection [true                                            | false]`                                                                                       | Toggle server reflection (default `true`).                                                        |
-| `@grpc-plaintext [true                                             | false]`                                                                                       | Force plaintext or TLS.                                                                           |
-| `@grpc-authority value`                                            | Override the HTTP/2 `:authority` header.                                                      |
-| `@grpc-metadata key: value`                                        | Add metadata pairs (repeatable).                                                              |
-| `@setting grpc-root-cas path1,path2`                               | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
-| `@setting grpc-root-mode append                                    | replace`                                                                                      | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
-| `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed).                                            |
-| `@setting grpc-insecure true`                                      | Skip TLS verification (off by default).                                                       |
+| Directive | Description |
+| --- | --- |
+| `@grpc package.Service/Method` | Fully qualified method to call. |
+| `@grpc-descriptor path/to/file.protoset` | Use a compiled descriptor set instead of server reflection. |
+| `@grpc-reflection [true|false]` | Toggle server reflection (default `true`). |
+| `@grpc-plaintext [true|false]` | Force plaintext or TLS. |
+| `@grpc-authority value` | Override the HTTP/2 `:authority` header. |
+| `@grpc-metadata key: value` | Add metadata pairs (repeatable). |
+| `@setting grpc-root-cas path1,path2` | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
+| `@setting grpc-root-mode append|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
+| `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed). |
+| `@setting grpc-insecure true` | Skip TLS verification (off by default). |
 
 Supplying any gRPC TLS setting (roots, client cert/key, insecure) automatically enables TLS unless you explicitly force plaintext with `@grpc-plaintext true`.
 
@@ -1276,14 +1275,13 @@ When you use `grant=authorization_code`, Resterm handles the entire OAuth automa
 
 The `redirect_uri` controls where the authorization server sends the user after login:
 
-| Configuration                                 | Result                                          |
-| --------------------------------------------- | ----------------------------------------------- |
-| Omit `redirect_uri`                           | `http://127.0.0.1:<random-port>/oauth/callback` |
-| `redirect_uri=http://127.0.0.1:8080/callback` | Uses port 8080 with path `/callback`            |
-| `redirect_uri=http://localhost:0/auth`        | Random port, custom path `/auth`                |
+| Configuration | Result |
+| --- | --- |
+| Omit `redirect_uri` | `http://127.0.0.1:<random-port>/oauth/callback` |
+| `redirect_uri=http://127.0.0.1:8080/callback` | Uses port 8080 with path `/callback` |
+| `redirect_uri=http://localhost:0/auth` | Random port, custom path `/auth` |
 
 **Constraints:**
-
 - Must use `http://` scheme (not `https://`) - [RFC 8252](https://datatracker.ietf.org/doc/html/rfc8252)
 - Host must be `127.0.0.1` or `localhost` - external hosts are rejected
 - Register the redirect URI pattern with your OAuth provider (most allow `http://127.0.0.1:*` or similar)
@@ -1527,26 +1525,26 @@ Run `resterm --help` for the latest list.
 
 ### Core flags
 
-| Flag                           | Description                                                                                                         |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
-| `--file <path>`                | Open a specific `.http`/`.rest` file on launch.                                                                     |
-| `--workspace <dir>`            | Workspace root used for file discovery.                                                                             |
-| `--recursive`                  | Recursively scan the workspace for request files.                                                                   |
-| `--env <name>`                 | Select environment explicitly.                                                                                      |
-| `--env-file <path>`            | Provide an explicit environment JSON file.                                                                          |
-| `--timeout <duration>`         | Default HTTP timeout (per request).                                                                                 |
-| `--insecure`                   | Skip TLS certificate verification globally.                                                                         |
-| `--follow`                     | Control redirect following (default on; pass `--follow=false` to disable).                                          |
-| `--proxy <url>`                | HTTP proxy URL.                                                                                                     |
-| `--compare <envs>`             | Default comma/space-delimited environments for manual compare runs (`g+c`).                                         |
-| `--compare-base <env>`         | Baseline environment name when `--compare` is set (defaults to the first target).                                   |
-| `--from-curl <command          | path>`                                                                                                              | Generate a `.http` file from a curl command or file (`-` reads stdin). |
-| `--from-openapi <spec>`        | Generate a `.http` collection from an OpenAPI document.                                                             |
-| `--http-out <file>`            | Destination for the generated `.http` file (defaults to `<spec>.http` for OpenAPI or `curl.http` for curl imports). |
-| `--openapi-base-var <name>`    | Override the base URL variable injected into the generated file (`baseUrl` by default).                             |
-| `--openapi-resolve-refs`       | Resolve external `$ref` pointers before generation.                                                                 |
-| `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default.                                                             |
-| `--openapi-server-index <n>`   | Choose which server entry (0-based) seeds the base URL.                                                             |
+| Flag | Description |
+| --- | --- |
+| `--file <path>` | Open a specific `.http`/`.rest` file on launch. |
+| `--workspace <dir>` | Workspace root used for file discovery. |
+| `--recursive` | Recursively scan the workspace for request files. |
+| `--env <name>` | Select environment explicitly. |
+| `--env-file <path>` | Provide an explicit environment JSON file. |
+| `--timeout <duration>` | Default HTTP timeout (per request). |
+| `--insecure` | Skip TLS certificate verification globally. |
+| `--follow` | Control redirect following (default on; pass `--follow=false` to disable). |
+| `--proxy <url>` | HTTP proxy URL. |
+| `--compare <envs>` | Default comma/space-delimited environments for manual compare runs (`g+c`). |
+| `--compare-base <env>` | Baseline environment name when `--compare` is set (defaults to the first target). |
+| `--from-curl <command|path>` | Generate a `.http` file from a curl command or file (`-` reads stdin). |
+| `--from-openapi <spec>` | Generate a `.http` collection from an OpenAPI document. |
+| `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http` for OpenAPI or `curl.http` for curl imports). |
+| `--openapi-base-var <name>` | Override the base URL variable injected into the generated file (`baseUrl` by default). |
+| `--openapi-resolve-refs` | Resolve external `$ref` pointers before generation. |
+| `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default. |
+| `--openapi-server-index <n>` | Choose which server entry (0-based) seeds the base URL. |
 
 ### Collection export, import, pack, and unpack
 
@@ -1561,38 +1559,38 @@ resterm collection unpack --in ./shared/my-api-bundle.zip --out ./shared/my-api-
 
 Export command flags:
 
-| Flag                | Description                                                                |
-| ------------------- | -------------------------------------------------------------------------- |
-| `--workspace <dir>` | Source workspace directory to scan.                                        |
-| `--out <dir>`       | Destination bundle directory to create.                                    |
-| `--name <name>`     | Optional bundle name stored in the manifest.                               |
-| `--recursive`       | Recursively scan workspace for request files before dependency resolution. |
-| `--force`           | Replace an existing output directory.                                      |
+| Flag | Description |
+| --- | --- |
+| `--workspace <dir>` | Source workspace directory to scan. |
+| `--out <dir>` | Destination bundle directory to create. |
+| `--name <name>` | Optional bundle name stored in the manifest. |
+| `--recursive` | Recursively scan workspace for request files before dependency resolution. |
+| `--force` | Replace an existing output directory. |
 
 Import command flags:
 
-| Flag                | Description                                                  |
-| ------------------- | ------------------------------------------------------------ |
-| `--in <dir>`        | Source bundle directory containing `manifest.json`.          |
-| `--workspace <dir>` | Destination workspace directory to write files into.         |
-| `--dry-run`         | Validate and print planned operations without writing files. |
-| `--force`           | Overwrite existing destination files.                        |
+| Flag | Description |
+| --- | --- |
+| `--in <dir>` | Source bundle directory containing `manifest.json`. |
+| `--workspace <dir>` | Destination workspace directory to write files into. |
+| `--dry-run` | Validate and print planned operations without writing files. |
+| `--force` | Overwrite existing destination files. |
 
 Pack command flags:
 
-| Flag               | Description                                         |
-| ------------------ | --------------------------------------------------- |
-| `--in <dir>`       | Source bundle directory containing `manifest.json`. |
-| `--out <file.zip>` | Destination archive path to create.                 |
-| `--force`          | Replace an existing archive file.                   |
+| Flag | Description |
+| --- | --- |
+| `--in <dir>` | Source bundle directory containing `manifest.json`. |
+| `--out <file.zip>` | Destination archive path to create. |
+| `--force` | Replace an existing archive file. |
 
 Unpack command flags:
 
-| Flag              | Description                                       |
-| ----------------- | ------------------------------------------------- |
+| Flag | Description |
+| --- | --- |
 | `--in <file.zip>` | Source archive file created by `collection pack`. |
-| `--out <dir>`     | Destination bundle directory to create.           |
-| `--force`         | Replace an existing output directory.             |
+| `--out <dir>` | Destination bundle directory to create. |
+| `--force` | Replace an existing output directory. |
 
 The exporter includes referenced helper files automatically and always emits `resterm.env.example.json` in the bundle. Import validates checksums before writing files and rejects unsafe paths. Pack and unpack apply the same manifest and path safety guarantees so archive handoffs behave the same as directory handoffs.
 
@@ -1687,14 +1685,14 @@ text = "#eceff4"
 
 #### Sections and fields
 
-| Section                | Keys                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Notes                                                                                                                                                                                                                                                              |
-| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `[metadata]`           | `name`, `description`, `author`, `version`, `tags[]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Informational only; shown in the selector.                                                                                                                                                                                                                         |
-| `[styles.*]`           | `browser_border`, `editor_border`, `response_border`, `navigator_title`, `navigator_title_selected`, `navigator_subtitle`, `navigator_subtitle_selected`, `navigator_badge`, `navigator_tag`, `navigator_detail_title`, `navigator_detail_value`, `navigator_detail_dim`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers`, `response_selection`, `response_cursor`, `stream_content`, `stream_timestamp`, `stream_direction_send`, `stream_direction_receive`, `stream_direction_info`, `stream_event_name`, `stream_data`, `stream_binary`, `stream_summary`, `stream_error`, `stream_console_title`, `stream_console_mode`, `stream_console_status`, `stream_console_prompt`, `stream_console_input`, `stream_console_input_focused` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
-| `[colors]`             | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground`, `method_get`, `method_post`, `method_put`, `method_patch`, `method_delete`, `method_head`, `method_options`, `method_grpc`, `method_ws`, `method_default`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Frequently reused colours for pane borders, active text, and method badges.                                                                                                                                                                                        |
-| `[editor_metadata]`    | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Controls metadata highlighting inside the editor.                                                                                                                                                                                                                  |
-| `[[header_segments]]`  | `background`, `foreground`, `border`, `accent`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | Rotating header chips; add multiple tables for rotation.                                                                                                                                                                                                           |
-| `[[command_segments]]` | `background`, `border`, `key`, `text`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | Colour sets for command bar hint capsules.                                                                                                                                                                                                                         |
+| Section | Keys | Notes |
+| --- | --- | --- |
+| `[metadata]` | `name`, `description`, `author`, `version`, `tags[]` | Informational only; shown in the selector. |
+| `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `navigator_title`, `navigator_title_selected`, `navigator_subtitle`, `navigator_subtitle_selected`, `navigator_badge`, `navigator_tag`, `navigator_detail_title`, `navigator_detail_value`, `navigator_detail_dim`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers`, `response_selection`, `response_cursor`, `stream_content`, `stream_timestamp`, `stream_direction_send`, `stream_direction_receive`, `stream_direction_info`, `stream_event_name`, `stream_data`, `stream_binary`, `stream_summary`, `stream_error`, `stream_console_title`, `stream_console_mode`, `stream_console_status`, `stream_console_prompt`, `stream_console_input`, `stream_console_input_focused` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
+| `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground`, `method_get`, `method_post`, `method_put`, `method_patch`, `method_delete`, `method_head`, `method_options`, `method_grpc`, `method_ws`, `method_default` | Frequently reused colours for pane borders, active text, and method badges. |
+| `[editor_metadata]` | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]` | Controls metadata highlighting inside the editor. |
+| `[[header_segments]]` | `background`, `foreground`, `border`, `accent` | Rotating header chips; add multiple tables for rotation. |
+| `[[command_segments]]` | `background`, `border`, `key`, `text` | Colour sets for command bar hint capsules. |
 
 Setting `editor_metadata.directive_default` recolours every built-in directive (`@name`, `@tag`, etc.) that still uses the inherited default. Specify entries inside `[editor_metadata.directive_colors]` only when you need a directive to diverge from that default.
 
@@ -1713,6 +1711,7 @@ resterm
 ```
 
 Inside Resterm, press `g` then `t` (or `Ctrl+Alt+T`) and pick “Aurora” for a dark setup or “Daybreak” for light terminals. Quit and restart to confirm the theme persists. If a theme fails to parse, Resterm logs the error and falls back to the default palette.
+
 
 ---
 
