@@ -96,8 +96,8 @@ func ApplyHTTPSettings(
 		}
 	}
 	if value, ok := norm["no-cookies"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			opts.DisableCookies = b
+		if b, err := strconv.ParseBool(value); err == nil && b {
+			opts.CookieJar = nil
 		}
 	}
 	return nil

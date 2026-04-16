@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"net/http/cookiejar"
 	"testing"
 	"time"
 
@@ -11,7 +12,8 @@ import (
 )
 
 func TestApplyAllDispatchesHandlers(t *testing.T) {
-	httpOpts := httpclient.Options{}
+	jar, _ := cookiejar.New(nil)
+	httpOpts := httpclient.Options{CookieJar: jar}
 	grpcOpts := grpcclient.Options{}
 
 	applier := New(
@@ -45,8 +47,8 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 	if httpOpts.HTTPVersion != httpver.V2 {
 		t.Fatalf("expected http version 2, got %v", httpOpts.HTTPVersion)
 	}
-	if !httpOpts.DisableCookies {
-		t.Fatalf("expected cookies to be disabled")
+	if httpOpts.CookieJar != nil {
+		t.Fatalf("expected cookie jar to be cleared")
 	}
 	if !grpcOpts.Insecure {
 		t.Fatalf("expected grpc insecure to be set")
@@ -60,7 +62,8 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 }
 
 func TestApplyAllHTTPAggregated(t *testing.T) {
-	httpOpts := httpclient.Options{}
+	jar, _ := cookiejar.New(nil)
+	httpOpts := httpclient.Options{CookieJar: jar}
 	applier := New(HTTPHandler(&httpOpts, nil))
 	settings := map[string]string{
 		"timeout":          "2s",
@@ -93,8 +96,8 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	if !httpOpts.InsecureSkipVerify {
 		t.Fatalf("expected insecure skip verify true")
 	}
-	if !httpOpts.DisableCookies {
-		t.Fatalf("expected cookies to be disabled")
+	if httpOpts.CookieJar != nil {
+		t.Fatalf("expected cookie jar to be cleared")
 	}
 	if httpOpts.HTTPVersion != httpver.V11 {
 		t.Fatalf("expected http version 1.1, got %v", httpOpts.HTTPVersion)

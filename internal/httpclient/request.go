@@ -175,8 +175,8 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 		}
 	}
 	if value, ok := norm["no-cookies"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			effective.DisableCookies = b
+		if b, err := strconv.ParseBool(value); err == nil && b {
+			effective.CookieJar = nil
 		}
 	}
 	if v := resolveHTTPVersion(opts, norm); v != httpver.Unknown {

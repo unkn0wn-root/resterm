@@ -36,7 +36,6 @@ type Options struct {
 	SSH                *ssh.Plan
 	K8s                *k8s.Plan
 	CookieJar          http.CookieJar
-	DisableCookies     bool
 }
 
 type Client struct {

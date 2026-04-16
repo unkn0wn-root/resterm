@@ -16,6 +16,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptrace"
 	"net/url"
 	"os"
@@ -35,7 +36,8 @@ import (
 )
 
 func TestApplyRequestSettings(t *testing.T) {
-	opts := Options{Timeout: 5 * time.Second, FollowRedirects: true}
+	jar, _ := cookiejar.New(nil)
+	opts := Options{Timeout: 5 * time.Second, FollowRedirects: true, CookieJar: jar}
 	settings := map[string]string{
 		"timeout":         "10s",
 		"proxy":           "http://localhost:8080",
@@ -61,8 +63,8 @@ func TestApplyRequestSettings(t *testing.T) {
 	if effective.HTTPVersion != httpver.V2 {
 		t.Fatalf("expected http version 2, got %v", effective.HTTPVersion)
 	}
-	if !effective.DisableCookies {
-		t.Fatalf("expected cookies to be disabled")
+	if effective.CookieJar != nil {
+		t.Fatalf("expected cookie jar to be cleared")
 	}
 }
 
