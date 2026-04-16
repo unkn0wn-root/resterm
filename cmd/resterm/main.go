@@ -21,15 +21,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	curl "github.com/unkn0wn-root/resterm/internal/curl/importer"
-	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
-	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/generator"
 	"github.com/unkn0wn-root/resterm/internal/openapi/parser"
 	"github.com/unkn0wn-root/resterm/internal/openapi/writer"
 	"github.com/unkn0wn-root/resterm/internal/rtfmt"
-	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui"
 	"github.com/unkn0wn-root/resterm/internal/update"
@@ -43,7 +40,9 @@ var (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err)
+		if msg := strings.TrimSpace(err.Error()); msg != "" {
+			_, _ = fmt.Fprintln(os.Stderr, msg)
+		}
 		os.Exit(cli.ExitCode(err))
 	}
 }
@@ -58,17 +57,12 @@ func run(a []string) error {
 	if ok, err := handleInitSubcommand(a); ok {
 		return err
 	}
+	if ok, err := handleRunSubcommand(a); ok {
+		return err
+	}
 
 	var (
 		filePath                 string
-		envName                  string
-		envFile                  string
-		workspace                string
-		timeout                  time.Duration
-		insecure                 bool
-		follow                   bool
-		proxyURL                 string
-		recursive                bool
 		showVersion              bool
 		checkUpdate              bool
 		doUpdate                 bool
@@ -79,34 +73,12 @@ func run(a []string) error {
 		openapiResolveRefs       bool
 		openapiIncludeDeprecated bool
 		openapiServerIndex       int
-		traceOTEndpoint          string
-		traceOTInsecure          bool
-		traceOTService           string
-		compareTargetsRaw        string
-		compareBaseline          string
 	)
 
-	tc := telemetry.ConfigFromEnv(os.Getenv)
-	traceOTEndpoint = tc.Endpoint
-	traceOTInsecure = tc.Insecure
-	traceOTService = tc.ServiceName
-
+	exec := cli.NewExecFlags()
 	fs := cli.NewFlagSet("resterm")
 	fs.StringVar(&filePath, "file", "", "Path to .http/.rest file to open")
-	fs.StringVar(&envName, "env", "", "Environment name to use")
-	fs.StringVar(&envFile, "env-file", "", "Path to environment file")
-	fs.StringVar(&workspace, "workspace", "", "Workspace directory to scan for request files")
-	fs.DurationVar(&timeout, "timeout", 30*time.Second, "Request timeout")
-	fs.BoolVar(&insecure, "insecure", false, "Skip TLS certificate verification")
-	fs.BoolVar(&follow, "follow", true, "Follow redirects")
-	fs.StringVar(&proxyURL, "proxy", "", "HTTP proxy URL")
-	fs.BoolVar(&recursive, "recursive", false, "Recursively scan workspace for request files")
-	fs.BoolVar(
-		&recursive,
-		"recurisve",
-		false,
-		"(deprecated) Recursively scan workspace for request files",
-	)
+	exec.Bind(fs)
 	fs.BoolVar(&showVersion, "version", false, "Show resterm version")
 	fs.BoolVar(&checkUpdate, "check-update", false, "Check for newer releases and exit")
 	fs.BoolVar(
@@ -152,36 +124,6 @@ func run(a []string) error {
 		0,
 		"Preferred server index (0-based) from the spec to use as the base URL",
 	)
-	fs.StringVar(
-		&traceOTEndpoint,
-		"trace-otel-endpoint",
-		traceOTEndpoint,
-		"OTLP collector endpoint used when @trace is enabled",
-	)
-	fs.BoolVar(
-		&traceOTInsecure,
-		"trace-otel-insecure",
-		traceOTInsecure,
-		"Disable TLS for OTLP trace export",
-	)
-	fs.StringVar(
-		&traceOTService,
-		"trace-otel-service",
-		traceOTService,
-		"Override service.name resource attribute for exported spans",
-	)
-	fs.StringVar(
-		&compareTargetsRaw,
-		"compare",
-		"",
-		"Default environments for manual compare runs (comma/space separated)",
-	)
-	fs.StringVar(
-		&compareBaseline,
-		"compare-base",
-		"",
-		"Baseline environment when --compare is used (defaults to first target)",
-	)
 	if err := fs.Parse(a); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			printMainUsage(os.Stderr, fs)
@@ -189,11 +131,6 @@ func run(a []string) error {
 		}
 		return cli.ExitErr{Err: err, Code: 2}
 	}
-
-	tc.Endpoint = strings.TrimSpace(traceOTEndpoint)
-	tc.Insecure = traceOTInsecure
-	tc.ServiceName = strings.TrimSpace(traceOTService)
-	tc.Version = version
 
 	if showVersion {
 		fmt.Printf("resterm %s\n", version)
@@ -206,7 +143,7 @@ func run(a []string) error {
 		}
 		return nil
 	}
-	if err := cli.ValidateReservedEnvironment(envName, "--env"); err != nil {
+	if err := exec.ValidateEnvFlag(); err != nil {
 		return err
 	}
 
@@ -325,6 +262,7 @@ func run(a []string) error {
 	if filePath == "" && fs.NArg() > 0 {
 		filePath = fs.Arg(0)
 	}
+	filePath = cli.CleanExecPath(filePath)
 
 	var initialContent string
 	if filePath != "" {
@@ -332,68 +270,25 @@ func run(a []string) error {
 		if err != nil {
 			return fmt.Errorf("read file: %w", err)
 		}
-
-		filePath = filepath.Clean(filePath)
 		initialContent = string(data)
 	}
 
-	if workspace == "" {
-		if filePath != "" {
-			workspace = filepath.Dir(filePath)
-		} else if wd, err := os.Getwd(); err == nil {
-			workspace = wd
-		} else {
-			workspace = "."
-		}
-	} else {
-		if abs, err := filepath.Abs(workspace); err == nil {
-			workspace = abs
-		}
-	}
-
-	envSet, resolvedEnvFile := cli.LoadEnvironment(envFile, filePath, workspace)
-	var envFallback string
-	if envName == "" && len(envSet) > 0 {
-		selected, notify := cli.SelectDefaultEnvironment(envSet)
-		if selected != "" {
-			envName = selected
-			if notify {
-				envFallback = selected
-			}
-		}
-	}
-
-	client := httpclient.NewClient(nil)
-
-	provider, err := telemetry.New(tc)
+	cfg, err := exec.Resolve(filePath)
 	if err != nil {
-		if tc.Enabled() {
+		return err
+	}
+
+	client, shutdown, err := cli.NewExecClient(version, exec)
+	if err != nil {
+		if exec.TelemetryConfig(version).Enabled() {
 			log.Printf("telemetry init error: %v", err)
 		}
-	} else {
-		client.SetTelemetry(provider)
+	} else if shutdown != nil {
 		defer func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			if shutdownErr := provider.Shutdown(ctx); shutdownErr != nil {
+			if shutdownErr := shutdown(); shutdownErr != nil {
 				log.Printf("telemetry shutdown: %v", shutdownErr)
 			}
 		}()
-	}
-
-	httpOpts := httpclient.Options{
-		Timeout:            timeout,
-		FollowRedirects:    follow,
-		InsecureSkipVerify: insecure,
-		ProxyURL:           proxyURL,
-	}
-	if filePath != "" {
-		httpOpts.BaseDir = filepath.Dir(filePath)
-	}
-
-	grpcOpts := grpcclient.Options{
-		DefaultPlaintext:    true,
-		DefaultPlaintextSet: true,
 	}
 
 	historyStore := histdb.New(config.HistoryPath())
@@ -420,15 +315,6 @@ func run(a []string) error {
 			log.Printf("history close error: %v", err)
 		}
 	}()
-
-	compareTargets, compareErr := cli.ParseCompareTargets(compareTargetsRaw)
-	if compareErr != nil {
-		return fmt.Errorf("invalid --compare value: %w", compareErr)
-	}
-	compareBaseline = strings.TrimSpace(compareBaseline)
-	if err := cli.ValidateReservedEnvironment(compareBaseline, "--compare-base"); err != nil {
-		return fmt.Errorf("invalid --compare-base value: %w", err)
-	}
 
 	settings, settingsHandle, err := config.LoadSettings()
 	if err != nil {
@@ -484,21 +370,21 @@ func run(a []string) error {
 		ActiveThemeKey:      activeThemeKey,
 		Settings:            settings,
 		SettingsHandle:      settingsHandle,
-		EnvironmentSet:      envSet,
-		EnvironmentName:     envName,
-		EnvironmentFile:     resolvedEnvFile,
-		EnvironmentFallback: envFallback,
-		HTTPOptions:         httpOpts,
-		GRPCOptions:         grpcOpts,
+		EnvironmentSet:      cfg.EnvSet,
+		EnvironmentName:     cfg.EnvName,
+		EnvironmentFile:     cfg.EnvFile,
+		EnvironmentFallback: cfg.EnvFallback,
+		HTTPOptions:         cfg.HTTPOpts,
+		GRPCOptions:         cfg.GRPCOpts,
 		History:             historyStore,
-		WorkspaceRoot:       workspace,
-		Recursive:           recursive,
+		WorkspaceRoot:       cfg.Workspace,
+		Recursive:           cfg.Recursive,
 		Version:             version,
 		UpdateClient:        uc,
 		EnableUpdate:        updateEnabled,
 		UpdateCmd:           ucmd,
-		CompareTargets:      compareTargets,
-		CompareBase:         compareBaseline,
+		CompareTargets:      cfg.CompareTargets,
+		CompareBase:         cfg.CompareBase,
 		Bindings:            bindingMap,
 	})
 
@@ -511,6 +397,24 @@ func run(a []string) error {
 
 func printMainUsage(w io.Writer, fs *flag.FlagSet) {
 	if _, err := fmt.Fprintf(w, "Usage: %s [flags] [file]\n\n", fs.Name()); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "Subcommands:"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "  run         Execute request files without the TUI"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "  init        Bootstrap a new workspace"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "  collection  Export or import request bundles"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w, "  history     Manage persisted history"); err != nil {
+		return
+	}
+	if _, err := fmt.Fprintln(w); err != nil {
 		return
 	}
 	if _, err := fmt.Fprintln(w, "Flags:"); err != nil {

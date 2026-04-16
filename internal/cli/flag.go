@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 )
 
 func NewFlagSet(name string) *flag.FlagSet {
@@ -41,4 +42,30 @@ func PrintFlagSetUsage(w io.Writer, app string, fs *flag.FlagSet) {
 	fs.SetOutput(w)
 	fs.PrintDefaults()
 	fs.SetOutput(out)
+}
+
+type trimmedStringValue struct {
+	dst *string
+}
+
+func (v trimmedStringValue) String() string {
+	if v.dst == nil {
+		return ""
+	}
+	return *v.dst
+}
+
+func (v trimmedStringValue) Set(s string) error {
+	if v.dst != nil {
+		*v.dst = strings.TrimSpace(s)
+	}
+	return nil
+}
+
+func StringVar(fs *flag.FlagSet, dst *string, name, value, usage string) {
+	if fs == nil || dst == nil {
+		return
+	}
+	*dst = strings.TrimSpace(value)
+	fs.Var(trimmedStringValue{dst: dst}, name, usage)
 }

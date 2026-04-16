@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -45,13 +45,11 @@ func (m *Model) filterEditorMessage(msg tea.Msg) tea.Msg {
 	return msg
 }
 
-var ansiSequenceRegex = regexp.MustCompile(
-	"\x1b\\[[0-9;?]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(?:\x07|\x1b\\\\)",
-)
-
 func stripANSIEscape(s string) string {
-	return ansiSequenceRegex.ReplaceAllString(s, "")
+	return bodyfmt.StripANSI(s)
 }
+
+var ansiSequenceRegex = bodyfmt.ANSISequenceRegex
 
 func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 	if len(results) == 0 && scriptErr == nil {
@@ -229,31 +227,11 @@ func renderContentLengthLinePretty(resp *httpclient.Response) string {
 }
 
 func formatByteQuantity(n int64) string {
-	if n == 1 {
-		return "1 byte"
-	}
-	return fmt.Sprintf("%d bytes", n)
+	return bodyfmt.FormatByteQuantity(n)
 }
 
 func formatByteSize(n int64) string {
-	if n < 0 {
-		n = 0
-	}
-
-	units := []string{"B", "KiB", "MiB", "GiB"}
-	f := float64(n)
-	i := 0
-	for i < len(units)-1 && f >= 1024 {
-		f /= 1024
-		i++
-	}
-	if i == 0 {
-		return fmt.Sprintf("%d %s", n, units[i])
-	}
-
-	s := fmt.Sprintf("%.1f", f)
-	s = strings.TrimRight(strings.TrimRight(s, "0"), ".")
-	return s + " " + units[i]
+	return bodyfmt.FormatByteSize(n)
 }
 
 func selectStatusStyle(code int) lipgloss.Style {

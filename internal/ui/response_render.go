@@ -3,12 +3,8 @@ package ui
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"encoding/xml"
 	"fmt"
-	"io"
 	"net/http"
-	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -17,10 +13,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
 const (
@@ -289,12 +287,7 @@ func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
 }
 
 func formatRawBody(body []byte, contentType string) string {
-	raw := trimResponseBody(string(body))
-	formatted, ok := indentRawBody(body, contentType)
-	if !ok {
-		return raw
-	}
-	return trimResponseBody(formatted)
+	return bodyfmt.FormatRaw(body, contentType)
 }
 
 type bodyViews struct {
@@ -333,141 +326,31 @@ func buildBodyViewsCtx(
 	viewBody []byte,
 	viewContentType string,
 ) bodyViews {
-	var detected binaryview.Meta
-	if meta == nil {
-		detected = binaryview.Analyze(body, contentType)
-		meta = &detected
+	out := bodyfmt.BuildContext(ctx, bodyfmt.BuildInput{
+		Body:            body,
+		ContentType:     contentType,
+		Meta:            meta,
+		ViewBody:        viewBody,
+		ViewContentType: viewContentType,
+		Color:           termcolor.TrueColor(),
+	})
+	if meta != nil {
+		*meta = out.Meta
 	}
-	localMeta := *meta
-
-	if len(viewBody) == 0 {
-		viewBody = body
+	pretty := out.Pretty
+	if out.Meta.Kind == binaryview.KindBinary {
+		pretty = renderBinarySummary(out.Meta)
 	}
-	if strings.TrimSpace(viewContentType) == "" {
-		viewContentType = contentType
-	}
-
-	if !bytes.Equal(viewBody, body) {
-		viewMeta := binaryview.Analyze(viewBody, viewContentType)
-		if viewMeta.Kind == binaryview.KindText {
-			localMeta = viewMeta
-		}
-		if strings.TrimSpace(localMeta.MIME) == "" {
-			localMeta.MIME = viewMeta.MIME
-		}
-		if strings.TrimSpace(localMeta.Charset) == "" {
-			localMeta.Charset = viewMeta.Charset
-		}
-	}
-
-	sz := len(body)
-	rawHex := ""
-	rawBase64 := ""
-	if sz <= rawHeavyLimit {
-		rawHex = binaryview.HexDump(body, binaryview.HexDumpBytesPerLine)
-		rawBase64 = binaryview.Base64Lines(body, rawBase64LineWidth)
-	}
-
-	rawMode := rawViewText
-	rawText := ""
-	if localMeta.Kind != binaryview.KindBinary || localMeta.Printable {
-		rawText = formatRawBody(viewBody, viewContentType)
-	}
-
-	decoded := viewBody
-	if localMeta.Kind == binaryview.KindText {
-		if decodedText, ok, errStr := binaryview.DecodeText(viewBody, localMeta.Charset); ok {
-			decoded = []byte(decodedText)
-			rawText = formatRawBody(decoded, viewContentType)
-		} else if errStr != "" {
-			localMeta.DecodeErr = errStr
-		}
-	}
-
-	var prettyBody string
-	if localMeta.Kind == binaryview.KindBinary {
-		prettyBody = renderBinarySummary(localMeta)
-		if rawHeavyBin(localMeta, sz) {
-			rawMode = rawViewSummary
-		} else {
-			rawMode = rawViewHex
-		}
-	} else {
-		prettyBody = trimResponseBody(prettifyBodyCtx(ctx, decoded, viewContentType))
-	}
-	rawMode = clampRawViewMode(localMeta, sz, rawMode)
-	if rawMode == rawViewHex && rawHex == "" {
-		if rawHeavyBin(localMeta, sz) {
-			rawMode = rawViewSummary
-		} else {
-			rawMode = rawViewText
-		}
-	}
-
-	if isBodyEmpty(prettyBody) {
-		prettyBody = "<empty>"
-	}
-
-	rawDefault := rawText
-	if rawMode == rawViewSummary {
-		rawDefault = rawSum(localMeta, sz)
-	} else if rawMode == rawViewHex && rawHex != "" {
-		rawDefault = rawHex
-	}
-	if isBodyEmpty(rawDefault) {
-		rawDefault = "<empty>"
-	}
-
-	*meta = localMeta
 	return bodyViews{
-		pretty:    prettyBody,
-		raw:       rawDefault,
-		rawText:   rawText,
-		rawHex:    rawHex,
-		rawBase64: rawBase64,
-		mode:      rawMode,
-		meta:      localMeta,
-		ct:        viewContentType,
+		pretty:    pretty,
+		raw:       out.Raw,
+		rawText:   out.RawText,
+		rawHex:    out.RawHex,
+		rawBase64: out.RawBase64,
+		mode:      rawViewMode(out.Mode),
+		meta:      out.Meta,
+		ct:        out.ContentType,
 	}
-}
-
-func indentRawBody(body []byte, contentType string) (string, bool) {
-	ct := strings.ToLower(contentType)
-	switch {
-	case strings.Contains(ct, "json"):
-		var buf bytes.Buffer
-		if err := json.Indent(&buf, body, "", "  "); err == nil {
-			return buf.String(), true
-		}
-	case strings.Contains(ct, "xml"):
-		if formatted, ok := indentXML(body); ok {
-			return formatted, true
-		}
-	}
-	return "", false
-}
-
-func indentXML(body []byte) (string, bool) {
-	decoder := xml.NewDecoder(bytes.NewReader(body))
-	var buf bytes.Buffer
-	encoder := xml.NewEncoder(&buf)
-	encoder.Indent("", "  ")
-	for {
-		tok, err := decoder.Token()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return "", false
-		}
-		if err := encoder.EncodeToken(tok); err != nil {
-			return "", false
-		}
-	}
-	if err := encoder.Flush(); err != nil {
-		return "", false
-	}
-	return buf.String(), true
 }
 
 func renderBinarySummary(meta binaryview.Meta) string {
@@ -529,32 +412,30 @@ func cloneHeaders(h http.Header) http.Header {
 }
 
 func formatHTTPHeaders(headers http.Header, colored bool) string {
-	if len(headers) == 0 {
+	fields := bodyfmt.HeaderFields(headers)
+	if len(fields) == 0 {
 		return ""
 	}
-	keys := make([]string, 0, len(headers))
-	for name := range headers {
-		keys = append(keys, name)
-	}
-	sort.Strings(keys)
 	builder := strings.Builder{}
-	for _, name := range keys {
-		values := append([]string(nil), headers[name]...)
-		sort.Strings(values)
-		joined := strings.Join(values, ", ")
+	for _, field := range fields {
 		if colored {
-			if strings.TrimSpace(joined) == "" {
-				builder.WriteString(statsLabelStyle.Render(name + ":"))
+			if strings.TrimSpace(field.Value) == "" {
+				builder.WriteString(statsLabelStyle.Render(field.Name + ":"))
 			} else {
 				builder.WriteString(
-					renderLabelValue(name, joined, statsLabelStyle, statsHeaderValueStyle),
+					renderLabelValue(
+						field.Name,
+						field.Value,
+						statsLabelStyle,
+						statsHeaderValueStyle,
+					),
 				)
 			}
 		} else {
-			if strings.TrimSpace(joined) == "" {
-				fmt.Fprintf(&builder, "%s:", name)
+			if strings.TrimSpace(field.Value) == "" {
+				fmt.Fprintf(&builder, "%s:", field.Name)
 			} else {
-				fmt.Fprintf(&builder, "%s: %s", name, joined)
+				fmt.Fprintf(&builder, "%s: %s", field.Name, field.Value)
 			}
 		}
 		builder.WriteString("\n")
@@ -563,11 +444,11 @@ func formatHTTPHeaders(headers http.Header, colored bool) string {
 }
 
 func trimResponseBody(body string) string {
-	return strings.TrimRight(body, "\n")
+	return bodyfmt.TrimBody(body)
 }
 
 func isBodyEmpty(body string) bool {
-	return strings.TrimSpace(stripANSIEscape(body)) == ""
+	return bodyfmt.IsEmpty(body)
 }
 
 func renderCompareBundle(bundle *compareBundle, focusedEnv string) string {

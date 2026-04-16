@@ -7,6 +7,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 )
 
 func (m *Model) cycleRawViewMode() tea.Cmd {
@@ -351,16 +352,7 @@ func ensureSnapshotMeta(snapshot *responseSnapshot) binaryview.Meta {
 }
 
 func clampRawViewMode(meta binaryview.Meta, sz int, mode rawViewMode) rawViewMode {
-	modes := allowedRawViewModes(meta, sz)
-	for _, m := range modes {
-		if m == mode {
-			return mode
-		}
-	}
-	if len(modes) == 0 {
-		return rawViewText
-	}
-	return modes[0]
+	return rawViewMode(bodyfmt.ClampRawMode(meta, sz, bodyfmt.RawMode(mode)))
 }
 
 func nextRawViewMode(meta binaryview.Meta, sz int, current rawViewMode) rawViewMode {
@@ -380,20 +372,17 @@ func nextRawViewMode(meta binaryview.Meta, sz int, current rawViewMode) rawViewM
 }
 
 func allowedRawViewModes(meta binaryview.Meta, sz int) []rawViewMode {
-	if meta.Kind == binaryview.KindBinary && !meta.Printable {
-		if rawHeavyBin(meta, sz) {
-			return []rawViewMode{rawViewSummary, rawViewHex, rawViewBase64}
-		}
-		return []rawViewMode{rawViewHex, rawViewBase64}
+	src := bodyfmt.AllowedRawModes(meta, sz)
+	if len(src) == 0 {
+		return nil
 	}
-	return []rawViewMode{rawViewText, rawViewHex, rawViewBase64}
+	out := make([]rawViewMode, 0, len(src))
+	for _, mode := range src {
+		out = append(out, rawViewMode(mode))
+	}
+	return out
 }
 
 func rawViewModeLabels(meta binaryview.Meta, sz int) []string {
-	modes := allowedRawViewModes(meta, sz)
-	labels := make([]string, 0, len(modes))
-	for _, mode := range modes {
-		labels = append(labels, mode.label())
-	}
-	return labels
+	return bodyfmt.ModeLabels(meta, sz)
 }

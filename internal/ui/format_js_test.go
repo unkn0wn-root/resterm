@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 )
 
 func TestRenderJSONAsJSFormatsEmbeddedObjectStrings(t *testing.T) {
@@ -21,9 +23,9 @@ func TestRenderJSONAsJSFormatsEmbeddedObjectStrings(t *testing.T) {
 		t.Fatalf("failed to marshal body: %v", err)
 	}
 
-	got, ok := renderJSONAsJSCtx(context.Background(), body)
+	got, ok := bodyfmt.RenderJSONAsJSContext(context.Background(), body)
 	if !ok {
-		t.Fatalf("renderJSONAsJSCtx returned !ok")
+		t.Fatalf("RenderJSONAsJSContext returned !ok")
 	}
 
 	want := `{
