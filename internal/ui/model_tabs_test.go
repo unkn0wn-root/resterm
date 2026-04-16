@@ -59,3 +59,28 @@ func TestAvailableResponseTabsIncludesExplainWhenSnapshotHasReport(t *testing.T)
 		t.Fatalf("expected explain tab when explain report exists, got %v", tabs)
 	}
 }
+
+func TestResponseTabLabelForProfileStats(t *testing.T) {
+	label := responseTabLabelForSnapshot(responseTabStats, &responseSnapshot{
+		statsKind: statsReportKindProfile,
+	})
+	if label != "Profile" {
+		t.Fatalf("expected profile stats label, got %q", label)
+	}
+}
+
+func TestResponseTabLabelForWorkflowStats(t *testing.T) {
+	label := responseTabLabelForSnapshot(responseTabStats, &responseSnapshot{
+		statsKind: statsReportKindWorkflow,
+	})
+	if label != "Workflow" {
+		t.Fatalf("expected workflow stats label, got %q", label)
+	}
+}
+
+func TestResponseTabLabelFallsBackToStats(t *testing.T) {
+	label := responseTabLabelForSnapshot(responseTabStats, nil)
+	if label != "Stats" {
+		t.Fatalf("expected generic stats label, got %q", label)
+	}
+}

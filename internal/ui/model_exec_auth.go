@@ -46,7 +46,8 @@ func (m *Model) prepareExplainAuthPreview(
 	resolver *vars.Resolver,
 	envName string,
 ) (explainAuthPreviewResult, error) {
-	preview, err := m.requestSvc(httpclient.Options{}).PrepareExplainAuthPreview(nil, req, resolver, envName)
+	preview, err := m.requestSvc(httpclient.Options{}).
+		PrepareExplainAuthPreview(nil, req, resolver, envName)
 	if err != nil {
 		return explainAuthPreviewResult{}, err
 	}

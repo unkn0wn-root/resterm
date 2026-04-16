@@ -238,7 +238,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
 - **Headers**: response headers by default; press `g+Shift+H` to toggle into the sent request headers view (cookies included) and back.
-- **Stats**: latency summaries and histograms from `@profile` runs plus step-by-step workflow breakdowns. Press `Shift+J` / `Shift+K` while that view is focused to hop between steps, and Resterm only realigns the viewport if the next step was off screen.
+- **Profile** / **Workflow**: latency summaries and histograms from `@profile` runs plus step-by-step workflow breakdowns. The tab label follows the current run type. Press `Shift+J` / `Shift+K` while that view is focused to hop between workflow steps, and Resterm only realigns the viewport if the next step was off screen.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
@@ -748,7 +748,7 @@ Flags:
 - `warmup` - optional warmup runs that are executed but excluded from stats.
 - `delay` - optional delay between runs (e.g. `250ms`).
 
-When profiling completes the response pane's **Stats** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
+When profiling completes the response pane's **Profile** tab shows percentiles, histograms, success/failure counts, and any errors that occurred.
 
 ## Workflows
 
@@ -771,7 +771,7 @@ POST https://example.com/users
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 
-Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Stats** tab shows a workflow summary (including started/ended timestamps), and a consolidated entry is written to history so you can review results later. While you read through that summary, tap `Shift+J` / `Shift+K` to move between workflow entries.
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Workflow** tab shows a workflow summary (including started/ended timestamps), and a consolidated entry is written to history so you can review results later. While you read through that summary, tap `Shift+J` / `Shift+K` to move between workflow entries.
 
 Key directives and tokens:
 

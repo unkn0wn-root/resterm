@@ -2433,14 +2433,19 @@ func TestClearGlobalValuesClearsCookiesForEnvironment(t *testing.T) {
 	}
 
 	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
-	model.cookieStore().Jar("prod").SetCookies(u, []*http.Cookie{{Name: "session", Value: "prod456"}})
+	model.cookieStore().
+		Jar("prod").
+		SetCookies(u, []*http.Cookie{{Name: "session", Value: "prod456"}})
 
 	model.clearGlobalValues()
 
 	if got := model.cookieStore().Jar("dev").Cookies(u); len(got) != 0 {
 		t.Fatalf("expected dev cookies to be cleared, got %+v", got)
 	}
-	if got := model.cookieStore().Jar("prod").Cookies(u); len(got) != 1 || got[0].Value != "prod456" {
+	if got := model.cookieStore().
+		Jar("prod").
+		Cookies(u); len(got) != 1 ||
+		got[0].Value != "prod456" {
 		t.Fatalf("expected prod cookies to remain, got %+v", got)
 	}
 }
@@ -2598,7 +2603,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 func TestApplyNoCookiesSetting(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, cookie := range r.Cookies() {
-			fmt.Fprintf(w, "%s\n", cookie.String())
+			_, _ = fmt.Fprintf(w, "%s\n", cookie.String())
 		}
 	}))
 	defer srv.Close()
@@ -2644,7 +2649,13 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 		Settings: map[string]string{"no-cookies": "true"},
 	}
 
-	cmd = model.executeRequest(nil, reqWithSetting, httpclient.Options{NoFallback: true}, "dev", nil)
+	cmd = model.executeRequest(
+		nil,
+		reqWithSetting,
+		httpclient.Options{NoFallback: true},
+		"dev",
+		nil,
+	)
 	msg, ok = cmd().(responseMsg)
 	if !ok {
 		t.Fatalf("expected responseMsg")

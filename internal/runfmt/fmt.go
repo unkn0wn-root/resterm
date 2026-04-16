@@ -1,4 +1,4 @@
-package headless
+package runfmt
 
 import (
 	"fmt"
@@ -23,19 +23,19 @@ func reportEnvLabel(name string) string {
 }
 
 func reportTargetLabel(rep *Report) string {
-	for _, item := range rep.Results {
-		if item.Kind != KindRequest {
+	for _, res := range rep.Results {
+		if res.Kind != "request" {
 			return "target(s)"
 		}
 	}
 	return "request(s)"
 }
 
-func resultLabel(item Result) string {
-	switch {
-	case item.Status == StatusSkip:
+func resultLabel(res Result) string {
+	switch res.Status {
+	case StatusSkip:
 		return "SKIP"
-	case item.Failed():
+	case StatusFail:
 		return "FAIL"
 	default:
 		return "PASS"
@@ -48,7 +48,7 @@ func stepLabel(step Step) string {
 		return "CANCELED"
 	case step.Status == StatusSkip:
 		return "SKIP"
-	case step.Failed():
+	case step.Status == StatusFail:
 		return "FAIL"
 	default:
 		return "PASS"
@@ -63,12 +63,11 @@ func requestMethodValue(method string) string {
 	return method
 }
 
-func resultName(item Result) string {
-	name := item.Name
-	if name != "" {
-		return name
+func resultName(res Result) string {
+	if res.Name != "" {
+		return res.Name
 	}
-	target := item.Target
+	target := res.Target
 	if target == "" {
 		return "<unnamed>"
 	}
@@ -79,15 +78,14 @@ func resultName(item Result) string {
 }
 
 func stepName(step Step) string {
-	name := step.Name
-	if name != "" {
-		return name
+	if step.Name != "" {
+		return step.Name
 	}
-	if env := step.Environment; env != "" {
-		return env
+	if step.Environment != "" {
+		return step.Environment
 	}
-	if target := step.Target; target != "" {
-		return target
+	if step.Target != "" {
+		return step.Target
 	}
 	return "<step>"
 }
@@ -108,45 +106,45 @@ func protocolStatus(http *HTTP, grpc *GRPC) string {
 	}
 }
 
-func resultStatus(item Result) string {
-	return protocolStatus(item.HTTP, item.GRPC)
+func resultStatus(res Result) string {
+	return protocolStatus(res.HTTP, res.GRPC)
 }
 
 func stepStatus(step Step) string {
 	return protocolStatus(step.HTTP, step.GRPC)
 }
 
-func resultLine(item Result) string {
-	switch item.Kind {
-	case KindWorkflow, KindForEach:
-		return workflowLine(item)
-	case KindCompare:
-		return compareLine(item)
-	case KindProfile:
-		return profileLine(item)
+func resultLine(res Result) string {
+	switch res.Kind {
+	case "workflow", "for-each":
+		return workflowLine(res)
+	case "compare":
+		return compareLine(res)
+	case "profile":
+		return profileLine(res)
 	}
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
+	base := fmt.Sprintf("%s %s", requestMethodValue(res.Method), resultName(res))
 	switch {
-	case item.Status == StatusSkip:
-		if reason := item.SkipReason; reason != "" {
+	case res.Status == StatusSkip:
+		if reason := res.SkipReason; reason != "" {
 			return fmt.Sprintf("%s [%s]", base, reason)
 		}
 		return base
-	case item.Error != "":
-		return fmt.Sprintf("%s [%s]", base, item.Error)
-	case item.ScriptError != "":
-		return fmt.Sprintf("%s [%s]", base, item.ScriptError)
+	case res.Error != "":
+		return fmt.Sprintf("%s [%s]", base, res.Error)
+	case res.ScriptError != "":
+		return fmt.Sprintf("%s [%s]", base, res.ScriptError)
 	}
 
-	if n := failedTestCount(item.Tests); n > 0 {
+	if n := failedTestCount(res.Tests); n > 0 {
 		return fmt.Sprintf("%s [%d test(s) failed]", base, n)
 	}
-	if msg := traceFailureText(item.Trace); msg != "" {
+	if msg := traceFailureText(res.Trace); msg != "" {
 		return fmt.Sprintf("%s [%s]", base, msg)
 	}
 
-	status := resultStatus(item)
-	dur := item.Duration
+	status := resultStatus(res)
+	dur := res.Duration
 	if status == "" && dur <= 0 {
 		return base
 	}
@@ -159,58 +157,60 @@ func resultLine(item Result) string {
 	return fmt.Sprintf("%s [%s in %s]", base, status, dur)
 }
 
-func workflowLine(item Result) string {
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	pass, fail, skip := stepCounts(item.Steps)
+func workflowLine(res Result) string {
+	base := fmt.Sprintf("%s %s", requestMethodValue(res.Method), resultName(res))
+	pass, fail, skip := stepCounts(res.Steps)
 	detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
-	if item.Canceled {
+	if res.Canceled {
 		detail += ", canceled"
 	}
-	if dur := item.Duration; dur > 0 {
+	if dur := res.Duration; dur > 0 {
 		detail = fmt.Sprintf("%s in %s", detail, dur)
 	}
 	return fmt.Sprintf("%s [%s]", base, detail)
 }
 
-func compareLine(item Result) string {
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	pass, fail, skip := stepCounts(item.Steps)
+func compareLine(res Result) string {
+	base := fmt.Sprintf("%s %s", requestMethodValue(res.Method), resultName(res))
+	pass, fail, skip := stepCounts(res.Steps)
 	detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
-	if item.Compare != nil && item.Compare.Baseline != "" {
-		detail = fmt.Sprintf("baseline: %s, %s", item.Compare.Baseline, detail)
+	if res.Compare != nil && res.Compare.Baseline != "" {
+		detail = fmt.Sprintf("baseline: %s, %s", res.Compare.Baseline, detail)
 	}
-	if item.Canceled {
+	if res.Canceled {
 		detail += ", canceled"
 	}
-	if dur := item.Duration; dur > 0 {
+	if dur := res.Duration; dur > 0 {
 		detail = fmt.Sprintf("%s in %s", detail, dur)
 	}
 	return fmt.Sprintf("%s [%s]", base, detail)
 }
 
-func profileLine(item Result) string {
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	prof := item.Profile
+func profileLine(res Result) string {
+	base := fmt.Sprintf("%s %s", requestMethodValue(res.Method), resultName(res))
+	prof := res.Profile
 	if prof == nil ||
 		(prof.TotalRuns == 0 && prof.WarmupRuns == 0 && prof.SuccessfulRuns == 0 && prof.FailedRuns == 0) {
-		if summary := item.Summary; summary != "" {
+		if summary := res.Summary; summary != "" {
 			return fmt.Sprintf("%s [%s]", base, summary)
 		}
 		return base
 	}
+
 	detail := fmt.Sprintf(
 		"%d total, %d success, %d failure",
 		prof.TotalRuns,
 		prof.SuccessfulRuns,
 		prof.FailedRuns,
 	)
+
 	if prof.WarmupRuns > 0 {
 		detail = fmt.Sprintf("%s, %d warmup", detail, prof.WarmupRuns)
 	}
-	if item.Canceled {
+	if res.Canceled {
 		detail += ", canceled"
 	}
-	if dur := item.Duration; dur > 0 {
+	if dur := res.Duration; dur > 0 {
 		detail = fmt.Sprintf("%s in %s", detail, dur)
 	}
 	return fmt.Sprintf("%s [%s]", base, detail)
@@ -218,10 +218,10 @@ func profileLine(item Result) string {
 
 func stepCounts(steps []Step) (pass, fail, skip int) {
 	for _, step := range steps {
-		switch {
-		case step.Status == StatusSkip:
+		switch step.Status {
+		case StatusSkip:
 			skip++
-		case step.Failed():
+		case StatusFail:
 			fail++
 		default:
 			pass++
@@ -258,7 +258,7 @@ func stepLine(step Step) string {
 	if msg := traceFailureText(step.Trace); msg != "" {
 		return fmt.Sprintf("%s [%s]", base, msg)
 	}
-	if step.Failed() {
+	if step.Status == StatusFail {
 		if msg := step.Summary; msg != "" {
 			return fmt.Sprintf("%s [%s]", base, msg)
 		}
@@ -316,27 +316,27 @@ func traceFailureText(info *Trace) string {
 	return fmt.Sprintf("trace budget breach %s", label)
 }
 
-func suiteName(item Result) string {
-	return requestMethodValue(item.Method) + " " + resultName(item)
+func suiteName(res Result) string {
+	return requestMethodValue(res.Method) + " " + resultName(res)
 }
 
-func resultFailureMessage(item Result) string {
+func resultFailureMessage(res Result) string {
 	switch {
-	case item.Error != "":
-		return item.Error
-	case item.ScriptError != "":
-		return item.ScriptError
+	case res.Error != "":
+		return res.Error
+	case res.ScriptError != "":
+		return res.ScriptError
 	}
-	if failed := failedTests(item.Tests); len(failed) > 0 {
+	if failed := failedTests(res.Tests); len(failed) > 0 {
 		return testFailureMessage(failed)
 	}
-	if msg := traceFailureText(item.Trace); msg != "" && item.Failed() {
+	if msg := traceFailureText(res.Trace); msg != "" && res.Status == StatusFail {
 		return msg
 	}
-	if msg := item.Summary; msg != "" && item.Failed() {
+	if msg := res.Summary; msg != "" && res.Status == StatusFail {
 		return msg
 	}
-	if status := resultStatus(item); status != "" && item.Failed() {
+	if status := resultStatus(res); status != "" && res.Status == StatusFail {
 		return status
 	}
 	return ""
@@ -357,13 +357,13 @@ func stepFailureMessage(step Step) string {
 	if failed := failedTests(step.Tests); len(failed) > 0 {
 		return testFailureMessage(failed)
 	}
-	if msg := traceFailureText(step.Trace); msg != "" && step.Failed() {
+	if msg := traceFailureText(step.Trace); msg != "" && step.Status == StatusFail {
 		return msg
 	}
-	if msg := step.Summary; msg != "" && step.Failed() {
+	if msg := step.Summary; msg != "" && step.Status == StatusFail {
 		return msg
 	}
-	if status := stepStatus(step); status != "" && step.Failed() {
+	if status := stepStatus(step); status != "" && step.Status == StatusFail {
 		return status
 	}
 	return ""
@@ -374,15 +374,13 @@ func testFailureMessage(tests []Test) string {
 		return ""
 	}
 	first := tests[0]
-	name := first.Name
-	msg := first.Message
 	switch {
-	case name != "" && msg != "":
-		return name + ": " + msg
-	case name != "":
-		return name
-	case msg != "":
-		return msg
+	case first.Name != "" && first.Message != "":
+		return first.Name + ": " + first.Message
+	case first.Name != "":
+		return first.Name
+	case first.Message != "":
+		return first.Message
 	default:
 		return "test failed"
 	}
@@ -416,8 +414,8 @@ func jsonAnyMap(src map[string]any) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, len(src))
-	for key, value := range src {
-		out[key] = jsonAnyValue(value)
+	for key, val := range src {
+		out[key] = jsonAnyValue(val)
 	}
 	return out
 }
