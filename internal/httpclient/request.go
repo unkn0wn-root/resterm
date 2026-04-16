@@ -3,9 +3,7 @@ package httpclient
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
@@ -146,43 +144,8 @@ func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
 }
 
 func applyRequestSettings(opts Options, settings map[string]string) Options {
-	norm := normalizeSettings(settings)
-	if len(norm) == 0 {
-		return opts
-	}
-
 	effective := opts
-
-	if value, ok := norm["timeout"]; ok {
-		if dur, err := time.ParseDuration(value); err == nil {
-			effective.Timeout = dur
-		}
-	}
-
-	if value, ok := norm["proxy"]; ok && value != "" {
-		effective.ProxyURL = value
-	}
-
-	if value, ok := norm["followredirects"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			effective.FollowRedirects = b
-		}
-	}
-
-	if value, ok := norm["insecure"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			effective.InsecureSkipVerify = b
-		}
-	}
-	if value, ok := norm["no-cookies"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil && b {
-			effective.CookieJar = nil
-		}
-	}
-	if v := resolveHTTPVersion(opts, norm); v != httpver.Unknown {
-		effective.HTTPVersion = v
-	}
-
+	_ = applyOptionSettings(&effective, settings, false)
 	return effective
 }
 

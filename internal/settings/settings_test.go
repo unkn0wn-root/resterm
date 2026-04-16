@@ -2,6 +2,7 @@ package settings
 
 import (
 	"net/http/cookiejar"
+	"strings"
 	"testing"
 	"time"
 
@@ -111,5 +112,18 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	}
 	if httpOpts.ClientCert != "cert.pem" || httpOpts.ClientKey != "key.pem" {
 		t.Fatalf("unexpected client cert/key: %q / %q", httpOpts.ClientCert, httpOpts.ClientKey)
+	}
+}
+
+func TestApplyAllHTTPInvalidVersionReturnsError(t *testing.T) {
+	httpOpts := httpclient.Options{}
+	applier := New(HTTPHandler(&httpOpts, nil))
+
+	_, err := applier.ApplyAll(map[string]string{"http-version": "bogus"})
+	if err == nil {
+		t.Fatal("expected invalid http-version error")
+	}
+	if !strings.Contains(err.Error(), "invalid http-version") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
