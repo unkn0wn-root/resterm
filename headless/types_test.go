@@ -202,12 +202,16 @@ func TestReportHasFailures(t *testing.T) {
 		t.Fatalf("expected failed result to be detected: %+v", rep)
 	}
 
+	if (&Report{Results: []Result{{Error: "boom"}}}).HasFailures() == false {
+		t.Fatal("expected result error to report failures")
+	}
+
 	if (&Report{Results: []Result{{Status: StatusPass}}}).HasFailures() {
 		t.Fatal("expected passing results to report no failures")
 	}
 }
 
-func TestResultFailedUsesStatus(t *testing.T) {
+func TestResultFailedUsesEffectiveStatus(t *testing.T) {
 	res := Result{
 		Status:      StatusPass,
 		Canceled:    true,
@@ -216,16 +220,16 @@ func TestResultFailedUsesStatus(t *testing.T) {
 		Tests:       []Test{{Passed: false}},
 		Trace:       &Trace{Breaches: []TraceBreach{{Kind: "total"}}},
 	}
-	if res.Failed() {
-		t.Fatalf("expected pass status to stay non-failing: %+v", res)
-	}
-	res.Status = StatusFail
 	if !res.Failed() {
-		t.Fatalf("expected fail status to report failure: %+v", res)
+		t.Fatalf("expected failure evidence to report failure: %+v", res)
+	}
+	res.Status = StatusSkip
+	if res.Failed() {
+		t.Fatalf("expected skip status to suppress failure reporting: %+v", res)
 	}
 }
 
-func TestStepFailedUsesStatus(t *testing.T) {
+func TestStepFailedUsesEffectiveStatus(t *testing.T) {
 	step := Step{
 		Status:      StatusPass,
 		Canceled:    true,
@@ -234,12 +238,12 @@ func TestStepFailedUsesStatus(t *testing.T) {
 		Tests:       []Test{{Passed: false}},
 		Trace:       &Trace{Breaches: []TraceBreach{{Kind: "total"}}},
 	}
-	if step.Failed() {
-		t.Fatalf("expected pass status to stay non-failing: %+v", step)
-	}
-	step.Status = StatusFail
 	if !step.Failed() {
-		t.Fatalf("expected fail status to report failure: %+v", step)
+		t.Fatalf("expected failure evidence to report failure: %+v", step)
+	}
+	step.Status = StatusSkip
+	if step.Failed() {
+		t.Fatalf("expected skip status to suppress failure reporting: %+v", step)
 	}
 }
 

@@ -87,14 +87,21 @@ type Result struct {
 	Steps       []Step
 }
 
-// Failed reports whether the result represents a failure.
-func (r Result) Failed() bool {
-	return r.Status == StatusFail
-}
-
 // MarshalJSON writes the canonical result JSON format.
 func (r Result) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toFormatResult(r))
+}
+
+// Failed reports whether the result represents a failure.
+func (r Result) Failed() bool {
+	return r.effectiveStatus() == StatusFail
+}
+
+func (r Result) effectiveStatus() Status {
+	return status(
+		r.Status,
+		hasFailure(r.Canceled, r.Error, r.ScriptError, r.Trace, r.Tests),
+	)
 }
 
 // Step contains one workflow or compare step result.
@@ -120,14 +127,56 @@ type Step struct {
 	Tests       []Test
 }
 
-// Failed reports whether the step represents a failure.
-func (s Step) Failed() bool {
-	return s.Status == StatusFail
-}
-
 // MarshalJSON writes the canonical step JSON format.
 func (s Step) MarshalJSON() ([]byte, error) {
 	return json.Marshal(toFormatStep(s))
+}
+
+// Failed reports whether the step represents a failure.
+func (s Step) Failed() bool {
+	return s.effectiveStatus() == StatusFail
+}
+
+func (s Step) effectiveStatus() Status {
+	return status(
+		s.Status,
+		hasFailure(s.Canceled, s.Error, s.ScriptError, s.Trace, s.Tests),
+	)
+}
+
+// skip wins, otherwise any failure evidence makes the result fail.
+func status(s Status, failed bool) Status {
+	if s == StatusSkip {
+		return StatusSkip
+	}
+	if s == StatusFail || failed {
+		return StatusFail
+	}
+	return StatusPass
+}
+
+func hasFailure(
+	canceled bool,
+	errText string,
+	scriptErrText string,
+	trace *Trace,
+	tests []Test,
+) bool {
+	return canceled || errText != "" || scriptErrText != "" ||
+		traceFailed(trace) || anyTestFailed(tests)
+}
+
+func traceFailed(trace *Trace) bool {
+	return trace != nil && len(trace.Breaches) > 0
+}
+
+func anyTestFailed(tests []Test) bool {
+	for _, test := range tests {
+		if !test.Passed {
+			return true
+		}
+	}
+	return false
 }
 
 // HTTP contains HTTP response summary fields.
@@ -267,7 +316,7 @@ func toFormatResult(res Result) runfmt.Result {
 		Method:      res.Method,
 		Target:      res.Target,
 		Environment: res.Environment,
-		Status:      runfmt.Status(res.Status),
+		Status:      runfmt.Status(res.effectiveStatus()),
 		Summary:     res.Summary,
 		Duration:    res.Duration,
 		Canceled:    res.Canceled,
@@ -310,7 +359,7 @@ func toFormatStep(step Step) runfmt.Step {
 		Branch:      step.Branch,
 		Iteration:   step.Iteration,
 		Total:       step.Total,
-		Status:      runfmt.Status(step.Status),
+		Status:      runfmt.Status(step.effectiveStatus()),
 		Summary:     step.Summary,
 		Duration:    step.Duration,
 		Canceled:    step.Canceled,

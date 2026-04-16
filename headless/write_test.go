@@ -132,7 +132,7 @@ func TestReportWriteJSONUsesCanonicalStatusValues(t *testing.T) {
 	}
 }
 
-func TestReportWriteJSONUsesExplicitStatus(t *testing.T) {
+func TestReportWriteJSONUsesEffectiveStatus(t *testing.T) {
 	rep := &Report{
 		FilePath: "api.http",
 		Results: []Result{{
@@ -179,10 +179,49 @@ func TestReportWriteJSONUsesExplicitStatus(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
 		t.Fatalf("unmarshal json: %v", err)
 	}
-	if len(got.Results) != 1 || got.Results[0].Status != "pass" {
+	if len(got.Results) != 1 || got.Results[0].Status != "fail" {
 		t.Fatalf("unexpected result json: %+v", got.Results)
 	}
-	if len(got.Results[0].Steps) != 1 || got.Results[0].Steps[0].Status != "pass" {
+	if len(got.Results[0].Steps) != 1 || got.Results[0].Steps[0].Status != "fail" {
+		t.Fatalf("unexpected step json: %+v", got.Results[0].Steps)
+	}
+}
+
+func TestReportWriteJSONPreservesSkipStatus(t *testing.T) {
+	rep := &Report{
+		FilePath: "api.http",
+		Results: []Result{{
+			Name:   "req",
+			Status: StatusSkip,
+			Error:  "boom",
+			Steps: []Step{{
+				Name:   "step",
+				Status: StatusSkip,
+				Error:  "boom",
+			}},
+		}},
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var got struct {
+		Results []struct {
+			Status string `json:"status"`
+			Steps  []struct {
+				Status string `json:"status"`
+			} `json:"steps"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if len(got.Results) != 1 || got.Results[0].Status != "skip" {
+		t.Fatalf("unexpected result json: %+v", got.Results)
+	}
+	if len(got.Results[0].Steps) != 1 || got.Results[0].Steps[0].Status != "skip" {
 		t.Fatalf("unexpected step json: %+v", got.Results[0].Steps)
 	}
 }
