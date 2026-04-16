@@ -22,7 +22,7 @@ func ExampleRun() {
 		fmt.Println(err)
 		return
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	path := filepath.Join(dir, "api.http")
 	src := fmt.Sprintf("# @name ok\nGET %s\n", srv.URL)

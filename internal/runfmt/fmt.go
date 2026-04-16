@@ -32,10 +32,10 @@ func reportTargetLabel(rep *Report) string {
 }
 
 func resultLabel(res Result) string {
-	switch {
-	case res.Status == StatusSkip:
+	switch res.Status {
+	case StatusSkip:
 		return "SKIP"
-	case res.Status == StatusFail:
+	case StatusFail:
 		return "FAIL"
 	default:
 		return "PASS"
@@ -218,10 +218,10 @@ func profileLine(res Result) string {
 
 func stepCounts(steps []Step) (pass, fail, skip int) {
 	for _, step := range steps {
-		switch {
-		case step.Status == StatusSkip:
+		switch step.Status {
+		case StatusSkip:
 			skip++
-		case step.Status == StatusFail:
+		case StatusFail:
 			fail++
 		default:
 			pass++

@@ -448,158 +448,6 @@ func resultFailed(item Result) bool {
 	return !item.Passed
 }
 
-func resultLabel(item Result) string {
-	switch {
-	case item.Skipped:
-		return "SKIP"
-	case resultFailed(item):
-		return "FAIL"
-	default:
-		return "PASS"
-	}
-}
-
-func resultLine(item Result) string {
-	switch item.Kind {
-	case ResultKindWorkflow, ResultKindForEach:
-		return workflowLine(item)
-	case ResultKindCompare:
-		return compareLine(item)
-	case ResultKindProfile:
-		return profileLine(item)
-	}
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	return lineWithDetail(base, func() string {
-		switch {
-		case item.Skipped:
-			return item.SkipReason
-		case item.Err != nil:
-			return item.Err.Error()
-		case item.ScriptErr != nil:
-			return item.ScriptErr.Error()
-		}
-
-		failed := failedTests(item.Tests)
-		if len(failed) > 0 {
-			return fmt.Sprintf("%d test(s) failed", len(failed))
-		}
-		if msg := traceFailureText(item.Trace); msg != "" {
-			return msg
-		}
-
-		status := resultStatus(item)
-		dur := resultDuration(item)
-		switch {
-		case status == "" && dur <= 0:
-			return ""
-		case dur <= 0:
-			return status
-		case status == "":
-			return dur.String()
-		default:
-			return fmt.Sprintf("%s in %s", status, dur)
-		}
-	})
-}
-
-func workflowLine(item Result) string {
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	return lineWithDetail(base, func() string {
-		pass, fail, skip := stepCounts(item.Steps)
-		detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
-		if item.Canceled {
-			detail += ", canceled"
-		}
-		if dur := resultDuration(item); dur > 0 {
-			detail = fmt.Sprintf("%s in %s", detail, dur)
-		}
-		return detail
-	})
-}
-
-func compareLine(item Result) string {
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	return lineWithDetail(base, func() string {
-		pass, fail, skip := stepCounts(item.Steps)
-		detail := fmt.Sprintf("%d passed, %d failed, %d skipped", pass, fail, skip)
-		if item.Compare != nil {
-			if baseline := item.Compare.Baseline; baseline != "" {
-				detail = fmt.Sprintf("baseline: %s, %s", baseline, detail)
-			}
-		}
-		if item.Canceled {
-			detail += ", canceled"
-		}
-		if dur := resultDuration(item); dur > 0 {
-			detail = fmt.Sprintf("%s in %s", detail, dur)
-		}
-		return detail
-	})
-}
-
-func profileLine(item Result) string {
-	base := fmt.Sprintf("%s %s", requestMethodValue(item.Method), resultName(item))
-	return lineWithDetail(base, func() string {
-		prof := item.Profile
-		if prof == nil || prof.Results == nil {
-			return item.Summary
-		}
-		detail := fmt.Sprintf(
-			"%d total, %d success, %d failure",
-			prof.Results.TotalRuns,
-			prof.Results.SuccessfulRuns,
-			prof.Results.FailedRuns,
-		)
-		if prof.Results.WarmupRuns > 0 {
-			detail = fmt.Sprintf("%s, %d warmup", detail, prof.Results.WarmupRuns)
-		}
-		if item.Canceled {
-			detail += ", canceled"
-		}
-		if dur := resultDuration(item); dur > 0 {
-			detail = fmt.Sprintf("%s in %s", detail, dur)
-		}
-		return detail
-	})
-}
-
-func lineWithDetail(base string, detail func() string) string {
-	if detail == nil {
-		return base
-	}
-	text := detail()
-	if text == "" {
-		return base
-	}
-	return fmt.Sprintf("%s [%s]", base, text)
-}
-
-func failedTests(tests []scripts.TestResult) []scripts.TestResult {
-	out := make([]scripts.TestResult, 0, len(tests))
-	for _, test := range tests {
-		if !test.Passed {
-			out = append(out, test)
-		}
-	}
-	return out
-}
-
-func resultStatus(item Result) string {
-	switch {
-	case item.Response != nil:
-		return strings.TrimSpace(item.Response.Status)
-	case item.GRPC != nil:
-		status := item.GRPC.StatusCode.String()
-		if msg := strings.TrimSpace(item.GRPC.StatusMessage); msg != "" &&
-			!strings.EqualFold(msg, status) {
-			status = fmt.Sprintf("%s (%s)", status, msg)
-		}
-		return status
-	default:
-		return ""
-	}
-}
-
 func resultDuration(item Result) time.Duration {
 	if item.Duration > 0 {
 		return item.Duration
@@ -611,22 +459,6 @@ func resultDuration(item Result) time.Duration {
 		return item.GRPC.Duration
 	default:
 		return 0
-	}
-}
-
-func stepStatus(step StepResult) string {
-	switch {
-	case step.Response != nil:
-		return strings.TrimSpace(step.Response.Status)
-	case step.GRPC != nil:
-		status := step.GRPC.StatusCode.String()
-		if msg := strings.TrimSpace(step.GRPC.StatusMessage); msg != "" &&
-			!strings.EqualFold(msg, status) {
-			status = fmt.Sprintf("%s (%s)", status, msg)
-		}
-		return status
-	default:
-		return ""
 	}
 }
 
@@ -694,18 +526,6 @@ func resultName(item Result) string {
 		return target[:77] + "..."
 	}
 	return target
-}
-
-func reportTargetLabel(r *Report) string {
-	if r == nil {
-		return "request(s)"
-	}
-	for _, item := range r.Results {
-		if item.Kind != ResultKindRequest {
-			return "target(s)"
-		}
-	}
-	return "request(s)"
 }
 
 func cloneReq(req *restfile.Request) *restfile.Request {
@@ -962,24 +782,6 @@ func traceFailed(info *TraceInfo) bool {
 	return info != nil && info.Summary != nil && len(info.Summary.Breaches) > 0
 }
 
-func traceFailureText(info *TraceInfo) string {
-	if !traceFailed(info) {
-		return ""
-	}
-	breach := info.Summary.Breaches[0]
-	label := strings.TrimSpace(breach.Kind)
-	if label == "" {
-		label = "trace"
-	}
-	if breach.Over > 0 {
-		return fmt.Sprintf("trace budget breach %s (+%s)", label, breach.Over)
-	}
-	if breach.Limit > 0 && breach.Actual > 0 {
-		return fmt.Sprintf("trace budget breach %s (%s > %s)", label, breach.Actual, breach.Limit)
-	}
-	return fmt.Sprintf("trace budget breach %s", label)
-}
-
 func streamResult(info *scripts.StreamInfo) *StreamInfo {
 	if info == nil {
 		return nil
@@ -1190,76 +992,6 @@ func streamArtifactSlug(name string) string {
 		lastDash = true
 	}
 	return strings.Trim(b.String(), "-")
-}
-
-func stepCounts(steps []StepResult) (pass, fail, skip int) {
-	for _, step := range steps {
-		switch {
-		case step.Skipped:
-			skip++
-		case stepFailed(step):
-			fail++
-		default:
-			pass++
-		}
-	}
-	return pass, fail, skip
-}
-
-func stepLabel(step StepResult) string {
-	switch {
-	case step.Canceled:
-		return "CANCELED"
-	case step.Skipped:
-		return "SKIP"
-	case stepFailed(step):
-		return "FAIL"
-	default:
-		return "PASS"
-	}
-}
-
-func stepLine(step StepResult) string {
-	base := stepName(step)
-	return lineWithDetail(base, func() string {
-		switch {
-		case step.Canceled:
-			return step.Summary
-		case step.Skipped:
-			if step.SkipReason != "" {
-				return step.SkipReason
-			}
-			return step.Summary
-		case step.Err != nil:
-			return step.Err.Error()
-		case step.ScriptErr != nil:
-			return step.ScriptErr.Error()
-		}
-
-		failed := failedTests(step.Tests)
-		if len(failed) > 0 {
-			return fmt.Sprintf("%d test(s) failed", len(failed))
-		}
-		if msg := traceFailureText(step.Trace); msg != "" {
-			return msg
-		}
-		if stepFailed(step) {
-			return step.Summary
-		}
-
-		status := stepStatus(step)
-		dur := step.Duration
-		switch {
-		case status == "" && dur <= 0:
-			return ""
-		case dur <= 0:
-			return status
-		case status == "":
-			return dur.String()
-		default:
-			return fmt.Sprintf("%s in %s", status, dur)
-		}
-	})
 }
 
 func stepName(step StepResult) string {

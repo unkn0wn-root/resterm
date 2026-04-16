@@ -2598,7 +2598,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 func TestApplyNoCookiesSetting(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		for _, cookie := range r.Cookies() {
-			fmt.Fprintf(w, "%s\n", cookie.String())
+			_, _ = fmt.Fprintf(w, "%s\n", cookie.String())
 		}
 	}))
 	defer srv.Close()
