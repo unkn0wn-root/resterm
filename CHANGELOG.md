@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.27.3](https://github.com/unkn0wn-root/resterm/compare/v0.27.2...v0.27.3) (2026-04-16)
+
+
+### ⚠ BREAKING CHANGES
+
+* **headless:** redesign public API and unify run formatting
+
+### Features
+
+* dynamic tab for workflow and profile ([90b280d](https://github.com/unkn0wn-root/resterm/commit/90b280dafd076d402b7b084a315b166b081e6fcf))
+
+
+### Bug Fixes
+
+* **headless:** restore inferred failure status for public reports ([bf1d3e5](https://github.com/unkn0wn-root/resterm/commit/bf1d3e51012fcd36c5edc283062a4d181109efc4))
+
+
+* **headless:** redesign public API and unify run formatting ([d611f55](https://github.com/unkn0wn-root/resterm/commit/d611f55eca04a36fa8a99cd78b55da5d33011365))
+
 ### [0.27.2](https://github.com/unkn0wn-root/resterm/compare/v0.27.1...v0.27.2) (2026-04-16)
 
 
