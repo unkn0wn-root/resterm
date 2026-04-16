@@ -142,7 +142,8 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 		t.Fatalf("expected step stream strings trimmed, got %+v", step.Stream)
 	}
 	if step.Trace == nil || step.Trace.Error != "later" || step.Trace.ArtifactPath != "step-trace.json" ||
-		len(step.Trace.Breaches) != 1 || step.Trace.Breaches[0].Kind != "phase" {
+		len(step.Trace.Breaches) != 1 ||
+		step.Trace.Breaches[0].Kind != "phase" {
 		t.Fatalf("expected step trace strings trimmed, got %+v", step.Trace)
 	}
 }

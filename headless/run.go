@@ -107,7 +107,10 @@ func workspacePath(path, work string) (string, error) {
 	}
 }
 
-func environmentOptions(opt Options, path, work string) (vars.EnvironmentSet, string, string, error) {
+func environmentOptions(
+	opt Options,
+	path, work string,
+) (vars.EnvironmentSet, string, string, error) {
 	envs := environmentSet(opt.Environment.Set)
 	envFile := strings.TrimSpace(opt.Environment.FilePath)
 	switch {
@@ -183,7 +186,9 @@ func compareTargets(src []string) ([]string, error) {
 		return nil, nil
 	}
 	if len(out) < 2 {
-		return nil, UsageError{err: fmt.Errorf("compare.targets requires at least two environments")}
+		return nil, UsageError{
+			err: fmt.Errorf("compare.targets requires at least two environments"),
+		}
 	}
 	return out, nil
 }

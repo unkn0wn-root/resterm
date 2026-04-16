@@ -64,7 +64,11 @@ func TestJSONTags(t *testing.T) {
 		{typ: reflect.TypeFor[StateOptions](), name: "ArtifactDir", tag: "artifactDir,omitempty"},
 		{typ: reflect.TypeFor[EnvironmentOptions](), name: "FilePath", tag: "filePath,omitempty"},
 		{typ: reflect.TypeFor[CompareOptions](), name: "Targets", tag: "targets,omitempty"},
-		{typ: reflect.TypeFor[HTTPOptions](), name: "FollowRedirects", tag: "followRedirects,omitempty"},
+		{
+			typ:  reflect.TypeFor[HTTPOptions](),
+			name: "FollowRedirects",
+			tag:  "followRedirects,omitempty",
+		},
 		{typ: reflect.TypeFor[GRPCOptions](), name: "Plaintext", tag: "plaintext,omitempty"},
 		{typ: reflect.TypeFor[Report](), name: "FilePath", tag: ""},
 		{typ: reflect.TypeFor[Report](), name: "EnvName", tag: ""},

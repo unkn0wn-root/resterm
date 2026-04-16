@@ -91,16 +91,28 @@ func TestCloneHTTP(t *testing.T) {
 		t.Fatalf("source timeline changed to %q", src.Timeline.Phases[0].Err)
 	}
 	if src.Timeline.Details.Connection.ResolvedAddrs[0] != "1.1.1.1" {
-		t.Fatalf("source timeline details changed to %q", src.Timeline.Details.Connection.ResolvedAddrs[0])
+		t.Fatalf(
+			"source timeline details changed to %q",
+			src.Timeline.Details.Connection.ResolvedAddrs[0],
+		)
 	}
 	if src.TraceReport.Timeline.Phases[0].Err != "" {
-		t.Fatalf("source trace report timeline changed to %q", src.TraceReport.Timeline.Phases[0].Err)
+		t.Fatalf(
+			"source trace report timeline changed to %q",
+			src.TraceReport.Timeline.Phases[0].Err,
+		)
 	}
 	if src.TraceReport.Budget.Phases[nettrace.PhaseTTFB] != time.Second {
-		t.Fatalf("source trace budget changed to %s", src.TraceReport.Budget.Phases[nettrace.PhaseTTFB])
+		t.Fatalf(
+			"source trace budget changed to %s",
+			src.TraceReport.Budget.Phases[nettrace.PhaseTTFB],
+		)
 	}
 	if src.TraceReport.BudgetReport.Breaches[0].Over != time.Second {
-		t.Fatalf("source trace breaches changed to %s", src.TraceReport.BudgetReport.Breaches[0].Over)
+		t.Fatalf(
+			"source trace breaches changed to %s",
+			src.TraceReport.BudgetReport.Breaches[0].Over,
+		)
 	}
 }
 
