@@ -2,6 +2,23 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.27.2](https://github.com/unkn0wn-root/resterm/compare/v0.27.1...v0.27.2) (2026-04-16)
+
+
+### Features
+
+* add ability to disable cookies per request ([5e7f5b1](https://github.com/unkn0wn-root/resterm/commit/5e7f5b1cf3a020a2b03aa7edbaad9ab055342542))
+* add shared store to runtime ([ddac155](https://github.com/unkn0wn-root/resterm/commit/ddac155ba5efef3bb75cdc84fc66a7cf26fe6cd9))
+* clean cookie store together with globals ([4404980](https://github.com/unkn0wn-root/resterm/commit/4404980c17252f331c99bb71e0ee8ef3ef7aa6e3))
+* cookie store per env ([943a90d](https://github.com/unkn0wn-root/resterm/commit/943a90db7ab6e31206e9a92dedfcb46706d45c32))
+* cookies ([0a83cbb](https://github.com/unkn0wn-root/resterm/commit/0a83cbbe1bd9414d1e1863b456c1a22f0c882282))
+
+
+### Bug Fixes
+
+* add separate hotkey for global cleanup ([81b2f9d](https://github.com/unkn0wn-root/resterm/commit/81b2f9dd6d7a490a11973ded3aa48c4e4d9aae6f))
+* better UI names for for-each workflows ([8f92b52](https://github.com/unkn0wn-root/resterm/commit/8f92b52cf5ae120a3805f6638caa3862417f7343))
+
 ### [0.27.1](https://github.com/unkn0wn-root/resterm/compare/v0.26.2...v0.27.1) (2026-04-14)
 
 
