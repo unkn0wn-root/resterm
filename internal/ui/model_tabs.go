@@ -77,7 +77,7 @@ func (m *Model) availableResponseTabs() []responseTab {
 	return tabs
 }
 
-func (m *Model) responseTabLabel(tab responseTab) string {
+func responseTabLabelForSnapshot(tab responseTab, snapshot *responseSnapshot) string {
 	switch tab {
 	case responseTabPretty:
 		return "Pretty"
@@ -90,7 +90,14 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 	case responseTabStream:
 		return "Stream"
 	case responseTabStats:
-		return "Stats"
+		switch snapshotStatsKind(snapshot) {
+		case statsReportKindProfile:
+			return "Profile"
+		case statsReportKindWorkflow:
+			return "Workflow"
+		default:
+			return "Stats"
+		}
 	case responseTabTimeline:
 		return "Timeline"
 	case responseTabCompare:
@@ -102,6 +109,13 @@ func (m *Model) responseTabLabel(tab responseTab) string {
 	default:
 		return "?"
 	}
+}
+
+func snapshotStatsKind(snapshot *responseSnapshot) statsReportKind {
+	if snapshot == nil {
+		return statsReportKindNone
+	}
+	return snapshot.statsKind
 }
 
 func (m *Model) diffAvailable() bool {

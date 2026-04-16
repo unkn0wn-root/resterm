@@ -968,9 +968,8 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	}
 	rowContent := m.buildTabRowContent(
 		tabs,
-		pane.activeTab,
+		pane,
 		focused,
-		pane.followLatest,
 		contentLimit,
 	)
 	row := rowStyle.Render(rowContent)
@@ -994,13 +993,24 @@ func (m Model) renderResponseDivider(left, right string) string {
 
 func (m Model) buildTabRowContent(
 	tabs []responseTab,
-	active responseTab,
+	pane *responsePaneState,
 	focused bool,
-	followLatest bool,
 	limit int,
 ) string {
 	if limit <= 0 {
 		limit = 1
+	}
+	active := responseTabPretty
+	followLatest := false
+	var snapshot *responseSnapshot
+	if pane != nil {
+		active = pane.activeTab
+		followLatest = pane.followLatest
+		snapshot = pane.snapshot
+	}
+	labels := make([]string, len(tabs))
+	for i, tab := range tabs {
+		labels[i] = responseTabLabelForSnapshot(tab, snapshot)
 	}
 	mode := "Pinned"
 	if followLatest {
@@ -1058,9 +1068,9 @@ func (m Model) buildTabRowContent(
 			fits bool
 		)
 		if plan.adaptive {
-			row, fits = m.buildAdaptiveTabRow(tabs, active, focused, plan, limit)
+			row, fits = m.buildAdaptiveTabRow(tabs, labels, active, focused, plan, limit)
 		} else {
-			row, fits = m.buildStaticTabRow(tabs, active, plan, limit)
+			row, fits = m.buildStaticTabRow(tabs, labels, active, plan, limit)
 		}
 		if fits {
 			return row
@@ -1182,13 +1192,14 @@ func (m Model) tabBadgeShort(mode string) string {
 
 func (m Model) buildStaticTabRow(
 	tabs []responseTab,
+	labels []string,
 	active responseTab,
 	plan tabRowPlan,
 	limit int,
 ) (string, bool) {
 	segments := make([]string, 0, len(tabs))
-	for _, tab := range tabs {
-		full := m.responseTabLabel(tab)
+	for i, tab := range tabs {
+		full := labels[i]
 		text := plan.labelFn(full, tab == active)
 		style := plan.inactiveStyle
 		if tab == active {
@@ -1204,14 +1215,15 @@ func (m Model) buildStaticTabRow(
 
 func (m Model) buildAdaptiveTabRow(
 	tabs []responseTab,
+	labels []string,
 	active responseTab,
 	focused bool,
 	plan tabRowPlan,
 	limit int,
 ) (string, bool) {
 	states := make([]tabLabelState, 0, len(tabs))
-	for _, tab := range tabs {
-		runes := []rune(m.responseTabLabel(tab))
+	for i, tab := range tabs {
+		runes := []rune(labels[i])
 		state := tabLabelState{
 			runes:     runes,
 			isActive:  tab == active,
