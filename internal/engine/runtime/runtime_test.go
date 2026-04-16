@@ -1,6 +1,8 @@
 package runtime
 
 import (
+	"net/http"
+	"net/url"
 	"testing"
 	"time"
 
@@ -107,6 +109,32 @@ func TestFilesClearEnvKeepsOtherEnvironments(t *testing.T) {
 	}
 	if got := prod["status"].Value; got != "500" {
 		t.Fatalf("unexpected prod file value %q", got)
+	}
+}
+
+func TestCookiesClearKeepsOtherEnvironments(t *testing.T) {
+	cs := NewCookies()
+	u, err := url.Parse("https://example.com")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	cs.Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
+	cs.Jar("prod").SetCookies(u, []*http.Cookie{{Name: "session", Value: "prod456"}})
+
+	dev := cs.Jar("dev").Cookies(u)
+	if len(dev) != 1 || dev[0].Value != "dev123" {
+		t.Fatalf("unexpected dev cookies before clear: %+v", dev)
+	}
+
+	cs.Clear("dev")
+
+	if snap := cs.Jar("dev").Cookies(u); len(snap) != 0 {
+		t.Fatalf("expected dev cookies to be cleared, got %+v", snap)
+	}
+	prod := cs.Jar("prod").Cookies(u)
+	if len(prod) != 1 || prod[0].Value != "prod456" {
+		t.Fatalf("expected prod cookies to remain, got %+v", prod)
 	}
 }
 

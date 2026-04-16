@@ -2,6 +2,7 @@ package request
 
 import (
 	"context"
+	"net/http"
 	"strings"
 	"time"
 
@@ -267,6 +268,9 @@ func newExec(
 			"Variable trace covers template resolution only; RTS/JS script internals are not traced",
 		)
 	}
+	if opts.CookieJar == nil {
+		opts.CookieJar = e.cookieJar(env)
+	}
 	return &execCtx{
 		eng:       e,
 		doc:       doc,
@@ -288,6 +292,16 @@ func newExec(
 		onWS:      opt.AttachWS,
 		onGRPC:    opt.AttachGRPC,
 	}
+}
+
+func (e *Engine) cookieJar(env string) http.CookieJar {
+	if e == nil || e.rt == nil {
+		return nil
+	}
+	if cs := e.rt.Cookies(); cs != nil {
+		return cs.Jar(env)
+	}
+	return nil
 }
 
 func detectPreRequestScripts(req *restfile.Request) (bool, bool) {

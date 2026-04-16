@@ -174,6 +174,11 @@ func applyRequestSettings(opts Options, settings map[string]string) Options {
 			effective.InsecureSkipVerify = b
 		}
 	}
+	if value, ok := norm["no-cookies"]; ok {
+		if b, err := strconv.ParseBool(value); err == nil {
+			effective.DisableCookies = b
+		}
+	}
 	if v := resolveHTTPVersion(opts, norm); v != httpver.Unknown {
 		effective.HTTPVersion = v
 	}

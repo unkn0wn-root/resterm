@@ -613,13 +613,19 @@ func (m *Model) clearGlobalValues() tea.Cmd {
 
 	env := m.cfg.EnvironmentName
 	gs.Clear(env)
+	if cs := m.cookieStore(); cs != nil {
+		cs.Clear(env)
+	}
 	label := env
 	if strings.TrimSpace(label) == "" {
 		label = "default"
 	}
 
 	m.setStatusMessage(
-		statusMsg{level: statusInfo, text: fmt.Sprintf("Cleared globals for %s", label)},
+		statusMsg{
+			level: statusInfo,
+			text:  fmt.Sprintf("Cleared globals and cookies for %s", label),
+		},
 	)
 	return nil
 }

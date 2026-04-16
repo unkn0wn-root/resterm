@@ -2413,13 +2413,108 @@ func TestClearGlobalValues(t *testing.T) {
 	if snap := model.globalsStore().Snapshot("dev"); len(snap) != 0 {
 		t.Fatalf("expected globals to be cleared, got %v", snap)
 	}
-	if !strings.Contains(model.statusMessage.text, "Cleared globals") {
+	if !strings.Contains(model.statusMessage.text, "Cleared globals and cookies") {
 		t.Fatalf("expected confirmation message, got %q", model.statusMessage.text)
 	}
 	if model.statusMessage.level != statusInfo {
 		t.Fatalf("expected info level, got %v", model.statusMessage.level)
 	}
 }
+
+func TestClearGlobalValuesClearsCookiesForEnvironment(t *testing.T) {
+	model := Model{
+		cfg: Config{EnvironmentName: "dev"},
+	}
+	u, err := url.Parse("https://example.com")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+
+	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
+	model.cookieStore().Jar("prod").SetCookies(u, []*http.Cookie{{Name: "session", Value: "prod456"}})
+
+	model.clearGlobalValues()
+
+	if got := model.cookieStore().Jar("dev").Cookies(u); len(got) != 0 {
+		t.Fatalf("expected dev cookies to be cleared, got %+v", got)
+	}
+	if got := model.cookieStore().Jar("prod").Cookies(u); len(got) != 1 || got[0].Value != "prod456" {
+		t.Fatalf("expected prod cookies to remain, got %+v", got)
+	}
+}
+
+func TestExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "dev123", Path: "/"})
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				_, _ = io.WriteString(w, cookie.String())
+			}
+		}
+	}))
+	defer srv.Close()
+
+	model := New(Config{EnvironmentName: "dev"})
+
+	setReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set"}
+	echoReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/echo"}
+
+	msg, ok := model.executeRequest(nil, setReq, httpclient.Options{}, "dev", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected set response: %#v", msg)
+	}
+
+	msg, ok = model.executeRequest(nil, echoReq, httpclient.Options{}, "dev", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected dev echo response: %#v", msg)
+	}
+	if got := strings.TrimSpace(string(msg.response.Body)); got != "session=dev123" {
+		t.Fatalf("expected dev cookie, got %q", got)
+	}
+
+	msg, ok = model.executeRequest(nil, echoReq, httpclient.Options{}, "prod", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected prod echo response: %#v", msg)
+	}
+	if got := strings.TrimSpace(string(msg.response.Body)); got != "" {
+		t.Fatalf("expected no prod cookie, got %q", got)
+	}
+}
+
+func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				_, _ = io.WriteString(w, cookie.String())
+			}
+		}
+	}))
+	defer srv.Close()
+
+	model := New(Config{EnvironmentName: "dev"})
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
+
+	req := &restfile.Request{
+		Method:   http.MethodGet,
+		URL:      srv.URL + "/echo",
+		Settings: map[string]string{"no-cookies": "true"},
+	}
+	msg, ok := model.executeRequest(nil, req, httpclient.Options{}, "dev", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected response: %#v", msg)
+	}
+	if got := strings.TrimSpace(string(msg.response.Body)); got != "" {
+		t.Fatalf("expected no cookie to be sent, got %q", got)
+	}
+}
+
 func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 	model := New(Config{})
 

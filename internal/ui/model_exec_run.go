@@ -241,6 +241,11 @@ func (m *Model) requestSetup(
 ) (httpclient.Options, string, tea.Cmd) {
 	options = m.resolveHTTPOptions(options)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
+	if options.CookieJar == nil {
+		if cs := m.cookieStore(); cs != nil {
+			options.CookieJar = cs.Jar(envName)
+		}
+	}
 	if req == nil {
 		err := errdef.New(errdef.CodeUI, "request is nil")
 		return options, envName, func() tea.Msg {

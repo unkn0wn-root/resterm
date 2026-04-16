@@ -23,6 +23,7 @@ type Config struct {
 type Runtime struct {
 	gs *Globals
 	fs *Files
+	cs *Cookies
 	ac *authcmd.Manager
 	oa *oauth.Manager
 	hs history.Store
@@ -42,6 +43,7 @@ func New(cfg Config) *Runtime {
 	return &Runtime{
 		gs: NewGlobals(),
 		fs: NewFiles(),
+		cs: NewCookies(),
 		ac: authcmd.NewManager(),
 		oa: oauth.NewManager(cfg.Client),
 		hs: cfg.History,
@@ -68,6 +70,16 @@ func (r *Runtime) Files() *Files {
 		r.fs = NewFiles()
 	}
 	return r.fs
+}
+
+func (r *Runtime) Cookies() *Cookies {
+	if r == nil {
+		return nil
+	}
+	if r.cs == nil {
+		r.cs = NewCookies()
+	}
+	return r.cs
 }
 
 func (r *Runtime) AuthCmd() *authcmd.Manager {

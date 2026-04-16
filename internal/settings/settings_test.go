@@ -25,6 +25,7 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 		"http-version":   "2",
 		"grpc-insecure":  "true",
 		"feature.flag":   "on",
+		"no-cookies":     "true",
 		"proxy":          "http://proxy",
 		"grpc-root-mode": "append",
 	})
@@ -43,6 +44,9 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 	}
 	if httpOpts.HTTPVersion != httpver.V2 {
 		t.Fatalf("expected http version 2, got %v", httpOpts.HTTPVersion)
+	}
+	if !httpOpts.DisableCookies {
+		t.Fatalf("expected cookies to be disabled")
 	}
 	if !grpcOpts.Insecure {
 		t.Fatalf("expected grpc insecure to be set")
@@ -63,6 +67,7 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 		"proxy":            "http://proxy",
 		"followredirects":  "false",
 		"insecure":         "true",
+		"no-cookies":       "true",
 		"http-version":     "1.1",
 		"http-root-mode":   "append",
 		"http-root-cas":    "a.pem,b.pem",
@@ -87,6 +92,9 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	}
 	if !httpOpts.InsecureSkipVerify {
 		t.Fatalf("expected insecure skip verify true")
+	}
+	if !httpOpts.DisableCookies {
+		t.Fatalf("expected cookies to be disabled")
 	}
 	if httpOpts.HTTPVersion != httpver.V11 {
 		t.Fatalf("expected http version 1.1, got %v", httpOpts.HTTPVersion)

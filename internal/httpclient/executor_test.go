@@ -41,6 +41,7 @@ func TestApplyRequestSettings(t *testing.T) {
 		"proxy":           "http://localhost:8080",
 		"followredirects": "false",
 		"insecure":        "true",
+		"no-cookies":      "true",
 		"http-version":    "2",
 	}
 
@@ -59,6 +60,9 @@ func TestApplyRequestSettings(t *testing.T) {
 	}
 	if effective.HTTPVersion != httpver.V2 {
 		t.Fatalf("expected http version 2, got %v", effective.HTTPVersion)
+	}
+	if !effective.DisableCookies {
+		t.Fatalf("expected cookies to be disabled")
 	}
 }
 
