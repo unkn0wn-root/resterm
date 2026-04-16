@@ -328,7 +328,7 @@ func (m Model) helpSections() []helpSection {
 				{m.helpActionKey(bindings.ActionShowGlobals, "Ctrl+G"), "Show globals summary"},
 				{
 					m.helpActionKey(bindings.ActionClearGlobals, "Ctrl+Shift+G"),
-					"Clear globals for environment",
+					"Clear globals and cookies for environment",
 				},
 				{m.helpActionKey(bindings.ActionOpenEnvSelector, "Ctrl+E"), "Environment selector"},
 				{

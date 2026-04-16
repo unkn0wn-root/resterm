@@ -89,6 +89,70 @@ func TestEngineExecuteCompareProfileAndWorkflow(t *testing.T) {
 	}
 }
 
+func TestEngineExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set/dev":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "dev123", Path: "/"})
+		case "/set/prod":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "prod456", Path: "/"})
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				if _, err := fmt.Fprint(w, cookie.String()); err != nil {
+					t.Fatalf("write echo response: %v", err)
+				}
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	eng := New(engine.Config{})
+
+	doc := &restfile.Document{Path: "cookies.http"}
+	setDev := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set/dev"}
+	setProd := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set/prod"}
+	echo := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/echo"}
+
+	if _, err := eng.ExecuteRequest(doc, setDev, "dev"); err != nil {
+		t.Fatalf("set dev cookie: %v", err)
+	}
+	res, err := eng.ExecuteRequest(doc, echo, "dev")
+	if err != nil {
+		t.Fatalf("echo dev cookie: %v", err)
+	}
+	if got := strings.TrimSpace(string(res.Response.Body)); got != "session=dev123" {
+		t.Fatalf("expected dev cookie, got %q", got)
+	}
+
+	res, err = eng.ExecuteRequest(doc, echo, "prod")
+	if err != nil {
+		t.Fatalf("echo prod cookie before set: %v", err)
+	}
+	if got := strings.TrimSpace(string(res.Response.Body)); got != "" {
+		t.Fatalf("expected no prod cookie before set, got %q", got)
+	}
+
+	if _, err := eng.ExecuteRequest(doc, setProd, "prod"); err != nil {
+		t.Fatalf("set prod cookie: %v", err)
+	}
+	res, err = eng.ExecuteRequest(doc, echo, "prod")
+	if err != nil {
+		t.Fatalf("echo prod cookie: %v", err)
+	}
+	if got := strings.TrimSpace(string(res.Response.Body)); got != "session=prod456" {
+		t.Fatalf("expected prod cookie, got %q", got)
+	}
+
+	res, err = eng.ExecuteRequest(doc, echo, "dev")
+	if err != nil {
+		t.Fatalf("echo dev cookie after prod set: %v", err)
+	}
+	if got := strings.TrimSpace(string(res.Response.Body)); got != "session=dev123" {
+		t.Fatalf("expected dev cookie to remain isolated, got %q", got)
+	}
+}
+
 func TestWorkflowScriptErr(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {

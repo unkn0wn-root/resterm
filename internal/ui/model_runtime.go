@@ -13,6 +13,7 @@ type globalStore = rtrun.Globals
 type globalValue = rtrun.GlobalValue
 type fileStore = rtrun.Files
 type fileVariable = rtrun.FileValue
+type cookieStore = rtrun.Cookies
 
 func newRuntime(cfg rtrun.Config) *rtrun.Runtime {
 	return rtrun.New(cfg)
@@ -26,14 +27,6 @@ func (m *Model) runtimeSvc() *rtrun.Runtime {
 		m.run = newRuntime(rtrun.Config{Client: m.client})
 	}
 	return m.run
-}
-
-func (m *Model) cookieStore() *rtrun.Cookies {
-	rt := m.runtimeSvc()
-	if rt == nil {
-		return nil
-	}
-	return rt.Cookies()
 }
 
 func (m *Model) globalsStore() *globalStore {
@@ -50,6 +43,14 @@ func (m *Model) fileStore() *fileStore {
 		return nil
 	}
 	return rt.Files()
+}
+
+func (m *Model) cookieStore() *cookieStore {
+	rt := m.runtimeSvc()
+	if rt == nil {
+		return nil
+	}
+	return rt.Cookies()
 }
 
 func (m *Model) authCmdMgr() *authcmd.Manager {

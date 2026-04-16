@@ -125,8 +125,10 @@ func (e *Engine) ExecuteWith(
 	env = e.envName(env)
 	req = cloneRequest(req)
 	opts := e.resolveHTTPOptions(doc, e.cfg.HTTPOptions)
-	if ck := e.rt.Cookies(); ck != nil {
-		opts.CookieJar = ck.GetOrCreate(env)
+	if opts.CookieJar == nil {
+		if cs := e.rt.Cookies(); cs != nil {
+			opts.CookieJar = cs.Jar(env)
+		}
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
 		err := errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s")

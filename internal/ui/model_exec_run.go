@@ -83,6 +83,11 @@ func newExecContext(
 	if runner == nil {
 		runner = scripts.NewRunner(nil)
 	}
+	if options.CookieJar == nil {
+		if cs := m.cookieStore(); cs != nil {
+			options.CookieJar = cs.Jar(envName)
+		}
+	}
 	sendCtx, sendCancel := context.WithCancel(context.Background())
 	m.sendCancel = sendCancel
 

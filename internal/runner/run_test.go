@@ -121,6 +121,93 @@ func TestRunSelectRequestByName(t *testing.T) {
 	}
 }
 
+func TestRunPersistsCookiesAcrossRequests(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cookies.http")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123", Path: "/"})
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				_, _ = io.WriteString(w, cookie.String())
+			}
+		}
+	}))
+	defer srv.Close()
+
+	src := strings.Join([]string{
+		"### Set",
+		"GET " + srv.URL + "/set",
+		"",
+		"### Echo",
+		"GET " + srv.URL + "/echo",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	rep, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 2 || rep.Results[1].Response == nil {
+		t.Fatalf("expected two HTTP results, got %+v", rep.Results)
+	}
+	if got := strings.TrimSpace(string(rep.Results[1].Response.Body)); got != "session=abc123" {
+		t.Fatalf("expected persisted cookie on second request, got %q", got)
+	}
+}
+
+func TestRunNoCookiesSettingSkipsJarForRequest(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "cookies.http")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/set":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "abc123", Path: "/"})
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				_, _ = io.WriteString(w, cookie.String())
+			}
+		}
+	}))
+	defer srv.Close()
+
+	src := strings.Join([]string{
+		"### Set",
+		"GET " + srv.URL + "/set",
+		"",
+		"### Echo",
+		"# @setting no-cookies true",
+		"GET " + srv.URL + "/echo",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	rep, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(rep.Results) != 2 || rep.Results[1].Response == nil {
+		t.Fatalf("expected two HTTP results, got %+v", rep.Results)
+	}
+	if got := strings.TrimSpace(string(rep.Results[1].Response.Body)); got != "" {
+		t.Fatalf("expected no cookie on second request, got %q", got)
+	}
+}
+
 func TestRunUsesWorkspaceGlobalPatchProfile(t *testing.T) {
 	dir := t.TempDir()
 	defs := filepath.Join(dir, "defs.http")

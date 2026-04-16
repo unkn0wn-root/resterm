@@ -1,6 +1,8 @@
 package settings
 
 import (
+	"net/http/cookiejar"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,7 +13,8 @@ import (
 )
 
 func TestApplyAllDispatchesHandlers(t *testing.T) {
-	httpOpts := httpclient.Options{}
+	jar, _ := cookiejar.New(nil)
+	httpOpts := httpclient.Options{CookieJar: jar}
 	grpcOpts := grpcclient.Options{}
 
 	applier := New(
@@ -25,6 +28,7 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 		"http-version":   "2",
 		"grpc-insecure":  "true",
 		"feature.flag":   "on",
+		"no-cookies":     "true",
 		"proxy":          "http://proxy",
 		"grpc-root-mode": "append",
 	})
@@ -44,6 +48,9 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 	if httpOpts.HTTPVersion != httpver.V2 {
 		t.Fatalf("expected http version 2, got %v", httpOpts.HTTPVersion)
 	}
+	if httpOpts.CookieJar != nil {
+		t.Fatalf("expected cookie jar to be cleared")
+	}
 	if !grpcOpts.Insecure {
 		t.Fatalf("expected grpc insecure to be set")
 	}
@@ -56,13 +63,15 @@ func TestApplyAllDispatchesHandlers(t *testing.T) {
 }
 
 func TestApplyAllHTTPAggregated(t *testing.T) {
-	httpOpts := httpclient.Options{}
+	jar, _ := cookiejar.New(nil)
+	httpOpts := httpclient.Options{CookieJar: jar}
 	applier := New(HTTPHandler(&httpOpts, nil))
 	settings := map[string]string{
 		"timeout":          "2s",
 		"proxy":            "http://proxy",
 		"followredirects":  "false",
 		"insecure":         "true",
+		"no-cookies":       "true",
 		"http-version":     "1.1",
 		"http-root-mode":   "append",
 		"http-root-cas":    "a.pem,b.pem",
@@ -88,6 +97,9 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	if !httpOpts.InsecureSkipVerify {
 		t.Fatalf("expected insecure skip verify true")
 	}
+	if httpOpts.CookieJar != nil {
+		t.Fatalf("expected cookie jar to be cleared")
+	}
 	if httpOpts.HTTPVersion != httpver.V11 {
 		t.Fatalf("expected http version 1.1, got %v", httpOpts.HTTPVersion)
 	}
@@ -100,5 +112,18 @@ func TestApplyAllHTTPAggregated(t *testing.T) {
 	}
 	if httpOpts.ClientCert != "cert.pem" || httpOpts.ClientKey != "key.pem" {
 		t.Fatalf("unexpected client cert/key: %q / %q", httpOpts.ClientCert, httpOpts.ClientKey)
+	}
+}
+
+func TestApplyAllHTTPInvalidVersionReturnsError(t *testing.T) {
+	httpOpts := httpclient.Options{}
+	applier := New(HTTPHandler(&httpOpts, nil))
+
+	_, err := applier.ApplyAll(map[string]string{"http-version": "bogus"})
+	if err == nil {
+		t.Fatal("expected invalid http-version error")
+	}
+	if !strings.Contains(err.Error(), "invalid http-version") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

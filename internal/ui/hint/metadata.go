@@ -703,6 +703,12 @@ var metaSub = map[string][]Hint{
 			CursorBack: len("true"),
 		},
 		{
+			Label:      "no-cookies=",
+			Summary:    "Disable cookies for this request",
+			Insert:     "no-cookies=true",
+			CursorBack: len("true"),
+		},
+		{
 			Label:      "http-version=",
 			Summary:    "HTTP protocol version (1.0|1.1|2)",
 			Insert:     "http-version=1.1",
@@ -792,6 +798,12 @@ var metaSub = map[string][]Hint{
 			Label:      "insecure=",
 			Summary:    "Skip TLS verify (HTTP)",
 			Insert:     "insecure=true",
+			CursorBack: len("true"),
+		},
+		{
+			Label:      "no-cookies=",
+			Summary:    "Disable cookies for this request",
+			Insert:     "no-cookies=true",
 			CursorBack: len("true"),
 		},
 		{

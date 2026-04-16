@@ -3,12 +3,10 @@ package settings
 import (
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -65,42 +63,7 @@ func ApplyHTTPSettings(
 	if len(settings) == 0 {
 		return nil
 	}
-	norm := normalize(settings)
-	if raw := firstSetting(norm, httpver.Key); raw != "" {
-		v, ok := httpver.ParseValue(raw)
-		if !ok {
-			return errdef.New(
-				errdef.CodeHTTP,
-				"invalid http-version %q (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
-				raw,
-			)
-		}
-		opts.HTTPVersion = v
-	}
-	if value, ok := norm["timeout"]; ok {
-		if dur, err := time.ParseDuration(value); err == nil {
-			opts.Timeout = dur
-		}
-	}
-	if value, ok := norm["proxy"]; ok && strings.TrimSpace(value) != "" {
-		opts.ProxyURL = value
-	}
-	if value, ok := norm["followredirects"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			opts.FollowRedirects = b
-		}
-	}
-	if value, ok := norm["insecure"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			opts.InsecureSkipVerify = b
-		}
-	}
-	if value, ok := norm["no-cookies"]; ok {
-		if b, err := strconv.ParseBool(value); err == nil && b {
-			opts.CookieJar = nil
-		}
-	}
-	return nil
+	return httpclient.ApplyOptionSettings(opts, settings)
 }
 
 func applyTLSSettings(

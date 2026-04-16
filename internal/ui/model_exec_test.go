@@ -2404,10 +2404,10 @@ func TestShowGlobalSummary(t *testing.T) {
 
 func TestClearGlobalValues(t *testing.T) {
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
+		cfg: Config{EnvironmentName: "dev"},
 	}
 	model.globalsStore().Set("dev", "token", "value", false)
-	model.cookieStore().GetOrCreate("dev")
+	model.cookieStore().Jar("dev")
 	if snap := model.globalsStore().Snapshot("dev"); len(snap) == 0 {
 		t.Fatalf("expected snapshot to contain entries before clearing")
 	}
@@ -2423,133 +2423,97 @@ func TestClearGlobalValues(t *testing.T) {
 	}
 }
 
-func TestClearGlobalValuesWithCookies(t *testing.T) {
-	model := New(Config{EnvironmentName: "dev"})
-
-	u, _ := url.Parse("http://localhost")
-
-	cookieJarDev := model.cookieStore().GetOrCreate("dev")
-	cookieJarDev.SetCookies(u, []*http.Cookie{{Name: "foo", Value: "bar"}})
-
-	cookieJarProd := model.cookieStore().GetOrCreate("prod")
-	cookieJarProd.SetCookies(u, []*http.Cookie{{Name: "shaz", Value: "bot"}})
-
-	// Just a quick sanity check
-	if before := model.cookieStore().GetOrCreate("dev").Cookies(u); len(before) != 1 || before[0].Name != "foo" {
-		t.Fatal("unexpected cookies in dev jar")
+func TestClearGlobalValuesClearsCookiesForEnvironment(t *testing.T) {
+	model := Model{
+		cfg: Config{EnvironmentName: "dev"},
 	}
-	if before := model.cookieStore().GetOrCreate("prod").Cookies(u); len(before) != 1 || before[0].Name != "shaz" {
-		t.Fatal("unexpected cookies in prod jar")
+	u, err := url.Parse("https://example.com")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
 	}
 
-	// Clean up
+	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
+	model.cookieStore().Jar("prod").SetCookies(u, []*http.Cookie{{Name: "session", Value: "prod456"}})
+
 	model.clearGlobalValues()
 
-	// Check the new state
-	if after := model.cookieStore().GetOrCreate("dev").Cookies(u); len(after) != 0 {
-		t.Fatal("unexpected cookies in dev jar")
+	if got := model.cookieStore().Jar("dev").Cookies(u); len(got) != 0 {
+		t.Fatalf("expected dev cookies to be cleared, got %+v", got)
 	}
-	if after := model.cookieStore().GetOrCreate("prod").Cookies(u); len(after) != 1 || after[0].Name != "shaz" {
-		t.Fatal("unexpected cookies in prod jar")
-	}
-
-	if !strings.Contains(model.statusMessage.text, "Cleared globals and cookies") {
-		t.Fatalf("expected confirmation message, got %q", model.statusMessage.text)
-	}
-	if model.statusMessage.level != statusInfo {
-		t.Fatalf("expected info level, got %v", model.statusMessage.level)
+	if got := model.cookieStore().Jar("prod").Cookies(u); len(got) != 1 || got[0].Value != "prod456" {
+		t.Fatalf("expected prod cookies to remain, got %+v", got)
 	}
 }
 
-func TestExecuteCookiesAreIsolatedPerEnv(t *testing.T) {
+func TestExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		t.Logf("Server received request: %s %s", r.Method, r.URL.Path)
-		t.Logf("Server received cookies: %v", r.Cookies())
-		if r.URL.Path == "/set" {
-			w.Header().Add("Set-Cookie", "session=dev123")
-		}
-		for _, cookie := range r.Cookies() {
-			fmt.Fprintf(w, "%s\n", cookie.String())
-			t.Logf("Server echoing cookie: %s", cookie.String())
+		switch r.URL.Path {
+		case "/set":
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "dev123", Path: "/"})
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				_, _ = io.WriteString(w, cookie.String())
+			}
 		}
 	}))
 	defer srv.Close()
 
-	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
+	model := New(Config{EnvironmentName: "dev"})
+
+	setReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set"}
+	echoReq := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/echo"}
+
+	msg, ok := model.executeRequest(nil, setReq, httpclient.Options{}, "dev", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected set response: %#v", msg)
 	}
 
-	// First request: instruct the server to set a cookie
-
-	setCookieReq := &restfile.Request{
-		Method: http.MethodPost,
-		URL:    srv.URL + "/set",
+	msg, ok = model.executeRequest(nil, echoReq, httpclient.Options{}, "dev", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected dev echo response: %#v", msg)
+	}
+	if got := strings.TrimSpace(string(msg.response.Body)); got != "session=dev123" {
+		t.Fatalf("expected dev cookie, got %q", got)
 	}
 
-	cmd := model.executeRequest(nil, setCookieReq, httpclient.Options{}, "dev", nil)
-	if cmd == nil {
-		t.Fatalf("expected executeRequest to return command")
+	msg, ok = model.executeRequest(nil, echoReq, httpclient.Options{}, "prod", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected prod echo response: %#v", msg)
 	}
+	if got := strings.TrimSpace(string(msg.response.Body)); got != "" {
+		t.Fatalf("expected no prod cookie, got %q", got)
+	}
+}
 
-	msg, ok := cmd().(responseMsg)
-	if !ok {
-		t.Fatalf("expected responseMsg, got %T", msg)
-	}
-	if msg.err != nil {
-		t.Fatalf("unexpected error: %v", msg.err)
-	}
+func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/echo":
+			if cookie, err := r.Cookie("session"); err == nil {
+				_, _ = io.WriteString(w, cookie.String())
+			}
+		}
+	}))
+	defer srv.Close()
 
-	// Second request: call again, expect our cookie to be mirrored
-
-	getCookieReq := &restfile.Request{
-		Method: http.MethodGet,
-		URL:    srv.URL + "/get",
+	model := New(Config{EnvironmentName: "dev"})
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
 	}
+	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{{Name: "session", Value: "dev123"}})
 
-	cmd = model.executeRequest(nil, getCookieReq, httpclient.Options{}, "dev", nil)
-	msg, ok = cmd().(responseMsg)
-	if !ok {
-		t.Fatalf("expected responseMsg")
+	req := &restfile.Request{
+		Method:   http.MethodGet,
+		URL:      srv.URL + "/echo",
+		Settings: map[string]string{"no-cookies": "true"},
 	}
-	if msg.err != nil {
-		t.Fatalf("unexpected error: %v", msg.err)
+	msg, ok := model.executeRequest(nil, req, httpclient.Options{}, "dev", nil)().(responseMsg)
+	if !ok || msg.err != nil {
+		t.Fatalf("unexpected response: %#v", msg)
 	}
-
-	respBodyString := strings.TrimSpace(string(msg.response.Body))
-	if respBodyString != "session=dev123" {
-		t.Fatalf("expected cookie session=dev123 in dev env, got %q", respBodyString)
-	}
-
-	// Third request: the same against a different env: no cookies should be sent
-
-	cmd = model.executeRequest(nil, getCookieReq, httpclient.Options{}, "prod", nil)
-	msg, ok = cmd().(responseMsg)
-	if !ok {
-		t.Fatalf("expected responseMsg")
-	}
-	if msg.err != nil {
-		t.Fatalf("unexpected error: %v", msg.err)
-	}
-
-	respBodyString = strings.TrimSpace(string(msg.response.Body))
-	if respBodyString != "" {
-		t.Fatalf("expected NO cookie in prod env, got %q", respBodyString)
-	}
-
-	// Fourth request: against the first env again, which should now include the cookie again
-
-	cmd = model.executeRequest(nil, getCookieReq, httpclient.Options{}, "dev", nil)
-	msg, ok = cmd().(responseMsg)
-	if !ok {
-		t.Fatalf("expected responseMsg")
-	}
-	if msg.err != nil {
-		t.Fatalf("unexpected error: %v", msg.err)
-	}
-
-	respBodyString = strings.TrimSpace(string(msg.response.Body))
-	if respBodyString != "session=dev123" {
-		t.Fatalf("expected cookie session=dev123 to persist in dev env, got %q", respBodyString)
+	if got := strings.TrimSpace(string(msg.response.Body)); got != "" {
+		t.Fatalf("expected no cookie to be sent, got %q", got)
 	}
 }
 
@@ -2640,12 +2604,12 @@ func TestApplyNoCookiesSetting(t *testing.T) {
 	defer srv.Close()
 
 	model := Model{
-		cfg:     Config{EnvironmentName: "dev"},
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	// Prepare the cookie jar
 	u, _ := url.Parse(srv.URL)
-	model.cookieStore().GetOrCreate("dev").SetCookies(u, []*http.Cookie{
+	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{
 		{Name: "foo", Value: "bar"},
 	})
 
