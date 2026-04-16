@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -347,49 +348,8 @@ func (r *Report) WriteText(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
 	}
-	fileLabel := r.FilePath
-	if base := filepath.Base(fileLabel); base != "" {
-		fileLabel = base
-	}
-	envLabel := r.EnvName
-	if envLabel == "" {
-		envLabel = "<default>"
-	}
-	if _, err := fmt.Fprintf(
-		w,
-		"Running %d %s from %s with env %s\n",
-		r.Total,
-		reportTargetLabel(r),
-		fileLabel,
-		envLabel,
-	); err != nil {
-		return err
-	}
-	for _, item := range r.Results {
-		if _, err := fmt.Fprintf(w, "%s %s\n", resultLabel(item), resultLine(item)); err != nil {
-			return err
-		}
-		for i, step := range item.Steps {
-			if _, err := fmt.Fprintf(
-				w,
-				"  %d. %s %s\n",
-				i+1,
-				stepLabel(step),
-				stepLine(step),
-			); err != nil {
-				return err
-			}
-		}
-	}
-	_, err := fmt.Fprintf(
-		w,
-		"Summary: total=%d passed=%d failed=%d skipped=%d\n",
-		r.Total,
-		r.Passed,
-		r.Failed,
-		r.Skipped,
-	)
-	return err
+	rep := NormalizeReport(r)
+	return runfmt.WriteText(w, &rep)
 }
 
 func selectRequests(doc *restfile.Document, sel Select) ([]*restfile.Request, error) {
@@ -477,7 +437,15 @@ func selectByTag(reqs []*restfile.Request, tag string) ([]*restfile.Request, err
 }
 
 func resultFailed(item Result) bool {
-	return !item.Passed && !item.Skipped
+	if item.Canceled || item.Err != nil || item.ScriptErr != nil || traceFailed(item.Trace) {
+		return true
+	}
+	for _, test := range item.Tests {
+		if !test.Passed {
+			return true
+		}
+	}
+	return !item.Passed
 }
 
 func resultLabel(item Result) string {

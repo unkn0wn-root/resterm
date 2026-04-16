@@ -7,29 +7,11 @@ import (
 	"time"
 )
 
-func TestStatusValid(t *testing.T) {
-	cases := []struct {
-		st   Status
-		want bool
-	}{
-		{st: StatusPass, want: true},
-		{st: StatusFail, want: true},
-		{st: StatusSkip, want: true},
-		{st: Status("canceled"), want: false},
-		{st: Status(""), want: false},
-	}
-	for _, tc := range cases {
-		if got := tc.st.Valid(); got != tc.want {
-			t.Fatalf("status %q valid = %v, want %v", tc.st, got, tc.want)
-		}
-	}
-}
-
 func TestIsUsageError(t *testing.T) {
 	base := errors.New("bad flag")
-	err := ErrUsage{err: base}
+	err := UsageError{err: base}
 	if !IsUsageError(err) {
-		t.Fatal("expected ErrUsage to be classified as usage error")
+		t.Fatal("expected UsageError to be classified as usage error")
 	}
 	if !IsUsageError(errors.Join(err, errors.New("extra"))) {
 		t.Fatal("expected joined usage error to be classified as usage error")
@@ -40,18 +22,18 @@ func TestIsUsageError(t *testing.T) {
 }
 
 func TestUsageErrorZero(t *testing.T) {
-	if got := (ErrUsage{}).Error(); got != "usage error" {
-		t.Fatalf("zero ErrUsage error = %q, want %q", got, "usage error")
+	if got := (UsageError{}).Error(); got != "usage error" {
+		t.Fatalf("zero UsageError error = %q, want %q", got, "usage error")
 	}
 }
 
 func TestZeroValues(t *testing.T) {
-	var opt Opt
-	if opt.FilePath != "" || opt.EnvName != "" || opt.Profile {
-		t.Fatalf("unexpected opt zero value: %+v", opt)
+	var opt Options
+	if opt.FilePath != "" || opt.Environment.Name != "" || opt.Profile {
+		t.Fatalf("unexpected options zero value: %+v", opt)
 	}
-	if opt.HTTP.Follow != nil || opt.GRPC.Plaintext != nil {
-		t.Fatalf("unexpected opt zero pointer values: %+v", opt)
+	if opt.HTTP.FollowRedirects != nil || opt.GRPC.Plaintext != nil {
+		t.Fatalf("unexpected options zero pointer values: %+v", opt)
 	}
 
 	var rep Report
@@ -63,11 +45,6 @@ func TestZeroValues(t *testing.T) {
 	}
 	if (&rep).HasFailures() {
 		t.Fatalf("expected zero-value report to have no failures: %+v", rep)
-	}
-
-	var item Result
-	if item.Status.Valid() {
-		t.Fatalf("expected zero-value status to be invalid, got %q", item.Status)
 	}
 
 	var tr Trace
@@ -82,18 +59,23 @@ func TestJSONTags(t *testing.T) {
 		name string
 		tag  string
 	}{
-		{typ: reflect.TypeFor[Opt](), name: "FilePath", tag: "filePath,omitempty"},
-		{typ: reflect.TypeFor[Opt](), name: "CompareTargets", tag: "compareTargets,omitempty"},
-		{typ: reflect.TypeFor[Report](), name: "FilePath", tag: "filePath"},
-		{typ: reflect.TypeFor[Report](), name: "EnvName", tag: "envName,omitempty"},
-		{typ: reflect.TypeFor[Result](), name: "Status", tag: "status"},
-		{typ: reflect.TypeFor[Result](), name: "ScriptError", tag: "scriptError,omitempty"},
-		{typ: reflect.TypeFor[Step](), name: "SkipReason", tag: "skipReason,omitempty"},
+		{typ: reflect.TypeFor[Options](), name: "FilePath", tag: "filePath,omitempty"},
+		{typ: reflect.TypeFor[Options](), name: "Selection", tag: "selection,omitempty"},
+		{typ: reflect.TypeFor[StateOptions](), name: "ArtifactDir", tag: "artifactDir,omitempty"},
+		{typ: reflect.TypeFor[EnvironmentOptions](), name: "FilePath", tag: "filePath,omitempty"},
+		{typ: reflect.TypeFor[CompareOptions](), name: "Targets", tag: "targets,omitempty"},
+		{typ: reflect.TypeFor[HTTPOptions](), name: "FollowRedirects", tag: "followRedirects,omitempty"},
+		{typ: reflect.TypeFor[GRPCOptions](), name: "Plaintext", tag: "plaintext,omitempty"},
+		{typ: reflect.TypeFor[Report](), name: "FilePath", tag: ""},
+		{typ: reflect.TypeFor[Report](), name: "EnvName", tag: ""},
+		{typ: reflect.TypeFor[Result](), name: "Status", tag: ""},
+		{typ: reflect.TypeFor[Result](), name: "ScriptError", tag: ""},
+		{typ: reflect.TypeFor[Step](), name: "SkipReason", tag: ""},
 		{typ: reflect.TypeFor[HTTP](), name: "StatusCode", tag: "statusCode,omitempty"},
 		{typ: reflect.TypeFor[GRPC](), name: "StatusMessage", tag: "statusMessage,omitempty"},
 		{typ: reflect.TypeFor[Test](), name: "Elapsed", tag: "elapsed,omitempty"},
 		{typ: reflect.TypeFor[Profile](), name: "TotalRuns", tag: "totalRuns,omitempty"},
-		{typ: reflect.TypeFor[ProfileFail](), name: "StatusCode", tag: "statusCode,omitempty"},
+		{typ: reflect.TypeFor[ProfileFailure](), name: "StatusCode", tag: "statusCode,omitempty"},
 		{typ: reflect.TypeFor[Stream](), name: "TranscriptPath", tag: "transcriptPath,omitempty"},
 		{typ: reflect.TypeFor[Trace](), name: "ArtifactPath", tag: "artifactPath,omitempty"},
 		{typ: reflect.TypeFor[TraceBudget](), name: "Phases", tag: "phases,omitempty"},
@@ -153,7 +135,7 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 				Histogram: []HistBin{
 					{From: time.Millisecond, To: 2 * time.Millisecond, Count: 2},
 				},
-				Failures: []ProfileFail{{
+				Failures: []ProfileFailure{{
 					Iteration:  2,
 					Status:     "500",
 					StatusCode: 500,
@@ -222,6 +204,42 @@ func TestReportHasFailures(t *testing.T) {
 
 	if (&Report{Results: []Result{{Status: StatusPass}}}).HasFailures() {
 		t.Fatal("expected passing results to report no failures")
+	}
+}
+
+func TestResultFailedUsesStatus(t *testing.T) {
+	res := Result{
+		Status:      StatusPass,
+		Canceled:    true,
+		Error:       "boom",
+		ScriptError: "script boom",
+		Tests:       []Test{{Passed: false}},
+		Trace:       &Trace{Breaches: []TraceBreach{{Kind: "total"}}},
+	}
+	if res.Failed() {
+		t.Fatalf("expected pass status to stay non-failing: %+v", res)
+	}
+	res.Status = StatusFail
+	if !res.Failed() {
+		t.Fatalf("expected fail status to report failure: %+v", res)
+	}
+}
+
+func TestStepFailedUsesStatus(t *testing.T) {
+	step := Step{
+		Status:      StatusPass,
+		Canceled:    true,
+		Error:       "boom",
+		ScriptError: "script boom",
+		Tests:       []Test{{Passed: false}},
+		Trace:       &Trace{Breaches: []TraceBreach{{Kind: "total"}}},
+	}
+	if step.Failed() {
+		t.Fatalf("expected pass status to stay non-failing: %+v", step)
+	}
+	step.Status = StatusFail
+	if !step.Failed() {
+		t.Fatalf("expected fail status to report failure: %+v", step)
 	}
 }
 

@@ -1,13 +1,10 @@
-package runner
+package runfmt
 
 import (
 	"encoding/json"
 	"io"
 	"sort"
-	"strings"
 	"time"
-
-	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
 type jsonReport struct {
@@ -82,13 +79,13 @@ type jsonProfile struct {
 	WarmupRuns     int                  `json:"warmupRuns,omitempty"`
 	SuccessfulRuns int                  `json:"successfulRuns,omitempty"`
 	FailedRuns     int                  `json:"failedRuns,omitempty"`
-	Latency        *jsonProfileLatency  `json:"latency,omitempty"`
+	Latency        *jsonLatency         `json:"latency,omitempty"`
 	Percentiles    []jsonPercentile     `json:"percentiles,omitempty"`
-	Histogram      []jsonHistogramBin   `json:"histogram,omitempty"`
+	Histogram      []jsonHistBin        `json:"histogram,omitempty"`
 	Failures       []jsonProfileFailure `json:"failures,omitempty"`
 }
 
-type jsonProfileLatency struct {
+type jsonLatency struct {
 	Count    int   `json:"count,omitempty"`
 	MinMs    int64 `json:"minMs,omitempty"`
 	MaxMs    int64 `json:"maxMs,omitempty"`
@@ -102,7 +99,7 @@ type jsonPercentile struct {
 	ValueMs    int64 `json:"valueMs,omitempty"`
 }
 
-type jsonHistogramBin struct {
+type jsonHistBin struct {
 	FromMs int64 `json:"fromMs,omitempty"`
 	ToMs   int64 `json:"toMs,omitempty"`
 	Count  int   `json:"count,omitempty"`
@@ -167,103 +164,83 @@ type jsonStep struct {
 	Tests       []jsonTest  `json:"tests,omitempty"`
 }
 
-func (r *Report) WriteJSON(w io.Writer) error {
-	if w == nil {
-		return ErrNilWriter
-	}
+func WriteJSON(w io.Writer, rep *Report) error {
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
-	return enc.Encode(r.json())
+	return enc.Encode(rep.json())
 }
 
-func (r *Report) json() jsonReport {
+func (rep Report) MarshalJSON() ([]byte, error) {
+	return json.Marshal(rep.json())
+}
+
+func (rep Report) json() jsonReport {
 	out := jsonReport{
-		Version:    r.Version,
-		FilePath:   r.FilePath,
-		EnvName:    r.EnvName,
-		StartedAt:  r.StartedAt,
-		EndedAt:    r.EndedAt,
-		DurationMs: durMS(r.Duration),
+		Version:    rep.Version,
+		FilePath:   rep.FilePath,
+		EnvName:    rep.EnvName,
+		StartedAt:  rep.StartedAt,
+		EndedAt:    rep.EndedAt,
+		DurationMs: durMS(rep.Duration),
 		Summary: jsonSummary{
-			Total:   r.Total,
-			Passed:  r.Passed,
-			Failed:  r.Failed,
-			Skipped: r.Skipped,
+			Total:   rep.Total,
+			Passed:  rep.Passed,
+			Failed:  rep.Failed,
+			Skipped: rep.Skipped,
 		},
-		Results: make([]jsonResult, 0, len(r.Results)),
+		Results: make([]jsonResult, 0, len(rep.Results)),
 	}
-	for _, item := range r.Results {
-		out.Results = append(out.Results, item.json())
+	for _, res := range rep.Results {
+		out.Results = append(out.Results, res.json())
 	}
 	return out
 }
 
-func (item Result) json() jsonResult {
+func (res Result) MarshalJSON() ([]byte, error) {
+	return json.Marshal(res.json())
+}
+
+func (res Result) json() jsonResult {
 	out := jsonResult{
-		Kind:        string(item.Kind),
-		Name:        item.Name,
-		Method:      requestMethodValue(item.Method),
-		Target:      item.Target,
-		Environment: item.Environment,
-		Status:      jsonResultStatus(item),
-		Summary:     item.Summary,
-		Canceled:    item.Canceled,
-		SkipReason:  item.SkipReason,
-		DurationMs:  durMS(resultDuration(item)),
+		Kind:        res.Kind,
+		Name:        res.Name,
+		Method:      requestMethodValue(res.Method),
+		Target:      res.Target,
+		Environment: res.Environment,
+		Status:      jsonStatus(res.Status),
+		Summary:     res.Summary,
+		Canceled:    res.Canceled,
+		SkipReason:  res.SkipReason,
+		Error:       res.Error,
+		ScriptError: res.ScriptError,
+		DurationMs:  durMS(res.Duration),
+		HTTP:        res.HTTP.json(),
+		GRPC:        res.GRPC.json(),
+		Stream:      res.Stream.json(),
+		Trace:       res.Trace.json(),
+		Compare:     res.Compare.json(),
+		Profile:     res.Profile.json(),
 	}
-	if item.Err != nil {
-		out.Error = item.Err.Error()
-	}
-	if item.ScriptErr != nil {
-		out.ScriptError = item.ScriptErr.Error()
-	}
-	if item.Response != nil {
-		out.HTTP = &jsonHTTP{
-			Status:     strings.TrimSpace(item.Response.Status),
-			StatusCode: item.Response.StatusCode,
-			Protocol:   strings.TrimSpace(item.Response.Proto),
+	if len(res.Tests) > 0 {
+		out.Tests = make([]jsonTest, 0, len(res.Tests))
+		for _, test := range res.Tests {
+			out.Tests = append(out.Tests, test.json())
 		}
 	}
-	if item.GRPC != nil {
-		out.GRPC = &jsonGRPC{
-			Code:          item.GRPC.StatusCode.String(),
-			StatusCode:    int(item.GRPC.StatusCode),
-			StatusMessage: strings.TrimSpace(item.GRPC.StatusMessage),
-		}
-	}
-	if item.Stream != nil {
-		out.Stream = jsonStreamInfo(item.Stream)
-	}
-	if item.Trace != nil {
-		out.Trace = jsonTraceInfo(item.Trace)
-	}
-	if len(item.Tests) > 0 {
-		out.Tests = make([]jsonTest, 0, len(item.Tests))
-		for _, test := range item.Tests {
-			out.Tests = append(out.Tests, jsonTest{
-				Name:      test.Name,
-				Message:   test.Message,
-				Passed:    test.Passed,
-				ElapsedMs: durMS(test.Elapsed),
-			})
-		}
-	}
-	if item.Compare != nil {
-		out.Compare = &jsonCompare{Baseline: item.Compare.Baseline}
-	}
-	if item.Profile != nil {
-		out.Profile = jsonProfileInfo(item.Profile)
-	}
-	if len(item.Steps) > 0 {
-		out.Steps = make([]jsonStep, 0, len(item.Steps))
-		for _, step := range item.Steps {
+	if len(res.Steps) > 0 {
+		out.Steps = make([]jsonStep, 0, len(res.Steps))
+		for _, step := range res.Steps {
 			out.Steps = append(out.Steps, step.json())
 		}
 	}
 	return out
 }
 
-func (step StepResult) json() jsonStep {
+func (step Step) MarshalJSON() ([]byte, error) {
+	return json.Marshal(step.json())
+}
+
+func (step Step) json() jsonStep {
 	out := jsonStep{
 		Name:        step.Name,
 		Method:      requestMethodValue(step.Method),
@@ -272,111 +249,118 @@ func (step StepResult) json() jsonStep {
 		Branch:      step.Branch,
 		Iteration:   step.Iteration,
 		Total:       step.Total,
-		Status:      jsonStepStatus(step),
+		Status:      jsonStatus(step.Status),
 		Summary:     step.Summary,
 		Canceled:    step.Canceled,
 		SkipReason:  step.SkipReason,
+		Error:       step.Error,
+		ScriptError: step.ScriptError,
 		DurationMs:  durMS(step.Duration),
-	}
-	if step.Err != nil {
-		out.Error = step.Err.Error()
-	}
-	if step.ScriptErr != nil {
-		out.ScriptError = step.ScriptErr.Error()
-	}
-	if step.Response != nil {
-		out.HTTP = &jsonHTTP{
-			Status:     strings.TrimSpace(step.Response.Status),
-			StatusCode: step.Response.StatusCode,
-			Protocol:   strings.TrimSpace(step.Response.Proto),
-		}
-	}
-	if step.GRPC != nil {
-		out.GRPC = &jsonGRPC{
-			Code:          step.GRPC.StatusCode.String(),
-			StatusCode:    int(step.GRPC.StatusCode),
-			StatusMessage: strings.TrimSpace(step.GRPC.StatusMessage),
-		}
-	}
-	if step.Stream != nil {
-		out.Stream = jsonStreamInfo(step.Stream)
-	}
-	if step.Trace != nil {
-		out.Trace = jsonTraceInfo(step.Trace)
+		HTTP:        step.HTTP.json(),
+		GRPC:        step.GRPC.json(),
+		Stream:      step.Stream.json(),
+		Trace:       step.Trace.json(),
 	}
 	if len(step.Tests) > 0 {
 		out.Tests = make([]jsonTest, 0, len(step.Tests))
 		for _, test := range step.Tests {
-			out.Tests = append(out.Tests, jsonTest{
-				Name:      test.Name,
-				Message:   test.Message,
-				Passed:    test.Passed,
-				ElapsedMs: durMS(test.Elapsed),
-			})
+			out.Tests = append(out.Tests, test.json())
 		}
 	}
 	return out
 }
 
-func jsonResultStatus(item Result) string {
-	if item.Skipped {
+func jsonStatus(status Status) string {
+	switch status {
+	case StatusSkip:
 		return "skip"
-	}
-	if resultFailed(item) {
+	case StatusFail:
 		return "fail"
+	default:
+		return "pass"
 	}
-	return "pass"
 }
 
-func jsonStepStatus(step StepResult) string {
-	if step.Skipped {
-		return "skip"
+func (http *HTTP) json() *jsonHTTP {
+	if http == nil {
+		return nil
 	}
-	if stepFailed(step) {
-		return "fail"
+	return &jsonHTTP{
+		Status:     http.Status,
+		StatusCode: http.StatusCode,
+		Protocol:   http.Protocol,
 	}
-	return "pass"
 }
 
-func jsonProfileInfo(prof *ProfileInfo) *jsonProfile {
+func (grpc *GRPC) json() *jsonGRPC {
+	if grpc == nil {
+		return nil
+	}
+	return &jsonGRPC{
+		Code:          grpc.Code,
+		StatusCode:    grpc.StatusCode,
+		StatusMessage: grpc.StatusMessage,
+	}
+}
+
+func (test Test) json() jsonTest {
+	return jsonTest{
+		Name:      test.Name,
+		Message:   test.Message,
+		Passed:    test.Passed,
+		ElapsedMs: durMS(test.Elapsed),
+	}
+}
+
+func (cmp *Compare) json() *jsonCompare {
+	if cmp == nil {
+		return nil
+	}
+	return &jsonCompare{Baseline: cmp.Baseline}
+}
+
+func (prof *Profile) json() *jsonProfile {
 	if prof == nil {
 		return nil
 	}
 	out := &jsonProfile{
-		Count:   prof.Count,
-		Warmup:  prof.Warmup,
-		DelayMs: durMS(prof.Delay),
+		Count:          prof.Count,
+		Warmup:         prof.Warmup,
+		DelayMs:        durMS(prof.Delay),
+		TotalRuns:      prof.TotalRuns,
+		WarmupRuns:     prof.WarmupRuns,
+		SuccessfulRuns: prof.SuccessfulRuns,
+		FailedRuns:     prof.FailedRuns,
+		Latency:        prof.Latency.json(),
 	}
-	if prof.Results != nil {
-		out.TotalRuns = prof.Results.TotalRuns
-		out.WarmupRuns = prof.Results.WarmupRuns
-		out.SuccessfulRuns = prof.Results.SuccessfulRuns
-		out.FailedRuns = prof.Results.FailedRuns
-		out.Latency = jsonProfileLatencyInfo(prof.Results.Latency)
-		out.Percentiles = jsonPercentiles(prof.Results.Percentiles)
-		out.Histogram = jsonHistogram(prof.Results.Histogram)
+	if len(prof.Percentiles) > 0 {
+		items := append([]Percentile(nil), prof.Percentiles...)
+		sort.Slice(items, func(i, j int) bool { return items[i].Percentile < items[j].Percentile })
+		out.Percentiles = make([]jsonPercentile, 0, len(items))
+		for _, item := range items {
+			out.Percentiles = append(out.Percentiles, item.json())
+		}
+	}
+	if len(prof.Histogram) > 0 {
+		out.Histogram = make([]jsonHistBin, 0, len(prof.Histogram))
+		for _, item := range prof.Histogram {
+			out.Histogram = append(out.Histogram, item.json())
+		}
 	}
 	if len(prof.Failures) > 0 {
 		out.Failures = make([]jsonProfileFailure, 0, len(prof.Failures))
-		for _, failure := range prof.Failures {
-			out.Failures = append(out.Failures, jsonProfileFailure{
-				Iteration:  failure.Iteration,
-				Warmup:     failure.Warmup,
-				Reason:     failure.Reason,
-				Status:     failure.Status,
-				StatusCode: failure.StatusCode,
-				DurationMs: durMS(failure.Duration),
-			})
+		for _, item := range prof.Failures {
+			out.Failures = append(out.Failures, item.json())
 		}
 	}
 	return out
 }
 
-func jsonProfileLatencyInfo(lat *history.ProfileLatency) *jsonProfileLatency {
+func (lat *Latency) json() *jsonLatency {
 	if lat == nil {
 		return nil
 	}
-	return &jsonProfileLatency{
+	return &jsonLatency{
 		Count:    lat.Count,
 		MinMs:    durMS(lat.Min),
 		MaxMs:    durMS(lat.Max),
@@ -386,118 +370,82 @@ func jsonProfileLatencyInfo(lat *history.ProfileLatency) *jsonProfileLatency {
 	}
 }
 
-func jsonPercentiles(src []history.ProfilePercentile) []jsonPercentile {
-	if len(src) == 0 {
-		return nil
+func (pct Percentile) json() jsonPercentile {
+	return jsonPercentile{
+		Percentile: pct.Percentile,
+		ValueMs:    durMS(pct.Value),
 	}
-	items := append([]history.ProfilePercentile(nil), src...)
-	sort.Slice(items, func(i, j int) bool { return items[i].Percentile < items[j].Percentile })
-	out := make([]jsonPercentile, 0, len(items))
-	for _, item := range items {
-		out = append(out, jsonPercentile{
-			Percentile: item.Percentile,
-			ValueMs:    durMS(item.Value),
-		})
-	}
-	return out
 }
 
-func jsonHistogram(src []history.ProfileHistogramBin) []jsonHistogramBin {
-	if len(src) == 0 {
-		return nil
+func (bin HistBin) json() jsonHistBin {
+	return jsonHistBin{
+		FromMs: durMS(bin.From),
+		ToMs:   durMS(bin.To),
+		Count:  bin.Count,
 	}
-	out := make([]jsonHistogramBin, 0, len(src))
-	for _, item := range src {
-		out = append(out, jsonHistogramBin{
-			FromMs: durMS(item.From),
-			ToMs:   durMS(item.To),
-			Count:  item.Count,
-		})
-	}
-	return out
 }
 
-func jsonStreamInfo(info *StreamInfo) *jsonStream {
-	if info == nil {
+func (fail ProfileFailure) json() jsonProfileFailure {
+	return jsonProfileFailure{
+		Iteration:  fail.Iteration,
+		Warmup:     fail.Warmup,
+		Reason:     fail.Reason,
+		Status:     fail.Status,
+		StatusCode: fail.StatusCode,
+		DurationMs: durMS(fail.Duration),
+	}
+}
+
+func (stream *Stream) json() *jsonStream {
+	if stream == nil {
 		return nil
 	}
 	out := &jsonStream{
-		Kind:           info.Kind,
-		EventCount:     info.EventCount,
-		TranscriptPath: info.TranscriptPath,
+		Kind:           stream.Kind,
+		EventCount:     stream.EventCount,
+		TranscriptPath: stream.TranscriptPath,
 	}
-	if len(info.Summary) > 0 {
-		out.Summary = jsonAnyMap(info.Summary)
+	if len(stream.Summary) > 0 {
+		out.Summary = jsonAnyMap(stream.Summary)
 	}
 	return out
 }
 
-func jsonTraceInfo(info *TraceInfo) *jsonTrace {
-	if info == nil || info.Summary == nil {
+func (trace *Trace) json() *jsonTrace {
+	if trace == nil {
 		return nil
 	}
 	out := &jsonTrace{
-		DurationMs:   durMS(info.Summary.Duration),
-		Error:        strings.TrimSpace(info.Summary.Error),
-		ArtifactPath: info.ArtifactPath,
+		DurationMs:   durMS(trace.Duration),
+		Error:        trace.Error,
+		ArtifactPath: trace.ArtifactPath,
 	}
-	if bud := info.Summary.Budgets; bud != nil {
+	if bud := trace.Budget; bud != nil {
 		out.Budgets = &jsonTraceBudget{
 			TotalMs:     durMS(bud.Total),
 			ToleranceMs: durMS(bud.Tolerance),
 		}
 		if len(bud.Phases) > 0 {
 			out.Budgets.Phases = make(map[string]int64, len(bud.Phases))
-			for key, value := range bud.Phases {
-				out.Budgets.Phases[key] = durMS(value)
+			for key, val := range bud.Phases {
+				out.Budgets.Phases[key] = durMS(val)
 			}
 		}
 	}
-	if len(info.Summary.Breaches) > 0 {
-		out.Breaches = make([]jsonTraceBreach, 0, len(info.Summary.Breaches))
-		for _, breach := range info.Summary.Breaches {
-			out.Breaches = append(out.Breaches, jsonTraceBreach{
-				Kind:     strings.TrimSpace(breach.Kind),
-				LimitMs:  durMS(breach.Limit),
-				ActualMs: durMS(breach.Actual),
-				OverMs:   durMS(breach.Over),
-			})
+	if len(trace.Breaches) > 0 {
+		out.Breaches = make([]jsonTraceBreach, 0, len(trace.Breaches))
+		for _, breach := range trace.Breaches {
+			out.Breaches = append(out.Breaches, breach.json())
 		}
 	}
 	return out
 }
 
-func jsonAnyMap(src map[string]any) map[string]any {
-	if len(src) == 0 {
-		return nil
+func (breach TraceBreach) json() jsonTraceBreach {
+	return jsonTraceBreach{
+		Kind:     breach.Kind,
+		LimitMs:  durMS(breach.Limit),
+		ActualMs: durMS(breach.Actual),
+		OverMs:   durMS(breach.Over),
 	}
-	out := make(map[string]any, len(src))
-	for key, value := range src {
-		out[key] = jsonAnyValue(value)
-	}
-	return out
-}
-
-func jsonAnyValue(v any) any {
-	switch x := v.(type) {
-	case time.Duration:
-		return durMS(x)
-	case map[string]any:
-		return jsonAnyMap(x)
-	case []any:
-		out := make([]any, 0, len(x))
-		for _, item := range x {
-			out = append(out, jsonAnyValue(item))
-		}
-		return out
-	default:
-		return x
-	}
-}
-
-func durMS(d time.Duration) int64 {
-	if d <= 0 {
-		return 0
-	}
-	return d.Milliseconds()
 }

@@ -3,6 +3,7 @@ package headless
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +129,90 @@ func TestReportWriteJSONUsesCanonicalStatusValues(t *testing.T) {
 	if len(got.Results[0].Steps) != 1 || got.Results[0].Steps[0].Status != "fail" ||
 		!got.Results[0].Steps[0].Canceled {
 		t.Fatalf("unexpected step json: %+v", got.Results[0].Steps)
+	}
+}
+
+func TestReportWriteJSONUsesExplicitStatus(t *testing.T) {
+	rep := &Report{
+		FilePath: "api.http",
+		Results: []Result{{
+			Name:     "req",
+			Status:   StatusPass,
+			Canceled: true,
+			Error:    "boom",
+			Tests: []Test{{
+				Name:   "status",
+				Passed: false,
+			}},
+			Trace: &Trace{
+				Breaches: []TraceBreach{{Kind: "total"}},
+			},
+			Steps: []Step{{
+				Name:     "step",
+				Status:   StatusPass,
+				Canceled: true,
+				Error:    "boom",
+				Tests: []Test{{
+					Name:   "status",
+					Passed: false,
+				}},
+				Trace: &Trace{
+					Breaches: []TraceBreach{{Kind: "total"}},
+				},
+			}},
+		}},
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var got struct {
+		Results []struct {
+			Status string `json:"status"`
+			Steps  []struct {
+				Status string `json:"status"`
+			} `json:"steps"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if len(got.Results) != 1 || got.Results[0].Status != "pass" {
+		t.Fatalf("unexpected result json: %+v", got.Results)
+	}
+	if len(got.Results[0].Steps) != 1 || got.Results[0].Steps[0].Status != "pass" {
+		t.Fatalf("unexpected step json: %+v", got.Results[0].Steps)
+	}
+}
+
+func TestReportMarshalJSONMatchesWriteJSON(t *testing.T) {
+	rep := reportFromRunner(sampleRunnerReport())
+	if rep == nil {
+		t.Fatal("expected report")
+	}
+
+	var want strings.Builder
+	if err := rep.WriteJSON(&want); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	got, err := json.Marshal(rep)
+	if err != nil {
+		t.Fatalf("MarshalJSON: %v", err)
+	}
+
+	var wantDoc any
+	if err := json.Unmarshal([]byte(want.String()), &wantDoc); err != nil {
+		t.Fatalf("unmarshal want: %v", err)
+	}
+	var gotDoc any
+	if err := json.Unmarshal(got, &gotDoc); err != nil {
+		t.Fatalf("unmarshal got: %v", err)
+	}
+	if !reflect.DeepEqual(gotDoc, wantDoc) {
+		t.Fatalf("marshal mismatch\nwant:\n%s\ngot:\n%s", want.String(), string(got))
 	}
 }
 

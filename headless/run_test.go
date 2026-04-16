@@ -37,7 +37,7 @@ func TestRunRequestParity(t *testing.T) {
 		t.Fatalf("abs file: %v", err)
 	}
 
-	got, err := Run(context.Background(), Opt{FilePath: file})
+	got, err := Run(context.Background(), Options{FilePath: file})
 	if err != nil {
 		t.Fatalf("public Run: %v", err)
 	}
@@ -45,7 +45,7 @@ func TestRunRequestParity(t *testing.T) {
 		FilePath:      path,
 		WorkspaceRoot: dir,
 		HTTPOptions: httpclient.Options{
-			Timeout:         defTimeout,
+			Timeout:         defaultTimeout,
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
@@ -95,10 +95,12 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		t.Fatalf("abs file: %v", err)
 	}
 
-	got, err := Run(context.Background(), Opt{
-		FilePath:       file,
-		CompareTargets: []string{"dev", "stage"},
-		CompareBase:    "stage",
+	got, err := Run(context.Background(), Options{
+		FilePath: file,
+		Compare: CompareOptions{
+			Targets: []string{"dev", "stage"},
+			Base:    "stage",
+		},
 	})
 	if err != nil {
 		t.Fatalf("public Run: %v", err)
@@ -118,7 +120,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		CompareTargets:  []string{"dev", "stage"},
 		CompareBase:     "stage",
 		HTTPOptions: httpclient.Options{
-			Timeout:         defTimeout,
+			Timeout:         defaultTimeout,
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
@@ -147,7 +149,7 @@ func TestRunUsageError(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := Run(context.Background(), Opt{FilePath: file})
+	_, err := Run(context.Background(), Options{FilePath: file})
 	if err == nil {
 		t.Fatal("expected usage error")
 	}
@@ -171,7 +173,12 @@ func TestRunUsesContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	got, err := Run(ctx, Opt{FilePath: file, HTTP: HTTPOpt{Timeout: 2 * time.Second}})
+	got, err := Run(ctx, Options{
+		FilePath: file,
+		HTTP: HTTPOptions{
+			Timeout: 2 * time.Second,
+		},
+	})
 	if err != nil {
 		t.Fatalf("public Run: %v", err)
 	}
@@ -199,14 +206,14 @@ func TestRunUsesContext(t *testing.T) {
 	}
 }
 
-func TestRunnerOptUsesHeadlessDefaults(t *testing.T) {
+func TestRunnerOptionsUseDefaults(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
-	got, err := runnerOpt(Opt{FilePath: file})
+	got, err := runnerOptions(Options{FilePath: file})
 	if err != nil {
-		t.Fatalf("runnerOpt: %v", err)
+		t.Fatalf("runnerOptions: %v", err)
 	}
-	if got.HTTPOptions.Timeout != defTimeout || !got.HTTPOptions.FollowRedirects {
+	if got.HTTPOptions.Timeout != defaultTimeout || !got.HTTPOptions.FollowRedirects {
 		t.Fatalf("unexpected http defaults: %+v", got.HTTPOptions)
 	}
 	if !got.GRPCOptions.DefaultPlaintext || !got.GRPCOptions.DefaultPlaintextSet {
@@ -214,18 +221,22 @@ func TestRunnerOptUsesHeadlessDefaults(t *testing.T) {
 	}
 }
 
-func TestRunnerOptRespectsExplicitBoolOptions(t *testing.T) {
+func TestRunnerOptionsRespectExplicitBoolOptions(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
 	follow := false
 	plain := false
-	got, err := runnerOpt(Opt{
+	got, err := runnerOptions(Options{
 		FilePath: file,
-		HTTP:     HTTPOpt{Follow: &follow},
-		GRPC:     GRPCOpt{Plaintext: &plain},
+		HTTP: HTTPOptions{
+			FollowRedirects: &follow,
+		},
+		GRPC: GRPCOptions{
+			Plaintext: &plain,
+		},
 	})
 	if err != nil {
-		t.Fatalf("runnerOpt: %v", err)
+		t.Fatalf("runnerOptions: %v", err)
 	}
 	if got.HTTPOptions.FollowRedirects {
 		t.Fatalf("expected follow=false, got %+v", got.HTTPOptions)
@@ -235,16 +246,16 @@ func TestRunnerOptRespectsExplicitBoolOptions(t *testing.T) {
 	}
 }
 
-func TestRunUsesExplicitEmptyFileContent(t *testing.T) {
+func TestRunUsesExplicitEmptyFileData(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
 	if err := os.WriteFile(file, []byte("GET https://example.com/status\n"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := Run(context.Background(), Opt{
-		FilePath:    file,
-		FileContent: []byte{},
+	_, err := Run(context.Background(), Options{
+		FilePath: file,
+		FileData: []byte{},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -287,8 +298,8 @@ func stableReport(src *Report) *Report {
 		return &out
 	}
 	out.Results = make([]Result, 0, len(src.Results))
-	for _, item := range src.Results {
-		out.Results = append(out.Results, stableResult(item))
+	for _, res := range src.Results {
+		out.Results = append(out.Results, stableResult(res))
 	}
 	return &out
 }

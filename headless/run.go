@@ -16,68 +16,69 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const defTimeout = 30 * time.Second
+const defaultTimeout = 30 * time.Second
 
-func Run(ctx context.Context, opt Opt) (*Report, error) {
-	ro, err := runnerOpt(opt)
+// Run executes a request or workflow file and returns a stable public report.
+func Run(ctx context.Context, opt Options) (*Report, error) {
+	ro, err := runnerOptions(opt)
 	if err != nil {
 		return nil, err
 	}
 	rep, err := runner.RunContext(ctx, ro)
 	if err != nil {
 		if runner.IsUsageError(err) {
-			return nil, ErrUsage{err: err}
+			return nil, UsageError{err: err}
 		}
 		return nil, err
 	}
 	return reportFromRunner(rep), nil
 }
 
-func runnerOpt(opt Opt) (runner.Options, error) {
+func runnerOptions(opt Options) (runner.Options, error) {
 	path, err := absPath(opt.FilePath)
 	if err != nil {
-		return runner.Options{}, ErrUsage{err: fmt.Errorf("resolve filePath: %w", err)}
+		return runner.Options{}, UsageError{err: fmt.Errorf("resolve filePath: %w", err)}
 	}
-	work, err := workspacePath(path, opt.Workspace)
+	work, err := workspacePath(path, opt.WorkspaceRoot)
 	if err != nil {
-		return runner.Options{}, ErrUsage{err: fmt.Errorf("resolve workspace: %w", err)}
+		return runner.Options{}, UsageError{err: fmt.Errorf("resolve workspaceRoot: %w", err)}
 	}
-	envs, envFile, envName, err := envOpt(opt, path, work)
-	if err != nil {
-		return runner.Options{}, err
-	}
-	targets, err := compareTargets(opt.CompareTargets)
+	envs, envFile, envName, err := environmentOptions(opt, path, work)
 	if err != nil {
 		return runner.Options{}, err
 	}
-	base := strings.TrimSpace(opt.CompareBase)
-	if err := cli.ValidateReservedEnvironment(base, "compareBase"); err != nil {
-		return runner.Options{}, ErrUsage{err: err}
+	targets, err := compareTargets(opt.Compare.Targets)
+	if err != nil {
+		return runner.Options{}, err
+	}
+	base := strings.TrimSpace(opt.Compare.Base)
+	if err := cli.ValidateReservedEnvironment(base, "compare.base"); err != nil {
+		return runner.Options{}, UsageError{err: err}
 	}
 	return runner.Options{
 		Version:         strings.TrimSpace(opt.Version),
 		FilePath:        path,
-		FileContent:     bytes.Clone(opt.FileContent),
+		FileContent:     bytes.Clone(opt.FileData),
 		WorkspaceRoot:   work,
 		Recursive:       opt.Recursive,
-		ArtifactDir:     strings.TrimSpace(opt.ArtifactDir),
-		StateDir:        strings.TrimSpace(opt.StateDir),
-		PersistGlobals:  opt.PersistGlobals,
-		PersistAuth:     opt.PersistAuth,
-		History:         opt.History,
+		ArtifactDir:     strings.TrimSpace(opt.State.ArtifactDir),
+		StateDir:        strings.TrimSpace(opt.State.StateDir),
+		PersistGlobals:  opt.State.PersistGlobals,
+		PersistAuth:     opt.State.PersistAuth,
+		History:         opt.State.History,
 		EnvSet:          envs,
 		EnvName:         envName,
 		EnvironmentFile: envFile,
 		CompareTargets:  targets,
 		CompareBase:     base,
 		Profile:         opt.Profile,
-		HTTPOptions:     httpOpt(opt.HTTP),
-		GRPCOptions:     grpcOpt(opt.GRPC),
+		HTTPOptions:     httpOptions(opt.HTTP),
+		GRPCOptions:     grpcOptions(opt.GRPC),
 		Select: runner.Select{
-			Request:  strings.TrimSpace(opt.Select.Request),
-			Workflow: strings.TrimSpace(opt.Select.Workflow),
-			Tag:      strings.TrimSpace(opt.Select.Tag),
-			All:      opt.Select.All,
+			Request:  strings.TrimSpace(opt.Selection.Request),
+			Workflow: strings.TrimSpace(opt.Selection.Workflow),
+			Tag:      strings.TrimSpace(opt.Selection.Tag),
+			All:      opt.Selection.All,
 		},
 	}, nil
 }
@@ -106,28 +107,28 @@ func workspacePath(path, work string) (string, error) {
 	}
 }
 
-func envOpt(opt Opt, path, work string) (vars.EnvironmentSet, string, string, error) {
-	envs := envSet(opt.Envs)
-	envFile := strings.TrimSpace(opt.EnvFile)
+func environmentOptions(opt Options, path, work string) (vars.EnvironmentSet, string, string, error) {
+	envs := environmentSet(opt.Environment.Set)
+	envFile := strings.TrimSpace(opt.Environment.FilePath)
 	switch {
 	case len(envs) > 0:
 	case envFile != "":
 		set, err := vars.LoadEnvironmentFile(envFile)
 		if err != nil {
-			return nil, "", "", fmt.Errorf("load env file: %w", err)
+			return nil, "", "", fmt.Errorf("load environment file: %w", err)
 		}
 		envs = set
 	default:
 		set, file, err := vars.ResolveEnvironment(envPaths(path, work))
 		if err != nil {
-			return nil, "", "", fmt.Errorf("resolve env file: %w", err)
+			return nil, "", "", fmt.Errorf("resolve environment file: %w", err)
 		}
 		envs = set
 		envFile = file
 	}
-	envName := strings.TrimSpace(opt.EnvName)
-	if err := cli.ValidateReservedEnvironment(envName, "env"); err != nil {
-		return nil, "", "", ErrUsage{err: err}
+	envName := strings.TrimSpace(opt.Environment.Name)
+	if err := cli.ValidateReservedEnvironment(envName, "environment.name"); err != nil {
+		return nil, "", "", UsageError{err: err}
 	}
 	if envName == "" && len(envs) > 0 {
 		envName, _ = cli.SelectDefaultEnvironment(envs)
@@ -146,7 +147,7 @@ func envPaths(path, work string) []string {
 	return out
 }
 
-func envSet(src EnvSet) vars.EnvironmentSet {
+func environmentSet(src EnvironmentSet) vars.EnvironmentSet {
 	if len(src) == 0 {
 		return nil
 	}
@@ -168,8 +169,8 @@ func compareTargets(src []string) ([]string, error) {
 		if name == "" {
 			continue
 		}
-		if err := cli.ValidateReservedEnvironment(name, "compareTargets"); err != nil {
-			return nil, ErrUsage{err: err}
+		if err := cli.ValidateReservedEnvironment(name, "compare.targets"); err != nil {
+			return nil, UsageError{err: err}
 		}
 		key := strings.ToLower(name)
 		if _, ok := seen[key]; ok {
@@ -182,21 +183,21 @@ func compareTargets(src []string) ([]string, error) {
 		return nil, nil
 	}
 	if len(out) < 2 {
-		return nil, ErrUsage{err: fmt.Errorf("compareTargets requires at least two environments")}
+		return nil, UsageError{err: fmt.Errorf("compare.targets requires at least two environments")}
 	}
 	return out, nil
 }
 
-func httpOpt(opt HTTPOpt) httpclient.Options {
+func httpOptions(opt HTTPOptions) httpclient.Options {
 	return httpclient.Options{
 		Timeout:            timeoutOf(opt.Timeout),
-		FollowRedirects:    boolVal(opt.Follow, true),
-		InsecureSkipVerify: opt.Insecure,
-		ProxyURL:           strings.TrimSpace(opt.Proxy),
+		FollowRedirects:    boolVal(opt.FollowRedirects, true),
+		InsecureSkipVerify: opt.InsecureSkipVerify,
+		ProxyURL:           strings.TrimSpace(opt.ProxyURL),
 	}
 }
 
-func grpcOpt(opt GRPCOpt) grpcclient.Options {
+func grpcOptions(opt GRPCOptions) grpcclient.Options {
 	return grpcclient.Options{
 		DefaultPlaintext:    boolVal(opt.Plaintext, true),
 		DefaultPlaintextSet: true,
@@ -207,7 +208,7 @@ func timeoutOf(d time.Duration) time.Duration {
 	if d > 0 {
 		return d
 	}
-	return defTimeout
+	return defaultTimeout
 }
 
 func boolVal(v *bool, def bool) bool {
