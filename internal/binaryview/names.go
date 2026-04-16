@@ -90,18 +90,66 @@ func extensionForMIME(mimeType string) string {
 
 	// "application/json; charset=utf-8"
 	if mediaType, _, err := mime.ParseMediaType(mt); err == nil && mediaType != "" {
-		mt = mediaType
+		mt = strings.ToLower(mediaType)
 	}
 
 	exts, err := mime.ExtensionsByType(mt)
 	if err != nil || len(exts) == 0 {
 		return ""
 	}
+	if ext := preferredExtensionForMIME(mt, exts); ext != "" {
+		return ext
+	}
 	for _, ext := range exts {
-		if e := strings.TrimSpace(ext); e != "" {
+		if e := strings.ToLower(strings.TrimSpace(ext)); e != "" {
 			return e
 		}
 	}
+	return ""
+}
+
+func preferredExtensionForMIME(mimeType string, exts []string) string {
+	preferredByType := map[string][]string{
+		"application/json": {".json"},
+		"application/pdf":  {".pdf"},
+		"application/xml":  {".xml"},
+		"image/jpeg":       {".jpg", ".jpeg"},
+		"image/png":        {".png"},
+		"image/svg+xml":    {".svg"},
+		"text/html":        {".html", ".htm"},
+		"text/plain":       {".txt"},
+		"text/xml":         {".xml"},
+	}
+
+	normalized := make(map[string]string, len(exts))
+	for _, ext := range exts {
+		e := strings.ToLower(strings.TrimSpace(ext))
+		if e != "" {
+			normalized[e] = e
+		}
+	}
+
+	for _, candidate := range preferredByType[mimeType] {
+		if ext := normalized[candidate]; ext != "" {
+			return ext
+		}
+	}
+
+	slash := strings.IndexByte(mimeType, '/')
+	if slash < 0 || slash == len(mimeType)-1 {
+		return ""
+	}
+
+	subtype := mimeType[slash+1:]
+	if plus := strings.IndexByte(subtype, '+'); plus > 0 {
+		if ext := normalized["."+subtype[:plus]]; ext != "" {
+			return ext
+		}
+	}
+	if ext := normalized["."+subtype]; ext != "" {
+		return ext
+	}
+
 	return ""
 }
 
