@@ -95,6 +95,11 @@ func ApplyHTTPSettings(
 			opts.InsecureSkipVerify = b
 		}
 	}
+	if value, ok := norm["no-cookies"]; ok {
+		if b, err := strconv.ParseBool(value); err == nil && b {
+			opts.CookieJar = nil
+		}
+	}
 	return nil
 }
 

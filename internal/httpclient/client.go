@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/http/cookiejar"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
@@ -36,11 +35,11 @@ type Options struct {
 	TraceBudget        *nettrace.Budget
 	SSH                *ssh.Plan
 	K8s                *k8s.Plan
+	CookieJar          http.CookieJar
 }
 
 type Client struct {
 	fs          FileSystem
-	jar         http.CookieJar
 	httpFactory func(Options) (*http.Client, error)
 	wsDial      func(context.Context, string, *websocket.DialOptions) (*websocket.Conn, *http.Response, error)
 	telemetry   telemetry.Instrumenter
@@ -78,8 +77,7 @@ func NewClient(fs FileSystem) *Client {
 		fs = OSFileSystem{}
 	}
 
-	jar, _ := cookiejar.New(nil)
-	c := &Client{fs: fs, jar: jar, telemetry: telemetry.Noop()}
+	c := &Client{fs: fs, telemetry: telemetry.Noop()}
 	c.httpFactory = c.buildHTTPClient
 	c.wsDial = websocket.Dial
 	return c

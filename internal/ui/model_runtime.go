@@ -28,6 +28,14 @@ func (m *Model) runtimeSvc() *rtrun.Runtime {
 	return m.run
 }
 
+func (m *Model) cookieStore() *rtrun.Cookies {
+	rt := m.runtimeSvc()
+	if rt == nil {
+		return nil
+	}
+	return rt.Cookies()
+}
+
 func (m *Model) globalsStore() *globalStore {
 	rt := m.runtimeSvc()
 	if rt == nil {
