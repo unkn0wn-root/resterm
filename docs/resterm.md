@@ -168,7 +168,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Split response vertically / horizontally | `Ctrl+V` / `Ctrl+U` |
 | Pin or unpin response pane | `Ctrl+Shift+V` |
 | Choose target pane for next response | `Ctrl+F` or `Ctrl+B`, then arrow keys or `h` / `l` |
-| Show globals summary / clear globals and cookies | `Ctrl+G` / `Ctrl+Shift+G` |
+| Show globals summary / clear globals and cookies | `Ctrl+G` / `Ctrl+Shift+G` (or `g Shift+G`) |
 | Quit | `Ctrl+Q` (or `Ctrl+D`) |
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), visual selections with `v` / `V`, yank and delete operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
@@ -196,7 +196,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `cycle_focus_prev` | Cycle focus backward. | `shift+tab` |
 | `open_env_selector` | Open environment picker. | `ctrl+e` |
 | `show_globals` | Show global variable summary. | `ctrl+g` |
-| `clear_globals` | Clear global variables and cookies. | `ctrl+shift+g` |
+| `clear_globals` | Clear global variables and cookies. | `ctrl+shift+g`, `g shift+g` |
 | `save_file` | Save the current `.http` / `.rest` file. | `ctrl+s` |
 | `save_layout` | Prompt to persist current layout (splits, widths) to settings. | `g shift+l` |
 | `toggle_response_split_vertical` | Toggle response inline vs vertical split. | `ctrl+v` |
@@ -272,7 +272,7 @@ Binary responses show size and type hints alongside quick previews. For large bi
 ### History and globals
 
 - The history pane persists responses along with their request and environment metadata. Entries survive restarts (stored under the config directory; see [Configuration](#configuration)).
-- `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` clears globals and cookies for the active environment.
+- `Ctrl+G` shows current globals (request/file/runtime) with secrets masked. `Ctrl+Shift+G` (or `g Shift+G`) clears globals and cookies for the active environment.
 - `Ctrl+E` opens the environment picker to switch between `resterm.env.json` (or `rest-client.env.json`) entries.
 
 ---
@@ -1385,7 +1385,7 @@ Key points:
 - Global defaults are passed via CLI flags (`--timeout`, `--follow`, `--insecure`, `--proxy`).
 - Per-request overrides use `@setting`, `@settings`, or `@timeout`.
 - HTTP version: `@setting http-version 1.1` (accepts `1.0`, `1.1`, `2`, `HTTP/1.1`, `HTTP/2`). A trailing `HTTP/1.1` on the request line also sets the version; explicit settings win. `2` is strict and fails if the response is not HTTP/2. WebSocket requests are incompatible with `1.0` and `2`.
-- Requests use an in-memory cookie jar per environment. Cookies are isolated between environments, and `@setting no-cookies true` disables cookies for a request without clearing the stored jar.
+- Requests use an in-memory cookie jar per environment. Cookies are isolated between environments, and `@setting no-cookies true` disables cookies for a request without clearing the stored jar. Use `Ctrl+Shift+G` (or `g Shift+G`) to clear cookies for the current environment.
 - TLS per request: `# @settings http-root-cas=a.pem http-client-cert=cert.pem http-client-key=key.pem http-insecure=true` for a single line, or `@setting key value` per line (`http-root-cas` accepts space/comma/semicolon separated lists; paths are relative). GraphQL/REST/WebSocket/SSE all share these HTTP settings.
 - Use `@no-log` to omit sensitive bodies from history snapshots.
 - History is stored in `${RESTERM_CONFIG_DIR}/history.db` (defaults to the platform config directory) and has no fixed entry cap. Set `RESTERM_CONFIG_DIR` to relocate it.

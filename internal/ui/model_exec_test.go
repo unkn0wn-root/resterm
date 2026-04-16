@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -2406,6 +2407,7 @@ func TestClearGlobalValues(t *testing.T) {
 		cfg: Config{EnvironmentName: "dev"},
 	}
 	model.globalsStore().Set("dev", "token", "value", false)
+	model.cookieStore().Jar("dev")
 	if snap := model.globalsStore().Snapshot("dev"); len(snap) == 0 {
 		t.Fatalf("expected snapshot to contain entries before clearing")
 	}
@@ -2590,5 +2592,69 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 	model.handleResponseMessage(msg)
 	if model.responseLatest == nil || model.responseLatest.timeline == nil {
 		t.Fatalf("expected timeline to be populated in snapshot")
+	}
+}
+
+func TestApplyNoCookiesSetting(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, cookie := range r.Cookies() {
+			fmt.Fprintf(w, "%s\n", cookie.String())
+		}
+	}))
+	defer srv.Close()
+
+	model := Model{
+		cfg: Config{EnvironmentName: "dev"},
+	}
+
+	// Prepare the cookie jar
+	u, _ := url.Parse(srv.URL)
+	model.cookieStore().Jar("dev").SetCookies(u, []*http.Cookie{
+		{Name: "foo", Value: "bar"},
+	})
+
+	// First request to check the cookie is set by default
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    srv.URL,
+	}
+
+	cmd := model.executeRequest(nil, req, httpclient.Options{NoFallback: true}, "dev", nil)
+	if cmd == nil {
+		t.Fatalf("expected executeRequest to return command")
+	}
+
+	msg, ok := cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString := strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "foo=bar" {
+		t.Fatalf("expected cookie foo=bar in dev env, got %q", respBodyString)
+	}
+
+	// Second request with setting to skip cookies
+	reqWithSetting := &restfile.Request{
+		Method:   "GET",
+		URL:      srv.URL,
+		Settings: map[string]string{"no-cookies": "true"},
+	}
+
+	cmd = model.executeRequest(nil, reqWithSetting, httpclient.Options{NoFallback: true}, "dev", nil)
+	msg, ok = cmd().(responseMsg)
+	if !ok {
+		t.Fatalf("expected responseMsg")
+	}
+	if msg.err != nil {
+		t.Fatalf("unexpected error: %v", msg.err)
+	}
+
+	respBodyString = strings.TrimSpace(string(msg.response.Body))
+	if respBodyString != "" {
+		t.Fatalf("expected no cookies to be sent, but got %q", respBodyString)
 	}
 }

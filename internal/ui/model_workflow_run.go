@@ -93,11 +93,30 @@ func workflowRunDisplayName(state *workflowState) string {
 	if state == nil {
 		return label
 	}
-	name := state.workflow.Name
+	name := workflowRunSubject(state)
 	if name == "" {
 		return label
 	}
 	return fmt.Sprintf("%s %s", label, name)
+}
+
+func workflowRunSubject(state *workflowState) string {
+	if state == nil {
+		return ""
+	}
+	if state.origin == workflowOriginForEach {
+		if req := workflowRunSourceRequest(state); req != nil {
+			return requestBaseTitle(req)
+		}
+	}
+	return strings.TrimSpace(state.workflow.Name)
+}
+
+func workflowRunSourceRequest(state *workflowState) *restfile.Request {
+	if state == nil || state.origin != workflowOriginForEach || len(state.steps) == 0 {
+		return nil
+	}
+	return state.steps[0].request
 }
 
 func makeWorkflowResult(
@@ -1659,7 +1678,7 @@ func workflowSummary(state *workflowState) string {
 		}
 	}
 	if lastFailure == -1 {
-		return fmt.Sprintf("Workflow %s finished with %d failure(s)", state.workflow.Name, failed)
+		return fmt.Sprintf("%s finished with %d failure(s)", title, failed)
 	}
 	if lastFailure < len(state.results)-1 {
 		return fmt.Sprintf("%s finished with %d failure(s)", title, failed)
@@ -2201,7 +2220,7 @@ func (m *Model) buildWorkflowReport(state *workflowState) string {
 	}
 	var b strings.Builder
 	label := workflowRunLabel(state)
-	name := state.workflow.Name
+	name := workflowRunSubject(state)
 	if name == "" {
 		name = label
 	}

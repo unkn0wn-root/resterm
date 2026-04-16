@@ -68,7 +68,7 @@ func PrepareWorkflow(
 	if doc == nil {
 		return nil, fmt.Errorf("no document loaded")
 	}
-	wf = engine.NormWf(wf)
+	wf = normWf(wf)
 	steps, reqs, err := prepareWorkflow(doc, wf)
 	if err != nil {
 		return nil, err
@@ -1173,6 +1173,23 @@ func stepOrDefault(step restfile.WorkflowStep) restfile.WorkflowStep {
 		step.Kind = restfile.WorkflowStepKindRequest
 	}
 	return step
+}
+
+func normWf(wf restfile.Workflow) restfile.Workflow {
+	wf.Name = strings.TrimSpace(wf.Name)
+	wf.Tags = engine.Tags(wf.Tags)
+	for i := range wf.Steps {
+		normWfStep(&wf.Steps[i])
+	}
+	return wf
+}
+
+func normWfStep(step *restfile.WorkflowStep) {
+	if step == nil {
+		return
+	}
+	step.Name = strings.TrimSpace(step.Name)
+	step.Using = strings.TrimSpace(step.Using)
 }
 
 func stepVars(step restfile.WorkflowStep) map[string]string {

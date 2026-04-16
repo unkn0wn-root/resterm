@@ -77,7 +77,7 @@ func newWorkflowStatsView(state *workflowState) *workflowStatsView {
 
 	return &workflowStatsView{
 		label:       workflowRunLabel(state),
-		name:        strings.TrimSpace(state.workflow.Name),
+		name:        workflowRunSubject(state),
 		started:     state.start,
 		ended:       state.end,
 		totalSteps:  len(state.steps),

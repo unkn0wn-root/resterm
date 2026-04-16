@@ -609,6 +609,9 @@ func New(cfg Config) Model {
 	if k8sMgr == nil {
 		k8sMgr = k8s.NewManager()
 	}
+	rg := registry.New()
+	rg.Load(workspace, cfg.Recursive)
+
 	run := cfg.Runtime
 	if run == nil {
 		run = newRuntime(rtrun.Config{
@@ -618,8 +621,6 @@ func New(cfg Config) Model {
 			K8sManager: k8sMgr,
 		})
 	}
-	rg := registry.New()
-	rg.Load(workspace, cfg.Recursive)
 
 	updateVersion := strings.TrimSpace(cfg.Version)
 	updateCmd := strings.TrimSpace(cfg.UpdateCmd)
