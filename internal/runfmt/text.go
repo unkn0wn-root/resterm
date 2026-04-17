@@ -48,7 +48,13 @@ func WriteTextStyled(w io.Writer, rep *Report, color termcolor.Config) error {
 			); err != nil {
 				return err
 			}
-			if err := writeTextTargetDetails(w, "    ", step.Target, step.EffectiveTarget, st); err != nil {
+			if err := writeTextTargetDetails(
+				w,
+				"    ",
+				step.Target,
+				step.EffectiveTarget,
+				st,
+			); err != nil {
 				return err
 			}
 		}

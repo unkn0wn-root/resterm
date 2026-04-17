@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -182,7 +182,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 }
 
 func CleanExecPath(path string) string {
-	path = strings.TrimSpace(path)
+	path = str.Trim(path)
 	if path == "" {
 		return ""
 	}
@@ -190,7 +190,7 @@ func CleanExecPath(path string) string {
 }
 
 func resolveWorkspace(filePath, workspace string) string {
-	workspace = strings.TrimSpace(workspace)
+	workspace = str.Trim(workspace)
 	if workspace == "" {
 		if filePath != "" {
 			return filepath.Dir(filePath)

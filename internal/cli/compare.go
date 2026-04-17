@@ -4,11 +4,12 @@ import (
 	"fmt"
 	"strings"
 
+	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func ParseCompareTargets(raw string) ([]string, error) {
-	raw = strings.TrimSpace(raw)
+	raw = str.Trim(raw)
 	if raw == "" {
 		return nil, nil
 	}

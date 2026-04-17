@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type RunRequestChoice struct {
@@ -88,7 +88,7 @@ func PromptRunRequestChoice(
 			}
 			return RunRequestChoice{}, io.EOF
 		}
-		raw := strings.TrimSpace(sc.Text())
+		raw := str.Trim(sc.Text())
 		n, err := strconv.Atoi(raw)
 		if err == nil && n >= 1 && n <= len(choices) {
 			return choices[n-1], nil
@@ -107,10 +107,10 @@ func runRequestLabel(req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
-	method := strings.TrimSpace(engine.ReqMethod(req))
-	name := strings.TrimSpace(req.Metadata.Name)
+	method := str.Trim(engine.ReqMethod(req))
+	name := str.Trim(req.Metadata.Name)
 	if name == "" {
-		name = strings.TrimSpace(engine.ReqTarget(req))
+		name = str.Trim(engine.ReqTarget(req))
 	}
 	if name == "" {
 		name = "<unnamed>"
