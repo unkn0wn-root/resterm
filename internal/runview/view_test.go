@@ -39,6 +39,7 @@ func TestRenderHTTPPrettyWithHeadersAndFailures(t *testing.T) {
 		"Warnings:",
 		"Unresolved template variables: reporting.token",
 		"Tests:",
+		"[PASS] method - expected GET (1ms)",
 		"[FAIL] status - expected 201 (3ms)",
 		`id: 1`,
 	} {
@@ -264,12 +265,20 @@ func testHTTPPrettyReport() *runner.Report {
 				ReqTE:        []string{"gzip"},
 			},
 			ScriptErr: errors.New("script boom"),
-			Tests: []scripts.TestResult{{
-				Name:    "status",
-				Message: "expected 201",
-				Passed:  false,
-				Elapsed: 3 * time.Millisecond,
-			}},
+			Tests: []scripts.TestResult{
+				{
+					Name:    "method",
+					Message: "expected GET",
+					Passed:  true,
+					Elapsed: 1 * time.Millisecond,
+				},
+				{
+					Name:    "status",
+					Message: "expected 201",
+					Passed:  false,
+					Elapsed: 3 * time.Millisecond,
+				},
+			},
 		}},
 	}
 	rep.Results[0].SetUnresolvedTemplateVars([]string{"reporting.token"})

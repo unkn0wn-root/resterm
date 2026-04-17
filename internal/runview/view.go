@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
@@ -183,7 +184,7 @@ func requestIssues(res runner.Result, st styler) string {
 		errs = st.sectionWarn("Errors:") + "\n" + indent(strings.Join(parts, "\n"), "  ")
 	}
 
-	tests := failedTestsText(res, st)
+	tests := testsText(res, st)
 	return bodyfmt.JoinSections(errs, tests)
 }
 
@@ -200,13 +201,10 @@ func requestWarnings(res runner.Result, st styler) string {
 	return st.sectionCaution("Warnings:") + "\n" + indent(line, "  ")
 }
 
-func failedTestsText(res runner.Result, st styler) string {
+func testsText(res runner.Result, st styler) string {
 	var lines []string
 	for _, test := range res.Tests {
-		if test.Passed {
-			continue
-		}
-		line := st.badge("[FAIL]", false)
+		line := st.badge(testBadge(test))
 		if name := strings.TrimSpace(test.Name); name != "" {
 			line += " " + st.value(name, toneValue)
 		}
@@ -222,6 +220,16 @@ func failedTestsText(res runner.Result, st styler) string {
 		return ""
 	}
 	return st.section("Tests:") + "\n" + indent(strings.Join(lines, "\n"), "  ")
+}
+
+func testBadge(test scripts.TestResult) (string, bool) {
+	switch test.Passed {
+	case true:
+		return "[PASS]", true
+	case false:
+		return "[FAIL]", false
+	}
+	return "[FAIL]", false
 }
 
 func requestHeadersText(res runner.Result, show bool, st styler) string {
