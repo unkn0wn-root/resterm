@@ -29,6 +29,8 @@ type ExecFlags struct {
 	TraceOTService    string
 	CompareTargetsRaw string
 	CompareBaseline   string
+
+	telemetry telemetry.Config
 }
 
 type ExecConfig struct {
@@ -53,6 +55,7 @@ func NewExecFlags() ExecFlags {
 		TraceOTEndpoint: tc.Endpoint,
 		TraceOTInsecure: tc.Insecure,
 		TraceOTService:  tc.ServiceName,
+		telemetry:       tc,
 	}
 }
 
@@ -115,12 +118,12 @@ func (f ExecFlags) ValidateEnvFlag() error {
 }
 
 func (f ExecFlags) TelemetryConfig(version string) telemetry.Config {
-	return telemetry.Config{
-		Endpoint:    f.TraceOTEndpoint,
-		Insecure:    f.TraceOTInsecure,
-		ServiceName: f.TraceOTService,
-		Version:     version,
-	}
+	cfg := f.telemetry
+	cfg.Endpoint = f.TraceOTEndpoint
+	cfg.Insecure = f.TraceOTInsecure
+	cfg.ServiceName = f.TraceOTService
+	cfg.Version = version
+	return cfg
 }
 
 func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
