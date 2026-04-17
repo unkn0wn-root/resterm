@@ -314,8 +314,20 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 		}
 	}
 
-	ch, err := cli.PromptRunRequestChoice(c.stdin(), c.stdout(), src.Path, reqs)
+	ch, err := cli.PromptRunRequestChoice(
+		c.stdin(),
+		c.stdout(),
+		src.Path,
+		reqs,
+		cli.RunRequestPromptOptions{
+			TTY:   c.stdinTTY && c.stdoutTTY,
+			Color: c.prettyColor(),
+		},
+	)
 	if err != nil {
+		if errors.Is(err, cli.ErrRunRequestChoiceCanceled) {
+			return cli.ExitErr{Code: 130}
+		}
 		return cli.ExitErr{Err: fmt.Errorf("run: %w", err), Code: 2}
 	}
 	c.line = ch.Line

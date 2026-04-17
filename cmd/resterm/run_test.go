@@ -263,8 +263,9 @@ func TestRunCmdInteractiveSelectsRequestLineBeforeExecution(t *testing.T) {
 	if got.Select.Line != 6 {
 		t.Fatalf("expected runner select line 6, got %+v", got.Select)
 	}
-	if !strings.Contains(out.String(), "Select request [1-2]:") {
-		t.Fatalf("expected prompt output, got %q", out.String())
+	gotOut := ansi.Strip(out.String())
+	if !strings.Contains(gotOut, "Select request [1-2]:") {
+		t.Fatalf("expected text prompt fallback, got %q", gotOut)
 	}
 }
 
@@ -917,6 +918,7 @@ func TestPromptRunRequestChoiceRetriesInvalidInput(t *testing.T) {
 		&out,
 		"many.http",
 		choices,
+		cli.RunRequestPromptOptions{},
 	)
 	if err != nil {
 		t.Fatalf("promptRunRequestChoice: %v", err)
@@ -938,6 +940,7 @@ func TestPromptRunRequestChoiceEOF(t *testing.T) {
 			{Line: 3, Label: "GET one"},
 			{Line: 7, Label: "GET two"},
 		},
+		cli.RunRequestPromptOptions{},
 	)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF, got %v", err)

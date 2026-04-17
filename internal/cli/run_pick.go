@@ -9,12 +9,16 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type RunRequestChoice struct {
-	Line  int
-	Label string
+	Line   int
+	Method string
+	Name   string
+	Target string
+	Label  string
 }
 
 func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
@@ -26,13 +30,24 @@ func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
 		if req == nil {
 			continue
 		}
+		method, name, target, label := runRequestFields(req)
 		out = append(out, RunRequestChoice{
-			Line:  reqLine(req),
-			Label: runRequestLabel(req),
+			Line:   reqLine(req),
+			Method: method,
+			Name:   name,
+			Target: target,
+			Label:  label,
 		})
 	}
 	return out
 }
+
+type RunRequestPromptOptions struct {
+	TTY   bool
+	Color termcolor.Config
+}
+
+var ErrRunRequestChoiceCanceled = errors.New("request selection canceled")
 
 func WriteRunRequestChoices(
 	w io.Writer,
@@ -70,10 +85,23 @@ func PromptRunRequestChoice(
 	w io.Writer,
 	path string,
 	choices []RunRequestChoice,
+	opt RunRequestPromptOptions,
 ) (RunRequestChoice, error) {
 	if len(choices) == 0 {
 		return RunRequestChoice{}, errors.New("no requests found")
 	}
+	if opt.TTY {
+		return promptRunRequestChoiceTTY(r, w, path, choices, opt)
+	}
+	return promptRunRequestChoiceText(r, w, path, choices)
+}
+
+func promptRunRequestChoiceText(
+	r io.Reader,
+	w io.Writer,
+	path string,
+	choices []RunRequestChoice,
+) (RunRequestChoice, error) {
 	if err := WriteRunRequestChoices(w, path, choices); err != nil {
 		return RunRequestChoice{}, err
 	}
@@ -103,22 +131,23 @@ func PromptRunRequestChoice(
 	}
 }
 
-func runRequestLabel(req *restfile.Request) string {
+func runRequestFields(req *restfile.Request) (string, string, string, string) {
 	if req == nil {
-		return ""
+		return "", "", "", ""
 	}
 	method := str.Trim(engine.ReqMethod(req))
 	name := str.Trim(req.Metadata.Name)
+	target := str.Trim(engine.ReqTarget(req))
 	if name == "" {
-		name = str.Trim(engine.ReqTarget(req))
+		name = target
 	}
 	if name == "" {
 		name = "<unnamed>"
 	}
 	if method == "" {
-		return name
+		return method, name, target, name
 	}
-	return method + " " + name
+	return method, name, target, method + " " + name
 }
 
 func reqLine(req *restfile.Request) int {
