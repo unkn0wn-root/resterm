@@ -3,6 +3,7 @@ package runfmt
 import (
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -16,6 +17,8 @@ type textProfileRow struct {
 	value string
 }
 
+const textProfileHistWid = 22
+
 func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyler) error {
 	p := res.Profile
 	if res.Kind != "profile" || p == nil {
@@ -23,7 +26,7 @@ func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyl
 	}
 
 	rows := textProfileRows(p)
-	if len(rows) == 0 && len(p.Failures) == 0 {
+	if len(rows) == 0 && len(p.Histogram) == 0 && len(p.Failures) == 0 {
 		return nil
 	}
 
@@ -34,6 +37,9 @@ func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyl
 		if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.detail(row.label, row.value)); err != nil {
 			return err
 		}
+	}
+	if err := writeTextProfileHistogram(w, indent, p.Histogram, st); err != nil {
+		return err
 	}
 
 	if len(p.Failures) == 0 {
@@ -84,6 +90,26 @@ func textProfileRows(p *Profile) []textProfileRow {
 		rows = append(rows, textProfileRow{label: "Stats", value: v})
 	}
 	return rows
+}
+
+func writeTextProfileHistogram(
+	w io.Writer,
+	indent string,
+	bins []HistBin,
+	st textStyler,
+) error {
+	if len(bins) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.heading("Histogram:")); err != nil {
+		return err
+	}
+	for _, line := range textProfileHistogramLines(bins) {
+		if _, err := fmt.Fprintf(w, "%s    %s\n", indent, st.resultLine(line)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func textProfilePlan(p *Profile) string {
@@ -157,6 +183,98 @@ func textProfileStats(p *Profile) string {
 		"stddev " + textProfileDuration(lat.StdDev),
 	}
 	return strings.Join(parts, " | ")
+}
+
+type textProfileHistLayout struct {
+	from []string
+	to   []string
+	cnt  []string
+	pct  []string
+	fw   int
+	tw   int
+	cw   int
+	pw   int
+	mx   int
+	tot  int
+}
+
+func textProfileHistogramLines(bins []HistBin) []string {
+	hl := textProfileHistogramLayout(bins)
+	lines := make([]string, 0, len(bins))
+	for i, bin := range bins {
+		lines = append(lines, fmt.Sprintf(
+			"%-*s - %-*s | %s (%*s, %*s)",
+			hl.fw,
+			hl.from[i],
+			hl.tw,
+			hl.to[i],
+			textProfileHistogramBar(bin.Count, hl.mx),
+			hl.cw,
+			hl.cnt[i],
+			hl.pw,
+			hl.pct[i],
+		))
+	}
+	return lines
+}
+
+func textProfileHistogramLayout(bins []HistBin) textProfileHistLayout {
+	hl := textProfileHistLayout{
+		from: make([]string, len(bins)),
+		to:   make([]string, len(bins)),
+		cnt:  make([]string, len(bins)),
+		pct:  make([]string, len(bins)),
+	}
+	for i, bin := range bins {
+		hl.from[i] = textProfileDuration(bin.From)
+		hl.to[i] = textProfileDuration(bin.To)
+		hl.cnt[i] = strconv.Itoa(bin.Count)
+		hl.fw = max(hl.fw, len(hl.from[i]))
+		hl.tw = max(hl.tw, len(hl.to[i]))
+		hl.cw = max(hl.cw, len(hl.cnt[i]))
+		hl.tot += bin.Count
+		if bin.Count > hl.mx {
+			hl.mx = bin.Count
+		}
+	}
+	if hl.mx < 1 {
+		hl.mx = 1
+	}
+	if hl.tot < 1 {
+		hl.tot = 1
+	}
+	for i, bin := range bins {
+		hl.pct[i] = textProfileHistogramPercent(bin.Count, hl.tot)
+		hl.pw = max(hl.pw, len(hl.pct[i]))
+	}
+	return hl
+}
+
+func textProfileHistogramBar(n, max int) string {
+	if max < 1 {
+		max = 1
+	}
+	if n < 0 {
+		n = 0
+	}
+	fill := 0
+	if n > 0 {
+		fill = int(math.Round(float64(n) / float64(max) * float64(textProfileHistWid)))
+		if fill == 0 {
+			fill = 1
+		}
+	}
+	if fill > textProfileHistWid {
+		fill = textProfileHistWid
+	}
+	return strings.Repeat("#", fill) + strings.Repeat(".", textProfileHistWid-fill)
+}
+
+func textProfileHistogramPercent(n, tot int) string {
+	if tot <= 0 {
+		return "0%"
+	}
+	return fmt.Sprintf("%.1f%%", (float64(n)/float64(tot))*100)
 }
 
 func textProfilePercentile(vals []Percentile, pct int) (time.Duration, bool) {

@@ -139,6 +139,10 @@ func TestWriteTextIncludesProfileDetails(t *testing.T) {
 					{Percentile: 95, Value: 39 * time.Millisecond},
 					{Percentile: 99, Value: 40 * time.Millisecond},
 				},
+				Histogram: []HistBin{
+					{From: 10 * time.Millisecond, To: 20 * time.Millisecond, Count: 1},
+					{From: 20 * time.Millisecond, To: 40 * time.Millisecond, Count: 2},
+				},
 				Failures: []ProfileFailure{
 					{
 						Iteration:  1,
@@ -177,6 +181,9 @@ func TestWriteTextIncludesProfileDetails(t *testing.T) {
 		"Delay: 25ms between runs",
 		"Latency: 2 samples | min 10ms | p50 20ms | p90 38ms | p95 39ms | p99 40ms | max 40ms",
 		"Stats: mean 25ms | median 20ms | stddev 15ms",
+		"Histogram:",
+		"10ms - 20ms | ###########........... (1, 33.3%)",
+		"20ms - 40ms | ###################### (2, 66.7%)",
 		"Failures:",
 		"- Warmup 1: dial tcp timeout [5ms]",
 		"- Run 4: HTTP 500 [500 Internal Server Error | 40ms]",
