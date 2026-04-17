@@ -52,7 +52,7 @@ func runRun(args []string) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return runExit(err, 2)
+		return runExit(err, runExitCodeUsage)
 	}
 	return cmd.run()
 }
@@ -69,6 +69,9 @@ const (
 	runFmtJUnit  runFormat = "junit"
 	runFmtPretty runFormat = "pretty"
 	runFmtRaw    runFormat = "raw"
+
+	runExitCodeUsage    = 2
+	runExitCodeCanceled = 130
 )
 
 type runUsageError struct {
@@ -186,30 +189,33 @@ func (c *runCmd) run() error {
 	args := c.fs.Args()
 	switch len(args) {
 	case 0:
-		return runExit(errors.New("request file path is required"), 2)
+		return runExit(errors.New("request file path is required"), runExitCodeUsage)
 	case 1:
 	default:
-		return runExit(fmt.Errorf("unexpected args: %s", strings.Join(args[1:], " ")), 2)
+		return runExit(
+			fmt.Errorf("unexpected args: %s", strings.Join(args[1:], " ")),
+			runExitCodeUsage,
+		)
 	}
 
 	src, err := c.loadSource(args[0])
 	if err != nil {
-		return runExit(err, 2)
+		return runExit(err, runExitCodeUsage)
 	}
 	doc, err := cli.ParseRunDoc(src)
 	if err != nil {
-		return runExit(err, 2)
+		return runExit(err, runExitCodeUsage)
 	}
 	if err := c.resolveDefaultRequest(doc, src); err != nil {
 		return err
 	}
 	if err := c.validateFormat(); err != nil {
-		return runExit(err, 2)
+		return runExit(err, runExitCodeUsage)
 	}
 
 	cfg, err := c.exec.Resolve(src.Path)
 	if err != nil {
-		return runExit(err, 2)
+		return runExit(err, runExitCodeUsage)
 	}
 
 	client, shutdown, err := c.client()
@@ -227,13 +233,13 @@ func (c *runCmd) run() error {
 	rep, err := c.execRun(context.Background(), src, cfg, client)
 	if err != nil {
 		if runner.IsUsageError(err) {
-			return runExit(err, 2)
+			return runExit(err, runExitCodeUsage)
 		}
 		return runExit(err, 1)
 	}
 	if err := c.writeReport(rep); err != nil {
 		if isRunUsageError(err) {
-			return runExit(err, 2)
+			return runExit(err, runExitCodeUsage)
 		}
 		return runExit(fmt.Errorf("write report: %w", err), 1)
 	}
@@ -310,7 +316,7 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 			Err: errors.New(
 				"run: multiple requests found; use --request, --tag, --all, or --line",
 			),
-			Code: 2,
+			Code: runExitCodeUsage,
 		}
 	}
 
@@ -326,9 +332,9 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 	)
 	if err != nil {
 		if errors.Is(err, cli.ErrRunRequestChoiceCanceled) {
-			return cli.ExitErr{Code: 130}
+			return cli.ExitErr{Code: runExitCodeCanceled}
 		}
-		return cli.ExitErr{Err: fmt.Errorf("run: %w", err), Code: 2}
+		return cli.ExitErr{Err: fmt.Errorf("run: %w", err), Code: runExitCodeUsage}
 	}
 	c.line = ch.Line
 	return nil

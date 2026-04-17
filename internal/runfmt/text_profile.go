@@ -34,7 +34,12 @@ func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyl
 		return err
 	}
 	for _, row := range rows {
-		if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.profileDetail(row.label, row.value)); err != nil {
+		if _, err := fmt.Fprintf(
+			w,
+			"%s  %s\n",
+			indent,
+			st.profileDetail(row.label, row.value),
+		); err != nil {
 			return err
 		}
 	}
