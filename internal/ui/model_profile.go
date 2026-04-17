@@ -439,7 +439,11 @@ func (m *Model) finalizeProfileRun(msg responseMsg, state *profileState) tea.Cmd
 	var stats analysis.LatencyStats
 	var statsPtr *analysis.LatencyStats
 	if len(state.successes) > 0 {
-		stats = analysis.ComputeLatencyStats(state.successes, []int{50, 90, 95, 99}, 10)
+		stats = analysis.ComputeLatencyStats(
+			state.successes,
+			analysis.DefaultProfilePercentiles(),
+			10,
+		)
 		statsPtr = &stats
 		report = m.buildProfileReport(state, stats)
 	} else {

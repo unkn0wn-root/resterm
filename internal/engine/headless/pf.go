@@ -123,7 +123,7 @@ func (c *proCollector) applyIter(ev core.ProIterDone) {
 func buildProfileResult(st *profileState) *engine.ProfileResult {
 	stats := analysis.LatencyStats{}
 	if st != nil && len(st.ok) > 0 {
-		stats = analysis.ComputeLatencyStats(st.ok, []int{50, 90, 95, 99}, 10)
+		stats = analysis.ComputeLatencyStats(st.ok, analysis.DefaultProfilePercentiles(), 10)
 	}
 	out := &engine.ProfileResult{}
 	if st == nil {

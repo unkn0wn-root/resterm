@@ -186,3 +186,42 @@ func TestWriteTextIncludesProfileDetails(t *testing.T) {
 		}
 	}
 }
+
+func TestWriteTextProfileLatencyUsesMedianWhenP50Missing(t *testing.T) {
+	rep := &Report{
+		FilePath: "profile.http",
+		Results: []Result{{
+			Kind:   "profile",
+			Name:   "prof",
+			Method: "PROFILE",
+			Status: StatusPass,
+			Profile: &Profile{
+				TotalRuns:      2,
+				SuccessfulRuns: 2,
+				Latency: &Latency{
+					Count:  2,
+					Min:    10 * time.Millisecond,
+					Max:    40 * time.Millisecond,
+					Mean:   25 * time.Millisecond,
+					Median: 25 * time.Millisecond,
+					StdDev: 15 * time.Millisecond,
+				},
+			},
+		}},
+		Total:  1,
+		Passed: 1,
+	}
+
+	var out strings.Builder
+	if err := WriteText(&out, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+
+	text := out.String()
+	if !strings.Contains(text, "Latency: 2 samples | min 10ms | median 25ms | max 40ms") {
+		t.Fatalf("expected median fallback in latency row, got %q", text)
+	}
+	if strings.Contains(text, "p50 25ms") {
+		t.Fatalf("did not expect p50 fallback label, got %q", text)
+	}
+}

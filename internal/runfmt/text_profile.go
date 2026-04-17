@@ -6,6 +6,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/analysis"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type textProfileRow struct {
@@ -84,9 +87,6 @@ func textProfileRows(p *Profile) []textProfileRow {
 }
 
 func textProfilePlan(p *Profile) string {
-	if p == nil {
-		return ""
-	}
 	parts := make([]string, 0, 2)
 	if p.Count > 0 {
 		parts = append(parts, fmt.Sprintf("%d measured", p.Count))
@@ -98,9 +98,6 @@ func textProfilePlan(p *Profile) string {
 }
 
 func textProfileRuns(p *Profile) string {
-	if p == nil {
-		return ""
-	}
 	if p.TotalRuns == 0 && p.SuccessfulRuns == 0 && p.FailedRuns == 0 && p.WarmupRuns == 0 {
 		return ""
 	}
@@ -117,9 +114,6 @@ func textProfileRuns(p *Profile) string {
 }
 
 func textProfileSuccess(p *Profile) string {
-	if p == nil {
-		return ""
-	}
 	n := p.SuccessfulRuns + p.FailedRuns
 	if n <= 0 {
 		return ""
@@ -129,7 +123,7 @@ func textProfileSuccess(p *Profile) string {
 }
 
 func textProfileLatency(p *Profile) string {
-	if p == nil || p.Latency == nil || p.Latency.Count == 0 {
+	if p.Latency == nil || p.Latency.Count == 0 {
 		return ""
 	}
 
@@ -141,9 +135,9 @@ func textProfileLatency(p *Profile) string {
 	if d, ok := textProfilePercentile(p.Percentiles, 50); ok {
 		parts = append(parts, "p50 "+textProfileDuration(d))
 	} else {
-		parts = append(parts, "p50 "+textProfileDuration(lat.Median))
+		parts = append(parts, "median "+textProfileDuration(lat.Median))
 	}
-	for _, pct := range []int{90, 95, 99} {
+	for _, pct := range analysis.DefaultProfileTailPercentiles() {
 		if d, ok := textProfilePercentile(p.Percentiles, pct); ok {
 			parts = append(parts, fmt.Sprintf("p%d %s", pct, textProfileDuration(d)))
 		}
@@ -153,7 +147,7 @@ func textProfileLatency(p *Profile) string {
 }
 
 func textProfileStats(p *Profile) string {
-	if p == nil || p.Latency == nil || p.Latency.Count == 0 {
+	if p.Latency == nil || p.Latency.Count == 0 {
 		return ""
 	}
 	lat := p.Latency
@@ -180,7 +174,7 @@ func textProfileFailure(fail ProfileFailure) string {
 		label = fmt.Sprintf("Warmup %d", fail.Iteration)
 	}
 
-	msg := strings.TrimSpace(fail.Reason)
+	msg := str.Trim(fail.Reason)
 	meta := textProfileFailureMeta(fail)
 	switch {
 	case msg != "" && meta != "":
@@ -195,7 +189,7 @@ func textProfileFailure(fail ProfileFailure) string {
 
 func textProfileFailureMeta(fail ProfileFailure) string {
 	parts := make([]string, 0, 2)
-	if status := strings.TrimSpace(fail.Status); status != "" {
+	if status := str.Trim(fail.Status); status != "" {
 		parts = append(parts, status)
 	} else if fail.StatusCode > 0 {
 		parts = append(parts, strconv.Itoa(fail.StatusCode))

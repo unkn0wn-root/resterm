@@ -23,6 +23,17 @@ type LatencyStats struct {
 	Histogram   []HistogramBucket
 }
 
+var defaultProfilePercentiles = []int{50, 90, 95, 99}
+var defaultProfileTailPercentiles = []int{90, 95, 99}
+
+func DefaultProfilePercentiles() []int {
+	return append([]int(nil), defaultProfilePercentiles...)
+}
+
+func DefaultProfileTailPercentiles() []int {
+	return append([]int(nil), defaultProfileTailPercentiles...)
+}
+
 func ComputeLatencyStats(durations []time.Duration, percentiles []int, bins int) LatencyStats {
 	stats := LatencyStats{}
 	count := len(durations)
