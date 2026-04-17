@@ -7,8 +7,19 @@ type UsageError struct {
 	err error
 }
 
-// ErrNilWriter reports an attempt to write to a nil writer.
-var ErrNilWriter = errors.New("headless: nil writer")
+var (
+	// ErrNoFilePath reports that Options.FilePath was empty.
+	ErrNoFilePath = errors.New("headless: file path is required")
+
+	// ErrTooFewTargets reports that compare mode was enabled without enough targets.
+	ErrTooFewTargets = errors.New("headless: compare requires at least two target environments")
+
+	// ErrNilReport reports an attempt to encode a nil report.
+	ErrNilReport = errors.New("headless: nil report")
+
+	// ErrNilWriter reports an attempt to write to a nil writer.
+	ErrNilWriter = errors.New("headless: nil writer")
+)
 
 func (e UsageError) Error() string {
 	if e.err == nil {

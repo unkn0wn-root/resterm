@@ -32,17 +32,20 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 ## Headless
 
-Resterm ships with a headless engine that can run requests, workflows, and assertions without the TUI.
+Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling, CI flows or internal automation.
+
+The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
 
 > [!NOTE]
-> If you want to run Resterm in your CI/CD - Check out runner [resterm-runner](https://github.com/unkn0wn-root/resterm-runner)
+> If you want an "off-the-shelf" runner instead of building your own, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## CLI
 
-You can quickly run resterm .http files directly from the terminal just like with curl/hurl.
-Resterm includes a built-in CLI runner (`resterm run`) for executing requests, workflows, assertions and tests.
+Resterm also ships with a built-in CLI runner: `resterm run`.
 
-Note that this is something else that headless runner. Headless is targeting CI/CD env. so the funcionality is more around tests while `resterm run` is more like resterm but without the TUI.
+Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI. It is the batteries-included CLI experience for requests, workflows, assertions, compare runs and profiles.
+
+This is different from the `headless` package. The `headless` package is the embeddable Go API for building your own runner or CI integration, while `resterm run` is the built-in CLI on top of the same execution engine.
 
 See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
 

@@ -15,7 +15,7 @@ type Options struct {
 	State         StateOptions       `json:"state,omitempty"`
 	Environment   EnvironmentOptions `json:"environment,omitempty"`
 	Compare       CompareOptions     `json:"compare,omitempty"`
-	Profile       bool               `json:"profile,omitempty"`
+	Profile       ProfileOptions     `json:"profile,omitempty"`
 	HTTP          HTTPOptions        `json:"http,omitempty"`
 	GRPC          GRPCOptions        `json:"grpc,omitempty"`
 	Selection     Selection          `json:"selection,omitempty"`
@@ -41,6 +41,11 @@ type EnvironmentOptions struct {
 type CompareOptions struct {
 	Targets []string `json:"targets,omitempty"`
 	Base    string   `json:"base,omitempty"`
+}
+
+// ProfileOptions configures profile runs.
+type ProfileOptions struct {
+	Enabled bool `json:"enabled,omitempty"`
 }
 
 // Selection narrows which request or workflow to run.

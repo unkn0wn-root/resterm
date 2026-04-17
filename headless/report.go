@@ -18,6 +18,21 @@ const (
 	KindProfile  Kind = "profile"
 )
 
+// String implements fmt.Stringer.
+func (k Kind) String() string {
+	return string(k)
+}
+
+// IsValid reports whether k is a known result kind.
+func (k Kind) IsValid() bool {
+	switch k {
+	case KindRequest, KindWorkflow, KindForEach, KindCompare, KindProfile:
+		return true
+	default:
+		return false
+	}
+}
+
 // Status reports whether a result passed, failed, or was skipped.
 type Status string
 
@@ -26,6 +41,21 @@ const (
 	StatusFail Status = "fail"
 	StatusSkip Status = "skip"
 )
+
+// String implements fmt.Stringer.
+func (s Status) String() string {
+	return string(s)
+}
+
+// IsValid reports whether s is a known result status.
+func (s Status) IsValid() bool {
+	switch s {
+	case StatusPass, StatusFail, StatusSkip:
+		return true
+	default:
+		return false
+	}
+}
 
 // Report contains the results of a headless run.
 type Report struct {
