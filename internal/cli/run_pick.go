@@ -21,6 +21,13 @@ type RunRequestChoice struct {
 	Label  string
 }
 
+type runRequestInfo struct {
+	method string
+	name   string
+	target string
+	label  string
+}
+
 func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil
@@ -30,13 +37,13 @@ func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
 		if req == nil {
 			continue
 		}
-		method, name, target, label := runRequestFields(req)
+		info := runRequestFields(req)
 		out = append(out, RunRequestChoice{
 			Line:   reqLine(req),
-			Method: method,
-			Name:   name,
-			Target: target,
-			Label:  label,
+			Method: info.method,
+			Name:   info.name,
+			Target: info.target,
+			Label:  info.label,
 		})
 	}
 	return out
@@ -131,23 +138,26 @@ func promptRunRequestChoiceText(
 	}
 }
 
-func runRequestFields(req *restfile.Request) (string, string, string, string) {
+func runRequestFields(req *restfile.Request) runRequestInfo {
 	if req == nil {
-		return "", "", "", ""
+		return runRequestInfo{}
 	}
-	method := str.Trim(engine.ReqMethod(req))
-	name := str.Trim(req.Metadata.Name)
-	target := str.Trim(engine.ReqTarget(req))
-	if name == "" {
-		name = target
+	info := runRequestInfo{
+		method: str.Trim(engine.ReqMethod(req)),
+		name:   str.Trim(req.Metadata.Name),
+		target: str.Trim(engine.ReqTarget(req)),
 	}
-	if name == "" {
-		name = "<unnamed>"
+	if info.name == "" {
+		info.name = info.target
 	}
-	if method == "" {
-		return method, name, target, name
+	if info.name == "" {
+		info.name = "<unnamed>"
 	}
-	return method, name, target, method + " " + name
+	info.label = info.name
+	if info.method != "" {
+		info.label = info.method + " " + info.name
+	}
+	return info
 }
 
 func reqLine(req *restfile.Request) int {
