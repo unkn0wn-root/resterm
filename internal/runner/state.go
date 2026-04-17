@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const stateFileVersion = 1
@@ -36,7 +36,7 @@ func resolveStatePaths(opts Options) (statePaths, error) {
 	if !usesStateDir(opts) {
 		return statePaths{}, nil
 	}
-	root := strings.TrimSpace(opts.StateDir)
+	root := str.Trim(opts.StateDir)
 	if root == "" {
 		root = filepath.Join(config.Dir(), "runner")
 	}
@@ -57,7 +57,7 @@ func usesStateDir(opts Options) bool {
 }
 
 func openHistoryStore(paths statePaths, opts Options) history.Store {
-	if !opts.History || strings.TrimSpace(paths.History) == "" {
+	if !opts.History || str.Trim(paths.History) == "" {
 		return nil
 	}
 	return histdb.New(paths.History)
@@ -118,7 +118,7 @@ func readAuthState(path string) (engine.AuthState, error) {
 }
 
 func readStateFile(path string, dst any) error {
-	path = strings.TrimSpace(path)
+	path = str.Trim(path)
 	if path == "" {
 		return nil
 	}
@@ -153,7 +153,7 @@ func writeAuthState(path string, state engine.AuthState) error {
 }
 
 func writeStateFile(path string, state any) error {
-	path = strings.TrimSpace(path)
+	path = str.Trim(path)
 	if path == "" {
 		return nil
 	}

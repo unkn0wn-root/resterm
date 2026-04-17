@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 var ErrNilWriter = errors.New("runview: nil writer")
@@ -108,7 +109,7 @@ func CanRenderRequest(rep *runner.Report) bool {
 }
 
 func normalizeMode(mode Mode) (Mode, error) {
-	switch strings.ToLower(strings.TrimSpace(string(mode))) {
+	switch str.LowerTrim(string(mode)) {
 	case "", string(ModePretty):
 		return ModePretty, nil
 	case string(ModeRaw):
@@ -152,9 +153,9 @@ func requestSummary(res runner.Result, st styler) string {
 		value string
 		tone  tone
 	}{
-		{"Name", strings.TrimSpace(res.Name), toneValue},
+		{"Name", str.Trim(res.Name), toneValue},
 		{"Request", requestLine(res), toneValue},
-		{"Environment", strings.TrimSpace(res.Environment), toneValue},
+		{"Environment", str.Trim(res.Environment), toneValue},
 		{"Status", statusText(res), statusTone(res)},
 		{"Duration", durationText(res), toneDur},
 		{"Content-Length", contentLengthText(res), toneValue},
@@ -171,10 +172,10 @@ func requestSummary(res runner.Result, st styler) string {
 func requestIssues(res runner.Result, st styler) string {
 	var parts []string
 	if res.Err != nil {
-		parts = append(parts, st.pair("Request error", strings.TrimSpace(res.Err.Error()), toneWarn))
+		parts = append(parts, st.pair("Request error", str.Trim(res.Err.Error()), toneWarn))
 	}
 	if res.ScriptErr != nil {
-		parts = append(parts, st.pair("Script error", strings.TrimSpace(res.ScriptErr.Error()), toneWarn))
+		parts = append(parts, st.pair("Script error", str.Trim(res.ScriptErr.Error()), toneWarn))
 	}
 	if msg := traceFailureText(res.Trace); msg != "" {
 		parts = append(parts, st.pair("Trace", msg, toneWarn))
@@ -205,10 +206,10 @@ func testsText(res runner.Result, st styler) string {
 	var lines []string
 	for _, test := range res.Tests {
 		line := st.badge(testBadge(test))
-		if name := strings.TrimSpace(test.Name); name != "" {
+		if name := str.Trim(test.Name); name != "" {
 			line += " " + st.value(name, toneValue)
 		}
-		if msg := strings.TrimSpace(test.Message); msg != "" {
+		if msg := str.Trim(test.Message); msg != "" {
 			line += " - " + st.value(msg, toneMsg)
 		}
 		if test.Elapsed > 0 {
@@ -305,15 +306,15 @@ func httpBodyInput(res runner.Result, resp *httpclient.Response) bodyfmt.BuildIn
 
 func grpcBodyInput(res runner.Result, grpc *grpcclient.Response) bodyfmt.BuildInput {
 	viewBody := cloneBytes(grpc.Body)
-	if len(viewBody) == 0 && strings.TrimSpace(grpc.Message) != "" {
+	if len(viewBody) == 0 && str.Trim(grpc.Message) != "" {
 		viewBody = []byte(grpc.Message)
 	}
-	viewType := strings.TrimSpace(grpc.ContentType)
+	viewType := str.Trim(grpc.ContentType)
 	if viewType == "" && len(viewBody) > 0 {
 		viewType = "application/json"
 	}
 	rawBody := cloneBytes(grpc.Wire)
-	rawType := strings.TrimSpace(grpc.WireContentType)
+	rawType := str.Trim(grpc.WireContentType)
 	if len(rawBody) == 0 {
 		rawBody = cloneBytes(viewBody)
 	}
@@ -358,7 +359,7 @@ func streamSummaryText(info *runner.StreamInfo) string {
 		return ""
 	}
 	var lines []string
-	if kind := strings.TrimSpace(info.Kind); kind != "" {
+	if kind := str.Trim(info.Kind); kind != "" {
 		lines = append(lines, "Stream: "+kind)
 	}
 	if len(info.Summary) > 0 {
@@ -375,14 +376,11 @@ func streamSummaryText(info *runner.StreamInfo) string {
 }
 
 func requestLine(res runner.Result) string {
-	method := strings.ToUpper(strings.TrimSpace(res.Method))
+	method := str.UpperTrim(res.Method)
 	if method == "" {
 		method = "REQ"
 	}
-	target := strings.TrimSpace(res.Target)
-	if target == "" {
-		target = strings.TrimSpace(res.Name)
-	}
+	target := str.FirstTrimmed(res.EffectiveTarget, res.Target, res.Name)
 	if target == "" {
 		return method
 	}
@@ -392,10 +390,10 @@ func requestLine(res runner.Result) string {
 func statusText(res runner.Result) string {
 	switch {
 	case res.Response != nil:
-		return strings.TrimSpace(res.Response.Status)
+		return str.Trim(res.Response.Status)
 	case res.GRPC != nil:
-		code := strings.TrimSpace(res.GRPC.StatusCode.String())
-		msg := strings.TrimSpace(res.GRPC.StatusMessage)
+		code := str.Trim(res.GRPC.StatusCode.String())
+		msg := str.Trim(res.GRPC.StatusMessage)
 		if code != "" && msg != "" && !strings.EqualFold(code, msg) {
 			return code + " (" + msg + ")"
 		}
@@ -440,7 +438,7 @@ func durationRound(d time.Duration) string {
 func contentLengthText(res runner.Result) string {
 	if resp := res.Response; resp != nil {
 		if resp.Headers != nil {
-			if raw := strings.TrimSpace(resp.Headers.Get("Content-Length")); raw != "" {
+			if raw := str.Trim(resp.Headers.Get("Content-Length")); raw != "" {
 				if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n >= 0 {
 					return bodyfmt.FormatByteQuantity(n)
 				}
@@ -471,7 +469,7 @@ func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
 	if resp == nil {
 		return hdrs
 	}
-	if hdrs.Get("Host") == "" && strings.TrimSpace(resp.ReqHost) != "" {
+	if hdrs.Get("Host") == "" && str.Trim(resp.ReqHost) != "" {
 		hdrs.Set("Host", resp.ReqHost)
 	}
 	if hdrs.Get("Transfer-Encoding") == "" && len(resp.ReqTE) > 0 {
@@ -502,7 +500,7 @@ func traceFailureText(info *runner.TraceInfo) string {
 		return ""
 	}
 	breach := info.Summary.Breaches[0]
-	label := strings.TrimSpace(breach.Kind)
+	label := str.Trim(breach.Kind)
 	if label == "" {
 		label = "trace"
 	}

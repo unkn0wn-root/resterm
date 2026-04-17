@@ -93,7 +93,11 @@ func PromptRunRequestChoice(
 		if err == nil && n >= 1 && n <= len(choices) {
 			return choices[n-1], nil
 		}
-		if _, err := fmt.Fprintf(w, "Enter a number between 1 and %d.\n", len(choices)); err != nil {
+		if _, err := fmt.Fprintf(
+			w,
+			"Enter a number between 1 and %d.\n",
+			len(choices),
+		); err != nil {
 			return RunRequestChoice{}, err
 		}
 	}

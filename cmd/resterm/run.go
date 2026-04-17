@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runview"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func handleRunSubcommand(args []string) (bool, error) {
@@ -261,7 +262,7 @@ func (c *runCmd) hasRequestSelector() bool {
 }
 
 func (c *runCmd) loadSource(arg string) (cli.RunSource, error) {
-	path := strings.TrimSpace(arg)
+	path := str.Trim(arg)
 	switch path {
 	case "":
 		return cli.RunSource{}, errors.New("run: request file path is required")
@@ -306,7 +307,9 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 			return fmt.Errorf("run: write request list: %w", err)
 		}
 		return cli.ExitErr{
-			Err:  errors.New("run: multiple requests found; use --request, --tag, --all, or --line"),
+			Err: errors.New(
+				"run: multiple requests found; use --request, --tag, --all, or --line",
+			),
 			Code: 2,
 		}
 	}

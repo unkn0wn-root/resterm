@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/collection"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func handleCollectionSubcommand(args []string) (bool, error) {
@@ -29,7 +30,7 @@ func runCollection(args []string) error {
 	if len(args) == 0 {
 		return errors.New(collectionUsageText())
 	}
-	op := strings.TrimSpace(strings.ToLower(args[0]))
+	op := str.Trim(strings.ToLower(args[0]))
 	switch op {
 	case "-h", "--help", "help":
 		if err := writeln(os.Stdout, collectionUsageText()); err != nil {
@@ -76,15 +77,15 @@ func runCollectionExport(args []string) error {
 		)
 	}
 
-	workspace = strings.TrimSpace(workspace)
+	workspace = str.Trim(workspace)
 	if workspace == "" {
 		return errors.New("collection export: --workspace is required")
 	}
-	out = strings.TrimSpace(out)
+	out = str.Trim(out)
 	if out == "" {
 		return errors.New("collection export: --out is required")
 	}
-	name = strings.TrimSpace(name)
+	name = str.Trim(name)
 
 	res, err := collection.ExportBundle(collection.ExportOptions{
 		Workspace: workspace,
@@ -140,11 +141,11 @@ func runCollectionImport(args []string) error {
 		)
 	}
 
-	in = strings.TrimSpace(in)
+	in = str.Trim(in)
 	if in == "" {
 		return errors.New("collection import: --in is required")
 	}
-	workspace = strings.TrimSpace(workspace)
+	workspace = str.Trim(workspace)
 	if workspace == "" {
 		return errors.New("collection import: --workspace is required")
 	}
@@ -207,11 +208,11 @@ func runCollectionPack(args []string) error {
 		)
 	}
 
-	in = strings.TrimSpace(in)
+	in = str.Trim(in)
 	if in == "" {
 		return errors.New("collection pack: --in is required")
 	}
-	out = strings.TrimSpace(out)
+	out = str.Trim(out)
 	if out == "" {
 		return errors.New("collection pack: --out is required")
 	}
@@ -259,11 +260,11 @@ func runCollectionUnpack(args []string) error {
 		)
 	}
 
-	in = strings.TrimSpace(in)
+	in = str.Trim(in)
 	if in == "" {
 		return errors.New("collection unpack: --in is required")
 	}
-	out = strings.TrimSpace(out)
+	out = str.Trim(out)
 	if out == "" {
 		return errors.New("collection unpack: --out is required")
 	}
@@ -296,7 +297,7 @@ func writeCollectionOutput(op, format string, args ...any) error {
 }
 
 func collectionUsageText() string {
-	return strings.TrimSpace(`
+	return str.Trim(`
 Usage: resterm collection <export|import|pack|unpack> [flags]
 
 Subcommands:

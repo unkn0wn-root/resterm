@@ -93,8 +93,11 @@ func TestRequestRunResultUsesExplainMissingVarsAndEffectiveURL(t *testing.T) {
 		},
 	}, "dev")
 
-	if item.Target != "https://httpbin.org/anything/api/reports" {
-		t.Fatalf("expected effective target, got %q", item.Target)
+	if item.Target != "{{services.api.base}}/reports" {
+		t.Fatalf("expected source target, got %q", item.Target)
+	}
+	if item.EffectiveTarget != "https://httpbin.org/anything/api/reports" {
+		t.Fatalf("expected effective target, got %q", item.EffectiveTarget)
 	}
 	got, ok := item.UnresolvedTemplateVars()
 	if !ok {
@@ -102,6 +105,51 @@ func TestRequestRunResultUsesExplainMissingVarsAndEffectiveURL(t *testing.T) {
 	}
 	if len(got) != 1 || got[0] != "reporting.token" {
 		t.Fatalf("expected only reporting.token to remain unresolved, got %v", got)
+	}
+}
+
+func TestCompareStepResultPreservesSourceTarget(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "{{services.api.base}}/reports",
+	}
+
+	step := compareStepResult(req, engine.CompareRow{
+		Environment: "dev",
+		Response: &httpclient.Response{
+			Status:       "200 OK",
+			StatusCode:   http.StatusOK,
+			EffectiveURL: "https://httpbin.org/anything/api/reports",
+		},
+		Success: true,
+	})
+
+	if step.Target != "{{services.api.base}}/reports" {
+		t.Fatalf("expected source target, got %q", step.Target)
+	}
+	if step.EffectiveTarget != "https://httpbin.org/anything/api/reports" {
+		t.Fatalf("expected effective target, got %q", step.EffectiveTarget)
+	}
+}
+
+func TestWorkflowStepResultPreservesSourceTarget(t *testing.T) {
+	step := workflowStepResult(engine.WorkflowStep{
+		Name:   "reports",
+		Method: "GET",
+		Target: "{{services.api.base}}/reports",
+		Response: &httpclient.Response{
+			Status:       "200 OK",
+			StatusCode:   http.StatusOK,
+			EffectiveURL: "https://httpbin.org/anything/api/reports",
+		},
+		Success: true,
+	})
+
+	if step.Target != "{{services.api.base}}/reports" {
+		t.Fatalf("expected source target, got %q", step.Target)
+	}
+	if step.EffectiveTarget != "https://httpbin.org/anything/api/reports" {
+		t.Fatalf("expected effective target, got %q", step.EffectiveTarget)
 	}
 }
 

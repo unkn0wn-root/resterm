@@ -52,11 +52,12 @@ func TestRenderHTTPPrettyWithHeadersAndFailures(t *testing.T) {
 func TestRenderHTTPPrettyUsesTrackedUnresolvedVarsAndEffectiveTarget(t *testing.T) {
 	rep := &runner.Report{
 		Results: []runner.Result{{
-			Kind:        runner.ResultKindRequest,
-			Name:        "ReportsList",
-			Method:      "GET",
-			Target:      "https://httpbin.org/anything/api/reports",
-			Environment: "dev",
+			Kind:            runner.ResultKindRequest,
+			Name:            "ReportsList",
+			Method:          "GET",
+			Target:          "{{services.api.base}}/reports",
+			EffectiveTarget: "https://httpbin.org/anything/api/reports",
+			Environment:     "dev",
 			Response: &httpclient.Response{
 				Status:       "200 OK",
 				StatusCode:   200,

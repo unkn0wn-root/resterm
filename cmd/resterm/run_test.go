@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestHandleRunSubcommandNotMatched(t *testing.T) {
@@ -71,7 +72,7 @@ func TestRunRunHelpFlagShowsUsage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help flag: %v", err)
 	}
-	if strings.TrimSpace(stderr) != "" {
+	if str.Trim(stderr) != "" {
 		t.Fatalf("expected empty stderr on help flag, got %q", stderr)
 	}
 	if !strings.Contains(stdout, "Usage: resterm run [flags] <file|->") {
@@ -102,7 +103,7 @@ func TestRunDispatchesRunSubcommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run dispatch: %v", err)
 	}
-	if strings.TrimSpace(stderr) != "" {
+	if str.Trim(stderr) != "" {
 		t.Fatalf("expected empty stderr, got %q", stderr)
 	}
 	if !strings.Contains(stdout, "Usage: resterm run [flags] <file|->") {
@@ -328,7 +329,7 @@ func TestRunCmdMapsFailedReportToExitCodeOne(t *testing.T) {
 	if code := cli.ExitCode(err); code != 1 {
 		t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
 	}
-	if msg := strings.TrimSpace(err.Error()); msg != "" {
+	if msg := str.Trim(err.Error()); msg != "" {
 		t.Fatalf("expected silent failure message, got %q", msg)
 	}
 }
@@ -795,7 +796,7 @@ func TestRunCmdBodyKeepsExitCodeWithoutFailureBanner(t *testing.T) {
 	if code := cli.ExitCode(err); code != 1 {
 		t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
 	}
-	if msg := strings.TrimSpace(err.Error()); msg != "" {
+	if msg := str.Trim(err.Error()); msg != "" {
 		t.Fatalf("expected silent failure message, got %q", msg)
 	}
 	if out.String() != "{\n  \"message\": \"ok\"\n}\n" {
@@ -824,7 +825,9 @@ func TestRunCmdBodyPrettyUsesColorFlag(t *testing.T) {
 	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
 		return stubRunReport(true), nil
 	}
-	if err := cmd.parse([]string{"--body", "--format", "pretty", "--color", "always", file}); err != nil {
+	if err := cmd.parse(
+		[]string{"--body", "--format", "pretty", "--color", "always", file},
+	); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if err := cmd.run(); err != nil {
@@ -927,10 +930,15 @@ func TestPromptRunRequestChoiceRetriesInvalidInput(t *testing.T) {
 }
 
 func TestPromptRunRequestChoiceEOF(t *testing.T) {
-	_, err := cli.PromptRunRequestChoice(strings.NewReader(""), &bytes.Buffer{}, "many.http", []cli.RunRequestChoice{
-		{Line: 3, Label: "GET one"},
-		{Line: 7, Label: "GET two"},
-	})
+	_, err := cli.PromptRunRequestChoice(
+		strings.NewReader(""),
+		&bytes.Buffer{},
+		"many.http",
+		[]cli.RunRequestChoice{
+			{Line: 3, Label: "GET one"},
+			{Line: 7, Label: "GET two"},
+		},
+	)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF, got %v", err)
 	}
