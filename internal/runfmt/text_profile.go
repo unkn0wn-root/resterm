@@ -34,11 +34,11 @@ func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyl
 		return err
 	}
 	for _, row := range rows {
-		if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.detail(row.label, row.value)); err != nil {
+		if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.profileDetail(row.label, row.value)); err != nil {
 			return err
 		}
 	}
-	if err := writeTextProfileHistogram(w, indent, p.Histogram, st); err != nil {
+	if err := writeTextProfileHistogram(w, indent, p, st); err != nil {
 		return err
 	}
 
@@ -58,7 +58,7 @@ func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyl
 			w,
 			"%s    %s\n",
 			indent,
-			st.resultLine("- "+textProfileFailure(fail)),
+			st.value("- "+textProfileFailure(fail)),
 		); err != nil {
 			return err
 		}
@@ -95,17 +95,24 @@ func textProfileRows(p *Profile) []textProfileRow {
 func writeTextProfileHistogram(
 	w io.Writer,
 	indent string,
-	bins []HistBin,
+	p *Profile,
 	st textStyler,
 ) error {
-	if len(bins) == 0 {
+	if p == nil || len(p.Histogram) == 0 {
 		return nil
 	}
 	if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.heading("Histogram:")); err != nil {
 		return err
 	}
-	for _, line := range textProfileHistogramLines(bins) {
-		if _, err := fmt.Fprintf(w, "%s    %s\n", indent, st.resultLine(line)); err != nil {
+	for _, row := range textProfileHistogramRows(p) {
+		if _, err := fmt.Fprintf(
+			w,
+			"%s    %s%s%s\n",
+			indent,
+			st.value(row.head),
+			st.paint(row.bar, row.color, false),
+			st.value(row.tail),
+		); err != nil {
 			return err
 		}
 	}
@@ -198,24 +205,32 @@ type textProfileHistLayout struct {
 	tot  int
 }
 
-func textProfileHistogramLines(bins []HistBin) []string {
-	hl := textProfileHistogramLayout(bins)
-	lines := make([]string, 0, len(bins))
-	for i, bin := range bins {
-		lines = append(lines, fmt.Sprintf(
-			"%-*s - %-*s | %s (%*s, %*s)",
-			hl.fw,
-			hl.from[i],
-			hl.tw,
-			hl.to[i],
-			textProfileHistogramBar(bin.Count, hl.mx),
-			hl.cw,
-			hl.cnt[i],
-			hl.pw,
-			hl.pct[i],
-		))
+type textProfileHistRow struct {
+	head  string
+	bar   string
+	tail  string
+	color string
+}
+
+func textProfileHistogramRows(p *Profile) []textProfileHistRow {
+	hl := textProfileHistogramLayout(p.Histogram)
+	rows := make([]textProfileHistRow, 0, len(p.Histogram))
+	p50, p90, ok := textProfileHistogramThresholds(p)
+	for i, bin := range p.Histogram {
+		rows = append(rows, textProfileHistRow{
+			head: fmt.Sprintf(
+				"%-*s - %-*s | ",
+				hl.fw,
+				hl.from[i],
+				hl.tw,
+				hl.to[i],
+			),
+			bar:   textProfileHistogramBar(bin.Count, hl.mx),
+			tail:  fmt.Sprintf(" (%*s, %*s)", hl.cw, hl.cnt[i], hl.pw, hl.pct[i]),
+			color: textProfileHistogramColor(bin, p50, p90, ok),
+		})
 	}
-	return lines
+	return rows
 }
 
 func textProfileHistogramLayout(bins []HistBin) textProfileHistLayout {
@@ -275,6 +290,36 @@ func textProfileHistogramPercent(n, tot int) string {
 		return "0%"
 	}
 	return fmt.Sprintf("%.1f%%", (float64(n)/float64(tot))*100)
+}
+
+func textProfileHistogramThresholds(p *Profile) (time.Duration, time.Duration, bool) {
+	if p == nil {
+		return 0, 0, false
+	}
+	p50, ok50 := textProfilePercentile(p.Percentiles, 50)
+	if !ok50 && p.Latency != nil && p.Latency.Median > 0 {
+		p50 = p.Latency.Median
+		ok50 = true
+	}
+	p90, ok90 := textProfilePercentile(p.Percentiles, 90)
+	if ok50 && ok90 {
+		return p50, p90, true
+	}
+	return 0, 0, false
+}
+
+func textProfileHistogramColor(bin HistBin, p50, p90 time.Duration, ok bool) string {
+	if !ok {
+		return textColValue
+	}
+	switch {
+	case bin.To <= p50:
+		return textColSuccess
+	case bin.To >= p90 || bin.From >= p90:
+		return textColWarn
+	default:
+		return textColCaution
+	}
 }
 
 func textProfilePercentile(vals []Percentile, pct int) (time.Duration, bool) {

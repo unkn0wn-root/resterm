@@ -232,3 +232,60 @@ func TestWriteTextProfileLatencyUsesMedianWhenP50Missing(t *testing.T) {
 		t.Fatalf("did not expect p50 fallback label, got %q", text)
 	}
 }
+
+func TestWriteTextStyledProfileHistogramUsesAnsiColors(t *testing.T) {
+	rep := &Report{
+		FilePath: "profile.http",
+		Results: []Result{{
+			Kind:   "profile",
+			Name:   "prof",
+			Method: "PROFILE",
+			Status: StatusPass,
+			Profile: &Profile{
+				TotalRuns:      3,
+				SuccessfulRuns: 3,
+				Latency: &Latency{
+					Count:  3,
+					Min:    10 * time.Millisecond,
+					Max:    70 * time.Millisecond,
+					Mean:   40 * time.Millisecond,
+					Median: 40 * time.Millisecond,
+					StdDev: 25 * time.Millisecond,
+				},
+				Percentiles: []Percentile{
+					{Percentile: 50, Value: 30 * time.Millisecond},
+					{Percentile: 90, Value: 60 * time.Millisecond},
+				},
+				Histogram: []HistBin{
+					{From: 10 * time.Millisecond, To: 20 * time.Millisecond, Count: 1},
+					{From: 30 * time.Millisecond, To: 50 * time.Millisecond, Count: 1},
+					{From: 60 * time.Millisecond, To: 70 * time.Millisecond, Count: 1},
+				},
+			},
+		}},
+		Total:  1,
+		Passed: 1,
+	}
+
+	var plain strings.Builder
+	if err := WriteText(&plain, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+
+	var colored strings.Builder
+	if err := WriteTextStyled(&colored, rep, termcolor.TrueColor()); err != nil {
+		t.Fatalf("WriteTextStyled(...): %v", err)
+	}
+
+	out := colored.String()
+	if !strings.Contains(out, "\x1b[") {
+		t.Fatalf("expected ansi output, got %q", out)
+	}
+	if got := ansi.Strip(out); got != plain.String() {
+		t.Fatalf(
+			"expected stripped profile output to match plain text\nwant:\n%s\n\ngot:\n%s",
+			plain.String(),
+			got,
+		)
+	}
+}
