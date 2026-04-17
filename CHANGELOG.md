@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.28.2](https://github.com/unkn0wn-root/resterm/compare/v0.28.1...v0.28.2) (2026-04-17)
+
+
+### Features
+
+* make headless api stable ([22a454d](https://github.com/unkn0wn-root/resterm/commit/22a454dce9a90cfbdb7badeaa4ab1446d83875bb))
+* use internal string util ([d6aaf6e](https://github.com/unkn0wn-root/resterm/commit/d6aaf6e46b3fc266c8a7e77e3ef59f3c884216a3))
+
 ### [0.28.1](https://github.com/unkn0wn-root/resterm/compare/v0.27.3...v0.28.1) (2026-04-17)
 
 
