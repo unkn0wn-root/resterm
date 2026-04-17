@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/update"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -128,7 +129,7 @@ type cliUpdater struct {
 func newCLIUpdater(cl update.Client, ver string) cliUpdater {
 	return cliUpdater{
 		cl:  cl,
-		ver: strings.TrimSpace(ver),
+		ver: str.Trim(ver),
 		out: os.Stdout,
 		err: os.Stderr,
 	}
@@ -165,7 +166,7 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 		return update.SwapStatus{}, fmt.Errorf("locate executable: %w", err)
 	}
 	exe = resolveExecPath(exe)
-	current := strings.TrimSpace(u.ver)
+	current := str.Trim(u.ver)
 	if current == "" {
 		current = "unknown"
 	}
@@ -218,7 +219,7 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 }
 
 func resolveExecPath(path string) string {
-	clean := strings.TrimSpace(path)
+	clean := str.Trim(path)
 	if clean == "" {
 		return path
 	}
@@ -241,7 +242,7 @@ func (u cliUpdater) printAvailable(res update.Result) {
 }
 
 func (u cliUpdater) printChangelog(res update.Result) {
-	notes := strings.TrimSpace(res.Info.Notes)
+	notes := str.Trim(res.Info.Notes)
 	divider := strings.Repeat("-", 64)
 	if _, err := fmt.Fprintln(u.out, divider); err != nil {
 		log.Printf(changelogDividerErr, err)
@@ -276,16 +277,16 @@ func formatChangelog(raw string) []string {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
 		trimmedRight := strings.TrimRight(line, " \t")
-		if strings.TrimSpace(trimmedRight) == "" {
+		if str.Trim(trimmedRight) == "" {
 			out = append(out, "")
 			continue
 		}
 
 		leading := countLeadingSpaces(line)
-		token := strings.TrimSpace(trimmedRight)
+		token := str.Trim(trimmedRight)
 		switch {
 		case strings.HasPrefix(token, "- ") || strings.HasPrefix(token, "* "):
-			item := strings.TrimSpace(token[2:])
+			item := str.Trim(token[2:])
 			out = append(out, strings.Repeat(" ", leading)+"• "+item)
 		default:
 			out = append(out, trimmedRight)

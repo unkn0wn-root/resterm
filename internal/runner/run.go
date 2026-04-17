@@ -23,6 +23,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -109,6 +110,7 @@ type Result struct {
 	Name                      string
 	Method                    string
 	Target                    string
+	EffectiveTarget           string
 	Environment               string
 	Summary                   string
 	Duration                  time.Duration
@@ -166,28 +168,29 @@ type TraceInfo struct {
 }
 
 type StepResult struct {
-	Name        string
-	Method      string
-	Target      string
-	Environment string
-	Branch      string
-	Iteration   int
-	Total       int
-	Summary     string
-	Duration    time.Duration
-	Response    *httpclient.Response
-	GRPC        *grpcclient.Response
-	Err         error
-	Tests       []scripts.TestResult
-	ScriptErr   error
-	Passed      bool
-	Skipped     bool
-	SkipReason  string
-	Canceled    bool
-	Stream      *StreamInfo
-	Trace       *TraceInfo
-	requestText string
-	transcript  []byte
+	Name            string
+	Method          string
+	Target          string
+	EffectiveTarget string
+	Environment     string
+	Branch          string
+	Iteration       int
+	Total           int
+	Summary         string
+	Duration        time.Duration
+	Response        *httpclient.Response
+	GRPC            *grpcclient.Response
+	Err             error
+	Tests           []scripts.TestResult
+	ScriptErr       error
+	Passed          bool
+	Skipped         bool
+	SkipReason      string
+	Canceled        bool
+	Stream          *StreamInfo
+	Trace           *TraceInfo
+	requestText     string
+	transcript      []byte
 }
 
 func Run(opts Options) (*Report, error) {
@@ -198,7 +201,7 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	path := strings.TrimSpace(opts.FilePath)
+	path := str.Trim(opts.FilePath)
 	if path == "" {
 		return nil, usageError("--file is required")
 	}
@@ -243,7 +246,7 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 		EnvironmentName: opts.EnvName,
 		EnvironmentFile: opts.EnvironmentFile,
 		CompareTargets:  append([]string(nil), opts.CompareTargets...),
-		CompareBase:     strings.TrimSpace(opts.CompareBase),
+		CompareBase:     str.Trim(opts.CompareBase),
 		HTTPOptions:     opts.HTTPOptions,
 		GRPCOptions:     opts.GRPCOptions,
 		WorkspaceRoot:   work,
@@ -256,9 +259,9 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	}
 
 	rep := &Report{
-		Version:   strings.TrimSpace(opts.Version),
+		Version:   str.Trim(opts.Version),
 		FilePath:  path,
-		EnvName:   strings.TrimSpace(opts.EnvName),
+		EnvName:   str.Trim(opts.EnvName),
 		StartedAt: start,
 	}
 
@@ -343,9 +346,9 @@ type selectedTarget struct {
 
 func newSelectSpec(sel Select) selectSpec {
 	return selectSpec{
-		request:  strings.TrimSpace(sel.Request),
-		workflow: strings.TrimSpace(sel.Workflow),
-		tag:      strings.TrimSpace(sel.Tag),
+		request:  str.Trim(sel.Request),
+		workflow: str.Trim(sel.Workflow),
+		tag:      str.Trim(sel.Tag),
 		all:      sel.All,
 		line:     sel.Line,
 	}
@@ -466,7 +469,7 @@ func selectWorkflow(doc *restfile.Document, name string) (*restfile.Workflow, er
 	var out []*restfile.Workflow
 	for i := range doc.Workflows {
 		wf := &doc.Workflows[i]
-		if strings.EqualFold(strings.TrimSpace(wf.Name), name) {
+		if strings.EqualFold(str.Trim(wf.Name), name) {
 			out = append(out, wf)
 		}
 	}
@@ -483,7 +486,7 @@ func selectWorkflow(doc *restfile.Document, name string) (*restfile.Workflow, er
 func selectByRequestName(reqs []*restfile.Request, name string) ([]*restfile.Request, error) {
 	var out []*restfile.Request
 	for _, req := range reqs {
-		if strings.EqualFold(strings.TrimSpace(req.Metadata.Name), name) {
+		if strings.EqualFold(str.Trim(req.Metadata.Name), name) {
 			out = append(out, req)
 		}
 	}
@@ -501,7 +504,7 @@ func selectByTag(reqs []*restfile.Request, tag string) ([]*restfile.Request, err
 	var out []*restfile.Request
 	for _, req := range reqs {
 		for _, item := range req.Metadata.Tags {
-			if strings.EqualFold(strings.TrimSpace(item), tag) {
+			if strings.EqualFold(str.Trim(item), tag) {
 				out = append(out, req)
 				break
 			}
@@ -583,7 +586,7 @@ func requestName(req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
-	name := strings.TrimSpace(req.Metadata.Name)
+	name := str.Trim(req.Metadata.Name)
 	if name != "" {
 		return name
 	}
@@ -595,14 +598,11 @@ func requestSourceTarget(req *restfile.Request) string {
 		return ""
 	}
 	if req.GRPC != nil {
-		if method := strings.TrimSpace(req.GRPC.FullMethod); method != "" {
-			return method
-		}
-		if target := strings.TrimSpace(req.GRPC.Target); target != "" {
+		if target := str.FirstTrimmed(req.GRPC.FullMethod, req.GRPC.Target); target != "" {
 			return target
 		}
 	}
-	return strings.TrimSpace(req.URL)
+	return str.Trim(req.URL)
 }
 
 func requestTarget(
@@ -610,7 +610,7 @@ func requestTarget(
 	resp *httpclient.Response,
 ) string {
 	if resp != nil {
-		if target := strings.TrimSpace(resp.EffectiveURL); target != "" {
+		if target := str.Trim(resp.EffectiveURL); target != "" {
 			return target
 		}
 	}
@@ -635,7 +635,7 @@ func requestMethod(req *restfile.Request) string {
 }
 
 func requestMethodValue(method string) string {
-	method = strings.ToUpper(strings.TrimSpace(method))
+	method = str.UpperTrim(method)
 	if method == "" {
 		return "REQ"
 	}
@@ -681,27 +681,25 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 	if res.Executed != nil {
 		runReq = res.Executed
 	}
-	envName := strings.TrimSpace(res.Environment)
-	if envName == "" {
-		envName = strings.TrimSpace(fallbackEnv)
-	}
+	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
-		Kind:        ResultKindRequest,
-		Name:        requestName(runReq),
-		Method:      requestMethod(runReq),
-		Target:      requestTarget(runReq, res.Response),
-		Environment: envName,
-		Response:    res.Response,
-		GRPC:        res.GRPC,
-		Err:         res.Err,
-		Tests:       cloneTests(res.Tests),
-		ScriptErr:   res.ScriptErr,
-		Skipped:     res.Skipped,
-		SkipReason:  strings.TrimSpace(res.SkipReason),
-		Stream:      streamResult(res.Stream),
-		Trace:       traceResult(res.Response),
-		requestText: strings.TrimSpace(res.RequestText),
-		transcript:  bytes.Clone(res.Transcript),
+		Kind:            ResultKindRequest,
+		Name:            requestName(runReq),
+		Method:          requestMethod(runReq),
+		Target:          requestSourceTarget(runReq),
+		EffectiveTarget: requestTarget(runReq, res.Response),
+		Environment:     envName,
+		Response:        res.Response,
+		GRPC:            res.GRPC,
+		Err:             res.Err,
+		Tests:           cloneTests(res.Tests),
+		ScriptErr:       res.ScriptErr,
+		Skipped:         res.Skipped,
+		SkipReason:      str.Trim(res.SkipReason),
+		Stream:          streamResult(res.Stream),
+		Trace:           traceResult(res.Response),
+		requestText:     str.Trim(res.RequestText),
+		transcript:      bytes.Clone(res.Transcript),
 	}
 	if res.Explain != nil {
 		item.SetUnresolvedTemplateVars(explainMissingTemplateVars(res.Explain))
@@ -723,23 +721,20 @@ func requestFailed(item Result) bool {
 }
 
 func compareRunResult(req *restfile.Request, res engine.CompareResult, fallbackEnv string) Result {
-	envName := strings.TrimSpace(res.Environment)
-	if envName == "" {
-		envName = strings.TrimSpace(fallbackEnv)
-	}
+	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
 		Kind:        ResultKindCompare,
 		Name:        requestName(req),
 		Method:      "COMPARE",
 		Target:      requestSourceTarget(req),
 		Environment: envName,
-		Summary:     strings.TrimSpace(res.Summary),
+		Summary:     str.Trim(res.Summary),
 		Duration:    compareDuration(res.Rows),
 		Passed:      res.Success,
 		Skipped:     res.Skipped,
 		Canceled:    res.Canceled,
 		Compare: &CompareInfo{
-			Baseline: strings.TrimSpace(res.Baseline),
+			Baseline: str.Trim(res.Baseline),
 		},
 		Steps: make([]StepResult, 0, len(res.Rows)),
 	}
@@ -760,44 +755,42 @@ func compareDuration(rows []engine.CompareRow) time.Duration {
 
 func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult {
 	return StepResult{
-		Name:        strings.TrimSpace(row.Environment),
-		Method:      requestMethod(req),
-		Target:      requestTarget(req, row.Response),
-		Environment: strings.TrimSpace(row.Environment),
-		Summary:     strings.TrimSpace(row.Summary),
-		Duration:    row.Duration,
-		Response:    row.Response,
-		GRPC:        row.GRPC,
-		Err:         row.Err,
-		Tests:       cloneTests(row.Tests),
-		ScriptErr:   row.ScriptErr,
-		Passed:      row.Success,
-		Skipped:     row.Skipped,
-		SkipReason:  strings.TrimSpace(row.SkipReason),
-		Canceled:    row.Canceled,
-		Stream:      streamResult(row.Stream),
-		Trace:       traceResult(row.Response),
-		requestText: "",
-		transcript:  bytes.Clone(row.Transcript),
+		Name:            str.Trim(row.Environment),
+		Method:          requestMethod(req),
+		Target:          requestSourceTarget(req),
+		EffectiveTarget: requestTarget(req, row.Response),
+		Environment:     str.Trim(row.Environment),
+		Summary:         str.Trim(row.Summary),
+		Duration:        row.Duration,
+		Response:        row.Response,
+		GRPC:            row.GRPC,
+		Err:             row.Err,
+		Tests:           cloneTests(row.Tests),
+		ScriptErr:       row.ScriptErr,
+		Passed:          row.Success,
+		Skipped:         row.Skipped,
+		SkipReason:      str.Trim(row.SkipReason),
+		Canceled:        row.Canceled,
+		Stream:          streamResult(row.Stream),
+		Trace:           traceResult(row.Response),
+		requestText:     "",
+		transcript:      bytes.Clone(row.Transcript),
 	}
 }
 
 func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackEnv string) Result {
-	envName := strings.TrimSpace(res.Environment)
-	if envName == "" {
-		envName = strings.TrimSpace(fallbackEnv)
-	}
+	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
 		Kind:        ResultKindProfile,
 		Name:        requestName(req),
 		Method:      "PROFILE",
 		Target:      requestSourceTarget(req),
 		Environment: envName,
-		Summary:     strings.TrimSpace(res.Summary),
+		Summary:     str.Trim(res.Summary),
 		Duration:    res.Duration,
 		Passed:      res.Success,
 		Skipped:     res.Skipped,
-		SkipReason:  strings.TrimSpace(res.SkipReason),
+		SkipReason:  str.Trim(res.SkipReason),
 		Canceled:    res.Canceled,
 		Profile: &ProfileInfo{
 			Count:    res.Count,
@@ -837,8 +830,8 @@ func profileFailures(src []engine.ProfileFailure) []ProfileFailure {
 		out = append(out, ProfileFailure{
 			Iteration:  failure.Iteration,
 			Warmup:     failure.Warmup,
-			Reason:     strings.TrimSpace(failure.Reason),
-			Status:     strings.TrimSpace(failure.Status),
+			Reason:     str.Trim(failure.Reason),
+			Status:     str.Trim(failure.Status),
 			StatusCode: failure.StatusCode,
 			Duration:   failure.Duration,
 		})
@@ -848,19 +841,16 @@ func profileFailures(src []engine.ProfileFailure) []ProfileFailure {
 
 func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 	kind := ResultKindWorkflow
-	if strings.EqualFold(strings.TrimSpace(res.Kind), string(ResultKindForEach)) {
+	if strings.EqualFold(str.Trim(string(res.Kind)), string(ResultKindForEach)) {
 		kind = ResultKindForEach
 	}
-	envName := strings.TrimSpace(res.Environment)
-	if envName == "" {
-		envName = strings.TrimSpace(fallbackEnv)
-	}
+	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
 		Kind:        kind,
-		Name:        strings.TrimSpace(res.Name),
-		Method:      strings.ToUpper(strings.TrimSpace(res.Kind)),
+		Name:        str.Trim(res.Name),
+		Method:      str.UpperTrim(string(res.Kind)),
 		Environment: envName,
-		Summary:     strings.TrimSpace(res.Summary),
+		Summary:     str.Trim(res.Summary),
 		Duration:    res.Duration,
 		Passed:      res.Success,
 		Skipped:     res.Skipped,
@@ -878,33 +868,35 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 }
 
 func workflowStepResult(step engine.WorkflowStep) StepResult {
-	target := strings.TrimSpace(step.Target)
+	target := str.Trim(step.Target)
+	effectiveTarget := target
 	if step.Response != nil {
-		if effective := strings.TrimSpace(step.Response.EffectiveURL); effective != "" {
-			target = effective
+		if effective := str.Trim(step.Response.EffectiveURL); effective != "" {
+			effectiveTarget = effective
 		}
 	}
 	return StepResult{
-		Name:        strings.TrimSpace(step.Name),
-		Method:      strings.TrimSpace(step.Method),
-		Target:      target,
-		Branch:      strings.TrimSpace(step.Branch),
-		Iteration:   step.Iteration,
-		Total:       step.Total,
-		Summary:     strings.TrimSpace(step.Summary),
-		Duration:    step.Duration,
-		Response:    step.Response,
-		GRPC:        step.GRPC,
-		Err:         step.Err,
-		Tests:       cloneTests(step.Tests),
-		ScriptErr:   step.ScriptErr,
-		Passed:      step.Success,
-		Skipped:     step.Skipped,
-		Canceled:    step.Canceled,
-		Stream:      streamResult(step.Stream),
-		Trace:       traceResult(step.Response),
-		requestText: "",
-		transcript:  bytes.Clone(step.Transcript),
+		Name:            str.Trim(step.Name),
+		Method:          str.Trim(step.Method),
+		Target:          target,
+		EffectiveTarget: effectiveTarget,
+		Branch:          str.Trim(step.Branch),
+		Iteration:       step.Iteration,
+		Total:           step.Total,
+		Summary:         str.Trim(step.Summary),
+		Duration:        step.Duration,
+		Response:        step.Response,
+		GRPC:            step.GRPC,
+		Err:             step.Err,
+		Tests:           cloneTests(step.Tests),
+		ScriptErr:       step.ScriptErr,
+		Passed:          step.Success,
+		Skipped:         step.Skipped,
+		Canceled:        step.Canceled,
+		Stream:          streamResult(step.Stream),
+		Trace:           traceResult(step.Response),
+		requestText:     "",
+		transcript:      bytes.Clone(step.Transcript),
 	}
 }
 
@@ -918,7 +910,7 @@ func explainMissingTemplateVars(rep *xplain.Report) []string {
 		if !item.Missing {
 			continue
 		}
-		name := strings.TrimSpace(item.Name)
+		name := str.Trim(item.Name)
 		if name == "" {
 			continue
 		}
@@ -952,7 +944,7 @@ func streamResult(info *scripts.StreamInfo) *StreamInfo {
 		return nil
 	}
 	out := &StreamInfo{
-		Kind:       strings.TrimSpace(info.Kind),
+		Kind:       str.Trim(info.Kind),
 		EventCount: streamEventCount(info),
 	}
 	if len(info.Summary) > 0 {
@@ -1001,8 +993,8 @@ func cloneTests(src []scripts.TestResult) []scripts.TestResult {
 	out := make([]scripts.TestResult, 0, len(src))
 	for _, test := range src {
 		out = append(out, scripts.TestResult{
-			Name:    strings.TrimSpace(test.Name),
-			Message: strings.TrimSpace(test.Message),
+			Name:    str.Trim(test.Name),
+			Message: str.Trim(test.Message),
 			Passed:  test.Passed,
 			Elapsed: test.Elapsed,
 		})
@@ -1095,7 +1087,7 @@ func writeStreamArtifact(
 	if slug := streamArtifactSlug(name); slug != "" {
 		file += "-" + slug
 	}
-	if kind := strings.ToLower(strings.TrimSpace(stream.Kind)); kind != "" {
+	if kind := str.LowerTrim(stream.Kind); kind != "" {
 		file += "-" + kind
 	}
 	path := filepath.Join(base, file+".json")
@@ -1137,7 +1129,7 @@ func writeTraceArtifact(
 }
 
 func streamArtifactSlug(name string) string {
-	name = strings.TrimSpace(strings.ToLower(name))
+	name = str.LowerTrim(name)
 	if name == "" {
 		return ""
 	}

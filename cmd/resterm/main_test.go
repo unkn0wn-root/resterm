@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func TestRunVersionFlag(t *testing.T) {
@@ -32,7 +33,7 @@ func TestRunHelpFlag(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run --help: %v", err)
 	}
-	if strings.TrimSpace(out) != "" {
+	if str.Trim(out) != "" {
 		t.Fatalf("expected empty stdout, got %q", out)
 	}
 	if !strings.Contains(errOut, "Usage: resterm [flags] [file]") {
@@ -98,7 +99,7 @@ func TestRunDispatchesHistorySubcommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run history -h: %v", err)
 	}
-	if strings.TrimSpace(errOut) != "" {
+	if str.Trim(errOut) != "" {
 		t.Fatalf("expected empty stderr, got %q", errOut)
 	}
 	if !strings.Contains(

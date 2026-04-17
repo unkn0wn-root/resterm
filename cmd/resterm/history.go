@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/config"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func handleHistorySubcommand(args []string) (bool, error) {
@@ -34,7 +35,7 @@ func runHistory(args []string) error {
 	if len(args) == 0 {
 		return errors.New(historyUsageText())
 	}
-	op := strings.TrimSpace(strings.ToLower(args[0]))
+	op := str.Trim(strings.ToLower(args[0]))
 	switch op {
 	case "-h", "--help", "help":
 		if err := writeln(os.Stdout, historyUsageText()); err != nil {
@@ -71,7 +72,7 @@ func runHistoryExport(args []string) error {
 	if len(fs.Args()) > 0 {
 		return fmt.Errorf("history export: unexpected args: %s", strings.Join(fs.Args(), " "))
 	}
-	out = strings.TrimSpace(out)
+	out = str.Trim(out)
 	if out == "" {
 		return errors.New("history export: --out is required")
 	}
@@ -105,7 +106,7 @@ func runHistoryImport(args []string) error {
 	if len(fs.Args()) > 0 {
 		return fmt.Errorf("history import: unexpected args: %s", strings.Join(fs.Args(), " "))
 	}
-	in = strings.TrimSpace(in)
+	in = str.Trim(in)
 	if in == "" {
 		return errors.New("history import: --in is required")
 	}
@@ -139,7 +140,7 @@ func runHistoryBackup(args []string) error {
 	if len(fs.Args()) > 0 {
 		return fmt.Errorf("history backup: unexpected args: %s", strings.Join(fs.Args(), " "))
 	}
-	out = strings.TrimSpace(out)
+	out = str.Trim(out)
 	if out == "" {
 		return errors.New("history backup: --out is required")
 	}
@@ -303,7 +304,7 @@ func openHistoryStore(migrate bool) (history.MaintenanceStore, error) {
 }
 
 func historyUsageText() string {
-	return strings.TrimSpace(`
+	return str.Trim(`
 Usage: resterm history <export|import|backup|stats|check|compact> [flags]
 
 Subcommands:
@@ -320,7 +321,7 @@ func printHistoryRecoveryWarning(w io.Writer, rec *histdb.RecoverInfo) error {
 	if rec == nil {
 		return nil
 	}
-	cause := strings.TrimSpace(rec.Cause)
+	cause := str.Trim(rec.Cause)
 	if cause == "" {
 		cause = "unknown"
 	}

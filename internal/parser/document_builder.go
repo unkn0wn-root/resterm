@@ -12,7 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/util"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type documentBuilder struct {
@@ -437,7 +437,7 @@ func (b *documentBuilder) addScript(ln int, body string, inc bool) {
 }
 
 func scriptInc(body string) (string, bool) {
-	h := util.TrimLeftSpace(body)
+	h := str.TrimLeft(body)
 	if !strings.HasPrefix(h, "<") {
 		return "", false
 	}
@@ -449,13 +449,13 @@ func scriptInc(body string) (string, bool) {
 }
 
 func trimScriptLine(raw string, allow bool) (string, bool) {
-	s := util.TrimLeftSpace(raw)
+	s := str.TrimLeft(raw)
 	if after, ok := strings.CutPrefix(s, ">"); ok {
-		b := util.TrimLeadingSpaceOnce(after)
-		return util.TrimRightSpace(b), true
+		b := str.TrimLeadingOnce(after)
+		return str.TrimRight(b), true
 	}
 	if allow {
-		return util.TrimRightSpace(raw), true
+		return str.TrimRight(raw), true
 	}
 	return "", false
 }
@@ -512,7 +512,7 @@ func isSBStart(trimmed string) bool {
 
 func isSBEnd(trimmed string) bool {
 	if after, ok := strings.CutPrefix(trimmed, ">"); ok {
-		trimmed = util.TrimLeftSpace(after)
+		trimmed = str.TrimLeft(after)
 	}
 	if !strings.HasPrefix(trimmed, "%}") {
 		return false
@@ -521,7 +521,7 @@ func isSBEnd(trimmed string) bool {
 	if rest == "" {
 		return true
 	}
-	rest = util.TrimLeftSpace(rest)
+	rest = str.TrimLeft(rest)
 	if rest == "" {
 		return true
 	}

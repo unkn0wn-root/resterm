@@ -3,7 +3,8 @@ package runner
 import (
 	"bytes"
 	"sort"
-	"strings"
+
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (r Result) Transcript() []byte {
@@ -18,7 +19,7 @@ func (r *Result) SetRequestText(text string) {
 	if r == nil {
 		return
 	}
-	r.requestText = strings.TrimSpace(text)
+	r.requestText = str.Trim(text)
 }
 
 func (r Result) UnresolvedTemplateVars() ([]string, bool) {
@@ -40,7 +41,7 @@ func (r *Result) SetUnresolvedTemplateVars(items []string) {
 	seen := make(map[string]struct{}, len(items))
 	out := make([]string, 0, len(items))
 	for _, item := range items {
-		item = strings.TrimSpace(item)
+		item = str.Trim(item)
 		if item == "" {
 			continue
 		}
@@ -66,5 +67,5 @@ func (s *StepResult) SetRequestText(text string) {
 	if s == nil {
 		return
 	}
-	s.requestText = strings.TrimSpace(text)
+	s.requestText = str.Trim(text)
 }
