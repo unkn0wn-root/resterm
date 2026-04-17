@@ -403,7 +403,10 @@ func printMainUsage(w io.Writer, fs *flag.FlagSet) {
 	if _, err := fmt.Fprintln(w, "Subcommands:"); err != nil {
 		return
 	}
-	if _, err := fmt.Fprintln(w, "  run         Execute request files without the TUI"); err != nil {
+	if _, err := fmt.Fprintln(
+		w,
+		"  run         Execute request files without the TUI",
+	); err != nil {
 		return
 	}
 	if _, err := fmt.Fprintln(w, "  init        Bootstrap a new workspace"); err != nil {

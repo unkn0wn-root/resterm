@@ -55,6 +55,10 @@ func TestWriteTextStyledColorPreservesPlainText(t *testing.T) {
 		t.Fatalf("expected ansi output, got %q", out)
 	}
 	if got := ansi.Strip(out); got != plain.String() {
-		t.Fatalf("expected stripped output to match plain text\nwant:\n%s\n\ngot:\n%s", plain.String(), got)
+		t.Fatalf(
+			"expected stripped output to match plain text\nwant:\n%s\n\ngot:\n%s",
+			plain.String(),
+			got,
+		)
 	}
 }

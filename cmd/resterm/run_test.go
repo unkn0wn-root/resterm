@@ -825,7 +825,9 @@ func TestRunCmdBodyPrettyUsesColorFlag(t *testing.T) {
 	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
 		return stubRunReport(true), nil
 	}
-	if err := cmd.parse([]string{"--body", "--format", "pretty", "--color", "always", file}); err != nil {
+	if err := cmd.parse(
+		[]string{"--body", "--format", "pretty", "--color", "always", file},
+	); err != nil {
 		t.Fatalf("parse: %v", err)
 	}
 	if err := cmd.run(); err != nil {
@@ -928,10 +930,15 @@ func TestPromptRunRequestChoiceRetriesInvalidInput(t *testing.T) {
 }
 
 func TestPromptRunRequestChoiceEOF(t *testing.T) {
-	_, err := cli.PromptRunRequestChoice(strings.NewReader(""), &bytes.Buffer{}, "many.http", []cli.RunRequestChoice{
-		{Line: 3, Label: "GET one"},
-		{Line: 7, Label: "GET two"},
-	})
+	_, err := cli.PromptRunRequestChoice(
+		strings.NewReader(""),
+		&bytes.Buffer{},
+		"many.http",
+		[]cli.RunRequestChoice{
+			{Line: 3, Label: "GET one"},
+			{Line: 7, Label: "GET two"},
+		},
+	)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF, got %v", err)
 	}

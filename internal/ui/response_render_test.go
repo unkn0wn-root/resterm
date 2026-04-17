@@ -206,7 +206,10 @@ func TestBinaryBodySummaryKeepsOriginalUILabelAndStyling(t *testing.T) {
 	if !strings.Contains(views.pretty, want) {
 		t.Fatalf("expected original UI label rendering, got %q", views.pretty)
 	}
-	if strings.Contains(views.pretty, renderLabelValue("Raw view", "hex / base64", statsLabelStyle, statsValueStyle)) {
+	if strings.Contains(
+		views.pretty,
+		renderLabelValue("Raw view", "hex / base64", statsLabelStyle, statsValueStyle),
+	) {
 		t.Fatalf("expected binary summary to avoid renamed label, got %q", views.pretty)
 	}
 }

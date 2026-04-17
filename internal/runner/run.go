@@ -385,7 +385,9 @@ func selectTarget(doc *restfile.Document, sel selectSpec) (selectedTarget, error
 	}
 	if sel.workflow != "" {
 		if sel.all || sel.request != "" || sel.tag != "" {
-			return selectedTarget{}, usageError("--workflow cannot be combined with --request, --tag, or --all")
+			return selectedTarget{}, usageError(
+				"--workflow cannot be combined with --request, --tag, or --all",
+			)
 		}
 		wf, err := selectWorkflow(doc, sel.workflow)
 		if err != nil {
@@ -441,7 +443,9 @@ func selectRequests(doc *restfile.Document, sel selectSpec) ([]*restfile.Request
 
 func selectByLine(doc *restfile.Document, sel selectSpec) (selectedTarget, error) {
 	if sel.workflow != "" || sel.request != "" || sel.tag != "" || sel.all {
-		return selectedTarget{}, usageError("--line cannot be combined with --workflow, --request, --tag, or --all")
+		return selectedTarget{}, usageError(
+			"--line cannot be combined with --workflow, --request, --tag, or --all",
+		)
 	}
 	if sel.line <= 0 {
 		return selectedTarget{}, usageError("--line must be greater than zero")
@@ -451,7 +455,10 @@ func selectByLine(doc *restfile.Document, sel selectSpec) (selectedTarget, error
 	wfs := selectWorkflowsByLine(doc, sel.line)
 	switch total := len(reqs) + len(wfs); total {
 	case 0:
-		return selectedTarget{}, usageError("line %d did not match any request or workflow", sel.line)
+		return selectedTarget{}, usageError(
+			"line %d did not match any request or workflow",
+			sel.line,
+		)
 	case 1:
 		if len(wfs) == 1 {
 			return selectedTarget{workflow: wfs[0]}, nil

@@ -307,7 +307,9 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 			return fmt.Errorf("run: write request list: %w", err)
 		}
 		return cli.ExitErr{
-			Err:  errors.New("run: multiple requests found; use --request, --tag, --all, or --line"),
+			Err: errors.New(
+				"run: multiple requests found; use --request, --tag, --all, or --line",
+			),
 			Code: 2,
 		}
 	}
