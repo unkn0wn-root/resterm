@@ -23,6 +23,17 @@ type Config struct {
 	DialTimeout time.Duration
 }
 
+func (c Config) Clone() Config {
+	out := c
+	if len(c.Headers) > 0 {
+		out.Headers = make(map[string]string, len(c.Headers))
+		for key, value := range c.Headers {
+			out.Headers[key] = value
+		}
+	}
+	return out
+}
+
 func Default() Config {
 	return Config{
 		ServiceName: "resterm",

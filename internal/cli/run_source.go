@@ -3,10 +3,10 @@ package cli
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const stdinRunName = "stdin.http"
@@ -28,7 +28,7 @@ func ParseRunDoc(src RunSource) (*restfile.Document, error) {
 	doc := parser.Parse(src.Path, src.Data)
 	if len(doc.Errors) > 0 {
 		err := doc.Errors[0]
-		msg := strings.TrimSpace(err.Message)
+		msg := str.Trim(err.Message)
 		if err.Line > 0 {
 			return nil, fmt.Errorf("parse error at line %d: %s", err.Line, msg)
 		}

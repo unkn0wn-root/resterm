@@ -3,7 +3,6 @@ package runner
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -331,29 +330,6 @@ func usageError(format string, args ...any) error {
 	return UsageError{err: fmt.Errorf(format, args...)}
 }
 
-type selectSpec struct {
-	request  string
-	workflow string
-	tag      string
-	all      bool
-	line     int
-}
-
-type selectedTarget struct {
-	requests []*restfile.Request
-	workflow *restfile.Workflow
-}
-
-func newSelectSpec(sel Select) selectSpec {
-	return selectSpec{
-		request:  str.Trim(sel.Request),
-		workflow: str.Trim(sel.Workflow),
-		tag:      str.Trim(sel.Tag),
-		all:      sel.All,
-		line:     sel.Line,
-	}
-}
-
 func (r *Report) add(item Result) {
 	r.Results = append(r.Results, item)
 	r.Total++
@@ -377,190 +353,6 @@ func (r *Report) WriteText(w io.Writer) error {
 	}
 	rep := NormalizeReport(r)
 	return runfmt.WriteText(w, &rep)
-}
-
-func selectTarget(doc *restfile.Document, sel selectSpec) (selectedTarget, error) {
-	if sel.line > 0 {
-		return selectByLine(doc, sel)
-	}
-	if sel.workflow != "" {
-		if sel.all || sel.request != "" || sel.tag != "" {
-			return selectedTarget{}, usageError(
-				"--workflow cannot be combined with --request, --tag, or --all",
-			)
-		}
-		wf, err := selectWorkflow(doc, sel.workflow)
-		if err != nil {
-			return selectedTarget{}, err
-		}
-		return selectedTarget{workflow: wf}, nil
-	}
-	reqs, err := selectRequests(doc, sel)
-	if err != nil {
-		return selectedTarget{}, err
-	}
-	return selectedTarget{requests: reqs}, nil
-}
-
-func selectRequests(doc *restfile.Document, sel selectSpec) ([]*restfile.Request, error) {
-	if doc == nil || len(doc.Requests) == 0 {
-		return nil, usageError("no requests found")
-	}
-
-	if sel.all && sel.line > 0 {
-		return nil, usageError("--all cannot be combined with --line")
-	}
-	if sel.all && (sel.request != "" || sel.tag != "") {
-		return nil, usageError("--all cannot be combined with --request or --tag")
-	}
-	if sel.request != "" && sel.line > 0 {
-		return nil, usageError("--request cannot be combined with --line")
-	}
-	if sel.tag != "" && sel.line > 0 {
-		return nil, usageError("--tag cannot be combined with --line")
-	}
-	if sel.request != "" && sel.tag != "" {
-		return nil, usageError("--request cannot be combined with --tag")
-	}
-
-	if sel.all {
-		return append([]*restfile.Request(nil), doc.Requests...), nil
-	}
-
-	if sel.request != "" {
-		return selectByRequestName(doc.Requests, sel.request)
-	}
-
-	if sel.tag != "" {
-		return selectByTag(doc.Requests, sel.tag)
-	}
-
-	if len(doc.Requests) == 1 {
-		return []*restfile.Request{doc.Requests[0]}, nil
-	}
-	return nil, usageError("multiple requests found; use --request, --tag, --line, or --all")
-}
-
-func selectByLine(doc *restfile.Document, sel selectSpec) (selectedTarget, error) {
-	if sel.workflow != "" || sel.request != "" || sel.tag != "" || sel.all {
-		return selectedTarget{}, usageError(
-			"--line cannot be combined with --workflow, --request, --tag, or --all",
-		)
-	}
-	if sel.line <= 0 {
-		return selectedTarget{}, usageError("--line must be greater than zero")
-	}
-
-	reqs := selectRequestsByLine(doc, sel.line)
-	wfs := selectWorkflowsByLine(doc, sel.line)
-	switch total := len(reqs) + len(wfs); total {
-	case 0:
-		return selectedTarget{}, usageError(
-			"line %d did not match any request or workflow",
-			sel.line,
-		)
-	case 1:
-		if len(wfs) == 1 {
-			return selectedTarget{workflow: wfs[0]}, nil
-		}
-		return selectedTarget{requests: reqs}, nil
-	default:
-		return selectedTarget{}, usageError("line %d matched %d entries", sel.line, total)
-	}
-}
-
-func selectWorkflow(doc *restfile.Document, name string) (*restfile.Workflow, error) {
-	if doc == nil || len(doc.Workflows) == 0 {
-		return nil, usageError("no workflows found")
-	}
-	var out []*restfile.Workflow
-	for i := range doc.Workflows {
-		wf := &doc.Workflows[i]
-		if strings.EqualFold(str.Trim(wf.Name), name) {
-			out = append(out, wf)
-		}
-	}
-	switch len(out) {
-	case 0:
-		return nil, usageError("workflow %q not found", name)
-	case 1:
-		return out[0], nil
-	default:
-		return nil, usageError("workflow %q matched %d entries", name, len(out))
-	}
-}
-
-func selectByRequestName(reqs []*restfile.Request, name string) ([]*restfile.Request, error) {
-	var out []*restfile.Request
-	for _, req := range reqs {
-		if strings.EqualFold(str.Trim(req.Metadata.Name), name) {
-			out = append(out, req)
-		}
-	}
-	switch len(out) {
-	case 0:
-		return nil, usageError("request %q not found", name)
-	case 1:
-		return out, nil
-	default:
-		return nil, usageError("request %q matched %d entries", name, len(out))
-	}
-}
-
-func selectByTag(reqs []*restfile.Request, tag string) ([]*restfile.Request, error) {
-	var out []*restfile.Request
-	for _, req := range reqs {
-		for _, item := range req.Metadata.Tags {
-			if strings.EqualFold(str.Trim(item), tag) {
-				out = append(out, req)
-				break
-			}
-		}
-	}
-	if len(out) == 0 {
-		return nil, usageError("tag %q did not match any requests", tag)
-	}
-	return out, nil
-}
-
-func selectRequestsByLine(doc *restfile.Document, line int) []*restfile.Request {
-	if doc == nil || line <= 0 {
-		return nil
-	}
-	out := make([]*restfile.Request, 0, 1)
-	for _, req := range doc.Requests {
-		if req == nil || !lineInRange(line, req.LineRange) {
-			continue
-		}
-		out = append(out, req)
-	}
-	return out
-}
-
-func selectWorkflowsByLine(doc *restfile.Document, line int) []*restfile.Workflow {
-	if doc == nil || line <= 0 {
-		return nil
-	}
-	out := make([]*restfile.Workflow, 0, 1)
-	for i := range doc.Workflows {
-		wf := &doc.Workflows[i]
-		if !lineInRange(line, wf.LineRange) {
-			continue
-		}
-		out = append(out, wf)
-	}
-	return out
-}
-
-func lineInRange(line int, rg restfile.LineRange) bool {
-	if line <= 0 || rg.Start <= 0 {
-		return false
-	}
-	end := rg.End
-	if end < rg.Start {
-		end = rg.Start
-	}
-	return line >= rg.Start && line <= end
 }
 
 func resultFailed(item Result) bool {
@@ -616,29 +408,32 @@ func requestTarget(
 	req *restfile.Request,
 	resp *httpclient.Response,
 ) string {
+	return effectiveURL(resp, requestSourceTarget(req))
+}
+
+func effectiveURL(resp *httpclient.Response, fallback string) string {
 	if resp != nil {
 		if target := str.Trim(resp.EffectiveURL); target != "" {
 			return target
 		}
 	}
-	return requestSourceTarget(req)
+	return fallback
 }
 
 func requestMethod(req *restfile.Request) string {
 	if req == nil {
 		return "REQ"
 	}
-	if req.GRPC != nil {
+	switch {
+	case req.GRPC != nil:
 		return "GRPC"
-	}
-	m := requestMethodValue(req.Method)
-	if req.WebSocket != nil {
+	case req.WebSocket != nil:
 		return "WS"
-	}
-	if req.SSE != nil {
+	case req.SSE != nil:
 		return "SSE"
+	default:
+		return requestMethodValue(req.Method)
 	}
-	return m
 }
 
 func requestMethodValue(method string) string {
@@ -647,21 +442,6 @@ func requestMethodValue(method string) string {
 		return "REQ"
 	}
 	return method
-}
-
-func resultName(item Result) string {
-	name := item.Name
-	if name != "" {
-		return name
-	}
-	target := item.Target
-	if target == "" {
-		return "<unnamed>"
-	}
-	if len(target) > 80 {
-		return target[:77] + "..."
-	}
-	return target
 }
 
 func cloneReq(req *restfile.Request) *restfile.Request {
@@ -876,17 +656,11 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 
 func workflowStepResult(step engine.WorkflowStep) StepResult {
 	target := str.Trim(step.Target)
-	effectiveTarget := target
-	if step.Response != nil {
-		if effective := str.Trim(step.Response.EffectiveURL); effective != "" {
-			effectiveTarget = effective
-		}
-	}
 	return StepResult{
 		Name:            str.Trim(step.Name),
 		Method:          str.Trim(step.Method),
 		Target:          target,
-		EffectiveTarget: effectiveTarget,
+		EffectiveTarget: effectiveURL(step.Response, target),
 		Branch:          str.Trim(step.Branch),
 		Iteration:       step.Iteration,
 		Total:           step.Total,
@@ -1007,170 +781,6 @@ func cloneTests(src []scripts.TestResult) []scripts.TestResult {
 		})
 	}
 	return out
-}
-
-func (r *Report) writeArtifacts(dir string) error {
-	if r == nil {
-		return nil
-	}
-	if dir == "" {
-		return nil
-	}
-	streamsDir := filepath.Join(dir, "streams")
-	tracesDir := filepath.Join(dir, "traces")
-	for i := range r.Results {
-		item := &r.Results[i]
-		if path, err := writeStreamArtifact(
-			streamsDir,
-			i+1,
-			0,
-			resultName(*item),
-			item.Stream,
-			item.transcript,
-		); err != nil {
-			return err
-		} else if item.Stream != nil {
-			item.Stream.TranscriptPath = path
-		}
-		if path, err := writeTraceArtifact(
-			tracesDir,
-			i+1,
-			0,
-			resultName(*item),
-			item.Trace,
-		); err != nil {
-			return err
-		} else if item.Trace != nil {
-			item.Trace.ArtifactPath = path
-		}
-		for j := range item.Steps {
-			step := &item.Steps[j]
-			if path, err := writeStreamArtifact(
-				streamsDir,
-				i+1,
-				j+1,
-				stepName(*step),
-				step.Stream,
-				step.transcript,
-			); err != nil {
-				return err
-			} else if step.Stream != nil {
-				step.Stream.TranscriptPath = path
-			}
-			if path, err := writeTraceArtifact(
-				tracesDir,
-				i+1,
-				j+1,
-				stepName(*step),
-				step.Trace,
-			); err != nil {
-				return err
-			} else if step.Trace != nil {
-				step.Trace.ArtifactPath = path
-			}
-		}
-	}
-	return nil
-}
-
-func writeStreamArtifact(
-	base string,
-	resultIndex int,
-	stepIndex int,
-	name string,
-	stream *StreamInfo,
-	transcript []byte,
-) (string, error) {
-	if stream == nil || len(transcript) == 0 {
-		return "", nil
-	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return "", err
-	}
-	file := fmt.Sprintf("result-%03d", resultIndex)
-	if stepIndex > 0 {
-		file += fmt.Sprintf("-step-%03d", stepIndex)
-	}
-	if slug := streamArtifactSlug(name); slug != "" {
-		file += "-" + slug
-	}
-	if kind := str.LowerTrim(stream.Kind); kind != "" {
-		file += "-" + kind
-	}
-	path := filepath.Join(base, file+".json")
-	if err := os.WriteFile(path, transcript, 0o644); err != nil {
-		return "", fmt.Errorf("write stream artifact: %w", err)
-	}
-	return path, nil
-}
-
-func writeTraceArtifact(
-	base string,
-	resultIndex int,
-	stepIndex int,
-	name string,
-	trace *TraceInfo,
-) (string, error) {
-	if trace == nil || trace.Summary == nil {
-		return "", nil
-	}
-	if err := os.MkdirAll(base, 0o755); err != nil {
-		return "", err
-	}
-	file := fmt.Sprintf("result-%03d", resultIndex)
-	if stepIndex > 0 {
-		file += fmt.Sprintf("-step-%03d", stepIndex)
-	}
-	if slug := streamArtifactSlug(name); slug != "" {
-		file += "-" + slug
-	}
-	path := filepath.Join(base, file+"-trace.json")
-	data, err := json.MarshalIndent(trace.Summary, "", "  ")
-	if err != nil {
-		return "", fmt.Errorf("marshal trace artifact: %w", err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		return "", fmt.Errorf("write trace artifact: %w", err)
-	}
-	return path, nil
-}
-
-func streamArtifactSlug(name string) string {
-	name = str.LowerTrim(name)
-	if name == "" {
-		return ""
-	}
-	var b strings.Builder
-	lastDash := false
-	for _, r := range name {
-		ok := r >= 'a' && r <= 'z' || r >= '0' && r <= '9'
-		if ok {
-			b.WriteRune(r)
-			lastDash = false
-			continue
-		}
-		if lastDash || b.Len() == 0 {
-			continue
-		}
-		b.WriteByte('-')
-		lastDash = true
-	}
-	return strings.Trim(b.String(), "-")
-}
-
-func stepName(step StepResult) string {
-	name := step.Name
-	if name != "" {
-		return name
-	}
-	if env := step.Environment; env != "" {
-		return env
-	}
-	target := step.Target
-	if target != "" {
-		return target
-	}
-	return "<step>"
 }
 
 func stepFailed(step StepResult) bool {

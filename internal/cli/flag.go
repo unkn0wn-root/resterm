@@ -5,7 +5,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func NewFlagSet(name string) *flag.FlagSet {
@@ -57,7 +58,7 @@ func (v trimmedStringValue) String() string {
 
 func (v trimmedStringValue) Set(s string) error {
 	if v.dst != nil {
-		*v.dst = strings.TrimSpace(s)
+		*v.dst = str.Trim(s)
 	}
 	return nil
 }
@@ -66,6 +67,6 @@ func StringVar(fs *flag.FlagSet, dst *string, name, value, usage string) {
 	if fs == nil || dst == nil {
 		return
 	}
-	*dst = strings.TrimSpace(value)
+	*dst = str.Trim(value)
 	fs.Var(trimmedStringValue{dst: dst}, name, usage)
 }

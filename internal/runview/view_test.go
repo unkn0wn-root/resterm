@@ -83,11 +83,13 @@ func TestRenderHTTPPrettyUsesTrackedUnresolvedVarsAndEffectiveTarget(t *testing.
 	if !strings.Contains(out, "Request: GET https://httpbin.org/anything/api/reports") {
 		t.Fatalf("expected effective request target, got %q", out)
 	}
+	if !strings.Contains(out, "Source Target: {{services.api.base}}/reports") {
+		t.Fatalf("expected source target details, got %q", out)
+	}
 	if !strings.Contains(out, "Unresolved template variables: reporting.token") {
 		t.Fatalf("expected tracked unresolved variable warning, got %q", out)
 	}
 	for _, bad := range []string{
-		"services.api.base",
 		"reporting.apiKey",
 		"reporting.sharedSecret",
 	} {

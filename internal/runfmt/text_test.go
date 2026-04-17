@@ -62,3 +62,48 @@ func TestWriteTextStyledColorPreservesPlainText(t *testing.T) {
 		)
 	}
 }
+
+func TestWriteTextIncludesTargetDetailsWhenDifferent(t *testing.T) {
+	rep := &Report{
+		FilePath: "reports.http",
+		Results: []Result{{
+			Kind:            "request",
+			Name:            "reports",
+			Method:          "GET",
+			Target:          "{{services.api.base}}/reports",
+			EffectiveTarget: "https://httpbin.org/anything/api/reports",
+			Status:          StatusPass,
+			Duration:        463 * time.Millisecond,
+			HTTP:            &HTTP{Status: "200 OK", StatusCode: 200},
+			Steps: []Step{{
+				Name:            "dev",
+				Method:          "GET",
+				Target:          "{{services.api.base}}/reports",
+				EffectiveTarget: "https://dev.httpbin.org/anything/api/reports",
+				Status:          StatusPass,
+				Duration:        250 * time.Millisecond,
+				HTTP:            &HTTP{Status: "200 OK", StatusCode: 200},
+			}},
+		}},
+		Total:   1,
+		Passed:  1,
+		Failed:  0,
+		Skipped: 0,
+	}
+
+	var out strings.Builder
+	if err := WriteText(&out, rep); err != nil {
+		t.Fatalf("WriteText(...): %v", err)
+	}
+
+	text := out.String()
+	for _, want := range []string{
+		"Source Target: {{services.api.base}}/reports",
+		"Effective Target: https://httpbin.org/anything/api/reports",
+		"Effective Target: https://dev.httpbin.org/anything/api/reports",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("expected %q in output, got %q", want, text)
+		}
+	}
+}

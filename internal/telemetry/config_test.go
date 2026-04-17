@@ -49,3 +49,19 @@ func TestParseHeaders(t *testing.T) {
 		t.Fatalf("expected nil headers, got %#v (%v)", headers, err)
 	}
 }
+
+func TestConfigCloneClonesHeaders(t *testing.T) {
+	src := Config{
+		Endpoint: "localhost:4317",
+		Headers: map[string]string{
+			"x-api-key": "secret",
+		},
+	}
+
+	clone := src.Clone()
+	clone.Headers["x-api-key"] = "changed"
+
+	if src.Headers["x-api-key"] != "secret" {
+		t.Fatalf("source headers mutated through clone: %#v", src.Headers)
+	}
+}
