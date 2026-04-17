@@ -257,7 +257,7 @@ func (e *Engine) PrepareCommandAuth(
 	if err != nil {
 		return authcmd.Prepared{}, err
 	}
-	return ac.Prepare(e.envName(env), cfg)
+	return ac.Prepare(e.cmdScope(doc, auth, env), cfg)
 }
 
 func (e *Engine) EnsureOAuth(
@@ -334,10 +334,7 @@ func (e *Engine) BuildCommandAuthConfig(
 		return cfg, err
 	}
 
-	dir := ""
-	if path := e.filePath(doc); path != "" {
-		dir = filepath.Dir(path)
-	}
+	dir := e.cmdDir(doc, auth)
 	out, err := authcmd.Parse(pm, dir)
 	if err != nil {
 		return out, err
@@ -346,6 +343,33 @@ func (e *Engine) BuildCommandAuthConfig(
 		return out, err
 	}
 	return out.WithBaseTimeout(timeout), nil
+}
+
+func (e *Engine) cmdScope(doc *restfile.Document, auth *restfile.AuthSpec, env string) string {
+	ws := e.cfg.WorkspaceRoot
+	if ws == "" {
+		ws = e.cmdDir(doc, auth)
+	} else {
+		ws = filepath.Clean(ws)
+		if abs, err := filepath.Abs(ws); err == nil {
+			ws = abs
+		}
+	}
+	return authcmd.Scope(e.envName(env), ws)
+}
+
+func (e *Engine) cmdDir(doc *restfile.Document, auth *restfile.AuthSpec) string {
+	if path := e.srcPath(doc, auth); path != "" {
+		return filepath.Dir(path)
+	}
+	return ""
+}
+
+func (e *Engine) srcPath(doc *restfile.Document, auth *restfile.AuthSpec) string {
+	if auth != nil && auth.SourcePath != "" {
+		return auth.SourcePath
+	}
+	return e.filePath(doc)
 }
 
 func (e *Engine) BuildOAuthConfig(

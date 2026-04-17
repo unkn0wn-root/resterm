@@ -7,6 +7,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
 
+func Scope(env, ws string) string {
+	var b strings.Builder
+	appendCachePart(&b, env)
+	appendCachePart(&b, ws)
+	return b.String()
+}
+
 func cacheEntryKey(env string, cfg Config) string {
 	if !cfg.hasCacheKey() {
 		return ""

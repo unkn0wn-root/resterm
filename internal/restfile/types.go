@@ -35,6 +35,9 @@ type Constant struct {
 type AuthSpec struct {
 	Type   string
 	Params map[string]string
+	// SourcePath tracks the file that defined this auth so relative command auth
+	// execution stays anchored to the auth definition, not the consuming request.
+	SourcePath string
 }
 
 type AuthScope int
@@ -46,10 +49,11 @@ const (
 )
 
 type AuthProfile struct {
-	Scope AuthScope
-	Name  string
-	Spec  AuthSpec
-	Line  int
+	Scope      AuthScope
+	Name       string
+	Spec       AuthSpec
+	Line       int
+	SourcePath string
 }
 
 type ScriptBlock struct {
@@ -293,6 +297,7 @@ type PatchProfile struct {
 	Expression string
 	Line       int
 	Col        int
+	SourcePath string
 }
 
 type Request struct {

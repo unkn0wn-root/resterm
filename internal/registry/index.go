@@ -404,6 +404,9 @@ func (ix *Index) DefaultAuth(doc *restfile.Document) (*restfile.AuthProfile, boo
 
 func cloneAuth(v restfile.AuthProfile) restfile.AuthProfile {
 	v.Spec = restfile.CloneAuthSpecValue(v.Spec)
+	if v.Spec.SourcePath == "" {
+		v.Spec.SourcePath = v.SourcePath
+	}
 	return v
 }
 
