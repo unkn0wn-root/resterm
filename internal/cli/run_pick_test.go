@@ -137,3 +137,12 @@ func TestRunRequestPickerAppendDigitResetsInvalidJump(t *testing.T) {
 		t.Fatalf("expected no validation note after reset, got %q", p.note)
 	}
 }
+
+func TestRunRequestPickerViewHandlesEmptyChoices(t *testing.T) {
+	p := newRunRequestPickerModel("many.http", nil, termcolor.TrueColor())
+
+	out := xansi.Strip(p.View())
+	if !strings.Contains(out, "No requests found.") {
+		t.Fatalf("expected empty picker message, got %q", out)
+	}
+}

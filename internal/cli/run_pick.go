@@ -164,8 +164,5 @@ func reqLine(req *restfile.Request) int {
 	if req == nil {
 		return 0
 	}
-	if req.LineRange.Start > 0 {
-		return req.LineRange.Start
-	}
-	return 0
+	return req.LineRange.Start
 }
