@@ -11,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -69,6 +72,39 @@ func TestRunSingleRequestDefaultSelection(t *testing.T) {
 	}
 }
 
+func TestRequestRunResultUsesExplainMissingVarsAndEffectiveURL(t *testing.T) {
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "{{services.api.base}}/reports",
+	}
+
+	item := requestRunResult(req, engine.RequestResult{
+		Response: &httpclient.Response{
+			Status:       "200 OK",
+			StatusCode:   200,
+			EffectiveURL: "https://httpbin.org/anything/api/reports",
+		},
+		Explain: &xplain.Report{
+			Vars: []xplain.Var{
+				{Name: "services.api.base", Missing: false},
+				{Name: "reporting.apiKey", Missing: false},
+				{Name: "reporting.token", Missing: true},
+			},
+		},
+	}, "dev")
+
+	if item.Target != "https://httpbin.org/anything/api/reports" {
+		t.Fatalf("expected effective target, got %q", item.Target)
+	}
+	got, ok := item.UnresolvedTemplateVars()
+	if !ok {
+		t.Fatalf("expected unresolved variable metadata")
+	}
+	if len(got) != 1 || got[0] != "reporting.token" {
+		t.Fatalf("expected only reporting.token to remain unresolved, got %v", got)
+	}
+}
+
 func TestRunSelectRequestByName(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")
@@ -118,6 +154,59 @@ func TestRunSelectRequestByName(t *testing.T) {
 	}
 	if seen != "https://example.com/two" {
 		t.Fatalf("expected second request, got %q", seen)
+	}
+}
+
+func TestRunSelectRequestByLine(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "many.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"GET https://example.com/one",
+		"X-Test: 1",
+		"",
+		"### Two",
+		"# @name two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var seen string
+	client := httpclient.NewClient(nil)
+	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				seen = req.URL.String()
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{Line: 4},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Total != 1 {
+		t.Fatalf("expected one result, got %+v", rep)
+	}
+	if seen != "https://example.com/one" {
+		t.Fatalf("expected first request, got %q", seen)
 	}
 }
 
@@ -326,7 +415,35 @@ func TestRunRejectsMultipleRequestsWithoutSelector(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected selector error")
 	}
-	if !strings.Contains(err.Error(), "use --request, --tag, or --all") {
+	if !strings.Contains(err.Error(), "use --request, --tag, --line, or --all") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunRejectsLineSelectorConflict(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "many.http")
+	src := strings.Join([]string{
+		"### One",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	_, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Select:        Select{Request: "two", Line: 5},
+	})
+	if err == nil {
+		t.Fatalf("expected selector conflict")
+	}
+	if !strings.Contains(err.Error(), "--line cannot be combined") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -460,6 +577,75 @@ func TestRunWorkflowByName(t *testing.T) {
 		t.Fatalf("expected workflow step output, got %q", text)
 	}
 
+}
+
+func TestRunWorkflowByLine(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "workflow.http")
+	src := strings.Join([]string{
+		"# @workflow demo",
+		"# @step Login using=login expect.statuscode=200",
+		"# @step Use using=use expect.statuscode=200",
+		"",
+		"### Login",
+		"# @name login",
+		"# @capture global auth.token {{response.json.token}}",
+		"GET https://example.com/login",
+		"",
+		"### Use",
+		"# @name use",
+		"GET https://example.com/use",
+		"Authorization: Bearer {{auth.token}}",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var auth string
+	client := httpclient.NewClient(nil)
+	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				hdr := make(http.Header)
+				body := "{}"
+				if req.URL.Path == "/login" {
+					hdr.Set("Content-Type", "application/json")
+					body = `{"token":"wf-123"}`
+				}
+				if req.URL.Path == "/use" {
+					auth = req.Header.Get("Authorization")
+				}
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     hdr,
+					Body:       io.NopCloser(strings.NewReader(body)),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{Line: 2},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Total != 1 || rep.Passed != 1 {
+		t.Fatalf("unexpected report counts: %+v", rep)
+	}
+	if auth != "Bearer wf-123" {
+		t.Fatalf("expected workflow capture to feed next step, got %q", auth)
+	}
+	if len(rep.Results) != 1 || rep.Results[0].Kind != ResultKindWorkflow {
+		t.Fatalf("expected workflow result, got %+v", rep.Results)
+	}
 }
 
 func TestRunRequestForEach(t *testing.T) {

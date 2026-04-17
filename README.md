@@ -24,6 +24,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
 - **RestermScript** - a small, safe expression language purpose.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
+- **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -423,3 +424,4 @@ Customize colors and keybindings via `themes/*.toml` and `bindings.toml` or `bin
 ## Documentation
 
 The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings, and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
+The command-line guide for `resterm run`, importers, collection tooling, and history maintenance lives in [`docs/cli.md`](./docs/cli.md).

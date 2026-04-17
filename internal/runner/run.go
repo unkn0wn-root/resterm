@@ -9,11 +9,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/headless"
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -29,6 +31,7 @@ type Select struct {
 	Workflow string
 	Tag      string
 	All      bool
+	Line     int
 }
 
 type Options struct {
@@ -102,28 +105,31 @@ const (
 )
 
 type Result struct {
-	Kind        ResultKind
-	Name        string
-	Method      string
-	Target      string
-	Environment string
-	Summary     string
-	Duration    time.Duration
-	Passed      bool
-	Canceled    bool
-	Response    *httpclient.Response
-	GRPC        *grpcclient.Response
-	Err         error
-	Tests       []scripts.TestResult
-	ScriptErr   error
-	Skipped     bool
-	SkipReason  string
-	Stream      *StreamInfo
-	Trace       *TraceInfo
-	Compare     *CompareInfo
-	Profile     *ProfileInfo
-	Steps       []StepResult
-	transcript  []byte
+	Kind                      ResultKind
+	Name                      string
+	Method                    string
+	Target                    string
+	Environment               string
+	Summary                   string
+	Duration                  time.Duration
+	Passed                    bool
+	Canceled                  bool
+	Response                  *httpclient.Response
+	GRPC                      *grpcclient.Response
+	Err                       error
+	Tests                     []scripts.TestResult
+	ScriptErr                 error
+	Skipped                   bool
+	SkipReason                string
+	Stream                    *StreamInfo
+	Trace                     *TraceInfo
+	Compare                   *CompareInfo
+	Profile                   *ProfileInfo
+	Steps                     []StepResult
+	requestText               string
+	transcript                []byte
+	unresolvedTemplateVars    []string
+	unresolvedTemplateVarsSet bool
 }
 
 type CompareInfo struct {
@@ -180,6 +186,7 @@ type StepResult struct {
 	Canceled    bool
 	Stream      *StreamInfo
 	Trace       *TraceInfo
+	requestText string
 	transcript  []byte
 }
 
@@ -255,20 +262,18 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 		StartedAt: start,
 	}
 
-	if name := strings.TrimSpace(opts.Select.Workflow); name != "" {
-		if opts.Select.All || strings.TrimSpace(opts.Select.Request) != "" ||
-			strings.TrimSpace(opts.Select.Tag) != "" {
-			return nil, usageError("--workflow cannot be combined with --request, --tag, or --all")
-		}
+	sel := newSelectSpec(opts.Select)
+	target, err := selectTarget(doc, sel)
+	if err != nil {
+		return nil, err
+	}
+
+	if target.workflow != nil {
 		if opts.Profile || len(opts.CompareTargets) > 0 {
 			return nil, usageError("--workflow cannot be combined with --compare or --profile")
 		}
-		wf, err := selectWorkflow(doc, name)
-		if err != nil {
-			return nil, err
-		}
 		rep.Results = make([]Result, 0, 1)
-		out, err := exec.ExecuteWorkflowContext(ctx, doc, wf, opts.EnvName)
+		out, err := exec.ExecuteWorkflowContext(ctx, doc, target.workflow, opts.EnvName)
 		if err != nil {
 			return nil, err
 		}
@@ -284,12 +289,8 @@ func RunContext(ctx context.Context, opts Options) (*Report, error) {
 		return rep, nil
 	}
 
-	reqs, err := selectRequests(doc, opts.Select)
-	if err != nil {
-		return nil, err
-	}
-	rep.Results = make([]Result, 0, len(reqs))
-	for _, req := range reqs {
+	rep.Results = make([]Result, 0, len(target.requests))
+	for _, req := range target.requests {
 		runReq := cloneReq(req)
 		if opts.Profile && runReq.Metadata.Profile == nil {
 			runReq.Metadata.Profile = &restfile.ProfileSpec{}
@@ -327,6 +328,29 @@ func usageError(format string, args ...any) error {
 	return UsageError{err: fmt.Errorf(format, args...)}
 }
 
+type selectSpec struct {
+	request  string
+	workflow string
+	tag      string
+	all      bool
+	line     int
+}
+
+type selectedTarget struct {
+	requests []*restfile.Request
+	workflow *restfile.Workflow
+}
+
+func newSelectSpec(sel Select) selectSpec {
+	return selectSpec{
+		request:  strings.TrimSpace(sel.Request),
+		workflow: strings.TrimSpace(sel.Workflow),
+		tag:      strings.TrimSpace(sel.Tag),
+		all:      sel.All,
+		line:     sel.Line,
+	}
+}
+
 func (r *Report) add(item Result) {
 	r.Results = append(r.Results, item)
 	r.Total++
@@ -352,34 +376,87 @@ func (r *Report) WriteText(w io.Writer) error {
 	return runfmt.WriteText(w, &rep)
 }
 
-func selectRequests(doc *restfile.Document, sel Select) ([]*restfile.Request, error) {
+func selectTarget(doc *restfile.Document, sel selectSpec) (selectedTarget, error) {
+	if sel.line > 0 {
+		return selectByLine(doc, sel)
+	}
+	if sel.workflow != "" {
+		if sel.all || sel.request != "" || sel.tag != "" {
+			return selectedTarget{}, usageError("--workflow cannot be combined with --request, --tag, or --all")
+		}
+		wf, err := selectWorkflow(doc, sel.workflow)
+		if err != nil {
+			return selectedTarget{}, err
+		}
+		return selectedTarget{workflow: wf}, nil
+	}
+	reqs, err := selectRequests(doc, sel)
+	if err != nil {
+		return selectedTarget{}, err
+	}
+	return selectedTarget{requests: reqs}, nil
+}
+
+func selectRequests(doc *restfile.Document, sel selectSpec) ([]*restfile.Request, error) {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil, usageError("no requests found")
 	}
 
-	if sel.All && (strings.TrimSpace(sel.Request) != "" || strings.TrimSpace(sel.Tag) != "") {
+	if sel.all && sel.line > 0 {
+		return nil, usageError("--all cannot be combined with --line")
+	}
+	if sel.all && (sel.request != "" || sel.tag != "") {
 		return nil, usageError("--all cannot be combined with --request or --tag")
 	}
-	if strings.TrimSpace(sel.Request) != "" && strings.TrimSpace(sel.Tag) != "" {
+	if sel.request != "" && sel.line > 0 {
+		return nil, usageError("--request cannot be combined with --line")
+	}
+	if sel.tag != "" && sel.line > 0 {
+		return nil, usageError("--tag cannot be combined with --line")
+	}
+	if sel.request != "" && sel.tag != "" {
 		return nil, usageError("--request cannot be combined with --tag")
 	}
 
-	if sel.All {
+	if sel.all {
 		return append([]*restfile.Request(nil), doc.Requests...), nil
 	}
 
-	if name := strings.TrimSpace(sel.Request); name != "" {
-		return selectByRequestName(doc.Requests, name)
+	if sel.request != "" {
+		return selectByRequestName(doc.Requests, sel.request)
 	}
 
-	if tag := strings.TrimSpace(sel.Tag); tag != "" {
-		return selectByTag(doc.Requests, tag)
+	if sel.tag != "" {
+		return selectByTag(doc.Requests, sel.tag)
 	}
 
 	if len(doc.Requests) == 1 {
 		return []*restfile.Request{doc.Requests[0]}, nil
 	}
-	return nil, usageError("multiple requests found; use --request, --tag, or --all")
+	return nil, usageError("multiple requests found; use --request, --tag, --line, or --all")
+}
+
+func selectByLine(doc *restfile.Document, sel selectSpec) (selectedTarget, error) {
+	if sel.workflow != "" || sel.request != "" || sel.tag != "" || sel.all {
+		return selectedTarget{}, usageError("--line cannot be combined with --workflow, --request, --tag, or --all")
+	}
+	if sel.line <= 0 {
+		return selectedTarget{}, usageError("--line must be greater than zero")
+	}
+
+	reqs := selectRequestsByLine(doc, sel.line)
+	wfs := selectWorkflowsByLine(doc, sel.line)
+	switch total := len(reqs) + len(wfs); total {
+	case 0:
+		return selectedTarget{}, usageError("line %d did not match any request or workflow", sel.line)
+	case 1:
+		if len(wfs) == 1 {
+			return selectedTarget{workflow: wfs[0]}, nil
+		}
+		return selectedTarget{requests: reqs}, nil
+	default:
+		return selectedTarget{}, usageError("line %d matched %d entries", sel.line, total)
+	}
 }
 
 func selectWorkflow(doc *restfile.Document, name string) (*restfile.Workflow, error) {
@@ -436,6 +513,46 @@ func selectByTag(reqs []*restfile.Request, tag string) ([]*restfile.Request, err
 	return out, nil
 }
 
+func selectRequestsByLine(doc *restfile.Document, line int) []*restfile.Request {
+	if doc == nil || line <= 0 {
+		return nil
+	}
+	out := make([]*restfile.Request, 0, 1)
+	for _, req := range doc.Requests {
+		if req == nil || !lineInRange(line, req.LineRange) {
+			continue
+		}
+		out = append(out, req)
+	}
+	return out
+}
+
+func selectWorkflowsByLine(doc *restfile.Document, line int) []*restfile.Workflow {
+	if doc == nil || line <= 0 {
+		return nil
+	}
+	out := make([]*restfile.Workflow, 0, 1)
+	for i := range doc.Workflows {
+		wf := &doc.Workflows[i]
+		if !lineInRange(line, wf.LineRange) {
+			continue
+		}
+		out = append(out, wf)
+	}
+	return out
+}
+
+func lineInRange(line int, rg restfile.LineRange) bool {
+	if line <= 0 || rg.Start <= 0 {
+		return false
+	}
+	end := rg.End
+	if end < rg.Start {
+		end = rg.Start
+	}
+	return line >= rg.Start && line <= end
+}
+
 func resultFailed(item Result) bool {
 	if item.Canceled || item.Err != nil || item.ScriptErr != nil || traceFailed(item.Trace) {
 		return true
@@ -470,10 +587,10 @@ func requestName(req *restfile.Request) string {
 	if name != "" {
 		return name
 	}
-	return requestTarget(req)
+	return requestSourceTarget(req)
 }
 
-func requestTarget(req *restfile.Request) string {
+func requestSourceTarget(req *restfile.Request) string {
 	if req == nil {
 		return ""
 	}
@@ -486,6 +603,18 @@ func requestTarget(req *restfile.Request) string {
 		}
 	}
 	return strings.TrimSpace(req.URL)
+}
+
+func requestTarget(
+	req *restfile.Request,
+	resp *httpclient.Response,
+) string {
+	if resp != nil {
+		if target := strings.TrimSpace(resp.EffectiveURL); target != "" {
+			return target
+		}
+	}
+	return requestSourceTarget(req)
 }
 
 func requestMethod(req *restfile.Request) string {
@@ -560,7 +689,7 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		Kind:        ResultKindRequest,
 		Name:        requestName(runReq),
 		Method:      requestMethod(runReq),
-		Target:      requestTarget(runReq),
+		Target:      requestTarget(runReq, res.Response),
 		Environment: envName,
 		Response:    res.Response,
 		GRPC:        res.GRPC,
@@ -571,7 +700,11 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		SkipReason:  strings.TrimSpace(res.SkipReason),
 		Stream:      streamResult(res.Stream),
 		Trace:       traceResult(res.Response),
+		requestText: strings.TrimSpace(res.RequestText),
 		transcript:  bytes.Clone(res.Transcript),
+	}
+	if res.Explain != nil {
+		item.SetUnresolvedTemplateVars(explainMissingTemplateVars(res.Explain))
 	}
 	item.Passed = !item.Skipped && !requestFailed(item)
 	return item
@@ -598,7 +731,7 @@ func compareRunResult(req *restfile.Request, res engine.CompareResult, fallbackE
 		Kind:        ResultKindCompare,
 		Name:        requestName(req),
 		Method:      "COMPARE",
-		Target:      requestTarget(req),
+		Target:      requestSourceTarget(req),
 		Environment: envName,
 		Summary:     strings.TrimSpace(res.Summary),
 		Duration:    compareDuration(res.Rows),
@@ -629,7 +762,7 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 	return StepResult{
 		Name:        strings.TrimSpace(row.Environment),
 		Method:      requestMethod(req),
-		Target:      requestTarget(req),
+		Target:      requestTarget(req, row.Response),
 		Environment: strings.TrimSpace(row.Environment),
 		Summary:     strings.TrimSpace(row.Summary),
 		Duration:    row.Duration,
@@ -644,6 +777,7 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 		Canceled:    row.Canceled,
 		Stream:      streamResult(row.Stream),
 		Trace:       traceResult(row.Response),
+		requestText: "",
 		transcript:  bytes.Clone(row.Transcript),
 	}
 }
@@ -657,7 +791,7 @@ func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackE
 		Kind:        ResultKindProfile,
 		Name:        requestName(req),
 		Method:      "PROFILE",
-		Target:      requestTarget(req),
+		Target:      requestSourceTarget(req),
 		Environment: envName,
 		Summary:     strings.TrimSpace(res.Summary),
 		Duration:    res.Duration,
@@ -744,27 +878,58 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 }
 
 func workflowStepResult(step engine.WorkflowStep) StepResult {
-	return StepResult{
-		Name:       strings.TrimSpace(step.Name),
-		Method:     strings.TrimSpace(step.Method),
-		Target:     strings.TrimSpace(step.Target),
-		Branch:     strings.TrimSpace(step.Branch),
-		Iteration:  step.Iteration,
-		Total:      step.Total,
-		Summary:    strings.TrimSpace(step.Summary),
-		Duration:   step.Duration,
-		Response:   step.Response,
-		GRPC:       step.GRPC,
-		Err:        step.Err,
-		Tests:      cloneTests(step.Tests),
-		ScriptErr:  step.ScriptErr,
-		Passed:     step.Success,
-		Skipped:    step.Skipped,
-		Canceled:   step.Canceled,
-		Stream:     streamResult(step.Stream),
-		Trace:      traceResult(step.Response),
-		transcript: bytes.Clone(step.Transcript),
+	target := strings.TrimSpace(step.Target)
+	if step.Response != nil {
+		if effective := strings.TrimSpace(step.Response.EffectiveURL); effective != "" {
+			target = effective
+		}
 	}
+	return StepResult{
+		Name:        strings.TrimSpace(step.Name),
+		Method:      strings.TrimSpace(step.Method),
+		Target:      target,
+		Branch:      strings.TrimSpace(step.Branch),
+		Iteration:   step.Iteration,
+		Total:       step.Total,
+		Summary:     strings.TrimSpace(step.Summary),
+		Duration:    step.Duration,
+		Response:    step.Response,
+		GRPC:        step.GRPC,
+		Err:         step.Err,
+		Tests:       cloneTests(step.Tests),
+		ScriptErr:   step.ScriptErr,
+		Passed:      step.Success,
+		Skipped:     step.Skipped,
+		Canceled:    step.Canceled,
+		Stream:      streamResult(step.Stream),
+		Trace:       traceResult(step.Response),
+		requestText: "",
+		transcript:  bytes.Clone(step.Transcript),
+	}
+}
+
+func explainMissingTemplateVars(rep *xplain.Report) []string {
+	if rep == nil || len(rep.Vars) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(rep.Vars))
+	out := make([]string, 0, len(rep.Vars))
+	for _, item := range rep.Vars {
+		if !item.Missing {
+			continue
+		}
+		name := strings.TrimSpace(item.Name)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func traceResult(resp *httpclient.Response) *TraceInfo {
