@@ -39,7 +39,10 @@ Resterm ships with a headless engine that can run requests, workflows, and asser
 
 ## CLI
 
-Resterm includes a built-in CLI runner (`resterm run`) for executing requests, workflows, and assertions directly from the terminal.
+You can quickly run resterm .http files directly from the terminal just like with curl/hurl.
+Resterm includes a built-in CLI runner (`resterm run`) for executing requests, workflows, assertions and tests.
+
+Note that this is something else that headless runner. Headless is targeting CI/CD env. so the funcionality is more around tests while `resterm run` is more like resterm but without the TUI.
 
 See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
 
