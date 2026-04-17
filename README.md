@@ -37,6 +37,12 @@ Resterm ships with a headless engine that can run requests, workflows, and asser
 > [!NOTE]
 > If you want to run Resterm in your CI/CD - Check out runner [resterm-runner](https://github.com/unkn0wn-root/resterm-runner)
 
+## CLI
+
+Resterm includes a built-in CLI runner (`resterm run`) for executing requests, workflows, and assertions directly from the terminal.
+
+See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
+
 ## Screenshot tour
 
 <details>
