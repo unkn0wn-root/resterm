@@ -16,14 +16,15 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 		Version: "  v1  ",
 		EnvName: "  dev  ",
 		Results: []Result{{
-			Kind:        ResultKindCompare,
-			Name:        "  cmp  ",
-			Method:      "  compare  ",
-			Target:      "  https://example.com  ",
-			Environment: "  dev  ",
-			Summary:     "  ok  ",
-			Passed:      true,
-			SkipReason:  "  skipped  ",
+			Kind:            ResultKindCompare,
+			Name:            "  cmp  ",
+			Method:          "  compare  ",
+			Target:          "  https://example.com  ",
+			EffectiveTarget: "  https://api.example.com  ",
+			Environment:     "  dev  ",
+			Summary:         "  ok  ",
+			Passed:          true,
+			SkipReason:      "  skipped  ",
 			Response: &httpclient.Response{
 				Status: "  200 OK  ",
 				Proto:  "  HTTP/1.1  ",
@@ -55,14 +56,15 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 				ArtifactPath: "  trace.json  ",
 			},
 			Steps: []StepResult{{
-				Name:        "  step  ",
-				Method:      "  grpc  ",
-				Target:      "  /svc.Method  ",
-				Environment: "  dev  ",
-				Branch:      "  if-true  ",
-				Summary:     "  ok  ",
-				Passed:      true,
-				SkipReason:  "  skipped  ",
+				Name:            "  step  ",
+				Method:          "  grpc  ",
+				Target:          "  /svc.Method  ",
+				EffectiveTarget: "  api.example.com:443  ",
+				Environment:     "  dev  ",
+				Branch:          "  if-true  ",
+				Summary:         "  ok  ",
+				Passed:          true,
+				SkipReason:      "  skipped  ",
 				GRPC: &grpcclient.Response{
 					StatusCode:    codes.OK,
 					StatusMessage: "  ok  ",
@@ -99,6 +101,7 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 
 	res := got.Results[0]
 	if res.Name != "cmp" || res.Method != "compare" || res.Target != "https://example.com" ||
+		res.EffectiveTarget != "https://api.example.com" ||
 		res.Environment != "dev" || res.Summary != "ok" || res.SkipReason != "skipped" {
 		t.Fatalf("expected result strings trimmed, got %+v", res)
 	}
@@ -128,6 +131,7 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 
 	step := res.Steps[0]
 	if step.Name != "step" || step.Method != "grpc" || step.Target != "/svc.Method" ||
+		step.EffectiveTarget != "api.example.com:443" ||
 		step.Environment != "dev" || step.Branch != "if-true" || step.Summary != "ok" ||
 		step.SkipReason != "skipped" {
 		t.Fatalf("expected step strings trimmed, got %+v", step)

@@ -147,19 +147,26 @@ func renderRequest(res runner.Result, opt Options) string {
 	return bodyfmt.JoinSections(summary, issues, warnings, headers, body)
 }
 
+type summaryField struct {
+	label string
+	value string
+	tone  tone
+}
+
 func requestSummary(res runner.Result, st styler) string {
-	fields := []struct {
-		label string
-		value string
-		tone  tone
-	}{
+	fields := []summaryField{
 		{"Name", str.Trim(res.Name), toneValue},
 		{"Request", requestLine(res), toneValue},
-		{"Environment", str.Trim(res.Environment), toneValue},
-		{"Status", statusText(res), statusTone(res)},
-		{"Duration", durationText(res), toneDur},
-		{"Content-Length", contentLengthText(res), toneValue},
 	}
+	if sourceTarget := requestSourceTargetText(res); sourceTarget != "" {
+		fields = append(fields, summaryField{"Source Target", sourceTarget, toneValue})
+	}
+	fields = append(fields,
+		summaryField{"Environment", str.Trim(res.Environment), toneValue},
+		summaryField{"Status", statusText(res), statusTone(res)},
+		summaryField{"Duration", durationText(res), toneDur},
+		summaryField{"Content-Length", contentLengthText(res), toneValue},
+	)
 	var lines []string
 	for _, f := range fields {
 		if f.value != "" {
@@ -224,11 +231,8 @@ func testsText(res runner.Result, st styler) string {
 }
 
 func testBadge(test scripts.TestResult) (string, bool) {
-	switch test.Passed {
-	case true:
+	if test.Passed {
 		return "[PASS]", true
-	case false:
-		return "[FAIL]", false
 	}
 	return "[FAIL]", false
 }
@@ -385,6 +389,15 @@ func requestLine(res runner.Result) string {
 		return method
 	}
 	return method + " " + target
+}
+
+func requestSourceTargetText(res runner.Result) string {
+	target := str.Trim(res.Target)
+	effective := str.Trim(res.EffectiveTarget)
+	if target == "" || effective == "" || target == effective {
+		return ""
+	}
+	return target
 }
 
 func statusText(res runner.Result) string {

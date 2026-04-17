@@ -25,48 +25,50 @@ type Report struct {
 }
 
 type Result struct {
-	Kind        string
-	Name        string
-	Method      string
-	Target      string
-	Environment string
-	Status      Status
-	Summary     string
-	Duration    time.Duration
-	Canceled    bool
-	SkipReason  string
-	Error       string
-	ScriptError string
-	HTTP        *HTTP
-	GRPC        *GRPC
-	Stream      *Stream
-	Trace       *Trace
-	Tests       []Test
-	Compare     *Compare
-	Profile     *Profile
-	Steps       []Step
+	Kind            string
+	Name            string
+	Method          string
+	Target          string
+	EffectiveTarget string
+	Environment     string
+	Status          Status
+	Summary         string
+	Duration        time.Duration
+	Canceled        bool
+	SkipReason      string
+	Error           string
+	ScriptError     string
+	HTTP            *HTTP
+	GRPC            *GRPC
+	Stream          *Stream
+	Trace           *Trace
+	Tests           []Test
+	Compare         *Compare
+	Profile         *Profile
+	Steps           []Step
 }
 
 type Step struct {
-	Name        string
-	Method      string
-	Target      string
-	Environment string
-	Branch      string
-	Iteration   int
-	Total       int
-	Status      Status
-	Summary     string
-	Duration    time.Duration
-	Canceled    bool
-	SkipReason  string
-	Error       string
-	ScriptError string
-	HTTP        *HTTP
-	GRPC        *GRPC
-	Stream      *Stream
-	Trace       *Trace
-	Tests       []Test
+	Name            string
+	Method          string
+	Target          string
+	EffectiveTarget string
+	Environment     string
+	Branch          string
+	Iteration       int
+	Total           int
+	Status          Status
+	Summary         string
+	Duration        time.Duration
+	Canceled        bool
+	SkipReason      string
+	Error           string
+	ScriptError     string
+	HTTP            *HTTP
+	GRPC            *GRPC
+	Stream          *Stream
+	Trace           *Trace
+	Tests           []Test
 }
 
 type HTTP struct {

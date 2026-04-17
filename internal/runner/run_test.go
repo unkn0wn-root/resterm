@@ -1033,6 +1033,49 @@ func TestReportWriteJSON(t *testing.T) {
 	}
 }
 
+func TestReportWriteJSONIncludesEffectiveTargetWhenDifferent(t *testing.T) {
+	rep := &Report{
+		Results: []Result{{
+			Kind:            ResultKindRequest,
+			Name:            "reports",
+			Method:          "GET",
+			Target:          "{{services.api.base}}/reports",
+			EffectiveTarget: "https://httpbin.org/anything/api/reports",
+			Passed:          true,
+			Response: &httpclient.Response{
+				Status:       "200 OK",
+				StatusCode:   http.StatusOK,
+				Proto:        "HTTP/1.1",
+				EffectiveURL: "https://httpbin.org/anything/api/reports",
+			},
+		}},
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var got struct {
+		Results []struct {
+			Target          string `json:"target"`
+			EffectiveTarget string `json:"effectiveTarget"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if len(got.Results) != 1 {
+		t.Fatalf("expected one result, got %+v", got.Results)
+	}
+	if got.Results[0].Target != "{{services.api.base}}/reports" {
+		t.Fatalf("unexpected target: %+v", got.Results[0])
+	}
+	if got.Results[0].EffectiveTarget != "https://httpbin.org/anything/api/reports" {
+		t.Fatalf("unexpected effective target: %+v", got.Results[0])
+	}
+}
+
 func TestWorkflowWriteJSONIncludesSteps(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "workflow-json.http")

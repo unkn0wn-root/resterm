@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func reportFileLabel(path string) string {
@@ -75,6 +77,23 @@ func resultName(res Result) string {
 		return target[:77] + "..."
 	}
 	return target
+}
+
+func targetDetails(target, effective string) (string, string, bool) {
+	target = str.Trim(target)
+	effective = str.Trim(effective)
+	if target == "" || effective == "" || target == effective {
+		return "", "", false
+	}
+	return target, effective, true
+}
+
+func effectiveTargetValue(target, effective string) string {
+	_, resolved, ok := targetDetails(target, effective)
+	if !ok {
+		return ""
+	}
+	return resolved
 }
 
 func stepName(step Step) string {

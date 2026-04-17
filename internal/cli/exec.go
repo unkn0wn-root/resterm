@@ -24,9 +24,6 @@ type ExecFlags struct {
 	Follow            bool
 	ProxyURL          string
 	Recursive         bool
-	TraceOTEndpoint   string
-	TraceOTInsecure   bool
-	TraceOTService    string
 	CompareTargetsRaw string
 	CompareBaseline   string
 
@@ -50,12 +47,9 @@ type ExecConfig struct {
 func NewExecFlags() ExecFlags {
 	tc := telemetry.ConfigFromEnv(os.Getenv)
 	return ExecFlags{
-		Timeout:         30 * time.Second,
-		Follow:          true,
-		TraceOTEndpoint: tc.Endpoint,
-		TraceOTInsecure: tc.Insecure,
-		TraceOTService:  tc.ServiceName,
-		telemetry:       tc,
+		Timeout:   30 * time.Second,
+		Follow:    true,
+		telemetry: tc,
 	}
 }
 
@@ -77,26 +71,7 @@ func (f *ExecFlags) Bind(fs *flag.FlagSet) {
 		false,
 		"(deprecated) Recursively scan workspace for request files",
 	)
-	StringVar(
-		fs,
-		&f.TraceOTEndpoint,
-		"trace-otel-endpoint",
-		f.TraceOTEndpoint,
-		"OTLP collector endpoint used when @trace is enabled",
-	)
-	fs.BoolVar(
-		&f.TraceOTInsecure,
-		"trace-otel-insecure",
-		f.TraceOTInsecure,
-		"Disable TLS for OTLP trace export",
-	)
-	StringVar(
-		fs,
-		&f.TraceOTService,
-		"trace-otel-service",
-		f.TraceOTService,
-		"Override service.name resource attribute for exported spans",
-	)
+	f.BindTelemetryFlags(fs)
 	StringVar(
 		fs,
 		&f.CompareTargetsRaw,
@@ -113,15 +88,38 @@ func (f *ExecFlags) Bind(fs *flag.FlagSet) {
 	)
 }
 
+func (f *ExecFlags) BindTelemetryFlags(fs *flag.FlagSet) {
+	if fs == nil || f == nil {
+		return
+	}
+	StringVar(
+		fs,
+		&f.telemetry.Endpoint,
+		"trace-otel-endpoint",
+		f.telemetry.Endpoint,
+		"OTLP collector endpoint used when @trace is enabled",
+	)
+	fs.BoolVar(
+		&f.telemetry.Insecure,
+		"trace-otel-insecure",
+		f.telemetry.Insecure,
+		"Disable TLS for OTLP trace export",
+	)
+	StringVar(
+		fs,
+		&f.telemetry.ServiceName,
+		"trace-otel-service",
+		f.telemetry.ServiceName,
+		"Override service.name resource attribute for exported spans",
+	)
+}
+
 func (f ExecFlags) ValidateEnvFlag() error {
 	return ValidateReservedEnvironment(f.EnvName, "--env")
 }
 
 func (f ExecFlags) TelemetryConfig(version string) telemetry.Config {
-	cfg := f.telemetry
-	cfg.Endpoint = f.TraceOTEndpoint
-	cfg.Insecure = f.TraceOTInsecure
-	cfg.ServiceName = f.TraceOTService
+	cfg := f.telemetry.Clone()
 	cfg.Version = version
 	return cfg
 }

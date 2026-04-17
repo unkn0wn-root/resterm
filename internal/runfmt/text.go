@@ -35,6 +35,9 @@ func WriteTextStyled(w io.Writer, rep *Report, color termcolor.Config) error {
 		); err != nil {
 			return err
 		}
+		if err := writeTextTargetDetails(w, "  ", res.Target, res.EffectiveTarget, st); err != nil {
+			return err
+		}
 		for i, step := range res.Steps {
 			if _, err := fmt.Fprintf(
 				w,
@@ -43,6 +46,9 @@ func WriteTextStyled(w io.Writer, rep *Report, color termcolor.Config) error {
 				st.stepLabel(stepLabel(step)),
 				st.stepLine(stepLine(step)),
 			); err != nil {
+				return err
+			}
+			if err := writeTextTargetDetails(w, "    ", step.Target, step.EffectiveTarget, st); err != nil {
 				return err
 			}
 		}
@@ -102,6 +108,14 @@ func (s textStyler) stepLine(text string) string {
 	return s.paint(text, textColValue, true)
 }
 
+func (s textStyler) detail(label, value string) string {
+	key := s.paint(label+":", textColHeading, false)
+	if value == "" {
+		return key
+	}
+	return key + " " + s.paint(value, textColValue, true)
+}
+
 func (s textStyler) index(n int) string {
 	return s.paint(strconv.Itoa(n)+".", textColHeading, false)
 }
@@ -142,4 +156,26 @@ func (s textStyler) profile() termenv.Profile {
 		return termenv.ANSI
 	}
 	return s.cfg.Profile
+}
+
+func writeTextTargetDetails(
+	w io.Writer,
+	indent string,
+	target string,
+	effective string,
+	st textStyler,
+) error {
+	source, resolved, ok := targetDetails(target, effective)
+	if !ok {
+		return nil
+	}
+	_, err := fmt.Fprintf(
+		w,
+		"%s%s\n%s%s\n",
+		indent,
+		st.detail("Source Target", source),
+		indent,
+		st.detail("Effective Target", resolved),
+	)
+	return err
 }

@@ -100,7 +100,7 @@ func (res Result) junitCase() junitCase {
 		Name:      resultName(res),
 		ClassName: suiteName(res),
 		Time:      junitTime(res.Duration),
-		SystemOut: resultLine(res),
+		SystemOut: junitSystemOut(resultLine(res), res.Target, res.EffectiveTarget),
 	}
 	if res.Status == StatusSkip {
 		tc.Skipped = &junitSkipped{Message: skipMessage(res.SkipReason, res.Summary)}
@@ -117,7 +117,7 @@ func (res Result) stepJUnitCase(step Step) junitCase {
 		Name:      stepName(step),
 		ClassName: suiteName(res),
 		Time:      junitTime(step.Duration),
-		SystemOut: stepLine(step),
+		SystemOut: junitSystemOut(stepLine(step), step.Target, step.EffectiveTarget),
 	}
 	if step.Status == StatusSkip {
 		tc.Skipped = &junitSkipped{Message: skipMessage(step.SkipReason, step.Summary)}
@@ -127,4 +127,16 @@ func (res Result) stepJUnitCase(step Step) junitCase {
 		tc.Failure = &junitFailure{Message: msg, Body: msg}
 	}
 	return tc
+}
+
+func junitSystemOut(text, target, effective string) string {
+	source, resolved, ok := targetDetails(target, effective)
+	if !ok {
+		return text
+	}
+	details := "Source Target: " + source + "\nEffective Target: " + resolved
+	if text == "" {
+		return details
+	}
+	return text + "\n" + details
 }
