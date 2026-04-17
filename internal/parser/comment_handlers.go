@@ -153,11 +153,14 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 		if dir.Disable || dir.Spec == nil {
 			return true
 		}
+		spec := restfile.CloneAuthSpecValue(*dir.Spec)
+		spec.SourcePath = b.doc.Path
 		b.authDefs = append(b.authDefs, restfile.AuthProfile{
-			Scope: dir.Scope,
-			Name:  dir.Name,
-			Spec:  restfile.CloneAuthSpecValue(*dir.Spec),
-			Line:  line,
+			Scope:      dir.Scope,
+			Name:       dir.Name,
+			Spec:       spec,
+			Line:       line,
+			SourcePath: b.doc.Path,
 		})
 	case restfile.AuthScopeRequest:
 		b.ensureRequest(line)
@@ -167,7 +170,9 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 			return true
 		}
 		if dir.Spec != nil {
-			b.request.metadata.Auth = restfile.CloneAuthSpec(dir.Spec)
+			spec := restfile.CloneAuthSpec(dir.Spec)
+			spec.SourcePath = b.doc.Path
+			b.request.metadata.Auth = spec
 			b.request.metadata.AuthDisabled = false
 		}
 	}
@@ -204,6 +209,7 @@ func (b *documentBuilder) handlePatchDirective(line int, key, rest string) bool 
 		b.addError(line, err.Error())
 		return true
 	}
+	spec.SourcePath = b.doc.Path
 	b.patchDefs = append(b.patchDefs, spec)
 	return true
 }

@@ -237,7 +237,11 @@ func (m *Model) parseApplyAuth(
 	if len(pm) == 0 {
 		pm = nil
 	}
-	return &restfile.AuthSpec{Type: typ, Params: pm}, nil
+	return &restfile.AuthSpec{
+		Type:       typ,
+		Params:     pm,
+		SourcePath: pos.Path,
+	}, nil
 }
 
 func (m *Model) parseApplySettings(
@@ -487,6 +491,9 @@ func (m *Model) applyExprs(
 			ps := m.rtsPosForLine(doc, req, pf.Line)
 			if pf.Col > 0 {
 				ps.Col = pf.Col
+			}
+			if pf.SourcePath != "" {
+				ps.Path = pf.SourcePath
 			}
 			out = append(out, applyExpr{
 				ex: ex,

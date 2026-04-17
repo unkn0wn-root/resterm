@@ -2,7 +2,9 @@ package request
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -12,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -179,6 +182,145 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}
 	if atomic.LoadInt32(&calls) != 1 {
 		t.Fatalf("expected cache-only reuse to skip execution, got %d calls", calls)
+	}
+}
+
+func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
+	var calls int32
+	var seen authcmd.Config
+
+	workspace := t.TempDir()
+	defsPath := filepath.Join(workspace, "auth_command.http")
+	usePath := filepath.Join(workspace, "rts", "rts_all_features.http")
+
+	eng := New(
+		engine.Config{
+			FilePath:        defsPath,
+			EnvironmentName: "dev",
+			WorkspaceRoot:   workspace,
+		},
+		rtrun.New(rtrun.Config{}),
+	)
+	eng.rt.AuthCmd().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
+		atomic.AddInt32(&calls, 1)
+		seen = cfg
+		return []byte("token-basic"), nil
+	})
+
+	defsDoc := parser.Parse(defsPath, []byte(`# @auth global command argv=["gh","auth","token"] cache_key=github-cli-global`))
+	eng.registryIndex().Sync(defsDoc)
+
+	seedReq := &restfile.Request{
+		Metadata: restfile.RequestMetadata{
+			Auth: restfile.CloneAuthSpec(&defsDoc.Auth[0].Spec),
+		},
+	}
+	if _, err := eng.EnsureCommandAuth(
+		context.Background(),
+		defsDoc,
+		seedReq,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth seed: %v", err)
+	}
+
+	useDoc := parser.Parse(usePath, []byte("GET https://example.com\n"))
+	req := &restfile.Request{}
+	eng.ResolveInheritedAuth(useDoc, req)
+	if req.Metadata.Auth == nil {
+		t.Fatal("expected inherited global auth")
+	}
+	if got := req.Metadata.Auth.SourcePath; got != defsPath {
+		t.Fatalf("expected inherited auth source %q, got %q", defsPath, got)
+	}
+
+	if _, err := eng.EnsureCommandAuth(
+		context.Background(),
+		useDoc,
+		req,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth inherited reuse: %v", err)
+	}
+
+	if got := seen.Dir; got != filepath.Dir(defsPath) {
+		t.Fatalf("expected command dir %q, got %q", filepath.Dir(defsPath), got)
+	}
+	if atomic.LoadInt32(&calls) != 1 {
+		t.Fatalf("expected inherited request to reuse seeded cache, got %d calls", calls)
+	}
+	if got := req.Headers.Get("Authorization"); got != "Bearer token-basic" {
+		t.Fatalf("expected inherited auth header, got %q", got)
+	}
+}
+
+func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
+	var calls int32
+
+	rt := rtrun.New(rtrun.Config{})
+	rt.AuthCmd().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
+		n := atomic.AddInt32(&calls, 1)
+		return []byte(fmt.Sprintf("%s/token-%d", cfg.Dir, n)), nil
+	})
+
+	authA := &restfile.AuthSpec{
+		Type: "command",
+		Params: map[string]string{
+			"argv":      `["gh","auth","token"]`,
+			"cache_key": "shared",
+		},
+		SourcePath: "/tmp/workspace-a/auth.http",
+	}
+	authB := &restfile.AuthSpec{
+		Type: "command",
+		Params: map[string]string{
+			"argv":      `["gh","auth","token"]`,
+			"cache_key": "shared",
+		},
+		SourcePath: "/tmp/workspace-b/auth.http",
+	}
+
+	engA := New(engine.Config{
+		FilePath:        "/tmp/workspace-a/request.http",
+		EnvironmentName: "dev",
+		WorkspaceRoot:   "/tmp/workspace-a",
+	}, rt)
+	engB := New(engine.Config{
+		FilePath:        "/tmp/workspace-b/request.http",
+		EnvironmentName: "dev",
+		WorkspaceRoot:   "/tmp/workspace-b",
+	}, rt)
+
+	reqA := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: authA}}
+	reqB := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: authB}}
+
+	if _, err := engA.EnsureCommandAuth(
+		context.Background(),
+		&restfile.Document{Path: "/tmp/workspace-a/request.http"},
+		reqA,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth workspace A: %v", err)
+	}
+	if _, err := engB.EnsureCommandAuth(
+		context.Background(),
+		&restfile.Document{Path: "/tmp/workspace-b/request.http"},
+		reqB,
+		vars.NewResolver(),
+		"",
+		time.Second,
+	); err != nil {
+		t.Fatalf("ensureCommandAuth workspace B: %v", err)
+	}
+
+	if atomic.LoadInt32(&calls) != 2 {
+		t.Fatalf("expected separate command executions per workspace, got %d", calls)
 	}
 }
 
