@@ -1507,127 +1507,24 @@ Export, import, pack, and unpack all enforce path safety and integrity checks. R
 
 ## CLI Reference
 
-Run `resterm --help` for the latest list.
+Resterm now has a dedicated CLI guide: [`cli.md`](./cli.md).
 
-### Subcommands
+Use it for:
 
-**`resterm init [dir]`** - Bootstrap a new project with starter files. See [Initializing a Project](#initializing-a-project) for details.
-**`resterm collection export --workspace <dir> --out <dir> [--name <name>] [--recursive] [--force]`** - Export a Git-friendly collection bundle directory.
-**`resterm collection import --in <dir> --workspace <dir> [--force] [--dry-run]`** - Import a collection bundle into a workspace.
-**`resterm collection pack --in <dir> --out <file.zip> [--force]`** - Pack a bundle directory into a zip archive.
-**`resterm collection unpack --in <file.zip> --out <dir> [--force]`** - Unpack and validate a bundle archive into a directory.
-**`resterm history export --out <path>`** - Export persisted history to JSON.
-**`resterm history import --in <path>`** - Import history entries from a JSON export.
-**`resterm history backup --out <path>`** - Create a SQLite-consistent backup copy of `history.db`.
-**`resterm history stats`** - Print schema version, row counts, and file sizes.
-**`resterm history check [--full]`** - Run SQLite integrity checks on history storage.
-**`resterm history compact`** - Run WAL checkpoint + VACUUM to compact `history.db`.
+- `resterm run` selectors, formats, body-only output, artifacts, persisted state, and exit codes
+- `resterm init`, `collection`, and `history` subcommands
+- shared execution flags such as `--workspace`, `--env`, `--timeout`, `--proxy`, and `--compare`
+- curl and OpenAPI import flows
 
-### Core flags
-
-| Flag | Description |
-| --- | --- |
-| `--file <path>` | Open a specific `.http`/`.rest` file on launch. |
-| `--workspace <dir>` | Workspace root used for file discovery. |
-| `--recursive` | Recursively scan the workspace for request files. |
-| `--env <name>` | Select environment explicitly. |
-| `--env-file <path>` | Provide an explicit environment JSON file. |
-| `--timeout <duration>` | Default HTTP timeout (per request). |
-| `--insecure` | Skip TLS certificate verification globally. |
-| `--follow` | Control redirect following (default on; pass `--follow=false` to disable). |
-| `--proxy <url>` | HTTP proxy URL. |
-| `--compare <envs>` | Default comma/space-delimited environments for manual compare runs (`g+c`). |
-| `--compare-base <env>` | Baseline environment name when `--compare` is set (defaults to the first target). |
-| `--from-curl <command|path>` | Generate a `.http` file from a curl command or file (`-` reads stdin). |
-| `--from-openapi <spec>` | Generate a `.http` collection from an OpenAPI document. |
-| `--http-out <file>` | Destination for the generated `.http` file (defaults to `<spec>.http` for OpenAPI or `curl.http` for curl imports). |
-| `--openapi-base-var <name>` | Override the base URL variable injected into the generated file (`baseUrl` by default). |
-| `--openapi-resolve-refs` | Resolve external `$ref` pointers before generation. |
-| `--openapi-include-deprecated` | Keep deprecated operations that are skipped by default. |
-| `--openapi-server-index <n>` | Choose which server entry (0-based) seeds the base URL. |
-
-### Collection export, import, pack, and unpack
-
-Use collection export/import when you want teammates to reproduce a request workspace without hand-copying dependencies. Use pack/unpack when you need a single archive file for transfer.
+Common entry points:
 
 ```bash
-resterm collection export --workspace ./my-api --out ./shared/my-api-bundle --recursive
-resterm collection import --in ./shared/my-api-bundle --workspace ./my-local-api
-resterm collection pack --in ./shared/my-api-bundle --out ./shared/my-api-bundle.zip
-resterm collection unpack --in ./shared/my-api-bundle.zip --out ./shared/my-api-bundle
+resterm
+resterm run ./requests.http
+resterm init ./api-tests
+resterm history stats
+resterm collection export --workspace ./api --out ./shared/api-bundle
 ```
-
-Export command flags:
-
-| Flag | Description |
-| --- | --- |
-| `--workspace <dir>` | Source workspace directory to scan. |
-| `--out <dir>` | Destination bundle directory to create. |
-| `--name <name>` | Optional bundle name stored in the manifest. |
-| `--recursive` | Recursively scan workspace for request files before dependency resolution. |
-| `--force` | Replace an existing output directory. |
-
-Import command flags:
-
-| Flag | Description |
-| --- | --- |
-| `--in <dir>` | Source bundle directory containing `manifest.json`. |
-| `--workspace <dir>` | Destination workspace directory to write files into. |
-| `--dry-run` | Validate and print planned operations without writing files. |
-| `--force` | Overwrite existing destination files. |
-
-Pack command flags:
-
-| Flag | Description |
-| --- | --- |
-| `--in <dir>` | Source bundle directory containing `manifest.json`. |
-| `--out <file.zip>` | Destination archive path to create. |
-| `--force` | Replace an existing archive file. |
-
-Unpack command flags:
-
-| Flag | Description |
-| --- | --- |
-| `--in <file.zip>` | Source archive file created by `collection pack`. |
-| `--out <dir>` | Destination bundle directory to create. |
-| `--force` | Replace an existing output directory. |
-
-The exporter includes referenced helper files automatically and always emits `resterm.env.example.json` in the bundle. Import validates checksums before writing files and rejects unsafe paths. Pack and unpack apply the same manifest and path safety guarantees so archive handoffs behave the same as directory handoffs.
-
-### Importing curl commands
-
-```bash
-resterm --from-curl "curl https://example.com -H 'X-Test: 1'" --http-out example.http
-```
-
-```bash
-resterm --from-curl ./requests.curl --http-out requests.http
-```
-
-```bash
-cat requests.curl | resterm --from-curl - --http-out requests.http
-```
-
-- Files can contain multiple curl commands; a blank line or a new line starting with `curl` starts a new request.
-- Common shell prefixes (`sudo`, `env`, `time`, `command`, and prompts like `$`) are ignored.
-- Unsupported curl flags are preserved as `Warning:` lines in the generated header.
-
-### Importing OpenAPI specs
-
-```bash
-resterm \
-  --from-openapi openapi-test.yml \
-  --http-out openapi-test.http \
-  --openapi-resolve-refs \
-  --openapi-server-index 1
-```
-
-- Loads the OpenAPI document, optionally resolves external `$ref` pointers, and emits a `.http` file that mirrors Resterm metadata and variable conventions.
-- Unsupported constructs (for example OpenID Connect) are preserved as `Warning:` lines in the generated header so you know where manual follow-up is required.
-- `openapi-test.yml` in the repository is a comprehensive spec that exercises callbacks, complex query styles, and mixed security schemes—perfect for smoke-testing the converter.
-
-> [!NOTE]
-> Resterm's converter is powered by [`libopenapi`](https://github.com/pb33f/libopenapi) and supports OpenAPI **v3.0**, **v3.1**, and **v3.2** inputs.
 
 ---
 
