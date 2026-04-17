@@ -328,7 +328,10 @@ func TestOptionsValidate(t *testing.T) {
 				if !IsUsageError(err) {
 					t.Fatalf("expected usage error, got %v", err)
 				}
-				if !strings.Contains(err.Error(), "profile.enabled cannot be combined with compare.targets") {
+				if !strings.Contains(
+					err.Error(),
+					"profile.enabled cannot be combined with compare.targets",
+				) {
 					t.Fatalf("unexpected error: %v", err)
 				}
 			},

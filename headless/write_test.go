@@ -139,7 +139,11 @@ func TestReportEncodeParity(t *testing.T) {
 			}
 
 			if got.String() != want.String() {
-				t.Fatalf("encoded output mismatch\nwant:\n%s\ngot:\n%s", want.String(), got.String())
+				t.Fatalf(
+					"encoded output mismatch\nwant:\n%s\ngot:\n%s",
+					want.String(),
+					got.String(),
+				)
 			}
 		})
 	}
@@ -169,7 +173,12 @@ func TestParseFormat(t *testing.T) {
 
 func TestFormatString(t *testing.T) {
 	if JSON.String() != "json" || JUnit.String() != "junit" || Text.String() != "text" {
-		t.Fatalf("unexpected format strings: %q %q %q", JSON.String(), JUnit.String(), Text.String())
+		t.Fatalf(
+			"unexpected format strings: %q %q %q",
+			JSON.String(),
+			JUnit.String(),
+			Text.String(),
+		)
 	}
 	if got := Format(99).String(); got != "format(99)" {
 		t.Fatalf("unexpected invalid format string: %q", got)

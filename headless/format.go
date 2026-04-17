@@ -2,7 +2,8 @@ package headless
 
 import (
 	"fmt"
-	"strings"
+
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Format int
@@ -27,7 +28,7 @@ func (f Format) String() string {
 }
 
 func ParseFormat(s string) (Format, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
+	switch str.LowerTrim(s) {
 	case JSON.String():
 		return JSON, nil
 	case JUnit.String():
