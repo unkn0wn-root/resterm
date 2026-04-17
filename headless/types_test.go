@@ -29,7 +29,7 @@ func TestUsageErrorZero(t *testing.T) {
 
 func TestZeroValues(t *testing.T) {
 	var opt Options
-	if opt.FilePath != "" || opt.Environment.Name != "" || opt.Profile {
+	if opt.FilePath != "" || opt.Environment.Name != "" || opt.Profile.Enabled {
 		t.Fatalf("unexpected options zero value: %+v", opt)
 	}
 	if opt.HTTP.FollowRedirects != nil || opt.GRPC.Plaintext != nil {
@@ -43,7 +43,7 @@ func TestZeroValues(t *testing.T) {
 	if rep.Results != nil {
 		t.Fatalf("expected nil zero-value results slice, got %+v", rep.Results)
 	}
-	if (&rep).HasFailures() {
+	if rep.HasFailures() {
 		t.Fatalf("expected zero-value report to have no failures: %+v", rep)
 	}
 
@@ -60,10 +60,12 @@ func TestJSONTags(t *testing.T) {
 		tag  string
 	}{
 		{typ: reflect.TypeFor[Options](), name: "FilePath", tag: "filePath,omitempty"},
+		{typ: reflect.TypeFor[Options](), name: "Profile", tag: "profile,omitempty"},
 		{typ: reflect.TypeFor[Options](), name: "Selection", tag: "selection,omitempty"},
 		{typ: reflect.TypeFor[StateOptions](), name: "ArtifactDir", tag: "artifactDir,omitempty"},
 		{typ: reflect.TypeFor[EnvironmentOptions](), name: "FilePath", tag: "filePath,omitempty"},
 		{typ: reflect.TypeFor[CompareOptions](), name: "Targets", tag: "targets,omitempty"},
+		{typ: reflect.TypeFor[ProfileOptions](), name: "Enabled", tag: "enabled,omitempty"},
 		{
 			typ:  reflect.TypeFor[HTTPOptions](),
 			name: "FollowRedirects",
@@ -196,7 +198,7 @@ func TestReportHasFailures(t *testing.T) {
 		t.Fatal("expected failed count to report failures")
 	}
 
-	rep := &Report{
+	rep := Report{
 		Results: []Result{
 			{Status: StatusPass},
 			{Status: StatusFail},
@@ -212,6 +214,30 @@ func TestReportHasFailures(t *testing.T) {
 
 	if (&Report{Results: []Result{{Status: StatusPass}}}).HasFailures() {
 		t.Fatal("expected passing results to report no failures")
+	}
+}
+
+func TestKindHelpers(t *testing.T) {
+	if KindRequest.String() != "request" {
+		t.Fatalf("KindRequest.String() = %q", KindRequest.String())
+	}
+	if !KindWorkflow.IsValid() {
+		t.Fatal("expected KindWorkflow to be valid")
+	}
+	if Kind("unknown").IsValid() {
+		t.Fatal("expected unknown kind to be invalid")
+	}
+}
+
+func TestStatusHelpers(t *testing.T) {
+	if StatusFail.String() != "fail" {
+		t.Fatalf("StatusFail.String() = %q", StatusFail.String())
+	}
+	if !StatusSkip.IsValid() {
+		t.Fatal("expected StatusSkip to be valid")
+	}
+	if Status("unknown").IsValid() {
+		t.Fatal("expected unknown status to be invalid")
 	}
 }
 

@@ -2,6 +2,7 @@ package headless
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -45,7 +46,7 @@ func TestRunRequestParity(t *testing.T) {
 		FilePath:      path,
 		WorkspaceRoot: dir,
 		HTTPOptions: httpclient.Options{
-			Timeout:         defaultTimeout,
+			Timeout:         DefaultHTTPTimeout,
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
@@ -120,7 +121,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		CompareTargets:  []string{"dev", "stage"},
 		CompareBase:     "stage",
 		HTTPOptions: httpclient.Options{
-			Timeout:         defaultTimeout,
+			Timeout:         DefaultHTTPTimeout,
 			FollowRedirects: true,
 		},
 		GRPCOptions: grpcclient.Options{
@@ -213,11 +214,26 @@ func TestRunnerOptionsUseDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runnerOptions: %v", err)
 	}
-	if got.HTTPOptions.Timeout != defaultTimeout || !got.HTTPOptions.FollowRedirects {
+	if got.HTTPOptions.Timeout != DefaultHTTPTimeout || !got.HTTPOptions.FollowRedirects {
 		t.Fatalf("unexpected http defaults: %+v", got.HTTPOptions)
 	}
 	if !got.GRPCOptions.DefaultPlaintext || !got.GRPCOptions.DefaultPlaintextSet {
 		t.Fatalf("unexpected grpc defaults: %+v", got.GRPCOptions)
+	}
+}
+
+func TestRunnerOptionsProfileEnabled(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	got, err := runnerOptions(Options{
+		FilePath: file,
+		Profile:  ProfileOptions{Enabled: true},
+	})
+	if err != nil {
+		t.Fatalf("runnerOptions: %v", err)
+	}
+	if !got.Profile {
+		t.Fatalf("expected profile=true, got %+v", got)
 	}
 }
 
@@ -265,6 +281,106 @@ func TestRunUsesExplicitEmptyFileData(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no requests found") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestOptionsValidate(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+
+	tests := []struct {
+		name  string
+		opt   Options
+		check func(*testing.T, error)
+	}{
+		{
+			name: "missing file path",
+			opt:  Options{},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if !IsUsageError(err) || !errors.Is(err, ErrNoFilePath) {
+					t.Fatalf("expected usage error wrapping ErrNoFilePath, got %v", err)
+				}
+			},
+		},
+		{
+			name: "too few compare targets",
+			opt: Options{
+				FilePath: file,
+				Compare:  CompareOptions{Targets: []string{"dev"}},
+			},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if !IsUsageError(err) || !errors.Is(err, ErrTooFewTargets) {
+					t.Fatalf("expected usage error wrapping ErrTooFewTargets, got %v", err)
+				}
+			},
+		},
+		{
+			name: "profile compare conflict",
+			opt: Options{
+				FilePath: file,
+				Profile:  ProfileOptions{Enabled: true},
+				Compare:  CompareOptions{Targets: []string{"dev", "stage"}},
+			},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if !IsUsageError(err) {
+					t.Fatalf("expected usage error, got %v", err)
+				}
+				if !strings.Contains(err.Error(), "profile.enabled cannot be combined with compare.targets") {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			},
+		},
+		{
+			name: "workflow selection conflict",
+			opt: Options{
+				FilePath: file,
+				Selection: Selection{
+					Workflow: "deploy",
+					Request:  "ping",
+				},
+			},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if !IsUsageError(err) {
+					t.Fatalf("expected usage error, got %v", err)
+				}
+				if !strings.Contains(
+					err.Error(),
+					"selection.workflow cannot be combined with selection.request, selection.tag, or selection.all",
+				) {
+					t.Fatalf("unexpected error: %v", err)
+				}
+			},
+		},
+		{
+			name: "valid options",
+			opt:  Options{FilePath: file},
+			check: func(t *testing.T, err error) {
+				t.Helper()
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.check(t, tc.opt.Validate())
+		})
+	}
+}
+
+func TestRunReturnsValidationErrors(t *testing.T) {
+	_, err := Run(context.Background(), Options{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsUsageError(err) || !errors.Is(err, ErrNoFilePath) {
+		t.Fatalf("expected usage error wrapping ErrNoFilePath, got %v", err)
 	}
 }
 

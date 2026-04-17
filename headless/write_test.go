@@ -3,6 +3,7 @@ package headless
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"reflect"
 	"strings"
 	"testing"
@@ -78,6 +79,9 @@ func TestWriteNilWriter(t *testing.T) {
 		t.Fatal("expected report")
 	}
 
+	if err := rep.Encode(nil, JSON); !errors.Is(err, ErrNilWriter) {
+		t.Fatalf("Encode(nil, JSON): got %v want %v", err, ErrNilWriter)
+	}
 	if err := rep.WriteText(nil); !errors.Is(err, ErrNilWriter) {
 		t.Fatalf("WriteText(nil): got %v want %v", err, ErrNilWriter)
 	}
@@ -86,6 +90,100 @@ func TestWriteNilWriter(t *testing.T) {
 	}
 	if err := rep.WriteJUnit(nil); !errors.Is(err, ErrNilWriter) {
 		t.Fatalf("WriteJUnit(nil): got %v want %v", err, ErrNilWriter)
+	}
+}
+
+func TestWriteNilReport(t *testing.T) {
+	var rep *Report
+
+	if err := rep.Encode(&strings.Builder{}, JSON); !errors.Is(err, ErrNilReport) {
+		t.Fatalf("Encode(..., JSON): got %v want %v", err, ErrNilReport)
+	}
+	if err := rep.WriteText(&strings.Builder{}); !errors.Is(err, ErrNilReport) {
+		t.Fatalf("WriteText(...): got %v want %v", err, ErrNilReport)
+	}
+	if err := rep.WriteJSON(&strings.Builder{}); !errors.Is(err, ErrNilReport) {
+		t.Fatalf("WriteJSON(...): got %v want %v", err, ErrNilReport)
+	}
+	if err := rep.WriteJUnit(&strings.Builder{}); !errors.Is(err, ErrNilReport) {
+		t.Fatalf("WriteJUnit(...): got %v want %v", err, ErrNilReport)
+	}
+}
+
+func TestReportEncodeParity(t *testing.T) {
+	rep := reportFromRunner(sampleRunnerReport())
+	if rep == nil {
+		t.Fatal("expected report")
+	}
+
+	cases := []struct {
+		name   string
+		format Format
+		write  func(io.Writer) error
+	}{
+		{name: "json", format: JSON, write: rep.WriteJSON},
+		{name: "junit", format: JUnit, write: rep.WriteJUnit},
+		{name: "text", format: Text, write: rep.WriteText},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var want strings.Builder
+			if err := tc.write(&want); err != nil {
+				t.Fatalf("write: %v", err)
+			}
+
+			var got strings.Builder
+			if err := rep.Encode(&got, tc.format); err != nil {
+				t.Fatalf("Encode: %v", err)
+			}
+
+			if got.String() != want.String() {
+				t.Fatalf("encoded output mismatch\nwant:\n%s\ngot:\n%s", want.String(), got.String())
+			}
+		})
+	}
+}
+
+func TestParseFormat(t *testing.T) {
+	cases := map[string]Format{
+		"json":    JSON,
+		"JSON":    JSON,
+		" junit ": JUnit,
+		"text":    Text,
+	}
+	for input, want := range cases {
+		got, err := ParseFormat(input)
+		if err != nil {
+			t.Fatalf("ParseFormat(%q): %v", input, err)
+		}
+		if got != want {
+			t.Fatalf("ParseFormat(%q) = %v, want %v", input, got, want)
+		}
+	}
+
+	if _, err := ParseFormat("yaml"); err == nil {
+		t.Fatal("expected unknown format error")
+	}
+}
+
+func TestFormatString(t *testing.T) {
+	if JSON.String() != "json" || JUnit.String() != "junit" || Text.String() != "text" {
+		t.Fatalf("unexpected format strings: %q %q %q", JSON.String(), JUnit.String(), Text.String())
+	}
+	if got := Format(99).String(); got != "format(99)" {
+		t.Fatalf("unexpected invalid format string: %q", got)
+	}
+}
+
+func TestEncodeInvalidFormat(t *testing.T) {
+	rep := &Report{FilePath: "api.http"}
+	err := rep.Encode(&strings.Builder{}, Format(99))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "unsupported format 99") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 

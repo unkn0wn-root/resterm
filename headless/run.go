@@ -16,7 +16,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const defaultTimeout = 30 * time.Second
+// DefaultHTTPTimeout is the timeout applied when Options.HTTP.Timeout is zero.
+const DefaultHTTPTimeout = 30 * time.Second
+
+// Validate reports whether o contains a valid headless configuration.
+func (o Options) Validate() error {
+	_, err := runnerOptions(o)
+	return err
+}
 
 // Run executes a request or workflow file and returns a stable public report.
 func Run(ctx context.Context, opt Options) (*Report, error) {
@@ -39,9 +46,16 @@ func runnerOptions(opt Options) (runner.Options, error) {
 	if err != nil {
 		return runner.Options{}, UsageError{err: fmt.Errorf("resolve filePath: %w", err)}
 	}
+	if path == "" {
+		return runner.Options{}, UsageError{err: ErrNoFilePath}
+	}
 	work, err := workspacePath(path, opt.WorkspaceRoot)
 	if err != nil {
 		return runner.Options{}, UsageError{err: fmt.Errorf("resolve workspaceRoot: %w", err)}
+	}
+	sel, err := selectionOptions(opt.Selection)
+	if err != nil {
+		return runner.Options{}, err
 	}
 	envs, envFile, envName, err := environmentOptions(opt, path, work)
 	if err != nil {
@@ -54,6 +68,18 @@ func runnerOptions(opt Options) (runner.Options, error) {
 	base := strings.TrimSpace(opt.Compare.Base)
 	if err := cli.ValidateReservedEnvironment(base, "compare.base"); err != nil {
 		return runner.Options{}, UsageError{err: err}
+	}
+	if opt.Profile.Enabled && len(targets) > 0 {
+		return runner.Options{}, UsageError{
+			err: fmt.Errorf("profile.enabled cannot be combined with compare.targets"),
+		}
+	}
+	if sel.Workflow != "" && (opt.Profile.Enabled || len(targets) > 0) {
+		return runner.Options{}, UsageError{
+			err: fmt.Errorf(
+				"selection.workflow cannot be combined with compare.targets or profile.enabled",
+			),
+		}
 	}
 	return runner.Options{
 		Version:         strings.TrimSpace(opt.Version),
@@ -71,16 +97,40 @@ func runnerOptions(opt Options) (runner.Options, error) {
 		EnvironmentFile: envFile,
 		CompareTargets:  targets,
 		CompareBase:     base,
-		Profile:         opt.Profile,
+		Profile:         opt.Profile.Enabled,
 		HTTPOptions:     httpOptions(opt.HTTP),
 		GRPCOptions:     grpcOptions(opt.GRPC),
-		Select: runner.Select{
-			Request:  strings.TrimSpace(opt.Selection.Request),
-			Workflow: strings.TrimSpace(opt.Selection.Workflow),
-			Tag:      strings.TrimSpace(opt.Selection.Tag),
-			All:      opt.Selection.All,
-		},
+		Select:          sel,
 	}, nil
+}
+
+func selectionOptions(sel Selection) (runner.Select, error) {
+	out := runner.Select{
+		Request:  strings.TrimSpace(sel.Request),
+		Workflow: strings.TrimSpace(sel.Workflow),
+		Tag:      strings.TrimSpace(sel.Tag),
+		All:      sel.All,
+	}
+	switch {
+	case out.Workflow != "" && (out.All || out.Request != "" || out.Tag != ""):
+		return runner.Select{}, UsageError{
+			err: fmt.Errorf(
+				"selection.workflow cannot be combined with selection.request, selection.tag, or selection.all",
+			),
+		}
+	case out.All && (out.Request != "" || out.Tag != ""):
+		return runner.Select{}, UsageError{
+			err: fmt.Errorf(
+				"selection.all cannot be combined with selection.request or selection.tag",
+			),
+		}
+	case out.Request != "" && out.Tag != "":
+		return runner.Select{}, UsageError{
+			err: fmt.Errorf("selection.request cannot be combined with selection.tag"),
+		}
+	default:
+		return out, nil
+	}
 }
 
 func absPath(path string) (string, error) {
@@ -118,13 +168,17 @@ func environmentOptions(
 	case envFile != "":
 		set, err := vars.LoadEnvironmentFile(envFile)
 		if err != nil {
-			return nil, "", "", fmt.Errorf("load environment file: %w", err)
+			return nil, "", "", UsageError{
+				err: fmt.Errorf("load environment.filePath: %w", err),
+			}
 		}
 		envs = set
 	default:
 		set, file, err := vars.ResolveEnvironment(envPaths(path, work))
 		if err != nil {
-			return nil, "", "", fmt.Errorf("resolve environment file: %w", err)
+			return nil, "", "", UsageError{
+				err: fmt.Errorf("resolve environment file: %w", err),
+			}
 		}
 		envs = set
 		envFile = file
@@ -186,9 +240,7 @@ func compareTargets(src []string) ([]string, error) {
 		return nil, nil
 	}
 	if len(out) < 2 {
-		return nil, UsageError{
-			err: fmt.Errorf("compare.targets requires at least two environments"),
-		}
+		return nil, UsageError{err: ErrTooFewTargets}
 	}
 	return out, nil
 }
@@ -213,7 +265,7 @@ func timeoutOf(d time.Duration) time.Duration {
 	if d > 0 {
 		return d
 	}
-	return defaultTimeout
+	return DefaultHTTPTimeout
 }
 
 func boolVal(v *bool, def bool) bool {

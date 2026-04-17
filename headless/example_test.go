@@ -1,6 +1,7 @@
 package headless_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/http"
@@ -31,8 +32,20 @@ func ExampleRun() {
 		return
 	}
 
-	rep, err := headless.Run(context.Background(), headless.Options{FilePath: path})
+	opts := headless.Options{FilePath: path}
+	if err := opts.Validate(); err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	rep, err := headless.Run(context.Background(), opts)
 	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	var out bytes.Buffer
+	if err := rep.Encode(&out, headless.Text); err != nil {
 		fmt.Println(err)
 		return
 	}
