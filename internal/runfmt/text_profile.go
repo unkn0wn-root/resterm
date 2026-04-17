@@ -1,0 +1,223 @@
+package runfmt
+
+import (
+	"fmt"
+	"io"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type textProfileRow struct {
+	label string
+	value string
+}
+
+func writeTextProfileDetails(w io.Writer, indent string, res Result, st textStyler) error {
+	p := res.Profile
+	if res.Kind != "profile" || p == nil {
+		return nil
+	}
+
+	rows := textProfileRows(p)
+	if len(rows) == 0 && len(p.Failures) == 0 {
+		return nil
+	}
+
+	if _, err := fmt.Fprintf(w, "%s%s\n", indent, st.heading("Profile:")); err != nil {
+		return err
+	}
+	for _, row := range rows {
+		if _, err := fmt.Fprintf(w, "%s  %s\n", indent, st.detail(row.label, row.value)); err != nil {
+			return err
+		}
+	}
+
+	if len(p.Failures) == 0 {
+		return nil
+	}
+	if _, err := fmt.Fprintf(
+		w,
+		"%s  %s\n",
+		indent,
+		st.paint("Failures:", textColWarn, true),
+	); err != nil {
+		return err
+	}
+	for _, fail := range p.Failures {
+		if _, err := fmt.Fprintf(
+			w,
+			"%s    %s\n",
+			indent,
+			st.resultLine("- "+textProfileFailure(fail)),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func textProfileRows(p *Profile) []textProfileRow {
+	rows := make([]textProfileRow, 0, 6)
+	if v := textProfilePlan(p); v != "" {
+		rows = append(rows, textProfileRow{label: "Plan", value: v})
+	}
+	if v := textProfileRuns(p); v != "" {
+		rows = append(rows, textProfileRow{label: "Runs", value: v})
+	}
+	if v := textProfileSuccess(p); v != "" {
+		rows = append(rows, textProfileRow{label: "Success", value: v})
+	}
+	if p.Delay > 0 {
+		rows = append(rows, textProfileRow{
+			label: "Delay",
+			value: textProfileDuration(p.Delay) + " between runs",
+		})
+	}
+	if v := textProfileLatency(p); v != "" {
+		rows = append(rows, textProfileRow{label: "Latency", value: v})
+	}
+	if v := textProfileStats(p); v != "" {
+		rows = append(rows, textProfileRow{label: "Stats", value: v})
+	}
+	return rows
+}
+
+func textProfilePlan(p *Profile) string {
+	if p == nil {
+		return ""
+	}
+	parts := make([]string, 0, 2)
+	if p.Count > 0 {
+		parts = append(parts, fmt.Sprintf("%d measured", p.Count))
+	}
+	if p.Warmup > 0 {
+		parts = append(parts, fmt.Sprintf("%d warmup", p.Warmup))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func textProfileRuns(p *Profile) string {
+	if p == nil {
+		return ""
+	}
+	if p.TotalRuns == 0 && p.SuccessfulRuns == 0 && p.FailedRuns == 0 && p.WarmupRuns == 0 {
+		return ""
+	}
+
+	parts := []string{
+		fmt.Sprintf("%d total", p.TotalRuns),
+		fmt.Sprintf("%d success", p.SuccessfulRuns),
+		fmt.Sprintf("%d failure", p.FailedRuns),
+	}
+	if p.WarmupRuns > 0 {
+		parts = append(parts, fmt.Sprintf("%d warmup", p.WarmupRuns))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func textProfileSuccess(p *Profile) string {
+	if p == nil {
+		return ""
+	}
+	n := p.SuccessfulRuns + p.FailedRuns
+	if n <= 0 {
+		return ""
+	}
+	rate := (float64(p.SuccessfulRuns) / float64(n)) * 100
+	return fmt.Sprintf("%.0f%% (%d/%d)", rate, p.SuccessfulRuns, n)
+}
+
+func textProfileLatency(p *Profile) string {
+	if p == nil || p.Latency == nil || p.Latency.Count == 0 {
+		return ""
+	}
+
+	lat := p.Latency
+	parts := []string{
+		fmt.Sprintf("%d samples", lat.Count),
+		"min " + textProfileDuration(lat.Min),
+	}
+	if d, ok := textProfilePercentile(p.Percentiles, 50); ok {
+		parts = append(parts, "p50 "+textProfileDuration(d))
+	} else {
+		parts = append(parts, "p50 "+textProfileDuration(lat.Median))
+	}
+	for _, pct := range []int{90, 95, 99} {
+		if d, ok := textProfilePercentile(p.Percentiles, pct); ok {
+			parts = append(parts, fmt.Sprintf("p%d %s", pct, textProfileDuration(d)))
+		}
+	}
+	parts = append(parts, "max "+textProfileDuration(lat.Max))
+	return strings.Join(parts, " | ")
+}
+
+func textProfileStats(p *Profile) string {
+	if p == nil || p.Latency == nil || p.Latency.Count == 0 {
+		return ""
+	}
+	lat := p.Latency
+	parts := []string{
+		"mean " + textProfileDuration(lat.Mean),
+		"median " + textProfileDuration(lat.Median),
+		"stddev " + textProfileDuration(lat.StdDev),
+	}
+	return strings.Join(parts, " | ")
+}
+
+func textProfilePercentile(vals []Percentile, pct int) (time.Duration, bool) {
+	for _, val := range vals {
+		if val.Percentile == pct {
+			return val.Value, true
+		}
+	}
+	return 0, false
+}
+
+func textProfileFailure(fail ProfileFailure) string {
+	label := fmt.Sprintf("Run %d", fail.Iteration)
+	if fail.Warmup {
+		label = fmt.Sprintf("Warmup %d", fail.Iteration)
+	}
+
+	msg := strings.TrimSpace(fail.Reason)
+	meta := textProfileFailureMeta(fail)
+	switch {
+	case msg != "" && meta != "":
+		msg = fmt.Sprintf("%s [%s]", msg, meta)
+	case msg == "" && meta != "":
+		msg = meta
+	case msg == "":
+		msg = "failed"
+	}
+	return label + ": " + msg
+}
+
+func textProfileFailureMeta(fail ProfileFailure) string {
+	parts := make([]string, 0, 2)
+	if status := strings.TrimSpace(fail.Status); status != "" {
+		parts = append(parts, status)
+	} else if fail.StatusCode > 0 {
+		parts = append(parts, strconv.Itoa(fail.StatusCode))
+	}
+	if fail.Duration > 0 {
+		parts = append(parts, textProfileDuration(fail.Duration))
+	}
+	return strings.Join(parts, " | ")
+}
+
+func textProfileDuration(d time.Duration) string {
+	if d <= 0 {
+		return "-"
+	}
+	if d < time.Microsecond {
+		return d.String()
+	}
+	if d < time.Millisecond {
+		return fmt.Sprintf("%dus", d/time.Microsecond)
+	}
+	if d < time.Second {
+		return fmt.Sprintf("%dms", d.Milliseconds())
+	}
+	return d.Round(time.Millisecond).String()
+}

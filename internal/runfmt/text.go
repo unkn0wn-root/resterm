@@ -38,6 +38,9 @@ func WriteTextStyled(w io.Writer, rep *Report, color termcolor.Config) error {
 		if err := writeTextTargetDetails(w, "  ", res.Target, res.EffectiveTarget, st); err != nil {
 			return err
 		}
+		if err := writeTextProfileDetails(w, "  ", res, st); err != nil {
+			return err
+		}
 		for i, step := range res.Steps {
 			if _, err := fmt.Fprintf(
 				w,
