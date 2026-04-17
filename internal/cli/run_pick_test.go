@@ -13,7 +13,13 @@ import (
 func TestPromptRunRequestChoiceTTYFallsBackToTextForNonTTYIO(t *testing.T) {
 	choices := []RunRequestChoice{
 		{Line: 3, Method: "GET", Name: "one", Target: "https://example.com/one", Label: "GET one"},
-		{Line: 7, Method: "POST", Name: "two", Target: "https://example.com/two", Label: "POST two"},
+		{
+			Line:   7,
+			Method: "POST",
+			Name:   "two",
+			Target: "https://example.com/two",
+			Label:  "POST two",
+		},
 	}
 
 	var out bytes.Buffer
@@ -131,9 +137,22 @@ func TestRunRequestPickerAppendDigitResetsInvalidJump(t *testing.T) {
 
 	p.appendDigit('1')
 	if p.num != "1" || p.sel != 0 {
-		t.Fatalf("expected invalid append to reset to first choice, got num=%q sel=%d", p.num, p.sel)
+		t.Fatalf(
+			"expected invalid append to reset to first choice, got num=%q sel=%d",
+			p.num,
+			p.sel,
+		)
 	}
 	if p.note != "" {
 		t.Fatalf("expected no validation note after reset, got %q", p.note)
+	}
+}
+
+func TestRunRequestPickerViewHandlesEmptyChoices(t *testing.T) {
+	p := newRunRequestPickerModel("many.http", nil, termcolor.TrueColor())
+
+	out := xansi.Strip(p.View())
+	if !strings.Contains(out, "No requests found.") {
+		t.Fatalf("expected empty picker message, got %q", out)
 	}
 }

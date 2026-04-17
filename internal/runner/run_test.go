@@ -1462,8 +1462,18 @@ func TestRunProfileMetadata(t *testing.T) {
 	if err := rep.WriteText(&text); err != nil {
 		t.Fatalf("WriteText: %v", err)
 	}
-	if !strings.Contains(text.String(), "PASS PROFILE prof") {
-		t.Fatalf("expected profile text output, got %q", text.String())
+	for _, want := range []string{
+		"PASS PROFILE prof",
+		"Profile:",
+		"Plan: 3 measured | 1 warmup",
+		"Runs: 4 total | 3 success | 0 failure | 1 warmup",
+		"Success: 100% (3/3)",
+		"Latency: 3 samples |",
+		"Stats: mean ",
+	} {
+		if !strings.Contains(text.String(), want) {
+			t.Fatalf("expected profile text output to contain %q, got %q", want, text.String())
+		}
 	}
 
 	var raw strings.Builder

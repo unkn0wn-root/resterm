@@ -38,6 +38,9 @@ func WriteTextStyled(w io.Writer, rep *Report, color termcolor.Config) error {
 		if err := writeTextTargetDetails(w, "  ", res.Target, res.EffectiveTarget, st); err != nil {
 			return err
 		}
+		if err := writeTextProfileDetails(w, "  ", res, st); err != nil {
+			return err
+		}
 		for i, step := range res.Steps {
 			if _, err := fmt.Fprintf(
 				w,
@@ -115,11 +118,23 @@ func (s textStyler) stepLine(text string) string {
 }
 
 func (s textStyler) detail(label, value string) string {
+	return s.detailValue(label, value, true)
+}
+
+func (s textStyler) profileDetail(label, value string) string {
+	return s.detailValue(label, value, false)
+}
+
+func (s textStyler) value(text string) string {
+	return s.paint(text, textColValue, false)
+}
+
+func (s textStyler) detailValue(label, value string, bold bool) string {
 	key := s.paint(label+":", textColHeading, false)
 	if value == "" {
 		return key
 	}
-	return key + " " + s.paint(value, textColValue, true)
+	return key + " " + s.paint(value, textColValue, bold)
 }
 
 func (s textStyler) index(n int) string {
