@@ -37,7 +37,7 @@ Resterm ships with the engine API, so you can build your own headless runner for
 The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
 
 > [!NOTE]
-> If you want an "off-the-shelf" runner instead of building your own, we also ship [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
+> If you want an "off-the-shelf" runner instead of building your own, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## CLI
 
