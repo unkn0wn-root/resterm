@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.28.1](https://github.com/unkn0wn-root/resterm/compare/v0.27.3...v0.28.1) (2026-04-17)
+
+
+### Features
+
+* add cli docs ([8d192e4](https://github.com/unkn0wn-root/resterm/commit/8d192e4b13ebaaf3721154b2d5287db404df9a81))
+* add custom cli request picker ([5946175](https://github.com/unkn0wn-root/resterm/commit/5946175f89aacbe321438d6e15621195be39fd27))
+* add effective target url and strings util ([fcf8d17](https://github.com/unkn0wn-root/resterm/commit/fcf8d1718d108737403a856a411e5713cf7756b7))
+* add histogram ([0c8b8d7](https://github.com/unkn0wn-root/resterm/commit/0c8b8d76a46528f98d22d8b094a172571e5edd3b))
+* add PASS badge to the cli ([1e7127d](https://github.com/unkn0wn-root/resterm/commit/1e7127d671705e6c5222a052f279d08ae848a6ee))
+* add profile histogram ([c45bb38](https://github.com/unkn0wn-root/resterm/commit/c45bb38815e5e88b579ae733931057429f8143de))
+* add some colors to histogram ([3d1f2e8](https://github.com/unkn0wn-root/resterm/commit/3d1f2e8608cf1bca466cfb4953340d42a9f13a43))
+* resterm run ([200af87](https://github.com/unkn0wn-root/resterm/commit/200af876cc6fdbcccfc8b517b5ff0eb47e334d2a))
+
+
+### Bug Fixes
+
+* **auth:** authcmd cache scope and source-dir resolution ([9e5c888](https://github.com/unkn0wn-root/resterm/commit/9e5c8887349bd899131c19214c87f1be2f05b2c2))
+* **binaryview:** prefer stable MIME extensions for filename hints ([f0b0eff](https://github.com/unkn0wn-root/resterm/commit/f0b0eff8b421bac2bf9790f7895ca37769768052))
+* small code fixes for profiling ([cfcd050](https://github.com/unkn0wn-root/resterm/commit/cfcd050f5dc6440524f9a0719a52c82c440b0266))
+* telementry config ([ad482ce](https://github.com/unkn0wn-root/resterm/commit/ad482ce143b20382f80c37ace72f1393e159712d))
+
 ### [0.27.3](https://github.com/unkn0wn-root/resterm/compare/v0.27.2...v0.27.3) (2026-04-16)
 
 
