@@ -7,7 +7,7 @@ import (
 )
 
 // Run executes a request or workflow file and returns a stable public report.
-// ctx must not be nil; otherwise Run returns ErrNilContext.
+// Use Run for one-shot execution when you do not need to reuse a prepared plan.
 func Run(ctx context.Context, opt Options) (*Report, error) {
 	if ctx == nil {
 		return nil, ErrNilContext
@@ -20,7 +20,8 @@ func Run(ctx context.Context, opt Options) (*Report, error) {
 }
 
 // RunPlan executes a prepared plan and returns a stable public report.
-// ctx must not be nil; otherwise RunPlan returns ErrNilContext.
+// Use RunPlan with Build when you want to prepare once and execute the same
+// validated plan multiple times.
 func RunPlan(ctx context.Context, pl Plan) (*Report, error) {
 	if ctx == nil {
 		return nil, ErrNilContext

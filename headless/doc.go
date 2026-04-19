@@ -1,7 +1,13 @@
 // Package headless runs Resterm requests and workflows without the TUI.
 //
 // The package exposes a library API for CI/CD, automation, and other
-// non-interactive integrations. The primary workflow is:
+// non-interactive integrations. Choose the entrypoint based on how you run:
+//
+//   - Call Run for a one-shot execution.
+//   - Call Build and then RunPlan when you want to prepare once and reuse the
+//     same validated plan across retries, repeated runs, or concurrent calls.
+//
+// The primary workflow is:
 //
 //  1. Construct Options.
 //  2. Call Build to prepare and validate a reusable Plan.

@@ -26,6 +26,8 @@ type Plan struct {
 }
 
 // Build prepares o for execution and returns a reusable plan.
+// Use Build with RunPlan when you want to validate once and reuse the same
+// source and selection across multiple runs.
 func Build(o Options) (Plan, error) {
 	ro, err := buildOptions(o)
 	if err != nil {
