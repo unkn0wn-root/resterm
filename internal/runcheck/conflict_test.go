@@ -1,6 +1,28 @@
 package runcheck
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestValidateConcreteEnvironment(t *testing.T) {
+	if err := ValidateConcreteEnvironment("", "--env"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if err := ValidateConcreteEnvironment("dev", "--env"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err := ValidateConcreteEnvironment("$shared", "--env")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if got := err.Error(); got != `--env "$shared" is reserved for shared defaults. Choose a concrete environment` {
+		t.Fatalf("error = %q", got)
+	}
+	if !strings.Contains(err.Error(), "reserved for shared defaults") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
 
 func TestValidateProfileCompare(t *testing.T) {
 	n := Names{

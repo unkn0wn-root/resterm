@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/runcheck"
 )
 
 func TestParseCompareTargetsRejectsShared(t *testing.T) {
@@ -17,15 +18,15 @@ func TestParseCompareTargetsRejectsShared(t *testing.T) {
 	}
 }
 
-func TestValidateReservedEnvironmentSelection(t *testing.T) {
-	if err := cli.ValidateReservedEnvironment("dev", "--env"); err != nil {
+func TestValidateConcreteEnvironmentSelection(t *testing.T) {
+	if err := runcheck.ValidateConcreteEnvironment("dev", "--env"); err != nil {
 		t.Fatalf("expected dev to be accepted, got %v", err)
 	}
-	if err := cli.ValidateReservedEnvironment("", "--env"); err != nil {
+	if err := runcheck.ValidateConcreteEnvironment("", "--env"); err != nil {
 		t.Fatalf("expected empty value to be accepted, got %v", err)
 	}
 
-	err := cli.ValidateReservedEnvironment("$shared", "--env")
+	err := runcheck.ValidateConcreteEnvironment("$shared", "--env")
 	if err == nil {
 		t.Fatalf("expected $shared to be rejected")
 	}

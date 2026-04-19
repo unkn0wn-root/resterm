@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/runcheck"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -115,7 +116,7 @@ func (f *ExecFlags) BindTelemetryFlags(fs *flag.FlagSet) {
 }
 
 func (f ExecFlags) ValidateEnvFlag() error {
-	return ValidateReservedEnvironment(f.EnvName, "--env")
+	return runcheck.ValidateConcreteEnvironment(f.EnvName, "--env")
 }
 
 func (f ExecFlags) TelemetryConfig(version string) telemetry.Config {
@@ -135,11 +136,11 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 	envName := f.EnvName
 	envFallback := ""
 	if envName == "" && len(envSet) > 0 {
-		selected, notify := SelectDefaultEnvironment(envSet)
-		if selected != "" {
-			envName = selected
-			if notify {
-				envFallback = selected
+		name := vars.DefaultEnvironment(envSet)
+		if name != "" {
+			envName = name
+			if len(envSet) > 1 {
+				envFallback = name
 			}
 		}
 	}
@@ -149,7 +150,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 		return ExecConfig{}, fmt.Errorf("invalid --compare value: %w", err)
 	}
 	base := f.CompareBaseline
-	if err := ValidateReservedEnvironment(base, "--compare-base"); err != nil {
+	if err := runcheck.ValidateConcreteEnvironment(base, "--compare-base"); err != nil {
 		return ExecConfig{}, fmt.Errorf("invalid --compare-base value: %w", err)
 	}
 

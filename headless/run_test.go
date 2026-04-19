@@ -14,7 +14,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -115,7 +114,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load env file: %v", err)
 	}
-	envName, _ := cli.SelectDefaultEnvironment(envs)
+	envName := vars.DefaultEnvironment(envs)
 	want, err := runner.RunContext(context.Background(), runner.Options{
 		FilePath:        path,
 		WorkspaceRoot:   dir,

@@ -5,10 +5,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 // SharedEnvKey is the reserved environment name whose variables are merged
@@ -25,7 +27,7 @@ var environmentFileCandidates = [...]string{
 // IsReservedEnvironment reports whether the name is reserved for
 // framework behavior and cannot be selected as a concrete environment.
 func IsReservedEnvironment(name string) bool {
-	return strings.EqualFold(strings.TrimSpace(name), SharedEnvKey)
+	return strings.EqualFold(str.Trim(name), SharedEnvKey)
 }
 
 func LoadEnvironmentFile(path string) (EnvironmentSet, error) {
@@ -188,20 +190,44 @@ func ResolveEnvironment(paths []string) (EnvironmentSet, string, error) {
 	return nil, "", nil
 }
 
+// DefaultEnvironment returns the default concrete environment name.
+func DefaultEnvironment(set EnvironmentSet) string {
+	if len(set) == 0 {
+		return ""
+	}
+	for _, name := range [...]string{"dev", "default", "local"} {
+		if _, ok := set[name]; ok {
+			return name
+		}
+	}
+	names := make([]string, 0, len(set))
+	for name := range set {
+		if str.Trim(name) == "" {
+			continue
+		}
+		names = append(names, name)
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	sort.Strings(names)
+	return names[0]
+}
+
 // SelectEnv returns the effective environment name, preferring the explicit override
 // when provided, then falling back to the current selection. Empty strings are ignored.
 func SelectEnv(set EnvironmentSet, override, current string) string {
-	if trimmed := strings.TrimSpace(override); trimmed != "" {
+	if trimmed := str.Trim(override); trimmed != "" {
 		return trimmed
 	}
-	if trimmed := strings.TrimSpace(current); trimmed != "" {
+	if trimmed := str.Trim(current); trimmed != "" {
 		return trimmed
 	}
 	if len(set) == 0 {
 		return ""
 	}
 	for name := range set {
-		if strings.TrimSpace(name) != "" {
+		if str.Trim(name) != "" {
 			return name
 		}
 	}
@@ -213,7 +239,7 @@ func EnvValues(set EnvironmentSet, name string) map[string]string {
 	if set == nil {
 		return nil
 	}
-	key := strings.TrimSpace(name)
+	key := str.Trim(name)
 	if key == "" {
 		return nil
 	}

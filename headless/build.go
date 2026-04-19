@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runcheck"
@@ -109,7 +108,7 @@ func (b *builder) buildCompare() error {
 		return err
 	}
 	base := str.Trim(b.opt.Compare.Base)
-	if err := cli.ValidateReservedEnvironment(base, "compare.base"); err != nil {
+	if err := runcheck.ValidateConcreteEnvironment(base, "compare.base"); err != nil {
 		return UsageError{err: err}
 	}
 	ns := runcheck.Names{
@@ -251,11 +250,11 @@ func environmentOptions(
 	}
 
 	envName := str.Trim(opt.Environment.Name)
-	if err := cli.ValidateReservedEnvironment(envName, "environment.name"); err != nil {
+	if err := runcheck.ValidateConcreteEnvironment(envName, "environment.name"); err != nil {
 		return nil, "", "", UsageError{err: err}
 	}
 	if envName == "" && len(envs) > 0 {
-		envName, _ = cli.SelectDefaultEnvironment(envs)
+		envName = vars.DefaultEnvironment(envs)
 	}
 	return envs, envFile, envName, nil
 }
@@ -293,7 +292,7 @@ func compareTargets(src []string) ([]string, error) {
 		if name == "" {
 			continue
 		}
-		if err := cli.ValidateReservedEnvironment(name, "compare.targets"); err != nil {
+		if err := runcheck.ValidateConcreteEnvironment(name, "compare.targets"); err != nil {
 			return nil, UsageError{err: err}
 		}
 		key := str.LowerTrim(name)
