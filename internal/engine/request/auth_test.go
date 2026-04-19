@@ -207,7 +207,10 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 		return []byte("token-basic"), nil
 	})
 
-	defsDoc := parser.Parse(defsPath, []byte(`# @auth global command argv=["gh","auth","token"] cache_key=github-cli-global`))
+	defsDoc := parser.Parse(
+		defsPath,
+		[]byte(`# @auth global command argv=["gh","auth","token"] cache_key=github-cli-global`),
+	)
 	eng.registryIndex().Sync(defsDoc)
 
 	seedReq := &restfile.Request{

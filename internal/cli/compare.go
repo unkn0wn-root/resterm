@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/runcheck"
 	str "github.com/unkn0wn-root/resterm/internal/util"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func ParseCompareTargets(raw string) ([]string, error) {
@@ -23,8 +23,8 @@ func ParseCompareTargets(raw string) ([]string, error) {
 	seen := make(map[string]struct{}, len(fields))
 	targets := make([]string, 0, len(fields))
 	for _, field := range fields {
-		if vars.IsReservedEnvironment(field) {
-			return nil, fmt.Errorf("environment %q is reserved for shared defaults", field)
+		if err := runcheck.ValidateConcreteEnvironment(field, "environment"); err != nil {
+			return nil, err
 		}
 		key := strings.ToLower(field)
 		if _, ok := seen[key]; ok {
@@ -38,15 +38,4 @@ func ParseCompareTargets(raw string) ([]string, error) {
 		return nil, fmt.Errorf("expected at least two environments, got %d", len(targets))
 	}
 	return targets, nil
-}
-
-func ValidateReservedEnvironment(value, flagName string) error {
-	if vars.IsReservedEnvironment(value) {
-		return fmt.Errorf(
-			"%s %q is reserved for shared defaults; choose a concrete environment",
-			flagName,
-			value,
-		)
-	}
-	return nil
 }

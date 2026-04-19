@@ -133,6 +133,60 @@ func TestIsReservedEnvironmentTrimsWhitespace(t *testing.T) {
 	}
 }
 
+func TestDefaultEnvironment(t *testing.T) {
+	tests := []struct {
+		name string
+		set  EnvironmentSet
+		want string
+	}{
+		{
+			name: "empty",
+			set:  nil,
+			want: "",
+		},
+		{
+			name: "prefer dev",
+			set: EnvironmentSet{
+				"stage": {},
+				"dev":   {},
+			},
+			want: "dev",
+		},
+		{
+			name: "prefer default",
+			set: EnvironmentSet{
+				"prod":    {},
+				"default": {},
+			},
+			want: "default",
+		},
+		{
+			name: "prefer local",
+			set: EnvironmentSet{
+				"prod":  {},
+				"local": {},
+			},
+			want: "local",
+		},
+		{
+			name: "sorted fallback",
+			set: EnvironmentSet{
+				"stage": {},
+				"alpha": {},
+			},
+			want: "alpha",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := DefaultEnvironment(tc.set); got != tc.want {
+				t.Fatalf("DefaultEnvironment() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSelectEnvTrimsInputs(t *testing.T) {
 	set := EnvironmentSet{"dev": {"base.url": "https://api.dev"}}
 

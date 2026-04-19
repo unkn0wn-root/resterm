@@ -9,10 +9,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -38,7 +39,9 @@ func TestRunRequestParity(t *testing.T) {
 		t.Fatalf("abs file: %v", err)
 	}
 
-	got, err := Run(context.Background(), Options{FilePath: file})
+	got, err := Run(context.Background(), Options{
+		Source: Source{Path: file},
+	})
 	if err != nil {
 		t.Fatalf("public Run: %v", err)
 	}
@@ -97,7 +100,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 	}
 
 	got, err := Run(context.Background(), Options{
-		FilePath: file,
+		Source: Source{Path: file},
 		Compare: CompareOptions{
 			Targets: []string{"dev", "stage"},
 			Base:    "stage",
@@ -111,7 +114,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load env file: %v", err)
 	}
-	envName, _ := cli.SelectDefaultEnvironment(envs)
+	envName := vars.DefaultEnvironment(envs)
 	want, err := runner.RunContext(context.Background(), runner.Options{
 		FilePath:        path,
 		WorkspaceRoot:   dir,
@@ -150,7 +153,9 @@ func TestRunUsageError(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := Run(context.Background(), Options{FilePath: file})
+	_, err := Run(context.Background(), Options{
+		Source: Source{Path: file},
+	})
 	if err == nil {
 		t.Fatal("expected usage error")
 	}
@@ -175,7 +180,7 @@ func TestRunUsesContext(t *testing.T) {
 	cancel()
 
 	got, err := Run(ctx, Options{
-		FilePath: file,
+		Source: Source{Path: file},
 		HTTP: HTTPOptions{
 			Timeout: 2 * time.Second,
 		},
@@ -207,12 +212,14 @@ func TestRunUsesContext(t *testing.T) {
 	}
 }
 
-func TestRunnerOptionsUseDefaults(t *testing.T) {
+func TestBuildOptionsUseDefaults(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
-	got, err := runnerOptions(Options{FilePath: file})
+	got, err := buildOptions(Options{
+		Source: Source{Path: file},
+	})
 	if err != nil {
-		t.Fatalf("runnerOptions: %v", err)
+		t.Fatalf("buildOptions: %v", err)
 	}
 	if got.HTTPOptions.Timeout != DefaultHTTPTimeout || !got.HTTPOptions.FollowRedirects {
 		t.Fatalf("unexpected http defaults: %+v", got.HTTPOptions)
@@ -222,28 +229,28 @@ func TestRunnerOptionsUseDefaults(t *testing.T) {
 	}
 }
 
-func TestRunnerOptionsProfileEnabled(t *testing.T) {
+func TestBuildOptionsProfileEnabled(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
-	got, err := runnerOptions(Options{
-		FilePath: file,
-		Profile:  ProfileOptions{Enabled: true},
+	got, err := buildOptions(Options{
+		Source:  Source{Path: file},
+		Profile: ProfileOptions{Enabled: true},
 	})
 	if err != nil {
-		t.Fatalf("runnerOptions: %v", err)
+		t.Fatalf("buildOptions: %v", err)
 	}
 	if !got.Profile {
 		t.Fatalf("expected profile=true, got %+v", got)
 	}
 }
 
-func TestRunnerOptionsRespectExplicitBoolOptions(t *testing.T) {
+func TestBuildOptionsRespectExplicitBoolOptions(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
 	follow := false
 	plain := false
-	got, err := runnerOptions(Options{
-		FilePath: file,
+	got, err := buildOptions(Options{
+		Source: Source{Path: file},
 		HTTP: HTTPOptions{
 			FollowRedirects: &follow,
 		},
@@ -252,7 +259,7 @@ func TestRunnerOptionsRespectExplicitBoolOptions(t *testing.T) {
 		},
 	})
 	if err != nil {
-		t.Fatalf("runnerOptions: %v", err)
+		t.Fatalf("buildOptions: %v", err)
 	}
 	if got.HTTPOptions.FollowRedirects {
 		t.Fatalf("expected follow=false, got %+v", got.HTTPOptions)
@@ -262,7 +269,7 @@ func TestRunnerOptionsRespectExplicitBoolOptions(t *testing.T) {
 	}
 }
 
-func TestRunUsesExplicitEmptyFileData(t *testing.T) {
+func TestRunUsesExplicitEmptySourceContent(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
 	if err := os.WriteFile(file, []byte("GET https://example.com/status\n"), 0o644); err != nil {
@@ -270,8 +277,10 @@ func TestRunUsesExplicitEmptyFileData(t *testing.T) {
 	}
 
 	_, err := Run(context.Background(), Options{
-		FilePath: file,
-		FileData: []byte{},
+		Source: Source{
+			Path:    file,
+			Content: []byte{},
+		},
 	})
 	if err == nil {
 		t.Fatal("expected error")
@@ -284,9 +293,12 @@ func TestRunUsesExplicitEmptyFileData(t *testing.T) {
 	}
 }
 
-func TestOptionsValidate(t *testing.T) {
+func TestBuildReturnsValidationErrors(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
+	if err := os.WriteFile(file, []byte("GET https://example.com/status\n"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
 
 	tests := []struct {
 		name  string
@@ -294,20 +306,20 @@ func TestOptionsValidate(t *testing.T) {
 		check func(*testing.T, error)
 	}{
 		{
-			name: "missing file path",
+			name: "missing source path",
 			opt:  Options{},
 			check: func(t *testing.T, err error) {
 				t.Helper()
-				if !IsUsageError(err) || !errors.Is(err, ErrNoFilePath) {
-					t.Fatalf("expected usage error wrapping ErrNoFilePath, got %v", err)
+				if !IsUsageError(err) || !errors.Is(err, ErrNoSourcePath) {
+					t.Fatalf("expected usage error wrapping ErrNoSourcePath, got %v", err)
 				}
 			},
 		},
 		{
 			name: "too few compare targets",
 			opt: Options{
-				FilePath: file,
-				Compare:  CompareOptions{Targets: []string{"dev"}},
+				Source:  Source{Path: file},
+				Compare: CompareOptions{Targets: []string{"dev"}},
 			},
 			check: func(t *testing.T, err error) {
 				t.Helper()
@@ -319,9 +331,9 @@ func TestOptionsValidate(t *testing.T) {
 		{
 			name: "profile compare conflict",
 			opt: Options{
-				FilePath: file,
-				Profile:  ProfileOptions{Enabled: true},
-				Compare:  CompareOptions{Targets: []string{"dev", "stage"}},
+				Source:  Source{Path: file},
+				Profile: ProfileOptions{Enabled: true},
+				Compare: CompareOptions{Targets: []string{"dev", "stage"}},
 			},
 			check: func(t *testing.T, err error) {
 				t.Helper()
@@ -339,7 +351,7 @@ func TestOptionsValidate(t *testing.T) {
 		{
 			name: "workflow selection conflict",
 			opt: Options{
-				FilePath: file,
+				Source: Source{Path: file},
 				Selection: Selection{
 					Workflow: "deploy",
 					Request:  "ping",
@@ -360,7 +372,7 @@ func TestOptionsValidate(t *testing.T) {
 		},
 		{
 			name: "valid options",
-			opt:  Options{FilePath: file},
+			opt:  Options{Source: Source{Path: file}},
 			check: func(t *testing.T, err error) {
 				t.Helper()
 				if err != nil {
@@ -372,8 +384,163 @@ func TestOptionsValidate(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.check(t, tc.opt.Validate())
+			_, err := Build(tc.opt)
+			tc.check(t, err)
 		})
+	}
+}
+
+func TestRunPlanUsesBuiltFileSnapshot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "api.http")
+	src := fmt.Sprintf("# @name ok\nGET %s\n", srv.URL)
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	pl, err := Build(Options{
+		Source: Source{Path: file},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if err := os.WriteFile(file, []byte("GET http://127.0.0.1:1/nope\n"), 0o644); err != nil {
+		t.Fatalf("overwrite file: %v", err)
+	}
+
+	rep, err := RunPlan(context.Background(), pl)
+	if err != nil {
+		t.Fatalf("RunPlan: %v", err)
+	}
+	if rep.Passed != 1 || rep.Failed != 0 {
+		t.Fatalf("unexpected report: %+v", rep)
+	}
+}
+
+func TestRunPlanUsesBuiltEnvironmentSnapshot(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/ok" {
+			http.NotFound(w, r)
+			return
+		}
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "api.http")
+	envFile := filepath.Join(dir, "rest-client.env.json")
+	src := "GET {{base}}/ok\n"
+	env := fmt.Sprintf(`{"dev":{"base":"%s"}}`, srv.URL)
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	if err := os.WriteFile(envFile, []byte(env), 0o644); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	pl, err := Build(Options{
+		Source: Source{Path: file},
+		Environment: EnvironmentOptions{
+			Name:     "dev",
+			FilePath: envFile,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if err := os.WriteFile(
+		envFile,
+		[]byte(`{"dev":{"base":"http://127.0.0.1:1"}}`),
+		0o644,
+	); err != nil {
+		t.Fatalf("overwrite env file: %v", err)
+	}
+
+	rep, err := RunPlan(context.Background(), pl)
+	if err != nil {
+		t.Fatalf("RunPlan: %v", err)
+	}
+	if rep.Passed != 1 || rep.Failed != 0 {
+		t.Fatalf("unexpected report: %+v", rep)
+	}
+}
+
+func TestRunPlanAllowsConcurrentReuse(t *testing.T) {
+	var hits atomic.Int64
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	file := filepath.Join(dir, "api.http")
+	src := fmt.Sprintf("# @name ok\nGET %s\n", srv.URL)
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	pl, err := Build(Options{
+		Source: Source{Path: file},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	const n = 6
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	for range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			rep, err := RunPlan(context.Background(), pl)
+			if err != nil {
+				errs <- err
+				return
+			}
+			if rep.Passed != 1 || rep.Failed != 0 {
+				errs <- fmt.Errorf("unexpected report: %+v", rep)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatalf("RunPlan: %v", err)
+	}
+	if got := hits.Load(); got != n {
+		t.Fatalf("request count = %d, want %d", got, n)
+	}
+}
+
+func TestRunPlanRejectsInvalidPlan(t *testing.T) {
+	_, err := RunPlan(context.Background(), Plan{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !IsUsageError(err) || !errors.Is(err, ErrInvalidPlan) {
+		t.Fatalf("expected usage error wrapping ErrInvalidPlan, got %v", err)
+	}
+}
+
+func TestRunPlanRejectsNilContext(t *testing.T) {
+	var ctx context.Context
+	_, err := RunPlan(ctx, Plan{})
+	if !errors.Is(err, ErrNilContext) {
+		t.Fatalf("RunPlan(nil, Plan{}): got %v want %v", err, ErrNilContext)
 	}
 }
 
@@ -382,8 +549,8 @@ func TestRunReturnsValidationErrors(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if !IsUsageError(err) || !errors.Is(err, ErrNoFilePath) {
-		t.Fatalf("expected usage error wrapping ErrNoFilePath, got %v", err)
+	if !IsUsageError(err) || !errors.Is(err, ErrNoSourcePath) {
+		t.Fatalf("expected usage error wrapping ErrNoSourcePath, got %v", err)
 	}
 }
 

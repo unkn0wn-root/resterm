@@ -5,11 +5,19 @@ import "time"
 // EnvironmentSet maps environment names to variable values.
 type EnvironmentSet map[string]map[string]string
 
+// Source identifies the request document to execute.
+// Path is required and provides the logical file identity and relative-resolution anchor.
+// Path may be synthetic when Content is provided.
+// Content overrides the bytes loaded from Path when provided.
+type Source struct {
+	Path    string `json:"path,omitempty"`
+	Content []byte `json:"-"`
+}
+
 // Options configures a headless run.
 type Options struct {
 	Version       string             `json:"version,omitempty"`
-	FilePath      string             `json:"filePath,omitempty"`
-	FileData      []byte             `json:"-"`
+	Source        Source             `json:"source,omitempty"`
 	WorkspaceRoot string             `json:"workspaceRoot,omitempty"`
 	Recursive     bool               `json:"recursive,omitempty"`
 	State         StateOptions       `json:"state,omitempty"`

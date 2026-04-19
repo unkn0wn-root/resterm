@@ -3,22 +3,17 @@ package runner
 import (
 	"bytes"
 	"context"
-	"errors"
-	"fmt"
 	"io"
-	"os"
-	"path/filepath"
+	"maps"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/engine/headless"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -55,29 +50,6 @@ type Options struct {
 	GRPCOptions     grpcclient.Options
 	Client          *httpclient.Client
 	Select          Select
-}
-
-type UsageError struct {
-	err error
-}
-
-// ErrNilWriter reports an attempt to write a report to a nil io.Writer.
-var ErrNilWriter = errors.New("runner: nil writer")
-
-func (e UsageError) Error() string {
-	if e.err == nil {
-		return ""
-	}
-	return e.err.Error()
-}
-
-func (e UsageError) Unwrap() error {
-	return e.err
-}
-
-func IsUsageError(err error) bool {
-	var target UsageError
-	return errors.As(err, &target)
 }
 
 type Report struct {
@@ -198,136 +170,13 @@ func Run(opts Options) (*Report, error) {
 
 func RunContext(ctx context.Context, opts Options) (*Report, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, ErrNilContext
 	}
-	path := str.Trim(opts.FilePath)
-	if path == "" {
-		return nil, usageError("--file is required")
-	}
-	start := time.Now()
-
-	data := bytes.Clone(opts.FileContent)
-	if data == nil {
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return nil, fmt.Errorf("read file: %w", err)
-		}
-		data = raw
-	}
-
-	doc := parser.Parse(path, data)
-	if len(doc.Errors) > 0 {
-		err := doc.Errors[0]
-		return nil, fmt.Errorf("parse error at line %d: %s", err.Line, err.Message)
-	}
-
-	work := opts.WorkspaceRoot
-	if work == "" {
-		work = filepath.Dir(path)
-	}
-	artifactDir, err := absCleanPath(opts.ArtifactDir)
-	if err != nil {
-		return nil, fmt.Errorf("resolve artifact dir: %w", err)
-	}
-	if opts.Profile && len(opts.CompareTargets) > 0 {
-		return nil, usageError("--profile cannot be combined with --compare")
-	}
-	paths, err := resolveStatePaths(opts)
-	if err != nil {
-		return nil, fmt.Errorf("resolve runner state: %w", err)
-	}
-	hist := openHistoryStore(paths, opts)
-
-	exec := headless.New(engine.Config{
-		FilePath:        path,
-		Client:          opts.Client,
-		EnvironmentSet:  opts.EnvSet,
-		EnvironmentName: opts.EnvName,
-		EnvironmentFile: opts.EnvironmentFile,
-		CompareTargets:  append([]string(nil), opts.CompareTargets...),
-		CompareBase:     str.Trim(opts.CompareBase),
-		HTTPOptions:     opts.HTTPOptions,
-		GRPCOptions:     opts.GRPCOptions,
-		WorkspaceRoot:   work,
-		Recursive:       opts.Recursive,
-		History:         hist,
-	})
-	defer func() { _ = exec.Close() }()
-	if err := loadRunnerState(exec, paths, opts); err != nil {
-		return nil, fmt.Errorf("load runner state: %w", err)
-	}
-
-	rep := &Report{
-		Version:   str.Trim(opts.Version),
-		FilePath:  path,
-		EnvName:   str.Trim(opts.EnvName),
-		StartedAt: start,
-	}
-
-	sel := newSelectSpec(opts.Select)
-	target, err := selectTarget(doc, sel)
+	pl, err := Build(opts)
 	if err != nil {
 		return nil, err
 	}
-
-	if target.workflow != nil {
-		if opts.Profile || len(opts.CompareTargets) > 0 {
-			return nil, usageError("--workflow cannot be combined with --compare or --profile")
-		}
-		rep.Results = make([]Result, 0, 1)
-		out, err := exec.ExecuteWorkflowContext(ctx, doc, target.workflow, opts.EnvName)
-		if err != nil {
-			return nil, err
-		}
-		rep.add(workflowRunResult(*out, opts.EnvName))
-		rep.EndedAt = time.Now()
-		rep.Duration = rep.EndedAt.Sub(rep.StartedAt)
-		if err := saveRunnerState(exec, paths, opts); err != nil {
-			return nil, fmt.Errorf("save runner state: %w", err)
-		}
-		if err := rep.writeArtifacts(artifactDir); err != nil {
-			return nil, err
-		}
-		return rep, nil
-	}
-
-	rep.Results = make([]Result, 0, len(target.requests))
-	for _, req := range target.requests {
-		runReq := cloneReq(req)
-		if opts.Profile && runReq.Metadata.Profile == nil {
-			runReq.Metadata.Profile = &restfile.ProfileSpec{}
-		}
-		res, err := exec.ExecuteRequestContext(ctx, doc, runReq, opts.EnvName)
-		if err != nil {
-			return nil, err
-		}
-		if res.Workflow != nil {
-			rep.add(workflowRunResult(*res.Workflow, opts.EnvName))
-			continue
-		}
-		if res.Compare != nil {
-			rep.add(compareRunResult(runReq, *res.Compare, opts.EnvName))
-			continue
-		}
-		if res.Profile != nil {
-			rep.add(profileRunResult(runReq, *res.Profile, opts.EnvName))
-			continue
-		}
-		rep.add(requestRunResult(runReq, res, opts.EnvName))
-	}
-	rep.EndedAt = time.Now()
-	rep.Duration = rep.EndedAt.Sub(rep.StartedAt)
-	if err := saveRunnerState(exec, paths, opts); err != nil {
-		return nil, fmt.Errorf("save runner state: %w", err)
-	}
-	if err := rep.writeArtifacts(artifactDir); err != nil {
-		return nil, err
-	}
-	return rep, nil
-}
-
-func usageError(format string, args ...any) error {
-	return UsageError{err: fmt.Errorf(format, args...)}
+	return RunPlan(ctx, pl)
 }
 
 func (r *Report) add(item Result) {
@@ -404,10 +253,7 @@ func requestSourceTarget(req *restfile.Request) string {
 	return str.Trim(req.URL)
 }
 
-func requestTarget(
-	req *restfile.Request,
-	resp *httpclient.Response,
-) string {
+func requestTarget(req *restfile.Request, resp *httpclient.Response) string {
 	return effectiveURL(resp, requestSourceTarget(req))
 }
 
@@ -761,9 +607,7 @@ func cloneStreamSummary(src map[string]any) map[string]any {
 		return nil
 	}
 	out := make(map[string]any, len(src))
-	for key, value := range src {
-		out[key] = value
-	}
+	maps.Copy(out, src)
 	return out
 }
 

@@ -8,11 +8,17 @@ type UsageError struct {
 }
 
 var (
-	// ErrNoFilePath reports that Options.FilePath was empty.
-	ErrNoFilePath = errors.New("headless: file path is required")
+	// ErrNoSourcePath reports that Options.Source.Path was empty.
+	ErrNoSourcePath = errors.New("headless: source path is required")
+
+	// ErrNilContext reports that a nil context was passed to Run or RunPlan.
+	ErrNilContext = errors.New("headless: nil context")
 
 	// ErrTooFewTargets reports that compare mode was enabled without enough targets.
 	ErrTooFewTargets = errors.New("headless: compare requires at least two target environments")
+
+	// ErrInvalidPlan reports that a zero-value or otherwise invalid Plan was used.
+	ErrInvalidPlan = errors.New("headless: invalid plan")
 
 	// ErrNilReport reports an attempt to encode a nil report.
 	ErrNilReport = errors.New("headless: nil report")

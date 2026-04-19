@@ -78,9 +78,22 @@ func NewClient(fs FileSystem) *Client {
 	}
 
 	c := &Client{fs: fs, telemetry: telemetry.Noop()}
-	c.httpFactory = c.buildHTTPClient
 	c.wsDial = websocket.Dial
 	return c
+}
+
+// Clone returns a snapshot of c's client configuration.
+// Later field updates on c do not affect the clone.
+func (c *Client) Clone() *Client {
+	if c == nil {
+		return nil
+	}
+	return &Client{
+		fs:          c.fs,
+		httpFactory: c.httpFactory,
+		wsDial:      c.wsDial,
+		telemetry:   c.telemetry,
+	}
 }
 
 // SetHTTPFactory allows callers to override how http.Client instances are created.
