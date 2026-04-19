@@ -4,17 +4,34 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-
-	"github.com/muesli/termenv"
-	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
-func WriteText(w io.Writer, rep *Report) error {
-	return WriteTextStyled(w, rep, termcolor.Config{})
+// TextPainter decorates text segments in the shared text formatter.
+// Implementations can apply ANSI styling or return the text unchanged.
+type TextPainter interface {
+	PaintText(text, fg string, bold bool) string
 }
 
-func WriteTextStyled(w io.Writer, rep *Report, color termcolor.Config) error {
-	st := newTextStyler(color)
+// TextPaintFunc adapts a function to TextPainter.
+type TextPaintFunc func(text, fg string, bold bool) string
+
+func (fn TextPaintFunc) PaintText(text, fg string, bold bool) string {
+	if fn == nil {
+		return text
+	}
+	return fn(text, fg, bold)
+}
+
+func WriteText(w io.Writer, rep *Report) error {
+	return writeText(w, rep, plainTextPainter{})
+}
+
+func WriteTextStyled(w io.Writer, rep *Report, painter TextPainter) error {
+	return writeText(w, rep, painter)
+}
+
+func writeText(w io.Writer, rep *Report, painter TextPainter) error {
+	st := newTextStyler(painter)
 	if _, err := fmt.Fprintf(
 		w,
 		"%s %d %s from %s with env %s\n",
@@ -83,11 +100,14 @@ const (
 )
 
 type textStyler struct {
-	cfg termcolor.Config
+	painter TextPainter
 }
 
-func newTextStyler(cfg termcolor.Config) textStyler {
-	return textStyler{cfg: cfg}
+func newTextStyler(painter TextPainter) textStyler {
+	if painter == nil {
+		painter = plainTextPainter{}
+	}
+	return textStyler{painter: painter}
 }
 
 func (s textStyler) heading(text string) string {
@@ -158,25 +178,16 @@ func (s textStyler) skipCount(n int) string {
 }
 
 func (s textStyler) paint(text, fg string, bold bool) string {
-	if !s.cfg.Enabled || text == "" {
+	if text == "" {
 		return text
 	}
-	p := s.profile()
-	st := p.String(text)
-	if fg != "" {
-		st = st.Foreground(p.Color(fg))
-	}
-	if bold {
-		st = st.Bold()
-	}
-	return st.String()
+	return s.painter.PaintText(text, fg, bold)
 }
 
-func (s textStyler) profile() termenv.Profile {
-	if s.cfg.Profile == termenv.Ascii {
-		return termenv.ANSI
-	}
-	return s.cfg.Profile
+type plainTextPainter struct{}
+
+func (plainTextPainter) PaintText(text, _ string, _ bool) string {
+	return text
 }
 
 func writeTextTargetDetails(

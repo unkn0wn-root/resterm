@@ -9,7 +9,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
-	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -27,14 +26,6 @@ func (r *Report) WriteJUnit(w io.Writer) error {
 	}
 	rep := NormalizeReport(r)
 	return runfmt.WriteJUnit(w, &rep)
-}
-
-func (r *Report) WriteTextStyled(w io.Writer, color termcolor.Config) error {
-	if w == nil {
-		return ErrNilWriter
-	}
-	rep := NormalizeReport(r)
-	return runfmt.WriteTextStyled(w, &rep, color)
 }
 
 // NormalizeReport converts a runner report into the canonical runfmt model.

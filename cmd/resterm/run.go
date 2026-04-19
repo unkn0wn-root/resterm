@@ -423,7 +423,8 @@ func (c *runCmd) writeReport(rep *runner.Report) error {
 		}
 		return c.writeOutput(func(w io.Writer) error {
 			if color.Enabled {
-				return rep.WriteTextStyled(w, color)
+				fmtRep := runner.NormalizeReport(rep)
+				return cli.WriteTextStyled(w, &fmtRep, color)
 			}
 			return rep.WriteText(w)
 		})

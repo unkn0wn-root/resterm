@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
-	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
 
 func TestWriteTextStyledColorPreservesPlainText(t *testing.T) {
@@ -46,7 +45,7 @@ func TestWriteTextStyledColorPreservesPlainText(t *testing.T) {
 	}
 
 	var colored strings.Builder
-	if err := WriteTextStyled(&colored, rep, termcolor.TrueColor()); err != nil {
+	if err := WriteTextStyled(&colored, rep, ansiTextPainter()); err != nil {
 		t.Fatalf("WriteTextStyled(...): %v", err)
 	}
 
@@ -273,7 +272,7 @@ func TestWriteTextStyledProfileHistogramUsesAnsiColors(t *testing.T) {
 	}
 
 	var colored strings.Builder
-	if err := WriteTextStyled(&colored, rep, termcolor.TrueColor()); err != nil {
+	if err := WriteTextStyled(&colored, rep, ansiTextPainter()); err != nil {
 		t.Fatalf("WriteTextStyled(...): %v", err)
 	}
 
@@ -288,4 +287,13 @@ func TestWriteTextStyledProfileHistogramUsesAnsiColors(t *testing.T) {
 			got,
 		)
 	}
+}
+
+func ansiTextPainter() TextPainter {
+	return TextPaintFunc(func(text, _ string, _ bool) string {
+		if text == "" {
+			return text
+		}
+		return "\x1b[31m" + text + "\x1b[0m"
+	})
 }
