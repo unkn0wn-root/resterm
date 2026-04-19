@@ -13,8 +13,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 func TestBuildAndRunPlanMatchRunContext(t *testing.T) {
@@ -256,10 +258,14 @@ func TestRunPlanRejectsInvalidSelection(t *testing.T) {
 	}
 }
 
+// assertRunnerReportParity compares semantic parity between two independent
+// executions. It normalizes runtime-only timing fields because RunPlan(pl) and
+// RunContext(opt) each perform a separate request, so timestamps and transport
+// durations can differ slightly even when behavior is identical.
 func assertRunnerReportParity(t *testing.T, want, got *Report) {
 	t.Helper()
-	want = stableRunnerReport(want)
-	got = stableRunnerReport(got)
+	want = parityRunnerReport(want)
+	got = parityRunnerReport(got)
 	var wantJSON strings.Builder
 	if err := want.WriteJSON(&wantJSON); err != nil {
 		t.Fatalf("want WriteJSON: %v", err)
@@ -273,7 +279,7 @@ func assertRunnerReportParity(t *testing.T, want, got *Report) {
 	}
 }
 
-func stableRunnerReport(src *Report) *Report {
+func parityRunnerReport(src *Report) *Report {
 	if src == nil {
 		return nil
 	}
@@ -287,22 +293,62 @@ func stableRunnerReport(src *Report) *Report {
 	}
 	out.Results = make([]Result, 0, len(src.Results))
 	for _, res := range src.Results {
-		out.Results = append(out.Results, stableRunnerResult(res))
+		out.Results = append(out.Results, parityRunnerResult(res))
 	}
 	return &out
 }
 
-func stableRunnerResult(src Result) Result {
+func parityRunnerResult(src Result) Result {
 	out := src
 	out.Duration = 0
+	out.Response = parityHTTPResponse(src.Response)
+	out.GRPC = parityGRPCResponse(src.GRPC)
+	out.Tests = parityRunnerTests(src.Tests)
 	if len(src.Steps) == 0 {
 		out.Steps = nil
 		return out
 	}
 	out.Steps = make([]StepResult, 0, len(src.Steps))
 	for _, step := range src.Steps {
-		step.Duration = 0
-		out.Steps = append(out.Steps, step)
+		out.Steps = append(out.Steps, parityRunnerStep(step))
+	}
+	return out
+}
+
+func parityRunnerStep(src StepResult) StepResult {
+	out := src
+	out.Duration = 0
+	out.Response = parityHTTPResponse(src.Response)
+	out.GRPC = parityGRPCResponse(src.GRPC)
+	out.Tests = parityRunnerTests(src.Tests)
+	return out
+}
+
+func parityHTTPResponse(src *httpclient.Response) *httpclient.Response {
+	if src == nil {
+		return nil
+	}
+	out := *src
+	out.Duration = 0
+	return &out
+}
+
+func parityGRPCResponse(src *grpcclient.Response) *grpcclient.Response {
+	if src == nil {
+		return nil
+	}
+	out := *src
+	out.Duration = 0
+	return &out
+}
+
+func parityRunnerTests(src []scripts.TestResult) []scripts.TestResult {
+	if len(src) == 0 {
+		return nil
+	}
+	out := append([]scripts.TestResult(nil), src...)
+	for i := range out {
+		out[i].Elapsed = 0
 	}
 	return out
 }
