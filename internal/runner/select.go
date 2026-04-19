@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -16,6 +17,12 @@ type selectSpec struct {
 }
 
 type selectedTarget struct {
+	requests    []int
+	workflow    int
+	workflowSet bool
+}
+
+type resolvedTarget struct {
 	requests []*restfile.Request
 	workflow *restfile.Workflow
 }
@@ -44,7 +51,7 @@ func selectTarget(doc *restfile.Document, sel selectSpec) (selectedTarget, error
 		if err != nil {
 			return selectedTarget{}, err
 		}
-		return selectedTarget{workflow: wf}, nil
+		return selectedTarget{workflow: wf, workflowSet: true}, nil
 	}
 	reqs, err := selectRequests(doc, sel)
 	if err != nil {
@@ -53,7 +60,7 @@ func selectTarget(doc *restfile.Document, sel selectSpec) (selectedTarget, error
 	return selectedTarget{requests: reqs}, nil
 }
 
-func selectRequests(doc *restfile.Document, sel selectSpec) ([]*restfile.Request, error) {
+func selectRequests(doc *restfile.Document, sel selectSpec) ([]int, error) {
 	if doc == nil || len(doc.Requests) == 0 {
 		return nil, usageError("no requests found")
 	}
@@ -75,7 +82,11 @@ func selectRequests(doc *restfile.Document, sel selectSpec) ([]*restfile.Request
 	}
 
 	if sel.all {
-		return append([]*restfile.Request(nil), doc.Requests...), nil
+		out := make([]int, 0, len(doc.Requests))
+		for i := range doc.Requests {
+			out = append(out, i)
+		}
+		return out, nil
 	}
 
 	if sel.request != "" {
@@ -87,7 +98,7 @@ func selectRequests(doc *restfile.Document, sel selectSpec) ([]*restfile.Request
 	}
 
 	if len(doc.Requests) == 1 {
-		return []*restfile.Request{doc.Requests[0]}, nil
+		return []int{0}, nil
 	}
 	return nil, usageError("multiple requests found; use --request, --tag, --line, or --all")
 }
@@ -111,8 +122,8 @@ func selectByLine(doc *restfile.Document, sel selectSpec) (selectedTarget, error
 			sel.line,
 		)
 	case 1:
-		if len(wfs) == 1 {
-			return selectedTarget{workflow: wfs[0]}, nil
+		if len(wfs) == 1 && wfs[0] >= 0 {
+			return selectedTarget{workflow: wfs[0], workflowSet: true}, nil
 		}
 		return selectedTarget{requests: reqs}, nil
 	default:
@@ -120,32 +131,32 @@ func selectByLine(doc *restfile.Document, sel selectSpec) (selectedTarget, error
 	}
 }
 
-func selectWorkflow(doc *restfile.Document, name string) (*restfile.Workflow, error) {
+func selectWorkflow(doc *restfile.Document, name string) (int, error) {
 	if doc == nil || len(doc.Workflows) == 0 {
-		return nil, usageError("no workflows found")
+		return -1, usageError("no workflows found")
 	}
-	var out []*restfile.Workflow
+	out := make([]int, 0, 1)
 	for i := range doc.Workflows {
-		wf := &doc.Workflows[i]
+		wf := doc.Workflows[i]
 		if strings.EqualFold(str.Trim(wf.Name), name) {
-			out = append(out, wf)
+			out = append(out, i)
 		}
 	}
 	switch len(out) {
 	case 0:
-		return nil, usageError("workflow %q not found", name)
+		return -1, usageError("workflow %q not found", name)
 	case 1:
 		return out[0], nil
 	default:
-		return nil, usageError("workflow %q matched %d entries", name, len(out))
+		return -1, usageError("workflow %q matched %d entries", name, len(out))
 	}
 }
 
-func selectByRequestName(reqs []*restfile.Request, name string) ([]*restfile.Request, error) {
-	var out []*restfile.Request
-	for _, req := range reqs {
-		if strings.EqualFold(str.Trim(req.Metadata.Name), name) {
-			out = append(out, req)
+func selectByRequestName(reqs []*restfile.Request, name string) ([]int, error) {
+	out := make([]int, 0, 1)
+	for i, req := range reqs {
+		if req != nil && strings.EqualFold(str.Trim(req.Metadata.Name), name) {
+			out = append(out, i)
 		}
 	}
 	switch len(out) {
@@ -158,12 +169,15 @@ func selectByRequestName(reqs []*restfile.Request, name string) ([]*restfile.Req
 	}
 }
 
-func selectByTag(reqs []*restfile.Request, tag string) ([]*restfile.Request, error) {
-	var out []*restfile.Request
-	for _, req := range reqs {
+func selectByTag(reqs []*restfile.Request, tag string) ([]int, error) {
+	out := make([]int, 0, 1)
+	for i, req := range reqs {
+		if req == nil {
+			continue
+		}
 		for _, item := range req.Metadata.Tags {
 			if strings.EqualFold(str.Trim(item), tag) {
-				out = append(out, req)
+				out = append(out, i)
 				break
 			}
 		}
@@ -174,33 +188,68 @@ func selectByTag(reqs []*restfile.Request, tag string) ([]*restfile.Request, err
 	return out, nil
 }
 
-func selectRequestsByLine(doc *restfile.Document, line int) []*restfile.Request {
+func selectRequestsByLine(doc *restfile.Document, line int) []int {
 	if doc == nil || line <= 0 {
 		return nil
 	}
-	out := make([]*restfile.Request, 0, 1)
-	for _, req := range doc.Requests {
+	out := make([]int, 0, 1)
+	for i, req := range doc.Requests {
 		if req == nil || !lineInRange(line, req.LineRange) {
 			continue
 		}
-		out = append(out, req)
+		out = append(out, i)
 	}
 	return out
 }
 
-func selectWorkflowsByLine(doc *restfile.Document, line int) []*restfile.Workflow {
+func selectWorkflowsByLine(doc *restfile.Document, line int) []int {
 	if doc == nil || line <= 0 {
 		return nil
 	}
-	out := make([]*restfile.Workflow, 0, 1)
+	out := make([]int, 0, 1)
 	for i := range doc.Workflows {
-		wf := &doc.Workflows[i]
+		wf := doc.Workflows[i]
 		if !lineInRange(line, wf.LineRange) {
 			continue
 		}
-		out = append(out, wf)
+		out = append(out, i)
 	}
 	return out
+}
+
+func (t selectedTarget) hasWorkflow() bool {
+	return t.workflowSet
+}
+
+func (t selectedTarget) resolve(doc *restfile.Document) (resolvedTarget, error) {
+	if doc == nil {
+		return resolvedTarget{}, invalidPlanError("document is nil")
+	}
+	if t.hasWorkflow() {
+		if len(t.requests) > 0 {
+			return resolvedTarget{}, invalidPlanError(
+				"workflow and requests are both selected",
+			)
+		}
+		wf, err := workflowAt(doc, t.workflow)
+		if err != nil {
+			return resolvedTarget{}, err
+		}
+		return resolvedTarget{workflow: wf}, nil
+	}
+	if len(t.requests) == 0 {
+		return resolvedTarget{}, invalidPlanError("selection is empty")
+	}
+
+	out := make([]*restfile.Request, 0, len(t.requests))
+	for _, i := range t.requests {
+		req, err := requestAt(doc, i)
+		if err != nil {
+			return resolvedTarget{}, err
+		}
+		out = append(out, req)
+	}
+	return resolvedTarget{requests: out}, nil
 }
 
 func lineInRange(line int, rg restfile.LineRange) bool {
@@ -212,4 +261,32 @@ func lineInRange(line int, rg restfile.LineRange) bool {
 		end = rg.Start
 	}
 	return line >= rg.Start && line <= end
+}
+
+func workflowAt(doc *restfile.Document, i int) (*restfile.Workflow, error) {
+	if doc == nil {
+		return nil, invalidPlanError("document is nil")
+	}
+	if i < 0 || i >= len(doc.Workflows) {
+		return nil, invalidPlanError("workflow index %d out of range", i)
+	}
+	return &doc.Workflows[i], nil
+}
+
+func requestAt(doc *restfile.Document, i int) (*restfile.Request, error) {
+	if doc == nil {
+		return nil, invalidPlanError("document is nil")
+	}
+	if i < 0 || i >= len(doc.Requests) {
+		return nil, invalidPlanError("request index %d out of range", i)
+	}
+	req := doc.Requests[i]
+	if req == nil {
+		return nil, invalidPlanError("request index %d is nil", i)
+	}
+	return req, nil
+}
+
+func invalidPlanError(format string, args ...any) error {
+	return fmt.Errorf("invalid runner plan: "+format, args...)
 }

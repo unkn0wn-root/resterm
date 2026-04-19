@@ -29,8 +29,11 @@ func TestUsageErrorZero(t *testing.T) {
 
 func TestZeroValues(t *testing.T) {
 	var opt Options
-	if opt.FilePath != "" || opt.Environment.Name != "" || opt.Profile.Enabled {
+	if opt.Source.Path != "" || opt.Environment.Name != "" || opt.Profile.Enabled {
 		t.Fatalf("unexpected options zero value: %+v", opt)
+	}
+	if opt.Source.Content != nil {
+		t.Fatalf("unexpected options zero source content: %+v", opt)
 	}
 	if opt.HTTP.FollowRedirects != nil || opt.GRPC.Plaintext != nil {
 		t.Fatalf("unexpected options zero pointer values: %+v", opt)
@@ -59,7 +62,9 @@ func TestJSONTags(t *testing.T) {
 		name string
 		tag  string
 	}{
-		{typ: reflect.TypeFor[Options](), name: "FilePath", tag: "filePath,omitempty"},
+		{typ: reflect.TypeFor[Options](), name: "Source", tag: "source,omitempty"},
+		{typ: reflect.TypeFor[Source](), name: "Path", tag: "path,omitempty"},
+		{typ: reflect.TypeFor[Source](), name: "Content", tag: "-"},
 		{typ: reflect.TypeFor[Options](), name: "Profile", tag: "profile,omitempty"},
 		{typ: reflect.TypeFor[Options](), name: "Selection", tag: "selection,omitempty"},
 		{typ: reflect.TypeFor[StateOptions](), name: "ArtifactDir", tag: "artifactDir,omitempty"},

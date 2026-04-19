@@ -32,13 +32,15 @@ func ExampleRun() {
 		return
 	}
 
-	opts := headless.Options{FilePath: path}
-	if err := opts.Validate(); err != nil {
+	pl, err := headless.Build(headless.Options{
+		Source: headless.Source{Path: path},
+	})
+	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
-	rep, err := headless.Run(context.Background(), opts)
+	rep, err := headless.RunPlan(context.Background(), pl)
 	if err != nil {
 		fmt.Println(err)
 		return
