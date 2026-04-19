@@ -458,7 +458,11 @@ func TestRunPlanUsesBuiltEnvironmentSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if err := os.WriteFile(envFile, []byte(`{"dev":{"base":"http://127.0.0.1:1"}}`), 0o644); err != nil {
+	if err := os.WriteFile(
+		envFile,
+		[]byte(`{"dev":{"base":"http://127.0.0.1:1"}}`),
+		0o644,
+	); err != nil {
 		t.Fatalf("overwrite env file: %v", err)
 	}
 
@@ -533,7 +537,8 @@ func TestRunPlanRejectsInvalidPlan(t *testing.T) {
 }
 
 func TestRunPlanRejectsNilContext(t *testing.T) {
-	_, err := RunPlan(nil, Plan{})
+	var ctx context.Context
+	_, err := RunPlan(ctx, Plan{})
 	if !errors.Is(err, ErrNilContext) {
 		t.Fatalf("RunPlan(nil, Plan{}): got %v want %v", err, ErrNilContext)
 	}

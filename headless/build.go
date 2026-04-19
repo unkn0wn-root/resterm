@@ -116,7 +116,11 @@ func (b *builder) buildCompare() error {
 		Compare:  "compare.targets",
 		Workflow: "selection.workflow",
 	}
-	if err := runcheck.ValidateProfileCompare(b.opt.Profile.Enabled, len(targets) > 0, ns); err != nil {
+	if err := runcheck.ValidateProfileCompare(
+		b.opt.Profile.Enabled,
+		len(targets) > 0,
+		ns,
+	); err != nil {
 		return UsageError{err: err}
 	}
 	if err := runcheck.ValidateWorkflowMode(

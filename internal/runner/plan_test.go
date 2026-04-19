@@ -200,7 +200,8 @@ func TestRunPlanRejectsNilPlan(t *testing.T) {
 }
 
 func TestRunPlanRejectsNilContext(t *testing.T) {
-	_, err := RunPlan(nil, nil)
+	var ctx context.Context
+	_, err := RunPlan(ctx, nil)
 	if !errors.Is(err, ErrNilContext) {
 		t.Fatalf("RunPlan(nil, nil): got %v want %v", err, ErrNilContext)
 	}
