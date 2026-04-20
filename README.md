@@ -16,39 +16,6 @@ Resterm is a **keyboard-driven** API client that lives in your terminal and keep
 
 Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview) and [Documentation](#documentation).
 
-## Why Resterm
-
-- Requests live in plain `.http` / `.rest` files.
-- **Conditional logic** - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each`.
-- **Multi-step workflows** with `@workflow` / `@step`.
-- **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
-- **RestermScript** - a small, safe expression language purpose.
-- **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
-- **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
-- **Timeline tracing**, **profiling**, and **compare runs** across environments.
-- **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
-- No cloud sync, no accounts, no telemetry. Everything stays local.
-- There is no AI integration and there will never be.
-
-## Headless
-
-Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling, CI flows or internal automation.
-
-The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
-
-> [!NOTE]
-> If you want an "off-the-shelf" runner instead of building your own, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
-
-## CLI
-
-Resterm also ships with a built-in CLI runner: `resterm run`.
-
-Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI. It is the batteries-included CLI experience for requests, workflows, assertions, compare runs and profiles.
-
-This is different from the `headless` package. The `headless` package is the embeddable Go API for building your own runner or CI integration, while `resterm run` is the built-in CLI on top of the same execution engine.
-
-See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
-
 ## Screenshot tour
 
 <details>
@@ -103,6 +70,51 @@ See the full [CLI documentation](docs/cli.md) for usage, selectors, output forma
 </p>
 
 </details>
+
+## Why Resterm
+
+- Requests live in plain `.http` / `.rest` files.
+- **Conditional logic** - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each`.
+- **Multi-step workflows** with `@workflow` / `@step`.
+- **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
+- **RestermScript** - a small, safe expression language purpose.
+- **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
+- **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
+- **Timeline tracing**, **profiling**, and **compare runs** across environments.
+- **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
+- No cloud sync, no accounts, no telemetry. Everything stays local.
+- There is no AI integration and there will never be.
+
+## Headless
+
+Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling/code, CI flows or internal automation.
+
+The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
+
+> [!NOTE]
+> If you want an "off-the-shelf" runner instead of building your own, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
+
+## CLI
+
+Resterm also ships with a built-in CLI: `resterm run`.
+
+Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI.
+
+**Example**:
+
+```bash
+mkdir my-api && cd my-api
+resterm init
+resterm run --request Echo requests.http
+```
+
+`resterm init` creates `requests.http` with sample requests and `resterm.env.json` with a `dev` environment that points at `httpbin.org`. The command above runs the **Echo** request which POSTs a JSON body and prints the response.
+
+> [!NOTE]
+> This is different from the `headless` package. The `headless` package is the embeddable Go API for building your own runner or CI integration, while `resterm run` is the built-in CLI on top of the same execution engine.
+
+See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
+
 
 ## Quick Start
 
