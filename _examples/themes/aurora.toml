@@ -101,6 +101,9 @@ bold = true
 pane_border_focus_file = "#38bdf8"
 pane_border_focus_requests = "#34d399"
 pane_active_foreground = "#f8fafc"
+modal_backdrop = "#1A1823"
+modal_input_background = "#1c1a23"
+modal_option = "#4D4663"
 
 [editor_metadata]
 comment_marker = "#38bdf8"

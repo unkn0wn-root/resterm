@@ -73,7 +73,7 @@ func TestApplyThemeDefinitionStylesGenericInputsOnlyForLightThemes(t *testing.T)
 	}
 }
 
-func TestThemeRuntimeDarkModalsPreserveLegacyColorsForCustomDarkThemes(t *testing.T) {
+func TestDarkModalFallback(t *testing.T) {
 	customDark := theme.DefaultTheme()
 	customDark.CommandBar = customDark.CommandBar.Background(lipgloss.Color("#102938"))
 	customDark.ResponseSelection = customDark.ResponseSelection.Background(lipgloss.Color("#223344"))
@@ -88,10 +88,65 @@ func TestThemeRuntimeDarkModalsPreserveLegacyColorsForCustomDarkThemes(t *testin
 	})
 
 	if got := rt.modalBackdropColor(customDark); got != lipgloss.Color("#1A1823") {
-		t.Fatalf("expected legacy dark modal backdrop, got %v", got)
+		t.Fatalf("expected default dark modal backdrop, got %v", got)
 	}
 	if got := rt.modalInputBackground(customDark); got != lipgloss.Color("#1c1a23") {
-		t.Fatalf("expected legacy dark modal input background, got %v", got)
+		t.Fatalf("expected default dark modal input background, got %v", got)
+	}
+}
+
+func TestModalOverrides(t *testing.T) {
+	customDark := theme.DefaultTheme()
+	customDark.CommandBar = customDark.CommandBar.Background(lipgloss.Color("#102938"))
+	customDark.ResponseSelection = customDark.ResponseSelection.Background(lipgloss.Color("#223344"))
+	customDark.ModalBackdrop = lipgloss.Color("#0f1720")
+	customDark.ModalInputBackground = lipgloss.Color("#162033")
+	customDark.ModalOption = lipgloss.Color("#94a3b8")
+
+	rt := newThemeRuntime(theme.Definition{
+		Key: "aurora",
+		Metadata: theme.Metadata{
+			Name: "Aurora",
+			Tags: []string{"dark"},
+		},
+		Theme: customDark,
+	})
+
+	if got := rt.modalBackdropColor(customDark); got != lipgloss.Color("#0f1720") {
+		t.Fatalf("expected explicit modal backdrop override, got %v", got)
+	}
+	if got := rt.modalInputBackground(customDark); got != lipgloss.Color("#162033") {
+		t.Fatalf("expected explicit modal input background override, got %v", got)
+	}
+	option := rt.modalOptionStyle(customDark)
+	if got := option.GetForeground(); got != lipgloss.Color("#94a3b8") {
+		t.Fatalf("expected explicit modal option foreground, got %v", got)
+	}
+}
+
+func TestEditorSelectionIgnoresModalInput(t *testing.T) {
+	model := New(Config{})
+
+	lightTheme := theme.DefaultTheme()
+	lightTheme.CommandBar = lightTheme.CommandBar.Background(lipgloss.Color("#dbe4ee"))
+	lightTheme.ResponseSelection = lipgloss.NewStyle().Background(lipgloss.Color("#e2e8f0"))
+	lightTheme.ModalInputBackground = lipgloss.Color("#cbd5f5")
+	lightTheme.PaneActiveForeground = lipgloss.Color("#0f172a")
+
+	model.applyThemeDefinition(theme.Definition{
+		Key: "daybreak",
+		Metadata: theme.Metadata{
+			Name: "Daybreak",
+			Tags: []string{"light"},
+		},
+		Theme: lightTheme,
+	})
+
+	if got := model.themeRuntime.modalInputBackground(model.theme); got != lipgloss.Color("#cbd5f5") {
+		t.Fatalf("expected modal input background override, got %v", got)
+	}
+	if got := model.editor.SelectionStyle().GetBackground(); got != lipgloss.Color("#e2e8f0") {
+		t.Fatalf("expected editor selection to keep response selection background, got %v", got)
 	}
 }
 

@@ -71,6 +71,9 @@ type Theme struct {
 	PaneBorderFocusFile           lipgloss.Color
 	PaneBorderFocusRequests       lipgloss.Color
 	PaneActiveForeground          lipgloss.Color
+	ModalBackdrop                 lipgloss.Color
+	ModalInputBackground          lipgloss.Color
+	ModalOption                   lipgloss.Color
 	EditorMetadata                EditorMetadataPalette
 	EditorHintBox                 lipgloss.Style
 	EditorHintItem                lipgloss.Style

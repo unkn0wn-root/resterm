@@ -111,6 +111,9 @@ type ColorsSpec struct {
 	PaneBorderFocusFile     *string `json:"pane_border_focus_file"     toml:"pane_border_focus_file"`
 	PaneBorderFocusRequests *string `json:"pane_border_focus_requests" toml:"pane_border_focus_requests"`
 	PaneActiveForeground    *string `json:"pane_active_foreground"     toml:"pane_active_foreground"`
+	ModalBackdrop           *string `json:"modal_backdrop"             toml:"modal_backdrop"`
+	ModalInputBackground    *string `json:"modal_input_background"     toml:"modal_input_background"`
+	ModalOption             *string `json:"modal_option"               toml:"modal_option"`
 	MethodGET               *string `json:"method_get"                 toml:"method_get"`
 	MethodPOST              *string `json:"method_post"                toml:"method_post"`
 	MethodPUT               *string `json:"method_put"                 toml:"method_put"`
@@ -669,6 +672,27 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 			return Theme{}, err
 		}
 		cloned.PaneActiveForeground = color
+	}
+	if spec.Colors.ModalBackdrop != nil {
+		color, err := toColor("modal_backdrop", *spec.Colors.ModalBackdrop)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.ModalBackdrop = color
+	}
+	if spec.Colors.ModalInputBackground != nil {
+		color, err := toColor("modal_input_background", *spec.Colors.ModalInputBackground)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.ModalInputBackground = color
+	}
+	if spec.Colors.ModalOption != nil {
+		color, err := toColor("modal_option", *spec.Colors.ModalOption)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.ModalOption = color
 	}
 	if spec.Colors.MethodGET != nil {
 		color, err := toColor("method_get", *spec.Colors.MethodGET)

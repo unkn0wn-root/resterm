@@ -306,6 +306,9 @@ border_color = "#60a5fa"
 pane_border_focus_file = "#2563eb"
 pane_border_focus_requests = "#0d9488"
 pane_active_foreground = "#0f172a"
+modal_backdrop = "#e2e8f0"
+modal_input_background = "#e2e8f0"
+modal_option = "#64748b"
 
 [editor_metadata]
 comment_marker = "#94a3b8"

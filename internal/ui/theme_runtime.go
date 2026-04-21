@@ -94,6 +94,9 @@ func (rt themeRuntime) helpHintStyle(th theme.Theme) lipgloss.Style {
 }
 
 func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor {
+	if colorDefined(th.ModalBackdrop) {
+		return th.ModalBackdrop
+	}
 	if !rt.isLight() {
 		return lipgloss.Color("#1A1823")
 	}
@@ -107,6 +110,9 @@ func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor
 }
 
 func (rt themeRuntime) modalInputBackground(th theme.Theme) lipgloss.TerminalColor {
+	if colorDefined(th.ModalInputBackground) {
+		return th.ModalInputBackground
+	}
 	if !rt.isLight() {
 		return lipgloss.Color("#1c1a23")
 	}
@@ -120,10 +126,23 @@ func (rt themeRuntime) modalInputBackground(th theme.Theme) lipgloss.TerminalCol
 }
 
 func (rt themeRuntime) modalOptionStyle(th theme.Theme) lipgloss.Style {
+	if colorDefined(th.ModalOption) {
+		return lipgloss.NewStyle().Foreground(th.ModalOption)
+	}
 	if rt.isLight() {
 		return inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("#4D4663"))
+}
+
+func (rt themeRuntime) editorSelectionBackground(th theme.Theme) lipgloss.TerminalColor {
+	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
+		return bg
+	}
+	if bg := th.CommandBar.GetBackground(); colorDefined(bg) {
+		return bg
+	}
+	return lipgloss.Color("#E2E8F0")
 }
 
 func (rt themeRuntime) statsPalette(th theme.Theme) statsPalette {
@@ -218,7 +237,7 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 	blurred.CursorLine = lipgloss.NewStyle()
 	ed.FocusedStyle = focused
 	ed.BlurredStyle = blurred
-	ed.SetSelectionStyle(lipgloss.NewStyle().Background(rt.modalInputBackground(th)))
+	ed.SetSelectionStyle(lipgloss.NewStyle().Background(rt.editorSelectionBackground(th)))
 	if ed.Focused() {
 		ed.Model.Focus()
 	} else {
