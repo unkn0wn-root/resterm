@@ -71,6 +71,7 @@ type responseSnapshot struct {
 	contentType     string
 	responseHeaders http.Header
 	effectiveURL    string
+	source          responseRenderSource
 }
 
 type headersViewMode int

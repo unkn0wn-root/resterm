@@ -79,8 +79,22 @@ func (rt themeRuntime) subtleTextStyle(th theme.Theme) lipgloss.Style {
 	return lipgloss.NewStyle().Faint(true)
 }
 
+func (rt themeRuntime) historyPlaceholderStyle(th theme.Theme) lipgloss.Style {
+	if rt.isLight() {
+		return rt.subtleTextStyle(th)
+	}
+	return th.HeaderValue.Faint(true)
+}
+
+func (rt themeRuntime) helpHintStyle(th theme.Theme) lipgloss.Style {
+	if rt.isLight() {
+		return rt.subtleTextStyle(th)
+	}
+	return th.HeaderValue.Faint(true)
+}
+
 func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor {
-	if rt.isDefaultTheme() {
+	if !rt.isLight() {
 		return lipgloss.Color("#1A1823")
 	}
 	if bg := th.CommandBar.GetBackground(); colorDefined(bg) {
@@ -89,14 +103,11 @@ func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor
 	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
 		return bg
 	}
-	if rt.isLight() {
-		return lipgloss.Color("#E2E8F0")
-	}
-	return lipgloss.Color("#1A1823")
+	return lipgloss.Color("#E2E8F0")
 }
 
 func (rt themeRuntime) modalInputBackground(th theme.Theme) lipgloss.TerminalColor {
-	if rt.isDefaultTheme() {
+	if !rt.isLight() {
 		return lipgloss.Color("#1c1a23")
 	}
 	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
@@ -105,10 +116,7 @@ func (rt themeRuntime) modalInputBackground(th theme.Theme) lipgloss.TerminalCol
 	if bg := th.CommandBar.GetBackground(); colorDefined(bg) {
 		return bg
 	}
-	if rt.isLight() {
-		return lipgloss.Color("#E2E8F0")
-	}
-	return lipgloss.Color("#1c1a23")
+	return lipgloss.Color("#E2E8F0")
 }
 
 func (rt themeRuntime) modalOptionStyle(th theme.Theme) lipgloss.Style {
@@ -153,7 +161,7 @@ func (rt themeRuntime) applyTextInput(
 	case textInputKindHistory:
 		ti.TextStyle = th.HeaderValue
 		ti.PromptStyle = th.HeaderValue
-		ti.PlaceholderStyle = rt.subtleTextStyle(th)
+		ti.PlaceholderStyle = rt.historyPlaceholderStyle(th)
 		ti.Cursor.Style = th.HeaderValue
 	default:
 		if rt.isLight() {
@@ -242,39 +250,19 @@ func (m *Model) applyThemeToInputs() {
 }
 
 func (m *Model) invalidateThemedCaches() {
-	seen := make(map[*responseSnapshot]struct{})
-	var snapshots []*responseSnapshot
-	add := func(snapshot *responseSnapshot) {
-		if snapshot == nil {
-			return
-		}
-		if _, ok := seen[snapshot]; ok {
-			return
-		}
-		seen[snapshot] = struct{}{}
-		snapshots = append(snapshots, snapshot)
-	}
-
-	add(m.responseLatest)
-	add(m.responsePrevious)
-	add(m.responsePending)
-	for _, snapshot := range m.responseTokens {
-		add(snapshot)
-	}
-	for _, snapshot := range m.compareSnapshots {
-		add(snapshot)
-	}
-	for i := range m.responsePanes {
-		add(m.responsePanes[i].snapshot)
-	}
-
+	snapshots := m.collectResponseSnapshots()
+	renderer := m.themeRuntime.responseRenderer(m.theme)
 	for _, snapshot := range snapshots {
+		m.rerenderThemedSnapshot(snapshot, renderer)
 		snapshot.statsColored = ""
 		snapshot.traceReport = timelineReport{}
 		snapshot.explain.cache = explainRenderCache{}
 		if snapshot.workflowStats != nil {
 			snapshot.workflowStats.invalidate()
 		}
+	}
+	for i := range m.responsePanes {
+		m.responsePanes[i].invalidateCaches()
 	}
 }
 

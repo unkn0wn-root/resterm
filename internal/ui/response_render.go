@@ -305,6 +305,101 @@ func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response)
 	return joinSections(reqLineColored, section)
 }
 
+func buildGRPCResponseViews(resp *grpcclient.Response, fullMethod string) responseViews {
+	return defaultResponseRenderer().buildGRPCResponseViews(resp, fullMethod)
+}
+
+func (r responseRenderer) buildGRPCResponseViews(
+	resp *grpcclient.Response,
+	fullMethod string,
+) responseViews {
+	if resp == nil {
+		return responseViews{
+			pretty:     noResponseMessage,
+			raw:        noResponseMessage,
+			rawSummary: "",
+			headers:    noResponseMessage,
+			meta:       binaryview.Meta{},
+			rawMode:    rawViewText,
+		}
+	}
+
+	headersBuilder := strings.Builder{}
+	contentType := strings.TrimSpace(resp.ContentType)
+	if len(resp.Headers) > 0 {
+		headersBuilder.WriteString("Headers:\n")
+		for name, values := range resp.Headers {
+			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
+			if strings.EqualFold(name, "Content-Type") && contentType == "" && len(values) > 0 {
+				contentType = strings.TrimSpace(values[0])
+			}
+		}
+	}
+	if len(resp.Trailers) > 0 {
+		if headersBuilder.Len() > 0 {
+			headersBuilder.WriteString("\n")
+		}
+		headersBuilder.WriteString("Trailers:\n")
+		for name, values := range resp.Trailers {
+			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
+		}
+	}
+	headersContent := strings.TrimRight(headersBuilder.String(), "\n")
+
+	statusLine := fmt.Sprintf(
+		"gRPC %s - %s",
+		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
+		resp.StatusCode.String(),
+	)
+	if resp.StatusMessage != "" {
+		statusLine += " (" + resp.StatusMessage + ")"
+	}
+
+	viewBody := append([]byte(nil), resp.Body...)
+	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
+		viewBody = []byte(resp.Message)
+	}
+	viewContentType := strings.TrimSpace(resp.ContentType)
+	if viewContentType == "" && len(viewBody) > 0 {
+		viewContentType = "application/json"
+	}
+
+	rawBody := append([]byte(nil), resp.Wire...)
+	if len(rawBody) == 0 {
+		rawBody = append([]byte(nil), viewBody...)
+	}
+	rawContentType := strings.TrimSpace(resp.WireContentType)
+	if rawContentType == "" {
+		rawContentType = contentType
+	}
+	if rawContentType == "" {
+		rawContentType = viewContentType
+	}
+
+	meta := binaryview.Analyze(viewBody, viewContentType)
+	bv := r.buildBodyViewsCtx(
+		context.Background(),
+		rawBody,
+		rawContentType,
+		&meta,
+		viewBody,
+		viewContentType,
+	)
+
+	return responseViews{
+		pretty:      joinSections(statusLine, bv.pretty),
+		raw:         joinSections(statusLine, bv.raw),
+		rawSummary:  statusLine,
+		headers:     joinSections(statusLine, headersContent),
+		meta:        meta,
+		contentType: bv.ct,
+		rawText:     bv.rawText,
+		rawHex:      bv.rawHex,
+		rawBase64:   bv.rawBase64,
+		rawMode:     bv.mode,
+	}
+}
+
 func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
 	var h http.Header
 	if resp != nil && resp.RequestHeaders != nil {

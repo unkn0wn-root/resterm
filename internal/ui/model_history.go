@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -502,6 +501,7 @@ func (m *Model) consumeHTTPResponse(
 		explain: explainState{
 			report: rep,
 		},
+		source: newHTTPResponseRenderSource(resp, tests, scriptErr),
 	}
 	m.responseRenderToken = token
 	m.responsePending = snapshot
@@ -796,91 +796,36 @@ func (m *Model) consumeGRPCResponse(
 		return nil
 	}
 
-	headersBuilder := strings.Builder{}
-	contentType := strings.TrimSpace(resp.ContentType)
-	if len(resp.Headers) > 0 {
-		headersBuilder.WriteString("Headers:\n")
-		for name, values := range resp.Headers {
-			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
-			if strings.EqualFold(name, "Content-Type") && contentType == "" && len(values) > 0 {
-				contentType = strings.TrimSpace(values[0])
-			}
-		}
+	renderer := m.themeRuntime.responseRenderer(m.theme)
+	fullMethod := ""
+	if req != nil && req.GRPC != nil {
+		fullMethod = req.GRPC.FullMethod
 	}
-	if len(resp.Trailers) > 0 {
-		if headersBuilder.Len() > 0 {
-			headersBuilder.WriteString("\n")
-		}
-		headersBuilder.WriteString("Trailers:\n")
-		for name, values := range resp.Trailers {
-			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
-		}
-	}
-	headersContent := strings.TrimRight(headersBuilder.String(), "\n")
-
-	statusLine := fmt.Sprintf(
-		"gRPC %s - %s",
-		strings.TrimPrefix(req.GRPC.FullMethod, "/"),
-		resp.StatusCode.String(),
-	)
-	if resp.StatusMessage != "" {
-		statusLine += " (" + resp.StatusMessage + ")"
-	}
-
-	viewBody := append([]byte(nil), resp.Body...)
-	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
-		viewBody = []byte(resp.Message)
-	}
-	viewContentType := strings.TrimSpace(resp.ContentType)
-	if viewContentType == "" && len(viewBody) > 0 {
-		viewContentType = "application/json"
-	}
-
-	rawBody := append([]byte(nil), resp.Wire...)
-	if len(rawBody) == 0 {
-		rawBody = append([]byte(nil), viewBody...)
-	}
-	rawContentType := strings.TrimSpace(resp.WireContentType)
-	if rawContentType == "" {
-		rawContentType = contentType
-	}
-	if rawContentType == "" {
-		rawContentType = viewContentType
-	}
-
-	meta := binaryview.Analyze(viewBody, viewContentType)
-	bv := buildBodyViews(rawBody, rawContentType, &meta, viewBody, viewContentType)
+	views := renderer.buildGRPCResponseViews(resp, fullMethod)
+	statusLine := views.rawSummary
 
 	snapshot := &responseSnapshot{
-		pretty:     joinSections(statusLine, bv.pretty),
-		raw:        joinSections(statusLine, bv.raw),
-		rawSummary: statusLine,
-		headers:    joinSections(statusLine, headersContent),
+		pretty:     views.pretty,
+		raw:        views.raw,
+		rawSummary: views.rawSummary,
+		headers:    views.headers,
 		explain: explainState{
 			report: rep,
 		},
-		ready:       true,
-		environment: environment,
-		body:        rawBody,
-		bodyMeta:    meta,
-		contentType: rawContentType,
-		rawText:     bv.rawText,
-		rawHex:      bv.rawHex,
-		rawBase64:   bv.rawBase64,
-		rawMode:     bv.mode,
-		responseHeaders: func() http.Header {
-			if len(resp.Headers) == 0 && len(resp.Trailers) == 0 {
-				return nil
-			}
-			h := make(http.Header, len(resp.Headers)+len(resp.Trailers))
-			for k, v := range resp.Headers {
-				h[k] = append([]string(nil), v...)
-			}
-			for k, v := range resp.Trailers {
-				h["Grpc-Trailer-"+k] = append([]string(nil), v...)
-			}
-			return h
-		}(),
+		ready:           true,
+		environment:     environment,
+		body:            append([]byte(nil), resp.Wire...),
+		bodyMeta:        views.meta,
+		contentType:     views.contentType,
+		rawText:         views.rawText,
+		rawHex:          views.rawHex,
+		rawBase64:       views.rawBase64,
+		rawMode:         views.rawMode,
+		responseHeaders: grpcResponseHeaderMap(resp),
+		source:          newGRPCResponseRenderSource(resp, fullMethod),
+	}
+	if len(snapshot.body) == 0 {
+		snapshot.body = append([]byte(nil), resp.Body...)
 	}
 	applyRawViewMode(snapshot, snapshot.rawMode)
 	m.responseLatest = snapshot

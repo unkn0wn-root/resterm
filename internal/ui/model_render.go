@@ -2621,7 +2621,7 @@ func (m Model) renderHelpFilter(width int) string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		input,
-		m.themeRuntime.subtleTextStyle(m.theme).Width(width).Render(hintText),
+		m.themeRuntime.helpHintStyle(m.theme).Width(width).Render(hintText),
 	)
 }
 
