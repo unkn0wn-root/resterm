@@ -1004,6 +1004,33 @@ func (m Model) LineInfo() LineInfo {
 	}
 }
 
+// ViewportCursor returns the cursor column and row within the rendered viewport.
+func (m Model) ViewportCursor() (int, int) {
+	if len(m.value) == 0 {
+		return 0, 0
+	}
+
+	row := m.row
+	if m.viewport != nil {
+		row -= m.viewport.YOffset
+	}
+	if row < 0 {
+		row = 0
+	}
+	if row >= m.height {
+		row = max(m.height-1, 0)
+	}
+
+	col := lipgloss.Width(m.getPromptString(m.row))
+	if m.ShowLineNumbers {
+		col += lipgloss.Width(m.formatLineNumber(m.row + 1))
+	}
+
+	line := m.value[m.row]
+	col += max(visualWidthUntil(line, m.col)-m.horizOffset, 0)
+	return col, row
+}
+
 // SetSelectionRange marks the inclusive-exclusive rune offsets that should be
 // highlighted in the rendered view. Passing identical offsets clears the
 // highlight.

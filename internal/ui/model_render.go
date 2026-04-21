@@ -12,7 +12,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/theme"
-	"github.com/unkn0wn-root/resterm/internal/ui/hint"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
@@ -595,25 +594,14 @@ func methodColor(th theme.Theme, method string) lipgloss.Color {
 func (m Model) renderEditorPane() string {
 	style := m.theme.EditorBorder
 	collapsed := m.effectiveRegionCollapsed(paneRegionEditor)
-	if m.focus == focusEditor && m.editorInsertMode && !collapsed {
-		if items, selection, ok := m.editor.metadataHintsDisplay(
-			metadataHintDisplayLimit,
-		); ok &&
-			len(items) > 0 {
-			overlay := m.buildMetadataHintOverlay(items, selection, m.editor.Width())
-			m.editor.SetOverlayLines(overlay)
-		} else {
-			m.editor.ClearOverlay()
-		}
-	} else {
-		m.editor.ClearOverlay()
-	}
-
 	if collapsed {
 		return ""
 	}
 
 	content := m.editor.View()
+	if m.focus == focusEditor && m.editorInsertMode {
+		content = m.renderMetadataHintPopup(content)
+	}
 	contentWidth := lipgloss.Width(content)
 	if contentWidth < 1 {
 		contentWidth = 1
@@ -645,39 +633,6 @@ func (m Model) renderEditorPane() string {
 		MaxWidth(outerWidth).
 		Height(height).
 		Render(content)
-}
-
-func (m Model) buildMetadataHintOverlay(items []hint.Hint, selection int, width int) []string {
-	if len(items) == 0 || width <= 0 {
-		return nil
-	}
-	lines := make([]string, len(items))
-	for i, item := range items {
-		labelStyle := m.theme.EditorHintItem
-		if i == selection {
-			labelStyle = m.theme.EditorHintSelected
-		}
-		label := labelStyle.Render(item.Label)
-		if item.Summary != "" {
-			annotation := m.theme.EditorHintAnnotation.Render(item.Summary)
-			lines[i] = lipgloss.JoinHorizontal(lipgloss.Top, label, " ", annotation)
-		} else {
-			lines[i] = label
-		}
-	}
-	boxWidth := width
-	if boxWidth > 60 {
-		boxWidth = 60
-	}
-	content := strings.Join(lines, "\n")
-	box := m.theme.EditorHintBox.Width(boxWidth).Render(content)
-	rawLines := strings.Split(box, "\n")
-	overlay := make([]string, 0, len(rawLines))
-	for _, line := range rawLines {
-		trimmed := ansi.Truncate(line, width, "")
-		overlay = append(overlay, trimmed)
-	}
-	return overlay
 }
 
 func (m Model) renderResponsePane(availableWidth int) string {
