@@ -83,14 +83,14 @@ func (rt themeRuntime) historyPlaceholderStyle(th theme.Theme) lipgloss.Style {
 	if rt.isLight() {
 		return rt.subtleTextStyle(th)
 	}
-	return th.HeaderValue.Faint(true)
+	return lipgloss.NewStyle().Faint(true)
 }
 
 func (rt themeRuntime) helpHintStyle(th theme.Theme) lipgloss.Style {
 	if rt.isLight() {
 		return rt.subtleTextStyle(th)
 	}
-	return th.HeaderValue.Faint(true)
+	return lipgloss.NewStyle().Faint(true)
 }
 
 func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor {

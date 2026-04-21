@@ -387,12 +387,15 @@ func (r responseRenderer) buildGRPCResponseViews(
 	)
 
 	return responseViews{
-		pretty:      joinSections(statusLine, bv.pretty),
-		raw:         joinSections(statusLine, bv.raw),
-		rawSummary:  statusLine,
-		headers:     joinSections(statusLine, headersContent),
-		meta:        meta,
-		contentType: bv.ct,
+		pretty:     joinSections(statusLine, bv.pretty),
+		raw:        joinSections(statusLine, bv.raw),
+		rawSummary: statusLine,
+		headers:    joinSections(statusLine, headersContent),
+		meta:       meta,
+		// Snapshot contentType must continue to describe the stored raw body.
+		// The view builder may expose a prettified content type for rendering,
+		// but raw body reload/export paths depend on the wire/raw type here.
+		contentType: rawContentType,
 		rawText:     bv.rawText,
 		rawHex:      bv.rawHex,
 		rawBase64:   bv.rawBase64,

@@ -176,11 +176,9 @@ func (m *Model) restartPendingResponseRender() tea.Cmd {
 
 	m.abortResponseFormatting()
 
-	token := strings.TrimSpace(pending.id)
-	if token == "" {
-		token = nextResponseRenderToken()
-		pending.id = token
-	}
+	// Always issue a fresh render token when restarting canceled work.
+	// The snapshot identity can stay stable; the async task identity must not.
+	token := nextResponseRenderToken()
 	m.responsePending = pending
 	m.responseLatest = pending
 	if m.responseTokens == nil {

@@ -312,14 +312,24 @@ modal_option = "#64748b"
 
 [editor_metadata]
 comment_marker = "#94a3b8"
-value = "#0369a1"
-directive_default = "#1e40af"
-request_line = "#c026d3"
-request_separator = "#2563eb"
+directive_default = "#1e3a8a"
+value = "#0f766e"
+setting_key = "#9a3412"
+setting_value = "#7c2d12"
+request_line = "#991b1b"
+request_separator = "#1d4ed8"
+rts_keyword_default = "#1e3a8a"
+rts_keyword_decl = "#7c3aed"
+rts_keyword_control = "#9a3412"
+rts_keyword_literal = "#15803d"
+rts_keyword_logical = "#b91c1c"
 
 [editor_metadata.directive_colors]
 graphql = "#7c3aed"
-workflow = "#0d9488"
+script = "#6d28d9"
+setting = "#9a3412"
+timeout = "#9a3412"
+workflow = "#0f766e"
 custom = "#f97316"
 
 [[header_segments]]
