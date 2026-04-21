@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.30.2](https://github.com/unkn0wn-root/resterm/compare/v0.30.1...v0.30.2) (2026-04-21)
+
+
+### Features
+
+* **ui:** add request-editor metadata hint popup and preview ([4a819d9](https://github.com/unkn0wn-root/resterm/commit/4a819d9771be9e30f5cd0d576e891d948507faea))
+
 ### [0.30.1](https://github.com/unkn0wn-root/resterm/compare/v0.29.2...v0.30.1) (2026-04-21)
 
 
