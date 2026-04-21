@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.30.1](https://github.com/unkn0wn-root/resterm/compare/v0.29.2...v0.30.1) (2026-04-21)
+
+
+### Features
+
+* generic runtime theme picker ([fdb8c6a](https://github.com/unkn0wn-root/resterm/commit/fdb8c6a24030d0a9e431fde16ede635d2fadaab8))
+* response snapshot while changing theme ([bdf957d](https://github.com/unkn0wn-root/resterm/commit/bdf957d83f07552a77e8664b435399978e7f567f))
+
+
+### Bug Fixes
+
+* remove old unused code after refactor ([98eac2e](https://github.com/unkn0wn-root/resterm/commit/98eac2e035651a05ad598decf06be38c86891c42))
+* snapshot raw ([3393934](https://github.com/unkn0wn-root/resterm/commit/33939343e09fc2caf328e6917831a4176bc0bad2))
+* **ui:** improve contrast for history and help search inputs ([e293b0f](https://github.com/unkn0wn-root/resterm/commit/e293b0f1a3b5e46e5a4bbae0dbcfe795b50e7487))
+* **ui:** preserve editor syntax colors on light theme cursor line ([d7f323b](https://github.com/unkn0wn-root/resterm/commit/d7f323b7582f669835829dd2449a09101e59a88b))
+
 ### [0.29.2](https://github.com/unkn0wn-root/resterm/compare/v0.29.1...v0.29.2) (2026-04-19)
 
 ### [0.29.1](https://github.com/unkn0wn-root/resterm/compare/v0.28.2...v0.29.1) (2026-04-19)
