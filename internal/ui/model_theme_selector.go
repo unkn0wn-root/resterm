@@ -61,23 +61,21 @@ func (m *Model) applyThemeSelection() tea.Cmd {
 		return nil
 	}
 
-	m.theme = def.Theme
-	m.activeThemeKey = def.Key
-	m.editor.SetRuneStyler(selectEditorRuneStyler(m.currentFile, m.theme.EditorMetadata))
+	m.applyThemeDefinition(def)
 	m.refreshThemeList()
-	m.applyThemeToLists()
+	syncCmd := m.syncThemedResponseState()
 
 	m.cfg.Settings.DefaultTheme = def.Key
 	if err := config.SaveSettings(m.cfg.Settings, m.settingsHandle); err != nil {
 		m.setStatusMessage(
 			statusMsg{level: statusWarn, text: fmt.Sprintf("theme save error: %v", err)},
 		)
-		return nil
+		return syncCmd
 	}
 	label := def.DisplayName
 	if strings.TrimSpace(label) == "" {
 		label = humaniseKey(def.Key)
 	}
 	m.setStatusMessage(statusMsg{level: statusInfo, text: fmt.Sprintf("Theme set to %s", label)})
-	return m.syncResponsePanes()
+	return syncCmd
 }

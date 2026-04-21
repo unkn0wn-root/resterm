@@ -29,6 +29,7 @@ const (
 
 type PrettyOptions struct {
 	Color termcolor.Config
+	Style string
 }
 
 type HeaderField struct {
@@ -65,6 +66,7 @@ type BuildInput struct {
 	ViewBody        []byte
 	ViewContentType string
 	Color           termcolor.Config
+	Style           string
 }
 
 type BodyViews struct {
@@ -129,7 +131,7 @@ func PrettifyContext(
 		return source
 	}
 
-	if highlighted, ok := highlight(source, lexer, opt.Color); ok {
+	if highlighted, ok := highlight(source, lexer, opt.Color, opt.Style); ok {
 		return highlighted
 	}
 	return source
@@ -267,7 +269,7 @@ func BuildContext(ctx context.Context, in BuildInput) BodyViews {
 				ctx,
 				decoded,
 				viewType,
-				PrettyOptions{Color: in.Color},
+				PrettyOptions{Color: in.Color, Style: in.Style},
 			),
 		)
 	}
@@ -604,13 +606,17 @@ func isJSIdentifier(name string) bool {
 	return true
 }
 
-func highlight(content, lexer string, color termcolor.Config) (string, bool) {
+func highlight(content, lexer string, color termcolor.Config, style string) (string, bool) {
 	fmtter := color.Formatter()
 	if fmtter == "" {
 		return "", false
 	}
+	style = strings.TrimSpace(style)
+	if style == "" {
+		style = "monokai"
+	}
 	var buf bytes.Buffer
-	if err := quick.Highlight(&buf, content, lexer, fmtter, "monokai"); err != nil {
+	if err := quick.Highlight(&buf, content, lexer, fmtter, style); err != nil {
 		return "", false
 	}
 	return buf.String(), true

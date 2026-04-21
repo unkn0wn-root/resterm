@@ -54,6 +54,28 @@ func TestBuildJSONColorUsesResolvedFormatter(t *testing.T) {
 	}
 }
 
+func TestBuildJSONColorRespectsConfiguredStyle(t *testing.T) {
+	github := Build(BuildInput{
+		Body:        []byte(`{"b":1,"a":"x"}`),
+		ContentType: "application/json",
+		Color:       termcolor.Enabled(termenv.ANSI256),
+		Style:       "github",
+	})
+	monokai := Build(BuildInput{
+		Body:        []byte(`{"b":1,"a":"x"}`),
+		ContentType: "application/json",
+		Color:       termcolor.Enabled(termenv.ANSI256),
+		Style:       "monokai",
+	})
+
+	if github.Pretty == monokai.Pretty {
+		t.Fatalf("expected different ANSI output for different styles")
+	}
+	if ansi.Strip(github.Pretty) != ansi.Strip(monokai.Pretty) {
+		t.Fatalf("expected different styles to preserve the same body text")
+	}
+}
+
 func TestFormatHeadersSortsNamesAndValues(t *testing.T) {
 	headers := http.Header{
 		"X-B": {"2", "1"},

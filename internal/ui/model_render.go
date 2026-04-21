@@ -255,7 +255,7 @@ func (m Model) renderFilePane() string {
 			BorderStyle(lipgloss.ThickBorder())
 	}
 	if !paneActive {
-		style = style.Faint(true)
+		style = m.themeRuntime.inactiveStyle(style)
 	}
 	frameWidth := style.GetHorizontalFrameSize()
 	width := m.sidebarWidthPx
@@ -279,7 +279,14 @@ func (m Model) renderFilePane() string {
 
 	listHeight := available
 
-	listView := navigator.ListView(m.navigator, m.theme, contentWidth, listHeight, paneActive)
+	listView := navigator.ListView(
+		m.navigator,
+		m.theme,
+		contentWidth,
+		listHeight,
+		paneActive,
+		m.themeRuntime.appearance,
+	)
 	if listView == "" {
 		listView = centerBox(
 			contentWidth,
@@ -417,7 +424,7 @@ func (m Model) renderNavigatorFilter(width int, active bool) string {
 		row = lipgloss.JoinHorizontal(lipgloss.Left, row, " ", tags)
 	}
 	if !active && !input.Focused() {
-		row = lipgloss.NewStyle().Faint(true).Render(row)
+		row = m.themeRuntime.inactiveRendered(row)
 	}
 	return lipgloss.NewStyle().Width(width).Render(row)
 }
@@ -441,7 +448,7 @@ func (m Model) navigatorMethodChips() string {
 		if on {
 			style = style.Bold(true).Underline(true)
 		} else if dim {
-			style = style.Faint(true)
+			style = m.themeRuntime.inactiveStyle(style)
 		}
 		parts = append(parts, style.Render(method))
 	}
@@ -465,12 +472,12 @@ func (m Model) navigatorTagChips() string {
 		if on {
 			style = style.Bold(true).Underline(true)
 		} else {
-			style = style.Faint(true)
+			style = m.themeRuntime.inactiveStyle(style)
 		}
 		parts = append(parts, style.Render("#"+tag))
 	}
 	if more {
-		parts = append(parts, m.theme.NavigatorTag.Faint(true).Render("..."))
+		parts = append(parts, m.themeRuntime.inactiveStyle(m.theme.NavigatorTag).Render("..."))
 	}
 	return strings.Join(parts, " ")
 }
@@ -619,8 +626,8 @@ func (m Model) renderEditorPane() string {
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
-		style = style.Faint(true)
-		content = lipgloss.NewStyle().Faint(true).Render(content)
+		style = m.themeRuntime.inactiveStyle(style)
+		content = m.themeRuntime.inactiveRendered(content)
 	}
 	frameHeight := style.GetVerticalFrameSize()
 	editorContentHeight := m.editorContentHeight
@@ -683,7 +690,7 @@ func (m Model) renderResponsePane(availableWidth int) string {
 			Bold(true).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
-		style = style.Faint(true)
+		style = m.themeRuntime.inactiveStyle(style)
 	}
 
 	frameWidth := style.GetHorizontalFrameSize()
@@ -812,7 +819,7 @@ func (m Model) renderResponsePane(availableWidth int) string {
 		}
 		column := m.renderResponseColumn(responsePanePrimary, active, columnWidth)
 		if !active {
-			column = lipgloss.NewStyle().Faint(true).Render(column)
+			column = m.themeRuntime.inactiveRendered(column)
 		}
 		body = column
 	}
@@ -921,11 +928,11 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 		Render(content)
 
 	if !focused && m.focus == focusResponse {
-		tabs = lipgloss.NewStyle().Faint(true).Render(tabs)
+		tabs = m.themeRuntime.inactiveRendered(tabs)
 		if searchView != "" {
-			searchView = lipgloss.NewStyle().Faint(true).Render(searchView)
+			searchView = m.themeRuntime.inactiveRendered(searchView)
 		}
-		content = lipgloss.NewStyle().Faint(true).Render(content)
+		content = m.themeRuntime.inactiveRendered(content)
 	}
 
 	elements := []string{tabs}
@@ -1021,7 +1028,7 @@ func (m Model) buildTabRowContent(
 	baseBadgeStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#A6A1BB"))
 	if !focused || m.focus != focusResponse {
-		baseBadgeStyle = baseBadgeStyle.Faint(true)
+		baseBadgeStyle = m.themeRuntime.inactiveStyle(baseBadgeStyle)
 	}
 	plans := []tabRowPlan{
 		{
@@ -1495,12 +1502,11 @@ func (m Model) renderSearchPrompt() string {
 	m.searchInput.Width = 0
 	label := lipgloss.NewStyle().Bold(true).Render("Search ")
 	input := m.searchInput.View()
-	modeBadge := lipgloss.NewStyle().
-		Faint(true).
+	subtle := m.themeRuntime.subtleTextStyle(m.theme)
+	modeBadge := subtle.
 		PaddingLeft(2).
 		Render(strings.ToUpper(mode))
-	hints := lipgloss.NewStyle().
-		Faint(true).
+	hints := subtle.
 		PaddingLeft(2).
 		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
 	row := lipgloss.JoinHorizontal(
@@ -1526,8 +1532,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 		mode = "regex"
 	}
 	label := lipgloss.NewStyle().Bold(true).Render("Search ")
-	modeBadge := lipgloss.NewStyle().
-		Faint(true).
+	modeBadge := m.themeRuntime.subtleTextStyle(m.theme).
 		PaddingLeft(1).
 		Render(strings.ToUpper(mode))
 	reserved := lipgloss.Width(
@@ -1562,12 +1567,11 @@ func (m Model) renderResponseSearchInfo() string {
 		mode = "regex"
 	}
 	label := lipgloss.NewStyle().Bold(true).Render("Response Search ")
-	modeBadge := lipgloss.NewStyle().
-		Faint(true).
+	subtle := m.themeRuntime.subtleTextStyle(m.theme)
+	modeBadge := subtle.
 		PaddingLeft(1).
 		Render(strings.ToUpper(mode))
-	hints := lipgloss.NewStyle().
-		Faint(true).
+	hints := subtle.
 		PaddingLeft(1).
 		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
 	row := lipgloss.JoinHorizontal(
@@ -2216,7 +2220,7 @@ func (m Model) renderRequestDetailsModal() string {
 		lipgloss.Center,
 		box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2252,20 +2256,20 @@ func (m Model) renderHistoryPreviewModal() string {
 	}
 
 	var bodyView string
+	bodyStyle := lipgloss.NewStyle().
+		Padding(0, 2).
+		Width(contentWidth)
+	if m.themeRuntime.isLight() {
+		bodyStyle = bodyStyle.Inherit(activeTextStyle(m.theme))
+	}
 	if vp := m.historyPreviewViewport; vp != nil {
 		wrapped := wrapPreformattedContent(body, viewWidth)
 		vp.SetContent(wrapped)
 		vp.Width = viewWidth
 		vp.Height = bodyHeight
-		bodyView = lipgloss.NewStyle().
-			Padding(0, 2).
-			Width(contentWidth).
-			Render(vp.View())
+		bodyView = bodyStyle.Render(vp.View())
 	} else {
-		bodyView = lipgloss.NewStyle().
-			Padding(0, 2).
-			Width(contentWidth).
-			Render(wrapPreformattedContent(body, viewWidth))
+		bodyView = bodyStyle.Render(wrapPreformattedContent(body, viewWidth))
 	}
 
 	headerView := m.theme.HeaderTitle.
@@ -2297,7 +2301,7 @@ func (m Model) renderHistoryPreviewModal() string {
 		lipgloss.Center,
 		box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2342,7 +2346,7 @@ func (m Model) renderErrorModal() string {
 	box := boxStyle.Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2393,7 +2397,7 @@ func (m Model) renderLayoutSaveModal() string {
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2424,7 +2428,7 @@ func (m Model) renderEnvironmentModal() string {
 		lipgloss.Center,
 		box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2475,7 +2479,7 @@ func (m Model) renderFileChangeModal() string {
 		lipgloss.Center,
 		box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2506,7 +2510,7 @@ func (m Model) renderThemeModal() string {
 		lipgloss.Center,
 		box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2596,7 +2600,7 @@ func (m Model) renderHelpOverlay() string {
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2617,7 +2621,7 @@ func (m Model) renderHelpFilter(width int) string {
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		input,
-		m.theme.HeaderValue.Faint(true).Width(width).Render(hintText),
+		m.themeRuntime.helpHintStyle(m.theme).Width(width).Render(hintText),
 	)
 }
 
@@ -2633,7 +2637,7 @@ func (m Model) renderNewFileModal() string {
 	var extLabels []string
 	for idx, ext := range newFileExtensions {
 		label := fmt.Sprintf("[%s]", ext)
-		style := lipgloss.NewStyle().Foreground(lipgloss.Color("#4D4663")).Bold(false)
+		style := m.themeRuntime.modalOptionStyle(m.theme).Bold(false)
 		if idx == m.newFileExtIndex {
 			style = m.theme.CommandBarHint.Bold(true)
 		}
@@ -2678,7 +2682,7 @@ func (m Model) renderNewFileModal() string {
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2723,7 +2727,7 @@ func (m Model) renderOpenModal() string {
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 
@@ -2732,7 +2736,7 @@ func (m Model) renderResponseSaveModal() string {
 	if width < 40 {
 		width = 40
 	}
-	bg := lipgloss.Color("#1c1a23")
+	bg := m.themeRuntime.modalInputBackground(m.theme)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
 		Background(bg).
@@ -2775,7 +2779,7 @@ func (m Model) renderResponseSaveModal() string {
 	box := m.theme.BrowserBorder.Width(width).Render(content)
 	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
 		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(lipgloss.Color("#1A1823")),
+		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
 	)
 }
 

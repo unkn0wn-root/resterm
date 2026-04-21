@@ -1553,7 +1553,8 @@ func (m Model) View() string {
 					cursorStyle := style
 					cursorIndex := segmentStart + cursorRel
 					if lineStyles != nil && cursorIndex >= 0 && cursorIndex < len(lineStyles) {
-						cursorStyle = cursorStyle.Inherit(lineStyles[cursorIndex])
+						// Rune-level syntax styles must win over the line's base text color.
+						cursorStyle = lineStyles[cursorIndex].Inherit(cursorStyle)
 					}
 					s.WriteString(cursorStyle.Render(m.Cursor.View()))
 					writeSegments(&s, segments, cursorRel+1, len(segments))
@@ -1698,7 +1699,9 @@ func (m Model) renderStyledSegments(
 		if isActual && lineStyles != nil {
 			idx := *lineConsumed
 			if idx >= 0 && idx < len(lineStyles) {
-				runeStyle = runeStyle.Inherit(lineStyles[idx])
+				// Start from the rune style and inherit the base line style so
+				// syntax highlighting can override the editor's default foreground.
+				runeStyle = lineStyles[idx].Inherit(runeStyle)
 			}
 		}
 

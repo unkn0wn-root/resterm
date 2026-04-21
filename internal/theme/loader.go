@@ -79,21 +79,12 @@ func (c *Catalog) add(def Definition) {
 }
 
 func LoadCatalog(dirs []string) (Catalog, error) {
-	base := DefaultTheme()
+	baseDef := DefaultDefinition()
+	base := baseDef.Theme
 	defs := make([]Definition, 0, 1)
 	usedKeys := map[string]int{"default": 1}
 
-	defs = append(defs, Definition{
-		Key:         "default",
-		DisplayName: "Default",
-		Metadata: Metadata{
-			Name: "Default",
-		},
-		Theme:  base,
-		Source: SourceBuiltin,
-		Format: FormatBuiltin,
-		Path:   "",
-	})
+	defs = append(defs, baseDef)
 
 	var combinedErr error
 

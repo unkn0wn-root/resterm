@@ -40,7 +40,7 @@ type timelineStyles struct {
 	statusWarn lipgloss.Style
 }
 
-func newTimelineStyles(th *theme.Theme) timelineStyles {
+func newTimelineStyles(th *theme.Theme, appearance theme.Appearance) timelineStyles {
 	styles := timelineStyles{
 		title:      lipgloss.NewStyle().Bold(true),
 		phase:      lipgloss.NewStyle().Bold(true),
@@ -58,7 +58,11 @@ func newTimelineStyles(th *theme.Theme) timelineStyles {
 	styles.title = th.HeaderTitle.Bold(true)
 	styles.phase = th.ResponseContent.Bold(true)
 	styles.emph = th.ResponseContent.Bold(true)
-	styles.meta = th.ResponseContent.Faint(true)
+	if appearance == theme.AppearanceLight {
+		styles.meta = inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
+	} else {
+		styles.meta = th.ResponseContent.Faint(true)
+	}
 	styles.barOK = th.Success
 	styles.barWarn = th.Error.Bold(true)
 	styles.statusOK = th.Success.Bold(true)

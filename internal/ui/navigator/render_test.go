@@ -40,7 +40,7 @@ func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
 			Tags:   []string{"demo", "workflow"},
 		},
 	}
-	out := renderRow(node, false, th, 80, true, false)
+	out := renderRow(node, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected workflow row without caret, got %q", clean)
@@ -65,7 +65,7 @@ func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 			Badges: []string{"AUTH", "gRPC"},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false)
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if strings.Contains(clean, "#beta") || strings.Contains(clean, "#users") {
 		t.Fatalf("expected tags to be omitted from list row, got %q", clean)
@@ -88,7 +88,7 @@ func TestRenderRowShowsDirIcon(t *testing.T) {
 			Expanded: false,
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false)
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconDirClosed) {
 		t.Fatalf("expected directory icon, got %q", clean)
@@ -109,7 +109,7 @@ func TestRenderRowShowsRTSIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false)
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconRTS) {
 		t.Fatalf("expected rts icon, got %q", clean)
@@ -128,7 +128,7 @@ func TestRenderRTSUsesModuleIndicator(t *testing.T) {
 			Payload: Payload[any]{FilePath: "/tmp/mod.rts"},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false)
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected rts row without caret, got %q", clean)
@@ -155,7 +155,7 @@ func TestRenderRowShowsEnvIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false)
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconEnv) {
 		t.Fatalf("expected env icon, got %q", clean)

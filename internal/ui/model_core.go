@@ -182,6 +182,8 @@ type Model struct {
 	rq                 *rqeng.Engine
 	bindingsMap        *bindings.Map
 	theme              theme.Theme
+	activeThemeDef     theme.Definition
+	themeRuntime       themeRuntime
 	themeCatalog       theme.Catalog
 	client             *httpclient.Client
 	grpcClient         *grpcclient.Client
@@ -523,9 +525,6 @@ func New(cfg Config) Model {
 	historyFilter.Prompt = "Filter: "
 	historyFilter.SetCursor(0)
 	historyFilter.Blur()
-	historyFilter.PlaceholderStyle = th.HeaderValue.Faint(true)
-	historyFilter.PromptStyle = th.HeaderValue
-	historyFilter.TextStyle = th.HeaderValue
 
 	primaryViewport := viewport.New(0, 0)
 	primaryViewport.SetContent(logoPlaceholder(0, 0))
@@ -736,7 +735,7 @@ func New(cfg Config) Model {
 	model.watchFile(cfg.FilePath, []byte(cfg.InitialContent))
 	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
-	model.applyThemeToLists()
+	model.applyThemeDefinition(resolveThemeDefinition(cfg.ThemeCatalog, activeTheme, th))
 	if strings.TrimSpace(model.workspaceRoot) != "" &&
 		strings.TrimSpace(model.lastResponseSaveDir) == "" {
 		model.lastResponseSaveDir = model.workspaceRoot

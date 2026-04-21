@@ -71,6 +71,7 @@ type responseSnapshot struct {
 	contentType     string
 	responseHeaders http.Header
 	effectiveURL    string
+	source          responseRenderSource
 }
 
 type headersViewMode int
@@ -930,7 +931,7 @@ func (m *Model) paneContentBaseForTab(
 		if snapshot.timeline == nil {
 			return "Trace data unavailable.\n", tab
 		}
-		styles := newTimelineStyles(&m.theme)
+		styles := newTimelineStyles(&m.theme, m.themeRuntime.appearance)
 		report := buildTimelineReport(
 			snapshot.timeline,
 			snapshotTraceSpec(snapshot),

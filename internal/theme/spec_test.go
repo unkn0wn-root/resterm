@@ -15,6 +15,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	spec := ThemeSpec{
 		Colors: ColorsSpec{
 			PaneActiveForeground: strPtr("#123456"),
+			ModalBackdrop:        strPtr("#202020"),
+			ModalInputBackground: strPtr("#181818"),
+			ModalOption:          strPtr("#778899"),
 		},
 		HeaderSegments: []HeaderSegmentSpec{{
 			Background: strPtr("#111111"),
@@ -50,6 +53,15 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 
 	if got := updated.PaneActiveForeground; got != "#123456" {
 		t.Errorf("expected pane active foreground %q, got %q", "#123456", got)
+	}
+	if got := updated.ModalBackdrop; got != "#202020" {
+		t.Errorf("expected modal backdrop %q, got %q", "#202020", got)
+	}
+	if got := updated.ModalInputBackground; got != "#181818" {
+		t.Errorf("expected modal input background %q, got %q", "#181818", got)
+	}
+	if got := updated.ModalOption; got != "#778899" {
+		t.Errorf("expected modal option %q, got %q", "#778899", got)
 	}
 	if len(updated.HeaderSegments) != 1 {
 		t.Fatalf("expected 1 header segment, got %d", len(updated.HeaderSegments))

@@ -22,7 +22,14 @@ const (
 )
 
 // ListView renders the navigator list with an optional height constraint.
-func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) string {
+func ListView(
+	m *Model[any],
+	th theme.Theme,
+	width int,
+	height int,
+	focus bool,
+	appearance theme.Appearance,
+) string {
 	if m == nil {
 		return ""
 	}
@@ -35,7 +42,7 @@ func ListView(m *Model[any], th theme.Theme, width int, height int, focus bool) 
 	var out []string
 	for i, row := range rows {
 		selected := (m.offset + i) == m.sel
-		out = append(out, renderRow(row, selected, th, width, focus, m.compact))
+		out = append(out, renderRow(row, selected, th, width, focus, m.compact, appearance))
 	}
 	return strings.Join(out, "\n")
 }
@@ -47,6 +54,7 @@ func renderRow(
 	width int,
 	focus bool,
 	compact bool,
+	appearance theme.Appearance,
 ) string {
 	n := row.Node
 	if n == nil {
@@ -73,7 +81,7 @@ func renderRow(
 		titleStyle = th.NavigatorTitleSelected
 		descStyle = th.NavigatorSubtitleSelected
 	}
-	if !focus {
+	if !focus && appearance != theme.AppearanceLight {
 		titleStyle = titleStyle.Faint(true)
 		descStyle = descStyle.Faint(true)
 	}

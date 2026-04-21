@@ -8,9 +8,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
+
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestRenderHTTPResponseCmdRawWrappedPreservesRawBody(t *testing.T) {
@@ -129,6 +133,56 @@ func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
 	}
 	if !strings.Contains(headers, statsHeaderValueStyle.Render("application/json")) {
 		t.Fatalf("expected colored header values, got %q", headers)
+	}
+}
+
+func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	body := []byte(`{"id":1,"name":"demo"}`)
+	resp := &httpclient.Response{
+		Status:     "200 OK",
+		StatusCode: 200,
+		Headers: http.Header{
+			"Content-Type": {"application/json"},
+			"X-Demo":       {"value"},
+		},
+		Body:         body,
+		Duration:     8 * time.Millisecond,
+		EffectiveURL: "https://api.example.com/items",
+	}
+
+	lightTheme := theme.DefaultTheme()
+	lightTheme.ExplainMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("#475569"))
+	lightTheme.ExplainLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#0369a1"))
+	lightTheme.HeaderTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#1d4ed8"))
+	lightTheme.HeaderValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#334155"))
+	lightTheme.StatusBarKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#b45309"))
+	lightTheme.Success = lipgloss.NewStyle().Foreground(lipgloss.Color("#15803d"))
+	lightTheme.Error = lipgloss.NewStyle().Foreground(lipgloss.Color("#b91c1c"))
+	lightTheme.ResponseSelection = lipgloss.NewStyle().Background(lipgloss.Color("#e2e8f0"))
+	lightTheme.PaneActiveForeground = lipgloss.Color("#0f172a")
+
+	renderer := newResponseRenderer(lightStatsPalette(lightTheme), "github")
+	views := renderer.buildHTTPResponseViews(resp, nil, nil)
+	contentLength := formatByteSize(int64(len(body)))
+
+	if !strings.Contains(views.pretty, renderer.stats.Value.Render(resp.EffectiveURL)) {
+		t.Fatalf("expected light palette URL style, got %q", views.pretty)
+	}
+	if strings.Contains(views.pretty, statsValueStyle.Render(resp.EffectiveURL)) {
+		t.Fatalf("expected light palette URL to avoid dark default style, got %q", views.pretty)
+	}
+	if !strings.Contains(views.pretty, renderer.stats.Value.Render(contentLength)) {
+		t.Fatalf("expected light palette content length style, got %q", views.pretty)
+	}
+	if !strings.Contains(views.headers, renderer.stats.HeaderValue.Render("application/json")) {
+		t.Fatalf("expected light palette header value style, got %q", views.headers)
+	}
+	if strings.Contains(views.headers, statsHeaderValueStyle.Render("application/json")) {
+		t.Fatalf("expected light palette headers to avoid dark default style, got %q", views.headers)
 	}
 }
 

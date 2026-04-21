@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 func TestHorizontalAutoScroll(t *testing.T) {
@@ -196,6 +197,58 @@ func TestOverlayRespectsHorizontalOffset(t *testing.T) {
 	}
 	if strings.Contains(plain, "0123") {
 		t.Fatalf("expected overlay to omit truncated prefix, got %q", plain)
+	}
+}
+
+type fixedLineRuneStyler map[int]lipgloss.Style
+
+func (s fixedLineRuneStyler) StylesForLine(line []rune, lineIndex int) []lipgloss.Style {
+	style, ok := s[lineIndex]
+	if !ok {
+		return nil
+	}
+	styles := make([]lipgloss.Style, len(line))
+	for i := range styles {
+		styles[i] = style
+	}
+	return styles
+}
+
+func TestRuneStylerOverridesBaseTextColorOnNonCursorLines(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(2)
+	m.SetWidth(8)
+	m.SetValue("GET\nPOST")
+	m.row = 1
+	m.SetCursor(len(m.value[m.row]))
+
+	baseColor := lipgloss.Color("#0f172a")
+	firstLineColor := lipgloss.Color("#991b1b")
+	secondLineColor := lipgloss.Color("#1e3a8a")
+
+	m.FocusedStyle.Text = lipgloss.NewStyle().Foreground(baseColor)
+	m.FocusedStyle.CursorLine = lipgloss.NewStyle().Foreground(baseColor)
+	m.style = &m.FocusedStyle
+	m.SetRuneStyler(fixedLineRuneStyler{
+		0: lipgloss.NewStyle().Foreground(firstLineColor),
+		1: lipgloss.NewStyle().Foreground(secondLineColor),
+	})
+
+	view := m.View()
+	if !strings.Contains(view, lipgloss.NewStyle().Foreground(firstLineColor).Render("G")) {
+		t.Fatalf("expected non-cursor line rune style to override base color, got %q", view)
+	}
+	if strings.Contains(view, lipgloss.NewStyle().Foreground(baseColor).Render("G")) {
+		t.Fatalf("expected non-cursor line to avoid base text color for styled rune, got %q", view)
+	}
+	if !strings.Contains(view, lipgloss.NewStyle().Foreground(secondLineColor).Render("P")) {
+		t.Fatalf("expected cursor line rune style to be preserved, got %q", view)
 	}
 }
 

@@ -167,15 +167,43 @@ type responseViews struct {
 	rawMode     rawViewMode
 }
 
+type responseRenderer struct {
+	stats       statsPalette
+	syntaxStyle string
+}
+
+func newResponseRenderer(stats statsPalette, syntaxStyle string) responseRenderer {
+	syntaxStyle = strings.TrimSpace(syntaxStyle)
+	if syntaxStyle == "" {
+		syntaxStyle = "monokai"
+	}
+	return responseRenderer{
+		stats:       stats,
+		syntaxStyle: syntaxStyle,
+	}
+}
+
+func defaultResponseRenderer() responseRenderer {
+	return newResponseRenderer(defaultStatsPalette(), "monokai")
+}
+
 func buildHTTPResponseViews(
 	resp *httpclient.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
-	return buildHTTPResponseViewsCtx(context.Background(), resp, tests, scriptErr)
+	return defaultResponseRenderer().buildHTTPResponseViews(resp, tests, scriptErr)
 }
 
-func buildHTTPResponseViewsCtx(
+func (r responseRenderer) buildHTTPResponseViews(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+) responseViews {
+	return r.buildHTTPResponseViewsCtx(context.Background(), resp, tests, scriptErr)
+}
+
+func (r responseRenderer) buildHTTPResponseViewsCtx(
 	ctx context.Context,
 	resp *httpclient.Response,
 	tests []scripts.TestResult,
@@ -192,20 +220,27 @@ func buildHTTPResponseViewsCtx(
 		}
 	}
 
-	summary := buildRespSum(resp, tests, scriptErr)
-	prettySummary := buildRespSumPretty(resp, tests, scriptErr)
-	coloredHeaders := formatHTTPHeaders(resp.Headers, true)
+	summary := r.buildRespSum(resp, tests, scriptErr)
+	prettySummary := r.buildRespSumPretty(resp, tests, scriptErr)
+	coloredHeaders := r.formatHTTPHeaders(resp.Headers, true)
 
 	contentType := ""
 	if resp.Headers != nil {
 		contentType = resp.Headers.Get("Content-Type")
 	}
 	meta := binaryview.Analyze(resp.Body, contentType)
-	bv := buildBodyViewsCtx(ctx, resp.Body, contentType, &meta, nil, "")
+	bv := r.buildBodyViewsCtx(
+		ctx,
+		resp.Body,
+		contentType,
+		&meta,
+		nil,
+		"",
+	)
 
 	headersSectionColored := ""
 	if coloredHeaders != "" {
-		headersSectionColored = statsHeadingStyle.Render("Headers:") + "\n" + coloredHeaders
+		headersSectionColored = r.stats.Heading.Render("Headers:") + "\n" + coloredHeaders
 	}
 
 	plainSummary := stripANSIEscape(summary)
@@ -228,6 +263,10 @@ func buildHTTPResponseViewsCtx(
 }
 
 func buildHTTPRequestHeadersView(resp *httpclient.Response) string {
+	return defaultResponseRenderer().buildHTTPRequestHeadersView(resp)
+}
+
+func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response) string {
 	if resp == nil {
 		return noResponseMessage
 	}
@@ -245,12 +284,12 @@ func buildHTTPRequestHeadersView(resp *httpclient.Response) string {
 	reqLine := strings.TrimSpace(method + " " + url)
 	reqLineColored := ""
 	if reqLine != "" {
-		reqLineColored = renderLabelValue("Request", reqLine, statsLabelStyle, statsValueStyle)
+		reqLineColored = renderLabelValue("Request", reqLine, r.stats.Label, r.stats.Value)
 	}
 
 	hdrs := buildRequestHeaderMap(resp)
-	colored := formatHTTPHeaders(hdrs, true)
-	section := statsHeadingStyle.Render("Headers:")
+	colored := r.formatHTTPHeaders(hdrs, true)
+	section := r.stats.Heading.Render("Headers:")
 	if strings.TrimSpace(colored) != "" {
 		section += "\n" + colored
 	} else {
@@ -258,6 +297,100 @@ func buildHTTPRequestHeadersView(resp *httpclient.Response) string {
 	}
 
 	return joinSections(reqLineColored, section)
+}
+
+func (r responseRenderer) buildGRPCResponseViews(
+	resp *grpcclient.Response,
+	fullMethod string,
+) responseViews {
+	if resp == nil {
+		return responseViews{
+			pretty:     noResponseMessage,
+			raw:        noResponseMessage,
+			rawSummary: "",
+			headers:    noResponseMessage,
+			meta:       binaryview.Meta{},
+			rawMode:    rawViewText,
+		}
+	}
+
+	headersBuilder := strings.Builder{}
+	contentType := strings.TrimSpace(resp.ContentType)
+	if len(resp.Headers) > 0 {
+		headersBuilder.WriteString("Headers:\n")
+		for name, values := range resp.Headers {
+			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
+			if strings.EqualFold(name, "Content-Type") && contentType == "" && len(values) > 0 {
+				contentType = strings.TrimSpace(values[0])
+			}
+		}
+	}
+	if len(resp.Trailers) > 0 {
+		if headersBuilder.Len() > 0 {
+			headersBuilder.WriteString("\n")
+		}
+		headersBuilder.WriteString("Trailers:\n")
+		for name, values := range resp.Trailers {
+			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
+		}
+	}
+	headersContent := strings.TrimRight(headersBuilder.String(), "\n")
+
+	statusLine := fmt.Sprintf(
+		"gRPC %s - %s",
+		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
+		resp.StatusCode.String(),
+	)
+	if resp.StatusMessage != "" {
+		statusLine += " (" + resp.StatusMessage + ")"
+	}
+
+	viewBody := append([]byte(nil), resp.Body...)
+	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
+		viewBody = []byte(resp.Message)
+	}
+	viewContentType := strings.TrimSpace(resp.ContentType)
+	if viewContentType == "" && len(viewBody) > 0 {
+		viewContentType = "application/json"
+	}
+
+	rawBody := append([]byte(nil), resp.Wire...)
+	if len(rawBody) == 0 {
+		rawBody = append([]byte(nil), viewBody...)
+	}
+	rawContentType := strings.TrimSpace(resp.WireContentType)
+	if rawContentType == "" {
+		rawContentType = contentType
+	}
+	if rawContentType == "" {
+		rawContentType = viewContentType
+	}
+
+	meta := binaryview.Analyze(viewBody, viewContentType)
+	bv := r.buildBodyViewsCtx(
+		context.Background(),
+		rawBody,
+		rawContentType,
+		&meta,
+		viewBody,
+		viewContentType,
+	)
+
+	return responseViews{
+		pretty:     joinSections(statusLine, bv.pretty),
+		raw:        joinSections(statusLine, bv.raw),
+		rawSummary: statusLine,
+		headers:    joinSections(statusLine, headersContent),
+		meta:       meta,
+		// Snapshot contentType must continue to describe the stored raw body.
+		// The view builder may expose a prettified content type for rendering,
+		// but raw body reload/export paths depend on the wire/raw type here.
+		contentType: rawContentType,
+		rawText:     bv.rawText,
+		rawHex:      bv.rawHex,
+		rawBase64:   bv.rawBase64,
+		rawMode:     bv.mode,
+	}
 }
 
 func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
@@ -308,7 +441,7 @@ func buildBodyViews(
 	viewBody []byte,
 	viewContentType string,
 ) bodyViews {
-	return buildBodyViewsCtx(
+	return defaultResponseRenderer().buildBodyViewsCtx(
 		context.Background(),
 		body,
 		contentType,
@@ -318,7 +451,7 @@ func buildBodyViews(
 	)
 }
 
-func buildBodyViewsCtx(
+func (r responseRenderer) buildBodyViewsCtx(
 	ctx context.Context,
 	body []byte,
 	contentType string,
@@ -333,13 +466,14 @@ func buildBodyViewsCtx(
 		ViewBody:        viewBody,
 		ViewContentType: viewContentType,
 		Color:           termcolor.TrueColor(),
+		Style:           r.syntaxStyle,
 	})
 	if meta != nil {
 		*meta = out.Meta
 	}
 	pretty := out.Pretty
 	if out.Meta.Kind == binaryview.KindBinary {
-		pretty = renderBinarySummary(out.Meta)
+		pretty = r.renderBinarySummary(out.Meta)
 	}
 	return bodyViews{
 		pretty:    pretty,
@@ -353,9 +487,9 @@ func buildBodyViewsCtx(
 	}
 }
 
-func renderBinarySummary(meta binaryview.Meta) string {
+func (r responseRenderer) renderBinarySummary(meta binaryview.Meta) string {
 	lines := []string{
-		statsHeadingStyle.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
+		r.stats.Heading.Render(fmt.Sprintf("Binary body (%s)", formatByteSize(int64(meta.Size)))),
 	}
 	if strings.TrimSpace(meta.MIME) != "" {
 		lines = append(
@@ -363,27 +497,27 @@ func renderBinarySummary(meta binaryview.Meta) string {
 			renderLabelValue(
 				"MIME",
 				strings.TrimSpace(meta.MIME),
-				statsLabelStyle,
-				statsValueStyle,
+				r.stats.Label,
+				r.stats.Value,
 			),
 		)
 	}
 	if strings.TrimSpace(meta.DecodeErr) != "" {
 		lines = append(
 			lines,
-			statsWarnStyle.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)),
+			r.stats.Warn.Render("Decode warning: "+strings.TrimSpace(meta.DecodeErr)),
 		)
 	}
 	if meta.PreviewHex != "" {
 		lines = append(
 			lines,
-			renderLabelValue("Preview hex", meta.PreviewHex, statsLabelStyle, statsMessageStyle),
+			renderLabelValue("Preview hex", meta.PreviewHex, r.stats.Label, r.stats.Message),
 		)
 	}
 	if meta.PreviewB64 != "" {
 		lines = append(
 			lines,
-			renderLabelValue("Preview base64", meta.PreviewB64, statsLabelStyle, statsMessageStyle),
+			renderLabelValue("Preview base64", meta.PreviewB64, r.stats.Label, r.stats.Message),
 		)
 	}
 	if modes := rawViewModeLabels(meta, meta.Size); len(modes) > 0 {
@@ -392,8 +526,8 @@ func renderBinarySummary(meta binaryview.Meta) string {
 			renderLabelValue(
 				"Raw tab",
 				strings.Join(modes, " / "),
-				statsLabelStyle,
-				statsValueStyle,
+				r.stats.Label,
+				r.stats.Value,
 			),
 		)
 	}
@@ -411,7 +545,7 @@ func cloneHeaders(h http.Header) http.Header {
 	return clone
 }
 
-func formatHTTPHeaders(headers http.Header, colored bool) string {
+func (r responseRenderer) formatHTTPHeaders(headers http.Header, colored bool) string {
 	fields := bodyfmt.HeaderFields(headers)
 	if len(fields) == 0 {
 		return ""
@@ -420,14 +554,14 @@ func formatHTTPHeaders(headers http.Header, colored bool) string {
 	for _, field := range fields {
 		if colored {
 			if strings.TrimSpace(field.Value) == "" {
-				builder.WriteString(statsLabelStyle.Render(field.Name + ":"))
+				builder.WriteString(r.stats.Label.Render(field.Name + ":"))
 			} else {
 				builder.WriteString(
 					renderLabelValue(
 						field.Name,
 						field.Value,
-						statsLabelStyle,
-						statsHeaderValueStyle,
+						r.stats.Label,
+						r.stats.HeaderValue,
 					),
 				)
 			}
