@@ -22,6 +22,14 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 <summary>See the UI in action</summary>
 
 <p align="center">
+  <strong>Light Theme</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm-lighttheme.png" alt="Screenshot of Resterm Light Theme" width="720" />
+</p>
+
+<p align="center">
   <strong>Workflows</strong>
 </p>
 
