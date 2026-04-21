@@ -218,7 +218,7 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 	textStyle := activeTextStyle(th)
 	mutedStyle := rt.subtleTextStyle(th)
 	promptStyle := th.HeaderTitle
-	cursorLine := lipgloss.NewStyle()
+	cursorLine := textStyle
 	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
 		cursorLine = cursorLine.Background(bg)
 	}
@@ -234,7 +234,7 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 		Text:             textStyle,
 	}
 	blurred := focused
-	blurred.CursorLine = lipgloss.NewStyle()
+	blurred.CursorLine = textStyle
 	ed.FocusedStyle = focused
 	ed.BlurredStyle = blurred
 	ed.SetSelectionStyle(lipgloss.NewStyle().Background(rt.editorSelectionBackground(th)))
