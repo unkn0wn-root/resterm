@@ -35,12 +35,21 @@ func TestThemeRuntimeInactiveStyleUsesFaintOnlyForNonLightThemes(t *testing.T) {
 	}
 }
 
-func TestApplyThemeDefinitionStylesGenericInputsOnlyForLightThemes(t *testing.T) {
+func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *testing.T) {
 	model := New(Config{})
 
 	model.applyThemeDefinition(theme.DefaultDefinition())
 	if colorDefined(model.searchInput.TextStyle.GetForeground()) {
 		t.Fatalf("expected dark generic input text style to stay unset")
+	}
+	if got := model.helpFilter.TextStyle.GetForeground(); got != lipgloss.Color("#F5F2FF") {
+		t.Fatalf("expected dark help filter text foreground, got %v", got)
+	}
+	if got := model.historyFilterInput.TextStyle.GetForeground(); got != lipgloss.Color("#F5F2FF") {
+		t.Fatalf("expected dark history filter text foreground, got %v", got)
+	}
+	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color("#A6A1BB") {
+		t.Fatalf("expected dark history filter prompt foreground, got %v", got)
 	}
 	if colorDefined(model.historyFilterInput.PlaceholderStyle.GetForeground()) {
 		t.Fatalf("expected dark history placeholder foreground to stay unset")
@@ -61,7 +70,7 @@ func TestApplyThemeDefinitionStylesGenericInputsOnlyForLightThemes(t *testing.T)
 	lightTheme.PaneActiveForeground = lipgloss.Color("#0f172a")
 	lightTheme.NavigatorTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
 	lightTheme.NavigatorSubtitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#475569"))
-	lightTheme.HeaderValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
+	lightTheme.HeaderValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#475569"))
 
 	model.applyThemeDefinition(theme.Definition{
 		Key: "daybreak",
@@ -77,6 +86,15 @@ func TestApplyThemeDefinitionStylesGenericInputsOnlyForLightThemes(t *testing.T)
 	}
 	if got := model.searchInput.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
 		t.Fatalf("expected light input text foreground, got %v", got)
+	}
+	if got := model.helpFilter.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
+		t.Fatalf("expected light help filter text foreground, got %v", got)
+	}
+	if got := model.historyFilterInput.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
+		t.Fatalf("expected light history filter text foreground, got %v", got)
+	}
+	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color("#64748b") {
+		t.Fatalf("expected light history filter prompt foreground, got %v", got)
 	}
 	if got := model.historyFilterInput.PlaceholderStyle.GetForeground(); got != lipgloss.Color("#64748b") {
 		t.Fatalf("expected history placeholder to use subtle light color, got %v", got)

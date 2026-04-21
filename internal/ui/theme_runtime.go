@@ -16,6 +16,7 @@ const (
 	textInputKindGeneric textInputKind = iota
 	textInputKindNavigator
 	textInputKindHistory
+	textInputKindHelp
 )
 
 type themeRuntime struct {
@@ -87,6 +88,19 @@ func (rt themeRuntime) helpHintStyle(th theme.Theme) lipgloss.Style {
 		return rt.subtleTextStyle(th)
 	}
 	return lipgloss.NewStyle().Faint(true)
+}
+
+func (rt themeRuntime) inputLabelStyle(th theme.Theme) lipgloss.Style {
+	if fg := th.ExplainMuted.GetForeground(); colorDefined(fg) {
+		return lipgloss.NewStyle().Foreground(fg)
+	}
+	if rt.isLight() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	}
+	if fg := th.HeaderValue.GetForeground(); colorDefined(fg) {
+		return lipgloss.NewStyle().Foreground(fg)
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB"))
 }
 
 func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor {
@@ -173,11 +187,18 @@ func (rt themeRuntime) applyTextInput(
 		ti.PromptStyle = th.NavigatorTitle
 		ti.PlaceholderStyle = th.NavigatorSubtitle
 		ti.Cursor.Style = th.NavigatorTitle
+	case textInputKindHelp:
+		textStyle := activeTextStyle(th)
+		ti.TextStyle = textStyle
+		ti.PromptStyle = rt.inputLabelStyle(th)
+		ti.PlaceholderStyle = rt.subtleTextStyle(th)
+		ti.Cursor.Style = textStyle
 	case textInputKindHistory:
-		ti.TextStyle = th.HeaderValue
-		ti.PromptStyle = th.HeaderValue
+		textStyle := activeTextStyle(th)
+		ti.TextStyle = textStyle
+		ti.PromptStyle = rt.inputLabelStyle(th)
 		ti.PlaceholderStyle = rt.historyPlaceholderStyle(th)
-		ti.Cursor.Style = th.HeaderValue
+		ti.Cursor.Style = textStyle
 	default:
 		if rt.isLight() {
 			textStyle := activeTextStyle(th)
@@ -255,7 +276,7 @@ func (m *Model) applyThemeDefinition(def theme.Definition) {
 func (m *Model) applyThemeToInputs() {
 	m.themeRuntime.applyRequestEditor(&m.editor, m.theme)
 	m.themeRuntime.applyTextInput(&m.searchInput, m.theme, textInputKindGeneric)
-	m.themeRuntime.applyTextInput(&m.helpFilter, m.theme, textInputKindGeneric)
+	m.themeRuntime.applyTextInput(&m.helpFilter, m.theme, textInputKindHelp)
 	m.themeRuntime.applyTextInput(&m.newFileInput, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.openPathInput, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.responseSaveInput, m.theme, textInputKindGeneric)
