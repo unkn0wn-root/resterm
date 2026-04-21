@@ -192,21 +192,15 @@ func buildHTTPResponseViews(
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
-	return defaultResponseRenderer().buildHTTPResponseViewsCtx(
-		context.Background(),
-		resp,
-		tests,
-		scriptErr,
-	)
+	return defaultResponseRenderer().buildHTTPResponseViews(resp, tests, scriptErr)
 }
 
-func buildHTTPResponseViewsCtx(
-	ctx context.Context,
+func (r responseRenderer) buildHTTPResponseViews(
 	resp *httpclient.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
 ) responseViews {
-	return defaultResponseRenderer().buildHTTPResponseViewsCtx(ctx, resp, tests, scriptErr)
+	return r.buildHTTPResponseViewsCtx(context.Background(), resp, tests, scriptErr)
 }
 
 func (r responseRenderer) buildHTTPResponseViewsCtx(
@@ -303,10 +297,6 @@ func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response)
 	}
 
 	return joinSections(reqLineColored, section)
-}
-
-func buildGRPCResponseViews(resp *grpcclient.Response, fullMethod string) responseViews {
-	return defaultResponseRenderer().buildGRPCResponseViews(resp, fullMethod)
 }
 
 func (r responseRenderer) buildGRPCResponseViews(
@@ -461,24 +451,6 @@ func buildBodyViews(
 	)
 }
 
-func buildBodyViewsCtx(
-	ctx context.Context,
-	body []byte,
-	contentType string,
-	meta *binaryview.Meta,
-	viewBody []byte,
-	viewContentType string,
-) bodyViews {
-	return defaultResponseRenderer().buildBodyViewsCtx(
-		ctx,
-		body,
-		contentType,
-		meta,
-		viewBody,
-		viewContentType,
-	)
-}
-
 func (r responseRenderer) buildBodyViewsCtx(
 	ctx context.Context,
 	body []byte,
@@ -513,10 +485,6 @@ func (r responseRenderer) buildBodyViewsCtx(
 		meta:      out.Meta,
 		ct:        out.ContentType,
 	}
-}
-
-func renderBinarySummary(meta binaryview.Meta) string {
-	return defaultResponseRenderer().renderBinarySummary(meta)
 }
 
 func (r responseRenderer) renderBinarySummary(meta binaryview.Meta) string {
@@ -575,10 +543,6 @@ func cloneHeaders(h http.Header) http.Header {
 		clone[k] = append([]string(nil), values...)
 	}
 	return clone
-}
-
-func formatHTTPHeaders(headers http.Header, colored bool) string {
-	return defaultResponseRenderer().formatHTTPHeaders(headers, colored)
 }
 
 func (r responseRenderer) formatHTTPHeaders(headers http.Header, colored bool) string {

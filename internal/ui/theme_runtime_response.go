@@ -96,12 +96,7 @@ func (m *Model) rerenderHTTPResponseSnapshot(
 		return
 	}
 	resp := snapshot.source.http
-	views := renderer.buildHTTPResponseViewsCtx(
-		context.Background(),
-		resp,
-		snapshot.source.tests,
-		snapshot.source.scriptErr,
-	)
+	views := renderer.buildHTTPResponseViews(resp, snapshot.source.tests, snapshot.source.scriptErr)
 	snapshot.pretty = views.pretty
 	snapshot.raw = views.raw
 	snapshot.rawSummary = views.rawSummary

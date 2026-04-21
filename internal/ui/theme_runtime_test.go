@@ -217,7 +217,7 @@ func TestApplyThemeDefinitionRerendersHTTPSnapshotsAndClearsPaneCaches(t *testin
 	})
 
 	expectedRenderer := model.themeRuntime.responseRenderer(model.theme)
-	expected := expectedRenderer.buildHTTPResponseViewsCtx(nil, resp, nil, nil)
+	expected := expectedRenderer.buildHTTPResponseViews(resp, nil, nil)
 	expectedRequestHeaders := expectedRenderer.buildHTTPRequestHeadersView(resp)
 
 	if snapshot.pretty != expected.pretty {

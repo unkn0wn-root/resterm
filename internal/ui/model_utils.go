@@ -99,18 +99,6 @@ func (r responseRenderer) formatTestSummary(
 	return strings.TrimRight(builder.String(), "\n")
 }
 
-func buildRespSum(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) string {
-	return defaultResponseRenderer().buildRespSum(resp, tests, scriptErr)
-}
-
-func buildRespSumPretty(
-	resp *httpclient.Response,
-	tests []scripts.TestResult,
-	scriptErr error,
-) string {
-	return defaultResponseRenderer().buildRespSumPretty(resp, tests, scriptErr)
-}
-
 func (r responseRenderer) buildRespSum(
 	resp *httpclient.Response,
 	tests []scripts.TestResult,
@@ -189,10 +177,6 @@ func (r responseRenderer) buildRespSummary(
 	return summary
 }
 
-func renderStatusLine(status string, code int) string {
-	return defaultResponseRenderer().renderStatusLine(status, code)
-}
-
 func (r responseRenderer) renderStatusLine(status string, code int) string {
 	trimmed := strings.TrimSpace(status)
 	if trimmed == "" {
@@ -267,10 +251,6 @@ func formatByteQuantity(n int64) string {
 
 func formatByteSize(n int64) string {
 	return bodyfmt.FormatByteSize(n)
-}
-
-func selectStatusStyle(code int) lipgloss.Style {
-	return defaultResponseRenderer().selectStatusStyle(code)
 }
 
 func (r responseRenderer) selectStatusStyle(code int) lipgloss.Style {

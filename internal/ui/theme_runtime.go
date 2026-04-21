@@ -54,10 +54,6 @@ func (rt themeRuntime) isLight() bool {
 	return rt.appearance == theme.AppearanceLight
 }
 
-func (rt themeRuntime) isDefaultTheme() bool {
-	return strings.EqualFold(strings.TrimSpace(rt.definition.Key), "default")
-}
-
 func (rt themeRuntime) inactiveStyle(style lipgloss.Style) lipgloss.Style {
 	if rt.isLight() {
 		return style
@@ -208,9 +204,9 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 		ed.BlurredStyle = blurred
 		ed.SetSelectionStyle(lipgloss.NewStyle().Background(lipgloss.Color("#4C3F72")))
 		if ed.Focused() {
-			ed.Model.Focus()
+			ed.Focus()
 		} else {
-			ed.Model.Blur()
+			ed.Blur()
 		}
 		return
 	}
@@ -239,9 +235,9 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 	ed.BlurredStyle = blurred
 	ed.SetSelectionStyle(lipgloss.NewStyle().Background(rt.editorSelectionBackground(th)))
 	if ed.Focused() {
-		ed.Model.Focus()
+		ed.Focus()
 	} else {
-		ed.Model.Blur()
+		ed.Blur()
 	}
 }
 

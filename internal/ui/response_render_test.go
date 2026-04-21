@@ -166,7 +166,7 @@ func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *test
 	lightTheme.PaneActiveForeground = lipgloss.Color("#0f172a")
 
 	renderer := newResponseRenderer(lightStatsPalette(lightTheme), "github")
-	views := renderer.buildHTTPResponseViewsCtx(context.Background(), resp, nil, nil)
+	views := renderer.buildHTTPResponseViews(resp, nil, nil)
 	contentLength := formatByteSize(int64(len(body)))
 
 	if !strings.Contains(views.pretty, renderer.stats.Value.Render(resp.EffectiveURL)) {
