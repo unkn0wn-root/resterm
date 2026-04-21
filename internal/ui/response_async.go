@@ -109,6 +109,7 @@ func (m *Model) respFmtCmd(
 	hdrs := cloneHeaders(rc.Headers)
 	url := strings.TrimSpace(rc.EffectiveURL)
 	rt := m.rt()
+	renderer := m.themeRuntime.responseRenderer(m.theme)
 
 	return func() tea.Msg {
 		if !rt.fmtSlot(ctx) {
@@ -119,7 +120,7 @@ func (m *Model) respFmtCmd(
 		if ctx != nil && ctx.Err() != nil {
 			return nil
 		}
-		views := buildHTTPResponseViewsCtx(ctx, rc, tc, scriptErr)
+		views := renderer.buildHTTPResponseViewsCtx(ctx, rc, tc, scriptErr)
 		if ctx != nil && ctx.Err() != nil {
 			return nil
 		}
@@ -129,7 +130,7 @@ func (m *Model) respFmtCmd(
 			raw:            views.raw,
 			rawSummary:     views.rawSummary,
 			headers:        views.headers,
-			requestHeaders: buildHTTPRequestHeadersView(rc),
+			requestHeaders: renderer.buildHTTPRequestHeadersView(rc),
 			width:          w,
 			body:           append([]byte(nil), rc.Body...),
 			meta:           views.meta,

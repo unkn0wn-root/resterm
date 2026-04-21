@@ -52,23 +52,30 @@ func stripANSIEscape(s string) string {
 var ansiSequenceRegex = bodyfmt.ANSISequenceRegex
 
 func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
+	return defaultResponseRenderer().formatTestSummary(results, scriptErr)
+}
+
+func (r responseRenderer) formatTestSummary(
+	results []scripts.TestResult,
+	scriptErr error,
+) string {
 	if len(results) == 0 && scriptErr == nil {
 		return ""
 	}
 
 	builder := strings.Builder{}
-	builder.WriteString(statsHeadingStyle.Render("Tests:") + "\n")
+	builder.WriteString(r.stats.Heading.Render("Tests:") + "\n")
 	if scriptErr != nil {
-		errorLabel := statsWarnStyle.Render("[ERROR]")
+		errorLabel := r.stats.Warn.Render("[ERROR]")
 		builder.WriteString(
-			"  " + errorLabel + " " + statsMessageStyle.Render(scriptErr.Error()) + "\n",
+			"  " + errorLabel + " " + r.stats.Message.Render(scriptErr.Error()) + "\n",
 		)
 	}
 	for _, result := range results {
-		statusStyle := statsSuccessStyle
+		statusStyle := r.stats.Success
 		statusLabel := "[PASS]"
 		if !result.Passed {
-			statusStyle = statsWarnStyle
+			statusStyle = r.stats.Warn
 			statusLabel = "[FAIL]"
 		}
 		line := strings.Builder{}
@@ -76,16 +83,16 @@ func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 		line.WriteString(statusStyle.Render(statusLabel))
 		if strings.TrimSpace(result.Name) != "" {
 			line.WriteString(" ")
-			line.WriteString(statsValueStyle.Render(result.Name))
+			line.WriteString(r.stats.Value.Render(result.Name))
 		}
 		if strings.TrimSpace(result.Message) != "" {
 			line.WriteString(" – ")
-			line.WriteString(statsMessageStyle.Render(result.Message))
+			line.WriteString(r.stats.Message.Render(result.Message))
 		}
 		if result.Elapsed > 0 {
 			dur := result.Elapsed.Truncate(time.Millisecond)
 			line.WriteString(" ")
-			line.WriteString(statsDurationStyle.Render(fmt.Sprintf("(%s)", dur)))
+			line.WriteString(r.stats.Duration.Render(fmt.Sprintf("(%s)", dur)))
 		}
 		builder.WriteString(line.String() + "\n")
 	}
@@ -93,7 +100,7 @@ func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
 }
 
 func buildRespSum(resp *httpclient.Response, tests []scripts.TestResult, scriptErr error) string {
-	return buildRespSumWithLength(resp, tests, scriptErr, renderContentLengthLine)
+	return defaultResponseRenderer().buildRespSum(resp, tests, scriptErr)
 }
 
 func buildRespSumPretty(
@@ -101,49 +108,65 @@ func buildRespSumPretty(
 	tests []scripts.TestResult,
 	scriptErr error,
 ) string {
-	return buildRespSumWithLength(resp, tests, scriptErr, renderContentLengthLinePretty)
+	return defaultResponseRenderer().buildRespSumPretty(resp, tests, scriptErr)
 }
 
-func buildRespSumWithLength(
+func (r responseRenderer) buildRespSum(
 	resp *httpclient.Response,
 	tests []scripts.TestResult,
 	scriptErr error,
-	lengthFn func(*httpclient.Response) string,
+) string {
+	return r.buildRespSummary(resp, tests, scriptErr, false)
+}
+
+func (r responseRenderer) buildRespSumPretty(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+) string {
+	return r.buildRespSummary(resp, tests, scriptErr, true)
+}
+
+func (r responseRenderer) buildRespSummary(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+	prettyLength bool,
 ) string {
 	if resp == nil {
 		return ""
 	}
 
-	if lengthFn == nil {
-		lengthFn = renderContentLengthLine
-	}
-
 	var lines []string
-	statusLine := renderStatusLine(resp.Status, resp.StatusCode)
+	statusLine := r.renderStatusLine(resp.Status, resp.StatusCode)
 	if statusLine != "" {
 		lines = append(lines, statusLine)
 	}
 
-	if lengthLine := lengthFn(resp); lengthLine != "" {
+	lengthLine := r.renderContentLengthLine(resp)
+	if prettyLength {
+		lengthLine = r.renderContentLengthLinePretty(resp)
+	}
+	if lengthLine != "" {
 		lines = append(lines, lengthLine)
 	}
 
 	if trimmedURL := strings.TrimSpace(resp.EffectiveURL); trimmedURL != "" {
-		lines = append(lines, renderLabelValue("URL", trimmedURL, statsLabelStyle, statsValueStyle))
+		lines = append(lines, renderLabelValue("URL", trimmedURL, r.stats.Label, r.stats.Value))
 	}
 
 	if resp.Headers != nil {
 		if streamType := strings.TrimSpace(resp.Headers.Get(streamHeaderType)); streamType != "" {
 			lines = append(
 				lines,
-				renderLabelValue("Stream", streamType, statsLabelStyle, statsValueStyle),
+				renderLabelValue("Stream", streamType, r.stats.Label, r.stats.Value),
 			)
 		}
 
 		if summary := strings.TrimSpace(resp.Headers.Get(streamHeaderSummary)); summary != "" {
 			lines = append(
 				lines,
-				renderLabelValue("Stream summary", summary, statsLabelStyle, statsMessageStyle),
+				renderLabelValue("Stream summary", summary, r.stats.Label, r.stats.Message),
 			)
 		}
 	}
@@ -155,24 +178,28 @@ func buildRespSumWithLength(
 		}
 		lines = append(
 			lines,
-			renderLabelValue("Duration", dur.String(), statsLabelStyle, statsDurationStyle),
+			renderLabelValue("Duration", dur.String(), r.stats.Label, r.stats.Duration),
 		)
 	}
 
 	summary := strings.Join(lines, "\n")
-	if testSummary := formatTestSummary(tests, scriptErr); testSummary != "" {
+	if testSummary := r.formatTestSummary(tests, scriptErr); testSummary != "" {
 		summary = joinSections(summary, testSummary)
 	}
 	return summary
 }
 
 func renderStatusLine(status string, code int) string {
+	return defaultResponseRenderer().renderStatusLine(status, code)
+}
+
+func (r responseRenderer) renderStatusLine(status string, code int) string {
 	trimmed := strings.TrimSpace(status)
 	if trimmed == "" {
 		return ""
 	}
-	style := selectStatusStyle(code)
-	return renderLabelValue("Status", trimmed, statsLabelStyle, style)
+	style := r.selectStatusStyle(code)
+	return renderLabelValue("Status", trimmed, r.stats.Label, style)
 }
 
 type contentLen struct {
@@ -199,6 +226,10 @@ func contentLength(resp *httpclient.Response) contentLen {
 }
 
 func renderContentLengthLine(resp *httpclient.Response) string {
+	return defaultResponseRenderer().renderContentLengthLine(resp)
+}
+
+func (r responseRenderer) renderContentLengthLine(resp *httpclient.Response) string {
 	cl := contentLength(resp)
 	if !cl.has {
 		return ""
@@ -209,10 +240,14 @@ func renderContentLengthLine(resp *httpclient.Response) string {
 		value = formatByteQuantity(cl.n)
 	}
 
-	return renderLabelValue("Content-Length", value, statsLabelStyle, statsValueStyle)
+	return renderLabelValue("Content-Length", value, r.stats.Label, r.stats.Value)
 }
 
 func renderContentLengthLinePretty(resp *httpclient.Response) string {
+	return defaultResponseRenderer().renderContentLengthLinePretty(resp)
+}
+
+func (r responseRenderer) renderContentLengthLinePretty(resp *httpclient.Response) string {
 	cl := contentLength(resp)
 	if !cl.has {
 		return ""
@@ -223,7 +258,7 @@ func renderContentLengthLinePretty(resp *httpclient.Response) string {
 		value = formatByteSize(cl.n)
 	}
 
-	return renderLabelValue("Content-Length", value, statsLabelStyle, statsValueStyle)
+	return renderLabelValue("Content-Length", value, r.stats.Label, r.stats.Value)
 }
 
 func formatByteQuantity(n int64) string {
@@ -235,17 +270,21 @@ func formatByteSize(n int64) string {
 }
 
 func selectStatusStyle(code int) lipgloss.Style {
+	return defaultResponseRenderer().selectStatusStyle(code)
+}
+
+func (r responseRenderer) selectStatusStyle(code int) lipgloss.Style {
 	switch {
 	case code >= 500 && code <= 599:
-		return statsWarnStyle
+		return r.stats.Warn
 	case code >= 400 && code <= 499:
-		return statsWarnStyle
+		return r.stats.Warn
 	case code >= 300 && code <= 399:
-		return statsNeutralStyle
+		return r.stats.Neutral
 	case code > 0:
-		return statsSuccessStyle
+		return r.stats.Success
 	default:
-		return statsValueStyle
+		return r.stats.Value
 	}
 }
 

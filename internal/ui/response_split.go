@@ -930,7 +930,7 @@ func (m *Model) paneContentBaseForTab(
 		if snapshot.timeline == nil {
 			return "Trace data unavailable.\n", tab
 		}
-		styles := newTimelineStyles(&m.theme)
+		styles := newTimelineStyles(&m.theme, m.themeRuntime.appearance)
 		report := buildTimelineReport(
 			snapshot.timeline,
 			snapshotTraceSpec(snapshot),

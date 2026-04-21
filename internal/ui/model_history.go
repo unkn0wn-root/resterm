@@ -452,7 +452,7 @@ func (m *Model) consumeHTTPResponse(
 			resp.Timeline,
 			traceSpec,
 			resp.TraceReport,
-			newTimelineStyles(&m.theme),
+			newTimelineStyles(&m.theme, m.themeRuntime.appearance),
 		)
 	}
 
@@ -2240,7 +2240,12 @@ func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) 
 			traceSpec = clone
 		}
 	}
-	report := buildTimelineReport(tl, traceSpec, rep, newTimelineStyles(&m.theme))
+	report := buildTimelineReport(
+		tl,
+		traceSpec,
+		rep,
+		newTimelineStyles(&m.theme, m.themeRuntime.appearance),
+	)
 	summary := historyEntrySummary(entry)
 	snap := &responseSnapshot{
 		id:          nextResponseRenderToken(),

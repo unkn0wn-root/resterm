@@ -222,12 +222,9 @@ func (m *Model) ensureNavigatorFilter() {
 		ni.Prompt = "Filter: "
 		ni.CharLimit = 0
 		ni.SetCursor(0)
-		ni.TextStyle = m.theme.NavigatorTitle
-		ni.PromptStyle = m.theme.NavigatorTitle
-		ni.PlaceholderStyle = m.theme.NavigatorSubtitle
-		ni.Cursor.Style = m.theme.NavigatorTitle
 		ni.Blur()
 		m.navigatorFilter = ni
+		m.themeRuntime.applyTextInput(&m.navigatorFilter, m.theme, textInputKindNavigator)
 	}
 }
 

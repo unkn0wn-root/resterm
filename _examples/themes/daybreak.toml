@@ -9,14 +9,54 @@ tags = ["light", "contrast"]
 foreground = "#1e40af"
 bold = true
 
+[styles.header]
+foreground = "#0f172a"
+
 [styles.header_value]
 foreground = "#0f172a"
 
 [styles.header_separator]
 foreground = "#2563eb"
 
+[styles.header_brand]
+foreground = "#f8fafc"
+background = "#1d4ed8"
+border_color = "#93c5fd"
+bold = true
+
 [styles.browser_border]
 border_color = "#cbd5f5"
+
+[styles.editor_border]
+border_color = "#93c5fd"
+
+[styles.response_border]
+border_color = "#67e8f9"
+
+[styles.app_frame]
+border_color = "#cbd5e1"
+
+[styles.navigator_title]
+foreground = "#0f172a"
+
+[styles.navigator_title_selected]
+foreground = "#0f172a"
+background = "#fde68a"
+bold = true
+
+[styles.navigator_subtitle]
+foreground = "#475569"
+
+[styles.navigator_subtitle_selected]
+foreground = "#0f172a"
+background = "#fde68a"
+
+[styles.navigator_badge]
+foreground = "#2563eb"
+bold = true
+
+[styles.navigator_tag]
+foreground = "#64748b"
 
 [styles.command_bar]
 foreground = "#1f2933"
@@ -43,6 +83,10 @@ foreground = "#f8fafc"
 
 [styles.tab_inactive]
 foreground = "#475569"
+
+[styles.command_divider]
+foreground = "#cbd5e1"
+bold = true
 
 [styles.notification]
 background = "#c7d2fe"
@@ -81,6 +125,37 @@ foreground = "#a1acc2"
 foreground = "#c026d3"
 underline = true
 
+[styles.pane_title]
+foreground = "#475569"
+bold = true
+
+[styles.pane_title_file]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.pane_title_requests]
+foreground = "#0f766e"
+bold = true
+
+[styles.pane_divider]
+foreground = "#cbd5e1"
+
+[styles.editor_hint_box]
+foreground = "#0f172a"
+border_color = "#93c5fd"
+background = "#eff6ff"
+
+[styles.editor_hint_item]
+foreground = "#0f172a"
+
+[styles.editor_hint_selected]
+foreground = "#0f172a"
+background = "#fde68a"
+bold = true
+
+[styles.editor_hint_annotation]
+foreground = "#64748b"
+
 [styles.response_content]
 foreground = "#0f172a"
 
@@ -90,12 +165,142 @@ foreground = "#1e3a8a"
 [styles.response_content_headers]
 foreground = "#047857"
 
+[styles.response_search_highlight]
+foreground = "#0f172a"
+background = "#bfdbfe"
+
+[styles.response_search_highlight_active]
+foreground = "#0f172a"
+background = "#fde68a"
+bold = true
+
 [styles.response_selection]
 background = "#e2e8f0"
 
 [styles.response_cursor]
 foreground = "#6b7280"
 bold = true
+
+[styles.explain_label]
+foreground = "#0369a1"
+bold = true
+
+[styles.explain_value]
+foreground = "#0f172a"
+
+[styles.explain_muted]
+foreground = "#64748b"
+
+[styles.explain_section_title]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.explain_section_border]
+foreground = "#93c5fd"
+
+[styles.explain_badge_ready]
+foreground = "#14532d"
+background = "#bbf7d0"
+bold = true
+
+[styles.explain_badge_skipped]
+foreground = "#854d0e"
+background = "#fde68a"
+bold = true
+
+[styles.explain_badge_error]
+foreground = "#991b1b"
+background = "#fecaca"
+bold = true
+
+[styles.explain_stage_ok]
+foreground = "#15803d"
+bold = true
+
+[styles.explain_stage_skipped]
+foreground = "#b45309"
+bold = true
+
+[styles.explain_stage_error]
+foreground = "#b91c1c"
+bold = true
+
+[styles.explain_change_add]
+foreground = "#15803d"
+bold = true
+
+[styles.explain_change_remove]
+foreground = "#b91c1c"
+bold = true
+
+[styles.explain_change_update]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.explain_warning]
+foreground = "#b45309"
+bold = true
+
+[styles.stream_content]
+foreground = "#0f172a"
+
+[styles.stream_timestamp]
+foreground = "#64748b"
+
+[styles.stream_direction_send]
+foreground = "#b91c1c"
+bold = true
+
+[styles.stream_direction_receive]
+foreground = "#15803d"
+bold = true
+
+[styles.stream_direction_info]
+foreground = "#b45309"
+bold = true
+
+[styles.stream_event_name]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.stream_data]
+foreground = "#0f172a"
+
+[styles.stream_binary]
+foreground = "#c2410c"
+
+[styles.stream_summary]
+foreground = "#64748b"
+italic = true
+
+[styles.stream_error]
+foreground = "#b91c1c"
+bold = true
+
+[styles.stream_console_title]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.stream_console_mode]
+foreground = "#0f766e"
+bold = true
+
+[styles.stream_console_status]
+foreground = "#b45309"
+
+[styles.stream_console_prompt]
+foreground = "#1d4ed8"
+bold = true
+
+[styles.stream_console_input]
+foreground = "#0f172a"
+background = "#f8fafc"
+border_color = "#cbd5e1"
+
+[styles.stream_console_input_focused]
+foreground = "#0f172a"
+background = "#f8fafc"
+border_color = "#60a5fa"
 
 [colors]
 pane_border_focus_file = "#2563eb"

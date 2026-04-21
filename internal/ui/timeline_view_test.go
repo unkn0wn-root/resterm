@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestBuildTimelineReportBudgets(t *testing.T) {
@@ -29,7 +30,7 @@ func TestBuildTimelineReportBudgets(t *testing.T) {
 		"connect": 60 * time.Millisecond,
 	}
 
-	report := buildTimelineReport(tl, spec, nil, newTimelineStyles(nil))
+	report := buildTimelineReport(tl, spec, nil, newTimelineStyles(nil, theme.AppearanceUnknown))
 	if len(report.rows) == 0 {
 		t.Fatalf("expected rows to be populated")
 	}
@@ -75,7 +76,7 @@ func TestRenderTimelineSuggestsBudgetsWhenMissing(t *testing.T) {
 			{Kind: nettrace.PhaseConnect, Duration: 60 * time.Millisecond},
 		},
 	}
-	report := buildTimelineReport(tl, nil, nil, newTimelineStyles(nil))
+	report := buildTimelineReport(tl, nil, nil, newTimelineStyles(nil, theme.AppearanceUnknown))
 	output := renderTimeline(report, 60)
 	if !strings.Contains(output, "Define @trace budget to enable gating.") {
 		t.Fatalf("expected suggestion for missing budgets, got %q", output)
@@ -97,7 +98,7 @@ func TestRenderTimelineShowsStatusIndicators(t *testing.T) {
 		"dns":     80 * time.Millisecond,
 		"connect": 30 * time.Millisecond,
 	}
-	report := buildTimelineReport(tl, spec, nil, newTimelineStyles(nil))
+	report := buildTimelineReport(tl, spec, nil, newTimelineStyles(nil, theme.AppearanceUnknown))
 	output := renderTimeline(report, 80)
 	if !strings.Contains(output, "✔") {
 		t.Fatalf("expected within-budget indicator, got %q", output)
@@ -117,7 +118,7 @@ func TestRenderTimelinePlacesTotalFirst(t *testing.T) {
 	}
 	spec := &restfile.TraceSpec{Enabled: true}
 	spec.Budgets.Total = 100 * time.Millisecond
-	report := buildTimelineReport(tl, spec, nil, newTimelineStyles(nil))
+	report := buildTimelineReport(tl, spec, nil, newTimelineStyles(nil, theme.AppearanceUnknown))
 	output := renderTimeline(report, 80)
 	lines := strings.Split(output, "\n")
 	rowLine := ""
@@ -181,7 +182,7 @@ func TestRenderTimelineDetails(t *testing.T) {
 		},
 	}
 
-	report := buildTimelineReport(tl, nil, nil, newTimelineStyles(nil))
+	report := buildTimelineReport(tl, nil, nil, newTimelineStyles(nil, theme.AppearanceUnknown))
 	output := renderTimeline(report, 80)
 	for _, want := range []string{
 		"Connection",
