@@ -1312,6 +1312,51 @@ func TestRequestEditorMetadataHintsProfileMultipleParams(t *testing.T) {
 	}
 }
 
+func TestRequestEditorMetadataHintsPreviewToggle(t *testing.T) {
+	editor := newTestEditor("# ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 2)
+	editorPtr.SetMetadataHintsEnabled(true)
+
+	keys := []tea.KeyMsg{
+		{Type: tea.KeyRunes, Runes: []rune{'@'}},
+		{Type: tea.KeyRunes, Runes: []rune{'a'}},
+	}
+	for _, key := range keys {
+		editor, _ = editor.Update(key)
+	}
+
+	if !editor.metadataHints.active {
+		t.Fatal("expected metadata hints to activate")
+	}
+	if editor.metadataHints.preview {
+		t.Fatal("expected preview to start closed")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
+	if !editor.metadataHints.preview {
+		t.Fatal("expected right key to open metadata hint preview")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if editor.metadataHints.preview {
+		t.Fatal("expected esc to close metadata hint preview")
+	}
+	if !editor.metadataHints.active {
+		t.Fatal("expected esc to keep metadata hints active after closing preview")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	if !editor.metadataHints.preview {
+		t.Fatal("expected ? to toggle metadata hint preview on")
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
+	if editor.metadataHints.preview {
+		t.Fatal("expected ctrl+l to toggle metadata hint preview off")
+	}
+}
+
 func TestRequestEditorMetadataHintsIgnoreNonCommentContext(t *testing.T) {
 	editor := newTestEditor("")
 	editorPtr := &editor

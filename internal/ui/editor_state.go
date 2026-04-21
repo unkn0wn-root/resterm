@@ -123,12 +123,13 @@ type editorSearch struct {
 	active  bool
 }
 
-const metadataHintDisplayLimit = 6
-
 type metadataHintState struct {
 	active       bool
 	anchorOffset int
 	selection    int
+	preview      bool
+	popupLabelW  int
+	popupSummaryW int
 	filtered     []hint.Hint
 	ctx          hint.Context
 }
@@ -137,6 +138,9 @@ func (s *metadataHintState) deactivate() {
 	s.active = false
 	s.filtered = nil
 	s.selection = 0
+	s.preview = false
+	s.popupLabelW = 0
+	s.popupSummaryW = 0
 	s.anchorOffset = 0
 	s.ctx = hint.Context{}
 }
@@ -146,13 +150,26 @@ func (s *metadataHintState) update(anchor int, filtered []hint.Hint, ctx hint.Co
 		s.deactivate()
 		return
 	}
-	if !s.active || s.anchorOffset != anchor || s.selection >= len(filtered) {
+	reset := !s.active || s.anchorOffset != anchor
+	if reset || s.selection >= len(filtered) {
 		s.selection = 0
 	}
 	s.active = true
 	s.anchorOffset = anchor
 	s.filtered = filtered
 	s.ctx = ctx
+	labelW, summaryW := metadataHintPopupPreference(filtered)
+	if reset {
+		s.popupLabelW = labelW
+		s.popupSummaryW = summaryW
+		return
+	}
+	if labelW > s.popupLabelW {
+		s.popupLabelW = labelW
+	}
+	if summaryW > s.popupSummaryW {
+		s.popupSummaryW = summaryW
+	}
 }
 
 func (s *metadataHintState) move(delta int) {
@@ -165,6 +182,18 @@ func (s *metadataHintState) move(delta int) {
 		idx += count
 	}
 	s.selection = idx
+}
+
+func (s *metadataHintState) setPreview(open bool) {
+	if !s.active || len(s.filtered) == 0 {
+		s.preview = false
+		return
+	}
+	s.preview = open
+}
+
+func (s *metadataHintState) togglePreview() {
+	s.setPreview(!s.preview)
 }
 
 func (s metadataHintState) display(limit int) (items []hint.Hint, selected int, ok bool) {
@@ -192,6 +221,20 @@ func (s metadataHintState) display(limit int) (items []hint.Hint, selected int, 
 	window := make([]hint.Hint, end-start)
 	copy(window, s.filtered[start:end])
 	return window, s.selection - start, true
+}
+
+func metadataHintPopupPreference(items []hint.Hint) (int, int) {
+	labelW := 0
+	summaryW := 0
+	for _, item := range items {
+		if w := visibleWidth(item.Label); w > labelW {
+			labelW = w
+		}
+		if w := visibleWidth(item.Summary); w > summaryW {
+			summaryW = w
+		}
+	}
+	return labelW, summaryW
 }
 
 func newRequestEditor() requestEditor {
@@ -403,12 +446,6 @@ func (e *requestEditor) SetMetadataHintsEnabled(enabled bool) {
 	}
 }
 
-func (e *requestEditor) metadataHintsDisplay(
-	limit int,
-) (items []hint.Hint, selection int, ok bool) {
-	return e.metadataHints.display(limit)
-}
-
 func (e *requestEditor) handleMetadataHintNavigation(msg tea.KeyMsg) (bool, tea.Cmd) {
 	if !e.metadataHints.active || len(e.metadataHints.filtered) == 0 {
 		return false, nil
@@ -420,6 +457,24 @@ func (e *requestEditor) handleMetadataHintNavigation(msg tea.KeyMsg) (bool, tea.
 	case "up", "ctrl+p", "shift+tab":
 		e.metadataHints.move(-1)
 		return true, nil
+	case "right":
+		e.metadataHints.setPreview(true)
+		return true, nil
+	case "left":
+		if e.metadataHints.preview {
+			e.metadataHints.setPreview(false)
+			return true, nil
+		}
+		return false, nil
+	case "ctrl+l", "?", "shift+/":
+		e.metadataHints.togglePreview()
+		return true, nil
+	case "esc":
+		if e.metadataHints.preview {
+			e.metadataHints.setPreview(false)
+			return true, nil
+		}
+		return false, nil
 	case "tab", "enter", "ctrl+m":
 		cmd := e.applyMetadataHintSelection()
 		return true, cmd
