@@ -385,7 +385,7 @@ func TestApplyThemeDefinitionKeepsGRPCRawContentType(t *testing.T) {
 }
 
 func TestResolveThemeDefinitionFallsBackToDefaultDefinition(t *testing.T) {
-	def := resolveThemeDefinition(theme.Catalog{}, "", theme.DefaultTheme())
+	def := theme.ResolveDefinition(theme.Catalog{}, "", theme.DefaultTheme())
 	if def.Key != "default" {
 		t.Fatalf("expected default fallback key, got %q", def.Key)
 	}

@@ -11,9 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	xansi "github.com/charmbracelet/x/ansi"
-	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"golang.org/x/term"
 )
@@ -27,43 +27,7 @@ const (
 	runRequestPickerCompactWidth = 44
 	runRequestPickerSideMargin   = 2
 	runRequestPickerChromeRows   = 10
-
-	runRequestPickerColBorder        = "#4B4670"
-	runRequestPickerColTitle         = "#F4E27A"
-	runRequestPickerColPath          = "#D2D4F5"
-	runRequestPickerColMuted         = "#8E88A7"
-	runRequestPickerColSelBg         = "#261F42"
-	runRequestPickerColSelFg         = "#F8F7FF"
-	runRequestPickerColCursor        = "#6F688D"
-	runRequestPickerColAccent        = "#FFD46A"
-	runRequestPickerColText          = "#E8E9F0"
-	runRequestPickerColBright        = "#FFFFFF"
-	runRequestPickerColLineSel       = "#C8C2E6"
-	runRequestPickerColTarget        = "#7DB9FF"
-	runRequestPickerColDanger        = "#F87171"
-	runRequestPickerColMethodGet     = "#34d399"
-	runRequestPickerColMethodPost    = "#60a5fa"
-	runRequestPickerColMethodPut     = "#f59e0b"
-	runRequestPickerColMethodPatch   = "#14b8a6"
-	runRequestPickerColMethodHead    = "#a1a1aa"
-	runRequestPickerColMethodOptions = "#c084fc"
-	runRequestPickerColMethodGRPC    = "#22d3ee"
-	runRequestPickerColMethodWS      = "#fb923c"
-	runRequestPickerColMethodDefault = "#9ca3af"
 )
-
-var runRequestPickerMethodCols = map[string]string{
-	"GET":     runRequestPickerColMethodGet,
-	"POST":    runRequestPickerColMethodPost,
-	"PUT":     runRequestPickerColMethodPut,
-	"PATCH":   runRequestPickerColMethodPatch,
-	"DELETE":  runRequestPickerColDanger,
-	"HEAD":    runRequestPickerColMethodHead,
-	"OPTIONS": runRequestPickerColMethodOptions,
-	"GRPC":    runRequestPickerColMethodGRPC,
-	"WS":      runRequestPickerColMethodWS,
-	"":        runRequestPickerColMethodDefault,
-}
 
 func promptRunRequestChoiceTTY(
 	r io.Reader,
@@ -77,7 +41,7 @@ func promptRunRequestChoiceTTY(
 	if !inOK || !outOK || !term.IsTerminal(int(in.Fd())) || !term.IsTerminal(int(out.Fd())) {
 		return promptRunRequestChoiceText(r, w, path, choices)
 	}
-	m := newRunRequestPickerModel(path, choices, opt.Color)
+	m := newRunRequestPickerModel(path, choices, opt.Color, opt.Theme)
 	if wid, hgt, ok := runRequestPromptSize(out); ok {
 		m.setSize(wid, hgt)
 	}
@@ -142,13 +106,14 @@ func newRunRequestPickerModel(
 	path string,
 	choices []RunRequestChoice,
 	cfg termcolor.Config,
+	def *theme.Definition,
 ) *runRequestPickerModel {
 	m := &runRequestPickerModel{
 		path:    path,
 		choices: choices,
 		wid:     runRequestPickerDefaultWidth,
 		rows:    runRequestPickerDefaultRows,
-		st:      newRunRequestPickerStyle(cfg),
+		st:      newRunRequestPickerStyle(cfg, def),
 	}
 	m.keepVisible()
 	return m
@@ -525,66 +490,6 @@ type runRequestPickerStyle struct {
 	help      lipgloss.Style
 	note      lipgloss.Style
 	methods   map[string]lipgloss.Style
-}
-
-func newRunRequestPickerStyle(cfg termcolor.Config) runRequestPickerStyle {
-	r := lipgloss.NewRenderer(io.Discard)
-	if cfg.Enabled {
-		r.SetColorProfile(cfg.Profile)
-	} else {
-		r.SetColorProfile(termenv.Ascii)
-	}
-	st := runRequestPickerStyle{
-		box: r.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color(runRequestPickerColBorder)).
-			Padding(0, 1),
-		title: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColTitle)).
-			Bold(true),
-		path: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColPath)),
-		meta: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColMuted)),
-		row: r.NewStyle(),
-		rowSel: r.NewStyle().
-			Background(lipgloss.Color(runRequestPickerColSelBg)).
-			Foreground(lipgloss.Color(runRequestPickerColSelFg)).
-			Bold(true),
-		cursor: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColCursor)),
-		cursorSel: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColAccent)).
-			Bold(true),
-		number: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColMuted)),
-		numberSel: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColTitle)).
-			Bold(true),
-		name: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColText)),
-		nameSel: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColBright)).
-			Bold(true),
-		line: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColMuted)),
-		lineSel: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColLineSel)),
-		target: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColTarget)),
-		help: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColMuted)),
-		note: r.NewStyle().
-			Foreground(lipgloss.Color(runRequestPickerColDanger)).
-			Bold(true),
-		methods: make(map[string]lipgloss.Style),
-	}
-	for k, v := range runRequestPickerMethodCols {
-		st.methods[k] = r.NewStyle().
-			Foreground(lipgloss.Color(v)).
-			Bold(true)
-	}
-	return st
 }
 
 func (s runRequestPickerStyle) method(m string) string {

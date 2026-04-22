@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runview"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -59,6 +60,7 @@ func runRun(args []string) error {
 
 type runExecFn func(context.Context, runner.Options) (*runner.Report, error)
 type runClientFn func(string, cli.ExecFlags) (*httpclient.Client, func() error, error)
+type runThemeFn func() (theme.Definition, error)
 
 type runFormat string
 
@@ -101,6 +103,7 @@ type runCmd struct {
 
 	runFn     runExecFn
 	newClient runClientFn
+	loadTheme runThemeFn
 
 	in        io.Reader
 	out       io.Writer
@@ -135,6 +138,7 @@ func newRunCmd() *runCmd {
 		stdinTTY:  term.IsTerminal(int(os.Stdin.Fd())),
 		stdoutTTY: term.IsTerminal(int(os.Stdout.Fd())),
 		lookupEnv: os.LookupEnv,
+		loadTheme: loadRunTheme,
 		format:    "auto",
 		color:     string(termcolor.ModeAuto),
 	}
@@ -328,6 +332,7 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 		cli.RunRequestPromptOptions{
 			TTY:   c.stdinTTY && c.stdoutTTY,
 			Color: c.prettyColor(),
+			Theme: c.themeDefinition(),
 		},
 	)
 	if err != nil {
@@ -338,6 +343,26 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 	}
 	c.line = ch.Line
 	return nil
+}
+
+func loadRunTheme() (theme.Definition, error) {
+	ts, err := loadThemeState()
+	return ts.def, err
+}
+
+func (c *runCmd) themeDefinition() *theme.Definition {
+	def := theme.DefaultDefinition()
+	if c == nil || c.loadTheme == nil {
+		return &def
+	}
+	got, err := c.loadTheme()
+	if err != nil {
+		log.Printf("%v", err)
+	}
+	if got.Key != "" {
+		def = got
+	}
+	return &def
 }
 
 func (c *runCmd) client() (*httpclient.Client, func() error, error) {

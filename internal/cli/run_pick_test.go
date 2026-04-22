@@ -6,8 +6,10 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	xansi "github.com/charmbracelet/x/ansi"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestPromptRunRequestChoiceTTYFallsBackToTextForNonTTYIO(t *testing.T) {
@@ -52,6 +54,7 @@ func TestRunRequestPickerModelMovesWithArrowKeys(t *testing.T) {
 			{Line: 7, Label: "GET two"},
 		},
 		termcolor.TrueColor(),
+		nil,
 	)
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -75,6 +78,7 @@ func TestRunRequestPickerModelCancelsOnQ(t *testing.T) {
 			{Line: 7, Label: "GET two"},
 		},
 		termcolor.TrueColor(),
+		nil,
 	)
 
 	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
@@ -110,6 +114,7 @@ func TestRunRequestPickerViewFitsConfiguredWidth(t *testing.T) {
 			},
 		},
 		termcolor.TrueColor(),
+		nil,
 	)
 	p.wid = 60
 
@@ -128,6 +133,7 @@ func TestRunRequestPickerAppendDigitResetsInvalidJump(t *testing.T) {
 			{Line: 7, Label: "GET two"},
 		},
 		termcolor.TrueColor(),
+		nil,
 	)
 
 	p.appendDigit('2')
@@ -149,10 +155,63 @@ func TestRunRequestPickerAppendDigitResetsInvalidJump(t *testing.T) {
 }
 
 func TestRunRequestPickerViewHandlesEmptyChoices(t *testing.T) {
-	p := newRunRequestPickerModel("many.http", nil, termcolor.TrueColor())
+	p := newRunRequestPickerModel("many.http", nil, termcolor.TrueColor(), nil)
 
 	out := xansi.Strip(p.View())
 	if !strings.Contains(out, "No requests found.") {
 		t.Fatalf("expected empty picker message, got %q", out)
+	}
+}
+
+func TestRunRequestPickerAppliesLightThemeStyles(t *testing.T) {
+	th := theme.DefaultTheme()
+	th.HeaderTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#1e40af")).Bold(true)
+	th.HeaderValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
+	th.ExplainMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	th.ExplainLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#0369a1")).Bold(true)
+	th.ListItemTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
+	th.ListItemDescription = lipgloss.NewStyle().Foreground(lipgloss.Color("#334155"))
+	th.ListItemSelectedTitle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#0f172a")).
+		Background(lipgloss.Color("#bfdbfe")).
+		Bold(true)
+	th.ListItemSelectedDescription = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#0f172a")).
+		Background(lipgloss.Color("#bae6fd"))
+	th.ResponseCursor = lipgloss.NewStyle().Foreground(lipgloss.Color("#6b7280")).Bold(true)
+	th.CommandBar = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#1f2933")).
+		Background(lipgloss.Color("#f8fafc"))
+
+	def := theme.Definition{
+		Key: "daybreak",
+		Metadata: theme.Metadata{
+			Name: "Daybreak",
+			Tags: []string{"light"},
+		},
+		Theme: th,
+	}
+
+	p := newRunRequestPickerModel(
+		"many.http",
+		[]RunRequestChoice{{Line: 3, Label: "GET one"}},
+		termcolor.TrueColor(),
+		&def,
+	)
+
+	if got := p.st.name.GetForeground(); got != lipgloss.Color("#0f172a") {
+		t.Fatalf("expected light row text foreground, got %v", got)
+	}
+	if got := p.st.rowSel.GetBackground(); got != lipgloss.Color("#bfdbfe") {
+		t.Fatalf("expected light selection background, got %v", got)
+	}
+	if got := p.st.rowSel.GetForeground(); got != lipgloss.Color("#0f172a") {
+		t.Fatalf("expected light selection foreground, got %v", got)
+	}
+	if got := p.st.cursorSel.GetForeground(); got != lipgloss.Color("#1e40af") {
+		t.Fatalf("expected accent cursor foreground, got %v", got)
+	}
+	if got := p.st.box.GetBackground(); got != lipgloss.Color("#f8fafc") {
+		t.Fatalf("expected light box background, got %v", got)
 	}
 }
