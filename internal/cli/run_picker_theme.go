@@ -15,6 +15,7 @@ const (
 	runPickerBorderLite = "#CBD5E1"
 	runPickerTextDark   = "#F8F7FF"
 	runPickerTextLite   = "#0F172A"
+	runPickerTitleDark  = "#F4E27A"
 	runPickerMutedDark  = "#8E88A7"
 	runPickerMutedLite  = "#64748B"
 	runPickerSelBgDark  = "#261F42"
@@ -44,6 +45,7 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 	th := df.Theme
 	ap := df.Appearance()
 	activeText := theme.ActiveTextStyle(th)
+	customThemeOverride := def != nil && def.Source == theme.SourceUser && ap == theme.AppearanceDark
 
 	boxBd := pickerColor(
 		pickerBorderColor(
@@ -60,12 +62,7 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 		th.CommandBar.GetBackground(),
 		theme.ColorForAppearance(ap, runPickerBgLite, ""),
 	)
-	title := pickerColor(
-		th.HeaderTitle.GetForeground(),
-		th.CommandBarHint.GetForeground(),
-		th.ExplainSectionTitle.GetForeground(),
-		theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark),
-	)
+	title := pickerTitleColor(th, ap, customThemeOverride)
 	path := pickerColor(
 		th.HeaderValue.GetForeground(),
 		activeText.GetForeground(),
@@ -101,11 +98,7 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 		th.ExplainMuted.GetForeground(),
 		theme.ColorForAppearance(ap, runPickerCurLite, runPickerCurDark),
 	)
-	acc := pickerColor(
-		th.CommandBarHint.GetForeground(),
-		th.HeaderTitle.GetForeground(),
-		theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark),
-	)
+	acc := pickerAccentColor(th, ap, customThemeOverride)
 	line := pickerColor(
 		th.ListItemDescription.GetForeground(),
 		th.ExplainMuted.GetForeground(),
@@ -126,13 +119,22 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 		theme.ColorForAppearance(ap, runPickerErrLite, runPickerErrDark),
 	)
 
+	titleStyle := textOnlyStyle(r, th.HeaderTitle, title).Bold(true)
+	cursorSelStyle := textOnlyStyle(r, th.HeaderTitle, acc).Bold(true)
+	numberSelStyle := textOnlyStyle(r, th.HeaderTitle, title).Bold(true)
+	if !customThemeOverride {
+		titleStyle = forceTextStyle(r, th.HeaderTitle, title).Bold(true)
+		cursorSelStyle = forceTextStyle(r, th.HeaderTitle, acc).Bold(true)
+		numberSelStyle = forceTextStyle(r, th.HeaderTitle, title).Bold(true)
+	}
+
 	st := runRequestPickerStyle{
 		box: textOnlyStyle(r, th.CommandBar, boxBd).
 			Border(lipgloss.NormalBorder()).
 			BorderForeground(boxBd).
 			Background(boxBg).
 			Padding(0, 1),
-		title: textOnlyStyle(r, th.HeaderTitle, title).Bold(true),
+		title: titleStyle,
 		path:  textOnlyStyle(r, th.HeaderValue, path),
 		meta:  textOnlyStyle(r, th.ExplainMuted, mute),
 		row:   r.NewStyle(),
@@ -141,9 +143,9 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 			Foreground(selFg).
 			Bold(true),
 		cursor:    textOnlyStyle(r, th.ResponseCursor, cur),
-		cursorSel: textOnlyStyle(r, th.HeaderTitle, acc).Bold(true),
+		cursorSel: cursorSelStyle,
 		number:    textOnlyStyle(r, th.ExplainMuted, mute),
-		numberSel: textOnlyStyle(r, th.HeaderTitle, acc).Bold(true),
+		numberSel: numberSelStyle,
 		name:      textOnlyStyle(r, th.ListItemTitle, text),
 		nameSel:   textOnlyStyle(r, th.ListItemSelectedTitle, selFg).Bold(true),
 		line:      textOnlyStyle(r, th.ListItemDescription, line),
@@ -159,6 +161,37 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 			Bold(true)
 	}
 	return st
+}
+
+func pickerTitleColor(
+	th theme.Theme,
+	ap theme.Appearance,
+	customThemeOverride bool,
+) lipgloss.TerminalColor {
+	if customThemeOverride {
+		return pickerColor(
+			th.HeaderTitle.GetForeground(),
+			th.CommandBarHint.GetForeground(),
+			th.ExplainSectionTitle.GetForeground(),
+			theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark),
+		)
+	}
+	return theme.ColorForAppearance(ap, runPickerAccLite, runPickerTitleDark)
+}
+
+func pickerAccentColor(
+	th theme.Theme,
+	ap theme.Appearance,
+	customThemeOverride bool,
+) lipgloss.TerminalColor {
+	if customThemeOverride {
+		return pickerColor(
+			th.CommandBarHint.GetForeground(),
+			th.HeaderTitle.GetForeground(),
+			theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark),
+		)
+	}
+	return theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark)
 }
 
 func textOnlyStyle(
@@ -183,6 +216,18 @@ func textOnlyStyle(
 	}
 	if base.GetFaint() {
 		st = st.Faint(true)
+	}
+	return st
+}
+
+func forceTextStyle(
+	r *lipgloss.Renderer,
+	base lipgloss.Style,
+	fg lipgloss.TerminalColor,
+) lipgloss.Style {
+	st := textOnlyStyle(r, base, nil)
+	if theme.ColorDefined(fg) {
+		st = st.Foreground(fg)
 	}
 	return st
 }
