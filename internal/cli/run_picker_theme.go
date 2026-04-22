@@ -45,7 +45,7 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 	th := df.Theme
 	ap := df.Appearance()
 	activeText := theme.ActiveTextStyle(th)
-	customThemeOverride := def != nil && def.Source == theme.SourceUser && ap == theme.AppearanceDark
+	customThemeOverride := def != nil && def.Source == theme.SourceUser
 
 	boxBd := pickerColor(
 		pickerBorderColor(

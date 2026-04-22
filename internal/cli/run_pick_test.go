@@ -165,7 +165,8 @@ func TestRunRequestPickerViewHandlesEmptyChoices(t *testing.T) {
 
 func TestRunRequestPickerAppliesLightThemeStyles(t *testing.T) {
 	th := theme.DefaultTheme()
-	th.HeaderTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#1e40af")).Bold(true)
+	th.HeaderTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#dc2626")).Bold(true)
+	th.CommandBarHint = lipgloss.NewStyle().Foreground(lipgloss.Color("#9333ea")).Bold(true)
 	th.HeaderValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
 	th.ExplainMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
 	th.ExplainLabel = lipgloss.NewStyle().Foreground(lipgloss.Color("#0369a1")).Bold(true)
@@ -184,7 +185,8 @@ func TestRunRequestPickerAppliesLightThemeStyles(t *testing.T) {
 		Background(lipgloss.Color("#f8fafc"))
 
 	def := theme.Definition{
-		Key: "daybreak",
+		Key:    "daybreak",
+		Source: theme.SourceUser,
 		Metadata: theme.Metadata{
 			Name: "Daybreak",
 			Tags: []string{"light"},
@@ -208,10 +210,62 @@ func TestRunRequestPickerAppliesLightThemeStyles(t *testing.T) {
 	if got := p.st.rowSel.GetForeground(); got != lipgloss.Color("#0f172a") {
 		t.Fatalf("expected light selection foreground, got %v", got)
 	}
-	if got := p.st.cursorSel.GetForeground(); got != lipgloss.Color("#1e40af") {
-		t.Fatalf("expected accent cursor foreground, got %v", got)
+	if got := p.st.title.GetForeground(); got != lipgloss.Color("#dc2626") {
+		t.Fatalf("expected light user theme to override title foreground, got %v", got)
+	}
+	if got := p.st.cursorSel.GetForeground(); got != lipgloss.Color("#dc2626") {
+		t.Fatalf("expected light user theme to override accent cursor foreground, got %v", got)
 	}
 	if got := p.st.box.GetBackground(); got != lipgloss.Color("#f8fafc") {
 		t.Fatalf("expected light box background, got %v", got)
+	}
+}
+
+func TestRunRequestPickerAppliesDarkUserThemeAccent(t *testing.T) {
+	th := theme.DefaultTheme()
+	th.HeaderTitle = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e")).Bold(true)
+	th.CommandBarHint = lipgloss.NewStyle().Foreground(lipgloss.Color("#38bdf8")).Bold(true)
+
+	def := theme.Definition{
+		Key:    "forest",
+		Source: theme.SourceUser,
+		Metadata: theme.Metadata{
+			Name: "Forest",
+			Tags: []string{"dark"},
+		},
+		Theme: th,
+	}
+
+	p := newRunRequestPickerModel(
+		"many.http",
+		[]RunRequestChoice{{Line: 3, Label: "GET one"}},
+		termcolor.TrueColor(),
+		&def,
+	)
+
+	if got := p.st.title.GetForeground(); got != lipgloss.Color("#22c55e") {
+		t.Fatalf("expected dark user theme to override title foreground, got %v", got)
+	}
+	if got := p.st.cursorSel.GetForeground(); got != lipgloss.Color("#22c55e") {
+		t.Fatalf("expected dark user theme to override accent cursor foreground, got %v", got)
+	}
+}
+
+func TestRunRequestPickerKeepsCLIDefaultAccentWithoutCustomTheme(t *testing.T) {
+	p := newRunRequestPickerModel(
+		"many.http",
+		[]RunRequestChoice{{Line: 3, Label: "GET one"}},
+		termcolor.TrueColor(),
+		nil,
+	)
+
+	if got := p.st.title.GetForeground(); got != lipgloss.Color("#F4E27A") {
+		t.Fatalf("expected CLI default title foreground, got %v", got)
+	}
+	if got := p.st.cursorSel.GetForeground(); got != lipgloss.Color("#FFD46A") {
+		t.Fatalf("expected CLI default cursor accent foreground, got %v", got)
+	}
+	if got := p.st.numberSel.GetForeground(); got != lipgloss.Color("#F4E27A") {
+		t.Fatalf("expected CLI default number accent foreground, got %v", got)
 	}
 }
