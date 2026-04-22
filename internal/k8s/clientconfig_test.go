@@ -18,7 +18,7 @@ func TestParseExecPolicy(t *testing.T) {
 		"ALLOW_LIST": ExecPolicyAllowlist,
 	}
 	for raw, want := range cases {
-		got, err := ParseExecPolicy(raw)
+		got, err := parseExecPolicy(raw)
 		if err != nil {
 			t.Fatalf("parse %q err: %v", raw, err)
 		}
@@ -26,13 +26,13 @@ func TestParseExecPolicy(t *testing.T) {
 			t.Fatalf("parse %q expected %q, got %q", raw, want, got)
 		}
 	}
-	if _, err := ParseExecPolicy("bad"); err == nil {
+	if _, err := parseExecPolicy("bad"); err == nil {
 		t.Fatalf("expected parse error for bad policy")
 	}
 }
 
 func TestNormalizeLoadOpt(t *testing.T) {
-	cf, err := normalizeLoadOpt(LoadOpt{})
+	cf, err := normalizeLoadOptions(LoadOptions{})
 	if err != nil {
 		t.Fatalf("normalize err: %v", err)
 	}
@@ -48,10 +48,10 @@ func TestNormalizeLoadOpt(t *testing.T) {
 }
 
 func TestNormalizeLoadOptAllowlistValidation(t *testing.T) {
-	if _, err := normalizeLoadOpt(LoadOpt{ExecPolicy: ExecPolicyAllowlist}); err == nil {
+	if _, err := normalizeLoadOptions(LoadOptions{ExecPolicy: ExecPolicyAllowlist}); err == nil {
 		t.Fatalf("expected allowlist policy validation error")
 	}
-	_, err := normalizeLoadOpt(LoadOpt{
+	_, err := normalizeLoadOptions(LoadOptions{
 		ExecPolicy:    ExecPolicyDenyAll,
 		ExecAllowlist: []string{"aws"},
 	})
@@ -71,7 +71,7 @@ func TestApplyExecPolicy(t *testing.T) {
 		},
 	}
 
-	cf, err := normalizeLoadOpt(LoadOpt{
+	cf, err := normalizeLoadOptions(LoadOptions{
 		ExecPolicy:    ExecPolicyAllowlist,
 		ExecAllowlist: []string{"aws", "kubelogin", "aws"},
 	})
@@ -132,12 +132,12 @@ func TestRawConfigAppliesContextOverrideAndExecPolicy(t *testing.T) {
 		t.Fatalf("write kubeconfig: %v", err)
 	}
 
-	cfg := Cfg{
+	cfg := Config{
 		Kubeconfig: path,
 		Context:    "ctx-b",
 		Namespace:  "ns-override",
 	}
-	raw, err := RawConfig(cfg, LoadOpt{
+	raw, err := rawConfig(cfg, LoadOptions{
 		ExecPolicy:    ExecPolicyAllowlist,
 		ExecAllowlist: []string{"aws"},
 	})

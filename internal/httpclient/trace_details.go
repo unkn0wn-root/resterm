@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -195,37 +194,7 @@ func formatK8s(plan *k8s.Plan) string {
 	if plan == nil || plan.Config == nil {
 		return ""
 	}
-	cfg := plan.Config
-	target := cfg.TargetName
-	kind := string(cfg.TargetKind)
-	if target == "" && cfg.Pod != "" {
-		target = cfg.Pod
-		kind = "pod"
-	}
-	if target == "" {
-		return ""
-	}
-	ns := cfg.Namespace
-	if kind == "" {
-		kind = "pod"
-	}
-	ref := target
-	if kind != "pod" {
-		ref = kind + "/" + target
-	}
-	if ns != "" {
-		ref = ns + "/" + ref
-	}
-	if cfg.Port > 0 {
-		ref += ":" + strconv.Itoa(cfg.Port)
-	} else if name := cfg.PortName; name != "" {
-		ref += ":" + name
-	}
-	ctx := cfg.Context
-	if ctx == "" {
-		return ref
-	}
-	return ctx + " " + ref
+	return plan.Config.DisplayRef()
 }
 
 func mergeIPs(current []string, addrs []net.IPAddr) []string {

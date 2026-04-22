@@ -17,6 +17,7 @@ import (
 	"nhooyr.io/websocket"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -137,6 +138,14 @@ func (c *Client) StartWebSocket(
 		dial = websocket.Dial
 	}
 
+	var k8sDiag *k8s.RequestDiag
+	if effectiveOpts.K8s != nil && effectiveOpts.K8s.Active() {
+		boundCtx, diag := k8s.BindRequestContext(handshakeCtx)
+		handshakeCtx = boundCtx
+		httpReq = httpReq.WithContext(boundCtx)
+		k8sDiag = diag
+	}
+
 	start := time.Now()
 	conn, resp, err := dial(handshakeCtx, httpReq.URL.String(), dialOpts)
 	if err != nil {
@@ -147,6 +156,9 @@ func (c *Client) StartWebSocket(
 				return nil, nil, convErr
 			}
 			return nil, fallback, nil
+		}
+		if k8sDiag != nil {
+			err = k8s.AnnotateRequestError(err, start, k8sDiag)
 		}
 		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "dial websocket")
 	}

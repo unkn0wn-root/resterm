@@ -71,10 +71,10 @@ func TestResolveK8sUsesDocumentGlobalProfiles(t *testing.T) {
 	if got := plan.Config.Name; got != "cluster-api" {
 		t.Fatalf("resolveK8s() name = %q, want %q", got, "cluster-api")
 	}
-	if got := plan.Config.TargetName; got != "api-server" {
+	if got := plan.Config.Target.Name; got != "api-server" {
 		t.Fatalf("resolveK8s() target = %q, want %q", got, "api-server")
 	}
-	if got := plan.Config.Port; got != 8080 {
+	if got := plan.Config.Port.Number; got != 8080 {
 		t.Fatalf("resolveK8s() port = %d, want %d", got, 8080)
 	}
 	if got := plan.Config.Label; got != "dev" {

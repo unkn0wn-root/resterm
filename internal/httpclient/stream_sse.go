@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -83,9 +84,19 @@ func (c *Client) StartSSE(
 		return nil, nil, err
 	}
 
+	var k8sDiag *k8s.RequestDiag
+	if effectiveOpts.K8s != nil && effectiveOpts.K8s.Active() {
+		reqCtx, diag := k8s.BindRequestContext(httpReq.Context())
+		httpReq = httpReq.WithContext(reqCtx)
+		k8sDiag = diag
+	}
+
 	start := time.Now()
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
+		if k8sDiag != nil {
+			err = k8s.AnnotateRequestError(err, start, k8sDiag)
+		}
 		cancel()
 		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "perform sse request")
 	}

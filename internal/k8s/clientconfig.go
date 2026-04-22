@@ -20,11 +20,9 @@ const (
 	ExecPolicyAllowlist ExecPolicy = "allowlist"
 )
 
-type LoadOpt struct {
-	ExecPolicy    ExecPolicy
-	ExecAllowlist []string
-	// Keep explicit-value + explicit-set to preserve API stability and let callers
-	// choose between default behavior and an explicit false.
+type LoadOptions struct {
+	ExecPolicy             ExecPolicy
+	ExecAllowlist          []string
 	StdinUnavailable       bool
 	StdinUnavailableSet    bool
 	StdinUnavailableReason string
@@ -37,7 +35,7 @@ type loadSettings struct {
 	stdinMsg     string
 }
 
-func ParseExecPolicy(raw string) (ExecPolicy, error) {
+func parseExecPolicy(raw string) (ExecPolicy, error) {
 	v := strings.TrimSpace(strings.ToLower(raw))
 	v = strings.ReplaceAll(v, "_", "-")
 	switch v {
@@ -52,37 +50,37 @@ func ParseExecPolicy(raw string) (ExecPolicy, error) {
 	}
 }
 
-func RawConfig(cfg Cfg, opt LoadOpt) (clientcmdapi.Config, error) {
+func rawConfig(cfg Config, opt LoadOptions) (clientcmdapi.Config, error) {
 	raw, _, err := loadRaw(cfg)
 	if err != nil {
 		return clientcmdapi.Config{}, err
 	}
 
-	cf, err := normalizeLoadOpt(opt)
+	st, err := normalizeLoadOptions(opt)
 	if err != nil {
 		return clientcmdapi.Config{}, err
 	}
-	applyExecPolicy(&raw, cf)
+	applyExecPolicy(&raw, st)
 	return raw, nil
 }
 
-func ClientConfig(cfg Cfg, opt LoadOpt) (clientcmd.ClientConfig, error) {
+func clientConfig(cfg Config, opt LoadOptions) (clientcmd.ClientConfig, error) {
 	raw, ovs, err := loadRaw(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	cf, err := normalizeLoadOpt(opt)
+	st, err := normalizeLoadOptions(opt)
 	if err != nil {
 		return nil, err
 	}
-	applyExecPolicy(&raw, cf)
+	applyExecPolicy(&raw, st)
 
 	return clientcmd.NewNonInteractiveClientConfig(raw, ovs.CurrentContext, ovs, nil), nil
 }
 
-func RESTConfig(cfg Cfg, opt LoadOpt) (*rest.Config, error) {
-	cc, err := ClientConfig(cfg, opt)
+func restConfig(cfg Config, opt LoadOptions) (*rest.Config, error) {
+	cc, err := clientConfig(cfg, opt)
 	if err != nil {
 		return nil, err
 	}
@@ -94,8 +92,8 @@ func RESTConfig(cfg Cfg, opt LoadOpt) (*rest.Config, error) {
 	return out, nil
 }
 
-func loadRaw(cfg Cfg) (clientcmdapi.Config, *clientcmd.ConfigOverrides, error) {
-	cfg = normalizeCfg(cfg)
+func loadRaw(cfg Config) (clientcmdapi.Config, *clientcmd.ConfigOverrides, error) {
+	cfg = cfg.normalize()
 
 	rules := clientcmd.NewDefaultClientConfigLoadingRules()
 	if cfg.Kubeconfig != "" {
@@ -118,21 +116,21 @@ func loadRaw(cfg Cfg) (clientcmdapi.Config, *clientcmd.ConfigOverrides, error) {
 	return raw, ovs, nil
 }
 
-func normalizeLoadOpt(opt LoadOpt) (loadSettings, error) {
-	pl := opt.ExecPolicy
-	if pl == "" {
-		pl = ExecPolicyAllowAll
+func normalizeLoadOptions(opt LoadOptions) (loadSettings, error) {
+	pol := opt.ExecPolicy
+	if pol == "" {
+		pol = ExecPolicyAllowAll
 	}
-	pp, err := ParseExecPolicy(string(pl))
+	policy, err := parseExecPolicy(string(pol))
 	if err != nil {
 		return loadSettings{}, err
 	}
 
 	al := normalizeAllowlist(opt.ExecAllowlist)
-	if len(al) > 0 && pp != ExecPolicyAllowlist {
+	if len(al) > 0 && policy != ExecPolicyAllowlist {
 		return loadSettings{}, fmt.Errorf("k8s: exec allowlist requires policy allowlist")
 	}
-	if pp == ExecPolicyAllowlist && len(al) == 0 {
+	if policy == ExecPolicyAllowlist && len(al) == 0 {
 		return loadSettings{}, fmt.Errorf(
 			"k8s: exec allowlist policy requires at least one allowlist entry",
 		)
@@ -148,7 +146,7 @@ func normalizeLoadOpt(opt LoadOpt) (loadSettings, error) {
 	}
 
 	return loadSettings{
-		policy:       pp,
+		policy:       policy,
 		allowlist:    al,
 		stdinUnavail: noIn,
 		stdinMsg:     msg,
@@ -187,11 +185,11 @@ func normalizeAllowlist(raw []string) []string {
 	return out
 }
 
-func applyExecPolicy(raw *clientcmdapi.Config, cf loadSettings) {
+func applyExecPolicy(raw *clientcmdapi.Config, st loadSettings) {
 	if raw == nil {
 		return
 	}
-	pol := policyFor(cf)
+	pol := policyFor(st)
 
 	for name, auth := range raw.AuthInfos {
 		if auth == nil || auth.Exec == nil {
@@ -199,25 +197,25 @@ func applyExecPolicy(raw *clientcmdapi.Config, cf loadSettings) {
 		}
 		ex := auth.Exec
 		ex.PluginPolicy = pol
-		ex.StdinUnavailable = cf.stdinUnavail
-		if cf.stdinMsg != "" {
-			ex.StdinUnavailableMessage = cf.stdinMsg
+		ex.StdinUnavailable = st.stdinUnavail
+		if st.stdinMsg != "" {
+			ex.StdinUnavailableMessage = st.stdinMsg
 		}
 		raw.AuthInfos[name].Exec = ex
 	}
 }
 
-func policyFor(cf loadSettings) clientcmdapi.PluginPolicy {
+func policyFor(st loadSettings) clientcmdapi.PluginPolicy {
 	out := clientcmdapi.PluginPolicy{
 		PolicyType: clientcmdapi.PluginPolicyAllowAll,
 	}
-	switch cf.policy {
+	switch st.policy {
 	case ExecPolicyDenyAll:
 		out.PolicyType = clientcmdapi.PluginPolicyDenyAll
 	case ExecPolicyAllowlist:
 		out.PolicyType = clientcmdapi.PluginPolicyAllowlist
-		out.Allowlist = make([]clientcmdapi.AllowlistEntry, 0, len(cf.allowlist))
-		for _, name := range cf.allowlist {
+		out.Allowlist = make([]clientcmdapi.AllowlistEntry, 0, len(st.allowlist))
+		for _, name := range st.allowlist {
 			out.Allowlist = append(out.Allowlist, clientcmdapi.AllowlistEntry{Name: name})
 		}
 	}

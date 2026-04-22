@@ -21,27 +21,31 @@ import (
 	"k8s.io/client-go/util/flowcontrol"
 )
 
-func startSession(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
-	if cfg.Namespace == "" {
-		return nil, errors.New("k8s: namespace required")
-	}
+type clusterClients struct {
+	apps appsv1client.AppsV1Interface
+	core corev1client.CoreV1Interface
+}
 
-	restCfg, err := RESTConfig(cfg, loadOptFromCfg(load))
+func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+	ensureRuntimeDiagInstalled()
+
+	restCfg, err := restConfig(cfg.Config, loadOptionsFromSettings(load))
 	if err != nil {
 		return nil, err
 	}
 
-	appsClient, coreClient, err := newTypedClients(restCfg)
+	clients, err := newClusterClients(restCfg)
 	if err != nil {
 		return nil, fmt.Errorf("k8s: build client: %w", err)
 	}
 
-	target, err := resolveForwardTarget(ctx, appsClient, coreClient, cfg.Namespace, cfg)
+	resolver := newClusterResolver(clients, cfg.Namespace)
+	target, err := resolver.resolveForwardTarget(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	u := coreClient.
+	u := clients.core.
 		RESTClient().
 		Post().
 		Resource("pods").
@@ -103,16 +107,13 @@ func startSession(ctx context.Context, cfg Cfg, load loadSettings) (*session, er
 		addressedDialHost(addresses),
 		strconv.Itoa(int(ports[0].Local)),
 	)
+	ses.setDiag(newDiagCollector(int(ports[0].Local), target.port, diagCap))
 	return ses, nil
 }
 
-func newTypedClients(cfg *rest.Config) (
-	appsv1client.AppsV1Interface,
-	corev1client.CoreV1Interface,
-	error,
-) {
+func newClusterClients(cfg *rest.Config) (clusterClients, error) {
 	if cfg == nil {
-		return nil, nil, errors.New("missing rest config")
+		return clusterClients{}, errors.New("missing rest config")
 	}
 
 	shallowCopy := *cfg
@@ -122,11 +123,11 @@ func newTypedClients(cfg *rest.Config) (
 
 	httpClient, err := rest.HTTPClientFor(&shallowCopy)
 	if err != nil {
-		return nil, nil, err
+		return clusterClients{}, err
 	}
 	if shallowCopy.RateLimiter == nil && shallowCopy.QPS > 0 {
 		if shallowCopy.Burst <= 0 {
-			return nil, nil, fmt.Errorf(
+			return clusterClients{}, fmt.Errorf(
 				"burst is required to be greater than 0 when RateLimiter is not set and QPS is set to greater than 0",
 			)
 		}
@@ -138,13 +139,13 @@ func newTypedClients(cfg *rest.Config) (
 
 	appsClient, err := appsv1client.NewForConfigAndClient(&shallowCopy, httpClient)
 	if err != nil {
-		return nil, nil, err
+		return clusterClients{}, err
 	}
 	coreClient, err := corev1client.NewForConfigAndClient(&shallowCopy, httpClient)
 	if err != nil {
-		return nil, nil, err
+		return clusterClients{}, err
 	}
-	return appsClient, coreClient, nil
+	return clusterClients{apps: appsClient, core: coreClient}, nil
 }
 
 func buildDialer(u *url.URL, cfg *rest.Config) (httpstream.Dialer, error) {
@@ -177,28 +178,13 @@ func shouldFallback(err error) bool {
 	if err == nil {
 		return false
 	}
-	if httpstream.IsUpgradeFailure(err) {
-		return true
-	}
-
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "websocket") ||
-		strings.Contains(msg, "bad handshake") ||
-		strings.Contains(msg, "upgrade request required") ||
-		strings.Contains(msg, "unknown scheme")
+	return httpstream.IsUpgradeFailure(err) || httpstream.IsHTTPSProxyError(err)
 }
 
 func bindAddrs(raw string) []string {
-	if raw == "" {
-		return []string{defaultAddress}
-	}
-
 	parts := strings.FieldsFunc(raw, func(r rune) bool {
 		return r == ',' || r == ';' || unicode.IsSpace(r)
 	})
-	if len(parts) == 0 {
-		return []string{defaultAddress}
-	}
 
 	seen := make(map[string]struct{}, len(parts))
 	out := make([]string, 0, len(parts))

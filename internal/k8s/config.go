@@ -22,20 +22,27 @@ const (
 type TargetKind = k8starget.Kind
 
 const (
-	targetKindPod         TargetKind = k8starget.Pod
-	targetKindService     TargetKind = k8starget.Service
-	targetKindDeployment  TargetKind = k8starget.Deployment
-	targetKindStatefulSet TargetKind = k8starget.StatefulSet
+	TargetPod         TargetKind = k8starget.Pod
+	TargetService     TargetKind = k8starget.Service
+	TargetDeployment  TargetKind = k8starget.Deployment
+	TargetStatefulSet TargetKind = k8starget.StatefulSet
 )
 
-type Cfg struct {
+type TargetRef struct {
+	Kind TargetKind
+	Name string
+}
+
+type PortRef struct {
+	Number int
+	Name   string
+}
+
+type Config struct {
 	Name       string
 	Namespace  string
-	TargetKind TargetKind
-	TargetName string
-	Pod        string
-	Port       int
-	PortName   string
+	Target     TargetRef
+	Port       PortRef
 	Context    string
 	Kubeconfig string
 	Container  string
@@ -44,166 +51,199 @@ type Cfg struct {
 	Persist    bool
 	PodWait    time.Duration
 	Retries    int
-
-	PortRaw      string
-	LocalPortRaw string
-	PodWaitRaw   string
-	RetriesRaw   string
-	Label        string
+	Label      string
 }
 
-func NormalizeProfile(p restfile.K8sProfile) (Cfg, error) {
-	cfg := baseCfg(p)
-	cfg.Name = connprofile.Fallback(cfg.Name, "default")
+type execConfig struct {
+	Config
+}
 
-	if err := parseTarget(&cfg, p); err != nil {
-		return Cfg{}, err
+func prepareExecConfig(cfg Config) (execConfig, error) {
+	cfg = cfg.normalize()
+	if err := cfg.validate(); err != nil {
+		return execConfig{}, err
 	}
+	return execConfig{Config: cfg}, nil
+}
+
+func normalizeProfile(p restfile.K8sProfile) (Config, error) {
+	cfg := baseConfig(p)
+
+	tg, err := targetFromProfile(p)
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.Target = tg
+
 	if err := parseProfileOptions(&cfg, p); err != nil {
-		return Cfg{}, err
-	}
-	if err := validateProfile(cfg); err != nil {
-		return Cfg{}, err
+		return Config{}, err
 	}
 	if err := expandKubeconfigPath(&cfg); err != nil {
-		return Cfg{}, err
+		return Config{}, err
 	}
-
-	return normalizeCfg(cfg), nil
+	cfg = cfg.normalize()
+	if err := cfg.validate(); err != nil {
+		return Config{}, err
+	}
+	return cfg, nil
 }
 
-func baseCfg(p restfile.K8sProfile) Cfg {
-	return Cfg{
-		Name:      strings.TrimSpace(p.Name),
-		Namespace: connprofile.Fallback(strings.TrimSpace(p.Namespace), defaultNamespace),
-		Pod:       strings.TrimSpace(p.Pod),
-		// Keep numeric Port as a fallback for programmatic callers that set only Port.
-		Port:         p.Port,
-		Context:      strings.TrimSpace(p.Context),
-		Kubeconfig:   strings.TrimSpace(p.Kubeconfig),
-		Container:    strings.TrimSpace(p.Container),
-		Address:      connprofile.Fallback(strings.TrimSpace(p.Address), defaultAddress),
-		LocalPort:    p.LocalPort,
-		Persist:      p.Persist.Set && p.Persist.Val,
-		PodWait:      defaultPodWait,
-		Retries:      0,
-		PortRaw:      strings.TrimSpace(p.PortStr),
-		LocalPortRaw: strings.TrimSpace(p.LocalPortStr),
-		PodWaitRaw:   strings.TrimSpace(p.PodWaitStr),
-		RetriesRaw:   strings.TrimSpace(p.RetriesStr),
-	}
-}
-
-func trimStrings(fields ...*string) {
-	for _, field := range fields {
-		*field = strings.TrimSpace(*field)
+func baseConfig(p restfile.K8sProfile) Config {
+	return Config{
+		Name:       strings.TrimSpace(p.Name),
+		Namespace:  connprofile.Fallback(strings.TrimSpace(p.Namespace), defaultNamespace),
+		Context:    strings.TrimSpace(p.Context),
+		Kubeconfig: strings.TrimSpace(p.Kubeconfig),
+		Container:  strings.TrimSpace(p.Container),
+		Address:    connprofile.Fallback(strings.TrimSpace(p.Address), defaultAddress),
+		LocalPort:  p.LocalPort,
+		Persist:    p.Persist.Set && p.Persist.Val,
+		PodWait:    defaultPodWait,
+		Retries:    0,
+		Port: PortRef{
+			Number: p.Port,
+		},
 	}
 }
 
-func normalizeCfg(cfg Cfg) Cfg {
-	trimStrings(
-		&cfg.Name,
-		&cfg.Namespace,
-		&cfg.TargetName,
-		&cfg.Pod,
-		&cfg.PortName,
-		&cfg.Context,
-		&cfg.Kubeconfig,
-		&cfg.Container,
-		&cfg.Address,
-		&cfg.PortRaw,
-		&cfg.LocalPortRaw,
-		&cfg.PodWaitRaw,
-		&cfg.RetriesRaw,
-		&cfg.Label,
-	)
-	cfg.TargetKind = normalizeTargetKind(cfg.TargetKind)
-	return cfg
+func (c Config) normalize() Config {
+	c.Name = strings.TrimSpace(c.Name)
+	c.Namespace = connprofile.Fallback(strings.TrimSpace(c.Namespace), defaultNamespace)
+	c.Target = c.Target.normalize()
+	c.Port = c.Port.normalize()
+	c.Context = strings.TrimSpace(c.Context)
+	c.Kubeconfig = strings.TrimSpace(c.Kubeconfig)
+	c.Container = strings.TrimSpace(c.Container)
+	c.Address = connprofile.Fallback(strings.TrimSpace(c.Address), defaultAddress)
+	c.Label = strings.TrimSpace(c.Label)
+	return c
 }
 
-func parseProfileOptions(cfg *Cfg, p restfile.K8sProfile) error {
-	if err := parsePortRef(cfg, p); err != nil {
+func (c Config) validate() error {
+	if err := c.Target.validate(); err != nil {
 		return err
 	}
-	if err := connprofile.ParsePort(
-		"k8s local",
-		&cfg.LocalPort,
-		&cfg.LocalPortRaw,
-		p.LocalPortStr,
-	); err != nil {
+	if err := c.Port.validate(); err != nil {
 		return err
 	}
-	if err := connprofile.ParseDuration(
-		"k8s pod wait",
-		&cfg.PodWait,
-		&cfg.PodWaitRaw,
-		p.PodWaitStr,
-	); err != nil {
+	if c.LocalPort < 0 || c.LocalPort > 65535 {
+		return errors.New("k8s: local port out of range")
+	}
+	return nil
+}
+
+func (t TargetRef) normalize() TargetRef {
+	raw := strings.TrimSpace(string(t.Kind))
+	t.Name = strings.TrimSpace(t.Name)
+
+	switch {
+	case raw == "" && t.Name != "":
+		t.Kind = TargetPod
+	case raw == "":
+		t.Kind = ""
+	default:
+		if kind := normalizeTargetKind(TargetKind(raw)); kind != "" {
+			t.Kind = kind
+		} else {
+			t.Kind = TargetKind(raw)
+		}
+	}
+	return t
+}
+
+func (t TargetRef) validate() error {
+	t = t.normalize()
+	if t.Name == "" {
+		return errors.New("k8s: target is required")
+	}
+	if kind := normalizeTargetKind(t.Kind); kind == "" {
+		return fmt.Errorf("k8s: unsupported target kind %q", strings.TrimSpace(string(t.Kind)))
+	}
+	return nil
+}
+
+func (t TargetRef) key() string {
+	t = t.normalize()
+	return targetRefKey(t)
+}
+
+func (t TargetRef) display() string {
+	t = t.normalize()
+	return targetDisplayRef(t)
+}
+
+func (p PortRef) normalize() PortRef {
+	p.Name = strings.TrimSpace(p.Name)
+	if p.Number > 0 {
+		p.Name = ""
+	}
+	return p
+}
+
+func (p PortRef) validate() error {
+	p = p.normalize()
+	switch {
+	case p.Number < 0 || p.Number > 65535:
+		return errors.New("k8s: port out of range")
+	case p.Number > 0:
+		return nil
+	case p.Name == "":
+		return errors.New("k8s: port is required")
+	case !k8starget.IsValidPortName(p.Name):
+		return fmt.Errorf("k8s: invalid port %q", p.Name)
+	default:
+		return nil
+	}
+}
+
+func (p PortRef) String() string {
+	p = p.normalize()
+	return portRefString(p)
+}
+
+func parseProfileOptions(cfg *Config, p restfile.K8sProfile) error {
+	if err := parsePortRef(&cfg.Port, p.PortStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseRetries(
-		"k8s",
-		&cfg.Retries,
-		&cfg.RetriesRaw,
-		p.RetriesStr,
-	); err != nil {
+
+	var raw string
+	if err := connprofile.ParsePort("k8s local", &cfg.LocalPort, &raw, p.LocalPortStr); err != nil {
+		return err
+	}
+	if err := connprofile.ParseDuration("k8s pod wait", &cfg.PodWait, &raw, p.PodWaitStr); err != nil {
+		return err
+	}
+	if err := connprofile.ParseRetries("k8s", &cfg.Retries, &raw, p.RetriesStr); err != nil {
 		return err
 	}
 	return nil
 }
 
-func parseTarget(cfg *Cfg, p restfile.K8sProfile) error {
-	kind, name, err := targetFromProfile(p)
-	if err != nil {
-		return err
-	}
-
-	cfg.TargetKind = kind
-	cfg.TargetName = name
-	if kind == targetKindPod {
-		cfg.Pod = name
-	} else {
-		cfg.Pod = ""
-	}
-	return nil
-}
-
-func targetFromProfile(p restfile.K8sProfile) (TargetKind, string, error) {
+func targetFromProfile(p restfile.K8sProfile) (TargetRef, error) {
 	rawTarget := strings.TrimSpace(p.Target)
 	rawPod := strings.TrimSpace(p.Pod)
 
-	var (
-		kind TargetKind
-		name string
-	)
+	var tg TargetRef
 	if rawTarget != "" {
-		parsedKind, parsedName, err := k8starget.ParseRef(rawTarget)
+		kind, name, err := k8starget.ParseRef(rawTarget)
 		if err != nil {
-			return "", "", err
+			return TargetRef{}, err
 		}
-		kind, name = parsedKind, parsedName
+		tg = TargetRef{Kind: kind, Name: name}
 	}
 	if rawPod != "" {
-		if kind != "" && (kind != targetKindPod || name != rawPod) {
-			return "", "", errors.New("k8s: target conflicts with pod")
+		if tg.Name != "" && (tg.Kind != TargetPod || tg.Name != rawPod) {
+			return TargetRef{}, errors.New("k8s: target conflicts with pod")
 		}
-		kind = targetKindPod
-		name = rawPod
+		tg = TargetRef{Kind: TargetPod, Name: rawPod}
 	}
-	if kind == "" || name == "" {
-		return "", "", errors.New("k8s: target is required")
+	if tg.Name == "" {
+		return TargetRef{}, errors.New("k8s: target is required")
 	}
-	return kind, name, nil
+	return tg, nil
 }
 
-func validateProfile(cfg Cfg) error {
-	if cfg.Port == 0 && cfg.PortName == "" {
-		return errors.New("k8s: port is required")
-	}
-	return nil
-}
-
-func expandKubeconfigPath(cfg *Cfg) error {
+func expandKubeconfigPath(cfg *Config) error {
 	if cfg == nil || cfg.Kubeconfig == "" {
 		return nil
 	}
@@ -219,65 +259,97 @@ func expandKubeconfigPath(cfg *Cfg) error {
 	return nil
 }
 
-func parsePortRef(cfg *Cfg, p restfile.K8sProfile) error {
-	val := strings.TrimSpace(p.PortStr)
-	if val == "" {
-		if cfg.Port > 0 && cfg.PortRaw == "" {
-			cfg.PortRaw = strconv.Itoa(cfg.Port)
-		}
+func parsePortRef(ref *PortRef, raw string) error {
+	if ref == nil {
 		return nil
 	}
 
-	cfg.PortRaw = val
+	val := strings.TrimSpace(raw)
+	if val == "" {
+		return nil
+	}
+
 	n, err := strconv.Atoi(val)
 	if err == nil {
 		if n <= 0 || n > 65535 {
 			return fmt.Errorf("k8s: invalid port %q", val)
 		}
-		cfg.Port = n
-		cfg.PortName = ""
+		ref.Number = n
+		ref.Name = ""
 		return nil
 	}
 
 	if !k8starget.IsValidPortName(val) {
 		return fmt.Errorf("k8s: invalid port %q", val)
 	}
-	cfg.Port = 0
-	cfg.PortName = val
+	ref.Number = 0
+	ref.Name = val
 	return nil
-}
-
-func (c Cfg) target() (TargetKind, string) {
-	k := c.TargetKind
-	n := strings.TrimSpace(c.TargetName)
-	if k == "" && strings.TrimSpace(c.Pod) != "" {
-		k = targetKindPod
-		n = strings.TrimSpace(c.Pod)
-	}
-	k = normalizeTargetKind(k)
-	return k, n
 }
 
 func normalizeTargetKind(k TargetKind) TargetKind {
 	switch k {
-	case targetKindPod, targetKindService, targetKindDeployment, targetKindStatefulSet:
+	case TargetPod, TargetService, TargetDeployment, TargetStatefulSet:
 		return k
 	default:
 		return k8starget.ParseKind(string(k))
 	}
 }
 
-func (c Cfg) targetRef() string {
-	k, n := c.target()
-	if k == "" || n == "" {
-		return ""
-	}
-	return string(k) + "/" + n
+func (c Config) targetRef() string {
+	return c.Target.key()
 }
 
-func (c Cfg) portRef() string {
-	if c.Port > 0 {
-		return strconv.Itoa(c.Port)
+func (c Config) portRef() string {
+	return c.Port.String()
+}
+
+func (c Config) DisplayRef() string {
+	c = c.normalize()
+	ref := targetDisplayRef(c.Target)
+	if ref == "" {
+		return ""
 	}
-	return strings.TrimSpace(c.PortName)
+	if c.Namespace != "" {
+		ref = c.Namespace + "/" + ref
+	}
+	if port := portRefString(c.Port); port != "" {
+		ref += ":" + port
+	}
+	if c.Context == "" {
+		return ref
+	}
+	return c.Context + " " + ref
+}
+
+func (c execConfig) targetRef() string {
+	return targetRefKey(c.Target)
+}
+
+func (c execConfig) portRef() string {
+	return portRefString(c.Port)
+}
+
+func targetRefKey(t TargetRef) string {
+	if t.Kind == "" || t.Name == "" {
+		return ""
+	}
+	return string(t.Kind) + "/" + t.Name
+}
+
+func targetDisplayRef(t TargetRef) string {
+	if t.Kind == "" || t.Name == "" {
+		return ""
+	}
+	if t.Kind == TargetPod {
+		return t.Name
+	}
+	return string(t.Kind) + "/" + t.Name
+}
+
+func portRefString(p PortRef) string {
+	if p.Number > 0 {
+		return strconv.Itoa(p.Number)
+	}
+	return p.Name
 }

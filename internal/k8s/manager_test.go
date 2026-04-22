@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/httpstream"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/fake"
 )
@@ -25,15 +27,11 @@ func TestDialNonPersistentClosesSessionOnConnClose(t *testing.T) {
 	starts := atomic.Int32{}
 	closes := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		starts.Add(1)
-		return &session{
-			localAddr: "127.0.0.1:18080",
-			closeFn: func() error {
-				closes.Add(1)
-				return nil
-			},
-		}, nil
+		return stubSessionWithClose("127.0.0.1:18080", func() {
+			closes.Add(1)
+		}), nil
 	}
 	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
 		c1, c2 := net.Pipe()
@@ -41,7 +39,7 @@ func TestDialNonPersistentClosesSessionOnConnClose(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: false}
+	cfg := podConfig("api", 8080)
 	conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial err: %v", err)
@@ -61,7 +59,7 @@ func TestDialPersistentCaches(t *testing.T) {
 	starts := atomic.Int32{}
 	dials := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		starts.Add(1)
 		return stubSession(cfg, "127.0.0.1:18080"), nil
 	}
@@ -72,7 +70,8 @@ func TestDialPersistentCaches(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	conn1, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial1 err: %v", err)
@@ -100,7 +99,7 @@ func TestDialPersistentCoalescesConcurrentReconnects(t *testing.T) {
 	startReady := make(chan struct{})
 	startRelease := make(chan struct{})
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		if starts.Add(1) != 1 {
 			return nil, errors.New("unexpected extra session start")
 		}
@@ -115,7 +114,8 @@ func TestDialPersistentCoalescesConcurrentReconnects(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 
 	const workers = 5
 	errCh := make(chan error, workers)
@@ -166,7 +166,7 @@ func TestDialPersistentReconnectsAfterSessionDone(t *testing.T) {
 	starts := atomic.Int32{}
 	var s1 *session
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		n := starts.Add(1)
 		s := stubSession(cfg, "127.0.0.1:"+strconv.Itoa(18080+int(n)))
 		if n == 1 {
@@ -180,7 +180,8 @@ func TestDialPersistentReconnectsAfterSessionDone(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	conn1, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial1 err: %v", err)
@@ -204,7 +205,7 @@ func TestDialPersistentReconnectsAfterDialFailure(t *testing.T) {
 	starts := atomic.Int32{}
 	dials := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		n := starts.Add(1)
 		addr := "127.0.0.1:18081"
 		if n > 1 {
@@ -222,7 +223,8 @@ func TestDialPersistentReconnectsAfterDialFailure(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	conn1, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial1 err: %v", err)
@@ -244,12 +246,17 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	m := NewManager()
 	t.Cleanup(func() { _ = m.Close() })
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	load, err := m.loadSettings()
 	if err != nil {
 		t.Fatalf("load cfg err: %v", err)
 	}
-	key := cacheKey(cfg, load)
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+	key := sessionKeyFor(execCfg, load)
 
 	oldSes := stubSession(cfg, "127.0.0.1:18081")
 	keepSes := stubSession(cfg, "127.0.0.1:18082")
@@ -275,7 +282,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	}
 
 	starts := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		starts.Add(1)
 		return nil, errBoom
 	}
@@ -327,25 +334,24 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 	m := NewManager()
 	t.Cleanup(func() { _ = m.Close() })
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	load, err := m.loadSettings()
 	if err != nil {
 		t.Fatalf("load cfg err: %v", err)
 	}
-	key := cacheKey(cfg, load)
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+	key := sessionKeyFor(execCfg, load)
 
 	oldSes := stubSession(cfg, "127.0.0.1:18081")
 	keepSes := stubSession(cfg, "127.0.0.1:18082")
-	reconnectSes := stubSession(cfg, "127.0.0.1:18083")
 	reconnectClosed := atomic.Int32{}
-	reconnectSes.closeFn = func() error {
+	reconnectSes := stubSessionWithClose("127.0.0.1:18083", func() {
 		reconnectClosed.Add(1)
-		reconnectSes.closed.Do(func() {
-			close(reconnectSes.stopCh)
-		})
-		reconnectSes.finish(nil)
-		return nil
-	}
+	})
 
 	m.mu.Lock()
 	m.cache[key] = &cacheEntry{ses: oldSes, lastUsed: m.now()}
@@ -369,7 +375,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 	}
 
 	starts := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		if starts.Add(1) > 1 {
 			return nil, errors.New("unexpected reconnect attempt")
 		}
@@ -426,7 +432,7 @@ func TestDialRetry(t *testing.T) {
 	m := NewManager()
 	m.retryDelay = time.Millisecond
 	starts := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		if starts.Add(1) < 2 {
 			return nil, errBoom
 		}
@@ -438,11 +444,10 @@ func TestDialRetry(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{
+	cfg := Config{
 		Namespace: "default",
-		Pod:       "api",
-		Port:      8080,
-		Persist:   false,
+		Target:    TargetRef{Name: "api"},
+		Port:      PortRef{Number: 8080},
 		Retries:   1,
 	}
 	conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
@@ -461,7 +466,7 @@ func TestDialRetryHonorsContextCancel(t *testing.T) {
 	m.retryDelay = time.Millisecond
 	starts := atomic.Int32{}
 	ctx, cancel := context.WithCancel(context.Background())
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		starts.Add(1)
 		cancel()
 		return nil, errBoom
@@ -471,13 +476,11 @@ func TestDialRetryHonorsContextCancel(t *testing.T) {
 		return nil, nil
 	}
 
-	cfg := Cfg{
-		Namespace:  "default",
-		TargetKind: targetKindPod,
-		TargetName: "api",
-		Port:       8080,
-		Persist:    false,
-		Retries:    3,
+	cfg := Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetPod, Name: "api"},
+		Port:      PortRef{Number: 8080},
+		Retries:   3,
 	}
 	_, err := m.DialContext(ctx, cfg, "tcp", "")
 	if !errors.Is(err, context.Canceled) {
@@ -493,7 +496,7 @@ func TestDialPersistentCacheKeyIncludesTargetAndPortRef(t *testing.T) {
 	starts := atomic.Int32{}
 	dials := atomic.Int32{}
 
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		n := starts.Add(1)
 		return stubSession(cfg, "127.0.0.1:"+strconv.Itoa(19080+int(n))), nil
 	}
@@ -504,12 +507,11 @@ func TestDialPersistentCacheKeyIncludesTargetAndPortRef(t *testing.T) {
 		return c1, nil
 	}
 
-	base := Cfg{
-		Namespace:  "default",
-		TargetKind: targetKindService,
-		TargetName: "api",
-		PortName:   "http",
-		Persist:    true,
+	base := Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetService, Name: "api"},
+		Port:      PortRef{Name: "http"},
+		Persist:   true,
 	}
 	conn1, err := m.DialContext(context.Background(), base, "tcp", "")
 	if err != nil {
@@ -523,7 +525,7 @@ func TestDialPersistentCacheKeyIncludesTargetAndPortRef(t *testing.T) {
 	_ = conn2.Close()
 
 	altPort := base
-	altPort.PortName = "metrics"
+	altPort.Port = PortRef{Name: "metrics"}
 	conn3, err := m.DialContext(context.Background(), altPort, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial3 err: %v", err)
@@ -531,7 +533,7 @@ func TestDialPersistentCacheKeyIncludesTargetAndPortRef(t *testing.T) {
 	_ = conn3.Close()
 
 	altTarget := base
-	altTarget.TargetName = "api-canary"
+	altTarget.Target = TargetRef{Kind: TargetService, Name: "api-canary"}
 	conn4, err := m.DialContext(context.Background(), altTarget, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial4 err: %v", err)
@@ -546,9 +548,65 @@ func TestDialPersistentCacheKeyIncludesTargetAndPortRef(t *testing.T) {
 	}
 }
 
+func TestDialBindsRequestDiagToSessionCollector(t *testing.T) {
+	resetRuntimeDiagForTest()
+
+	m := NewManager()
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		s := stubSession(cfg, "127.0.0.1:18080")
+		s.setDiag(newDiagCollector(18080, 8080, diagCap))
+		return s, nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	ctx, reqDiag := BindRequestContext(context.Background())
+	conn, err := m.DialContext(ctx, podConfig("api", 8080), "tcp", "")
+	if err != nil {
+		t.Fatalf("dial err: %v", err)
+	}
+
+	pushRuntimeErr(
+		time.Now(),
+		errors.New(
+			`an error occurred forwarding 18080 -> 8080: error forwarding port 8080 to pod x, uid : failed to connect to localhost:8080 inside namespace "x"`,
+		),
+	)
+
+	annotated := AnnotateRequestError(io.EOF, time.Now().Add(-time.Second), reqDiag)
+	if !strings.Contains(annotated.Error(), "k8s port-forward 18080->8080:") {
+		t.Fatalf("expected bound request diag annotation, got %q", annotated.Error())
+	}
+
+	_ = conn.Close()
+}
+
+func TestSessionKeyAllowlistUsesUnambiguousSeparator(t *testing.T) {
+	execCfg, err := prepareExecConfig(podConfig("api", 8080))
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+
+	keyOne := sessionKeyFor(execCfg, loadSettings{
+		policy:    ExecPolicyAllowlist,
+		allowlist: []string{"aws,prod"},
+	})
+	keyTwo := sessionKeyFor(execCfg, loadSettings{
+		policy:    ExecPolicyAllowlist,
+		allowlist: []string{"aws", "prod"},
+	})
+
+	if keyOne == keyTwo {
+		t.Fatalf("expected distinct session keys for distinct allowlists")
+	}
+}
+
 func TestDialRejectsUnsupportedNetwork(t *testing.T) {
 	m := NewManager()
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080}
+	cfg := podConfig("api", 8080)
 	_, err := m.DialContext(context.Background(), cfg, "udp", "")
 	if err == nil {
 		t.Fatalf("expected unsupported network error")
@@ -557,9 +615,9 @@ func TestDialRejectsUnsupportedNetwork(t *testing.T) {
 
 func TestDialNormalizesCfgBoundary(t *testing.T) {
 	m := NewManager()
-	var got Cfg
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
-		got = cfg
+	var got Config
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		got = cfg.Config
 		return stubSession(cfg, "127.0.0.1:18080"), nil
 	}
 	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -568,10 +626,10 @@ func TestDialNormalizesCfgBoundary(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{
+	cfg := Config{
 		Namespace: " default ",
-		Pod:       " api ",
-		Port:      8080,
+		Target:    TargetRef{Name: " api "},
+		Port:      PortRef{Number: 8080},
 		Container: " app ",
 		Address:   " 127.0.0.1 ",
 	}
@@ -584,8 +642,8 @@ func TestDialNormalizesCfgBoundary(t *testing.T) {
 	if got.Namespace != "default" {
 		t.Fatalf("expected normalized namespace, got %q", got.Namespace)
 	}
-	if got.Pod != "api" {
-		t.Fatalf("expected normalized pod, got %q", got.Pod)
+	if got.Target.Name != "api" {
+		t.Fatalf("expected normalized pod target, got %q", got.Target.Name)
 	}
 	if got.Container != "app" {
 		t.Fatalf("expected normalized container, got %q", got.Container)
@@ -597,7 +655,11 @@ func TestDialNormalizesCfgBoundary(t *testing.T) {
 
 func TestDialRejectsOutOfRangePort(t *testing.T) {
 	m := NewManager()
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 70000}
+	cfg := Config{
+		Namespace: "default",
+		Target:    TargetRef{Name: "api"},
+		Port:      PortRef{Number: 70000},
+	}
 	_, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err == nil || !strings.Contains(err.Error(), "out of range") {
 		t.Fatalf("expected out of range error, got %v", err)
@@ -612,17 +674,11 @@ func TestCacheTTL(t *testing.T) {
 
 	starts := atomic.Int32{}
 	closes := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		starts.Add(1)
-		s := stubSession(cfg, "127.0.0.1:18080")
-		s.closeFn = func() error {
+		s := stubSessionWithClose("127.0.0.1:18080", func() {
 			closes.Add(1)
-			s.closed.Do(func() {
-				close(s.stopCh)
-			})
-			s.finish(nil)
-			return nil
-		}
+		})
 		return s, nil
 	}
 	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -631,7 +687,8 @@ func TestCacheTTL(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	conn1, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial1 err: %v", err)
@@ -656,16 +713,10 @@ func TestCacheTTL(t *testing.T) {
 func TestManagerClose(t *testing.T) {
 	m := NewManager()
 	closes := atomic.Int32{}
-	m.start = func(ctx context.Context, cfg Cfg, load loadSettings) (*session, error) {
-		s := stubSession(cfg, "127.0.0.1:18080")
-		s.closeFn = func() error {
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		s := stubSessionWithClose("127.0.0.1:18080", func() {
 			closes.Add(1)
-			s.closed.Do(func() {
-				close(s.stopCh)
-			})
-			s.finish(nil)
-			return nil
-		}
+		})
 		return s, nil
 	}
 	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -674,7 +725,8 @@ func TestManagerClose(t *testing.T) {
 		return c1, nil
 	}
 
-	cfg := Cfg{Namespace: "default", Pod: "api", Port: 8080, Persist: true}
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
 	conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
 	if err != nil {
 		t.Fatalf("dial err: %v", err)
@@ -689,26 +741,91 @@ func TestManagerClose(t *testing.T) {
 	}
 }
 
-func TestSessionCloseHookStillClosesLifecycle(t *testing.T) {
-	s := &session{
-		stopCh: make(chan struct{}),
-		doneCh: make(chan struct{}),
+func TestDialAfterManagerClose(t *testing.T) {
+	m := NewManager()
+	if err := m.Close(); err != nil {
+		t.Fatalf("manager close err: %v", err)
 	}
-	hookCalled := atomic.Int32{}
-	s.closeFn = func() error {
-		hookCalled.Add(1)
-		return nil
+
+	_, err := m.DialContext(context.Background(), podConfig("api", 8080), "tcp", "")
+	if !errors.Is(err, errManagerClosed) {
+		t.Fatalf("expected manager closed error, got %v", err)
 	}
+}
+
+func TestCloseDuringInflightConnectRejectsSession(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
+
+	startReady := make(chan struct{})
+	startRelease := make(chan struct{})
+	closes := atomic.Int32{}
+
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		close(startReady)
+		<-startRelease
+
+		s := stubSessionWithClose("127.0.0.1:18080", func() {
+			closes.Add(1)
+		})
+		return s, nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		t.Fatalf("dial should not be called after manager close")
+		return nil, nil
+	}
+
+	errCh := make(chan error, 1)
 	go func() {
-		<-s.stopCh
-		s.finish(nil)
+		_, err := m.DialContext(context.Background(), cfg, "tcp", "")
+		errCh <- err
 	}()
+
+	select {
+	case <-startReady:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for session start")
+	}
+
+	if err := m.Close(); err != nil {
+		t.Fatalf("manager close err: %v", err)
+	}
+	close(startRelease)
+
+	select {
+	case err := <-errCh:
+		if !errors.Is(err, errManagerClosed) {
+			t.Fatalf("expected manager closed error, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for dial result")
+	}
+
+	if closes.Load() != 1 {
+		t.Fatalf("expected pending session cleanup, got %d", closes.Load())
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.cache) != 0 {
+		t.Fatalf("expected empty cache after close, got %d entries", len(m.cache))
+	}
+}
+
+func TestSessionCloseStopsLifecycle(t *testing.T) {
+	closed := atomic.Int32{}
+	s := stubSessionWithClose("", func() {
+		closed.Add(1)
+	})
 
 	if err := s.close(); err != nil {
 		t.Fatalf("session close err: %v", err)
 	}
-	if hookCalled.Load() != 1 {
-		t.Fatalf("expected close hook call count 1, got %d", hookCalled.Load())
+	if closed.Load() != 1 {
+		t.Fatalf("expected session shutdown count 1, got %d", closed.Load())
 	}
 }
 
@@ -716,11 +833,14 @@ func TestShouldFallback(t *testing.T) {
 	if shouldFallback(nil) {
 		t.Fatalf("expected false for nil err")
 	}
-	if !shouldFallback(errors.New("websocket: bad handshake")) {
-		t.Fatalf("expected websocket handshake to fallback")
+	if !shouldFallback(&httpstream.UpgradeFailureError{Cause: errors.New("bad handshake")}) {
+		t.Fatalf("expected upgrade failure to fallback")
 	}
 	if !shouldFallback(errors.New("proxy: unknown scheme: https")) {
 		t.Fatalf("expected unknown scheme to fallback")
+	}
+	if shouldFallback(errors.New("websocket: bad handshake")) {
+		t.Fatalf("expected plain websocket text error to not fallback")
 	}
 	if shouldFallback(errors.New("forbidden")) {
 		t.Fatalf("expected forbidden error to not force fallback")
@@ -732,11 +852,8 @@ func TestWaitTargetPodHonorsContextCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	_, err := waitTargetPod(ctx, cs.AppsV1(), cs.CoreV1(), "default", Cfg{
-		TargetKind: targetKindPod,
-		TargetName: "api",
-		PodWait:    time.Second,
-	})
+	r := testClusterResolver(cs, "default")
+	_, err := r.waitTargetPod(ctx, TargetRef{Kind: TargetPod, Name: "api"}, time.Second)
 	if !errors.Is(err, context.Canceled) && !strings.Contains(err.Error(), "context canceled") {
 		t.Fatalf("expected context canceled error, got %v", err)
 	}
@@ -760,14 +877,12 @@ func TestResolveForwardTargetServiceNamedPort(t *testing.T) {
 		testPod("api-0", map[string]string{"app": "api"}, true, "api", "http", 8080),
 	)
 
-	cfg := Cfg{
-		Namespace:  "default",
-		TargetKind: targetKindService,
-		TargetName: "api",
-		PortName:   "web",
-		PodWait:    0,
+	cfg := Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetService, Name: "api"},
+		Port:      PortRef{Name: "web"},
 	}
-	got, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
+	got, err := testResolveForwardTarget(t, cs, "default", cfg)
 	if err != nil {
 		t.Fatalf("resolve target err: %v", err)
 	}
@@ -791,15 +906,13 @@ func TestResolveForwardTargetDeploymentPicksReadyPod(t *testing.T) {
 		testPod("api-1", map[string]string{"app": "api"}, true, "api", "http", 8080),
 		testPodPending("api-0", map[string]string{"app": "api"}),
 	)
-	cfg := Cfg{
-		Namespace:  "default",
-		TargetKind: targetKindDeployment,
-		TargetName: "api",
-		Port:       8080,
-		PodWait:    0,
+	cfg := Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetDeployment, Name: "api"},
+		Port:      PortRef{Number: 8080},
 	}
 
-	got, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
+	got, err := testResolveForwardTarget(t, cs, "default", cfg)
 	if err != nil {
 		t.Fatalf("resolve target err: %v", err)
 	}
@@ -822,15 +935,13 @@ func TestResolveForwardTargetStatefulSetDeterministicPod(t *testing.T) {
 		testPod("db-1", map[string]string{"app": "db"}, true, "db", "pg", 5432),
 		testPod("db-0", map[string]string{"app": "db"}, true, "db", "pg", 5432),
 	)
-	cfg := Cfg{
-		Namespace:  "default",
-		TargetKind: targetKindStatefulSet,
-		TargetName: "db",
-		PortName:   "pg",
-		PodWait:    0,
+	cfg := Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetStatefulSet, Name: "db"},
+		Port:      PortRef{Name: "pg"},
 	}
 
-	got, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
+	got, err := testResolveForwardTarget(t, cs, "default", cfg)
 	if err != nil {
 		t.Fatalf("resolve target err: %v", err)
 	}
@@ -867,21 +978,42 @@ func TestResolveForwardTargetServiceNamedPortAmbiguousAcrossContainers(t *testin
 		},
 		p,
 	)
-	cfg := Cfg{
-		Namespace:  "default",
-		TargetKind: targetKindService,
-		TargetName: "api",
-		PortName:   "web",
-		PodWait:    0,
+	cfg := Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetService, Name: "api"},
+		Port:      PortRef{Name: "web"},
 	}
 
-	_, err := resolveForwardTarget(context.Background(), cs.AppsV1(), cs.CoreV1(), "default", cfg)
+	_, err := testResolveForwardTarget(t, cs, "default", cfg)
 	if err == nil || !strings.Contains(err.Error(), "ambiguous named port") {
 		t.Fatalf("expected ambiguous named port error, got %v", err)
 	}
 }
 
-func stubSession(cfg Cfg, addr string) *session {
+func testClusterResolver(cs *fake.Clientset, namespace string) clusterResolver {
+	return newClusterResolver(clusterClients{apps: cs.AppsV1(), core: cs.CoreV1()}, namespace)
+}
+
+func testResolveForwardTarget(
+	t *testing.T,
+	cs *fake.Clientset,
+	namespace string,
+	cfg Config,
+) (forwardTarget, error) {
+	t.Helper()
+
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		return forwardTarget{}, err
+	}
+	return testClusterResolver(cs, namespace).resolveForwardTarget(context.Background(), execCfg)
+}
+
+func stubSession(_ any, addr string) *session {
+	return stubSessionWithClose(addr, nil)
+}
+
+func stubSessionWithClose(addr string, onClose func()) *session {
 	s := &session{
 		localAddr: addr,
 		stopCh:    make(chan struct{}),
@@ -889,9 +1021,20 @@ func stubSession(cfg Cfg, addr string) *session {
 	}
 	go func() {
 		<-s.stopCh
+		if onClose != nil {
+			onClose()
+		}
 		s.finish(nil)
 	}()
 	return s
+}
+
+func podConfig(name string, port int) Config {
+	return Config{
+		Namespace: "default",
+		Target:    TargetRef{Kind: TargetPod, Name: name},
+		Port:      PortRef{Number: port},
+	}
 }
 
 func testPod(

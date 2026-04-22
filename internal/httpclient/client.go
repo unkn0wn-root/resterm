@@ -153,9 +153,15 @@ func (c *Client) Execute(
 		timeline    *nettrace.Timeline
 		traceSess   *traceSession
 		traceReport *nettrace.Report
+		k8sDiag     *k8s.RequestDiag
 	)
 
 	httpReq, requestSpan := c.startRequestSpan(req, httpReq, effectiveOpts)
+	if effectiveOpts.K8s != nil && effectiveOpts.K8s.Active() {
+		reqCtx, diag := k8s.BindRequestContext(httpReq.Context())
+		httpReq = httpReq.WithContext(reqCtx)
+		k8sDiag = diag
+	}
 
 	defer func() {
 		endRequestSpan(requestSpan, resp, err, timeline, traceReport)
@@ -169,8 +175,8 @@ func (c *Client) Execute(
 	start := time.Now()
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
-		if effectiveOpts.K8s != nil {
-			err = k8s.AnnotateRequestError(err, start)
+		if k8sDiag != nil {
+			err = k8s.AnnotateRequestError(err, start, k8sDiag)
 		}
 		duration := time.Since(start)
 		if traceSess != nil {
