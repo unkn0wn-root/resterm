@@ -141,10 +141,7 @@ func (rt themeRuntime) statsPalette(th theme.Theme) statsPalette {
 }
 
 func (rt themeRuntime) syntaxHighlightStyle() string {
-	if rt.isLight() {
-		return "github"
-	}
-	return "monokai"
+	return theme.SyntaxHighlightStyle(rt.definition)
 }
 
 func (rt themeRuntime) responseRenderer(th theme.Theme) responseRenderer {
@@ -278,16 +275,4 @@ func (m *Model) invalidateThemedCaches() {
 	for i := range m.responsePanes {
 		m.responsePanes[i].invalidateCaches()
 	}
-}
-
-func activeTextStyle(th theme.Theme) lipgloss.Style {
-	return theme.ActiveTextStyle(th)
-}
-
-func inlineForegroundStyle(base lipgloss.Style, fallback lipgloss.Color) lipgloss.Style {
-	return theme.ForegroundStyle(base, fallback)
-}
-
-func colorDefined(color lipgloss.TerminalColor) bool {
-	return theme.ColorDefined(color)
 }

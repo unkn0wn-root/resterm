@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestWriteTextStyledAppliesANSIColor(t *testing.T) {
@@ -48,7 +50,7 @@ func TestWriteTextStyledAppliesANSIColor(t *testing.T) {
 	}
 
 	var colored strings.Builder
-	if err := WriteTextStyled(&colored, rep, termcolor.TrueColor()); err != nil {
+	if err := WriteTextStyled(&colored, rep, termcolor.TrueColor(), nil); err != nil {
 		t.Fatalf("WriteTextStyled(...): %v", err)
 	}
 
@@ -62,5 +64,51 @@ func TestWriteTextStyledAppliesANSIColor(t *testing.T) {
 			plain.String(),
 			got,
 		)
+	}
+}
+
+func TestWriteTextStyledUsesThemePalette(t *testing.T) {
+	rep := &runfmt.Report{
+		FilePath: "workflow.http",
+		EnvName:  "dev",
+		Results: []runfmt.Result{{
+			Kind:   "workflow",
+			Name:   "sample-order",
+			Method: "WORKFLOW",
+			Status: runfmt.StatusPass,
+		}},
+		Total:  1,
+		Passed: 1,
+	}
+
+	var dark strings.Builder
+	if err := WriteTextStyled(&dark, rep, termcolor.TrueColor(), nil); err != nil {
+		t.Fatalf("WriteTextStyled(...): %v", err)
+	}
+
+	lightTheme := theme.DefaultTheme()
+	lightTheme.ExplainMuted = lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
+	lightTheme.PaneActiveForeground = lipgloss.Color("#0f172a")
+	lightTheme.Success = lipgloss.NewStyle().Foreground(lipgloss.Color("#15803d"))
+	lightTheme.Error = lipgloss.NewStyle().Foreground(lipgloss.Color("#b91c1c"))
+	lightTheme.StatusBarKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#b45309"))
+
+	var light strings.Builder
+	if err := WriteTextStyled(&light, rep, termcolor.TrueColor(), &theme.Definition{
+		Key: "daybreak",
+		Metadata: theme.Metadata{
+			Name: "Daybreak",
+			Tags: []string{"light"},
+		},
+		Theme: lightTheme,
+	}); err != nil {
+		t.Fatalf("WriteTextStyled(...): %v", err)
+	}
+
+	if dark.String() == light.String() {
+		t.Fatalf("expected light theme text palette to differ from default dark palette")
+	}
+	if ansi.Strip(dark.String()) != ansi.Strip(light.String()) {
+		t.Fatalf("expected theme palette changes to preserve text output")
 	}
 }

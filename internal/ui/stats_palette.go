@@ -43,9 +43,9 @@ func defaultStatsPalette() statsPalette {
 }
 
 func lightStatsPalette(th theme.Theme) statsPalette {
-	label := inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#475569"))
-	subLabel := inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
-	value := activeTextStyle(th).Bold(true)
+	label := theme.ForegroundStyle(th.ExplainMuted, lipgloss.Color("#475569"))
+	subLabel := theme.ForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
+	value := theme.ActiveTextStyle(th).Bold(true)
 	success := foregroundStyle(th.Success, lipgloss.Color("#15803d")).Bold(true)
 	warn := foregroundStyle(th.Error, lipgloss.Color("#b91c1c")).Bold(true)
 	caution := foregroundStyle(th.StatusBarKey, lipgloss.Color("#b45309")).Bold(true)
@@ -54,7 +54,7 @@ func lightStatsPalette(th theme.Theme) statsPalette {
 	duration := foregroundStyle(th.ExplainLabel, lipgloss.Color("#0369a1")).Bold(true)
 
 	selectedBG := th.ResponseSelection.GetBackground()
-	if !colorDefined(selectedBG) {
+	if !theme.ColorDefined(selectedBG) {
 		selectedBG = lipgloss.Color("#e2e8f0")
 	}
 
@@ -83,7 +83,7 @@ func foregroundStyle(base lipgloss.Style, fallback lipgloss.Color) lipgloss.Styl
 }
 
 func foregroundColor(base lipgloss.Style, fallback lipgloss.Color) lipgloss.TerminalColor {
-	if fg := base.GetForeground(); colorDefined(fg) {
+	if fg := base.GetForeground(); theme.ColorDefined(fg) {
 		return fg
 	}
 	return fallback

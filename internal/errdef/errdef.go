@@ -9,6 +9,7 @@ type Code string
 
 const (
 	CodeUnknown    Code = "unknown"
+	CodeConfig     Code = "config"
 	CodeParse      Code = "parse"
 	CodeHTTP       Code = "http"
 	CodeFilesystem Code = "filesystem"
@@ -63,6 +64,14 @@ func New(code Code, format string, args ...any) error {
 		msg = fmt.Sprintf(format, args...)
 	}
 	return &Error{Code: ensureCode(code), Message: msg}
+}
+
+func Join(code Code, errs ...error) error {
+	err := stdErrors.Join(errs...)
+	if err == nil {
+		return nil
+	}
+	return &Error{Code: ensureCode(code), Err: err}
 }
 
 func CodeOf(err error) Code {

@@ -59,7 +59,7 @@ func newTimelineStyles(th *theme.Theme, appearance theme.Appearance) timelineSty
 	styles.phase = th.ResponseContent.Bold(true)
 	styles.emph = th.ResponseContent.Bold(true)
 	if appearance == theme.AppearanceLight {
-		styles.meta = inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
+		styles.meta = theme.ForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
 	} else {
 		styles.meta = th.ResponseContent.Faint(true)
 	}

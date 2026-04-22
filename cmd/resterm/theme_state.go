@@ -1,11 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
+	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -30,11 +30,11 @@ func loadThemeState() (themeState, error) {
 		active:  "default",
 	}
 
-	var err error
+	var errs []error
 
 	cfg, h, cfgErr := config.LoadSettings()
 	if cfgErr != nil {
-		err = errors.Join(err, fmt.Errorf("settings load error: %w", cfgErr))
+		errs = append(errs, fmt.Errorf("settings load error: %w", cfgErr))
 	} else {
 		st.settings = cfg
 		st.handle = h
@@ -42,7 +42,7 @@ func loadThemeState() (themeState, error) {
 
 	cat, catErr := theme.LoadCatalog([]string{config.ThemeDir()})
 	if catErr != nil {
-		err = errors.Join(err, fmt.Errorf("theme load error: %w", catErr))
+		errs = append(errs, fmt.Errorf("theme load error: %w", catErr))
 	}
 	st.catalog = cat
 
@@ -55,12 +55,12 @@ func loadThemeState() (themeState, error) {
 		st.def = def
 		st.active = def.Key
 		st.settings.DefaultTheme = def.Key
-		return st, err
+		return st, errdef.Join(errdef.CodeConfig, errs...)
 	}
 
 	if st.settings.DefaultTheme != "" {
-		err = errors.Join(
-			err,
+		errs = append(
+			errs,
 			fmt.Errorf("theme %q not found; using built-in default", st.settings.DefaultTheme),
 		)
 	}
@@ -73,5 +73,5 @@ func loadThemeState() (themeState, error) {
 		st.active = st.def.Key
 	}
 	st.settings.DefaultTheme = ""
-	return st, err
+	return st, errdef.Join(errdef.CodeConfig, errs...)
 }

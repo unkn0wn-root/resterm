@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	"google.golang.org/grpc/codes"
 )
 
@@ -241,6 +242,44 @@ func TestRenderBodyPrettyCanColorOutput(t *testing.T) {
 	}
 	if got := ansi.Strip(out); got != plain {
 		t.Fatalf("expected stripped body to match plain output\nwant:\n%s\n\ngot:\n%s", plain, got)
+	}
+}
+
+func TestRenderBodyPrettyUsesThemeSyntaxStyle(t *testing.T) {
+	rep := &runner.Report{
+		Results: []runner.Result{{
+			Kind: runner.ResultKindRequest,
+			Response: &httpclient.Response{
+				Headers: http.Header{"Content-Type": {"application/json"}},
+				Body:    []byte(`{"id":1,"name":"demo"}`),
+			},
+		}},
+	}
+
+	dark, err := RenderBody(rep, BodyOptions{Mode: ModePretty, Color: termcolor.TrueColor()})
+	if err != nil {
+		t.Fatalf("RenderBody(...): %v", err)
+	}
+	light, err := RenderBody(rep, BodyOptions{
+		Mode:  ModePretty,
+		Color: termcolor.TrueColor(),
+		Theme: &theme.Definition{
+			Key: "daybreak",
+			Metadata: theme.Metadata{
+				Name: "Daybreak",
+				Tags: []string{"light"},
+			},
+			Theme: theme.DefaultTheme(),
+		},
+	})
+	if err != nil {
+		t.Fatalf("RenderBody(...): %v", err)
+	}
+	if dark == light {
+		t.Fatalf("expected light theme syntax styling to differ from default dark styling")
+	}
+	if ansi.Strip(dark) != ansi.Strip(light) {
+		t.Fatalf("expected syntax style changes to preserve text output")
 	}
 }
 

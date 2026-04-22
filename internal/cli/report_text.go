@@ -7,15 +7,25 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 // WriteTextStyled writes a runfmt text report with CLI-owned ANSI styling.
-func WriteTextStyled(w io.Writer, rep *runfmt.Report, color termcolor.Config) error {
-	return runfmt.WriteTextStyled(w, rep, textPainter{cfg: color})
+func WriteTextStyled(
+	w io.Writer,
+	rep *runfmt.Report,
+	color termcolor.Config,
+	def *theme.Definition,
+) error {
+	return runfmt.WriteTextStyled(w, rep, textPainter{
+		cfg: color,
+		pal: theme.CLIPaletteFor(def),
+	})
 }
 
 type textPainter struct {
 	cfg termcolor.Config
+	pal theme.CLIPalette
 }
 
 func (p textPainter) PaintText(text, fg string, bold bool) string {
@@ -38,4 +48,14 @@ func (p textPainter) profile() termenv.Profile {
 		return termenv.ANSI
 	}
 	return p.cfg.Profile
+}
+
+func (p textPainter) TextPalette() runfmt.TextPalette {
+	return runfmt.TextPalette{
+		Heading: p.pal.Heading,
+		Success: p.pal.Success,
+		Warn:    p.pal.Warn,
+		Caution: p.pal.Caution,
+		Value:   p.pal.Value,
+	}
 }

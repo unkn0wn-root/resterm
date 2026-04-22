@@ -39,7 +39,7 @@ func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *test
 	model := New(Config{})
 
 	model.applyThemeDefinition(theme.DefaultDefinition())
-	if colorDefined(model.searchInput.TextStyle.GetForeground()) {
+	if theme.ColorDefined(model.searchInput.TextStyle.GetForeground()) {
 		t.Fatalf("expected dark generic input text style to stay unset")
 	}
 	if got := model.helpFilter.TextStyle.GetForeground(); got != lipgloss.Color("#F5F2FF") {
@@ -51,13 +51,13 @@ func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *test
 	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color("#A6A1BB") {
 		t.Fatalf("expected dark history filter prompt foreground, got %v", got)
 	}
-	if colorDefined(model.historyFilterInput.PlaceholderStyle.GetForeground()) {
+	if theme.ColorDefined(model.historyFilterInput.PlaceholderStyle.GetForeground()) {
 		t.Fatalf("expected dark history placeholder foreground to stay unset")
 	}
 	if !model.historyFilterInput.PlaceholderStyle.GetFaint() {
 		t.Fatalf("expected dark history placeholder to stay faint")
 	}
-	if colorDefined(model.themeRuntime.helpHintStyle(model.theme).GetForeground()) {
+	if theme.ColorDefined(model.themeRuntime.helpHintStyle(model.theme).GetForeground()) {
 		t.Fatalf("expected dark help hint foreground to stay unset")
 	}
 	if !model.themeRuntime.helpHintStyle(model.theme).GetFaint() {

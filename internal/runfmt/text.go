@@ -12,6 +12,18 @@ type TextPainter interface {
 	PaintText(text, fg string, bold bool) string
 }
 
+type TextPalette struct {
+	Heading string
+	Success string
+	Warn    string
+	Caution string
+	Value   string
+}
+
+type textPaletteProvider interface {
+	TextPalette() TextPalette
+}
+
 // TextPaintFunc adapts a function to TextPainter.
 type TextPaintFunc func(text, fg string, bold bool) string
 
@@ -101,27 +113,34 @@ const (
 
 type textStyler struct {
 	painter TextPainter
+	pal     TextPalette
 }
 
 func newTextStyler(painter TextPainter) textStyler {
 	if painter == nil {
 		painter = plainTextPainter{}
 	}
-	return textStyler{painter: painter}
+	pal := defaultTextPalette()
+	if p, ok := painter.(textPaletteProvider); ok {
+		if got := p.TextPalette(); got != (TextPalette{}) {
+			pal = mergeTextPalette(pal, got)
+		}
+	}
+	return textStyler{painter: painter, pal: pal}
 }
 
 func (s textStyler) heading(text string) string {
-	return s.paint(text, textColHeading, true)
+	return s.paint(text, s.pal.Heading, true)
 }
 
 func (s textStyler) resultLabel(text string) string {
 	switch text {
 	case "FAIL", "CANCELED":
-		return s.paint(text, textColWarn, true)
+		return s.paint(text, s.pal.Warn, true)
 	case "SKIP":
-		return s.paint(text, textColCaution, true)
+		return s.paint(text, s.pal.Caution, true)
 	default:
-		return s.paint(text, textColSuccess, true)
+		return s.paint(text, s.pal.Success, true)
 	}
 }
 
@@ -130,11 +149,11 @@ func (s textStyler) stepLabel(text string) string {
 }
 
 func (s textStyler) resultLine(text string) string {
-	return s.paint(text, textColValue, true)
+	return s.paint(text, s.pal.Value, true)
 }
 
 func (s textStyler) stepLine(text string) string {
-	return s.paint(text, textColValue, true)
+	return s.paint(text, s.pal.Value, true)
 }
 
 func (s textStyler) detail(label, value string) string {
@@ -146,35 +165,35 @@ func (s textStyler) profileDetail(label, value string) string {
 }
 
 func (s textStyler) value(text string) string {
-	return s.paint(text, textColValue, false)
+	return s.paint(text, s.pal.Value, false)
 }
 
 func (s textStyler) detailValue(label, value string, bold bool) string {
-	key := s.paint(label+":", textColHeading, false)
+	key := s.paint(label+":", s.pal.Heading, false)
 	if value == "" {
 		return key
 	}
-	return key + " " + s.paint(value, textColValue, bold)
+	return key + " " + s.paint(value, s.pal.Value, bold)
 }
 
 func (s textStyler) index(n int) string {
-	return s.paint(strconv.Itoa(n)+".", textColHeading, false)
+	return s.paint(strconv.Itoa(n)+".", s.pal.Heading, false)
 }
 
 func (s textStyler) totalCount(n int) string {
-	return s.paint(strconv.Itoa(n), textColValue, true)
+	return s.paint(strconv.Itoa(n), s.pal.Value, true)
 }
 
 func (s textStyler) passCount(n int) string {
-	return s.paint(strconv.Itoa(n), textColSuccess, true)
+	return s.paint(strconv.Itoa(n), s.pal.Success, true)
 }
 
 func (s textStyler) failCount(n int) string {
-	return s.paint(strconv.Itoa(n), textColWarn, true)
+	return s.paint(strconv.Itoa(n), s.pal.Warn, true)
 }
 
 func (s textStyler) skipCount(n int) string {
-	return s.paint(strconv.Itoa(n), textColCaution, true)
+	return s.paint(strconv.Itoa(n), s.pal.Caution, true)
 }
 
 func (s textStyler) paint(text, fg string, bold bool) string {
@@ -188,6 +207,35 @@ type plainTextPainter struct{}
 
 func (plainTextPainter) PaintText(text, _ string, _ bool) string {
 	return text
+}
+
+func defaultTextPalette() TextPalette {
+	return TextPalette{
+		Heading: textColHeading,
+		Success: textColSuccess,
+		Warn:    textColWarn,
+		Caution: textColCaution,
+		Value:   textColValue,
+	}
+}
+
+func mergeTextPalette(base, over TextPalette) TextPalette {
+	if over.Heading != "" {
+		base.Heading = over.Heading
+	}
+	if over.Success != "" {
+		base.Success = over.Success
+	}
+	if over.Warn != "" {
+		base.Warn = over.Warn
+	}
+	if over.Caution != "" {
+		base.Caution = over.Caution
+	}
+	if over.Value != "" {
+		base.Value = over.Value
+	}
+	return base
 }
 
 func writeTextTargetDetails(

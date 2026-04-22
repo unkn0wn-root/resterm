@@ -1,11 +1,10 @@
 package runfmt
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 func TestWriteTextStyledColorPreservesPlainText(t *testing.T) {
@@ -53,7 +52,7 @@ func TestWriteTextStyledColorPreservesPlainText(t *testing.T) {
 	if !strings.Contains(out, "\x1b[") {
 		t.Fatalf("expected ansi output, got %q", out)
 	}
-	if got := ansi.Strip(out); got != plain.String() {
+	if got := stripANSI(out); got != plain.String() {
 		t.Fatalf(
 			"expected stripped output to match plain text\nwant:\n%s\n\ngot:\n%s",
 			plain.String(),
@@ -280,7 +279,7 @@ func TestWriteTextStyledProfileHistogramUsesAnsiColors(t *testing.T) {
 	if !strings.Contains(out, "\x1b[") {
 		t.Fatalf("expected ansi output, got %q", out)
 	}
-	if got := ansi.Strip(out); got != plain.String() {
+	if got := stripANSI(out); got != plain.String() {
 		t.Fatalf(
 			"expected stripped profile output to match plain text\nwant:\n%s\n\ngot:\n%s",
 			plain.String(),
@@ -296,4 +295,10 @@ func ansiTextPainter() TextPainter {
 		}
 		return "\x1b[31m" + text + "\x1b[0m"
 	})
+}
+
+var ansiSeq = regexp.MustCompile(`\x1b\[[0-?]*[ -/]*[@-~]`)
+
+func stripANSI(s string) string {
+	return ansiSeq.ReplaceAllString(s, "")
 }

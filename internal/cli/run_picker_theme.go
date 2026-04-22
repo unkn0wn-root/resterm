@@ -40,9 +40,10 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 		r.SetColorProfile(termenv.Ascii)
 	}
 
-	df := pickerTheme(def)
+	df := theme.OrDefault(def)
 	th := df.Theme
 	ap := df.Appearance()
+	activeText := theme.ActiveTextStyle(th)
 
 	boxBd := pickerColor(
 		pickerBorderColor(
@@ -52,77 +53,77 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 			th.EditorBorder,
 			th.ResponseBorder,
 		),
-		pickerBorderFallback(ap),
+		theme.ColorForAppearance(ap, runPickerBorderLite, runPickerBorderDark),
 	)
 	boxBg := pickerColor(
 		th.ModalInputBackground,
-		pickerStyleBg(th.CommandBar),
-		pickerBoxBgFallback(ap),
+		th.CommandBar.GetBackground(),
+		theme.ColorForAppearance(ap, runPickerBgLite, ""),
 	)
 	title := pickerColor(
-		pickerStyleFg(th.HeaderTitle),
-		pickerStyleFg(th.CommandBarHint),
-		pickerStyleFg(th.ExplainSectionTitle),
-		pickerAccentFallback(ap),
+		th.HeaderTitle.GetForeground(),
+		th.CommandBarHint.GetForeground(),
+		th.ExplainSectionTitle.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark),
 	)
 	path := pickerColor(
-		pickerStyleFg(th.HeaderValue),
-		pickerStyleFg(theme.ActiveTextStyle(th)),
-		pickerTextFallback(ap),
+		th.HeaderValue.GetForeground(),
+		activeText.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerTextLite, runPickerTextDark),
 	)
 	mute := pickerColor(
-		pickerStyleFg(th.ExplainMuted),
-		pickerStyleFg(th.ListItemDescription),
-		pickerStyleFg(th.NavigatorTag),
-		pickerMutedFallback(ap),
+		th.ExplainMuted.GetForeground(),
+		th.ListItemDescription.GetForeground(),
+		th.NavigatorTag.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerMutedLite, runPickerMutedDark),
 	)
 	text := pickerColor(
-		pickerStyleFg(th.ListItemTitle),
-		pickerStyleFg(theme.ActiveTextStyle(th)),
-		pickerStyleFg(th.HeaderValue),
-		pickerTextFallback(ap),
+		th.ListItemTitle.GetForeground(),
+		activeText.GetForeground(),
+		th.HeaderValue.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerTextLite, runPickerTextDark),
 	)
 	selBg := pickerColor(
-		pickerStyleBg(th.ListItemSelectedTitle),
-		pickerStyleBg(th.ListItemSelectedDescription),
-		pickerStyleBg(th.ResponseSelection),
-		pickerSelBgFallback(ap),
+		th.ListItemSelectedTitle.GetBackground(),
+		th.ListItemSelectedDescription.GetBackground(),
+		th.ResponseSelection.GetBackground(),
+		theme.ColorForAppearance(ap, runPickerSelBgLite, runPickerSelBgDark),
 	)
 	selFg := pickerColor(
-		pickerStyleFg(th.ListItemSelectedTitle),
-		pickerStyleFg(th.ListItemSelectedDescription),
-		pickerStyleFg(theme.ActiveTextStyle(th)),
-		pickerSelFgFallback(ap),
+		th.ListItemSelectedTitle.GetForeground(),
+		th.ListItemSelectedDescription.GetForeground(),
+		activeText.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerSelFgLite, runPickerSelFgDark),
 	)
 	cur := pickerColor(
-		pickerStyleFg(th.ResponseCursor),
-		pickerStyleFg(th.NavigatorTag),
-		pickerStyleFg(th.ExplainMuted),
-		pickerCursorFallback(ap),
+		th.ResponseCursor.GetForeground(),
+		th.NavigatorTag.GetForeground(),
+		th.ExplainMuted.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerCurLite, runPickerCurDark),
 	)
 	acc := pickerColor(
-		pickerStyleFg(th.CommandBarHint),
-		pickerStyleFg(th.HeaderTitle),
-		pickerAccentFallback(ap),
+		th.CommandBarHint.GetForeground(),
+		th.HeaderTitle.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerAccLite, runPickerAccDark),
 	)
 	line := pickerColor(
-		pickerStyleFg(th.ListItemDescription),
-		pickerStyleFg(th.ExplainMuted),
+		th.ListItemDescription.GetForeground(),
+		th.ExplainMuted.GetForeground(),
 		mute,
 	)
 	lineSel := pickerColor(
-		pickerStyleFg(th.ListItemSelectedDescription),
-		pickerStyleFg(th.ListItemSelectedTitle),
+		th.ListItemSelectedDescription.GetForeground(),
+		th.ListItemSelectedTitle.GetForeground(),
 		selFg,
 	)
 	tgt := pickerColor(
-		pickerStyleFg(th.ExplainLabel),
-		pickerStyleFg(th.HeaderTitle),
-		pickerTargetFallback(ap),
+		th.ExplainLabel.GetForeground(),
+		th.HeaderTitle.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerTgtLite, runPickerTgtDark),
 	)
 	note := pickerColor(
-		pickerStyleFg(th.Error),
-		pickerErrorFallback(ap),
+		th.Error.GetForeground(),
+		theme.ColorForAppearance(ap, runPickerErrLite, runPickerErrDark),
 	)
 
 	st := runRequestPickerStyle{
@@ -160,13 +161,6 @@ func newRunRequestPickerStyle(cfg termcolor.Config, def *theme.Definition) runRe
 	return st
 }
 
-func pickerTheme(def *theme.Definition) theme.Definition {
-	if def != nil && def.Key != "" {
-		return *def
-	}
-	return theme.DefaultDefinition()
-}
-
 func textOnlyStyle(
 	r *lipgloss.Renderer,
 	base lipgloss.Style,
@@ -191,14 +185,6 @@ func textOnlyStyle(
 		st = st.Faint(true)
 	}
 	return st
-}
-
-func pickerStyleFg(st lipgloss.Style) lipgloss.TerminalColor {
-	return st.GetForeground()
-}
-
-func pickerStyleBg(st lipgloss.Style) lipgloss.TerminalColor {
-	return st.GetBackground()
 }
 
 func pickerBorderColor(sts ...lipgloss.Style) lipgloss.TerminalColor {
@@ -249,74 +235,4 @@ func pickerMethodColor(th theme.Theme, m string) lipgloss.TerminalColor {
 	default:
 		return pickerColor(th.MethodColors.Default, lipgloss.Color("#9ca3af"))
 	}
-}
-
-func pickerBorderFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerBorderLite)
-	}
-	return lipgloss.Color(runPickerBorderDark)
-}
-
-func pickerBoxBgFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerBgLite)
-	}
-	return nil
-}
-
-func pickerTextFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerTextLite)
-	}
-	return lipgloss.Color(runPickerTextDark)
-}
-
-func pickerMutedFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerMutedLite)
-	}
-	return lipgloss.Color(runPickerMutedDark)
-}
-
-func pickerSelBgFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerSelBgLite)
-	}
-	return lipgloss.Color(runPickerSelBgDark)
-}
-
-func pickerSelFgFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerSelFgLite)
-	}
-	return lipgloss.Color(runPickerSelFgDark)
-}
-
-func pickerAccentFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerAccLite)
-	}
-	return lipgloss.Color(runPickerAccDark)
-}
-
-func pickerCursorFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerCurLite)
-	}
-	return lipgloss.Color(runPickerCurDark)
-}
-
-func pickerTargetFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerTgtLite)
-	}
-	return lipgloss.Color(runPickerTgtDark)
-}
-
-func pickerErrorFallback(ap theme.Appearance) lipgloss.TerminalColor {
-	if ap == theme.AppearanceLight {
-		return lipgloss.Color(runPickerErrLite)
-	}
-	return lipgloss.Color(runPickerErrDark)
 }

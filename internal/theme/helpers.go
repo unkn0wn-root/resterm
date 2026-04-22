@@ -21,6 +21,24 @@ func ResolveDefinition(c Catalog, key string, fb Theme) Definition {
 	return def
 }
 
+// OrDefault returns def when it points to a named theme definition, otherwise
+// it falls back to the builtin default theme definition.
+func OrDefault(def *Definition) Definition {
+	if def == nil || normalizeKey(def.Key) == "" {
+		return DefaultDefinition()
+	}
+	return *def
+}
+
+// ColorForAppearance returns the light or dark fallback color for the given
+// appearance. Empty color values mean "no color".
+func ColorForAppearance(ap Appearance, light, dark string) lipgloss.TerminalColor {
+	if ap == AppearanceLight {
+		return colorOrNil(light)
+	}
+	return colorOrNil(dark)
+}
+
 func ActiveTextStyle(th Theme) lipgloss.Style {
 	if th.PaneActiveForeground != "" {
 		return lipgloss.NewStyle().Foreground(th.PaneActiveForeground)
@@ -50,6 +68,13 @@ func ColorDefined(c lipgloss.TerminalColor) bool {
 		return false
 	}
 	return true
+}
+
+func colorOrNil(v string) lipgloss.TerminalColor {
+	if v == "" {
+		return nil
+	}
+	return lipgloss.Color(v)
 }
 
 func normalizeKey(key string) string {

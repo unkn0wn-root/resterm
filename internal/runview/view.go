@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -33,11 +34,13 @@ type Options struct {
 	Mode    Mode
 	Headers bool
 	Color   termcolor.Config
+	Theme   *theme.Definition
 }
 
 type BodyOptions struct {
 	Mode  Mode
 	Color termcolor.Config
+	Theme *theme.Definition
 }
 
 func Write(w io.Writer, rep *runner.Report, opt Options) error {
@@ -80,6 +83,7 @@ func Render(rep *runner.Report, opt Options) (string, error) {
 		Mode:    mode,
 		Headers: opt.Headers,
 		Color:   opt.Color,
+		Theme:   opt.Theme,
 	}), nil
 }
 
@@ -95,7 +99,7 @@ func RenderBody(rep *runner.Report, opt BodyOptions) (string, error) {
 	if res.Kind != runner.ResultKindRequest {
 		return "", errors.New("runview: body output requires exactly one request result")
 	}
-	return requestBodyText(*res, mode, opt.Color), nil
+	return requestBodyText(*res, mode, opt.Color, opt.Theme), nil
 }
 
 func CanRender(rep *runner.Report) bool {
@@ -138,12 +142,12 @@ func reportText(rep *runner.Report) (string, error) {
 }
 
 func renderRequest(res runner.Result, opt Options) string {
-	st := newStyler(opt.Color)
+	st := newStyler(opt.Color, opt.Theme)
 	summary := requestSummary(res, st)
 	issues := requestIssues(res, st)
 	warnings := requestWarnings(res, st)
 	headers := requestHeadersText(res, opt.Headers, st)
-	body := requestBody(res, opt.Mode, opt.Color, st)
+	body := requestBody(res, opt.Mode, opt.Color, opt.Theme, st)
 	return bodyfmt.JoinSections(summary, issues, warnings, headers, body)
 }
 
@@ -259,25 +263,37 @@ func requestHeadersText(res runner.Result, show bool, st styler) string {
 	return bodyfmt.JoinSections(reqText, respText)
 }
 
-func requestBody(res runner.Result, mode Mode, color termcolor.Config, st styler) string {
+func requestBody(
+	res runner.Result,
+	mode Mode,
+	color termcolor.Config,
+	def *theme.Definition,
+	st styler,
+) string {
 	heading := "Body:"
 	if mode == ModeRaw {
 		heading = "Raw Body:"
 	}
-	body := requestBodyText(res, mode, color)
+	body := requestBodyText(res, mode, color, def)
 	if body == "" {
 		body = "<empty>"
 	}
 	return st.section(heading) + "\n" + body
 }
 
-func requestBodyText(res runner.Result, mode Mode, color termcolor.Config) string {
+func requestBodyText(
+	res runner.Result,
+	mode Mode,
+	color termcolor.Config,
+	def *theme.Definition,
+) string {
 	input := resolveBodyInput(res)
 	if bodyInputEmpty(input) {
 		return ""
 	}
 	if mode == ModePretty {
 		input.Color = color
+		input.Style = theme.SyntaxHighlightStyle(theme.OrDefault(def))
 	}
 	return selectBody(bodyfmt.Build(input), mode)
 }
