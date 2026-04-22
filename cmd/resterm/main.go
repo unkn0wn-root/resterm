@@ -27,7 +27,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/openapi/parser"
 	"github.com/unkn0wn-root/resterm/internal/openapi/writer"
 	"github.com/unkn0wn-root/resterm/internal/rtfmt"
-	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui"
 	"github.com/unkn0wn-root/resterm/internal/update"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -317,48 +316,15 @@ func run(a []string) error {
 		}
 	}()
 
-	settings, settingsHandle, err := config.LoadSettings()
-	if err != nil {
-		log.Printf("settings load error: %v", err)
-		settings = config.Settings{}
-		settingsHandle = config.SettingsHandle{
-			Path:   filepath.Join(config.Dir(), "settings.toml"),
-			Format: config.SettingsFormatTOML,
-		}
-	}
-
 	bindingMap, _, bindingErr := bindings.Load(config.Dir())
 	if bindingErr != nil {
 		log.Printf("bindings load error: %v", bindingErr)
 		bindingMap = bindings.DefaultMap()
 	}
 
-	themeCatalog, themeErr := theme.LoadCatalog([]string{config.ThemeDir()})
+	ts, themeErr := loadThemeState()
 	if themeErr != nil {
-		log.Printf("theme load error: %v", themeErr)
-	}
-
-	th := theme.DefaultTheme()
-	activeThemeKey := str.Trim(strings.ToLower(settings.DefaultTheme))
-	if activeThemeKey == "" {
-		activeThemeKey = "default"
-	}
-	if def, ok := themeCatalog.Get(activeThemeKey); ok {
-		th = def.Theme
-		activeThemeKey = def.Key
-		settings.DefaultTheme = def.Key
-	} else {
-		if settings.DefaultTheme != "" {
-			log.Printf("theme %q not found; using built-in default", settings.DefaultTheme)
-		}
-		if def, ok := themeCatalog.Get("default"); ok {
-			th = def.Theme
-			activeThemeKey = def.Key
-		} else {
-			th = theme.DefaultTheme()
-			activeThemeKey = "default"
-		}
-		settings.DefaultTheme = ""
+		log.Printf("%v", themeErr)
 	}
 	updateEnabled := version != "dev"
 
@@ -366,11 +332,11 @@ func run(a []string) error {
 		FilePath:            filePath,
 		InitialContent:      initialContent,
 		Client:              client,
-		Theme:               &th,
-		ThemeCatalog:        themeCatalog,
-		ActiveThemeKey:      activeThemeKey,
-		Settings:            settings,
-		SettingsHandle:      settingsHandle,
+		Theme:               &ts.def.Theme,
+		ThemeCatalog:        ts.catalog,
+		ActiveThemeKey:      ts.active,
+		Settings:            ts.settings,
+		SettingsHandle:      ts.handle,
 		EnvironmentSet:      cfg.EnvSet,
 		EnvironmentName:     cfg.EnvName,
 		EnvironmentFile:     cfg.EnvFile,

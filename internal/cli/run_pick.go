@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -52,6 +53,7 @@ func BuildRunRequestChoices(doc *restfile.Document) []RunRequestChoice {
 type RunRequestPromptOptions struct {
 	TTY   bool
 	Color termcolor.Config
+	Theme *theme.Definition
 }
 
 var ErrRunRequestChoiceCanceled = errors.New("request selection canceled")

@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"strings"
-
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 
@@ -31,26 +29,6 @@ func newThemeRuntime(def theme.Definition) themeRuntime {
 	}
 }
 
-func resolveThemeDefinition(
-	catalog theme.Catalog,
-	key string,
-	fallback theme.Theme,
-) theme.Definition {
-	if def, ok := catalog.Get(strings.TrimSpace(key)); ok {
-		return def
-	}
-	def := theme.DefaultDefinition()
-	def.Theme = fallback
-	key = strings.TrimSpace(key)
-	if key == "" {
-		return def
-	}
-	def.Key = key
-	def.DisplayName = humaniseKey(key)
-	def.Metadata.Name = def.DisplayName
-	return def
-}
-
 func (rt themeRuntime) isLight() bool {
 	return rt.appearance == theme.AppearanceLight
 }
@@ -71,7 +49,7 @@ func (rt themeRuntime) inactiveRendered(content string) string {
 
 func (rt themeRuntime) subtleTextStyle(th theme.Theme) lipgloss.Style {
 	if rt.isLight() {
-		return inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
+		return theme.ForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
 	}
 	return lipgloss.NewStyle().Faint(true)
 }
@@ -91,65 +69,65 @@ func (rt themeRuntime) helpHintStyle(th theme.Theme) lipgloss.Style {
 }
 
 func (rt themeRuntime) inputLabelStyle(th theme.Theme) lipgloss.Style {
-	if fg := th.ExplainMuted.GetForeground(); colorDefined(fg) {
+	if fg := th.ExplainMuted.GetForeground(); theme.ColorDefined(fg) {
 		return lipgloss.NewStyle().Foreground(fg)
 	}
 	if rt.isLight() {
 		return lipgloss.NewStyle().Foreground(lipgloss.Color("#64748b"))
 	}
-	if fg := th.HeaderValue.GetForeground(); colorDefined(fg) {
+	if fg := th.HeaderValue.GetForeground(); theme.ColorDefined(fg) {
 		return lipgloss.NewStyle().Foreground(fg)
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB"))
 }
 
 func (rt themeRuntime) modalBackdropColor(th theme.Theme) lipgloss.TerminalColor {
-	if colorDefined(th.ModalBackdrop) {
+	if theme.ColorDefined(th.ModalBackdrop) {
 		return th.ModalBackdrop
 	}
 	if !rt.isLight() {
 		return lipgloss.Color("#1A1823")
 	}
-	if bg := th.CommandBar.GetBackground(); colorDefined(bg) {
+	if bg := th.CommandBar.GetBackground(); theme.ColorDefined(bg) {
 		return bg
 	}
-	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
+	if bg := th.ResponseSelection.GetBackground(); theme.ColorDefined(bg) {
 		return bg
 	}
 	return lipgloss.Color("#E2E8F0")
 }
 
 func (rt themeRuntime) modalInputBackground(th theme.Theme) lipgloss.TerminalColor {
-	if colorDefined(th.ModalInputBackground) {
+	if theme.ColorDefined(th.ModalInputBackground) {
 		return th.ModalInputBackground
 	}
 	if !rt.isLight() {
 		return lipgloss.Color("#1c1a23")
 	}
-	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
+	if bg := th.ResponseSelection.GetBackground(); theme.ColorDefined(bg) {
 		return bg
 	}
-	if bg := th.CommandBar.GetBackground(); colorDefined(bg) {
+	if bg := th.CommandBar.GetBackground(); theme.ColorDefined(bg) {
 		return bg
 	}
 	return lipgloss.Color("#E2E8F0")
 }
 
 func (rt themeRuntime) modalOptionStyle(th theme.Theme) lipgloss.Style {
-	if colorDefined(th.ModalOption) {
+	if theme.ColorDefined(th.ModalOption) {
 		return lipgloss.NewStyle().Foreground(th.ModalOption)
 	}
 	if rt.isLight() {
-		return inlineForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
+		return theme.ForegroundStyle(th.ExplainMuted, lipgloss.Color("#64748b"))
 	}
 	return lipgloss.NewStyle().Foreground(lipgloss.Color("#4D4663"))
 }
 
 func (rt themeRuntime) editorSelectionBackground(th theme.Theme) lipgloss.TerminalColor {
-	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
+	if bg := th.ResponseSelection.GetBackground(); theme.ColorDefined(bg) {
 		return bg
 	}
-	if bg := th.CommandBar.GetBackground(); colorDefined(bg) {
+	if bg := th.CommandBar.GetBackground(); theme.ColorDefined(bg) {
 		return bg
 	}
 	return lipgloss.Color("#E2E8F0")
@@ -163,10 +141,7 @@ func (rt themeRuntime) statsPalette(th theme.Theme) statsPalette {
 }
 
 func (rt themeRuntime) syntaxHighlightStyle() string {
-	if rt.isLight() {
-		return "github"
-	}
-	return "monokai"
+	return theme.SyntaxHighlightStyle(rt.definition)
 }
 
 func (rt themeRuntime) responseRenderer(th theme.Theme) responseRenderer {
@@ -188,20 +163,20 @@ func (rt themeRuntime) applyTextInput(
 		ti.PlaceholderStyle = th.NavigatorSubtitle
 		ti.Cursor.Style = th.NavigatorTitle
 	case textInputKindHelp:
-		textStyle := activeTextStyle(th)
+		textStyle := theme.ActiveTextStyle(th)
 		ti.TextStyle = textStyle
 		ti.PromptStyle = rt.inputLabelStyle(th)
 		ti.PlaceholderStyle = rt.subtleTextStyle(th)
 		ti.Cursor.Style = textStyle
 	case textInputKindHistory:
-		textStyle := activeTextStyle(th)
+		textStyle := theme.ActiveTextStyle(th)
 		ti.TextStyle = textStyle
 		ti.PromptStyle = rt.inputLabelStyle(th)
 		ti.PlaceholderStyle = rt.historyPlaceholderStyle(th)
 		ti.Cursor.Style = textStyle
 	default:
 		if rt.isLight() {
-			textStyle := activeTextStyle(th)
+			textStyle := theme.ActiveTextStyle(th)
 			ti.TextStyle = textStyle
 			ti.PromptStyle = th.HeaderTitle
 			ti.PlaceholderStyle = rt.subtleTextStyle(th)
@@ -232,11 +207,11 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 		return
 	}
 
-	textStyle := activeTextStyle(th)
+	textStyle := theme.ActiveTextStyle(th)
 	mutedStyle := rt.subtleTextStyle(th)
 	promptStyle := th.HeaderTitle
 	cursorLine := textStyle
-	if bg := th.ResponseSelection.GetBackground(); colorDefined(bg) {
+	if bg := th.ResponseSelection.GetBackground(); theme.ColorDefined(bg) {
 		cursorLine = cursorLine.Background(bg)
 	}
 
@@ -300,35 +275,4 @@ func (m *Model) invalidateThemedCaches() {
 	for i := range m.responsePanes {
 		m.responsePanes[i].invalidateCaches()
 	}
-}
-
-func activeTextStyle(th theme.Theme) lipgloss.Style {
-	if th.PaneActiveForeground != "" {
-		return lipgloss.NewStyle().Foreground(th.PaneActiveForeground)
-	}
-	if fg := th.ResponseContent.GetForeground(); colorDefined(fg) {
-		return lipgloss.NewStyle().Foreground(fg)
-	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
-}
-
-func inlineForegroundStyle(base lipgloss.Style, fallback lipgloss.Color) lipgloss.Style {
-	style := lipgloss.NewStyle()
-	if fg := base.GetForeground(); colorDefined(fg) {
-		return style.Foreground(fg)
-	}
-	return style.Foreground(fallback)
-}
-
-func colorDefined(color lipgloss.TerminalColor) bool {
-	if color == nil {
-		return false
-	}
-	if _, ok := color.(lipgloss.NoColor); ok {
-		return false
-	}
-	if value, ok := color.(lipgloss.Color); ok && value == "" {
-		return false
-	}
-	return true
 }

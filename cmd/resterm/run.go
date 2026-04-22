@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runview"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -59,6 +60,7 @@ func runRun(args []string) error {
 
 type runExecFn func(context.Context, runner.Options) (*runner.Report, error)
 type runClientFn func(string, cli.ExecFlags) (*httpclient.Client, func() error, error)
+type runThemeFn func() (theme.Definition, error)
 
 type runFormat string
 
@@ -101,6 +103,7 @@ type runCmd struct {
 
 	runFn     runExecFn
 	newClient runClientFn
+	loadTheme runThemeFn
 
 	in        io.Reader
 	out       io.Writer
@@ -135,6 +138,7 @@ func newRunCmd() *runCmd {
 		stdinTTY:  term.IsTerminal(int(os.Stdin.Fd())),
 		stdoutTTY: term.IsTerminal(int(os.Stdout.Fd())),
 		lookupEnv: os.LookupEnv,
+		loadTheme: loadRunTheme,
 		format:    "auto",
 		color:     string(termcolor.ModeAuto),
 	}
@@ -328,6 +332,7 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 		cli.RunRequestPromptOptions{
 			TTY:   c.stdinTTY && c.stdoutTTY,
 			Color: c.prettyColor(),
+			Theme: c.themeDefinition(),
 		},
 	)
 	if err != nil {
@@ -338,6 +343,26 @@ func (c *runCmd) resolveDefaultRequest(doc *restfile.Document, src cli.RunSource
 	}
 	c.line = ch.Line
 	return nil
+}
+
+func loadRunTheme() (theme.Definition, error) {
+	ts, err := loadThemeState()
+	return ts.def, err
+}
+
+func (c *runCmd) themeDefinition() *theme.Definition {
+	def := theme.DefaultDefinition()
+	if c == nil || c.loadTheme == nil {
+		return &def
+	}
+	got, err := c.loadTheme()
+	if err != nil {
+		log.Printf("%v", err)
+	}
+	if got.Key != "" {
+		def = got
+	}
+	return &def
 }
 
 func (c *runCmd) client() (*httpclient.Client, func() error, error) {
@@ -410,6 +435,7 @@ func (c *runCmd) writeReport(rep *runner.Report) error {
 		return c.writeBody(rep)
 	}
 	color := c.prettyColor()
+	def := c.themeDefinition()
 	switch c.reportFormat() {
 	case runFmtAuto:
 		if runview.CanRenderRequest(rep) {
@@ -418,13 +444,14 @@ func (c *runCmd) writeReport(rep *runner.Report) error {
 					Mode:    runview.ModePretty,
 					Headers: c.headers,
 					Color:   color,
+					Theme:   def,
 				})
 			})
 		}
 		return c.writeOutput(func(w io.Writer) error {
 			if color.Enabled {
 				fmtRep := runner.NormalizeReport(rep)
-				return cli.WriteTextStyled(w, &fmtRep, color)
+				return cli.WriteTextStyled(w, &fmtRep, color, def)
 			}
 			return rep.WriteText(w)
 		})
@@ -451,6 +478,7 @@ func (c *runCmd) writeReport(rep *runner.Report) error {
 				Mode:    runview.ModePretty,
 				Headers: c.headers,
 				Color:   color,
+				Theme:   def,
 			})
 		})
 	case runFmtRaw:
@@ -463,6 +491,7 @@ func (c *runCmd) writeReport(rep *runner.Report) error {
 			return runview.Write(w, rep, runview.Options{
 				Mode:    runview.ModeRaw,
 				Headers: c.headers,
+				Theme:   def,
 			})
 		})
 	default:
@@ -542,8 +571,13 @@ func (c *runCmd) writeBody(rep *runner.Report) error {
 	if mode == runview.ModePretty {
 		color = c.prettyColor()
 	}
+	def := c.themeDefinition()
 	return c.writeOutput(func(w io.Writer) error {
-		return runview.WriteBody(w, rep, runview.BodyOptions{Mode: mode, Color: color})
+		return runview.WriteBody(w, rep, runview.BodyOptions{
+			Mode:  mode,
+			Color: color,
+			Theme: def,
+		})
 	})
 }
 

@@ -2215,7 +2215,7 @@ func (m Model) renderHistoryPreviewModal() string {
 		Padding(0, 2).
 		Width(contentWidth)
 	if m.themeRuntime.isLight() {
-		bodyStyle = bodyStyle.Inherit(activeTextStyle(m.theme))
+		bodyStyle = bodyStyle.Inherit(theme.ActiveTextStyle(m.theme))
 	}
 	if vp := m.historyPreviewViewport; vp != nil {
 		wrapped := wrapPreformattedContent(body, viewWidth)

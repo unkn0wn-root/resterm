@@ -735,7 +735,7 @@ func New(cfg Config) Model {
 	model.watchFile(cfg.FilePath, []byte(cfg.InitialContent))
 	model.startFileWatcher()
 	model.setLivePane(responsePanePrimary)
-	model.applyThemeDefinition(resolveThemeDefinition(cfg.ThemeCatalog, activeTheme, th))
+	model.applyThemeDefinition(theme.ResolveDefinition(cfg.ThemeCatalog, activeTheme, th))
 	if strings.TrimSpace(model.workspaceRoot) != "" &&
 		strings.TrimSpace(model.lastResponseSaveDir) == "" {
 		model.lastResponseSaveDir = model.workspaceRoot
