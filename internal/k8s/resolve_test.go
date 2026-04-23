@@ -24,6 +24,46 @@ func TestResolveUseMissingWithInline(t *testing.T) {
 	}
 }
 
+func TestResolveUseInvalidProfileReportsDefinitionError(t *testing.T) {
+	spec := &restfile.K8sSpec{Use: "cluster-api"}
+	globalProfiles := []restfile.K8sProfile{{
+		Scope:   restfile.K8sScopeGlobal,
+		Name:    "cluster-api",
+		Line:    1,
+		Invalid: true,
+		Error:   "@k8s global scope requires target and port",
+	}}
+
+	_, err := Resolve(spec, nil, globalProfiles, nil, "")
+	if err == nil {
+		t.Fatal("expected error for invalid profile")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		`profile "cluster-api" is invalid`,
+		"line 1",
+		"@k8s global scope requires target and port",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("expected %q in error %q", want, msg)
+		}
+	}
+}
+
+func TestResolveValidationErrorOmitsPackagePrefix(t *testing.T) {
+	spec := &restfile.K8sSpec{
+		Inline: &restfile.K8sProfile{Pod: "api"},
+	}
+
+	_, err := Resolve(spec, nil, nil, nil, "")
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if got, want := err.Error(), "port is required"; got != want {
+		t.Fatalf("unexpected error: got %q want %q", got, want)
+	}
+}
+
 func TestResolveUseWithInlineOverrides(t *testing.T) {
 	spec := &restfile.K8sSpec{
 		Use: "api",
@@ -47,11 +87,11 @@ func TestResolveUseWithInlineOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve err: %v", err)
 	}
-	if cfg.Pod != "api-override" {
-		t.Fatalf("expected inline pod override, got %q", cfg.Pod)
+	if cfg.Target.Kind != TargetPod || cfg.Target.Name != "api-override" {
+		t.Fatalf("expected inline pod override, got %s/%s", cfg.Target.Kind, cfg.Target.Name)
 	}
-	if cfg.Port != 9090 {
-		t.Fatalf("expected inline port override, got %d", cfg.Port)
+	if cfg.Port.Number != 9090 {
+		t.Fatalf("expected inline port override, got %d", cfg.Port.Number)
 	}
 }
 
@@ -73,8 +113,8 @@ func TestResolveExpandsEnvAndTemplates(t *testing.T) {
 	if cfg.Namespace != "prod" {
 		t.Fatalf("expected namespace prod, got %q", cfg.Namespace)
 	}
-	if cfg.TargetKind != targetKindPod || cfg.TargetName != "api-x" {
-		t.Fatalf("expected pod target api-x, got %s/%s", cfg.TargetKind, cfg.TargetName)
+	if cfg.Target.Kind != TargetPod || cfg.Target.Name != "api-x" {
+		t.Fatalf("expected pod target api-x, got %s/%s", cfg.Target.Kind, cfg.Target.Name)
 	}
 }
 
@@ -96,11 +136,11 @@ func TestResolveTrimsExpandedWhitespace(t *testing.T) {
 	if cfg.Namespace != "default" {
 		t.Fatalf("expected namespace default, got %q", cfg.Namespace)
 	}
-	if cfg.TargetKind != targetKindPod || cfg.TargetName != "api-x" || cfg.Pod != "api-x" {
-		t.Fatalf("unexpected target %s/%s (%q)", cfg.TargetKind, cfg.TargetName, cfg.Pod)
+	if cfg.Target.Kind != TargetPod || cfg.Target.Name != "api-x" {
+		t.Fatalf("unexpected target %s/%s", cfg.Target.Kind, cfg.Target.Name)
 	}
-	if cfg.Port != 8080 || cfg.PortName != "" || cfg.PortRaw != "8080" {
-		t.Fatalf("unexpected port parse: %d name=%q raw=%q", cfg.Port, cfg.PortName, cfg.PortRaw)
+	if cfg.Port.Number != 8080 || cfg.Port.Name != "" {
+		t.Fatalf("unexpected port parse: %+v", cfg.Port)
 	}
 }
 
@@ -129,8 +169,8 @@ func TestResolvePrefersFileScopeProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve err: %v", err)
 	}
-	if cfg.Pod != "file-pod" {
-		t.Fatalf("expected file scoped pod, got %q", cfg.Pod)
+	if cfg.Target.Kind != TargetPod || cfg.Target.Name != "file-pod" {
+		t.Fatalf("expected file scoped pod, got %s/%s", cfg.Target.Kind, cfg.Target.Name)
 	}
 }
 
@@ -154,11 +194,11 @@ func TestResolveInlinePodClearsBaseNonPodTarget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve err: %v", err)
 	}
-	if cfg.TargetKind != targetKindPod || cfg.TargetName != "api-0" {
-		t.Fatalf("expected pod target override, got %s/%s", cfg.TargetKind, cfg.TargetName)
+	if cfg.Target.Kind != TargetPod || cfg.Target.Name != "api-0" {
+		t.Fatalf("expected pod target override, got %s/%s", cfg.Target.Kind, cfg.Target.Name)
 	}
-	if cfg.Port != 8081 {
-		t.Fatalf("expected numeric port override, got %d", cfg.Port)
+	if cfg.Port.Number != 8081 {
+		t.Fatalf("expected numeric port override, got %d", cfg.Port.Number)
 	}
 }
 
@@ -182,15 +222,14 @@ func TestResolveInlineTargetPodOverridesBasePod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolve err: %v", err)
 	}
-	if cfg.TargetKind != targetKindPod || cfg.TargetName != "api-1" || cfg.Pod != "api-1" {
+	if cfg.Target.Kind != TargetPod || cfg.Target.Name != "api-1" {
 		t.Fatalf(
-			"expected pod target api-1, got %s/%s (%q)",
-			cfg.TargetKind,
-			cfg.TargetName,
-			cfg.Pod,
+			"expected pod target api-1, got %s/%s",
+			cfg.Target.Kind,
+			cfg.Target.Name,
 		)
 	}
-	if cfg.Port != 9090 {
-		t.Fatalf("expected numeric port override, got %d", cfg.Port)
+	if cfg.Port.Number != 9090 {
+		t.Fatalf("expected numeric port override, got %d", cfg.Port.Number)
 	}
 }

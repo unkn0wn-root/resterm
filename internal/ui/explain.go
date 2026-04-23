@@ -1240,16 +1240,14 @@ func explainRoute(sp *ssh.Plan, kp *k8s.Plan) *xplain.Route {
 			return nil
 		}
 		sum := cfg.Namespace
-		if cfg.TargetKind != "" && cfg.TargetName != "" {
+		if cfg.Target.Kind != "" && cfg.Target.Name != "" {
 			if sum != "" {
 				sum += " "
 			}
-			sum += string(cfg.TargetKind) + "/" + cfg.TargetName
+			sum += string(cfg.Target.Kind) + "/" + cfg.Target.Name
 		}
-		if cfg.PortName != "" {
-			sum += ":" + cfg.PortName
-		} else if cfg.Port > 0 {
-			sum += fmt.Sprintf(":%d", cfg.Port)
+		if port := cfg.Port.String(); port != "" {
+			sum += ":" + port
 		}
 		var notes []string
 		if cfg.Context != "" {

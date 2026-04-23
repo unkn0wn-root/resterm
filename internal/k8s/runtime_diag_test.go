@@ -39,9 +39,10 @@ func TestAnnotateRequestErrorWithRecentPFErr(t *testing.T) {
 	now := time.Now()
 	start := now.Add(-250 * time.Millisecond)
 	raw := `an error occurred forwarding 50611 -> 8080: error forwarding port 8080 to pod x, uid : failed to connect to localhost:8080 inside namespace "x"`
+	_, reqDiag := bindTestRequestDiag(50611, 8080)
 	pushRuntimeErr(now, errors.New(raw))
 
-	err := AnnotateRequestError(io.EOF, start)
+	err := AnnotateRequestError(io.EOF, start, reqDiag)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected wrapped EOF, got %v", err)
 	}
@@ -58,9 +59,10 @@ func TestAnnotateRequestErrorSkipsStalePFErr(t *testing.T) {
 	resetRuntimeDiagForTest()
 
 	raw := `an error occurred forwarding 50611 -> 8080: error forwarding port 8080 to pod x, uid : failed to connect to localhost:8080`
+	_, reqDiag := bindTestRequestDiag(50611, 8080)
 	pushRuntimeErr(time.Now().Add(-2*diagMaxAge), errors.New(raw))
 
-	err := AnnotateRequestError(io.EOF, time.Now().Add(-time.Second))
+	err := AnnotateRequestError(io.EOF, time.Now().Add(-time.Second), reqDiag)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("expected EOF unchanged, got %v", err)
 	}
@@ -71,6 +73,8 @@ func TestAnnotateRequestErrorSkipsStalePFErr(t *testing.T) {
 
 func TestAnnotateRequestErrorFromRuntimeHandleError(t *testing.T) {
 	resetRuntimeDiagForTest()
+	ensureRuntimeDiagInstalled()
+	_, reqDiag := bindTestRequestDiag(41111, 8443)
 
 	start := time.Now().Add(-time.Second)
 	kruntime.HandleError(
@@ -79,13 +83,35 @@ func TestAnnotateRequestErrorFromRuntimeHandleError(t *testing.T) {
 		),
 	)
 
-	err := AnnotateRequestError(io.EOF, start)
+	err := AnnotateRequestError(io.EOF, start, reqDiag)
 	if !strings.Contains(err.Error(), "k8s port-forward 41111->8443:") {
 		t.Fatalf("expected runtime.HandleError capture, got %q", err.Error())
 	}
 }
 
-func TestBuildRuntimeDiagErrorHandlersFallbackDropsFirst(t *testing.T) {
+func TestAnnotateRequestErrorDoesNotCrossCollectors(t *testing.T) {
+	resetRuntimeDiagForTest()
+
+	now := time.Now()
+	start := now.Add(-250 * time.Millisecond)
+	raw := `an error occurred forwarding 50612 -> 8080: error forwarding port 8080 to pod x, uid : failed to connect to localhost:8080 inside namespace "x"`
+
+	_, first := bindTestRequestDiag(50611, 8080)
+	_, second := bindTestRequestDiag(50612, 8080)
+	pushRuntimeErr(now, errors.New(raw))
+
+	errOne := AnnotateRequestError(io.EOF, start, first)
+	if strings.Contains(errOne.Error(), "k8s port-forward") {
+		t.Fatalf("expected first request diag to stay clean, got %q", errOne.Error())
+	}
+
+	errTwo := AnnotateRequestError(io.EOF, start, second)
+	if !strings.Contains(errTwo.Error(), "k8s port-forward 50612->8080:") {
+		t.Fatalf("expected second request diag annotation, got %q", errTwo.Error())
+	}
+}
+
+func TestBuildRuntimeDiagErrorHandlersPreservesNonRuntimeHandlers(t *testing.T) {
 	got := buildRuntimeDiagErrorHandlers(
 		[]kruntime.ErrorHandler{
 			testErrHandlerA,
@@ -95,10 +121,26 @@ func TestBuildRuntimeDiagErrorHandlersFallbackDropsFirst(t *testing.T) {
 	)
 	want := []kruntime.ErrorHandler{
 		captureRuntimeErr,
+		testErrHandlerA,
 		testErrHandlerB,
 		testErrHandlerC,
 	}
 	assertHandlerPtrs(t, got, want)
+}
+
+func TestBuildRuntimeDiagErrorHandlersDropsRuntimeLogger(t *testing.T) {
+	got := buildRuntimeDiagErrorHandlers(kruntime.ErrorHandlers)
+	if len(got) == 0 {
+		t.Fatal("expected runtime handlers")
+	}
+	if handlerPtr(got[0]) != handlerPtr(captureRuntimeErr) {
+		t.Fatalf("expected capture handler first")
+	}
+	for i := 1; i < len(got); i++ {
+		if isDefaultRuntimeLogHandler(got[i]) {
+			t.Fatalf("unexpected default runtime log handler at %d", i)
+		}
+	}
 }
 
 func assertHandlerPtrs(t *testing.T, got, want []kruntime.ErrorHandler) {
@@ -126,8 +168,12 @@ func testErrHandlerA(_ context.Context, _ error, _ string, _ ...any) {}
 func testErrHandlerB(_ context.Context, _ error, _ string, _ ...any) {}
 func testErrHandlerC(_ context.Context, _ error, _ string, _ ...any) {}
 
+func bindTestRequestDiag(local, remote int) (context.Context, *RequestDiag) {
+	ctx, reqDiag := BindRequestContext(context.Background())
+	bindRequestDiag(ctx, newDiagCollector(local, remote, diagCap))
+	return ctx, reqDiag
+}
+
 func resetRuntimeDiagForTest() {
-	rtDiag.mu.Lock()
-	rtDiag.buf = newRing[diagRecord](diagCap)
-	rtDiag.mu.Unlock()
+	rtDiag = newDiagState()
 }

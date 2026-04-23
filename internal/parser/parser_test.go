@@ -970,6 +970,19 @@ GET http://example.com
 	if !hasParseMessage(doc.Errors, "@k8s global scope requires target and port") {
 		t.Fatalf("expected global scope target parse error, got %v", doc.Errors)
 	}
+	if len(doc.K8s) != 1 {
+		t.Fatalf("expected invalid k8s profile marker, got %d", len(doc.K8s))
+	}
+	prof := doc.K8s[0]
+	if !prof.Invalid {
+		t.Fatalf("expected invalid k8s profile marker")
+	}
+	if prof.Name != "api" || prof.Scope != restfile.K8sScopeGlobal || prof.Line != 1 {
+		t.Fatalf("unexpected invalid profile marker: %+v", prof)
+	}
+	if !strings.Contains(prof.Error, "@k8s global scope requires target and port") {
+		t.Fatalf("unexpected invalid profile error: %q", prof.Error)
+	}
 }
 
 func TestParseK8sServiceTarget(t *testing.T) {

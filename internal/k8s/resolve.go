@@ -16,22 +16,21 @@ func Resolve(
 	globalProfiles []restfile.K8sProfile,
 	resolver *vars.Resolver,
 	envLabel string,
-) (*Cfg, error) {
+) (*Config, error) {
 	if spec == nil {
 		return nil, nil
 	}
 
-	merged, err := resolveProfileSpec(spec, fileProfiles, globalProfiles)
+	p, err := resolveProfileSpec(spec, fileProfiles, globalProfiles)
+	if err != nil {
+		return nil, err
+	}
+	p, err = expandProfile(p, resolver)
 	if err != nil {
 		return nil, err
 	}
 
-	expanded, err := expandProfile(merged, resolver)
-	if err != nil {
-		return nil, err
-	}
-
-	cfg, err := NormalizeProfile(expanded)
+	cfg, err := normalizeProfile(p)
 	if err != nil {
 		return nil, err
 	}
@@ -52,9 +51,24 @@ func resolveProfileSpec(
 		return *spec.Inline, nil
 	}
 
-	base, ok := lookupNamedProfile(fileProfiles, globalProfiles, use)
+	base, ok := resolveNamedProfile(fileProfiles, globalProfiles, use)
 	if !ok {
-		return restfile.K8sProfile{}, fmt.Errorf("k8s: profile %q not found", use)
+		return restfile.K8sProfile{}, fmt.Errorf("profile %q not found", use)
+	}
+	if base.Invalid {
+		msg := strings.TrimSpace(base.Error)
+		if msg == "" {
+			msg = "invalid definition"
+		}
+		if base.Line > 0 {
+			return restfile.K8sProfile{}, fmt.Errorf(
+				"profile %q is invalid: line %d: %s",
+				use,
+				base.Line,
+				msg,
+			)
+		}
+		return restfile.K8sProfile{}, fmt.Errorf("profile %q is invalid: %s", use, msg)
 	}
 	base.Name = use
 
@@ -64,28 +78,26 @@ func resolveProfileSpec(
 	return mergeProfile(base, *spec.Inline), nil
 }
 
-func lookupNamedProfile(
+func resolveNamedProfile(
 	fileProfiles []restfile.K8sProfile,
 	globalProfiles []restfile.K8sProfile,
 	name string,
 ) (restfile.K8sProfile, bool) {
-	if prof, ok := lookupProfile(fileProfiles, name, restfile.K8sScopeFile); ok {
-		return *prof, true
-	}
-	if prof, ok := lookupProfile(globalProfiles, name, restfile.K8sScopeGlobal); ok {
-		return *prof, true
-	}
-	return restfile.K8sProfile{}, false
-}
-
-func lookupProfile(
-	profiles []restfile.K8sProfile,
-	name string,
-	scope restfile.K8sScope,
-) (*restfile.K8sProfile, bool) {
 	sf := func(p restfile.K8sProfile) restfile.K8sScope { return p.Scope }
 	nf := func(p restfile.K8sProfile) string { return p.Name }
-	return restfile.LookupNamedScoped(profiles, name, scope, sf, nf)
+	p, ok := restfile.ResolveNamedScoped(
+		fileProfiles,
+		globalProfiles,
+		name,
+		restfile.K8sScopeFile,
+		restfile.K8sScopeGlobal,
+		sf,
+		nf,
+	)
+	if !ok {
+		return restfile.K8sProfile{}, false
+	}
+	return *p, true
 }
 
 func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfile.K8sProfile {
@@ -94,31 +106,24 @@ func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfi
 	connprofile.SetIf(&out.Name, override.Name)
 	connprofile.SetIf(&out.Namespace, override.Namespace)
 
-	// Target and Pod override precedence:
-	// 1) Target overrides clear Pod by default.
-	// 2) A literal pod target (pod:<name> or <name>) mirrors Pod.
-	// 3) Explicit Pod override wins when both Target and Pod are set.
-	//
-	// We intentionally do not fail merge-time parsing for templated targets.
-	// NormalizeProfile validates the expanded final value later.
 	target := strings.TrimSpace(override.Target)
 	if target != "" {
 		out.Target = target
 		out.Pod = ""
 		k, n, err := k8starget.ParseRef(target)
-		if err == nil && k == targetKindPod {
+		if err == nil && k == TargetPod {
 			out.Pod = n
 		}
 	}
-	if v := strings.TrimSpace(override.Pod); v != "" {
-		out.Pod = v
+	if pod := strings.TrimSpace(override.Pod); pod != "" {
+		out.Pod = pod
 		if target == "" {
 			out.Target = ""
 		}
 	}
 
-	if v := strings.TrimSpace(override.PortStr); v != "" {
-		out.PortStr = v
+	if port := strings.TrimSpace(override.PortStr); port != "" {
+		out.PortStr = port
 		out.Port = override.Port
 	}
 
@@ -127,11 +132,10 @@ func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfi
 	connprofile.SetIf(&out.Container, override.Container)
 	connprofile.SetIf(&out.Address, override.Address)
 
-	if v := strings.TrimSpace(override.LocalPortStr); v != "" {
-		out.LocalPortStr = v
+	if port := strings.TrimSpace(override.LocalPortStr); port != "" {
+		out.LocalPortStr = port
 		out.LocalPort = override.LocalPort
 	}
-
 	if override.Persist.Set {
 		out.Persist = override.Persist
 	}
@@ -148,8 +152,7 @@ func mergeProfile(base restfile.K8sProfile, override restfile.K8sProfile) restfi
 }
 
 func expandProfile(p restfile.K8sProfile, resolver *vars.Resolver) (restfile.K8sProfile, error) {
-	if err := expandProfileFields(
-		resolver,
+	fs := []*string{
 		&p.Name,
 		&p.Namespace,
 		&p.Target,
@@ -162,24 +165,17 @@ func expandProfile(p restfile.K8sProfile, resolver *vars.Resolver) (restfile.K8s
 		&p.LocalPortStr,
 		&p.PodWaitStr,
 		&p.RetriesStr,
-	); err != nil {
-		return restfile.K8sProfile{}, err
 	}
-	return p, nil
-}
-
-func expandProfileFields(resolver *vars.Resolver, fields ...*string) error {
-	for _, field := range fields {
-		val := strings.TrimSpace(*field)
+	for _, f := range fs {
+		val := strings.TrimSpace(*f)
 		if val == "" {
 			continue
 		}
-
-		expanded, err := connprofile.ExpandValue(val, resolver)
+		v, err := connprofile.ExpandValue(val, resolver)
 		if err != nil {
-			return err
+			return restfile.K8sProfile{}, err
 		}
-		*field = expanded
+		*f = v
 	}
-	return nil
+	return p, nil
 }

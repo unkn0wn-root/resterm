@@ -59,7 +59,11 @@ func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 		},
 		K8s: &k8s.Plan{
 			Manager: &k8s.Manager{},
-			Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+			Config: &k8s.Config{
+				Namespace: "default",
+				Target:    k8s.TargetRef{Kind: k8s.TargetPod, Name: "api"},
+				Port:      k8s.PortRef{Number: 8080},
+			},
 		},
 	}
 

@@ -387,7 +387,11 @@ func TestBuildHTTPClientK8sLeavesTLSDialerNil(t *testing.T) {
 	opts := Options{
 		K8s: &k8s.Plan{
 			Manager: mgr,
-			Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+			Config: &k8s.Config{
+				Namespace: "default",
+				Target:    k8s.TargetRef{Kind: k8s.TargetPod, Name: "api"},
+				Port:      k8s.PortRef{Number: 8080},
+			},
 		},
 	}
 
@@ -416,7 +420,11 @@ func TestBuildHTTPClientRejectsSSHAndK8s(t *testing.T) {
 		},
 		K8s: &k8s.Plan{
 			Manager: &k8s.Manager{},
-			Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+			Config: &k8s.Config{
+				Namespace: "default",
+				Target:    k8s.TargetRef{Kind: k8s.TargetPod, Name: "api"},
+				Port:      k8s.PortRef{Number: 8080},
+			},
 		},
 	}
 
@@ -448,7 +456,11 @@ func TestBuildHTTPClientRejectsProxyWithTunnel(t *testing.T) {
 			ProxyURL: "http://localhost:8080",
 			K8s: &k8s.Plan{
 				Manager: &k8s.Manager{},
-				Config:  &k8s.Cfg{Namespace: "default", Pod: "api", Port: 8080},
+				Config: &k8s.Config{
+					Namespace: "default",
+					Target:    k8s.TargetRef{Kind: k8s.TargetPod, Name: "api"},
+					Port:      k8s.PortRef{Number: 8080},
+				},
 			},
 		}
 		_, err := client.buildHTTPClient(opts)
@@ -1100,6 +1112,37 @@ func TestStartSSEPublishesEvents(t *testing.T) {
 	}
 	if state != stream.StateClosed {
 		t.Fatalf("expected session to close cleanly, got state %v", state)
+	}
+}
+
+func TestStartSSEBindsK8sRequestDiag(t *testing.T) {
+	client := NewClient(nil)
+	client.httpFactory = func(Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				if diag := k8s.RequestDiagFromContext(req.Context()); diag == nil {
+					t.Fatal("expected sse request context to include k8s request diag")
+				}
+				return nil, errors.New("stream boom")
+			}),
+		}, nil
+	}
+
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/events",
+		SSE:    &restfile.SSERequest{},
+	}
+	opts := Options{
+		K8s: &k8s.Plan{
+			Manager: &k8s.Manager{},
+			Config:  &k8s.Config{},
+		},
+	}
+
+	_, _, err := client.StartSSE(context.Background(), req, vars.NewResolver(), opts)
+	if err == nil {
+		t.Fatalf("expected sse request error")
 	}
 }
 

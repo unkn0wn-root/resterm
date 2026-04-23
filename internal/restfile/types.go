@@ -165,6 +165,7 @@ type SSHSpec struct {
 type K8sProfile struct {
 	Scope        K8sScope
 	Name         string
+	Line         int
 	Namespace    string
 	Target       string
 	Pod          string
@@ -181,6 +182,8 @@ type K8sProfile struct {
 	PodWaitStr   string
 	Retries      Opt[int]
 	RetriesStr   string
+	Invalid      bool
+	Error        string
 }
 
 type K8sSpec struct {

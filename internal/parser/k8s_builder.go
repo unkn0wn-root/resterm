@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,10 +18,33 @@ type k8sDirective struct {
 	persistIgnored bool
 }
 
+type k8sDirectiveError struct {
+	err     error
+	profile restfile.K8sProfile
+}
+
+func (e *k8sDirectiveError) Error() string {
+	if e == nil || e.err == nil {
+		return ""
+	}
+	return e.err.Error()
+}
+
+func (e *k8sDirectiveError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.err
+}
+
 func (b *documentBuilder) handleK8s(line int, rest string) {
 	res, err := parseK8sDirective(rest)
 	if err != nil {
 		b.addError(line, err.Error())
+		var dirErr *k8sDirectiveError
+		if errors.As(err, &dirErr) {
+			b.addInvalidK8sProfile(line, dirErr.profile, err.Error())
+		}
 		return
 	}
 
@@ -43,8 +67,23 @@ func (b *documentBuilder) handleK8s(line int, rest string) {
 
 	if res.scope == restfile.K8sScopeGlobal || res.scope == restfile.K8sScopeFile {
 		res.profile.Scope = res.scope
+		res.profile.Line = line
 		b.k8sDefs = append(b.k8sDefs, res.profile)
 	}
+}
+
+func (b *documentBuilder) addInvalidK8sProfile(
+	line int,
+	prof restfile.K8sProfile,
+	message string,
+) {
+	if prof.Scope != restfile.K8sScopeGlobal && prof.Scope != restfile.K8sScopeFile {
+		return
+	}
+	prof.Line = line
+	prof.Invalid = true
+	prof.Error = message
+	b.k8sDefs = append(b.k8sDefs, prof)
 }
 
 func parseK8sDirective(rest string) (k8sDirective, error) {
@@ -77,8 +116,18 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 
 	opts := parseOptionTokens(strings.Join(fields[idx:], " "))
 	prof := restfile.K8sProfile{Scope: scope, Name: name}
+	profileErr := func(err error) error {
+		if err == nil {
+			return nil
+		}
+		if scope != restfile.K8sScopeGlobal && scope != restfile.K8sScopeFile {
+			return err
+		}
+		prof.Scope = scope
+		return &k8sDirectiveError{err: err, profile: prof}
+	}
 	if err := applyK8sOptions(&prof, opts); err != nil {
-		return res, err
+		return res, profileErr(err)
 	}
 
 	if scope == restfile.K8sScopeRequest {
@@ -90,7 +139,8 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 		if err := requireK8sTarget(prof); err != nil {
-			return res, fmt.Errorf("@k8s %s scope %w", k8sScopeLabel(scope), err)
+			err := fmt.Errorf("@k8s %s scope %w", k8sScopeLabel(scope), err)
+			return res, profileErr(err)
 		}
 		res.scope = scope
 		res.profile = prof

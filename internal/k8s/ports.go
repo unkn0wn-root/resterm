@@ -10,7 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func resolveRemotePort(cfg Cfg, pod *corev1.Pod, svc *corev1.Service) (int, error) {
+func resolveRemotePort(cfg execConfig, pod *corev1.Pod, svc *corev1.Service) (int, error) {
 	if pod == nil {
 		return 0, errors.New("k8s: pod is required")
 	}
@@ -20,22 +20,22 @@ func resolveRemotePort(cfg Cfg, pod *corev1.Pod, svc *corev1.Service) (int, erro
 	return resolveServicePort(cfg, pod, svc)
 }
 
-func resolvePodPort(cfg Cfg, pod *corev1.Pod) (int, error) {
-	if cfg.Port > 0 {
-		return cfg.Port, nil
+func resolvePodPort(cfg execConfig, pod *corev1.Pod) (int, error) {
+	if cfg.Port.Number > 0 {
+		return cfg.Port.Number, nil
 	}
-	return podPortByName(pod, cfg.Container, cfg.PortName)
+	return podPortByName(pod, cfg.Container, cfg.Port.Name)
 }
 
-func resolveServicePort(cfg Cfg, pod *corev1.Pod, svc *corev1.Service) (int, error) {
-	servicePort, err := servicePortByCfg(cfg, svc)
+func resolveServicePort(cfg execConfig, pod *corev1.Pod, svc *corev1.Service) (int, error) {
+	servicePort, err := servicePortByConfig(cfg, svc)
 	if err != nil {
 		return 0, err
 	}
 	return serviceTargetPort(servicePort, pod, cfg.Container)
 }
 
-func servicePortByCfg(cfg Cfg, svc *corev1.Service) (corev1.ServicePort, error) {
+func servicePortByConfig(cfg execConfig, svc *corev1.Service) (corev1.ServicePort, error) {
 	if svc == nil {
 		return corev1.ServicePort{}, errors.New("k8s: service is required")
 	}
@@ -47,38 +47,38 @@ func servicePortByCfg(cfg Cfg, svc *corev1.Service) (corev1.ServicePort, error) 
 		)
 	}
 
-	if cfg.Port > 0 {
+	if cfg.Port.Number > 0 {
 		var matches []corev1.ServicePort
 		for _, port := range svc.Spec.Ports {
-			if int(port.Port) == cfg.Port {
+			if int(port.Port) == cfg.Port.Number {
 				matches = append(matches, port)
 			}
 		}
-		return pickServicePort(matches, svc, strconv.Itoa(cfg.Port))
+		return pickServicePort(matches, svc, strconv.Itoa(cfg.Port.Number))
 	}
 
-	if cfg.PortName == "" {
+	if cfg.Port.Name == "" {
 		return corev1.ServicePort{}, errors.New("k8s: port is required")
 	}
 
 	var byName []corev1.ServicePort
 	for _, port := range svc.Spec.Ports {
-		if strings.TrimSpace(port.Name) == cfg.PortName {
+		if strings.TrimSpace(port.Name) == cfg.Port.Name {
 			byName = append(byName, port)
 		}
 	}
 	if len(byName) > 0 {
-		return pickServicePort(byName, svc, cfg.PortName)
+		return pickServicePort(byName, svc, cfg.Port.Name)
 	}
 
 	var byTargetPort []corev1.ServicePort
 	for _, port := range svc.Spec.Ports {
 		if port.TargetPort.Type == intstr.String &&
-			strings.TrimSpace(port.TargetPort.StrVal) == cfg.PortName {
+			strings.TrimSpace(port.TargetPort.StrVal) == cfg.Port.Name {
 			byTargetPort = append(byTargetPort, port)
 		}
 	}
-	return pickServicePort(byTargetPort, svc, cfg.PortName)
+	return pickServicePort(byTargetPort, svc, cfg.Port.Name)
 }
 
 func pickServicePort(

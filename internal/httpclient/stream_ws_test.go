@@ -14,6 +14,7 @@ import (
 
 	"nhooyr.io/websocket"
 
+	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
@@ -186,6 +187,35 @@ func TestStartWebSocketUsesHTTPFactory(t *testing.T) {
 	}
 	if !called {
 		t.Fatalf("expected custom HTTP factory to be used")
+	}
+}
+
+func TestStartWebSocketBindsK8sRequestDiag(t *testing.T) {
+	client := NewClient(nil)
+	client.wsDial = func(ctx context.Context, url string, opts *websocket.DialOptions) (*websocket.Conn, *http.Response, error) {
+		if diag := k8s.RequestDiagFromContext(ctx); diag == nil {
+			t.Fatal("expected websocket handshake context to include k8s request diag")
+		}
+		return nil, nil, errors.New("dial boom")
+	}
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.com/ws",
+		WebSocket: &restfile.WebSocketRequest{
+			Options: restfile.WebSocketOptions{},
+		},
+	}
+	opts := Options{
+		K8s: &k8s.Plan{
+			Manager: &k8s.Manager{},
+			Config:  &k8s.Config{},
+		},
+	}
+
+	_, _, err := client.StartWebSocket(context.Background(), req, nil, opts)
+	if err == nil {
+		t.Fatalf("expected dial error")
 	}
 }
 

@@ -20,26 +20,26 @@ const (
 func ParseRef(raw string) (Kind, string, error) {
 	val := strings.TrimSpace(raw)
 	if val == "" {
-		return "", "", errors.New("k8s: target is required")
+		return "", "", errors.New("target is required")
 	}
 
 	var lhs, rhs string
-	if i := strings.Index(val, ":"); i >= 0 {
-		lhs = strings.TrimSpace(val[:i])
-		rhs = strings.TrimSpace(val[i+1:])
-	} else if i := strings.Index(val, "/"); i >= 0 {
-		lhs = strings.TrimSpace(val[:i])
-		rhs = strings.TrimSpace(val[i+1:])
+	if b, a, ok := strings.Cut(val, ":"); ok {
+		lhs = strings.TrimSpace(b)
+		rhs = strings.TrimSpace(a)
+	} else if c, d, k := strings.Cut(val, "/"); k {
+		lhs = strings.TrimSpace(c)
+		rhs = strings.TrimSpace(d)
 	} else {
 		return Pod, val, nil
 	}
 
 	k := ParseKind(lhs)
 	if k == "" {
-		return "", "", fmt.Errorf("k8s: invalid target kind %q", lhs)
+		return "", "", fmt.Errorf("invalid target kind %q", lhs)
 	}
 	if rhs == "" {
-		return "", "", errors.New("k8s: target name is required")
+		return "", "", errors.New("target name is required")
 	}
 	return k, rhs, nil
 }
@@ -63,9 +63,6 @@ func Format(kind Kind, name string) string {
 	return strings.TrimSpace(string(kind)) + ":" + strings.TrimSpace(name)
 }
 
-// IsValidPortName validates non-numeric port references used in @k8s options.
-// It allows template placeholders and otherwise accepts only simple identifier
-// characters to reject clearly malformed values early (for example "!!!").
 func IsValidPortName(raw string) bool {
 	val := strings.TrimSpace(raw)
 	if val == "" || strings.ContainsAny(val, " \t\r\n") {
