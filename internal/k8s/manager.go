@@ -77,6 +77,12 @@ type cacheEntry struct {
 	lastUsed time.Time
 }
 
+type pendingClose struct {
+	key   sessionKey
+	ent   *cacheEntry
+	token chan struct{}
+}
+
 type session struct {
 	localAddr string
 	stopCh    chan struct{}
@@ -278,7 +284,7 @@ func (m *Manager) tryCachedSession(
 		ent.touch(m.now())
 		ses := ent.ses
 		m.mu.Unlock()
-		closeEntries(stale)
+		m.closeEntries(stale)
 
 		if ses.alive() {
 			ses.bindRequestDiag(ctx)
@@ -294,7 +300,7 @@ func (m *Manager) tryCachedSession(
 
 	waitCh, waiting := m.inflight[key]
 	m.mu.Unlock()
-	closeEntries(stale)
+	m.closeEntries(stale)
 	if !waiting {
 		return nil, cachedDialAcquire, nil
 	}
@@ -374,23 +380,29 @@ func (m *Manager) claimInflight(key sessionKey) (chan struct{}, cachedDialStep, 
 	stale := m.purgeLocked()
 	if m.cache[key] != nil || m.inflight[key] != nil {
 		m.mu.Unlock()
-		closeEntries(stale)
+		m.closeEntries(stale)
 		return nil, cachedDialRetry, nil
 	}
 
 	token := make(chan struct{})
 	m.inflight[key] = token
 	m.mu.Unlock()
-	closeEntries(stale)
+	m.closeEntries(stale)
 	return token, cachedDialAcquire, nil
 }
 
 func (m *Manager) evictCachedSession(key sessionKey, ent *cacheEntry) {
 	m.mu.Lock()
+	var pending *pendingClose
 	if cur := m.cache[key]; cur == ent {
-		delete(m.cache, key)
+		pending = m.reserveCloseLocked(key, ent)
 	}
 	m.mu.Unlock()
+
+	if pending != nil {
+		m.closeEntries([]*pendingClose{pending})
+		return
+	}
 	_ = ent.close()
 }
 
@@ -464,22 +476,40 @@ func (m *Manager) dialSession(ctx context.Context, ses *session, network string)
 	return m.dial(ctx, n, ses.localAddr)
 }
 
-func (m *Manager) purgeLocked() []*cacheEntry {
+func (m *Manager) purgeLocked() []*pendingClose {
 	now := m.now()
-	var stale []*cacheEntry
+	var stale []*pendingClose
 	for key, ent := range m.cache {
 		if now.Sub(ent.lastUsed) <= m.ttl && ent.alive() {
 			continue
 		}
-		delete(m.cache, key)
-		stale = append(stale, ent)
+		stale = append(stale, m.reserveCloseLocked(key, ent))
 	}
 	return stale
 }
 
-func closeEntries(entries []*cacheEntry) {
-	for _, ent := range entries {
-		_ = ent.close()
+func (m *Manager) reserveCloseLocked(key sessionKey, ent *cacheEntry) *pendingClose {
+	delete(m.cache, key)
+	if ent == nil {
+		return nil
+	}
+	if _, ok := m.inflight[key]; ok {
+		return &pendingClose{key: key, ent: ent}
+	}
+	token := make(chan struct{})
+	m.inflight[key] = token
+	return &pendingClose{key: key, ent: ent, token: token}
+}
+
+func (m *Manager) closeEntries(entries []*pendingClose) {
+	for _, pending := range entries {
+		if pending == nil {
+			continue
+		}
+		_ = pending.ent.close()
+		if pending.token != nil {
+			m.releaseInflight(pending.key, pending.token)
+		}
 	}
 }
 
