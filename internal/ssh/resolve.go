@@ -15,7 +15,7 @@ func Resolve(
 	globalProfiles []restfile.SSHProfile,
 	resolver *vars.Resolver,
 	envLabel string,
-) (*Cfg, error) {
+) (*Config, error) {
 	if spec == nil {
 		return nil, nil
 	}

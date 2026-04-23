@@ -55,7 +55,7 @@ func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 	opts := Options{
 		SSH: &ssh.Plan{
 			Manager: &ssh.Manager{},
-			Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+			Config:  &ssh.Config{Host: "jump", Port: 22, User: "ops"},
 		},
 		K8s: &k8s.Plan{
 			Manager: &k8s.Manager{},

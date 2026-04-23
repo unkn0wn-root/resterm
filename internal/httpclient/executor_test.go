@@ -361,7 +361,7 @@ func TestBuildHTTPClientSSHLeavesTLSDialerNil(t *testing.T) {
 	opts := Options{
 		SSH: &ssh.Plan{
 			Manager: mgr,
-			Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+			Config:  &ssh.Config{Host: "jump", Port: 22, User: "ops"},
 		},
 	}
 
@@ -416,7 +416,7 @@ func TestBuildHTTPClientRejectsSSHAndK8s(t *testing.T) {
 	opts := Options{
 		SSH: &ssh.Plan{
 			Manager: &ssh.Manager{},
-			Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+			Config:  &ssh.Config{Host: "jump", Port: 22, User: "ops"},
 		},
 		K8s: &k8s.Plan{
 			Manager: &k8s.Manager{},
@@ -442,7 +442,7 @@ func TestBuildHTTPClientRejectsProxyWithTunnel(t *testing.T) {
 			ProxyURL: "http://localhost:8080",
 			SSH: &ssh.Plan{
 				Manager: &ssh.Manager{},
-				Config:  &ssh.Cfg{Host: "jump", Port: 22, User: "ops"},
+				Config:  &ssh.Config{Host: "jump", Port: 22, User: "ops"},
 			},
 		}
 		_, err := client.buildHTTPClient(opts)
