@@ -10,7 +10,7 @@ import (
 var errSessionClosed = errors.New("ssh: session closed")
 
 type session struct {
-	cli Client
+	cli client
 
 	stopCh chan struct{}
 	doneCh chan struct{}
@@ -20,7 +20,7 @@ type session struct {
 	closed sync.Once
 }
 
-func newSession(cli Client, keepAlive time.Duration) *session {
+func newSession(cli client, keepAlive time.Duration) *session {
 	s := &session{
 		cli:    cli,
 		stopCh: make(chan struct{}),

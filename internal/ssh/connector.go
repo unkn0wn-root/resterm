@@ -10,12 +10,7 @@ import (
 	xssh "golang.org/x/crypto/ssh"
 )
 
-func dialSSH(ctx context.Context, cfg Config) (Client, error) {
-	execCfg, err := prepareExecConfig(cfg)
-	if err != nil {
-		return nil, err
-	}
-
+func dialSSH(ctx context.Context, execCfg execConfig) (client, error) {
 	addr := execCfg.ep.addr()
 	base := &net.Dialer{Timeout: execCfg.Timeout}
 
@@ -71,21 +66,21 @@ func closeAuthConn(conn net.Conn, closeAuth func() error) error {
 }
 
 type clientWrap struct {
-	Client
+	client
 	closeFn func() error
 }
 
-func wrapClient(cli Client, closeFn func() error) Client {
+func wrapClient(cli client, closeFn func() error) client {
 	if closeFn == nil {
 		return cli
 	}
-	return &clientWrap{Client: cli, closeFn: closeFn}
+	return &clientWrap{client: cli, closeFn: closeFn}
 }
 
 func (c *clientWrap) Close() error {
 	var errs []error
-	if c.Client != nil {
-		if err := c.Client.Close(); err != nil {
+	if c.client != nil {
+		if err := c.client.Close(); err != nil {
 			errs = append(errs, err)
 		}
 	}
