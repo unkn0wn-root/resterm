@@ -17,7 +17,7 @@ var (
 	errManagerClosed      = errors.New("ssh: manager closed")
 )
 
-type Client interface {
+type client interface {
 	Dial(network, addr string) (net.Conn, error)
 	SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error)
 	Close() error
@@ -32,7 +32,7 @@ type Manager struct {
 
 	ttl        time.Duration
 	now        func() time.Time
-	dial       func(context.Context, Config) (Client, error)
+	dial       func(context.Context, execConfig) (client, error)
 	retryDelay time.Duration
 }
 
@@ -87,7 +87,6 @@ func (m *Manager) Close() error {
 	}
 
 	m.mu.Lock()
-	m.initLocked()
 	if m.closed {
 		m.mu.Unlock()
 		return nil
@@ -143,29 +142,10 @@ func (m *Manager) ready() error {
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.initLocked()
 	if m.closed {
 		return errManagerClosed
 	}
 	return nil
-}
-
-func (m *Manager) initLocked() {
-	if m.cache == nil {
-		m.cache = make(map[sessionKey]*entry)
-	}
-	if m.inflight == nil {
-		m.inflight = make(map[sessionKey]chan struct{})
-	}
-	if m.ttl == 0 {
-		m.ttl = defaultTTL
-	}
-	if m.now == nil {
-		m.now = time.Now
-	}
-	if m.retryDelay == 0 {
-		m.retryDelay = dialRetryDelay
-	}
 }
 
 func (m *Manager) dialOnce(
@@ -378,7 +358,7 @@ func (m *Manager) connect(ctx context.Context, cfg execConfig, cached bool) (*se
 		default:
 		}
 
-		cli, err := m.dial(ctx, cfg.Config)
+		cli, err := m.dial(ctx, cfg)
 		if err == nil {
 			keepAlive := time.Duration(0)
 			if cached {

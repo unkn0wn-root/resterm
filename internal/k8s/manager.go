@@ -77,6 +77,12 @@ type cacheEntry struct {
 	lastUsed time.Time
 }
 
+type pendingClose struct {
+	key   sessionKey
+	ent   *cacheEntry
+	token chan struct{}
+}
+
 type session struct {
 	localAddr string
 	stopCh    chan struct{}
@@ -112,16 +118,20 @@ func (e *cacheEntry) close() error {
 }
 
 func NewManager() *Manager {
-	dialer := &net.Dialer{Timeout: defaultLocalDialTimeout}
 	return &Manager{
 		cache:      make(map[sessionKey]*cacheEntry),
 		inflight:   make(map[sessionKey]chan struct{}),
 		ttl:        defaultTTL,
 		now:        time.Now,
 		start:      startSession,
-		dial:       dialer.DialContext,
+		dial:       newLocalDialer(),
 		retryDelay: defaultDialRetryDelay,
 	}
+}
+
+func newLocalDialer() dialFn {
+	dialer := &net.Dialer{Timeout: defaultLocalDialTimeout}
+	return dialer.DialContext
 }
 
 func (m *Manager) SetLoadOptions(opt LoadOptions) {
@@ -168,7 +178,7 @@ func (m *Manager) Close() error {
 func (m *Manager) DialContext(
 	ctx context.Context,
 	cfg Config,
-	network, addr string,
+	network, _ string,
 ) (net.Conn, error) {
 	if err := m.ready(); err != nil {
 		return nil, err
@@ -267,13 +277,14 @@ func (m *Manager) tryCachedSession(
 		m.mu.Unlock()
 		return nil, cachedDialReturn, errManagerClosed
 	}
-	m.purgeLocked()
+	stale := m.purgeLocked()
 
 	ent := m.cache[key]
 	if ent != nil {
 		ent.touch(m.now())
 		ses := ent.ses
 		m.mu.Unlock()
+		m.closeEntries(stale)
 
 		if ses.alive() {
 			ses.bindRequestDiag(ctx)
@@ -289,6 +300,7 @@ func (m *Manager) tryCachedSession(
 
 	waitCh, waiting := m.inflight[key]
 	m.mu.Unlock()
+	m.closeEntries(stale)
 	if !waiting {
 		return nil, cachedDialAcquire, nil
 	}
@@ -360,28 +372,35 @@ func (m *Manager) acquireNewSession(
 
 func (m *Manager) claimInflight(key sessionKey) (chan struct{}, cachedDialStep, error) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	if m.closed {
+		m.mu.Unlock()
 		return nil, cachedDialReturn, errManagerClosed
 	}
-	m.purgeLocked()
+	stale := m.purgeLocked()
 	if m.cache[key] != nil || m.inflight[key] != nil {
+		m.mu.Unlock()
+		m.closeEntries(stale)
 		return nil, cachedDialRetry, nil
 	}
 
 	token := make(chan struct{})
 	m.inflight[key] = token
+	m.mu.Unlock()
+	m.closeEntries(stale)
 	return token, cachedDialAcquire, nil
 }
 
 func (m *Manager) evictCachedSession(key sessionKey, ent *cacheEntry) {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-
+	var pending *pendingClose
 	if cur := m.cache[key]; cur == ent {
-		_ = ent.close()
-		delete(m.cache, key)
+		pending = m.reserveCloseLocked(key, ent)
+	}
+	m.mu.Unlock()
+
+	if pending != nil {
+		m.closeEntries([]*pendingClose{pending})
 		return
 	}
 	_ = ent.close()
@@ -417,6 +436,12 @@ func (m *Manager) connect(ctx context.Context, cfg execConfig, load loadSettings
 
 	var lastErr error
 	for i := range attempts {
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		default:
+		}
+
 		ses, err := m.start(ctx, cfg, load)
 		if err == nil {
 			return ses, nil
@@ -451,14 +476,40 @@ func (m *Manager) dialSession(ctx context.Context, ses *session, network string)
 	return m.dial(ctx, n, ses.localAddr)
 }
 
-func (m *Manager) purgeLocked() {
+func (m *Manager) purgeLocked() []*pendingClose {
 	now := m.now()
+	var stale []*pendingClose
 	for key, ent := range m.cache {
 		if now.Sub(ent.lastUsed) <= m.ttl && ent.alive() {
 			continue
 		}
-		_ = ent.close()
-		delete(m.cache, key)
+		stale = append(stale, m.reserveCloseLocked(key, ent))
+	}
+	return stale
+}
+
+func (m *Manager) reserveCloseLocked(key sessionKey, ent *cacheEntry) *pendingClose {
+	delete(m.cache, key)
+	if ent == nil {
+		return nil
+	}
+	if _, ok := m.inflight[key]; ok {
+		return &pendingClose{key: key, ent: ent}
+	}
+	token := make(chan struct{})
+	m.inflight[key] = token
+	return &pendingClose{key: key, ent: ent, token: token}
+}
+
+func (m *Manager) closeEntries(entries []*pendingClose) {
+	for _, pending := range entries {
+		if pending == nil {
+			continue
+		}
+		_ = pending.ent.close()
+		if pending.token != nil {
+			m.releaseInflight(pending.key, pending.token)
+		}
 	}
 }
 

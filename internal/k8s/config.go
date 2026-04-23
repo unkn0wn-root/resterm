@@ -129,6 +129,12 @@ func (c Config) validate() error {
 	if c.LocalPort < 0 || c.LocalPort > 65535 {
 		return errors.New("local port out of range")
 	}
+	if c.PodWait < 0 {
+		return errors.New("pod wait out of range")
+	}
+	if c.Retries < 0 {
+		return errors.New("retries out of range")
+	}
 	return nil
 }
 

@@ -132,7 +132,7 @@ func (b *blockingCloseClient) release() {
 	})
 }
 
-func newTestManager(dial func(context.Context, Config) (Client, error)) *Manager {
+func newTestManager(dial func(context.Context, execConfig) (client, error)) *Manager {
 	return &Manager{
 		cache:      make(map[sessionKey]*entry),
 		inflight:   make(map[sessionKey]chan struct{}),
@@ -198,7 +198,7 @@ func TestDialNonPersistent(t *testing.T) {
 	cfg := Config{Host: "h", Port: 22, User: "u", Pass: "p", Persist: false}
 	dials := atomic.Int32{}
 
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		dials.Add(1)
 		return &fakeClient{}, nil
 	})
@@ -219,7 +219,7 @@ func TestDialNonPersistentClosesSessionWhenManagerClosesDuringConnect(t *testing
 	started := make(chan struct{})
 	release := make(chan struct{})
 	fc := &fakeClient{}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		close(started)
 		<-release
 		return fc, nil
@@ -257,7 +257,7 @@ func TestDialPersistentCaches(t *testing.T) {
 	dials := atomic.Int32{}
 
 	fc := &fakeClient{}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		dials.Add(1)
 		return fc, nil
 	})
@@ -287,7 +287,7 @@ func TestDialPersistentReconnectsAfterCachedFailure(t *testing.T) {
 	second := &scriptedClient{}
 	dials := atomic.Int32{}
 
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		switch dials.Add(1) {
 		case 1:
 			return first, nil
@@ -339,7 +339,7 @@ func TestEvictCachedSessionClosesOutsideManagerLock(t *testing.T) {
 	defer blocking.release()
 
 	sshDials := atomic.Int32{}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		if cfg.Host == "h" && sshDials.Add(1) == 1 {
 			return blocking, nil
 		}
@@ -376,7 +376,7 @@ func TestPurgeClosesStaleSessionOutsideManagerLock(t *testing.T) {
 	blocking := newBlockingCloseClient(false)
 	defer blocking.release()
 
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		return &fakeClient{}, nil
 	})
 	m.cache[keyForTest(t, cfg)] = newEntry(
@@ -407,7 +407,7 @@ func TestDialPersistentConcurrentSharesClient(t *testing.T) {
 	dials := atomic.Int32{}
 	start := make(chan struct{})
 	fc := &fakeClient{}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		dials.Add(1)
 		<-start
 		return fc, nil
@@ -452,7 +452,7 @@ func TestDialRetry(t *testing.T) {
 	cfg := Config{Host: "h", Port: 22, User: "u", Pass: "p", Persist: false, Retries: 2}
 	count := atomic.Int32{}
 
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		if count.Add(1); count.Load() < 2 {
 			return nil, errBoom
 		}
@@ -487,7 +487,7 @@ func TestKeepAliveStops(t *testing.T) {
 	}
 	fc := &fakeClient{}
 
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		return fc, nil
 	})
 
@@ -517,7 +517,7 @@ func TestKeepAliveFailureReconnects(t *testing.T) {
 	first := &fakeClient{requestErr: errBoom}
 	second := &fakeClient{}
 	dials := atomic.Int32{}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		switch dials.Add(1) {
 		case 1:
 			return first, nil
@@ -553,7 +553,7 @@ func TestKeepAliveFailureReconnects(t *testing.T) {
 func TestPersistentTargetDialFailureClosesSession(t *testing.T) {
 	cfg := Config{Host: "h", Port: 22, User: "u", Pass: "p", Persist: true}
 	fc := &fakeClient{failDial: true}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		return fc, nil
 	})
 
@@ -577,7 +577,7 @@ func TestPersistentTargetDialFailureClosesSession(t *testing.T) {
 func TestManagerCloseIdempotent(t *testing.T) {
 	cfg := Config{Host: "h", Port: 22, User: "u", Pass: "p", Persist: true}
 	fc := &fakeClient{}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		return fc, nil
 	})
 
@@ -600,7 +600,7 @@ func TestManagerCloseIdempotent(t *testing.T) {
 
 func TestClosedManagerRejectsDial(t *testing.T) {
 	cfg := Config{Host: "h", Port: 22, User: "u", Pass: "p"}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		return &fakeClient{}, nil
 	})
 	if err := m.Close(); err != nil {
@@ -615,7 +615,7 @@ func TestClosedManagerRejectsDial(t *testing.T) {
 
 func TestDialRetryHonorsCancelledContext(t *testing.T) {
 	cfg := Config{Host: "h", Port: 22, User: "u", Pass: "p", Persist: false, Retries: 3}
-	m := newTestManager(func(ctx context.Context, cfg Config) (Client, error) {
+	m := newTestManager(func(ctx context.Context, cfg execConfig) (client, error) {
 		return nil, errBoom
 	})
 

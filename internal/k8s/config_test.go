@@ -207,3 +207,20 @@ func TestNormalizeProfileRejectsInvalid(t *testing.T) {
 		}
 	})
 }
+
+func TestPrepareExecConfigRejectsInvalidDirectValues(t *testing.T) {
+	t.Run("negative pod wait", func(t *testing.T) {
+		cfg := podConfig("api", 8080)
+		cfg.PodWait = -time.Second
+		if _, err := prepareExecConfig(cfg); err == nil {
+			t.Fatalf("expected pod wait error")
+		}
+	})
+	t.Run("negative retries", func(t *testing.T) {
+		cfg := podConfig("api", 8080)
+		cfg.Retries = -1
+		if _, err := prepareExecConfig(cfg); err == nil {
+			t.Fatalf("expected retries error")
+		}
+	})
+}

@@ -242,6 +242,244 @@ func TestDialPersistentReconnectsAfterDialFailure(t *testing.T) {
 	}
 }
 
+func TestEvictCachedSessionClosesOutsideManagerLock(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
+	otherCfg := podConfig("other", 8080)
+
+	load, err := m.loadSettings()
+	if err != nil {
+		t.Fatalf("load cfg err: %v", err)
+	}
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+	key := sessionKeyFor(execCfg, load)
+
+	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
+	defer release()
+
+	m.mu.Lock()
+	m.cache[key] = newCacheEntry(blocking, m.now())
+	m.mu.Unlock()
+
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		return stubSession(cfg, "127.0.0.1:18081"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == blocking.localAddr {
+			return nil, errBoom
+		}
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
+		if conn != nil {
+			_ = conn.Close()
+		}
+		errCh <- err
+	}()
+
+	waitForBlockingCloseStarted(t, closeStarted)
+	assertDialFinishes(t, m, otherCfg)
+
+	release()
+	if err := <-errCh; err != nil {
+		t.Fatalf("reconnect dial err: %v", err)
+	}
+}
+
+func TestEvictCachedSessionBlocksSameKeyUntilCloseCompletes(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
+	cfg.LocalPort = 18080
+
+	load, err := m.loadSettings()
+	if err != nil {
+		t.Fatalf("load cfg err: %v", err)
+	}
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+	key := sessionKeyFor(execCfg, load)
+
+	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
+	defer release()
+
+	m.mu.Lock()
+	m.cache[key] = newCacheEntry(blocking, m.now())
+	m.mu.Unlock()
+
+	released := atomic.Bool{}
+	starts := atomic.Int32{}
+	earlyStarts := atomic.Int32{}
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		starts.Add(1)
+		if !released.Load() {
+			earlyStarts.Add(1)
+		}
+		return stubSession(cfg, "127.0.0.1:18081"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == blocking.localAddr {
+			return nil, errBoom
+		}
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	firstErr := dialAsync(m, cfg)
+	waitForBlockingCloseStarted(t, closeStarted)
+	secondErr := dialAsync(m, cfg)
+
+	time.Sleep(50 * time.Millisecond)
+	if got := earlyStarts.Load(); got != 0 {
+		t.Fatalf("expected same-key start to wait for close, got %d early starts", got)
+	}
+
+	released.Store(true)
+	release()
+	assertDialErr(t, firstErr, "first reconnect")
+	assertDialErr(t, secondErr, "same-key reconnect")
+
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("expected one replacement start, got %d", got)
+	}
+}
+
+func TestPurgeClosesStaleSessionOutsideManagerLock(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	now := time.Unix(100, 0)
+	m.now = func() time.Time { return now }
+	m.ttl = time.Minute
+
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
+	otherCfg := podConfig("other", 8080)
+
+	load, err := m.loadSettings()
+	if err != nil {
+		t.Fatalf("load cfg err: %v", err)
+	}
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+	key := sessionKeyFor(execCfg, load)
+
+	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
+	defer release()
+
+	m.mu.Lock()
+	m.cache[key] = newCacheEntry(blocking, now.Add(-2*time.Minute))
+	m.mu.Unlock()
+
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		return stubSession(cfg, "127.0.0.1:18081"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
+		if conn != nil {
+			_ = conn.Close()
+		}
+		errCh <- err
+	}()
+
+	waitForBlockingCloseStarted(t, closeStarted)
+	assertDialFinishes(t, m, otherCfg)
+
+	release()
+	if err := <-errCh; err != nil {
+		t.Fatalf("purge dial err: %v", err)
+	}
+}
+
+func TestPurgeBlocksSameKeyUntilCloseCompletes(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	now := time.Unix(100, 0)
+	m.now = func() time.Time { return now }
+	m.ttl = time.Minute
+
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
+	cfg.LocalPort = 18080
+
+	load, err := m.loadSettings()
+	if err != nil {
+		t.Fatalf("load cfg err: %v", err)
+	}
+	execCfg, err := prepareExecConfig(cfg)
+	if err != nil {
+		t.Fatalf("prepare cfg err: %v", err)
+	}
+	key := sessionKeyFor(execCfg, load)
+
+	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
+	defer release()
+
+	m.mu.Lock()
+	m.cache[key] = newCacheEntry(blocking, now.Add(-2*time.Minute))
+	m.mu.Unlock()
+
+	released := atomic.Bool{}
+	starts := atomic.Int32{}
+	earlyStarts := atomic.Int32{}
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		starts.Add(1)
+		if !released.Load() {
+			earlyStarts.Add(1)
+		}
+		return stubSession(cfg, "127.0.0.1:18081"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	firstErr := dialAsync(m, cfg)
+	waitForBlockingCloseStarted(t, closeStarted)
+	secondErr := dialAsync(m, cfg)
+
+	time.Sleep(50 * time.Millisecond)
+	if got := earlyStarts.Load(); got != 0 {
+		t.Fatalf("expected same-key start to wait for close, got %d early starts", got)
+	}
+
+	released.Store(true)
+	release()
+	assertDialErr(t, firstErr, "first purge reconnect")
+	assertDialErr(t, secondErr, "same-key purge reconnect")
+
+	if got := starts.Load(); got != 1 {
+		t.Fatalf("expected one replacement start, got %d", got)
+	}
+}
+
 func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 	m := NewManager()
 	t.Cleanup(func() { _ = m.Close() })
@@ -488,6 +726,26 @@ func TestDialRetryHonorsContextCancel(t *testing.T) {
 	}
 	if starts.Load() != 1 {
 		t.Fatalf("expected one start before cancel, got %d", starts.Load())
+	}
+}
+
+func TestDialRetryHonorsPreCancelledContext(t *testing.T) {
+	m := NewManager()
+	starts := atomic.Int32{}
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		starts.Add(1)
+		return nil, errBoom
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := m.DialContext(ctx, podConfig("api", 8080), "tcp", "")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected context canceled, got %v", err)
+	}
+	if starts.Load() != 0 {
+		t.Fatalf("expected no start after pre-cancel, got %d", starts.Load())
 	}
 }
 
@@ -1007,6 +1265,80 @@ func testResolveForwardTarget(
 		return forwardTarget{}, err
 	}
 	return testClusterResolver(cs, namespace).resolveForwardTarget(context.Background(), execCfg)
+}
+
+func newBlockingCloseSession(addr string) (*session, <-chan struct{}, func()) {
+	closeStarted := make(chan struct{})
+	closeRelease := make(chan struct{})
+	var startOnce sync.Once
+	var releaseOnce sync.Once
+
+	s := stubSessionWithClose(addr, func() {
+		startOnce.Do(func() {
+			close(closeStarted)
+		})
+		<-closeRelease
+	})
+	release := func() {
+		releaseOnce.Do(func() {
+			close(closeRelease)
+		})
+	}
+	return s, closeStarted, release
+}
+
+func waitForBlockingCloseStarted(t *testing.T, closeStarted <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-closeStarted:
+	case <-time.After(time.Second):
+		t.Fatalf("close did not start")
+	}
+}
+
+func assertDialFinishes(t *testing.T, m *Manager, cfg Config) {
+	t.Helper()
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
+		if conn != nil {
+			_ = conn.Close()
+		}
+		errCh <- err
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("dial err: %v", err)
+		}
+	case <-time.After(100 * time.Millisecond):
+		t.Fatalf("dial blocked on manager lock")
+	}
+}
+
+func dialAsync(m *Manager, cfg Config) <-chan error {
+	errCh := make(chan error, 1)
+	go func() {
+		conn, err := m.DialContext(context.Background(), cfg, "tcp", "")
+		if conn != nil {
+			_ = conn.Close()
+		}
+		errCh <- err
+	}()
+	return errCh
+}
+
+func assertDialErr(t *testing.T, errCh <-chan error, label string) {
+	t.Helper()
+	select {
+	case err := <-errCh:
+		if err != nil {
+			t.Fatalf("%s err: %v", label, err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("%s timed out", label)
+	}
 }
 
 func stubSession(_ any, addr string) *session {
