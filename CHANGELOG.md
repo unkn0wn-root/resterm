@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.30.3](https://github.com/unkn0wn-root/resterm/compare/v0.30.2...v0.30.3) (2026-04-23)
+
+
+### Features
+
+* **k8s:** improve errors ([934e07a](https://github.com/unkn0wn-root/resterm/commit/934e07aefc36f33f73133cd7138c2cb82b0a2802))
+* make cli follow theming of tui ([b30ed68](https://github.com/unkn0wn-root/resterm/commit/b30ed68824d62d81a2a1eec7b05e274fbdab14c7))
+
+
+### Bug Fixes
+
+* remove leftover wrappers after refactor ([f74a961](https://github.com/unkn0wn-root/resterm/commit/f74a9613bc2f85dde6abd684ce085b000b93472e))
+* request selector and response render ([5e2a423](https://github.com/unkn0wn-root/resterm/commit/5e2a423778ca4e97b039502e4acde6ae8171a383))
+* tests and allow ovveride header in light theme ([5175b74](https://github.com/unkn0wn-root/resterm/commit/5175b74016cae37eb280fc5f38939e5cfd8d025a))
+
 ### [0.30.2](https://github.com/unkn0wn-root/resterm/compare/v0.30.1...v0.30.2) (2026-04-21)
 
 
