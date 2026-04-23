@@ -162,16 +162,6 @@ func (t TargetRef) validate() error {
 	return nil
 }
 
-func (t TargetRef) key() string {
-	t = t.normalize()
-	return targetRefKey(t)
-}
-
-func (t TargetRef) display() string {
-	t = t.normalize()
-	return targetDisplayRef(t)
-}
-
 func (p PortRef) normalize() PortRef {
 	p.Name = strings.TrimSpace(p.Name)
 	if p.Number > 0 {
@@ -294,14 +284,6 @@ func normalizeTargetKind(k TargetKind) TargetKind {
 	default:
 		return k8starget.ParseKind(string(k))
 	}
-}
-
-func (c Config) targetRef() string {
-	return c.Target.key()
-}
-
-func (c Config) portRef() string {
-	return c.Port.String()
 }
 
 func (c Config) DisplayRef() string {
