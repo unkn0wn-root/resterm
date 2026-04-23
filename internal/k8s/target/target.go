@@ -20,7 +20,7 @@ const (
 func ParseRef(raw string) (Kind, string, error) {
 	val := strings.TrimSpace(raw)
 	if val == "" {
-		return "", "", errors.New("k8s: target is required")
+		return "", "", errors.New("target is required")
 	}
 
 	var lhs, rhs string
@@ -36,10 +36,10 @@ func ParseRef(raw string) (Kind, string, error) {
 
 	k := ParseKind(lhs)
 	if k == "" {
-		return "", "", fmt.Errorf("k8s: invalid target kind %q", lhs)
+		return "", "", fmt.Errorf("invalid target kind %q", lhs)
 	}
 	if rhs == "" {
-		return "", "", errors.New("k8s: target name is required")
+		return "", "", errors.New("target name is required")
 	}
 	return k, rhs, nil
 }

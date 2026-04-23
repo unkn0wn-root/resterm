@@ -61,7 +61,7 @@ type execConfig struct {
 func prepareExecConfig(cfg Config) (execConfig, error) {
 	cfg = cfg.normalize()
 	if err := cfg.validate(); err != nil {
-		return execConfig{}, err
+		return execConfig{}, fmt.Errorf("k8s: %w", err)
 	}
 	return execConfig{Config: cfg}, nil
 }
@@ -127,7 +127,7 @@ func (c Config) validate() error {
 		return err
 	}
 	if c.LocalPort < 0 || c.LocalPort > 65535 {
-		return errors.New("k8s: local port out of range")
+		return errors.New("local port out of range")
 	}
 	return nil
 }
@@ -154,10 +154,10 @@ func (t TargetRef) normalize() TargetRef {
 func (t TargetRef) validate() error {
 	t = t.normalize()
 	if t.Name == "" {
-		return errors.New("k8s: target is required")
+		return errors.New("target is required")
 	}
 	if kind := normalizeTargetKind(t.Kind); kind == "" {
-		return fmt.Errorf("k8s: unsupported target kind %q", strings.TrimSpace(string(t.Kind)))
+		return fmt.Errorf("unsupported target kind %q", strings.TrimSpace(string(t.Kind)))
 	}
 	return nil
 }
@@ -184,13 +184,13 @@ func (p PortRef) validate() error {
 	p = p.normalize()
 	switch {
 	case p.Number < 0 || p.Number > 65535:
-		return errors.New("k8s: port out of range")
+		return errors.New("port out of range")
 	case p.Number > 0:
 		return nil
 	case p.Name == "":
-		return errors.New("k8s: port is required")
+		return errors.New("port is required")
 	case !k8starget.IsValidPortName(p.Name):
-		return fmt.Errorf("k8s: invalid port %q", p.Name)
+		return fmt.Errorf("invalid port %q", p.Name)
 	default:
 		return nil
 	}
@@ -207,10 +207,10 @@ func parseProfileOptions(cfg *Config, p restfile.K8sProfile) error {
 	}
 
 	var raw string
-	if err := connprofile.ParsePort("k8s local", &cfg.LocalPort, &raw, p.LocalPortStr); err != nil {
+	if err := connprofile.ParsePort("local", &cfg.LocalPort, &raw, p.LocalPortStr); err != nil {
 		return err
 	}
-	if err := connprofile.ParseDuration("k8s pod wait", &cfg.PodWait, &raw, p.PodWaitStr); err != nil {
+	if err := connprofile.ParseDuration("pod wait", &cfg.PodWait, &raw, p.PodWaitStr); err != nil {
 		return err
 	}
 	if err := connprofile.ParseRetries("k8s", &cfg.Retries, &raw, p.RetriesStr); err != nil {
@@ -233,12 +233,12 @@ func targetFromProfile(p restfile.K8sProfile) (TargetRef, error) {
 	}
 	if rawPod != "" {
 		if tg.Name != "" && (tg.Kind != TargetPod || tg.Name != rawPod) {
-			return TargetRef{}, errors.New("k8s: target conflicts with pod")
+			return TargetRef{}, errors.New("target conflicts with pod")
 		}
 		tg = TargetRef{Kind: TargetPod, Name: rawPod}
 	}
 	if tg.Name == "" {
-		return TargetRef{}, errors.New("k8s: target is required")
+		return TargetRef{}, errors.New("target is required")
 	}
 	return tg, nil
 }
@@ -272,7 +272,7 @@ func parsePortRef(ref *PortRef, raw string) error {
 	n, err := strconv.Atoi(val)
 	if err == nil {
 		if n <= 0 || n > 65535 {
-			return fmt.Errorf("k8s: invalid port %q", val)
+			return fmt.Errorf("invalid port %q", val)
 		}
 		ref.Number = n
 		ref.Name = ""
@@ -280,7 +280,7 @@ func parsePortRef(ref *PortRef, raw string) error {
 	}
 
 	if !k8starget.IsValidPortName(val) {
-		return fmt.Errorf("k8s: invalid port %q", val)
+		return fmt.Errorf("invalid port %q", val)
 	}
 	ref.Number = 0
 	ref.Name = val

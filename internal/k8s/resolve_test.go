@@ -24,6 +24,46 @@ func TestResolveUseMissingWithInline(t *testing.T) {
 	}
 }
 
+func TestResolveUseInvalidProfileReportsDefinitionError(t *testing.T) {
+	spec := &restfile.K8sSpec{Use: "cluster-api"}
+	globalProfiles := []restfile.K8sProfile{{
+		Scope:   restfile.K8sScopeGlobal,
+		Name:    "cluster-api",
+		Line:    1,
+		Invalid: true,
+		Error:   "@k8s global scope requires target and port",
+	}}
+
+	_, err := Resolve(spec, nil, globalProfiles, nil, "")
+	if err == nil {
+		t.Fatal("expected error for invalid profile")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		`profile "cluster-api" is invalid`,
+		"line 1",
+		"@k8s global scope requires target and port",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("expected %q in error %q", want, msg)
+		}
+	}
+}
+
+func TestResolveValidationErrorOmitsPackagePrefix(t *testing.T) {
+	spec := &restfile.K8sSpec{
+		Inline: &restfile.K8sProfile{Pod: "api"},
+	}
+
+	_, err := Resolve(spec, nil, nil, nil, "")
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if got, want := err.Error(), "port is required"; got != want {
+		t.Fatalf("unexpected error: got %q want %q", got, want)
+	}
+}
+
 func TestResolveUseWithInlineOverrides(t *testing.T) {
 	spec := &restfile.K8sSpec{
 		Use: "api",
