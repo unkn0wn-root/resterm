@@ -4,8 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -19,7 +17,7 @@ const (
 	defaultTTL     = 10 * time.Minute
 )
 
-type Cfg struct {
+type Config struct {
 	Name       string
 	Host       string
 	Port       int
@@ -42,51 +40,85 @@ type Cfg struct {
 	Label        string
 }
 
-func NormalizeProfile(p restfile.SSHProfile) (Cfg, error) {
+type endpoint struct {
+	host string
+	port int
+}
+
+type sessionKey struct {
+	label       string
+	name        string
+	host        string
+	port        int
+	user        string
+	keyPath     string
+	passHash    string
+	keyPassHash string
+	knownHosts  string
+	strict      bool
+	agent       bool
+	persist     bool
+	timeout     time.Duration
+	keepAlive   time.Duration
+	retries     int
+}
+
+type execConfig struct {
+	Config
+	ep    endpoint
+	auth  authSpec
+	hk    hostKeySpec
+	retry int
+	key   sessionKey
+}
+
+func NormalizeProfile(p restfile.SSHProfile) (Config, error) {
 	cfg := baseCfg(p)
 	cfg.Name = connprofile.Fallback(cfg.Name, "default")
 	if cfg.Host == "" {
-		return Cfg{}, errors.New("ssh host is required")
+		return Config{}, errors.New("ssh host is required")
 	}
 
 	applyAuth(&cfg, p)
 
 	if err := resolvePaths(&cfg, p); err != nil {
-		return Cfg{}, err
+		return Config{}, err
 	}
 	if err := parseCfg(&cfg, p); err != nil {
-		return Cfg{}, err
+		return Config{}, err
 	}
 
 	return cfg, nil
 }
 
-func baseCfg(p restfile.SSHProfile) Cfg {
-	return Cfg{
-		Name:         strings.TrimSpace(p.Name),
-		Host:         strings.TrimSpace(p.Host),
+func baseCfg(p restfile.SSHProfile) Config {
+	cfg := Config{
+		Name:         p.Name,
+		Host:         p.Host,
 		Port:         defaultPort,
-		Agent:        defaultAgent(p.Agent),
-		KnownHosts:   strings.TrimSpace(p.KnownHosts),
-		Strict:       defaultStrict(p.Strict),
+		Agent:        defaultOpt(p.Agent, true),
+		KnownHosts:   p.KnownHosts,
+		Strict:       defaultOpt(p.Strict, true),
 		Persist:      p.Persist.Set && p.Persist.Val,
 		Timeout:      defaultTimeout,
 		KeepAlive:    0,
 		Retries:      0,
-		PortRaw:      strings.TrimSpace(p.PortStr),
-		TimeoutRaw:   strings.TrimSpace(p.TimeoutStr),
-		KeepAliveRaw: strings.TrimSpace(p.KeepAliveStr),
-		RetriesRaw:   strings.TrimSpace(p.RetriesStr),
+		PortRaw:      p.PortStr,
+		TimeoutRaw:   p.TimeoutStr,
+		KeepAliveRaw: p.KeepAliveStr,
+		RetriesRaw:   p.RetriesStr,
 	}
+	trimConfigStrings(&cfg)
+	return cfg
 }
 
-func applyAuth(cfg *Cfg, p restfile.SSHProfile) {
+func applyAuth(cfg *Config, p restfile.SSHProfile) {
 	trimmedAllowEmpty(&cfg.User, p.User)
 	rawIfSet(&cfg.Pass, p.Pass)
 	rawIfSet(&cfg.KeyPass, p.KeyPass)
 }
 
-func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
+func parseCfg(cfg *Config, p restfile.SSHProfile) error {
 	if err := connprofile.ParsePort("ssh", &cfg.Port, &cfg.PortRaw, p.PortStr); err != nil {
 		return err
 	}
@@ -117,18 +149,11 @@ func parseCfg(cfg *Cfg, p restfile.SSHProfile) error {
 	return nil
 }
 
-func defaultAgent(opt restfile.Opt[bool]) bool {
+func defaultOpt(opt restfile.Opt[bool], def bool) bool {
 	if opt.Set {
 		return opt.Val
 	}
-	return true
-}
-
-func defaultStrict(opt restfile.Opt[bool]) bool {
-	if opt.Set {
-		return opt.Val
-	}
-	return true
+	return def
 }
 
 func defaultKnownHosts() (string, error) {
@@ -138,51 +163,105 @@ func defaultKnownHosts() (string, error) {
 	)
 }
 
-func userHomeDir() string {
-	dir, err := os.UserHomeDir()
-	if err != nil {
+func prepareExecConfig(cfg Config) (execConfig, error) {
+	cfg = cfg.normalize()
+	if cfg.Host == "" {
+		return execConfig{}, errors.New("ssh host required")
+	}
+	if cfg.Port <= 0 || cfg.Port > 65535 {
+		return execConfig{}, errors.New("ssh port out of range")
+	}
+	if cfg.Timeout < 0 {
+		return execConfig{}, errors.New("ssh timeout out of range")
+	}
+	if cfg.KeepAlive < 0 {
+		return execConfig{}, errors.New("ssh keepalive out of range")
+	}
+	if cfg.Retries < 0 {
+		return execConfig{}, errors.New("ssh retries out of range")
+	}
+
+	sp := authSpecFor(cfg)
+	return execConfig{
+		Config: cfg,
+		ep: endpoint{
+			host: cfg.Host,
+			port: cfg.Port,
+		},
+		auth:  sp,
+		hk:    hostKeySpecFor(cfg),
+		retry: cfg.Retries,
+		key:   sessionKeyFor(cfg),
+	}, nil
+}
+
+func (cfg Config) normalize() Config {
+	trimConfigStrings(&cfg)
+	defaultZero(&cfg.Name, "default")
+	defaultZero(&cfg.Port, defaultPort)
+	defaultZero(&cfg.Timeout, defaultTimeout)
+	return cfg
+}
+
+func trimConfigStrings(cfg *Config) {
+	if cfg == nil {
+		return
+	}
+	trimStrings(
+		&cfg.Name,
+		&cfg.Host,
+		&cfg.PortRaw,
+		&cfg.User,
+		&cfg.KeyPath,
+		&cfg.KnownHosts,
+		&cfg.TimeoutRaw,
+		&cfg.KeepAliveRaw,
+		&cfg.RetriesRaw,
+		&cfg.Label,
+	)
+}
+
+func trimStrings(fields ...*string) {
+	for _, f := range fields {
+		if f != nil {
+			*f = strings.TrimSpace(*f)
+		}
+	}
+}
+
+func defaultZero[T comparable](v *T, def T) {
+	var zero T
+	if v != nil && *v == zero {
+		*v = def
+	}
+}
+
+// sessionKeyFor expects cfg to have already passed through Config.normalize.
+func sessionKeyFor(cfg Config) sessionKey {
+	return sessionKey{
+		label:       cfg.Label,
+		name:        cfg.Name,
+		host:        cfg.Host,
+		port:        cfg.Port,
+		user:        cfg.User,
+		keyPath:     cfg.KeyPath,
+		passHash:    hashIfSet(cfg.Pass),
+		keyPassHash: hashIfSet(cfg.KeyPass),
+		knownHosts:  cfg.KnownHosts,
+		strict:      cfg.Strict,
+		agent:       cfg.Agent,
+		persist:     cfg.Persist,
+		timeout:     cfg.Timeout,
+		keepAlive:   cfg.KeepAlive,
+		retries:     cfg.Retries,
+	}
+}
+
+func hashIfSet(secret string) string {
+	if secret == "" {
 		return ""
 	}
-	return dir
-}
-
-func cacheKey(cfg Cfg) string {
-	parts := []string{
-		cfg.Label,
-		cfg.Name,
-		cfg.Host,
-		strconv.Itoa(cfg.Port),
-		cfg.User,
-		authFingerprint(cfg),
-		cfg.KnownHosts,
-		connprofile.BoolKey(cfg.Strict),
-		connprofile.BoolKey(cfg.Agent),
-		connprofile.BoolKey(cfg.Persist),
-		cfg.Timeout.String(),
-		cfg.KeepAlive.String(),
-		strconv.Itoa(cfg.Retries),
-	}
-	return strings.Join(parts, "|")
-}
-
-func authFingerprint(cfg Cfg) string {
-	var parts []string
-
-	if cfg.KeyPath != "" {
-		parts = append(parts, "key:"+cfg.KeyPath)
-	}
-
-	if cfg.Pass != "" {
-		parts = append(parts, "pass:"+hashSecret(cfg.Pass))
-	}
-	if cfg.KeyPass != "" {
-		parts = append(parts, "keypass:"+hashSecret(cfg.KeyPass))
-	}
-
-	if len(parts) == 0 {
-		return "noauth"
-	}
-	return strings.Join(parts, ",")
+	return hashSecret(secret)
 }
 
 func hashSecret(secret string) string {
@@ -190,7 +269,7 @@ func hashSecret(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func resolvePaths(cfg *Cfg, p restfile.SSHProfile) error {
+func resolvePaths(cfg *Config, p restfile.SSHProfile) error {
 	if p.Key != "" {
 		keyPath, err := connprofile.ExpandPath(p.Key, "cannot resolve home directory for ssh path")
 		if err != nil {

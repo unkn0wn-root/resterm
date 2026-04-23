@@ -3,27 +3,19 @@ package ssh
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"os"
-	"path/filepath"
-	"strconv"
 	"sync"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/tunnel"
-	xssh "golang.org/x/crypto/ssh"
-	"golang.org/x/crypto/ssh/agent"
-	knownhosts "golang.org/x/crypto/ssh/knownhosts"
 )
 
 const dialRetryDelay = 150 * time.Millisecond
 
-var defaultKeyPaths = []string{
-	filepath.Join(userHomeDir(), ".ssh", "id_ed25519"),
-	filepath.Join(userHomeDir(), ".ssh", "id_rsa"),
-	filepath.Join(userHomeDir(), ".ssh", "id_ecdsa"),
-}
+var (
+	errManagerUnavailable = errors.New("ssh: manager unavailable")
+	errManagerClosed      = errors.New("ssh: manager closed")
+)
 
 type Client interface {
 	Dial(network, addr string) (net.Conn, error)
@@ -32,26 +24,33 @@ type Client interface {
 }
 
 type Manager struct {
-	mu    sync.Mutex
-	cache map[string]*entry
-	ttl   time.Duration
-	now   func() time.Time
-	dial  func(context.Context, Cfg) (Client, error)
+	mu sync.Mutex
+
+	cache    map[sessionKey]*entry
+	inflight map[sessionKey]chan struct{}
+	closed   bool
+
+	ttl        time.Duration
+	now        func() time.Time
+	dial       func(context.Context, Config) (Client, error)
+	retryDelay time.Duration
 }
+
+type cachedDialStep uint8
+
+const (
+	cachedDialReturn cachedDialStep = iota
+	cachedDialRetry
+	cachedDialAcquire
+)
 
 type entry struct {
-	cfg      Cfg
-	cli      Client
+	ses      *session
 	lastUsed time.Time
-	stop     chan struct{}
 }
 
-func newEntry(cfg Cfg, cli Client, now time.Time) *entry {
-	ent := &entry{cfg: cfg, cli: cli, lastUsed: now, stop: make(chan struct{})}
-	if cfg.KeepAlive > 0 {
-		go keepAliveLoop(cli, cfg.KeepAlive, ent.stop)
-	}
-	return ent
+func newEntry(ses *session, now time.Time) *entry {
+	return &entry{ses: ses, lastUsed: now}
 }
 
 func (e *entry) touch(now time.Time) {
@@ -60,116 +59,337 @@ func (e *entry) touch(now time.Time) {
 	}
 }
 
+func (e *entry) alive() bool {
+	return e != nil && e.ses.alive()
+}
+
 func (e *entry) close() error {
-	return closeEntry(e)
+	if e == nil {
+		return nil
+	}
+	return e.ses.close()
 }
 
 func NewManager() *Manager {
 	return &Manager{
-		cache: make(map[string]*entry),
-		ttl:   defaultTTL,
-		now:   time.Now,
-		dial:  dialSSH,
+		cache:      make(map[sessionKey]*entry),
+		inflight:   make(map[sessionKey]chan struct{}),
+		ttl:        defaultTTL,
+		now:        time.Now,
+		dial:       dialSSH,
+		retryDelay: dialRetryDelay,
 	}
 }
 
 func (m *Manager) Close() error {
+	if m == nil {
+		return nil
+	}
+
 	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.initLocked()
+	if m.closed {
+		m.mu.Unlock()
+		return nil
+	}
+	m.closed = true
+
+	cache := m.cache
+	inflight := m.inflight
+	m.cache = make(map[sessionKey]*entry)
+	m.inflight = make(map[sessionKey]chan struct{})
+	m.mu.Unlock()
+
+	for _, ch := range inflight {
+		close(ch)
+	}
+
 	var errs []error
-	for key, ent := range m.cache {
+	for _, ent := range cache {
 		if err := ent.close(); err != nil {
 			errs = append(errs, err)
 		}
-		delete(m.cache, key)
 	}
 	return errors.Join(errs...)
 }
 
 func (m *Manager) DialContext(
 	ctx context.Context,
-	cfg Cfg,
+	cfg Config,
 	network, addr string,
 ) (net.Conn, error) {
-	if cfg.Host == "" {
-		return nil, fmt.Errorf("ssh host required")
+	if err := m.ready(); err != nil {
+		return nil, err
 	}
-	if !cfg.Persist {
-		return m.dialOnce(ctx, cfg, network, addr)
-	}
-	return m.dialCached(ctx, cfg, network, addr)
-}
 
-func (m *Manager) dialOnce(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
-	cli, err := m.connect(ctx, cfg)
+	execCfg, err := prepareExecConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 
-	conn, err := cli.Dial(network, addr)
-	if err != nil {
-		return nil, joinCloseErr(err, cli.Close())
+	if !execCfg.Persist {
+		return m.dialOnce(ctx, execCfg, network, addr)
 	}
-
-	return tunnel.WrapConn(conn, cli.Close), nil
+	return m.dialCached(ctx, execCfg, network, addr)
 }
 
-func (m *Manager) dialCached(ctx context.Context, cfg Cfg, network, addr string) (net.Conn, error) {
-	key := cacheKey(cfg)
+func (m *Manager) ready() error {
+	if m == nil {
+		return errManagerUnavailable
+	}
+	if m.dial == nil {
+		return errManagerUnavailable
+	}
 
 	m.mu.Lock()
-	m.purgeLocked()
+	defer m.mu.Unlock()
+	m.initLocked()
+	if m.closed {
+		return errManagerClosed
+	}
+	return nil
+}
+
+func (m *Manager) initLocked() {
+	if m.cache == nil {
+		m.cache = make(map[sessionKey]*entry)
+	}
+	if m.inflight == nil {
+		m.inflight = make(map[sessionKey]chan struct{})
+	}
+	if m.ttl == 0 {
+		m.ttl = defaultTTL
+	}
+	if m.now == nil {
+		m.now = time.Now
+	}
+	if m.retryDelay == 0 {
+		m.retryDelay = dialRetryDelay
+	}
+}
+
+func (m *Manager) dialOnce(
+	ctx context.Context,
+	cfg execConfig,
+	network, addr string,
+) (net.Conn, error) {
+	ses, err := m.connect(ctx, cfg, false)
+	if err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	closed := m.closed
+	m.mu.Unlock()
+	if closed {
+		return nil, joinCloseErr(errManagerClosed, ses.close())
+	}
+
+	conn, err := ses.dial(network, addr)
+	if err != nil {
+		return nil, joinCloseErr(err, ses.close())
+	}
+	return tunnel.WrapConn(conn, ses.close), nil
+}
+
+func (m *Manager) dialCached(
+	ctx context.Context,
+	cfg execConfig,
+	network, addr string,
+) (net.Conn, error) {
+	key := cfg.key
+
+	for {
+		conn, step, err := m.tryCachedSession(ctx, key, network, addr)
+		switch step {
+		case cachedDialReturn:
+			return conn, err
+		case cachedDialRetry:
+			continue
+		}
+
+		conn, step, err = m.acquireNewSession(ctx, key, cfg, network, addr)
+		switch step {
+		case cachedDialReturn:
+			return conn, err
+		case cachedDialRetry:
+			continue
+		default:
+			return nil, errors.New("ssh: invalid cached dial state")
+		}
+	}
+}
+
+func (m *Manager) tryCachedSession(
+	ctx context.Context,
+	key sessionKey,
+	network, addr string,
+) (net.Conn, cachedDialStep, error) {
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil, cachedDialReturn, errManagerClosed
+	}
+	stale := m.purgeLocked()
+
 	ent := m.cache[key]
 	if ent != nil {
 		ent.touch(m.now())
-		cli := ent.cli
+		ses := ent.ses
 		m.mu.Unlock()
-		if conn, err := cli.Dial(network, addr); err == nil {
-			return conn, nil
+		closeEntries(stale)
+
+		if ses.alive() {
+			conn, err := ses.dial(network, addr)
+			if err == nil {
+				return conn, cachedDialReturn, nil
+			}
 		}
 
-		m.mu.Lock()
-		_ = ent.close()
-		delete(m.cache, key)
+		m.evictCachedSession(key, ent)
+		return nil, cachedDialRetry, nil
 	}
+
+	waitCh, waiting := m.inflight[key]
 	m.mu.Unlock()
-
-	cli, err := m.connect(ctx, cfg)
-	if err != nil {
-		return nil, err
+	closeEntries(stale)
+	if !waiting {
+		return nil, cachedDialAcquire, nil
 	}
 
-	ent = newEntry(cfg, cli, m.now())
+	select {
+	case <-waitCh:
+		return nil, cachedDialRetry, nil
+	case <-ctx.Done():
+		return nil, cachedDialReturn, ctx.Err()
+	}
+}
 
-	conn, err := cli.Dial(network, addr)
+func (m *Manager) acquireNewSession(
+	ctx context.Context,
+	key sessionKey,
+	cfg execConfig,
+	network, addr string,
+) (net.Conn, cachedDialStep, error) {
+	token, step, err := m.claimInflight(key)
+	if step != cachedDialAcquire {
+		return nil, step, err
+	}
+
+	ses, err := m.connect(ctx, cfg, true)
 	if err != nil {
-		return nil, joinCloseErr(err, ent.close())
+		m.releaseInflight(key, token)
+		return nil, cachedDialReturn, err
 	}
 
 	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		m.releaseInflight(key, token)
+		return nil, cachedDialReturn, joinCloseErr(errManagerClosed, ses.close())
+	}
+	if cur := m.cache[key]; cur != nil && cur.alive() {
+		m.mu.Unlock()
+		_ = ses.close()
+		m.releaseInflight(key, token)
+
+		conn, dialErr := cur.ses.dial(network, addr)
+		if dialErr == nil {
+			return conn, cachedDialReturn, nil
+		}
+		m.evictCachedSession(key, cur)
+		return nil, cachedDialRetry, nil
+	}
+
+	ent := newEntry(ses, m.now())
 	m.cache[key] = ent
 	m.mu.Unlock()
+	m.releaseInflight(key, token)
 
-	return conn, nil
+	conn, err := ses.dial(network, addr)
+	if err == nil {
+		return conn, cachedDialReturn, nil
+	}
+
+	m.mu.Lock()
+	if cur := m.cache[key]; cur == ent {
+		delete(m.cache, key)
+	}
+	m.mu.Unlock()
+	return nil, cachedDialReturn, joinCloseErr(err, ses.close())
 }
 
-func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
-	attempts := cfg.Retries + 1
+func (m *Manager) claimInflight(key sessionKey) (chan struct{}, cachedDialStep, error) {
+	m.mu.Lock()
+
+	if m.closed {
+		m.mu.Unlock()
+		return nil, cachedDialReturn, errManagerClosed
+	}
+	stale := m.purgeLocked()
+	if m.cache[key] != nil || m.inflight[key] != nil {
+		m.mu.Unlock()
+		closeEntries(stale)
+		return nil, cachedDialRetry, nil
+	}
+
+	token := make(chan struct{})
+	m.inflight[key] = token
+	m.mu.Unlock()
+	closeEntries(stale)
+	return token, cachedDialAcquire, nil
+}
+
+func (m *Manager) releaseInflight(key sessionKey, token chan struct{}) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if cur, ok := m.inflight[key]; ok && cur == token {
+		delete(m.inflight, key)
+		close(token)
+	}
+}
+
+func (m *Manager) evictCachedSession(key sessionKey, ent *entry) {
+	m.mu.Lock()
+	if cur := m.cache[key]; cur == ent {
+		delete(m.cache, key)
+	}
+	m.mu.Unlock()
+	_ = ent.close()
+}
+
+func (m *Manager) connect(ctx context.Context, cfg execConfig, cached bool) (*session, error) {
+	attempts := cfg.retry + 1
+	if attempts < 1 {
+		attempts = 1
+	}
+
+	delay := m.retryDelay
+	if delay <= 0 {
+		delay = dialRetryDelay
+	}
+
 	var lastErr error
 	for i := 0; i < attempts; i++ {
-		cli, err := m.dial(ctx, cfg)
-		if err == nil {
-			return cli, nil
-		}
-
-		lastErr = err
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		default:
 		}
+
+		cli, err := m.dial(ctx, cfg.Config)
+		if err == nil {
+			keepAlive := time.Duration(0)
+			if cached {
+				keepAlive = cfg.KeepAlive
+			}
+			return newSession(cli, keepAlive), nil
+		}
+
+		lastErr = err
 		if i+1 < attempts {
-			if err := tunnel.WaitWithContext(ctx, dialRetryDelay); err != nil {
+			if err := tunnel.WaitWithContext(ctx, delay); err != nil {
 				return nil, err
 			}
 		}
@@ -180,223 +400,21 @@ func (m *Manager) connect(ctx context.Context, cfg Cfg) (Client, error) {
 	return nil, lastErr
 }
 
-func (m *Manager) purgeLocked() {
+func (m *Manager) purgeLocked() []*entry {
 	now := m.now()
+	var stale []*entry
 	for key, ent := range m.cache {
-		if now.Sub(ent.lastUsed) > m.ttl {
-			_ = ent.close()
-			delete(m.cache, key)
-		}
-	}
-}
-
-func dialSSH(ctx context.Context, cfg Cfg) (Client, error) {
-	addr := net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port))
-	base := &net.Dialer{Timeout: cfg.Timeout}
-
-	netConn, err := base.DialContext(ctx, "tcp", addr)
-	if err != nil {
-		return nil, err
-	}
-
-	auth, closeAuth, err := authMethods(cfg)
-	if err != nil {
-		cleanupErr := netConn.Close()
-		if closeAuth != nil {
-			cleanupErr = errors.Join(cleanupErr, closeAuth())
-		}
-		return nil, joinCloseErr(err, cleanupErr)
-	}
-
-	hostKeyCb, err := hostKeyCallback(cfg)
-	if err != nil {
-		cleanupErr := netConn.Close()
-		if closeAuth != nil {
-			cleanupErr = errors.Join(cleanupErr, closeAuth())
-		}
-		return nil, joinCloseErr(err, cleanupErr)
-	}
-
-	sshCfg := &xssh.ClientConfig{
-		User:            cfg.User,
-		Auth:            auth,
-		HostKeyCallback: hostKeyCb,
-		Timeout:         cfg.Timeout,
-	}
-	if sshCfg.User == "" {
-		sshCfg.User = os.Getenv("USER")
-	}
-
-	conn, chans, reqs, err := xssh.NewClientConn(netConn, addr, sshCfg)
-	if err != nil {
-		cleanupErr := netConn.Close()
-		if closeAuth != nil {
-			cleanupErr = errors.Join(cleanupErr, closeAuth())
-		}
-		return nil, joinCloseErr(err, cleanupErr)
-	}
-	cli := xssh.NewClient(conn, chans, reqs)
-	return wrapClient(cli, closeAuth), nil
-}
-
-func joinCloseErr(baseErr error, cleanupErr error) error {
-	if cleanupErr == nil {
-		return baseErr
-	}
-	if baseErr == nil {
-		return cleanupErr
-	}
-	return errors.Join(baseErr, cleanupErr)
-}
-
-func authMethods(cfg Cfg) ([]xssh.AuthMethod, func() error, error) {
-	var methods []xssh.AuthMethod
-	var closers []func() error
-
-	if cfg.KeyPath != "" {
-		keyData, err := os.ReadFile(cfg.KeyPath)
-		if err != nil {
-			return nil, closeAll(closers), fmt.Errorf("read ssh key: %w", err)
-		}
-
-		signer, err := parseKey(keyData, cfg.KeyPass)
-		if err != nil {
-			return nil, closeAll(closers), err
-		}
-
-		methods = append(methods, xssh.PublicKeys(signer))
-	}
-
-	if cfg.KeyPath == "" && cfg.Pass == "" {
-		if signer := loadDefaultKey(cfg.KeyPass); signer != nil {
-			methods = append(methods, xssh.PublicKeys(signer))
-		}
-	}
-
-	if cfg.Agent {
-		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
-			conn, err := net.Dial("unix", sock)
-			if err == nil {
-				closers = append(closers, conn.Close)
-				methods = append(methods, xssh.PublicKeysCallback(agent.NewClient(conn).Signers))
-			}
-		}
-	}
-
-	if cfg.Pass != "" {
-		methods = append(methods, xssh.Password(cfg.Pass))
-	}
-
-	if len(methods) == 0 {
-		return nil, closeAll(closers), errors.New("no ssh auth methods")
-	}
-	return methods, closeAll(closers), nil
-}
-
-func closeAll(fns []func() error) func() error {
-	if len(fns) == 0 {
-		return nil
-	}
-	return func() error {
-		var errs []error
-		for _, fn := range fns {
-			if fn == nil {
-				continue
-			}
-			if err := fn(); err != nil {
-				errs = append(errs, err)
-			}
-		}
-		return errors.Join(errs...)
-	}
-}
-
-func parseKey(data []byte, pass string) (xssh.Signer, error) {
-	if pass == "" {
-		return xssh.ParsePrivateKey(data)
-	}
-	return xssh.ParsePrivateKeyWithPassphrase(data, []byte(pass))
-}
-
-func loadDefaultKey(pass string) xssh.Signer {
-	for _, p := range defaultKeyPaths {
-		data, err := os.ReadFile(p)
-		if err != nil {
+		if now.Sub(ent.lastUsed) <= m.ttl && ent.alive() {
 			continue
 		}
-		signer, err := parseKey(data, pass)
-		if err != nil {
-			continue
-		}
-		return signer
+		delete(m.cache, key)
+		stale = append(stale, ent)
 	}
-	return nil
+	return stale
 }
 
-func hostKeyCallback(cfg Cfg) (xssh.HostKeyCallback, error) {
-	if !cfg.Strict {
-		return xssh.InsecureIgnoreHostKey(), nil
+func closeEntries(entries []*entry) {
+	for _, ent := range entries {
+		_ = ent.close()
 	}
-	if cfg.KnownHosts == "" {
-		return nil, errors.New("strict host key but no known_hosts")
-	}
-	return knownhosts.New(cfg.KnownHosts)
-}
-
-func keepAliveLoop(cli Client, interval time.Duration, stop <-chan struct{}) {
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	for {
-		select {
-		case <-stop:
-			return
-		case <-t.C:
-			_, _, err := cli.SendRequest("keepalive@openssh.com", true, nil)
-			if err != nil {
-				return
-			}
-		}
-	}
-}
-
-func closeEntry(ent *entry) error {
-	if ent == nil {
-		return nil
-	}
-	select {
-	case <-ent.stop:
-	default:
-		close(ent.stop)
-	}
-	if ent.cli != nil {
-		return ent.cli.Close()
-	}
-	return nil
-}
-
-type clientWrap struct {
-	Client
-	closeFn func() error
-}
-
-func wrapClient(cli Client, closeFn func() error) Client {
-	if closeFn == nil {
-		return cli
-	}
-	return &clientWrap{Client: cli, closeFn: closeFn}
-}
-
-func (c *clientWrap) Close() error {
-	var errs []error
-	if c.Client != nil {
-		if err := c.Client.Close(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	if c.closeFn != nil {
-		if err := c.closeFn(); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
 }

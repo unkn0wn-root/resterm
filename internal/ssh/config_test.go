@@ -157,7 +157,7 @@ func TestNormalizeProfileRejectsInvalidNumbers(t *testing.T) {
 }
 
 func TestCacheKeyReflectsAuthAndOptions(t *testing.T) {
-	base := Cfg{
+	base := Config{
 		Label:      "env",
 		Name:       "edge",
 		Host:       "jump",
@@ -174,29 +174,59 @@ func TestCacheKeyReflectsAuthAndOptions(t *testing.T) {
 		KeepAlive:  2 * time.Second,
 		Retries:    1,
 	}
-	baseKey := cacheKey(base)
+	baseKey := sessionKeyFor(base)
 
 	changedPass := base
 	changedPass.Pass = "pw2"
-	if cacheKey(changedPass) == baseKey {
+	if sessionKeyFor(changedPass) == baseKey {
 		t.Fatalf("expected cache key to change when password changes")
 	}
 
 	changedKeyPass := base
 	changedKeyPass.KeyPass = "kp2"
-	if cacheKey(changedKeyPass) == baseKey {
+	if sessionKeyFor(changedKeyPass) == baseKey {
 		t.Fatalf("expected cache key to change when key passphrase changes")
 	}
 
 	changedKeepAlive := base
 	changedKeepAlive.KeepAlive = base.KeepAlive + time.Second
-	if cacheKey(changedKeepAlive) == baseKey {
+	if sessionKeyFor(changedKeepAlive) == baseKey {
 		t.Fatalf("expected cache key to change when keepalive changes")
 	}
 
 	changedRetries := base
 	changedRetries.Retries = base.Retries + 1
-	if cacheKey(changedRetries) == baseKey {
+	if sessionKeyFor(changedRetries) == baseKey {
 		t.Fatalf("expected cache key to change when retries changes")
+	}
+}
+
+func TestPrepareExecConfigNormalizesDefaults(t *testing.T) {
+	execCfg, err := prepareExecConfig(Config{Host: " jump "})
+	if err != nil {
+		t.Fatalf("prepare config: %v", err)
+	}
+	if execCfg.Name != "default" || execCfg.Host != "jump" {
+		t.Fatalf("unexpected normalized identity: %+v", execCfg.Config)
+	}
+	if execCfg.Port != defaultPort || execCfg.Timeout != defaultTimeout {
+		t.Fatalf("unexpected normalized defaults: %+v", execCfg.Config)
+	}
+	if execCfg.ep.host != "jump" || execCfg.ep.port != defaultPort {
+		t.Fatalf("unexpected endpoint: %+v", execCfg.ep)
+	}
+}
+
+func TestPrepareExecConfigPreservesRawSecrets(t *testing.T) {
+	execCfg, err := prepareExecConfig(Config{
+		Host:    " jump ",
+		Pass:    " pw ",
+		KeyPass: " kp ",
+	})
+	if err != nil {
+		t.Fatalf("prepare config: %v", err)
+	}
+	if execCfg.Pass != " pw " || execCfg.KeyPass != " kp " {
+		t.Fatalf("expected raw secrets to be preserved: %+v", execCfg.Config)
 	}
 }
