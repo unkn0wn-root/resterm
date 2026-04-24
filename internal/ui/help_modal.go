@@ -242,8 +242,10 @@ func (m Model) helpSections() []helpSection {
 						},
 						"gg / G",
 					),
-					"Response/History tab: top / bottom",
+					"Response/History tab: top / bottom; Workflow list: first / last step",
 				},
+				{"Enter / Esc", "Workflow tab: focus detail / return to step list"},
+				{"j / k / PgUp / PgDn", "Workflow tab: step navigation or focused detail scroll"},
 				{
 					m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"),
 					"Toggle request/response headers view",

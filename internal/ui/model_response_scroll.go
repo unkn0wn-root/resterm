@@ -12,6 +12,14 @@ func (m *Model) scrollShortcutToEdge(top bool) (tea.Cmd, bool) {
 			m.scrollHistoryToEdge(top)
 			return nil, true
 		}
+		if pane != nil && pane.activeTab == responseTabStats {
+			if stats := workflowStatsFromPane(pane); stats != nil {
+				if stats.detailFocus {
+					return m.scrollWorkflowStatsDetailEdge(top), true
+				}
+				return m.jumpWorkflowStatsEdge(top), true
+			}
+		}
 		return m.scrollResponseToEdge(top), true
 	case focusFile, focusRequests, focusWorkflows:
 		return nil, m.scrollNavigatorToEdge(top)

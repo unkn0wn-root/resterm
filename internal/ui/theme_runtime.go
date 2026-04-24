@@ -268,9 +268,6 @@ func (m *Model) invalidateThemedCaches() {
 		snapshot.statsColored = ""
 		snapshot.traceReport = timelineReport{}
 		snapshot.explain.cache = explainRenderCache{}
-		if snapshot.workflowStats != nil {
-			snapshot.workflowStats.invalidate()
-		}
 	}
 	for i := range m.responsePanes {
 		m.responsePanes[i].invalidateCaches()

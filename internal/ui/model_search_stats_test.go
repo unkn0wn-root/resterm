@@ -17,6 +17,7 @@ func TestWorkflowStatsSearchUsesRenderedContent(t *testing.T) {
 		t.Fatal("expected response pane")
 	}
 	pane.viewport.Width = 60
+	pane.viewport.Height = 18
 	pane.activeTab = responseTabStats
 
 	view := &workflowStatsView{
@@ -39,9 +40,7 @@ func TestWorkflowStatsSearchUsesRenderedContent(t *testing.T) {
 				},
 			},
 		},
-		selected:    0,
-		expanded:    map[int]bool{0: true},
-		renderCache: make(map[int]workflowStatsRender),
+		selected: 0,
 	}
 
 	pane.snapshot = &responseSnapshot{
@@ -73,6 +72,7 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 		t.Fatal("expected response pane")
 	}
 	pane.viewport.Width = 80
+	pane.viewport.Height = 18
 	pane.activeTab = responseTabStats
 
 	view := &workflowStatsView{
@@ -108,8 +108,7 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 				},
 			},
 		},
-		expanded:    map[int]bool{0: true, 1: true},
-		renderCache: make(map[int]workflowStatsRender),
+		selected: 0,
 	}
 
 	pane.snapshot = &responseSnapshot{
@@ -123,7 +122,7 @@ func TestWorkflowStatsSearchKeepsIndexWhenSelectionChanges(t *testing.T) {
 
 	if status := statusFromCmd(
 		t,
-		model.applyResponseSearch("match", false),
+		model.applyResponseSearch("Call", false),
 	); status == nil ||
 		status.level != statusInfo {
 		t.Fatalf("expected search to start, got %v", status)

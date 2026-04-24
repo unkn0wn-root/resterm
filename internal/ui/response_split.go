@@ -612,9 +612,8 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 
 	if tab == responseTabStats {
 		snapshot := pane.snapshot
-		if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
-			snapshot.workflowStats != nil {
-			return m.syncWorkflowStatsPane(pane, w, snapshot)
+		if workflowStatsFromPane(pane) != nil {
+			return m.syncWorkflowStatsPane(pane, w, h, snapshot)
 		}
 	}
 	if tab == responseTabExplain && !pane.search.hasQuery() {
@@ -765,12 +764,13 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 func (m *Model) syncWorkflowStatsPane(
 	pane *responsePaneState,
 	width int,
+	height int,
 	snapshot *responseSnapshot,
 ) tea.Cmd {
 	if pane == nil || snapshot == nil || snapshot.workflowStats == nil {
 		return nil
 	}
-	render := snapshot.workflowStats.render(width)
+	render := snapshot.workflowStats.render(width, height)
 	pane.setCacheForTab(responseTabStats, rawViewText, pane.headersView, cachedWrap{
 		width:   width,
 		content: render.content,
@@ -786,9 +786,8 @@ func (m *Model) syncWorkflowStatsPane(
 	)
 	decorated = m.applyResponseContentStyles(responseTabStats, decorated)
 	pane.viewport.SetContent(decorated)
-	pane.restoreScrollForActiveTab()
-	snapshot.workflowStats.ensureVisible(pane, render)
 	ensureResponseMatchInView(pane, render.content)
+	pane.viewport.SetYOffset(0)
 	pane.setCurrPosition()
 	return nil
 }
