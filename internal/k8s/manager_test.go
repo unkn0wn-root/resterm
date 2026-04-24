@@ -242,6 +242,66 @@ func TestDialPersistentReconnectsAfterDialFailure(t *testing.T) {
 	}
 }
 
+func TestDialPersistentInitialDialFailureBlocksSameKeyUntilCloseCompletes(t *testing.T) {
+	m := NewManager()
+	t.Cleanup(func() { _ = m.Close() })
+
+	cfg := podConfig("api", 8080)
+	cfg.Persist = true
+	cfg.LocalPort = 18080
+
+	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
+	defer release()
+
+	released := atomic.Bool{}
+	starts := atomic.Int32{}
+	earlyStarts := atomic.Int32{}
+	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+		n := starts.Add(1)
+		if n > 1 && !released.Load() {
+			earlyStarts.Add(1)
+		}
+		if n == 1 {
+			return blocking, nil
+		}
+		return stubSession(cfg, "127.0.0.1:18081"), nil
+	}
+	m.dial = func(ctx context.Context, network, address string) (net.Conn, error) {
+		if address == blocking.localAddr {
+			return nil, errBoom
+		}
+		c1, c2 := net.Pipe()
+		_ = c2.Close()
+		return c1, nil
+	}
+
+	firstErr := dialAsync(m, cfg)
+	waitForBlockingCloseStarted(t, closeStarted)
+	secondErr := dialAsync(m, cfg)
+
+	time.Sleep(50 * time.Millisecond)
+	if got := earlyStarts.Load(); got != 0 {
+		t.Fatalf("expected same-key start to wait for failed session close, got %d early starts", got)
+	}
+
+	released.Store(true)
+	release()
+
+	select {
+	case err := <-firstErr:
+		if !errors.Is(err, errBoom) {
+			t.Fatalf("expected first dial failure, got %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatalf("first failed dial timed out")
+	}
+	assertDialErr(t, secondErr, "same-key retry after failed initial dial")
+
+	if got := starts.Load(); got != 2 {
+		t.Fatalf("expected initial and replacement starts, got %d", got)
+	}
+}
+
 func TestEvictCachedSessionClosesOutsideManagerLock(t *testing.T) {
 	m := NewManager()
 	t.Cleanup(func() { _ = m.Close() })

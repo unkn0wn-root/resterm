@@ -98,15 +98,6 @@ func (c *sessionCache) put(key sessionKey, ses *session, now time.Time) *cacheEn
 	return ent
 }
 
-func (c *sessionCache) deleteSession(key sessionKey, ses *session) {
-	if c == nil {
-		return
-	}
-	if cur := c.entries[key]; cur != nil && cur.ses == ses {
-		delete(c.entries, key)
-	}
-}
-
 func (c *sessionCache) wait(key sessionKey) (chan struct{}, bool) {
 	if c == nil {
 		return nil, false
@@ -308,8 +299,14 @@ func (m *Manager) acquireNewSession(
 	}
 
 	m.mu.Lock()
-	m.cache.deleteSession(key, ses)
+	var pending *pendingClose
+	if cur := m.cache.entry(key); cur != nil && cur.ses == ses {
+		pending = m.cache.reserveClose(key, cur)
+	}
 	m.mu.Unlock()
+	if pending != nil {
+		return nil, cachedDialReturn, joinCleanupErr(err, m.closeEntries([]*pendingClose{pending}))
+	}
 	return nil, cachedDialReturn, joinCleanupErr(err, ses.close())
 }
 
@@ -365,16 +362,20 @@ func (m *Manager) purgeLocked() []*pendingClose {
 	return m.ensureCacheLocked().purge(m.now(), m.ttl)
 }
 
-func (m *Manager) closeEntries(entries []*pendingClose) {
+func (m *Manager) closeEntries(entries []*pendingClose) error {
+	var errs []error
 	for _, pending := range entries {
 		if pending == nil {
 			continue
 		}
-		_ = pending.ent.close()
+		if err := pending.ent.close(); err != nil {
+			errs = append(errs, err)
+		}
 		if pending.token != nil {
 			m.releaseInflight(pending.key, pending.token)
 		}
 	}
+	return errors.Join(errs...)
 }
 
 func sessionKeyFor(cfg execConfig, load loadSettings) sessionKey {
