@@ -3,7 +3,7 @@ package runfmt
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/runfail"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
 
 const ReportSchemaVersion = "1"

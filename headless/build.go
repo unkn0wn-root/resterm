@@ -9,8 +9,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/runcheck"
 	"github.com/unkn0wn-root/resterm/internal/runner"
+	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )

@@ -1,6 +1,6 @@
 package headless
 
-import "github.com/unkn0wn-root/resterm/internal/runfail"
+import "github.com/unkn0wn-root/resterm/internal/runx/fail"
 
 // ExitCodeMode selects whether Report.ExitCode returns detailed classified
 // codes or the legacy pass/fail summary codes.

@@ -1,8 +1,8 @@
 package headless
 
 import (
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/runner"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
 
 func reportFromRunner(rep *runner.Report) *Report {

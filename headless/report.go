@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/runfail"
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
 
 // Kind identifies the executed result type.

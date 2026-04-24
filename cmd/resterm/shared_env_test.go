@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
-	"github.com/unkn0wn-root/resterm/internal/runcheck"
+	"github.com/unkn0wn-root/resterm/internal/runx/check"
 )
 
 func TestParseCompareTargetsRejectsShared(t *testing.T) {

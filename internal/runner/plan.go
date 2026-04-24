@@ -17,8 +17,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/runcheck"
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
+	"github.com/unkn0wn-root/resterm/internal/runx/check"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )

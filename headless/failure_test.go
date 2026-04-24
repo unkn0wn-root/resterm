@@ -3,7 +3,7 @@ package headless
 import (
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/runfail"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
 
 func TestFailureConstantsMatchInternalValues(t *testing.T) {

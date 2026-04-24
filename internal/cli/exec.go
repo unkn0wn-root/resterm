@@ -10,7 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/runcheck"
+	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/telemetry"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
