@@ -5,12 +5,20 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/tunnel"
 )
 
 var errSessionClosed = errors.New("ssh: session closed")
 
+type sshClient interface {
+	Dial(network, addr string) (net.Conn, error)
+	SendRequest(name string, wantReply bool, payload []byte) (bool, []byte, error)
+	Close() error
+}
+
 type session struct {
-	cli client
+	cli sshClient
 
 	stopCh chan struct{}
 	doneCh chan struct{}
@@ -20,7 +28,7 @@ type session struct {
 	closed sync.Once
 }
 
-func newSession(cli client, keepAlive time.Duration) *session {
+func newSession(cli sshClient, keepAlive time.Duration) *session {
 	s := &session{
 		cli:    cli,
 		stopCh: make(chan struct{}),
@@ -40,6 +48,14 @@ func (s *session) dial(network, addr string) (net.Conn, error) {
 		return nil, errSessionClosed
 	}
 	return s.cli.Dial(network, addr)
+}
+
+func (s *session) dialOnce(network, addr string) (net.Conn, error) {
+	conn, err := s.dial(network, addr)
+	if err != nil {
+		return nil, joinCloseErr(err, s.close())
+	}
+	return tunnel.WrapConn(conn, s.close), nil
 }
 
 func (s *session) alive() bool {

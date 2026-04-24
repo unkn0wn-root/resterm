@@ -1,8 +1,6 @@
 package ssh
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -14,7 +12,6 @@ import (
 const (
 	defaultPort    = 22
 	defaultTimeout = 15 * time.Second
-	defaultTTL     = 10 * time.Minute
 )
 
 type Config struct {
@@ -45,31 +42,12 @@ type endpoint struct {
 	port int
 }
 
-type sessionKey struct {
-	label       string
-	name        string
-	host        string
-	port        int
-	user        string
-	keyPath     string
-	passHash    string
-	keyPassHash string
-	knownHosts  string
-	strict      bool
-	agent       bool
-	persist     bool
-	timeout     time.Duration
-	keepAlive   time.Duration
-	retries     int
-}
-
 type execConfig struct {
 	Config
-	ep    endpoint
-	auth  authSpec
-	hk    hostKeySpec
-	retry int
-	key   sessionKey
+	ep   endpoint
+	auth authSpec
+	hk   hostKeySpec
+	key  sessionKey
 }
 
 func NormalizeProfile(p restfile.SSHProfile) (Config, error) {
@@ -188,10 +166,9 @@ func prepareExecConfig(cfg Config) (execConfig, error) {
 			host: cfg.Host,
 			port: cfg.Port,
 		},
-		auth:  sp,
-		hk:    hostKeySpecFor(cfg),
-		retry: cfg.Retries,
-		key:   sessionKeyFor(cfg),
+		auth: sp,
+		hk:   hostKeySpecFor(cfg),
+		key:  sessionKeyFor(cfg),
 	}, nil
 }
 
@@ -234,39 +211,6 @@ func defaultZero[T comparable](v *T, def T) {
 	if v != nil && *v == zero {
 		*v = def
 	}
-}
-
-// sessionKeyFor expects cfg to have already passed through Config.normalize.
-func sessionKeyFor(cfg Config) sessionKey {
-	return sessionKey{
-		label:       cfg.Label,
-		name:        cfg.Name,
-		host:        cfg.Host,
-		port:        cfg.Port,
-		user:        cfg.User,
-		keyPath:     cfg.KeyPath,
-		passHash:    hashIfSet(cfg.Pass),
-		keyPassHash: hashIfSet(cfg.KeyPass),
-		knownHosts:  cfg.KnownHosts,
-		strict:      cfg.Strict,
-		agent:       cfg.Agent,
-		persist:     cfg.Persist,
-		timeout:     cfg.Timeout,
-		keepAlive:   cfg.KeepAlive,
-		retries:     cfg.Retries,
-	}
-}
-
-func hashIfSet(secret string) string {
-	if secret == "" {
-		return ""
-	}
-	return hashSecret(secret)
-}
-
-func hashSecret(secret string) string {
-	sum := sha256.Sum256([]byte(secret))
-	return hex.EncodeToString(sum[:])
 }
 
 func resolvePaths(cfg *Config, p restfile.SSHProfile) error {
