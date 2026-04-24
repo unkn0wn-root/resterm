@@ -37,6 +37,31 @@ func TestMetadataHintPopupLayoutKeepsBelowWhenBothSidesFit(t *testing.T) {
 	}
 }
 
+func TestMetadataHintPopupLayoutCapsVisibleRows(t *testing.T) {
+	m := New(Config{})
+	got, ok := m.metadataHintPopupLayout(80, 40, 10, 2, 50)
+	if !ok {
+		t.Fatal("expected popup layout")
+	}
+	if got.limit != metadataHintMaxRows {
+		t.Fatalf("expected hint limit %d, got %d", metadataHintMaxRows, got.limit)
+	}
+}
+
+func TestMetadataHintPopupLayoutStaysBelowWhenCappedRowsFit(t *testing.T) {
+	m := New(Config{})
+	got, ok := m.metadataHintPopupLayout(80, 50, 10, 30, 50)
+	if !ok {
+		t.Fatal("expected popup layout")
+	}
+	if got.y != 31 {
+		t.Fatalf("expected popup below cursor at row 31, got %d", got.y)
+	}
+	if got.limit != metadataHintMaxRows {
+		t.Fatalf("expected hint limit %d, got %d", metadataHintMaxRows, got.limit)
+	}
+}
+
 func TestMetadataHintPopupLayoutFlipsAboveWhenBelowIsTight(t *testing.T) {
 	m := New(Config{})
 	got, ok := m.metadataHintPopupLayout(50, 12, 10, 8, 5)

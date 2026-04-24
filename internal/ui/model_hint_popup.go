@@ -10,6 +10,7 @@ import (
 )
 
 const metadataHintMaxWidth = 60
+const metadataHintMaxRows = 15
 const metadataHintPreviewMaxWidth = 52
 const metadataHintPreviewMaxHeight = 12
 
@@ -117,16 +118,17 @@ func (m Model) metadataHintPopupLayout(
 		return metadataHintPopupLayout{}, false
 	}
 
+	targetItems := minInt(count, metadataHintMaxRows)
 	limit := 0
 	y := cursorY + 1
 	switch {
-	case belowItems >= count:
-		limit = count
+	case belowItems >= targetItems:
+		limit = targetItems
 	case belowItems == 0 || aboveItems > belowItems:
-		limit = minInt(count, aboveItems)
+		limit = minInt(targetItems, aboveItems)
 		y = cursorY - (limit + box.frameH)
 	default:
-		limit = minInt(count, belowItems)
+		limit = minInt(targetItems, belowItems)
 	}
 	if limit < 1 {
 		return metadataHintPopupLayout{}, false
