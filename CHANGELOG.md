@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.31.2](https://github.com/unkn0wn-root/resterm/compare/v0.31.1...v0.31.2) (2026-04-24)
+
+
+### Features
+
+* limit hints to 15 rows ([f1102b3](https://github.com/unkn0wn-root/resterm/commit/f1102b3f2f5c7ec2ef746e26245a3258a0f16e30))
+
 ### [0.31.1](https://github.com/unkn0wn-root/resterm/compare/v0.30.3...v0.31.1) (2026-04-24)
 
 
