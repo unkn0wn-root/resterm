@@ -1444,6 +1444,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			cmd := m.openSearchPrompt()
 			return combine(cmd)
 		case "esc":
+			if pane != nil && pane.activeTab == responseTabStats {
+				if stats := workflowStatsFromPane(pane); stats != nil && stats.detailFocus {
+					return combine(m.blurWorkflowStatsDetail())
+				}
+			}
 			if pane != nil && pane.activeTab == responseTabHistory {
 				if m.clearHistoryFilter(false) {
 					return combine(nil)
@@ -1471,19 +1476,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			}
 			if pane.activeTab == responseTabStats {
-				snapshot := pane.snapshot
-				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
-					snapshot.workflowStats != nil {
-					if keyStr == "shift+j" || keyStr == "J" {
-						return combine(m.jumpWorkflowStatsSelection(1))
+				if stats := workflowStatsFromPane(pane); stats != nil {
+					if stats.detailFocus {
+						return combine(m.scrollWorkflowStatsDetail(1))
 					}
-					if snapshot.workflowStats.scrollExpanded(pane, 1) {
-						pane.setCurrPosition()
-						return combine(m.selectWorkflowStatsByViewport(pane, snapshot, 1))
-					}
-					pane.viewport.ScrollDown(1)
-					pane.setCurrPosition()
-					return combine(m.selectWorkflowStatsByViewport(pane, snapshot, 1))
+					return combine(m.jumpWorkflowStatsSelection(1))
 				}
 			}
 			if pane.activeTab == responseTabHistory {
@@ -1497,19 +1494,11 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(nil)
 			}
 			if pane.activeTab == responseTabStats {
-				snapshot := pane.snapshot
-				if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
-					snapshot.workflowStats != nil {
-					if keyStr == "shift+k" || keyStr == "K" {
-						return combine(m.jumpWorkflowStatsSelection(-1))
+				if stats := workflowStatsFromPane(pane); stats != nil {
+					if stats.detailFocus {
+						return combine(m.scrollWorkflowStatsDetail(-1))
 					}
-					if snapshot.workflowStats.scrollExpanded(pane, -1) {
-						pane.setCurrPosition()
-						return combine(m.selectWorkflowStatsByViewport(pane, snapshot, -1))
-					}
-					pane.viewport.ScrollUp(1)
-					pane.setCurrPosition()
-					return combine(m.selectWorkflowStatsByViewport(pane, snapshot, -1))
+					return combine(m.jumpWorkflowStatsSelection(-1))
 				}
 			}
 			if pane.activeTab == responseTabHistory {
@@ -1522,6 +1511,12 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane == nil {
 				return combine(nil)
 			}
+			if pane.activeTab == responseTabStats {
+				if workflowStatsFromPane(pane) != nil {
+					page := maxInt(pane.viewport.Height/2, 1)
+					return combine(m.scrollWorkflowStatsDetail(page))
+				}
+			}
 			if pane.activeTab == responseTabHistory {
 				break
 			}
@@ -1532,12 +1527,42 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if pane == nil {
 				return combine(nil)
 			}
+			if pane.activeTab == responseTabStats {
+				if workflowStatsFromPane(pane) != nil {
+					page := maxInt(pane.viewport.Height/2, 1)
+					return combine(m.scrollWorkflowStatsDetail(-page))
+				}
+			}
 			if pane.activeTab == responseTabHistory {
 				break
 			}
 			return combine(m.scrollResponseViewport(pane, func() {
 				pane.viewport.PageUp()
 			}))
+		case "home":
+			if pane == nil {
+				return combine(nil)
+			}
+			if pane.activeTab == responseTabStats {
+				if stats := workflowStatsFromPane(pane); stats != nil {
+					if stats.detailFocus {
+						return combine(m.scrollWorkflowStatsDetailEdge(true))
+					}
+					return combine(m.jumpWorkflowStatsEdge(true))
+				}
+			}
+		case "end":
+			if pane == nil {
+				return combine(nil)
+			}
+			if pane.activeTab == responseTabStats {
+				if stats := workflowStatsFromPane(pane); stats != nil {
+					if stats.detailFocus {
+						return combine(m.scrollWorkflowStatsDetailEdge(false))
+					}
+					return combine(m.jumpWorkflowStatsEdge(false))
+				}
+			}
 		case "left", "ctrl+h", "h":
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
 		case "right", "ctrl+l", "l":
@@ -1548,9 +1573,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				case responseTabHistory:
 					return combine(m.loadHistorySelection(false))
 				case responseTabStats:
-					snapshot := pane.snapshot
-					if snapshot != nil && snapshot.statsKind == statsReportKindWorkflow &&
-						snapshot.workflowStats != nil {
+					if workflowStatsFromPane(pane) != nil {
 						return combine(m.toggleWorkflowStatsExpansion())
 					}
 				}

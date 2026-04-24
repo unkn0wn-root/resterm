@@ -95,10 +95,8 @@ func (m *Model) responseSearchContent(
 	content, cacheKey := m.paneContentForTabDisplay(paneID, tab)
 	if tab == responseTabStats {
 		if pane := m.pane(paneID); pane != nil {
-			snap := pane.snapshot
-			if snap != nil && snap.statsKind == statsReportKindWorkflow &&
-				snap.workflowStats != nil {
-				render := snap.workflowStats.render(width)
+			if stats := workflowStatsFromPane(pane); stats != nil {
+				render := stats.render(width, pane.viewport.Height)
 				content = displayContent(render.content)
 				cacheKey = responseTabStats
 				return content, cacheKey, content

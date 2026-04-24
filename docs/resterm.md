@@ -238,7 +238,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
 - **Headers**: response headers by default; press `g+Shift+H` to toggle into the sent request headers view (cookies included) and back.
-- **Profile** / **Workflow**: latency summaries and histograms from `@profile` runs plus step-by-step workflow breakdowns. The tab label follows the current run type. Press `Shift+J` / `Shift+K` while that view is focused to hop between workflow steps, and Resterm only realigns the viewport if the next step was off screen.
+- **Profile** / **Workflow**: latency summaries and histograms from `@profile` runs plus step-by-step workflow breakdowns. The tab label follows the current run type. Workflow results render as a stable summary plus step list and selected-step detail view. Use `j` / `k` or arrow keys to move between steps, `Enter` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc` or `Enter` to return to the step list.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.
 - **History**: chronological responses for the selected request (live updates). Open a full JSON preview with `p` or delete the focused entry with `d`.
@@ -771,7 +771,7 @@ POST https://example.com/users
 GET https://example.com/users/{{vars.workflow.userId}}
 ```
 
-Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Workflow** tab shows a workflow summary (including started/ended timestamps), and a consolidated entry is written to history so you can review results later. While you read through that summary, tap `Shift+J` / `Shift+K` to move between workflow entries.
+Workflows parsed from the current document appear in the **Workflows** list on the left. Select one and press `Enter` (or `Space`) to run it. Resterm executes each step in order, respects `on-failure=continue`, and streams progress in the status bar. When the run completes the **Workflow** tab shows a workflow summary, stable step list, and selected-step response detail. Resterm selects the first failed or canceled step by default, or the first step when everything passes. Press `Enter` on a selected step to focus its response detail and scroll long responses without changing the selected step. A consolidated entry is written to history so you can review results later.
 
 Key directives and tokens:
 

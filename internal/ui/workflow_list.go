@@ -41,6 +41,11 @@ func (i workflowListItem) Description() string {
 	if count != 1 {
 		info += "s"
 	}
+	mode := strings.TrimSpace(string(i.workflow.DefaultOnFailure))
+	if mode == "" {
+		mode = string(restfile.WorkflowOnFailureStop)
+	}
+	info = strings.Join(compactStrings(info, "on-failure "+mode), " · ")
 	if desc == "" {
 		return info
 	}
