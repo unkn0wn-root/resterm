@@ -22,14 +22,6 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 <summary>See the UI in action</summary>
 
 <p align="center">
-  <strong>Split Hints</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm-split-hints.png" alt="Screenshot of Resterm Hints" width="720" />
-</p>
-
-<p align="center">
   <strong>Light Theme</strong>
 </p>
 
