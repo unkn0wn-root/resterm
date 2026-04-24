@@ -17,31 +17,24 @@ const (
 	StatefulSet      Kind = "statefulset"
 )
 
-func ParseRef(raw string) (Kind, string, error) {
-	val := strings.TrimSpace(raw)
-	if val == "" {
+func ParseRef(ref string) (Kind, string, error) {
+	if ref == "" {
 		return "", "", errors.New("target is required")
 	}
 
-	var lhs, rhs string
-	if b, a, ok := strings.Cut(val, ":"); ok {
-		lhs = strings.TrimSpace(b)
-		rhs = strings.TrimSpace(a)
-	} else if c, d, k := strings.Cut(val, "/"); k {
-		lhs = strings.TrimSpace(c)
-		rhs = strings.TrimSpace(d)
-	} else {
-		return Pod, val, nil
+	kindRef, name, ok := splitRef(ref)
+	if !ok {
+		return Pod, ref, nil
 	}
 
-	k := ParseKind(lhs)
-	if k == "" {
-		return "", "", fmt.Errorf("invalid target kind %q", lhs)
+	kind := ParseKind(kindRef)
+	if kind == "" {
+		return "", "", fmt.Errorf("invalid target kind %q", kindRef)
 	}
-	if rhs == "" {
+	if name == "" {
 		return "", "", errors.New("target name is required")
 	}
-	return k, rhs, nil
+	return kind, name, nil
 }
 
 func ParseKind(raw string) Kind {
@@ -106,4 +99,14 @@ func hasBalancedTemplateDelims(val string) bool {
 		}
 	}
 	return depth == 0
+}
+
+func splitRef(ref string) (kind, name string, ok bool) {
+	for _, sep := range [...]string{":", "/"} {
+		lhs, rhs, found := strings.Cut(ref, sep)
+		if found {
+			return strings.TrimSpace(lhs), strings.TrimSpace(rhs), true
+		}
+	}
+	return "", "", false
 }

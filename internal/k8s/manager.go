@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net"
-	"strings"
 	"sync"
 	"time"
 
@@ -14,7 +13,6 @@ import (
 const (
 	defaultDialRetryDelay   = 150 * time.Millisecond
 	defaultLocalDialTimeout = 10 * time.Second
-	closeWaitWindow         = 3 * time.Second
 	podPollInterval         = 300 * time.Millisecond
 )
 
@@ -31,9 +29,8 @@ type (
 type Manager struct {
 	mu sync.Mutex
 
-	cache    map[sessionKey]*cacheEntry
-	inflight map[sessionKey]chan struct{}
-	closed   bool
+	cache  *sessionCache
+	closed bool
 
 	ttl time.Duration
 	now func() time.Time
@@ -44,83 +41,9 @@ type Manager struct {
 	retryDelay time.Duration
 }
 
-type sessionKey struct {
-	label        string
-	name         string
-	namespace    string
-	target       string
-	port         string
-	context      string
-	kubeconfig   string
-	container    string
-	address      string
-	localPort    int
-	persist      bool
-	podWait      time.Duration
-	retries      int
-	policy       ExecPolicy
-	stdinUnavail bool
-	stdinMsg     string
-	allowlistKey string
-}
-
-type cachedDialStep uint8
-
-const (
-	cachedDialReturn cachedDialStep = iota
-	cachedDialRetry
-	cachedDialAcquire
-)
-
-type cacheEntry struct {
-	ses      *session
-	lastUsed time.Time
-}
-
-type pendingClose struct {
-	key   sessionKey
-	ent   *cacheEntry
-	token chan struct{}
-}
-
-type session struct {
-	localAddr string
-	stopCh    chan struct{}
-	doneCh    chan struct{}
-
-	mu       sync.RWMutex
-	err      error
-	diag     *diagCollector
-	ended    bool
-	closed   sync.Once
-	finished sync.Once
-}
-
-func newCacheEntry(ses *session, now time.Time) *cacheEntry {
-	return &cacheEntry{ses: ses, lastUsed: now}
-}
-
-func (e *cacheEntry) touch(now time.Time) {
-	if e != nil {
-		e.lastUsed = now
-	}
-}
-
-func (e *cacheEntry) alive() bool {
-	return e != nil && e.ses.alive()
-}
-
-func (e *cacheEntry) close() error {
-	if e == nil {
-		return nil
-	}
-	return e.ses.close()
-}
-
 func NewManager() *Manager {
 	return &Manager{
-		cache:      make(map[sessionKey]*cacheEntry),
-		inflight:   make(map[sessionKey]chan struct{}),
+		cache:      newSessionCache(),
 		ttl:        defaultTTL,
 		now:        time.Now,
 		start:      startSession,
@@ -156,10 +79,7 @@ func (m *Manager) Close() error {
 	}
 	m.closed = true
 
-	cache := m.cache
-	inflight := m.inflight
-	m.cache = make(map[sessionKey]*cacheEntry)
-	m.inflight = make(map[sessionKey]chan struct{})
+	entries, inflight := m.ensureCacheLocked().reset()
 	m.mu.Unlock()
 
 	for _, ch := range inflight {
@@ -167,7 +87,7 @@ func (m *Manager) Close() error {
 	}
 
 	var errs []error
-	for _, ent := range cache {
+	for _, ent := range entries {
 		if err := ent.close(); err != nil {
 			errs = append(errs, err)
 		}
@@ -238,194 +158,6 @@ func (m *Manager) dialOnce(
 	return tunnel.WrapConn(conn, ses.close), nil
 }
 
-func (m *Manager) dialCached(
-	ctx context.Context,
-	cfg execConfig,
-	load loadSettings,
-	network string,
-) (net.Conn, error) {
-	key := sessionKeyFor(cfg, load)
-
-	for {
-		conn, step, err := m.tryCachedSession(ctx, key, network)
-		switch step {
-		case cachedDialReturn:
-			return conn, err
-		case cachedDialRetry:
-			continue
-		}
-
-		conn, step, err = m.acquireNewSession(ctx, key, cfg, load, network)
-		switch step {
-		case cachedDialReturn:
-			return conn, err
-		case cachedDialRetry:
-			continue
-		default:
-			return nil, errors.New("k8s: invalid cached dial state")
-		}
-	}
-}
-
-func (m *Manager) tryCachedSession(
-	ctx context.Context,
-	key sessionKey,
-	network string,
-) (net.Conn, cachedDialStep, error) {
-	m.mu.Lock()
-	if m.closed {
-		m.mu.Unlock()
-		return nil, cachedDialReturn, errManagerClosed
-	}
-	stale := m.purgeLocked()
-
-	ent := m.cache[key]
-	if ent != nil {
-		ent.touch(m.now())
-		ses := ent.ses
-		m.mu.Unlock()
-		m.closeEntries(stale)
-
-		if ses.alive() {
-			ses.bindRequestDiag(ctx)
-			conn, err := m.dialSession(ctx, ses, network)
-			if err == nil {
-				return conn, cachedDialReturn, nil
-			}
-		}
-
-		m.evictCachedSession(key, ent)
-		return nil, cachedDialRetry, nil
-	}
-
-	waitCh, waiting := m.inflight[key]
-	m.mu.Unlock()
-	m.closeEntries(stale)
-	if !waiting {
-		return nil, cachedDialAcquire, nil
-	}
-
-	select {
-	case <-waitCh:
-		return nil, cachedDialRetry, nil
-	case <-ctx.Done():
-		return nil, cachedDialReturn, ctx.Err()
-	}
-}
-
-func (m *Manager) acquireNewSession(
-	ctx context.Context,
-	key sessionKey,
-	cfg execConfig,
-	load loadSettings,
-	network string,
-) (net.Conn, cachedDialStep, error) {
-	token, step, err := m.claimInflight(key)
-	if step != cachedDialAcquire {
-		return nil, step, err
-	}
-
-	ses, err := m.connect(ctx, cfg, load)
-	if err != nil {
-		m.releaseInflight(key, token)
-		return nil, cachedDialReturn, err
-	}
-
-	m.mu.Lock()
-	if m.closed {
-		m.mu.Unlock()
-		m.releaseInflight(key, token)
-		return nil, cachedDialReturn, joinCleanupErr(errManagerClosed, ses.close())
-	}
-	if cur := m.cache[key]; cur != nil && cur.alive() {
-		m.mu.Unlock()
-		_ = ses.close()
-		m.releaseInflight(key, token)
-
-		cur.ses.bindRequestDiag(ctx)
-		conn, dialErr := m.dialSession(ctx, cur.ses, network)
-		if dialErr == nil {
-			return conn, cachedDialReturn, nil
-		}
-
-		m.evictCachedSession(key, cur)
-		return nil, cachedDialRetry, nil
-	}
-
-	m.cache[key] = newCacheEntry(ses, m.now())
-	m.mu.Unlock()
-	m.releaseInflight(key, token)
-
-	ses.bindRequestDiag(ctx)
-	conn, err := m.dialSession(ctx, ses, network)
-	if err == nil {
-		return conn, cachedDialReturn, nil
-	}
-
-	m.mu.Lock()
-	if cur := m.cache[key]; cur != nil && cur.ses == ses {
-		delete(m.cache, key)
-	}
-	m.mu.Unlock()
-	return nil, cachedDialReturn, joinCleanupErr(err, ses.close())
-}
-
-func (m *Manager) claimInflight(key sessionKey) (chan struct{}, cachedDialStep, error) {
-	m.mu.Lock()
-
-	if m.closed {
-		m.mu.Unlock()
-		return nil, cachedDialReturn, errManagerClosed
-	}
-	stale := m.purgeLocked()
-	if m.cache[key] != nil || m.inflight[key] != nil {
-		m.mu.Unlock()
-		m.closeEntries(stale)
-		return nil, cachedDialRetry, nil
-	}
-
-	token := make(chan struct{})
-	m.inflight[key] = token
-	m.mu.Unlock()
-	m.closeEntries(stale)
-	return token, cachedDialAcquire, nil
-}
-
-func (m *Manager) evictCachedSession(key sessionKey, ent *cacheEntry) {
-	m.mu.Lock()
-	var pending *pendingClose
-	if cur := m.cache[key]; cur == ent {
-		pending = m.reserveCloseLocked(key, ent)
-	}
-	m.mu.Unlock()
-
-	if pending != nil {
-		m.closeEntries([]*pendingClose{pending})
-		return
-	}
-	_ = ent.close()
-}
-
-func (m *Manager) releaseInflight(key sessionKey, token chan struct{}) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	if cur, ok := m.inflight[key]; ok && cur == token {
-		delete(m.inflight, key)
-		close(token)
-	}
-}
-
-func joinCleanupErr(baseErr error, cleanupErr error) error {
-	if cleanupErr == nil {
-		return baseErr
-	}
-	if baseErr == nil {
-		return cleanupErr
-	}
-	return errors.Join(baseErr, cleanupErr)
-}
-
 func (m *Manager) connect(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 	attempts := max(cfg.Retries+1, 1)
 
@@ -470,47 +202,11 @@ func (m *Manager) dialSession(ctx context.Context, ses *session, network string)
 	if err != nil {
 		return nil, err
 	}
-	if ses == nil || ses.localAddr == "" {
-		return nil, errors.New("k8s: local forward address unavailable")
+	addr, err := ses.localAddress()
+	if err != nil {
+		return nil, err
 	}
-	return m.dial(ctx, n, ses.localAddr)
-}
-
-func (m *Manager) purgeLocked() []*pendingClose {
-	now := m.now()
-	var stale []*pendingClose
-	for key, ent := range m.cache {
-		if now.Sub(ent.lastUsed) <= m.ttl && ent.alive() {
-			continue
-		}
-		stale = append(stale, m.reserveCloseLocked(key, ent))
-	}
-	return stale
-}
-
-func (m *Manager) reserveCloseLocked(key sessionKey, ent *cacheEntry) *pendingClose {
-	delete(m.cache, key)
-	if ent == nil {
-		return nil
-	}
-	if _, ok := m.inflight[key]; ok {
-		return &pendingClose{key: key, ent: ent}
-	}
-	token := make(chan struct{})
-	m.inflight[key] = token
-	return &pendingClose{key: key, ent: ent, token: token}
-}
-
-func (m *Manager) closeEntries(entries []*pendingClose) {
-	for _, pending := range entries {
-		if pending == nil {
-			continue
-		}
-		_ = pending.ent.close()
-		if pending.token != nil {
-			m.releaseInflight(pending.key, pending.token)
-		}
-	}
+	return m.dial(ctx, n, addr)
 }
 
 func (m *Manager) loadSettings() (loadSettings, error) {
@@ -520,136 +216,4 @@ func (m *Manager) loadSettings() (loadSettings, error) {
 
 	opt.ExecAllowlist = append([]string(nil), opt.ExecAllowlist...)
 	return normalizeLoadOptions(opt)
-}
-
-func (s *session) alive() bool {
-	if s == nil || s.doneCh == nil {
-		return false
-	}
-	select {
-	case <-s.doneCh:
-		return false
-	default:
-		return true
-	}
-}
-
-func (s *session) finish(err error) {
-	if s == nil {
-		return
-	}
-
-	s.mu.Lock()
-	s.err = err
-	s.ended = true
-	diag := s.diag
-	s.mu.Unlock()
-
-	s.finished.Do(func() {
-		if s.doneCh != nil {
-			close(s.doneCh)
-		}
-	})
-	if diag != nil {
-		diag.close()
-	}
-}
-
-func (s *session) close() error {
-	if s == nil {
-		return nil
-	}
-
-	s.closed.Do(func() {
-		if s.stopCh != nil {
-			close(s.stopCh)
-		}
-	})
-
-	var errs []error
-	if s.doneCh != nil {
-		select {
-		case <-s.doneCh:
-		case <-time.After(closeWaitWindow):
-			errs = append(errs, errors.New("k8s: timeout closing port-forward"))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-func (s *session) errValue() error {
-	if s == nil {
-		return nil
-	}
-
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.err
-}
-
-func (s *session) setDiag(collector *diagCollector) {
-	if s == nil || collector == nil {
-		return
-	}
-
-	closeCollector := false
-	s.mu.Lock()
-	if s.ended {
-		closeCollector = true
-	} else {
-		s.diag = collector
-	}
-	s.mu.Unlock()
-
-	if closeCollector {
-		collector.close()
-	}
-}
-
-func (s *session) bindRequestDiag(ctx context.Context) {
-	if s == nil {
-		return
-	}
-
-	s.mu.RLock()
-	diag := s.diag
-	s.mu.RUnlock()
-
-	bindRequestDiag(ctx, diag)
-}
-
-func sessionKeyFor(cfg execConfig, load loadSettings) sessionKey {
-	return sessionKey{
-		label:        cfg.Label,
-		name:         cfg.Name,
-		namespace:    cfg.Namespace,
-		target:       cfg.targetRef(),
-		port:         cfg.portRef(),
-		context:      cfg.Context,
-		kubeconfig:   cfg.Kubeconfig,
-		container:    cfg.Container,
-		address:      cfg.Address,
-		localPort:    cfg.LocalPort,
-		persist:      cfg.Persist,
-		podWait:      cfg.PodWait,
-		retries:      cfg.Retries,
-		policy:       load.policy,
-		stdinUnavail: load.stdinUnavail,
-		stdinMsg:     load.stdinMsg,
-		allowlistKey: allowlistCacheKey(load.allowlist),
-	}
-}
-
-func allowlistCacheKey(allowlist []string) string {
-	return strings.Join(allowlist, "\x00")
-}
-
-func loadOptionsFromSettings(st loadSettings) LoadOptions {
-	return LoadOptions{
-		ExecPolicy:             st.policy,
-		ExecAllowlist:          append([]string(nil), st.allowlist...),
-		StdinUnavailable:       st.stdinUnavail,
-		StdinUnavailableSet:    true,
-		StdinUnavailableReason: st.stdinMsg,
-	}
 }

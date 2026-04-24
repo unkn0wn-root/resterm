@@ -263,9 +263,7 @@ func TestEvictCachedSessionClosesOutsideManagerLock(t *testing.T) {
 	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
 	defer release()
 
-	m.mu.Lock()
-	m.cache[key] = newCacheEntry(blocking, m.now())
-	m.mu.Unlock()
+	putCachedSession(t, m, key, blocking, m.now())
 
 	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		return stubSession(cfg, "127.0.0.1:18081"), nil
@@ -318,9 +316,7 @@ func TestEvictCachedSessionBlocksSameKeyUntilCloseCompletes(t *testing.T) {
 	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
 	defer release()
 
-	m.mu.Lock()
-	m.cache[key] = newCacheEntry(blocking, m.now())
-	m.mu.Unlock()
+	putCachedSession(t, m, key, blocking, m.now())
 
 	released := atomic.Bool{}
 	starts := atomic.Int32{}
@@ -385,9 +381,7 @@ func TestPurgeClosesStaleSessionOutsideManagerLock(t *testing.T) {
 	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
 	defer release()
 
-	m.mu.Lock()
-	m.cache[key] = newCacheEntry(blocking, now.Add(-2*time.Minute))
-	m.mu.Unlock()
+	putCachedSession(t, m, key, blocking, now.Add(-2*time.Minute))
 
 	m.start = func(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
 		return stubSession(cfg, "127.0.0.1:18081"), nil
@@ -441,9 +435,7 @@ func TestPurgeBlocksSameKeyUntilCloseCompletes(t *testing.T) {
 	blocking, closeStarted, release := newBlockingCloseSession("127.0.0.1:18080")
 	defer release()
 
-	m.mu.Lock()
-	m.cache[key] = newCacheEntry(blocking, now.Add(-2*time.Minute))
-	m.mu.Unlock()
+	putCachedSession(t, m, key, blocking, now.Add(-2*time.Minute))
 
 	released := atomic.Bool{}
 	starts := atomic.Int32{}
@@ -498,9 +490,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 
 	oldSes := stubSession(cfg, "127.0.0.1:18081")
 	keepSes := stubSession(cfg, "127.0.0.1:18082")
-	m.mu.Lock()
-	m.cache[key] = &cacheEntry{ses: oldSes, lastUsed: m.now()}
-	m.mu.Unlock()
+	putCachedEntry(t, m, key, &cacheEntry{ses: oldSes, lastUsed: m.now()})
 
 	dialHit := make(chan struct{})
 	dialCont := make(chan struct{})
@@ -542,9 +532,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 		t.Fatalf("timed out waiting for old cached dial")
 	}
 
-	m.mu.Lock()
-	m.cache[key] = &cacheEntry{ses: keepSes, lastUsed: m.now()}
-	m.mu.Unlock()
+	putCachedEntry(t, m, key, &cacheEntry{ses: keepSes, lastUsed: m.now()})
 	close(dialCont)
 
 	select {
@@ -560,9 +548,7 @@ func TestDialCachedUsesReplacedEntryWithoutReconnect(t *testing.T) {
 		t.Fatalf("expected no reconnect attempt, got %d", starts.Load())
 	}
 
-	m.mu.Lock()
-	cur := m.cache[key]
-	m.mu.Unlock()
+	cur := cachedEntry(t, m, key)
 	if cur == nil || cur.ses != keepSes {
 		t.Fatalf("expected replacement cached session to be preserved")
 	}
@@ -591,9 +577,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 		reconnectClosed.Add(1)
 	})
 
-	m.mu.Lock()
-	m.cache[key] = &cacheEntry{ses: oldSes, lastUsed: m.now()}
-	m.mu.Unlock()
+	putCachedEntry(t, m, key, &cacheEntry{ses: oldSes, lastUsed: m.now()})
 
 	dialHit := make(chan struct{})
 	dialCont := make(chan struct{})
@@ -637,9 +621,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 		t.Fatalf("timed out waiting for old cached dial")
 	}
 
-	m.mu.Lock()
-	m.cache[key] = &cacheEntry{ses: keepSes, lastUsed: m.now()}
-	m.mu.Unlock()
+	putCachedEntry(t, m, key, &cacheEntry{ses: keepSes, lastUsed: m.now()})
 	close(dialCont)
 
 	select {
@@ -658,9 +640,7 @@ func TestDialCachedKeepsReplacedEntryOnReconnectSuccess(t *testing.T) {
 		t.Fatalf("expected no reconnect session lifecycle when replacement exists")
 	}
 
-	m.mu.Lock()
-	cur := m.cache[key]
-	m.mu.Unlock()
+	cur := cachedEntry(t, m, key)
 	if cur == nil || cur.ses != keepSes {
 		t.Fatalf("expected replacement cached session to be preserved")
 	}
@@ -1066,10 +1046,8 @@ func TestCloseDuringInflightConnectRejectsSession(t *testing.T) {
 		t.Fatalf("expected pending session cleanup, got %d", closes.Load())
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if len(m.cache) != 0 {
-		t.Fatalf("expected empty cache after close, got %d entries", len(m.cache))
+	if got := cachedLen(t, m); got != 0 {
+		t.Fatalf("expected empty cache after close, got %d entries", got)
 	}
 }
 
@@ -1339,6 +1317,32 @@ func assertDialErr(t *testing.T, errCh <-chan error, label string) {
 	case <-time.After(time.Second):
 		t.Fatalf("%s timed out", label)
 	}
+}
+
+func putCachedSession(t *testing.T, m *Manager, key sessionKey, ses *session, now time.Time) {
+	t.Helper()
+	putCachedEntry(t, m, key, newCacheEntry(ses, now))
+}
+
+func putCachedEntry(t *testing.T, m *Manager, key sessionKey, ent *cacheEntry) {
+	t.Helper()
+	m.mu.Lock()
+	m.ensureCacheLocked().entries[key] = ent
+	m.mu.Unlock()
+}
+
+func cachedEntry(t *testing.T, m *Manager, key sessionKey) *cacheEntry {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.ensureCacheLocked().entry(key)
+}
+
+func cachedLen(t *testing.T, m *Manager) int {
+	t.Helper()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.ensureCacheLocked().entries)
 }
 
 func stubSession(_ any, addr string) *session {
