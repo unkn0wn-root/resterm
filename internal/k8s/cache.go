@@ -220,7 +220,7 @@ func (m *Manager) tryCachedSession(
 		ent.touch(m.now())
 		ses := ent.ses
 		m.mu.Unlock()
-		m.closeEntries(stale)
+		_ = m.closeEntries(stale)
 
 		if ses.alive() {
 			ses.bindRequestDiag(ctx)
@@ -236,7 +236,7 @@ func (m *Manager) tryCachedSession(
 
 	waitCh, waiting := m.cache.wait(key)
 	m.mu.Unlock()
-	m.closeEntries(stale)
+	_ = m.closeEntries(stale)
 	if !waiting {
 		return nil, cachedDialAcquire, nil
 	}
@@ -321,18 +321,18 @@ func (m *Manager) claimInflight(key sessionKey) (chan struct{}, cachedDialStep, 
 	stale := m.purgeLocked()
 	if cache.entry(key) != nil {
 		m.mu.Unlock()
-		m.closeEntries(stale)
+		_ = m.closeEntries(stale)
 		return nil, cachedDialRetry, nil
 	}
 	if _, ok := cache.wait(key); ok {
 		m.mu.Unlock()
-		m.closeEntries(stale)
+		_ = m.closeEntries(stale)
 		return nil, cachedDialRetry, nil
 	}
 
 	token := cache.claim(key)
 	m.mu.Unlock()
-	m.closeEntries(stale)
+	_ = m.closeEntries(stale)
 	return token, cachedDialAcquire, nil
 }
 
@@ -345,7 +345,7 @@ func (m *Manager) evictCachedSession(key sessionKey, ent *cacheEntry) {
 	m.mu.Unlock()
 
 	if pending != nil {
-		m.closeEntries([]*pendingClose{pending})
+		_ = m.closeEntries([]*pendingClose{pending})
 		return
 	}
 	_ = ent.close()
