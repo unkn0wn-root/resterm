@@ -5,11 +5,11 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
-func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
+func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
 	req := &restfile.Request{
 		Method: " get ",
 		URL:    " https://example.com/users ",
@@ -37,6 +37,9 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 	if len(gotReq.Tests) != 1 || gotReq.Tests[0].Name != "status" ||
 		gotReq.Tests[0].Message != "failed" {
 		t.Fatalf("unexpected request tests: %+v", gotReq.Tests)
+	}
+	if gotReq.Failure.Code != runfail.CodeAssertion || gotReq.Failure.Source != "tests" {
+		t.Fatalf("expected request failure classification, got %+v", gotReq.Failure)
 	}
 
 	gotCompare := compareRunResult(req, engine.CompareResult{
@@ -67,6 +70,11 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 		step.Tests[0].Name != "compare test" || step.Tests[0].Message != "compare fail" {
 		t.Fatalf("unexpected compare step: %+v", step)
 	}
+	if gotCompare.Failure.Code != runfail.CodeAssertion ||
+		gotCompare.Steps[0].Failure.Code != runfail.CodeAssertion {
+		t.Fatalf("expected compare failure classification, got result=%+v step=%+v",
+			gotCompare.Failure, gotCompare.Steps[0].Failure)
+	}
 
 	gotProfile := profileRunResult(req, engine.ProfileResult{
 		Environment: " perf ",
@@ -75,7 +83,7 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 		Failures: []engine.ProfileFailure{{
 			Reason:  " timeout ",
 			Status:  " 500 ",
-			Failure: runclass.NewFailure(runclass.FailureTimeout, "timeout", "profile"),
+			Failure: runfail.New(runfail.CodeTimeout, "timeout", "profile"),
 		}},
 	}, " fallback ")
 	if gotProfile.Environment != "perf" || gotProfile.Summary != "profile summary" ||
@@ -87,13 +95,16 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 		gotProfile.Profile.Failures[0].Status != " 500 " {
 		t.Fatalf("unexpected profile failures: %+v", gotProfile.Profile)
 	}
-	if gotProfile.Profile.Failures[0].Failure.Code != runclass.FailureTimeout {
+	if gotProfile.Profile.Failures[0].Failure.Code != runfail.CodeTimeout {
 		t.Fatalf("expected profile failure classification, got %+v", gotProfile.Profile.Failures[0].Failure)
 	}
-	gotProfileFmt := NormalizeReport(&Report{Results: []Result{gotProfile}})
+	if gotProfile.Failure.Code != runfail.CodeTimeout {
+		t.Fatalf("expected profile result failure classification, got %+v", gotProfile.Failure)
+	}
+	gotProfileFmt := ReportModel(&Report{Results: []Result{gotProfile}})
 	if gotProfileFmt.Results[0].Profile.Failures[0].Reason != "timeout" ||
 		gotProfileFmt.Results[0].Profile.Failures[0].Status != "500" {
-		t.Fatalf("expected report normalization to trim profile failures, got %+v", gotProfileFmt.Results[0].Profile)
+		t.Fatalf("expected report conversion to trim profile failures, got %+v", gotProfileFmt.Results[0].Profile)
 	}
 
 	gotWorkflow := workflowRunResult(engine.WorkflowResult{
@@ -125,5 +136,10 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 		step.Summary != "step summary" || len(step.Tests) != 1 ||
 		step.Tests[0].Name != "wf test" || step.Tests[0].Message != "wf fail" {
 		t.Fatalf("unexpected workflow step: %+v", step)
+	}
+	if gotWorkflow.Failure.Code != runfail.CodeAssertion ||
+		gotWorkflow.Steps[0].Failure.Code != runfail.CodeAssertion {
+		t.Fatalf("expected workflow failure classification, got result=%+v step=%+v",
+			gotWorkflow.Failure, gotWorkflow.Steps[0].Failure)
 	}
 }

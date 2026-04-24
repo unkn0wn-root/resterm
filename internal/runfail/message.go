@@ -1,4 +1,4 @@
-package runclass
+package runfail
 
 import (
 	"strings"
@@ -22,14 +22,14 @@ const (
 )
 
 type messageClassifier struct {
-	defaultCode FailureCode
+	defaultCode Code
 	rules       []messageRule
 }
 
 // messageRule is only used after typed and errdef-based classification fails.
 // Matching picks the strongest single evidence item; weak matches never add up.
 type messageRule struct {
-	code        FailureCode
+	code        Code
 	priority    int
 	phrases     []string
 	tokens      []string
@@ -38,18 +38,18 @@ type messageRule struct {
 
 var sharedMessageRules = []messageRule{
 	{
-		code:     FailureTimeout,
+		code:     CodeTimeout,
 		priority: messagePriorityTimeout,
 		phrases:  []string{"deadline exceeded", "timed out"},
 		tokens:   []string{"timeout"},
 	},
 	{
-		code:     FailureTLS,
+		code:     CodeTLS,
 		priority: messagePriorityTLS,
 		tokens:   []string{"certificate", "x509", "tls", "ssl"},
 	},
 	{
-		code:     FailureAuth,
+		code:     CodeAuth,
 		priority: messagePriorityAuth,
 		phrases: []string{
 			"access token",
@@ -77,13 +77,13 @@ var sharedMessageRules = []messageRule{
 		},
 	},
 	{
-		code:     FailureRoute,
+		code:     CodeRoute,
 		priority: messagePriorityRoute,
 		phrases:  []string{"port-forward", "port forward"},
 		tokens:   []string{"ssh", "k8s", "kubernetes", "tunnel"},
 	},
 	{
-		code:     FailureProtocol,
+		code:     CodeProtocol,
 		priority: messagePriorityProtocol,
 		phrases: []string{
 			"decode body",
@@ -107,7 +107,7 @@ var sharedMessageRules = []messageRule{
 
 var genericMessageRules = []messageRule{
 	{
-		code:     FailureFilesystem,
+		code:     CodeFilesystem,
 		priority: messagePriorityFilesystem,
 		phrases: []string{
 			"directory not found",
@@ -130,7 +130,7 @@ var genericMessageRules = []messageRule{
 		},
 	},
 	{
-		code:     FailureNetwork,
+		code:     CodeNetwork,
 		priority: messagePriorityNetwork,
 		phrases: []string{
 			"connection refused",
@@ -155,7 +155,7 @@ var genericMessageRules = []messageRule{
 
 var httpMessageRules = []messageRule{
 	{
-		code:     FailureNetwork,
+		code:     CodeNetwork,
 		priority: messagePriorityNetwork,
 		phrases: []string{
 			"connection refused",
@@ -183,12 +183,12 @@ var httpMessageRules = []messageRule{
 }
 
 var genericMessageClassifier = messageClassifier{
-	defaultCode: FailureUnknown,
+	defaultCode: CodeUnknown,
 	rules:       mergeMessageRules(sharedMessageRules, genericMessageRules),
 }
 
 var httpMessageClassifier = messageClassifier{
-	defaultCode: FailureProtocol,
+	defaultCode: CodeProtocol,
 	rules:       mergeMessageRules(sharedMessageRules, httpMessageRules),
 }
 
@@ -212,7 +212,7 @@ func mergeMessageRules(groups ...[]messageRule) []messageRule {
 	return out
 }
 
-func (c messageClassifier) classifyCode(msg string) FailureCode {
+func (c messageClassifier) classifyCode(msg string) Code {
 	tm := newMessageTerms(msg)
 	var b messageMatch
 	m := false
@@ -243,11 +243,11 @@ func (c messageClassifier) classifyCode(msg string) FailureCode {
 }
 
 func (c messageClassifier) classify(msg, source string) Failure {
-	return NewFailure(c.classifyCode(msg), msg, source)
+	return New(c.classifyCode(msg), msg, source)
 }
 
 type messageMatch struct {
-	code       FailureCode
+	code       Code
 	confidence int
 	priority   int
 }

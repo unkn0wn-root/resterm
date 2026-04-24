@@ -259,7 +259,7 @@ func TestRunPlanRejectsInvalidSelection(t *testing.T) {
 }
 
 // assertRunnerReportParity compares semantic parity between two independent
-// executions. It normalizes runtime-only timing fields because RunPlan(pl) and
+// executions. It adjusts runtime-only timing fields because RunPlan(pl) and
 // RunContext(opt) each perform a separate request, so timestamps and transport
 // durations can differ slightly even when behavior is identical.
 func assertRunnerReportParity(t *testing.T, want, got *Report) {

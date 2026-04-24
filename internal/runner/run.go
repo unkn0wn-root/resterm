@@ -15,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -105,6 +105,7 @@ type Result struct {
 	Compare                   *CompareInfo
 	Profile                   *ProfileInfo
 	Steps                     []StepResult
+	Failure                   runfail.Failure
 	requestText               string
 	transcript                []byte
 	unresolvedTemplateVars    []string
@@ -131,7 +132,7 @@ type ProfileFailure struct {
 	StatusCode int
 	Duration   time.Duration
 	// Failure carries the structured classification from the profile collector.
-	Failure runclass.Failure
+	Failure runfail.Failure
 }
 
 type StreamInfo struct {
@@ -168,6 +169,7 @@ type StepResult struct {
 	Canceled        bool
 	Stream          *StreamInfo
 	Trace           *TraceInfo
+	Failure         runfail.Failure
 	requestText     string
 	transcript      []byte
 }
@@ -208,11 +210,14 @@ func (r *Report) WriteText(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
 	}
-	rep := NormalizeReport(r)
+	rep := ReportModel(r)
 	return runfmt.WriteText(w, &rep)
 }
 
 func resultFailed(item Result) bool {
+	if item.Failure.Code != "" {
+		return true
+	}
 	if item.Canceled || item.Err != nil || item.ScriptErr != nil || traceFailed(item.Trace) {
 		return true
 	}
@@ -220,6 +225,14 @@ func resultFailed(item Result) bool {
 		if !test.Passed {
 			return true
 		}
+	}
+	for _, step := range item.Steps {
+		if stepFailed(step) {
+			return true
+		}
+	}
+	if item.Profile != nil && len(item.Profile.Failures) > 0 {
+		return true
 	}
 	return !item.Passed
 }
@@ -346,6 +359,8 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		item.SetUnresolvedTemplateVars(explainMissingTemplateVars(res.Explain))
 	}
 	item.Passed = !item.Skipped && !requestFailed(item)
+	item.Failure = resultFailure(item)
+	item.Passed = !item.Skipped && item.Failure.Code == ""
 	return item
 }
 
@@ -396,6 +411,7 @@ func compareRunResult(req *restfile.Request, res engine.CompareResult, fallbackE
 		item.Steps = append(item.Steps, compareStepResult(req, row))
 	}
 	item.Passed = !item.Skipped && !item.Canceled && stepsPassed(item.Steps)
+	item.Failure = resultFailure(item)
 	return item
 }
 
@@ -408,7 +424,7 @@ func compareDuration(rows []engine.CompareRow) time.Duration {
 }
 
 func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult {
-	return StepResult{
+	step := StepResult{
 		Name:            str.Trim(row.Environment),
 		Method:          requestMethod(req),
 		Target:          requestSourceTarget(req),
@@ -430,6 +446,8 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 		requestText:     "",
 		transcript:      bytes.Clone(row.Transcript),
 	}
+	step.Failure = stepFailure(step)
+	return step
 }
 
 func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackEnv string) Result {
@@ -454,6 +472,7 @@ func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackE
 			Failures: profileFailures(res.Failures),
 		},
 	}
+	item.Failure = resultFailure(item)
 	return item
 }
 
@@ -519,12 +538,13 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 		item.Steps = append(item.Steps, workflowStepResult(step))
 	}
 	item.Passed = !item.Skipped && !item.Canceled && stepsPassed(item.Steps)
+	item.Failure = resultFailure(item)
 	return item
 }
 
 func workflowStepResult(step engine.WorkflowStep) StepResult {
 	target := str.Trim(step.Target)
-	return StepResult{
+	out := StepResult{
 		Name:            str.Trim(step.Name),
 		Method:          str.Trim(step.Method),
 		Target:          target,
@@ -547,6 +567,8 @@ func workflowStepResult(step engine.WorkflowStep) StepResult {
 		requestText:     "",
 		transcript:      bytes.Clone(step.Transcript),
 	}
+	out.Failure = stepFailure(out)
+	return out
 }
 
 func explainMissingTemplateVars(rep *xplain.Report) []string {
@@ -650,6 +672,9 @@ func cloneTests(src []scripts.TestResult) []scripts.TestResult {
 }
 
 func stepFailed(step StepResult) bool {
+	if step.Failure.Code != "" {
+		return true
+	}
 	if step.Canceled || step.Err != nil || step.ScriptErr != nil || traceFailed(step.Trace) {
 		return true
 	}

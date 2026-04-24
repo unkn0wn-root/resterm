@@ -1,6 +1,10 @@
 package runfmt
 
-import "time"
+import (
+	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/runfail"
+)
 
 type Status string
 
@@ -123,11 +127,11 @@ type ProfileFailure struct {
 }
 
 type Failure struct {
-	Code     string `json:"code,omitempty"`
-	Category string `json:"category,omitempty"`
-	ExitCode int    `json:"exitCode,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Source   string `json:"source,omitempty"`
+	Code     runfail.Code     `json:"code,omitempty"`
+	Category runfail.Category `json:"category,omitempty"`
+	ExitCode int              `json:"exitCode,omitempty"`
+	Message  string           `json:"message,omitempty"`
+	Source   string           `json:"source,omitempty"`
 }
 
 type Latency struct {

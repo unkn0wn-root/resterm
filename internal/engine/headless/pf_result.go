@@ -9,7 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 )
 
 type profileState struct {
@@ -32,7 +32,7 @@ type profileState struct {
 
 type profileFailureOutcome struct {
 	reason  string
-	failure runclass.Failure
+	failure runfail.Failure
 }
 
 func profileOutcome(out engine.RequestResult) (bool, profileFailureOutcome) {
@@ -41,37 +41,37 @@ func profileOutcome(out engine.RequestResult) (bool, profileFailureOutcome) {
 		if reason == "" {
 			reason = "request skipped"
 		}
-		failure := runclass.AssertionFailure(reason, "profile")
+		failure := runfail.Assertion(reason, "profile")
 		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.Err != nil {
-		failure := runclass.ClassifyErrorSource(out.Err, "profile")
+		failure := runfail.FromErrorSource(out.Err, "profile")
 		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.Response != nil && out.Response.StatusCode >= 400 {
-		failure := runclass.AssertionFailure(
+		failure := runfail.Assertion(
 			profileHTTPStatus(out.Response.Status, out.Response.StatusCode),
 			"profile",
 		)
 		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.ScriptErr != nil {
-		failure := runclass.ScriptFailure(out.ScriptErr.Error(), "profile")
+		failure := runfail.Script(out.ScriptErr.Error(), "profile")
 		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	for _, test := range out.Tests {
 		if test.Passed {
 			continue
 		}
-		failure := runclass.AssertionFailure(
+		failure := runfail.Assertion(
 			profileTestFailure(test.Name, test.Message),
 			"profile",
 		)
 		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.Response == nil {
-		failure := runclass.NewFailure(
-			runclass.FailureProtocol,
+		failure := runfail.New(
+			runfail.CodeProtocol,
 			"no response",
 			"profile",
 		)

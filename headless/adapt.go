@@ -9,7 +9,7 @@ func reportFromRunner(rep *runner.Report) *Report {
 	if rep == nil {
 		return nil
 	}
-	return reportFromFmt(runner.NormalizeReport(rep))
+	return reportFromFmt(runner.ReportModel(rep))
 }
 
 func reportFromFmt(rep runfmt.Report) *Report {
@@ -228,7 +228,7 @@ func streamFromFmt(stream *runfmt.Stream) *Stream {
 		Kind:           stream.Kind,
 		EventCount:     stream.EventCount,
 		TranscriptPath: stream.TranscriptPath,
-		// NormalizeReport already deep-clones stream summary maps.
+		// ReportModel already deep-clones stream summary maps.
 		Summary: stream.Summary,
 	}
 	return out

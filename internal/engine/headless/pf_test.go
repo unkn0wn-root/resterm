@@ -12,7 +12,7 @@ import (
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 )
 
 func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
@@ -94,8 +94,8 @@ func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 	if out.Failures[0].Iteration != 2 || out.Failures[0].Warmup {
 		t.Fatalf("unexpected profile failure entry: %+v", out.Failures[0])
 	}
-	if failure := out.Failures[0].Failure; failure.Code != runclass.FailureAssertion ||
-		failure.Source != "profile" || failure.ExitCode != runclass.ExitFailure {
+	if failure := out.Failures[0].Failure; failure.Code != runfail.CodeAssertion ||
+		failure.Source != "profile" || failure.ExitCode != runfail.ExitFailure {
 		t.Fatalf("unexpected profile failure classification: %+v", failure)
 	}
 }

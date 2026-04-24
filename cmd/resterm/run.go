@@ -16,7 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runview"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -73,8 +73,8 @@ const (
 	runFmtPretty runFormat = "pretty"
 	runFmtRaw    runFormat = "raw"
 
-	runExitCodeUsage    = runclass.ExitUsage
-	runExitCodeCanceled = runclass.ExitCanceled
+	runExitCodeUsage    = runfail.ExitUsage
+	runExitCodeCanceled = runfail.ExitCanceled
 )
 
 type runUsageError struct {
@@ -143,7 +143,7 @@ func newRunCmd() *runCmd {
 		lookupEnv:    os.LookupEnv,
 		loadTheme:    loadRunTheme,
 		format:       "auto",
-		exitCodeMode: string(runclass.ExitCodeModeDetailed),
+		exitCodeMode: string(runfail.ExitDetailed),
 		color:        string(termcolor.ModeAuto),
 	}
 	fs := cli.NewFlagSet("run")
@@ -464,7 +464,7 @@ func (c *runCmd) writeReport(rep *runner.Report) error {
 		}
 		return c.writeOutput(func(w io.Writer) error {
 			if color.Enabled {
-				fmtRep := runner.NormalizeReport(rep)
+				fmtRep := runner.ReportModel(rep)
 				return cli.WriteTextStyled(w, &fmtRep, color, def)
 			}
 			return rep.WriteText(w)
@@ -539,7 +539,7 @@ func (c *runCmd) validateFormat() error {
 	if format == "" {
 		return fmt.Errorf("unsupported --format %q", c.format)
 	}
-	if !runclass.ValidExitCodeMode(c.parsedExitCodeMode()) {
+	if !runfail.ValidExitMode(c.parsedExitCodeMode()) {
 		return fmt.Errorf("unsupported --exit-code-mode %q", c.exitCodeMode)
 	}
 	if c.body {
@@ -552,16 +552,16 @@ func (c *runCmd) validateFormat() error {
 	return nil
 }
 
-func (c *runCmd) parsedExitCodeMode() runclass.ExitCodeMode {
+func (c *runCmd) parsedExitCodeMode() runfail.ExitMode {
 	if c == nil {
-		return runclass.ExitCodeModeDetailed
+		return runfail.ExitDetailed
 	}
-	return runclass.ExitCodeMode(strings.ToLower(strings.TrimSpace(c.exitCodeMode)))
+	return runfail.ExitMode(strings.ToLower(strings.TrimSpace(c.exitCodeMode)))
 }
 
 func (c *runCmd) failureExitCode(err error) int {
-	failure := runclass.ClassifyError(err)
-	return runclass.ReportExitCode([]runclass.Failure{failure}, true, c.parsedExitCodeMode())
+	failure := runfail.FromError(err)
+	return runfail.ExitCode([]runfail.Failure{failure}, true, c.parsedExitCodeMode())
 }
 
 func (c *runCmd) reportFormat() runFormat {

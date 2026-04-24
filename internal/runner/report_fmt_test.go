@@ -7,12 +7,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
 )
 
-func TestNormalizeReportTrimsStrings(t *testing.T) {
+func TestReportModelTrimsStrings(t *testing.T) {
 	rep := &Report{
 		Version: "  v1  ",
 		EnvName: "  dev  ",
@@ -92,7 +92,7 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 		}},
 	}
 
-	got := NormalizeReport(rep)
+	got := ReportModel(rep)
 	if got.Version != "v1" || got.EnvName != "dev" {
 		t.Fatalf("expected top-level strings trimmed, got %+v", got)
 	}
@@ -154,7 +154,7 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 	}
 }
 
-func TestNormalizeReportUsesStructuredProfileFailure(t *testing.T) {
+func TestReportModelUsesStructuredProfileFailure(t *testing.T) {
 	rep := &Report{
 		Results: []Result{{
 			Kind:   ResultKindProfile,
@@ -164,8 +164,8 @@ func TestNormalizeReportUsesStructuredProfileFailure(t *testing.T) {
 				Failures: []ProfileFailure{{
 					Reason:     "HTTP 500",
 					StatusCode: 500,
-					Failure: runclass.NewFailure(
-						runclass.FailureTimeout,
+					Failure: runfail.New(
+						runfail.CodeTimeout,
 						"context deadline exceeded",
 						"profile",
 					),
@@ -174,24 +174,24 @@ func TestNormalizeReportUsesStructuredProfileFailure(t *testing.T) {
 		}},
 	}
 
-	got := NormalizeReport(rep)
+	got := ReportModel(rep)
 	if len(got.Results) != 1 || got.Results[0].Profile == nil ||
 		len(got.Results[0].Profile.Failures) != 1 {
-		t.Fatalf("unexpected normalized profile: %+v", got.Results)
+		t.Fatalf("unexpected formatted profile: %+v", got.Results)
 	}
 	failure := got.Results[0].Profile.Failures[0].Failure
-	if failure == nil || failure.Code != string(runclass.FailureTimeout) ||
-		failure.ExitCode != runclass.ExitTimeout ||
+	if failure == nil || failure.Code != runfail.CodeTimeout ||
+		failure.ExitCode != runfail.ExitTimeout ||
 		failure.Message != "context deadline exceeded" {
 		t.Fatalf("unexpected profile failure: %+v", failure)
 	}
 	if got.Results[0].Failure == nil ||
-		got.Results[0].Failure.Code != string(runclass.FailureTimeout) {
+		got.Results[0].Failure.Code != runfail.CodeTimeout {
 		t.Fatalf("expected result failure to use structured profile failure, got %+v", got.Results[0].Failure)
 	}
 }
 
-func TestNormalizeReportUsesResponseDuration(t *testing.T) {
+func TestReportModelUsesResponseDuration(t *testing.T) {
 	rep := &Report{
 		Results: []Result{{
 			Passed: true,
@@ -201,7 +201,7 @@ func TestNormalizeReportUsesResponseDuration(t *testing.T) {
 		}},
 	}
 
-	got := NormalizeReport(rep)
+	got := ReportModel(rep)
 	if len(got.Results) != 1 || got.Results[0].Duration != 25*time.Millisecond {
 		t.Fatalf("expected response duration fallback, got %+v", got.Results)
 	}

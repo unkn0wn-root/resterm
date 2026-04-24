@@ -3,12 +3,11 @@ package runner
 import (
 	"io"
 	"sort"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -18,7 +17,7 @@ func (r *Report) WriteJSON(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
 	}
-	rep := NormalizeReport(r)
+	rep := ReportModel(r)
 	return runfmt.WriteJSON(w, &rep)
 }
 
@@ -26,17 +25,17 @@ func (r *Report) WriteJUnit(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
 	}
-	rep := NormalizeReport(r)
+	rep := ReportModel(r)
 	return runfmt.WriteJUnit(w, &rep)
 }
 
-func ExitCode(rep *Report, mode runclass.ExitCodeMode) int {
-	fmtRep := NormalizeReport(rep)
+func ExitCode(rep *Report, mode runfail.ExitMode) int {
+	fmtRep := ReportModel(rep)
 	return fmtRep.ExitCode(mode)
 }
 
-// NormalizeReport converts a runner report into the canonical runfmt model.
-func NormalizeReport(rep *Report) runfmt.Report {
+// ReportModel converts a runner report into the canonical runfmt model.
+func ReportModel(rep *Report) runfmt.Report {
 	if rep == nil {
 		return runfmt.Report{}
 	}
@@ -235,114 +234,26 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 }
 
 func formatResultFailure(res Result) *runfmt.Failure {
-	if res.Skipped || !resultFailed(res) {
-		return nil
-	}
-	switch {
-	case res.Canceled:
-		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
-	case res.Err != nil:
-		return runfmt.ClassFailure(runclass.ClassifyErrorSource(res.Err, "error"))
-	case res.ScriptErr != nil:
-		return runfmt.ClassFailure(runclass.ScriptFailure(res.ScriptErr.Error(), "scriptError"))
-	case anyScriptTestFailed(res.Tests):
-		return runfmt.ClassFailure(runclass.AssertionFailure(scriptTestFailureMessage(res.Tests), "tests"))
-	case traceFailed(res.Trace):
-		return runfmt.ClassFailure(runclass.TraceBudgetFailure(traceBreachMessage(res.Trace)))
-	case res.Profile != nil && len(res.Profile.Failures) > 0:
-		return formatProfileFailure(res.Profile.Failures[0])
-	default:
-		msg := str.FirstTrimmed(res.Summary, protocolStatusText(formatHTTP(res.Response), formatGRPC(res.GRPC)))
-		return runfmt.ClassFailure(runclass.AssertionFailure(msg, "status"))
-	}
+	return formatRunFailure(resultFailure(res))
 }
 
 func formatStepFailure(step StepResult) *runfmt.Failure {
-	if step.Skipped || !stepFailed(step) {
-		return nil
-	}
-	switch {
-	case step.Canceled:
-		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
-	case step.Err != nil:
-		return runfmt.ClassFailure(runclass.ClassifyErrorSource(step.Err, "error"))
-	case step.ScriptErr != nil:
-		return runfmt.ClassFailure(runclass.ScriptFailure(step.ScriptErr.Error(), "scriptError"))
-	case anyScriptTestFailed(step.Tests):
-		return runfmt.ClassFailure(runclass.AssertionFailure(scriptTestFailureMessage(step.Tests), "tests"))
-	case traceFailed(step.Trace):
-		return runfmt.ClassFailure(runclass.TraceBudgetFailure(traceBreachMessage(step.Trace)))
-	default:
-		msg := str.FirstTrimmed(step.Summary, protocolStatusText(formatHTTP(step.Response), formatGRPC(step.GRPC)))
-		return runfmt.ClassFailure(runclass.AssertionFailure(msg, "status"))
-	}
+	return formatRunFailure(stepFailure(step))
 }
 
 func formatProfileFailure(fail ProfileFailure) *runfmt.Failure {
-	return formatClassFailure(fail.Failure)
+	return formatRunFailure(fail.Failure)
 }
 
-func formatClassFailure(failure runclass.Failure) *runfmt.Failure {
+func formatRunFailure(failure runfail.Failure) *runfmt.Failure {
 	if failure.Code == "" {
 		return nil
 	}
-	return runfmt.ClassFailure(runclass.NewFailure(
+	return runfmt.FromFailure(runfail.New(
 		failure.Code,
 		str.Trim(failure.Message),
 		str.Trim(failure.Source),
 	))
-}
-
-func anyScriptTestFailed(tests []scripts.TestResult) bool {
-	for _, test := range tests {
-		if !test.Passed {
-			return true
-		}
-	}
-	return false
-}
-
-func scriptTestFailureMessage(tests []scripts.TestResult) string {
-	return runclass.FirstTestFailureMessage(tests, func(test scripts.TestResult) runclass.TestFailureFields {
-		return runclass.TestFailureFields{
-			Name:    str.Trim(test.Name),
-			Message: str.Trim(test.Message),
-			Passed:  test.Passed,
-		}
-	})
-}
-
-func traceBreachMessage(info *TraceInfo) string {
-	if info == nil || info.Summary == nil {
-		return "trace budget breached"
-	}
-	return runclass.FirstTraceBudgetBreachMessage(
-		info.Summary.Breaches,
-		func(breach history.TraceBreach) runclass.TraceBudgetBreachFields {
-			return runclass.TraceBudgetBreachFields{
-				Kind:   str.Trim(breach.Kind),
-				Limit:  breach.Limit,
-				Actual: breach.Actual,
-				Over:   breach.Over,
-			}
-		},
-	)
-}
-
-func protocolStatusText(http *runfmt.HTTP, grpc *runfmt.GRPC) string {
-	switch {
-	case http != nil:
-		return str.Trim(http.Status)
-	case grpc != nil:
-		code := str.Trim(grpc.Code)
-		msg := str.Trim(grpc.StatusMessage)
-		if code != "" && msg != "" && !strings.EqualFold(msg, code) {
-			return code + " (" + msg + ")"
-		}
-		return code
-	default:
-		return ""
-	}
 }
 
 func formatLatency(lat *history.ProfileLatency) *runfmt.Latency {

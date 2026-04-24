@@ -333,8 +333,8 @@ func (failure *Failure) json() *jsonFailure {
 		return nil
 	}
 	return &jsonFailure{
-		Code:     failure.Code,
-		Category: failure.Category,
+		Code:     string(failure.Code),
+		Category: string(failure.Category),
 		ExitCode: failure.ExitCode,
 		Message:  failure.Message,
 		Source:   failure.Source,

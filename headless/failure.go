@@ -1,6 +1,6 @@
 package headless
 
-import "github.com/unkn0wn-root/resterm/internal/runclass"
+import "github.com/unkn0wn-root/resterm/internal/runfail"
 
 // ExitCodeMode selects whether Report.ExitCode returns detailed classified
 // codes or the legacy pass/fail summary codes.
@@ -15,55 +15,55 @@ const (
 )
 
 const (
-	ExitPass       = runclass.ExitPass
-	ExitFailure    = runclass.ExitFailure
-	ExitUsage      = runclass.ExitUsage
-	ExitInternal   = runclass.ExitInternal
-	ExitTimeout    = runclass.ExitTimeout
-	ExitNetwork    = runclass.ExitNetwork
-	ExitTLS        = runclass.ExitTLS
-	ExitAuth       = runclass.ExitAuth
-	ExitScript     = runclass.ExitScript
-	ExitFilesystem = runclass.ExitFilesystem
-	ExitProtocol   = runclass.ExitProtocol
-	ExitRoute      = runclass.ExitRoute
-	ExitCanceled   = runclass.ExitCanceled
+	ExitPass       = 0
+	ExitFailure    = 1
+	ExitUsage      = 2
+	ExitInternal   = 3
+	ExitTimeout    = 20
+	ExitNetwork    = 21
+	ExitTLS        = 22
+	ExitAuth       = 23
+	ExitScript     = 24
+	ExitFilesystem = 25
+	ExitProtocol   = 26
+	ExitRoute      = 27
+	ExitCanceled   = 130
 )
 
 // FailureCode identifies the stable machine-readable reason for a failed item.
 type FailureCode string
 
 const (
-	FailureAssertion   FailureCode = FailureCode(runclass.FailureAssertion)
-	FailureTraceBudget FailureCode = FailureCode(runclass.FailureTraceBudget)
-	FailureTimeout     FailureCode = FailureCode(runclass.FailureTimeout)
-	FailureNetwork     FailureCode = FailureCode(runclass.FailureNetwork)
-	FailureTLS         FailureCode = FailureCode(runclass.FailureTLS)
-	FailureAuth        FailureCode = FailureCode(runclass.FailureAuth)
-	FailureScript      FailureCode = FailureCode(runclass.FailureScript)
-	FailureFilesystem  FailureCode = FailureCode(runclass.FailureFilesystem)
-	FailureProtocol    FailureCode = FailureCode(runclass.FailureProtocol)
-	FailureRoute       FailureCode = FailureCode(runclass.FailureRoute)
-	FailureCanceled    FailureCode = FailureCode(runclass.FailureCanceled)
-	FailureInternal    FailureCode = FailureCode(runclass.FailureInternal)
-	FailureUnknown     FailureCode = FailureCode(runclass.FailureUnknown)
+	FailureAssertion   FailureCode = "assertion"
+	FailureTraceBudget FailureCode = "trace_budget"
+	FailureTimeout     FailureCode = "timeout"
+	FailureNetwork     FailureCode = "network"
+	FailureTLS         FailureCode = "tls"
+	FailureAuth        FailureCode = "auth"
+	FailureScript      FailureCode = "script"
+	FailureFilesystem  FailureCode = "filesystem"
+	FailureProtocol    FailureCode = "protocol"
+	FailureRoute       FailureCode = "route"
+	FailureCanceled    FailureCode = "canceled"
+	FailureInternal    FailureCode = "internal"
+	FailureUnknown     FailureCode = "unknown"
 )
 
 // FailureCategory groups failure codes into broader operational categories.
 type FailureCategory string
 
 const (
-	CategorySemantic   FailureCategory = FailureCategory(runclass.CategorySemantic)
-	CategoryTimeout    FailureCategory = FailureCategory(runclass.CategoryTimeout)
-	CategoryNetwork    FailureCategory = FailureCategory(runclass.CategoryNetwork)
-	CategoryTLS        FailureCategory = FailureCategory(runclass.CategoryTLS)
-	CategoryAuth       FailureCategory = FailureCategory(runclass.CategoryAuth)
-	CategoryScript     FailureCategory = FailureCategory(runclass.CategoryScript)
-	CategoryFilesystem FailureCategory = FailureCategory(runclass.CategoryFilesystem)
-	CategoryProtocol   FailureCategory = FailureCategory(runclass.CategoryProtocol)
-	CategoryRoute      FailureCategory = FailureCategory(runclass.CategoryRoute)
-	CategoryCanceled   FailureCategory = FailureCategory(runclass.CategoryCanceled)
-	CategoryInternal   FailureCategory = FailureCategory(runclass.CategoryInternal)
+	CategorySemantic   FailureCategory = "semantic"
+	CategoryTimeout    FailureCategory = "timeout"
+	CategoryNetwork    FailureCategory = "network"
+	CategoryTLS        FailureCategory = "tls"
+	CategoryAuth       FailureCategory = "auth"
+	CategoryScript     FailureCategory = "script"
+	CategoryFilesystem FailureCategory = "filesystem"
+	CategoryProtocol   FailureCategory = "protocol"
+	CategoryRoute      FailureCategory = "route"
+	CategoryCanceled   FailureCategory = "canceled"
+	CategoryInternal   FailureCategory = "internal"
 )
 
 // Failure contains structured machine-readable metadata for a failed result,
@@ -82,7 +82,7 @@ func (r *Report) ExitCode(mode ExitCodeMode) int {
 		return ExitPass
 	}
 	rep := toFormatReport(r)
-	return runclass.ReportExitCode(rep.Failures(), r.HasFailures(), runclass.ExitCodeMode(mode))
+	return runfail.ExitCode(rep.Failures(), r.HasFailures(), runfail.ExitMode(mode))
 }
 
 // FailureCodes returns the unique failure codes present in the report.

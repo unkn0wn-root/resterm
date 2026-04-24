@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 )
 
@@ -521,13 +521,7 @@ func toFormatFailure(f *Failure) *runfmt.Failure {
 	if f == nil {
 		return nil
 	}
-	return &runfmt.Failure{
-		Code:     string(f.Code),
-		Category: string(f.Category),
-		ExitCode: f.ExitCode,
-		Message:  f.Message,
-		Source:   f.Source,
-	}
+	return runfmt.FromFailure(runfail.New(runfail.Code(f.Code), f.Message, f.Source))
 }
 
 func toFormatResultFailure(res Result) *runfmt.Failure {
@@ -539,17 +533,17 @@ func toFormatResultFailure(res Result) *runfmt.Failure {
 	}
 	switch {
 	case res.Canceled:
-		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
+		return runfmt.FromFailure(runfail.Canceled("canceled", "canceled"))
 	case res.Error != "":
-		return runfmt.ClassFailure(runclass.ClassifyErrorSource(errorsFromText(res.Error), "error"))
+		return runfmt.FromFailure(runfail.FromErrorSource(errorsFromText(res.Error), "error"))
 	case res.ScriptError != "":
-		return runfmt.ClassFailure(runclass.ScriptFailure(res.ScriptError, "scriptError"))
+		return runfmt.FromFailure(runfail.Script(res.ScriptError, "scriptError"))
 	case anyTestFailed(res.Tests):
-		return runfmt.ClassFailure(runclass.AssertionFailure(publicTestFailureMessage(res.Tests), "tests"))
+		return runfmt.FromFailure(runfail.Assertion(publicTestFailureMessage(res.Tests), "tests"))
 	case traceFailed(res.Trace):
-		return runfmt.ClassFailure(runclass.TraceBudgetFailure(publicTraceFailureMessage(res.Trace)))
+		return runfmt.FromFailure(runfail.TraceBudget(publicTraceFailureMessage(res.Trace)))
 	default:
-		return runfmt.ClassFailure(runclass.AssertionFailure(res.Summary, "status"))
+		return runfmt.FromFailure(runfail.Assertion(res.Summary, "status"))
 	}
 }
 
@@ -562,17 +556,17 @@ func toFormatStepFailure(step Step) *runfmt.Failure {
 	}
 	switch {
 	case step.Canceled:
-		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
+		return runfmt.FromFailure(runfail.Canceled("canceled", "canceled"))
 	case step.Error != "":
-		return runfmt.ClassFailure(runclass.ClassifyErrorSource(errorsFromText(step.Error), "error"))
+		return runfmt.FromFailure(runfail.FromErrorSource(errorsFromText(step.Error), "error"))
 	case step.ScriptError != "":
-		return runfmt.ClassFailure(runclass.ScriptFailure(step.ScriptError, "scriptError"))
+		return runfmt.FromFailure(runfail.Script(step.ScriptError, "scriptError"))
 	case anyTestFailed(step.Tests):
-		return runfmt.ClassFailure(runclass.AssertionFailure(publicTestFailureMessage(step.Tests), "tests"))
+		return runfmt.FromFailure(runfail.Assertion(publicTestFailureMessage(step.Tests), "tests"))
 	case traceFailed(step.Trace):
-		return runfmt.ClassFailure(runclass.TraceBudgetFailure(publicTraceFailureMessage(step.Trace)))
+		return runfmt.FromFailure(runfail.TraceBudget(publicTraceFailureMessage(step.Trace)))
 	default:
-		return runfmt.ClassFailure(runclass.AssertionFailure(step.Summary, "status"))
+		return runfmt.FromFailure(runfail.Assertion(step.Summary, "status"))
 	}
 }
 
@@ -588,8 +582,8 @@ func errorsFromText(s string) error {
 }
 
 func publicTestFailureMessage(tests []Test) string {
-	return runclass.FirstTestFailureMessage(tests, func(test Test) runclass.TestFailureFields {
-		return runclass.TestFailureFields{
+	return runfail.FirstTestFailureMessage(tests, func(test Test) runfail.TestFailureFields {
+		return runfail.TestFailureFields{
 			Name:    test.Name,
 			Message: test.Message,
 			Passed:  test.Passed,
@@ -601,10 +595,10 @@ func publicTraceFailureMessage(trace *Trace) string {
 	if trace == nil {
 		return "trace budget breached"
 	}
-	return runclass.FirstTraceBudgetBreachMessage(
+	return runfail.FirstTraceBudgetBreachMessage(
 		trace.Breaches,
-		func(breach TraceBreach) runclass.TraceBudgetBreachFields {
-			return runclass.TraceBudgetBreachFields{
+		func(breach TraceBreach) runfail.TraceBudgetBreachFields {
+			return runfail.TraceBudgetBreachFields{
 				Kind:   breach.Kind,
 				Limit:  breach.Limit,
 				Actual: breach.Actual,

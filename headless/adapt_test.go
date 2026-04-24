@@ -15,16 +15,16 @@ import (
 
 func TestReportFromRunnerCounts(t *testing.T) {
 	src := &runner.Report{
-		Version:   "v1",
-		FilePath:  "api.http",
-		EnvName:   "dev",
-		StartedAt: time.Unix(10, 0),
-		EndedAt:   time.Unix(12, 0),
-		Duration:  2 * time.Second,
-		Total:     4,
-		Passed:    2,
-		Failed:    1,
-		Skipped:   1,
+		Version:    "v1",
+		FilePath:   "api.http",
+		EnvName:    "dev",
+		StartedAt:  time.Unix(10, 0),
+		EndedAt:    time.Unix(12, 0),
+		Duration:   2 * time.Second,
+		Total:      4,
+		Passed:     2,
+		Failed:     1,
+		Skipped:    1,
 		StopReason: "fail_fast",
 		Results: []runner.Result{
 			{

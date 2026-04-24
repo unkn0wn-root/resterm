@@ -3,14 +3,14 @@ package runfmt
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/runclass"
+	"github.com/unkn0wn-root/resterm/internal/runfail"
 )
 
 const ReportSchemaVersion = "1"
 
-func (rep Report) ExitCode(mode runclass.ExitCodeMode) int {
+func (rep Report) ExitCode(mode runfail.ExitMode) int {
 	failures := rep.Failures()
-	return runclass.ReportExitCode(failures, rep.Failed > 0 || len(failures) > 0, mode)
+	return runfail.ExitCode(failures, rep.Failed > 0 || len(failures) > 0, mode)
 }
 
 func (rep Report) FailureCodes() []string {
@@ -34,20 +34,20 @@ func (rep Report) FailureCodes() []string {
 	return out
 }
 
-func (rep Report) Failures() []runclass.Failure {
-	out := make([]runclass.Failure, 0)
+func (rep Report) Failures() []runfail.Failure {
+	out := make([]runfail.Failure, 0)
 	for _, res := range rep.Results {
-		if failure := failureToClass(res.Failure); failure.Code != "" {
+		if failure := toRunFailure(res.Failure); failure.Code != "" {
 			out = append(out, failure)
 		}
 		for _, step := range res.Steps {
-			if failure := failureToClass(step.Failure); failure.Code != "" {
+			if failure := toRunFailure(step.Failure); failure.Code != "" {
 				out = append(out, failure)
 			}
 		}
 		if res.Profile != nil {
 			for _, failure := range res.Profile.Failures {
-				if got := failureToClass(failure.Failure); got.Code != "" {
+				if got := toRunFailure(failure.Failure); got.Code != "" {
 					out = append(out, got)
 				}
 			}
@@ -56,24 +56,24 @@ func (rep Report) Failures() []runclass.Failure {
 	return out
 }
 
-func ClassFailure(f runclass.Failure) *Failure {
+func FromFailure(f runfail.Failure) *Failure {
 	if f.Code == "" {
 		return nil
 	}
 	return &Failure{
-		Code:     string(f.Code),
-		Category: string(f.Category),
+		Code:     f.Code,
+		Category: f.Category,
 		ExitCode: f.ExitCode,
 		Message:  f.Message,
 		Source:   f.Source,
 	}
 }
 
-func failureToClass(f *Failure) runclass.Failure {
+func toRunFailure(f *Failure) runfail.Failure {
 	if f == nil {
-		return runclass.Failure{}
+		return runfail.Failure{}
 	}
-	return runclass.NewFailure(runclass.FailureCode(f.Code), f.Message, f.Source)
+	return runfail.New(f.Code, f.Message, f.Source)
 }
 
 func schemaVersion(v string) string {

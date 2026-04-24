@@ -1,4 +1,4 @@
-package runclass
+package runfail
 
 import "time"
 
