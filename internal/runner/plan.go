@@ -18,6 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/runcheck"
+	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -144,10 +145,11 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	}
 
 	rep := &Report{
-		Version:   opt.Version,
-		FilePath:  opt.FilePath,
-		EnvName:   opt.EnvName,
-		StartedAt: start,
+		Version:       opt.Version,
+		SchemaVersion: runfmt.ReportSchemaVersion,
+		FilePath:      opt.FilePath,
+		EnvName:       opt.EnvName,
+		StartedAt:     start,
 	}
 
 	if tg.workflow != nil {
@@ -161,7 +163,7 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	}
 
 	rep.Results = make([]Result, 0, len(tg.requests))
-	for _, req := range tg.requests {
+	for i, req := range tg.requests {
 		runReq := cloneReq(req)
 		if opt.Profile && runReq.Metadata.Profile == nil {
 			runReq.Metadata.Profile = &restfile.ProfileSpec{}
@@ -179,6 +181,13 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 			rep.add(profileRunResult(runReq, *res.Profile, opt.EnvName))
 		default:
 			rep.add(requestRunResult(runReq, res, opt.EnvName))
+		}
+		if opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]) {
+			rep.StopReason = stopReasonFailFast
+			for _, skipped := range tg.requests[i+1:] {
+				rep.add(skippedRequestResult(skipped, opt.EnvName, "skipped after --fail-fast"))
+			}
+			break
 		}
 	}
 	return finishRun(rep, exec, pl.state, opt)

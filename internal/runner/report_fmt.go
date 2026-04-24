@@ -1,12 +1,16 @@
 package runner
 
 import (
+	"errors"
 	"io"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -28,23 +32,30 @@ func (r *Report) WriteJUnit(w io.Writer) error {
 	return runfmt.WriteJUnit(w, &rep)
 }
 
+func ExitCode(rep *Report, mode runclass.ExitCodeMode) int {
+	fmtRep := NormalizeReport(rep)
+	return fmtRep.ExitCode(mode)
+}
+
 // NormalizeReport converts a runner report into the canonical runfmt model.
 func NormalizeReport(rep *Report) runfmt.Report {
 	if rep == nil {
 		return runfmt.Report{}
 	}
 	out := runfmt.Report{
-		Version:   str.Trim(rep.Version),
-		FilePath:  rep.FilePath,
-		EnvName:   str.Trim(rep.EnvName),
-		StartedAt: rep.StartedAt,
-		EndedAt:   rep.EndedAt,
-		Duration:  rep.Duration,
-		Results:   make([]runfmt.Result, 0, len(rep.Results)),
-		Total:     rep.Total,
-		Passed:    rep.Passed,
-		Failed:    rep.Failed,
-		Skipped:   rep.Skipped,
+		SchemaVersion: str.FirstTrimmed(rep.SchemaVersion, runfmt.ReportSchemaVersion),
+		Version:       str.Trim(rep.Version),
+		FilePath:      rep.FilePath,
+		EnvName:       str.Trim(rep.EnvName),
+		StartedAt:     rep.StartedAt,
+		EndedAt:       rep.EndedAt,
+		Duration:      rep.Duration,
+		Results:       make([]runfmt.Result, 0, len(rep.Results)),
+		Total:         rep.Total,
+		Passed:        rep.Passed,
+		Failed:        rep.Failed,
+		Skipped:       rep.Skipped,
+		StopReason:    rep.StopReason,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, toFormatResult(res))
@@ -67,6 +78,7 @@ func toFormatResult(res Result) runfmt.Result {
 		SkipReason:      str.Trim(res.SkipReason),
 		Error:           errText(res.Err),
 		ScriptError:     errText(res.ScriptErr),
+		Failure:         formatResultFailure(res),
 		HTTP:            formatHTTP(res.Response),
 		GRPC:            formatGRPC(res.GRPC),
 		Stream:          formatStream(res.Stream),
@@ -96,6 +108,7 @@ func toFormatStep(step StepResult) runfmt.Step {
 		SkipReason:      str.Trim(step.SkipReason),
 		Error:           errText(step.Err),
 		ScriptError:     errText(step.ScriptErr),
+		Failure:         formatStepFailure(step),
 		HTTP:            formatHTTP(step.Response),
 		GRPC:            formatGRPC(step.GRPC),
 		Stream:          formatStream(step.Stream),
@@ -216,10 +229,131 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 				Status:     str.Trim(fail.Status),
 				StatusCode: fail.StatusCode,
 				Duration:   fail.Duration,
+				Failure:    formatProfileFailure(fail),
 			})
 		}
 	}
 	return out
+}
+
+func formatResultFailure(res Result) *runfmt.Failure {
+	if res.Skipped || !resultFailed(res) {
+		return nil
+	}
+	switch {
+	case res.Canceled:
+		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
+	case res.Err != nil:
+		return runfmt.ClassFailure(runclass.ClassifyErrorSource(res.Err, "error"))
+	case res.ScriptErr != nil:
+		return runfmt.ClassFailure(runclass.ScriptFailure(res.ScriptErr.Error(), "scriptError"))
+	case failedScriptTestCount(res.Tests) > 0:
+		return runfmt.ClassFailure(runclass.AssertionFailure(scriptTestFailureMessage(res.Tests), "tests"))
+	case traceFailed(res.Trace):
+		return runfmt.ClassFailure(runclass.TraceBudgetFailure(traceBreachMessage(res.Trace)))
+	case res.Profile != nil && len(res.Profile.Failures) > 0:
+		return formatProfileFailure(res.Profile.Failures[0])
+	default:
+		msg := str.FirstTrimmed(res.Summary, protocolStatusText(formatHTTP(res.Response), formatGRPC(res.GRPC)))
+		return runfmt.ClassFailure(runclass.AssertionFailure(msg, "status"))
+	}
+}
+
+func formatStepFailure(step StepResult) *runfmt.Failure {
+	if step.Skipped || !stepFailed(step) {
+		return nil
+	}
+	switch {
+	case step.Canceled:
+		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
+	case step.Err != nil:
+		return runfmt.ClassFailure(runclass.ClassifyErrorSource(step.Err, "error"))
+	case step.ScriptErr != nil:
+		return runfmt.ClassFailure(runclass.ScriptFailure(step.ScriptErr.Error(), "scriptError"))
+	case failedScriptTestCount(step.Tests) > 0:
+		return runfmt.ClassFailure(runclass.AssertionFailure(scriptTestFailureMessage(step.Tests), "tests"))
+	case traceFailed(step.Trace):
+		return runfmt.ClassFailure(runclass.TraceBudgetFailure(traceBreachMessage(step.Trace)))
+	default:
+		msg := str.FirstTrimmed(step.Summary, protocolStatusText(formatHTTP(step.Response), formatGRPC(step.GRPC)))
+		return runfmt.ClassFailure(runclass.AssertionFailure(msg, "status"))
+	}
+}
+
+func formatProfileFailure(fail ProfileFailure) *runfmt.Failure {
+	msg := str.FirstTrimmed(fail.Reason, fail.Status)
+	if msg == "" && fail.StatusCode != 0 {
+		msg = strconv.Itoa(fail.StatusCode)
+	}
+	if fail.StatusCode >= 400 || strings.Contains(strings.ToLower(msg), "test failed") {
+		return runfmt.ClassFailure(runclass.AssertionFailure(msg, "profile"))
+	}
+	return runfmt.ClassFailure(runclass.ClassifyErrorSource(errors.New(msg), "profile"))
+}
+
+func failedScriptTestCount(tests []scripts.TestResult) int {
+	n := 0
+	for _, test := range tests {
+		if !test.Passed {
+			n++
+		}
+	}
+	return n
+}
+
+func scriptTestFailureMessage(tests []scripts.TestResult) string {
+	for _, test := range tests {
+		if test.Passed {
+			continue
+		}
+		name := str.Trim(test.Name)
+		msg := str.Trim(test.Message)
+		switch {
+		case name != "" && msg != "":
+			return name + ": " + msg
+		case name != "":
+			return name
+		case msg != "":
+			return msg
+		default:
+			return "test failed"
+		}
+	}
+	return "test failed"
+}
+
+func traceBreachMessage(info *TraceInfo) string {
+	if info == nil || info.Summary == nil || len(info.Summary.Breaches) == 0 {
+		return "trace budget breached"
+	}
+	breach := info.Summary.Breaches[0]
+	label := str.Trim(breach.Kind)
+	if label == "" {
+		label = "trace"
+	}
+	if breach.Over > 0 {
+		return "trace budget breach " + label + " (+" + breach.Over.String() + ")"
+	}
+	if breach.Limit > 0 && breach.Actual > 0 {
+		return "trace budget breach " + label + " (" + breach.Actual.String() + " > " + breach.Limit.String() + ")"
+	}
+	return "trace budget breach " + label
+}
+
+func protocolStatusText(http *runfmt.HTTP, grpc *runfmt.GRPC) string {
+	switch {
+	case http != nil:
+		return str.Trim(http.Status)
+	case grpc != nil:
+		code := str.Trim(grpc.Code)
+		msg := str.Trim(grpc.StatusMessage)
+		if code != "" && msg != "" && !strings.EqualFold(msg, code) {
+			return code + " (" + msg + ")"
+		}
+		return code
+	default:
+		return ""
+	}
 }
 
 func formatLatency(lat *history.ProfileLatency) *runfmt.Latency {

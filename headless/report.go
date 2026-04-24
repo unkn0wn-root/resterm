@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 )
 
@@ -57,19 +58,30 @@ func (s Status) IsValid() bool {
 	}
 }
 
+// StopReason explains why a run stopped before all selected work completed.
+// The zero value means the run completed normally.
+type StopReason string
+
+const (
+	// StopReasonFailFast means Options.FailFast stopped execution after a failure.
+	StopReasonFailFast StopReason = "fail_fast"
+)
+
 // Report contains the results of a headless run.
 type Report struct {
-	Version   string
-	FilePath  string
-	EnvName   string
-	StartedAt time.Time
-	EndedAt   time.Time
-	Duration  time.Duration
-	Results   []Result
-	Total     int
-	Passed    int
-	Failed    int
-	Skipped   int
+	SchemaVersion string
+	Version       string
+	FilePath      string
+	EnvName       string
+	StartedAt     time.Time
+	EndedAt       time.Time
+	Duration      time.Duration
+	Results       []Result
+	Total         int
+	Passed        int
+	Failed        int
+	Skipped       int
+	StopReason    StopReason
 }
 
 // HasFailures reports whether the report contains any failed results.
@@ -107,6 +119,7 @@ type Result struct {
 	SkipReason  string
 	Error       string
 	ScriptError string
+	Failure     *Failure
 	HTTP        *HTTP
 	GRPC        *GRPC
 	Stream      *Stream
@@ -128,10 +141,12 @@ func (r Result) Failed() bool {
 }
 
 func (r Result) effectiveStatus() Status {
-	return status(
-		r.Status,
-		hasFailure(r.Canceled, r.Error, r.ScriptError, r.Trace, r.Tests),
-	)
+	return status(r.Status, r.hasFailureEvidence())
+}
+
+func (r Result) hasFailureEvidence() bool {
+	return r.Failure != nil ||
+		hasFailure(r.Canceled, r.Error, r.ScriptError, r.Trace, r.Tests)
 }
 
 // Step contains one workflow or compare step result.
@@ -150,6 +165,7 @@ type Step struct {
 	SkipReason  string
 	Error       string
 	ScriptError string
+	Failure     *Failure
 	HTTP        *HTTP
 	GRPC        *GRPC
 	Stream      *Stream
@@ -168,10 +184,12 @@ func (s Step) Failed() bool {
 }
 
 func (s Step) effectiveStatus() Status {
-	return status(
-		s.Status,
-		hasFailure(s.Canceled, s.Error, s.ScriptError, s.Trace, s.Tests),
-	)
+	return status(s.Status, s.hasFailureEvidence())
+}
+
+func (s Step) hasFailureEvidence() bool {
+	return s.Failure != nil ||
+		hasFailure(s.Canceled, s.Error, s.ScriptError, s.Trace, s.Tests)
 }
 
 // skip wins, otherwise any failure evidence makes the result fail.
@@ -259,6 +277,7 @@ type ProfileFailure struct {
 	Status     string        `json:"status,omitempty"`
 	StatusCode int           `json:"statusCode,omitempty"`
 	Duration   time.Duration `json:"duration,omitempty"`
+	Failure    *Failure      `json:"failure,omitempty"`
 }
 
 // Latency contains aggregate profile latency statistics.
@@ -321,17 +340,19 @@ func toFormatReport(rep *Report) runfmt.Report {
 		return runfmt.Report{}
 	}
 	out := runfmt.Report{
-		Version:   rep.Version,
-		FilePath:  rep.FilePath,
-		EnvName:   rep.EnvName,
-		StartedAt: rep.StartedAt,
-		EndedAt:   rep.EndedAt,
-		Duration:  rep.Duration,
-		Results:   make([]runfmt.Result, 0, len(rep.Results)),
-		Total:     rep.Total,
-		Passed:    rep.Passed,
-		Failed:    rep.Failed,
-		Skipped:   rep.Skipped,
+		SchemaVersion: rep.SchemaVersion,
+		Version:       rep.Version,
+		FilePath:      rep.FilePath,
+		EnvName:       rep.EnvName,
+		StartedAt:     rep.StartedAt,
+		EndedAt:       rep.EndedAt,
+		Duration:      rep.Duration,
+		Results:       make([]runfmt.Result, 0, len(rep.Results)),
+		Total:         rep.Total,
+		Passed:        rep.Passed,
+		Failed:        rep.Failed,
+		Skipped:       rep.Skipped,
+		StopReason:    string(rep.StopReason),
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, toFormatResult(res))
@@ -353,6 +374,7 @@ func toFormatResult(res Result) runfmt.Result {
 		SkipReason:  res.SkipReason,
 		Error:       res.Error,
 		ScriptError: res.ScriptError,
+		Failure:     toFormatResultFailure(res),
 		HTTP:        toFormatHTTP(res.HTTP),
 		GRPC:        toFormatGRPC(res.GRPC),
 		Stream:      toFormatStream(res.Stream),
@@ -396,6 +418,7 @@ func toFormatStep(step Step) runfmt.Step {
 		SkipReason:  step.SkipReason,
 		Error:       step.Error,
 		ScriptError: step.ScriptError,
+		Failure:     toFormatStepFailure(step),
 		HTTP:        toFormatHTTP(step.HTTP),
 		GRPC:        toFormatGRPC(step.GRPC),
 		Stream:      toFormatStream(step.Stream),
@@ -487,10 +510,118 @@ func toFormatProfile(prof *Profile) *runfmt.Profile {
 				Status:     fail.Status,
 				StatusCode: fail.StatusCode,
 				Duration:   fail.Duration,
+				Failure:    toFormatFailure(fail.Failure),
 			})
 		}
 	}
 	return out
+}
+
+func toFormatFailure(f *Failure) *runfmt.Failure {
+	if f == nil {
+		return nil
+	}
+	return &runfmt.Failure{
+		Code:     string(f.Code),
+		Category: string(f.Category),
+		ExitCode: f.ExitCode,
+		Message:  f.Message,
+		Source:   f.Source,
+	}
+}
+
+func toFormatResultFailure(res Result) *runfmt.Failure {
+	if res.Failure != nil {
+		return toFormatFailure(res.Failure)
+	}
+	if res.effectiveStatus() != StatusFail {
+		return nil
+	}
+	switch {
+	case res.Canceled:
+		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
+	case res.Error != "":
+		return runfmt.ClassFailure(runclass.ClassifyErrorSource(errorsFromText(res.Error), "error"))
+	case res.ScriptError != "":
+		return runfmt.ClassFailure(runclass.ScriptFailure(res.ScriptError, "scriptError"))
+	case anyTestFailed(res.Tests):
+		return runfmt.ClassFailure(runclass.AssertionFailure(publicTestFailureMessage(res.Tests), "tests"))
+	case traceFailed(res.Trace):
+		return runfmt.ClassFailure(runclass.TraceBudgetFailure(publicTraceFailureMessage(res.Trace)))
+	default:
+		return runfmt.ClassFailure(runclass.AssertionFailure(res.Summary, "status"))
+	}
+}
+
+func toFormatStepFailure(step Step) *runfmt.Failure {
+	if step.Failure != nil {
+		return toFormatFailure(step.Failure)
+	}
+	if step.effectiveStatus() != StatusFail {
+		return nil
+	}
+	switch {
+	case step.Canceled:
+		return runfmt.ClassFailure(runclass.CanceledFailure("canceled", "canceled"))
+	case step.Error != "":
+		return runfmt.ClassFailure(runclass.ClassifyErrorSource(errorsFromText(step.Error), "error"))
+	case step.ScriptError != "":
+		return runfmt.ClassFailure(runclass.ScriptFailure(step.ScriptError, "scriptError"))
+	case anyTestFailed(step.Tests):
+		return runfmt.ClassFailure(runclass.AssertionFailure(publicTestFailureMessage(step.Tests), "tests"))
+	case traceFailed(step.Trace):
+		return runfmt.ClassFailure(runclass.TraceBudgetFailure(publicTraceFailureMessage(step.Trace)))
+	default:
+		return runfmt.ClassFailure(runclass.AssertionFailure(step.Summary, "status"))
+	}
+}
+
+type textError string
+
+func (e textError) Error() string { return string(e) }
+
+func errorsFromText(s string) error {
+	if s == "" {
+		return nil
+	}
+	return textError(s)
+}
+
+func publicTestFailureMessage(tests []Test) string {
+	for _, test := range tests {
+		if test.Passed {
+			continue
+		}
+		switch {
+		case test.Name != "" && test.Message != "":
+			return test.Name + ": " + test.Message
+		case test.Name != "":
+			return test.Name
+		case test.Message != "":
+			return test.Message
+		default:
+			return "test failed"
+		}
+	}
+	return "test failed"
+}
+
+func publicTraceFailureMessage(trace *Trace) string {
+	if trace == nil || len(trace.Breaches) == 0 {
+		return "trace budget breached"
+	}
+	breach := trace.Breaches[0]
+	label := breach.Kind
+	if label == "" {
+		label = "trace"
+	}
+	if breach.Over > 0 {
+		return "trace budget breach " + label + " (+" + breach.Over.String() + ")"
+	}
+	if breach.Limit > 0 && breach.Actual > 0 {
+		return "trace budget breach " + label + " (" + breach.Actual.String() + " > " + breach.Limit.String() + ")"
+	}
+	return "trace budget breach " + label
 }
 
 func toFormatLatency(lat *Latency) *runfmt.Latency {

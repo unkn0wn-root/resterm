@@ -25,6 +25,7 @@ func TestReportFromRunnerCounts(t *testing.T) {
 		Passed:    2,
 		Failed:    1,
 		Skipped:   1,
+		StopReason: "fail_fast",
 		Results: []runner.Result{
 			{
 				Kind:        runner.ResultKindRequest,
@@ -109,6 +110,9 @@ func TestReportFromRunnerCounts(t *testing.T) {
 	}
 	if got.Total != 4 || got.Passed != 2 || got.Failed != 1 || got.Skipped != 1 {
 		t.Fatalf("unexpected counts: %+v", got)
+	}
+	if got.StopReason != StopReasonFailFast {
+		t.Fatalf("stop reason = %q, want %q", got.StopReason, StopReasonFailFast)
 	}
 	if len(got.Results) != 4 {
 		t.Fatalf("expected four results, got %+v", got.Results)

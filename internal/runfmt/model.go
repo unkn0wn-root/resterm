@@ -11,17 +11,19 @@ const (
 )
 
 type Report struct {
-	Version   string
-	FilePath  string
-	EnvName   string
-	StartedAt time.Time
-	EndedAt   time.Time
-	Duration  time.Duration
-	Results   []Result
-	Total     int
-	Passed    int
-	Failed    int
-	Skipped   int
+	SchemaVersion string
+	Version       string
+	FilePath      string
+	EnvName       string
+	StartedAt     time.Time
+	EndedAt       time.Time
+	Duration      time.Duration
+	Results       []Result
+	Total         int
+	Passed        int
+	Failed        int
+	Skipped       int
+	StopReason    string
 }
 
 type Result struct {
@@ -38,6 +40,7 @@ type Result struct {
 	SkipReason      string
 	Error           string
 	ScriptError     string
+	Failure         *Failure
 	HTTP            *HTTP
 	GRPC            *GRPC
 	Stream          *Stream
@@ -64,6 +67,7 @@ type Step struct {
 	SkipReason      string
 	Error           string
 	ScriptError     string
+	Failure         *Failure
 	HTTP            *HTTP
 	GRPC            *GRPC
 	Stream          *Stream
@@ -115,6 +119,15 @@ type ProfileFailure struct {
 	Status     string
 	StatusCode int
 	Duration   time.Duration
+	Failure    *Failure
+}
+
+type Failure struct {
+	Code     string `json:"code,omitempty"`
+	Category string `json:"category,omitempty"`
+	ExitCode int    `json:"exitCode,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Source   string `json:"source,omitempty"`
 }
 
 type Latency struct {

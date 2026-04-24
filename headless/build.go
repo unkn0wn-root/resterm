@@ -155,6 +155,7 @@ func (b *builder) finalize() {
 	b.out.PersistGlobals = b.opt.State.PersistGlobals
 	b.out.PersistAuth = b.opt.State.PersistAuth
 	b.out.History = b.opt.State.History
+	b.out.FailFast = b.opt.FailFast
 	b.out.Profile = b.opt.Profile.Enabled
 }
 

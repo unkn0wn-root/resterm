@@ -8,21 +8,25 @@ import (
 )
 
 type jsonReport struct {
-	Version    string       `json:"version,omitempty"`
-	FilePath   string       `json:"filePath"`
-	EnvName    string       `json:"envName,omitempty"`
-	StartedAt  time.Time    `json:"startedAt"`
-	EndedAt    time.Time    `json:"endedAt"`
-	DurationMs int64        `json:"durationMs"`
-	Summary    jsonSummary  `json:"summary"`
-	Results    []jsonResult `json:"results"`
+	SchemaVersion string       `json:"schemaVersion"`
+	Version       string       `json:"version,omitempty"`
+	FilePath      string       `json:"filePath"`
+	EnvName       string       `json:"envName,omitempty"`
+	StartedAt     time.Time    `json:"startedAt"`
+	EndedAt       time.Time    `json:"endedAt"`
+	DurationMs    int64        `json:"durationMs"`
+	Summary       jsonSummary  `json:"summary"`
+	Results       []jsonResult `json:"results"`
 }
 
 type jsonSummary struct {
-	Total   int `json:"total"`
-	Passed  int `json:"passed"`
-	Failed  int `json:"failed"`
-	Skipped int `json:"skipped"`
+	Total        int      `json:"total"`
+	Passed       int      `json:"passed"`
+	Failed       int      `json:"failed"`
+	Skipped      int      `json:"skipped"`
+	StopReason   string   `json:"stopReason,omitempty"`
+	ExitCode     int      `json:"exitCode"`
+	FailureCodes []string `json:"failureCodes,omitempty"`
 }
 
 type jsonResult struct {
@@ -38,6 +42,7 @@ type jsonResult struct {
 	SkipReason      string       `json:"skipReason,omitempty"`
 	Error           string       `json:"error,omitempty"`
 	ScriptError     string       `json:"scriptError,omitempty"`
+	Failure         *jsonFailure `json:"failure,omitempty"`
 	DurationMs      int64        `json:"durationMs,omitempty"`
 	HTTP            *jsonHTTP    `json:"http,omitempty"`
 	GRPC            *jsonGRPC    `json:"grpc,omitempty"`
@@ -59,6 +64,14 @@ type jsonGRPC struct {
 	Code          string `json:"code,omitempty"`
 	StatusCode    int    `json:"statusCode,omitempty"`
 	StatusMessage string `json:"statusMessage,omitempty"`
+}
+
+type jsonFailure struct {
+	Code     string `json:"code,omitempty"`
+	Category string `json:"category,omitempty"`
+	ExitCode int    `json:"exitCode,omitempty"`
+	Message  string `json:"message,omitempty"`
+	Source   string `json:"source,omitempty"`
 }
 
 type jsonTest struct {
@@ -107,12 +120,13 @@ type jsonHistBin struct {
 }
 
 type jsonProfileFailure struct {
-	Iteration  int    `json:"iteration,omitempty"`
-	Warmup     bool   `json:"warmup,omitempty"`
-	Reason     string `json:"reason,omitempty"`
-	Status     string `json:"status,omitempty"`
-	StatusCode int    `json:"statusCode,omitempty"`
-	DurationMs int64  `json:"durationMs,omitempty"`
+	Iteration  int          `json:"iteration,omitempty"`
+	Warmup     bool         `json:"warmup,omitempty"`
+	Reason     string       `json:"reason,omitempty"`
+	Status     string       `json:"status,omitempty"`
+	StatusCode int          `json:"statusCode,omitempty"`
+	DurationMs int64        `json:"durationMs,omitempty"`
+	Failure    *jsonFailure `json:"failure,omitempty"`
 }
 
 type jsonStream struct {
@@ -144,26 +158,27 @@ type jsonTraceBreach struct {
 }
 
 type jsonStep struct {
-	Name            string      `json:"name,omitempty"`
-	Method          string      `json:"method,omitempty"`
-	Target          string      `json:"target,omitempty"`
-	EffectiveTarget string      `json:"effectiveTarget,omitempty"`
-	Environment     string      `json:"environment,omitempty"`
-	Branch          string      `json:"branch,omitempty"`
-	Iteration       int         `json:"iteration,omitempty"`
-	Total           int         `json:"total,omitempty"`
-	Status          string      `json:"status"`
-	Summary         string      `json:"summary,omitempty"`
-	Canceled        bool        `json:"canceled,omitempty"`
-	SkipReason      string      `json:"skipReason,omitempty"`
-	Error           string      `json:"error,omitempty"`
-	ScriptError     string      `json:"scriptError,omitempty"`
-	DurationMs      int64       `json:"durationMs,omitempty"`
-	HTTP            *jsonHTTP   `json:"http,omitempty"`
-	GRPC            *jsonGRPC   `json:"grpc,omitempty"`
-	Stream          *jsonStream `json:"stream,omitempty"`
-	Trace           *jsonTrace  `json:"trace,omitempty"`
-	Tests           []jsonTest  `json:"tests,omitempty"`
+	Name            string       `json:"name,omitempty"`
+	Method          string       `json:"method,omitempty"`
+	Target          string       `json:"target,omitempty"`
+	EffectiveTarget string       `json:"effectiveTarget,omitempty"`
+	Environment     string       `json:"environment,omitempty"`
+	Branch          string       `json:"branch,omitempty"`
+	Iteration       int          `json:"iteration,omitempty"`
+	Total           int          `json:"total,omitempty"`
+	Status          string       `json:"status"`
+	Summary         string       `json:"summary,omitempty"`
+	Canceled        bool         `json:"canceled,omitempty"`
+	SkipReason      string       `json:"skipReason,omitempty"`
+	Error           string       `json:"error,omitempty"`
+	ScriptError     string       `json:"scriptError,omitempty"`
+	Failure         *jsonFailure `json:"failure,omitempty"`
+	DurationMs      int64        `json:"durationMs,omitempty"`
+	HTTP            *jsonHTTP    `json:"http,omitempty"`
+	GRPC            *jsonGRPC    `json:"grpc,omitempty"`
+	Stream          *jsonStream  `json:"stream,omitempty"`
+	Trace           *jsonTrace   `json:"trace,omitempty"`
+	Tests           []jsonTest   `json:"tests,omitempty"`
 }
 
 func WriteJSON(w io.Writer, rep *Report) error {
@@ -178,17 +193,21 @@ func (rep Report) MarshalJSON() ([]byte, error) {
 
 func (rep Report) json() jsonReport {
 	out := jsonReport{
-		Version:    rep.Version,
-		FilePath:   rep.FilePath,
-		EnvName:    rep.EnvName,
-		StartedAt:  rep.StartedAt,
-		EndedAt:    rep.EndedAt,
-		DurationMs: durMS(rep.Duration),
+		SchemaVersion: schemaVersion(rep.SchemaVersion),
+		Version:       rep.Version,
+		FilePath:      rep.FilePath,
+		EnvName:       rep.EnvName,
+		StartedAt:     rep.StartedAt,
+		EndedAt:       rep.EndedAt,
+		DurationMs:    durMS(rep.Duration),
 		Summary: jsonSummary{
-			Total:   rep.Total,
-			Passed:  rep.Passed,
-			Failed:  rep.Failed,
-			Skipped: rep.Skipped,
+			Total:        rep.Total,
+			Passed:       rep.Passed,
+			Failed:       rep.Failed,
+			Skipped:      rep.Skipped,
+			StopReason:   rep.StopReason,
+			ExitCode:     rep.ExitCode(""),
+			FailureCodes: rep.FailureCodes(),
 		},
 		Results: make([]jsonResult, 0, len(rep.Results)),
 	}
@@ -216,6 +235,7 @@ func (res Result) json() jsonResult {
 		SkipReason:      res.SkipReason,
 		Error:           res.Error,
 		ScriptError:     res.ScriptError,
+		Failure:         res.Failure.json(),
 		DurationMs:      durMS(res.Duration),
 		HTTP:            res.HTTP.json(),
 		GRPC:            res.GRPC.json(),
@@ -259,6 +279,7 @@ func (step Step) json() jsonStep {
 		SkipReason:      step.SkipReason,
 		Error:           step.Error,
 		ScriptError:     step.ScriptError,
+		Failure:         step.Failure.json(),
 		DurationMs:      durMS(step.Duration),
 		HTTP:            step.HTTP.json(),
 		GRPC:            step.GRPC.json(),
@@ -304,6 +325,19 @@ func (grpc *GRPC) json() *jsonGRPC {
 		Code:          grpc.Code,
 		StatusCode:    grpc.StatusCode,
 		StatusMessage: grpc.StatusMessage,
+	}
+}
+
+func (failure *Failure) json() *jsonFailure {
+	if failure == nil {
+		return nil
+	}
+	return &jsonFailure{
+		Code:     failure.Code,
+		Category: failure.Category,
+		ExitCode: failure.ExitCode,
+		Message:  failure.Message,
+		Source:   failure.Source,
 	}
 }
 
@@ -397,6 +431,7 @@ func (fail ProfileFailure) json() jsonProfileFailure {
 		Status:     fail.Status,
 		StatusCode: fail.StatusCode,
 		DurationMs: durMS(fail.Duration),
+		Failure:    fail.Failure.json(),
 	}
 }
 

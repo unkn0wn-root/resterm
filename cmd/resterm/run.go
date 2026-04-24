@@ -16,6 +16,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runview"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -72,8 +73,8 @@ const (
 	runFmtPretty runFormat = "pretty"
 	runFmtRaw    runFormat = "raw"
 
-	runExitCodeUsage    = 2
-	runExitCodeCanceled = 130
+	runExitCodeUsage    = runclass.ExitUsage
+	runExitCodeCanceled = runclass.ExitCanceled
 )
 
 type runUsageError struct {
@@ -115,6 +116,7 @@ type runCmd struct {
 	workflow       string
 	tag            string
 	format         string
+	exitCodeMode   string
 	color          string
 	line           int
 	artifactDir    string
@@ -126,21 +128,23 @@ type runCmd struct {
 	persistGlobals bool
 	persistAuth    bool
 	history        bool
+	failFast       bool
 }
 
 func newRunCmd() *runCmd {
 	cmd := &runCmd{
-		exec:      cli.NewExecFlags(),
-		runFn:     runner.RunContext,
-		newClient: cli.NewExecClient,
-		in:        os.Stdin,
-		out:       os.Stdout,
-		stdinTTY:  term.IsTerminal(int(os.Stdin.Fd())),
-		stdoutTTY: term.IsTerminal(int(os.Stdout.Fd())),
-		lookupEnv: os.LookupEnv,
-		loadTheme: loadRunTheme,
-		format:    "auto",
-		color:     string(termcolor.ModeAuto),
+		exec:         cli.NewExecFlags(),
+		runFn:        runner.RunContext,
+		newClient:    cli.NewExecClient,
+		in:           os.Stdin,
+		out:          os.Stdout,
+		stdinTTY:     term.IsTerminal(int(os.Stdin.Fd())),
+		stdoutTTY:    term.IsTerminal(int(os.Stdout.Fd())),
+		lookupEnv:    os.LookupEnv,
+		loadTheme:    loadRunTheme,
+		format:       "auto",
+		exitCodeMode: string(runclass.ExitCodeModeDetailed),
+		color:        string(termcolor.ModeAuto),
 	}
 	fs := cli.NewFlagSet("run")
 	cmd.fs = fs
@@ -164,10 +168,18 @@ func (c *runCmd) bind() {
 		c.format,
 		"Output format: auto, text, json, junit, pretty, raw",
 	)
+	cli.StringVar(
+		c.fs,
+		&c.exitCodeMode,
+		"exit-code-mode",
+		c.exitCodeMode,
+		"Exit code mode: detailed or summary",
+	)
 	cli.StringVar(c.fs, &c.color, "color", c.color, "Color for pretty output: auto, always, never")
 	c.fs.BoolVar(&c.body, "body", false, "Print only the response body for a single request result")
 	c.fs.BoolVar(&c.headers, "headers", false, "Include request and response headers in output")
 	c.fs.BoolVar(&c.profile, "profile", false, "Force profile mode for the selected request")
+	c.fs.BoolVar(&c.failFast, "fail-fast", false, "Stop after the first failed result")
 	cli.StringVar(c.fs, &c.artifactDir, "artifact-dir", "", "Directory to write run artifacts")
 	cli.StringVar(c.fs, &c.stateDir, "state-dir", "", "Directory for persisted run state")
 	c.fs.BoolVar(
@@ -239,18 +251,19 @@ func (c *runCmd) run() error {
 		if runner.IsUsageError(err) {
 			return runExit(err, runExitCodeUsage)
 		}
-		return runExit(err, 1)
+		return runExit(err, c.failureExitCode(err))
 	}
 	if err := c.writeReport(rep); err != nil {
 		if isRunUsageError(err) {
 			return runExit(err, runExitCodeUsage)
 		}
-		return runExit(fmt.Errorf("write report: %w", err), 1)
+		err = fmt.Errorf("write report: %w", err)
+		return runExit(err, c.failureExitCode(err))
 	}
 	if rep.Success() {
 		return nil
 	}
-	return cli.ExitErr{Code: 1}
+	return cli.ExitErr{Code: runner.ExitCode(rep, c.parsedExitCodeMode())}
 }
 
 func (c *runCmd) hasRequestSelector() bool {
@@ -401,6 +414,7 @@ func (c *runCmd) runOptions(
 		PersistGlobals:  c.persistGlobals,
 		PersistAuth:     c.persistAuth,
 		History:         c.history,
+		FailFast:        c.failFast,
 		EnvSet:          cfg.EnvSet,
 		EnvName:         cfg.EnvName,
 		EnvironmentFile: cfg.EnvFile,
@@ -525,6 +539,9 @@ func (c *runCmd) validateFormat() error {
 	if format == "" {
 		return fmt.Errorf("unsupported --format %q", c.format)
 	}
+	if !runclass.ValidExitCodeMode(c.parsedExitCodeMode()) {
+		return fmt.Errorf("unsupported --exit-code-mode %q", c.exitCodeMode)
+	}
 	if c.body {
 		switch format {
 		case runFmtAuto, runFmtPretty, runFmtRaw:
@@ -533,6 +550,18 @@ func (c *runCmd) validateFormat() error {
 		}
 	}
 	return nil
+}
+
+func (c *runCmd) parsedExitCodeMode() runclass.ExitCodeMode {
+	if c == nil {
+		return runclass.ExitCodeModeDetailed
+	}
+	return runclass.ExitCodeMode(strings.ToLower(strings.TrimSpace(c.exitCodeMode)))
+}
+
+func (c *runCmd) failureExitCode(err error) int {
+	failure := runclass.ClassifyError(err)
+	return runclass.ReportExitCode([]runclass.Failure{failure}, true, c.parsedExitCodeMode())
 }
 
 func (c *runCmd) reportFormat() runFormat {

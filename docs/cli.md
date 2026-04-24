@@ -108,6 +108,15 @@ Output rules worth knowing:
 - `--color auto` enables ANSI output only when stdout is a TTY and the terminal supports color
 - `--color always` forces pretty color even when output is piped
 
+### Execution Controls
+
+| Flag | Description |
+| --- | --- |
+| `--fail-fast` | Stop after the first failed top-level result and mark the remaining selected requests as skipped. |
+| `--exit-code-mode <mode>` | `detailed` returns classified CI exit codes; `summary` preserves the legacy `0`/`1`/`2` contract. |
+
+JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.failureCodes`, and per-result `failure` metadata when a result fails. Workflow, compare, and profile failures include the same structured failure object at the step or profile-iteration level.
+
 ### Artifacts And Persisted State
 
 `resterm run` can write execution artifacts and optionally persist runtime state between invocations.
@@ -132,11 +141,25 @@ Behavior:
 
 ### Exit Codes
 
+By default, `resterm run` uses detailed exit codes so CI/CD systems can distinguish operational failures from assertion failures. Pass `--exit-code-mode summary` when existing automation expects only pass/fail/usage exit codes.
+
 | Exit code | Meaning |
 | --- | --- |
 | `0` | All selected results passed. |
 | `1` | Execution completed, but at least one result failed. This includes request failures, test failures, and trace budget breaches. |
 | `2` | Usage or selection error. This includes invalid flag combinations, parse errors, unsupported formats, ambiguous selection, and missing request files. |
+| `3` | Internal or unknown runtime failure. |
+| `20` | Timeout or deadline failure. |
+| `21` | Network failure such as DNS, dial, connection reset, or proxy failure. |
+| `22` | TLS or certificate failure. |
+| `23` | Authentication or authorization failure. |
+| `24` | Script execution failure. |
+| `25` | Filesystem, state, artifact, or history persistence failure. |
+| `26` | Protocol failure such as malformed HTTP/gRPC/streaming behavior. |
+| `27` | Route/tunnel failure such as SSH or Kubernetes port-forward setup. |
+| `130` | Canceled execution. |
+
+In `--exit-code-mode summary`, completed failed runs and runtime failures exit `1`, usage errors exit `2`, and successful runs exit `0`.
 
 ### Examples
 
@@ -198,6 +221,12 @@ Force profile mode for a request:
 
 ```bash
 resterm run --request health --profile ./requests.http
+```
+
+Stop after the first failed selected request while still recording skipped results:
+
+```bash
+resterm run --tag smoke --fail-fast --format json ./requests.http
 ```
 
 ## `resterm`

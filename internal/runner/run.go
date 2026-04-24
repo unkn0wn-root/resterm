@@ -40,6 +40,7 @@ type Options struct {
 	PersistGlobals  bool
 	PersistAuth     bool
 	History         bool
+	FailFast        bool
 	EnvSet          vars.EnvironmentSet
 	EnvName         string
 	EnvironmentFile string
@@ -52,18 +53,22 @@ type Options struct {
 	Select          Select
 }
 
+const stopReasonFailFast = "fail_fast"
+
 type Report struct {
-	Version   string
-	FilePath  string
-	EnvName   string
-	StartedAt time.Time
-	EndedAt   time.Time
-	Duration  time.Duration
-	Results   []Result
-	Total     int
-	Passed    int
-	Failed    int
-	Skipped   int
+	SchemaVersion string
+	Version       string
+	FilePath      string
+	EnvName       string
+	StartedAt     time.Time
+	EndedAt       time.Time
+	Duration      time.Duration
+	Results       []Result
+	Total         int
+	Passed        int
+	Failed        int
+	Skipped       int
+	StopReason    string
 }
 
 type ResultKind string
@@ -339,6 +344,20 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 	}
 	item.Passed = !item.Skipped && !requestFailed(item)
 	return item
+}
+
+func skippedRequestResult(req *restfile.Request, fallbackEnv, reason string) Result {
+	runReq := cloneReq(req)
+	return Result{
+		Kind:        ResultKindRequest,
+		Name:        requestName(runReq),
+		Method:      requestMethod(runReq),
+		Target:      requestSourceTarget(runReq),
+		Environment: str.Trim(fallbackEnv),
+		Skipped:     true,
+		SkipReason:  str.Trim(reason),
+		Passed:      false,
+	}
 }
 
 func requestFailed(item Result) bool {
