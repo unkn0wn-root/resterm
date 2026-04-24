@@ -39,7 +39,11 @@ func (c *Client) prepareBody(
 			text := string(data)
 			expanded, err := resolver.ExpandTemplates(text)
 			if err != nil {
-				return bodyPlan{}, errdef.Wrap(errdef.CodeProtocol, err, "expand body file templates")
+				return bodyPlan{}, errdef.Wrap(
+					errdef.CodeProtocol,
+					err,
+					"expand body file templates",
+				)
 			}
 
 			processed, procErr := c.injectBodyIncludes(expanded, lookup)
@@ -288,7 +292,10 @@ func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
 
 	if err := decoder.Decode(new(interface{})); err != io.EOF {
 		if err == nil {
-			return nil, errdef.New(errdef.CodeProtocol, "unexpected trailing data in graphql variables")
+			return nil, errdef.New(
+				errdef.CodeProtocol,
+				"unexpected trailing data in graphql variables",
+			)
 		}
 		return nil, errdef.Wrap(errdef.CodeProtocol, err, "parse graphql variables")
 	}

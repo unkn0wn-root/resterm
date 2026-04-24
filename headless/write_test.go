@@ -344,10 +344,18 @@ func TestReportWriteJSONIncludesFailureMetadata(t *testing.T) {
 		t.Fatalf("unexpected result failure metadata: %+v", got.Results)
 	}
 	if rep.ExitCode(ExitCodeDetailed) != ExitTimeout {
-		t.Fatalf("expected detailed exit code %d, got %d", ExitTimeout, rep.ExitCode(ExitCodeDetailed))
+		t.Fatalf(
+			"expected detailed exit code %d, got %d",
+			ExitTimeout,
+			rep.ExitCode(ExitCodeDetailed),
+		)
 	}
 	if rep.ExitCode(ExitCodeSummary) != ExitFailure {
-		t.Fatalf("expected summary exit code %d, got %d", ExitFailure, rep.ExitCode(ExitCodeSummary))
+		t.Fatalf(
+			"expected summary exit code %d, got %d",
+			ExitFailure,
+			rep.ExitCode(ExitCodeSummary),
+		)
 	}
 }
 

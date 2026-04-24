@@ -186,7 +186,10 @@ func TestMessageClassifierDecision(t *testing.T) {
 				},
 			},
 		}
-		if got := classifier.classify("weak1 weak2 weak3 strong signal", "source"); got.Code != CodeProtocol {
+		if got := classifier.classify(
+			"weak1 weak2 weak3 strong signal",
+			"source",
+		); got.Code != CodeProtocol {
 			t.Fatalf("classification = %+v, want code=%s", got, CodeProtocol)
 		}
 	})

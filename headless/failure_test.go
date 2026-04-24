@@ -43,7 +43,11 @@ func TestFailureConstantsMatchInternalValues(t *testing.T) {
 		{name: "CategoryTLS", public: CategoryTLS, internal: runfail.CategoryTLS},
 		{name: "CategoryAuth", public: CategoryAuth, internal: runfail.CategoryAuth},
 		{name: "CategoryScript", public: CategoryScript, internal: runfail.CategoryScript},
-		{name: "CategoryFilesystem", public: CategoryFilesystem, internal: runfail.CategoryFilesystem},
+		{
+			name:     "CategoryFilesystem",
+			public:   CategoryFilesystem,
+			internal: runfail.CategoryFilesystem,
+		},
 		{name: "CategoryProtocol", public: CategoryProtocol, internal: runfail.CategoryProtocol},
 		{name: "CategoryRoute", public: CategoryRoute, internal: runfail.CategoryRoute},
 		{name: "CategoryCanceled", public: CategoryCanceled, internal: runfail.CategoryCanceled},

@@ -96,7 +96,10 @@ func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
 		t.Fatalf("unexpected profile failures: %+v", gotProfile.Profile)
 	}
 	if gotProfile.Profile.Failures[0].Failure.Code != runfail.CodeTimeout {
-		t.Fatalf("expected profile failure classification, got %+v", gotProfile.Profile.Failures[0].Failure)
+		t.Fatalf(
+			"expected profile failure classification, got %+v",
+			gotProfile.Profile.Failures[0].Failure,
+		)
 	}
 	if gotProfile.Failure.Code != runfail.CodeTimeout {
 		t.Fatalf("expected profile result failure classification, got %+v", gotProfile.Failure)
@@ -104,7 +107,10 @@ func TestRunResultConstructorsTrimOwnedStrings(t *testing.T) {
 	gotProfileFmt := ReportModel(&Report{Results: []Result{gotProfile}})
 	if gotProfileFmt.Results[0].Profile.Failures[0].Reason != "timeout" ||
 		gotProfileFmt.Results[0].Profile.Failures[0].Status != "500" {
-		t.Fatalf("expected report conversion to trim profile failures, got %+v", gotProfileFmt.Results[0].Profile)
+		t.Fatalf(
+			"expected report conversion to trim profile failures, got %+v",
+			gotProfileFmt.Results[0].Profile,
+		)
 	}
 
 	gotWorkflow := workflowRunResult(engine.WorkflowResult{

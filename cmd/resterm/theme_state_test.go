@@ -58,6 +58,10 @@ background = "#bfdbfe"
 		t.Fatalf("expected themed header title foreground, got %v", got)
 	}
 	if st.settings.DefaultTheme != "daybreak" {
-		t.Fatalf("expected normalized settings theme %q, got %q", "daybreak", st.settings.DefaultTheme)
+		t.Fatalf(
+			"expected normalized settings theme %q, got %q",
+			"daybreak",
+			st.settings.DefaultTheme,
+		)
 	}
 }

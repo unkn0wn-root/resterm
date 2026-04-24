@@ -187,7 +187,10 @@ func TestReportModelUsesStructuredProfileFailure(t *testing.T) {
 	}
 	if got.Results[0].Failure == nil ||
 		got.Results[0].Failure.Code != runfail.CodeTimeout {
-		t.Fatalf("expected result failure to use structured profile failure, got %+v", got.Results[0].Failure)
+		t.Fatalf(
+			"expected result failure to use structured profile failure, got %+v",
+			got.Results[0].Failure,
+		)
 	}
 }
 

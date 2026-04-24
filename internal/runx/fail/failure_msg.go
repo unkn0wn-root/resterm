@@ -39,7 +39,10 @@ type TraceBudgetBreachFields struct {
 	Over   time.Duration
 }
 
-func FirstTraceBudgetBreachMessage[T any](breaches []T, fields func(T) TraceBudgetBreachFields) string {
+func FirstTraceBudgetBreachMessage[T any](
+	breaches []T,
+	fields func(T) TraceBudgetBreachFields,
+) string {
 	if len(breaches) == 0 {
 		return "trace budget breached"
 	}

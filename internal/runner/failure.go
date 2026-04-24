@@ -90,13 +90,16 @@ func anyScriptTestFailed(tests []scripts.TestResult) bool {
 }
 
 func scriptTestFailureMessage(tests []scripts.TestResult) string {
-	return runfail.FirstTestFailureMessage(tests, func(test scripts.TestResult) runfail.TestFailureFields {
-		return runfail.TestFailureFields{
-			Name:    str.Trim(test.Name),
-			Message: str.Trim(test.Message),
-			Passed:  test.Passed,
-		}
-	})
+	return runfail.FirstTestFailureMessage(
+		tests,
+		func(test scripts.TestResult) runfail.TestFailureFields {
+			return runfail.TestFailureFields{
+				Name:    str.Trim(test.Name),
+				Message: str.Trim(test.Message),
+				Passed:  test.Passed,
+			}
+		},
+	)
 }
 
 func traceBreachMessage(info *TraceInfo) string {

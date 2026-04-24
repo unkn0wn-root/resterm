@@ -76,7 +76,11 @@ func TestColorForAppearance(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := ColorForAppearance(tt.ap, tt.light, tt.dark)
 			if ColorDefined(got) != tt.defined {
-				t.Fatalf("ColorDefined(ColorForAppearance(...)) = %v, want %v", ColorDefined(got), tt.defined)
+				t.Fatalf(
+					"ColorDefined(ColorForAppearance(...)) = %v, want %v",
+					ColorDefined(got),
+					tt.defined,
+				)
 			}
 			if !tt.defined {
 				return

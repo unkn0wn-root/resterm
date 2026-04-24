@@ -790,7 +790,9 @@ func (rt *wsRuntime) shutdown() {
 		if err := rt.conn.Close(websocket.StatusNormalClosure, ""); err != nil &&
 			!errors.Is(err, net.ErrClosed) && !errors.Is(err, context.Canceled) {
 			if rt.session != nil {
-				rt.session.Close(errdef.Wrap(errdef.CodeProtocol, err, "close websocket connection"))
+				rt.session.Close(
+					errdef.Wrap(errdef.CodeProtocol, err, "close websocket connection"),
+				)
 			}
 		}
 	})

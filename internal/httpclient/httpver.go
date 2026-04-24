@@ -33,7 +33,10 @@ func checkHTTPVersionRequest(req *http.Request, v httpver.Version) error {
 		return nil
 	}
 	if strings.EqualFold(req.URL.Scheme, "http") {
-		return errdef.New(errdef.CodeProtocol, "http-version=2 requires https (h2c is not supported)")
+		return errdef.New(
+			errdef.CodeProtocol,
+			"http-version=2 requires https (h2c is not supported)",
+		)
 	}
 	return nil
 }
@@ -46,7 +49,10 @@ func checkWebSocketHTTPVersion(v httpver.Version) error {
 			"http-version=1.0 is not supported for WebSocket requests",
 		)
 	case httpver.V2:
-		return errdef.New(errdef.CodeProtocol, "http-version=2 is not supported for WebSocket requests")
+		return errdef.New(
+			errdef.CodeProtocol,
+			"http-version=2 is not supported for WebSocket requests",
+		)
 	default:
 		return nil
 	}

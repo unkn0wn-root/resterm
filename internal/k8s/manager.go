@@ -158,7 +158,11 @@ func (m *Manager) dialOnce(
 	return tunnel.WrapConn(conn, ses.close), nil
 }
 
-func (m *Manager) connect(ctx context.Context, cfg execConfig, load loadSettings) (*session, error) {
+func (m *Manager) connect(
+	ctx context.Context,
+	cfg execConfig,
+	load loadSettings,
+) (*session, error) {
 	attempts := max(cfg.Retries+1, 1)
 
 	retryDelay := m.retryDelay

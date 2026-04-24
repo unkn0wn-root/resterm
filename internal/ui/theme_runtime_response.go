@@ -32,7 +32,10 @@ func newHTTPResponseRenderSource(
 	}
 }
 
-func newGRPCResponseRenderSource(resp *grpcclient.Response, fullMethod string) responseRenderSource {
+func newGRPCResponseRenderSource(
+	resp *grpcclient.Response,
+	fullMethod string,
+) responseRenderSource {
 	return responseRenderSource{
 		grpc:       cloneGRPCResponse(resp),
 		grpcMethod: strings.TrimSpace(fullMethod),

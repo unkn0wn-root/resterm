@@ -356,7 +356,11 @@ func findMethodInFiles(
 
 	svcDesc, ok := desc.(protoreflect.ServiceDescriptor)
 	if !ok {
-		return nil, errdef.New(errdef.CodeProtocol, "descriptor for %s is not a service", serviceName)
+		return nil, errdef.New(
+			errdef.CodeProtocol,
+			"descriptor for %s is not a service",
+			serviceName,
+		)
 	}
 
 	method := svcDesc.Methods().ByName(protoreflect.Name(grpcReq.Method))

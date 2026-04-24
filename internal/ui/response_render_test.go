@@ -182,7 +182,10 @@ func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *test
 		t.Fatalf("expected light palette header value style, got %q", views.headers)
 	}
 	if strings.Contains(views.headers, statsHeaderValueStyle.Render("application/json")) {
-		t.Fatalf("expected light palette headers to avoid dark default style, got %q", views.headers)
+		t.Fatalf(
+			"expected light palette headers to avoid dark default style, got %q",
+			views.headers,
+		)
 	}
 }
 
