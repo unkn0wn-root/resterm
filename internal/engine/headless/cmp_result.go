@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"google.golang.org/grpc/codes"
@@ -62,7 +61,7 @@ func compareSummary(base, row engine.CompareRow) string {
 		return "skipped"
 	}
 	if row.Err != nil {
-		return "error: " + errdef.Message(row.Err)
+		return "error: " + row.Err.Error()
 	}
 	if row.ScriptErr != nil {
 		return "tests error: " + row.ScriptErr.Error()

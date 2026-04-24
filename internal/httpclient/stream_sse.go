@@ -63,7 +63,7 @@ func (c *Client) StartSSE(
 	opts Options,
 ) (*StreamHandle, *Response, error) {
 	if req == nil || req.SSE == nil {
-		return nil, nil, errdef.New(errdef.CodeHTTP, "sse metadata missing")
+		return nil, nil, errdef.New(errdef.CodeProtocol, "sse metadata missing")
 	}
 
 	streamOpts := req.SSE.Options
@@ -98,7 +98,7 @@ func (c *Client) StartSSE(
 			err = k8s.AnnotateRequestError(err, start, k8sDiag)
 		}
 		cancel()
-		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "perform sse request")
+		return nil, nil, errdef.Wrap(errdef.CodeProtocol, err, "perform sse request")
 	}
 	if verErr := checkHTTPVersion(httpResp, effectiveOpts.HTTPVersion); verErr != nil {
 		_ = httpResp.Body.Close()
@@ -112,10 +112,10 @@ func (c *Client) StartSSE(
 		closeErr := httpResp.Body.Close()
 		cancel()
 		if readErr != nil {
-			return nil, nil, errdef.Wrap(errdef.CodeHTTP, readErr, "read response body")
+			return nil, nil, errdef.Wrap(errdef.CodeProtocol, readErr, "read response body")
 		}
 		if closeErr != nil {
-			return nil, nil, errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
+			return nil, nil, errdef.Wrap(errdef.CodeProtocol, closeErr, "close response body")
 		}
 		return nil, respFromHTTP(httpReq, httpResp, req, body, time.Since(start)), nil
 	}
@@ -155,7 +155,7 @@ func (c *Client) ExecuteSSE(
 
 func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	if handle == nil || handle.Session == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "sse session not available")
+		return nil, errdef.New(errdef.CodeProtocol, "sse session not available")
 	}
 
 	session := handle.Session
@@ -198,7 +198,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	transcript := SSETranscript{Events: acc.events, Summary: acc.summary}
 	body, err := json.MarshalIndent(transcript, "", "  ")
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode sse transcript")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "encode sse transcript")
 	}
 
 	headers := cloneHdr(handle.Meta.Headers)
@@ -262,7 +262,7 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 		limitReached := opts.MaxBytes > 0 && byteCount >= opts.MaxBytes
 
 		if err != nil && !errors.Is(err, io.EOF) {
-			session.Close(errdef.Wrap(errdef.CodeHTTP, err, "read sse stream"))
+			session.Close(errdef.Wrap(errdef.CodeProtocol, err, "read sse stream"))
 			return
 		}
 
@@ -476,10 +476,10 @@ func (b *sseEventBuilder) consume(line string) error {
 		}
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "parse retry directive")
+			return errdef.Wrap(errdef.CodeProtocol, err, "parse retry directive")
 		}
 		if n < 0 {
-			return errdef.New(errdef.CodeHTTP, "retry directive must be non-negative")
+			return errdef.New(errdef.CodeProtocol, "retry directive must be non-negative")
 		}
 		b.retry = n
 		b.hasRetry = true

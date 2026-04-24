@@ -101,9 +101,9 @@ func normalizeMetaKey(key string, src metaSrc) (string, error) {
 
 func metaKeyErr(src metaSrc, key string, msg string) error {
 	if src == metaSrcHeader {
-		return errdef.New(errdef.CodeHTTP, "grpc metadata key %q from headers %s", key, msg)
+		return errdef.New(errdef.CodeProtocol, "grpc metadata key %q from headers %s", key, msg)
 	}
-	return errdef.New(errdef.CodeHTTP, "grpc metadata key %q %s", key, msg)
+	return errdef.New(errdef.CodeProtocol, "grpc metadata key %q %s", key, msg)
 }
 
 func validMetaKey(key string) bool {

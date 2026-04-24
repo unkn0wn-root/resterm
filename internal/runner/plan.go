@@ -139,7 +139,9 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		Recursive:       opt.Recursive,
 		History:         hist,
 	})
+
 	defer func() { _ = exec.Close() }()
+
 	if err := loadRunnerState(exec, pl.state, opt); err != nil {
 		return nil, fmt.Errorf("load runner state: %w", err)
 	}

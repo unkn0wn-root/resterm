@@ -767,7 +767,7 @@ func workflowResultFromRun(
 
 	if res.Err != nil {
 		ok = false
-		out.Status = strings.TrimSpace(errdef.Message(res.Err))
+		out.Status = res.Err.Error()
 		if out.Status == "" {
 			out.Status = "request failed"
 		}
@@ -1468,7 +1468,7 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		hasErr       = rm.err != nil
 	)
 	if hasErr {
-		emsg = strings.TrimSpace(errdef.Message(rm.err))
+		emsg = rm.err.Error()
 		if emsg == "" {
 			emsg = "request failed"
 		}

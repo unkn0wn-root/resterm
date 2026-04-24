@@ -588,40 +588,30 @@ func errorsFromText(s string) error {
 }
 
 func publicTestFailureMessage(tests []Test) string {
-	for _, test := range tests {
-		if test.Passed {
-			continue
+	return runclass.FirstTestFailureMessage(tests, func(test Test) runclass.TestFailureFields {
+		return runclass.TestFailureFields{
+			Name:    test.Name,
+			Message: test.Message,
+			Passed:  test.Passed,
 		}
-		switch {
-		case test.Name != "" && test.Message != "":
-			return test.Name + ": " + test.Message
-		case test.Name != "":
-			return test.Name
-		case test.Message != "":
-			return test.Message
-		default:
-			return "test failed"
-		}
-	}
-	return "test failed"
+	})
 }
 
 func publicTraceFailureMessage(trace *Trace) string {
-	if trace == nil || len(trace.Breaches) == 0 {
+	if trace == nil {
 		return "trace budget breached"
 	}
-	breach := trace.Breaches[0]
-	label := breach.Kind
-	if label == "" {
-		label = "trace"
-	}
-	if breach.Over > 0 {
-		return "trace budget breach " + label + " (+" + breach.Over.String() + ")"
-	}
-	if breach.Limit > 0 && breach.Actual > 0 {
-		return "trace budget breach " + label + " (" + breach.Actual.String() + " > " + breach.Limit.String() + ")"
-	}
-	return "trace budget breach " + label
+	return runclass.FirstTraceBudgetBreachMessage(
+		trace.Breaches,
+		func(breach TraceBreach) runclass.TraceBudgetBreachFields {
+			return runclass.TraceBudgetBreachFields{
+				Kind:   breach.Kind,
+				Limit:  breach.Limit,
+				Actual: breach.Actual,
+				Over:   breach.Over,
+			}
+		},
+	)
 }
 
 func toFormatLatency(lat *Latency) *runfmt.Latency {

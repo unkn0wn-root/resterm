@@ -48,90 +48,89 @@ func TestClassifyErrorTypedFailures(t *testing.T) {
 			code: FailureScript,
 			exit: ExitScript,
 		},
+		{
+			name: "errdef timeout",
+			err:  errdef.New(errdef.CodeTimeout, "operation timed out"),
+			code: FailureTimeout,
+			exit: ExitTimeout,
+		},
+		{
+			name: "errdef canceled",
+			err:  errdef.New(errdef.CodeCanceled, "operation canceled"),
+			code: FailureCanceled,
+			exit: ExitCanceled,
+		},
+		{
+			name: "errdef network",
+			err:  errdef.New(errdef.CodeNetwork, "network unavailable"),
+			code: FailureNetwork,
+			exit: ExitNetwork,
+		},
+		{
+			name: "errdef tls",
+			err:  errdef.New(errdef.CodeTLS, "certificate rejected"),
+			code: FailureTLS,
+			exit: ExitTLS,
+		},
+		{
+			name: "errdef auth",
+			err:  errdef.New(errdef.CodeAuth, "token rejected"),
+			code: FailureAuth,
+			exit: ExitAuth,
+		},
+		{
+			name: "errdef protocol",
+			err:  errdef.New(errdef.CodeProtocol, "invalid frame"),
+			code: FailureProtocol,
+			exit: ExitProtocol,
+		},
+		{
+			name: "errdef route",
+			err:  errdef.New(errdef.CodeRoute, "tunnel unavailable"),
+			code: FailureRoute,
+			exit: ExitRoute,
+		},
+		{
+			name: "joined errdefs choose dominant code",
+			err: errors.Join(
+				errdef.New(errdef.CodeAuth, "token rejected"),
+				errdef.New(errdef.CodeTimeout, "command timed out"),
+			),
+			code: FailureTimeout,
+			exit: ExitTimeout,
+		},
+		{
+			name: "http wrapper defers to nested code",
+			err: errdef.Wrap(
+				errdef.CodeHTTP,
+				errdef.New(errdef.CodeFilesystem, "body unavailable"),
+				"read request body",
+			),
+			code: FailureFilesystem,
+			exit: ExitFilesystem,
+		},
+		{
+			name: "http wrapper uses http fallback",
+			err:  errdef.New(errdef.CodeHTTP, "proxy connection reset"),
+			code: FailureNetwork,
+			exit: ExitNetwork,
+		},
+		{
+			name: "wrapped errdef timeout wins over auth wrapper",
+			err: errdef.Wrap(
+				errdef.CodeAuth,
+				errdef.New(errdef.CodeTimeout, "command timed out"),
+				"resolve command auth",
+			),
+			code: FailureTimeout,
+			exit: ExitTimeout,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got := ClassifyError(tc.err)
 			if got.Code != tc.code || got.ExitCode != tc.exit {
 				t.Fatalf("ClassifyError = %+v, want code=%s exit=%d", got, tc.code, tc.exit)
-			}
-		})
-	}
-}
-
-func TestClassifyMessageSharedRules(t *testing.T) {
-	classifiers := []struct {
-		name string
-		fn   func(string, string) Failure
-	}{
-		{name: "generic", fn: classifyMessage},
-		{name: "http", fn: classifyHTTPMessage},
-	}
-	for _, classifier := range classifiers {
-		t.Run(classifier.name, func(t *testing.T) {
-			got := classifier.fn("oauth token expired", "source")
-			if got.Code != FailureAuth {
-				t.Fatalf("classification = %+v, want code=%s", got, FailureAuth)
-			}
-		})
-	}
-}
-
-func TestClassifyMessageContextSpecificRules(t *testing.T) {
-	cases := []struct {
-		name string
-		fn   func(string, string) Failure
-		msg  string
-		code FailureCode
-	}{
-		{
-			name: "generic default unknown",
-			fn:   classifyMessage,
-			msg:  "unexpected failure",
-			code: FailureUnknown,
-		},
-		{
-			name: "generic profile is not filesystem",
-			fn:   classifyMessage,
-			msg:  "profile data unavailable",
-			code: FailureUnknown,
-		},
-		{
-			name: "generic mainstream is not protocol",
-			fn:   classifyMessage,
-			msg:  "mainstream response unavailable",
-			code: FailureUnknown,
-		},
-		{
-			name: "http default protocol",
-			fn:   classifyHTTPMessage,
-			msg:  "unexpected failure",
-			code: FailureProtocol,
-		},
-		{
-			name: "generic filesystem",
-			fn:   classifyMessage,
-			msg:  "open config: permission denied",
-			code: FailureFilesystem,
-		},
-		{
-			name: "generic standalone file",
-			fn:   classifyMessage,
-			msg:  "file not found",
-			code: FailureFilesystem,
-		},
-		{
-			name: "http proxy network",
-			fn:   classifyHTTPMessage,
-			msg:  "proxy connection reset",
-			code: FailureNetwork,
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tc.fn(tc.msg, "source")
-			if got.Code != tc.code {
-				t.Fatalf("classification = %+v, want code=%s", got, tc.code)
 			}
 		})
 	}
@@ -144,6 +143,9 @@ func TestReportExitCodeModes(t *testing.T) {
 	}
 	if got := ReportExitCode(failures, true, ExitCodeModeDetailed); got != ExitTimeout {
 		t.Fatalf("detailed exit code = %d, want %d", got, ExitTimeout)
+	}
+	if got := ReportExitCode(failures, true, ""); got != ExitTimeout {
+		t.Fatalf("default exit code = %d, want %d", got, ExitTimeout)
 	}
 	if got := ReportExitCode(failures, true, ExitCodeModeSummary); got != ExitFailure {
 		t.Fatalf("summary exit code = %d, want %d", got, ExitFailure)

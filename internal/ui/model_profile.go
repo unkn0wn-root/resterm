@@ -11,7 +11,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -392,7 +391,7 @@ func evaluateProfileOutcome(msg responseMsg) (bool, string) {
 		return false, reason
 	}
 	if msg.err != nil {
-		return false, errdef.Message(msg.err)
+		return false, msg.err.Error()
 	}
 	if msg.response != nil && msg.response.StatusCode >= 400 {
 		return false, fmt.Sprintf("HTTP %s", msg.response.Status)
@@ -1055,9 +1054,9 @@ func profileHistoryStatus(st *profileState, msg responseMsg) (string, int) {
 	case msg.response != nil:
 		return msg.response.Status, msg.response.StatusCode
 	case msg.err != nil:
-		return errdef.Message(msg.err), 0
+		return msg.err.Error(), 0
 	case msg.scriptErr != nil:
-		return strings.TrimSpace(msg.scriptErr.Error()), 0
+		return msg.scriptErr.Error(), 0
 	case st != nil && len(st.failures) > 0:
 		last := st.failures[len(st.failures)-1]
 		status := strings.TrimSpace(last.Status)

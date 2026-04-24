@@ -9,7 +9,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -191,7 +190,7 @@ func proOutcome(out engine.RequestResult) (bool, string) {
 		return false, reason
 	}
 	if out.Err != nil {
-		return false, errdef.Message(out.Err)
+		return false, out.Err.Error()
 	}
 	if out.Response != nil && out.Response.StatusCode >= 400 {
 		return false, fmt.Sprintf("HTTP %s", out.Response.Status)

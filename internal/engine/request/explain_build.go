@@ -1112,7 +1112,7 @@ func (e *Engine) prepareExplainAuthPreview(
 		ac := e.rt.AuthCmd()
 		if ac == nil {
 			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeHTTP,
+				errdef.CodeAuth,
 				"command auth support is not initialised",
 			)
 		}
@@ -1144,7 +1144,7 @@ func (e *Engine) prepareExplainAuthPreview(
 		oa := e.rt.OAuth()
 		if oa == nil {
 			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeHTTP,
+				errdef.CodeAuth,
 				"oauth support is not initialised",
 			)
 		}
@@ -1156,7 +1156,7 @@ func (e *Engine) prepareExplainAuthPreview(
 		cfg = oa.MergeCachedConfig(env, cfg)
 		if cfg.TokenURL == "" {
 			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeHTTP,
+				errdef.CodeAuth,
 				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
 			)
 		}

@@ -401,7 +401,7 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 		StatusMessage: "not found",
 		Message:       "{}",
 	}
-	err := errdef.New(errdef.CodeHTTP, "invoke grpc method")
+	err := errdef.New(errdef.CodeProtocol, "invoke grpc method")
 
 	model.handleResponseMessage(responseMsg{
 		grpc:     resp,

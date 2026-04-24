@@ -11,7 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -235,7 +234,7 @@ func (e *Engine) recordCompare(
 			}
 			item.BodySnippet = item.Error
 		case row.Err != nil:
-			item.Error = errdef.Message(row.Err)
+			item.Error = row.Err.Error()
 			item.BodySnippet = item.Error
 		case row.Response != nil:
 			item.StatusCode = row.Response.StatusCode

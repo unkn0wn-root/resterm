@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -129,6 +130,8 @@ type ProfileFailure struct {
 	Status     string
 	StatusCode int
 	Duration   time.Duration
+	// Failure carries the structured classification from the profile collector.
+	Failure runclass.Failure
 }
 
 type StreamInfo struct {
@@ -347,12 +350,11 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 }
 
 func skippedRequestResult(req *restfile.Request, fallbackEnv, reason string) Result {
-	runReq := cloneReq(req)
 	return Result{
 		Kind:        ResultKindRequest,
-		Name:        requestName(runReq),
-		Method:      requestMethod(runReq),
-		Target:      requestSourceTarget(runReq),
+		Name:        requestName(req),
+		Method:      requestMethod(req),
+		Target:      requestSourceTarget(req),
 		Environment: str.Trim(fallbackEnv),
 		Skipped:     true,
 		SkipReason:  str.Trim(reason),
@@ -482,10 +484,11 @@ func profileFailures(src []engine.ProfileFailure) []ProfileFailure {
 		out = append(out, ProfileFailure{
 			Iteration:  failure.Iteration,
 			Warmup:     failure.Warmup,
-			Reason:     str.Trim(failure.Reason),
-			Status:     str.Trim(failure.Status),
+			Reason:     failure.Reason,
+			Status:     failure.Status,
 			StatusCode: failure.StatusCode,
 			Duration:   failure.Duration,
+			Failure:    failure.Failure,
 		})
 	}
 	return out

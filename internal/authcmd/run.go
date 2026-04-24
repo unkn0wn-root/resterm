@@ -50,7 +50,7 @@ func (b *limitBuf) overflowErr() error {
 	if b.err != nil {
 		return b.err
 	}
-	b.err = errdef.New(errdef.CodeHTTP, "%s exceeded %s", b.kind, sizeLabel(b.limit))
+	b.err = errdef.New(errdef.CodeAuth, "%s exceeded %s", b.kind, sizeLabel(b.limit))
 	if b.cancel != nil {
 		b.cancel(b.err)
 	}
@@ -74,7 +74,7 @@ func (cfg commandConfig) name() string {
 
 func run(ctx context.Context, cfg commandConfig) ([]byte, error) {
 	if len(cfg.Argv) == 0 {
-		return nil, errdef.New(errdef.CodeHTTP, "missing command argv")
+		return nil, errdef.New(errdef.CodeAuth, "missing command argv")
 	}
 
 	runCtx, cancel := newRunContext(ctx, cfg.Timeout)
@@ -160,14 +160,14 @@ func mapRunError(runCtx context.Context, cfg commandConfig, err error, stderr st
 	if runCtx.Err() != nil {
 		if cfg.Timeout > 0 && errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 			return errdef.New(
-				errdef.CodeHTTP,
+				errdef.CodeTimeout,
 				"command %q timed out after %s",
 				cfg.name(),
 				cfg.Timeout,
 			)
 		}
 		return errdef.Wrap(
-			errdef.CodeHTTP,
+			errdef.CodeAuth,
 			runCtx.Err(),
 			"run command %q",
 			cfg.name(),
@@ -177,7 +177,7 @@ func mapRunError(runCtx context.Context, cfg commandConfig, err error, stderr st
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
 		return errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeAuth,
 			"command %q exited with status %d%s",
 			cfg.name(),
 			exitErr.ExitCode(),
@@ -185,5 +185,5 @@ func mapRunError(runCtx context.Context, cfg commandConfig, err error, stderr st
 		)
 	}
 
-	return errdef.Wrap(errdef.CodeHTTP, err, "run command %q", cfg.name())
+	return errdef.Wrap(errdef.CodeAuth, err, "run command %q", cfg.name())
 }

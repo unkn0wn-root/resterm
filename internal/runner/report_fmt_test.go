@@ -7,6 +7,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"google.golang.org/grpc/codes"
 )
@@ -150,6 +151,43 @@ func TestNormalizeReportTrimsStrings(t *testing.T) {
 		len(step.Trace.Breaches) != 1 ||
 		step.Trace.Breaches[0].Kind != "phase" {
 		t.Fatalf("expected step trace strings trimmed, got %+v", step.Trace)
+	}
+}
+
+func TestNormalizeReportUsesStructuredProfileFailure(t *testing.T) {
+	rep := &Report{
+		Results: []Result{{
+			Kind:   ResultKindProfile,
+			Name:   "prof",
+			Passed: false,
+			Profile: &ProfileInfo{
+				Failures: []ProfileFailure{{
+					Reason:     "HTTP 500",
+					StatusCode: 500,
+					Failure: runclass.NewFailure(
+						runclass.FailureTimeout,
+						"context deadline exceeded",
+						"profile",
+					),
+				}},
+			},
+		}},
+	}
+
+	got := NormalizeReport(rep)
+	if len(got.Results) != 1 || got.Results[0].Profile == nil ||
+		len(got.Results[0].Profile.Failures) != 1 {
+		t.Fatalf("unexpected normalized profile: %+v", got.Results)
+	}
+	failure := got.Results[0].Profile.Failures[0].Failure
+	if failure == nil || failure.Code != string(runclass.FailureTimeout) ||
+		failure.ExitCode != runclass.ExitTimeout ||
+		failure.Message != "context deadline exceeded" {
+		t.Fatalf("unexpected profile failure: %+v", failure)
+	}
+	if got.Results[0].Failure == nil ||
+		got.Results[0].Failure.Code != string(runclass.FailureTimeout) {
+		t.Fatalf("expected result failure to use structured profile failure, got %+v", got.Results[0].Failure)
 	}
 }
 

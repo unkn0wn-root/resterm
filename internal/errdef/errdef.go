@@ -12,6 +12,13 @@ const (
 	CodeConfig     Code = "config"
 	CodeParse      Code = "parse"
 	CodeHTTP       Code = "http"
+	CodeTimeout    Code = "timeout"
+	CodeCanceled   Code = "canceled"
+	CodeNetwork    Code = "network"
+	CodeTLS        Code = "tls"
+	CodeAuth       Code = "auth"
+	CodeProtocol   Code = "protocol"
+	CodeRoute      Code = "route"
 	CodeFilesystem Code = "filesystem"
 	CodeScript     Code = "script"
 	CodeHistory    Code = "history"
@@ -82,11 +89,43 @@ func CodeOf(err error) Code {
 	return CodeUnknown
 }
 
-func Message(err error) string {
+func Codes(err error) []Code {
+	var out []Code
+	seen := make(map[Code]struct{})
+	collectCodes(err, func(code Code) {
+		if _, ok := seen[code]; ok {
+			return
+		}
+		seen[code] = struct{}{}
+		out = append(out, code)
+	})
+	return out
+}
+
+func HasCode(err error, code Code) bool {
+	found := false
+	collectCodes(err, func(got Code) {
+		found = found || got == code
+	})
+	return found
+}
+
+func collectCodes(err error, visit func(Code)) {
 	if err == nil {
-		return ""
+		return
 	}
-	return err.Error()
+	if e, ok := err.(*Error); ok {
+		visit(e.Code)
+	}
+	if multi, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, child := range multi.Unwrap() {
+			collectCodes(child, visit)
+		}
+		return
+	}
+	if single, ok := err.(interface{ Unwrap() error }); ok {
+		collectCodes(single.Unwrap(), visit)
+	}
 }
 
 func ensureCode(code Code) Code {

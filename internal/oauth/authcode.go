@@ -38,7 +38,7 @@ func (m *Manager) requestAuthCodeToken(
 ) (Token, error) {
 	authURL := cfg.AuthURL
 	if authURL == "" {
-		return Token{}, errdef.New(errdef.CodeHTTP, "authorization_code requires auth_url")
+		return Token{}, errdef.New(errdef.CodeAuth, "authorization_code requires auth_url")
 	}
 
 	ver, err := pickVerifier(cfg.CodeVerifier)
@@ -101,7 +101,7 @@ func pickVerifier(raw string) (string, error) {
 	if v != "" {
 		if len(v) < 43 || len(v) > 128 {
 			return "", errdef.New(
-				errdef.CodeHTTP,
+				errdef.CodeAuth,
 				"code_verifier must be between 43 and 128 characters",
 			)
 		}
@@ -135,7 +135,7 @@ func buildChallenge(verifier, method string) (string, error) {
 		sum := sha256Sum([]byte(verifier))
 		return base64.RawURLEncoding.EncodeToString(sum), nil
 	default:
-		return "", errdef.New(errdef.CodeHTTP, "unsupported code_challenge_method: %s", method)
+		return "", errdef.New(errdef.CodeAuth, "unsupported code_challenge_method: %s", method)
 	}
 }
 
@@ -146,7 +146,7 @@ func buildAuthURL(
 ) (string, error) {
 	u, err := url.Parse(base)
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeHTTP, err, "parse auth_url")
+		return "", errdef.Wrap(errdef.CodeAuth, err, "parse auth_url")
 	}
 
 	q := u.Query()
@@ -195,10 +195,10 @@ func prepareRedirect(raw string) (*url.URL, net.Listener, error) {
 	if raw != "" {
 		u, err := url.Parse(raw)
 		if err != nil {
-			return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "parse redirect_uri")
+			return nil, nil, errdef.Wrap(errdef.CodeAuth, err, "parse redirect_uri")
 		}
 		if u.Scheme != "" && u.Scheme != "http" {
-			return nil, nil, errdef.New(errdef.CodeHTTP, "redirect_uri must use http")
+			return nil, nil, errdef.New(errdef.CodeAuth, "redirect_uri must use http")
 		}
 		if u.Path != "" {
 			path = u.Path
@@ -216,7 +216,7 @@ func prepareRedirect(raw string) (*url.URL, net.Listener, error) {
 		h = "127.0.0.1"
 	}
 	if !isLoopback(h) {
-		return nil, nil, errdef.New(errdef.CodeHTTP, "redirect_uri host must be loopback")
+		return nil, nil, errdef.New(errdef.CodeAuth, "redirect_uri host must be loopback")
 	}
 	if p == "" {
 		p = "0"
@@ -224,7 +224,7 @@ func prepareRedirect(raw string) (*url.URL, net.Listener, error) {
 
 	ln, err := net.Listen("tcp", net.JoinHostPort(h, p))
 	if err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "listen for oauth redirect")
+		return nil, nil, errdef.Wrap(errdef.CodeAuth, err, "listen for oauth redirect")
 	}
 
 	addr := ln.Addr().(*net.TCPAddr)
@@ -319,9 +319,9 @@ func (s *codeServer) wait(ctx context.Context) (string, error) {
 	case code := <-s.codeCh:
 		return code, nil
 	case err := <-s.errCh:
-		return "", errdef.Wrap(errdef.CodeHTTP, err, "oauth callback server")
+		return "", errdef.Wrap(errdef.CodeAuth, err, "oauth callback server")
 	case <-ctx.Done():
-		return "", errdef.Wrap(errdef.CodeHTTP, ctx.Err(), "waiting for oauth authorization")
+		return "", errdef.Wrap(errdef.CodeAuth, ctx.Err(), "waiting for oauth authorization")
 	}
 }
 
@@ -334,20 +334,20 @@ func (s *codeServer) handle(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if errText := strings.TrimSpace(q.Get("error")); errText != "" {
 		http.Error(w, "authorization failed", http.StatusBadRequest)
-		s.errCh <- errdef.New(errdef.CodeHTTP, "authorization failed: %s", errText)
+		s.errCh <- errdef.New(errdef.CodeAuth, "authorization failed: %s", errText)
 		return
 	}
 
 	code := strings.TrimSpace(q.Get("code"))
 	if code == "" {
 		http.Error(w, "missing authorization code", http.StatusBadRequest)
-		s.errCh <- errdef.New(errdef.CodeHTTP, "authorization response missing code")
+		s.errCh <- errdef.New(errdef.CodeAuth, "authorization response missing code")
 		return
 	}
 	gotState := strings.TrimSpace(q.Get("state"))
 	if strings.TrimSpace(s.state) != "" && strings.TrimSpace(s.state) != gotState {
 		http.Error(w, "state mismatch", http.StatusBadRequest)
-		s.errCh <- errdef.New(errdef.CodeHTTP, "state mismatch")
+		s.errCh <- errdef.New(errdef.CodeAuth, "state mismatch")
 		return
 	}
 
@@ -368,7 +368,7 @@ func (s *codeServer) handle(w http.ResponseWriter, r *http.Request) {
 func openBrowser(link string) error {
 	cmd := browserCommand(link)
 	if cmd == nil {
-		return errdef.New(errdef.CodeHTTP, "unsupported platform for browser launch")
+		return errdef.New(errdef.CodeAuth, "unsupported platform for browser launch")
 	}
 	return cmd.Start()
 }
@@ -387,7 +387,7 @@ func browserCommand(link string) *exec.Cmd {
 func randString(size int) (string, error) {
 	buf := make([]byte, size)
 	if _, err := rand.Read(buf); err != nil {
-		return "", errdef.Wrap(errdef.CodeHTTP, err, "generate random string")
+		return "", errdef.Wrap(errdef.CodeAuth, err, "generate random string")
 	}
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }

@@ -268,6 +268,10 @@ func TestRunFailFastSkipsRemainingRequests(t *testing.T) {
 		!strings.Contains(rep.Results[1].SkipReason, "--fail-fast") {
 		t.Fatalf("unexpected skipped result: %+v", rep.Results)
 	}
+	if skipped := rep.Results[1]; skipped.Name != "two" || skipped.Method != "GET" ||
+		skipped.Target != "https://example.com/two" {
+		t.Fatalf("unexpected skipped request fields: %+v", skipped)
+	}
 }
 
 func TestRunSelectRequestByLine(t *testing.T) {

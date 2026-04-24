@@ -1,10 +1,8 @@
 package runner
 
 import (
-	"errors"
 	"io"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -247,7 +245,7 @@ func formatResultFailure(res Result) *runfmt.Failure {
 		return runfmt.ClassFailure(runclass.ClassifyErrorSource(res.Err, "error"))
 	case res.ScriptErr != nil:
 		return runfmt.ClassFailure(runclass.ScriptFailure(res.ScriptErr.Error(), "scriptError"))
-	case failedScriptTestCount(res.Tests) > 0:
+	case anyScriptTestFailed(res.Tests):
 		return runfmt.ClassFailure(runclass.AssertionFailure(scriptTestFailureMessage(res.Tests), "tests"))
 	case traceFailed(res.Trace):
 		return runfmt.ClassFailure(runclass.TraceBudgetFailure(traceBreachMessage(res.Trace)))
@@ -270,7 +268,7 @@ func formatStepFailure(step StepResult) *runfmt.Failure {
 		return runfmt.ClassFailure(runclass.ClassifyErrorSource(step.Err, "error"))
 	case step.ScriptErr != nil:
 		return runfmt.ClassFailure(runclass.ScriptFailure(step.ScriptErr.Error(), "scriptError"))
-	case failedScriptTestCount(step.Tests) > 0:
+	case anyScriptTestFailed(step.Tests):
 		return runfmt.ClassFailure(runclass.AssertionFailure(scriptTestFailureMessage(step.Tests), "tests"))
 	case traceFailed(step.Trace):
 		return runfmt.ClassFailure(runclass.TraceBudgetFailure(traceBreachMessage(step.Trace)))
@@ -281,63 +279,54 @@ func formatStepFailure(step StepResult) *runfmt.Failure {
 }
 
 func formatProfileFailure(fail ProfileFailure) *runfmt.Failure {
-	msg := str.FirstTrimmed(fail.Reason, fail.Status)
-	if msg == "" && fail.StatusCode != 0 {
-		msg = strconv.Itoa(fail.StatusCode)
-	}
-	if fail.StatusCode >= 400 || strings.Contains(strings.ToLower(msg), "test failed") {
-		return runfmt.ClassFailure(runclass.AssertionFailure(msg, "profile"))
-	}
-	return runfmt.ClassFailure(runclass.ClassifyErrorSource(errors.New(msg), "profile"))
+	return formatClassFailure(fail.Failure)
 }
 
-func failedScriptTestCount(tests []scripts.TestResult) int {
-	n := 0
+func formatClassFailure(failure runclass.Failure) *runfmt.Failure {
+	if failure.Code == "" {
+		return nil
+	}
+	return runfmt.ClassFailure(runclass.NewFailure(
+		failure.Code,
+		str.Trim(failure.Message),
+		str.Trim(failure.Source),
+	))
+}
+
+func anyScriptTestFailed(tests []scripts.TestResult) bool {
 	for _, test := range tests {
 		if !test.Passed {
-			n++
+			return true
 		}
 	}
-	return n
+	return false
 }
 
 func scriptTestFailureMessage(tests []scripts.TestResult) string {
-	for _, test := range tests {
-		if test.Passed {
-			continue
+	return runclass.FirstTestFailureMessage(tests, func(test scripts.TestResult) runclass.TestFailureFields {
+		return runclass.TestFailureFields{
+			Name:    str.Trim(test.Name),
+			Message: str.Trim(test.Message),
+			Passed:  test.Passed,
 		}
-		name := str.Trim(test.Name)
-		msg := str.Trim(test.Message)
-		switch {
-		case name != "" && msg != "":
-			return name + ": " + msg
-		case name != "":
-			return name
-		case msg != "":
-			return msg
-		default:
-			return "test failed"
-		}
-	}
-	return "test failed"
+	})
 }
 
 func traceBreachMessage(info *TraceInfo) string {
-	if info == nil || info.Summary == nil || len(info.Summary.Breaches) == 0 {
+	if info == nil || info.Summary == nil {
 		return "trace budget breached"
 	}
-	breach := info.Summary.Breaches[0]
-	label := str.Trim(breach.Kind)
-	if label == "" {
-		label = "trace"
-	}
-	if breach.Over > 0 {
-		return "trace budget breach " + label + " (+" + breach.Over.String() + ")"
-	}
-	if breach.Limit > 0 && breach.Actual > 0 {
-		return "trace budget breach " + label + " (" + breach.Actual.String() + " > " + breach.Limit.String() + ")"
-	}
-	return "trace budget breach " + label
+	return runclass.FirstTraceBudgetBreachMessage(
+		info.Summary.Breaches,
+		func(breach history.TraceBreach) runclass.TraceBudgetBreachFields {
+			return runclass.TraceBudgetBreachFields{
+				Kind:   str.Trim(breach.Kind),
+				Limit:  breach.Limit,
+				Actual: breach.Actual,
+				Over:   breach.Over,
+			}
+		},
+	)
 }
 
 func protocolStatusText(http *runfmt.HTTP, grpc *runfmt.GRPC) string {

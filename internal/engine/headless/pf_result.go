@@ -3,14 +3,13 @@ package headless
 import (
 	"fmt"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 )
 
 type profileState struct {
@@ -31,36 +30,77 @@ type profileState struct {
 	cancelMsg string
 }
 
-func profileOutcome(out engine.RequestResult) (bool, string) {
+type profileFailureOutcome struct {
+	reason  string
+	failure runclass.Failure
+}
+
+func profileOutcome(out engine.RequestResult) (bool, profileFailureOutcome) {
 	if out.Skipped {
-		reason := strings.TrimSpace(out.SkipReason)
+		reason := out.SkipReason
 		if reason == "" {
 			reason = "request skipped"
 		}
-		return false, reason
+		failure := runclass.AssertionFailure(reason, "profile")
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.Err != nil {
-		return false, errdef.Message(out.Err)
+		failure := runclass.ClassifyErrorSource(out.Err, "profile")
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.Response != nil && out.Response.StatusCode >= 400 {
-		return false, fmt.Sprintf("HTTP %s", out.Response.Status)
+		failure := runclass.AssertionFailure(
+			profileHTTPStatus(out.Response.Status, out.Response.StatusCode),
+			"profile",
+		)
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.ScriptErr != nil {
-		return false, out.ScriptErr.Error()
+		failure := runclass.ScriptFailure(out.ScriptErr.Error(), "profile")
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	for _, test := range out.Tests {
 		if test.Passed {
 			continue
 		}
-		if strings.TrimSpace(test.Message) != "" {
-			return false, fmt.Sprintf("Test failed: %s – %s", test.Name, test.Message)
-		}
-		return false, fmt.Sprintf("Test failed: %s", test.Name)
+		failure := runclass.AssertionFailure(
+			profileTestFailure(test.Name, test.Message),
+			"profile",
+		)
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
 	if out.Response == nil {
-		return false, "no response"
+		failure := runclass.NewFailure(
+			runclass.FailureProtocol,
+			"no response",
+			"profile",
+		)
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
 	}
-	return true, ""
+	return true, profileFailureOutcome{}
+}
+
+func profileHTTPStatus(status string, statusCode int) string {
+	if status != "" {
+		return "HTTP " + status
+	}
+	if statusCode != 0 {
+		return fmt.Sprintf("HTTP %d", statusCode)
+	}
+	return "HTTP request failed"
+}
+
+func profileTestFailure(name, msg string) string {
+	if msg != "" {
+		if name != "" {
+			return fmt.Sprintf("Test failed: %s - %s", name, msg)
+		}
+		return "Test failed: " + msg
+	}
+	if name != "" {
+		return "Test failed: " + name
+	}
+	return "Test failed"
 }
 
 func buildProfileResults(st *profileState, stats analysis.LatencyStats) *history.ProfileResults {

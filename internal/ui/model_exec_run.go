@@ -256,7 +256,7 @@ func (m *Model) requestSetup(
 		}
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
-		err := errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s")
+		err := errdef.New(errdef.CodeRoute, "@ssh cannot be combined with @k8s")
 		explain := newExplainBuilder(m, req, envName, preview)
 		explain.stage(
 			explainStageRoute,
@@ -599,7 +599,7 @@ func (e *execContext) resolveRoute() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "Route resolution failed")
-		msg.err = errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh")
+		msg.err = errdef.Wrap(errdef.CodeRoute, err, "resolve ssh")
 		return &msg
 	}
 
@@ -615,7 +615,7 @@ func (e *execContext) resolveRoute() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "Route resolution failed")
-		msg.err = errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s")
+		msg.err = errdef.Wrap(errdef.CodeRoute, err, "resolve k8s")
 		return &msg
 	}
 

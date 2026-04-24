@@ -131,7 +131,7 @@ func (e *Engine) ExecuteWith(
 		}
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
-		err := errdef.New(errdef.CodeHTTP, "@ssh cannot be combined with @k8s")
+		err := errdef.New(errdef.CodeRoute, "@ssh cannot be combined with @k8s")
 		exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
 		exp.stage(
 			xplain.StageRoute,
@@ -634,7 +634,7 @@ func (x *execCtx) resolveRoute() *xrunResult {
 			nil,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeHTTP, err, "resolve ssh")
+		wrap := errdef.Wrap(errdef.CodeRoute, err, "resolve ssh")
 		return x.fail(wrap, "Route resolution failed", err)
 	}
 	kp, err := x.eng.resolveK8s(x.doc, x.req, x.res, x.env)
@@ -647,7 +647,7 @@ func (x *execCtx) resolveRoute() *xrunResult {
 			nil,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeHTTP, err, "resolve k8s")
+		wrap := errdef.Wrap(errdef.CodeRoute, err, "resolve k8s")
 		return x.fail(wrap, "Route resolution failed", err)
 	}
 	x.sshPlan = sp
@@ -848,7 +848,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 	x := f.ctx
 	if x.eng.gc == nil {
-		err := errdef.New(errdef.CodeHTTP, "gRPC client is not initialised")
+		err := errdef.New(errdef.CodeProtocol, "gRPC client is not initialised")
 		x.exp.setPrepared(x.req)
 		res := x.base()
 		res.Err = err

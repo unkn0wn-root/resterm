@@ -187,22 +187,22 @@ func headerValue(h http.Header, name string) string {
 
 func (e *Engine) authCmdManager() (*authcmd.Manager, error) {
 	if e == nil || e.rt == nil {
-		return nil, errdef.New(errdef.CodeHTTP, errCommandAuthNotInitialized)
+		return nil, errdef.New(errdef.CodeAuth, errCommandAuthNotInitialized)
 	}
 	ac := e.rt.AuthCmd()
 	if ac == nil {
-		return nil, errdef.New(errdef.CodeHTTP, errCommandAuthNotInitialized)
+		return nil, errdef.New(errdef.CodeAuth, errCommandAuthNotInitialized)
 	}
 	return ac, nil
 }
 
 func (e *Engine) oauthManager() (*oauth.Manager, error) {
 	if e == nil || e.rt == nil {
-		return nil, errdef.New(errdef.CodeHTTP, errOAuthNotInitialized)
+		return nil, errdef.New(errdef.CodeAuth, errOAuthNotInitialized)
 	}
 	oa := e.rt.OAuth()
 	if oa == nil {
-		return nil, errdef.New(errdef.CodeHTTP, errOAuthNotInitialized)
+		return nil, errdef.New(errdef.CodeAuth, errOAuthNotInitialized)
 	}
 	return oa, nil
 }
@@ -234,7 +234,7 @@ func (e *Engine) EnsureCommandAuth(
 	}
 	out, err := ac.ResolvePrepared(ctx, prep)
 	if err != nil {
-		return authcmd.Result{}, errdef.Wrap(errdef.CodeHTTP, err, "resolve command auth")
+		return authcmd.Result{}, errdef.Wrap(errdef.CodeAuth, err, "resolve command auth")
 	}
 	if !setRequestHeaderIfMissing(req, out.Header, out.Value) {
 		return authcmd.Result{}, nil
@@ -283,14 +283,14 @@ func (e *Engine) EnsureOAuth(
 	env = e.envName(env)
 	cfg = oa.MergeCachedConfig(env, cfg)
 	if cfg.TokenURL == "" {
-		return errdef.New(errdef.CodeHTTP, errOAuthTokenURLRequired)
+		return errdef.New(errdef.CodeAuth, errOAuthTokenURLRequired)
 	}
 	hdr := cfg.Header
 	if requestHeaderPresent(req, hdr) {
 		return nil
 	}
 	if e.oauthNeedsHeadlessSeed(oa, env, cfg) {
-		return errdef.New(errdef.CodeHTTP, errOAuthHeadlessSeedRequired)
+		return errdef.New(errdef.CodeAuth, errOAuthHeadlessSeedRequired)
 	}
 
 	tmo := oauthTimeout(cfg.GrantType, timeout)
@@ -299,7 +299,7 @@ func (e *Engine) EnsureOAuth(
 
 	tok, err := oa.Token(ctx, env, cfg, opts)
 	if err != nil {
-		return errdef.Wrap(errdef.CodeHTTP, err, "fetch oauth token")
+		return errdef.Wrap(errdef.CodeAuth, err, "fetch oauth token")
 	}
 	setRequestHeaderIfMissing(req, hdr, oauthHeaderValue(hdr, tok))
 	return nil
@@ -327,7 +327,7 @@ func (e *Engine) BuildCommandAuthConfig(
 ) (authcmd.Config, error) {
 	cfg := authcmd.Config{}
 	if auth == nil {
-		return cfg, errdef.New(errdef.CodeHTTP, errMissingCommandAuthSpec)
+		return cfg, errdef.New(errdef.CodeAuth, errMissingCommandAuthSpec)
 	}
 	pm, err := commandAuthParams(auth, res)
 	if err != nil {
@@ -378,7 +378,7 @@ func (e *Engine) BuildOAuthConfig(
 ) (oauth.Config, error) {
 	cfg := oauth.Config{}
 	if auth == nil {
-		return cfg, errdef.New(errdef.CodeHTTP, errMissingOAuthSpec)
+		return cfg, errdef.New(errdef.CodeAuth, errMissingOAuthSpec)
 	}
 	for _, field := range oauthConfigFields {
 		value, err := expandAuthParam(res, authTypeOAuth2, field.key, auth.Params[field.key])
@@ -445,7 +445,7 @@ func expandCommandAuthArgv(argv []string, res *vars.Resolver) error {
 	for i, arg := range argv {
 		value, err := res.ExpandTemplates(arg)
 		if err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "expand command auth argv[%d]", i)
+			return errdef.Wrap(errdef.CodeAuth, err, "expand command auth argv[%d]", i)
 		}
 		argv[i] = value
 	}
@@ -461,7 +461,7 @@ func expandAuthParam(res *vars.Resolver, scope, key, raw string) (string, error)
 	}
 	value, err := res.ExpandTemplates(raw)
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeHTTP, err, "expand %s param %s", scope, key)
+		return "", errdef.Wrap(errdef.CodeAuth, err, "expand %s param %s", scope, key)
 	}
 	return strings.TrimSpace(value), nil
 }

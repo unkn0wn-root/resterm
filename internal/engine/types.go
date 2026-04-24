@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -149,6 +150,8 @@ type ProfileFailure struct {
 	Status     string
 	StatusCode int
 	Duration   time.Duration
+	// Failure preserves classification while typed request errors are still available.
+	Failure runclass.Failure
 }
 
 type WorkflowResult struct {

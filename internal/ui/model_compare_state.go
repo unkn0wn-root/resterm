@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -176,7 +175,7 @@ func summarizeCompareDelta(base, target *compareResult) string {
 		return "baseline skipped"
 	}
 	if target.Err != nil {
-		return fmt.Sprintf("error: %s", errdef.Message(target.Err))
+		return fmt.Sprintf("error: %s", target.Err.Error())
 	}
 	if target.ScriptErr != nil {
 		return fmt.Sprintf("tests error: %v", target.ScriptErr)

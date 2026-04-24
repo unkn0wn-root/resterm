@@ -67,18 +67,18 @@ func (c *Client) buildHTTPClient(opts Options) (*http.Client, error) {
 	sshOn := opts.SSH != nil && opts.SSH.Active()
 	k8sOn := opts.K8s != nil && opts.K8s.Active()
 	if tunnel.HasConflict(sshOn, k8sOn) {
-		return nil, errdef.New(errdef.CodeHTTP, "ssh and k8s transports cannot be combined")
+		return nil, errdef.New(errdef.CodeRoute, "ssh and k8s transports cannot be combined")
 	}
 	if strings.TrimSpace(opts.ProxyURL) != "" && (sshOn || k8sOn) {
 		return nil, errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeRoute,
 			"proxy cannot be combined with ssh or k8s tunneling",
 		)
 	}
 
 	applyTunnel := func(kind string, dial tunnel.DialContextFunc) error {
 		if err := tunnel.ApplyHTTPTransport(transport, opts.HTTPVersion, dial); err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "enable http2 over %s", kind)
+			return errdef.Wrap(errdef.CodeRoute, err, "enable http2 over %s", kind)
 		}
 		return nil
 	}

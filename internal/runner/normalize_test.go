@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/runclass"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -72,8 +73,9 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 		Summary:     " profile summary ",
 		SkipReason:  " profile skipped ",
 		Failures: []engine.ProfileFailure{{
-			Reason: " timeout ",
-			Status: " 500 ",
+			Reason:  " timeout ",
+			Status:  " 500 ",
+			Failure: runclass.NewFailure(runclass.FailureTimeout, "timeout", "profile"),
 		}},
 	}, " fallback ")
 	if gotProfile.Environment != "perf" || gotProfile.Summary != "profile summary" ||
@@ -81,9 +83,17 @@ func TestRunResultConstructorsNormalizeOwnedStrings(t *testing.T) {
 		t.Fatalf("unexpected profile result metadata: %+v", gotProfile)
 	}
 	if gotProfile.Profile == nil || len(gotProfile.Profile.Failures) != 1 ||
-		gotProfile.Profile.Failures[0].Reason != "timeout" ||
-		gotProfile.Profile.Failures[0].Status != "500" {
+		gotProfile.Profile.Failures[0].Reason != " timeout " ||
+		gotProfile.Profile.Failures[0].Status != " 500 " {
 		t.Fatalf("unexpected profile failures: %+v", gotProfile.Profile)
+	}
+	if gotProfile.Profile.Failures[0].Failure.Code != runclass.FailureTimeout {
+		t.Fatalf("expected profile failure classification, got %+v", gotProfile.Profile.Failures[0].Failure)
+	}
+	gotProfileFmt := NormalizeReport(&Report{Results: []Result{gotProfile}})
+	if gotProfileFmt.Results[0].Profile.Failures[0].Reason != "timeout" ||
+		gotProfileFmt.Results[0].Profile.Failures[0].Status != "500" {
+		t.Fatalf("expected report normalization to trim profile failures, got %+v", gotProfileFmt.Results[0].Profile)
 	}
 
 	gotWorkflow := workflowRunResult(engine.WorkflowResult{

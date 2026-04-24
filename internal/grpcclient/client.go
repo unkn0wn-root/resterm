@@ -83,12 +83,12 @@ func (c *Client) Execute(
 	hook StreamHook,
 ) (resp *Response, err error) {
 	if grpcReq == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "missing grpc metadata")
+		return nil, errdef.New(errdef.CodeProtocol, "missing grpc metadata")
 	}
 
 	target := strings.TrimSpace(grpcReq.Target)
 	if target == "" {
-		return nil, errdef.New(errdef.CodeHTTP, "grpc target not specified")
+		return nil, errdef.New(errdef.CodeProtocol, "grpc target not specified")
 	}
 
 	ctx := parent
@@ -120,7 +120,7 @@ func (c *Client) Execute(
 	sshOn := options.SSH != nil && options.SSH.Active()
 	k8sOn := options.K8s != nil && options.K8s.Active()
 	if tunnel.HasConflict(sshOn, k8sOn) {
-		return nil, errdef.New(errdef.CodeHTTP, "ssh and k8s transports cannot be combined")
+		return nil, errdef.New(errdef.CodeProtocol, "ssh and k8s transports cannot be combined")
 	}
 
 	appendTunnelDialer := func(dial tunnel.DialContextFunc) {
@@ -143,12 +143,12 @@ func (c *Client) Execute(
 
 	conn, err := grpc.NewClient(target, dialOpts...)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "dial grpc target")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "dial grpc target")
 	}
 
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil && err == nil {
-			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close grpc connection")
+			err = errdef.Wrap(errdef.CodeProtocol, closeErr, "close grpc connection")
 		}
 	}()
 
@@ -180,7 +180,7 @@ func (c *Client) executeUnary(
 	stripped := strings.TrimSpace(messageJSON)
 	if stripped != "" {
 		if err := protojson.Unmarshal([]byte(stripped), inputMsg); err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "decode grpc request body")
+			return nil, errdef.Wrap(errdef.CodeProtocol, err, "decode grpc request body")
 		}
 	}
 
@@ -212,12 +212,12 @@ func (c *Client) executeUnary(
 			resp.StatusCode = st.Code()
 			resp.StatusMessage = st.Message()
 		}
-		return resp, errdef.Wrap(errdef.CodeHTTP, invokeErr, "invoke grpc method")
+		return resp, errdef.Wrap(errdef.CodeProtocol, invokeErr, "invoke grpc method")
 	}
 
 	marshalled, err := marshalMsg(outputMsg)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode grpc response")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "encode grpc response")
 	}
 	resp.Message = string(marshalled)
 	resp.Body = marshalled
@@ -239,7 +239,7 @@ func (c *Client) resolveMethodDescriptor(
 	options Options,
 ) (protoreflect.MethodDescriptor, error) {
 	if grpcReq.FullMethod == "" {
-		return nil, errdef.New(errdef.CodeHTTP, "grpc method not specified")
+		return nil, errdef.New(errdef.CodeProtocol, "grpc method not specified")
 	}
 
 	if grpcReq.DescriptorSet != "" {
@@ -249,14 +249,14 @@ func (c *Client) resolveMethodDescriptor(
 		}
 		files, err := protodesc.NewFiles(set)
 		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "build descriptors from file")
+			return nil, errdef.Wrap(errdef.CodeProtocol, err, "build descriptors from file")
 		}
 		return findMethodInFiles(files, grpcReq)
 	}
 
 	if !grpcReq.UseReflection {
 		return nil, errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeProtocol,
 			"grpc reflection disabled and no descriptor provided",
 		)
 	}
@@ -268,7 +268,7 @@ func (c *Client) resolveMethodDescriptor(
 
 	files, err := protodesc.NewFiles(fds)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "build descriptors from reflection")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "build descriptors from reflection")
 	}
 	return findMethodInFiles(files, grpcReq)
 }
@@ -293,7 +293,7 @@ func (c *Client) loadDescriptorSet(
 
 	fds := &descriptorpb.FileDescriptorSet{}
 	if err := proto.Unmarshal(data, fds); err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "parse descriptor set")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "parse descriptor set")
 	}
 	return fds, nil
 }
@@ -351,18 +351,18 @@ func findMethodInFiles(
 
 	desc, err := files.FindDescriptorByName(serviceName)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "service %s not found", serviceName)
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "service %s not found", serviceName)
 	}
 
 	svcDesc, ok := desc.(protoreflect.ServiceDescriptor)
 	if !ok {
-		return nil, errdef.New(errdef.CodeHTTP, "descriptor for %s is not a service", serviceName)
+		return nil, errdef.New(errdef.CodeProtocol, "descriptor for %s is not a service", serviceName)
 	}
 
 	method := svcDesc.Methods().ByName(protoreflect.Name(grpcReq.Method))
 	if method == nil {
 		return nil, errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeProtocol,
 			"method %s not found on %s",
 			grpcReq.Method,
 			serviceName,
@@ -379,12 +379,12 @@ func fetchDescriptorsViaReflection(
 	client := reflectpb.NewServerReflectionClient(conn)
 	stream, err := client.ServerReflectionInfo(ctx)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "open reflection stream")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "open reflection stream")
 	}
 
 	defer func() {
 		if closeErr := stream.CloseSend(); closeErr != nil && err == nil {
-			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close reflection stream")
+			err = errdef.Wrap(errdef.CodeProtocol, closeErr, "close reflection stream")
 		}
 	}()
 
@@ -403,33 +403,33 @@ func fetchDescriptorsViaReflection(
 		},
 	}
 	if err := stream.Send(request); err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "send reflection request")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "send reflection request")
 	}
 
 	response, err := stream.Recv()
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "receive reflection response")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "receive reflection response")
 	}
 
 	if errResp := response.GetErrorResponse(); errResp != nil {
 		code := codes.Code(errResp.GetErrorCode()).String()
 		msg := strings.TrimSpace(errResp.GetErrorMessage())
 		if msg == "" {
-			return nil, errdef.New(errdef.CodeHTTP, "grpc reflection error %s", code)
+			return nil, errdef.New(errdef.CodeProtocol, "grpc reflection error %s", code)
 		}
-		return nil, errdef.New(errdef.CodeHTTP, "grpc reflection error %s: %s", code, msg)
+		return nil, errdef.New(errdef.CodeProtocol, "grpc reflection error %s: %s", code, msg)
 	}
 
 	fileResp := response.GetFileDescriptorResponse()
 	if fileResp == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "reflection response missing descriptors")
+		return nil, errdef.New(errdef.CodeProtocol, "reflection response missing descriptors")
 	}
 
 	set = &descriptorpb.FileDescriptorSet{}
 	for _, raw := range fileResp.FileDescriptorProto {
 		fd := &descriptorpb.FileDescriptorProto{}
 		if err := proto.Unmarshal(raw, fd); err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "decode reflected descriptor")
+			return nil, errdef.Wrap(errdef.CodeProtocol, err, "decode reflected descriptor")
 		}
 		set.File = append(set.File, fd)
 	}

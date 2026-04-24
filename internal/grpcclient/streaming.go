@@ -68,7 +68,7 @@ func (c *Client) executeStream(
 	)
 	if err != nil {
 		finalizeStream(session, grpcReq.FullMethod, err)
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "open grpc stream")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "open grpc stream")
 	}
 	session.MarkOpen()
 
@@ -90,7 +90,7 @@ func (c *Client) executeStream(
 	body, bodyErr := buildStreamBody(out)
 	if bodyErr != nil {
 		finalizeStream(session, grpcReq.FullMethod, bodyErr)
-		return nil, errdef.Wrap(errdef.CodeHTTP, bodyErr, "encode grpc stream response")
+		return nil, errdef.Wrap(errdef.CodeProtocol, bodyErr, "encode grpc stream response")
 	}
 	resp.Message = string(body)
 	resp.Body = body
@@ -102,7 +102,7 @@ func (c *Client) executeStream(
 			resp.StatusMessage = st.Message()
 		}
 		finalizeStream(session, grpcReq.FullMethod, streamErr)
-		return resp, errdef.Wrap(errdef.CodeHTTP, streamErr, "invoke grpc stream")
+		return resp, errdef.Wrap(errdef.CodeProtocol, streamErr, "invoke grpc stream")
 	}
 	finalizeStream(session, grpcReq.FullMethod, nil)
 	return resp, nil
@@ -126,7 +126,7 @@ func runStream(
 	case methodDesc.IsStreamingServer():
 		return runServerStream(cs, msgs, inType, outDesc, method, session)
 	default:
-		return nil, errdef.New(errdef.CodeHTTP, "grpc method is not streaming")
+		return nil, errdef.New(errdef.CodeProtocol, "grpc method is not streaming")
 	}
 }
 
@@ -287,7 +287,7 @@ func parseInput(
 		return []proto.Message{dynamicpb.NewMessage(msgDesc)}, nil
 	}
 	if len(msgs) > 1 {
-		return nil, errdef.New(errdef.CodeHTTP, "grpc request expects a single message")
+		return nil, errdef.New(errdef.CodeProtocol, "grpc request expects a single message")
 	}
 	return msgs, nil
 }
@@ -303,14 +303,14 @@ func decodeMessages(
 	if strings.HasPrefix(trimmed, "[") {
 		var raw []json.RawMessage
 		if err := json.Unmarshal([]byte(trimmed), &raw); err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "decode grpc request body")
+			return nil, errdef.Wrap(errdef.CodeProtocol, err, "decode grpc request body")
 		}
 		msgs := make([]proto.Message, 0, len(raw))
 		for i, item := range raw {
 			msg, err := unmarshalMsg(item, msgDesc)
 			if err != nil {
 				return nil, errdef.Wrap(
-					errdef.CodeHTTP,
+					errdef.CodeProtocol,
 					err,
 					"decode grpc request body item %d",
 					i,
@@ -322,7 +322,7 @@ func decodeMessages(
 	}
 	msg, err := unmarshalMsg([]byte(trimmed), msgDesc)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "decode grpc request body")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "decode grpc request body")
 	}
 	return []proto.Message{msg}, nil
 }
