@@ -1,30 +1,32 @@
 package headless
 
 import (
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
 	"github.com/unkn0wn-root/resterm/internal/runner"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
 
 func reportFromRunner(rep *runner.Report) *Report {
 	if rep == nil {
 		return nil
 	}
-	return reportFromFmt(runner.NormalizeReport(rep))
+	return reportFromFmt(runner.ReportModel(rep))
 }
 
 func reportFromFmt(rep runfmt.Report) *Report {
 	out := &Report{
-		Version:   rep.Version,
-		FilePath:  rep.FilePath,
-		EnvName:   rep.EnvName,
-		StartedAt: rep.StartedAt,
-		EndedAt:   rep.EndedAt,
-		Duration:  rep.Duration,
-		Results:   make([]Result, 0, len(rep.Results)),
-		Total:     rep.Total,
-		Passed:    rep.Passed,
-		Failed:    rep.Failed,
-		Skipped:   rep.Skipped,
+		SchemaVersion: rep.SchemaVersion,
+		Version:       rep.Version,
+		FilePath:      rep.FilePath,
+		EnvName:       rep.EnvName,
+		StartedAt:     rep.StartedAt,
+		EndedAt:       rep.EndedAt,
+		Duration:      rep.Duration,
+		Results:       make([]Result, 0, len(rep.Results)),
+		Total:         rep.Total,
+		Passed:        rep.Passed,
+		Failed:        rep.Failed,
+		Skipped:       rep.Skipped,
+		StopReason:    StopReason(rep.StopReason),
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, resultFromFmt(res))
@@ -46,6 +48,7 @@ func resultFromFmt(res runfmt.Result) Result {
 		SkipReason:  res.SkipReason,
 		Error:       res.Error,
 		ScriptError: res.ScriptError,
+		Failure:     failureFromFmt(res.Failure),
 		HTTP:        httpFromFmt(res.HTTP),
 		GRPC:        grpcFromFmt(res.GRPC),
 		Stream:      streamFromFmt(res.Stream),
@@ -74,6 +77,7 @@ func stepFromFmt(step runfmt.Step) Step {
 		SkipReason:  step.SkipReason,
 		Error:       step.Error,
 		ScriptError: step.ScriptError,
+		Failure:     failureFromFmt(step.Failure),
 		HTTP:        httpFromFmt(step.HTTP),
 		GRPC:        grpcFromFmt(step.GRPC),
 		Stream:      streamFromFmt(step.Stream),
@@ -182,10 +186,24 @@ func profileFromFmt(prof *runfmt.Profile) *Profile {
 				Status:     failure.Status,
 				StatusCode: failure.StatusCode,
 				Duration:   failure.Duration,
+				Failure:    failureFromFmt(failure.Failure),
 			})
 		}
 	}
 	return out
+}
+
+func failureFromFmt(f *runfmt.Failure) *Failure {
+	if f == nil {
+		return nil
+	}
+	return &Failure{
+		Code:     FailureCode(f.Code),
+		Category: FailureCategory(f.Category),
+		ExitCode: f.ExitCode,
+		Message:  f.Message,
+		Source:   f.Source,
+	}
 }
 
 func latencyFromFmt(lat *runfmt.Latency) *Latency {
@@ -210,7 +228,7 @@ func streamFromFmt(stream *runfmt.Stream) *Stream {
 		Kind:           stream.Kind,
 		EventCount:     stream.EventCount,
 		TranscriptPath: stream.TranscriptPath,
-		// NormalizeReport already deep-clones stream summary maps.
+		// ReportModel already deep-clones stream summary maps.
 		Summary: stream.Summary,
 	}
 	return out

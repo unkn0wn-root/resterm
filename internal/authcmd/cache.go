@@ -34,7 +34,7 @@ func appendCachePart(b *strings.Builder, value string) {
 
 func conflictError(cfg Config, field string) error {
 	return errdef.New(
-		errdef.CodeHTTP,
+		errdef.CodeAuth,
 		"@auth command cache_key %q conflicts with seeded %s",
 		cfg.CacheKey,
 		field,

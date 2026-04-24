@@ -66,21 +66,21 @@ func (m *Model) expandWebSocketSteps(req *restfile.Request, resolver *vars.Resol
 		if trimmed := strings.TrimSpace(step.Value); trimmed != "" {
 			expanded, err := resolver.ExpandTemplates(trimmed)
 			if err != nil {
-				return errdef.Wrap(errdef.CodeHTTP, err, "expand websocket step value")
+				return errdef.Wrap(errdef.CodeProtocol, err, "expand websocket step value")
 			}
 			step.Value = expanded
 		}
 		if trimmed := strings.TrimSpace(step.File); trimmed != "" {
 			expanded, err := resolver.ExpandTemplates(trimmed)
 			if err != nil {
-				return errdef.Wrap(errdef.CodeHTTP, err, "expand websocket file path")
+				return errdef.Wrap(errdef.CodeProtocol, err, "expand websocket file path")
 			}
 			step.File = expanded
 		}
 		if trimmed := strings.TrimSpace(step.Reason); trimmed != "" {
 			expanded, err := resolver.ExpandTemplates(trimmed)
 			if err != nil {
-				return errdef.Wrap(errdef.CodeHTTP, err, "expand websocket close reason")
+				return errdef.Wrap(errdef.CodeProtocol, err, "expand websocket close reason")
 			}
 			step.Reason = expanded
 		}
@@ -110,7 +110,7 @@ func (m *Model) prepareGRPCRequest(
 				grpcReq.FullMethod = "/" + service + "/" + method
 			}
 		} else {
-			return errdef.New(errdef.CodeHTTP, "grpc method metadata is incomplete")
+			return errdef.New(errdef.CodeProtocol, "grpc method metadata is incomplete")
 		}
 	}
 
@@ -134,14 +134,14 @@ func (m *Model) prepareGRPCRequest(
 	if resolver != nil {
 		target, err := resolver.ExpandTemplates(grpcReq.Target)
 		if err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc target")
+			return errdef.Wrap(errdef.CodeProtocol, err, "expand grpc target")
 		}
 
 		grpcReq.Target = strings.TrimSpace(target)
 		if strings.TrimSpace(grpcReq.Message) != "" {
 			expanded, err := resolver.ExpandTemplates(grpcReq.Message)
 			if err != nil {
-				return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc message")
+				return errdef.Wrap(errdef.CodeProtocol, err, "expand grpc message")
 			}
 			grpcReq.Message = expanded
 		}
@@ -159,7 +159,7 @@ func (m *Model) prepareGRPCRequest(
 				expanded, err := resolver.ExpandTemplates(value)
 				if err != nil {
 					return errdef.Wrap(
-						errdef.CodeHTTP,
+						errdef.CodeProtocol,
 						err,
 						"expand grpc metadata %s",
 						grpcReq.Metadata[i].Key,
@@ -171,14 +171,14 @@ func (m *Model) prepareGRPCRequest(
 		if authority := strings.TrimSpace(grpcReq.Authority); authority != "" {
 			expanded, err := resolver.ExpandTemplates(authority)
 			if err != nil {
-				return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc authority")
+				return errdef.Wrap(errdef.CodeProtocol, err, "expand grpc authority")
 			}
 			grpcReq.Authority = strings.TrimSpace(expanded)
 		}
 		if descriptor := strings.TrimSpace(grpcReq.DescriptorSet); descriptor != "" {
 			expanded, err := resolver.ExpandTemplates(descriptor)
 			if err != nil {
-				return errdef.Wrap(errdef.CodeHTTP, err, "expand grpc descriptor set")
+				return errdef.Wrap(errdef.CodeProtocol, err, "expand grpc descriptor set")
 			}
 			grpcReq.DescriptorSet = strings.TrimSpace(expanded)
 		}
@@ -188,7 +188,7 @@ func (m *Model) prepareGRPCRequest(
 				for i, value := range values {
 					expanded, err := resolver.ExpandTemplates(value)
 					if err != nil {
-						return errdef.Wrap(errdef.CodeHTTP, err, "expand header %s", key)
+						return errdef.Wrap(errdef.CodeProtocol, err, "expand header %s", key)
 					}
 					req.Headers[key][i] = expanded
 				}
@@ -199,7 +199,7 @@ func (m *Model) prepareGRPCRequest(
 	grpcReq.Target = strings.TrimSpace(grpcReq.Target)
 	grpcReq.Target = normalizeGRPCTarget(grpcReq.Target, grpcReq)
 	if grpcReq.Target == "" {
-		return errdef.New(errdef.CodeHTTP, "grpc target not specified")
+		return errdef.New(errdef.CodeProtocol, "grpc target not specified")
 	}
 	req.URL = grpcReq.Target
 	return nil
@@ -223,7 +223,7 @@ func expandGRPCMessageFile(
 	}
 	expanded, err := resolver.ExpandTemplates(string(data))
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeHTTP, err, "expand grpc message file")
+		return "", errdef.Wrap(errdef.CodeProtocol, err, "expand grpc message file")
 	}
 	return expanded, nil
 }

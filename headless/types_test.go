@@ -65,6 +65,7 @@ func TestJSONTags(t *testing.T) {
 		{typ: reflect.TypeFor[Options](), name: "Source", tag: "source,omitempty"},
 		{typ: reflect.TypeFor[Source](), name: "Path", tag: "path,omitempty"},
 		{typ: reflect.TypeFor[Source](), name: "Content", tag: "-"},
+		{typ: reflect.TypeFor[Options](), name: "FailFast", tag: "failFast,omitempty"},
 		{typ: reflect.TypeFor[Options](), name: "Profile", tag: "profile,omitempty"},
 		{typ: reflect.TypeFor[Options](), name: "Selection", tag: "selection,omitempty"},
 		{typ: reflect.TypeFor[StateOptions](), name: "ArtifactDir", tag: "artifactDir,omitempty"},
@@ -77,16 +78,23 @@ func TestJSONTags(t *testing.T) {
 			tag:  "followRedirects,omitempty",
 		},
 		{typ: reflect.TypeFor[GRPCOptions](), name: "Plaintext", tag: "plaintext,omitempty"},
+		{typ: reflect.TypeFor[Report](), name: "SchemaVersion", tag: ""},
 		{typ: reflect.TypeFor[Report](), name: "FilePath", tag: ""},
 		{typ: reflect.TypeFor[Report](), name: "EnvName", tag: ""},
 		{typ: reflect.TypeFor[Result](), name: "Status", tag: ""},
 		{typ: reflect.TypeFor[Result](), name: "ScriptError", tag: ""},
+		{typ: reflect.TypeFor[Result](), name: "Failure", tag: ""},
 		{typ: reflect.TypeFor[Step](), name: "SkipReason", tag: ""},
+		{typ: reflect.TypeFor[Step](), name: "Failure", tag: ""},
 		{typ: reflect.TypeFor[HTTP](), name: "StatusCode", tag: "statusCode,omitempty"},
 		{typ: reflect.TypeFor[GRPC](), name: "StatusMessage", tag: "statusMessage,omitempty"},
 		{typ: reflect.TypeFor[Test](), name: "Elapsed", tag: "elapsed,omitempty"},
 		{typ: reflect.TypeFor[Profile](), name: "TotalRuns", tag: "totalRuns,omitempty"},
 		{typ: reflect.TypeFor[ProfileFailure](), name: "StatusCode", tag: "statusCode,omitempty"},
+		{typ: reflect.TypeFor[ProfileFailure](), name: "Failure", tag: "failure,omitempty"},
+		{typ: reflect.TypeFor[Failure](), name: "Code", tag: "code,omitempty"},
+		{typ: reflect.TypeFor[Failure](), name: "Category", tag: "category,omitempty"},
+		{typ: reflect.TypeFor[Failure](), name: "ExitCode", tag: "exitCode,omitempty"},
 		{typ: reflect.TypeFor[Stream](), name: "TranscriptPath", tag: "transcriptPath,omitempty"},
 		{typ: reflect.TypeFor[Trace](), name: "ArtifactPath", tag: "artifactPath,omitempty"},
 		{typ: reflect.TypeFor[TraceBudget](), name: "Phases", tag: "phases,omitempty"},
@@ -100,12 +108,13 @@ func TestJSONTags(t *testing.T) {
 
 func TestPublicTypesHoldStableValues(t *testing.T) {
 	rep := Report{
-		Version:   "v1",
-		FilePath:  "api.http",
-		EnvName:   "dev",
-		StartedAt: time.Unix(10, 0),
-		EndedAt:   time.Unix(12, 0),
-		Duration:  2 * time.Second,
+		SchemaVersion: "1",
+		Version:       "v1",
+		FilePath:      "api.http",
+		EnvName:       "dev",
+		StartedAt:     time.Unix(10, 0),
+		EndedAt:       time.Unix(12, 0),
+		Duration:      2 * time.Second,
 		Results: []Result{{
 			Kind:        KindCompare,
 			Name:        "cmp",
@@ -115,6 +124,13 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 			Status:      StatusPass,
 			Summary:     "ok",
 			Duration:    time.Second,
+			Failure: &Failure{
+				Code:     FailureTimeout,
+				Category: CategoryTimeout,
+				ExitCode: ExitTimeout,
+				Message:  "deadline exceeded",
+				Source:   "error",
+			},
 			HTTP: &HTTP{
 				Status:     "200 OK",
 				StatusCode: 200,
@@ -151,6 +167,11 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 					Status:     "500",
 					StatusCode: 500,
 					Duration:   3 * time.Millisecond,
+					Failure: &Failure{
+						Code:     FailureProtocol,
+						Category: CategoryProtocol,
+						ExitCode: ExitProtocol,
+					},
 				}},
 			},
 			Trace: &Trace{
@@ -176,8 +197,9 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 				TranscriptPath: "stream.log",
 			},
 			Steps: []Step{{
-				Name:   "step",
-				Status: StatusPass,
+				Name:    "step",
+				Status:  StatusPass,
+				Failure: &Failure{Code: FailureAssertion, Category: CategorySemantic},
 			}},
 		}},
 		Total:   1,
@@ -191,6 +213,11 @@ func TestPublicTypesHoldStableValues(t *testing.T) {
 	if rep.Results[0].Profile == nil || rep.Results[0].Trace == nil ||
 		rep.Results[0].Stream == nil {
 		t.Fatalf("expected nested public values to be retained: %+v", rep.Results[0])
+	}
+	if rep.SchemaVersion != "1" || rep.Results[0].Failure == nil ||
+		rep.Results[0].Profile.Failures[0].Failure == nil ||
+		rep.Results[0].Steps[0].Failure == nil {
+		t.Fatalf("expected failure metadata to be retained: %+v", rep)
 	}
 }
 
@@ -215,6 +242,10 @@ func TestReportHasFailures(t *testing.T) {
 
 	if (&Report{Results: []Result{{Error: "boom"}}}).HasFailures() == false {
 		t.Fatal("expected result error to report failures")
+	}
+
+	if (&Report{Results: []Result{{Failure: &Failure{Code: FailureTimeout}}}}).HasFailures() == false {
+		t.Fatal("expected result failure metadata to report failures")
 	}
 
 	if (&Report{Results: []Result{{Status: StatusPass}}}).HasFailures() {
@@ -252,6 +283,7 @@ func TestResultFailedUsesEffectiveStatus(t *testing.T) {
 		Canceled:    true,
 		Error:       "boom",
 		ScriptError: "script boom",
+		Failure:     &Failure{Code: FailureTimeout},
 		Tests:       []Test{{Passed: false}},
 		Trace:       &Trace{Breaches: []TraceBreach{{Kind: "total"}}},
 	}
@@ -270,6 +302,7 @@ func TestStepFailedUsesEffectiveStatus(t *testing.T) {
 		Canceled:    true,
 		Error:       "boom",
 		ScriptError: "script boom",
+		Failure:     &Failure{Code: FailureTimeout},
 		Tests:       []Test{{Passed: false}},
 		Trace:       &Trace{Breaches: []TraceBreach{{Kind: "total"}}},
 	}

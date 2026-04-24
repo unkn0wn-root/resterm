@@ -124,14 +124,14 @@ type editorSearch struct {
 }
 
 type metadataHintState struct {
-	active       bool
-	anchorOffset int
-	selection    int
-	preview      bool
-	popupLabelW  int
+	active        bool
+	anchorOffset  int
+	selection     int
+	preview       bool
+	popupLabelW   int
 	popupSummaryW int
-	filtered     []hint.Hint
-	ctx          hint.Context
+	filtered      []hint.Hint
+	ctx           hint.Context
 }
 
 func (s *metadataHintState) deactivate() {

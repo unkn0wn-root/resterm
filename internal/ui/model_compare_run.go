@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -608,7 +607,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.Error = reason
 		entry.BodySnippet = reason
 	case result.Err != nil:
-		entry.Error = errdef.Message(result.Err)
+		entry.Error = result.Err.Error()
 		entry.BodySnippet = entry.Error
 	case result.Response != nil:
 		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, env, m)

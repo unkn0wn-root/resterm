@@ -335,6 +335,121 @@ func TestRunCmdMapsFailedReportToExitCodeOne(t *testing.T) {
 	}
 }
 
+func TestRunCmdUsesDetailedFailureExitCodeByDefault(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	src := strings.Join([]string{
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cmd := newRunCmd()
+	cmd.newClient = stubRunClient
+	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
+		return stubRunErrorReport(context.DeadlineExceeded), nil
+	}
+	if err := cmd.parse([]string{file}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err := cmd.run()
+	if err == nil {
+		t.Fatalf("expected timeout exit")
+	}
+	if code := cli.ExitCode(err); code != 20 {
+		t.Fatalf("expected exit code 20, got %d (err=%v)", code, err)
+	}
+}
+
+func TestRunCmdSummaryExitCodeModeKeepsLegacyFailureCode(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	src := strings.Join([]string{
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cmd := newRunCmd()
+	cmd.newClient = stubRunClient
+	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
+		return stubRunErrorReport(context.DeadlineExceeded), nil
+	}
+	if err := cmd.parse([]string{"--exit-code-mode", "summary", file}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err := cmd.run()
+	if err == nil {
+		t.Fatalf("expected failure exit")
+	}
+	if code := cli.ExitCode(err); code != 1 {
+		t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
+	}
+}
+
+func TestRunCmdSummaryExitCodeModeAppliesToRuntimeErrors(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	src := strings.Join([]string{
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cmd := newRunCmd()
+	cmd.newClient = stubRunClient
+	cmd.runFn = func(_ context.Context, opts runner.Options) (*runner.Report, error) {
+		return nil, context.DeadlineExceeded
+	}
+	if err := cmd.parse([]string{"--exit-code-mode", "summary", file}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err := cmd.run()
+	if err == nil {
+		t.Fatalf("expected runtime error exit")
+	}
+	if code := cli.ExitCode(err); code != 1 {
+		t.Fatalf("expected exit code 1, got %d (err=%v)", code, err)
+	}
+}
+
+func TestRunCmdRejectsUnsupportedExitCodeMode(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "one.http")
+	src := strings.Join([]string{
+		"# @name one",
+		"GET https://example.com/one",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	cmd := newRunCmd()
+	if err := cmd.parse([]string{"--exit-code-mode", "legacy", file}); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	err := cmd.run()
+	if err == nil {
+		t.Fatalf("expected exit-code-mode error")
+	}
+	if code := cli.ExitCode(err); code != 2 {
+		t.Fatalf("expected exit code 2, got %d (err=%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "unsupported --exit-code-mode") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunCmdFailedOutputEndsWithNewline(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
@@ -985,4 +1100,20 @@ func stubRunReport(pass bool) *runner.Report {
 	}
 	rep.Failed = 1
 	return rep
+}
+
+func stubRunErrorReport(err error) *runner.Report {
+	item := runner.Result{
+		Kind:   runner.ResultKindRequest,
+		Name:   "one",
+		Method: "GET",
+		Target: "https://example.com/one",
+		Err:    err,
+		Passed: false,
+	}
+	return &runner.Report{
+		Results: []runner.Result{item},
+		Total:   1,
+		Failed:  1,
+	}
 }

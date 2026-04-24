@@ -166,7 +166,7 @@ func manualStepRes(
 		out.msg = strings.TrimSpace(res.SkipReason)
 	}
 	if out.err != nil {
-		out.msg = strings.TrimSpace(out.err.Error())
+		out.msg = out.err.Error()
 		if errors.Is(out.err, context.Canceled) {
 			out.cancel = true
 		}

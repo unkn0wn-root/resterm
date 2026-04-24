@@ -5,7 +5,7 @@ import (
 
 	"github.com/muesli/termenv"
 
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )

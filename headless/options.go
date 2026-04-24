@@ -21,6 +21,7 @@ type Options struct {
 	WorkspaceRoot string             `json:"workspaceRoot,omitempty"`
 	Recursive     bool               `json:"recursive,omitempty"`
 	State         StateOptions       `json:"state,omitempty"`
+	FailFast      bool               `json:"failFast,omitempty"`
 	Environment   EnvironmentOptions `json:"environment,omitempty"`
 	Compare       CompareOptions     `json:"compare,omitempty"`
 	Profile       ProfileOptions     `json:"profile,omitempty"`

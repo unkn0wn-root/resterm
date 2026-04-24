@@ -281,7 +281,10 @@ func TestDialPersistentInitialDialFailureBlocksSameKeyUntilCloseCompletes(t *tes
 
 	time.Sleep(50 * time.Millisecond)
 	if got := earlyStarts.Load(); got != 0 {
-		t.Fatalf("expected same-key start to wait for failed session close, got %d early starts", got)
+		t.Fatalf(
+			"expected same-key start to wait for failed session close, got %d early starts",
+			got,
+		)
 	}
 
 	released.Store(true)

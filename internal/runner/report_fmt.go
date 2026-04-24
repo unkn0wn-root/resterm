@@ -7,7 +7,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -16,7 +17,7 @@ func (r *Report) WriteJSON(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
 	}
-	rep := NormalizeReport(r)
+	rep := ReportModel(r)
 	return runfmt.WriteJSON(w, &rep)
 }
 
@@ -24,27 +25,34 @@ func (r *Report) WriteJUnit(w io.Writer) error {
 	if w == nil {
 		return ErrNilWriter
 	}
-	rep := NormalizeReport(r)
+	rep := ReportModel(r)
 	return runfmt.WriteJUnit(w, &rep)
 }
 
-// NormalizeReport converts a runner report into the canonical runfmt model.
-func NormalizeReport(rep *Report) runfmt.Report {
+func ExitCode(rep *Report, mode runfail.ExitMode) int {
+	fmtRep := ReportModel(rep)
+	return fmtRep.ExitCode(mode)
+}
+
+// ReportModel converts a runner report into the canonical runfmt model.
+func ReportModel(rep *Report) runfmt.Report {
 	if rep == nil {
 		return runfmt.Report{}
 	}
 	out := runfmt.Report{
-		Version:   str.Trim(rep.Version),
-		FilePath:  rep.FilePath,
-		EnvName:   str.Trim(rep.EnvName),
-		StartedAt: rep.StartedAt,
-		EndedAt:   rep.EndedAt,
-		Duration:  rep.Duration,
-		Results:   make([]runfmt.Result, 0, len(rep.Results)),
-		Total:     rep.Total,
-		Passed:    rep.Passed,
-		Failed:    rep.Failed,
-		Skipped:   rep.Skipped,
+		SchemaVersion: str.FirstTrimmed(rep.SchemaVersion, runfmt.ReportSchemaVersion),
+		Version:       str.Trim(rep.Version),
+		FilePath:      rep.FilePath,
+		EnvName:       str.Trim(rep.EnvName),
+		StartedAt:     rep.StartedAt,
+		EndedAt:       rep.EndedAt,
+		Duration:      rep.Duration,
+		Results:       make([]runfmt.Result, 0, len(rep.Results)),
+		Total:         rep.Total,
+		Passed:        rep.Passed,
+		Failed:        rep.Failed,
+		Skipped:       rep.Skipped,
+		StopReason:    rep.StopReason,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, toFormatResult(res))
@@ -67,6 +75,7 @@ func toFormatResult(res Result) runfmt.Result {
 		SkipReason:      str.Trim(res.SkipReason),
 		Error:           errText(res.Err),
 		ScriptError:     errText(res.ScriptErr),
+		Failure:         formatResultFailure(res),
 		HTTP:            formatHTTP(res.Response),
 		GRPC:            formatGRPC(res.GRPC),
 		Stream:          formatStream(res.Stream),
@@ -96,6 +105,7 @@ func toFormatStep(step StepResult) runfmt.Step {
 		SkipReason:      str.Trim(step.SkipReason),
 		Error:           errText(step.Err),
 		ScriptError:     errText(step.ScriptErr),
+		Failure:         formatStepFailure(step),
 		HTTP:            formatHTTP(step.Response),
 		GRPC:            formatGRPC(step.GRPC),
 		Stream:          formatStream(step.Stream),
@@ -216,10 +226,34 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 				Status:     str.Trim(fail.Status),
 				StatusCode: fail.StatusCode,
 				Duration:   fail.Duration,
+				Failure:    formatProfileFailure(fail),
 			})
 		}
 	}
 	return out
+}
+
+func formatResultFailure(res Result) *runfmt.Failure {
+	return formatRunFailure(resultFailure(res))
+}
+
+func formatStepFailure(step StepResult) *runfmt.Failure {
+	return formatRunFailure(stepFailure(step))
+}
+
+func formatProfileFailure(fail ProfileFailure) *runfmt.Failure {
+	return formatRunFailure(fail.Failure)
+}
+
+func formatRunFailure(failure runfail.Failure) *runfmt.Failure {
+	if failure.Code == "" {
+		return nil
+	}
+	return runfmt.FromFailure(runfail.New(
+		failure.Code,
+		str.Trim(failure.Message),
+		str.Trim(failure.Source),
+	))
 }
 
 func formatLatency(lat *history.ProfileLatency) *runfmt.Latency {

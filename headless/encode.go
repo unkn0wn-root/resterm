@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/unkn0wn-root/resterm/internal/runfmt"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
 
 // Encode writes the report in the given format.

@@ -102,7 +102,7 @@ func (c *Client) StartWebSocket(
 	opts Options,
 ) (*WebSocketHandle, *Response, error) {
 	if req == nil || req.WebSocket == nil {
-		return nil, nil, errdef.New(errdef.CodeHTTP, "websocket metadata missing")
+		return nil, nil, errdef.New(errdef.CodeProtocol, "websocket metadata missing")
 	}
 
 	effective := applyRequestSettings(opts, req.Settings)
@@ -160,7 +160,7 @@ func (c *Client) StartWebSocket(
 		if k8sDiag != nil {
 			err = k8s.AnnotateRequestError(err, start, k8sDiag)
 		}
-		return nil, nil, errdef.Wrap(errdef.CodeHTTP, err, "dial websocket")
+		return nil, nil, errdef.Wrap(errdef.CodeProtocol, err, "dial websocket")
 	}
 	// Swap contexts now - handshake timeout shouldn't kill the active connection.
 	// The new context lets the session run until explicitly closed or parent cancels.
@@ -254,7 +254,7 @@ func (c *Client) CompleteWebSocket(
 	opts Options,
 ) (*Response, error) {
 	if handle == nil || handle.Session == nil || handle.Sender == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "websocket session not available")
+		return nil, errdef.New(errdef.CodeProtocol, "websocket session not available")
 	}
 
 	session := handle.Session
@@ -315,7 +315,7 @@ func (c *Client) CompleteWebSocket(
 	transcript := WebSocketTranscript{Events: acc.events, Summary: acc.summary}
 	body, err := json.MarshalIndent(transcript, "", "  ")
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "encode websocket transcript")
+		return nil, errdef.Wrap(errdef.CodeProtocol, err, "encode websocket transcript")
 	}
 
 	headers := cloneHdr(handle.Meta.Headers)
@@ -363,7 +363,7 @@ func (c *Client) runWSSteps(
 	opts Options,
 ) (bool, error) {
 	if req == nil || req.WebSocket == nil {
-		return false, errdef.New(errdef.CodeHTTP, "websocket request missing")
+		return false, errdef.New(errdef.CodeProtocol, "websocket request missing")
 	}
 
 	wsReq := req.WebSocket
@@ -460,7 +460,7 @@ func buildWebSocketFallback(
 	started time.Time,
 ) (*Response, error) {
 	if httpResp == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "websocket handshake response unavailable")
+		return nil, errdef.New(errdef.CodeProtocol, "websocket handshake response unavailable")
 	}
 
 	var body []byte
@@ -468,10 +468,10 @@ func buildWebSocketFallback(
 		data, err := io.ReadAll(httpResp.Body)
 		closeErr := httpResp.Body.Close()
 		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, err, "read websocket handshake body")
+			return nil, errdef.Wrap(errdef.CodeProtocol, err, "read websocket handshake body")
 		}
 		if closeErr != nil {
-			return nil, errdef.Wrap(errdef.CodeHTTP, closeErr, "close websocket handshake body")
+			return nil, errdef.Wrap(errdef.CodeProtocol, closeErr, "close websocket handshake body")
 		}
 		body = data
 	}
@@ -502,13 +502,13 @@ func waitForDuration(ctx context.Context, d time.Duration) error {
 
 func ensureSessionAlive(session *stream.Session) error {
 	if session == nil {
-		return errdef.New(errdef.CodeHTTP, "websocket session missing")
+		return errdef.New(errdef.CodeProtocol, "websocket session missing")
 	}
 	if err := session.Context().Err(); err != nil {
 		if sessErr := session.Err(); sessErr != nil {
 			return sessErr
 		}
-		return errdef.Wrap(errdef.CodeHTTP, err, "websocket session closed")
+		return errdef.Wrap(errdef.CodeProtocol, err, "websocket session closed")
 	}
 	return nil
 }
@@ -555,7 +555,7 @@ func (rt *wsRuntime) readLoop() {
 			if ctx.Err() != nil {
 				session.Close(ctx.Err())
 			} else {
-				session.Close(errdef.Wrap(errdef.CodeHTTP, err, "read websocket message"))
+				session.Close(errdef.Wrap(errdef.CodeProtocol, err, "read websocket message"))
 			}
 			return
 		}
@@ -672,7 +672,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 			opcode = wsOpcodeText
 		}
 		if err := rt.conn.Write(ctx, msg.msgType, msg.payload); err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket frame")
+			return errdef.Wrap(errdef.CodeProtocol, err, "send websocket frame")
 		}
 		rt.touchActivity()
 
@@ -698,7 +698,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		return nil
 	case wsOutboundPing:
 		if err := rt.conn.Ping(ctx); err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket ping")
+			return errdef.Wrap(errdef.CodeProtocol, err, "send websocket ping")
 		}
 		rt.touchActivity()
 
@@ -721,13 +721,13 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 		payload := append([]byte(nil), msg.payload...)
 		if len(payload) > websocketControlMaxPayload {
 			return errdef.New(
-				errdef.CodeHTTP,
+				errdef.CodeProtocol,
 				"websocket pong payload exceeds %d bytes",
 				websocketControlMaxPayload,
 			)
 		}
 		if err := wsWriteControl(rt.conn, ctx, wsOpcodePong, payload); err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "send websocket pong")
+			return errdef.Wrap(errdef.CodeProtocol, err, "send websocket pong")
 		}
 		rt.touchActivity()
 
@@ -750,7 +750,7 @@ func (rt *wsRuntime) performWrite(msg wsOutbound) error {
 	case wsOutboundClose:
 		session.MarkClosing()
 		if err := rt.conn.Close(msg.code, msg.reason); err != nil {
-			return errdef.Wrap(errdef.CodeHTTP, err, "close websocket")
+			return errdef.Wrap(errdef.CodeProtocol, err, "close websocket")
 		}
 		rt.touchActivity()
 
@@ -790,7 +790,9 @@ func (rt *wsRuntime) shutdown() {
 		if err := rt.conn.Close(websocket.StatusNormalClosure, ""); err != nil &&
 			!errors.Is(err, net.ErrClosed) && !errors.Is(err, context.Canceled) {
 			if rt.session != nil {
-				rt.session.Close(errdef.Wrap(errdef.CodeHTTP, err, "close websocket connection"))
+				rt.session.Close(
+					errdef.Wrap(errdef.CodeProtocol, err, "close websocket connection"),
+				)
 			}
 		}
 	})
@@ -816,7 +818,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 
 	defer func() {
 		if r := recover(); r != nil {
-			err = errdef.New(errdef.CodeHTTP, "websocket session closed")
+			err = errdef.New(errdef.CodeProtocol, "websocket session closed")
 			if msg.result != nil {
 				msg.result <- err
 			}
@@ -825,7 +827,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 
 	select {
 	case <-s.runtime.session.Context().Done():
-		return errdef.New(errdef.CodeHTTP, "websocket session closed")
+		return errdef.New(errdef.CodeProtocol, "websocket session closed")
 	default:
 	}
 
@@ -854,7 +856,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 						if msg.kind == wsOutboundClose {
 							return nil
 						}
-						return errdef.New(errdef.CodeHTTP, "websocket session closed")
+						return errdef.New(errdef.CodeProtocol, "websocket session closed")
 					}
 				}
 			}
@@ -873,7 +875,7 @@ func (s *WebSocketSender) enqueue(msg wsOutbound) (err error) {
 		}
 		return msg.ctx.Err()
 	case <-s.runtime.session.Context().Done():
-		return errdef.New(errdef.CodeHTTP, "websocket session closed")
+		return errdef.New(errdef.CodeProtocol, "websocket session closed")
 	}
 }
 
@@ -901,7 +903,7 @@ func (s *WebSocketSender) SendJSON(
 	meta map[string]string,
 ) error {
 	if !json.Valid([]byte(jsonPayload)) {
-		return errdef.New(errdef.CodeHTTP, "invalid json payload for websocket send")
+		return errdef.New(errdef.CodeProtocol, "invalid json payload for websocket send")
 	}
 	m := cloneMetadata(meta)
 	if m == nil {
@@ -948,7 +950,7 @@ func (s *WebSocketSender) SendBase64(
 ) error {
 	decoded, err := base64.StdEncoding.DecodeString(data)
 	if err != nil {
-		return errdef.Wrap(errdef.CodeHTTP, err, "decode base64 payload")
+		return errdef.Wrap(errdef.CodeProtocol, err, "decode base64 payload")
 	}
 	return s.SendBinary(ctx, decoded, meta)
 }
@@ -967,7 +969,7 @@ func (s *WebSocketSender) Pong(ctx context.Context, payload string, meta map[str
 	data := []byte(payload)
 	if len(data) > websocketControlMaxPayload {
 		return errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeProtocol,
 			"websocket pong payload exceeds %d bytes",
 			websocketControlMaxPayload,
 		)

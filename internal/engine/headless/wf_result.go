@@ -11,7 +11,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -223,9 +222,9 @@ func workflowTransportOutcome(res *wfStepRes) (bool, string) {
 
 	switch {
 	case res.err != nil:
-		res.status = strings.TrimSpace(errdef.Message(res.err))
+		res.status = res.err.Error()
 		if res.status == "" {
-			res.status = strings.TrimSpace(res.err.Error())
+			res.status = "request failed"
 		}
 		msg = res.status
 		if errors.Is(res.err, context.Canceled) {

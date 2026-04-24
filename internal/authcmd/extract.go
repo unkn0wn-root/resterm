@@ -41,7 +41,7 @@ func extractTextCredential(out []byte) (credential, error) {
 func extractText(out []byte) (string, error) {
 	src := strings.TrimSpace(string(out))
 	if src == "" {
-		return "", errdef.New(errdef.CodeHTTP, "command stdout is empty")
+		return "", errdef.New(errdef.CodeAuth, "command stdout is empty")
 	}
 
 	lines := strings.Split(src, "\n")
@@ -55,12 +55,12 @@ func extractText(out []byte) (string, error) {
 	}
 	switch len(vals) {
 	case 0:
-		return "", errdef.New(errdef.CodeHTTP, "command stdout is empty")
+		return "", errdef.New(errdef.CodeAuth, "command stdout is empty")
 	case 1:
 		return vals[0], nil
 	default:
 		return "", errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeAuth,
 			"command stdout returned multiple values; use format=json",
 		)
 	}
@@ -78,7 +78,7 @@ func extractJSONCredential(cfg extractConfig, out []byte, now time.Time) (creden
 	}
 	if !ok || tok == "" {
 		return credential{}, errdef.New(
-			errdef.CodeHTTP,
+			errdef.CodeAuth,
 			"token_path must resolve to a non-empty scalar",
 		)
 	}
@@ -105,14 +105,14 @@ func decodeJSON(out []byte) (any, error) {
 
 	var doc any
 	if err := dec.Decode(&doc); err != nil {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "decode command stdout as json")
+		return nil, errdef.Wrap(errdef.CodeAuth, err, "decode command stdout as json")
 	}
 
 	var extra any
 	if err := dec.Decode(&extra); err == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "command stdout contains multiple JSON values")
+		return nil, errdef.New(errdef.CodeAuth, "command stdout contains multiple JSON values")
 	} else if err != io.EOF {
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "decode command stdout as json")
+		return nil, errdef.Wrap(errdef.CodeAuth, err, "decode command stdout as json")
 	}
 	return doc, nil
 }
@@ -129,7 +129,7 @@ func scalarAt(doc any, path, name string) (string, bool, error) {
 
 	out, ok := scalarString(val)
 	if !ok {
-		return "", false, errdef.New(errdef.CodeHTTP, "%s must resolve to a scalar", name)
+		return "", false, errdef.New(errdef.CodeAuth, "%s must resolve to a scalar", name)
 	}
 	return out, true, nil
 }
@@ -182,7 +182,7 @@ func expiryAt(doc any, cfg extractConfig, now time.Time) (time.Time, error) {
 func parseExpiry(raw string) (time.Time, error) {
 	src := trim(raw)
 	if src == "" {
-		return time.Time{}, errdef.New(errdef.CodeHTTP, "expiry value is empty")
+		return time.Time{}, errdef.New(errdef.CodeAuth, "expiry value is empty")
 	}
 
 	for _, layout := range []string{time.RFC3339Nano, time.RFC3339} {
@@ -195,7 +195,7 @@ func parseExpiry(raw string) (time.Time, error) {
 		return parseUnixExpiry(num), nil
 	}
 
-	return time.Time{}, errdef.New(errdef.CodeHTTP, "unsupported expiry value %q", raw)
+	return time.Time{}, errdef.New(errdef.CodeAuth, "unsupported expiry value %q", raw)
 }
 
 // expiry_path accepts both Unix seconds and Unix milliseconds.
@@ -210,15 +210,15 @@ func parseUnixExpiry(num int64) time.Time {
 func parseSeconds(raw string) (time.Duration, error) {
 	src := trim(raw)
 	if src == "" {
-		return 0, errdef.New(errdef.CodeHTTP, "expires_in value is empty")
+		return 0, errdef.New(errdef.CodeAuth, "expires_in value is empty")
 	}
 
 	val, err := strconv.ParseFloat(src, 64)
 	if err != nil {
-		return 0, errdef.New(errdef.CodeHTTP, "invalid expires_in value %q", raw)
+		return 0, errdef.New(errdef.CodeAuth, "invalid expires_in value %q", raw)
 	}
 	if val <= 0 {
-		return 0, errdef.New(errdef.CodeHTTP, "expires_in must be greater than zero")
+		return 0, errdef.New(errdef.CodeAuth, "expires_in must be greater than zero")
 	}
 	return time.Duration(val * float64(time.Second)), nil
 }

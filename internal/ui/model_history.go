@@ -121,11 +121,11 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 
 		code := errdef.CodeOf(msg.err)
 		level := statusError
-		if code == errdef.CodeScript || canceled {
+		if code == errdef.CodeScript || code == errdef.CodeCanceled || canceled {
 			level = statusWarn
 		}
 
-		text := errdef.Message(msg.err)
+		text := msg.err.Error()
 		if canceled {
 			text = "Request canceled"
 		}
@@ -190,7 +190,7 @@ func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
 
 	code := errdef.CodeOf(err)
 	title := requestErrorTitle(code)
-	detail := strings.TrimSpace(errdef.Message(err))
+	detail := err.Error()
 	if canceled {
 		title = "Request Canceled"
 		detail = "Request was canceled by user."
@@ -363,8 +363,22 @@ func (m *Model) consumeExplainPreview(env string, rep *xplain.Report) tea.Cmd {
 
 func requestErrorTitle(code errdef.Code) string {
 	switch code {
+	case errdef.CodeCanceled:
+		return "Request Canceled"
+	case errdef.CodeTimeout:
+		return "Request Timeout"
 	case errdef.CodeScript:
 		return "Request Script Error"
+	case errdef.CodeAuth:
+		return "Request Auth Error"
+	case errdef.CodeRoute:
+		return "Request Route Error"
+	case errdef.CodeProtocol:
+		return "Request Protocol Error"
+	case errdef.CodeNetwork:
+		return "Request Network Error"
+	case errdef.CodeTLS:
+		return "Request TLS Error"
 	case errdef.CodeHTTP:
 		return "HTTP Request Error"
 	case errdef.CodeParse:
@@ -378,9 +392,17 @@ func requestErrorTitle(code errdef.Code) string {
 
 func requestErrorNote(code errdef.Code) string {
 	switch code {
+	case errdef.CodeCanceled:
+		return "Request was canceled before completion."
+	case errdef.CodeTimeout:
+		return "Request timed out before a response payload was available."
 	case errdef.CodeScript:
 		return "Request scripts failed before completion."
-	case errdef.CodeHTTP:
+	case errdef.CodeAuth:
+		return "Request authentication failed before a response payload was available."
+	case errdef.CodeRoute:
+		return "Request route setup failed before a response payload was available."
+	case errdef.CodeProtocol, errdef.CodeNetwork, errdef.CodeTLS, errdef.CodeHTTP:
 		return "No response payload received."
 	default:
 		return "Request did not produce a response payload."

@@ -15,6 +15,11 @@
 //  4. Inspect the returned Report, Result, and Step values.
 //  5. Serialize the report with Report.Encode using JSON, JUnit, or Text.
 //
+// Reports expose structured failure metadata through Failure values on failed
+// results, steps, and profile iterations. Report.FailureCodes returns the
+// unique failure codes present in a report, and Report.ExitCode returns either
+// detailed classified CI exit codes or the legacy summary pass/fail codes.
+//
 // WriteJSON, WriteJUnit, and WriteText remain available as helpers
 // over Encode. Programmatic format selection is available through the Format
 // constants JSON, JUnit, and Text, and ParseFormat converts user-provided names

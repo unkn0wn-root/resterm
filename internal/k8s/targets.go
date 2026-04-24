@@ -41,7 +41,10 @@ func newClusterResolver(clients clusterClients, namespace string) clusterResolve
 	}
 }
 
-func (r clusterResolver) resolveForwardTarget(ctx context.Context, cfg execConfig) (forwardTarget, error) {
+func (r clusterResolver) resolveForwardTarget(
+	ctx context.Context,
+	cfg execConfig,
+) (forwardTarget, error) {
 	target, err := r.waitTargetPod(ctx, cfg.Target, cfg.PodWait)
 	if err != nil {
 		return forwardTarget{}, err

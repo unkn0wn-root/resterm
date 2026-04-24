@@ -294,6 +294,71 @@ func TestReportWriteJSONUsesEffectiveStatus(t *testing.T) {
 	}
 }
 
+func TestReportWriteJSONIncludesFailureMetadata(t *testing.T) {
+	rep := &Report{
+		FilePath: "api.http",
+		Results: []Result{{
+			Name:   "slow",
+			Status: StatusPass,
+			Error:  "context deadline exceeded",
+		}},
+	}
+
+	var out strings.Builder
+	if err := rep.WriteJSON(&out); err != nil {
+		t.Fatalf("WriteJSON: %v", err)
+	}
+
+	var got struct {
+		SchemaVersion string `json:"schemaVersion"`
+		Summary       struct {
+			ExitCode     int      `json:"exitCode"`
+			FailureCodes []string `json:"failureCodes"`
+		} `json:"summary"`
+		Results []struct {
+			Status  string `json:"status"`
+			Failure struct {
+				Code     string `json:"code"`
+				Category string `json:"category"`
+				ExitCode int    `json:"exitCode"`
+				Source   string `json:"source"`
+			} `json:"failure"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
+		t.Fatalf("unmarshal json: %v", err)
+	}
+	if got.SchemaVersion != "1" {
+		t.Fatalf("unexpected schema version %q", got.SchemaVersion)
+	}
+	if got.Summary.ExitCode != ExitTimeout ||
+		len(got.Summary.FailureCodes) != 1 ||
+		got.Summary.FailureCodes[0] != string(FailureTimeout) {
+		t.Fatalf("unexpected summary failure metadata: %+v", got.Summary)
+	}
+	if len(got.Results) != 1 || got.Results[0].Status != "fail" ||
+		got.Results[0].Failure.Code != string(FailureTimeout) ||
+		got.Results[0].Failure.Category != string(CategoryTimeout) ||
+		got.Results[0].Failure.ExitCode != ExitTimeout ||
+		got.Results[0].Failure.Source != "error" {
+		t.Fatalf("unexpected result failure metadata: %+v", got.Results)
+	}
+	if rep.ExitCode(ExitCodeDetailed) != ExitTimeout {
+		t.Fatalf(
+			"expected detailed exit code %d, got %d",
+			ExitTimeout,
+			rep.ExitCode(ExitCodeDetailed),
+		)
+	}
+	if rep.ExitCode(ExitCodeSummary) != ExitFailure {
+		t.Fatalf(
+			"expected summary exit code %d, got %d",
+			ExitFailure,
+			rep.ExitCode(ExitCodeSummary),
+		)
+	}
+}
+
 func TestReportWriteJSONPreservesSkipStatus(t *testing.T) {
 	rep := &Report{
 		FilePath: "api.http",

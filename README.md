@@ -105,7 +105,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling/code, CI flows or internal automation.
 
-The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
+The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI. Reports include structured failure metadata, schema-versioned JSON, failure-code helpers, and exit-code helpers for detailed CI handling or legacy pass/fail behavior.
 
 > [!NOTE]
 > If you want an "off-the-shelf" runner instead of building your own, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
@@ -115,6 +115,8 @@ The public Go API lives in the [`headless`](./headless) package and can run requ
 Resterm also ships with a built-in CLI: `resterm run`.
 
 Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI.
+
+`resterm run` supports JSON/JUnit output, detailed classified exit codes by default, `--exit-code-mode summary` for the older `0`/`1`/`2` contract, and `--fail-fast` for stopping after the first failed selected result.
 
 **Example**:
 

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/runcheck"
+	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 

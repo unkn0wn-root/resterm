@@ -205,6 +205,75 @@ func TestRunSelectRequestByName(t *testing.T) {
 	}
 }
 
+func TestRunFailFastSkipsRemainingRequests(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "fail-fast.http")
+	src := strings.Join([]string{
+		"### One",
+		"# @name one",
+		"# @assert response.statusCode == 200",
+		"GET https://example.com/one",
+		"",
+		"### Two",
+		"# @name two",
+		"GET https://example.com/two",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var calls int
+	client := httpclient.NewClient(nil)
+	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				calls++
+				status := http.StatusOK
+				if calls == 1 {
+					status = http.StatusInternalServerError
+				}
+				return &http.Response{
+					Status:     http.StatusText(status),
+					StatusCode: status,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{All: true},
+		FailFast:      true,
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if calls != 1 {
+		t.Fatalf("expected one request before fail-fast, got %d", calls)
+	}
+	if rep.Total != 2 || rep.Failed != 1 || rep.Skipped != 1 {
+		t.Fatalf("unexpected fail-fast report: %+v", rep)
+	}
+	if rep.StopReason != stopReasonFailFast {
+		t.Fatalf("stop reason = %q, want %q", rep.StopReason, stopReasonFailFast)
+	}
+	if len(rep.Results) != 2 || !rep.Results[1].Skipped ||
+		!strings.Contains(rep.Results[1].SkipReason, "--fail-fast") {
+		t.Fatalf("unexpected skipped result: %+v", rep.Results)
+	}
+	if skipped := rep.Results[1]; skipped.Name != "two" || skipped.Method != "GET" ||
+		skipped.Target != "https://example.com/two" {
+		t.Fatalf("unexpected skipped request fields: %+v", skipped)
+	}
+}
+
 func TestRunSelectRequestByLine(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "many.http")

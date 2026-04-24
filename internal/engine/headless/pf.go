@@ -97,7 +97,7 @@ func (c *proCollector) applyIter(ev core.ProIterDone) {
 	if ev.Result.Response != nil {
 		dur = ev.Result.Response.Duration
 	}
-	ok, reason := profileOutcome(ev.Result)
+	ok, outcome := profileOutcome(ev.Result)
 	if !ev.Iter.Warmup {
 		st.mEnd = ev.Meta.At
 	}
@@ -110,8 +110,9 @@ func (c *proCollector) applyIter(ev core.ProIterDone) {
 	fail := engine.ProfileFailure{
 		Iteration: ev.Iter.Index + 1,
 		Warmup:    ev.Iter.Warmup,
-		Reason:    reason,
+		Reason:    outcome.reason,
 		Duration:  dur,
+		Failure:   outcome.failure,
 	}
 	if ev.Result.Response != nil {
 		fail.Status = ev.Result.Response.Status

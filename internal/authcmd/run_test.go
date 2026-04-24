@@ -7,6 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
 
 func TestRun(t *testing.T) {
@@ -60,6 +63,22 @@ func TestRun(t *testing.T) {
 				t.Fatalf("stdout = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMapRunErrorUsesTimeoutCode(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Nanosecond)
+	defer cancel()
+	<-ctx.Done()
+
+	err := mapRunError(
+		ctx,
+		commandConfig{Argv: []string{"token-helper"}, Timeout: time.Second},
+		context.DeadlineExceeded,
+		"",
+	)
+	if got := errdef.CodeOf(err); got != errdef.CodeTimeout {
+		t.Fatalf("CodeOf(error) = %q, want %q", got, errdef.CodeTimeout)
 	}
 }
 

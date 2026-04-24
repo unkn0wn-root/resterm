@@ -48,7 +48,9 @@ func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *test
 	if got := model.historyFilterInput.TextStyle.GetForeground(); got != lipgloss.Color("#F5F2FF") {
 		t.Fatalf("expected dark history filter text foreground, got %v", got)
 	}
-	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color("#A6A1BB") {
+	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color(
+		"#A6A1BB",
+	) {
 		t.Fatalf("expected dark history filter prompt foreground, got %v", got)
 	}
 	if theme.ColorDefined(model.historyFilterInput.PlaceholderStyle.GetForeground()) {
@@ -93,10 +95,14 @@ func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *test
 	if got := model.historyFilterInput.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
 		t.Fatalf("expected light history filter text foreground, got %v", got)
 	}
-	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color("#64748b") {
+	if got := model.historyFilterInput.PromptStyle.GetForeground(); got != lipgloss.Color(
+		"#64748b",
+	) {
 		t.Fatalf("expected light history filter prompt foreground, got %v", got)
 	}
-	if got := model.historyFilterInput.PlaceholderStyle.GetForeground(); got != lipgloss.Color("#64748b") {
+	if got := model.historyFilterInput.PlaceholderStyle.GetForeground(); got != lipgloss.Color(
+		"#64748b",
+	) {
 		t.Fatalf("expected history placeholder to use subtle light color, got %v", got)
 	}
 }
@@ -104,7 +110,9 @@ func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *test
 func TestDarkModalFallback(t *testing.T) {
 	customDark := theme.DefaultTheme()
 	customDark.CommandBar = customDark.CommandBar.Background(lipgloss.Color("#102938"))
-	customDark.ResponseSelection = customDark.ResponseSelection.Background(lipgloss.Color("#223344"))
+	customDark.ResponseSelection = customDark.ResponseSelection.Background(
+		lipgloss.Color("#223344"),
+	)
 
 	rt := newThemeRuntime(theme.Definition{
 		Key: "aurora",
@@ -126,7 +134,9 @@ func TestDarkModalFallback(t *testing.T) {
 func TestModalOverrides(t *testing.T) {
 	customDark := theme.DefaultTheme()
 	customDark.CommandBar = customDark.CommandBar.Background(lipgloss.Color("#102938"))
-	customDark.ResponseSelection = customDark.ResponseSelection.Background(lipgloss.Color("#223344"))
+	customDark.ResponseSelection = customDark.ResponseSelection.Background(
+		lipgloss.Color("#223344"),
+	)
 	customDark.ModalBackdrop = lipgloss.Color("#0f1720")
 	customDark.ModalInputBackground = lipgloss.Color("#162033")
 	customDark.ModalOption = lipgloss.Color("#94a3b8")
@@ -170,7 +180,11 @@ func TestEditorSelectionIgnoresModalInput(t *testing.T) {
 		Theme: lightTheme,
 	})
 
-	if got := model.themeRuntime.modalInputBackground(model.theme); got != lipgloss.Color("#cbd5f5") {
+	if got := model.themeRuntime.modalInputBackground(
+		model.theme,
+	); got != lipgloss.Color(
+		"#cbd5f5",
+	) {
 		t.Fatalf("expected modal input background override, got %v", got)
 	}
 	if got := model.editor.SelectionStyle().GetBackground(); got != lipgloss.Color("#e2e8f0") {
