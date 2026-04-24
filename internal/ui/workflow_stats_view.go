@@ -33,14 +33,7 @@ type workflowStatsEntry struct {
 
 type workflowStatsRender struct {
 	content   string
-	metrics   []workflowStatsMetric
 	lineCount int
-}
-
-type workflowStatsMetric struct {
-	index int
-	start int
-	end   int
 }
 
 func buildWorkflowStatsEntries(state *workflowState) []workflowStatsEntry {
@@ -494,7 +487,6 @@ func (v *workflowStatsView) renderStepRow(idx, width int) string {
 		nameWidth = 6
 		if metaWidth > 0 && width < 40 {
 			meta = ""
-			metaWidth = 0
 			nameWidth = width - visibleWidth(prefix) - visibleWidth(status) - 2
 		}
 	}

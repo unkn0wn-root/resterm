@@ -119,20 +119,6 @@ func (m *Model) invalidateWorkflowStatsCaches(snapshot *responseSnapshot) {
 	}
 }
 
-func (m *Model) ensureWorkflowStatsVisible(snapshot *responseSnapshot) {
-	if snapshot == nil || snapshot.workflowStats == nil {
-		return
-	}
-	for _, id := range m.visiblePaneIDs() {
-		pane := m.pane(id)
-		if pane == nil || pane.snapshot != snapshot || pane.activeTab != responseTabStats {
-			continue
-		}
-		pane.viewport.SetYOffset(0)
-		pane.setCurrPosition()
-	}
-}
-
 func (m *Model) activateWorkflowStatsView(snapshot *responseSnapshot) tea.Cmd {
 	if snapshot == nil || snapshot.workflowStats == nil {
 		return nil
