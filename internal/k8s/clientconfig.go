@@ -153,6 +153,16 @@ func normalizeLoadOptions(opt LoadOptions) (loadSettings, error) {
 	}, nil
 }
 
+func loadOptionsFromSettings(st loadSettings) LoadOptions {
+	return LoadOptions{
+		ExecPolicy:             st.policy,
+		ExecAllowlist:          append([]string(nil), st.allowlist...),
+		StdinUnavailable:       st.stdinUnavail,
+		StdinUnavailableSet:    true,
+		StdinUnavailableReason: st.stdinMsg,
+	}
+}
+
 func normalizeAllowlist(raw []string) []string {
 	if len(raw) == 0 {
 		return nil

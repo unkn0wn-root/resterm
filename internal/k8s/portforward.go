@@ -74,10 +74,7 @@ func startSession(ctx context.Context, cfg execConfig, load loadSettings) (*sess
 		return nil, fmt.Errorf("k8s: build port-forwarder: %w", err)
 	}
 
-	ses := &session{
-		stopCh: stopCh,
-		doneCh: make(chan struct{}),
-	}
+	ses := newSession(stopCh)
 	go func() {
 		ses.finish(pf.ForwardPorts())
 	}()
