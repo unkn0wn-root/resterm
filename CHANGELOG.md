@@ -2,6 +2,21 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.31.1](https://github.com/unkn0wn-root/resterm/compare/v0.30.3...v0.31.1) (2026-04-24)
+
+
+### Features
+
+* redesign workflows ([4460a78](https://github.com/unkn0wn-root/resterm/commit/4460a78cbcba6e712a79fde17658e7e743b6ad06))
+* **squashed:** headless api new exit codes ([feace2c](https://github.com/unkn0wn-root/resterm/commit/feace2c42a82ebc0dc4ad046f4637c046317c636))
+
+
+### Bug Fixes
+
+* ignore low level cache err ([8b3f17c](https://github.com/unkn0wn-root/resterm/commit/8b3f17c41e031815e883dc3f19709ffe4b8322e6))
+* **k8s:** keep port-forward key busy while closing failed session ([07bb087](https://github.com/unkn0wn-root/resterm/commit/07bb0877d830efba42198f0a0d85a5314a29eff2))
+* **k8s:** keep port-forward key busy while closing stale session ([124012e](https://github.com/unkn0wn-root/resterm/commit/124012e8e7030dffb9d65775f26dd76267d75255))
+
 ### [0.30.3](https://github.com/unkn0wn-root/resterm/compare/v0.30.2...v0.30.3) (2026-04-23)
 
 
