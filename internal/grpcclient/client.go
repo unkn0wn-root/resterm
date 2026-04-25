@@ -120,7 +120,7 @@ func (c *Client) Execute(
 	sshOn := options.SSH != nil && options.SSH.Active()
 	k8sOn := options.K8s != nil && options.K8s.Active()
 	if tunnel.HasConflict(sshOn, k8sOn) {
-		return nil, errdef.New(errdef.CodeProtocol, "ssh and k8s transports cannot be combined")
+		return nil, errdef.New(errdef.CodeRoute, "ssh and k8s transports cannot be combined")
 	}
 
 	appendTunnelDialer := func(dial tunnel.DialContextFunc) {
