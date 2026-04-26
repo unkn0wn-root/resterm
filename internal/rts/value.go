@@ -39,7 +39,6 @@ type Func struct {
 type Object interface {
 	TypeName() string
 	GetMember(name string) (Value, bool)
-	CallMember(name string, args []Value) (Value, error)
 	Index(key Value) (Value, error)
 }
 

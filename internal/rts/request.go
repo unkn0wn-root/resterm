@@ -1,7 +1,6 @@
 package rts
 
 import (
-	"fmt"
 	"net/url"
 	"strings"
 	"sync"
@@ -106,10 +105,6 @@ func (o *requestObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".setBody", o.setBodyFn), true
 	}
 	return Null(), false
-}
-
-func (o *requestObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), fmt.Errorf("no member call: %s", name)
 }
 
 func (o *requestObj) Index(key Value) (Value, error) {

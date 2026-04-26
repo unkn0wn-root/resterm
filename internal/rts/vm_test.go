@@ -52,6 +52,20 @@ func TestEvalBasic(t *testing.T) {
 	}
 }
 
+func TestListIndexRequiresInteger(t *testing.T) {
+	ex, err := ParseExpr("test", 1, 1, "[10,20][1.2]")
+	if err != nil {
+		t.Fatalf("parse expr: %v", err)
+	}
+	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
+	vm := &VM{ctx: ctx}
+	env := NewEnv(nil)
+	_, err = vm.eval(env, ex)
+	if err == nil || !strings.Contains(err.Error(), "list index must be integer") {
+		t.Fatalf("expected integer index error, got %v", err)
+	}
+}
+
 func TestEvalLogic(t *testing.T) {
 	v := evalExpr(t, "true and false")
 	if v.K != VBool || v.B != false {

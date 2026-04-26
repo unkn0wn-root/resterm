@@ -31,6 +31,9 @@ type RT struct {
 	Extra       map[string]Value
 }
 
+// Eng evaluates RTS expressions and modules.
+// It is not safe for concurrent use because evaluation updates shared request
+// state that cached modules resolve dynamically.
 type Eng struct {
 	C      *ModCache
 	Lim    Limits

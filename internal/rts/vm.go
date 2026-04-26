@@ -452,6 +452,12 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			if idx.K != VNum {
 				return Null(), rtErr(vm.ctx, e.Pos(), "list index must be number")
 			}
+			if math.IsNaN(idx.N) || math.IsInf(idx.N, 0) || math.Trunc(idx.N) != idx.N {
+				return Null(), rtErr(vm.ctx, e.Pos(), "list index must be integer")
+			}
+			if idx.N > maxI || idx.N < minI {
+				return Null(), rtErr(vm.ctx, e.Pos(), "list index out of range")
+			}
 			i := int(idx.N)
 			if i < 0 || i >= len(x.L) {
 				return Null(), nil

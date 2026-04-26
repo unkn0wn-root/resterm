@@ -2,7 +2,6 @@ package rts
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 )
 
@@ -29,10 +28,6 @@ func (o *mapObj) GetMember(name string) (Value, bool) {
 	}
 
 	return mapMember(o.m, name)
-}
-
-func (o *mapObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), fmt.Errorf("no member call: %s", name)
 }
 
 func (o *mapObj) Index(key Value) (Value, error) {
@@ -126,10 +121,6 @@ func (o *respObj) GetMember(name string) (Value, bool) {
 		return NativeNamed(o.name+".json", o.jsonFn), true
 	}
 	return Null(), false
-}
-
-func (o *respObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), fmt.Errorf("no member call: %s", name)
 }
 
 func (o *respObj) Index(key Value) (Value, error) {
