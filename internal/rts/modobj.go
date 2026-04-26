@@ -1,7 +1,5 @@
 package rts
 
-import "fmt"
-
 type ModObj struct {
 	name string
 	exp  map[string]Value
@@ -16,10 +14,6 @@ func (m *ModObj) TypeName() string { return "module:" + m.name }
 func (m *ModObj) GetMember(name string) (Value, bool) {
 	v, ok := m.exp[name]
 	return v, ok
-}
-
-func (m *ModObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), fmt.Errorf("module has no member call: %s", name)
 }
 
 func (m *ModObj) Index(key Value) (Value, error) {

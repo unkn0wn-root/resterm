@@ -114,10 +114,6 @@ func (o *traceObj) GetMember(name string) (Value, bool) {
 	return Null(), false
 }
 
-func (o *traceObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), rtErr(nil, Pos{}, "no member call: %s", name)
-}
-
 func (o *traceObj) Index(key Value) (Value, error) {
 	return Null(), nil
 }

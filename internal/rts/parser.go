@@ -201,12 +201,18 @@ func (p *Parser) parseParams() []string {
 		return nil
 	}
 	var out []string
+	seen := map[string]struct{}{}
 	for {
 		if p.cur.K != IDENT {
 			p.fail(p.cur.P, "expected parameter name")
 		}
 
-		out = append(out, p.cur.Lit)
+		name := p.cur.Lit
+		if _, ok := seen[name]; ok {
+			p.fail(p.cur.P, fmt.Sprintf("duplicate parameter %q", name))
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
 		p.next()
 		if p.cur.K == COMMA {
 			p.next()

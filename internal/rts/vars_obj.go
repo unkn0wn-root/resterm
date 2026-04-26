@@ -72,10 +72,6 @@ func (o *varsObj) GetMember(name string) (Value, bool) {
 	return mapMember(o.m, name)
 }
 
-func (o *varsObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), rtErr(nil, Pos{}, "no member call: %s", name)
-}
-
 func (o *varsObj) Index(key Value) (Value, error) {
 	return mapIndex(o.m, key)
 }
@@ -130,10 +126,6 @@ func (o *globalObj) GetMember(name string) (Value, bool) {
 	}
 
 	return mapMember(o.m, name)
-}
-
-func (o *globalObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), rtErr(nil, Pos{}, "no member call: %s", name)
 }
 
 func (o *globalObj) Index(key Value) (Value, error) {

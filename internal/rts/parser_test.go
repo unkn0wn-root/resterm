@@ -20,6 +20,12 @@ func TestParseFnIf(t *testing.T) {
 	}
 }
 
+func TestParseDuplicateParamRejected(t *testing.T) {
+	if _, err := ParseModule("test", []byte("fn f(a, a) { return a }\n")); err == nil {
+		t.Fatalf("expected duplicate parameter error")
+	}
+}
+
 func TestParseDict(t *testing.T) {
 	src := "let x = {\"a\": 1, b: 2}\n"
 	m, err := ParseModule("test", []byte(src))

@@ -1,9 +1,6 @@
 package rts
 
-import (
-	"fmt"
-	"maps"
-)
+import "maps"
 
 type nsSpec struct {
 	name string
@@ -37,10 +34,6 @@ func (o *objMap) TypeName() string { return o.name }
 func (o *objMap) GetMember(name string) (Value, bool) {
 	v, ok := o.m[name]
 	return v, ok
-}
-
-func (o *objMap) CallMember(name string, args []Value) (Value, error) {
-	return Null(), fmt.Errorf("no such member: %s", name)
 }
 
 func (o *objMap) Index(key Value) (Value, error) {

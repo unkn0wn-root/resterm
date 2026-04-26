@@ -449,10 +449,10 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		}
 		switch x.K {
 		case VList:
-			if idx.K != VNum {
-				return Null(), rtErr(vm.ctx, e.Pos(), "list index must be number")
+			i, err := vm.listIndex(e.Pos(), idx)
+			if err != nil {
+				return Null(), err
 			}
-			i := int(idx.N)
 			if i < 0 || i >= len(x.L) {
 				return Null(), nil
 			}
@@ -532,6 +532,20 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 	default:
 		return Null(), rtErr(vm.ctx, ex.Pos(), "unknown expr")
 	}
+}
+
+func (vm *VM) listIndex(pos Pos, idx Value) (int, error) {
+	if idx.K != VNum {
+		return 0, rtErr(vm.ctx, pos, "list index must be number")
+	}
+	n := idx.N
+	switch {
+	case math.IsNaN(n), math.IsInf(n, 0), math.Trunc(n) != n:
+		return 0, rtErr(vm.ctx, pos, "list index must be integer")
+	case n > maxI, n < minI:
+		return 0, rtErr(vm.ctx, pos, "list index out of range")
+	}
+	return int(n), nil
 }
 
 func (vm *VM) evalCall(env *Env, c *Call) (Value, error) {

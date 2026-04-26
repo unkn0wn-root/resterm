@@ -32,10 +32,6 @@ func (o *streamObj) GetMember(name string) (Value, bool) {
 	return Null(), false
 }
 
-func (o *streamObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), rtErr(nil, Pos{}, "no member call: %s", name)
-}
-
 func (o *streamObj) Index(key Value) (Value, error) {
 	return Null(), nil
 }

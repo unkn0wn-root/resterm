@@ -1,7 +1,5 @@
 package rts
 
-import "fmt"
-
 type resultObj struct {
 	ok  bool
 	val Value
@@ -36,10 +34,6 @@ func (o *resultObj) GetMember(name string) (Value, bool) {
 		return Str(o.err), true
 	}
 	return Null(), false
-}
-
-func (o *resultObj) CallMember(name string, args []Value) (Value, error) {
-	return Null(), fmt.Errorf("no member call: %s", name)
 }
 
 func (o *resultObj) Index(key Value) (Value, error) {
