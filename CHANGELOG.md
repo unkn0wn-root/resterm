@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.32.1](https://github.com/unkn0wn-root/resterm/compare/v0.31.2...v0.32.1) (2026-04-26)
+
+
+### Features
+
+* **rts:** add new unix string method ([2b99f0a](https://github.com/unkn0wn-root/resterm/commit/2b99f0ace12fd32d02127fdf1ac6dbeac8ce6e8f))
+
+
+### Bug Fixes
+
+* classify grpc tunnel conflicts as route failures ([7e4da09](https://github.com/unkn0wn-root/resterm/commit/7e4da091e138543cd82bf73f79c47561f4ebdde5))
+* **rts:** parser and VM, remove dead CallMember interface ([0da36b9](https://github.com/unkn0wn-root/resterm/commit/0da36b9bb511d552abe50a500916e5fe6305c8a7))
+
 ### [0.31.2](https://github.com/unkn0wn-root/resterm/compare/v0.31.1...v0.31.2) (2026-04-24)
 
 
