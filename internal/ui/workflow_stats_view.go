@@ -241,7 +241,10 @@ func (v *workflowStatsView) render(width, height int) workflowStatsRender {
 func (v *workflowStatsView) renderScreen(width, height int) []string {
 	lines := v.summaryLines(width)
 	if !v.hasEntries() {
-		lines = append(lines, workflowFitLine(statsMessageStyle.Render("No workflow steps captured"), width))
+		lines = append(
+			lines,
+			workflowFitLine(statsMessageStyle.Render("No workflow steps captured"), width),
+		)
 		return workflowFitLines(lines, width, height)
 	}
 
@@ -250,7 +253,9 @@ func (v *workflowStatsView) renderScreen(width, height int) []string {
 	if layout.sideBySide {
 		left := v.renderStepList(layout.listWidth, layout.listHeight)
 		right := v.renderDetail(layout.detailWidth, layout.detailHeight)
-		lines = append(lines, workflowJoinColumns(left, right, layout.listWidth, layout.detailWidth)...)
+		lines = append(
+			lines,
+			workflowJoinColumns(left, right, layout.listWidth, layout.detailWidth)...)
 		return workflowFitLines(lines, width, height)
 	}
 
@@ -504,7 +509,9 @@ func (v *workflowStatsView) renderStepRow(idx, width int) string {
 	)
 	line := prefix + status + " " + name
 	if meta != "" {
-		line += " " + statsSubLabelStyle.Render(workflowPlainTruncate(meta, maxInt(width-visibleWidth(line)-1, 1)))
+		line += " " + statsSubLabelStyle.Render(
+			workflowPlainTruncate(meta, maxInt(width-visibleWidth(line)-1, 1)),
+		)
 	}
 	line = workflowFitLine(line, width)
 	if selected {
@@ -588,7 +595,10 @@ func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []
 		lines = append(lines, workflowFitLine(strings.Join(fields, "  "), width))
 	}
 	if target := workflowStepTarget(entry.result); target != "" {
-		lines = append(lines, workflowFitLine(statsSubLabelStyle.Render(workflowPlainTruncate(target, width)), width))
+		lines = append(
+			lines,
+			workflowFitLine(statsSubLabelStyle.Render(workflowPlainTruncate(target, width)), width),
+		)
 	}
 	if msg := strings.TrimSpace(entry.result.Message); msg != "" {
 		for _, line := range wrapStructuredLine(statsMessageStyle.Render(msg), width) {
