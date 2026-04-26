@@ -2,20 +2,22 @@ package rts
 
 import (
 	"math"
+	"strconv"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
 var timeSpec = nsSpec{name: "time", top: true, fns: map[string]NativeFunc{
-	"nowISO":     timeNowISO,
-	"nowUnix":    timeNowUnix,
-	"nowUnixMs":  timeNowUnixMs,
-	"format":     timeFormat,
-	"parse":      timeParse,
-	"formatUnix": timeFormatUnix,
-	"addUnix":    timeAddUnix,
-	"duration":   timeDuration,
+	"nowISO":        timeNowISO,
+	"nowUnix":       timeNowUnix,
+	"nowUnixString": timeNowUnixStr,
+	"nowUnixMs":     timeNowUnixMs,
+	"format":        timeFormat,
+	"parse":         timeParse,
+	"formatUnix":    timeFormatUnix,
+	"addUnix":       timeAddUnix,
+	"duration":      timeDuration,
 }}
 
 const (
@@ -47,6 +49,23 @@ func timeNowUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 	return Num(float64(t.Unix())), nil
+}
+
+func timeNowUnixStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, "time.nowUnixString()")
+	if err := na.count(0); err != nil {
+		return Null(), err
+	}
+
+	t, err := nowT(ctx, pos)
+	if err != nil {
+		return Null(), err
+	}
+	s := strconv.FormatInt(t.Unix(), 10)
+	if err := chkStr(ctx, pos, s); err != nil {
+		return Null(), err
+	}
+	return Str(s), nil
 }
 
 func timeNowUnixMs(ctx *Ctx, pos Pos, args []Value) (Value, error) {

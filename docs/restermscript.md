@@ -297,6 +297,7 @@ RTS provides a small standard library that covers common request needs without e
 
 - `rts.time.nowISO()` returns the current time in ISO 8601 format.
 - `rts.time.nowUnix()` returns the current time as unix seconds.
+- `rts.time.nowUnixString()` returns the current time as a decimal unix seconds string.
 - `rts.time.nowUnixMs()` returns the current time as unix milliseconds.
 - `rts.time.format(layout)` formats the current time with the given layout string.
 - `rts.time.parse(layout, value)` parses the time string and returns unix seconds (fractional).

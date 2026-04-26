@@ -150,6 +150,14 @@ func TestStdlibTimeExtras(t *testing.T) {
 	if v.K != VNum || v.N != float64(base.Unix()) {
 		t.Fatalf("expected nowUnix")
 	}
+	v = evalExprCtx(t, ctx, "time.nowUnixString()")
+	if v.K != VStr || v.S != "1704164645" {
+		t.Fatalf("expected nowUnixString")
+	}
+	v = evalExprCtx(t, ctx, "\"\" + time.nowUnixString()")
+	if v.K != VStr || v.S != "1704164645" {
+		t.Fatalf("expected nowUnixString concat")
+	}
 	v = evalExprCtx(t, ctx, "time.nowUnixMs()")
 	ms := base.UnixNano() / int64(time.Millisecond)
 	if v.K != VNum || v.N != float64(ms) {
