@@ -8,6 +8,10 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -55,7 +59,7 @@ func parseApplyUses(raw string) ([]string, error) {
 		if !strings.EqualFold(strings.TrimSpace(k), "use") {
 			return nil, fmt.Errorf("@apply token %q must be use=<name>", p)
 		}
-		n := strings.TrimSpace(trimQuotes(v))
+		n := strings.TrimSpace(lex.TrimQuotes(v))
 		if !validPatchName(n) {
 			return nil, fmt.Errorf("@apply use name %q is invalid", n)
 		}
@@ -68,7 +72,7 @@ func parseApplyUses(raw string) ([]string, error) {
 }
 
 func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
-	scTok, rem := splitFirst(rest)
+	scTok, rem := lex.SplitFirst(rest)
 	if scTok == "" {
 		return restfile.PatchProfile{}, fmt.Errorf(
 			"@patch requires '<scope> <name> <expression>'",
@@ -78,7 +82,7 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 	if !ok {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch scope must be file or global")
 	}
-	n, rem := splitFirst(rem)
+	n, rem := lex.SplitFirst(rem)
 	n = strings.TrimSpace(n)
 	if !validPatchName(n) {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch name %q is invalid", n)
@@ -116,7 +120,7 @@ func validPatchName(n string) bool {
 		return false
 	}
 	for _, r := range n {
-		if isIdentRune(r) {
+		if lex.IsIdentRune(r) {
 			continue
 		}
 		if r == '-' || r == '.' {
@@ -128,7 +132,7 @@ func validPatchName(n string) bool {
 }
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
-	f := tokenizeFields(rest)
+	f := lex.TokenizeFields(rest)
 	n := len(f)
 	switch n {
 	case 0:
@@ -153,7 +157,7 @@ func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
 		if p == "" || a == "" {
 			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
 		}
-		if !isIdent(a) {
+		if !lex.IsIdent(a) {
 			return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", a)
 		}
 		return restfile.UseSpec{
@@ -190,7 +194,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
 		}
-		if !isIdent(name) {
+		if !lex.IsIdent(name) {
 			return nil, fmt.Errorf("@for-each name %q is invalid", name)
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
@@ -201,7 +205,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
 		}
-		if !isIdent(name) {
+		if !lex.IsIdent(name) {
 			return nil, fmt.Errorf("@for-each name %q is invalid", name)
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
@@ -242,7 +246,7 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 		return dir, false, nil
 	}
 
-	fields := tokenizeFields(trimmed)
+	fields := lex.TokenizeFields(trimmed)
 	if len(fields) == 0 {
 		return dir, false, nil
 	}
@@ -289,7 +293,7 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 }
 
 func parseAuthScope(token string) (restfile.AuthScope, bool) {
-	return parseDirectiveScope(
+	return dscope.Parse(
 		token,
 		restfile.AuthScopeRequest,
 		restfile.AuthScopeFile,
@@ -298,7 +302,7 @@ func parseAuthScope(token string) (restfile.AuthScope, bool) {
 }
 
 func parseAuthSpec(rest string) *restfile.AuthSpec {
-	fields := tokenizeFields(rest)
+	fields := lex.TokenizeFields(rest)
 	if len(fields) == 0 {
 		return nil
 	}
@@ -324,7 +328,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if len(fields) < 2 {
 			return nil
 		}
-		maps.Copy(params, parseKeyValuePairs(fields[1:]))
+		maps.Copy(params, options.ParseFields(fields[1:]))
 		if params["token_url"] == "" && params["cache_key"] == "" {
 			return nil
 		}
@@ -338,7 +342,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if len(fields) < 2 {
 			return nil
 		}
-		maps.Copy(params, parseKeyValuePairs(fields[1:]))
+		maps.Copy(params, options.ParseFields(fields[1:]))
 		if params["argv"] == "" && params["cache_key"] == "" {
 			return nil
 		}
@@ -364,8 +368,8 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 		return spec
 	}
 
-	fields := tokenizeFields(trimmed)
-	params := parseKeyValuePairs(fields)
+	fields := lex.TokenizeFields(trimmed)
+	params := options.ParseFields(fields)
 
 	if spec.Count == 0 {
 		if raw, ok := params["count"]; ok {
@@ -409,7 +413,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 		return spec
 	}
 
-	fields := tokenizeFields(trimmed)
+	fields := lex.TokenizeFields(trimmed)
 	for _, field := range fields {
 		value := strings.TrimSpace(field)
 		if value == "" {
@@ -447,7 +451,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 			val := strings.TrimSpace(value[idx+1:])
 			switch key {
 			case "enabled":
-				if b, ok := parseBool(val); ok {
+				if b, ok := dvalue.ParseBool(val); ok {
 					spec.Enabled = b
 				}
 			case "total":
@@ -486,7 +490,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 }
 
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
-	fields := tokenizeFields(rest)
+	fields := lex.TokenizeFields(rest)
 	envs := make([]string, 0, len(fields))
 	seen := make(map[string]struct{})
 	var baseline string

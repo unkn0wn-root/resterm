@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -2455,7 +2456,7 @@ query Second {
 
 func TestParseOptionTokensQuotedValues(t *testing.T) {
 	input := `expect.status="201 Created" vars.request.item_name='Workflow Demo Item' note=alpha\ beta message="He said \"hi\"" flag`
-	opts := parseOptionTokens(input)
+	opts := options.Parse(input)
 
 	if got := opts["expect.status"]; got != "201 Created" {
 		t.Fatalf("expected expect.status to be '201 Created', got %q", got)
@@ -2476,7 +2477,7 @@ func TestParseOptionTokensQuotedValues(t *testing.T) {
 
 func TestParseOptionTokensBareJSONValue(t *testing.T) {
 	input := `argv=["gh", "auth", "token"] mode=json`
-	opts := parseOptionTokens(input)
+	opts := options.Parse(input)
 
 	if got := opts["argv"]; got != `["gh", "auth", "token"]` {
 		t.Fatalf("expected argv JSON preserved, got %q", got)

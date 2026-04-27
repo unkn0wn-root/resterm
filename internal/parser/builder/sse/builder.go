@@ -1,22 +1,24 @@
-package parser
+package sse
 
 import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-type sseBuilder struct {
+type Builder struct {
 	enabled bool
 	options restfile.SSEOptions
 }
 
-func newSSEBuilder() *sseBuilder {
-	return &sseBuilder{}
+func New() *Builder {
+	return &Builder{}
 }
 
-func (b *sseBuilder) HandleDirective(key, rest string) bool {
+func (b *Builder) HandleDirective(key, rest string) bool {
 	if !strings.EqualFold(key, "sse") {
 		return false
 	}
@@ -36,14 +38,14 @@ func (b *sseBuilder) HandleDirective(key, rest string) bool {
 	}
 
 	b.enabled = true
-	assignments := parseOptionTokens(trimmed)
+	assignments := options.Parse(trimmed)
 	for key, value := range assignments {
 		b.applyOption(key, value)
 	}
 	return true
 }
 
-func (b *sseBuilder) applyOption(name, value string) {
+func (b *Builder) applyOption(name, value string) {
 	switch strings.ToLower(name) {
 	case "duration", "timeout":
 		if dur, ok := duration.Parse(value); ok {
@@ -60,17 +62,17 @@ func (b *sseBuilder) applyOption(name, value string) {
 			b.options.IdleTimeout = dur
 		}
 	case "max-events":
-		if n, err := parsePositiveInt(value); err == nil {
+		if n, err := dvalue.ParsePositiveInt(value); err == nil {
 			b.options.MaxEvents = n
 		}
 	case "max-bytes", "limit-bytes":
-		if size, err := parseByteSize(value); err == nil {
+		if size, err := dvalue.ParseByteSize(value); err == nil {
 			b.options.MaxBytes = size
 		}
 	}
 }
 
-func (b *sseBuilder) Finalize() (*restfile.SSERequest, bool) {
+func (b *Builder) Finalize() (*restfile.SSERequest, bool) {
 	if !b.enabled {
 		return nil, false
 	}

@@ -16,7 +16,6 @@ var (
 	variableLineRe = regexp.MustCompile(
 		`^@(?:(global(?:-secret)?|file(?:-secret)?|request(?:-secret)?)\s+)?([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.+?)|\s+(\S.*))$`,
 	)
-	nameValueRe = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
 )
 
 func Parse(path string, data []byte) *restfile.Document {

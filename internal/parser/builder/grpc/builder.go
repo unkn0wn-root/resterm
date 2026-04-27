@@ -1,4 +1,4 @@
-package grpcbuilder
+package grpc
 
 import (
 	"strings"

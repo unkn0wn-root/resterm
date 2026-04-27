@@ -1,7 +1,7 @@
-package httpbuilder
+package http
 
 import (
-	"net/http"
+	stdhttp "net/http"
 	"regexp"
 	"strings"
 
@@ -28,7 +28,7 @@ func ParseMethodLine(line string) (method string, url string, ver httpver.Versio
 
 	method = strings.ToUpper(fields[0])
 	if method == "WS" || method == "WSS" {
-		method = http.MethodGet
+		method = stdhttp.MethodGet
 	}
 
 	urlFields, ver := httpver.SplitToken(fields[1:])
@@ -54,7 +54,7 @@ func ParseWebSocketURLLine(line string) (url string, ok bool) {
 type Builder struct {
 	method       string
 	url          string
-	headers      http.Header
+	headers      stdhttp.Header
 	headerDone   bool
 	bodyLines    []string
 	bodyFromFile string
@@ -72,7 +72,7 @@ func (b *Builder) HasMethod() bool {
 func (b *Builder) SetMethodAndURL(method, url string) {
 	m := strings.ToUpper(strings.TrimSpace(method))
 	if m == "WS" || m == "WSS" {
-		m = http.MethodGet
+		m = stdhttp.MethodGet
 	}
 	b.method = m
 	b.url = strings.TrimSpace(url)
@@ -86,14 +86,14 @@ func (b *Builder) URL() string {
 	return b.url
 }
 
-func (b *Builder) Headers() http.Header {
+func (b *Builder) Headers() stdhttp.Header {
 	if b.headers == nil {
-		b.headers = make(http.Header)
+		b.headers = make(stdhttp.Header)
 	}
 	return b.headers
 }
 
-func (b *Builder) HeaderMap() http.Header {
+func (b *Builder) HeaderMap() stdhttp.Header {
 	return b.headers
 }
 

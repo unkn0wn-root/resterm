@@ -1,4 +1,4 @@
-package graphqlbuilder
+package graphql
 
 import (
 	"strings"

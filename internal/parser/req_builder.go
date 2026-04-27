@@ -3,9 +3,13 @@ package parser
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
-	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
-	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
+	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
+	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
+	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
+	ssebuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/sse"
+	wsbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/websocket"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -29,8 +33,8 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
-	sse               *sseBuilder
-	websocket         *wsBuilder
+	sse               *ssebuilder.Builder
+	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions
 	ssh               *restfile.SSHSpec
 	k8s               *restfile.K8sSpec
@@ -103,7 +107,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	if value == "" {
 		return false
 	}
-	key, val := splitDirective(value)
+	key, val := lex.SplitDirective(value)
 	if key == "" {
 		key = value
 	}
@@ -111,7 +115,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	case "expand", "expand-templates":
 		enabled := true
 		if strings.TrimSpace(val) != "" {
-			if parsed, ok := parseBool(val); ok {
+			if parsed, ok := dvalue.ParseBool(val); ok {
 				enabled = parsed
 			}
 		}
