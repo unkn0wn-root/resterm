@@ -1,4 +1,4 @@
-package parser
+package ssh
 
 import (
 	"fmt"
@@ -6,54 +6,28 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-type sshDirective struct {
-	scope          restfile.SSHScope
-	profile        restfile.SSHProfile
-	spec           *restfile.SSHSpec
-	persistIgnored bool
+type Directive struct {
+	Scope          restfile.SSHScope
+	Profile        restfile.SSHProfile
+	Spec           *restfile.SSHSpec
+	PersistIgnored bool
 }
 
-func (b *documentBuilder) handleSSH(line int, rest string) {
-	res, err := parseSSHDirective(rest)
-	if err != nil {
-		b.addError(line, err.Error())
-		return
-	}
-
-	if res.scope == restfile.SSHScopeRequest {
-		b.ensureRequest(line)
-		if b.request.k8s != nil {
-			b.addError(line, "@ssh cannot be combined with @k8s on the same request")
-			return
-		}
-		if b.request.ssh != nil {
-			b.addError(line, "@ssh already defined for this request")
-			return
-		}
-		if res.persistIgnored {
-			b.addWarning(line, "@ssh request scope ignores persist")
-		}
-		b.request.ssh = res.spec
-		return
-	}
-
-	if res.scope == restfile.SSHScopeGlobal || res.scope == restfile.SSHScopeFile {
-		res.profile.Scope = res.scope
-		b.sshDefs = append(b.sshDefs, res.profile)
-	}
-}
-
-func parseSSHDirective(rest string) (sshDirective, error) {
-	res := sshDirective{}
-	trimmed := strings.TrimSpace(rest)
+func ParseDirective(rest string) (Directive, error) {
+	res := Directive{}
+	trimmed := str.Trim(rest)
 	if trimmed == "" {
 		return res, fmt.Errorf("@ssh requires options")
 	}
 
-	fields := tokenizeFieldsEscaped(trimmed)
+	fields := lex.TokenizeFieldsEscaped(trimmed)
 	if len(fields) == 0 {
 		return res, fmt.Errorf("@ssh requires options")
 	}
@@ -67,45 +41,45 @@ func parseSSHDirective(rest string) (sshDirective, error) {
 
 	name := "default"
 	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
-		name = strings.TrimSpace(fields[idx])
+		name = str.Trim(fields[idx])
 		idx++
 	}
 	if name == "" {
 		name = "default"
 	}
 
-	opts := parseOptionTokens(strings.Join(fields[idx:], " "))
+	opts := options.Parse(strings.Join(fields[idx:], " "))
 	prof := restfile.SSHProfile{Scope: scope, Name: name}
 	applySSHOptions(&prof, opts)
 	if scope == restfile.SSHScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking tunnels.
-		res.persistIgnored = prof.Persist.Set
+		res.PersistIgnored = prof.Persist.Set
 		prof.Persist = restfile.Opt[bool]{}
 	}
 
 	if scope != restfile.SSHScopeRequest {
-		if strings.TrimSpace(prof.Host) == "" {
+		if str.Trim(prof.Host) == "" {
 			return res, fmt.Errorf("@ssh %s scope requires host", sshScopeLabel(scope))
 		}
-		res.scope = scope
-		res.profile = prof
+		res.Scope = scope
+		res.Profile = prof
 		return res, nil
 	}
 
-	use := strings.TrimSpace(opts["use"])
+	use := str.Trim(opts["use"])
 	inline := buildInlineSSH(prof)
 	if use == "" && inline == nil {
 		return res, fmt.Errorf("@ssh requires host or use=")
 	}
 
-	res.scope = scope
-	res.profile = prof
-	res.spec = &restfile.SSHSpec{Use: use, Inline: inline}
+	res.Scope = scope
+	res.Profile = prof
+	res.Spec = &restfile.SSHSpec{Use: use, Inline: inline}
 	return res, nil
 }
 
 func parseSSHScope(token string) (restfile.SSHScope, bool) {
-	return parseDirectiveScope(
+	return dscope.Parse(
 		token,
 		restfile.SSHScopeRequest,
 		restfile.SSHScopeFile,
@@ -114,54 +88,61 @@ func parseSSHScope(token string) (restfile.SSHScope, bool) {
 }
 
 func applySSHOptions(prof *restfile.SSHProfile, opts map[string]string) {
-	if host, ok := firstOpt(opts, "host"); ok {
+	if host, ok := options.First(opts, "host"); ok {
 		prof.Host = host
 	}
-	if port, ok := firstOpt(opts, "port"); ok {
+	if port, ok := options.First(opts, "port"); ok {
 		prof.PortStr = port
 		if n, err := strconv.Atoi(port); err == nil && n > 0 {
 			prof.Port = n
 		}
 	}
-	if user, ok := firstOpt(opts, "user"); ok {
+	if user, ok := options.First(opts, "user"); ok {
 		prof.User = user
 	}
-	if pw, ok := firstOpt(opts, "password", "pass"); ok {
+	if pw, ok := options.First(opts, "password", "pass"); ok {
 		prof.Pass = pw
 	}
-	if key, ok := firstOpt(opts, "key"); ok {
+	if key, ok := options.First(opts, "key"); ok {
 		prof.Key = key
 	}
-	if kp, ok := firstOpt(opts, "passphrase"); ok {
+	if kp, ok := options.First(opts, "passphrase"); ok {
 		prof.KeyPass = kp
 	}
-	setOptBool(&prof.Agent, opts, "agent")
-	if kh, ok := firstOpt(opts, "known_hosts", "known-hosts"); ok {
+	setBoolOption(&prof.Agent, opts, "agent")
+	if kh, ok := options.First(opts, "known_hosts", "known-hosts"); ok {
 		prof.KnownHosts = kh
 	}
-	setOptBool(&prof.Strict, opts, "strict_hostkey", "strict-hostkey", "strict_host_key")
-	setOptBool(&prof.Persist, opts, "persist")
+	setBoolOption(&prof.Strict, opts, "strict_hostkey", "strict-hostkey", "strict_host_key")
+	setBoolOption(&prof.Persist, opts, "persist")
 
-	if raw, ok := firstOpt(opts, "timeout"); ok {
+	if raw, ok := options.First(opts, "timeout"); ok {
 		prof.TimeoutStr = raw
 		prof.Timeout.Set = true
 		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			prof.Timeout.Val = dur
 		}
 	}
-	if raw, ok := firstOpt(opts, "keepalive"); ok {
+	if raw, ok := options.First(opts, "keepalive"); ok {
 		prof.KeepAliveStr = raw
 		prof.KeepAlive.Set = true
 		if dur, ok := duration.Parse(raw); ok && dur >= 0 {
 			prof.KeepAlive.Val = dur
 		}
 	}
-	if raw, ok := firstOpt(opts, "retries"); ok {
+	if raw, ok := options.First(opts, "retries"); ok {
 		prof.RetriesStr = raw
 		prof.Retries.Set = true
 		if n, err := strconv.Atoi(raw); err == nil && n >= 0 {
 			prof.Retries.Val = n
 		}
+	}
+}
+
+func setBoolOption(opt *restfile.Opt[bool], opts map[string]string, keys ...string) {
+	if value, ok := options.Bool(opts, keys...); ok {
+		opt.Set = true
+		opt.Val = value
 	}
 }
 
@@ -191,7 +172,7 @@ func sshInlineSet(prof restfile.SSHProfile) bool {
 }
 
 func sshScopeLabel(scope restfile.SSHScope) string {
-	return directiveScopeLabel(
+	return dscope.Label(
 		scope,
 		restfile.SSHScopeRequest,
 		restfile.SSHScopeFile,

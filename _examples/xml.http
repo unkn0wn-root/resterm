@@ -1,0 +1,27 @@
+### XML Echo
+# @name xmlEcho
+# @tag body xml
+POST {{base.url}}/anything/xml
+Content-Type: application/xml
+Accept: application/json
+
+<?xml version="1.0" encoding="UTF-8"?>
+<order id="123">
+  <customer>
+    <name>Ada Lovelace</name>
+    <email>ada@example.com</email>
+  </customer>
+  <items>
+    <item sku="book-001" quantity="2">Notebook</item>
+  </items>
+</order>
+
+### Inline Angle Text
+# @name inlineAngleText
+# @tag body inline
+# @body inline
+POST {{base.url}}/anything/inline-angle
+Content-Type: text/plain
+Accept: application/json
+
+< this is literal text, not a body file reference

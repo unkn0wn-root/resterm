@@ -1,99 +1,53 @@
-package parser
+package k8s
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	k8starget "github.com/unkn0wn-root/resterm/internal/k8s/target"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-type k8sDirective struct {
-	scope          restfile.K8sScope
-	profile        restfile.K8sProfile
-	spec           *restfile.K8sSpec
-	persistIgnored bool
+type Directive struct {
+	Scope          restfile.K8sScope
+	Profile        restfile.K8sProfile
+	Spec           *restfile.K8sSpec
+	PersistIgnored bool
 }
 
-type k8sDirectiveError struct {
+type DirectiveError struct {
 	err     error
-	profile restfile.K8sProfile
+	Profile restfile.K8sProfile
 }
 
-func (e *k8sDirectiveError) Error() string {
+func (e *DirectiveError) Error() string {
 	if e == nil || e.err == nil {
 		return ""
 	}
 	return e.err.Error()
 }
 
-func (e *k8sDirectiveError) Unwrap() error {
+func (e *DirectiveError) Unwrap() error {
 	if e == nil {
 		return nil
 	}
 	return e.err
 }
 
-func (b *documentBuilder) handleK8s(line int, rest string) {
-	res, err := parseK8sDirective(rest)
-	if err != nil {
-		b.addError(line, err.Error())
-		var dirErr *k8sDirectiveError
-		if errors.As(err, &dirErr) {
-			b.addInvalidK8sProfile(line, dirErr.profile, err.Error())
-		}
-		return
-	}
-
-	if res.scope == restfile.K8sScopeRequest {
-		b.ensureRequest(line)
-		if b.request.ssh != nil {
-			b.addError(line, "@k8s cannot be combined with @ssh on the same request")
-			return
-		}
-		if b.request.k8s != nil {
-			b.addError(line, "@k8s already defined for this request")
-			return
-		}
-		if res.persistIgnored {
-			b.addWarning(line, "@k8s request scope ignores persist")
-		}
-		b.request.k8s = res.spec
-		return
-	}
-
-	if res.scope == restfile.K8sScopeGlobal || res.scope == restfile.K8sScopeFile {
-		res.profile.Scope = res.scope
-		res.profile.Line = line
-		b.k8sDefs = append(b.k8sDefs, res.profile)
-	}
-}
-
-func (b *documentBuilder) addInvalidK8sProfile(
-	line int,
-	prof restfile.K8sProfile,
-	message string,
-) {
-	if prof.Scope != restfile.K8sScopeGlobal && prof.Scope != restfile.K8sScopeFile {
-		return
-	}
-	prof.Line = line
-	prof.Invalid = true
-	prof.Error = message
-	b.k8sDefs = append(b.k8sDefs, prof)
-}
-
-func parseK8sDirective(rest string) (k8sDirective, error) {
-	res := k8sDirective{}
-	trimmed := strings.TrimSpace(rest)
+func ParseDirective(rest string) (Directive, error) {
+	res := Directive{}
+	trimmed := str.Trim(rest)
 	if trimmed == "" {
 		return res, fmt.Errorf("@k8s requires options")
 	}
 
-	fields := tokenizeFieldsEscaped(trimmed)
+	fields := lex.TokenizeFieldsEscaped(trimmed)
 	if len(fields) == 0 {
 		return res, fmt.Errorf("@k8s requires options")
 	}
@@ -107,14 +61,14 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 
 	name := "default"
 	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
-		name = strings.TrimSpace(fields[idx])
+		name = str.Trim(fields[idx])
 		idx++
 	}
 	if name == "" {
 		name = "default"
 	}
 
-	opts := parseOptionTokens(strings.Join(fields[idx:], " "))
+	opts := options.Parse(strings.Join(fields[idx:], " "))
 	prof := restfile.K8sProfile{Scope: scope, Name: name}
 	profileErr := func(err error) error {
 		if err == nil {
@@ -124,7 +78,7 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 			return err
 		}
 		prof.Scope = scope
-		return &k8sDirectiveError{err: err, profile: prof}
+		return &DirectiveError{err: err, Profile: prof}
 	}
 	if err := applyK8sOptions(&prof, opts); err != nil {
 		return res, profileErr(err)
@@ -132,40 +86,40 @@ func parseK8sDirective(rest string) (k8sDirective, error) {
 
 	if scope == restfile.K8sScopeRequest {
 		// Request-scoped persist is ignored to avoid leaking forwarders.
-		res.persistIgnored = prof.Persist.Set
+		res.PersistIgnored = prof.Persist.Set
 		prof.Persist = restfile.Opt[bool]{}
 	} else {
-		if strings.TrimSpace(prof.Namespace) == "" {
+		if str.Trim(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 		if err := requireK8sTarget(prof); err != nil {
 			err := fmt.Errorf("@k8s %s scope %w", k8sScopeLabel(scope), err)
 			return res, profileErr(err)
 		}
-		res.scope = scope
-		res.profile = prof
+		res.Scope = scope
+		res.Profile = prof
 		return res, nil
 	}
 
-	use := strings.TrimSpace(opts["use"])
+	use := str.Trim(opts["use"])
 	if use == "" {
 		if err := requireK8sTarget(prof); err != nil {
 			return res, fmt.Errorf("@k8s requires target and port or use=")
 		}
-		if strings.TrimSpace(prof.Namespace) == "" {
+		if str.Trim(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 	}
 
 	inline := buildInlineK8s(prof)
-	res.scope = scope
-	res.profile = prof
-	res.spec = &restfile.K8sSpec{Use: use, Inline: inline}
+	res.Scope = scope
+	res.Profile = prof
+	res.Spec = &restfile.K8sSpec{Use: use, Inline: inline}
 	return res, nil
 }
 
 func parseK8sScope(token string) (restfile.K8sScope, bool) {
-	return parseDirectiveScope(
+	return dscope.Parse(
 		token,
 		restfile.K8sScopeRequest,
 		restfile.K8sScopeFile,
@@ -174,11 +128,11 @@ func parseK8sScope(token string) (restfile.K8sScope, bool) {
 }
 
 func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
-	if ns, ok := firstOpt(opts, "namespace", "ns"); ok {
+	if ns, ok := options.First(opts, "namespace", "ns"); ok {
 		prof.Namespace = ns
 	}
 
-	if raw, ok := firstOpt(opts, "target"); ok {
+	if raw, ok := options.First(opts, "target"); ok {
 		k, n, err := k8starget.ParseRef(raw)
 		if err != nil {
 			return fmt.Errorf("invalid @k8s target: %w", err)
@@ -199,7 +153,7 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 	}
 	for _, ta := range targetAliases {
 		for _, key := range ta.keys {
-			v := strings.TrimSpace(opts[key])
+			v := str.Trim(opts[key])
 			if v == "" {
 				continue
 			}
@@ -209,7 +163,7 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 		}
 	}
 
-	if port, ok := firstOpt(opts, "port"); ok {
+	if port, ok := options.First(opts, "port"); ok {
 		prof.PortStr = port
 		n, err := strconv.Atoi(port)
 		if err == nil {
@@ -222,23 +176,23 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 		}
 	}
 
-	if v, ok := firstOpt(opts, "context", "kube_context", "kube-context"); ok {
+	if v, ok := options.First(opts, "context", "kube_context", "kube-context"); ok {
 		prof.Context = v
 	}
 
-	if v, ok := firstOpt(opts, "kubeconfig", "config"); ok {
+	if v, ok := options.First(opts, "kubeconfig", "config"); ok {
 		prof.Kubeconfig = v
 	}
 
-	if v, ok := firstOpt(opts, "container"); ok {
+	if v, ok := options.First(opts, "container"); ok {
 		prof.Container = v
 	}
 
-	if v, ok := firstOpt(opts, "address", "bind"); ok {
+	if v, ok := options.First(opts, "address", "bind"); ok {
 		prof.Address = v
 	}
 
-	if key, raw, ok := firstOptWithKey(opts, "local_port", "local-port", "localport"); ok {
+	if key, raw, ok := options.FirstWithKey(opts, "local_port", "local-port", "localport"); ok {
 		prof.LocalPortStr = raw
 		n, err := strconv.Atoi(raw)
 		if err != nil || n <= 0 || n > 65535 {
@@ -247,9 +201,12 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 		prof.LocalPort = n
 	}
 
-	setOptBool(&prof.Persist, opts, "persist")
+	if value, ok := options.Bool(opts, "persist"); ok {
+		prof.Persist.Set = true
+		prof.Persist.Val = value
+	}
 
-	if key, raw, ok := firstOptWithKey(
+	if key, raw, ok := options.FirstWithKey(
 		opts,
 		"pod_running_timeout",
 		"pod-running-timeout",
@@ -264,7 +221,7 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 		prof.PodWait.Val = d
 	}
 
-	if raw, ok := firstOpt(opts, "retries"); ok {
+	if raw, ok := options.First(opts, "retries"); ok {
 		prof.RetriesStr = raw
 		prof.Retries.Set = true
 		n, err := strconv.Atoi(raw)
@@ -302,19 +259,19 @@ func k8sInlineSet(prof restfile.K8sProfile) bool {
 }
 
 func requireK8sTarget(prof restfile.K8sProfile) error {
-	if !hasK8sTarget(prof) || strings.TrimSpace(prof.PortStr) == "" {
+	if !hasK8sTarget(prof) || str.Trim(prof.PortStr) == "" {
 		return fmt.Errorf("requires target and port")
 	}
 	return nil
 }
 
 func hasK8sTarget(prof restfile.K8sProfile) bool {
-	return strings.TrimSpace(prof.Pod) != "" || strings.TrimSpace(prof.Target) != ""
+	return str.Trim(prof.Pod) != "" || str.Trim(prof.Target) != ""
 }
 
 func setK8sTarget(prof *restfile.K8sProfile, kind k8starget.Kind, name string) error {
 	k := k8starget.ParseKind(string(kind))
-	n := strings.TrimSpace(name)
+	n := str.Trim(name)
 	if k == "" || n == "" {
 		return fmt.Errorf("invalid @k8s target")
 	}
@@ -334,20 +291,20 @@ func setK8sTarget(prof *restfile.K8sProfile, kind k8starget.Kind, name string) e
 }
 
 func currentK8sTarget(prof restfile.K8sProfile) (k8starget.Kind, string) {
-	if raw := strings.TrimSpace(prof.Target); raw != "" {
+	if raw := str.Trim(prof.Target); raw != "" {
 		k, n, err := k8starget.ParseRef(raw)
 		if err == nil {
 			return k, n
 		}
 	}
-	if p := strings.TrimSpace(prof.Pod); p != "" {
+	if p := str.Trim(prof.Pod); p != "" {
 		return k8starget.Pod, p
 	}
 	return "", ""
 }
 
 func k8sScopeLabel(scope restfile.K8sScope) string {
-	return directiveScopeLabel(
+	return dscope.Label(
 		scope,
 		restfile.K8sScopeRequest,
 		restfile.K8sScopeFile,

@@ -54,6 +54,47 @@ func TestRenderCommandAuth(t *testing.T) {
 	}
 }
 
+func TestRenderBodyOptions(t *testing.T) {
+	doc := &restfile.Document{
+		Requests: []*restfile.Request{{
+			Method: "POST",
+			URL:    "https://example.com",
+			Body: restfile.BodySource{
+				Text: "< this is just a string",
+				Options: restfile.BodyOptions{
+					ExpandTemplates: true,
+					ForceInline:     true,
+				},
+			},
+		}},
+	}
+
+	out := Render(doc, Options{})
+	if !strings.Contains(out, "# @body expand") {
+		t.Fatalf("expected body expand directive in output: %q", out)
+	}
+	if !strings.Contains(out, "# @body inline") {
+		t.Fatalf("expected body inline directive in output: %q", out)
+	}
+}
+
+func TestRenderAmbiguousInlineBodyAddsDirective(t *testing.T) {
+	doc := &restfile.Document{
+		Requests: []*restfile.Request{{
+			Method: "POST",
+			URL:    "https://example.com",
+			Body: restfile.BodySource{
+				Text: "< ./not-a-file-reference",
+			},
+		}},
+	}
+
+	out := Render(doc, Options{})
+	if !strings.Contains(out, "# @body inline") {
+		t.Fatalf("expected body inline directive in output: %q", out)
+	}
+}
+
 func TestFormatAuthParamPrefersSingleQuotesForJSONLikeValues(t *testing.T) {
 	got := formatAuthParam("argv", `["tool","arg with space"]`)
 	if got != `argv='["tool","arg with space"]'` {

@@ -355,6 +355,39 @@ func TestPrepareBodyFileExpandTemplates(t *testing.T) {
 	}
 }
 
+func TestBuildHTTPRequestSendsXMLBodyRaw(t *testing.T) {
+	client := NewClient(nil)
+	req := &restfile.Request{
+		Method: "POST",
+		URL:    "https://example.com/soap",
+		Headers: http.Header{
+			"Content-Type": {"text/xml; charset=utf-8"},
+		},
+		Body: restfile.BodySource{
+			Text: `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://xmlsoap.org">
+  <soap:Body>{{env.num}}</soap:Body>
+</soap:Envelope>`,
+		},
+	}
+	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{"num": "500"}))
+
+	httpReq, _, body, err := client.BuildHTTPRequest(context.Background(), req, resolver, Options{})
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	want := `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://xmlsoap.org">
+  <soap:Body>500</soap:Body>
+</soap:Envelope>`
+	if string(body) != want {
+		t.Fatalf("unexpected body:\n%s", string(body))
+	}
+	if got := httpReq.Header.Get("Content-Type"); got != "text/xml; charset=utf-8" {
+		t.Fatalf("unexpected content type %q", got)
+	}
+}
+
 func TestBuildHTTPClientSSHLeavesTLSDialerNil(t *testing.T) {
 	client := NewClient(nil)
 	mgr := &ssh.Manager{}

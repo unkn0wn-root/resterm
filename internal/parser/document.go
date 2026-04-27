@@ -8,9 +8,15 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
-	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
-	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
-	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
+	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
+	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
+	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
+	ssebuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/sse"
+	wsbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/websocket"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -187,7 +193,7 @@ func (b *documentBuilder) handleVariableLine(lineNumber int, line, trimmed strin
 	if matches == nil {
 		return false
 	}
-	scopeToken, secret := parseScopeToken(matches[1])
+	scopeToken, secret := dscope.ParseToken(matches[1])
 	name := matches[2]
 	valueCandidate := matches[3]
 	if valueCandidate == "" {
@@ -346,7 +352,7 @@ func (b *documentBuilder) parseCaptureDirective(
 	rest string,
 	line int,
 ) (restfile.CaptureSpec, bool) {
-	scopeToken, remainder := splitDirective(rest)
+	scopeToken, remainder := lex.SplitDirective(rest)
 	if scopeToken == "" {
 		b.addWarning(line, "@capture missing scope (use request, file, or global)")
 		return restfile.CaptureSpec{}, false
@@ -413,6 +419,45 @@ func (b *documentBuilder) parseAssertDirective(rest string, line int) (restfile.
 		Message:    msg,
 		Line:       line,
 	}, true
+}
+
+func splitAssert(text string) (string, string) {
+	trimmed := strings.TrimSpace(text)
+	if trimmed == "" {
+		return "", ""
+	}
+
+	inQuote := false
+	var quote byte
+	escaped := false
+	for i := 0; i < len(trimmed)-1; i++ {
+		ch := trimmed[i]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if ch == '\\' {
+			escaped = true
+			continue
+		}
+		if inQuote {
+			if ch == quote {
+				inQuote = false
+			}
+			continue
+		}
+		if ch == '"' || ch == '\'' {
+			inQuote = true
+			quote = ch
+			continue
+		}
+		if ch == '=' && trimmed[i+1] == '>' {
+			left := strings.TrimSpace(trimmed[:i])
+			right := strings.TrimSpace(trimmed[i+2:])
+			return left, lex.TrimQuotes(right)
+		}
+	}
+	return trimmed, ""
 }
 
 func (b *documentBuilder) handleScript(ln int, raw string) {
@@ -563,14 +608,14 @@ func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line i
 	scopeToken := key
 	args := rest
 	if key == "var" {
-		scopeToken, args = splitFirst(rest)
+		scopeToken, args = lex.SplitFirst(rest)
 		if scopeToken == "" {
 			return false
 		}
 	}
 
-	scopeStr, secret := parseScopeToken(scopeToken)
-	name, value := parseNameValue(args)
+	scopeStr, secret := dscope.ParseToken(scopeToken)
+	name, value := options.ParseNameValue(args)
 
 	switch scopeStr {
 	case "global":
@@ -601,17 +646,18 @@ func (b *documentBuilder) handleBodyLine(line string) {
 		return
 	}
 
-	trimmed := strings.TrimSpace(line)
-	if after, ok := strings.CutPrefix(trimmed, "<"); ok {
-		b.request.http.SetBodyFromFile(strings.TrimSpace(after))
+	opt := bodyref.Options{
+		Location:    bodyref.Line,
+		ForceInline: b.request.bodyOptions.ForceInline,
+	}
+	if file, ok := bodyref.Parse(line, opt); ok {
+		b.request.http.SetBodyFromFile(file)
 		return
 	}
-	if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
-		parts := strings.SplitN(trimmed, "<", 2)
-		if len(parts) == 2 {
-			b.request.http.SetBodyFromFile(strings.TrimSpace(parts[1]))
-			return
-		}
+	opt.Location = bodyref.Inline
+	if file, ok := bodyref.Parse(line, opt); ok {
+		b.request.http.SetBodyFromFile(file)
+		return
 	}
 	b.request.http.AppendBodyLine(line)
 }
@@ -634,8 +680,8 @@ func (b *documentBuilder) ensureRequest(line int) {
 		http:              httpbuilder.New(),
 		graphql:           graphqlbuilder.New(),
 		grpc:              grpcbuilder.New(),
-		sse:               newSSEBuilder(),
-		websocket:         newWebSocketBuilder(),
+		sse:               ssebuilder.New(),
+		websocket:         wsbuilder.New(),
 	}
 }
 
@@ -706,7 +752,7 @@ func (b *documentBuilder) finish() {
 }
 
 func (b *documentBuilder) handleFileSetting(rest string) {
-	keyName, value := splitDirective(rest)
+	keyName, value := lex.SplitDirective(rest)
 	if keyName == "" {
 		return
 	}
@@ -731,13 +777,13 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	if b.inRequest {
 		b.flushRequest(line - 1)
 	}
-	nameToken, remainder := splitFirst(rest)
+	nameToken, remainder := lex.SplitFirst(rest)
 	if nameToken == "" || strings.Contains(nameToken, "=") {
 		return
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
-	sb.applyOptions(parseOptionTokens(remainder))
+	sb.applyOptions(options.Parse(remainder))
 	sb.touch(line)
 	b.workflow = sb
 }

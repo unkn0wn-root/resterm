@@ -1,14 +1,18 @@
-package parser
+package websocket
 
 import (
 	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-type wsBuilder struct {
+type Builder struct {
 	on    bool
 	opts  restfile.WebSocketOptions
 	steps []restfile.WebSocketStep
@@ -35,11 +39,11 @@ const (
 	wsCloseOK        = 1000
 )
 
-func newWebSocketBuilder() *wsBuilder {
-	return &wsBuilder{}
+func New() *Builder {
+	return &Builder{}
 }
 
-func (b *wsBuilder) HandleDirective(key, rest string) bool {
+func (b *Builder) HandleDirective(key, rest string) bool {
 	switch normKey(key) {
 	case wsKeyWebSocket:
 		return b.handleWebSocket(rest)
@@ -50,32 +54,32 @@ func (b *wsBuilder) HandleDirective(key, rest string) bool {
 	}
 }
 
-func (b *wsBuilder) handleWebSocket(rest string) bool {
-	t := trim(rest)
+func (b *Builder) handleWebSocket(rest string) bool {
+	t := str.Trim(rest)
 	if t == "" {
 		b.on = true
 		return true
 	}
-	if isOffToken(t) {
+	if dvalue.IsOffToken(t) {
 		b.reset()
 		return true
 	}
 
 	b.on = true
-	opts := parseOptionTokens(t)
+	opts := options.Parse(t)
 	for key, value := range opts {
 		b.applyOption(key, value)
 	}
 	return true
 }
 
-func (b *wsBuilder) reset() {
+func (b *Builder) reset() {
 	b.on = false
 	b.opts = restfile.WebSocketOptions{}
 	b.steps = nil
 }
 
-func (b *wsBuilder) applyOption(name, value string) {
+func (b *Builder) applyOption(name, value string) {
 	switch normKey(name) {
 	case wsOptTimeout:
 		if dur, ok := duration.Parse(value); ok && dur >= 0 {
@@ -86,11 +90,11 @@ func (b *wsBuilder) applyOption(name, value string) {
 			b.opts.IdleTimeout = dur
 		}
 	case wsOptMaxMsg:
-		if size, err := parseByteSize(value); err == nil {
+		if size, err := dvalue.ParseByteSize(value); err == nil {
 			b.opts.MaxMessageBytes = size
 		}
 	case wsOptSub, wsOptSubs:
-		if list := splitCSV(value); len(list) > 0 {
+		if list := options.SplitCSV(value); len(list) > 0 {
 			b.opts.Subprotocols = list
 		}
 	case wsOptCompression:
@@ -114,19 +118,19 @@ var wsStepParsers = map[string]wsStepParser{
 	wsActClose:      parseWSClose,
 }
 
-func (b *wsBuilder) handleStep(rest string) bool {
-	t := trim(rest)
+func (b *Builder) handleStep(rest string) bool {
+	t := str.Trim(rest)
 	if t == "" {
 		return true
 	}
 	b.on = true
 
-	act, rem := splitFirst(t)
+	act, rem := lex.SplitFirst(t)
 	if act == "" {
 		return true
 	}
-	act = strings.ToLower(act)
-	rem = trim(rem)
+	act = str.LowerTrim(act)
+	rem = str.Trim(rem)
 
 	parse, ok := wsStepParsers[act]
 	if !ok {
@@ -162,7 +166,7 @@ func parseWSSendBase64(rest string, step *restfile.WebSocketStep) bool {
 func parseWSSendFile(rest string, step *restfile.WebSocketStep) bool {
 	step.Type = restfile.WebSocketStepSendFile
 	if after, ok := strings.CutPrefix(rest, "<"); ok {
-		rest = trim(after)
+		rest = str.Trim(after)
 	}
 	if rest == "" {
 		return false
@@ -199,29 +203,33 @@ func parseWSClose(rest string, step *restfile.WebSocketStep) bool {
 		step.Code = wsCloseOK
 		return true
 	}
-	codeTok, tail := splitFirst(rest)
+	codeTok, tail := lex.SplitFirst(rest)
 	if codeTok == "" {
 		step.Code = wsCloseOK
 		return true
 	}
 	if code, err := strconv.Atoi(codeTok); err == nil {
 		step.Code = code
-		step.Reason = trim(tail)
+		step.Reason = str.Trim(tail)
 		return true
 	}
 	step.Code = wsCloseOK
-	step.Reason = trim(rest)
+	step.Reason = str.Trim(rest)
 	return true
 }
 
-func (b *wsBuilder) Finalize() (*restfile.WebSocketRequest, bool) {
+func (b *Builder) Finalize() (*restfile.WebSocketRequest, bool) {
 	if !b.on {
 		return nil, false
 	}
-	steps := cloneSlice(b.steps)
+	steps := append([]restfile.WebSocketStep(nil), b.steps...)
 	req := &restfile.WebSocketRequest{
 		Options: b.opts,
 		Steps:   steps,
 	}
 	return req, true
+}
+
+func normKey(s string) string {
+	return str.LowerTrim(s)
 }

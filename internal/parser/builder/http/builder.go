@@ -1,11 +1,12 @@
-package httpbuilder
+package http
 
 import (
-	"net/http"
+	stdhttp "net/http"
 	"regexp"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/httpver"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 var methodRe = regexp.MustCompile(
@@ -26,9 +27,9 @@ func ParseMethodLine(line string) (method string, url string, ver httpver.Versio
 		return "", "", httpver.Unknown, false
 	}
 
-	method = strings.ToUpper(fields[0])
+	method = str.UpperTrim(fields[0])
 	if method == "WS" || method == "WSS" {
-		method = http.MethodGet
+		method = stdhttp.MethodGet
 	}
 
 	urlFields, ver := httpver.SplitToken(fields[1:])
@@ -40,11 +41,11 @@ func ParseMethodLine(line string) (method string, url string, ver httpver.Versio
 }
 
 func ParseWebSocketURLLine(line string) (url string, ok bool) {
-	trimmed := strings.TrimSpace(line)
+	trimmed := str.Trim(line)
 	if trimmed == "" {
 		return "", false
 	}
-	lower := strings.ToLower(trimmed)
+	lower := str.LowerTrim(trimmed)
 	if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
 		return trimmed, true
 	}
@@ -54,7 +55,7 @@ func ParseWebSocketURLLine(line string) (url string, ok bool) {
 type Builder struct {
 	method       string
 	url          string
-	headers      http.Header
+	headers      stdhttp.Header
 	headerDone   bool
 	bodyLines    []string
 	bodyFromFile string
@@ -70,12 +71,12 @@ func (b *Builder) HasMethod() bool {
 }
 
 func (b *Builder) SetMethodAndURL(method, url string) {
-	m := strings.ToUpper(strings.TrimSpace(method))
+	m := str.UpperTrim(method)
 	if m == "WS" || m == "WSS" {
-		m = http.MethodGet
+		m = stdhttp.MethodGet
 	}
 	b.method = m
-	b.url = strings.TrimSpace(url)
+	b.url = str.Trim(url)
 }
 
 func (b *Builder) Method() string {
@@ -86,14 +87,14 @@ func (b *Builder) URL() string {
 	return b.url
 }
 
-func (b *Builder) Headers() http.Header {
+func (b *Builder) Headers() stdhttp.Header {
 	if b.headers == nil {
-		b.headers = make(http.Header)
+		b.headers = make(stdhttp.Header)
 	}
 	return b.headers
 }
 
-func (b *Builder) HeaderMap() http.Header {
+func (b *Builder) HeaderMap() stdhttp.Header {
 	return b.headers
 }
 
@@ -118,7 +119,7 @@ func (b *Builder) AppendBodyLine(line string) {
 }
 
 func (b *Builder) SetBodyFromFile(path string) {
-	b.bodyFromFile = strings.TrimSpace(path)
+	b.bodyFromFile = str.Trim(path)
 	b.bodyLines = nil
 }
 

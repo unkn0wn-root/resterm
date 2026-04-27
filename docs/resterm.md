@@ -730,6 +730,8 @@ Do not mix unquoted template markers and RTS call syntax in the same capture exp
 - **Inline**: everything after the blank line separating headers and body.
 - **External file**: `< ./payloads/create-user.json` loads the file relative to the request file. To also search the workspace root / current working directory, set `RESTERM_ENABLE_FALLBACK=1` (opt-in).
 - **Inline includes**: lines in the body starting with `@ path/to/file` are replaced with the file contents (useful for multi-part templates).
+- **XML/SOAP**: inline XML is sent exactly as written after template expansion. XML tags such as `<soap:Envelope>` are body text, not file references.
+- **Forced inline body**: add `# @body inline` (or `# @body raw`) when a literal body line intentionally looks like a file reference, such as `< this is just a string`. This only affects parsing. Template expansion and inline includes still work as usual.
 - **GraphQL**: handled separately (see [GraphQL](#graphql)).
 
 ### Profiling requests
@@ -1400,6 +1402,8 @@ Key points:
 Body helpers:
 
 - `< path` loads file contents as the body.
+- Inline XML/SOAP tags are treated as body text.
+- `# @body inline` or `# @body raw` forces prefixed body lines to remain inline text.
 - `@ path` inside the body injects file contents inline.
 - GraphQL payloads are normalized automatically.
 
@@ -1619,6 +1623,7 @@ Explore `_examples/` for ready-to-run:
 - `basic.http` - simple GET/POST with bearer auth.
 - `scopes.http` - demonstrates global/file/request captures.
 - `scripts.http` - pre-request and test scripting patterns.
+- `xml.http` - XML bodies and explicit inline angle-prefixed text.
 - `graphql.http` - inline and file-based GraphQL requests.
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `k8s.http` - Kubernetes profile scopes, non-pod targets, named ports, and gRPC over `@k8s`.

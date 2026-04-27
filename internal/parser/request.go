@@ -3,15 +3,29 @@ package parser
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
-	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
-	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
+	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
+	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
+	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
+	ssebuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/sse"
+	wsbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/websocket"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
 	defaultScriptKind = "test"
 	defaultScriptLang = "js"
+)
+
+type bodyDirective string
+
+const (
+	bodyDirectiveExpand          bodyDirective = "expand"
+	bodyDirectiveExpandTemplates bodyDirective = "expand-templates"
+	bodyDirectiveInline          bodyDirective = "inline"
+	bodyDirectiveRaw             bodyDirective = "raw"
 )
 
 type requestBuilder struct {
@@ -29,15 +43,15 @@ type requestBuilder struct {
 	http              *httpbuilder.Builder
 	graphql           *graphqlbuilder.Builder
 	grpc              *grpcbuilder.Builder
-	sse               *sseBuilder
-	websocket         *wsBuilder
+	sse               *ssebuilder.Builder
+	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions
 	ssh               *restfile.SSHSpec
 	k8s               *restfile.K8sSpec
 }
 
 func normScriptKind(kind string) string {
-	out := strings.ToLower(strings.TrimSpace(kind))
+	out := str.LowerTrim(kind)
 	if out == "" {
 		return defaultScriptKind
 	}
@@ -45,7 +59,7 @@ func normScriptKind(kind string) string {
 }
 
 func normScriptLang(lang string) string {
-	out := strings.ToLower(strings.TrimSpace(lang))
+	out := str.LowerTrim(lang)
 	switch out {
 	case "":
 		return defaultScriptLang
@@ -99,27 +113,39 @@ func (r *requestBuilder) appendScriptInclude(kind, lang, path string) {
 }
 
 func (r *requestBuilder) handleBodyDirective(rest string) bool {
-	value := strings.TrimSpace(rest)
-	if value == "" {
+	rs := str.Trim(rest)
+	if rs == "" {
 		return false
 	}
-	key, val := splitDirective(value)
-	if key == "" {
-		key = value
+	k, v := lex.SplitDirective(rs)
+	if k == "" {
+		return false
 	}
-	switch strings.ToLower(key) {
-	case "expand", "expand-templates":
-		enabled := true
-		if strings.TrimSpace(val) != "" {
-			if parsed, ok := parseBool(val); ok {
-				enabled = parsed
-			}
-		}
-		r.bodyOptions.ExpandTemplates = enabled
-		return true
+
+	directive := bodyDirective(k)
+	switch directive {
+	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
+	case bodyDirectiveInline, bodyDirectiveRaw:
 	default:
 		return false
 	}
+
+	enabled := true
+	if str.Trim(v) != "" {
+		parsed, ok := dvalue.ParseBool(v)
+		if !ok {
+			return false
+		}
+		enabled = parsed
+	}
+
+	switch directive {
+	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
+		r.bodyOptions.ExpandTemplates = enabled
+	case bodyDirectiveInline, bodyDirectiveRaw:
+		r.bodyOptions.ForceInline = enabled
+	}
+	return true
 }
 
 func (r *requestBuilder) markHeadersDone() {
@@ -160,7 +186,7 @@ func (r *requestBuilder) build() *restfile.Request {
 	req := &restfile.Request{
 		Metadata:  r.metadata,
 		Method:    r.http.Method(),
-		URL:       strings.TrimSpace(r.http.URL()),
+		URL:       str.Trim(r.http.URL()),
 		Headers:   r.http.HeaderMap(),
 		Body:      restfile.BodySource{},
 		Variables: vars,

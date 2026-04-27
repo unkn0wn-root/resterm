@@ -93,6 +93,7 @@ type BodySource struct {
 
 type BodyOptions struct {
 	ExpandTemplates bool
+	ForceInline     bool
 }
 
 type GraphQLBody struct {

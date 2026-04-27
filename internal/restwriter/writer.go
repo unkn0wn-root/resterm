@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -157,6 +158,7 @@ func renderRequest(b *strings.Builder, req *restfile.Request) {
 	renderSettings(b, req.Settings)
 	renderRequestVariables(b, req.Variables)
 	renderCaptures(b, req.Metadata.Captures)
+	renderBodyOptions(b, req)
 
 	b.WriteString(reqLine(req))
 	renderHeaders(b, req.Headers)
@@ -171,6 +173,39 @@ func renderRequest(b *strings.Builder, req *restfile.Request) {
 			b.WriteString("\n")
 		}
 	}
+}
+
+func renderBodyOptions(b *strings.Builder, req *restfile.Request) {
+	if req == nil {
+		return
+	}
+	opt := req.Body.Options
+	if opt.ExpandTemplates {
+		b.WriteString("# @body expand\n")
+	}
+	if opt.ForceInline || bodyTextNeedsInlineDirective(req) {
+		b.WriteString("# @body inline\n")
+	}
+}
+
+func bodyTextNeedsInlineDirective(req *restfile.Request) bool {
+	if req == nil || strings.TrimSpace(req.Body.FilePath) != "" {
+		return false
+	}
+	text := strings.TrimSpace(req.Body.Text)
+	if text == "" {
+		return false
+	}
+	line, _, _ := strings.Cut(text, "\n")
+	opt := bodyref.Options{
+		Location: bodyref.Line,
+	}
+	if _, ok := bodyref.Parse(line, opt); ok {
+		return true
+	}
+	opt.Location = bodyref.Inline
+	_, ok := bodyref.Parse(line, opt)
+	return ok
 }
 
 func renderDescription(b *strings.Builder, desc string) {

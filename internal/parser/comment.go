@@ -1,8 +1,12 @@
 package parser
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -16,7 +20,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		return
 	}
 
-	key, rest := splitDirective(directive)
+	key, rest := lex.SplitDirective(directive)
 	if key == "" {
 		return
 	}
@@ -119,7 +123,7 @@ func (b *documentBuilder) handleConstDirective(line int, key, rest string) bool 
 	if key != "const" {
 		return false
 	}
-	if name, value := parseNameValue(rest); name != "" {
+	if name, value := options.ParseNameValue(rest); name != "" {
 		b.addConstant(name, value, line)
 	}
 	return true
@@ -253,7 +257,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 	switch key {
 	case "name":
 		if rest != "" {
-			value := trimQuotes(strings.TrimSpace(rest))
+			value := lex.TrimQuotes(strings.TrimSpace(rest))
 			b.request.metadata.Name = value
 		}
 		return true
@@ -273,7 +277,9 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			if tag == "" {
 				continue
 			}
-			if !contains(b.request.metadata.Tags, tag) {
+			if !slices.ContainsFunc(b.request.metadata.Tags, func(item string) bool {
+				return strings.EqualFold(item, tag)
+			}) {
 				b.request.metadata.Tags = append(b.request.metadata.Tags, tag)
 			}
 		}
@@ -286,7 +292,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.request.metadata.AllowSensitiveHeaders = true
 			return true
 		}
-		if value, ok := parseBool(rest); ok {
+		if value, ok := dvalue.ParseBool(rest); ok {
 			b.request.metadata.AllowSensitiveHeaders = value
 		}
 		return true
@@ -294,7 +300,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		b.request.settings = applySettingsTokens(b.request.settings, rest)
 		return true
 	case "setting":
-		key, value := splitDirective(rest)
+		key, value := lex.SplitDirective(rest)
 		if key != "" {
 			if b.request.settings == nil {
 				b.request.settings = make(map[string]string)
@@ -309,7 +315,7 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		b.request.settings["timeout"] = rest
 		return true
 	case "var":
-		name, value := parseNameValue(rest)
+		name, value := options.ParseNameValue(rest)
 		if name == "" {
 			return true
 		}
@@ -398,4 +404,61 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		return true
 	}
 	return false
+}
+
+func applySettingsTokens(dst map[string]string, raw string) map[string]string {
+	opts := options.Parse(raw)
+	if len(opts) == 0 {
+		return dst
+	}
+	if dst == nil {
+		dst = make(map[string]string, len(opts))
+	}
+	for k, v := range opts {
+		if k == "" {
+			continue
+		}
+		dst[k] = v
+	}
+	return dst
+}
+
+func parseScriptSpec(rest string) (string, string) {
+	fields := lex.TokenizeFields(rest)
+	kind := ""
+	lang := ""
+	for _, field := range fields {
+		if strings.Contains(field, "=") {
+			continue
+		}
+		if kind == "" {
+			kind = field
+			continue
+		}
+		if lang == "" {
+			if v, ok := scriptLangToken(field); ok {
+				lang = v
+			}
+		}
+	}
+	params := options.ParseFields(fields)
+	if v := params["lang"]; v != "" {
+		lang = v
+	}
+	if v := params["language"]; v != "" && lang == "" {
+		lang = v
+	}
+	return normScriptKind(kind), normScriptLang(lang)
+}
+
+func scriptLangToken(tok string) (string, bool) {
+	out := strings.ToLower(strings.TrimSpace(tok))
+	switch out {
+	case "js", "javascript":
+		return "js", true
+	case "rts", "restermlang":
+		return "rts", true
+	default:
+		return "", false
+	}
 }
