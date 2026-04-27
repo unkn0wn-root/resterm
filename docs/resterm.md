@@ -1623,6 +1623,7 @@ Explore `_examples/` for ready-to-run:
 - `basic.http` - simple GET/POST with bearer auth.
 - `scopes.http` - demonstrates global/file/request captures.
 - `scripts.http` - pre-request and test scripting patterns.
+- `xml.http` - XML bodies and explicit inline angle-prefixed text.
 - `graphql.http` - inline and file-based GraphQL requests.
 - `grpc.http` - gRPC reflection and descriptor usage.
 - `k8s.http` - Kubernetes profile scopes, non-pod targets, named ports, and gRPC over `@k8s`.

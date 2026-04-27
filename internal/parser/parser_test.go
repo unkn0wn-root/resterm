@@ -2233,6 +2233,46 @@ POST https://example.com/api
 	}
 }
 
+func TestParseBodyInlineDirectiveFalseKeepsFileReference(t *testing.T) {
+	src := `# @body inline false
+POST https://example.com/api
+
+< ./payload.xml
+`
+
+	doc := Parse("inline-angle-false.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "./payload.xml" {
+		t.Fatalf("expected body file reference, got %q", req.Body.FilePath)
+	}
+	if req.Body.Options.ForceInline {
+		t.Fatalf("expected ForceInline to remain false")
+	}
+}
+
+func TestParseBodyInlineDirectiveInvalidValueDoesNotEnable(t *testing.T) {
+	src := `# @body inline maybe
+POST https://example.com/api
+
+< ./payload.xml
+`
+
+	doc := Parse("inline-angle-invalid.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "./payload.xml" {
+		t.Fatalf("expected body file reference, got %q", req.Body.FilePath)
+	}
+	if req.Body.Options.ForceInline {
+		t.Fatalf("expected invalid ForceInline value to be ignored")
+	}
+}
+
 func TestParseExplicitBodyFileReferenceWithGreaterThan(t *testing.T) {
 	src := `POST https://example.com/api
 

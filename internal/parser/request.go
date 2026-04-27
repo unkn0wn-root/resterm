@@ -122,22 +122,30 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 		return false
 	}
 
-	enabled := true
-	if str.Trim(v) != "" {
-		if parsed, ok := dvalue.ParseBool(v); ok {
-			enabled = parsed
-		}
-	}
-	switch bodyDirective(k) {
+	directive := bodyDirective(k)
+	switch directive {
 	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
-		r.bodyOptions.ExpandTemplates = enabled
-		return true
 	case bodyDirectiveInline, bodyDirectiveRaw:
-		r.bodyOptions.ForceInline = enabled
-		return true
 	default:
 		return false
 	}
+
+	enabled := true
+	if str.Trim(v) != "" {
+		parsed, ok := dvalue.ParseBool(v)
+		if !ok {
+			return false
+		}
+		enabled = parsed
+	}
+
+	switch directive {
+	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
+		r.bodyOptions.ExpandTemplates = enabled
+	case bodyDirectiveInline, bodyDirectiveRaw:
+		r.bodyOptions.ForceInline = enabled
+	}
+	return true
 }
 
 func (r *requestBuilder) markHeadersDone() {
