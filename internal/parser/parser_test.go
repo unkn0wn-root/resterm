@@ -2059,7 +2059,10 @@ Content-Type: text/xml
 	if req.Body.FilePath != "" {
 		t.Fatalf("expected inline XML body, got file path %q", req.Body.FilePath)
 	}
-	if !strings.Contains(req.Body.Text, `<soap:Envelope xmlns:soap=http://schemas.xmlsoap.org/soap/envelope/>`) {
+	if !strings.Contains(
+		req.Body.Text,
+		`<soap:Envelope xmlns:soap=http://schemas.xmlsoap.org/soap/envelope/>`,
+	) {
 		t.Fatalf("expected malformed XML to remain body text, got %q", req.Body.Text)
 	}
 	if !strings.Contains(req.Body.Text, `<get_the_infos_ssm/>`) {

@@ -121,17 +121,13 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return false
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Options{
-		Location: bodyref.Line,
-	}); ok {
+	if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Line}); ok {
 		b.messageFromFile = file
 		b.messageLines = nil
 		return true
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Options{
-		Location: bodyref.Inline,
-	}); ok {
+	if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Inline}); ok {
 		b.messageFromFile = file
 		b.messageLines = nil
 		return true
