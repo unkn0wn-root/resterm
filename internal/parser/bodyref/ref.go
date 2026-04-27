@@ -17,26 +17,25 @@ const (
 	Inline
 )
 
-type Compatibility int
-
-const (
-	// ExplicitOnly accepts only the documented "< path" form.
-	ExplicitOnly Compatibility = iota
-	// AllowNoSpace also accepts the "<path" form for existing request files.
-	AllowNoSpace
-)
+type Options struct {
+	Location Location
+	// ForceInline disables body file references for ambiguous literal bodies.
+	ForceInline bool
+}
 
 // Parse returns the body file path from Resterm's "< path" body reference syntax.
-// Location controls where to look for "<". Compatibility controls whether to
-// allow the older no-space form. ExplicitOnly avoids treating XML lines like
-// "<soap:Envelope" as file references.
-func Parse(line string, loc Location, compat Compatibility) (string, bool) {
+// Options controls where to look for "<" and whether body file references are
+// disabled for the current body.
+func Parse(line string, opt Options) (string, bool) {
+	if opt.ForceInline {
+		return "", false
+	}
 	s := str.Trim(line)
-	t, ok := tail(s, loc)
+	t, ok := tail(s, opt.Location)
 	if !ok {
 		return "", false
 	}
-	return parsePath(t, compat)
+	return parsePath(t)
 }
 
 func tail(s string, loc Location) (string, bool) {
@@ -60,17 +59,12 @@ func tail(s string, loc Location) (string, bool) {
 	}
 }
 
-func parsePath(s string, compat Compatibility) (string, bool) {
-	explicit := hasLeadingSpace(s)
-	if !explicit && compat != AllowNoSpace {
+func parsePath(s string) (string, bool) {
+	if !hasLeadingSpace(s) {
 		return "", false
 	}
-
 	p := str.Trim(s)
 	if p == "" {
-		return "", false
-	}
-	if !explicit && strings.Contains(p, ">") {
 		return "", false
 	}
 	return p, true

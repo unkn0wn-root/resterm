@@ -11,11 +11,21 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
 	defaultScriptKind = "test"
 	defaultScriptLang = "js"
+)
+
+type bodyDirective string
+
+const (
+	bodyDirectiveExpand          bodyDirective = "expand"
+	bodyDirectiveExpandTemplates bodyDirective = "expand-templates"
+	bodyDirectiveInline          bodyDirective = "inline"
+	bodyDirectiveRaw             bodyDirective = "raw"
 )
 
 type requestBuilder struct {
@@ -41,7 +51,7 @@ type requestBuilder struct {
 }
 
 func normScriptKind(kind string) string {
-	out := strings.ToLower(strings.TrimSpace(kind))
+	out := str.LowerTrim(kind)
 	if out == "" {
 		return defaultScriptKind
 	}
@@ -49,7 +59,7 @@ func normScriptKind(kind string) string {
 }
 
 func normScriptLang(lang string) string {
-	out := strings.ToLower(strings.TrimSpace(lang))
+	out := str.LowerTrim(lang)
 	switch out {
 	case "":
 		return defaultScriptLang
@@ -103,23 +113,27 @@ func (r *requestBuilder) appendScriptInclude(kind, lang, path string) {
 }
 
 func (r *requestBuilder) handleBodyDirective(rest string) bool {
-	value := strings.TrimSpace(rest)
-	if value == "" {
+	rs := str.Trim(rest)
+	if rs == "" {
 		return false
 	}
-	key, val := lex.SplitDirective(value)
-	if key == "" {
-		key = value
+	k, v := lex.SplitDirective(rs)
+	if k == "" {
+		return false
 	}
-	switch strings.ToLower(key) {
-	case "expand", "expand-templates":
-		enabled := true
-		if strings.TrimSpace(val) != "" {
-			if parsed, ok := dvalue.ParseBool(val); ok {
-				enabled = parsed
-			}
+
+	enabled := true
+	if str.Trim(v) != "" {
+		if parsed, ok := dvalue.ParseBool(v); ok {
+			enabled = parsed
 		}
+	}
+	switch bodyDirective(k) {
+	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
 		r.bodyOptions.ExpandTemplates = enabled
+		return true
+	case bodyDirectiveInline, bodyDirectiveRaw:
+		r.bodyOptions.ForceInline = enabled
 		return true
 	default:
 		return false
@@ -164,7 +178,7 @@ func (r *requestBuilder) build() *restfile.Request {
 	req := &restfile.Request{
 		Metadata:  r.metadata,
 		Method:    r.http.Method(),
-		URL:       strings.TrimSpace(r.http.URL()),
+		URL:       str.Trim(r.http.URL()),
 		Headers:   r.http.HeaderMap(),
 		Body:      restfile.BodySource{},
 		Variables: vars,

@@ -2090,7 +2090,7 @@ Content-Type: text/xml
 	}
 }
 
-func TestParseBodyFileReferenceWithoutSpaceCompatibility(t *testing.T) {
+func TestParseCompactAngleBodyStaysInlineText(t *testing.T) {
 	src := `POST https://example.com/api
 
 <payload.xml
@@ -2101,11 +2101,132 @@ func TestParseBodyFileReferenceWithoutSpaceCompatibility(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 	req := doc.Requests[0]
-	if req.Body.FilePath != "payload.xml" {
+	if req.Body.FilePath != "" {
 		t.Fatalf("unexpected file path %q", req.Body.FilePath)
 	}
-	if req.Body.Text != "" {
-		t.Fatalf("expected no inline body text, got %q", req.Body.Text)
+	if req.Body.Text != "<payload.xml" {
+		t.Fatalf("unexpected inline body text %q", req.Body.Text)
+	}
+}
+
+func TestParseBodyFileReferencesWithXMLContentType(t *testing.T) {
+	src := `### Compact XML body
+POST https://example.com/api
+Content-Type: application/xml
+
+<payload.xml
+
+### Spaced body file
+POST https://example.com/api
+Content-Type: text/xml
+
+< ./payload.xml
+`
+
+	doc := Parse("body-file-xml-content-type.http", []byte(src))
+	if len(doc.Requests) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(doc.Requests))
+	}
+
+	if got := strings.TrimSpace(doc.Requests[0].Body.Text); got != "<payload.xml" {
+		t.Fatalf("unexpected compact inline body %q", got)
+	}
+	if got := doc.Requests[0].Body.FilePath; got != "" {
+		t.Fatalf("unexpected compact file path %q", got)
+	}
+	if got := doc.Requests[1].Body.FilePath; got != "./payload.xml" {
+		t.Fatalf("unexpected spaced file path %q", got)
+	}
+}
+
+func TestParsePlainXMLTagWithXMLContentType(t *testing.T) {
+	src := `POST https://example.com/api
+Content-Type: application/xml
+
+<Invoice
+  id="123">
+</Invoice>
+`
+
+	doc := Parse("plain-xml-tag.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline XML body, got file path %q", req.Body.FilePath)
+	}
+	if !strings.Contains(req.Body.Text, "<Invoice\n") {
+		t.Fatalf("expected inline XML body, got %q", req.Body.Text)
+	}
+}
+
+func TestParsePlainAngleNameWithoutContentTypeStaysInlineBody(t *testing.T) {
+	src := `POST https://example.com/api
+
+<Invoice
+`
+
+	doc := Parse("plain-angle-name.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline body, got file reference %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "<Invoice" {
+		t.Fatalf("unexpected inline body text %q", req.Body.Text)
+	}
+}
+
+func TestParseBodyInlineDirectiveForcesAngleBodyText(t *testing.T) {
+	src := `# @body expand
+# @body inline
+POST https://example.com/api
+
+< this is just a string
+`
+
+	doc := Parse("inline-angle-string.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline body, got file path %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "< this is just a string" {
+		t.Fatalf("unexpected inline body text %q", req.Body.Text)
+	}
+	if !req.Body.Options.ForceInline {
+		t.Fatalf("expected ForceInline option")
+	}
+	if !req.Body.Options.ExpandTemplates {
+		t.Fatalf("expected ExpandTemplates option")
+	}
+}
+
+func TestParseBodyRawDirectiveAliasForcesAngleBodyText(t *testing.T) {
+	src := `# @body raw
+POST https://example.com/api
+
+< ./payload.xml
+`
+
+	doc := Parse("raw-angle-string.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline body, got file path %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "< ./payload.xml" {
+		t.Fatalf("unexpected inline body text %q", req.Body.Text)
+	}
+	if !req.Body.Options.ForceInline {
+		t.Fatalf("expected ForceInline option")
 	}
 }
 
@@ -2404,7 +2525,7 @@ query FetchUser($id: ID!) {
 func TestParseGraphQLFileRefs(t *testing.T) {
 	src := `# @graphql
 # @query < ./queries/workspace.graphql
-# @variables <./queries/workspace.variables.json
+# @variables < ./queries/workspace.variables.json
 POST https://example.com/graphql
 `
 
@@ -2546,7 +2667,7 @@ func TestParseGRPCMessageFileRef(t *testing.T) {
 	src := `# @grpc my.pkg.UserService/GetUser
 GRPC localhost:50051
 
-<./payload.json
+< ./payload.json
 `
 
 	doc := Parse("grpc-file.http", []byte(src))

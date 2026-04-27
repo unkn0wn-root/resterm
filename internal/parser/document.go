@@ -646,23 +646,20 @@ func (b *documentBuilder) handleBodyLine(line string) {
 		return
 	}
 
-	compat := bodyref.AllowNoSpace
-	if isXMLContentType(b.request.http.MimeType()) {
-		compat = bodyref.ExplicitOnly
+	opt := bodyref.Options{
+		Location:    bodyref.Line,
+		ForceInline: b.request.bodyOptions.ForceInline,
 	}
-	if file, ok := bodyref.Parse(line, bodyref.Line, compat); ok {
+	if file, ok := bodyref.Parse(line, opt); ok {
 		b.request.http.SetBodyFromFile(file)
 		return
 	}
-	if file, ok := bodyref.Parse(line, bodyref.Inline, compat); ok {
+	opt.Location = bodyref.Inline
+	if file, ok := bodyref.Parse(line, opt); ok {
 		b.request.http.SetBodyFromFile(file)
 		return
 	}
 	b.request.http.AppendBodyLine(line)
-}
-
-func isXMLContentType(s string) bool {
-	return strings.Contains(strings.ToLower(s), "xml")
 }
 
 func (b *documentBuilder) ensureRequest(line int) {

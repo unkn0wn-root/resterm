@@ -16,7 +16,7 @@ var MetaCatalog = []Hint{
 	{Label: "@setting", Summary: "Set options (transport/TLS/etc.)"},
 	{Label: "@settings", Summary: "Set multiple options on one line"},
 	{Label: "@timeout", Summary: "Override the request timeout"},
-	{Label: "@body", Summary: "Control body processing (e.g. template expansion)"},
+	{Label: "@body", Summary: "Control body parsing and template expansion"},
 	{Label: "@var", Summary: "Declare a request-scoped variable"},
 	{Label: "@request", Summary: "Define a request-scoped variable"},
 	{Label: "@request-secret", Summary: "Define a secret request variable"},

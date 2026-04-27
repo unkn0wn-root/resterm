@@ -48,7 +48,9 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 
 		rest = str.Trim(rest)
 		if rest != "" {
-			if file, ok := bodyref.Parse(rest, bodyref.Line, bodyref.AllowNoSpace); ok {
+			if file, ok := bodyref.Parse(rest, bodyref.Options{
+				Location: bodyref.Line,
+			}); ok {
 				b.variablesFile = file
 			} else {
 				b.variablesLines = append(b.variablesLines, rest)
@@ -65,7 +67,9 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 
 		rest = str.Trim(rest)
 		if rest != "" {
-			if file, ok := bodyref.Parse(rest, bodyref.Line, bodyref.AllowNoSpace); ok {
+			if file, ok := bodyref.Parse(rest, bodyref.Options{
+				Location: bodyref.Line,
+			}); ok {
 				b.queryFile = file
 				return true
 			}
@@ -91,12 +95,16 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return false
 	}
 	if b.collectVariables {
-		if file, ok := bodyref.Parse(line, bodyref.Line, bodyref.AllowNoSpace); ok {
+		if file, ok := bodyref.Parse(line, bodyref.Options{
+			Location: bodyref.Line,
+		}); ok {
 			b.variablesFile = file
 			b.variablesLines = nil
 			return true
 		}
-		if file, ok := bodyref.Parse(line, bodyref.Inline, bodyref.AllowNoSpace); ok {
+		if file, ok := bodyref.Parse(line, bodyref.Options{
+			Location: bodyref.Inline,
+		}); ok {
 			b.variablesFile = file
 			b.variablesLines = nil
 			return true
@@ -105,13 +113,17 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return true
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Line, bodyref.AllowNoSpace); ok {
+	if file, ok := bodyref.Parse(line, bodyref.Options{
+		Location: bodyref.Line,
+	}); ok {
 		b.queryFile = file
 		b.queryLines = nil
 		return true
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Inline, bodyref.AllowNoSpace); ok {
+	if file, ok := bodyref.Parse(line, bodyref.Options{
+		Location: bodyref.Inline,
+	}); ok {
 		b.queryFile = file
 		b.queryLines = nil
 		return true
