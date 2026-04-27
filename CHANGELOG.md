@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.33.1](https://github.com/unkn0wn-root/resterm/compare/v0.32.1...v0.33.1) (2026-04-27)
+
+
+### Features
+
+* add xml parsing ([1fc67e8](https://github.com/unkn0wn-root/resterm/commit/1fc67e8cd08f49254ce061abfe88da1b809769d5))
+
+
+### Bug Fixes
+
+* do not accept invalid values as explicit enable flag ([ae05aef](https://github.com/unkn0wn-root/resterm/commit/ae05aef7c32d604558534895b9b7f7fe9754870c))
+* **parser:** require spaced body file references ([caf1ecc](https://github.com/unkn0wn-root/resterm/commit/caf1ecc3ea6a8812268f547a84816673b1dbfdba))
+
 ### [0.32.1](https://github.com/unkn0wn-root/resterm/compare/v0.31.2...v0.32.1) (2026-04-26)
 
 
