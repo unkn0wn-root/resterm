@@ -2005,6 +2005,148 @@ POST https://example.com/api
 	}
 }
 
+func TestParseInlineXMLBody(t *testing.T) {
+	src := `POST https://dataaccess.com
+Content-Type: text/xml; charset=utf-8
+
+<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:soap="http://xmlsoap.org">
+  <soap:Body>
+    <NumberToWords xmlns="http://dataaccess.com">
+      <ubiNum>500</ubiNum>
+    </NumberToWords>
+  </soap:Body>
+</soap:Envelope>
+`
+
+	doc := Parse("soap.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline XML body, got file path %q", req.Body.FilePath)
+	}
+	if !strings.Contains(req.Body.Text, `<?xml version="1.0" encoding="utf-8"?>`) {
+		t.Fatalf("expected XML declaration in body, got %q", req.Body.Text)
+	}
+	if !strings.Contains(req.Body.Text, `<soap:Envelope xmlns:soap="http://xmlsoap.org">`) {
+		t.Fatalf("expected SOAP envelope in body, got %q", req.Body.Text)
+	}
+}
+
+func TestParseInlineMalformedXMLBody(t *testing.T) {
+	src := `### POST http://localhost:8080/server.php
+POST http://localhost:8080/server.php
+Content-Type: text/xml
+
+<soap:Envelope xmlns:soap=http://schemas.xmlsoap.org/soap/envelope/>
+<soap:Body>
+  <get_the_infos_ssm/>
+</soap:Body>
+</soap:Envelope>
+`
+
+	doc := Parse("soap-malformed.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline XML body, got file path %q", req.Body.FilePath)
+	}
+	if !strings.Contains(req.Body.Text, `<soap:Envelope xmlns:soap=http://schemas.xmlsoap.org/soap/envelope/>`) {
+		t.Fatalf("expected malformed XML to remain body text, got %q", req.Body.Text)
+	}
+	if !strings.Contains(req.Body.Text, `<get_the_infos_ssm/>`) {
+		t.Fatalf("expected self-closing XML tag in body, got %q", req.Body.Text)
+	}
+}
+
+func TestParseMultiLineXMLStartTagBody(t *testing.T) {
+	src := `POST https://example.com/soap
+Content-Type: text/xml
+
+<soap:Envelope
+  xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Body/>
+</soap:Envelope>
+`
+
+	doc := Parse("soap-multiline-start.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline XML body, got file path %q", req.Body.FilePath)
+	}
+	if !strings.Contains(req.Body.Text, "<soap:Envelope\n") {
+		t.Fatalf("expected multiline start tag body, got %q", req.Body.Text)
+	}
+}
+
+func TestParseBodyFileReferenceWithoutSpaceCompatibility(t *testing.T) {
+	src := `POST https://example.com/api
+
+<payload.xml
+`
+
+	doc := Parse("body-file-nospace.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "payload.xml" {
+		t.Fatalf("unexpected file path %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "" {
+		t.Fatalf("expected no inline body text, got %q", req.Body.Text)
+	}
+}
+
+func TestParseExplicitBodyFileReferenceWithGreaterThan(t *testing.T) {
+	src := `POST https://example.com/api
+
+< ./payload>v1.xml
+`
+
+	doc := Parse("body-file-gt.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "./payload>v1.xml" {
+		t.Fatalf("unexpected file path %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "" {
+		t.Fatalf("expected no inline body text, got %q", req.Body.Text)
+	}
+}
+
+func TestParseBodyFileReferenceStillWinsOverLaterText(t *testing.T) {
+	src := `POST https://example.com/api
+
+< ./payload.xml
+ignored
+`
+
+	doc := Parse("body-file-wins.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "./payload.xml" {
+		t.Fatalf("unexpected file path %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "" {
+		t.Fatalf("expected file body to win, got inline body %q", req.Body.Text)
+	}
+}
+
 func TestParseWorkflowDirectives(t *testing.T) {
 	src := `# @workflow provision-account on-failure=continue
 # @description Provision new account flow
@@ -2258,6 +2400,29 @@ query FetchUser($id: ID!) {
 	}
 }
 
+func TestParseGraphQLFileRefs(t *testing.T) {
+	src := `# @graphql
+# @query < ./queries/workspace.graphql
+# @variables <./queries/workspace.variables.json
+POST https://example.com/graphql
+`
+
+	doc := Parse("graphql-files.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatalf("expected GraphQL body")
+	}
+	if gql.QueryFile != "./queries/workspace.graphql" {
+		t.Fatalf("unexpected query file %q", gql.QueryFile)
+	}
+	if gql.VariablesFile != "./queries/workspace.variables.json" {
+		t.Fatalf("unexpected variables file %q", gql.VariablesFile)
+	}
+}
+
 func TestParseGraphQLDisableResetsState(t *testing.T) {
 	src := `# @graphql
 POST https://example.com/graphql
@@ -2373,6 +2538,29 @@ GRPC localhost:50051
 	}
 	if strings.TrimSpace(grpc.Message) == "" {
 		t.Fatalf("expected message body to be captured")
+	}
+}
+
+func TestParseGRPCMessageFileRef(t *testing.T) {
+	src := `# @grpc my.pkg.UserService/GetUser
+GRPC localhost:50051
+
+<./payload.json
+`
+
+	doc := Parse("grpc-file.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	grpc := doc.Requests[0].GRPC
+	if grpc == nil {
+		t.Fatalf("expected grpc request")
+	}
+	if grpc.MessageFile != "./payload.json" {
+		t.Fatalf("unexpected message file %q", grpc.MessageFile)
+	}
+	if grpc.Message != "" {
+		t.Fatalf("expected no inline message, got %q", grpc.Message)
 	}
 }
 

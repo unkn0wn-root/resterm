@@ -118,6 +118,9 @@ func PrettifyContext(
 			lexer = "json"
 		}
 	case strings.Contains(ct, "xml"):
+		if formatted, ok := indentXML(body); ok {
+			source = formatted
+		}
 		lexer = "xml"
 	case strings.Contains(ct, "html"):
 		lexer = "html"

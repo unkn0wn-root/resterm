@@ -3,6 +3,7 @@ package grpcbuilder
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -119,19 +120,16 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return false
 	}
 
-	if strings.HasPrefix(trimmed, "<") {
-		b.messageFromFile = strings.TrimSpace(strings.TrimPrefix(trimmed, "<"))
+	if file, ok := bodyref.Parse(line, bodyref.Line, bodyref.AllowNoSpace); ok {
+		b.messageFromFile = file
 		b.messageLines = nil
 		return true
 	}
 
-	if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
-		parts := strings.SplitN(trimmed, "<", 2)
-		if len(parts) == 2 {
-			b.messageFromFile = strings.TrimSpace(parts[1])
-			b.messageLines = nil
-			return true
-		}
+	if file, ok := bodyref.Parse(line, bodyref.Inline, bodyref.AllowNoSpace); ok {
+		b.messageFromFile = file
+		b.messageLines = nil
+		return true
 	}
 	b.messageLines = append(b.messageLines, line)
 	return true

@@ -8,6 +8,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/parser/graphqlbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/grpcbuilder"
 	"github.com/unkn0wn-root/resterm/internal/parser/httpbuilder"
@@ -601,19 +602,23 @@ func (b *documentBuilder) handleBodyLine(line string) {
 		return
 	}
 
-	trimmed := strings.TrimSpace(line)
-	if after, ok := strings.CutPrefix(trimmed, "<"); ok {
-		b.request.http.SetBodyFromFile(strings.TrimSpace(after))
+	compat := bodyref.AllowNoSpace
+	if isXMLContentType(b.request.http.MimeType()) {
+		compat = bodyref.ExplicitOnly
+	}
+	if file, ok := bodyref.Parse(line, bodyref.Line, compat); ok {
+		b.request.http.SetBodyFromFile(file)
 		return
 	}
-	if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
-		parts := strings.SplitN(trimmed, "<", 2)
-		if len(parts) == 2 {
-			b.request.http.SetBodyFromFile(strings.TrimSpace(parts[1]))
-			return
-		}
+	if file, ok := bodyref.Parse(line, bodyref.Inline, compat); ok {
+		b.request.http.SetBodyFromFile(file)
+		return
 	}
 	b.request.http.AppendBodyLine(line)
+}
+
+func isXMLContentType(s string) bool {
+	return strings.Contains(strings.ToLower(s), "xml")
 }
 
 func (b *documentBuilder) ensureRequest(line int) {

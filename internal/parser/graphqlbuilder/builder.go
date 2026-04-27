@@ -3,6 +3,7 @@ package graphqlbuilder
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -46,8 +47,8 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 
 		rest = strings.TrimSpace(rest)
 		if rest != "" {
-			if strings.HasPrefix(rest, "<") {
-				b.variablesFile = strings.TrimSpace(strings.TrimPrefix(rest, "<"))
+			if file, ok := bodyref.Parse(rest, bodyref.Line, bodyref.AllowNoSpace); ok {
+				b.variablesFile = file
 			} else {
 				b.variablesLines = append(b.variablesLines, rest)
 			}
@@ -63,8 +64,8 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 
 		rest = strings.TrimSpace(rest)
 		if rest != "" {
-			if strings.HasPrefix(rest, "<") {
-				b.queryFile = strings.TrimSpace(strings.TrimPrefix(rest, "<"))
+			if file, ok := bodyref.Parse(rest, bodyref.Line, bodyref.AllowNoSpace); ok {
+				b.queryFile = file
 				return true
 			}
 			b.queryLines = append(b.queryLines, rest)
@@ -88,38 +89,31 @@ func (b *Builder) HandleBodyLine(line string) bool {
 	if !b.enabled {
 		return false
 	}
-	trimmed := strings.TrimSpace(line)
 	if b.collectVariables {
-		if strings.HasPrefix(trimmed, "<") {
-			b.variablesFile = strings.TrimSpace(strings.TrimPrefix(trimmed, "<"))
+		if file, ok := bodyref.Parse(line, bodyref.Line, bodyref.AllowNoSpace); ok {
+			b.variablesFile = file
 			b.variablesLines = nil
 			return true
 		}
-		if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
-			parts := strings.SplitN(trimmed, "<", 2)
-			if len(parts) == 2 {
-				b.variablesFile = strings.TrimSpace(parts[1])
-				b.variablesLines = nil
-				return true
-			}
+		if file, ok := bodyref.Parse(line, bodyref.Inline, bodyref.AllowNoSpace); ok {
+			b.variablesFile = file
+			b.variablesLines = nil
+			return true
 		}
 		b.variablesLines = append(b.variablesLines, line)
 		return true
 	}
 
-	if strings.HasPrefix(trimmed, "<") {
-		b.queryFile = strings.TrimSpace(strings.TrimPrefix(trimmed, "<"))
+	if file, ok := bodyref.Parse(line, bodyref.Line, bodyref.AllowNoSpace); ok {
+		b.queryFile = file
 		b.queryLines = nil
 		return true
 	}
 
-	if strings.HasPrefix(trimmed, "@") && strings.Contains(trimmed, "<") {
-		parts := strings.SplitN(trimmed, "<", 2)
-		if len(parts) == 2 {
-			b.queryFile = strings.TrimSpace(parts[1])
-			b.queryLines = nil
-			return true
-		}
+	if file, ok := bodyref.Parse(line, bodyref.Inline, bodyref.AllowNoSpace); ok {
+		b.queryFile = file
+		b.queryLines = nil
+		return true
 	}
 	b.queryLines = append(b.queryLines, line)
 	return true

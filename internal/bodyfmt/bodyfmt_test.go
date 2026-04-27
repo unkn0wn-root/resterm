@@ -76,6 +76,33 @@ func TestBuildJSONColorRespectsConfiguredStyle(t *testing.T) {
 	}
 }
 
+func TestBuildXMLPrettyFormats(t *testing.T) {
+	views := Build(BuildInput{
+		Body:        []byte(`<root><child>one</child></root>`),
+		ContentType: "text/xml",
+	})
+	if !strings.Contains(views.Pretty, "\n  <child>one</child>\n") {
+		t.Fatalf("expected formatted XML pretty output, got %q", views.Pretty)
+	}
+	if !strings.Contains(views.RawText, "\n  <child>one</child>\n") {
+		t.Fatalf("expected formatted XML raw output, got %q", views.RawText)
+	}
+}
+
+func TestBuildMalformedXMLFallsBackToOriginalText(t *testing.T) {
+	body := `<root><child></root>`
+	views := Build(BuildInput{
+		Body:        []byte(body),
+		ContentType: "application/xml",
+	})
+	if views.Pretty != body {
+		t.Fatalf("expected malformed XML pretty fallback, got %q", views.Pretty)
+	}
+	if views.RawText != body {
+		t.Fatalf("expected malformed XML raw fallback, got %q", views.RawText)
+	}
+}
+
 func TestFormatHeadersSortsNamesAndValues(t *testing.T) {
 	headers := http.Header{
 		"X-B": {"2", "1"},
