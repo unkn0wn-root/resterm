@@ -7,6 +7,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -23,13 +24,13 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		return false
 	}
 
-	trimmed := strings.TrimSpace(rest)
+	trimmed := str.Trim(rest)
 	if trimmed == "" {
 		b.enabled = true
 		return true
 	}
 
-	lowered := strings.ToLower(trimmed)
+	lowered := str.LowerTrim(trimmed)
 	switch lowered {
 	case "0", "false", "off", "disable", "disabled":
 		b.enabled = false
@@ -46,7 +47,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 }
 
 func (b *Builder) applyOption(name, value string) {
-	switch strings.ToLower(name) {
+	switch str.LowerTrim(name) {
 	case "duration", "timeout":
 		if dur, ok := duration.Parse(value); ok {
 			if dur < 0 {

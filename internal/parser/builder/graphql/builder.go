@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -45,7 +46,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		b.variablesLines = nil
 		b.variablesFile = ""
 
-		rest = strings.TrimSpace(rest)
+		rest = str.Trim(rest)
 		if rest != "" {
 			if file, ok := bodyref.Parse(rest, bodyref.Line, bodyref.AllowNoSpace); ok {
 				b.variablesFile = file
@@ -62,7 +63,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		b.queryLines = nil
 		b.queryFile = ""
 
-		rest = strings.TrimSpace(rest)
+		rest = str.Trim(rest)
 		if rest != "" {
 			if file, ok := bodyref.Parse(rest, bodyref.Line, bodyref.AllowNoSpace); ok {
 				b.queryFile = file
@@ -125,9 +126,9 @@ func (b *Builder) Finalize(existingMime string) (*restfile.GraphQLBody, string, 
 	}
 
 	gql := &restfile.GraphQLBody{
-		Query:         strings.TrimSpace(strings.Join(b.queryLines, "\n")),
-		OperationName: strings.TrimSpace(b.operation),
-		Variables:     strings.TrimSpace(strings.Join(b.variablesLines, "\n")),
+		Query:         str.Trim(strings.Join(b.queryLines, "\n")),
+		OperationName: str.Trim(b.operation),
+		Variables:     str.Trim(strings.Join(b.variablesLines, "\n")),
 	}
 
 	if b.queryFile != "" {

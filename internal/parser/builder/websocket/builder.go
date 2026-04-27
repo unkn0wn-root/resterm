@@ -9,6 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -54,7 +55,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 }
 
 func (b *Builder) handleWebSocket(rest string) bool {
-	t := strings.TrimSpace(rest)
+	t := str.Trim(rest)
 	if t == "" {
 		b.on = true
 		return true
@@ -118,7 +119,7 @@ var wsStepParsers = map[string]wsStepParser{
 }
 
 func (b *Builder) handleStep(rest string) bool {
-	t := strings.TrimSpace(rest)
+	t := str.Trim(rest)
 	if t == "" {
 		return true
 	}
@@ -128,8 +129,8 @@ func (b *Builder) handleStep(rest string) bool {
 	if act == "" {
 		return true
 	}
-	act = strings.ToLower(act)
-	rem = strings.TrimSpace(rem)
+	act = str.LowerTrim(act)
+	rem = str.Trim(rem)
 
 	parse, ok := wsStepParsers[act]
 	if !ok {
@@ -165,7 +166,7 @@ func parseWSSendBase64(rest string, step *restfile.WebSocketStep) bool {
 func parseWSSendFile(rest string, step *restfile.WebSocketStep) bool {
 	step.Type = restfile.WebSocketStepSendFile
 	if after, ok := strings.CutPrefix(rest, "<"); ok {
-		rest = strings.TrimSpace(after)
+		rest = str.Trim(after)
 	}
 	if rest == "" {
 		return false
@@ -209,11 +210,11 @@ func parseWSClose(rest string, step *restfile.WebSocketStep) bool {
 	}
 	if code, err := strconv.Atoi(codeTok); err == nil {
 		step.Code = code
-		step.Reason = strings.TrimSpace(tail)
+		step.Reason = str.Trim(tail)
 		return true
 	}
 	step.Code = wsCloseOK
-	step.Reason = strings.TrimSpace(rest)
+	step.Reason = str.Trim(rest)
 	return true
 }
 
@@ -230,5 +231,5 @@ func (b *Builder) Finalize() (*restfile.WebSocketRequest, bool) {
 }
 
 func normKey(s string) string {
-	return strings.ToLower(strings.TrimSpace(s))
+	return str.LowerTrim(s)
 }

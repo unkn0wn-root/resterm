@@ -5,6 +5,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Builder struct {
@@ -39,7 +40,7 @@ func (b *Builder) EnsureRequest() *restfile.GRPCRequest {
 
 func (b *Builder) SetTarget(target string) {
 	req := b.EnsureRequest()
-	req.Target = strings.TrimSpace(target)
+	req.Target = str.Trim(target)
 }
 
 func (b *Builder) HandleDirective(key, rest string) bool {
@@ -95,8 +96,8 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		req := b.EnsureRequest()
 		if rest != "" {
 			if idx := strings.Index(rest, ":"); idx >= 0 {
-				key := strings.TrimSpace(rest[:idx])
-				value := strings.TrimSpace(rest[idx+1:])
+				key := str.Trim(rest[:idx])
+				value := str.Trim(rest[idx+1:])
 				if key != "" {
 					req.Metadata = append(req.Metadata, restfile.MetadataPair{
 						Key:   key,
@@ -115,7 +116,7 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return false
 	}
 
-	trimmed := strings.TrimSpace(line)
+	trimmed := str.Trim(line)
 	if trimmed == "" {
 		return false
 	}
@@ -158,14 +159,14 @@ func (b *Builder) Finalize(
 	body := restfile.BodySource{}
 	if grpcCopy.MessageFile != "" {
 		body.FilePath = grpcCopy.MessageFile
-	} else if strings.TrimSpace(grpcCopy.Message) != "" {
+	} else if str.Trim(grpcCopy.Message) != "" {
 		body.Text = grpcCopy.Message
 	}
 	return &grpcCopy, body, existingMime, true
 }
 
 func parseMethod(spec string) (pkg string, service string, method string) {
-	working := strings.TrimSpace(spec)
+	working := str.Trim(spec)
 	if working == "" {
 		return "", "", ""
 	}
@@ -176,8 +177,8 @@ func parseMethod(spec string) (pkg string, service string, method string) {
 		return "", "", ""
 	}
 
-	serviceFQN := strings.TrimSpace(parts[0])
-	method = strings.TrimSpace(parts[1])
+	serviceFQN := str.Trim(parts[0])
+	method = str.Trim(parts[1])
 	if serviceFQN == "" || method == "" {
 		return "", "", ""
 	}

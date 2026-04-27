@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Directive struct {
@@ -21,7 +22,7 @@ type Directive struct {
 
 func ParseDirective(rest string) (Directive, error) {
 	res := Directive{}
-	trimmed := strings.TrimSpace(rest)
+	trimmed := str.Trim(rest)
 	if trimmed == "" {
 		return res, fmt.Errorf("@ssh requires options")
 	}
@@ -40,7 +41,7 @@ func ParseDirective(rest string) (Directive, error) {
 
 	name := "default"
 	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
-		name = strings.TrimSpace(fields[idx])
+		name = str.Trim(fields[idx])
 		idx++
 	}
 	if name == "" {
@@ -57,7 +58,7 @@ func ParseDirective(rest string) (Directive, error) {
 	}
 
 	if scope != restfile.SSHScopeRequest {
-		if strings.TrimSpace(prof.Host) == "" {
+		if str.Trim(prof.Host) == "" {
 			return res, fmt.Errorf("@ssh %s scope requires host", sshScopeLabel(scope))
 		}
 		res.Scope = scope
@@ -65,7 +66,7 @@ func ParseDirective(rest string) (Directive, error) {
 		return res, nil
 	}
 
-	use := strings.TrimSpace(opts["use"])
+	use := str.Trim(opts["use"])
 	inline := buildInlineSSH(prof)
 	if use == "" && inline == nil {
 		return res, fmt.Errorf("@ssh requires host or use=")

@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Directive struct {
@@ -41,7 +42,7 @@ func (e *DirectiveError) Unwrap() error {
 
 func ParseDirective(rest string) (Directive, error) {
 	res := Directive{}
-	trimmed := strings.TrimSpace(rest)
+	trimmed := str.Trim(rest)
 	if trimmed == "" {
 		return res, fmt.Errorf("@k8s requires options")
 	}
@@ -60,7 +61,7 @@ func ParseDirective(rest string) (Directive, error) {
 
 	name := "default"
 	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
-		name = strings.TrimSpace(fields[idx])
+		name = str.Trim(fields[idx])
 		idx++
 	}
 	if name == "" {
@@ -88,7 +89,7 @@ func ParseDirective(rest string) (Directive, error) {
 		res.PersistIgnored = prof.Persist.Set
 		prof.Persist = restfile.Opt[bool]{}
 	} else {
-		if strings.TrimSpace(prof.Namespace) == "" {
+		if str.Trim(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 		if err := requireK8sTarget(prof); err != nil {
@@ -100,12 +101,12 @@ func ParseDirective(rest string) (Directive, error) {
 		return res, nil
 	}
 
-	use := strings.TrimSpace(opts["use"])
+	use := str.Trim(opts["use"])
 	if use == "" {
 		if err := requireK8sTarget(prof); err != nil {
 			return res, fmt.Errorf("@k8s requires target and port or use=")
 		}
-		if strings.TrimSpace(prof.Namespace) == "" {
+		if str.Trim(prof.Namespace) == "" {
 			prof.Namespace = k8starget.DefaultNamespace
 		}
 	}
@@ -152,7 +153,7 @@ func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {
 	}
 	for _, ta := range targetAliases {
 		for _, key := range ta.keys {
-			v := strings.TrimSpace(opts[key])
+			v := str.Trim(opts[key])
 			if v == "" {
 				continue
 			}
@@ -258,19 +259,19 @@ func k8sInlineSet(prof restfile.K8sProfile) bool {
 }
 
 func requireK8sTarget(prof restfile.K8sProfile) error {
-	if !hasK8sTarget(prof) || strings.TrimSpace(prof.PortStr) == "" {
+	if !hasK8sTarget(prof) || str.Trim(prof.PortStr) == "" {
 		return fmt.Errorf("requires target and port")
 	}
 	return nil
 }
 
 func hasK8sTarget(prof restfile.K8sProfile) bool {
-	return strings.TrimSpace(prof.Pod) != "" || strings.TrimSpace(prof.Target) != ""
+	return str.Trim(prof.Pod) != "" || str.Trim(prof.Target) != ""
 }
 
 func setK8sTarget(prof *restfile.K8sProfile, kind k8starget.Kind, name string) error {
 	k := k8starget.ParseKind(string(kind))
-	n := strings.TrimSpace(name)
+	n := str.Trim(name)
 	if k == "" || n == "" {
 		return fmt.Errorf("invalid @k8s target")
 	}
@@ -290,13 +291,13 @@ func setK8sTarget(prof *restfile.K8sProfile, kind k8starget.Kind, name string) e
 }
 
 func currentK8sTarget(prof restfile.K8sProfile) (k8starget.Kind, string) {
-	if raw := strings.TrimSpace(prof.Target); raw != "" {
+	if raw := str.Trim(prof.Target); raw != "" {
 		k, n, err := k8starget.ParseRef(raw)
 		if err == nil {
 			return k, n
 		}
 	}
-	if p := strings.TrimSpace(prof.Pod); p != "" {
+	if p := str.Trim(prof.Pod); p != "" {
 		return k8starget.Pod, p
 	}
 	return "", ""

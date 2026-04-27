@@ -38,16 +38,33 @@ const (
 	wfOptName    = "name"
 	wfPreExpect  = "expect."
 	wfPreVars    = "vars."
+
+	wfExpectStatus     = "status"
+	wfExpectStatusCode = "statuscode"
+
+	wfFailureStop     = string(restfile.WorkflowOnFailureStop)
+	wfFailureContinue = string(restfile.WorkflowOnFailureContinue)
+	wfFailureFail     = "fail"
+	wfFailureAbort    = "abort"
+	wfFailureSkip     = "skip"
 )
 
+var workflowFailureAliases = map[string]restfile.WorkflowFailureMode{
+	wfFailureStop:     restfile.WorkflowOnFailureStop,
+	wfFailureFail:     restfile.WorkflowOnFailureStop,
+	wfFailureAbort:    restfile.WorkflowOnFailureStop,
+	wfFailureContinue: restfile.WorkflowOnFailureContinue,
+	wfFailureSkip:     restfile.WorkflowOnFailureContinue,
+}
+
 var expectValidators = map[string]expectValidator{
-	"status": func(raw string) error {
+	wfExpectStatus: func(raw string) error {
 		if str.Trim(raw) == "" {
 			return fmt.Errorf("expect.status requires a value")
 		}
 		return nil
 	},
-	"statuscode": func(raw string) error {
+	wfExpectStatusCode: func(raw string) error {
 		t := str.Trim(raw)
 		if t == "" {
 			return fmt.Errorf("expect.statuscode requires a value")
@@ -57,6 +74,20 @@ var expectValidators = map[string]expectValidator{
 		}
 		return nil
 	},
+}
+
+type workflowSwitchBuilder struct {
+	expr  string
+	cases []restfile.WorkflowSwitchCase
+	def   *restfile.WorkflowSwitchCase
+	line  int
+}
+
+type workflowIfBuilder struct {
+	then  restfile.WorkflowIfBranch
+	elifs []restfile.WorkflowIfBranch
+	els   *restfile.WorkflowIfBranch
+	line  int
 }
 
 type workflowBuilder struct {
@@ -79,20 +110,6 @@ func newWorkflowBuilder(line int, name string) *workflowBuilder {
 			DefaultOnFailure: restfile.WorkflowOnFailureStop,
 		},
 	}
-}
-
-type workflowSwitchBuilder struct {
-	expr  string
-	cases []restfile.WorkflowSwitchCase
-	def   *restfile.WorkflowSwitchCase
-	line  int
-}
-
-type workflowIfBuilder struct {
-	then  restfile.WorkflowIfBranch
-	elifs []restfile.WorkflowIfBranch
-	els   *restfile.WorkflowIfBranch
-	line  int
 }
 
 func (b *workflowBuilder) touch(line int) {
@@ -563,14 +580,8 @@ func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool)
 	if trimmed == "" {
 		return "", false
 	}
-	switch trimmed {
-	case "stop", "fail", "abort":
-		return restfile.WorkflowOnFailureStop, true
-	case "continue", "skip":
-		return restfile.WorkflowOnFailureContinue, true
-	default:
-		return "", false
-	}
+	mode, ok := workflowFailureAliases[trimmed]
+	return mode, ok
 }
 
 func parseTagList(text string) []string {
