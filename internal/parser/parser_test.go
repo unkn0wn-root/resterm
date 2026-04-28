@@ -2312,6 +2312,25 @@ ignored
 	}
 }
 
+func TestParseHTTPBodyAtPrefixedAngleLineStaysInlineText(t *testing.T) {
+	src := `POST https://example.com/api
+
+@{payload} < ./not-a-file-reference
+`
+
+	doc := Parse("http-at-angle-body.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if req.Body.FilePath != "" {
+		t.Fatalf("expected inline body text, got file path %q", req.Body.FilePath)
+	}
+	if req.Body.Text != "@{payload} < ./not-a-file-reference" {
+		t.Fatalf("unexpected inline body text %q", req.Body.Text)
+	}
+}
+
 func TestParseWorkflowDirectives(t *testing.T) {
 	src := `# @workflow provision-account on-failure=continue
 # @description Provision new account flow
@@ -2520,6 +2539,13 @@ func TestParseScannerError(t *testing.T) {
 	}
 }
 
+func TestNormalizeNewlinesHandlesBareCarriageReturn(t *testing.T) {
+	got := string(normalizeNewlines([]byte("first\rsecond\r\nthird\n")))
+	if got != "first\nsecond\nthird\n" {
+		t.Fatalf("unexpected normalized newlines %q", got)
+	}
+}
+
 func TestParseGraphQLRequest(t *testing.T) {
 	src := `# @name GraphQLExample
 # @graphql
@@ -2585,6 +2611,77 @@ POST https://example.com/graphql
 	}
 	if gql.VariablesFile != "./queries/workspace.variables.json" {
 		t.Fatalf("unexpected variables file %q", gql.VariablesFile)
+	}
+}
+
+func TestParseGraphQLDirectiveFileRefsIgnoreBodyInline(t *testing.T) {
+	src := `# @body inline
+# @graphql
+# @query < ./queries/workspace.graphql
+# @variables < ./queries/workspace.variables.json
+POST https://example.com/graphql
+`
+
+	doc := Parse("graphql-directive-files-inline.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatalf("expected GraphQL body")
+	}
+	if gql.QueryFile != "./queries/workspace.graphql" {
+		t.Fatalf("unexpected query file %q", gql.QueryFile)
+	}
+	if gql.VariablesFile != "./queries/workspace.variables.json" {
+		t.Fatalf("unexpected variables file %q", gql.VariablesFile)
+	}
+}
+
+func TestParseGraphQLBodyInlineForcesFileLikeLineToText(t *testing.T) {
+	src := `# @body inline
+# @graphql
+POST https://example.com/graphql
+
+< ./queries/workspace.graphql
+`
+
+	doc := Parse("graphql-inline-body-file-like.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatalf("expected GraphQL body")
+	}
+	if gql.QueryFile != "" {
+		t.Fatalf("expected inline query text, got query file %q", gql.QueryFile)
+	}
+	if gql.Query != "< ./queries/workspace.graphql" {
+		t.Fatalf("unexpected query text %q", gql.Query)
+	}
+}
+
+func TestParseGraphQLTemplateHeadAngleLineStaysInlineText(t *testing.T) {
+	src := `# @graphql
+POST https://example.com/graphql
+
+@{payload} < ./not-a-file-reference
+`
+
+	doc := Parse("graphql-template-head-angle.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatalf("expected GraphQL body")
+	}
+	if gql.QueryFile != "" {
+		t.Fatalf("expected inline query text, got query file %q", gql.QueryFile)
+	}
+	if gql.Query != "@{payload} < ./not-a-file-reference" {
+		t.Fatalf("unexpected query text %q", gql.Query)
 	}
 }
 
@@ -2726,6 +2823,34 @@ GRPC localhost:50051
 	}
 	if grpc.Message != "" {
 		t.Fatalf("expected no inline message, got %q", grpc.Message)
+	}
+}
+
+func TestParseGRPCBodyInlineForcesFileLikeLineToText(t *testing.T) {
+	src := `# @body inline
+# @grpc my.pkg.UserService/GetUser
+GRPC localhost:50051
+
+< ./payload.json
+`
+
+	doc := Parse("grpc-inline-body-file-like.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	grpc := req.GRPC
+	if grpc == nil {
+		t.Fatalf("expected grpc request")
+	}
+	if grpc.MessageFile != "" {
+		t.Fatalf("expected inline message text, got message file %q", grpc.MessageFile)
+	}
+	if grpc.Message != "< ./payload.json" {
+		t.Fatalf("unexpected inline message %q", grpc.Message)
+	}
+	if !req.Body.Options.ForceInline {
+		t.Fatalf("expected ForceInline option")
 	}
 }
 

@@ -111,7 +111,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 	return false
 }
 
-func (b *Builder) HandleBodyLine(line string) bool {
+func (b *Builder) HandleBodyLine(line string, forceInline bool) bool {
 	if b.request == nil {
 		return false
 	}
@@ -121,17 +121,12 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return false
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Line}); ok {
+	if file, ok := bodyref.ParseBodyFile(line, forceInline); ok {
 		b.messageFromFile = file
 		b.messageLines = nil
 		return true
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Inline}); ok {
-		b.messageFromFile = file
-		b.messageLines = nil
-		return true
-	}
 	b.messageLines = append(b.messageLines, line)
 	return true
 }

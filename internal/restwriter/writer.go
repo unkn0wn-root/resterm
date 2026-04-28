@@ -203,9 +203,7 @@ func bodyTextNeedsInlineDirective(req *restfile.Request) bool {
 	if _, ok := bodyref.Parse(line, opt); ok {
 		return true
 	}
-	opt.Location = bodyref.Inline
-	_, ok := bodyref.Parse(line, opt)
-	return ok
+	return false
 }
 
 func renderDescription(b *strings.Builder, desc string) {

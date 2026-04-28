@@ -46,5 +46,6 @@ func Parse(path string, data []byte) *restfile.Document {
 }
 
 func normalizeNewlines(data []byte) []byte {
-	return bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	data = bytes.ReplaceAll(data, []byte("\r\n"), []byte("\n"))
+	return bytes.ReplaceAll(data, []byte("\r"), []byte("\n"))
 }

@@ -226,17 +226,30 @@ func (b *documentBuilder) handleBlankLine(line, trimmed string) bool {
 	if trimmed != "" {
 		return false
 	}
-	if b.inRequest {
-		if !b.request.http.HasMethod() {
-		} else if !b.request.http.HeaderDone() {
-			b.request.markHeadersDone()
-		} else if b.request.graphql.HandleBodyLine(line) {
-		} else if b.request.grpc.HandleBodyLine(line) {
-		} else {
-			b.request.http.AppendBodyLine("")
-		}
-		b.appendLine(line)
+	if !b.inRequest {
+		return true
 	}
+
+	if !b.request.http.HasMethod() {
+		b.appendLine(line)
+		return true
+	}
+	if !b.request.http.HeaderDone() {
+		b.request.markHeadersDone()
+		b.appendLine(line)
+		return true
+	}
+	if b.request.graphql.HandleBodyLine(line, b.request.bodyOptions.ForceInline) {
+		b.appendLine(line)
+		return true
+	}
+	if b.request.grpc.HandleBodyLine(line, b.request.bodyOptions.ForceInline) {
+		b.appendLine(line)
+		return true
+	}
+
+	b.request.http.AppendBodyLine("")
+	b.appendLine(line)
 	return true
 }
 
@@ -639,27 +652,25 @@ func (b *documentBuilder) addConstant(name, value string, line int) {
 }
 
 func (b *documentBuilder) handleBodyLine(line string) {
-	if b.request.graphql.HandleBodyLine(line) {
+	if b.request.graphql.HandleBodyLine(line, b.request.bodyOptions.ForceInline) {
 		return
 	}
-	if b.request.grpc.HandleBodyLine(line) {
+	if b.request.grpc.HandleBodyLine(line, b.request.bodyOptions.ForceInline) {
 		return
 	}
 
-	opt := bodyref.Options{
-		Location:    bodyref.Line,
-		ForceInline: b.request.bodyOptions.ForceInline,
-	}
-	if file, ok := bodyref.Parse(line, opt); ok {
-		b.request.http.SetBodyFromFile(file)
-		return
-	}
-	opt.Location = bodyref.Inline
-	if file, ok := bodyref.Parse(line, opt); ok {
+	if file, ok := parseHTTPBodyFile(line, b.request.bodyOptions.ForceInline); ok {
 		b.request.http.SetBodyFromFile(file)
 		return
 	}
 	b.request.http.AppendBodyLine(line)
+}
+
+func parseHTTPBodyFile(line string, forceInline bool) (string, bool) {
+	return bodyref.Parse(line, bodyref.Options{
+		Location:    bodyref.Line,
+		ForceInline: forceInline,
+	})
 }
 
 func (b *documentBuilder) ensureRequest(line int) {
