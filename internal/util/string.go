@@ -26,6 +26,14 @@ func LowerTrim(s string) string {
 	return strings.ToLower(Trim(s))
 }
 
+func Contains(s, substr string) bool {
+	return strings.Contains(s, substr)
+}
+
+func HasPrefix(s, prefix string) bool {
+	return strings.HasPrefix(s, prefix)
+}
+
 func FirstTrimmed(values ...string) string {
 	for _, value := range values {
 		if value = Trim(value); value != "" {

@@ -1,9 +1,8 @@
 package workspace
 
 import (
-	"strings"
-
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type RefKind uint8
@@ -82,7 +81,7 @@ func (c *refCollector) collectGRPC(req *restfile.GRPCRequest, line int) {
 func (c *refCollector) collectScripts(scripts []restfile.ScriptBlock, line int) {
 	for _, block := range scripts {
 		c.add(RefScript, block.FilePath, line)
-		if isRTS(block.Lang) && strings.TrimSpace(block.Body) != "" {
+		if isRTS(block.Lang) && str.Trim(block.Body) != "" {
 			c.module(block.Body, line)
 		}
 	}
@@ -174,7 +173,7 @@ func (c *refCollector) module(src string, line int) {
 }
 
 func (c *refCollector) add(kind RefKind, path string, line int) {
-	path = strings.TrimSpace(path)
+	path = str.Trim(path)
 	if path == "" {
 		return
 	}
@@ -182,7 +181,7 @@ func (c *refCollector) add(kind RefKind, path string, line int) {
 }
 
 func isRTS(lang string) bool {
-	switch strings.ToLower(strings.TrimSpace(lang)) {
+	switch str.LowerTrim(lang) {
 	case "rts", "restermlang":
 		return true
 	default:

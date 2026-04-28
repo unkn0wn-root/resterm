@@ -4,11 +4,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type ListOptions struct {
@@ -162,7 +162,7 @@ func (l *lister) addDoc(e filesvc.FileEntry) {
 }
 
 func (l *lister) currentEntry() (filesvc.FileEntry, bool) {
-	path := strings.TrimSpace(l.opt.CurrentFile)
+	path := str.Trim(l.opt.CurrentFile)
 	if path == "" {
 		return filesvc.FileEntry{}, false
 	}
@@ -174,8 +174,8 @@ func (l *lister) currentEntry() (filesvc.FileEntry, bool) {
 }
 
 func (l *lister) refEntry(src, ref string) (filesvc.FileEntry, bool) {
-	ref = strings.TrimSpace(ref)
-	if ref == "" || strings.Contains(ref, "{{") || strings.Contains(ref, "}}") {
+	ref = str.Trim(ref)
+	if ref == "" || str.Contains(ref, "{{") || str.Contains(ref, "}}") {
 		return filesvc.FileEntry{}, false
 	}
 
@@ -198,7 +198,7 @@ func (l *lister) entryFor(path string, kind filesvc.FileKind) (filesvc.FileEntry
 	}
 
 	rel, err := filepath.Rel(l.rootAbs, pathAbs)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if err != nil || rel == ".." || str.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return filesvc.FileEntry{}, false
 	}
 
@@ -228,14 +228,14 @@ func (l *lister) sorted() []filesvc.FileEntry {
 }
 
 func samePath(a, b string) bool {
-	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
+	if str.Trim(a) == "" || str.Trim(b) == "" {
 		return false
 	}
 	return pathKey(a) == pathKey(b)
 }
 
 func pathKey(path string) string {
-	path = filepath.Clean(strings.TrimSpace(path))
+	path = filepath.Clean(str.Trim(path))
 	if abs, err := filepath.Abs(path); err == nil {
 		return abs
 	}

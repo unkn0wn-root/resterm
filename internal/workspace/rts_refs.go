@@ -1,13 +1,12 @@
 package workspace
 
 import (
-	"strings"
-
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func jsonFileExprs(path string, line, col int, src string) []string {
-	src = strings.TrimSpace(src)
+	src = str.Trim(src)
 	if src == "" {
 		return nil
 	}
@@ -125,7 +124,7 @@ func literalJSONFileCall(call *rts.Call) (string, bool) {
 	if !ok || lit.Kind != rts.LitStr {
 		return "", false
 	}
-	path := strings.TrimSpace(lit.S)
+	path := str.Trim(lit.S)
 	return path, path != ""
 }
 

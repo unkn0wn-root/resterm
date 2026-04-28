@@ -751,7 +751,11 @@ Content-Type: application/json
 		}
 		entry, ok := node.Payload.Data.(filesvc.FileEntry)
 		if !ok {
-			t.Fatalf("expected filesvc.FileEntry payload for %s, got %T", tt.path, node.Payload.Data)
+			t.Fatalf(
+				"expected filesvc.FileEntry payload for %s, got %T",
+				tt.path,
+				node.Payload.Data,
+			)
 		}
 		if entry.Kind != tt.kind {
 			t.Fatalf("expected kind %v for %s, got %v", tt.kind, tt.path, entry.Kind)
@@ -760,7 +764,11 @@ Content-Type: application/json
 			t.Fatalf("expected no extension-derived badges for %s, got %+v", tt.path, node.Badges)
 		}
 		if len(node.Children) != 0 || node.Count != 0 {
-			t.Fatalf("expected auxiliary file to be a leaf node, got count=%d children=%d", node.Count, len(node.Children))
+			t.Fatalf(
+				"expected auxiliary file to be a leaf node, got count=%d children=%d",
+				node.Count,
+				len(node.Children),
+			)
 		}
 	}
 	if node := m.navigator.Find("file:" + orphanFile); node != nil {
