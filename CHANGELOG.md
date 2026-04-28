@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.33.3](https://github.com/unkn0wn-root/resterm/compare/v0.33.1...v0.33.3) (2026-04-28)
+
+
+### Features
+
+* add json, js and graphql files ([7caa134](https://github.com/unkn0wn-root/resterm/commit/7caa1342ebaedd09458371518d679ed7482705f5))
+
+
+### Bug Fixes
+
+* **parser:** bodyref ([8b18084](https://github.com/unkn0wn-root/resterm/commit/8b18084db60bc4d369596fb351e4defa675c5d6b))
+* revert line break ([0e4100d](https://github.com/unkn0wn-root/resterm/commit/0e4100d29226a670bb5eac1b38e9c20403095bdd))
+
 ### [0.33.1](https://github.com/unkn0wn-root/resterm/compare/v0.32.1...v0.33.1) (2026-04-27)
 
 
