@@ -47,7 +47,13 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.doc = parseEditableDocument(path, data)
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
-	m.rebuildNavigator(nil)
+	entries, err := m.syncWorkspaceEntries()
+	if err != nil {
+		return func() tea.Msg {
+			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
+		}
+	}
+	m.rebuildNavigator(entries)
 	m.dirty = false
 	m.watchFile(path, data)
 	m.setStatusMessage(
@@ -87,6 +93,8 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.doc = parser.Parse("", nil)
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
+	entries := m.syncWorkspaceEntriesStatus()
+	m.rebuildNavigator(entries)
 	m.dirty = false
 	m.syncHistory()
 	focusCmd := m.setFocus(focusEditor)
@@ -159,11 +167,7 @@ func (m *Model) ensureWorkspaceFile(path string) bool {
 }
 
 func (m *Model) reparseDocument() tea.Cmd {
-	m.doc = parseEditableDocument(m.currentFile, []byte(m.editor.Value()))
-	m.syncRegistry(m.doc)
-	m.syncRequestList(m.doc)
-	m.rebuildNavigator(nil)
-	m.resetCursorSync()
+	m.refreshCurrentDocument([]byte(m.editor.Value()))
 	return func() tea.Msg {
 		return statusMsg{text: "Document reloaded", level: statusInfo}
 	}
@@ -217,7 +221,8 @@ func (m *Model) refreshCurrentDocument(content []byte) {
 	m.doc = parseEditableDocument(m.currentFile, content)
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
-	m.rebuildNavigator(nil)
+	entries := m.syncWorkspaceEntriesStatus()
+	m.rebuildNavigator(entries)
 	m.resetCursorSync()
 	m.updateEditorStyler(m.currentFile)
 	if req := m.findRequestByKey(m.activeRequestKey); req != nil {

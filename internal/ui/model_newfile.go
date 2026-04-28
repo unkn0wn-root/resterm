@@ -114,14 +114,6 @@ func (m *Model) submitNewFile() tea.Cmd {
 
 	fromSave := m.newFileFromSave
 	m.closeNewFileModal()
-	entries, err := m.listWorkspaceEntries()
-	if err != nil {
-		return func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
-		}
-	}
-	m.fileList.SetItems(makeFileItems(entries))
-	m.selectFileByPath(finalPath)
 	focusCmd := m.setFocus(focusEditor)
 	cmd := m.openFile(finalPath)
 	label := "Created"

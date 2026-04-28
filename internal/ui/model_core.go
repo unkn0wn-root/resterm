@@ -435,7 +435,14 @@ func New(cfg Config) Model {
 		}
 	}
 
-	entries, err := listWorkspaceEntries(workspace, cfg.Recursive, cfg.EnvironmentFile)
+	initialDoc := parseEditableDocument(cfg.FilePath, []byte(cfg.InitialContent))
+	entries, err := listWorkspaceEntries(
+		workspace,
+		cfg.Recursive,
+		cfg.EnvironmentFile,
+		cfg.FilePath,
+		initialDoc,
+	)
 	var initialStatus statusMsg
 	if err != nil {
 		initialStatus = statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusWarn}
@@ -722,7 +729,7 @@ func New(cfg Config) Model {
 	model.applyLayoutSettingsFromConfig(cfg.Settings.Layout)
 	_ = model.setInsertMode(false, false)
 
-	model.doc = parseEditableDocument(cfg.FilePath, []byte(cfg.InitialContent))
+	model.doc = initialDoc
 	model.syncRegistry(model.doc)
 	model.syncRequestList(model.doc)
 	model.rebuildNavigator(entries)
