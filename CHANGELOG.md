@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.33.4](https://github.com/unkn0wn-root/resterm/compare/v0.33.3...v0.33.4) (2026-04-28)
+
+
+### Bug Fixes
+
+* preserve dirty state and align workspace ref discovery ([7d3e596](https://github.com/unkn0wn-root/resterm/commit/7d3e596c4801a5f59fb14cc1558d27ce8a9b547e))
+
 ### [0.33.3](https://github.com/unkn0wn-root/resterm/compare/v0.33.1...v0.33.3) (2026-04-28)
 
 
