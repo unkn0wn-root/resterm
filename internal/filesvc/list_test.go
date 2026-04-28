@@ -36,11 +36,11 @@ func TestFileKindBadgeLabel(t *testing.T) {
 		want string
 	}{
 		{kind: FileKindRequest, want: ""},
-		{kind: FileKindScript, want: "RTS"},
+		{kind: FileKindScript, want: ""},
 		{kind: FileKindEnv, want: "ENV"},
-		{kind: FileKindGraphQL, want: "GQL"},
-		{kind: FileKindJSON, want: "JSON"},
-		{kind: FileKindJavaScript, want: "JS"},
+		{kind: FileKindGraphQL, want: ""},
+		{kind: FileKindJSON, want: ""},
+		{kind: FileKindJavaScript, want: ""},
 		{kind: FileKind(99), want: ""},
 	}
 

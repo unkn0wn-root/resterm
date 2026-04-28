@@ -54,16 +54,8 @@ func (k FileKind) String() string {
 
 func (k FileKind) BadgeLabel() string {
 	switch k {
-	case FileKindScript:
-		return "RTS"
 	case FileKindEnv:
 		return "ENV"
-	case FileKindGraphQL:
-		return "GQL"
-	case FileKindJSON:
-		return "JSON"
-	case FileKindJavaScript:
-		return "JS"
 	default:
 		return ""
 	}

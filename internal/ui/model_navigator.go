@@ -352,8 +352,6 @@ func requestBadges(req *restfile.Request) []string {
 		b = append(b, "WS")
 	case req.SSE != nil:
 		b = append(b, "SSE")
-	case req.GRPC != nil:
-		b = append(b, "gRPC")
 	default:
 	}
 

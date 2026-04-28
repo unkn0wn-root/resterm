@@ -725,13 +725,12 @@ func TestNavigatorIncludesAuxiliaryWorkspaceFiles(t *testing.T) {
 	m := &model
 
 	tests := []struct {
-		path  string
-		kind  filesvc.FileKind
-		badge string
+		path string
+		kind filesvc.FileKind
 	}{
-		{path: queryFile, kind: filesvc.FileKindGraphQL, badge: "GQL"},
-		{path: varsFile, kind: filesvc.FileKindJSON, badge: "JSON"},
-		{path: scriptFile, kind: filesvc.FileKindJavaScript, badge: "JS"},
+		{path: queryFile, kind: filesvc.FileKindGraphQL},
+		{path: varsFile, kind: filesvc.FileKindJSON},
+		{path: scriptFile, kind: filesvc.FileKindJavaScript},
 	}
 
 	for _, tt := range tests {
@@ -746,18 +745,27 @@ func TestNavigatorIncludesAuxiliaryWorkspaceFiles(t *testing.T) {
 		if entry.Kind != tt.kind {
 			t.Fatalf("expected kind %v for %s, got %v", tt.kind, tt.path, entry.Kind)
 		}
-		if !containsString(node.Badges, tt.badge) {
-			t.Fatalf("expected badge %q for %s, got %+v", tt.badge, tt.path, node.Badges)
+		if len(node.Badges) != 0 {
+			t.Fatalf("expected no extension-derived badges for %s, got %+v", tt.path, node.Badges)
 		}
 		if len(node.Children) != 0 || node.Count != 0 {
 			t.Fatalf("expected auxiliary file to be a leaf node, got count=%d children=%d", node.Count, len(node.Children))
 		}
 	}
 
-	m.navigator.SetFilter("GQL")
+	m.navigator.SetFilter("addNote.graphql")
 	rows := m.navigator.Rows()
 	if len(rows) != 1 || rows[0].Node == nil || rows[0].Node.ID != "file:"+queryFile {
-		t.Fatalf("expected GQL filter to find graphql file, got %+v", rows)
+		t.Fatalf("expected filename filter to find graphql file, got %+v", rows)
+	}
+}
+
+func TestRequestBadgesDoesNotDuplicateGRPCMethod(t *testing.T) {
+	req := &restfile.Request{
+		GRPC: &restfile.GRPCRequest{},
+	}
+	if got := requestBadges(req); len(got) != 0 {
+		t.Fatalf("expected no automatic gRPC badge, got %+v", got)
 	}
 }
 
