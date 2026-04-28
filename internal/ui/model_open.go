@@ -54,7 +54,7 @@ func (m *Model) submitOpenPath() tea.Cmd {
 	}
 
 	if !m.isSupportedOpenPath(resolved) {
-		m.openPathError = "Only request, RTS, or env files are supported"
+		m.openPathError = "Only Resterm-supported workspace files can be opened"
 		return nil
 	}
 
@@ -146,11 +146,7 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 
 func (m *Model) isSupportedOpenPath(path string) bool {
 	switch {
-	case filesvc.IsRequestFile(path):
-		return true
-	case filesvc.IsRTSFile(path):
-		return true
-	case filesvc.IsEnvJSONFile(path):
+	case filesvc.IsWorkspaceFile(path):
 		return true
 	case vars.IsDotEnvPath(path):
 		return true

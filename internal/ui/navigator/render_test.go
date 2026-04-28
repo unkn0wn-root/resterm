@@ -167,3 +167,93 @@ func TestRenderRowShowsEnvIcon(t *testing.T) {
 		t.Fatalf("expected env badges, got %q", clean)
 	}
 }
+
+func TestRenderRowShowsGraphQLIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindFile,
+			Title:  "query.graphql",
+			Badges: []string{"GQL"},
+			Payload: Payload[any]{
+				FilePath: "/tmp/query.graphql",
+				Data: filesvc.FileEntry{
+					Name: "query.graphql",
+					Path: "/tmp/query.graphql",
+					Kind: filesvc.FileKindGraphQL,
+				},
+			},
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconGraphQL) {
+		t.Fatalf("expected graphql icon, got %q", clean)
+	}
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
+		t.Fatalf("expected graphql row without caret, got %q", clean)
+	}
+	if !strings.Contains(clean, "GQL") {
+		t.Fatalf("expected graphql badge, got %q", clean)
+	}
+}
+
+func TestRenderRowShowsJSONIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindFile,
+			Title:  "variables.json",
+			Badges: []string{"JSON"},
+			Payload: Payload[any]{
+				FilePath: "/tmp/variables.json",
+				Data: filesvc.FileEntry{
+					Name: "variables.json",
+					Path: "/tmp/variables.json",
+					Kind: filesvc.FileKindJSON,
+				},
+			},
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconJSON) {
+		t.Fatalf("expected json icon, got %q", clean)
+	}
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
+		t.Fatalf("expected json row without caret, got %q", clean)
+	}
+	if !strings.Contains(clean, "JSON") {
+		t.Fatalf("expected json badge, got %q", clean)
+	}
+}
+
+func TestRenderRowShowsJavaScriptIcon(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindFile,
+			Title:  "pre.js",
+			Badges: []string{"JS"},
+			Payload: Payload[any]{
+				FilePath: "/tmp/pre.js",
+				Data: filesvc.FileEntry{
+					Name: "pre.js",
+					Path: "/tmp/pre.js",
+					Kind: filesvc.FileKindJavaScript,
+				},
+			},
+		},
+	}
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, iconJavaScript) {
+		t.Fatalf("expected javascript icon, got %q", clean)
+	}
+	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
+		t.Fatalf("expected javascript row without caret, got %q", clean)
+	}
+	if !strings.Contains(clean, "JS") {
+		t.Fatalf("expected javascript badge, got %q", clean)
+	}
+}

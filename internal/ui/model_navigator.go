@@ -115,12 +115,12 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 }
 
 func fileEntryBadges(entry filesvc.FileEntry, activeEnvFile string) []string {
-	if entry.Kind != filesvc.FileKindEnv {
-		return nil
+	var badges []string
+	if label := entry.Kind.BadgeLabel(); label != "" {
+		badges = append(badges, label)
 	}
 
-	badges := []string{"ENV"}
-	if samePath(entry.Path, activeEnvFile) {
+	if entry.Kind == filesvc.FileKindEnv && samePath(entry.Path, activeEnvFile) {
 		badges = append(badges, "ACTIVE")
 	}
 	return badges

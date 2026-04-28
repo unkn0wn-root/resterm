@@ -23,7 +23,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
-	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -723,7 +722,7 @@ func New(cfg Config) Model {
 	model.applyLayoutSettingsFromConfig(cfg.Settings.Layout)
 	_ = model.setInsertMode(false, false)
 
-	model.doc = parser.Parse(cfg.FilePath, []byte(cfg.InitialContent))
+	model.doc = parseEditableDocument(cfg.FilePath, []byte(cfg.InitialContent))
 	model.syncRegistry(model.doc)
 	model.syncRequestList(model.doc)
 	model.rebuildNavigator(entries)

@@ -15,6 +15,9 @@ func TestFileKindString(t *testing.T) {
 		{name: "request", kind: FileKindRequest, want: "request"},
 		{name: "script", kind: FileKindScript, want: "script"},
 		{name: "env", kind: FileKindEnv, want: "env"},
+		{name: "graphql", kind: FileKindGraphQL, want: "graphql"},
+		{name: "json", kind: FileKindJSON, want: "json"},
+		{name: "javascript", kind: FileKindJavaScript, want: "javascript"},
 		{name: "unknown", kind: FileKind(99), want: "unknown"},
 	}
 
@@ -24,6 +27,27 @@ func TestFileKindString(t *testing.T) {
 				t.Fatalf("String() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestFileKindBadgeLabel(t *testing.T) {
+	tests := []struct {
+		kind FileKind
+		want string
+	}{
+		{kind: FileKindRequest, want: ""},
+		{kind: FileKindScript, want: "RTS"},
+		{kind: FileKindEnv, want: "ENV"},
+		{kind: FileKindGraphQL, want: "GQL"},
+		{kind: FileKindJSON, want: "JSON"},
+		{kind: FileKindJavaScript, want: "JS"},
+		{kind: FileKind(99), want: ""},
+	}
+
+	for _, tt := range tests {
+		if got := tt.kind.BadgeLabel(); got != tt.want {
+			t.Fatalf("BadgeLabel(%v) = %q, want %q", tt.kind, got, tt.want)
+		}
 	}
 }
 
@@ -84,6 +108,12 @@ func TestListWorkspaceFilesIncludesEnvJSON(t *testing.T) {
 		"a.http",
 		"helpers.rts",
 		"resterm.env.json",
+		"query.graphql",
+		"short.gql",
+		"payload.json",
+		"pre.js",
+		"module.mjs",
+		"common.cjs",
 		"notes.txt",
 	}
 	for _, name := range files {
@@ -111,8 +141,57 @@ func TestListWorkspaceFilesIncludesEnvJSON(t *testing.T) {
 	if got["resterm.env.json"] != FileKindEnv {
 		t.Fatalf("expected resterm.env.json to be an env file, got %+v", entries)
 	}
+	if got["query.graphql"] != FileKindGraphQL {
+		t.Fatalf("expected query.graphql to be a graphql file, got %+v", entries)
+	}
+	if got["short.gql"] != FileKindGraphQL {
+		t.Fatalf("expected short.gql to be a graphql file, got %+v", entries)
+	}
+	if got["payload.json"] != FileKindJSON {
+		t.Fatalf("expected payload.json to be a json file, got %+v", entries)
+	}
+	if got["pre.js"] != FileKindJavaScript {
+		t.Fatalf("expected pre.js to be a javascript file, got %+v", entries)
+	}
+	if got["module.mjs"] != FileKindJavaScript {
+		t.Fatalf("expected module.mjs to be a javascript file, got %+v", entries)
+	}
+	if got["common.cjs"] != FileKindJavaScript {
+		t.Fatalf("expected common.cjs to be a javascript file, got %+v", entries)
+	}
 	if _, ok := got["notes.txt"]; ok {
 		t.Fatalf("did not expect notes.txt in workspace entries, got %+v", entries)
+	}
+}
+
+func TestClassifyWorkspacePathPrecedence(t *testing.T) {
+	tests := []struct {
+		path string
+		want FileKind
+		ok   bool
+	}{
+		{path: "requests.http", want: FileKindRequest, ok: true},
+		{path: "requests.rest", want: FileKindRequest, ok: true},
+		{path: "helpers.rts", want: FileKindScript, ok: true},
+		{path: "resterm.env.json", want: FileKindEnv, ok: true},
+		{path: "rest-client.env.json", want: FileKindEnv, ok: true},
+		{path: "payload.json", want: FileKindJSON, ok: true},
+		{path: "query.graphql", want: FileKindGraphQL, ok: true},
+		{path: "query.gql", want: FileKindGraphQL, ok: true},
+		{path: "pre.js", want: FileKindJavaScript, ok: true},
+		{path: "pre.mjs", want: FileKindJavaScript, ok: true},
+		{path: "pre.cjs", want: FileKindJavaScript, ok: true},
+		{path: "notes.txt", ok: false},
+	}
+
+	for _, tt := range tests {
+		got, ok := ClassifyWorkspacePath(tt.path)
+		if ok != tt.ok {
+			t.Fatalf("ClassifyWorkspacePath(%q) ok = %v, want %v", tt.path, ok, tt.ok)
+		}
+		if got != tt.want {
+			t.Fatalf("ClassifyWorkspacePath(%q) = %v, want %v", tt.path, got, tt.want)
+		}
 	}
 }
 
