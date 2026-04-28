@@ -22,14 +22,6 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 <summary>See the UI in action</summary>
 
 <p align="center">
-  <strong>Light Theme</strong>
-</p>
-
-<p align="center">
-  <img src="_media/resterm-lighttheme.png" alt="Screenshot of Resterm Light Theme" width="720" />
-</p>
-
-<p align="center">
   <strong>Workflows</strong>
 </p>
 
@@ -100,7 +92,7 @@ Resterm ships with the engine API, so you can build your own headless runner for
 The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
 
 > [!NOTE]
-> If you want an "off-the-shelf" runner instead of building your own, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
+> If you don't want to build your own runner, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## CLI
 
