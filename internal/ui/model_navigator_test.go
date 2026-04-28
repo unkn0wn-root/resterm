@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
@@ -707,6 +708,56 @@ func TestNavigatorDirFirstSort(t *testing.T) {
 	}
 	if dirNode.Children[1].Kind != navigator.KindFile || dirNode.Children[1].Title != "a.http" {
 		t.Fatalf("expected file after dir under %s", dir)
+	}
+}
+
+func TestNavigatorIncludesAuxiliaryWorkspaceFiles(t *testing.T) {
+	tmp := t.TempDir()
+	queryFile := filepath.Join(tmp, "addNote.graphql")
+	varsFile := filepath.Join(tmp, "addNote.variables.json")
+	scriptFile := filepath.Join(tmp, "pre.js")
+
+	writeSampleFile(t, queryFile, "mutation AddNote { addNote { id } }\n")
+	writeSampleFile(t, varsFile, `{"id":"1"}`)
+	writeSampleFile(t, scriptFile, "request.setHeader('X-Test', '1');\n")
+
+	model := New(Config{WorkspaceRoot: tmp})
+	m := &model
+
+	tests := []struct {
+		path  string
+		kind  filesvc.FileKind
+		badge string
+	}{
+		{path: queryFile, kind: filesvc.FileKindGraphQL, badge: "GQL"},
+		{path: varsFile, kind: filesvc.FileKindJSON, badge: "JSON"},
+		{path: scriptFile, kind: filesvc.FileKindJavaScript, badge: "JS"},
+	}
+
+	for _, tt := range tests {
+		node := m.navigator.Find("file:" + tt.path)
+		if node == nil {
+			t.Fatalf("expected navigator node for %s", tt.path)
+		}
+		entry, ok := node.Payload.Data.(filesvc.FileEntry)
+		if !ok {
+			t.Fatalf("expected filesvc.FileEntry payload for %s, got %T", tt.path, node.Payload.Data)
+		}
+		if entry.Kind != tt.kind {
+			t.Fatalf("expected kind %v for %s, got %v", tt.kind, tt.path, entry.Kind)
+		}
+		if !containsString(node.Badges, tt.badge) {
+			t.Fatalf("expected badge %q for %s, got %+v", tt.badge, tt.path, node.Badges)
+		}
+		if len(node.Children) != 0 || node.Count != 0 {
+			t.Fatalf("expected auxiliary file to be a leaf node, got count=%d children=%d", node.Count, len(node.Children))
+		}
+	}
+
+	m.navigator.SetFilter("GQL")
+	rows := m.navigator.Rows()
+	if len(rows) != 1 || rows[0].Node == nil || rows[0].Node.ID != "file:"+queryFile {
+		t.Fatalf("expected GQL filter to find graphql file, got %+v", rows)
 	}
 }
 

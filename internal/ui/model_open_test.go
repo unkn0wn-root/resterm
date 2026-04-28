@@ -114,3 +114,47 @@ func TestSubmitOpenPathOpensEnvFile(t *testing.T) {
 		t.Fatalf("expected current file %q, got %q", file, m.currentFile)
 	}
 }
+
+func TestSubmitOpenPathOpensAuxiliaryWorkspaceFiles(t *testing.T) {
+	tests := []struct {
+		name string
+		file string
+		body string
+	}{
+		{name: "graphql", file: "query.graphql", body: "query { viewer { id } }"},
+		{name: "gql", file: "query.gql", body: "query { viewer { id } }"},
+		{name: "json", file: "variables.json", body: `{"id":"1"}`},
+		{name: "js", file: "pre.js", body: "request.setHeader('X-Test', '1');"},
+		{name: "mjs", file: "pre.mjs", body: "export const value = 1;"},
+		{name: "cjs", file: "pre.cjs", body: "module.exports = {};"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			file := filepath.Join(tmp, tt.file)
+			if err := os.WriteFile(file, []byte(tt.body), 0o644); err != nil {
+				t.Fatalf("write file: %v", err)
+			}
+
+			th := theme.DefaultTheme()
+			model := New(Config{WorkspaceRoot: tmp, Theme: &th})
+			m := &model
+			m.openOpenModal()
+			m.openPathInput.SetValue(file)
+			if cmd := m.submitOpenPath(); cmd != nil {
+				cmd()
+			}
+
+			if m.currentFile != file {
+				t.Fatalf("expected current file %q, got %q", file, m.currentFile)
+			}
+			if got := m.editor.Value(); got != tt.body {
+				t.Fatalf("expected editor body %q, got %q", tt.body, got)
+			}
+			if len(m.requestItems) != 0 {
+				t.Fatalf("expected auxiliary file not to populate requests, got %+v", m.requestItems)
+			}
+		})
+	}
+}

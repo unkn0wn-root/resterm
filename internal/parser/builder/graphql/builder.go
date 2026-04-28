@@ -86,17 +86,12 @@ func (b *Builder) disable() {
 	b.queryFile = ""
 }
 
-func (b *Builder) HandleBodyLine(line string) bool {
+func (b *Builder) HandleBodyLine(line string, forceInline bool) bool {
 	if !b.enabled {
 		return false
 	}
 	if b.collectVariables {
-		if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Line}); ok {
-			b.variablesFile = file
-			b.variablesLines = nil
-			return true
-		}
-		if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Inline}); ok {
+		if file, ok := bodyref.ParseBodyFile(line, forceInline); ok {
 			b.variablesFile = file
 			b.variablesLines = nil
 			return true
@@ -105,17 +100,12 @@ func (b *Builder) HandleBodyLine(line string) bool {
 		return true
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Line}); ok {
+	if file, ok := bodyref.ParseBodyFile(line, forceInline); ok {
 		b.queryFile = file
 		b.queryLines = nil
 		return true
 	}
 
-	if file, ok := bodyref.Parse(line, bodyref.Options{Location: bodyref.Inline}); ok {
-		b.queryFile = file
-		b.queryLines = nil
-		return true
-	}
 	b.queryLines = append(b.queryLines, line)
 	return true
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func (m *Model) openSelectedFile() tea.Cmd {
@@ -43,7 +44,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.currentRequest = nil
 	m.activeRequestTitle = ""
 	m.activeRequestKey = ""
-	m.doc = parser.Parse(path, data)
+	m.doc = parseEditableDocument(path, data)
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
@@ -158,7 +159,7 @@ func (m *Model) ensureWorkspaceFile(path string) bool {
 }
 
 func (m *Model) reparseDocument() tea.Cmd {
-	m.doc = parser.Parse(m.currentFile, []byte(m.editor.Value()))
+	m.doc = parseEditableDocument(m.currentFile, []byte(m.editor.Value()))
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
@@ -213,7 +214,7 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 }
 
 func (m *Model) refreshCurrentDocument(content []byte) {
-	m.doc = parser.Parse(m.currentFile, content)
+	m.doc = parseEditableDocument(m.currentFile, content)
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
 	m.rebuildNavigator(nil)
@@ -227,4 +228,11 @@ func (m *Model) refreshCurrentDocument(content []byte) {
 
 func (m *Model) updateEditorStyler(path string) {
 	m.editor.SetRuneStyler(selectEditorRuneStyler(path, m.theme.EditorMetadata))
+}
+
+func parseEditableDocument(path string, data []byte) *restfile.Document {
+	if !filesvc.IsRequestFile(path) {
+		return &restfile.Document{Path: path, Raw: append([]byte(nil), data...)}
+	}
+	return parser.Parse(path, data)
 }

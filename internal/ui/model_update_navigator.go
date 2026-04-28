@@ -137,7 +137,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				if path != "" && !samePath(path, m.currentFile) {
 					cmd = m.openFile(path)
 				}
-				if filesvc.IsRTSFile(path) {
+				if path != "" && !filesvc.IsRequestFile(path) {
 					return applyJump(cmd, true)
 				}
 				m.navExpandFile(n, false)
@@ -160,6 +160,9 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				path := n.Payload.FilePath
 				if path != "" && !samePath(path, m.currentFile) {
 					cmd = m.openFile(path)
+				}
+				if path != "" && !filesvc.IsRequestFile(path) {
+					return applyJump(cmd, true)
 				}
 				m.navExpandFile(n, false)
 			case navigator.KindDir:
