@@ -412,11 +412,11 @@ func TestNavigatorLFocusesEditorForRTS(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "a.http")
 	fileB := filepath.Join(tmp, "helpers.rts")
-	content := "### req\nGET https://example.com\n"
+	content := "# @use ./helpers.rts\n### req\nGET https://example.com\n"
 	writeSampleFile(t, fileA, content)
 	writeSampleFile(t, fileB, "fn add(a, b) { return a + b }\n")
 
-	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA, InitialContent: content})
 	m := &model
 
 	selectNavigatorID(t, m, "file:"+fileB)
@@ -628,7 +628,7 @@ func TestNavigatorBuildsDirectoryTree(t *testing.T) {
 		t.Fatalf("mkdir %s: %v", nested, err)
 	}
 	writeSampleFile(t, root, "### root\nGET https://example.com\n")
-	writeSampleFile(t, fileA, "### one\nGET https://example.com/one\n")
+	writeSampleFile(t, fileA, "# @use ./mod.rts\n### one\nGET https://example.com/one\n")
 	writeSampleFile(t, fileB, "export const x = 1\n")
 	writeSampleFile(t, fileC, "### two\nGET https://example.com/two\n")
 
@@ -711,15 +711,26 @@ func TestNavigatorDirFirstSort(t *testing.T) {
 	}
 }
 
-func TestNavigatorIncludesAuxiliaryWorkspaceFiles(t *testing.T) {
+func TestNavigatorIncludesReferencedAuxiliaryWorkspaceFiles(t *testing.T) {
 	tmp := t.TempDir()
+	apiFile := filepath.Join(tmp, "api.http")
 	queryFile := filepath.Join(tmp, "addNote.graphql")
 	varsFile := filepath.Join(tmp, "addNote.variables.json")
 	scriptFile := filepath.Join(tmp, "pre.js")
+	orphanFile := filepath.Join(tmp, "orphan.json")
 
+	writeSampleFile(t, apiFile, `# @script pre-request
+> < ./pre.js
+# @graphql
+# @query < ./addNote.graphql
+# @variables < ./addNote.variables.json
+POST https://example.com/graphql
+Content-Type: application/json
+`)
 	writeSampleFile(t, queryFile, "mutation AddNote { addNote { id } }\n")
 	writeSampleFile(t, varsFile, `{"id":"1"}`)
 	writeSampleFile(t, scriptFile, "request.setHeader('X-Test', '1');\n")
+	writeSampleFile(t, orphanFile, `{}`)
 
 	model := New(Config{WorkspaceRoot: tmp})
 	m := &model
@@ -740,7 +751,11 @@ func TestNavigatorIncludesAuxiliaryWorkspaceFiles(t *testing.T) {
 		}
 		entry, ok := node.Payload.Data.(filesvc.FileEntry)
 		if !ok {
-			t.Fatalf("expected filesvc.FileEntry payload for %s, got %T", tt.path, node.Payload.Data)
+			t.Fatalf(
+				"expected filesvc.FileEntry payload for %s, got %T",
+				tt.path,
+				node.Payload.Data,
+			)
 		}
 		if entry.Kind != tt.kind {
 			t.Fatalf("expected kind %v for %s, got %v", tt.kind, tt.path, entry.Kind)
@@ -749,8 +764,15 @@ func TestNavigatorIncludesAuxiliaryWorkspaceFiles(t *testing.T) {
 			t.Fatalf("expected no extension-derived badges for %s, got %+v", tt.path, node.Badges)
 		}
 		if len(node.Children) != 0 || node.Count != 0 {
-			t.Fatalf("expected auxiliary file to be a leaf node, got count=%d children=%d", node.Count, len(node.Children))
+			t.Fatalf(
+				"expected auxiliary file to be a leaf node, got count=%d children=%d",
+				node.Count,
+				len(node.Children),
+			)
 		}
+	}
+	if node := m.navigator.Find("file:" + orphanFile); node != nil {
+		t.Fatalf("did not expect unreferenced auxiliary file in navigator")
 	}
 
 	m.navigator.SetFilter("addNote.graphql")

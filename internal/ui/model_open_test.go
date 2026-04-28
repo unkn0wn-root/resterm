@@ -153,7 +153,10 @@ func TestSubmitOpenPathOpensAuxiliaryWorkspaceFiles(t *testing.T) {
 				t.Fatalf("expected editor body %q, got %q", tt.body, got)
 			}
 			if len(m.requestItems) != 0 {
-				t.Fatalf("expected auxiliary file not to populate requests, got %+v", m.requestItems)
+				t.Fatalf(
+					"expected auxiliary file not to populate requests, got %+v",
+					m.requestItems,
+				)
 			}
 		})
 	}

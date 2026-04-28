@@ -100,7 +100,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.requestItems = nil
 	m.requestList.Select(-1)
 
-	entries, err := listWorkspaceEntries(dir, m.workspaceRecursive, m.cfg.EnvironmentFile)
+	entries, err := listWorkspaceEntries(dir, m.workspaceRecursive, m.cfg.EnvironmentFile, "", nil)
 	if err != nil {
 		return func() tea.Msg {
 			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
@@ -132,14 +132,6 @@ func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	m.cfg.FilePath = path
 	m.cfg.Recursive = m.workspaceRecursive
 
-	entries, err := listWorkspaceEntries(dir, m.workspaceRecursive, m.cfg.EnvironmentFile)
-	if err != nil {
-		return func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
-		}
-	}
-	m.fileList.SetItems(makeFileItems(entries))
-	m.selectFileByPath(path)
 	focusCmd := m.setFocus(focusEditor)
 	return batchCommands(focusCmd, m.openFile(path))
 }
