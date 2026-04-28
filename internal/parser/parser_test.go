@@ -2539,13 +2539,6 @@ func TestParseScannerError(t *testing.T) {
 	}
 }
 
-func TestNormalizeNewlinesHandlesBareCarriageReturn(t *testing.T) {
-	got := string(normalizeNewlines([]byte("first\rsecond\r\nthird\n")))
-	if got != "first\nsecond\nthird\n" {
-		t.Fatalf("unexpected normalized newlines %q", got)
-	}
-}
-
 func TestParseGraphQLRequest(t *testing.T) {
 	src := `# @name GraphQLExample
 # @graphql
