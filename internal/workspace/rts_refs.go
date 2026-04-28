@@ -5,6 +5,14 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+const (
+	jsonFileMember = "file"
+
+	jsonNamespace   = "json"
+	rtsNamespace    = "rts"
+	stdlibNamespace = "stdlib"
+)
+
 func jsonFileExprs(path string, line, col int, src string) []string {
 	src = str.Trim(src)
 	if src == "" {
@@ -130,19 +138,19 @@ func literalJSONFileCall(call *rts.Call) (string, bool) {
 
 func isJSONFileCallee(ex rts.Expr) bool {
 	mem, ok := ex.(*rts.Member)
-	if !ok || mem.Name != "file" {
+	if !ok || mem.Name != jsonFileMember {
 		return false
 	}
 
 	switch base := mem.X.(type) {
 	case *rts.Ident:
-		return base.Name == "json"
+		return base.Name == jsonNamespace
 	case *rts.Member:
-		if base.Name != "json" {
+		if base.Name != jsonNamespace {
 			return false
 		}
 		root, ok := base.X.(*rts.Ident)
-		return ok && (root.Name == "rts" || root.Name == "stdlib")
+		return ok && (root.Name == rtsNamespace || root.Name == stdlibNamespace)
 	default:
 		return false
 	}

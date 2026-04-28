@@ -167,7 +167,10 @@ func (m *Model) ensureWorkspaceFile(path string) bool {
 }
 
 func (m *Model) reparseDocument() tea.Cmd {
+	wasDirty := m.dirty
 	m.refreshCurrentDocument([]byte(m.editor.Value()))
+	// Reparse refreshes derived UI state from the editor buffer. It is not a save.
+	m.dirty = wasDirty
 	return func() tea.Msg {
 		return statusMsg{text: "Document reloaded", level: statusInfo}
 	}

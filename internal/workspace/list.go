@@ -11,6 +11,21 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+const (
+	templateOpenMarker  = "{{"
+	templateCloseMarker = "}}"
+	parentRel           = ".."
+
+	// Separates absolute paths in seenRTSModuleRefs keys. NUL cannot appear in
+	// valid file paths, so it avoids ambiguity without escaping.
+	pathKeySeparator = "\x00"
+)
+
+var templateMarkers = [...]string{
+	templateOpenMarker,
+	templateCloseMarker,
+}
+
 type ListOptions struct {
 	Recursive       bool
 	ExplicitEnvFile string
@@ -24,12 +39,12 @@ func List(root string, opt ListOptions) ([]filesvc.FileEntry, error) {
 }
 
 type lister struct {
-	root     string
-	rootAbs  string
-	opt      ListOptions
-	entries  map[string]filesvc.FileEntry
-	docs     []filesvc.FileEntry
-	seenMods map[string]struct{}
+	root              string
+	rootAbs           string
+	opt               ListOptions
+	entries           map[string]filesvc.FileEntry
+	docs              []filesvc.FileEntry
+	seenRTSModuleRefs map[string]struct{}
 }
 
 func newLister(root string, opt ListOptions) *lister {
@@ -40,11 +55,11 @@ func newLister(root string, opt ListOptions) *lister {
 	}
 
 	return &lister{
-		root:     root,
-		rootAbs:  rootAbs,
-		opt:      opt,
-		entries:  make(map[string]filesvc.FileEntry),
-		seenMods: make(map[string]struct{}),
+		root:              root,
+		rootAbs:           rootAbs,
+		opt:               opt,
+		entries:           make(map[string]filesvc.FileEntry),
+		seenRTSModuleRefs: make(map[string]struct{}),
 	}
 }
 
@@ -106,25 +121,25 @@ func (l *lister) addRefs(src string, refs []Ref) {
 	}
 }
 
-func (l *lister) addRef(src string, ref Ref) {
-	e, ok := l.refEntry(src, ref.Path)
+func (l *lister) addRef(referrerPath string, ref Ref) {
+	e, ok := l.refEntry(referrerPath, ref.Path)
 	if !ok {
 		return
 	}
 	l.addEntry(e)
-	l.addRTSModuleRefs(e)
+	l.addRTSModuleRefs(referrerPath, e)
 }
 
-func (l *lister) addRTSModuleRefs(e filesvc.FileEntry) {
+func (l *lister) addRTSModuleRefs(referrerPath string, e filesvc.FileEntry) {
 	if e.Kind != filesvc.FileKindScript {
 		return
 	}
 
-	key := pathKey(e.Path)
-	if _, ok := l.seenMods[key]; ok {
+	key := rtsModuleRefScanKey(e.Path, referrerPath)
+	if _, ok := l.seenRTSModuleRefs[key]; ok {
 		return
 	}
-	l.seenMods[key] = struct{}{}
+	l.seenRTSModuleRefs[key] = struct{}{}
 
 	data, err := os.ReadFile(e.Path)
 	if err != nil {
@@ -132,7 +147,7 @@ func (l *lister) addRTSModuleRefs(e filesvc.FileEntry) {
 	}
 
 	for _, path := range jsonFileModuleRefs(e.Path, string(data)) {
-		l.addRef(e.Path, Ref{Path: path, Kind: RefRTSJSON})
+		l.addRef(referrerPath, Ref{Path: path, Kind: RefRTSJSON})
 	}
 }
 
@@ -175,7 +190,10 @@ func (l *lister) currentEntry() (filesvc.FileEntry, bool) {
 
 func (l *lister) refEntry(src, ref string) (filesvc.FileEntry, bool) {
 	ref = str.Trim(ref)
-	if ref == "" || str.Contains(ref, "{{") || str.Contains(ref, "}}") {
+	if ref == "" {
+		return filesvc.FileEntry{}, false
+	}
+	if isDynamicRef(ref) {
 		return filesvc.FileEntry{}, false
 	}
 
@@ -198,7 +216,10 @@ func (l *lister) entryFor(path string, kind filesvc.FileKind) (filesvc.FileEntry
 	}
 
 	rel, err := filepath.Rel(l.rootAbs, pathAbs)
-	if err != nil || rel == ".." || str.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if err != nil {
+		return filesvc.FileEntry{}, false
+	}
+	if relEscapesRoot(rel) {
 		return filesvc.FileEntry{}, false
 	}
 
@@ -240,4 +261,32 @@ func pathKey(path string) string {
 		return abs
 	}
 	return path
+}
+
+func isDynamicRef(ref string) bool {
+	for _, marker := range templateMarkers {
+		if str.Contains(ref, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+func relEscapesRoot(rel string) bool {
+	switch {
+	case rel == parentRel:
+		return true
+	case str.HasPrefix(rel, parentRel+string(filepath.Separator)):
+		return true
+	default:
+		return false
+	}
+}
+
+func rtsModuleRefScanKey(modulePath, referrerPath string) string {
+	rtbase := str.Trim(referrerPath)
+	if rtbase == "" {
+		rtbase = modulePath
+	}
+	return pathKey(modulePath) + pathKeySeparator + pathKey(filepath.Dir(rtbase))
 }

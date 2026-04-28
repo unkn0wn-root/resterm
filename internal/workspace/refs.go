@@ -5,6 +5,13 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+const (
+	rtsExprStartCol = 1
+
+	scriptLangRTS           = "rts"
+	scriptLangRestermScript = "restermlang"
+)
+
 type RefKind uint8
 
 const (
@@ -161,7 +168,7 @@ func (c *refCollector) collectWorkflowStep(step restfile.WorkflowStep) {
 }
 
 func (c *refCollector) expr(expr string, line int) {
-	for _, path := range jsonFileExprs(c.doc.Path, line, 1, expr) {
+	for _, path := range jsonFileExprs(c.doc.Path, line, rtsExprStartCol, expr) {
 		c.add(RefRTSJSON, path, line)
 	}
 }
@@ -182,7 +189,7 @@ func (c *refCollector) add(kind RefKind, path string, line int) {
 
 func isRTS(lang string) bool {
 	switch str.LowerTrim(lang) {
-	case "rts", "restermlang":
+	case scriptLangRTS, scriptLangRestermScript:
 		return true
 	default:
 		return false

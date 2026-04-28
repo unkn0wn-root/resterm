@@ -130,6 +130,37 @@ func TestOpenTemporaryDocumentResetsState(t *testing.T) {
 	}
 }
 
+func TestReparseDocumentPreservesDirtyState(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "sample.http")
+	content := "GET https://example.com\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("failed to write sample file: %v", err)
+	}
+
+	model := New(Config{
+		WorkspaceRoot:  tmp,
+		Theme:          &th,
+		FilePath:       path,
+		InitialContent: content,
+	})
+	m := &model
+	m.editor.SetValue("GET https://changed.example\n")
+	m.dirty = true
+
+	if cmd := m.reparseDocument(); cmd != nil {
+		cmd()
+	}
+
+	if !m.dirty {
+		t.Fatalf("expected reparse to preserve unsaved dirty state")
+	}
+	if len(m.doc.Requests) != 1 || m.doc.Requests[0].URL != "https://changed.example" {
+		t.Fatalf("expected document to reparse editor contents, got %#v", m.doc.Requests)
+	}
+}
+
 func TestOpenFileSetsHistoryScopeToRequest(t *testing.T) {
 	tmp := t.TempDir()
 	th := theme.DefaultTheme()

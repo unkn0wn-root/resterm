@@ -63,6 +63,65 @@ export fn enabled() {
 	}
 }
 
+func TestListResolvesRTSModuleJSONRefsFromDocumentBase(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "api.http"), `# @use ./rts/helpers.rts
+# @when helpers.enabled()
+GET https://example.com
+`)
+	writeFile(t, filepath.Join(root, "rts", "helpers.rts"), `module helpers
+export fn enabled() {
+  return json.file("./flags.json").enabled
+}
+`)
+	writeFile(t, filepath.Join(root, "flags.json"), `{"enabled":true}`)
+
+	entries, err := List(root, ListOptions{})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+
+	got := entryKinds(entries)
+	if got["flags.json"] != filesvc.FileKindJSON {
+		t.Fatalf("expected root flags.json from document base, got %+v", entries)
+	}
+	if _, ok := got[filepath.Join("rts", "flags.json")]; ok {
+		t.Fatalf("did not expect module-relative flags.json in entries: %+v", entries)
+	}
+}
+
+func TestListResolvesSharedRTSModuleJSONRefsPerDocumentBase(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "api.http"), `# @use ./common/helpers.rts
+# @when helpers.enabled()
+GET https://root.example
+`)
+	writeFile(t, filepath.Join(root, "nested", "api.http"), `# @use ../common/helpers.rts
+# @when helpers.enabled()
+GET https://nested.example
+`)
+	writeFile(t, filepath.Join(root, "common", "helpers.rts"), `module helpers
+export fn enabled() {
+  return json.file("./flags.json").enabled
+}
+`)
+	writeFile(t, filepath.Join(root, "flags.json"), `{"enabled":true}`)
+	writeFile(t, filepath.Join(root, "nested", "flags.json"), `{"enabled":true}`)
+
+	entries, err := List(root, ListOptions{Recursive: true})
+	if err != nil {
+		t.Fatalf("List returned error: %v", err)
+	}
+
+	got := entryKinds(entries)
+	if got["flags.json"] != filesvc.FileKindJSON {
+		t.Fatalf("expected root flags.json from root document base, got %+v", entries)
+	}
+	if got[filepath.Join("nested", "flags.json")] != filesvc.FileKindJSON {
+		t.Fatalf("expected nested flags.json from nested document base, got %+v", entries)
+	}
+}
+
 func TestListSkipsMissingOutsideAndDynamicRefs(t *testing.T) {
 	root := t.TempDir()
 	outside := t.TempDir()
