@@ -20,7 +20,7 @@ const (
 	iconRTS         = "λ"
 	iconEnv         = "⚙"
 	iconGraphQL     = "◇"
-	iconJSON        = "{}"
+	iconJSON        = "▣"
 	iconJavaScript  = "JS"
 )
 
