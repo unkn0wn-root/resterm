@@ -241,11 +241,11 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 	plainSummary := stripANSIEscape(summary)
 	prettyView := joinSections(prettySummary, bv.pretty)
 	rawView := joinSections(plainSummary, bv.raw)
-	headersView := r.headerView(
-		summary,
-		"",
-		resp.Headers,
-		"No response headers captured",
+	headersView := r.renderHTTPRespHdrs(
+		resp,
+		tests,
+		scriptErr,
+		defaultResponseViewportWidth,
 	)
 
 	return responseViews{
@@ -262,11 +262,26 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 	}
 }
 
-func buildHTTPRequestHeadersView(resp *httpclient.Response) string {
-	return defaultResponseRenderer().buildHTTPRequestHeadersView(resp)
+func (r responseRenderer) renderHTTPRespHdrs(
+	resp *httpclient.Response,
+	tests []scripts.TestResult,
+	scriptErr error,
+	width int,
+) string {
+	if resp == nil {
+		return noResponseMessage
+	}
+	return r.renderHdrDoc(
+		r.buildRespSum(resp, tests, scriptErr),
+		[]hdrPanel{{
+			fields: bodyfmt.HeaderFields(resp.Headers),
+			empty:  "No response headers captured",
+		}},
+		width,
+	)
 }
 
-func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response) string {
+func (r responseRenderer) renderHTTPReqHdrs(resp *httpclient.Response, width int) string {
 	if resp == nil {
 		return noResponseMessage
 	}
@@ -282,18 +297,27 @@ func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response)
 	}
 
 	reqLine := strings.TrimSpace(method + " " + url)
-	reqLineColored := ""
+	sum := ""
 	if reqLine != "" {
-		reqLineColored = renderLabelValue("Request", reqLine, r.stats.Label, r.stats.Value)
+		sum = renderLabelValue("Request", reqLine, r.stats.Label, r.stats.Value)
 	}
 
-	hdrs := buildRequestHeaderMap(resp)
-	return r.headerView(reqLineColored, "", hdrs, "No request headers captured")
+	return r.renderHdrDoc(
+		sum,
+		[]hdrPanel{{
+			fields: bodyfmt.HeaderFields(buildRequestHeaderMap(resp)),
+			empty:  "No request headers captured",
+		}},
+		width,
+	)
 }
 
-func (r responseRenderer) buildGRPCRequestHeadersView(req *restfile.Request) string {
+func (r responseRenderer) renderGRPCReqHdrs(req *restfile.Request, width int) string {
 	if req == nil {
-		return r.headerView("", "Request metadata", nil, "Request metadata not captured")
+		return r.renderHdrDoc("", []hdrPanel{{
+			title: "Request metadata",
+			empty: "Request metadata not captured",
+		}}, width)
 	}
 
 	var lines []string
@@ -319,97 +343,184 @@ func (r responseRenderer) buildGRPCRequestHeadersView(req *restfile.Request) str
 		}
 	}
 
-	return r.headerView(
+	return r.renderHdrDoc(
 		strings.Join(lines, "\n"),
-		"Request metadata",
-		grpcRequestHeaderMap(req),
-		"No request metadata captured",
+		[]hdrPanel{{
+			title:  "Request metadata",
+			fields: bodyfmt.HeaderFields(grpcRequestHeaderMap(req)),
+			empty:  "No request metadata captured",
+		}},
+		width,
 	)
 }
 
-func (r responseRenderer) headerView(sum, title string, h http.Header, empty string) string {
-	return joinSections(sum, r.renderHeaderPanel(title, bodyfmt.HeaderFields(h), empty))
+func (r responseRenderer) renderGRPCRespHdrs(
+	resp *grpcclient.Response,
+	fullMethod string,
+	width int,
+) string {
+	if resp == nil {
+		return noResponseMessage
+	}
+	return r.renderHdrDoc(
+		grpcStatusLine(resp, fullMethod),
+		[]hdrPanel{
+			{
+				fields: bodyfmt.HeaderFields(http.Header(resp.Headers)),
+				empty:  "No response headers captured",
+			},
+			{
+				title:  "Trailers",
+				fields: bodyfmt.HeaderFields(http.Header(resp.Trailers)),
+				empty:  "No trailers captured",
+			},
+		},
+		width,
+	)
+}
+
+type hdrPanel struct {
+	title  string
+	fields []bodyfmt.HeaderField
+	empty  string
+}
+
+// Keep at least this much room before rendering a header value inline.
+const minHeaderValueWidth = 8
+
+func (r responseRenderer) renderHdrDoc(sum string, panels []hdrPanel, width int) string {
+	if width <= 0 {
+		width = defaultResponseViewportWidth
+	}
+	var secs []string
+	if strings.TrimSpace(sum) != "" {
+		secs = append(secs, sum)
+	}
+	for _, p := range panels {
+		if sec := r.renderHeaderPanel(p.title, p.fields, p.empty, width); sec != "" {
+			secs = append(secs, sec)
+		}
+	}
+	return joinSections(secs...)
 }
 
 func (r responseRenderer) renderHeaderPanel(
 	title string,
 	fields []bodyfmt.HeaderField,
 	empty string,
+	width int,
 ) string {
+	if width <= 0 {
+		width = defaultResponseViewportWidth
+	}
 	cnt := headerCountLabel(len(fields))
 	head := r.stats.Neutral.Render(cnt)
-	if title != "" {
-		head = r.stats.Heading.Render(title) +
-			r.stats.SubLabel.Render("  ") +
-			r.stats.Neutral.Render(cnt)
+	if title = strings.TrimSpace(title); title != "" {
+		head = lipgloss.JoinHorizontal(
+			lipgloss.Left,
+			r.stats.Heading.Render(title),
+			r.stats.SubLabel.Render(" · "),
+			r.stats.Neutral.Render(cnt),
+		)
 	}
-	sepWidth := lipgloss.Width(cnt)
+	head = renderRuleHead(head, width, r.stats.SubLabel)
 	if len(fields) == 0 {
-		sep := r.stats.SubLabel.Render(strings.Repeat("─", sepWidth))
-		return strings.Join([]string{head, sep, r.stats.Message.Render(empty)}, "\n")
+		return strings.Join([]string{head, r.stats.Message.Render(empty)}, "\n")
 	}
 
-	w := headerNameWidth(fields)
-	vw := headerValueWidth(fields)
-	sep := r.stats.SubLabel.Render(strings.Repeat("─", w+1) + "┬" + strings.Repeat("─", vw+1))
-	lines := []string{head, sep}
+	lines := []string{head}
 	for _, f := range fields {
-		val := f.Value
-		valStyle := r.stats.HeaderValue
-		if strings.TrimSpace(val) == "" {
-			val = "<empty>"
-			valStyle = r.stats.Message
+		if line := r.renderHeaderField(f, width); line != "" {
+			lines = append(lines, line)
 		}
-		lines = append(
-			lines,
-			r.stats.Label.Render(headerNameCell(f.Name, w))+
-				r.stats.SubLabel.Render(" │ ")+
-				valStyle.Render(val),
-		)
 	}
 	return strings.Join(lines, "\n")
 }
 
 func headerCountLabel(n int) string {
 	if n == 1 {
-		return "1 header"
+		return "1 HEADER"
 	}
-	return fmt.Sprintf("%d headers", n)
+	return fmt.Sprintf("%d HEADERS", n)
 }
 
-func headerNameWidth(fields []bodyfmt.HeaderField) int {
-	w := 0
-	for _, f := range fields {
-		if v := lipgloss.Width(f.Name); v > w {
-			w = v
-		}
+func (r responseRenderer) renderHeaderField(f bodyfmt.HeaderField, width int) string {
+	name := strings.TrimSpace(f.Name)
+	if name == "" {
+		return ""
 	}
-	return w
+	val := f.Value
+	st := r.stats.HeaderValue
+	if strings.TrimSpace(val) == "" {
+		val = "<empty>"
+		st = r.stats.Message
+	}
+
+	prefix := r.stats.Label.Render(name + ": ")
+	if width-visibleWidth(prefix) >= minHeaderValueWidth {
+		return strings.Join(renderHdrValue(prefix, val, st, width), "\n")
+	}
+
+	lines := renderHdrName(name, width, r.stats.Label)
+	indent := hdrIndent(width)
+	lines = append(lines, renderHdrValue(indent, val, st, width)...)
+	return strings.Join(lines, "\n")
 }
 
-func headerValueWidth(fields []bodyfmt.HeaderField) int {
-	w := 0
-	for _, f := range fields {
-		val := f.Value
-		if strings.TrimSpace(val) == "" {
-			val = "<empty>"
-		}
-		if v := lipgloss.Width(val); v > w {
-			w = v
-		}
+func renderHdrValue(
+	prefix string,
+	val string,
+	st lipgloss.Style,
+	width int,
+) []string {
+	avail := width - visibleWidth(prefix)
+	if avail < minHeaderValueWidth {
+		avail = width
 	}
-	return w
+	indent := strings.Repeat(" ", visibleWidth(prefix))
+	return renderWrapText(val, prefix, indent, avail, st)
 }
 
-func headerNameCell(name string, w int) string {
-	if w <= 0 {
-		return name
+func renderHdrName(name string, width int, st lipgloss.Style) []string {
+	text := name + ":"
+	if width <= 0 || lipgloss.Width(text) <= width {
+		return []string{st.Render(text)}
 	}
-	pad := w - lipgloss.Width(name)
-	if pad <= 0 {
-		return name
+	indent := hdrIndent(width)
+	segW := width - visibleWidth(indent)
+	if segW < 1 {
+		segW = width
 	}
-	return name + strings.Repeat(" ", pad)
+	return renderWrapText(text, "", indent, segW, st)
+}
+
+func renderWrapText(
+	text string,
+	first string,
+	cont string,
+	width int,
+	st lipgloss.Style,
+) []string {
+	segs := wrapLineSegments(text, width)
+	if len(segs) == 0 {
+		segs = []string{text}
+	}
+	lines := make([]string, 0, len(segs))
+	for i, seg := range segs {
+		if i == 0 {
+			lines = append(lines, first+st.Render(seg))
+			continue
+		}
+		lines = append(lines, cont+st.Render(seg))
+	}
+	return lines
+}
+
+func hdrIndent(width int) string {
+	if width <= 4 {
+		return ""
+	}
+	return "  "
 }
 
 func (r responseRenderer) buildGRPCResponseViews(
@@ -436,14 +547,7 @@ func (r responseRenderer) buildGRPCResponseViews(
 		}
 	}
 
-	statusLine := fmt.Sprintf(
-		"gRPC %s - %s",
-		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
-		resp.StatusCode.String(),
-	)
-	if resp.StatusMessage != "" {
-		statusLine += " (" + resp.StatusMessage + ")"
-	}
+	statusLine := grpcStatusLine(resp, fullMethod)
 
 	viewBody := append([]byte(nil), resp.Body...)
 	if len(viewBody) == 0 && strings.TrimSpace(resp.Message) != "" {
@@ -480,20 +584,8 @@ func (r responseRenderer) buildGRPCResponseViews(
 		pretty:     joinSections(statusLine, bv.pretty),
 		raw:        joinSections(statusLine, bv.raw),
 		rawSummary: statusLine,
-		headers: joinSections(
-			statusLine,
-			r.renderHeaderPanel(
-				"",
-				bodyfmt.HeaderFields(http.Header(resp.Headers)),
-				"No response headers captured",
-			),
-			r.renderHeaderPanel(
-				"Trailers",
-				bodyfmt.HeaderFields(http.Header(resp.Trailers)),
-				"No trailers captured",
-			),
-		),
-		meta: meta,
+		headers:    r.renderGRPCRespHdrs(resp, fullMethod, defaultResponseViewportWidth),
+		meta:       meta,
 		// Snapshot contentType must continue to describe the stored raw body.
 		// The view builder may expose a prettified content type for rendering,
 		// but raw body reload/export paths depend on the wire/raw type here.
@@ -503,6 +595,21 @@ func (r responseRenderer) buildGRPCResponseViews(
 		rawBase64:   bv.rawBase64,
 		rawMode:     bv.mode,
 	}
+}
+
+func grpcStatusLine(resp *grpcclient.Response, fullMethod string) string {
+	if resp == nil {
+		return ""
+	}
+	line := fmt.Sprintf(
+		"gRPC %s - %s",
+		strings.TrimPrefix(strings.TrimSpace(fullMethod), "/"),
+		resp.StatusCode.String(),
+	)
+	if resp.StatusMessage != "" {
+		line += " (" + resp.StatusMessage + ")"
+	}
+	return line
 }
 
 func buildRequestHeaderMap(resp *httpclient.Response) http.Header {

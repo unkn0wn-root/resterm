@@ -46,7 +46,8 @@ func (m *Model) responseCopyPayload() (string, string, *statusMsg) {
 		}
 	}
 
-	content, _ := m.paneContentForTab(m.responsePaneFocus, pane.activeTab)
+	w := responseWrapWidth(pane.activeTab, pane.viewport.Width)
+	content, _ := m.paneContentBase(m.responsePaneFocus, pane.activeTab, w)
 	plain := stripANSIEscape(content)
 	text := withTrailingNewline(plain)
 	return label, text, nil

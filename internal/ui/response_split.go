@@ -625,7 +625,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 
 	sr, sid := paneSnap(pane)
 
-	content, cacheKey := m.paneContentForTabDisplay(id, tab)
+	content, cacheKey := m.paneDisplayContent(id, tab, ww)
 	if content == "" {
 		cache := logoPlaceholderCache(ww, h)
 		pane.setCacheForTab(cacheKey, rawViewText, pane.headersView, cache)
@@ -858,9 +858,10 @@ func ensureResponseMatchInView(pane *responsePaneState, base string) {
 	ensureResponseMatchVisible(&pane.viewport, base, pane.search.matches[idx])
 }
 
-func (m *Model) paneContentBaseForTab(
+func (m *Model) paneContentBase(
 	id responsePaneID,
 	tab responseTab,
+	w int,
 ) (string, responseTab) {
 	pane := m.pane(id)
 	if pane == nil {
@@ -887,16 +888,7 @@ func (m *Model) paneContentBaseForTab(
 	case responseTabRaw:
 		return snapshot.raw, tab
 	case responseTabHeaders:
-		if pane != nil && pane.headersView == headersViewRequest {
-			if strings.TrimSpace(snapshot.requestHeaders) == "" {
-				return "<no request headers>\n", tab
-			}
-			return snapshot.requestHeaders, tab
-		}
-		if strings.TrimSpace(snapshot.headers) == "" {
-			return "<no headers>\n", tab
-		}
-		return snapshot.headers, tab
+		return m.headerContent(pane, w), tab
 	case responseTabExplain:
 		if snapshot.explain.report == nil {
 			return "<no explain>\n", tab
@@ -961,19 +953,18 @@ func (m *Model) paneContentBaseForTab(
 	}
 }
 
-func (m *Model) paneContentForTab(id responsePaneID, tab responseTab) (string, responseTab) {
-	content, tab := m.paneContentBaseForTab(id, tab)
-	return withTrailingNewline(content), tab
-}
-
-func (m *Model) paneContentForTabDisplay(
+func (m *Model) paneDisplayContent(
 	id responsePaneID,
 	tab responseTab,
+	w int,
 ) (string, responseTab) {
-	content, tab := m.paneContentBaseForTab(id, tab)
+	content, tab := m.paneContentBase(id, tab, w)
 	if tab == responseTabHeaders {
 		if pane := m.pane(id); pane != nil && pane.snapshot != nil && pane.snapshot.ready {
-			content = joinSections(m.renderHeaderSubviewSwitch(pane), content)
+			head := m.renderHeaderSubviewHead(pane, w)
+			if head != "" {
+				content = strings.Join([]string{head, trimSection(content)}, "\n")
+			}
 		}
 	}
 	return displayContent(content), tab

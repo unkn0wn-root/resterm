@@ -5,6 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 )
 
 const (
@@ -36,6 +38,18 @@ func (m *Model) renderHeaderSubviewSwitch(pane *responsePaneState) string {
 		m.theme.PaneDivider.Render("│"),
 		req,
 	)
+}
+
+func (m *Model) renderHeaderSubviewHead(pane *responsePaneState, width int) string {
+	sw := m.renderHeaderSubviewSwitch(pane)
+	if sw == "" {
+		return ""
+	}
+	if width <= 0 {
+		width = defaultResponseViewportWidth
+	}
+	rule := m.theme.PaneDivider.Render(strings.Repeat("─", width))
+	return sw + "\n" + rule
 }
 
 func headerSwitchStyle(st lipgloss.Style) lipgloss.Style {
@@ -127,4 +141,51 @@ func headerSubviewAvailable(pane *responsePaneState) bool {
 		return false
 	}
 	return pane.snapshot != nil && pane.snapshot.ready
+}
+
+func (m *Model) headerContent(pane *responsePaneState, width int) string {
+	if pane == nil || pane.snapshot == nil || !pane.snapshot.ready {
+		return ""
+	}
+	snap := pane.snapshot
+	r := m.themeRuntime.responseRenderer(m.theme)
+
+	if pane.headersView == headersViewRequest {
+		switch {
+		case snap.source.hasHTTP():
+			return r.renderHTTPReqHdrs(snap.source.http, width)
+		case snap.source.hasGRPC():
+			return r.renderGRPCReqHdrs(snap.source.grpcReq, width)
+		}
+		if strings.TrimSpace(snap.requestHeaders) == "" {
+			return "<no request headers>\n"
+		}
+		return snap.requestHeaders
+	}
+
+	switch {
+	case snap.source.hasHTTP():
+		return r.renderHTTPRespHdrs(
+			snap.source.http,
+			snap.source.tests,
+			snap.source.scriptErr,
+			width,
+		)
+	case snap.source.hasGRPC():
+		return r.renderGRPCRespHdrs(
+			snap.source.grpc,
+			snap.source.grpcMethod,
+			width,
+		)
+	case len(snap.responseHeaders) > 0:
+		return r.renderHdrDoc("", []hdrPanel{{
+			fields: bodyfmt.HeaderFields(snap.responseHeaders),
+			empty:  "No response headers captured",
+		}}, width)
+	}
+
+	if strings.TrimSpace(snap.headers) == "" {
+		return "<no headers>\n"
+	}
+	return snap.headers
 }

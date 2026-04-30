@@ -401,7 +401,11 @@ func TestPresentHistoryEntryPopulatesTimeline(t *testing.T) {
 	if pane == nil || pane.snapshot != model.responseLatest {
 		t.Fatalf("expected primary pane to reference latest snapshot")
 	}
-	content, _ := model.paneContentForTab(responsePanePrimary, responseTabTimeline)
+	content, _ := model.paneContentBase(
+		responsePanePrimary,
+		responseTabTimeline,
+		defaultResponseViewportWidth,
+	)
 	if !strings.Contains(content, "Timeline") {
 		t.Fatalf("expected timeline content to render, got %q", content)
 	}

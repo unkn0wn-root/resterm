@@ -54,14 +54,7 @@ func renderExplainSection(title, body string, width int, st explainStyles) strin
 		return ""
 	}
 	head := st.sectionTitle.Render(strings.ToUpper(strings.TrimSpace(title)))
-	if rem := width - visibleWidth(head) - 1; rem > 4 {
-		head = lipgloss.JoinHorizontal(
-			lipgloss.Left,
-			head,
-			" ",
-			st.sectionBorder.Render(strings.Repeat("─", rem)),
-		)
-	}
+	head = renderRuleHead(head, width, st.sectionBorder)
 
 	prefix := st.sectionBorder.Render("│ ")
 	lines := strings.Split(body, "\n")

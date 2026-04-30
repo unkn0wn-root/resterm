@@ -129,7 +129,7 @@ func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
 	if strings.Contains(stripANSIEscape(headers), "Response headers") {
 		t.Fatalf("expected response header pane title to be omitted, got %q", headers)
 	}
-	if !strings.Contains(headers, statsNeutralStyle.Render("2 headers")) {
+	if !strings.Contains(headers, statsNeutralStyle.Render("2 HEADERS")) {
 		t.Fatalf("expected colored response header count, got %q", headers)
 	}
 	if !strings.Contains(headers, statsLabelStyle.Render("Content-Type")) {
@@ -204,7 +204,7 @@ func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 		RequestHeaders: http.Header{"X-Test": {"1"}},
 	}
 
-	view := buildHTTPRequestHeadersView(resp)
+	view := defaultResponseRenderer().renderHTTPReqHdrs(resp, defaultResponseViewportWidth)
 	plain := stripANSIEscape(view)
 	if !strings.Contains(plain, "GET https://final.example.com/items") {
 		t.Fatalf("expected request line to use executed method/url, got %q", plain)
@@ -215,91 +215,99 @@ func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 	if strings.Contains(plain, "Request headers") {
 		t.Fatalf("expected request header pane title to be omitted, got %q", plain)
 	}
-	if !strings.Contains(plain, "1 header") {
+	if !strings.Contains(plain, "1 HEADER") {
 		t.Fatalf("expected request header count, got %q", plain)
 	}
 }
 
-func TestHeaderPanelRuleUsesLongestHeaderNameAndValue(t *testing.T) {
+func TestHeaderPanelRuleUsesAvailableWidth(t *testing.T) {
 	renderer := defaultResponseRenderer()
 	view := stripANSIEscape(renderer.renderHeaderPanel(
-		"Response headers",
+		"",
 		[]bodyfmt.HeaderField{
 			{Name: "X", Value: "short"},
-			{Name: "Longer", Value: "long-value"},
+			{Name: "Longer", Value: strings.Repeat("v", 40)},
 		},
 		"empty",
+		32,
 	))
 	lines := strings.Split(view, "\n")
 	if len(lines) < 2 {
-		t.Fatalf("expected heading and rule, got %q", view)
+		t.Fatalf("expected heading and rows, got %q", view)
 	}
-	if got, want := lines[1], strings.Repeat("─", len("Longer")+1)+"┬"+strings.Repeat("─", len("long-value")+1); got != want {
-		t.Fatalf("expected rule %q, got %q", want, got)
+	if got := lipgloss.Width(lines[0]); got != 32 {
+		t.Fatalf("expected heading width 32, got %d in %q", got, lines[0])
 	}
-	if strings.Contains(lines[1], "1 header") {
-		t.Fatalf("rule should not include count text, got %q", lines[1])
+	if !strings.HasPrefix(lines[0], "2 HEADERS ") || !strings.Contains(lines[0], "─") {
+		t.Fatalf("expected count embedded in rule, got %q", lines[0])
+	}
+	if strings.Contains(lines[0], "vvvv") && lipgloss.Width(lines[0]) > 32 {
+		t.Fatalf("heading should not depend on longest value, got %q", lines[0])
 	}
 }
 
-func TestHeaderPanelUntitledEmptyRuleUsesCountWidth(t *testing.T) {
+func TestHeaderPanelEmptyEmbedsCountInRule(t *testing.T) {
 	renderer := defaultResponseRenderer()
-	view := stripANSIEscape(renderer.renderHeaderPanel("", nil, "empty"))
+	view := stripANSIEscape(renderer.renderHeaderPanel("", nil, "empty", 24))
 	lines := strings.Split(view, "\n")
 	if len(lines) < 2 {
-		t.Fatalf("expected heading and rule, got %q", view)
+		t.Fatalf("expected heading and empty message, got %q", view)
 	}
-	if got, want := lines[0], "0 headers"; got != want {
-		t.Fatalf("expected count heading %q, got %q", want, got)
+	if got := lipgloss.Width(lines[0]); got != 24 {
+		t.Fatalf("expected heading width 24, got %d in %q", got, lines[0])
 	}
-	if got, want := lines[1], strings.Repeat("─", len("0 headers")); got != want {
-		t.Fatalf("expected rule %q, got %q", want, got)
+	if !strings.HasPrefix(lines[0], "0 HEADERS ") || !strings.Contains(lines[0], "─") {
+		t.Fatalf("expected count embedded in rule, got %q", lines[0])
+	}
+	if got, want := lines[1], "empty"; got != want {
+		t.Fatalf("expected empty message %q, got %q", want, got)
 	}
 }
 
-func TestHeaderPanelAlignsSeparatorToLongestName(t *testing.T) {
+func TestHeaderPanelWrappedValueKeepsValueIndent(t *testing.T) {
 	renderer := defaultResponseRenderer()
 	view := stripANSIEscape(renderer.renderHeaderPanel(
-		"Response headers",
+		"",
 		[]bodyfmt.HeaderField{
-			{Name: "Access-Control-Allow-Origin", Value: "*"},
+			{Name: "X-Test", Value: "alpha beta gamma delta"},
+		},
+		"empty",
+		18,
+	))
+	lines := strings.Split(view, "\n")
+	if len(lines) < 4 {
+		t.Fatalf("expected wrapped header value, got %q", view)
+	}
+	first := lines[1]
+	next := lines[2]
+	indent := strings.Repeat(" ", len("X-Test: "))
+	if !strings.HasPrefix(first, "X-Test: ") {
+		t.Fatalf("expected first row to start with header name, got %q", first)
+	}
+	if !strings.HasPrefix(next, indent) {
+		t.Fatalf("expected continuation indent %q, got %q in %q", indent, next, view)
+	}
+}
+
+func TestHeaderPanelLongNameStacksValue(t *testing.T) {
+	renderer := defaultResponseRenderer()
+	view := stripANSIEscape(renderer.renderHeaderPanel(
+		"",
+		[]bodyfmt.HeaderField{
 			{Name: "Access-Control-Allow-Credentials", Value: "true"},
 		},
 		"empty",
+		20,
 	))
 	lines := strings.Split(view, "\n")
-	var cols []int
-	for _, line := range lines {
-		idx := strings.IndexRune(line, '│')
-		if idx >= 0 {
-			cols = append(cols, idx)
-		}
+	if len(lines) < 4 {
+		t.Fatalf("expected long name to stack value, got %q", view)
 	}
-	if len(cols) != 2 {
-		t.Fatalf("expected two header rows with separators, got %q", view)
+	if strings.Contains(view, "│") || strings.Contains(view, "┬") {
+		t.Fatalf("expected explain-style fields without table separators, got %q", view)
 	}
-	if cols[0] != cols[1] {
-		t.Fatalf("expected aligned separators, got columns %v in %q", cols, view)
-	}
-}
-
-func TestHeaderPanelRowsStartAtHeaderName(t *testing.T) {
-	renderer := defaultResponseRenderer()
-	view := stripANSIEscape(renderer.renderHeaderPanel(
-		"Response headers",
-		[]bodyfmt.HeaderField{
-			{Name: "Content-Type", Value: "application/json"},
-			{Name: "X-Test", Value: "ok"},
-		},
-		"empty",
-	))
-	for _, line := range strings.Split(view, "\n") {
-		if !strings.Contains(line, "│") {
-			continue
-		}
-		if strings.HasPrefix(line, " ") {
-			t.Fatalf("expected header row to start at header name, got %q in %q", line, view)
-		}
+	if !strings.HasPrefix(lines[len(lines)-1], "  true") {
+		t.Fatalf("expected stacked value indentation, got %q in %q", lines[len(lines)-1], view)
 	}
 }
 

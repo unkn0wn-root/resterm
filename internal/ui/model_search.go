@@ -92,7 +92,7 @@ func (m *Model) responseSearchContent(
 	tab responseTab,
 	width int,
 ) (string, responseTab, string) {
-	content, cacheKey := m.paneContentForTabDisplay(paneID, tab)
+	content, cacheKey := m.paneDisplayContent(paneID, tab, width)
 	if tab == responseTabStats {
 		if pane := m.pane(paneID); pane != nil {
 			if stats := workflowStatsFromPane(pane); stats != nil {

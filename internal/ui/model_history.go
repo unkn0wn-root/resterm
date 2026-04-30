@@ -728,7 +728,11 @@ func (m *Model) handleResponseRendered(msg responseRenderedMsg) tea.Cmd {
 			}
 
 			headersWidth := responseWrapWidth(responseTabHeaders, msg.width)
-			headersBase, _ := m.paneContentForTabDisplay(id, responseTabHeaders)
+			headersBase, _ := m.paneDisplayContent(
+				id,
+				responseTabHeaders,
+				headersWidth,
+			)
 			if shouldInlineWrap(responseTabHeaders, headersBase) {
 				pane.setCacheForTab(
 					responseTabHeaders,
@@ -841,7 +845,7 @@ func (m *Model) consumeGRPCResponse(
 		rawBase64:       views.rawBase64,
 		rawMode:         views.rawMode,
 		responseHeaders: grpcResponseHeaderMap(resp),
-		requestHeaders:  renderer.buildGRPCRequestHeadersView(req),
+		requestHeaders:  renderer.renderGRPCReqHdrs(req, defaultResponseViewportWidth),
 		source:          newGRPCResponseRenderSource(resp, fullMethod, req),
 	}
 	if len(snapshot.body) == 0 {
