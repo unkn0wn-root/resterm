@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
@@ -157,6 +158,54 @@ func TestTabBadgeShortOmitsSpinner(t *testing.T) {
 	want := "P"
 	if got != want {
 		t.Fatalf("expected short badge %q, got %q", want, got)
+	}
+}
+
+func TestRenderTabSegmentConsumesIndicatorPadding(t *testing.T) {
+	st := lipgloss.NewStyle().Padding(0, 2)
+
+	if got := stripANSIEscape(renderTabSegment(st, "Raw", false)); got != "  Raw  " {
+		t.Fatalf("expected unmarked tab spacing, got %q", got)
+	}
+	if got := stripANSIEscape(renderTabSegment(st, "Raw", true)); got != " ▹ Raw  " {
+		t.Fatalf("expected marked tab spacing, got %q", got)
+	}
+}
+
+func TestRenderTabSegmentHandlesCompactPadding(t *testing.T) {
+	compact := lipgloss.NewStyle().Padding(0, 1)
+	if got := stripANSIEscape(renderTabSegment(compact, "Raw", true)); got != "▹ Raw " {
+		t.Fatalf("expected compact marked tab spacing, got %q", got)
+	}
+
+	tight := lipgloss.NewStyle().Padding(0)
+	if got := stripANSIEscape(renderTabSegment(tight, "Raw", true)); got != "▹ Raw" {
+		t.Fatalf("expected tight marked tab spacing, got %q", got)
+	}
+}
+
+func TestAdaptiveTabRowUsesSingleIndicator(t *testing.T) {
+	m := Model{}
+	states := []tabLabelState{
+		{
+			runes:     []rune("Raw"),
+			isActive:  true,
+			length:    3,
+			maxLength: 3,
+		},
+	}
+	plan := tabRowPlan{
+		activeStyle:   lipgloss.NewStyle().Padding(0, 1),
+		inactiveStyle: lipgloss.NewStyle(),
+		badgeStyle:    lipgloss.NewStyle(),
+	}
+
+	row, width := m.renderTabRowFromStates(states, plan, true)
+	if got := stripANSIEscape(row); got != "▹ Raw " {
+		t.Fatalf("expected adaptive marked tab spacing, got %q", got)
+	}
+	if width != lipgloss.Width("▹ Raw ") {
+		t.Fatalf("expected adaptive width to match rendered text, got %d", width)
 	}
 }
 

@@ -97,7 +97,7 @@ const (
 	noResponseMessage         = "░█▀▄░█▀▀░█▀▀░▀█▀░█▀▀░█▀▄░█▄█\n░█▀▄░█▀▀░▀▀█░░█░░█▀▀░█▀▄░█░█\n░▀░▀░▀▀▀░▀▀▀░░▀░░▀▀▀░▀░▀░▀░▀"
 	historySnippetPlaceholder = "[HTML content omitted]"
 	historySnippetMaxLines    = 24
-	tabIndicatorPrefix        = "▸ "
+	tabIndicatorPrefix        = "▹ "
 )
 
 const (
