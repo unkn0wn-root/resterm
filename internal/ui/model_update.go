@@ -1567,24 +1567,22 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
 		case "right", "ctrl+l", "l":
 			return combine(m.activateNextTabFor(m.responsePaneFocus))
-		case "enter", " ", "space":
+		case "enter":
 			if pane != nil {
 				switch pane.activeTab {
 				case responseTabHeaders:
 					return combine(m.cycleHeaderSubview())
 				case responseTabHistory:
-					if keyStr != "enter" {
-						break
-					}
 					return combine(m.loadHistorySelection(false))
 				case responseTabStats:
-					if keyStr != "enter" {
-						break
-					}
 					if workflowStatsFromPane(pane) != nil {
 						return combine(m.toggleWorkflowStatsExpansion())
 					}
 				}
+			}
+		case " ", "space":
+			if pane != nil && pane.activeTab == responseTabHeaders {
+				return combine(m.cycleHeaderSubview())
 			}
 		}
 		if pane != nil && pane.activeTab == responseTabHistory {

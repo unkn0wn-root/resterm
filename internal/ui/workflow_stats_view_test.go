@@ -188,6 +188,34 @@ func TestWorkflowStatsDetailFocusLetsJScrollDetail(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatsSpaceDoesNotToggleDetailFocus(t *testing.T) {
+	model := New(Config{})
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane")
+	}
+	pane.viewport = viewport.New(120, 14)
+	pane.activeTab = responseTabStats
+
+	view := workflowStatsTestView()
+	pane.snapshot = &responseSnapshot{
+		id:            "wf-focus",
+		stats:         "workflow stats",
+		statsKind:     statsReportKindWorkflow,
+		workflowStats: view,
+		ready:         true,
+	}
+
+	if cmd := model.handleKey(tea.KeyMsg{Type: tea.KeySpace}); cmd != nil {
+		_ = cmd()
+	}
+	if view.detailFocus {
+		t.Fatal("expected space to leave workflow detail focus unchanged")
+	}
+}
+
 func TestActivateWorkflowStatsViewFocusesResponsePane(t *testing.T) {
 	model := New(Config{})
 	model.focus = focusWorkflows
