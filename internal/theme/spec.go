@@ -40,6 +40,7 @@ type StylesSpec struct {
 	HeaderValue                   *StyleSpec `json:"header_value"                     toml:"header_value"`
 	HeaderSeparator               *StyleSpec `json:"header_separator"                 toml:"header_separator"`
 	StatusBar                     *StyleSpec `json:"status_bar"                       toml:"status_bar"`
+	StatusBarInfo                 *StyleSpec `json:"status_bar_info"                  toml:"status_bar_info"`
 	StatusBarKey                  *StyleSpec `json:"status_bar_key"                   toml:"status_bar_key"`
 	StatusBarValue                *StyleSpec `json:"status_bar_value"                 toml:"status_bar_value"`
 	CommandBar                    *StyleSpec `json:"command_bar"                      toml:"command_bar"`
@@ -262,6 +263,9 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		return Theme{}, err
 	}
 	if err := apply("status_bar", &cloned.StatusBar, spec.Styles.StatusBar); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("status_bar_info", &cloned.StatusBarInfo, spec.Styles.StatusBarInfo); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("status_bar_key", &cloned.StatusBarKey, spec.Styles.StatusBarKey); err != nil {

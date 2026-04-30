@@ -30,6 +30,10 @@ bold = true
 foreground = "#f8fafc"
 background = "#111c33"
 
+[styles.status_bar_info]
+foreground = "#94a3b8"
+bold = true
+
 [styles.status_bar_key]
 foreground = "#f97316"
 bold = true
