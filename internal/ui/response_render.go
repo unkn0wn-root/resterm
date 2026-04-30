@@ -243,7 +243,7 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 	rawView := joinSections(plainSummary, bv.raw)
 	headersView := r.headerView(
 		summary,
-		"Response headers",
+		"",
 		resp.Headers,
 		"No response headers captured",
 	)
@@ -288,7 +288,7 @@ func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response)
 	}
 
 	hdrs := buildRequestHeaderMap(resp)
-	return r.headerView(reqLineColored, "Request headers", hdrs, "No request headers captured")
+	return r.headerView(reqLineColored, "", hdrs, "No request headers captured")
 }
 
 func (r responseRenderer) buildGRPCRequestHeadersView(req *restfile.Request) string {
@@ -337,15 +337,21 @@ func (r responseRenderer) renderHeaderPanel(
 	empty string,
 ) string {
 	cnt := headerCountLabel(len(fields))
-	head := r.stats.Heading.Render(title) +
-		r.stats.SubLabel.Render("  ") +
-		r.stats.Neutral.Render(cnt)
-	sep := r.stats.SubLabel.Render(strings.Repeat("─", lipgloss.Width(title)))
+	head := r.stats.Neutral.Render(cnt)
+	if title != "" {
+		head = r.stats.Heading.Render(title) +
+			r.stats.SubLabel.Render("  ") +
+			r.stats.Neutral.Render(cnt)
+	}
+	sepWidth := lipgloss.Width(cnt)
 	if len(fields) == 0 {
+		sep := r.stats.SubLabel.Render(strings.Repeat("─", sepWidth))
 		return strings.Join([]string{head, sep, r.stats.Message.Render(empty)}, "\n")
 	}
 
 	w := headerNameWidth(fields)
+	vw := headerValueWidth(fields)
+	sep := r.stats.SubLabel.Render(strings.Repeat("─", w+1) + "┬" + strings.Repeat("─", vw+1))
 	lines := []string{head, sep}
 	for _, f := range fields {
 		val := f.Value
@@ -356,7 +362,7 @@ func (r responseRenderer) renderHeaderPanel(
 		}
 		lines = append(
 			lines,
-			"  "+r.stats.Label.Render(headerNameCell(f.Name, w))+
+			r.stats.Label.Render(headerNameCell(f.Name, w))+
 				r.stats.SubLabel.Render(" │ ")+
 				valStyle.Render(val),
 		)
@@ -375,6 +381,20 @@ func headerNameWidth(fields []bodyfmt.HeaderField) int {
 	w := 0
 	for _, f := range fields {
 		if v := lipgloss.Width(f.Name); v > w {
+			w = v
+		}
+	}
+	return w
+}
+
+func headerValueWidth(fields []bodyfmt.HeaderField) int {
+	w := 0
+	for _, f := range fields {
+		val := f.Value
+		if strings.TrimSpace(val) == "" {
+			val = "<empty>"
+		}
+		if v := lipgloss.Width(val); v > w {
 			w = v
 		}
 	}
@@ -463,7 +483,7 @@ func (r responseRenderer) buildGRPCResponseViews(
 		headers: joinSections(
 			statusLine,
 			r.renderHeaderPanel(
-				"Response headers",
+				"",
 				bodyfmt.HeaderFields(http.Header(resp.Headers)),
 				"No response headers captured",
 			),
