@@ -991,12 +991,8 @@ func (m Model) buildTabRowContent(
 			inactiveStyle: m.theme.TabInactive,
 			badgeStyle:    baseBadgeStyle.PaddingLeft(2),
 			badgeText:     badge,
-			labelFn: func(full string, isActive bool) string {
-				text := full
-				if isActive && focused {
-					text = tabIndicatorPrefix + text
-				}
-				return text
+			labelFn: func(full string) string {
+				return full
 			},
 		},
 		{
@@ -1011,13 +1007,10 @@ func (m Model) buildTabRowContent(
 			inactiveStyle: m.theme.TabInactive.Padding(0),
 			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
 			badgeText:     shortBadge,
-			labelFn: func(full string, isActive bool) string {
+			labelFn: func(full string) string {
 				label := firstRuneUpper(full)
 				if label == "" {
 					label = "-"
-				}
-				if isActive && focused {
-					return tabIndicatorPrefix + label
 				}
 				return label
 			},
@@ -1032,7 +1025,7 @@ func (m Model) buildTabRowContent(
 		if plan.adaptive {
 			row, fits = m.buildAdaptiveTabRow(tabs, labels, active, focused, plan, limit)
 		} else {
-			row, fits = m.buildStaticTabRow(tabs, labels, active, plan, limit)
+			row, fits = m.buildStaticTabRow(tabs, labels, active, focused, plan, limit)
 		}
 		if fits {
 			return row
@@ -1156,18 +1149,19 @@ func (m Model) buildStaticTabRow(
 	tabs []responseTab,
 	labels []string,
 	active responseTab,
+	focused bool,
 	plan tabRowPlan,
 	limit int,
 ) (string, bool) {
 	segments := make([]string, 0, len(tabs))
 	for i, tab := range tabs {
 		full := labels[i]
-		text := plan.labelFn(full, tab == active)
+		text := plan.labelFn(full)
 		style := plan.inactiveStyle
 		if tab == active {
 			style = plan.activeStyle
 		}
-		segments = append(segments, style.Render(text))
+		segments = append(segments, renderTabSegment(style, text, tab == active && focused))
 	}
 	row := strings.Join(segments, " ")
 	badge := plan.badgeStyle.Render(plan.badgeText)
@@ -1243,19 +1237,26 @@ func (m Model) renderTabRowFromStates(
 			length = state.maxLength
 		}
 		label := string(state.runes[:length])
-		if state.isActive && focused {
-			label = tabIndicatorPrefix + label
-		}
 		style := plan.inactiveStyle
 		if state.isActive {
 			style = plan.activeStyle
 		}
-		segments = append(segments, style.Render(label))
+		segments = append(segments, renderTabSegment(style, label, state.isActive && focused))
 	}
 	row := strings.Join(segments, " ")
 	badge := plan.badgeStyle.Render(plan.badgeText)
 	row = lipgloss.JoinHorizontal(lipgloss.Top, row, badge)
 	return row, lipgloss.Width(row)
+}
+
+func renderTabSegment(st lipgloss.Style, label string, marked bool) string {
+	if marked {
+		label = tabIndicatorPrefix + label
+		if left := st.GetPaddingLeft(); left > 0 {
+			st = st.PaddingLeft(left - 1)
+		}
+	}
+	return st.Render(label)
 }
 
 type tabLabelState struct {
@@ -1270,7 +1271,7 @@ type tabRowPlan struct {
 	inactiveStyle lipgloss.Style
 	badgeStyle    lipgloss.Style
 	badgeText     string
-	labelFn       func(full string, isActive bool) string
+	labelFn       func(full string) string
 	adaptive      bool
 }
 
