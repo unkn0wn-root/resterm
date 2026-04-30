@@ -23,8 +23,8 @@ const (
 )
 
 const (
-	statusInfoLightColor    = "#2563eb"
-	statusInfoDarkColor     = "#38bdf8"
+	statusInfoLightColor    = "#475569"
+	statusInfoDarkColor     = "#94a3b8"
 	statusWarnLightColor    = "#d97706"
 	statusWarnDarkColor     = "#FACC15"
 	statusErrorLightColor   = "#dc2626"
