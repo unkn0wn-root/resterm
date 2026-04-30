@@ -48,6 +48,7 @@ type Theme struct {
 	HeaderValue                   lipgloss.Style
 	HeaderSeparator               lipgloss.Style
 	StatusBar                     lipgloss.Style
+	StatusBarInfo                 lipgloss.Style
 	StatusBarKey                  lipgloss.Style
 	StatusBarValue                lipgloss.Style
 	CommandBar                    lipgloss.Style

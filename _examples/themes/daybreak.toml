@@ -70,6 +70,10 @@ bold = true
 foreground = "#f8fafc"
 background = "#1f2937"
 
+[styles.status_bar_info]
+foreground = "#2563eb"
+bold = true
+
 [styles.status_bar_key]
 foreground = "#facc15"
 bold = true

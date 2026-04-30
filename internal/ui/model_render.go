@@ -17,7 +17,20 @@ import (
 
 const (
 	statusBarLeftMaxRatio = 0.7
+	statusBarSep          = "    "
+	statusBarSepWidth     = 4
 	helpKeyColumnWidth    = 32
+)
+
+const (
+	statusInfoLightColor    = "#2563eb"
+	statusInfoDarkColor     = "#38bdf8"
+	statusWarnLightColor    = "#d97706"
+	statusWarnDarkColor     = "#FACC15"
+	statusErrorLightColor   = "#dc2626"
+	statusErrorDarkColor    = "#FF6E6E"
+	statusSuccessLightColor = "#15803d"
+	statusSuccessDarkColor  = "#6EF17E"
 )
 
 var headerSegmentIcons = map[string]string{
@@ -36,6 +49,39 @@ const (
 	testStatusFail  testStatus = "fail"
 	testStatusError testStatus = "error"
 )
+
+type statusBarSeg struct {
+	key string
+	val string
+}
+
+type statusBarLeft struct {
+	msg          string
+	level        statusLevel
+	ctx          string
+	ctxTruncated bool
+	segs         []statusBarSeg
+}
+
+type statusBarPart struct {
+	text string
+	view string
+}
+
+type statusBarFrame struct {
+	width         int
+	leftAvailable int
+	maxLeft       int
+	minGap        int
+}
+
+type statusBarLayout struct {
+	status string
+	level  statusLevel
+	frame  statusBarFrame
+	left   statusBarLeft
+	right  statusBarPart
+}
 
 func headerIconFor(label string) string {
 	key := strings.ToLower(strings.TrimSpace(label))
@@ -1851,190 +1897,372 @@ func headerTestIcon(status testStatus) string {
 }
 
 func (m Model) renderStatusBar() string {
-	statusText := m.statusMessage.text
-	if statusText == "" {
-		switch {
-		case m.fileMissing:
-			statusText = "File missing on disk"
-		case m.fileStale:
-			statusText = "File changed on disk"
-		case m.dirty:
-			statusText = "Unsaved changes"
-		default:
-			statusText = "Ready"
-		}
-	}
+	status, level := m.statusBarMessage()
+	ly := m.statusBarLayout(status, level)
+	return m.theme.StatusBar.Render(m.renderStatusBarLine(ly))
+}
 
-	minimizedText := m.minimizedStatusText()
-	versionText := strings.TrimSpace(m.cfg.Version)
-	if versionText == "" {
-		versionText = strings.TrimSpace(m.updateVersion)
+func (m Model) statusBarLayout(status string, level statusLevel) statusBarLayout {
+	width := maxInt(m.width-2, 1)
+	right := m.statusBarRight(width)
+	frame := newStatusBarFrame(width, right.text)
+
+	segs := m.statusBarSegments()
+	ctx := statusBarSegmentsText(segs)
+	frame.fit(status, ctx)
+
+	return statusBarLayout{
+		status: status,
+		level:  level,
+		frame:  frame,
+		left:   statusBarLeftFor(status, level, segs, frame.maxLeft),
+		right:  right,
 	}
-	lineWidth := maxInt(m.width-2, 1)
-	if versionText != "" {
-		versionText = truncateToWidth(versionText, lineWidth)
-	}
-	rightParts := make([]string, 0, 2)
-	if minimizedText != "" {
-		rightParts = append(rightParts, minimizedText)
-	}
-	if versionText != "" {
-		rightParts = append(rightParts, versionText)
-	}
-	rightText := strings.Join(rightParts, "  ")
-	if lipgloss.Width(rightText) > lineWidth {
-		rightText = truncateToWidth(rightText, lineWidth)
-	}
-	rightWidth := lipgloss.Width(rightText)
+}
+
+func newStatusBarFrame(width int, right string) statusBarFrame {
+	rightWidth := lipgloss.Width(right)
 	minGap := 1
-	if rightWidth == 0 || lineWidth <= rightWidth {
+	if rightWidth == 0 || width <= rightWidth {
 		minGap = 0
 	}
 
-	leftAvailable := lineWidth
-	maxLeftWidth := lineWidth
+	leftAvailable := width
+	maxLeft := width
 	if statusBarLeftMaxRatio > 0 && statusBarLeftMaxRatio < 1 {
-		ratioWidth := int(math.Round(float64(lineWidth) * statusBarLeftMaxRatio))
-		if ratioWidth < maxLeftWidth {
-			maxLeftWidth = ratioWidth
+		ratioWidth := int(math.Round(float64(width) * statusBarLeftMaxRatio))
+		if ratioWidth < maxLeft {
+			maxLeft = ratioWidth
 		}
 	}
 	if rightWidth > 0 {
-		available := lineWidth - rightWidth - minGap
+		available := width - rightWidth - minGap
 		if minGap == 0 {
-			available = lineWidth - rightWidth
+			available = width - rightWidth
 		}
 		if available < 0 {
 			available = 0
 		}
 		leftAvailable = available
-		if available < maxLeftWidth {
-			maxLeftWidth = available
+		if available < maxLeft {
+			maxLeft = available
 		}
 	}
 
-	const sep = "    "
-	sepWidth := lipgloss.Width(sep)
-	ellipsisWidth := lipgloss.Width("…")
+	return statusBarFrame{
+		width:         width,
+		leftAvailable: leftAvailable,
+		maxLeft:       maxLeft,
+		minGap:        minGap,
+	}
+}
 
-	segments := make([]string, 0, 4)
+func (f *statusBarFrame) fit(status, ctx string) {
+	ctxWidth := lipgloss.Width(ctx)
+	if ctxWidth > 0 {
+		if ctxWidth > f.leftAvailable {
+			f.maxLeft = f.leftAvailable
+		} else if ctxWidth > f.maxLeft {
+			f.maxLeft = ctxWidth
+		}
+	}
+	if status != "" && ctxWidth > 0 {
+		minRequired := ctxWidth + statusBarSepWidth + lipgloss.Width("…")
+		if minRequired <= f.leftAvailable && f.maxLeft < minRequired {
+			f.maxLeft = minRequired
+		}
+	}
+	if f.maxLeft > f.leftAvailable {
+		f.maxLeft = f.leftAvailable
+	}
+	if f.maxLeft < 0 {
+		f.maxLeft = 0
+	}
+}
+
+func statusBarLeftFor(
+	status string,
+	level statusLevel,
+	segs []statusBarSeg,
+	width int,
+) statusBarLeft {
+	msg := status
+	ctx := statusBarSegmentsText(segs)
+	ctxTruncated := false
+
+	switch {
+	case width <= 0:
+		msg = ""
+		ctx = ""
+	case ctx != "":
+		ctxWidth := lipgloss.Width(ctx)
+		if ctxWidth > width {
+			ctx = truncateToWidth(ctx, width)
+			ctxTruncated = true
+			msg = ""
+			break
+		}
+		available := width - ctxWidth
+		if available < 0 {
+			available = 0
+		}
+		if msg != "" {
+			if available > statusBarSepWidth {
+				msg = truncateToWidth(msg, available-statusBarSepWidth)
+			} else {
+				msg = ""
+			}
+		}
+	default:
+		msg = truncateToWidth(msg, width)
+	}
+
+	left := statusBarLeft{
+		msg:          msg,
+		level:        level,
+		ctx:          ctx,
+		ctxTruncated: ctxTruncated,
+		segs:         segs,
+	}
+	if left.String() == "" && width > 0 {
+		left = statusBarLeft{
+			msg:   truncateToWidth(status, width),
+			level: level,
+		}
+	}
+	return left
+}
+
+func (m Model) renderStatusBarLine(ly statusBarLayout) string {
+	left := ly.fitLeft()
+	if ly.right.text != "" {
+		return m.renderStatusBarLineWithRight(ly, left)
+	}
+	if left.String() == "" {
+		left = statusBarLeft{
+			msg:   truncateToWidth(ly.status, ly.frame.width),
+			level: ly.level,
+		}
+	}
+	return m.renderStatusBarLeft(left)
+}
+
+func (ly statusBarLayout) fitLeft() statusBarLeft {
+	left := ly.left
+	if ly.frame.maxLeft <= 0 {
+		return left
+	}
+	text := left.String()
+	truncated := truncateToWidth(text, ly.frame.maxLeft)
+	if truncated == text {
+		return left
+	}
+	return statusBarLeft{
+		msg:   truncated,
+		level: ly.level,
+	}
+}
+
+func (m Model) renderStatusBarLineWithRight(ly statusBarLayout, left statusBarLeft) string {
+	leftText := left.String()
+	leftWidth := lipgloss.Width(leftText)
+	rightWidth := lipgloss.Width(ly.right.text)
+	if leftWidth == 0 {
+		pad := maxInt(ly.frame.width-rightWidth, 0)
+		if ly.frame.minGap > 0 && pad > ly.frame.width-rightWidth-ly.frame.minGap {
+			pad = ly.frame.width - rightWidth - ly.frame.minGap
+			if pad < 0 {
+				pad = 0
+			}
+		}
+		return strings.Repeat(" ", pad) + ly.right.view
+	}
+
+	gap := ly.frame.width - rightWidth - leftWidth
+	if gap < 0 {
+		gap = 0
+	}
+	if ly.frame.minGap > 0 && gap < ly.frame.minGap {
+		gap = ly.frame.minGap
+	}
+	return m.renderStatusBarLeft(left) + strings.Repeat(" ", gap) + ly.right.view
+}
+
+func (m Model) statusBarMessage() (string, statusLevel) {
+	if m.statusMessage.text != "" {
+		return m.statusMessage.text, m.statusMessage.level
+	}
+	switch {
+	case m.fileMissing:
+		return "File missing on disk", statusWarn
+	case m.fileStale:
+		return "File changed on disk", statusWarn
+	case m.dirty:
+		return "Unsaved changes", statusWarn
+	default:
+		return "Ready", statusInfo
+	}
+}
+
+func (m Model) statusBarSegments() []statusBarSeg {
+	segs := make([]statusBarSeg, 0, 4)
 	if m.currentFile != "" {
-		segments = append(segments, filepath.Base(m.currentFile))
+		segs = append(segs, statusBarSeg{val: filepath.Base(m.currentFile)})
 	}
-	segments = append(segments, fmt.Sprintf("Focus: %s", m.focusLabel()))
+	segs = append(segs, statusBarSeg{key: "Focus", val: m.focusLabel()})
 	if m.focus == focusEditor {
-		mode := "VIEW"
-		if m.editorInsertMode {
-			mode = "INSERT"
-		} else if m.editor.isVisualLineMode() {
-			mode = "VISUAL LINE"
-		} else if m.editor.isVisualMode() {
-			mode = "VISUAL"
-		}
-		segments = append(segments, fmt.Sprintf("Mode: %s", mode))
+		segs = append(segs, statusBarSeg{key: "Mode", val: m.editorModeLabel()})
 	}
 	if m.zoomActive {
-		segments = append(segments, fmt.Sprintf("Zoom: %s", m.collapsedStatusLabel(m.zoomRegion)))
+		segs = append(segs, statusBarSeg{
+			key: "Zoom",
+			val: m.collapsedStatusLabel(m.zoomRegion),
+		})
+	}
+	return segs
+}
+
+func (m Model) editorModeLabel() string {
+	switch {
+	case m.editorInsertMode:
+		return "INSERT"
+	case m.editor.isVisualLineMode():
+		return "VISUAL LINE"
+	case m.editor.isVisualMode():
+		return "VISUAL"
+	default:
+		return "VIEW"
+	}
+}
+
+func (m Model) statusBarRight(width int) statusBarPart {
+	version := strings.TrimSpace(m.cfg.Version)
+	if version == "" {
+		version = strings.TrimSpace(m.updateVersion)
+	}
+	if version != "" {
+		version = truncateToWidth(version, width)
 	}
 
-	staticText := strings.Join(segments, sep)
-	staticWidth := lipgloss.Width(staticText)
-	if staticWidth > 0 {
-		if staticWidth > leftAvailable {
-			maxLeftWidth = leftAvailable
-		} else if staticWidth > maxLeftWidth {
-			maxLeftWidth = staticWidth
+	type part struct {
+		text string
+		view string
+	}
+	parts := make([]part, 0, 2)
+	if min := m.minimizedStatusText(); min != "" {
+		parts = append(parts, part{text: ansi.Strip(min), view: min})
+	}
+	if version != "" {
+		parts = append(parts, part{
+			text: version,
+			view: m.theme.StatusBarValue.Render(version),
+		})
+	}
+
+	texts := make([]string, 0, len(parts))
+	views := make([]string, 0, len(parts))
+	for _, p := range parts {
+		texts = append(texts, p.text)
+		views = append(views, p.view)
+	}
+	text := strings.Join(texts, "  ")
+	view := strings.Join(views, "  ")
+	if lipgloss.Width(text) > width {
+		text = truncateToWidth(text, width)
+		view = m.theme.StatusBarValue.Render(text)
+	}
+	return statusBarPart{text: text, view: view}
+}
+
+func (m Model) renderStatusBarLeft(left statusBarLeft) string {
+	parts := make([]string, 0, 2)
+	if left.msg != "" {
+		parts = append(parts, m.statusBarMessageStyle(left.level).Render(left.msg))
+	}
+	if left.ctx != "" {
+		parts = append(parts, m.renderStatusBarContext(left.ctx, left.ctxTruncated, left.segs))
+	}
+	return strings.Join(parts, statusBarSep)
+}
+
+func (m Model) renderStatusBarContext(text string, truncated bool, segs []statusBarSeg) string {
+	if truncated || len(segs) == 0 {
+		return m.theme.StatusBarValue.Render(text)
+	}
+	parts := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		if seg.key == "" {
+			parts = append(parts, m.theme.StatusBarValue.Render(seg.val))
+			continue
 		}
+		key := m.theme.StatusBarKey.Render(seg.key + ":")
+		val := m.theme.StatusBarValue.Render(seg.val)
+		parts = append(parts, key+" "+val)
 	}
-	if statusText != "" && staticWidth > 0 {
-		minRequired := staticWidth + sepWidth + ellipsisWidth
-		if minRequired <= leftAvailable && maxLeftWidth < minRequired {
-			maxLeftWidth = minRequired
-		}
-	}
-	if maxLeftWidth > leftAvailable {
-		maxLeftWidth = leftAvailable
-	}
-	if maxLeftWidth < 0 {
-		maxLeftWidth = 0
-	}
+	return strings.Join(parts, statusBarSep)
+}
 
-	maxContentWidth := maxLeftWidth
-	messageText := statusText
-
-	if maxContentWidth <= 0 {
-		staticText = ""
-		messageText = ""
-	} else if staticText != "" {
-		staticWidth := lipgloss.Width(staticText)
-		if staticWidth > maxContentWidth {
-			staticText = truncateToWidth(staticText, maxContentWidth)
-			messageText = ""
-		} else {
-			available := maxContentWidth - staticWidth
-			if available < 0 {
-				available = 0
-			}
-			if messageText != "" {
-				if available > sepWidth {
-					available -= sepWidth
-					messageText = truncateToWidth(messageText, available)
-				} else {
-					messageText = ""
-				}
-			}
-		}
-	} else {
-		messageText = truncateToWidth(messageText, maxContentWidth)
+func (m Model) statusBarMessageStyle(level statusLevel) lipgloss.Style {
+	switch level {
+	case statusWarn:
+		return m.statusBarFg(
+			m.theme.StatusBarKey,
+			statusWarnLightColor,
+			statusWarnDarkColor,
+		).Bold(true)
+	case statusError:
+		return m.statusBarFg(
+			m.theme.Error,
+			statusErrorLightColor,
+			statusErrorDarkColor,
+		).Bold(true)
+	case statusSuccess:
+		return m.statusBarFg(
+			m.theme.Success,
+			statusSuccessLightColor,
+			statusSuccessDarkColor,
+		).Bold(true)
+	default:
+		return m.statusBarFg(
+			m.theme.StatusBarInfo,
+			statusInfoLightColor,
+			statusInfoDarkColor,
+		).Bold(true)
 	}
+}
 
-	var builder strings.Builder
-	if messageText != "" {
-		builder.WriteString(messageText)
+func (m Model) statusBarFg(st lipgloss.Style, light, dark string) lipgloss.Style {
+	if fg := st.GetForeground(); theme.ColorDefined(fg) {
+		return lipgloss.NewStyle().Foreground(fg)
 	}
-	if staticText != "" {
-		if builder.Len() > 0 {
-			builder.WriteString(sep)
-		}
-		builder.WriteString(staticText)
-	}
+	return lipgloss.NewStyle().
+		Foreground(theme.ColorForAppearance(m.themeRuntime.appearance, light, dark))
+}
 
-	lineContent := builder.String()
-	if lineContent == "" && maxContentWidth > 0 {
-		lineContent = truncateToWidth(statusText, maxContentWidth)
+func (s statusBarSeg) String() string {
+	if s.key == "" {
+		return s.val
 	}
+	return s.key + ": " + s.val
+}
 
-	if rightWidth > 0 {
-		if maxLeftWidth > 0 {
-			lineContent = truncateToWidth(lineContent, maxLeftWidth)
-		}
-		leftWidth := lipgloss.Width(lineContent)
-		spaceWidth := lineWidth - rightWidth - leftWidth
-		if spaceWidth < 0 {
-			spaceWidth = 0
-		}
-		if leftWidth > 0 {
-			if minGap > 0 && spaceWidth < minGap {
-				spaceWidth = minGap
-			}
-			lineContent = lineContent + strings.Repeat(" ", spaceWidth) + rightText
-		} else {
-			pad := maxInt(lineWidth-rightWidth, 0)
-			if minGap > 0 && pad > lineWidth-rightWidth-minGap {
-				pad = lineWidth - rightWidth - minGap
-				if pad < 0 {
-					pad = 0
-				}
-			}
-			lineContent = strings.Repeat(" ", pad) + rightText
-		}
+func (l statusBarLeft) String() string {
+	parts := make([]string, 0, 2)
+	if l.msg != "" {
+		parts = append(parts, l.msg)
 	}
-
-	if lineContent == "" {
-		lineContent = truncateToWidth(statusText, lineWidth)
+	if l.ctx != "" {
+		parts = append(parts, l.ctx)
 	}
+	return strings.Join(parts, statusBarSep)
+}
 
-	return m.theme.StatusBar.Render(lineContent)
+func statusBarSegmentsText(segs []statusBarSeg) string {
+	parts := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		parts = append(parts, seg.String())
+	}
+	return strings.Join(parts, statusBarSep)
 }
 
 func (m Model) minimizedStatusText() string {
