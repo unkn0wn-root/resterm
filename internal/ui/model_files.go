@@ -56,9 +56,6 @@ func (m *Model) openFile(path string) tea.Cmd {
 	m.rebuildNavigator(entries)
 	m.dirty = false
 	m.watchFile(path, data)
-	m.setStatusMessage(
-		statusMsg{text: fmt.Sprintf("Opened %s", filepath.Base(path)), level: statusSuccess},
-	)
 	m.setHistoryScopeForFile(path)
 	m.syncHistory()
 	if len(m.requestItems) > 0 {
