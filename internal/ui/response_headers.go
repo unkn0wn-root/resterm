@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"net/http"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -143,6 +144,55 @@ func headerSubviewAvailable(pane *responsePaneState) bool {
 	return pane.snapshot != nil && pane.snapshot.ready
 }
 
+func headerSnap(s *responseSnapshot, view headersViewMode) string {
+	if s == nil {
+		return ""
+	}
+	if view == headersViewRequest {
+		if strings.TrimSpace(s.requestHeaders) == "" {
+			return "<no request headers>\n"
+		}
+		return s.requestHeaders
+	}
+	if strings.TrimSpace(s.headers) == "" {
+		return "<no headers>\n"
+	}
+	return s.headers
+}
+
+func headerCopy(s *responseSnapshot, view headersViewMode) string {
+	if h := headerMap(s, view); len(h) > 0 {
+		return bodyfmt.FormatHeaders(h)
+	}
+	return headerSnap(s, view)
+}
+
+func headerMap(s *responseSnapshot, view headersViewMode) http.Header {
+	if s == nil {
+		return nil
+	}
+	if view == headersViewRequest {
+		switch {
+		case s.source.hasHTTP():
+			return buildRequestHeaderMap(s.source.http)
+		case s.source.hasGRPC():
+			return grpcRequestHeaderMap(s.source.grpcReq)
+		default:
+			return nil
+		}
+	}
+	switch {
+	case s.source.hasHTTP():
+		return s.source.http.Headers
+	case s.source.hasGRPC():
+		return grpcResponseHeaderMap(s.source.grpc)
+	case len(s.responseHeaders) > 0:
+		return s.responseHeaders
+	default:
+		return nil
+	}
+}
+
 func (m *Model) headerContent(pane *responsePaneState, width int) string {
 	if pane == nil || pane.snapshot == nil || !pane.snapshot.ready {
 		return ""
@@ -157,10 +207,7 @@ func (m *Model) headerContent(pane *responsePaneState, width int) string {
 		case snap.source.hasGRPC():
 			return r.renderGRPCReqHdrs(snap.source.grpcReq, width)
 		}
-		if strings.TrimSpace(snap.requestHeaders) == "" {
-			return "<no request headers>\n"
-		}
-		return snap.requestHeaders
+		return headerSnap(snap, pane.headersView)
 	}
 
 	switch {
@@ -184,8 +231,5 @@ func (m *Model) headerContent(pane *responsePaneState, width int) string {
 		}}, width)
 	}
 
-	if strings.TrimSpace(snap.headers) == "" {
-		return "<no headers>\n"
-	}
-	return snap.headers
+	return headerSnap(snap, pane.headersView)
 }

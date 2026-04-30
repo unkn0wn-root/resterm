@@ -46,11 +46,27 @@ func (m *Model) responseCopyPayload() (string, string, *statusMsg) {
 		}
 	}
 
-	w := responseWrapWidth(pane.activeTab, pane.viewport.Width)
-	content, _ := m.paneContentBase(m.responsePaneFocus, pane.activeTab, w)
+	content := responseCopyText(pane)
 	plain := stripANSIEscape(content)
 	text := withTrailingNewline(plain)
 	return label, text, nil
+}
+
+func responseCopyText(p *responsePaneState) string {
+	if p == nil || p.snapshot == nil {
+		return ""
+	}
+	s := p.snapshot
+	switch p.activeTab {
+	case responseTabPretty:
+		return s.pretty
+	case responseTabRaw:
+		return s.raw
+	case responseTabHeaders:
+		return headerCopy(s, p.headersView)
+	default:
+		return ""
+	}
 }
 
 func responseCopyTabLabel(tab responseTab) (string, bool) {
