@@ -101,7 +101,11 @@ func TestPaneContentBaseForExplainRendersReport(t *testing.T) {
 		},
 	}
 
-	out, tab := model.paneContentBaseForTab(responsePanePrimary, responseTabExplain)
+	out, tab := model.paneContentBase(
+		responsePanePrimary,
+		responseTabExplain,
+		defaultResponseViewportWidth,
+	)
 	if tab != responseTabExplain {
 		t.Fatalf("expected explain tab, got %v", tab)
 	}

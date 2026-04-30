@@ -130,7 +130,7 @@ func (m *Model) respFmtCmd(
 			raw:            views.raw,
 			rawSummary:     views.rawSummary,
 			headers:        views.headers,
-			requestHeaders: renderer.buildHTTPRequestHeadersView(rc),
+			requestHeaders: renderer.renderHTTPReqHdrs(rc, defaultResponseViewportWidth),
 			width:          w,
 			body:           append([]byte(nil), rc.Body...),
 			meta:           views.meta,

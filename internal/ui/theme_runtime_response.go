@@ -108,7 +108,7 @@ func (m *Model) rerenderHTTPResponseSnapshot(
 	snapshot.raw = views.raw
 	snapshot.rawSummary = views.rawSummary
 	snapshot.headers = views.headers
-	snapshot.requestHeaders = renderer.buildHTTPRequestHeadersView(resp)
+	snapshot.requestHeaders = renderer.renderHTTPReqHdrs(resp, defaultResponseViewportWidth)
 	snapshot.body = append([]byte(nil), resp.Body...)
 	snapshot.bodyMeta = views.meta
 	snapshot.contentType = views.contentType
@@ -138,7 +138,10 @@ func (m *Model) rerenderGRPCResponseSnapshot(
 	snapshot.raw = views.raw
 	snapshot.rawSummary = views.rawSummary
 	snapshot.headers = views.headers
-	snapshot.requestHeaders = renderer.buildGRPCRequestHeadersView(snapshot.source.grpcReq)
+	snapshot.requestHeaders = renderer.renderGRPCReqHdrs(
+		snapshot.source.grpcReq,
+		defaultResponseViewportWidth,
+	)
 	snapshot.body = append([]byte(nil), resp.Wire...)
 	if len(snapshot.body) == 0 {
 		snapshot.body = append([]byte(nil), resp.Body...)

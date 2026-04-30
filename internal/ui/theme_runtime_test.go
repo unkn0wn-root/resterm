@@ -209,7 +209,7 @@ func TestApplyThemeDefinitionRerendersHTTPSnapshotsAndClearsPaneCaches(t *testin
 		EffectiveURL: "https://api.example.com/items",
 	}
 	initial := buildHTTPResponseViews(resp, nil, nil)
-	requestHeaders := buildHTTPRequestHeadersView(resp)
+	requestHeaders := defaultResponseRenderer().renderHTTPReqHdrs(resp, defaultResponseViewportWidth)
 	snapshot := &responseSnapshot{
 		id:             "snap",
 		pretty:         initial.pretty,
@@ -250,7 +250,7 @@ func TestApplyThemeDefinitionRerendersHTTPSnapshotsAndClearsPaneCaches(t *testin
 
 	expectedRenderer := model.themeRuntime.responseRenderer(model.theme)
 	expected := expectedRenderer.buildHTTPResponseViews(resp, nil, nil)
-	expectedRequestHeaders := expectedRenderer.buildHTTPRequestHeadersView(resp)
+	expectedRequestHeaders := expectedRenderer.renderHTTPReqHdrs(resp, defaultResponseViewportWidth)
 
 	if snapshot.pretty != expected.pretty {
 		t.Fatalf("expected themed pretty response to rerender")
