@@ -126,8 +126,11 @@ func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
 	if strings.Contains(raw, "\x1b[") {
 		t.Fatalf("expected raw view without ANSI codes, got %q", raw)
 	}
-	if !strings.Contains(headers, statsHeadingStyle.Render("Response headers")) {
-		t.Fatalf("expected colored response headers heading, got %q", headers)
+	if strings.Contains(stripANSIEscape(headers), "Response headers") {
+		t.Fatalf("expected response header pane title to be omitted, got %q", headers)
+	}
+	if !strings.Contains(headers, statsNeutralStyle.Render("2 headers")) {
+		t.Fatalf("expected colored response header count, got %q", headers)
 	}
 	if !strings.Contains(headers, statsLabelStyle.Render("Content-Type")) {
 		t.Fatalf("expected colored header names, got %q", headers)
@@ -209,27 +212,48 @@ func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 	if strings.Contains(plain, "{{env}}") {
 		t.Fatalf("expected expanded URL to omit template placeholder, got %q", plain)
 	}
-	if !strings.Contains(plain, "Request headers") {
-		t.Fatalf("expected request headers heading, got %q", plain)
+	if strings.Contains(plain, "Request headers") {
+		t.Fatalf("expected request header pane title to be omitted, got %q", plain)
+	}
+	if !strings.Contains(plain, "1 header") {
+		t.Fatalf("expected request header count, got %q", plain)
 	}
 }
 
-func TestHeaderPanelRuleUsesTitleWidth(t *testing.T) {
+func TestHeaderPanelRuleUsesLongestHeaderNameAndValue(t *testing.T) {
 	renderer := defaultResponseRenderer()
 	view := stripANSIEscape(renderer.renderHeaderPanel(
 		"Response headers",
-		[]bodyfmt.HeaderField{{Name: "X-Test", Value: "ok"}},
+		[]bodyfmt.HeaderField{
+			{Name: "X", Value: "short"},
+			{Name: "Longer", Value: "long-value"},
+		},
 		"empty",
 	))
 	lines := strings.Split(view, "\n")
 	if len(lines) < 2 {
 		t.Fatalf("expected heading and rule, got %q", view)
 	}
-	if got, want := lines[1], strings.Repeat("─", len("Response headers")); got != want {
+	if got, want := lines[1], strings.Repeat("─", len("Longer")+1)+"┬"+strings.Repeat("─", len("long-value")+1); got != want {
 		t.Fatalf("expected rule %q, got %q", want, got)
 	}
 	if strings.Contains(lines[1], "1 header") {
 		t.Fatalf("rule should not include count text, got %q", lines[1])
+	}
+}
+
+func TestHeaderPanelUntitledEmptyRuleUsesCountWidth(t *testing.T) {
+	renderer := defaultResponseRenderer()
+	view := stripANSIEscape(renderer.renderHeaderPanel("", nil, "empty"))
+	lines := strings.Split(view, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected heading and rule, got %q", view)
+	}
+	if got, want := lines[0], "0 headers"; got != want {
+		t.Fatalf("expected count heading %q, got %q", want, got)
+	}
+	if got, want := lines[1], strings.Repeat("─", len("0 headers")); got != want {
+		t.Fatalf("expected rule %q, got %q", want, got)
 	}
 }
 
@@ -256,6 +280,26 @@ func TestHeaderPanelAlignsSeparatorToLongestName(t *testing.T) {
 	}
 	if cols[0] != cols[1] {
 		t.Fatalf("expected aligned separators, got columns %v in %q", cols, view)
+	}
+}
+
+func TestHeaderPanelRowsStartAtHeaderName(t *testing.T) {
+	renderer := defaultResponseRenderer()
+	view := stripANSIEscape(renderer.renderHeaderPanel(
+		"Response headers",
+		[]bodyfmt.HeaderField{
+			{Name: "Content-Type", Value: "application/json"},
+			{Name: "X-Test", Value: "ok"},
+		},
+		"empty",
+	))
+	for _, line := range strings.Split(view, "\n") {
+		if !strings.Contains(line, "│") {
+			continue
+		}
+		if strings.HasPrefix(line, " ") {
+			t.Fatalf("expected header row to start at header name, got %q in %q", line, view)
+		}
 	}
 }
 
