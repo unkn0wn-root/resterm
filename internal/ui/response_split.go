@@ -971,6 +971,11 @@ func (m *Model) paneContentForTabDisplay(
 	tab responseTab,
 ) (string, responseTab) {
 	content, tab := m.paneContentBaseForTab(id, tab)
+	if tab == responseTabHeaders {
+		if pane := m.pane(id); pane != nil && pane.snapshot != nil && pane.snapshot.ready {
+			content = joinSections(m.renderHeaderSubviewSwitch(pane), content)
+		}
+	}
 	return displayContent(content), tab
 }
 
@@ -1407,48 +1412,4 @@ func (m *Model) selectTimelineTab() tea.Cmd {
 	pane.invalidateCaches()
 	pane.restoreScrollForActiveTab()
 	return batchCommands(focusCmd, m.syncResponsePane(paneID))
-}
-
-func (m *Model) toggleHeaderPreview() tea.Cmd {
-	focusCmd := m.setFocus(focusResponse)
-	m.ensurePaneFocusValid()
-
-	paneID := m.responsePaneFocus
-	if !m.responseSplit {
-		paneID = responsePanePrimary
-	}
-	pane := m.pane(paneID)
-	if pane == nil {
-		return batchCommands(focusCmd, func() tea.Msg {
-			return statusMsg{text: "Response pane unavailable", level: statusWarn}
-		})
-	}
-
-	if pane.snapshot == nil || !pane.snapshot.ready {
-		return batchCommands(focusCmd, func() tea.Msg {
-			return statusMsg{text: "No response available", level: statusWarn}
-		})
-	}
-
-	if pane.activeTab != responseTabHeaders {
-		pane.setActiveTab(responseTabHeaders)
-	}
-
-	pane.setCurrPosition()
-
-	next := headersViewRequest
-	note := "Showing request headers (including cookies)"
-	if pane.headersView == headersViewRequest {
-		next = headersViewResponse
-		note = "Showing response headers"
-	}
-	pane.setHeadersView(next)
-	pane.restoreScrollForActiveTab()
-	pane.setCurrPosition()
-
-	cmd := m.syncResponsePane(paneID)
-	status := func() tea.Msg {
-		return statusMsg{text: note, level: statusInfo}
-	}
-	return batchCommands(focusCmd, cmd, status)
 }

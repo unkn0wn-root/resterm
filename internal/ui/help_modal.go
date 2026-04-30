@@ -246,10 +246,7 @@ func (m Model) helpSections() []helpSection {
 				},
 				{"Enter / Esc", "Workflow tab: focus detail / return to step list"},
 				{"j / k / PgUp / PgDn", "Workflow tab: step navigation or focused detail scroll"},
-				{
-					m.helpActionKey(bindings.ActionToggleHeaderPreview, "g Shift+H"),
-					"Toggle request/response headers view",
-				},
+				{"Enter / Space", "Headers tab: switch response / request"},
 				{
 					m.helpActionKey(bindings.ActionCycleRawView, "g b"),
 					"Cycle raw view: text / hex / base64 (summary for large binary)",

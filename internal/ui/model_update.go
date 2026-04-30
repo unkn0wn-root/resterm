@@ -1017,7 +1017,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionExplainRequest:
 		return m.explainActiveRequest(), true
 	case bindings.ActionToggleHeaderPreview:
-		return m.toggleHeaderPreview(), true
+		return m.activateHeaderSubviewFromBinding(), true
 	case bindings.ActionCycleRawView:
 		return m.cycleRawViewMode(), true
 	case bindings.ActionShowRawDump:
@@ -1567,12 +1567,20 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			return combine(m.activatePrevTabFor(m.responsePaneFocus))
 		case "right", "ctrl+l", "l":
 			return combine(m.activateNextTabFor(m.responsePaneFocus))
-		case "enter":
+		case "enter", " ", "space":
 			if pane != nil {
 				switch pane.activeTab {
+				case responseTabHeaders:
+					return combine(m.cycleHeaderSubview())
 				case responseTabHistory:
+					if keyStr != "enter" {
+						break
+					}
 					return combine(m.loadHistorySelection(false))
 				case responseTabStats:
+					if keyStr != "enter" {
+						break
+					}
 					if workflowStatsFromPane(pane) != nil {
 						return combine(m.toggleWorkflowStatsExpansion())
 					}

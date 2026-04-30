@@ -12,6 +12,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -125,10 +126,10 @@ func TestBuildHTTPResponseViewsColorsSummaryExceptRaw(t *testing.T) {
 	if strings.Contains(raw, "\x1b[") {
 		t.Fatalf("expected raw view without ANSI codes, got %q", raw)
 	}
-	if !strings.Contains(headers, statsHeadingStyle.Render("Headers:")) {
-		t.Fatalf("expected colored headers heading, got %q", headers)
+	if !strings.Contains(headers, statsHeadingStyle.Render("Response headers")) {
+		t.Fatalf("expected colored response headers heading, got %q", headers)
 	}
-	if !strings.Contains(headers, statsLabelStyle.Render("Content-Type:")) {
+	if !strings.Contains(headers, statsLabelStyle.Render("Content-Type")) {
 		t.Fatalf("expected colored header names, got %q", headers)
 	}
 	if !strings.Contains(headers, statsHeaderValueStyle.Render("application/json")) {
@@ -207,6 +208,54 @@ func TestBuildHTTPRequestHeadersViewUsesExecutedRequest(t *testing.T) {
 	}
 	if strings.Contains(plain, "{{env}}") {
 		t.Fatalf("expected expanded URL to omit template placeholder, got %q", plain)
+	}
+	if !strings.Contains(plain, "Request headers") {
+		t.Fatalf("expected request headers heading, got %q", plain)
+	}
+}
+
+func TestHeaderPanelRuleUsesTitleWidth(t *testing.T) {
+	renderer := defaultResponseRenderer()
+	view := stripANSIEscape(renderer.renderHeaderPanel(
+		"Response headers",
+		[]bodyfmt.HeaderField{{Name: "X-Test", Value: "ok"}},
+		"empty",
+	))
+	lines := strings.Split(view, "\n")
+	if len(lines) < 2 {
+		t.Fatalf("expected heading and rule, got %q", view)
+	}
+	if got, want := lines[1], strings.Repeat("─", len("Response headers")); got != want {
+		t.Fatalf("expected rule %q, got %q", want, got)
+	}
+	if strings.Contains(lines[1], "1 header") {
+		t.Fatalf("rule should not include count text, got %q", lines[1])
+	}
+}
+
+func TestHeaderPanelAlignsSeparatorToLongestName(t *testing.T) {
+	renderer := defaultResponseRenderer()
+	view := stripANSIEscape(renderer.renderHeaderPanel(
+		"Response headers",
+		[]bodyfmt.HeaderField{
+			{Name: "Access-Control-Allow-Origin", Value: "*"},
+			{Name: "Access-Control-Allow-Credentials", Value: "true"},
+		},
+		"empty",
+	))
+	lines := strings.Split(view, "\n")
+	var cols []int
+	for _, line := range lines {
+		idx := strings.IndexRune(line, '│')
+		if idx >= 0 {
+			cols = append(cols, idx)
+		}
+	}
+	if len(cols) != 2 {
+		t.Fatalf("expected two header rows with separators, got %q", view)
+	}
+	if cols[0] != cols[1] {
+		t.Fatalf("expected aligned separators, got columns %v in %q", cols, view)
 	}
 }
 

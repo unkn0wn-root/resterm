@@ -105,7 +105,7 @@ func TestComputeDiffForHeadersIncludesBody(t *testing.T) {
 		!strings.Contains(plain, "\"value\": \"two\"") {
 		t.Fatalf("expected body diff, got %q", plain)
 	}
-	if !strings.Contains(plain, "Headers") {
+	if !strings.Contains(strings.ToLower(plain), "headers") {
 		t.Fatalf("expected headers section in diff, got %q", plain)
 	}
 }
