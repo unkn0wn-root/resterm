@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 )
@@ -222,7 +223,6 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 
 	summary := r.buildRespSum(resp, tests, scriptErr)
 	prettySummary := r.buildRespSumPretty(resp, tests, scriptErr)
-	coloredHeaders := r.formatHTTPHeaders(resp.Headers, true)
 
 	contentType := ""
 	if resp.Headers != nil {
@@ -238,15 +238,15 @@ func (r responseRenderer) buildHTTPResponseViewsCtx(
 		"",
 	)
 
-	headersSectionColored := ""
-	if coloredHeaders != "" {
-		headersSectionColored = r.stats.Heading.Render("Headers:") + "\n" + coloredHeaders
-	}
-
 	plainSummary := stripANSIEscape(summary)
 	prettyView := joinSections(prettySummary, bv.pretty)
 	rawView := joinSections(plainSummary, bv.raw)
-	headersView := joinSections(summary, headersSectionColored)
+	headersView := r.headerView(
+		summary,
+		"Response headers",
+		resp.Headers,
+		"No response headers captured",
+	)
 
 	return responseViews{
 		pretty:      prettyView,
@@ -288,15 +288,108 @@ func (r responseRenderer) buildHTTPRequestHeadersView(resp *httpclient.Response)
 	}
 
 	hdrs := buildRequestHeaderMap(resp)
-	colored := r.formatHTTPHeaders(hdrs, true)
-	section := r.stats.Heading.Render("Headers:")
-	if strings.TrimSpace(colored) != "" {
-		section += "\n" + colored
-	} else {
-		section += "\n<none>"
+	return r.headerView(reqLineColored, "Request headers", hdrs, "No request headers captured")
+}
+
+func (r responseRenderer) buildGRPCRequestHeadersView(req *restfile.Request) string {
+	if req == nil {
+		return r.headerView("", "Request metadata", nil, "Request metadata not captured")
 	}
 
-	return joinSections(reqLineColored, section)
+	var lines []string
+	if req.GRPC != nil {
+		if method := strings.TrimSpace(req.GRPC.FullMethod); method != "" {
+			lines = append(
+				lines,
+				renderLabelValue(
+					"Method",
+					strings.TrimPrefix(method, "/"),
+					r.stats.Label,
+					r.stats.Value,
+				),
+			)
+		}
+		if target := strings.TrimSpace(req.GRPC.Target); target != "" {
+			lines = append(lines, renderLabelValue("Target", target, r.stats.Label, r.stats.Value))
+		}
+	}
+	if len(lines) == 0 {
+		if target := strings.TrimSpace(req.URL); target != "" {
+			lines = append(lines, renderLabelValue("Target", target, r.stats.Label, r.stats.Value))
+		}
+	}
+
+	return r.headerView(
+		strings.Join(lines, "\n"),
+		"Request metadata",
+		grpcRequestHeaderMap(req),
+		"No request metadata captured",
+	)
+}
+
+func (r responseRenderer) headerView(sum, title string, h http.Header, empty string) string {
+	return joinSections(sum, r.renderHeaderPanel(title, bodyfmt.HeaderFields(h), empty))
+}
+
+func (r responseRenderer) renderHeaderPanel(
+	title string,
+	fields []bodyfmt.HeaderField,
+	empty string,
+) string {
+	cnt := headerCountLabel(len(fields))
+	head := r.stats.Heading.Render(title) +
+		r.stats.SubLabel.Render("  ") +
+		r.stats.Neutral.Render(cnt)
+	sep := r.stats.SubLabel.Render(strings.Repeat("─", lipgloss.Width(title)))
+	if len(fields) == 0 {
+		return strings.Join([]string{head, sep, r.stats.Message.Render(empty)}, "\n")
+	}
+
+	w := headerNameWidth(fields)
+	lines := []string{head, sep}
+	for _, f := range fields {
+		val := f.Value
+		valStyle := r.stats.HeaderValue
+		if strings.TrimSpace(val) == "" {
+			val = "<empty>"
+			valStyle = r.stats.Message
+		}
+		lines = append(
+			lines,
+			"  "+r.stats.Label.Render(headerNameCell(f.Name, w))+
+				r.stats.SubLabel.Render(" │ ")+
+				valStyle.Render(val),
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func headerCountLabel(n int) string {
+	if n == 1 {
+		return "1 header"
+	}
+	return fmt.Sprintf("%d headers", n)
+}
+
+func headerNameWidth(fields []bodyfmt.HeaderField) int {
+	w := 0
+	for _, f := range fields {
+		if v := lipgloss.Width(f.Name); v > w {
+			w = v
+		}
+	}
+	return w
+}
+
+func headerNameCell(name string, w int) string {
+	if w <= 0 {
+		return name
+	}
+	pad := w - lipgloss.Width(name)
+	if pad <= 0 {
+		return name
+	}
+	return name + strings.Repeat(" ", pad)
 }
 
 func (r responseRenderer) buildGRPCResponseViews(
@@ -314,27 +407,14 @@ func (r responseRenderer) buildGRPCResponseViews(
 		}
 	}
 
-	headersBuilder := strings.Builder{}
 	contentType := strings.TrimSpace(resp.ContentType)
 	if len(resp.Headers) > 0 {
-		headersBuilder.WriteString("Headers:\n")
 		for name, values := range resp.Headers {
-			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
 			if strings.EqualFold(name, "Content-Type") && contentType == "" && len(values) > 0 {
 				contentType = strings.TrimSpace(values[0])
 			}
 		}
 	}
-	if len(resp.Trailers) > 0 {
-		if headersBuilder.Len() > 0 {
-			headersBuilder.WriteString("\n")
-		}
-		headersBuilder.WriteString("Trailers:\n")
-		for name, values := range resp.Trailers {
-			fmt.Fprintf(&headersBuilder, "%s: %s\n", name, strings.Join(values, ", "))
-		}
-	}
-	headersContent := strings.TrimRight(headersBuilder.String(), "\n")
 
 	statusLine := fmt.Sprintf(
 		"gRPC %s - %s",
@@ -380,8 +460,20 @@ func (r responseRenderer) buildGRPCResponseViews(
 		pretty:     joinSections(statusLine, bv.pretty),
 		raw:        joinSections(statusLine, bv.raw),
 		rawSummary: statusLine,
-		headers:    joinSections(statusLine, headersContent),
-		meta:       meta,
+		headers: joinSections(
+			statusLine,
+			r.renderHeaderPanel(
+				"Response headers",
+				bodyfmt.HeaderFields(http.Header(resp.Headers)),
+				"No response headers captured",
+			),
+			r.renderHeaderPanel(
+				"Trailers",
+				bodyfmt.HeaderFields(http.Header(resp.Trailers)),
+				"No trailers captured",
+			),
+		),
+		meta: meta,
 		// Snapshot contentType must continue to describe the stored raw body.
 		// The view builder may expose a prettified content type for rendering,
 		// but raw body reload/export paths depend on the wire/raw type here.
@@ -416,6 +508,31 @@ func buildRequestHeaderMap(resp *httpclient.Response) http.Header {
 		h.Set("Content-Length", strconv.FormatInt(resp.ReqLen, 10))
 	}
 
+	return h
+}
+
+func grpcRequestHeaderMap(req *restfile.Request) http.Header {
+	if req == nil {
+		return nil
+	}
+
+	h := make(http.Header)
+	if req.GRPC != nil {
+		for _, pair := range req.GRPC.Metadata {
+			name := strings.TrimSpace(pair.Key)
+			if name != "" {
+				h.Add(name, pair.Value)
+			}
+		}
+	}
+	for name, values := range req.Headers {
+		for _, value := range values {
+			h.Add(name, value)
+		}
+	}
+	if len(h) == 0 {
+		return nil
+	}
 	return h
 }
 
@@ -543,38 +660,6 @@ func cloneHeaders(h http.Header) http.Header {
 		clone[k] = append([]string(nil), values...)
 	}
 	return clone
-}
-
-func (r responseRenderer) formatHTTPHeaders(headers http.Header, colored bool) string {
-	fields := bodyfmt.HeaderFields(headers)
-	if len(fields) == 0 {
-		return ""
-	}
-	builder := strings.Builder{}
-	for _, field := range fields {
-		if colored {
-			if strings.TrimSpace(field.Value) == "" {
-				builder.WriteString(r.stats.Label.Render(field.Name + ":"))
-			} else {
-				builder.WriteString(
-					renderLabelValue(
-						field.Name,
-						field.Value,
-						r.stats.Label,
-						r.stats.HeaderValue,
-					),
-				)
-			}
-		} else {
-			if strings.TrimSpace(field.Value) == "" {
-				fmt.Fprintf(&builder, "%s:", field.Name)
-			} else {
-				fmt.Fprintf(&builder, "%s: %s", field.Name, field.Value)
-			}
-		}
-		builder.WriteString("\n")
-	}
-	return strings.TrimRight(builder.String(), "\n")
 }
 
 func trimResponseBody(body string) string {

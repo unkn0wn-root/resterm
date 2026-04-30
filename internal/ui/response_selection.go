@@ -863,7 +863,7 @@ func (m *Model) respSelText(p *responsePaneState) (string, bool) {
 	}
 
 	labelTab := p.activeTab
-	content, _ := m.paneContentForTab(m.responsePaneFocus, labelTab)
+	content, _ := m.paneContentForTabDisplay(m.responsePaneFocus, labelTab)
 	plain := stripANSIEscape(content)
 	base := withTrailingNewline(plain)
 	lines := strings.Split(base, "\n")

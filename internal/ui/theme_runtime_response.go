@@ -9,12 +9,14 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 type responseRenderSource struct {
 	http       *httpclient.Response
 	grpc       *grpcclient.Response
+	grpcReq    *restfile.Request
 	grpcMethod string
 	tests      []scripts.TestResult
 	scriptErr  error
@@ -35,9 +37,11 @@ func newHTTPResponseRenderSource(
 func newGRPCResponseRenderSource(
 	resp *grpcclient.Response,
 	fullMethod string,
+	req *restfile.Request,
 ) responseRenderSource {
 	return responseRenderSource{
 		grpc:       cloneGRPCResponse(resp),
+		grpcReq:    cloneRequest(req),
 		grpcMethod: strings.TrimSpace(fullMethod),
 	}
 }
@@ -134,6 +138,7 @@ func (m *Model) rerenderGRPCResponseSnapshot(
 	snapshot.raw = views.raw
 	snapshot.rawSummary = views.rawSummary
 	snapshot.headers = views.headers
+	snapshot.requestHeaders = renderer.buildGRPCRequestHeadersView(snapshot.source.grpcReq)
 	snapshot.body = append([]byte(nil), resp.Wire...)
 	if len(snapshot.body) == 0 {
 		snapshot.body = append([]byte(nil), resp.Body...)

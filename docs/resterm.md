@@ -216,7 +216,6 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `explain_request` | Prepare an Explain preview for the active request without sending it. | `g x` |
 | `cancel_run` | Cancel the in-flight request, compare, profile, or workflow run. | `ctrl+c` |
 | `copy_response_tab` | Copy the focused Pretty/Raw/Headers response tab to the clipboard. | `ctrl+shift+c`, `g y` |
-| `toggle_header_preview` | Toggle request vs response headers in the Headers tab. | `g shift+h` |
 
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
@@ -237,7 +236,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 - **Pretty**: formatted JSON (or best-effort formatting for other types).
 - **Raw**: exact payload text.
 - **Stream**: live transcript viewer for WebSocket and SSE sessions with bookmarking and console integration.
-- **Headers**: response headers by default; press `g+Shift+H` to toggle into the sent request headers view (cookies included) and back.
+- **Headers**: response and request header subviews with a visible in-pane switcher. Press `Enter` or `Space` while focused on the Headers tab to switch between the response headers and the sent request headers (cookies included).
 - **Profile** / **Workflow**: latency summaries and histograms from `@profile` runs plus step-by-step workflow breakdowns. The tab label follows the current run type. Workflow results render as a stable summary plus step list and selected-step detail view. Use `j` / `k` or arrow keys to move between steps, `Enter` to focus the selected step detail, `j` / `k` or `PageUp` / `PageDown` to scroll that detail, and `Esc` or `Enter` to return to the step list.
 - **Timeline**: per-phase HTTP timings with budget overlays; available whenever tracing is enabled.
 - **Diff**: compare the focused pane against the other response pane.

@@ -40,6 +40,35 @@ func TestDefaultMapContainsExpectedBindings(t *testing.T) {
 	if !m.HasChordPrefix("g") {
 		t.Fatalf("expected HasChordPrefix('g') to be true")
 	}
+
+	if binding, ok := m.ResolveChord("g", "shift+h"); ok {
+		t.Fatalf(
+			"expected deprecated header preview binding to have no default, got %v",
+			binding.Action,
+		)
+	}
+}
+
+func TestDeprecatedHeaderPreviewActionCanStillBeConfigured(t *testing.T) {
+	dir := t.TempDir()
+	payload := `
+[bindings]
+toggle_header_preview = ["g shift+h"]
+`
+	path := filepath.Join(dir, "bindings.toml")
+	if err := os.WriteFile(path, []byte(payload), 0o644); err != nil {
+		t.Fatalf("write bindings: %v", err)
+	}
+
+	m, _, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+
+	binding, ok := m.ResolveChord("g", "shift+h")
+	if !ok || binding.Action != ActionToggleHeaderPreview {
+		t.Fatalf("expected g shift+h -> deprecated header preview, got %+v (ok=%v)", binding, ok)
+	}
 }
 
 func TestLoadOverridesBindings(t *testing.T) {
