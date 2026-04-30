@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.34.1](https://github.com/unkn0wn-root/resterm/compare/v0.33.4...v0.34.1) (2026-04-30)
+
+
+### Features
+
+* add small table to headers and remove head ([#253](https://github.com/unkn0wn-root/resterm/issues/253)) ([eef8926](https://github.com/unkn0wn-root/resterm/commit/eef8926a456b9e0a848291eea0686d05fdcd8112))
+* redesign headers tab ([#252](https://github.com/unkn0wn-root/resterm/issues/252)) ([f8dcedb](https://github.com/unkn0wn-root/resterm/commit/f8dcedb772e97e6438a067f1c7e5afdb9c5ed6d0))
+
+
+### Bug Fixes
+
+* remove extra space for active pane ([#255](https://github.com/unkn0wn-root/resterm/issues/255)) ([b8f84fb](https://github.com/unkn0wn-root/resterm/commit/b8f84fb0b7d561f621ebd3ccd89cde18c071281d))
+
 ### [0.33.4](https://github.com/unkn0wn-root/resterm/compare/v0.33.3...v0.33.4) (2026-04-28)
 
 
