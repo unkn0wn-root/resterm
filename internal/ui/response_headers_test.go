@@ -64,10 +64,16 @@ func TestHeadersSubviewSwitchesWithEnterAndSpace(t *testing.T) {
 	}
 }
 
-func TestHeadersSwitchDoesNotWrapWithPaddedTabStyles(t *testing.T) {
+func TestHeadersSwitchUsesMarkerAndIgnoresTabStyles(t *testing.T) {
 	model := New(Config{})
-	model.theme.TabActive = model.theme.TabActive.Padding(0, 4).Width(8)
-	model.theme.TabInactive = model.theme.TabInactive.Padding(0, 3).Width(7)
+	model.theme.TabActive = model.theme.TabActive.
+		Padding(0, 4).
+		Width(8).
+		Background(lipgloss.Color("9"))
+	model.theme.TabInactive = model.theme.TabInactive.
+		Padding(0, 3).
+		Width(7).
+		Background(lipgloss.Color("8"))
 	pane := model.pane(responsePanePrimary)
 	pane.headersView = headersViewResponse
 
@@ -75,33 +81,58 @@ func TestHeadersSwitchDoesNotWrapWithPaddedTabStyles(t *testing.T) {
 	if strings.Contains(view, "\n") {
 		t.Fatalf("expected one-line header switch, got %q", view)
 	}
+	if view != "● Response │ Request" {
+		t.Fatalf("expected response marker switch, got %q", view)
+	}
 
-	parts := strings.Split(view, "│")
-	if len(parts) != 2 {
-		t.Fatalf("expected two switch cells, got %q", view)
+	pane.headersView = headersViewRequest
+	view = stripANSIEscape(model.renderHeaderSubviewSwitch(pane))
+	if strings.Contains(view, "\n") {
+		t.Fatalf("expected one-line header switch, got %q", view)
 	}
-	left := strings.TrimRight(parts[0], " ")
-	right := strings.TrimLeft(parts[1], " ")
-	if lipgloss.Width(left) != lipgloss.Width(right) {
-		t.Fatalf("expected equal cell widths, got %q (%d) and %q (%d)",
-			left,
-			lipgloss.Width(left),
-			right,
-			lipgloss.Width(right),
-		)
-	}
-	if !strings.Contains(left, "Response") || !strings.Contains(right, "Request") {
-		t.Fatalf("expected complete labels, got %q", view)
+	if view != "Response │● Request" {
+		t.Fatalf("expected request marker switch, got %q", view)
 	}
 }
 
-func TestHeaderSwitchCellPadsPlainTextBeforeStyling(t *testing.T) {
-	cell := headerSwitchCell("Request", lipgloss.Width("Response"))
-	if got := lipgloss.Width(cell); got != lipgloss.Width("Response")+2 {
-		t.Fatalf("expected padded cell width 10, got %d (%q)", got, cell)
+func TestHeaderSwitchTextMarksActiveItem(t *testing.T) {
+	if got := headerSwitchText("Response", true); got != "● Response" {
+		t.Fatalf("expected active marker item, got %q", got)
 	}
-	if !strings.HasPrefix(cell, " ") || !strings.HasSuffix(cell, "  ") {
-		t.Fatalf("expected centered padding around shorter label, got %q", cell)
+	if got := headerSwitchText("Request", false); got != "Request" {
+		t.Fatalf("expected inactive marker spacing, got %q", got)
+	}
+}
+
+func TestHeaderSwitchStyleUsesTabTextStateOnly(t *testing.T) {
+	model := New(Config{})
+	active := headerSwitchStyle(model.theme, true)
+	inactive := headerSwitchStyle(model.theme, false)
+
+	if got := active.GetForeground(); got != model.theme.TabActive.GetForeground() {
+		t.Fatalf("expected active tab foreground, got %v", got)
+	}
+	if _, ok := active.GetBackground().(lipgloss.NoColor); !ok {
+		t.Fatalf("expected active background to be unset, got %v", active.GetBackground())
+	}
+	if !active.GetBold() {
+		t.Fatalf("expected active item to be bold")
+	}
+	if active.GetFaint() {
+		t.Fatalf("expected active item not to be faint")
+	}
+
+	if got := inactive.GetForeground(); got != model.theme.TabInactive.GetForeground() {
+		t.Fatalf("expected inactive tab foreground, got %v", got)
+	}
+	if _, ok := inactive.GetBackground().(lipgloss.NoColor); !ok {
+		t.Fatalf("expected inactive background to be unset, got %v", inactive.GetBackground())
+	}
+	if inactive.GetBold() {
+		t.Fatalf("expected inactive item not to be bold")
+	}
+	if !inactive.GetFaint() {
+		t.Fatalf("expected inactive item to be faint")
 	}
 }
 

@@ -8,36 +8,29 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 const (
 	headerResponseLabel = "Response"
 	headerRequestLabel  = "Request"
+	headerActiveMark    = "●"
 )
 
 func (m *Model) renderHeaderSubviewSwitch(pane *responsePaneState) string {
 	if pane == nil {
 		return ""
 	}
-	w := headerSwitchWidth(headerResponseLabel, headerRequestLabel)
-	resCell := headerSwitchCell(headerResponseLabel, w)
-	reqCell := headerSwitchCell(headerRequestLabel, w)
-	active := headerSwitchStyle(m.theme.TabActive)
-	inactive := headerSwitchStyle(m.theme.TabInactive)
-
-	res := inactive.Render(resCell)
-	req := inactive.Render(reqCell)
-	if pane.headersView == headersViewRequest {
-		req = active.Render(reqCell)
-	} else {
-		res = active.Render(resCell)
+	reqActive := pane.headersView == headersViewRequest
+	sep := " " + m.theme.PaneDivider.Render("│")
+	if !reqActive {
+		sep += " "
 	}
-
 	return lipgloss.JoinHorizontal(
 		lipgloss.Top,
-		res,
-		m.theme.PaneDivider.Render("│"),
-		req,
+		m.renderHeaderSwitchItem(headerResponseLabel, pane.headersView == headersViewResponse),
+		sep,
+		m.renderHeaderSwitchItem(headerRequestLabel, reqActive),
 	)
 }
 
@@ -53,33 +46,32 @@ func (m *Model) renderHeaderSubviewHead(pane *responsePaneState, width int) stri
 	return sw + "\n" + rule
 }
 
-func headerSwitchStyle(st lipgloss.Style) lipgloss.Style {
-	return st.
+func (m *Model) renderHeaderSwitchItem(label string, active bool) string {
+	return headerSwitchStyle(m.theme, active).Render(headerSwitchText(label, active))
+}
+
+func headerSwitchText(label string, active bool) string {
+	if active {
+		return headerActiveMark + " " + label
+	}
+	return label
+}
+
+func headerSwitchStyle(th theme.Theme, active bool) lipgloss.Style {
+	st := th.TabInactive
+	if active {
+		st = th.TabActive
+	}
+	st = st.
+		UnsetBackground().
 		UnsetWidth().
 		UnsetMaxWidth().
 		UnsetMargins().
 		Padding(0, 0)
-}
-
-func headerSwitchWidth(labels ...string) int {
-	w := 0
-	for _, label := range labels {
-		if v := lipgloss.Width(label); v > w {
-			w = v
-		}
+	if active {
+		return st.Bold(true).Faint(false)
 	}
-	return w
-}
-
-func headerSwitchCell(label string, w int) string {
-	if v := lipgloss.Width(label); w < v {
-		w = v
-	}
-	w += 2
-	pad := w - lipgloss.Width(label)
-	left := pad / 2
-	right := pad - left
-	return strings.Repeat(" ", left) + label + strings.Repeat(" ", right)
+	return st.Bold(false).Faint(true)
 }
 
 func (m *Model) cycleHeaderSubview() tea.Cmd {
