@@ -23,8 +23,8 @@ const (
 )
 
 const (
-	statusInfoLightColor    = "#475569"
-	statusInfoDarkColor     = "#94a3b8"
+	statusInfoLightColor    = "#64748b"
+	statusInfoDarkColor     = "#cbd5e1"
 	statusWarnLightColor    = "#d97706"
 	statusWarnDarkColor     = "#FACC15"
 	statusErrorLightColor   = "#dc2626"
@@ -2108,7 +2108,7 @@ func (m Model) statusBarMessage() (string, statusLevel) {
 func (m Model) statusBarSegments() []statusBarSeg {
 	segs := make([]statusBarSeg, 0, 4)
 	if m.currentFile != "" {
-		segs = append(segs, statusBarSeg{val: filepath.Base(m.currentFile)})
+		segs = append(segs, statusBarSeg{key: "File", val: filepath.Base(m.currentFile)})
 	}
 	segs = append(segs, statusBarSeg{key: "Focus", val: m.focusLabel()})
 	if m.focus == focusEditor {
@@ -2210,25 +2210,25 @@ func (m Model) statusBarMessageStyle(level statusLevel) lipgloss.Style {
 			m.theme.StatusBarKey,
 			statusWarnLightColor,
 			statusWarnDarkColor,
-		).Bold(true)
+		)
 	case statusError:
 		return m.statusBarFg(
 			m.theme.Error,
 			statusErrorLightColor,
 			statusErrorDarkColor,
-		).Bold(true)
+		)
 	case statusSuccess:
 		return m.statusBarFg(
 			m.theme.Success,
 			statusSuccessLightColor,
 			statusSuccessDarkColor,
-		).Bold(true)
+		)
 	default:
 		return m.statusBarFg(
 			m.theme.StatusBarInfo,
 			statusInfoLightColor,
 			statusInfoDarkColor,
-		).Bold(true)
+		)
 	}
 }
 

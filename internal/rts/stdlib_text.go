@@ -2,6 +2,17 @@ package rts
 
 import "strings"
 
+const (
+	sigTextLower      = "text.lower(s)"
+	sigTextUpper      = "text.upper(s)"
+	sigTextTrim       = "text.trim(s)"
+	sigTextSplit      = "text.split(s, sep)"
+	sigTextJoin       = "text.join(list, sep)"
+	sigTextReplace    = "text.replace(s, old, new)"
+	sigTextStartsWith = "text.startsWith(s, prefix)"
+	sigTextEndsWith   = "text.endsWith(s, suffix)"
+)
+
 var textSpec = nsSpec{name: "text", fns: map[string]NativeFunc{
 	"lower":      textLower,
 	"upper":      textUpper,
@@ -14,7 +25,7 @@ var textSpec = nsSpec{name: "text", fns: map[string]NativeFunc{
 }}
 
 func textLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.lower(s)")
+	na := newNativeArgs(ctx, pos, args, sigTextLower)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -32,7 +43,7 @@ func textLower(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.upper(s)")
+	na := newNativeArgs(ctx, pos, args, sigTextUpper)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -50,7 +61,7 @@ func textUpper(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.trim(s)")
+	na := newNativeArgs(ctx, pos, args, sigTextTrim)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -68,7 +79,7 @@ func textTrim(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.split(s, sep)")
+	na := newNativeArgs(ctx, pos, args, sigTextSplit)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -99,7 +110,7 @@ func textSplit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.join(list, sep)")
+	na := newNativeArgs(ctx, pos, args, sigTextJoin)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -109,7 +120,7 @@ func textJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if src.K == VNull {
 		items = nil
 	} else if src.K != VList {
-		return Null(), rtErr(ctx, pos, "text.join(list, sep) expects list")
+		return Null(), rtErr(ctx, pos, "%s expects list", sigTextJoin)
 	} else {
 		items = src.L
 	}
@@ -124,7 +135,7 @@ func textJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 
 	out := make([]string, 0, len(items))
 	for _, it := range items {
-		s, err := scalarStr(ctx, pos, it, "text.join(list, sep)")
+		s, err := scalarStr(ctx, pos, it, sigTextJoin)
 		if err != nil {
 			return Null(), err
 		}
@@ -142,7 +153,7 @@ func textJoin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.replace(s, old, new)")
+	na := newNativeArgs(ctx, pos, args, sigTextReplace)
 	if err := na.count(3); err != nil {
 		return Null(), err
 	}
@@ -170,7 +181,7 @@ func textReplace(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.startsWith(s, prefix)")
+	na := newNativeArgs(ctx, pos, args, sigTextStartsWith)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -188,7 +199,7 @@ func textStartsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func textEndsWith(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "text.endsWith(s, suffix)")
+	na := newNativeArgs(ctx, pos, args, sigTextEndsWith)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}

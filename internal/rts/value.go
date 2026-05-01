@@ -36,10 +36,19 @@ type Func struct {
 	Pos  Pos
 }
 
+// Object is the host extension point for RTS values with members and indexes.
 type Object interface {
 	TypeName() string
 	GetMember(name string) (Value, bool)
 	Index(key Value) (Value, error)
+}
+
+type truthyObject interface {
+	Truthy() bool
+}
+
+type interfaceValuer interface {
+	ToInterface() any
 }
 
 func Null() Value                   { return Value{K: VNull} }
@@ -68,7 +77,7 @@ func (v Value) IsTruthy() bool {
 		return len(v.M) != 0
 	case VObj:
 		if v.O != nil {
-			if t, ok := v.O.(interface{ Truthy() bool }); ok {
+			if t, ok := v.O.(truthyObject); ok {
 				return t.Truthy()
 			}
 		}

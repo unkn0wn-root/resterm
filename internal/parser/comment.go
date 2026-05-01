@@ -330,10 +330,11 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		return true
 	case "script":
 		if rest != "" {
-			kind, lang := parseScriptSpec(rest)
-			b.request.currentScriptKind = kind
-			b.request.currentScriptLang = lang
+			b.setScript(rest, "")
 		}
+		return true
+	case "rts":
+		b.setScript(rest, "rts")
 		return true
 	case "apply":
 		spec, err := parseApplySpec(rest, line)
@@ -404,6 +405,15 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		return true
 	}
 	return false
+}
+
+func (b *documentBuilder) setScript(rest, lang string) {
+	k, l := parseScriptSpec(rest)
+	if lang != "" {
+		l = normScriptLang(lang)
+	}
+	b.request.currentScriptKind = k
+	b.request.currentScriptLang = l
 }
 
 func applySettingsTokens(dst map[string]string, raw string) map[string]string {

@@ -6,6 +6,14 @@ import (
 	"strings"
 )
 
+const (
+	sigJSONFile      = "json.file(path)"
+	sigJSONParse     = "json.parse(text)"
+	sigJSONStringify = "json.stringify(value[, indent])"
+	sigJSONGet       = "json.get(value[, path])"
+	sigJSONHas       = "json.has(value, path)"
+)
+
 var jsonSpec = nsSpec{name: "json", top: true, fns: map[string]NativeFunc{
 	"file":      jsonFile,
 	"parse":     jsonParse,
@@ -15,7 +23,7 @@ var jsonSpec = nsSpec{name: "json", top: true, fns: map[string]NativeFunc{
 }}
 
 func jsonFile(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "json.file(path)")
+	na := newNativeArgs(ctx, pos, args, sigJSONFile)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -52,13 +60,13 @@ func jsonFile(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func jsonParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "json.parse(text)")
+	na := newNativeArgs(ctx, pos, args, sigJSONParse)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 
 	if na.arg(0).K != VStr {
-		return Null(), rtErr(ctx, pos, "json.parse(text) expects string")
+		return Null(), rtErr(ctx, pos, "%s expects string", sigJSONParse)
 	}
 
 	txt := na.arg(0).S
@@ -74,7 +82,7 @@ func jsonParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func jsonStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "json.stringify(value[, indent])")
+	na := newNativeArgs(ctx, pos, args, sigJSONStringify)
 	if err := na.countRange(1, 2); err != nil {
 		return Null(), err
 	}
@@ -88,7 +96,7 @@ func jsonStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		data   []byte
 		indent string
 	)
-	if len(args) == 2 {
+	if na.has(1) {
 		indent, err = jsonIndent(ctx, pos, na.arg(1))
 		if err != nil {
 			return Null(), err
@@ -113,7 +121,7 @@ func jsonStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func jsonGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "json.get(value[, path])")
+	na := newNativeArgs(ctx, pos, args, sigJSONGet)
 	if err := na.countRange(1, 2); err != nil {
 		return Null(), err
 	}
@@ -124,7 +132,7 @@ func jsonGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	path := ""
-	if len(args) == 2 {
+	if na.has(1) {
 		p, err := na.str(1)
 		if err != nil {
 			return Null(), err
@@ -144,7 +152,7 @@ func jsonGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func jsonHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "json.has(value, path)")
+	na := newNativeArgs(ctx, pos, args, sigJSONHas)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -222,7 +230,7 @@ func jsonIface(ctx *Ctx, pos Pos, v Value) (any, error) {
 		return out, nil
 	case VObj:
 		if v.O != nil {
-			if t, ok := v.O.(interface{ ToInterface() any }); ok {
+			if t, ok := v.O.(interfaceValuer); ok {
 				return t.ToInterface(), nil
 			}
 		}

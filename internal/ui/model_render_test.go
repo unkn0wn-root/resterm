@@ -148,11 +148,14 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 	model := New(Config{})
 	model.width = 96
 	model.theme.StatusBar = lipgloss.NewStyle()
-	model.theme.StatusBarInfo = lipgloss.NewStyle()
-	model.theme.StatusBarKey = lipgloss.NewStyle()
+	// source theme styles may be bold
+	// statusbar messages should keep only
+	// their foreground color and render at regular weight
+	model.theme.StatusBarInfo = lipgloss.NewStyle().Bold(true)
+	model.theme.StatusBarKey = lipgloss.NewStyle().Bold(true)
 	model.theme.StatusBarValue = lipgloss.NewStyle()
-	model.theme.Error = lipgloss.NewStyle()
-	model.theme.Success = lipgloss.NewStyle()
+	model.theme.Error = lipgloss.NewStyle().Bold(true)
+	model.theme.Success = lipgloss.NewStyle().Bold(true)
 
 	tests := []struct {
 		name  string
@@ -183,17 +186,25 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 			if got := model.statusBarMessageStyle(tt.level).GetForeground(); got != tt.color {
 				t.Fatalf("expected %s color %v, got %v", tt.name, tt.color, got)
 			}
+			if model.statusBarMessageStyle(tt.level).GetBold() {
+				t.Fatalf("expected %s status message to render at regular weight", tt.name)
+			}
 		})
 	}
 }
 
 func TestStatusBarInfoUsesThemeForeground(t *testing.T) {
 	model := New(Config{})
-	model.theme.StatusBarInfo = lipgloss.NewStyle().Foreground(lipgloss.Color("#0ea5e9"))
+	model.theme.StatusBarInfo = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#0ea5e9")).
+		Bold(true)
 
 	style := model.statusBarMessageStyle(statusInfo)
 	if got := style.GetForeground(); got != lipgloss.Color("#0ea5e9") {
 		t.Fatalf("expected status info foreground override, got %v", got)
+	}
+	if style.GetBold() {
+		t.Fatal("expected status info message to render at regular weight")
 	}
 }
 
@@ -229,6 +240,28 @@ func TestRenderStatusBarLeftUsesExplicitParts(t *testing.T) {
 	})
 	if want := model.theme.StatusBarValue.Render("Focus: Ed..."); !strings.Contains(truncated, want) {
 		t.Fatalf("expected truncated context value style %q in %q", want, truncated)
+	}
+}
+
+func TestStatusBarLabelsCurrentFileSegment(t *testing.T) {
+	model := New(Config{})
+	model.currentFile = "/tmp/example.http"
+
+	got := statusBarSegmentsText(model.statusBarSegments())
+	if !strings.Contains(got, "File: example.http") {
+		t.Fatalf("expected file segment to be labeled, got %q", got)
+	}
+}
+
+func TestStatusBarOmitsFileSegmentWithoutCurrentFile(t *testing.T) {
+	model := New(Config{})
+
+	got := statusBarSegmentsText(model.statusBarSegments())
+	if strings.Contains(got, "File:") {
+		t.Fatalf("expected no file segment without current file, got %q", got)
+	}
+	if !strings.Contains(got, "Focus:") {
+		t.Fatalf("expected focus segment to remain labeled, got %q", got)
 	}
 }
 

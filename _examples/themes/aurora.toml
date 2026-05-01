@@ -31,8 +31,7 @@ foreground = "#f8fafc"
 background = "#111c33"
 
 [styles.status_bar_info]
-foreground = "#94a3b8"
-bold = true
+foreground = "#cbd5e1"
 
 [styles.status_bar_key]
 foreground = "#f97316"

@@ -7,6 +7,14 @@ import (
 	"sort"
 )
 
+type loopAction int
+
+const (
+	loopNext loopAction = iota
+	loopBreak
+	loopContinue
+)
+
 type VM struct {
 	ctx *Ctx
 }
@@ -206,23 +214,20 @@ func (vm *VM) execFor(up *Env, exp map[string]Value, s *ForStmt) error {
 				break
 			}
 		}
-		err := vm.execBlock(env, exp, s.Body)
+		action, err := vm.execLoopBlock(env, exp, s.Body)
 		if err != nil {
-			switch err.(type) {
-			case ret:
-				return err
-			case breakSig:
-				return nil
-			case continueSig:
-				if s.Post != nil {
-					if err := vm.execStmt(env, exp, s.Post); err != nil {
-						return err
-					}
+			return err
+		}
+		switch action {
+		case loopBreak:
+			return nil
+		case loopContinue:
+			if s.Post != nil {
+				if err := vm.execStmt(env, exp, s.Post); err != nil {
+					return err
 				}
-				continue
-			default:
-				return err
 			}
+			continue
 		}
 		if s.Post != nil {
 			if err := vm.execStmt(env, exp, s.Post); err != nil {
@@ -231,6 +236,23 @@ func (vm *VM) execFor(up *Env, exp map[string]Value, s *ForStmt) error {
 		}
 	}
 	return nil
+}
+
+func (vm *VM) execLoopBlock(env *Env, exp map[string]Value, body *Block) (loopAction, error) {
+	err := vm.execBlock(env, exp, body)
+	if err == nil {
+		return loopNext, nil
+	}
+	switch err.(type) {
+	case ret:
+		return loopNext, err
+	case breakSig:
+		return loopBreak, nil
+	case continueSig:
+		return loopContinue, nil
+	default:
+		return loopNext, err
+	}
 }
 
 func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
@@ -253,29 +275,15 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 			if err := vm.tick(s.Pos()); err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(
-				env,
-				rng.Key,
-				Num(float64(i)),
-				rng.Declare,
-				s.Pos(),
-			); err != nil {
+			action, err := vm.execRangeStep(env, exp, s, Num(float64(i)), it)
+			if err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(env, rng.Val, it, rng.Declare, s.Pos()); err != nil {
-				return err
+			if action == loopBreak {
+				return nil
 			}
-			if err := vm.execBlock(env, exp, s.Body); err != nil {
-				switch err.(type) {
-				case ret:
-					return err
-				case breakSig:
-					return nil
-				case continueSig:
-					continue
-				default:
-					return err
-				}
+			if action == loopContinue {
+				continue
 			}
 		}
 	case VDict:
@@ -288,23 +296,15 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 			if err := vm.tick(s.Pos()); err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(env, rng.Key, Str(k), rng.Declare, s.Pos()); err != nil {
+			action, err := vm.execRangeStep(env, exp, s, Str(k), src.M[k])
+			if err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(env, rng.Val, src.M[k], rng.Declare, s.Pos()); err != nil {
-				return err
+			if action == loopBreak {
+				return nil
 			}
-			if err := vm.execBlock(env, exp, s.Body); err != nil {
-				switch err.(type) {
-				case ret:
-					return err
-				case breakSig:
-					return nil
-				case continueSig:
-					continue
-				default:
-					return err
-				}
+			if action == loopContinue {
+				continue
 			}
 		}
 	case VStr:
@@ -312,41 +312,39 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 			if err := vm.tick(s.Pos()); err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(
-				env,
-				rng.Key,
-				Num(float64(idx)),
-				rng.Declare,
-				s.Pos(),
-			); err != nil {
+			action, err := vm.execRangeStep(env, exp, s, Num(float64(idx)), Str(string(r)))
+			if err != nil {
 				return err
 			}
-			if err := vm.assignRangeVar(
-				env,
-				rng.Val,
-				Str(string(r)),
-				rng.Declare,
-				s.Pos(),
-			); err != nil {
-				return err
+			if action == loopBreak {
+				return nil
 			}
-			if err := vm.execBlock(env, exp, s.Body); err != nil {
-				switch err.(type) {
-				case ret:
-					return err
-				case breakSig:
-					return nil
-				case continueSig:
-					continue
-				default:
-					return err
-				}
+			if action == loopContinue {
+				continue
 			}
 		}
 	default:
 		return rtErr(vm.ctx, rng.Expr.Pos(), "range over non-iterable value")
 	}
 	return nil
+}
+
+func (vm *VM) execRangeStep(
+	env *Env,
+	exp map[string]Value,
+	s *ForStmt,
+	keyVal Value,
+	itemVal Value,
+) (loopAction, error) {
+	rng := s.Range
+	pos := s.Pos()
+	if err := vm.assignRangeVar(env, rng.Key, keyVal, rng.Declare, pos); err != nil {
+		return loopNext, err
+	}
+	if err := vm.assignRangeVar(env, rng.Val, itemVal, rng.Declare, pos); err != nil {
+		return loopNext, err
+	}
+	return vm.execLoopBlock(env, exp, s.Body)
 }
 
 func (vm *VM) defRangeVar(env *Env, name string) {
@@ -538,11 +536,15 @@ func (vm *VM) listIndex(pos Pos, idx Value) (int, error) {
 	if idx.K != VNum {
 		return 0, rtErr(vm.ctx, pos, "list index must be number")
 	}
+	const (
+		maxInt64Float = float64(^uint64(0) >> 1)
+		minInt64Float = -maxInt64Float - 1
+	)
 	n := idx.N
 	switch {
 	case math.IsNaN(n), math.IsInf(n, 0), math.Trunc(n) != n:
 		return 0, rtErr(vm.ctx, pos, "list index must be integer")
-	case n > maxI, n < minI:
+	case n > maxInt64Float, n < minInt64Float:
 		return 0, rtErr(vm.ctx, pos, "list index out of range")
 	}
 	return int(n), nil

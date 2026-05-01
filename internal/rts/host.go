@@ -128,8 +128,9 @@ func (o *respObj) Index(key Value) (Value, error) {
 }
 
 func (o *respObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".header(name)"
 	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "%s.header(name) expects 1 arg", o.name)
+		return Null(), rtErr(ctx, pos, "%s expects 1 arg", sig)
 	}
 
 	if o.r == nil {
@@ -149,8 +150,9 @@ func (o *respObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *respObj) textFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".text()"
 	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "%s.text() expects 0 args", o.name)
+		return Null(), rtErr(ctx, pos, "%s expects 0 args", sig)
 	}
 
 	if o.r == nil {
@@ -165,8 +167,9 @@ func (o *respObj) textFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *respObj) jsonFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".json(path)"
 	if len(args) > 1 {
-		return Null(), rtErr(ctx, pos, "%s.json(path) expects 0 or 1 arg", o.name)
+		return Null(), rtErr(ctx, pos, "%s expects 0 or 1 arg", sig)
 	}
 
 	if o.r == nil {

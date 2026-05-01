@@ -271,6 +271,93 @@ GET https://example.com
 	}
 }
 
+func TestParseRTSDirectiveAlias(t *testing.T) {
+	tests := []struct {
+		name string
+		dir  string
+		kind string
+	}{
+		{
+			name: "pre request",
+			dir:  "# @rts pre-request",
+			kind: "pre-request",
+		},
+		{
+			name: "test kind",
+			dir:  "# @rts test",
+			kind: "test",
+		},
+		{
+			name: "default kind",
+			dir:  "# @rts",
+			kind: "test",
+		},
+		{
+			name: "language forced",
+			dir:  "# @rts pre-request lang=js",
+			kind: "pre-request",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := strings.Join([]string{
+				tt.dir,
+				`> request.setHeader("X-Test", "1")`,
+				"GET https://example.com",
+				"",
+			}, "\n")
+
+			doc := Parse("rts-alias.http", []byte(src))
+			if len(doc.Requests) != 1 {
+				t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+			}
+			req := doc.Requests[0]
+			if len(req.Metadata.Scripts) != 1 {
+				t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+			}
+			script := req.Metadata.Scripts[0]
+			if script.Kind != tt.kind {
+				t.Fatalf("expected %s script, got %s", tt.kind, script.Kind)
+			}
+			if script.Lang != "rts" {
+				t.Fatalf("expected rts lang, got %q", script.Lang)
+			}
+			if script.Body == "" {
+				t.Fatalf("expected script body to be captured")
+			}
+		})
+	}
+}
+
+func TestParseRTSDirectiveAliasFileInclude(t *testing.T) {
+	src := `# @rts pre-request
+> < ./pre.rts
+GET https://example.com
+`
+	doc := Parse("rts-include.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+	script := req.Metadata.Scripts[0]
+	if script.Kind != "pre-request" {
+		t.Fatalf("expected pre-request script, got %s", script.Kind)
+	}
+	if script.Lang != "rts" {
+		t.Fatalf("expected rts lang, got %q", script.Lang)
+	}
+	if script.FilePath != "./pre.rts" {
+		t.Fatalf("unexpected script file path: %q", script.FilePath)
+	}
+	if script.Body != "" {
+		t.Fatalf("expected script body to be empty for file include, got %q", script.Body)
+	}
+}
+
 func TestParseApplyDirective(t *testing.T) {
 	src := `# @apply {headers: {"X-Test": "1"}}
 GET https://example.com

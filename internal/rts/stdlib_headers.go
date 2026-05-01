@@ -2,6 +2,15 @@ package rts
 
 import "strings"
 
+const (
+	sigHeadersNormalize = "headers.normalize(h)"
+	sigHeadersGet       = "headers.get(h, name)"
+	sigHeadersHas       = "headers.has(h, name)"
+	sigHeadersSet       = "headers.set(h, name, value)"
+	sigHeadersRemove    = "headers.remove(h, name)"
+	sigHeadersMerge     = "headers.merge(a, b)"
+)
+
 var headersSpec = nsSpec{name: "headers", top: true, fns: map[string]NativeFunc{
 	"get":       headersGet,
 	"has":       headersHas,
@@ -12,7 +21,7 @@ var headersSpec = nsSpec{name: "headers", top: true, fns: map[string]NativeFunc{
 }}
 
 func headersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "headers.normalize(h)")
+	na := newNativeArgs(ctx, pos, args, sigHeadersNormalize)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -30,7 +39,7 @@ func headersNormalize(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func headersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "headers.get(h, name)")
+	na := newNativeArgs(ctx, pos, args, sigHeadersGet)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -53,7 +62,7 @@ func headersGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func headersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "headers.has(h, name)")
+	na := newNativeArgs(ctx, pos, args, sigHeadersHas)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -85,12 +94,12 @@ func headersHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	case VList:
 		return Bool(len(checked.L) > 0), nil
 	default:
-		return Null(), rtErr(ctx, pos, "headers.has(h, name) expects header values as string/list")
+		return Null(), rtErr(ctx, pos, "%s expects header values as string/list", sigHeadersHas)
 	}
 }
 
 func headersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "headers.set(h, name, value)")
+	na := newNativeArgs(ctx, pos, args, sigHeadersSet)
 	if err := na.count(3); err != nil {
 		return Null(), err
 	}
@@ -116,7 +125,7 @@ func headersSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func headersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "headers.remove(h, name)")
+	na := newNativeArgs(ctx, pos, args, sigHeadersRemove)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -137,7 +146,7 @@ func headersRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func headersMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "headers.merge(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigHeadersMerge)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}

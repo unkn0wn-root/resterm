@@ -53,7 +53,7 @@ Content-Type: application/json
 ### RTS Pre-request Mutation
 # @name RTS_PreRequest
 # @description Mutates request, vars, and globals in pre-request.
-# @script pre-request lang=rts
+# @rts pre-request
 > pre.mutate(request, vars, env)
 # @assert response.json("method") == "POST"
 # @assert request.method == "POST"

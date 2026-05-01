@@ -30,8 +30,8 @@ func jsonPathGet(v any, path string) (any, bool) {
 	if p == "" {
 		return v, true
 	}
-	if strings.HasPrefix(p, "$") {
-		p = strings.TrimPrefix(p, "$")
+	if after, ok := strings.CutPrefix(p, "$"); ok {
+		p = after
 		p = strings.TrimPrefix(p, ".")
 	}
 
