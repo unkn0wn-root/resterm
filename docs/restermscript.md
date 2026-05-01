@@ -59,10 +59,10 @@ Apply patches evaluate a single RestermScript expression that returns a patch di
 5) Pre request scripts
 
 ```
-# @script pre-request lang=rts
+# @rts pre-request
 ```
 
-Pre-request scripts run full RestermScript blocks and can mutate the outgoing request and variables. They run before JavaScript pre-request blocks.
+Pre-request scripts run full RestermScript blocks and can mutate the outgoing request and variables. They run before JavaScript pre-request blocks. The full `# @script pre-request lang=rts` form remains supported.
 
 ## Language overview
 
@@ -373,7 +373,7 @@ Resterm exposes host objects when evaluating templates, directives, `@apply`, as
 
 ### request
 
-`request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` contains the first value per header (lowercased keys), while `header(name)` is case-insensitive. `query` returns strings or lists when a key has multiple values. In `@script pre-request lang=rts` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. In `@apply`, the request object is read only, so you return a patch dict instead of mutating it.
+`request` provides a summary of the current request. It exposes `method`, `url`, `headers`, `header(name)`, and `query`. `headers` contains the first value per header (lowercased keys), while `header(name)` is case-insensitive. `query` returns strings or lists when a key has multiple values. In `@rts pre-request` blocks, mutation helpers are available, including `request.setMethod`, `request.setURL`, `request.setHeader`, `request.addHeader`, `request.removeHeader`, `request.setQueryParam`, and `request.setBody`. The full `@script pre-request lang=rts` form is equivalent. In `@apply`, the request object is read only, so you return a patch dict instead of mutating it.
 
 ### last
 

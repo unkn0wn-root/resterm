@@ -1008,6 +1008,55 @@ func TestRunAllCarriesRTSPreRequestGlobals(t *testing.T) {
 	}
 }
 
+func TestRunExecutesRTSDirectiveAlias(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "rts-alias.http")
+	src := strings.Join([]string{
+		"# @name alias",
+		"# @rts pre-request",
+		"> request.setHeader(\"X-Mode\", \"alias\")",
+		"GET https://example.com/alias",
+		"",
+	}, "\n")
+	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	var mode string
+	client := httpclient.NewClient(nil)
+	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+		return &http.Client{
+			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
+				mode = req.Header.Get("X-Mode")
+				return &http.Response{
+					Status:     "200 OK",
+					StatusCode: http.StatusOK,
+					Proto:      "HTTP/1.1",
+					Header:     make(http.Header),
+					Body:       io.NopCloser(strings.NewReader("{}")),
+					Request:    req,
+				}, nil
+			}),
+		}, nil
+	})
+
+	rep, err := Run(Options{
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Select:        Select{All: true},
+	})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if rep.Total != 1 || rep.Passed != 1 {
+		t.Fatalf("unexpected report counts: %+v", rep)
+	}
+	if mode != "alias" {
+		t.Fatalf("expected RTS alias to set request header, got %q", mode)
+	}
+}
+
 func TestReportWriteJSON(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "json.http")

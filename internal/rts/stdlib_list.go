@@ -6,6 +6,18 @@ import (
 	"strconv"
 )
 
+const (
+	sigListAppend = "list.append(list, item)"
+	sigListConcat = "list.concat(a, b)"
+	sigListSort   = "list.sort(list)"
+	sigListMap    = "list.map(list, fn)"
+	sigListFilter = "list.filter(list, fn)"
+	sigListAny    = "list.any(list, fn)"
+	sigListAll    = "list.all(list, fn)"
+	sigListSlice  = "list.slice(list, start[, end])"
+	sigListUnique = "list.unique(list)"
+)
+
 var listSpec = nsSpec{name: "list", fns: map[string]NativeFunc{
 	"append": listAppend,
 	"concat": listConcat,
@@ -18,8 +30,13 @@ var listSpec = nsSpec{name: "list", fns: map[string]NativeFunc{
 	"unique": listUnique,
 }}
 
+var (
+	maxNativeIntFloat = float64(int(^uint(0) >> 1))
+	minNativeIntFloat = -maxNativeIntFloat - 1
+)
+
 func listAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.append(list, item)")
+	na := newNativeArgs(ctx, pos, args, sigListAppend)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -39,7 +56,7 @@ func listAppend(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.concat(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigListConcat)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -64,7 +81,7 @@ func listConcat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.sort(list)")
+	na := newNativeArgs(ctx, pos, args, sigListSort)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -85,7 +102,7 @@ func listSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	kind := items[0].K
 	for i := 0; i < len(items); i++ {
 		if items[i].K != kind {
-			return Null(), rtErr(ctx, pos, "list.sort(list) expects numbers or strings")
+			return Null(), rtErr(ctx, pos, "%s expects numbers or strings", sigListSort)
 		}
 	}
 
@@ -97,13 +114,13 @@ func listSort(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	case VStr:
 		sort.Slice(out, func(i, j int) bool { return out[i].S < out[j].S })
 	default:
-		return Null(), rtErr(ctx, pos, "list.sort(list) expects numbers or strings")
+		return Null(), rtErr(ctx, pos, "%s expects numbers or strings", sigListSort)
 	}
 	return List(out), nil
 }
 
 func listMap(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.map(list, fn)")
+	na := newNativeArgs(ctx, pos, args, sigListMap)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -113,8 +130,8 @@ func listMap(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 
-	fn := na.arg(1)
-	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
+	fn, err := na.fn(1)
+	if err != nil {
 		return Null(), err
 	}
 	if len(items) == 0 {
@@ -139,7 +156,7 @@ func listMap(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listFilter(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.filter(list, fn)")
+	na := newNativeArgs(ctx, pos, args, sigListFilter)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -149,8 +166,8 @@ func listFilter(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 
-	fn := na.arg(1)
-	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
+	fn, err := na.fn(1)
+	if err != nil {
 		return Null(), err
 	}
 	if len(items) == 0 {
@@ -177,7 +194,7 @@ func listFilter(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listAny(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.any(list, fn)")
+	na := newNativeArgs(ctx, pos, args, sigListAny)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -187,8 +204,8 @@ func listAny(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 
-	fn := na.arg(1)
-	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
+	fn, err := na.fn(1)
+	if err != nil {
 		return Null(), err
 	}
 	for _, it := range items {
@@ -207,7 +224,7 @@ func listAny(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listAll(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.all(list, fn)")
+	na := newNativeArgs(ctx, pos, args, sigListAll)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -217,8 +234,8 @@ func listAll(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 
-	fn := na.arg(1)
-	if err := fnChk(ctx, pos, fn, na.sig); err != nil {
+	fn, err := na.fn(1)
+	if err != nil {
 		return Null(), err
 	}
 	for _, it := range items {
@@ -237,7 +254,7 @@ func listAll(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.slice(list, start[, end])")
+	na := newNativeArgs(ctx, pos, args, sigListSlice)
 	if err := na.countRange(2, 3); err != nil {
 		return Null(), err
 	}
@@ -256,7 +273,7 @@ func listSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	en := len(items)
-	if len(args) == 3 {
+	if na.has(2) {
 		en, err = intNum(ctx, pos, na.arg(2), na.sig)
 		if err != nil {
 			return Null(), err
@@ -277,7 +294,7 @@ func listSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func listUnique(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "list.unique(list)")
+	na := newNativeArgs(ctx, pos, args, sigListUnique)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -323,9 +340,7 @@ func intNum(ctx *Ctx, pos Pos, v Value, sig string) (int, error) {
 		return 0, rtErr(ctx, pos, "%s expects integer", sig)
 	}
 
-	max := float64(int(^uint(0) >> 1))
-	min := -max - 1
-	if n > max || n < min {
+	if n > maxNativeIntFloat || n < minNativeIntFloat {
 		return 0, rtErr(ctx, pos, "%s out of range", sig)
 	}
 	return int(n), nil

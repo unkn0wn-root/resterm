@@ -44,7 +44,7 @@ func toStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 		return string(data), nil
 	case VObj:
 		if v.O != nil {
-			if _, ok := v.O.(interface{ ToInterface() any }); ok {
+			if _, ok := v.O.(interfaceValuer); ok {
 				data, err := json.Marshal(toIface(v))
 				if err != nil {
 					return "", rtErr(ctx, pos, "json encode failed")
@@ -89,7 +89,7 @@ func toIface(v Value) any {
 		return out
 	case VObj:
 		if v.O != nil {
-			if t, ok := v.O.(interface{ ToInterface() any }); ok {
+			if t, ok := v.O.(interfaceValuer); ok {
 				return t.ToInterface()
 			}
 		}

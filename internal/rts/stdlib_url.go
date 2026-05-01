@@ -2,13 +2,18 @@ package rts
 
 import "net/url"
 
+const (
+	sigURLEncode = "url.encode(x)"
+	sigURLDecode = "url.decode(x)"
+)
+
 var urlSpec = nsSpec{name: "url", top: true, fns: map[string]NativeFunc{
 	"encode": urlEncode,
 	"decode": urlDecode,
 }}
 
 func urlEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "url.encode(x)")
+	na := newNativeArgs(ctx, pos, args, sigURLEncode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -21,7 +26,7 @@ func urlEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func urlDecode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "url.decode(x)")
+	na := newNativeArgs(ctx, pos, args, sigURLDecode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}

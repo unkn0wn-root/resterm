@@ -39,6 +39,7 @@ var directiveValueModes = map[string]metadataValueMode{
 	"grpc-authority":        metadataValueModeRest,
 	"grpc-metadata":         metadataValueModeRest,
 	"script":                metadataValueModeToken,
+	"rts":                   metadataValueModeToken,
 	"patch":                 metadataValueModeRest,
 	"use":                   metadataValueModeRest,
 	"apply":                 metadataValueModeRest,

@@ -118,16 +118,35 @@ func (o *traceObj) Index(key Value) (Value, error) {
 	return Null(), nil
 }
 
+const (
+	sigTraceEnabled         = "trace.enabled()"
+	sigTraceDurationMs      = "trace.durationMs()"
+	sigTraceDurationSeconds = "trace.durationSeconds()"
+	sigTraceDurationString  = "trace.durationString()"
+	sigTraceError           = "trace.error()"
+	sigTraceStarted         = "trace.started()"
+	sigTraceCompleted       = "trace.completed()"
+	sigTracePhases          = "trace.phases()"
+	sigTraceGetPhase        = "trace.getPhase(name)"
+	sigTracePhaseNames      = "trace.phaseNames()"
+	sigTraceBudgets         = "trace.budgets()"
+	sigTraceBreaches        = "trace.breaches()"
+	sigTraceWithinBudget    = "trace.withinBudget()"
+	sigTraceHasBudgets      = "trace.hasBudgets()"
+)
+
 func (o *traceObj) enabledFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.enabled() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceEnabled)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	return Bool(o.tl != nil), nil
 }
 
 func (o *traceObj) durMsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.durationMs() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceDurationMs)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.tl == nil {
 		return Num(0), nil
@@ -136,8 +155,9 @@ func (o *traceObj) durMsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) durSecFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.durationSeconds() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceDurationSeconds)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.tl == nil {
 		return Num(0), nil
@@ -146,8 +166,9 @@ func (o *traceObj) durSecFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) durStrFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.durationString() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceDurationString)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.tl == nil {
 		return Str(""), nil
@@ -156,8 +177,9 @@ func (o *traceObj) durStrFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) errFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.error() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceError)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.tl == nil {
 		return Str(""), nil
@@ -166,8 +188,9 @@ func (o *traceObj) errFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) startedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.started() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceStarted)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.tl == nil || o.tl.Started.IsZero() {
 		return Str(""), nil
@@ -176,8 +199,9 @@ func (o *traceObj) startedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) completedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.completed() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceCompleted)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.tl == nil || o.tl.Completed.IsZero() {
 		return Str(""), nil
@@ -186,8 +210,9 @@ func (o *traceObj) completedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) phasesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.phases() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTracePhases)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if len(o.seg) == 0 {
 		return List(nil), nil
@@ -200,8 +225,9 @@ func (o *traceObj) phasesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) getPhaseFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := sigTraceGetPhase
 	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "trace.getPhase(name) expects 1 arg")
+		return Null(), rtErr(ctx, pos, "%s expects 1 arg", sig)
 	}
 	k, err := toKey(pos, args[0])
 	if err != nil {
@@ -231,8 +257,9 @@ func (o *traceObj) getPhaseFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) phaseNamesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.phaseNames() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTracePhaseNames)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if len(o.ord) == 0 {
 		return List(nil), nil
@@ -306,8 +333,9 @@ func (o *traceObj) tlsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.budgets() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceBudgets)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if !o.hasBud() {
 		return Dict(map[string]Value{"enabled": Bool(false)}), nil
@@ -328,8 +356,9 @@ func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) breachesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.breaches() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceBreaches)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if len(o.br) == 0 {
 		return List(nil), nil
@@ -350,8 +379,9 @@ func (o *traceObj) breachesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) withinFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.withinBudget() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceWithinBudget)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	return Bool(len(o.br) == 0), nil
 }
@@ -379,8 +409,9 @@ func traceUnavailable() Value {
 }
 
 func (o *traceObj) hasBudFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "trace.hasBudgets() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigTraceHasBudgets)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	return Bool(o.hasBud()), nil
 }

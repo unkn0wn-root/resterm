@@ -18,6 +18,8 @@ type OSFS struct{}
 func (OSFS) ReadFile(path string) ([]byte, error)  { return os.ReadFile(path) }
 func (OSFS) Stat(path string) (os.FileInfo, error) { return os.Stat(path) }
 
+// ModCache compiles .rts modules once per file fingerprint and reloads them
+// when size or modification time changes.
 type ModCache struct {
 	fs  FS
 	mu  sync.RWMutex
@@ -42,6 +44,7 @@ func NewCache(fs FS) *ModCache {
 	return &ModCache{fs: fs, ent: map[string]*modEnt{}, std: Stdlib}
 }
 
+// SetStdlib installs the prelude used when compiling modules through the cache.
 func (c *ModCache) SetStdlib(fn func() map[string]Value) {
 	if fn == nil {
 		return

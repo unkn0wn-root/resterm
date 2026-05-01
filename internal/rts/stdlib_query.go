@@ -7,6 +7,12 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
 
+const (
+	sigQueryParse  = "query.parse(urlOrQuery)"
+	sigQueryEncode = "query.encode(map)"
+	sigQueryMerge  = "query.merge(url, map)"
+)
+
 var querySpec = nsSpec{name: "query", top: true, fns: map[string]NativeFunc{
 	"parse":  queryParse,
 	"encode": queryEncode,
@@ -14,12 +20,12 @@ var querySpec = nsSpec{name: "query", top: true, fns: map[string]NativeFunc{
 }}
 
 func queryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "query.parse(urlOrQuery)")
+	na := newNativeArgs(ctx, pos, args, sigQueryParse)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
 	if na.arg(0).K != VStr {
-		return Null(), rtErr(ctx, pos, "query.parse(urlOrQuery) expects string")
+		return Null(), rtErr(ctx, pos, "%s expects string", sigQueryParse)
 	}
 	txt := strings.TrimSpace(na.arg(0).S)
 	if txt == "" {
@@ -33,7 +39,7 @@ func queryParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func queryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "query.encode(map)")
+	na := newNativeArgs(ctx, pos, args, sigQueryEncode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -59,13 +65,13 @@ func queryEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func queryMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "query.merge(url, map)")
+	na := newNativeArgs(ctx, pos, args, sigQueryMerge)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
 	if na.arg(0).K != VStr {
-		return Null(), rtErr(ctx, pos, "query.merge(url, map) expects string url")
+		return Null(), rtErr(ctx, pos, "%s expects string url", sigQueryMerge)
 	}
 
 	m, err := na.dict(1)

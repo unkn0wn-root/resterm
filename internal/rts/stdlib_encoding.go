@@ -5,6 +5,13 @@ import (
 	"encoding/hex"
 )
 
+const (
+	sigEncodingHexEncode       = "encoding.hex.encode(text)"
+	sigEncodingHexDecode       = "encoding.hex.decode(text)"
+	sigEncodingBase64URLEncode = "encoding.base64url.encode(text)"
+	sigEncodingBase64URLDecode = "encoding.base64url.decode(text)"
+)
+
 func mkEncObj() *objMap {
 	hx := mkObj("encoding.hex", map[string]NativeFunc{
 		"encode": encodingHexEncode,
@@ -26,7 +33,7 @@ func mkEncObj() *objMap {
 }
 
 func encodingHexEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "encoding.hex.encode(text)")
+	na := newNativeArgs(ctx, pos, args, sigEncodingHexEncode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -39,7 +46,7 @@ func encodingHexEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func encodingHexDecode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "encoding.hex.decode(text)")
+	na := newNativeArgs(ctx, pos, args, sigEncodingHexDecode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -62,7 +69,7 @@ func encodingHexDecode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func encodingBase64urlEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "encoding.base64url.encode(text)")
+	na := newNativeArgs(ctx, pos, args, sigEncodingBase64URLEncode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -80,7 +87,7 @@ func encodingBase64urlEncode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func encodingBase64urlDecode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "encoding.base64url.decode(text)")
+	na := newNativeArgs(ctx, pos, args, sigEncodingBase64URLDecode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}

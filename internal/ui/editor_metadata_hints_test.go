@@ -8,7 +8,16 @@ import (
 )
 
 func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
-	required := []string{"@body", "@const", "@variables", "@query", "@trace", "@patch", "@k8s"}
+	required := []string{
+		"@body",
+		"@const",
+		"@variables",
+		"@query",
+		"@trace",
+		"@patch",
+		"@k8s",
+		"@rts",
+	}
 	labels := make(map[string]struct{}, len(hint.MetaCatalog))
 	for _, option := range hint.MetaCatalog {
 		labels[option.Label] = struct{}{}
@@ -81,6 +90,25 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 
 	if opts := hint.MetaOptions("unknown", ""); opts != nil {
 		t.Fatalf("expected nil suggestions for unknown directive, got %v", opts)
+	}
+
+	rtsOptions := hint.MetaOptions("rts", "")
+	if len(rtsOptions) == 0 {
+		t.Fatal("expected rts subcommand options")
+	}
+	for _, label := range []string{"pre-request", "test"} {
+		if !hintOptionsContain(rtsOptions, label) {
+			t.Fatalf("missing rts subcommand %q", label)
+		}
+	}
+	filteredRTS := hint.MetaOptions("rts", "pre")
+	if len(filteredRTS) == 0 {
+		t.Fatal("expected filtered rts subcommand results")
+	}
+	for _, option := range filteredRTS {
+		if !strings.HasPrefix(option.Label, "pre") {
+			t.Fatalf("expected pre* suggestion, got %q", option.Label)
+		}
 	}
 
 	traceOptions := hint.MetaOptions("trace", "")
