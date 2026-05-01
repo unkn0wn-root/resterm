@@ -2,6 +2,7 @@ package ui
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -32,6 +33,36 @@ func TestThemeRuntimeInactiveStyleUsesFaintOnlyForNonLightThemes(t *testing.T) {
 	})
 	if light.inactiveStyle(base).GetFaint() {
 		t.Fatalf("expected light theme inactive style to avoid faint")
+	}
+}
+
+func TestThemeRuntimeInactiveRenderedReappliesAfterANSIReset(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	rt := newThemeRuntime(theme.DefaultDefinition())
+	prefix, _ := styleSGR(lipgloss.NewStyle().Faint(true))
+	if prefix == "" {
+		t.Fatalf("expected faint style prefix")
+	}
+
+	got := rt.inactiveRendered("{\x1b[38;2;249;38;114mname\x1b[0m}")
+	if !strings.Contains(got, "\x1b[0m"+prefix+"}") {
+		t.Fatalf("expected inactive style to be restored after ANSI reset, got %q", got)
+	}
+
+	light := newThemeRuntime(theme.Definition{
+		Key: "daybreak",
+		Metadata: theme.Metadata{
+			Name: "Daybreak",
+			Tags: []string{"light"},
+		},
+		Theme: theme.DefaultTheme(),
+	})
+	const plain = "{\x1b[0m}"
+	if got := light.inactiveRendered(plain); got != plain {
+		t.Fatalf("expected light theme inactive rendering to leave content unchanged, got %q", got)
 	}
 }
 

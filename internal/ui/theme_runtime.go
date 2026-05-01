@@ -44,7 +44,8 @@ func (rt themeRuntime) inactiveRendered(content string) string {
 	if rt.isLight() {
 		return content
 	}
-	return lipgloss.NewStyle().Faint(true).Render(content)
+	prefix, suffix := styleSGR(lipgloss.NewStyle().Faint(true))
+	return applyPersistentANSIStyle(content, prefix, suffix)
 }
 
 func (rt themeRuntime) subtleTextStyle(th theme.Theme) lipgloss.Style {

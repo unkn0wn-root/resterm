@@ -1148,37 +1148,43 @@ func toTermenvColor(profile termenv.Profile, c lipgloss.TerminalColor) termenv.C
 // selection prefix after every SGR sequence so the highlight doesn't get "canceled"
 // by styles that appear inside the line.
 func applySelectionToLine(line, prefix, suffix string) string {
+	return applyPersistentANSIStyle(line, prefix, suffix)
+}
+
+// applyPersistentANSIStyle wraps ANSI-styled content and restores the wrapper
+// after embedded SGR sequences reset terminal attributes.
+func applyPersistentANSIStyle(content, prefix, suffix string) string {
 	if prefix == "" {
-		return line
+		return content
 	}
-	if line == "" {
+	if content == "" {
 		return prefix + suffix
 	}
-	if !ansiSequenceRegex.MatchString(line) {
-		return prefix + line + suffix
+	if !ansiSequenceRegex.MatchString(content) {
+		return prefix + content + suffix
 	}
-	indices := ansiSequenceRegex.FindAllStringIndex(line, -1)
+	indices := ansiSequenceRegex.FindAllStringIndex(content, -1)
 	if len(indices) == 0 {
-		return prefix + line + suffix
+		return prefix + content + suffix
 	}
 
 	var builder strings.Builder
-	builder.Grow(len(line) + len(prefix)*(len(indices)+1) + len(suffix))
+	builder.Grow(len(content) + len(prefix)*(len(indices)+1) + len(suffix))
 	builder.WriteString(prefix)
 	last := 0
 	for _, idx := range indices {
 		if idx[0] > last {
-			builder.WriteString(line[last:idx[0]])
+			builder.WriteString(content[last:idx[0]])
 		}
-		seq := line[idx[0]:idx[1]]
+		seq := content[idx[0]:idx[1]]
 		builder.WriteString(seq)
 		if isSGR(seq) {
 			builder.WriteString(prefix)
 		}
 		last = idx[1]
 	}
-	if last < len(line) {
-		builder.WriteString(line[last:])
+	if last < len(content) {
+		builder.WriteString(content[last:])
 	}
 	builder.WriteString(suffix)
 	return builder.String()
