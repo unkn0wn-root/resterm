@@ -33,15 +33,16 @@ var coreSpec = map[string]NativeFunc{
 }
 
 func coreFail(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	na := newNativeArgs(ctx, pos, args, sigFail)
 	msg := sigFail
-	if len(args) == 1 {
-		s, err := toStr(ctx, pos, args[0])
+	if na.len() == 1 {
+		s, err := na.toStr(0)
 		if err != nil {
 			return Null(), err
 		}
 		msg = s
-	} else if len(args) > 1 {
-		msg = fmt.Sprintf("fail(%d args)", len(args))
+	} else if na.len() > 1 {
+		msg = fmt.Sprintf("fail(%d args)", na.len())
 	}
 	return Null(), rtErr(ctx, pos, "%s", msg)
 }

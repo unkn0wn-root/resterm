@@ -96,7 +96,7 @@ func jsonStringify(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		data   []byte
 		indent string
 	)
-	if len(args) == 2 {
+	if na.has(1) {
 		indent, err = jsonIndent(ctx, pos, na.arg(1))
 		if err != nil {
 			return Null(), err
@@ -132,7 +132,7 @@ func jsonGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	path := ""
-	if len(args) == 2 {
+	if na.has(1) {
 		p, err := na.str(1)
 		if err != nil {
 			return Null(), err

@@ -43,14 +43,15 @@ func conv[T any](
 	f cfn[T],
 	mk func(T) Value,
 ) (Value, error) {
-	if err := argCountRange(ctx, pos, args, 1, 2, sig); err != nil {
+	na := newNativeArgs(ctx, pos, args, sig)
+	if err := na.countRange(1, 2); err != nil {
 		return Null(), err
 	}
-	if v, ok := f(args[0]); ok {
+	if v, ok := f(na.arg(0)); ok {
 		return mk(v), nil
 	}
-	if len(args) == 2 {
-		if v, ok := f(args[1]); ok {
+	if na.has(1) {
+		if v, ok := f(na.arg(1)); ok {
 			return mk(v), nil
 		}
 	}

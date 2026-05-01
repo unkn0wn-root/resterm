@@ -197,7 +197,7 @@ func dictGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	if m == nil {
-		if len(args) == 3 {
+		if na.has(2) {
 			return na.arg(2), nil
 		}
 		return Null(), nil
@@ -212,7 +212,7 @@ func dictGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if ok {
 		return v, nil
 	}
-	if len(args) == 3 {
+	if na.has(2) {
 		return na.arg(2), nil
 	}
 	return Null(), nil

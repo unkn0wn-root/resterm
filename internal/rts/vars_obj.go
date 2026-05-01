@@ -147,38 +147,27 @@ func (o *globalObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 
 func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".set(name, value[, secret])"
-	if err := argCountRange(
-		ctx,
-		pos,
-		args,
-		2,
-		3,
-		sig,
-	); err != nil {
+	na := newNativeArgs(ctx, pos, args, sig)
+	if err := na.countRange(2, 3); err != nil {
 		return Null(), err
 	}
 	if o.mut == nil {
 		return Null(), rtErr(ctx, pos, "%s is read-only", o.name)
 	}
-	name, err := keyArg(ctx, pos, args[0], sig)
+	name, err := na.key(0)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := scalarStr(ctx, pos, args[1], sig)
+	val, err := na.scalarStr(1)
 	if err != nil {
 		return Null(), err
 	}
 	secret := false
-	if len(args) == 3 {
-		if args[2].K != VBool {
-			return Null(), rtErr(
-				ctx,
-				pos,
-				"%s expects secret bool",
-				sig,
-			)
+	if na.has(2) {
+		secret, err = na.bool(2)
+		if err != nil {
+			return Null(), err
 		}
-		secret = args[2].B
 	}
 	o.mut.SetGlobal(name, val, secret)
 	key := lowerKey(name)

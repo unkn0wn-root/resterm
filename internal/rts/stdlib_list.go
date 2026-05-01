@@ -273,7 +273,7 @@ func listSlice(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	en := len(items)
-	if len(args) == 3 {
+	if na.has(2) {
 		en, err = intNum(ctx, pos, na.arg(2), na.sig)
 		if err != nil {
 			return Null(), err
