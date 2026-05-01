@@ -6,20 +6,27 @@ import (
 	"strings"
 )
 
+const (
+	sigNum    = "num(x[, def])"
+	sigInt    = "int(x[, def])"
+	sigBool   = "bool(x[, def])"
+	sigTypeof = "typeof(x)"
+)
+
 func coreNum(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return conv(ctx, pos, args, "num(x[, def])", "expects number/string/bool", numTry, Num)
+	return conv(ctx, pos, args, sigNum, "expects number/string/bool", numTry, Num)
 }
 
 func coreInt(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return conv(ctx, pos, args, "int(x[, def])", "expects int/string/bool", intTry, Num)
+	return conv(ctx, pos, args, sigInt, "expects int/string/bool", intTry, Num)
 }
 
 func coreBool(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	return conv(ctx, pos, args, "bool(x[, def])", "expects bool/number/string", boolTry, Bool)
+	return conv(ctx, pos, args, sigBool, "expects bool/number/string", boolTry, Bool)
 }
 
 func coreTypeof(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "typeof(x)")
+	na := newNativeArgs(ctx, pos, args, sigTypeof)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}

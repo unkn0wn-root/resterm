@@ -6,11 +6,30 @@ import (
 	"os"
 )
 
+const (
+	defaultMaxSteps = 10000
+	defaultMaxCall  = 64
+	defaultMaxStr   = 65536
+	defaultMaxList  = 2000
+	defaultMaxDict  = 2000
+)
+
+func defaultLimits() Limits {
+	return Limits{
+		MaxSteps: defaultMaxSteps,
+		MaxCall:  defaultMaxCall,
+		MaxStr:   defaultMaxStr,
+		MaxList:  defaultMaxList,
+		MaxDict:  defaultMaxDict,
+	}
+}
+
 type Use struct {
 	Path  string
 	Alias string
 }
 
+// RT is the host-provided runtime surface visible to an evaluation.
 type RT struct {
 	Env         map[string]string
 	Vars        map[string]string
@@ -44,7 +63,7 @@ type Eng struct {
 func NewEng() *Eng {
 	e := &Eng{
 		C:      NewCache(nil),
-		Lim:    Limits{MaxSteps: 10000, MaxCall: 64, MaxStr: 65536, MaxList: 2000, MaxDict: 2000},
+		Lim:    defaultLimits(),
 		reqObj: newRequestObj("request"),
 	}
 	e.Stdlib = func() map[string]Value {
@@ -52,21 +71,6 @@ func NewEng() *Eng {
 	}
 	e.C.SetStdlib(e.Stdlib)
 	return e
-}
-
-func (e *Eng) ensure() {
-	if e.reqObj == nil {
-		e.reqObj = newRequestObj("request")
-	}
-	if e.Stdlib == nil {
-		e.Stdlib = func() map[string]Value {
-			return buildStdlib(e.reqObj)
-		}
-	}
-	if e.C == nil {
-		e.C = NewCache(nil)
-	}
-	e.C.SetStdlib(e.Stdlib)
 }
 
 func (e *Eng) Eval(ctx context.Context, rt RT, src string, pos Pos) (Value, error) {
@@ -142,6 +146,21 @@ func (e *Eng) ExecModule(ctx context.Context, rt RT, src string, pos Pos) (*Comp
 		defer cx.pop()
 	}
 	return Exec(cx, mod, pre)
+}
+
+func (e *Eng) ensure() {
+	if e.reqObj == nil {
+		e.reqObj = newRequestObj("request")
+	}
+	if e.Stdlib == nil {
+		e.Stdlib = func() map[string]Value {
+			return buildStdlib(e.reqObj)
+		}
+	}
+	if e.C == nil {
+		e.C = NewCache(nil)
+	}
+	e.C.SetStdlib(e.Stdlib)
 }
 
 func (e *Eng) newCtx(ctx context.Context, rt RT) *Ctx {

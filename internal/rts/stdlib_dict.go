@@ -5,6 +5,19 @@ import (
 	"sort"
 )
 
+const (
+	sigDictKeys   = "dict.keys(dict)"
+	sigDictValues = "dict.values(dict)"
+	sigDictItems  = "dict.items(dict)"
+	sigDictSet    = "dict.set(dict, key, value)"
+	sigDictMerge  = "dict.merge(a, b)"
+	sigDictRemove = "dict.remove(dict, key)"
+	sigDictGet    = "dict.get(dict, key[, def])"
+	sigDictHas    = "dict.has(dict, key)"
+	sigDictPick   = "dict.pick(dict, keys)"
+	sigDictOmit   = "dict.omit(dict, keys)"
+)
+
 var dictSpec = nsSpec{name: "dict", fns: map[string]NativeFunc{
 	"keys":   dictKeys,
 	"values": dictValues,
@@ -19,7 +32,7 @@ var dictSpec = nsSpec{name: "dict", fns: map[string]NativeFunc{
 }}
 
 func dictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.keys(dict)")
+	na := newNativeArgs(ctx, pos, args, sigDictKeys)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -45,7 +58,7 @@ func dictKeys(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictValues(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.values(dict)")
+	na := newNativeArgs(ctx, pos, args, sigDictValues)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -71,7 +84,7 @@ func dictValues(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictItems(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.items(dict)")
+	na := newNativeArgs(ctx, pos, args, sigDictItems)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -100,7 +113,7 @@ func dictItems(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.set(dict, key, value)")
+	na := newNativeArgs(ctx, pos, args, sigDictSet)
 	if err := na.count(3); err != nil {
 		return Null(), err
 	}
@@ -124,7 +137,7 @@ func dictSet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.merge(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigDictMerge)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -149,7 +162,7 @@ func dictMerge(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.remove(dict, key)")
+	na := newNativeArgs(ctx, pos, args, sigDictRemove)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -173,7 +186,7 @@ func dictRemove(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.get(dict, key[, def])")
+	na := newNativeArgs(ctx, pos, args, sigDictGet)
 	if err := na.countRange(2, 3); err != nil {
 		return Null(), err
 	}
@@ -206,7 +219,7 @@ func dictGet(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.has(dict, key)")
+	na := newNativeArgs(ctx, pos, args, sigDictHas)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -226,7 +239,7 @@ func dictHas(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictPick(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.pick(dict, keys)")
+	na := newNativeArgs(ctx, pos, args, sigDictPick)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -262,7 +275,7 @@ func dictPick(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func dictOmit(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "dict.omit(dict, keys)")
+	na := newNativeArgs(ctx, pos, args, sigDictOmit)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}

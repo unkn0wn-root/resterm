@@ -413,6 +413,22 @@ func (p *Parser) parseExpr() Expr {
 	return p.parseTernary()
 }
 
+type binOpMatcher func(Kind) (BinOp, bool)
+
+func (p *Parser) parseBinary(next func() Expr, opOf binOpMatcher) Expr {
+	left := next()
+	for {
+		op, ok := opOf(p.cur.K)
+		if !ok {
+			return left
+		}
+		pos := p.cur.P
+		p.next()
+		right := next()
+		left = &Binary{P: pos, Op: op, Left: left, Right: right}
+	}
+}
+
 func (p *Parser) parseTernary() Expr {
 	cond := p.parseCoalesce()
 	if p.cur.K != QUESTION {
@@ -428,108 +444,102 @@ func (p *Parser) parseTernary() Expr {
 }
 
 func (p *Parser) parseCoalesce() Expr {
-	left := p.parseOr()
-	for p.cur.K == COALESCE {
-		pos := p.cur.P
-		p.next()
-		right := p.parseOr()
-		left = &Binary{P: pos, Op: OpCoalesce, Left: left, Right: right}
-	}
-	return left
+	return p.parseBinary(p.parseOr, coalesceOp)
 }
 
 func (p *Parser) parseOr() Expr {
-	left := p.parseAnd()
-	for p.cur.K == KW_OR {
-		pos := p.cur.P
-		p.next()
-		right := p.parseAnd()
-		left = &Binary{P: pos, Op: OpOr, Left: left, Right: right}
-	}
-	return left
+	return p.parseBinary(p.parseAnd, orOp)
 }
 
 func (p *Parser) parseAnd() Expr {
-	left := p.parseEq()
-	for p.cur.K == KW_AND {
-		pos := p.cur.P
-		p.next()
-		right := p.parseEq()
-		left = &Binary{P: pos, Op: OpAnd, Left: left, Right: right}
-	}
-	return left
+	return p.parseBinary(p.parseEq, andOp)
 }
 
 func (p *Parser) parseEq() Expr {
-	left := p.parseCmp()
-	for p.cur.K == EQ || p.cur.K == NE {
-		pos := p.cur.P
-		op := p.cur.K
-		p.next()
-		right := p.parseCmp()
-		if op == EQ {
-			left = &Binary{P: pos, Op: OpEq, Left: left, Right: right}
-		} else {
-			left = &Binary{P: pos, Op: OpNe, Left: left, Right: right}
-		}
-	}
-	return left
+	return p.parseBinary(p.parseCmp, eqOp)
 }
 
 func (p *Parser) parseCmp() Expr {
-	left := p.parseAdd()
-	for p.cur.K == LT || p.cur.K == LE || p.cur.K == GT || p.cur.K == GE {
-		pos := p.cur.P
-		op := p.cur.K
-		p.next()
-		right := p.parseAdd()
-		switch op {
-		case LT:
-			left = &Binary{P: pos, Op: OpLt, Left: left, Right: right}
-		case LE:
-			left = &Binary{P: pos, Op: OpLe, Left: left, Right: right}
-		case GT:
-			left = &Binary{P: pos, Op: OpGt, Left: left, Right: right}
-		case GE:
-			left = &Binary{P: pos, Op: OpGe, Left: left, Right: right}
-		}
-	}
-	return left
+	return p.parseBinary(p.parseAdd, cmpOp)
 }
 
 func (p *Parser) parseAdd() Expr {
-	left := p.parseMul()
-	for p.cur.K == PLUS || p.cur.K == MINUS {
-		pos := p.cur.P
-		op := p.cur.K
-		p.next()
-		right := p.parseMul()
-		if op == PLUS {
-			left = &Binary{P: pos, Op: OpAdd, Left: left, Right: right}
-		} else {
-			left = &Binary{P: pos, Op: OpSub, Left: left, Right: right}
-		}
-	}
-	return left
+	return p.parseBinary(p.parseMul, addOp)
 }
 
 func (p *Parser) parseMul() Expr {
-	left := p.parseUnary()
-	for p.cur.K == STAR || p.cur.K == SLASH || p.cur.K == PERCENT {
-		pos := p.cur.P
-		op := p.cur.K
-		p.next()
-		right := p.parseUnary()
-		switch op {
-		case STAR:
-			left = &Binary{P: pos, Op: OpMul, Left: left, Right: right}
-		case SLASH:
-			left = &Binary{P: pos, Op: OpDiv, Left: left, Right: right}
-		case PERCENT:
-			left = &Binary{P: pos, Op: OpMod, Left: left, Right: right}
-		}
+	return p.parseBinary(p.parseUnary, mulOp)
+}
+
+func coalesceOp(k Kind) (BinOp, bool) {
+	if k == COALESCE {
+		return OpCoalesce, true
 	}
-	return left
+	return 0, false
+}
+
+func orOp(k Kind) (BinOp, bool) {
+	if k == KW_OR {
+		return OpOr, true
+	}
+	return 0, false
+}
+
+func andOp(k Kind) (BinOp, bool) {
+	if k == KW_AND {
+		return OpAnd, true
+	}
+	return 0, false
+}
+
+func eqOp(k Kind) (BinOp, bool) {
+	switch k {
+	case EQ:
+		return OpEq, true
+	case NE:
+		return OpNe, true
+	default:
+		return 0, false
+	}
+}
+
+func cmpOp(k Kind) (BinOp, bool) {
+	switch k {
+	case LT:
+		return OpLt, true
+	case LE:
+		return OpLe, true
+	case GT:
+		return OpGt, true
+	case GE:
+		return OpGe, true
+	default:
+		return 0, false
+	}
+}
+
+func addOp(k Kind) (BinOp, bool) {
+	switch k {
+	case PLUS:
+		return OpAdd, true
+	case MINUS:
+		return OpSub, true
+	default:
+		return 0, false
+	}
+}
+
+func mulOp(k Kind) (BinOp, bool) {
+	switch k {
+	case STAR:
+		return OpMul, true
+	case SLASH:
+		return OpDiv, true
+	case PERCENT:
+		return OpMod, true
+	default:
+		return 0, false
+	}
 }
 
 func (p *Parser) parseUnary() Expr {

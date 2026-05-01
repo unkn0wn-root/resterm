@@ -8,6 +8,20 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
+const (
+	sigTimeNowISO        = "time.nowISO()"
+	sigTimeNowUnix       = "time.nowUnix()"
+	sigTimeNowUnixString = "time.nowUnixString()"
+	sigTimeNowUnixMs     = "time.nowUnixMs()"
+	sigTimeFormat        = "time.format(layout)"
+	sigTimeParse         = "time.parse(layout, value)"
+	sigTimeFormatUnix    = "time.formatUnix(ts, layout)"
+	sigTimeAddUnix       = "time.addUnix(ts, seconds)"
+	sigTimeDuration      = "time.duration(value)"
+
+	nsSec = int64(time.Second)
+)
+
 var timeSpec = nsSpec{name: "time", top: true, fns: map[string]NativeFunc{
 	"nowISO":        timeNowISO,
 	"nowUnix":       timeNowUnix,
@@ -20,15 +34,9 @@ var timeSpec = nsSpec{name: "time", top: true, fns: map[string]NativeFunc{
 	"duration":      timeDuration,
 }}
 
-const (
-	maxI  = float64(^uint64(0) >> 1)
-	minI  = -maxI - 1
-	nsSec = int64(time.Second)
-)
-
 func timeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.nowISO()")
-	if err := na.count(0); err != nil {
+	na := newNativeArgs(ctx, pos, args, sigTimeNowISO)
+	if err := na.none(); err != nil {
 		return Null(), err
 	}
 	t, err := nowT(ctx, pos)
@@ -39,8 +47,8 @@ func timeNowISO(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeNowUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.nowUnix()")
-	if err := na.count(0); err != nil {
+	na := newNativeArgs(ctx, pos, args, sigTimeNowUnix)
+	if err := na.none(); err != nil {
 		return Null(), err
 	}
 
@@ -52,8 +60,8 @@ func timeNowUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeNowUnixStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.nowUnixString()")
-	if err := na.count(0); err != nil {
+	na := newNativeArgs(ctx, pos, args, sigTimeNowUnixString)
+	if err := na.none(); err != nil {
 		return Null(), err
 	}
 
@@ -69,8 +77,8 @@ func timeNowUnixStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeNowUnixMs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.nowUnixMs()")
-	if err := na.count(0); err != nil {
+	na := newNativeArgs(ctx, pos, args, sigTimeNowUnixMs)
+	if err := na.none(); err != nil {
 		return Null(), err
 	}
 
@@ -84,7 +92,7 @@ func timeNowUnixMs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.format(layout)")
+	na := newNativeArgs(ctx, pos, args, sigTimeFormat)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -100,7 +108,7 @@ func timeFormat(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.parse(layout, value)")
+	na := newNativeArgs(ctx, pos, args, sigTimeParse)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -125,7 +133,7 @@ func timeParse(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeFormatUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.formatUnix(ts, layout)")
+	na := newNativeArgs(ctx, pos, args, sigTimeFormatUnix)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -145,12 +153,12 @@ func timeFormatUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeAddUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.addUnix(ts, seconds)")
+	na := newNativeArgs(ctx, pos, args, sigTimeAddUnix)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
 
-	a, err := numF(ctx, pos, na.arg(0), na.sig)
+	a, err := na.finiteNum(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -169,7 +177,7 @@ func timeAddUnix(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func timeDuration(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "time.duration(value)")
+	na := newNativeArgs(ctx, pos, args, sigTimeDuration)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -226,7 +234,11 @@ func splitUnix(ctx *Ctx, pos Pos, v Value, sig string) (int64, int64, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	if n > maxI || n < minI {
+	const (
+		maxInt64Float = float64(^uint64(0) >> 1)
+		minInt64Float = -maxInt64Float - 1
+	)
+	if n > maxInt64Float || n < minInt64Float {
 		return 0, 0, rtErr(ctx, pos, "%s out of range", sig)
 	}
 

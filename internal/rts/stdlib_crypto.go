@@ -6,13 +6,18 @@ import (
 	"encoding/hex"
 )
 
+const (
+	sigCryptoSHA256     = "crypto.sha256(text)"
+	sigCryptoHMACSHA256 = "crypto.hmacSha256(key, text)"
+)
+
 var cryptoSpec = nsSpec{name: "crypto", top: true, fns: map[string]NativeFunc{
 	"sha256":     cryptoSHA256,
 	"hmacSha256": cryptoHMACSHA256,
 }}
 
 func cryptoSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "crypto.sha256(text)")
+	na := newNativeArgs(ctx, pos, args, sigCryptoSHA256)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -27,7 +32,7 @@ func cryptoSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func cryptoHMACSHA256(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "crypto.hmacSha256(key, text)")
+	na := newNativeArgs(ctx, pos, args, sigCryptoHMACSHA256)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}

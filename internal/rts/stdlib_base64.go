@@ -2,13 +2,18 @@ package rts
 
 import "encoding/base64"
 
+const (
+	sigBase64Encode = "base64.encode(x)"
+	sigBase64Decode = "base64.decode(x)"
+)
+
 var base64Spec = nsSpec{name: "base64", top: true, fns: map[string]NativeFunc{
 	"encode": base64Encode,
 	"decode": base64Decode,
 }}
 
 func base64Encode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "base64.encode(x)")
+	na := newNativeArgs(ctx, pos, args, sigBase64Encode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -21,7 +26,7 @@ func base64Encode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func base64Decode(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "base64.decode(x)")
+	na := newNativeArgs(ctx, pos, args, sigBase64Decode)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}

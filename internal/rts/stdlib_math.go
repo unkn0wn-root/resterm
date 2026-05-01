@@ -2,6 +2,16 @@ package rts
 
 import "math"
 
+const (
+	sigMathAbs   = "math.abs(x)"
+	sigMathMin   = "math.min(a, b)"
+	sigMathMax   = "math.max(a, b)"
+	sigMathClamp = "math.clamp(x, min, max)"
+	sigMathFloor = "math.floor(x)"
+	sigMathCeil  = "math.ceil(x)"
+	sigMathRound = "math.round(x)"
+)
+
 var mathSpec = nsSpec{name: "math", fns: map[string]NativeFunc{
 	"abs":   mathAbs,
 	"min":   mathMin,
@@ -13,7 +23,7 @@ var mathSpec = nsSpec{name: "math", fns: map[string]NativeFunc{
 }}
 
 func mathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.abs(x)")
+	na := newNativeArgs(ctx, pos, args, sigMathAbs)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -26,7 +36,7 @@ func mathAbs(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func mathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.min(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigMathMin)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -44,7 +54,7 @@ func mathMin(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func mathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.max(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigMathMax)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -62,7 +72,7 @@ func mathMax(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func mathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.clamp(x, min, max)")
+	na := newNativeArgs(ctx, pos, args, sigMathClamp)
 	if err := na.count(3); err != nil {
 		return Null(), err
 	}
@@ -82,7 +92,7 @@ func mathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		return Null(), err
 	}
 	if lo > hi {
-		return Null(), rtErr(ctx, pos, "math.clamp(x, min, max) expects min <= max")
+		return Null(), rtErr(ctx, pos, "%s expects min <= max", sigMathClamp)
 	}
 	if x < lo {
 		return Num(lo), nil
@@ -94,7 +104,7 @@ func mathClamp(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func mathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.floor(x)")
+	na := newNativeArgs(ctx, pos, args, sigMathFloor)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -107,7 +117,7 @@ func mathFloor(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func mathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.ceil(x)")
+	na := newNativeArgs(ctx, pos, args, sigMathCeil)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -120,7 +130,7 @@ func mathCeil(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func mathRound(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "math.round(x)")
+	na := newNativeArgs(ctx, pos, args, sigMathRound)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}

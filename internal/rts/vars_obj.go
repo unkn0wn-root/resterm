@@ -89,17 +89,18 @@ func (o *varsObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *varsObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 2, o.name+".set(name, value)"); err != nil {
+	sig := o.name + ".set(name, value)"
+	if err := argCount(ctx, pos, args, 2, sig); err != nil {
 		return Null(), err
 	}
 	if o.mut == nil {
 		return Null(), rtErr(ctx, pos, "%s is read-only", o.name)
 	}
-	name, err := keyArg(ctx, pos, args[0], o.name+".set(name, value)")
+	name, err := keyArg(ctx, pos, args[0], sig)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := scalarStr(ctx, pos, args[1], o.name+".set(name, value)")
+	val, err := scalarStr(ctx, pos, args[1], sig)
 	if err != nil {
 		return Null(), err
 	}
@@ -145,24 +146,25 @@ func (o *globalObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
+	sig := o.name + ".set(name, value[, secret])"
 	if err := argCountRange(
 		ctx,
 		pos,
 		args,
 		2,
 		3,
-		o.name+".set(name, value[, secret])",
+		sig,
 	); err != nil {
 		return Null(), err
 	}
 	if o.mut == nil {
 		return Null(), rtErr(ctx, pos, "%s is read-only", o.name)
 	}
-	name, err := keyArg(ctx, pos, args[0], o.name+".set(name, value[, secret])")
+	name, err := keyArg(ctx, pos, args[0], sig)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := scalarStr(ctx, pos, args[1], o.name+".set(name, value[, secret])")
+	val, err := scalarStr(ctx, pos, args[1], sig)
 	if err != nil {
 		return Null(), err
 	}
@@ -172,8 +174,8 @@ func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			return Null(), rtErr(
 				ctx,
 				pos,
-				"%s.set(name, value[, secret]) expects secret bool",
-				o.name,
+				"%s expects secret bool",
+				sig,
 			)
 		}
 		secret = args[2].B
@@ -185,13 +187,14 @@ func (o *globalObj) setFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *globalObj) delFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if err := argCount(ctx, pos, args, 1, o.name+".delete(name)"); err != nil {
+	sig := o.name + ".delete(name)"
+	if err := argCount(ctx, pos, args, 1, sig); err != nil {
 		return Null(), err
 	}
 	if o.mut == nil {
 		return Null(), rtErr(ctx, pos, "%s is read-only", o.name)
 	}
-	name, err := keyArg(ctx, pos, args[0], o.name+".delete(name)")
+	name, err := keyArg(ctx, pos, args[0], sig)
 	if err != nil {
 		return Null(), err
 	}

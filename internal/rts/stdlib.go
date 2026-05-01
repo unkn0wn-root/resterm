@@ -3,9 +3,11 @@ package rts
 import "maps"
 
 type nsSpec struct {
+	// name is the RTS namespace name, such as "crypto" or "json".
 	name string
-	top  bool
-	fns  map[string]NativeFunc
+	// top exposes the namespace both as rts.name and as a top-level alias.
+	top bool
+	fns map[string]NativeFunc
 }
 
 var rtsNamespaces = []nsSpec{
@@ -22,6 +24,9 @@ var rtsNamespaces = []nsSpec{
 	mathSpec,
 }
 
+// NativeFunc is the Go implementation shape for an RTS built-in function.
+// Implementations should validate args with nativeArgs so user-facing
+// signatures and errors stay consistent.
 type NativeFunc func(ctx *Ctx, pos Pos, args []Value) (Value, error)
 
 type objMap struct {

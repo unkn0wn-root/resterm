@@ -8,6 +8,16 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	sigFail     = "fail()"
+	sigLen      = "len(x)"
+	sigContains = "contains(a, b)"
+	sigMatch    = "match(pattern, text)"
+	sigStr      = "str(x)"
+	sigDefault  = "default(a, b)"
+	sigUUID     = "uuid()"
+)
+
 var coreSpec = map[string]NativeFunc{
 	"fail":     coreFail,
 	"len":      coreLen,
@@ -23,7 +33,7 @@ var coreSpec = map[string]NativeFunc{
 }
 
 func coreFail(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	msg := "fail()"
+	msg := sigFail
 	if len(args) == 1 {
 		s, err := toStr(ctx, pos, args[0])
 		if err != nil {
@@ -37,7 +47,7 @@ func coreFail(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func coreLen(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "len(x)")
+	na := newNativeArgs(ctx, pos, args, sigLen)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -50,12 +60,12 @@ func coreLen(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	case VDict:
 		return Num(float64(len(na.arg(0).M))), nil
 	default:
-		return Null(), rtErr(ctx, pos, "len(x) unsupported")
+		return Null(), rtErr(ctx, pos, "%s unsupported", sigLen)
 	}
 }
 
 func coreContains(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "contains(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigContains)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -86,7 +96,7 @@ func coreContains(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func coreMatch(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "match(pattern, text)")
+	na := newNativeArgs(ctx, pos, args, sigMatch)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -113,7 +123,7 @@ func coreMatch(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func coreStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "str(x)")
+	na := newNativeArgs(ctx, pos, args, sigStr)
 	if err := na.count(1); err != nil {
 		return Null(), err
 	}
@@ -126,7 +136,7 @@ func coreStr(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func coreDefault(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "default(a, b)")
+	na := newNativeArgs(ctx, pos, args, sigDefault)
 	if err := na.count(2); err != nil {
 		return Null(), err
 	}
@@ -137,7 +147,7 @@ func coreDefault(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func coreUUID(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, "uuid()")
+	na := newNativeArgs(ctx, pos, args, sigUUID)
 	if err := na.count(0); err != nil {
 		return Null(), err
 	}

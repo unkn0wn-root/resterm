@@ -36,16 +36,25 @@ func (o *streamObj) Index(key Value) (Value, error) {
 	return Null(), nil
 }
 
+const (
+	sigStreamEnabled = "stream.enabled()"
+	sigStreamKind    = "stream.kind()"
+	sigStreamSummary = "stream.summary()"
+	sigStreamEvents  = "stream.events()"
+)
+
 func (o *streamObj) enabledFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "stream.enabled() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigStreamEnabled)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	return Bool(o.s != nil), nil
 }
 
 func (o *streamObj) kindFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "stream.kind() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigStreamKind)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.s == nil {
 		return Str(""), nil
@@ -54,8 +63,9 @@ func (o *streamObj) kindFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *streamObj) summaryFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "stream.summary() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigStreamSummary)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.s == nil || len(o.s.Summary) == 0 {
 		return Dict(nil), nil
@@ -64,8 +74,9 @@ func (o *streamObj) summaryFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *streamObj) eventsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "stream.events() expects 0 args")
+	na := newNativeArgs(ctx, pos, args, sigStreamEvents)
+	if err := na.none(); err != nil {
+		return Null(), err
 	}
 	if o.s == nil || len(o.s.Events) == 0 {
 		return List(nil), nil
