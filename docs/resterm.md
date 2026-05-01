@@ -626,7 +626,7 @@ RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. I
 | `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |
 | `@assert` | `# @assert response.statusCode == 200` | Evaluate an assertion after the response arrives. |
 | `@for-each` | `# @for-each json.file("users.json") as user` | Repeat the request for each item in a list. |
-| `@script pre-request lang=rts` | `# @script pre-request lang=rts` | Run a pre-request RST block with request/vars mutation helpers. |
+| `@rts pre-request` | `# @rts pre-request` | Run a pre-request RST block with request/vars mutation helpers. The full `# @script pre-request lang=rts` form remains supported. |
 
 #### Workflow-only RST directives
 
