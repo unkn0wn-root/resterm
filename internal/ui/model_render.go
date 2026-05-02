@@ -638,7 +638,8 @@ func methodColor(th theme.Theme, method string) lipgloss.Color {
 }
 
 func (m Model) renderEditorPane() string {
-	style := m.theme.EditorBorder
+	active := m.focus == focusEditor
+	style := m.editorFrameStyle(active)
 	collapsed := m.effectiveRegionCollapsed(paneRegionEditor)
 	if collapsed {
 		return ""
@@ -654,15 +655,6 @@ func (m Model) renderEditorPane() string {
 	}
 	content = padHorizontal(content, paneHorizontalPadding)
 	innerWidth := contentWidth + (paneHorizontalPadding * 2)
-	if m.focus == focusEditor {
-		style = style.
-			BorderForeground(lipgloss.Color("#B794F6")).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	} else {
-		style = m.themeRuntime.inactiveStyle(style)
-		content = m.themeRuntime.inactiveRendered(content)
-	}
 	frameHeight := style.GetVerticalFrameSize()
 	editorContentHeight := m.editorContentHeight
 	if editorContentHeight <= 0 {
@@ -679,6 +671,18 @@ func (m Model) renderEditorPane() string {
 		MaxWidth(outerWidth).
 		Height(height).
 		Render(content)
+}
+
+func (m Model) editorFrameStyle(active bool) lipgloss.Style {
+	st := m.theme.EditorBorder
+	if active {
+		st = st.
+			BorderForeground(lipgloss.Color("#B794F6")).
+			BorderStyle(lipgloss.ThickBorder())
+	} else {
+		st = m.dimFrame(st)
+	}
+	return stripTextAttrs(st)
 }
 
 func (m Model) renderResponsePane(availableWidth int) string {
@@ -836,12 +840,12 @@ func (m Model) respFrameStyle(active bool) lipgloss.Style {
 			BorderForeground(lipgloss.Color("#6CC4C4")).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
-		st = m.dimRespFrame(st)
+		st = m.dimFrame(st)
 	}
 	return stripTextAttrs(st)
 }
 
-func (m Model) dimRespFrame(st lipgloss.Style) lipgloss.Style {
+func (m Model) dimFrame(st lipgloss.Style) lipgloss.Style {
 	if fg := m.theme.PaneDivider.GetForeground(); theme.ColorDefined(fg) {
 		st = st.BorderForeground(fg)
 	}

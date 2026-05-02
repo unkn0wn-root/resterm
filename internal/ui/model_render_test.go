@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
@@ -375,6 +376,45 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 	}
 	if !strings.Contains(plain, tabSpinFrames[1]) {
 		t.Fatalf("expected spinner frame, got %q", plain)
+	}
+}
+
+func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.editor.SetValue("GET https://google.no")
+	model.editor.SetWidth(32)
+	model.editor.SetHeight(2)
+	model.editorContentHeight = 3
+	model.editor.ShowLineNumbers = false
+	model.editor.SetCursor(0)
+
+	baseColor := lipgloss.Color("#ffffff")
+	reqColor := lipgloss.Color("#ff0000")
+	model.editor.BlurredStyle.Text = lipgloss.NewStyle().Foreground(baseColor)
+	model.editor.BlurredStyle.CursorLine = lipgloss.NewStyle().Foreground(baseColor)
+	model.editor.Blur()
+	model.editor.SetRuneStyler(newMetadataRuneStyler(theme.EditorMetadataPalette{
+		RequestLine: reqColor,
+	}))
+
+	view := model.renderEditorPane()
+	line := lineWith(view, "GET")
+	if line == "" {
+		t.Fatalf("expected rendered editor to include request line, got %q", ansi.Strip(view))
+	}
+	if hasFaintSGR(line) {
+		t.Fatalf("expected inactive editor body to avoid pane-level faint styling, got %q", line)
+	}
+	if strings.Contains(line, lipgloss.NewStyle().Foreground(baseColor).Render("G")) {
+		t.Fatalf("expected cursor rune to keep request-line style, got %q", line)
 	}
 }
 

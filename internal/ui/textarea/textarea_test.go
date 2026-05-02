@@ -252,6 +252,35 @@ func TestRuneStylerOverridesBaseTextColorOnNonCursorLines(t *testing.T) {
 	}
 }
 
+func TestBlurredCursorRuneKeepsSyntaxStyle(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(1)
+	m.SetWidth(24)
+	m.SetValue("GET https://google.no")
+	m.row = 0
+	m.SetCursor(0)
+
+	baseColor := lipgloss.Color("#ffffff")
+	reqColor := lipgloss.Color("#ff0000")
+	m.BlurredStyle.Text = lipgloss.NewStyle().Foreground(baseColor)
+	m.BlurredStyle.CursorLine = lipgloss.NewStyle().Foreground(baseColor)
+	m.Blur()
+	m.SetRuneStyler(fixedLineRuneStyler{
+		0: lipgloss.NewStyle().Foreground(reqColor),
+	})
+
+	view := m.View()
+	if strings.Contains(view, lipgloss.NewStyle().Foreground(baseColor).Render("G")) {
+		t.Fatalf("expected blurred cursor rune to avoid base cursor color, got %q", view)
+	}
+}
+
 func TestVerticalScrollKeepsBuffer(t *testing.T) {
 	m := newTextArea()
 	m.Prompt = ""
