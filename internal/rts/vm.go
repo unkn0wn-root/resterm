@@ -59,13 +59,13 @@ func Exec(ctx *Ctx, mod *Mod, pre map[string]Value) (*Comp, error) {
 	for _, st := range mod.Stmts {
 		if err := vm.execStmt(env, exp, st); err != nil {
 			if _, ok := err.(ret); ok {
-				return nil, rtErr(ctx, st.Pos(), "return outside fn")
+				return nil, Errf(ctx, st.Pos(), "return outside fn")
 			}
 			if b, ok := err.(breakSig); ok {
-				return nil, rtErr(ctx, b.pos, "break outside loop")
+				return nil, Errf(ctx, b.pos, "break outside loop")
 			}
 			if c, ok := err.(continueSig); ok {
-				return nil, rtErr(ctx, c.pos, "continue outside loop")
+				return nil, Errf(ctx, c.pos, "continue outside loop")
 			}
 			return nil, err
 		}
@@ -80,7 +80,7 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 	switch s := st.(type) {
 	case *LetStmt:
 		if env.HasLocal(s.Name) {
-			return rtErr(vm.ctx, s.Pos(), "name already defined: %q", s.Name)
+			return Errf(vm.ctx, s.Pos(), "name already defined: %q", s.Name)
 		}
 		v, err := vm.eval(env, s.Val)
 		if err != nil {
@@ -108,10 +108,10 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 		}
 		found, isConst := env.Set(s.Name, v)
 		if !found {
-			return rtErr(vm.ctx, s.Pos(), "assign to undefined name %q", s.Name)
+			return Errf(vm.ctx, s.Pos(), "assign to undefined name %q", s.Name)
 		}
 		if isConst {
-			return rtErr(vm.ctx, s.Pos(), "assign to const name %q", s.Name)
+			return Errf(vm.ctx, s.Pos(), "assign to const name %q", s.Name)
 		}
 		return nil
 	case *ReturnStmt:
@@ -128,7 +128,7 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 		return err
 	case *FnDef:
 		if env.HasLocal(s.Name) {
-			return rtErr(vm.ctx, s.Pos(), "name already defined: %q", s.Name)
+			return Errf(vm.ctx, s.Pos(), "name already defined: %q", s.Name)
 		}
 		fn := &Func{
 			Name: s.Name,
@@ -171,7 +171,7 @@ func (vm *VM) execStmt(env *Env, exp map[string]Value, st Stmt) error {
 	case *ContinueStmt:
 		return continueSig{pos: s.Pos()}
 	default:
-		return rtErr(vm.ctx, st.Pos(), "unknown stmt")
+		return Errf(vm.ctx, st.Pos(), "unknown stmt")
 	}
 }
 
@@ -324,7 +324,7 @@ func (vm *VM) execRange(up *Env, exp map[string]Value, s *ForStmt) error {
 			}
 		}
 	default:
-		return rtErr(vm.ctx, rng.Expr.Pos(), "range over non-iterable value")
+		return Errf(vm.ctx, rng.Expr.Pos(), "range over non-iterable value")
 	}
 	return nil
 }
@@ -364,10 +364,10 @@ func (vm *VM) assignRangeVar(env *Env, name string, val Value, declare bool, pos
 	}
 	found, isConst := env.Set(name, val)
 	if !found {
-		return rtErr(vm.ctx, pos, "assign to undefined name %q", name)
+		return Errf(vm.ctx, pos, "assign to undefined name %q", name)
 	}
 	if isConst {
-		return rtErr(vm.ctx, pos, "assign to const name %q", name)
+		return Errf(vm.ctx, pos, "assign to const name %q", name)
 	}
 	return nil
 }
@@ -380,7 +380,7 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 	case *Ident:
 		v, ok := env.Get(e.Name)
 		if !ok {
-			return Null(), rtErr(vm.ctx, e.Pos(), "undefined name %q", e.Name)
+			return Null(), Errf(vm.ctx, e.Pos(), "undefined name %q", e.Name)
 		}
 		return v, nil
 	case *Literal:
@@ -392,12 +392,12 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		case LitNum:
 			return Num(e.N), nil
 		case LitStr:
-			if err := vm.chkStr(e.Pos(), e.S); err != nil {
+			if err := vm.checkStr(e.Pos(), e.S); err != nil {
 				return Null(), err
 			}
 			return Str(e.S), nil
 		}
-		return Null(), rtErr(vm.ctx, e.Pos(), "bad literal")
+		return Null(), Errf(vm.ctx, e.Pos(), "bad literal")
 	case *Unary:
 		x, err := vm.eval(env, e.X)
 		if err != nil {
@@ -409,11 +409,11 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		case UnNeg:
 			n, err := toNum(e.Pos(), x)
 			if err != nil {
-				return Null(), wrapErr(vm.ctx, err)
+				return Null(), WrapErr(vm.ctx, err)
 			}
 			return Num(-n), nil
 		}
-		return Null(), rtErr(vm.ctx, e.Pos(), "bad unary")
+		return Null(), Errf(vm.ctx, e.Pos(), "bad unary")
 	case *Binary:
 		return vm.evalBin(env, e)
 	case *Ternary:
@@ -456,9 +456,9 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			}
 			return x.L[i], nil
 		case VDict:
-			k, err := toKey(e.Pos(), idx)
+			k, err := Key(e.Pos(), idx)
 			if err != nil {
-				return Null(), wrapErr(vm.ctx, err)
+				return Null(), WrapErr(vm.ctx, err)
 			}
 			v, ok := x.M[k]
 			if !ok {
@@ -467,15 +467,15 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			return v, nil
 		case VObj:
 			if x.O == nil {
-				return Null(), rtErr(vm.ctx, e.Pos(), "object has no index")
+				return Null(), Errf(vm.ctx, e.Pos(), "object has no index")
 			}
 			v, err := x.O.Index(idx)
 			if err != nil {
-				return Null(), wrapErr(vm.ctx, err)
+				return Null(), WrapErr(vm.ctx, err)
 			}
 			return v, nil
 		default:
-			return Null(), rtErr(vm.ctx, e.Pos(), "index on non-collection")
+			return Null(), Errf(vm.ctx, e.Pos(), "index on non-collection")
 		}
 	case *Member:
 		x, err := vm.eval(env, e.X)
@@ -491,7 +491,7 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			return v, nil
 		case VObj:
 			if x.O == nil {
-				return Null(), rtErr(vm.ctx, e.Pos(), "object has no members")
+				return Null(), Errf(vm.ctx, e.Pos(), "object has no members")
 			}
 			v, ok := x.O.GetMember(e.Name)
 			if !ok {
@@ -499,11 +499,11 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 			}
 			return v, nil
 		default:
-			return Null(), rtErr(vm.ctx, e.Pos(), "member on non-object")
+			return Null(), Errf(vm.ctx, e.Pos(), "member on non-object")
 		}
 	case *ListLit:
 		if vm.ctx != nil && vm.ctx.Lim.MaxList > 0 && len(e.Elems) > vm.ctx.Lim.MaxList {
-			return Null(), rtErr(vm.ctx, e.Pos(), "list too large")
+			return Null(), Errf(vm.ctx, e.Pos(), "list too large")
 		}
 		out := make([]Value, 0, len(e.Elems))
 		for _, it := range e.Elems {
@@ -516,7 +516,7 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		return List(out), nil
 	case *DictLit:
 		if vm.ctx != nil && vm.ctx.Lim.MaxDict > 0 && len(e.Entries) > vm.ctx.Lim.MaxDict {
-			return Null(), rtErr(vm.ctx, e.Pos(), "dict too large")
+			return Null(), Errf(vm.ctx, e.Pos(), "dict too large")
 		}
 		out := make(map[string]Value, len(e.Entries))
 		for _, it := range e.Entries {
@@ -528,13 +528,13 @@ func (vm *VM) eval(env *Env, ex Expr) (Value, error) {
 		}
 		return Dict(out), nil
 	default:
-		return Null(), rtErr(vm.ctx, ex.Pos(), "unknown expr")
+		return Null(), Errf(vm.ctx, ex.Pos(), "unknown expr")
 	}
 }
 
 func (vm *VM) listIndex(pos Pos, idx Value) (int, error) {
 	if idx.K != VNum {
-		return 0, rtErr(vm.ctx, pos, "list index must be number")
+		return 0, Errf(vm.ctx, pos, "list index must be number")
 	}
 	const (
 		maxInt64Float = float64(^uint64(0) >> 1)
@@ -543,9 +543,9 @@ func (vm *VM) listIndex(pos Pos, idx Value) (int, error) {
 	n := idx.N
 	switch {
 	case math.IsNaN(n), math.IsInf(n, 0), math.Trunc(n) != n:
-		return 0, rtErr(vm.ctx, pos, "list index must be integer")
+		return 0, Errf(vm.ctx, pos, "list index must be integer")
 	case n > maxInt64Float, n < minInt64Float:
-		return 0, rtErr(vm.ctx, pos, "list index out of range")
+		return 0, Errf(vm.ctx, pos, "list index out of range")
 	}
 	return int(n), nil
 }
@@ -571,14 +571,14 @@ func (vm *VM) callVal(pos Pos, cal Value, args []Value) (Value, error) {
 	case VFunc:
 		fn := cal.F
 		if fn == nil {
-			return Null(), rtErr(vm.ctx, pos, "call on nil fn")
+			return Null(), Errf(vm.ctx, pos, "call on nil fn")
 		}
 		if len(args) != len(fn.Args) {
-			return Null(), rtErr(vm.ctx, pos, "arg count mismatch")
+			return Null(), Errf(vm.ctx, pos, "arg count mismatch")
 		}
 		if vm.ctx != nil {
 			if vm.ctx.Lim.MaxCall > 0 && vm.ctx.depth >= vm.ctx.Lim.MaxCall {
-				return Null(), rtErr(vm.ctx, pos, "call depth exceeded")
+				return Null(), Errf(vm.ctx, pos, "call depth exceeded")
 			}
 			vm.ctx.depth++
 			vm.ctx.push(Frame{Kind: FrameFn, Pos: fn.Pos, Name: fn.Name})
@@ -597,17 +597,17 @@ func (vm *VM) callVal(pos Pos, cal Value, args []Value) (Value, error) {
 				return r.v, nil
 			}
 			if b, ok := err.(breakSig); ok {
-				return Null(), rtErr(vm.ctx, b.pos, "break outside loop")
+				return Null(), Errf(vm.ctx, b.pos, "break outside loop")
 			}
 			if c, ok := err.(continueSig); ok {
-				return Null(), rtErr(vm.ctx, c.pos, "continue outside loop")
+				return Null(), Errf(vm.ctx, c.pos, "continue outside loop")
 			}
 			return Null(), err
 		}
 		return Null(), nil
 	case VNative:
 		if cal.NF == nil {
-			return Null(), rtErr(vm.ctx, pos, "call on nil native")
+			return Null(), Errf(vm.ctx, pos, "call on nil native")
 		}
 		v, err := cal.NF(vm.ctx, pos, args)
 		if err != nil {
@@ -618,7 +618,7 @@ func (vm *VM) callVal(pos Pos, cal Value, args []Value) (Value, error) {
 		}
 		return v, nil
 	default:
-		return Null(), rtErr(vm.ctx, pos, "not callable")
+		return Null(), Errf(vm.ctx, pos, "not callable")
 	}
 }
 
@@ -675,26 +675,26 @@ func (vm *VM) evalBin(env *Env, e *Binary) (Value, error) {
 		if l.K == VNum && r.K == VNum {
 			return Num(l.N + r.N), nil
 		}
-		ls, err := toStr(vm.ctx, e.Pos(), l)
+		ls, err := ToStr(vm.ctx, e.Pos(), l)
 		if err != nil {
 			return Null(), err
 		}
-		rs, err := toStr(vm.ctx, e.Pos(), r)
+		rs, err := ToStr(vm.ctx, e.Pos(), r)
 		if err != nil {
 			return Null(), err
 		}
-		if err := vm.chkStr(e.Pos(), ls+rs); err != nil {
+		if err := vm.checkStr(e.Pos(), ls+rs); err != nil {
 			return Null(), err
 		}
 		return Str(ls + rs), nil
 	case OpSub, OpMul, OpDiv, OpMod:
 		ln, err := toNum(e.Pos(), l)
 		if err != nil {
-			return Null(), wrapErr(vm.ctx, err)
+			return Null(), WrapErr(vm.ctx, err)
 		}
 		rn, err := toNum(e.Pos(), r)
 		if err != nil {
-			return Null(), wrapErr(vm.ctx, err)
+			return Null(), WrapErr(vm.ctx, err)
 		}
 		switch e.Op {
 		case OpSub:
@@ -703,12 +703,12 @@ func (vm *VM) evalBin(env *Env, e *Binary) (Value, error) {
 			return Num(ln * rn), nil
 		case OpDiv:
 			if rn == 0 {
-				return Null(), rtErr(vm.ctx, e.Pos(), "division by zero")
+				return Null(), Errf(vm.ctx, e.Pos(), "division by zero")
 			}
 			return Num(ln / rn), nil
 		case OpMod:
 			if rn == 0 {
-				return Null(), rtErr(vm.ctx, e.Pos(), "division by zero")
+				return Null(), Errf(vm.ctx, e.Pos(), "division by zero")
 			}
 			return Num(math.Mod(ln, rn)), nil
 		}
@@ -720,7 +720,7 @@ func (vm *VM) evalBin(env *Env, e *Binary) (Value, error) {
 		return cmp(vm.ctx, e.Pos(), e.Op, l, r)
 	}
 
-	return Null(), rtErr(vm.ctx, e.Pos(), "bad op")
+	return Null(), Errf(vm.ctx, e.Pos(), "bad op")
 }
 
 func (vm *VM) tick(pos Pos) error {
@@ -732,7 +732,7 @@ func (vm *VM) tick(pos Pos) error {
 
 func (vm *VM) chkVal(pos Pos, v Value) error {
 	if v.K == VStr {
-		return vm.chkStr(pos, v.S)
+		return vm.checkStr(pos, v.S)
 	}
 	if vm.ctx == nil {
 		return nil
@@ -740,22 +740,22 @@ func (vm *VM) chkVal(pos Pos, v Value) error {
 	switch v.K {
 	case VList:
 		if vm.ctx.Lim.MaxList > 0 && len(v.L) > vm.ctx.Lim.MaxList {
-			return rtErr(vm.ctx, pos, "list too large")
+			return Errf(vm.ctx, pos, "list too large")
 		}
 	case VDict:
 		if vm.ctx.Lim.MaxDict > 0 && len(v.M) > vm.ctx.Lim.MaxDict {
-			return rtErr(vm.ctx, pos, "dict too large")
+			return Errf(vm.ctx, pos, "dict too large")
 		}
 	}
 	return nil
 }
 
-func (vm *VM) chkStr(pos Pos, s string) error {
+func (vm *VM) checkStr(pos Pos, s string) error {
 	if vm.ctx == nil || vm.ctx.Lim.MaxStr <= 0 {
 		return nil
 	}
 	if len(s) > vm.ctx.Lim.MaxStr {
-		return rtErr(vm.ctx, pos, "string too long")
+		return Errf(vm.ctx, pos, "string too long")
 	}
 	return nil
 }
@@ -803,5 +803,5 @@ func cmp(ctx *Ctx, pos Pos, op BinOp, a, b Value) (Value, error) {
 			return Bool(a.S >= b.S), nil
 		}
 	}
-	return Null(), rtErr(ctx, pos, "cannot compare")
+	return Null(), Errf(ctx, pos, "cannot compare")
 }

@@ -47,7 +47,8 @@ type truthyObject interface {
 	Truthy() bool
 }
 
-type interfaceValuer interface {
+// InterfaceValuer lets host objects expose a JSON-compatible representation.
+type InterfaceValuer interface {
 	ToInterface() any
 }
 

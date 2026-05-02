@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
@@ -61,7 +62,7 @@ func (m *Model) runAsserts(
 		return nil, nil
 	}
 	if m.rtsEng == nil {
-		m.rtsEng = rts.NewEng()
+		m.rtsEng = rts.NewEng(stdlib.New)
 	}
 	if vars == nil {
 		vars = m.rtsVars(doc, req, envName)

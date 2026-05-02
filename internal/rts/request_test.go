@@ -9,7 +9,7 @@ import (
 )
 
 func TestRequestHostObject(t *testing.T) {
-	e := NewEng()
+	e := NewEng(testStdlib)
 	p := Pos{Path: "test", Line: 1, Col: 1}
 	rt := RT{
 		Env:  map[string]string{},
@@ -57,12 +57,12 @@ func TestRequestHostObject(t *testing.T) {
 		t.Fatalf("expected query value 2")
 	}
 	rt.Req.URL = "/path"
-	v, err = e.Eval(context.Background(), rt, "rts.dict.keys(request.query)", p)
+	v, err = e.Eval(context.Background(), rt, "len(request.query)", p)
 	if err != nil {
-		t.Fatalf("eval request.query keys: %v", err)
+		t.Fatalf("eval request.query len: %v", err)
 	}
-	if v.K != VList || len(v.L) != 0 {
-		t.Fatalf("expected empty query keys")
+	if v.K != VNum || v.N != 0 {
+		t.Fatalf("expected empty query")
 	}
 }
 
@@ -76,7 +76,7 @@ func TestRequestHostObjectInModule(t *testing.T) {
 	); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
-	e := NewEng()
+	e := NewEng(testStdlib)
 	rt := RT{
 		Env:     map[string]string{},
 		Vars:    map[string]string{},
@@ -108,7 +108,7 @@ func TestModuleAliasFromHeader(t *testing.T) {
 	if err := os.WriteFile(p, src, 0o644); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
-	e := NewEng()
+	e := NewEng(testStdlib)
 	rt := RT{
 		Env:     map[string]string{},
 		Vars:    map[string]string{},
@@ -131,7 +131,7 @@ func TestModuleAliasOverride(t *testing.T) {
 	if err := os.WriteFile(p, src, 0o644); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
-	e := NewEng()
+	e := NewEng(testStdlib)
 	rt := RT{
 		Env:     map[string]string{},
 		Vars:    map[string]string{},
@@ -154,7 +154,7 @@ func TestModuleAliasMissingName(t *testing.T) {
 	if err := os.WriteFile(p, src, 0o644); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
-	e := NewEng()
+	e := NewEng(testStdlib)
 	rt := RT{
 		Env:     map[string]string{},
 		Vars:    map[string]string{},
@@ -174,7 +174,7 @@ func TestModuleAliasModuleNotFirst(t *testing.T) {
 	if err := os.WriteFile(p, src, 0o644); err != nil {
 		t.Fatalf("write module: %v", err)
 	}
-	e := NewEng()
+	e := NewEng(testStdlib)
 	rt := RT{
 		Env:     map[string]string{},
 		Vars:    map[string]string{},

@@ -6,7 +6,7 @@ type ModObj struct {
 }
 
 func NewModObj(name string, exp map[string]Value) *ModObj {
-	return &ModObj{name: name, exp: cloneMap(exp)}
+	return &ModObj{name: name, exp: CloneDict(exp)}
 }
 
 func (m *ModObj) TypeName() string { return "module:" + m.name }
@@ -17,7 +17,7 @@ func (m *ModObj) GetMember(name string) (Value, bool) {
 }
 
 func (m *ModObj) Index(key Value) (Value, error) {
-	k, err := toKey(Pos{}, key)
+	k, err := Key(Pos{}, key)
 	if err != nil {
 		return Null(), err
 	}

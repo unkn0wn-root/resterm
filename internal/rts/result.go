@@ -37,7 +37,7 @@ func (o *resultObj) GetMember(name string) (Value, bool) {
 }
 
 func (o *resultObj) Index(key Value) (Value, error) {
-	k, err := toKey(Pos{}, key)
+	k, err := Key(Pos{}, key)
 	if err != nil {
 		return Null(), err
 	}
@@ -52,7 +52,7 @@ func (o *resultObj) Truthy() bool { return o.ok }
 func (o *resultObj) ToInterface() any {
 	out := map[string]any{
 		"ok":    o.ok,
-		"value": toIface(o.val),
+		"value": ToIface(o.val),
 	}
 	if o.ok || o.err == "" {
 		out["error"] = nil

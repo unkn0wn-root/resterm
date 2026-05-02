@@ -265,7 +265,11 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 	if err := apply("status_bar", &cloned.StatusBar, spec.Styles.StatusBar); err != nil {
 		return Theme{}, err
 	}
-	if err := apply("status_bar_info", &cloned.StatusBarInfo, spec.Styles.StatusBarInfo); err != nil {
+	if err := apply(
+		"status_bar_info",
+		&cloned.StatusBarInfo,
+		spec.Styles.StatusBarInfo,
+	); err != nil {
 		return Theme{}, err
 	}
 	if err := apply("status_bar_key", &cloned.StatusBarKey, spec.Styles.StatusBarKey); err != nil {

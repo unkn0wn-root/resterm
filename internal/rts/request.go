@@ -60,7 +60,7 @@ func (o *requestObj) mutator(ctx *Ctx, pos Pos) (ReqMut, error) {
 	m := o.mut
 	o.mu.RUnlock()
 	if m == nil {
-		return nil, rtErr(ctx, pos, "request is read-only")
+		return nil, Errf(ctx, pos, "request is read-only")
 	}
 	return m, nil
 }
@@ -113,19 +113,19 @@ func (o *requestObj) Index(key Value) (Value, error) {
 
 func (o *requestObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".header(name)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(1); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(1); err != nil {
 		return Null(), err
 	}
-	name, err := toKey(pos, na.arg(0))
+	name, err := Key(pos, na.Arg(0))
 	if err != nil {
-		return Null(), wrapErr(ctx, err)
+		return Null(), WrapErr(ctx, err)
 	}
 	h := reqHeadersRaw(o.get())
 	if len(h) == 0 {
 		return Str(""), nil
 	}
-	key := lowerKey(name)
+	key := lookupKey(name)
 	vals, ok := h[key]
 	if !ok || len(vals) == 0 {
 		return Str(""), nil
@@ -135,15 +135,15 @@ func (o *requestObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 
 func (o *requestObj) setMethodFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".setMethod(method)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(1); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(1); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := na.scalarStr(0)
+	val, err := na.ScalarStr(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -153,15 +153,15 @@ func (o *requestObj) setMethodFn(ctx *Ctx, pos Pos, args []Value) (Value, error)
 
 func (o *requestObj) setURLFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".setURL(url)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(1); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(1); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := na.scalarStr(0)
+	val, err := na.ScalarStr(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -171,19 +171,19 @@ func (o *requestObj) setURLFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 
 func (o *requestObj) setHeaderFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".setHeader(name, value)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(2); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(2); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	name, err := na.key(0)
+	name, err := na.Key(0)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := na.scalarStr(1)
+	val, err := na.ScalarStr(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -193,19 +193,19 @@ func (o *requestObj) setHeaderFn(ctx *Ctx, pos Pos, args []Value) (Value, error)
 
 func (o *requestObj) addHeaderFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".addHeader(name, value)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(2); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(2); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	name, err := na.key(0)
+	name, err := na.Key(0)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := na.scalarStr(1)
+	val, err := na.ScalarStr(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -215,15 +215,15 @@ func (o *requestObj) addHeaderFn(ctx *Ctx, pos Pos, args []Value) (Value, error)
 
 func (o *requestObj) removeHeaderFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".removeHeader(name)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(1); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(1); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	name, err := na.key(0)
+	name, err := na.Key(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -233,19 +233,19 @@ func (o *requestObj) removeHeaderFn(ctx *Ctx, pos Pos, args []Value) (Value, err
 
 func (o *requestObj) setQueryFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".setQueryParam(name, value)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(2); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(2); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	name, err := na.key(0)
+	name, err := na.Key(0)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := na.scalarStr(1)
+	val, err := na.ScalarStr(1)
 	if err != nil {
 		return Null(), err
 	}
@@ -255,15 +255,15 @@ func (o *requestObj) setQueryFn(ctx *Ctx, pos Pos, args []Value) (Value, error) 
 
 func (o *requestObj) setBodyFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".setBody(body)"
-	na := newNativeArgs(ctx, pos, args, sig)
-	if err := na.count(1); err != nil {
+	na := NewArgs(ctx, pos, args, sig)
+	if err := na.Count(1); err != nil {
 		return Null(), err
 	}
 	m, err := o.mutator(ctx, pos)
 	if err != nil {
 		return Null(), err
 	}
-	val, err := na.scalarStr(0)
+	val, err := na.ScalarStr(0)
 	if err != nil {
 		return Null(), err
 	}
@@ -313,10 +313,10 @@ func reqQuery(r *Req) map[string]Value {
 	}
 	qv := url.Values(r.Q)
 	if len(qv) == 0 && r.URL != "" {
-		qv = parseURLQuery(r.URL)
+		qv = ParseURLQuery(r.URL)
 	}
 	if len(qv) == 0 {
 		return map[string]Value{}
 	}
-	return valuesDict(qv)
+	return ValuesDict(qv)
 }

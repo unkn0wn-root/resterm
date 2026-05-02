@@ -10,7 +10,7 @@ import (
 
 func evalTrace(t *testing.T, rt RT, src string) Value {
 	t.Helper()
-	e := NewEng()
+	e := NewEng(testStdlib)
 	v, err := e.Eval(context.Background(), rt, src, Pos{Path: "test", Line: 1, Col: 1})
 	if err != nil {
 		t.Fatalf("eval %q: %v", src, err)

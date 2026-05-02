@@ -14,7 +14,7 @@ func evalExpr(t *testing.T, src string) Value {
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	vm := &VM{ctx: ctx}
 	env := NewEnv(nil)
-	for k, v := range Stdlib() {
+	for k, v := range testStdlib() {
 		env.DefConst(k, v)
 	}
 	v, err := vm.eval(env, ex)
@@ -33,7 +33,7 @@ func execModule(t *testing.T, src string) *Comp {
 		context.Background(),
 		Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024, MaxSteps: 10000},
 	)
-	comp, err := Exec(ctx, m, Stdlib())
+	comp, err := Exec(ctx, m, testStdlib())
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestEvalFnCall(t *testing.T) {
 		t.Fatalf("parse: %v", err)
 	}
 	ctx := NewCtx(context.Background(), Limits{})
-	comp, err := Exec(ctx, m, Stdlib())
+	comp, err := Exec(ctx, m, testStdlib())
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestTryExprSwallowsError(t *testing.T) {
 	ctx := NewCtx(context.Background(), Limits{})
 	vm := &VM{ctx: ctx}
 	env := NewEnv(nil)
-	for k, v := range Stdlib() {
+	for k, v := range testStdlib() {
 		env.DefConst(k, v)
 	}
 	v, err := vm.eval(env, ex)
@@ -185,7 +185,7 @@ fn dec(n) {
 		t.Fatalf("parse: %v", err)
 	}
 	ctx := NewCtx(context.Background(), Limits{})
-	comp, err := Exec(ctx, m, Stdlib())
+	comp, err := Exec(ctx, m, testStdlib())
 	if err != nil {
 		t.Fatalf("exec: %v", err)
 	}
@@ -306,7 +306,7 @@ x = 2
 		t.Fatalf("parse: %v", err)
 	}
 	ctx := NewCtx(context.Background(), Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
-	_, err = Exec(ctx, m, Stdlib())
+	_, err = Exec(ctx, m, testStdlib())
 	if err == nil || !strings.Contains(err.Error(), "const") {
 		t.Fatalf("expected const assignment error, got %v", err)
 	}
@@ -321,7 +321,7 @@ let len = 1
 		t.Fatalf("parse: %v", err)
 	}
 	ctx := NewCtx(context.Background(), Limits{})
-	_, err = Exec(ctx, m, Stdlib())
+	_, err = Exec(ctx, m, testStdlib())
 	if err == nil || !strings.Contains(err.Error(), "name already defined") {
 		t.Fatalf("expected name already defined error, got %v", err)
 	}
@@ -336,7 +336,7 @@ let env = 1
 		t.Fatalf("parse: %v", err)
 	}
 	ctx := NewCtx(context.Background(), Limits{})
-	pre := Stdlib()
+	pre := testStdlib()
 	pre["env"] = Obj(newMapObj("env", map[string]string{}))
 	_, err = Exec(ctx, m, pre)
 	if err == nil || !strings.Contains(err.Error(), "name already defined") {

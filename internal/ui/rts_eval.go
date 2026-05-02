@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -363,7 +364,7 @@ func (m *Model) rtsEval(
 	extras ...map[string]string,
 ) vars.ExprEval {
 	if m.rtsEng == nil {
-		m.rtsEng = rts.NewEng()
+		m.rtsEng = rts.NewEng(stdlib.New)
 	}
 	var v map[string]string
 	if safe {
@@ -397,7 +398,7 @@ func (m *Model) rtsEvalValue(
 	extraVals map[string]rts.Value,
 ) (rts.Value, error) {
 	if m.rtsEng == nil {
-		m.rtsEng = rts.NewEng()
+		m.rtsEng = rts.NewEng(stdlib.New)
 	}
 	if vars == nil {
 		vars = m.rtsVars(doc, req, envName)

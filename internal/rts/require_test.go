@@ -7,7 +7,7 @@ import (
 )
 
 func TestRequireHelpers(t *testing.T) {
-	e := NewEng()
+	e := NewEng(testStdlib)
 	rt := RT{
 		Env:     map[string]string{"mode": "dev"},
 		Vars:    map[string]string{"token": "abc"},

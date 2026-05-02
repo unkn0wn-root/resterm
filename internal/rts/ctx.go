@@ -128,7 +128,8 @@ func (c *Ctx) pop() {
 	c.stack = c.stack[:len(c.stack)-1]
 }
 
-func rtErr(ctx *Ctx, pos Pos, format string, args ...any) error {
+// Errf returns a runtime error with the current call stack attached.
+func Errf(ctx *Ctx, pos Pos, format string, args ...any) error {
 	base := &RuntimeError{Pos: pos, Msg: fmt.Sprintf(format, args...)}
 	if ctx == nil {
 		return base
@@ -161,7 +162,8 @@ func isAbort(err error) bool {
 	return false
 }
 
-func wrapErr(ctx *Ctx, err error) error {
+// WrapErr attaches the current call stack to err unless it already has one.
+func WrapErr(ctx *Ctx, err error) error {
 	if err == nil {
 		return nil
 	}

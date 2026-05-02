@@ -5,7 +5,8 @@ import (
 	"strings"
 )
 
-func parseQuery(txt string) (url.Values, error) {
+// ParseQuery parses either a raw query string or a URL containing a query.
+func ParseQuery(txt string) (url.Values, error) {
 	if hasURLMarkers(txt) {
 		u, err := url.Parse(txt)
 		if err != nil {
@@ -17,7 +18,8 @@ func parseQuery(txt string) (url.Values, error) {
 	return url.ParseQuery(tr)
 }
 
-func parseURLQuery(raw string) url.Values {
+// ParseURLQuery returns the parsed query for URL-like strings.
+func ParseURLQuery(raw string) url.Values {
 	u := strings.TrimSpace(raw)
 	if u == "" {
 		return url.Values{}
@@ -26,7 +28,7 @@ func parseURLQuery(raw string) url.Values {
 		return url.Values{}
 	}
 
-	vals, err := parseQuery(u)
+	vals, err := ParseQuery(u)
 	if err != nil {
 		return url.Values{}
 	}
@@ -37,7 +39,8 @@ func hasURLMarkers(s string) bool {
 	return strings.Contains(s, "?") || strings.Contains(s, "://")
 }
 
-func valuesDict(vals url.Values) map[string]Value {
+// ValuesDict converts URL query values into an RTS dictionary.
+func ValuesDict(vals url.Values) map[string]Value {
 	if len(vals) == 0 {
 		return map[string]Value{}
 	}
