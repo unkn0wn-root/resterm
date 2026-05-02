@@ -418,6 +418,25 @@ func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
 	}
 }
 
+func TestInactiveSidebarFrameKeepsStyleOnFrame(t *testing.T) {
+	model := New(Config{})
+	model.theme.BrowserBorder = model.theme.BrowserBorder.
+		Foreground(lipgloss.Color("#ffffff")).
+		Bold(true).
+		Faint(true)
+
+	st := model.sidebarFrameStyle(false)
+	if st.GetBold() || st.GetFaint() {
+		t.Fatalf("expected inactive sidebar frame to strip text attrs")
+	}
+	if _, ok := st.GetForeground().(lipgloss.NoColor); !ok {
+		t.Fatalf("expected inactive sidebar frame to avoid text foreground, got %v", st.GetForeground())
+	}
+	if st.GetBorderLeftForeground() != model.theme.PaneDivider.GetForeground() {
+		t.Fatalf("expected inactive sidebar border to use pane divider color")
+	}
+}
+
 func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

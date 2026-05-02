@@ -284,24 +284,9 @@ func (m Model) renderWithinAppFrame(content string) string {
 }
 
 func (m Model) renderFilePane() string {
-	style := m.theme.BrowserBorder
 	paneActive := m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows
+	style := m.sidebarFrameStyle(paneActive)
 	collapsed := m.effectiveRegionCollapsed(paneRegionSidebar)
-	switch m.focus {
-	case focusFile:
-		style = style.
-			BorderForeground(m.theme.PaneBorderFocusFile).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	case focusRequests, focusWorkflows:
-		style = style.
-			BorderForeground(m.theme.PaneBorderFocusRequests).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	}
-	if !paneActive {
-		style = m.themeRuntime.inactiveStyle(style)
-	}
 	frameWidth := style.GetHorizontalFrameSize()
 	width := m.sidebarWidthPx
 	if width <= 0 {
@@ -353,6 +338,25 @@ func (m Model) renderFilePane() string {
 		MaxWidth(width).
 		Height(targetHeight).
 		Render(content)
+}
+
+func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {
+	st := m.theme.BrowserBorder
+	if active {
+		switch m.focus {
+		case focusFile:
+			st = st.
+				BorderForeground(m.theme.PaneBorderFocusFile).
+				BorderStyle(lipgloss.ThickBorder())
+		case focusRequests, focusWorkflows:
+			st = st.
+				BorderForeground(m.theme.PaneBorderFocusRequests).
+				BorderStyle(lipgloss.ThickBorder())
+		}
+	} else {
+		st = m.dimFrame(st)
+	}
+	return stripTextAttrs(st)
 }
 
 func centerBox(width, height int, content string) string {
