@@ -147,12 +147,14 @@ func TestResponseCopyPayloadRequestHeadersCopiesPlainHeaders(t *testing.T) {
 		},
 	}
 	snap := &responseSnapshot{
-		pretty:         withTrailingNewline("pretty"),
-		raw:            withTrailingNewline("raw"),
-		headers:        withTrailingNewline("Stored response headers\nX-Resp: ok"),
-		requestHeaders: withTrailingNewline("Request GET http://example.test\n\n1 HEADER\nX-Decorated-Req: no"),
-		source:         newHTTPResponseRenderSource(resp, nil, nil),
-		ready:          true,
+		pretty:  withTrailingNewline("pretty"),
+		raw:     withTrailingNewline("raw"),
+		headers: withTrailingNewline("Stored response headers\nX-Resp: ok"),
+		requestHeaders: withTrailingNewline(
+			"Request GET http://example.test\n\n1 HEADER\nX-Decorated-Req: no",
+		),
+		source: newHTTPResponseRenderSource(resp, nil, nil),
+		ready:  true,
 	}
 	model := newModelWithResponseTab(responseTabHeaders, snap)
 	pane := model.pane(responsePanePrimary)

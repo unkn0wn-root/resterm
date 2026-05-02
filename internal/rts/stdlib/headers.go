@@ -98,7 +98,12 @@ func headersHas(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) 
 	case rts.VList:
 		return rts.Bool(len(checked.L) > 0), nil
 	default:
-		return rts.Null(), rts.Errf(ctx, pos, "%s expects header values as string/list", sigHeadersHas)
+		return rts.Null(), rts.Errf(
+			ctx,
+			pos,
+			"%s expects header values as string/list",
+			sigHeadersHas,
+		)
 	}
 }
 
@@ -186,7 +191,12 @@ func headersMerge(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error
 	return rts.Dict(out), nil
 }
 
-func normHeaders(ctx *rts.Ctx, pos rts.Pos, m map[string]rts.Value, sig string) (map[string]rts.Value, error) {
+func normHeaders(
+	ctx *rts.Ctx,
+	pos rts.Pos,
+	m map[string]rts.Value,
+	sig string,
+) (map[string]rts.Value, error) {
 	if len(m) == 0 {
 		return map[string]rts.Value{}, nil
 	}
@@ -227,7 +237,12 @@ func headerValue(ctx *rts.Ctx, pos rts.Pos, v rts.Value) (rts.Value, error) {
 	}
 }
 
-func findHeader(ctx *rts.Ctx, pos rts.Pos, m map[string]rts.Value, name string) (rts.Value, bool, error) {
+func findHeader(
+	ctx *rts.Ctx,
+	pos rts.Pos,
+	m map[string]rts.Value,
+	name string,
+) (rts.Value, bool, error) {
 	key := strings.ToLower(name)
 	if val, ok := m[key]; ok {
 		return val, true, nil

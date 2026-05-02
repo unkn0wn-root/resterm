@@ -54,11 +54,13 @@ func TestStdlibCore(t *testing.T) {
 func TestStdlibCrypto(t *testing.T) {
 	ctx := rts.NewCtx(context.Background(), rts.Limits{MaxStr: 1024, MaxList: 1024, MaxDict: 1024})
 	v := evalExprCtx(t, ctx, "crypto.sha256(\"abc\")")
-	if v.K != rts.VStr || v.S != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
+	if v.K != rts.VStr ||
+		v.S != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
 		t.Fatalf("expected sha256")
 	}
 	v = evalExprCtx(t, ctx, "crypto.hmacSha256(\"key\", \"data\")")
-	if v.K != rts.VStr || v.S != "5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0" {
+	if v.K != rts.VStr ||
+		v.S != "5031fe3d989c6d1537a013fa6e739da23463fdaec3b70137d828e36ace221bd0" {
 		t.Fatalf("expected hmac sha256")
 	}
 }

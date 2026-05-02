@@ -239,7 +239,12 @@ func TestRenderStatusBarLeftUsesExplicitParts(t *testing.T) {
 		ctx:          "Focus: Ed...",
 		ctxTruncated: true,
 	})
-	if want := model.theme.StatusBarValue.Render("Focus: Ed..."); !strings.Contains(truncated, want) {
+	if want := model.theme.StatusBarValue.Render(
+		"Focus: Ed...",
+	); !strings.Contains(
+		truncated,
+		want,
+	) {
 		t.Fatalf("expected truncated context value style %q in %q", want, truncated)
 	}
 }
@@ -430,7 +435,10 @@ func TestInactiveSidebarFrameKeepsStyleOnFrame(t *testing.T) {
 		t.Fatalf("expected inactive sidebar frame to strip text attrs")
 	}
 	if _, ok := st.GetForeground().(lipgloss.NoColor); !ok {
-		t.Fatalf("expected inactive sidebar frame to avoid text foreground, got %v", st.GetForeground())
+		t.Fatalf(
+			"expected inactive sidebar frame to avoid text foreground, got %v",
+			st.GetForeground(),
+		)
 	}
 	if st.GetBorderLeftForeground() != model.theme.PaneDivider.GetForeground() {
 		t.Fatalf("expected inactive sidebar border to use pane divider color")
