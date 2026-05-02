@@ -682,17 +682,9 @@ func (m Model) renderEditorPane() string {
 }
 
 func (m Model) renderResponsePane(availableWidth int) string {
-	style := m.theme.ResponseBorder
 	active := m.focus == focusResponse
+	style := m.respFrameStyle(active)
 	collapsed := m.effectiveRegionCollapsed(paneRegionResponse)
-	if active {
-		style = style.
-			BorderForeground(lipgloss.Color("#6CC4C4")).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	} else {
-		style = m.themeRuntime.inactiveStyle(style)
-	}
 
 	frameWidth := style.GetHorizontalFrameSize()
 	if availableWidth < 0 {
@@ -819,9 +811,6 @@ func (m Model) renderResponsePane(availableWidth int) string {
 			columnWidth = contentBudget
 		}
 		column := m.renderResponseColumn(responsePanePrimary, active, columnWidth)
-		if !active {
-			column = m.themeRuntime.inactiveRendered(column)
-		}
 		body = column
 	}
 
@@ -838,6 +827,39 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	body = lipgloss.NewStyle().Width(contentBudget).Render(body)
 	body = padHorizontal(body, paneHorizontalPadding)
 	return style.Width(innerWidth).MaxWidth(width).Height(height).Render(body)
+}
+
+func (m Model) respFrameStyle(active bool) lipgloss.Style {
+	st := m.theme.ResponseBorder
+	if active {
+		st = st.
+			BorderForeground(lipgloss.Color("#6CC4C4")).
+			BorderStyle(lipgloss.ThickBorder())
+	} else {
+		st = m.dimRespFrame(st)
+	}
+	return stripTextAttrs(st)
+}
+
+func (m Model) dimRespFrame(st lipgloss.Style) lipgloss.Style {
+	if fg := m.theme.PaneDivider.GetForeground(); theme.ColorDefined(fg) {
+		st = st.BorderForeground(fg)
+	}
+	return st
+}
+
+// Pretty content carries its own ANSI syntax colors
+// text attributes on the frame leak into unstyled tokens until the next inner reset.
+func stripTextAttrs(st lipgloss.Style) lipgloss.Style {
+	return st.
+		UnsetForeground().
+		UnsetBold().
+		UnsetItalic().
+		UnsetUnderline().
+		UnsetStrikethrough().
+		UnsetReverse().
+		UnsetBlink().
+		UnsetFaint()
 }
 
 func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
@@ -929,11 +951,9 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 		Render(content)
 
 	if !focused && m.focus == focusResponse {
-		tabs = m.themeRuntime.inactiveRendered(tabs)
 		if searchView != "" {
 			searchView = m.themeRuntime.inactiveRendered(searchView)
 		}
-		content = m.themeRuntime.inactiveRendered(content)
 	}
 
 	elements := []string{tabs}
@@ -1026,32 +1046,38 @@ func (m Model) buildTabRowContent(
 	}
 	badge := m.tabBadgeText(mode)
 	shortBadge := m.tabBadgeShort(mode)
-	baseBadgeStyle := lipgloss.NewStyle().
+	actTab := m.theme.TabActive
+	inactTab := m.theme.TabInactive
+	if !focused || m.focus != focusResponse {
+		actTab = m.themeRuntime.inactiveStyle(actTab)
+		inactTab = m.themeRuntime.inactiveStyle(inactTab)
+	}
+	badgeSt := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#A6A1BB"))
 	if !focused || m.focus != focusResponse {
-		baseBadgeStyle = m.themeRuntime.inactiveStyle(baseBadgeStyle)
+		badgeSt = m.themeRuntime.inactiveStyle(badgeSt)
 	}
 	plans := []tabRowPlan{
 		{
-			activeStyle:   m.theme.TabActive,
-			inactiveStyle: m.theme.TabInactive,
-			badgeStyle:    baseBadgeStyle.PaddingLeft(2),
+			activeStyle:   actTab,
+			inactiveStyle: inactTab,
+			badgeStyle:    badgeSt.PaddingLeft(2),
 			badgeText:     badge,
 			labelFn: func(full string) string {
 				return full
 			},
 		},
 		{
-			activeStyle:   m.theme.TabActive.Padding(0, 1),
-			inactiveStyle: m.theme.TabInactive.Padding(0),
-			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
+			activeStyle:   actTab.Padding(0, 1),
+			inactiveStyle: inactTab.Padding(0),
+			badgeStyle:    badgeSt.PaddingLeft(1),
 			badgeText:     badge,
 			adaptive:      true,
 		},
 		{
-			activeStyle:   m.theme.TabActive.Padding(0),
-			inactiveStyle: m.theme.TabInactive.Padding(0),
-			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
+			activeStyle:   actTab.Padding(0),
+			inactiveStyle: inactTab.Padding(0),
+			badgeStyle:    badgeSt.PaddingLeft(1),
 			badgeText:     shortBadge,
 			labelFn: func(full string) string {
 				label := firstRuneUpper(full)

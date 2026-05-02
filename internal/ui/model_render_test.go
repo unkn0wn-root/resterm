@@ -377,3 +377,72 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 		t.Fatalf("expected spinner frame, got %q", plain)
 	}
 }
+
+func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	snap := &responseSnapshot{
+		pretty: withTrailingNewline("{\n  \"ok\": true\n}"),
+		ready:  true,
+	}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	model.focus = focusEditor
+	model.responseContentHeight = 8
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 32
+	pane.viewport.Height = 6
+	pane.viewport.SetContent(snap.pretty)
+
+	view := model.renderResponsePane(40)
+	line := lineWith(view, "{")
+	if line == "" {
+		t.Fatalf("expected rendered response to include opening brace, got %q", ansi.Strip(view))
+	}
+	if hasFaintSGR(line) {
+		t.Fatalf("expected inactive pane to leave Pretty content unfainted, got %q", line)
+	}
+}
+
+func TestUnfocusedSplitResponseColumnKeepsPrettyContentReadable(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := newModelWithResponseTab(responseTabPretty, &responseSnapshot{ready: true})
+	model.responseSplit = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePaneSecondary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 32
+	pane.viewport.Height = 6
+	pane.viewport.SetContent("{\n  \"ok\": true\n}")
+
+	view := model.renderResponseColumn(responsePaneSecondary, false, 32)
+	line := lineWith(view, "{")
+	if line == "" {
+		t.Fatalf("expected rendered response to include opening brace, got %q", ansi.Strip(view))
+	}
+	if hasFaintSGR(line) {
+		t.Fatalf("expected unfocused split column to leave Pretty content unfainted, got %q", line)
+	}
+}
+
+func lineWith(view, needle string) string {
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(ansi.Strip(line), needle) {
+			return line
+		}
+	}
+	return ""
+}
+
+func hasFaintSGR(s string) bool {
+	return strings.Contains(s, "\x1b[2m") || strings.Contains(s, "\x1b[2;")
+}
