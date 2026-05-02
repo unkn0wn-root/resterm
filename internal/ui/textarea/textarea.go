@@ -1583,6 +1583,7 @@ func (m Model) View() string {
 						// Rune-level syntax styles must win over the line's base text color.
 						cursorStyle = lineStyles[cursorIndex].Inherit(cursorStyle)
 					}
+					m.Cursor.TextStyle = cursorStyle
 					s.WriteString(cursorStyle.Render(m.Cursor.View()))
 					writeSegments(&s, segments, cursorRel+1, len(segments))
 				} else {

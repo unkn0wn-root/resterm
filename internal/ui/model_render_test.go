@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
 
@@ -376,4 +377,131 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 	if !strings.Contains(plain, tabSpinFrames[1]) {
 		t.Fatalf("expected spinner frame, got %q", plain)
 	}
+}
+
+func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.editor.SetValue("GET https://google.no")
+	model.editor.SetWidth(32)
+	model.editor.SetHeight(2)
+	model.editorContentHeight = 3
+	model.editor.ShowLineNumbers = false
+	model.editor.SetCursor(0)
+
+	baseColor := lipgloss.Color("#ffffff")
+	reqColor := lipgloss.Color("#ff0000")
+	model.editor.BlurredStyle.Text = lipgloss.NewStyle().Foreground(baseColor)
+	model.editor.BlurredStyle.CursorLine = lipgloss.NewStyle().Foreground(baseColor)
+	model.editor.Blur()
+	model.editor.SetRuneStyler(newMetadataRuneStyler(theme.EditorMetadataPalette{
+		RequestLine: reqColor,
+	}))
+
+	view := model.renderEditorPane()
+	line := lineWith(view, "GET")
+	if line == "" {
+		t.Fatalf("expected rendered editor to include request line, got %q", ansi.Strip(view))
+	}
+	if hasFaintSGR(line) {
+		t.Fatalf("expected inactive editor body to avoid pane-level faint styling, got %q", line)
+	}
+	if strings.Contains(line, lipgloss.NewStyle().Foreground(baseColor).Render("G")) {
+		t.Fatalf("expected cursor rune to keep request-line style, got %q", line)
+	}
+}
+
+func TestInactiveSidebarFrameKeepsStyleOnFrame(t *testing.T) {
+	model := New(Config{})
+	model.theme.BrowserBorder = model.theme.BrowserBorder.
+		Foreground(lipgloss.Color("#ffffff")).
+		Bold(true).
+		Faint(true)
+
+	st := model.sidebarFrameStyle(false)
+	if st.GetBold() || st.GetFaint() {
+		t.Fatalf("expected inactive sidebar frame to strip text attrs")
+	}
+	if _, ok := st.GetForeground().(lipgloss.NoColor); !ok {
+		t.Fatalf("expected inactive sidebar frame to avoid text foreground, got %v", st.GetForeground())
+	}
+	if st.GetBorderLeftForeground() != model.theme.PaneDivider.GetForeground() {
+		t.Fatalf("expected inactive sidebar border to use pane divider color")
+	}
+}
+
+func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	snap := &responseSnapshot{
+		pretty: withTrailingNewline("{\n  \"ok\": true\n}"),
+		ready:  true,
+	}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	model.focus = focusEditor
+	model.responseContentHeight = 8
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 32
+	pane.viewport.Height = 6
+	pane.viewport.SetContent(snap.pretty)
+
+	view := model.renderResponsePane(40)
+	line := lineWith(view, "{")
+	if line == "" {
+		t.Fatalf("expected rendered response to include opening brace, got %q", ansi.Strip(view))
+	}
+	if hasFaintSGR(line) {
+		t.Fatalf("expected inactive pane to leave Pretty content unfainted, got %q", line)
+	}
+}
+
+func TestUnfocusedSplitResponseColumnKeepsPrettyContentReadable(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := newModelWithResponseTab(responseTabPretty, &responseSnapshot{ready: true})
+	model.responseSplit = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePaneSecondary)
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 32
+	pane.viewport.Height = 6
+	pane.viewport.SetContent("{\n  \"ok\": true\n}")
+
+	view := model.renderResponseColumn(responsePaneSecondary, false, 32)
+	line := lineWith(view, "{")
+	if line == "" {
+		t.Fatalf("expected rendered response to include opening brace, got %q", ansi.Strip(view))
+	}
+	if hasFaintSGR(line) {
+		t.Fatalf("expected unfocused split column to leave Pretty content unfainted, got %q", line)
+	}
+}
+
+func lineWith(view, needle string) string {
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(ansi.Strip(line), needle) {
+			return line
+		}
+	}
+	return ""
+}
+
+func hasFaintSGR(s string) bool {
+	return strings.Contains(s, "\x1b[2m") || strings.Contains(s, "\x1b[2;")
 }

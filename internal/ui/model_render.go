@@ -284,24 +284,9 @@ func (m Model) renderWithinAppFrame(content string) string {
 }
 
 func (m Model) renderFilePane() string {
-	style := m.theme.BrowserBorder
 	paneActive := m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows
+	style := m.sidebarFrameStyle(paneActive)
 	collapsed := m.effectiveRegionCollapsed(paneRegionSidebar)
-	switch m.focus {
-	case focusFile:
-		style = style.
-			BorderForeground(m.theme.PaneBorderFocusFile).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	case focusRequests, focusWorkflows:
-		style = style.
-			BorderForeground(m.theme.PaneBorderFocusRequests).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	}
-	if !paneActive {
-		style = m.themeRuntime.inactiveStyle(style)
-	}
 	frameWidth := style.GetHorizontalFrameSize()
 	width := m.sidebarWidthPx
 	if width <= 0 {
@@ -353,6 +338,25 @@ func (m Model) renderFilePane() string {
 		MaxWidth(width).
 		Height(targetHeight).
 		Render(content)
+}
+
+func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {
+	st := m.theme.BrowserBorder
+	if active {
+		switch m.focus {
+		case focusFile:
+			st = st.
+				BorderForeground(m.theme.PaneBorderFocusFile).
+				BorderStyle(lipgloss.ThickBorder())
+		case focusRequests, focusWorkflows:
+			st = st.
+				BorderForeground(m.theme.PaneBorderFocusRequests).
+				BorderStyle(lipgloss.ThickBorder())
+		}
+	} else {
+		st = m.dimFrame(st)
+	}
+	return stripTextAttrs(st)
 }
 
 func centerBox(width, height int, content string) string {
@@ -638,7 +642,8 @@ func methodColor(th theme.Theme, method string) lipgloss.Color {
 }
 
 func (m Model) renderEditorPane() string {
-	style := m.theme.EditorBorder
+	active := m.focus == focusEditor
+	style := m.editorFrameStyle(active)
 	collapsed := m.effectiveRegionCollapsed(paneRegionEditor)
 	if collapsed {
 		return ""
@@ -654,15 +659,6 @@ func (m Model) renderEditorPane() string {
 	}
 	content = padHorizontal(content, paneHorizontalPadding)
 	innerWidth := contentWidth + (paneHorizontalPadding * 2)
-	if m.focus == focusEditor {
-		style = style.
-			BorderForeground(lipgloss.Color("#B794F6")).
-			Bold(true).
-			BorderStyle(lipgloss.ThickBorder())
-	} else {
-		style = m.themeRuntime.inactiveStyle(style)
-		content = m.themeRuntime.inactiveRendered(content)
-	}
 	frameHeight := style.GetVerticalFrameSize()
 	editorContentHeight := m.editorContentHeight
 	if editorContentHeight <= 0 {
@@ -681,18 +677,22 @@ func (m Model) renderEditorPane() string {
 		Render(content)
 }
 
-func (m Model) renderResponsePane(availableWidth int) string {
-	style := m.theme.ResponseBorder
-	active := m.focus == focusResponse
-	collapsed := m.effectiveRegionCollapsed(paneRegionResponse)
+func (m Model) editorFrameStyle(active bool) lipgloss.Style {
+	st := m.theme.EditorBorder
 	if active {
-		style = style.
-			BorderForeground(lipgloss.Color("#6CC4C4")).
-			Bold(true).
+		st = st.
+			BorderForeground(lipgloss.Color("#B794F6")).
 			BorderStyle(lipgloss.ThickBorder())
 	} else {
-		style = m.themeRuntime.inactiveStyle(style)
+		st = m.dimFrame(st)
 	}
+	return stripTextAttrs(st)
+}
+
+func (m Model) renderResponsePane(availableWidth int) string {
+	active := m.focus == focusResponse
+	style := m.respFrameStyle(active)
+	collapsed := m.effectiveRegionCollapsed(paneRegionResponse)
 
 	frameWidth := style.GetHorizontalFrameSize()
 	if availableWidth < 0 {
@@ -819,9 +819,6 @@ func (m Model) renderResponsePane(availableWidth int) string {
 			columnWidth = contentBudget
 		}
 		column := m.renderResponseColumn(responsePanePrimary, active, columnWidth)
-		if !active {
-			column = m.themeRuntime.inactiveRendered(column)
-		}
 		body = column
 	}
 
@@ -838,6 +835,39 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	body = lipgloss.NewStyle().Width(contentBudget).Render(body)
 	body = padHorizontal(body, paneHorizontalPadding)
 	return style.Width(innerWidth).MaxWidth(width).Height(height).Render(body)
+}
+
+func (m Model) respFrameStyle(active bool) lipgloss.Style {
+	st := m.theme.ResponseBorder
+	if active {
+		st = st.
+			BorderForeground(lipgloss.Color("#6CC4C4")).
+			BorderStyle(lipgloss.ThickBorder())
+	} else {
+		st = m.dimFrame(st)
+	}
+	return stripTextAttrs(st)
+}
+
+func (m Model) dimFrame(st lipgloss.Style) lipgloss.Style {
+	if fg := m.theme.PaneDivider.GetForeground(); theme.ColorDefined(fg) {
+		st = st.BorderForeground(fg)
+	}
+	return st
+}
+
+// Pretty content carries its own ANSI syntax colors
+// text attributes on the frame leak into unstyled tokens until the next inner reset.
+func stripTextAttrs(st lipgloss.Style) lipgloss.Style {
+	return st.
+		UnsetForeground().
+		UnsetBold().
+		UnsetItalic().
+		UnsetUnderline().
+		UnsetStrikethrough().
+		UnsetReverse().
+		UnsetBlink().
+		UnsetFaint()
 }
 
 func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
@@ -929,11 +959,9 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 		Render(content)
 
 	if !focused && m.focus == focusResponse {
-		tabs = m.themeRuntime.inactiveRendered(tabs)
 		if searchView != "" {
 			searchView = m.themeRuntime.inactiveRendered(searchView)
 		}
-		content = m.themeRuntime.inactiveRendered(content)
 	}
 
 	elements := []string{tabs}
@@ -1026,32 +1054,38 @@ func (m Model) buildTabRowContent(
 	}
 	badge := m.tabBadgeText(mode)
 	shortBadge := m.tabBadgeShort(mode)
-	baseBadgeStyle := lipgloss.NewStyle().
+	actTab := m.theme.TabActive
+	inactTab := m.theme.TabInactive
+	if !focused || m.focus != focusResponse {
+		actTab = m.themeRuntime.inactiveStyle(actTab)
+		inactTab = m.themeRuntime.inactiveStyle(inactTab)
+	}
+	badgeSt := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("#A6A1BB"))
 	if !focused || m.focus != focusResponse {
-		baseBadgeStyle = m.themeRuntime.inactiveStyle(baseBadgeStyle)
+		badgeSt = m.themeRuntime.inactiveStyle(badgeSt)
 	}
 	plans := []tabRowPlan{
 		{
-			activeStyle:   m.theme.TabActive,
-			inactiveStyle: m.theme.TabInactive,
-			badgeStyle:    baseBadgeStyle.PaddingLeft(2),
+			activeStyle:   actTab,
+			inactiveStyle: inactTab,
+			badgeStyle:    badgeSt.PaddingLeft(2),
 			badgeText:     badge,
 			labelFn: func(full string) string {
 				return full
 			},
 		},
 		{
-			activeStyle:   m.theme.TabActive.Padding(0, 1),
-			inactiveStyle: m.theme.TabInactive.Padding(0),
-			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
+			activeStyle:   actTab.Padding(0, 1),
+			inactiveStyle: inactTab.Padding(0),
+			badgeStyle:    badgeSt.PaddingLeft(1),
 			badgeText:     badge,
 			adaptive:      true,
 		},
 		{
-			activeStyle:   m.theme.TabActive.Padding(0),
-			inactiveStyle: m.theme.TabInactive.Padding(0),
-			badgeStyle:    baseBadgeStyle.PaddingLeft(1),
+			activeStyle:   actTab.Padding(0),
+			inactiveStyle: inactTab.Padding(0),
+			badgeStyle:    badgeSt.PaddingLeft(1),
 			badgeText:     shortBadge,
 			labelFn: func(full string) string {
 				label := firstRuneUpper(full)
