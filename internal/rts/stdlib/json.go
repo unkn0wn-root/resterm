@@ -13,7 +13,7 @@ const (
 	sigJSONParse     = "json.parse(text)"
 	sigJSONStringify = "json.stringify(value[, indent])"
 	sigJSONGet       = "json.get(value[, path])"
-	sigJSONHas       = "json.Has(value, path)"
+	sigJSONHas       = "json.has(value, path)"
 )
 
 var jsonSpec = nsSpec{name: "json", top: true, fns: map[string]rts.NativeFunc{

@@ -15,7 +15,7 @@ const (
 	sigDictMerge  = "dict.merge(a, b)"
 	sigDictRemove = "dict.remove(dict, key)"
 	sigDictGet    = "dict.get(dict, key[, def])"
-	sigDictHas    = "dict.Has(dict, key)"
+	sigDictHas    = "dict.has(dict, key)"
 	sigDictPick   = "dict.pick(dict, keys)"
 	sigDictOmit   = "dict.omit(dict, keys)"
 )

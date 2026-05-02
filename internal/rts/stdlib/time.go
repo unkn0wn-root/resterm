@@ -205,10 +205,10 @@ func fmtTime(ctx *rts.Ctx, pos rts.Pos, t time.Time, layout string) (rts.Value, 
 }
 
 func numF(ctx *rts.Ctx, pos rts.Pos, v rts.Value, sig string) (float64, error) {
-	n, err := rts.NumArg(ctx, pos, v, sig)
-	if err != nil {
-		return 0, err
+	if v.K != rts.VNum {
+		return 0, rts.Errf(ctx, pos, "%s expects number", sig)
 	}
+	n := v.N
 	if math.IsNaN(n) || math.IsInf(n, 0) {
 		return 0, rts.Errf(ctx, pos, "%s expects finite number", sig)
 	}

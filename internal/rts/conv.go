@@ -6,13 +6,6 @@ import (
 	"strconv"
 )
 
-func Key(pos Pos, v Value) (string, error) {
-	if v.K != VStr {
-		return "", Errf(nil, pos, "expected string key")
-	}
-	return v.S, nil
-}
-
 func ToStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 	switch v.K {
 	case VStr:
@@ -51,6 +44,16 @@ func ToStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 		return "", Errf(ctx, pos, "cannot stringify %v", v.K)
 	default:
 		return "", Errf(ctx, pos, "cannot stringify %v", v.K)
+	}
+}
+
+// ScalarStr converts string, number, and bool values to strings.
+func ScalarStr(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
+	switch v.K {
+	case VStr, VNum, VBool:
+		return ToStr(ctx, pos, v)
+	default:
+		return "", Errf(ctx, pos, "%s expects string/number/bool", sig)
 	}
 }
 

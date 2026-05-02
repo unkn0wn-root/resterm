@@ -125,7 +125,7 @@ func (o *requestObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	if len(h) == 0 {
 		return Str(""), nil
 	}
-	key := lowerKey(name)
+	key := lookupKey(name)
 	vals, ok := h[key]
 	if !ok || len(vals) == 0 {
 		return Str(""), nil

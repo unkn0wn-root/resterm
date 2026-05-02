@@ -9,7 +9,7 @@ import (
 const (
 	sigHeadersNormalize = "headers.normalize(h)"
 	sigHeadersGet       = "headers.get(h, name)"
-	sigHeadersHas       = "headers.Has(h, name)"
+	sigHeadersHas       = "headers.has(h, name)"
 	sigHeadersSet       = "headers.set(h, name, value)"
 	sigHeadersRemove    = "headers.remove(h, name)"
 	sigHeadersMerge     = "headers.merge(a, b)"
