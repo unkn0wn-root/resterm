@@ -10,6 +10,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
@@ -44,7 +45,7 @@ func (m *Model) runRTSPreRequest(
 	}
 	eng := m.rtsEng
 	if eng == nil {
-		eng = rts.NewEng()
+		eng = rts.NewEng(stdlib.New)
 		m.rtsEng = eng
 	}
 	uses := m.rtsUses(doc, req)

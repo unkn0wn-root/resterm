@@ -52,7 +52,7 @@ func TestModCacheReload(t *testing.T) {
 	fs := &memFS{files: map[string]*memFile{}}
 	fs.files[p] = &memFile{data: []byte("export let x = 1"), mod: time.Unix(10, 0)}
 
-	c := NewCache(fs)
+	c := NewCache(fs, testStdlib)
 	ctx := NewCtx(context.Background(), Limits{})
 
 	m1, p1, err := c.Load(ctx, "", p)
@@ -99,9 +99,8 @@ func TestUseAliasCollisionBeforeParse(t *testing.T) {
 	fs.files[p1] = &memFile{data: []byte("module mod\nexport let x ="), mod: time.Unix(10, 0)}
 	fs.files[p2] = &memFile{data: []byte("module mod\nexport let y ="), mod: time.Unix(10, 0)}
 
-	e := NewEng()
-	e.C = NewCache(fs)
-	e.C.SetStdlib(e.Stdlib)
+	e := NewEng(testStdlib)
+	e.C = NewCache(fs, e.modulePre)
 
 	rt := RT{
 		BaseDir: dir,

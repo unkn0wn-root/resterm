@@ -5,99 +5,125 @@ import (
 	"strings"
 )
 
-func argCount(ctx *Ctx, pos Pos, args []Value, want int, sig string) error {
+func ArgCount(ctx *Ctx, pos Pos, args []Value, want int, sig string) error {
 	if len(args) != want {
-		return rtErr(ctx, pos, "%s expects %d args", sig, want)
+		return Errf(ctx, pos, "%s expects %d args", sig, want)
 	}
 	return nil
 }
 
-func argCountRange(ctx *Ctx, pos Pos, args []Value, min, max int, sig string) error {
+func ArgCountRange(ctx *Ctx, pos Pos, args []Value, min, max int, sig string) error {
 	if len(args) < min || len(args) > max {
-		return rtErr(ctx, pos, "%s expects %d-%d args", sig, min, max)
+		return Errf(ctx, pos, "%s expects %d-%d args", sig, min, max)
 	}
 	return nil
 }
 
-func dictArg(ctx *Ctx, pos Pos, v Value, sig string) (map[string]Value, error) {
+func DictArg(ctx *Ctx, pos Pos, v Value, sig string) (map[string]Value, error) {
 	if v.K == VNull {
 		return nil, nil
 	}
 	if v.K != VDict {
-		return nil, rtErr(ctx, pos, "%s expects dict", sig)
+		return nil, Errf(ctx, pos, "%s expects dict", sig)
 	}
 	return v.M, nil
 }
 
-func cloneDict(in map[string]Value) map[string]Value {
-	return cloneMap(in)
-}
-
-func keyArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
-	k, err := toKey(pos, v)
+func KeyArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
+	k, err := Key(pos, v)
 	if err != nil {
-		return "", wrapErr(ctx, err)
+		return "", WrapErr(ctx, err)
 	}
 
 	k = strings.TrimSpace(k)
 	if k == "" {
-		return "", rtErr(ctx, pos, "%s expects non-empty key", sig)
+		return "", Errf(ctx, pos, "%s expects non-empty key", sig)
 	}
 	return k, nil
 }
 
-func mapKey(ctx *Ctx, pos Pos, key, sig string) (string, error) {
+func MapKey(ctx *Ctx, pos Pos, key, sig string) (string, error) {
 	k := strings.TrimSpace(key)
 	if k == "" {
-		return "", rtErr(ctx, pos, "%s expects non-empty key", sig)
+		return "", Errf(ctx, pos, "%s expects non-empty key", sig)
 	}
 	return k, nil
 }
 
-func lowerKey(key string) string {
-	return strings.ToLower(key)
-}
-
-func scalarStr(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
+func ScalarStr(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
 	switch v.K {
 	case VStr, VNum, VBool:
-		return toStr(ctx, pos, v)
+		return ToStr(ctx, pos, v)
 	default:
-		return "", rtErr(ctx, pos, "%s expects string/number/bool", sig)
+		return "", Errf(ctx, pos, "%s expects string/number/bool", sig)
 	}
 }
 
-func strArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
-	s, err := toStr(ctx, pos, v)
+func StrArg(ctx *Ctx, pos Pos, v Value, sig string) (string, error) {
+	s, err := ToStr(ctx, pos, v)
 	if err != nil {
 		return "", err
 	}
-	if err := chkStr(ctx, pos, s); err != nil {
+	if err := CheckStr(ctx, pos, s); err != nil {
 		return "", err
 	}
 	return s, nil
 }
 
-func numArg(ctx *Ctx, pos Pos, v Value, sig string) (float64, error) {
+func NumArg(ctx *Ctx, pos Pos, v Value, sig string) (float64, error) {
 	if v.K != VNum {
-		return 0, rtErr(ctx, pos, "%s expects number", sig)
+		return 0, Errf(ctx, pos, "%s expects number", sig)
 	}
 	return v.N, nil
 }
 
-func listArg(ctx *Ctx, pos Pos, v Value, sig string) ([]Value, error) {
+func ListArg(ctx *Ctx, pos Pos, v Value, sig string) ([]Value, error) {
 	if v.K == VNull {
 		return nil, nil
 	}
 
 	if v.K != VList {
-		return nil, rtErr(ctx, pos, "%s expects list", sig)
+		return nil, Errf(ctx, pos, "%s expects list", sig)
 	}
 
-	if err := chkList(ctx, pos, len(v.L)); err != nil {
+	if err := CheckList(ctx, pos, len(v.L)); err != nil {
 		return nil, err
 	}
 	return v.L, nil
+}
+
+func CheckStr(ctx *Ctx, pos Pos, s string) error {
+	if ctx == nil || ctx.Lim.MaxStr <= 0 {
+		return nil
+	}
+	if len(s) > ctx.Lim.MaxStr {
+		return Errf(ctx, pos, "string too long")
+	}
+	return nil
+}
+
+func CheckList(ctx *Ctx, pos Pos, n int) error {
+	if ctx == nil || ctx.Lim.MaxList <= 0 {
+		return nil
+	}
+	if n > ctx.Lim.MaxList {
+		return Errf(ctx, pos, "list too large")
+	}
+	return nil
+}
+
+func CheckDict(ctx *Ctx, pos Pos, n int) error {
+	if ctx == nil || ctx.Lim.MaxDict <= 0 {
+		return nil
+	}
+	if n > ctx.Lim.MaxDict {
+		return Errf(ctx, pos, "dict too large")
+	}
+	return nil
+}
+
+func lowerKey(key string) string {
+	return strings.ToLower(key)
 }
 
 func reqMsg(ctx *Ctx, pos Pos, args []Value) (string, error) {
@@ -105,7 +131,7 @@ func reqMsg(ctx *Ctx, pos Pos, args []Value) (string, error) {
 		return "", nil
 	}
 
-	s, err := toStr(ctx, pos, args[1])
+	s, err := ToStr(ctx, pos, args[1])
 	if err != nil {
 		return "", err
 	}
@@ -120,35 +146,5 @@ func reqErr(ctx *Ctx, pos Pos, obj, key string, args []Value) error {
 	if msg == "" {
 		msg = fmt.Sprintf("missing required %s: %s", obj, key)
 	}
-	return rtErr(ctx, pos, "%s", msg)
-}
-
-func chkStr(ctx *Ctx, pos Pos, s string) error {
-	if ctx == nil || ctx.Lim.MaxStr <= 0 {
-		return nil
-	}
-	if len(s) > ctx.Lim.MaxStr {
-		return rtErr(ctx, pos, "string too long")
-	}
-	return nil
-}
-
-func chkList(ctx *Ctx, pos Pos, n int) error {
-	if ctx == nil || ctx.Lim.MaxList <= 0 {
-		return nil
-	}
-	if n > ctx.Lim.MaxList {
-		return rtErr(ctx, pos, "list too large")
-	}
-	return nil
-}
-
-func chkDict(ctx *Ctx, pos Pos, n int) error {
-	if ctx == nil || ctx.Lim.MaxDict <= 0 {
-		return nil
-	}
-	if n > ctx.Lim.MaxDict {
-		return rtErr(ctx, pos, "dict too large")
-	}
-	return nil
+	return Errf(ctx, pos, "%s", msg)
 }

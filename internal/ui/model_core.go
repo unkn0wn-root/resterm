@@ -26,6 +26,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -692,7 +693,7 @@ func New(cfg Config) Model {
 		statusMessage:            initialStatus,
 		latencySeries:            newLatencySeries(latCap),
 		scriptRunner:             scripts.NewRunner(nil),
-		rtsEng:                   rts.NewEng(),
+		rtsEng:                   rts.NewEng(stdlib.New),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,
 		updateCmd:                updateCmd,

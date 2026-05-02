@@ -130,16 +130,16 @@ func (o *respObj) Index(key Value) (Value, error) {
 func (o *respObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".header(name)"
 	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "%s expects 1 arg", sig)
+		return Null(), Errf(ctx, pos, "%s expects 1 arg", sig)
 	}
 
 	if o.r == nil {
 		return Null(), nil
 	}
 
-	k, err := toKey(pos, args[0])
+	k, err := Key(pos, args[0])
 	if err != nil {
-		return Null(), wrapErr(ctx, err)
+		return Null(), WrapErr(ctx, err)
 	}
 
 	v, ok := o.h[strings.ToLower(k)]
@@ -152,7 +152,7 @@ func (o *respObj) headerFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 func (o *respObj) textFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".text()"
 	if len(args) != 0 {
-		return Null(), rtErr(ctx, pos, "%s expects 0 args", sig)
+		return Null(), Errf(ctx, pos, "%s expects 0 args", sig)
 	}
 
 	if o.r == nil {
@@ -161,7 +161,7 @@ func (o *respObj) textFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 
 	s := string(o.r.Body)
 	if ctx != nil && ctx.Lim.MaxStr > 0 && len(s) > ctx.Lim.MaxStr {
-		return Null(), rtErr(ctx, pos, "text too long")
+		return Null(), Errf(ctx, pos, "text too long")
 	}
 	return Str(s), nil
 }
@@ -169,7 +169,7 @@ func (o *respObj) textFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 func (o *respObj) jsonFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := o.name + ".json(path)"
 	if len(args) > 1 {
-		return Null(), rtErr(ctx, pos, "%s expects 0 or 1 arg", sig)
+		return Null(), Errf(ctx, pos, "%s expects 0 or 1 arg", sig)
 	}
 
 	if o.r == nil {
@@ -186,21 +186,21 @@ func (o *respObj) jsonFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	}
 
 	if o.jerr != nil {
-		return Null(), rtErr(ctx, pos, "invalid json")
+		return Null(), Errf(ctx, pos, "invalid json")
 	}
 
 	path := ""
 	if len(args) == 1 {
-		p, err := toStr(ctx, pos, args[0])
+		p, err := ToStr(ctx, pos, args[0])
 		if err != nil {
 			return Null(), err
 		}
 		path = p
 	}
 
-	val, ok := jsonPathGet(o.jv, path)
+	val, ok := JSONPathGet(o.jv, path)
 	if !ok {
 		return Null(), nil
 	}
-	return fromIface(ctx, pos, val)
+	return FromIface(ctx, pos, val)
 }

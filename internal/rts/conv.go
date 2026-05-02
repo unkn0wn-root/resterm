@@ -6,21 +6,14 @@ import (
 	"strconv"
 )
 
-func toNum(pos Pos, v Value) (float64, error) {
-	if v.K != VNum {
-		return 0, rtErr(nil, pos, "expected number")
-	}
-	return v.N, nil
-}
-
-func toKey(pos Pos, v Value) (string, error) {
+func Key(pos Pos, v Value) (string, error) {
 	if v.K != VStr {
-		return "", rtErr(nil, pos, "expected string key")
+		return "", Errf(nil, pos, "expected string key")
 	}
 	return v.S, nil
 }
 
-func toStr(ctx *Ctx, pos Pos, v Value) (string, error) {
+func ToStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 	switch v.K {
 	case VStr:
 		return v.S, nil
@@ -34,38 +27,38 @@ func toStr(ctx *Ctx, pos Pos, v Value) (string, error) {
 	case VNull:
 		return "", nil
 	case VList, VDict:
-		data, err := json.Marshal(toIface(v))
+		data, err := json.Marshal(ToIface(v))
 		if err != nil {
-			return "", rtErr(ctx, pos, "json encode failed")
+			return "", Errf(ctx, pos, "json encode failed")
 		}
 		if ctx != nil && ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
-			return "", rtErr(ctx, pos, "string too long")
+			return "", Errf(ctx, pos, "string too long")
 		}
 		return string(data), nil
 	case VObj:
 		if v.O != nil {
-			if _, ok := v.O.(interfaceValuer); ok {
-				data, err := json.Marshal(toIface(v))
+			if _, ok := v.O.(InterfaceValuer); ok {
+				data, err := json.Marshal(ToIface(v))
 				if err != nil {
-					return "", rtErr(ctx, pos, "json encode failed")
+					return "", Errf(ctx, pos, "json encode failed")
 				}
 				if ctx != nil && ctx.Lim.MaxStr > 0 && len(data) > ctx.Lim.MaxStr {
-					return "", rtErr(ctx, pos, "string too long")
+					return "", Errf(ctx, pos, "string too long")
 				}
 				return string(data), nil
 			}
 		}
-		return "", rtErr(ctx, pos, "cannot stringify %v", v.K)
+		return "", Errf(ctx, pos, "cannot stringify %v", v.K)
 	default:
-		return "", rtErr(ctx, pos, "cannot stringify %v", v.K)
+		return "", Errf(ctx, pos, "cannot stringify %v", v.K)
 	}
 }
 
 func ValueString(ctx *Ctx, pos Pos, v Value) (string, error) {
-	return toStr(ctx, pos, v)
+	return ToStr(ctx, pos, v)
 }
 
-func toIface(v Value) any {
+func ToIface(v Value) any {
 	switch v.K {
 	case VNull:
 		return nil
@@ -78,18 +71,18 @@ func toIface(v Value) any {
 	case VList:
 		out := make([]any, 0, len(v.L))
 		for _, it := range v.L {
-			out = append(out, toIface(it))
+			out = append(out, ToIface(it))
 		}
 		return out
 	case VDict:
 		out := make(map[string]any, len(v.M))
 		for k, it := range v.M {
-			out[k] = toIface(it)
+			out[k] = ToIface(it)
 		}
 		return out
 	case VObj:
 		if v.O != nil {
-			if t, ok := v.O.(interfaceValuer); ok {
+			if t, ok := v.O.(InterfaceValuer); ok {
 				return t.ToInterface()
 			}
 		}
@@ -99,7 +92,7 @@ func toIface(v Value) any {
 	}
 }
 
-func fromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
+func FromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
 	switch t := v.(type) {
 	case nil:
 		return Null(), nil
@@ -109,16 +102,16 @@ func fromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
 		return Num(t), nil
 	case string:
 		if ctx != nil && ctx.Lim.MaxStr > 0 && len(t) > ctx.Lim.MaxStr {
-			return Null(), rtErr(ctx, pos, "string too long")
+			return Null(), Errf(ctx, pos, "string too long")
 		}
 		return Str(t), nil
 	case []any:
 		if ctx != nil && ctx.Lim.MaxList > 0 && len(t) > ctx.Lim.MaxList {
-			return Null(), rtErr(ctx, pos, "list too large")
+			return Null(), Errf(ctx, pos, "list too large")
 		}
 		out := make([]Value, 0, len(t))
 		for _, it := range t {
-			v2, err := fromIface(ctx, pos, it)
+			v2, err := FromIface(ctx, pos, it)
 			if err != nil {
 				return Null(), err
 			}
@@ -127,11 +120,11 @@ func fromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
 		return List(out), nil
 	case map[string]any:
 		if ctx != nil && ctx.Lim.MaxDict > 0 && len(t) > ctx.Lim.MaxDict {
-			return Null(), rtErr(ctx, pos, "dict too large")
+			return Null(), Errf(ctx, pos, "dict too large")
 		}
 		out := make(map[string]Value, len(t))
 		for k, it := range t {
-			v2, err := fromIface(ctx, pos, it)
+			v2, err := FromIface(ctx, pos, it)
 			if err != nil {
 				return Null(), err
 			}
@@ -139,6 +132,13 @@ func fromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
 		}
 		return Dict(out), nil
 	default:
-		return Null(), rtErr(ctx, pos, "unsupported json value")
+		return Null(), Errf(ctx, pos, "unsupported json value")
 	}
+}
+
+func toNum(pos Pos, v Value) (float64, error) {
+	if v.K != VNum {
+		return 0, Errf(nil, pos, "expected number")
+	}
+	return v.N, nil
 }

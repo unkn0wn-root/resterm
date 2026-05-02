@@ -136,16 +136,16 @@ const (
 )
 
 func (o *traceObj) enabledFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceEnabled)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceEnabled)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	return Bool(o.tl != nil), nil
 }
 
 func (o *traceObj) durMsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceDurationMs)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceDurationMs)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.tl == nil {
@@ -155,8 +155,8 @@ func (o *traceObj) durMsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) durSecFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceDurationSeconds)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceDurationSeconds)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.tl == nil {
@@ -166,8 +166,8 @@ func (o *traceObj) durSecFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) durStrFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceDurationString)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceDurationString)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.tl == nil {
@@ -177,8 +177,8 @@ func (o *traceObj) durStrFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) errFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceError)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceError)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.tl == nil {
@@ -188,8 +188,8 @@ func (o *traceObj) errFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) startedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceStarted)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceStarted)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.tl == nil || o.tl.Started.IsZero() {
@@ -199,8 +199,8 @@ func (o *traceObj) startedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) completedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceCompleted)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceCompleted)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.tl == nil || o.tl.Completed.IsZero() {
@@ -210,8 +210,8 @@ func (o *traceObj) completedFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *traceObj) phasesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTracePhases)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTracePhases)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if len(o.seg) == 0 {
@@ -221,17 +221,17 @@ func (o *traceObj) phasesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	for _, s := range o.seg {
 		out = append(out, o.segMap(s))
 	}
-	return fromIface(ctx, pos, out)
+	return FromIface(ctx, pos, out)
 }
 
 func (o *traceObj) getPhaseFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	sig := sigTraceGetPhase
 	if len(args) != 1 {
-		return Null(), rtErr(ctx, pos, "%s expects 1 arg", sig)
+		return Null(), Errf(ctx, pos, "%s expects 1 arg", sig)
 	}
-	k, err := toKey(pos, args[0])
+	k, err := Key(pos, args[0])
 	if err != nil {
-		return Null(), wrapErr(ctx, err)
+		return Null(), WrapErr(ctx, err)
 	}
 	k = strings.ToLower(strings.TrimSpace(k))
 	if k == "" {
@@ -253,12 +253,12 @@ func (o *traceObj) getPhaseFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"durationString":  a.dur.String(),
 		"segments":        segs,
 	}
-	return fromIface(ctx, pos, res)
+	return FromIface(ctx, pos, res)
 }
 
 func (o *traceObj) phaseNamesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTracePhaseNames)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTracePhaseNames)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if len(o.ord) == 0 {
@@ -268,7 +268,7 @@ func (o *traceObj) phaseNamesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) 
 	for _, name := range o.ord {
 		out = append(out, name)
 	}
-	return fromIface(ctx, pos, out)
+	return FromIface(ctx, pos, out)
 }
 
 func (o *traceObj) connFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
@@ -297,7 +297,7 @@ func (o *traceObj) connFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"k8s":           conn.K8s,
 		"protocol":      conn.Protocol,
 	}
-	return fromIface(ctx, pos, res)
+	return FromIface(ctx, pos, res)
 }
 
 func (o *traceObj) tlsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
@@ -329,12 +329,12 @@ func (o *traceObj) tlsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"verified":   det.Verified,
 		"certs":      certs,
 	}
-	return fromIface(ctx, pos, res)
+	return FromIface(ctx, pos, res)
 }
 
 func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceBudgets)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceBudgets)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if !o.hasBud() {
@@ -352,12 +352,12 @@ func (o *traceObj) budgetsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 		"toleranceSeconds": o.bud.Tolerance.Seconds(),
 		"phases":           ph,
 	}
-	return fromIface(ctx, pos, res)
+	return FromIface(ctx, pos, res)
 }
 
 func (o *traceObj) breachesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceBreaches)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceBreaches)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if len(o.br) == 0 {
@@ -375,12 +375,12 @@ func (o *traceObj) breachesFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 			"overSeconds":   b.Over.Seconds(),
 		})
 	}
-	return fromIface(ctx, pos, out)
+	return FromIface(ctx, pos, out)
 }
 
 func (o *traceObj) withinFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceWithinBudget)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceWithinBudget)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	return Bool(len(o.br) == 0), nil
@@ -399,7 +399,7 @@ func toIfaceList(items []string) []any {
 
 func ensureNoArgs(ctx *Ctx, pos Pos, args []Value, name string) error {
 	if len(args) != 0 {
-		return rtErr(ctx, pos, "%s() expects 0 args", name)
+		return Errf(ctx, pos, "%s() expects 0 args", name)
 	}
 	return nil
 }
@@ -409,8 +409,8 @@ func traceUnavailable() Value {
 }
 
 func (o *traceObj) hasBudFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigTraceHasBudgets)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigTraceHasBudgets)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	return Bool(o.hasBud()), nil

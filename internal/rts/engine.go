@@ -60,16 +60,14 @@ type Eng struct {
 	reqObj *requestObj
 }
 
-func NewEng() *Eng {
+// NewEng creates an engine with the provided standard-library prelude.
+func NewEng(std func() map[string]Value) *Eng {
 	e := &Eng{
-		C:      NewCache(nil),
 		Lim:    defaultLimits(),
+		Stdlib: prelude(std),
 		reqObj: newRequestObj("request"),
 	}
-	e.Stdlib = func() map[string]Value {
-		return buildStdlib(e.reqObj)
-	}
-	e.C.SetStdlib(e.Stdlib)
+	e.C = NewCache(nil, e.modulePre)
 	return e
 }
 
@@ -118,7 +116,7 @@ func (e *Eng) EvalStr(ctx context.Context, rt RT, src string, pos Pos) (string, 
 		return "", err
 	}
 	cx := NewCtx(ctx, e.Lim)
-	return toStr(cx, pos, v)
+	return ToStr(cx, pos, v)
 }
 
 func (e *Eng) ExecModule(ctx context.Context, rt RT, src string, pos Pos) (*Comp, error) {
@@ -153,14 +151,12 @@ func (e *Eng) ensure() {
 		e.reqObj = newRequestObj("request")
 	}
 	if e.Stdlib == nil {
-		e.Stdlib = func() map[string]Value {
-			return buildStdlib(e.reqObj)
-		}
+		e.Stdlib = prelude(nil)
 	}
 	if e.C == nil {
-		e.C = NewCache(nil)
+		e.C = NewCache(nil, e.modulePre)
 	}
-	e.C.SetStdlib(e.Stdlib)
+	e.C.SetStdlib(e.modulePre)
 }
 
 func (e *Eng) newCtx(ctx context.Context, rt RT) *Ctx {
@@ -176,7 +172,7 @@ func (e *Eng) newCtx(ctx context.Context, rt RT) *Ctx {
 }
 
 func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
-	pre := cloneVals(e.Stdlib())
+	pre := e.modulePre()
 	pre["env"] = Obj(newMapObj("env", rt.Env))
 	pre["vars"] = Obj(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
 	pre["last"] = Obj(newRespObj("last", rt.Resp))
@@ -194,7 +190,7 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 			continue
 		}
 		if _, ok := pre[k]; ok {
-			return nil, rtErr(cx, pos, "name already defined: %s", k)
+			return nil, Errf(cx, pos, "name already defined: %s", k)
 		}
 		pre[k] = v
 	}
@@ -213,6 +209,14 @@ func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 	return pre, nil
 }
 
+func (e *Eng) modulePre() map[string]Value {
+	pre := cloneVals(e.Stdlib())
+	if e.reqObj != nil {
+		pre["request"] = Obj(e.reqObj)
+	}
+	return pre
+}
+
 func cloneVals(src map[string]Value) map[string]Value {
-	return cloneMap(src)
+	return CloneDict(src)
 }

@@ -44,16 +44,16 @@ const (
 )
 
 func (o *streamObj) enabledFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigStreamEnabled)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigStreamEnabled)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	return Bool(o.s != nil), nil
 }
 
 func (o *streamObj) kindFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigStreamKind)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigStreamKind)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.s == nil {
@@ -63,8 +63,8 @@ func (o *streamObj) kindFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *streamObj) summaryFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigStreamSummary)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigStreamSummary)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.s == nil || len(o.s.Summary) == 0 {
@@ -74,8 +74,8 @@ func (o *streamObj) summaryFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 }
 
 func (o *streamObj) eventsFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
-	na := newNativeArgs(ctx, pos, args, sigStreamEvents)
-	if err := na.none(); err != nil {
+	na := NewArgs(ctx, pos, args, sigStreamEvents)
+	if err := na.None(); err != nil {
 		return Null(), err
 	}
 	if o.s == nil || len(o.s.Events) == 0 {
@@ -96,7 +96,7 @@ func toVal(ctx *Ctx, pos Pos, v any) (Value, error) {
 		return Bool(t), nil
 	case string:
 		if ctx != nil && ctx.Lim.MaxStr > 0 && len(t) > ctx.Lim.MaxStr {
-			return Null(), rtErr(ctx, pos, "string too long")
+			return Null(), Errf(ctx, pos, "string too long")
 		}
 		return Str(t), nil
 	case float64:
@@ -132,13 +132,13 @@ func toVal(ctx *Ctx, pos Pos, v any) (Value, error) {
 	case map[string]any:
 		return toMap(ctx, pos, t)
 	default:
-		return Null(), rtErr(ctx, pos, "unsupported value")
+		return Null(), Errf(ctx, pos, "unsupported value")
 	}
 }
 
 func toList(ctx *Ctx, pos Pos, src []any) (Value, error) {
 	if ctx != nil && ctx.Lim.MaxList > 0 && len(src) > ctx.Lim.MaxList {
-		return Null(), rtErr(ctx, pos, "list too large")
+		return Null(), Errf(ctx, pos, "list too large")
 	}
 	out := make([]Value, 0, len(src))
 	for _, it := range src {
@@ -153,7 +153,7 @@ func toList(ctx *Ctx, pos Pos, src []any) (Value, error) {
 
 func toMap(ctx *Ctx, pos Pos, src map[string]any) (Value, error) {
 	if ctx != nil && ctx.Lim.MaxDict > 0 && len(src) > ctx.Lim.MaxDict {
-		return Null(), rtErr(ctx, pos, "dict too large")
+		return Null(), Errf(ctx, pos, "dict too large")
 	}
 	out := make(map[string]Value, len(src))
 	for k, it := range src {

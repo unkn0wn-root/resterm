@@ -37,11 +37,12 @@ type modFP struct {
 	size int64
 }
 
-func NewCache(fs FS) *ModCache {
+// NewCache creates a module cache using fs and the provided compile-time prelude.
+func NewCache(fs FS, std func() map[string]Value) *ModCache {
 	if fs == nil {
 		fs = OSFS{}
 	}
-	return &ModCache{fs: fs, ent: map[string]*modEnt{}, std: Stdlib}
+	return &ModCache{fs: fs, ent: map[string]*modEnt{}, std: prelude(std)}
 }
 
 // SetStdlib installs the prelude used when compiling modules through the cache.
@@ -50,7 +51,7 @@ func (c *ModCache) SetStdlib(fn func() map[string]Value) {
 		return
 	}
 	c.mu.Lock()
-	c.std = fn
+	c.std = prelude(fn)
 	c.mu.Unlock()
 }
 
@@ -117,6 +118,15 @@ func (c *ModCache) stat(path string) (modFP, error) {
 		return modFP{}, err
 	}
 	return modFP{mod: info.ModTime(), size: info.Size()}, nil
+}
+
+func prelude(fn func() map[string]Value) func() map[string]Value {
+	if fn != nil {
+		return fn
+	}
+	return func() map[string]Value {
+		return map[string]Value{}
+	}
 }
 
 func absPath(base, path string) (string, error) {

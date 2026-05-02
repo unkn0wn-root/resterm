@@ -25,7 +25,9 @@ type idxResult struct {
 	stop bool
 }
 
-func jsonPathGet(v any, path string) (any, bool) {
+// JSONPathGet resolves a value using the same lightweight JSON path semantics
+// used by the RTS runtime.
+func JSONPathGet(v any, path string) (any, bool) {
 	p := strings.TrimSpace(path)
 	if p == "" {
 		return v, true
@@ -64,12 +66,6 @@ func jsonPathGet(v any, path string) (any, bool) {
 		cur = val
 	}
 	return cur, true
-}
-
-// JSONPathGet resolves a value using the same lightweight JSON path semantics
-// used by the RTS runtime.
-func JSONPathGet(v any, path string) (any, bool) {
-	return jsonPathGet(v, path)
 }
 
 func splitPath(p string) []jseg {

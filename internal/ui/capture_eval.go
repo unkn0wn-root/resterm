@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -210,7 +211,7 @@ func (m *Model) captureValue(in captureValueIn) (string, captureExpr, error) {
 
 func (m *Model) captureRTSValue(in captureRTSIn) (string, error) {
 	if m.rtsEng == nil {
-		m.rtsEng = rts.NewEng()
+		m.rtsEng = rts.NewEng(stdlib.New)
 	}
 	ps := m.rtsPosForLine(in.doc, in.req, in.spec.Line)
 	rt := m.rtsRT(rtsRTIn{

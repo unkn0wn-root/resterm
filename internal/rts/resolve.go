@@ -27,13 +27,13 @@ func (e *Eng) resolveUses(cx *Ctx, rt RT, pre map[string]Value, pos Pos) ([]Use,
 				if p.Line == 0 {
 					p = Pos{Path: mp.Path, Line: 1, Col: 1}
 				}
-				return nil, rtErr(cx, p, "missing module name (add 'module <name>' at top of file)")
+				return nil, Errf(cx, p, "missing module name (add 'module <name>' at top of file)")
 			}
 			al = nm
 			u.Alias = nm
 		}
 		if _, ok := seen[al]; ok {
-			return nil, rtErr(cx, pos, "alias already defined: %s", al)
+			return nil, Errf(cx, pos, "alias already defined: %s", al)
 		}
 		seen[al] = struct{}{}
 		out = append(out, u)
