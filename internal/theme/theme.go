@@ -287,7 +287,7 @@ func DefaultTheme() Theme {
 		PaneTitleRequests: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#15AABF")).
 			Bold(true),
-		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3547")),
+		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#5B526E")),
 		PaneBorderFocusFile:     lipgloss.Color("#7D56F4"),
 		PaneBorderFocusRequests: lipgloss.Color("#15AABF"),
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
