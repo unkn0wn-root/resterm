@@ -68,9 +68,13 @@ type Theme struct {
 	PaneTitle                     lipgloss.Style
 	PaneTitleFile                 lipgloss.Style
 	PaneTitleRequests             lipgloss.Style
+	PaneTitleEditor               lipgloss.Style
+	PaneTitleResponse             lipgloss.Style
 	PaneDivider                   lipgloss.Style
 	PaneBorderFocusFile           lipgloss.Color
 	PaneBorderFocusRequests       lipgloss.Color
+	PaneBorderFocusEditor         lipgloss.Color
+	PaneBorderFocusResponse       lipgloss.Color
 	PaneActiveForeground          lipgloss.Color
 	ModalBackdrop                 lipgloss.Color
 	ModalInputBackground          lipgloss.Color
@@ -152,13 +156,13 @@ func DefaultTheme() Theme {
 			BorderForeground(lipgloss.Color("#5FB3B3")),
 		NavigatorTitle: lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
 		NavigatorTitleSelected: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#0F111A")).
-			Background(lipgloss.Color("#FFD46A")).
+			Foreground(lipgloss.Color("#F3ECFF")).
+			Background(lipgloss.Color("#2A2140")).
 			Bold(true),
 		NavigatorSubtitle: lipgloss.NewStyle().Foreground(lipgloss.Color("#6E6A86")),
 		NavigatorSubtitleSelected: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#0F111A")).
-			Background(lipgloss.Color("#FFD46A")),
+			Foreground(lipgloss.Color("#C9B8FF")).
+			Background(lipgloss.Color("#2A2140")),
 		NavigatorBadge: lipgloss.NewStyle().Padding(0, 1).Bold(true),
 		NavigatorTag:   lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")),
 		AppFrame: lipgloss.NewStyle().
@@ -278,18 +282,16 @@ func DefaultTheme() Theme {
 		CommandDivider: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#403B59")).
 			Bold(true),
-		PaneTitle: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#A6A1BB")).
-			Bold(true),
-		PaneTitleFile: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#7D56F4")).
-			Bold(true),
-		PaneTitleRequests: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#15AABF")).
-			Bold(true),
-		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#3A3547")),
-		PaneBorderFocusFile:     lipgloss.Color("#7D56F4"),
-		PaneBorderFocusRequests: lipgloss.Color("#15AABF"),
+		PaneTitle:               lipgloss.NewStyle().Bold(true),
+		PaneTitleFile:           lipgloss.NewStyle().Bold(true),
+		PaneTitleRequests:       lipgloss.NewStyle().Bold(true),
+		PaneTitleEditor:         lipgloss.NewStyle().Bold(true),
+		PaneTitleResponse:       lipgloss.NewStyle().Bold(true),
+		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#5B526E")),
+		PaneBorderFocusFile:     lipgloss.Color("#FFD46A"),
+		PaneBorderFocusRequests: lipgloss.Color("#FFD46A"),
+		PaneBorderFocusEditor:   lipgloss.Color("#56A9DD"),
+		PaneBorderFocusResponse: lipgloss.Color("#33C481"),
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
 		EditorMetadata: EditorMetadataPalette{
 			CommentMarker:    lipgloss.Color("#5E5A72"),

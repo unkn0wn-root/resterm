@@ -110,6 +110,40 @@ func TestNavigatorTagChipsLimit(t *testing.T) {
 	}
 }
 
+func TestNavigatorFilterBandShowsOnlyOnDemand(t *testing.T) {
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 100
+	model.height = 32
+	model.ready = true
+	_ = model.applyLayout()
+	model.ensureNavigatorFilter()
+
+	view := ansi.Strip(model.renderFilePane())
+	if strings.Contains(view, "Filter:") {
+		t.Fatalf("expected inactive empty filter to be hidden, got %q", view)
+	}
+
+	model.navigatorFilter.Focus()
+	view = ansi.Strip(model.renderFilePane())
+	if !strings.Contains(view, "Filter:") {
+		t.Fatalf("expected focused filter to be visible, got %q", view)
+	}
+
+	model.navigatorFilter.Blur()
+	model.navigatorFilter.SetValue("auth")
+	view = ansi.Strip(model.renderFilePane())
+	if !strings.Contains(view, "Filter:") {
+		t.Fatalf("expected active text filter to remain visible, got %q", view)
+	}
+
+	model.navigatorFilter.SetValue("")
+	model.navigator.ToggleMethodFilter("GET")
+	view = ansi.Strip(model.renderFilePane())
+	if !strings.Contains(view, "Filter:") {
+		t.Fatalf("expected active method filter to keep filter band visible, got %q", view)
+	}
+}
+
 func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 	model := New(Config{WorkspaceRoot: t.TempDir(), Version: "vTest"})
 	model.width = 120
@@ -442,6 +476,57 @@ func TestInactiveSidebarFrameKeepsStyleOnFrame(t *testing.T) {
 	}
 	if st.GetBorderLeftForeground() != model.theme.PaneDivider.GetForeground() {
 		t.Fatalf("expected inactive sidebar border to use pane divider color")
+	}
+}
+
+func TestFocusedPaneFramesUseThemeFocusColors(t *testing.T) {
+	model := New(Config{})
+	model.theme.PaneBorderFocusFile = lipgloss.Color("#111111")
+	model.theme.PaneBorderFocusRequests = lipgloss.Color("#222222")
+	model.theme.PaneBorderFocusEditor = lipgloss.Color("#333333")
+	model.theme.PaneBorderFocusResponse = lipgloss.Color("#444444")
+
+	model.focus = focusFile
+	if got := model.sidebarFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#111111") {
+		t.Fatalf("expected file focus border color, got %v", got)
+	}
+
+	model.focus = focusRequests
+	if got := model.sidebarFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#222222") {
+		t.Fatalf("expected requests focus border color, got %v", got)
+	}
+
+	if got := model.editorFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#333333") {
+		t.Fatalf("expected editor focus border color, got %v", got)
+	}
+	if got := model.respFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#444444") {
+		t.Fatalf("expected response focus border color, got %v", got)
+	}
+}
+
+func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
+	frame := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#abcdef")).
+		Width(18).
+		Height(3)
+
+	rendered := renderTitledPaneFrame(frame, lipgloss.NewStyle(), "Files", "body")
+	lines := strings.Split(ansi.Strip(rendered), "\n")
+	if len(lines) < 1 {
+		t.Fatalf("expected rendered frame to have a top border")
+	}
+	if !strings.HasPrefix(lines[0], "╭─") {
+		t.Fatalf("expected titled rounded top border to keep left corner, got %q", lines[0])
+	}
+	if !strings.Contains(lines[0], " Files ─╮") {
+		t.Fatalf("expected title on right side of top border, got %q", lines[0])
+	}
+	if !strings.HasSuffix(lines[0], "╮") {
+		t.Fatalf("expected top border to keep right corner, got %q", lines[0])
+	}
+	if got, want := ansi.StringWidth(lines[0]), lipgloss.Width(frame.Render("body")); got != want {
+		t.Fatalf("expected titled top border width %d, got %d", want, got)
 	}
 }
 

@@ -217,15 +217,19 @@ func (m *Model) cacheDoc(path string, doc *restfile.Document) {
 
 func (m *Model) ensureNavigatorFilter() {
 	if m.navigatorFilter.Prompt == "" {
-		ni := textinput.New()
-		ni.Placeholder = "Requests, tags, files..."
-		ni.Prompt = "Filter: "
-		ni.CharLimit = 0
-		ni.SetCursor(0)
-		ni.Blur()
-		m.navigatorFilter = ni
+		m.navigatorFilter = newNavigatorFilterInput()
 		m.themeRuntime.applyTextInput(&m.navigatorFilter, m.theme, textInputKindNavigator)
 	}
+}
+
+func newNavigatorFilterInput() textinput.Model {
+	ti := textinput.New()
+	ti.Placeholder = "Requests, tags, files..."
+	ti.Prompt = "Filter: "
+	ti.CharLimit = 0
+	ti.SetCursor(0)
+	ti.Blur()
+	return ti
 }
 
 func (m *Model) loadDocFor(path string) *restfile.Document {

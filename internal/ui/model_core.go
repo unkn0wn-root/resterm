@@ -512,12 +512,7 @@ func New(cfg Config) Model {
 	searchInput.SetCursor(0)
 	searchInput.Blur()
 
-	navFilter := textinput.New()
-	navFilter.Placeholder = "filter"
-	navFilter.CharLimit = 0
-	navFilter.Prompt = ""
-	navFilter.SetCursor(0)
-	navFilter.Blur()
+	navFilter := newNavigatorFilterInput()
 
 	helpFilter := textinput.New()
 	helpFilter.Placeholder = "Search..."

@@ -58,6 +58,8 @@ type StylesSpec struct {
 	PaneTitle                     *StyleSpec `json:"pane_title"                       toml:"pane_title"`
 	PaneTitleFile                 *StyleSpec `json:"pane_title_file"                  toml:"pane_title_file"`
 	PaneTitleRequests             *StyleSpec `json:"pane_title_requests"              toml:"pane_title_requests"`
+	PaneTitleEditor               *StyleSpec `json:"pane_title_editor"                toml:"pane_title_editor"`
+	PaneTitleResponse             *StyleSpec `json:"pane_title_response"              toml:"pane_title_response"`
 	PaneDivider                   *StyleSpec `json:"pane_divider"                     toml:"pane_divider"`
 	EditorHintBox                 *StyleSpec `json:"editor_hint_box"                  toml:"editor_hint_box"`
 	EditorHintItem                *StyleSpec `json:"editor_hint_item"                 toml:"editor_hint_item"`
@@ -111,6 +113,8 @@ type StylesSpec struct {
 type ColorsSpec struct {
 	PaneBorderFocusFile     *string `json:"pane_border_focus_file"     toml:"pane_border_focus_file"`
 	PaneBorderFocusRequests *string `json:"pane_border_focus_requests" toml:"pane_border_focus_requests"`
+	PaneBorderFocusEditor   *string `json:"pane_border_focus_editor"   toml:"pane_border_focus_editor"`
+	PaneBorderFocusResponse *string `json:"pane_border_focus_response" toml:"pane_border_focus_response"`
 	PaneActiveForeground    *string `json:"pane_active_foreground"     toml:"pane_active_foreground"`
 	ModalBackdrop           *string `json:"modal_backdrop"             toml:"modal_backdrop"`
 	ModalInputBackground    *string `json:"modal_input_background"     toml:"modal_input_background"`
@@ -348,6 +352,20 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		"pane_title_requests",
 		&cloned.PaneTitleRequests,
 		spec.Styles.PaneTitleRequests,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"pane_title_editor",
+		&cloned.PaneTitleEditor,
+		spec.Styles.PaneTitleEditor,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"pane_title_response",
+		&cloned.PaneTitleResponse,
+		spec.Styles.PaneTitleResponse,
 	); err != nil {
 		return Theme{}, err
 	}
@@ -673,6 +691,20 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 			return Theme{}, err
 		}
 		cloned.PaneBorderFocusRequests = color
+	}
+	if spec.Colors.PaneBorderFocusEditor != nil {
+		color, err := toColor("pane_border_focus_editor", *spec.Colors.PaneBorderFocusEditor)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.PaneBorderFocusEditor = color
+	}
+	if spec.Colors.PaneBorderFocusResponse != nil {
+		color, err := toColor("pane_border_focus_response", *spec.Colors.PaneBorderFocusResponse)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.PaneBorderFocusResponse = color
 	}
 	if spec.Colors.PaneActiveForeground != nil {
 		color, err := toColor("pane_active_foreground", *spec.Colors.PaneActiveForeground)

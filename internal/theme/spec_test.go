@@ -14,10 +14,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
 		Colors: ColorsSpec{
-			PaneActiveForeground: strPtr("#123456"),
-			ModalBackdrop:        strPtr("#202020"),
-			ModalInputBackground: strPtr("#181818"),
-			ModalOption:          strPtr("#778899"),
+			PaneBorderFocusEditor:   strPtr("#654321"),
+			PaneBorderFocusResponse: strPtr("#fedcba"),
+			PaneActiveForeground:    strPtr("#123456"),
+			ModalBackdrop:           strPtr("#202020"),
+			ModalInputBackground:    strPtr("#181818"),
+			ModalOption:             strPtr("#778899"),
 		},
 		HeaderSegments: []HeaderSegmentSpec{{
 			Background: strPtr("#111111"),
@@ -42,6 +44,8 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			ExplainLabel:        &StyleSpec{Foreground: strPtr("#bada55")},
 			ExplainBadgeError:   &StyleSpec{Background: strPtr("#220000")},
 			ExplainWarning:      &StyleSpec{Foreground: strPtr("#ffaa00")},
+			PaneTitleEditor:     &StyleSpec{Foreground: strPtr("#445566")},
+			PaneTitleResponse:   &StyleSpec{Foreground: strPtr("#665544")},
 			StreamContent:       &StyleSpec{Foreground: strPtr("#123123")},
 		},
 	}
@@ -53,6 +57,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 
 	if got := updated.PaneActiveForeground; got != "#123456" {
 		t.Errorf("expected pane active foreground %q, got %q", "#123456", got)
+	}
+	if got := updated.PaneBorderFocusEditor; got != "#654321" {
+		t.Errorf("expected editor focus border %q, got %q", "#654321", got)
+	}
+	if got := updated.PaneBorderFocusResponse; got != "#fedcba" {
+		t.Errorf("expected response focus border %q, got %q", "#fedcba", got)
 	}
 	if got := updated.ModalBackdrop; got != "#202020" {
 		t.Errorf("expected modal backdrop %q, got %q", "#202020", got)
@@ -110,6 +120,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if color := updated.ExplainWarning.GetForeground(); color != lipgloss.Color("#ffaa00") {
 		t.Errorf("expected explain warning foreground #ffaa00, got %v", color)
+	}
+	if color := updated.PaneTitleEditor.GetForeground(); color != lipgloss.Color("#445566") {
+		t.Errorf("expected editor pane title foreground #445566, got %v", color)
+	}
+	if color := updated.PaneTitleResponse.GetForeground(); color != lipgloss.Color("#665544") {
+		t.Errorf("expected response pane title foreground #665544, got %v", color)
 	}
 	if color := updated.StreamContent.GetForeground(); color != lipgloss.Color("#123123") {
 		t.Errorf("expected stream content foreground #123123, got %v", color)

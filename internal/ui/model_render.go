@@ -20,6 +20,13 @@ const (
 	statusBarSep          = "    "
 	statusBarSepWidth     = 4
 	helpKeyColumnWidth    = 32
+	paneTitleLeadWidth    = 1
+)
+
+const (
+	filePaneTitle     = "Files"
+	editorPaneTitle   = "Editor"
+	responsePaneTitle = "Response"
 )
 
 const (
@@ -300,9 +307,15 @@ func (m Model) renderFilePane() string {
 	}
 
 	contentWidth := maxInt(paneContentWidth(width, frameWidth), 1)
-	filter := m.renderNavigatorFilter(contentWidth, paneActive)
-	filterSep := dividerLine(m.theme.PaneDivider, contentWidth)
-	available := m.paneContentHeight - lipgloss.Height(filter) - lipgloss.Height(filterSep)
+	bodyParts := make([]string, 0, 3)
+	filterHeight := 0
+	if m.navigatorFilterVisible() {
+		filter := m.renderNavigatorFilter(contentWidth, paneActive)
+		filterSep := dividerLine(m.theme.PaneDivider, contentWidth)
+		bodyParts = append(bodyParts, filter, filterSep)
+		filterHeight = lipgloss.Height(filter) + lipgloss.Height(filterSep)
+	}
+	available := m.paneContentHeight - filterHeight
 	if available < 1 {
 		available = 1
 	}
@@ -326,18 +339,23 @@ func (m Model) renderFilePane() string {
 	}
 	listView = lipgloss.NewStyle().Width(contentWidth).Height(listHeight).Render(listView)
 
-	bodyParts := []string{filter, filterSep, listView}
+	bodyParts = append(bodyParts, listView)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, bodyParts...)
 	content = clampPane(content, contentWidth, m.paneContentHeight)
 	content = padHorizontal(content, paneHorizontalPadding)
 	targetHeight := m.paneContentHeight + style.GetVerticalFrameSize()
 	innerWidth := maxInt(paneInnerWidth(width, frameWidth), 1)
-	return style.
+	frame := style.
 		Width(innerWidth).
 		MaxWidth(width).
-		Height(targetHeight).
-		Render(content)
+		Height(targetHeight)
+	return renderTitledPaneFrame(
+		frame,
+		m.theme.PaneTitleFile.Inherit(m.theme.PaneTitle),
+		filePaneTitle,
+		content,
+	)
 }
 
 func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {
@@ -346,12 +364,10 @@ func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {
 		switch m.focus {
 		case focusFile:
 			st = st.
-				BorderForeground(m.theme.PaneBorderFocusFile).
-				BorderStyle(lipgloss.ThickBorder())
+				BorderForeground(m.theme.PaneBorderFocusFile)
 		case focusRequests, focusWorkflows:
 			st = st.
-				BorderForeground(m.theme.PaneBorderFocusRequests).
-				BorderStyle(lipgloss.ThickBorder())
+				BorderForeground(m.theme.PaneBorderFocusRequests)
 		}
 	} else {
 		st = m.dimFrame(st)
@@ -456,8 +472,11 @@ func padHorizontal(content string, padding int) string {
 }
 
 func (m Model) renderNavigatorFilter(width int, active bool) string {
-	m.ensureNavigatorFilter()
 	input := m.navigatorFilter
+	if input.Prompt == "" {
+		input = newNavigatorFilterInput()
+		m.themeRuntime.applyTextInput(&input, m.theme, textInputKindNavigator)
+	}
 	if width > 4 {
 		input.Width = width - 2
 		if input.Width < 1 {
@@ -476,6 +495,16 @@ func (m Model) renderNavigatorFilter(width int, active bool) string {
 		row = m.themeRuntime.inactiveRendered(row)
 	}
 	return lipgloss.NewStyle().Width(width).Render(row)
+}
+
+func (m Model) navigatorFilterVisible() bool {
+	if m.navigatorFilter.Focused() || strings.TrimSpace(m.navigatorFilter.Value()) != "" {
+		return true
+	}
+	if m.navigator == nil {
+		return false
+	}
+	return len(m.navigator.MethodFilters()) > 0 || len(m.navigator.TagFilters()) > 0
 }
 
 func (m Model) navigatorMethodChips() string {
@@ -670,19 +699,23 @@ func (m Model) renderEditorPane() string {
 	if outerWidth < 1 {
 		outerWidth = innerWidth + style.GetHorizontalFrameSize()
 	}
-	return style.
+	frame := style.
 		Width(innerWidth).
 		MaxWidth(outerWidth).
-		Height(height).
-		Render(content)
+		Height(height)
+	return renderTitledPaneFrame(
+		frame,
+		m.theme.PaneTitleEditor.Inherit(m.theme.PaneTitle),
+		editorPaneTitle,
+		content,
+	)
 }
 
 func (m Model) editorFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.EditorBorder
 	if active {
 		st = st.
-			BorderForeground(lipgloss.Color("#B794F6")).
-			BorderStyle(lipgloss.ThickBorder())
+			BorderForeground(m.theme.PaneBorderFocusEditor)
 	} else {
 		st = m.dimFrame(st)
 	}
@@ -834,19 +867,167 @@ func (m Model) renderResponsePane(availableWidth int) string {
 	}
 	body = lipgloss.NewStyle().Width(contentBudget).Render(body)
 	body = padHorizontal(body, paneHorizontalPadding)
-	return style.Width(innerWidth).MaxWidth(width).Height(height).Render(body)
+	frame := style.Width(innerWidth).MaxWidth(width).Height(height)
+	return renderTitledPaneFrame(
+		frame,
+		m.theme.PaneTitleResponse.Inherit(m.theme.PaneTitle),
+		responsePaneTitle,
+		body,
+	)
 }
 
 func (m Model) respFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.ResponseBorder
 	if active {
 		st = st.
-			BorderForeground(lipgloss.Color("#6CC4C4")).
-			BorderStyle(lipgloss.ThickBorder())
+			BorderForeground(m.theme.PaneBorderFocusResponse)
 	} else {
 		st = m.dimFrame(st)
 	}
 	return stripTextAttrs(st)
+}
+
+func renderTitledPaneFrame(
+	frameStyle lipgloss.Style,
+	titleStyle lipgloss.Style,
+	title string,
+	content string,
+) string {
+	rendered := frameStyle.Render(content)
+	title = sanitizePaneTitle(title)
+	if title == "" || frameStyle.GetBorderTopSize() == 0 {
+		return rendered
+	}
+
+	lines := strings.Split(rendered, "\n")
+	if len(lines) == 0 {
+		return rendered
+	}
+	width := ansi.StringWidth(lines[0])
+	if width <= 0 {
+		return rendered
+	}
+	top := titledPaneTopBorder(frameStyle, titleStyle, title, width)
+	if top == "" {
+		return rendered
+	}
+	lines[0] = top
+	return strings.Join(lines, "\n")
+}
+
+func sanitizePaneTitle(title string) string {
+	return strings.Join(strings.Fields(title), " ")
+}
+
+func titledPaneTopBorder(
+	frameStyle lipgloss.Style,
+	titleStyle lipgloss.Style,
+	title string,
+	width int,
+) string {
+	border := frameStyle.GetBorderStyle()
+	top := firstRuneOr(border.Top, " ")
+	left := ""
+	right := ""
+	if frameStyle.GetBorderLeftSize() > 0 {
+		left = firstRuneOr(border.TopLeft, " ")
+	}
+	if frameStyle.GetBorderRightSize() > 0 {
+		right = firstRuneOr(border.TopRight, " ")
+	}
+
+	innerWidth := width - ansi.StringWidth(left) - ansi.StringWidth(right)
+	if innerWidth <= 0 {
+		return ""
+	}
+
+	borderTextStyle := topBorderTextStyle(frameStyle)
+	plainBorder := left + repeatToCellWidth(top, innerWidth) + right
+	if innerWidth < paneTitleLeadWidth+4 {
+		return borderTextStyle.Render(plainBorder)
+	}
+
+	maxTitleWidth := innerWidth - paneTitleLeadWidth - 3
+	if maxTitleWidth < 1 {
+		return borderTextStyle.Render(plainBorder)
+	}
+	title = ansi.Truncate(title, maxTitleWidth, "")
+	titleWidth := ansi.StringWidth(title)
+	if titleWidth < 1 {
+		return borderTextStyle.Render(plainBorder)
+	}
+
+	prefixWidth := innerWidth - paneTitleLeadWidth - 1 - titleWidth - 1
+	if prefixWidth < 0 {
+		return borderTextStyle.Render(plainBorder)
+	}
+
+	titleStyle = paneTitleStyleForFrame(frameStyle, titleStyle)
+	var out strings.Builder
+	out.WriteString(borderTextStyle.Render(left))
+	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, prefixWidth)))
+	out.WriteString(borderTextStyle.Render(" "))
+	out.WriteString(titleStyle.Render(title))
+	out.WriteString(borderTextStyle.Render(" "))
+	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, paneTitleLeadWidth)))
+	out.WriteString(borderTextStyle.Render(right))
+	return out.String()
+}
+
+func paneTitleStyleForFrame(frameStyle lipgloss.Style, titleStyle lipgloss.Style) lipgloss.Style {
+	if !theme.ColorDefined(titleStyle.GetForeground()) {
+		if fg := frameStyle.GetBorderTopForeground(); theme.ColorDefined(fg) {
+			titleStyle = titleStyle.Foreground(fg)
+		}
+	}
+	if !theme.ColorDefined(titleStyle.GetBackground()) {
+		if bg := frameStyle.GetBorderTopBackground(); theme.ColorDefined(bg) {
+			titleStyle = titleStyle.Background(bg)
+		}
+	}
+	return titleStyle
+}
+
+func topBorderTextStyle(frameStyle lipgloss.Style) lipgloss.Style {
+	st := lipgloss.NewStyle()
+	if fg := frameStyle.GetBorderTopForeground(); theme.ColorDefined(fg) {
+		st = st.Foreground(fg)
+	}
+	if bg := frameStyle.GetBorderTopBackground(); theme.ColorDefined(bg) {
+		st = st.Background(bg)
+	}
+	return st
+}
+
+func firstRuneOr(value string, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	r, _ := utf8.DecodeRuneInString(value)
+	if r == utf8.RuneError {
+		return fallback
+	}
+	return string(r)
+}
+
+func repeatToCellWidth(value string, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	if ansi.StringWidth(value) <= 0 {
+		value = " "
+	}
+	var out strings.Builder
+	cellWidth := 0
+	valueWidth := ansi.StringWidth(value)
+	for cellWidth < width {
+		out.WriteString(value)
+		cellWidth += valueWidth
+	}
+	if cellWidth == width {
+		return out.String()
+	}
+	return ansi.Truncate(out.String(), width, "")
 }
 
 func (m Model) dimFrame(st lipgloss.Style) lipgloss.Style {

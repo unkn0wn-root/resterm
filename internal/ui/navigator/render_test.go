@@ -4,15 +4,40 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
+const selectedTestBackgroundSGR = "48;2;36;27;51"
+
+func selectedRenderTheme(t *testing.T) theme.Theme {
+	t.Helper()
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	th := theme.DefaultTheme()
+	th.NavigatorTitleSelected = th.NavigatorTitleSelected.Background(lipgloss.Color("#241B33"))
+	th.NavigatorSubtitleSelected = th.NavigatorSubtitleSelected.Background(lipgloss.Color("#241B33"))
+	return th
+}
+
+func assertSelectedBackgroundSegments(t *testing.T, rendered string, min int) {
+	t.Helper()
+	if got := strings.Count(rendered, selectedTestBackgroundSGR); got < min {
+		t.Fatalf("expected at least %d selected background segments, got %d in %q", min, got, rendered)
+	}
+}
+
 func TestRenderBadgesUsesCommaSeparator(t *testing.T) {
 	th := theme.DefaultTheme()
-	out := renderBadges([]string{"  SSE  ", "SCRIPT", "WS"}, th)
+	out := renderBadges([]string{"  SSE  ", "SCRIPT", "WS"}, th, false)
 	clean := ansi.Strip(out)
 
 	if strings.Count(clean, ",") != 2 {
@@ -79,6 +104,23 @@ func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 	}
 }
 
+func TestRenderSelectedRequestShowsMarker(t *testing.T) {
+	th := selectedRenderTheme(t)
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindRequest,
+			Title:  "getStatus",
+			Method: "GET",
+		},
+	}
+	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.HasPrefix(clean, "> GET  getStatus") {
+		t.Fatalf("expected selected request marker before method badge, got %q", clean)
+	}
+	assertSelectedBackgroundSegments(t, out, 3)
+}
+
 func TestRenderRowShowsDirIcon(t *testing.T) {
 	th := theme.DefaultTheme()
 	row := Flat[any]{
@@ -96,6 +138,59 @@ func TestRenderRowShowsDirIcon(t *testing.T) {
 	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected directory row without caret, got %q", clean)
 	}
+}
+
+func TestRenderSelectedFileKeepsCaret(t *testing.T) {
+	th := selectedRenderTheme(t)
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:     KindFile,
+			Title:    "api.http",
+			Expanded: false,
+			Count:    2,
+		},
+	}
+	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if strings.HasPrefix(clean, iconSelected) {
+		t.Fatalf("expected selected file to keep caret instead of request marker, got %q", clean)
+	}
+	if !strings.HasPrefix(clean, iconCaretClosed+" api.http (2)") {
+		t.Fatalf("expected selected file caret and title, got %q", clean)
+	}
+	assertSelectedBackgroundSegments(t, out, 3)
+}
+
+func TestRenderSelectedDirHighlightsIconGap(t *testing.T) {
+	th := selectedRenderTheme(t)
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:  KindDir,
+			Title: "queries",
+		},
+	}
+	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.HasPrefix(clean, iconDirClosed+" queries") {
+		t.Fatalf("expected selected directory icon and title, got %q", clean)
+	}
+	assertSelectedBackgroundSegments(t, out, 3)
+}
+
+func TestRenderSelectedWorkflowShowsMarker(t *testing.T) {
+	th := selectedRenderTheme(t)
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:  KindWorkflow,
+			Title: "sample-order",
+		},
+	}
+	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.HasPrefix(clean, "> WF  sample-order") {
+		t.Fatalf("expected selected workflow marker before badge, got %q", clean)
+	}
+	assertSelectedBackgroundSegments(t, out, 3)
 }
 
 func TestRenderRowShowsRTSIcon(t *testing.T) {
