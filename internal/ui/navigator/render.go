@@ -13,6 +13,7 @@ import (
 
 const (
 	iconNone        = " "
+	iconSelected    = ">"
 	iconCaretClosed = "▸"
 	iconCaretOpen   = "▾"
 	iconDirClosed   = "📁"
@@ -64,20 +65,6 @@ func renderRow(
 		return ""
 	}
 
-	pad := strings.Repeat("  ", row.Level)
-	parts := []string{pad, rowIcon(n)}
-	if n.Kind == KindWorkflow {
-		parts = append(parts, renderWorkflowBadge(th))
-	}
-	if n.Method != "" {
-		parts = append(parts, renderMethodBadge(n.Method, th))
-	}
-
-	title := n.Title
-	if n.Kind == KindFile && n.Count > 0 {
-		title = fmt.Sprintf("%s (%d)", title, n.Count)
-	}
-
 	titleStyle := th.NavigatorTitle
 	descStyle := th.NavigatorSubtitle
 	if selected {
@@ -89,16 +76,35 @@ func renderRow(
 		descStyle = descStyle.Faint(true)
 	}
 
-	parts = append(parts, " ", titleStyle.Render(title))
+	pad := strings.Repeat("  ", row.Level)
+	icon := rowIcon(n, selected)
+	if selected {
+		icon = titleStyle.Render(icon)
+	}
+
+	parts := []string{pad, icon}
+	if n.Kind == KindWorkflow {
+		parts = append(parts, renderWorkflowBadge(th, selected))
+	}
+	if n.Method != "" {
+		parts = append(parts, renderMethodBadge(n.Method, th, selected))
+	}
+
+	title := n.Title
+	if n.Kind == KindFile && n.Count > 0 {
+		title = fmt.Sprintf("%s (%d)", title, n.Count)
+	}
+
+	parts = append(parts, selectedGap(th, selected), titleStyle.Render(title))
 	showTarget := n.Target != "" && !compact
 	if n.Kind == KindRequest && n.HasName {
 		showTarget = false
 	}
 	if n.Kind == KindRequest && showTarget {
-		parts = append(parts, " ", descStyle.Render(trimPath(n.Target, width/2)))
+		parts = append(parts, selectedGap(th, selected), descStyle.Render(trimPath(n.Target, width/2)))
 	}
 	if len(n.Badges) > 0 {
-		parts = append(parts, " ", renderBadges(n.Badges, th))
+		parts = append(parts, selectedGap(th, selected), renderBadges(n.Badges, th, selected))
 	}
 
 	line := strings.Join(parts, "")
@@ -116,12 +122,23 @@ func renderRow(
 	return lipgloss.NewStyle().Width(width).Render(truncated)
 }
 
-func rowIcon(n *Node[any]) string {
+func rowIcon(n *Node[any], selected bool) string {
 	if n == nil {
 		return iconNone
 	}
 	switch n.Kind {
+	case KindRequest:
+		if selected {
+			return iconSelected
+		}
+		if len(n.Children) > 0 || n.Count > 0 {
+			return caret(n.Expanded)
+		}
+		return iconNone
 	case KindWorkflow:
+		if selected {
+			return iconSelected
+		}
 		return iconNone
 	case KindDir:
 		return dirIcon(n.Expanded)
@@ -171,23 +188,32 @@ func dirIcon(expanded bool) string {
 	return iconDirClosed
 }
 
-func renderMethodBadge(method string, th theme.Theme) string {
+func renderMethodBadge(method string, th theme.Theme, selected bool) string {
 	label := strings.ToUpper(strings.TrimSpace(method))
 	style := th.NavigatorBadge.Foreground(methodColor(th, label)).Bold(true)
+	if selected {
+		style = withSelectedBackground(style, th)
+	}
 	return style.Render(label)
 }
 
-func renderWorkflowBadge(th theme.Theme) string {
+func renderWorkflowBadge(th theme.Theme, selected bool) string {
 	style := th.NavigatorBadge.Foreground(th.MethodColors.POST).Bold(true)
+	if selected {
+		style = withSelectedBackground(style, th)
+	}
 	return style.Render("WF")
 }
 
-func renderBadges(badges []string, th theme.Theme) string {
+func renderBadges(badges []string, th theme.Theme, selected bool) string {
 	if len(badges) == 0 {
 		return ""
 	}
 
 	badgeStyle := th.NavigatorBadge.Padding(0, 0)
+	if selected {
+		badgeStyle = withSelectedBackground(badgeStyle, th)
+	}
 	parts := make([]string, 0, len(badges))
 	for _, b := range badges {
 		label := strings.TrimSpace(b)
@@ -197,8 +223,26 @@ func renderBadges(badges []string, th theme.Theme) string {
 		parts = append(parts, badgeStyle.Render(label))
 	}
 
-	sep := th.NavigatorSubtitle.Render(", ")
+	sepStyle := th.NavigatorSubtitle
+	if selected {
+		sepStyle = withSelectedBackground(sepStyle, th)
+	}
+	sep := sepStyle.Render(", ")
 	return strings.Join(parts, sep)
+}
+
+func selectedGap(th theme.Theme, selected bool) string {
+	if !selected {
+		return " "
+	}
+	return withSelectedBackground(lipgloss.NewStyle(), th).Render(" ")
+}
+
+func withSelectedBackground(style lipgloss.Style, th theme.Theme) lipgloss.Style {
+	if bg := th.NavigatorTitleSelected.GetBackground(); theme.ColorDefined(bg) {
+		return style.Background(bg)
+	}
+	return style
 }
 
 func methodColor(th theme.Theme, method string) lipgloss.Color {

@@ -44,6 +44,8 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			ExplainLabel:        &StyleSpec{Foreground: strPtr("#bada55")},
 			ExplainBadgeError:   &StyleSpec{Background: strPtr("#220000")},
 			ExplainWarning:      &StyleSpec{Foreground: strPtr("#ffaa00")},
+			PaneTitleEditor:     &StyleSpec{Foreground: strPtr("#445566")},
+			PaneTitleResponse:   &StyleSpec{Foreground: strPtr("#665544")},
 			StreamContent:       &StyleSpec{Foreground: strPtr("#123123")},
 		},
 	}
@@ -118,6 +120,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if color := updated.ExplainWarning.GetForeground(); color != lipgloss.Color("#ffaa00") {
 		t.Errorf("expected explain warning foreground #ffaa00, got %v", color)
+	}
+	if color := updated.PaneTitleEditor.GetForeground(); color != lipgloss.Color("#445566") {
+		t.Errorf("expected editor pane title foreground #445566, got %v", color)
+	}
+	if color := updated.PaneTitleResponse.GetForeground(); color != lipgloss.Color("#665544") {
+		t.Errorf("expected response pane title foreground #665544, got %v", color)
 	}
 	if color := updated.StreamContent.GetForeground(); color != lipgloss.Color("#123123") {
 		t.Errorf("expected stream content foreground #123123, got %v", color)

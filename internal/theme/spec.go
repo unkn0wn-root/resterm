@@ -58,6 +58,8 @@ type StylesSpec struct {
 	PaneTitle                     *StyleSpec `json:"pane_title"                       toml:"pane_title"`
 	PaneTitleFile                 *StyleSpec `json:"pane_title_file"                  toml:"pane_title_file"`
 	PaneTitleRequests             *StyleSpec `json:"pane_title_requests"              toml:"pane_title_requests"`
+	PaneTitleEditor               *StyleSpec `json:"pane_title_editor"                toml:"pane_title_editor"`
+	PaneTitleResponse             *StyleSpec `json:"pane_title_response"              toml:"pane_title_response"`
 	PaneDivider                   *StyleSpec `json:"pane_divider"                     toml:"pane_divider"`
 	EditorHintBox                 *StyleSpec `json:"editor_hint_box"                  toml:"editor_hint_box"`
 	EditorHintItem                *StyleSpec `json:"editor_hint_item"                 toml:"editor_hint_item"`
@@ -350,6 +352,20 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		"pane_title_requests",
 		&cloned.PaneTitleRequests,
 		spec.Styles.PaneTitleRequests,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"pane_title_editor",
+		&cloned.PaneTitleEditor,
+		spec.Styles.PaneTitleEditor,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"pane_title_response",
+		&cloned.PaneTitleResponse,
+		spec.Styles.PaneTitleResponse,
 	); err != nil {
 		return Theme{}, err
 	}
