@@ -1568,6 +1568,8 @@ bold = true
 
 [colors]
 pane_border_focus_file = "#1f6feb"
+pane_border_focus_editor = "#56a9dd"
+pane_border_focus_response = "#33c481"
 pane_active_foreground = "#f8faff"
 
 [editor_metadata]
@@ -1589,7 +1591,7 @@ text = "#eceff4"
 | --- | --- | --- |
 | `[metadata]` | `name`, `description`, `author`, `version`, `tags[]` | Informational only; shown in the selector. |
 | `[styles.*]` | `browser_border`, `editor_border`, `response_border`, `navigator_title`, `navigator_title_selected`, `navigator_subtitle`, `navigator_subtitle_selected`, `navigator_badge`, `navigator_tag`, `navigator_detail_title`, `navigator_detail_value`, `navigator_detail_dim`, `app_frame`, `header`, `header_title`, `header_value`, `header_separator`, `status_bar`, `status_bar_info`, `status_bar_key`, `status_bar_value`, `command_bar`, `command_bar_hint`, `response_search_highlight`, `response_search_highlight_active`, `tabs`, `tab_active`, `tab_inactive`, `notification`, `error`, `success`, `header_brand`, `command_divider`, `pane_title`, `pane_title_file`, `pane_title_requests`, `pane_divider`, `editor_hint_box`, `editor_hint_item`, `editor_hint_selected`, `editor_hint_annotation`, `list_item_title`, `list_item_description`, `list_item_selected_title`, `list_item_selected_description`, `list_item_dimmed_title`, `list_item_dimmed_description`, `list_item_filter_match`, `response_content`, `response_content_raw`, `response_content_headers`, `response_selection`, `response_cursor`, `stream_content`, `stream_timestamp`, `stream_direction_send`, `stream_direction_receive`, `stream_direction_info`, `stream_event_name`, `stream_data`, `stream_binary`, `stream_summary`, `stream_error`, `stream_console_title`, `stream_console_mode`, `stream_console_status`, `stream_console_prompt`, `stream_console_input`, `stream_console_input_focused` | Accept `foreground`, `background`, `border_color`, `border_background`, `border_style` (`normal`, `rounded`, `thick`, `double`, `ascii`, `block`), plus booleans `bold`, `italic`, `underline`, `faint`, `strikethrough`, and `align` (`left`, `center`, `right`). |
-| `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_active_foreground`, `method_get`, `method_post`, `method_put`, `method_patch`, `method_delete`, `method_head`, `method_options`, `method_grpc`, `method_ws`, `method_default` | Frequently reused colours for pane borders, active text, and method badges. |
+| `[colors]` | `pane_border_focus_file`, `pane_border_focus_requests`, `pane_border_focus_editor`, `pane_border_focus_response`, `pane_active_foreground`, `method_get`, `method_post`, `method_put`, `method_patch`, `method_delete`, `method_head`, `method_options`, `method_grpc`, `method_ws`, `method_default` | Frequently reused colours for pane borders, active text, and method badges. |
 | `[editor_metadata]` | `comment_marker`, `directive_default`, `value`, `setting_key`, `setting_value`, `request_line`, `request_separator`, `[editor_metadata.directive_colors]` | Controls metadata highlighting inside the editor. |
 | `[[header_segments]]` | `background`, `foreground`, `border`, `accent` | Rotating header chips; add multiple tables for rotation. |
 | `[[command_segments]]` | `background`, `border`, `key`, `text` | Colour sets for command bar hint capsules. |

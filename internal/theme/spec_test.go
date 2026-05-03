@@ -14,10 +14,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
 		Colors: ColorsSpec{
-			PaneActiveForeground: strPtr("#123456"),
-			ModalBackdrop:        strPtr("#202020"),
-			ModalInputBackground: strPtr("#181818"),
-			ModalOption:          strPtr("#778899"),
+			PaneBorderFocusEditor:   strPtr("#654321"),
+			PaneBorderFocusResponse: strPtr("#fedcba"),
+			PaneActiveForeground:    strPtr("#123456"),
+			ModalBackdrop:           strPtr("#202020"),
+			ModalInputBackground:    strPtr("#181818"),
+			ModalOption:             strPtr("#778899"),
 		},
 		HeaderSegments: []HeaderSegmentSpec{{
 			Background: strPtr("#111111"),
@@ -53,6 +55,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 
 	if got := updated.PaneActiveForeground; got != "#123456" {
 		t.Errorf("expected pane active foreground %q, got %q", "#123456", got)
+	}
+	if got := updated.PaneBorderFocusEditor; got != "#654321" {
+		t.Errorf("expected editor focus border %q, got %q", "#654321", got)
+	}
+	if got := updated.PaneBorderFocusResponse; got != "#fedcba" {
+		t.Errorf("expected response focus border %q, got %q", "#fedcba", got)
 	}
 	if got := updated.ModalBackdrop; got != "#202020" {
 		t.Errorf("expected modal backdrop %q, got %q", "#202020", got)

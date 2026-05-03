@@ -445,6 +445,31 @@ func TestInactiveSidebarFrameKeepsStyleOnFrame(t *testing.T) {
 	}
 }
 
+func TestFocusedPaneFramesUseThemeFocusColors(t *testing.T) {
+	model := New(Config{})
+	model.theme.PaneBorderFocusFile = lipgloss.Color("#111111")
+	model.theme.PaneBorderFocusRequests = lipgloss.Color("#222222")
+	model.theme.PaneBorderFocusEditor = lipgloss.Color("#333333")
+	model.theme.PaneBorderFocusResponse = lipgloss.Color("#444444")
+
+	model.focus = focusFile
+	if got := model.sidebarFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#111111") {
+		t.Fatalf("expected file focus border color, got %v", got)
+	}
+
+	model.focus = focusRequests
+	if got := model.sidebarFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#222222") {
+		t.Fatalf("expected requests focus border color, got %v", got)
+	}
+
+	if got := model.editorFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#333333") {
+		t.Fatalf("expected editor focus border color, got %v", got)
+	}
+	if got := model.respFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#444444") {
+		t.Fatalf("expected response focus border color, got %v", got)
+	}
+}
+
 func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

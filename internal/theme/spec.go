@@ -111,6 +111,8 @@ type StylesSpec struct {
 type ColorsSpec struct {
 	PaneBorderFocusFile     *string `json:"pane_border_focus_file"     toml:"pane_border_focus_file"`
 	PaneBorderFocusRequests *string `json:"pane_border_focus_requests" toml:"pane_border_focus_requests"`
+	PaneBorderFocusEditor   *string `json:"pane_border_focus_editor"   toml:"pane_border_focus_editor"`
+	PaneBorderFocusResponse *string `json:"pane_border_focus_response" toml:"pane_border_focus_response"`
 	PaneActiveForeground    *string `json:"pane_active_foreground"     toml:"pane_active_foreground"`
 	ModalBackdrop           *string `json:"modal_backdrop"             toml:"modal_backdrop"`
 	ModalInputBackground    *string `json:"modal_input_background"     toml:"modal_input_background"`
@@ -673,6 +675,20 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 			return Theme{}, err
 		}
 		cloned.PaneBorderFocusRequests = color
+	}
+	if spec.Colors.PaneBorderFocusEditor != nil {
+		color, err := toColor("pane_border_focus_editor", *spec.Colors.PaneBorderFocusEditor)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.PaneBorderFocusEditor = color
+	}
+	if spec.Colors.PaneBorderFocusResponse != nil {
+		color, err := toColor("pane_border_focus_response", *spec.Colors.PaneBorderFocusResponse)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.PaneBorderFocusResponse = color
 	}
 	if spec.Colors.PaneActiveForeground != nil {
 		color, err := toColor("pane_active_foreground", *spec.Colors.PaneActiveForeground)

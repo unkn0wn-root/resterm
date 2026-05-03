@@ -71,6 +71,8 @@ type Theme struct {
 	PaneDivider                   lipgloss.Style
 	PaneBorderFocusFile           lipgloss.Color
 	PaneBorderFocusRequests       lipgloss.Color
+	PaneBorderFocusEditor         lipgloss.Color
+	PaneBorderFocusResponse       lipgloss.Color
 	PaneActiveForeground          lipgloss.Color
 	ModalBackdrop                 lipgloss.Color
 	ModalInputBackground          lipgloss.Color
@@ -288,8 +290,10 @@ func DefaultTheme() Theme {
 			Foreground(lipgloss.Color("#15AABF")).
 			Bold(true),
 		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#5B526E")),
-		PaneBorderFocusFile:     lipgloss.Color("#7D56F4"),
-		PaneBorderFocusRequests: lipgloss.Color("#15AABF"),
+		PaneBorderFocusFile:     lipgloss.Color("#FFD46A"),
+		PaneBorderFocusRequests: lipgloss.Color("#FFD46A"),
+		PaneBorderFocusEditor:   lipgloss.Color("#56A9DD"),
+		PaneBorderFocusResponse: lipgloss.Color("#33C481"),
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
 		EditorMetadata: EditorMetadataPalette{
 			CommentMarker:    lipgloss.Color("#5E5A72"),
