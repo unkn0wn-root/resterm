@@ -346,12 +346,10 @@ func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {
 		switch m.focus {
 		case focusFile:
 			st = st.
-				BorderForeground(m.theme.PaneBorderFocusFile).
-				BorderStyle(lipgloss.ThickBorder())
+				BorderForeground(m.theme.PaneBorderFocusFile)
 		case focusRequests, focusWorkflows:
 			st = st.
-				BorderForeground(m.theme.PaneBorderFocusRequests).
-				BorderStyle(lipgloss.ThickBorder())
+				BorderForeground(m.theme.PaneBorderFocusRequests)
 		}
 	} else {
 		st = m.dimFrame(st)
@@ -681,8 +679,7 @@ func (m Model) editorFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.EditorBorder
 	if active {
 		st = st.
-			BorderForeground(lipgloss.Color("#B794F6")).
-			BorderStyle(lipgloss.ThickBorder())
+			BorderForeground(lipgloss.Color("#B794F6"))
 	} else {
 		st = m.dimFrame(st)
 	}
@@ -841,8 +838,7 @@ func (m Model) respFrameStyle(active bool) lipgloss.Style {
 	st := m.theme.ResponseBorder
 	if active {
 		st = st.
-			BorderForeground(lipgloss.Color("#6CC4C4")).
-			BorderStyle(lipgloss.ThickBorder())
+			BorderForeground(lipgloss.Color("#6CC4C4"))
 	} else {
 		st = m.dimFrame(st)
 	}
