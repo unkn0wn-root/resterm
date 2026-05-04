@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func navigatorFilterConsumesKey(msg tea.KeyMsg) bool {
@@ -185,7 +186,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && !samePath(path, m.currentFile) {
+				if path != "" && !util.SamePath(path, m.currentFile) {
 					if !m.confirmCrossFileNavigation(
 						n,
 						navActionOpenFile,
@@ -216,7 +217,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && !samePath(path, m.currentFile) {
+				if path != "" && !util.SamePath(path, m.currentFile) {
 					if !m.confirmCrossFileNavigation(
 						n,
 						navActionOpenFile,

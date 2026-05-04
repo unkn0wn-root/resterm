@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m Model) Init() tea.Cmd {
@@ -657,7 +658,7 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	if sel.Kind != kind {
 		return false
 	}
-	if !samePath(sel.Payload.FilePath, m.currentFile) {
+	if !util.SamePath(sel.Payload.FilePath, m.currentFile) {
 		if warn != "" {
 			m.setStatusMessage(statusMsg{text: warn, level: statusInfo})
 		}
@@ -696,7 +697,7 @@ func (m *Model) confirmCrossFileNavigation(
 		return true
 	}
 	path := n.Payload.FilePath
-	if path == "" || samePath(path, m.currentFile) || !m.dirty {
+	if path == "" || util.SamePath(path, m.currentFile) || !m.dirty {
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
@@ -740,17 +741,10 @@ func (p pendingCrossFileNavigation) matches(
 	if p.nodeID != nodeID || p.action != action || p.sourceRevision != sourceRevision {
 		return false
 	}
-	if !samePathOrBothEmpty(p.sourcePath, sourcePath) {
+	if !util.SamePathOrBothEmpty(p.sourcePath, sourcePath) {
 		return false
 	}
-	return samePathOrBothEmpty(p.targetPath, targetPath)
-}
-
-func samePathOrBothEmpty(a, b string) bool {
-	if a == "" || b == "" {
-		return a == b
-	}
-	return samePath(a, b)
+	return util.SamePathOrBothEmpty(p.targetPath, targetPath)
 }
 
 func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
@@ -758,14 +752,14 @@ func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
 		return nil, true
 	}
 	path := n.Payload.FilePath
-	if path == "" || samePath(path, m.currentFile) {
+	if path == "" || util.SamePath(path, m.currentFile) {
 		return nil, true
 	}
 	var cmds []tea.Cmd
 	if cmd := m.openFile(path); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	if samePath(path, m.currentFile) {
+	if util.SamePath(path, m.currentFile) {
 		return cmds, true
 	}
 	return cmds, false

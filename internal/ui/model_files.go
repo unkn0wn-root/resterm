@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m *Model) openSelectedFile() tea.Cmd {
@@ -143,7 +144,7 @@ func (m *Model) selectFileByPath(path string) bool {
 	items := m.fileList.Items()
 	for i, item := range items {
 		if fi, ok := item.(fileItem); ok {
-			if samePath(fi.entry.Path, path) {
+			if util.SamePath(fi.entry.Path, path) {
 				m.fileList.Select(i)
 				return true
 			}

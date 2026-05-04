@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
@@ -111,7 +112,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 	if doc, ok := m.cachedDoc(entry.Path); ok && doc != nil {
 		node.Count = len(doc.Requests)
 		node.Children = m.buildRequestNodes(doc, entry.Path)
-		if samePath(entry.Path, m.currentFile) && navHasKids(node) {
+		if util.SamePath(entry.Path, m.currentFile) && navHasKids(node) {
 			node.Expanded = true
 		}
 	}
@@ -124,7 +125,7 @@ func fileEntryBadges(entry filesvc.FileEntry, activeEnvFile string) []string {
 		badges = append(badges, label)
 	}
 
-	if entry.Kind == filesvc.FileKindEnv && samePath(entry.Path, activeEnvFile) {
+	if entry.Kind == filesvc.FileKindEnv && util.SamePath(entry.Path, activeEnvFile) {
 		badges = append(badges, "ACTIVE")
 	}
 	return badges
@@ -390,7 +391,7 @@ func (m *Model) syncNavigatorSelection() {
 			if path != "" {
 				_ = m.selectFileByPath(path)
 			}
-			if samePath(path, m.currentFile) {
+			if util.SamePath(path, m.currentFile) {
 				m.setActiveRequest(req)
 			} else {
 				if m.pendingCrossFile.nodeID == n.ID {
@@ -409,7 +410,7 @@ func (m *Model) syncNavigatorSelection() {
 			if path != "" {
 				_ = m.selectFileByPath(path)
 			}
-			if samePath(path, m.currentFile) {
+			if util.SamePath(path, m.currentFile) {
 				if m.selectWorkflowForNode(wf, n.ID) {
 					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
 						wf = item.workflow
@@ -628,25 +629,6 @@ func applyNavigatorExpansion(nodes []*navigator.Node[any], prev *navigator.Model
 
 func navHasKids(n *navigator.Node[any]) bool {
 	return n != nil && len(n.Children) > 0
-}
-
-func samePath(a, b string) bool {
-	if a == "" || b == "" {
-		return false
-	}
-
-	cleanA := filepath.Clean(a)
-	cleanB := filepath.Clean(b)
-	if cleanA == cleanB {
-		return true
-	}
-
-	absA, errA := filepath.Abs(cleanA)
-	absB, errB := filepath.Abs(cleanB)
-	if errA != nil || errB != nil {
-		return false
-	}
-	return absA == absB
 }
 
 func sortNavNodes(nodes []*navigator.Node[any]) {

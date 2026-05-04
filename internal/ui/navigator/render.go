@@ -2,7 +2,6 @@ package navigator
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -296,17 +296,7 @@ func sameNavigatorPath(a, b string) bool {
 	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
 		return false
 	}
-	cleanA := filepath.Clean(a)
-	cleanB := filepath.Clean(b)
-	if cleanA == cleanB {
-		return true
-	}
-	absA, errA := filepath.Abs(cleanA)
-	absB, errB := filepath.Abs(cleanB)
-	if errA != nil || errB != nil {
-		return false
-	}
-	return absA == absB
+	return util.SamePath(a, b)
 }
 
 func fileKind(n *Node[any]) filesvc.FileKind {

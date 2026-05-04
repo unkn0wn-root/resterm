@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/history"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (s *Store) ExportJSON(path string) (int, error) {
@@ -99,7 +100,7 @@ func (s *Store) Backup(path string) error {
 
 	// The destination must be different from the live database path.
 	// Removing an existing file is part of backup preparation.
-	if samePath(path, s.p) {
+	if util.SamePath(path, s.p) {
 		return errdef.Wrap(
 			errdef.CodeHistory,
 			errors.New("backup path must differ from history db path"),
@@ -159,17 +160,4 @@ func writeFileAtom(path string, data []byte, perm os.FileMode) error {
 		return errdef.Wrap(errdef.CodeFilesystem, err, "replace export file")
 	}
 	return nil
-}
-
-func samePath(a, b string) bool {
-	if a == "" || b == "" {
-		return false
-	}
-	if p, err := filepath.Abs(a); err == nil {
-		a = p
-	}
-	if p, err := filepath.Abs(b); err == nil {
-		b = p
-	}
-	return a == b
 }

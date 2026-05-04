@@ -8,6 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type requestDetailField struct {
@@ -74,7 +75,7 @@ func (m *Model) navigatorRequestContext() (*restfile.Request, *restfile.Document
 	}
 	path := n.Payload.FilePath
 	doc := m.doc
-	if path != "" && !samePath(path, m.currentFile) {
+	if path != "" && !util.SamePath(path, m.currentFile) {
 		doc = m.loadDocFor(path)
 	}
 	if path == "" {

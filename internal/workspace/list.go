@@ -152,7 +152,7 @@ func (l *lister) addRTSModuleRefs(referrerPath string, e filesvc.FileEntry) {
 }
 
 func (l *lister) loadDoc(path string) *restfile.Document {
-	if l.opt.CurrentDoc != nil && samePath(path, l.opt.CurrentFile) {
+	if l.opt.CurrentDoc != nil && str.SamePath(str.Trim(path), str.Trim(l.opt.CurrentFile)) {
 		return l.opt.CurrentDoc
 	}
 
@@ -169,7 +169,7 @@ func (l *lister) addEntry(e filesvc.FileEntry) {
 
 func (l *lister) addDoc(e filesvc.FileEntry) {
 	for _, doc := range l.docs {
-		if samePath(doc.Path, e.Path) {
+		if str.SamePath(str.Trim(doc.Path), str.Trim(e.Path)) {
 			return
 		}
 	}
@@ -246,13 +246,6 @@ func (l *lister) sorted() []filesvc.FileEntry {
 		return out[i].Name < out[j].Name
 	})
 	return out
-}
-
-func samePath(a, b string) bool {
-	if str.Trim(a) == "" || str.Trim(b) == "" {
-		return false
-	}
-	return pathKey(a) == pathKey(b)
 }
 
 func pathKey(path string) string {
