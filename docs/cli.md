@@ -59,6 +59,8 @@ If you do not pass a selector:
 - a file with multiple requests prompts for a choice when stdin/stdout are TTYs
 - a file with multiple requests prints a numbered list and exits with code `2` in non-interactive use
 
+The interactive picker follows the active theme and can be customized with `styles.cli_run_picker*` without changing TUI list or response-pane styling.
+
 Selection flags:
 
 | Flag | Description |

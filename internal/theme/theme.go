@@ -53,6 +53,10 @@ type Theme struct {
 	StatusBarValue                lipgloss.Style
 	CommandBar                    lipgloss.Style
 	CommandBarHint                lipgloss.Style
+	CLIRunPicker                  lipgloss.Style
+	CLIRunPickerSelected          lipgloss.Style
+	CLIRunPickerCursor            lipgloss.Style
+	CLIRunPickerCursorSelected    lipgloss.Style
 	ResponseSearchHighlight       lipgloss.Style
 	ResponseSearchHighlightActive lipgloss.Style
 	Tabs                          lipgloss.Style
