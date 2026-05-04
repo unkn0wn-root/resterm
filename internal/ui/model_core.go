@@ -345,7 +345,6 @@ type Model struct {
 	sending                bool
 	sendCancel             context.CancelFunc
 	suppressEditorKey      bool
-	skipEditorCursorSync   bool
 	editorInsertMode       bool
 	editorWriteKeyMap      textarea.KeyMap
 	editorViewKeyMap       textarea.KeyMap

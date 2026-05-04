@@ -125,7 +125,6 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 		focusCmd := m.setFocus(focusEditor)
 		if m.focus == focusEditor {
 			m.suppressEditorKey = true
-			m.skipEditorCursorSync = true
 		}
 		return batchCommands(out, focusCmd)
 	}
@@ -187,6 +186,13 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
 				if path != "" && !samePath(path, m.currentFile) {
+					if !m.confirmCrossFileNavigation(
+						n,
+						navActionOpenFile,
+						navOpenFileRetryHint(ev.String()),
+					) {
+						return applyFilter(nil)
+					}
 					cmd = m.openFile(path)
 				}
 				if path != "" && !filesvc.IsRequestFile(path) {
@@ -211,6 +217,13 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
 				if path != "" && !samePath(path, m.currentFile) {
+					if !m.confirmCrossFileNavigation(
+						n,
+						navActionOpenFile,
+						navOpenFileRetryHint(ev.String()),
+					) {
+						return applyFilter(nil)
+					}
 					cmd = m.openFile(path)
 				}
 				if path != "" && !filesvc.IsRequestFile(path) {
@@ -271,6 +284,19 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 
 func navJumpable(n *navigator.Node[any]) bool {
 	return n != nil && (n.Kind == navigator.KindRequest || n.Kind == navigator.KindWorkflow)
+}
+
+func navOpenFileRetryHint(key string) string {
+	switch key {
+	case "enter":
+		return "Press Enter again to open."
+	case "right":
+		return "Press Right again to open."
+	case "l":
+		return "Press l again to open."
+	default:
+		return "Repeat the open action to continue."
+	}
 }
 
 func (m *Model) navExpandFile(n *navigator.Node[any], toggle bool) {

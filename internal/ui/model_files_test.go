@@ -147,7 +147,7 @@ func TestReparseDocumentPreservesDirtyState(t *testing.T) {
 	})
 	m := &model
 	m.editor.SetValue("GET https://changed.example\n")
-	m.dirty = true
+	m.markDirty()
 
 	if cmd := m.reparseDocument(); cmd != nil {
 		cmd()
@@ -208,7 +208,7 @@ func TestReloadWarnUpdatesFileChangeModal(t *testing.T) {
 
 	model := New(Config{WorkspaceRoot: tmp, Theme: &th, FilePath: path, InitialContent: "body"})
 	m := &model
-	m.dirty = true
+	m.markDirty()
 	m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged})
 	if !m.showFileChangeModal {
 		t.Fatalf("expected file change modal to be visible")

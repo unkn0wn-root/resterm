@@ -1380,8 +1380,65 @@ GET https://example.com
 	if sel := m.navigator.Selected(); sel == nil || sel.ID != wfID {
 		t.Fatalf("expected workflow selection to survive full update, got %#v", sel)
 	}
-	if m.suppressEditorKey || m.skipEditorCursorSync {
-		t.Fatalf("expected jump suppression flags to be consumed after full update")
+	if m.suppressEditorKey {
+		t.Fatalf("expected editor key suppression to be consumed after full update")
+	}
+}
+
+func TestNavigatorWorkflowJumpSurvivesNextEditorSync(t *testing.T) {
+	content := `### Fetch
+# @name FetchExample
+GET https://example.com
+
+# @workflow sample-order
+# @step Fetch using=FetchExample
+`
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/workflow-stable.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	wf := &m.doc.Workflows[0]
+	wfID := navigatorWorkflowID(m.currentFile, 0)
+	activeReq := m.currentRequest
+	activeReqKey := m.activeRequestKey
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: m.doc.Requests[0]},
+		},
+		{
+			ID:      wfID,
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: wf},
+		},
+	})
+	selectNavigatorID(t, m, wfID)
+	m.focus = focusWorkflows
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if got := currentCursorLine(m.editor); got != wf.LineRange.Start {
+		t.Fatalf("expected cursor to jump to workflow line %d, got %d", wf.LineRange.Start, got)
+	}
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != wfID {
+		t.Fatalf("expected workflow selected after jump, got %#v", sel)
+	}
+
+	m = applyModelUpdate(t, m, tea.WindowSizeMsg{Width: 100, Height: 32})
+	if got := currentCursorLine(m.editor); got != wf.LineRange.Start {
+		t.Fatalf("expected cursor to remain on workflow line %d, got %d", wf.LineRange.Start, got)
+	}
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != wfID {
+		t.Fatalf("expected workflow selection to survive next editor sync, got %#v", sel)
+	}
+	if m.currentRequest != activeReq || m.activeRequestKey != activeReqKey {
+		t.Fatalf(
+			"expected active request %q to survive workflow cursor sync, got %q",
+			activeReqKey,
+			m.activeRequestKey,
+		)
 	}
 }
 
@@ -1407,7 +1464,7 @@ GET https://remote.test
 	wfID := "wf:" + fileB + ":0"
 	selectNavigatorID(t, m, wfID)
 	m.focus = focusWorkflows
-	m.dirty = true
+	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
 	if !samePath(m.currentFile, fileA) {
@@ -1445,7 +1502,7 @@ func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testi
 	reqID := navigatorRequestID(fileB, 0)
 	selectNavigatorID(t, m, reqID)
 	m.focus = focusRequests
-	m.dirty = true
+	m.markDirty()
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	if !samePath(m.currentFile, fileA) {
@@ -1461,6 +1518,120 @@ func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testi
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Enter again to send.") {
 		t.Fatalf("expected send-specific warning, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorCrossFileConfirmationIsBoundToSourceBuffer(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	fileC := filepath.Join(tmp, "other.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+	writeSampleFile(t, fileC, "### Other\n# @name Other\nGET https://other.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	reqID := navigatorRequestID(fileB, 0)
+	selectNavigatorID(t, m, reqID)
+	m.focus = focusRequests
+	m.markDirty()
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
+		t.Fatalf("expected preview-specific warning, got %q", m.statusMessage.text)
+	}
+
+	if cmd := m.openFile(fileC); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	selectNavigatorID(t, m, reqID)
+	m.focus = focusRequests
+	m.markDirty()
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if !samePath(m.currentFile, fileC) {
+		t.Fatalf("expected stale confirmation not to open %q, got current file %q", fileB, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
+		t.Fatalf("expected a fresh preview warning for new source buffer, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorCrossFileConfirmationIsInvalidatedByFurtherEdits(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	reqID := navigatorRequestID(fileB, 0)
+	selectNavigatorID(t, m, reqID)
+	m.focus = focusRequests
+	m.markDirty()
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+	}
+
+	original := m.editor.Value()
+	m.editor.SetValue(original + "\n# changed after warning")
+	m.editor.SetValue(original)
+	m.markDirty()
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected edited-then-restored buffer to require fresh confirmation, got current file %q", m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
+		t.Fatalf("expected fresh preview warning after restoring an edit, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorFileOpenRequiresDirtyConfirmation(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	selectNavigatorID(t, m, "file:"+fileB)
+	m.focus = focusFile
+	m.markDirty()
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first enter to keep dirty file %q, got %q", fileA, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Enter again to open.") {
+		t.Fatalf("expected file-open warning, got %q", m.statusMessage.text)
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !samePath(m.currentFile, fileB) {
+		t.Fatalf("expected repeated enter to open %q, got %q", fileB, m.currentFile)
+	}
+	if m.dirty {
+		t.Fatalf("expected opened file to be clean")
 	}
 }
 

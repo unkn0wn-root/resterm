@@ -86,6 +86,7 @@ func statusCmd(level statusLevel, text string) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
+	revision             uint64
 	selection            selectionState
 	mode                 selectionMode
 	pendingMotion        string
@@ -244,6 +245,21 @@ func newRequestEditor() requestEditor {
 		motionsEnabled: true,
 		hintManager:    hint.NewManager(hint.MetaSource()),
 	}
+}
+
+func (e requestEditor) Revision() uint64 {
+	return e.revision
+}
+
+func (e *requestEditor) noteContentChanged() {
+	e.revision++
+}
+
+func (e *requestEditor) SetValue(value string) {
+	if e.Value() != value {
+		e.noteContentChanged()
+	}
+	e.Model.SetValue(value)
 }
 
 func (e *requestEditor) SetMotionsEnabled(enabled bool) {
@@ -615,10 +631,15 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 }
 
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
+	beforeValue := e.Value()
+	beforeRevision := e.revision
 	keyMsg, isKey := msg.(tea.KeyMsg)
 	if !isKey {
 		var innerCmd tea.Cmd
 		e.Model, innerCmd = e.Model.Update(msg)
+		if e.Value() != beforeValue && e.revision == beforeRevision {
+			e.noteContentChanged()
+		}
 		return e, innerCmd
 	}
 
@@ -824,6 +845,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		}
 		var innerCmd tea.Cmd
 		e.Model, innerCmd = e.Model.Update(transformed)
+		if e.Value() != beforeValue && e.revision == beforeRevision {
+			e.noteContentChanged()
+		}
 		if innerCmd != nil {
 			cmds = append(cmds, innerCmd)
 		}

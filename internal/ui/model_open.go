@@ -95,6 +95,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.doc = nil
 	m.editor.SetValue("")
 	m.editor.SetCursor(0)
+	m.markClean()
 	focusCmd := m.setFocus(focusFile)
 	m.requestList.SetItems(nil)
 	m.requestItems = nil

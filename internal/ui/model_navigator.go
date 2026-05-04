@@ -43,6 +43,10 @@ func navigatorRequestID(path string, idx int) string {
 	return fmt.Sprintf("req:%s:%d", path, idx)
 }
 
+func navigatorWorkflowID(path string, idx int) string {
+	return fmt.Sprintf("wf:%s:%d", path, idx)
+}
+
 func (m *Model) buildNavTree(entries []filesvc.FileEntry) []*navigator.Node[any] {
 	if len(entries) == 0 {
 		return nil
@@ -167,7 +171,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 		desc := condense(strings.TrimSpace(wf.Description), 80)
 		badges := []string{fmt.Sprintf("%d steps", len(wf.Steps))}
 		nodes = append(nodes, &navigator.Node[any]{
-			ID:      fmt.Sprintf("wf:%s:%d", filePath, idx),
+			ID:      navigatorWorkflowID(filePath, idx),
 			Title:   title,
 			Desc:    desc,
 			Kind:    navigator.KindWorkflow,
@@ -493,6 +497,11 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 		return
 	}
 
+	if wf, wfIdx := workflowAtLine(m.doc, line); wf != nil {
+		m.syncNavigatorWorkflowAtCursor(wf, wfIdx, line)
+		return
+	}
+
 	req, reqIdx := requestAtLine(m.doc, line)
 	if req == nil && len(m.doc.Requests) > 0 {
 		lastIdx := len(m.doc.Requests) - 1
@@ -535,6 +544,63 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	m.lastCursorLine = line
 	m.lastCursorFile = m.currentFile
 	m.lastCursorDoc = m.doc
+}
+
+func (m *Model) syncNavigatorWorkflowAtCursor(wf *restfile.Workflow, wfIdx int, line int) {
+	if wf == nil || wfIdx < 0 {
+		return
+	}
+
+	targetID := navigatorWorkflowID(m.currentFile, wfIdx)
+	currentID := ""
+	if sel := m.navigator.Selected(); sel != nil {
+		currentID = sel.ID
+	}
+	if line == m.lastCursorLine &&
+		m.lastCursorFile == m.currentFile &&
+		m.lastCursorDoc == m.doc &&
+		currentID == targetID {
+		return
+	}
+
+	m.ensureNavigatorRequestsForFile(m.currentFile)
+	if !m.navigator.SelectByID(targetID) {
+		m.lastCursorLine = line
+		m.lastCursorFile = m.currentFile
+		m.lastCursorDoc = m.doc
+		return
+	}
+
+	if m.selectWorkflowForNode(wf, targetID) {
+		if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
+			wf = item.workflow
+		}
+	}
+	m.workflowSelectionKey = workflowKey(wf)
+	m.lastCursorLine = line
+	m.lastCursorFile = m.currentFile
+	m.lastCursorDoc = m.doc
+}
+
+func workflowAtLine(doc *restfile.Document, line int) (*restfile.Workflow, int) {
+	if doc == nil || line < 1 {
+		return nil, -1
+	}
+	for idx := range doc.Workflows {
+		wf := &doc.Workflows[idx]
+		start := wf.LineRange.Start
+		end := wf.LineRange.End
+		if start < 1 {
+			continue
+		}
+		if end < start {
+			end = start
+		}
+		if line >= start && line <= end {
+			return wf, idx
+		}
+	}
+	return nil, -1
 }
 
 // applyNavigatorExpansion copies expanded state from the previous navigator tree.

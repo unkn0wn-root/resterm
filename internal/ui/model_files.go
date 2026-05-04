@@ -54,7 +54,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 		}
 	}
 	m.rebuildNavigator(entries)
-	m.dirty = false
+	m.markClean()
 	m.watchFile(path, data)
 	m.setHistoryScopeForFile(path)
 	m.syncHistory()
@@ -92,7 +92,7 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 	m.syncRequestList(m.doc)
 	entries := m.syncWorkspaceEntriesStatus()
 	m.rebuildNavigator(entries)
-	m.dirty = false
+	m.markClean()
 	m.syncHistory()
 	focusCmd := m.setFocus(focusEditor)
 	m.setStatusMessage(statusMsg{text: "Temporary document", level: statusInfo})
@@ -228,7 +228,17 @@ func (m *Model) refreshCurrentDocument(content []byte) {
 	if req := m.findRequestByKey(m.activeRequestKey); req != nil {
 		m.currentRequest = req
 	}
+	m.markClean()
+}
+
+func (m *Model) markDirty() {
+	m.dirty = true
+	m.clearPendingCrossFileNavigation()
+}
+
+func (m *Model) markClean() {
 	m.dirty = false
+	m.clearPendingCrossFileNavigation()
 }
 
 func (m *Model) updateEditorStyler(path string) {

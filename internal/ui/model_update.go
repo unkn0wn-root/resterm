@@ -53,6 +53,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case editorEvent:
 		if typed.dirty {
+			// Content changes are observed synchronously through the editor revision.
+			// Dirty events may arrive later with status messages, so they should not
+			// clear a newer pending navigation confirmation.
 			m.dirty = true
 		}
 		if typed.status != nil {
@@ -485,16 +488,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.suppressEditorKey = false
 		} else {
 			filtered := m.filterEditorMessage(msg)
+			beforeValue := m.editor.Value()
+			beforeRevision := m.editor.Revision()
 			var editorCmd tea.Cmd
 			m.editor, editorCmd = m.editor.Update(filtered)
+			if m.editor.Revision() != beforeRevision || m.editor.Value() != beforeValue {
+				if m.editor.Revision() == beforeRevision {
+					m.editor.noteContentChanged()
+				}
+				m.markDirty()
+			}
 			cmds = append(cmds, editorCmd)
 		}
 		if m.focus == focusEditor {
-			if m.skipEditorCursorSync {
-				m.skipEditorCursorSync = false
-			} else {
-				m.syncNavigatorWithEditorCursor()
-			}
+			m.syncNavigatorWithEditorCursor()
 		}
 	}
 
@@ -660,13 +667,17 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 }
 
 type pendingCrossFileNavigation struct {
-	nodeID string
-	action string
+	nodeID         string
+	action         string
+	sourcePath     string
+	targetPath     string
+	sourceRevision uint64
 }
 
 const (
 	navActionJumpL          = "navigator:jump:l"
 	navActionJumpR          = "navigator:jump:r"
+	navActionOpenFile       = "navigator:file:open"
 	navActionRequestSend    = "request:send"
 	navActionRequestPreview = "request:preview"
 	navActionWorkflowRun    = "workflow:run"
@@ -684,16 +695,23 @@ func (m *Model) confirmCrossFileNavigation(
 	if n == nil {
 		return true
 	}
-	path := strings.TrimSpace(n.Payload.FilePath)
+	path := n.Payload.FilePath
 	if path == "" || samePath(path, m.currentFile) || !m.dirty {
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	if m.pendingCrossFile.nodeID == n.ID && m.pendingCrossFile.action == action {
+	sourceRevision := m.editor.Revision()
+	if m.pendingCrossFile.matches(n.ID, action, m.currentFile, path, sourceRevision) {
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	m.pendingCrossFile = pendingCrossFileNavigation{nodeID: n.ID, action: action}
+	m.pendingCrossFile = pendingCrossFileNavigation{
+		nodeID:         n.ID,
+		action:         action,
+		sourcePath:     m.currentFile,
+		targetPath:     path,
+		sourceRevision: sourceRevision,
+	}
 	base := filepath.Base(path)
 	if base == "" {
 		base = path
@@ -712,11 +730,34 @@ func (m *Model) confirmCrossFileNavigation(
 	return false
 }
 
+func (p pendingCrossFileNavigation) matches(
+	nodeID string,
+	action string,
+	sourcePath string,
+	targetPath string,
+	sourceRevision uint64,
+) bool {
+	if p.nodeID != nodeID || p.action != action || p.sourceRevision != sourceRevision {
+		return false
+	}
+	if !samePathOrBothEmpty(p.sourcePath, sourcePath) {
+		return false
+	}
+	return samePathOrBothEmpty(p.targetPath, targetPath)
+}
+
+func samePathOrBothEmpty(a, b string) bool {
+	if a == "" || b == "" {
+		return a == b
+	}
+	return samePath(a, b)
+}
+
 func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
 	if n == nil {
 		return nil, true
 	}
-	path := strings.TrimSpace(n.Payload.FilePath)
+	path := n.Payload.FilePath
 	if path == "" || samePath(path, m.currentFile) {
 		return nil, true
 	}
@@ -1319,8 +1360,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "u":
-				var cmd tea.Cmd
-				m.editor, cmd = m.editor.UndoLastChange()
+				cmd := m.runUndoLastChange()
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "ctrl+r":
@@ -1329,8 +1369,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			case "d":
 				if m.editor.hasSelection() {
-					var cmd tea.Cmd
-					m.editor, cmd = m.editor.DeleteSelection()
+					cmd := m.runDeleteSelection()
 					m.suppressEditorKey = true
 					return combine(cmd)
 				}
@@ -1349,8 +1388,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			case "c":
 				if m.editor.hasSelection() {
-					var cmd tea.Cmd
-					m.editor, cmd = m.editor.DeleteSelection()
+					cmd := m.runDeleteSelection()
 					cmd = batchCommands(cmd, m.setInsertMode(true, true))
 					m.suppressEditorKey = true
 					return combine(cmd)
@@ -1420,15 +1458,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		if m.shouldSendEditorRequest(msg, m.editorInsertMode) {
 			m.suppressEditorKey = true
 			return combine(m.sendActiveRequest())
-		}
-		if m.editorInsertMode {
-			km := msg
-			switch km.Type {
-			case tea.KeyBackspace, tea.KeyDelete, tea.KeyRunes, tea.KeyEnter:
-				if km.Type != tea.KeyRunes || len(km.Runes) > 0 {
-					m.dirty = true
-				}
-			}
 		}
 	}
 
@@ -2025,12 +2054,28 @@ func (m *Model) runWorkflowResize(delta float64) tea.Cmd {
 
 func (m *Model) applyEditorMutation(op func(requestEditor) (requestEditor, tea.Cmd)) tea.Cmd {
 	before := m.editor.Value()
+	beforeRevision := m.editor.Revision()
 	editor, cmd := op(m.editor)
-	if editor.Value() != before {
-		m.dirty = true
+	if editor.Revision() != beforeRevision || editor.Value() != before {
+		if editor.Revision() == beforeRevision {
+			editor.noteContentChanged()
+		}
+		m.markDirty()
 	}
 	m.editor = editor
 	return cmd
+}
+
+func (m *Model) runDeleteSelection() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.DeleteSelection()
+	})
+}
+
+func (m *Model) runUndoLastChange() tea.Cmd {
+	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.UndoLastChange()
+	})
 }
 
 func (m *Model) runDeleteCurrentLine() tea.Cmd {
