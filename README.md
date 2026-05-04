@@ -19,7 +19,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 ## Screenshot tour
 
 <details>
-<summary>See the UI in action</summary>
+<summary>See the UI in action (click to expand)</summary>
 
 <p align="center">
   <strong>Workflows</strong>
