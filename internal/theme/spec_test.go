@@ -38,15 +38,20 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 		Styles: StylesSpec{
 			ListItemTitle:       &StyleSpec{Foreground: strPtr("#222233")},
 			ListItemDescription: &StyleSpec{Foreground: strPtr("#9999aa")},
-			ResponseContentRaw:  &StyleSpec{Foreground: strPtr("#abcdef")},
-			ResponseSelection:   &StyleSpec{Background: strPtr("#101010")},
-			ResponseCursor:      &StyleSpec{Foreground: strPtr("#010203")},
-			ExplainLabel:        &StyleSpec{Foreground: strPtr("#bada55")},
-			ExplainBadgeError:   &StyleSpec{Background: strPtr("#220000")},
-			ExplainWarning:      &StyleSpec{Foreground: strPtr("#ffaa00")},
-			PaneTitleEditor:     &StyleSpec{Foreground: strPtr("#445566")},
-			PaneTitleResponse:   &StyleSpec{Foreground: strPtr("#665544")},
-			StreamContent:       &StyleSpec{Foreground: strPtr("#123123")},
+			CLIRunPickerSelected: &StyleSpec{
+				Foreground: strPtr("#111827"),
+				Background: strPtr("#facc15"),
+			},
+			CLIRunPickerCursorSelected: &StyleSpec{Foreground: strPtr("#22c55e")},
+			ResponseContentRaw:         &StyleSpec{Foreground: strPtr("#abcdef")},
+			ResponseSelection:          &StyleSpec{Background: strPtr("#101010")},
+			ResponseCursor:             &StyleSpec{Foreground: strPtr("#010203")},
+			ExplainLabel:               &StyleSpec{Foreground: strPtr("#bada55")},
+			ExplainBadgeError:          &StyleSpec{Background: strPtr("#220000")},
+			ExplainWarning:             &StyleSpec{Foreground: strPtr("#ffaa00")},
+			PaneTitleEditor:            &StyleSpec{Foreground: strPtr("#445566")},
+			PaneTitleResponse:          &StyleSpec{Foreground: strPtr("#665544")},
+			StreamContent:              &StyleSpec{Foreground: strPtr("#123123")},
 		},
 	}
 
@@ -102,6 +107,15 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if color := updated.ListItemDescription.GetForeground(); color != lipgloss.Color("#9999aa") {
 		t.Errorf("expected list item description foreground #9999aa, got %v", color)
+	}
+	if color := updated.CLIRunPickerSelected.GetForeground(); color != lipgloss.Color("#111827") {
+		t.Errorf("expected CLI run picker foreground #111827, got %v", color)
+	}
+	if color := updated.CLIRunPickerSelected.GetBackground(); color != lipgloss.Color("#facc15") {
+		t.Errorf("expected CLI run picker background #facc15, got %v", color)
+	}
+	if color := updated.CLIRunPickerCursorSelected.GetForeground(); color != lipgloss.Color("#22c55e") {
+		t.Errorf("expected CLI run picker cursor foreground #22c55e, got %v", color)
 	}
 	if color := updated.ResponseContentRaw.GetForeground(); color != lipgloss.Color("#abcdef") {
 		t.Errorf("expected raw response foreground #abcdef, got %v", color)

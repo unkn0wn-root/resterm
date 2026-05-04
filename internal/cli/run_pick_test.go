@@ -268,4 +268,45 @@ func TestRunRequestPickerKeepsCLIDefaultAccentWithoutCustomTheme(t *testing.T) {
 	if got := p.st.numberSel.GetForeground(); got != lipgloss.Color("#F4E27A") {
 		t.Fatalf("expected CLI default number accent foreground, got %v", got)
 	}
+	if got := p.st.rowSel.GetBackground(); theme.ColorDefined(got) {
+		t.Fatalf("expected CLI default selected row to avoid a background, got %v", got)
+	}
+}
+
+func TestRunRequestPickerAppliesCLIOnlySelectionStyles(t *testing.T) {
+	th := theme.DefaultTheme()
+	th.ListItemSelectedTitle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#f8fafc")).
+		Background(lipgloss.Color("#3A2B52"))
+	th.CLIRunPickerSelected = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#111827")).
+		Background(lipgloss.Color("#facc15"))
+	th.CLIRunPickerCursorSelected = lipgloss.NewStyle().Foreground(lipgloss.Color("#22c55e"))
+
+	def := theme.Definition{
+		Key:    "cli",
+		Source: theme.SourceUser,
+		Metadata: theme.Metadata{
+			Name: "CLI",
+			Tags: []string{"dark"},
+		},
+		Theme: th,
+	}
+
+	p := newRunRequestPickerModel(
+		"many.http",
+		[]RunRequestChoice{{Line: 3, Label: "GET one"}},
+		termcolor.TrueColor(),
+		&def,
+	)
+
+	if got := p.st.rowSel.GetBackground(); got != lipgloss.Color("#facc15") {
+		t.Fatalf("expected CLI selected background override, got %v", got)
+	}
+	if got := p.st.rowSel.GetForeground(); got != lipgloss.Color("#111827") {
+		t.Fatalf("expected CLI selected foreground override, got %v", got)
+	}
+	if got := p.st.cursorSel.GetForeground(); got != lipgloss.Color("#22c55e") {
+		t.Fatalf("expected CLI cursor foreground override, got %v", got)
+	}
 }

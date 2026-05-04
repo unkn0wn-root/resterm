@@ -45,6 +45,10 @@ type StylesSpec struct {
 	StatusBarValue                *StyleSpec `json:"status_bar_value"                 toml:"status_bar_value"`
 	CommandBar                    *StyleSpec `json:"command_bar"                      toml:"command_bar"`
 	CommandBarHint                *StyleSpec `json:"command_bar_hint"                 toml:"command_bar_hint"`
+	CLIRunPicker                  *StyleSpec `json:"cli_run_picker"                  toml:"cli_run_picker"`
+	CLIRunPickerSelected          *StyleSpec `json:"cli_run_picker_selected"         toml:"cli_run_picker_selected"`
+	CLIRunPickerCursor            *StyleSpec `json:"cli_run_picker_cursor"           toml:"cli_run_picker_cursor"`
+	CLIRunPickerCursorSelected    *StyleSpec `json:"cli_run_picker_cursor_selected"  toml:"cli_run_picker_cursor_selected"`
 	ResponseSearchHighlight       *StyleSpec `json:"response_search_highlight"        toml:"response_search_highlight"`
 	ResponseSearchHighlightActive *StyleSpec `json:"response_search_highlight_active" toml:"response_search_highlight_active"`
 	Tabs                          *StyleSpec `json:"tabs"                             toml:"tabs"`
@@ -293,6 +297,30 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		"command_bar_hint",
 		&cloned.CommandBarHint,
 		spec.Styles.CommandBarHint,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply("cli_run_picker", &cloned.CLIRunPicker, spec.Styles.CLIRunPicker); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"cli_run_picker_selected",
+		&cloned.CLIRunPickerSelected,
+		spec.Styles.CLIRunPickerSelected,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"cli_run_picker_cursor",
+		&cloned.CLIRunPickerCursor,
+		spec.Styles.CLIRunPickerCursor,
+	); err != nil {
+		return Theme{}, err
+	}
+	if err := apply(
+		"cli_run_picker_cursor_selected",
+		&cloned.CLIRunPickerCursorSelected,
+		spec.Styles.CLIRunPickerCursorSelected,
 	); err != nil {
 		return Theme{}, err
 	}
