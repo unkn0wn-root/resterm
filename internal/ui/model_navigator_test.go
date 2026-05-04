@@ -98,6 +98,35 @@ func TestNavigatorFollowsEditorCursor(t *testing.T) {
 	}
 }
 
+func TestNavigatorResyncsSelectionWhenCursorUnchanged(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "sample.http")
+	content := "### first\nGET https://example.com/one\n\n### second\nGET https://example.com/two\n"
+	writeSampleFile(t, file, content)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: file, InitialContent: content})
+	m := &model
+
+	_ = m.setFocus(focusEditor)
+
+	secondStart := m.doc.Requests[1].LineRange.Start
+	secondID := navigatorRequestID(file, 1)
+	m.moveCursorToLine(secondStart)
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != secondID {
+		t.Fatalf("expected navigator to select second request, got %#v", sel)
+	}
+
+	firstID := navigatorRequestID(file, 0)
+	if !m.navigator.SelectByID(firstID) {
+		t.Fatalf("expected navigator to select first request")
+	}
+
+	m.syncNavigatorWithEditorCursor()
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != secondID {
+		t.Fatalf("expected navigator to resync second request, got %#v", sel)
+	}
+}
+
 func TestNavigatorIgnoresLinesOutsideRequests(t *testing.T) {
 	tmp := t.TempDir()
 	file := filepath.Join(tmp, "preface.http")
@@ -391,6 +420,37 @@ func TestNavigatorRightDoesNotCollapseFile(t *testing.T) {
 	}
 	if !node.Expanded {
 		t.Fatalf("expected %s to stay expanded after second right", fileB)
+	}
+}
+
+func TestNavigatorSpaceExpandsUnloadedFile(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "a.http")
+	fileB := filepath.Join(tmp, "b.http")
+	content := "### req\n# @name sample\nGET https://example.com\n"
+	writeSampleFile(t, fileA, content)
+	writeSampleFile(t, fileB, content)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+
+	selectNavigatorID(t, m, "file:"+fileB)
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeySpace}); cmd != nil {
+		cmd()
+	}
+
+	node := m.navigator.Find("file:" + fileB)
+	if node == nil {
+		t.Fatalf("expected node for %s", fileB)
+	}
+	if !node.Expanded {
+		t.Fatalf("expected %s to expand after space", fileB)
+	}
+	if len(node.Children) == 0 {
+		t.Fatalf("expected requests to load for %s", fileB)
 	}
 }
 

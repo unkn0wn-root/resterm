@@ -255,9 +255,11 @@ func (e *requestEditor) noteContentChanged() {
 }
 
 func (e *requestEditor) SetValue(value string) {
-	if e.Value() != value {
-		e.noteContentChanged()
+	if e.Value() == value {
+		return
 	}
+
+	e.noteContentChanged()
 	e.Model.SetValue(value)
 }
 

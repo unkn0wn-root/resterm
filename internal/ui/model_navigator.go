@@ -356,7 +356,6 @@ func requestBadges(req *restfile.Request) []string {
 		b = append(b, "WS")
 	case req.SSE != nil:
 		b = append(b, "SSE")
-	default:
 	}
 
 	if req.Metadata.Compare != nil {
@@ -434,8 +433,6 @@ func (m *Model) syncNavigatorSelection() {
 			_ = m.selectFileByPath(path)
 		}
 		m.clearNavigatorRequestSelection()
-	case navigator.KindDir:
-		m.clearNavigatorRequestSelection()
 	default:
 		m.clearNavigatorRequestSelection()
 	}
@@ -479,10 +476,41 @@ func (m *Model) applyCursorRequest(req *restfile.Request) {
 	m.setActiveRequest(req)
 }
 
+type cursorSyncState struct {
+	line int
+	file string
+	doc  *restfile.Document
+}
+
 func (m *Model) resetCursorSync() {
-	m.lastCursorLine = -1
-	m.lastCursorFile = ""
-	m.lastCursorDoc = nil
+	m.lastCursorSync = cursorSyncState{line: -1}
+}
+
+func (m *Model) markCursorSynced(line int) {
+	m.lastCursorSync = m.currentCursorSyncState(line)
+}
+
+func (m *Model) currentCursorSyncState(line int) cursorSyncState {
+	return cursorSyncState{
+		line: line,
+		file: m.currentFile,
+		doc:  m.doc,
+	}
+}
+
+func (m *Model) cursorSyncChanged(line int, targetID string) bool {
+	// Doc pointer comparison intentionally detects reparses as a change.
+	if m.lastCursorSync != m.currentCursorSyncState(line) {
+		return true
+	}
+
+	currentID := ""
+	if m.navigator != nil {
+		if sel := m.navigator.Selected(); sel != nil {
+			currentID = sel.ID
+		}
+	}
+	return currentID != targetID
 }
 
 func (m *Model) syncNavigatorWithEditorCursor() {
@@ -494,9 +522,6 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	}
 
 	line := currentCursorLine(m.editor)
-	if line == m.lastCursorLine && m.lastCursorFile == m.currentFile && m.lastCursorDoc == m.doc {
-		return
-	}
 
 	if wf, wfIdx := workflowAtLine(m.doc, line); wf != nil {
 		m.syncNavigatorWorkflowAtCursor(wf, wfIdx, line)
@@ -514,37 +539,23 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	}
 
 	if req == nil {
-		m.lastCursorLine = line
-		m.lastCursorFile = m.currentFile
-		m.lastCursorDoc = m.doc
+		m.markCursorSynced(line)
 		return
 	}
 
 	targetID := navigatorRequestID(m.currentFile, reqIdx)
-	currentID := ""
-	if sel := m.navigator.Selected(); sel != nil {
-		currentID = sel.ID
-	}
-	// Doc pointer comparison intentionally detects reparses as a change.
-	if line == m.lastCursorLine &&
-		m.lastCursorFile == m.currentFile &&
-		m.lastCursorDoc == m.doc &&
-		currentID == targetID {
+	if !m.cursorSyncChanged(line, targetID) {
 		return
 	}
 
 	m.ensureNavigatorRequestsForFile(m.currentFile)
 	if !m.navigator.SelectByID(targetID) {
-		m.lastCursorLine = line
-		m.lastCursorFile = m.currentFile
-		m.lastCursorDoc = m.doc
+		m.markCursorSynced(line)
 		return
 	}
 
 	m.applyCursorRequest(req)
-	m.lastCursorLine = line
-	m.lastCursorFile = m.currentFile
-	m.lastCursorDoc = m.doc
+	m.markCursorSynced(line)
 }
 
 func (m *Model) syncNavigatorWorkflowAtCursor(wf *restfile.Workflow, wfIdx int, line int) {
@@ -553,22 +564,13 @@ func (m *Model) syncNavigatorWorkflowAtCursor(wf *restfile.Workflow, wfIdx int, 
 	}
 
 	targetID := navigatorWorkflowID(m.currentFile, wfIdx)
-	currentID := ""
-	if sel := m.navigator.Selected(); sel != nil {
-		currentID = sel.ID
-	}
-	if line == m.lastCursorLine &&
-		m.lastCursorFile == m.currentFile &&
-		m.lastCursorDoc == m.doc &&
-		currentID == targetID {
+	if !m.cursorSyncChanged(line, targetID) {
 		return
 	}
 
 	m.ensureNavigatorRequestsForFile(m.currentFile)
 	if !m.navigator.SelectByID(targetID) {
-		m.lastCursorLine = line
-		m.lastCursorFile = m.currentFile
-		m.lastCursorDoc = m.doc
+		m.markCursorSynced(line)
 		return
 	}
 
@@ -578,9 +580,7 @@ func (m *Model) syncNavigatorWorkflowAtCursor(wf *restfile.Workflow, wfIdx int, 
 		}
 	}
 	m.workflowSelectionKey = workflowKey(wf)
-	m.lastCursorLine = line
-	m.lastCursorFile = m.currentFile
-	m.lastCursorDoc = m.doc
+	m.markCursorSynced(line)
 }
 
 func workflowAtLine(doc *restfile.Document, line int) (*restfile.Workflow, int) {

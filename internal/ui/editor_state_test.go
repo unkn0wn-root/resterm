@@ -72,6 +72,25 @@ func collectHintLabels(options []hint.Hint) map[string]bool {
 	return labels
 }
 
+func TestRequestEditorSetValueNoopsWhenUnchanged(t *testing.T) {
+	content := "alpha\nbeta\ngamma"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 2)
+
+	beforeCursor := editor.caretPosition()
+	beforeRevision := editor.Revision()
+
+	editorPtr.SetValue(content)
+
+	if got := editor.caretPosition(); got != beforeCursor {
+		t.Fatalf("expected cursor to remain at %+v, got %+v", beforeCursor, got)
+	}
+	if got := editor.Revision(); got != beforeRevision {
+		t.Fatalf("expected revision to remain %d, got %d", beforeRevision, got)
+	}
+}
+
 const clipboardFallbackStatus = "Clipboard unavailable; saved in editor register"
 
 func expectStatusWithClipboardFallback(t *testing.T, status *statusMsg, want string) {

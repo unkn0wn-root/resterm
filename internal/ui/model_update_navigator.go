@@ -304,42 +304,36 @@ func (m *Model) navExpandFile(n *navigator.Node[any], toggle bool) {
 	if m.navigator == nil || n == nil {
 		return
 	}
-	has := len(n.Children) > 0
-	if !has {
+	loaded := len(n.Children) > 0
+	if !loaded {
 		m.expandNavigatorFile(n.Payload.FilePath)
 		if refreshed := m.navigator.Find(n.ID); refreshed != nil {
 			n = refreshed
 		}
 	}
-	if n == nil || len(n.Children) == 0 {
-		return
+
+	if !loaded {
+		toggle = false
 	}
-	changed := false
-	if toggle && has {
-		n.Expanded = !n.Expanded
-		changed = true
-	} else if !n.Expanded {
-		n.Expanded = true
-		changed = true
-	}
-	if changed {
-		m.navigator.Refresh()
-	}
+	m.navToggleExpand(n, toggle)
 }
 
 func (m *Model) navExpandDir(n *navigator.Node[any], toggle bool) {
+	m.navToggleExpand(n, toggle)
+}
+
+func (m *Model) navToggleExpand(n *navigator.Node[any], toggle bool) {
 	if m.navigator == nil || n == nil || len(n.Children) == 0 {
 		return
 	}
-	changed := false
+
+	expanded := n.Expanded
 	if toggle {
 		n.Expanded = !n.Expanded
-		changed = true
-	} else if !n.Expanded {
+	} else {
 		n.Expanded = true
-		changed = true
 	}
-	if changed {
+	if n.Expanded != expanded {
 		m.navigator.Refresh()
 	}
 }

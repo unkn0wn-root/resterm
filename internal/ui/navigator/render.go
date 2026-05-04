@@ -156,7 +156,7 @@ func rowActive(row Flat[any], state RenderState) bool {
 	if state.ActiveNodeID != "" && n.ID == state.ActiveNodeID {
 		return true
 	}
-	return n.Kind == KindFile && sameNavigatorPath(n.Payload.FilePath, state.ActiveFilePath)
+	return n.Kind == KindFile && util.SamePath(n.Payload.FilePath, state.ActiveFilePath)
 }
 
 func rowTextStyles(
@@ -290,13 +290,6 @@ func withActiveForeground(style lipgloss.Style, th theme.Theme) lipgloss.Style {
 		return style.Foreground(fg)
 	}
 	return style
-}
-
-func sameNavigatorPath(a, b string) bool {
-	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
-		return false
-	}
-	return util.SamePath(a, b)
 }
 
 func fileKind(n *Node[any]) filesvc.FileKind {

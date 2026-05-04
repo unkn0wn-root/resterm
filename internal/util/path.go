@@ -11,14 +11,12 @@ func SamePath(a, b string) bool {
 		return false
 	}
 
-	cleanA := filepath.Clean(a)
-	cleanB := filepath.Clean(b)
-	if cleanA == cleanB {
+	if a == b {
 		return true
 	}
 
-	absA, errA := filepath.Abs(cleanA)
-	absB, errB := filepath.Abs(cleanB)
+	absA, errA := filepath.Abs(a)
+	absB, errB := filepath.Abs(b)
 	if errA != nil || errB != nil {
 		return false
 	}

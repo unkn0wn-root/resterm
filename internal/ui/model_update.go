@@ -685,17 +685,18 @@ func (m *Model) confirmCrossFileNavigation(
 		return true
 	}
 	sourceRevision := m.editor.Revision()
-	if m.pendingCrossFile.matches(n.ID, action, m.currentFile, path, sourceRevision) {
-		m.clearPendingCrossFileNavigation()
-		return true
-	}
-	m.pendingCrossFile = pendingCrossFileNavigation{
+	pending := pendingCrossFileNavigation{
 		nodeID:         n.ID,
 		action:         action,
 		sourcePath:     m.currentFile,
 		targetPath:     path,
 		sourceRevision: sourceRevision,
 	}
+	if m.pendingCrossFile.matches(pending) {
+		m.clearPendingCrossFileNavigation()
+		return true
+	}
+	m.pendingCrossFile = pending
 	base := filepath.Base(path)
 	if base == "" {
 		base = path
@@ -714,20 +715,20 @@ func (m *Model) confirmCrossFileNavigation(
 	return false
 }
 
-func (p pendingCrossFileNavigation) matches(
-	nodeID string,
-	action string,
-	sourcePath string,
-	targetPath string,
-	sourceRevision uint64,
-) bool {
-	if p.nodeID != nodeID || p.action != action || p.sourceRevision != sourceRevision {
+func (p pendingCrossFileNavigation) matches(other pendingCrossFileNavigation) bool {
+	if p.nodeID != other.nodeID {
 		return false
 	}
-	if !util.SamePathOrBothEmpty(p.sourcePath, sourcePath) {
+	if p.action != other.action {
 		return false
 	}
-	return util.SamePathOrBothEmpty(p.targetPath, targetPath)
+	if p.sourceRevision != other.sourceRevision {
+		return false
+	}
+	if !util.SamePathOrBothEmpty(p.sourcePath, other.sourcePath) {
+		return false
+	}
+	return util.SamePathOrBothEmpty(p.targetPath, other.targetPath)
 }
 
 func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
