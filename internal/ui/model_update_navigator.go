@@ -27,7 +27,7 @@ type navJumpResult struct {
 	focus bool
 }
 
-func (m *Model) navJumpCmd() navJumpResult {
+func (m *Model) navJumpCmd(key string) navJumpResult {
 	if m.navigator == nil {
 		return navJumpResult{}
 	}
@@ -38,16 +38,17 @@ func (m *Model) navJumpCmd() navJumpResult {
 
 	switch n.Kind {
 	case navigator.KindRequest:
-		return m.navReqJumpCmd()
+		return m.navReqJumpCmd(key)
 	case navigator.KindWorkflow:
-		return m.navWfJumpCmd()
+		return m.navWfJumpCmd(key)
 	default:
 		return navJumpResult{}
 	}
 }
 
-func (m *Model) navReqJumpCmd() navJumpResult {
-	prep := m.resolveNavReq()
+func (m *Model) navReqJumpCmd(key string) navJumpResult {
+	action, hint := navJumpCrossFileAction(key)
+	prep := m.resolveNavReq(action, hint)
 	if !prep.ok {
 		if len(prep.cmds) > 0 {
 			return navJumpResult{cmd: tea.Batch(prep.cmds...)}
@@ -65,8 +66,9 @@ func (m *Model) navReqJumpCmd() navJumpResult {
 	return navJumpResult{ok: true, focus: true}
 }
 
-func (m *Model) navWfJumpCmd() navJumpResult {
-	prep := m.resolveNavWf()
+func (m *Model) navWfJumpCmd(key string) navJumpResult {
+	action, hint := navJumpCrossFileAction(key)
+	prep := m.resolveNavWf(action, hint)
 	if !prep.ok {
 		if len(prep.cmds) > 0 {
 			return navJumpResult{cmd: tea.Batch(prep.cmds...)}
@@ -82,6 +84,13 @@ func (m *Model) navWfJumpCmd() navJumpResult {
 		return navJumpResult{cmd: tea.Batch(cmds...), ok: true, focus: true}
 	}
 	return navJumpResult{ok: true, focus: true}
+}
+
+func navJumpCrossFileAction(key string) (string, string) {
+	if key == "r" {
+		return navActionJumpR, "Press r again to jump."
+	}
+	return navActionJumpL, "Press l again to jump."
 }
 
 func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
@@ -113,7 +122,12 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 		if !focus {
 			return out
 		}
-		return batchCommands(out, m.setFocus(focusEditor))
+		focusCmd := m.setFocus(focusEditor)
+		if m.focus == focusEditor {
+			m.suppressEditorKey = true
+			m.skipEditorCursorSync = true
+		}
+		return batchCommands(out, focusCmd)
 	}
 
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.navigatorFilter.Focused() &&
@@ -151,17 +165,15 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			m.syncNavigatorSelection()
 		case "right", "l":
 			selected := m.navigator.Selected()
-			if ev.String() == "l" || navJumpable(selected) {
-				res := m.navJumpCmd()
+			if ev.String() == "l" && navJumpable(selected) {
+				res := m.navJumpCmd("l")
 				if res.ok {
 					return applyJump(res.cmd, res.focus)
 				}
-				if ev.String() == "l" && navJumpable(selected) {
-					return applyJump(res.cmd, false)
-				}
 				if res.cmd != nil {
-					cmd = batchCommands(cmd, res.cmd)
+					return applyFilter(res.cmd)
 				}
+				return applyFilter(nil)
 			}
 			if m.navigatorFilter.Focused() {
 				m.navigatorFilter.Blur()
@@ -244,7 +256,7 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				m.navigator.ClearTagFilters()
 			}
 		case "r":
-			res := m.navJumpCmd()
+			res := m.navJumpCmd("r")
 			if res.ok {
 				return applyJump(res.cmd, res.focus)
 			}

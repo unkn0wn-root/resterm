@@ -394,7 +394,7 @@ func (m *Model) syncNavigatorSelection() {
 			if samePath(path, m.currentFile) {
 				m.setActiveRequest(req)
 			} else {
-				if m.pendingCrossFileID == n.ID {
+				if m.pendingCrossFile.nodeID == n.ID {
 					return
 				}
 				m.clearNavigatorRequestSelection()
@@ -418,7 +418,7 @@ func (m *Model) syncNavigatorSelection() {
 				}
 				m.workflowSelectionKey = workflowKey(wf)
 			} else {
-				if m.pendingCrossFileID == n.ID {
+				if m.pendingCrossFile.nodeID == n.ID {
 					return
 				}
 				m.clearNavigatorWorkflowSelection()

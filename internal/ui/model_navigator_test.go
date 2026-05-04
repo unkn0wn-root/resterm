@@ -59,6 +59,16 @@ func selectNavigatorID(t *testing.T, m *Model, id string) {
 	m.navigator.Move(target - curr)
 }
 
+func applyModelUpdate(t *testing.T, m *Model, msg tea.Msg) *Model {
+	t.Helper()
+	updated, _ := m.Update(msg)
+	next, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("expected ui.Model update to return Model, got %T", updated)
+	}
+	return &next
+}
+
 func TestNavigatorFollowsEditorCursor(t *testing.T) {
 	tmp := t.TempDir()
 	file := filepath.Join(tmp, "sample.http")
@@ -1116,6 +1126,44 @@ func TestNavigatorRequestLJumpsToDefinition(t *testing.T) {
 	}
 }
 
+func TestNavigatorRightDoesNotJumpToRequestDefinition(t *testing.T) {
+	content := strings.Repeat(
+		"\n",
+		5,
+	) + "### example\n# @name getExample\nGET https://example.com\n"
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/sample.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	req := m.doc.Requests[0]
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: req},
+		},
+	})
+	m.focus = focusRequests
+
+	if res := m.setCollapseState(paneRegionEditor, true); res.blocked {
+		t.Fatalf("expected editor collapse to be allowed")
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRight})
+
+	if !m.collapseState(paneRegionEditor) {
+		t.Fatalf("expected right key not to restore editor for request jump")
+	}
+	if m.focus == focusEditor {
+		t.Fatalf("expected right key not to move focus to editor")
+	}
+	if got := currentCursorLine(m.editor); got == req.LineRange.Start {
+		t.Fatalf("expected right key not to jump cursor to request line %d", got)
+	}
+}
+
 func TestNavigatorRightFallsThroughWhenRequestJumpCannotResolve(t *testing.T) {
 	model := newTestModelWithDoc("### req\nGET https://example.com\n")
 	m := model
@@ -1236,6 +1284,135 @@ DELETE https://example.com/resource
 	}
 	if m.workflowSelectionKey != workflowKey(wf) {
 		t.Fatalf("expected workflow selection key %q, got %q", workflowKey(wf), m.workflowSelectionKey)
+	}
+}
+
+func TestNavigatorWorkflowJumpFullUpdateKeepsWorkflowSelected(t *testing.T) {
+	content := `### Fetch
+# @name FetchExample
+GET https://example.com
+
+# @workflow sample-order
+# @step Fetch using=FetchExample
+`
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/workflow-after-request.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	if len(m.doc.Requests) == 0 || len(m.doc.Workflows) == 0 {
+		t.Fatalf("expected request and workflow")
+	}
+	wf := &m.doc.Workflows[0]
+	wfID := "wf:" + m.currentFile + ":0"
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: m.doc.Requests[0]},
+		},
+		{
+			ID:      wfID,
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: wf},
+		},
+	})
+	selectNavigatorID(t, m, wfID)
+	m.focus = focusWorkflows
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+
+	if m.focus != focusEditor {
+		t.Fatalf("expected focus to move to editor, got %v", m.focus)
+	}
+	if got := currentCursorLine(m.editor); got != wf.LineRange.Start {
+		t.Fatalf("expected cursor to jump to workflow line %d, got %d", wf.LineRange.Start, got)
+	}
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != wfID {
+		t.Fatalf("expected workflow selection to survive full update, got %#v", sel)
+	}
+	if m.suppressEditorKey || m.skipEditorCursorSync {
+		t.Fatalf("expected jump suppression flags to be consumed after full update")
+	}
+}
+
+func TestNavigatorCrossFileJumpConfirmationIsNotReusedForWorkflowRun(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "workflow.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, `# @workflow cross-file
+# @step Fetch using=FetchRemote
+
+### Fetch remote
+# @name FetchRemote
+GET https://remote.test
+`)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	wfID := "wf:" + fileB + ":0"
+	selectNavigatorID(t, m, wfID)
+	m.focus = focusWorkflows
+	m.dirty = true
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first jump press to keep current file %q, got %q", fileA, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press l again to jump.") {
+		t.Fatalf("expected jump-specific warning, got %q", m.statusMessage.text)
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected enter not to reuse jump confirmation, got current file %q", m.currentFile)
+	}
+	if m.workflowRun != nil {
+		t.Fatalf("expected workflow not to start from stale jump confirmation")
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Enter/Space again to run.") {
+		t.Fatalf("expected run-specific warning, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	reqID := navigatorRequestID(fileB, 0)
+	selectNavigatorID(t, m, reqID)
+	m.focus = focusRequests
+	m.dirty = true
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
+		t.Fatalf("expected preview-specific warning, got %q", m.statusMessage.text)
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected enter not to reuse preview confirmation, got current file %q", m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Enter again to send.") {
+		t.Fatalf("expected send-specific warning, got %q", m.statusMessage.text)
 	}
 }
 
