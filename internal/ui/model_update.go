@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m Model) Init() tea.Cmd {
@@ -52,9 +53,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case editorEvent:
-		if typed.dirty {
-			m.dirty = true
-		}
 		if typed.status != nil {
 			m.setStatusMessage(*typed.status)
 		}
@@ -484,17 +482,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.suppressEditorKey {
 			m.suppressEditorKey = false
 		} else {
-			filtered := m.filterEditorMessage(msg)
-			var editorCmd tea.Cmd
-			m.editor, editorCmd = m.editor.Update(filtered)
-			cmds = append(cmds, editorCmd)
+			cmds = append(cmds, m.updateEditor(m.filterEditorMessage(msg)))
 		}
 		if m.focus == focusEditor {
-			if m.skipEditorCursorSync {
-				m.skipEditorCursorSync = false
-			} else {
-				m.syncNavigatorWithEditorCursor()
-			}
+			m.syncNavigatorWithEditorCursor()
 		}
 	}
 
@@ -650,7 +641,7 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	if sel.Kind != kind {
 		return false
 	}
-	if !samePath(sel.Payload.FilePath, m.currentFile) {
+	if !util.SamePath(sel.Payload.FilePath, m.currentFile) {
 		if warn != "" {
 			m.setStatusMessage(statusMsg{text: warn, level: statusInfo})
 		}
@@ -660,13 +651,17 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 }
 
 type pendingCrossFileNavigation struct {
-	nodeID string
-	action string
+	nodeID         string
+	action         string
+	sourcePath     string
+	targetPath     string
+	sourceRevision uint64
 }
 
 const (
 	navActionJumpL          = "navigator:jump:l"
 	navActionJumpR          = "navigator:jump:r"
+	navActionOpenFile       = "navigator:file:open"
 	navActionRequestSend    = "request:send"
 	navActionRequestPreview = "request:preview"
 	navActionWorkflowRun    = "workflow:run"
@@ -684,16 +679,24 @@ func (m *Model) confirmCrossFileNavigation(
 	if n == nil {
 		return true
 	}
-	path := strings.TrimSpace(n.Payload.FilePath)
-	if path == "" || samePath(path, m.currentFile) || !m.dirty {
+	path := n.Payload.FilePath
+	if path == "" || util.SamePath(path, m.currentFile) || !m.dirty {
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	if m.pendingCrossFile.nodeID == n.ID && m.pendingCrossFile.action == action {
+	sourceRevision := m.editor.Revision()
+	pending := pendingCrossFileNavigation{
+		nodeID:         n.ID,
+		action:         action,
+		sourcePath:     m.currentFile,
+		targetPath:     path,
+		sourceRevision: sourceRevision,
+	}
+	if m.pendingCrossFile.matches(pending) {
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	m.pendingCrossFile = pendingCrossFileNavigation{nodeID: n.ID, action: action}
+	m.pendingCrossFile = pending
 	base := filepath.Base(path)
 	if base == "" {
 		base = path
@@ -712,19 +715,35 @@ func (m *Model) confirmCrossFileNavigation(
 	return false
 }
 
+func (p pendingCrossFileNavigation) matches(other pendingCrossFileNavigation) bool {
+	if p.nodeID != other.nodeID {
+		return false
+	}
+	if p.action != other.action {
+		return false
+	}
+	if p.sourceRevision != other.sourceRevision {
+		return false
+	}
+	if !util.SamePathOrBothEmpty(p.sourcePath, other.sourcePath) {
+		return false
+	}
+	return util.SamePathOrBothEmpty(p.targetPath, other.targetPath)
+}
+
 func (m *Model) ensureNavigatorFile(n *navigator.Node[any]) ([]tea.Cmd, bool) {
 	if n == nil {
 		return nil, true
 	}
-	path := strings.TrimSpace(n.Payload.FilePath)
-	if path == "" || samePath(path, m.currentFile) {
+	path := n.Payload.FilePath
+	if path == "" || util.SamePath(path, m.currentFile) {
 		return nil, true
 	}
 	var cmds []tea.Cmd
 	if cmd := m.openFile(path); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	if samePath(path, m.currentFile) {
+	if util.SamePath(path, m.currentFile) {
 		return cmds, true
 	}
 	return cmds, false
@@ -1319,8 +1338,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "u":
-				var cmd tea.Cmd
-				m.editor, cmd = m.editor.UndoLastChange()
+				cmd := m.runUndoLastChange()
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "ctrl+r":
@@ -1329,8 +1347,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			case "d":
 				if m.editor.hasSelection() {
-					var cmd tea.Cmd
-					m.editor, cmd = m.editor.DeleteSelection()
+					cmd := m.runDeleteSelection()
 					m.suppressEditorKey = true
 					return combine(cmd)
 				}
@@ -1349,8 +1366,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			case "c":
 				if m.editor.hasSelection() {
-					var cmd tea.Cmd
-					m.editor, cmd = m.editor.DeleteSelection()
+					cmd := m.runDeleteSelection()
 					cmd = batchCommands(cmd, m.setInsertMode(true, true))
 					m.suppressEditorKey = true
 					return combine(cmd)
@@ -1420,15 +1436,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		if m.shouldSendEditorRequest(msg, m.editorInsertMode) {
 			m.suppressEditorKey = true
 			return combine(m.sendActiveRequest())
-		}
-		if m.editorInsertMode {
-			km := msg
-			switch km.Type {
-			case tea.KeyBackspace, tea.KeyDelete, tea.KeyRunes, tea.KeyEnter:
-				if km.Type != tea.KeyRunes || len(km.Runes) > 0 {
-					m.dirty = true
-				}
-			}
 		}
 	}
 
@@ -1910,13 +1917,13 @@ func (m *Model) handleOperatorKey(msg tea.KeyMsg) tea.Cmd {
 	switch op {
 	case "c":
 		actionCmd = batchCommands(
-			m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+			m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 				return ed.ChangeMotion(anchor, spec)
 			}),
 			m.setInsertMode(true, true),
 		)
 	default:
-		actionCmd = m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		actionCmd = m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 			return ed.DeleteMotion(anchor, spec)
 		})
 	}
@@ -2023,48 +2030,70 @@ func (m *Model) runWorkflowResize(delta float64) tea.Cmd {
 	return nil
 }
 
-func (m *Model) applyEditorMutation(op func(requestEditor) (requestEditor, tea.Cmd)) tea.Cmd {
-	before := m.editor.Value()
-	editor, cmd := op(m.editor)
-	if editor.Value() != before {
-		m.dirty = true
+func (m *Model) updateEditor(msg tea.Msg) tea.Cmd {
+	beforeRevision := m.editor.Revision()
+	var cmd tea.Cmd
+	m.editor, cmd = m.editor.Update(msg)
+	if m.editor.Revision() != beforeRevision {
+		m.markDirty()
 	}
-	m.editor = editor
 	return cmd
 }
 
+func (m *Model) mutateEditor(op func(requestEditor) (requestEditor, tea.Cmd)) tea.Cmd {
+	beforeRevision := m.editor.Revision()
+	editor, cmd := op(m.editor)
+	m.editor = editor
+	if editor.Revision() != beforeRevision {
+		m.markDirty()
+	}
+	return cmd
+}
+
+func (m *Model) runDeleteSelection() tea.Cmd {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.DeleteSelection()
+	})
+}
+
+func (m *Model) runUndoLastChange() tea.Cmd {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.UndoLastChange()
+	})
+}
+
 func (m *Model) runDeleteCurrentLine() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteCurrentLine()
 	})
 }
 
 func (m *Model) runDeleteToLineEnd() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteToLineEnd()
 	})
 }
 
 func (m *Model) runDeleteCharAtCursor() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteCharAtCursor()
 	})
 }
 
 func (m *Model) runChangeCurrentLine() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.ChangeCurrentLine()
 	})
 }
 
 func (m *Model) runPasteClipboard(after bool) tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.PasteClipboard(after)
 	})
 }
 
 func (m *Model) runRedoLastChange() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.RedoLastChange()
 	})
 }

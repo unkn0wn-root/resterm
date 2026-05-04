@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/watcher"
 )
 
@@ -70,7 +71,7 @@ func (m *Model) nextFileWatchMsgCmd() tea.Cmd {
 }
 
 func (m *Model) handleFileChangeEvent(msg fileChangedMsg) {
-	if msg.path == "" || !samePath(msg.path, m.currentFile) {
+	if msg.path == "" || !util.SamePath(msg.path, m.currentFile) {
 		return
 	}
 	m.fileStale = true

@@ -65,7 +65,6 @@ func (s selectionState) Caret() cursorPosition {
 }
 
 type editorEvent struct {
-	dirty  bool
 	status *statusMsg
 }
 
@@ -86,6 +85,7 @@ func statusCmd(level statusLevel, text string) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
+	revision             uint64
 	selection            selectionState
 	mode                 selectionMode
 	pendingMotion        string
@@ -244,6 +244,23 @@ func newRequestEditor() requestEditor {
 		motionsEnabled: true,
 		hintManager:    hint.NewManager(hint.MetaSource()),
 	}
+}
+
+func (e requestEditor) Revision() uint64 {
+	return e.revision
+}
+
+func (e *requestEditor) noteContentChanged() {
+	e.revision++
+}
+
+func (e *requestEditor) SetValue(value string) {
+	if e.Value() == value {
+		return
+	}
+
+	e.noteContentChanged()
+	e.Model.SetValue(value)
 }
 
 func (e *requestEditor) SetMotionsEnabled(enabled bool) {
@@ -611,14 +628,19 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	e.moveCursorTo(line, col)
 	e.applySelectionHighlight()
 	e.metadataHints.deactivate()
-	return toEditorEventCmd(editorEvent{dirty: true})
+	return nil
 }
 
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
+	beforeValue := e.Value()
+	beforeRevision := e.revision
 	keyMsg, isKey := msg.(tea.KeyMsg)
 	if !isKey {
 		var innerCmd tea.Cmd
 		e.Model, innerCmd = e.Model.Update(msg)
+		if e.Value() != beforeValue && e.revision == beforeRevision {
+			e.noteContentChanged()
+		}
 		return e, innerCmd
 	}
 
@@ -659,9 +681,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	case "ctrl+x":
 		if text := e.selectedText(); text != "" {
 			cmds = append(cmds, (&e).copyToClipboard(text, ""))
-			if _, removed := (&e).removeSelection(); removed {
-				cmds = append(cmds, toEditorEventCmd(editorEvent{dirty: true}))
-			}
+			(&e).removeSelection()
 		}
 		handled = true
 	case " ":
@@ -670,15 +690,11 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		}
 	case "ctrl+v":
 		if e.hasSelection() {
-			if _, removed := (&e).removeSelection(); removed {
-				cmds = append(cmds, toEditorEventCmd(editorEvent{dirty: true}))
-			}
+			(&e).removeSelection()
 		}
 	case "backspace", "ctrl+h", "delete":
 		if e.hasSelection() {
-			if _, removed := (&e).removeSelection(); removed {
-				cmds = append(cmds, toEditorEventCmd(editorEvent{dirty: true}))
-			}
+			(&e).removeSelection()
 			handled = true
 		}
 	case "gg":
@@ -809,9 +825,6 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 						cmds = append(cmds, warnCmd)
 					}
 				}
-
-				dirtyCmd := toEditorEventCmd(editorEvent{dirty: true})
-				cmds = append(cmds, dirtyCmd)
 			}
 		}
 	}
@@ -824,6 +837,9 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		}
 		var innerCmd tea.Cmd
 		e.Model, innerCmd = e.Model.Update(transformed)
+		if e.Value() != beforeValue && e.revision == beforeRevision {
+			e.noteContentChanged()
+		}
 		if innerCmd != nil {
 			cmds = append(cmds, innerCmd)
 		}
@@ -931,7 +947,7 @@ func (e requestEditor) DeleteSelection() (requestEditor, tea.Cmd) {
 		if status.level == statusInfo && status.text == "Deleted selection" {
 			status.text = "Selection deleted"
 		}
-		return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+		return e, toEditorEventCmd(editorEvent{status: &status})
 	}
 	return e, nil
 }
@@ -1034,7 +1050,7 @@ func (e requestEditor) DeleteMotion(
 	}
 
 	status := editorPtr.writeClipboardWithFallback(removed, summary)
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e *requestEditor) changeLines(startLine, endLine int) (string, bool) {
@@ -1125,7 +1141,7 @@ func (e requestEditor) ChangeMotion(
 	}
 
 	status := editorPtr.writeClipboardWithFallback(removed, summary)
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func classifyMotion(keys []string, action string) (deleteMotionSpec, error) {
@@ -1277,7 +1293,7 @@ func (e requestEditor) DeleteCurrentLine() (requestEditor, tea.Cmd) {
 	editorPtr.moveCursorTo(target, 0)
 	e.applySelectionHighlight()
 	status := editorPtr.writeClipboardWithFallback(clip, "Deleted line")
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) DeleteToLineEnd() (requestEditor, tea.Cmd) {
@@ -1318,7 +1334,7 @@ func (e requestEditor) DeleteToLineEnd() (requestEditor, tea.Cmd) {
 	editorPtr.moveCursorTo(cursor.Line, cursor.Column)
 	e.applySelectionHighlight()
 	status := (&e).writeClipboardWithFallback(segment, "Deleted to end of line")
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) DeleteCharAtCursor() (requestEditor, tea.Cmd) {
@@ -1333,7 +1349,7 @@ func (e requestEditor) DeleteCharAtCursor() (requestEditor, tea.Cmd) {
 		} else {
 			status = statusMsg{text: "Deleted selection", level: statusInfo}
 		}
-		return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+		return e, toEditorEventCmd(editorEvent{status: &status})
 	}
 
 	runes := []rune(e.Value())
@@ -1356,7 +1372,7 @@ func (e requestEditor) DeleteCharAtCursor() (requestEditor, tea.Cmd) {
 	e.applySelectionHighlight()
 	deletedChar := string([]rune{removed})
 	status := (&e).writeClipboardWithFallback(deletedChar, "Deleted character")
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) ChangeCurrentLine() (requestEditor, tea.Cmd) {
@@ -1370,7 +1386,7 @@ func (e requestEditor) ChangeCurrentLine() (requestEditor, tea.Cmd) {
 		return e, statusCmd(statusWarn, "Nothing to change")
 	}
 	status := editorPtr.writeClipboardWithFallback(removed, "Changed line")
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
@@ -1461,7 +1477,7 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 			text:  "Clipboard unavailable; pasted from editor register",
 		}
 	}
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) UndoLastChange() (requestEditor, tea.Cmd) {
@@ -1479,7 +1495,7 @@ func (e requestEditor) UndoLastChange() (requestEditor, tea.Cmd) {
 		level: statusInfo,
 		text:  "Undid last change",
 	}
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) RedoLastChange() (requestEditor, tea.Cmd) {
@@ -1497,7 +1513,7 @@ func (e requestEditor) RedoLastChange() (requestEditor, tea.Cmd) {
 		level: statusInfo,
 		text:  "Redid last change",
 	}
-	return e, toEditorEventCmd(editorEvent{dirty: true, status: &status})
+	return e, toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) lineBounds(requested int) (start int, end int, idx int) {

@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
@@ -41,6 +42,10 @@ func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
 
 func navigatorRequestID(path string, idx int) string {
 	return fmt.Sprintf("req:%s:%d", path, idx)
+}
+
+func navigatorWorkflowID(path string, idx int) string {
+	return fmt.Sprintf("wf:%s:%d", path, idx)
 }
 
 func (m *Model) buildNavTree(entries []filesvc.FileEntry) []*navigator.Node[any] {
@@ -107,7 +112,7 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 	if doc, ok := m.cachedDoc(entry.Path); ok && doc != nil {
 		node.Count = len(doc.Requests)
 		node.Children = m.buildRequestNodes(doc, entry.Path)
-		if samePath(entry.Path, m.currentFile) && navHasKids(node) {
+		if util.SamePath(entry.Path, m.currentFile) && navHasKids(node) {
 			node.Expanded = true
 		}
 	}
@@ -120,7 +125,7 @@ func fileEntryBadges(entry filesvc.FileEntry, activeEnvFile string) []string {
 		badges = append(badges, label)
 	}
 
-	if entry.Kind == filesvc.FileKindEnv && samePath(entry.Path, activeEnvFile) {
+	if entry.Kind == filesvc.FileKindEnv && util.SamePath(entry.Path, activeEnvFile) {
 		badges = append(badges, "ACTIVE")
 	}
 	return badges
@@ -167,7 +172,7 @@ func (m *Model) buildRequestNodes(doc *restfile.Document, filePath string) []*na
 		desc := condense(strings.TrimSpace(wf.Description), 80)
 		badges := []string{fmt.Sprintf("%d steps", len(wf.Steps))}
 		nodes = append(nodes, &navigator.Node[any]{
-			ID:      fmt.Sprintf("wf:%s:%d", filePath, idx),
+			ID:      navigatorWorkflowID(filePath, idx),
 			Title:   title,
 			Desc:    desc,
 			Kind:    navigator.KindWorkflow,
@@ -351,7 +356,6 @@ func requestBadges(req *restfile.Request) []string {
 		b = append(b, "WS")
 	case req.SSE != nil:
 		b = append(b, "SSE")
-	default:
 	}
 
 	if req.Metadata.Compare != nil {
@@ -386,7 +390,7 @@ func (m *Model) syncNavigatorSelection() {
 			if path != "" {
 				_ = m.selectFileByPath(path)
 			}
-			if samePath(path, m.currentFile) {
+			if util.SamePath(path, m.currentFile) {
 				m.setActiveRequest(req)
 			} else {
 				if m.pendingCrossFile.nodeID == n.ID {
@@ -405,7 +409,7 @@ func (m *Model) syncNavigatorSelection() {
 			if path != "" {
 				_ = m.selectFileByPath(path)
 			}
-			if samePath(path, m.currentFile) {
+			if util.SamePath(path, m.currentFile) {
 				if m.selectWorkflowForNode(wf, n.ID) {
 					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
 						wf = item.workflow
@@ -428,8 +432,6 @@ func (m *Model) syncNavigatorSelection() {
 		if path != "" {
 			_ = m.selectFileByPath(path)
 		}
-		m.clearNavigatorRequestSelection()
-	case navigator.KindDir:
 		m.clearNavigatorRequestSelection()
 	default:
 		m.clearNavigatorRequestSelection()
@@ -474,10 +476,41 @@ func (m *Model) applyCursorRequest(req *restfile.Request) {
 	m.setActiveRequest(req)
 }
 
+type cursorSyncState struct {
+	line int
+	file string
+	doc  *restfile.Document
+}
+
 func (m *Model) resetCursorSync() {
-	m.lastCursorLine = -1
-	m.lastCursorFile = ""
-	m.lastCursorDoc = nil
+	m.lastCursorSync = cursorSyncState{line: -1}
+}
+
+func (m *Model) markCursorSynced(line int) {
+	m.lastCursorSync = m.currentCursorSyncState(line)
+}
+
+func (m *Model) currentCursorSyncState(line int) cursorSyncState {
+	return cursorSyncState{
+		line: line,
+		file: m.currentFile,
+		doc:  m.doc,
+	}
+}
+
+func (m *Model) cursorSyncChanged(line int, targetID string) bool {
+	// Doc pointer comparison intentionally detects reparses as a change.
+	if m.lastCursorSync != m.currentCursorSyncState(line) {
+		return true
+	}
+
+	currentID := ""
+	if m.navigator != nil {
+		if sel := m.navigator.Selected(); sel != nil {
+			currentID = sel.ID
+		}
+	}
+	return currentID != targetID
 }
 
 func (m *Model) syncNavigatorWithEditorCursor() {
@@ -489,7 +522,9 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	}
 
 	line := currentCursorLine(m.editor)
-	if line == m.lastCursorLine && m.lastCursorFile == m.currentFile && m.lastCursorDoc == m.doc {
+
+	if wf, wfIdx := workflowAtLine(m.doc, line); wf != nil {
+		m.syncNavigatorWorkflowAtCursor(wf, wfIdx, line)
 		return
 	}
 
@@ -504,37 +539,69 @@ func (m *Model) syncNavigatorWithEditorCursor() {
 	}
 
 	if req == nil {
-		m.lastCursorLine = line
-		m.lastCursorFile = m.currentFile
-		m.lastCursorDoc = m.doc
+		m.markCursorSynced(line)
 		return
 	}
 
 	targetID := navigatorRequestID(m.currentFile, reqIdx)
-	currentID := ""
-	if sel := m.navigator.Selected(); sel != nil {
-		currentID = sel.ID
-	}
-	// Doc pointer comparison intentionally detects reparses as a change.
-	if line == m.lastCursorLine &&
-		m.lastCursorFile == m.currentFile &&
-		m.lastCursorDoc == m.doc &&
-		currentID == targetID {
+	if !m.cursorSyncChanged(line, targetID) {
 		return
 	}
 
 	m.ensureNavigatorRequestsForFile(m.currentFile)
 	if !m.navigator.SelectByID(targetID) {
-		m.lastCursorLine = line
-		m.lastCursorFile = m.currentFile
-		m.lastCursorDoc = m.doc
+		m.markCursorSynced(line)
 		return
 	}
 
 	m.applyCursorRequest(req)
-	m.lastCursorLine = line
-	m.lastCursorFile = m.currentFile
-	m.lastCursorDoc = m.doc
+	m.markCursorSynced(line)
+}
+
+func (m *Model) syncNavigatorWorkflowAtCursor(wf *restfile.Workflow, wfIdx int, line int) {
+	if wf == nil || wfIdx < 0 {
+		return
+	}
+
+	targetID := navigatorWorkflowID(m.currentFile, wfIdx)
+	if !m.cursorSyncChanged(line, targetID) {
+		return
+	}
+
+	m.ensureNavigatorRequestsForFile(m.currentFile)
+	if !m.navigator.SelectByID(targetID) {
+		m.markCursorSynced(line)
+		return
+	}
+
+	if m.selectWorkflowForNode(wf, targetID) {
+		if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
+			wf = item.workflow
+		}
+	}
+	m.workflowSelectionKey = workflowKey(wf)
+	m.markCursorSynced(line)
+}
+
+func workflowAtLine(doc *restfile.Document, line int) (*restfile.Workflow, int) {
+	if doc == nil || line < 1 {
+		return nil, -1
+	}
+	for idx := range doc.Workflows {
+		wf := &doc.Workflows[idx]
+		start := wf.LineRange.Start
+		end := wf.LineRange.End
+		if start < 1 {
+			continue
+		}
+		if end < start {
+			end = start
+		}
+		if line >= start && line <= end {
+			return wf, idx
+		}
+	}
+	return nil, -1
 }
 
 // applyNavigatorExpansion copies expanded state from the previous navigator tree.
@@ -562,25 +629,6 @@ func applyNavigatorExpansion(nodes []*navigator.Node[any], prev *navigator.Model
 
 func navHasKids(n *navigator.Node[any]) bool {
 	return n != nil && len(n.Children) > 0
-}
-
-func samePath(a, b string) bool {
-	if a == "" || b == "" {
-		return false
-	}
-
-	cleanA := filepath.Clean(a)
-	cleanB := filepath.Clean(b)
-	if cleanA == cleanB {
-		return true
-	}
-
-	absA, errA := filepath.Abs(cleanA)
-	absB, errB := filepath.Abs(cleanB)
-	if errA != nil || errB != nil {
-		return false
-	}
-	return absA == absB
 }
 
 func sortNavNodes(nodes []*navigator.Node[any]) {

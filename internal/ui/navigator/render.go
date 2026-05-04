@@ -2,7 +2,6 @@ package navigator
 
 import (
 	"fmt"
-	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/theme"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -156,7 +156,7 @@ func rowActive(row Flat[any], state RenderState) bool {
 	if state.ActiveNodeID != "" && n.ID == state.ActiveNodeID {
 		return true
 	}
-	return n.Kind == KindFile && sameNavigatorPath(n.Payload.FilePath, state.ActiveFilePath)
+	return n.Kind == KindFile && util.SamePath(n.Payload.FilePath, state.ActiveFilePath)
 }
 
 func rowTextStyles(
@@ -290,23 +290,6 @@ func withActiveForeground(style lipgloss.Style, th theme.Theme) lipgloss.Style {
 		return style.Foreground(fg)
 	}
 	return style
-}
-
-func sameNavigatorPath(a, b string) bool {
-	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
-		return false
-	}
-	cleanA := filepath.Clean(a)
-	cleanB := filepath.Clean(b)
-	if cleanA == cleanB {
-		return true
-	}
-	absA, errA := filepath.Abs(cleanA)
-	absB, errB := filepath.Abs(cleanB)
-	if errA != nil || errB != nil {
-		return false
-	}
-	return absA == absB
 }
 
 func fileKind(n *Node[any]) filesvc.FileKind {

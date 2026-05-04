@@ -44,12 +44,19 @@ func assertSelectedRow(t *testing.T, rendered string, width int) {
 	assertSelectedBackgroundSegments(t, rendered, 3)
 }
 
-func TestSameNavigatorPathMatchesRelativeAndAbsolute(t *testing.T) {
+func TestRowActiveMatchesRelativeAndAbsoluteFilePath(t *testing.T) {
 	abs, err := filepath.Abs("api.http")
 	if err != nil {
 		t.Fatalf("abs path: %v", err)
 	}
-	if !sameNavigatorPath("api.http", abs) {
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:    KindFile,
+			Payload: Payload[any]{FilePath: "api.http"},
+		},
+	}
+
+	if !rowActive(row, RenderState{ActiveFilePath: abs}) {
 		t.Fatalf("expected relative path to match absolute path %q", abs)
 	}
 }

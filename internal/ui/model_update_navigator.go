@@ -7,6 +7,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func navigatorFilterConsumesKey(msg tea.KeyMsg) bool {
@@ -125,7 +126,6 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 		focusCmd := m.setFocus(focusEditor)
 		if m.focus == focusEditor {
 			m.suppressEditorKey = true
-			m.skipEditorCursorSync = true
 		}
 		return batchCommands(out, focusCmd)
 	}
@@ -186,7 +186,14 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && !samePath(path, m.currentFile) {
+				if path != "" && !util.SamePath(path, m.currentFile) {
+					if !m.confirmCrossFileNavigation(
+						n,
+						navActionOpenFile,
+						navOpenFileRetryHint(ev.String()),
+					) {
+						return applyFilter(nil)
+					}
 					cmd = m.openFile(path)
 				}
 				if path != "" && !filesvc.IsRequestFile(path) {
@@ -210,7 +217,14 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			switch n.Kind {
 			case navigator.KindFile:
 				path := n.Payload.FilePath
-				if path != "" && !samePath(path, m.currentFile) {
+				if path != "" && !util.SamePath(path, m.currentFile) {
+					if !m.confirmCrossFileNavigation(
+						n,
+						navActionOpenFile,
+						navOpenFileRetryHint(ev.String()),
+					) {
+						return applyFilter(nil)
+					}
 					cmd = m.openFile(path)
 				}
 				if path != "" && !filesvc.IsRequestFile(path) {
@@ -273,46 +287,53 @@ func navJumpable(n *navigator.Node[any]) bool {
 	return n != nil && (n.Kind == navigator.KindRequest || n.Kind == navigator.KindWorkflow)
 }
 
+func navOpenFileRetryHint(key string) string {
+	switch key {
+	case "enter":
+		return "Press Enter again to open."
+	case "right":
+		return "Press Right again to open."
+	case "l":
+		return "Press l again to open."
+	default:
+		return "Repeat the open action to continue."
+	}
+}
+
 func (m *Model) navExpandFile(n *navigator.Node[any], toggle bool) {
 	if m.navigator == nil || n == nil {
 		return
 	}
-	has := len(n.Children) > 0
-	if !has {
+	loaded := len(n.Children) > 0
+	if !loaded {
 		m.expandNavigatorFile(n.Payload.FilePath)
 		if refreshed := m.navigator.Find(n.ID); refreshed != nil {
 			n = refreshed
 		}
 	}
-	if n == nil || len(n.Children) == 0 {
-		return
+
+	if !loaded {
+		toggle = false
 	}
-	changed := false
-	if toggle && has {
-		n.Expanded = !n.Expanded
-		changed = true
-	} else if !n.Expanded {
-		n.Expanded = true
-		changed = true
-	}
-	if changed {
-		m.navigator.Refresh()
-	}
+	m.navToggleExpand(n, toggle)
 }
 
 func (m *Model) navExpandDir(n *navigator.Node[any], toggle bool) {
+	m.navToggleExpand(n, toggle)
+}
+
+func (m *Model) navToggleExpand(n *navigator.Node[any], toggle bool) {
 	if m.navigator == nil || n == nil || len(n.Children) == 0 {
 		return
 	}
-	changed := false
+
+	expanded := n.Expanded
 	if toggle {
 		n.Expanded = !n.Expanded
-		changed = true
-	} else if !n.Expanded {
+	} else {
 		n.Expanded = true
-		changed = true
 	}
-	if changed {
+	if n.Expanded != expanded {
 		m.navigator.Refresh()
 	}
 }

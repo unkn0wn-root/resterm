@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -95,6 +96,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.doc = nil
 	m.editor.SetValue("")
 	m.editor.SetCursor(0)
+	m.markClean()
 	focusCmd := m.setFocus(focusFile)
 	m.requestList.SetItems(nil)
 	m.requestItems = nil
@@ -142,7 +144,7 @@ func (m *Model) isSupportedOpenPath(path string) bool {
 		return true
 	case vars.IsDotEnvPath(path):
 		return true
-	case samePath(path, m.cfg.EnvironmentFile):
+	case util.SamePath(path, m.cfg.EnvironmentFile):
 		return true
 	default:
 		return false

@@ -8,7 +8,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	str "github.com/unkn0wn-root/resterm/internal/util"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -152,7 +152,7 @@ func (l *lister) addRTSModuleRefs(referrerPath string, e filesvc.FileEntry) {
 }
 
 func (l *lister) loadDoc(path string) *restfile.Document {
-	if l.opt.CurrentDoc != nil && samePath(path, l.opt.CurrentFile) {
+	if l.opt.CurrentDoc != nil && util.SamePath(util.Trim(path), util.Trim(l.opt.CurrentFile)) {
 		return l.opt.CurrentDoc
 	}
 
@@ -169,7 +169,7 @@ func (l *lister) addEntry(e filesvc.FileEntry) {
 
 func (l *lister) addDoc(e filesvc.FileEntry) {
 	for _, doc := range l.docs {
-		if samePath(doc.Path, e.Path) {
+		if util.SamePath(util.Trim(doc.Path), util.Trim(e.Path)) {
 			return
 		}
 	}
@@ -177,7 +177,7 @@ func (l *lister) addDoc(e filesvc.FileEntry) {
 }
 
 func (l *lister) currentEntry() (filesvc.FileEntry, bool) {
-	path := str.Trim(l.opt.CurrentFile)
+	path := util.Trim(l.opt.CurrentFile)
 	if path == "" {
 		return filesvc.FileEntry{}, false
 	}
@@ -189,7 +189,7 @@ func (l *lister) currentEntry() (filesvc.FileEntry, bool) {
 }
 
 func (l *lister) refEntry(src, ref string) (filesvc.FileEntry, bool) {
-	ref = str.Trim(ref)
+	ref = util.Trim(ref)
 	if ref == "" {
 		return filesvc.FileEntry{}, false
 	}
@@ -248,15 +248,8 @@ func (l *lister) sorted() []filesvc.FileEntry {
 	return out
 }
 
-func samePath(a, b string) bool {
-	if str.Trim(a) == "" || str.Trim(b) == "" {
-		return false
-	}
-	return pathKey(a) == pathKey(b)
-}
-
 func pathKey(path string) string {
-	path = filepath.Clean(str.Trim(path))
+	path = filepath.Clean(util.Trim(path))
 	if abs, err := filepath.Abs(path); err == nil {
 		return abs
 	}
@@ -265,7 +258,7 @@ func pathKey(path string) string {
 
 func isDynamicRef(ref string) bool {
 	for _, marker := range templateMarkers {
-		if str.Contains(ref, marker) {
+		if util.Contains(ref, marker) {
 			return true
 		}
 	}
@@ -276,7 +269,7 @@ func relEscapesRoot(rel string) bool {
 	switch {
 	case rel == parentRel:
 		return true
-	case str.HasPrefix(rel, parentRel+string(filepath.Separator)):
+	case util.HasPrefix(rel, parentRel+string(filepath.Separator)):
 		return true
 	default:
 		return false
@@ -284,7 +277,7 @@ func relEscapesRoot(rel string) bool {
 }
 
 func rtsModuleRefScanKey(modulePath, referrerPath string) string {
-	rtbase := str.Trim(referrerPath)
+	rtbase := util.Trim(referrerPath)
 	if rtbase == "" {
 		rtbase = modulePath
 	}

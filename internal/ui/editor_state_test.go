@@ -72,6 +72,25 @@ func collectHintLabels(options []hint.Hint) map[string]bool {
 	return labels
 }
 
+func TestRequestEditorSetValueNoopsWhenUnchanged(t *testing.T) {
+	content := "alpha\nbeta\ngamma"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 2)
+
+	beforeCursor := editor.caretPosition()
+	beforeRevision := editor.Revision()
+
+	editorPtr.SetValue(content)
+
+	if got := editor.caretPosition(); got != beforeCursor {
+		t.Fatalf("expected cursor to remain at %+v, got %+v", beforeCursor, got)
+	}
+	if got := editor.Revision(); got != beforeRevision {
+		t.Fatalf("expected revision to remain %d, got %d", beforeRevision, got)
+	}
+}
+
 const clipboardFallbackStatus = "Clipboard unavailable; saved in editor register"
 
 func expectStatusWithClipboardFallback(t *testing.T, status *statusMsg, want string) {
@@ -328,10 +347,11 @@ func TestRequestEditorDeleteSelectionRemovesText(t *testing.T) {
 	editorPtr.selection.Update(cursorPosition{Line: 0, Column: 5, Offset: 5})
 	editorPtr.applySelectionHighlight()
 
+	beforeRevision := editor.Revision()
 	updated, cmd := editor.DeleteSelection()
 	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatalf("expected delete selection to mark editor dirty")
+	if updated.Revision() == beforeRevision {
+		t.Fatalf("expected delete selection to change editor revision")
 	}
 	expectStatusWithClipboardFallback(t, evt.status, "Selection deleted")
 	if got := updated.Value(); got != "" {
@@ -344,10 +364,11 @@ func TestRequestEditorDeleteSelectionRemovesText(t *testing.T) {
 
 func TestRequestEditorDeleteSelectionRequiresSelection(t *testing.T) {
 	editor := newTestEditor("alpha")
+	beforeRevision := editor.Revision()
 	updated, cmd := editor.DeleteSelection()
 	evt := editorEventFromCmd(t, cmd)
-	if evt.dirty {
-		t.Fatalf("expected no dirty flag when nothing deleted")
+	if updated.Revision() != beforeRevision {
+		t.Fatalf("expected editor revision to remain unchanged when nothing deleted")
 	}
 	if evt.status == nil || evt.status.text != "No selection to delete" {
 		t.Fatalf("expected warning about missing selection, got %+v", evt.status)
@@ -404,10 +425,11 @@ func TestRequestEditorUndoRestoresDeletion(t *testing.T) {
 	editorPtr.applySelectionHighlight()
 
 	editor, _ = editor.DeleteSelection()
+	beforeRevision := editor.Revision()
 	editor, cmd := editor.UndoLastChange()
 	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatalf("expected undo to mark editor dirty")
+	if editor.Revision() == beforeRevision {
+		t.Fatalf("expected undo to change editor revision")
 	}
 	if evt.status == nil || evt.status.text != "Undid last change" {
 		t.Fatalf("expected undo status message, got %+v", evt.status)
@@ -422,10 +444,11 @@ func TestRequestEditorUndoRestoresDeletion(t *testing.T) {
 
 func TestRequestEditorUndoWhenEmpty(t *testing.T) {
 	editor := newTestEditor("alpha")
+	beforeRevision := editor.Revision()
 	editor, cmd := editor.UndoLastChange()
 	evt := editorEventFromCmd(t, cmd)
-	if evt.dirty {
-		t.Fatalf("expected no dirty flag when nothing to undo")
+	if editor.Revision() != beforeRevision {
+		t.Fatalf("expected editor revision to remain unchanged when nothing to undo")
 	}
 	if evt.status == nil || evt.status.text != "Nothing to undo" {
 		t.Fatalf("expected no-undo status message, got %+v", evt.status)
@@ -1036,10 +1059,10 @@ func TestRequestEditorMetadataHintsSuggestAndAccept(t *testing.T) {
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
 
-	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatal("expected autocomplete acceptance to mark editor dirty")
+	beforeRevision := editor.Revision()
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if editor.Revision() == beforeRevision {
+		t.Fatal("expected autocomplete acceptance to change editor revision")
 	}
 	if got := editor.Value(); !strings.HasPrefix(got, "# @name ") {
 		t.Fatalf("expected @name completion, got %q", got)
@@ -1072,10 +1095,10 @@ func TestRequestEditorMetadataHintsSecondLineAnchor(t *testing.T) {
 		t.Fatal("expected metadata hints to activate on the second line")
 	}
 
-	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatal("expected autocomplete acceptance to mark editor dirty")
+	beforeRevision := editor.Revision()
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if editor.Revision() == beforeRevision {
+		t.Fatal("expected autocomplete acceptance to change editor revision")
 	}
 	if got := editor.Value(); got != "GET https://example.com\n# @name " {
 		t.Fatalf("expected @name completion on second line, got %q", got)
@@ -1127,10 +1150,10 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 		t.Fatalf("expected first suggestion to be send, got %q", got)
 	}
 
-	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatal("expected accepting subcommand hint to mark editor dirty")
+	beforeRevision := editor.Revision()
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if editor.Revision() == beforeRevision {
+		t.Fatal("expected accepting subcommand hint to change editor revision")
 	}
 	if got := editor.Value(); !strings.HasPrefix(got, "# @ws send ") {
 		t.Fatalf("expected editor content to include ws subcommand, got %q", got)
@@ -1184,10 +1207,10 @@ func TestRequestEditorMetadataHintsSuggestAuthSubcommands(t *testing.T) {
 		t.Fatalf("expected first suggestion to be command, got %q", got)
 	}
 
-	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatal("expected accepting auth hint to mark editor dirty")
+	beforeRevision := editor.Revision()
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if editor.Revision() == beforeRevision {
+		t.Fatal("expected accepting auth hint to change editor revision")
 	}
 	if got := editor.Value(); !strings.HasPrefix(got, "# @auth command argv=") {
 		t.Fatalf("expected editor content to include auth command skeleton, got %q", got)
@@ -1228,10 +1251,10 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.Mode)
 	}
 
-	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	evt := editorEventFromCmd(t, cmd)
-	if !evt.dirty {
-		t.Fatal("expected accepting trace hint to mark editor dirty")
+	beforeRevision := editor.Revision()
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if editor.Revision() == beforeRevision {
+		t.Fatal("expected accepting trace hint to change editor revision")
 	}
 	if editor.metadataHints.active {
 		t.Fatal("expected metadata hints to close after acceptance")

@@ -345,7 +345,6 @@ type Model struct {
 	sending                bool
 	sendCancel             context.CancelFunc
 	suppressEditorKey      bool
-	skipEditorCursorSync   bool
 	editorInsertMode       bool
 	editorWriteKeyMap      textarea.KeyMap
 	editorViewKeyMap       textarea.KeyMap
@@ -368,9 +367,7 @@ type Model struct {
 	doc                *restfile.Document
 	currentFile        string
 	currentRequest     *restfile.Request
-	lastCursorLine     int
-	lastCursorFile     string
-	lastCursorDoc      *restfile.Document
+	lastCursorSync     cursorSyncState
 	compareBundle      *compareBundle
 	compareRun         *compareState
 	profileRun         *profileState
@@ -686,7 +683,7 @@ func New(cfg Config) Model {
 		historyScope:             historyScopeGlobal,
 		historySort:              historySortNewest,
 		currentFile:              cfg.FilePath,
-		lastCursorLine:           -1,
+		lastCursorSync:           cursorSyncState{line: -1},
 		statusMessage:            initialStatus,
 		latencySeries:            newLatencySeries(latCap),
 		scriptRunner:             scripts.NewRunner(nil),

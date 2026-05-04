@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 const (
@@ -428,7 +429,7 @@ func (m Model) navigatorFileNode(path string) *navigator.Node[any] {
 		if n == nil || n.Kind != navigator.KindFile {
 			continue
 		}
-		if samePath(n.Payload.FilePath, path) {
+		if util.SamePath(n.Payload.FilePath, path) {
 			return n
 		}
 	}
