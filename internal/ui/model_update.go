@@ -53,12 +53,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case editorEvent:
-		if typed.dirty {
-			// Content changes are observed synchronously through the editor revision.
-			// Dirty events may arrive later with status messages, so they should not
-			// clear a newer pending navigation confirmation.
-			m.dirty = true
-		}
 		if typed.status != nil {
 			m.setStatusMessage(*typed.status)
 		}
@@ -488,18 +482,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.suppressEditorKey {
 			m.suppressEditorKey = false
 		} else {
-			filtered := m.filterEditorMessage(msg)
-			beforeValue := m.editor.Value()
-			beforeRevision := m.editor.Revision()
-			var editorCmd tea.Cmd
-			m.editor, editorCmd = m.editor.Update(filtered)
-			if m.editor.Revision() != beforeRevision || m.editor.Value() != beforeValue {
-				if m.editor.Revision() == beforeRevision {
-					m.editor.noteContentChanged()
-				}
-				m.markDirty()
-			}
-			cmds = append(cmds, editorCmd)
+			cmds = append(cmds, m.updateEditor(m.filterEditorMessage(msg)))
 		}
 		if m.focus == focusEditor {
 			m.syncNavigatorWithEditorCursor()
@@ -1933,13 +1916,13 @@ func (m *Model) handleOperatorKey(msg tea.KeyMsg) tea.Cmd {
 	switch op {
 	case "c":
 		actionCmd = batchCommands(
-			m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+			m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 				return ed.ChangeMotion(anchor, spec)
 			}),
 			m.setInsertMode(true, true),
 		)
 	default:
-		actionCmd = m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		actionCmd = m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 			return ed.DeleteMotion(anchor, spec)
 		})
 	}
@@ -2046,64 +2029,70 @@ func (m *Model) runWorkflowResize(delta float64) tea.Cmd {
 	return nil
 }
 
-func (m *Model) applyEditorMutation(op func(requestEditor) (requestEditor, tea.Cmd)) tea.Cmd {
-	before := m.editor.Value()
+func (m *Model) updateEditor(msg tea.Msg) tea.Cmd {
 	beforeRevision := m.editor.Revision()
-	editor, cmd := op(m.editor)
-	if editor.Revision() != beforeRevision || editor.Value() != before {
-		if editor.Revision() == beforeRevision {
-			editor.noteContentChanged()
-		}
+	var cmd tea.Cmd
+	m.editor, cmd = m.editor.Update(msg)
+	if m.editor.Revision() != beforeRevision {
 		m.markDirty()
 	}
+	return cmd
+}
+
+func (m *Model) mutateEditor(op func(requestEditor) (requestEditor, tea.Cmd)) tea.Cmd {
+	beforeRevision := m.editor.Revision()
+	editor, cmd := op(m.editor)
 	m.editor = editor
+	if editor.Revision() != beforeRevision {
+		m.markDirty()
+	}
 	return cmd
 }
 
 func (m *Model) runDeleteSelection() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteSelection()
 	})
 }
 
 func (m *Model) runUndoLastChange() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.UndoLastChange()
 	})
 }
 
 func (m *Model) runDeleteCurrentLine() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteCurrentLine()
 	})
 }
 
 func (m *Model) runDeleteToLineEnd() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteToLineEnd()
 	})
 }
 
 func (m *Model) runDeleteCharAtCursor() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.DeleteCharAtCursor()
 	})
 }
 
 func (m *Model) runChangeCurrentLine() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.ChangeCurrentLine()
 	})
 }
 
 func (m *Model) runPasteClipboard(after bool) tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.PasteClipboard(after)
 	})
 }
 
 func (m *Model) runRedoLastChange() tea.Cmd {
-	return m.applyEditorMutation(func(ed requestEditor) (requestEditor, tea.Cmd) {
+	return m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
 		return ed.RedoLastChange()
 	})
 }

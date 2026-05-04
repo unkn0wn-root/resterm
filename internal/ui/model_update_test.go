@@ -861,7 +861,7 @@ func TestHandleKeyUWithoutHistoryShowsStatus(t *testing.T) {
 	if evt.status == nil || evt.status.text != "Nothing to undo" {
 		t.Fatalf("expected no-history status, got %+v", evt.status)
 	}
-	if evt.dirty {
+	if model.dirty {
 		t.Fatalf("expected dirty to remain false when no undo")
 	}
 	if got := model.editor.Value(); got != "alpha" {
