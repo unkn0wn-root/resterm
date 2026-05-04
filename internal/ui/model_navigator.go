@@ -269,12 +269,7 @@ func (m *Model) expandNavigatorFile(path string) {
 	}
 
 	children := m.buildRequestNodes(doc, path)
-	m.navigator.ReplaceChildren("file:"+path, children)
-	node := m.navigator.Find("file:" + path)
-	if node != nil && len(children) > 0 {
-		node.Count = len(children)
-		node.Expanded = true
-	}
+	m.navigator.ReplaceChildrenAndExpand("file:"+path, children)
 }
 
 func (m *Model) ensureNavigatorRequestsForFile(path string) {

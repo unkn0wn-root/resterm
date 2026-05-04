@@ -1126,6 +1126,54 @@ func TestNavigatorRequestLJumpsToDefinition(t *testing.T) {
 	}
 }
 
+func TestNavigatorRequestLKeepsLongFirstRequestCursorVisible(t *testing.T) {
+	content := strings.Repeat("\n", 5) +
+		"### Long first request\n# @name LongFirst\n" +
+		strings.Repeat("# @assert true == true\n", 32) +
+		"GET https://example.com/long\n\n" +
+		"### second\n# @name Second\nGET https://example.com/second\n"
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/long-first.http"
+	m.cfg.FilePath = m.currentFile
+	m.editor.SetHeight(8)
+	m.syncRequestList(m.doc)
+
+	req := m.doc.Requests[0]
+	if req.LineRange.End-req.LineRange.Start < m.editor.Height() {
+		t.Fatalf("expected first request to exceed editor viewport")
+	}
+	m.moveCursorToLine(req.LineRange.Start)
+	m.editor.SetViewStart(0)
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: req},
+		},
+	})
+	m.focus = focusRequests
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	cursorLine := currentCursorLine(m.editor)
+	if cursorLine != req.LineRange.Start {
+		t.Fatalf("expected cursor to stay on request line %d, got %d", req.LineRange.Start, cursorLine)
+	}
+	viewStart := m.editor.ViewStart()
+	cursorOffset := cursorLine - 1
+	if cursorOffset < viewStart || cursorOffset >= viewStart+m.editor.Height() {
+		t.Fatalf(
+			"expected cursor line %d to be visible in viewport [%d,%d)",
+			cursorLine,
+			viewStart+1,
+			viewStart+m.editor.Height()+1,
+		)
+	}
+}
+
 func TestNavigatorRightDoesNotJumpToRequestDefinition(t *testing.T) {
 	content := strings.Repeat(
 		"\n",
