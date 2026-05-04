@@ -376,7 +376,8 @@ type Model struct {
 	workflowRun        *workflowState
 	activeRequestTitle string
 	activeRequestKey   string
-	activeWorkflowKey  string
+	// preserves workflow list selection. it is not active app context.
+	workflowSelectionKey string
 
 	streamMgr          *stream.Manager
 	streamMsgChan      chan tea.Msg

@@ -14,7 +14,7 @@ func (m *Model) syncWorkflowList(doc *restfile.Document) bool {
 	if !visible {
 		m.workflowList.SetItems(nil)
 		m.workflowList.Select(-1)
-		m.activeWorkflowKey = ""
+		m.workflowSelectionKey = ""
 		m.setHistoryWorkflow("")
 		changed := m.setWorkflowShown(false)
 		if m.focus == focusWorkflows {
@@ -23,10 +23,10 @@ func (m *Model) syncWorkflowList(doc *restfile.Document) bool {
 		return changed
 	}
 	m.workflowList.SetItems(listItems)
-	if !m.selectWorkflowItemByKey(m.activeWorkflowKey) {
+	if !m.selectWorkflowItemByKey(m.workflowSelectionKey) {
 		m.workflowList.Select(0)
 		if len(m.workflowItems) > 0 {
-			m.activeWorkflowKey = workflowKey(m.workflowItems[0].workflow)
+			m.workflowSelectionKey = workflowKey(m.workflowItems[0].workflow)
 		}
 	}
 	return m.setWorkflowShown(true)
@@ -79,7 +79,7 @@ func (m *Model) runSelectedWorkflow() tea.Cmd {
 	wf := *item.workflow
 	m.setHistoryWorkflow(wf.Name)
 	if key := workflowKey(item.workflow); key != "" {
-		m.activeWorkflowKey = key
+		m.workflowSelectionKey = key
 	}
 	return m.startWorkflowRun(m.doc, wf, m.cfg.HTTPOptions)
 }
