@@ -1,6 +1,7 @@
 package navigator
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -32,6 +33,24 @@ func assertSelectedBackgroundSegments(t *testing.T, rendered string, min int) {
 	t.Helper()
 	if got := strings.Count(rendered, selectedTestBackgroundSGR); got < min {
 		t.Fatalf("expected at least %d selected background segments, got %d in %q", min, got, rendered)
+	}
+}
+
+func assertSelectedRow(t *testing.T, rendered string, width int) {
+	t.Helper()
+	if got := lipgloss.Width(rendered); got != width {
+		t.Fatalf("expected selected row width %d, got %d in %q", width, got, rendered)
+	}
+	assertSelectedBackgroundSegments(t, rendered, 3)
+}
+
+func TestSameNavigatorPathMatchesRelativeAndAbsolute(t *testing.T) {
+	abs, err := filepath.Abs("api.http")
+	if err != nil {
+		t.Fatalf("abs path: %v", err)
+	}
+	if !sameNavigatorPath("api.http", abs) {
+		t.Fatalf("expected relative path to match absolute path %q", abs)
 	}
 }
 
@@ -118,7 +137,7 @@ func TestRenderSelectedRequestShowsMarker(t *testing.T) {
 	if !strings.HasPrefix(clean, "> GET  getStatus") {
 		t.Fatalf("expected selected request marker before method badge, got %q", clean)
 	}
-	assertSelectedBackgroundSegments(t, out, 3)
+	assertSelectedRow(t, out, 80)
 }
 
 func TestRenderRowShowsDirIcon(t *testing.T) {
@@ -140,7 +159,7 @@ func TestRenderRowShowsDirIcon(t *testing.T) {
 	}
 }
 
-func TestRenderSelectedFileKeepsCaret(t *testing.T) {
+func TestRenderSelectedFileShowsMarkerAndCaret(t *testing.T) {
 	th := selectedRenderTheme(t)
 	row := Flat[any]{
 		Node: &Node[any]{
@@ -152,16 +171,13 @@ func TestRenderSelectedFileKeepsCaret(t *testing.T) {
 	}
 	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
-	if strings.HasPrefix(clean, iconSelected) {
-		t.Fatalf("expected selected file to keep caret instead of request marker, got %q", clean)
+	if !strings.HasPrefix(clean, iconSelected+" "+iconCaretClosed+" api.http (2)") {
+		t.Fatalf("expected selected file marker, caret, and title, got %q", clean)
 	}
-	if !strings.HasPrefix(clean, iconCaretClosed+" api.http (2)") {
-		t.Fatalf("expected selected file caret and title, got %q", clean)
-	}
-	assertSelectedBackgroundSegments(t, out, 3)
+	assertSelectedRow(t, out, 80)
 }
 
-func TestRenderSelectedDirHighlightsIconGap(t *testing.T) {
+func TestRenderSelectedDirShowsMarkerAndIcon(t *testing.T) {
 	th := selectedRenderTheme(t)
 	row := Flat[any]{
 		Node: &Node[any]{
@@ -171,10 +187,10 @@ func TestRenderSelectedDirHighlightsIconGap(t *testing.T) {
 	}
 	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
-	if !strings.HasPrefix(clean, iconDirClosed+" queries") {
-		t.Fatalf("expected selected directory icon and title, got %q", clean)
+	if !strings.HasPrefix(clean, iconSelected+" "+iconDirClosed+" queries") {
+		t.Fatalf("expected selected directory marker, icon, and title, got %q", clean)
 	}
-	assertSelectedBackgroundSegments(t, out, 3)
+	assertSelectedRow(t, out, 80)
 }
 
 func TestRenderSelectedWorkflowShowsMarker(t *testing.T) {
@@ -190,7 +206,59 @@ func TestRenderSelectedWorkflowShowsMarker(t *testing.T) {
 	if !strings.HasPrefix(clean, "> WF  sample-order") {
 		t.Fatalf("expected selected workflow marker before badge, got %q", clean)
 	}
-	assertSelectedBackgroundSegments(t, out, 3)
+	assertSelectedRow(t, out, 80)
+}
+
+func TestRenderActiveFileShowsSubtleMarker(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:     KindFile,
+			Title:    "api.http",
+			Expanded: false,
+			Count:    2,
+		},
+	}
+	out := renderRowState(row, false, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.HasPrefix(clean, iconActive+" "+iconCaretClosed+" api.http (2)") {
+		t.Fatalf("expected active file marker, caret, and title, got %q", clean)
+	}
+}
+
+func TestRenderActiveRequestShowsSubtleMarker(t *testing.T) {
+	th := theme.DefaultTheme()
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:   KindRequest,
+			Title:  "getStatus",
+			Method: "GET",
+		},
+	}
+	out := renderRowState(row, false, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.HasPrefix(clean, iconActive+" GET  getStatus") {
+		t.Fatalf("expected active request marker before method badge, got %q", clean)
+	}
+}
+
+func TestRenderSelectedActivePrefersSelectionMarker(t *testing.T) {
+	th := selectedRenderTheme(t)
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:     KindFile,
+			Title:    "api.http",
+			Expanded: false,
+		},
+	}
+	out := renderRowState(row, true, true, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.HasPrefix(clean, iconSelected+" "+iconCaretClosed+" api.http") {
+		t.Fatalf("expected selected marker to win over active marker, got %q", clean)
+	}
+	if strings.HasPrefix(clean, iconActive) {
+		t.Fatalf("expected active marker to be hidden on selected row, got %q", clean)
+	}
 }
 
 func TestRenderRowShowsRTSIcon(t *testing.T) {

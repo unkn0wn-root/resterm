@@ -190,7 +190,7 @@ func (m Model) helpSections() []helpSection {
 				{"/ (Esc clears)", "Focus navigator filter / reset filters"},
 				{"m", "Navigator: toggle method filter for selected request"},
 				{"t", "Navigator: toggle tag filters for selected item"},
-				{"l / r", "Navigator: jump to selected request in editor"},
+				{"l / r", "Navigator: jump to selected request/workflow in editor"},
 				{
 					m.helpCombinedKey(
 						[]bindings.ActionID{

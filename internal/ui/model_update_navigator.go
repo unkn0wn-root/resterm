@@ -27,29 +27,70 @@ type navJumpResult struct {
 	focus bool
 }
 
-func (m *Model) navReqJumpCmd() navJumpResult {
+func (m *Model) navJumpCmd(key string) navJumpResult {
 	if m.navigator == nil {
 		return navJumpResult{}
 	}
 	n := m.navigator.Selected()
-	if n == nil || n.Kind != navigator.KindRequest {
+	if n == nil {
 		return navJumpResult{}
 	}
-	req, _, cmds, ok := m.prepareNavigatorRequest()
-	if !ok {
-		if len(cmds) > 0 {
-			return navJumpResult{cmd: tea.Batch(cmds...), ok: true}
-		}
-		return navJumpResult{ok: true}
+
+	switch n.Kind {
+	case navigator.KindRequest:
+		return m.navReqJumpCmd(key)
+	case navigator.KindWorkflow:
+		return m.navWfJumpCmd(key)
+	default:
+		return navJumpResult{}
 	}
+}
+
+func (m *Model) navReqJumpCmd(key string) navJumpResult {
+	action, hint := navJumpCrossFileAction(key)
+	prep := m.resolveNavReq(action, hint)
+	if !prep.ok {
+		if len(prep.cmds) > 0 {
+			return navJumpResult{cmd: tea.Batch(prep.cmds...)}
+		}
+		return navJumpResult{}
+	}
+	cmds := prep.cmds
 	if cmd := m.restorePane(paneRegionEditor); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
-	m.jumpToNavigatorRequest(req, true)
+	m.jumpToNavigatorRequest(prep.request, true)
 	if len(cmds) > 0 {
 		return navJumpResult{cmd: tea.Batch(cmds...), ok: true, focus: true}
 	}
 	return navJumpResult{ok: true, focus: true}
+}
+
+func (m *Model) navWfJumpCmd(key string) navJumpResult {
+	action, hint := navJumpCrossFileAction(key)
+	prep := m.resolveNavWf(action, hint)
+	if !prep.ok {
+		if len(prep.cmds) > 0 {
+			return navJumpResult{cmd: tea.Batch(prep.cmds...)}
+		}
+		return navJumpResult{}
+	}
+	cmds := prep.cmds
+	if cmd := m.restorePane(paneRegionEditor); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	m.jumpToNavigatorWorkflow(prep.workflow, true)
+	if len(cmds) > 0 {
+		return navJumpResult{cmd: tea.Batch(cmds...), ok: true, focus: true}
+	}
+	return navJumpResult{ok: true, focus: true}
+}
+
+func navJumpCrossFileAction(key string) (string, string) {
+	if key == "r" {
+		return navActionJumpR, "Press r again to jump."
+	}
+	return navActionJumpL, "Press l again to jump."
 }
 
 func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
@@ -81,7 +122,12 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 		if !focus {
 			return out
 		}
-		return batchCommands(out, m.setFocus(focusEditor))
+		focusCmd := m.setFocus(focusEditor)
+		if m.focus == focusEditor {
+			m.suppressEditorKey = true
+			m.skipEditorCursorSync = true
+		}
+		return batchCommands(out, focusCmd)
 	}
 
 	if keyMsg, ok := msg.(tea.KeyMsg); ok && m.navigatorFilter.Focused() &&
@@ -118,16 +164,22 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 			m.navigator.Move(-1)
 			m.syncNavigatorSelection()
 		case "right", "l":
-			if ev.String() == "l" {
-				if res := m.navReqJumpCmd(); res.ok {
+			selected := m.navigator.Selected()
+			if ev.String() == "l" && navJumpable(selected) {
+				res := m.navJumpCmd("l")
+				if res.ok {
 					return applyJump(res.cmd, res.focus)
 				}
+				if res.cmd != nil {
+					return applyFilter(res.cmd)
+				}
+				return applyFilter(nil)
 			}
 			if m.navigatorFilter.Focused() {
 				m.navigatorFilter.Blur()
 				return nil
 			}
-			n := m.navigator.Selected()
+			n := selected
 			if n == nil {
 				return nil
 			}
@@ -204,14 +256,21 @@ func (m *Model) updateNavigator(msg tea.Msg) tea.Cmd {
 				m.navigator.ClearTagFilters()
 			}
 		case "r":
-			res := m.navReqJumpCmd()
+			res := m.navJumpCmd("r")
 			if res.ok {
 				return applyJump(res.cmd, res.focus)
+			}
+			if res.cmd != nil {
+				return applyFilter(res.cmd)
 			}
 		}
 	}
 
 	return applyFilter(cmd)
+}
+
+func navJumpable(n *navigator.Node[any]) bool {
+	return n != nil && (n.Kind == navigator.KindRequest || n.Kind == navigator.KindWorkflow)
 }
 
 func (m *Model) navExpandFile(n *navigator.Node[any], toggle bool) {

@@ -202,7 +202,7 @@ type Model struct {
 	navigator                *navigator.Model[any]
 	navigatorFilter          textinput.Model
 	navigatorCompact         bool
-	pendingCrossFileID       string
+	pendingCrossFile         pendingCrossFileNavigation
 	docCache                 map[string]navDocCache
 	editor                   requestEditor
 	responsePanes            [2]responsePaneState
@@ -345,6 +345,7 @@ type Model struct {
 	sending                bool
 	sendCancel             context.CancelFunc
 	suppressEditorKey      bool
+	skipEditorCursorSync   bool
 	editorInsertMode       bool
 	editorWriteKeyMap      textarea.KeyMap
 	editorViewKeyMap       textarea.KeyMap
@@ -376,7 +377,8 @@ type Model struct {
 	workflowRun        *workflowState
 	activeRequestTitle string
 	activeRequestKey   string
-	activeWorkflowKey  string
+	// preserves workflow list selection. it is not active app context.
+	workflowSelectionKey string
 
 	streamMgr          *stream.Manager
 	streamMsgChan      chan tea.Msg

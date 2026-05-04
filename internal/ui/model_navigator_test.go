@@ -59,6 +59,16 @@ func selectNavigatorID(t *testing.T, m *Model, id string) {
 	m.navigator.Move(target - curr)
 }
 
+func applyModelUpdate(t *testing.T, m *Model, msg tea.Msg) *Model {
+	t.Helper()
+	updated, _ := m.Update(msg)
+	next, ok := updated.(Model)
+	if !ok {
+		t.Fatalf("expected ui.Model update to return Model, got %T", updated)
+	}
+	return &next
+}
+
 func TestNavigatorFollowsEditorCursor(t *testing.T) {
 	tmp := t.TempDir()
 	file := filepath.Join(tmp, "sample.http")
@@ -572,6 +582,90 @@ func TestNavigatorSelectionClearsRequestForOtherFile(t *testing.T) {
 	}
 }
 
+func TestNavigatorWorkflowSelectionPreservesActiveRequest(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "workflow.http")
+	writeSampleFile(t, file, `# @workflow sample-order on-failure=continue
+# @step Cleanup using=DeleteResource
+
+### Cleanup resource
+# @name DeleteResource
+# @auth bearer {{auth.token}}
+DELETE https://example.com/resource
+`)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: file})
+	m := &model
+	if cmd := m.openFile(file); cmd != nil {
+		cmd()
+	}
+
+	reqID := navigatorRequestID(file, 0)
+	selectNavigatorID(t, m, reqID)
+	m.syncNavigatorSelection()
+	if m.currentRequest == nil || m.activeRequestKey == "" {
+		t.Fatalf("expected request selection to activate request")
+	}
+	activeReq := m.currentRequest
+	activeReqKey := m.activeRequestKey
+	reqIndex := m.requestList.Index()
+
+	wfID := "wf:" + file + ":0"
+	selectNavigatorID(t, m, wfID)
+	m.syncNavigatorSelection()
+
+	if m.currentRequest != activeReq || m.activeRequestKey != activeReqKey {
+		t.Fatalf(
+			"expected workflow selection to preserve active request %q, got %q",
+			activeReqKey,
+			m.activeRequestKey,
+		)
+	}
+	if m.requestList.Index() != reqIndex {
+		t.Fatalf("expected request list selection %d, got %d", reqIndex, m.requestList.Index())
+	}
+	if m.workflowSelectionKey == "" {
+		t.Fatalf("expected workflow selection to activate workflow key")
+	}
+	if state := m.navigatorRenderState(); state.ActiveNodeID != "" {
+		t.Fatalf("expected workflow selection not to render request marker, got %q", state.ActiveNodeID)
+	}
+}
+
+func TestNavigatorNilSelectionPreservesWorkflowSelectionKey(t *testing.T) {
+	content := `# @workflow sample-order
+# @step Fetch using=FetchExample
+
+### Fetch
+# @name FetchExample
+GET https://example.com
+`
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/workflow.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	if len(m.doc.Workflows) == 0 {
+		t.Fatalf("expected workflow")
+	}
+	key := workflowKey(&m.doc.Workflows[0])
+	m.workflowSelectionKey = key
+	if !m.selectWorkflowItemByKey(key) {
+		t.Fatalf("expected workflow list selection for key %q", key)
+	}
+
+	m.navigator = navigator.New[any](nil)
+	m.syncNavigatorSelection()
+
+	if m.workflowSelectionKey != key {
+		t.Fatalf("expected workflow selection key %q to be preserved, got %q", key, m.workflowSelectionKey)
+	}
+	if m.workflowList.Index() != -1 {
+		t.Fatalf("expected empty navigator selection to clear visible workflow selection")
+	}
+}
+
 func TestNavigatorFilterLoadsOtherFiles(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "alpha.http")
@@ -1029,5 +1123,395 @@ func TestNavigatorRequestLJumpsToDefinition(t *testing.T) {
 	}
 	if got := currentCursorLine(m.editor); got != req.LineRange.Start {
 		t.Fatalf("expected cursor to jump to line %d, got %d", req.LineRange.Start, got)
+	}
+}
+
+func TestNavigatorRequestLKeepsLongFirstRequestCursorVisible(t *testing.T) {
+	content := strings.Repeat("\n", 5) +
+		"### Long first request\n# @name LongFirst\n" +
+		strings.Repeat("# @assert true == true\n", 32) +
+		"GET https://example.com/long\n\n" +
+		"### second\n# @name Second\nGET https://example.com/second\n"
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/long-first.http"
+	m.cfg.FilePath = m.currentFile
+	m.editor.SetHeight(8)
+	m.syncRequestList(m.doc)
+
+	req := m.doc.Requests[0]
+	if req.LineRange.End-req.LineRange.Start < m.editor.Height() {
+		t.Fatalf("expected first request to exceed editor viewport")
+	}
+	m.moveCursorToLine(req.LineRange.Start)
+	m.editor.SetViewStart(0)
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: req},
+		},
+	})
+	m.focus = focusRequests
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	cursorLine := currentCursorLine(m.editor)
+	if cursorLine != req.LineRange.Start {
+		t.Fatalf("expected cursor to stay on request line %d, got %d", req.LineRange.Start, cursorLine)
+	}
+	viewStart := m.editor.ViewStart()
+	cursorOffset := cursorLine - 1
+	if cursorOffset < viewStart || cursorOffset >= viewStart+m.editor.Height() {
+		t.Fatalf(
+			"expected cursor line %d to be visible in viewport [%d,%d)",
+			cursorLine,
+			viewStart+1,
+			viewStart+m.editor.Height()+1,
+		)
+	}
+}
+
+func TestNavigatorRightDoesNotJumpToRequestDefinition(t *testing.T) {
+	content := strings.Repeat(
+		"\n",
+		5,
+	) + "### example\n# @name getExample\nGET https://example.com\n"
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/sample.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	req := m.doc.Requests[0]
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: req},
+		},
+	})
+	m.focus = focusRequests
+
+	if res := m.setCollapseState(paneRegionEditor, true); res.blocked {
+		t.Fatalf("expected editor collapse to be allowed")
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRight})
+
+	if !m.collapseState(paneRegionEditor) {
+		t.Fatalf("expected right key not to restore editor for request jump")
+	}
+	if m.focus == focusEditor {
+		t.Fatalf("expected right key not to move focus to editor")
+	}
+	if got := currentCursorLine(m.editor); got == req.LineRange.Start {
+		t.Fatalf("expected right key not to jump cursor to request line %d", got)
+	}
+}
+
+func TestNavigatorRightFallsThroughWhenRequestJumpCannotResolve(t *testing.T) {
+	model := newTestModelWithDoc("### req\nGET https://example.com\n")
+	m := model
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:    "req:/tmp/sample:0",
+			Kind:  navigator.KindRequest,
+			Title: "Broken request",
+			Children: []*navigator.Node[any]{
+				{
+					ID:    "req:/tmp/sample:0:child",
+					Kind:  navigator.KindRequest,
+					Title: "Child",
+				},
+			},
+		},
+	})
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRight}); cmd != nil {
+		cmd()
+	}
+
+	n := m.navigator.Find("req:/tmp/sample:0")
+	if n == nil || !n.Expanded {
+		t.Fatalf("expected right key to expand unresolved request node")
+	}
+}
+
+func TestNavigatorLDoesNotExpandWhenRequestJumpCannotResolve(t *testing.T) {
+	model := newTestModelWithDoc("### req\nGET https://example.com\n")
+	m := model
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:    "req:/tmp/sample:0",
+			Kind:  navigator.KindRequest,
+			Title: "Broken request",
+			Children: []*navigator.Node[any]{
+				{
+					ID:    "req:/tmp/sample:0:child",
+					Kind:  navigator.KindRequest,
+					Title: "Child",
+				},
+			},
+		},
+	})
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	n := m.navigator.Find("req:/tmp/sample:0")
+	if n == nil || n.Expanded {
+		t.Fatalf("expected l key not to expand unresolved request node")
+	}
+}
+
+func TestNavigatorWorkflowLJumpsToDefinition(t *testing.T) {
+	content := strings.Repeat("\n", 5) + `# @workflow sample-order on-failure=continue
+# @step Cleanup using=DeleteResource
+
+### Cleanup resource
+# @name DeleteResource
+DELETE https://example.com/resource
+`
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/workflow.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	if len(m.doc.Workflows) == 0 {
+		t.Fatalf("expected parsed workflows in doc")
+	}
+	wf := &m.doc.Workflows[0]
+	if wf.LineRange.Start <= 1 {
+		t.Fatalf("expected workflow to start after line 1, got %d", wf.LineRange.Start)
+	}
+	if m.activeRequestKey == "" {
+		t.Fatalf("expected request list sync to select the request before workflow jump")
+	}
+	activeReq := m.currentRequest
+	activeReqKey := m.activeRequestKey
+
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      "wf:" + m.currentFile + ":0",
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: wf},
+		},
+	})
+
+	if res := m.setCollapseState(paneRegionEditor, true); res.blocked {
+		t.Fatalf("expected editor collapse to be allowed")
+	}
+	if !m.collapseState(paneRegionEditor) {
+		t.Fatalf("expected editor to start collapsed")
+	}
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	if m.collapseState(paneRegionEditor) {
+		t.Fatalf("expected editor to be restored")
+	}
+	if m.focus != focusEditor {
+		t.Fatalf("expected focus to move to editor, got %v", m.focus)
+	}
+	if got := currentCursorLine(m.editor); got != wf.LineRange.Start {
+		t.Fatalf("expected cursor to jump to line %d, got %d", wf.LineRange.Start, got)
+	}
+	if m.currentRequest != activeReq || m.activeRequestKey != activeReqKey {
+		t.Fatalf(
+			"expected workflow jump to preserve active request %q, got %q",
+			activeReqKey,
+			m.activeRequestKey,
+		)
+	}
+	if m.workflowSelectionKey != workflowKey(wf) {
+		t.Fatalf("expected workflow selection key %q, got %q", workflowKey(wf), m.workflowSelectionKey)
+	}
+}
+
+func TestNavigatorWorkflowJumpFullUpdateKeepsWorkflowSelected(t *testing.T) {
+	content := `### Fetch
+# @name FetchExample
+GET https://example.com
+
+# @workflow sample-order
+# @step Fetch using=FetchExample
+`
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/workflow-after-request.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	if len(m.doc.Requests) == 0 || len(m.doc.Workflows) == 0 {
+		t.Fatalf("expected request and workflow")
+	}
+	wf := &m.doc.Workflows[0]
+	wfID := "wf:" + m.currentFile + ":0"
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      navigatorRequestID(m.currentFile, 0),
+			Kind:    navigator.KindRequest,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: m.doc.Requests[0]},
+		},
+		{
+			ID:      wfID,
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: wf},
+		},
+	})
+	selectNavigatorID(t, m, wfID)
+	m.focus = focusWorkflows
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+
+	if m.focus != focusEditor {
+		t.Fatalf("expected focus to move to editor, got %v", m.focus)
+	}
+	if got := currentCursorLine(m.editor); got != wf.LineRange.Start {
+		t.Fatalf("expected cursor to jump to workflow line %d, got %d", wf.LineRange.Start, got)
+	}
+	if sel := m.navigator.Selected(); sel == nil || sel.ID != wfID {
+		t.Fatalf("expected workflow selection to survive full update, got %#v", sel)
+	}
+	if m.suppressEditorKey || m.skipEditorCursorSync {
+		t.Fatalf("expected jump suppression flags to be consumed after full update")
+	}
+}
+
+func TestNavigatorCrossFileJumpConfirmationIsNotReusedForWorkflowRun(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "workflow.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, `# @workflow cross-file
+# @step Fetch using=FetchRemote
+
+### Fetch remote
+# @name FetchRemote
+GET https://remote.test
+`)
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	wfID := "wf:" + fileB + ":0"
+	selectNavigatorID(t, m, wfID)
+	m.focus = focusWorkflows
+	m.dirty = true
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first jump press to keep current file %q, got %q", fileA, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press l again to jump.") {
+		t.Fatalf("expected jump-specific warning, got %q", m.statusMessage.text)
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected enter not to reuse jump confirmation, got current file %q", m.currentFile)
+	}
+	if m.workflowRun != nil {
+		t.Fatalf("expected workflow not to start from stale jump confirmation")
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Enter/Space again to run.") {
+		t.Fatalf("expected run-specific warning, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	reqID := navigatorRequestID(fileB, 0)
+	selectNavigatorID(t, m, reqID)
+	m.focus = focusRequests
+	m.dirty = true
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
+		t.Fatalf("expected preview-specific warning, got %q", m.statusMessage.text)
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !samePath(m.currentFile, fileA) {
+		t.Fatalf("expected enter not to reuse preview confirmation, got current file %q", m.currentFile)
+	}
+	if !strings.Contains(m.statusMessage.text, "Press Enter again to send.") {
+		t.Fatalf("expected send-specific warning, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorWorkflowJumpUsesNodeIndexBeforeWorkflowName(t *testing.T) {
+	content := `# @workflow duplicate
+# @step First using=req
+
+# @workflow duplicate
+# @step Second using=req
+
+### req
+GET https://example.com
+`
+	model := newTestModelWithDoc(content)
+	m := model
+	m.currentFile = "/tmp/duplicate-workflow.http"
+	m.cfg.FilePath = m.currentFile
+	m.syncRequestList(m.doc)
+
+	if len(m.doc.Workflows) != 2 {
+		t.Fatalf("expected two workflows, got %d", len(m.doc.Workflows))
+	}
+	first := &m.doc.Workflows[0]
+	second := &m.doc.Workflows[1]
+	if workflowKey(first) != workflowKey(second) {
+		t.Fatalf("expected duplicate workflow keys")
+	}
+
+	secondID := "wf:" + m.currentFile + ":1"
+	m.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      "wf:" + m.currentFile + ":0",
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: first},
+		},
+		{
+			ID:      secondID,
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: m.currentFile, Data: second},
+		},
+	})
+	selectNavigatorID(t, m, secondID)
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+
+	if got := currentCursorLine(m.editor); got != second.LineRange.Start {
+		t.Fatalf("expected cursor to jump to duplicate workflow line %d, got %d", second.LineRange.Start, got)
+	}
+	if got := m.workflowList.Index(); got != 1 {
+		t.Fatalf("expected second workflow list item to be selected, got %d", got)
 	}
 }

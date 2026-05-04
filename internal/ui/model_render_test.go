@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -141,6 +142,78 @@ func TestNavigatorFilterBandShowsOnlyOnDemand(t *testing.T) {
 	view = ansi.Strip(model.renderFilePane())
 	if !strings.Contains(view, "Filter:") {
 		t.Fatalf("expected active method filter to keep filter band visible, got %q", view)
+	}
+}
+
+func TestNavigatorRenderStateMarksCurrentFileAndActiveRequest(t *testing.T) {
+	content := "### first\n# @name first\nGET https://example.com/one\n\n### second\n# @name second\nPOST https://example.com/two\n"
+	model := newTestModelWithDoc(content)
+	file := "/tmp/nav-state.http"
+	model.currentFile = file
+	model.activeRequestKey = requestKey(model.doc.Requests[1])
+
+	state := model.navigatorRenderState()
+	if state.ActiveFilePath != file {
+		t.Fatalf("expected active file %q, got %q", file, state.ActiveFilePath)
+	}
+	if want := navigatorRequestID(file, 1); state.ActiveNodeID != want {
+		t.Fatalf("expected active request node %q, got %q", want, state.ActiveNodeID)
+	}
+}
+
+func TestNavigatorRenderStateUsesNavigatorNodeIDForEquivalentRequestPath(t *testing.T) {
+	content := "### first\n# @name first\nGET https://example.com/one\n\n### second\n# @name second\nPOST https://example.com/two\n"
+	model := newTestModelWithDoc(content)
+	file := filepath.Join(t.TempDir(), "nav-state.http")
+	nodePath := filepath.Dir(file) + string(filepath.Separator) + "." +
+		string(filepath.Separator) + filepath.Base(file)
+	model.currentFile = file
+	model.activeRequestKey = requestKey(model.doc.Requests[1])
+
+	want := navigatorRequestID(nodePath, 1)
+	model.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:       "file:" + nodePath,
+			Kind:     navigator.KindFile,
+			Expanded: true,
+			Payload:  navigator.Payload[any]{FilePath: nodePath},
+			Children: []*navigator.Node[any]{
+				{
+					ID:      navigatorRequestID(nodePath, 0),
+					Kind:    navigator.KindRequest,
+					Payload: navigator.Payload[any]{FilePath: nodePath, Data: model.doc.Requests[0]},
+				},
+				{
+					ID:      want,
+					Kind:    navigator.KindRequest,
+					Payload: navigator.Payload[any]{FilePath: nodePath, Data: model.doc.Requests[1]},
+				},
+			},
+		},
+	})
+
+	state := model.navigatorRenderState()
+	if state.ActiveNodeID != want {
+		t.Fatalf("expected navigator node id %q, got %q", want, state.ActiveNodeID)
+	}
+}
+
+func TestNavigatorRenderStateSuppressesRequestMarkerForSelectedWorkflow(t *testing.T) {
+	content := "### req\nGET https://example.com\n\n# @workflow sample\n# @step Fetch using=req\n"
+	model := newTestModelWithDoc(content)
+	model.currentFile = "/tmp/workflow.http"
+	model.activeRequestKey = requestKey(model.doc.Requests[0])
+	model.navigator = navigator.New[any]([]*navigator.Node[any]{
+		{
+			ID:      "wf:" + model.currentFile + ":0",
+			Kind:    navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{FilePath: model.currentFile, Data: &model.doc.Workflows[0]},
+		},
+	})
+
+	state := model.navigatorRenderState()
+	if state.ActiveNodeID != "" {
+		t.Fatalf("expected selected workflow to suppress request marker, got %q", state.ActiveNodeID)
 	}
 }
 

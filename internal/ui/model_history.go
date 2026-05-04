@@ -1894,6 +1894,7 @@ func (m *Model) moveCursorToLine(target int) {
 	}
 	current := currentCursorLine(m.editor)
 	if current == target {
+		m.revealLineRangeInEditor(restfile.LineRange{Start: target, End: target})
 		return
 	}
 	wasFocused := m.editor.Focused()
@@ -1914,6 +1915,7 @@ func (m *Model) moveCursorToLine(target int) {
 		current--
 	}
 	m.editor, _ = m.editor.Update(tea.KeyMsg{Type: tea.KeyHome})
+	m.revealLineRangeInEditor(restfile.LineRange{Start: target, End: target})
 	m.syncNavigatorWithEditorCursor()
 }
 

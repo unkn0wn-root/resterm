@@ -157,7 +157,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
 | Navigator: toggle method filter for selected request | `m` (repeat to switch/clear) |
 | Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
-| Navigator: jump to selected request in editor | `l` / `r` (when a request is highlighted) |
+| Navigator: jump to selected request/workflow in editor | `l` / `r` (when a request or workflow is highlighted) |
 | Open environment selector | `Ctrl+E` |
 | Save file | `Ctrl+S` |
 | Save layout (prompt) | `g+Shift+L` |
@@ -280,6 +280,7 @@ Binary responses show size and type hints alongside quick previews. For large bi
 
 - Resterm scans the workspace root for `.http` and `.rest` files. Use `--workspace` to set the root or rely on the directory of the file passed via `--file`. Add `--recursive` to traverse subdirectories (hidden directories are skipped).
 - The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `m` toggles method badges (single select) for the highlighted request, `t` toggles tag badges, and `Esc` clears text plus any badges.
+- Highlight a request or workflow in the navigator and press `l` or `r` to restore the editor pane and jump to that definition.
 - The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear. Use `Ctrl+Shift+O` (or `g+Shift+O`) to rescan the workspace for new files.
 - Resterm watches the active file on disk. If another tool edits or deletes it, a modal appears telling you the file changed or went missing. Your in-memory buffer stays intact. Press the reload shortcut (`g+Shift+R` by default, or whatever you’ve mapped to `reload_file_from_disk`) to pull the on disk version into the editor. If you have unsaved changes, the first press warns that reload will discard them; press reload again to confirm. Dismiss with `Esc` to keep your buffer and continue editing.
 - Create a scratch buffer with `Ctrl+T` for ad-hoc experiments. These buffers are not written to disk unless you save them explicitly.

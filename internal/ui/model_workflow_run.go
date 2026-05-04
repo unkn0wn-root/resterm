@@ -430,7 +430,7 @@ func (m *Model) startWorkflowRun(
 		return nil
 	}
 	if key := workflowKey(&workflow); key != "" {
-		m.activeWorkflowKey = key
+		m.workflowSelectionKey = key
 	}
 	if options.BaseDir == "" && m.currentFile != "" {
 		options.BaseDir = filepath.Dir(m.currentFile)

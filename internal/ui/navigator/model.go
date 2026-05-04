@@ -299,6 +299,23 @@ func (m *Model[T]) ReplaceChildren(id string, children []*Node[T]) {
 	m.refresh()
 }
 
+// ReplaceChildrenAndExpand swaps children under a node id and expands the node
+// when it has children. It refreshes visible rows once after the full mutation.
+func (m *Model[T]) ReplaceChildrenAndExpand(id string, children []*Node[T]) bool {
+	if id == "" {
+		return false
+	}
+	n := m.Find(id)
+	if n == nil {
+		return false
+	}
+	n.Children = children
+	n.Count = len(children)
+	n.Expanded = len(children) > 0
+	m.refresh()
+	return true
+}
+
 // Find finds a node by id.
 func (m *Model[T]) Find(id string) *Node[T] {
 	if id == "" {
@@ -313,10 +330,18 @@ func (m *Model[T]) Find(id string) *Node[T] {
 }
 
 func (m *Model[T]) refresh() {
+	selectedID := ""
+	if selected := m.Selected(); selected != nil {
+		selectedID = selected.ID
+	}
+
 	m.flat = flatten(m.nodes, 0, m.filter, m.methodFilters, m.tagFilters)
 	if len(m.flat) == 0 {
 		m.sel = -1
 		m.offset = 0
+		return
+	}
+	if selectedID != "" && m.SelectByID(selectedID) {
 		return
 	}
 	m.ensureVisible()

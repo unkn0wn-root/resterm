@@ -490,7 +490,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, editorCmd)
 		}
 		if m.focus == focusEditor {
-			m.syncNavigatorWithEditorCursor()
+			if m.skipEditorCursorSync {
+				m.skipEditorCursorSync = false
+			} else {
+				m.syncNavigatorWithEditorCursor()
+			}
 		}
 	}
 
@@ -655,28 +659,53 @@ func (m *Model) navGate(kind navigator.Kind, warn string) bool {
 	return true
 }
 
-func (m *Model) confirmCrossFileNavigation(n *navigator.Node[any]) bool {
+type pendingCrossFileNavigation struct {
+	nodeID string
+	action string
+}
+
+const (
+	navActionJumpL          = "navigator:jump:l"
+	navActionJumpR          = "navigator:jump:r"
+	navActionRequestSend    = "request:send"
+	navActionRequestPreview = "request:preview"
+	navActionWorkflowRun    = "workflow:run"
+)
+
+func (m *Model) clearPendingCrossFileNavigation() {
+	m.pendingCrossFile = pendingCrossFileNavigation{}
+}
+
+func (m *Model) confirmCrossFileNavigation(
+	n *navigator.Node[any],
+	action string,
+	retryHint string,
+) bool {
 	if n == nil {
 		return true
 	}
 	path := strings.TrimSpace(n.Payload.FilePath)
 	if path == "" || samePath(path, m.currentFile) || !m.dirty {
-		m.pendingCrossFileID = ""
+		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	if m.pendingCrossFileID == n.ID {
-		m.pendingCrossFileID = ""
+	if m.pendingCrossFile.nodeID == n.ID && m.pendingCrossFile.action == action {
+		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	m.pendingCrossFileID = n.ID
+	m.pendingCrossFile = pendingCrossFileNavigation{nodeID: n.ID, action: action}
 	base := filepath.Base(path)
 	if base == "" {
 		base = path
 	}
+	if strings.TrimSpace(retryHint) == "" {
+		retryHint = "Repeat the action to continue."
+	}
 	m.setStatusMessage(statusMsg{
 		text: fmt.Sprintf(
-			"Unsaved changes will be discarded when opening %s. Press Enter/Space again to continue.",
+			"Unsaved changes will be discarded when opening %s. %s",
 			base,
+			retryHint,
 		),
 		level: statusWarn,
 	})
@@ -728,44 +757,53 @@ func (m *Model) selectRequestForNode(req *restfile.Request, id string) bool {
 	return false
 }
 
-func (m *Model) prepareNavigatorRequest() (*restfile.Request, *navigator.Node[any], []tea.Cmd, bool) {
+type navReqPrep struct {
+	request *restfile.Request
+	cmds    []tea.Cmd
+	ok      bool
+}
+
+func (m *Model) resolveNavReq(action string, retryHint string) navReqPrep {
 	if m.navigator == nil {
-		return nil, nil, nil, false
+		return navReqPrep{}
 	}
 	n := m.navigator.Selected()
 	if n == nil || n.Kind != navigator.KindRequest {
-		return nil, nil, nil, false
+		return navReqPrep{}
 	}
-	if !m.confirmCrossFileNavigation(n) {
-		return nil, nil, []tea.Cmd{func() tea.Msg { return nil }}, false
+	if !m.confirmCrossFileNavigation(n, action, retryHint) {
+		return navReqPrep{cmds: []tea.Cmd{func() tea.Msg { return nil }}}
 	}
 	req, ok := n.Payload.Data.(*restfile.Request)
 	if !ok || req == nil {
-		return nil, nil, nil, false
+		return navReqPrep{}
 	}
 	cmds, okFile := m.ensureNavigatorFile(n)
 	if !okFile {
 		if len(cmds) == 0 {
-			return nil, nil, nil, false
+			return navReqPrep{}
 		}
-		return nil, nil, cmds, false
+		return navReqPrep{cmds: cmds}
 	}
 	if !m.selectRequestForNode(req, n.ID) {
 		m.setStatusMessage(statusMsg{text: "Request not found in file", level: statusWarn})
 		if len(cmds) == 0 {
-			return nil, nil, nil, false
+			return navReqPrep{}
 		}
-		return nil, nil, cmds, false
+		return navReqPrep{cmds: cmds}
 	}
-	return req, n, cmds, true
+	return navReqPrep{request: req, cmds: cmds, ok: true}
 }
 
-func (m *Model) revealRequestInEditor(req *restfile.Request) {
-	if req == nil {
+func (m *Model) revealLineRangeInEditor(r restfile.LineRange) {
+	if r.Start <= 0 {
 		return
 	}
-	start := req.LineRange.Start - 1
-	end := req.LineRange.End - 1
+	start := r.Start - 1
+	end := r.End - 1
+	if end < start {
+		end = start
+	}
 	h := m.editor.Height()
 	if h <= 0 {
 		h = 1
@@ -773,6 +811,13 @@ func (m *Model) revealRequestInEditor(req *restfile.Request) {
 	total := m.editor.LineCount()
 	offset := scroll.Reveal(start, end, m.editor.ViewStart(), h, total)
 	m.editor.SetViewStart(offset)
+}
+
+func (m *Model) revealRequestInEditor(req *restfile.Request) {
+	if req == nil {
+		return
+	}
+	m.revealLineRangeInEditor(req.LineRange)
 }
 
 func (m *Model) jumpToNavigatorRequest(req *restfile.Request, moveCursor bool) {
@@ -785,15 +830,74 @@ func (m *Model) jumpToNavigatorRequest(req *restfile.Request, moveCursor bool) {
 	}
 }
 
-func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
-	req, _, cmds, ok := m.prepareNavigatorRequest()
-	if !ok {
+type navWfPrep struct {
+	workflow *restfile.Workflow
+	cmds     []tea.Cmd
+	ok       bool
+}
+
+func (m *Model) resolveNavWf(action string, retryHint string) navWfPrep {
+	if m.navigator == nil {
+		return navWfPrep{}
+	}
+	n := m.navigator.Selected()
+	if n == nil || n.Kind != navigator.KindWorkflow {
+		return navWfPrep{}
+	}
+	if !m.confirmCrossFileNavigation(n, action, retryHint) {
+		return navWfPrep{cmds: []tea.Cmd{func() tea.Msg { return nil }}}
+	}
+	wf, ok := n.Payload.Data.(*restfile.Workflow)
+	if !ok || wf == nil {
+		return navWfPrep{}
+	}
+	cmds, okFile := m.ensureNavigatorFile(n)
+	if !okFile {
 		if len(cmds) == 0 {
+			return navWfPrep{}
+		}
+		return navWfPrep{cmds: cmds}
+	}
+	if !m.selectWorkflowForNode(wf, n.ID) {
+		m.setStatusMessage(statusMsg{text: "Workflow not found in file", level: statusWarn})
+		if len(cmds) == 0 {
+			return navWfPrep{}
+		}
+		return navWfPrep{cmds: cmds}
+	}
+	if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
+		wf = item.workflow
+	}
+	m.workflowSelectionKey = workflowKey(wf)
+	return navWfPrep{workflow: wf, cmds: cmds, ok: true}
+}
+
+func (m *Model) jumpToNavigatorWorkflow(wf *restfile.Workflow, moveCursor bool) {
+	if wf == nil {
+		return
+	}
+	m.revealLineRangeInEditor(wf.LineRange)
+	if moveCursor {
+		m.moveCursorToLine(wf.LineRange.Start)
+	}
+}
+
+func (m *Model) sendNavigatorRequest(execute bool) tea.Cmd {
+	action := navActionRequestPreview
+	hint := "Press Space again to preview."
+	if execute {
+		action = navActionRequestSend
+		hint = "Press Enter again to send."
+	}
+	prep := m.resolveNavReq(action, hint)
+	if !prep.ok {
+		if len(prep.cmds) == 0 {
 			return nil
 		}
-		return tea.Batch(cmds...)
+		return tea.Batch(prep.cmds...)
 	}
-	m.jumpToNavigatorRequest(req, false)
+	cmds := prep.cmds
+	m.jumpToNavigatorRequest(prep.request, false)
 	if cmd := m.setFocus(focusRequests); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -810,45 +914,25 @@ func (m *Model) selectWorkflowForNode(wf *restfile.Workflow, id string) bool {
 	if wf == nil {
 		return false
 	}
-	if key := workflowKey(wf); key != "" && m.selectWorkflowItemByKey(key) {
-		return true
-	}
 	if idx := navRequestIndex(id); idx >= 0 && idx < len(m.workflowItems) {
 		m.workflowList.Select(idx)
+		return true
+	}
+	if key := workflowKey(wf); key != "" && m.selectWorkflowItemByKey(key) {
 		return true
 	}
 	return false
 }
 
 func (m *Model) sendNavigatorWorkflow() tea.Cmd {
-	if m.navigator == nil {
-		return nil
-	}
-	n := m.navigator.Selected()
-	if n == nil || n.Kind != navigator.KindWorkflow {
-		return nil
-	}
-	if !m.confirmCrossFileNavigation(n) {
-		return func() tea.Msg { return nil }
-	}
-	wf, ok := n.Payload.Data.(*restfile.Workflow)
-	if !ok || wf == nil {
-		return nil
-	}
-	cmds, okFile := m.ensureNavigatorFile(n)
-	if !okFile {
-		if len(cmds) == 0 {
+	prep := m.resolveNavWf(navActionWorkflowRun, "Press Enter/Space again to run.")
+	if !prep.ok {
+		if len(prep.cmds) == 0 {
 			return nil
 		}
-		return tea.Batch(cmds...)
+		return tea.Batch(prep.cmds...)
 	}
-	if !m.selectWorkflowForNode(wf, n.ID) {
-		m.setStatusMessage(statusMsg{text: "Workflow not found in file", level: statusWarn})
-		if len(cmds) == 0 {
-			return nil
-		}
-		return tea.Batch(cmds...)
-	}
+	cmds := prep.cmds
 	if cmd := m.setFocus(focusWorkflows); cmd != nil {
 		cmds = append(cmds, cmd)
 	}

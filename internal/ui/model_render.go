@@ -322,13 +322,14 @@ func (m Model) renderFilePane() string {
 
 	listHeight := available
 
-	listView := navigator.ListView(
+	listView := navigator.ListViewWithState(
 		m.navigator,
 		m.theme,
 		contentWidth,
 		listHeight,
 		paneActive,
 		m.themeRuntime.appearance,
+		m.navigatorRenderState(),
 	)
 	if listView == "" {
 		listView = centerBox(
@@ -356,6 +357,82 @@ func (m Model) renderFilePane() string {
 		filePaneTitle,
 		content,
 	)
+}
+
+func (m Model) navigatorRenderState() navigator.RenderState {
+	return navigator.RenderState{
+		ActiveFilePath: m.currentFile,
+		ActiveNodeID:   m.activeRequestNavigatorNodeID(),
+	}
+}
+
+func (m Model) activeRequestNavigatorNodeID() string {
+	if m.currentFile == "" || m.doc == nil {
+		return ""
+	}
+	if m.navigator != nil {
+		if sel := m.navigator.Selected(); sel != nil && sel.Kind == navigator.KindWorkflow {
+			return ""
+		}
+	}
+
+	reqKey := strings.TrimSpace(m.activeRequestKey)
+	if reqKey == "" && m.currentRequest != nil {
+		reqKey = requestKey(m.currentRequest)
+	}
+	if reqKey != "" {
+		for idx, req := range m.doc.Requests {
+			if requestKey(req) == reqKey {
+				if id := m.navigatorRequestNodeID(m.currentFile, idx); id != "" {
+					return id
+				}
+				return navigatorRequestID(m.currentFile, idx)
+			}
+		}
+	}
+
+	return ""
+}
+
+func (m Model) navigatorRequestNodeID(path string, reqIdx int) string {
+	if m.navigator == nil || reqIdx < 0 {
+		return ""
+	}
+
+	exactID := navigatorRequestID(path, reqIdx)
+	if n := m.navigator.Find(exactID); n != nil && n.Kind == navigator.KindRequest {
+		return exactID
+	}
+
+	fileNode := m.navigatorFileNode(path)
+	if fileNode == nil || reqIdx >= len(fileNode.Children) {
+		return ""
+	}
+	n := fileNode.Children[reqIdx]
+	if n == nil || n.Kind != navigator.KindRequest {
+		return ""
+	}
+	return n.ID
+}
+
+func (m Model) navigatorFileNode(path string) *navigator.Node[any] {
+	if m.navigator == nil {
+		return nil
+	}
+
+	if n := m.navigator.Find("file:" + path); n != nil && n.Kind == navigator.KindFile {
+		return n
+	}
+	for _, row := range m.navigator.Rows() {
+		n := row.Node
+		if n == nil || n.Kind != navigator.KindFile {
+			continue
+		}
+		if samePath(n.Payload.FilePath, path) {
+			return n
+		}
+	}
+	return nil
 }
 
 func (m Model) sidebarFrameStyle(active bool) lipgloss.Style {

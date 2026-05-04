@@ -269,12 +269,7 @@ func (m *Model) expandNavigatorFile(path string) {
 	}
 
 	children := m.buildRequestNodes(doc, path)
-	m.navigator.ReplaceChildren("file:"+path, children)
-	node := m.navigator.Find("file:" + path)
-	if node != nil && len(children) > 0 {
-		node.Count = len(children)
-		node.Expanded = true
-	}
+	m.navigator.ReplaceChildrenAndExpand("file:"+path, children)
 }
 
 func (m *Model) ensureNavigatorRequestsForFile(path string) {
@@ -379,8 +374,7 @@ func (m *Model) syncNavigatorSelection() {
 	n := m.navigator.Selected()
 	m.syncNavigatorFocus(n)
 	if n == nil {
-		m.setActiveRequest(nil)
-		m.requestList.Select(-1)
+		m.clearNavigatorRequestSelection()
 		m.workflowList.Select(-1)
 		return
 	}
@@ -395,18 +389,16 @@ func (m *Model) syncNavigatorSelection() {
 			if samePath(path, m.currentFile) {
 				m.setActiveRequest(req)
 			} else {
-				if m.pendingCrossFileID == n.ID {
+				if m.pendingCrossFile.nodeID == n.ID {
 					return
 				}
-				m.setActiveRequest(nil)
-				m.requestList.Select(-1)
+				m.clearNavigatorRequestSelection()
 				m.setStatusMessage(
 					statusMsg{text: "Open file to edit this request", level: statusInfo},
 				)
 			}
 		} else {
-			m.setActiveRequest(nil)
-			m.requestList.Select(-1)
+			m.clearNavigatorRequestSelection()
 		}
 	case navigator.KindWorkflow:
 		if wf, ok := n.Payload.Data.(*restfile.Workflow); ok {
@@ -414,35 +406,44 @@ func (m *Model) syncNavigatorSelection() {
 				_ = m.selectFileByPath(path)
 			}
 			if samePath(path, m.currentFile) {
-				m.activeWorkflowKey = workflowKey(wf)
-				_ = m.selectWorkflowItemByKey(m.activeWorkflowKey)
+				if m.selectWorkflowForNode(wf, n.ID) {
+					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
+						wf = item.workflow
+					}
+				}
+				m.workflowSelectionKey = workflowKey(wf)
 			} else {
-				if m.pendingCrossFileID == n.ID {
+				if m.pendingCrossFile.nodeID == n.ID {
 					return
 				}
-				m.activeWorkflowKey = ""
-				m.workflowList.Select(-1)
+				m.clearNavigatorWorkflowSelection()
 				m.setStatusMessage(
 					statusMsg{text: "Open file to edit this workflow", level: statusInfo},
 				)
 			}
 		} else {
-			m.activeWorkflowKey = ""
-			m.workflowList.Select(-1)
+			m.clearNavigatorWorkflowSelection()
 		}
 	case navigator.KindFile:
 		if path != "" {
 			_ = m.selectFileByPath(path)
 		}
-		m.setActiveRequest(nil)
-		m.requestList.Select(-1)
+		m.clearNavigatorRequestSelection()
 	case navigator.KindDir:
-		m.setActiveRequest(nil)
-		m.requestList.Select(-1)
+		m.clearNavigatorRequestSelection()
 	default:
-		m.setActiveRequest(nil)
-		m.requestList.Select(-1)
+		m.clearNavigatorRequestSelection()
 	}
+}
+
+func (m *Model) clearNavigatorRequestSelection() {
+	m.setActiveRequest(nil)
+	m.requestList.Select(-1)
+}
+
+func (m *Model) clearNavigatorWorkflowSelection() {
+	m.workflowSelectionKey = ""
+	m.workflowList.Select(-1)
 }
 
 func (m *Model) syncNavigatorFocus(n *navigator.Node[any]) {
