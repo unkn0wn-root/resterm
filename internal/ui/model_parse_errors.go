@@ -24,6 +24,7 @@ type eSty struct {
 	loc   lipgloss.Style
 	src   lipgloss.Style
 	bar   lipgloss.Style
+	chain lipgloss.Style
 	note  lipgloss.Style
 }
 
@@ -78,8 +79,16 @@ func (m Model) errSty() eSty {
 		loc:   warn,
 		src:   theme.ActiveTextStyle(m.theme),
 		bar:   m.themeRuntime.subtleTextStyle(m.theme),
+		chain: m.chainLineStyle(),
 		note:  m.themeRuntime.subtleTextStyle(m.theme),
 	}
+}
+
+func (m Model) chainLineStyle() lipgloss.Style {
+	if m.themeRuntime.isLight() {
+		return lipgloss.NewStyle().Foreground(lipgloss.Color("#b45309"))
+	}
+	return lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C"))
 }
 
 func (st eSty) line(l diag.Line) string {
@@ -90,7 +99,9 @@ func (st eSty) line(l diag.Line) string {
 		return st.loc.Render(l.Text)
 	case diag.LineSrc:
 		return st.src.Render(l.Text)
-	case diag.LineChain, diag.LineNote, diag.LineHelp:
+	case diag.LineChain:
+		return st.chain.Render(l.Text)
+	case diag.LineNote, diag.LineHelp:
 		return st.note.Render(l.Text)
 	case diag.LineStack:
 		return st.loc.Render(l.Text)

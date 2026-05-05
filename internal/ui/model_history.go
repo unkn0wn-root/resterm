@@ -119,20 +119,9 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.lastResponse = nil
 		m.lastGRPC = nil
 
-		class := diag.ClassOf(msg.err)
-		level := statusError
-		if class == diag.ClassScript || class == diag.ClassCanceled || canceled {
-			level = statusWarn
-		}
-
-		text := msg.err.Error()
-		if canceled {
-			text = "Request canceled"
-		}
-
 		cmd := m.consumeRequestError(msg.err, msg.explain)
 		m.suppressNextErrorModal = true
-		m.setStatusMessage(statusMsg{text: text, level: level})
+		m.setStatusMessage(requestErrorStatus(canceled))
 		return cmd
 	}
 
@@ -155,6 +144,13 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		)
 	}
 	return cmd
+}
+
+func requestErrorStatus(canceled bool) statusMsg {
+	if canceled {
+		return statusMsg{text: "Request canceled", level: statusInfo}
+	}
+	return statusMsg{text: "Request failed - see Response", level: statusInfo}
 }
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
