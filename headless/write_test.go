@@ -328,7 +328,7 @@ func TestReportWriteJSONIncludesFailureMetadata(t *testing.T) {
 	if err := json.Unmarshal([]byte(out.String()), &got); err != nil {
 		t.Fatalf("unmarshal json: %v", err)
 	}
-	if got.SchemaVersion != "1" {
+	if got.SchemaVersion != "2" {
 		t.Fatalf("unexpected schema version %q", got.SchemaVersion)
 	}
 	if got.Summary.ExitCode != ExitTimeout ||

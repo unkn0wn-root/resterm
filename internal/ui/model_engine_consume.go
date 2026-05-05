@@ -6,8 +6,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -19,7 +19,7 @@ func (m *Model) handleRunReqMsg(msg runReqMsg) tea.Cmd {
 	}
 	if msg.res.Workflow != nil || msg.res.Compare != nil || msg.res.Profile != nil {
 		return m.handleRunErr(
-			errdef.New(errdef.CodeUI, "unexpected aggregate run result on request path"),
+			diag.New(diag.ClassUI, "unexpected aggregate run result on request path"),
 		)
 	}
 	return m.handleResponseMessage(m.responseMsgFromRun(msg.res))
@@ -29,9 +29,7 @@ func (m *Model) handleRunErr(err error) tea.Cmd {
 	if err == nil {
 		return nil
 	}
-	m.lastError = err
-	m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
-	return nil
+	return m.failErr(err)
 }
 
 func (m *Model) responseMsgFromRun(res engine.RequestResult) responseMsg {

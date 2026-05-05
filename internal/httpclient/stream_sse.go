@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -63,7 +63,7 @@ func (c *Client) StartSSE(
 	opts Options,
 ) (*StreamHandle, *Response, error) {
 	if req == nil || req.SSE == nil {
-		return nil, nil, errdef.New(errdef.CodeProtocol, "sse metadata missing")
+		return nil, nil, diag.New(diag.ClassProtocol, "sse metadata missing")
 	}
 
 	streamOpts := req.SSE.Options
@@ -98,7 +98,7 @@ func (c *Client) StartSSE(
 			err = k8s.AnnotateRequestError(err, start, k8sDiag)
 		}
 		cancel()
-		return nil, nil, errdef.Wrap(errdef.CodeProtocol, err, "perform sse request")
+		return nil, nil, diag.WrapAs(diag.ClassProtocol, err, "perform sse request")
 	}
 	if verErr := checkHTTPVersion(httpResp, effectiveOpts.HTTPVersion); verErr != nil {
 		_ = httpResp.Body.Close()
@@ -112,10 +112,10 @@ func (c *Client) StartSSE(
 		closeErr := httpResp.Body.Close()
 		cancel()
 		if readErr != nil {
-			return nil, nil, errdef.Wrap(errdef.CodeProtocol, readErr, "read response body")
+			return nil, nil, diag.WrapAs(diag.ClassProtocol, readErr, "read response body")
 		}
 		if closeErr != nil {
-			return nil, nil, errdef.Wrap(errdef.CodeProtocol, closeErr, "close response body")
+			return nil, nil, diag.WrapAs(diag.ClassProtocol, closeErr, "close response body")
 		}
 		return nil, respFromHTTP(httpReq, httpResp, req, body, time.Since(start)), nil
 	}
@@ -155,7 +155,7 @@ func (c *Client) ExecuteSSE(
 
 func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	if handle == nil || handle.Session == nil {
-		return nil, errdef.New(errdef.CodeProtocol, "sse session not available")
+		return nil, diag.New(diag.ClassProtocol, "sse session not available")
 	}
 
 	session := handle.Session
@@ -198,7 +198,7 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 	transcript := SSETranscript{Events: acc.events, Summary: acc.summary}
 	body, err := json.MarshalIndent(transcript, "", "  ")
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeProtocol, err, "encode sse transcript")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode sse transcript")
 	}
 
 	headers := cloneHdr(handle.Meta.Headers)
@@ -262,7 +262,7 @@ func runSSESession(session *stream.Session, body io.ReadCloser, opts restfile.SS
 		limitReached := opts.MaxBytes > 0 && byteCount >= opts.MaxBytes
 
 		if err != nil && !errors.Is(err, io.EOF) {
-			session.Close(errdef.Wrap(errdef.CodeProtocol, err, "read sse stream"))
+			session.Close(diag.WrapAs(diag.ClassProtocol, err, "read sse stream"))
 			return
 		}
 
@@ -476,10 +476,10 @@ func (b *sseEventBuilder) consume(line string) error {
 		}
 		n, err := strconv.Atoi(value)
 		if err != nil {
-			return errdef.Wrap(errdef.CodeProtocol, err, "parse retry directive")
+			return diag.WrapAs(diag.ClassProtocol, err, "parse retry directive")
 		}
 		if n < 0 {
-			return errdef.New(errdef.CodeProtocol, "retry directive must be non-negative")
+			return diag.New(diag.ClassProtocol, "retry directive must be non-negative")
 		}
 		b.retry = n
 		b.hasRetry = true

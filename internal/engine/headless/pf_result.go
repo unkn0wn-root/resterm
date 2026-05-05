@@ -33,6 +33,7 @@ type profileState struct {
 type profileFailureOutcome struct {
 	reason  string
 	failure runfail.Failure
+	err     error
 }
 
 func profileOutcome(out engine.RequestResult) (bool, profileFailureOutcome) {
@@ -46,7 +47,7 @@ func profileOutcome(out engine.RequestResult) (bool, profileFailureOutcome) {
 	}
 	if out.Err != nil {
 		failure := runfail.FromErrorSource(out.Err, "profile")
-		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
+		return false, profileFailureOutcome{reason: failure.Message, failure: failure, err: out.Err}
 	}
 	if out.Response != nil && out.Response.StatusCode >= 400 {
 		failure := runfail.Assertion(
@@ -57,7 +58,11 @@ func profileOutcome(out engine.RequestResult) (bool, profileFailureOutcome) {
 	}
 	if out.ScriptErr != nil {
 		failure := runfail.Script(out.ScriptErr.Error(), "profile")
-		return false, profileFailureOutcome{reason: failure.Message, failure: failure}
+		return false, profileFailureOutcome{
+			reason:  failure.Message,
+			failure: failure,
+			err:     out.ScriptErr,
+		}
 	}
 	for _, test := range out.Tests {
 		if test.Passed {

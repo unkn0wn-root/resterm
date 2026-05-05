@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -39,9 +39,7 @@ func (c *Client) prepareBody(
 			text := string(data)
 			expanded, err := resolver.ExpandTemplates(text)
 			if err != nil {
-				return bodyPlan{}, errdef.Wrap(
-					errdef.CodeProtocol,
-					err,
+				return bodyPlan{}, diag.WrapAsf(diag.ClassProtocol, err,
 					"expand body file templates",
 				)
 			}
@@ -59,7 +57,7 @@ func (c *Client) prepareBody(
 			var err error
 			expanded, err = resolver.ExpandTemplates(req.Body.Text)
 			if err != nil {
-				return bodyPlan{}, errdef.Wrap(errdef.CodeProtocol, err, "expand body template")
+				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body template")
 			}
 		}
 		processed, err := c.injectBodyIncludes(expanded, lookup)
@@ -132,13 +130,13 @@ func (c *Client) gqlQuery(
 		if expanded, expandErr := resolver.ExpandTemplates(query); expandErr == nil {
 			query = expanded
 		} else {
-			return "", errdef.Wrap(errdef.CodeProtocol, expandErr, "expand graphql query")
+			return "", diag.WrapAs(diag.ClassProtocol, expandErr, "expand graphql query")
 		}
 	}
 
 	query = strings.TrimSpace(query)
 	if query == "" {
-		return "", errdef.New(errdef.CodeProtocol, "graphql query is empty")
+		return "", diag.New(diag.ClassProtocol, "graphql query is empty")
 	}
 
 	return query, nil
@@ -151,7 +149,7 @@ func gqlOpName(gql *restfile.GraphQLBody, resolver *vars.Resolver) (string, erro
 	}
 	expanded, err := resolver.ExpandTemplates(op)
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeProtocol, err, "expand graphql operation name")
+		return "", diag.WrapAs(diag.ClassProtocol, err, "expand graphql operation name")
 	}
 	return strings.TrimSpace(expanded), nil
 }
@@ -180,7 +178,7 @@ func (c *Client) gqlVars(
 		if expanded, expandErr := resolver.ExpandTemplates(raw); expandErr == nil {
 			raw = strings.TrimSpace(expanded)
 		} else {
-			return nil, "", errdef.Wrap(errdef.CodeProtocol, expandErr, "expand graphql variables")
+			return nil, "", diag.WrapAs(diag.ClassProtocol, expandErr, "expand graphql variables")
 		}
 	}
 
@@ -191,7 +189,7 @@ func (c *Client) gqlVars(
 
 	normalised, marshalErr := json.Marshal(parsed)
 	if marshalErr != nil {
-		return nil, "", errdef.Wrap(errdef.CodeProtocol, marshalErr, "encode graphql variables")
+		return nil, "", diag.WrapAs(diag.ClassProtocol, marshalErr, "encode graphql variables")
 	}
 	return parsed, string(normalised), nil
 }
@@ -206,16 +204,16 @@ func buildGraphQLURL(
 		if expanded, expandErr := resolver.ExpandTemplates(expandedURL); expandErr == nil {
 			expandedURL = strings.TrimSpace(expanded)
 		} else {
-			return "", errdef.Wrap(errdef.CodeProtocol, expandErr, "expand graphql request url")
+			return "", diag.WrapAs(diag.ClassProtocol, expandErr, "expand graphql request url")
 		}
 	}
 	if expandedURL == "" {
-		return "", errdef.New(errdef.CodeProtocol, "graphql request url is empty")
+		return "", diag.New(diag.ClassProtocol, "graphql request url is empty")
 	}
 
 	parsedURL, urlErr := url.Parse(expandedURL)
 	if urlErr != nil {
-		return "", errdef.Wrap(errdef.CodeProtocol, urlErr, "parse graphql request url")
+		return "", diag.WrapAs(diag.ClassProtocol, urlErr, "parse graphql request url")
 	}
 
 	values := parsedURL.Query()
@@ -254,7 +252,7 @@ func buildGraphQLPayload(
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeProtocol, err, "encode graphql payload")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode graphql payload")
 	}
 	return bytes.NewReader(body), nil
 }
@@ -287,17 +285,17 @@ func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
 	decoder.UseNumber()
 	var payload map[string]interface{}
 	if err := decoder.Decode(&payload); err != nil {
-		return nil, errdef.Wrap(errdef.CodeProtocol, err, "parse graphql variables")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse graphql variables")
 	}
 
 	if err := decoder.Decode(new(interface{})); err != io.EOF {
 		if err == nil {
-			return nil, errdef.New(
-				errdef.CodeProtocol,
+			return nil, diag.Newf(
+				diag.ClassProtocol,
 				"unexpected trailing data in graphql variables",
 			)
 		}
-		return nil, errdef.Wrap(errdef.CodeProtocol, err, "parse graphql variables")
+		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse graphql variables")
 	}
 	return payload, nil
 }

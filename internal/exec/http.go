@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -84,7 +84,7 @@ type Runner struct {
 func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	if in.Client == nil {
 		return HTTPResult{
-			Err:      errdef.New(errdef.CodeProtocol, "http client is not initialised"),
+			Err:      diag.New(diag.ClassProtocol, "http client is not initialised"),
 			Decision: "HTTP request failed",
 		}
 	}
@@ -93,14 +93,14 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 	}
 	if in.Req == nil {
 		return HTTPResult{
-			Err:      errdef.New(errdef.CodeProtocol, "request is nil"),
+			Err:      diag.New(diag.ClassProtocol, "request is nil"),
 			Decision: "HTTP request failed",
 		}
 	}
 	if in.Req.WebSocket != nil && len(in.Req.WebSocket.Steps) == 0 {
 		return HTTPResult{
-			Err: errdef.New(
-				errdef.CodeProtocol,
+			Err: diag.New(
+				diag.ClassProtocol,
 				"interactive websocket execution requires caller-managed session handling",
 			),
 			Decision: "WebSocket request failed",
@@ -170,7 +170,7 @@ func (r Runner) RunHTTP(in HTTPInput) HTTPResult {
 
 	streamInfo, streamErr := streamInfoFromResponse(in.Req, resp)
 	if streamErr != nil {
-		res.Err = errdef.Wrap(errdef.CodeProtocol, streamErr, "decode stream transcript")
+		res.Err = diag.WrapAs(diag.ClassProtocol, streamErr, "decode stream transcript")
 		res.Decision = "Stream decoding failed"
 		return res
 	}

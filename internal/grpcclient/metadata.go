@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -101,9 +101,9 @@ func normalizeMetaKey(key string, src metaSrc) (string, error) {
 
 func metaKeyErr(src metaSrc, key string, msg string) error {
 	if src == metaSrcHeader {
-		return errdef.New(errdef.CodeProtocol, "grpc metadata key %q from headers %s", key, msg)
+		return diag.Newf(diag.ClassProtocol, "grpc metadata key %q from headers %s", key, msg)
 	}
-	return errdef.New(errdef.CodeProtocol, "grpc metadata key %q %s", key, msg)
+	return diag.Newf(diag.ClassProtocol, "grpc metadata key %q %s", key, msg)
 }
 
 func validMetaKey(key string) bool {

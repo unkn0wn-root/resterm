@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 const (
@@ -44,11 +44,11 @@ func IsDotEnvPath(path string) bool {
 func loadDotEnvEnvironment(path string) (envs EnvironmentSet, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "open env file %s", path)
+		return nil, diag.WrapAsf(diag.ClassFilesystem, err, "open env file %s", path)
 	}
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
-			err = errdef.Wrap(errdef.CodeFilesystem, closeErr, "close env file %s", path)
+			err = diag.WrapAsf(diag.ClassFilesystem, closeErr, "close env file %s", path)
 		}
 	}()
 
@@ -106,8 +106,8 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 		}
 		if isWorkspaceKey(key) {
 			if workspaceSeen {
-				return nil, errdef.New(
-					errdef.CodeParse,
+				return nil, diag.Newf(
+					diag.ClassParse,
 					"dotenv line %d: workspace defined multiple times",
 					lineNumber,
 				)
@@ -117,7 +117,7 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 		values[key] = finalValue
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read env file %s", path)
+		return nil, diag.WrapAsf(diag.ClassFilesystem, err, "read env file %s", path)
 	}
 
 	return values, nil
@@ -136,8 +136,8 @@ func parseDotEnvAssignment(line string, lineNumber int) (string, string, error) 
 
 	idx := strings.IndexRune(trimmed, '=')
 	if idx < 0 {
-		return "", "", errdef.New(
-			errdef.CodeParse,
+		return "", "", diag.Newf(
+			diag.ClassParse,
 			"dotenv line %d: expected KEY=value",
 			lineNumber,
 		)
@@ -145,7 +145,7 @@ func parseDotEnvAssignment(line string, lineNumber int) (string, string, error) 
 
 	key := strings.TrimSpace(trimmed[:idx])
 	if key == "" {
-		return "", "", errdef.New(errdef.CodeParse, "dotenv line %d: missing key", lineNumber)
+		return "", "", diag.Newf(diag.ClassParse, "dotenv line %d: missing key", lineNumber)
 	}
 
 	value := trimmed[idx+1:]
@@ -181,8 +181,8 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 		ch := input[i]
 		if ch == '\\' {
 			if i+1 >= len(input) {
-				return "", "", errdef.New(
-					errdef.CodeParse,
+				return "", "", diag.Newf(
+					diag.ClassParse,
 					"dotenv line %d: unfinished escape",
 					lineNumber,
 				)
@@ -200,8 +200,8 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 			remainder := input[i+1:]
 			trimmed := strings.TrimSpace(remainder)
 			if trimmed != "" && trimmed[0] != '#' && trimmed[0] != ';' {
-				return "", "", errdef.New(
-					errdef.CodeParse,
+				return "", "", diag.Newf(
+					diag.ClassParse,
 					"dotenv line %d: unexpected content after quoted value",
 					lineNumber,
 				)
@@ -210,8 +210,8 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 		}
 		b.WriteByte(ch)
 	}
-	return "", "", errdef.New(
-		errdef.CodeParse,
+	return "", "", diag.Newf(
+		diag.ClassParse,
 		"dotenv line %d: unterminated quoted value",
 		lineNumber,
 	)
@@ -256,8 +256,8 @@ func expandDotEnvValue(value string, resolved map[string]string, lineNumber int)
 		if value[i+1] == '{' {
 			end := strings.IndexByte(value[i+2:], '}')
 			if end < 0 {
-				return "", errdef.New(
-					errdef.CodeParse,
+				return "", diag.Newf(
+					diag.ClassParse,
 					"dotenv line %d: missing closing brace for ${",
 					lineNumber,
 				)
@@ -265,8 +265,8 @@ func expandDotEnvValue(value string, resolved map[string]string, lineNumber int)
 			end += i + 2
 			name := strings.TrimSpace(value[i+2 : end])
 			if name == "" {
-				return "", errdef.New(
-					errdef.CodeParse,
+				return "", diag.Newf(
+					diag.ClassParse,
 					"dotenv line %d: empty variable name",
 					lineNumber,
 				)
@@ -309,8 +309,8 @@ func resolveDotEnvRef(name string, resolved map[string]string, lineNumber int) (
 	if envValue, ok := os.LookupEnv(strings.ToUpper(name)); ok {
 		return envValue, nil
 	}
-	return "", errdef.New(
-		errdef.CodeParse,
+	return "", diag.Newf(
+		diag.ClassParse,
 		"dotenv line %d: variable %q is not defined",
 		lineNumber,
 		name,

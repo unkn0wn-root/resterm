@@ -1,10 +1,11 @@
 package settings
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
@@ -75,6 +76,8 @@ func applyTLSSettings(
 	if cfg == nil || len(settings) == 0 {
 		return nil
 	}
+	prefixLower := strings.ToLower(strings.TrimSpace(prefix))
+	component := settingsComponent(prefixLower)
 	resolve := func(val string, label string) (string, error) {
 		trimmed := strings.TrimSpace(val)
 		if trimmed == "" {
@@ -85,11 +88,15 @@ func applyTLSSettings(
 		}
 		expanded, err := resolver.ExpandTemplates(trimmed)
 		if err != nil {
-			return "", errdef.Wrap(errdef.CodeHTTP, err, "expand %s", label)
+			return "", diag.WrapAs(
+				diag.ClassProtocol,
+				err,
+				"expand "+label,
+				diag.WithComponent(component),
+			)
 		}
 		return strings.TrimSpace(expanded), nil
 	}
-	prefixLower := strings.ToLower(strings.TrimSpace(prefix))
 	norm := normalize(settings)
 
 	if rawMode := firstSetting(norm, prefixLower+"-root-mode"); rawMode != "" {
@@ -100,11 +107,14 @@ func applyTLSSettings(
 		case string(tlsconfig.RootModeReplace):
 			cfg.RootMode = tlsconfig.RootModeReplace
 		default:
-			return errdef.New(
-				errdef.CodeHTTP,
-				"invalid %s-root-mode %q (use append or replace)",
-				prefixLower,
-				rawMode,
+			return diag.New(
+				diag.ClassProtocol,
+				fmt.Sprintf(
+					"invalid %s-root-mode %q (use append or replace)",
+					prefixLower,
+					rawMode,
+				),
+				diag.WithComponent(component),
 			)
 		}
 	}
@@ -152,6 +162,15 @@ func applyTLSSettings(
 		}
 	}
 	return nil
+}
+
+func settingsComponent(prefix string) diag.Component {
+	switch prefix {
+	case "grpc":
+		return diag.ComponentGRPC
+	default:
+		return diag.ComponentHTTP
+	}
 }
 
 func normalize(settings map[string]string) map[string]string {

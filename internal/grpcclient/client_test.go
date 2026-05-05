@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -72,8 +72,8 @@ func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "cannot be combined") {
 		t.Fatalf("expected transport conflict error, got %v", err)
 	}
-	if got := errdef.CodeOf(err); got != errdef.CodeRoute {
-		t.Fatalf("transport conflict code = %q, want %q", got, errdef.CodeRoute)
+	if got := diag.ClassOf(err); got != diag.ClassRoute {
+		t.Fatalf("transport conflict code = %q, want %q", got, diag.ClassRoute)
 	}
 }
 

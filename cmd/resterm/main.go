@@ -21,6 +21,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/config"
 	curl "github.com/unkn0wn-root/resterm/internal/curl/importer"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/generator"
@@ -40,7 +41,7 @@ var (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		if msg := str.Trim(err.Error()); msg != "" {
+		if msg := diag.Render(err); msg != "" {
 			_, _ = fmt.Fprintln(os.Stderr, msg)
 		}
 		os.Exit(cli.ExitCode(err))

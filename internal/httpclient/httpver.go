@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 )
 
@@ -20,7 +20,7 @@ func checkHTTPVersion(resp *http.Response, v httpver.Version) error {
 		if strings.TrimSpace(proto) == "" {
 			proto = "unknown"
 		}
-		return errdef.New(errdef.CodeProtocol, "expected HTTP/2 response, got %s", proto)
+		return diag.Newf(diag.ClassProtocol, "expected HTTP/2 response, got %s", proto)
 	}
 	return nil
 }
@@ -33,8 +33,8 @@ func checkHTTPVersionRequest(req *http.Request, v httpver.Version) error {
 		return nil
 	}
 	if strings.EqualFold(req.URL.Scheme, "http") {
-		return errdef.New(
-			errdef.CodeProtocol,
+		return diag.Newf(
+			diag.ClassProtocol,
 			"http-version=2 requires https (h2c is not supported)",
 		)
 	}
@@ -44,13 +44,13 @@ func checkHTTPVersionRequest(req *http.Request, v httpver.Version) error {
 func checkWebSocketHTTPVersion(v httpver.Version) error {
 	switch v {
 	case httpver.V10:
-		return errdef.New(
-			errdef.CodeProtocol,
+		return diag.Newf(
+			diag.ClassProtocol,
 			"http-version=1.0 is not supported for WebSocket requests",
 		)
 	case httpver.V2:
-		return errdef.New(
-			errdef.CodeProtocol,
+		return diag.Newf(
+			diag.ClassProtocol,
 			"http-version=2 is not supported for WebSocket requests",
 		)
 	default:

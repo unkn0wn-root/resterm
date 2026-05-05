@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 const (
@@ -113,7 +113,7 @@ var migs = []mig{
 func applyPragmas(db *sql.DB) error {
 	for _, q := range pragmas {
 		if _, err := db.Exec(q); err != nil {
-			return errdef.Wrap(errdef.CodeHistory, err, "apply history pragma")
+			return diag.WrapAs(diag.ClassHistory, err, "apply history pragma")
 		}
 	}
 	return nil
@@ -122,18 +122,18 @@ func applyPragmas(db *sql.DB) error {
 func schemaVersion(db *sql.DB) (int, error) {
 	var v int
 	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&v); err != nil {
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "read history schema version")
+		return 0, diag.WrapAs(diag.ClassHistory, err, "read history schema version")
 	}
 	return v, nil
 }
 
 func setSchemaVersion(tx *sql.Tx, v int) error {
 	if v < 0 {
-		return errdef.New(errdef.CodeHistory, "invalid history schema version: %d", v)
+		return diag.Newf(diag.ClassHistory, "invalid history schema version: %d", v)
 	}
 	q := "PRAGMA user_version = " + strconv.Itoa(v)
 	if _, err := tx.Exec(q); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "set history schema version")
+		return diag.WrapAs(diag.ClassHistory, err, "set history schema version")
 	}
 	return nil
 }
@@ -153,8 +153,8 @@ func migrateSchema(db *sql.DB) error {
 	// Opening a database created by a newer build is rejected early.
 	// Continuing would risk silent damage from unknown schema changes.
 	if v > schemaVer {
-		return errdef.New(
-			errdef.CodeHistory,
+		return diag.Newf(
+			diag.ClassHistory,
 			"history schema version %d is newer than supported %d",
 			v,
 			schemaVer,
@@ -172,8 +172,8 @@ func migrateSchema(db *sql.DB) error {
 	}
 
 	if v != schemaVer {
-		return errdef.New(
-			errdef.CodeHistory,
+		return diag.Newf(
+			diag.ClassHistory,
 			"history schema migration incomplete: got %d want %d",
 			v,
 			schemaVer,
@@ -187,15 +187,13 @@ func applyMigration(db *sql.DB, m mig) error {
 	// for that step is visible, or none of it is.
 	tx, err := db.BeginTx(context.Background(), nil)
 	if err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "begin history schema migration tx")
+		return diag.WrapAs(diag.ClassHistory, err, "begin history schema migration tx")
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	for _, q := range m.qs {
 		if _, err := tx.Exec(q); err != nil {
-			return errdef.Wrap(
-				errdef.CodeHistory,
-				err,
+			return diag.WrapAsf(diag.ClassHistory, err,
 				"apply history schema migration v%d",
 				m.ver,
 			)
@@ -205,7 +203,7 @@ func applyMigration(db *sql.DB, m mig) error {
 		return err
 	}
 	if err := tx.Commit(); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "commit history schema migration tx")
+		return diag.WrapAs(diag.ClassHistory, err, "commit history schema migration tx")
 	}
 	return nil
 }
@@ -222,7 +220,7 @@ func checkDB(db *sql.DB, full bool) error {
 
 	rs, err := db.Query(q)
 	if err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "run history integrity check")
+		return diag.WrapAs(diag.ClassHistory, err, "run history integrity check")
 	}
 	defer func() { _ = rs.Close() }()
 
@@ -230,26 +228,22 @@ func checkDB(db *sql.DB, full bool) error {
 	for rs.Next() {
 		var v string
 		if err := rs.Scan(&v); err != nil {
-			return errdef.Wrap(errdef.CodeHistory, err, "scan history integrity check")
+			return diag.WrapAs(diag.ClassHistory, err, "scan history integrity check")
 		}
 		r := parseIntegrityCheckResult(v)
 		if r.status == integrityCheckStatusOK {
 			ok = true
 			continue
 		}
-		return errdef.Wrap(
-			errdef.CodeHistory,
-			&integrityCheckError{Check: checkName, Result: r.detail},
+		return diag.WrapAsf(diag.ClassHistory, &integrityCheckError{Check: checkName, Result: r.detail},
 			"run history integrity check",
 		)
 	}
 	if err := rs.Err(); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "iterate history integrity check")
+		return diag.WrapAs(diag.ClassHistory, err, "iterate history integrity check")
 	}
 	if !ok {
-		return errdef.Wrap(
-			errdef.CodeHistory,
-			&integrityCheckError{Check: checkName, Result: "empty result"},
+		return diag.WrapAsf(diag.ClassHistory, &integrityCheckError{Check: checkName, Result: "empty result"},
 			"run history integrity check",
 		)
 	}

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/curl"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -25,7 +25,7 @@ func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) 
 
 	if len(out.Query) > 0 {
 		if err := applyPreRequestQuery(req, out.Query); err != nil {
-			return errdef.Wrap(errdef.CodeScript, err, "invalid url after script")
+			return diag.WrapAs(diag.ClassScript, err, "invalid url after script")
 		}
 	}
 	if out.Headers != nil {

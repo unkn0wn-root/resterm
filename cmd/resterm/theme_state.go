@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 
 	"github.com/unkn0wn-root/resterm/internal/config"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -55,7 +55,7 @@ func loadThemeState() (themeState, error) {
 		st.def = def
 		st.active = def.Key
 		st.settings.DefaultTheme = def.Key
-		return st, errdef.Join(errdef.CodeConfig, errs...)
+		return st, diag.Join(diag.ClassConfig, "load theme state", errs...)
 	}
 
 	if st.settings.DefaultTheme != "" {
@@ -73,5 +73,5 @@ func loadThemeState() (themeState, error) {
 		st.active = st.def.Key
 	}
 	st.settings.DefaultTheme = ""
-	return st, errdef.Join(errdef.CodeConfig, errs...)
+	return st, diag.Join(diag.ClassConfig, "load theme state", errs...)
 }

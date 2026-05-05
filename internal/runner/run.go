@@ -131,6 +131,7 @@ type ProfileFailure struct {
 	Status     string
 	StatusCode int
 	Duration   time.Duration
+	Err        error
 	// Failure carries the structured classification from the profile collector.
 	Failure runfail.Failure
 }
@@ -507,6 +508,7 @@ func profileFailures(src []engine.ProfileFailure) []ProfileFailure {
 			Status:     failure.Status,
 			StatusCode: failure.StatusCode,
 			Duration:   failure.Duration,
+			Err:        failure.Err,
 			Failure:    failure.Failure,
 		})
 	}

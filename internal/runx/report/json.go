@@ -67,11 +67,32 @@ type jsonGRPC struct {
 }
 
 type jsonFailure struct {
-	Code     string `json:"code,omitempty"`
-	Category string `json:"category,omitempty"`
-	ExitCode int    `json:"exitCode,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Source   string `json:"source,omitempty"`
+	Code     string             `json:"code,omitempty"`
+	Category string             `json:"category,omitempty"`
+	ExitCode int                `json:"exitCode,omitempty"`
+	Message  string             `json:"message,omitempty"`
+	Source   string             `json:"source,omitempty"`
+	Chain    []jsonFailureChain `json:"chain,omitempty"`
+	Frames   []jsonFailureFrame `json:"frames,omitempty"`
+}
+
+type jsonFailureChain struct {
+	Code      string             `json:"code,omitempty"`
+	Component string             `json:"component,omitempty"`
+	Kind      string             `json:"kind,omitempty"`
+	Message   string             `json:"message,omitempty"`
+	Children  []jsonFailureChain `json:"children,omitempty"`
+}
+
+type jsonFailureFrame struct {
+	Name string          `json:"name,omitempty"`
+	Pos  *jsonFailurePos `json:"pos,omitempty"`
+}
+
+type jsonFailurePos struct {
+	Path string `json:"path,omitempty"`
+	Line int    `json:"line,omitempty"`
+	Col  int    `json:"col,omitempty"`
 }
 
 type jsonTest struct {
@@ -235,7 +256,7 @@ func (res Result) json() jsonResult {
 		SkipReason:      res.SkipReason,
 		Error:           res.Error,
 		ScriptError:     res.ScriptError,
-		Failure:         res.Failure.json(),
+		Failure:         res.Failure.json(res.Error, res.ScriptError),
 		DurationMs:      durMS(res.Duration),
 		HTTP:            res.HTTP.json(),
 		GRPC:            res.GRPC.json(),
@@ -279,7 +300,7 @@ func (step Step) json() jsonStep {
 		SkipReason:      step.SkipReason,
 		Error:           step.Error,
 		ScriptError:     step.ScriptError,
-		Failure:         step.Failure.json(),
+		Failure:         step.Failure.json(step.Error, step.ScriptError),
 		DurationMs:      durMS(step.Duration),
 		HTTP:            step.HTTP.json(),
 		GRPC:            step.GRPC.json(),
@@ -328,17 +349,64 @@ func (grpc *GRPC) json() *jsonGRPC {
 	}
 }
 
-func (failure *Failure) json() *jsonFailure {
+func (failure *Failure) json(duplicates ...string) *jsonFailure {
 	if failure == nil {
 		return nil
+	}
+	message := failure.Message
+	for _, duplicate := range duplicates {
+		if message != "" && message == duplicate {
+			message = ""
+			break
+		}
 	}
 	return &jsonFailure{
 		Code:     string(failure.Code),
 		Category: string(failure.Category),
 		ExitCode: failure.ExitCode,
-		Message:  failure.Message,
+		Message:  message,
 		Source:   failure.Source,
+		Chain:    failureChainJSON(failure.Chain),
+		Frames:   failureFramesJSON(failure.Frames),
 	}
+}
+
+func failureChainJSON(src []FailureChain) []jsonFailureChain {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]jsonFailureChain, 0, len(src))
+	for _, entry := range src {
+		out = append(out, jsonFailureChain{
+			Code:      entry.Code,
+			Component: entry.Component,
+			Kind:      entry.Kind,
+			Message:   entry.Message,
+			Children:  failureChainJSON(entry.Children),
+		})
+	}
+	return out
+}
+
+func failureFramesJSON(src []FailureFrame) []jsonFailureFrame {
+	if len(src) == 0 {
+		return nil
+	}
+	out := make([]jsonFailureFrame, 0, len(src))
+	for _, frame := range src {
+		out = append(out, jsonFailureFrame{
+			Name: frame.Name,
+			Pos:  failurePosJSON(frame.Pos),
+		})
+	}
+	return out
+}
+
+func failurePosJSON(pos FailurePos) *jsonFailurePos {
+	if pos == (FailurePos{}) {
+		return nil
+	}
+	return &jsonFailurePos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
 }
 
 func (test Test) json() jsonTest {
@@ -431,7 +499,7 @@ func (fail ProfileFailure) json() jsonProfileFailure {
 		Status:     fail.Status,
 		StatusCode: fail.StatusCode,
 		DurationMs: durMS(fail.Duration),
-		Failure:    fail.Failure.json(),
+		Failure:    fail.Failure.json(fail.Reason),
 	}
 }
 

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 )
 
 var shellNames = map[string]struct{}{
@@ -69,15 +69,15 @@ func parsedConfig(cfg Config) (Config, error) {
 func parseArgv(raw string) ([]string, error) {
 	src := trim(raw)
 	if src == "" {
-		return nil, errdef.New(errdef.CodeAuth, "@auth command requires argv")
+		return nil, diag.New(diag.ClassAuth, "@auth command requires argv")
 	}
 
 	var argv []string
 	if err := json.Unmarshal([]byte(src), &argv); err != nil {
-		return nil, errdef.Wrap(errdef.CodeAuth, err, "decode command argv")
+		return nil, diag.WrapAs(diag.ClassAuth, err, "decode command argv")
 	}
 	if len(argv) == 0 {
-		return nil, errdef.New(errdef.CodeAuth, "command argv must not be empty")
+		return nil, diag.New(diag.ClassAuth, "command argv must not be empty")
 	}
 	return argv, nil
 }
@@ -89,13 +89,13 @@ func parseDur(raw, name string) (time.Duration, error) {
 	}
 	d, ok := duration.Parse(value)
 	if !ok {
-		return 0, errdef.New(errdef.CodeAuth, "invalid %s duration %q", name, raw)
+		return 0, diag.Newf(diag.ClassAuth, "invalid %s duration %q", name, raw)
 	}
 	if d < 0 {
-		return 0, errdef.New(errdef.CodeAuth, "%s must not be negative", name)
+		return 0, diag.Newf(diag.ClassAuth, "%s must not be negative", name)
 	}
 	if d == 0 {
-		return 0, errdef.New(errdef.CodeAuth, "%s must be greater than zero", name)
+		return 0, diag.Newf(diag.ClassAuth, "%s must be greater than zero", name)
 	}
 	return d, nil
 }
@@ -108,7 +108,7 @@ func validate(cfg Config) error {
 		return missingArgvError(cfg)
 	}
 	if effectiveFormat(cfg) == FormatJSON && cfg.TokenPath == "" {
-		return errdef.New(errdef.CodeAuth, "token_path is required for format=json")
+		return diag.New(diag.ClassAuth, "token_path is required for format=json")
 	}
 	return nil
 }
@@ -118,11 +118,11 @@ func validateParsed(cfg Config) error {
 		return missingArgvError(cfg)
 	}
 	if len(cfg.Argv) > 0 && cfg.Argv[0] == "" {
-		return errdef.New(errdef.CodeAuth, "command argv[0] must not be empty")
+		return diag.New(diag.ClassAuth, "command argv[0] must not be empty")
 	}
 	if len(cfg.Argv) > 0 && isShell(cfg.Argv[0]) {
-		return errdef.New(
-			errdef.CodeAuth,
+		return diag.Newf(
+			diag.ClassAuth,
 			"@auth command does not allow shell front-end %q",
 			filepath.Base(cfg.Argv[0]),
 		)
@@ -130,16 +130,16 @@ func validateParsed(cfg Config) error {
 	switch effectiveFormat(cfg) {
 	case FormatText, FormatJSON:
 	default:
-		return errdef.New(errdef.CodeAuth, "unsupported command auth format %q", cfg.Format)
+		return diag.Newf(diag.ClassAuth, "unsupported command auth format %q", cfg.Format)
 	}
 	if cfg.TTL < 0 {
-		return errdef.New(errdef.CodeAuth, "ttl must not be negative")
+		return diag.New(diag.ClassAuth, "ttl must not be negative")
 	}
 	if cfg.Timeout < 0 {
-		return errdef.New(errdef.CodeAuth, "timeout must not be negative")
+		return diag.New(diag.ClassAuth, "timeout must not be negative")
 	}
 	if cfg.TTL > 0 && !cfg.hasCacheKey() {
-		return errdef.New(errdef.CodeAuth, "ttl requires cache_key")
+		return diag.New(diag.ClassAuth, "ttl requires cache_key")
 	}
 	return nil
 }
@@ -157,12 +157,12 @@ func effectiveFormatValue(raw Format) Format {
 
 func missingArgvError(cfg Config) error {
 	if cfg.hasCacheKey() {
-		return errdef.New(
-			errdef.CodeAuth,
+		return diag.Newf(
+			diag.ClassAuth,
 			"@auth command requires argv (include it once per cache_key to seed the cache)",
 		)
 	}
-	return errdef.New(errdef.CodeAuth, "@auth command requires argv")
+	return diag.New(diag.ClassAuth, "@auth command requires argv")
 }
 
 func isShell(cmd string) bool {

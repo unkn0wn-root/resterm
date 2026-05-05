@@ -14,6 +14,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
@@ -139,6 +140,17 @@ func TestParseRunDocReturnsParseError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "parse error") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	rendered := diag.Render(err)
+	for _, want := range []string{
+		"error[parse]",
+		"--> broken.http:1:1",
+		"   1 | # @k8s namespace=default",
+		"note: Fix the request file parse error before running.",
+	} {
+		if !strings.Contains(rendered, want) {
+			t.Fatalf("expected diagnostic rendering to contain %q, got %q", want, rendered)
+		}
 	}
 }
 

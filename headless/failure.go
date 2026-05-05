@@ -1,6 +1,9 @@
 package headless
 
-import "github.com/unkn0wn-root/resterm/internal/runx/fail"
+import (
+	"github.com/unkn0wn-root/resterm/internal/runx/fail"
+	"github.com/unkn0wn-root/resterm/internal/runx/report"
+)
 
 // ExitCodeMode selects whether Report.ExitCode returns detailed classified
 // codes or the legacy pass/fail summary codes.
@@ -74,7 +77,18 @@ type Failure struct {
 	ExitCode int             `json:"exitCode,omitempty"`
 	Message  string          `json:"message,omitempty"`
 	Source   string          `json:"source,omitempty"`
+	Chain    []FailureChain  `json:"chain,omitempty"`
+	Frames   []FailureFrame  `json:"frames,omitempty"`
 }
+
+// FailureChain contains one context or cause entry in a failure chain.
+type FailureChain = runfmt.FailureChain
+
+// FailureFrame contains one runtime stack frame attached to a failure.
+type FailureFrame = runfmt.FailureFrame
+
+// FailurePos identifies a source location in a failure.
+type FailurePos = runfmt.FailurePos
 
 // ExitCode returns the report exit code for the requested mode.
 func (r *Report) ExitCode(mode ExitCodeMode) int {

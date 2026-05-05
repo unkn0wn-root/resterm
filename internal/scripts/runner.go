@@ -15,7 +15,7 @@ import (
 	"github.com/dop251/goja"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -102,14 +102,14 @@ func (r *Runner) RunPreRequest(
 
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
-			return result, errdef.Wrap(errdef.CodeScript, err, "pre-request script %d", idx+1)
+			return result, diag.WrapAsf(diag.ClassScript, err, "pre-request script %d", idx+1)
 		}
 		if script == "" {
 			continue
 		}
 
 		if err := r.executePreRequestScript(ctx, script, input, &result); err != nil {
-			return result, errdef.Wrap(errdef.CodeScript, err, "pre-request script %d", idx+1)
+			return result, diag.WrapAsf(diag.ClassScript, err, "pre-request script %d", idx+1)
 		}
 	}
 
@@ -146,7 +146,7 @@ func (r *Runner) RunTests(
 
 		script, err := r.loadScript(block, input.BaseDir)
 		if err != nil {
-			return aggregated, changes, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
+			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
 		if script == "" {
 			continue
@@ -154,7 +154,7 @@ func (r *Runner) RunTests(
 
 		results, globals, err := r.executeTestScript(script, input)
 		if err != nil {
-			return aggregated, changes, errdef.Wrap(errdef.CodeScript, err, "test script %d", idx+1)
+			return aggregated, changes, diag.WrapAsf(diag.ClassScript, err, "test script %d", idx+1)
 		}
 
 		aggregated = append(aggregated, results...)
@@ -200,15 +200,15 @@ func (r *Runner) executePreRequestScript(
 
 	pre := newPreRequestAPI(output, input)
 	if err := bindCommon(vm); err != nil {
-		return errdef.Wrap(errdef.CodeScript, err, "bind console api")
+		return diag.WrapAs(diag.ClassScript, err, "bind console api")
 	}
 
 	if err := vm.Set("request", pre.requestAPI()); err != nil {
-		return errdef.Wrap(errdef.CodeScript, err, "bind request api")
+		return diag.WrapAs(diag.ClassScript, err, "bind request api")
 	}
 
 	if err := vm.Set("vars", pre.varsAPI()); err != nil {
-		return errdef.Wrap(errdef.CodeScript, err, "bind vars api")
+		return diag.WrapAs(diag.ClassScript, err, "bind vars api")
 	}
 
 	_, err := vm.RunString(script)
@@ -222,7 +222,7 @@ func (r *Runner) executePreRequestScript(
 				return ctx.Err()
 			}
 		}
-		return errdef.Wrap(errdef.CodeScript, err, "execute pre-request script")
+		return diag.WrapAs(diag.ClassScript, err, "execute pre-request script")
 	}
 	return nil
 }
@@ -238,44 +238,44 @@ func (r *Runner) executeTestScript(
 	streamBinding := newStreamAPI(vm, streamInfo)
 
 	if err := bindCommon(vm); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind console api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind console api")
 	}
 
 	if err := vm.Set("tests", tester.testsAPI()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind tests api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind tests api")
 	}
 
 	if err := vm.Set("client", tester.clientAPI()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind client api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind client api")
 	}
 
 	if err := vm.Set("resterm", tester.clientAPI()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind resterm alias")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind resterm alias")
 	}
 
 	if err := vm.Set("response", tester.responseAPI()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind response api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind response api")
 	}
 
 	if err := vm.Set("vars", tester.varsAPI()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind vars api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind vars api")
 	}
 
 	if err := vm.Set("stream", streamBinding.object()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind stream api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind stream api")
 	}
 
 	if err := vm.Set("trace", tester.traceAPI()); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "bind trace api")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "bind trace api")
 	}
 
 	_, err := vm.RunString(script)
 	if err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "execute test script")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "execute test script")
 	}
 
 	if err := streamBinding.replay(); err != nil {
-		return nil, nil, errdef.Wrap(errdef.CodeScript, err, "execute stream callbacks")
+		return nil, nil, diag.WrapAs(diag.ClassScript, err, "execute stream callbacks")
 	}
 	return tester.results(), tester.globalChanges(), nil
 }
@@ -314,7 +314,7 @@ func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string,
 
 	data, err := r.fs.ReadFile(path)
 	if err != nil {
-		return "", errdef.Wrap(errdef.CodeFilesystem, err, "read script file %s", path)
+		return "", diag.WrapAsf(diag.ClassFilesystem, err, "read script file %s", path)
 	}
 	return normalizeScript(string(data)), nil
 }

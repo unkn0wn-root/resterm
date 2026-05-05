@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -120,6 +121,10 @@ func TestRunInvalidFlagReturnsCodeTwo(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "flag provided but not defined") {
 		t.Fatalf("unexpected parse error: %v", err)
+	}
+	rendered := diag.Render(err)
+	if !strings.Contains(rendered, "error[unknown]: flag provided but not defined") {
+		t.Fatalf("expected diagnostic stderr rendering, got %q", rendered)
 	}
 }
 

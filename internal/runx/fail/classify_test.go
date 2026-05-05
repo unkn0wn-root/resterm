@@ -8,7 +8,7 @@ import (
 	"net"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 func TestFromErrorTypedFailures(t *testing.T) {
@@ -44,82 +44,80 @@ func TestFromErrorTypedFailures(t *testing.T) {
 		},
 		{
 			name: "script",
-			err:  errdef.Wrap(errdef.CodeScript, errors.New("boom"), "pre-request"),
+			err:  diag.WrapAs(diag.ClassScript, errors.New("boom"), "pre-request"),
 			code: CodeScript,
 			exit: ExitScript,
 		},
 		{
-			name: "errdef timeout",
-			err:  errdef.New(errdef.CodeTimeout, "operation timed out"),
+			name: "diag timeout",
+			err:  diag.New(diag.ClassTimeout, "operation timed out"),
 			code: CodeTimeout,
 			exit: ExitTimeout,
 		},
 		{
-			name: "errdef canceled",
-			err:  errdef.New(errdef.CodeCanceled, "operation canceled"),
+			name: "diag canceled",
+			err:  diag.New(diag.ClassCanceled, "operation canceled"),
 			code: CodeCanceled,
 			exit: ExitCanceled,
 		},
 		{
-			name: "errdef network",
-			err:  errdef.New(errdef.CodeNetwork, "network unavailable"),
+			name: "diag network",
+			err:  diag.New(diag.ClassNetwork, "network unavailable"),
 			code: CodeNetwork,
 			exit: ExitNetwork,
 		},
 		{
-			name: "errdef tls",
-			err:  errdef.New(errdef.CodeTLS, "certificate rejected"),
+			name: "diag tls",
+			err:  diag.New(diag.ClassTLS, "certificate rejected"),
 			code: CodeTLS,
 			exit: ExitTLS,
 		},
 		{
-			name: "errdef auth",
-			err:  errdef.New(errdef.CodeAuth, "token rejected"),
+			name: "diag auth",
+			err:  diag.New(diag.ClassAuth, "token rejected"),
 			code: CodeAuth,
 			exit: ExitAuth,
 		},
 		{
-			name: "errdef protocol",
-			err:  errdef.New(errdef.CodeProtocol, "invalid frame"),
+			name: "diag protocol",
+			err:  diag.New(diag.ClassProtocol, "invalid frame"),
 			code: CodeProtocol,
 			exit: ExitProtocol,
 		},
 		{
-			name: "errdef route",
-			err:  errdef.New(errdef.CodeRoute, "tunnel unavailable"),
+			name: "diag route",
+			err:  diag.New(diag.ClassRoute, "tunnel unavailable"),
 			code: CodeRoute,
 			exit: ExitRoute,
 		},
 		{
-			name: "joined errdefs choose dominant code",
+			name: "joined diags choose dominant code",
 			err: errors.Join(
-				errdef.New(errdef.CodeAuth, "token rejected"),
-				errdef.New(errdef.CodeTimeout, "command timed out"),
+				diag.New(diag.ClassAuth, "token rejected"),
+				diag.New(diag.ClassTimeout, "command timed out"),
 			),
 			code: CodeTimeout,
 			exit: ExitTimeout,
 		},
 		{
-			name: "http wrapper defers to nested code",
-			err: errdef.Wrap(
-				errdef.CodeHTTP,
-				errdef.New(errdef.CodeFilesystem, "body unavailable"),
+			name: "http component wrapper defers to nested class",
+			err: diag.Wrap(
+				diag.New(diag.ClassFilesystem, "body unavailable"),
 				"read request body",
+				diag.WithComponent(diag.ComponentHTTP),
 			),
 			code: CodeFilesystem,
 			exit: ExitFilesystem,
 		},
 		{
-			name: "http wrapper uses http fallback",
-			err:  errdef.New(errdef.CodeHTTP, "proxy connection reset"),
+			name: "plain message uses network fallback",
+			err:  errors.New("proxy connection reset"),
 			code: CodeNetwork,
 			exit: ExitNetwork,
 		},
 		{
-			name: "wrapped errdef timeout wins over auth wrapper",
-			err: errdef.Wrap(
-				errdef.CodeAuth,
-				errdef.New(errdef.CodeTimeout, "command timed out"),
+			name: "wrapped diag timeout wins over auth wrapper",
+			err: diag.WrapAs(diag.ClassAuth, diag.New(diag.ClassTimeout, "command timed out"),
 				"resolve command auth",
 			),
 			code: CodeTimeout,

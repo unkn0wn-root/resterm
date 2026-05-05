@@ -73,6 +73,15 @@ func (m *Model) execRunReq(
 	vals map[string]rts.Value,
 	xs ...map[string]string,
 ) tea.Cmd {
+	if err := docErr(doc); err != nil {
+		return func() tea.Msg {
+			return responseMsg{
+				err:         err,
+				executed:    cloneRequest(req),
+				environment: env,
+			}
+		}
+	}
 	rq := m.requestSvc(opts)
 	if rq == nil {
 		return nil

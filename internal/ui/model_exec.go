@@ -216,6 +216,18 @@ type activeReqExec struct {
 func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
+	rc := m.restorePane(paneRegionResponse)
+	wrap := func(cmd tea.Cmd) tea.Cmd {
+		return batchCommands(rc, cmd)
+	}
+
+	m.doc = doc
+	m.syncRequestList(doc)
+	m.syncRegistry(doc)
+	if err := docErr(doc); err != nil {
+		return nil, wrap(m.failErr(err))
+	}
+
 	cursorLine := currentCursorLine(m.editor)
 	req, _ := m.requestAtCursor(doc, content, cursorLine)
 	if req == nil {
@@ -224,15 +236,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 		}
 	}
 
-	rc := m.restorePane(paneRegionResponse)
-	wrap := func(cmd tea.Cmd) tea.Cmd {
-		return batchCommands(rc, cmd)
-	}
-
-	m.doc = doc
-	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncRegistry(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned
@@ -254,6 +258,9 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	st, cmd := m.prepareActiveRequestExec()
 	if cmd != nil {
 		return cmd
+	}
+	if st == nil {
+		return nil
 	}
 
 	if st.req.Metadata.ForEach != nil {
@@ -345,6 +352,9 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 	if cmd != nil {
 		return cmd
 	}
+	if st == nil {
+		return nil
+	}
 
 	spin := m.startSending()
 	target := m.statusRequestTarget(st.doc, st.req, "")
@@ -367,6 +377,13 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
+	m.doc = doc
+	m.syncRequestList(doc)
+	m.syncRegistry(doc)
+	if err := docErr(doc); err != nil {
+		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
+	}
+
 	cursorLine := currentCursorLine(m.editor)
 	req, _ := m.requestAtCursor(doc, content, cursorLine)
 	if req == nil {
@@ -397,10 +414,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 		return nil
 	}
 
-	m.doc = doc
-	m.syncRequestList(doc)
 	m.setActiveRequest(req)
-	m.syncRegistry(doc)
 
 	cloned := cloneRequest(req)
 	m.currentRequest = cloned

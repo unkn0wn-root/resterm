@@ -110,9 +110,8 @@ func collectRequests(byPath map[string]expFile, rootAbs, rootReal string, rec bo
 		}
 
 		doc := parser.Parse(abs, data)
-		if len(doc.Errors) > 0 {
-			e := doc.Errors[0]
-			return fmt.Errorf("parse %s:%d: %s", rel, e.Line, e.Message)
+		if err := parser.Check(doc); err != nil {
+			return fmt.Errorf("parse %s: %w", rel, err)
 		}
 
 		baseDir := filepath.Dir(abs)

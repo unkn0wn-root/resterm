@@ -373,14 +373,20 @@ func toFormatResult(res Result) runfmt.Result {
 		Canceled:    res.Canceled,
 		SkipReason:  res.SkipReason,
 		Error:       res.Error,
+		ErrorDetail: runfmt.ErrorDetailFromError(
+			errorsFromText(res.Error),
+		),
 		ScriptError: res.ScriptError,
-		Failure:     toFormatResultFailure(res),
-		HTTP:        toFormatHTTP(res.HTTP),
-		GRPC:        toFormatGRPC(res.GRPC),
-		Stream:      toFormatStream(res.Stream),
-		Trace:       toFormatTrace(res.Trace),
-		Compare:     toFormatCompare(res.Compare),
-		Profile:     toFormatProfile(res.Profile),
+		ScriptErrorDetail: runfmt.ErrorDetailFromError(
+			errorsFromText(res.ScriptError),
+		),
+		Failure: toFormatResultFailure(res),
+		HTTP:    toFormatHTTP(res.HTTP),
+		GRPC:    toFormatGRPC(res.GRPC),
+		Stream:  toFormatStream(res.Stream),
+		Trace:   toFormatTrace(res.Trace),
+		Compare: toFormatCompare(res.Compare),
+		Profile: toFormatProfile(res.Profile),
 	}
 	if len(res.Tests) > 0 {
 		out.Tests = make([]runfmt.Test, 0, len(res.Tests))
@@ -417,12 +423,18 @@ func toFormatStep(step Step) runfmt.Step {
 		Canceled:    step.Canceled,
 		SkipReason:  step.SkipReason,
 		Error:       step.Error,
+		ErrorDetail: runfmt.ErrorDetailFromError(
+			errorsFromText(step.Error),
+		),
 		ScriptError: step.ScriptError,
-		Failure:     toFormatStepFailure(step),
-		HTTP:        toFormatHTTP(step.HTTP),
-		GRPC:        toFormatGRPC(step.GRPC),
-		Stream:      toFormatStream(step.Stream),
-		Trace:       toFormatTrace(step.Trace),
+		ScriptErrorDetail: runfmt.ErrorDetailFromError(
+			errorsFromText(step.ScriptError),
+		),
+		Failure: toFormatStepFailure(step),
+		HTTP:    toFormatHTTP(step.HTTP),
+		GRPC:    toFormatGRPC(step.GRPC),
+		Stream:  toFormatStream(step.Stream),
+		Trace:   toFormatTrace(step.Trace),
 	}
 	if len(step.Tests) > 0 {
 		out.Tests = make([]runfmt.Test, 0, len(step.Tests))
@@ -521,7 +533,13 @@ func toFormatFailure(f *Failure) *runfmt.Failure {
 	if f == nil {
 		return nil
 	}
-	return runfmt.FromFailure(runfail.New(runfail.Code(f.Code), f.Message, f.Source))
+	out := runfmt.FromFailure(runfail.New(runfail.Code(f.Code), f.Message, f.Source))
+	if out == nil {
+		return nil
+	}
+	out.Chain = runfmt.CloneFailureChain(f.Chain)
+	out.Frames = runfmt.CloneFailureFrames(f.Frames)
+	return out
 }
 
 func toFormatResultFailure(res Result) *runfmt.Failure {

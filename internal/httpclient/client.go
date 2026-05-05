@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
@@ -58,7 +58,11 @@ func (c *Client) resolveHTTPFactory() func(Options) (*http.Client, error) {
 func (c *Client) httpClient(opts Options) (*http.Client, error) {
 	factory := c.resolveHTTPFactory()
 	if factory == nil {
-		return nil, errdef.New(errdef.CodeHTTP, "http client factory unavailable")
+		return nil, diag.New(
+			diag.ClassInternal,
+			"http client factory unavailable",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 	return factory(opts)
 }
@@ -189,10 +193,10 @@ func (c *Client) Execute(
 				Duration:    duration,
 				Timeline:    timeline,
 				TraceReport: traceReport,
-			}, errdef.Wrap(
-				errdef.CodeHTTP,
+			}, diag.Wrap(
 				err,
 				"perform request",
+				diag.WithComponent(diag.ComponentHTTP),
 			)
 	}
 	if verErr := checkHTTPVersion(httpResp, effectiveOpts.HTTPVersion); verErr != nil {
@@ -214,7 +218,11 @@ func (c *Client) Execute(
 
 	defer func() {
 		if closeErr := httpResp.Body.Close(); closeErr != nil && err == nil {
-			err = errdef.Wrap(errdef.CodeHTTP, closeErr, "close response body")
+			err = diag.Wrap(
+				closeErr,
+				"close response body",
+				diag.WithComponent(diag.ComponentHTTP),
+			)
 		}
 	}()
 
@@ -227,7 +235,11 @@ func (c *Client) Execute(
 			traceSess.fail(err)
 			traceSess.complete(buildTraceExtras(httpReq, httpResp, effectiveOpts, proxy))
 		}
-		return nil, errdef.Wrap(errdef.CodeHTTP, err, "read response body")
+		return nil, diag.Wrap(
+			err,
+			"read response body",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 
 	if traceSess != nil {

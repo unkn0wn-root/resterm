@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -472,10 +472,10 @@ func (m *Manager) requestToken(
 		}
 	case GrantAuthorizationCode:
 		if cfg.Code == "" {
-			return Token{}, errdef.New(errdef.CodeAuth, "missing authorization code")
+			return Token{}, diag.New(diag.ClassAuth, "missing authorization code")
 		}
 		if cfg.RedirectURL == "" {
-			return Token{}, errdef.New(errdef.CodeAuth, "authorization_code requires redirect_uri")
+			return Token{}, diag.New(diag.ClassAuth, "authorization_code requires redirect_uri")
 		}
 		form.Set("code", cfg.Code)
 		form.Set("redirect_uri", cfg.RedirectURL)
@@ -491,7 +491,7 @@ func (m *Manager) requestToken(
 			}
 		}
 	default:
-		return Token{}, errdef.New(errdef.CodeAuth, "unsupported oauth2 grant type: %s", grant)
+		return Token{}, diag.Newf(diag.ClassAuth, "unsupported oauth2 grant type: %s", grant)
 	}
 
 	headers := make(http.Header)
@@ -517,7 +517,7 @@ func (m *Manager) requestToken(
 		return Token{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Token{}, errdef.New(errdef.CodeAuth, "oauth token request failed: %s", resp.Status)
+		return Token{}, diag.Newf(diag.ClassAuth, "oauth token request failed: %s", resp.Status)
 	}
 
 	token, err := parseTokenResponse(resp.Body)
@@ -559,7 +559,7 @@ func (m *Manager) refreshToken(
 ) (Token, error) {
 	cfg = cfg.Resolved()
 	if refresh == "" {
-		return Token{}, errdef.New(errdef.CodeAuth, "missing refresh token")
+		return Token{}, diag.New(diag.ClassAuth, "missing refresh token")
 	}
 
 	form := url.Values{}
@@ -605,7 +605,7 @@ func (m *Manager) refreshToken(
 		return Token{}, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return Token{}, errdef.New(errdef.CodeAuth, "oauth token refresh failed: %s", resp.Status)
+		return Token{}, diag.Newf(diag.ClassAuth, "oauth token refresh failed: %s", resp.Status)
 	}
 
 	token, err := parseTokenResponse(resp.Body)
@@ -684,7 +684,7 @@ func parseTokenResponse(body []byte) (Token, error) {
 		// the form-encoded body so these responses still work.
 		values, parseErr := url.ParseQuery(string(body))
 		if parseErr != nil {
-			return Token{}, errdef.Wrap(errdef.CodeAuth, err, "decode oauth token response")
+			return Token{}, diag.WrapAs(diag.ClassAuth, err, "decode oauth token response")
 		}
 		resp.AccessToken = values.Get("access_token")
 		resp.TokenType = values.Get("token_type")
@@ -704,7 +704,7 @@ func parseTokenResponse(body []byte) (Token, error) {
 
 func buildToken(resp tokenResponse, raw map[string]any) (Token, error) {
 	if resp.AccessToken == "" {
-		return Token{}, errdef.New(errdef.CodeAuth, "oauth token response missing access_token")
+		return Token{}, diag.New(diag.ClassAuth, "oauth token response missing access_token")
 	}
 	if resp.TokenType == "" {
 		resp.TokenType = "Bearer"

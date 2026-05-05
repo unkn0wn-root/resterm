@@ -107,7 +107,7 @@ func (res Result) junitCase() junitCase {
 		return tc
 	}
 	if msg := resultFailureMessage(res); msg != "" && res.Status == StatusFail {
-		tc.Failure = &junitFailure{Message: msg, Body: msg}
+		tc.Failure = &junitFailure{Message: msg, Body: resultFailureBody(res, msg)}
 	}
 	return tc
 }
@@ -124,9 +124,29 @@ func (res Result) stepJUnitCase(step Step) junitCase {
 		return tc
 	}
 	if msg := stepFailureMessage(step); msg != "" && (step.Canceled || step.Status == StatusFail) {
-		tc.Failure = &junitFailure{Message: msg, Body: msg}
+		tc.Failure = &junitFailure{Message: msg, Body: stepFailureBody(step, msg)}
 	}
 	return tc
+}
+
+func resultFailureBody(res Result, fallback string) string {
+	if res.ErrorDetail != nil {
+		return errorDetailText(res.ErrorDetail, fallback)
+	}
+	if res.ScriptErrorDetail != nil {
+		return errorDetailText(res.ScriptErrorDetail, fallback)
+	}
+	return fallback
+}
+
+func stepFailureBody(step Step, fallback string) string {
+	if step.ErrorDetail != nil {
+		return errorDetailText(step.ErrorDetail, fallback)
+	}
+	if step.ScriptErrorDetail != nil {
+		return errorDetailText(step.ScriptErrorDetail, fallback)
+	}
+	return fallback
 }
 
 func junitSystemOut(text, target, effective string) string {

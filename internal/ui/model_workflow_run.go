@@ -10,9 +10,9 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -323,7 +323,7 @@ func (m *Model) wfErr(
 	tag string,
 	err error,
 ) tea.Cmd {
-	wrapped := errdef.Wrap(errdef.CodeScript, err, "%s", tag)
+	wrapped := diag.WrapAsf(diag.ClassScript, err, "%s", tag)
 	m.lastError = wrapped
 	cmd := m.consumeRequestError(wrapped, nil)
 	next := m.advanceWorkflow(
@@ -414,6 +414,9 @@ func (m *Model) startWorkflowRun(
 		m.setStatusMessage(statusMsg{text: "No document loaded", level: statusWarn})
 		return nil
 	}
+	if err := docErr(doc); err != nil {
+		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
+	}
 	if len(workflow.Steps) == 0 {
 		m.setStatusMessage(
 			statusMsg{
@@ -458,6 +461,9 @@ func (m *Model) startForEachRun(
 	if doc == nil || req == nil {
 		m.setStatusMessage(statusMsg{text: "No request loaded", level: statusWarn})
 		return nil
+	}
+	if err := docErr(doc); err != nil {
+		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
 	}
 	if m.workflowRun != nil {
 		m.setStatusMessage(statusMsg{text: "Another run is already active", level: statusWarn})
@@ -1171,7 +1177,7 @@ func (m *Model) executeWorkflowLoopIteration(
 		pos := m.rtsPosForLine(st.doc, loop.request, loop.line)
 		itemStr, err := m.rtsValueString(ctx, pos, item)
 		if err != nil {
-			wrapped := errdef.Wrap(errdef.CodeScript, err, "@for-each")
+			wrapped := diag.WrapAs(diag.ClassScript, err, "@for-each")
 			m.lastError = wrapped
 			if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 				cmds = append(cmds, cmd)
@@ -1210,7 +1216,7 @@ func (m *Model) executeWorkflowLoopIteration(
 				vals,
 			)
 			if err != nil {
-				wrapped := errdef.Wrap(errdef.CodeScript, err, "@when")
+				wrapped := diag.WrapAs(diag.ClassScript, err, "@when")
 				m.lastError = wrapped
 				if cmd := m.consumeRequestError(wrapped, nil); cmd != nil {
 					cmds = append(cmds, cmd)
@@ -1431,7 +1437,7 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 			Success: false,
 			Skipped: rm.skipped,
 			Message: "workflow state missing",
-			Err:     errdef.New(errdef.CodeUI, "workflow state missing"),
+			Err:     diag.New(diag.ClassUI, "workflow state missing"),
 		}
 	}
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 )
 
@@ -29,10 +29,10 @@ func applyOptionSettings(opts *Options, settings map[string]string, strictVersio
 		v, ok := httpver.ParseValue(raw)
 		if !ok {
 			if strictVersion {
-				return errdef.New(
-					errdef.CodeHTTP,
-					"invalid http-version %q (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
-					raw,
+				return diag.New(
+					diag.ClassProtocol,
+					"invalid http-version "+strconv.Quote(raw)+" (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
+					diag.WithComponent(diag.ComponentHTTP),
 				)
 			}
 		} else {

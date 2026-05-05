@@ -3,7 +3,7 @@ package sqlite
 import (
 	"os"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
@@ -17,7 +17,7 @@ func (s *Store) Stats() (history.Stats, error) {
 	if err := s.db.QueryRow(
 		`SELECT COUNT(*), COALESCE(MIN(exec_ns), 0), COALESCE(MAX(exec_ns), 0) FROM hist`,
 	).Scan(&st.Rows, &minNS, &maxNS); err != nil {
-		return history.Stats{}, errdef.Wrap(errdef.CodeHistory, err, "query history stats")
+		return history.Stats{}, diag.WrapAs(diag.ClassHistory, err, "query history stats")
 	}
 	st.Oldest = nsToTime(minNS)
 	st.Newest = nsToTime(maxNS)
@@ -45,13 +45,13 @@ func (s *Store) Compact() error {
 		return err
 	}
 	if _, err := s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE);`); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "checkpoint history db")
+		return diag.WrapAs(diag.ClassHistory, err, "checkpoint history db")
 	}
 	if _, err := s.db.Exec(`VACUUM;`); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "compact history db")
+		return diag.WrapAs(diag.ClassHistory, err, "compact history db")
 	}
 	if _, err := s.db.Exec(`PRAGMA optimize;`); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "optimize history db")
+		return diag.WrapAs(diag.ClassHistory, err, "optimize history db")
 	}
 	return nil
 }

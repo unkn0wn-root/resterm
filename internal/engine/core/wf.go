@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
@@ -185,7 +185,7 @@ func (r *wfRun) runStep(ctx context.Context, rt WorkflowStepRuntime) (bool, erro
 		return r.runReqStep(ctx, step, rt.Req, "")
 	default:
 		res := engine.RequestResult{
-			Err: errdef.New(errdef.CodeUI, "unknown workflow step kind %q", step.Kind),
+			Err: diag.Newf(diag.ClassUI, "unknown workflow step kind %q", step.Kind),
 		}
 		if err := r.emitStepStart(ctx, r.idx, step, rt.Req, "", 0, 0); err != nil {
 			return false, err
@@ -217,7 +217,7 @@ func (r *wfRun) runReqStep(
 			branch,
 			0,
 			0,
-			engine.RequestResult{Err: errdef.New(errdef.CodeUI, "workflow step missing request")},
+			engine.RequestResult{Err: diag.New(diag.ClassUI, "workflow step missing request")},
 		)
 		if err != nil {
 			return false, err
@@ -252,7 +252,7 @@ func (r *wfRun) runReqStep(
 				branch,
 				0,
 				0,
-				engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagWhen)},
+				engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagWhen)},
 			)
 			if emitErr != nil {
 				return false, emitErr
@@ -290,7 +290,7 @@ func (r *wfRun) runReqStep(
 			branch,
 			0,
 			0,
-			engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagForEach)},
+			engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach)},
 		)
 		if emitErr != nil {
 			return false, emitErr
@@ -323,7 +323,7 @@ func (r *wfRun) runReqStep(
 			branch,
 			0,
 			0,
-			engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagForEach)},
+			engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach)},
 		)
 		if emitErr != nil {
 			return false, emitErr
@@ -362,7 +362,7 @@ func (r *wfRun) runReqStep(
 				branch,
 				i+1,
 				len(items),
-				engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagForEach)},
+				engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach)},
 			)
 			if emitErr != nil {
 				return false, emitErr
@@ -412,7 +412,7 @@ func (r *wfRun) runReqStep(
 					branch,
 					i+1,
 					len(items),
-					engine.RequestResult{Err: errdef.Wrap(errdef.CodeScript, err, wfTagWhen)},
+					engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagWhen)},
 				)
 				if emitErr != nil {
 					return false, emitErr
@@ -477,7 +477,7 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 			"",
 			0,
 			0,
-			engine.RequestResult{Err: errdef.New(errdef.CodeUI, "workflow @if missing definition")},
+			engine.RequestResult{Err: diag.New(diag.ClassUI, "workflow @if missing definition")},
 		)
 		if err != nil {
 			return false, err
@@ -595,7 +595,7 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 			0,
 			0,
 			engine.RequestResult{
-				Err: errdef.New(errdef.CodeUI, "workflow @switch missing definition"),
+				Err: diag.New(diag.ClassUI, "workflow @switch missing definition"),
 			},
 		)
 		if err != nil {
@@ -867,7 +867,7 @@ func (r *wfRun) selectIfBranch(
 ) (*restfile.WorkflowIfBranch, error) {
 	ok, err := r.evalStepBool(ctx, nil, step.If.Then.Line, wfTagIf, step.If.Then.Cond, vv, nil)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, wfTagIf)
+		return nil, diag.WrapAs(diag.ClassScript, err, wfTagIf)
 	}
 	if ok {
 		return &step.If.Then, nil
@@ -876,7 +876,7 @@ func (r *wfRun) selectIfBranch(
 		item := &step.If.Elifs[i]
 		ok, err = r.evalStepBool(ctx, nil, item.Line, wfTagElif, item.Cond, vv, nil)
 		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeScript, err, wfTagElif)
+			return nil, diag.WrapAs(diag.ClassScript, err, wfTagElif)
 		}
 		if ok {
 			return item, nil
@@ -894,7 +894,7 @@ func (r *wfRun) selectSwitchCase(
 	vv map[string]string,
 ) (*restfile.WorkflowSwitchCase, error) {
 	if strings.TrimSpace(step.Switch.Expr) == "" {
-		return nil, errdef.New(errdef.CodeUI, "@switch expression missing")
+		return nil, diag.New(diag.ClassUI, "@switch expression missing")
 	}
 	base, err := r.evalStepValue(
 		ctx,
@@ -906,7 +906,7 @@ func (r *wfRun) selectSwitchCase(
 		nil,
 	)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeScript, err, wfTagSwitch)
+		return nil, diag.WrapAs(diag.ClassScript, err, wfTagSwitch)
 	}
 	for i := range step.Switch.Cases {
 		item := &step.Switch.Cases[i]
@@ -916,7 +916,7 @@ func (r *wfRun) selectSwitchCase(
 		}
 		val, err := r.evalStepValue(ctx, nil, item.Line, wfTagCase, expr, vv, nil)
 		if err != nil {
-			return nil, errdef.Wrap(errdef.CodeScript, err, wfTagCase)
+			return nil, diag.WrapAs(diag.ClassScript, err, wfTagCase)
 		}
 		if rts.ValueEqual(base, val) {
 			return item, nil

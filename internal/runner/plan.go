@@ -51,9 +51,8 @@ func Build(opts Options) (*Plan, error) {
 	}
 
 	doc := parser.Parse(path, data)
-	if len(doc.Errors) > 0 {
-		err := doc.Errors[0]
-		return nil, fmt.Errorf("parse error at line %d: %s", err.Line, err.Message)
+	if err := parser.Check(doc); err != nil {
+		return nil, err
 	}
 
 	work := str.Trim(opts.WorkspaceRoot)

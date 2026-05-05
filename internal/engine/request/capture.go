@@ -10,7 +10,7 @@ import (
 	"sync"
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -139,7 +139,7 @@ func (e *Engine) applyCaptures(in captureRun) error {
 			lc:       lc,
 		})
 		if err != nil {
-			return errdef.Wrap(errdef.CodeScript, err, "%s", captureErrCtx(in.req, c, ex))
+			return diag.WrapAsf(diag.ClassScript, err, "%s", captureErrCtx(in.req, c, ex))
 		}
 		switch c.Scope {
 		case restfile.CaptureScopeRequest:
