@@ -97,7 +97,6 @@ var scriptHints = []Hint{
 
 var rtsHints = []Hint{
 	{Label: "pre-request", Summary: "Run RestermScript before the request"},
-	{Label: "test", Summary: "Use the test script kind"},
 }
 
 var workflowRunHints = []Hint{

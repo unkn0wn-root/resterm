@@ -109,10 +109,13 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 	if len(rtsOptions) == 0 {
 		t.Fatal("expected rts subcommand options")
 	}
-	for _, label := range []string{"pre-request", "test"} {
+	for _, label := range []string{"pre-request"} {
 		if !hintOptionsContain(rtsOptions, label) {
 			t.Fatalf("missing rts subcommand %q", label)
 		}
+	}
+	if hintOptionsContain(rtsOptions, "test") {
+		t.Fatal("unexpected rts subcommand \"test\"")
 	}
 	filteredRTS := hint.MetaOptions("rts", "pre")
 	if len(filteredRTS) == 0 {
