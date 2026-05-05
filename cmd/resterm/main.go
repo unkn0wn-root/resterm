@@ -41,8 +41,10 @@ var (
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
-		if msg := diag.Render(err); msg != "" {
-			_, _ = fmt.Fprintln(os.Stderr, msg)
+		if !cli.IsExitCodeOnly(err) {
+			if msg := diag.Render(err); msg != "" {
+				_, _ = fmt.Fprintln(os.Stderr, msg)
+			}
 		}
 		os.Exit(cli.ExitCode(err))
 	}
