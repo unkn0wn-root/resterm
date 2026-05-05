@@ -6,7 +6,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runx/fail"
 )
 
-const ReportSchemaVersion = "2"
+const ReportSchemaVersion = "1"
 
 func (rep Report) ExitCode(mode runfail.ExitMode) int {
 	failures := rep.Failures()
