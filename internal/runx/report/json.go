@@ -256,7 +256,7 @@ func (res Result) json() jsonResult {
 		SkipReason:      res.SkipReason,
 		Error:           res.Error,
 		ScriptError:     res.ScriptError,
-		Failure:         res.Failure.json(res.Error, res.ScriptError),
+		Failure:         res.Failure.json(),
 		DurationMs:      durMS(res.Duration),
 		HTTP:            res.HTTP.json(),
 		GRPC:            res.GRPC.json(),
@@ -300,7 +300,7 @@ func (step Step) json() jsonStep {
 		SkipReason:      step.SkipReason,
 		Error:           step.Error,
 		ScriptError:     step.ScriptError,
-		Failure:         step.Failure.json(step.Error, step.ScriptError),
+		Failure:         step.Failure.json(),
 		DurationMs:      durMS(step.Duration),
 		HTTP:            step.HTTP.json(),
 		GRPC:            step.GRPC.json(),
@@ -349,22 +349,15 @@ func (grpc *GRPC) json() *jsonGRPC {
 	}
 }
 
-func (failure *Failure) json(duplicates ...string) *jsonFailure {
+func (failure *Failure) json() *jsonFailure {
 	if failure == nil {
 		return nil
-	}
-	message := failure.Message
-	for _, duplicate := range duplicates {
-		if message != "" && message == duplicate {
-			message = ""
-			break
-		}
 	}
 	return &jsonFailure{
 		Code:     string(failure.Code),
 		Category: string(failure.Category),
 		ExitCode: failure.ExitCode,
-		Message:  message,
+		Message:  failure.Message,
 		Source:   failure.Source,
 		Chain:    failureChainJSON(failure.Chain),
 		Frames:   failureFramesJSON(failure.Frames),
@@ -499,7 +492,7 @@ func (fail ProfileFailure) json() jsonProfileFailure {
 		Status:     fail.Status,
 		StatusCode: fail.StatusCode,
 		DurationMs: durMS(fail.Duration),
-		Failure:    fail.Failure.json(fail.Reason),
+		Failure:    fail.Failure.json(),
 	}
 }
 

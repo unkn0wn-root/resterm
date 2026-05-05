@@ -242,6 +242,23 @@ func TestRenderPlainErrorDoesNotDuplicateCause(t *testing.T) {
 	}
 }
 
+func TestRenderLeafDiagnosticDoesNotDuplicateCause(t *testing.T) {
+	err := diag.New(diag.ClassAuth, "token_url required")
+
+	got := diag.Render(err)
+	if got != "error[auth]: token_url required" {
+		t.Fatalf("Render() = %q", got)
+	}
+
+	rep := diag.ReportOf(err)
+	if len(rep.Items) != 1 {
+		t.Fatalf("report items = %d, want 1", len(rep.Items))
+	}
+	if len(rep.Items[0].Chain) != 0 {
+		t.Fatalf("leaf diagnostic chain = %#v, want empty", rep.Items[0].Chain)
+	}
+}
+
 func TestRenderJoinedErrorsAsBranches(t *testing.T) {
 	err := diag.Join(
 		diag.ClassConfig,

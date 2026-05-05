@@ -315,7 +315,7 @@ func leafDiagnostic(e *diagnosticError) Diagnostic {
 		Labels:    append([]Label(nil), e.meta.labels...),
 		Source:    append([]byte(nil), e.meta.source...),
 		Notes:     notesFromMetadata(e.meta),
-		Chain:     chainWithOperation(operationEntry(e), chainOfError(e.err, msg), nil),
+		Chain:     opChain(e, msg),
 		Frames:    append([]StackFrame(nil), e.meta.frames...),
 	}
 	if e.meta.path != "" && d.Span.Start.Path == "" {
@@ -325,6 +325,13 @@ func leafDiagnostic(e *diagnosticError) Diagnostic {
 		d.Notes = append(d.Notes, Note{Kind: NoteHelp, Message: "No response payload was received."})
 	}
 	return d
+}
+
+func opChain(e *diagnosticError, msg string) []ChainEntry {
+	if e == nil || e.err == nil {
+		return nil
+	}
+	return chainWithOperation(operationEntry(e), chainOfError(e.err, msg), nil)
 }
 
 func plainDiagnostic(err error) Diagnostic {

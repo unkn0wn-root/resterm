@@ -58,7 +58,7 @@ func TestWriteJSONIncludesFailureChainWithoutErrorDetailDuplicate(t *testing.T) 
 	res := got.Results[0]
 	if res.Error == "" ||
 		res.Failure.Code != string(diag.ClassNetwork) ||
-		res.Failure.Message != "" {
+		res.Failure.Message != res.Error {
 		t.Fatalf("unexpected failure json: %+v", res)
 	}
 	if len(res.Failure.Chain) != 1 ||
@@ -68,6 +68,22 @@ func TestWriteJSONIncludesFailureChainWithoutErrorDetailDuplicate(t *testing.T) 
 		len(res.Failure.Chain[0].Children[0].Children) != 1 ||
 		res.Failure.Chain[0].Children[0].Children[0].Message != "lookup api.local: no such host" {
 		t.Fatalf("unexpected failure chain: %+v", res.Failure.Chain)
+	}
+}
+
+func TestErrorDetailFromLeafDiagnosticHasNoChain(t *testing.T) {
+	detail := ErrorDetailFromError(diag.New(diag.ClassAuth, "token_url required"))
+	if detail == nil {
+		t.Fatal("expected error detail")
+	}
+	if detail.Message != "token_url required" {
+		t.Fatalf("detail message = %q, want token_url required", detail.Message)
+	}
+	if len(detail.Chain) != 0 {
+		t.Fatalf("leaf diagnostic chain = %#v, want empty", detail.Chain)
+	}
+	if strings.Contains(detail.Rendered, "\ntoken_url required") {
+		t.Fatalf("rendered detail contains duplicate chain line: %q", detail.Rendered)
 	}
 }
 
