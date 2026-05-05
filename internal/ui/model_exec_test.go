@@ -512,8 +512,8 @@ func TestHandleResponseMsgShowsHTTPErrorInPane(t *testing.T) {
 	if !strings.Contains(viewport, "send request failed") {
 		t.Fatalf("expected viewport to include error details, got %q", viewport)
 	}
-	if model.statusMessage.text != "Request failed - see Response" ||
-		model.statusMessage.level != statusInfo {
+	if model.statusMessage.text != "Request failed ✗" ||
+		model.statusMessage.level != statusError {
 		t.Fatalf("unexpected request error status: %+v", model.statusMessage)
 	}
 	if model.suppressNextErrorModal {
@@ -582,8 +582,8 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 	if model.showErrorModal {
 		t.Fatalf("expected error modal to stay closed for script errors")
 	}
-	if model.statusMessage.text != "Request failed - see Response" ||
-		model.statusMessage.level != statusInfo {
+	if model.statusMessage.text != "Request failed ✗" ||
+		model.statusMessage.level != statusError {
 		t.Fatalf("unexpected script error status: %+v", model.statusMessage)
 	}
 	if model.responseLatest == nil ||
@@ -639,8 +639,8 @@ func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 	if got := atomic.LoadInt32(&calls); got != 0 {
 		t.Fatalf("expected no HTTP client creation, got %d", got)
 	}
-	if model.statusMessage.text != "Request failed - see Response" ||
-		model.statusMessage.level != statusInfo {
+	if model.statusMessage.text != "Request failed ✗" ||
+		model.statusMessage.level != statusError {
 		t.Fatalf("unexpected parse error status: %+v", model.statusMessage)
 	}
 	if model.lastError == nil || diag.ClassOf(model.lastError) != diag.ClassParse {

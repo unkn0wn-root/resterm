@@ -10,7 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
-func TestStyleLinesRendersChainWithWarmDiagnosticColor(t *testing.T) {
+func TestStyleLinesRendersChainWithLocationColor(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prevProfile)
@@ -21,9 +21,9 @@ func TestStyleLinesRendersChainWithWarmDiagnosticColor(t *testing.T) {
 	st := model.errSty()
 
 	gotChain := st.line(diag.Line{Kind: diag.LineChain, Text: chain})
-	wantChain := model.chainLineStyle().Render(chain)
+	wantChain := st.loc.Render(chain)
 	if gotChain != wantChain {
-		t.Fatalf("chain line style = %q, want warm diagnostic style %q", gotChain, wantChain)
+		t.Fatalf("chain line style = %q, want location style %q", gotChain, wantChain)
 	}
 	if strings.Contains(gotChain, "\x1b[2m") {
 		t.Fatalf("chain line should not use faint style, got %q", gotChain)

@@ -85,10 +85,7 @@ func (m Model) errSty() eSty {
 }
 
 func (m Model) chainLineStyle() lipgloss.Style {
-	if m.themeRuntime.isLight() {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("#b45309"))
-	}
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("#FFB86C"))
+	return m.statusBarFg(m.theme.StatusBarKey, statusWarnLightColor, statusWarnDarkColor)
 }
 
 func (st eSty) line(l diag.Line) string {

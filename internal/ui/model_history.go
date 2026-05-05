@@ -150,7 +150,7 @@ func requestErrorStatus(canceled bool) statusMsg {
 	if canceled {
 		return statusMsg{text: "Request canceled", level: statusInfo}
 	}
-	return statusMsg{text: "Request failed - see Response", level: statusInfo}
+	return statusMsg{text: "Request failed ✗", level: statusError}
 }
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
