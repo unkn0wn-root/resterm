@@ -179,14 +179,20 @@ func TestNavigatorRenderStateUsesNavigatorNodeIDForEquivalentRequestPath(t *test
 			Payload:  navigator.Payload[any]{FilePath: nodePath},
 			Children: []*navigator.Node[any]{
 				{
-					ID:      navigatorRequestID(nodePath, 0),
-					Kind:    navigator.KindRequest,
-					Payload: navigator.Payload[any]{FilePath: nodePath, Data: model.doc.Requests[0]},
+					ID:   navigatorRequestID(nodePath, 0),
+					Kind: navigator.KindRequest,
+					Payload: navigator.Payload[any]{
+						FilePath: nodePath,
+						Data:     model.doc.Requests[0],
+					},
 				},
 				{
-					ID:      want,
-					Kind:    navigator.KindRequest,
-					Payload: navigator.Payload[any]{FilePath: nodePath, Data: model.doc.Requests[1]},
+					ID:   want,
+					Kind: navigator.KindRequest,
+					Payload: navigator.Payload[any]{
+						FilePath: nodePath,
+						Data:     model.doc.Requests[1],
+					},
 				},
 			},
 		},
@@ -205,15 +211,21 @@ func TestNavigatorRenderStateSuppressesRequestMarkerForSelectedWorkflow(t *testi
 	model.activeRequestKey = requestKey(model.doc.Requests[0])
 	model.navigator = navigator.New[any]([]*navigator.Node[any]{
 		{
-			ID:      "wf:" + model.currentFile + ":0",
-			Kind:    navigator.KindWorkflow,
-			Payload: navigator.Payload[any]{FilePath: model.currentFile, Data: &model.doc.Workflows[0]},
+			ID:   "wf:" + model.currentFile + ":0",
+			Kind: navigator.KindWorkflow,
+			Payload: navigator.Payload[any]{
+				FilePath: model.currentFile,
+				Data:     &model.doc.Workflows[0],
+			},
 		},
 	})
 
 	state := model.navigatorRenderState()
 	if state.ActiveNodeID != "" {
-		t.Fatalf("expected selected workflow to suppress request marker, got %q", state.ActiveNodeID)
+		t.Fatalf(
+			"expected selected workflow to suppress request marker, got %q",
+			state.ActiveNodeID,
+		)
 	}
 }
 
@@ -560,19 +572,31 @@ func TestFocusedPaneFramesUseThemeFocusColors(t *testing.T) {
 	model.theme.PaneBorderFocusResponse = lipgloss.Color("#444444")
 
 	model.focus = focusFile
-	if got := model.sidebarFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#111111") {
+	if got := model.sidebarFrameStyle(true).
+		GetBorderLeftForeground(); got != lipgloss.Color(
+		"#111111",
+	) {
 		t.Fatalf("expected file focus border color, got %v", got)
 	}
 
 	model.focus = focusRequests
-	if got := model.sidebarFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#222222") {
+	if got := model.sidebarFrameStyle(true).
+		GetBorderLeftForeground(); got != lipgloss.Color(
+		"#222222",
+	) {
 		t.Fatalf("expected requests focus border color, got %v", got)
 	}
 
-	if got := model.editorFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#333333") {
+	if got := model.editorFrameStyle(true).
+		GetBorderLeftForeground(); got != lipgloss.Color(
+		"#333333",
+	) {
 		t.Fatalf("expected editor focus border color, got %v", got)
 	}
-	if got := model.respFrameStyle(true).GetBorderLeftForeground(); got != lipgloss.Color("#444444") {
+	if got := model.respFrameStyle(true).
+		GetBorderLeftForeground(); got != lipgloss.Color(
+		"#444444",
+	) {
 		t.Fatalf("expected response focus border color, got %v", got)
 	}
 }

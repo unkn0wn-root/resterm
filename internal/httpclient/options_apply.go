@@ -31,7 +31,9 @@ func applyOptionSettings(opts *Options, settings map[string]string, strictVersio
 			if strictVersion {
 				return diag.New(
 					diag.ClassProtocol,
-					"invalid http-version "+strconv.Quote(raw)+" (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
+					"invalid http-version "+strconv.Quote(
+						raw,
+					)+" (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
 					diag.WithComponent(diag.ComponentHTTP),
 				)
 			}

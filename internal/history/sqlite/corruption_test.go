@@ -9,7 +9,9 @@ import (
 )
 
 func TestIsCorruptErrIntegrityCheckError(t *testing.T) {
-	err := diag.WrapAs(diag.ClassHistory, &integrityCheckError{Check: "quick_check", Result: "database disk image is malformed"},
+	err := diag.WrapAs(
+		diag.ClassHistory,
+		&integrityCheckError{Check: "quick_check", Result: "database disk image is malformed"},
 		"run history integrity check",
 	)
 	if !isCorruptErr(err) {

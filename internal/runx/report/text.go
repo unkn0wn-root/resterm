@@ -71,7 +71,13 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 		if err := writeTextProfileDetails(w, "  ", res, st); err != nil {
 			return err
 		}
-		if err := writeTextErrorDetails(w, "  ", res.ErrorDetail, res.ScriptErrorDetail, st); err != nil {
+		if err := writeTextErrorDetails(
+			w,
+			"  ",
+			res.ErrorDetail,
+			res.ScriptErrorDetail,
+			st,
+		); err != nil {
 			return err
 		}
 		for i, step := range res.Steps {

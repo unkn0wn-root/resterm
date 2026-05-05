@@ -158,10 +158,7 @@ func isTLSError(err error) bool {
 		return true
 	}
 	var recordHeader tls.RecordHeaderError
-	if errors.As(err, &recordHeader) {
-		return true
-	}
-	return false
+	return errors.As(err, &recordHeader)
 }
 
 func isTransportFailure(class Class) bool {

@@ -235,7 +235,9 @@ func checkDB(db *sql.DB, full bool) error {
 			ok = true
 			continue
 		}
-		return diag.WrapAsf(diag.ClassHistory, &integrityCheckError{Check: checkName, Result: r.detail},
+		return diag.WrapAsf(
+			diag.ClassHistory,
+			&integrityCheckError{Check: checkName, Result: r.detail},
 			"run history integrity check",
 		)
 	}
@@ -243,7 +245,9 @@ func checkDB(db *sql.DB, full bool) error {
 		return diag.WrapAs(diag.ClassHistory, err, "iterate history integrity check")
 	}
 	if !ok {
-		return diag.WrapAsf(diag.ClassHistory, &integrityCheckError{Check: checkName, Result: "empty result"},
+		return diag.WrapAsf(
+			diag.ClassHistory,
+			&integrityCheckError{Check: checkName, Result: "empty result"},
 			"run history integrity check",
 		)
 	}

@@ -86,10 +86,14 @@ func itemLines(rep Report, it Diagnostic) []Line {
 		if col <= 0 {
 			col = 1
 		}
-		ls = append(ls,
+		ls = append(
+			ls,
 			Line{Kind: LineBar, Text: bar},
 			Line{Kind: LineSrc, Text: fmt.Sprintf("%*d | %s", width, it.Span.Start.Line, src)},
-			Line{Kind: LineMark, Text: strings.Repeat(" ", width+3+col-1) + "^" + label(it.Span.Label)},
+			Line{
+				Kind: LineMark,
+				Text: strings.Repeat(" ", width+3+col-1) + "^" + label(it.Span.Label),
+			},
 		)
 	}
 	if len(it.Chain) > 0 {
@@ -106,7 +110,10 @@ func itemLines(rep Report, it Diagnostic) []Line {
 				name = "<fn>"
 			}
 			if pos := f.Pos.String(); pos != "" {
-				ls = append(ls, Line{Kind: LineStack, Text: fmt.Sprintf("  at %s in %s", pos, name)})
+				ls = append(
+					ls,
+					Line{Kind: LineStack, Text: fmt.Sprintf("  at %s in %s", pos, name)},
+				)
 				continue
 			}
 			ls = append(ls, Line{Kind: LineStack, Text: "  at " + name})

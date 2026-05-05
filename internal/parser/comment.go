@@ -545,7 +545,9 @@ func errRTSTestUnsupported() error {
 }
 
 func errRTSLangUnsupported() error {
-	return errors.New("@rts only supports RestermScript, remove lang=js or use @script for JavaScript")
+	return errors.New(
+		"@rts only supports RestermScript, remove lang=js or use @script for JavaScript",
+	)
 }
 
 func errRTSModeRequired() error {

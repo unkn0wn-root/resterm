@@ -134,7 +134,11 @@ func renderRowState(
 		showTarget = false
 	}
 	if n.Kind == KindRequest && showTarget {
-		parts = append(parts, selectedGap(th, selected), descStyle.Render(trimPath(n.Target, width/2)))
+		parts = append(
+			parts,
+			selectedGap(th, selected),
+			descStyle.Render(trimPath(n.Target, width/2)),
+		)
 	}
 	if len(n.Badges) > 0 {
 		parts = append(parts, selectedGap(th, selected), renderBadges(n.Badges, th, selected))

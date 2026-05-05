@@ -207,7 +207,12 @@ func (r Report) Summary() string {
 		return "parse error: " + msg
 	}
 	if it.Span.Start.Line > 0 {
-		return fmt.Sprintf("%s at line %d: %s", severityOrError(it.Severity), it.Span.Start.Line, msg)
+		return fmt.Sprintf(
+			"%s at line %d: %s",
+			severityOrError(it.Severity),
+			it.Span.Start.Line,
+			msg,
+		)
 	}
 	return msg
 }
@@ -322,7 +327,10 @@ func leafDiagnostic(e *diagnosticError) Diagnostic {
 		d.Span.Start.Path = e.meta.path
 	}
 	if e.err != nil && isTransportFailure(class) && component == ComponentHTTP {
-		d.Notes = append(d.Notes, Note{Kind: NoteHelp, Message: "No response payload was received."})
+		d.Notes = append(
+			d.Notes,
+			Note{Kind: NoteHelp, Message: "No response payload was received."},
+		)
 	}
 	return d
 }

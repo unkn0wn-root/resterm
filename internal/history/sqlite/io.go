@@ -101,7 +101,9 @@ func (s *Store) Backup(path string) error {
 	// The destination must be different from the live database path.
 	// Removing an existing file is part of backup preparation.
 	if util.SamePath(path, s.p) {
-		return diag.WrapAs(diag.ClassHistory, errors.New("backup path must differ from history db path"),
+		return diag.WrapAs(
+			diag.ClassHistory,
+			errors.New("backup path must differ from history db path"),
 			"backup history",
 		)
 	}

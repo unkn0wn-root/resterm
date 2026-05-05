@@ -114,7 +114,9 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	if color := updated.CLIRunPickerSelected.GetBackground(); color != lipgloss.Color("#facc15") {
 		t.Errorf("expected CLI run picker background #facc15, got %v", color)
 	}
-	if color := updated.CLIRunPickerCursorSelected.GetForeground(); color != lipgloss.Color("#22c55e") {
+	if color := updated.CLIRunPickerCursorSelected.GetForeground(); color != lipgloss.Color(
+		"#22c55e",
+	) {
 		t.Errorf("expected CLI run picker cursor foreground #22c55e, got %v", color)
 	}
 	if color := updated.ResponseContentRaw.GetForeground(); color != lipgloss.Color("#abcdef") {

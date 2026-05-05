@@ -98,7 +98,10 @@ func TestFromReportPreparesDefaultsAndCopiesData(t *testing.T) {
 		t.Fatalf("label count = %d, want 1", len(item.Labels))
 	}
 	if item.Labels[0].Span.Start.Path != "sample.http" || item.Labels[0].Span.Start.Col != 0 {
-		t.Fatalf("label start = %+v, want inherited path without column default", item.Labels[0].Span.Start)
+		t.Fatalf(
+			"label start = %+v, want inherited path without column default",
+			item.Labels[0].Span.Start,
+		)
 	}
 	if string(item.Source) != "payload" {
 		t.Fatalf("item source = %q, want original item source", item.Source)
@@ -119,9 +122,21 @@ func TestFromReportPreparesNotesAndChain(t *testing.T) {
 			Class:   diag.ClassScript,
 			Message: "failed",
 			Notes: []diag.Note{
-				{Kind: diag.NoteKind("bad"), Message: " duplicate ", Span: diag.Span{Start: diag.Pos{Line: 3}}},
-				{Kind: diag.NoteInfo, Message: "duplicate", Span: diag.Span{Start: diag.Pos{Line: 3}}},
-				{Kind: diag.NoteHelp, Message: "duplicate", Span: diag.Span{Start: diag.Pos{Line: 3}}},
+				{
+					Kind:    diag.NoteKind("bad"),
+					Message: " duplicate ",
+					Span:    diag.Span{Start: diag.Pos{Line: 3}},
+				},
+				{
+					Kind:    diag.NoteInfo,
+					Message: "duplicate",
+					Span:    diag.Span{Start: diag.Pos{Line: 3}},
+				},
+				{
+					Kind:    diag.NoteHelp,
+					Message: "duplicate",
+					Span:    diag.Span{Start: diag.Pos{Line: 3}},
+				},
 				{Kind: diag.NoteInfo, Message: " "},
 			},
 			Chain: []diag.ChainEntry{
