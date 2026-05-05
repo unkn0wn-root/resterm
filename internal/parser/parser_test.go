@@ -283,18 +283,13 @@ func TestParseRTSDirectiveAlias(t *testing.T) {
 			kind: "pre-request",
 		},
 		{
-			name: "test kind",
-			dir:  "# @rts test",
-			kind: "test",
+			name: "language option",
+			dir:  "# @rts pre-request lang=rts",
+			kind: "pre-request",
 		},
 		{
-			name: "default kind",
-			dir:  "# @rts",
-			kind: "test",
-		},
-		{
-			name: "language forced",
-			dir:  "# @rts pre-request lang=js",
+			name: "restermlang option",
+			dir:  "# @rts pre-request language=restermlang",
 			kind: "pre-request",
 		},
 	}
@@ -309,6 +304,9 @@ func TestParseRTSDirectiveAlias(t *testing.T) {
 			}, "\n")
 
 			doc := Parse("rts-alias.http", []byte(src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no parse errors, got %v", doc.Errors)
+			}
 			if len(doc.Requests) != 1 {
 				t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 			}
@@ -325,6 +323,87 @@ func TestParseRTSDirectiveAlias(t *testing.T) {
 			}
 			if script.Body == "" {
 				t.Fatalf("expected script body to be captured")
+			}
+		})
+	}
+}
+
+func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
+	tests := []struct {
+		name string
+		dir  string
+		want string
+	}{
+		{
+			name: "bare directive",
+			dir:  "# @rts",
+			want: "@rts requires a mode",
+		},
+		{
+			name: "language token without mode",
+			dir:  "# @rts rts",
+			want: "@rts requires a mode",
+		},
+		{
+			name: "language option without mode",
+			dir:  "# @rts lang=rts",
+			want: "@rts requires a mode",
+		},
+		{
+			name: "pre alias",
+			dir:  "# @rts pre",
+			want: "@rts supports only pre-request mode",
+		},
+		{
+			name: "duplicate kind",
+			dir:  "# @rts pre-request pre-request",
+			want: "@rts accepts only one mode",
+		},
+		{
+			name: "test kind",
+			dir:  "# @rts test",
+			want: "@rts test is not supported",
+		},
+		{
+			name: "tests kind",
+			dir:  "# @rts tests",
+			want: "@rts test is not supported",
+		},
+		{
+			name: "javascript option",
+			dir:  "# @rts pre-request lang=js",
+			want: "@rts only supports RestermScript",
+		},
+		{
+			name: "javascript token",
+			dir:  "# @rts js",
+			want: "@rts only supports RestermScript",
+		},
+		{
+			name: "unknown kind",
+			dir:  "# @rts response",
+			want: "@rts supports only pre-request mode",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := strings.Join([]string{
+				tt.dir,
+				`> request.setHeader("X-Test", "1")`,
+				"GET https://example.com",
+				"",
+			}, "\n")
+
+			doc := Parse("rts-invalid.http", []byte(src))
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("expected parse error containing %q, got %v", tt.want, doc.Errors)
+			}
+			if len(doc.Requests) != 1 {
+				t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+			}
+			if got := len(doc.Requests[0].Metadata.Scripts); got != 0 {
+				t.Fatalf("expected invalid @rts body to be discarded, got %d scripts", got)
 			}
 		})
 	}

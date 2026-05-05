@@ -14,9 +14,32 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+type scriptKind string
+
 const (
-	defaultScriptKind = "test"
-	defaultScriptLang = "js"
+	scriptKindTest       scriptKind = "test"
+	scriptKindTests      scriptKind = "tests"
+	scriptKindPreRequest scriptKind = "pre-request"
+)
+
+func (k scriptKind) String() string {
+	return string(k)
+}
+
+type scriptLang string
+
+const (
+	scriptLangJS  scriptLang = "js"
+	scriptLangRTS scriptLang = "rts"
+)
+
+func (l scriptLang) String() string {
+	return string(l)
+}
+
+const (
+	defaultScriptKind = scriptKindTest
+	defaultScriptLang = scriptLangJS
 )
 
 type bodyDirective string
@@ -34,10 +57,11 @@ type requestBuilder struct {
 	metadata          restfile.RequestMetadata
 	variables         []restfile.Variable
 	originalLines     []string
-	currentScriptKind string
-	currentScriptLang string
-	scriptBufferKind  string
-	scriptBufferLang  string
+	currentScriptKind scriptKind
+	currentScriptLang scriptLang
+	discardScript     bool
+	scriptBufferKind  scriptKind
+	scriptBufferLang  scriptLang
 	scriptBuffer      []string
 	settings          map[string]string
 	http              *httpbuilder.Builder
@@ -50,15 +74,15 @@ type requestBuilder struct {
 	k8s               *restfile.K8sSpec
 }
 
-func normScriptKind(kind string) string {
+func normScriptKind(kind string) scriptKind {
 	out := str.LowerTrim(kind)
 	if out == "" {
 		return defaultScriptKind
 	}
-	return out
+	return scriptKind(out)
 }
 
-func normScriptLang(lang string) string {
+func normScriptLang(lang string) scriptLang {
 	out := str.LowerTrim(lang)
 	switch out {
 	case "":
@@ -66,17 +90,21 @@ func normScriptLang(lang string) string {
 	case "javascript":
 		return defaultScriptLang
 	case "restermlang":
-		return "rts"
+		return scriptLangRTS
 	default:
-		return out
+		return scriptLang(out)
 	}
 }
 
-func (r *requestBuilder) appendScriptLine(kind, lang, body string) {
-	kind = normScriptKind(kind)
-	lang = normScriptLang(lang)
+func (r *requestBuilder) appendScriptLine(kind scriptKind, lang scriptLang, body string) {
+	if r.discardScript {
+		return
+	}
+	kind = normScriptKind(kind.String())
+	lang = normScriptLang(lang.String())
 	if r.scriptBufferKind != "" &&
-		(!strings.EqualFold(r.scriptBufferKind, kind) || !strings.EqualFold(r.scriptBufferLang, lang)) {
+		(!strings.EqualFold(r.scriptBufferKind.String(), kind.String()) ||
+			!strings.EqualFold(r.scriptBufferLang.String(), lang.String())) {
 		r.flushPendingScript()
 	}
 	if r.scriptBufferKind == "" {
@@ -92,8 +120,8 @@ func (r *requestBuilder) flushPendingScript() {
 	}
 	script := strings.Join(r.scriptBuffer, "\n")
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind: r.scriptBufferKind,
-		Lang: r.scriptBufferLang,
+		Kind: r.scriptBufferKind.String(),
+		Lang: r.scriptBufferLang.String(),
 		Body: script,
 	})
 	r.scriptBuffer = nil
@@ -101,13 +129,16 @@ func (r *requestBuilder) flushPendingScript() {
 	r.scriptBufferLang = ""
 }
 
-func (r *requestBuilder) appendScriptInclude(kind, lang, path string) {
-	kind = normScriptKind(kind)
-	lang = normScriptLang(lang)
+func (r *requestBuilder) appendScriptInclude(kind scriptKind, lang scriptLang, path string) {
+	if r.discardScript {
+		return
+	}
+	kind = normScriptKind(kind.String())
+	lang = normScriptLang(lang.String())
 	r.flushPendingScript()
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind:     kind,
-		Lang:     lang,
+		Kind:     kind.String(),
+		Lang:     lang.String(),
 		FilePath: path,
 	})
 }

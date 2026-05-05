@@ -62,7 +62,7 @@ Apply patches evaluate a single RestermScript expression that returns a patch di
 # @rts pre-request
 ```
 
-Pre-request scripts run full RestermScript blocks and can mutate the outgoing request and variables. They run before JavaScript pre-request blocks. The full `# @script pre-request lang=rts` form remains supported.
+Pre-request scripts run full RestermScript blocks and can mutate the outgoing request and variables. They run before JavaScript pre-request blocks. The full `# @script pre-request lang=rts` form remains supported. Use `@assert` for RestermScript response checks.
 
 ## Language overview
 

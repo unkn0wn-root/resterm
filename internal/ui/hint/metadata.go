@@ -27,7 +27,7 @@ var MetaCatalog = []Hint{
 	{Label: "@const", Summary: "Define a reusable constant"},
 	{Label: "@use", Summary: "Import a RestermScript module"},
 	{Label: "@script", Summary: "Start a pre-request or test script block"},
-	{Label: "@rts", Summary: "Start a RestermScript script block"},
+	{Label: "@rts", Summary: "Start a RestermScript pre-request block", Insert: "@rts pre-request"},
 	{Label: "@patch", Summary: "Define a reusable apply profile at file/global scope"},
 	{
 		Label:   "@apply",

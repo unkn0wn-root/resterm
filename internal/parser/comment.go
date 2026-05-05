@@ -1,6 +1,7 @@
 package parser
 
 import (
+	"errors"
 	"slices"
 	"strings"
 
@@ -331,10 +332,14 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 	case "script":
 		if rest != "" {
 			b.setScript(rest, "")
+		} else {
+			b.request.discardScript = false
 		}
 		return true
 	case "rts":
-		b.setScript(rest, "rts")
+		if err := b.setRTSScript(rest); err != nil {
+			b.addError(line, err.Error())
+		}
 		return true
 	case "apply":
 		spec, err := parseApplySpec(rest, line)
@@ -414,6 +419,20 @@ func (b *documentBuilder) setScript(rest, lang string) {
 	}
 	b.request.currentScriptKind = k
 	b.request.currentScriptLang = l
+	b.request.discardScript = false
+}
+
+func (b *documentBuilder) setRTSScript(rest string) error {
+	k, l, err := parseRTSScriptSpec(rest)
+	if err != nil {
+		b.request.discardScript = true
+		b.request.flushPendingScript()
+		return err
+	}
+	b.request.currentScriptKind = k
+	b.request.currentScriptLang = l
+	b.request.discardScript = false
+	return nil
 }
 
 func applySettingsTokens(dst map[string]string, raw string) map[string]string {
@@ -433,16 +452,16 @@ func applySettingsTokens(dst map[string]string, raw string) map[string]string {
 	return dst
 }
 
-func parseScriptSpec(rest string) (string, string) {
+func parseScriptSpec(rest string) (scriptKind, scriptLang) {
 	fields := lex.TokenizeFields(rest)
-	kind := ""
-	lang := ""
+	kind := scriptKind("")
+	lang := scriptLang("")
 	for _, field := range fields {
 		if strings.Contains(field, "=") {
 			continue
 		}
 		if kind == "" {
-			kind = field
+			kind = scriptKind(field)
 			continue
 		}
 		if lang == "" {
@@ -453,21 +472,101 @@ func parseScriptSpec(rest string) (string, string) {
 	}
 	params := options.ParseFields(fields)
 	if v := params["lang"]; v != "" {
-		lang = v
+		lang = scriptLang(v)
 	}
 	if v := params["language"]; v != "" && lang == "" {
-		lang = v
+		lang = scriptLang(v)
 	}
-	return normScriptKind(kind), normScriptLang(lang)
+	return normScriptKind(kind.String()), normScriptLang(lang.String())
 }
 
-func scriptLangToken(tok string) (string, bool) {
+func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
+	fields := lex.TokenizeFields(rest)
+	var kind scriptKind
+	kindSet := false
+
+	for _, field := range fields {
+		if strings.Contains(field, "=") {
+			continue
+		}
+		if lang, ok := scriptLangToken(field); ok {
+			if lang != scriptLangRTS {
+				return "", "", errRTSLangUnsupported()
+			}
+			continue
+		}
+
+		next, err := parseRTSScriptKind(field)
+		if err != nil {
+			return "", "", err
+		}
+		if kindSet {
+			return "", "", errRTSMultipleModes()
+		}
+		kind = next
+		kindSet = true
+	}
+
+	if err := validateRTSScriptLangOptions(fields); err != nil {
+		return "", "", err
+	}
+	if !kindSet {
+		return "", "", errRTSModeRequired()
+	}
+
+	return kind, scriptLangRTS, nil
+}
+
+func parseRTSScriptKind(field string) (scriptKind, error) {
+	switch kind := normScriptKind(field); kind {
+	case scriptKindPreRequest:
+		return kind, nil
+	case scriptKindTest, scriptKindTests:
+		return "", errRTSTestUnsupported()
+	default:
+		return "", errRTSModeUnsupported()
+	}
+}
+
+func validateRTSScriptLangOptions(fields []string) error {
+	params := options.ParseFields(fields)
+	for _, opt := range []string{"lang", "language"} {
+		if val := params[opt]; val != "" && normScriptLang(val) != scriptLangRTS {
+			return errRTSLangUnsupported()
+		}
+	}
+	return nil
+}
+
+func errRTSTestUnsupported() error {
+	return errors.New(
+		"@rts test is not supported, use @assert for RTS response checks or @script test for JavaScript tests",
+	)
+}
+
+func errRTSLangUnsupported() error {
+	return errors.New("@rts only supports RestermScript, remove lang=js or use @script for JavaScript")
+}
+
+func errRTSModeRequired() error {
+	return errors.New("@rts requires a mode, use '@rts pre-request'")
+}
+
+func errRTSModeUnsupported() error {
+	return errors.New("@rts supports only pre-request mode, use '@rts pre-request'")
+}
+
+func errRTSMultipleModes() error {
+	return errors.New("@rts accepts only one mode, use '@rts pre-request'")
+}
+
+func scriptLangToken(tok string) (scriptLang, bool) {
 	out := strings.ToLower(strings.TrimSpace(tok))
 	switch out {
 	case "js", "javascript":
-		return "js", true
+		return scriptLangJS, true
 	case "rts", "restermlang":
-		return "rts", true
+		return scriptLangRTS, true
 	default:
 		return "", false
 	}

@@ -29,6 +29,19 @@ func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
 	}
 }
 
+func TestRTSMetadataHintInsertsExplicitPreRequestMode(t *testing.T) {
+	for _, option := range hint.MetaCatalog {
+		if option.Label != "@rts" {
+			continue
+		}
+		if option.Insert != "@rts pre-request" {
+			t.Fatalf("expected @rts hint to insert explicit mode, got %q", option.Insert)
+		}
+		return
+	}
+	t.Fatal("metadata hint catalog missing @rts")
+}
+
 func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 	authOptions := hint.MetaOptions("auth", "")
 	if len(authOptions) == 0 {
