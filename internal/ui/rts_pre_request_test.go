@@ -39,13 +39,13 @@ vars.global.delete("old")`,
 			}},
 		},
 	}
-	vars := map[string]string{"seed": "value"}
+	variables := map[string]string{"seed": "value"}
 	globals := map[string]vars.GlobalMutation{
 		"secret": {Name: "Secret", Value: "top", Secret: true},
 		"old":    {Name: "old", Value: "gone"},
 	}
 
-	out, err := model.runRTSPreRequest(context.Background(), nil, req, "", "", vars, globals)
+	out, err := model.runRTSPreRequest(context.Background(), nil, req, "", "", variables, globals)
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
@@ -65,8 +65,8 @@ vars.global.delete("old")`,
 	if got := out.Variables["token"]; got != "abc" {
 		t.Fatalf("expected output vars token=abc, got %q", got)
 	}
-	if got := vars["token"]; got != "abc" {
-		t.Fatalf("expected vars map token=abc, got %q", got)
+	if got := variables["token"]; got != "abc" {
+		t.Fatalf("expected variables map token=abc, got %q", got)
 	}
 	if gv, ok := out.Globals["newglobal"]; !ok || gv.Value != "ng" || gv.Secret {
 		t.Fatalf("expected newglobal=ng (non-secret), got %#v", gv)
