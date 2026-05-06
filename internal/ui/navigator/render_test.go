@@ -25,14 +25,21 @@ func selectedRenderTheme(t *testing.T) theme.Theme {
 
 	th := theme.DefaultTheme()
 	th.NavigatorTitleSelected = th.NavigatorTitleSelected.Background(lipgloss.Color("#241B33"))
-	th.NavigatorSubtitleSelected = th.NavigatorSubtitleSelected.Background(lipgloss.Color("#241B33"))
+	th.NavigatorSubtitleSelected = th.NavigatorSubtitleSelected.Background(
+		lipgloss.Color("#241B33"),
+	)
 	return th
 }
 
 func assertSelectedBackgroundSegments(t *testing.T, rendered string, min int) {
 	t.Helper()
 	if got := strings.Count(rendered, selectedTestBackgroundSGR); got < min {
-		t.Fatalf("expected at least %d selected background segments, got %d in %q", min, got, rendered)
+		t.Fatalf(
+			"expected at least %d selected background segments, got %d in %q",
+			min,
+			got,
+			rendered,
+		)
 	}
 }
 

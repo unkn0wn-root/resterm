@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -119,7 +119,7 @@ func (e *Engine) ExecuteWith(
 	opt ExecOptions,
 ) (engine.RequestResult, error) {
 	if req == nil {
-		return engine.RequestResult{}, errdef.New(errdef.CodeUI, "request is nil")
+		return engine.RequestResult{}, diag.New(diag.ClassUI, "request is nil")
 	}
 
 	e.syncRegistry(doc)
@@ -132,7 +132,7 @@ func (e *Engine) ExecuteWith(
 		}
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
-		err := errdef.New(errdef.CodeRoute, "@ssh cannot be combined with @k8s")
+		err := diag.New(diag.ClassRoute, "@ssh cannot be combined with @k8s")
 		exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
 		exp.stage(
 			xplain.StageRoute,
@@ -446,7 +446,7 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 			nil,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeScript, err, "%s", tag)
+		wrap := diag.WrapAsf(diag.ClassScript, err, "%s", tag)
 		return x.fail(wrap, "Condition evaluation failed", err)
 	}
 	st := xplain.StageOK
@@ -482,7 +482,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			x.req,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeScript, err, "@apply")
+		wrap := diag.WrapAs(diag.ClassScript, err, "@apply")
 		return x.fail(wrap, "Apply failed", err)
 	}
 	if before != nil {
@@ -517,7 +517,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			x.req,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeScript, err, "pre-request rts script")
+		wrap := diag.WrapAs(diag.ClassScript, err, "pre-request rts script")
 		return x.fail(wrap, "RTS pre-request failed", err)
 	}
 	if err := applyPreRequestOutput(x.req, rtsOut); err != nil {
@@ -569,7 +569,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 			x.req,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeScript, err, "pre-request script")
+		wrap := diag.WrapAs(diag.ClassScript, err, "pre-request script")
 		return x.fail(wrap, "JS pre-request failed", err)
 	}
 	if err := applyPreRequestOutput(x.req, jsOut); err != nil {
@@ -635,7 +635,7 @@ func (x *execCtx) resolveRoute() *xrunResult {
 			nil,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeRoute, err, "resolve ssh")
+		wrap := diag.WrapAs(diag.ClassRoute, err, "resolve ssh")
 		return x.fail(wrap, "Route resolution failed", err)
 	}
 	kp, err := x.eng.resolveK8s(x.doc, x.req, x.res, x.env)
@@ -648,7 +648,7 @@ func (x *execCtx) resolveRoute() *xrunResult {
 			nil,
 			err.Error(),
 		)
-		wrap := errdef.Wrap(errdef.CodeRoute, err, "resolve k8s")
+		wrap := diag.WrapAs(diag.ClassRoute, err, "resolve k8s")
 		return x.fail(wrap, "Route resolution failed", err)
 	}
 	x.sshPlan = sp
@@ -849,7 +849,7 @@ func (f flow) ExecuteGRPC() xexec.RequestResult {
 	}
 	x := f.ctx
 	if x.eng.gc == nil {
-		err := errdef.New(errdef.CodeProtocol, "gRPC client is not initialised")
+		err := diag.New(diag.ClassProtocol, "gRPC client is not initialised")
 		x.exp.setPrepared(x.req)
 		res := x.base()
 		res.Err = err

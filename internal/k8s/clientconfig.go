@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -87,7 +88,7 @@ func restConfig(cfg Config, opt LoadOptions) (*rest.Config, error) {
 
 	out, err := cc.ClientConfig()
 	if err != nil {
-		return nil, fmt.Errorf("k8s: build kube client config: %w", err)
+		return nil, diag.WrapAs(diag.ClassRoute, err, "build kube client config")
 	}
 	return out, nil
 }
@@ -111,7 +112,7 @@ func loadRaw(cfg Config) (clientcmdapi.Config, *clientcmd.ConfigOverrides, error
 	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, ovs)
 	raw, err := cc.RawConfig()
 	if err != nil {
-		return clientcmdapi.Config{}, nil, fmt.Errorf("k8s: load kubeconfig: %w", err)
+		return clientcmdapi.Config{}, nil, diag.WrapAs(diag.ClassRoute, err, "load kubeconfig")
 	}
 	return raw, ovs, nil
 }

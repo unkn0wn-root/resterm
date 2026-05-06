@@ -1,9 +1,14 @@
 package runner
 
 import (
+	"errors"
+	"net"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -191,6 +196,56 @@ func TestReportModelUsesStructuredProfileFailure(t *testing.T) {
 			"expected result failure to use structured profile failure, got %+v",
 			got.Results[0].Failure,
 		)
+	}
+}
+
+func TestReportModelIncludesErrorDetails(t *testing.T) {
+	reqErr := diag.Wrap(
+		&url.Error{
+			Op:  "Get",
+			URL: "https://api.local",
+			Err: &net.DNSError{Err: "no such host", Name: "api.local"},
+		},
+		"perform request",
+		diag.WithComponent(diag.ComponentHTTP),
+	)
+	scriptErr := errors.New("script boom")
+	rep := &Report{
+		Results: []Result{{
+			Kind:      ResultKindRequest,
+			Name:      "lookup",
+			Err:       reqErr,
+			ScriptErr: scriptErr,
+			Profile: &ProfileInfo{
+				Failures: []ProfileFailure{{
+					Reason:  "request failed",
+					Err:     reqErr,
+					Failure: runfail.FromErrorSource(reqErr, "profile"),
+				}},
+			},
+			Steps: []StepResult{{
+				Name: "step",
+				Err:  reqErr,
+			}},
+		}},
+	}
+
+	got := ReportModel(rep)
+	res := got.Results[0]
+	if res.ErrorDetail == nil ||
+		!strings.Contains(res.ErrorDetail.Rendered, "\nperform request\n") ||
+		res.ScriptErrorDetail == nil ||
+		!strings.Contains(res.ScriptErrorDetail.Rendered, "script boom") {
+		t.Fatalf("expected result error details, got %+v", res)
+	}
+	if len(res.Steps) != 1 || res.Steps[0].ErrorDetail == nil ||
+		!strings.Contains(res.Steps[0].ErrorDetail.Rendered, "lookup api.local") {
+		t.Fatalf("expected step error detail, got %+v", res.Steps)
+	}
+	if res.Profile == nil || len(res.Profile.Failures) != 1 ||
+		res.Profile.Failures[0].Failure == nil ||
+		len(res.Profile.Failures[0].Failure.Chain) == 0 {
+		t.Fatalf("expected profile failure chain, got %+v", res.Profile)
 	}
 }
 

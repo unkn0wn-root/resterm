@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -50,8 +50,8 @@ func loadJSONEnvironmentFile(path string) (EnvironmentSet, error) {
 
 	hadShared := applyShared(envs)
 	if hadShared && len(envs) == 0 {
-		return nil, errdef.New(
-			errdef.CodeParse,
+		return nil, diag.Newf(
+			diag.ClassParse,
 			`env file %s defines only %q; add at least one concrete environment`,
 			path,
 			SharedEnvKey,
@@ -63,21 +63,21 @@ func loadJSONEnvironmentFile(path string) (EnvironmentSet, error) {
 func readJSONEnvironment(path string) (raw any, err error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "open env file %s", path)
+		return nil, diag.WrapAsf(diag.ClassFilesystem, err, "open env file %s", path)
 	}
 	defer func() {
 		if closeErr := f.Close(); closeErr != nil && err == nil {
-			err = errdef.Wrap(errdef.CodeFilesystem, closeErr, "close env file %s", path)
+			err = diag.WrapAsf(diag.ClassFilesystem, closeErr, "close env file %s", path)
 		}
 	}()
 
 	data, err := io.ReadAll(f)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeFilesystem, err, "read env file %s", path)
+		return nil, diag.WrapAsf(diag.ClassFilesystem, err, "read env file %s", path)
 	}
 
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, errdef.Wrap(errdef.CodeParse, err, "parse env file %s", path)
+		return nil, diag.WrapAsf(diag.ClassParse, err, "parse env file %s", path)
 	}
 	return raw, nil
 }
@@ -85,7 +85,7 @@ func readJSONEnvironment(path string) (raw any, err error) {
 func parseEnvironmentSet(raw any) (EnvironmentSet, error) {
 	obj, ok := raw.(map[string]any)
 	if !ok {
-		return nil, errdef.New(errdef.CodeParse, "unsupported env file format: %T", raw)
+		return nil, diag.Newf(diag.ClassParse, "unsupported env file format: %T", raw)
 	}
 
 	envs := make(EnvironmentSet, len(obj))

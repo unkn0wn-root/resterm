@@ -62,55 +62,59 @@ func ReportModel(rep *Report) runfmt.Report {
 
 func toFormatResult(res Result) runfmt.Result {
 	out := runfmt.Result{
-		Kind:            string(res.Kind),
-		Name:            str.Trim(res.Name),
-		Method:          str.Trim(res.Method),
-		Target:          str.Trim(res.Target),
-		EffectiveTarget: str.Trim(res.EffectiveTarget),
-		Environment:     str.Trim(res.Environment),
-		Status:          resultStatusOf(res),
-		Summary:         str.Trim(res.Summary),
-		Duration:        resultDuration(res),
-		Canceled:        res.Canceled,
-		SkipReason:      str.Trim(res.SkipReason),
-		Error:           errText(res.Err),
-		ScriptError:     errText(res.ScriptErr),
-		Failure:         formatResultFailure(res),
-		HTTP:            formatHTTP(res.Response),
-		GRPC:            formatGRPC(res.GRPC),
-		Stream:          formatStream(res.Stream),
-		Trace:           formatTrace(res.Trace),
-		Tests:           formatTests(res.Tests),
-		Compare:         formatCompare(res.Compare),
-		Profile:         formatProfile(res.Profile),
-		Steps:           formatSteps(res.Steps),
+		Kind:              string(res.Kind),
+		Name:              str.Trim(res.Name),
+		Method:            str.Trim(res.Method),
+		Target:            str.Trim(res.Target),
+		EffectiveTarget:   str.Trim(res.EffectiveTarget),
+		Environment:       str.Trim(res.Environment),
+		Status:            resultStatusOf(res),
+		Summary:           str.Trim(res.Summary),
+		Duration:          resultDuration(res),
+		Canceled:          res.Canceled,
+		SkipReason:        str.Trim(res.SkipReason),
+		Error:             errText(res.Err),
+		ErrorDetail:       runfmt.ErrorDetailFromError(res.Err),
+		ScriptError:       errText(res.ScriptErr),
+		ScriptErrorDetail: runfmt.ErrorDetailFromError(res.ScriptErr),
+		Failure:           formatResultFailure(res),
+		HTTP:              formatHTTP(res.Response),
+		GRPC:              formatGRPC(res.GRPC),
+		Stream:            formatStream(res.Stream),
+		Trace:             formatTrace(res.Trace),
+		Tests:             formatTests(res.Tests),
+		Compare:           formatCompare(res.Compare),
+		Profile:           formatProfile(res.Profile),
+		Steps:             formatSteps(res.Steps),
 	}
 	return out
 }
 
 func toFormatStep(step StepResult) runfmt.Step {
 	out := runfmt.Step{
-		Name:            str.Trim(step.Name),
-		Method:          str.Trim(step.Method),
-		Target:          str.Trim(step.Target),
-		EffectiveTarget: str.Trim(step.EffectiveTarget),
-		Environment:     str.Trim(step.Environment),
-		Branch:          str.Trim(step.Branch),
-		Iteration:       step.Iteration,
-		Total:           step.Total,
-		Status:          stepStatusOf(step),
-		Summary:         str.Trim(step.Summary),
-		Duration:        step.Duration,
-		Canceled:        step.Canceled,
-		SkipReason:      str.Trim(step.SkipReason),
-		Error:           errText(step.Err),
-		ScriptError:     errText(step.ScriptErr),
-		Failure:         formatStepFailure(step),
-		HTTP:            formatHTTP(step.Response),
-		GRPC:            formatGRPC(step.GRPC),
-		Stream:          formatStream(step.Stream),
-		Trace:           formatTrace(step.Trace),
-		Tests:           formatTests(step.Tests),
+		Name:              str.Trim(step.Name),
+		Method:            str.Trim(step.Method),
+		Target:            str.Trim(step.Target),
+		EffectiveTarget:   str.Trim(step.EffectiveTarget),
+		Environment:       str.Trim(step.Environment),
+		Branch:            str.Trim(step.Branch),
+		Iteration:         step.Iteration,
+		Total:             step.Total,
+		Status:            stepStatusOf(step),
+		Summary:           str.Trim(step.Summary),
+		Duration:          step.Duration,
+		Canceled:          step.Canceled,
+		SkipReason:        str.Trim(step.SkipReason),
+		Error:             errText(step.Err),
+		ErrorDetail:       runfmt.ErrorDetailFromError(step.Err),
+		ScriptError:       errText(step.ScriptErr),
+		ScriptErrorDetail: runfmt.ErrorDetailFromError(step.ScriptErr),
+		Failure:           formatStepFailure(step),
+		HTTP:              formatHTTP(step.Response),
+		GRPC:              formatGRPC(step.GRPC),
+		Stream:            formatStream(step.Stream),
+		Trace:             formatTrace(step.Trace),
+		Tests:             formatTests(step.Tests),
 	}
 	return out
 }
@@ -234,26 +238,46 @@ func formatProfile(prof *ProfileInfo) *runfmt.Profile {
 }
 
 func formatResultFailure(res Result) *runfmt.Failure {
-	return formatRunFailure(resultFailure(res))
+	return formatRunFailure(resultFailure(res), resultErrorDetail(res))
 }
 
 func formatStepFailure(step StepResult) *runfmt.Failure {
-	return formatRunFailure(stepFailure(step))
+	return formatRunFailure(stepFailure(step), stepErrorDetail(step))
 }
 
 func formatProfileFailure(fail ProfileFailure) *runfmt.Failure {
-	return formatRunFailure(fail.Failure)
+	return formatRunFailure(fail.Failure, runfmt.ErrorDetailFromError(fail.Err))
 }
 
-func formatRunFailure(failure runfail.Failure) *runfmt.Failure {
+func formatRunFailure(failure runfail.Failure, detail *runfmt.ErrorDetail) *runfmt.Failure {
 	if failure.Code == "" {
 		return nil
 	}
-	return runfmt.FromFailure(runfail.New(
+	return runfmt.AttachErrorDetail(runfmt.FromFailure(runfail.New(
 		failure.Code,
 		str.Trim(failure.Message),
 		str.Trim(failure.Source),
-	))
+	)), detail)
+}
+
+func resultErrorDetail(res Result) *runfmt.ErrorDetail {
+	if res.Err != nil {
+		return runfmt.ErrorDetailFromError(res.Err)
+	}
+	if res.ScriptErr != nil {
+		return runfmt.ErrorDetailFromError(res.ScriptErr)
+	}
+	return nil
+}
+
+func stepErrorDetail(step StepResult) *runfmt.ErrorDetail {
+	if step.Err != nil {
+		return runfmt.ErrorDetailFromError(step.Err)
+	}
+	if step.ScriptErr != nil {
+		return runfmt.ErrorDetailFromError(step.ScriptErr)
+	}
+	return nil
 }
 
 func formatLatency(lat *history.ProfileLatency) *runfmt.Latency {

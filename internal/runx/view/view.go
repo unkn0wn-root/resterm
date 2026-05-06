@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -183,10 +184,10 @@ func requestSummary(res runner.Result, st styler) string {
 func requestIssues(res runner.Result, st styler) string {
 	var parts []string
 	if res.Err != nil {
-		parts = append(parts, st.pair("Request error", str.Trim(res.Err.Error()), toneWarn))
+		parts = append(parts, diagnosticIssue("Request error", res.Err, st))
 	}
 	if res.ScriptErr != nil {
-		parts = append(parts, st.pair("Script error", str.Trim(res.ScriptErr.Error()), toneWarn))
+		parts = append(parts, diagnosticIssue("Script error", res.ScriptErr, st))
 	}
 	if msg := traceFailureText(res.Trace); msg != "" {
 		parts = append(parts, st.pair("Trace", msg, toneWarn))
@@ -198,6 +199,17 @@ func requestIssues(res runner.Result, st styler) string {
 
 	tests := testsText(res, st)
 	return bodyfmt.JoinSections(errs, tests)
+}
+
+func diagnosticIssue(label string, err error, st styler) string {
+	body := str.Trim(diag.Render(err))
+	if body == "" && err != nil {
+		body = str.Trim(err.Error())
+	}
+	if body == "" {
+		return st.label(label + ":")
+	}
+	return st.label(label+":") + "\n" + indent(st.value(body, toneWarn), "  ")
 }
 
 func requestWarnings(res runner.Result, st styler) string {

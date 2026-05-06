@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -18,7 +18,11 @@ func (c *Client) prepareHTTPRequest(
 	opts Options,
 ) (*http.Request, Options, error) {
 	if req == nil {
-		return nil, opts, errdef.New(errdef.CodeHTTP, "request is nil")
+		return nil, opts, diag.New(
+			diag.ClassProtocol,
+			"request is nil",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 
 	effective := applyRequestSettings(opts, req.Settings)

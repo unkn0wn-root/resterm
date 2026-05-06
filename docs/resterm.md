@@ -606,7 +606,7 @@ Troubleshooting:
 | `@tag` / `@tags` | `# @tag smoke billing` | Tags for grouping and filters (comma- or space-separated). |
 | `@trace` | `# @trace dns<=40ms total<=200ms tolerance=25ms` | Enable per-phase tracing and optional latency budgets. |
 | `@no-log` | `# @no-log` | Prevents the response body snippet from being stored in history. |
-| `@log-sensitive-headers` | `# @log-sensitive-headers [true|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
+| `@log-sensitive-headers` | `# @log-sensitive-headers [true\|false]` | Allow allowlisted sensitive headers (Authorization, Proxy-Authorization, API-token headers such as `X-API-Key`, `X-Access-Token`, `X-Auth-Key`, etc.) to appear in history; omit or set to `false` to keep them masked (default). |
 | `@setting` | `# @setting key value` | Generic settings (transport/TLS today: `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`, `http-*`, `grpc-*`). |
 | `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
@@ -627,7 +627,7 @@ RestermScript (RST) powers templates (`{{= ... }}`) and directive expressions. I
 | `@skip-if` | `# @skip-if env.mode == "dry-run"` | Skip the request when the expression is truthy. |
 | `@assert` | `# @assert response.statusCode == 200` | Evaluate an assertion after the response arrives. |
 | `@for-each` | `# @for-each json.file("users.json") as user` | Repeat the request for each item in a list. |
-| `@rts pre-request` | `# @rts pre-request` | Run a pre-request RST block with request/vars mutation helpers. The full `# @script pre-request lang=rts` form remains supported. |
+| `@rts pre-request` | `# @rts pre-request` | Run a pre-request RST block with request/vars mutation helpers. Use `@assert` for RST response checks. The full `# @script pre-request lang=rts` form remains supported. |
 
 #### Workflow-only RST directives
 
@@ -841,7 +841,7 @@ Available WebSocket options:
 | `idle-timeout` | Idle timeout once the socket is open. Resets on any send or receive activity (0 leaves it unbounded). |
 | `max-message-bytes` | Upper bound on inbound frame sizes. |
 | `subprotocols` | Comma-separated list advertised during the handshake. |
-| `compression=<true|false>` | Explicitly enable or disable per-message compression. |
+| `compression=<true\|false>` | Explicitly enable or disable per-message compression. |
 
 Supported `@ws` steps:
 
@@ -1051,7 +1051,7 @@ Available directives:
 
 | Directive | Description |
 | --- | --- |
-| `@graphql [true|false]` | Enable/disable GraphQL processing for the request. |
+| `@graphql [true\|false]` | Enable/disable GraphQL processing for the request. |
 | `@operation` / `@graphql-operation` | Sets the `operationName`. |
 | `@variables` | Starts a variables block; inline JSON or `< file.json`. |
 | `@query` | Loads the query from a file instead of the inline body. |
@@ -1087,12 +1087,12 @@ gRPC requests start with a line such as `GRPC host:port`. Metadata directives de
 | --- | --- |
 | `@grpc package.Service/Method` | Fully qualified method to call. |
 | `@grpc-descriptor path/to/file.protoset` | Use a compiled descriptor set instead of server reflection. |
-| `@grpc-reflection [true|false]` | Toggle server reflection (default `true`). |
-| `@grpc-plaintext [true|false]` | Force plaintext or TLS. |
+| `@grpc-reflection [true\|false]` | Toggle server reflection (default `true`). |
+| `@grpc-plaintext [true\|false]` | Force plaintext or TLS. |
 | `@grpc-authority value` | Override the HTTP/2 `:authority` header. |
 | `@grpc-metadata key: value` | Add metadata pairs (repeatable). |
 | `@setting grpc-root-cas path1,path2` | Extra root CAs (space/comma/semicolon separated). Paths resolve relative to the request file. |
-| `@setting grpc-root-mode append|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
+| `@setting grpc-root-mode append\|replace` | Control whether extra CAs append to system roots (`append`) or replace them (`replace`, default). |
 | `@setting grpc-client-cert path` / `@setting grpc-client-key path` | Client cert/key for mTLS (relative paths allowed). |
 | `@setting grpc-insecure true` | Skip TLS verification (off by default). |
 

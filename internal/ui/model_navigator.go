@@ -411,7 +411,8 @@ func (m *Model) syncNavigatorSelection() {
 			}
 			if util.SamePath(path, m.currentFile) {
 				if m.selectWorkflowForNode(wf, n.ID) {
-					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
+					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok &&
+						item.workflow != nil {
 						wf = item.workflow
 					}
 				}
@@ -575,7 +576,8 @@ func (m *Model) syncNavigatorWorkflowAtCursor(wf *restfile.Workflow, wfIdx int, 
 	}
 
 	if m.selectWorkflowForNode(wf, targetID) {
-		if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok && item.workflow != nil {
+		if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok &&
+			item.workflow != nil {
 			wf = item.workflow
 		}
 	}

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -20,7 +20,11 @@ func (c *Client) BuildHTTPRequest(
 	opts Options,
 ) (*http.Request, Options, []byte, error) {
 	if req == nil {
-		return nil, opts, nil, errdef.New(errdef.CodeHTTP, "request is nil")
+		return nil, opts, nil, diag.New(
+			diag.ClassProtocol,
+			"request is nil",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 
 	effective := applyRequestSettings(opts, req.Settings)
@@ -33,7 +37,12 @@ func (c *Client) BuildHTTPRequest(
 	if plan.rd != nil {
 		body, err = io.ReadAll(plan.rd)
 		if err != nil {
-			return nil, opts, nil, errdef.Wrap(errdef.CodeHTTP, err, "read request body")
+			return nil, opts, nil, diag.WrapAs(
+				diag.ClassProtocol,
+				err,
+				"read request body",
+				diag.WithComponent(diag.ComponentHTTP),
+			)
 		}
 	}
 
@@ -65,7 +74,11 @@ func (c *Client) buildHTTPRequest(
 	urlOverride string,
 ) (*http.Request, Options, error) {
 	if req == nil {
-		return nil, opts, errdef.New(errdef.CodeHTTP, "request is nil")
+		return nil, opts, diag.New(
+			diag.ClassProtocol,
+			"request is nil",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 
 	expandedURL := strings.TrimSpace(urlOverride)
@@ -73,19 +86,33 @@ func (c *Client) buildHTTPRequest(
 		expandedURL = strings.TrimSpace(req.URL)
 	}
 	if expandedURL == "" {
-		return nil, opts, errdef.New(errdef.CodeHTTP, "request url is empty")
+		return nil, opts, diag.New(
+			diag.ClassProtocol,
+			"request url is empty",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 	if resolver != nil {
 		var err error
 		expandedURL, err = resolver.ExpandTemplates(expandedURL)
 		if err != nil {
-			return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "expand url")
+			return nil, opts, diag.WrapAs(
+				diag.ClassProtocol,
+				err,
+				"expand url",
+				diag.WithComponent(diag.ComponentHTTP),
+			)
 		}
 	}
 
 	httpReq, err := http.NewRequestWithContext(ctx, req.Method, expandedURL, body)
 	if err != nil {
-		return nil, opts, errdef.Wrap(errdef.CodeHTTP, err, "build request")
+		return nil, opts, diag.WrapAs(
+			diag.ClassProtocol,
+			err,
+			"build request",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 	applyHTTPVersion(httpReq, opts.HTTPVersion)
 	if verErr := checkHTTPVersionRequest(httpReq, opts.HTTPVersion); verErr != nil {

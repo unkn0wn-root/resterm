@@ -689,7 +689,10 @@ DELETE https://example.com/resource
 		t.Fatalf("expected workflow selection to activate workflow key")
 	}
 	if state := m.navigatorRenderState(); state.ActiveNodeID != "" {
-		t.Fatalf("expected workflow selection not to render request marker, got %q", state.ActiveNodeID)
+		t.Fatalf(
+			"expected workflow selection not to render request marker, got %q",
+			state.ActiveNodeID,
+		)
 	}
 }
 
@@ -720,7 +723,11 @@ GET https://example.com
 	m.syncNavigatorSelection()
 
 	if m.workflowSelectionKey != key {
-		t.Fatalf("expected workflow selection key %q to be preserved, got %q", key, m.workflowSelectionKey)
+		t.Fatalf(
+			"expected workflow selection key %q to be preserved, got %q",
+			key,
+			m.workflowSelectionKey,
+		)
 	}
 	if m.workflowList.Index() != -1 {
 		t.Fatalf("expected empty navigator selection to clear visible workflow selection")
@@ -1096,7 +1103,8 @@ func TestNavigatorRequestEnterSendsFromSidebar(t *testing.T) {
 			m.navigator.Selected().Payload.Data,
 		)
 	}
-	if sel := m.navigator.Selected(); sel == nil || !util.SamePath(sel.Payload.FilePath, m.currentFile) {
+	if sel := m.navigator.Selected(); sel == nil ||
+		!util.SamePath(sel.Payload.FilePath, m.currentFile) {
 		t.Fatalf(
 			"expected navigator selection to target current file, got %v vs %q",
 			sel,
@@ -1221,7 +1229,11 @@ func TestNavigatorRequestLKeepsLongFirstRequestCursorVisible(t *testing.T) {
 
 	cursorLine := currentCursorLine(m.editor)
 	if cursorLine != req.LineRange.Start {
-		t.Fatalf("expected cursor to stay on request line %d, got %d", req.LineRange.Start, cursorLine)
+		t.Fatalf(
+			"expected cursor to stay on request line %d, got %d",
+			req.LineRange.Start,
+			cursorLine,
+		)
 	}
 	viewStart := m.editor.ViewStart()
 	cursorOffset := cursorLine - 1
@@ -1392,7 +1404,11 @@ DELETE https://example.com/resource
 		)
 	}
 	if m.workflowSelectionKey != workflowKey(wf) {
-		t.Fatalf("expected workflow selection key %q, got %q", workflowKey(wf), m.workflowSelectionKey)
+		t.Fatalf(
+			"expected workflow selection key %q, got %q",
+			workflowKey(wf),
+			m.workflowSelectionKey,
+		)
 	}
 }
 
@@ -1537,7 +1553,10 @@ GET https://remote.test
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if !util.SamePath(m.currentFile, fileA) {
-		t.Fatalf("expected enter not to reuse jump confirmation, got current file %q", m.currentFile)
+		t.Fatalf(
+			"expected enter not to reuse jump confirmation, got current file %q",
+			m.currentFile,
+		)
 	}
 	if m.workflowRun != nil {
 		t.Fatalf("expected workflow not to start from stale jump confirmation")
@@ -1567,7 +1586,11 @@ func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testi
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	if !util.SamePath(m.currentFile, fileA) {
-		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+		t.Fatalf(
+			"expected first preview press to keep current file %q, got %q",
+			fileA,
+			m.currentFile,
+		)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
 		t.Fatalf("expected preview-specific warning, got %q", m.statusMessage.text)
@@ -1575,7 +1598,10 @@ func TestNavigatorCrossFilePreviewConfirmationIsNotReusedForRequestSend(t *testi
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
 	if !util.SamePath(m.currentFile, fileA) {
-		t.Fatalf("expected enter not to reuse preview confirmation, got current file %q", m.currentFile)
+		t.Fatalf(
+			"expected enter not to reuse preview confirmation, got current file %q",
+			m.currentFile,
+		)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Enter again to send.") {
 		t.Fatalf("expected send-specific warning, got %q", m.statusMessage.text)
@@ -1604,7 +1630,11 @@ func TestNavigatorCrossFileConfirmationIsBoundToSourceBuffer(t *testing.T) {
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	if !util.SamePath(m.currentFile, fileA) {
-		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+		t.Fatalf(
+			"expected first preview press to keep current file %q, got %q",
+			fileA,
+			m.currentFile,
+		)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
 		t.Fatalf("expected preview-specific warning, got %q", m.statusMessage.text)
@@ -1620,10 +1650,17 @@ func TestNavigatorCrossFileConfirmationIsBoundToSourceBuffer(t *testing.T) {
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	if !util.SamePath(m.currentFile, fileC) {
-		t.Fatalf("expected stale confirmation not to open %q, got current file %q", fileB, m.currentFile)
+		t.Fatalf(
+			"expected stale confirmation not to open %q, got current file %q",
+			fileB,
+			m.currentFile,
+		)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
-		t.Fatalf("expected a fresh preview warning for new source buffer, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"expected a fresh preview warning for new source buffer, got %q",
+			m.statusMessage.text,
+		)
 	}
 }
 
@@ -1647,7 +1684,11 @@ func TestNavigatorCrossFileConfirmationIsInvalidatedByFurtherEdits(t *testing.T)
 
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	if !util.SamePath(m.currentFile, fileA) {
-		t.Fatalf("expected first preview press to keep current file %q, got %q", fileA, m.currentFile)
+		t.Fatalf(
+			"expected first preview press to keep current file %q, got %q",
+			fileA,
+			m.currentFile,
+		)
 	}
 
 	original := m.editor.Value()
@@ -1656,10 +1697,16 @@ func TestNavigatorCrossFileConfirmationIsInvalidatedByFurtherEdits(t *testing.T)
 	m.markDirty()
 	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeySpace})
 	if !util.SamePath(m.currentFile, fileA) {
-		t.Fatalf("expected edited-then-restored buffer to require fresh confirmation, got current file %q", m.currentFile)
+		t.Fatalf(
+			"expected edited-then-restored buffer to require fresh confirmation, got current file %q",
+			m.currentFile,
+		)
 	}
 	if !strings.Contains(m.statusMessage.text, "Press Space again to preview.") {
-		t.Fatalf("expected fresh preview warning after restoring an edit, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"expected fresh preview warning after restoring an edit, got %q",
+			m.statusMessage.text,
+		)
 	}
 }
 
@@ -1741,7 +1788,11 @@ GET https://example.com
 	}
 
 	if got := currentCursorLine(m.editor); got != second.LineRange.Start {
-		t.Fatalf("expected cursor to jump to duplicate workflow line %d, got %d", second.LineRange.Start, got)
+		t.Fatalf(
+			"expected cursor to jump to duplicate workflow line %d, got %d",
+			second.LineRange.Start,
+			got,
+		)
 	}
 	if got := m.workflowList.Index(); got != 1 {
 		t.Fatalf("expected second workflow list item to be selected, got %d", got)

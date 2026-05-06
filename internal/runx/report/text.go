@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 )
 
 // TextPainter decorates text segments in the shared text formatter.
@@ -70,6 +71,15 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 		if err := writeTextProfileDetails(w, "  ", res, st); err != nil {
 			return err
 		}
+		if err := writeTextErrorDetails(
+			w,
+			"  ",
+			res.ErrorDetail,
+			res.ScriptErrorDetail,
+			st,
+		); err != nil {
+			return err
+		}
 		for i, step := range res.Steps {
 			if _, err := fmt.Fprintf(
 				w,
@@ -89,6 +99,15 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 			); err != nil {
 				return err
 			}
+			if err := writeTextErrorDetails(
+				w,
+				"    ",
+				step.ErrorDetail,
+				step.ScriptErrorDetail,
+				st,
+			); err != nil {
+				return err
+			}
 		}
 	}
 	_, err := fmt.Fprintf(
@@ -101,6 +120,62 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 		st.skipCount(rep.Skipped),
 	)
 	return err
+}
+
+func writeTextErrorDetails(
+	w io.Writer,
+	indent string,
+	errDetail *ErrorDetail,
+	scriptDetail *ErrorDetail,
+	st textStyler,
+) error {
+	if err := writeTextErrorDetail(w, indent, "Error", errDetail, st); err != nil {
+		return err
+	}
+	return writeTextErrorDetail(w, indent, "Script Error", scriptDetail, st)
+}
+
+func writeTextErrorDetail(
+	w io.Writer,
+	indent string,
+	label string,
+	detail *ErrorDetail,
+	st textStyler,
+) error {
+	body := errorDetailText(detail, "")
+	if body == "" {
+		return nil
+	}
+	_, err := fmt.Fprintf(
+		w,
+		"%s%s\n%s\n",
+		indent,
+		st.detail(label, ""),
+		indentBlock(styleErrorDetailBlock(body, st), indent+"  "),
+	)
+	return err
+}
+
+func styleErrorDetailBlock(text string, st textStyler) string {
+	if text == "" {
+		return ""
+	}
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
+		lines[i] = st.value(line)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func indentBlock(text, prefix string) string {
+	if text == "" || prefix == "" {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	for i := range lines {
+		lines[i] = prefix + lines[i]
+	}
+	return strings.Join(lines, "\n")
 }
 
 const (

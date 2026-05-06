@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 func TestRun(t *testing.T) {
@@ -77,8 +77,8 @@ func TestMapRunErrorUsesTimeoutCode(t *testing.T) {
 		context.DeadlineExceeded,
 		"",
 	)
-	if got := errdef.CodeOf(err); got != errdef.CodeTimeout {
-		t.Fatalf("CodeOf(error) = %q, want %q", got, errdef.CodeTimeout)
+	if got := diag.ClassOf(err); got != diag.ClassTimeout {
+		t.Fatalf("CodeOf(error) = %q, want %q", got, diag.ClassTimeout)
 	}
 }
 

@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 func TestIsCorruptErrIntegrityCheckError(t *testing.T) {
-	err := errdef.Wrap(
-		errdef.CodeHistory,
+	err := diag.WrapAs(
+		diag.ClassHistory,
 		&integrityCheckError{Check: "quick_check", Result: "database disk image is malformed"},
 		"run history integrity check",
 	)
@@ -39,7 +39,7 @@ func TestIsCorruptErrRejectsNonCorruptionErrors(t *testing.T) {
 	if isCorruptErr(nil) {
 		t.Fatalf("expected nil error to be non-corrupt")
 	}
-	if isCorruptErr(errdef.New(errdef.CodeHistory, "unrelated failure")) {
+	if isCorruptErr(diag.New(diag.ClassHistory, "unrelated failure")) {
 		t.Fatalf("expected unrelated error to be non-corrupt")
 	}
 }

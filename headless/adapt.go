@@ -203,6 +203,8 @@ func failureFromFmt(f *runfmt.Failure) *Failure {
 		ExitCode: f.ExitCode,
 		Message:  f.Message,
 		Source:   f.Source,
+		Chain:    runfmt.CloneFailureChain(f.Chain),
+		Frames:   runfmt.CloneFailureFrames(f.Frames),
 	}
 }
 

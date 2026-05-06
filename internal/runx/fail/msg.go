@@ -26,7 +26,7 @@ type messageClassifier struct {
 	rules       []messageRule
 }
 
-// messageRule is only used after typed and errdef-based classification fails.
+// messageRule is only used after typed and diag-based classification fails.
 // Matching picks the strongest single evidence item; weak matches never add up.
 type messageRule struct {
 	code        Code

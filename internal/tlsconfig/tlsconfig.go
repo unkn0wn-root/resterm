@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 type Files struct {
@@ -46,7 +46,7 @@ func Build(cfg Files, baseDir string) (*tls.Config, error) {
 
 	if cfg.ClientCert != "" || cfg.ClientKey != "" {
 		if cfg.ClientCert == "" || cfg.ClientKey == "" {
-			return nil, errdef.New(errdef.CodeTLS, "client certificate and key are both required")
+			return nil, diag.New(diag.ClassTLS, "client certificate and key are both required")
 		}
 		cert, err := loadClientCert(cfg.ClientCert, cfg.ClientKey, baseDir)
 		if err != nil {
@@ -71,10 +71,10 @@ func loadRootCAs(paths []string, baseDir string, mergeSystem bool) (*x509.CertPo
 		resolved := resolvePath(p, baseDir)
 		data, readErr := os.ReadFile(resolved)
 		if readErr != nil {
-			return nil, errdef.Wrap(errdef.CodeFilesystem, readErr, "read root ca %s", p)
+			return nil, diag.WrapAsf(diag.ClassFilesystem, readErr, "read root ca %s", p)
 		}
 		if ok := pool.AppendCertsFromPEM(data); !ok {
-			return nil, errdef.New(errdef.CodeTLS, "append cert from %s", p)
+			return nil, diag.Newf(diag.ClassTLS, "append cert from %s", p)
 		}
 	}
 	return pool, nil
@@ -85,7 +85,7 @@ func loadClientCert(certPath, keyPath, baseDir string) (tls.Certificate, error) 
 	keyFile := resolvePath(keyPath, baseDir)
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return tls.Certificate{}, errdef.Wrap(errdef.CodeTLS, err, "load client certificate")
+		return tls.Certificate{}, diag.WrapAs(diag.ClassTLS, err, "load client certificate")
 	}
 	return cert, nil
 }

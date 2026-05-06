@@ -29,6 +29,21 @@ func (e ExitErr) ExitCode() int {
 	return e.Code
 }
 
+// IsExitCodeOnly reports whether err is only an exit-code carrier.
+//
+// Commands use this after they have already written their output and need to
+// return a non-zero process status without producing another stderr diagnostic.
+func IsExitCodeOnly(err error) bool {
+	switch e := err.(type) {
+	case ExitErr:
+		return e.Err == nil
+	case *ExitErr:
+		return e != nil && e.Err == nil
+	default:
+		return false
+	}
+}
+
 func ExitCode(err error) int {
 	if err == nil {
 		return 0

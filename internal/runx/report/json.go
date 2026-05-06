@@ -67,11 +67,32 @@ type jsonGRPC struct {
 }
 
 type jsonFailure struct {
-	Code     string `json:"code,omitempty"`
-	Category string `json:"category,omitempty"`
-	ExitCode int    `json:"exitCode,omitempty"`
-	Message  string `json:"message,omitempty"`
-	Source   string `json:"source,omitempty"`
+	Code     string             `json:"code,omitempty"`
+	Category string             `json:"category,omitempty"`
+	ExitCode int                `json:"exitCode,omitempty"`
+	Message  string             `json:"message,omitempty"`
+	Source   string             `json:"source,omitempty"`
+	Chain    []jsonFailureChain `json:"chain,omitempty"`
+	Frames   []jsonFailureFrame `json:"frames,omitempty"`
+}
+
+type jsonFailureChain struct {
+	Code      string             `json:"code,omitempty"`
+	Component string             `json:"component,omitempty"`
+	Kind      string             `json:"kind,omitempty"`
+	Message   string             `json:"message,omitempty"`
+	Children  []jsonFailureChain `json:"children,omitempty"`
+}
+
+type jsonFailureFrame struct {
+	Name string          `json:"name,omitempty"`
+	Pos  *jsonFailurePos `json:"pos,omitempty"`
+}
+
+type jsonFailurePos struct {
+	Path string `json:"path,omitempty"`
+	Line int    `json:"line,omitempty"`
+	Col  int    `json:"col,omitempty"`
 }
 
 type jsonTest struct {
@@ -338,7 +359,47 @@ func (failure *Failure) json() *jsonFailure {
 		ExitCode: failure.ExitCode,
 		Message:  failure.Message,
 		Source:   failure.Source,
+		Chain:    failureChainJSON(failure.Chain),
+		Frames:   failureFramesJSON(failure.Frames),
 	}
+}
+
+func failureChainJSON(src []FailureChain) []jsonFailureChain {
+	if len(src) == 0 {
+		return nil
+	}
+	chain := make([]jsonFailureChain, len(src))
+	for i, entry := range src {
+		chain[i] = jsonFailureChain{
+			Code:      entry.Code,
+			Component: entry.Component,
+			Kind:      entry.Kind,
+			Message:   entry.Message,
+			Children:  failureChainJSON(entry.Children),
+		}
+	}
+	return chain
+}
+
+func failureFramesJSON(src []FailureFrame) []jsonFailureFrame {
+	if len(src) == 0 {
+		return nil
+	}
+	frames := make([]jsonFailureFrame, len(src))
+	for i, frame := range src {
+		frames[i] = jsonFailureFrame{
+			Name: frame.Name,
+			Pos:  failurePosJSON(frame.Pos),
+		}
+	}
+	return frames
+}
+
+func failurePosJSON(pos FailurePos) *jsonFailurePos {
+	if pos == (FailurePos{}) {
+		return nil
+	}
+	return &jsonFailurePos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
 }
 
 func (test Test) json() jsonTest {

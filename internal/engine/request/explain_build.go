@@ -8,7 +8,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -1111,8 +1111,8 @@ func (e *Engine) prepareExplainAuthPreview(
 		}
 		ac := e.rt.AuthCmd()
 		if ac == nil {
-			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeAuth,
+			return explainAuthPreviewResult{}, diag.New(
+				diag.ClassAuth,
 				"command auth support is not initialised",
 			)
 		}
@@ -1143,8 +1143,8 @@ func (e *Engine) prepareExplainAuthPreview(
 	case "oauth2":
 		oa := e.rt.OAuth()
 		if oa == nil {
-			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeAuth,
+			return explainAuthPreviewResult{}, diag.New(
+				diag.ClassAuth,
 				"oauth support is not initialised",
 			)
 		}
@@ -1155,8 +1155,8 @@ func (e *Engine) prepareExplainAuthPreview(
 		env = e.envName(env)
 		cfg = oa.MergeCachedConfig(env, cfg)
 		if cfg.TokenURL == "" {
-			return explainAuthPreviewResult{}, errdef.New(
-				errdef.CodeAuth,
+			return explainAuthPreviewResult{}, diag.New(
+				diag.ClassAuth,
 				"@auth oauth2 requires token_url (include it once per cache_key to seed the cache)",
 			)
 		}

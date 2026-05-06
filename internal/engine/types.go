@@ -150,6 +150,7 @@ type ProfileFailure struct {
 	Status     string
 	StatusCode int
 	Duration   time.Duration
+	Err        error
 	// Failure preserves classification while typed request errors are still available.
 	Failure runfail.Failure
 }

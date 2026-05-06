@@ -29,6 +29,19 @@ func TestMetadataHintCatalogContainsRequiredDirectives(t *testing.T) {
 	}
 }
 
+func TestRTSMetadataHintInsertsExplicitPreRequestMode(t *testing.T) {
+	for _, option := range hint.MetaCatalog {
+		if option.Label != "@rts" {
+			continue
+		}
+		if option.Insert != "@rts pre-request" {
+			t.Fatalf("expected @rts hint to insert explicit mode, got %q", option.Insert)
+		}
+		return
+	}
+	t.Fatal("metadata hint catalog missing @rts")
+}
+
 func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 	authOptions := hint.MetaOptions("auth", "")
 	if len(authOptions) == 0 {
@@ -96,10 +109,13 @@ func TestFilterMetadataHintOptionsForSubcommands(t *testing.T) {
 	if len(rtsOptions) == 0 {
 		t.Fatal("expected rts subcommand options")
 	}
-	for _, label := range []string{"pre-request", "test"} {
+	for _, label := range []string{"pre-request"} {
 		if !hintOptionsContain(rtsOptions, label) {
 			t.Fatalf("missing rts subcommand %q", label)
 		}
+	}
+	if hintOptionsContain(rtsOptions, "test") {
+		t.Fatal("unexpected rts subcommand \"test\"")
 	}
 	filteredRTS := hint.MetaOptions("rts", "pre")
 	if len(filteredRTS) == 0 {

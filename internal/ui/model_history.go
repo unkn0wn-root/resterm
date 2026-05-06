@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -119,20 +119,9 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.lastResponse = nil
 		m.lastGRPC = nil
 
-		code := errdef.CodeOf(msg.err)
-		level := statusError
-		if code == errdef.CodeScript || code == errdef.CodeCanceled || canceled {
-			level = statusWarn
-		}
-
-		text := msg.err.Error()
-		if canceled {
-			text = "Request canceled"
-		}
-
 		cmd := m.consumeRequestError(msg.err, msg.explain)
 		m.suppressNextErrorModal = true
-		m.setStatusMessage(statusMsg{text: text, level: level})
+		m.setStatusMessage(requestErrorStatus(canceled))
 		return cmd
 	}
 
@@ -155,6 +144,13 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		)
 	}
 	return cmd
+}
+
+func requestErrorStatus(canceled bool) statusMsg {
+	if canceled {
+		return statusMsg{text: "Request canceled", level: statusInfo}
+	}
+	return statusMsg{text: "Request failed ✗", level: statusError}
 }
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
@@ -188,35 +184,31 @@ func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
 		}
 	}
 
-	code := errdef.CodeOf(err)
-	title := requestErrorTitle(code)
-	detail := err.Error()
-	if canceled {
-		title = "Request Canceled"
-		detail = "Request was canceled by user."
+	class := diag.ClassOf(err)
+	view := m.errView(err)
+	if strings.TrimSpace(view.pretty) == "" {
+		title := requestErrorTitle(class)
+		detail := err.Error()
+		if canceled {
+			title = "Request Canceled"
+			detail = "Request was canceled by user."
+		}
+		if detail == "" {
+			detail = "Request failed with no additional details."
+		}
+		note := requestErrorNote(class)
+		view.pretty = joinSections(title, detail, note)
+		view.raw = joinSections(title, detail)
+		view.head = view.raw
 	}
-	if detail == "" {
-		detail = "Request failed with no additional details."
-	}
-	note := requestErrorNote(code)
-	pretty := joinSections(title, detail, note)
-	raw := joinSections(title, detail)
-
-	var meta []string
-	if code != errdef.CodeUnknown && string(code) != "" && !canceled {
-		meta = append(meta, fmt.Sprintf("Code: %s", strings.ToUpper(string(code))))
-	}
-	if strings.TrimSpace(note) != "" && !canceled {
-		meta = append(meta, note)
-	}
-	metaText := strings.Join(meta, "\n")
-	headers := joinSections(title, metaText, detail)
 
 	snapshot := &responseSnapshot{
-		id:      nextResponseRenderToken(),
-		pretty:  pretty,
-		raw:     raw,
-		headers: headers,
+		id:             nextResponseRenderToken(),
+		pretty:         view.pretty,
+		raw:            view.raw,
+		rawSummary:     firstErrLine(view.raw),
+		headers:        view.head,
+		requestHeaders: view.head,
 		explain: explainState{
 			report: rep,
 		},
@@ -233,7 +225,7 @@ func (m *Model) consumeRequestError(err error, rep *xplain.Report) tea.Cmd {
 		}
 		pane.snapshot = snapshot
 		pane.invalidateCaches()
-		pane.viewport.SetContent(pretty)
+		pane.viewport.SetContent(view.pretty)
 		pane.viewport.GotoTop()
 		pane.setCurrPosition()
 	}
@@ -361,49 +353,49 @@ func (m *Model) consumeExplainPreview(env string, rep *xplain.Report) tea.Cmd {
 	return m.syncResponsePanes()
 }
 
-func requestErrorTitle(code errdef.Code) string {
-	switch code {
-	case errdef.CodeCanceled:
+func requestErrorTitle(class diag.Class) string {
+	switch class {
+	case diag.ClassCanceled:
 		return "Request Canceled"
-	case errdef.CodeTimeout:
+	case diag.ClassTimeout:
 		return "Request Timeout"
-	case errdef.CodeScript:
+	case diag.ClassScript:
 		return "Request Script Error"
-	case errdef.CodeAuth:
+	case diag.ClassAuth:
 		return "Request Auth Error"
-	case errdef.CodeRoute:
+	case diag.ClassRoute:
 		return "Request Route Error"
-	case errdef.CodeProtocol:
+	case diag.ClassProtocol:
 		return "Request Protocol Error"
-	case errdef.CodeNetwork:
+	case diag.ClassNetwork:
 		return "Request Network Error"
-	case errdef.CodeTLS:
+	case diag.ClassTLS:
 		return "Request TLS Error"
-	case errdef.CodeHTTP:
-		return "HTTP Request Error"
-	case errdef.CodeParse:
+	case diag.ClassParse:
 		return "Request Parse Error"
 	}
-	if code != errdef.CodeUnknown && string(code) != "" {
-		return fmt.Sprintf("Request Error (%s)", strings.ToUpper(string(code)))
+	if class != diag.ClassUnknown && string(class) != "" {
+		return fmt.Sprintf("Request Error (%s)", strings.ToUpper(string(class)))
 	}
 	return "Request Error"
 }
 
-func requestErrorNote(code errdef.Code) string {
-	switch code {
-	case errdef.CodeCanceled:
+func requestErrorNote(class diag.Class) string {
+	switch class {
+	case diag.ClassCanceled:
 		return "Request was canceled before completion."
-	case errdef.CodeTimeout:
+	case diag.ClassTimeout:
 		return "Request timed out before a response payload was available."
-	case errdef.CodeScript:
+	case diag.ClassScript:
 		return "Request scripts failed before completion."
-	case errdef.CodeAuth:
+	case diag.ClassAuth:
 		return "Request authentication failed before a response payload was available."
-	case errdef.CodeRoute:
+	case diag.ClassRoute:
 		return "Request route setup failed before a response payload was available."
-	case errdef.CodeProtocol, errdef.CodeNetwork, errdef.CodeTLS, errdef.CodeHTTP:
+	case diag.ClassProtocol, diag.ClassNetwork, diag.ClassTLS:
 		return "No response payload received."
+	case diag.ClassParse:
+		return "Fix the request file parse error before running."
 	default:
 		return "Request did not produce a response payload."
 	}
@@ -2109,6 +2101,9 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	}
 
 	doc := parser.Parse(m.currentFile, []byte(requestText))
+	if err := docErr(doc); err != nil {
+		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
+	}
 	if len(doc.Requests) == 0 {
 		m.setStatusMessage(statusMsg{text: "Unable to parse stored request", level: statusError})
 		return nil

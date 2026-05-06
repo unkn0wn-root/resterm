@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -167,6 +167,15 @@ func (m *Model) executeRequest(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
+	if err := docErr(doc); err != nil {
+		return func() tea.Msg {
+			return responseMsg{
+				err:         err,
+				executed:    cloneRequest(req),
+				environment: envOverride,
+			}
+		}
+	}
 	options, envName, cmd := m.requestSetup(req, options, envOverride, false)
 	if cmd != nil {
 		return cmd
@@ -210,6 +219,15 @@ func (m *Model) executeExplain(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
+	if err := docErr(doc); err != nil {
+		return func() tea.Msg {
+			return responseMsg{
+				err:         err,
+				executed:    cloneRequest(req),
+				environment: envOverride,
+			}
+		}
+	}
 	options, envName, cmd := m.requestSetup(req, options, envOverride, true)
 	if cmd != nil {
 		return cmd
@@ -247,7 +265,7 @@ func (m *Model) requestSetup(
 	options = m.resolveHTTPOptions(options)
 	envName := vars.SelectEnv(m.cfg.EnvironmentSet, envOverride, m.cfg.EnvironmentName)
 	if req == nil {
-		err := errdef.New(errdef.CodeUI, "request is nil")
+		err := diag.New(diag.ClassUI, "request is nil")
 		return options, envName, func() tea.Msg {
 			return responseMsg{
 				err:         err,
@@ -256,7 +274,7 @@ func (m *Model) requestSetup(
 		}
 	}
 	if tunnel.HasConflict(req.SSH != nil, req.K8s != nil) {
-		err := errdef.New(errdef.CodeRoute, "@ssh cannot be combined with @k8s")
+		err := diag.New(diag.ClassRoute, "@ssh cannot be combined with @k8s")
 		explain := newExplainBuilder(m, req, envName, preview)
 		explain.stage(
 			explainStageRoute,
@@ -391,7 +409,7 @@ func (e *execContext) evaluateCondition() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "Condition evaluation failed")
-		msg.err = errdef.Wrap(errdef.CodeScript, err, "%s", tag)
+		msg.err = diag.WrapAsf(diag.ClassScript, err, "%s", tag)
 		return &msg
 	}
 
@@ -437,7 +455,7 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "Apply failed")
-		msg.err = errdef.Wrap(errdef.CodeScript, err, "@apply")
+		msg.err = diag.WrapAs(diag.ClassScript, err, "@apply")
 		return &msg
 	}
 	if len(e.req.Metadata.Applies) > 0 {
@@ -471,7 +489,7 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "RTS pre-request failed")
-		msg.err = errdef.Wrap(errdef.CodeScript, err, "pre-request rts script")
+		msg.err = diag.WrapAs(diag.ClassScript, err, "pre-request rts script")
 		return &msg
 	}
 	if err := applyPreRequestOutput(e.req, rtsResult); err != nil {
@@ -524,7 +542,7 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "JS pre-request failed")
-		msg.err = errdef.Wrap(errdef.CodeScript, err, "pre-request script")
+		msg.err = diag.WrapAs(diag.ClassScript, err, "pre-request script")
 		return &msg
 	}
 	if err := applyPreRequestOutput(e.req, preResult); err != nil {
@@ -599,7 +617,7 @@ func (e *execContext) resolveRoute() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "Route resolution failed")
-		msg.err = errdef.Wrap(errdef.CodeRoute, err, "resolve ssh")
+		msg.err = diag.WrapAs(diag.ClassRoute, err, "resolve ssh")
 		return &msg
 	}
 
@@ -615,7 +633,7 @@ func (e *execContext) resolveRoute() *responseMsg {
 		)
 
 		msg := e.errorResponse(err, "Route resolution failed")
-		msg.err = errdef.Wrap(errdef.CodeRoute, err, "resolve k8s")
+		msg.err = diag.WrapAs(diag.ClassRoute, err, "resolve k8s")
 		return &msg
 	}
 

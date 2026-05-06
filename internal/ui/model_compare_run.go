@@ -71,6 +71,9 @@ func (m *Model) startCompareRun(
 	spec *restfile.CompareSpec,
 	options httpclient.Options,
 ) tea.Cmd {
+	if err := docErr(doc); err != nil {
+		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
+	}
 	if spec == nil || len(spec.Environments) < 2 {
 		m.setStatusMessage(
 			statusMsg{level: statusWarn, text: "Compare requires at least two environments"},

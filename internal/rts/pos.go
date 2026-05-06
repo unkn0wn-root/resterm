@@ -41,4 +41,13 @@ func (e *RuntimeError) Error() string {
 
 type AbortError struct {
 	*RuntimeError
+	Kind AbortKind
 }
+
+type AbortKind int
+
+const (
+	AbortScript AbortKind = iota
+	AbortTimeout
+	AbortCanceled
+)

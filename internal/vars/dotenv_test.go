@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 func TestIsDotEnvPath(t *testing.T) {
@@ -118,7 +118,7 @@ func TestLoadEnvironmentFileDotEnvMissingReference(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected error for missing reference")
 	}
-	if errdef.CodeOf(err) != errdef.CodeParse {
+	if diag.ClassOf(err) != diag.ClassParse {
 		t.Fatalf("expected parse error, got %v", err)
 	}
 }
@@ -135,7 +135,7 @@ func TestLoadEnvironmentFileDotEnvDuplicateWorkspace(t *testing.T) {
 	if err == nil {
 		t.Fatalf("expected duplicate workspace error")
 	}
-	if errdef.CodeOf(err) != errdef.CodeParse {
+	if diag.ClassOf(err) != diag.ClassParse {
 		t.Fatalf("expected parse error, got %v", err)
 	}
 }

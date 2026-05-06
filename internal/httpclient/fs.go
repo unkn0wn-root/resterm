@@ -9,7 +9,7 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -46,12 +46,12 @@ func (c *Client) readFileWithFallback(
 	label string,
 ) ([]byte, string, error) {
 	if c == nil || c.fs == nil {
-		return nil, "", errdef.New(errdef.CodeFilesystem, "file reader unavailable")
+		return nil, "", diag.New(diag.ClassFilesystem, "file reader unavailable")
 	}
 
 	if path == "" {
-		return nil, "", errdef.New(
-			errdef.CodeFilesystem,
+		return nil, "", diag.Newf(
+			diag.ClassFilesystem,
 			"%s path is empty",
 			strings.ToLower(label),
 		)
@@ -62,9 +62,7 @@ func (c *Client) readFileWithFallback(
 		if err == nil {
 			return data, path, nil
 		}
-		return nil, "", errdef.Wrap(
-			errdef.CodeFilesystem,
-			err,
+		return nil, "", diag.WrapAsf(diag.ClassFilesystem, err,
 			"read %s %s",
 			strings.ToLower(label),
 			path,
@@ -81,9 +79,7 @@ func (c *Client) readFileWithFallback(
 			return data, candidate, nil
 		}
 		if stopReadFallback(err) {
-			return nil, "", errdef.Wrap(
-				errdef.CodeFilesystem,
-				err,
+			return nil, "", diag.WrapAsf(diag.ClassFilesystem, err,
 				"read %s %s",
 				strings.ToLower(label),
 				candidate,
@@ -97,9 +93,7 @@ func (c *Client) readFileWithFallback(
 		lastErr = os.ErrNotExist
 		lastPath = path
 	}
-	return nil, "", errdef.Wrap(
-		errdef.CodeFilesystem,
-		lastErr,
+	return nil, "", diag.WrapAsf(diag.ClassFilesystem, lastErr,
 		"read %s %s (last tried %s)",
 		strings.ToLower(label),
 		path,
@@ -142,7 +136,7 @@ func (c *Client) injectBodyIncludes(
 	}
 
 	if err := scanner.Err(); err != nil {
-		return "", errdef.Wrap(errdef.CodeFilesystem, err, "scan body includes")
+		return "", diag.WrapAs(diag.ClassFilesystem, err, "scan body includes")
 	}
 	return b.String(), nil
 }

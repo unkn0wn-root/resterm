@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 func Scope(env, ws string) string {
@@ -33,8 +33,8 @@ func appendCachePart(b *strings.Builder, value string) {
 }
 
 func conflictError(cfg Config, field string) error {
-	return errdef.New(
-		errdef.CodeAuth,
+	return diag.Newf(
+		diag.ClassAuth,
 		"@auth command cache_key %q conflicts with seeded %s",
 		cfg.CacheKey,
 		field,

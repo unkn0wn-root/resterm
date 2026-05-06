@@ -104,14 +104,14 @@ func (c *Ctx) CloneNoIO() *Ctx {
 func (c *Ctx) tick(pos Pos) error {
 	c.steps++
 	if c.Lim.MaxSteps > 0 && c.steps > c.Lim.MaxSteps {
-		return rtAbort(c, pos, "step limit exceeded")
+		return rtAbort(c, pos, AbortScript, "step limit exceeded")
 	}
 	if c.Lim.Timeout > 0 && c.Now().Sub(c.start) > c.Lim.Timeout {
-		return rtAbort(c, pos, "timeout exceeded")
+		return rtAbort(c, pos, AbortTimeout, "timeout exceeded")
 	}
 	select {
 	case <-c.Ctx.Done():
-		return rtAbort(c, pos, "canceled: %v", c.Ctx.Err())
+		return rtAbort(c, pos, AbortCanceled, "canceled: %v", c.Ctx.Err())
 	default:
 		return nil
 	}
@@ -138,9 +138,9 @@ func Errf(ctx *Ctx, pos Pos, format string, args ...any) error {
 	return &StackError{Err: base, Frames: frames}
 }
 
-func rtAbort(ctx *Ctx, pos Pos, format string, args ...any) error {
+func rtAbort(ctx *Ctx, pos Pos, kind AbortKind, format string, args ...any) error {
 	base := &RuntimeError{Pos: pos, Msg: fmt.Sprintf(format, args...)}
-	abort := &AbortError{RuntimeError: base}
+	abort := &AbortError{RuntimeError: base, Kind: kind}
 	if ctx == nil {
 		return abort
 	}

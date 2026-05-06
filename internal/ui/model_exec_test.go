@@ -20,12 +20,13 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
@@ -401,7 +402,7 @@ func TestHandleResponseMsgShowsGrpcErrors(t *testing.T) {
 		StatusMessage: "not found",
 		Message:       "{}",
 	}
-	err := errdef.New(errdef.CodeProtocol, "invoke grpc method")
+	err := diag.New(diag.ClassProtocol, "invoke grpc method")
 
 	model.handleResponseMessage(responseMsg{
 		grpc:     resp,
@@ -488,7 +489,11 @@ func TestHandleResponseMsgShowsHTTPErrorInPane(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	err := errdef.New(errdef.CodeHTTP, "send request failed")
+	err := diag.New(
+		diag.ClassProtocol,
+		"send request failed",
+		diag.WithComponent(diag.ComponentHTTP),
+	)
 	cmd := model.handleResponseMessage(responseMsg{err: err})
 	if cmd != nil {
 		collectMsgs(cmd)
@@ -507,11 +512,55 @@ func TestHandleResponseMsgShowsHTTPErrorInPane(t *testing.T) {
 	if !strings.Contains(viewport, "send request failed") {
 		t.Fatalf("expected viewport to include error details, got %q", viewport)
 	}
-	if model.statusMessage.level != statusError {
-		t.Fatalf("expected status message to record error, got %v", model.statusMessage.level)
+	if model.statusMessage.text != "Request failed ✗" ||
+		model.statusMessage.level != statusError {
+		t.Fatalf("unexpected request error status: %+v", model.statusMessage)
 	}
 	if model.suppressNextErrorModal {
 		t.Fatalf("expected suppress flag to reset after status update")
+	}
+}
+
+func TestHandleResponseMsgShowsRequestCauseWithoutNotes(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	err := diag.Wrap(
+		&url.Error{
+			Op:  "Get",
+			URL: "https://api.local",
+			Err: &net.DNSError{Err: "no such host", Name: "api.local"},
+		},
+		"perform request",
+		diag.WithComponent(diag.ComponentHTTP),
+	)
+	cmd := model.handleResponseMessage(responseMsg{err: err})
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.responseLatest == nil || !model.responseLatest.ready {
+		t.Fatalf("expected latest snapshot to be ready")
+	}
+	plain := stripANSIEscape(model.responseLatest.pretty)
+	for _, want := range []string{
+		"error[network]: request failed",
+		"perform request",
+		"╰─> Get \"https://api.local\"",
+		"    ╰─> lookup api.local: no such host",
+		"help: No response payload was received.",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected request error view to contain %q, got %q", want, plain)
+		}
+	}
+	if strings.Contains(plain, "note:") {
+		t.Fatalf("expected request error view not to use notes, got %q", plain)
 	}
 }
 
@@ -524,7 +573,7 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	err := errdef.Wrap(errdef.CodeScript, errors.New("boom"), "pre-request script")
+	err := diag.WrapAs(diag.ClassScript, errors.New("boom"), "pre-request script")
 	cmd := model.handleResponseMessage(responseMsg{err: err})
 	if cmd != nil {
 		collectMsgs(cmd)
@@ -533,8 +582,9 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 	if model.showErrorModal {
 		t.Fatalf("expected error modal to stay closed for script errors")
 	}
-	if model.statusMessage.level != statusWarn {
-		t.Fatalf("expected script errors to show warning status, got %v", model.statusMessage.level)
+	if model.statusMessage.text != "Request failed ✗" ||
+		model.statusMessage.level != statusError {
+		t.Fatalf("unexpected script error status: %+v", model.statusMessage)
 	}
 	if model.responseLatest == nil ||
 		!strings.Contains(model.responseLatest.pretty, "pre-request script") {
@@ -550,6 +600,145 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 	}
 	if model.suppressNextErrorModal {
 		t.Fatalf("expected suppress flag to reset after script error")
+	}
+}
+
+func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
+	var calls int32
+	fakeClient := httpclient.NewClient(nil)
+	fakeClient.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+		atomic.AddInt32(&calls, 1)
+		return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			t.Fatalf("request should not be sent after parse error")
+			return nil, nil
+		})}, nil
+	})
+
+	content := strings.Join([]string{
+		"# @rts pre",
+		`> request.setHeader("X-Test", "1")`,
+		"GET https://example.com",
+		"",
+	}, "\n")
+	model := New(Config{
+		FilePath:       "sample.http",
+		InitialContent: content,
+		Client:         fakeClient,
+	})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if cmd := model.sendActiveRequest(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if got := atomic.LoadInt32(&calls); got != 0 {
+		t.Fatalf("expected no HTTP client creation, got %d", got)
+	}
+	if model.statusMessage.text != "Request failed ✗" ||
+		model.statusMessage.level != statusError {
+		t.Fatalf("unexpected parse error status: %+v", model.statusMessage)
+	}
+	if model.lastError == nil || diag.ClassOf(model.lastError) != diag.ClassParse {
+		t.Fatalf("expected parse lastError, got %v", model.lastError)
+	}
+	if model.responseLatest == nil || !model.responseLatest.ready {
+		t.Fatalf("expected ready parse-error response snapshot")
+	}
+	plain := stripANSIEscape(model.responseLatest.pretty)
+	for _, want := range []string{
+		"error[parse]: @rts supports only pre-request mode",
+		"@rts supports only pre-request mode",
+		"--> sample.http:1:1",
+		"   1 | # @rts pre",
+		"note: Fix the request file parse error before running.",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected parse view to contain %q, got %q", want, plain)
+		}
+	}
+}
+
+func TestStartConfigCompareHardFailsOnParseError(t *testing.T) {
+	content := strings.Join([]string{
+		"# @rts pre",
+		`> request.setHeader("X-Test", "1")`,
+		"GET https://example.com",
+		"",
+	}, "\n")
+	model := New(Config{
+		FilePath:       "sample.http",
+		InitialContent: content,
+		CompareTargets: []string{"dev", "prod"},
+	})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if cmd := model.startConfigCompareFromEditor(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.compareRun != nil {
+		t.Fatalf("expected compare run not to start")
+	}
+	if model.responseLatest == nil || !strings.Contains(
+		stripANSIEscape(model.responseLatest.pretty),
+		"@rts supports only pre-request mode",
+	) {
+		t.Fatalf("expected parse error in response pane, got %#v", model.responseLatest)
+	}
+}
+
+func TestHandleResponseMsgRendersRTSStack(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 100
+	model.height = 30
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	err := diag.WrapAs(diag.ClassScript, &rts.StackError{
+		Err: &rts.RuntimeError{
+			Pos: rts.Pos{Path: "hook.rts", Line: 3, Col: 7},
+			Msg: "boom",
+		},
+		Frames: []rts.Frame{{
+			Kind: rts.FrameFn,
+			Pos:  rts.Pos{Path: "hook.rts", Line: 2, Col: 1},
+			Name: "sign",
+		}},
+	},
+		"pre-request rts script",
+	)
+
+	cmd := model.handleResponseMessage(responseMsg{err: err})
+	if cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	if model.responseLatest == nil || !model.responseLatest.ready {
+		t.Fatalf("expected ready script-error response snapshot")
+	}
+	plain := stripANSIEscape(model.responseLatest.pretty)
+	for _, want := range []string{
+		"error[script]: boom",
+		"--> hook.rts:3:7",
+		"pre-request rts script",
+		"Stack:",
+		"at hook.rts:2:1 in sign",
+	} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected RTS stack view to contain %q, got %q", want, plain)
+		}
 	}
 }
 

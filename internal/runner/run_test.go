@@ -1008,13 +1008,13 @@ func TestRunAllCarriesRTSPreRequestGlobals(t *testing.T) {
 	}
 }
 
-func TestRunExecutesRTSDirectiveAlias(t *testing.T) {
+func TestRunExecutesRTSPreRequestDirective(t *testing.T) {
 	dir := t.TempDir()
-	file := filepath.Join(dir, "rts-alias.http")
+	file := filepath.Join(dir, "rts-pre-request.http")
 	src := strings.Join([]string{
 		"# @name alias",
 		"# @rts pre-request",
-		"> request.setHeader(\"X-Mode\", \"alias\")",
+		`> request.setHeader("X-Mode", "pre-request")`,
 		"GET https://example.com/alias",
 		"",
 	}, "\n")
@@ -1052,8 +1052,8 @@ func TestRunExecutesRTSDirectiveAlias(t *testing.T) {
 	if rep.Total != 1 || rep.Passed != 1 {
 		t.Fatalf("unexpected report counts: %+v", rep)
 	}
-	if mode != "alias" {
-		t.Fatalf("expected RTS alias to set request header, got %q", mode)
+	if mode != "pre-request" {
+		t.Fatalf("expected RTS pre-request directive to set request header, got %q", mode)
 	}
 }
 

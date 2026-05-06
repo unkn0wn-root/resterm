@@ -1,19 +1,9 @@
 package runfail
 
 import (
-	"context"
-	"crypto/tls"
-	"crypto/x509"
-	"errors"
-	"io/fs"
-	"net"
-	"net/url"
-	"os"
 	"slices"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
 type ExitMode string
@@ -220,101 +210,27 @@ func FromErrorSource(err error, source string) Failure {
 		return Failure{}
 	}
 	msg := err.Error()
-	switch {
-	case isCanceled(err):
-		return New(CodeCanceled, msg, source)
-	case isTimeout(err):
-		return New(CodeTimeout, msg, source)
-	case isTLS(err):
-		return New(CodeTLS, msg, source)
-	}
-
-	if f, ok := classifyGRPC(err, msg, source); ok {
-		return f
-	}
-	if f, ok := classifyTypedNetwork(err, msg, source); ok {
-		return f
-	}
-	if f, ok := classifyTypedFilesystem(err, msg, source); ok {
-		return f
-	}
-	if f, ok := classifyErrdef(err, msg, source); ok {
+	if f, ok := classifyDiag(err, msg, source); ok {
 		return f
 	}
 	return classifyMessage(msg, source)
 }
 
-func classifyGRPC(err error, msg, source string) (Failure, bool) {
-	st, ok := status.FromError(err)
-	if !ok {
+func classifyDiag(err error, msg, source string) (Failure, bool) {
+	classes := diag.Classes(err)
+	if len(classes) == 0 {
 		return Failure{}, false
 	}
-	code := st.Code()
-	switch code {
-	case codes.OK:
-		return Failure{}, false
-	case codes.Canceled:
-		return New(CodeCanceled, msg, source), true
-	case codes.DeadlineExceeded:
-		return New(CodeTimeout, msg, source), true
-	case codes.Unavailable:
-		return New(CodeNetwork, msg, source), true
-	case codes.Unauthenticated, codes.PermissionDenied:
-		return New(CodeAuth, msg, source), true
-	default:
-		return New(CodeProtocol, msg, source), true
-	}
-}
-
-func classifyTypedNetwork(err error, msg, source string) (Failure, bool) {
-	var dnsErr *net.DNSError
-	if errors.As(err, &dnsErr) {
-		return New(CodeNetwork, msg, source), true
-	}
-	var opErr *net.OpError
-	if errors.As(err, &opErr) {
-		return New(CodeNetwork, msg, source), true
-	}
-	var urlErr *url.Error
-	if errors.As(err, &urlErr) {
-		return New(CodeNetwork, msg, source), true
-	}
-	return Failure{}, false
-}
-
-func classifyTypedFilesystem(err error, msg, source string) (Failure, bool) {
-	switch {
-	case errors.Is(err, fs.ErrNotExist),
-		errors.Is(err, fs.ErrPermission),
-		errors.Is(err, fs.ErrExist),
-		errors.Is(err, fs.ErrClosed):
-		return New(CodeFilesystem, msg, source), true
-	}
-	var pathErr *fs.PathError
-	if errors.As(err, &pathErr) {
-		return New(CodeFilesystem, msg, source), true
-	}
-	return Failure{}, false
-}
-
-func classifyErrdef(err error, msg, source string) (Failure, bool) {
-	codes := errdef.Codes(err)
-	if len(codes) == 0 {
-		return Failure{}, false
-	}
-	if c, ok := dominantErrdefFailureCode(codes); ok {
+	if c, ok := dominantDiagFailureCode(classes); ok {
 		return New(c, msg, source), true
 	}
-	if containsErrdefCode(codes, errdef.CodeHTTP) {
-		return classifyHTTPMessage(msg, source), true
-	}
 	return Failure{}, false
 }
 
-func dominantErrdefFailureCode(codes []errdef.Code) (Code, bool) {
+func dominantDiagFailureCode(classes []diag.Class) (Code, bool) {
 	var out Code
-	for _, c := range codes {
-		fc, ok := errdefFailureCode(c)
+	for _, c := range classes {
+		fc, ok := diagFailureCode(c)
 		if !ok {
 			continue
 		}
@@ -325,68 +241,31 @@ func dominantErrdefFailureCode(codes []errdef.Code) (Code, bool) {
 	return out, out != ""
 }
 
-func containsErrdefCode(codes []errdef.Code, want errdef.Code) bool {
-	return slices.Contains(codes, want)
-}
-
-func errdefFailureCode(code errdef.Code) (Code, bool) {
-	switch code {
-	case errdef.CodeTimeout:
+func diagFailureCode(class diag.Class) (Code, bool) {
+	switch class {
+	case diag.ClassTimeout:
 		return CodeTimeout, true
-	case errdef.CodeCanceled:
+	case diag.ClassCanceled:
 		return CodeCanceled, true
-	case errdef.CodeNetwork:
+	case diag.ClassNetwork:
 		return CodeNetwork, true
-	case errdef.CodeTLS:
+	case diag.ClassTLS:
 		return CodeTLS, true
-	case errdef.CodeAuth:
+	case diag.ClassAuth:
 		return CodeAuth, true
-	case errdef.CodeProtocol:
+	case diag.ClassProtocol:
 		return CodeProtocol, true
-	case errdef.CodeRoute:
+	case diag.ClassRoute:
 		return CodeRoute, true
-	case errdef.CodeScript:
+	case diag.ClassScript:
 		return CodeScript, true
-	case errdef.CodeFilesystem, errdef.CodeHistory:
+	case diag.ClassFilesystem, diag.ClassHistory:
 		return CodeFilesystem, true
-	case errdef.CodeConfig, errdef.CodeParse, errdef.CodeUI:
+	case diag.ClassConfig, diag.ClassParse, diag.ClassUI, diag.ClassInternal:
 		return CodeInternal, true
 	default:
 		return "", false
 	}
-}
-
-func isCanceled(err error) bool {
-	return errors.Is(err, context.Canceled)
-}
-
-func isTimeout(err error) bool {
-	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
-		return true
-	}
-	var netErr net.Error
-	return errors.As(err, &netErr) && netErr.Timeout()
-}
-
-func isTLS(err error) bool {
-	var unknownAuthority x509.UnknownAuthorityError
-	if errors.As(err, &unknownAuthority) {
-		return true
-	}
-	var hostname x509.HostnameError
-	if errors.As(err, &hostname) {
-		return true
-	}
-	var invalid x509.CertificateInvalidError
-	if errors.As(err, &invalid) {
-		return true
-	}
-	var roots x509.SystemRootsError
-	if errors.As(err, &roots) {
-		return true
-	}
-	var record tls.RecordHeaderError
-	return errors.As(err, &record)
 }
 
 func rankOf(code Code) int {

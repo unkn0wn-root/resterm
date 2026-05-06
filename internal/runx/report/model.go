@@ -31,52 +31,56 @@ type Report struct {
 }
 
 type Result struct {
-	Kind            string
-	Name            string
-	Method          string
-	Target          string
-	EffectiveTarget string
-	Environment     string
-	Status          Status
-	Summary         string
-	Duration        time.Duration
-	Canceled        bool
-	SkipReason      string
-	Error           string
-	ScriptError     string
-	Failure         *Failure
-	HTTP            *HTTP
-	GRPC            *GRPC
-	Stream          *Stream
-	Trace           *Trace
-	Tests           []Test
-	Compare         *Compare
-	Profile         *Profile
-	Steps           []Step
+	Kind              string
+	Name              string
+	Method            string
+	Target            string
+	EffectiveTarget   string
+	Environment       string
+	Status            Status
+	Summary           string
+	Duration          time.Duration
+	Canceled          bool
+	SkipReason        string
+	Error             string
+	ErrorDetail       *ErrorDetail
+	ScriptError       string
+	ScriptErrorDetail *ErrorDetail
+	Failure           *Failure
+	HTTP              *HTTP
+	GRPC              *GRPC
+	Stream            *Stream
+	Trace             *Trace
+	Tests             []Test
+	Compare           *Compare
+	Profile           *Profile
+	Steps             []Step
 }
 
 type Step struct {
-	Name            string
-	Method          string
-	Target          string
-	EffectiveTarget string
-	Environment     string
-	Branch          string
-	Iteration       int
-	Total           int
-	Status          Status
-	Summary         string
-	Duration        time.Duration
-	Canceled        bool
-	SkipReason      string
-	Error           string
-	ScriptError     string
-	Failure         *Failure
-	HTTP            *HTTP
-	GRPC            *GRPC
-	Stream          *Stream
-	Trace           *Trace
-	Tests           []Test
+	Name              string
+	Method            string
+	Target            string
+	EffectiveTarget   string
+	Environment       string
+	Branch            string
+	Iteration         int
+	Total             int
+	Status            Status
+	Summary           string
+	Duration          time.Duration
+	Canceled          bool
+	SkipReason        string
+	Error             string
+	ErrorDetail       *ErrorDetail
+	ScriptError       string
+	ScriptErrorDetail *ErrorDetail
+	Failure           *Failure
+	HTTP              *HTTP
+	GRPC              *GRPC
+	Stream            *Stream
+	Trace             *Trace
+	Tests             []Test
 }
 
 type HTTP struct {
@@ -126,12 +130,47 @@ type ProfileFailure struct {
 	Failure    *Failure
 }
 
+// ErrorDetail contains structured and rendered error information for human reports.
+type ErrorDetail struct {
+	Code      string
+	Component string
+	Severity  string
+	Message   string
+	Rendered  string
+	Chain     []FailureChain
+	Frames    []FailureFrame
+}
+
+// FailureChain contains one context or cause entry in a failure chain.
+type FailureChain struct {
+	Code      string         `json:"code,omitempty"`
+	Component string         `json:"component,omitempty"`
+	Kind      string         `json:"kind,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	Children  []FailureChain `json:"children,omitempty"`
+}
+
+// FailureFrame identifies a call frame related to a failure.
+type FailureFrame struct {
+	Name string     `json:"name,omitempty"`
+	Pos  FailurePos `json:"pos,omitempty"`
+}
+
+// FailurePos identifies a source position related to a failure.
+type FailurePos struct {
+	Path string `json:"path,omitempty"`
+	Line int    `json:"line,omitempty"`
+	Col  int    `json:"col,omitempty"`
+}
+
 type Failure struct {
 	Code     runfail.Code     `json:"code,omitempty"`
 	Category runfail.Category `json:"category,omitempty"`
 	ExitCode int              `json:"exitCode,omitempty"`
 	Message  string           `json:"message,omitempty"`
 	Source   string           `json:"source,omitempty"`
+	Chain    []FailureChain   `json:"chain,omitempty"`
+	Frames   []FailureFrame   `json:"frames,omitempty"`
 }
 
 type Latency struct {

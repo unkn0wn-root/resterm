@@ -14,7 +14,7 @@ import (
 	sqlitedrv "modernc.org/sqlite"
 	sqlite3 "modernc.org/sqlite/lib"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -67,7 +67,7 @@ func (s *Store) Close() error {
 	err := s.db.Close()
 	s.db = nil
 	if err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "close history db")
+		return diag.WrapAs(diag.ClassHistory, err, "close history db")
 	}
 	return nil
 }
@@ -93,7 +93,7 @@ func (s *Store) Append(e history.Entry) error {
 	}
 
 	if _, err = insertRow(s.db, qReplace, &r); err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "insert history row")
+		return diag.WrapAs(diag.ClassHistory, err, "insert history row")
 	}
 	return nil
 }
@@ -147,11 +147,11 @@ func (s *Store) Delete(id string) (bool, error) {
 
 	res, err := s.db.Exec(`DELETE FROM hist WHERE id = ?`, id)
 	if err != nil {
-		return false, errdef.Wrap(errdef.CodeHistory, err, "delete history row")
+		return false, diag.WrapAs(diag.ClassHistory, err, "delete history row")
 	}
 	n, err := res.RowsAffected()
 	if err != nil {
-		return false, errdef.Wrap(errdef.CodeHistory, err, "history rows affected")
+		return false, diag.WrapAs(diag.ClassHistory, err, "history rows affected")
 	}
 	return n > 0, nil
 }
@@ -174,7 +174,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 
 	rs, err := s.db.Query(q, args...)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHistory, err, "query history rows")
+		return nil, diag.WrapAs(diag.ClassHistory, err, "query history rows")
 	}
 	defer func() { _ = rs.Close() }()
 
@@ -187,7 +187,7 @@ func (s *Store) rows(where string, args []any) ([]history.Entry, error) {
 		es = append(es, e)
 	}
 	if err := rs.Err(); err != nil {
-		return nil, errdef.Wrap(errdef.CodeHistory, err, "iterate history rows")
+		return nil, diag.WrapAs(diag.ClassHistory, err, "iterate history rows")
 	}
 	return es, nil
 }
@@ -219,7 +219,7 @@ func scanRow(rs *sql.Rows) (history.Entry, error) {
 		&cmpJSON,
 	)
 	if err != nil {
-		return history.Entry{}, errdef.Wrap(errdef.CodeHistory, err, "scan history row")
+		return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "scan history row")
 	}
 
 	e := history.Entry{
@@ -241,28 +241,28 @@ func scanRow(rs *sql.Rows) (history.Entry, error) {
 	if len(tagsJSON) > 0 {
 		tags, err := dec[[]string](tagsJSON)
 		if err != nil {
-			return history.Entry{}, errdef.Wrap(errdef.CodeHistory, err, "decode history tags")
+			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history tags")
 		}
 		e.Tags = tags
 	}
 	if len(profJSON) > 0 {
 		p, err := dec[history.ProfileResults](profJSON)
 		if err != nil {
-			return history.Entry{}, errdef.Wrap(errdef.CodeHistory, err, "decode history profile")
+			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history profile")
 		}
 		e.ProfileResults = &p
 	}
 	if len(traceJSON) > 0 {
 		t, err := dec[history.TraceSummary](traceJSON)
 		if err != nil {
-			return history.Entry{}, errdef.Wrap(errdef.CodeHistory, err, "decode history trace")
+			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history trace")
 		}
 		e.Trace = &t
 	}
 	if len(cmpJSON) > 0 {
 		c, err := dec[history.CompareEntry](cmpJSON)
 		if err != nil {
-			return history.Entry{}, errdef.Wrap(errdef.CodeHistory, err, "decode history compare")
+			return history.Entry{}, diag.WrapAs(diag.ClassHistory, err, "decode history compare")
 		}
 		e.Compare = &c
 	}
@@ -293,25 +293,25 @@ func mkRow(e history.Entry) (row, error) {
 	if len(e.Tags) > 0 {
 		r.tagsJSON, err = enc(e.Tags)
 		if err != nil {
-			return row{}, errdef.Wrap(errdef.CodeHistory, err, "encode history tags")
+			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history tags")
 		}
 	}
 	if e.ProfileResults != nil {
 		r.profJSON, err = enc(e.ProfileResults)
 		if err != nil {
-			return row{}, errdef.Wrap(errdef.CodeHistory, err, "encode history profile")
+			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history profile")
 		}
 	}
 	if e.Trace != nil {
 		r.traceJSON, err = enc(e.Trace)
 		if err != nil {
-			return row{}, errdef.Wrap(errdef.CodeHistory, err, "encode history trace")
+			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history trace")
 		}
 	}
 	if e.Compare != nil {
 		r.cmpJSON, err = enc(e.Compare)
 		if err != nil {
-			return row{}, errdef.Wrap(errdef.CodeHistory, err, "encode history compare")
+			return row{}, diag.WrapAs(diag.ClassHistory, err, "encode history compare")
 		}
 	}
 
@@ -388,7 +388,7 @@ func (s *Store) ensure() error {
 	}
 
 	if err := os.MkdirAll(filepath.Dir(s.p), 0o755); err != nil {
-		return errdef.Wrap(errdef.CodeFilesystem, err, "create history dir")
+		return diag.WrapAs(diag.ClassFilesystem, err, "create history dir")
 	}
 
 	// Opening is lazy so commands that never touch history do not pay
@@ -428,7 +428,7 @@ func (s *Store) openWithRecover() (*sql.DB, *RecoverInfo, error) {
 	db, err = openReadyDB(s.p)
 	if err != nil {
 		return nil, nil, errors.Join(
-			errdef.Wrap(errdef.CodeHistory, err, "open recovered history db"),
+			diag.WrapAs(diag.ClassHistory, err, "open recovered history db"),
 			fmt.Errorf("history db moved to %s", bak),
 		)
 	}
@@ -447,7 +447,7 @@ func openReadyDB(dsn string) (*sql.DB, error) {
 	// A handle is returned only when the database is safe to use.
 	db, err := sql.Open(drv, dsn)
 	if err != nil {
-		return nil, errdef.Wrap(errdef.CodeHistory, err, "open history db")
+		return nil, diag.WrapAs(diag.ClassHistory, err, "open history db")
 	}
 	// SQLite behaves best here with a single connection because writes
 	// are serialized and this avoids avoidable lock contention.
@@ -533,7 +533,7 @@ func moveIfExists(src, dst string) error {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
 		}
-		return errdef.Wrap(errdef.CodeFilesystem, err, "move corrupted history file")
+		return diag.WrapAs(diag.ClassFilesystem, err, "move corrupted history file")
 	}
 	return nil
 }

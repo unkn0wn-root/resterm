@@ -112,6 +112,7 @@ func (c *proCollector) applyIter(ev core.ProIterDone) {
 		Warmup:    ev.Iter.Warmup,
 		Reason:    outcome.reason,
 		Duration:  dur,
+		Err:       outcome.err,
 		Failure:   outcome.failure,
 	}
 	if ev.Result.Response != nil {

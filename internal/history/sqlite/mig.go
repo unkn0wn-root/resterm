@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/errdef"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
@@ -34,7 +34,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 
 	tx, err := s.db.BeginTx(context.Background(), nil)
 	if err != nil {
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "begin history migration tx")
+		return 0, diag.WrapAs(diag.ClassHistory, err, "begin history migration tx")
 	}
 	defer func() { _ = tx.Rollback() }()
 
@@ -53,7 +53,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return 0, nil
 		}
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "read legacy history")
+		return 0, diag.WrapAs(diag.ClassHistory, err, "read legacy history")
 	}
 
 	n := 0
@@ -67,7 +67,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		if existing == 0 {
 			es, err := dec[[]history.Entry](data)
 			if err != nil {
-				return 0, errdef.Wrap(errdef.CodeHistory, err, "parse legacy history")
+				return 0, diag.WrapAs(diag.ClassHistory, err, "parse legacy history")
 			}
 			for _, e := range es {
 				r, err := mkRow(e)
@@ -78,7 +78,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 				// not abort the whole migration transaction.
 				res, err := insertRow(tx, qIgnore, &r)
 				if err != nil {
-					return 0, errdef.Wrap(errdef.CodeHistory, err, "insert migrated history row")
+					return 0, diag.WrapAs(diag.ClassHistory, err, "insert migrated history row")
 				}
 				ra, err := res.RowsAffected()
 				if err == nil && ra > 0 {
@@ -92,7 +92,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 		return 0, err
 	}
 	if err := tx.Commit(); err != nil {
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "commit history migration tx")
+		return 0, diag.WrapAs(diag.ClassHistory, err, "commit history migration tx")
 	}
 	return n, nil
 }
@@ -100,7 +100,7 @@ func (s *Store) MigrateJSON(path string) (int, error) {
 func rowCount(tx *sql.Tx) (int64, error) {
 	var n int64
 	if err := tx.QueryRow(`SELECT COUNT(*) FROM hist`).Scan(&n); err != nil {
-		return 0, errdef.Wrap(errdef.CodeHistory, err, "count history rows")
+		return 0, diag.WrapAs(diag.ClassHistory, err, "count history rows")
 	}
 	return n, nil
 }
@@ -114,7 +114,7 @@ func metaHas(tx *sql.Tx, key string) (bool, error) {
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
-	return false, errdef.Wrap(errdef.CodeHistory, err, "read history meta")
+	return false, diag.WrapAs(diag.ClassHistory, err, "read history meta")
 }
 
 func metaSet(tx *sql.Tx, key, val string) error {
@@ -125,7 +125,7 @@ func metaSet(tx *sql.Tx, key, val string) error {
 		val,
 	)
 	if err != nil {
-		return errdef.Wrap(errdef.CodeHistory, err, "write history meta")
+		return diag.WrapAs(diag.ClassHistory, err, "write history meta")
 	}
 	return nil
 }
