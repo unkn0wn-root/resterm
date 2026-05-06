@@ -6,15 +6,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rtspre"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -220,7 +220,7 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	return rts.RT{
 		Env:         e.rtsEnv(in.env),
 		Vars:        in.vars,
-		Globals:     globalValues(e.collectGlobalValues(in.doc, in.env), false),
+		Globals:     rtspre.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), false),
 		Resp:        resp,
 		Res:         res,
 		Trace:       in.tr,
@@ -233,24 +233,6 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 		Uses:        e.rtsUses(in.doc, in.req),
 		Extra:       in.x,
 	}
-}
-
-func globalValues(globs map[string]scripts.GlobalValue, safe bool) map[string]string {
-	if len(globs) == 0 {
-		return map[string]string{}
-	}
-	out := make(map[string]string, len(globs))
-	for k, v := range globs {
-		if safe && v.Secret {
-			continue
-		}
-		name := strings.TrimSpace(v.Name)
-		if name == "" {
-			name = k
-		}
-		out[lowerKey(name)] = v.Value
-	}
-	return out
 }
 
 func (e *Engine) rtsEval(
@@ -487,314 +469,53 @@ func (e *Engine) runAsserts(
 	return out, nil
 }
 
-type preMut struct {
-	out   *scripts.PreRequestOutput
-	req   *rts.Req
-	vars  map[string]string
-	globs map[string]string
-}
-
-func newPreMut(
-	out *scripts.PreRequestOutput,
-	req *rts.Req,
-	vars map[string]string,
-	globs map[string]string,
-) *preMut {
-	return &preMut{out: out, req: req, vars: vars, globs: globs}
-}
-
 func (e *Engine) runRTSPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
 	env, base string,
 	vv map[string]string,
-	globs map[string]scripts.GlobalValue,
-) (scripts.PreRequestOutput, error) {
-	var out scripts.PreRequestOutput
+	globs map[string]vars.GlobalMutation,
+) (prerequest.Output, error) {
+	var out prerequest.Output
 	if req == nil {
 		return out, nil
 	}
 	uses := e.rtsUses(doc, req)
 	envs := e.rtsEnv(env)
 	base = e.rtsBase(doc, base)
-	gv := globalValues(globs, false)
-	mut := newPreMut(&out, e.rtsReq(req), vv, gv)
+	gv := rtspre.RuntimeGlobals(globs, false)
+	mut := rtspre.NewMutator(&out, e.rtsReq(req), vv, gv)
 	empty := &rts.Resp{}
 
-	for idx, blk := range req.Metadata.Scripts {
-		if !isRTSPre(blk) {
-			continue
-		}
-		if err := ctx.Err(); err != nil {
-			return out, err
-		}
-		src, path, err := loadRTSScript(blk, base)
-		if err != nil {
-			return out, fmt.Errorf("rts pre-request script %d: %w", idx+1, err)
-		}
-		if strings.TrimSpace(src) == "" {
-			continue
-		}
-		pos := e.rtsPosForLine(doc, req, 0)
-		if path != "" {
-			pos.Path = path
-			pos.Line = 1
-			pos.Col = 1
-		}
-		rt := rts.RT{
-			Env:         envs,
-			Vars:        vv,
-			Globals:     gv,
-			Resp:        e.rtsLast(),
-			Res:         empty,
-			Req:         mut.req,
-			ReqMut:      mut,
-			VarsMut:     mut,
-			GlobalMut:   mut,
-			Uses:        uses,
-			BaseDir:     base,
-			ReadFile:    os.ReadFile,
-			AllowRandom: true,
-			Site:        "@script pre-request",
-		}
-		if _, err := e.re.ExecModule(ctx, rt, src, pos); err != nil {
-			return out, err
-		}
-	}
-	trimPreOutput(&out)
-	return out, nil
-}
-
-func isRTSPre(blk restfile.ScriptBlock) bool {
-	return strings.ToLower(blk.Kind) == "pre-request" && scriptLang(blk.Lang) == "rts"
-}
-
-func scriptLang(lang string) string {
-	val := strings.ToLower(strings.TrimSpace(lang))
-	switch val {
-	case "", "javascript":
-		return "js"
-	case "restermlang":
-		return "rts"
-	default:
-		return val
-	}
-}
-
-func loadRTSScript(blk restfile.ScriptBlock, base string) (string, string, error) {
-	if blk.FilePath == "" {
-		return blk.Body, "", nil
-	}
-	path := strings.TrimSpace(blk.FilePath)
-	if path == "" {
-		return "", "", nil
-	}
-	if !filepath.IsAbs(path) && base != "" {
-		path = filepath.Join(base, path)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", "", err
-	}
-	return string(data), path, nil
-}
-
-func trimPreOutput(out *scripts.PreRequestOutput) {
-	if out == nil {
-		return
-	}
-	if len(out.Headers) == 0 {
-		out.Headers = nil
-	}
-	if len(out.Query) == 0 {
-		out.Query = nil
-	}
-	if len(out.Variables) == 0 {
-		out.Variables = nil
-	}
-	if len(out.Globals) == 0 {
-		out.Globals = nil
-	}
-}
-
-func (m *preMut) SetMethod(val string) {
-	val = strings.ToUpper(strings.TrimSpace(val))
-	setPtr(&m.out.Method, val)
-	if m.req != nil {
-		m.req.Method = val
-	}
-}
-
-func (m *preMut) SetURL(val string) {
-	val = strings.TrimSpace(val)
-	setPtr(&m.out.URL, val)
-	if m.req != nil {
-		m.req.URL = val
-		m.req.Q = nil
-	}
-}
-
-func (m *preMut) SetHeader(name, val string) {
-	if m.out.Headers == nil {
-		m.out.Headers = make(http.Header)
-	}
-	m.out.Headers.Set(name, val)
-	setReqHeader(m.req, name, val, false)
-}
-
-func (m *preMut) AddHeader(name, val string) {
-	if m.out.Headers == nil {
-		m.out.Headers = make(http.Header)
-	}
-	m.out.Headers.Add(name, val)
-	setReqHeader(m.req, name, val, true)
-}
-
-func (m *preMut) DelHeader(name string) {
-	if m.out.Headers != nil {
-		m.out.Headers.Del(name)
-	}
-	if m.req != nil && m.req.H != nil {
-		delete(m.req.H, lowerKey(name))
-	}
-}
-
-func (m *preMut) SetQuery(name, val string) {
-	if m.out.Query == nil {
-		m.out.Query = make(map[string]string)
-	}
-	m.out.Query[name] = val
-	setReqQuery(m.req, name, val)
-}
-
-func (m *preMut) SetBody(val string) { setPtr(&m.out.Body, val) }
-
-func (m *preMut) SetVar(name, val string) {
-	if m.out.Variables == nil {
-		m.out.Variables = make(map[string]string)
-	}
-	m.out.Variables[name] = val
-	if m.vars != nil {
-		m.vars[name] = val
-	}
-}
-
-func (m *preMut) SetGlobal(name, val string, sec bool) {
-	if m.out.Globals == nil {
-		m.out.Globals = make(map[string]scripts.GlobalValue)
-	}
-	m.out.Globals[name] = scripts.GlobalValue{Name: name, Value: val, Secret: sec}
-	if m.globs != nil {
-		m.globs[lowerKey(name)] = val
-	}
-}
-
-func (m *preMut) DelGlobal(name string) {
-	if m.out.Globals == nil {
-		m.out.Globals = make(map[string]scripts.GlobalValue)
-	}
-	m.out.Globals[name] = scripts.GlobalValue{Name: name, Delete: true}
-	if m.globs != nil {
-		delete(m.globs, lowerKey(name))
-	}
-}
-
-func setPtr(dst **string, val string) {
-	if dst == nil {
-		return
-	}
-	cp := val
-	*dst = &cp
-}
-
-func setReqHeader(req *rts.Req, name, val string, appendValue bool) {
-	if req == nil {
-		return
-	}
-	if req.H == nil {
-		req.H = make(map[string][]string)
-	}
-	key := lowerKey(name)
-	if appendValue {
-		req.H[key] = append(req.H[key], val)
-		return
-	}
-	req.H[key] = []string{val}
-}
-
-func setReqQuery(req *rts.Req, name, val string) {
-	if req == nil {
-		return
-	}
-	if req.Q == nil {
-		req.Q = make(map[string][]string)
-	}
-	req.Q[name] = []string{val}
-	raw := strings.TrimSpace(req.URL)
-	if raw == "" {
-		return
-	}
-	cp := val
-	out, err := urltpl.PatchQuery(raw, map[string]*string{name: &cp})
-	if err == nil {
-		req.URL = out
-	}
-}
-
-func lowerKey(name string) string { return strings.ToLower(name) }
-
-func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) error {
-	if out.Method != nil {
-		req.Method = strings.ToUpper(strings.TrimSpace(*out.Method))
-	}
-	if out.URL != nil {
-		req.URL = strings.TrimSpace(*out.URL)
-	}
-	if len(out.Query) > 0 {
-		if err := applyPreRequestQuery(req, out.Query); err != nil {
-			return diag.WrapAs(diag.ClassScript, err, "invalid url after script")
-		}
-	}
-	if out.Headers != nil {
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		for n, vs := range out.Headers {
-			req.Headers.Del(n)
-			for _, v := range vs {
-				req.Headers.Add(n, v)
+	err := rtspre.Run(ctx, e.re, rtspre.ExecInput{
+		Doc:     doc,
+		Scripts: req.Metadata.Scripts,
+		BaseDir: base,
+		BuildRT: func() rts.RT {
+			return rts.RT{
+				Env:         envs,
+				Vars:        vv,
+				Globals:     gv,
+				Resp:        e.rtsLast(),
+				Res:         empty,
+				Req:         mut.Request(),
+				ReqMut:      mut,
+				VarsMut:     mut,
+				GlobalMut:   mut,
+				Uses:        uses,
+				BaseDir:     base,
+				ReadFile:    os.ReadFile,
+				AllowRandom: true,
+				Site:        "@script pre-request",
 			}
-		}
-	}
-	if out.Body != nil {
-		req.Body.FilePath = ""
-		req.Body.Text = *out.Body
-		req.Body.GraphQL = nil
-	}
-	setRequestVars(req, out.Variables)
-	return nil
-}
-
-func applyPreRequestQuery(req *restfile.Request, q map[string]string) error {
-	if req == nil || len(q) == 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(req.URL)
-	patch := make(map[string]*string, len(q))
-	for k, v := range q {
-		cp := v
-		patch[k] = &cp
-	}
-	out, err := urltpl.PatchQuery(raw, patch)
+		},
+	})
 	if err != nil {
-		return err
+		return out, err
 	}
-	if raw == "" && out == "" {
-		return nil
-	}
-	req.URL = out
-	return nil
+	prerequest.Normalize(&out)
+	return out, nil
 }
 
 type applyPatch struct {

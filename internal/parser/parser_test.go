@@ -328,6 +328,45 @@ func TestParseRTSDirectiveAlias(t *testing.T) {
 	}
 }
 
+func TestParseInlineRTSSourceLines(t *testing.T) {
+	src := `### Sample
+# @rts pre-request
+> request.setHeader("X", missing.value)
+  > pre.mutate(request, vars, env)
+GET https://example.com
+`
+
+	doc := Parse("script-source.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected no parse errors, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if len(req.Metadata.Scripts) != 1 {
+		t.Fatalf("expected 1 script block, got %d", len(req.Metadata.Scripts))
+	}
+
+	script := req.Metadata.Scripts[0]
+	if script.SourcePath != "script-source.http" {
+		t.Fatalf("unexpected source path: %q", script.SourcePath)
+	}
+	wantBody := "request.setHeader(\"X\", missing.value)\npre.mutate(request, vars, env)"
+	if script.Body != wantBody {
+		t.Fatalf("unexpected script body:\n%s", script.Body)
+	}
+	wantLines := []restfile.ScriptLine{{Line: 3, Col: 3}, {Line: 4, Col: 5}}
+	if len(script.Lines) != len(wantLines) {
+		t.Fatalf("expected %d script lines, got %#v", len(wantLines), script.Lines)
+	}
+	for i, want := range wantLines {
+		if script.Lines[i] != want {
+			t.Fatalf("line %d: expected %#v, got %#v", i, want, script.Lines[i])
+		}
+	}
+}
+
 func TestParseRTSDirectiveRejectsUnsupportedModes(t *testing.T) {
 	tests := []struct {
 		name string

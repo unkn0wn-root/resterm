@@ -11,7 +11,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -1356,7 +1355,7 @@ func (m *Model) redactExplainReportWithState(
 	rep *xplain.Report,
 	env string,
 	req *restfile.Request,
-	globals map[string]scripts.GlobalValue,
+	globals map[string]vars.GlobalMutation,
 	extras ...string,
 ) *xplain.Report {
 	if rep == nil {
@@ -1450,7 +1449,7 @@ func (m *Model) redactExplainReportWithState(
 func (m *Model) explainSecretsForRedaction(
 	env string,
 	req *restfile.Request,
-	globals map[string]scripts.GlobalValue,
+	globals map[string]vars.GlobalMutation,
 	extras []string,
 ) []string {
 	values := make(map[string]struct{})

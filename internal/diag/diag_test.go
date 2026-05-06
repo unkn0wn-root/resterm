@@ -36,7 +36,7 @@ func TestRenderReportWithSourceSpan(t *testing.T) {
 		"error[parse]: @rts supports only pre-request mode",
 		"--> sample.http:2:3",
 		"   2 | # @rts pre",
-		"        ^",
+		"     |   ^",
 		"note: Fix the request file parse error before running.",
 	} {
 		if !strings.Contains(got, want) {

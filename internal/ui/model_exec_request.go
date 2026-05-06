@@ -7,67 +7,9 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/curl"
-	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
-	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
-
-func applyPreRequestOutput(req *restfile.Request, out scripts.PreRequestOutput) error {
-	if out.Method != nil {
-		req.Method = strings.ToUpper(strings.TrimSpace(*out.Method))
-	}
-
-	if out.URL != nil {
-		req.URL = strings.TrimSpace(*out.URL)
-	}
-
-	if len(out.Query) > 0 {
-		if err := applyPreRequestQuery(req, out.Query); err != nil {
-			return diag.WrapAs(diag.ClassScript, err, "invalid url after script")
-		}
-	}
-	if out.Headers != nil {
-		if req.Headers == nil {
-			req.Headers = make(http.Header)
-		}
-		for name, values := range out.Headers {
-			req.Headers.Del(name)
-			for _, value := range values {
-				req.Headers.Add(name, value)
-			}
-		}
-	}
-	if out.Body != nil {
-		req.Body.FilePath = ""
-		req.Body.Text = *out.Body
-		req.Body.GraphQL = nil
-	}
-	setRequestVars(req, out.Variables)
-	return nil
-}
-
-func applyPreRequestQuery(req *restfile.Request, q map[string]string) error {
-	if req == nil || len(q) == 0 {
-		return nil
-	}
-	raw := strings.TrimSpace(req.URL)
-	patch := make(map[string]*string, len(q))
-	for key, value := range q {
-		val := value
-		patch[key] = &val
-	}
-	updated, err := urltpl.PatchQuery(raw, patch)
-	if err != nil {
-		return err
-	}
-	if raw == "" && updated == "" {
-		return nil
-	}
-	req.URL = updated
-	return nil
-}
 
 func cloneRequest(req *restfile.Request) *restfile.Request {
 	if req == nil {
@@ -86,7 +28,7 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 	clone.Variables = append([]restfile.Variable(nil), req.Variables...)
 	clone.Metadata.Tags = append([]string(nil), req.Metadata.Tags...)
 	clone.Metadata.Auth = restfile.CloneAuthSpec(req.Metadata.Auth)
-	clone.Metadata.Scripts = append([]restfile.ScriptBlock(nil), req.Metadata.Scripts...)
+	clone.Metadata.Scripts = restfile.CloneScriptBlocks(req.Metadata.Scripts)
 	clone.Metadata.Uses = append([]restfile.UseSpec(nil), req.Metadata.Uses...)
 	if len(req.Metadata.Applies) > 0 {
 		clone.Metadata.Applies = make([]restfile.ApplySpec, len(req.Metadata.Applies))

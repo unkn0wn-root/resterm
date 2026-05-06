@@ -135,7 +135,7 @@ func (e *Eng) ExecModule(ctx context.Context, rt RT, src string, pos Pos) (*Comp
 	if err != nil {
 		return nil, err
 	}
-	mod, err := ParseModule(pos.Path, []byte(src))
+	mod, err := ParseModuleAt(pos.Path, []byte(src), pos)
 	if err != nil {
 		return nil, err
 	}

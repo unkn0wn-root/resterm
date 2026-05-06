@@ -13,7 +13,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -47,7 +46,7 @@ type explainFinalizeInput struct {
 	settings     map[string]string
 	ssh          *ssh.Plan
 	k8s          *k8s.Plan
-	globals      map[string]scripts.GlobalValue
+	globals      map[string]vars.GlobalMutation
 	extraSecrets []string
 }
 
@@ -62,7 +61,7 @@ type explainBuilder struct {
 	settings     map[string]string
 	ssh          *ssh.Plan
 	k8s          *k8s.Plan
-	globals      map[string]scripts.GlobalValue
+	globals      map[string]vars.GlobalMutation
 	extraSecrets []string
 }
 

@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -224,7 +225,7 @@ type execCtx struct {
 	rel     func()
 
 	baseVars  map[string]string
-	storeG    map[string]scripts.GlobalValue
+	storeG    map[string]vars.GlobalMutation
 	hasRTSPre bool
 	hasJSPre  bool
 	scriptV   map[string]string
@@ -302,10 +303,10 @@ func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
 	}
 	var hasRTS, hasJS bool
 	for _, blk := range req.Metadata.Scripts {
-		if isRTSPre(blk) {
+		if restfile.IsPreRequestScript(blk, restfile.ScriptLangRTS) {
 			hasRTS = true
 		}
-		if strings.ToLower(blk.Kind) == "pre-request" && scriptLang(blk.Lang) == "js" {
+		if restfile.IsPreRequestScript(blk, restfile.ScriptLangJS) {
 			hasJS = true
 		}
 	}
@@ -354,7 +355,7 @@ func (x *execCtx) currentVariables() map[string]string {
 	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, x.extraV)
 }
 
-func (x *execCtx) currentGlobals() map[string]scripts.GlobalValue {
+func (x *execCtx) currentGlobals() map[string]vars.GlobalMutation {
 	return effectiveGlobalValues(x.doc, x.storeG)
 }
 
@@ -362,7 +363,7 @@ func (x *execCtx) captureVariables() map[string]string {
 	return mergeStringMaps(x.eng.collectVariables(x.doc, x.req, x.env, x.extraV), x.scriptV)
 }
 
-func (x *execCtx) applyRuntimeGlobals(ch map[string]scripts.GlobalValue) {
+func (x *execCtx) applyRuntimeGlobals(ch map[string]vars.GlobalMutation) {
 	if len(ch) == 0 {
 		return
 	}
@@ -520,7 +521,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		wrap := diag.WrapAs(diag.ClassScript, err, "pre-request rts script")
 		return x.fail(wrap, "RTS pre-request failed", err)
 	}
-	if err := applyPreRequestOutput(x.req, rtsOut); err != nil {
+	if err := prerequest.Apply(x.req, rtsOut); err != nil {
 		x.exp.stage(
 			xplain.StageRTSPreRequest,
 			xplain.StageError,
@@ -553,7 +554,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	if x.hasJSPre {
 		before = cloneRequest(x.req)
 	}
-	jsOut, err := x.eng.sc.RunPreRequest(x.req.Metadata.Scripts, scripts.PreRequestInput{
+	jsOut, err := x.eng.sc.RunPreRequest(x.req.Metadata.Scripts, prerequest.Input{
 		Request:   x.req,
 		Variables: vv,
 		Globals:   cloneGlobalValues(x.currentGlobals()),
@@ -572,7 +573,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 		wrap := diag.WrapAs(diag.ClassScript, err, "pre-request script")
 		return x.fail(wrap, "JS pre-request failed", err)
 	}
-	if err := applyPreRequestOutput(x.req, jsOut); err != nil {
+	if err := prerequest.Apply(x.req, jsOut); err != nil {
 		x.exp.stage(
 			xplain.StageJSPreRequest,
 			xplain.StageError,
@@ -1012,7 +1013,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			) map[string]string {
 				return x.eng.collectVariables(doc, req, env, x.extraV)
 			},
-			CollectGlobalValues: func(doc *restfile.Document, env string) map[string]scripts.GlobalValue {
+			CollectGlobalValues: func(doc *restfile.Document, env string) map[string]vars.GlobalMutation {
 				return x.eng.collectGlobalValues(doc, env)
 			},
 			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {

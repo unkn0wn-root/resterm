@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -44,7 +45,7 @@ type execContext struct {
 
 	// State derived before request preparation.
 	baseVars     map[string]string
-	storeGlobals map[string]scripts.GlobalValue
+	storeGlobals map[string]vars.GlobalMutation
 	hasRTSPre    bool
 	hasJSPre     bool
 	scriptVars   map[string]string
@@ -133,10 +134,10 @@ func detectPreRequestScripts(req *restfile.Request) (bool, bool) {
 	hasRTSPre := false
 	hasJSPre := false
 	for _, block := range req.Metadata.Scripts {
-		if isRTSPre(block) {
+		if restfile.IsPreRequestScript(block, restfile.ScriptLangRTS) {
 			hasRTSPre = true
 		}
-		if strings.ToLower(block.Kind) == "pre-request" && scriptLang(block.Lang) == "js" {
+		if restfile.IsPreRequestScript(block, restfile.ScriptLangJS) {
 			hasJSPre = true
 		}
 	}
@@ -366,11 +367,11 @@ func (e *execContext) currentVariables() map[string]string {
 	return current
 }
 
-func (e *execContext) currentGlobalValues() map[string]scripts.GlobalValue {
+func (e *execContext) currentGlobalValues() map[string]vars.GlobalMutation {
 	return effectiveGlobalValues(e.doc, e.storeGlobals)
 }
 
-func (e *execContext) applyRuntimeGlobals(changes map[string]scripts.GlobalValue) {
+func (e *execContext) applyRuntimeGlobals(changes map[string]vars.GlobalMutation) {
 	if len(changes) == 0 {
 		return
 	}
@@ -492,7 +493,7 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		msg.err = diag.WrapAs(diag.ClassScript, err, "pre-request rts script")
 		return &msg
 	}
-	if err := applyPreRequestOutput(e.req, rtsResult); err != nil {
+	if err := prerequest.Apply(e.req, rtsResult); err != nil {
 		e.explain.stage(
 			explainStageRTSPreRequest,
 			xplain.StageError,
@@ -524,7 +525,7 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 	}
 
 	jsBefore := cloneRequestIf(e.req, e.hasJSPre)
-	preResult, err := e.runner.RunPreRequest(e.req.Metadata.Scripts, scripts.PreRequestInput{
+	preResult, err := e.runner.RunPreRequest(e.req.Metadata.Scripts, prerequest.Input{
 		Request:   e.req,
 		Variables: preVars,
 		Globals:   cloneGlobalValues(e.currentGlobalValues()),
@@ -545,7 +546,7 @@ func (e *execContext) runPreRequestScripts() *responseMsg {
 		msg.err = diag.WrapAs(diag.ClassScript, err, "pre-request script")
 		return &msg
 	}
-	if err := applyPreRequestOutput(e.req, preResult); err != nil {
+	if err := prerequest.Apply(e.req, preResult); err != nil {
 		e.explain.stage(
 			explainStageJSPreRequest,
 			xplain.StageError,
