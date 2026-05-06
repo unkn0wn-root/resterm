@@ -90,12 +90,16 @@ func (m Model) chainLineStyle() lipgloss.Style {
 
 func (st eSty) line(l diag.Line) string {
 	switch l.Kind {
-	case diag.LineHead, diag.LineMark:
+	case diag.LineHead:
 		return st.title.Render(l.Text)
 	case diag.LineLoc:
 		return st.loc.Render(l.Text)
+	case diag.LineBar:
+		return st.src.Render(l.Text)
 	case diag.LineSrc:
 		return st.src.Render(l.Text)
+	case diag.LineMark:
+		return st.mark(l.Text)
 	case diag.LineChain:
 		return st.chain.Render(l.Text)
 	case diag.LineNote, diag.LineHelp:
@@ -108,4 +112,12 @@ func (st eSty) line(l diag.Line) string {
 		}
 		return st.bar.Render(l.Text)
 	}
+}
+
+func (st eSty) mark(text string) string {
+	idx := strings.Index(text, "^")
+	if idx < 0 {
+		return st.title.Render(text)
+	}
+	return st.src.Render(text[:idx]) + st.title.Render(text[idx:])
 }

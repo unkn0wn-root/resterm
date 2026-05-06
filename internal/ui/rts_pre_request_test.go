@@ -3,9 +3,13 @@ package ui
 import (
 	"context"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
@@ -103,5 +107,89 @@ request.setQueryParam("mutated", "true")`,
 	}
 	if !strings.Contains(req.URL, "mode=debug") || !strings.Contains(req.URL, "mutated=true") {
 		t.Fatalf("expected merged query params, got %q", req.URL)
+	}
+}
+
+func TestRunRTSPreRequestErrorRendersInlineSource(t *testing.T) {
+	model := New(Config{})
+	src := `### RTS
+# @rts pre-request
+> request.setHeader("X", missing.value)
+GET https://example.com
+`
+	doc := parser.Parse("sample.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	_, err := model.runRTSPreRequest(
+		context.Background(),
+		doc,
+		doc.Requests[0],
+		"",
+		"",
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatalf("expected rts error")
+	}
+
+	out := diag.Render(diag.WrapAs(diag.ClassScript, err, "pre-request rts script"))
+	checks := []string{
+		`error[script]: undefined name "missing"`,
+		"--> sample.http:3:26",
+		`   3 | > request.setHeader("X", missing.value)`,
+		"                         ^",
+		"Stack:",
+		"  at sample.http:3:1 in @script pre-request",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected rendered error to contain %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRunRTSPreRequestErrorRendersIncludedSource(t *testing.T) {
+	model := New(Config{})
+	dir := t.TempDir()
+	path := filepath.Join(dir, "pre.rts")
+	if err := os.WriteFile(
+		path,
+		[]byte("request.setHeader(\"X\", missing.value)\n"),
+		0o600,
+	); err != nil {
+		t.Fatalf("write rts file: %v", err)
+	}
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       "https://example.com",
+		LineRange: restfile.LineRange{Start: 1, End: 3},
+		Metadata: restfile.RequestMetadata{
+			Scripts: []restfile.ScriptBlock{{
+				Kind:     "pre-request",
+				Lang:     "rts",
+				FilePath: "pre.rts",
+			}},
+		},
+	}
+
+	_, err := model.runRTSPreRequest(context.Background(), nil, req, "", dir, nil, nil)
+	if err == nil {
+		t.Fatalf("expected rts error")
+	}
+
+	out := diag.Render(diag.WrapAs(diag.ClassScript, err, "pre-request rts script"))
+	checks := []string{
+		`error[script]: undefined name "missing"`,
+		"--> " + path + ":1:24",
+		`   1 | request.setHeader("X", missing.value)`,
+		"  at " + path + ":1:1 in @script pre-request",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected rendered error to contain %q:\n%s", want, out)
+		}
 	}
 }

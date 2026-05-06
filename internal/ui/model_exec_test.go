@@ -655,6 +655,7 @@ func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 		"@rts supports only pre-request mode",
 		"--> sample.http:1:1",
 		"   1 | # @rts pre",
+		"     | ^",
 		"note: Fix the request file parse error before running.",
 	} {
 		if !strings.Contains(plain, want) {
@@ -739,6 +740,20 @@ func TestHandleResponseMsgRendersRTSStack(t *testing.T) {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected RTS stack view to contain %q, got %q", want, plain)
 		}
+	}
+}
+
+func TestStyleLinesUsesSourceStyleForGutterBar(t *testing.T) {
+	model := New(Config{})
+	st := model.errSty()
+	line := diag.Line{Kind: diag.LineBar, Text: "     |"}
+	if got, want := st.line(line), st.src.Render(line.Text); got != want {
+		t.Fatalf("LineBar style mismatch\ngot:  %q\nwant: %q", got, want)
+	}
+
+	mark := "     |   ^"
+	if got, want := st.mark(mark), st.src.Render("     |   ")+st.title.Render("^"); got != want {
+		t.Fatalf("LineMark style mismatch\ngot:  %q\nwant: %q", got, want)
 	}
 }
 

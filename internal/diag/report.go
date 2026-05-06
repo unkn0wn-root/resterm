@@ -274,6 +274,12 @@ func withOperation(rep Report, e *diagnosticError) Report {
 	if class := classFromError(e); rep.Items[0].Class == ClassUnknown && class != ClassUnknown {
 		rep.Items[0].Class = class
 	}
+	if rep.Path == "" && e.meta.path != "" {
+		rep.Path = e.meta.path
+	}
+	if len(rep.Source) == 0 && len(e.meta.source) > 0 {
+		rep.Source = append([]byte(nil), e.meta.source...)
+	}
 	if rep.Items[0].Component == "" && e.component != "" {
 		rep.Items[0].Component = e.component
 	}

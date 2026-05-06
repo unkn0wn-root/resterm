@@ -62,6 +62,8 @@ type requestBuilder struct {
 	discardScript     bool
 	scriptBufferKind  scriptKind
 	scriptBufferLang  scriptLang
+	scriptSourcePath  string
+	scriptBufferLines []restfile.ScriptLine
 	scriptBuffer      []string
 	settings          map[string]string
 	http              *httpbuilder.Builder
@@ -96,7 +98,13 @@ func normScriptLang(lang string) scriptLang {
 	}
 }
 
-func (r *requestBuilder) appendScriptLine(kind scriptKind, lang scriptLang, body string) {
+func (r *requestBuilder) appendScriptLine(
+	kind scriptKind,
+	lang scriptLang,
+	body string,
+	path string,
+	loc restfile.ScriptLine,
+) {
 	if r.discardScript {
 		return
 	}
@@ -104,14 +112,17 @@ func (r *requestBuilder) appendScriptLine(kind scriptKind, lang scriptLang, body
 	lang = normScriptLang(lang.String())
 	if r.scriptBufferKind != "" &&
 		(!strings.EqualFold(r.scriptBufferKind.String(), kind.String()) ||
-			!strings.EqualFold(r.scriptBufferLang.String(), lang.String())) {
+			!strings.EqualFold(r.scriptBufferLang.String(), lang.String()) ||
+			r.scriptSourcePath != path) {
 		r.flushPendingScript()
 	}
 	if r.scriptBufferKind == "" {
 		r.scriptBufferKind = kind
 		r.scriptBufferLang = lang
+		r.scriptSourcePath = path
 	}
 	r.scriptBuffer = append(r.scriptBuffer, body)
+	r.scriptBufferLines = append(r.scriptBufferLines, loc)
 }
 
 func (r *requestBuilder) flushPendingScript() {
@@ -120,13 +131,17 @@ func (r *requestBuilder) flushPendingScript() {
 	}
 	script := strings.Join(r.scriptBuffer, "\n")
 	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind: r.scriptBufferKind.String(),
-		Lang: r.scriptBufferLang.String(),
-		Body: script,
+		Kind:       r.scriptBufferKind.String(),
+		Lang:       r.scriptBufferLang.String(),
+		Body:       script,
+		SourcePath: r.scriptSourcePath,
+		Lines:      append([]restfile.ScriptLine(nil), r.scriptBufferLines...),
 	})
 	r.scriptBuffer = nil
 	r.scriptBufferKind = ""
 	r.scriptBufferLang = ""
+	r.scriptSourcePath = ""
+	r.scriptBufferLines = nil
 }
 
 func (r *requestBuilder) appendScriptInclude(kind scriptKind, lang scriptLang, path string) {

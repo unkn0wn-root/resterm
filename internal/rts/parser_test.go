@@ -26,6 +26,20 @@ func TestParseDuplicateParamRejected(t *testing.T) {
 	}
 }
 
+func TestParseModuleAtUsesInitialPos(t *testing.T) {
+	_, err := ParseModuleAt("hook.rts", []byte("  fn f( {}\n"), Pos{Line: 10, Col: 1})
+	if err == nil {
+		t.Fatalf("expected parse error")
+	}
+	parseErr, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected ParseError, got %T", err)
+	}
+	if parseErr.Pos.Path != "hook.rts" || parseErr.Pos.Line != 10 || parseErr.Pos.Col != 9 {
+		t.Fatalf("unexpected parse position: %+v", parseErr.Pos)
+	}
+}
+
 func TestParseDict(t *testing.T) {
 	src := "let x = {\"a\": 1, b: 2}\n"
 	m, err := ParseModule("test", []byte(src))

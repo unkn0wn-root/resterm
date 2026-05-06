@@ -474,14 +474,14 @@ func splitAssert(text string) (string, string) {
 }
 
 func (b *documentBuilder) handleScript(ln int, raw string) {
-	body, ok := trimScriptLine(raw, false)
+	body, col, ok := trimScriptLine(raw, false)
 	if !ok {
 		return
 	}
-	b.addScript(ln, body, true)
+	b.addScript(ln, col, body, true)
 }
 
-func (b *documentBuilder) addScript(ln int, body string, inc bool) {
+func (b *documentBuilder) addScript(ln int, col int, body string, inc bool) {
 	b.ensureRequest(ln)
 	k := b.request.currentScriptKind
 	l := b.request.currentScriptLang
@@ -491,7 +491,7 @@ func (b *documentBuilder) addScript(ln int, body string, inc bool) {
 			return
 		}
 	}
-	b.request.appendScriptLine(k, l, body)
+	b.request.appendScriptLine(k, l, body, b.doc.Path, restfile.ScriptLine{Line: ln, Col: col})
 }
 
 func scriptInc(body string) (string, bool) {
@@ -506,16 +506,18 @@ func scriptInc(body string) (string, bool) {
 	return p, true
 }
 
-func trimScriptLine(raw string, allow bool) (string, bool) {
+func trimScriptLine(raw string, allow bool) (string, int, bool) {
 	s := str.TrimLeft(raw)
 	if after, ok := strings.CutPrefix(s, ">"); ok {
+		col := len(raw) - len(s) + 2
 		b := str.TrimLeadingOnce(after)
-		return str.TrimRight(b), true
+		col += len(after) - len(b)
+		return str.TrimRight(b), col, true
 	}
 	if allow {
-		return str.TrimRight(raw), true
+		return str.TrimRight(raw), 1, true
 	}
-	return "", false
+	return "", 0, false
 }
 
 func (b *documentBuilder) handleScriptBlockStart(ln int, line, tr string) bool {
@@ -540,8 +542,8 @@ func (b *documentBuilder) handleScriptBlockLine(ln int, line, tr string) bool {
 		return true
 	}
 
-	body, _ := trimScriptLine(line, true)
-	b.addScript(ln, body, false)
+	body, col, _ := trimScriptLine(line, true)
+	b.addScript(ln, col, body, false)
 	b.appendLine(line)
 	return true
 }

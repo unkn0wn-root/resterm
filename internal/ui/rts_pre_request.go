@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
+	"github.com/unkn0wn-root/resterm/internal/rtssrc"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 )
@@ -62,18 +62,12 @@ func (m *Model) runRTSPreRequest(
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		src, path, err := loadRTSScript(block, baseDir)
+		src, err := rtssrc.Load(doc, block, baseDir)
 		if err != nil {
 			return out, fmt.Errorf("rts pre-request script %d: %w", idx+1, err)
 		}
-		if strings.TrimSpace(src) == "" {
+		if strings.TrimSpace(src.Text) == "" {
 			continue
-		}
-		pos := m.rtsPosForLine(doc, req, 0)
-		if path != "" {
-			pos.Path = path
-			pos.Line = 1
-			pos.Col = 1
 		}
 		rt := rts.RT{
 			Env:         env,
@@ -92,8 +86,8 @@ func (m *Model) runRTSPreRequest(
 			AllowRandom: true,
 			Site:        "@script pre-request",
 		}
-		if _, err := eng.ExecModule(ctx, rt, src, pos); err != nil {
-			return out, err
+		if _, err := eng.ExecModule(ctx, rt, src.Text, src.Pos); err != nil {
+			return out, rtssrc.Annotate(err, src)
 		}
 	}
 
@@ -118,24 +112,6 @@ func scriptLang(lang string) string {
 	default:
 		return val
 	}
-}
-
-func loadRTSScript(block restfile.ScriptBlock, base string) (string, string, error) {
-	if block.FilePath == "" {
-		return block.Body, "", nil
-	}
-	path := strings.TrimSpace(block.FilePath)
-	if path == "" {
-		return "", "", nil
-	}
-	if !filepath.IsAbs(path) && base != "" {
-		path = filepath.Join(base, path)
-	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", "", err
-	}
-	return string(data), path, nil
 }
 
 func trimPreOutput(out *scripts.PreRequestOutput) {

@@ -26,6 +26,10 @@ func NewParserAt(path string, src []byte, pos Pos) *Parser {
 }
 
 func ParseModule(path string, src []byte) (m *Mod, err error) {
+	return ParseModuleAt(path, src, Pos{Line: 1, Col: 1})
+}
+
+func ParseModuleAt(path string, src []byte, pos Pos) (m *Mod, err error) {
 	defer func() {
 		if r := recover(); r != nil {
 			if pe, ok := r.(*ParseError); ok {
@@ -36,7 +40,7 @@ func ParseModule(path string, src []byte) (m *Mod, err error) {
 			panic(r)
 		}
 	}()
-	p := NewParser(path, src)
+	p := NewParserAt(path, src, pos)
 	m = p.parseMod()
 	return m, err
 }

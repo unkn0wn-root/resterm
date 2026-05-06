@@ -57,10 +57,18 @@ type AuthProfile struct {
 }
 
 type ScriptBlock struct {
-	Kind     string
-	Lang     string
-	Body     string
-	FilePath string
+	Kind       string
+	Lang       string
+	Body       string
+	FilePath   string
+	SourcePath string       `json:"-"`
+	Lines      []ScriptLine `json:"-"`
+}
+
+// ScriptLine maps one stored script body line back to its source file position.
+type ScriptLine struct {
+	Line int
+	Col  int
 }
 
 type UseSpec struct {

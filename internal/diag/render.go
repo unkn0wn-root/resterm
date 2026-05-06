@@ -92,7 +92,13 @@ func itemLines(rep Report, it Diagnostic) []Line {
 			Line{Kind: LineSrc, Text: fmt.Sprintf("%*d | %s", width, it.Span.Start.Line, src)},
 			Line{
 				Kind: LineMark,
-				Text: strings.Repeat(" ", width+3+col-1) + "^" + label(it.Span.Label),
+				Text: fmt.Sprintf(
+					"%*s | %s^%s",
+					width,
+					"",
+					strings.Repeat(" ", col-1),
+					label(it.Span.Label),
+				),
 			},
 		)
 	}

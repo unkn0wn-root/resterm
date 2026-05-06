@@ -34,7 +34,7 @@ func cloneRequestMetadata(src restfile.RequestMetadata) restfile.RequestMetadata
 	dst := src
 	dst.Tags = slices.Clone(src.Tags)
 	dst.Auth = restfile.CloneAuthSpec(src.Auth)
-	dst.Scripts = slices.Clone(src.Scripts)
+	dst.Scripts = restfile.CloneScriptBlocks(src.Scripts)
 	dst.Uses = slices.Clone(src.Uses)
 	dst.Applies = cloneApplySpecs(src.Applies)
 	dst.When = clonePtr(src.When)
