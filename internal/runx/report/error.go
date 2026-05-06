@@ -23,48 +23,6 @@ func ErrorDetailFromError(err error) *ErrorDetail {
 	}
 }
 
-func failureChain(src []diag.ChainEntry) []FailureChain {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make([]FailureChain, 0, len(src))
-	for _, entry := range src {
-		out = append(out, FailureChain{
-			Code:      string(entry.Class),
-			Component: string(entry.Component),
-			Kind:      string(entry.Kind),
-			Message:   entry.Message,
-			Children:  failureChain(entry.Children),
-		})
-	}
-	return out
-}
-
-func failureFrames(src []diag.StackFrame) []FailureFrame {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make([]FailureFrame, 0, len(src))
-	for _, frame := range src {
-		out = append(out, FailureFrame{
-			Name: frame.Name,
-			Pos:  failurePos(frame.Pos),
-		})
-	}
-	return out
-}
-
-func failurePos(pos diag.Pos) FailurePos {
-	return FailurePos{Path: pos.Path, Line: pos.Line, Col: pos.Col}
-}
-
-func errorDetailText(detail *ErrorDetail, fallback string) string {
-	if detail == nil || detail.Rendered == "" {
-		return fallback
-	}
-	return detail.Rendered
-}
-
 // AttachErrorDetail copies chain and frame metadata from detail onto failure.
 func AttachErrorDetail(failure *Failure, detail *ErrorDetail) *Failure {
 	if failure == nil || detail == nil {
@@ -94,4 +52,46 @@ func CloneFailureFrames(src []FailureFrame) []FailureFrame {
 		return nil
 	}
 	return append([]FailureFrame(nil), src...)
+}
+
+func failureChain(src []diag.ChainEntry) []FailureChain {
+	if len(src) == 0 {
+		return nil
+	}
+	chain := make([]FailureChain, len(src))
+	for i, entry := range src {
+		chain[i] = FailureChain{
+			Code:      string(entry.Class),
+			Component: string(entry.Component),
+			Kind:      string(entry.Kind),
+			Message:   entry.Message,
+			Children:  failureChain(entry.Children),
+		}
+	}
+	return chain
+}
+
+func failureFrames(src []diag.StackFrame) []FailureFrame {
+	if len(src) == 0 {
+		return nil
+	}
+	frames := make([]FailureFrame, len(src))
+	for i, frame := range src {
+		frames[i] = FailureFrame{
+			Name: frame.Name,
+			Pos: FailurePos{
+				Path: frame.Pos.Path,
+				Line: frame.Pos.Line,
+				Col:  frame.Pos.Col,
+			},
+		}
+	}
+	return frames
+}
+
+func errorDetailText(detail *ErrorDetail, fallback string) string {
+	if detail == nil || detail.Rendered == "" {
+		return fallback
+	}
+	return detail.Rendered
 }

@@ -368,31 +368,31 @@ func failureChainJSON(src []FailureChain) []jsonFailureChain {
 	if len(src) == 0 {
 		return nil
 	}
-	out := make([]jsonFailureChain, 0, len(src))
-	for _, entry := range src {
-		out = append(out, jsonFailureChain{
+	chain := make([]jsonFailureChain, len(src))
+	for i, entry := range src {
+		chain[i] = jsonFailureChain{
 			Code:      entry.Code,
 			Component: entry.Component,
 			Kind:      entry.Kind,
 			Message:   entry.Message,
 			Children:  failureChainJSON(entry.Children),
-		})
+		}
 	}
-	return out
+	return chain
 }
 
 func failureFramesJSON(src []FailureFrame) []jsonFailureFrame {
 	if len(src) == 0 {
 		return nil
 	}
-	out := make([]jsonFailureFrame, 0, len(src))
-	for _, frame := range src {
-		out = append(out, jsonFailureFrame{
+	frames := make([]jsonFailureFrame, len(src))
+	for i, frame := range src {
+		frames[i] = jsonFailureFrame{
 			Name: frame.Name,
 			Pos:  failurePosJSON(frame.Pos),
-		})
+		}
 	}
-	return out
+	return frames
 }
 
 func failurePosJSON(pos FailurePos) *jsonFailurePos {
