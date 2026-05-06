@@ -17,7 +17,7 @@ func (m *Model) runRTSPreRequest(
 	doc *restfile.Document,
 	req *restfile.Request,
 	envName, base string,
-	vars map[string]string,
+	variables map[string]string,
 	globals map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
 	out := prerequest.Output{}
@@ -33,7 +33,7 @@ func (m *Model) runRTSPreRequest(
 	env := m.rtsEnv(envName)
 	baseDir := m.rtsBase(doc, base)
 	globs := rtspre.RuntimeGlobals(globals, false)
-	mut := rtspre.NewMutator(&out, m.rtsReq(req), vars, globs)
+	mut := rtspre.NewMutator(&out, m.rtsReq(req), variables, globs)
 	emptyResp := &rts.Resp{}
 
 	err := rtspre.Run(ctx, eng, rtspre.ExecInput{
@@ -43,7 +43,7 @@ func (m *Model) runRTSPreRequest(
 		BuildRT: func() rts.RT {
 			return rts.RT{
 				Env:         env,
-				Vars:        vars,
+				Vars:        variables,
 				Globals:     globs,
 				Resp:        m.rtsLast(),
 				Res:         emptyResp,

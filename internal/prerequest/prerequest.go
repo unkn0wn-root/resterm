@@ -107,15 +107,15 @@ func applyQuery(req *restfile.Request, q map[string]string) error {
 	return nil
 }
 
-func setRequestVars(req *restfile.Request, vars map[string]string) {
-	if req == nil || len(vars) == 0 {
+func setRequestVars(req *restfile.Request, variables map[string]string) {
+	if req == nil || len(variables) == 0 {
 		return
 	}
 	existing := make(map[string]int)
 	for i, variable := range req.Variables {
 		existing[strings.ToLower(variable.Name)] = i
 	}
-	for name, value := range vars {
+	for name, value := range variables {
 		key := strings.ToLower(name)
 		if idx, ok := existing[key]; ok {
 			req.Variables[idx].Value = value

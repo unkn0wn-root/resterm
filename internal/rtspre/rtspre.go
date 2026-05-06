@@ -76,20 +76,20 @@ func RuntimeGlobals(globals map[string]vars.GlobalMutation, safe bool) map[strin
 
 // Mutator adapts RTS mutation interfaces to prerequest.Output.
 type Mutator struct {
-	out     *prerequest.Output
-	req     *rts.Req
-	vars    map[string]string
-	globals map[string]string
+	out       *prerequest.Output
+	req       *rts.Req
+	variables map[string]string
+	globals   map[string]string
 }
 
 // NewMutator creates the request, variable, and global mutation surface for RTS.
 func NewMutator(
 	out *prerequest.Output,
 	req *rts.Req,
-	vars map[string]string,
+	variables map[string]string,
 	globals map[string]string,
 ) *Mutator {
-	return &Mutator{out: out, req: req, vars: vars, globals: globals}
+	return &Mutator{out: out, req: req, variables: variables, globals: globals}
 }
 
 // Request returns the live request view mutated during script execution.
@@ -183,8 +183,8 @@ func (m *Mutator) SetVar(name, value string) {
 		m.out.Variables = make(map[string]string)
 	}
 	m.out.Variables[name] = value
-	if m.vars != nil {
-		m.vars[name] = value
+	if m.variables != nil {
+		m.variables[name] = value
 	}
 }
 
