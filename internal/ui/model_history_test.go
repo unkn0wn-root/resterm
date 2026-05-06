@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -253,6 +254,45 @@ func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 	viewportContent := model.pane(responsePanePrimary).viewport.View()
 	if !strings.Contains(viewportContent, "Status:") {
 		t.Fatalf("expected viewport content to include response summary, got %q", viewportContent)
+	}
+}
+
+func TestConsumeHTTPResponseStatusLevelFollowsHTTPStatusCode(t *testing.T) {
+	tests := []struct {
+		name string
+		code int
+		want statusLevel
+	}{
+		{"success", http.StatusOK, statusSuccess},
+		{"client error", http.StatusUnauthorized, statusWarn},
+		{"server error", http.StatusInternalServerError, statusError},
+		{"redirect", http.StatusFound, statusError},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := New(Config{})
+			model.ready = true
+			model.width = 120
+			model.height = 40
+			if cmd := model.applyLayout(); cmd != nil {
+				collectMsgs(cmd)
+			}
+
+			resp := &httpclient.Response{
+				Status:     fmt.Sprintf("%d %s", tt.code, http.StatusText(tt.code)),
+				StatusCode: tt.code,
+				Headers:    http.Header{"Content-Type": []string{"text/plain"}},
+				Body:       []byte("body"),
+			}
+
+			if cmd := model.consumeHTTPResponse(resp, nil, nil, "", nil); cmd == nil {
+				t.Fatalf("expected consumeHTTPResponse to return render command")
+			}
+			if model.statusMessage.level != tt.want {
+				t.Fatalf("expected status level %v, got %v", tt.want, model.statusMessage.level)
+			}
+		})
 	}
 }
 

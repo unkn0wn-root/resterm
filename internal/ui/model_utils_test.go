@@ -49,6 +49,50 @@ func TestWrapLineSegmentsHandlesLongTokenWithIndent(t *testing.T) {
 	}
 }
 
+func TestRenderStatusLineUsesHTTPStatusSeverity(t *testing.T) {
+	tests := []struct {
+		name   string
+		code   int
+		status string
+		want   string
+	}{
+		{
+			name:   "success",
+			code:   http.StatusOK,
+			status: "200 OK",
+			want:   statsSuccessStyle.Render("200 OK"),
+		},
+		{
+			name:   "client error",
+			code:   http.StatusUnauthorized,
+			status: "401 Unauthorized",
+			want:   statsCautionStyle.Render("401 Unauthorized"),
+		},
+		{
+			name:   "server error",
+			code:   http.StatusInternalServerError,
+			status: "500 Internal Server Error",
+			want:   statsWarnStyle.Render("500 Internal Server Error"),
+		},
+		{
+			name:   "redirect",
+			code:   http.StatusFound,
+			status: "302 Found",
+			want:   statsWarnStyle.Render("302 Found"),
+		},
+	}
+
+	renderer := defaultResponseRenderer()
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := renderer.renderStatusLine(tt.status, tt.code)
+			if !strings.Contains(got, tt.want) {
+				t.Fatalf("expected status line to contain %q, got %q", tt.want, got)
+			}
+		})
+	}
+}
+
 func TestWrapLineSegmentsSplitsLongWhitespace(t *testing.T) {
 	line := strings.Repeat(" ", 12) + "x"
 	segments := wrapLineSegments(line, 5)

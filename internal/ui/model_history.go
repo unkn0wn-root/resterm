@@ -469,7 +469,7 @@ func (m *Model) consumeHTTPResponse(
 		)
 	}
 
-	statusLevel := statusSuccess
+	statusLevel := statusLevelForHTTPStatus(resp.StatusCode)
 	statusText := ""
 	if resp != nil {
 		statusText = fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode)
@@ -478,10 +478,10 @@ func (m *Model) consumeHTTPResponse(
 	switch {
 	case scriptErr != nil:
 		statusText = fmt.Sprintf("%s – tests error: %v", statusText, scriptErr)
-		statusLevel = statusWarn
+		statusLevel = maxStatusLevel(statusLevel, statusWarn)
 	case failureCount > 0:
 		statusText = fmt.Sprintf("%s – %d test(s) failed", statusText, failureCount)
-		statusLevel = statusWarn
+		statusLevel = maxStatusLevel(statusLevel, statusWarn)
 	case len(tests) > 0:
 		statusText = fmt.Sprintf("%s – all tests passed", statusText)
 	default:
@@ -503,7 +503,7 @@ func (m *Model) consumeHTTPResponse(
 		if len(timeline.breaches) > 1 {
 			statusText = fmt.Sprintf("%s (%d total)", statusText, len(timeline.breaches))
 		}
-		statusLevel = statusWarn
+		statusLevel = maxStatusLevel(statusLevel, statusWarn)
 	}
 
 	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel})
