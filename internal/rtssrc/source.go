@@ -42,11 +42,15 @@ func Load(doc *restfile.Document, block restfile.ScriptBlock, base string) (Sour
 	}, nil
 }
 
-// Annotate attaches source text to err when source text is available.
+// Annotate attaches source metadata to err when available.
 func Annotate(err error, src Source) error {
-	if err == nil || len(src.Raw) == 0 {
+	if err == nil {
+		return nil
+	}
+	if src.Path == "" && len(src.Raw) == 0 {
 		return err
 	}
+	// Empty operation keeps the original diagnostic message and adds no chain entry.
 	return diag.Wrap(err, "", diag.WithSource(src.Path, src.Raw))
 }
 
@@ -65,6 +69,8 @@ func inline(doc *restfile.Document, block restfile.ScriptBlock) Source {
 	if len(block.Lines) > 0 && block.Lines[0].Line > 0 {
 		pos.Line = block.Lines[0].Line
 	}
+	// Keep Col at 1: bodySource pads each inline line to its source column.
+	// Setting Pos.Col from block.Lines would double-count the first line offset.
 	return Source{
 		Text: bodySource(block.Body, block.Lines),
 		Path: path,
@@ -80,20 +86,31 @@ func bodySource(body string, lines []restfile.ScriptLine) string {
 
 	parts := strings.Split(body, "\n")
 	var b strings.Builder
-	line := lines[0].Line
+	line := 1
+	if lines[0].Line > 0 {
+		line = lines[0].Line
+	}
 	for i, part := range parts {
 		if i > 0 {
 			b.WriteByte('\n')
 			line++
 		}
-		if i < len(lines) && lines[i].Line > 0 {
-			for line < lines[i].Line {
-				b.WriteByte('\n')
-				line++
-			}
-			if col := lines[i].Col; col > 1 {
-				b.WriteString(strings.Repeat(" ", col-1))
-			}
+		// Extra body lines have no source metadata; keep them verbatim.
+		if i >= len(lines) {
+			b.WriteString(part)
+			continue
+		}
+		loc := lines[i]
+		if loc.Line < line {
+			b.WriteString(part)
+			continue
+		}
+		for line < loc.Line {
+			b.WriteByte('\n')
+			line++
+		}
+		if col := loc.Col; col > 1 {
+			b.WriteString(strings.Repeat(" ", col-1))
 		}
 		b.WriteString(part)
 	}

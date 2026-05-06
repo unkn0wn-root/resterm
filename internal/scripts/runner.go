@@ -17,6 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -31,35 +32,10 @@ func NewRunner(fs httpclient.FileSystem) *Runner {
 	return &Runner{fs: fs}
 }
 
-type GlobalValue struct {
-	Name   string
-	Value  string
-	Secret bool
-	Delete bool
-}
-
-type PreRequestInput struct {
-	Request   *restfile.Request
-	Variables map[string]string
-	Globals   map[string]GlobalValue
-	BaseDir   string
-	Context   context.Context
-}
-
-type PreRequestOutput struct {
-	Headers   http.Header
-	Query     map[string]string
-	Body      *string
-	URL       *string
-	Method    *string
-	Variables map[string]string
-	Globals   map[string]GlobalValue
-}
-
 type TestInput struct {
 	Response  *Response
 	Variables map[string]string
-	Globals   map[string]GlobalValue
+	Globals   map[string]prerequest.GlobalValue
 	BaseDir   string
 	Stream    *StreamInfo
 	Trace     *TraceInput
@@ -74,18 +50,18 @@ type TestResult struct {
 
 func (r *Runner) RunPreRequest(
 	scripts []restfile.ScriptBlock,
-	input PreRequestInput,
-) (PreRequestOutput, error) {
+	input prerequest.Input,
+) (prerequest.Output, error) {
 	ctx := input.Context
 	if ctx == nil {
 		ctx = context.Background()
 	}
 
-	result := PreRequestOutput{
+	result := prerequest.Output{
 		Headers:   make(http.Header),
 		Query:     make(map[string]string),
 		Variables: make(map[string]string),
-		Globals:   make(map[string]GlobalValue),
+		Globals:   make(map[string]prerequest.GlobalValue),
 	}
 
 	for idx, block := range scripts {
@@ -93,10 +69,7 @@ func (r *Runner) RunPreRequest(
 			return result, err
 		}
 
-		if strings.ToLower(block.Kind) != "pre-request" {
-			continue
-		}
-		if scriptLang(block) != "js" {
+		if !restfile.IsPreRequestScript(block, restfile.ScriptLangJS) {
 			continue
 		}
 
@@ -113,18 +86,7 @@ func (r *Runner) RunPreRequest(
 		}
 	}
 
-	if len(result.Headers) == 0 {
-		result.Headers = nil
-	}
-	if len(result.Query) == 0 {
-		result.Query = nil
-	}
-	if len(result.Variables) == 0 {
-		result.Variables = nil
-	}
-	if len(result.Globals) == 0 {
-		result.Globals = nil
-	}
+	prerequest.Normalize(&result)
 
 	return result, nil
 }
@@ -132,15 +94,15 @@ func (r *Runner) RunPreRequest(
 func (r *Runner) RunTests(
 	scripts []restfile.ScriptBlock,
 	input TestInput,
-) ([]TestResult, map[string]GlobalValue, error) {
+) ([]TestResult, map[string]prerequest.GlobalValue, error) {
 	var aggregated []TestResult
-	changes := make(map[string]GlobalValue)
+	changes := make(map[string]prerequest.GlobalValue)
 
 	for idx, block := range scripts {
 		if kind := strings.ToLower(block.Kind); kind != "test" && kind != "tests" {
 			continue
 		}
-		if scriptLang(block) != "js" {
+		if restfile.NormalizeScriptLang(block.Lang) != restfile.ScriptLangJS {
 			continue
 		}
 
@@ -169,21 +131,11 @@ func (r *Runner) RunTests(
 	return aggregated, changes, nil
 }
 
-func scriptLang(block restfile.ScriptBlock) string {
-	lang := strings.ToLower(strings.TrimSpace(block.Lang))
-	switch lang {
-	case "", "javascript":
-		return "js"
-	default:
-		return lang
-	}
-}
-
 func (r *Runner) executePreRequestScript(
 	ctx context.Context,
 	script string,
-	input PreRequestInput,
-	output *PreRequestOutput,
+	input prerequest.Input,
+	output *prerequest.Output,
 ) error {
 	vm := goja.New()
 	if ctx != nil {
@@ -230,7 +182,7 @@ func (r *Runner) executePreRequestScript(
 func (r *Runner) executeTestScript(
 	script string,
 	input TestInput,
-) ([]TestResult, map[string]GlobalValue, error) {
+) ([]TestResult, map[string]prerequest.GlobalValue, error) {
 	vm := goja.New()
 	streamInfo := input.Stream.Clone()
 	tester := newTestAPI(input.Response, input.Variables, input.Globals, streamInfo, input.Trace)
@@ -325,18 +277,18 @@ func normalizeGlobalKey(name string) string {
 
 type preRequestAPI struct {
 	request   *restfile.Request
-	output    *PreRequestOutput
+	output    *prerequest.Output
 	variables map[string]string
-	globals   map[string]GlobalValue
+	globals   map[string]prerequest.GlobalValue
 }
 
-func newPreRequestAPI(output *PreRequestOutput, input PreRequestInput) *preRequestAPI {
+func newPreRequestAPI(output *prerequest.Output, input prerequest.Input) *preRequestAPI {
 	vars := make(map[string]string, len(input.Variables))
 	for k, v := range input.Variables {
 		vars[k] = v
 	}
 
-	globals := make(map[string]GlobalValue, len(input.Globals))
+	globals := make(map[string]prerequest.GlobalValue, len(input.Globals))
 	for key, value := range input.Globals {
 		if strings.TrimSpace(value.Name) == "" {
 			value.Name = key
@@ -463,10 +415,10 @@ func (api *preRequestAPI) setGlobal(name, value string, secret bool) {
 	}
 
 	key := normalizeGlobalKey(name)
-	entry := GlobalValue{Name: name, Value: value, Secret: secret}
+	entry := prerequest.GlobalValue{Name: name, Value: value, Secret: secret}
 	api.globals[key] = entry
 	if api.output.Globals == nil {
-		api.output.Globals = make(map[string]GlobalValue)
+		api.output.Globals = make(map[string]prerequest.GlobalValue)
 	}
 	api.output.Globals[key] = entry
 }
@@ -480,9 +432,9 @@ func (api *preRequestAPI) deleteGlobal(name string) {
 	key := normalizeGlobalKey(name)
 	delete(api.globals, key)
 	if api.output.Globals == nil {
-		api.output.Globals = make(map[string]GlobalValue)
+		api.output.Globals = make(map[string]prerequest.GlobalValue)
 	}
-	api.output.Globals[key] = GlobalValue{Name: name, Delete: true}
+	api.output.Globals[key] = prerequest.GlobalValue{Name: name, Delete: true}
 }
 
 func parseGlobalSecret(value goja.Value) bool {
@@ -500,8 +452,8 @@ func parseGlobalSecret(value goja.Value) bool {
 type testAPI struct {
 	response  *Response
 	variables map[string]string
-	globals   map[string]GlobalValue
-	changes   map[string]GlobalValue
+	globals   map[string]prerequest.GlobalValue
+	changes   map[string]prerequest.GlobalValue
 	cases     []TestResult
 	stream    *StreamInfo
 	trace     *traceBinding
@@ -511,7 +463,7 @@ type testAPI struct {
 func newTestAPI(
 	resp *Response,
 	vars map[string]string,
-	globals map[string]GlobalValue,
+	globals map[string]prerequest.GlobalValue,
 	stream *StreamInfo,
 	trace *TraceInput,
 ) *testAPI {
@@ -520,7 +472,7 @@ func newTestAPI(
 		copyVars[k] = v
 	}
 
-	globalCopy := make(map[string]GlobalValue, len(globals))
+	globalCopy := make(map[string]prerequest.GlobalValue, len(globals))
 	for key, value := range globals {
 		if strings.TrimSpace(value.Name) == "" {
 			value.Name = key
@@ -531,7 +483,7 @@ func newTestAPI(
 		response:  resp,
 		variables: copyVars,
 		globals:   globalCopy,
-		changes:   make(map[string]GlobalValue),
+		changes:   make(map[string]prerequest.GlobalValue),
 		stream:    stream,
 		trace:     newTraceBinding(trace),
 	}
@@ -876,10 +828,10 @@ func (api *testAPI) setGlobal(name, value string, secret bool) {
 	}
 
 	key := normalizeGlobalKey(name)
-	entry := GlobalValue{Name: name, Value: value, Secret: secret}
+	entry := prerequest.GlobalValue{Name: name, Value: value, Secret: secret}
 	api.globals[key] = entry
 	if api.changes == nil {
-		api.changes = make(map[string]GlobalValue)
+		api.changes = make(map[string]prerequest.GlobalValue)
 	}
 	api.changes[key] = entry
 }
@@ -893,17 +845,17 @@ func (api *testAPI) deleteGlobal(name string) {
 	key := normalizeGlobalKey(name)
 	delete(api.globals, key)
 	if api.changes == nil {
-		api.changes = make(map[string]GlobalValue)
+		api.changes = make(map[string]prerequest.GlobalValue)
 	}
-	api.changes[key] = GlobalValue{Name: name, Delete: true}
+	api.changes[key] = prerequest.GlobalValue{Name: name, Delete: true}
 }
 
-func (api *testAPI) globalChanges() map[string]GlobalValue {
+func (api *testAPI) globalChanges() map[string]prerequest.GlobalValue {
 	if len(api.changes) == 0 {
 		return nil
 	}
 
-	clone := make(map[string]GlobalValue, len(api.changes))
+	clone := make(map[string]prerequest.GlobalValue, len(api.changes))
 	for key, value := range api.changes {
 		clone[key] = value
 	}

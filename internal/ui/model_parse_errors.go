@@ -94,9 +94,7 @@ func (st eSty) line(l diag.Line) string {
 		return st.title.Render(l.Text)
 	case diag.LineLoc:
 		return st.loc.Render(l.Text)
-	case diag.LineBar:
-		return st.src.Render(l.Text)
-	case diag.LineSrc:
+	case diag.LineBar, diag.LineSrc:
 		return st.src.Render(l.Text)
 	case diag.LineMark:
 		return st.mark(l.Text)
@@ -115,9 +113,9 @@ func (st eSty) line(l diag.Line) string {
 }
 
 func (st eSty) mark(text string) string {
-	idx := strings.Index(text, "^")
-	if idx < 0 {
+	before, after, ok := strings.Cut(text, "^")
+	if !ok {
 		return st.title.Render(text)
 	}
-	return st.src.Render(text[:idx]) + st.title.Render(text[idx:])
+	return st.src.Render(before) + st.title.Render("^"+after)
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
+	"github.com/unkn0wn-root/resterm/internal/rtspre"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -339,7 +340,7 @@ func (m *Model) rtsRT(in rtsRTIn) rts.RT {
 	return rts.RT{
 		Env:         m.rtsEnv(in.env),
 		Vars:        in.v,
-		Globals:     globalValues(m.collectGlobalValues(in.doc, in.env), in.safe),
+		Globals:     rtspre.RuntimeGlobals(m.collectGlobalValues(in.doc, in.env), in.safe),
 		Resp:        resp,
 		Res:         res,
 		Trace:       tr,

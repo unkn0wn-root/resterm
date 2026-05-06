@@ -10,8 +10,8 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/parser"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 func TestRunRTSPreRequestMutations(t *testing.T) {
@@ -39,7 +39,7 @@ vars.global.delete("old")`,
 		},
 	}
 	vars := map[string]string{"seed": "value"}
-	globals := map[string]scripts.GlobalValue{
+	globals := map[string]prerequest.GlobalValue{
 		"secret": {Name: "Secret", Value: "top", Secret: true},
 		"old":    {Name: "old", Value: "gone"},
 	}
@@ -95,7 +95,7 @@ request.setQueryParam("mutated", "true")`,
 	if err != nil {
 		t.Fatalf("runRTSPreRequest: %v", err)
 	}
-	if err := applyPreRequestOutput(req, out); err != nil {
+	if err := prerequest.Apply(req, out); err != nil {
 		t.Fatalf("applyPreRequestOutput: %v", err)
 	}
 

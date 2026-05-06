@@ -6,8 +6,8 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -24,7 +24,7 @@ type explainFinalizeInput struct {
 	mergedSettings map[string]string
 	sshPlan        *ssh.Plan
 	k8sPlan        *k8s.Plan
-	globals        map[string]scripts.GlobalValue
+	globals        map[string]prerequest.GlobalValue
 	extraSecrets   []string
 }
 
@@ -38,7 +38,7 @@ type explainBuilder struct {
 	mergedSettings map[string]string
 	sshPlan        *ssh.Plan
 	k8sPlan        *k8s.Plan
-	globals        map[string]scripts.GlobalValue
+	globals        map[string]prerequest.GlobalValue
 	extraSecrets   []string
 }
 

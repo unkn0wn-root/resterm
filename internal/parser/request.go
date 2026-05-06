@@ -111,8 +111,8 @@ func (r *requestBuilder) appendScriptLine(
 	kind = normScriptKind(kind.String())
 	lang = normScriptLang(lang.String())
 	if r.scriptBufferKind != "" &&
-		(!strings.EqualFold(r.scriptBufferKind.String(), kind.String()) ||
-			!strings.EqualFold(r.scriptBufferLang.String(), lang.String()) ||
+		(r.scriptBufferKind != kind ||
+			r.scriptBufferLang != lang ||
 			r.scriptSourcePath != path) {
 		r.flushPendingScript()
 	}

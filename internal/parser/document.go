@@ -506,7 +506,9 @@ func scriptInc(body string) (string, bool) {
 	return p, true
 }
 
-func trimScriptLine(raw string, allow bool) (string, int, bool) {
+// trimScriptLine returns the script body and its 1-based source column.
+// When ok is false, body and column are their zero values and must be ignored.
+func trimScriptLine(raw string, allow bool) (body string, col int, ok bool) {
 	s := str.TrimLeft(raw)
 	if after, ok := strings.CutPrefix(s, ">"); ok {
 		col := len(raw) - len(s) + 2

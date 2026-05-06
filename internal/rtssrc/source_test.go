@@ -38,6 +38,27 @@ func TestLoadInlineSourceMapsLinesAndColumns(t *testing.T) {
 	}
 }
 
+func TestBodySourceIgnoresStaleLineMetadata(t *testing.T) {
+	got := bodySource("first()\nsecond()", []restfile.ScriptLine{
+		{Line: 5, Col: 3},
+		{Line: 4, Col: 5},
+	})
+
+	if got != "  first()\nsecond()" {
+		t.Fatalf("unexpected source text: %q", got)
+	}
+}
+
+func TestBodySourceKeepsExtraBodyLinesVerbatim(t *testing.T) {
+	got := bodySource("first()\nsecond()", []restfile.ScriptLine{
+		{Line: 3, Col: 3},
+	})
+
+	if got != "  first()\nsecond()" {
+		t.Fatalf("unexpected source text: %q", got)
+	}
+}
+
 func TestAnnotateAddsSourceToDiagnostic(t *testing.T) {
 	err := &rts.RuntimeError{
 		Pos: rts.Pos{Path: "sample.http", Line: 3, Col: 3},
@@ -51,5 +72,20 @@ func TestAnnotateAddsSourceToDiagnostic(t *testing.T) {
 	out := diag.Render(Annotate(err, src))
 	if !strings.Contains(out, "   3 | > boom()") {
 		t.Fatalf("expected source line in rendered diagnostic:\n%s", out)
+	}
+}
+
+func TestAnnotateAddsPathWithoutSource(t *testing.T) {
+	err := &rts.RuntimeError{
+		Pos: rts.Pos{Line: 2, Col: 4},
+		Msg: "boom",
+	}
+
+	out := diag.Render(Annotate(err, Source{Path: "inline.http"}))
+	if !strings.Contains(out, "--> inline.http:2:4") {
+		t.Fatalf("expected path-only location in rendered diagnostic:\n%s", out)
+	}
+	if strings.Contains(out, "operation failed") {
+		t.Fatalf("expected original diagnostic message to be preserved:\n%s", out)
 	}
 }

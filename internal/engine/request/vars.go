@@ -10,9 +10,9 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/settings"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -132,7 +132,7 @@ func (e *Engine) buildResolver(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env, base string,
-	globs map[string]scripts.GlobalValue,
+	globs map[string]prerequest.GlobalValue,
 	extra map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
@@ -225,7 +225,7 @@ func (e *Engine) collectVariablesWithGlobals(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env string,
-	globs map[string]scripts.GlobalValue,
+	globs map[string]prerequest.GlobalValue,
 	extras ...map[string]string,
 ) map[string]string {
 	env = e.envName(env)
@@ -263,24 +263,24 @@ func (e *Engine) collectVariablesWithGlobals(
 func (e *Engine) collectGlobalValues(
 	doc *restfile.Document,
 	env string,
-) map[string]scripts.GlobalValue {
+) map[string]prerequest.GlobalValue {
 	return effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
 }
 
-func (e *Engine) collectStoredGlobalValues(env string) map[string]scripts.GlobalValue {
+func (e *Engine) collectStoredGlobalValues(env string) map[string]prerequest.GlobalValue {
 	env = e.envName(env)
 	gs := e.rt.Globals()
 	if gs == nil {
 		return nil
 	}
-	out := make(map[string]scripts.GlobalValue)
+	out := make(map[string]prerequest.GlobalValue)
 	if snap := gs.Snapshot(env); len(snap) > 0 {
 		for k, v := range snap {
 			name := strings.TrimSpace(v.Name)
 			if name == "" {
 				name = k
 			}
-			out[name] = scripts.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
+			out[name] = prerequest.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
 		}
 	}
 	if len(out) == 0 {
@@ -289,17 +289,17 @@ func (e *Engine) collectStoredGlobalValues(env string) map[string]scripts.Global
 	return out
 }
 
-func collectDocumentGlobalValues(doc *restfile.Document) map[string]scripts.GlobalValue {
+func collectDocumentGlobalValues(doc *restfile.Document) map[string]prerequest.GlobalValue {
 	if doc == nil || len(doc.Globals) == 0 {
 		return nil
 	}
-	out := make(map[string]scripts.GlobalValue)
+	out := make(map[string]prerequest.GlobalValue)
 	for _, v := range doc.Globals {
 		name := strings.TrimSpace(v.Name)
 		if name == "" {
 			continue
 		}
-		out[name] = scripts.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
+		out[name] = prerequest.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
 	}
 	if len(out) == 0 {
 		return nil
@@ -309,16 +309,16 @@ func collectDocumentGlobalValues(doc *restfile.Document) map[string]scripts.Glob
 
 func effectiveGlobalValues(
 	doc *restfile.Document,
-	globs map[string]scripts.GlobalValue,
-) map[string]scripts.GlobalValue {
+	globs map[string]prerequest.GlobalValue,
+) map[string]prerequest.GlobalValue {
 	return mergeGlobalValues(collectDocumentGlobalValues(doc), globs)
 }
 
-func cloneGlobalValues(src map[string]scripts.GlobalValue) map[string]scripts.GlobalValue {
+func cloneGlobalValues(src map[string]prerequest.GlobalValue) map[string]prerequest.GlobalValue {
 	if len(src) == 0 {
 		return nil
 	}
-	dst := make(map[string]scripts.GlobalValue, len(src))
+	dst := make(map[string]prerequest.GlobalValue, len(src))
 	for k, v := range src {
 		dst[k] = v
 	}
@@ -326,15 +326,15 @@ func cloneGlobalValues(src map[string]scripts.GlobalValue) map[string]scripts.Gl
 }
 
 func mergeGlobalValues(
-	base map[string]scripts.GlobalValue,
-	changes map[string]scripts.GlobalValue,
-) map[string]scripts.GlobalValue {
+	base map[string]prerequest.GlobalValue,
+	changes map[string]prerequest.GlobalValue,
+) map[string]prerequest.GlobalValue {
 	if len(base) == 0 && len(changes) == 0 {
 		return nil
 	}
 	out := cloneGlobalValues(base)
 	if out == nil {
-		out = make(map[string]scripts.GlobalValue, len(changes))
+		out = make(map[string]prerequest.GlobalValue, len(changes))
 	}
 	for k, v := range changes {
 		name := strings.TrimSpace(v.Name)
@@ -361,7 +361,7 @@ func mergeGlobalValues(
 	return out
 }
 
-func globalValueMap(globs map[string]scripts.GlobalValue) map[string]string {
+func globalValueMap(globs map[string]prerequest.GlobalValue) map[string]string {
 	if len(globs) == 0 {
 		return nil
 	}
@@ -382,7 +382,7 @@ func globalValueMap(globs map[string]scripts.GlobalValue) map[string]string {
 	return out
 }
 
-func (e *Engine) applyGlobalMutations(changes map[string]scripts.GlobalValue, env string) {
+func (e *Engine) applyGlobalMutations(changes map[string]prerequest.GlobalValue, env string) {
 	gs := e.rt.Globals()
 	if len(changes) == 0 || gs == nil {
 		return

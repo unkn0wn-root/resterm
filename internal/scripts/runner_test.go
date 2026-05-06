@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -35,7 +36,7 @@ func TestRunPreRequestScripts(t *testing.T) {
 
 	out, err := runner.RunPreRequest(
 		scripts,
-		PreRequestInput{Request: req, Variables: map[string]string{"seed": "value"}},
+		prerequest.Input{Request: req, Variables: map[string]string{"seed": "value"}},
 	)
 	if err != nil {
 		t.Fatalf("pre-request runner: %v", err)
@@ -61,7 +62,7 @@ func TestRunPreRequestSkipsRTS(t *testing.T) {
 	}}
 	out, err := runner.RunPreRequest(
 		blocks,
-		PreRequestInput{Request: req, Variables: map[string]string{}},
+		prerequest.Input{Request: req, Variables: map[string]string{}},
 	)
 	if err != nil {
 		t.Fatalf("pre-request runner: %v", err)
@@ -92,7 +93,7 @@ client.test("vars carried", function () {
 	preBlocks := []restfile.ScriptBlock{{Kind: "pre-request", FilePath: "pre.js"}}
 	preResult, err := runner.RunPreRequest(
 		preBlocks,
-		PreRequestInput{Request: req, Variables: map[string]string{}, BaseDir: dir},
+		prerequest.Input{Request: req, Variables: map[string]string{}, BaseDir: dir},
 	)
 	if err != nil {
 		t.Fatalf("pre-request file script: %v", err)
@@ -309,10 +310,10 @@ func TestPreRequestGlobalSetAndDelete(t *testing.T) {
 vars.global.set("token", "updated", {secret: true});
 vars.global.delete("removeMe");`,
 	}}
-	input := PreRequestInput{
+	input := prerequest.Input{
 		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
 		Variables: map[string]string{},
-		Globals: map[string]GlobalValue{
+		Globals: map[string]prerequest.GlobalValue{
 			"token":    {Name: "token", Value: "seed"},
 			"removeMe": {Name: "removeMe", Value: "gone"},
 		},
@@ -356,7 +357,7 @@ func TestPreRequestCancellationInterruptsScript(t *testing.T) {
 	}}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	input := PreRequestInput{
+	input := prerequest.Input{
 		Request: &restfile.Request{Method: "GET", URL: "https://example.com"},
 		Context: ctx,
 	}
@@ -393,7 +394,7 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	results, globals, err := runner.RunTests(scripts, TestInput{
 		Response:  resp,
 		Variables: map[string]string{},
-		Globals: map[string]GlobalValue{
+		Globals: map[string]prerequest.GlobalValue{
 			"token": {Name: "token", Value: "seed"},
 		},
 	})
@@ -406,7 +407,7 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	if globals == nil {
 		t.Fatalf("expected globals to be returned")
 	}
-	var updated GlobalValue
+	var updated prerequest.GlobalValue
 	found := false
 	for _, entry := range globals {
 		if entry.Name == "token" {
