@@ -451,16 +451,12 @@ func (m *Model) consumeHTTPResponse(
 	}
 
 	var traceSpec *restfile.TraceSpec
-	if resp != nil {
-		if cloned := cloneTraceSpec(
-			traceSpecFromRequest(resp.Request),
-		); cloned != nil &&
-			cloned.Enabled {
-			traceSpec = cloned
-		}
+	if cloned := cloneTraceSpec(traceSpecFromRequest(resp.Request)); cloned != nil &&
+		cloned.Enabled {
+		traceSpec = cloned
 	}
 	var timeline timelineReport
-	if resp != nil && resp.Timeline != nil {
+	if resp.Timeline != nil {
 		timeline = buildTimelineReport(
 			resp.Timeline,
 			traceSpec,
@@ -470,10 +466,7 @@ func (m *Model) consumeHTTPResponse(
 	}
 
 	statusLevel := statusLevelForHTTPStatus(resp.StatusCode)
-	statusText := ""
-	if resp != nil {
-		statusText = fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode)
-	}
+	statusText := fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode)
 
 	switch {
 	case scriptErr != nil:
@@ -523,7 +516,7 @@ func (m *Model) consumeHTTPResponse(
 	if traceSpec != nil {
 		snapshot.traceSpec = traceSpec
 	}
-	if resp != nil && resp.Timeline != nil {
+	if resp.Timeline != nil {
 		snapshot.timeline = resp.Timeline.Clone()
 		snapshot.traceReport = timeline
 		snapshot.traceData = resp.TraceReport.Clone()
