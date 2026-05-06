@@ -284,7 +284,7 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 		color lipgloss.Color
 	}{
 		{"info", statusInfo, "Connected", lipgloss.Color(statusInfoDarkColor)},
-		{"warn", statusWarn, "Missing variable", lipgloss.Color(statusWarnDarkColor)},
+		{"warn", statusWarn, "Missing variable", lipgloss.Color(statusMsgWarnDarkColor)},
 		{"error", statusError, "Request failed", lipgloss.Color(statusErrorDarkColor)},
 		{"success", statusSuccess, "Request saved", lipgloss.Color(statusSuccessDarkColor)},
 	}
@@ -325,6 +325,24 @@ func TestStatusBarInfoUsesThemeForeground(t *testing.T) {
 	}
 	if style.GetBold() {
 		t.Fatal("expected status info message to render at regular weight")
+	}
+}
+
+func TestStatusBarWarnDoesNotReuseContextKeyColor(t *testing.T) {
+	model := New(Config{})
+	model.theme.StatusBarKey = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#ff8b39")).
+		Bold(true)
+
+	style := model.statusBarMessageStyle(statusWarn)
+	if got := style.GetForeground(); got != lipgloss.Color(statusMsgWarnDarkColor) {
+		t.Fatalf("expected warning foreground %v, got %v", lipgloss.Color(statusMsgWarnDarkColor), got)
+	}
+	if got := style.GetForeground(); got == model.theme.StatusBarKey.GetForeground() {
+		t.Fatalf("expected warning color to differ from status bar key color %v", got)
+	}
+	if style.GetBold() {
+		t.Fatal("expected warning status message to render at regular weight")
 	}
 }
 

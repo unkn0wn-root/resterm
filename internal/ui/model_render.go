@@ -35,6 +35,8 @@ const (
 	statusInfoDarkColor     = "#cbd5e1"
 	statusWarnLightColor    = "#d97706"
 	statusWarnDarkColor     = "#FACC15"
+	statusMsgWarnLightColor = "#b45309"
+	statusMsgWarnDarkColor  = "#FBBF24"
 	statusErrorLightColor   = "#dc2626"
 	statusErrorDarkColor    = "#FF6E6E"
 	statusSuccessLightColor = "#15803d"
@@ -2500,9 +2502,9 @@ func (m Model) statusBarMessageStyle(level statusLevel) lipgloss.Style {
 	switch level {
 	case statusWarn:
 		return m.statusBarFg(
-			m.theme.StatusBarKey,
-			statusWarnLightColor,
-			statusWarnDarkColor,
+			lipgloss.NewStyle(),
+			statusMsgWarnLightColor,
+			statusMsgWarnDarkColor,
 		)
 	case statusError:
 		return m.statusBarFg(

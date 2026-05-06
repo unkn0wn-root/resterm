@@ -254,15 +254,13 @@ func formatByteSize(n int64) string {
 }
 
 func (r responseRenderer) selectStatusStyle(code int) lipgloss.Style {
-	switch {
-	case code >= 500 && code <= 599:
-		return r.stats.Warn
-	case code >= 400 && code <= 499:
-		return r.stats.Warn
-	case code >= 300 && code <= 399:
-		return r.stats.Neutral
-	case code > 0:
+	switch statusLevelForHTTPStatus(code) {
+	case statusSuccess:
 		return r.stats.Success
+	case statusWarn:
+		return r.stats.Caution
+	case statusError:
+		return r.stats.Warn
 	default:
 		return r.stats.Value
 	}
