@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRunPreRequestScripts(t *testing.T) {
@@ -313,7 +314,7 @@ vars.global.delete("removeMe");`,
 	input := prerequest.Input{
 		Request:   &restfile.Request{Method: "GET", URL: "https://example.com"},
 		Variables: map[string]string{},
-		Globals: map[string]prerequest.GlobalValue{
+		Globals: map[string]vars.GlobalMutation{
 			"token":    {Name: "token", Value: "seed"},
 			"removeMe": {Name: "removeMe", Value: "gone"},
 		},
@@ -394,7 +395,7 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	results, globals, err := runner.RunTests(scripts, TestInput{
 		Response:  resp,
 		Variables: map[string]string{},
-		Globals: map[string]prerequest.GlobalValue{
+		Globals: map[string]vars.GlobalMutation{
 			"token": {Name: "token", Value: "seed"},
 		},
 	})
@@ -407,7 +408,7 @@ func TestTestScriptsGlobalMutation(t *testing.T) {
 	if globals == nil {
 		t.Fatalf("expected globals to be returned")
 	}
-	var updated prerequest.GlobalValue
+	var updated vars.GlobalMutation
 	found := false
 	for _, entry := range globals {
 		if entry.Name == "token" {

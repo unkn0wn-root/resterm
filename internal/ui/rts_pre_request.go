@@ -9,6 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/rtspre"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (m *Model) runRTSPreRequest(
@@ -17,7 +18,7 @@ func (m *Model) runRTSPreRequest(
 	req *restfile.Request,
 	envName, base string,
 	vars map[string]string,
-	globals map[string]prerequest.GlobalValue,
+	globals map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
 	out := prerequest.Output{}
 	if req == nil {

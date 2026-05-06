@@ -12,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRunRTSPreRequestMutations(t *testing.T) {
@@ -39,7 +40,7 @@ vars.global.delete("old")`,
 		},
 	}
 	vars := map[string]string{"seed": "value"}
-	globals := map[string]prerequest.GlobalValue{
+	globals := map[string]vars.GlobalMutation{
 		"secret": {Name: "Secret", Value: "top", Secret: true},
 		"old":    {Name: "old", Value: "gone"},
 	}

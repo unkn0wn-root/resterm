@@ -45,7 +45,7 @@ type execContext struct {
 
 	// State derived before request preparation.
 	baseVars     map[string]string
-	storeGlobals map[string]prerequest.GlobalValue
+	storeGlobals map[string]vars.GlobalMutation
 	hasRTSPre    bool
 	hasJSPre     bool
 	scriptVars   map[string]string
@@ -367,11 +367,11 @@ func (e *execContext) currentVariables() map[string]string {
 	return current
 }
 
-func (e *execContext) currentGlobalValues() map[string]prerequest.GlobalValue {
+func (e *execContext) currentGlobalValues() map[string]vars.GlobalMutation {
 	return effectiveGlobalValues(e.doc, e.storeGlobals)
 }
 
-func (e *execContext) applyRuntimeGlobals(changes map[string]prerequest.GlobalValue) {
+func (e *execContext) applyRuntimeGlobals(changes map[string]vars.GlobalMutation) {
 	if len(changes) == 0 {
 		return
 	}

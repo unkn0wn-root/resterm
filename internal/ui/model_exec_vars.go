@@ -13,7 +13,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
-	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
@@ -56,7 +55,7 @@ func (m *Model) buildResolverWithGlobals(
 	req *restfile.Request,
 	envName, base string,
 	extraVals map[string]rts.Value,
-	globals map[string]prerequest.GlobalValue,
+	globals map[string]vars.GlobalMutation,
 	extras ...map[string]string,
 ) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
@@ -358,7 +357,7 @@ func (m *Model) collectVariablesWithStoreGlobals(
 	doc *restfile.Document,
 	req *restfile.Request,
 	envName string,
-	storeGlobals map[string]prerequest.GlobalValue,
+	storeGlobals map[string]vars.GlobalMutation,
 ) map[string]string {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	result := make(map[string]string)
@@ -393,19 +392,19 @@ func (m *Model) collectVariablesWithStoreGlobals(
 func (m *Model) collectGlobalValues(
 	doc *restfile.Document,
 	envName string,
-) map[string]prerequest.GlobalValue {
+) map[string]vars.GlobalMutation {
 	return effectiveGlobalValues(doc, m.collectStoredGlobalValues(envName))
 }
 
-func collectDocumentGlobalValues(doc *restfile.Document) map[string]prerequest.GlobalValue {
-	globals := make(map[string]prerequest.GlobalValue)
+func collectDocumentGlobalValues(doc *restfile.Document) map[string]vars.GlobalMutation {
+	globals := make(map[string]vars.GlobalMutation)
 	if doc != nil {
 		for _, v := range doc.Globals {
 			name := strings.TrimSpace(v.Name)
 			if name == "" {
 				continue
 			}
-			globals[name] = prerequest.GlobalValue{Name: name, Value: v.Value, Secret: v.Secret}
+			globals[name] = vars.GlobalMutation{Name: name, Value: v.Value, Secret: v.Secret}
 		}
 	}
 	if len(globals) == 0 {
@@ -414,9 +413,9 @@ func collectDocumentGlobalValues(doc *restfile.Document) map[string]prerequest.G
 	return globals
 }
 
-func (m *Model) collectStoredGlobalValues(envName string) map[string]prerequest.GlobalValue {
+func (m *Model) collectStoredGlobalValues(envName string) map[string]vars.GlobalMutation {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
-	globals := make(map[string]prerequest.GlobalValue)
+	globals := make(map[string]vars.GlobalMutation)
 	if gs := m.globalsStore(); gs != nil {
 		if snapshot := gs.Snapshot(resolvedEnv); len(snapshot) > 0 {
 			for key, entry := range snapshot {
@@ -424,7 +423,7 @@ func (m *Model) collectStoredGlobalValues(envName string) map[string]prerequest.
 				if name == "" {
 					name = key
 				}
-				globals[name] = prerequest.GlobalValue{
+				globals[name] = vars.GlobalMutation{
 					Name:   name,
 					Value:  entry.Value,
 					Secret: entry.Secret,
@@ -440,16 +439,16 @@ func (m *Model) collectStoredGlobalValues(envName string) map[string]prerequest.
 
 func effectiveGlobalValues(
 	doc *restfile.Document,
-	storeGlobals map[string]prerequest.GlobalValue,
-) map[string]prerequest.GlobalValue {
+	storeGlobals map[string]vars.GlobalMutation,
+) map[string]vars.GlobalMutation {
 	return mergeGlobalValues(collectDocumentGlobalValues(doc), storeGlobals)
 }
 
-func cloneGlobalValues(src map[string]prerequest.GlobalValue) map[string]prerequest.GlobalValue {
+func cloneGlobalValues(src map[string]vars.GlobalMutation) map[string]vars.GlobalMutation {
 	if len(src) == 0 {
 		return nil
 	}
-	out := make(map[string]prerequest.GlobalValue, len(src))
+	out := make(map[string]vars.GlobalMutation, len(src))
 	for key, value := range src {
 		out[key] = value
 	}
@@ -457,15 +456,15 @@ func cloneGlobalValues(src map[string]prerequest.GlobalValue) map[string]prerequ
 }
 
 func mergeGlobalValues(
-	base map[string]prerequest.GlobalValue,
-	changes map[string]prerequest.GlobalValue,
-) map[string]prerequest.GlobalValue {
+	base map[string]vars.GlobalMutation,
+	changes map[string]vars.GlobalMutation,
+) map[string]vars.GlobalMutation {
 	if len(base) == 0 && len(changes) == 0 {
 		return nil
 	}
 	out := cloneGlobalValues(base)
 	if out == nil {
-		out = make(map[string]prerequest.GlobalValue, len(changes))
+		out = make(map[string]vars.GlobalMutation, len(changes))
 	}
 	for key, change := range changes {
 		name := strings.TrimSpace(change.Name)
@@ -492,7 +491,7 @@ func mergeGlobalValues(
 	return out
 }
 
-func globalValueMap(globals map[string]prerequest.GlobalValue) map[string]string {
+func globalValueMap(globals map[string]vars.GlobalMutation) map[string]string {
 	if len(globals) == 0 {
 		return nil
 	}
@@ -513,7 +512,7 @@ func globalValueMap(globals map[string]prerequest.GlobalValue) map[string]string
 	return values
 }
 
-func (m *Model) applyGlobalMutations(changes map[string]prerequest.GlobalValue, envName string) {
+func (m *Model) applyGlobalMutations(changes map[string]vars.GlobalMutation, envName string) {
 	gs := m.globalsStore()
 	if len(changes) == 0 || gs == nil {
 		return

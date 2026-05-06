@@ -8,21 +8,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
-
-// GlobalValue describes a runtime global value or deletion produced by a script.
-type GlobalValue struct {
-	Name   string
-	Value  string
-	Secret bool
-	Delete bool
-}
 
 // Input is the host state available to a pre-request script runner.
 type Input struct {
 	Request   *restfile.Request
 	Variables map[string]string
-	Globals   map[string]GlobalValue
+	Globals   map[string]vars.GlobalMutation
 	BaseDir   string
 	Context   context.Context
 }
@@ -35,7 +28,7 @@ type Output struct {
 	URL       *string
 	Method    *string
 	Variables map[string]string
-	Globals   map[string]GlobalValue
+	Globals   map[string]vars.GlobalMutation
 }
 
 // Normalize canonicalizes empty maps to nil.

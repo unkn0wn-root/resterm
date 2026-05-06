@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtssrc"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 // ExecInput describes the RTS script blocks and host runtime builder to execute.
@@ -52,7 +53,7 @@ func Run(ctx context.Context, eng *rts.Eng, in ExecInput) error {
 }
 
 // RuntimeGlobals returns globals keyed the way RTS variable lookup expects.
-func RuntimeGlobals(globals map[string]prerequest.GlobalValue, safe bool) map[string]string {
+func RuntimeGlobals(globals map[string]vars.GlobalMutation, safe bool) map[string]string {
 	if len(globals) == 0 {
 		return map[string]string{}
 	}
@@ -192,9 +193,9 @@ func (m *Mutator) SetGlobal(name, value string, secret bool) {
 		return
 	}
 	if m.out.Globals == nil {
-		m.out.Globals = make(map[string]prerequest.GlobalValue)
+		m.out.Globals = make(map[string]vars.GlobalMutation)
 	}
-	m.out.Globals[name] = prerequest.GlobalValue{Name: name, Value: value, Secret: secret}
+	m.out.Globals[name] = vars.GlobalMutation{Name: name, Value: value, Secret: secret}
 	if m.globals != nil {
 		m.globals[lowerKey(name)] = value
 	}
@@ -205,9 +206,9 @@ func (m *Mutator) DelGlobal(name string) {
 		return
 	}
 	if m.out.Globals == nil {
-		m.out.Globals = make(map[string]prerequest.GlobalValue)
+		m.out.Globals = make(map[string]vars.GlobalMutation)
 	}
-	m.out.Globals[name] = prerequest.GlobalValue{Name: name, Delete: true}
+	m.out.Globals[name] = vars.GlobalMutation{Name: name, Delete: true}
 	if m.globals != nil {
 		delete(m.globals, lowerKey(name))
 	}

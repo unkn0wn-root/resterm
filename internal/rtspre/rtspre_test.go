@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRunSkipsNonRTSPreRequestBlocks(t *testing.T) {
@@ -34,7 +34,7 @@ func TestRunSkipsNonRTSPreRequestBlocks(t *testing.T) {
 }
 
 func TestRuntimeGlobals(t *testing.T) {
-	globals := map[string]prerequest.GlobalValue{
+	globals := map[string]vars.GlobalMutation{
 		"fallback": {Value: "a"},
 		"named":    {Name: "Token", Value: "b"},
 		"secret":   {Name: "Secret", Value: "c", Secret: true},

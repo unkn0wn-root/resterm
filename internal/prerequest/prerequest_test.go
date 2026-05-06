@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestNormalize(t *testing.T) {
@@ -15,7 +16,7 @@ func TestNormalize(t *testing.T) {
 		Query:     map[string]string{},
 		Body:      &body,
 		Variables: map[string]string{},
-		Globals:   map[string]GlobalValue{},
+		Globals:   map[string]vars.GlobalMutation{},
 	}
 
 	Normalize(&out)

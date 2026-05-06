@@ -475,7 +475,7 @@ func (e *Engine) runRTSPreRequest(
 	req *restfile.Request,
 	env, base string,
 	vv map[string]string,
-	globs map[string]prerequest.GlobalValue,
+	globs map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
 	var out prerequest.Output
 	if req == nil {

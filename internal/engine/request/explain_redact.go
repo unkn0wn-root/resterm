@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
-	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 const explainMask = "•••"
@@ -17,7 +17,7 @@ func (e *Engine) redactExplainReport(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env string,
-	globs map[string]prerequest.GlobalValue,
+	globs map[string]vars.GlobalMutation,
 	extra ...string,
 ) *xplain.Report {
 	if rep == nil {
@@ -96,7 +96,7 @@ func (e *Engine) explainSecrets(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env string,
-	globs map[string]prerequest.GlobalValue,
+	globs map[string]vars.GlobalMutation,
 	extra []string,
 ) []string {
 	vals := make(map[string]struct{})

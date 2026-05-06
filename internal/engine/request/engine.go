@@ -225,7 +225,7 @@ type execCtx struct {
 	rel     func()
 
 	baseVars  map[string]string
-	storeG    map[string]prerequest.GlobalValue
+	storeG    map[string]vars.GlobalMutation
 	hasRTSPre bool
 	hasJSPre  bool
 	scriptV   map[string]string
@@ -355,7 +355,7 @@ func (x *execCtx) currentVariables() map[string]string {
 	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, x.extraV)
 }
 
-func (x *execCtx) currentGlobals() map[string]prerequest.GlobalValue {
+func (x *execCtx) currentGlobals() map[string]vars.GlobalMutation {
 	return effectiveGlobalValues(x.doc, x.storeG)
 }
 
@@ -363,7 +363,7 @@ func (x *execCtx) captureVariables() map[string]string {
 	return mergeStringMaps(x.eng.collectVariables(x.doc, x.req, x.env, x.extraV), x.scriptV)
 }
 
-func (x *execCtx) applyRuntimeGlobals(ch map[string]prerequest.GlobalValue) {
+func (x *execCtx) applyRuntimeGlobals(ch map[string]vars.GlobalMutation) {
 	if len(ch) == 0 {
 		return
 	}
@@ -1013,7 +1013,7 @@ func (x *execCtx) httpRunner() xexec.Runner {
 			) map[string]string {
 				return x.eng.collectVariables(doc, req, env, x.extraV)
 			},
-			CollectGlobalValues: func(doc *restfile.Document, env string) map[string]prerequest.GlobalValue {
+			CollectGlobalValues: func(doc *restfile.Document, env string) map[string]vars.GlobalMutation {
 				return x.eng.collectGlobalValues(doc, env)
 			},
 			RunAsserts: func(in xexec.AssertInput) ([]scripts.TestResult, error) {

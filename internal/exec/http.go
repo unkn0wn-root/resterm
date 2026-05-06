@@ -8,7 +8,6 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
-	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -63,9 +62,9 @@ type HTTPHooks struct {
 	AttachWebSocketHandle func(*httpclient.WebSocketHandle, *restfile.Request)
 	ApplyCaptures         func(CaptureInput) error
 	CollectVariables      func(*restfile.Document, *restfile.Request, string) map[string]string
-	CollectGlobalValues   func(*restfile.Document, string) map[string]prerequest.GlobalValue
+	CollectGlobalValues   func(*restfile.Document, string) map[string]vars.GlobalMutation
 	RunAsserts            func(AssertInput) ([]scripts.TestResult, error)
-	ApplyRuntimeGlobals   func(map[string]prerequest.GlobalValue)
+	ApplyRuntimeGlobals   func(map[string]vars.GlobalMutation)
 }
 
 type HTTPResult struct {
@@ -264,7 +263,7 @@ func (r Runner) collectVars(
 func (r Runner) collectGlobals(
 	doc *restfile.Document,
 	envName string,
-) map[string]prerequest.GlobalValue {
+) map[string]vars.GlobalMutation {
 	if r.Hooks.CollectGlobalValues == nil {
 		return nil
 	}
