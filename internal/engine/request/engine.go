@@ -271,7 +271,7 @@ func newExec(
 	if req != nil &&
 		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTS || hasJS) {
 		exp.warn(
-			"Variable trace covers template resolution only; RTS/JS script internals are not traced",
+			"Variable trace covers template resolution only. RTS/JS script internals are not traced",
 		)
 	}
 	return &execCtx{

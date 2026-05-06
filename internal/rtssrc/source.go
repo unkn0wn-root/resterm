@@ -23,10 +23,7 @@ func Load(doc *restfile.Document, block restfile.ScriptBlock, base string) (Sour
 	if block.FilePath == "" {
 		return inline(doc, block), nil
 	}
-	path := strings.TrimSpace(block.FilePath)
-	if path == "" {
-		return Source{}, nil
-	}
+	path := block.FilePath
 	if !filepath.IsAbs(path) && base != "" {
 		path = filepath.Join(base, path)
 	}
@@ -95,7 +92,7 @@ func bodySource(body string, lines []restfile.ScriptLine) string {
 			b.WriteByte('\n')
 			line++
 		}
-		// Extra body lines have no source metadata; keep them verbatim.
+		// Extra body lines have no source metadata
 		if i >= len(lines) {
 			b.WriteString(part)
 			continue

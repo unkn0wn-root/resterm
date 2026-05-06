@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/rtssrc"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -104,7 +105,7 @@ func (m *Mutator) SetMethod(value string) {
 	if m == nil || m.out == nil {
 		return
 	}
-	val := strings.ToUpper(strings.TrimSpace(value))
+	val := util.UpperTrim(value)
 	setPtr(&m.out.Method, val)
 	if m.req != nil {
 		m.req.Method = val
@@ -153,7 +154,7 @@ func (m *Mutator) DelHeader(name string) {
 		m.out.Headers.Del(name)
 	}
 	if m.req != nil && m.req.H != nil {
-		delete(m.req.H, lowerKey(name))
+		delete(m.req.H, util.Lower(name))
 	}
 }
 
@@ -197,7 +198,7 @@ func (m *Mutator) SetGlobal(name, value string, secret bool) {
 	}
 	m.out.Globals[name] = vars.GlobalMutation{Name: name, Value: value, Secret: secret}
 	if m.globals != nil {
-		m.globals[lowerKey(name)] = value
+		m.globals[util.Lower(name)] = value
 	}
 }
 
@@ -210,7 +211,7 @@ func (m *Mutator) DelGlobal(name string) {
 	}
 	m.out.Globals[name] = vars.GlobalMutation{Name: name, Delete: true}
 	if m.globals != nil {
-		delete(m.globals, lowerKey(name))
+		delete(m.globals, util.Lower(name))
 	}
 }
 
@@ -229,7 +230,7 @@ func setReqHeader(req *rts.Req, name, value string, appendValue bool) {
 	if req.H == nil {
 		req.H = make(map[string][]string)
 	}
-	key := lowerKey(name)
+	key := util.Lower(name)
 	if appendValue {
 		req.H[key] = append(req.H[key], value)
 		return
@@ -245,7 +246,7 @@ func setReqQuery(req *rts.Req, name, value string) {
 		req.Q = make(map[string][]string)
 	}
 	req.Q[name] = []string{value}
-	raw := strings.TrimSpace(req.URL)
+	raw := req.URL
 	if raw == "" {
 		return
 	}
@@ -255,8 +256,4 @@ func setReqQuery(req *rts.Req, name, value string) {
 		return
 	}
 	req.URL = updated
-}
-
-func lowerKey(name string) string {
-	return strings.ToLower(name)
 }

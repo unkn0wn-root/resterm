@@ -31,35 +31,16 @@ type Output struct {
 	Globals   map[string]vars.GlobalMutation
 }
 
-// Normalize canonicalizes empty maps to nil.
-func Normalize(out *Output) {
-	if out == nil {
-		return
-	}
-	out.Headers = nilIfEmpty(out.Headers)
-	out.Query = nilIfEmpty(out.Query)
-	out.Variables = nilIfEmpty(out.Variables)
-	out.Globals = nilIfEmpty(out.Globals)
-}
-
-func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
-	if len(m) != 0 {
-		return m
-	}
-	var zero M
-	return zero
-}
-
 // Apply mutates req with pre-request script output.
 func Apply(req *restfile.Request, out Output) error {
 	if req == nil {
 		return nil
 	}
 	if out.Method != nil {
-		req.Method = strings.ToUpper(strings.TrimSpace(*out.Method))
+		req.Method = *out.Method
 	}
 	if out.URL != nil {
-		req.URL = strings.TrimSpace(*out.URL)
+		req.URL = *out.URL
 	}
 	if len(out.Query) > 0 {
 		if err := applyQuery(req, out.Query); err != nil {
@@ -86,11 +67,29 @@ func Apply(req *restfile.Request, out Output) error {
 	return nil
 }
 
+func Normalize(out *Output) {
+	if out == nil {
+		return
+	}
+	out.Headers = nilIfEmpty(out.Headers)
+	out.Query = nilIfEmpty(out.Query)
+	out.Variables = nilIfEmpty(out.Variables)
+	out.Globals = nilIfEmpty(out.Globals)
+}
+
+func nilIfEmpty[M ~map[K]V, K comparable, V any](m M) M {
+	if len(m) != 0 {
+		return m
+	}
+	var zero M
+	return zero
+}
+
 func applyQuery(req *restfile.Request, q map[string]string) error {
 	if req == nil || len(q) == 0 {
 		return nil
 	}
-	raw := strings.TrimSpace(req.URL)
+	raw := req.URL
 	patch := make(map[string]*string, len(q))
 	for key, value := range q {
 		val := value

@@ -100,7 +100,7 @@ func newExecContext(
 	if req != nil &&
 		(req.Metadata.When != nil || len(req.Metadata.Applies) > 0 || hasRTSPre || hasJSPre) {
 		explain.warn(
-			"Variable trace covers template resolution only; RTS/JS script internals are not traced",
+			"Variable trace covers template resolution only. RTS/JS script internals are not traced",
 		)
 	}
 

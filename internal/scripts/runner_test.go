@@ -53,6 +53,29 @@ func TestRunPreRequestScripts(t *testing.T) {
 	}
 }
 
+func TestRunPreRequestNormalizesTokenMutations(t *testing.T) {
+	runner := NewRunner(nil)
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/api"}
+	scripts := []restfile.ScriptBlock{{
+		Kind: "pre-request",
+		Body: `request.setMethod(" post "); request.setURL(" https://api.example.com/users ");`,
+	}}
+
+	out, err := runner.RunPreRequest(
+		scripts,
+		prerequest.Input{Request: req, Variables: map[string]string{}},
+	)
+	if err != nil {
+		t.Fatalf("pre-request runner: %v", err)
+	}
+	if out.Method == nil || *out.Method != "POST" {
+		t.Fatalf("expected normalized method, got %#v", out.Method)
+	}
+	if out.URL == nil || *out.URL != "https://api.example.com/users" {
+		t.Fatalf("expected normalized url, got %#v", out.URL)
+	}
+}
+
 func TestRunPreRequestSkipsRTS(t *testing.T) {
 	runner := NewRunner(nil)
 	req := &restfile.Request{}

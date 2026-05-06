@@ -10,6 +10,10 @@ func Trim(s string) string {
 	return strings.TrimSpace(s)
 }
 
+func Lower(s string) string {
+	return strings.ToLower(s)
+}
+
 func TrimLeft(s string) string {
 	return strings.TrimLeftFunc(s, unicode.IsSpace)
 }

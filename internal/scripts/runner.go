@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -256,7 +257,7 @@ func normalizeScript(body string) string {
 }
 
 func (r *Runner) loadScript(block restfile.ScriptBlock, baseDir string) (string, error) {
-	if strings.TrimSpace(block.FilePath) == "" {
+	if block.FilePath == "" {
 		return normalizeScript(block.Body), nil
 	}
 
@@ -343,11 +344,11 @@ func (api *preRequestAPI) requestAPI() map[string]interface{} {
 			api.output.Query[name] = value
 		},
 		"setURL": func(url string) {
-			copied := url
+			copied := strings.TrimSpace(url)
 			api.output.URL = &copied
 		},
 		"setMethod": func(method string) {
-			copied := strings.ToUpper(method)
+			copied := util.UpperTrim(method)
 			api.output.Method = &copied
 		},
 		"setBody": func(body string) {

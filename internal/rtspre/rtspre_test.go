@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -50,5 +51,22 @@ func TestRuntimeGlobals(t *testing.T) {
 	}
 	if _, ok := got["deleted"]; ok {
 		t.Fatalf("expected deleted global to be omitted: %#v", got)
+	}
+}
+
+func TestMutatorNormalizesTokenMutations(t *testing.T) {
+	var out prerequest.Output
+	req := &rts.Req{}
+	mut := NewMutator(&out, req, nil, nil)
+
+	mut.SetMethod(" post ")
+	mut.SetURL(" https://api.example.com/users ")
+
+	if out.Method == nil || *out.Method != "POST" || req.Method != "POST" {
+		t.Fatalf("expected normalized method, out=%#v req=%q", out.Method, req.Method)
+	}
+	if out.URL == nil || *out.URL != "https://api.example.com/users" ||
+		req.URL != "https://api.example.com/users" {
+		t.Fatalf("expected normalized url, out=%#v req=%q", out.URL, req.URL)
 	}
 }
