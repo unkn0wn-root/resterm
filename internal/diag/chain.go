@@ -11,51 +11,6 @@ import (
 
 const maxChainDepth = 32
 
-func operationEntry(e *diagnosticError) ChainEntry {
-	if e == nil || messageText(e.message) == "" {
-		return ChainEntry{}
-	}
-	class := classFromError(e)
-	component := e.component
-	if component == "" {
-		component = e.meta.component
-	}
-	return ChainEntry{
-		Class:     class,
-		Component: component,
-		Kind:      ChainOperation,
-		Message:   e.message,
-	}
-}
-
-func chainWithOperation(op ChainEntry, base, existing []ChainEntry) []ChainEntry {
-	if len(base) == 0 {
-		base = existing
-	}
-	if messageText(op.Message) == "" {
-		return prepareChain(base)
-	}
-	op.Message = messageText(op.Message)
-	op.Children = prepareChain(base)
-	return prepareChain([]ChainEntry{op})
-}
-
-func chainOfError(err error, skip ...string) []ChainEntry {
-	if err == nil {
-		return nil
-	}
-	st := chainState{
-		seen: make(map[error]struct{}),
-		skip: make(map[string]struct{}, len(skip)),
-	}
-	for _, msg := range skip {
-		if msg = messageText(msg); msg != "" {
-			st.skip[msg] = struct{}{}
-		}
-	}
-	return prepareChain(st.entries(err, 0))
-}
-
 type chainState struct {
 	seen map[error]struct{}
 	skip map[string]struct{}
@@ -74,7 +29,7 @@ func (s *chainState) entries(err error, depth int) []ChainEntry {
 
 	if e, ok := err.(*diagnosticError); ok {
 		children := s.entries(e.err, depth+1)
-		msg := messageText(e.message)
+		msg := e.message
 		if msg == "" || s.shouldSkip(msg) {
 			return children
 		}
@@ -117,9 +72,9 @@ func (s *chainState) entries(err error, depth int) []ChainEntry {
 		)
 	}
 
-	if multi, ok := err.(interface{ Unwrap() []error }); ok {
+	if wrapped, ok := err.(errsUnwrapper); ok {
 		var out []ChainEntry
-		for _, child := range multi.Unwrap() {
+		for _, child := range wrapped.Unwrap() {
 			childChain := s.entries(child, depth+1)
 			if len(childChain) == 0 {
 				childChain = leafChain(child, s)
@@ -142,8 +97,8 @@ func (s *chainState) entries(err error, depth int) []ChainEntry {
 		}
 	}
 
-	if single, ok := err.(interface{ Unwrap() error }); ok {
-		if child := single.Unwrap(); child != nil {
+	if wrapped, ok := err.(errUnwrapper); ok {
+		if child := wrapped.Unwrap(); child != nil {
 			return s.entries(child, depth+1)
 		}
 	}
@@ -158,7 +113,6 @@ func (s *chainState) typedWrapper(
 	depth int,
 ) []ChainEntry {
 	children := s.entries(child, depth+1)
-	msg = messageText(msg)
 	if msg == "" || s.shouldSkip(msg) {
 		return children
 	}
@@ -186,7 +140,6 @@ func (s *chainState) markSeen(err error) bool {
 }
 
 func (s *chainState) shouldSkip(msg string) bool {
-	msg = messageText(msg)
 	if msg == "" {
 		return true
 	}
@@ -194,11 +147,55 @@ func (s *chainState) shouldSkip(msg string) bool {
 	return ok
 }
 
+func operationEntry(e *diagnosticError) ChainEntry {
+	if e == nil || e.message == "" {
+		return ChainEntry{}
+	}
+	class := classFromError(e)
+	component := e.component
+	if component == "" {
+		component = e.meta.component
+	}
+	return ChainEntry{
+		Class:     class,
+		Component: component,
+		Kind:      ChainOperation,
+		Message:   e.message,
+	}
+}
+
+func chainWithOp(op ChainEntry, base, existing []ChainEntry) []ChainEntry {
+	if len(base) == 0 {
+		base = existing
+	}
+	if op.Message == "" {
+		return prepareChain(base)
+	}
+	op.Children = prepareChain(base)
+	return prepareChain([]ChainEntry{op})
+}
+
+func chainOfError(err error, skip ...string) []ChainEntry {
+	if err == nil {
+		return nil
+	}
+	st := chainState{
+		seen: make(map[error]struct{}),
+		skip: make(map[string]struct{}, len(skip)),
+	}
+	for _, msg := range skip {
+		if msg != "" {
+			st.skip[msg] = struct{}{}
+		}
+	}
+	return prepareChain(st.entries(err, 0))
+}
+
 func leafChain(err error, st *chainState) []ChainEntry {
 	if err == nil {
 		return nil
 	}
-	msg := messageText(err.Error())
+	msg := err.Error()
 	if msg == "" || st.shouldSkip(msg) {
 		return nil
 	}
@@ -259,7 +256,7 @@ func reportMessage(rep Report) string {
 	if len(rep.Items) == 0 {
 		return ""
 	}
-	return messageText(rep.Summary())
+	return rep.Summary()
 }
 
 func firstComponent(rep Report) Component {

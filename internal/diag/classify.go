@@ -14,6 +14,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+type errUnwrapper interface {
+	Unwrap() error
+}
+
+type errsUnwrapper interface {
+	Unwrap() []error
+}
+
 func classify(err error) Class {
 	if err == nil {
 		return ClassUnknown
@@ -26,12 +34,14 @@ func classify(err error) Class {
 			return class
 		}
 	}
+
 	if errors.Is(err, context.Canceled) {
 		return ClassCanceled
 	}
 	if errors.Is(err, context.DeadlineExceeded) || os.IsTimeout(err) {
 		return ClassTimeout
 	}
+
 	var netErr net.Error
 	if errors.As(err, &netErr) && netErr.Timeout() {
 		return ClassTimeout
@@ -41,6 +51,7 @@ func classify(err error) Class {
 			return class
 		}
 	}
+
 	var urlErr *url.Error
 	if errors.As(err, &urlErr) {
 		if class := classify(urlErr.Err); class != ClassUnknown {
@@ -48,17 +59,21 @@ func classify(err error) Class {
 		}
 		return ClassNetwork
 	}
+
 	if isTLSError(err) {
 		return ClassTLS
 	}
+
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) {
 		return ClassNetwork
 	}
+
 	var opErr *net.OpError
 	if errors.As(err, &opErr) {
 		return ClassNetwork
 	}
+
 	switch {
 	case errors.Is(err, fs.ErrNotExist),
 		errors.Is(err, fs.ErrPermission),
@@ -66,16 +81,20 @@ func classify(err error) Class {
 		errors.Is(err, fs.ErrClosed):
 		return ClassFilesystem
 	}
+
 	var pathErr *fs.PathError
 	if errors.As(err, &pathErr) {
 		return ClassFilesystem
 	}
-	if multi, ok := err.(interface{ Unwrap() []error }); ok {
-		return dominantClass(multi.Unwrap())
+
+	if wrapped, ok := err.(errsUnwrapper); ok {
+		return dominantClass(wrapped.Unwrap())
 	}
-	if single, ok := err.(interface{ Unwrap() error }); ok {
-		return classify(single.Unwrap())
+
+	if wrapped, ok := err.(errUnwrapper); ok {
+		return classify(wrapped.Unwrap())
 	}
+
 	return ClassUnknown
 }
 

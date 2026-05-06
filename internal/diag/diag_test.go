@@ -108,8 +108,8 @@ func TestFromReportPreparesDefaultsAndCopiesData(t *testing.T) {
 	}
 	if len(item.Notes) != 1 ||
 		item.Notes[0].Kind != diag.NoteInfo ||
-		item.Notes[0].Message != "retry with a valid request" {
-		t.Fatalf("item notes = %#v, want trimmed info note", item.Notes)
+		item.Notes[0].Message != "  retry with a valid request  " {
+		t.Fatalf("item notes = %#v, want preserved info note", item.Notes)
 	}
 	if len(item.Frames) != 1 || item.Frames[0].Name != "call" {
 		t.Fatalf("item frames = %#v, want copied original frame", item.Frames)
@@ -137,7 +137,7 @@ func TestFromReportPreparesNotesAndChain(t *testing.T) {
 					Message: "duplicate",
 					Span:    diag.Span{Start: diag.Pos{Line: 3}},
 				},
-				{Kind: diag.NoteInfo, Message: " "},
+				{Kind: diag.NoteInfo},
 			},
 			Chain: []diag.ChainEntry{
 				{Kind: diag.ChainKind("bad"), Message: " root "},
@@ -149,25 +149,31 @@ func TestFromReportPreparesNotesAndChain(t *testing.T) {
 
 	got := diag.ReportOf(err)
 	item := got.Items[0]
-	if len(item.Notes) != 2 {
-		t.Fatalf("note count = %d, want 2: %#v", len(item.Notes), item.Notes)
+	if len(item.Notes) != 3 {
+		t.Fatalf("note count = %d, want 3: %#v", len(item.Notes), item.Notes)
 	}
-	if item.Notes[0].Kind != diag.NoteInfo || item.Notes[0].Message != "duplicate" {
-		t.Fatalf("first note = %#v, want info duplicate", item.Notes[0])
+	if item.Notes[0].Kind != diag.NoteInfo || item.Notes[0].Message != " duplicate " {
+		t.Fatalf("first note = %#v, want preserved info duplicate", item.Notes[0])
 	}
-	if item.Notes[1].Kind != diag.NoteHelp || item.Notes[1].Message != "duplicate" {
-		t.Fatalf("second note = %#v, want help duplicate", item.Notes[1])
+	if item.Notes[1].Kind != diag.NoteInfo || item.Notes[1].Message != "duplicate" {
+		t.Fatalf("second note = %#v, want info duplicate", item.Notes[1])
 	}
-	if len(item.Chain) != 2 {
-		t.Fatalf("chain count = %d, want 2: %#v", len(item.Chain), item.Chain)
+	if item.Notes[2].Kind != diag.NoteHelp || item.Notes[2].Message != "duplicate" {
+		t.Fatalf("third note = %#v, want help duplicate", item.Notes[2])
+	}
+	if len(item.Chain) != 3 {
+		t.Fatalf("chain count = %d, want 3: %#v", len(item.Chain), item.Chain)
 	}
 	if item.Chain[0].Kind != diag.ChainCause ||
 		item.Chain[0].Class != diag.ClassUnknown ||
-		item.Chain[0].Message != "root" {
-		t.Fatalf("first chain entry = %#v, want prepared root cause", item.Chain[0])
+		item.Chain[0].Message != " root " {
+		t.Fatalf("first chain entry = %#v, want preserved root cause", item.Chain[0])
 	}
-	if item.Chain[1].Kind != diag.ChainCause || item.Chain[1].Message != "child" {
-		t.Fatalf("second chain entry = %#v, want flattened child cause", item.Chain[1])
+	if item.Chain[1].Kind != diag.ChainCause || item.Chain[1].Message != "root" {
+		t.Fatalf("second chain entry = %#v, want exact root cause", item.Chain[1])
+	}
+	if item.Chain[2].Kind != diag.ChainCause || item.Chain[2].Message != " child " {
+		t.Fatalf("third chain entry = %#v, want flattened preserved child cause", item.Chain[2])
 	}
 }
 

@@ -126,7 +126,7 @@ type diagnosticError struct {
 
 // New returns a classified diagnostic error.
 func New(class Class, message string, opts ...Option) error {
-	msg := messageText(message)
+	msg := message
 	if msg == "" {
 		msg = string(classOrUnknown(class))
 	}
@@ -201,7 +201,7 @@ func newError(class Class, message string, err error, opts ...Option) error {
 	return &diagnosticError{
 		class:     classOrUnknown(class),
 		component: meta.component,
-		message:   messageText(message),
+		message:   message,
 		err:       err,
 		meta:      meta,
 	}

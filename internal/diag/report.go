@@ -227,9 +227,9 @@ func reportOf(err error) Report {
 	if rep, ok := err.(reporter); ok {
 		return rep.Diagnostic()
 	}
-	if multi, ok := err.(interface{ Unwrap() []error }); ok {
+	if wrapped, ok := err.(errsUnwrapper); ok {
 		var out Report
-		for _, child := range multi.Unwrap() {
+		for _, child := range wrapped.Unwrap() {
 			rep := reportOf(child)
 			if len(rep.Items) == 0 {
 				continue
@@ -244,8 +244,8 @@ func reportOf(err error) Report {
 		}
 		return out
 	}
-	if single, ok := err.(interface{ Unwrap() error }); ok {
-		return reportOf(single.Unwrap())
+	if wrapped, ok := err.(errUnwrapper); ok {
+		return reportOf(wrapped.Unwrap())
 	}
 	return Report{}
 }
@@ -257,7 +257,7 @@ func reportFromDiagnosticError(e *diagnosticError) Report {
 	if len(e.report.Items) > 0 {
 		return prepareReport(e.report)
 	}
-	if _, ok := e.err.(interface{ Unwrap() []error }); ok {
+	if _, ok := e.err.(errsUnwrapper); ok {
 		return Report{Items: []Diagnostic{leafDiagnostic(e)}}
 	}
 	if child := reportOf(e.err); len(child.Items) > 0 {
@@ -280,7 +280,7 @@ func withOperation(rep Report, e *diagnosticError) Report {
 	if rep.Items[0].Component == "" && e.meta.component != "" {
 		rep.Items[0].Component = e.meta.component
 	}
-	rep.Items[0].Chain = chainWithOperation(
+	rep.Items[0].Chain = chainWithOp(
 		operationEntry(e),
 		chainOfError(e.err, rep.Items[0].Message, rep.Summary(), errorString(e.err)),
 		rep.Items[0].Chain,
@@ -299,7 +299,7 @@ func leafDiagnostic(e *diagnosticError) Diagnostic {
 	}
 	msg := e.message
 	if msg == "" && e.err != nil {
-		if _, ok := e.err.(interface{ Unwrap() []error }); ok {
+		if _, ok := e.err.(errsUnwrapper); ok {
 			msg = string(class)
 		} else {
 			msg = e.err.Error()
@@ -339,7 +339,7 @@ func opChain(e *diagnosticError, msg string) []ChainEntry {
 	if e == nil || e.err == nil {
 		return nil
 	}
-	return chainWithOperation(operationEntry(e), chainOfError(e.err, msg), nil)
+	return chainWithOp(operationEntry(e), chainOfError(e.err, msg), nil)
 }
 
 func plainDiagnostic(err error) Diagnostic {
@@ -388,16 +388,16 @@ func collectClasses(err error, visit func(Class) bool) bool {
 			return false
 		}
 	}
-	if multi, ok := err.(interface{ Unwrap() []error }); ok {
-		for _, child := range multi.Unwrap() {
+	if wrapped, ok := err.(errsUnwrapper); ok {
+		for _, child := range wrapped.Unwrap() {
 			if !collectClasses(child, visit) {
 				return false
 			}
 		}
 		return true
 	}
-	if single, ok := err.(interface{ Unwrap() error }); ok {
-		return collectClasses(single.Unwrap(), visit)
+	if wrapped, ok := err.(errUnwrapper); ok {
+		return collectClasses(wrapped.Unwrap(), visit)
 	}
 	return true
 }

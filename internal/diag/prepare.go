@@ -2,7 +2,6 @@ package diag
 
 import (
 	"slices"
-	"strings"
 )
 
 type chainEntryKey struct {
@@ -31,13 +30,6 @@ func chainKindOrCause(kind ChainKind) ChainKind {
 	return knownOr(kind, ChainCause, ChainOperation)
 }
 
-func knownOr[T comparable](value, fallback T, allowed ...T) T {
-	if value == fallback || slices.Contains(allowed, value) {
-		return value
-	}
-	return fallback
-}
-
 func classOrUnknown(class Class) Class {
 	if class == "" {
 		return ClassUnknown
@@ -45,10 +37,16 @@ func classOrUnknown(class Class) Class {
 	return class
 }
 
+func knownOr[T comparable](value, fallback T, allowed ...T) T {
+	if value == fallback || slices.Contains(allowed, value) {
+		return value
+	}
+	return fallback
+}
+
 func prepareChainEntry(entry ChainEntry) ChainEntry {
 	entry.Class = classOrUnknown(entry.Class)
 	entry.Kind = chainKindOrCause(entry.Kind)
-	entry.Message = messageText(entry.Message)
 	entry.Children = prepareChain(entry.Children)
 	return entry
 }
@@ -144,7 +142,6 @@ func prepareNotes(src []Note) []Note {
 	out := make([]Note, 0, len(src))
 	for _, note := range src {
 		note.Kind = noteKindOrInfo(note.Kind)
-		note.Message = strings.TrimSpace(note.Message)
 		if note.Message == "" {
 			continue
 		}
@@ -158,21 +155,4 @@ func prepareNotes(src []Note) []Note {
 		}
 	}
 	return out
-}
-
-func messageText(msg string) string {
-	msg = strings.TrimSpace(msg)
-	if msg == "" {
-		return ""
-	}
-	msg = strings.ReplaceAll(msg, "\r\n", "\n")
-	msg = strings.ReplaceAll(msg, "\r", "\n")
-	parts := strings.Split(msg, "\n")
-	out := make([]string, 0, len(parts))
-	for _, part := range parts {
-		if part = strings.TrimSpace(part); part != "" {
-			out = append(out, part)
-		}
-	}
-	return strings.Join(out, " | ")
 }
