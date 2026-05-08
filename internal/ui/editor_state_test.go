@@ -192,6 +192,316 @@ func TestRequestEditorMotionCaret(t *testing.T) {
 	}
 }
 
+func TestRequestEditorInsertEntryPositions(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		line       int
+		col        int
+		action     editorInsertAction
+		wantValue  string
+		wantLine   int
+		wantColumn int
+	}{
+		{
+			name:       "I moves to first non blank",
+			content:    "  alpha",
+			line:       0,
+			col:        5,
+			action:     editorInsertAtLineStartNonBlank,
+			wantValue:  "  alpha",
+			wantLine:   0,
+			wantColumn: 2,
+		},
+		{
+			name:       "I moves to start on whitespace only line",
+			content:    "    ",
+			line:       0,
+			col:        3,
+			action:     editorInsertAtLineStartNonBlank,
+			wantValue:  "    ",
+			wantLine:   0,
+			wantColumn: 0,
+		},
+		{
+			name:       "A moves to rune end",
+			content:    "åβ",
+			line:       0,
+			col:        0,
+			action:     editorInsertAtLineEnd,
+			wantValue:  "åβ",
+			wantLine:   0,
+			wantColumn: 2,
+		},
+		{
+			name:       "o opens indented line below",
+			content:    "  alpha\nbeta",
+			line:       0,
+			col:        3,
+			action:     editorInsertOpenLineBelow,
+			wantValue:  "  alpha\n  \nbeta",
+			wantLine:   1,
+			wantColumn: 2,
+		},
+		{
+			name:       "o opens below last line",
+			content:    "alpha\n  beta",
+			line:       1,
+			col:        4,
+			action:     editorInsertOpenLineBelow,
+			wantValue:  "alpha\n  beta\n  ",
+			wantLine:   2,
+			wantColumn: 2,
+		},
+		{
+			name:       "O opens indented line above first line",
+			content:    "  alpha\nbeta",
+			line:       0,
+			col:        3,
+			action:     editorInsertOpenLineAbove,
+			wantValue:  "  \n  alpha\nbeta",
+			wantLine:   0,
+			wantColumn: 2,
+		},
+		{
+			name:       "O opens unindented line above middle line",
+			content:    "  alpha\nbeta",
+			line:       1,
+			col:        1,
+			action:     editorInsertOpenLineAbove,
+			wantValue:  "  alpha\n\nbeta",
+			wantLine:   1,
+			wantColumn: 0,
+		},
+		{
+			name:       "O opens above empty buffer",
+			content:    "",
+			line:       0,
+			col:        0,
+			action:     editorInsertOpenLineAbove,
+			wantValue:  "\n",
+			wantLine:   0,
+			wantColumn: 0,
+		},
+		{
+			name:       "o opens below empty buffer",
+			content:    "",
+			line:       0,
+			col:        0,
+			action:     editorInsertOpenLineBelow,
+			wantValue:  "\n",
+			wantLine:   1,
+			wantColumn: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := newTestEditor(tt.content)
+			editorPtr := &editor
+			editorPtr.moveCursorTo(tt.line, tt.col)
+
+			editor, cmd := editor.ApplyInsertAction(tt.action)
+			if cmd != nil {
+				_ = cmd()
+			}
+
+			if got := editor.Value(); got != tt.wantValue {
+				t.Fatalf("unexpected value:\nwant %q\n got %q", tt.wantValue, got)
+			}
+			pos := editor.caretPosition()
+			if pos.Line != tt.wantLine || pos.Column != tt.wantColumn {
+				t.Fatalf(
+					"expected cursor (%d,%d), got (%d,%d)",
+					tt.wantLine,
+					tt.wantColumn,
+					pos.Line,
+					pos.Column,
+				)
+			}
+		})
+	}
+}
+
+func TestRequestEditorInsertChangeActions(t *testing.T) {
+	tests := []struct {
+		name       string
+		content    string
+		line       int
+		col        int
+		action     editorInsertAction
+		wantValue  string
+		wantLine   int
+		wantColumn int
+	}{
+		{
+			name:       "s changes character",
+			content:    "abc",
+			line:       0,
+			col:        1,
+			action:     editorInsertSubstituteChar,
+			wantValue:  "ac",
+			wantLine:   0,
+			wantColumn: 1,
+		},
+		{
+			name:       "s at end of line only positions insert",
+			content:    "abc",
+			line:       0,
+			col:        3,
+			action:     editorInsertSubstituteChar,
+			wantValue:  "abc",
+			wantLine:   0,
+			wantColumn: 3,
+		},
+		{
+			name:       "S changes current line",
+			content:    "alpha\nbeta",
+			line:       1,
+			col:        2,
+			action:     editorInsertSubstituteLine,
+			wantValue:  "alpha\n",
+			wantLine:   1,
+			wantColumn: 0,
+		},
+		{
+			name:       "S on empty line only positions insert",
+			content:    "alpha\n",
+			line:       1,
+			col:        0,
+			action:     editorInsertSubstituteLine,
+			wantValue:  "alpha\n",
+			wantLine:   1,
+			wantColumn: 0,
+		},
+		{
+			name:       "C changes to line end",
+			content:    "alpha beta",
+			line:       0,
+			col:        6,
+			action:     editorInsertChangeToLineEnd,
+			wantValue:  "alpha ",
+			wantLine:   0,
+			wantColumn: 6,
+		},
+		{
+			name:       "C at end of line only positions insert",
+			content:    "alpha",
+			line:       0,
+			col:        5,
+			action:     editorInsertChangeToLineEnd,
+			wantValue:  "alpha",
+			wantLine:   0,
+			wantColumn: 5,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := newTestEditor(tt.content)
+			editorPtr := &editor
+			editorPtr.moveCursorTo(tt.line, tt.col)
+
+			editor, cmd := editor.ApplyInsertAction(tt.action)
+			if cmd != nil {
+				_ = cmd()
+			}
+
+			if got := editor.Value(); got != tt.wantValue {
+				t.Fatalf("unexpected value:\nwant %q\n got %q", tt.wantValue, got)
+			}
+			pos := editor.caretPosition()
+			if pos.Line != tt.wantLine || pos.Column != tt.wantColumn {
+				t.Fatalf(
+					"expected cursor (%d,%d), got (%d,%d)",
+					tt.wantLine,
+					tt.wantColumn,
+					pos.Line,
+					pos.Column,
+				)
+			}
+		})
+	}
+}
+
+func TestRequestEditorInsertChangeActionsAreUndoable(t *testing.T) {
+	tests := []struct {
+		name      string
+		content   string
+		line      int
+		col       int
+		action    editorInsertAction
+		wantValue string
+	}{
+		{
+			name:      "open below",
+			content:   "alpha",
+			action:    editorInsertOpenLineBelow,
+			wantValue: "alpha\n",
+		},
+		{
+			name:      "open above",
+			content:   "alpha",
+			action:    editorInsertOpenLineAbove,
+			wantValue: "\nalpha",
+		},
+		{
+			name:      "substitute char",
+			content:   "abc",
+			col:       1,
+			action:    editorInsertSubstituteChar,
+			wantValue: "ac",
+		},
+		{
+			name:      "substitute line",
+			content:   "alpha\nbeta",
+			line:      1,
+			col:       2,
+			action:    editorInsertSubstituteLine,
+			wantValue: "alpha\n",
+		},
+		{
+			name:      "change to end",
+			content:   "alpha beta",
+			col:       6,
+			action:    editorInsertChangeToLineEnd,
+			wantValue: "alpha ",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			editor := newTestEditor(tt.content)
+			editorPtr := &editor
+			editorPtr.moveCursorTo(tt.line, tt.col)
+
+			editor, cmd := editor.ApplyInsertAction(tt.action)
+			if cmd != nil {
+				_ = cmd()
+			}
+			if got := editor.Value(); got != tt.wantValue {
+				t.Fatalf("unexpected value after action:\nwant %q\n got %q", tt.wantValue, got)
+			}
+
+			editor, cmd = editor.UndoLastChange()
+			if cmd != nil {
+				_ = cmd()
+			}
+			if got := editor.Value(); got != tt.content {
+				t.Fatalf("unexpected value after undo:\nwant %q\n got %q", tt.content, got)
+			}
+
+			editor, cmd = editor.RedoLastChange()
+			if cmd != nil {
+				_ = cmd()
+			}
+			if got := editor.Value(); got != tt.wantValue {
+				t.Fatalf("unexpected value after redo:\nwant %q\n got %q", tt.wantValue, got)
+			}
+		})
+	}
+}
+
 func TestRequestEditorMotionE(t *testing.T) {
 	content := "word another\nlast"
 	editor := newTestEditor(content)
