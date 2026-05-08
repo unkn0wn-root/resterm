@@ -175,7 +175,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleStreamReady(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
 	case fileChangedMsg:
-		m.handleFileChangeEvent(typed)
+		if cmd := m.handleFileChangeEvent(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 		cmds = append(cmds, m.nextFileWatchMsgCmd())
 	case wsConsoleResultMsg:
 		m.handleConsoleResult(typed)

@@ -35,10 +35,7 @@ type Options struct {
 	Interval time.Duration
 	Buffer   int
 	// HashUnchanged forces a content hash even when modtime and size are unchanged.
-	// When false (default), scans skip hashing if metadata is unchanged to avoid
-	// unnecessary I/O for large files. Maybe I was overthinking here but though
-	// that I'll keep that so if I would ever wire up forcing full file hashing
-	// i know where and why. Behavior is still the same anyways.
+	// When false, scans skip hashing if metadata is unchanged.
 	HashUnchanged bool
 }
 

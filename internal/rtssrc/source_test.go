@@ -12,7 +12,9 @@ import (
 func TestLoadInlineSourceMapsLinesAndColumns(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "sample.http",
-		Raw:  []byte("### Sample\n# @rts pre-request\n> first()\n\n  > second()\nGET https://example.com\n"),
+		Raw: []byte(
+			"### Sample\n# @rts pre-request\n> first()\n\n  > second()\nGET https://example.com\n",
+		),
 	}
 	block := restfile.ScriptBlock{
 		Body:       "first()\nsecond()",

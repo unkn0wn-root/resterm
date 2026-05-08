@@ -14,6 +14,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
+type diskContentOptions struct {
+	PreserveView bool
+}
+
 func (m *Model) openSelectedFile() tea.Cmd {
 	path := selectedFilePath(m.fileList.SelectedItem())
 	if path == "" {
@@ -183,13 +187,8 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	}
 	if m.dirty && !m.pendingReloadConfirm {
 		m.pendingReloadConfirm = true
-		warn := "Reload will discard unsaved changes. Press reload again to confirm."
-		if m.showFileChangeModal {
-			m.openFileChangeModal(warn)
-		}
-		return func() tea.Msg {
-			return statusMsg{text: warn, level: statusWarn}
-		}
+		m.openReloadConfirmModal(manualDirtyReloadMessage())
+		return nil
 	}
 
 	data, err := os.ReadFile(path)
@@ -199,23 +198,39 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 		}
 	}
 
-	m.pendingReloadConfirm = false
-	m.fileStale = false
-	m.fileMissing = false
-	m.closeFileChangeModal()
-	_ = m.setInsertMode(false, false)
-	m.editor.ClearSelection()
-	m.editor.SetValue(string(data))
-	m.editor.undoStack = nil
-	m.editor.SetViewStart(0)
-	m.editor.moveCursorTo(0, 0)
-	m.editor.ClearSelection()
-	m.refreshCurrentDocument(data)
-	m.watchFile(path, data)
+	m.applyDiskContent(path, data, diskContentOptions{})
 
 	return func() tea.Msg {
 		return statusMsg{text: fmt.Sprintf("Reloaded %s", filepath.Base(path)), level: statusInfo}
 	}
+}
+
+func manualDirtyReloadMessage() string {
+	return "Reload from disk? Unsaved changes in Resterm will be discarded."
+}
+
+func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOptions) {
+	pos := cursorPosition{}
+	viewStart := 0
+	if opt.PreserveView {
+		pos = m.editor.caretPosition()
+		viewStart = m.editor.ViewStart()
+	}
+
+	_ = m.setInsertMode(false, false)
+	m.editor.ClearSelection()
+	m.editor.SetValue(string(data))
+	m.editor.undoStack = nil
+	if opt.PreserveView {
+		m.editor.moveCursorTo(pos.Line, pos.Column)
+		m.editor.SetViewStart(viewStart)
+	} else {
+		m.editor.SetViewStart(0)
+		m.editor.moveCursorTo(0, 0)
+	}
+	m.editor.ClearSelection()
+	m.refreshCurrentDocument(data)
+	m.watchFile(path, data)
 }
 
 func (m *Model) refreshCurrentDocument(content []byte) {

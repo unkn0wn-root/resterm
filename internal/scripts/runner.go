@@ -297,7 +297,12 @@ func newPreRequestAPI(output *prerequest.Output, input prerequest.Input) *preReq
 		}
 		globals[normalizeGlobalKey(value.Name)] = value
 	}
-	return &preRequestAPI{request: input.Request, output: output, variables: variables, globals: globals}
+	return &preRequestAPI{
+		request:   input.Request,
+		output:    output,
+		variables: variables,
+		globals:   globals,
+	}
 }
 
 func (api *preRequestAPI) requestAPI() map[string]interface{} {

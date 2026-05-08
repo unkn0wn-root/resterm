@@ -249,6 +249,7 @@ type Model struct {
 	showOpenModal          bool
 	showErrorModal         bool
 	showFileChangeModal    bool
+	fileChangeTitle        string
 	fileChangeMessage      string
 	errorModalMessage      string
 	showHistoryPreview     bool
@@ -420,7 +421,7 @@ func New(cfg Config) Model {
 	if bindingMap == nil {
 		bindingMap = bindings.DefaultMap()
 	}
-	fileWatcher := watcher.New(watcher.Options{})
+	fileWatcher := watcher.New(watcher.Options{HashUnchanged: true})
 	fileWatchChan := make(chan tea.Msg, 16)
 	runMsgChan := make(chan tea.Msg, 256)
 
