@@ -223,6 +223,7 @@ A few keys that make Resterm feel “native” quickly:
     - `Ctrl+Shift+C` or `g y` - copy the entire Pretty/Raw/Headers tab
       to the clipboard (no mouse selection needed).
   - `g x` - build an Explain preview for the active request without sending it.
+  - `g e` - open the current or selected supported file in your external editor.
 
 ---
 

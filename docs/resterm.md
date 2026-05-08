@@ -162,6 +162,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Save file | `Ctrl+S` |
 | Save layout (prompt) | `g+Shift+L` |
 | Open file picker | `Ctrl+O` |
+| Open current/selected file in external editor | `g+e` |
 | New scratch buffer | `Ctrl+T` |
 | Reparse current document | `Ctrl+P` (also `Ctrl+Alt+P`) |
 | Refresh workspace files | `Ctrl+Shift+O` |
@@ -206,6 +207,7 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `open_path_modal` | Open the “Open File” modal. | `ctrl+o` |
 | `reload_workspace` | Rescan the workspace root(s). | `ctrl+shift+o`, `g shift+o` |
 | `open_new_file_modal` | Launch the “New Request” modal. | `ctrl+n` |
+| `open_file_in_editor` | Open the current or selected supported file in `$RESTERM_EDITOR`, `$VISUAL`, or `$EDITOR`. | `g e` |
 | `open_theme_selector` | Open theme selector. | `ctrl+alt+t`, `g m`, `g shift+t` |
 | `open_temp_document` | Open a scratch document. | `ctrl+t` |
 | `reparse_document` | Reparse the active buffer. | `ctrl+p`, `ctrl+alt+p`, `ctrl+shift+t` |
@@ -282,6 +284,7 @@ Binary responses show size and type hints alongside quick previews. For large bi
 - The navigator filter sits above the tree: press `/` to focus, type to match files, request/workflow names, URLs, tags, and badges. `m` toggles method badges (single select) for the highlighted request, `t` toggles tag badges, and `Esc` clears text plus any badges.
 - Highlight a request or workflow in the navigator and press `l` or `r` to restore the editor pane and jump to that definition.
 - The navigator refreshes immediately when a file is saved or reparsed; filtering auto-loads unopened files so cross-workspace matches still appear. Use `Ctrl+Shift+O` (or `g+Shift+O`) to rescan the workspace for new files.
+- Press `g+e` to open the current file, or the selected navigator file/request/workflow file, in an external editor. Resterm uses `$RESTERM_EDITOR`, then `$VISUAL`, then `$EDITOR`; if none is configured or found, it shows a warning instead of falling back to a non-editor default app.
 - Resterm watches the active file on disk. If another tool edits or deletes it, a modal appears telling you the file changed or went missing. Your in-memory buffer stays intact. Press the reload shortcut (`g+Shift+R` by default, or whatever you’ve mapped to `reload_file_from_disk`) to pull the on disk version into the editor. If you have unsaved changes, the first press warns that reload will discard them; press reload again to confirm. Dismiss with `Esc` to keep your buffer and continue editing.
 - Create a scratch buffer with `Ctrl+T` for ad-hoc experiments. These buffers are not written to disk unless you save them explicitly.
 

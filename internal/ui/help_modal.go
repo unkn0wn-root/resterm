@@ -168,6 +168,10 @@ func (m Model) helpSections() []helpSection {
 					m.helpActionKey(bindings.ActionSaveLayout, "g Shift+L"),
 					"Save layout to settings",
 				},
+				{
+					m.helpActionKey(bindings.ActionOpenFileInEditor, "g e"),
+					"Open file in external editor",
+				},
 				{m.helpActionKey(bindings.ActionOpenNewFileModal, "Ctrl+N"), "Create request file"},
 				{m.helpActionKey(bindings.ActionOpenPathModal, "Ctrl+O"), "Open file or folder"},
 				{

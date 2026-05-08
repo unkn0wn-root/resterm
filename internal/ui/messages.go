@@ -98,6 +98,11 @@ type rawDumpLoadedMsg struct {
 	content  string
 }
 
+type externalEditorMsg struct {
+	path string
+	err  error
+}
+
 type runReqMsg struct {
 	res engine.RequestResult
 	err error
