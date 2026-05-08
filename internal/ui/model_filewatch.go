@@ -6,7 +6,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -119,7 +118,6 @@ func (m *Model) showFileChangeWarning(path string, kind watcher.EventKind, text 
 	m.fileMissing = kind == watcher.EventMissing
 	m.pendingReloadConfirm = false
 	m.showHelp = false
-	text = strings.TrimSpace(text)
 	if text == "" {
 		text = fileChangeMessage(path, kind)
 	}
@@ -142,11 +140,7 @@ func dirtyFileChangeMessage(path string) string {
 }
 
 func fileDisplayName(path string) string {
-	name := filepath.Base(path)
-	if name == "" {
-		return "File"
-	}
-	return name
+	return filepath.Base(path)
 }
 
 func (m *Model) openFileChangeModal(msg string) {
@@ -159,8 +153,8 @@ func (m *Model) openReloadConfirmModal(msg string) {
 
 func (m *Model) openFileChangeModalWithTitle(title, msg string) {
 	m.showFileChangeModal = true
-	m.fileChangeTitle = strings.TrimSpace(title)
-	m.fileChangeMessage = strings.TrimSpace(msg)
+	m.fileChangeTitle = title
+	m.fileChangeMessage = msg
 	m.resetChordState()
 	m.showEnvSelector = false
 	m.showThemeSelector = false

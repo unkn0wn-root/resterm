@@ -179,7 +179,7 @@ func (m *Model) reparseDocument() tea.Cmd {
 }
 
 func (m *Model) reloadFileFromDisk() tea.Cmd {
-	path := strings.TrimSpace(m.currentFile)
+	path := m.currentFile
 	if path == "" {
 		return func() tea.Msg {
 			return statusMsg{text: "No file selected", level: statusWarn}

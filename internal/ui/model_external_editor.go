@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -15,7 +14,7 @@ import (
 
 func (m *Model) openFileInEditor() tea.Cmd {
 	path := m.externalEditorTarget()
-	if strings.TrimSpace(path) == "" {
+	if path == "" {
 		m.setStatusMessage(statusMsg{text: "No file selected", level: statusWarn})
 		return nil
 	}
@@ -87,7 +86,7 @@ func (m *Model) navigatorSelectedPath() (string, bool) {
 	if n == nil {
 		return "", false
 	}
-	return strings.TrimSpace(n.Payload.FilePath), true
+	return n.Payload.FilePath, true
 }
 
 func (m *Model) handleExternalEditorMsg(msg externalEditorMsg) tea.Cmd {
