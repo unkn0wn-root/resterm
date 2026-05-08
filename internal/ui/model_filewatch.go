@@ -80,7 +80,14 @@ func (m *Model) handleFileChangeEvent(msg fileChangedMsg) tea.Cmd {
 	if msg.kind == watcher.EventChanged && !m.dirty {
 		return m.autoReloadChangedFile(msg.path)
 	}
-	m.showFileChangeWarning(msg.path, msg.kind, "")
+	text := ""
+	confirmReload := false
+	if msg.kind == watcher.EventChanged && m.dirty {
+		text = dirtyFileChangeMessage(msg.path)
+		confirmReload = true
+	}
+	m.showFileChangeWarning(msg.path, msg.kind, text)
+	m.pendingReloadConfirm = confirmReload
 	return nil
 }
 
@@ -113,7 +120,6 @@ func (m *Model) showFileChangeWarning(path string, kind watcher.EventKind, text 
 		text = fileChangeMessage(path, kind)
 	}
 	m.openFileChangeModal(text)
-	m.setStatusMessage(statusMsg{text: text, level: statusWarn})
 }
 
 func fileChangeMessage(path string, kind watcher.EventKind) string {
@@ -122,6 +128,13 @@ func fileChangeMessage(path string, kind watcher.EventKind) string {
 		return fmt.Sprintf("%s removed on disk. Using current buffer.", name)
 	}
 	return fmt.Sprintf("%s changed on disk. Using current buffer.", name)
+}
+
+func dirtyFileChangeMessage(path string) string {
+	return fmt.Sprintf(
+		"%s changed outside Resterm and you have unsaved changes. Reload to discard local changes.",
+		fileDisplayName(path),
+	)
 }
 
 func fileDisplayName(path string) string {
@@ -133,7 +146,16 @@ func fileDisplayName(path string) string {
 }
 
 func (m *Model) openFileChangeModal(msg string) {
+	m.openFileChangeModalWithTitle("File Change Detected", msg)
+}
+
+func (m *Model) openReloadConfirmModal(msg string) {
+	m.openFileChangeModalWithTitle("Reload From Disk", msg)
+}
+
+func (m *Model) openFileChangeModalWithTitle(title, msg string) {
 	m.showFileChangeModal = true
+	m.fileChangeTitle = strings.TrimSpace(title)
 	m.fileChangeMessage = strings.TrimSpace(msg)
 	m.resetChordState()
 	m.showEnvSelector = false
@@ -144,7 +166,9 @@ func (m *Model) openFileChangeModal(msg string) {
 
 func (m *Model) closeFileChangeModal() {
 	m.showFileChangeModal = false
+	m.fileChangeTitle = ""
 	m.fileChangeMessage = ""
+	m.pendingReloadConfirm = false
 	m.resetChordState()
 }
 

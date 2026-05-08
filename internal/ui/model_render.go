@@ -2389,12 +2389,12 @@ func (m Model) statusBarMessage() (string, statusLevel) {
 		return m.statusMessage.text, m.statusMessage.level
 	}
 	switch {
+	case m.dirty:
+		return "Unsaved changes", statusWarn
 	case m.fileMissing:
 		return "File missing on disk", statusWarn
 	case m.fileStale:
 		return "File changed on disk", statusWarn
-	case m.dirty:
-		return "Unsaved changes", statusWarn
 	default:
 		return "Ready", statusInfo
 	}
@@ -2940,7 +2940,7 @@ func (m Model) renderFileChangeModal() string {
 	title := m.theme.HeaderTitle.
 		Width(contentWidth).
 		Align(lipgloss.Center).
-		Render("File Change Detected")
+		Render(m.fileChangeTitle)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,

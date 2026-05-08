@@ -253,12 +253,18 @@ func TestFileChangeDirtyBufferDoesNotAutoReload(t *testing.T) {
 	if !m.fileStale || m.fileMissing {
 		t.Fatalf("expected stale non-missing file, got stale=%v missing=%v", m.fileStale, m.fileMissing)
 	}
-	want := "changed.http changed on disk. Using current buffer."
-	if m.statusMessage.text != want {
-		t.Fatalf("expected status message %q, got %q", want, m.statusMessage.text)
+	if !m.pendingReloadConfirm {
+		t.Fatalf("expected file change modal to arm reload confirmation")
 	}
-	if m.statusMessage.level != statusWarn {
-		t.Fatalf("expected warning status level, got %v", m.statusMessage.level)
+	want := "changed.http changed outside Resterm and you have unsaved changes. Reload to discard local changes."
+	if m.fileChangeTitle != "File Change Detected" {
+		t.Fatalf("expected file change modal title, got %q", m.fileChangeTitle)
+	}
+	if m.fileChangeMessage != want {
+		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
 	}
 }
 
@@ -295,11 +301,11 @@ func TestFileMissingDoesNotClearCleanBuffer(t *testing.T) {
 		t.Fatalf("expected stale missing file, got stale=%v missing=%v", m.fileStale, m.fileMissing)
 	}
 	want := "missing.http removed on disk. Using current buffer."
-	if m.statusMessage.text != want {
-		t.Fatalf("expected status message %q, got %q", want, m.statusMessage.text)
+	if m.fileChangeMessage != want {
+		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
 	}
-	if m.statusMessage.level != statusWarn {
-		t.Fatalf("expected warning status level, got %v", m.statusMessage.level)
+	if m.statusMessage.text != "" {
+		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
 	}
 }
 
@@ -340,7 +346,7 @@ func TestOpenFileSetsHistoryScopeToRequest(t *testing.T) {
 	}
 }
 
-func TestReloadWarnUpdatesFileChangeModal(t *testing.T) {
+func TestFileChangeDirtyReloadUsesModalConfirmation(t *testing.T) {
 	tmp := t.TempDir()
 	th := theme.DefaultTheme()
 	path := filepath.Join(tmp, "changed.http")
@@ -350,21 +356,98 @@ func TestReloadWarnUpdatesFileChangeModal(t *testing.T) {
 
 	model := New(Config{WorkspaceRoot: tmp, Theme: &th, FilePath: path, InitialContent: "body"})
 	m := &model
+	m.editor.SetValue("local")
 	m.markDirty()
+	if err := os.WriteFile(path, []byte("disk"), 0o644); err != nil {
+		t.Fatalf("write changed file: %v", err)
+	}
 	m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged})
 	if !m.showFileChangeModal {
 		t.Fatalf("expected file change modal to be visible")
 	}
+	if !m.pendingReloadConfirm {
+		t.Fatalf("expected file change modal to arm reload confirmation")
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
+	}
 
 	cmd := m.reloadFileFromDisk()
 	if cmd == nil {
-		t.Fatalf("expected warning command on first reload attempt")
+		t.Fatalf("expected reload status command")
+	}
+	if got := m.editor.Value(); got != "disk" {
+		t.Fatalf("expected dirty buffer to reload from disk, got %q", got)
+	}
+	if m.dirty {
+		t.Fatalf("expected dirty state to clear after confirmed reload")
+	}
+	if m.showFileChangeModal {
+		t.Fatalf("expected file change modal to close after reload")
+	}
+}
+
+func TestFileChangeDismissClearsReloadConfirmation(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "changed.http")
+	if err := os.WriteFile(path, []byte("disk"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th, FilePath: path, InitialContent: "disk"})
+	m := &model
+	m.editor.SetValue("local")
+	m.markDirty()
+
+	m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged})
+	if !m.pendingReloadConfirm {
+		t.Fatalf("expected file change modal to arm reload confirmation")
+	}
+
+	m.closeFileChangeModal()
+	if m.pendingReloadConfirm {
+		t.Fatalf("expected dismissing file change modal to clear reload confirmation")
+	}
+	if msg, _ := m.statusBarMessage(); msg != "Unsaved changes" {
+		t.Fatalf("expected dismissed dirty modal to leave normal dirty status, got %q", msg)
+	}
+}
+
+func TestManualDirtyReloadRequiresConfirmation(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "changed.http")
+	if err := os.WriteFile(path, []byte("disk"), 0o644); err != nil {
+		t.Fatalf("write temp file: %v", err)
+	}
+
+	model := New(Config{WorkspaceRoot: tmp, Theme: &th, FilePath: path, InitialContent: "disk"})
+	m := &model
+	m.editor.SetValue("local")
+	m.markDirty()
+
+	cmd := m.reloadFileFromDisk()
+	if cmd != nil {
+		t.Fatalf("did not expect modal warning to return a status command")
+	}
+	if got := m.editor.Value(); got != "local" {
+		t.Fatalf("expected manual reload warning to preserve buffer, got %q", got)
+	}
+	if !m.showFileChangeModal {
+		t.Fatalf("expected manual reload warning to open modal")
+	}
+	if m.fileChangeTitle != "Reload From Disk" {
+		t.Fatalf("expected reload modal title, got %q", m.fileChangeTitle)
 	}
 	if !m.pendingReloadConfirm {
 		t.Fatalf("expected reload confirmation to be pending")
 	}
-	want := "Reload will discard unsaved changes. Press reload again to confirm."
+	want := manualDirtyReloadMessage()
 	if m.fileChangeMessage != want {
 		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
 	}
 }

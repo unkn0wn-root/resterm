@@ -187,13 +187,8 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	}
 	if m.dirty && !m.pendingReloadConfirm {
 		m.pendingReloadConfirm = true
-		warn := "Reload will discard unsaved changes. Press reload again to confirm."
-		if m.showFileChangeModal {
-			m.openFileChangeModal(warn)
-		}
-		return func() tea.Msg {
-			return statusMsg{text: warn, level: statusWarn}
-		}
+		m.openReloadConfirmModal(manualDirtyReloadMessage())
+		return nil
 	}
 
 	data, err := os.ReadFile(path)
@@ -208,6 +203,10 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	return func() tea.Msg {
 		return statusMsg{text: fmt.Sprintf("Reloaded %s", filepath.Base(path)), level: statusInfo}
 	}
+}
+
+func manualDirtyReloadMessage() string {
+	return "Reload from disk? Unsaved changes in Resterm will be discarded."
 }
 
 func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOptions) {

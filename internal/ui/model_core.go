@@ -249,6 +249,7 @@ type Model struct {
 	showOpenModal          bool
 	showErrorModal         bool
 	showFileChangeModal    bool
+	fileChangeTitle        string
 	fileChangeMessage      string
 	errorModalMessage      string
 	showHistoryPreview     bool
