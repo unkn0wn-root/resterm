@@ -161,6 +161,148 @@ func TestReparseDocumentPreservesDirtyState(t *testing.T) {
 	}
 }
 
+func TestFileChangeAutoReloadsCleanBuffer(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "changed.http")
+	original := "GET https://old.example\n"
+	updated := "GET https://new.example\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write original file: %v", err)
+	}
+
+	model := New(Config{
+		WorkspaceRoot:  tmp,
+		Theme:          &th,
+		FilePath:       path,
+		InitialContent: original,
+	})
+	m := &model
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		t.Fatalf("write updated file: %v", err)
+	}
+
+	cmd := m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged})
+	if cmd == nil {
+		t.Fatalf("expected auto reload status command")
+	}
+	if got := m.editor.Value(); got != updated {
+		t.Fatalf("expected editor to reload updated content, got %q", got)
+	}
+	if m.dirty {
+		t.Fatalf("expected auto-reloaded buffer to stay clean")
+	}
+	if m.showFileChangeModal {
+		t.Fatalf("did not expect file change modal for clean auto reload")
+	}
+	if m.fileStale || m.fileMissing {
+		t.Fatalf("expected stale/missing flags to clear, got stale=%v missing=%v", m.fileStale, m.fileMissing)
+	}
+	if len(m.doc.Requests) != 1 || m.doc.Requests[0].URL != "https://new.example" {
+		t.Fatalf("expected parsed document to refresh, got %#v", m.doc.Requests)
+	}
+
+	msg, ok := cmd().(statusMsg)
+	if !ok {
+		t.Fatalf("expected statusMsg response, got %T", msg)
+	}
+	if msg.text != "↻ Reloaded changed.http (file changed outside Resterm)" {
+		t.Fatalf("unexpected status text: %q", msg.text)
+	}
+	if msg.level != statusWarn {
+		t.Fatalf("expected warning status level, got %v", msg.level)
+	}
+}
+
+func TestFileChangeDirtyBufferDoesNotAutoReload(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "changed.http")
+	original := "GET https://old.example\n"
+	updated := "GET https://disk.example\n"
+	local := "GET https://local.example\n"
+	if err := os.WriteFile(path, []byte(original), 0o644); err != nil {
+		t.Fatalf("write original file: %v", err)
+	}
+
+	model := New(Config{
+		WorkspaceRoot:  tmp,
+		Theme:          &th,
+		FilePath:       path,
+		InitialContent: original,
+	})
+	m := &model
+	m.editor.SetValue(local)
+	m.markDirty()
+	if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+		t.Fatalf("write updated file: %v", err)
+	}
+
+	if cmd := m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged}); cmd != nil {
+		t.Fatalf("did not expect dirty buffer warning to return command")
+	}
+	if got := m.editor.Value(); got != local {
+		t.Fatalf("expected dirty local buffer to be preserved, got %q", got)
+	}
+	if !m.dirty {
+		t.Fatalf("expected dirty state to be preserved")
+	}
+	if !m.showFileChangeModal {
+		t.Fatalf("expected file change modal for dirty buffer")
+	}
+	if !m.fileStale || m.fileMissing {
+		t.Fatalf("expected stale non-missing file, got stale=%v missing=%v", m.fileStale, m.fileMissing)
+	}
+	want := "changed.http changed on disk. Using current buffer."
+	if m.statusMessage.text != want {
+		t.Fatalf("expected status message %q, got %q", want, m.statusMessage.text)
+	}
+	if m.statusMessage.level != statusWarn {
+		t.Fatalf("expected warning status level, got %v", m.statusMessage.level)
+	}
+}
+
+func TestFileMissingDoesNotClearCleanBuffer(t *testing.T) {
+	tmp := t.TempDir()
+	th := theme.DefaultTheme()
+	path := filepath.Join(tmp, "missing.http")
+	content := "GET https://old.example\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write original file: %v", err)
+	}
+
+	model := New(Config{
+		WorkspaceRoot:  tmp,
+		Theme:          &th,
+		FilePath:       path,
+		InitialContent: content,
+	})
+	m := &model
+	if err := os.Remove(path); err != nil {
+		t.Fatalf("remove file: %v", err)
+	}
+
+	if cmd := m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventMissing}); cmd != nil {
+		t.Fatalf("did not expect missing-file warning to return command")
+	}
+	if got := m.editor.Value(); got != content {
+		t.Fatalf("expected clean buffer to be preserved after deletion, got %q", got)
+	}
+	if !m.showFileChangeModal {
+		t.Fatalf("expected file change modal for missing file")
+	}
+	if !m.fileStale || !m.fileMissing {
+		t.Fatalf("expected stale missing file, got stale=%v missing=%v", m.fileStale, m.fileMissing)
+	}
+	want := "missing.http removed on disk. Using current buffer."
+	if m.statusMessage.text != want {
+		t.Fatalf("expected status message %q, got %q", want, m.statusMessage.text)
+	}
+	if m.statusMessage.level != statusWarn {
+		t.Fatalf("expected warning status level, got %v", m.statusMessage.level)
+	}
+}
+
 func TestOpenFileSetsHistoryScopeToRequest(t *testing.T) {
 	tmp := t.TempDir()
 	th := theme.DefaultTheme()

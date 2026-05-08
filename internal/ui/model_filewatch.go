@@ -1,7 +1,10 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -70,25 +73,63 @@ func (m *Model) nextFileWatchMsgCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) handleFileChangeEvent(msg fileChangedMsg) {
+func (m *Model) handleFileChangeEvent(msg fileChangedMsg) tea.Cmd {
 	if msg.path == "" || !util.SamePath(msg.path, m.currentFile) {
-		return
+		return nil
 	}
+	if msg.kind == watcher.EventChanged && !m.dirty {
+		return m.autoReloadChangedFile(msg.path)
+	}
+	m.showFileChangeWarning(msg.path, msg.kind, "")
+	return nil
+}
+
+func (m *Model) autoReloadChangedFile(path string) tea.Cmd {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			m.showFileChangeWarning(path, watcher.EventMissing, "")
+			return nil
+		}
+		text := fmt.Sprintf("%s changed on disk but could not be reloaded: %v", fileDisplayName(path), err)
+		m.showFileChangeWarning(path, watcher.EventChanged, text)
+		return nil
+	}
+
+	m.applyDiskContent(path, data, diskContentOptions{PreserveView: true})
+	text := fmt.Sprintf("↻ Reloaded %s (file changed outside Resterm)", fileDisplayName(path))
+	return func() tea.Msg {
+		return statusMsg{text: text, level: statusWarn}
+	}
+}
+
+func (m *Model) showFileChangeWarning(path string, kind watcher.EventKind, text string) {
 	m.fileStale = true
-	m.fileMissing = msg.kind == watcher.EventMissing
+	m.fileMissing = kind == watcher.EventMissing
 	m.pendingReloadConfirm = false
 	m.showHelp = false
-	name := filepath.Base(msg.path)
-	if name == "" {
-		name = "File"
+	text = strings.TrimSpace(text)
+	if text == "" {
+		text = fileChangeMessage(path, kind)
 	}
-	title := fmt.Sprintf("%s changed on disk. Using current buffer.", name)
-	if m.fileMissing {
-		title = fmt.Sprintf("%s removed on disk. Using current buffer.", name)
-	}
-	text := strings.TrimSpace(title)
 	m.openFileChangeModal(text)
 	m.setStatusMessage(statusMsg{text: text, level: statusWarn})
+}
+
+func fileChangeMessage(path string, kind watcher.EventKind) string {
+	name := fileDisplayName(path)
+	if kind == watcher.EventMissing {
+		return fmt.Sprintf("%s removed on disk. Using current buffer.", name)
+	}
+	return fmt.Sprintf("%s changed on disk. Using current buffer.", name)
+}
+
+func fileDisplayName(path string) string {
+	name := filepath.Base(path)
+	if name == "" {
+		return "File"
+	}
+	return name
 }
 
 func (m *Model) openFileChangeModal(msg string) {
