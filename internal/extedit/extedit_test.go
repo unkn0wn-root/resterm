@@ -96,7 +96,10 @@ func TestSplit(t *testing.T) {
 		{
 			name: "quoted executable",
 			in:   `"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code" --wait`,
-			want: []string{"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code", "--wait"},
+			want: []string{
+				"/Applications/Visual Studio Code.app/Contents/Resources/app/bin/code",
+				"--wait",
+			},
 		},
 		{
 			name: "single quoted arg",
