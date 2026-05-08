@@ -343,6 +343,20 @@ type deleteMotionSpec struct {
 	linewise            bool
 }
 
+type editorInsertAction int
+
+const (
+	editorInsertAtCursor editorInsertAction = iota
+	editorInsertAfterCursor
+	editorInsertAtLineStartNonBlank
+	editorInsertAtLineEnd
+	editorInsertOpenLineBelow
+	editorInsertOpenLineAbove
+	editorInsertSubstituteChar
+	editorInsertSubstituteLine
+	editorInsertChangeToLineEnd
+)
+
 type motionSpan struct {
 	startLine int
 	endLine   int
@@ -1240,6 +1254,213 @@ func mapChangeMotionKeys(keys []string) []string {
 
 func classifyChangeMotion(keys []string) (deleteMotionSpec, error) {
 	return classifyMotion(mapChangeMotionKeys(keys), "change")
+}
+
+func (e requestEditor) ApplyInsertAction(
+	action editorInsertAction,
+) (requestEditor, tea.Cmd) {
+	editorPtr := &e
+	var cmd tea.Cmd
+
+	switch action {
+	case editorInsertAtCursor:
+		editorPtr.clearSelection()
+	case editorInsertAfterCursor:
+		editorPtr.clearSelection()
+		cursor := editorPtr.caretPosition()
+		lineLen := editorPtr.LineLength(cursor.Line)
+		targetCol := cursor.Column
+		if targetCol < lineLen {
+			targetCol++
+		} else {
+			targetCol = lineLen
+		}
+		editorPtr.moveCursorTo(cursor.Line, targetCol)
+	case editorInsertAtLineStartNonBlank:
+		editorPtr.clearSelection()
+		editorPtr.moveToLineStartNonBlank()
+	case editorInsertAtLineEnd:
+		editorPtr.clearSelection()
+		cursor := editorPtr.caretPosition()
+		editorPtr.moveCursorTo(cursor.Line, editorPtr.LineLength(cursor.Line))
+	case editorInsertOpenLineBelow:
+		cmd = editorPtr.openLineForInsert(true)
+	case editorInsertOpenLineAbove:
+		cmd = editorPtr.openLineForInsert(false)
+	case editorInsertSubstituteChar:
+		cmd = editorPtr.substituteCharForInsert()
+	case editorInsertSubstituteLine:
+		cmd = editorPtr.changeCurrentLineForInsert()
+	case editorInsertChangeToLineEnd:
+		cmd = editorPtr.changeToLineEndForInsert()
+	}
+
+	editorPtr.pendingMotion = ""
+	editorPtr.metadataHints.deactivate()
+	editorPtr.applySelectionHighlight()
+
+	var refreshCmd tea.Cmd
+	editorPtr.Model, refreshCmd = editorPtr.Model.Update(nil)
+	return e, batchCommands(cmd, refreshCmd)
+}
+
+func (e *requestEditor) openLineForInsert(below bool) tea.Cmd {
+	value := e.Value()
+	lines := strings.Split(value, "\n")
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+
+	line := e.Line()
+	if line < 0 {
+		line = 0
+	}
+	if line >= len(lines) {
+		line = len(lines) - 1
+	}
+
+	insertAt := line
+	if below {
+		insertAt = line + 1
+	}
+	if insertAt < 0 {
+		insertAt = 0
+	}
+	if insertAt > len(lines) {
+		insertAt = len(lines)
+	}
+
+	indent := leadingWhitespacePrefix(lines[line])
+	prevView := e.ViewStart()
+	e.pushUndoSnapshot()
+
+	lines = append(lines, "")
+	copy(lines[insertAt+1:], lines[insertAt:])
+	lines[insertAt] = indent
+
+	e.SetValue(strings.Join(lines, "\n"))
+	e.SetViewStart(prevView)
+	e.clearSelection()
+	e.moveCursorTo(insertAt, utf8.RuneCountInString(indent))
+	return nil
+}
+
+func leadingWhitespacePrefix(line string) string {
+	for i, r := range line {
+		if !unicode.IsSpace(r) {
+			return line[:i]
+		}
+	}
+	return line
+}
+
+func (e *requestEditor) substituteCharForInsert() tea.Cmd {
+	if text := e.selectedText(); text != "" {
+		if _, removed := e.removeSelection(); removed {
+			status := e.writeClipboardWithFallback(text, "Changed selection")
+			return toEditorEventCmd(editorEvent{status: &status})
+		}
+	}
+
+	cursor := e.caretPosition()
+	lineLen := e.LineLength(cursor.Line)
+	if cursor.Column >= lineLen {
+		e.clearSelection()
+		return nil
+	}
+
+	runes := []rune(e.Value())
+	if cursor.Offset < 0 || cursor.Offset >= len(runes) || runes[cursor.Offset] == '\n' {
+		e.clearSelection()
+		return nil
+	}
+
+	prevView := e.ViewStart()
+	e.pushUndoSnapshot()
+	removed := runes[cursor.Offset]
+	runes = append(runes[:cursor.Offset], runes[cursor.Offset+1:]...)
+
+	e.SetValue(string(runes))
+	e.SetViewStart(prevView)
+	e.clearSelection()
+	e.moveCursorTo(cursor.Line, cursor.Column)
+
+	status := e.writeClipboardWithFallback(string([]rune{removed}), "Changed character")
+	return toEditorEventCmd(editorEvent{status: &status})
+}
+
+func (e *requestEditor) changeCurrentLineForInsert() tea.Cmd {
+	if e.LineCount() == 0 {
+		e.clearSelection()
+		return nil
+	}
+
+	line := e.Line()
+	if line < 0 {
+		line = 0
+	}
+	if line >= e.LineCount() {
+		line = e.LineCount() - 1
+	}
+	if e.LineLength(line) == 0 {
+		e.clearSelection()
+		e.moveCursorTo(line, 0)
+		return nil
+	}
+
+	removed, ok := e.changeLines(line, line)
+	if !ok {
+		e.clearSelection()
+		e.moveCursorTo(line, 0)
+		return nil
+	}
+	status := e.writeClipboardWithFallback(removed, "Changed line")
+	return toEditorEventCmd(editorEvent{status: &status})
+}
+
+func (e *requestEditor) changeToLineEndForInsert() tea.Cmd {
+	if text := e.selectedText(); text != "" {
+		if _, removed := e.removeSelection(); removed {
+			status := e.writeClipboardWithFallback(text, "Changed selection")
+			return toEditorEventCmd(editorEvent{status: &status})
+		}
+	}
+
+	cursor := e.caretPosition()
+	lineLen := e.LineLength(cursor.Line)
+	if cursor.Column >= lineLen {
+		e.clearSelection()
+		return nil
+	}
+
+	start := cursor.Offset
+	end := e.offsetForPosition(cursor.Line, lineLen)
+	if end <= start {
+		e.clearSelection()
+		return nil
+	}
+
+	runes := []rune(e.Value())
+	if start < 0 || start >= len(runes) {
+		e.clearSelection()
+		return nil
+	}
+	if end > len(runes) {
+		end = len(runes)
+	}
+
+	prevView := e.ViewStart()
+	e.pushUndoSnapshot()
+	removed := string(runes[start:end])
+	runes = append(runes[:start], runes[end:]...)
+
+	e.SetValue(string(runes))
+	e.SetViewStart(prevView)
+	e.clearSelection()
+	e.moveCursorTo(cursor.Line, cursor.Column)
+
+	status := e.writeClipboardWithFallback(removed, "Changed to end of line")
+	return toEditorEventCmd(editorEvent{status: &status})
 }
 
 func (e requestEditor) DeleteCurrentLine() (requestEditor, tea.Cmd) {

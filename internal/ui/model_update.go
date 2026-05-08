@@ -1360,9 +1360,18 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				cmd := m.runDeleteToLineEnd()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			case "C":
+				cmd := m.runEditorInsertAction(editorInsertChangeToLineEnd)
+				return combine(cmd)
 			case "x":
 				cmd := m.runDeleteCharAtCursor()
 				m.suppressEditorKey = true
+				return combine(cmd)
+			case "s":
+				cmd := m.runEditorInsertAction(editorInsertSubstituteChar)
+				return combine(cmd)
+			case "S":
+				cmd := m.runEditorInsertAction(editorInsertSubstituteLine)
 				return combine(cmd)
 			case "c":
 				if m.editor.hasSelection() {
@@ -1381,8 +1390,19 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "i":
-				cmd := m.setInsertMode(true, true)
-				m.suppressEditorKey = true
+				cmd := m.runEditorInsertAction(editorInsertAtCursor)
+				return combine(cmd)
+			case "I":
+				cmd := m.runEditorInsertAction(editorInsertAtLineStartNonBlank)
+				return combine(cmd)
+			case "A":
+				cmd := m.runEditorInsertAction(editorInsertAtLineEnd)
+				return combine(cmd)
+			case "o":
+				cmd := m.runEditorInsertAction(editorInsertOpenLineBelow)
+				return combine(cmd)
+			case "O":
+				cmd := m.runEditorInsertAction(editorInsertOpenLineAbove)
 				return combine(cmd)
 			case "esc":
 				exitCmd := m.editor.ExitSearchMode()
@@ -1405,19 +1425,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				m.suppressEditorKey = true
 				return combine(cmd)
 			case "a":
-				editorPtr := &m.editor
-				editorPtr.ClearSelection()
-				pos := editorPtr.caretPosition()
-				lineLen := editorPtr.LineLength(pos.Line)
-				targetCol := pos.Column
-				if targetCol < lineLen {
-					targetCol++
-				} else {
-					targetCol = lineLen
-				}
-				editorPtr.moveCursorTo(pos.Line, targetCol)
-				cmd := m.setInsertMode(true, true)
-				m.suppressEditorKey = true
+				cmd := m.runEditorInsertAction(editorInsertAfterCursor)
 				return combine(cmd)
 			}
 			if updated, cmd, ok := m.editor.HandleMotion(keyStr); ok {
@@ -2048,6 +2056,14 @@ func (m *Model) mutateEditor(op func(requestEditor) (requestEditor, tea.Cmd)) te
 		m.markDirty()
 	}
 	return cmd
+}
+
+func (m *Model) runEditorInsertAction(action editorInsertAction) tea.Cmd {
+	actionCmd := m.mutateEditor(func(ed requestEditor) (requestEditor, tea.Cmd) {
+		return ed.ApplyInsertAction(action)
+	})
+	m.suppressEditorKey = true
+	return batchCommands(actionCmd, m.setInsertMode(true, true))
 }
 
 func (m *Model) runDeleteSelection() tea.Cmd {

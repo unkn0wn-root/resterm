@@ -1012,6 +1012,134 @@ func TestHandleKeyCCChangesLineAndEntersInsert(t *testing.T) {
 	}
 }
 
+func TestHandleKeyInsertEntriesEnterInsertMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		key        string
+		content    string
+		line       int
+		col        int
+		wantValue  string
+		wantLine   int
+		wantColumn int
+	}{
+		{
+			name:       "i inserts at cursor",
+			key:        "i",
+			content:    "abc",
+			col:        1,
+			wantValue:  "abc",
+			wantLine:   0,
+			wantColumn: 1,
+		},
+		{
+			name:       "a inserts after cursor",
+			key:        "a",
+			content:    "abc",
+			col:        1,
+			wantValue:  "abc",
+			wantLine:   0,
+			wantColumn: 2,
+		},
+		{
+			name:       "I inserts at first non blank",
+			key:        "I",
+			content:    "  abc",
+			col:        4,
+			wantValue:  "  abc",
+			wantLine:   0,
+			wantColumn: 2,
+		},
+		{
+			name:       "A inserts at line end",
+			key:        "A",
+			content:    "abc",
+			wantValue:  "abc",
+			wantLine:   0,
+			wantColumn: 3,
+		},
+		{
+			name:       "o opens below",
+			key:        "o",
+			content:    "  alpha\nbeta",
+			col:        2,
+			wantValue:  "  alpha\n  \nbeta",
+			wantLine:   1,
+			wantColumn: 2,
+		},
+		{
+			name:       "O opens above",
+			key:        "O",
+			content:    "  alpha\nbeta",
+			line:       1,
+			col:        1,
+			wantValue:  "  alpha\n\nbeta",
+			wantLine:   1,
+			wantColumn: 0,
+		},
+		{
+			name:       "s changes character",
+			key:        "s",
+			content:    "abc",
+			col:        1,
+			wantValue:  "ac",
+			wantLine:   0,
+			wantColumn: 1,
+		},
+		{
+			name:       "S changes line",
+			key:        "S",
+			content:    "alpha\nbeta",
+			line:       1,
+			col:        2,
+			wantValue:  "alpha\n",
+			wantLine:   1,
+			wantColumn: 0,
+		},
+		{
+			name:       "C changes to line end",
+			key:        "C",
+			content:    "alpha beta",
+			col:        6,
+			wantValue:  "alpha ",
+			wantLine:   0,
+			wantColumn: 6,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := newTestModelWithDoc(tt.content)
+			model.ready = true
+			_ = model.setFocus(focusEditor)
+			_ = model.setInsertMode(false, false)
+			editorPtr := &model.editor
+			editorPtr.moveCursorTo(tt.line, tt.col)
+
+			if cmd := model.handleKey(keyMsgFor(tt.key)); cmd != nil {
+				_ = cmd()
+			}
+
+			if !model.editorInsertMode {
+				t.Fatal("expected editor to enter insert mode")
+			}
+			if got := model.editor.Value(); got != tt.wantValue {
+				t.Fatalf("unexpected value:\nwant %q\n got %q", tt.wantValue, got)
+			}
+			pos := model.editor.caretPosition()
+			if pos.Line != tt.wantLine || pos.Column != tt.wantColumn {
+				t.Fatalf(
+					"expected cursor (%d,%d), got (%d,%d)",
+					tt.wantLine,
+					tt.wantColumn,
+					pos.Line,
+					pos.Column,
+				)
+			}
+		})
+	}
+}
+
 func TestHandleKeyPasteAfter(t *testing.T) {
 	if err := clipboard.WriteAll("ZZ"); err != nil {
 		t.Skipf("clipboard unavailable: %v", err)

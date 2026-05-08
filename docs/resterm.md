@@ -171,7 +171,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Show globals summary / clear globals and cookies | `Ctrl+G` / `Ctrl+Shift+G` (or `g Shift+G`) |
 | Quit | `Ctrl+Q` (or `Ctrl+D`) |
 
-The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), visual selections with `v` / `V`, yank and delete operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
+The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
 ### Custom bindings
 
