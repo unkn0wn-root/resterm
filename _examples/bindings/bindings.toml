@@ -26,5 +26,8 @@ sidebar_width_increase = ["g m"]
 # Open the environment selector.
 open_env_selector = ["ctrl+alt+e"]
 
+# Open the current or selected file in the external editor.
+open_file_in_editor = ["g e"]
+
 # Launch the theme selector.
 open_theme_selector = ["ctrl+alt+t", "f6"]

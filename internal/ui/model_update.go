@@ -120,6 +120,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleRawDumpLoaded(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case externalEditorMsg:
+		if cmd := m.handleExternalEditorMsg(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case profileNextIterationMsg:
 		if cmd := m.executeProfileIteration(); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -1048,6 +1052,8 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionOpenNewFileModal:
 		m.openNewFileModal()
 		return nil, true
+	case bindings.ActionOpenFileInEditor:
+		return m.openFileInEditor(), true
 	case bindings.ActionOpenThemeSelector:
 		m.openThemeSelector()
 		return nil, true

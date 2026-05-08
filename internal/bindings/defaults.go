@@ -19,6 +19,7 @@ var (
 	ActionOpenPathModal           ActionID = "open_path_modal"
 	ActionReloadWorkspace         ActionID = "reload_workspace"
 	ActionOpenNewFileModal        ActionID = "open_new_file_modal"
+	ActionOpenFileInEditor        ActionID = "open_file_in_editor"
 	ActionOpenThemeSelector       ActionID = "open_theme_selector"
 	ActionOpenTempDocument        ActionID = "open_temp_document"
 	ActionReparseDocument         ActionID = "reparse_document"
@@ -79,6 +80,7 @@ var definitions = []definition{
 	def(ActionOpenPathModal, false, "ctrl+o"),
 	def(ActionReloadWorkspace, false, "ctrl+shift+o", "g shift+o"),
 	def(ActionOpenNewFileModal, false, "ctrl+n"),
+	def(ActionOpenFileInEditor, false, "g e"),
 	def(ActionOpenThemeSelector, false, "ctrl+alt+t", "g m", "g shift+t"),
 	def(ActionOpenTempDocument, false, "ctrl+t"),
 	def(ActionReparseDocument, false, "ctrl+p", "ctrl+alt+p", "ctrl+shift+t"),
