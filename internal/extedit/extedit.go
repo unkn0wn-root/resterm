@@ -110,7 +110,7 @@ func split(s string) ([]string, error) {
 }
 
 func checkExe(path string, lookPath func(string) (string, error)) error {
-	if strings.TrimSpace(path) == "" {
+	if path == "" {
 		return ErrNoArgs
 	}
 	if _, err := lookPath(path); err != nil {

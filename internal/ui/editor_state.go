@@ -1305,29 +1305,12 @@ func (e requestEditor) ApplyInsertAction(
 }
 
 func (e *requestEditor) openLineForInsert(below bool) tea.Cmd {
-	value := e.Value()
-	lines := strings.Split(value, "\n")
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
+	lines := strings.Split(e.Value(), "\n")
 
 	line := e.Line()
-	if line < 0 {
-		line = 0
-	}
-	if line >= len(lines) {
-		line = len(lines) - 1
-	}
-
 	insertAt := line
 	if below {
 		insertAt = line + 1
-	}
-	if insertAt < 0 {
-		insertAt = 0
-	}
-	if insertAt > len(lines) {
-		insertAt = len(lines)
 	}
 
 	indent := leadingWhitespacePrefix(lines[line])
@@ -1370,11 +1353,6 @@ func (e *requestEditor) substituteCharForInsert() tea.Cmd {
 	}
 
 	runes := []rune(e.Value())
-	if cursor.Offset < 0 || cursor.Offset >= len(runes) || runes[cursor.Offset] == '\n' {
-		e.clearSelection()
-		return nil
-	}
-
 	prevView := e.ViewStart()
 	e.pushUndoSnapshot()
 	removed := runes[cursor.Offset]
@@ -1390,18 +1368,7 @@ func (e *requestEditor) substituteCharForInsert() tea.Cmd {
 }
 
 func (e *requestEditor) changeCurrentLineForInsert() tea.Cmd {
-	if e.LineCount() == 0 {
-		e.clearSelection()
-		return nil
-	}
-
 	line := e.Line()
-	if line < 0 {
-		line = 0
-	}
-	if line >= e.LineCount() {
-		line = e.LineCount() - 1
-	}
 	if e.LineLength(line) == 0 {
 		e.clearSelection()
 		e.moveCursorTo(line, 0)
@@ -1435,20 +1402,8 @@ func (e *requestEditor) changeToLineEndForInsert() tea.Cmd {
 
 	start := cursor.Offset
 	end := e.offsetForPosition(cursor.Line, lineLen)
-	if end <= start {
-		e.clearSelection()
-		return nil
-	}
 
 	runes := []rune(e.Value())
-	if start < 0 || start >= len(runes) {
-		e.clearSelection()
-		return nil
-	}
-	if end > len(runes) {
-		end = len(runes)
-	}
-
 	prevView := e.ViewStart()
 	e.pushUndoSnapshot()
 	removed := string(runes[start:end])
