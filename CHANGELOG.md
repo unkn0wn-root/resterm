@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.37.1](https://github.com/unkn0wn-root/resterm/compare/v0.36.3...v0.37.1) (2026-05-08)
+
+
+### Features
+
+* add Vim style insert entry keys ([#271](https://github.com/unkn0wn-root/resterm/issues/271)) ([728602f](https://github.com/unkn0wn-root/resterm/commit/728602f61d36bdc86f6d102a51c4c2aa3518a0a8))
+
 ### [0.36.3](https://github.com/unkn0wn-root/resterm/compare/v0.36.2...v0.36.3) (2026-05-06)
 
 ### [0.36.2](https://github.com/unkn0wn-root/resterm/compare/v0.36.1...v0.36.2) (2026-05-06)
