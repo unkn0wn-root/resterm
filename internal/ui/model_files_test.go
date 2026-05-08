@@ -196,7 +196,11 @@ func TestFileChangeAutoReloadsCleanBuffer(t *testing.T) {
 		t.Fatalf("did not expect file change modal for clean auto reload")
 	}
 	if m.fileStale || m.fileMissing {
-		t.Fatalf("expected stale/missing flags to clear, got stale=%v missing=%v", m.fileStale, m.fileMissing)
+		t.Fatalf(
+			"expected stale/missing flags to clear, got stale=%v missing=%v",
+			m.fileStale,
+			m.fileMissing,
+		)
 	}
 	if len(m.doc.Requests) != 1 || m.doc.Requests[0].URL != "https://new.example" {
 		t.Fatalf("expected parsed document to refresh, got %#v", m.doc.Requests)
@@ -238,7 +242,9 @@ func TestFileChangeDirtyBufferDoesNotAutoReload(t *testing.T) {
 		t.Fatalf("write updated file: %v", err)
 	}
 
-	if cmd := m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventChanged}); cmd != nil {
+	if cmd := m.handleFileChangeEvent(
+		fileChangedMsg{path: path, kind: watcher.EventChanged},
+	); cmd != nil {
 		t.Fatalf("did not expect dirty buffer warning to return command")
 	}
 	if got := m.editor.Value(); got != local {
@@ -251,7 +257,11 @@ func TestFileChangeDirtyBufferDoesNotAutoReload(t *testing.T) {
 		t.Fatalf("expected file change modal for dirty buffer")
 	}
 	if !m.fileStale || m.fileMissing {
-		t.Fatalf("expected stale non-missing file, got stale=%v missing=%v", m.fileStale, m.fileMissing)
+		t.Fatalf(
+			"expected stale non-missing file, got stale=%v missing=%v",
+			m.fileStale,
+			m.fileMissing,
+		)
 	}
 	if !m.pendingReloadConfirm {
 		t.Fatalf("expected file change modal to arm reload confirmation")
@@ -264,7 +274,10 @@ func TestFileChangeDirtyBufferDoesNotAutoReload(t *testing.T) {
 		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
 	}
 	if m.statusMessage.text != "" {
-		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"did not expect modal warning to persist in status bar, got %q",
+			m.statusMessage.text,
+		)
 	}
 }
 
@@ -288,7 +301,9 @@ func TestFileMissingDoesNotClearCleanBuffer(t *testing.T) {
 		t.Fatalf("remove file: %v", err)
 	}
 
-	if cmd := m.handleFileChangeEvent(fileChangedMsg{path: path, kind: watcher.EventMissing}); cmd != nil {
+	if cmd := m.handleFileChangeEvent(
+		fileChangedMsg{path: path, kind: watcher.EventMissing},
+	); cmd != nil {
 		t.Fatalf("did not expect missing-file warning to return command")
 	}
 	if got := m.editor.Value(); got != content {
@@ -305,7 +320,10 @@ func TestFileMissingDoesNotClearCleanBuffer(t *testing.T) {
 		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
 	}
 	if m.statusMessage.text != "" {
-		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"did not expect modal warning to persist in status bar, got %q",
+			m.statusMessage.text,
+		)
 	}
 }
 
@@ -369,7 +387,10 @@ func TestFileChangeDirtyReloadUsesModalConfirmation(t *testing.T) {
 		t.Fatalf("expected file change modal to arm reload confirmation")
 	}
 	if m.statusMessage.text != "" {
-		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"did not expect modal warning to persist in status bar, got %q",
+			m.statusMessage.text,
+		)
 	}
 
 	cmd := m.reloadFileFromDisk()
@@ -448,6 +469,9 @@ func TestManualDirtyReloadRequiresConfirmation(t *testing.T) {
 		t.Fatalf("expected modal message %q, got %q", want, m.fileChangeMessage)
 	}
 	if m.statusMessage.text != "" {
-		t.Fatalf("did not expect modal warning to persist in status bar, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"did not expect modal warning to persist in status bar, got %q",
+			m.statusMessage.text,
+		)
 	}
 }

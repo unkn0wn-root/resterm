@@ -98,7 +98,11 @@ func (m *Model) autoReloadChangedFile(path string) tea.Cmd {
 			m.showFileChangeWarning(path, watcher.EventMissing, "")
 			return nil
 		}
-		text := fmt.Sprintf("%s changed on disk but could not be reloaded: %v", fileDisplayName(path), err)
+		text := fmt.Sprintf(
+			"%s changed on disk but could not be reloaded: %v",
+			fileDisplayName(path),
+			err,
+		)
 		m.showFileChangeWarning(path, watcher.EventChanged, text)
 		return nil
 	}

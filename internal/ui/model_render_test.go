@@ -336,7 +336,11 @@ func TestStatusBarWarnDoesNotReuseContextKeyColor(t *testing.T) {
 
 	style := model.statusBarMessageStyle(statusWarn)
 	if got := style.GetForeground(); got != lipgloss.Color(statusMsgWarnDarkColor) {
-		t.Fatalf("expected warning foreground %v, got %v", lipgloss.Color(statusMsgWarnDarkColor), got)
+		t.Fatalf(
+			"expected warning foreground %v, got %v",
+			lipgloss.Color(statusMsgWarnDarkColor),
+			got,
+		)
 	}
 	if got := style.GetForeground(); got == model.theme.StatusBarKey.GetForeground() {
 		t.Fatalf("expected warning color to differ from status bar key color %v", got)
