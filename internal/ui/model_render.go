@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/charmbracelet/x/cellbuf"
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -156,6 +157,20 @@ func (m Model) View() string {
 		return m.renderWithinAppFrame(m.renderLayoutSaveModal())
 	}
 
+	base := m.renderAppContent()
+	if m.showHelp {
+		return m.renderWithinAppFrame(m.renderHelpOverlay())
+	}
+	if m.showThemeSelector {
+		return m.renderWithinAppFrame(m.renderThemeModal())
+	}
+	if m.showEnvSelector {
+		return m.renderWithinAppFrame(m.renderEnvironmentModal())
+	}
+	return m.renderWithinAppFrame(base)
+}
+
+func (m Model) renderAppContent() string {
 	filePane := m.renderFilePane()
 	fileWidth := lipgloss.Width(filePane)
 	editorPane := m.renderEditorPane()
@@ -235,17 +250,7 @@ func (m Model) View() string {
 		m.renderStatusBar(),
 	)
 	header := m.renderHeader()
-	base := lipgloss.JoinVertical(lipgloss.Left, header, body)
-	if m.showHelp {
-		return m.renderWithinAppFrame(m.renderHelpOverlay())
-	}
-	if m.showThemeSelector {
-		return m.renderWithinAppFrame(m.renderThemeModal())
-	}
-	if m.showEnvSelector {
-		return m.renderWithinAppFrame(m.renderEnvironmentModal())
-	}
-	return m.renderWithinAppFrame(base)
+	return lipgloss.JoinVertical(lipgloss.Left, header, body)
 }
 
 func (m Model) renderWithinAppFrame(content string) string {
@@ -293,8 +298,63 @@ func (m Model) renderWithinAppFrame(content string) string {
 	return framed
 }
 
+func (m Model) renderCenteredModal(box string) string {
+	width := maxInt(m.width, lipgloss.Width(box))
+	height := maxInt(m.height, lipgloss.Height(box))
+	if width <= 0 || height <= 0 {
+		return box
+	}
+
+	base := m.renderModalUnderlay(width, height)
+
+	x := maxInt((width-lipgloss.Width(box))/2, 0)
+	y := maxInt((height-lipgloss.Height(box))/2, 0)
+	return m.renderModalOverlay(base, box, x, y, width, height)
+}
+
+func (m Model) renderModalUnderlay(width, height int) string {
+	underlay := m
+	underlay.renderingModalUnderlay = true
+
+	return lipgloss.Place(
+		width,
+		height,
+		lipgloss.Top,
+		lipgloss.Left,
+		underlay.renderAppContent(),
+		lipgloss.WithWhitespaceChars(" "),
+	)
+}
+
+func (m Model) renderModalOverlay(base, box string, x, y, width, height int) string {
+	buf := cellbuf.NewBuffer(width, height)
+	cellbuf.SetContent(buf, base)
+
+	boxWidth := minInt(lipgloss.Width(box), width-x)
+	boxHeight := minInt(lipgloss.Height(box), height-y)
+	if boxWidth <= 0 || boxHeight <= 0 {
+		return strings.ReplaceAll(cellbuf.Render(buf), "\r\n", "\n")
+	}
+
+	modal := cellbuf.NewBuffer(boxWidth, boxHeight)
+	cellbuf.SetContent(modal, box)
+	for row := 0; row < boxHeight; row++ {
+		for col := 0; col < boxWidth; col++ {
+			cell := modal.Cell(col, row)
+			if cell == nil || cell.Width == 0 {
+				continue
+			}
+
+			buf.SetCell(x+col, y+row, cell)
+		}
+	}
+
+	return strings.ReplaceAll(cellbuf.Render(buf), "\r\n", "\n")
+}
+
 func (m Model) renderFilePane() string {
-	paneActive := m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows
+	paneActive := !m.renderingModalUnderlay &&
+		(m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows)
 	style := m.sidebarFrameStyle(paneActive)
 	collapsed := m.effectiveRegionCollapsed(paneRegionSidebar)
 	frameWidth := style.GetHorizontalFrameSize()
@@ -571,7 +631,7 @@ func (m Model) renderNavigatorFilter(width int, active bool) string {
 	if tags := m.navigatorTagChips(); tags != "" {
 		row = lipgloss.JoinHorizontal(lipgloss.Left, row, " ", tags)
 	}
-	if !active && !input.Focused() {
+	if !active && (!input.Focused() || m.renderingModalUnderlay) {
 		row = m.themeRuntime.inactiveRendered(row)
 	}
 	return lipgloss.NewStyle().Width(width).Render(row)
@@ -751,7 +811,7 @@ func methodColor(th theme.Theme, method string) lipgloss.Color {
 }
 
 func (m Model) renderEditorPane() string {
-	active := m.focus == focusEditor
+	active := !m.renderingModalUnderlay && m.focus == focusEditor
 	style := m.editorFrameStyle(active)
 	collapsed := m.effectiveRegionCollapsed(paneRegionEditor)
 	if collapsed {
@@ -759,7 +819,7 @@ func (m Model) renderEditorPane() string {
 	}
 
 	content := m.editor.View()
-	if m.focus == focusEditor && m.editorInsertMode {
+	if active && m.editorInsertMode {
 		content = m.renderMetadataHintPopup(content)
 	}
 	contentWidth := lipgloss.Width(content)
@@ -803,7 +863,7 @@ func (m Model) editorFrameStyle(active bool) lipgloss.Style {
 }
 
 func (m Model) renderResponsePane(availableWidth int) string {
-	active := m.focus == focusResponse
+	active := !m.renderingModalUnderlay && m.focus == focusResponse
 	style := m.respFrameStyle(active)
 	collapsed := m.effectiveRegionCollapsed(paneRegionResponse)
 
@@ -2692,15 +2752,7 @@ func (m Model) renderRequestDetailsModal() string {
 		instructionsView,
 	)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderHistoryPreviewModal() string {
@@ -2773,15 +2825,7 @@ func (m Model) renderHistoryPreviewModal() string {
 		instructionsView,
 	)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderErrorModal() string {
@@ -2823,10 +2867,7 @@ func (m Model) renderErrorModal() string {
 	)
 	boxStyle := m.theme.BrowserBorder.Width(width)
 	box := boxStyle.Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderLayoutSaveModal() string {
@@ -2874,10 +2915,7 @@ func (m Model) renderLayoutSaveModal() string {
 		hints,
 	)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderEnvironmentModal() string {
@@ -2900,15 +2938,7 @@ func (m Model) renderEnvironmentModal() string {
 	)
 
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderFileChangeModal() string {
@@ -2951,15 +2981,7 @@ func (m Model) renderFileChangeModal() string {
 		infoLine,
 	)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderThemeModal() string {
@@ -2982,15 +3004,7 @@ func (m Model) renderThemeModal() string {
 	)
 
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(
-		m.width,
-		m.height,
-		lipgloss.Center,
-		lipgloss.Center,
-		box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderHelpOverlay() string {
@@ -3077,10 +3091,7 @@ func (m Model) renderHelpOverlay() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, topView, bodyView)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderHelpFilter(width int) string {
@@ -3159,10 +3170,7 @@ func (m Model) renderNewFileModal() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderOpenModal() string {
@@ -3204,10 +3212,7 @@ func (m Model) renderOpenModal() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) renderResponseSaveModal() string {
@@ -3256,10 +3261,7 @@ func (m Model) renderResponseSaveModal() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, lines...)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box,
-		lipgloss.WithWhitespaceChars(" "),
-		lipgloss.WithWhitespaceForeground(m.themeRuntime.modalBackdropColor(m.theme)),
-	)
+	return m.renderCenteredModal(box)
 }
 
 func (m Model) focusLabel() string {
