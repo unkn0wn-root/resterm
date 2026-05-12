@@ -145,6 +145,64 @@ func TestNavigatorFilterBandShowsOnlyOnDemand(t *testing.T) {
 	}
 }
 
+func TestCenteredModalUnderlayKeepsAppVisible(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := newTestModelWithDoc(sampleRequestDoc)
+	model.width = 100
+	model.height = 30
+	model.ready = true
+	model.focus = focusFile
+	model.theme.PaneBorderFocusFile = lipgloss.Color("#111111")
+	model.theme.PaneDivider = lipgloss.NewStyle().Foreground(lipgloss.Color("#222222"))
+	_ = model.applyLayout()
+	model.openErrorModal("network down")
+
+	view := model.View()
+	plain := ansi.Strip(view)
+	if !strings.Contains(plain, "Error") || !strings.Contains(plain, "network down") {
+		t.Fatalf("expected error modal content, got %q", plain)
+	}
+	if !strings.Contains(plain, "RESTERM") {
+		t.Fatalf("expected app content to remain visible behind modal, got %q", plain)
+	}
+	if strings.Contains(view, "\x1b[38;2;17;17;17m") {
+		t.Fatalf("expected modal underlay to remove pane focus color")
+	}
+	if !strings.Contains(view, "\x1b[38;2;34;34;34m") {
+		t.Fatalf("expected modal underlay to render inactive pane divider color")
+	}
+}
+
+func TestCenteredModalKeepsThemeSurface(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := newTestModelWithDoc(sampleRequestDoc)
+	model.width = 100
+	model.height = 30
+	model.ready = true
+	model.theme.ModalInputBackground = lipgloss.Color("#123456")
+	_ = model.applyLayout()
+	model.openNewFileModal()
+
+	view := model.View()
+	line := lineWith(view, "New Request File")
+	if line == "" {
+		t.Fatalf("expected new file modal title, got %q", ansi.Strip(view))
+	}
+	if strings.Contains(line, "48;2;18;52;86") {
+		t.Fatalf("expected modal title to keep original surface, got %q", line)
+	}
+}
+
 func TestNavigatorRenderStateMarksCurrentFileAndActiveRequest(t *testing.T) {
 	content := "### first\n# @name first\nGET https://example.com/one\n\n### second\n# @name second\nPOST https://example.com/two\n"
 	model := newTestModelWithDoc(content)

@@ -132,6 +132,23 @@ func TestHandleKeyIgnoredWhileErrorModalVisible(t *testing.T) {
 	}
 }
 
+func TestModalPreservesBackgroundRunSubscription(t *testing.T) {
+	model := newTestModelWithDoc(sampleRequestDoc)
+	model.openNewFileModal()
+
+	next, cmd := model.Update(runEvtMsg{})
+	if cmd == nil {
+		t.Fatalf("expected modal update to keep waiting for run events")
+	}
+	updated, ok := next.(Model)
+	if !ok {
+		t.Fatalf("expected ui.Model update to return Model, got %T", next)
+	}
+	if !updated.showNewFileModal {
+		t.Fatalf("expected modal to remain open")
+	}
+}
+
 func TestHandleKeyGhShrinksEditor(t *testing.T) {
 	model := New(Config{WorkspaceRoot: t.TempDir()})
 	model.width = 160
