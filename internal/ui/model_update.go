@@ -193,34 +193,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc", "enter":
 				m.closeErrorModal()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			}
 		}
-		return m, nil
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showFileChangeModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if cmd, handled := m.handleReloadBinding(keyMsg); handled {
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			}
 			switch keyMsg.String() {
 			case "esc":
 				m.closeFileChangeModal()
-				if len(cmds) == 0 {
-					return m, nil
-				}
-				return m, tea.Batch(cmds...)
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			}
 		}
-		if len(cmds) == 0 {
-			return m, nil
-		}
-		return m, tea.Batch(cmds...)
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showHistoryPreview {
@@ -229,42 +223,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc", "enter":
 				m.closeHistoryPreview()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "down", "j":
 				if vp != nil {
 					vp.ScrollDown(1)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "up", "k":
 				if vp != nil {
 					vp.ScrollUp(1)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "pgdown", "ctrl+f":
 				if vp != nil {
 					vp.ScrollDown(vp.Height)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "pgup", "ctrl+b", "ctrl+u":
 				if vp != nil {
 					vp.ScrollUp(vp.Height)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "home":
 				if vp != nil {
 					vp.GotoTop()
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "end":
 				if vp != nil {
 					vp.GotoBottom()
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			}
 		}
-		return m, nil
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showRequestDetails {
@@ -273,64 +267,65 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc", "enter":
 				m.closeRequestDetails()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "down", "j":
 				if vp != nil {
 					vp.ScrollDown(1)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "up", "k":
 				if vp != nil {
 					vp.ScrollUp(1)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "pgdown", "ctrl+f":
 				if vp != nil {
 					vp.ScrollDown(vp.Height)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "pgup", "ctrl+b", "ctrl+u":
 				if vp != nil {
 					vp.ScrollUp(vp.Height)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "home":
 				if vp != nil {
 					vp.GotoTop()
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "end":
 				if vp != nil {
 					vp.GotoBottom()
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			}
 		}
-		return m, nil
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showResponseSaveModal {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
 			if m.responseSaveJustOpened {
 				m.responseSaveJustOpened = false
-				return m, nil
+				return m, batchCommands(cmds...)
 			}
 			switch keyMsg.String() {
 			case "esc":
 				m.closeResponseSaveModal()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "enter":
 				cmd := m.submitResponseSave()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			}
+			var inputCmd tea.Cmd
+			m.responseSaveInput, inputCmd = m.responseSaveInput.Update(msg)
+			return m, batchCommands(append(cmds, inputCmd)...)
 		}
-		var inputCmd tea.Cmd
-		m.responseSaveInput, inputCmd = m.responseSaveInput.Update(msg)
-		return m, inputCmd
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showOpenModal {
@@ -338,17 +333,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc":
 				m.closeOpenModal()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "enter":
 				cmd := m.submitOpenPath()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			}
+			var inputCmd tea.Cmd
+			m.openPathInput, inputCmd = m.openPathInput.Update(msg)
+			return m, batchCommands(append(cmds, inputCmd)...)
 		}
-		var inputCmd tea.Cmd
-		m.openPathInput, inputCmd = m.openPathInput.Update(msg)
-		return m, inputCmd
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showNewFileModal {
@@ -356,24 +352,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc":
 				m.closeNewFileModal()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "enter":
 				cmd := m.submitNewFile()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			case "tab", "shift+tab", "right", "left":
 				if keyMsg.String() == "left" || keyMsg.String() == "shift+tab" {
 					m.cycleNewFileExtension(-1)
 				} else {
 					m.cycleNewFileExtension(1)
 				}
-				return m, nil
+				return m, batchCommands(cmds...)
 			}
+			var inputCmd tea.Cmd
+			m.newFileInput, inputCmd = m.newFileInput.Update(msg)
+			return m, batchCommands(append(cmds, inputCmd)...)
 		}
-		var inputCmd tea.Cmd
-		m.newFileInput, inputCmd = m.newFileInput.Update(msg)
-		return m, inputCmd
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showLayoutSaveModal {
@@ -381,15 +378,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "y", "Y":
 				cmd := m.saveLayoutSettings()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			case "n", "N", "esc":
 				m.closeLayoutSaveModal()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			}
 		}
-		return m, nil
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showSearchPrompt {
@@ -398,26 +395,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.searchJustOpened = false
 				switch keyMsg.String() {
 				case "shift+f", "F":
-					return m, nil
+					return m, batchCommands(cmds...)
 				}
 			}
 			switch keyMsg.String() {
 			case "esc":
 				m.closeSearchPrompt()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "ctrl+r":
 				m.toggleSearchMode()
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "enter":
 				cmd := m.submitSearchPrompt()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			}
+			var inputCmd tea.Cmd
+			m.searchInput, inputCmd = m.searchInput.Update(msg)
+			return m, batchCommands(append(cmds, inputCmd)...)
 		}
-		var inputCmd tea.Cmd
-		m.searchInput, inputCmd = m.searchInput.Update(msg)
-		return m, inputCmd
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showHelp {
@@ -432,20 +430,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc":
 				m.showThemeSelector = false
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "enter":
 				cmd := m.applyThemeSelection()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			case "?", "shift+/":
 				m.toggleHelp()
-				return m, nil
+				return m, batchCommands(cmds...)
 			}
+			var themeCmd tea.Cmd
+			m.themeList, themeCmd = m.themeList.Update(msg)
+			return m, batchCommands(append(cmds, themeCmd)...)
 		}
-		var themeCmd tea.Cmd
-		m.themeList, themeCmd = m.themeList.Update(msg)
-		return m, themeCmd
+		return m, batchCommands(cmds...)
 	}
 
 	if m.showEnvSelector {
@@ -453,20 +452,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch keyMsg.String() {
 			case "esc":
 				m.showEnvSelector = false
-				return m, nil
+				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			case "enter":
 				cmd := m.applyEnvironmentSelection()
-				return m, cmd
+				return m, batchCommands(append(cmds, cmd)...)
 			case "?", "shift+/":
 				m.toggleHelp()
-				return m, nil
+				return m, batchCommands(cmds...)
 			}
+			var envCmd tea.Cmd
+			m.envList, envCmd = m.envList.Update(msg)
+			return m, batchCommands(append(cmds, envCmd)...)
 		}
-		var envCmd tea.Cmd
-		m.envList, envCmd = m.envList.Update(msg)
-		return m, envCmd
+		return m, batchCommands(cmds...)
 	}
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok {
@@ -1073,12 +1073,12 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionCancelRun:
 		return m.cancelActiveRuns(), true
 	case bindings.ActionSidebarWidthDecrease:
-		if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
+		if m.navigatorPaneFocused() {
 			return m.runSidebarWidthResize(-sidebarWidthStep), true
 		}
 		return m.runEditorResize(-editorSplitStep), true
 	case bindings.ActionSidebarWidthIncrease:
-		if m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows {
+		if m.navigatorPaneFocused() {
 			return m.runSidebarWidthResize(sidebarWidthStep), true
 		}
 		return m.runEditorResize(editorSplitStep), true
@@ -1179,21 +1179,28 @@ func (m *Model) shouldSendEditorRequest(msg tea.KeyMsg, insertMode bool) bool {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) tea.Cmd {
-	if m.modalBlocksKeys() {
+	if m.modalCapturesGlobalKeys() {
 		return nil
 	}
 	return m.handleKeyWithChord(msg, true)
 }
 
-func (m *Model) modalBlocksKeys() bool {
-	return m.showErrorModal ||
-		m.showOpenModal ||
-		m.showNewFileModal ||
-		m.showEnvSelector ||
-		m.showHistoryPreview ||
-		m.showRequestDetails ||
-		m.showLayoutSaveModal ||
-		m.showFileChangeModal
+func (m *Model) modalCapturesGlobalKeys() bool {
+	switch {
+	case m.showErrorModal,
+		m.showOpenModal,
+		m.showNewFileModal,
+		m.showResponseSaveModal,
+		m.showEnvSelector,
+		m.showThemeSelector,
+		m.showHistoryPreview,
+		m.showRequestDetails,
+		m.showLayoutSaveModal,
+		m.showFileChangeModal:
+		return true
+	default:
+		return false
+	}
 }
 
 func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {

@@ -353,8 +353,7 @@ func (m Model) renderModalOverlay(base, box string, x, y, width, height int) str
 }
 
 func (m Model) renderFilePane() string {
-	paneActive := !m.renderingModalUnderlay &&
-		(m.focus == focusFile || m.focus == focusRequests || m.focus == focusWorkflows)
+	paneActive := m.navigatorPaneActive()
 	style := m.sidebarFrameStyle(paneActive)
 	collapsed := m.effectiveRegionCollapsed(paneRegionSidebar)
 	frameWidth := style.GetHorizontalFrameSize()
@@ -420,6 +419,19 @@ func (m Model) renderFilePane() string {
 		filePaneTitle,
 		content,
 	)
+}
+
+func (m Model) navigatorPaneActive() bool {
+	return m.navigatorPaneFocused() && !m.renderingModalUnderlay
+}
+
+func (m Model) navigatorPaneFocused() bool {
+	switch m.focus {
+	case focusFile, focusRequests, focusWorkflows:
+		return true
+	default:
+		return false
+	}
 }
 
 func (m Model) navigatorRenderState() navigator.RenderState {
