@@ -993,6 +993,93 @@ func TestWorkflowRunKeepsSpinnerActiveUntilRunDone(t *testing.T) {
 	}
 }
 
+func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
+	m := newOrchTestModel(t, Config{})
+	doc := &restfile.Document{
+		Requests: []*restfile.Request{{
+			Method: "GET",
+			URL:    "https://example.com/one",
+			Metadata: restfile.RequestMetadata{
+				Name: "one",
+			},
+		}},
+	}
+	wf := restfile.Workflow{
+		Name: "demo",
+		Steps: []restfile.WorkflowStep{{
+			Name:  "One",
+			Using: "one",
+		}},
+	}
+	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-502", Env: "dev"})
+	if err != nil {
+		t.Fatalf("PrepareWorkflow: %v", err)
+	}
+	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	at := time.Unix(26, 0)
+
+	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
+	applyRunEvt(t, &m, core.WfStepStart{
+		Meta: core.NewMeta(pl.Run, at),
+		Step: core.StepMeta{
+			Index: 0,
+			Name:  "One",
+			Kind:  restfile.WorkflowStepKindRequest,
+		},
+		Doc:     doc,
+		Request: doc.Requests[0],
+	})
+	applyRunEvt(t, &m, core.ReqStart{
+		Meta: core.NewMeta(pl.Run, at),
+		Req:  core.ReqMeta{Index: 1, Label: "One", Env: "dev"},
+		Doc:  doc, Request: doc.Requests[0],
+	})
+
+	res := engine.RequestResult{
+		Response: testHTTPResp(
+			"https://example.com/one",
+			502,
+			`{"error":"bad gateway"}`,
+			9*time.Millisecond,
+		),
+		Executed:    cloneRequest(doc.Requests[0]),
+		RequestText: "GET https://example.com/one\n",
+		Environment: "dev",
+	}
+	applyRunEvt(t, &m, core.ReqDone{
+		Meta:   core.NewMeta(pl.Run, at.Add(9*time.Millisecond)),
+		Req:    core.ReqMeta{Index: 1, Label: "One", Env: "dev"},
+		Result: res,
+	})
+	if m.showErrorModal {
+		t.Fatalf("expected workflow step 502 to stay in workflow UI, got modal %q", m.errorModalMessage)
+	}
+	if m.suppressNextErrorModal {
+		t.Fatal("expected modal suppression to be consumed by the step status update")
+	}
+
+	applyRunEvt(t, &m, core.WfStepDone{
+		Meta: core.NewMeta(pl.Run, at.Add(9*time.Millisecond)),
+		Step: core.StepMeta{
+			Index: 0,
+			Name:  "One",
+			Kind:  restfile.WorkflowStepKindRequest,
+		},
+		Result: res,
+	})
+	applyRunEvt(t, &m, core.RunDone{
+		Meta: core.NewMeta(pl.Run, at.Add(10*time.Millisecond)),
+	})
+
+	if m.showErrorModal {
+		t.Fatalf("expected failed workflow summary not to open modal, got %q", m.errorModalMessage)
+	}
+	if m.statusMessage.level != statusWarn ||
+		!strings.Contains(m.statusMessage.text, "unexpected status code 502") {
+		t.Fatalf("expected workflow warning summary for 502, got %+v", m.statusMessage)
+	}
+}
+
 func TestWorkflowUIDrivenResponseKeepsSpinnerActiveBetweenSteps(t *testing.T) {
 	m := newOrchTestModel(t, Config{})
 	doc := &restfile.Document{
@@ -1546,6 +1633,8 @@ func httpStatus(code int) string {
 		return "201 Created"
 	case 500:
 		return "500 Internal Server Error"
+	case 502:
+		return "502 Bad Gateway"
 	default:
 		return "200 OK"
 	}
