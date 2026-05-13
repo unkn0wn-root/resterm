@@ -359,6 +359,13 @@ func (m Model) renderModalOverlay(
 	return strings.ReplaceAll(cellbuf.Render(buf), "\r\n", "\n")
 }
 
+func (m Model) renderModalTitle(title string, width int) string {
+	return m.theme.HeaderTitle.
+		Width(width).
+		Align(lipgloss.Center).
+		Render(title)
+}
+
 func (m Model) applyModalBackdrop(
 	buf *cellbuf.Buffer,
 	boxX, boxY, boxWidth, boxHeight int,
@@ -1913,7 +1920,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 
 const (
 	searchPromptHintPrefix = "Enter confirm  Esc cancel  Ctrl+R toggle "
-	searchPromptIcon       = "󰱼"
+	searchPromptIcon       = ""
 )
 
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
@@ -2743,10 +2750,7 @@ func (m Model) renderRequestDetailsModal() string {
 			Render(body)
 	}
 
-	headerView := m.theme.HeaderTitle.
-		Width(contentWidth).
-		Align(lipgloss.Center).
-		Render(title)
+	headerView := m.renderModalTitle(title, width)
 	instructions := fmt.Sprintf(
 		"%s / %s Close",
 		m.theme.CommandBarHint.Render("Esc"),
@@ -2816,10 +2820,7 @@ func (m Model) renderHistoryPreviewModal() string {
 		bodyView = bodyStyle.Render(wrapPreformattedContent(body, viewWidth))
 	}
 
-	headerView := m.theme.HeaderTitle.
-		Width(contentWidth).
-		Align(lipgloss.Center).
-		Render(title)
+	headerView := m.renderModalTitle(title, width)
 	instructions := fmt.Sprintf(
 		"%s / %s Close",
 		m.theme.CommandBarHint.Render("Esc"),
@@ -2861,10 +2862,7 @@ func (m Model) renderErrorModal() string {
 	}
 	wrapped := wrapToWidth(message, contentWidth)
 	messageView := m.theme.Error.Render(wrapped)
-	title := m.theme.HeaderTitle.
-		Width(contentWidth).
-		Align(lipgloss.Center).
-		Render("Error")
+	title := m.renderModalTitle("Error", width)
 	instructions := fmt.Sprintf(
 		"%s / %s Dismiss",
 		m.theme.CommandBarHint.Render("Esc"),
@@ -2912,10 +2910,7 @@ func (m Model) renderLayoutSaveModal() string {
 	}
 
 	contentWidth := max(width-frame, minContent)
-	title := m.theme.HeaderTitle.
-		Width(contentWidth).
-		Align(lipgloss.Center).
-		Render("Save Layout")
+	title := m.renderModalTitle("Save Layout", width)
 	body := paddedLeftLine(contentWidth, pad, bodyText)
 	hints := paddedLeftLine(contentWidth, pad, hintsText)
 	content := lipgloss.JoinVertical(
@@ -2980,10 +2975,7 @@ func (m Model) renderFileChangeModal() string {
 		m.theme.CommandBarHint.Render("Esc"),
 	)
 	infoLine := paddedLeftLine(contentWidth, 2, info)
-	title := m.theme.HeaderTitle.
-		Width(contentWidth).
-		Align(lipgloss.Center).
-		Render(m.fileChangeTitle)
+	title := m.renderModalTitle(m.fileChangeTitle, width)
 
 	content := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -3026,8 +3018,8 @@ func (m Model) renderHelpOverlay() string {
 		width = 48
 	}
 
-	contentWidth := max(width-6, 30)
-	viewWidth := max(contentWidth-6, 22)
+	contentWidth := width
+	viewWidth := max(contentWidth-4, 22)
 	maxBodyHeight := m.height - 8
 	if maxBodyHeight < 6 {
 		maxBodyHeight = 6
@@ -3158,10 +3150,7 @@ func (m Model) renderNewFileModal() string {
 	)
 
 	lines := []string{
-		m.theme.HeaderTitle.
-			Width(width - 4).
-			Align(lipgloss.Center).
-			Render("New Request File"),
+		m.renderModalTitle("New Request File", width),
 		"",
 		lipgloss.NewStyle().
 			Padding(0, 2).
@@ -3200,10 +3189,7 @@ func (m Model) renderOpenModal() string {
 	info := fmt.Sprintf("%s Open    %s Cancel", enter, esc)
 
 	lines := []string{
-		m.theme.HeaderTitle.
-			Width(width - 4).
-			Align(lipgloss.Center).
-			Render("Open File or Workspace"),
+		m.renderModalTitle("Open File or Workspace", width),
 		"",
 		lipgloss.NewStyle().
 			Padding(0, 2).
@@ -3248,10 +3234,7 @@ func (m Model) renderResponseSaveModal() string {
 	info := fmt.Sprintf("%s Save    %s Cancel", enter, esc)
 
 	lines := []string{
-		m.theme.HeaderTitle.
-			Width(width - 4).
-			Align(lipgloss.Center).
-			Render("Save Response Body"),
+		m.renderModalTitle("Save Response Body", width),
 		"",
 		lipgloss.NewStyle().
 			Padding(0, 2).

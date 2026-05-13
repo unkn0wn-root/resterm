@@ -224,6 +224,93 @@ func TestCenteredModalKeepsThemeSurface(t *testing.T) {
 	}
 }
 
+func TestModalTitlesAreCenteredWithinBorders(t *testing.T) {
+	cases := []struct {
+		name   string
+		title  string
+		setup  func(*Model)
+		render func(*Model) string
+	}{
+		{
+			name:   "help",
+			title:  "Key Bindings",
+			render: func(m *Model) string { return m.renderHelpOverlay() },
+		},
+		{
+			name:   "new file",
+			title:  "New Request File",
+			render: func(m *Model) string { return m.renderNewFileModal() },
+		},
+		{
+			name:   "open",
+			title:  "Open File or Workspace",
+			render: func(m *Model) string { return m.renderOpenModal() },
+		},
+		{
+			name:   "save response",
+			title:  "Save Response Body",
+			render: func(m *Model) string { return m.renderResponseSaveModal() },
+		},
+		{
+			name:  "error",
+			title: "Error",
+			setup: func(m *Model) {
+				m.errorModalMessage = "network down"
+			},
+			render: func(m *Model) string { return m.renderErrorModal() },
+		},
+		{
+			name:   "layout save",
+			title:  "Save Layout",
+			render: func(m *Model) string { return m.renderLayoutSaveModal() },
+		},
+		{
+			name:  "file change",
+			title: "File Change Detected",
+			setup: func(m *Model) {
+				m.fileChangeTitle = "File Change Detected"
+				m.fileChangeMessage = "File changed outside this session."
+			},
+			render: func(m *Model) string { return m.renderFileChangeModal() },
+		},
+		{
+			name:  "request details",
+			title: "Request Details",
+			setup: func(m *Model) {
+				m.requestDetailTitle = "Request Details"
+				m.requestDetailFields = []requestDetailField{
+					{label: "Method", value: "GET"},
+				}
+			},
+			render: func(m *Model) string { return m.renderRequestDetailsModal() },
+		},
+		{
+			name:  "history preview",
+			title: "History Entry",
+			setup: func(m *Model) {
+				m.historyPreviewTitle = "History Entry"
+				m.historyPreviewContent = "{}"
+			},
+			render: func(m *Model) string { return m.renderHistoryPreviewModal() },
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			model := newTestModelWithDoc(sampleRequestDoc)
+			model.width = 100
+			model.height = 32
+			model.ready = true
+			_ = model.applyLayout()
+			if tc.setup != nil {
+				tc.setup(model)
+			}
+
+			assertTitleCenteredWithinNearestBorders(t, tc.render(model), tc.title)
+		})
+	}
+}
+
 func TestNavigatorRenderStateMarksCurrentFileAndActiveRequest(t *testing.T) {
 	content := "### first\n# @name first\nGET https://example.com/one\n\n### second\n# @name second\nPOST https://example.com/two\n"
 	model := newTestModelWithDoc(content)
@@ -791,6 +878,40 @@ func lineWith(view, needle string) string {
 		}
 	}
 	return ""
+}
+
+func assertTitleCenteredWithinNearestBorders(t *testing.T, view, title string) {
+	t.Helper()
+
+	plain := ansi.Strip(view)
+	line := lineWith(plain, title)
+	if line == "" {
+		t.Fatalf("expected modal title %q in view, got %q", title, plain)
+	}
+
+	titleStart := strings.Index(line, title)
+	if titleStart < 0 {
+		t.Fatalf("expected modal title %q in line %q", title, line)
+	}
+	titleEnd := titleStart + len(title)
+	leftBorder := strings.LastIndex(line[:titleStart], "│")
+	rightOffset := strings.Index(line[titleEnd:], "│")
+	if leftBorder < 0 || rightOffset < 0 {
+		t.Fatalf("expected line with %q to have modal borders, got %q", title, line)
+	}
+	rightBorder := titleEnd + rightOffset
+
+	leftPad := lipgloss.Width(line[leftBorder+len("│") : titleStart])
+	rightPad := lipgloss.Width(line[titleEnd:rightBorder])
+	if leftPad > rightPad+1 || rightPad > leftPad+1 {
+		t.Fatalf(
+			"expected %q centered between modal borders, got left=%d right=%d line=%q",
+			title,
+			leftPad,
+			rightPad,
+			line,
+		)
+	}
 }
 
 func hasFaintSGR(s string) bool {
