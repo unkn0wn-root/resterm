@@ -1981,6 +1981,14 @@ func (m Model) renderSearchPromptInput(width int) string {
 		if placeholderWidth > 1 {
 			inputModel.Width = placeholderWidth - 1
 		}
+	} else {
+		inputModel.Width = max(width-lipgloss.Width(inputModel.Prompt), 1)
+		value := inputModel.Value()
+		pos := inputModel.Position()
+		// Rebuild the copy's overflow window after assigning a render-only width.
+		inputModel.Reset()
+		inputModel.SetValue(value)
+		inputModel.SetCursor(pos)
 	}
 	return lipgloss.NewStyle().MaxWidth(width).Render(inputModel.View())
 }

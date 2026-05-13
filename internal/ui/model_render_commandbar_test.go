@@ -179,6 +179,24 @@ func TestRenderResponseSearchPromptHidesGuideAfterTyping(t *testing.T) {
 	assertSearchGuideHidden(t, out)
 }
 
+func TestRenderResponseSearchPromptKeepsCursorVisibleForLongQuery(t *testing.T) {
+	model := New(Config{})
+	model.searchTarget = searchTargetResponse
+	model.searchInput.SetValue(strings.Repeat("a", 30) + "TAIL")
+	model.searchInput.CursorEnd()
+	model.searchInput.Focus()
+
+	out := ansi.Strip(model.renderResponseSearchPrompt(24))
+
+	if !strings.Contains(out, "TAIL") {
+		t.Fatalf("expected long response search to render cursor tail, got %q", out)
+	}
+	if lipgloss.Width(out) > 24 {
+		t.Fatalf("expected response search prompt to fit width 24, got width %d in %q", lipgloss.Width(out), out)
+	}
+	assertSearchGuideHidden(t, out)
+}
+
 func assertSearchGuideHidden(t *testing.T, out string) {
 	t.Helper()
 
