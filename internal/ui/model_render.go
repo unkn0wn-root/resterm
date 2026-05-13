@@ -1919,7 +1919,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 }
 
 const (
-	searchPromptIcon = "›"
+	searchPromptIcon = "»"
 )
 
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
