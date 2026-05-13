@@ -885,22 +885,34 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 		Width(18).
 		Height(3)
 
-	rendered := renderTitledPaneFrame(frame, lipgloss.NewStyle(), "Files", "body")
-	lines := strings.Split(ansi.Strip(rendered), "\n")
-	if len(lines) < 1 {
-		t.Fatalf("expected rendered frame to have a top border")
+	tests := []struct {
+		title string
+		want  string
+	}{
+		{title: filePaneTitle, want: "┐¹Files┌─╮"},
+		{title: editorPaneTitle, want: "┐²Editor┌─╮"},
+		{title: responsePaneTitle, want: "┐³Response┌─╮"},
 	}
-	if !strings.HasPrefix(lines[0], "╭─") {
-		t.Fatalf("expected titled rounded top border to keep left corner, got %q", lines[0])
-	}
-	if !strings.Contains(lines[0], " Files ─╮") {
-		t.Fatalf("expected title on right side of top border, got %q", lines[0])
-	}
-	if !strings.HasSuffix(lines[0], "╮") {
-		t.Fatalf("expected top border to keep right corner, got %q", lines[0])
-	}
-	if got, want := ansi.StringWidth(lines[0]), lipgloss.Width(frame.Render("body")); got != want {
-		t.Fatalf("expected titled top border width %d, got %d", want, got)
+	for _, tt := range tests {
+		t.Run(tt.title, func(t *testing.T) {
+			rendered := renderTitledPaneFrame(frame, lipgloss.NewStyle(), tt.title, "body")
+			lines := strings.Split(ansi.Strip(rendered), "\n")
+			if len(lines) < 1 {
+				t.Fatalf("expected rendered frame to have a top border")
+			}
+			if !strings.HasPrefix(lines[0], "╭─") {
+				t.Fatalf("expected titled rounded top border to keep left corner, got %q", lines[0])
+			}
+			if !strings.Contains(lines[0], tt.want) {
+				t.Fatalf("expected numbered title %q on top border, got %q", tt.want, lines[0])
+			}
+			if !strings.HasSuffix(lines[0], "╮") {
+				t.Fatalf("expected top border to keep right corner, got %q", lines[0])
+			}
+			if got, want := ansi.StringWidth(lines[0]), lipgloss.Width(frame.Render("body")); got != want {
+				t.Fatalf("expected titled top border width %d, got %d", want, got)
+			}
+		})
 	}
 }
 
