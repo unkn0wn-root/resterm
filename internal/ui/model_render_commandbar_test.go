@@ -63,12 +63,12 @@ func TestRenderSearchPromptShowsLiteralGuideWhenEmpty(t *testing.T) {
 	model.searchInput.Focus()
 
 	out := ansi.Strip(model.renderSearchPrompt())
-	expected := searchPromptIcon + " Search /pattern LIT " + model.searchPromptHints()
+	expected := searchPromptIcon + " Search /pattern LITERAL " + model.searchPromptHints()
 
 	if !strings.Contains(out, expected) {
 		t.Fatalf("expected empty literal editor search guide %q, got %q", expected, out)
 	}
-	if strings.Contains(out, "/p LIT") {
+	if strings.Contains(out, "/p LITERAL") {
 		t.Fatalf("expected full /pattern placeholder, got %q", out)
 	}
 }
@@ -133,12 +133,12 @@ func TestRenderResponseSearchPromptShowsLiteralGuideWhenEmpty(t *testing.T) {
 	model.searchInput.Focus()
 
 	out := ansi.Strip(model.renderResponseSearchPrompt(96))
-	expected := searchPromptIcon + " Search /pattern LIT " + model.searchPromptHints()
+	expected := searchPromptIcon + " Search /pattern LITERAL " + model.searchPromptHints()
 
 	if !strings.Contains(out, expected) {
 		t.Fatalf("expected empty literal response search guide %q, got %q", expected, out)
 	}
-	if strings.Contains(out, "/p LIT") {
+	if strings.Contains(out, "/p LITERAL") {
 		t.Fatalf("expected full /pattern placeholder, got %q", out)
 	}
 }
@@ -202,6 +202,7 @@ func assertSearchGuideHidden(t *testing.T, out string) {
 
 	for _, unexpected := range []string{
 		"LIT",
+		"LITERAL",
 		"REGEX",
 		"^R regex",
 		"^R literal",

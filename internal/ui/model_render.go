@@ -29,6 +29,7 @@ const (
 	filePaneTitle     = "Files"
 	editorPaneTitle   = "Editor"
 	responsePaneTitle = "Response"
+	activePaneIcon    = "◉"
 )
 
 const (
@@ -461,7 +462,7 @@ func (m Model) renderFilePane(rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleFile.Inherit(m.theme.PaneTitle),
-		filePaneTitle,
+		paneTitleWithFocus(filePaneTitle, paneActive),
 		content,
 	)
 }
@@ -899,7 +900,7 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleEditor.Inherit(m.theme.PaneTitle),
-		editorPaneTitle,
+		paneTitleWithFocus(editorPaneTitle, active),
 		content,
 	)
 }
@@ -1064,7 +1065,7 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleResponse.Inherit(m.theme.PaneTitle),
-		responsePaneTitle,
+		paneTitleWithFocus(responsePaneTitle, active),
 		body,
 	)
 }
@@ -1110,6 +1111,13 @@ func renderTitledPaneFrame(
 
 func sanitizePaneTitle(title string) string {
 	return strings.Join(strings.Fields(title), " ")
+}
+
+func paneTitleWithFocus(title string, active bool) string {
+	if !active {
+		return title
+	}
+	return activePaneIcon + " " + title
 }
 
 func titledPaneTopBorder(
@@ -1919,7 +1927,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 }
 
 const (
-	searchPromptIcon = "»"
+	searchPromptIcon = "⌕"
 )
 
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
@@ -1963,7 +1971,7 @@ func (m Model) searchPromptMode() string {
 	if m.searchIsRegex {
 		return "regex"
 	}
-	return "lit"
+	return "literal"
 }
 
 func (m Model) searchPromptHints() string {

@@ -815,6 +815,34 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 	}
 }
 
+func TestFocusedPaneTitleRendersActiveIcon(t *testing.T) {
+	frame := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#abcdef")).
+		Width(24).
+		Height(3)
+
+	rendered := renderTitledPaneFrame(
+		frame,
+		lipgloss.NewStyle(),
+		paneTitleWithFocus("Response", true),
+		"body",
+	)
+	if !strings.Contains(ansi.Strip(rendered), activePaneIcon+" Response") {
+		t.Fatalf("expected focused pane title to include active icon, got %q", rendered)
+	}
+
+	rendered = renderTitledPaneFrame(
+		frame,
+		lipgloss.NewStyle(),
+		paneTitleWithFocus("Response", false),
+		"body",
+	)
+	if strings.Contains(ansi.Strip(rendered), activePaneIcon+" Response") {
+		t.Fatalf("expected inactive pane title to omit active icon, got %q", rendered)
+	}
+}
+
 func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
