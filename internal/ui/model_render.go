@@ -1919,8 +1919,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 }
 
 const (
-	searchPromptHintPrefix = "Enter confirm  Esc cancel  Ctrl+R toggle "
-	searchPromptIcon       = "›"
+	searchPromptIcon = "›"
 )
 
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
@@ -1964,14 +1963,14 @@ func (m Model) searchPromptMode() string {
 	if m.searchIsRegex {
 		return "regex"
 	}
-	return "literal"
+	return "lit"
 }
 
 func (m Model) searchPromptHints() string {
 	if m.searchIsRegex {
-		return searchPromptHintPrefix + "literal"
+		return "^R literal"
 	}
-	return searchPromptHintPrefix + "regex"
+	return "^R regex"
 }
 
 func (m Model) renderSearchPromptInput(width int) string {
