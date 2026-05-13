@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -108,11 +107,6 @@ type editorSnapshot struct {
 	selection selectionState
 	mode      selectionMode
 	viewStart int
-}
-
-type searchMatch struct {
-	start int
-	end   int
 }
 
 type editorSearch struct {
@@ -403,18 +397,34 @@ func (e *requestEditor) applySelectionHighlight() {
 		if startOffset, endOffset, ok := e.selectionOffsets(); ok &&
 			endOffset > startOffset {
 			e.SetSelectionRange(startOffset, endOffset)
-			return
-		}
-	}
-	if match, ok := e.currentSearchMatch(); ok {
-		start := e.clampOffset(match.start)
-		end := e.clampOffset(match.end)
-		if end > start {
-			e.SetSelectionRange(start, end)
+			e.applySearchHighlights()
 			return
 		}
 	}
 	e.ClearSelectionRange()
+	e.applySearchHighlights()
+}
+
+func (e *requestEditor) applySearchHighlights() {
+	if len(e.search.matches) == 0 || strings.TrimSpace(e.search.query) == "" {
+		e.ClearHighlightRanges()
+		return
+	}
+
+	ranges := make([]textarea.HighlightRange, 0, len(e.search.matches))
+	for i, match := range e.search.matches {
+		start := e.clampOffset(match.start)
+		end := e.clampOffset(match.end)
+		if end <= start {
+			continue
+		}
+		ranges = append(ranges, textarea.HighlightRange{
+			Start:  start,
+			End:    end,
+			Active: e.search.active && i == e.search.index,
+		})
+	}
+	e.SetHighlightRanges(ranges)
 }
 
 func (e requestEditor) selectionOffsets() (int, int, bool) {
@@ -1879,7 +1889,7 @@ func (e requestEditor) ApplySearch(
 		return e, statusCmd(statusWarn, "Enter a search pattern")
 	}
 
-	matches, err := pe.buildSearchMatches(trimmed, isRegex)
+	matches, err := buildSearchMatches(pe.Value(), trimmed, isRegex)
 	if err != nil {
 		pe.applySelectionHighlight()
 		msg := fmt.Sprintf("Invalid regex: %v", err)
@@ -1901,10 +1911,7 @@ func (e requestEditor) ApplySearch(
 	}
 
 	moveCmd := pe.jumpToSearchIndex(index)
-	statusText := fmt.Sprintf("Match %d/%d for %q", index+1, len(matches), trimmed)
-	if wrapped {
-		statusText += " (wrapped)"
-	}
+	statusText := searchStatusText(index, len(matches), trimmed, wrapped)
 
 	status := statusCmd(statusInfo, statusText)
 	if moveCmd != nil {
@@ -1921,7 +1928,7 @@ func (e requestEditor) NextSearchMatch() (requestEditor, tea.Cmd) {
 	}
 
 	if len(pe.search.matches) == 0 {
-		matches, err := pe.buildSearchMatches(trimmed, pe.search.isRegex)
+		matches, err := buildSearchMatches(pe.Value(), trimmed, pe.search.isRegex)
 		if err != nil {
 			msg := fmt.Sprintf("Invalid regex: %v", err)
 			return e, statusCmd(statusError, msg)
@@ -1939,15 +1946,7 @@ func (e requestEditor) NextSearchMatch() (requestEditor, tea.Cmd) {
 		offset := pe.caretPosition().Offset
 		index, wrapped := firstMatchIndex(pe.search.matches, offset)
 		moveCmd := pe.jumpToSearchIndex(index)
-		statusText := fmt.Sprintf(
-			"Match %d/%d for %q",
-			index+1,
-			len(pe.search.matches),
-			trimmed,
-		)
-		if wrapped {
-			statusText += " (wrapped)"
-		}
+		statusText := searchStatusText(index, len(pe.search.matches), trimmed, wrapped)
 
 		status := statusCmd(statusInfo, statusText)
 		if moveCmd != nil {
@@ -1964,15 +1963,7 @@ func (e requestEditor) NextSearchMatch() (requestEditor, tea.Cmd) {
 	}
 
 	moveCmd := pe.jumpToSearchIndex(nextIndex)
-	statusText := fmt.Sprintf(
-		"Match %d/%d for %q",
-		nextIndex+1,
-		len(pe.search.matches),
-		trimmed,
-	)
-	if wrapped {
-		statusText += " (wrapped)"
-	}
+	statusText := searchStatusText(nextIndex, len(pe.search.matches), trimmed, wrapped)
 
 	status := statusCmd(statusInfo, statusText)
 	if moveCmd != nil {
@@ -1989,7 +1980,7 @@ func (e requestEditor) PrevSearchMatch() (requestEditor, tea.Cmd) {
 	}
 
 	if len(pe.search.matches) == 0 {
-		matches, err := pe.buildSearchMatches(trimmed, pe.search.isRegex)
+		matches, err := buildSearchMatches(pe.Value(), trimmed, pe.search.isRegex)
 		if err != nil {
 			msg := fmt.Sprintf("Invalid regex: %v", err)
 			return e, statusCmd(statusError, msg)
@@ -2007,15 +1998,7 @@ func (e requestEditor) PrevSearchMatch() (requestEditor, tea.Cmd) {
 		offset := pe.caretPosition().Offset
 		index, wrapped := lastMatchIndex(pe.search.matches, offset)
 		moveCmd := pe.jumpToSearchIndex(index)
-		statusText := fmt.Sprintf(
-			"Match %d/%d for %q",
-			index+1,
-			len(pe.search.matches),
-			trimmed,
-		)
-		if wrapped {
-			statusText += " (wrapped)"
-		}
+		statusText := searchStatusText(index, len(pe.search.matches), trimmed, wrapped)
 
 		status := statusCmd(statusInfo, statusText)
 		if moveCmd != nil {
@@ -2032,15 +2015,7 @@ func (e requestEditor) PrevSearchMatch() (requestEditor, tea.Cmd) {
 	}
 
 	moveCmd := pe.jumpToSearchIndex(prevIndex)
-	statusText := fmt.Sprintf(
-		"Match %d/%d for %q",
-		prevIndex+1,
-		len(pe.search.matches),
-		trimmed,
-	)
-	if wrapped {
-		statusText += " (wrapped)"
-	}
+	statusText := searchStatusText(prevIndex, len(pe.search.matches), trimmed, wrapped)
 
 	status := statusCmd(statusInfo, statusText)
 	if moveCmd != nil {
@@ -2473,92 +2448,6 @@ func (e requestEditor) currentSearchMatch() (searchMatch, bool) {
 	return e.search.matches[e.search.index], true
 }
 
-func firstMatchIndex(matches []searchMatch, offset int) (int, bool) {
-	if len(matches) == 0 {
-		return -1, false
-	}
-	for i, match := range matches {
-		if offset < match.end {
-			return i, false
-		}
-	}
-	return 0, true
-}
-
-func lastMatchIndex(matches []searchMatch, offset int) (int, bool) {
-	if len(matches) == 0 {
-		return -1, false
-	}
-	for i := len(matches) - 1; i >= 0; i-- {
-		match := matches[i]
-		if offset > match.start {
-			return i, false
-		}
-	}
-	return len(matches) - 1, true
-}
-
-func literalMatches(content, pattern string) []searchMatch {
-	patternRunes := []rune(pattern)
-	contentRunes := []rune(content)
-	plen := len(patternRunes)
-	if plen == 0 || len(contentRunes) < plen {
-		return nil
-	}
-
-	matches := make([]searchMatch, 0)
-	for i := 0; i <= len(contentRunes)-plen; i++ {
-		match := true
-		for j := 0; j < plen; j++ {
-			if contentRunes[i+j] != patternRunes[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			matches = append(matches, searchMatch{start: i, end: i + plen})
-		}
-	}
-	return matches
-}
-
-func regexMatches(content string, rx *regexp.Regexp) []searchMatch {
-	indices := rx.FindAllStringIndex(content, -1)
-	if len(indices) == 0 {
-		return nil
-	}
-
-	matches := make([]searchMatch, 0, len(indices))
-	for _, idx := range indices {
-		if len(idx) != 2 {
-			continue
-		}
-		startByte, endByte := idx[0], idx[1]
-		if endByte <= startByte {
-			continue
-		}
-		start := utf8.RuneCountInString(content[:startByte])
-		end := utf8.RuneCountInString(content[:endByte])
-		matches = append(matches, searchMatch{start: start, end: end})
-	}
-	return matches
-}
-
-func (e requestEditor) buildSearchMatches(
-	query string,
-	isRegex bool,
-) ([]searchMatch, error) {
-	value := e.Value()
-	if isRegex {
-		rx, err := regexp.Compile(query)
-		if err != nil {
-			return nil, err
-		}
-		return regexMatches(value, rx), nil
-	}
-	return literalMatches(value, query), nil
-}
-
 func (e *requestEditor) jumpToSearchIndex(index int) tea.Cmd {
 	if index < 0 || index >= len(e.search.matches) {
 		return nil
@@ -2580,6 +2469,15 @@ func (e requestEditor) SearchActive() bool {
 		return false
 	}
 	return strings.TrimSpace(e.search.query) != ""
+}
+
+func (e *requestEditor) ClearSearch(isRegex bool) {
+	e.search.query = ""
+	e.search.isRegex = isRegex
+	e.search.matches = nil
+	e.search.index = -1
+	e.search.active = false
+	e.applySelectionHighlight()
 }
 
 func (e *requestEditor) ExitSearchMode() tea.Cmd {

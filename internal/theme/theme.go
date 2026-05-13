@@ -155,7 +155,8 @@ func DefaultTheme() Theme {
 	return Theme{
 		BrowserBorder: base.BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#A78BFA")),
-		EditorBorder: base.BorderStyle(lipgloss.RoundedBorder()).BorderForeground(accent),
+		EditorBorder: base.BorderStyle(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#C9324A")),
 		ResponseBorder: base.BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#5FB3B3")),
 		NavigatorTitle: lipgloss.NewStyle().Foreground(lipgloss.Color("#E6E1FF")),
@@ -191,7 +192,7 @@ func DefaultTheme() Theme {
 		Tabs: lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
 		TabActive: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#FDFBFF")).
-			Background(lipgloss.Color("#7D56F4")).
+			Background(lipgloss.Color("#2F5FA8")).
 			Bold(true).
 			Padding(0, 2),
 		TabInactive: lipgloss.NewStyle().
@@ -294,7 +295,7 @@ func DefaultTheme() Theme {
 		PaneDivider:             lipgloss.NewStyle().Foreground(lipgloss.Color("#5B526E")),
 		PaneBorderFocusFile:     lipgloss.Color("#FFD46A"),
 		PaneBorderFocusRequests: lipgloss.Color("#FFD46A"),
-		PaneBorderFocusEditor:   lipgloss.Color("#56A9DD"),
+		PaneBorderFocusEditor:   lipgloss.Color("#C9324A"),
 		PaneBorderFocusResponse: lipgloss.Color("#33C481"),
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
 		EditorMetadata: EditorMetadataPalette{

@@ -22,13 +22,18 @@ const (
 	statusBarSep          = "    "
 	statusBarSepWidth     = 4
 	helpKeyColumnWidth    = 32
-	paneTitleLeadWidth    = 1
 )
 
 const (
 	filePaneTitle     = "Files"
 	editorPaneTitle   = "Editor"
 	responsePaneTitle = "Response"
+)
+
+const (
+	paneTitleLeftCap  = "┐"
+	paneTitleRightCap = "┌"
+	paneTitleTrail    = 1
 )
 
 const (
@@ -1136,11 +1141,14 @@ func titledPaneTopBorder(
 
 	borderTextStyle := topBorderTextStyle(frameStyle)
 	plainBorder := left + repeatToCellWidth(top, innerWidth) + right
-	if innerWidth < paneTitleLeadWidth+4 {
+	marker := paneTitleMarker(title)
+	segmentFixedWidth := ansi.StringWidth(paneTitleLeftCap) +
+		ansi.StringWidth(marker) +
+		ansi.StringWidth(paneTitleRightCap)
+	if innerWidth < segmentFixedWidth+paneTitleTrail+1 {
 		return borderTextStyle.Render(plainBorder)
 	}
-
-	maxTitleWidth := innerWidth - paneTitleLeadWidth - 3
+	maxTitleWidth := innerWidth - segmentFixedWidth - paneTitleTrail
 	if maxTitleWidth < 1 {
 		return borderTextStyle.Render(plainBorder)
 	}
@@ -1150,7 +1158,7 @@ func titledPaneTopBorder(
 		return borderTextStyle.Render(plainBorder)
 	}
 
-	prefixWidth := innerWidth - paneTitleLeadWidth - 1 - titleWidth - 1
+	prefixWidth := innerWidth - segmentFixedWidth - titleWidth - paneTitleTrail
 	if prefixWidth < 0 {
 		return borderTextStyle.Render(plainBorder)
 	}
@@ -1159,12 +1167,26 @@ func titledPaneTopBorder(
 	var out strings.Builder
 	out.WriteString(borderTextStyle.Render(left))
 	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, prefixWidth)))
-	out.WriteString(borderTextStyle.Render(" "))
+	out.WriteString(borderTextStyle.Render(paneTitleLeftCap))
+	out.WriteString(titleStyle.Render(marker))
 	out.WriteString(titleStyle.Render(title))
-	out.WriteString(borderTextStyle.Render(" "))
-	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, paneTitleLeadWidth)))
+	out.WriteString(borderTextStyle.Render(paneTitleRightCap))
+	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, paneTitleTrail)))
 	out.WriteString(borderTextStyle.Render(right))
 	return out.String()
+}
+
+func paneTitleMarker(title string) string {
+	switch title {
+	case filePaneTitle:
+		return "¹"
+	case editorPaneTitle:
+		return "²"
+	case responsePaneTitle:
+		return "³"
+	default:
+		return ""
+	}
 }
 
 func paneTitleStyleForFrame(frameStyle lipgloss.Style, titleStyle lipgloss.Style) lipgloss.Style {

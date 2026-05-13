@@ -281,6 +281,139 @@ func TestBlurredCursorRuneKeepsSyntaxStyle(t *testing.T) {
 	}
 }
 
+func TestHighlightDoesNotRestyleUnmatchedVisibleLine(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(2)
+	m.SetWidth(12)
+	m.SetValue("match\nplain")
+	m.row = 0
+	m.col = 0
+
+	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
+	m.FocusedStyle.Text = base
+	m.FocusedStyle.CursorLine = base
+	m.style = &m.FocusedStyle
+
+	before := rawViewLine(t, m, 1)
+	m.SetHighlightStyle(lipgloss.NewStyle().Background(lipgloss.Color("#2c1e3a")))
+	m.SetHighlightRanges([]HighlightRange{{Start: 0, End: 5}})
+	after := rawViewLine(t, m, 1)
+
+	if before != after {
+		t.Fatalf(
+			"expected unrelated visible line to keep raw rendering\nbefore: %q\nafter:  %q",
+			before,
+			after,
+		)
+	}
+}
+
+func TestHighlightOutsideHorizontalViewportDoesNotRestyleVisibleText(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(1)
+	m.SetWidth(4)
+	m.SetValue("abcdefghij")
+	m.row = 0
+	m.col = 0
+	m.horizOffset = 6
+
+	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#0f172a"))
+	m.FocusedStyle.Text = base
+	m.FocusedStyle.CursorLine = base
+	m.style = &m.FocusedStyle
+
+	before := rawViewLine(t, m, 0)
+	m.SetHighlightStyle(lipgloss.NewStyle().Background(lipgloss.Color("#2c1e3a")))
+	m.SetHighlightRanges([]HighlightRange{{Start: 0, End: 2}})
+	after := rawViewLine(t, m, 0)
+
+	if before != after {
+		t.Fatalf(
+			"expected offscreen highlight to keep raw rendering\nbefore: %q\nafter:  %q",
+			before,
+			after,
+		)
+	}
+}
+
+func TestVisibleHighlightUsesHighlightStyle(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(1)
+	m.SetWidth(4)
+	m.SetValue("abcd")
+	m.row = 0
+	m.col = 0
+	m.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	m.style = &m.FocusedStyle
+
+	highlight := lipgloss.NewStyle().
+		Background(lipgloss.Color("#2c1e3a")).
+		Foreground(lipgloss.Color("#e9e6ff"))
+	m.SetHighlightStyle(highlight)
+	m.SetHighlightRanges([]HighlightRange{{Start: 1, End: 3}})
+
+	view := m.View()
+	if !strings.Contains(view, highlight.Render("b")) {
+		t.Fatalf("expected visible highlight to use highlight style, got %q", view)
+	}
+}
+
+func TestOverlappingHighlightRangesPreferActiveStyle(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	m := newTextArea()
+	m.Prompt = ""
+	m.ShowLineNumbers = false
+	m.SetHeight(1)
+	m.SetWidth(4)
+	m.SetValue("aaa")
+	m.row = 0
+	m.col = len(m.value[m.row])
+	m.FocusedStyle.CursorLine = lipgloss.NewStyle()
+	m.style = &m.FocusedStyle
+
+	highlight := lipgloss.NewStyle().
+		Background(lipgloss.Color("#2c1e3a")).
+		Foreground(lipgloss.Color("#e9e6ff"))
+	active := lipgloss.NewStyle().
+		Background(lipgloss.Color("#ffd46a")).
+		Foreground(lipgloss.Color("#1a1020"))
+	m.SetHighlightStyle(highlight)
+	m.SetActiveHighlightStyle(active)
+	m.SetHighlightRanges([]HighlightRange{
+		{Start: 0, End: 2},
+		{Start: 1, End: 3, Active: true},
+	})
+
+	view := m.View()
+	if count := strings.Count(view, active.Render("a")); count != 2 {
+		t.Fatalf("expected active style on both runes of active overlap, got %d in %q", count, view)
+	}
+	if count := strings.Count(view, highlight.Render("a")); count != 1 {
+		t.Fatalf("expected inactive style only before active overlap, got %d in %q", count, view)
+	}
+}
+
 func TestVerticalScrollKeepsBuffer(t *testing.T) {
 	m := newTextArea()
 	m.Prompt = ""
@@ -1997,4 +2130,13 @@ func stripString(str string) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func rawViewLine(t *testing.T, m Model, index int) string {
+	t.Helper()
+	lines := strings.Split(m.View(), "\n")
+	if index < 0 || index >= len(lines) {
+		t.Fatalf("view line %d out of range in %q", index, strings.Join(lines, "\n"))
+	}
+	return lines[index]
 }
