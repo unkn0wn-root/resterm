@@ -7,6 +7,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+func isSearchTriggerKey(key string) bool {
+	switch key {
+	case "shift+f", "F", "/":
+		return true
+	default:
+		return false
+	}
+}
+
 func (m *Model) openSearchPrompt() tea.Cmd {
 	if m.showSearchPrompt {
 		return nil

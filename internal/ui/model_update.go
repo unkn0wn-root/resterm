@@ -391,14 +391,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showSearchPrompt {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			keyStr := keyMsg.String()
 			if m.searchJustOpened {
 				m.searchJustOpened = false
-				switch keyMsg.String() {
-				case "shift+f", "F":
+				if isSearchTriggerKey(keyStr) {
 					return m, batchCommands(cmds...)
 				}
 			}
-			switch keyMsg.String() {
+			switch keyStr {
 			case "esc":
 				m.closeSearchPrompt()
 				return m, batchCommands(cmds...)
@@ -1332,11 +1332,12 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 
 	if m.focus == focusEditor {
 		if !m.editorInsertMode {
-			switch keyStr {
-			case "shift+f", "F":
+			if isSearchTriggerKey(keyStr) {
 				cmd := m.openSearchPrompt()
 				m.suppressEditorKey = true
 				return combine(cmd)
+			}
+			switch keyStr {
 			case "n":
 				var cmd tea.Cmd
 				m.editor, cmd = m.editor.NextSearchMatch()
@@ -1553,10 +1554,15 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			}
 		}
-		switch keyStr {
-		case "shift+f", "F":
+		if isSearchTriggerKey(keyStr) {
+			if keyStr == "/" && pane != nil && pane.activeTab == responseTabHistory {
+				m.openHistoryFilter()
+				return combine(nil)
+			}
 			cmd := m.openSearchPrompt()
 			return combine(cmd)
+		}
+		switch keyStr {
 		case "esc":
 			if pane != nil && pane.activeTab == responseTabStats {
 				if stats := workflowStatsFromPane(pane); stats != nil && stats.detailFocus {
@@ -1708,9 +1714,6 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			case "s":
 				m.toggleHistorySort()
 				m.blockHistoryKey()
-				return combine(nil)
-			case "/":
-				m.openHistoryFilter()
 				return combine(nil)
 			case " ", "space":
 				m.toggleHistorySelection()

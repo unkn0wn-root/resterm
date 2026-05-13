@@ -1306,6 +1306,7 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	if m.showSearchPrompt && m.searchTarget == searchTargetResponse && m.searchResponsePane == id {
 		searchView = m.renderResponseSearchPrompt(contentWidth)
 	}
+	contentBodyHeight := max(contentHeight-lipgloss.Height(searchView), 0)
 
 	var content string
 	if pane.activeTab == responseTabHistory {
@@ -1313,17 +1314,21 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	} else {
 		content = pane.viewport.View()
 	}
-	if send := m.sendingView(pane, contentWidth, contentHeight); send != "" {
+	if send := m.sendingView(pane, contentWidth, contentBodyHeight); send != "" {
 		content = send
-	} else if formatting := m.formattingView(pane, contentWidth, contentHeight); formatting != "" {
+	} else if formatting := m.formattingView(pane, contentWidth, contentBodyHeight); formatting != "" {
 		content = formatting
-	} else if reflowing := m.reflowView(pane, contentWidth, contentHeight); reflowing != "" {
+	} else if reflowing := m.reflowView(pane, contentWidth, contentBodyHeight); reflowing != "" {
 		content = reflowing
 	}
-	content = lipgloss.NewStyle().
-		MaxWidth(contentWidth).
-		MaxHeight(contentHeight).
-		Render(content)
+	if contentBodyHeight <= 0 {
+		content = ""
+	} else {
+		content = lipgloss.NewStyle().
+			MaxWidth(contentWidth).
+			MaxHeight(contentBodyHeight).
+			Render(content)
+	}
 
 	if !focused && m.focus == focusResponse {
 		if searchView != "" {
@@ -1850,10 +1855,7 @@ func clampPositive(value, maxValue int) int {
 }
 
 func (m Model) renderCommandBar() string {
-	if m.showSearchPrompt {
-		if m.searchTarget == searchTargetResponse {
-			return m.renderResponseSearchInfo()
-		}
+	if m.showSearchPrompt && m.searchTarget != searchTargetResponse {
 		return m.renderSearchPrompt()
 	}
 
@@ -1898,125 +1900,118 @@ func (m Model) renderCommandBar() string {
 }
 
 func (m Model) renderSearchPrompt() string {
-	mode := "literal"
-	if m.searchIsRegex {
-		mode = "regex"
-	}
-	m.searchInput.Width = 0
-	label := lipgloss.NewStyle().Bold(true).Render("Search ")
-	input := m.searchInput.View()
-	subtle := m.themeRuntime.subtleTextStyle(m.theme)
-	modeBadge := subtle.
-		PaddingLeft(2).
-		Render(strings.ToUpper(mode))
-	hints := subtle.
-		PaddingLeft(2).
-		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
-	row := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		label,
-		input,
-		modeBadge,
-		hints,
-	)
-	return renderCommandBarContainer(
-		m.theme.CommandBar,
-		row,
-		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
-	)
+	return m.renderSearchCommandBar(m.theme.CommandBar.Width(m.width))
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
 	}
-	mode := "literal"
-	if m.searchIsRegex {
-		mode = "regex"
-	}
-	label := lipgloss.NewStyle().Bold(true).Render("Search ")
-	modeBadge := m.themeRuntime.subtleTextStyle(m.theme).
-		PaddingLeft(1).
-		Render(strings.ToUpper(mode))
-	reserved := lipgloss.Width(
-		label,
-	) + lipgloss.Width(
-		modeBadge,
-	) + 2 + searchCommandBarLeadingColorSpaces
-	inputWidth := width - reserved
-	if inputWidth < 4 {
-		inputWidth = max(4, width-8)
-	}
-	m.searchInput.Width = inputWidth
-	input := lipgloss.NewStyle().MaxWidth(inputWidth).Render(m.searchInput.View())
-	row := lipgloss.JoinHorizontal(
-		lipgloss.Top,
-		label,
-		input,
-		modeBadge,
-	)
-	return renderCommandBarContainer(
-		m.theme.CommandBar.Width(width),
-		row,
-		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
-	)
+	style := m.theme.CommandBar.Width(width).PaddingLeft(0).PaddingRight(0)
+	return m.renderSearchCommandBar(style)
 }
 
-const searchCommandBarLeadingColorSpaces = 1
+const (
+	searchPromptHintPrefix = "Enter confirm  Esc cancel  Ctrl+R toggle "
+	searchPromptIcon       = "󰱼"
+)
 
-func (m Model) renderResponseSearchInfo() string {
-	mode := "literal"
-	if m.searchIsRegex {
-		mode = "regex"
-	}
-	label := lipgloss.NewStyle().Bold(true).Render("Response Search ")
+func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
 	subtle := m.themeRuntime.subtleTextStyle(m.theme)
-	modeBadge := subtle.
-		PaddingLeft(1).
-		Render(strings.ToUpper(mode))
-	hints := subtle.
-		PaddingLeft(1).
-		Render("Enter confirm  Esc cancel  Ctrl+R toggle regex")
-	row := lipgloss.JoinHorizontal(
-		lipgloss.Top,
+	label := renderSearchPromptLabel("Search")
+
+	reserved := lipgloss.Width(label)
+	showGuide := m.searchInput.Value() == ""
+	modeBadge := ""
+	hints := ""
+	if showGuide {
+		modeBadge = subtle.
+			PaddingLeft(1).
+			Render(strings.ToUpper(m.searchPromptMode()))
+		reserved += lipgloss.Width(modeBadge)
+
+		hints = subtle.
+			PaddingLeft(1).
+			Render(m.searchPromptHints())
+		reserved += lipgloss.Width(hints)
+	}
+
+	segments := []string{
 		label,
-		modeBadge,
-		hints,
-	)
+		m.renderSearchPromptInput(commandBarContentWidth(style) - reserved),
+	}
+	if modeBadge != "" {
+		segments = append(segments, modeBadge)
+	}
+	if hints != "" {
+		segments = append(segments, hints)
+	}
+
 	return renderCommandBarContainer(
-		m.theme.CommandBar,
-		row,
-		withColoredLeadingSpaces(searchCommandBarLeadingColorSpaces),
+		style,
+		lipgloss.JoinHorizontal(lipgloss.Top, segments...),
 	)
 }
 
-type commandBarContainerConfig struct {
-	leadingColoredSpaces int
+func (m Model) searchPromptMode() string {
+	if m.searchIsRegex {
+		return "regex"
+	}
+	return "literal"
 }
 
-type commandBarContainerOption func(*commandBarContainerConfig)
+func (m Model) searchPromptHints() string {
+	if m.searchIsRegex {
+		return searchPromptHintPrefix + "literal"
+	}
+	return searchPromptHintPrefix + "regex"
+}
 
-func withColoredLeadingSpaces(spaces int) commandBarContainerOption {
-	if spaces < 0 {
-		spaces = 0
+func (m Model) renderSearchPromptInput(width int) string {
+	if width < 4 {
+		width = 4
 	}
-	return func(cfg *commandBarContainerConfig) {
-		cfg.leadingColoredSpaces = spaces
+	// Copy so we can adjust Width without mutating the real input.
+	inputModel := m.searchInput
+	inputModel.Width = 0
+	if inputModel.Value() == "" {
+		// With a zero width, textinput renders only the first placeholder rune.
+		// Set just enough width for the placeholder without padding the gap to the next segment.
+		placeholderWidth := lipgloss.Width(inputModel.Placeholder)
+		if placeholderWidth > 1 {
+			inputModel.Width = placeholderWidth - 1
+		}
+	} else {
+		inputModel.Width = max(width-lipgloss.Width(inputModel.Prompt), 1)
+		value := inputModel.Value()
+		pos := inputModel.Position()
+		// Rebuild the copy's overflow window after assigning a render-only width.
+		inputModel.Reset()
+		inputModel.SetValue(value)
+		inputModel.SetCursor(pos)
 	}
+	return lipgloss.NewStyle().MaxWidth(width).Render(inputModel.View())
+}
+
+func renderSearchPromptLabel(text string) string {
+	return lipgloss.NewStyle().Bold(true).Render(searchPromptIcon + " " + text + " ")
+}
+
+func commandBarContentWidth(style lipgloss.Style) int {
+	width := style.GetWidth()
+	if width <= 0 {
+		width = style.GetMaxWidth()
+	}
+	if width <= 0 {
+		return 0
+	}
+	return max(width-style.GetPaddingLeft()-style.GetPaddingRight(), 0)
 }
 
 func renderCommandBarContainer(
 	style lipgloss.Style,
 	content string,
-	opts ...commandBarContainerOption,
 ) string {
-	var cfg commandBarContainerConfig
-	for _, opt := range opts {
-		if opt == nil {
-			continue
-		}
-		opt(&cfg)
-	}
 	padLeft := style.GetPaddingLeft()
 	padRight := style.GetPaddingRight()
 	width := style.GetWidth()
@@ -2035,42 +2030,14 @@ func renderCommandBarContainer(
 		innerMaxWidth = max(innerMaxWidth-padLeft-padRight, 0)
 	}
 
-	leadingSpaces := cfg.leadingColoredSpaces
-	if leadingSpaces > 0 {
-		if innerWidth > 0 {
-			leadingSpaces = min(leadingSpaces, innerWidth)
-		}
-		if innerMaxWidth > 0 {
-			leadingSpaces = min(leadingSpaces, innerMaxWidth)
-		}
-	}
-	innerSegments := make([]string, 0, 2)
-	if leadingSpaces > 0 {
-		leadingStyle := baseStyle
-		if innerWidth > 0 {
-			leadingStyle = leadingStyle.Width(leadingSpaces)
-		}
-		if innerMaxWidth > 0 {
-			leadingStyle = leadingStyle.MaxWidth(leadingSpaces)
-		}
-		innerSegments = append(
-			innerSegments,
-			leadingStyle.Render(strings.Repeat(" ", leadingSpaces)),
-		)
-	}
-
 	contentStyle := baseStyle
 	if innerWidth > 0 {
-		remaining := max(innerWidth-leadingSpaces, 0)
-		contentStyle = contentStyle.Width(remaining)
+		contentStyle = contentStyle.Width(innerWidth)
 	}
 	if innerMaxWidth > 0 {
-		remainingMax := max(innerMaxWidth-leadingSpaces, 0)
-		contentStyle = contentStyle.MaxWidth(remainingMax)
+		contentStyle = contentStyle.MaxWidth(innerMaxWidth)
 	}
-	innerSegments = append(innerSegments, contentStyle.Render(content))
-
-	inner := lipgloss.JoinHorizontal(lipgloss.Top, innerSegments...)
+	inner := contentStyle.Render(content)
 
 	if padLeft == 0 && padRight == 0 {
 		return inner
