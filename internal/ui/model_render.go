@@ -26,9 +26,12 @@ const (
 )
 
 const (
-	filePaneTitle     = "Files"
-	editorPaneTitle   = "Editor"
-	responsePaneTitle = "Response"
+	filePaneTitle         = "Files"
+	editorPaneTitle       = "Editor"
+	responsePaneTitle     = "Response"
+	filePaneFocusIcon     = "▤"
+	editorPaneFocusIcon   = "✎"
+	responsePaneFocusIcon = "◉"
 )
 
 const (
@@ -461,7 +464,7 @@ func (m Model) renderFilePane(rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleFile.Inherit(m.theme.PaneTitle),
-		filePaneTitle,
+		paneTitleWithFocus(filePaneTitle, filePaneFocusIcon, paneActive),
 		content,
 	)
 }
@@ -899,7 +902,7 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleEditor.Inherit(m.theme.PaneTitle),
-		editorPaneTitle,
+		paneTitleWithFocus(editorPaneTitle, editorPaneFocusIcon, active),
 		content,
 	)
 }
@@ -1064,7 +1067,7 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleResponse.Inherit(m.theme.PaneTitle),
-		responsePaneTitle,
+		paneTitleWithFocus(responsePaneTitle, responsePaneFocusIcon, active),
 		body,
 	)
 }
@@ -1110,6 +1113,13 @@ func renderTitledPaneFrame(
 
 func sanitizePaneTitle(title string) string {
 	return strings.Join(strings.Fields(title), " ")
+}
+
+func paneTitleWithFocus(title, icon string, active bool) string {
+	if !active {
+		return title
+	}
+	return icon + " " + title
 }
 
 func titledPaneTopBorder(
@@ -1335,6 +1345,16 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 			MaxWidth(contentWidth).
 			MaxHeight(contentBodyHeight).
 			Render(content)
+		if searchView != "" {
+			content = lipgloss.Place(
+				contentWidth,
+				contentBodyHeight,
+				lipgloss.Top,
+				lipgloss.Left,
+				content,
+				lipgloss.WithWhitespaceChars(" "),
+			)
+		}
 	}
 
 	if !focused && m.focus == focusResponse {
@@ -1344,10 +1364,10 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	}
 
 	elements := []string{tabs}
+	elements = append(elements, content)
 	if searchView != "" {
 		elements = append(elements, searchView)
 	}
-	elements = append(elements, content)
 
 	column := lipgloss.JoinVertical(
 		lipgloss.Left,
@@ -1919,7 +1939,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 }
 
 const (
-	searchPromptIcon = "»"
+	searchPromptIcon = "⌕"
 )
 
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
@@ -1963,7 +1983,7 @@ func (m Model) searchPromptMode() string {
 	if m.searchIsRegex {
 		return "regex"
 	}
-	return "lit"
+	return "literal"
 }
 
 func (m Model) searchPromptHints() string {

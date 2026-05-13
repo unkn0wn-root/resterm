@@ -691,6 +691,80 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 	}
 }
 
+func TestResponseSearchPromptRendersAtColumnBottom(t *testing.T) {
+	snap := &responseSnapshot{pretty: withTrailingNewline("short-body"), ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+	model.showSearchPrompt = true
+	model.searchTarget = searchTargetResponse
+	model.searchResponsePane = responsePanePrimary
+	model.searchInput.SetValue("needle")
+	model.searchInput.Focus()
+
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 36
+	pane.viewport.Height = 5
+	pane.viewport.SetContent("short-body")
+
+	view := model.renderResponseColumn(responsePanePrimary, true, 36)
+	lines := strings.Split(ansi.Strip(view), "\n")
+	bodyLine := lineIndexContaining(lines, "short-body")
+	searchLine := lineIndexContaining(lines, searchPromptIcon+" Search")
+	if bodyLine < 0 {
+		t.Fatalf("expected response body in column, got %q", ansi.Strip(view))
+	}
+	if searchLine < 0 {
+		t.Fatalf("expected response search prompt in column, got %q", ansi.Strip(view))
+	}
+	if searchLine <= bodyLine {
+		t.Fatalf("expected search prompt below response body, got body line %d search line %d in %q", bodyLine, searchLine, ansi.Strip(view))
+	}
+	if last := lastNonBlankLineIndex(lines); last != searchLine {
+		t.Fatalf("expected search prompt on bottom content line, got last line %d search line %d in %q", last, searchLine, ansi.Strip(view))
+	}
+}
+
+func TestResponseSearchPromptOnlyRendersInTargetSplitPane(t *testing.T) {
+	model := newModelWithResponseTab(responseTabPretty, &responseSnapshot{ready: true})
+	model.responseSplit = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	model.showSearchPrompt = true
+	model.searchTarget = searchTargetResponse
+	model.searchResponsePane = responsePaneSecondary
+	model.searchInput.SetValue("needle")
+	model.searchInput.Focus()
+
+	primary := model.pane(responsePanePrimary)
+	primary.viewport.Width = 32
+	primary.viewport.Height = 5
+	primary.viewport.SetContent("primary-body")
+	secondary := model.pane(responsePaneSecondary)
+	secondary.activeTab = responseTabPretty
+	secondary.viewport.Width = 32
+	secondary.viewport.Height = 5
+	secondary.viewport.SetContent("secondary-body")
+
+	primaryView := model.renderResponseColumn(responsePanePrimary, true, 32)
+	if strings.Contains(ansi.Strip(primaryView), searchPromptIcon+" Search") {
+		t.Fatalf("did not expect search prompt in primary pane, got %q", ansi.Strip(primaryView))
+	}
+
+	secondaryView := model.renderResponseColumn(responsePaneSecondary, false, 32)
+	secondaryPlain := ansi.Strip(secondaryView)
+	if !strings.Contains(secondaryPlain, searchPromptIcon+" Search") {
+		t.Fatalf("expected search prompt in secondary pane, got %q", secondaryPlain)
+	}
+	secondaryLines := strings.Split(secondaryPlain, "\n")
+	bodyLine := lineIndexContaining(secondaryLines, "secondary-body")
+	searchLine := lineIndexContaining(secondaryLines, searchPromptIcon+" Search")
+	if bodyLine < 0 || searchLine < 0 {
+		t.Fatalf("expected secondary body and search prompt, got %q", secondaryPlain)
+	}
+	if searchLine <= bodyLine {
+		t.Fatalf("expected secondary search prompt below body, got body line %d search line %d in %q", bodyLine, searchLine, secondaryPlain)
+	}
+}
+
 func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -815,6 +889,54 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 	}
 }
 
+func TestFocusedPaneTitleRendersPaneIcon(t *testing.T) {
+	frame := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#abcdef")).
+		Width(24).
+		Height(3)
+
+	cases := []struct {
+		title string
+		icon  string
+	}{
+		{title: filePaneTitle, icon: filePaneFocusIcon},
+		{title: editorPaneTitle, icon: editorPaneFocusIcon},
+		{title: responsePaneTitle, icon: responsePaneFocusIcon},
+	}
+
+	seen := make(map[string]struct{}, len(cases))
+	for _, tc := range cases {
+		if tc.icon == "" {
+			t.Fatalf("expected focused pane icon for %s", tc.title)
+		}
+		if _, ok := seen[tc.icon]; ok {
+			t.Fatalf("expected distinct focused pane icon, got duplicate %q", tc.icon)
+		}
+		seen[tc.icon] = struct{}{}
+
+		rendered := renderTitledPaneFrame(
+			frame,
+			lipgloss.NewStyle(),
+			paneTitleWithFocus(tc.title, tc.icon, true),
+			"body",
+		)
+		if !strings.Contains(ansi.Strip(rendered), tc.icon+" "+tc.title) {
+			t.Fatalf("expected focused %s title to include icon %q, got %q", tc.title, tc.icon, rendered)
+		}
+
+		rendered = renderTitledPaneFrame(
+			frame,
+			lipgloss.NewStyle(),
+			paneTitleWithFocus(tc.title, tc.icon, false),
+			"body",
+		)
+		if strings.Contains(ansi.Strip(rendered), tc.icon+" "+tc.title) {
+			t.Fatalf("expected inactive %s title to omit icon %q, got %q", tc.title, tc.icon, rendered)
+		}
+	}
+}
+
 func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
@@ -878,6 +1000,24 @@ func lineWith(view, needle string) string {
 		}
 	}
 	return ""
+}
+
+func lineIndexContaining(lines []string, needle string) int {
+	for idx, line := range lines {
+		if strings.Contains(line, needle) {
+			return idx
+		}
+	}
+	return -1
+}
+
+func lastNonBlankLineIndex(lines []string) int {
+	for idx := len(lines) - 1; idx >= 0; idx-- {
+		if strings.TrimSpace(lines[idx]) != "" {
+			return idx
+		}
+	}
+	return -1
 }
 
 func assertTitleCenteredWithinNearestBorders(t *testing.T, view, title string) {
