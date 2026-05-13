@@ -192,7 +192,11 @@ func TestRenderResponseSearchPromptKeepsCursorVisibleForLongQuery(t *testing.T) 
 		t.Fatalf("expected long response search to render cursor tail, got %q", out)
 	}
 	if lipgloss.Width(out) > 24 {
-		t.Fatalf("expected response search prompt to fit width 24, got width %d in %q", lipgloss.Width(out), out)
+		t.Fatalf(
+			"expected response search prompt to fit width 24, got width %d in %q",
+			lipgloss.Width(out),
+			out,
+		)
 	}
 	assertSearchGuideHidden(t, out)
 }

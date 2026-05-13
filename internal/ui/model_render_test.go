@@ -716,10 +716,20 @@ func TestResponseSearchPromptRendersAtColumnBottom(t *testing.T) {
 		t.Fatalf("expected response search prompt in column, got %q", ansi.Strip(view))
 	}
 	if searchLine <= bodyLine {
-		t.Fatalf("expected search prompt below response body, got body line %d search line %d in %q", bodyLine, searchLine, ansi.Strip(view))
+		t.Fatalf(
+			"expected search prompt below response body, got body line %d search line %d in %q",
+			bodyLine,
+			searchLine,
+			ansi.Strip(view),
+		)
 	}
 	if last := lastNonBlankLineIndex(lines); last != searchLine {
-		t.Fatalf("expected search prompt on bottom content line, got last line %d search line %d in %q", last, searchLine, ansi.Strip(view))
+		t.Fatalf(
+			"expected search prompt on bottom content line, got last line %d search line %d in %q",
+			last,
+			searchLine,
+			ansi.Strip(view),
+		)
 	}
 }
 
@@ -761,7 +771,12 @@ func TestResponseSearchPromptOnlyRendersInTargetSplitPane(t *testing.T) {
 		t.Fatalf("expected secondary body and search prompt, got %q", secondaryPlain)
 	}
 	if searchLine <= bodyLine {
-		t.Fatalf("expected secondary search prompt below body, got body line %d search line %d in %q", bodyLine, searchLine, secondaryPlain)
+		t.Fatalf(
+			"expected secondary search prompt below body, got body line %d search line %d in %q",
+			bodyLine,
+			searchLine,
+			secondaryPlain,
+		)
 	}
 }
 

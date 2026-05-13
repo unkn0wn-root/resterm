@@ -199,6 +199,8 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 		ed.FocusedStyle = focused
 		ed.BlurredStyle = blurred
 		ed.SetSelectionStyle(lipgloss.NewStyle().Background(lipgloss.Color("#4C3F72")))
+		ed.SetHighlightStyle(ensureResponseHighlight(th.ResponseSearchHighlight, false))
+		ed.SetActiveHighlightStyle(ensureResponseHighlight(th.ResponseSearchHighlightActive, true))
 		if ed.Focused() {
 			ed.Focus()
 		} else {
@@ -230,6 +232,8 @@ func (rt themeRuntime) applyRequestEditor(ed *requestEditor, th theme.Theme) {
 	ed.FocusedStyle = focused
 	ed.BlurredStyle = blurred
 	ed.SetSelectionStyle(lipgloss.NewStyle().Background(rt.editorSelectionBackground(th)))
+	ed.SetHighlightStyle(ensureResponseHighlight(th.ResponseSearchHighlight, false))
+	ed.SetActiveHighlightStyle(ensureResponseHighlight(th.ResponseSearchHighlightActive, true))
 	if ed.Focused() {
 		ed.Focus()
 	} else {

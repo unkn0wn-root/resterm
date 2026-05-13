@@ -406,14 +406,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "ctrl+r":
 				m.toggleSearchMode()
-				return m, batchCommands(cmds...)
+				cmd := m.applyLiveSearchPrompt()
+				return m, batchCommands(append(cmds, cmd)...)
 			case "enter":
 				cmd := m.submitSearchPrompt()
 				return m, batchCommands(append(cmds, cmd)...)
 			}
+			prevValue := m.searchInput.Value()
 			var inputCmd tea.Cmd
 			m.searchInput, inputCmd = m.searchInput.Update(msg)
-			return m, batchCommands(append(cmds, inputCmd)...)
+			cmds = append(cmds, inputCmd)
+			if m.searchInput.Value() != prevValue {
+				cmds = append(cmds, m.applyLiveSearchPrompt())
+			}
+			return m, batchCommands(cmds...)
 		}
 		return m, batchCommands(cmds...)
 	}

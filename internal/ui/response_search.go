@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -90,16 +89,11 @@ func (s *responseSearchState) computeMatches(content string) error {
 		return nil
 	}
 
-	query := s.query
-	if s.isRegex {
-		rx, err := regexp.Compile(query)
-		if err != nil {
-			return err
-		}
-		s.matches = regexMatches(content, rx)
-	} else {
-		s.matches = literalMatches(content, query)
+	matches, err := buildSearchMatches(content, s.query, s.isRegex)
+	if err != nil {
+		return err
 	}
+	s.matches = matches
 	if len(s.matches) == 0 {
 		s.index = -1
 		s.active = false

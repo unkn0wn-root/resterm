@@ -1168,6 +1168,43 @@ func TestRequestEditorApplySearchLiteral(t *testing.T) {
 	}
 }
 
+func TestRequestEditorApplySearchHighlightsAllMatches(t *testing.T) {
+	content := "foo bar\nfoo baz\nfoo"
+	editor := newTestEditor(content)
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, 0)
+
+	editor, cmd := editor.ApplySearch("foo", false)
+	if status := statusFromCmd(t, cmd); status == nil {
+		t.Fatal("expected initial search status")
+	}
+
+	ranges := editor.HighlightRanges()
+	if len(ranges) != 3 {
+		t.Fatalf("expected all matches highlighted, got %d ranges", len(ranges))
+	}
+	if !ranges[0].Active {
+		t.Fatalf("expected first match to be active, got %+v", ranges)
+	}
+	for i, r := range ranges {
+		if got := r.End - r.Start; got != len("foo") {
+			t.Fatalf("expected range %d to cover foo, got length %d", i, got)
+		}
+	}
+
+	editor, cmd = editor.NextSearchMatch()
+	if status := statusFromCmd(t, cmd); status == nil {
+		t.Fatal("expected next search status")
+	}
+	ranges = editor.HighlightRanges()
+	if len(ranges) != 3 {
+		t.Fatalf("expected all matches to stay highlighted, got %d ranges", len(ranges))
+	}
+	if ranges[0].Active || !ranges[1].Active || ranges[2].Active {
+		t.Fatalf("expected second match to become active, got %+v", ranges)
+	}
+}
+
 func TestRequestEditorApplySearchRegexInvalid(t *testing.T) {
 	editor := newTestEditor("alpha")
 	editor, cmd := editor.ApplySearch("[", true)
@@ -1792,6 +1829,9 @@ func TestRequestEditorExitSearchMode(t *testing.T) {
 	}
 	if len(editor.search.matches) != 0 {
 		t.Fatalf("expected search matches cleared, got %d", len(editor.search.matches))
+	}
+	if ranges := editor.HighlightRanges(); len(ranges) != 0 {
+		t.Fatalf("expected search highlights cleared, got %d", len(ranges))
 	}
 	if _, ok := editor.currentSearchMatch(); ok {
 		t.Fatal("did not expect current search match after exit")

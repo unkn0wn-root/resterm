@@ -1052,7 +1052,10 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 		Result: res,
 	})
 	if m.showErrorModal {
-		t.Fatalf("expected workflow step 502 to stay in workflow UI, got modal %q", m.errorModalMessage)
+		t.Fatalf(
+			"expected workflow step 502 to stay in workflow UI, got modal %q",
+			m.errorModalMessage,
+		)
 	}
 	if m.suppressNextErrorModal {
 		t.Fatal("expected modal suppression to be consumed by the step status update")

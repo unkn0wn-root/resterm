@@ -56,6 +56,13 @@ type RuneStyler interface {
 	StylesForLine(line []rune, lineIndex int) []lipgloss.Style
 }
 
+// HighlightRange marks an inclusive-exclusive rune range for rendered emphasis.
+type HighlightRange struct {
+	Start  int
+	End    int
+	Active bool
+}
+
 // KeyMap is the key bindings for different actions within the textarea.
 type KeyMap struct {
 	CharacterBackward       key.Binding
@@ -293,6 +300,9 @@ type Model struct {
 	selectionStart  int
 	selectionEnd    int
 	selectionStyle  lipgloss.Style
+	highlightRanges []HighlightRange
+	highlightStyle  lipgloss.Style
+	activeHighlight lipgloss.Style
 	runeStyler      RuneStyler
 	overlayLines    []string
 
@@ -376,6 +386,13 @@ func New() Model {
 		Cursor:               cur,
 		KeyMap:               DefaultKeyMap,
 		selectionStyle:       lipgloss.NewStyle().Background(lipgloss.Color("#4C3F72")),
+		highlightStyle: lipgloss.NewStyle().
+			Background(lipgloss.Color("#2C1E3A")).
+			Foreground(lipgloss.Color("#E9E6FF")),
+		activeHighlight: lipgloss.NewStyle().
+			Background(lipgloss.Color("#FFD46A")).
+			Foreground(lipgloss.Color("#1A1020")).
+			Bold(true),
 
 		value: make([][]rune, minHeight, maxLines),
 		focus: false,
@@ -1079,6 +1096,60 @@ func (m *Model) SetSelectionStyle(style lipgloss.Style) {
 	m.selectionStyle = style
 }
 
+// SetHighlightRanges replaces the auxiliary highlighted ranges.
+func (m *Model) SetHighlightRanges(ranges []HighlightRange) {
+	if len(ranges) == 0 {
+		m.highlightRanges = nil
+		return
+	}
+	next := make([]HighlightRange, 0, len(ranges))
+	for _, r := range ranges {
+		if r.Start < 0 {
+			r.Start = 0
+		}
+		if r.End <= r.Start {
+			continue
+		}
+		next = append(next, r)
+	}
+	if len(next) == 0 {
+		m.highlightRanges = nil
+		return
+	}
+	slices.SortFunc(next, func(a, b HighlightRange) int {
+		if a.Start != b.Start {
+			return a.Start - b.Start
+		}
+		return a.End - b.End
+	})
+	m.highlightRanges = next
+}
+
+// HighlightRanges returns the auxiliary highlighted ranges.
+func (m Model) HighlightRanges() []HighlightRange {
+	if len(m.highlightRanges) == 0 {
+		return nil
+	}
+	ranges := make([]HighlightRange, len(m.highlightRanges))
+	copy(ranges, m.highlightRanges)
+	return ranges
+}
+
+// ClearHighlightRanges removes auxiliary highlights.
+func (m *Model) ClearHighlightRanges() {
+	m.highlightRanges = nil
+}
+
+// SetHighlightStyle overrides the style for non-active auxiliary highlights.
+func (m *Model) SetHighlightStyle(style lipgloss.Style) {
+	m.highlightStyle = style
+}
+
+// SetActiveHighlightStyle overrides the style for the active auxiliary highlight.
+func (m *Model) SetActiveHighlightStyle(style lipgloss.Style) {
+	m.activeHighlight = style
+}
+
 // SetOverlayLines configures auxiliary lines inserted after the cursor row.
 func (m *Model) SetOverlayLines(lines []string) {
 	if len(lines) == 0 {
@@ -1451,6 +1522,7 @@ func (m Model) View() string {
 	selectionActive := m.selectionActive && m.selectionEnd > m.selectionStart
 	selStart := m.selectionStart
 	selEnd := m.selectionEnd
+	highlightIndex := 0
 	globalOffset := 0
 
 	var (
@@ -1533,7 +1605,20 @@ func (m Model) View() string {
 		startIdx, visibleRunes, renderedWidth := visibleSegment(line, m.horizOffset, m.width)
 		lineConsumed := startIdx
 		globalOffset += startIdx
-		needsStyler := lineStyles != nil || selectionActive
+		segmentStartOffset := globalOffset
+		segmentEndOffset := segmentStartOffset + len(visibleRunes)
+		selectionVisible := selectionActive && rangesOverlap(
+			selStart,
+			selEnd,
+			segmentStartOffset,
+			segmentEndOffset,
+		)
+		highlightVisible := m.highlightIntersects(
+			segmentStartOffset,
+			segmentEndOffset,
+			&highlightIndex,
+		)
+		needsStyler := lineStyles != nil || selectionVisible || highlightVisible
 
 		cursorRel := m.col - startIdx
 		cursorVisible := m.row == l && cursorRel >= 0 && cursorRel <= len(visibleRunes)
@@ -1571,6 +1656,7 @@ func (m Model) View() string {
 				selectionActive,
 				selStart,
 				selEnd,
+				&highlightIndex,
 			)
 
 			if cursorVisible {
@@ -1583,6 +1669,14 @@ func (m Model) View() string {
 						// Rune-level syntax styles must win over the line's base text color.
 						cursorStyle = lineStyles[cursorIndex].Inherit(cursorStyle)
 					}
+					cursorOffset := lineStartOffset + startIdx + cursorRel
+					cursorStyle = m.highlightedStyleForOffset(
+						cursorOffset,
+						cursorStyle,
+						selectionActive,
+						selStart,
+						selEnd,
+					)
 					m.Cursor.TextStyle = cursorStyle
 					s.WriteString(cursorStyle.Render(m.Cursor.View()))
 					writeSegments(&s, segments, cursorRel+1, len(segments))
@@ -1719,6 +1813,7 @@ func (m Model) renderStyledSegments(
 	globalOffset *int,
 	selectionActive bool,
 	selectionStart, selectionEnd int,
+	highlightIndex *int,
 ) []string {
 	segments := make([]string, len(wrappedLine))
 	for i, r := range wrappedLine {
@@ -1734,6 +1829,11 @@ func (m Model) renderStyledSegments(
 		}
 
 		renderStyle := runeStyle
+		if isActual {
+			if style, ok := m.highlightStyleAtOffset(*globalOffset, highlightIndex); ok {
+				renderStyle = style.Inherit(renderStyle)
+			}
+		}
 		if selectionActive && isActual && *globalOffset >= selectionStart &&
 			*globalOffset < selectionEnd {
 			renderStyle = m.selectionStyle.Inherit(runeStyle)
@@ -1746,6 +1846,65 @@ func (m Model) renderStyledSegments(
 		}
 	}
 	return segments
+}
+
+func (m Model) highlightStyleAtOffset(offset int, idx *int) (lipgloss.Style, bool) {
+	for *idx < len(m.highlightRanges) && m.highlightRanges[*idx].End <= offset {
+		*idx++
+	}
+	return m.highlightStyleAtOffsetFrom(offset, *idx)
+}
+
+func (m Model) highlightStyleAtOffsetFrom(offset, start int) (lipgloss.Style, bool) {
+	highlighted := false
+	for i := start; i < len(m.highlightRanges); i++ {
+		r := m.highlightRanges[i]
+		if r.Start > offset {
+			break
+		}
+		if r.End <= offset {
+			continue
+		}
+		if r.Active {
+			return m.activeHighlight, true
+		}
+		highlighted = true
+	}
+	if highlighted {
+		return m.highlightStyle, true
+	}
+	return lipgloss.Style{}, false
+}
+
+func (m Model) highlightIntersects(start, end int, idx *int) bool {
+	for *idx < len(m.highlightRanges) && m.highlightRanges[*idx].End <= start {
+		*idx++
+	}
+	if start >= end || *idx >= len(m.highlightRanges) {
+		return false
+	}
+	r := m.highlightRanges[*idx]
+	return rangesOverlap(r.Start, r.End, start, end)
+}
+
+func (m Model) highlightedStyleForOffset(
+	offset int,
+	base lipgloss.Style,
+	selectionActive bool,
+	selectionStart int,
+	selectionEnd int,
+) lipgloss.Style {
+	if style, ok := m.highlightStyleAtOffsetFrom(offset, 0); ok {
+		base = style.Inherit(base)
+	}
+	if selectionActive && offset >= selectionStart && offset < selectionEnd {
+		base = m.selectionStyle.Inherit(base)
+	}
+	return base
+}
+
+func rangesOverlap(aStart, aEnd, bStart, bEnd int) bool {
+	return aStart < bEnd && bStart < aEnd
 }
 
 // formatLineNumber formats the line number for display dynamically based on

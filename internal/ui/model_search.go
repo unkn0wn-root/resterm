@@ -88,12 +88,50 @@ func (m *Model) submitSearchPrompt() tea.Cmd {
 	}
 }
 
+func (m *Model) applyLiveSearchPrompt() tea.Cmd {
+	query := strings.TrimSpace(m.searchInput.Value())
+	if query == "" {
+		return m.clearLiveSearchTarget()
+	}
+
+	switch m.searchTarget {
+	case searchTargetResponse:
+		return m.applyResponseSearch(query, m.searchIsRegex)
+	default:
+		updated, cmd := m.editor.ApplySearch(query, m.searchIsRegex)
+		m.editor = updated
+		return cmd
+	}
+}
+
+func (m *Model) clearLiveSearchTarget() tea.Cmd {
+	switch m.searchTarget {
+	case searchTargetResponse:
+		paneID := m.searchResponsePane
+		if paneID != responsePanePrimary && paneID != responsePaneSecondary {
+			paneID = m.responsePaneFocus
+			m.searchResponsePane = paneID
+		}
+		pane := m.pane(paneID)
+		if pane == nil {
+			return nil
+		}
+		hadState := pane.search.clear()
+		pane.search.isRegex = m.searchIsRegex
+		if !hadState {
+			return nil
+		}
+		return m.syncResponsePane(paneID)
+	default:
+		m.editor.ClearSearch(m.searchIsRegex)
+		return nil
+	}
+}
+
 func (m *Model) prepareEditorSearchContext() {
 	m.searchTarget = searchTargetEditor
 	m.searchIsRegex = m.editor.search.isRegex
-	if strings.TrimSpace(m.searchInput.Value()) == "" {
-		m.searchInput.SetValue(m.editor.search.query)
-	}
+	m.searchInput.SetValue(m.editor.search.query)
 }
 
 func (m *Model) responseSearchContent(
@@ -198,7 +236,7 @@ func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
 	status := statusCmd(
 		statusInfo,
-		fmt.Sprintf("Match %d/%d for %q", pane.search.index+1, len(pane.search.matches), query),
+		searchStatusText(pane.search.index, len(pane.search.matches), query, false),
 	)
 	if syncCmd := m.syncResponsePane(paneID); syncCmd != nil {
 		return tea.Batch(syncCmd, status)
@@ -273,15 +311,7 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
 	pane.search.active = true
 
-	statusText := fmt.Sprintf(
-		"Match %d/%d for %q",
-		next+1,
-		len(pane.search.matches),
-		pane.search.query,
-	)
-	if wrappedAround {
-		statusText += " (wrapped)"
-	}
+	statusText := searchStatusText(next, len(pane.search.matches), pane.search.query, wrappedAround)
 	status := statusCmd(statusInfo, statusText)
 	if syncCmd := m.syncResponsePane(paneID); syncCmd != nil {
 		return tea.Batch(syncCmd, status)
@@ -356,15 +386,7 @@ func (m *Model) retreatResponseSearch() tea.Cmd {
 	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
 	pane.search.active = true
 
-	statusText := fmt.Sprintf(
-		"Match %d/%d for %q",
-		prev+1,
-		len(pane.search.matches),
-		pane.search.query,
-	)
-	if wrappedAround {
-		statusText += " (wrapped)"
-	}
+	statusText := searchStatusText(prev, len(pane.search.matches), pane.search.query, wrappedAround)
 	status := statusCmd(statusInfo, statusText)
 	if syncCmd := m.syncResponsePane(paneID); syncCmd != nil {
 		return tea.Batch(syncCmd, status)
