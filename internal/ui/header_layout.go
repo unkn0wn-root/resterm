@@ -21,15 +21,15 @@ func headerContentWidth(total int, style lipgloss.Style) int {
 	return width
 }
 
-func styleRight(text string, st lipgloss.Style, max int) (string, int) {
-	if max <= 0 {
+func styleRight(text string, st lipgloss.Style, maxWidth int) (string, int) {
+	if maxWidth <= 0 {
 		return "", 0
 	}
 	t := strings.TrimSpace(text)
 	if t == "" {
 		return "", 0
 	}
-	t = truncateToWidth(t, maxInt(1, max-st.GetHorizontalFrameSize()))
+	t = truncateToWidth(t, max(1, maxWidth-st.GetHorizontalFrameSize()))
 	if strings.TrimSpace(t) == "" {
 		return "", 0
 	}

@@ -288,10 +288,10 @@ func (m *Model) applyLayout() tea.Cmd {
 		}
 		m.editorSplit = realEditorRatio
 	}
-	m.editor.SetWidth(maxInt(paneContentWidth(editorWidth, editorFrameWidth), 1))
-	m.editor.SetHeight(maxInt(editorHeight, 1))
+	m.editor.SetWidth(max(paneContentWidth(editorWidth, editorFrameWidth), 1))
+	m.editor.SetHeight(max(editorHeight, 1))
 
-	primaryContentWidth := maxInt(paneContentWidth(responseWidth, responseFrameWidth), 1)
+	primaryContentWidth := max(paneContentWidth(responseWidth, responseFrameWidth), 1)
 	primaryPane := &m.responsePanes[0]
 	secondaryPane := &m.responsePanes[1]
 
@@ -318,7 +318,7 @@ func (m *Model) applyLayout() tea.Cmd {
 			primaryHeight := int(math.Round(float64(available) * ratio))
 			minHeight := minResponseSplitHeight
 			if available < minHeight*2 {
-				minHeight = maxInt(available/2, 1)
+				minHeight = max(available/2, 1)
 			}
 			if primaryHeight < minHeight {
 				primaryHeight = minHeight
@@ -328,7 +328,7 @@ func (m *Model) applyLayout() tea.Cmd {
 				primaryHeight = maxPrimary
 			}
 			if primaryHeight < 1 {
-				primaryHeight = maxInt(available, 1)
+				primaryHeight = max(available, 1)
 			}
 			secondaryHeight := available - primaryHeight
 			if secondaryHeight < 1 && available > 0 {
@@ -339,10 +339,10 @@ func (m *Model) applyLayout() tea.Cmd {
 				}
 				primaryHeight = tmp
 			}
-			primaryPane.viewport.Width = maxInt(width, 1)
-			primaryPane.viewport.Height = maxInt(primaryHeight, 1)
-			secondaryPane.viewport.Width = maxInt(width, 1)
-			secondaryPane.viewport.Height = maxInt(secondaryHeight, 1)
+			primaryPane.viewport.Width = max(width, 1)
+			primaryPane.viewport.Height = max(primaryHeight, 1)
+			secondaryPane.viewport.Width = max(width, 1)
+			secondaryPane.viewport.Height = max(secondaryHeight, 1)
 		default:
 			available := primaryContentWidth - responseSplitSeparatorWidth
 			if available < 0 {
@@ -352,7 +352,7 @@ func (m *Model) applyLayout() tea.Cmd {
 			if available <= 0 {
 				primaryWidth, secondaryWidth = 1, 1
 			} else if available < minResponseSplitWidth*2 {
-				primaryWidth = maxInt(available/2, 1)
+				primaryWidth = max(available/2, 1)
 				secondaryWidth = available - primaryWidth
 				if secondaryWidth < 1 {
 					secondaryWidth = 1
@@ -382,16 +382,16 @@ func (m *Model) applyLayout() tea.Cmd {
 					secondaryWidth = 1
 				}
 			}
-			primaryPane.viewport.Width = maxInt(primaryWidth, 1)
-			primaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
-			secondaryPane.viewport.Width = maxInt(secondaryWidth, 1)
-			secondaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
+			primaryPane.viewport.Width = max(primaryWidth, 1)
+			primaryPane.viewport.Height = max(baseViewportHeight, 1)
+			secondaryPane.viewport.Width = max(secondaryWidth, 1)
+			secondaryPane.viewport.Height = max(baseViewportHeight, 1)
 		}
 	} else {
-		primaryPane.viewport.Width = maxInt(primaryContentWidth, 1)
-		primaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
-		secondaryPane.viewport.Width = maxInt(primaryContentWidth, 1)
-		secondaryPane.viewport.Height = maxInt(baseViewportHeight, 1)
+		primaryPane.viewport.Width = max(primaryContentWidth, 1)
+		primaryPane.viewport.Height = max(baseViewportHeight, 1)
+		secondaryPane.viewport.Width = max(primaryContentWidth, 1)
+		secondaryPane.viewport.Height = max(baseViewportHeight, 1)
 	}
 
 	historyPane := primaryPane
@@ -400,30 +400,30 @@ func (m *Model) applyLayout() tea.Cmd {
 			historyPane = secondaryPane
 		}
 	}
-	historyWidth := maxInt(historyPane.viewport.Width, 1)
-	historyHeight := maxInt(historyPane.viewport.Height, 1)
+	historyWidth := max(historyPane.viewport.Width, 1)
+	historyHeight := max(historyPane.viewport.Height, 1)
 	listHeight := historyHeight - m.historyHeaderHeight()
 	if listHeight < 1 {
 		listHeight = 1
 	}
 	m.historyList.SetSize(historyWidth, listHeight)
 	if len(m.envList.Items()) > 0 {
-		envWidth := minInt(40, m.width-6)
+		envWidth := min(40, m.width-6)
 		if envWidth < 20 {
 			envWidth = 20
 		}
-		envHeight := minInt(paneHeight-4, 12)
+		envHeight := min(paneHeight-4, 12)
 		if envHeight < 5 {
 			envHeight = 5
 		}
 		m.envList.SetSize(envWidth, envHeight)
 	}
 	if len(m.themeList.Items()) > 0 {
-		themeWidth := minInt(48, m.width-6)
+		themeWidth := min(48, m.width-6)
 		if themeWidth < 24 {
 			themeWidth = 24
 		}
-		themeHeight := minInt(paneHeight-4, 14)
+		themeHeight := min(paneHeight-4, 14)
 		if themeHeight < 5 {
 			themeHeight = 5
 		}
@@ -567,13 +567,13 @@ func (m *Model) horizontalContentHeights(
 		paneHeight = 0
 	}
 	if editorCollapsed && responseCollapsed {
-		return 0, maxInt(paneHeight, 1)
+		return 0, max(paneHeight, 1)
 	}
 	if editorCollapsed {
-		return 0, maxInt(paneHeight, 1)
+		return 0, max(paneHeight, 1)
 	}
 	if responseCollapsed {
-		return maxInt(paneHeight, 1), 0
+		return max(paneHeight, 1), 0
 	}
 
 	frameAllowance := 0
@@ -589,10 +589,10 @@ func (m *Model) horizontalContentHeights(
 		availableHeight = 0
 	}
 
-	minEditor := maxInt(minEditorPaneHeight, 1)
-	minResponse := maxInt(minResponsePaneHeight, 1)
+	minEditor := max(minEditorPaneHeight, 1)
+	minResponse := max(minResponsePaneHeight, 1)
 	if availableHeight < minEditor+minResponse {
-		distributed := maxInt(availableHeight/2, 1)
+		distributed := max(availableHeight/2, 1)
 		minEditor = distributed
 		minResponse = availableHeight - distributed
 		if minResponse < 1 {

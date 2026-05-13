@@ -114,7 +114,7 @@ func newHistoryLineFrame(style lipgloss.Style, width int) historyLineFrame {
 		padL: style.GetPaddingLeft(),
 		padR: style.GetPaddingRight(),
 	}
-	frame.width = maxInt(
+	frame.width = max(
 		width-frame.padL-frame.padR-style.GetBorderLeftSize()-style.GetBorderRightSize(),
 		0,
 	)

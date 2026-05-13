@@ -44,8 +44,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.frameWidth = typed.Width
 		m.frameHeight = typed.Height
-		m.width = maxInt(typed.Width-2, 0)
-		m.height = maxInt(typed.Height-2, 0)
+		m.width = max(typed.Width-2, 0)
+		m.height = max(typed.Height-2, 0)
 		if !m.ready {
 			m.ready = true
 		}
@@ -1627,7 +1627,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			if pane.activeTab == responseTabStats {
 				if workflowStatsFromPane(pane) != nil {
-					page := maxInt(pane.viewport.Height/2, 1)
+					page := max(pane.viewport.Height/2, 1)
 					return combine(m.scrollWorkflowStatsDetail(page))
 				}
 			}
@@ -1643,7 +1643,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			}
 			if pane.activeTab == responseTabStats {
 				if workflowStatsFromPane(pane) != nil {
-					page := maxInt(pane.viewport.Height/2, 1)
+					page := max(pane.viewport.Height/2, 1)
 					return combine(m.scrollWorkflowStatsDetail(-page))
 				}
 			}

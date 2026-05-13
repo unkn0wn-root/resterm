@@ -100,11 +100,11 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	case "pgdown", "ctrl+f":
 		if vp != nil {
-			vp.ScrollDown(maxInt(1, vp.Height))
+			vp.ScrollDown(max(1, vp.Height))
 		}
 	case "pgup", "ctrl+b", "ctrl+u":
 		if vp != nil {
-			vp.ScrollUp(maxInt(1, vp.Height))
+			vp.ScrollUp(max(1, vp.Height))
 		}
 	case "home":
 		if vp != nil {

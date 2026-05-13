@@ -117,13 +117,6 @@ func formatHistogramPercent(count, total int) string {
 	return fmt.Sprintf("%.1f%%", percent)
 }
 
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
 func renderHistogramLegend(indent string) string {
 	if indent == "" {
 		indent = histogramDefaultIndent

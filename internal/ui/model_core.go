@@ -235,7 +235,6 @@ type Model struct {
 	responseTokens         map[string]*responseSnapshot
 	responseLastFocused    responsePaneID
 	focus                  paneFocus
-	renderingModalUnderlay bool
 	compareSnapshots       map[string]*responseSnapshot
 	compareRowIndex        int
 	compareSelectedEnv     string
