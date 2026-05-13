@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.38.3](https://github.com/unkn0wn-root/resterm/compare/v0.38.2...v0.38.3) (2026-05-13)
+
+
+### Bug Fixes
+
+* suppress error modal on workflow step ([#277](https://github.com/unkn0wn-root/resterm/issues/277)) ([45dd582](https://github.com/unkn0wn-root/resterm/commit/45dd582e08f7ba9d6e16d3bbe8520a73144210df))
+
 ### [0.38.2](https://github.com/unkn0wn-root/resterm/compare/v0.38.1...v0.38.2) (2026-05-13)
 
 
