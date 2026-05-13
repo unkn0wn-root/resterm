@@ -1920,7 +1920,7 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 
 const (
 	searchPromptHintPrefix = "Enter confirm  Esc cancel  Ctrl+R toggle "
-	searchPromptIcon       = ""
+	searchPromptIcon       = "›"
 )
 
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
