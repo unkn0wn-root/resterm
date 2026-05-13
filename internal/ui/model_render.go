@@ -26,12 +26,9 @@ const (
 )
 
 const (
-	filePaneTitle         = "Files"
-	editorPaneTitle       = "Editor"
-	responsePaneTitle     = "Response"
-	filePaneFocusIcon     = "▤"
-	editorPaneFocusIcon   = "✎"
-	responsePaneFocusIcon = "◉"
+	filePaneTitle     = "Files"
+	editorPaneTitle   = "Editor"
+	responsePaneTitle = "Response"
 )
 
 const (
@@ -464,7 +461,7 @@ func (m Model) renderFilePane(rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleFile.Inherit(m.theme.PaneTitle),
-		paneTitleWithFocus(filePaneTitle, filePaneFocusIcon, paneActive),
+		filePaneTitle,
 		content,
 	)
 }
@@ -902,7 +899,7 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleEditor.Inherit(m.theme.PaneTitle),
-		paneTitleWithFocus(editorPaneTitle, editorPaneFocusIcon, active),
+		editorPaneTitle,
 		content,
 	)
 }
@@ -1067,7 +1064,7 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	return renderTitledPaneFrame(
 		frame,
 		m.theme.PaneTitleResponse.Inherit(m.theme.PaneTitle),
-		paneTitleWithFocus(responsePaneTitle, responsePaneFocusIcon, active),
+		responsePaneTitle,
 		body,
 	)
 }
@@ -1113,13 +1110,6 @@ func renderTitledPaneFrame(
 
 func sanitizePaneTitle(title string) string {
 	return strings.Join(strings.Fields(title), " ")
-}
-
-func paneTitleWithFocus(title, icon string, active bool) string {
-	if !active {
-		return title
-	}
-	return icon + " " + title
 }
 
 func titledPaneTopBorder(

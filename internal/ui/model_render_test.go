@@ -889,54 +889,6 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 	}
 }
 
-func TestFocusedPaneTitleRendersPaneIcon(t *testing.T) {
-	frame := lipgloss.NewStyle().
-		BorderStyle(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#abcdef")).
-		Width(24).
-		Height(3)
-
-	cases := []struct {
-		title string
-		icon  string
-	}{
-		{title: filePaneTitle, icon: filePaneFocusIcon},
-		{title: editorPaneTitle, icon: editorPaneFocusIcon},
-		{title: responsePaneTitle, icon: responsePaneFocusIcon},
-	}
-
-	seen := make(map[string]struct{}, len(cases))
-	for _, tc := range cases {
-		if tc.icon == "" {
-			t.Fatalf("expected focused pane icon for %s", tc.title)
-		}
-		if _, ok := seen[tc.icon]; ok {
-			t.Fatalf("expected distinct focused pane icon, got duplicate %q", tc.icon)
-		}
-		seen[tc.icon] = struct{}{}
-
-		rendered := renderTitledPaneFrame(
-			frame,
-			lipgloss.NewStyle(),
-			paneTitleWithFocus(tc.title, tc.icon, true),
-			"body",
-		)
-		if !strings.Contains(ansi.Strip(rendered), tc.icon+" "+tc.title) {
-			t.Fatalf("expected focused %s title to include icon %q, got %q", tc.title, tc.icon, rendered)
-		}
-
-		rendered = renderTitledPaneFrame(
-			frame,
-			lipgloss.NewStyle(),
-			paneTitleWithFocus(tc.title, tc.icon, false),
-			"body",
-		)
-		if strings.Contains(ansi.Strip(rendered), tc.icon+" "+tc.title) {
-			t.Fatalf("expected inactive %s title to omit icon %q, got %q", tc.title, tc.icon, rendered)
-		}
-	}
-}
-
 func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
