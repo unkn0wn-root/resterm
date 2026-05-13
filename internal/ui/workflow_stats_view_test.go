@@ -79,6 +79,29 @@ func TestWorkflowStatsRenderSplitListAndSelectedDetail(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatsFocusHeadingsUseActiveMarker(t *testing.T) {
+	view := workflowStatsTestView()
+
+	plain := stripANSIEscape(view.render(120, 18).content)
+	if !strings.Contains(plain, "● Steps") {
+		t.Fatalf("expected active marker on step list heading, got %q", plain)
+	}
+	if strings.Contains(plain, "● Selected Step") {
+		t.Fatalf("did not expect detail heading to be active before toggle, got %q", plain)
+	}
+
+	if !view.toggle() {
+		t.Fatal("expected toggle to focus selected step detail")
+	}
+	plain = stripANSIEscape(view.render(120, 18).content)
+	if !strings.Contains(plain, "● Selected Step") {
+		t.Fatalf("expected active marker on selected step heading, got %q", plain)
+	}
+	if strings.Contains(plain, "● Steps") {
+		t.Fatalf("did not expect step list heading to stay active after toggle, got %q", plain)
+	}
+}
+
 func TestWorkflowStatsEmptyViewIsUnknown(t *testing.T) {
 	view := &workflowStatsView{name: "empty"}
 

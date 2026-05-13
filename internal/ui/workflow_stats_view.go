@@ -430,11 +430,7 @@ func (v *workflowStatsView) renderStepList(width, height int) []string {
 	if height < 1 {
 		return nil
 	}
-	heading := statsHeadingStyle.Render("Steps")
-	if !v.detailFocus {
-		heading = statsSelectedStyle.Render(workflowFitLine(heading, width))
-	}
-	lines := []string{workflowFitLine(heading, width)}
+	lines := []string{workflowStatsSectionHeading("Steps", width, !v.detailFocus)}
 	rowsHeight := height - 1
 	if rowsHeight < 1 {
 		return workflowFitLines(lines, width, height)
@@ -534,7 +530,7 @@ func (v *workflowStatsView) renderDetail(width, height int) []string {
 	}
 	if !v.hasEntries() || v.selected < 0 || v.selected >= len(v.entries) {
 		return workflowFitLines([]string{
-			statsHeadingStyle.Render("Selected Step"),
+			workflowDetailHeading("Selected Step", width, v.detailFocus),
 			statsMessageStyle.Render("No step selected"),
 		}, width, height)
 	}
@@ -609,11 +605,15 @@ func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []
 }
 
 func workflowDetailHeading(label string, width int, focused bool) string {
-	line := workflowFitLine(statsHeadingStyle.Render(label), width)
+	return workflowStatsSectionHeading(label, width, focused)
+}
+
+func workflowStatsSectionHeading(label string, width int, focused bool) string {
+	style := statsHeadingStyle.Bold(false).Faint(true)
 	if focused {
-		return statsSelectedStyle.Render(line)
+		style = statsHeadingStyle.Bold(true).Faint(false)
 	}
-	return line
+	return workflowFitLine(style.Render(headerSwitchText(label, focused)), width)
 }
 
 func (v *workflowStatsView) detailBodyHeight(width, height, bodyLines int) int {
