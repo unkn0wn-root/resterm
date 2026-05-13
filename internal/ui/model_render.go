@@ -1343,6 +1343,16 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 			MaxWidth(contentWidth).
 			MaxHeight(contentBodyHeight).
 			Render(content)
+		if searchView != "" {
+			content = lipgloss.Place(
+				contentWidth,
+				contentBodyHeight,
+				lipgloss.Top,
+				lipgloss.Left,
+				content,
+				lipgloss.WithWhitespaceChars(" "),
+			)
+		}
 	}
 
 	if !focused && m.focus == focusResponse {
@@ -1352,10 +1362,10 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	}
 
 	elements := []string{tabs}
+	elements = append(elements, content)
 	if searchView != "" {
 		elements = append(elements, searchView)
 	}
-	elements = append(elements, content)
 
 	column := lipgloss.JoinVertical(
 		lipgloss.Left,
