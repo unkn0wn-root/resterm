@@ -294,8 +294,8 @@ func (v *workflowStatsView) layout(width, height int) workflowStatsLayout {
 			detailWidth = 32
 			listWidth = width - detailWidth - gapWidth
 			if listWidth < 20 {
-				listWidth = maxInt(width/2-gapWidth, 1)
-				detailWidth = maxInt(width-listWidth-gapWidth, 1)
+				listWidth = max(width/2-gapWidth, 1)
+				detailWidth = max(width-listWidth-gapWidth, 1)
 			}
 		}
 		return workflowStatsLayout{
@@ -345,7 +345,7 @@ func (v *workflowStatsView) summaryLines(width int) []string {
 
 	status := v.overallStatus()
 	title := statsTitleStyle.Render(label) + " " +
-		statsValueStyle.Render(workflowPlainTruncate(name, maxInt(width-24, 8))) + " " +
+		statsValueStyle.Render(workflowPlainTruncate(name, max(width-24, 8))) + " " +
 		workflowStatusBadge(status)
 
 	counts := v.counts()
@@ -510,7 +510,7 @@ func (v *workflowStatsView) renderStepRow(idx, width int) string {
 	line := prefix + status + " " + name
 	if meta != "" {
 		line += " " + statsSubLabelStyle.Render(
-			workflowPlainTruncate(meta, maxInt(width-visibleWidth(line)-1, 1)),
+			workflowPlainTruncate(meta, max(width-visibleWidth(line)-1, 1)),
 		)
 	}
 	line = workflowFitLine(line, width)
@@ -865,7 +865,7 @@ func workflowWrapLines(lines []string, width int) []string {
 }
 
 func workflowJoinColumns(left, right []string, leftWidth, rightWidth int) []string {
-	height := maxInt(len(left), len(right))
+	height := max(len(left), len(right))
 	out := make([]string, 0, height)
 	for i := 0; i < height; i++ {
 		l := strings.Repeat(" ", leftWidth)
@@ -892,7 +892,7 @@ func workflowFitLines(lines []string, width, height int) []string {
 	if height < 0 {
 		height = 0
 	}
-	out := make([]string, 0, maxInt(len(lines), height))
+	out := make([]string, 0, max(len(lines), height))
 	for _, line := range lines {
 		out = append(out, workflowFitLine(line, width))
 	}
@@ -900,7 +900,7 @@ func workflowFitLines(lines []string, width, height int) []string {
 		out = out[:height]
 	}
 	for height > 0 && len(out) < height {
-		out = append(out, strings.Repeat(" ", maxInt(width, 0)))
+		out = append(out, strings.Repeat(" ", max(width, 0)))
 	}
 	return out
 }

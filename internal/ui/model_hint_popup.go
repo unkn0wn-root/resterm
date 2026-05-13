@@ -80,7 +80,7 @@ func (m Model) renderMetadataHintPopup(content string) string {
 		return content
 	}
 
-	maxX := maxInt(w-boxW, 0)
+	maxX := max(w-boxW, 0)
 	if layout.x > maxX {
 		layout.x = maxX
 	}
@@ -105,30 +105,30 @@ func (m Model) metadataHintPopupLayout(
 	}
 
 	box := m.editorHintBoxMetrics()
-	maxW := minInt(contentW, metadataHintMaxWidth)
+	maxW := min(contentW, metadataHintMaxWidth)
 	if maxW <= box.frameW {
 		return metadataHintPopupLayout{}, false
 	}
 
 	below := contentH - cursorY - 1
 	above := cursorY
-	belowItems := maxInt(below-box.frameH, 0)
-	aboveItems := maxInt(above-box.frameH, 0)
+	belowItems := max(below-box.frameH, 0)
+	aboveItems := max(above-box.frameH, 0)
 	if belowItems == 0 && aboveItems == 0 {
 		return metadataHintPopupLayout{}, false
 	}
 
-	targetItems := minInt(count, metadataHintMaxRows)
+	targetItems := min(count, metadataHintMaxRows)
 	limit := 0
 	y := cursorY + 1
 	switch {
 	case belowItems >= targetItems:
 		limit = targetItems
 	case belowItems == 0 || aboveItems > belowItems:
-		limit = minInt(targetItems, aboveItems)
+		limit = min(targetItems, aboveItems)
 		y = cursorY - (limit + box.frameH)
 	default:
-		limit = minInt(targetItems, belowItems)
+		limit = min(targetItems, belowItems)
 	}
 	if limit < 1 {
 		return metadataHintPopupLayout{}, false
@@ -139,12 +139,12 @@ func (m Model) metadataHintPopupLayout(
 		x = 0
 	}
 	if x > contentW-maxW {
-		x = maxInt(contentW-maxW, 0)
+		x = max(contentW-maxW, 0)
 	}
 
 	return metadataHintPopupLayout{
 		x:     x,
-		y:     maxInt(y, 0),
+		y:     max(y, 0),
 		width: maxW,
 		limit: limit,
 	}, true
@@ -361,8 +361,8 @@ func (m Model) metadataHintPreviewBox(
 		if cand.maxW < 18 || cand.maxH < 5 {
 			continue
 		}
-		maxW := minInt(cand.maxW, metadataHintPreviewMaxWidth)
-		maxH := minInt(cand.maxH, metadataHintPreviewMaxHeight)
+		maxW := min(cand.maxW, metadataHintPreviewMaxWidth)
+		maxH := min(cand.maxH, metadataHintPreviewMaxHeight)
 		lines := m.buildMetadataHintPreview(item, maxW, maxH)
 		if len(lines) == 0 {
 			continue
@@ -379,12 +379,12 @@ func (m Model) metadataHintPreviewBox(
 			continue
 		}
 		if cand.side {
-			box.y = clamp(box.y, 0, maxInt(contentH-box.h, 0))
+			box.y = clamp(box.y, 0, max(contentH-box.h, 0))
 			if i == 1 {
 				box.x = list.x - gap - box.w
 			}
 		} else {
-			box.x = clamp(box.x, 0, maxInt(contentW-box.w, 0))
+			box.x = clamp(box.x, 0, max(contentW-box.w, 0))
 			if i == 3 {
 				box.y = list.y - gap - box.h
 			}

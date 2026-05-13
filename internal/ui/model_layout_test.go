@@ -153,20 +153,20 @@ func TestResponsePaneWidthMatchesLayout(t *testing.T) {
 	m.ready = true
 	_ = m.applyLayout()
 
-	filePane := m.renderFilePane()
-	editorPane := m.renderEditorPane()
+	filePane := m.renderFilePane(renderContext{})
+	editorPane := m.renderEditorPane(renderContext{})
 	fileWidth := lipgloss.Width(filePane)
 	editorWidth := lipgloss.Width(editorPane)
 	target := m.responseTargetWidth(fileWidth, editorWidth)
 	var respPane string
 	if target > 0 {
-		respPane = m.renderResponsePane(target)
+		respPane = m.renderResponsePane(target, renderContext{})
 		respWidth := lipgloss.Width(respPane)
 		excess := fileWidth + editorWidth + respWidth - m.width
 		if excess > 0 {
 			adjusted := target - excess
 			if adjusted > 0 {
-				respPane = m.renderResponsePane(adjusted)
+				respPane = m.renderResponsePane(adjusted, renderContext{})
 				respWidth = lipgloss.Width(respPane)
 				if fileWidth+editorWidth+respWidth > m.width {
 					t.Fatalf(
@@ -200,20 +200,20 @@ func TestZoomEditorKeepsResponseWithinBounds(t *testing.T) {
 	}
 	_ = m.applyLayout()
 
-	filePane := m.renderFilePane()
-	editorPane := m.renderEditorPane()
+	filePane := m.renderFilePane(renderContext{})
+	editorPane := m.renderEditorPane(renderContext{})
 	fileWidth := lipgloss.Width(filePane)
 	editorWidth := lipgloss.Width(editorPane)
 	target := m.responseTargetWidth(fileWidth, editorWidth)
 	var respPane string
 	if target > 0 {
-		respPane = m.renderResponsePane(target)
+		respPane = m.renderResponsePane(target, renderContext{})
 		respWidth := lipgloss.Width(respPane)
 		excess := fileWidth + editorWidth + respWidth - m.width
 		if excess > 0 {
 			adjusted := target - excess
 			if adjusted > 0 {
-				respPane = m.renderResponsePane(adjusted)
+				respPane = m.renderResponsePane(adjusted, renderContext{})
 				respWidth = lipgloss.Width(respPane)
 				if fileWidth+editorWidth+respWidth > m.width {
 					t.Fatalf(
@@ -280,8 +280,8 @@ func TestCollapsedResponseHidesPaneWidth(t *testing.T) {
 		t.Fatalf("expected response collapse to be allowed")
 	}
 	_ = model.applyLayout()
-	filePane := model.renderFilePane()
-	editorPane := model.renderEditorPane()
+	filePane := model.renderFilePane(renderContext{})
+	editorPane := model.renderEditorPane(renderContext{})
 	fileWidth := lipgloss.Width(filePane)
 	editorWidth := lipgloss.Width(editorPane)
 	if tw := model.responseTargetWidth(fileWidth, editorWidth); tw != 0 {
@@ -444,13 +444,13 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 				)
 			}
 
-			filePane := model.renderFilePane()
-			editorPane := model.renderEditorPane()
+			filePane := model.renderFilePane(renderContext{})
+			editorPane := model.renderEditorPane(renderContext{})
 			available := model.width - lipgloss.Width(filePane) - lipgloss.Width(editorPane)
 			if available < 0 {
 				available = 0
 			}
-			responsePane := model.renderResponsePane(available)
+			responsePane := model.renderResponsePane(available, renderContext{})
 			panesWidth := lipgloss.Width(
 				lipgloss.JoinHorizontal(lipgloss.Top, filePane, editorPane, responsePane),
 			)

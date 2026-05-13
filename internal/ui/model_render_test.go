@@ -119,27 +119,27 @@ func TestNavigatorFilterBandShowsOnlyOnDemand(t *testing.T) {
 	_ = model.applyLayout()
 	model.ensureNavigatorFilter()
 
-	view := ansi.Strip(model.renderFilePane())
+	view := ansi.Strip(model.renderFilePane(renderContext{}))
 	if strings.Contains(view, "Filter:") {
 		t.Fatalf("expected inactive empty filter to be hidden, got %q", view)
 	}
 
 	model.navigatorFilter.Focus()
-	view = ansi.Strip(model.renderFilePane())
+	view = ansi.Strip(model.renderFilePane(renderContext{}))
 	if !strings.Contains(view, "Filter:") {
 		t.Fatalf("expected focused filter to be visible, got %q", view)
 	}
 
 	model.navigatorFilter.Blur()
 	model.navigatorFilter.SetValue("auth")
-	view = ansi.Strip(model.renderFilePane())
+	view = ansi.Strip(model.renderFilePane(renderContext{}))
 	if !strings.Contains(view, "Filter:") {
 		t.Fatalf("expected active text filter to remain visible, got %q", view)
 	}
 
 	model.navigatorFilter.SetValue("")
 	model.navigator.ToggleMethodFilter("GET")
-	view = ansi.Strip(model.renderFilePane())
+	view = ansi.Strip(model.renderFilePane(renderContext{}))
 	if !strings.Contains(view, "Filter:") {
 		t.Fatalf("expected active method filter to keep filter band visible, got %q", view)
 	}
@@ -175,6 +175,27 @@ func TestCenteredModalUnderlayKeepsAppVisible(t *testing.T) {
 	}
 	if !strings.Contains(view, "\x1b[38;2;34;34;34m") {
 		t.Fatalf("expected modal underlay to render inactive pane divider color")
+	}
+}
+
+func TestCenteredModalUnderlayUsesBackdropColor(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prevProfile)
+	})
+
+	model := newTestModelWithDoc(sampleRequestDoc)
+	model.width = 100
+	model.height = 30
+	model.ready = true
+	model.theme.ModalBackdrop = lipgloss.Color("#0f1720")
+	_ = model.applyLayout()
+	model.openErrorModal("network down")
+
+	view := model.View()
+	if !strings.Contains(view, "\x1b[38;2;15;23;32m") {
+		t.Fatalf("expected modal underlay to use modal backdrop color")
 	}
 }
 
@@ -609,7 +630,7 @@ func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
 		RequestLine: reqColor,
 	}))
 
-	view := model.renderEditorPane()
+	view := model.renderEditorPane(renderContext{})
 	line := lineWith(view, "GET")
 	if line == "" {
 		t.Fatalf("expected rendered editor to include request line, got %q", ansi.Strip(view))
@@ -726,7 +747,7 @@ func TestInactiveResponsePaneKeepsPrettyContentReadable(t *testing.T) {
 	pane.viewport.Height = 6
 	pane.viewport.SetContent(snap.pretty)
 
-	view := model.renderResponsePane(40)
+	view := model.renderResponsePane(40, renderContext{})
 	line := lineWith(view, "{")
 	if line == "" {
 		t.Fatalf("expected rendered response to include opening brace, got %q", ansi.Strip(view))
