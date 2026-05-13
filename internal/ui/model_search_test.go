@@ -103,3 +103,115 @@ func TestClearResponseSearchOnEsc(t *testing.T) {
 		)
 	}
 }
+
+func TestSlashOpensEditorSearchPromptWithoutTypingSlash(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusEditor
+	model.editorInsertMode = false
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = updated.(Model)
+
+	if !model.showSearchPrompt {
+		t.Fatal("expected search prompt to open")
+	}
+	if model.searchTarget != searchTargetEditor {
+		t.Fatalf("expected editor search target, got %v", model.searchTarget)
+	}
+	if got := model.searchInput.Value(); got != "" {
+		t.Fatalf("expected trigger slash to be consumed, got search input %q", got)
+	}
+}
+
+func TestSlashOpensResponseSearchPromptWithoutTypingSlash(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane to be available")
+	}
+	pane.activeTab = responseTabPretty
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = updated.(Model)
+
+	if !model.showSearchPrompt {
+		t.Fatal("expected search prompt to open")
+	}
+	if model.searchTarget != searchTargetResponse {
+		t.Fatalf("expected response search target, got %v", model.searchTarget)
+	}
+	if got := model.searchInput.Value(); got != "" {
+		t.Fatalf("expected trigger slash to be consumed, got search input %q", got)
+	}
+}
+
+func TestSlashStillOpensHistoryFilter(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane to be available")
+	}
+	pane.activeTab = responseTabHistory
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = updated.(Model)
+
+	if model.showSearchPrompt {
+		t.Fatal("did not expect response search prompt on history slash")
+	}
+	if !model.historyFilterActive {
+		t.Fatal("expected history filter to open")
+	}
+}
+
+func TestShiftFStillOpensResponseSearchOnHistoryTab(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane to be available")
+	}
+	pane.activeTab = responseTabHistory
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'F'}})
+	model = updated.(Model)
+
+	if !model.showSearchPrompt {
+		t.Fatal("expected response search prompt to open")
+	}
+	if model.searchTarget != searchTargetResponse {
+		t.Fatalf("expected response search target, got %v", model.searchTarget)
+	}
+	if model.historyFilterActive {
+		t.Fatal("did not expect history filter to open for Shift+F")
+	}
+	if got := model.searchInput.Value(); got != "" {
+		t.Fatalf("expected trigger key to be consumed, got search input %q", got)
+	}
+}
+
+func TestQuestionMarkStillOpensHelp(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
+	model = updated.(Model)
+
+	if !model.showHelp {
+		t.Fatal("expected question mark to open help")
+	}
+	if model.showSearchPrompt {
+		t.Fatal("did not expect question mark to open search while help binding is active")
+	}
+}

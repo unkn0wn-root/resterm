@@ -73,11 +73,12 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 	}
 
 	vp := m.helpViewport
+	if isSearchTriggerKey(keyStr) {
+		return m.focusHelpFilter()
+	}
 	switch keyStr {
 	case "ctrl+q", "ctrl+d":
 		return tea.Quit
-	case "/", "shift+f", "F":
-		return m.focusHelpFilter()
 	case "esc":
 		if strings.TrimSpace(m.helpFilter.Value()) != "" {
 			m.clearHelpFilter()
@@ -374,7 +375,9 @@ func (m Model) helpSections() []helpSection {
 			title: "Search",
 			entries: []helpEntry{
 				{"/", "Help: focus help search"},
-				{"Shift+F", "Open search prompt (Ctrl+R toggles regex)"},
+				{"Shift+F or /", "Editor / response: open search prompt"},
+				{"Ctrl+R", "Search prompt: toggle literal / regex"},
+				{"/", "History tab: focus history filter"},
 				{"n / p", "Next / previous match (wraps around)"},
 			},
 		},
