@@ -31,9 +31,8 @@ const (
 )
 
 const (
-	paneTitleLeftCap  = "┐"
-	paneTitleRightCap = "┌"
-	paneTitleTrail    = 1
+	paneTitlePad   = " "
+	paneTitleTrail = 1
 )
 
 const (
@@ -1142,9 +1141,7 @@ func titledPaneTopBorder(
 	borderTextStyle := topBorderTextStyle(frameStyle)
 	plainBorder := left + repeatToCellWidth(top, innerWidth) + right
 	marker := paneTitleMarker(title)
-	segmentFixedWidth := ansi.StringWidth(paneTitleLeftCap) +
-		ansi.StringWidth(marker) +
-		ansi.StringWidth(paneTitleRightCap)
+	segmentFixedWidth := ansi.StringWidth(paneTitlePad)*2 + ansi.StringWidth(marker)
 	if innerWidth < segmentFixedWidth+paneTitleTrail+1 {
 		return borderTextStyle.Render(plainBorder)
 	}
@@ -1167,10 +1164,10 @@ func titledPaneTopBorder(
 	var out strings.Builder
 	out.WriteString(borderTextStyle.Render(left))
 	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, prefixWidth)))
-	out.WriteString(borderTextStyle.Render(paneTitleLeftCap))
+	out.WriteString(borderTextStyle.Render(paneTitlePad))
 	out.WriteString(titleStyle.Render(marker))
 	out.WriteString(titleStyle.Render(title))
-	out.WriteString(borderTextStyle.Render(paneTitleRightCap))
+	out.WriteString(borderTextStyle.Render(paneTitlePad))
 	out.WriteString(borderTextStyle.Render(repeatToCellWidth(top, paneTitleTrail)))
 	out.WriteString(borderTextStyle.Render(right))
 	return out.String()

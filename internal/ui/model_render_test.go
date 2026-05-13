@@ -889,9 +889,9 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 		title string
 		want  string
 	}{
-		{title: filePaneTitle, want: "┐¹Files┌─╮"},
-		{title: editorPaneTitle, want: "┐²Editor┌─╮"},
-		{title: responsePaneTitle, want: "┐³Response┌─╮"},
+		{title: filePaneTitle, want: "─ ¹Files ─╮"},
+		{title: editorPaneTitle, want: "─ ²Editor ─╮"},
+		{title: responsePaneTitle, want: "─ ³Response ─╮"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
