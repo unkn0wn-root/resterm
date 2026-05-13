@@ -1314,6 +1314,7 @@ func (m *Model) wfConsume(st *workflowState, msg responseMsg) []tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	case msg.response != nil:
+		m.suppressNextErrorModal = true
 		if cmd := m.consumeHTTPResponse(
 			msg.response,
 			msg.tests,
