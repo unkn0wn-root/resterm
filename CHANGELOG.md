@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.39.2](https://github.com/unkn0wn-root/resterm/compare/v0.39.1...v0.39.2) (2026-05-14)
+
+
+### Bug Fixes
+
+* remove superscript chars from panes ([ecb8c98](https://github.com/unkn0wn-root/resterm/commit/ecb8c98c63362664a1daa5efee6bb23205154ea0))
+
 ### [0.39.1](https://github.com/unkn0wn-root/resterm/compare/v0.38.3...v0.39.1) (2026-05-13)
 
 ### [0.38.3](https://github.com/unkn0wn-root/resterm/compare/v0.38.2...v0.38.3) (2026-05-13)
