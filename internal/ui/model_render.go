@@ -2102,7 +2102,7 @@ func renderCommandButton(
 
 	button := lipgloss.NewStyle().
 		Foreground(textColor).
-		Padding(0, 2).
+		Padding(0, 1).
 		Bold(true)
 	if palette.Background != "" {
 		button = button.Background(palette.Background)
