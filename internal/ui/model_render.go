@@ -76,7 +76,6 @@ type statusBarSeg struct {
 var statusBarSegmentIcons = map[string]string{
 	"File":  "▤",
 	"Focus": "◉",
-	"Mode":  "✎",
 	"Zoom":  "⌖",
 }
 
@@ -2629,6 +2628,16 @@ func (m Model) renderStatusBarContext(text string, truncated bool, segs []status
 			parts = append(parts, m.theme.StatusBarValue.Render(seg.val))
 			continue
 		}
+		if seg.key == "Mode" {
+			parts = append(parts,
+				m.theme.StatusBarKey.Render("--")+
+					" "+
+					m.theme.StatusBarValue.Render(seg.val)+
+					" "+
+					m.theme.StatusBarKey.Render("--"),
+			)
+			continue
+		}
 		key := m.theme.StatusBarKey.Render(seg.statusMarker())
 		val := m.theme.StatusBarValue.Render(seg.val)
 		parts = append(parts, key+seg.statusMarkerGap()+val)
@@ -2677,6 +2686,9 @@ func (s statusBarSeg) String() string {
 	if s.key == "" {
 		return s.val
 	}
+	if s.key == "Mode" {
+		return "-- " + s.val + " --"
+	}
 	return s.statusMarker() + s.statusMarkerGap() + s.val
 }
 
@@ -2691,9 +2703,6 @@ func (s statusBarSeg) statusMarker() string {
 }
 
 func (s statusBarSeg) statusMarkerGap() string {
-	if s.key == "Mode" {
-		return "  "
-	}
 	return " "
 }
 

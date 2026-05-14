@@ -600,7 +600,7 @@ func TestStatusBarSegmentIconsCoverContextKeys(t *testing.T) {
 	for _, want := range []string{
 		"▤ example.http",
 		"◉ Editor",
-		"✎  VIEW",
+		"-- VIEW --",
 		"⌖ Response",
 		"Unknown: fallback",
 	} {
