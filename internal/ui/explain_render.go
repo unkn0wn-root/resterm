@@ -407,7 +407,9 @@ func (m *Model) explainStyledContent(snapshot *responseSnapshot, width int) stri
 	content := snapshot.explain.cache.styled
 	if content == "" || snapshot.explain.cache.width != width ||
 		snapshot.explain.cache.themeKey != key {
-		content = displayContent(renderExplainStyledView(snapshot.explain.ensureView(), width, m.theme))
+		content = displayContent(
+			renderExplainStyledView(snapshot.explain.ensureView(), width, m.theme),
+		)
 		snapshot.explain.cache = explainRenderCache{
 			styled:   content,
 			width:    width,

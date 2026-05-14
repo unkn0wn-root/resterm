@@ -1116,7 +1116,11 @@ func sanitizePaneTitle(title string) string {
 	return strings.Join(strings.Fields(title), " ")
 }
 
-func (m Model) paneTitleStyle(base lipgloss.Style, frame lipgloss.Style, active bool) lipgloss.Style {
+func (m Model) paneTitleStyle(
+	base lipgloss.Style,
+	frame lipgloss.Style,
+	active bool,
+) lipgloss.Style {
 	st := base.Inherit(m.theme.PaneTitle)
 	if !active {
 		return st

@@ -845,7 +845,14 @@ func (m *Model) decorateResponseContentForPane(
 	}
 	highlight := m.theme.ResponseSearchHighlight
 	active := m.theme.ResponseSearchHighlightActive
-	return decorateResponseContent(base, index, pane.search.matches, highlight, active, pane.search.index)
+	return decorateResponseContent(
+		base,
+		index,
+		pane.search.matches,
+		highlight,
+		active,
+		pane.search.index,
+	)
 }
 
 func (m *Model) applyResponseContentStyles(tab responseTab, content string) string {
@@ -867,7 +874,11 @@ func ensureResponseMatchInView(pane *responsePaneState, base string) {
 		idx = 0
 		pane.search.index = idx
 	}
-	ensureResponseMatchVisible(&pane.viewport, pane.search.contentIndexFor(base), pane.search.matches[idx])
+	ensureResponseMatchVisible(
+		&pane.viewport,
+		pane.search.contentIndexFor(base),
+		pane.search.matches[idx],
+	)
 }
 
 func (m *Model) paneContentBase(

@@ -204,7 +204,9 @@ func decorateResponseContent(
 			prefix = activePrefix
 			suffix = activeSuffix
 		}
-		builder.WriteString(applyANSIAwareWrap(content[rawStart:rawEnd], prefix, suffix, bounds[end].sgr))
+		builder.WriteString(
+			applyANSIAwareWrap(content[rawStart:rawEnd], prefix, suffix, bounds[end].sgr),
+		)
 		lastRaw = rawEnd
 		lastVisible = end
 	}

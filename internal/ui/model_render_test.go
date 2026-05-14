@@ -893,7 +893,10 @@ func TestPaneTitleStyleUsesFocusedFrameColor(t *testing.T) {
 		t.Fatalf("expected inactive title to keep pane title color, got %v", got)
 	}
 	if theme.ColorDefined(inactive.GetBackground()) {
-		t.Fatalf("expected inactive title background to stay unset, got %v", inactive.GetBackground())
+		t.Fatalf(
+			"expected inactive title background to stay unset, got %v",
+			inactive.GetBackground(),
+		)
 	}
 
 	active := model.paneTitleStyle(model.theme.PaneTitleEditor, frame, true)
@@ -939,7 +942,11 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 			if !strings.HasSuffix(lines[0], "╮") {
 				t.Fatalf("expected top border to keep right corner, got %q", lines[0])
 			}
-			if got, want := ansi.StringWidth(lines[0]), lipgloss.Width(frame.Render("body")); got != want {
+			if got, want := ansi.StringWidth(
+				lines[0],
+			), lipgloss.Width(
+				frame.Render("body"),
+			); got != want {
 				t.Fatalf("expected titled top border width %d, got %d", want, got)
 			}
 		})
