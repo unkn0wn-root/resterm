@@ -552,7 +552,15 @@ func (m *Model) consumeHTTPResponse(
 	formatCtx, cancel := context.WithCancel(context.Background())
 	m.responseRenderCancel = cancel
 
-	return m.respCmd(m.respFmtCmd(formatCtx, token, resp, tests, scriptErr, primaryWidth))
+	renderCmd := m.respCmd(m.respFmtCmd(formatCtx, token, resp, tests, scriptErr, primaryWidth))
+	if pane := m.pane(target); pane != nil &&
+		pane.activeTab == responseTabExplain &&
+		pane.hasExplainReport() {
+		if cmd := m.syncResponsePane(target); cmd != nil {
+			return tea.Batch(cmd, renderCmd)
+		}
+	}
+	return renderCmd
 }
 
 func (m *Model) responseLoadingMessage() string {
@@ -757,6 +765,9 @@ func (m *Model) handleResponseLoadingTick() tea.Cmd {
 	for _, id := range m.visiblePaneIDs() {
 		pane := m.pane(id)
 		if pane == nil || pane.snapshot == nil || pane.snapshot.ready {
+			continue
+		}
+		if pane.activeTab == responseTabExplain && pane.hasExplainReport() {
 			continue
 		}
 		pane.viewport.SetContent(message)

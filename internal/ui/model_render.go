@@ -1581,6 +1581,9 @@ func (m Model) sendingView(pane *responsePaneState, width, height int) string {
 }
 
 func (m Model) formattingView(pane *responsePaneState, width, height int) string {
+	if pane != nil && pane.activeTab == responseTabExplain && pane.hasExplainReport() {
+		return ""
+	}
 	return m.spinnerView(pane, width, height, responseFormattingBase, m.responseLoading)
 }
 

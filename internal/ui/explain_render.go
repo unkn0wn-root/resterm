@@ -386,7 +386,7 @@ func (m *Model) syncExplainPane(
 		responseTabExplain,
 		decorated,
 		width,
-		snapshot.ready,
+		true,
 		snapshot.id,
 	)
 	pane.viewport.SetContent(decorated)

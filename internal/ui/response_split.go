@@ -130,11 +130,20 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 	}
 }
 
-func (pane *responsePaneState) hasReadyExplain() bool {
+func (pane *responsePaneState) hasExplainReport() bool {
 	return pane != nil &&
 		pane.snapshot != nil &&
-		pane.snapshot.ready &&
 		pane.snapshot.explain.report != nil
+}
+
+func (pane *responsePaneState) searchContentReady(tab responseTab) bool {
+	if pane == nil || pane.snapshot == nil {
+		return false
+	}
+	if tab == responseTabExplain {
+		return pane.hasExplainReport()
+	}
+	return pane.snapshot.ready
 }
 
 func (pane *responsePaneState) stashCursor() {
@@ -626,7 +635,7 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 		}
 	}
 	if tab == responseTabExplain {
-		if pane.hasReadyExplain() {
+		if pane.hasExplainReport() {
 			return m.syncExplainPane(pane, ww, pane.snapshot)
 		}
 	}
@@ -901,7 +910,7 @@ func (m *Model) paneContentBase(
 	if snapshot == nil {
 		return "", tab
 	}
-	if !snapshot.ready {
+	if !snapshot.ready && (tab != responseTabExplain || !pane.hasExplainReport()) {
 		return m.responseLoadingMessage(), tab
 	}
 
@@ -913,7 +922,7 @@ func (m *Model) paneContentBase(
 	case responseTabHeaders:
 		return m.headerContent(pane, w), tab
 	case responseTabExplain:
-		if !pane.hasReadyExplain() {
+		if !pane.hasExplainReport() {
 			return "<no explain>\n", tab
 		}
 		if strings.TrimSpace(snapshot.explain.plain) == "" {

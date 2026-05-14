@@ -141,7 +141,7 @@ func (m *Model) responseSearchContent(
 ) (string, responseTab, string) {
 	switch tab {
 	case responseTabExplain:
-		if pane := m.pane(paneID); pane.hasReadyExplain() {
+		if pane := m.pane(paneID); pane.hasExplainReport() {
 			content := m.explainStyledContent(pane.snapshot, width)
 			return content, responseTabExplain, content
 		}
@@ -198,15 +198,15 @@ func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 
 	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
-	snapshotReady := false
+	contentReady := false
 	if pane.snapshot != nil {
 		snapshotID = pane.snapshot.id
-		snapshotReady = pane.snapshot.ready
+		contentReady = pane.searchContentReady(tab)
 	}
 
 	pane.search.prepare(query, isRegex, cacheKey, snapshotID, width)
 
-	if !snapshotReady {
+	if !contentReady {
 		pane.search.computed = false
 		pane.search.active = false
 		status := statusCmd(
@@ -273,12 +273,12 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 
 	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
-	snapshotReady := false
+	contentReady := false
 	if pane.snapshot != nil {
 		snapshotID = pane.snapshot.id
-		snapshotReady = pane.snapshot.ready
+		contentReady = pane.searchContentReady(tab)
 	}
-	if !snapshotReady {
+	if !contentReady {
 		return statusCmd(statusWarn, "Response not ready")
 	}
 
@@ -348,12 +348,12 @@ func (m *Model) retreatResponseSearch() tea.Cmd {
 
 	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
-	snapshotReady := false
+	contentReady := false
 	if pane.snapshot != nil {
 		snapshotID = pane.snapshot.id
-		snapshotReady = pane.snapshot.ready
+		contentReady = pane.searchContentReady(tab)
 	}
-	if !snapshotReady {
+	if !contentReady {
 		return statusCmd(statusWarn, "Response not ready")
 	}
 

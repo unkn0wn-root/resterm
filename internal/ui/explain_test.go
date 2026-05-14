@@ -7,6 +7,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -325,6 +326,96 @@ func TestSyncResponsePaneExplainUsesStyledRenderer(t *testing.T) {
 	}
 }
 
+func TestSyncResponsePaneExplainDoesNotWaitForResponseFormatting(t *testing.T) {
+	t.Parallel()
+
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	pane := &model.responsePanes[responsePanePrimary]
+	pane.activeTab = responseTabExplain
+	pane.snapshot = &responseSnapshot{
+		id:    "snap-explain-before-formatting",
+		ready: false,
+		explain: explainState{
+			report: &xplain.Report{
+				Status:   xplain.StatusReady,
+				Method:   "GET",
+				URL:      "https://example.com",
+				Decision: "HTTP request sent",
+			},
+		},
+	}
+
+	if cmd := model.syncResponsePane(responsePanePrimary); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	plain := ansi.Strip(pane.viewport.View())
+	if strings.Contains(plain, responseFormattingBase) {
+		t.Fatalf("did not expect explain tab to wait for response formatting, got %q", plain)
+	}
+	if !strings.Contains(plain, "SUMMARY") || !strings.Contains(plain, "HTTP request sent") {
+		t.Fatalf("expected explain report before response formatting completes, got %q", plain)
+	}
+}
+
+func TestConsumeHTTPResponseActiveExplainRendersBeforeResponseFormatting(t *testing.T) {
+	t.Parallel()
+
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane")
+	}
+	pane.activeTab = responseTabExplain
+
+	cmd := model.consumeHTTPResponse(
+		&httpclient.Response{
+			Status:       "200 OK",
+			StatusCode:   200,
+			ReqMethod:    "GET",
+			EffectiveURL: "https://example.com",
+			Body:         []byte("ok"),
+		},
+		nil,
+		nil,
+		"",
+		&xplain.Report{
+			Status:   xplain.StatusReady,
+			Method:   "GET",
+			URL:      "https://example.com",
+			Decision: "HTTP request sent",
+		},
+	)
+	if cmd == nil {
+		t.Fatal("expected async response render command")
+	}
+	if !model.responseLoading {
+		t.Fatal("expected response formatting to still be active")
+	}
+
+	plain := ansi.Strip(model.renderResponseColumn(responsePanePrimary, true, 120))
+	if strings.Contains(plain, responseFormattingBase) {
+		t.Fatalf("did not expect explain tab to show formatting overlay, got %q", plain)
+	}
+	if !strings.Contains(plain, "SUMMARY") || !strings.Contains(plain, "HTTP request sent") {
+		t.Fatalf("expected explain report before response formatting completes, got %q", plain)
+	}
+}
+
 func TestSyncResponsePaneExplainKeepsStyledRenderingWhileSearching(t *testing.T) {
 	t.Parallel()
 
@@ -466,7 +557,7 @@ func TestRenderExplainStyledWrapsCleanlyInNarrowWidth(t *testing.T) {
 	}
 }
 
-func TestApplyResponseSearchOnExplainUsesPlainContent(t *testing.T) {
+func TestApplyResponseSearchOnExplainDoesNotWaitForResponseFormatting(t *testing.T) {
 	t.Parallel()
 
 	model := New(Config{})
@@ -486,7 +577,7 @@ func TestApplyResponseSearchOnExplainUsesPlainContent(t *testing.T) {
 	pane.viewport.Width = 80
 	pane.snapshot = &responseSnapshot{
 		id:    "snap-explain-search-content",
-		ready: true,
+		ready: false,
 		explain: explainState{
 			report: &xplain.Report{
 				Status: xplain.StatusReady,
