@@ -878,6 +878,36 @@ func TestFocusedPaneFramesUseThemeFocusColors(t *testing.T) {
 	}
 }
 
+func TestPaneTitleStyleUsesFocusedFrameColor(t *testing.T) {
+	model := New(Config{})
+	model.theme.PaneTitle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#111111"))
+	model.theme.PaneTitleEditor = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#222222"))
+	frame := lipgloss.NewStyle().
+		BorderStyle(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#333333"))
+
+	inactive := model.paneTitleStyle(model.theme.PaneTitleEditor, frame, false)
+	if got := inactive.GetForeground(); got != lipgloss.Color("#222222") {
+		t.Fatalf("expected inactive title to keep pane title color, got %v", got)
+	}
+	if theme.ColorDefined(inactive.GetBackground()) {
+		t.Fatalf("expected inactive title background to stay unset, got %v", inactive.GetBackground())
+	}
+
+	active := model.paneTitleStyle(model.theme.PaneTitleEditor, frame, true)
+	if got := active.GetForeground(); got != lipgloss.Color("#333333") {
+		t.Fatalf("expected active title foreground from focused frame, got %v", got)
+	}
+	if theme.ColorDefined(active.GetBackground()) {
+		t.Fatalf("expected active title background to stay unset, got %v", active.GetBackground())
+	}
+	if !active.GetBold() {
+		t.Fatalf("expected active title to be bold")
+	}
+}
+
 func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 	frame := lipgloss.NewStyle().
 		BorderStyle(lipgloss.RoundedBorder()).
@@ -889,9 +919,9 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 		title string
 		want  string
 	}{
-		{title: filePaneTitle, want: "─ ¹Files ─╮"},
-		{title: editorPaneTitle, want: "─ ²Editor ─╮"},
-		{title: responsePaneTitle, want: "─ ³Response ─╮"},
+		{title: filePaneTitle, want: "─ Files ─╮"},
+		{title: editorPaneTitle, want: "─ Editor ─╮"},
+		{title: responsePaneTitle, want: "─ Response ─╮"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.title, func(t *testing.T) {
@@ -904,7 +934,7 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 				t.Fatalf("expected titled rounded top border to keep left corner, got %q", lines[0])
 			}
 			if !strings.Contains(lines[0], tt.want) {
-				t.Fatalf("expected numbered title %q on top border, got %q", tt.want, lines[0])
+				t.Fatalf("expected title %q on top border, got %q", tt.want, lines[0])
 			}
 			if !strings.HasSuffix(lines[0], "╮") {
 				t.Fatalf("expected top border to keep right corner, got %q", lines[0])
