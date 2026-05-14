@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.39.3](https://github.com/unkn0wn-root/resterm/compare/v0.39.2...v0.39.3) (2026-05-14)
+
+
+### Features
+
+* change mode segment and update resterm_base ([64808ae](https://github.com/unkn0wn-root/resterm/commit/64808ae87b7cfb91229ddf5292bba301c6df9242))
+
 ### [0.39.2](https://github.com/unkn0wn-root/resterm/compare/v0.39.1...v0.39.2) (2026-05-14)
 
 
