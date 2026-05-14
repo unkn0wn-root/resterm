@@ -4,7 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+
+	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 )
 
 func TestRetreatResponseSearchWrap(t *testing.T) {
@@ -318,6 +321,156 @@ func TestResponseSearchAppliesWhileTyping(t *testing.T) {
 	}
 	if pane == nil || !pane.search.active || pane.search.query != "foo" {
 		t.Fatalf("expected esc to keep live response search active, got %+v", pane)
+	}
+}
+
+func TestResponseSearchIgnoresANSIParametersInPretty(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane to be available")
+	}
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 8
+	colored := "\x1b[38;5;244m\"X-Amzn-Trace-Id\"\x1b[0m: " +
+		"\x1b[48;2;248;242;240m\"Root=abc\"\x1b[0m"
+	pane.snapshot = &responseSnapshot{
+		id:      "snap-colored-no-visible-4",
+		pretty:  withTrailingNewline(colored),
+		raw:     withTrailingNewline(stripANSIEscape(colored)),
+		headers: withTrailingNewline("Status: 200 OK"),
+		ready:   true,
+	}
+
+	status := statusFromCmd(t, model.applyResponseSearch("4", false))
+	if status == nil {
+		t.Fatal("expected search status")
+	}
+	if status.level != statusWarn || !strings.Contains(status.text, "No matches") {
+		t.Fatalf("expected no visible matches, got %+v", status)
+	}
+	if len(pane.search.matches) != 0 || pane.search.active {
+		t.Fatalf(
+			"expected ANSI-only digits to be ignored, active=%v matches=%d",
+			pane.search.active,
+			len(pane.search.matches),
+		)
+	}
+}
+
+func TestResponseSearchHighlightPreservesANSIColoredPretty(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane to be available")
+	}
+	pane.activeTab = responseTabPretty
+	pane.viewport.Width = 80
+	pane.viewport.Height = 8
+	colored := "\x1b[38;5;244m\"count\"\x1b[0m: \x1b[38;5;114m4\x1b[0m"
+	pane.snapshot = &responseSnapshot{
+		id:      "snap-colored-visible-4",
+		pretty:  withTrailingNewline(colored),
+		raw:     withTrailingNewline(stripANSIEscape(colored)),
+		headers: withTrailingNewline("Status: 200 OK"),
+		ready:   true,
+	}
+
+	status := statusFromCmd(t, model.applyResponseSearch("4", false))
+	if status == nil {
+		t.Fatal("expected search status")
+	}
+	if status.level != statusInfo {
+		t.Fatalf("expected visible match, got %+v", status)
+	}
+	if len(pane.search.matches) != 1 {
+		t.Fatalf("expected one visible match, got %d", len(pane.search.matches))
+	}
+
+	rendered := pane.viewport.View()
+	plain := stripANSIEscape(rendered)
+	if strings.Contains(plain, "38;5") || strings.Contains(plain, "48;2") {
+		t.Fatalf("expected ANSI sequences to stay hidden after highlight, got %q", plain)
+	}
+	if !strings.Contains(plain, `"count": 4`) {
+		t.Fatalf("expected highlighted view to preserve visible content, got %q", plain)
+	}
+}
+
+func TestResponseSearchKeepsExplainStyledRenderer(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatal("expected response pane to be available")
+	}
+	pane.activeTab = responseTabExplain
+	pane.viewport.Width = 80
+	pane.viewport.Height = 12
+	pane.snapshot = &responseSnapshot{
+		id:    "snap-explain-styled-search",
+		ready: true,
+		explain: explainState{
+			report: &xplain.Report{
+				Status: xplain.StatusReady,
+				Stages: []xplain.Stage{
+					{Name: "route", Status: xplain.StageOK, Summary: "direct connection"},
+				},
+			},
+		},
+	}
+
+	status := statusFromCmd(t, model.applyResponseSearch("direct", false))
+	if status == nil {
+		t.Fatal("expected search status")
+	}
+	if !pane.search.active || len(pane.search.matches) == 0 {
+		t.Fatalf(
+			"expected explain search matches, active=%v matches=%d",
+			pane.search.active,
+			len(pane.search.matches),
+		)
+	}
+
+	plain := stripANSIEscape(pane.viewport.View())
+	if strings.Contains(plain, "Summary\n======") {
+		t.Fatalf("expected styled explain view, got plain report %q", plain)
+	}
+	if !strings.Contains(plain, "SUMMARY") || !strings.Contains(plain, "direct connection") {
+		t.Fatalf("expected styled explain content to remain visible, got %q", plain)
+	}
+}
+
+func TestEnsureResponseMatchVisibleTargetsActualMatchLine(t *testing.T) {
+	content := "\x1b[38;5;244mzero\x1b[0m\none\ntwo"
+	visible := stripANSIEscape(content)
+	start := len([]rune("zero\n"))
+	end := start + len([]rune("one"))
+
+	vp := viewport.New(20, 1)
+	vp.SetContent(content)
+	index := buildResponseSearchContentIndex(content)
+	ensureResponseMatchVisible(&vp, &index, searchMatch{start: start, end: end})
+
+	if vp.YOffset != 1 {
+		t.Fatalf(
+			"expected match line %q in one-line viewport at offset 1, got offset %d for %q",
+			"one",
+			vp.YOffset,
+			visible,
+		)
 	}
 }
 

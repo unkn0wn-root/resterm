@@ -691,6 +691,32 @@ func TestResponsePaneShowsSendingSpinner(t *testing.T) {
 	}
 }
 
+func TestResponsePaneShowsExplainPreviewSpinner(t *testing.T) {
+	if len(tabSpinFrames) < 2 {
+		t.Fatalf("expected tab spinner frames")
+	}
+	snap := &responseSnapshot{pretty: withTrailingNewline("ok"), ready: true}
+	model := newModelWithResponseTab(responseTabExplain, snap)
+	model.sending = true
+	model.sendingOverlayBase = responseExplainPreviewBase
+	model.tabSpinIdx = 1
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 40
+	pane.viewport.Height = 10
+
+	view := model.renderResponseColumn(responsePanePrimary, true, 40)
+	plain := ansi.Strip(view)
+	if strings.Contains(plain, responseSendingBase) {
+		t.Fatalf("did not expect send spinner message during explain preview, got %q", plain)
+	}
+	if !strings.Contains(plain, responseExplainPreviewBase) {
+		t.Fatalf("expected explain preview spinner message, got %q", plain)
+	}
+	if !strings.Contains(plain, tabSpinFrames[1]) {
+		t.Fatalf("expected spinner frame, got %q", plain)
+	}
+}
+
 func TestResponseSearchPromptRendersAtColumnBottom(t *testing.T) {
 	snap := &responseSnapshot{pretty: withTrailingNewline("short-body"), ready: true}
 	model := newModelWithResponseTab(responseTabPretty, snap)
@@ -893,7 +919,10 @@ func TestPaneTitleStyleUsesFocusedFrameColor(t *testing.T) {
 		t.Fatalf("expected inactive title to keep pane title color, got %v", got)
 	}
 	if theme.ColorDefined(inactive.GetBackground()) {
-		t.Fatalf("expected inactive title background to stay unset, got %v", inactive.GetBackground())
+		t.Fatalf(
+			"expected inactive title background to stay unset, got %v",
+			inactive.GetBackground(),
+		)
 	}
 
 	active := model.paneTitleStyle(model.theme.PaneTitleEditor, frame, true)
@@ -939,7 +968,11 @@ func TestTitledPaneFrameRendersTitleOnTopBorder(t *testing.T) {
 			if !strings.HasSuffix(lines[0], "╮") {
 				t.Fatalf("expected top border to keep right corner, got %q", lines[0])
 			}
-			if got, want := ansi.StringWidth(lines[0]), lipgloss.Width(frame.Render("body")); got != want {
+			if got, want := ansi.StringWidth(
+				lines[0],
+			), lipgloss.Width(
+				frame.Render("body"),
+			); got != want {
 				t.Fatalf("expected titled top border width %d, got %d", want, got)
 			}
 		})

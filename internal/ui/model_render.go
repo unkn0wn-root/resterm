@@ -1116,7 +1116,11 @@ func sanitizePaneTitle(title string) string {
 	return strings.Join(strings.Fields(title), " ")
 }
 
-func (m Model) paneTitleStyle(base lipgloss.Style, frame lipgloss.Style, active bool) lipgloss.Style {
+func (m Model) paneTitleStyle(
+	base lipgloss.Style,
+	frame lipgloss.Style,
+	active bool,
+) lipgloss.Style {
 	st := base.Inherit(m.theme.PaneTitle)
 	if !active {
 		return st
@@ -1534,7 +1538,10 @@ var tabSpinFrames = []string{
 	"⠏",
 }
 
-const responseSendingBase = "Sending request"
+const (
+	responseSendingBase        = "Sending request"
+	responseExplainPreviewBase = "Preparing explain preview"
+)
 
 func (m Model) tabSpinner() string {
 	if !m.spinnerActive() || len(tabSpinFrames) == 0 {
@@ -1566,10 +1573,17 @@ func (m Model) spinnerView(
 }
 
 func (m Model) sendingView(pane *responsePaneState, width, height int) string {
-	return m.spinnerView(pane, width, height, responseSendingBase, m.sending)
+	base := m.sendingOverlayBase
+	if base == "" {
+		base = responseSendingBase
+	}
+	return m.spinnerView(pane, width, height, base, m.sending)
 }
 
 func (m Model) formattingView(pane *responsePaneState, width, height int) string {
+	if pane != nil && pane.activeTab == responseTabExplain && pane.hasExplainReport() {
+		return ""
+	}
 	return m.spinnerView(pane, width, height, responseFormattingBase, m.responseLoading)
 }
 

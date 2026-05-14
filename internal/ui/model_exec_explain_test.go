@@ -122,6 +122,35 @@ func TestExecuteExplainReturnsPreviewWithoutSending(t *testing.T) {
 	}
 }
 
+func TestExplainActiveRequestUsesPreviewSpinnerLabel(t *testing.T) {
+	t.Parallel()
+
+	model := New(Config{})
+	model.editor.SetValue("GET https://example.com/api\n")
+
+	cmd := model.explainActiveRequest()
+	if cmd == nil {
+		t.Fatal("expected explain request command")
+	}
+	if !model.sending {
+		t.Fatal("expected explain preview to keep active-run spinner state")
+	}
+	if model.sendingOverlayBase != responseExplainPreviewBase {
+		t.Fatalf(
+			"expected explain preview overlay %q, got %q",
+			responseExplainPreviewBase,
+			model.sendingOverlayBase,
+		)
+	}
+	view := model.sendingView(model.pane(responsePanePrimary), 40, 8)
+	if !strings.Contains(view, responseExplainPreviewBase) {
+		t.Fatalf("expected explain preview spinner to use %q, got %q", responseExplainPreviewBase, view)
+	}
+	if strings.Contains(view, responseSendingBase) {
+		t.Fatalf("did not expect explain preview spinner to use %q", responseSendingBase)
+	}
+}
+
 func TestHandleResponseMessagePreviewOpensExplainTab(t *testing.T) {
 	t.Parallel()
 

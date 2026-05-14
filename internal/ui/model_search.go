@@ -139,17 +139,24 @@ func (m *Model) responseSearchContent(
 	tab responseTab,
 	width int,
 ) (string, responseTab, string) {
-	content, cacheKey := m.paneDisplayContent(paneID, tab, width)
-	if tab == responseTabStats {
+	switch tab {
+	case responseTabExplain:
+		if pane := m.pane(paneID); pane.hasExplainReport() {
+			content := m.explainStyledContent(pane.snapshot, width)
+			return content, responseTabExplain, content
+		}
+		// Fall back to paneDisplayContent so the normal "<no explain>" message is searchable.
+	case responseTabStats:
 		if pane := m.pane(paneID); pane != nil {
 			if stats := workflowStatsFromPane(pane); stats != nil {
 				render := stats.render(width, pane.viewport.Height)
-				content = displayContent(render.content)
-				cacheKey = responseTabStats
-				return content, cacheKey, content
+				content := displayContent(render.content)
+				return content, responseTabStats, content
 			}
 		}
 	}
+
+	content, cacheKey := m.paneDisplayContent(paneID, tab, width)
 	return content, cacheKey, wrapContentForTab(cacheKey, content, width)
 }
 
@@ -191,15 +198,15 @@ func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 
 	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
-	snapshotReady := false
+	contentReady := false
 	if pane.snapshot != nil {
 		snapshotID = pane.snapshot.id
-		snapshotReady = pane.snapshot.ready
+		contentReady = pane.searchContentReady(tab)
 	}
 
 	pane.search.prepare(query, isRegex, cacheKey, snapshotID, width)
 
-	if !snapshotReady {
+	if !contentReady {
 		pane.search.computed = false
 		pane.search.active = false
 		status := statusCmd(
@@ -233,7 +240,7 @@ func (m *Model) applyResponseSearch(query string, isRegex bool) tea.Cmd {
 	pane.search.active = true
 	pane.search.index = 0
 	match := pane.search.matches[pane.search.index]
-	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
+	ensureResponseMatchVisible(&pane.viewport, pane.search.contentIndexFor(wrapped), match)
 	status := statusCmd(
 		statusInfo,
 		searchStatusText(pane.search.index, len(pane.search.matches), query, false),
@@ -266,12 +273,12 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 
 	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
-	snapshotReady := false
+	contentReady := false
 	if pane.snapshot != nil {
 		snapshotID = pane.snapshot.id
-		snapshotReady = pane.snapshot.ready
+		contentReady = pane.searchContentReady(tab)
 	}
-	if !snapshotReady {
+	if !contentReady {
 		return statusCmd(statusWarn, "Response not ready")
 	}
 
@@ -308,7 +315,7 @@ func (m *Model) advanceResponseSearch() tea.Cmd {
 	}
 	pane.search.index = next
 	match := pane.search.matches[next]
-	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
+	ensureResponseMatchVisible(&pane.viewport, pane.search.contentIndexFor(wrapped), match)
 	pane.search.active = true
 
 	statusText := searchStatusText(next, len(pane.search.matches), pane.search.query, wrappedAround)
@@ -341,12 +348,12 @@ func (m *Model) retreatResponseSearch() tea.Cmd {
 
 	_, cacheKey, wrapped := m.responseSearchContent(paneID, tab, width)
 	snapshotID := ""
-	snapshotReady := false
+	contentReady := false
 	if pane.snapshot != nil {
 		snapshotID = pane.snapshot.id
-		snapshotReady = pane.snapshot.ready
+		contentReady = pane.searchContentReady(tab)
 	}
-	if !snapshotReady {
+	if !contentReady {
 		return statusCmd(statusWarn, "Response not ready")
 	}
 
@@ -383,7 +390,7 @@ func (m *Model) retreatResponseSearch() tea.Cmd {
 	}
 	pane.search.index = prev
 	match := pane.search.matches[prev]
-	ensureResponseMatchVisible(&pane.viewport, wrapped, match)
+	ensureResponseMatchVisible(&pane.viewport, pane.search.contentIndexFor(wrapped), match)
 	pane.search.active = true
 
 	statusText := searchStatusText(prev, len(pane.search.matches), pane.search.query, wrappedAround)
