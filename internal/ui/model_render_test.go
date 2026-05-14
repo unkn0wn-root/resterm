@@ -417,6 +417,9 @@ func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 	if !strings.Contains(plain, "● Editor") || !strings.Contains(plain, "● Nav") {
 		t.Fatalf("expected green dot indicators for minimized panes, got %q", plain)
 	}
+	if !strings.Contains(plain, "◇ vTest") {
+		t.Fatalf("expected version icon on the right, got %q", plain)
+	}
 	trimmed := strings.TrimSpace(plain)
 	if !strings.HasSuffix(trimmed, "vTest") {
 		t.Fatalf("expected version to remain on the right, got %q", trimmed)
@@ -533,21 +536,21 @@ func TestRenderStatusBarLeftUsesExplicitParts(t *testing.T) {
 		ctx:   statusBarSegmentsText(segs),
 		segs:  segs,
 	})
-	if plain := ansi.Strip(full); plain != "Ready"+statusBarSep+"Focus: Editor" {
+	if plain := ansi.Strip(full); plain != "Ready"+statusBarMsgSep+"◉ Editor" {
 		t.Fatalf("unexpected full status text %q", plain)
 	}
-	if want := model.theme.StatusBarKey.Render("Focus:"); !strings.Contains(full, want) {
+	if want := model.theme.StatusBarKey.Render("◉"); !strings.Contains(full, want) {
 		t.Fatalf("expected full context key style %q in %q", want, full)
 	}
 
 	truncated := model.renderStatusBarLeft(statusBarLeft{
 		msg:          "Ready",
 		level:        statusInfo,
-		ctx:          "Focus: Ed...",
+		ctx:          "◉ Ed...",
 		ctxTruncated: true,
 	})
 	if want := model.theme.StatusBarValue.Render(
-		"Focus: Ed...",
+		"◉ Ed...",
 	); !strings.Contains(
 		truncated,
 		want,
@@ -556,13 +559,16 @@ func TestRenderStatusBarLeftUsesExplicitParts(t *testing.T) {
 	}
 }
 
-func TestStatusBarLabelsCurrentFileSegment(t *testing.T) {
+func TestStatusBarUsesIconForCurrentFileSegment(t *testing.T) {
 	model := New(Config{})
 	model.currentFile = "/tmp/example.http"
 
 	got := statusBarSegmentsText(model.statusBarSegments())
-	if !strings.Contains(got, "File: example.http") {
-		t.Fatalf("expected file segment to be labeled, got %q", got)
+	if strings.Contains(got, "File:") {
+		t.Fatalf("expected file label to be replaced by icon, got %q", got)
+	}
+	if !strings.Contains(got, "▤ example.http") {
+		t.Fatalf("expected file segment icon, got %q", got)
 	}
 }
 
@@ -573,8 +579,39 @@ func TestStatusBarOmitsFileSegmentWithoutCurrentFile(t *testing.T) {
 	if strings.Contains(got, "File:") {
 		t.Fatalf("expected no file segment without current file, got %q", got)
 	}
-	if !strings.Contains(got, "Focus:") {
-		t.Fatalf("expected focus segment to remain labeled, got %q", got)
+	if strings.Contains(got, "Focus:") {
+		t.Fatalf("expected focus label to be replaced by icon, got %q", got)
+	}
+	if !strings.Contains(got, "◉") {
+		t.Fatalf("expected focus segment icon, got %q", got)
+	}
+}
+
+func TestStatusBarSegmentIconsCoverContextKeys(t *testing.T) {
+	segs := []statusBarSeg{
+		{key: "File", val: "example.http"},
+		{key: "Focus", val: "Editor"},
+		{key: "Mode", val: "VIEW"},
+		{key: "Zoom", val: "Response"},
+		{key: "Unknown", val: "fallback"},
+	}
+
+	got := statusBarSegmentsText(segs)
+	for _, want := range []string{
+		"▤ example.http",
+		"◉ Editor",
+		"✎  VIEW",
+		"⌖ Response",
+		"Unknown: fallback",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("expected status segment %q in %q", want, got)
+		}
+	}
+	for _, old := range []string{"File:", "Focus:", "Mode:", "Zoom:"} {
+		if strings.Contains(got, old) {
+			t.Fatalf("expected legacy status label %q to be replaced, got %q", old, got)
+		}
 	}
 }
 

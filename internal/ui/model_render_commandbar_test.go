@@ -6,6 +6,8 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
 func TestRenderCommandBarContainerPreservesOuterPadding(t *testing.T) {
@@ -124,6 +126,14 @@ func TestRenderCommandBarDoesNotEchoResponseSearch(t *testing.T) {
 		if strings.Contains(out, unexpected) {
 			t.Fatalf("expected command bar to hide response search %q, got %q", unexpected, out)
 		}
+	}
+}
+
+func TestRenderCommandButtonUsesSingleCellHorizontalPadding(t *testing.T) {
+	out := ansi.Strip(renderCommandButton("Tab", "Focus", theme.CommandSegmentStyle{}))
+
+	if out != " Tab Focus " {
+		t.Fatalf("expected single-cell shortcut padding, got %q", out)
 	}
 }
 

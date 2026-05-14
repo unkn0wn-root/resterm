@@ -32,7 +32,7 @@ var (
 	statsCautionStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD46A")).Bold(true)
 	statsNeutralStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4"))
 	statsMessageStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Faint(true)
-	statsHeaderValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#D2D4F5"))
+	statsHeaderValueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#F3F0FF"))
 	statsDurationStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#56C2F4")).Bold(true)
 	statsSelectedStyle    = lipgloss.NewStyle().
 				Background(lipgloss.Color("#343B59")).

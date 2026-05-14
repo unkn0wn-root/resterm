@@ -21,6 +21,9 @@ const (
 	statusBarLeftMaxRatio = 0.7
 	statusBarSep          = "    "
 	statusBarSepWidth     = 4
+	statusBarMsgSep       = "  ›  "
+	statusBarMsgSepWidth  = 5
+	statusBarVersionIcon  = "◇"
 	helpKeyColumnWidth    = 32
 )
 
@@ -68,6 +71,13 @@ const (
 type statusBarSeg struct {
 	key string
 	val string
+}
+
+var statusBarSegmentIcons = map[string]string{
+	"File":  "▤",
+	"Focus": "◉",
+	"Mode":  "✎",
+	"Zoom":  "⌖",
 }
 
 type statusBarLeft struct {
@@ -2116,7 +2126,7 @@ func renderCommandButton(
 
 	button := lipgloss.NewStyle().
 		Foreground(textColor).
-		Padding(0, 2).
+		Padding(0, 1).
 		Bold(true)
 	if palette.Background != "" {
 		button = button.Background(palette.Background)
@@ -2381,7 +2391,7 @@ func (f *statusBarFrame) fit(status, ctx string) {
 		}
 	}
 	if status != "" && ctxWidth > 0 {
-		minRequired := ctxWidth + statusBarSepWidth + lipgloss.Width("…")
+		minRequired := ctxWidth + statusBarMsgSepWidth + lipgloss.Width("…")
 		if minRequired <= f.leftAvailable && f.maxLeft < minRequired {
 			f.maxLeft = minRequired
 		}
@@ -2421,8 +2431,8 @@ func statusBarLeftFor(
 			available = 0
 		}
 		if msg != "" {
-			if available > statusBarSepWidth {
-				msg = truncateToWidth(msg, available-statusBarSepWidth)
+			if available > statusBarMsgSepWidth {
+				msg = truncateToWidth(msg, available-statusBarMsgSepWidth)
 			} else {
 				msg = ""
 			}
@@ -2567,9 +2577,12 @@ func (m Model) statusBarRight(width int) statusBarPart {
 		parts = append(parts, part{text: ansi.Strip(min), view: min})
 	}
 	if version != "" {
+		text := statusBarVersionText(version)
 		parts = append(parts, part{
-			text: version,
-			view: m.theme.StatusBarValue.Render(version),
+			text: text,
+			view: m.theme.StatusBarKey.Render(statusBarVersionIcon) +
+				" " +
+				m.theme.StatusBarValue.Render(version),
 		})
 	}
 
@@ -2588,6 +2601,13 @@ func (m Model) statusBarRight(width int) statusBarPart {
 	return statusBarPart{text: text, view: view}
 }
 
+func statusBarVersionText(version string) string {
+	if version == "" {
+		return ""
+	}
+	return statusBarVersionIcon + " " + version
+}
+
 func (m Model) renderStatusBarLeft(left statusBarLeft) string {
 	parts := make([]string, 0, 2)
 	if left.msg != "" {
@@ -2596,7 +2616,7 @@ func (m Model) renderStatusBarLeft(left statusBarLeft) string {
 	if left.ctx != "" {
 		parts = append(parts, m.renderStatusBarContext(left.ctx, left.ctxTruncated, left.segs))
 	}
-	return strings.Join(parts, statusBarSep)
+	return strings.Join(parts, statusBarMsgSep)
 }
 
 func (m Model) renderStatusBarContext(text string, truncated bool, segs []statusBarSeg) string {
@@ -2609,9 +2629,9 @@ func (m Model) renderStatusBarContext(text string, truncated bool, segs []status
 			parts = append(parts, m.theme.StatusBarValue.Render(seg.val))
 			continue
 		}
-		key := m.theme.StatusBarKey.Render(seg.key + ":")
+		key := m.theme.StatusBarKey.Render(seg.statusMarker())
 		val := m.theme.StatusBarValue.Render(seg.val)
-		parts = append(parts, key+" "+val)
+		parts = append(parts, key+seg.statusMarkerGap()+val)
 	}
 	return strings.Join(parts, statusBarSep)
 }
@@ -2657,7 +2677,24 @@ func (s statusBarSeg) String() string {
 	if s.key == "" {
 		return s.val
 	}
-	return s.key + ": " + s.val
+	return s.statusMarker() + s.statusMarkerGap() + s.val
+}
+
+func (s statusBarSeg) statusMarker() string {
+	if icon := statusBarSegmentIcons[s.key]; icon != "" {
+		return icon
+	}
+	if s.key == "" {
+		return ""
+	}
+	return s.key + ":"
+}
+
+func (s statusBarSeg) statusMarkerGap() string {
+	if s.key == "Mode" {
+		return "  "
+	}
+	return " "
 }
 
 func (l statusBarLeft) String() string {
@@ -2668,7 +2705,7 @@ func (l statusBarLeft) String() string {
 	if l.ctx != "" {
 		parts = append(parts, l.ctx)
 	}
-	return strings.Join(parts, statusBarSep)
+	return strings.Join(parts, statusBarMsgSep)
 }
 
 func statusBarSegmentsText(segs []statusBarSeg) string {
