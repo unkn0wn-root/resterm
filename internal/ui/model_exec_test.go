@@ -1764,6 +1764,7 @@ func TestExecuteRequestRejectsSSHAndK8sBeforeResolve(t *testing.T) {
 func TestCancelActiveRunsStopsSend(t *testing.T) {
 	model := New(Config{})
 	model.sending = true
+	model.sendingOverlayBase = responseExplainPreviewBase
 	model.statusPulseBase = "Sending test"
 	model.statusPulseFrame = 2
 	model.statusPulseOn = true
@@ -1777,6 +1778,9 @@ func TestCancelActiveRunsStopsSend(t *testing.T) {
 	}
 	if model.sending {
 		t.Fatalf("expected sending flag to reset")
+	}
+	if model.sendingOverlayBase != "" {
+		t.Fatalf("expected sending overlay label to reset, got %q", model.sendingOverlayBase)
 	}
 	if model.statusPulseBase != "" || model.statusPulseFrame != 0 {
 		t.Fatalf(

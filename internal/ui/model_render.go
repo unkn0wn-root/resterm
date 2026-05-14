@@ -1538,7 +1538,10 @@ var tabSpinFrames = []string{
 	"⠏",
 }
 
-const responseSendingBase = "Sending request"
+const (
+	responseSendingBase        = "Sending request"
+	responseExplainPreviewBase = "Preparing explain preview"
+)
 
 func (m Model) tabSpinner() string {
 	if !m.spinnerActive() || len(tabSpinFrames) == 0 {
@@ -1570,7 +1573,11 @@ func (m Model) spinnerView(
 }
 
 func (m Model) sendingView(pane *responsePaneState, width, height int) string {
-	return m.spinnerView(pane, width, height, responseSendingBase, m.sending)
+	base := m.sendingOverlayBase
+	if base == "" {
+		base = responseSendingBase
+	}
+	return m.spinnerView(pane, width, height, base, m.sending)
 }
 
 func (m Model) formattingView(pane *responsePaneState, width, height int) string {

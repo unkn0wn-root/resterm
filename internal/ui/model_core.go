@@ -344,6 +344,7 @@ type Model struct {
 	ready                  bool
 	dirty                  bool
 	sending                bool
+	sendingOverlayBase     string
 	sendCancel             context.CancelFunc
 	suppressEditorKey      bool
 	editorInsertMode       bool

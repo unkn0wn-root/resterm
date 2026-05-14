@@ -357,6 +357,7 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 	}
 
 	spin := m.startSending()
+	m.sendingOverlayBase = responseExplainPreviewBase
 	target := m.statusRequestTarget(st.doc, st.req, "")
 	base := "Preparing explain preview"
 	if trimmed := strings.TrimSpace(target); trimmed != "" {
@@ -442,11 +443,13 @@ const (
 
 func (m *Model) startSending() tea.Cmd {
 	m.sending = true
+	m.sendingOverlayBase = ""
 	return m.startTabSpin()
 }
 
 func (m *Model) stopSending() {
 	m.sending = false
+	m.sendingOverlayBase = ""
 	m.stopTabSpinIfIdle()
 }
 
