@@ -376,6 +376,30 @@ func (m *Model) syncExplainPane(
 	if pane == nil || snapshot == nil || snapshot.explain.report == nil {
 		return nil
 	}
+	content := m.explainStyledContent(snapshot, width)
+	if strings.TrimSpace(content) == "" {
+		content = "<no explain>\n"
+	}
+	decorated := m.applyResponseContentStyles(responseTabExplain, content)
+	decorated = m.decorateResponseContentForPane(
+		pane,
+		responseTabExplain,
+		decorated,
+		width,
+		snapshot.ready,
+		snapshot.id,
+	)
+	pane.viewport.SetContent(decorated)
+	pane.restoreScrollForActiveTab()
+	ensureResponseMatchInView(pane, content)
+	pane.setCurrPosition()
+	return nil
+}
+
+func (m *Model) explainStyledContent(snapshot *responseSnapshot, width int) string {
+	if snapshot == nil || snapshot.explain.report == nil {
+		return ""
+	}
 	key := strings.TrimSpace(m.activeThemeKey)
 	if key == "" {
 		key = "default"
@@ -383,19 +407,12 @@ func (m *Model) syncExplainPane(
 	content := snapshot.explain.cache.styled
 	if content == "" || snapshot.explain.cache.width != width ||
 		snapshot.explain.cache.themeKey != key {
-		content = renderExplainStyledView(snapshot.explain.ensureView(), width, m.theme)
+		content = displayContent(renderExplainStyledView(snapshot.explain.ensureView(), width, m.theme))
 		snapshot.explain.cache = explainRenderCache{
 			styled:   content,
 			width:    width,
 			themeKey: key,
 		}
 	}
-	if strings.TrimSpace(content) == "" {
-		content = "<no explain>\n"
-	}
-	decorated := m.applyResponseContentStyles(responseTabExplain, content)
-	pane.viewport.SetContent(decorated)
-	pane.restoreScrollForActiveTab()
-	pane.setCurrPosition()
-	return nil
+	return content
 }

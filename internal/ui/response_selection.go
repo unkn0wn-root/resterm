@@ -1148,40 +1148,7 @@ func toTermenvColor(profile termenv.Profile, c lipgloss.TerminalColor) termenv.C
 // selection prefix after every SGR sequence so the highlight doesn't get "canceled"
 // by styles that appear inside the line.
 func applySelectionToLine(line, prefix, suffix string) string {
-	if prefix == "" {
-		return line
-	}
-	if line == "" {
-		return prefix + suffix
-	}
-	if !ansiSequenceRegex.MatchString(line) {
-		return prefix + line + suffix
-	}
-	indices := ansiSequenceRegex.FindAllStringIndex(line, -1)
-	if len(indices) == 0 {
-		return prefix + line + suffix
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(line) + len(prefix)*(len(indices)+1) + len(suffix))
-	builder.WriteString(prefix)
-	last := 0
-	for _, idx := range indices {
-		if idx[0] > last {
-			builder.WriteString(line[last:idx[0]])
-		}
-		seq := line[idx[0]:idx[1]]
-		builder.WriteString(seq)
-		if isSGR(seq) {
-			builder.WriteString(prefix)
-		}
-		last = idx[1]
-	}
-	if last < len(line) {
-		builder.WriteString(line[last:])
-	}
-	builder.WriteString(suffix)
-	return builder.String()
+	return applyANSIAwareWrap(line, prefix, suffix, "")
 }
 
 // Cursor highlighting targets the first visible rune. We preserve any leading ANSI
@@ -1271,16 +1238,6 @@ func splitFirstVisibleRune(line string) (string, string, string, bool) {
 		return line[:index], line[index : index+size], line[index+size:], true
 	}
 	return line, "", "", false
-}
-
-func isSGR(seq string) bool {
-	if len(seq) == 0 {
-		return false
-	}
-	if seq[len(seq)-1] != 'm' {
-		return false
-	}
-	return strings.HasPrefix(seq, "\x1b[")
 }
 
 func moveDir(prev, next int) int {

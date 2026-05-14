@@ -130,6 +130,13 @@ func newResponsePaneState(vp viewport.Model, followLatest bool) responsePaneStat
 	}
 }
 
+func (pane *responsePaneState) hasReadyExplain() bool {
+	return pane != nil &&
+		pane.snapshot != nil &&
+		pane.snapshot.ready &&
+		pane.snapshot.explain.report != nil
+}
+
 func (pane *responsePaneState) stashCursor() {
 	if pane == nil || !pane.cursor.on {
 		return
@@ -515,20 +522,22 @@ func (m *Model) applyPaneContent(
 	if pane == nil {
 		return
 	}
+	// Apply the base style first so search highlights can restore the active SGR
+	// state after their own reset sequences.
+	base := m.applyResponseContentStyles(tab, content)
 	decorated := m.decorateResponseContentForPane(
 		pane,
 		tab,
-		content,
+		base,
 		width,
 		snapshotReady,
 		snapshotID,
 	)
-	decorated = m.applyResponseContentStyles(tab, decorated)
 	decorated = m.decorateResponseSelection(pane, tab, decorated)
 	decorated = m.decorateResponseCursor(pane, tab, decorated)
 	pane.viewport.SetContent(decorated)
 	pane.restoreScrollForActiveTab()
-	ensureResponseMatchInView(pane, content)
+	ensureResponseMatchInView(pane, base)
 	pane.setCurrPosition()
 }
 
@@ -616,10 +625,9 @@ func (m *Model) syncResponsePane(id responsePaneID) tea.Cmd {
 			return m.syncWorkflowStatsPane(pane, w, h, snapshot)
 		}
 	}
-	if tab == responseTabExplain && !pane.search.hasQuery() {
-		snapshot := pane.snapshot
-		if snapshot != nil && snapshot.explain.report != nil {
-			return m.syncExplainPane(pane, ww, snapshot)
+	if tab == responseTabExplain {
+		if pane.hasReadyExplain() {
+			return m.syncExplainPane(pane, ww, pane.snapshot)
 		}
 	}
 
@@ -776,17 +784,19 @@ func (m *Model) syncWorkflowStatsPane(
 		content: render.content,
 		valid:   true,
 	})
+	// Apply the base style first so search highlights can restore the active SGR
+	// state after their own reset sequences.
+	base := m.applyResponseContentStyles(responseTabStats, render.content)
 	decorated := m.decorateResponseContentForPane(
 		pane,
 		responseTabStats,
-		render.content,
+		base,
 		width,
 		snapshot.ready,
 		snapshot.id,
 	)
-	decorated = m.applyResponseContentStyles(responseTabStats, decorated)
 	pane.viewport.SetContent(decorated)
-	ensureResponseMatchInView(pane, render.content)
+	ensureResponseMatchInView(pane, base)
 	pane.viewport.SetYOffset(0)
 	pane.setCurrPosition()
 	return nil
@@ -810,10 +820,12 @@ func (m *Model) decorateResponseContentForPane(
 		return base
 	}
 
+	index := pane.search.contentIndexFor(base)
 	if pane.search.needsRefresh(snapshotID, tab, width) {
 		prevIndex := pane.search.index
 		pane.search.prepare(pane.search.query, pane.search.isRegex, tab, snapshotID, width)
-		if err := pane.search.computeMatches(base); err != nil {
+		index = pane.search.contentIndexFor(base)
+		if err := pane.search.computeMatchesFromIndex(index); err != nil {
 			pane.search.invalidate()
 			return base
 		}
@@ -833,7 +845,7 @@ func (m *Model) decorateResponseContentForPane(
 	}
 	highlight := m.theme.ResponseSearchHighlight
 	active := m.theme.ResponseSearchHighlightActive
-	return decorateResponseContent(base, pane.search.matches, highlight, active, pane.search.index)
+	return decorateResponseContent(base, index, pane.search.matches, highlight, active, pane.search.index)
 }
 
 func (m *Model) applyResponseContentStyles(tab responseTab, content string) string {
@@ -855,7 +867,7 @@ func ensureResponseMatchInView(pane *responsePaneState, base string) {
 		idx = 0
 		pane.search.index = idx
 	}
-	ensureResponseMatchVisible(&pane.viewport, base, pane.search.matches[idx])
+	ensureResponseMatchVisible(&pane.viewport, pane.search.contentIndexFor(base), pane.search.matches[idx])
 }
 
 func (m *Model) paneContentBase(
@@ -890,7 +902,7 @@ func (m *Model) paneContentBase(
 	case responseTabHeaders:
 		return m.headerContent(pane, w), tab
 	case responseTabExplain:
-		if snapshot.explain.report == nil {
+		if !pane.hasReadyExplain() {
 			return "<no explain>\n", tab
 		}
 		if strings.TrimSpace(snapshot.explain.plain) == "" {

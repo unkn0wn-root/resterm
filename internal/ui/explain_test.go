@@ -325,7 +325,7 @@ func TestSyncResponsePaneExplainUsesStyledRenderer(t *testing.T) {
 	}
 }
 
-func TestSyncResponsePaneExplainFallsBackToPlainWhileSearching(t *testing.T) {
+func TestSyncResponsePaneExplainKeepsStyledRenderingWhileSearching(t *testing.T) {
 	t.Parallel()
 
 	model := New(Config{})
@@ -356,12 +356,58 @@ func TestSyncResponsePaneExplainFallsBackToPlainWhileSearching(t *testing.T) {
 		collectMsgs(cmd)
 	}
 
-	view := pane.viewport.View()
-	if strings.Contains(view, "\x1b[") {
-		t.Fatalf("expected search mode to use plain explain rendering, got %q", view)
+	view := ansi.Strip(pane.viewport.View())
+	if strings.Contains(view, "Summary\n======") {
+		t.Fatalf("expected search mode to keep styled explain rendering, got %q", view)
 	}
-	if !strings.Contains(view, "Decision") {
-		t.Fatalf("expected plain explain content during search, got %q", view)
+	if !strings.Contains(view, "DECISION") {
+		t.Fatalf("expected styled explain content during search, got %q", view)
+	}
+}
+
+func TestExplainSearchUsesSameStyledDisplayContentAsPane(t *testing.T) {
+	t.Parallel()
+
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	pane := &model.responsePanes[responsePanePrimary]
+	pane.activeTab = responseTabExplain
+	pane.viewport.Width = 80
+	pane.snapshot = &responseSnapshot{
+		id:    "snap-explain-search-display",
+		ready: true,
+		explain: explainState{
+			report: &xplain.Report{
+				Status:   xplain.StatusReady,
+				Method:   "GET",
+				URL:      "https://example.com",
+				Decision: "Request prepared",
+			},
+		},
+	}
+
+	styled := model.explainStyledContent(pane.snapshot, pane.viewport.Width)
+	searchContent, tab, wrapped := model.responseSearchContent(
+		responsePanePrimary,
+		responseTabExplain,
+		pane.viewport.Width,
+	)
+	if tab != responseTabExplain {
+		t.Fatalf("expected explain search tab, got %v", tab)
+	}
+	if searchContent != styled || wrapped != styled {
+		t.Fatalf(
+			"expected explain search content to match pane display content\nstyled=%q\nsearch=%q\nwrapped=%q",
+			styled,
+			searchContent,
+			wrapped,
+		)
 	}
 }
 
