@@ -80,52 +80,80 @@ func run(a []string) error {
 
 	exec := cli.NewExecFlags()
 	fs := cli.NewFlagSet("resterm")
-	fs.StringVar(&filePath, "file", "", "Path to .http/.rest file to open")
+	cli.StringVarAliases(fs, &filePath, "", "Path to .http/.rest file to open", "file", "f")
 	exec.Bind(fs)
-	fs.BoolVar(&showVersion, "version", false, "Show resterm version")
-	fs.BoolVar(&checkUpdate, "check-update", false, "Check for newer releases and exit")
-	fs.BoolVar(
+	cli.BoolVarAliases(fs, &showVersion, false, "Show resterm version", "version", "v")
+	cli.BoolVarAliases(
+		fs,
+		&checkUpdate,
+		false,
+		"Check for newer releases and exit",
+		"check-update",
+		"c",
+	)
+	cli.BoolVarAliases(
+		fs,
 		&doUpdate,
-		"update",
 		false,
 		"Download and install the latest release, if available",
+		"update",
+		"u",
 	)
-	fs.StringVar(
+	cli.StringVarAliases(
+		fs,
 		&curlSrc,
-		"from-curl",
 		"",
 		"Curl command or file path to convert",
+		"from-curl",
+		"fc",
 	)
-	fs.StringVar(
+	cli.StringVarAliases(
+		fs,
 		&openapiSpec,
-		"from-openapi",
 		"",
 		"Path to OpenAPI specification file to convert",
+		"from-openapi",
+		"fo",
 	)
-	fs.StringVar(&httpOut, "http-out", "", "Destination path for generated .http file")
-	fs.StringVar(
+	cli.StringVarAliases(
+		fs,
+		&httpOut,
+		"",
+		"Destination path for generated .http file",
+		"http-out",
+		"o",
+	)
+	cli.StringVarAliases(
+		fs,
 		&openapiBase,
-		"openapi-base-var",
 		openapi.DefaultBaseURLVariable,
 		"Variable name for the generated base URL",
+		"openapi-base-var",
+		"ob",
 	)
-	fs.BoolVar(
+	cli.BoolVarAliases(
+		fs,
 		&openapiResolveRefs,
-		"openapi-resolve-refs",
 		false,
 		"Resolve external $ref references during OpenAPI import",
+		"openapi-resolve-refs",
+		"or",
 	)
-	fs.BoolVar(
+	cli.BoolVarAliases(
+		fs,
 		&openapiIncludeDeprecated,
-		"openapi-include-deprecated",
 		false,
 		"Include deprecated operations when generating requests",
+		"openapi-include-deprecated",
+		"od",
 	)
-	fs.IntVar(
+	cli.IntVarAliases(
+		fs,
 		&openapiServerIndex,
-		"openapi-server-index",
 		0,
 		"Preferred server index (0-based) from the spec to use as the base URL",
+		"openapi-server-index",
+		"os",
 	)
 	if err := fs.Parse(a); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -393,10 +421,7 @@ func printMainUsage(w io.Writer, fs *flag.FlagSet) {
 	if _, err := fmt.Fprintln(w, "Flags:"); err != nil {
 		return
 	}
-	out := fs.Output()
-	fs.SetOutput(w)
-	defer fs.SetOutput(out)
-	fs.PrintDefaults()
+	cli.PrintFlagDefaults(w, fs)
 }
 
 func executableChecksum() (string, error) {

@@ -155,46 +155,100 @@ func newRunCmd() *runCmd {
 
 func (c *runCmd) bind() {
 	c.exec.Bind(c.fs)
-	cli.StringVar(c.fs, &c.request, "request", "", "Run a named request")
-	cli.StringVar(c.fs, &c.request, "r", "", "Run a named request")
-	cli.StringVar(c.fs, &c.workflow, "workflow", "", "Run a named workflow")
-	cli.StringVar(c.fs, &c.tag, "tag", "", "Run requests matching a tag")
-	c.fs.BoolVar(&c.all, "all", false, "Run all requests in the file")
-	c.fs.IntVar(&c.line, "line", 0, "Run the request or workflow at a specific line")
-	cli.StringVar(
+	cli.StringVarAliases(c.fs, &c.request, "", "Run a named request", "request", "r")
+	cli.StringVarAliases(c.fs, &c.workflow, "", "Run a named workflow", "workflow", "W")
+	cli.StringVarAliases(c.fs, &c.tag, "", "Run requests matching a tag", "tag", "g")
+	cli.BoolVarAliases(c.fs, &c.all, false, "Run all requests in the file", "all", "a")
+	cli.IntVarAliases(
+		c.fs,
+		&c.line,
+		0,
+		"Run the request or workflow at a specific line",
+		"line",
+		"l",
+	)
+	cli.StringVarAliases(
 		c.fs,
 		&c.format,
-		"format",
 		c.format,
 		"Output format: auto, text, json, junit, pretty, raw",
+		"format",
+		"f",
 	)
-	cli.StringVar(
+	cli.StringVarAliases(
 		c.fs,
 		&c.exitCodeMode,
-		"exit-code-mode",
 		c.exitCodeMode,
 		"Exit code mode: detailed or summary",
+		"exit-code-mode",
+		"m",
 	)
-	cli.StringVar(c.fs, &c.color, "color", c.color, "Color for pretty output: auto, always, never")
-	c.fs.BoolVar(&c.body, "body", false, "Print only the response body for a single request result")
-	c.fs.BoolVar(&c.headers, "headers", false, "Include request and response headers in output")
-	c.fs.BoolVar(&c.profile, "profile", false, "Force profile mode for the selected request")
-	c.fs.BoolVar(&c.failFast, "fail-fast", false, "Stop after the first failed result")
-	cli.StringVar(c.fs, &c.artifactDir, "artifact-dir", "", "Directory to write run artifacts")
-	cli.StringVar(c.fs, &c.stateDir, "state-dir", "", "Directory for persisted run state")
-	c.fs.BoolVar(
+	cli.StringVarAliases(
+		c.fs,
+		&c.color,
+		c.color,
+		"Color for pretty output: auto, always, never",
+		"color",
+		"c",
+	)
+	cli.BoolVarAliases(
+		c.fs,
+		&c.body,
+		false,
+		"Print only the response body for a single request result",
+		"body",
+		"b",
+	)
+	cli.BoolVarAliases(
+		c.fs,
+		&c.headers,
+		false,
+		"Include request and response headers in output",
+		"headers",
+		"H",
+	)
+	cli.BoolVarAliases(
+		c.fs,
+		&c.profile,
+		false,
+		"Force profile mode for the selected request",
+		"profile",
+		"p",
+	)
+	cli.BoolVarAliases(c.fs, &c.failFast, false, "Stop after the first failed result", "fail-fast", "ff")
+	cli.StringVarAliases(
+		c.fs,
+		&c.artifactDir,
+		"",
+		"Directory to write run artifacts",
+		"artifact-dir",
+		"A",
+	)
+	cli.StringVarAliases(
+		c.fs,
+		&c.stateDir,
+		"",
+		"Directory for persisted run state",
+		"state-dir",
+		"s",
+	)
+	cli.BoolVarAliases(
+		c.fs,
 		&c.persistGlobals,
-		"persist-globals",
 		false,
 		"Persist captured globals between invocations",
+		"persist-globals",
+		"G",
 	)
-	c.fs.BoolVar(
+	cli.BoolVarAliases(
+		c.fs,
 		&c.persistAuth,
-		"persist-auth",
 		false,
 		"Persist cached auth state between invocations",
+		"persist-auth",
+		"P",
 	)
-	c.fs.BoolVar(&c.history, "history", false, "Persist run history to the state directory")
+	cli.BoolVarAliases(c.fs, &c.history, false, "Persist run history to the state directory", "history", "y")
 }
 
 func (c *runCmd) parse(args []string) error {
@@ -665,8 +719,5 @@ func printRunUsage(w io.Writer, fs *flag.FlagSet) {
 	if _, err := fmt.Fprintln(w, "Flags:"); err != nil {
 		return
 	}
-	out := fs.Output()
-	fs.SetOutput(w)
-	defer fs.SetOutput(out)
-	fs.PrintDefaults()
+	cli.PrintFlagDefaults(w, fs)
 }

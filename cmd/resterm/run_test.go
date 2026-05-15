@@ -97,6 +97,92 @@ func TestRunRunFlagErrorsHaveCommandPrefix(t *testing.T) {
 	}
 }
 
+func TestRunCmdShortAliases(t *testing.T) {
+	cmd := newRunCmd()
+	if err := cmd.parse([]string{
+		"-e", "dev",
+		"-E", "env.json",
+		"-w", "/tmp/workspace",
+		"-t", "5s",
+		"-k",
+		"-L=false",
+		"-x", "http://proxy.example",
+		"-R",
+		"-C", "dev,prod",
+		"-B", "prod",
+		"-toe", "collector:4317",
+		"-toi=true",
+		"-tos", "resterm-test",
+		"-r", "login",
+		"-W", "smoke-flow",
+		"-g", "smoke",
+		"-a",
+		"-l", "12",
+		"-f", "json",
+		"-m", "summary",
+		"-c", "never",
+		"-b",
+		"-H",
+		"-p",
+		"-ff",
+		"-A", "artifacts",
+		"-s", "state",
+		"-G",
+		"-P",
+		"-y",
+		"requests.http",
+	}); err != nil {
+		t.Fatalf("parse aliases: %v", err)
+	}
+
+	if cmd.exec.EnvName != "dev" || cmd.exec.EnvFile != "env.json" ||
+		cmd.exec.Workspace != "/tmp/workspace" {
+		t.Fatalf("unexpected exec string flags: %+v", cmd.exec)
+	}
+	if cmd.exec.Timeout != 5*time.Second {
+		t.Fatalf("timeout = %s, want 5s", cmd.exec.Timeout)
+	}
+	if !cmd.exec.Insecure || cmd.exec.Follow || !cmd.exec.Recursive {
+		t.Fatalf("unexpected exec bool flags: %+v", cmd.exec)
+	}
+	if cmd.exec.ProxyURL != "http://proxy.example" ||
+		cmd.exec.CompareTargetsRaw != "dev,prod" ||
+		cmd.exec.CompareBaseline != "prod" {
+		t.Fatalf("unexpected exec flags: %+v", cmd.exec)
+	}
+
+	tel := cmd.exec.TelemetryConfig("test-version")
+	if tel.Endpoint != "collector:4317" || !tel.Insecure || tel.ServiceName != "resterm-test" {
+		t.Fatalf("unexpected telemetry config: %+v", tel)
+	}
+	if cmd.request != "login" || cmd.workflow != "smoke-flow" || cmd.tag != "smoke" {
+		t.Fatalf("unexpected selectors: request=%q workflow=%q tag=%q", cmd.request, cmd.workflow, cmd.tag)
+	}
+	if !cmd.all || cmd.line != 12 {
+		t.Fatalf("unexpected all/line: all=%v line=%d", cmd.all, cmd.line)
+	}
+	if cmd.format != "json" || cmd.exitCodeMode != "summary" || cmd.color != "never" {
+		t.Fatalf(
+			"unexpected output flags: format=%q mode=%q color=%q",
+			cmd.format,
+			cmd.exitCodeMode,
+			cmd.color,
+		)
+	}
+	if !cmd.body || !cmd.headers || !cmd.profile || !cmd.failFast {
+		t.Fatalf("unexpected run bool flags: %+v", cmd)
+	}
+	if cmd.artifactDir != "artifacts" || cmd.stateDir != "state" {
+		t.Fatalf("unexpected dirs: artifact=%q state=%q", cmd.artifactDir, cmd.stateDir)
+	}
+	if !cmd.persistGlobals || !cmd.persistAuth || !cmd.history {
+		t.Fatalf("unexpected persistence flags: %+v", cmd)
+	}
+	if got := cmd.fs.Args(); len(got) != 1 || got[0] != "requests.http" {
+		t.Fatalf("args = %#v, want requests.http", got)
+	}
+}
+
 func TestRunDispatchesRunSubcommand(t *testing.T) {
 	stdout, stderr, err := captureRunIO(t, func() error {
 		return run([]string{"run", "-h"})

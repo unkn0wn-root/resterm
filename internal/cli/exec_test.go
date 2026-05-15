@@ -77,3 +77,69 @@ func TestExecFlagsBindTelemetryFlags(t *testing.T) {
 		t.Fatalf("version = %q, want %q", cfg.Version, "test-version")
 	}
 }
+
+func TestExecFlagsShortAliases(t *testing.T) {
+	flags := NewExecFlags()
+	fs := NewFlagSet("test")
+	flags.Bind(fs)
+
+	if err := fs.Parse([]string{
+		"-e", "dev",
+		"-E", "env.json",
+		"-w", "/tmp/workspace",
+		"-t", "5s",
+		"-k",
+		"-L=false",
+		"-x", "http://proxy.example",
+		"-R",
+		"-C", "dev,prod",
+		"-B", "prod",
+		"-toe", "collector:4317",
+		"-toi=true",
+		"-tos", "resterm-test",
+	}); err != nil {
+		t.Fatalf("Parse(...): %v", err)
+	}
+
+	if flags.EnvName != "dev" {
+		t.Fatalf("env = %q, want dev", flags.EnvName)
+	}
+	if flags.EnvFile != "env.json" {
+		t.Fatalf("env file = %q, want env.json", flags.EnvFile)
+	}
+	if flags.Workspace != "/tmp/workspace" {
+		t.Fatalf("workspace = %q, want /tmp/workspace", flags.Workspace)
+	}
+	if flags.Timeout != 5*time.Second {
+		t.Fatalf("timeout = %s, want 5s", flags.Timeout)
+	}
+	if !flags.Insecure {
+		t.Fatalf("insecure = false, want true")
+	}
+	if flags.Follow {
+		t.Fatalf("follow = true, want false")
+	}
+	if flags.ProxyURL != "http://proxy.example" {
+		t.Fatalf("proxy = %q, want http://proxy.example", flags.ProxyURL)
+	}
+	if !flags.Recursive {
+		t.Fatalf("recursive = false, want true")
+	}
+	if flags.CompareTargetsRaw != "dev,prod" {
+		t.Fatalf("compare = %q, want dev,prod", flags.CompareTargetsRaw)
+	}
+	if flags.CompareBaseline != "prod" {
+		t.Fatalf("compare base = %q, want prod", flags.CompareBaseline)
+	}
+
+	cfg := flags.TelemetryConfig("test-version")
+	if cfg.Endpoint != "collector:4317" {
+		t.Fatalf("endpoint = %q, want collector:4317", cfg.Endpoint)
+	}
+	if !cfg.Insecure {
+		t.Fatalf("telemetry insecure = false, want true")
+	}
+	if cfg.ServiceName != "resterm-test" {
+		t.Fatalf("telemetry service = %q, want resterm-test", cfg.ServiceName)
+	}
+}
