@@ -215,7 +215,14 @@ func (c *runCmd) bind() {
 		"profile",
 		"p",
 	)
-	cli.BoolVarAliases(c.fs, &c.failFast, false, "Stop after the first failed result", "fail-fast", "ff")
+	cli.BoolVarAliases(
+		c.fs,
+		&c.failFast,
+		false,
+		"Stop after the first failed result",
+		"fail-fast",
+		"ff",
+	)
 	cli.StringVarAliases(
 		c.fs,
 		&c.artifactDir,
@@ -248,7 +255,14 @@ func (c *runCmd) bind() {
 		"persist-auth",
 		"P",
 	)
-	cli.BoolVarAliases(c.fs, &c.history, false, "Persist run history to the state directory", "history", "y")
+	cli.BoolVarAliases(
+		c.fs,
+		&c.history,
+		false,
+		"Persist run history to the state directory",
+		"history",
+		"y",
+	)
 }
 
 func (c *runCmd) parse(args []string) error {

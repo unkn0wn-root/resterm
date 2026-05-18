@@ -156,7 +156,12 @@ func TestRunCmdShortAliases(t *testing.T) {
 		t.Fatalf("unexpected telemetry config: %+v", tel)
 	}
 	if cmd.request != "login" || cmd.workflow != "smoke-flow" || cmd.tag != "smoke" {
-		t.Fatalf("unexpected selectors: request=%q workflow=%q tag=%q", cmd.request, cmd.workflow, cmd.tag)
+		t.Fatalf(
+			"unexpected selectors: request=%q workflow=%q tag=%q",
+			cmd.request,
+			cmd.workflow,
+			cmd.tag,
+		)
 	}
 	if !cmd.all || cmd.line != 12 {
 		t.Fatalf("unexpected all/line: all=%v line=%d", cmd.all, cmd.line)
