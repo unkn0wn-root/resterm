@@ -24,21 +24,39 @@ Use this guide for commandline behavior. For request syntax, directives, workflo
 
 These flags are shared by `resterm` and `resterm run` when request execution is involved.
 
-| Flag | Description |
-| --- | --- |
-| `--workspace <dir>` | Workspace root used for file discovery and relative resolution. |
-| `--recursive` | Recursively scan the workspace for request files. |
-| `--env <name>` | Select an environment explicitly. |
-| `--env-file <path>` | Use an explicit environment JSON file. |
-| `--timeout <duration>` | Default HTTP timeout. |
-| `--insecure` | Skip TLS certificate verification. |
-| `--follow` | Follow redirects. Pass `--follow=false` to disable it. |
-| `--proxy <url>` | HTTP proxy URL. |
-| `--compare <envs>` | Default comma/space-delimited compare targets. |
-| `--compare-base <env>` | Baseline environment for compare runs. |
-| `--trace-otel-endpoint <url>` | OTLP collector endpoint used by `@trace`. |
-| `--trace-otel-insecure` | Disable TLS for OTLP trace export. |
-| `--trace-otel-service <name>` | Override the exported `service.name`. |
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--workspace <dir>` | `-w <dir>` | Workspace root used for file discovery and relative resolution. |
+| `--recursive` | `-R` | Recursively scan the workspace for request files. |
+| `--env <name>` | `-e <name>` | Select an environment explicitly. |
+| `--env-file <path>` | `-E <path>` | Use an explicit environment JSON file. |
+| `--timeout <duration>` | `-t <duration>` | Default HTTP timeout. |
+| `--insecure` | `-k` | Skip TLS certificate verification. |
+| `--follow` | `-L` | Follow redirects. Pass `--follow=false` or `-L=false` to disable it. |
+| `--proxy <url>` | `-x <url>` | HTTP proxy URL. |
+| `--compare <envs>` | `-C <envs>` | Default comma/space-delimited compare targets. |
+| `--compare-base <env>` | `-B <env>` | Baseline environment for compare runs. |
+| `--trace-otel-endpoint <url>` | `-toe <url>` | OTLP collector endpoint used by `@trace`. |
+| `--trace-otel-insecure` | `-toi` | Disable TLS for OTLP trace export. |
+| `--trace-otel-service <name>` | `-tos <name>` | Override the exported `service.name`. |
+
+## `resterm` Utility Flags
+
+These flags belong to the top-level `resterm` command.
+
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--file <path>` | `-f <path>` | Path to a `.http` / `.rest` file to open. |
+| `--version` | `-v` | Show the Resterm version. |
+| `--check-update` | `-c` | Check for newer releases and exit. |
+| `--update` | `-u` | Download and install the latest release, if available. |
+| `--from-curl <cmd-or-path>` | `-fc <cmd-or-path>` | Curl command or file path to convert. |
+| `--from-openapi <path>` | `-fo <path>` | OpenAPI specification file to convert. |
+| `--http-out <path>` | `-o <path>` | Destination path for generated `.http` file. |
+| `--openapi-base-var <name>` | `-ob <name>` | Variable name for the generated base URL. |
+| `--openapi-resolve-refs` | `-or` | Resolve external `$ref` references during OpenAPI import. |
+| `--openapi-include-deprecated` | `-od` | Include deprecated operations when generating requests. |
+| `--openapi-server-index <n>` | `-os <n>` | Preferred server index from the spec to use as the base URL. |
 
 ## `resterm run`
 
@@ -63,14 +81,14 @@ The interactive picker follows the active theme and can be customized with `styl
 
 Selection flags:
 
-| Flag | Description |
-| --- | --- |
-| `--request <name>` / `-r <name>` | Run one named request. |
-| `--workflow <name>` | Run one named workflow. |
-| `--tag <tag>` | Run every request tagged with the given tag. |
-| `--line <n>` | Run the request or workflow whose source range contains line `n`. |
-| `--all` | Run every request in the file. |
-| `--profile` | Force profile mode for the selected request. |
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--request <name>` | `-r <name>` | Run one named request. |
+| `--workflow <name>` | `-W <name>` | Run one named workflow. |
+| `--tag <tag>` | `-g <tag>` | Run every request tagged with the given tag. |
+| `--line <n>` | `-l <n>` | Run the request or workflow whose source range contains line `n`. |
+| `--all` | `-a` | Run every request in the file. |
+| `--profile` | `-p` | Force profile mode for the selected request. |
 
 Selector rules:
 
@@ -95,12 +113,12 @@ Selector rules:
 
 Related flags:
 
-| Flag | Description |
-| --- | --- |
-| `--format <mode>` | One of `auto`, `text`, `json`, `junit`, `pretty`, or `raw`. |
-| `--body` | Print only the response body for exactly one request result. |
-| `--headers` | Include request and response headers when a single-request view is rendered. |
-| `--color <mode>` | Pretty-output color mode: `auto`, `always`, `never`. |
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--format <mode>` | `-f <mode>` | One of `auto`, `text`, `json`, `junit`, `pretty`, or `raw`. |
+| `--body` | `-b` | Print only the response body for exactly one request result. |
+| `--headers` | `-H` | Include request and response headers when a single-request view is rendered. |
+| `--color <mode>` | `-c <mode>` | Pretty-output color mode: `auto`, `always`, `never`. |
 
 Output rules worth knowing:
 
@@ -112,10 +130,10 @@ Output rules worth knowing:
 
 ### Execution Controls
 
-| Flag | Description |
-| --- | --- |
-| `--fail-fast` | Stop after the first failed top-level result and mark the remaining selected requests as skipped. |
-| `--exit-code-mode <mode>` | `detailed` returns classified CI exit codes; `summary` preserves the legacy `0`/`1`/`2` contract. |
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--fail-fast` | `-ff` | Stop after the first failed top-level result and mark the remaining selected requests as skipped. |
+| `--exit-code-mode <mode>` | `-m <mode>` | `detailed` returns classified CI exit codes; `summary` preserves the legacy `0`/`1`/`2` contract. |
 
 JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.failureCodes`, and per-result `failure` metadata when a result fails. Workflow, compare, and profile failures include the same structured failure object at the step or profile-iteration level.
 
@@ -123,13 +141,13 @@ JSON output includes a top-level `schemaVersion`, `summary.exitCode`, `summary.f
 
 `resterm run` can write execution artifacts and optionally persist runtime state between invocations.
 
-| Flag | Description |
-| --- | --- |
-| `--artifact-dir <dir>` | Write artifacts produced by the run. |
-| `--state-dir <dir>` | Root directory for persisted runner state. |
-| `--persist-globals` | Persist captured globals between runs. |
-| `--persist-auth` | Persist cached auth state between runs. |
-| `--history` | Persist run history to the state directory. |
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--artifact-dir <dir>` | `-A <dir>` | Write artifacts produced by the run. |
+| `--state-dir <dir>` | `-s <dir>` | Root directory for persisted runner state. |
+| `--persist-globals` | `-G` | Persist captured globals between runs. |
+| `--persist-auth` | `-P` | Persist cached auth state between runs. |
+| `--history` | `-y` | Persist run history to the state directory. |
 
 Behavior:
 

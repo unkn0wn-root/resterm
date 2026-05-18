@@ -144,7 +144,11 @@ func TestExplainActiveRequestUsesPreviewSpinnerLabel(t *testing.T) {
 	}
 	view := model.sendingView(model.pane(responsePanePrimary), 40, 8)
 	if !strings.Contains(view, responseExplainPreviewBase) {
-		t.Fatalf("expected explain preview spinner to use %q, got %q", responseExplainPreviewBase, view)
+		t.Fatalf(
+			"expected explain preview spinner to use %q, got %q",
+			responseExplainPreviewBase,
+			view,
+		)
 	}
 	if strings.Contains(view, responseSendingBase) {
 		t.Fatalf("did not expect explain preview spinner to use %q", responseSendingBase)

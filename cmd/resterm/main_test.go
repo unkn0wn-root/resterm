@@ -27,6 +27,21 @@ func TestRunVersionFlag(t *testing.T) {
 	}
 }
 
+func TestRunVersionShortFlag(t *testing.T) {
+	out, errOut, err := captureRunIO(t, func() error {
+		return run([]string{"-v"})
+	})
+	if err != nil {
+		t.Fatalf("run -v: %v", err)
+	}
+	if errOut != "" {
+		t.Fatalf("expected empty stderr, got %q", errOut)
+	}
+	if !strings.Contains(out, "resterm ") {
+		t.Fatalf("expected version header in stdout, got %q", out)
+	}
+}
+
 func TestRunHelpFlag(t *testing.T) {
 	out, errOut, err := captureRunIO(t, func() error {
 		return run([]string{"--help"})
@@ -59,9 +74,34 @@ func TestRunRejectsConflictingImportFlags(t *testing.T) {
 	}
 }
 
+func TestRunRejectsConflictingImportShortFlags(t *testing.T) {
+	t.Setenv("RESTERM_CONFIG_DIR", t.TempDir())
+	err := run([]string{
+		"-fc", "curl https://example.com",
+		"-fo", "spec.yaml",
+	})
+	if err == nil {
+		t.Fatalf("expected conflict error")
+	}
+	if !strings.Contains(err.Error(), "choose either --from-curl or --from-openapi") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestRunRejectsInvalidCompareValue(t *testing.T) {
 	t.Setenv("RESTERM_CONFIG_DIR", t.TempDir())
 	err := run([]string{"--compare", "dev"})
+	if err == nil {
+		t.Fatalf("expected compare validation error")
+	}
+	if !strings.Contains(err.Error(), "invalid --compare value") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunRejectsInvalidCompareShortFlagValue(t *testing.T) {
+	t.Setenv("RESTERM_CONFIG_DIR", t.TempDir())
+	err := run([]string{"-C", "dev"})
 	if err == nil {
 		t.Fatalf("expected compare validation error")
 	}
