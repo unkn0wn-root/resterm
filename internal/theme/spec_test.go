@@ -10,6 +10,13 @@ func strPtr(value string) *string {
 	return &value
 }
 
+func TestDefaultThemeEditorHintBoxUsesEditorFocusColor(t *testing.T) {
+	th := DefaultTheme()
+	if got := th.EditorHintBox.GetBorderLeftForeground(); got != th.PaneBorderFocusEditor {
+		t.Fatalf("expected editor hint border to use editor focus color, got %v", got)
+	}
+}
+
 func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	base := DefaultTheme()
 	spec := ThemeSpec{
