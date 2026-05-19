@@ -149,6 +149,7 @@ type MethodColors struct {
 
 func DefaultTheme() Theme {
 	accent := lipgloss.Color("#7D56F4")
+	responseAccent := lipgloss.Color("#33C481")
 	base := lipgloss.NewStyle().Foreground(lipgloss.Color("#dcd7ff"))
 	directiveAccent := lipgloss.Color("#56A9DD")
 
@@ -296,7 +297,7 @@ func DefaultTheme() Theme {
 		PaneBorderFocusFile:     lipgloss.Color("#FFD46A"),
 		PaneBorderFocusRequests: lipgloss.Color("#FFD46A"),
 		PaneBorderFocusEditor:   directiveAccent,
-		PaneBorderFocusResponse: accent,
+		PaneBorderFocusResponse: responseAccent,
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
 		EditorMetadata: EditorMetadataPalette{
 			CommentMarker:    lipgloss.Color("#5E5A72"),
