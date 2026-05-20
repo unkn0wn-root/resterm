@@ -198,7 +198,7 @@ func DefaultTheme() Theme {
 			Bold(true).
 			Padding(0, 2),
 		TabInactive: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#5E5A72")).
+			Foreground(lipgloss.Color("#8B86A8")).
 			Padding(0, 1),
 		Notification: lipgloss.NewStyle().
 			Foreground(lipgloss.Color("#E0DEF4")).
@@ -301,7 +301,7 @@ func DefaultTheme() Theme {
 		PaneBorderFocusResponse: responseAccent,
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
 		EditorMetadata: EditorMetadataPalette{
-			CommentMarker:    lipgloss.Color("#5E5A72"),
+			CommentMarker:    lipgloss.Color("#8B86A8"),
 			DirectiveDefault: directiveAccent,
 			Value:            lipgloss.Color("#E6E1FF"),
 			SettingKey:       lipgloss.Color("#FFD46A"),

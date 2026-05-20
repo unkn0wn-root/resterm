@@ -133,3 +133,17 @@ func TestRenderHelpOverlayShowsNoMatchesMessage(t *testing.T) {
 		t.Fatalf("expected no-match help message, got %q", out)
 	}
 }
+
+func TestRenderHelpOverlayDoesNotRepeatInactiveSearchHint(t *testing.T) {
+	model := New(Config{})
+	model.width = 120
+	model.height = 40
+
+	out := ansi.Strip(model.renderHelpOverlay())
+	if !strings.Contains(out, "/ search") {
+		t.Fatalf("expected top search guidance, got %q", out)
+	}
+	if strings.Contains(out, "Shift+F to search") {
+		t.Fatalf("did not expect inactive search hint to repeat, got %q", out)
+	}
+}

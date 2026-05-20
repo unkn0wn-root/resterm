@@ -3192,10 +3192,10 @@ func (m Model) renderHelpFilter(width int) string {
 		Width(width).
 		Render(m.helpFilter.View())
 
-	hintText := "Type to filter the help • Enter done • Esc clear/close"
 	if !m.helpFilter.Focused() {
-		hintText = "/ or Shift+F to search • Esc clear/close"
+		return input
 	}
+	hintText := "Type to filter the help • Enter done • Esc clear/close"
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
