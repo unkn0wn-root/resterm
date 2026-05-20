@@ -56,6 +56,22 @@ func TestHorizontalAutoScroll(t *testing.T) {
 	}
 }
 
+func TestDefaultPromptDoesNotAddExtraGapBeforeLineNumber(t *testing.T) {
+	textarea := New()
+	textarea.Placeholder = ""
+	textarea.SetHeight(1)
+	textarea.SetWidth(16)
+	textarea.SetValue("GET")
+
+	view := ansi.Strip(textarea.View())
+	if strings.Contains(view, "┃   1") {
+		t.Fatalf("expected default prompt to avoid extra gutter gap, got %q", view)
+	}
+	if !strings.Contains(view, "┃  1 GET") {
+		t.Fatalf("expected compact default prompt before line number, got %q", view)
+	}
+}
+
 func TestHorizontalScrollMargin(t *testing.T) {
 	textarea := newTextArea()
 	textarea.Prompt = ""
