@@ -419,7 +419,9 @@ func TestPaneFramesDoNotReserveBottomPaddingRows(t *testing.T) {
 
 	responseWant := model.responseContentHeight + paneBottomPadding +
 		model.theme.ResponseBorder.GetVerticalFrameSize()
-	if got := lipgloss.Height(model.renderResponsePane(model.responseWidthPx, renderContext{})); got != responseWant {
+	if got := lipgloss.Height(
+		model.renderResponsePane(model.responseWidthPx, renderContext{}),
+	); got != responseWant {
 		t.Fatalf("expected response pane height %d, got %d", responseWant, got)
 	}
 }
