@@ -21,13 +21,21 @@ func (m *Model) applyLayout() tea.Cmd {
 	chromeHeight := lipgloss.Height(m.renderHeader()) +
 		lipgloss.Height(m.renderCommandBar()) +
 		lipgloss.Height(m.renderStatusBar())
-
-	paneHeight := m.height - chromeHeight - 4
-	if paneHeight < 4 {
-		paneHeight = 4
-	}
+	sidebarFrameHeight := m.paneVerticalFrameHeight(paneRegionSidebar)
+	editorFrameHeight := m.paneVerticalFrameHeight(paneRegionEditor)
+	responseFrameHeight := m.paneVerticalFrameHeight(paneRegionResponse)
+	heightBudget := newPaneHeightBudget(
+		m.height,
+		chromeHeight,
+		m.visiblePaneFrameHeight(),
+		paneBottomPadding,
+	)
+	paneHeight := heightBudget.contentHeight
 
 	m.paneContentHeight = paneHeight
+	sidebarContentHeight := heightBudget.contentHeightForFrame(sidebarFrameHeight)
+	editorFullHeight := heightBudget.contentHeightForFrame(editorFrameHeight)
+	responseFullHeight := heightBudget.contentHeightForFrame(responseFrameHeight)
 
 	if m.sidebarSplit <= 0 {
 		m.sidebarSplit = sidebarSplitDefault
@@ -125,8 +133,8 @@ func (m *Model) applyLayout() tea.Cmd {
 	editorFrameWidth := m.theme.EditorBorder.GetHorizontalFrameSize()
 	responseFrameWidth := m.theme.ResponseBorder.GetHorizontalFrameSize()
 
-	m.editorContentHeight = paneHeight
-	m.responseContentHeight = paneHeight
+	m.editorContentHeight = editorFullHeight
+	m.responseContentHeight = responseFullHeight
 
 	var editorWidth, responseWidth int
 	var editorHeight, responseHeight int
@@ -134,20 +142,25 @@ func (m *Model) applyLayout() tea.Cmd {
 	if m.mainSplitOrientation == mainSplitHorizontal {
 		editorWidth = remaining
 		responseWidth = remaining
-		editorFrameHeight := m.theme.EditorBorder.GetVerticalFrameSize()
-		responseFrameHeight := m.theme.ResponseBorder.GetVerticalFrameSize()
 		ratio := m.editorSplit
 		if ratio <= 0 {
 			ratio = editorSplitDefault
 		}
-		editorHeight, responseHeight = m.horizontalContentHeights(
-			paneHeight,
-			editorCollapsed,
-			responseCollapsed,
-			ratio,
-			editorFrameHeight,
-			responseFrameHeight,
-		)
+		switch {
+		case editorCollapsed && responseCollapsed:
+			editorHeight, responseHeight = 0, 0
+		case editorCollapsed:
+			editorHeight = 0
+			responseHeight = max(heightBudget.contentHeightForFrame(responseFrameHeight), 1)
+		case responseCollapsed:
+			editorHeight = max(heightBudget.contentHeightForFrame(editorFrameHeight), 1)
+			responseHeight = 0
+		default:
+			editorHeight, responseHeight = splitStackedContentHeight(
+				heightBudget.stackedContentHeight(editorFrameHeight, responseFrameHeight),
+				ratio,
+			)
+		}
 		m.editorContentHeight = editorHeight
 		m.responseContentHeight = responseHeight
 	} else {
@@ -223,9 +236,9 @@ func (m *Model) applyLayout() tea.Cmd {
 			}
 		}
 
-		editorHeight = paneHeight
-		m.editorContentHeight = paneHeight
-		m.responseContentHeight = paneHeight
+		editorHeight = editorFullHeight
+		m.editorContentHeight = editorFullHeight
+		m.responseContentHeight = responseFullHeight
 	}
 
 	if m.mainSplitOrientation == mainSplitVertical {
@@ -264,15 +277,15 @@ func (m *Model) applyLayout() tea.Cmd {
 		m.sidebarWidth = realSidebarRatio
 	}
 
-	m.sidebarFilesHeight = paneHeight
-	m.sidebarRequestsHeight = paneHeight
-	m.navigatorCompact = paneHeight < requestCompactSwitch
+	m.sidebarFilesHeight = sidebarContentHeight
+	m.sidebarRequestsHeight = sidebarContentHeight
+	m.navigatorCompact = sidebarContentHeight < requestCompactSwitch
 	if m.navigator != nil {
 		m.navigator.SetCompact(m.navigatorCompact)
 	}
 	listWidth := paneContentWidth(fileWidth, sidebarFrameWidth)
 	m.navigatorFilter.Width = listWidth
-	m.fileList.SetSize(listWidth, paneHeight)
+	m.fileList.SetSize(listWidth, sidebarContentHeight)
 	m.requestList.SetSize(listWidth, 0)
 	m.workflowList.SetSize(listWidth, 0)
 
@@ -295,7 +308,7 @@ func (m *Model) applyLayout() tea.Cmd {
 	primaryPane := &m.responsePanes[0]
 	secondaryPane := &m.responsePanes[1]
 
-	const responseTabsHeight = 1
+	const responseTabsHeight = 2
 	responseViewportHeight := m.responseContentHeight - responseTabsHeight
 	if responseViewportHeight < 1 {
 		responseViewportHeight = 1
@@ -557,38 +570,8 @@ func (m *Model) adjustEditorSplit(delta float64) (bool, bool, tea.Cmd) {
 	return true, bounded, cmd
 }
 
-func (m *Model) horizontalContentHeights(
-	paneHeight int,
-	editorCollapsed, responseCollapsed bool,
-	ratio float64,
-	editorFrame, responseFrame int,
-) (int, int) {
-	if paneHeight < 0 {
-		paneHeight = 0
-	}
-	if editorCollapsed && responseCollapsed {
-		return 0, max(paneHeight, 1)
-	}
-	if editorCollapsed {
-		return 0, max(paneHeight, 1)
-	}
-	if responseCollapsed {
-		return max(paneHeight, 1), 0
-	}
-
-	frameAllowance := 0
-	if !editorCollapsed {
-		frameAllowance += editorFrame
-	}
-	if !responseCollapsed {
-		frameAllowance += responseFrame
-	}
-
-	availableHeight := paneHeight - frameAllowance
-	if availableHeight < 0 {
-		availableHeight = 0
-	}
-
+func splitStackedContentHeight(availableHeight int, ratio float64) (int, int) {
+	availableHeight = max(availableHeight, 0)
 	minEditor := max(minEditorPaneHeight, 1)
 	minResponse := max(minResponsePaneHeight, 1)
 	if availableHeight < minEditor+minResponse {
@@ -628,6 +611,69 @@ func (m *Model) horizontalContentHeights(
 		responseHeight = 1
 	}
 	return editorHeight, responseHeight
+}
+
+type paneHeightBudget struct {
+	contentHeight  int
+	rowFrameHeight int
+	bottomPadding  int
+}
+
+func newPaneHeightBudget(
+	totalHeight int,
+	chromeHeight int,
+	rowFrameHeight int,
+	bottomPadding int,
+) paneHeightBudget {
+	return paneHeightBudget{
+		contentHeight: max(
+			totalHeight-chromeHeight-rowFrameHeight-bottomPadding,
+			minPaneContentHeight,
+		),
+		rowFrameHeight: rowFrameHeight,
+		bottomPadding:  bottomPadding,
+	}
+}
+
+func (b paneHeightBudget) contentHeightForFrame(frameHeight int) int {
+	return max(b.contentHeight+b.rowFrameHeight-frameHeight, 0)
+}
+
+func (b paneHeightBudget) outerHeight() int {
+	return b.contentHeight + b.rowFrameHeight + b.bottomPadding
+}
+
+func (b paneHeightBudget) stackedContentHeight(firstFrameHeight, secondFrameHeight int) int {
+	return max(
+		b.outerHeight()-firstFrameHeight-secondFrameHeight-(b.bottomPadding*2),
+		0,
+	)
+}
+
+func (m *Model) visiblePaneFrameHeight() int {
+	frameHeight := 0
+	for _, region := range [...]paneRegion{
+		paneRegionSidebar,
+		paneRegionEditor,
+		paneRegionResponse,
+	} {
+		if m.effectiveRegionCollapsed(region) {
+			continue
+		}
+		frameHeight = max(frameHeight, m.paneVerticalFrameHeight(region))
+	}
+	return frameHeight
+}
+
+func (m *Model) paneVerticalFrameHeight(region paneRegion) int {
+	switch region {
+	case paneRegionSidebar:
+		return m.theme.BrowserBorder.GetVerticalFrameSize()
+	case paneRegionResponse:
+		return m.theme.ResponseBorder.GetVerticalFrameSize()
+	default:
+		return m.theme.EditorBorder.GetVerticalFrameSize()
+	}
 }
 
 func redistributeCollapsedWidths(

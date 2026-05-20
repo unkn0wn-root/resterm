@@ -395,6 +395,78 @@ func TestViewRespectsFrameDimensions(t *testing.T) {
 	}
 }
 
+func TestPaneFramesDoNotReserveBottomPaddingRows(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.frameWidth = 120
+	model.frameHeight = 40
+	model.width = model.frameWidth - 2
+	model.height = model.frameHeight - 2
+	model.ready = true
+	_ = model.applyLayout()
+
+	fileWant := model.paneContentHeight + paneBottomPadding +
+		model.theme.BrowserBorder.GetVerticalFrameSize()
+	if got := lipgloss.Height(model.renderFilePane(renderContext{})); got != fileWant {
+		t.Fatalf("expected file pane height %d, got %d", fileWant, got)
+	}
+
+	editorWant := model.editorContentHeight + paneBottomPadding +
+		model.theme.EditorBorder.GetVerticalFrameSize()
+	if got := lipgloss.Height(model.renderEditorPane(renderContext{})); got != editorWant {
+		t.Fatalf("expected editor pane height %d, got %d", editorWant, got)
+	}
+
+	responseWant := model.responseContentHeight + paneBottomPadding +
+		model.theme.ResponseBorder.GetVerticalFrameSize()
+	if got := lipgloss.Height(model.renderResponsePane(model.responseWidthPx, renderContext{})); got != responseWant {
+		t.Fatalf("expected response pane height %d, got %d", responseWant, got)
+	}
+}
+
+func TestLayoutIgnoresCollapsedPaneFrameHeight(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.frameWidth = 120
+	model.frameHeight = 40
+	model.width = model.frameWidth - 2
+	model.height = model.frameHeight - 2
+	model.ready = true
+	model.theme.EditorBorder = model.theme.EditorBorder.BorderStyle(lipgloss.Border{})
+	model.theme.ResponseBorder = model.theme.ResponseBorder.BorderStyle(lipgloss.Border{})
+	if res := model.setCollapseState(paneRegionSidebar, true); res.blocked {
+		t.Fatalf("expected sidebar collapse to be allowed")
+	}
+
+	_ = model.applyLayout()
+
+	if got := lipgloss.Height(model.renderAppContent(renderContext{})); got != model.height {
+		t.Fatalf("expected app content height %d, got %d", model.height, got)
+	}
+}
+
+func TestHorizontalSplitAccountsForMixedPaneFrameHeights(t *testing.T) {
+	cfg := Config{WorkspaceRoot: t.TempDir()}
+	model := New(cfg)
+	model.frameWidth = 120
+	model.frameHeight = 40
+	model.width = model.frameWidth - 2
+	model.height = model.frameHeight - 2
+	model.ready = true
+	model.mainSplitOrientation = mainSplitHorizontal
+	model.theme.EditorBorder = model.theme.EditorBorder.BorderStyle(lipgloss.Border{})
+	model.theme.ResponseBorder = model.theme.ResponseBorder.BorderStyle(lipgloss.RoundedBorder())
+	if res := model.setCollapseState(paneRegionSidebar, true); res.blocked {
+		t.Fatalf("expected sidebar collapse to be allowed")
+	}
+
+	_ = model.applyLayout()
+
+	if got := lipgloss.Height(model.renderAppContent(renderContext{})); got != model.height {
+		t.Fatalf("expected app content height %d, got %d", model.height, got)
+	}
+}
+
 func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 	cfg := Config{WorkspaceRoot: t.TempDir()}
 	testCases := []struct {

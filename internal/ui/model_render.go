@@ -427,6 +427,10 @@ func (m Model) renderFilePane(rc renderContext) string {
 	}
 
 	contentWidth := max(paneContentWidth(width, frameWidth), 1)
+	contentHeight := m.sidebarFilesHeight
+	if contentHeight <= 0 {
+		contentHeight = m.paneContentHeight
+	}
 	bodyParts := make([]string, 0, 3)
 	filterHeight := 0
 	if m.navigatorFilterVisible() {
@@ -435,7 +439,7 @@ func (m Model) renderFilePane(rc renderContext) string {
 		bodyParts = append(bodyParts, filter, filterSep)
 		filterHeight = lipgloss.Height(filter) + lipgloss.Height(filterSep)
 	}
-	available := m.paneContentHeight - filterHeight
+	available := contentHeight - filterHeight
 	if available < 1 {
 		available = 1
 	}
@@ -463,9 +467,9 @@ func (m Model) renderFilePane(rc renderContext) string {
 	bodyParts = append(bodyParts, listView)
 
 	content := lipgloss.JoinVertical(lipgloss.Left, bodyParts...)
-	content = clampPane(content, contentWidth, m.paneContentHeight)
+	content = clampPane(content, contentWidth, contentHeight)
 	content = padHorizontal(content, paneHorizontalPadding)
-	targetHeight := m.paneContentHeight + style.GetVerticalFrameSize()
+	targetHeight := contentHeight + paneBottomPadding
 	innerWidth := max(paneInnerWidth(width, frameWidth), 1)
 	frame := style.
 		Width(innerWidth).
@@ -894,13 +898,12 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	}
 	content = padHorizontal(content, paneHorizontalPadding)
 	innerWidth := contentWidth + (paneHorizontalPadding * 2)
-	frameHeight := style.GetVerticalFrameSize()
 	editorContentHeight := m.editorContentHeight
 	if editorContentHeight <= 0 {
 		editorContentHeight = m.paneContentHeight
 	}
 	innerHeight := max(m.editor.Height(), editorContentHeight)
-	height := innerHeight + frameHeight
+	height := innerHeight + paneBottomPadding
 	outerWidth := paneOuterWidthFromContent(contentWidth, style.GetHorizontalFrameSize())
 	if outerWidth < 1 {
 		outerWidth = innerWidth + style.GetHorizontalFrameSize()
@@ -1062,14 +1065,13 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	}
 
 	width := targetOuterWidth
-	frameHeight := style.GetVerticalFrameSize()
 	responseHeight := m.responseContentHeight
 	if responseHeight <= 0 {
 		responseHeight = m.paneContentHeight
 	}
-	height := responseHeight + frameHeight
-	if height < frameHeight {
-		height = frameHeight
+	height := responseHeight + paneBottomPadding
+	if height < 1 {
+		height = 1
 	}
 	body = lipgloss.NewStyle().Width(contentBudget).Render(body)
 	body = padHorizontal(body, paneHorizontalPadding)

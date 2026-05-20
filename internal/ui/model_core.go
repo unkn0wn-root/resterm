@@ -132,7 +132,9 @@ const (
 	responseSplitSeparatorHeight = 1
 	minEditorPaneHeight          = 10
 	minResponsePaneHeight        = 6
+	minPaneContentHeight         = 4
 	paneHorizontalPadding        = 1
+	paneBottomPadding            = 0
 )
 
 const (

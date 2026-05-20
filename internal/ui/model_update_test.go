@@ -1523,8 +1523,11 @@ func TestMainSplitOrientationChord(t *testing.T) {
 			model.responseContentHeight,
 		)
 	}
-	frameAllowance := model.theme.EditorBorder.GetVerticalFrameSize() + model.theme.ResponseBorder.GetVerticalFrameSize()
-	expectedTotal := baselineHeight - frameAllowance
+	editorFrame := model.theme.EditorBorder.GetVerticalFrameSize()
+	responseFrame := model.theme.ResponseBorder.GetVerticalFrameSize()
+	paneFrame := model.visiblePaneFrameHeight()
+	outerBudget := baselineHeight + paneFrame + paneBottomPadding
+	expectedTotal := outerBudget - editorFrame - responseFrame - (paneBottomPadding * 2)
 	if expectedTotal < 1 {
 		expectedTotal = 1
 	}
