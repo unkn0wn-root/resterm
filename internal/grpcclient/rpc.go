@@ -2,7 +2,6 @@ package grpcclient
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -24,7 +23,7 @@ func (c *Client) executeUnary(
 	cd codec,
 ) (*Response, error) {
 	input := dynamicpb.NewMessage(md.Input())
-	if strings.TrimSpace(body) != "" {
+	if body != "" {
 		if err := cd.unmarshalInto([]byte(body), input); err != nil {
 			return nil, diag.WrapAs(diag.ClassProtocol, err, "decode grpc request body")
 		}

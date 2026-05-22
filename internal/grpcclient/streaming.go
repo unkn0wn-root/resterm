@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -281,8 +280,8 @@ func publishSummary(session *stream.Session, method string, st *status.Status) {
 		if code := st.Code().String(); code != "" {
 			meta[MetaStatus] = code
 		}
-		if msg := strings.TrimSpace(st.Message()); msg != "" {
-			meta[MetaReason] = msg
+		if st.Message() != "" {
+			meta[MetaReason] = st.Message()
 		}
 	}
 	session.Publish(&stream.Event{

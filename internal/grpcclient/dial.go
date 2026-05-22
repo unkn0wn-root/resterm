@@ -40,8 +40,8 @@ func buildDial(gr *restfile.GRPCRequest, opt Options) (string, []grpc.DialOption
 		cfg := *plan.Config
 		dialOpts = append(dialOpts, tunnel.GRPCDialOption(tunnel.DialerFor(plan.Manager, cfg)))
 	}
-	if auth := strings.TrimSpace(gr.Authority); auth != "" {
-		dialOpts = append(dialOpts, grpc.WithAuthority(auth))
+	if gr.Authority != "" {
+		dialOpts = append(dialOpts, grpc.WithAuthority(gr.Authority))
 	}
 
 	return dialTarget(gr.Target, sshOn || k8sOn), dialOpts, nil
@@ -56,7 +56,6 @@ func dialGRPC(target string, opts []grpc.DialOption) (*grpc.ClientConn, error) {
 }
 
 func dialTarget(target string, routed bool) string {
-	target = strings.TrimSpace(target)
 	if !routed {
 		return target
 	}

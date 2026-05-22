@@ -39,7 +39,7 @@ func (c codec) marshal(msg proto.Message) ([]byte, error) {
 
 func (c codec) unmarshal(data []byte, desc protoreflect.MessageDescriptor) (proto.Message, error) {
 	msg := dynamicpb.NewMessage(desc)
-	if strings.TrimSpace(string(data)) == "" {
+	if len(data) == 0 {
 		return msg, nil
 	}
 	if err := c.unmarshalInto(data, msg); err != nil {
@@ -111,7 +111,6 @@ func decodeMessages(
 	desc protoreflect.MessageDescriptor,
 	cd codec,
 ) ([]proto.Message, error) {
-	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, nil
 	}

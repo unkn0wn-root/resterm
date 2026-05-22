@@ -1,7 +1,6 @@
 package grpcclient
 
 import (
-	"strings"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -31,7 +30,7 @@ func ensureContentType(resp *Response) {
 	if resp.Headers == nil {
 		resp.Headers = make(map[string][]string)
 	}
-	if len(resp.Headers["Content-Type"]) == 0 && strings.TrimSpace(resp.ContentType) != "" {
+	if len(resp.Headers["Content-Type"]) == 0 && resp.ContentType != "" {
 		resp.Headers["Content-Type"] = []string{resp.ContentType}
 	}
 }

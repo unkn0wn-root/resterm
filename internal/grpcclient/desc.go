@@ -36,7 +36,7 @@ func (c *Client) resolveMethod(
 		return nil, nil, err
 	}
 
-	if strings.TrimSpace(gr.DescriptorSet) != "" {
+	if gr.DescriptorSet != "" {
 		files, err := c.loadDescriptorSet(gr.DescriptorSet, opt.BaseDir)
 		if err != nil {
 			return nil, nil, err
@@ -65,7 +65,6 @@ func (c *Client) resolveMethod(
 }
 
 func parseFullMethod(full string) (methodID, error) {
-	full = strings.TrimSpace(full)
 	if full == "" {
 		return methodID{}, diag.New(diag.ClassProtocol, "grpc method not specified")
 	}
@@ -234,7 +233,6 @@ func v1ReflectFiles(res *reflectv1.ServerReflectionResponse) ([][]byte, bool) {
 
 func reflectionErr(code int32, msg string) error {
 	name := codes.Code(code).String()
-	msg = strings.TrimSpace(msg)
 	if msg == "" {
 		return diag.Newf(diag.ClassProtocol, "grpc reflection error %s", name)
 	}

@@ -2,7 +2,6 @@ package grpcclient
 
 import (
 	"context"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -69,10 +68,10 @@ func (c *Client) Execute(
 		return nil, diag.New(diag.ClassProtocol, "missing grpc metadata")
 	}
 
-	if strings.TrimSpace(gr.Target) == "" {
+	if gr.Target == "" {
 		return nil, diag.New(diag.ClassProtocol, "grpc target not specified")
 	}
-	if strings.TrimSpace(gr.FullMethod) == "" {
+	if gr.FullMethod == "" {
 		return nil, diag.New(diag.ClassProtocol, "grpc method not specified")
 	}
 
