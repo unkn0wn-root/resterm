@@ -74,7 +74,12 @@ func (c *Client) resolveMessage(gr *restfile.GRPCRequest, baseDir string) (strin
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", diag.WrapAsf(diag.ClassFilesystem, err, "read grpc message file %s", gr.MessageFile)
+		return "", diag.WrapAsf(
+			diag.ClassFilesystem,
+			err,
+			"read grpc message file %s",
+			gr.MessageFile,
+		)
 	}
 	return string(data), nil
 }
@@ -119,7 +124,12 @@ func decodeMessages(
 		for i, item := range raw {
 			msg, err := cd.unmarshal(item, desc)
 			if err != nil {
-				return nil, diag.WrapAsf(diag.ClassProtocol, err, "decode grpc request body item %d", i)
+				return nil, diag.WrapAsf(
+					diag.ClassProtocol,
+					err,
+					"decode grpc request body item %d",
+					i,
+				)
 			}
 			msgs = append(msgs, msg)
 		}
