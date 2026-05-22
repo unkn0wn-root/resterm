@@ -8,7 +8,6 @@ import (
 	"google.golang.org/grpc"
 	testgrpc "google.golang.org/grpc/interop/grpc_testing"
 	"google.golang.org/grpc/reflection"
-	reflectalpha "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 )
 
 type testSvc struct {
@@ -68,15 +67,12 @@ func (s *testSvc) FullDuplexCall(
 
 func startTestServer(t *testing.T) (string, func()) {
 	t.Helper()
-	return startTestServerWithReflection(t, true)
+	return startTestServerWith(t, func(srv *grpc.Server) {
+		reflection.RegisterV1(srv)
+	})
 }
 
-func startAlphaReflectionServer(t *testing.T) (string, func()) {
-	t.Helper()
-	return startTestServerWithReflection(t, false)
-}
-
-func startTestServerWithReflection(t *testing.T, v1 bool) (string, func()) {
+func startTestServerWith(t *testing.T, register func(*grpc.Server)) (string, func()) {
 	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
@@ -85,13 +81,8 @@ func startTestServerWithReflection(t *testing.T, v1 bool) (string, func()) {
 	}
 	srv := grpc.NewServer()
 	testgrpc.RegisterTestServiceServer(srv, &testSvc{})
-	if v1 {
-		reflection.Register(srv)
-	} else {
-		reflectalpha.RegisterServerReflectionServer(
-			srv,
-			reflection.NewServer(reflection.ServerOptions{Services: srv}),
-		)
+	if register != nil {
+		register(srv)
 	}
 
 	go func() {

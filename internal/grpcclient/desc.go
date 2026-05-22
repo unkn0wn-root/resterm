@@ -11,7 +11,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	reflectv1 "google.golang.org/grpc/reflection/grpc_reflection_v1"
-	reflectalpha "google.golang.org/grpc/reflection/grpc_reflection_v1alpha"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protodesc"
@@ -187,25 +186,6 @@ func fetchReflectV1(
 	return reflectRoundTrip(stream, req, v1ReflectErr, v1ReflectFiles)
 }
 
-func fetchReflectAlpha(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	sym string,
-) (*descriptorpb.FileDescriptorSet, error) {
-	client := reflectalpha.NewServerReflectionClient(conn)
-	stream, err := client.ServerReflectionInfo(ctx)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "open reflection stream")
-	}
-	req := &reflectalpha.ServerReflectionRequest{
-		MessageRequest: &reflectalpha.ServerReflectionRequest_FileContainingSymbol{
-			FileContainingSymbol: sym,
-		},
-	}
-
-	return reflectRoundTrip(stream, req, alphaReflectErr, alphaReflectFiles)
-}
-
 func reflectRoundTrip[Req any, Res any](
 	stream grpc.BidiStreamingClient[Req, Res],
 	req *Req,
@@ -245,22 +225,6 @@ func v1ReflectErr(res *reflectv1.ServerReflectionResponse) (int32, string, bool)
 }
 
 func v1ReflectFiles(res *reflectv1.ServerReflectionResponse) ([][]byte, bool) {
-	fileRes := res.GetFileDescriptorResponse()
-	if fileRes == nil {
-		return nil, false
-	}
-	return fileRes.GetFileDescriptorProto(), true
-}
-
-func alphaReflectErr(res *reflectalpha.ServerReflectionResponse) (int32, string, bool) {
-	errRes := res.GetErrorResponse()
-	if errRes == nil {
-		return 0, "", false
-	}
-	return errRes.GetErrorCode(), errRes.GetErrorMessage(), true
-}
-
-func alphaReflectFiles(res *reflectalpha.ServerReflectionResponse) ([][]byte, bool) {
 	fileRes := res.GetFileDescriptorResponse()
 	if fileRes == nil {
 		return nil, false
