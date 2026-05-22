@@ -257,7 +257,6 @@ func cloneHTTPOptions(src httpclient.Options) httpclient.Options {
 
 func cloneGRPCOptions(src grpcclient.Options) grpcclient.Options {
 	out := src
-	out.DescriptorPaths = slices.Clone(src.DescriptorPaths)
 	out.RootCAs = slices.Clone(src.RootCAs)
 	return out
 }

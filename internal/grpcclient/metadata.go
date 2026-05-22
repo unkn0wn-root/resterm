@@ -74,15 +74,14 @@ func appendHeaderPairs(pairs []string, hdr http.Header, src metaSrc) ([]string, 
 }
 
 func normalizeMetaKey(key string, src metaSrc) (string, error) {
-	trimmed := strings.TrimSpace(key)
-	if trimmed == "" {
+	if key == "" {
 		return "", metaKeyErr(src, "<empty>", "is empty")
 	}
-	norm := strings.ToLower(trimmed)
+	norm := strings.ToLower(key)
 	if !validMetaKey(norm) {
 		return "", metaKeyErr(
 			src,
-			trimmed,
+			key,
 			"has invalid characters; allowed: a-z, 0-9, '-', '_', '.'",
 		)
 	}

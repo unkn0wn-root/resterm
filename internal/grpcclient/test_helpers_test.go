@@ -67,6 +67,13 @@ func (s *testSvc) FullDuplexCall(
 
 func startTestServer(t *testing.T) (string, func()) {
 	t.Helper()
+	return startTestServerWith(t, func(srv *grpc.Server) {
+		reflection.RegisterV1(srv)
+	})
+}
+
+func startTestServerWith(t *testing.T, register func(*grpc.Server)) (string, func()) {
+	t.Helper()
 
 	lis, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -74,7 +81,9 @@ func startTestServer(t *testing.T) (string, func()) {
 	}
 	srv := grpc.NewServer()
 	testgrpc.RegisterTestServiceServer(srv, &testSvc{})
-	reflection.Register(srv)
+	if register != nil {
+		register(srv)
+	}
 
 	go func() {
 		_ = srv.Serve(lis)

@@ -2,9 +2,6 @@ package grpcclient
 
 import (
 	"context"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
@@ -13,28 +10,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
-	"github.com/unkn0wn-root/resterm/internal/tunnel"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
-	reflectpb "google.golang.org/grpc/reflection/grpc_reflection_v1"
-	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protodesc"
-	"google.golang.org/protobuf/reflect/protoreflect"
-	"google.golang.org/protobuf/reflect/protoregistry"
-	"google.golang.org/protobuf/types/descriptorpb"
-	"google.golang.org/protobuf/types/dynamicpb"
 )
 
 type Options struct {
 	BaseDir             string
 	DefaultPlaintext    bool
 	DefaultPlaintextSet bool
-	DescriptorPaths     []string
 	DialTimeout         time.Duration
 	RootCAs             []string
 	ClientCert          string
@@ -78,400 +60,76 @@ func NewClient() *Client {
 func (c *Client) Execute(
 	parent context.Context,
 	req *restfile.Request,
-	grpcReq *restfile.GRPCRequest,
-	options Options,
+	gr *restfile.GRPCRequest,
+	opt Options,
 	hook StreamHook,
 ) (resp *Response, err error) {
-	if grpcReq == nil {
+	if gr == nil {
 		return nil, diag.New(diag.ClassProtocol, "missing grpc metadata")
 	}
 
-	target := strings.TrimSpace(grpcReq.Target)
-	if target == "" {
+	if gr.Target == "" {
 		return nil, diag.New(diag.ClassProtocol, "grpc target not specified")
 	}
+	if gr.FullMethod == "" {
+		return nil, diag.New(diag.ClassProtocol, "grpc method not specified")
+	}
 
-	ctx := parent
-	cancel := func() {}
-	var timeoutSetting string
-	if req != nil {
-		timeoutSetting = req.Settings["timeout"]
-	}
-	if timeoutSetting != "" {
-		if dur, err := time.ParseDuration(timeoutSetting); err == nil && dur > 0 {
-			ctx, cancel = context.WithTimeout(parent, dur)
-		}
-	} else if options.DialTimeout > 0 {
-		ctx, cancel = context.WithTimeout(parent, options.DialTimeout)
-	}
+	ctx, cancel := contextWithTimeout(parent, req, opt)
 	defer cancel()
 
-	usePlain := shouldUsePlaintext(grpcReq, options)
-	var dialOpts []grpc.DialOption
-	if usePlain {
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	} else {
-		creds, err := buildTransportCredentials(options)
-		if err != nil {
-			return nil, err
-		}
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(creds))
-	}
-	sshOn := options.SSH != nil && options.SSH.Active()
-	k8sOn := options.K8s != nil && options.K8s.Active()
-	if tunnel.HasConflict(sshOn, k8sOn) {
-		return nil, diag.New(diag.ClassRoute, "ssh and k8s transports cannot be combined")
-	}
-
-	appendTunnelDialer := func(dial tunnel.DialContextFunc) {
-		dialOpts = append(dialOpts, tunnel.GRPCDialOption(dial))
-	}
-
-	if sshOn {
-		plan := options.SSH
-		cfgCopy := *plan.Config
-		appendTunnelDialer(tunnel.DialerFor(plan.Manager, cfgCopy))
-	}
-	if k8sOn {
-		plan := options.K8s
-		cfgCopy := *plan.Config
-		appendTunnelDialer(tunnel.DialerFor(plan.Manager, cfgCopy))
-	}
-	if grpcReq.Authority != "" {
-		dialOpts = append(dialOpts, grpc.WithAuthority(grpcReq.Authority))
-	}
-
-	conn, err := grpc.NewClient(target, dialOpts...)
+	target, dialOpts, err := buildDial(gr, opt)
 	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "dial grpc target")
+		return nil, err
 	}
 
+	conn, err := dialGRPC(target, dialOpts)
+	if err != nil {
+		return nil, err
+	}
 	defer func() {
 		if closeErr := conn.Close(); closeErr != nil && err == nil {
 			err = diag.WrapAs(diag.ClassProtocol, closeErr, "close grpc connection")
 		}
 	}()
 
-	methodDesc, err := c.resolveMethodDescriptor(ctx, conn, grpcReq, options)
+	files, md, err := c.resolveMethod(ctx, conn, gr, opt)
 	if err != nil {
 		return nil, err
 	}
 
-	messageJSON, err := c.resolveMessage(grpcReq, options.BaseDir)
+	body, err := c.resolveMessage(gr, opt.BaseDir)
 	if err != nil {
 		return nil, err
 	}
 
-	if isStreaming(methodDesc) {
-		return c.executeStream(ctx, conn, req, grpcReq, methodDesc, messageJSON, hook)
+	cd := newCodec(files)
+	if isStreaming(md) {
+		return c.executeStream(ctx, conn, req, gr, md, body, cd, hook)
 	}
-	return c.executeUnary(ctx, conn, req, grpcReq, methodDesc, messageJSON)
+	return c.executeUnary(ctx, conn, req, gr, md, body, cd)
 }
 
-func (c *Client) executeUnary(
-	ctx context.Context,
-	conn *grpc.ClientConn,
+func contextWithTimeout(
+	parent context.Context,
 	req *restfile.Request,
-	grpcReq *restfile.GRPCRequest,
-	methodDesc protoreflect.MethodDescriptor,
-	messageJSON string,
-) (*Response, error) {
-	inputMsg := dynamicpb.NewMessage(methodDesc.Input())
-	stripped := strings.TrimSpace(messageJSON)
-	if stripped != "" {
-		if err := protojson.Unmarshal([]byte(stripped), inputMsg); err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "decode grpc request body")
+	opt Options,
+) (context.Context, context.CancelFunc) {
+	if parent == nil {
+		parent = context.Background()
+	}
+
+	var timeout string
+	if req != nil {
+		timeout = req.Settings["timeout"]
+	}
+	if timeout != "" {
+		if dur, err := time.ParseDuration(timeout); err == nil && dur > 0 {
+			return context.WithTimeout(parent, dur)
 		}
 	}
-
-	headerMD := metadata.MD{}
-	trailerMD := metadata.MD{}
-
-	callCtx := ctx
-	if metaPairs, err := collectMetadata(grpcReq, req); err != nil {
-		return nil, err
-	} else if len(metaPairs) > 0 {
-		callCtx = metadata.NewOutgoingContext(callCtx, metadata.Pairs(metaPairs...))
+	if opt.DialTimeout > 0 {
+		return context.WithTimeout(parent, opt.DialTimeout)
 	}
-
-	outputMsg := dynamicpb.NewMessage(methodDesc.Output())
-	start := time.Now()
-	invokeErr := conn.Invoke(
-		callCtx,
-		grpcReq.FullMethod,
-		inputMsg,
-		outputMsg,
-		grpc.Header(&headerMD),
-		grpc.Trailer(&trailerMD),
-	)
-	resp := newResponse(headerMD, trailerMD, time.Since(start))
-
-	if invokeErr != nil {
-		st, ok := status.FromError(invokeErr)
-		if ok {
-			resp.StatusCode = st.Code()
-			resp.StatusMessage = st.Message()
-		}
-		return resp, diag.WrapAs(diag.ClassProtocol, invokeErr, "invoke grpc method")
-	}
-
-	marshalled, err := marshalMsg(outputMsg)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "encode grpc response")
-	}
-	resp.Message = string(marshalled)
-	resp.Body = marshalled
-
-	if wire, err := proto.Marshal(outputMsg); err == nil {
-		resp.Wire = wire
-	}
-	if len(resp.Body) == 0 {
-		resp.Body = marshalled
-	}
-	ensureContentType(resp)
-	return resp, nil
-}
-
-func (c *Client) resolveMethodDescriptor(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	grpcReq *restfile.GRPCRequest,
-	options Options,
-) (protoreflect.MethodDescriptor, error) {
-	if grpcReq.FullMethod == "" {
-		return nil, diag.New(diag.ClassProtocol, "grpc method not specified")
-	}
-
-	if grpcReq.DescriptorSet != "" {
-		set, err := c.loadDescriptorSet(grpcReq.DescriptorSet, options.BaseDir)
-		if err != nil {
-			return nil, err
-		}
-		files, err := protodesc.NewFiles(set)
-		if err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "build descriptors from file")
-		}
-		return findMethodInFiles(files, grpcReq)
-	}
-
-	if !grpcReq.UseReflection {
-		return nil, diag.Newf(
-			diag.ClassProtocol,
-			"grpc reflection disabled and no descriptor provided",
-		)
-	}
-
-	fds, err := fetchDescriptorsViaReflection(ctx, conn, grpcReq.FullMethod)
-	if err != nil {
-		return nil, err
-	}
-
-	files, err := protodesc.NewFiles(fds)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "build descriptors from reflection")
-	}
-	return findMethodInFiles(files, grpcReq)
-}
-
-func (c *Client) loadDescriptorSet(
-	descriptorPath, baseDir string,
-) (*descriptorpb.FileDescriptorSet, error) {
-	path := descriptorPath
-	if !filepath.IsAbs(path) && baseDir != "" {
-		path = filepath.Join(baseDir, path)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, diag.WrapAsf(diag.ClassFilesystem, err,
-			"read grpc descriptor %s",
-			descriptorPath,
-		)
-	}
-
-	fds := &descriptorpb.FileDescriptorSet{}
-	if err := proto.Unmarshal(data, fds); err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse descriptor set")
-	}
-	return fds, nil
-}
-
-func (c *Client) resolveMessage(grpcReq *restfile.GRPCRequest, baseDir string) (string, error) {
-	if grpcReq.MessageExpandedSet {
-		return grpcReq.MessageExpanded, nil
-	}
-	if grpcReq.Message != "" {
-		return grpcReq.Message, nil
-	}
-	if grpcReq.MessageFile == "" {
-		return "", nil
-	}
-
-	path := grpcReq.MessageFile
-	if !filepath.IsAbs(path) && baseDir != "" {
-		path = filepath.Join(baseDir, path)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", diag.WrapAsf(diag.ClassFilesystem, err,
-			"read grpc message file %s",
-			grpcReq.MessageFile,
-		)
-	}
-	return string(data), nil
-}
-
-func buildTransportCredentials(opts Options) (credentials.TransportCredentials, error) {
-	cfg, err := tlsconfig.Build(tlsconfig.Files{
-		RootCAs:    opts.RootCAs,
-		ClientCert: opts.ClientCert,
-		ClientKey:  opts.ClientKey,
-		Insecure:   opts.Insecure,
-		RootMode:   opts.RootMode,
-	}, opts.BaseDir)
-	if err != nil {
-		return nil, err
-	}
-	return credentials.NewTLS(cfg), nil
-}
-
-func findMethodInFiles(
-	files *protoregistry.Files,
-	grpcReq *restfile.GRPCRequest,
-) (protoreflect.MethodDescriptor, error) {
-	serviceName := protoreflect.FullName(grpcReq.Service)
-	if grpcReq.Package != "" {
-		serviceName = protoreflect.FullName(grpcReq.Package + "." + grpcReq.Service)
-	}
-
-	desc, err := files.FindDescriptorByName(serviceName)
-	if err != nil {
-		return nil, diag.WrapAsf(diag.ClassProtocol, err, "service %s not found", serviceName)
-	}
-
-	svcDesc, ok := desc.(protoreflect.ServiceDescriptor)
-	if !ok {
-		return nil, diag.Newf(
-			diag.ClassProtocol,
-			"descriptor for %s is not a service",
-			serviceName,
-		)
-	}
-
-	method := svcDesc.Methods().ByName(protoreflect.Name(grpcReq.Method))
-	if method == nil {
-		return nil, diag.Newf(
-			diag.ClassProtocol,
-			"method %s not found on %s",
-			grpcReq.Method,
-			serviceName,
-		)
-	}
-	return method, nil
-}
-
-func fetchDescriptorsViaReflection(
-	ctx context.Context,
-	conn *grpc.ClientConn,
-	fullMethod string,
-) (set *descriptorpb.FileDescriptorSet, err error) {
-	client := reflectpb.NewServerReflectionClient(conn)
-	stream, err := client.ServerReflectionInfo(ctx)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "open reflection stream")
-	}
-
-	defer func() {
-		if closeErr := stream.CloseSend(); closeErr != nil && err == nil {
-			err = diag.WrapAs(diag.ClassProtocol, closeErr, "close reflection stream")
-		}
-	}()
-
-	symbol := strings.TrimSpace(strings.TrimPrefix(fullMethod, "/"))
-	if idx := strings.LastIndex(symbol, "/"); idx > 0 && idx < len(symbol)-1 {
-		service := symbol[:idx]
-		method := symbol[idx+1:]
-		if service != "" && method != "" {
-			symbol = service + "." + method
-		}
-	}
-
-	request := &reflectpb.ServerReflectionRequest{
-		MessageRequest: &reflectpb.ServerReflectionRequest_FileContainingSymbol{
-			FileContainingSymbol: symbol,
-		},
-	}
-	if err := stream.Send(request); err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "send reflection request")
-	}
-
-	response, err := stream.Recv()
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "receive reflection response")
-	}
-
-	if errResp := response.GetErrorResponse(); errResp != nil {
-		code := codes.Code(errResp.GetErrorCode()).String()
-		msg := strings.TrimSpace(errResp.GetErrorMessage())
-		if msg == "" {
-			return nil, diag.Newf(diag.ClassProtocol, "grpc reflection error %s", code)
-		}
-		return nil, diag.Newf(diag.ClassProtocol, "grpc reflection error %s: %s", code, msg)
-	}
-
-	fileResp := response.GetFileDescriptorResponse()
-	if fileResp == nil {
-		return nil, diag.New(diag.ClassProtocol, "reflection response missing descriptors")
-	}
-
-	set = &descriptorpb.FileDescriptorSet{}
-	for _, raw := range fileResp.FileDescriptorProto {
-		fd := &descriptorpb.FileDescriptorProto{}
-		if err := proto.Unmarshal(raw, fd); err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "decode reflected descriptor")
-		}
-		set.File = append(set.File, fd)
-	}
-	return set, nil
-}
-
-func shouldUsePlaintext(grpcReq *restfile.GRPCRequest, options Options) bool {
-	if grpcReq != nil && grpcReq.PlaintextSet {
-		return grpcReq.Plaintext
-	}
-	if options.DefaultPlaintextSet {
-		return options.DefaultPlaintext
-	}
-	if hasTLS(options) {
-		return false
-	}
-	return true
-}
-
-func hasTLS(opts Options) bool {
-	if len(opts.RootCAs) > 0 {
-		return true
-	}
-	if opts.ClientCert != "" || opts.ClientKey != "" {
-		return true
-	}
-	if opts.Insecure {
-		return true
-	}
-	return false
-}
-
-func copyMetadata(md metadata.MD) map[string][]string {
-	if md == nil {
-		return nil
-	}
-
-	out := make(map[string][]string, len(md))
-	for k, values := range md {
-		copied := make([]string, len(values))
-		copy(copied, values)
-		out[k] = copied
-	}
-	return out
+	return parent, func() {}
 }
