@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -52,7 +54,12 @@ func TestShouldUsePlaintextDisabledWhenTLSConfigured(t *testing.T) {
 
 func TestExecuteRejectsSSHAndK8s(t *testing.T) {
 	client := NewClient()
-	grpcReq := &restfile.GRPCRequest{Target: "127.0.0.1:1", Plaintext: true, PlaintextSet: true}
+	grpcReq := &restfile.GRPCRequest{
+		Target:       "127.0.0.1:1",
+		FullMethod:   "/pkg.Svc/Call",
+		Plaintext:    true,
+		PlaintextSet: true,
+	}
 	opts := Options{
 		SSH: &ssh.Plan{
 			Manager: &ssh.Manager{},
@@ -89,16 +96,84 @@ func TestFetchDescriptorsReflectionError(t *testing.T) {
 		_ = conn.Close()
 	}()
 
-	_, err = fetchDescriptorsViaReflection(
-		context.Background(),
-		conn,
-		"/grpc.testing.MissingService/MissingMethod",
-	)
+	id, err := parseFullMethod("/grpc.testing.MissingService/MissingMethod")
+	if err != nil {
+		t.Fatalf("parse method: %v", err)
+	}
+
+	_, err = fetchDescriptorsViaReflection(context.Background(), conn, id)
 	if err == nil {
 		t.Fatalf("expected reflection error")
 	}
 	if !strings.Contains(err.Error(), "grpc reflection error") {
 		t.Fatalf("expected reflection error detail, got %v", err)
+	}
+}
+
+func TestFetchDescriptorsFallsBackToReflectionAlpha(t *testing.T) {
+	addr, stop := startAlphaReflectionServer(t)
+	defer stop()
+
+	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() {
+		_ = conn.Close()
+	}()
+
+	id, err := parseFullMethod("/grpc.testing.TestService/EmptyCall")
+	if err != nil {
+		t.Fatalf("parse method: %v", err)
+	}
+
+	set, err := fetchDescriptorsViaReflection(context.Background(), conn, id)
+	if err != nil {
+		t.Fatalf("fetch descriptors: %v", err)
+	}
+	if len(set.GetFile()) == 0 {
+		t.Fatalf("expected reflected descriptors")
+	}
+}
+
+func TestExecuteUnaryNonOKKeepsResponse(t *testing.T) {
+	addr, stop := startTestServer(t)
+	defer stop()
+
+	req := &restfile.Request{Settings: map[string]string{}}
+	grpcReq := baseStreamReq(addr, "UnimplementedCall")
+	client := NewClient()
+	opts := Options{DefaultPlaintext: true, DefaultPlaintextSet: true, DialTimeout: time.Second}
+
+	resp, err := client.Execute(context.Background(), req, grpcReq, opts, nil)
+	if err == nil {
+		t.Fatalf("expected non-OK status error")
+	}
+	if resp == nil {
+		t.Fatalf("expected response with gRPC status")
+	}
+	if resp.StatusCode != codes.Unimplemented {
+		t.Fatalf("status code = %s, want %s", resp.StatusCode, codes.Unimplemented)
+	}
+	if resp.Duration <= 0 {
+		t.Fatalf("expected duration to be captured")
+	}
+}
+
+func TestDialTargetAddsPassthroughForRoutes(t *testing.T) {
+	got := dialTarget("internal-svc:8080", true)
+	if got != "passthrough:///internal-svc:8080" {
+		t.Fatalf("dial target = %q", got)
+	}
+
+	got = dialTarget("dns:///example.com:443", true)
+	if got != "dns:///example.com:443" {
+		t.Fatalf("expected explicit resolver target to be preserved, got %q", got)
+	}
+
+	got = dialTarget("internal-svc:8080", false)
+	if got != "internal-svc:8080" {
+		t.Fatalf("expected direct target to be preserved, got %q", got)
 	}
 }
 

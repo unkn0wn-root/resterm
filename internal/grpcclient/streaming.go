@@ -2,7 +2,6 @@ package grpcclient
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"strconv"
 	"strings"
@@ -15,21 +14,20 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
-	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/dynamicpb"
 )
 
-func isStreaming(methodDesc protoreflect.MethodDescriptor) bool {
-	return methodDesc.IsStreamingClient() || methodDesc.IsStreamingServer()
+func isStreaming(md protoreflect.MethodDescriptor) bool {
+	return md.IsStreamingClient() || md.IsStreamingServer()
 }
 
-func streamDesc(methodDesc protoreflect.MethodDescriptor) *grpc.StreamDesc {
+func streamDesc(md protoreflect.MethodDescriptor) *grpc.StreamDesc {
 	return &grpc.StreamDesc{
-		StreamName:    string(methodDesc.Name()),
-		ClientStreams: methodDesc.IsStreamingClient(),
-		ServerStreams: methodDesc.IsStreamingServer(),
+		StreamName:    string(md.Name()),
+		ClientStreams: md.IsStreamingClient(),
+		ServerStreams: md.IsStreamingServer(),
 	}
 }
 
@@ -37,16 +35,15 @@ func (c *Client) executeStream(
 	ctx context.Context,
 	conn *grpc.ClientConn,
 	req *restfile.Request,
-	grpcReq *restfile.GRPCRequest,
-	methodDesc protoreflect.MethodDescriptor,
-	messageJSON string,
+	gr *restfile.GRPCRequest,
+	md protoreflect.MethodDescriptor,
+	body string,
+	cd codec,
 	hook StreamHook,
 ) (*Response, error) {
-	callCtx := ctx
-	if metaPairs, err := collectMetadata(grpcReq, req); err != nil {
+	callCtx, err := outgoingContext(ctx, gr, req)
+	if err != nil {
 		return nil, err
-	} else if len(metaPairs) > 0 {
-		callCtx = metadata.NewOutgoingContext(callCtx, metadata.Pairs(metaPairs...))
 	}
 	callCtx, cancel := context.WithCancel(callCtx)
 	defer cancel()
@@ -56,121 +53,103 @@ func (c *Client) executeStream(
 		hook(session)
 	}
 
+	msgs, err := parseInput(body, md.Input(), md.IsStreamingClient(), cd)
+	if err != nil {
+		finalizeStream(session, gr.FullMethod, err)
+		return nil, err
+	}
+
 	headerMD := metadata.MD{}
 	trailerMD := metadata.MD{}
 	start := time.Now()
 	cs, err := conn.NewStream(
 		callCtx,
-		streamDesc(methodDesc),
-		grpcReq.FullMethod,
+		streamDesc(md),
+		gr.FullMethod,
 		grpc.Header(&headerMD),
 		grpc.Trailer(&trailerMD),
 	)
 	if err != nil {
-		finalizeStream(session, grpcReq.FullMethod, err)
+		finalizeStream(session, gr.FullMethod, err)
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "open grpc stream")
 	}
 	session.MarkOpen()
 
-	msgs, err := parseInput(messageJSON, methodDesc.Input(), methodDesc.IsStreamingClient())
-	if err != nil {
-		finalizeStream(session, grpcReq.FullMethod, err)
-		return nil, err
+	sc := streamCall{
+		cs:      cs,
+		md:      md,
+		method:  gr.FullMethod,
+		session: session,
+		cd:      cd,
 	}
-
-	out, streamErr := runStream(
-		cs,
-		methodDesc,
-		msgs,
-		grpcReq.FullMethod,
-		session,
-		cancel,
-	)
+	out, streamErr := runStream(sc, msgs, cancel)
 	resp := newResponse(headerMD, trailerMD, time.Since(start))
-	body, bodyErr := buildStreamBody(out)
+	bodyData, bodyErr := buildStreamBody(out)
 	if bodyErr != nil {
-		finalizeStream(session, grpcReq.FullMethod, bodyErr)
+		finalizeStream(session, gr.FullMethod, bodyErr)
 		return nil, diag.WrapAs(diag.ClassProtocol, bodyErr, "encode grpc stream response")
 	}
-	resp.Message = string(body)
-	resp.Body = body
+	resp.Message = string(bodyData)
+	resp.Body = bodyData
 	ensureContentType(resp)
 
 	if streamErr != nil {
-		if st, ok := status.FromError(streamErr); ok {
-			resp.StatusCode = st.Code()
-			resp.StatusMessage = st.Message()
-		}
-		finalizeStream(session, grpcReq.FullMethod, streamErr)
+		setResponseStatus(resp, streamErr)
+		finalizeStream(session, gr.FullMethod, streamErr)
 		return resp, diag.WrapAs(diag.ClassProtocol, streamErr, "invoke grpc stream")
 	}
-	finalizeStream(session, grpcReq.FullMethod, nil)
+	finalizeStream(session, gr.FullMethod, nil)
 	return resp, nil
 }
 
+type streamCall struct {
+	cs      grpc.ClientStream
+	md      protoreflect.MethodDescriptor
+	method  string
+	session *stream.Session
+	cd      codec
+}
+
 func runStream(
-	cs grpc.ClientStream,
-	methodDesc protoreflect.MethodDescriptor,
+	sc streamCall,
 	msgs []proto.Message,
-	method string,
-	session *stream.Session,
 	cancel context.CancelFunc,
 ) ([][]byte, error) {
-	inType := string(methodDesc.Input().FullName())
-	outDesc := methodDesc.Output()
 	switch {
-	case methodDesc.IsStreamingClient() && methodDesc.IsStreamingServer():
-		return runBidiStream(cs, msgs, inType, outDesc, method, session, cancel)
-	case methodDesc.IsStreamingClient():
-		return runClientStream(cs, msgs, inType, outDesc, method, session)
-	case methodDesc.IsStreamingServer():
-		return runServerStream(cs, msgs, inType, outDesc, method, session)
+	case sc.md.IsStreamingClient() && sc.md.IsStreamingServer():
+		return runBidiStream(sc, msgs, cancel)
+	case sc.md.IsStreamingClient():
+		return runClientStream(sc, msgs)
+	case sc.md.IsStreamingServer():
+		return runServerStream(sc, msgs)
 	default:
 		return nil, diag.New(diag.ClassProtocol, "grpc method is not streaming")
 	}
 }
 
-func runServerStream(
-	cs grpc.ClientStream,
-	msgs []proto.Message,
-	inType string,
-	outDesc protoreflect.MessageDescriptor,
-	method string,
-	session *stream.Session,
-) ([][]byte, error) {
-	if err := sendMsgs(cs, msgs, inType, method, session); err != nil {
+func runServerStream(sc streamCall, msgs []proto.Message) ([][]byte, error) {
+	if err := sc.send(msgs); err != nil {
 		return nil, err
 	}
-	if err := cs.CloseSend(); err != nil {
+	if err := sc.cs.CloseSend(); err != nil {
 		return nil, err
 	}
-	return recvAll(cs, outDesc, method, session)
+	return sc.recvAll()
 }
 
-func runClientStream(
-	cs grpc.ClientStream,
-	msgs []proto.Message,
-	inType string,
-	outDesc protoreflect.MessageDescriptor,
-	method string,
-	session *stream.Session,
-) ([][]byte, error) {
-	if err := sendMsgs(cs, msgs, inType, method, session); err != nil {
+func runClientStream(sc streamCall, msgs []proto.Message) ([][]byte, error) {
+	if err := sc.send(msgs); err != nil {
 		return nil, err
 	}
-	if err := cs.CloseSend(); err != nil {
+	if err := sc.cs.CloseSend(); err != nil {
 		return nil, err
 	}
-	return recvOne(cs, outDesc, method, session)
+	return sc.recvOne()
 }
 
 func runBidiStream(
-	cs grpc.ClientStream,
+	sc streamCall,
 	msgs []proto.Message,
-	inType string,
-	outDesc protoreflect.MessageDescriptor,
-	method string,
-	session *stream.Session,
 	cancel context.CancelFunc,
 ) ([][]byte, error) {
 	type recvResult struct {
@@ -179,175 +158,77 @@ func runBidiStream(
 	}
 	ch := make(chan recvResult, 1)
 	go func() {
-		out, err := recvAll(cs, outDesc, method, session)
+		out, err := sc.recvAll()
 		ch <- recvResult{msgs: out, err: err}
 	}()
 
-	if err := sendMsgs(cs, msgs, inType, method, session); err != nil {
+	if err := sc.send(msgs); err != nil {
 		cancel()
 		res := <-ch
 		return res.msgs, err
 	}
-	if err := cs.CloseSend(); err != nil {
+	if err := sc.cs.CloseSend(); err != nil {
 		cancel()
 		res := <-ch
 		return res.msgs, err
 	}
 
 	res := <-ch
-	if res.err != nil {
-		return res.msgs, res.err
-	}
-	return res.msgs, nil
+	return res.msgs, res.err
 }
 
-func sendMsgs(
-	cs grpc.ClientStream,
-	msgs []proto.Message,
-	msgType string,
-	method string,
-	session *stream.Session,
-) error {
+func (sc streamCall) send(msgs []proto.Message) error {
+	msgType := string(sc.md.Input().FullName())
 	for i, msg := range msgs {
-		if err := cs.SendMsg(msg); err != nil {
+		if err := sc.cs.SendMsg(msg); err != nil {
 			return err
 		}
-		payload, err := marshalMsg(msg)
+		payload, err := sc.cd.marshal(msg)
 		if err != nil {
 			return err
 		}
-		publishMsg(session, stream.DirSend, method, msgType, i, payload)
+		publishMsg(sc.session, stream.DirSend, sc.method, msgType, i, payload)
 	}
 	return nil
 }
 
-func recvAll(
-	cs grpc.ClientStream,
-	outDesc protoreflect.MessageDescriptor,
-	method string,
-	session *stream.Session,
-) ([][]byte, error) {
+func (sc streamCall) recvAll() ([][]byte, error) {
 	var out [][]byte
-	idx := 0
+	outDesc := sc.md.Output()
 	msgType := string(outDesc.FullName())
-	for {
+	for i := 0; ; i++ {
 		msg := dynamicpb.NewMessage(outDesc)
-		err := cs.RecvMsg(msg)
+		err := sc.cs.RecvMsg(msg)
 		if err == io.EOF {
 			return out, nil
 		}
 		if err != nil {
 			return out, err
 		}
-		payload, err := marshalMsg(msg)
+		payload, err := sc.cd.marshal(msg)
 		if err != nil {
 			return out, err
 		}
 		out = append(out, payload)
-		publishMsg(session, stream.DirReceive, method, msgType, idx, payload)
-		idx++
+		publishMsg(sc.session, stream.DirReceive, sc.method, msgType, i, payload)
 	}
 }
 
-func recvOne(
-	cs grpc.ClientStream,
-	outDesc protoreflect.MessageDescriptor,
-	method string,
-	session *stream.Session,
-) ([][]byte, error) {
-	msgType := string(outDesc.FullName())
+func (sc streamCall) recvOne() ([][]byte, error) {
+	outDesc := sc.md.Output()
 	msg := dynamicpb.NewMessage(outDesc)
-	if err := cs.RecvMsg(msg); err != nil {
+	if err := sc.cs.RecvMsg(msg); err != nil {
 		if err == io.EOF {
 			return nil, nil
 		}
 		return nil, err
 	}
-	payload, err := marshalMsg(msg)
+	payload, err := sc.cd.marshal(msg)
 	if err != nil {
 		return nil, err
 	}
-	publishMsg(session, stream.DirReceive, method, msgType, 0, payload)
+	publishMsg(sc.session, stream.DirReceive, sc.method, string(outDesc.FullName()), 0, payload)
 	return [][]byte{payload}, nil
-}
-
-func parseInput(
-	text string,
-	msgDesc protoreflect.MessageDescriptor,
-	clientStream bool,
-) ([]proto.Message, error) {
-	msgs, err := decodeMessages(text, msgDesc)
-	if err != nil {
-		return nil, err
-	}
-	if clientStream {
-		return msgs, nil
-	}
-	if len(msgs) == 0 {
-		return []proto.Message{dynamicpb.NewMessage(msgDesc)}, nil
-	}
-	if len(msgs) > 1 {
-		return nil, diag.New(diag.ClassProtocol, "grpc request expects a single message")
-	}
-	return msgs, nil
-}
-
-func decodeMessages(
-	text string,
-	msgDesc protoreflect.MessageDescriptor,
-) ([]proto.Message, error) {
-	trimmed := strings.TrimSpace(text)
-	if trimmed == "" {
-		return nil, nil
-	}
-	if strings.HasPrefix(trimmed, "[") {
-		var raw []json.RawMessage
-		if err := json.Unmarshal([]byte(trimmed), &raw); err != nil {
-			return nil, diag.WrapAs(diag.ClassProtocol, err, "decode grpc request body")
-		}
-		msgs := make([]proto.Message, 0, len(raw))
-		for i, item := range raw {
-			msg, err := unmarshalMsg(item, msgDesc)
-			if err != nil {
-				return nil, diag.WrapAsf(diag.ClassProtocol, err,
-					"decode grpc request body item %d",
-					i,
-				)
-			}
-			msgs = append(msgs, msg)
-		}
-		return msgs, nil
-	}
-	msg, err := unmarshalMsg([]byte(trimmed), msgDesc)
-	if err != nil {
-		return nil, diag.WrapAs(diag.ClassProtocol, err, "decode grpc request body")
-	}
-	return []proto.Message{msg}, nil
-}
-
-func unmarshalMsg(
-	data []byte,
-	msgDesc protoreflect.MessageDescriptor,
-) (proto.Message, error) {
-	msg := dynamicpb.NewMessage(msgDesc)
-	if strings.TrimSpace(string(data)) == "" {
-		return msg, nil
-	}
-	if err := protojson.Unmarshal(data, msg); err != nil {
-		return nil, err
-	}
-	return msg, nil
-}
-
-func buildStreamBody(msgs [][]byte) ([]byte, error) {
-	if len(msgs) == 0 {
-		return []byte("[]"), nil
-	}
-	raw := make([]json.RawMessage, len(msgs))
-	for i, msg := range msgs {
-		raw[i] = json.RawMessage(msg)
-	}
-	return json.MarshalIndent(raw, "", "  ")
 }
 
 func publishMsg(
@@ -380,23 +261,15 @@ func finalizeStream(session *stream.Session, method string, err error) {
 	if session == nil {
 		return
 	}
-	st := summaryStatus(err)
-	publishSummary(session, method, st)
-	if err != nil {
-		session.Close(err)
-		return
-	}
-	session.Close(nil)
+	publishSummary(session, method, summaryStatus(err))
+	session.Close(err)
 }
 
 func summaryStatus(err error) *status.Status {
 	if err == nil {
 		return status.New(codes.OK, "OK")
 	}
-	if st, ok := status.FromError(err); ok {
-		return st
-	}
-	return status.New(codes.Unknown, err.Error())
+	return status.Convert(err)
 }
 
 func publishSummary(session *stream.Session, method string, st *status.Status) {
@@ -405,12 +278,10 @@ func publishSummary(session *stream.Session, method string, st *status.Status) {
 	}
 	meta := map[string]string{MetaMethod: method}
 	if st != nil {
-		code := st.Code().String()
-		if code != "" {
+		if code := st.Code().String(); code != "" {
 			meta[MetaStatus] = code
 		}
-		msg := strings.TrimSpace(st.Message())
-		if msg != "" {
+		if msg := strings.TrimSpace(st.Message()); msg != "" {
 			meta[MetaReason] = msg
 		}
 	}
@@ -419,35 +290,4 @@ func publishSummary(session *stream.Session, method string, st *status.Status) {
 		Direction: stream.DirNA,
 		Metadata:  meta,
 	})
-}
-
-func marshalMsg(msg proto.Message) ([]byte, error) {
-	return protojson.MarshalOptions{
-		Multiline:       true,
-		EmitUnpopulated: true,
-	}.Marshal(msg)
-}
-
-func newResponse(headerMD, trailerMD metadata.MD, dur time.Duration) *Response {
-	return &Response{
-		Headers:         copyMetadata(headerMD),
-		Trailers:        copyMetadata(trailerMD),
-		StatusCode:      codes.OK,
-		StatusMessage:   "OK",
-		ContentType:     "application/json",
-		WireContentType: "application/grpc+proto",
-		Duration:        dur,
-	}
-}
-
-func ensureContentType(resp *Response) {
-	if resp == nil {
-		return
-	}
-	if resp.Headers == nil {
-		resp.Headers = make(map[string][]string)
-	}
-	if len(resp.Headers["Content-Type"]) == 0 && strings.TrimSpace(resp.ContentType) != "" {
-		resp.Headers["Content-Type"] = []string{resp.ContentType}
-	}
 }
