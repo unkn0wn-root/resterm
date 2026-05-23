@@ -1,6 +1,7 @@
 package grpcclient
 
 import (
+	"slices"
 	"time"
 
 	"google.golang.org/grpc/codes"
@@ -8,12 +9,14 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+const statusTextOK = "OK"
+
 func newResponse(headerMD, trailerMD metadata.MD, dur time.Duration) *Response {
 	return &Response{
 		Headers:         copyMetadata(headerMD),
 		Trailers:        copyMetadata(trailerMD),
 		StatusCode:      codes.OK,
-		StatusMessage:   "OK",
+		StatusMessage:   statusTextOK,
 		ContentType:     "application/json",
 		WireContentType: "application/grpc+proto",
 		Duration:        dur,
@@ -42,7 +45,7 @@ func copyMetadata(md metadata.MD) map[string][]string {
 
 	out := make(map[string][]string, len(md))
 	for k, vals := range md {
-		out[k] = append([]string(nil), vals...)
+		out[k] = slices.Clone(vals)
 	}
 	return out
 }

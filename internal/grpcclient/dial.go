@@ -12,6 +12,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 )
 
+// passthroughScheme forces gRPC to skip name resolution and dial the target
+// required when traffic is routed through an SSH/k8s tunnel dialer.
+const passthroughScheme = "passthrough:///"
+
 func buildDial(gr *restfile.GRPCRequest, opt Options) (string, []grpc.DialOption, error) {
 	sshOn := opt.SSH != nil && opt.SSH.Active()
 	k8sOn := opt.K8s != nil && opt.K8s.Active()
@@ -62,7 +66,7 @@ func dialTarget(target string, routed bool) string {
 	if target == "" || hasTargetScheme(target) {
 		return target
 	}
-	return "passthrough:///" + target
+	return passthroughScheme + target
 }
 
 func hasTargetScheme(target string) bool {

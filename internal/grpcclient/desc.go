@@ -36,30 +36,16 @@ func (c *Client) resolveMethod(
 		return nil, nil, err
 	}
 
-	if gr.DescriptorSet != "" {
-		files, err := c.loadDescriptorSet(gr.DescriptorSet, opt.BaseDir)
-		if err != nil {
-			return nil, nil, err
-		}
-		md, err := findMethod(files, id)
-		return files, md, err
-	}
-
-	if !gr.UseReflection {
-		return nil, nil, diag.New(
-			diag.ClassProtocol,
-			"grpc reflection disabled and no descriptor provided",
-		)
-	}
-
-	set, err := fetchDescriptorsViaReflection(ctx, conn, id)
+	src, err := descriptorSourceFor(conn, gr, opt)
 	if err != nil {
 		return nil, nil, err
 	}
-	files, err := filesFromSet(set, "build descriptors from reflection")
+
+	files, err := src.files(ctx, id)
 	if err != nil {
 		return nil, nil, err
 	}
+
 	md, err := findMethod(files, id)
 	return files, md, err
 }
@@ -84,14 +70,6 @@ func parseFullMethod(full string) (methodID, error) {
 
 func (m methodID) symbol() string {
 	return string(m.svc) + "." + string(m.method)
-}
-
-func (c *Client) loadDescriptorSet(path, baseDir string) (*protoregistry.Files, error) {
-	set, err := readDescriptorSet(path, baseDir)
-	if err != nil {
-		return nil, err
-	}
-	return filesFromSet(set, "build descriptors from file")
 }
 
 func readDescriptorSet(path, baseDir string) (*descriptorpb.FileDescriptorSet, error) {

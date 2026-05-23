@@ -16,7 +16,7 @@ const (
 )
 
 func collectMetadata(grpcReq *restfile.GRPCRequest, req *restfile.Request) ([]string, error) {
-	pairs := []string{}
+	var pairs []string
 	if grpcReq != nil && len(grpcReq.Metadata) > 0 {
 		var err error
 		pairs, err = appendMetaPairs(pairs, grpcReq.Metadata, metaSrcMeta)
@@ -106,11 +106,7 @@ func metaKeyErr(src metaSrc, key string, msg string) error {
 }
 
 func validMetaKey(key string) bool {
-	if key == "" {
-		return false
-	}
-	for i := 0; i < len(key); i++ {
-		c := key[i]
+	for _, c := range []byte(key) {
 		if c >= 'a' && c <= 'z' {
 			continue
 		}
@@ -127,23 +123,25 @@ func validMetaKey(key string) bool {
 	return true
 }
 
+// reservedMetaKeys are HTTP/2 and gRPC pseudo headers that callers must not set
+// as user metadata. gRPC manages them on the wire.
+var reservedMetaKeys = map[string]struct{}{
+	"content-type":      {},
+	"user-agent":        {},
+	"te":                {},
+	"authority":         {},
+	"host":              {},
+	"connection":        {},
+	"keep-alive":        {},
+	"proxy-connection":  {},
+	"transfer-encoding": {},
+	"upgrade":           {},
+}
+
 func isReservedMetaKey(key string) bool {
 	if strings.HasPrefix(key, "grpc-") || strings.HasPrefix(key, ":") {
 		return true
 	}
-	switch key {
-	case "content-type",
-		"user-agent",
-		"te",
-		"authority",
-		"host",
-		"connection",
-		"keep-alive",
-		"proxy-connection",
-		"transfer-encoding",
-		"upgrade":
-		return true
-	default:
-		return false
-	}
+	_, reserved := reservedMetaKeys[key]
+	return reserved
 }

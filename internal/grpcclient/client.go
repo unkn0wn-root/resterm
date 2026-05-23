@@ -42,7 +42,6 @@ type Response struct {
 
 type StreamHook func(*stream.Session)
 
-// gRPC stream event metadata keys.
 const (
 	MetaMethod   = "grpc.method"
 	MetaMsgType  = "grpc.msg.type"
@@ -50,6 +49,8 @@ const (
 	MetaStatus   = "grpc.status"
 	MetaReason   = "grpc.reason"
 )
+
+const settingTimeout = "timeout"
 
 type Client struct{}
 
@@ -121,7 +122,7 @@ func contextWithTimeout(
 
 	var timeout string
 	if req != nil {
-		timeout = req.Settings["timeout"]
+		timeout = req.Settings[settingTimeout]
 	}
 	if timeout != "" {
 		if dur, err := time.ParseDuration(timeout); err == nil && dur > 0 {

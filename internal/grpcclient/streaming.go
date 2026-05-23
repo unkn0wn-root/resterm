@@ -2,6 +2,7 @@ package grpcclient
 
 import (
 	"context"
+	"errors"
 	"io"
 	"strconv"
 	"time"
@@ -198,7 +199,7 @@ func (sc streamCall) recvAll() ([][]byte, error) {
 	for i := 0; ; i++ {
 		msg := dynamicpb.NewMessage(outDesc)
 		err := sc.cs.RecvMsg(msg)
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return out, nil
 		}
 		if err != nil {
@@ -217,7 +218,7 @@ func (sc streamCall) recvOne() ([][]byte, error) {
 	outDesc := sc.md.Output()
 	msg := dynamicpb.NewMessage(outDesc)
 	if err := sc.cs.RecvMsg(msg); err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, nil
 		}
 		return nil, err
@@ -266,7 +267,7 @@ func finalizeStream(session *stream.Session, method string, err error) {
 
 func summaryStatus(err error) *status.Status {
 	if err == nil {
-		return status.New(codes.OK, "OK")
+		return status.New(codes.OK, statusTextOK)
 	}
 	return status.Convert(err)
 }
