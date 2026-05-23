@@ -18,9 +18,12 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
+	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+}
+
 func TestRunnerRunHTTPSSE(t *testing.T) {
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {

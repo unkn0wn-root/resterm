@@ -11,6 +11,31 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+type authType string
+
+const (
+	authTypeBasic  authType = "basic"
+	authTypeBearer authType = "bearer"
+	authTypeAPIKey authType = "apikey"
+	authTypeHeader authType = "header"
+)
+
+const (
+	authParamUsername  = "username"
+	authParamPassword  = "password"
+	authParamToken     = "token"
+	authParamPlacement = "placement"
+	authParamName      = "name"
+	authParamValue     = "value"
+	authParamHeader    = "header"
+
+	authPlacementQuery   = "query"
+	authorizationHeader  = "Authorization"
+	defaultAPIKeyHeader  = "X-API-Key"
+	bearerTokenPrefix    = "Bearer "
+	legacyAPIKeyAuthType = "api-key"
+)
+
 func (c *Client) prepareHTTPRequest(
 	ctx context.Context,
 	req *restfile.Request,
@@ -26,7 +51,11 @@ func (c *Client) prepareHTTPRequest(
 	}
 
 	effective := applyRequestSettings(opts, req.Settings)
-	return c.prepareHTTPRequestWithOpts(ctx, req, resolver, effective)
+	prepared, err := c.prepareRequest(ctx, req, resolver, effective, false)
+	if err != nil {
+		return nil, effective, err
+	}
+	return prepared.request, prepared.options, nil
 }
 
 func (c *Client) prepareHTTPRequestWithOpts(
@@ -35,11 +64,11 @@ func (c *Client) prepareHTTPRequestWithOpts(
 	resolver *vars.Resolver,
 	opts Options,
 ) (*http.Request, Options, error) {
-	plan, err := c.prepareBody(req, resolver, opts)
+	prepared, err := c.prepareRequest(ctx, req, resolver, opts, false)
 	if err != nil {
 		return nil, opts, err
 	}
-	return c.buildHTTPRequest(ctx, req, resolver, opts, plan.rd, plan.url)
+	return prepared.request, prepared.options, nil
 }
 
 func (c *Client) applyAuthentication(
@@ -65,36 +94,36 @@ func (c *Client) applyAuthentication(
 	}
 
 	switch strings.ToLower(auth.Type) {
-	case "basic":
-		user := expand(auth.Params["username"])
-		pass := expand(auth.Params["password"])
-		if req.Header.Get("Authorization") == "" {
+	case string(authTypeBasic):
+		user := expand(auth.Params[authParamUsername])
+		pass := expand(auth.Params[authParamPassword])
+		if req.Header.Get(authorizationHeader) == "" {
 			req.SetBasicAuth(user, pass)
 		}
-	case "bearer":
-		token := expand(auth.Params["token"])
-		if req.Header.Get("Authorization") == "" {
-			req.Header.Set("Authorization", "Bearer "+token)
+	case string(authTypeBearer):
+		token := expand(auth.Params[authParamToken])
+		if req.Header.Get(authorizationHeader) == "" {
+			req.Header.Set(authorizationHeader, bearerTokenPrefix+token)
 		}
-	case "apikey", "api-key":
-		placement := strings.ToLower(auth.Params["placement"])
-		name := expand(auth.Params["name"])
-		value := expand(auth.Params["value"])
-		if placement == "query" {
+	case string(authTypeAPIKey), legacyAPIKeyAuthType:
+		placement := strings.ToLower(auth.Params[authParamPlacement])
+		name := expand(auth.Params[authParamName])
+		value := expand(auth.Params[authParamValue])
+		if placement == authPlacementQuery {
 			q := req.URL.Query()
 			q.Set(name, value)
 			req.URL.RawQuery = q.Encode()
 		} else {
 			if name == "" {
-				name = "X-API-Key"
+				name = defaultAPIKeyHeader
 			}
 			if req.Header.Get(name) == "" {
 				req.Header.Set(name, value)
 			}
 		}
-	case "header":
-		name := expand(auth.Params["header"])
-		value := expand(auth.Params["value"])
+	case string(authTypeHeader):
+		name := expand(auth.Params[authParamHeader])
+		value := expand(auth.Params[authParamValue])
 		if name != "" && req.Header.Get(name) == "" {
 			req.Header.Set(name, value)
 		}
@@ -134,7 +163,7 @@ func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
 
 	if reqForMeta != nil {
 		host = reqForMeta.Host
-		if strings.TrimSpace(host) == "" && reqForMeta.URL != nil {
+		if host == "" && reqForMeta.URL != nil {
 			host = reqForMeta.URL.Host
 		}
 		length = reqForMeta.ContentLength

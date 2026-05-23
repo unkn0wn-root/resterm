@@ -78,7 +78,7 @@ func newExecContext(
 	m.syncRegistry(doc)
 	client := m.client
 	if client == nil {
-		client = httpclient.NewClient(nil)
+		client = httpclient.NewClientWithOptions()
 	}
 	runner := m.scriptRunner
 	if runner == nil {

@@ -129,15 +129,14 @@ func TestRunPlanDoesNotMutateBuiltDocument(t *testing.T) {
 	}
 }
 
-func TestRunPlanUsesBuiltClientSnapshot(t *testing.T) {
+func TestRunPlanUsesBuiltClient(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "api.http")
 	if err := os.WriteFile(file, []byte("GET https://example.com/status\n"), 0o644); err != nil {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -160,21 +159,6 @@ func TestRunPlanUsesBuiltClientSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
-		return &http.Client{
-			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
-				return &http.Response{
-					Status:     "200 OK",
-					StatusCode: http.StatusOK,
-					Proto:      "HTTP/1.1",
-					Header:     make(http.Header),
-					Body:       io.NopCloser(strings.NewReader("mutated")),
-					Request:    req,
-				}, nil
-			}),
-		}, nil
-	})
 
 	rep, err := RunPlan(context.Background(), pl)
 	if err != nil {

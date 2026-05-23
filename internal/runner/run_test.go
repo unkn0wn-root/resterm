@@ -25,6 +25,10 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
+	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+}
+
 func TestRunSingleRequestDefaultSelection(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "one.http")
@@ -32,8 +36,7 @@ func TestRunSingleRequestDefaultSelection(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -171,8 +174,7 @@ func TestRunSelectRequestByName(t *testing.T) {
 	}
 
 	var seen string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = req.URL.String()
@@ -224,8 +226,7 @@ func TestRunFailFastSkipsRemainingRequests(t *testing.T) {
 	}
 
 	var calls int
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				calls++
@@ -293,8 +294,7 @@ func TestRunSelectRequestByLine(t *testing.T) {
 	}
 
 	var seen string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = req.URL.String()
@@ -579,8 +579,7 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -635,8 +634,7 @@ func TestRunWorkflowByName(t *testing.T) {
 	}
 
 	var auth string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -720,8 +718,7 @@ func TestRunWorkflowByLine(t *testing.T) {
 	}
 
 	var auth string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -782,8 +779,7 @@ func TestRunRequestForEach(t *testing.T) {
 	}
 
 	var seen []string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = append(seen, req.URL.Path)
@@ -853,8 +849,7 @@ func TestRunAllCarriesJSPreRequestGlobals(t *testing.T) {
 	}
 
 	var auth string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == "/use" {
@@ -909,8 +904,7 @@ func TestRunAllCarriesCapturesAcrossRequests(t *testing.T) {
 	}
 
 	var auth string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				body := "{}"
@@ -972,8 +966,7 @@ func TestRunAllCarriesRTSPreRequestGlobals(t *testing.T) {
 	}
 
 	var mode string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				if req.URL.Path == "/use" {
@@ -1023,8 +1016,7 @@ func TestRunExecutesRTSPreRequestDirective(t *testing.T) {
 	}
 
 	var mode string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				mode = req.Header.Get("X-Mode")
@@ -1074,8 +1066,7 @@ func TestReportWriteJSON(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				return &http.Response{
@@ -1217,8 +1208,7 @@ func TestWorkflowWriteJSONIncludesSteps(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -1304,8 +1294,7 @@ func TestRunAllCarriesStreamCapturesAndArtifacts(t *testing.T) {
 	}
 
 	var gotHdr string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				hdr := make(http.Header)
@@ -1412,8 +1401,7 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 	}
 
 	var seen []string
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				seen = append(seen, req.URL.Host)
@@ -1527,8 +1515,7 @@ func TestRunProfileMetadata(t *testing.T) {
 	}
 
 	count := 0
-	client := httpclient.NewClient(nil)
-	client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: transportFunc(func(req *http.Request) (*http.Response, error) {
 				count++

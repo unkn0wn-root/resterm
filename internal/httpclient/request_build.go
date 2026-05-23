@@ -12,6 +12,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+type preparedHTTPRequest struct {
+	request    *http.Request
+	options    Options
+	optionsSet bool
+	body       []byte
+}
+
 // BuildHTTPRequest prepares the request with expansions and returns the body bytes for reuse.
 func (c *Client) BuildHTTPRequest(
 	ctx context.Context,
@@ -28,41 +35,82 @@ func (c *Client) BuildHTTPRequest(
 	}
 
 	effective := applyRequestSettings(opts, req.Settings)
-	plan, err := c.prepareBody(req, resolver, effective)
+	prepared, err := c.prepareRequest(ctx, req, resolver, effective, true)
 	if err != nil {
+		if prepared.optionsSet {
+			return nil, prepared.options, nil, err
+		}
 		return nil, opts, nil, err
 	}
 
-	var body []byte
-	if plan.rd != nil {
-		body, err = io.ReadAll(plan.rd)
-		if err != nil {
-			return nil, opts, nil, diag.WrapAs(
-				diag.ClassProtocol,
-				err,
-				"read request body",
-				diag.WithComponent(diag.ComponentHTTP),
-			)
-		}
+	return prepared.request, prepared.options, prepared.body, nil
+}
+
+func (c *Client) prepareRequest(
+	ctx context.Context,
+	req *restfile.Request,
+	resolver *vars.Resolver,
+	opts Options,
+	captureBody bool,
+) (preparedHTTPRequest, error) {
+	if req == nil {
+		return preparedHTTPRequest{options: opts, optionsSet: true}, diag.New(
+			diag.ClassProtocol,
+			"request is nil",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 
-	var reader io.Reader
-	if plan.rd != nil {
-		reader = bytes.NewReader(body)
+	plan, err := c.prepareBody(req, resolver, opts)
+	if err != nil {
+		return preparedHTTPRequest{}, err
+	}
+
+	body, reader, err := requestBodyReader(plan, captureBody)
+	if err != nil {
+		return preparedHTTPRequest{}, err
 	}
 
 	httpReq, effective, err := c.buildHTTPRequest(
 		ctx,
 		req,
 		resolver,
-		effective,
+		opts,
 		reader,
-		plan.url,
+		plan.effectiveURL(req.URL),
 	)
 	if err != nil {
-		return nil, effective, nil, err
+		return preparedHTTPRequest{options: effective, optionsSet: true}, err
 	}
-	return httpReq, effective, body, nil
+
+	return preparedHTTPRequest{
+		request:    httpReq,
+		options:    effective,
+		optionsSet: true,
+		body:       body,
+	}, nil
+}
+
+func requestBodyReader(plan bodyPlan, captureBody bool) ([]byte, io.Reader, error) {
+	if plan.rd == nil {
+		return nil, nil, nil
+	}
+
+	if !captureBody {
+		return nil, plan.rd, nil
+	}
+
+	body, err := io.ReadAll(plan.rd)
+	if err != nil {
+		return nil, nil, diag.WrapAs(
+			diag.ClassProtocol,
+			err,
+			"read request body",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
+	}
+
+	return body, bytes.NewReader(body), nil
 }
 
 func (c *Client) buildHTTPRequest(
@@ -81,9 +129,9 @@ func (c *Client) buildHTTPRequest(
 		)
 	}
 
-	expandedURL := strings.TrimSpace(urlOverride)
+	expandedURL := urlOverride
 	if expandedURL == "" {
-		expandedURL = strings.TrimSpace(req.URL)
+		expandedURL = req.URL
 	}
 	if expandedURL == "" {
 		return nil, opts, diag.New(

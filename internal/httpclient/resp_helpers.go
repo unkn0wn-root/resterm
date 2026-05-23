@@ -4,7 +4,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 func effURL(req *http.Request, resp *http.Response) string {
@@ -25,12 +27,7 @@ func cloneHdr(h http.Header) http.Header {
 }
 
 func cloneStrs(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, len(in))
-	copy(out, in)
-	return out
+	return util.CloneSlice(in)
 }
 
 func respFromHTTP(
@@ -64,5 +61,19 @@ func respFromHTTP(
 		Duration:       dur,
 		EffectiveURL:   effURL(sent, resp),
 		Request:        req,
+	}
+}
+
+func partialResp(
+	req *restfile.Request,
+	dur time.Duration,
+	timeline *nettrace.Timeline,
+	report *nettrace.Report,
+) *Response {
+	return &Response{
+		Request:     req,
+		Duration:    dur,
+		Timeline:    timeline,
+		TraceReport: report,
 	}
 }

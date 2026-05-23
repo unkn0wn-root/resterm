@@ -35,6 +35,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
+func newTestClientWithHTTPFactory(factory HTTPClientFactory) *Client {
+	return NewClientWithOptions(WithHTTPFactory(factory))
+}
+
 func TestApplyRequestSettings(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	opts := Options{Timeout: 5 * time.Second, FollowRedirects: true, CookieJar: jar}
@@ -590,8 +594,7 @@ func readFile(t *testing.T, path string) string {
 }
 
 func TestExecuteCapturesTraceTimeline(t *testing.T) {
-	client := NewClient(nil)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			trace := httptrace.ContextClientTrace(req.Context())
 			if trace != nil {
@@ -648,7 +651,7 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 			return resp, nil
 		})
 		return &http.Client{Transport: transport}, nil
-	}
+	})
 
 	req := &restfile.Request{Method: http.MethodGet, URL: "https://example.com"}
 	budget := nettrace.Budget{Total: 10 * time.Microsecond}
@@ -709,8 +712,7 @@ func TestExecuteCapturesTraceTimeline(t *testing.T) {
 }
 
 func TestExecuteEffectiveURLFallback(t *testing.T) {
-	client := NewClient(nil)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			resp := &http.Response{
 				Status:     "200 OK",
@@ -723,7 +725,7 @@ func TestExecuteEffectiveURLFallback(t *testing.T) {
 			return resp, nil
 		})
 		return &http.Client{Transport: transport}, nil
-	}
+	})
 
 	req := &restfile.Request{Method: http.MethodGet, URL: "https://example.com"}
 	resp, err := client.Execute(context.Background(), req, vars.NewResolver(), Options{})
@@ -833,8 +835,7 @@ func (e errBody) Read(p []byte) (int, error) {
 func (e errBody) Close() error { return nil }
 
 func TestExecuteSSE(t *testing.T) {
-	client := NewClient(nil)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		stream := strings.Join([]string{
 			":warmup",
 			"",
@@ -863,7 +864,7 @@ func TestExecuteSSE(t *testing.T) {
 				return resp, nil
 			}),
 		}, nil
-	}
+	})
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -905,8 +906,7 @@ func TestExecuteSSE(t *testing.T) {
 }
 
 func TestExecuteSSEIdleTimeout(t *testing.T) {
-	client := NewClient(nil)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
@@ -930,7 +930,7 @@ func TestExecuteSSEIdleTimeout(t *testing.T) {
 			return resp, nil
 		})
 		return &http.Client{Transport: transport}, nil
-	}
+	})
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -963,9 +963,8 @@ func TestExecuteSSEIdleTimeout(t *testing.T) {
 }
 
 func TestExecuteSSEReadErrorSummary(t *testing.T) {
-	client := NewClient(nil)
 	boom := errors.New("boom")
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			resp := &http.Response{
 				Status:     "200 OK",
@@ -979,7 +978,7 @@ func TestExecuteSSEReadErrorSummary(t *testing.T) {
 			return resp, nil
 		})
 		return &http.Client{Transport: transport}, nil
-	}
+	})
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -1004,11 +1003,10 @@ func TestExecuteSSEReadErrorSummary(t *testing.T) {
 }
 
 func TestExecuteSSEMaxBytes(t *testing.T) {
-	client := NewClient(nil)
 	first := "data: one\n\n"
 	second := "data: two\n\n"
 	maxBytes := len(first)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		stream := first + second
 		return &http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -1024,7 +1022,7 @@ func TestExecuteSSEMaxBytes(t *testing.T) {
 				return resp, nil
 			}),
 		}, nil
-	}
+	})
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -1055,8 +1053,7 @@ func TestExecuteSSEMaxBytes(t *testing.T) {
 }
 
 func TestStartSSEPublishesEvents(t *testing.T) {
-	client := NewClient(nil)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
@@ -1081,7 +1078,7 @@ func TestStartSSEPublishesEvents(t *testing.T) {
 			return resp, nil
 		})
 		return &http.Client{Transport: transport}, nil
-	}
+	})
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -1149,8 +1146,7 @@ func TestStartSSEPublishesEvents(t *testing.T) {
 }
 
 func TestStartSSEBindsK8sRequestDiag(t *testing.T) {
-	client := NewClient(nil)
-	client.httpFactory = func(Options) (*http.Client, error) {
+	client := newTestClientWithHTTPFactory(func(Options) (*http.Client, error) {
 		return &http.Client{
 			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 				if diag := k8s.RequestDiagFromContext(req.Context()); diag == nil {
@@ -1159,7 +1155,7 @@ func TestStartSSEBindsK8sRequestDiag(t *testing.T) {
 				return nil, errors.New("stream boom")
 			}),
 		}, nil
-	}
+	})
 
 	req := &restfile.Request{
 		Method: "GET",

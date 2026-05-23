@@ -222,12 +222,11 @@ func resolveWorkspace(filePath, workspace string) string {
 }
 
 func NewExecClient(version string, f ExecFlags) (*httpclient.Client, func() error, error) {
-	client := httpclient.NewClient(nil)
 	provider, err := telemetry.New(f.TelemetryConfig(version))
 	if err != nil {
-		return client, nil, err
+		return httpclient.NewClientWithOptions(), nil, err
 	}
-	client.SetTelemetry(provider)
+	client := httpclient.NewClientWithOptions(httpclient.WithTelemetry(provider))
 	return client, func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
