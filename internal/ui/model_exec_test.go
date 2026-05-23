@@ -39,6 +39,10 @@ func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 	return f(req)
 }
 
+func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
+	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+}
+
 func startUIWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 	t.Helper()
 
@@ -605,8 +609,7 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 
 func TestSendActiveRequestHardFailsOnParseError(t *testing.T) {
 	var calls int32
-	fakeClient := httpclient.NewClient(nil)
-	fakeClient.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	fakeClient := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		atomic.AddInt32(&calls, 1)
 		return &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 			t.Fatalf("request should not be sent after parse error")
@@ -764,8 +767,7 @@ func (f transportFunc) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
-	fakeClient := httpclient.NewClient(nil)
-	fakeClient.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	fakeClient := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		transport := transportFunc(func(req *http.Request) (*http.Response, error) {
 			reader, writer := io.Pipe()
 			go func() {
@@ -850,11 +852,8 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 }
 
 func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *testing.T) {
-	model := New(Config{EnvironmentName: "dev"})
-	model.globalsStore().Set("dev", "token", "global-token", false)
-
 	var seenHeader string
-	model.client.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	fakeClient := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			seenHeader = req.Header.Get("X-Seen")
 			return &http.Response{
@@ -868,6 +867,9 @@ func TestExecuteRequestRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 		})
 		return &http.Client{Transport: transport}, nil
 	})
+
+	model := New(Config{EnvironmentName: "dev", Client: fakeClient})
+	model.globalsStore().Set("dev", "token", "global-token", false)
 
 	req := &restfile.Request{
 		Method: "GET",
@@ -2731,10 +2733,7 @@ func TestExecuteRequestNoCookiesSettingDisablesJar(t *testing.T) {
 }
 
 func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
-	model := New(Config{})
-
-	client := model.client
-	client.SetHTTPFactory(func(opts httpclient.Options) (*http.Client, error) {
+	client := newHTTPClientWithFactory(func(opts httpclient.Options) (*http.Client, error) {
 		transport := roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			clientTrace := httptrace.ContextClientTrace(req.Context())
 			if clientTrace != nil {
@@ -2783,6 +2782,7 @@ func TestExecuteRequestWithTraceSpecPopulatesTimeline(t *testing.T) {
 		})
 		return &http.Client{Transport: transport}, nil
 	})
+	model := New(Config{Client: client})
 
 	content := "### Trace\n# @trace total<=1s\nGET https://example.com\n\n"
 	doc := parser.Parse("trace.http", []byte(content))

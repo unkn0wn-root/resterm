@@ -416,7 +416,7 @@ func New(cfg Config) Model {
 
 	client := cfg.Client
 	if client == nil {
-		client = httpclient.NewClient(nil)
+		client = httpclient.NewClientWithOptions()
 		cfg.Client = client
 	}
 	grpcExec := grpcclient.NewClient()

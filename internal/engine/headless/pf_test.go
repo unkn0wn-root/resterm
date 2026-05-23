@@ -38,8 +38,7 @@ func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	cl := httpclient.NewClient(nil)
-	cl.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	cl := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return srv.Client(), nil
 	})
 

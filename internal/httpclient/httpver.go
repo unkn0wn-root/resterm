@@ -17,7 +17,7 @@ func checkHTTPVersion(resp *http.Response, v httpver.Version) error {
 		if resp != nil {
 			proto = resp.Proto
 		}
-		if strings.TrimSpace(proto) == "" {
+		if proto == "" {
 			proto = "unknown"
 		}
 		return diag.Newf(diag.ClassProtocol, "expected HTTP/2 response, got %s", proto)

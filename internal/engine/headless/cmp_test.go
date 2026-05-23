@@ -14,6 +14,10 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
+func newHTTPClientWithFactory(factory httpclient.HTTPClientFactory) *httpclient.Client {
+	return httpclient.NewClientWithOptions(httpclient.WithHTTPFactory(factory))
+}
+
 func TestExecuteCompareKeepsRequestedMissingBaselineAndFallsBackToFirstRow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
@@ -22,8 +26,7 @@ func TestExecuteCompareKeepsRequestedMissingBaselineAndFallsBackToFirstRow(t *te
 	}))
 	defer srv.Close()
 
-	cl := httpclient.NewClient(nil)
-	cl.SetHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+	cl := newHTTPClientWithFactory(func(httpclient.Options) (*http.Client, error) {
 		return srv.Client(), nil
 	})
 

@@ -38,14 +38,24 @@ type Options struct {
 	CookieJar          http.CookieJar
 }
 
+type HTTPClientFactory func(Options) (*http.Client, error)
+
+type WebSocketDialer func(
+	context.Context,
+	string,
+	*websocket.DialOptions,
+) (*websocket.Conn, *http.Response, error)
+
+type ClientOption func(*Client)
+
 type Client struct {
 	fs          FileSystem
-	httpFactory func(Options) (*http.Client, error)
-	wsDial      func(context.Context, string, *websocket.DialOptions) (*websocket.Conn, *http.Response, error)
+	httpFactory HTTPClientFactory
+	wsDial      WebSocketDialer
 	telemetry   telemetry.Instrumenter
 }
 
-func (c *Client) resolveHTTPFactory() func(Options) (*http.Client, error) {
+func (c *Client) resolveHTTPFactory() HTTPClientFactory {
 	if c == nil {
 		return nil
 	}
@@ -77,13 +87,57 @@ func (c *Client) streamClient(opts Options) (*http.Client, error) {
 }
 
 func NewClient(fs FileSystem) *Client {
-	if fs == nil {
-		fs = OSFileSystem{}
-	}
+	return NewClientWithOptions(WithFileSystem(fs))
+}
 
-	c := &Client{fs: fs, telemetry: telemetry.Noop()}
-	c.wsDial = websocket.Dial
+func NewClientWithOptions(opts ...ClientOption) *Client {
+	c := &Client{}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(c)
+		}
+	}
+	if c.fs == nil {
+		c.fs = OSFileSystem{}
+	}
+	if c.wsDial == nil {
+		c.wsDial = websocket.Dial
+	}
+	if c.telemetry == nil {
+		c.telemetry = telemetry.Noop()
+	}
 	return c
+}
+
+func WithFileSystem(fs FileSystem) ClientOption {
+	return func(c *Client) {
+		if fs != nil {
+			c.fs = fs
+		}
+	}
+}
+
+func WithHTTPFactory(factory HTTPClientFactory) ClientOption {
+	return func(c *Client) {
+		c.httpFactory = factory
+	}
+}
+
+func WithWebSocketDialer(dialer WebSocketDialer) ClientOption {
+	return func(c *Client) {
+		if dialer != nil {
+			c.wsDial = dialer
+		}
+	}
+}
+
+func WithTelemetry(instr telemetry.Instrumenter) ClientOption {
+	return func(c *Client) {
+		if instr == nil {
+			instr = telemetry.Noop()
+		}
+		c.telemetry = instr
+	}
 }
 
 // Clone returns a snapshot of c's client configuration.
@@ -98,20 +152,6 @@ func (c *Client) Clone() *Client {
 		wsDial:      c.wsDial,
 		telemetry:   c.telemetry,
 	}
-}
-
-// SetHTTPFactory allows callers to override how http.Client instances are created.
-// Passing nil restores the default factory.
-func (c *Client) SetHTTPFactory(factory func(Options) (*http.Client, error)) {
-	c.httpFactory = factory
-}
-
-// SetTelemetry configures the instrumenter used to emit OpenTelemetry spans. Passing nil restores the no-op implementation.
-func (c *Client) SetTelemetry(instr telemetry.Instrumenter) {
-	if instr == nil {
-		instr = telemetry.Noop()
-	}
-	c.telemetry = instr
 }
 
 type Response struct {
@@ -188,16 +228,11 @@ func (c *Client) Execute(
 			timeline = traceSess.complete(buildTraceExtras(httpReq, nil, effectiveOpts, proxy))
 			traceReport = buildTraceReport(timeline, effectiveOpts.TraceBudget)
 		}
-		return &Response{
-				Request:     req,
-				Duration:    duration,
-				Timeline:    timeline,
-				TraceReport: traceReport,
-			}, diag.Wrap(
-				err,
-				"perform request",
-				diag.WithComponent(diag.ComponentHTTP),
-			)
+		return partialResp(req, duration, timeline, traceReport), diag.Wrap(
+			err,
+			"perform request",
+			diag.WithComponent(diag.ComponentHTTP),
+		)
 	}
 	if verErr := checkHTTPVersion(httpResp, effectiveOpts.HTTPVersion); verErr != nil {
 		duration := time.Since(start)
@@ -208,12 +243,7 @@ func (c *Client) Execute(
 			traceReport = buildTraceReport(timeline, effectiveOpts.TraceBudget)
 		}
 		_ = httpResp.Body.Close()
-		return &Response{
-			Request:     req,
-			Duration:    duration,
-			Timeline:    timeline,
-			TraceReport: traceReport,
-		}, verErr
+		return partialResp(req, duration, timeline, traceReport), verErr
 	}
 
 	defer func() {

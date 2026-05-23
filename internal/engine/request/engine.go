@@ -66,7 +66,7 @@ type ExecOptions struct {
 func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
 	hc := cfg.Client
 	if hc == nil {
-		hc = httpclient.NewClient(nil)
+		hc = httpclient.NewClientWithOptions()
 	}
 	if rt == nil {
 		rt = rtrun.New(rtrun.Config{
@@ -96,7 +96,7 @@ func (e *Engine) SetConfig(cfg engine.Config) {
 	if cfg.Client != nil {
 		e.hc = cfg.Client
 	} else if e.hc == nil {
-		e.hc = httpclient.NewClient(nil)
+		e.hc = httpclient.NewClientWithOptions()
 	}
 	if cfg.Registry != nil {
 		e.rg = cfg.Registry

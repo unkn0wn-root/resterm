@@ -1,7 +1,6 @@
 package httpclient
 
 import (
-	"errors"
 	"net/http"
 	"testing"
 )
@@ -16,14 +15,9 @@ func TestNewClientUsesImplicitDefaultFactory(t *testing.T) {
 	}
 }
 
-func TestClientCloneKeepsDefaultFactoryIndependent(t *testing.T) {
+func TestClientCloneKeepsDefaultFactory(t *testing.T) {
 	src := NewClient(nil)
 	cl := src.Clone()
-
-	want := errors.New("mutated")
-	src.SetHTTPFactory(func(Options) (*http.Client, error) {
-		return nil, want
-	})
 
 	if cl == nil {
 		t.Fatal("Clone() = nil")
@@ -37,20 +31,13 @@ func TestClientCloneKeepsDefaultFactoryIndependent(t *testing.T) {
 }
 
 func TestClientCloneSnapshotsCustomFactory(t *testing.T) {
-	src := NewClient(nil)
-
 	used := false
-	src.SetHTTPFactory(func(Options) (*http.Client, error) {
+	src := NewClientWithOptions(WithHTTPFactory(func(Options) (*http.Client, error) {
 		used = true
 		return &http.Client{}, nil
-	})
+	}))
 
 	cl := src.Clone()
-
-	want := errors.New("mutated")
-	src.SetHTTPFactory(func(Options) (*http.Client, error) {
-		return nil, want
-	})
 
 	if _, err := cl.httpClient(Options{}); err != nil {
 		t.Fatalf("clone httpClient: %v", err)

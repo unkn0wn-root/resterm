@@ -17,6 +17,13 @@ type bodyPlan struct {
 	url string
 }
 
+func (p bodyPlan) effectiveURL(defaultURL string) string {
+	if p.url != "" {
+		return p.url
+	}
+	return defaultURL
+}
+
 func (c *Client) prepareBody(
 	req *restfile.Request,
 	resolver *vars.Resolver,
@@ -100,6 +107,8 @@ func (c *Client) prepareGraphQLBody(
 		if err != nil {
 			return bodyPlan{}, err
 		}
+		// Preserve the long-standing package behavior for callers that inspect
+		// the restfile request after preparation.
 		req.URL = url
 		return bodyPlan{url: url}, nil
 	}
@@ -158,7 +167,7 @@ func (c *Client) gqlVars(
 	gql *restfile.GraphQLBody,
 	resolver *vars.Resolver,
 	lookup fileLookup,
-) (map[string]interface{}, string, error) {
+) (map[string]any, string, error) {
 	raw, err := c.graphQLSectionContent(
 		gql.Variables,
 		gql.VariablesFile,
@@ -199,10 +208,10 @@ func buildGraphQLURL(
 	resolver *vars.Resolver,
 	query, op, varsJSON string,
 ) (string, error) {
-	expandedURL := strings.TrimSpace(rawURL)
+	expandedURL := rawURL
 	if resolver != nil {
 		if expanded, expandErr := resolver.ExpandTemplates(expandedURL); expandErr == nil {
-			expandedURL = strings.TrimSpace(expanded)
+			expandedURL = expanded
 		} else {
 			return "", diag.WrapAs(diag.ClassProtocol, expandErr, "expand graphql request url")
 		}
@@ -236,9 +245,9 @@ func buildGraphQLURL(
 
 func buildGraphQLPayload(
 	query, op string,
-	vars map[string]interface{},
+	vars map[string]any,
 ) (io.Reader, error) {
-	payload := map[string]interface{}{
+	payload := map[string]any{
 		"query": query,
 	}
 
@@ -280,15 +289,15 @@ func (c *Client) graphQLSectionContent(
 
 // Second Decode call checks for trailing garbage after the JSON object.
 // Without this, extra content would silently get ignored.
-func decodeGraphQLVariables(raw string) (map[string]interface{}, error) {
+func decodeGraphQLVariables(raw string) (map[string]any, error) {
 	decoder := json.NewDecoder(strings.NewReader(raw))
 	decoder.UseNumber()
-	var payload map[string]interface{}
+	var payload map[string]any
 	if err := decoder.Decode(&payload); err != nil {
 		return nil, diag.WrapAs(diag.ClassProtocol, err, "parse graphql variables")
 	}
 
-	if err := decoder.Decode(new(interface{})); err != io.EOF {
+	if err := decoder.Decode(new(any)); err != io.EOF {
 		if err == nil {
 			return nil, diag.Newf(
 				diag.ClassProtocol,

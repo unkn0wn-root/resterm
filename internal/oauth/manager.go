@@ -84,7 +84,7 @@ const expirySlack = 30 * time.Second
 
 func NewManager(client *httpclient.Client) *Manager {
 	if client == nil {
-		client = httpclient.NewClient(nil)
+		client = httpclient.NewClientWithOptions()
 	}
 
 	mgr := &Manager{

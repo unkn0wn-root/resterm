@@ -163,15 +163,18 @@ func TestExecuteWebSocketChat(t *testing.T) {
 }
 
 func TestStartWebSocketUsesHTTPFactory(t *testing.T) {
-	client := NewClient(nil)
 	called := false
-	client.SetHTTPFactory(func(Options) (*http.Client, error) {
-		called = true
-		return &http.Client{}, nil
-	})
-	client.wsDial = func(ctx context.Context, url string, opts *websocket.DialOptions) (*websocket.Conn, *http.Response, error) {
-		return nil, nil, fmt.Errorf("dial boom")
-	}
+	client := NewClientWithOptions(
+		WithHTTPFactory(func(Options) (*http.Client, error) {
+			called = true
+			return &http.Client{}, nil
+		}),
+		WithWebSocketDialer(
+			func(ctx context.Context, url string, opts *websocket.DialOptions) (*websocket.Conn, *http.Response, error) {
+				return nil, nil, fmt.Errorf("dial boom")
+			},
+		),
+	)
 
 	req := &restfile.Request{
 		Method: http.MethodGet,
@@ -191,13 +194,16 @@ func TestStartWebSocketUsesHTTPFactory(t *testing.T) {
 }
 
 func TestStartWebSocketBindsK8sRequestDiag(t *testing.T) {
-	client := NewClient(nil)
-	client.wsDial = func(ctx context.Context, url string, opts *websocket.DialOptions) (*websocket.Conn, *http.Response, error) {
-		if diag := k8s.RequestDiagFromContext(ctx); diag == nil {
-			t.Fatal("expected websocket handshake context to include k8s request diag")
-		}
-		return nil, nil, errors.New("dial boom")
-	}
+	client := NewClientWithOptions(
+		WithWebSocketDialer(
+			func(ctx context.Context, url string, opts *websocket.DialOptions) (*websocket.Conn, *http.Response, error) {
+				if diag := k8s.RequestDiagFromContext(ctx); diag == nil {
+					t.Fatal("expected websocket handshake context to include k8s request diag")
+				}
+				return nil, nil, errors.New("dial boom")
+			},
+		),
+	)
 
 	req := &restfile.Request{
 		Method: http.MethodGet,
