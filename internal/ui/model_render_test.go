@@ -843,6 +843,28 @@ func TestResponseSearchPromptOnlyRendersInTargetSplitPane(t *testing.T) {
 	}
 }
 
+func TestResponseColumnUsesFullViewportHeight(t *testing.T) {
+	content := "line-1\nline-2\nline-3\nline-4\nline-5"
+	snap := &responseSnapshot{pretty: withTrailingNewline(content), ready: true}
+	model := newModelWithResponseTab(responseTabPretty, snap)
+
+	pane := model.pane(responsePanePrimary)
+	pane.viewport.Width = 36
+	pane.viewport.Height = 5
+	if cmd := model.syncResponsePane(responsePanePrimary); cmd != nil {
+		cmd()
+	}
+
+	view := model.renderResponseColumn(responsePanePrimary, true, 36)
+	lines := strings.Split(ansi.Strip(view), "\n")
+	if got, want := len(lines), pane.viewport.Height+lipgloss.Height(model.renderPaneTabs(responsePanePrimary, true, 36)); got != want {
+		t.Fatalf("expected response column height %d, got %d in %q", want, got, ansi.Strip(view))
+	}
+	if !strings.Contains(lines[len(lines)-1], "line-5") {
+		t.Fatalf("expected last viewport row to show last content line, got %q in %q", lines[len(lines)-1], ansi.Strip(view))
+	}
+}
+
 func TestInactiveEditorPaneKeepsCursorRuneStyle(t *testing.T) {
 	prevProfile := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

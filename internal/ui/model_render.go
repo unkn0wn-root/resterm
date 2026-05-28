@@ -1343,7 +1343,12 @@ func (m Model) renderResponseColumn(id responsePaneID, focused bool, maxWidth in
 	if m.showSearchPrompt && m.searchTarget == searchTargetResponse && m.searchResponsePane == id {
 		searchView = m.renderResponseSearchPrompt(contentWidth)
 	}
-	contentBodyHeight := max(contentHeight-lipgloss.Height(searchView), 0)
+	searchHeight := 0
+	if searchView != "" {
+		// lipgloss.Height("") is 1, so only rendered optional chrome consumes rows.
+		searchHeight = lipgloss.Height(searchView)
+	}
+	contentBodyHeight := max(contentHeight-searchHeight, 0)
 
 	var content string
 	if pane.activeTab == responseTabHistory {
