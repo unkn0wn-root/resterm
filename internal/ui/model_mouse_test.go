@@ -315,7 +315,10 @@ func TestMouseDoubleClickNavigatorRequestJumpsToEditor(t *testing.T) {
 		t.Fatalf("expected cursor to jump to first request line %d, got %d", wantLine, got)
 	}
 	if model.responseLatest != nil {
-		t.Fatalf("expected double-clicked request not to preview response, got %#v", model.responseLatest)
+		t.Fatalf(
+			"expected double-clicked request not to preview response, got %#v",
+			model.responseLatest,
+		)
 	}
 }
 
@@ -374,7 +377,8 @@ func TestMouseDragEditorGutterSelectsLines(t *testing.T) {
 		t.Fatalf("expected editor line selection")
 	}
 	selected := model.editor.selectedText()
-	if !strings.Contains(selected, "### first") || !strings.Contains(selected, "GET https://example.com/one") {
+	if !strings.Contains(selected, "### first") ||
+		!strings.Contains(selected, "GET https://example.com/one") {
 		t.Fatalf("expected first request lines selected, got %q", selected)
 	}
 }
@@ -707,7 +711,10 @@ func TestResponseMouseHitSplitSecondaryPane(t *testing.T) {
 			}
 
 			ly := model.currentMouseLayout()
-			body := model.paneBodyRect(ly.response, model.respFrameStyle(model.focus == focusResponse))
+			body := model.paneBodyRect(
+				ly.response,
+				model.respFrameStyle(model.focus == focusResponse),
+			)
 			if body.Empty() {
 				t.Fatalf("expected response body rect")
 			}
@@ -834,7 +841,10 @@ func TestHistoryLoadDoesNotPoisonNavigatorRequests(t *testing.T) {
 		_ = cmd()
 	}
 	if model.currentFile != "" {
-		t.Fatalf("expected history load to leave editor as temporary document, got %q", model.currentFile)
+		t.Fatalf(
+			"expected history load to leave editor as temporary document, got %q",
+			model.currentFile,
+		)
 	}
 	if !model.navigator.SelectByID(originalReqID) {
 		t.Fatalf("expected original request node to remain selectable")
@@ -848,7 +858,10 @@ func TestHistoryLoadDoesNotPoisonNavigatorRequests(t *testing.T) {
 	}
 	if model.responseLatest == nil ||
 		!strings.Contains(model.responseLatest.pretty, "GET https://example.com/one") {
-		t.Fatalf("expected original request preview after history load, got %#v", model.responseLatest)
+		t.Fatalf(
+			"expected original request preview after history load, got %#v",
+			model.responseLatest,
+		)
 	}
 	if strings.Contains(strings.ToLower(model.statusMessage.text), "request not found") {
 		t.Fatalf("unexpected stale navigator status: %q", model.statusMessage.text)

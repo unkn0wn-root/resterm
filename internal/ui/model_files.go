@@ -189,9 +189,7 @@ func manualDirtyReloadMessage() string {
 }
 
 func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOptions) {
-	m.replaceEditorContent(string(data), editorContentOptions{
-		PreserveView: opt.PreserveView,
-	})
+	m.replaceEditorContent(string(data), editorContentOptions(opt))
 	m.refreshCurrentDocument(data)
 	m.watchFile(path, data)
 }
