@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.40.1](https://github.com/unkn0wn-root/resterm/compare/v0.39.5...v0.40.1) (2026-05-28)
+
+
+### Bug Fixes
+
+* render response payload ([a621af0](https://github.com/unkn0wn-root/resterm/commit/a621af05b198e647381bb3c03a7da966791aea35))
+
 ### [0.39.5](https://github.com/unkn0wn-root/resterm/compare/v0.39.4...v0.39.5) (2026-05-20)
 
 ### [0.39.4](https://github.com/unkn0wn-root/resterm/compare/v0.39.3...v0.39.4) (2026-05-18)
