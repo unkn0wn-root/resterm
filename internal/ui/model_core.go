@@ -135,6 +135,7 @@ const (
 	minPaneContentHeight         = 4
 	paneHorizontalPadding        = 1
 	paneBottomPadding            = 0
+	responseTabsHeight           = 2
 )
 
 const (
@@ -341,6 +342,8 @@ type Model struct {
 	repeatChordPrefix      string
 	repeatChordKey         string
 	repeatChordActive      bool
+	lastMouseClick         mouseClickState
+	mouseDrag              mouseDragState
 	operator               operatorState
 	suppressListKey        bool
 	ready                  bool
@@ -555,7 +558,7 @@ func New(cfg Config) Model {
 	workflowList.DisableQuitKeybindings()
 
 	historySelected := make(map[string]struct{})
-	histDelegate := historyDelegateForTheme(th, 2, historySelected)
+	histDelegate := historyDelegateForTheme(th, historyListDelegateHeight, historySelected)
 	historyList := list.New(nil, histDelegate, 0, 0)
 	historyList.SetShowStatusBar(false)
 	historyList.SetShowHelp(false)

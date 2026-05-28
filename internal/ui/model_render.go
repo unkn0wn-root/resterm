@@ -3104,6 +3104,11 @@ func (m Model) renderThemeModal() string {
 }
 
 func (m Model) renderHelpOverlay() string {
+	box, _ := m.helpOverlayBox()
+	return m.renderCenteredModal(box)
+}
+
+func (m Model) helpOverlayBox() (string, mouseRect) {
 	width := min(m.width-6, 120)
 	if width < 48 {
 		width = 48
@@ -3187,7 +3192,32 @@ func (m Model) renderHelpOverlay() string {
 
 	content := lipgloss.JoinVertical(lipgloss.Left, topView, bodyView)
 	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
+	return box, m.helpOverlayBodyRect(box, lipgloss.Height(topView), bodyHeight)
+}
+
+func (m Model) helpOverlayBodyRect(box string, topHeight, bodyHeight int) mouseRect {
+	boxWidth := lipgloss.Width(box)
+	boxHeight := lipgloss.Height(box)
+	width := max(m.width, boxWidth)
+	height := max(m.height, boxHeight)
+	if width <= 0 || height <= 0 {
+		return mouseRect{}
+	}
+
+	x := max((width-boxWidth)/2, 0)
+	y := max((height-boxHeight)/2, 0)
+	style := m.theme.BrowserBorder
+	left := style.GetBorderLeftSize() + style.GetPaddingLeft()
+	right := style.GetBorderRightSize() + style.GetPaddingRight()
+	top := style.GetBorderTopSize() + style.GetPaddingTop()
+	bottom := style.GetBorderBottomSize() + style.GetPaddingBottom()
+	availableHeight := max(boxHeight-top-bottom-topHeight, 0)
+	return mouseRect{
+		x: x + left,
+		y: y + top + topHeight,
+		w: max(boxWidth-left-right, 0),
+		h: min(bodyHeight, availableHeight),
+	}
 }
 
 func (m Model) renderHelpFilter(width int) string {

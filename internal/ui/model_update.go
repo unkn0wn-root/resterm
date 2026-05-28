@@ -39,6 +39,7 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	mouseHandled := false
 
 	switch typed := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -61,6 +62,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd := m.handleKey(typed); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+		}
+	case tea.MouseMsg:
+		var cmd tea.Cmd
+		cmd, mouseHandled = m.handleMouse(typed)
+		if cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 	case responseMsg:
 		m.stopSending()
@@ -477,7 +484,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok {
 		m.navigatorFilter, _ = m.navigatorFilter.Update(msg)
-	} else {
+	} else if !mouseHandled {
 		switch m.focus {
 		case focusFile, focusRequests, focusWorkflows:
 			if m.suppressListKey {
@@ -490,7 +497,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	if _, ok := msg.(tea.WindowSizeMsg); ok || m.focus == focusEditor {
+	if _, ok := msg.(tea.WindowSizeMsg); ok || (!mouseHandled && m.focus == focusEditor) {
 		if m.suppressEditorKey {
 			m.suppressEditorKey = false
 		} else {
@@ -502,7 +509,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if _, ok := msg.(tea.WindowSizeMsg); ok ||
-		(m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
+		(!mouseHandled && m.focus == focusResponse && m.focusedPane() != nil && m.focusedPane().activeTab == responseTabHistory) {
 		skipHist := false
 		if _, ok := msg.(tea.KeyMsg); ok {
 			if m.historyFilterActive || m.historyBlockKey {
@@ -533,7 +540,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, paneCmd)
 			}
 		}
-	} else if m.focus == focusResponse {
+	} else if !mouseHandled && m.focus == focusResponse {
 		pane := m.focusedPane()
 		if pane != nil && pane.activeTab != responseTabHistory {
 			skipViewport := false

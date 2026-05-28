@@ -18,6 +18,18 @@ type diskContentOptions struct {
 	PreserveView bool
 }
 
+type editorContentOptions struct {
+	PreserveView bool
+}
+
+type editorDocumentReplacement struct {
+	path                  string
+	value                 string
+	doc                   *restfile.Document
+	cacheCurrent          bool
+	reportWorkspaceErrors bool
+}
+
 func (m *Model) openSelectedFile() tea.Cmd {
 	path := selectedFilePath(m.fileList.SelectedItem())
 	if path == "" {
@@ -34,32 +46,16 @@ func (m *Model) openFile(path string) tea.Cmd {
 			return statusMsg{text: fmt.Sprintf("open failed: %v", err), level: statusError}
 		}
 	}
-	m.forgetFileWatch(m.currentFile)
-	m.currentFile = path
-	m.cfg.FilePath = path
-	m.updateEditorStyler(path)
-	m.resetCursorSync()
-	_ = m.setInsertMode(false, false)
-	m.editor.ClearSelection()
-	m.editor.SetValue(string(data))
-	m.editor.undoStack = nil
-	m.editor.SetViewStart(0)
-	m.editor.moveCursorTo(0, 0)
-	m.editor.ClearSelection()
-	m.currentRequest = nil
-	m.activeRequestTitle = ""
-	m.activeRequestKey = ""
-	m.doc = parseEditableDocument(path, data)
-	m.syncRegistry(m.doc)
-	m.syncRequestList(m.doc)
-	entries, err := m.syncWorkspaceEntries()
-	if err != nil {
+	doc := parseEditableDocument(path, data)
+	if err := m.replaceEditorWithDocument(editorDocumentReplacement{
+		path:  path,
+		value: string(data),
+		doc:   doc,
+	}); err != nil {
 		return func() tea.Msg {
 			return statusMsg{text: fmt.Sprintf("workspace error: %v", err), level: statusError}
 		}
 	}
-	m.rebuildNavigator(entries)
-	m.markClean()
 	m.watchFile(path, data)
 	m.setHistoryScopeForFile(path)
 	m.syncHistory()
@@ -77,27 +73,10 @@ func (m *Model) setHistoryScopeForFile(path string) {
 }
 
 func (m *Model) openTemporaryDocument() tea.Cmd {
-	m.forgetFileWatch(m.currentFile)
-	m.cfg.FilePath = ""
-	m.currentFile = ""
-	m.updateEditorStyler("")
-	m.currentRequest = nil
-	m.activeRequestKey = ""
-	m.activeRequestTitle = ""
-	_ = m.setInsertMode(false, false)
-	m.editor.ClearSelection()
-	m.editor.SetValue("")
-	m.editor.undoStack = nil
-	m.editor.SetViewStart(0)
-	m.editor.moveCursorTo(0, 0)
-	m.editor.ClearSelection()
-	m.resetCursorSync()
-	m.doc = parser.Parse("", nil)
-	m.syncRegistry(m.doc)
-	m.syncRequestList(m.doc)
-	entries := m.syncWorkspaceEntriesStatus()
-	m.rebuildNavigator(entries)
-	m.markClean()
+	_ = m.replaceEditorWithDocument(editorDocumentReplacement{
+		doc:                   parser.Parse("", nil),
+		reportWorkspaceErrors: true,
+	})
 	m.syncHistory()
 	focusCmd := m.setFocus(focusEditor)
 	m.setStatusMessage(statusMsg{text: "Temporary document", level: statusInfo})
@@ -210,6 +189,48 @@ func manualDirtyReloadMessage() string {
 }
 
 func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOptions) {
+	m.replaceEditorContent(string(data), editorContentOptions(opt))
+	m.refreshCurrentDocument(data)
+	m.watchFile(path, data)
+}
+
+func (m *Model) replaceEditorWithDocument(
+	repl editorDocumentReplacement,
+) error {
+	if repl.cacheCurrent && m.currentFile != "" && m.doc != nil {
+		m.cacheDoc(m.currentFile, m.doc)
+	}
+
+	m.forgetFileWatch(m.currentFile)
+	m.currentFile = repl.path
+	m.cfg.FilePath = repl.path
+	m.updateEditorStyler(repl.path)
+	m.resetCursorSync()
+	m.replaceEditorContent(repl.value, editorContentOptions{})
+
+	m.currentRequest = nil
+	m.activeRequestKey = ""
+	m.activeRequestTitle = ""
+	m.doc = repl.doc
+	m.syncRegistry(m.doc)
+	m.syncRequestList(m.doc)
+
+	entries, err := m.syncWorkspaceEntries()
+	if err != nil {
+		if !repl.reportWorkspaceErrors {
+			return err
+		}
+		m.setStatusMessage(statusMsg{
+			text:  fmt.Sprintf("workspace error: %v", err),
+			level: statusError,
+		})
+	}
+	m.rebuildNavigator(entries)
+	m.markClean()
+	return nil
+}
+
+func (m *Model) replaceEditorContent(value string, opt editorContentOptions) {
 	pos := cursorPosition{}
 	viewStart := 0
 	if opt.PreserveView {
@@ -218,9 +239,8 @@ func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOption
 	}
 
 	_ = m.setInsertMode(false, false)
-	m.editor.ClearSelection()
-	m.editor.SetValue(string(data))
-	m.editor.undoStack = nil
+	m.editor.SetValue(value)
+	m.editor.ResetUndo()
 	if opt.PreserveView {
 		m.editor.moveCursorTo(pos.Line, pos.Column)
 		m.editor.SetViewStart(viewStart)
@@ -229,8 +249,6 @@ func (m *Model) applyDiskContent(path string, data []byte, opt diskContentOption
 		m.editor.moveCursorTo(0, 0)
 	}
 	m.editor.ClearSelection()
-	m.refreshCurrentDocument(data)
-	m.watchFile(path, data)
 }
 
 func (m *Model) refreshCurrentDocument(content []byte) {

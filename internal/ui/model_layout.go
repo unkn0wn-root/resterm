@@ -308,7 +308,6 @@ func (m *Model) applyLayout() tea.Cmd {
 	primaryPane := &m.responsePanes[0]
 	secondaryPane := &m.responsePanes[1]
 
-	const responseTabsHeight = 2
 	responseViewportHeight := m.responseContentHeight - responseTabsHeight
 	if responseViewportHeight < 1 {
 		responseViewportHeight = 1

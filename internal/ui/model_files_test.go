@@ -96,6 +96,13 @@ func TestOpenTemporaryDocumentResetsState(t *testing.T) {
 	if m.currentFile != path {
 		t.Fatalf("expected model to load file before temporary document")
 	}
+	m.editor.UpdateManualSelection(
+		cursorPosition{Line: 0, Column: 0, Offset: 0},
+		cursorPosition{Line: 0, Column: 3, Offset: 3},
+	)
+	if !m.editor.hasSelection() {
+		t.Fatal("expected test setup to create an editor selection")
+	}
 
 	if cmd := m.openTemporaryDocument(); cmd != nil {
 		cmd()
@@ -109,6 +116,9 @@ func TestOpenTemporaryDocumentResetsState(t *testing.T) {
 	}
 	if m.editor.Value() != "" {
 		t.Fatalf("expected editor to be empty, got %q", m.editor.Value())
+	}
+	if m.editor.hasSelection() {
+		t.Fatal("expected temporary document to clear editor selection")
 	}
 	if m.doc == nil {
 		t.Fatal("expected document to be initialised")
