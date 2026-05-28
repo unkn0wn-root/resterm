@@ -7,6 +7,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
+const historyListDelegateHeight = 2
+
 func listItemStylesForTheme(th theme.Theme) list.DefaultItemStyles {
 	styles := list.NewDefaultItemStyles()
 	styles.NormalTitle = mergeListStyle(styles.NormalTitle, th.ListItemTitle)
@@ -52,6 +54,11 @@ func historyDelegateForTheme(
 	return historyDelegate{DefaultDelegate: delegate, th: th, selected: selected}
 }
 
+func historyMouseRowHeight() int {
+	delegate := historyDelegateForTheme(theme.Theme{}, historyListDelegateHeight, nil)
+	return delegate.Height() + delegate.Spacing()
+}
+
 func applyListTheme(th theme.Theme, model *list.Model, showDescription bool, height int) {
 	delegate := listDelegateForTheme(th, showDescription, height)
 	model.SetDelegate(delegate)
@@ -71,7 +78,7 @@ func (m *Model) applyThemeToLists() {
 	applyListTheme(m.theme, &m.fileList, false, 0)
 	applyListTheme(m.theme, &m.requestList, !m.reqCompactMode(), 3)
 	applyListTheme(m.theme, &m.workflowList, !m.wfCompactMode(), 3)
-	applyHistoryListTheme(m.theme, &m.historyList, 2, m.historySelected)
+	applyHistoryListTheme(m.theme, &m.historyList, historyListDelegateHeight, m.historySelected)
 	m.historyList.Styles.PaginationStyle = mergeListStyle(
 		list.DefaultStyles().PaginationStyle,
 		m.theme.ListItemDescription,

@@ -386,7 +386,11 @@ func run(a []string) error {
 		Bindings:            bindingMap,
 	})
 
-	program := tea.NewProgram(model, tea.WithAltScreen())
+	program := tea.NewProgram(
+		model,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 	if _, err := program.Run(); err != nil {
 		return fmt.Errorf("error: %w", err)
 	}

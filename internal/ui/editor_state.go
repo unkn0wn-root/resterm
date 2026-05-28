@@ -311,6 +311,12 @@ func (e *requestEditor) pushUndoSnapshotAuto() {
 	e.undoCoalescing = true
 }
 
+func (e *requestEditor) ResetUndo() {
+	e.undoStack = nil
+	e.redoStack = nil
+	e.undoCoalescing = false
+}
+
 func (e *requestEditor) restoreSnapshot(snapshot editorSnapshot) {
 	e.SetValue(snapshot.value)
 	e.selection = snapshot.selection
@@ -925,6 +931,53 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 
 func (e *requestEditor) ClearSelection() {
 	e.clearSelection()
+}
+
+func (e requestEditor) SelectionActive() bool {
+	return e.selection.IsActive()
+}
+
+func (e *requestEditor) ActivateSelection() {
+	e.selection.active = true
+	e.applySelectionHighlight()
+}
+
+func (e *requestEditor) StartVisualLineSelection(pos cursorPosition) {
+	e.startSelection(pos, selectionVisualLine)
+	e.ActivateSelection()
+}
+
+func (e *requestEditor) UpdateVisualLineSelection(anchor, pos cursorPosition) {
+	if e.mode != selectionVisualLine {
+		e.startSelection(anchor, selectionVisualLine)
+	}
+	e.selection.Update(pos)
+	e.ActivateSelection()
+	e.moveCursorTo(pos.Line, pos.Column)
+}
+
+func (e *requestEditor) UpdateManualSelection(anchor, pos cursorPosition) {
+	if e.mode == selectionNone {
+		e.startSelection(anchor, selectionManual)
+	}
+	e.selection.Update(pos)
+	e.moveCursorTo(pos.Line, pos.Column)
+	if e.selection.IsActive() {
+		e.applySelectionHighlight()
+	} else {
+		e.ClearSelectionRange()
+	}
+}
+
+func (e *requestEditor) SetManualSelection(anchor, pos cursorPosition) {
+	e.startSelection(anchor, selectionManual)
+	e.selection.Update(pos)
+	e.moveCursorTo(pos.Line, pos.Column)
+	if e.selection.IsActive() {
+		e.applySelectionHighlight()
+	} else {
+		e.ClearSelectionRange()
+	}
 }
 
 func (e requestEditor) ToggleVisual() (requestEditor, tea.Cmd) {

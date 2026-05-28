@@ -2007,6 +2007,15 @@ func (m *Model) captureHistorySelection() {
 	}
 }
 
+func (m *Model) moveHistoryCursor(delta int) {
+	for ; delta > 0; delta-- {
+		m.historyList.CursorDown()
+	}
+	for ; delta < 0; delta++ {
+		m.historyList.CursorUp()
+	}
+}
+
 func (m *Model) restoreHistorySelection() {
 	if len(m.historyEntries) == 0 {
 		m.historySelectedID = ""
@@ -2104,7 +2113,13 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		return nil
 	}
 
-	doc := parser.Parse(m.currentFile, []byte(requestText))
+	sourcePath := entry.FilePath
+	basePath := sourcePath
+	if basePath == "" {
+		basePath = m.currentFile
+	}
+
+	doc := parser.Parse(sourcePath, []byte(requestText))
 	if err := docErr(doc); err != nil {
 		return batchCommands(m.restorePane(paneRegionResponse), m.failErr(err))
 	}
@@ -2119,18 +2134,14 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	}
 
 	options := m.cfg.HTTPOptions
-	if options.BaseDir == "" && m.currentFile != "" {
-		options.BaseDir = filepath.Dir(m.currentFile)
+	if options.BaseDir == "" && basePath != "" {
+		options.BaseDir = filepath.Dir(basePath)
 	}
 
-	m.doc = doc
-	m.syncRequestList(doc)
-	m.setActiveRequest(docReq)
+	m.loadHistoryDocument(doc, requestText)
 
 	req := cloneRequest(docReq)
 	m.currentRequest = req
-	m.editor.SetValue(requestText)
-	m.editor.SetCursor(0)
 	m.testResults = nil
 	m.scriptError = nil
 
@@ -2192,6 +2203,16 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	m.setStatusMessage(statusMsg{text: replayText, level: statusInfo})
 	cmd := m.execRunReq(doc, req, options, "", nil)
 	return batchCmds([]tea.Cmd{cmd, m.startStatusPulse(), spin})
+}
+
+func (m *Model) loadHistoryDocument(doc *restfile.Document, requestText string) {
+	_ = m.replaceEditorWithDocument(editorDocumentReplacement{
+		value:                 requestText,
+		doc:                   doc,
+		cacheCurrent:          true,
+		reportWorkspaceErrors: true,
+	})
+	m.setActiveRequest(doc.Requests[0])
 }
 
 func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) tea.Cmd {

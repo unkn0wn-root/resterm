@@ -618,6 +618,15 @@ func (m *Model) LineLength(line int) int {
 	return len(m.LineRunes(line))
 }
 
+// ColumnForVisibleCell maps a rendered cell in the horizontal viewport to a
+// rune column on the requested line.
+func (m *Model) ColumnForVisibleCell(line, cell int) int {
+	if cell < 0 {
+		cell = 0
+	}
+	return columnForWidth(m.LineRunes(line), m.horizOffset+cell)
+}
+
 // RuneCount returns the total number of runes, including newline separators.
 func (m *Model) RuneCount() int {
 	if len(m.value) == 0 {
@@ -1293,6 +1302,21 @@ func (m *Model) repositionHorizontal() {
 // Width returns the width of the textarea.
 func (m Model) Width() int {
 	return m.width
+}
+
+// ViewWidth returns the terminal cell width of View without rendering it.
+func (m Model) ViewWidth() int {
+	width := m.width
+	if m.viewport != nil {
+		width = m.viewport.Width
+	}
+	if m.style != nil {
+		width += m.style.Base.GetHorizontalFrameSize()
+	}
+	if width < 1 {
+		return 1
+	}
+	return width
 }
 
 // moveToBegin moves the cursor to the beginning of the input.
