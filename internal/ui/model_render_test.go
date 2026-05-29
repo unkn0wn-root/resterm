@@ -609,6 +609,36 @@ func TestStatusBarRightShowsIdentity(t *testing.T) {
 	}
 }
 
+func TestStatusBarKeepsMessageWhenIdentityIsLong(t *testing.T) {
+	model := New(Config{Version: "vTest"})
+	model.width = 36
+	model.statusUser = "very-long-user-name"
+	model.statusHost = "very-long-workstation-name"
+	model.statusMessage = statusMsg{
+		text:  "Request failed because the upstream service returned a very long error",
+		level: statusError,
+	}
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	if strings.Contains(plain, "\n") {
+		t.Fatalf("expected one-line status bar, got %q", plain)
+	}
+	if got := lipgloss.Width(plain); got > model.width {
+		t.Fatalf("expected status bar width <= %d, got %d (%q)", model.width, got, plain)
+	}
+	if !strings.Contains(plain, "Request") {
+		t.Fatalf("expected status message to remain visible, got %q", plain)
+	}
+	if !strings.Contains(plain, "vTest") {
+		t.Fatalf("expected version to remain visible, got %q", plain)
+	}
+	if strings.Contains(plain, "very-long-user-name") ||
+		strings.Contains(plain, "very-long-workstation-name") {
+		t.Fatalf("expected long identity to yield space first, got %q", plain)
+	}
+}
+
 func TestStatusBarStyledMessageFitsNarrowWidth(t *testing.T) {
 	model := New(Config{Version: "vTest"})
 	model.width = 36
@@ -629,6 +659,37 @@ func TestStatusBarStyledMessageFitsNarrowWidth(t *testing.T) {
 	}
 	if !strings.Contains(plain, "vTest") {
 		t.Fatalf("expected version to remain visible, got %q", plain)
+	}
+}
+
+func TestCleanStatusUsername(t *testing.T) {
+	tests := map[string]string{
+		`DOMAIN\david`:  "david",
+		`DOMAIN\ david`: "david",
+		"domain/david":  `david`,
+		" david ":       "david",
+		"":              "",
+	}
+
+	for input, want := range tests {
+		if got := cleanStatusUsername(input); got != want {
+			t.Fatalf("cleanStatusUsername(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestCleanStatusHost(t *testing.T) {
+	tests := map[string]string{
+		"workstation.local": "workstation",
+		"host":              "host",
+		" host ":            "host",
+		"":                  "",
+	}
+
+	for input, want := range tests {
+		if got := cleanStatusHost(input); got != want {
+			t.Fatalf("cleanStatusHost(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 

@@ -2,6 +2,8 @@ package ui
 
 import (
 	"fmt"
+	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 
@@ -19,19 +21,22 @@ const (
 	statusBarInsertIcon   = "▸"
 	statusBarVisualIcon   = "◫"
 	statusBarSectionPad   = 1
-)
-
-const (
-	statusWarnLightColor  = "#d97706"
-	statusWarnDarkColor   = "#FACC15"
-	statusErrorLightColor = "#dc2626"
-	statusErrorDarkColor  = "#FF6E6E"
+	statusBarMinLeftWidth = 12
 )
 
 type statusBarSeg struct {
-	key string
+	key statusBarSegmentKind
 	val string
 }
+
+type statusBarSegmentKind string
+
+const (
+	statusBarSegmentFile  statusBarSegmentKind = "File"
+	statusBarSegmentFocus statusBarSegmentKind = "Focus"
+	statusBarSegmentMode  statusBarSegmentKind = "Mode"
+	statusBarSegmentZoom  statusBarSegmentKind = "Zoom"
+)
 
 type statusBarSection struct {
 	text  string
@@ -59,13 +64,18 @@ func (m Model) renderStatusBarLine(
 		return ""
 	}
 
+	leftSections := m.statusBarLeftSections(status, level, palette)
+	rightLimit := width - statusBarLeftReserve(leftSections, width)
+	if rightLimit < 0 {
+		rightLimit = 0
+	}
 	right := fitStatusBarSections(
 		m.statusBarRightSections(palette),
-		width,
+		rightLimit,
 	)
 	rightWidth := statusBarSectionsWidth(right)
 	left := fitStatusBarSections(
-		m.statusBarLeftSections(status, level, palette),
+		leftSections,
 		width-rightWidth,
 	)
 	leftView := renderStatusBarSections(left)
@@ -130,15 +140,18 @@ func (m Model) statusBarMessage() (string, statusLevel) {
 func (m Model) statusBarSegments() []statusBarSeg {
 	segs := make([]statusBarSeg, 0, 4)
 	if m.currentFile != "" {
-		segs = append(segs, statusBarSeg{key: "File", val: filepath.Base(m.currentFile)})
+		segs = append(segs, statusBarSeg{
+			key: statusBarSegmentFile,
+			val: filepath.Base(m.currentFile),
+		})
 	}
-	segs = append(segs, statusBarSeg{key: "Focus", val: m.focusLabel()})
+	segs = append(segs, statusBarSeg{key: statusBarSegmentFocus, val: m.focusLabel()})
 	if m.focus == focusEditor {
-		segs = append(segs, statusBarSeg{key: "Mode", val: m.editorModeLabel()})
+		segs = append(segs, statusBarSeg{key: statusBarSegmentMode, val: m.editorModeLabel()})
 	}
 	if m.zoomActive {
 		segs = append(segs, statusBarSeg{
-			key: "Zoom",
+			key: statusBarSegmentZoom,
 			val: m.collapsedStatusLabel(m.zoomRegion),
 		})
 	}
@@ -229,24 +242,24 @@ func statusBarVersionText(version string) string {
 
 func statusBarContextText(seg statusBarSeg) string {
 	val := strings.TrimSpace(seg.val)
-	key := strings.TrimSpace(seg.key)
+	key := statusBarSegmentKind(strings.TrimSpace(string(seg.key)))
 	if val == "" {
 		return ""
 	}
 	switch key {
-	case "File":
+	case statusBarSegmentFile:
 		return statusBarHTTPFileIcon + " " + val
-	case "Focus":
+	case statusBarSegmentFocus:
 		if strings.EqualFold(val, "Editor") {
 			return statusBarEditorIcon + " " + val
 		}
 		return val
-	case "Mode":
+	case statusBarSegmentMode:
 		return statusBarModeText(val)
-	case "", "Zoom":
+	case "", statusBarSegmentZoom:
 		return val
 	default:
-		return key + ": " + val
+		return string(key) + ": " + val
 	}
 }
 
@@ -280,21 +293,43 @@ func statusBarStatusStyle(
 }
 
 func statusBarContextStyle(
-	key string,
+	key statusBarSegmentKind,
 	palette theme.StatusBarPalette,
 ) theme.StatusBarSegmentStyle {
 	switch key {
-	case "File":
+	case statusBarSegmentFile:
 		return palette.File
-	case "Focus":
+	case statusBarSegmentFocus:
 		return palette.Focus
-	case "Mode":
+	case statusBarSegmentMode:
 		return palette.Mode
-	case "Zoom":
+	case statusBarSegmentZoom:
 		return palette.Zoom
 	default:
 		return palette.Focus
 	}
+}
+
+func statusBarLeftReserve(segs []statusBarSection, width int) int {
+	if width <= 0 {
+		return 0
+	}
+	fullWidth := statusBarSectionsWidth(compactStatusBarSections(segs))
+	if fullWidth == 0 {
+		return 0
+	}
+
+	reserve := width * 2 / 3
+	if reserve < statusBarMinLeftWidth {
+		reserve = statusBarMinLeftWidth
+	}
+	if reserve > width {
+		return width
+	}
+	if fullWidth <= reserve {
+		return fullWidth
+	}
+	return reserve
 }
 
 func fitStatusBarSections(
@@ -394,14 +429,6 @@ func statusBarSectionContent(text string) string {
 	return pad + strings.TrimSpace(text) + pad
 }
 
-func (m Model) statusBarFg(st lipgloss.Style, light, dark string) lipgloss.Style {
-	if fg := st.GetForeground(); theme.ColorDefined(fg) {
-		return lipgloss.NewStyle().Foreground(fg)
-	}
-	return lipgloss.NewStyle().
-		Foreground(theme.ColorForAppearance(m.themeRuntime.appearance, light, dark))
-}
-
 func (m Model) minimizedStatusText() string {
 	if !m.sidebarCollapsed && !m.editorCollapsed && !m.responseCollapsed {
 		return ""
@@ -423,4 +450,45 @@ func (m Model) minimizedStatusText() string {
 		parts = append(parts, fmt.Sprintf("%s %s", marker, item.label))
 	}
 	return strings.Join(parts, "  ")
+}
+
+func currentStatusIdentity() (string, string) {
+	return currentStatusUsername(), currentStatusHost()
+}
+
+func currentStatusUsername() string {
+	if u, err := user.Current(); err == nil && u != nil {
+		if name := cleanStatusUsername(u.Username); name != "" {
+			return name
+		}
+	}
+
+	for _, v := range []string{os.Getenv("USER"), os.Getenv("USERNAME")} {
+		if name := cleanStatusUsername(v); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func currentStatusHost() string {
+	if name, err := os.Hostname(); err == nil {
+		return cleanStatusHost(name)
+	}
+	return ""
+}
+
+func cleanStatusUsername(s string) string {
+	if i := strings.LastIndexAny(s, `\/`); i >= 0 {
+		s = s[i+1:]
+	}
+	return strings.TrimSpace(s)
+}
+
+func cleanStatusHost(s string) string {
+	s = strings.TrimSpace(s)
+	if name, _, ok := strings.Cut(s, "."); ok && name != "" {
+		return name
+	}
+	return s
 }
