@@ -48,6 +48,7 @@ type Theme struct {
 	HeaderValue                   lipgloss.Style
 	HeaderSeparator               lipgloss.Style
 	StatusBar                     lipgloss.Style
+	StatusBarPalette              StatusBarPalette
 	StatusBarInfo                 lipgloss.Style
 	StatusBarKey                  lipgloss.Style
 	StatusBarValue                lipgloss.Style
@@ -175,15 +176,16 @@ func DefaultTheme() Theme {
 		AppFrame: lipgloss.NewStyle().
 			BorderStyle(lipgloss.RoundedBorder()).
 			BorderForeground(lipgloss.Color("#403B59")),
-		Header:          lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E1FF")).Padding(0, 1),
-		HeaderTitle:     lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
-		HeaderValue:     lipgloss.NewStyle().Foreground(lipgloss.Color("#D1CFF6")),
-		HeaderSeparator: lipgloss.NewStyle().Foreground(lipgloss.Color("#867CC1")).Bold(true),
-		StatusBar:       lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
-		StatusBarKey:    lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8B39")).Bold(true),
-		StatusBarValue:  lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
-		CommandBar:      lipgloss.NewStyle().Foreground(lipgloss.Color("#C2C0D9")).Padding(0, 1),
-		CommandBarHint:  lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
+		Header:           lipgloss.NewStyle().Foreground(lipgloss.Color("#E5E1FF")).Padding(0, 1),
+		HeaderTitle:      lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
+		HeaderValue:      lipgloss.NewStyle().Foreground(lipgloss.Color("#D1CFF6")),
+		HeaderSeparator:  lipgloss.NewStyle().Foreground(lipgloss.Color("#867CC1")).Bold(true),
+		StatusBar:        lipgloss.NewStyle().Foreground(lipgloss.Color("#A6A1BB")).Padding(0, 1),
+		StatusBarPalette: DefaultStatusBarPalette(),
+		StatusBarKey:     lipgloss.NewStyle().Foreground(lipgloss.Color("#FF8B39")).Bold(true),
+		StatusBarValue:   lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA")),
+		CommandBar:       lipgloss.NewStyle().Foreground(lipgloss.Color("#C2C0D9")).Padding(0, 1),
+		CommandBarHint:   lipgloss.NewStyle().Foreground(lipgloss.Color("#7D56F4")).Bold(true),
 		ResponseSearchHighlight: lipgloss.NewStyle().
 			Background(lipgloss.Color("#2C1E3A")).
 			Foreground(lipgloss.Color("#E9E6FF")),

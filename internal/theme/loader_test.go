@@ -19,6 +19,13 @@ foreground = "#ddeeff"
 
 [colors]
 pane_active_foreground = "#335577"
+
+[status_bar]
+base = "#010203"
+
+[status_bar.info]
+foreground = "#ddeeff"
+background = "#223344"
 `)
 	if err := os.WriteFile(filepath.Join(dir, "oceanic.toml"), tomlContent, 0o644); err != nil {
 		t.Fatalf("write toml theme: %v", err)
@@ -60,6 +67,15 @@ pane_active_foreground = "#335577"
 		t.Fatalf(
 			"expected pane active foreground override, got %q",
 			oceanic.Theme.PaneActiveForeground,
+		)
+	}
+	if oceanic.Theme.StatusBarPalette.Base != "#010203" {
+		t.Fatalf("expected status bar base override, got %q", oceanic.Theme.StatusBarPalette.Base)
+	}
+	if oceanic.Theme.StatusBarPalette.Info.Background != "#223344" {
+		t.Fatalf(
+			"expected status bar info background override, got %q",
+			oceanic.Theme.StatusBarPalette.Info.Background,
 		)
 	}
 

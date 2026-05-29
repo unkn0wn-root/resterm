@@ -19,6 +19,7 @@ type ThemeSpec struct {
 	Metadata        *Metadata            `json:"metadata"         toml:"metadata"`
 	Styles          StylesSpec           `json:"styles"           toml:"styles"`
 	Colors          ColorsSpec           `json:"colors"           toml:"colors"`
+	StatusBar       *StatusBarSpec       `json:"status_bar"       toml:"status_bar"`
 	HeaderSegments  []HeaderSegmentSpec  `json:"header_segments"  toml:"header_segments"`
 	CommandSegments []CommandSegmentSpec `json:"command_segments" toml:"command_segments"`
 	EditorMetadata  *EditorMetadataSpec  `json:"editor_metadata"  toml:"editor_metadata"`
@@ -147,6 +148,27 @@ type CommandSegmentSpec struct {
 	Border     *string `json:"border"     toml:"border"`
 	Key        *string `json:"key"        toml:"key"`
 	Text       *string `json:"text"       toml:"text"`
+}
+
+type StatusBarSpec struct {
+	Base      *string               `json:"base"      toml:"base"`
+	Info      *StatusBarSegmentSpec `json:"info"      toml:"info"`
+	Warn      *StatusBarSegmentSpec `json:"warn"      toml:"warn"`
+	Error     *StatusBarSegmentSpec `json:"error"     toml:"error"`
+	Success   *StatusBarSegmentSpec `json:"success"   toml:"success"`
+	File      *StatusBarSegmentSpec `json:"file"      toml:"file"`
+	Focus     *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
+	Mode      *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
+	Zoom      *StatusBarSegmentSpec `json:"zoom"      toml:"zoom"`
+	Minimized *StatusBarSegmentSpec `json:"minimized" toml:"minimized"`
+	Version   *StatusBarSegmentSpec `json:"version"   toml:"version"`
+	User      *StatusBarSegmentSpec `json:"user"      toml:"user"`
+	Host      *StatusBarSegmentSpec `json:"host"      toml:"host"`
+}
+
+type StatusBarSegmentSpec struct {
+	Foreground *string `json:"foreground" toml:"foreground"`
+	Background *string `json:"background" toml:"background"`
 }
 
 type EditorMetadataSpec struct {
@@ -849,6 +871,12 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		cloned.CommandSegments = segments
 	}
 
+	if spec.StatusBar != nil {
+		if err := applyStatusBarPalette(&cloned.StatusBarPalette, *spec.StatusBar); err != nil {
+			return Theme{}, err
+		}
+	}
+
 	if spec.EditorMetadata != nil {
 		if err := applyEditorMetadata(&cloned.EditorMetadata, *spec.EditorMetadata); err != nil {
 			return Theme{}, err
@@ -1017,6 +1045,66 @@ func applyCommandSegments(
 		result[i] = template
 	}
 	return result, nil
+}
+
+func applyStatusBarPalette(dst *StatusBarPalette, spec StatusBarSpec) error {
+	if spec.Base != nil {
+		color, err := toColor("status_bar.base", *spec.Base)
+		if err != nil {
+			return err
+		}
+		dst.Base = color
+	}
+
+	segments := []struct {
+		name string
+		spec *StatusBarSegmentSpec
+		dst  *StatusBarSegmentStyle
+	}{
+		{"info", spec.Info, &dst.Info},
+		{"warn", spec.Warn, &dst.Warn},
+		{"error", spec.Error, &dst.Error},
+		{"success", spec.Success, &dst.Success},
+		{"file", spec.File, &dst.File},
+		{"focus", spec.Focus, &dst.Focus},
+		{"mode", spec.Mode, &dst.Mode},
+		{"zoom", spec.Zoom, &dst.Zoom},
+		{"minimized", spec.Minimized, &dst.Minimized},
+		{"version", spec.Version, &dst.Version},
+		{"user", spec.User, &dst.User},
+		{"host", spec.Host, &dst.Host},
+	}
+	for _, segment := range segments {
+		if segment.spec == nil {
+			continue
+		}
+		if err := applyStatusBarSegment(segment.name, segment.dst, *segment.spec); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func applyStatusBarSegment(
+	name string,
+	dst *StatusBarSegmentStyle,
+	spec StatusBarSegmentSpec,
+) error {
+	if spec.Foreground != nil {
+		color, err := toColor("status_bar."+name+".foreground", *spec.Foreground)
+		if err != nil {
+			return err
+		}
+		dst.Foreground = color
+	}
+	if spec.Background != nil {
+		color, err := toColor("status_bar."+name+".background", *spec.Background)
+		if err != nil {
+			return err
+		}
+		dst.Background = color
+	}
+	return nil
 }
 
 func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) error {

@@ -274,6 +274,8 @@ type Model struct {
 	searchResponsePane responsePaneID
 
 	statusMessage    statusMsg
+	statusUser       string
+	statusHost       string
 	statusPulseBase  string
 	statusPulseFrame int
 	statusPulseSeq   int
@@ -457,10 +459,7 @@ func New(cfg Config) Model {
 	}
 	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
 		initialStatus = statusMsg{
-			text: fmt.Sprintf(
-				"Environment defaulted to %q - press Ctrl+E to change.",
-				cfg.EnvironmentFallback,
-			),
+			text:  fmt.Sprintf("Using environment %q", cfg.EnvironmentFallback),
 			level: statusInfo,
 		}
 	}
@@ -636,6 +635,7 @@ func New(cfg Config) Model {
 	}
 	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" &&
 		cfg.UpdateClient.Ready()
+	statusUser, statusHost := currentStatusIdentity()
 
 	model := Model{
 		cfg:                    cfg,
@@ -692,6 +692,8 @@ func New(cfg Config) Model {
 		currentFile:              cfg.FilePath,
 		lastCursorSync:           cursorSyncState{line: -1},
 		statusMessage:            initialStatus,
+		statusUser:               statusUser,
+		statusHost:               statusHost,
 		latencySeries:            newLatencySeries(latCap),
 		scriptRunner:             scripts.NewRunner(nil),
 		rtsEng:                   rts.NewEng(stdlib.New),

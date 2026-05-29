@@ -1726,13 +1726,6 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 	m.activeRequestKey = requestKey(req)
 	_ = m.selectRequestItemByKey(m.activeRequestKey)
 	if prev != m.activeRequestKey {
-		summary := requestMetaSummary(req)
-		if summary == "" {
-			summary = requestBaseTitle(req)
-		}
-		if summary != "" {
-			m.setStatusMessage(statusMsg{text: summary, level: statusInfo})
-		}
 		if m.historyScope == historyScopeRequest && m.ready {
 			m.syncHistory()
 		}
@@ -1962,13 +1955,6 @@ func requestKey(req *restfile.Request) string {
 		return "name:" + name
 	}
 	return fmt.Sprintf("line:%d:%s", req.LineRange.Start, req.Method)
-}
-
-func requestMetaSummary(req *restfile.Request) string {
-	if req == nil {
-		return ""
-	}
-	return joinTags(req.Metadata.Tags, 5)
 }
 
 func normalizedTags(tags []string) []string {

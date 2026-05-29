@@ -400,6 +400,8 @@ func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 	model.width = 120
 	model.height = 40
 	model.ready = true
+	model.statusUser = ""
+	model.statusHost = ""
 	_ = model.applyLayout()
 
 	if res := model.setCollapseState(paneRegionSidebar, true); res.blocked {
@@ -415,7 +417,7 @@ func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 		t.Fatalf("expected minimized indicators to replace legacy labels, got %q", plain)
 	}
 	if !strings.Contains(plain, "● Editor") || !strings.Contains(plain, "● Nav") {
-		t.Fatalf("expected green dot indicators for minimized panes, got %q", plain)
+		t.Fatalf("expected dot indicators for minimized panes, got %q", plain)
 	}
 	if !strings.Contains(plain, "◇ vTest") {
 		t.Fatalf("expected version icon on the right, got %q", plain)
@@ -436,26 +438,19 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 
 	model := New(Config{})
 	model.width = 96
-	model.theme.StatusBar = lipgloss.NewStyle()
-	// source theme styles may be bold
-	// statusbar messages should keep only
-	// their foreground color and render at regular weight
-	model.theme.StatusBarInfo = lipgloss.NewStyle().Bold(true)
-	model.theme.StatusBarKey = lipgloss.NewStyle().Bold(true)
-	model.theme.StatusBarValue = lipgloss.NewStyle()
-	model.theme.Error = lipgloss.NewStyle().Bold(true)
-	model.theme.Success = lipgloss.NewStyle().Bold(true)
+	model.statusUser = ""
+	model.statusHost = ""
 
 	tests := []struct {
 		name  string
 		level statusLevel
 		text  string
-		color lipgloss.Color
+		bg    lipgloss.Color
 	}{
-		{"info", statusInfo, "Connected", lipgloss.Color(statusInfoDarkColor)},
-		{"warn", statusWarn, "Missing variable", lipgloss.Color(statusMsgWarnDarkColor)},
-		{"error", statusError, "Request failed", lipgloss.Color(statusErrorDarkColor)},
-		{"success", statusSuccess, "Request saved", lipgloss.Color(statusSuccessDarkColor)},
+		{"info", statusInfo, "Connected", lipgloss.Color("#2563EB")},
+		{"warn", statusWarn, "Missing variable", lipgloss.Color("#B45309")},
+		{"error", statusError, "Request failed", lipgloss.Color("#B91C1C")},
+		{"success", statusSuccess, "Request saved", lipgloss.Color("#15803D")},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -472,152 +467,206 @@ func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 			if !strings.Contains(bar, "\x1b[") {
 				t.Fatalf("expected rendered status bar to include ANSI styling, got %q", bar)
 			}
-			if got := model.statusBarMessageStyle(tt.level).GetForeground(); got != tt.color {
-				t.Fatalf("expected %s color %v, got %v", tt.name, tt.color, got)
-			}
-			if model.statusBarMessageStyle(tt.level).GetBold() {
-				t.Fatalf("expected %s status message to render at regular weight", tt.name)
+			palette := statusBarPalette(model.theme.StatusBarPalette)
+			if got := statusBarStatusStyle(tt.level, palette).Background; got != tt.bg {
+				t.Fatalf("expected %s status background %v, got %v", tt.name, tt.bg, got)
 			}
 		})
 	}
 }
 
-func TestStatusBarInfoUsesThemeForeground(t *testing.T) {
-	model := New(Config{})
-	model.theme.StatusBarInfo = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#0ea5e9")).
-		Bold(true)
-
-	style := model.statusBarMessageStyle(statusInfo)
-	if got := style.GetForeground(); got != lipgloss.Color("#0ea5e9") {
-		t.Fatalf("expected status info foreground override, got %v", got)
-	}
-	if style.GetBold() {
-		t.Fatal("expected status info message to render at regular weight")
-	}
-}
-
-func TestStatusBarWarnDoesNotReuseContextKeyColor(t *testing.T) {
-	model := New(Config{})
-	model.theme.StatusBarKey = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#ff8b39")).
-		Bold(true)
-
-	style := model.statusBarMessageStyle(statusWarn)
-	if got := style.GetForeground(); got != lipgloss.Color(statusMsgWarnDarkColor) {
-		t.Fatalf(
-			"expected warning foreground %v, got %v",
-			lipgloss.Color(statusMsgWarnDarkColor),
-			got,
-		)
-	}
-	if got := style.GetForeground(); got == model.theme.StatusBarKey.GetForeground() {
-		t.Fatalf("expected warning color to differ from status bar key color %v", got)
-	}
-	if style.GetBold() {
-		t.Fatal("expected warning status message to render at regular weight")
-	}
-}
-
-func TestRenderStatusBarLeftUsesExplicitParts(t *testing.T) {
+func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
 	defer lipgloss.SetColorProfile(prev)
 
 	model := New(Config{})
-	model.theme.StatusBarInfo = lipgloss.NewStyle().Foreground(lipgloss.Color("#0ea5e9"))
-	model.theme.StatusBarKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#f59e0b"))
-	model.theme.StatusBarValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#cbd5e1"))
-
-	segs := []statusBarSeg{{key: "Focus", val: "Editor"}}
-	full := model.renderStatusBarLeft(statusBarLeft{
-		msg:   "Ready",
-		level: statusInfo,
-		ctx:   statusBarSegmentsText(segs),
-		segs:  segs,
-	})
-	if plain := ansi.Strip(full); plain != "Ready"+statusBarMsgSep+"◉ Editor" {
-		t.Fatalf("unexpected full status text %q", plain)
-	}
-	if want := model.theme.StatusBarKey.Render("◉"); !strings.Contains(full, want) {
-		t.Fatalf("expected full context key style %q in %q", want, full)
-	}
-
-	truncated := model.renderStatusBarLeft(statusBarLeft{
-		msg:          "Ready",
-		level:        statusInfo,
-		ctx:          "◉ Ed...",
-		ctxTruncated: true,
-	})
-	if want := model.theme.StatusBarValue.Render(
-		"◉ Ed...",
-	); !strings.Contains(
-		truncated,
-		want,
-	) {
-		t.Fatalf("expected truncated context value style %q in %q", want, truncated)
-	}
-}
-
-func TestStatusBarUsesIconForCurrentFileSegment(t *testing.T) {
-	model := New(Config{})
+	model.width = 96
 	model.currentFile = "/tmp/example.http"
+	model.focus = focusEditor
+	model.editorInsertMode = true
+	model.statusUser = ""
+	model.statusHost = ""
 
-	got := statusBarSegmentsText(model.statusBarSegments())
-	if strings.Contains(got, "File:") {
-		t.Fatalf("expected file label to be replaced by icon, got %q", got)
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	for _, want := range []string{"Ready", "⇄ example.http", "▣ Editor", "▸ INSERT"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected powerline status section %q in %q", want, plain)
+		}
 	}
-	if !strings.Contains(got, "▤ example.http") {
-		t.Fatalf("expected file segment icon, got %q", got)
+	for _, legacy := range []string{"▤", "◉", "-- INSERT --"} {
+		if strings.Contains(plain, legacy) {
+			t.Fatalf(
+				"expected plain powerline sections without legacy marker %q in %q",
+				legacy,
+				plain,
+			)
+		}
+	}
+	if !strings.Contains(bar, "48;2;0;0;0") {
+		t.Fatalf("expected black status bar background, got %q", bar)
 	}
 }
 
-func TestStatusBarOmitsFileSegmentWithoutCurrentFile(t *testing.T) {
+func TestStatusBarUsesOuterInset(t *testing.T) {
+	model := New(Config{Version: "vTest"})
+	model.width = 40
+	model.statusUser = ""
+	model.statusHost = ""
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	if got := lipgloss.Width(plain); got != model.width {
+		t.Fatalf("expected status bar width %d, got %d (%q)", model.width, got, plain)
+	}
+	if !strings.HasPrefix(plain, "  Ready") {
+		t.Fatalf("expected left sections to be inset, got %q", plain)
+	}
+	if !strings.HasSuffix(plain, "vTest  ") {
+		t.Fatalf("expected right sections to be inset, got %q", plain)
+	}
+}
+
+func TestStatusBarUsesThemePalette(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
 	model := New(Config{})
+	model.width = 80
+	model.statusUser = ""
+	model.statusHost = ""
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.StatusBarPalette.Base = lipgloss.Color("#101010")
+	model.theme.StatusBarPalette.Info = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#abcdef"),
+		Background: lipgloss.Color("#123456"),
+	}
 
-	got := statusBarSegmentsText(model.statusBarSegments())
-	if strings.Contains(got, "File:") {
-		t.Fatalf("expected no file segment without current file, got %q", got)
+	bar := model.renderStatusBar()
+	if !strings.Contains(bar, "48;2;16;16;16") {
+		t.Fatalf("expected custom base background, got %q", bar)
 	}
-	if strings.Contains(got, "Focus:") {
-		t.Fatalf("expected focus label to be replaced by icon, got %q", got)
-	}
-	if !strings.Contains(got, "◉") {
-		t.Fatalf("expected focus segment icon, got %q", got)
+	if !strings.Contains(bar, "38;2;171;205;239") ||
+		!strings.Contains(bar, "48;2;18;52;86") {
+		t.Fatalf("expected custom info segment colors, got %q", bar)
 	}
 }
 
-func TestStatusBarSegmentIconsCoverContextKeys(t *testing.T) {
-	segs := []statusBarSeg{
-		{key: "File", val: "example.http"},
-		{key: "Focus", val: "Editor"},
-		{key: "Mode", val: "VIEW"},
-		{key: "Zoom", val: "Response"},
-		{key: "Unknown", val: "fallback"},
+func TestStatusBarContextText(t *testing.T) {
+	tests := []struct {
+		seg  statusBarSeg
+		want string
+	}{
+		{statusBarSeg{key: "File", val: "example.http"}, "⇄ example.http"},
+		{statusBarSeg{key: "Focus", val: "Editor"}, "▣ Editor"},
+		{statusBarSeg{key: "Focus", val: "Response"}, "Response"},
+		{statusBarSeg{key: "Mode", val: "VIEW"}, "□ VIEW"},
+		{statusBarSeg{key: "Mode", val: "INSERT"}, "▸ INSERT"},
+		{statusBarSeg{key: "Zoom", val: "Response"}, "Response"},
+		{statusBarSeg{key: "Unknown", val: "fallback"}, "Unknown: fallback"},
 	}
 
-	got := statusBarSegmentsText(segs)
-	for _, want := range []string{
-		"▤ example.http",
-		"◉ Editor",
-		"-- VIEW --",
-		"⌖ Response",
-		"Unknown: fallback",
-	} {
-		if !strings.Contains(got, want) {
-			t.Fatalf("expected status segment %q in %q", want, got)
+	for _, tt := range tests {
+		if got := statusBarContextText(tt.seg); got != tt.want {
+			t.Fatalf("expected %q, got %q", tt.want, got)
 		}
 	}
-	for _, old := range []string{"File:", "Focus:", "Mode:", "Zoom:"} {
-		if strings.Contains(got, old) {
-			t.Fatalf("expected legacy status label %q to be replaced, got %q", old, got)
+}
+
+func TestStatusBarSectionsDoNotRenderExplicitSeparators(t *testing.T) {
+	styleA := theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#ffffff"),
+		Background: lipgloss.Color("#111111"),
+	}
+	styleB := theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#ffffff"),
+		Background: lipgloss.Color("#222222"),
+	}
+	segs := []statusBarSection{
+		{text: "A", style: styleA},
+		{text: "B", style: styleB},
+	}
+
+	for name, view := range map[string]string{
+		"left":  renderStatusBarSections(segs),
+		"right": renderStatusBarSections(segs),
+	} {
+		plain := ansi.Strip(view)
+		if plain != " A  B " {
+			t.Fatalf("unexpected %s section layout %q", name, plain)
 		}
+		if strings.ContainsAny(plain, "│") {
+			t.Fatalf("expected no explicit %s separators in %q", name, plain)
+		}
+		if got := lipgloss.Width(plain); got != statusBarSectionsWidth(segs) {
+			t.Fatalf(
+				"expected %s width %d, got %d",
+				name,
+				statusBarSectionsWidth(segs),
+				got,
+			)
+		}
+	}
+}
+
+func TestStatusBarRightShowsIdentity(t *testing.T) {
+	model := New(Config{Version: "vTest"})
+	model.width = 120
+	model.statusUser = "david"
+	model.statusHost = "workstation"
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	for _, want := range []string{"◇ vTest", "david", "workstation"} {
+		if !strings.Contains(plain, want) {
+			t.Fatalf("expected right status section %q in %q", want, plain)
+		}
+	}
+	if strings.ContainsAny(plain, "│") {
+		t.Fatalf("expected no explicit separators in %q", plain)
+	}
+	if trimmed := strings.TrimSpace(plain); !strings.HasSuffix(trimmed, "workstation") {
+		t.Fatalf("expected host to be the rightmost section, got %q", trimmed)
+	}
+}
+
+func TestStatusBarKeepsMessageWhenIdentityIsLong(t *testing.T) {
+	model := New(Config{Version: "vTest"})
+	model.width = 36
+	model.statusUser = "very-long-user-name"
+	model.statusHost = "very-long-workstation-name"
+	model.statusMessage = statusMsg{
+		text:  "Request failed because the upstream service returned a very long error",
+		level: statusError,
+	}
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	if strings.Contains(plain, "\n") {
+		t.Fatalf("expected one-line status bar, got %q", plain)
+	}
+	if got := lipgloss.Width(plain); got > model.width {
+		t.Fatalf("expected status bar width <= %d, got %d (%q)", model.width, got, plain)
+	}
+	if !strings.Contains(plain, "Request") {
+		t.Fatalf("expected status message to remain visible, got %q", plain)
+	}
+	if !strings.Contains(plain, "vTest") {
+		t.Fatalf("expected version to remain visible, got %q", plain)
+	}
+	if strings.Contains(plain, "very-long-user-name") ||
+		strings.Contains(plain, "very-long-workstation-name") {
+		t.Fatalf("expected long identity to yield space first, got %q", plain)
 	}
 }
 
 func TestStatusBarStyledMessageFitsNarrowWidth(t *testing.T) {
 	model := New(Config{Version: "vTest"})
 	model.width = 36
+	model.statusUser = ""
+	model.statusHost = ""
 	model.statusMessage = statusMsg{
 		text:  "Request failed because the upstream service returned a very long error",
 		level: statusError,
@@ -633,6 +682,37 @@ func TestStatusBarStyledMessageFitsNarrowWidth(t *testing.T) {
 	}
 	if !strings.Contains(plain, "vTest") {
 		t.Fatalf("expected version to remain visible, got %q", plain)
+	}
+}
+
+func TestCleanStatusUsername(t *testing.T) {
+	tests := map[string]string{
+		`DOMAIN\david`:  "david",
+		`DOMAIN\ david`: "david",
+		"domain/david":  `david`,
+		" david ":       "david",
+		"":              "",
+	}
+
+	for input, want := range tests {
+		if got := cleanStatusUsername(input); got != want {
+			t.Fatalf("cleanStatusUsername(%q) = %q, want %q", input, got, want)
+		}
+	}
+}
+
+func TestCleanStatusHost(t *testing.T) {
+	tests := map[string]string{
+		"workstation.local": "workstation",
+		"host":              "host",
+		" host ":            "host",
+		"":                  "",
+	}
+
+	for input, want := range tests {
+		if got := cleanStatusHost(input); got != want {
+			t.Fatalf("cleanStatusHost(%q) = %q, want %q", input, got, want)
+		}
 	}
 }
 
@@ -857,11 +937,19 @@ func TestResponseColumnUsesFullViewportHeight(t *testing.T) {
 
 	view := model.renderResponseColumn(responsePanePrimary, true, 36)
 	lines := strings.Split(ansi.Strip(view), "\n")
-	if got, want := len(lines), pane.viewport.Height+lipgloss.Height(model.renderPaneTabs(responsePanePrimary, true, 36)); got != want {
+	if got, want := len(
+		lines,
+	), pane.viewport.Height+lipgloss.Height(
+		model.renderPaneTabs(responsePanePrimary, true, 36),
+	); got != want {
 		t.Fatalf("expected response column height %d, got %d in %q", want, got, ansi.Strip(view))
 	}
 	if !strings.Contains(lines[len(lines)-1], "line-5") {
-		t.Fatalf("expected last viewport row to show last content line, got %q in %q", lines[len(lines)-1], ansi.Strip(view))
+		t.Fatalf(
+			"expected last viewport row to show last content line, got %q in %q",
+			lines[len(lines)-1],
+			ansi.Strip(view),
+		)
 	}
 }
 

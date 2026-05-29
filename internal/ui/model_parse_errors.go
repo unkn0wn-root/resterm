@@ -28,6 +28,13 @@ type eSty struct {
 	note  lipgloss.Style
 }
 
+const (
+	diagWarnLightColor  = "#d97706"
+	diagWarnDarkColor   = "#FACC15"
+	diagErrorLightColor = "#dc2626"
+	diagErrorDarkColor  = "#FF6E6E"
+)
+
 func docErr(doc *restfile.Document) error {
 	return parser.Check(doc)
 }
@@ -71,8 +78,8 @@ func (m Model) styleLines(ls []diag.Line) string {
 }
 
 func (m Model) errSty() eSty {
-	err := m.statusBarFg(m.theme.Error, statusErrorLightColor, statusErrorDarkColor)
-	warn := m.statusBarFg(m.theme.StatusBarKey, statusWarnLightColor, statusWarnDarkColor)
+	err := m.fallbackFg(m.theme.Error, diagErrorLightColor, diagErrorDarkColor)
+	warn := m.fallbackFg(m.theme.StatusBarKey, diagWarnLightColor, diagWarnDarkColor)
 	return eSty{
 		title: err.Bold(true),
 		label: warn.Bold(true),
@@ -85,7 +92,15 @@ func (m Model) errSty() eSty {
 }
 
 func (m Model) chainLineStyle() lipgloss.Style {
-	return m.statusBarFg(m.theme.StatusBarKey, statusWarnLightColor, statusWarnDarkColor)
+	return m.fallbackFg(m.theme.StatusBarKey, diagWarnLightColor, diagWarnDarkColor)
+}
+
+func (m Model) fallbackFg(st lipgloss.Style, light, dark string) lipgloss.Style {
+	if fg := st.GetForeground(); theme.ColorDefined(fg) {
+		return lipgloss.NewStyle().Foreground(fg)
+	}
+	return lipgloss.NewStyle().
+		Foreground(theme.ColorForAppearance(m.themeRuntime.appearance, light, dark))
 }
 
 func (st eSty) line(l diag.Line) string {
