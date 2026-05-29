@@ -168,10 +168,19 @@ func (s *WebSocketSender) SendBase64(
 	return s.SendBinary(ctx, decoded, meta)
 }
 
-func (s *WebSocketSender) Ping(ctx context.Context, meta map[string]string) error {
+func (s *WebSocketSender) Ping(ctx context.Context, payload string, meta map[string]string) error {
+	data := []byte(payload)
+	if len(data) > websocketControlMaxPayload {
+		return diag.Newf(
+			diag.ClassProtocol,
+			"websocket ping payload exceeds %d bytes",
+			websocketControlMaxPayload,
+		)
+	}
 	msg := wsOutbound{
 		ctx:      ctx,
 		kind:     wsOutboundPing,
+		payload:  append([]byte(nil), data...),
 		metadata: cloneMetadata(meta),
 		result:   make(chan error, 1),
 	}

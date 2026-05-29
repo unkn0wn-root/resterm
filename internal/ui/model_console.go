@@ -611,6 +611,7 @@ func (m *Model) sendConsolePing() tea.Cmd {
 		defer cancel()
 		err := console.sender.Ping(
 			ctx,
+			"",
 			map[string]string{wsMetaType: "ping", wsMetaStep: "interactive"},
 		)
 		return wsConsoleResultMsg{err: err, status: "Ping sent", mode: mode}

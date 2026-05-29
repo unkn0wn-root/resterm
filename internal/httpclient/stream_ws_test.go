@@ -162,6 +162,44 @@ func TestExecuteWebSocketChat(t *testing.T) {
 	}
 }
 
+func TestExecuteWebSocketPingPayloadTranscript(t *testing.T) {
+	server, cleanup := startEchoWebSocketServer(t)
+	defer cleanup()
+
+	wsURL := strings.Replace(server.URL, "http", "ws", 1) + "/ws/ping"
+	client := NewClient(nil)
+
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    wsURL,
+		WebSocket: &restfile.WebSocketRequest{
+			Steps: []restfile.WebSocketStep{
+				{Type: restfile.WebSocketStepPing, Value: "heartbeat"},
+				{Type: restfile.WebSocketStepClose, Code: 1000, Reason: "done"},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := client.ExecuteWebSocket(ctx, req, nil, Options{})
+	if err != nil {
+		t.Fatalf("ExecuteWebSocket returned error: %v", err)
+	}
+
+	transcript, err := DecodeWebSocketTranscript(resp.Body)
+	if err != nil {
+		t.Fatalf("failed to decode transcript: %v", err)
+	}
+	for _, evt := range transcript.Events {
+		if evt.Direction == "send" && evt.Type == "ping" && evt.Text == "heartbeat" {
+			return
+		}
+	}
+	t.Fatalf("expected ping payload in transcript: %+v", transcript.Events)
+}
+
 func TestStartWebSocketUsesHTTPFactory(t *testing.T) {
 	called := false
 	client := NewClientWithOptions(

@@ -56,6 +56,8 @@ type Session struct {
 	done chan struct{}
 
 	stats Stats
+
+	closeOnce sync.Once
 }
 
 type Stats struct {
@@ -67,11 +69,11 @@ type Stats struct {
 }
 
 type listener struct {
-	ch        chan *Event
-	dropCnt   uint64
-	policy    DropPolicy
-	closed    int32
-	closeOnce sync.Once
+	mu      sync.Mutex
+	ch      chan *Event
+	dropCnt uint64
+	policy  DropPolicy
+	closed  bool
 }
 
 type Listener struct {
@@ -195,10 +197,13 @@ func (s *Session) removeListener(id int) {
 }
 
 func (l *listener) close() {
-	l.closeOnce.Do(func() {
-		atomic.StoreInt32(&l.closed, 1)
-		close(l.ch)
-	})
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.closed {
+		return
+	}
+	l.closed = true
+	close(l.ch)
 }
 
 func (s *Session) Publish(evt *Event) {
@@ -234,13 +239,41 @@ func (s *Session) Publish(evt *Event) {
 }
 
 func (l *listener) emit(evt *Event) bool {
-	if atomic.LoadInt32(&l.closed) == 1 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	if l.closed {
 		return false
 	}
 
-	send := func() bool {
-		switch l.policy {
-		case DropNewest:
+	switch l.policy {
+	case DropNewest:
+		select {
+		case l.ch <- evt:
+			return true
+		default:
+			l.dropCnt++
+			return false
+		}
+	case DropListener:
+		select {
+		case l.ch <- evt:
+			return true
+		default:
+			l.dropCnt++
+			l.closed = true
+			close(l.ch)
+			return false
+		}
+	default: // DropOldest - when buffer is full, try to discard one old event to make room
+		select {
+		case l.ch <- evt:
+			return true
+		default:
+			select {
+			case <-l.ch:
+			default:
+			}
 			select {
 			case l.ch <- evt:
 				return true
@@ -248,40 +281,8 @@ func (l *listener) emit(evt *Event) bool {
 				l.dropCnt++
 				return false
 			}
-		case DropListener:
-			select {
-			case l.ch <- evt:
-				return true
-			default:
-				l.close()
-				return false
-			}
-		default: // DropOldest - when buffer is full, try to discard one old event to make room
-			select {
-			case l.ch <- evt:
-				return true
-			default:
-				select {
-				case <-l.ch:
-				default:
-				}
-				select {
-				case l.ch <- evt:
-					return true
-				default:
-					l.dropCnt++
-					return false
-				}
-			}
 		}
 	}
-	defer func() {
-		if r := recover(); r != nil {
-			atomic.StoreInt32(&l.closed, 1)
-			l.dropCnt++
-		}
-	}()
-	return send()
 }
 
 func (s *Session) MarkOpen() {
@@ -293,15 +294,16 @@ func (s *Session) MarkClosing() {
 }
 
 func (s *Session) Close(err error) {
-	if err != nil {
-		s.setState(StateFailed, err)
-	} else {
-		s.setState(StateClosed, nil)
-	}
-
 	s.cancel()
 	s.mu.Lock()
 	if s.stats.EndedAt.IsZero() {
+		if err != nil {
+			s.state = StateFailed
+			s.err = err
+		} else {
+			s.state = StateClosed
+			s.err = nil
+		}
 		s.stats.EndedAt = time.Now()
 	}
 
@@ -315,11 +317,9 @@ func (s *Session) Close(err error) {
 	for _, l := range listeners {
 		l.close()
 	}
-	select {
-	case <-s.done:
-	default:
+	s.closeOnce.Do(func() {
 		close(s.done)
-	}
+	})
 }
 
 func (s *Session) setState(state State, err error) {
