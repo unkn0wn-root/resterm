@@ -91,7 +91,7 @@ func (c *Client) runWSSteps(
 			waitForWindow(ctx, recvWindow)
 		case restfile.WebSocketStepPing:
 			meta[wsMetaType] = "ping"
-			if err := sender.Ping(ctx, meta); err != nil {
+			if err := sender.Ping(ctx, step.Value, meta); err != nil {
 				session.Cancel()
 				return false, err
 			}
