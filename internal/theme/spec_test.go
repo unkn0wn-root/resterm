@@ -36,6 +36,16 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			Key:  strPtr("#abcdef"),
 			Text: strPtr("#fedcba"),
 		}},
+		StatusBar: &StatusBarSpec{
+			Base: strPtr("#010101"),
+			Info: &StatusBarSegmentSpec{
+				Foreground: strPtr("#fafafa"),
+				Background: strPtr("#020202"),
+			},
+			Host: &StatusBarSegmentSpec{
+				Background: strPtr("#030303"),
+			},
+		},
 		EditorMetadata: &EditorMetadataSpec{
 			CommentMarker: strPtr("#222222"),
 			DirectiveColors: map[string]string{
@@ -100,6 +110,21 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	if updated.CommandSegments[0].Key != "#abcdef" {
 		t.Errorf("expected command key color override, got %q", updated.CommandSegments[0].Key)
 	}
+	if got := updated.StatusBarPalette.Base; got != "#010101" {
+		t.Errorf("expected status bar base override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.Info.Foreground; got != "#fafafa" {
+		t.Errorf("expected status bar info foreground override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.Info.Background; got != "#020202" {
+		t.Errorf("expected status bar info background override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.Host.Background; got != "#030303" {
+		t.Errorf("expected status bar host background override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.Host.Foreground; got != base.StatusBarPalette.Host.Foreground {
+		t.Errorf("expected status bar host foreground fallback, got %q", got)
+	}
 	if updated.EditorMetadata.CommentMarker != "#222222" {
 		t.Errorf(
 			"expected metadata comment marker override, got %q",
@@ -155,6 +180,20 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if base.PaneActiveForeground == "#123456" {
 		t.Errorf("base theme should remain unchanged")
+	}
+}
+
+func TestApplySpecRejectsEmptyStatusBarColor(t *testing.T) {
+	_, err := ApplySpec(DefaultTheme(), ThemeSpec{
+		StatusBar: &StatusBarSpec{
+			Info: &StatusBarSegmentSpec{Background: strPtr("")},
+		},
+	})
+	if err == nil {
+		t.Fatal("expected empty status bar color to fail")
+	}
+	if got := err.Error(); got != "status_bar.info.background: colour value may not be empty" {
+		t.Fatalf("unexpected error %q", got)
 	}
 }
 

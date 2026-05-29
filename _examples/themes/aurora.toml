@@ -40,6 +40,57 @@ bold = true
 [styles.status_bar_value]
 foreground = "#cbd5f5"
 
+[status_bar]
+base = "#000000"
+
+[status_bar.info]
+foreground = "#eff6ff"
+background = "#2563eb"
+
+[status_bar.warn]
+foreground = "#fff7ed"
+background = "#b45309"
+
+[status_bar.error]
+foreground = "#fef2f2"
+background = "#b91c1c"
+
+[status_bar.success]
+foreground = "#f0fdf4"
+background = "#15803d"
+
+[status_bar.file]
+foreground = "#f9fafb"
+background = "#404040"
+
+[status_bar.focus]
+foreground = "#f4f4f5"
+background = "#52525b"
+
+[status_bar.mode]
+foreground = "#f8fafc"
+background = "#64748b"
+
+[status_bar.zoom]
+foreground = "#ecfeff"
+background = "#0891b2"
+
+[status_bar.minimized]
+foreground = "#f0fdf4"
+background = "#166534"
+
+[status_bar.version]
+foreground = "#f8fafc"
+background = "#374151"
+
+[status_bar.user]
+foreground = "#f8fafc"
+background = "#4b5563"
+
+[status_bar.host]
+foreground = "#e5e7eb"
+background = "#27272a"
+
 [styles.tab_active]
 background = "#1d4ed8"
 foreground = "#f8fafc"
