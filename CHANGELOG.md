@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.41.1](https://github.com/unkn0wn-root/resterm/compare/v0.40.1...v0.41.1) (2026-05-29)
+
+
+### Bug Fixes
+
+* websocket transcript ordering race ([#289](https://github.com/unkn0wn-root/resterm/issues/289)) ([9b24067](https://github.com/unkn0wn-root/resterm/commit/9b240678efb76d34d7a1c1ad0412569c32ebb132))
+
 ### [0.40.1](https://github.com/unkn0wn-root/resterm/compare/v0.39.5...v0.40.1) (2026-05-28)
 
 
