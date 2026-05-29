@@ -497,7 +497,11 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	}
 	for _, legacy := range []string{"▤", "◉", "-- INSERT --"} {
 		if strings.Contains(plain, legacy) {
-			t.Fatalf("expected plain powerline sections without legacy marker %q in %q", legacy, plain)
+			t.Fatalf(
+				"expected plain powerline sections without legacy marker %q in %q",
+				legacy,
+				plain,
+			)
 		}
 	}
 	if !strings.Contains(bar, "48;2;0;0;0") {
@@ -933,11 +937,19 @@ func TestResponseColumnUsesFullViewportHeight(t *testing.T) {
 
 	view := model.renderResponseColumn(responsePanePrimary, true, 36)
 	lines := strings.Split(ansi.Strip(view), "\n")
-	if got, want := len(lines), pane.viewport.Height+lipgloss.Height(model.renderPaneTabs(responsePanePrimary, true, 36)); got != want {
+	if got, want := len(
+		lines,
+	), pane.viewport.Height+lipgloss.Height(
+		model.renderPaneTabs(responsePanePrimary, true, 36),
+	); got != want {
 		t.Fatalf("expected response column height %d, got %d in %q", want, got, ansi.Strip(view))
 	}
 	if !strings.Contains(lines[len(lines)-1], "line-5") {
-		t.Fatalf("expected last viewport row to show last content line, got %q in %q", lines[len(lines)-1], ansi.Strip(view))
+		t.Fatalf(
+			"expected last viewport row to show last content line, got %q in %q",
+			lines[len(lines)-1],
+			ansi.Strip(view),
+		)
 	}
 }
 

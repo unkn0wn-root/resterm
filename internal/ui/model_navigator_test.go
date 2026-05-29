@@ -700,7 +700,10 @@ func TestNavigatorOpenFileHintClearsWhenRevealingRequestFile(t *testing.T) {
 		t.Fatalf("expected editor to reveal %s, got %s", fileB, m.currentFile)
 	}
 	if m.statusMessage.text != "" {
-		t.Fatalf("expected cross-file request hint to clear after reveal, got %q", m.statusMessage.text)
+		t.Fatalf(
+			"expected cross-file request hint to clear after reveal, got %q",
+			m.statusMessage.text,
+		)
 	}
 }
 
