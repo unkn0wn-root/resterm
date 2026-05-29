@@ -14,14 +14,15 @@ import (
 )
 
 const (
-	statusBarVersionIcon  = "◇"
-	statusBarHTTPFileIcon = "⇄"
-	statusBarEditorIcon   = "▣"
-	statusBarViewIcon     = "□"
-	statusBarInsertIcon   = "▸"
-	statusBarVisualIcon   = "◫"
-	statusBarSectionPad   = 1
-	statusBarMinLeftWidth = 12
+	statusBarVersionIcon   = "◇"
+	statusBarHTTPFileIcon  = "⇄"
+	statusBarEditorIcon    = "▣"
+	statusBarViewIcon      = "□"
+	statusBarInsertIcon    = "▸"
+	statusBarVisualIcon    = "◫"
+	statusBarHorizontalPad = 1
+	statusBarSectionPad    = 1
+	statusBarMinLeftWidth  = 12
 )
 
 type statusBarSeg struct {
@@ -46,8 +47,16 @@ type statusBarSection struct {
 func (m Model) renderStatusBar() string {
 	status, level := m.statusBarMessage()
 	width := max(m.width, 1)
+	inset := statusBarUsesOuterInset(width)
+	contentWidth := width
+	if inset {
+		contentWidth -= statusBarHorizontalPad * 2
+	}
 	palette := statusBarPalette(m.theme.StatusBarPalette)
-	line := m.renderStatusBarLine(status, level, width, palette)
+	line := m.renderStatusBarLine(status, level, contentWidth, palette)
+	if inset {
+		line = insetStatusBarLine(line)
+	}
 	return lipgloss.NewStyle().
 		Background(palette.Base).
 		Width(width).
@@ -86,6 +95,14 @@ func (m Model) renderStatusBarLine(
 		gap = 0
 	}
 	return leftView + strings.Repeat(" ", gap) + rightView
+}
+
+func statusBarUsesOuterInset(width int) bool {
+	return width > statusBarHorizontalPad*2
+}
+
+func insetStatusBarLine(line string) string {
+	return " " + line + " "
 }
 
 func statusBarPalette(palette theme.StatusBarPalette) theme.StatusBarPalette {

@@ -505,6 +505,25 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	}
 }
 
+func TestStatusBarUsesOuterInset(t *testing.T) {
+	model := New(Config{Version: "vTest"})
+	model.width = 40
+	model.statusUser = ""
+	model.statusHost = ""
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	if got := lipgloss.Width(plain); got != model.width {
+		t.Fatalf("expected status bar width %d, got %d (%q)", model.width, got, plain)
+	}
+	if !strings.HasPrefix(plain, "  Ready") {
+		t.Fatalf("expected left sections to be inset, got %q", plain)
+	}
+	if !strings.HasSuffix(plain, "vTest  ") {
+		t.Fatalf("expected right sections to be inset, got %q", plain)
+	}
+}
+
 func TestStatusBarUsesThemePalette(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)
