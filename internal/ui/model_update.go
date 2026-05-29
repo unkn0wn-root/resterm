@@ -1326,7 +1326,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 				return combine(cmd)
 			}
 		}
-		if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
+		if !m.navGate(navigator.KindRequest, navigatorRequestPreviewStatus) {
 			return combine(nil)
 		}
 		if cmd := m.sendRequestFromList(false); cmd != nil {
@@ -1492,7 +1492,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if cmd := m.sendNavigatorRequest(true); cmd != nil {
 				return combine(cmd)
 			}
-			if !m.navGate(navigator.KindRequest, "Open file to send this request") {
+			if !m.navGate(navigator.KindRequest, navigatorRequestSendStatus) {
 				return combine(nil)
 			}
 			return combine(m.sendRequestFromList(true))
@@ -1500,7 +1500,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if cmd := m.sendNavigatorRequest(false); cmd != nil {
 				return combine(cmd)
 			}
-			if !m.navGate(navigator.KindRequest, "Open file to preview this request") {
+			if !m.navGate(navigator.KindRequest, navigatorRequestPreviewStatus) {
 				return combine(nil)
 			}
 			return combine(m.sendRequestFromList(false))
@@ -1513,7 +1513,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if cmd := m.sendNavigatorWorkflow(); cmd != nil {
 				return combine(cmd)
 			}
-			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
+			if !m.navGate(navigator.KindWorkflow, navigatorWorkflowRunStatus) {
 				return combine(nil)
 			}
 			return combine(m.runSelectedWorkflow())
@@ -1521,7 +1521,7 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 			if cmd := m.sendNavigatorWorkflow(); cmd != nil {
 				return combine(cmd)
 			}
-			if !m.navGate(navigator.KindWorkflow, "Open file to run this workflow") {
+			if !m.navGate(navigator.KindWorkflow, navigatorWorkflowRunStatus) {
 				return combine(nil)
 			}
 			return combine(m.runSelectedWorkflow())

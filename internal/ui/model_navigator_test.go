@@ -643,6 +643,67 @@ func TestNavigatorSelectionClearsRequestForOtherFile(t *testing.T) {
 	}
 }
 
+func TestNavigatorOpenFileHintClearsWhenReturningToCurrentRequest(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "one.http")
+	fileB := filepath.Join(tmp, "two.http")
+	writeSampleFile(t, fileA, "### one\n# @name one\nGET https://one.test\n")
+	writeSampleFile(t, fileB, "### two\n# @name two\nGET https://two.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+
+	m.expandNavigatorFile(fileB)
+	selectNavigatorID(t, m, navigatorRequestID(fileB, 0))
+	m.syncNavigatorSelection()
+	if m.statusMessage.text != navigatorRequestEditStatus {
+		t.Fatalf("expected cross-file request hint, got %q", m.statusMessage.text)
+	}
+
+	selectNavigatorID(t, m, navigatorRequestID(fileA, 0))
+	m.syncNavigatorSelection()
+	if m.statusMessage.text != "" {
+		t.Fatalf("expected cross-file request hint to clear, got %q", m.statusMessage.text)
+	}
+	if m.currentRequest == nil || requestKey(m.currentRequest) != requestKey(m.doc.Requests[0]) {
+		t.Fatalf("expected current request to be active")
+	}
+}
+
+func TestNavigatorOpenFileHintClearsWhenRevealingRequestFile(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "one.http")
+	fileB := filepath.Join(tmp, "two.http")
+	writeSampleFile(t, fileA, "### one\n# @name one\nGET https://one.test\n")
+	writeSampleFile(t, fileB, "### two\n# @name two\nGET https://two.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+
+	m.expandNavigatorFile(fileB)
+	selectNavigatorID(t, m, navigatorRequestID(fileB, 0))
+	m.syncNavigatorSelection()
+	if m.statusMessage.text != navigatorRequestEditStatus {
+		t.Fatalf("expected cross-file request hint, got %q", m.statusMessage.text)
+	}
+
+	if cmd := m.updateNavigator(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}}); cmd != nil {
+		cmd()
+	}
+	if !util.SamePath(m.currentFile, fileB) {
+		t.Fatalf("expected editor to reveal %s, got %s", fileB, m.currentFile)
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("expected cross-file request hint to clear after reveal, got %q", m.statusMessage.text)
+	}
+}
+
 func TestNavigatorWorkflowSelectionPreservesActiveRequest(t *testing.T) {
 	tmp := t.TempDir()
 	file := filepath.Join(tmp, "workflow.http")

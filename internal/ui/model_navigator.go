@@ -40,6 +40,14 @@ func (m *Model) rebuildNavigator(entries []filesvc.FileEntry) {
 	m.navigator.SetCompact(m.navigatorCompact)
 }
 
+const (
+	navigatorRequestEditStatus    = "Open file to edit this request"
+	navigatorWorkflowEditStatus   = "Open file to edit this workflow"
+	navigatorRequestPreviewStatus = "Open file to preview this request"
+	navigatorRequestSendStatus    = "Open file to send this request"
+	navigatorWorkflowRunStatus    = "Open file to run this workflow"
+)
+
 func navigatorRequestID(path string, idx int) string {
 	return fmt.Sprintf("req:%s:%d", path, idx)
 }
@@ -378,6 +386,7 @@ func (m *Model) syncNavigatorSelection() {
 	n := m.navigator.Selected()
 	m.syncNavigatorFocus(n)
 	if n == nil {
+		m.clearNavigatorOpenFileStatus()
 		m.clearNavigatorRequestSelection()
 		m.workflowList.Select(-1)
 		return
@@ -391,6 +400,7 @@ func (m *Model) syncNavigatorSelection() {
 				_ = m.selectFileByPath(path)
 			}
 			if util.SamePath(path, m.currentFile) {
+				m.clearNavigatorOpenFileStatus()
 				m.setActiveRequest(req)
 			} else {
 				if m.pendingCrossFile.nodeID == n.ID {
@@ -398,10 +408,11 @@ func (m *Model) syncNavigatorSelection() {
 				}
 				m.clearNavigatorRequestSelection()
 				m.setStatusMessage(
-					statusMsg{text: "Open file to edit this request", level: statusInfo},
+					statusMsg{text: navigatorRequestEditStatus, level: statusInfo},
 				)
 			}
 		} else {
+			m.clearNavigatorOpenFileStatus()
 			m.clearNavigatorRequestSelection()
 		}
 	case navigator.KindWorkflow:
@@ -410,6 +421,7 @@ func (m *Model) syncNavigatorSelection() {
 				_ = m.selectFileByPath(path)
 			}
 			if util.SamePath(path, m.currentFile) {
+				m.clearNavigatorOpenFileStatus()
 				if m.selectWorkflowForNode(wf, n.ID) {
 					if item, ok := m.workflowList.SelectedItem().(workflowListItem); ok &&
 						item.workflow != nil {
@@ -423,19 +435,33 @@ func (m *Model) syncNavigatorSelection() {
 				}
 				m.clearNavigatorWorkflowSelection()
 				m.setStatusMessage(
-					statusMsg{text: "Open file to edit this workflow", level: statusInfo},
+					statusMsg{text: navigatorWorkflowEditStatus, level: statusInfo},
 				)
 			}
 		} else {
+			m.clearNavigatorOpenFileStatus()
 			m.clearNavigatorWorkflowSelection()
 		}
 	case navigator.KindFile:
+		m.clearNavigatorOpenFileStatus()
 		if path != "" {
 			_ = m.selectFileByPath(path)
 		}
 		m.clearNavigatorRequestSelection()
 	default:
+		m.clearNavigatorOpenFileStatus()
 		m.clearNavigatorRequestSelection()
+	}
+}
+
+func (m *Model) clearNavigatorOpenFileStatus() {
+	switch m.statusMessage.text {
+	case navigatorRequestEditStatus,
+		navigatorWorkflowEditStatus,
+		navigatorRequestPreviewStatus,
+		navigatorRequestSendStatus,
+		navigatorWorkflowRunStatus:
+		m.setStatusMessage(statusMsg{})
 	}
 }
 
