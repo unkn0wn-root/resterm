@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -504,8 +505,9 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 			)
 		}
 	}
-	if !strings.Contains(bar, "48;2;0;0;0") {
-		t.Fatalf("expected black status bar background, got %q", bar)
+	palette := statusBarPalette(model.theme.StatusBarPalette)
+	if theme.ColorDefined(palette.Base) || strings.Contains(bar, "48;2;0;0;0") {
+		t.Fatalf("expected default status bar base to be unset, got %q", bar)
 	}
 }
 
@@ -552,6 +554,80 @@ func TestStatusBarUsesThemePalette(t *testing.T) {
 		!strings.Contains(bar, "48;2;18;52;86") {
 		t.Fatalf("expected custom info segment colors, got %q", bar)
 	}
+}
+
+func TestStatusBarBaseFillsOpenCells(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{Version: "vTest"})
+	model.width = 80
+	model.statusUser = ""
+	model.statusHost = ""
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.StatusBarPalette.Base = lipgloss.Color("#101010")
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	if got := lipgloss.Width(plain); got != model.width {
+		t.Fatalf("expected status bar width %d, got %d (%q)", model.width, got, plain)
+	}
+
+	palette := statusBarPalette(model.theme.StatusBarPalette)
+	contentWidth := model.width
+	leftOffset := 0
+	if statusBarUsesOuterInset(model.width) {
+		contentWidth -= statusBarHorizontalPad * 2
+		leftOffset = statusBarHorizontalPad
+	}
+	leftSections := model.statusBarLeftSections("Ready", statusInfo, palette)
+	rightLimit := contentWidth - statusBarLeftReserve(leftSections, contentWidth)
+	if rightLimit < 0 {
+		rightLimit = 0
+	}
+	right := fitStatusBarSections(model.statusBarRightSections(palette), rightLimit)
+	rightWidth := statusBarSectionsWidth(right)
+	left := fitStatusBarSections(leftSections, contentWidth-rightWidth)
+	leftWidth := statusBarSectionsWidth(left)
+	gapStart := leftOffset + leftWidth
+	gapEnd := leftOffset + contentWidth - rightWidth
+	if gapEnd <= gapStart {
+		t.Fatalf("expected status bar to have a base-filled gap, got %q", plain)
+	}
+
+	backgrounds := renderedCellBackgrounds(bar)
+	if len(backgrounds) != lipgloss.Width(plain) {
+		t.Fatalf("expected %d rendered cell backgrounds, got %d", lipgloss.Width(plain), len(backgrounds))
+	}
+	wantBase := []int{sgrExtBackground, sgrExtRGB, 16, 16, 16}
+	for _, idx := range []int{0, len(backgrounds) - 1} {
+		if !slices.Equal(backgrounds[idx], wantBase) {
+			t.Fatalf("expected outer status cell %d to use base background, got %v", idx, backgrounds[idx])
+		}
+	}
+	for idx := gapStart; idx < gapEnd; idx++ {
+		if !slices.Equal(backgrounds[idx], wantBase) {
+			t.Fatalf(
+				"expected status gap cell %d to use base background %v, got %v in %q",
+				idx,
+				wantBase,
+				backgrounds[idx],
+				bar,
+			)
+		}
+	}
+}
+
+func renderedCellBackgrounds(s string) [][]int {
+	bounds := responseSearchBoundaries(s)
+	backgrounds := make([][]int, 0, len(bounds)-1)
+	for _, bound := range bounds[1:] {
+		var state sgrState
+		_ = state.apply(bound.sgr)
+		backgrounds = append(backgrounds, slices.Clone(state.bg))
+	}
+	return backgrounds
 }
 
 func TestStatusBarContextText(t *testing.T) {

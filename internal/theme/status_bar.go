@@ -25,7 +25,6 @@ type StatusBarPalette struct {
 
 func DefaultStatusBarPalette() StatusBarPalette {
 	return StatusBarPalette{
-		Base:      lipgloss.Color("#000000"),
 		Info:      StatusBarSegmentStyle{Foreground: "#EFF6FF", Background: "#2563EB"},
 		Warn:      StatusBarSegmentStyle{Foreground: "#FFF7ED", Background: "#B45309"},
 		Error:     StatusBarSegmentStyle{Foreground: "#FEF2F2", Background: "#B91C1C"},

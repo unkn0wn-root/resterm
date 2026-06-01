@@ -55,12 +55,9 @@ func (m Model) renderStatusBar() string {
 	palette := statusBarPalette(m.theme.StatusBarPalette)
 	line := m.renderStatusBarLine(status, level, contentWidth, palette)
 	if inset {
-		line = insetStatusBarLine(line)
+		line = insetStatusBarLine(line, palette)
 	}
-	return lipgloss.NewStyle().
-		Background(palette.Base).
-		Width(width).
-		Render(line)
+	return line
 }
 
 func (m Model) renderStatusBarLine(
@@ -94,22 +91,33 @@ func (m Model) renderStatusBarLine(
 	if gap < 0 {
 		gap = 0
 	}
-	return leftView + strings.Repeat(" ", gap) + rightView
+	return leftView + renderStatusBarBaseFill(gap, palette) + rightView
 }
 
 func statusBarUsesOuterInset(width int) bool {
 	return width > statusBarHorizontalPad*2
 }
 
-func insetStatusBarLine(line string) string {
-	return " " + line + " "
+func insetStatusBarLine(line string, palette theme.StatusBarPalette) string {
+	pad := renderStatusBarBaseFill(statusBarHorizontalPad, palette)
+	return pad + line + pad
+}
+
+func renderStatusBarBaseFill(width int, palette theme.StatusBarPalette) string {
+	if width <= 0 {
+		return ""
+	}
+	fill := strings.Repeat(" ", width)
+	if !theme.ColorDefined(palette.Base) {
+		return fill
+	}
+	return lipgloss.NewStyle().
+		Background(palette.Base).
+		Render(fill)
 }
 
 func statusBarPalette(palette theme.StatusBarPalette) theme.StatusBarPalette {
 	defaults := theme.DefaultStatusBarPalette()
-	if !theme.ColorDefined(palette.Base) {
-		palette.Base = defaults.Base
-	}
 	palette.Info = statusBarSegmentStyle(palette.Info, defaults.Info)
 	palette.Warn = statusBarSegmentStyle(palette.Warn, defaults.Warn)
 	palette.Error = statusBarSegmentStyle(palette.Error, defaults.Error)
