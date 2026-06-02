@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.42.1](https://github.com/unkn0wn-root/resterm/compare/v0.41.1...v0.42.1) (2026-06-02)
+
+
+### Features
+
+* default theme disable base status bar color ([#290](https://github.com/unkn0wn-root/resterm/issues/290)) ([058b342](https://github.com/unkn0wn-root/resterm/commit/058b34287024409854baad4b4f6bfc2c4a800569))
+
 ### [0.41.1](https://github.com/unkn0wn-root/resterm/compare/v0.40.1...v0.41.1) (2026-05-29)
 
 
