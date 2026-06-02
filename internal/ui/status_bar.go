@@ -17,9 +17,7 @@ const (
 	statusBarVersionIcon   = "◇"
 	statusBarHTTPFileIcon  = "⇄"
 	statusBarEditorIcon    = "▣"
-	statusBarViewIcon      = "□"
-	statusBarInsertIcon    = "▸"
-	statusBarVisualIcon    = "◫"
+	statusBarModeMarker    = "--"
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
@@ -40,9 +38,19 @@ const (
 )
 
 type statusBarSection struct {
-	text  string
-	style theme.StatusBarSegmentStyle
+	text        string
+	style       theme.StatusBarSegmentStyle
+	kind        statusBarSectionKind
+	markerStyle lipgloss.Style
+	valueStyle  lipgloss.Style
 }
+
+type statusBarSectionKind int
+
+const (
+	statusBarSectionPlain statusBarSectionKind = iota
+	statusBarSectionMode
+)
 
 func (m Model) renderStatusBar() string {
 	status, level := m.statusBarMessage()
@@ -207,14 +215,11 @@ func (m Model) statusBarLeftSections(
 	}}
 
 	for _, item := range m.statusBarSegments() {
-		text := statusBarContextText(item)
-		if text == "" {
+		section, ok := m.statusBarContextSection(item, palette)
+		if !ok {
 			continue
 		}
-		segs = append(segs, statusBarSection{
-			text:  text,
-			style: statusBarContextStyle(item.key, palette),
-		})
+		segs = append(segs, section)
 	}
 	return segs
 }
@@ -267,11 +272,10 @@ func statusBarVersionText(version string) string {
 
 func statusBarContextText(seg statusBarSeg) string {
 	val := strings.TrimSpace(seg.val)
-	key := statusBarSegmentKind(strings.TrimSpace(string(seg.key)))
 	if val == "" {
 		return ""
 	}
-	switch key {
+	switch seg.key {
 	case statusBarSegmentFile:
 		return statusBarHTTPFileIcon + " " + val
 	case statusBarSegmentFocus:
@@ -284,21 +288,40 @@ func statusBarContextText(seg statusBarSeg) string {
 	case "", statusBarSegmentZoom:
 		return val
 	default:
-		return string(key) + ": " + val
+		return string(seg.key) + ": " + val
 	}
 }
 
 func statusBarModeText(mode string) string {
-	switch strings.ToUpper(mode) {
-	case "INSERT":
-		return statusBarInsertIcon + " " + mode
-	case "VIEW":
-		return statusBarViewIcon + " " + mode
-	case "VISUAL", "VISUAL LINE":
-		return statusBarVisualIcon + " " + mode
-	default:
-		return mode
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		return ""
 	}
+	return statusBarModeMarker + " " + mode + " " + statusBarModeMarker
+}
+
+func (m Model) statusBarContextSection(
+	seg statusBarSeg,
+	palette theme.StatusBarPalette,
+) (statusBarSection, bool) {
+	text := statusBarContextText(seg)
+	if text == "" {
+		return statusBarSection{}, false
+	}
+	section := statusBarSection{
+		text:  text,
+		style: statusBarContextStyle(seg.key, palette),
+	}
+	if seg.key == statusBarSegmentMode {
+		section.kind = statusBarSectionMode
+		section.markerStyle = statusBarModeInlineStyle(m.theme.StatusBarKey)
+		section.valueStyle = statusBarModeInlineStyle(m.theme.StatusBarValue)
+	}
+	return section, true
+}
+
+func statusBarModeInlineStyle(style lipgloss.Style) lipgloss.Style {
+	return style.UnsetBackground()
 }
 
 func statusBarStatusStyle(
@@ -443,10 +466,28 @@ func renderStatusBarSections(segs []statusBarSection) string {
 }
 
 func renderStatusBarSection(seg statusBarSection) string {
+	if seg.kind == statusBarSectionMode {
+		return renderStatusBarModeSection(seg)
+	}
 	return lipgloss.NewStyle().
 		Foreground(seg.style.Foreground).
 		Background(seg.style.Background).
 		Render(statusBarSectionContent(seg.text))
+}
+
+func renderStatusBarModeSection(seg statusBarSection) string {
+	content := statusBarSectionContent(seg.text)
+	var b strings.Builder
+	for {
+		before, after, ok := strings.Cut(content, statusBarModeMarker)
+		b.WriteString(seg.valueStyle.Render(before))
+		if !ok {
+			break
+		}
+		b.WriteString(seg.markerStyle.Render(statusBarModeMarker))
+		content = after
+	}
+	return b.String()
 }
 
 func statusBarSectionContent(text string) string {

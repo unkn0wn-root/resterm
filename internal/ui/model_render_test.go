@@ -491,16 +491,16 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 
 	bar := model.renderStatusBar()
 	plain := ansi.Strip(bar)
-	for _, want := range []string{"Ready", "⇄ example.http", "▣ Editor", "▸ INSERT"} {
+	for _, want := range []string{"Ready", "⇄ example.http", "▣ Editor", "-- INSERT --"} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected powerline status section %q in %q", want, plain)
 		}
 	}
-	for _, legacy := range []string{"▤", "◉", "-- INSERT --"} {
-		if strings.Contains(plain, legacy) {
+	for _, icon := range []string{"▤", "◉", "▸ INSERT", "□ VIEW", "◫ VISUAL"} {
+		if strings.Contains(plain, icon) {
 			t.Fatalf(
-				"expected plain powerline sections without legacy marker %q in %q",
-				legacy,
+				"expected plain powerline sections without icon marker %q in %q",
+				icon,
 				plain,
 			)
 		}
@@ -508,6 +508,56 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	palette := statusBarPalette(model.theme.StatusBarPalette)
 	if theme.ColorDefined(palette.Base) || strings.Contains(bar, "48;2;0;0;0") {
 		t.Fatalf("expected default status bar base to be unset, got %q", bar)
+	}
+}
+
+func TestStatusBarModeSectionUsesMarkerForegroundWithoutBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 96
+	model.focus = focusEditor
+	model.editorInsertMode = true
+	model.statusUser = ""
+	model.statusHost = ""
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.StatusBarPalette.Mode = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#778899"),
+		Background: lipgloss.Color("#445566"),
+	}
+	model.theme.StatusBarKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#112233"))
+	model.theme.StatusBarValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#223344"))
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	modeText := "-- INSERT --"
+	start := strings.Index(plain, modeText)
+	if start < 0 {
+		t.Fatalf("expected mode text %q in %q", modeText, plain)
+	}
+	if !strings.Contains(bar, "38;2;17;34;51") {
+		t.Fatalf("expected status bar key foreground on mode markers in %q", bar)
+	}
+	if !strings.Contains(bar, "38;2;34;51;68") {
+		t.Fatalf("expected status bar value foreground on mode text in %q", bar)
+	}
+	if strings.Contains(bar, "38;2;119;136;153") {
+		t.Fatalf("expected mode palette foreground not to render mode text in %q", bar)
+	}
+	if strings.Contains(bar, "48;2;68;85;102") {
+		t.Fatalf("expected mode background not to be rendered in %q", bar)
+	}
+
+	backgrounds := renderedCellBackgrounds(bar)
+	if len(backgrounds) != lipgloss.Width(plain) {
+		t.Fatalf("expected %d rendered cell backgrounds, got %d", lipgloss.Width(plain), len(backgrounds))
+	}
+	for idx := start; idx < start+lipgloss.Width(modeText); idx++ {
+		if len(backgrounds[idx]) != 0 {
+			t.Fatalf("expected mode cell %d to have no background, got %v in %q", idx, backgrounds[idx], bar)
+		}
 	}
 }
 
@@ -638,8 +688,9 @@ func TestStatusBarContextText(t *testing.T) {
 		{statusBarSeg{key: "File", val: "example.http"}, "⇄ example.http"},
 		{statusBarSeg{key: "Focus", val: "Editor"}, "▣ Editor"},
 		{statusBarSeg{key: "Focus", val: "Response"}, "Response"},
-		{statusBarSeg{key: "Mode", val: "VIEW"}, "□ VIEW"},
-		{statusBarSeg{key: "Mode", val: "INSERT"}, "▸ INSERT"},
+		{statusBarSeg{key: "Mode", val: "VIEW"}, "-- VIEW --"},
+		{statusBarSeg{key: "Mode", val: "INSERT"}, "-- INSERT --"},
+		{statusBarSeg{key: "Mode", val: "VISUAL"}, "-- VISUAL --"},
 		{statusBarSeg{key: "Zoom", val: "Response"}, "Response"},
 		{statusBarSeg{key: "Unknown", val: "fallback"}, "Unknown: fallback"},
 	}
