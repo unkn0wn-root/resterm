@@ -191,7 +191,10 @@ func (m Model) statusBarSegments() []statusBarSeg {
 	segs = append(segs, statusBarSeg{key: statusBarSegmentFocus, val: m.focusLabel()})
 	if m.focus == focusEditor {
 		segs = append(segs, statusBarSeg{key: statusBarSegmentMode, val: m.editorModeLabel()})
-		segs = append(segs, statusBarSeg{key: statusBarSegmentEditorPos, val: m.editorPositionLabel()})
+		segs = append(
+			segs,
+			statusBarSeg{key: statusBarSegmentEditorPos, val: m.editorPositionLabel()},
+		)
 	}
 	if m.zoomActive {
 		segs = append(segs, statusBarSeg{
@@ -427,8 +430,12 @@ func (m Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
 	}
 }
 
-func (m Model) statusBarEditorPosSection(text string, palette theme.StatusBarPalette) statusBarSection {
-	if editor := palette.Editor; theme.ColorDefined(editor.Foreground) || theme.ColorDefined(editor.Background) {
+func (m Model) statusBarEditorPosSection(
+	text string,
+	palette theme.StatusBarPalette,
+) statusBarSection {
+	if editor := palette.Editor; theme.ColorDefined(editor.Foreground) ||
+		theme.ColorDefined(editor.Background) {
 		return statusBarSection{text: text, style: editor}
 	}
 	style := statusBarModeInlineStyle(m.theme.StatusBarValue).Faint(true)

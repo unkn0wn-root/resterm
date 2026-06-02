@@ -191,7 +191,10 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 	return batchCommands(
 		m.refreshGitStatusCmd(),
 		func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("Reloaded %s", filepath.Base(path)), level: statusInfo}
+			return statusMsg{
+				text:  fmt.Sprintf("Reloaded %s", filepath.Base(path)),
+				level: statusInfo,
+			}
 		},
 	)
 }

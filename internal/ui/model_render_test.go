@@ -549,11 +549,20 @@ func TestStatusBarModeSectionUsesIconForegroundWithoutBackground(t *testing.T) {
 
 	backgrounds := renderedCellBackgrounds(bar)
 	if len(backgrounds) != lipgloss.Width(plain) {
-		t.Fatalf("expected %d rendered cell backgrounds, got %d", lipgloss.Width(plain), len(backgrounds))
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
 	}
 	for idx := start; idx < start+lipgloss.Width(modeText); idx++ {
 		if len(backgrounds[idx]) != 0 {
-			t.Fatalf("expected mode cell %d to have no background, got %v in %q", idx, backgrounds[idx], bar)
+			t.Fatalf(
+				"expected mode cell %d to have no background, got %v in %q",
+				idx,
+				backgrounds[idx],
+				bar,
+			)
 		}
 	}
 }
@@ -612,11 +621,20 @@ func TestStatusBarGitSummaryUsesForegroundWithoutBackground(t *testing.T) {
 
 	backgrounds := renderedCellBackgrounds(bar)
 	if len(backgrounds) != lipgloss.Width(plain) {
-		t.Fatalf("expected %d rendered cell backgrounds, got %d", lipgloss.Width(plain), len(backgrounds))
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
 	}
 	for idx := start; idx < start+lipgloss.Width(gitText); idx++ {
 		if len(backgrounds[idx]) != 0 {
-			t.Fatalf("expected git cell %d to have no background, got %v in %q", idx, backgrounds[idx], bar)
+			t.Fatalf(
+				"expected git cell %d to have no background, got %v in %q",
+				idx,
+				backgrounds[idx],
+				bar,
+			)
 		}
 	}
 }
@@ -708,12 +726,20 @@ func TestStatusBarBaseFillsOpenCells(t *testing.T) {
 
 	backgrounds := renderedCellBackgrounds(bar)
 	if len(backgrounds) != lipgloss.Width(plain) {
-		t.Fatalf("expected %d rendered cell backgrounds, got %d", lipgloss.Width(plain), len(backgrounds))
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
 	}
 	wantBase := []int{sgrExtBackground, sgrExtRGB, 16, 16, 16}
 	for _, idx := range []int{0, len(backgrounds) - 1} {
 		if !slices.Equal(backgrounds[idx], wantBase) {
-			t.Fatalf("expected outer status cell %d to use base background, got %v", idx, backgrounds[idx])
+			t.Fatalf(
+				"expected outer status cell %d to use base background, got %v",
+				idx,
+				backgrounds[idx],
+			)
 		}
 	}
 	for idx := gapStart; idx < gapEnd; idx++ {
@@ -823,13 +849,20 @@ func TestStatusBarEditorPositionStyling(t *testing.T) {
 	cellStart := lipgloss.Width(plain[:start])
 	for idx := cellStart; idx < cellStart+lipgloss.Width(pos); idx++ {
 		if len(backgrounds[idx]) != 0 {
-			t.Fatalf("expected editor position cell %d to have no background, got %v in %q", idx, backgrounds[idx], bar)
+			t.Fatalf(
+				"expected editor position cell %d to have no background, got %v in %q",
+				idx,
+				backgrounds[idx],
+				bar,
+			)
 		}
 	}
 
 	// Override: a themed [status_bar.editor] foreground takes over.
 	m = build()
-	m.theme.StatusBarPalette.Editor = theme.StatusBarSegmentStyle{Foreground: lipgloss.Color("#33AAFF")}
+	m.theme.StatusBarPalette.Editor = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#33AAFF"),
+	}
 	if bar := m.renderStatusBar(); !strings.Contains(bar, "38;2;51;170;255") {
 		t.Fatalf("expected themed editor position foreground in %q", bar)
 	}
