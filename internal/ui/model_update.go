@@ -28,6 +28,9 @@ func (m Model) Init() tea.Cmd {
 	if cmd := m.nextFileWatchMsgCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	if cmd := m.initialGitStatusCmd(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if cmd := m.nextRunMsgCmd(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -99,6 +102,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleStatusPulse(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case gitStatusMsg:
+		m.handleGitStatusMsg(typed)
 	case tabSpinMsg:
 		if cmd := m.handleTabSpin(typed); cmd != nil {
 			cmds = append(cmds, cmd)

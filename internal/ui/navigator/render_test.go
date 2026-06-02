@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -189,6 +190,37 @@ func TestRenderSelectedFileShowsMarkerAndCaret(t *testing.T) {
 		t.Fatalf("expected selected file marker, caret, and title, got %q", clean)
 	}
 	assertSelectedRow(t, out, 80)
+}
+
+func TestRenderFileShowsGitStatusSeparateFromBadges(t *testing.T) {
+	prevProfile := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prevProfile)
+
+	th := theme.DefaultTheme()
+	th.GitColors.Modified = lipgloss.Color("#abcdef")
+	row := Flat[any]{
+		Node: &Node[any]{
+			Kind:      KindFile,
+			Title:     "api.http",
+			GitStatus: gitstatus.StatusModified,
+			Badges:    []string{"ACTIVE"},
+		},
+	}
+
+	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	clean := ansi.Strip(out)
+	if !strings.Contains(clean, "api.http M ACTIVE") {
+		t.Fatalf("expected git marker between title and badges, got %q", clean)
+	}
+	if !strings.Contains(out, "38;2;171;205;239") {
+		t.Fatalf("expected git marker foreground, got %q", out)
+	}
+	for _, token := range nodeTokens(row.Node) {
+		if token == "m" {
+			t.Fatalf("did not expect git marker in filter tokens: %v", nodeTokens(row.Node))
+		}
+	}
 }
 
 func TestRenderSelectedDirShowsMarkerAndIcon(t *testing.T) {

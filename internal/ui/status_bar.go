@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -17,7 +18,10 @@ const (
 	statusBarVersionIcon   = "◇"
 	statusBarHTTPFileIcon  = "⇄"
 	statusBarEditorIcon    = "▣"
-	statusBarModeMarker    = "--"
+	statusBarViewIcon      = "□"
+	statusBarInsertIcon    = "▸"
+	statusBarVisualIcon    = "◫"
+	statusBarGitIcon       = "⎇"
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
@@ -38,19 +42,24 @@ const (
 )
 
 type statusBarSection struct {
-	text        string
-	style       theme.StatusBarSegmentStyle
-	kind        statusBarSectionKind
-	markerStyle lipgloss.Style
-	valueStyle  lipgloss.Style
+	text       string
+	style      theme.StatusBarSegmentStyle
+	runs       []styledRun
+	valueStyle lipgloss.Style
 }
 
-type statusBarSectionKind int
+type styledRun struct {
+	text  string
+	style lipgloss.Style
+}
 
-const (
-	statusBarSectionPlain statusBarSectionKind = iota
-	statusBarSectionMode
-)
+func styledRunsText(runs []styledRun) string {
+	var b strings.Builder
+	for _, run := range runs {
+		b.WriteString(run.text)
+	}
+	return b.String()
+}
 
 func (m Model) renderStatusBar() string {
 	status, level := m.statusBarMessage()
@@ -234,6 +243,14 @@ func (m Model) statusBarRightSections(
 			style: palette.Minimized,
 		})
 	}
+	gitValueStyle := statusBarModeInlineStyle(m.theme.StatusBarValue)
+	if runs := m.statusBarGitRuns(gitValueStyle); len(runs) > 0 {
+		segs = append(segs, statusBarSection{
+			text:       styledRunsText(runs),
+			runs:       runs,
+			valueStyle: gitValueStyle,
+		})
+	}
 	if version := m.statusBarVersion(); version != "" {
 		segs = append(segs, statusBarSection{
 			text:  statusBarVersionText(version),
@@ -253,6 +270,53 @@ func (m Model) statusBarRightSections(
 		})
 	}
 	return segs
+}
+
+func (m Model) statusBarGitRuns(valueStyle lipgloss.Style) []styledRun {
+	if m.gitStatus.RepoRoot == "" {
+		return nil
+	}
+
+	counts := m.gitStatus.Counts()
+	branch := strings.TrimSpace(m.gitStatus.Branch)
+	if branch == "(detached)" {
+		branch = "detached"
+	}
+	if branch == "" && !counts.Any() && m.gitStatus.Ahead == 0 && m.gitStatus.Behind == 0 {
+		return nil
+	}
+
+	colors := m.theme.GitColors
+	runs := []styledRun{{text: statusBarGitIcon, style: statusBarGitForeground(colors.Branch)}}
+	add := func(text string, color lipgloss.Color) {
+		runs = append(runs,
+			styledRun{text: " ", style: valueStyle},
+			styledRun{text: text, style: statusBarGitForeground(color)},
+		)
+	}
+	addCount := func(status gitstatus.Status, count int, color lipgloss.Color) {
+		if count > 0 {
+			add(fmt.Sprintf("%s%d", status.Label(), count), color)
+		}
+	}
+
+	if branch != "" {
+		add(branch, colors.Branch)
+	}
+	// Counts are listed most- to least-severe, mirroring gitstatus.Status priority.
+	addCount(gitstatus.StatusConflict, counts.Conflict, colors.Conflict)
+	addCount(gitstatus.StatusDeleted, counts.Deleted, colors.Deleted)
+	addCount(gitstatus.StatusRenamed, counts.Renamed, colors.Renamed)
+	addCount(gitstatus.StatusAdded, counts.Added, colors.Added)
+	addCount(gitstatus.StatusModified, counts.Modified, colors.Modified)
+	addCount(gitstatus.StatusUntracked, counts.Untracked, colors.Untracked)
+	if m.gitStatus.Ahead > 0 {
+		add(fmt.Sprintf("↑%d", m.gitStatus.Ahead), colors.Branch)
+	}
+	if m.gitStatus.Behind > 0 {
+		add(fmt.Sprintf("↓%d", m.gitStatus.Behind), colors.Branch)
+	}
+	return runs
 }
 
 func (m Model) statusBarVersion() string {
@@ -297,27 +361,58 @@ func statusBarModeText(mode string) string {
 	if mode == "" {
 		return ""
 	}
-	return statusBarModeMarker + " " + mode + " " + statusBarModeMarker
+	icon := statusBarModeIcon(mode)
+	if icon == "" {
+		return mode
+	}
+	return icon + " " + mode
+}
+
+func statusBarModeIcon(mode string) string {
+	switch strings.ToUpper(strings.TrimSpace(mode)) {
+	case "INSERT":
+		return statusBarInsertIcon
+	case "VIEW":
+		return statusBarViewIcon
+	case "VISUAL", "VISUAL LINE":
+		return statusBarVisualIcon
+	default:
+		return ""
+	}
 }
 
 func (m Model) statusBarContextSection(
 	seg statusBarSeg,
 	palette theme.StatusBarPalette,
 ) (statusBarSection, bool) {
+	if seg.key == statusBarSegmentMode {
+		return m.statusBarModeSection(seg), true
+	}
 	text := statusBarContextText(seg)
 	if text == "" {
 		return statusBarSection{}, false
 	}
-	section := statusBarSection{
+	return statusBarSection{
 		text:  text,
 		style: statusBarContextStyle(seg.key, palette),
+	}, true
+}
+
+func (m Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
+	mode := seg.val
+	valueStyle := statusBarModeInlineStyle(m.theme.StatusBarValue)
+	runs := []styledRun{{text: mode, style: valueStyle}}
+	if icon := statusBarModeIcon(mode); icon != "" {
+		runs = []styledRun{
+			{text: icon, style: statusBarModeInlineStyle(m.theme.StatusBarKey)},
+			{text: " " + mode, style: valueStyle},
+		}
 	}
-	if seg.key == statusBarSegmentMode {
-		section.kind = statusBarSectionMode
-		section.markerStyle = statusBarModeInlineStyle(m.theme.StatusBarKey)
-		section.valueStyle = statusBarModeInlineStyle(m.theme.StatusBarValue)
+	return statusBarSection{
+		text:       styledRunsText(runs),
+		runs:       runs,
+		valueStyle: valueStyle,
 	}
-	return section, true
 }
 
 func statusBarModeInlineStyle(style lipgloss.Style) lipgloss.Style {
@@ -440,6 +535,10 @@ func truncateLastStatusBarSection(
 		target = 1
 	}
 	last.text = truncateToWidth(last.text, target)
+	if len(last.runs) > 0 {
+		// A mid-token cut can't preserve per-token colours; collapse to one run.
+		last.runs = []styledRun{{text: last.text, style: last.valueStyle}}
+	}
 }
 
 func statusBarSectionsWidth(segs []statusBarSection) int {
@@ -466,8 +565,8 @@ func renderStatusBarSections(segs []statusBarSection) string {
 }
 
 func renderStatusBarSection(seg statusBarSection) string {
-	if seg.kind == statusBarSectionMode {
-		return renderStatusBarModeSection(seg)
+	if len(seg.runs) > 0 {
+		return renderStatusBarStyledSection(seg)
 	}
 	return lipgloss.NewStyle().
 		Foreground(seg.style.Foreground).
@@ -475,19 +574,21 @@ func renderStatusBarSection(seg statusBarSection) string {
 		Render(statusBarSectionContent(seg.text))
 }
 
-func renderStatusBarModeSection(seg statusBarSection) string {
-	content := statusBarSectionContent(seg.text)
+func renderStatusBarStyledSection(seg statusBarSection) string {
+	pad := seg.valueStyle.Render(strings.Repeat(" ", statusBarSectionPad))
 	var b strings.Builder
-	for {
-		before, after, ok := strings.Cut(content, statusBarModeMarker)
-		b.WriteString(seg.valueStyle.Render(before))
-		if !ok {
-			break
-		}
-		b.WriteString(seg.markerStyle.Render(statusBarModeMarker))
-		content = after
+	b.WriteString(pad)
+	for _, run := range seg.runs {
+		b.WriteString(run.style.Render(run.text))
 	}
+	b.WriteString(pad)
 	return b.String()
+}
+
+func statusBarGitForeground(color lipgloss.Color) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Foreground(color).
+		Bold(true)
 }
 
 func statusBarSectionContent(text string) string {

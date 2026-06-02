@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -129,6 +130,9 @@ func renderRowState(
 	}
 
 	parts = append(parts, selectedGap(th, selected), titleStyle.Render(title))
+	if n.Kind == KindFile && n.GitStatus != gitstatus.StatusClean {
+		parts = append(parts, selectedGap(th, selected), renderGitStatus(n.GitStatus, th, selected))
+	}
 	showTarget := n.Target != "" && !compact
 	if n.Kind == KindRequest && n.HasName {
 		showTarget = false
@@ -335,6 +339,39 @@ func renderWorkflowBadge(th theme.Theme, selected bool) string {
 		style = withSelectedBackground(style, th)
 	}
 	return style.Render("WF")
+}
+
+func renderGitStatus(status gitstatus.Status, th theme.Theme, selected bool) string {
+	label := status.Label()
+	if label == "" {
+		return ""
+	}
+	style := lipgloss.NewStyle().
+		Foreground(gitStatusColor(status, th)).
+		Bold(true)
+	if selected {
+		style = withSelectedBackground(style, th)
+	}
+	return style.Render(label)
+}
+
+func gitStatusColor(status gitstatus.Status, th theme.Theme) lipgloss.TerminalColor {
+	switch status {
+	case gitstatus.StatusModified:
+		return th.GitColors.Modified
+	case gitstatus.StatusAdded:
+		return th.GitColors.Added
+	case gitstatus.StatusUntracked:
+		return th.GitColors.Untracked
+	case gitstatus.StatusDeleted:
+		return th.GitColors.Deleted
+	case gitstatus.StatusRenamed:
+		return th.GitColors.Renamed
+	case gitstatus.StatusConflict:
+		return th.GitColors.Conflict
+	default:
+		return th.NavigatorSubtitle.GetForeground()
+	}
 }
 
 func renderBadges(badges []string, th theme.Theme, selected bool) string {

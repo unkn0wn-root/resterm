@@ -87,7 +87,7 @@ func (m *Model) handleFileChangeEvent(msg fileChangedMsg) tea.Cmd {
 	}
 	m.showFileChangeWarning(msg.path, msg.kind, text)
 	m.pendingReloadConfirm = confirmReload
-	return nil
+	return m.refreshGitStatusCmd()
 }
 
 func (m *Model) autoReloadChangedFile(path string) tea.Cmd {
@@ -108,9 +108,12 @@ func (m *Model) autoReloadChangedFile(path string) tea.Cmd {
 
 	m.applyDiskContent(path, data, diskContentOptions{PreserveView: true})
 	text := fmt.Sprintf("↻ Reloaded %s (file changed outside Resterm)", fileDisplayName(path))
-	return func() tea.Msg {
-		return statusMsg{text: text, level: statusWarn}
-	}
+	return batchCommands(
+		m.refreshGitStatusCmd(),
+		func() tea.Msg {
+			return statusMsg{text: text, level: statusWarn}
+		},
+	)
 }
 
 func (m *Model) showFileChangeWarning(path string, kind watcher.EventKind, text string) {
