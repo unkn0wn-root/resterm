@@ -16,6 +16,7 @@ type StatusBarPalette struct {
 	File      StatusBarSegmentStyle
 	Focus     StatusBarSegmentStyle
 	Mode      StatusBarSegmentStyle
+	Editor    StatusBarSegmentStyle
 	Zoom      StatusBarSegmentStyle
 	Minimized StatusBarSegmentStyle
 	Version   StatusBarSegmentStyle

@@ -117,6 +117,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	}
 	return batchCommands(
 		focusCmd,
+		m.refreshGitStatusCmd(),
 		func() tea.Msg {
 			return statusMsg{
 				text:  fmt.Sprintf("Workspace set to %s", filepath.Base(dir)),

@@ -27,6 +27,8 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			ModalBackdrop:           strPtr("#202020"),
 			ModalInputBackground:    strPtr("#181818"),
 			ModalOption:             strPtr("#778899"),
+			GitModified:             strPtr("#445500"),
+			GitBranch:               strPtr("#445566"),
 		},
 		HeaderSegments: []HeaderSegmentSpec{{
 			Background: strPtr("#111111"),
@@ -94,6 +96,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if got := updated.ModalOption; got != "#778899" {
 		t.Errorf("expected modal option %q, got %q", "#778899", got)
+	}
+	if got := updated.GitColors.Modified; got != "#445500" {
+		t.Errorf("expected git modified color %q, got %q", "#445500", got)
+	}
+	if got := updated.GitColors.Branch; got != "#445566" {
+		t.Errorf("expected git branch color %q, got %q", "#445566", got)
 	}
 	if len(updated.HeaderSegments) != 1 {
 		t.Fatalf("expected 1 header segment, got %d", len(updated.HeaderSegments))

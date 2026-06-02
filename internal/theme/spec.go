@@ -124,6 +124,13 @@ type ColorsSpec struct {
 	ModalBackdrop           *string `json:"modal_backdrop"             toml:"modal_backdrop"`
 	ModalInputBackground    *string `json:"modal_input_background"     toml:"modal_input_background"`
 	ModalOption             *string `json:"modal_option"               toml:"modal_option"`
+	GitBranch               *string `json:"git_branch"                 toml:"git_branch"`
+	GitModified             *string `json:"git_modified"               toml:"git_modified"`
+	GitAdded                *string `json:"git_added"                  toml:"git_added"`
+	GitUntracked            *string `json:"git_untracked"              toml:"git_untracked"`
+	GitDeleted              *string `json:"git_deleted"                toml:"git_deleted"`
+	GitRenamed              *string `json:"git_renamed"                toml:"git_renamed"`
+	GitConflict             *string `json:"git_conflict"               toml:"git_conflict"`
 	MethodGET               *string `json:"method_get"                 toml:"method_get"`
 	MethodPOST              *string `json:"method_post"                toml:"method_post"`
 	MethodPUT               *string `json:"method_put"                 toml:"method_put"`
@@ -159,6 +166,7 @@ type StatusBarSpec struct {
 	File      *StatusBarSegmentSpec `json:"file"      toml:"file"`
 	Focus     *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
 	Mode      *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
+	Editor    *StatusBarSegmentSpec `json:"editor"    toml:"editor"`
 	Zoom      *StatusBarSegmentSpec `json:"zoom"      toml:"zoom"`
 	Minimized *StatusBarSegmentSpec `json:"minimized" toml:"minimized"`
 	Version   *StatusBarSegmentSpec `json:"version"   toml:"version"`
@@ -784,6 +792,55 @@ func ApplySpec(base Theme, spec ThemeSpec) (Theme, error) {
 		}
 		cloned.ModalOption = color
 	}
+	if spec.Colors.GitBranch != nil {
+		color, err := toColor("git_branch", *spec.Colors.GitBranch)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Branch = color
+	}
+	if spec.Colors.GitModified != nil {
+		color, err := toColor("git_modified", *spec.Colors.GitModified)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Modified = color
+	}
+	if spec.Colors.GitAdded != nil {
+		color, err := toColor("git_added", *spec.Colors.GitAdded)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Added = color
+	}
+	if spec.Colors.GitUntracked != nil {
+		color, err := toColor("git_untracked", *spec.Colors.GitUntracked)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Untracked = color
+	}
+	if spec.Colors.GitDeleted != nil {
+		color, err := toColor("git_deleted", *spec.Colors.GitDeleted)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Deleted = color
+	}
+	if spec.Colors.GitRenamed != nil {
+		color, err := toColor("git_renamed", *spec.Colors.GitRenamed)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Renamed = color
+	}
+	if spec.Colors.GitConflict != nil {
+		color, err := toColor("git_conflict", *spec.Colors.GitConflict)
+		if err != nil {
+			return Theme{}, err
+		}
+		cloned.GitColors.Conflict = color
+	}
 	if spec.Colors.MethodGET != nil {
 		color, err := toColor("method_get", *spec.Colors.MethodGET)
 		if err != nil {
@@ -1068,6 +1125,7 @@ func applyStatusBarPalette(dst *StatusBarPalette, spec StatusBarSpec) error {
 		{"file", spec.File, &dst.File},
 		{"focus", spec.Focus, &dst.Focus},
 		{"mode", spec.Mode, &dst.Mode},
+		{"editor", spec.Editor, &dst.Editor},
 		{"zoom", spec.Zoom, &dst.Zoom},
 		{"minimized", spec.Minimized, &dst.Minimized},
 		{"version", spec.Version, &dst.Version},

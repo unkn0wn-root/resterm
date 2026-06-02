@@ -16,6 +16,16 @@ type CommandSegmentStyle struct {
 	Text       lipgloss.Color
 }
 
+type GitColors struct {
+	Branch    lipgloss.Color
+	Modified  lipgloss.Color
+	Added     lipgloss.Color
+	Untracked lipgloss.Color
+	Deleted   lipgloss.Color
+	Renamed   lipgloss.Color
+	Conflict  lipgloss.Color
+}
+
 type EditorMetadataPalette struct {
 	CommentMarker     lipgloss.Color
 	DirectiveDefault  lipgloss.Color
@@ -84,6 +94,7 @@ type Theme struct {
 	ModalBackdrop                 lipgloss.Color
 	ModalInputBackground          lipgloss.Color
 	ModalOption                   lipgloss.Color
+	GitColors                     GitColors
 	EditorMetadata                EditorMetadataPalette
 	EditorHintBox                 lipgloss.Style
 	EditorHintItem                lipgloss.Style
@@ -302,6 +313,15 @@ func DefaultTheme() Theme {
 		PaneBorderFocusEditor:   editorAccent,
 		PaneBorderFocusResponse: responseAccent,
 		PaneActiveForeground:    lipgloss.Color("#F5F2FF"),
+		GitColors: GitColors{
+			Branch:    lipgloss.Color("#A78BFA"),
+			Modified:  lipgloss.Color("#FFD46A"),
+			Added:     lipgloss.Color("#6EF17E"),
+			Untracked: lipgloss.Color("#56A9DD"),
+			Deleted:   lipgloss.Color("#FF6E6E"),
+			Renamed:   lipgloss.Color("#C9B8FF"),
+			Conflict:  lipgloss.Color("#FF8B39"),
+		},
 		EditorMetadata: EditorMetadataPalette{
 			CommentMarker:    lipgloss.Color("#8B86A8"),
 			DirectiveDefault: directiveAccent,

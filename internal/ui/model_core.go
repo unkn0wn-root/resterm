@@ -19,6 +19,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/config"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -280,6 +281,8 @@ type Model struct {
 	statusPulseFrame int
 	statusPulseSeq   int
 	statusPulseOn    bool
+	gitStatus        gitstatus.Snapshot
+	gitStatusSeq     int
 	tabSpinIdx       int
 	tabSpinSeq       int
 	tabSpinOn        bool

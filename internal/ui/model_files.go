@@ -62,7 +62,7 @@ func (m *Model) openFile(path string) tea.Cmd {
 	if len(m.requestItems) > 0 {
 		m.syncEditorWithRequestSelection(-1)
 	}
-	return nil
+	return m.refreshGitStatusCmd()
 }
 
 func (m *Model) setHistoryScopeForFile(path string) {
@@ -101,12 +101,15 @@ func (m *Model) saveFile() tea.Cmd {
 	}
 	m.watchFile(m.currentFile, content)
 	m.refreshCurrentDocument(content)
-	return func() tea.Msg {
-		return statusMsg{
-			text:  fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)),
-			level: statusSuccess,
-		}
-	}
+	return batchCommands(
+		m.refreshGitStatusCmd(),
+		func() tea.Msg {
+			return statusMsg{
+				text:  fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)),
+				level: statusSuccess,
+			}
+		},
+	)
 }
 
 func (m *Model) reloadWorkspace() tea.Cmd {
@@ -118,9 +121,12 @@ func (m *Model) reloadWorkspace() tea.Cmd {
 	}
 	m.fileList.SetItems(makeFileItems(entries))
 	m.rebuildNavigator(entries)
-	return func() tea.Msg {
-		return statusMsg{text: "Workspace refreshed", level: statusSuccess}
-	}
+	return batchCommands(
+		m.refreshGitStatusCmd(),
+		func() tea.Msg {
+			return statusMsg{text: "Workspace refreshed", level: statusSuccess}
+		},
+	)
 }
 
 func (m *Model) selectFileByPath(path string) bool {
@@ -152,9 +158,12 @@ func (m *Model) reparseDocument() tea.Cmd {
 	m.refreshCurrentDocument([]byte(m.editor.Value()))
 	// Reparse refreshes derived UI state from the editor buffer. It is not a save.
 	m.dirty = wasDirty
-	return func() tea.Msg {
-		return statusMsg{text: "Document reloaded", level: statusInfo}
-	}
+	return batchCommands(
+		m.refreshGitStatusCmd(),
+		func() tea.Msg {
+			return statusMsg{text: "Document reloaded", level: statusInfo}
+		},
+	)
 }
 
 func (m *Model) reloadFileFromDisk() tea.Cmd {
@@ -179,9 +188,15 @@ func (m *Model) reloadFileFromDisk() tea.Cmd {
 
 	m.applyDiskContent(path, data, diskContentOptions{})
 
-	return func() tea.Msg {
-		return statusMsg{text: fmt.Sprintf("Reloaded %s", filepath.Base(path)), level: statusInfo}
-	}
+	return batchCommands(
+		m.refreshGitStatusCmd(),
+		func() tea.Msg {
+			return statusMsg{
+				text:  fmt.Sprintf("Reloaded %s", filepath.Base(path)),
+				level: statusInfo,
+			}
+		},
+	)
 }
 
 func manualDirtyReloadMessage() string {

@@ -112,6 +112,9 @@ func (m *Model) buildFileNode(entry filesvc.FileEntry) *navigator.Node[any] {
 		Badges:  fileEntryBadges(entry, m.cfg.EnvironmentFile),
 		Payload: navigator.Payload[any]{FilePath: entry.Path, Data: entry},
 	}
+	if status, ok := m.gitStatus.File(entry.Path); ok {
+		node.GitStatus = status.Status
+	}
 
 	if !filesvc.IsRequestFile(entry.Path) {
 		return node

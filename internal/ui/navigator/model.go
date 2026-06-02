@@ -4,6 +4,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/ui/scroll"
 )
 
@@ -24,19 +25,20 @@ type Payload[T any] struct {
 
 // Node represents a tree item.
 type Node[T any] struct {
-	ID       string
-	Title    string
-	Desc     string
-	Kind     Kind
-	Method   string
-	Tags     []string
-	Target   string
-	Count    int
-	Badges   []string
-	HasName  bool
-	Expanded bool
-	Children []*Node[T]
-	Payload  Payload[T]
+	ID        string
+	Title     string
+	Desc      string
+	Kind      Kind
+	Method    string
+	Tags      []string
+	Target    string
+	Count     int
+	Badges    []string
+	GitStatus gitstatus.Status
+	HasName   bool
+	Expanded  bool
+	Children  []*Node[T]
+	Payload   Payload[T]
 }
 
 // Flat is a visible row with indentation level.

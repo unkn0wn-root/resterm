@@ -5,9 +5,29 @@ import (
 	"path/filepath"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/watcher"
 )
+
+func statusMsgFromCmd(cmd tea.Cmd) (statusMsg, bool) {
+	if cmd == nil {
+		return statusMsg{}, false
+	}
+	msg := cmd()
+	if status, ok := msg.(statusMsg); ok {
+		return status, true
+	}
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, item := range batch {
+			if status, ok := statusMsgFromCmd(item); ok {
+				return status, true
+			}
+		}
+	}
+	return statusMsg{}, false
+}
 
 func TestSaveFileWithoutSelectionAndEmptyEditorWarns(t *testing.T) {
 	tmp := t.TempDir()
@@ -20,7 +40,7 @@ func TestSaveFileWithoutSelectionAndEmptyEditorWarns(t *testing.T) {
 	if cmd == nil {
 		t.Fatalf("expected warning command when no file is selected")
 	}
-	msg, ok := cmd().(statusMsg)
+	msg, ok := statusMsgFromCmd(cmd)
 	if !ok {
 		t.Fatalf("expected statusMsg response, got %T", msg)
 	}
@@ -216,7 +236,7 @@ func TestFileChangeAutoReloadsCleanBuffer(t *testing.T) {
 		t.Fatalf("expected parsed document to refresh, got %#v", m.doc.Requests)
 	}
 
-	msg, ok := cmd().(statusMsg)
+	msg, ok := statusMsgFromCmd(cmd)
 	if !ok {
 		t.Fatalf("expected statusMsg response, got %T", msg)
 	}
@@ -254,8 +274,8 @@ func TestFileChangeDirtyBufferDoesNotAutoReload(t *testing.T) {
 
 	if cmd := m.handleFileChangeEvent(
 		fileChangedMsg{path: path, kind: watcher.EventChanged},
-	); cmd != nil {
-		t.Fatalf("did not expect dirty buffer warning to return command")
+	); cmd == nil {
+		t.Fatalf("expected git status refresh command")
 	}
 	if got := m.editor.Value(); got != local {
 		t.Fatalf("expected dirty local buffer to be preserved, got %q", got)
@@ -313,8 +333,8 @@ func TestFileMissingDoesNotClearCleanBuffer(t *testing.T) {
 
 	if cmd := m.handleFileChangeEvent(
 		fileChangedMsg{path: path, kind: watcher.EventMissing},
-	); cmd != nil {
-		t.Fatalf("did not expect missing-file warning to return command")
+	); cmd == nil {
+		t.Fatalf("expected git status refresh command")
 	}
 	if got := m.editor.Value(); got != content {
 		t.Fatalf("expected clean buffer to be preserved after deletion, got %q", got)

@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -20,6 +21,7 @@ const (
 	statusBarViewIcon      = "□"
 	statusBarInsertIcon    = "▸"
 	statusBarVisualIcon    = "◫"
+	statusBarGitIcon       = "⎇"
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
@@ -33,15 +35,31 @@ type statusBarSeg struct {
 type statusBarSegmentKind string
 
 const (
-	statusBarSegmentFile  statusBarSegmentKind = "File"
-	statusBarSegmentFocus statusBarSegmentKind = "Focus"
-	statusBarSegmentMode  statusBarSegmentKind = "Mode"
-	statusBarSegmentZoom  statusBarSegmentKind = "Zoom"
+	statusBarSegmentFile      statusBarSegmentKind = "File"
+	statusBarSegmentFocus     statusBarSegmentKind = "Focus"
+	statusBarSegmentMode      statusBarSegmentKind = "Mode"
+	statusBarSegmentEditorPos statusBarSegmentKind = "EditorPos"
+	statusBarSegmentZoom      statusBarSegmentKind = "Zoom"
 )
 
 type statusBarSection struct {
+	text       string
+	style      theme.StatusBarSegmentStyle
+	runs       []styledRun
+	valueStyle lipgloss.Style
+}
+
+type styledRun struct {
 	text  string
-	style theme.StatusBarSegmentStyle
+	style lipgloss.Style
+}
+
+func styledRunsText(runs []styledRun) string {
+	var b strings.Builder
+	for _, run := range runs {
+		b.WriteString(run.text)
+	}
+	return b.String()
 }
 
 func (m Model) renderStatusBar() string {
@@ -163,7 +181,7 @@ func (m Model) statusBarMessage() (string, statusLevel) {
 }
 
 func (m Model) statusBarSegments() []statusBarSeg {
-	segs := make([]statusBarSeg, 0, 4)
+	segs := make([]statusBarSeg, 0, 5)
 	if m.currentFile != "" {
 		segs = append(segs, statusBarSeg{
 			key: statusBarSegmentFile,
@@ -173,6 +191,10 @@ func (m Model) statusBarSegments() []statusBarSeg {
 	segs = append(segs, statusBarSeg{key: statusBarSegmentFocus, val: m.focusLabel()})
 	if m.focus == focusEditor {
 		segs = append(segs, statusBarSeg{key: statusBarSegmentMode, val: m.editorModeLabel()})
+		segs = append(
+			segs,
+			statusBarSeg{key: statusBarSegmentEditorPos, val: m.editorPositionLabel()},
+		)
 	}
 	if m.zoomActive {
 		segs = append(segs, statusBarSeg{
@@ -181,6 +203,13 @@ func (m Model) statusBarSegments() []statusBarSeg {
 		})
 	}
 	return segs
+}
+
+func (m Model) editorPositionLabel() string {
+	line := m.editor.Line() + 1
+	total := max(m.editor.LineCount(), 1)
+	col := m.editor.LineInfo().ColumnOffset + 1
+	return fmt.Sprintf("Ln %d/%d Col %d", line, total, col)
 }
 
 func (m Model) editorModeLabel() string {
@@ -207,14 +236,11 @@ func (m Model) statusBarLeftSections(
 	}}
 
 	for _, item := range m.statusBarSegments() {
-		text := statusBarContextText(item)
-		if text == "" {
+		section, ok := m.statusBarContextSection(item, palette)
+		if !ok {
 			continue
 		}
-		segs = append(segs, statusBarSection{
-			text:  text,
-			style: statusBarContextStyle(item.key, palette),
-		})
+		segs = append(segs, section)
 	}
 	return segs
 }
@@ -227,6 +253,14 @@ func (m Model) statusBarRightSections(
 		segs = append(segs, statusBarSection{
 			text:  min,
 			style: palette.Minimized,
+		})
+	}
+	gitValueStyle := statusBarModeInlineStyle(m.theme.StatusBarValue)
+	if runs := m.statusBarGitRuns(gitValueStyle); len(runs) > 0 {
+		segs = append(segs, statusBarSection{
+			text:       styledRunsText(runs),
+			runs:       runs,
+			valueStyle: gitValueStyle,
 		})
 	}
 	if version := m.statusBarVersion(); version != "" {
@@ -250,6 +284,53 @@ func (m Model) statusBarRightSections(
 	return segs
 }
 
+func (m Model) statusBarGitRuns(valueStyle lipgloss.Style) []styledRun {
+	if m.gitStatus.RepoRoot == "" {
+		return nil
+	}
+
+	counts := m.gitStatus.Counts()
+	branch := strings.TrimSpace(m.gitStatus.Branch)
+	if branch == "(detached)" {
+		branch = "detached"
+	}
+	if branch == "" && !counts.Any() && m.gitStatus.Ahead == 0 && m.gitStatus.Behind == 0 {
+		return nil
+	}
+
+	colors := m.theme.GitColors
+	runs := []styledRun{{text: statusBarGitIcon, style: statusBarGitForeground(colors.Branch)}}
+	add := func(text string, color lipgloss.Color) {
+		runs = append(runs,
+			styledRun{text: " ", style: valueStyle},
+			styledRun{text: text, style: statusBarGitForeground(color)},
+		)
+	}
+	addCount := func(status gitstatus.Status, count int, color lipgloss.Color) {
+		if count > 0 {
+			add(fmt.Sprintf("%s%d", status.Label(), count), color)
+		}
+	}
+
+	if branch != "" {
+		add(branch, colors.Branch)
+	}
+	// Counts are listed most- to least-severe, mirroring gitstatus.Status priority.
+	addCount(gitstatus.StatusConflict, counts.Conflict, colors.Conflict)
+	addCount(gitstatus.StatusDeleted, counts.Deleted, colors.Deleted)
+	addCount(gitstatus.StatusRenamed, counts.Renamed, colors.Renamed)
+	addCount(gitstatus.StatusAdded, counts.Added, colors.Added)
+	addCount(gitstatus.StatusModified, counts.Modified, colors.Modified)
+	addCount(gitstatus.StatusUntracked, counts.Untracked, colors.Untracked)
+	if m.gitStatus.Ahead > 0 {
+		add(fmt.Sprintf("↑%d", m.gitStatus.Ahead), colors.Branch)
+	}
+	if m.gitStatus.Behind > 0 {
+		add(fmt.Sprintf("↓%d", m.gitStatus.Behind), colors.Branch)
+	}
+	return runs
+}
+
 func (m Model) statusBarVersion() string {
 	version := strings.TrimSpace(m.cfg.Version)
 	if version == "" {
@@ -266,12 +347,11 @@ func statusBarVersionText(version string) string {
 }
 
 func statusBarContextText(seg statusBarSeg) string {
-	val := strings.TrimSpace(seg.val)
-	key := statusBarSegmentKind(strings.TrimSpace(string(seg.key)))
+	val := seg.val
 	if val == "" {
 		return ""
 	}
-	switch key {
+	switch seg.key {
 	case statusBarSegmentFile:
 		return statusBarHTTPFileIcon + " " + val
 	case statusBarSegmentFocus:
@@ -281,24 +361,93 @@ func statusBarContextText(seg statusBarSeg) string {
 		return val
 	case statusBarSegmentMode:
 		return statusBarModeText(val)
-	case "", statusBarSegmentZoom:
+	case "", statusBarSegmentZoom, statusBarSegmentEditorPos:
 		return val
 	default:
-		return string(key) + ": " + val
+		return string(seg.key) + ": " + val
 	}
 }
 
 func statusBarModeText(mode string) string {
-	switch strings.ToUpper(mode) {
-	case "INSERT":
-		return statusBarInsertIcon + " " + mode
-	case "VIEW":
-		return statusBarViewIcon + " " + mode
-	case "VISUAL", "VISUAL LINE":
-		return statusBarVisualIcon + " " + mode
-	default:
+	mode = strings.TrimSpace(mode)
+	if mode == "" {
+		return ""
+	}
+	icon := statusBarModeIcon(mode)
+	if icon == "" {
 		return mode
 	}
+	return icon + " " + mode
+}
+
+func statusBarModeIcon(mode string) string {
+	switch strings.ToUpper(strings.TrimSpace(mode)) {
+	case "INSERT":
+		return statusBarInsertIcon
+	case "VIEW":
+		return statusBarViewIcon
+	case "VISUAL", "VISUAL LINE":
+		return statusBarVisualIcon
+	default:
+		return ""
+	}
+}
+
+func (m Model) statusBarContextSection(
+	seg statusBarSeg,
+	palette theme.StatusBarPalette,
+) (statusBarSection, bool) {
+	if seg.key == statusBarSegmentMode {
+		return m.statusBarModeSection(seg), true
+	}
+	text := statusBarContextText(seg)
+	if text == "" {
+		return statusBarSection{}, false
+	}
+	if seg.key == statusBarSegmentEditorPos {
+		return m.statusBarEditorPosSection(text, palette), true
+	}
+	return statusBarSection{
+		text:  text,
+		style: statusBarContextStyle(seg.key, palette),
+	}, true
+}
+
+func (m Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
+	mode := seg.val
+	valueStyle := statusBarModeInlineStyle(m.theme.StatusBarValue)
+	runs := []styledRun{{text: mode, style: valueStyle}}
+	if icon := statusBarModeIcon(mode); icon != "" {
+		runs = []styledRun{
+			{text: icon, style: statusBarModeInlineStyle(m.theme.StatusBarKey)},
+			{text: " " + mode, style: valueStyle},
+		}
+	}
+	return statusBarSection{
+		text:       styledRunsText(runs),
+		runs:       runs,
+		valueStyle: valueStyle,
+	}
+}
+
+func (m Model) statusBarEditorPosSection(
+	text string,
+	palette theme.StatusBarPalette,
+) statusBarSection {
+	if editor := palette.Editor; theme.ColorDefined(editor.Foreground) ||
+		theme.ColorDefined(editor.Background) {
+		return statusBarSection{text: text, style: editor}
+	}
+	style := statusBarModeInlineStyle(m.theme.StatusBarValue).Faint(true)
+	return statusBarSection{
+		text:       text,
+		runs:       []styledRun{{text: text, style: style}},
+		valueStyle: style,
+	}
+}
+
+func statusBarModeInlineStyle(style lipgloss.Style) lipgloss.Style {
+	return style.UnsetBackground()
 }
 
 func statusBarStatusStyle(
@@ -417,6 +566,10 @@ func truncateLastStatusBarSection(
 		target = 1
 	}
 	last.text = truncateToWidth(last.text, target)
+	if len(last.runs) > 0 {
+		// A mid-token cut can't preserve per-token colours; collapse to one run.
+		last.runs = []styledRun{{text: last.text, style: last.valueStyle}}
+	}
 }
 
 func statusBarSectionsWidth(segs []statusBarSection) int {
@@ -443,10 +596,30 @@ func renderStatusBarSections(segs []statusBarSection) string {
 }
 
 func renderStatusBarSection(seg statusBarSection) string {
+	if len(seg.runs) > 0 {
+		return renderStatusBarStyledSection(seg)
+	}
 	return lipgloss.NewStyle().
 		Foreground(seg.style.Foreground).
 		Background(seg.style.Background).
 		Render(statusBarSectionContent(seg.text))
+}
+
+func renderStatusBarStyledSection(seg statusBarSection) string {
+	pad := seg.valueStyle.Render(strings.Repeat(" ", statusBarSectionPad))
+	var b strings.Builder
+	b.WriteString(pad)
+	for _, run := range seg.runs {
+		b.WriteString(run.style.Render(run.text))
+	}
+	b.WriteString(pad)
+	return b.String()
+}
+
+func statusBarGitForeground(color lipgloss.Color) lipgloss.Style {
+	return lipgloss.NewStyle().
+		Foreground(color).
+		Bold(true)
 }
 
 func statusBarSectionContent(text string) string {

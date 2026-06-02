@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
+	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
@@ -493,21 +494,148 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	plain := ansi.Strip(bar)
 	for _, want := range []string{"Ready", "⇄ example.http", "▣ Editor", "▸ INSERT"} {
 		if !strings.Contains(plain, want) {
-			t.Fatalf("expected powerline status section %q in %q", want, plain)
+			t.Fatalf("expected status section %q in %q", want, plain)
 		}
 	}
-	for _, legacy := range []string{"▤", "◉", "-- INSERT --"} {
-		if strings.Contains(plain, legacy) {
-			t.Fatalf(
-				"expected plain powerline sections without legacy marker %q in %q",
-				legacy,
-				plain,
-			)
+	for _, marker := range []string{"-- INSERT --", "-- VIEW --", "-- VISUAL --"} {
+		if strings.Contains(plain, marker) {
+			t.Fatalf("expected status sections without mode marker %q in %q", marker, plain)
 		}
 	}
 	palette := statusBarPalette(model.theme.StatusBarPalette)
 	if theme.ColorDefined(palette.Base) || strings.Contains(bar, "48;2;0;0;0") {
 		t.Fatalf("expected default status bar base to be unset, got %q", bar)
+	}
+}
+
+func TestStatusBarModeSectionUsesIconForegroundWithoutBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 96
+	model.focus = focusEditor
+	model.editorInsertMode = true
+	model.statusUser = ""
+	model.statusHost = ""
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.StatusBarPalette.Mode = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#778899"),
+		Background: lipgloss.Color("#445566"),
+	}
+	model.theme.StatusBarKey = lipgloss.NewStyle().Foreground(lipgloss.Color("#112233"))
+	model.theme.StatusBarValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#223344"))
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	modeText := "▸ INSERT"
+	start := strings.Index(plain, modeText)
+	if start < 0 {
+		t.Fatalf("expected mode text %q in %q", modeText, plain)
+	}
+	if !strings.Contains(bar, "38;2;17;34;51") {
+		t.Fatalf("expected status bar key foreground on mode icon in %q", bar)
+	}
+	if !strings.Contains(bar, "38;2;34;51;68") {
+		t.Fatalf("expected status bar value foreground on mode text in %q", bar)
+	}
+	if strings.Contains(bar, "38;2;119;136;153") {
+		t.Fatalf("expected mode palette foreground not to render mode text in %q", bar)
+	}
+	if strings.Contains(bar, "48;2;68;85;102") {
+		t.Fatalf("expected mode background not to be rendered in %q", bar)
+	}
+
+	backgrounds := renderedCellBackgrounds(bar)
+	if len(backgrounds) != lipgloss.Width(plain) {
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
+	}
+	for idx := start; idx < start+lipgloss.Width(modeText); idx++ {
+		if len(backgrounds[idx]) != 0 {
+			t.Fatalf(
+				"expected mode cell %d to have no background, got %v in %q",
+				idx,
+				backgrounds[idx],
+				bar,
+			)
+		}
+	}
+}
+
+func TestStatusBarGitSummaryUsesForegroundWithoutBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 96
+	model.statusUser = ""
+	model.statusHost = ""
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.StatusBarPalette.Base = lipgloss.Color("#101010")
+	model.theme.GitColors = theme.GitColors{
+		Branch:    lipgloss.Color("#112233"),
+		Modified:  lipgloss.Color("#223344"),
+		Untracked: lipgloss.Color("#334455"),
+	}
+	model.gitStatus = gitstatus.Snapshot{
+		RepoRoot: "/repo",
+		Branch:   "main",
+		Ahead:    1,
+		Behind:   2,
+		Files: map[string]gitstatus.FileStatus{
+			"/repo/api.http": {
+				Path:     "/repo/api.http",
+				RepoPath: "api.http",
+				Status:   gitstatus.StatusModified,
+			},
+			"/repo/payload.json": {
+				Path:     "/repo/payload.json",
+				RepoPath: "payload.json",
+				Status:   gitstatus.StatusUntracked,
+			},
+		},
+	}
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	gitText := "⎇ main M1 U1 ↑1 ↓2"
+	start := strings.Index(plain, gitText)
+	if start < 0 {
+		t.Fatalf("expected git summary %q in %q", gitText, plain)
+	}
+	for _, want := range []string{
+		"38;2;17;34;51",
+		"38;2;34;51;68",
+		"38;2;51;68;85",
+	} {
+		if !strings.Contains(bar, want) {
+			t.Fatalf("expected git foreground %s in %q", want, bar)
+		}
+	}
+
+	backgrounds := renderedCellBackgrounds(bar)
+	if len(backgrounds) != lipgloss.Width(plain) {
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
+	}
+	for idx := start; idx < start+lipgloss.Width(gitText); idx++ {
+		if len(backgrounds[idx]) != 0 {
+			t.Fatalf(
+				"expected git cell %d to have no background, got %v in %q",
+				idx,
+				backgrounds[idx],
+				bar,
+			)
+		}
 	}
 }
 
@@ -598,12 +726,20 @@ func TestStatusBarBaseFillsOpenCells(t *testing.T) {
 
 	backgrounds := renderedCellBackgrounds(bar)
 	if len(backgrounds) != lipgloss.Width(plain) {
-		t.Fatalf("expected %d rendered cell backgrounds, got %d", lipgloss.Width(plain), len(backgrounds))
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
 	}
 	wantBase := []int{sgrExtBackground, sgrExtRGB, 16, 16, 16}
 	for _, idx := range []int{0, len(backgrounds) - 1} {
 		if !slices.Equal(backgrounds[idx], wantBase) {
-			t.Fatalf("expected outer status cell %d to use base background, got %v", idx, backgrounds[idx])
+			t.Fatalf(
+				"expected outer status cell %d to use base background, got %v",
+				idx,
+				backgrounds[idx],
+			)
 		}
 	}
 	for idx := gapStart; idx < gapEnd; idx++ {
@@ -640,6 +776,9 @@ func TestStatusBarContextText(t *testing.T) {
 		{statusBarSeg{key: "Focus", val: "Response"}, "Response"},
 		{statusBarSeg{key: "Mode", val: "VIEW"}, "□ VIEW"},
 		{statusBarSeg{key: "Mode", val: "INSERT"}, "▸ INSERT"},
+		{statusBarSeg{key: "Mode", val: "VISUAL"}, "◫ VISUAL"},
+		{statusBarSeg{key: "Mode", val: "VISUAL LINE"}, "◫ VISUAL LINE"},
+		{statusBarSeg{key: "EditorPos", val: "Ln 3/3 Col 6"}, "Ln 3/3 Col 6"},
 		{statusBarSeg{key: "Zoom", val: "Response"}, "Response"},
 		{statusBarSeg{key: "Unknown", val: "fallback"}, "Unknown: fallback"},
 	}
@@ -648,6 +787,84 @@ func TestStatusBarContextText(t *testing.T) {
 		if got := statusBarContextText(tt.seg); got != tt.want {
 			t.Fatalf("expected %q, got %q", tt.want, got)
 		}
+	}
+}
+
+func TestEditorPositionLabel(t *testing.T) {
+	m := New(Config{})
+	m.editor.SetValue("alpha\nbeta\ngamma")
+	if got, want := m.editorPositionLabel(), "Ln 3/3 Col 6"; got != want {
+		t.Fatalf("editor position label: got %q, want %q", got, want)
+	}
+}
+
+func TestStatusBarShowsEditorPositionOnlyInEditor(t *testing.T) {
+	m := New(Config{})
+	m.width = 120
+	m.statusUser = ""
+	m.statusHost = ""
+	m.editor.SetValue("alpha\nbeta\ngamma")
+
+	m.focus = focusEditor
+	if bar := ansi.Strip(m.renderStatusBar()); !strings.Contains(bar, "Ln 3/3 Col 6") {
+		t.Fatalf("expected editor position in editor focus, got %q", bar)
+	}
+
+	m.focus = focusResponse
+	if bar := ansi.Strip(m.renderStatusBar()); strings.Contains(bar, "Ln ") {
+		t.Fatalf("did not expect editor position outside editor focus, got %q", bar)
+	}
+}
+
+func TestStatusBarEditorPositionStyling(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	build := func() Model {
+		m := New(Config{})
+		m.width = 120
+		m.focus = focusEditor
+		m.statusUser = ""
+		m.statusHost = ""
+		m.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+		m.theme.StatusBarValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA"))
+		m.editor.SetValue("alpha\nbeta\ngamma")
+		return m
+	}
+
+	// Default: faint value foreground, no background.
+	m := build()
+	bar := m.renderStatusBar()
+	plain := ansi.Strip(bar)
+	pos := "Ln 3/3 Col 6"
+	start := strings.Index(plain, pos)
+	if start < 0 {
+		t.Fatalf("expected editor position %q in %q", pos, plain)
+	}
+	if !strings.Contains(bar, "38;2;234;234;234") {
+		t.Fatalf("expected value foreground on editor position in %q", bar)
+	}
+	backgrounds := renderedCellBackgrounds(bar)
+	cellStart := lipgloss.Width(plain[:start])
+	for idx := cellStart; idx < cellStart+lipgloss.Width(pos); idx++ {
+		if len(backgrounds[idx]) != 0 {
+			t.Fatalf(
+				"expected editor position cell %d to have no background, got %v in %q",
+				idx,
+				backgrounds[idx],
+				bar,
+			)
+		}
+	}
+
+	// Override: a themed [status_bar.editor] foreground takes over.
+	m = build()
+	m.theme.StatusBarPalette.Editor = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#33AAFF"),
+	}
+	if bar := m.renderStatusBar(); !strings.Contains(bar, "38;2;51;170;255") {
+		t.Fatalf("expected themed editor position foreground in %q", bar)
 	}
 }
 
