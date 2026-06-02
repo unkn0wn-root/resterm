@@ -335,7 +335,7 @@ func statusBarVersionText(version string) string {
 }
 
 func statusBarContextText(seg statusBarSeg) string {
-	val := strings.TrimSpace(seg.val)
+	val := seg.val
 	if val == "" {
 		return ""
 	}
