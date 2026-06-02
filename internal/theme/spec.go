@@ -166,6 +166,7 @@ type StatusBarSpec struct {
 	File      *StatusBarSegmentSpec `json:"file"      toml:"file"`
 	Focus     *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
 	Mode      *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
+	Editor    *StatusBarSegmentSpec `json:"editor"    toml:"editor"`
 	Zoom      *StatusBarSegmentSpec `json:"zoom"      toml:"zoom"`
 	Minimized *StatusBarSegmentSpec `json:"minimized" toml:"minimized"`
 	Version   *StatusBarSegmentSpec `json:"version"   toml:"version"`
@@ -1124,6 +1125,7 @@ func applyStatusBarPalette(dst *StatusBarPalette, spec StatusBarSpec) error {
 		{"file", spec.File, &dst.File},
 		{"focus", spec.Focus, &dst.Focus},
 		{"mode", spec.Mode, &dst.Mode},
+		{"editor", spec.Editor, &dst.Editor},
 		{"zoom", spec.Zoom, &dst.Zoom},
 		{"minimized", spec.Minimized, &dst.Minimized},
 		{"version", spec.Version, &dst.Version},

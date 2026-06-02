@@ -752,6 +752,7 @@ func TestStatusBarContextText(t *testing.T) {
 		{statusBarSeg{key: "Mode", val: "INSERT"}, "▸ INSERT"},
 		{statusBarSeg{key: "Mode", val: "VISUAL"}, "◫ VISUAL"},
 		{statusBarSeg{key: "Mode", val: "VISUAL LINE"}, "◫ VISUAL LINE"},
+		{statusBarSeg{key: "EditorPos", val: "Ln 3/3 Col 6"}, "Ln 3/3 Col 6"},
 		{statusBarSeg{key: "Zoom", val: "Response"}, "Response"},
 		{statusBarSeg{key: "Unknown", val: "fallback"}, "Unknown: fallback"},
 	}
@@ -760,6 +761,77 @@ func TestStatusBarContextText(t *testing.T) {
 		if got := statusBarContextText(tt.seg); got != tt.want {
 			t.Fatalf("expected %q, got %q", tt.want, got)
 		}
+	}
+}
+
+func TestEditorPositionLabel(t *testing.T) {
+	m := New(Config{})
+	m.editor.SetValue("alpha\nbeta\ngamma")
+	if got, want := m.editorPositionLabel(), "Ln 3/3 Col 6"; got != want {
+		t.Fatalf("editor position label: got %q, want %q", got, want)
+	}
+}
+
+func TestStatusBarShowsEditorPositionOnlyInEditor(t *testing.T) {
+	m := New(Config{})
+	m.width = 120
+	m.statusUser = ""
+	m.statusHost = ""
+	m.editor.SetValue("alpha\nbeta\ngamma")
+
+	m.focus = focusEditor
+	if bar := ansi.Strip(m.renderStatusBar()); !strings.Contains(bar, "Ln 3/3 Col 6") {
+		t.Fatalf("expected editor position in editor focus, got %q", bar)
+	}
+
+	m.focus = focusResponse
+	if bar := ansi.Strip(m.renderStatusBar()); strings.Contains(bar, "Ln ") {
+		t.Fatalf("did not expect editor position outside editor focus, got %q", bar)
+	}
+}
+
+func TestStatusBarEditorPositionStyling(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	build := func() Model {
+		m := New(Config{})
+		m.width = 120
+		m.focus = focusEditor
+		m.statusUser = ""
+		m.statusHost = ""
+		m.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+		m.theme.StatusBarValue = lipgloss.NewStyle().Foreground(lipgloss.Color("#EAEAEA"))
+		m.editor.SetValue("alpha\nbeta\ngamma")
+		return m
+	}
+
+	// Default: faint value foreground, no background.
+	m := build()
+	bar := m.renderStatusBar()
+	plain := ansi.Strip(bar)
+	pos := "Ln 3/3 Col 6"
+	start := strings.Index(plain, pos)
+	if start < 0 {
+		t.Fatalf("expected editor position %q in %q", pos, plain)
+	}
+	if !strings.Contains(bar, "38;2;234;234;234") {
+		t.Fatalf("expected value foreground on editor position in %q", bar)
+	}
+	backgrounds := renderedCellBackgrounds(bar)
+	cellStart := lipgloss.Width(plain[:start])
+	for idx := cellStart; idx < cellStart+lipgloss.Width(pos); idx++ {
+		if len(backgrounds[idx]) != 0 {
+			t.Fatalf("expected editor position cell %d to have no background, got %v in %q", idx, backgrounds[idx], bar)
+		}
+	}
+
+	// Override: a themed [status_bar.editor] foreground takes over.
+	m = build()
+	m.theme.StatusBarPalette.Editor = theme.StatusBarSegmentStyle{Foreground: lipgloss.Color("#33AAFF")}
+	if bar := m.renderStatusBar(); !strings.Contains(bar, "38;2;51;170;255") {
+		t.Fatalf("expected themed editor position foreground in %q", bar)
 	}
 }
 

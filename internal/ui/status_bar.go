@@ -35,10 +35,11 @@ type statusBarSeg struct {
 type statusBarSegmentKind string
 
 const (
-	statusBarSegmentFile  statusBarSegmentKind = "File"
-	statusBarSegmentFocus statusBarSegmentKind = "Focus"
-	statusBarSegmentMode  statusBarSegmentKind = "Mode"
-	statusBarSegmentZoom  statusBarSegmentKind = "Zoom"
+	statusBarSegmentFile      statusBarSegmentKind = "File"
+	statusBarSegmentFocus     statusBarSegmentKind = "Focus"
+	statusBarSegmentMode      statusBarSegmentKind = "Mode"
+	statusBarSegmentEditorPos statusBarSegmentKind = "EditorPos"
+	statusBarSegmentZoom      statusBarSegmentKind = "Zoom"
 )
 
 type statusBarSection struct {
@@ -180,7 +181,7 @@ func (m Model) statusBarMessage() (string, statusLevel) {
 }
 
 func (m Model) statusBarSegments() []statusBarSeg {
-	segs := make([]statusBarSeg, 0, 4)
+	segs := make([]statusBarSeg, 0, 5)
 	if m.currentFile != "" {
 		segs = append(segs, statusBarSeg{
 			key: statusBarSegmentFile,
@@ -190,6 +191,7 @@ func (m Model) statusBarSegments() []statusBarSeg {
 	segs = append(segs, statusBarSeg{key: statusBarSegmentFocus, val: m.focusLabel()})
 	if m.focus == focusEditor {
 		segs = append(segs, statusBarSeg{key: statusBarSegmentMode, val: m.editorModeLabel()})
+		segs = append(segs, statusBarSeg{key: statusBarSegmentEditorPos, val: m.editorPositionLabel()})
 	}
 	if m.zoomActive {
 		segs = append(segs, statusBarSeg{
@@ -198,6 +200,13 @@ func (m Model) statusBarSegments() []statusBarSeg {
 		})
 	}
 	return segs
+}
+
+func (m Model) editorPositionLabel() string {
+	line := m.editor.Line() + 1
+	total := max(m.editor.LineCount(), 1)
+	col := m.editor.LineInfo().ColumnOffset + 1
+	return fmt.Sprintf("Ln %d/%d Col %d", line, total, col)
 }
 
 func (m Model) editorModeLabel() string {
@@ -349,7 +358,7 @@ func statusBarContextText(seg statusBarSeg) string {
 		return val
 	case statusBarSegmentMode:
 		return statusBarModeText(val)
-	case "", statusBarSegmentZoom:
+	case "", statusBarSegmentZoom, statusBarSegmentEditorPos:
 		return val
 	default:
 		return string(seg.key) + ": " + val
@@ -392,6 +401,9 @@ func (m Model) statusBarContextSection(
 	if text == "" {
 		return statusBarSection{}, false
 	}
+	if seg.key == statusBarSegmentEditorPos {
+		return m.statusBarEditorPosSection(text, palette), true
+	}
 	return statusBarSection{
 		text:  text,
 		style: statusBarContextStyle(seg.key, palette),
@@ -412,6 +424,18 @@ func (m Model) statusBarModeSection(seg statusBarSeg) statusBarSection {
 		text:       styledRunsText(runs),
 		runs:       runs,
 		valueStyle: valueStyle,
+	}
+}
+
+func (m Model) statusBarEditorPosSection(text string, palette theme.StatusBarPalette) statusBarSection {
+	if editor := palette.Editor; theme.ColorDefined(editor.Foreground) || theme.ColorDefined(editor.Background) {
+		return statusBarSection{text: text, style: editor}
+	}
+	style := statusBarModeInlineStyle(m.theme.StatusBarValue).Faint(true)
+	return statusBarSection{
+		text:       text,
+		runs:       []styledRun{{text: text, style: style}},
+		valueStyle: style,
 	}
 }
 
