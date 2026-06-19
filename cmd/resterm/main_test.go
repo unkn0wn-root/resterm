@@ -12,6 +12,23 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+func TestDefaultOpenAPIOutputPath(t *testing.T) {
+	cases := map[string]string{
+		"openapi.yaml":                     "openapi.http",
+		"specs/api.json":                   "specs/api.http",
+		"https://host/v1/openapi.json":     "openapi.http",
+		"https://host/v1/openapi.json?x=1": "openapi.http",
+		"http://host/api":                  "api.http",
+		"https://host/":                    "openapi.http",
+		"https://host":                     "openapi.http",
+	}
+	for in, want := range cases {
+		if got := defaultOpenAPIOutputPath(in); got != want {
+			t.Errorf("defaultOpenAPIOutputPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestRunVersionFlag(t *testing.T) {
 	out, errOut, err := captureRunIO(t, func() error {
 		return run([]string{"--version"})

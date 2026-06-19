@@ -424,7 +424,7 @@ Resterm supports unary and streaming calls with transcripts, metadata, and body 
 
 #### OpenAPI import
 
-Convert OpenAPI 3 specs into Resterm-ready `.http` collections from the CLI with `--from-openapi`. Docs: [`docs/resterm.md#importing-openapi-specs`](./docs/resterm.md#importing-openapi-specs).
+Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
 
 #### Collection sharing
 

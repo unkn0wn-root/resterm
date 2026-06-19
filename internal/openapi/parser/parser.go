@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sort"
 	"strings"
 
@@ -17,11 +18,16 @@ import (
 )
 
 type Loader struct {
-	ws []string
+	ws     []string
+	client *http.Client
 }
 
-func NewLoader() *Loader {
-	return &Loader{}
+func NewLoader(opts ...Option) *Loader {
+	l := &Loader{}
+	for _, opt := range opts {
+		opt(l)
+	}
+	return l
 }
 
 func (l *Loader) Warnings() []string {
@@ -52,7 +58,8 @@ func (l *Loader) Parse(
 	sm := newSchMap()
 	sm.setWarn(l.noteWarn)
 
-	doc, ws, err := loadDoc(path, opts)
+	srcURL, _ := ParseSpecURL(path)
+	doc, ws, err := l.loadDoc(ctx, path, srcURL, opts)
 	if err != nil {
 		return nil, fmt.Errorf("load OpenAPI spec: %w", err)
 	}
@@ -81,6 +88,9 @@ func (l *Loader) Parse(
 	}
 
 	spec.Operations = ops
+	if srcURL != nil {
+		resolveRelativeServers(spec, srcURL)
+	}
 	return spec, nil
 }
 
