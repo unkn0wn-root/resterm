@@ -532,7 +532,7 @@ func openapiHTTPClient(insecure bool, proxyURL string) (*http.Client, error) {
 		}
 		tr.Proxy = http.ProxyURL(pu)
 	}
-	return &http.Client{Timeout: 60 * time.Second, Transport: tr}, nil
+	return &http.Client{Timeout: parser.FetchTimeout, Transport: tr}, nil
 }
 
 func readCurlCommand(src string) (string, error) {
@@ -583,15 +583,12 @@ func defaultHTTPOutputPath(specPath string) string {
 // last path segment, falling back to openapi.http when there isn't one.
 func defaultOpenAPIOutputPath(src string) string {
 	src = str.Trim(src)
-	if u, err := url.Parse(src); err == nil {
-		switch strings.ToLower(u.Scheme) {
-		case "http", "https":
-			name := path.Base(u.Path)
-			if name == "." || name == "/" {
-				return "openapi.http"
-			}
-			return defaultHTTPOutputPath(name)
+	if u, ok := parser.ParseSpecURL(src); ok {
+		name := path.Base(u.Path)
+		if name == "." || name == "/" {
+			return "openapi.http"
 		}
+		return defaultHTTPOutputPath(name)
 	}
 	return defaultHTTPOutputPath(src)
 }

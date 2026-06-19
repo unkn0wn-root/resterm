@@ -68,8 +68,8 @@ func TestParseSpecURL(t *testing.T) {
 		{"", false},
 	}
 	for _, tc := range cases {
-		if _, ok := parseSpecURL(tc.in); ok != tc.want {
-			t.Errorf("parseSpecURL(%q) = %v, want %v", tc.in, ok, tc.want)
+		if _, ok := ParseSpecURL(tc.in); ok != tc.want {
+			t.Errorf("ParseSpecURL(%q) = %v, want %v", tc.in, ok, tc.want)
 		}
 	}
 }
@@ -83,9 +83,9 @@ func TestBaseDirURL(t *testing.T) {
 		"https://host/v1/openapi.json?x=1#frag": "https://host/v1/",
 	}
 	for in, want := range cases {
-		u, ok := parseSpecURL(in)
+		u, ok := ParseSpecURL(in)
 		if !ok {
-			t.Fatalf("parseSpecURL(%q) not a URL", in)
+			t.Fatalf("ParseSpecURL(%q) not a URL", in)
 		}
 		if got := baseDirURL(u).String(); got != want {
 			t.Errorf("baseDirURL(%q) = %q, want %q", in, got, want)

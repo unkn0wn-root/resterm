@@ -58,7 +58,7 @@ func (l *Loader) Parse(
 	sm := newSchMap()
 	sm.setWarn(l.noteWarn)
 
-	srcURL, _ := parseSpecURL(path)
+	srcURL, _ := ParseSpecURL(path)
 	doc, ws, err := l.loadDoc(ctx, path, srcURL, opts)
 	if err != nil {
 		return nil, fmt.Errorf("load OpenAPI spec: %w", err)

@@ -18,10 +18,10 @@ const (
 	importAccept    = "application/json, application/yaml, application/x-yaml, " +
 		"text/yaml, text/plain;q=0.9, */*;q=0.8"
 	maxSpecBytes = 50 << 20 // 50 MiB
-	fetchTimeout = 30 * time.Second
+	FetchTimeout = 30 * time.Second
 )
 
-var defaultHTTPClient = &http.Client{Timeout: fetchTimeout}
+var defaultHTTPClient = &http.Client{Timeout: FetchTimeout}
 
 type Option func(*Loader)
 
@@ -40,9 +40,9 @@ func (l *Loader) httpClient() *http.Client {
 	return defaultHTTPClient
 }
 
-// parseSpecURL parses src as an http(s) URL. File paths return false, including
+// ParseSpecURL parses src as an http(s) URL. File paths return false, including
 // Windows drive paths like C:\spec.yaml (the "C:" reads as a scheme, not http).
-func parseSpecURL(src string) (*url.URL, bool) {
+func ParseSpecURL(src string) (*url.URL, bool) {
 	u, err := url.Parse(strings.TrimSpace(src))
 	if err != nil {
 		return nil, false
