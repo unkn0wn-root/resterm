@@ -51,7 +51,7 @@ These flags belong to the top-level `resterm` command.
 | `--check-update` | `-c` | Check for newer releases and exit. |
 | `--update` | `-u` | Download and install the latest release, if available. |
 | `--from-curl <cmd-or-path>` | `-fc <cmd-or-path>` | Curl command or file path to convert. |
-| `--from-openapi <path>` | `-fo <path>` | OpenAPI specification file to convert. |
+| `--from-openapi <path-or-url>` | `-fo <path-or-url>` | OpenAPI specification (local file or `http(s)` URL) to convert. |
 | `--http-out <path>` | `-o <path>` | Destination path for generated `.http` file. |
 | `--openapi-base-var <name>` | `-ob <name>` | Variable name for the generated base URL. |
 | `--openapi-resolve-refs` | `-or` | Resolve external `$ref` references during OpenAPI import. |
@@ -264,7 +264,7 @@ Top-level flags also expose a few CLI-only workflows:
 | Flag | Description |
 | --- | --- |
 | `--from-curl <command\|path>` | Convert curl commands into a `.http` file. |
-| `--from-openapi <spec>` | Generate a `.http` collection from an OpenAPI document. |
+| `--from-openapi <spec-or-url>` | Generate a `.http` collection from an OpenAPI document (local file or `http(s)` URL). |
 | `--http-out <file>` | Output path for generated `.http` files. |
 | `--openapi-base-var <name>` | Override the generated base URL variable name. |
 | `--openapi-resolve-refs` | Resolve external `$ref` values during OpenAPI import. |
@@ -331,6 +331,15 @@ resterm \
   --openapi-resolve-refs \
   --openapi-server-index 1
 ```
+
+`--from-openapi` also takes an `http(s)` URL and fetches the spec directly:
+
+```bash
+resterm --from-openapi https://petstore3.swagger.io/api/v3/openapi.json --http-out petstore.http
+```
+
+For a URL spec, relative `servers` URLs are resolved against it, and `--openapi-resolve-refs`
+follows external `$ref`s over HTTP. `--insecure` and `--proxy` apply to the fetch.
 
 ## Related Docs
 

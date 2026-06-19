@@ -2,8 +2,10 @@ package parser
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -258,28 +260,33 @@ func (fx *hdrFix) warns() []string {
 	return ws
 }
 
-func loadDoc(path string, opts openapi.ParseOptions) (*v3.Document, []string, error) {
-	raw, rErr := os.ReadFile(path)
+func (l *Loader) loadDoc(
+	ctx context.Context,
+	src string,
+	srcURL *url.URL,
+	opts openapi.ParseOptions,
+) (*v3.Document, []string, error) {
+	raw, rErr := l.readSpec(ctx, src, srcURL)
 	if rErr != nil {
-		return nil, nil, fmt.Errorf("read spec file: %w", rErr)
+		return nil, nil, rErr
 	}
 
 	if bytes.Contains(raw, []byte(parRefPre)) {
 		raw2, ws, n, fErr := fixHdrRefs(raw)
 		if fErr == nil && n > 0 {
-			doc, err := buildDoc(path, raw2, opts)
+			doc, err := l.buildDoc(ctx, src, srcURL, raw2, opts)
 			if err == nil {
 				return doc, ws, nil
 			}
 
-			doc2, err2 := buildDoc(path, raw, opts)
+			doc2, err2 := l.buildDoc(ctx, src, srcURL, raw, opts)
 			if err2 == nil {
 				return doc2, nil, nil
 			}
 			return nil, nil, compatErr(err2, "load rewritten spec", err)
 		}
 
-		doc, err := buildDoc(path, raw, opts)
+		doc, err := l.buildDoc(ctx, src, srcURL, raw, opts)
 		if err == nil {
 			return doc, nil, nil
 		}
@@ -292,21 +299,44 @@ func loadDoc(path string, opts openapi.ParseOptions) (*v3.Document, []string, er
 		return nil, nil, err
 	}
 
-	doc, err := buildDoc(path, raw, opts)
+	doc, err := l.buildDoc(ctx, src, srcURL, raw, opts)
 	if err != nil {
 		return nil, nil, err
 	}
 	return doc, nil, nil
 }
 
-func buildDoc(path string, raw []byte, opts openapi.ParseOptions) (*v3.Document, error) {
+func (l *Loader) readSpec(ctx context.Context, src string, srcURL *url.URL) ([]byte, error) {
+	if srcURL != nil {
+		return l.fetchRemote(ctx, srcURL)
+	}
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		return nil, fmt.Errorf("read spec file: %w", err)
+	}
+	return raw, nil
+}
+
+func (l *Loader) buildDoc(
+	ctx context.Context,
+	src string,
+	srcURL *url.URL,
+	raw []byte,
+	opts openapi.ParseOptions,
+) (*v3.Document, error) {
 	cfg := datamodel.NewDocumentConfiguration()
 	cfg.SkipExternalRefResolution = !opts.ResolveExternalRefs
 	if opts.ResolveExternalRefs {
-		cp := filepath.Clean(path)
-		cfg.AllowFileReferences = true
-		cfg.BasePath = filepath.Dir(cp)
-		cfg.SpecFilePath = cp
+		if srcURL != nil {
+			cfg.BaseURL = baseDirURL(srcURL)
+			cfg.AllowRemoteReferences = true
+			cfg.RemoteURLHandler = l.remoteHandler(ctx)
+		} else {
+			cp := filepath.Clean(src)
+			cfg.AllowFileReferences = true
+			cfg.BasePath = filepath.Dir(cp)
+			cfg.SpecFilePath = cp
+		}
 	}
 
 	doc, err := libopenapi.NewDocumentWithConfiguration(raw, cfg)
