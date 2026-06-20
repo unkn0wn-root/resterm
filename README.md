@@ -5,7 +5,7 @@
 </h1>
 
 <p align="center">
-  <em>A terminal client for REST, GraphQL, gRPC, WebSocket, and SSE.</em>
+  <em>A terminal API client for REST, GraphQL, gRPC, WebSocket and SSE.</em>
 </p>
 
 <p align="center">
