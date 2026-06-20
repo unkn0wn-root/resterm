@@ -174,6 +174,30 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F` or `/`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
+### Editor completions (IntelliSense)
+
+While the editor is in insert mode, Resterm suggests completions based on where the
+caret sits. Everything is computed locally from the open file and the active
+environment - there are no network calls while you type.
+
+| Context | What completes |
+| --- | --- |
+| Start of a request line | HTTP methods plus `WS` / `WSS` / `GRPC` |
+| Start of a request URL | Schemes: `http://`, `https://`, `ws://`, `wss://` |
+| `@` on a comment line | Metadata directives and their options (e.g. `@auth bearer`, `@k8s target=`) |
+| Header section (after the request line, before the blank line) | Header names, then values for well-known headers such as `Content-Type` |
+| Inside `{{ ... }}` | Variables in scope (file/global/request, `@const`, current-environment keys) and dynamic builtins (`$uuid`, `$timestamp`, ...) |
+| `@compare` arguments | Environment names |
+| `use=` on `@apply` / `@ssh` / `@k8s` | Matching `@patch` / `@ssh` / `@k8s` profile names |
+
+Popup keys: `Up` / `Down` (or `Ctrl+P` / `Ctrl+N`) navigate, `Right` or `?` opens the
+details preview, `Left` / `Esc` closes the preview, `Enter` or `Tab` accepts, and `Esc`
+dismisses the popup. Styling is controlled by the `editor_hint_*` theme keys.
+
+Completion is deliberately offline: it does not introspect a live gRPC server
+(reflection/descriptors) or a GraphQL schema to complete service, method, or field
+names.
+
 ### Custom bindings
 
 Resterm looks for `${RESTERM_CONFIG_DIR}/bindings.toml` first and `${RESTERM_CONFIG_DIR}/bindings.json` second (default: `~/.config/resterm`). Missing files fall back to the built-in bindings. Example:
@@ -319,7 +343,7 @@ Resterm automatically searches, in order:
 2. The workspace root.
 3. The current working directory.
 
-It loads the first `resterm.env.json` or `rest-client.env.json` it finds. The JSON can contain nested objects and arrays—they are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
+It loads the first `resterm.env.json` or `rest-client.env.json` it finds. The JSON can contain nested objects and arrays - they are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
 
 Example environment (`_examples/resterm.env.json`):
 
@@ -368,7 +392,7 @@ In this example `dev` inherits `auth.clientId=demo-client` from `$shared`, while
 
 Prefer JSON for multi-environment bundles, but you can point Resterm at a dotenv file when you only need a single workspace:
 
-- Pass `--env-file path/to/.env` (or `.env.prod`, `prod.env`, etc.). Dotenv files are **never** auto-discovered—explicit opt-in avoids surprising overrides.
+- Pass `--env-file path/to/.env` (or `.env.prod`, `prod.env`, etc.). Dotenv files are **never** auto-discovered explicit opt-in avoids surprising overrides.
 - Supported syntax matches common `.env` loaders: optional `export` prefixes, `KEY=value` pairs, `#`/`;` comments, single- and double-quoted values (with escapes), and `${VAR}` or `$VAR` interpolation. We expand references using earlier keys from the same file and the current OS environment.
 - The environment name is derived from a `workspace` entry (case-insensitive). If that key is missing or blank we fall back to the file name (`.env.prod` → `prod`, `prod.env` → `prod`, bare `.env` → `default`).
 - Each dotenv file yields exactly one environment today. If you need multiple environments, stick with `resterm.env.json`.

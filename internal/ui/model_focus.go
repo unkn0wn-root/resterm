@@ -142,7 +142,7 @@ func (m *Model) setInsertMode(enabled bool, announce bool) tea.Cmd {
 		if cmd := m.editor.Cursor.Focus(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
-		m.editor.SetMetadataHintsEnabled(true)
+		m.editor.SetCompletionEnabled(true)
 	} else {
 		m.editor.ClearSelection()
 		m.editor.SetMotionsEnabled(true)
@@ -151,7 +151,7 @@ func (m *Model) setInsertMode(enabled bool, announce bool) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 		m.editor.Cursor.Blink = false
-		m.editor.SetMetadataHintsEnabled(false)
+		m.editor.SetCompletionEnabled(false)
 	}
 	m.editor.undoCoalescing = false
 	return batchCommands(cmds...)

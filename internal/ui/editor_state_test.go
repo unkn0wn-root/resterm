@@ -8,7 +8,7 @@ import (
 
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/unkn0wn-root/resterm/internal/ui/hint"
+	"github.com/unkn0wn-root/resterm/internal/intellisense"
 )
 
 func newTestEditor(content string) requestEditor {
@@ -64,7 +64,7 @@ func editorEventFromCmd(t *testing.T, cmd tea.Cmd) editorEvent {
 	return evt
 }
 
-func collectHintLabels(options []hint.Hint) map[string]bool {
+func collectHintLabels(options []intellisense.Item) map[string]bool {
 	labels := make(map[string]bool, len(options))
 	for _, option := range options {
 		labels[option.Label] = true
@@ -1389,17 +1389,17 @@ func TestRequestEditorPrevSearchMatchWrap(t *testing.T) {
 	}
 }
 
-func TestRequestEditorMetadataHintsSuggestAndAccept(t *testing.T) {
+func TestRequestEditorCompletionsSuggestAndAccept(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to activate after typing @")
 	}
-	if len(editor.metadataHints.filtered) == 0 {
+	if len(editor.completion.filtered) == 0 {
 		t.Fatal("expected metadata hint options")
 	}
 
@@ -1414,16 +1414,16 @@ func TestRequestEditorMetadataHintsSuggestAndAccept(t *testing.T) {
 	if got := editor.Value(); !strings.HasPrefix(got, "# @name ") {
 		t.Fatalf("expected @name completion, got %q", got)
 	}
-	if editor.metadataHints.active {
+	if editor.completion.active {
 		t.Fatal("expected metadata hints to close after acceptance")
 	}
 }
 
-func TestRequestEditorMetadataHintsSecondLineAnchor(t *testing.T) {
+func TestRequestEditorCompletionsSecondLineAnchor(t *testing.T) {
 	editor := newTestEditor("GET https://example.com\n# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(1, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	keys := []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'@'}},
@@ -1438,7 +1438,7 @@ func TestRequestEditorMetadataHintsSecondLineAnchor(t *testing.T) {
 		}
 	}
 
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to activate on the second line")
 	}
 
@@ -1450,16 +1450,16 @@ func TestRequestEditorMetadataHintsSecondLineAnchor(t *testing.T) {
 	if got := editor.Value(); got != "GET https://example.com\n# @name " {
 		t.Fatalf("expected @name completion on second line, got %q", got)
 	}
-	if editor.metadataHints.active {
+	if editor.completion.active {
 		t.Fatal("expected metadata hints to close after acceptance")
 	}
 }
 
-func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
+func TestRequestEditorCompletionsSuggestWsSubcommands(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	keys := []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'@'}},
@@ -1475,14 +1475,14 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 		}
 	}
 
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to activate for @ws directive")
 	}
-	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
-		t.Fatalf("expected subcommand hint mode, got %v", editor.metadataHints.ctx.Mode)
+	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
+		t.Fatalf("expected subcommand hint mode, got %v", editor.completion.ctx.Kind)
 	}
 
-	labels := collectHintLabels(editor.metadataHints.filtered)
+	labels := collectHintLabels(editor.completion.filtered)
 	for _, label := range []string{"send", "send-json", "send-base64", "send-file", "ping", "pong", "wait", "close"} {
 		if !labels[label] {
 			t.Fatalf("expected ws subcommand %q in suggestions", label)
@@ -1490,10 +1490,10 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'s'}})
-	if len(editor.metadataHints.filtered) == 0 {
+	if len(editor.completion.filtered) == 0 {
 		t.Fatal("expected filtered subcommand suggestions after typing prefix")
 	}
-	if got := editor.metadataHints.filtered[editor.metadataHints.selection].Label; got != "send" {
+	if got := editor.completion.filtered[editor.completion.selection].Label; got != "send" {
 		t.Fatalf("expected first suggestion to be send, got %q", got)
 	}
 
@@ -1505,16 +1505,16 @@ func TestRequestEditorMetadataHintsSuggestWsSubcommands(t *testing.T) {
 	if got := editor.Value(); !strings.HasPrefix(got, "# @ws send ") {
 		t.Fatalf("expected editor content to include ws subcommand, got %q", got)
 	}
-	if editor.metadataHints.active {
+	if editor.completion.active {
 		t.Fatal("expected metadata hints to close after subcommand acceptance")
 	}
 }
 
-func TestRequestEditorMetadataHintsSuggestAuthSubcommands(t *testing.T) {
+func TestRequestEditorCompletionsSuggestAuthSubcommands(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	keys := []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'@'}},
@@ -1532,14 +1532,14 @@ func TestRequestEditorMetadataHintsSuggestAuthSubcommands(t *testing.T) {
 		}
 	}
 
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to activate for @auth directive")
 	}
-	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
-		t.Fatalf("expected subcommand hint mode, got %v", editor.metadataHints.ctx.Mode)
+	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
+		t.Fatalf("expected subcommand hint mode, got %v", editor.completion.ctx.Kind)
 	}
 
-	labels := collectHintLabels(editor.metadataHints.filtered)
+	labels := collectHintLabels(editor.completion.filtered)
 	for _, label := range []string{"basic", "bearer", "apikey", "oauth2", "command", "token_url=", "argv="} {
 		if !labels[label] {
 			t.Fatalf("expected auth subcommand %q in suggestions", label)
@@ -1547,10 +1547,10 @@ func TestRequestEditorMetadataHintsSuggestAuthSubcommands(t *testing.T) {
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'c'}})
-	if len(editor.metadataHints.filtered) == 0 {
+	if len(editor.completion.filtered) == 0 {
 		t.Fatal("expected filtered auth subcommand suggestions after typing prefix")
 	}
-	if got := editor.metadataHints.filtered[editor.metadataHints.selection].Label; got != "command" {
+	if got := editor.completion.filtered[editor.completion.selection].Label; got != "command" {
 		t.Fatalf("expected first suggestion to be command, got %q", got)
 	}
 
@@ -1562,16 +1562,16 @@ func TestRequestEditorMetadataHintsSuggestAuthSubcommands(t *testing.T) {
 	if got := editor.Value(); !strings.HasPrefix(got, "# @auth command argv=") {
 		t.Fatalf("expected editor content to include auth command skeleton, got %q", got)
 	}
-	if editor.metadataHints.active {
+	if editor.completion.active {
 		t.Fatal("expected metadata hints to close after auth acceptance")
 	}
 }
 
-func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
+func TestRequestEditorCompletionsTracePlaceholder(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	keys := []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'@'}},
@@ -1591,11 +1591,11 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 		}
 	}
 
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to remain active for trace subcommand")
 	}
-	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
-		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.Mode)
+	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
+		t.Fatalf("expected subcommand mode, got %v", editor.completion.ctx.Kind)
 	}
 
 	beforeRevision := editor.Revision()
@@ -1603,7 +1603,7 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 	if editor.Revision() == beforeRevision {
 		t.Fatal("expected accepting trace hint to change editor revision")
 	}
-	if editor.metadataHints.active {
+	if editor.completion.active {
 		t.Fatal("expected metadata hints to close after acceptance")
 	}
 
@@ -1626,11 +1626,11 @@ func TestRequestEditorMetadataHintsTracePlaceholder(t *testing.T) {
 	}
 }
 
-func TestRequestEditorMetadataHintsProfileMultipleParams(t *testing.T) {
+func TestRequestEditorCompletionsProfileMultipleParams(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	keys := []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'@'}},
@@ -1651,18 +1651,18 @@ func TestRequestEditorMetadataHintsProfileMultipleParams(t *testing.T) {
 		}
 	}
 
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to activate for profile subcommands")
 	}
-	if editor.metadataHints.ctx.Mode != hint.ModeSubcommand {
-		t.Fatalf("expected subcommand mode, got %v", editor.metadataHints.ctx.Mode)
+	if editor.completion.ctx.Kind != intellisense.KindDirectiveArg {
+		t.Fatalf("expected subcommand mode, got %v", editor.completion.ctx.Kind)
 	}
 
 	editor, cmd := editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
 		cmd()
 	}
-	if editor.metadataHints.active {
+	if editor.completion.active {
 		t.Fatal("expected metadata hints to close after first profile acceptance")
 	}
 
@@ -1673,20 +1673,20 @@ func TestRequestEditorMetadataHintsProfileMultipleParams(t *testing.T) {
 	if cmd != nil {
 		cmd()
 	}
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to stay active for additional profile params")
 	}
-	labels := collectHintLabels(editor.metadataHints.filtered)
+	labels := collectHintLabels(editor.completion.filtered)
 	if !labels["warmup="] {
-		t.Fatalf("expected warmup suggestion, got %v", editor.metadataHints.filtered)
+		t.Fatalf("expected warmup suggestion, got %v", editor.completion.filtered)
 	}
 }
 
-func TestRequestEditorMetadataHintsPreviewToggle(t *testing.T) {
+func TestRequestEditorCompletionsPreviewToggle(t *testing.T) {
 	editor := newTestEditor("# ")
 	editorPtr := &editor
 	editorPtr.moveCursorTo(0, 2)
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	keys := []tea.KeyMsg{
 		{Type: tea.KeyRunes, Runes: []rune{'@'}},
@@ -1696,99 +1696,211 @@ func TestRequestEditorMetadataHintsPreviewToggle(t *testing.T) {
 		editor, _ = editor.Update(key)
 	}
 
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected metadata hints to activate")
 	}
-	if editor.metadataHints.preview {
+	if editor.completion.preview {
 		t.Fatal("expected preview to start closed")
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRight})
-	if !editor.metadataHints.preview {
+	if !editor.completion.preview {
 		t.Fatal("expected right key to open metadata hint preview")
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if editor.metadataHints.preview {
+	if editor.completion.preview {
 		t.Fatal("expected esc to close metadata hint preview")
 	}
-	if !editor.metadataHints.active {
+	if !editor.completion.active {
 		t.Fatal("expected esc to keep metadata hints active after closing preview")
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'?'}})
-	if !editor.metadataHints.preview {
+	if !editor.completion.preview {
 		t.Fatal("expected ? to toggle metadata hint preview on")
 	}
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyCtrlL})
-	if editor.metadataHints.preview {
+	if editor.completion.preview {
 		t.Fatal("expected ctrl+l to toggle metadata hint preview off")
 	}
 }
 
-func TestRequestEditorMetadataHintsIgnoreNonCommentContext(t *testing.T) {
+func TestRequestEditorCompletionsIgnoreNonCommentContext(t *testing.T) {
 	editor := newTestEditor("")
 	editorPtr := &editor
-	editorPtr.SetMetadataHintsEnabled(true)
+	editorPtr.SetCompletionEnabled(true)
 
 	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
-	if editor.metadataHints.active {
-		t.Fatal("expected metadata hints to remain inactive outside comment context")
+	if editor.completion.active {
+		t.Fatal("expected completion to stay inactive when typing @ outside a comment")
 	}
 }
 
-func TestAnalyzeMetadataHintContextSupportsChainedProfileParams(t *testing.T) {
-	query := []rune("profile count=1 warm")
-	ctx, ok := hint.AnalyzeContext(query)
-	if !ok {
-		t.Fatal("expected analyzeMetadataHintContext to accept chained params")
+func typeRunes(editor requestEditor, s string) requestEditor {
+	// Completions run in insert mode, where vim motions are disabled; mirror that
+	// so method/header letters (G, E, w, ...) insert instead of moving the caret.
+	(&editor).SetMotionsEnabled(false)
+	for _, r := range s {
+		editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
 	}
-	if ctx.Mode != hint.ModeSubcommand {
-		t.Fatalf("expected subcommand mode, got %v", ctx.Mode)
+	return editor
+}
+
+func TestRequestEditorCompletionsMethodSuggestAndAccept(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "GE")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindMethod {
+		t.Fatalf(
+			"expected method completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
 	}
-	if ctx.BaseKey != "profile" {
-		t.Fatalf("expected base key profile, got %q", ctx.BaseKey)
-	}
-	if ctx.Query != "warm" {
-		t.Fatalf("expected query warm, got %q", ctx.Query)
-	}
-	wantStart := len([]rune("profile count=1 "))
-	if ctx.TokenStart != wantStart {
-		t.Fatalf("expected token start %d, got %d", wantStart, ctx.TokenStart)
+	if !collectHintLabels(editor.completion.filtered)["GET"] {
+		t.Fatalf("expected GET suggestion, got %v", editor.completion.filtered)
 	}
 
-	trailing := []rune("profile count=1 ")
-	ctx, ok = hint.AnalyzeContext(trailing)
-	if !ok {
-		t.Fatal("expected analyzeMetadataHintContext to accept trailing space after params")
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "GET " {
+		t.Fatalf("expected accepted method to insert \"GET \", got %q", got)
 	}
-	if ctx.Query != "" {
-		t.Fatalf("expected empty query for trailing space, got %q", ctx.Query)
-	}
-	if ctx.TokenStart != len(trailing) {
-		t.Fatalf("expected token start at end of query, got %d", ctx.TokenStart)
+	if editor.completion.active {
+		t.Fatal("expected completion to close after accepting a method")
 	}
 }
 
-func TestAnalyzeMetadataHintContextSupportsApplyUseComma(t *testing.T) {
-	query := []rune("apply use=jsonApi,use")
-	ctx, ok := hint.AnalyzeContext(query)
-	if !ok {
-		t.Fatal("expected analyzeMetadataHintContext to accept comma-separated apply use")
+func TestRequestEditorCompletionsURLScheme(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "GET h")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindScheme {
+		t.Fatalf(
+			"expected scheme completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
 	}
-	if ctx.Mode != hint.ModeSubcommand {
-		t.Fatalf("expected subcommand mode, got %v", ctx.Mode)
+	if !collectHintLabels(editor.completion.filtered)["https://"] {
+		t.Fatalf("expected https:// suggestion, got %v", editor.completion.filtered)
 	}
-	if ctx.BaseKey != "apply" {
-		t.Fatalf("expected base key apply, got %q", ctx.BaseKey)
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "GET https://" {
+		t.Fatalf("expected scheme inserted without trailing space, got %q", got)
 	}
-	if ctx.Query != "use=jsonapi,use" {
-		t.Fatalf("unexpected query %q", ctx.Query)
+}
+
+func TestRequestEditorCompletionsHeaderNameInHeaderSection(t *testing.T) {
+	editor := newTestEditor("GET https://example.com\n")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, 0)
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "Cont")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindHeaderName {
+		t.Fatalf(
+			"expected header-name completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
 	}
-	wantStart := len([]rune("apply "))
-	if ctx.TokenStart != wantStart {
-		t.Fatalf("expected token start %d, got %d", wantStart, ctx.TokenStart)
+	if !collectHintLabels(editor.completion.filtered)["Content-Type"] {
+		t.Fatalf("expected Content-Type suggestion, got %v", editor.completion.filtered)
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "GET https://example.com\nContent-Type: " {
+		t.Fatalf("expected header name with colon and space, got %q", got)
+	}
+}
+
+func TestRequestEditorCompletionsHeaderValue(t *testing.T) {
+	editor := newTestEditor("GET https://example.com\nContent-Type: ")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(1, len([]rune("Content-Type: ")))
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "app")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindHeaderValue {
+		t.Fatalf(
+			"expected header-value completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
+	}
+	if !collectHintLabels(editor.completion.filtered)["application/json"] {
+		t.Fatalf("expected application/json suggestion, got %v", editor.completion.filtered)
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "GET https://example.com\nContent-Type: application/json" {
+		t.Fatalf("expected header value without trailing space, got %q", got)
+	}
+}
+
+func TestRequestEditorCompletionsVariableFromScope(t *testing.T) {
+	editor := newTestEditor("GET https://")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, len([]rune("GET https://")))
+	editorPtr.SetCompletionEnabled(true)
+	editorPtr.SetCompletionScope(intellisense.Scope{
+		Variables: []intellisense.VarRef{{Name: "host", Origin: "file"}},
+	})
+
+	editor = typeRunes(editor, "{{ho")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindVariable {
+		t.Fatalf(
+			"expected variable completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
+	}
+	labels := collectHintLabels(editor.completion.filtered)
+	if !labels["host"] {
+		t.Fatalf("expected host variable, got %v", editor.completion.filtered)
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "GET https://{{host" {
+		t.Fatalf("expected variable inserted without trailing space, got %q", got)
+	}
+}
+
+func TestRequestEditorCompletionsVariableIncludesBuiltins(t *testing.T) {
+	editor := newTestEditor("GET https://")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(0, len([]rune("GET https://")))
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "{{$ti")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindVariable {
+		t.Fatalf(
+			"expected variable completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
+	}
+	if !collectHintLabels(editor.completion.filtered)["$timestamp"] {
+		t.Fatalf("expected $timestamp builtin, got %v", editor.completion.filtered)
+	}
+}
+
+func TestRequestEditorCompletionsQuietInBody(t *testing.T) {
+	editor := newTestEditor("POST https://example.com\nContent-Type: application/json\n\n")
+	editorPtr := &editor
+	editorPtr.moveCursorTo(3, 0)
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "na")
+	if editor.completion.active {
+		t.Fatalf("expected no completion in request body, got %v", editor.completion.filtered)
 	}
 }
 

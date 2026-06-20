@@ -7,7 +7,7 @@ import (
 	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/unkn0wn-root/resterm/internal/ui/hint"
+	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
@@ -84,19 +84,20 @@ func statusCmd(level statusLevel, text string) tea.Cmd {
 
 type requestEditor struct {
 	textarea.Model
-	revision             uint64
-	selection            selectionState
-	mode                 selectionMode
-	pendingMotion        string
-	search               editorSearch
-	motionsEnabled       bool
-	undoStack            []editorSnapshot
-	redoStack            []editorSnapshot
-	undoCoalescing       bool
-	registerText         string
-	metadataHints        metadataHintState
-	metadataHintsEnabled bool
-	hintManager          hint.Manager
+	revision          uint64
+	selection         selectionState
+	mode              selectionMode
+	pendingMotion     string
+	search            editorSearch
+	motionsEnabled    bool
+	undoStack         []editorSnapshot
+	redoStack         []editorSnapshot
+	undoCoalescing    bool
+	registerText      string
+	completion        completionState
+	completionEnabled bool
+	engine            intellisense.Engine
+	scope             intellisense.Scope
 }
 
 const editorUndoLimit = 64
@@ -117,18 +118,18 @@ type editorSearch struct {
 	active  bool
 }
 
-type metadataHintState struct {
+type completionState struct {
 	active        bool
 	anchorOffset  int
 	selection     int
 	preview       bool
 	popupLabelW   int
 	popupSummaryW int
-	filtered      []hint.Hint
-	ctx           hint.Context
+	filtered      []intellisense.Item
+	ctx           intellisense.Context
 }
 
-func (s *metadataHintState) deactivate() {
+func (s *completionState) deactivate() {
 	s.active = false
 	s.filtered = nil
 	s.selection = 0
@@ -136,10 +137,14 @@ func (s *metadataHintState) deactivate() {
 	s.popupLabelW = 0
 	s.popupSummaryW = 0
 	s.anchorOffset = 0
-	s.ctx = hint.Context{}
+	s.ctx = intellisense.Context{}
 }
 
-func (s *metadataHintState) update(anchor int, filtered []hint.Hint, ctx hint.Context) {
+func (s *completionState) update(
+	anchor int,
+	filtered []intellisense.Item,
+	ctx intellisense.Context,
+) {
 	if len(filtered) == 0 {
 		s.deactivate()
 		return
@@ -152,7 +157,7 @@ func (s *metadataHintState) update(anchor int, filtered []hint.Hint, ctx hint.Co
 	s.anchorOffset = anchor
 	s.filtered = filtered
 	s.ctx = ctx
-	labelW, summaryW := metadataHintPopupPreference(filtered)
+	labelW, summaryW := completionPopupPreference(filtered)
 	if reset {
 		s.popupLabelW = labelW
 		s.popupSummaryW = summaryW
@@ -166,7 +171,7 @@ func (s *metadataHintState) update(anchor int, filtered []hint.Hint, ctx hint.Co
 	}
 }
 
-func (s *metadataHintState) move(delta int) {
+func (s *completionState) move(delta int) {
 	if !s.active || len(s.filtered) == 0 {
 		return
 	}
@@ -178,7 +183,7 @@ func (s *metadataHintState) move(delta int) {
 	s.selection = idx
 }
 
-func (s *metadataHintState) setPreview(open bool) {
+func (s *completionState) setPreview(open bool) {
 	if !s.active || len(s.filtered) == 0 {
 		s.preview = false
 		return
@@ -186,38 +191,31 @@ func (s *metadataHintState) setPreview(open bool) {
 	s.preview = open
 }
 
-func (s *metadataHintState) togglePreview() {
+func (s *completionState) togglePreview() {
 	s.setPreview(!s.preview)
 }
 
-func (s metadataHintState) display(limit int) (items []hint.Hint, selected int, ok bool) {
+func (s completionState) display(limit int) (items []intellisense.Item, selected int, ok bool) {
 	if !s.active || len(s.filtered) == 0 || limit <= 0 {
 		return nil, 0, false
 	}
 	if s.selection >= len(s.filtered) {
 		return nil, 0, false
 	}
-	start := s.selection - limit/2
-	if start < 0 {
-		start = 0
-	}
-	maxStart := len(s.filtered) - limit
-	if maxStart < 0 {
-		maxStart = 0
-	}
+
+	start := max(s.selection-limit/2, 0)
+	maxStart := max(len(s.filtered)-limit, 0)
 	if start > maxStart {
 		start = maxStart
 	}
-	end := start + limit
-	if end > len(s.filtered) {
-		end = len(s.filtered)
-	}
-	window := make([]hint.Hint, end-start)
+
+	end := min(start+limit, len(s.filtered))
+	window := make([]intellisense.Item, end-start)
 	copy(window, s.filtered[start:end])
 	return window, s.selection - start, true
 }
 
-func metadataHintPopupPreference(items []hint.Hint) (int, int) {
+func completionPopupPreference(items []intellisense.Item) (int, int) {
 	labelW := 0
 	summaryW := 0
 	for _, item := range items {
@@ -236,7 +234,7 @@ func newRequestEditor() requestEditor {
 	return requestEditor{
 		Model:          ta,
 		motionsEnabled: true,
-		hintManager:    hint.NewManager(hint.MetaSource()),
+		engine:         intellisense.New(),
 	}
 }
 
@@ -486,132 +484,114 @@ func (e requestEditor) selectionSummaryRange() (
 	return start, end
 }
 
-func (e *requestEditor) SetMetadataHintsEnabled(enabled bool) {
-	e.metadataHintsEnabled = enabled
+func (e *requestEditor) SetCompletionEnabled(enabled bool) {
+	e.completionEnabled = enabled
 	if !enabled {
-		e.metadataHints.deactivate()
+		e.completion.deactivate()
 	}
 }
 
-func (e *requestEditor) handleMetadataHintNavigation(msg tea.KeyMsg) (bool, tea.Cmd) {
-	if !e.metadataHints.active || len(e.metadataHints.filtered) == 0 {
+// SetCompletionScope updates the document-derived data used by context-aware
+// completions (variables, environments, profiles). It is refreshed on document
+// or environment changes, not per keystroke.
+func (e *requestEditor) SetCompletionScope(scope intellisense.Scope) {
+	e.scope = scope
+}
+
+func (e *requestEditor) handleCompletionKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
+	if !e.completion.active || len(e.completion.filtered) == 0 {
 		return false, nil
 	}
 	switch msg.String() {
 	case "down", "ctrl+n":
-		e.metadataHints.move(1)
+		e.completion.move(1)
 		return true, nil
 	case "up", "ctrl+p", "shift+tab":
-		e.metadataHints.move(-1)
+		e.completion.move(-1)
 		return true, nil
 	case "right":
-		e.metadataHints.setPreview(true)
+		e.completion.setPreview(true)
 		return true, nil
 	case "left":
-		if e.metadataHints.preview {
-			e.metadataHints.setPreview(false)
+		if e.completion.preview {
+			e.completion.setPreview(false)
 			return true, nil
 		}
 		return false, nil
 	case "ctrl+l", "?", "shift+/":
-		e.metadataHints.togglePreview()
+		e.completion.togglePreview()
 		return true, nil
 	case "esc":
-		if e.metadataHints.preview {
-			e.metadataHints.setPreview(false)
+		if e.completion.preview {
+			e.completion.setPreview(false)
 			return true, nil
 		}
 		return false, nil
 	case "tab", "enter", "ctrl+m":
-		cmd := e.applyMetadataHintSelection()
+		cmd := e.applyCompletion()
 		return true, cmd
 	default:
 		return false, nil
 	}
 }
 
-func (e *requestEditor) refreshMetadataHints() {
-	if !e.metadataHintsEnabled {
-		e.metadataHints.deactivate()
+func (e *requestEditor) refreshCompletions() {
+	if !e.completionEnabled {
+		e.completion.deactivate()
 		return
 	}
 	line := e.Line()
-	lineRunes := e.LineRunes(line)
-	lineLen := len(lineRunes)
+	cur := e.LineRunes(line)
 	info := e.LineInfo()
-	column := info.StartColumn + info.ColumnOffset
-	if column < 0 {
-		column = 0
-	}
-	if column > lineLen {
-		column = lineLen
-	}
-	if column == 0 || lineLen == 0 {
-		e.metadataHints.deactivate()
-		return
-	}
+	col := min(max(info.StartColumn+info.ColumnOffset, 0), len(cur))
 
-	anchor := hint.Anchor(lineRunes, column)
-	if anchor < 0 {
-		e.metadataHints.deactivate()
-		return
-	}
-	if !hint.InDirectiveContext(lineRunes, anchor) {
-		e.metadataHints.deactivate()
-		return
-	}
-	queryRunes := lineRunes[anchor+1 : column]
-	if column < lineLen && hint.IsQueryRune(lineRunes[column]) {
-		// Caret sits before additional directive characters; keep existing hints.
-		return
-	}
-	ctx, ok := hint.AnalyzeContext(queryRunes)
+	ctx, ok := intellisense.Analyze(e, line, col)
 	if !ok {
-		e.metadataHints.deactivate()
+		e.completion.deactivate()
 		return
 	}
-	filtered := e.hintManager.Options(ctx)
+	if col < len(cur) && intellisense.IsTokenRune(cur[col]) {
+		// Caret sits before more token characters; keep the current popup.
+		return
+	}
+	filtered := e.engine.Suggest(ctx, e.scope)
 	if len(filtered) == 0 {
-		e.metadataHints.deactivate()
+		e.completion.deactivate()
 		return
 	}
-	insertAnchor := anchor
-	if ctx.Mode == hint.ModeSubcommand {
-		insertAnchor = anchor + 1 + ctx.TokenStart
-	}
-	lineStart := e.offsetForPosition(line, 0)
-	e.metadataHints.update(lineStart+insertAnchor, filtered, ctx)
+	anchor := e.offsetForPosition(line, ctx.Start)
+	e.completion.update(anchor, filtered, ctx)
 }
 
-func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
-	if !e.metadataHints.active || len(e.metadataHints.filtered) == 0 {
+func (e *requestEditor) applyCompletion() tea.Cmd {
+	if !e.completion.active || len(e.completion.filtered) == 0 {
 		return nil
 	}
-	if e.metadataHints.selection < 0 || e.metadataHints.selection >= len(e.metadataHints.filtered) {
+	if e.completion.selection < 0 || e.completion.selection >= len(e.completion.filtered) {
 		return nil
 	}
-	selected := e.metadataHints.filtered[e.metadataHints.selection]
+	selected := e.completion.filtered[e.completion.selection]
 	insert := selected.Label
 	if selected.Insert != "" {
 		insert = selected.Insert
 	}
-	start := e.metadataHints.anchorOffset
+	start := e.completion.anchorOffset
 	caret := e.caretPosition()
 	if start < 0 || caret.Offset < start {
-		e.metadataHints.deactivate()
+		e.completion.deactivate()
 		return nil
 	}
 	runes := []rune(e.Value())
-	end := caret.Offset
-	if end > len(runes) {
-		end = len(runes)
-	}
+	end := min(caret.Offset, len(runes))
 	before := runes[:start]
 	after := runes[end:]
 	bodyRunes := []rune(insert)
 	replacementRunes := append([]rune{}, bodyRunes...)
-	needsSpace := len(after) == 0 || !unicode.IsSpace(after[0])
+
+	addSpace := completionAddsSpace(e.completion.ctx.Kind) &&
+		(len(after) == 0 || !unicode.IsSpace(after[0]))
 	e.pushUndoSnapshot()
+
 	updated := append([]rune{}, before...)
 	insertStart := len(updated)
 	updated = append(updated, replacementRunes...)
@@ -626,17 +606,18 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 				back = bodyLen
 			}
 			cursorMin := insertStart
-			target := insertEnd - back
-			if target < cursorMin {
-				target = cursorMin
-			}
+			target := max(insertEnd-back, cursorMin)
 			newOffset = target
 			placeholderStart = target
 			placeholderEnd = insertEnd
 		}
 	}
-	if needsSpace {
+	if addSpace {
 		updated = append(updated, ' ')
+		if placeholderStart < 0 {
+			// Leave the caret past the separator, ready for the next token.
+			newOffset = insertEnd + 1
+		}
 	}
 	updated = append(updated, after...)
 	newValue := string(updated)
@@ -657,8 +638,17 @@ func (e *requestEditor) applyMetadataHintSelection() tea.Cmd {
 	line, col := e.positionForOffset(newOffset)
 	e.moveCursorTo(line, col)
 	e.applySelectionHighlight()
-	e.metadataHints.deactivate()
+	e.completion.deactivate()
 	return nil
+}
+
+func completionAddsSpace(kind intellisense.Kind) bool {
+	switch kind {
+	case intellisense.KindVariable, intellisense.KindHeaderValue, intellisense.KindScheme:
+		return false
+	default:
+		return true
+	}
 }
 
 func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
@@ -682,7 +672,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	handled := false
 	var cmds []tea.Cmd
 
-	if consumed, hintCmd := e.handleMetadataHintNavigation(keyMsg); consumed {
+	if consumed, hintCmd := e.handleCompletionKeys(keyMsg); consumed {
 		if hintCmd != nil {
 			cmds = append(cmds, hintCmd)
 		}
@@ -702,7 +692,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			e.clearSelection()
 			handled = true
 		}
-		e.metadataHints.deactivate()
+		e.completion.deactivate()
 	case "ctrl+c":
 		if text := e.selectedText(); text != "" {
 			cmds = append(cmds, (&e).copyToClipboard(text, ""))
@@ -715,7 +705,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 		}
 		handled = true
 	case " ":
-		if e.motionsEnabled && !e.metadataHints.active {
+		if e.motionsEnabled && !e.completion.active {
 			handled = true
 		}
 	case "ctrl+v":
@@ -765,7 +755,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 	case "e", "E", "w", "W", "b", "B":
-		if e.metadataHints.active {
+		if e.completion.active {
 			break
 		}
 		if !e.motionsEnabled {
@@ -876,7 +866,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 	}
 
 	after := e.caretPosition()
-	e.refreshMetadataHints()
+	e.refreshCompletions()
 	if transformed.String() != keyMsg.String() && !e.hasSelection() {
 		e.clearSelection()
 	}
@@ -1359,7 +1349,7 @@ func (e requestEditor) ApplyInsertAction(
 	}
 
 	editorPtr.pendingMotion = ""
-	editorPtr.metadataHints.deactivate()
+	editorPtr.completion.deactivate()
 	editorPtr.applySelectionHighlight()
 
 	var refreshCmd tea.Cmd
@@ -1493,10 +1483,7 @@ func (e requestEditor) DeleteCurrentLine() (requestEditor, tea.Cmd) {
 		lines = []string{""}
 	}
 
-	line := e.Line()
-	if line < 0 {
-		line = 0
-	}
+	line := max(e.Line(), 0)
 	if line >= len(lines) {
 		line = len(lines) - 1
 	}
@@ -1546,10 +1533,7 @@ func (e requestEditor) DeleteToLineEnd() (requestEditor, tea.Cmd) {
 	}
 
 	lineLen := e.LineLength(cursor.Line)
-	end := e.offsetForPosition(cursor.Line, lineLen)
-	if end < start {
-		end = start
-	}
+	end := max(e.offsetForPosition(cursor.Line, lineLen), start)
 	if end <= start {
 		if start < len(runes) && runes[start] == '\n' {
 			end = start + 1
@@ -1642,10 +1626,7 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 	prevView := e.ViewStart()
 	runes := []rune(e.Value())
 	insert := []rune(text)
-	index := cursor.Offset
-	if index < 0 {
-		index = 0
-	}
+	index := max(cursor.Offset, 0)
 	if index > len(runes) {
 		index = len(runes)
 	}
@@ -1761,10 +1742,7 @@ func (e requestEditor) lineBounds(requested int) (start int, end int, idx int) {
 		return 0, 0, 0
 	}
 
-	idx = requested
-	if idx < 0 {
-		idx = 0
-	}
+	idx = max(requested, 0)
 	if idx >= lineCount {
 		idx = lineCount - 1
 	}
@@ -1797,10 +1775,7 @@ func (e requestEditor) executeFindMotion(
 
 	index := -1
 	if forward {
-		start := cursor.Column + 1
-		if start < 0 {
-			start = 0
-		}
+		start := max(cursor.Column+1, 0)
 		for i := start; i < len(row); i++ {
 			if row[i] == target {
 				index = i
@@ -2200,10 +2175,7 @@ func (e *requestEditor) moveCursorTo(line, column int) {
 
 	lc := e.LineCount()
 	if line >= lc {
-		line = lc - 1
-		if line < 0 {
-			line = 0
-		}
+		line = max(lc-1, 0)
 	}
 
 	for e.Line() > line {
@@ -2249,10 +2221,7 @@ func (e *requestEditor) moveToLineStartNonBlank() {
 		e.moveCursorTo(0, 0)
 		return
 	}
-	line := e.Line()
-	if line < 0 {
-		line = 0
-	}
+	line := max(e.Line(), 0)
 	if line >= lineCount {
 		line = lineCount - 1
 	}
@@ -2297,10 +2266,7 @@ func (e *requestEditor) moveToWordEnd(big bool) {
 		return
 	}
 	pos := e.caretPosition()
-	idx := pos.Offset
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(pos.Offset, 0)
 	if idx >= len(runes) {
 		idx = len(runes) - 1
 	}
@@ -2345,10 +2311,7 @@ func (e *requestEditor) moveToWordNext(big bool) {
 		return
 	}
 	pos := e.caretPosition()
-	idx := pos.Offset
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(pos.Offset, 0)
 	if idx >= len(runes) {
 		return
 	}
@@ -2373,10 +2336,7 @@ func (e *requestEditor) moveToWordStart(big bool) {
 		return
 	}
 	pos := e.caretPosition()
-	idx := pos.Offset
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(pos.Offset, 0)
 	if idx >= len(runes) {
 		idx = len(runes) - 1
 	}
@@ -2434,10 +2394,7 @@ func (e requestEditor) pageStep(full bool) int {
 		return 1
 	}
 
-	step := height / 2
-	if step < 1 {
-		step = 1
-	}
+	step := max(height/2, 1)
 	return step
 }
 
@@ -2452,7 +2409,7 @@ func (e *requestEditor) pageUp(full bool) {
 func (e *requestEditor) moveLines(delta int) {
 	switch {
 	case delta > 0:
-		for i := 0; i < delta; i++ {
+		for range delta {
 			e.CursorDown()
 		}
 	case delta < 0:

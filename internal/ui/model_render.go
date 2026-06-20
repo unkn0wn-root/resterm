@@ -66,7 +66,7 @@ func headerLabelText(label string) string {
 func headerLabelTextWithIcon(label, iconOverride string) string {
 	labelText := strings.ToUpper(strings.TrimSpace(label))
 	if labelText == "" {
-		labelText = "—"
+		labelText = "-"
 	}
 	icon := iconOverride
 	if icon == "" {
@@ -830,7 +830,7 @@ func (m Model) renderEditorPane(rc renderContext) string {
 
 	content := m.editor.View()
 	if active && m.editorInsertMode {
-		content = m.renderMetadataHintPopup(content)
+		content = m.renderCompletionPopup(content)
 	}
 	contentWidth := lipgloss.Width(content)
 	if contentWidth < 1 {
@@ -2171,7 +2171,7 @@ func (m Model) renderHeaderButton(idx int, label, value, icon string) string {
 		)
 	}
 	if valueText == "" {
-		valueText = "—"
+		valueText = "-"
 	}
 
 	fg := palette.Foreground
@@ -2225,7 +2225,8 @@ func (m Model) renderHeaderButton(idx int, label, value, icon string) string {
 		colonStyle = colonStyle.Background(palette.Background)
 	}
 
-	content := lipgloss.JoinHorizontal(lipgloss.Top,
+	content := lipgloss.JoinHorizontal(
+		lipgloss.Top,
 		labelStyle.Render(labelText),
 		colonStyle.Render(": "),
 		valueStyle.Render(valueText),
