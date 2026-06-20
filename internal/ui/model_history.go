@@ -1657,6 +1657,7 @@ func (m *Model) historyFilePath() string {
 }
 
 func (m *Model) syncRequestList(doc *restfile.Document) {
+	m.refreshCompletionScope()
 	_ = m.syncWorkflowList(doc)
 	items, listItems := m.buildRequestItems(doc)
 	m.requestItems = items

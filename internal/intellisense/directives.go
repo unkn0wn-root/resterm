@@ -1,8 +1,8 @@
-package hint
+package intellisense
 
-import "strings"
+import "slices"
 
-var MetaCatalog = []Hint{
+var directives = []Item{
 	{Label: "@name", Summary: "Assign a display name to the request"},
 	{Label: "@description", Aliases: []string{"@desc"}, Summary: "Add a multi-line description"},
 	{Label: "@tag", Aliases: []string{"@tags"}, Summary: "Categorize the request with tags"},
@@ -80,26 +80,18 @@ var MetaCatalog = []Hint{
 	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
 }
 
-var scriptHints = []Hint{
+var scriptArgs = []Item{
 	{Label: "pre-request", Summary: "Run script before the request"},
 	{Label: "test", Summary: "Run script after the response"},
-	{
-		Label:   "lang=rts",
-		Aliases: []string{"language=rts"},
-		Summary: "Use RestermScript (RST)",
-	},
-	{
-		Label:   "lang=js",
-		Aliases: []string{"language=js"},
-		Summary: "Use JavaScript (Goja)",
-	},
+	{Label: "lang=rts", Aliases: []string{"language=rts"}, Summary: "Use RestermScript (RST)"},
+	{Label: "lang=js", Aliases: []string{"language=js"}, Summary: "Use JavaScript (Goja)"},
 }
 
-var rtsHints = []Hint{
+var rtsArgs = []Item{
 	{Label: "pre-request", Summary: "Run RestermScript before the request"},
 }
 
-var workflowRunHints = []Hint{
+var workflowRunArgs = []Item{
 	{
 		Label:      "run=",
 		Summary:    "Run workflow step",
@@ -114,7 +106,107 @@ var workflowRunHints = []Hint{
 	},
 }
 
-var metaSub = map[string][]Hint{
+var settingArgs = []Item{
+	{
+		Label:      "timeout=",
+		Summary:    "Request timeout (e.g. 5s)",
+		Insert:     "timeout=5s",
+		CursorBack: len("5s"),
+	},
+	{
+		Label:      "proxy=",
+		Summary:    "HTTP proxy URL",
+		Insert:     "proxy=http://proxy",
+		CursorBack: len("http://proxy"),
+	},
+	{
+		Label:      "followredirects=",
+		Summary:    "Follow redirects (true/false)",
+		Insert:     "followredirects=false",
+		CursorBack: len("false"),
+	},
+	{
+		Label:      "insecure=",
+		Summary:    "Skip TLS verify (HTTP)",
+		Insert:     "insecure=true",
+		CursorBack: len("true"),
+	},
+	{
+		Label:      "no-cookies=",
+		Summary:    "Disable cookies for this request",
+		Insert:     "no-cookies=true",
+		CursorBack: len("true"),
+	},
+	{
+		Label:      "http-version=",
+		Summary:    "HTTP protocol version (1.0|1.1|2)",
+		Insert:     "http-version=1.1",
+		CursorBack: len("1.1"),
+	},
+	{
+		Label:      "http-insecure=",
+		Summary:    "Skip TLS verify (HTTP)",
+		Insert:     "http-insecure=true",
+		CursorBack: len("true"),
+	},
+	{
+		Label:      "http-root-cas=",
+		Summary:    "Extra root CAs (comma/space separated)",
+		Insert:     "http-root-cas=ca.pem",
+		CursorBack: len("ca.pem"),
+	},
+	{
+		Label:      "http-root-mode=",
+		Summary:    "Root CA mode (append|replace)",
+		Insert:     "http-root-mode=append",
+		CursorBack: len("append"),
+	},
+	{
+		Label:      "http-client-cert=",
+		Summary:    "Client certificate path",
+		Insert:     "http-client-cert=cert.pem",
+		CursorBack: len("cert.pem"),
+	},
+	{
+		Label:      "http-client-key=",
+		Summary:    "Client key path",
+		Insert:     "http-client-key=key.pem",
+		CursorBack: len("key.pem"),
+	},
+	{
+		Label:      "grpc-insecure=",
+		Summary:    "Skip TLS verify (gRPC)",
+		Insert:     "grpc-insecure=true",
+		CursorBack: len("true"),
+	},
+	{
+		Label:      "grpc-root-cas=",
+		Summary:    "Extra gRPC root CAs",
+		Insert:     "grpc-root-cas=ca.pem",
+		CursorBack: len("ca.pem"),
+	},
+	{
+		Label:      "grpc-root-mode=",
+		Summary:    "gRPC root mode (append|replace)",
+		Insert:     "grpc-root-mode=append",
+		CursorBack: len("append"),
+	},
+	{
+		Label:      "grpc-client-cert=",
+		Summary:    "gRPC client cert path",
+		Insert:     "grpc-client-cert=cert.pem",
+		CursorBack: len("cert.pem"),
+	},
+	{
+		Label:      "grpc-client-key=",
+		Summary:    "gRPC client key path",
+		Insert:     "grpc-client-key=key.pem",
+		CursorBack: len("key.pem"),
+	},
+}
+
+// directiveArgs maps a directive base key to its option/sub-token suggestions.
+var directiveArgs = map[string][]Item{
 	"auth": {
 		{
 			Label:      "request",
@@ -134,10 +226,7 @@ var metaSub = map[string][]Hint{
 			Insert:     "global bearer {{token}}",
 			CursorBack: len("bearer {{token}}"),
 		},
-		{
-			Label:   "none",
-			Summary: "Disable inherited auth for the current request",
-		},
+		{Label: "none", Summary: "Disable inherited auth for the current request"},
 		{
 			Label:      "basic",
 			Summary:    "Basic auth with username and password",
@@ -336,14 +425,8 @@ var metaSub = map[string][]Hint{
 		},
 	},
 	"patch": {
-		{
-			Label:   "file",
-			Summary: "Define a file-scoped reusable patch profile",
-		},
-		{
-			Label:   "global",
-			Summary: "Define a workspace-global reusable patch profile",
-		},
+		{Label: "file", Summary: "Define a file-scoped reusable patch profile"},
+		{Label: "global", Summary: "Define a workspace-global reusable patch profile"},
 	},
 	"body": {
 		{Label: "expand", Summary: "Expand templates before sending body (incl. gRPC files)"},
@@ -369,13 +452,13 @@ var metaSub = map[string][]Hint{
 			CursorBack: len("250ms"),
 		},
 	},
-	"script":  scriptHints,
-	"rts":     rtsHints,
-	"if":      workflowRunHints,
-	"elif":    workflowRunHints,
-	"else":    workflowRunHints,
-	"case":    workflowRunHints,
-	"default": workflowRunHints,
+	"script":  scriptArgs,
+	"rts":     rtsArgs,
+	"if":      workflowRunArgs,
+	"elif":    workflowRunArgs,
+	"else":    workflowRunArgs,
+	"case":    workflowRunArgs,
+	"default": workflowRunArgs,
 	"trace": {
 		{Label: "enabled=true", Summary: "Turn tracing on"},
 		{Label: "enabled=false", Summary: "Turn tracing off"},
@@ -445,6 +528,51 @@ var metaSub = map[string][]Hint{
 			Insert:     "allowance=25ms",
 			CursorBack: len("25ms"),
 		},
+	},
+	"sse": {
+		{
+			Label:      "timeout=",
+			Summary:    "Total stream timeout",
+			Insert:     "timeout=30s",
+			CursorBack: len("30s"),
+		},
+		{
+			Label:      "duration=",
+			Summary:    "Total stream timeout (alias)",
+			Insert:     "duration=30s",
+			CursorBack: len("30s"),
+		},
+		{
+			Label:      "idle=",
+			Summary:    "Idle timeout between events",
+			Insert:     "idle=10s",
+			CursorBack: len("10s"),
+		},
+		{
+			Label:      "idle-timeout=",
+			Summary:    "Idle timeout (long form)",
+			Insert:     "idle-timeout=10s",
+			CursorBack: len("10s"),
+		},
+		{
+			Label:      "max-events=",
+			Summary:    "Stop after N events",
+			Insert:     "max-events=100",
+			CursorBack: len("100"),
+		},
+		{
+			Label:      "max-bytes=",
+			Summary:    "Stop after N bytes",
+			Insert:     "max-bytes=1mb",
+			CursorBack: len("1mb"),
+		},
+		{
+			Label:      "limit-bytes=",
+			Summary:    "Stop after N bytes (alias)",
+			Insert:     "limit-bytes=1mb",
+			CursorBack: len("1mb"),
+		},
+		{Label: "off", Summary: "Disable SSE for this request"},
 	},
 	"websocket": {
 		{
@@ -683,235 +811,54 @@ var metaSub = map[string][]Hint{
 			CursorBack: len("true"),
 		},
 	},
-	"setting": {
-		{
-			Label:      "timeout=",
-			Summary:    "Request timeout (e.g. 5s)",
-			Insert:     "timeout=5s",
-			CursorBack: len("5s"),
-		},
-		{
-			Label:      "proxy=",
-			Summary:    "HTTP proxy URL",
-			Insert:     "proxy=http://proxy",
-			CursorBack: len("http://proxy"),
-		},
-		{
-			Label:      "followredirects=",
-			Summary:    "Follow redirects (true/false)",
-			Insert:     "followredirects=false",
-			CursorBack: len("false"),
-		},
-		{
-			Label:      "insecure=",
-			Summary:    "Skip TLS verify (HTTP)",
-			Insert:     "insecure=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "no-cookies=",
-			Summary:    "Disable cookies for this request",
-			Insert:     "no-cookies=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "http-version=",
-			Summary:    "HTTP protocol version (1.0|1.1|2)",
-			Insert:     "http-version=1.1",
-			CursorBack: len("1.1"),
-		},
-		{
-			Label:      "http-insecure=",
-			Summary:    "Skip TLS verify (HTTP)",
-			Insert:     "http-insecure=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "http-root-cas=",
-			Summary:    "Extra root CAs (comma/space separated)",
-			Insert:     "http-root-cas=ca.pem",
-			CursorBack: len("ca.pem"),
-		},
-		{
-			Label:      "http-root-mode=",
-			Summary:    "Root CA mode (append|replace)",
-			Insert:     "http-root-mode=append",
-			CursorBack: len("append"),
-		},
-		{
-			Label:      "http-client-cert=",
-			Summary:    "Client certificate path",
-			Insert:     "http-client-cert=cert.pem",
-			CursorBack: len("cert.pem"),
-		},
-		{
-			Label:      "http-client-key=",
-			Summary:    "Client key path",
-			Insert:     "http-client-key=key.pem",
-			CursorBack: len("key.pem"),
-		},
-		{
-			Label:      "grpc-insecure=",
-			Summary:    "Skip TLS verify (gRPC)",
-			Insert:     "grpc-insecure=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "grpc-root-cas=",
-			Summary:    "Extra gRPC root CAs",
-			Insert:     "grpc-root-cas=ca.pem",
-			CursorBack: len("ca.pem"),
-		},
-		{
-			Label:      "grpc-root-mode=",
-			Summary:    "gRPC root mode (append|replace)",
-			Insert:     "grpc-root-mode=append",
-			CursorBack: len("append"),
-		},
-		{
-			Label:      "grpc-client-cert=",
-			Summary:    "gRPC client cert path",
-			Insert:     "grpc-client-cert=cert.pem",
-			CursorBack: len("cert.pem"),
-		},
-		{
-			Label:      "grpc-client-key=",
-			Summary:    "gRPC client key path",
-			Insert:     "grpc-client-key=key.pem",
-			CursorBack: len("key.pem"),
-		},
-	},
-	"settings": {
-		{
-			Label:      "timeout=",
-			Summary:    "Request timeout (e.g. 5s)",
-			Insert:     "timeout=5s",
-			CursorBack: len("5s"),
-		},
-		{
-			Label:      "proxy=",
-			Summary:    "HTTP proxy URL",
-			Insert:     "proxy=http://proxy",
-			CursorBack: len("http://proxy"),
-		},
-		{
-			Label:      "followredirects=",
-			Summary:    "Follow redirects (true/false)",
-			Insert:     "followredirects=false",
-			CursorBack: len("false"),
-		},
-		{
-			Label:      "insecure=",
-			Summary:    "Skip TLS verify (HTTP)",
-			Insert:     "insecure=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "no-cookies=",
-			Summary:    "Disable cookies for this request",
-			Insert:     "no-cookies=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "http-version=",
-			Summary:    "HTTP protocol version (1.0|1.1|2)",
-			Insert:     "http-version=1.1",
-			CursorBack: len("1.1"),
-		},
-		{
-			Label:      "http-insecure=",
-			Summary:    "Skip TLS verify (HTTP)",
-			Insert:     "http-insecure=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "http-root-cas=",
-			Summary:    "Extra root CAs (comma/space separated)",
-			Insert:     "http-root-cas=ca.pem",
-			CursorBack: len("ca.pem"),
-		},
-		{
-			Label:      "http-root-mode=",
-			Summary:    "Root CA mode (append|replace)",
-			Insert:     "http-root-mode=append",
-			CursorBack: len("append"),
-		},
-		{
-			Label:      "http-client-cert=",
-			Summary:    "Client certificate path",
-			Insert:     "http-client-cert=cert.pem",
-			CursorBack: len("cert.pem"),
-		},
-		{
-			Label:      "http-client-key=",
-			Summary:    "Client key path",
-			Insert:     "http-client-key=key.pem",
-			CursorBack: len("key.pem"),
-		},
-		{
-			Label:      "grpc-insecure=",
-			Summary:    "Skip TLS verify (gRPC)",
-			Insert:     "grpc-insecure=true",
-			CursorBack: len("true"),
-		},
-		{
-			Label:      "grpc-root-cas=",
-			Summary:    "Extra gRPC root CAs",
-			Insert:     "grpc-root-cas=ca.pem",
-			CursorBack: len("ca.pem"),
-		},
-		{
-			Label:      "grpc-root-mode=",
-			Summary:    "gRPC root mode (append|replace)",
-			Insert:     "grpc-root-mode=append",
-			CursorBack: len("append"),
-		},
-		{
-			Label:      "grpc-client-cert=",
-			Summary:    "gRPC client cert path",
-			Insert:     "grpc-client-cert=cert.pem",
-			CursorBack: len("cert.pem"),
-		},
-		{
-			Label:      "grpc-client-key=",
-			Summary:    "gRPC client key path",
-			Insert:     "grpc-client-key=key.pem",
-			CursorBack: len("key.pem"),
-		},
-	},
+	"setting":  settingArgs,
+	"settings": settingArgs,
 }
 
-func MetaOptions(base, query string) []Hint {
-	key := NormalizeKey(base)
-	if key == "" {
-		return Filter(MetaCatalog, query)
-	}
-	opts, ok := metaSub[key]
-	if !ok {
+type directiveSource struct{}
+
+func (directiveSource) Provide(ctx Context, sc Scope) []Item {
+	switch ctx.Kind {
+	case KindDirective:
+		return filter(directives, ctx.Query)
+	case KindDirectiveArg:
+		if ctx.ArgKey == "use" {
+			return filter(profileItems(ctx.Directive, sc.Profiles), ctx.Query)
+		}
+		opts := directiveArgs[ctx.Directive]
+		if ctx.Directive == "compare" {
+			opts = slices.Concat(opts, environmentItems(sc.Environments))
+		}
+		if len(opts) == 0 {
+			return nil
+		}
+		return filter(opts, ctx.Query)
+	default:
 		return nil
 	}
-	return Filter(opts, query)
 }
 
-func NormalizeKey(raw string) string {
-	trimmed := strings.TrimSpace(raw)
-	if trimmed == "" {
-		return ""
+func profileItems(directive string, profiles ProfileSet) []Item {
+	var names []string
+	switch directive {
+	case "apply":
+		names = profiles.Patch
+	case "ssh":
+		names = profiles.SSH
+	case "k8s":
+		names = profiles.K8s
 	}
-	trimmed = strings.TrimPrefix(trimmed, "@")
-	return strings.ToLower(trimmed)
+	out := make([]Item, len(names))
+	for i, n := range names {
+		out[i] = Item{Label: n, Summary: directive + " profile"}
+	}
+	return out
 }
 
-type metaSource struct{}
-
-func MetaSource() Source {
-	return metaSource{}
-}
-
-func (metaSource) Match(ctx Context) bool {
-	return ctx.Mode == ModeDirective || ctx.Mode == ModeSubcommand
-}
-
-func (metaSource) Options(ctx Context) []Hint {
-	return MetaOptions(ctx.BaseKey, ctx.Query)
+func environmentItems(names []string) []Item {
+	out := make([]Item, len(names))
+	for i, n := range names {
+		out[i] = Item{Label: n, Summary: "environment"}
+	}
+	return out
 }

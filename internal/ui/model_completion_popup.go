@@ -6,15 +6,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/unkn0wn-root/resterm/internal/ui/hint"
+	"github.com/unkn0wn-root/resterm/internal/intellisense"
 )
 
-const metadataHintMaxWidth = 60
-const metadataHintMaxRows = 15
-const metadataHintPreviewMaxWidth = 52
-const metadataHintPreviewMaxHeight = 12
+const completionPopupMaxWidth = 60
+const completionPopupMaxRows = 15
+const completionPreviewMaxWidth = 52
+const completionPreviewMaxHeight = 12
 
-type metadataHintPopupLayout struct {
+type completionPopupLayout struct {
 	x     int
 	y     int
 	width int
@@ -36,8 +36,8 @@ func (m Model) editorHintBoxMetrics() hintBoxMetrics {
 	}
 }
 
-func (m Model) renderMetadataHintPopup(content string) string {
-	st := m.editor.metadataHints
+func (m Model) renderCompletionPopup(content string) string {
+	st := m.editor.completion
 	if !st.active || len(st.filtered) == 0 {
 		return content
 	}
@@ -49,7 +49,7 @@ func (m Model) renderMetadataHintPopup(content string) string {
 	}
 
 	x, y := m.editor.ViewportCursor()
-	layout, ok := m.metadataHintPopupLayout(w, h, x, y, len(st.filtered))
+	layout, ok := m.completionPopupLayout(w, h, x, y, len(st.filtered))
 	if !ok {
 		return content
 	}
@@ -59,7 +59,7 @@ func (m Model) renderMetadataHintPopup(content string) string {
 		return content
 	}
 
-	lines := m.buildMetadataHintPopup(
+	lines := m.buildCompletionPopup(
 		items,
 		selection,
 		layout.width,
@@ -90,24 +90,24 @@ func (m Model) renderMetadataHintPopup(content string) string {
 	}
 
 	listBox := hintOverlayBox{x: layout.x, y: layout.y, w: boxW, h: len(lines)}
-	preview, ok := m.metadataHintPreviewBox(items[selection], listBox, w, h)
+	preview, ok := m.completionPreviewBox(items[selection], listBox, w, h)
 	if !ok {
 		return out
 	}
 	return overlayHintPopup(out, preview.lines, preview.x, preview.y, w, h)
 }
 
-func (m Model) metadataHintPopupLayout(
+func (m Model) completionPopupLayout(
 	contentW, contentH, cursorX, cursorY, count int,
-) (metadataHintPopupLayout, bool) {
+) (completionPopupLayout, bool) {
 	if contentW <= 0 || contentH <= 0 || count <= 0 {
-		return metadataHintPopupLayout{}, false
+		return completionPopupLayout{}, false
 	}
 
 	box := m.editorHintBoxMetrics()
-	maxW := min(contentW, metadataHintMaxWidth)
+	maxW := min(contentW, completionPopupMaxWidth)
 	if maxW <= box.frameW {
-		return metadataHintPopupLayout{}, false
+		return completionPopupLayout{}, false
 	}
 
 	below := contentH - cursorY - 1
@@ -115,10 +115,10 @@ func (m Model) metadataHintPopupLayout(
 	belowItems := max(below-box.frameH, 0)
 	aboveItems := max(above-box.frameH, 0)
 	if belowItems == 0 && aboveItems == 0 {
-		return metadataHintPopupLayout{}, false
+		return completionPopupLayout{}, false
 	}
 
-	targetItems := min(count, metadataHintMaxRows)
+	targetItems := min(count, completionPopupMaxRows)
 	limit := 0
 	y := cursorY + 1
 	switch {
@@ -131,7 +131,7 @@ func (m Model) metadataHintPopupLayout(
 		limit = min(targetItems, belowItems)
 	}
 	if limit < 1 {
-		return metadataHintPopupLayout{}, false
+		return completionPopupLayout{}, false
 	}
 
 	x := cursorX
@@ -142,7 +142,7 @@ func (m Model) metadataHintPopupLayout(
 		x = max(contentW-maxW, 0)
 	}
 
-	return metadataHintPopupLayout{
+	return completionPopupLayout{
 		x:     x,
 		y:     max(y, 0),
 		width: maxW,
@@ -150,8 +150,8 @@ func (m Model) metadataHintPopupLayout(
 	}, true
 }
 
-func (m Model) buildMetadataHintPopup(
-	items []hint.Hint,
+func (m Model) buildCompletionPopup(
+	items []intellisense.Item,
 	selection int,
 	maxOuterW int,
 	prefLabelW int,
@@ -171,8 +171,8 @@ func (m Model) buildMetadataHintPopup(
 		return nil
 	}
 
-	labelW, summaryW := metadataHintPopupColumns(prefLabelW, prefSummaryW, maxTextW)
-	lines := m.metadataHintPopupLines(items, selection, labelW, summaryW)
+	labelW, summaryW := completionPopupColumns(prefLabelW, prefSummaryW, maxTextW)
+	lines := m.completionPopupLines(items, selection, labelW, summaryW)
 	textW := labelW
 	if summaryW > 0 {
 		textW += 1 + summaryW
@@ -184,8 +184,8 @@ func (m Model) buildMetadataHintPopup(
 	return strings.Split(out, "\n")
 }
 
-func (m Model) metadataHintPopupLines(
-	items []hint.Hint,
+func (m Model) completionPopupLines(
+	items []intellisense.Item,
 	selection int,
 	labelW, summaryW int,
 ) []string {
@@ -210,7 +210,7 @@ func (m Model) metadataHintPopupLines(
 	return lines
 }
 
-func metadataHintPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int) {
+func completionPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int) {
 	if maxTextW < 1 {
 		return 0, 0
 	}
@@ -236,7 +236,7 @@ func metadataHintPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int)
 	return labelW, summaryW
 }
 
-func metadataHintPopupWidth(lines []string) int {
+func completionPopupWidth(lines []string) int {
 	w := 0
 	for _, line := range lines {
 		if ww := visibleWidth(line); ww > w {
@@ -316,8 +316,8 @@ type hintOverlayBox struct {
 	lines []string
 }
 
-func (m Model) metadataHintPreviewBox(
-	item hint.Hint,
+func (m Model) completionPreviewBox(
+	item intellisense.Item,
 	list hintOverlayBox,
 	contentW, contentH int,
 ) (hintOverlayBox, bool) {
@@ -361,9 +361,9 @@ func (m Model) metadataHintPreviewBox(
 		if cand.maxW < 18 || cand.maxH < 5 {
 			continue
 		}
-		maxW := min(cand.maxW, metadataHintPreviewMaxWidth)
-		maxH := min(cand.maxH, metadataHintPreviewMaxHeight)
-		lines := m.buildMetadataHintPreview(item, maxW, maxH)
+		maxW := min(cand.maxW, completionPreviewMaxWidth)
+		maxH := min(cand.maxH, completionPreviewMaxHeight)
+		lines := m.buildCompletionPreview(item, maxW, maxH)
 		if len(lines) == 0 {
 			continue
 		}
@@ -371,7 +371,7 @@ func (m Model) metadataHintPreviewBox(
 		box := hintOverlayBox{
 			x:     cand.x,
 			y:     cand.y,
-			w:     metadataHintPopupWidth(lines),
+			w:     completionPopupWidth(lines),
 			h:     len(lines),
 			lines: lines,
 		}
@@ -397,8 +397,8 @@ func (m Model) metadataHintPreviewBox(
 	return hintOverlayBox{}, false
 }
 
-func (m Model) buildMetadataHintPreview(
-	item hint.Hint,
+func (m Model) buildCompletionPreview(
+	item intellisense.Item,
 	maxOuterW, maxOuterH int,
 ) []string {
 	if maxOuterW <= 0 || maxOuterH <= 0 {
@@ -476,7 +476,7 @@ render:
 	for i, line := range lines {
 		lines[i] = ansi.Truncate(line, textW, "")
 	}
-	width := metadataHintPopupWidth(lines)
+	width := completionPopupWidth(lines)
 	if width < 1 {
 		return nil
 	}

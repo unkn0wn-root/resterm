@@ -919,7 +919,7 @@ func leadWSANSI(b []byte) []byte {
 	// Keep an explicit reset when trailing ANSI contained one so continuation
 	// prefixes don't inherit outer styles (for example, bold from parent style).
 	if hasResetSGR(suf) {
-		// SGR 0 — resets all graphic attributes so prefix styling
+		// SGR 0 resets all graphic attributes so prefix styling
 		// (bold, color, etc.) does not bleed into content tokens.
 		const resetAll = "\x1b[0m"
 		clean = append(append([]byte(nil), clean...), resetAll...)
