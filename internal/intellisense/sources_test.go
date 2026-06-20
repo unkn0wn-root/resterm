@@ -22,6 +22,23 @@ func TestMethodSource(t *testing.T) {
 	}
 }
 
+func TestSchemeSource(t *testing.T) {
+	h := schemeSource{}.Provide(Context{Kind: KindScheme, Query: "h"}, Scope{})
+	if !contains(h, "https://") || !contains(h, "http://") {
+		t.Fatalf("scheme query h missing http(s): %v", h)
+	}
+	if contains(h, "ws://") {
+		t.Fatalf("scheme query h should not match ws://: %v", h)
+	}
+	w := schemeSource{}.Provide(Context{Kind: KindScheme, Query: "w"}, Scope{})
+	if !contains(w, "ws://") || !contains(w, "wss://") {
+		t.Fatalf("scheme query w missing ws schemes: %v", w)
+	}
+	if (schemeSource{}).Provide(Context{Kind: KindMethod}, Scope{}) != nil {
+		t.Fatal("scheme source should ignore non-scheme kinds")
+	}
+}
+
 func TestHeaderSource(t *testing.T) {
 	names := headerSource{}.Provide(Context{Kind: KindHeaderName, Query: "content"}, Scope{})
 	if !contains(names, "Content-Type") {
@@ -81,6 +98,9 @@ func TestEngineDispatchesByKind(t *testing.T) {
 	}
 	if items := e.Suggest(Context{Kind: KindVariable, Query: "ho"}, sc); !contains(items, "host") {
 		t.Fatalf("engine did not route variable context: %v", items)
+	}
+	if items := e.Suggest(Context{Kind: KindScheme, Query: "h"}, sc); !contains(items, "https://") {
+		t.Fatalf("engine did not route scheme context: %v", items)
 	}
 	if items := e.Suggest(
 		Context{Kind: KindDirective, Query: "aut"},

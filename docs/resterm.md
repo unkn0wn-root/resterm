@@ -183,6 +183,7 @@ environment - there are no network calls while you type.
 | Context | What completes |
 | --- | --- |
 | Start of a request line | HTTP methods plus `WS` / `WSS` / `GRPC` |
+| Start of a request URL | Schemes: `http://`, `https://`, `ws://`, `wss://` |
 | `@` on a comment line | Metadata directives and their options (e.g. `@auth bearer`, `@k8s target=`) |
 | Header section (after the request line, before the blank line) | Header names, then values for well-known headers such as `Content-Type` |
 | Inside `{{ ... }}` | Variables in scope (file/global/request, `@const`, current-environment keys) and dynamic builtins (`$uuid`, `$timestamp`, ...) |

@@ -1774,6 +1774,29 @@ func TestRequestEditorCompletionsMethodSuggestAndAccept(t *testing.T) {
 	}
 }
 
+func TestRequestEditorCompletionsURLScheme(t *testing.T) {
+	editor := newTestEditor("")
+	editorPtr := &editor
+	editorPtr.SetCompletionEnabled(true)
+
+	editor = typeRunes(editor, "GET h")
+	if !editor.completion.active || editor.completion.ctx.Kind != intellisense.KindScheme {
+		t.Fatalf(
+			"expected scheme completion, got active=%v kind=%v",
+			editor.completion.active,
+			editor.completion.ctx.Kind,
+		)
+	}
+	if !collectHintLabels(editor.completion.filtered)["https://"] {
+		t.Fatalf("expected https:// suggestion, got %v", editor.completion.filtered)
+	}
+
+	editor, _ = editor.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if got := editor.Value(); got != "GET https://" {
+		t.Fatalf("expected scheme inserted without trailing space, got %q", got)
+	}
+}
+
 func TestRequestEditorCompletionsHeaderNameInHeaderSection(t *testing.T) {
 	editor := newTestEditor("GET https://example.com\n")
 	editorPtr := &editor

@@ -74,10 +74,31 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			wantKind: KindMethod, wantQuery: "",
 		},
 		{
-			name:     "no method completion in url",
+			name:     "url scheme after method",
+			lines:    []string{"GET h"},
+			line:     0,
+			col:      5,
+			wantKind: KindScheme, wantQuery: "h",
+		},
+		{
+			name:     "no scheme once past the colon",
+			lines:    []string{"GET https://exa"},
+			line:     0,
+			col:      15,
+			wantKind: KindNone,
+		},
+		{
+			name:     "no scheme on an empty url token",
+			lines:    []string{"GET "},
+			line:     0,
+			col:      4,
+			wantKind: KindNone,
+		},
+		{
+			name:     "no completion in the url host",
 			lines:    []string{"GET https://x"},
 			line:     0,
-			col:      9,
+			col:      13,
 			wantKind: KindNone,
 		},
 		{

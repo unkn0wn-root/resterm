@@ -12,6 +12,7 @@ const (
 	KindDirective         // @directive name on a comment line
 	KindDirectiveArg      // a sub-token of a directive (auth/k8s/trace/...)
 	KindMethod            // first token of a request line
+	KindScheme            // URL scheme after a request method
 	KindHeaderName        // start of a header line
 	KindHeaderValue       // value after "Name:" on a header line
 	KindVariable          // identifier inside an open {{ ... }}
@@ -165,7 +166,7 @@ func analyzeRequest(lines Lines, line int, cur []rune, col int) (Context, bool) 
 	}
 
 	if methodLine < 0 {
-		return methodContext(cur, col)
+		return requestLineContext(cur, col)
 	}
 
 	for i := methodLine + 1; i < line; i++ {
@@ -179,7 +180,7 @@ func analyzeRequest(lines Lines, line int, cur []rune, col int) (Context, bool) 
 	return headerContext(cur, col)
 }
 
-func methodContext(cur []rune, col int) (Context, bool) {
+func requestLineContext(cur []rune, col int) (Context, bool) {
 	start := 0
 	for start < len(cur) && unicode.IsSpace(cur[start]) {
 		start++
@@ -188,19 +189,38 @@ func methodContext(cur []rune, col int) (Context, bool) {
 	for end < len(cur) && !unicode.IsSpace(cur[end]) {
 		end++
 	}
-	if col > end || col < start {
+
+	// First token: the request method.
+	if col <= end {
+		if col < start {
+			return Context{}, false
+		}
+		for _, r := range cur[start:col] {
+			if !isMethodRune(r) {
+				return Context{}, false
+			}
+		}
+		return Context{Kind: KindMethod, Query: strings.ToLower(string(cur[start:col])), Start: start}, true
+	}
+
+	// Second token: the URL scheme, while still typing scheme letters (before "://").
+	u := end
+	for u < len(cur) && unicode.IsSpace(cur[u]) {
+		u++
+	}
+	uEnd := u
+	for uEnd < len(cur) && !unicode.IsSpace(cur[uEnd]) {
+		uEnd++
+	}
+	if col <= u || col > uEnd {
 		return Context{}, false
 	}
-	for _, r := range cur[start:col] {
-		if !isMethodRune(r) {
+	for _, r := range cur[u:col] {
+		if !unicode.IsLetter(r) {
 			return Context{}, false
 		}
 	}
-	return Context{
-		Kind:  KindMethod,
-		Query: strings.ToLower(string(cur[start:col])),
-		Start: start,
-	}, true
+	return Context{Kind: KindScheme, Query: strings.ToLower(string(cur[u:col])), Start: u}, true
 }
 
 func headerContext(cur []rune, col int) (Context, bool) {

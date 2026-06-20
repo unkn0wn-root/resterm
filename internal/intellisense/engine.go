@@ -12,6 +12,7 @@ func New() Engine {
 	return Engine{sources: []source{
 		directiveSource{},
 		methodSource{},
+		schemeSource{},
 		headerSource{},
 		variableSource{},
 	}}

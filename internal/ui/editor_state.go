@@ -644,7 +644,7 @@ func (e *requestEditor) applyCompletion() tea.Cmd {
 
 func completionAddsSpace(kind intellisense.Kind) bool {
 	switch kind {
-	case intellisense.KindVariable, intellisense.KindHeaderValue:
+	case intellisense.KindVariable, intellisense.KindHeaderValue, intellisense.KindScheme:
 		return false
 	default:
 		return true
