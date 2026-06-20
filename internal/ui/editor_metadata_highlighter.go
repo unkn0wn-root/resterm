@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
@@ -56,18 +57,6 @@ var directiveValueModes = map[string]metadataValueMode{
 	"no-log":                metadataValueModeNone,
 	"log-sensitive-headers": metadataValueModeToken,
 	"log-secret-headers":    metadataValueModeToken,
-}
-
-var httpRequestMethods = map[string]struct{}{
-	"GET":     {},
-	"POST":    {},
-	"PUT":     {},
-	"PATCH":   {},
-	"DELETE":  {},
-	"HEAD":    {},
-	"OPTIONS": {},
-	"TRACE":   {},
-	"CONNECT": {},
 }
 
 type metadataRuneStyler struct {
@@ -439,11 +428,5 @@ func isRequestLine(line []rune, start int) bool {
 		return false
 	}
 
-	token := strings.ToUpper(string(line[start:end]))
-	if token == "GRPC" {
-		return true
-	}
-
-	_, ok := httpRequestMethods[token]
-	return ok
+	return intellisense.IsMethodKeyword(string(line[start:end]))
 }

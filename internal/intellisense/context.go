@@ -286,7 +286,7 @@ func looksLikeRequestLine(line string) bool {
 		return false
 	}
 	fields := strings.Fields(t)
-	if methodKeywords[strings.ToUpper(fields[0])] {
+	if IsMethodKeyword(fields[0]) {
 		return true
 	}
 	lower := strings.ToLower(t)
@@ -383,10 +383,4 @@ func isMethodRune(r rune) bool {
 
 func IsTokenRune(r rune) bool {
 	return isVarRune(r)
-}
-
-var methodKeywords = map[string]bool{
-	"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true,
-	"HEAD": true, "OPTIONS": true, "TRACE": true, "CONNECT": true,
-	"WS": true, "WSS": true, "GRPC": true,
 }

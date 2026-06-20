@@ -106,6 +106,16 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 		Render("G") {
 		t.Fatalf("gRPC request style mismatch:\nwant %q\n got %q", expected, got)
 	}
+
+	wsLine := []rune("WS wss://stream.example.com")
+	styles = styler.StylesForLine(wsLine, 0)
+	if styles == nil {
+		t.Fatalf("expected styles for WebSocket request line")
+	}
+	wsWant := lipgloss.NewStyle().Foreground(color).Bold(true).Render("W")
+	if got := styles[0].Render("W"); got != wsWant {
+		t.Fatalf("WebSocket request style mismatch:\nwant %q\n got %q", wsWant, got)
+	}
 }
 
 func TestMetadataRuneStylerRequestSeparator(t *testing.T) {
