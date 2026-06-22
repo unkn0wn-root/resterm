@@ -69,7 +69,7 @@ func analyzeVariable(cur []rune, col int) (Context, bool) {
 		return Context{}, false
 	}
 	start := col
-	for start > open && isVarRune(cur[start-1]) {
+	for start > open && IsTokenRune(cur[start-1]) {
 		start--
 	}
 	return Context{
@@ -131,10 +131,7 @@ func analyzeDirectiveArea(area []rune) (Context, bool) {
 		return Context{}, false
 	}
 
-	base := normalizeKey(string(area[:firstSpace]))
-	if base == "" {
-		return Context{}, false
-	}
+	base := strings.ToLower(string(area[:firstSpace]))
 
 	start, token, ok := splitToken(area, skipSpaces(area, firstSpace))
 	if !ok {
@@ -285,8 +282,11 @@ func looksLikeRequestLine(line string) bool {
 	if t == "" {
 		return false
 	}
-	fields := strings.Fields(t)
-	if IsMethodKeyword(fields[0]) {
+	token := t
+	if i := strings.IndexFunc(t, unicode.IsSpace); i >= 0 {
+		token = t[:i]
+	}
+	if IsMethodKeyword(token) {
 		return true
 	}
 	lower := strings.ToLower(t)
@@ -373,14 +373,10 @@ func isSubcommandRune(r rune) bool {
 	}
 }
 
-func isVarRune(r rune) bool {
+func IsTokenRune(r rune) bool {
 	return isQueryRune(r) || r == '$' || r == '.'
 }
 
 func isMethodRune(r rune) bool {
 	return unicode.IsLetter(r)
-}
-
-func IsTokenRune(r rune) bool {
-	return isVarRune(r)
 }
