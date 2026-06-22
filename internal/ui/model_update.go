@@ -1470,6 +1470,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 		} else {
 			switch keyStr {
 			case "esc":
+				if m.editor.dismissCompletion() {
+					m.suppressEditorKey = true
+					return combine(nil)
+				}
 				cmd := m.setInsertMode(false, true)
 				m.suppressEditorKey = true
 				return combine(cmd)
