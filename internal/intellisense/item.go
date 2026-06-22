@@ -1,6 +1,9 @@
 package intellisense
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 type Item struct {
 	Label      string
@@ -15,7 +18,7 @@ func filter(opts []Item, q string) []Item {
 		return nil
 	}
 	if q == "" {
-		return clone(opts)
+		return slices.Clone(opts)
 	}
 	lq := strings.ToLower(q)
 	var out []Item
@@ -42,16 +45,4 @@ func match(it Item, q string) bool {
 func hasPrefix(label, q string) bool {
 	label = strings.TrimPrefix(label, "@")
 	return strings.HasPrefix(strings.ToLower(label), q)
-}
-
-func clone(opts []Item) []Item {
-	out := make([]Item, len(opts))
-	copy(out, opts)
-	return out
-}
-
-func normalizeKey(raw string) string {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "@")
-	return strings.ToLower(raw)
 }

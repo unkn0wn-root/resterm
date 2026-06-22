@@ -535,6 +535,18 @@ func (e *requestEditor) handleCompletionKeys(msg tea.KeyMsg) (bool, tea.Cmd) {
 	}
 }
 
+func (e *requestEditor) dismissCompletion() bool {
+	if !e.completion.active {
+		return false
+	}
+	if e.completion.preview {
+		e.completion.setPreview(false)
+		return true
+	}
+	e.completion.deactivate()
+	return true
+}
+
 func (e *requestEditor) refreshCompletions() {
 	if !e.completionEnabled {
 		e.completion.deactivate()

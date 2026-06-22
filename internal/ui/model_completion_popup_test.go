@@ -347,3 +347,29 @@ func runeIndex(s string, target rune) int {
 	}
 	return -1
 }
+
+func TestEscDismissesCompletionBeforeLeavingInsertMode(t *testing.T) {
+	m := newCompletionPopupModel(t, 120, 40)
+	setTestCompletions(&m, []intellisense.Item{
+		{Label: "@auth", Summary: "Configure authentication"},
+		{Label: "@name", Summary: "Assign a name"},
+	}, 0)
+	if !m.editor.completion.active {
+		t.Fatal("expected completion popup to be active")
+	}
+
+	// First esc retracts the popup but must stay in insert mode.
+	_ = m.handleKey(keyMsgFor("esc"))
+	if m.editor.completion.active {
+		t.Fatal("expected esc to dismiss the completion popup")
+	}
+	if !m.editorInsertMode {
+		t.Fatal("expected esc to keep the editor in insert mode while a popup was open")
+	}
+
+	// Second esc, with no popup, leaves insert mode as before.
+	_ = m.handleKey(keyMsgFor("esc"))
+	if m.editorInsertMode {
+		t.Fatal("expected esc to leave insert mode once the popup was closed")
+	}
+}
