@@ -345,12 +345,12 @@ func (e *Engine) EvalCondition(
 		base,
 		expr,
 		tag+" "+expr,
-		e.rtsPosForLine(doc, req, spec.Line),
+		e.rtsPosForLineCol(doc, req, spec.Line, spec.Col),
 		vv,
 		extra,
 	)
 	if err != nil {
-		return false, "", err
+		return false, "", e.rtsErr(err, doc)
 	}
 	truthy := val.IsTruthy()
 	shouldRun := truthy
@@ -452,9 +452,9 @@ func (e *Engine) runAsserts(
 		}
 		rt.Site = "@assert " + expr
 		start := time.Now()
-		val, err := e.re.Eval(ctx, rt, expr, e.rtsPosForLine(doc, req, as.Line))
+		val, err := e.re.Eval(ctx, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
 		if err != nil {
-			return out, err
+			return out, e.rtsErr(err, doc)
 		}
 		out = append(out, scripts.TestResult{
 			Name:    expr,
@@ -993,10 +993,7 @@ func (e *Engine) applyExprs(
 			if ex == "" {
 				return nil, fmt.Errorf("@apply use=%q has an empty expression", name)
 			}
-			ps := e.rtsPosForLine(doc, req, pf.Line)
-			if pf.Col > 0 {
-				ps.Col = pf.Col
-			}
+			ps := e.rtsPosForLineCol(doc, req, pf.Line, pf.Col)
 			if pf.SourcePath != "" {
 				ps.Path = pf.SourcePath
 			}
@@ -1012,10 +1009,7 @@ func (e *Engine) applyExprs(
 	if ex == "" {
 		return nil, nil
 	}
-	ps := e.rtsPosForLine(doc, req, sp.Line)
-	if sp.Col > 0 {
-		ps.Col = sp.Col
-	}
+	ps := e.rtsPosForLineCol(doc, req, sp.Line, sp.Col)
 	return []applyExpr{{
 		ex: ex,
 		ps: ps,
@@ -1054,7 +1048,7 @@ func (e *Engine) runRTSApply(
 			}
 			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, nil)
 			if err != nil {
-				return err
+				return e.rtsErr(err, doc)
 			}
 			patch, err := e.parseApplyPatch(ctx, ex.ps, val)
 			if err != nil {

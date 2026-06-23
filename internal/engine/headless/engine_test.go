@@ -9,8 +9,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"google.golang.org/grpc"
 	testgrpc "google.golang.org/grpc/interop/grpc_testing"
@@ -216,6 +218,154 @@ func TestWorkflowScriptErr(t *testing.T) {
 	}
 	if out.Steps[0].ScriptErr == nil {
 		t.Fatalf("expected workflow step script error, got %+v", out.Steps[0])
+	}
+}
+
+func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "# @assert status == 200 && ok\nGET " + srv.URL + "\n"
+	doc := parser.Parse("basic.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	// Default (headless / `resterm run`): expression-relative column (base 1) and
+	// no source attached, exactly as before the source-span change.
+	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], "")
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.ScriptErr == nil {
+		t.Fatal("expected script error for malformed assert")
+	}
+	rep := diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) == 0 {
+		t.Fatal("expected diagnostic items")
+	}
+	if len(rep.Source) != 0 {
+		t.Fatalf("expected no source attached without SourceDiagnostics, got %q", rep.Source)
+	}
+	if col := rep.Items[0].Span.Start.Col; col != 15 {
+		t.Fatalf("expected pre-gate expression-relative column 15, got %d", col)
+	}
+
+	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
+	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(doc, doc.Requests[0], "")
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.ScriptErr == nil {
+		t.Fatal("expected script error for malformed assert")
+	}
+	rep = diag.ReportOf(res.ScriptErr)
+	if len(rep.Items) == 0 {
+		t.Fatal("expected diagnostic items")
+	}
+	if !strings.Contains(string(rep.Source), "@assert") {
+		t.Fatalf("expected file source attached for caret rendering, got %q", rep.Source)
+	}
+	if span := rep.Items[0].Span.Start; span.Line != 1 || span.Col != 25 {
+		t.Fatalf("expected span at the '&' (1:25), got %d:%d", span.Line, span.Col)
+	}
+	if got := res.ScriptErr.Error(); !strings.Contains(got, ":1:25:") {
+		t.Fatalf("expected position in error string, got %q", got)
+	}
+}
+
+func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "# @capture request id status && ok\nGET " + srv.URL + "\n"
+	doc := parser.Parse("capture.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	// Default (headless / `resterm run`): expression-relative column (base 1) and
+	// no source attached, exactly as before the source-span change.
+	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], "")
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.Err == nil {
+		t.Fatal("expected request error for malformed capture")
+	}
+	rep := diag.ReportOf(res.Err)
+	if len(rep.Items) == 0 {
+		t.Fatal("expected diagnostic items")
+	}
+	if len(rep.Source) != 0 {
+		t.Fatalf("expected no source attached without SourceDiagnostics, got %q", rep.Source)
+	}
+	if col := rep.Items[0].Span.Start.Col; col != 8 {
+		t.Fatalf("expected pre-gate expression-relative column 8, got %d", col)
+	}
+
+	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
+	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(doc, doc.Requests[0], "")
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.Err == nil {
+		t.Fatal("expected request error for malformed capture")
+	}
+	rep = diag.ReportOf(res.Err)
+	if len(rep.Items) == 0 {
+		t.Fatal("expected diagnostic items")
+	}
+	if !strings.Contains(string(rep.Source), "@capture") {
+		t.Fatalf("expected file source attached for caret rendering, got %q", rep.Source)
+	}
+	if span := rep.Items[0].Span.Start; span.Line != 1 || span.Col != 30 {
+		t.Fatalf("expected span at the '&' (1:30), got %d:%d", span.Line, span.Col)
+	}
+}
+
+func TestRequestRTSModuleParseErrorCarriesSourceSpan(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := fmt.Fprint(w, `{"ok":true}`); err != nil {
+			t.Fatalf("write response: %v", err)
+		}
+	}))
+	defer srv.Close()
+
+	src := "# @rts pre-request\n> let ok = 1 && 2\nGET " + srv.URL + "\n"
+	doc := parser.Parse("module.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], "")
+	if err != nil {
+		t.Fatalf("ExecuteRequest: %v", err)
+	}
+	if res.Err == nil {
+		t.Fatal("expected request error for malformed pre-request RTS block")
+	}
+
+	rep := diag.ReportOf(res.Err)
+	if len(rep.Items) == 0 {
+		t.Fatal("expected diagnostic items")
+	}
+	if rep.Items[0].Message != "unexpected '&'" {
+		t.Fatalf("expected precise lexer message, got %q", rep.Items[0].Message)
+	}
+	if !strings.Contains(string(rep.Source), "let ok") {
+		t.Fatalf("expected file source attached for caret rendering, got %q", rep.Source)
+	}
+	if span := rep.Items[0].Span.Start; span.Line != 2 {
+		t.Fatalf("expected span on the script line (2), got line %d", span.Line)
 	}
 }
 

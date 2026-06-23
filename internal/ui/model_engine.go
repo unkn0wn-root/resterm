@@ -36,6 +36,7 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 		CompareBase:           strings.TrimSpace(m.cfg.CompareBase),
 		Registry:              m.registryIndex(),
 		Bindings:              m.bindingsMap,
+		SourceDiagnostics:     true,
 	}
 }
 

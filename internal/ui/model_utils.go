@@ -13,6 +13,7 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -66,10 +67,9 @@ func (r responseRenderer) formatTestSummary(
 	builder := strings.Builder{}
 	builder.WriteString(r.stats.Heading.Render("Tests:") + "\n")
 	if scriptErr != nil {
-		errorLabel := r.stats.Warn.Render("[ERROR]")
-		builder.WriteString(
-			"  " + errorLabel + " " + r.stats.Message.Render(scriptErr.Error()) + "\n",
-		)
+		for _, l := range diag.Lines(diag.ReportOf(scriptErr)) {
+			builder.WriteString("  " + r.errStyles.line(l) + "\n")
+		}
 	}
 	for _, result := range results {
 		statusStyle := r.stats.Success

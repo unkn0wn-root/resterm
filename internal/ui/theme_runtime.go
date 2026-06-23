@@ -145,7 +145,7 @@ func (rt themeRuntime) syntaxHighlightStyle() string {
 }
 
 func (rt themeRuntime) responseRenderer(th theme.Theme) responseRenderer {
-	return newResponseRenderer(rt.statsPalette(th), rt.syntaxHighlightStyle())
+	return newResponseRenderer(rt.statsPalette(th), rt.syntaxHighlightStyle(), rt.errSty(th))
 }
 
 func (rt themeRuntime) applyTextInput(

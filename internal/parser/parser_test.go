@@ -228,6 +228,64 @@ GET https://example.com/api
 	}
 }
 
+func TestParseAssertDirectiveColumn(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		col  int
+	}{
+		{"hash", "# @assert a && b", 11},
+		{"slashes", "// @assert a && b", 12},
+		{"indented", "    # @assert a && b", 15},
+		{"colon", "# @assert: a && b", 12},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := Parse("assert.http", []byte(tc.line+"\nGET https://example.com/\n"))
+			if len(doc.Requests) != 1 || len(doc.Requests[0].Metadata.Asserts) != 1 {
+				t.Fatalf("expected 1 request with 1 assert")
+			}
+			as := doc.Requests[0].Metadata.Asserts[0]
+			if as.Expression != "a && b" {
+				t.Fatalf("unexpected expression: %q", as.Expression)
+			}
+			if as.Col != tc.col {
+				t.Fatalf("col: got %d, want %d", as.Col, tc.col)
+			}
+		})
+	}
+}
+
+func TestParseDirectiveExpressionColumns(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		col  int
+		got  func(*restfile.Request) int
+	}{
+		{"capture", "# @capture request id body && x", 23, func(r *restfile.Request) int {
+			return r.Metadata.Captures[0].Col
+		}},
+		{"apply", "# @apply body && x", 10, func(r *restfile.Request) int {
+			return r.Metadata.Applies[0].Col
+		}},
+		{"when", "# @when body && x", 9, func(r *restfile.Request) int {
+			return r.Metadata.When.Col
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := Parse("d.http", []byte(tc.line+"\nGET https://example.com/\n"))
+			if len(doc.Requests) != 1 {
+				t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+			}
+			if got := tc.got(doc.Requests[0]); got != tc.col {
+				t.Fatalf("col: got %d, want %d", got, tc.col)
+			}
+		})
+	}
+}
+
 func TestSplitAssertEscapes(t *testing.T) {
 	expr, msg := splitAssert(`contains(body, "a=>b") => "ok"`)
 	if expr != `contains(body, "a=>b")` {
@@ -498,8 +556,8 @@ GET https://example.com
 	if spec.Line != 1 {
 		t.Fatalf("expected line 1, got %d", spec.Line)
 	}
-	if spec.Col != 1 {
-		t.Fatalf("expected col 1, got %d", spec.Col)
+	if spec.Col != 10 {
+		t.Fatalf("expected col 10 (start of expression), got %d", spec.Col)
 	}
 }
 

@@ -28,7 +28,7 @@ func TestStyleLinesRendersChainWithLocationColor(t *testing.T) {
 	if strings.Contains(gotChain, "\x1b[2m") {
 		t.Fatalf("chain line should not use faint style, got %q", gotChain)
 	}
-	if gotChain == model.fallbackFg(
+	if gotChain == model.themeRuntime.fallbackFg(
 		model.theme.Error,
 		diagErrorLightColor,
 		diagErrorDarkColor,

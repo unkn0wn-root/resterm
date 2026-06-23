@@ -250,3 +250,47 @@ func TestParseModuleDeclDuplicate(t *testing.T) {
 		t.Fatalf("expected module duplicate error")
 	}
 }
+
+func TestParseExprIllegalTokenMessage(t *testing.T) {
+	cases := []struct {
+		name string
+		src  string
+		col  int
+	}{
+		{"trailing operator", "a && b", 3},
+		{"inside parens", "(a & b)", 4},
+		{"leading operator", "& a", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseExpr("t", 1, 1, tc.src)
+			pe, ok := err.(*ParseError)
+			if !ok {
+				t.Fatalf("expected *ParseError, got %T", err)
+			}
+			if pe.Msg != "unexpected '&'" {
+				t.Fatalf("msg: got %q, want %q", pe.Msg, "unexpected '&'")
+			}
+			if pe.Pos.Line != 1 || pe.Pos.Col != tc.col {
+				t.Fatalf("pos: got %d:%d, want 1:%d", pe.Pos.Line, pe.Pos.Col, tc.col)
+			}
+		})
+	}
+}
+
+func TestParseModuleIllegalTokenMessage(t *testing.T) {
+	_, err := ParseModule("t", []byte("let x = !\n"))
+	pe, ok := err.(*ParseError)
+	if !ok {
+		t.Fatalf("expected *ParseError, got %T", err)
+	}
+	if pe.Msg != "unexpected '!'" {
+		t.Fatalf("msg: got %q, want %q", pe.Msg, "unexpected '!'")
+	}
+	if pe.Pos.Line != 1 || pe.Pos.Col != 9 {
+		t.Fatalf("pos: got %d:%d, want 1:9", pe.Pos.Line, pe.Pos.Col)
+	}
+	if got := pe.Error(); got != "t:1:9: unexpected '!'" {
+		t.Fatalf("error string: got %q", got)
+	}
+}

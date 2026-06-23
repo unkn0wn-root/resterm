@@ -2,11 +2,13 @@ package request
 
 import (
 	"context"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
@@ -106,6 +108,34 @@ func (e *Engine) rtsPosForLine(doc *restfile.Document, req *restfile.Request, li
 	return rts.Pos{Path: path, Line: line, Col: 1}
 }
 
+func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request, line, col int) rts.Pos {
+	ps := e.rtsPosForLine(doc, req, line)
+	if col > 0 && e.cfg.SourceDiagnostics {
+		ps.Col = col
+	}
+	return ps
+}
+
+func (e *Engine) rtsErr(err error, doc *restfile.Document) error {
+	if !e.cfg.SourceDiagnostics {
+		return err
+	}
+	rep := diag.ReportOf(err)
+	if !canAttachSource(rep, doc) {
+		return err
+	}
+	// empty operation preserves err.Error() (with position) and adds no chain entry
+	return diag.Wrap(err, "", diag.WithSource(doc.Path, doc.Raw))
+}
+
+func canAttachSource(rep diag.Report, doc *restfile.Document) bool {
+	if doc == nil || len(doc.Raw) == 0 || len(rep.Items) == 0 {
+		return false
+	}
+	p := rep.Items[0].Span.Start.Path
+	return p == "" || p == doc.Path
+}
+
 func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 	if strings.TrimSpace(base) != "" {
 		return base
@@ -116,9 +146,7 @@ func (e *Engine) rtsBase(doc *restfile.Document, base string) string {
 func (e *Engine) rtsEnv(name string) map[string]string {
 	out := make(map[string]string)
 	if env := vars.EnvValues(e.cfg.EnvironmentSet, name); len(env) > 0 {
-		for k, v := range env {
-			out[k] = v
-		}
+		maps.Copy(out, env)
 	}
 	if strings.TrimSpace(name) != "" {
 		out["name"] = name
@@ -230,9 +258,7 @@ func (e *Engine) collectVariablesWithGlobals(
 	env = e.envName(env)
 	out := make(map[string]string)
 	if vals := vars.EnvValues(e.cfg.EnvironmentSet, env); len(vals) > 0 {
-		for k, v := range vals {
-			out[k] = v
-		}
+		maps.Copy(out, vals)
 	}
 	if doc != nil {
 		for _, v := range doc.Variables {
@@ -243,18 +269,14 @@ func (e *Engine) collectVariablesWithGlobals(
 		}
 	}
 	e.mergeFileRuntimeVars(out, doc, env)
-	for k, v := range globalValueMap(globs) {
-		out[k] = v
-	}
+	maps.Copy(out, globalValueMap(globs))
 	if req != nil {
 		for _, v := range req.Variables {
 			out[v.Name] = v.Value
 		}
 	}
 	for _, extra := range extras {
-		for k, v := range extra {
-			out[k] = v
-		}
+		maps.Copy(out, extra)
 	}
 	return out
 }

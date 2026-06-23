@@ -11,7 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func (b *documentBuilder) handleComment(line int, text string) {
+func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 	if !strings.HasPrefix(text, "@") {
 		return
 	}
@@ -25,6 +25,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if key == "" {
 		return
 	}
+	argCol := directiveArgCol(text, baseCol)
 
 	if b.handleWorkflowStart(line, key, rest) {
 		return
@@ -50,7 +51,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if b.handleK8sDirective(line, key, rest) {
 		return
 	}
-	if b.handlePatchDirective(line, key, rest) {
+	if b.handlePatchDirective(line, argCol, key, rest) {
 		return
 	}
 	if b.handleFileSettingsDirective(key, rest) {
@@ -62,7 +63,7 @@ func (b *documentBuilder) handleComment(line int, text string) {
 	if b.handleRequestBuilderDirective(key, rest) {
 		return
 	}
-	if b.handleRequestMetadataDirective(line, key, rest) {
+	if b.handleRequestMetadataDirective(line, argCol, key, rest) {
 		return
 	}
 	if startedRequest {
@@ -71,6 +72,39 @@ func (b *documentBuilder) handleComment(line int, text string) {
 		b.inRequest = false
 		b.request = nil
 	}
+}
+
+// directiveArgCol returns the 1-based source column of a directive's argument
+// (the text after the "@<key>" token), given baseCol, the column of text[0] (the
+// '@'). The key token is measured from text rather than the parsed key
+// so trailing markers (e.g. the colon in "@assert:") are accounted for.
+func directiveArgCol(text string, baseCol int) int {
+	if baseCol <= 0 {
+		return 0
+	}
+	body := text[1:] // after '@'
+	lead := len(body) - len(strings.TrimLeft(body, " \t"))
+	tok := body[lead:]
+	if i := strings.IndexAny(tok, " \t"); i >= 0 {
+		tok = tok[:i]
+	}
+	afterTok := body[lead+len(tok):]
+	gap := len(afterTok) - len(strings.TrimLeft(afterTok, " \t"))
+	return baseCol + 1 + lead + len(tok) + gap
+}
+
+// exprCol returns the 1-based source column of expr within rest, the directive
+// argument that begins at argCol. The expression is the trailing component of
+// rest for these directives so LastIndex locates it. 0 for unknown.
+func exprCol(rest, expr string, argCol int) int {
+	if argCol <= 0 || expr == "" {
+		return 0
+	}
+	off := strings.LastIndex(rest, expr)
+	if off < 0 {
+		return 0
+	}
+	return argCol + off
 }
 
 func (b *documentBuilder) handleWorkflowStart(line int, key, rest string) bool {
@@ -201,7 +235,7 @@ func (b *documentBuilder) handleK8sDirective(line int, key, rest string) bool {
 	return true
 }
 
-func (b *documentBuilder) handlePatchDirective(line int, key, rest string) bool {
+func (b *documentBuilder) handlePatchDirective(line, argCol int, key, rest string) bool {
 	if key != "patch" {
 		return false
 	}
@@ -213,6 +247,9 @@ func (b *documentBuilder) handlePatchDirective(line int, key, rest string) bool 
 	if err != nil {
 		b.addError(line, err.Error())
 		return true
+	}
+	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+		spec.Col = c
 	}
 	spec.SourcePath = b.doc.Path
 	b.patchDefs = append(b.patchDefs, spec)
@@ -254,7 +291,7 @@ func (b *documentBuilder) handleRequestBuilderDirective(key, rest string) bool {
 	return false
 }
 
-func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest string) bool {
+func (b *documentBuilder) handleRequestMetadataDirective(line, argCol int, key, rest string) bool {
 	switch key {
 	case "name":
 		if rest != "" {
@@ -347,15 +384,21 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 			b.addError(line, err.Error())
 			return true
 		}
+		if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+			spec.Col = c
+		}
 		b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
 		return true
 	case "capture":
 		if capture, ok := b.parseCaptureDirective(rest, line); ok {
+			if c := exprCol(rest, capture.Expression, argCol); c > 0 {
+				capture.Col = c
+			}
 			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
 		}
 		return true
 	case "assert":
-		if spec, ok := b.parseAssertDirective(rest, line); ok {
+		if spec, ok := b.parseAssertDirective(rest, line, argCol); ok {
 			b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
 		} else {
 			b.addError(line, "@assert expression missing")
@@ -371,6 +414,9 @@ func (b *documentBuilder) handleRequestMetadataDirective(line int, key, rest str
 		if b.request.metadata.When != nil {
 			b.addError(line, "@when directive already defined for this request")
 			return true
+		}
+		if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+			spec.Col = c
 		}
 		b.request.metadata.When = spec
 		return true

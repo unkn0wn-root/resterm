@@ -169,7 +169,7 @@ func TestBuildHTTPResponseViewsWithLightPaletteUsesReadableSummaryStyles(t *test
 	lightTheme.ResponseSelection = lipgloss.NewStyle().Background(lipgloss.Color("#e2e8f0"))
 	lightTheme.PaneActiveForeground = lipgloss.Color("#0f172a")
 
-	renderer := newResponseRenderer(lightStatsPalette(lightTheme), "github")
+	renderer := newResponseRenderer(lightStatsPalette(lightTheme), "github", eSty{})
 	views := renderer.buildHTTPResponseViews(resp, nil, nil)
 	contentLength := formatByteSize(int64(len(body)))
 

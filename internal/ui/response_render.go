@@ -171,9 +171,10 @@ type responseViews struct {
 type responseRenderer struct {
 	stats       statsPalette
 	syntaxStyle string
+	errStyles   eSty
 }
 
-func newResponseRenderer(stats statsPalette, syntaxStyle string) responseRenderer {
+func newResponseRenderer(stats statsPalette, syntaxStyle string, errStyles eSty) responseRenderer {
 	syntaxStyle = strings.TrimSpace(syntaxStyle)
 	if syntaxStyle == "" {
 		syntaxStyle = "monokai"
@@ -181,11 +182,12 @@ func newResponseRenderer(stats statsPalette, syntaxStyle string) responseRendere
 	return responseRenderer{
 		stats:       stats,
 		syntaxStyle: syntaxStyle,
+		errStyles:   errStyles,
 	}
 }
 
 func defaultResponseRenderer() responseRenderer {
-	return newResponseRenderer(defaultStatsPalette(), "monokai")
+	return newResponseRenderer(defaultStatsPalette(), "monokai", eSty{})
 }
 
 func buildHTTPResponseViews(

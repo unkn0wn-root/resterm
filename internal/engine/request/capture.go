@@ -202,7 +202,7 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 }
 
 func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
-	ps := e.rtsPosForLine(in.doc, in.req, in.spec.Line)
+	ps := e.rtsPosForLineCol(in.doc, in.req, in.spec.Line, in.spec.Col)
 	rt := e.buildRT(rtIn{
 		doc:  in.doc,
 		req:  in.req,
@@ -214,7 +214,8 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		res:  in.rr,
 		st:   in.rs,
 	})
-	return e.re.EvalStr(context.Background(), rt, in.ex, ps)
+	v, err := e.re.EvalStr(context.Background(), rt, in.ex, ps)
+	return v, e.rtsErr(err, in.doc)
 }
 
 func parseCaptureExpr(raw string, mode restfile.CaptureExprMode) captureExpr {
