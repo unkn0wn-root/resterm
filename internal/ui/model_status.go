@@ -23,9 +23,7 @@ func (m *Model) syncPulseBase(msg statusMsg) {
 }
 
 func (m *Model) handleStatusModal(msg statusMsg) {
-	show := msg.level == statusError && strings.TrimSpace(msg.text) != "" &&
-		!m.suppressNextErrorModal
-	m.suppressNextErrorModal = false
+	show := msg.level == statusError && strings.TrimSpace(msg.text) != "" && !msg.noModal
 	if show {
 		m.openErrorModal(msg.text)
 	}

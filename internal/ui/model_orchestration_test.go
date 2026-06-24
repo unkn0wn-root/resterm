@@ -1057,10 +1057,6 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 			m.errorModalMessage,
 		)
 	}
-	if m.suppressNextErrorModal {
-		t.Fatal("expected modal suppression to be consumed by the step status update")
-	}
-
 	applyRunEvt(t, &m, core.WfStepDone{
 		Meta: core.NewMeta(pl.Run, at.Add(9*time.Millisecond)),
 		Step: core.StepMeta{

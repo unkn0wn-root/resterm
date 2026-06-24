@@ -520,9 +520,6 @@ func TestHandleResponseMsgShowsHTTPErrorInPane(t *testing.T) {
 		model.statusMessage.level != statusError {
 		t.Fatalf("unexpected request error status: %+v", model.statusMessage)
 	}
-	if model.suppressNextErrorModal {
-		t.Fatalf("expected suppress flag to reset after status update")
-	}
 }
 
 func TestHandleResponseMsgShowsRequestCauseWithoutNotes(t *testing.T) {
@@ -601,9 +598,6 @@ func TestHandleResponseMsgShowsScriptErrorInPane(t *testing.T) {
 	viewport := model.pane(responsePanePrimary).viewport.View()
 	if !strings.Contains(viewport, "pre-request script") {
 		t.Fatalf("expected viewport to include script error details, got %q", viewport)
-	}
-	if model.suppressNextErrorModal {
-		t.Fatalf("expected suppress flag to reset after script error")
 	}
 }
 
