@@ -47,18 +47,6 @@ func (m *Model) buildResolver(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
-	return m.buildResolverWithGlobals(ctx, doc, req, envName, base, extraVals, nil, extras...)
-}
-
-func (m *Model) buildResolverWithGlobals(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	envName, base string,
-	extraVals map[string]rts.Value,
-	globals map[string]vars.GlobalMutation,
-	extras ...map[string]string,
-) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -86,11 +74,7 @@ func (m *Model) buildResolverWithGlobals(
 		}
 	}
 
-	if globals != nil {
-		if values := globalValueMap(globals); len(values) > 0 {
-			providers = append(providers, vars.NewMapProvider("global", values))
-		}
-	} else if gs := m.globalsStore(); gs != nil {
+	if gs := m.globalsStore(); gs != nil {
 		if snapshot := gs.Snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {

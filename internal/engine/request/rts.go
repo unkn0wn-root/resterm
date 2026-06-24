@@ -259,8 +259,8 @@ func (e *Engine) rtsEval(
 	extras ...map[string]string,
 ) vars.ExprEval {
 	vv := e.collectVariables(doc, req, env)
-	for _, extra := range extras {
-		for k, v := range extra {
+	for _, overlay := range extras {
+		for k, v := range overlay {
 			vv[k] = v
 		}
 	}
