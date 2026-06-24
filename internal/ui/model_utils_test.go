@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
@@ -493,14 +494,35 @@ func TestFormatTestSummaryColorsStatuses(t *testing.T) {
 	}
 }
 
+func TestFormatTestSummaryRendersDiagnostic(t *testing.T) {
+	rep := diag.Report{
+		Source: []byte("# @assert status == 200 && ok\n"),
+		Items: []diag.Diagnostic{{
+			Class:    diag.ClassScript,
+			Severity: diag.SeverityError,
+			Message:  "unexpected '&'",
+			Span:     diag.Span{Start: diag.Pos{Path: "basic.http", Line: 1, Col: 25}},
+		}},
+	}
+	err := diag.FromReport(rep, errors.New("unexpected '&'"))
+	output := stripANSIEscape(defaultResponseRenderer().formatTestSummary(nil, err))
+
+	for _, want := range []string{"error[script]: unexpected '&'", "--> basic.http:1:25", "^"} {
+		if !strings.Contains(output, want) {
+			t.Fatalf("expected %q in rust-like output, got:\n%s", want, output)
+		}
+	}
+	if strings.Contains(output, "basic.http:1:25: unexpected") {
+		t.Fatalf("should not render the plain one-liner, got:\n%s", output)
+	}
+}
+
 func TestFormatTestSummaryColorsErrors(t *testing.T) {
 	err := errors.New("kaboom")
-	output := formatTestSummary(nil, err)
+	r := newResponseRenderer(defaultStatsPalette(), "monokai", eSty{title: statsWarnStyle})
+	output := r.formatTestSummary(nil, err)
 
-	if !strings.Contains(output, statsWarnStyle.Render("[ERROR]")) {
-		t.Fatalf("expected error badge to be colored, got %q", output)
-	}
-	if !strings.Contains(output, statsMessageStyle.Render("kaboom")) {
-		t.Fatalf("expected error message to be colored, got %q", output)
+	if !strings.Contains(output, statsWarnStyle.Render("error[unknown]: kaboom")) {
+		t.Fatalf("expected rust-like error head to be colored, got %q", output)
 	}
 }

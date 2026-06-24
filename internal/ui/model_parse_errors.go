@@ -78,29 +78,33 @@ func (m Model) styleLines(ls []diag.Line) string {
 }
 
 func (m Model) errSty() eSty {
-	err := m.fallbackFg(m.theme.Error, diagErrorLightColor, diagErrorDarkColor)
-	warn := m.fallbackFg(m.theme.StatusBarKey, diagWarnLightColor, diagWarnDarkColor)
+	return m.themeRuntime.errSty(m.theme)
+}
+
+func (rt themeRuntime) errSty(th theme.Theme) eSty {
+	err := rt.fallbackFg(th.Error, diagErrorLightColor, diagErrorDarkColor)
+	warn := rt.fallbackFg(th.StatusBarKey, diagWarnLightColor, diagWarnDarkColor)
 	return eSty{
 		title: err.Bold(true),
 		label: warn.Bold(true),
 		loc:   warn,
-		src:   theme.ActiveTextStyle(m.theme),
-		bar:   m.themeRuntime.subtleTextStyle(m.theme),
-		chain: m.chainLineStyle(),
-		note:  m.themeRuntime.subtleTextStyle(m.theme),
+		src:   theme.ActiveTextStyle(th),
+		bar:   rt.subtleTextStyle(th),
+		chain: rt.chainLineStyle(th),
+		note:  rt.subtleTextStyle(th),
 	}
 }
 
-func (m Model) chainLineStyle() lipgloss.Style {
-	return m.fallbackFg(m.theme.StatusBarKey, diagWarnLightColor, diagWarnDarkColor)
+func (rt themeRuntime) chainLineStyle(th theme.Theme) lipgloss.Style {
+	return rt.fallbackFg(th.StatusBarKey, diagWarnLightColor, diagWarnDarkColor)
 }
 
-func (m Model) fallbackFg(st lipgloss.Style, light, dark string) lipgloss.Style {
+func (rt themeRuntime) fallbackFg(st lipgloss.Style, light, dark string) lipgloss.Style {
 	if fg := st.GetForeground(); theme.ColorDefined(fg) {
 		return lipgloss.NewStyle().Foreground(fg)
 	}
 	return lipgloss.NewStyle().
-		Foreground(theme.ColorForAppearance(m.themeRuntime.appearance, light, dark))
+		Foreground(theme.ColorForAppearance(rt.appearance, light, dark))
 }
 
 func (st eSty) line(l diag.Line) string {

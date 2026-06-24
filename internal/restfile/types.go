@@ -288,12 +288,14 @@ type CaptureSpec struct {
 	Mode       CaptureExprMode
 	Secret     bool
 	Line       int
+	Col        int
 }
 
 type AssertSpec struct {
 	Expression string
 	Message    string
 	Line       int
+	Col        int
 }
 
 type ApplySpec struct {

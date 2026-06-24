@@ -178,7 +178,7 @@ func summarizeCompareDelta(base, target *compareResult) string {
 		return fmt.Sprintf("error: %s", target.Err.Error())
 	}
 	if target.ScriptErr != nil {
-		return fmt.Sprintf("tests error: %v", target.ScriptErr)
+		return "test error"
 	}
 	if fails := countTestFailures(target.Tests); fails > 0 {
 		return fmt.Sprintf("%d test(s) failed", fails)

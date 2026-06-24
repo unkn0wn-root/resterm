@@ -135,7 +135,7 @@ func (b *documentBuilder) handleBlockComment(lineNumber int, line, trimmed strin
 	if b.inBlock {
 		content, closed := parseBlockCommentLine(trimmed, false)
 		if content != "" {
-			b.handleComment(lineNumber, content)
+			b.handleComment(lineNumber, 0, content)
 		}
 		b.appendLine(line)
 		if closed {
@@ -147,7 +147,7 @@ func (b *documentBuilder) handleBlockComment(lineNumber int, line, trimmed strin
 	if isBlockCommentStart(trimmed) {
 		content, closed := parseBlockCommentLine(trimmed, true)
 		if content != "" {
-			b.handleComment(lineNumber, content)
+			b.handleComment(lineNumber, 0, content)
 		}
 		b.appendLine(line)
 		if !closed {
@@ -171,8 +171,10 @@ func (b *documentBuilder) handleSeparator(lineNumber int, trimmed string) bool {
 }
 
 func (b *documentBuilder) handleCommentLine(lineNumber int, line, trimmed string) bool {
-	if commentText, ok := stripComment(trimmed); ok {
-		b.handleComment(lineNumber, commentText)
+	if commentText, col, ok := stripComment(trimmed); ok {
+		// trimmed is TrimSpace(line) and col is 1-based within trimmed so this is the directive's 1-based column in line.
+		base := strings.Index(line, trimmed) + col
+		b.handleComment(lineNumber, base, commentText)
 		b.appendLine(line)
 		return true
 	}
@@ -325,17 +327,23 @@ func (b *documentBuilder) handleDescriptionLine(lineNumber int, line, trimmed st
 	return true
 }
 
-func stripComment(trimmed string) (string, bool) {
+// stripComment strips a line comment marker and returns the directive text, the
+// 1-based column of that text within trimmed and whether trimmed was a comment.
+func stripComment(trimmed string) (string, int, bool) {
+	var n int
 	switch {
 	case strings.HasPrefix(trimmed, "//"):
-		return strings.TrimSpace(trimmed[2:]), true
+		n = 2
 	case strings.HasPrefix(trimmed, "#"):
-		return strings.TrimSpace(trimmed[1:]), true
+		n = 1
 	case strings.HasPrefix(trimmed, "--"):
-		return strings.TrimSpace(trimmed[2:]), true
+		n = 2
 	default:
-		return "", false
+		return "", 0, false
 	}
+	body := trimmed[n:]
+	lead := len(body) - len(strings.TrimLeft(body, " \t"))
+	return strings.TrimSpace(body), n + lead + 1, true
 }
 
 func isBlockCommentStart(trimmed string) bool {
@@ -421,7 +429,7 @@ func captureExprMode(ex string) restfile.CaptureExprMode {
 	return restfile.CaptureExprModeRTS
 }
 
-func (b *documentBuilder) parseAssertDirective(rest string, line int) (restfile.AssertSpec, bool) {
+func (b *documentBuilder) parseAssertDirective(rest string, line, col int) (restfile.AssertSpec, bool) {
 	expr, msg := splitAssert(rest)
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
@@ -431,6 +439,7 @@ func (b *documentBuilder) parseAssertDirective(rest string, line int) (restfile.
 		Expression: expr,
 		Message:    msg,
 		Line:       line,
+		Col:        col,
 	}, true
 }
 
@@ -587,7 +596,7 @@ func isSBEnd(trimmed string) bool {
 	if rest == "" {
 		return true
 	}
-	_, ok := stripComment(rest)
+	_, _, ok := stripComment(rest)
 	return ok
 }
 

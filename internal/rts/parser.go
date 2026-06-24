@@ -101,7 +101,7 @@ func (p *Parser) parseExprOnly() Expr {
 		p.next()
 	}
 	if p.cur.K != EOF {
-		p.fail(p.cur.P, fmt.Sprintf("unexpected %s", p.cur.K))
+		p.failCur(fmt.Sprintf("unexpected %s", p.cur.K))
 	}
 	return ex
 }
@@ -659,10 +659,8 @@ func (p *Parser) parsePrimary() Expr {
 		return p.parseList()
 	case LBRACE:
 		return p.parseDict()
-	case ILLEGAL:
-		p.fail(p.cur.P, p.cur.Lit)
 	}
-	p.fail(p.cur.P, fmt.Sprintf("unexpected %s", p.cur.K))
+	p.failCur(fmt.Sprintf("unexpected %s", p.cur.K))
 	return nil
 }
 
@@ -750,7 +748,7 @@ func (p *Parser) isSemi(k Kind) bool {
 
 func (p *Parser) expectSemi() {
 	if !p.isSemi(p.cur.K) {
-		p.fail(p.cur.P, fmt.Sprintf("expected %s, got %s", SEMI, p.cur.K))
+		p.failCur(fmt.Sprintf("expected %s, got %s", SEMI, p.cur.K))
 	}
 	p.next()
 }
@@ -780,7 +778,7 @@ func (p *Parser) peekN(n int) Tok {
 
 func (p *Parser) expect(k Kind) Tok {
 	if p.cur.K != k {
-		p.fail(p.cur.P, fmt.Sprintf("expected %s, got %s", k, p.cur.K))
+		p.failCur(fmt.Sprintf("expected %s, got %s", k, p.cur.K))
 	}
 	t := p.cur
 	p.next()
@@ -789,4 +787,14 @@ func (p *Parser) expect(k Kind) Tok {
 
 func (p *Parser) fail(pos Pos, msg string) {
 	panic(&ParseError{Pos: pos, Msg: msg})
+}
+
+// failCur reports a parse error at the current token. An ILLEGAL token already
+// carries the lexer's diagnostic (e.g. unexpected '&')
+func (p *Parser) failCur(fallback string) {
+	msg := fallback
+	if p.cur.K == ILLEGAL {
+		msg = p.cur.Lit
+	}
+	p.fail(p.cur.P, msg)
 }
