@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -232,9 +233,10 @@ func (m *Model) buildDisplayResolver(
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(m.requestSvc(httpclient.Options{}).ExprEval(
+	res.SetExprEval(m.requestSvc(httpclient.Options{}).ExprEvalWithOptions(
 		ctx, doc, req, resolvedEnv, base,
 		m.rtsVarsSafe(doc, req, resolvedEnv, extras...), extraVals,
+		rqeng.ExprEvalOptions{OmitSecretGlobals: true},
 	))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res

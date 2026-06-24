@@ -51,6 +51,7 @@ func (m *Model) requestSvc(opts httpclient.Options) *rqeng.Engine {
 	} else {
 		m.rq.SetConfig(cfg)
 	}
+	m.rq.SeedLast(m.lastResponse, m.lastGRPC)
 	return m.rq
 }
 
