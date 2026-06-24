@@ -131,7 +131,10 @@ func (m *Model) buildResolverWithGlobals(
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, false, extraVals, extras...))
+	res.SetExprEval(m.requestSvc(httpclient.Options{}).ExprEval(
+		ctx, doc, req, resolvedEnv, base,
+		m.rtsVars(doc, req, resolvedEnv, extras...), extraVals,
+	))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res
 }
@@ -229,7 +232,10 @@ func (m *Model) buildDisplayResolver(
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, true, extraVals, extras...))
+	res.SetExprEval(m.requestSvc(httpclient.Options{}).ExprEval(
+		ctx, doc, req, resolvedEnv, base,
+		m.rtsVarsSafe(doc, req, resolvedEnv, extras...), extraVals,
+	))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res
 }
@@ -387,13 +393,6 @@ func (m *Model) collectVariablesWithStoreGlobals(
 		}
 	}
 	return result
-}
-
-func (m *Model) collectGlobalValues(
-	doc *restfile.Document,
-	envName string,
-) map[string]vars.GlobalMutation {
-	return effectiveGlobalValues(doc, m.collectStoredGlobalValues(envName))
 }
 
 func collectDocumentGlobalValues(doc *restfile.Document) map[string]vars.GlobalMutation {

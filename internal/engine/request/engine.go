@@ -474,7 +474,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	if len(x.req.Metadata.Applies) > 0 {
 		before = cloneRequest(x.req)
 	}
-	if err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv); err != nil {
+	if err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, nil); err != nil {
 		x.exp.stage(
 			xplain.StageApply,
 			xplain.StageError,

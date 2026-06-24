@@ -2,12 +2,11 @@ package ui
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
-	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 )
 
 type forEachSpec struct {
@@ -25,35 +24,8 @@ func (m *Model) evalCondition(
 	vars map[string]string,
 	extraVals map[string]rts.Value,
 ) (bool, string, error) {
-	if spec == nil {
-		return true, "", nil
-	}
-	expr := strings.TrimSpace(spec.Expression)
-	if expr == "" {
-		return true, "", nil
-	}
-	tag := "@when"
-	if spec.Negate {
-		tag = "@skip-if"
-	}
-	site := tag + " " + expr
-	pos := m.rtsPosForLine(doc, req, spec.Line)
-	val, err := m.rtsEvalValue(ctx, doc, req, envName, base, expr, site, pos, vars, extraVals)
-	if err != nil {
-		return false, "", err
-	}
-	truthy := val.IsTruthy()
-	shouldRun := truthy
-	if spec.Negate {
-		shouldRun = !truthy
-	}
-	if shouldRun {
-		return true, "", nil
-	}
-	if spec.Negate {
-		return false, fmt.Sprintf("@skip-if evaluated to true: %s", expr), nil
-	}
-	return false, fmt.Sprintf("@when evaluated to false: %s", expr), nil
+	return m.requestSvc(httpclient.Options{}).
+		EvalCondition(ctx, doc, req, envName, base, spec, vars, extraVals)
 }
 
 func (m *Model) evalForEachItems(
@@ -65,36 +37,38 @@ func (m *Model) evalForEachItems(
 	vars map[string]string,
 	extraVals map[string]rts.Value,
 ) ([]rts.Value, error) {
-	expr := strings.TrimSpace(spec.Expr)
-	if expr == "" {
-		return nil, fmt.Errorf("@for-each expression missing")
-	}
-	pos := m.rtsPosForLine(doc, req, spec.Line)
-	val, err := m.rtsEvalValue(
-		ctx,
-		doc,
-		req,
-		envName,
-		base,
-		expr,
-		"@for-each "+expr,
-		pos,
-		vars,
-		extraVals,
+	return m.requestSvc(httpclient.Options{}).EvalForEachItems(
+		ctx, doc, req, envName, base,
+		rqeng.ForEachSpec{Expr: spec.Expr, Var: spec.Var, Line: spec.Line},
+		vars, extraVals,
 	)
-	if err != nil {
-		return nil, err
-	}
-	if val.K != rts.VList {
-		return nil, fmt.Errorf("@for-each expects list result")
-	}
-	return val.L, nil
+}
+
+func (m *Model) rtsEvalValue(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base, expr, site string,
+	pos rts.Pos,
+	vars map[string]string,
+	extraVals map[string]rts.Value,
+) (rts.Value, error) {
+	return m.requestSvc(httpclient.Options{}).
+		EvalValue(ctx, doc, req, envName, base, expr, site, pos, vars, extraVals)
 }
 
 func (m *Model) rtsValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error) {
-	if m.rtsEng == nil {
-		m.rtsEng = rts.NewEng(stdlib.New)
-	}
-	cx := rts.NewCtx(ctx, m.rtsEng.Lim)
-	return rts.ValueString(cx, pos, v)
+	return m.requestSvc(httpclient.Options{}).ValueString(ctx, pos, v)
+}
+
+func (m *Model) runRTSApply(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	envName, base string,
+	vars map[string]string,
+	extraVals map[string]rts.Value,
+) error {
+	return m.requestSvc(httpclient.Options{}).
+		ApplyPatches(ctx, doc, req, envName, base, vars, extraVals)
 }

@@ -249,6 +249,20 @@ func (e *Engine) rtsEval(
 			vv[k] = v
 		}
 	}
+	return e.ExprEval(ctx, doc, req, env, base, vv, extra)
+}
+
+// ExprEval returns a {{= expr }} evaluator bound to vv. Callers own the variable
+// set, so the UI can pass secret-stripped vars for previews without the engine
+// carrying a "safe" mode of its own.
+func (e *Engine) ExprEval(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+) vars.ExprEval {
 	return func(expr string, pos vars.ExprPos) (string, error) {
 		rt := e.buildRT(rtIn{
 			doc:  doc,
@@ -490,6 +504,18 @@ func (e *Engine) runAsserts(
 		return nil, nil
 	}
 	return out, nil
+}
+
+// RunPreRequest runs the request's @rts pre-request scripts.
+func (e *Engine) RunPreRequest(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	globals map[string]vars.GlobalMutation,
+) (prerequest.Output, error) {
+	return e.runRTSPreRequest(ctx, doc, req, env, base, vv, globals)
 }
 
 func (e *Engine) runRTSPreRequest(
@@ -1053,6 +1079,7 @@ func (e *Engine) runRTSApply(
 	req *restfile.Request,
 	env, base string,
 	vv map[string]string,
+	extra map[string]rts.Value,
 ) error {
 	if req == nil || len(req.Metadata.Applies) == 0 {
 		return nil
@@ -1069,7 +1096,7 @@ func (e *Engine) runRTSApply(
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, nil)
+			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, extra)
 			if err != nil {
 				return err
 			}
@@ -1083,6 +1110,18 @@ func (e *Engine) runRTSApply(
 		}
 	}
 	return nil
+}
+
+// ApplyPatches runs the request's @apply directives, mutating req in place.
+func (e *Engine) ApplyPatches(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+) error {
+	return e.runRTSApply(ctx, doc, req, env, base, vv, extra)
 }
 
 func joinErr(a, b error) error {

@@ -26,8 +26,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/rts"
-	"github.com/unkn0wn-root/resterm/internal/rts/stdlib"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -294,7 +292,6 @@ type Model struct {
 	latAnimStart     time.Time
 
 	scriptRunner    *scripts.Runner
-	rtsEng          *rts.Eng
 	testResults     []scripts.TestResult
 	scriptError     error
 	updateClient    update.Client
@@ -698,7 +695,6 @@ func New(cfg Config) Model {
 		statusHost:               statusHost,
 		latencySeries:            newLatencySeries(latCap),
 		scriptRunner:             scripts.NewRunner(nil),
-		rtsEng:                   rts.NewEng(stdlib.New),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,
 		updateCmd:                updateCmd,
