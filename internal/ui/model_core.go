@@ -265,7 +265,6 @@ type Model struct {
 	requestDetailFields    []requestDetailField
 	requestDetailViewport  *viewport.Model
 	helpViewport           *viewport.Model
-	suppressNextErrorModal bool
 
 	showSearchPrompt   bool
 	searchInput        textinput.Model

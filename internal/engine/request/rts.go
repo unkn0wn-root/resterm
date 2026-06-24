@@ -259,8 +259,30 @@ func (e *Engine) rtsEval(
 			site: "{{= " + expr + " }}",
 			x:    extra,
 		})
-		return e.re.EvalStr(ctx, rt, expr, rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col})
+		return e.evalRTSString(ctx, doc, rt, expr, rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col})
 	}
+}
+
+func (e *Engine) evalRTSValue(
+	ctx context.Context,
+	doc *restfile.Document,
+	rt rts.RT,
+	expr string,
+	pos rts.Pos,
+) (rts.Value, error) {
+	v, err := e.re.Eval(ctx, rt, expr, pos)
+	return v, e.rtsErr(err, doc)
+}
+
+func (e *Engine) evalRTSString(
+	ctx context.Context,
+	doc *restfile.Document,
+	rt rts.RT,
+	expr string,
+	pos rts.Pos,
+) (string, error) {
+	s, err := e.re.EvalStr(ctx, rt, expr, pos)
+	return s, e.rtsErr(err, doc)
 }
 
 func (e *Engine) rtsEvalValue(
@@ -275,7 +297,7 @@ func (e *Engine) rtsEvalValue(
 	if vv == nil {
 		vv = e.collectVariables(doc, req, env)
 	}
-	return e.re.Eval(ctx, e.buildRT(rtIn{
+	rt := e.buildRT(rtIn{
 		doc:  doc,
 		req:  req,
 		env:  env,
@@ -283,7 +305,8 @@ func (e *Engine) rtsEvalValue(
 		vars: vv,
 		site: site,
 		x:    extra,
-	}), expr, pos)
+	})
+	return e.evalRTSValue(ctx, doc, rt, expr, pos)
 }
 
 func (e *Engine) PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos {
@@ -350,7 +373,7 @@ func (e *Engine) EvalCondition(
 		extra,
 	)
 	if err != nil {
-		return false, "", e.rtsErr(err, doc)
+		return false, "", err
 	}
 	truthy := val.IsTruthy()
 	shouldRun := truthy
@@ -452,9 +475,9 @@ func (e *Engine) runAsserts(
 		}
 		rt.Site = "@assert " + expr
 		start := time.Now()
-		val, err := e.re.Eval(ctx, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
+		val, err := e.evalRTSValue(ctx, doc, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
 		if err != nil {
-			return out, e.rtsErr(err, doc)
+			return out, err
 		}
 		out = append(out, scripts.TestResult{
 			Name:    expr,
@@ -1048,7 +1071,7 @@ func (e *Engine) runRTSApply(
 			}
 			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, nil)
 			if err != nil {
-				return e.rtsErr(err, doc)
+				return err
 			}
 			patch, err := e.parseApplyPatch(ctx, ex.ps, val)
 			if err != nil {

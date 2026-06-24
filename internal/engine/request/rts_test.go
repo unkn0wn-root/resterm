@@ -49,3 +49,42 @@ GET https://example.com
 		}
 	}
 }
+
+func TestEvalForEachErrorCarriesSource(t *testing.T) {
+	eng := New(engcfg.Config{SourceDiagnostics: true}, nil)
+	src := `### Req
+# @for-each item in missing.value
+GET https://example.com
+`
+	doc := parser.Parse("sample.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+
+	_, err := eng.EvalForEachItems(
+		context.Background(),
+		doc,
+		doc.Requests[0],
+		"",
+		"",
+		ForEachSpec{Expr: "missing.value", Line: 2},
+		nil,
+		nil,
+	)
+	if err == nil {
+		t.Fatalf("expected for-each error")
+	}
+
+	out := diag.Render(err)
+	checks := []string{
+		`error[script]: undefined name "missing"`,
+		"--> sample.http:2:1",
+		"   2 | # @for-each item in missing.value", // source snippet, attached via rtsErr
+		"in @for-each missing.value",
+	}
+	for _, want := range checks {
+		if !strings.Contains(out, want) {
+			t.Fatalf("expected rendered for-each error to contain %q:\n%s", want, out)
+		}
+	}
+}

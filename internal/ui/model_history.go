@@ -120,7 +120,6 @@ func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 		m.lastGRPC = nil
 
 		cmd := m.consumeRequestError(msg.err, msg.explain)
-		m.suppressNextErrorModal = true
 		m.setStatusMessage(requestErrorStatus(canceled))
 		return cmd
 	}
@@ -150,7 +149,8 @@ func requestErrorStatus(canceled bool) statusMsg {
 	if canceled {
 		return statusMsg{text: "Request canceled", level: statusInfo}
 	}
-	return statusMsg{text: "Request failed ✗", level: statusError}
+	// error is already rendered in the response pane
+	return statusMsg{text: "Request failed ✗", level: statusError, noModal: true}
 }
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
@@ -501,8 +501,7 @@ func (m *Model) consumeHTTPResponse(
 
 	// A response (incl. 4xx/5xx API errors) is already shown in the response tab and
 	// status line so don't also pop the error modal - it would just duplicate it.
-	m.suppressNextErrorModal = true
-	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel})
+	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel, noModal: true})
 
 	token := nextResponseRenderToken()
 	snapshot := &responseSnapshot{
