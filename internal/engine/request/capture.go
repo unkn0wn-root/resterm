@@ -214,8 +214,7 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		res:  in.rr,
 		st:   in.rs,
 	})
-	v, err := e.re.EvalStr(context.Background(), rt, in.ex, ps)
-	return v, e.rtsErr(err, in.doc)
+	return e.evalRTSString(context.Background(), in.doc, rt, in.ex, ps)
 }
 
 func parseCaptureExpr(raw string, mode restfile.CaptureExprMode) captureExpr {
