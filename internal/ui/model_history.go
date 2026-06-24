@@ -499,6 +499,9 @@ func (m *Model) consumeHTTPResponse(
 		statusLevel = maxStatusLevel(statusLevel, statusWarn)
 	}
 
+	// A response (incl. 4xx/5xx API errors) is already shown in the response tab and
+	// status line so don't also pop the error modal - it would just duplicate it.
+	m.suppressNextErrorModal = true
 	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel})
 
 	token := nextResponseRenderToken()
