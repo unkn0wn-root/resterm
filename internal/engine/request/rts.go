@@ -111,6 +111,16 @@ func (e *Engine) rtsLast() *rts.Resp {
 	}
 }
 
+// rtsLastTrace binds the most recent HTTP response's trace so RTS evaluation
+// (trace.enabled(), trace.withinBudget(), trace.breaches()) resolves against it
+// when no explicit trace is supplied.
+func (e *Engine) rtsLastTrace() *rts.Trace {
+	if e.last.http != nil {
+		return rtsTrace(e.last.http)
+	}
+	return nil
+}
+
 func rtsHTTP(resp *httpclient.Response) *rts.Resp {
 	if resp == nil {
 		return nil
@@ -194,17 +204,18 @@ func rtsStream(info *scripts.StreamInfo) *rts.Stream {
 }
 
 type rtIn struct {
-	doc  *restfile.Document
-	req  *restfile.Request
-	env  string
-	base string
-	vars map[string]string
-	site string
-	resp *rts.Resp
-	res  *rts.Resp
-	tr   *rts.Trace
-	st   *rts.Stream
-	x    map[string]rts.Value
+	doc               *restfile.Document
+	req               *restfile.Request
+	env               string
+	base              string
+	vars              map[string]string
+	site              string
+	resp              *rts.Resp
+	res               *rts.Resp
+	tr                *rts.Trace
+	st                *rts.Stream
+	x                 map[string]rts.Value
+	omitSecretGlobals bool
 }
 
 func (e *Engine) buildRT(in rtIn) rts.RT {
@@ -217,13 +228,17 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	if res == nil {
 		res = resp
 	}
+	tr := in.tr
+	if tr == nil {
+		tr = e.rtsLastTrace()
+	}
 	return rts.RT{
 		Env:         e.rtsEnv(in.env),
 		Vars:        in.vars,
-		Globals:     rtspre.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), false),
+		Globals:     rtspre.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), in.omitSecretGlobals),
 		Resp:        resp,
 		Res:         res,
-		Trace:       in.tr,
+		Trace:       tr,
 		Stream:      in.st,
 		Req:         e.rtsReq(in.req),
 		BaseDir:     base,
@@ -244,20 +259,54 @@ func (e *Engine) rtsEval(
 	extras ...map[string]string,
 ) vars.ExprEval {
 	vv := e.collectVariables(doc, req, env)
-	for _, extra := range extras {
-		for k, v := range extra {
+	for _, overlay := range extras {
+		for k, v := range overlay {
 			vv[k] = v
 		}
 	}
+	return e.ExprEval(ctx, doc, req, env, base, vv, extra)
+}
+
+// ExprEvalOptions tunes how a {{= expr }} evaluator treats the RTS runtime.
+type ExprEvalOptions struct {
+	// OmitSecretGlobals drops secret global values from the runtime so preview
+	// and status evaluation cannot expose them.
+	OmitSecretGlobals bool
+}
+
+// ExprEval returns a {{= expr }} evaluator bound to vv with default policy.
+// Callers own the variable set (full for execution, secret-stripped for preview).
+func (e *Engine) ExprEval(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+) vars.ExprEval {
+	return e.ExprEvalWithOptions(ctx, doc, req, env, base, vv, extra, ExprEvalOptions{})
+}
+
+// ExprEvalWithOptions is ExprEval with an explicit evaluation policy.
+func (e *Engine) ExprEvalWithOptions(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+	opt ExprEvalOptions,
+) vars.ExprEval {
 	return func(expr string, pos vars.ExprPos) (string, error) {
 		rt := e.buildRT(rtIn{
-			doc:  doc,
-			req:  req,
-			env:  env,
-			base: base,
-			vars: vv,
-			site: "{{= " + expr + " }}",
-			x:    extra,
+			doc:               doc,
+			req:               req,
+			env:               env,
+			base:              base,
+			vars:              vv,
+			site:              "{{= " + expr + " }}",
+			x:                 extra,
+			omitSecretGlobals: opt.OmitSecretGlobals,
 		})
 		return e.evalRTSString(ctx, doc, rt, expr, rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col})
 	}
@@ -492,6 +541,18 @@ func (e *Engine) runAsserts(
 	return out, nil
 }
 
+// RunPreRequest runs the request's @rts pre-request scripts.
+func (e *Engine) RunPreRequest(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	globals map[string]vars.GlobalMutation,
+) (prerequest.Output, error) {
+	return e.runRTSPreRequest(ctx, doc, req, env, base, vv, globals)
+}
+
 func (e *Engine) runRTSPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
@@ -522,6 +583,7 @@ func (e *Engine) runRTSPreRequest(
 				Globals:     gv,
 				Resp:        e.rtsLast(),
 				Res:         empty,
+				Trace:       e.rtsLastTrace(),
 				Req:         mut.Request(),
 				ReqMut:      mut,
 				VarsMut:     mut,
@@ -957,6 +1019,9 @@ func applyPatchVars(req *restfile.Request, vv map[string]string, in map[string]s
 		return
 	}
 	setRequestVars(req, in)
+	if vv == nil {
+		return
+	}
 	for k, v := range in {
 		vv[k] = v
 	}
@@ -1053,6 +1118,7 @@ func (e *Engine) runRTSApply(
 	req *restfile.Request,
 	env, base string,
 	vv map[string]string,
+	extra map[string]rts.Value,
 ) error {
 	if req == nil || len(req.Metadata.Applies) == 0 {
 		return nil
@@ -1069,7 +1135,7 @@ func (e *Engine) runRTSApply(
 			if err := ctx.Err(); err != nil {
 				return err
 			}
-			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, nil)
+			val, err := e.rtsEvalValue(ctx, doc, req, env, base, ex.ex, ex.st, ex.ps, vv, extra)
 			if err != nil {
 				return err
 			}
@@ -1083,6 +1149,18 @@ func (e *Engine) runRTSApply(
 		}
 	}
 	return nil
+}
+
+// ApplyPatches runs the request's @apply directives, mutating req in place.
+func (e *Engine) ApplyPatches(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	vv map[string]string,
+	extra map[string]rts.Value,
+) error {
+	return e.runRTSApply(ctx, doc, req, env, base, vv, extra)
 }
 
 func joinErr(a, b error) error {

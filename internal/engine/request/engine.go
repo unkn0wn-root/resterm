@@ -190,6 +190,22 @@ func (e *Engine) store(res xrunResult) {
 	}
 }
 
+// SeedLast sets the ambient "previous response" RTS evaluation binds to (resp/trace)
+// for callers that produce responses outside ExecuteWith - e.g. the TUI
+// interactive WebSocket path, whose responses never flow through store().
+func (e *Engine) SeedLast(resp *httpclient.Response, grpc *grpcclient.Response) {
+	switch {
+	case grpc != nil:
+		e.last.grpc = grpc
+		e.last.http = nil
+	case resp != nil:
+		e.last.http = resp
+		e.last.grpc = nil
+	default:
+		e.last = lastState{}
+	}
+}
+
 func toResult(res xrunResult) engine.RequestResult {
 	return engine.RequestResult{
 		Response:       res.Response,
@@ -474,7 +490,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	if len(x.req.Metadata.Applies) > 0 {
 		before = cloneRequest(x.req)
 	}
-	if err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv); err != nil {
+	if err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, nil); err != nil {
 		x.exp.stage(
 			xplain.StageApply,
 			xplain.StageError,

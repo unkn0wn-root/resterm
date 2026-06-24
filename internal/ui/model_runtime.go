@@ -12,7 +12,6 @@ import (
 type globalStore = rtrun.Globals
 type globalValue = rtrun.GlobalValue
 type fileStore = rtrun.Files
-type fileVariable = rtrun.FileValue
 type cookieStore = rtrun.Cookies
 
 func newRuntime(cfg rtrun.Config) *rtrun.Runtime {

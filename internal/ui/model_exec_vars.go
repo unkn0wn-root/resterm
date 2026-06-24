@@ -11,6 +11,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -46,18 +47,6 @@ func (m *Model) buildResolver(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) *vars.Resolver {
-	return m.buildResolverWithGlobals(ctx, doc, req, envName, base, extraVals, nil, extras...)
-}
-
-func (m *Model) buildResolverWithGlobals(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	envName, base string,
-	extraVals map[string]rts.Value,
-	globals map[string]vars.GlobalMutation,
-	extras ...map[string]string,
-) *vars.Resolver {
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	providers := make([]vars.Provider, 0, 9)
 
@@ -85,11 +74,7 @@ func (m *Model) buildResolverWithGlobals(
 		}
 	}
 
-	if globals != nil {
-		if values := globalValueMap(globals); len(values) > 0 {
-			providers = append(providers, vars.NewMapProvider("global", values))
-		}
-	} else if gs := m.globalsStore(); gs != nil {
+	if gs := m.globalsStore(); gs != nil {
 		if snapshot := gs.Snapshot(resolvedEnv); len(snapshot) > 0 {
 			values := make(map[string]string, len(snapshot))
 			for key, entry := range snapshot {
@@ -131,7 +116,10 @@ func (m *Model) buildResolverWithGlobals(
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, false, extraVals, extras...))
+	res.SetExprEval(m.requestSvc(httpclient.Options{}).ExprEval(
+		ctx, doc, req, resolvedEnv, base,
+		m.rtsVars(doc, req, resolvedEnv, extras...), extraVals,
+	))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res
 }
@@ -229,7 +217,11 @@ func (m *Model) buildDisplayResolver(
 	providers = append(providers, vars.EnvProvider{})
 	res := vars.NewResolver(providers...)
 	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(m.rtsEval(ctx, doc, req, resolvedEnv, base, true, extraVals, extras...))
+	res.SetExprEval(m.requestSvc(httpclient.Options{}).ExprEvalWithOptions(
+		ctx, doc, req, resolvedEnv, base,
+		m.rtsVarsSafe(doc, req, resolvedEnv, extras...), extraVals,
+		rqeng.ExprEvalOptions{OmitSecretGlobals: true},
+	))
 	res.SetExprPos(m.rtsPos(doc, req))
 	return res
 }
@@ -387,13 +379,6 @@ func (m *Model) collectVariablesWithStoreGlobals(
 		}
 	}
 	return result
-}
-
-func (m *Model) collectGlobalValues(
-	doc *restfile.Document,
-	envName string,
-) map[string]vars.GlobalMutation {
-	return effectiveGlobalValues(doc, m.collectStoredGlobalValues(envName))
 }
 
 func collectDocumentGlobalValues(doc *restfile.Document) map[string]vars.GlobalMutation {

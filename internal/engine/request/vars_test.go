@@ -109,7 +109,7 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 		},
 	}
 
-	if err := e.runRTSApply(context.Background(), doc, req, "", "", nil); err != nil {
+	if err := e.runRTSApply(context.Background(), doc, req, "", "", nil, nil); err != nil {
 		t.Fatalf("runRTSApply() error = %v", err)
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer abc" {
