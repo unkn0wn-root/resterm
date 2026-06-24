@@ -117,7 +117,7 @@ func (e *Engine) rtsPosForLineCol(doc *restfile.Document, req *restfile.Request,
 }
 
 func (e *Engine) rtsErr(err error, doc *restfile.Document) error {
-	if !e.cfg.SourceDiagnostics {
+	if err == nil || !e.cfg.SourceDiagnostics {
 		return err
 	}
 	rep := diag.ReportOf(err)
