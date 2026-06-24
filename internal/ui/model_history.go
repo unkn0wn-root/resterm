@@ -470,13 +470,13 @@ func (m *Model) consumeHTTPResponse(
 
 	switch {
 	case scriptErr != nil:
-		statusText = fmt.Sprintf("%s – tests error: %v", statusText, scriptErr)
-		statusLevel = maxStatusLevel(statusLevel, statusWarn)
+		statusText = fmt.Sprintf("%s - ✗ test error", statusText)
+		statusLevel = maxStatusLevel(statusLevel, statusError)
 	case failureCount > 0:
-		statusText = fmt.Sprintf("%s – %d test(s) failed", statusText, failureCount)
+		statusText = fmt.Sprintf("%s - ✗ %d test(s) failed", statusText, failureCount)
 		statusLevel = maxStatusLevel(statusLevel, statusWarn)
 	case len(tests) > 0:
-		statusText = fmt.Sprintf("%s – all tests passed", statusText)
+		statusText = fmt.Sprintf("%s - ✓ tests passed", statusText)
 	default:
 		if statusText == "" {
 			statusText = "Request completed"

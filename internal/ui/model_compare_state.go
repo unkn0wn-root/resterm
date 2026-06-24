@@ -178,7 +178,9 @@ func summarizeCompareDelta(base, target *compareResult) string {
 		return fmt.Sprintf("error: %s", target.Err.Error())
 	}
 	if target.ScriptErr != nil {
-		return fmt.Sprintf("tests error: %v", target.ScriptErr)
+		// Row already shows a ✗ indicator; keep this short (full diagnostic is in the
+		// response tab) and match the main status line's wording.
+		return "test error"
 	}
 	if fails := countTestFailures(target.Tests); fails > 0 {
 		return fmt.Sprintf("%d test(s) failed", fails)
