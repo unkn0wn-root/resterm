@@ -9,12 +9,14 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 )
 
 func TestRedactHistoryTextMasksSecrets(t *testing.T) {
@@ -293,6 +295,48 @@ func TestConsumeHTTPResponseStatusLevelFollowsHTTPStatusCode(t *testing.T) {
 				t.Fatalf("expected status level %v, got %v", tt.want, model.statusMessage.level)
 			}
 		})
+	}
+}
+
+func TestConsumeHTTPResponseUsesSeparateStatusBarTestSummary(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.width = 120
+	model.height = 40
+	model.statusUser = ""
+	model.statusHost = ""
+	if cmd := model.applyLayout(); cmd != nil {
+		collectMsgs(cmd)
+	}
+
+	resp := &httpclient.Response{
+		Status:     "500 Internal Server Error",
+		StatusCode: http.StatusInternalServerError,
+		Headers:    http.Header{"Content-Type": []string{"text/plain"}},
+		Body:       []byte("body"),
+	}
+	tests := []scripts.TestResult{{Name: "status", Passed: false}}
+
+	if cmd := model.consumeHTTPResponse(resp, tests, nil, "", nil); cmd == nil {
+		t.Fatalf("expected consumeHTTPResponse to return render command")
+	}
+	if strings.Contains(model.statusMessage.text, " - ") {
+		t.Fatalf("expected response status text not to include test separator, got %q", model.statusMessage.text)
+	}
+	if got, want := model.statusMessage.testSummary, "✗ 1 test failed"; got != want {
+		t.Fatalf("expected status test summary %q, got %q", want, got)
+	}
+	if model.statusMessage.testLevel != statusWarn {
+		t.Fatalf("expected warn test status level, got %v", model.statusMessage.testLevel)
+	}
+
+	plain := ansi.Strip(model.renderStatusBar())
+	if !strings.Contains(plain, "500 Internal Server Error (500)") ||
+		!strings.Contains(plain, "✗ 1 test failed") {
+		t.Fatalf("expected response status and test block in status bar, got %q", plain)
+	}
+	if strings.Contains(plain, " - ✗") {
+		t.Fatalf("expected test summary to use a status bar block instead of hyphen separator, got %q", plain)
 	}
 }
 

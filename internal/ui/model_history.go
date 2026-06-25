@@ -153,6 +153,28 @@ func requestErrorStatus(canceled bool) statusMsg {
 	return statusMsg{text: "Request failed ✗", level: statusError, noModal: true}
 }
 
+func responseTestStatusSummary(
+	tests []scripts.TestResult,
+	scriptErr error,
+) (string, statusLevel, bool) {
+	switch {
+	case scriptErr != nil:
+		return "⚠ test error", statusError, true
+	case len(tests) > 0:
+		failures := countTestFailures(tests)
+		if failures == 0 {
+			return "✓ tests passed", statusSuccess, true
+		}
+		n := "tests"
+		if failures == 1 {
+			n = "test"
+		}
+		return fmt.Sprintf("✗ %d %s failed", failures, n), statusWarn, true
+	default:
+		return "", statusInfo, false
+	}
+}
+
 func (m *Model) recordResponseLatency(msg responseMsg) {
 	if msg.response != nil {
 		m.addLatency(msg.response.Duration)
@@ -443,12 +465,7 @@ func (m *Model) consumeHTTPResponse(
 
 	m.abortResponseFormatting()
 
-	failureCount := 0
-	for _, result := range tests {
-		if !result.Passed {
-			failureCount++
-		}
-	}
+	testSummary, testLevel, hasTestSummary := responseTestStatusSummary(tests, scriptErr)
 
 	var traceSpec *restfile.TraceSpec
 	if cloned := cloneTraceSpec(traceSpecFromRequest(resp.Request)); cloned != nil &&
@@ -467,21 +484,9 @@ func (m *Model) consumeHTTPResponse(
 
 	statusLevel := statusLevelForHTTPStatus(resp.StatusCode)
 	statusText := fmt.Sprintf("%s (%d)", resp.Status, resp.StatusCode)
-
-	switch {
-	case scriptErr != nil:
-		statusText = fmt.Sprintf("%s - ✗ test error", statusText)
-		statusLevel = maxStatusLevel(statusLevel, statusError)
-	case failureCount > 0:
-		statusText = fmt.Sprintf("%s - ✗ %d test(s) failed", statusText, failureCount)
-		statusLevel = maxStatusLevel(statusLevel, statusWarn)
-	case len(tests) > 0:
-		statusText = fmt.Sprintf("%s - ✓ tests passed", statusText)
-	default:
-		if statusText == "" {
-			statusText = "Request completed"
-			statusLevel = statusSuccess
-		}
+	if statusText == "" {
+		statusText = "Request completed"
+		statusLevel = statusSuccess
 	}
 
 	if len(timeline.breaches) > 0 {
@@ -501,7 +506,12 @@ func (m *Model) consumeHTTPResponse(
 
 	// A response (incl. 4xx/5xx API errors) is already shown in the response tab and
 	// status line so don't also pop the error modal - it would just duplicate it.
-	m.setStatusMessage(statusMsg{text: statusText, level: statusLevel, noModal: true})
+	status := statusMsg{text: statusText, level: statusLevel, noModal: true}
+	if hasTestSummary {
+		status.testSummary = testSummary
+		status.testLevel = testLevel
+	}
+	m.setStatusMessage(status)
 
 	token := nextResponseRenderToken()
 	snapshot := &responseSnapshot{
@@ -859,12 +869,16 @@ func (m *Model) consumeGRPCResponse(
 		}
 	}
 
+	status := statusMsg{text: statusLine, level: statusSuccess}
 	switch {
 	case resp.StatusCode != codes.OK:
-		m.setStatusMessage(statusMsg{text: statusLine, level: statusWarn})
-	default:
-		m.setStatusMessage(statusMsg{text: statusLine, level: statusSuccess})
+		status.level = statusWarn
 	}
+	if testSummary, testLevel, ok := responseTestStatusSummary(tests, scriptErr); ok {
+		status.testSummary = testSummary
+		status.testLevel = testLevel
+	}
+	m.setStatusMessage(status)
 
 	target := m.responseTargetPane()
 	for _, id := range m.visiblePaneIDs() {

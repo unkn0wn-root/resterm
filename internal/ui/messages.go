@@ -57,9 +57,11 @@ type responseMsg struct {
 }
 
 type statusMsg struct {
-	text    string
-	level   statusLevel
-	noModal bool // error shown elsewhere (e.g. response pane); don't also pop the modal
+	text        string
+	level       statusLevel
+	testSummary string
+	testLevel   statusLevel
+	noModal     bool // error shown elsewhere (e.g. response pane); don't also pop the modal
 }
 
 type updateCheckMsg struct {

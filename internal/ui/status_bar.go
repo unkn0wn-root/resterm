@@ -234,6 +234,9 @@ func (m Model) statusBarLeftSections(
 		text:  strings.TrimSpace(status),
 		style: statusBarStatusStyle(level, palette),
 	}}
+	if section, ok := m.statusBarTestSection(palette); ok {
+		segs = append(segs, section)
+	}
 
 	for _, item := range m.statusBarSegments() {
 		section, ok := m.statusBarContextSection(item, palette)
@@ -243,6 +246,18 @@ func (m Model) statusBarLeftSections(
 		segs = append(segs, section)
 	}
 	return segs
+}
+
+func (m Model) statusBarTestSection(
+	palette theme.StatusBarPalette,
+) (statusBarSection, bool) {
+	if m.statusMessage.testSummary == "" {
+		return statusBarSection{}, false
+	}
+	return statusBarSection{
+		text:  m.statusMessage.testSummary,
+		style: statusBarStatusStyle(m.statusMessage.testLevel, palette),
+	}, true
 }
 
 func (m Model) statusBarRightSections(
