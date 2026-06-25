@@ -12,9 +12,9 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files, supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, and gives you a fast feedback loop with `history`, `diffs`, `tracing`, and `profiling`.
+Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files and supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, with a fast feedback loop built around `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Features](#overview) and [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
 
 ## Screenshot tour
 
@@ -73,6 +73,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 ## Why Resterm
 
+- **HTTP, GraphQL, gRPC, WebSocket, and SSE** are supported out of the box.
 - Requests live in plain `.http` / `.rest` files.
 - **Conditional logic** - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each`.
 - **Multi-step workflows** with `@workflow` / `@step`.
@@ -84,15 +85,6 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
 - There is no AI integration and there will never be.
-
-## Headless
-
-Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling/code, CI flows or internal automation.
-
-The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs, and profiles without the TUI.
-
-> [!NOTE]
-> If you don't want to build your own runner, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## CLI
 
@@ -115,6 +107,14 @@ resterm run --request Echo requests.http
 
 See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
 
+## Headless
+
+Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling/code, CI or internal automation.
+
+The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs and profiles without the TUI.
+
+> [!NOTE]
+> If you don't want to build your own runner, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## Quick Start
 
@@ -150,52 +150,6 @@ See the full [CLI documentation](docs/cli.md) for usage, selectors, output forma
 
 If you do not want files yet, just run `resterm`, type a URL in the editor, and press `Ctrl+Enter`.
 If you already have a curl command, paste it into the editor and press `Ctrl+Enter` to import it.
-
-## Key files
-
-These are the files you will see most often in a Resterm workspace.
-
-- `.http` / `.rest` files store your requests, metadata, and named steps.
-- `resterm.env.json` holds environment variables and secrets for one or more environments.
-- `resterm.env.example.json` is a safe template you can commit and share.
-- `.rts` files contain RestermScript helpers for reuse and small bits of logic.
-- `RESTERM.md` is optional project notes created by `resterm init`.
-
-## Overview
-
-Protocols and transports cover the following.
-
-- `HTTP`, `GraphQL`, `gRPC`, `WebSocket`, and `SSE` are supported out of the box.
-- `SSH tunnels` include host key verification, keep-alives, retries, and persistent sessions.
-- `Kubernetes port-forwards` target pods, services, deployments, and statefulsets with named port resolution, pod readiness checks, retries, and persistent sessions.
-
-Workspace and files focus on the following.
-
-- `.http` / `.rest` files are discovered automatically and the request list stays in sync as you edit.
-- The request editor includes inline syntax highlighting, search, and contextual metadata hints.
-- Environment files are treated as first-class input. `resterm init` adds _resterm.env.json_ to _.gitignore_ but any custom env files passed via the CLI are **not** ignored automatically.
-
-Automation and reuse include the following.
-
-- Variables, captures, constants, and multi-step workflows.
-- RestermScript (RTS) and optional JavaScript hooks handle request-time logic.
-- Curl commands and OpenAPI specs can be imported directly into request collections.
-
-Debugging and inspection provide the following.
-
-- `Pretty/raw/header/diff/history` views are available with split panes.
-- Streaming transcripts are recorded and an interactive console is available for WebSocket and SSE.
-- Timeline tracing and profiling help find slow or flaky endpoints.
-
-Security and auth cover the following.
-
-- OAuth 2.0 client credentials, password grant, and authorization code + PKCE are supported.
-- Command-backed auth can reuse existing CLIs without wrapping a shell.
-- Tokens can be cached per environment, and OAuth tokens are refreshed automatically.
-
-Customization includes the following.
-
-- Custom themes and keybindings.
 
 ## Navigation & layout cheat sheet
 
