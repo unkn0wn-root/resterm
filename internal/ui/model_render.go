@@ -2255,7 +2255,7 @@ func headerTestIcon(status testStatus) string {
 	case testStatusFail:
 		return "✗"
 	case testStatusError:
-		return "✗"
+		return "!"
 	default:
 		return headerIconFor("tests")
 	}

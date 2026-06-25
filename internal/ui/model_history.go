@@ -156,7 +156,7 @@ func requestErrorStatus(canceled bool) statusMsg {
 func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (string, statusLevel) {
 	switch {
 	case scriptErr != nil:
-		return "✗ test error", statusError
+		return "! test error", statusError
 	case len(tests) > 0:
 		fails := countTestFailures(tests)
 		if fails == 0 {
