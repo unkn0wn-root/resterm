@@ -2242,14 +2242,8 @@ func (m Model) headerTestStatus() (string, testStatus, bool) {
 	if len(m.testResults) == 0 {
 		return "", "", false
 	}
-	failures := 0
-	for _, result := range m.testResults {
-		if !result.Passed {
-			failures++
-		}
-	}
-	if failures > 0 {
-		return fmt.Sprintf("%d fail", failures), testStatusFail, true
+	if fails := countTestFailures(m.testResults); fails > 0 {
+		return fmt.Sprintf("%d fail", fails), testStatusFail, true
 	}
 	return fmt.Sprintf("%d pass", len(m.testResults)), testStatusPass, true
 }

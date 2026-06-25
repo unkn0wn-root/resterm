@@ -153,25 +153,22 @@ func requestErrorStatus(canceled bool) statusMsg {
 	return statusMsg{text: "Request failed ✗", level: statusError, noModal: true}
 }
 
-func responseTestStatusSummary(
-	tests []scripts.TestResult,
-	scriptErr error,
-) (string, statusLevel, bool) {
+func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (string, statusLevel) {
 	switch {
 	case scriptErr != nil:
-		return "⚠ test error", statusError, true
+		return "⚠ test error", statusError
 	case len(tests) > 0:
-		failures := countTestFailures(tests)
-		if failures == 0 {
-			return "✓ tests passed", statusSuccess, true
+		fails := countTestFailures(tests)
+		if fails == 0 {
+			return "✓ tests passed", statusSuccess
 		}
 		n := "tests"
-		if failures == 1 {
+		if fails == 1 {
 			n = "test"
 		}
-		return fmt.Sprintf("✗ %d %s failed", failures, n), statusWarn, true
+		return fmt.Sprintf("✗ %d %s failed", fails, n), statusWarn
 	default:
-		return "", statusInfo, false
+		return "", statusInfo
 	}
 }
 
@@ -465,8 +462,6 @@ func (m *Model) consumeHTTPResponse(
 
 	m.abortResponseFormatting()
 
-	testSummary, testLevel, hasTestSummary := responseTestStatusSummary(tests, scriptErr)
-
 	var traceSpec *restfile.TraceSpec
 	if cloned := cloneTraceSpec(traceSpecFromRequest(resp.Request)); cloned != nil &&
 		cloned.Enabled {
@@ -507,10 +502,7 @@ func (m *Model) consumeHTTPResponse(
 	// A response (incl. 4xx/5xx API errors) is already shown in the response tab and
 	// status line so don't also pop the error modal - it would just duplicate it.
 	status := statusMsg{text: statusText, level: statusLevel, noModal: true}
-	if hasTestSummary {
-		status.testSummary = testSummary
-		status.testLevel = testLevel
-	}
+	status.testSummary, status.testLevel = responseTestStatusSummary(tests, scriptErr)
 	m.setStatusMessage(status)
 
 	token := nextResponseRenderToken()
@@ -870,14 +862,10 @@ func (m *Model) consumeGRPCResponse(
 	}
 
 	status := statusMsg{text: statusLine, level: statusSuccess}
-	switch {
-	case resp.StatusCode != codes.OK:
+	if resp.StatusCode != codes.OK {
 		status.level = statusWarn
 	}
-	if testSummary, testLevel, ok := responseTestStatusSummary(tests, scriptErr); ok {
-		status.testSummary = testSummary
-		status.testLevel = testLevel
-	}
+	status.testSummary, status.testLevel = responseTestStatusSummary(tests, scriptErr)
 	m.setStatusMessage(status)
 
 	target := m.responseTargetPane()
