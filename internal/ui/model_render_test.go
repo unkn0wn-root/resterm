@@ -12,6 +12,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
+	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
 )
@@ -505,6 +506,35 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 	palette := statusBarPalette(model.theme.StatusBarPalette)
 	if theme.ColorDefined(palette.Base) || strings.Contains(bar, "48;2;0;0;0") {
 		t.Fatalf("expected default status bar base to be unset, got %q", bar)
+	}
+}
+
+func TestStatusBarUsesStatusMessageTestSummaryOnly(t *testing.T) {
+	model := New(Config{})
+	model.width = 96
+	model.statusUser = ""
+	model.statusHost = ""
+	model.testResults = []scripts.TestResult{{Name: "status", Passed: false}}
+	model.statusMessage = statusMsg{text: "Saved draft.http", level: statusSuccess}
+
+	plain := ansi.Strip(model.renderStatusBar())
+	if strings.Contains(plain, "test failed") || strings.Contains(plain, "tests passed") {
+		t.Fatalf("expected stale test results not to render in status bar, got %q", plain)
+	}
+
+	model.statusMessage = statusMsg{
+		text:        "500 Internal Server Error (500)",
+		level:       statusError,
+		testSummary: "✗ 1 test failed",
+		testLevel:   statusWarn,
+	}
+	plain = ansi.Strip(model.renderStatusBar())
+	if !strings.Contains(plain, "500 Internal Server Error (500)") ||
+		!strings.Contains(plain, "✗ 1 test failed") {
+		t.Fatalf("expected status message test summary in status bar, got %q", plain)
+	}
+	if strings.Contains(plain, " - ✗") {
+		t.Fatalf("expected test summary to render without a hyphen separator, got %q", plain)
 	}
 }
 

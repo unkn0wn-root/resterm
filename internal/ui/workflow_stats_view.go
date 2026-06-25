@@ -588,7 +588,7 @@ func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []
 		workflowFormatDuration(entry.result.Duration),
 	)
 	if len(fields) > 0 {
-		lines = append(lines, workflowFitLine(strings.Join(fields, "  "), width))
+		lines = append(lines, workflowFitLine(strings.Join(fields, " "), width))
 	}
 	if target := workflowStepTarget(entry.result); target != "" {
 		lines = append(

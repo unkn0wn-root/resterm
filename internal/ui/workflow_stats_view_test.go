@@ -283,6 +283,34 @@ func TestWorkflowStatsRenderNarrowLayout(t *testing.T) {
 	}
 }
 
+func TestWorkflowStatsDetailUsesSingleStatusDurationSeparator(t *testing.T) {
+	view := &workflowStatsView{
+		name:       "wf",
+		started:    time.Now(),
+		ended:      time.Now(),
+		totalSteps: 1,
+		entries: []workflowStatsEntry{{
+			index: 0,
+			result: workflowStepResult{
+				Step:     restfile.WorkflowStep{Name: "Slow"},
+				Success:  false,
+				Status:   "context deadline exceeded",
+				Duration: 31 * time.Second,
+				Message:  "context deadline exceeded",
+			},
+		}},
+		selected: 0,
+	}
+
+	plain := stripANSIEscape(view.render(100, 12).content)
+	if strings.Contains(plain, "context deadline exceeded  31s") {
+		t.Fatalf("expected single separator before duration, got %q", plain)
+	}
+	if !strings.Contains(plain, "context deadline exceeded 31s") {
+		t.Fatalf("expected status and duration in detail header, got %q", plain)
+	}
+}
+
 func TestWorkflowStatsCanceledAndSkippedDetails(t *testing.T) {
 	view := &workflowStatsView{
 		name:       "wf",
