@@ -25,7 +25,7 @@ const (
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
-	statusBarMinimizedIcon = "▢"
+	statusBarMinimizedIcon = "❐"
 )
 
 var (
