@@ -5,10 +5,10 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
 	"github.com/unkn0wn-root/resterm/internal/theme"
@@ -25,6 +25,12 @@ const (
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
+	statusBarMinimizedIcon = "▢"
+)
+
+var (
+	statusBarMinimizedFgLight = theme.DefaultStatusBarPalette().Minimized.Foreground
+	statusBarMinimizedFgDark  = lipgloss.Color("#1A1020")
 )
 
 type statusBarSeg struct {
@@ -89,10 +95,7 @@ func (m Model) renderStatusBarLine(
 	}
 
 	leftSections := m.statusBarLeftSections(status, level, palette)
-	rightLimit := width - statusBarLeftReserve(leftSections, width)
-	if rightLimit < 0 {
-		rightLimit = 0
-	}
+	rightLimit := max(width-statusBarLeftReserve(leftSections, width), 0)
 	right := fitStatusBarSections(
 		m.statusBarRightSections(palette),
 		rightLimit,
@@ -105,10 +108,7 @@ func (m Model) renderStatusBarLine(
 	leftView := renderStatusBarSections(left)
 	rightView := renderStatusBarSections(right)
 
-	gap := width - lipgloss.Width(leftView) - lipgloss.Width(rightView)
-	if gap < 0 {
-		gap = 0
-	}
+	gap := max(width-lipgloss.Width(leftView)-lipgloss.Width(rightView), 0)
 	return leftView + renderStatusBarBaseFill(gap, palette) + rightView
 }
 
@@ -267,12 +267,7 @@ func (m Model) statusBarRightSections(
 	palette theme.StatusBarPalette,
 ) []statusBarSection {
 	segs := make([]statusBarSection, 0, 4)
-	if min := strings.TrimSpace(ansi.Strip(m.minimizedStatusText())); min != "" {
-		segs = append(segs, statusBarSection{
-			text:  min,
-			style: palette.Minimized,
-		})
-	}
+	segs = append(segs, m.minimizedStatusSections(palette)...)
 	gitValueStyle := statusBarModeInlineStyle(m.theme.StatusBarValue)
 	if runs := m.statusBarGitRuns(gitValueStyle); len(runs) > 0 {
 		segs = append(segs, statusBarSection{
@@ -319,7 +314,8 @@ func (m Model) statusBarGitRuns(valueStyle lipgloss.Style) []styledRun {
 	colors := m.theme.GitColors
 	runs := []styledRun{{text: statusBarGitIcon, style: statusBarGitForeground(colors.Branch)}}
 	add := func(text string, color lipgloss.Color) {
-		runs = append(runs,
+		runs = append(
+			runs,
 			styledRun{text: " ", style: valueStyle},
 			styledRun{text: text, style: statusBarGitForeground(color)},
 		)
@@ -595,10 +591,7 @@ func truncateLastStatusBarSection(
 		return
 	}
 	last := &segs[len(segs)-1]
-	target := lipgloss.Width(last.text) - over
-	if target < 1 {
-		target = 1
-	}
+	target := max(lipgloss.Width(last.text)-over, 1)
 	last.text = truncateToWidth(last.text, target)
 	if len(last.runs) > 0 {
 		// A mid-token cut can't preserve per-token colours; collapse to one run.
@@ -661,27 +654,116 @@ func statusBarSectionContent(text string) string {
 	return pad + strings.TrimSpace(text) + pad
 }
 
-func (m Model) minimizedStatusText() string {
-	if !m.sidebarCollapsed && !m.editorCollapsed && !m.responseCollapsed {
-		return ""
-	}
+type minimizedStatusItem struct {
+	region paneRegion
+	label  string
+}
+
+func (m Model) minimizedStatusItems() []minimizedStatusItem {
 	items := []struct {
-		on    bool
-		label string
+		on     bool
+		region paneRegion
+		label  string
 	}{
-		{m.sidebarCollapsed, "Nav"},
-		{m.editorCollapsed, "Editor"},
-		{m.responseCollapsed, "Resp"},
+		{m.sidebarCollapsed, paneRegionSidebar, "Nav"},
+		{m.editorCollapsed, paneRegionEditor, "Editor"},
+		{m.responseCollapsed, paneRegionResponse, "Resp"},
 	}
-	marker := "●"
-	parts := make([]string, 0, len(items))
+	out := make([]minimizedStatusItem, 0, len(items))
 	for _, item := range items {
 		if !item.on {
 			continue
 		}
-		parts = append(parts, fmt.Sprintf("%s %s", marker, item.label))
+		out = append(out, minimizedStatusItem{
+			region: item.region,
+			label:  item.label,
+		})
 	}
-	return strings.Join(parts, "  ")
+	return out
+}
+
+func (m Model) minimizedStatusSections(
+	palette theme.StatusBarPalette,
+) []statusBarSection {
+	items := m.minimizedStatusItems()
+	if len(items) == 0 {
+		return nil
+	}
+	sections := make([]statusBarSection, 0, len(items))
+	for _, item := range items {
+		sections = append(sections, statusBarSection{
+			text:  fmt.Sprintf("%s %s", statusBarMinimizedIcon, item.label),
+			style: m.minimizedStatusStyle(item.region, palette),
+		})
+	}
+	return sections
+}
+
+func (m Model) minimizedStatusStyle(
+	region paneRegion,
+	palette theme.StatusBarPalette,
+) theme.StatusBarSegmentStyle {
+	seg := palette.Minimized
+	bg := m.minimizedPaneBackground(region)
+	if seg.BackgroundSet {
+		bg = seg.Background
+	}
+	fg := statusBarContrastForeground(bg)
+	if seg.ForegroundSet {
+		fg = seg.Foreground
+	}
+	return theme.StatusBarSegmentStyle{
+		Foreground: fg,
+		Background: bg,
+	}
+}
+
+func (m Model) minimizedPaneBackground(region paneRegion) lipgloss.Color {
+	switch region {
+	case paneRegionSidebar:
+		return m.theme.PaneBorderFocusFile
+	case paneRegionResponse:
+		return m.theme.PaneBorderFocusResponse
+	default:
+		return m.theme.PaneBorderFocusEditor
+	}
+}
+
+func statusBarContrastForeground(bg lipgloss.Color) lipgloss.Color {
+	if statusBarIsLight(bg) {
+		return statusBarMinimizedFgDark
+	}
+	return statusBarMinimizedFgLight
+}
+
+// statusBarIsLight reports whether bg reads as a light color using the ITU-R
+// BT.601 perceived brightness formula (luma 0-255, midpoint 128). Colors that
+// can't be parsed as hex count as dark so text defaults to light.
+func statusBarIsLight(bg lipgloss.Color) bool {
+	r, g, b, ok := statusBarHexRGB(bg)
+	return ok && (r*299+g*587+b*114)/1000 > 128
+}
+
+func statusBarHexRGB(c lipgloss.Color) (int, int, int, bool) {
+	raw, ok := strings.CutPrefix(string(c), "#")
+	if !ok {
+		return 0, 0, 0, false
+	}
+	if len(raw) == 3 {
+		raw = string([]byte{
+			raw[0], raw[0],
+			raw[1], raw[1],
+			raw[2], raw[2],
+		})
+	}
+	if len(raw) != 6 {
+		return 0, 0, 0, false
+	}
+	v, err := strconv.ParseUint(raw, 16, 32)
+	if err != nil {
+		return 0, 0, 0, false
+	}
+	return int(v >> 16 & 0xff), int(v >> 8 & 0xff), int(v & 0xff), true
 }
 
 func currentStatusIdentity() (string, string) {
