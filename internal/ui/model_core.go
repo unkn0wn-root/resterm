@@ -458,7 +458,7 @@ func New(cfg Config) Model {
 	}
 	if initialStatus.text == "" && cfg.EnvironmentFallback != "" {
 		initialStatus = statusMsg{
-			text:  fmt.Sprintf("Using environment %q", cfg.EnvironmentFallback),
+			text:  fmt.Sprintf("Using environment: %s", cfg.EnvironmentFallback),
 			level: statusInfo,
 		}
 	}

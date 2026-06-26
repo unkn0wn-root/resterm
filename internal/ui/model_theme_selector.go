@@ -56,7 +56,7 @@ func (m *Model) applyThemeSelection() tea.Cmd {
 	def, ok := m.themeCatalog.Get(item.key)
 	if !ok {
 		m.setStatusMessage(
-			statusMsg{level: statusWarn, text: fmt.Sprintf("theme %q unavailable", item.key)},
+			statusMsg{level: statusWarn, text: fmt.Sprintf("Theme unavailable: %s", item.key)},
 		)
 		return nil
 	}
