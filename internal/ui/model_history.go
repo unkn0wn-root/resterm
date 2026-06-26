@@ -160,7 +160,7 @@ func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (str
 	case len(tests) > 0:
 		fails := countTestFailures(tests)
 		if fails == 0 {
-			return "✓ tests passed", statusSuccess
+			return "✔ tests passed", statusSuccess
 		}
 		n := "tests"
 		if fails == 1 {
