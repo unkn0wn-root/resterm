@@ -434,6 +434,114 @@ func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 	}
 }
 
+func TestStatusBarMinimizedIndicatorsUsePaneBackgrounds(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 120
+	model.statusUser = ""
+	model.statusHost = ""
+	model.sidebarCollapsed = true
+	model.editorCollapsed = true
+	model.responseCollapsed = true
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.PaneBorderFocusFile = lipgloss.Color("#FFD46A")
+	model.theme.PaneBorderFocusEditor = lipgloss.Color("#56A9DD")
+	model.theme.PaneBorderFocusResponse = lipgloss.Color("#33C481")
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	backgrounds := renderedCellBackgrounds(bar)
+	if len(backgrounds) != lipgloss.Width(plain) {
+		t.Fatalf(
+			"expected %d rendered cell backgrounds, got %d",
+			lipgloss.Width(plain),
+			len(backgrounds),
+		)
+	}
+
+	tests := []struct {
+		text string
+		bg   lipgloss.Color
+	}{
+		{"● Nav", model.theme.PaneBorderFocusFile},
+		{"● Editor", model.theme.PaneBorderFocusEditor},
+		{"● Resp", model.theme.PaneBorderFocusResponse},
+	}
+	for _, tt := range tests {
+		assertSectionBackground(t, bar, plain, backgrounds, tt.text, tt.bg)
+	}
+}
+
+func TestStatusBarMinimizedExplicitDefaultBackgroundOverridesPaneBackgrounds(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{WorkspaceRoot: t.TempDir()})
+	model.width = 120
+	model.statusUser = ""
+	model.statusHost = ""
+	model.sidebarCollapsed = true
+	model.editorCollapsed = true
+	model.responseCollapsed = true
+	model.theme.PaneBorderFocusFile = lipgloss.Color("#FFD46A")
+	model.theme.PaneBorderFocusEditor = lipgloss.Color("#56A9DD")
+	model.theme.PaneBorderFocusResponse = lipgloss.Color("#33C481")
+
+	minimizedBackground := "#166534"
+	updated, err := theme.ApplySpec(model.theme, theme.ThemeSpec{
+		StatusBar: &theme.StatusBarSpec{
+			Minimized: &theme.StatusBarSegmentSpec{
+				Background: &minimizedBackground,
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("apply theme spec: %v", err)
+	}
+	model.theme = updated
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	backgrounds := renderedCellBackgrounds(bar)
+	for _, text := range []string{"● Nav", "● Editor", "● Resp"} {
+		assertSectionBackground(t, bar, plain, backgrounds, text, lipgloss.Color(minimizedBackground))
+	}
+}
+
+// assertSectionBackground checks that every cell of text in the rendered status
+// bar uses the background want.
+func assertSectionBackground(
+	t *testing.T,
+	bar, plain string,
+	backgrounds [][]int,
+	text string,
+	want lipgloss.Color,
+) {
+	t.Helper()
+	wantBg := renderedCellBackgrounds(lipgloss.NewStyle().Background(want).Render("x"))[0]
+	start := strings.Index(plain, text)
+	if start < 0 {
+		t.Fatalf("expected minimized indicator %q in %q", text, plain)
+	}
+	cellStart := lipgloss.Width(plain[:start])
+	for idx := cellStart; idx < cellStart+lipgloss.Width(text); idx++ {
+		if !slices.Equal(backgrounds[idx], wantBg) {
+			t.Fatalf(
+				"expected %q cell %d to use background %v, got %v in %q",
+				text,
+				idx,
+				wantBg,
+				backgrounds[idx],
+				bar,
+			)
+		}
+	}
+}
+
 func TestStatusBarMessageLevelsRenderStyled(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

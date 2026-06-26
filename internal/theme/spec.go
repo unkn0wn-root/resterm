@@ -1160,6 +1160,7 @@ func applyStatusBarSegment(
 			return err
 		}
 		dst.Foreground = color
+		dst.ForegroundSet = true
 	}
 	if spec.Background != nil {
 		color, err := toColor("status_bar."+name+".background", *spec.Background)
@@ -1167,6 +1168,7 @@ func applyStatusBarSegment(
 			return err
 		}
 		dst.Background = color
+		dst.BackgroundSet = true
 	}
 	return nil
 }

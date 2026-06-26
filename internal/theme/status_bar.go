@@ -3,8 +3,10 @@ package theme
 import "github.com/charmbracelet/lipgloss"
 
 type StatusBarSegmentStyle struct {
-	Foreground lipgloss.Color
-	Background lipgloss.Color
+	Foreground    lipgloss.Color
+	Background    lipgloss.Color
+	ForegroundSet bool `json:"-" toml:"-"`
+	BackgroundSet bool `json:"-" toml:"-"`
 }
 
 type StatusBarPalette struct {

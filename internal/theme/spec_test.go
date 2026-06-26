@@ -59,6 +59,10 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 			Host: &StatusBarSegmentSpec{
 				Background: strPtr("#030303"),
 			},
+			Minimized: &StatusBarSegmentSpec{
+				Foreground: strPtr("#F0FDF4"),
+				Background: strPtr("#166534"),
+			},
 		},
 		EditorMetadata: &EditorMetadataSpec{
 			CommentMarker: strPtr("#222222"),
@@ -156,6 +160,12 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if got := updated.StatusBarPalette.Host.Foreground; got != base.StatusBarPalette.Host.Foreground {
 		t.Errorf("expected status bar host foreground fallback, got %q", got)
+	}
+	if !updated.StatusBarPalette.Minimized.ForegroundSet {
+		t.Errorf("expected status bar minimized foreground override to be tracked")
+	}
+	if !updated.StatusBarPalette.Minimized.BackgroundSet {
+		t.Errorf("expected status bar minimized background override to be tracked")
 	}
 	if updated.EditorMetadata.CommentMarker != "#222222" {
 		t.Errorf(
