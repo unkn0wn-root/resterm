@@ -419,8 +419,9 @@ func TestStatusBarShowsMinimizedIndicators(t *testing.T) {
 	if strings.Contains(plain, "Editor:min") || strings.Contains(plain, "Response:min") {
 		t.Fatalf("expected minimized indicators to replace legacy labels, got %q", plain)
 	}
-	if !strings.Contains(plain, "● Editor") || !strings.Contains(plain, "● Nav") {
-		t.Fatalf("expected dot indicators for minimized panes, got %q", plain)
+	if !strings.Contains(plain, statusBarMinimizedIcon+" Editor") ||
+		!strings.Contains(plain, statusBarMinimizedIcon+" Nav") {
+		t.Fatalf("expected minimized indicators for minimized panes, got %q", plain)
 	}
 	if !strings.Contains(plain, "◇ vTest") {
 		t.Fatalf("expected version icon on the right, got %q", plain)
@@ -466,9 +467,9 @@ func TestStatusBarMinimizedIndicatorsUsePaneBackgrounds(t *testing.T) {
 		text string
 		bg   lipgloss.Color
 	}{
-		{"● Nav", model.theme.PaneBorderFocusFile},
-		{"● Editor", model.theme.PaneBorderFocusEditor},
-		{"● Resp", model.theme.PaneBorderFocusResponse},
+		{statusBarMinimizedIcon + " Nav", model.theme.PaneBorderFocusFile},
+		{statusBarMinimizedIcon + " Editor", model.theme.PaneBorderFocusEditor},
+		{statusBarMinimizedIcon + " Resp", model.theme.PaneBorderFocusResponse},
 	}
 	for _, tt := range tests {
 		assertSectionBackground(t, bar, plain, backgrounds, tt.text, tt.bg)
@@ -507,7 +508,11 @@ func TestStatusBarMinimizedExplicitDefaultBackgroundOverridesPaneBackgrounds(t *
 	bar := model.renderStatusBar()
 	plain := ansi.Strip(bar)
 	backgrounds := renderedCellBackgrounds(bar)
-	for _, text := range []string{"● Nav", "● Editor", "● Resp"} {
+	for _, text := range []string{
+		statusBarMinimizedIcon + " Nav",
+		statusBarMinimizedIcon + " Editor",
+		statusBarMinimizedIcon + " Resp",
+	} {
 		assertSectionBackground(t, bar, plain, backgrounds, text, lipgloss.Color(minimizedBackground))
 	}
 }
