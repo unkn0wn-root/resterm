@@ -314,10 +314,9 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 
 	if st.req.WebSocket != nil && len(st.req.WebSocket.Steps) == 0 {
 		spin := m.startSending()
-		target := m.statusRequestTarget(st.doc, st.req, "")
 		base := "Sending"
-		if trimmed := strings.TrimSpace(target); trimmed != "" {
-			base = fmt.Sprintf("Sending %s", trimmed)
+		if label := m.statusRequestLabel(st.doc, st.req, ""); label != "" {
+			base = fmt.Sprintf("Sending %s", label)
 		}
 		m.statusPulseBase = base
 		m.statusPulseFrame = -1
@@ -329,10 +328,9 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	}
 
 	spin := m.startSending()
-	target := m.statusRequestTarget(st.doc, st.req, "")
 	base := "Sending"
-	if trimmed := strings.TrimSpace(target); trimmed != "" {
-		base = fmt.Sprintf("Sending %s", trimmed)
+	if label := m.statusRequestLabel(st.doc, st.req, ""); label != "" {
+		base = fmt.Sprintf("Sending %s", label)
 	}
 	m.statusPulseBase = base
 	m.statusPulseFrame = -1
@@ -358,10 +356,9 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 
 	spin := m.startSending()
 	m.sendingOverlayBase = responseExplainPreviewBase
-	target := m.statusRequestTarget(st.doc, st.req, "")
 	base := "Preparing explain preview"
-	if trimmed := strings.TrimSpace(target); trimmed != "" {
-		base = fmt.Sprintf("Preparing explain for %s", trimmed)
+	if label := m.statusRequestLabel(st.doc, st.req, ""); label != "" {
+		base = fmt.Sprintf("Preparing explain for %s", label)
 	}
 	m.statusPulseBase = base
 	m.statusPulseFrame = -1

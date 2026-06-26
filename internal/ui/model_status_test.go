@@ -3,6 +3,7 @@ package ui
 import (
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -38,5 +39,21 @@ func TestSetActiveRequestDoesNotReplaceStatusMessage(t *testing.T) {
 	}
 	if m.activeRequestKey == "" {
 		t.Fatal("expected active request state to update")
+	}
+}
+
+func TestStatusRequestLabelPrefersName(t *testing.T) {
+	content := "# @name Login\nGET https://api.example.com/login\n\n###\nGET https://api.example.com/health\n"
+	doc := parser.Parse("sample.http", []byte(content))
+	m := New(Config{})
+
+	if len(doc.Requests) != 2 {
+		t.Fatalf("expected 2 requests, got %d", len(doc.Requests))
+	}
+	if got := m.statusRequestLabel(doc, doc.Requests[0], ""); got != "Login" {
+		t.Fatalf("named request: want %q, got %q", "Login", got)
+	}
+	if got := m.statusRequestLabel(doc, doc.Requests[1], ""); got != "https://api.example.com/health" {
+		t.Fatalf("unnamed request: want URL fallback, got %q", got)
 	}
 }

@@ -2184,10 +2184,9 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 	}
 
 	spin := m.startSending()
-	replayTarget := m.statusRequestTarget(doc, req, targetEnv)
 	replayText := "Replaying"
-	if trimmed := strings.TrimSpace(replayTarget); trimmed != "" {
-		replayText = fmt.Sprintf("Replaying %s", trimmed)
+	if label := m.statusRequestLabel(doc, req, targetEnv); label != "" {
+		replayText = fmt.Sprintf("Replaying %s", label)
 	}
 	m.statusPulseBase = replayText
 	m.statusPulseFrame = -1

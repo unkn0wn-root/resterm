@@ -33,7 +33,7 @@ func (m *Model) statusResolver(
 	return m.buildDisplayResolver(context.Background(), doc, req, env, base, nil, extras...)
 }
 
-func (m *Model) statusRequestTarget(
+func (m *Model) statusRequestLabel(
 	doc *restfile.Document,
 	req *restfile.Request,
 	env string,
@@ -43,11 +43,11 @@ func (m *Model) statusRequestTarget(
 		return ""
 	}
 	r := m.statusResolver(doc, req, env, extras...)
-	target := expandStatusText(r, req.URL)
-	if target == "" {
-		target = strings.TrimSpace(req.URL)
+	name := expandStatusText(r, req.Metadata.Name)
+	if name == "" {
+		name = expandStatusText(r, req.URL)
 	}
-	return target
+	return name
 }
 
 func (m *Model) statusRequestTitle(
