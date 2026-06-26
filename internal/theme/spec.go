@@ -163,6 +163,7 @@ type StatusBarSpec struct {
 	Warn      *StatusBarSegmentSpec `json:"warn"      toml:"warn"`
 	Error     *StatusBarSegmentSpec `json:"error"     toml:"error"`
 	Success   *StatusBarSegmentSpec `json:"success"   toml:"success"`
+	Tests     *StatusBarSegmentSpec `json:"tests"     toml:"tests"`
 	File      *StatusBarSegmentSpec `json:"file"      toml:"file"`
 	Focus     *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
 	Mode      *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
@@ -1122,6 +1123,7 @@ func applyStatusBarPalette(dst *StatusBarPalette, spec StatusBarSpec) error {
 		{"warn", spec.Warn, &dst.Warn},
 		{"error", spec.Error, &dst.Error},
 		{"success", spec.Success, &dst.Success},
+		{"tests", spec.Tests, &dst.Tests},
 		{"file", spec.File, &dst.File},
 		{"focus", spec.Focus, &dst.Focus},
 		{"mode", spec.Mode, &dst.Mode},

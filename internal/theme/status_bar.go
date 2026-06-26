@@ -13,6 +13,7 @@ type StatusBarPalette struct {
 	Warn      StatusBarSegmentStyle
 	Error     StatusBarSegmentStyle
 	Success   StatusBarSegmentStyle
+	Tests     StatusBarSegmentStyle
 	File      StatusBarSegmentStyle
 	Focus     StatusBarSegmentStyle
 	Mode      StatusBarSegmentStyle
@@ -30,6 +31,7 @@ func DefaultStatusBarPalette() StatusBarPalette {
 		Warn:      StatusBarSegmentStyle{Foreground: "#FFF7ED", Background: "#B45309"},
 		Error:     StatusBarSegmentStyle{Foreground: "#FEF2F2", Background: "#B91C1C"},
 		Success:   StatusBarSegmentStyle{Foreground: "#F0FDF4", Background: "#15803D"},
+		Tests:     StatusBarSegmentStyle{Foreground: "#ECFEFF", Background: "#0E7490"},
 		File:      StatusBarSegmentStyle{Foreground: "#F9FAFB", Background: "#404040"},
 		Focus:     StatusBarSegmentStyle{Foreground: "#F4F4F5", Background: "#52525B"},
 		Mode:      StatusBarSegmentStyle{Foreground: "#F8FAFC", Background: "#64748B"},

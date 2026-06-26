@@ -59,6 +59,10 @@ background = "#b91c1c"
 foreground = "#f0fdf4"
 background = "#15803d"
 
+[status_bar.tests]
+foreground = "#ecfeff"
+background = "#0e7490"
+
 [status_bar.file]
 foreground = "#f9fafb"
 background = "#404040"

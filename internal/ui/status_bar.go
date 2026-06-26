@@ -140,6 +140,7 @@ func statusBarPalette(palette theme.StatusBarPalette) theme.StatusBarPalette {
 	palette.Warn = statusBarSegmentStyle(palette.Warn, defaults.Warn)
 	palette.Error = statusBarSegmentStyle(palette.Error, defaults.Error)
 	palette.Success = statusBarSegmentStyle(palette.Success, defaults.Success)
+	palette.Tests = statusBarSegmentStyle(palette.Tests, defaults.Tests)
 	palette.File = statusBarSegmentStyle(palette.File, defaults.File)
 	palette.Focus = statusBarSegmentStyle(palette.Focus, defaults.Focus)
 	palette.Mode = statusBarSegmentStyle(palette.Mode, defaults.Mode)
@@ -256,7 +257,7 @@ func (m Model) statusBarTestSection(
 	}
 	return statusBarSection{
 		text:  m.statusMessage.testSummary,
-		style: statusBarStatusStyle(m.statusMessage.testLevel, palette),
+		style: statusBarTestStyle(m.statusMessage.testLevel, palette),
 	}, true
 }
 
@@ -479,6 +480,16 @@ func statusBarStatusStyle(
 	default:
 		return palette.Info
 	}
+}
+
+func statusBarTestStyle(
+	level statusLevel,
+	palette theme.StatusBarPalette,
+) theme.StatusBarSegmentStyle {
+	if level == statusSuccess {
+		return palette.Tests
+	}
+	return statusBarStatusStyle(level, palette)
 }
 
 func statusBarContextStyle(
