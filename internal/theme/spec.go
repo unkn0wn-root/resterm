@@ -158,23 +158,23 @@ type CommandSegmentSpec struct {
 }
 
 type StatusBarSpec struct {
-	Base       *string               `json:"base"      toml:"base"`
-	Info       *StatusBarSegmentSpec `json:"info"      toml:"info"`
-	Warn       *StatusBarSegmentSpec `json:"warn"      toml:"warn"`
-	Error      *StatusBarSegmentSpec `json:"error"     toml:"error"`
-	Success    *StatusBarSegmentSpec `json:"success"   toml:"success"`
-	TestsPass  *StatusBarSegmentSpec `json:"tests_pass" toml:"tests_pass"`
-	TestsFail  *StatusBarSegmentSpec `json:"tests_fail" toml:"tests_fail"`
+	Base       *string               `json:"base"        toml:"base"`
+	Info       *StatusBarSegmentSpec `json:"info"        toml:"info"`
+	Warn       *StatusBarSegmentSpec `json:"warn"        toml:"warn"`
+	Error      *StatusBarSegmentSpec `json:"error"       toml:"error"`
+	Success    *StatusBarSegmentSpec `json:"success"     toml:"success"`
+	TestsPass  *StatusBarSegmentSpec `json:"tests_pass"  toml:"tests_pass"`
+	TestsFail  *StatusBarSegmentSpec `json:"tests_fail"  toml:"tests_fail"`
 	TestsError *StatusBarSegmentSpec `json:"tests_error" toml:"tests_error"`
-	File       *StatusBarSegmentSpec `json:"file"      toml:"file"`
-	Focus      *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
-	Mode       *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
-	Editor     *StatusBarSegmentSpec `json:"editor"    toml:"editor"`
-	Zoom       *StatusBarSegmentSpec `json:"zoom"      toml:"zoom"`
-	Minimized  *StatusBarSegmentSpec `json:"minimized" toml:"minimized"`
-	Version    *StatusBarSegmentSpec `json:"version"   toml:"version"`
-	User       *StatusBarSegmentSpec `json:"user"      toml:"user"`
-	Host       *StatusBarSegmentSpec `json:"host"      toml:"host"`
+	File       *StatusBarSegmentSpec `json:"file"        toml:"file"`
+	Focus      *StatusBarSegmentSpec `json:"focus"       toml:"focus"`
+	Mode       *StatusBarSegmentSpec `json:"mode"        toml:"mode"`
+	Editor     *StatusBarSegmentSpec `json:"editor"      toml:"editor"`
+	Zoom       *StatusBarSegmentSpec `json:"zoom"        toml:"zoom"`
+	Minimized  *StatusBarSegmentSpec `json:"minimized"   toml:"minimized"`
+	Version    *StatusBarSegmentSpec `json:"version"     toml:"version"`
+	User       *StatusBarSegmentSpec `json:"user"        toml:"user"`
+	Host       *StatusBarSegmentSpec `json:"host"        toml:"host"`
 }
 
 type StatusBarSegmentSpec struct {

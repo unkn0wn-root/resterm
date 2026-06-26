@@ -745,7 +745,10 @@ func statusBarIsLight(bg lipgloss.Color) bool {
 }
 
 func statusBarHexRGB(c lipgloss.Color) (int, int, int, bool) {
-	raw := strings.TrimPrefix(strings.TrimSpace(string(c)), "#")
+	raw, ok := strings.CutPrefix(string(c), "#")
+	if !ok {
+		return 0, 0, 0, false
+	}
 	if len(raw) == 3 {
 		raw = string([]byte{
 			raw[0], raw[0],
