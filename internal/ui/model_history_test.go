@@ -340,6 +340,19 @@ func TestConsumeHTTPResponseUsesSeparateStatusBarTestSummary(t *testing.T) {
 	}
 }
 
+func TestResponseTestStatusSummaryUsesHeavyCheckForPassingTests(t *testing.T) {
+	got, level := responseTestStatusSummary(
+		[]scripts.TestResult{{Name: "status", Passed: true}},
+		nil,
+	)
+	if got != "✔ tests passed" {
+		t.Fatalf("expected heavy check pass summary, got %q", got)
+	}
+	if level != statusSuccess {
+		t.Fatalf("expected success status level, got %v", level)
+	}
+}
+
 func collectMsgs(cmd tea.Cmd) []tea.Msg {
 	if cmd == nil {
 		return nil

@@ -158,20 +158,23 @@ type CommandSegmentSpec struct {
 }
 
 type StatusBarSpec struct {
-	Base      *string               `json:"base"      toml:"base"`
-	Info      *StatusBarSegmentSpec `json:"info"      toml:"info"`
-	Warn      *StatusBarSegmentSpec `json:"warn"      toml:"warn"`
-	Error     *StatusBarSegmentSpec `json:"error"     toml:"error"`
-	Success   *StatusBarSegmentSpec `json:"success"   toml:"success"`
-	File      *StatusBarSegmentSpec `json:"file"      toml:"file"`
-	Focus     *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
-	Mode      *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
-	Editor    *StatusBarSegmentSpec `json:"editor"    toml:"editor"`
-	Zoom      *StatusBarSegmentSpec `json:"zoom"      toml:"zoom"`
-	Minimized *StatusBarSegmentSpec `json:"minimized" toml:"minimized"`
-	Version   *StatusBarSegmentSpec `json:"version"   toml:"version"`
-	User      *StatusBarSegmentSpec `json:"user"      toml:"user"`
-	Host      *StatusBarSegmentSpec `json:"host"      toml:"host"`
+	Base       *string               `json:"base"      toml:"base"`
+	Info       *StatusBarSegmentSpec `json:"info"      toml:"info"`
+	Warn       *StatusBarSegmentSpec `json:"warn"      toml:"warn"`
+	Error      *StatusBarSegmentSpec `json:"error"     toml:"error"`
+	Success    *StatusBarSegmentSpec `json:"success"   toml:"success"`
+	TestsPass  *StatusBarSegmentSpec `json:"tests_pass" toml:"tests_pass"`
+	TestsFail  *StatusBarSegmentSpec `json:"tests_fail" toml:"tests_fail"`
+	TestsError *StatusBarSegmentSpec `json:"tests_error" toml:"tests_error"`
+	File       *StatusBarSegmentSpec `json:"file"      toml:"file"`
+	Focus      *StatusBarSegmentSpec `json:"focus"     toml:"focus"`
+	Mode       *StatusBarSegmentSpec `json:"mode"      toml:"mode"`
+	Editor     *StatusBarSegmentSpec `json:"editor"    toml:"editor"`
+	Zoom       *StatusBarSegmentSpec `json:"zoom"      toml:"zoom"`
+	Minimized  *StatusBarSegmentSpec `json:"minimized" toml:"minimized"`
+	Version    *StatusBarSegmentSpec `json:"version"   toml:"version"`
+	User       *StatusBarSegmentSpec `json:"user"      toml:"user"`
+	Host       *StatusBarSegmentSpec `json:"host"      toml:"host"`
 }
 
 type StatusBarSegmentSpec struct {
@@ -1122,6 +1125,9 @@ func applyStatusBarPalette(dst *StatusBarPalette, spec StatusBarSpec) error {
 		{"warn", spec.Warn, &dst.Warn},
 		{"error", spec.Error, &dst.Error},
 		{"success", spec.Success, &dst.Success},
+		{"tests_pass", spec.TestsPass, &dst.TestsPass},
+		{"tests_fail", spec.TestsFail, &dst.TestsFail},
+		{"tests_error", spec.TestsError, &dst.TestsError},
 		{"file", spec.File, &dst.File},
 		{"focus", spec.Focus, &dst.Focus},
 		{"mode", spec.Mode, &dst.Mode},

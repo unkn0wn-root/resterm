@@ -714,6 +714,105 @@ func TestStatusBarUsesThemePalette(t *testing.T) {
 	}
 }
 
+func TestStatusBarTestsUseDedicatedPalettes(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(prev)
+
+	model := New(Config{})
+	model.width = 96
+	model.statusUser = ""
+	model.statusHost = ""
+	model.theme.StatusBarPalette = theme.DefaultStatusBarPalette()
+	model.theme.StatusBarPalette.Success = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#eeeeee"),
+		Background: lipgloss.Color("#111111"),
+	}
+	model.theme.StatusBarPalette.TestsPass = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#eeeeee"),
+		Background: lipgloss.Color("#222222"),
+	}
+	model.theme.StatusBarPalette.Warn = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#eeeeee"),
+		Background: lipgloss.Color("#333333"),
+	}
+	model.theme.StatusBarPalette.TestsFail = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#eeeeee"),
+		Background: lipgloss.Color("#444444"),
+	}
+	model.theme.StatusBarPalette.Error = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#eeeeee"),
+		Background: lipgloss.Color("#555555"),
+	}
+	model.theme.StatusBarPalette.TestsError = theme.StatusBarSegmentStyle{
+		Foreground: lipgloss.Color("#eeeeee"),
+		Background: lipgloss.Color("#666666"),
+	}
+
+	tests := []struct {
+		name       string
+		statusText string
+		level      statusLevel
+		testText   string
+		testLevel  statusLevel
+		statusBG   string
+		testsBG    string
+	}{
+		{
+			name:       "success",
+			statusText: "200 OK (200)",
+			level:      statusSuccess,
+			testText:   "✔ tests passed",
+			testLevel:  statusSuccess,
+			statusBG:   "48;2;17;17;17",
+			testsBG:    "48;2;34;34;34",
+		},
+		{
+			name:       "warning",
+			statusText: "404 Not Found (404)",
+			level:      statusWarn,
+			testText:   "✗ 1 test failed",
+			testLevel:  statusWarn,
+			statusBG:   "48;2;51;51;51",
+			testsBG:    "48;2;68;68;68",
+		},
+		{
+			name:       "error",
+			statusText: "Request failed",
+			level:      statusError,
+			testText:   "! test error",
+			testLevel:  statusError,
+			statusBG:   "48;2;85;85;85",
+			testsBG:    "48;2;102;102;102",
+		},
+	}
+
+	for _, tt := range tests {
+		model.statusMessage = statusMsg{
+			text:        tt.statusText,
+			level:       tt.level,
+			testSummary: tt.testText,
+			testLevel:   tt.testLevel,
+		}
+		bar := model.renderStatusBar()
+		plain := ansi.Strip(bar)
+		if !strings.Contains(plain, tt.statusText) ||
+			!strings.Contains(plain, tt.testText) {
+			t.Fatalf("%s: expected response and tests summaries, got %q", tt.name, plain)
+		}
+		if !strings.Contains(bar, tt.statusBG) ||
+			!strings.Contains(bar, tt.testsBG) {
+			t.Fatalf(
+				"%s: expected response background %s and tests background %s, got %q",
+				tt.name,
+				tt.statusBG,
+				tt.testsBG,
+				bar,
+			)
+		}
+	}
+}
+
 func TestStatusBarBaseFillsOpenCells(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(termenv.TrueColor)

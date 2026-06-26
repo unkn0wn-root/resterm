@@ -98,6 +98,18 @@ background = "#dc2626"
 foreground = "#f0fdf4"
 background = "#15803d"
 
+[status_bar.tests_pass]
+foreground = "#ecfeff"
+background = "#0e7490"
+
+[status_bar.tests_fail]
+foreground = "#fff1f2"
+background = "#be123c"
+
+[status_bar.tests_error]
+foreground = "#faf5ff"
+background = "#7e22ce"
+
 [status_bar.file]
 foreground = "#f8fafc"
 background = "#334155"

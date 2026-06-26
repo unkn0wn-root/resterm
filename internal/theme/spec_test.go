@@ -44,6 +44,18 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 				Foreground: strPtr("#fafafa"),
 				Background: strPtr("#020202"),
 			},
+			TestsPass: &StatusBarSegmentSpec{
+				Foreground: strPtr("#f0fdff"),
+				Background: strPtr("#040404"),
+			},
+			TestsFail: &StatusBarSegmentSpec{
+				Foreground: strPtr("#fff1f2"),
+				Background: strPtr("#050505"),
+			},
+			TestsError: &StatusBarSegmentSpec{
+				Foreground: strPtr("#faf5ff"),
+				Background: strPtr("#060606"),
+			},
 			Host: &StatusBarSegmentSpec{
 				Background: strPtr("#030303"),
 			},
@@ -126,6 +138,18 @@ func TestApplySpecOverridesColorsAndMetadata(t *testing.T) {
 	}
 	if got := updated.StatusBarPalette.Info.Background; got != "#020202" {
 		t.Errorf("expected status bar info background override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.TestsPass.Foreground; got != "#f0fdff" {
+		t.Errorf("expected status bar tests pass foreground override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.TestsPass.Background; got != "#040404" {
+		t.Errorf("expected status bar tests pass background override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.TestsFail.Background; got != "#050505" {
+		t.Errorf("expected status bar tests fail background override, got %q", got)
+	}
+	if got := updated.StatusBarPalette.TestsError.Background; got != "#060606" {
+		t.Errorf("expected status bar tests error background override, got %q", got)
 	}
 	if got := updated.StatusBarPalette.Host.Background; got != "#030303" {
 		t.Errorf("expected status bar host background override, got %q", got)
