@@ -17,7 +17,10 @@ import (
 const (
 	statusBarVersionIcon   = "◇"
 	statusBarHTTPFileIcon  = "⇄"
+	statusBarFilesIcon     = "▤"
+	statusBarRequestsIcon  = "↑"
 	statusBarEditorIcon    = "▣"
+	statusBarResponseIcon  = "↓"
 	statusBarViewIcon      = "□"
 	statusBarInsertIcon    = "▸"
 	statusBarVisualIcon    = "◫"
@@ -369,8 +372,15 @@ func statusBarContextText(seg statusBarSeg) string {
 	case statusBarSegmentFile:
 		return statusBarHTTPFileIcon + " " + val
 	case statusBarSegmentFocus:
-		if strings.EqualFold(val, "Editor") {
+		switch {
+		case strings.EqualFold(val, "Files"):
+			return statusBarFilesIcon + " " + val
+		case strings.EqualFold(val, "Requests"):
+			return statusBarRequestsIcon + " " + val
+		case strings.EqualFold(val, "Editor"):
 			return statusBarEditorIcon + " " + val
+		case strings.EqualFold(val, "Response"):
+			return statusBarResponseIcon + " " + val
 		}
 		return val
 	case statusBarSegmentMode:

@@ -770,7 +770,8 @@ func TestStatusBarGitSummaryUsesForegroundWithoutBackground(t *testing.T) {
 			len(backgrounds),
 		)
 	}
-	for idx := start; idx < start+lipgloss.Width(gitText); idx++ {
+	cellStart := lipgloss.Width(plain[:start])
+	for idx := cellStart; idx < cellStart+lipgloss.Width(gitText); idx++ {
 		if len(backgrounds[idx]) != 0 {
 			t.Fatalf(
 				"expected git cell %d to have no background, got %v in %q",
@@ -1014,8 +1015,10 @@ func TestStatusBarContextText(t *testing.T) {
 		want string
 	}{
 		{statusBarSeg{key: "File", val: "example.http"}, "⇄ example.http"},
+		{statusBarSeg{key: "Focus", val: "Files"}, "▤ Files"},
+		{statusBarSeg{key: "Focus", val: "Requests"}, "↑ Requests"},
 		{statusBarSeg{key: "Focus", val: "Editor"}, "▣ Editor"},
-		{statusBarSeg{key: "Focus", val: "Response"}, "Response"},
+		{statusBarSeg{key: "Focus", val: "Response"}, "↓ Response"},
 		{statusBarSeg{key: "Mode", val: "VIEW"}, "□ VIEW"},
 		{statusBarSeg{key: "Mode", val: "INSERT"}, "▸ INSERT"},
 		{statusBarSeg{key: "Mode", val: "VISUAL"}, "◫ VISUAL"},
