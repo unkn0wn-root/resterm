@@ -35,7 +35,7 @@ var headerSegmentIcons = map[string]string{
 	"workspace": "▣",
 	"env":       "⬢",
 	"requests":  "⇄",
-	"active":    "◧",
+	"active":    "◨",
 	"tests":     "⧗",
 }
 
