@@ -19,7 +19,7 @@ const (
 	statusBarHTTPFileIcon  = "⇄"
 	statusBarFilesIcon     = "◧"
 	statusBarRequestsIcon  = "↑"
-	statusBarEditorIcon    = "⌨"
+	statusBarEditorIcon    = "≡"
 	statusBarResponseIcon  = "↓"
 	statusBarViewIcon      = "□"
 	statusBarInsertIcon    = "▸"
