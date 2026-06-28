@@ -345,7 +345,7 @@ func TestResponseTestStatusSummaryUsesHeavyCheckForPassingTests(t *testing.T) {
 		[]scripts.TestResult{{Name: "status", Passed: true}},
 		nil,
 	)
-	if got != "✔ tests passed" {
+	if got != iconTestPass+" tests passed" {
 		t.Fatalf("expected heavy check pass summary, got %q", got)
 	}
 	if level != statusSuccess {

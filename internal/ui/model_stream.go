@@ -290,12 +290,27 @@ func (m *Model) handleStreamReady(msg streamReadyMsg) {
 	m.refreshStreamPanes()
 }
 
+const streamFilterPromptStatus = "Filter stream (Enter to apply, Esc to cancel)"
+
+func (m *Model) closeStreamFilterPrompt() {
+	m.streamFilterActive = false
+	m.streamFilterInput.SetValue("")
+	m.streamFilterInput.Blur()
+	m.clearStatusMessages(streamFilterPromptStatus)
+}
+
 func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 	if m.focus != focusResponse {
+		if m.streamFilterActive {
+			m.closeStreamFilterPrompt()
+		}
 		return nil, false
 	}
 	pane := m.pane(m.responsePaneFocus)
 	if pane == nil || pane.activeTab != responseTabStream {
+		if m.streamFilterActive {
+			m.closeStreamFilterPrompt()
+		}
 		return nil, false
 	}
 	sessionID := m.sessionIDForRequest(m.currentRequest)
@@ -324,8 +339,7 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 			m.refreshStreamPanes()
 			return nil, true
 		case "esc":
-			m.streamFilterActive = false
-			m.streamFilterInput.Blur()
+			m.closeStreamFilterPrompt()
 			m.refreshStreamPanes()
 			return nil, true
 		default:
@@ -365,7 +379,7 @@ func (m *Model) handleStreamKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		m.streamFilterInput.CursorEnd()
 		m.streamFilterInput.Focus()
 		m.setStatusMessage(
-			statusMsg{text: "Filter stream (Enter to apply, Esc to cancel)", level: statusInfo},
+			statusMsg{text: streamFilterPromptStatus, level: statusInfo},
 		)
 		m.refreshStreamPanes()
 		return nil, true

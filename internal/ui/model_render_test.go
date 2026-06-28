@@ -876,7 +876,7 @@ func TestStatusBarTestsUseDedicatedPalettes(t *testing.T) {
 			name:       "success",
 			statusText: "200 OK (200)",
 			level:      statusSuccess,
-			testText:   "✔ tests passed",
+			testText:   iconTestPass + " tests passed",
 			testLevel:  statusSuccess,
 			statusBG:   "48;2;17;17;17",
 			testsBG:    "48;2;34;34;34",

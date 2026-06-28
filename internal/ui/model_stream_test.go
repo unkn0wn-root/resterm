@@ -4,6 +4,9 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/stream"
 )
 
@@ -68,4 +71,60 @@ func TestBookmarkLabelFallback(t *testing.T) {
 	if label == "" {
 		t.Fatalf("expected fallback label")
 	}
+}
+
+func TestStreamFilterPromptClearsOnEsc(t *testing.T) {
+	model := newStreamFilterPromptModel(t)
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	model = updated.(Model)
+	if model.statusMessage.text != streamFilterPromptStatus {
+		t.Fatalf("expected stream filter prompt, got %q", model.statusMessage.text)
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.streamFilterActive {
+		t.Fatalf("expected stream filter mode to close")
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected stream filter prompt to clear, got %q", model.statusMessage.text)
+	}
+}
+
+func TestStreamFilterPromptClearsWhenFocusLeavesResponse(t *testing.T) {
+	model := newStreamFilterPromptModel(t)
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyCtrlF})
+	model = updated.(Model)
+	if model.statusMessage.text != streamFilterPromptStatus {
+		t.Fatalf("expected stream filter prompt, got %q", model.statusMessage.text)
+	}
+
+	_ = model.setFocus(focusEditor)
+	if model.streamFilterActive {
+		t.Fatalf("expected stream filter mode to close")
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected focus change to clear stream filter prompt, got %q", model.statusMessage.text)
+	}
+}
+
+func newStreamFilterPromptModel(t *testing.T) Model {
+	t.Helper()
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+	model.responsePaneFocus = responsePanePrimary
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatalf("expected primary response pane")
+	}
+	pane.activeTab = responseTabStream
+
+	req := &restfile.Request{Method: "GET", URL: "https://example.com/events"}
+	model.currentRequest = req
+	model.requestSessions[req] = "stream-1"
+	model.liveSessions["stream-1"] = newLiveSession("stream-1", 10)
+	return model
 }

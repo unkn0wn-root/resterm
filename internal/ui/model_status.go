@@ -8,6 +8,15 @@ func (m *Model) setStatusMessage(msg statusMsg) {
 	m.handleStatusModal(msg)
 }
 
+func (m *Model) clearStatusMessages(texts ...string) {
+	for _, text := range texts {
+		if text != "" && m.statusMessage.text == text {
+			m.setStatusMessage(statusMsg{})
+			return
+		}
+	}
+}
+
 func (m *Model) syncPulseBase(msg statusMsg) {
 	if msg.level != statusWarn && msg.level != statusError {
 		return

@@ -693,9 +693,7 @@ const (
 )
 
 func (m *Model) clearPendingCrossFileNavigation() {
-	if m.pendingCrossFile.statusText != "" && m.statusMessage.text == m.pendingCrossFile.statusText {
-		m.setStatusMessage(statusMsg{})
-	}
+	m.clearStatusMessages(m.pendingCrossFile.statusText)
 	m.pendingCrossFile = pendingCrossFileNavigation{}
 }
 

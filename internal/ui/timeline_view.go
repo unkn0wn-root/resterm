@@ -493,7 +493,7 @@ func renderTimelineStatus(status timelineStatus, styles timelineStyles) string {
 	case timelineStatusWarn:
 		return styles.statusWarn.Render("!")
 	case timelineStatusOK:
-		return styles.statusOK.Render("✔")
+		return styles.statusOK.Render(iconTestPass)
 	default:
 		return " "
 	}

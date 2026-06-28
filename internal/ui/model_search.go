@@ -16,6 +16,22 @@ func isSearchTriggerKey(key string) bool {
 	}
 }
 
+const (
+	literalSearchStatus = "Literal search"
+	regexSearchStatus   = "Regex search"
+)
+
+func searchModeStatus(isRegex bool) string {
+	if isRegex {
+		return regexSearchStatus
+	}
+	return literalSearchStatus
+}
+
+func (m *Model) clearSearchPromptStatus() {
+	m.clearStatusMessages(literalSearchStatus, regexSearchStatus)
+}
+
 func (m *Model) openSearchPrompt() tea.Cmd {
 	if m.showSearchPrompt {
 		return nil
@@ -58,15 +74,12 @@ func (m *Model) closeSearchPrompt() {
 	m.showSearchPrompt = false
 	m.searchJustOpened = false
 	m.searchInput.Blur()
+	m.clearSearchPromptStatus()
 }
 
 func (m *Model) toggleSearchMode() {
 	m.searchIsRegex = !m.searchIsRegex
-	mode := "Literal search"
-	if m.searchIsRegex {
-		mode = "Regex search"
-	}
-	m.setStatusMessage(statusMsg{text: mode, level: statusInfo})
+	m.setStatusMessage(statusMsg{text: searchModeStatus(m.searchIsRegex), level: statusInfo})
 }
 
 func (m *Model) submitSearchPrompt() tea.Cmd {

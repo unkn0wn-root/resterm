@@ -453,6 +453,30 @@ func TestResponseSearchKeepsExplainStyledRenderer(t *testing.T) {
 	}
 }
 
+func TestSearchModeStatusClearsWhenPromptCanceled(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusEditor
+	model.editorInsertMode = false
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
+	model = updated.(Model)
+	if model.statusMessage.text != regexSearchStatus {
+		t.Fatalf("expected search mode status, got %q", model.statusMessage.text)
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.showSearchPrompt {
+		t.Fatalf("expected search prompt to close")
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected canceled search mode status to clear, got %q", model.statusMessage.text)
+	}
+}
+
 func TestEnsureResponseMatchVisibleTargetsActualMatchLine(t *testing.T) {
 	content := "\x1b[38;5;244mzero\x1b[0m\none\ntwo"
 	visible := stripANSIEscape(content)

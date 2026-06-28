@@ -17,18 +17,28 @@ type requestDetailField struct {
 	dim   bool
 }
 
+const (
+	requestDetailFocusStatus  = "Focus files or requests to view details"
+	requestDetailSelectStatus = "Select a request to view details"
+)
+
+func (m *Model) clearRequestDetailStatus() {
+	m.clearStatusMessages(requestDetailFocusStatus, requestDetailSelectStatus)
+}
+
 func (m *Model) openRequestDetails() {
 	if m.focus != focusFile && m.focus != focusRequests {
 		m.setStatusMessage(
-			statusMsg{text: "Focus files or requests to view details", level: statusInfo},
+			statusMsg{text: requestDetailFocusStatus, level: statusInfo},
 		)
 		return
 	}
 	req, doc, path := m.requestDetailContext()
 	if req == nil {
-		m.setStatusMessage(statusMsg{text: "Select a request to view details", level: statusInfo})
+		m.setStatusMessage(statusMsg{text: requestDetailSelectStatus, level: statusInfo})
 		return
 	}
+	m.clearRequestDetailStatus()
 	m.requestDetailFields = m.buildRequestDetailFields(req, doc, path)
 	m.requestDetailTitle = m.requestDetailTitleFor(req, doc)
 	m.showRequestDetails = true
