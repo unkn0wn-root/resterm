@@ -680,6 +680,7 @@ type pendingCrossFileNavigation struct {
 	sourcePath     string
 	targetPath     string
 	sourceRevision uint64
+	statusText     string
 }
 
 const (
@@ -692,6 +693,9 @@ const (
 )
 
 func (m *Model) clearPendingCrossFileNavigation() {
+	if m.pendingCrossFile.statusText != "" && m.statusMessage.text == m.pendingCrossFile.statusText {
+		m.setStatusMessage(statusMsg{})
+	}
 	m.pendingCrossFile = pendingCrossFileNavigation{}
 }
 
@@ -720,7 +724,6 @@ func (m *Model) confirmCrossFileNavigation(
 		m.clearPendingCrossFileNavigation()
 		return true
 	}
-	m.pendingCrossFile = pending
 	base := filepath.Base(path)
 	if base == "" {
 		base = path
@@ -728,12 +731,14 @@ func (m *Model) confirmCrossFileNavigation(
 	if strings.TrimSpace(retryHint) == "" {
 		retryHint = "Repeat the action to continue."
 	}
+	pending.statusText = fmt.Sprintf(
+		"Unsaved changes will be discarded when opening %s. %s",
+		base,
+		retryHint,
+	)
+	m.pendingCrossFile = pending
 	m.setStatusMessage(statusMsg{
-		text: fmt.Sprintf(
-			"Unsaved changes will be discarded when opening %s. %s",
-			base,
-			retryHint,
-		),
+		text:  pending.statusText,
 		level: statusWarn,
 	})
 	return false
