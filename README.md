@@ -62,6 +62,14 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 </p>
 
 <p align="center">
+  <strong>Light Theme</strong>
+</p>
+
+<p align="center">
+  <img src="_media/resterm-lighttheme.png" alt="Screenshot of Resterm in Lighttheme" width="720" />
+</p>
+
+<p align="center">
   <strong>OAuth browser demo (old UI design)</strong>
 </p>
 
