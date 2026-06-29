@@ -120,3 +120,18 @@ func TestRequestDetailsFocusHintClearsWhenFocusBecomesValid(t *testing.T) {
 		t.Fatalf("expected valid focus to clear request details hint, got %q", model.statusMessage.text)
 	}
 }
+
+func TestRequestDetailsSelectHintClearsWhenLeavingNavigator(t *testing.T) {
+	model := New(Config{})
+	_ = model.setFocus(focusRequests)
+
+	model.openRequestDetails()
+	if model.statusMessage.text != requestDetailSelectStatus {
+		t.Fatalf("expected select-request hint, got %q", model.statusMessage.text)
+	}
+
+	_ = model.setFocus(focusEditor)
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected leaving navigator to clear request details hint, got %q", model.statusMessage.text)
+	}
+}
