@@ -606,7 +606,12 @@ func TestStatusBarUsesPlainLeftSections(t *testing.T) {
 
 	bar := model.renderStatusBar()
 	plain := ansi.Strip(bar)
-	for _, want := range []string{"Ready", "⇄ example.http", "▣ Editor", "▸ INSERT"} {
+	for _, want := range []string{
+		"Ready",
+		statusBarHTTPFileIcon + " example.http",
+		statusBarEditorIcon + " Editor",
+		statusBarInsertIcon + " INSERT",
+	} {
 		if !strings.Contains(plain, want) {
 			t.Fatalf("expected status section %q in %q", want, plain)
 		}
@@ -876,7 +881,7 @@ func TestStatusBarTestsUseDedicatedPalettes(t *testing.T) {
 			name:       "success",
 			statusText: "200 OK (200)",
 			level:      statusSuccess,
-			testText:   "✔ tests passed",
+			testText:   iconTestPass + " tests passed",
 			testLevel:  statusSuccess,
 			statusBG:   "48;2;17;17;17",
 			testsBG:    "48;2;34;34;34",
@@ -1014,15 +1019,15 @@ func TestStatusBarContextText(t *testing.T) {
 		seg  statusBarSeg
 		want string
 	}{
-		{statusBarSeg{key: "File", val: "example.http"}, "⇄ example.http"},
-		{statusBarSeg{key: "Focus", val: "Files"}, "▤ Files"},
-		{statusBarSeg{key: "Focus", val: "Requests"}, "↑ Requests"},
-		{statusBarSeg{key: "Focus", val: "Editor"}, "▣ Editor"},
-		{statusBarSeg{key: "Focus", val: "Response"}, "↓ Response"},
-		{statusBarSeg{key: "Mode", val: "VIEW"}, "□ VIEW"},
-		{statusBarSeg{key: "Mode", val: "INSERT"}, "▸ INSERT"},
-		{statusBarSeg{key: "Mode", val: "VISUAL"}, "◫ VISUAL"},
-		{statusBarSeg{key: "Mode", val: "VISUAL LINE"}, "◫ VISUAL LINE"},
+		{statusBarSeg{key: "File", val: "example.http"}, statusBarHTTPFileIcon + " example.http"},
+		{statusBarSeg{key: "Focus", val: "Files"}, statusBarFilesIcon + " Files"},
+		{statusBarSeg{key: "Focus", val: "Requests"}, statusBarRequestsIcon + " Requests"},
+		{statusBarSeg{key: "Focus", val: "Editor"}, statusBarEditorIcon + " Editor"},
+		{statusBarSeg{key: "Focus", val: "Response"}, statusBarResponseIcon + " Response"},
+		{statusBarSeg{key: "Mode", val: "VIEW"}, statusBarViewIcon + " VIEW"},
+		{statusBarSeg{key: "Mode", val: "INSERT"}, statusBarInsertIcon + " INSERT"},
+		{statusBarSeg{key: "Mode", val: "VISUAL"}, statusBarVisualIcon + " VISUAL"},
+		{statusBarSeg{key: "Mode", val: "VISUAL LINE"}, statusBarVisualIcon + " VISUAL LINE"},
 		{statusBarSeg{key: "EditorPos", val: "Ln 3/3 Col 6"}, "Ln 3/3 Col 6"},
 		{statusBarSeg{key: "Zoom", val: "Response"}, "Response"},
 		{statusBarSeg{key: "Unknown", val: "fallback"}, "Unknown: fallback"},

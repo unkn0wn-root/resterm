@@ -77,6 +77,11 @@ func (m *Model) setFocus(target paneFocus) tea.Cmd {
 	}
 	prev := m.focus
 	m.focus = target
+	m.clearRequestDetailStatus()
+	if target != focusResponse {
+		m.closeHistoryFilterPrompt()
+		m.closeStreamFilterPrompt()
+	}
 	clearedSel := false
 	if prev == focusResponse && target != focusResponse {
 		for _, id := range m.visiblePaneIDs() {

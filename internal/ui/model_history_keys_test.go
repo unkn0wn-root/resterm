@@ -80,6 +80,59 @@ func TestHistoryEscClearsFilter(t *testing.T) {
 	}
 }
 
+func TestHistoryFilterEmptyEscClearsPrompt(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatalf("expected primary pane")
+	}
+	pane.activeTab = responseTabHistory
+
+	model.openHistoryFilter()
+	if model.statusMessage.text != historyFilterPromptStatus {
+		t.Fatalf("expected history filter prompt, got %q", model.statusMessage.text)
+	}
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.historyFilterActive {
+		t.Fatalf("expected history filter mode to close")
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected empty history filter prompt to clear, got %q", model.statusMessage.text)
+	}
+}
+
+func TestHistoryFilterPromptClearsWhenLeavingHistoryTab(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusResponse
+
+	pane := model.pane(responsePanePrimary)
+	if pane == nil {
+		t.Fatalf("expected primary pane")
+	}
+	pane.activeTab = responseTabHistory
+
+	model.openHistoryFilter()
+	if model.statusMessage.text != historyFilterPromptStatus {
+		t.Fatalf("expected history filter prompt, got %q", model.statusMessage.text)
+	}
+
+	if cmd := model.activateNextTabFor(responsePanePrimary); cmd != nil {
+		cmd()
+	}
+	if model.historyFilterActive {
+		t.Fatalf("expected history filter mode to close")
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected tab change to clear history filter prompt, got %q", model.statusMessage.text)
+	}
+}
+
 func TestHistoryMultiSelectDelete(t *testing.T) {
 	dir := t.TempDir()
 	store := histdb.New(filepath.Join(dir, "history.db"))

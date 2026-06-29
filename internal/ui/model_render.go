@@ -2248,10 +2248,13 @@ func (m Model) headerTestStatus() (string, testStatus, bool) {
 	return fmt.Sprintf("%d pass", len(m.testResults)), testStatusPass, true
 }
 
+// U+FE0E forces text (not color-emoji) presentation; macOS clips the emoji glyph.
+const iconTestPass = "✔\ufe0e"
+
 func headerTestIcon(status testStatus) string {
 	switch status {
 	case testStatusPass:
-		return "✔"
+		return iconTestPass
 	case testStatusFail:
 		return "✗"
 	case testStatusError:

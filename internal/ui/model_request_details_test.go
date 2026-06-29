@@ -81,3 +81,57 @@ func TestOpenRequestDetailsRequiresNavigatorFocus(t *testing.T) {
 		t.Fatalf("expected details modal to remain closed outside navigator focus")
 	}
 }
+
+func TestOpenRequestDetailsClearsSelectRequestHint(t *testing.T) {
+	model := New(Config{})
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com",
+	}
+	_ = model.setFocus(focusRequests)
+
+	model.openRequestDetails()
+	if model.statusMessage.text != requestDetailSelectStatus {
+		t.Fatalf("expected select-request hint, got %q", model.statusMessage.text)
+	}
+
+	model.doc = &restfile.Document{Requests: []*restfile.Request{req}}
+	model.currentRequest = req
+	model.openRequestDetails()
+	if !model.showRequestDetails {
+		t.Fatalf("expected details modal to open")
+	}
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected details hint to clear after successful open, got %q", model.statusMessage.text)
+	}
+}
+
+func TestRequestDetailsFocusHintClearsWhenFocusBecomesValid(t *testing.T) {
+	model := New(Config{})
+	_ = model.setFocus(focusEditor)
+
+	model.openRequestDetails()
+	if model.statusMessage.text != requestDetailFocusStatus {
+		t.Fatalf("expected focus hint, got %q", model.statusMessage.text)
+	}
+
+	_ = model.setFocus(focusRequests)
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected valid focus to clear request details hint, got %q", model.statusMessage.text)
+	}
+}
+
+func TestRequestDetailsSelectHintClearsWhenLeavingNavigator(t *testing.T) {
+	model := New(Config{})
+	_ = model.setFocus(focusRequests)
+
+	model.openRequestDetails()
+	if model.statusMessage.text != requestDetailSelectStatus {
+		t.Fatalf("expected select-request hint, got %q", model.statusMessage.text)
+	}
+
+	_ = model.setFocus(focusEditor)
+	if model.statusMessage.text != "" {
+		t.Fatalf("expected leaving navigator to clear request details hint, got %q", model.statusMessage.text)
+	}
+}

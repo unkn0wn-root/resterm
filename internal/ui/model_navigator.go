@@ -458,14 +458,13 @@ func (m *Model) syncNavigatorSelection() {
 }
 
 func (m *Model) clearNavigatorOpenFileStatus() {
-	switch m.statusMessage.text {
-	case navigatorRequestEditStatus,
+	m.clearStatusMessages(
+		navigatorRequestEditStatus,
 		navigatorWorkflowEditStatus,
 		navigatorRequestPreviewStatus,
 		navigatorRequestSendStatus,
-		navigatorWorkflowRunStatus:
-		m.setStatusMessage(statusMsg{})
-	}
+		navigatorWorkflowRunStatus,
+	)
 }
 
 func (m *Model) clearNavigatorRequestSelection() {

@@ -1774,6 +1774,38 @@ func TestNavigatorCrossFileConfirmationIsInvalidatedByFurtherEdits(t *testing.T)
 	}
 }
 
+func TestNavigatorDirtyJumpWarningClearsAfterConfirmedJump(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	m.expandNavigatorFile(fileB)
+	reqID := navigatorRequestID(fileB, 0)
+	selectNavigatorID(t, m, reqID)
+	m.focus = focusRequests
+	m.markDirty()
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if !strings.Contains(m.statusMessage.text, "Press l again to jump.") {
+		t.Fatalf("expected jump warning, got %q", m.statusMessage.text)
+	}
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'l'}})
+	if !util.SamePath(m.currentFile, fileB) {
+		t.Fatalf("expected confirmed jump to open %q, got %q", fileB, m.currentFile)
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("expected confirmed jump to clear warning, got %q", m.statusMessage.text)
+	}
+}
+
 func TestNavigatorFileOpenRequiresDirtyConfirmation(t *testing.T) {
 	tmp := t.TempDir()
 	fileA := filepath.Join(tmp, "current.http")
@@ -1804,6 +1836,43 @@ func TestNavigatorFileOpenRequiresDirtyConfirmation(t *testing.T) {
 	}
 	if m.dirty {
 		t.Fatalf("expected opened file to be clean")
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("expected confirmed open to clear warning, got %q", m.statusMessage.text)
+	}
+}
+
+func TestNavigatorDirtyWarningClearsWhenFileOpenedElsewhere(t *testing.T) {
+	tmp := t.TempDir()
+	fileA := filepath.Join(tmp, "current.http")
+	fileB := filepath.Join(tmp, "remote.http")
+	fileC := filepath.Join(tmp, "other.http")
+	writeSampleFile(t, fileA, "### Local\n# @name Local\nGET https://local.test\n")
+	writeSampleFile(t, fileB, "### Remote\n# @name Remote\nGET https://remote.test\n")
+	writeSampleFile(t, fileC, "### Other\n# @name Other\nGET https://other.test\n")
+
+	model := New(Config{WorkspaceRoot: tmp, FilePath: fileA})
+	m := &model
+	if cmd := m.openFile(fileA); cmd != nil {
+		cmd()
+	}
+	selectNavigatorID(t, m, "file:"+fileB)
+	m.focus = focusFile
+	m.markDirty()
+
+	m = applyModelUpdate(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if !strings.Contains(m.statusMessage.text, "Press Enter again to open.") {
+		t.Fatalf("expected file-open warning, got %q", m.statusMessage.text)
+	}
+
+	if cmd := m.openFile(fileC); cmd != nil {
+		cmd()
+	}
+	if !util.SamePath(m.currentFile, fileC) {
+		t.Fatalf("expected opened file %q, got %q", fileC, m.currentFile)
+	}
+	if m.statusMessage.text != "" {
+		t.Fatalf("expected opening another file to clear warning, got %q", m.statusMessage.text)
 	}
 }
 

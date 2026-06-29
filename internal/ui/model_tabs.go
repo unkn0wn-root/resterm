@@ -22,6 +22,7 @@ func (m *Model) activatePrevTabFor(id responsePaneID) tea.Cmd {
 	if pane.activeTab == responseTabHistory {
 		m.historyJumpToLatest = true
 	}
+	m.closeResponseTabPrompts(pane.activeTab)
 	return m.syncResponsePane(id)
 }
 
@@ -41,7 +42,17 @@ func (m *Model) activateNextTabFor(id responsePaneID) tea.Cmd {
 	if pane.activeTab == responseTabHistory {
 		m.historyJumpToLatest = true
 	}
+	m.closeResponseTabPrompts(pane.activeTab)
 	return m.syncResponsePane(id)
+}
+
+func (m *Model) closeResponseTabPrompts(active responseTab) {
+	if active != responseTabHistory {
+		m.closeHistoryFilterPrompt()
+	}
+	if active != responseTabStream {
+		m.closeStreamFilterPrompt()
+	}
 }
 
 func indexOfResponseTab(tabs []responseTab, target responseTab) int {

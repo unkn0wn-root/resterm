@@ -656,9 +656,7 @@ func (m *Model) clearStreamBufferCmd() tea.Cmd {
 			m.wsConsole.clearStatus()
 		}
 	}
-	m.streamFilterActive = false
-	m.streamFilterInput.SetValue("")
-	m.streamFilterInput.Blur()
+	m.closeStreamFilterPrompt()
 	m.refreshStreamPanes()
 	return func() tea.Msg {
 		return statusMsg{text: "Stream buffer cleared", level: statusInfo}

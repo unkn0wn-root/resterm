@@ -160,7 +160,7 @@ func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (str
 	case len(tests) > 0:
 		fails := countTestFailures(tests)
 		if fails == 0 {
-			return "✔ tests passed", statusSuccess
+			return iconTestPass + " tests passed", statusSuccess
 		}
 		n := "tests"
 		if fails == 1 {
@@ -1498,24 +1498,35 @@ func (m *Model) toggleHistorySort() {
 	)
 }
 
+const historyFilterPromptStatus = "Filter history (Enter to apply, Esc to clear)"
+
+func (m *Model) closeHistoryFilterPrompt() {
+	m.historyFilterActive = false
+	m.historyFilterInput.Blur()
+	m.clearStatusMessages(historyFilterPromptStatus)
+}
+
 func (m *Model) openHistoryFilter() {
 	m.historyFilterActive = true
 	m.historyFilterInput.CursorEnd()
 	m.historyFilterInput.Focus()
 	m.blockHistoryKey()
 	m.setStatusMessage(
-		statusMsg{text: "Filter history (Enter to apply, Esc to clear)", level: statusInfo},
+		statusMsg{text: historyFilterPromptStatus, level: statusInfo},
 	)
 }
 
 func (m *Model) clearHistoryFilter(force bool) bool {
 	hasFilter := strings.TrimSpace(m.historyFilterInput.Value()) != ""
 	if !force && !hasFilter {
+		m.closeHistoryFilterPrompt()
 		return false
 	}
-	m.historyFilterActive = false
+	m.closeHistoryFilterPrompt()
 	m.historyFilterInput.SetValue("")
-	m.historyFilterInput.Blur()
+	if !hasFilter {
+		return false
+	}
 	m.syncHistory()
 	m.setStatusMessage(statusMsg{text: "History filter cleared", level: statusInfo})
 	return true
@@ -1604,17 +1615,18 @@ func (m *Model) handleHistoryFilterKey(msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	if m.focus != focusResponse {
+		m.closeHistoryFilterPrompt()
 		return nil, false
 	}
 	pane := m.focusedPane()
 	if pane == nil || pane.activeTab != responseTabHistory {
+		m.closeHistoryFilterPrompt()
 		return nil, false
 	}
 
 	switch msg.String() {
 	case "enter":
-		m.historyFilterActive = false
-		m.historyFilterInput.Blur()
+		m.closeHistoryFilterPrompt()
 		m.syncHistory()
 		val := strings.TrimSpace(m.historyFilterInput.Value())
 		if val == "" {
@@ -1699,9 +1711,7 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 		m.activeRequestTitle = ""
 		m.activeRequestKey = ""
 		m.currentRequest = nil
-		m.streamFilterActive = false
-		m.streamFilterInput.SetValue("")
-		m.streamFilterInput.Blur()
+		m.closeStreamFilterPrompt()
 		if m.historyScope == historyScopeRequest && m.ready {
 			m.syncHistory()
 		}
@@ -1724,11 +1734,10 @@ func (m *Model) setActiveRequest(req *restfile.Request) {
 			}
 		}
 	}
-	m.streamFilterActive = false
-	m.streamFilterInput.SetValue("")
-	m.streamFilterInput.Blur()
+	m.closeStreamFilterPrompt()
 	m.activeRequestTitle = requestDisplayName(req)
 	m.activeRequestKey = requestKey(req)
+	m.clearRequestDetailStatus()
 	_ = m.selectRequestItemByKey(m.activeRequestKey)
 	if prev != m.activeRequestKey {
 		if m.historyScope == historyScopeRequest && m.ready {
