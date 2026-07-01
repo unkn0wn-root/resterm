@@ -25,12 +25,11 @@ func (m Model) latencyStyle() lipgloss.Style {
 	st := m.theme.HeaderValue
 	s := m.latencySeries
 	if s == nil || s.empty() {
-		el := time.Since(m.latAnimStart)
 		if m.latAnimOn {
-			return latAnimStyle(m.theme, el)
-		}
-		if !m.latAnimStart.IsZero() {
-			return latAnimStyle(m.theme, el)
+			el := time.Since(m.latAnimStart)
+			if el < latAnimSettleStart() {
+				return latAnimStyle(m.theme, el)
+			}
 		}
 		return st
 	}
