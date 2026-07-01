@@ -191,6 +191,165 @@ func TestHandleKeyGlExpandsEditor(t *testing.T) {
 	}
 }
 
+func TestHandleKeyGhGlResizeEditorOnlyInVerticalMainSplit(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		focus paneFocus
+	}{
+		{name: "h editor", key: "h", focus: focusEditor},
+		{name: "l editor", key: "l", focus: focusEditor},
+		{name: "h response", key: "h", focus: focusResponse},
+		{name: "l response", key: "l", focus: focusResponse},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := New(Config{WorkspaceRoot: t.TempDir()})
+			model.width = 160
+			model.height = 50
+			model.ready = true
+			model.mainSplitOrientation = mainSplitHorizontal
+			_ = model.setFocus(tt.focus)
+			_ = model.applyLayout()
+
+			initialSplit := model.editorSplit
+			initialEditorHeight := model.editorContentHeight
+			initialResponseHeight := model.responseContentHeight
+
+			sendKeys(t, &model, "g", tt.key)
+
+			if model.editorSplit != initialSplit ||
+				model.editorContentHeight != initialEditorHeight ||
+				model.responseContentHeight != initialResponseHeight {
+				t.Fatalf(
+					"expected g%s not to resize stacked editor/response panes; split %.2f -> %.2f, editor height %d -> %d, response height %d -> %d",
+					tt.key,
+					initialSplit,
+					model.editorSplit,
+					initialEditorHeight,
+					model.editorContentHeight,
+					initialResponseHeight,
+					model.responseContentHeight,
+				)
+			}
+		})
+	}
+}
+
+func TestHandleKeyGjGkResizeEditorHeightInHorizontalMainSplit(t *testing.T) {
+	tests := []struct {
+		name       string
+		key        string
+		focus      paneFocus
+		wantEditor func(newHeight, oldHeight int) bool
+		wantResp   func(newHeight, oldHeight int) bool
+	}{
+		{
+			name:       "j editor",
+			key:        "j",
+			focus:      focusEditor,
+			wantEditor: func(newHeight, oldHeight int) bool { return newHeight > oldHeight },
+			wantResp:   func(newHeight, oldHeight int) bool { return newHeight < oldHeight },
+		},
+		{
+			name:       "k editor",
+			key:        "k",
+			focus:      focusEditor,
+			wantEditor: func(newHeight, oldHeight int) bool { return newHeight < oldHeight },
+			wantResp:   func(newHeight, oldHeight int) bool { return newHeight > oldHeight },
+		},
+		{
+			name:       "j response",
+			key:        "j",
+			focus:      focusResponse,
+			wantEditor: func(newHeight, oldHeight int) bool { return newHeight > oldHeight },
+			wantResp:   func(newHeight, oldHeight int) bool { return newHeight < oldHeight },
+		},
+		{
+			name:       "k response",
+			key:        "k",
+			focus:      focusResponse,
+			wantEditor: func(newHeight, oldHeight int) bool { return newHeight < oldHeight },
+			wantResp:   func(newHeight, oldHeight int) bool { return newHeight > oldHeight },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := New(Config{WorkspaceRoot: t.TempDir()})
+			model.width = 160
+			model.height = 50
+			model.ready = true
+			model.mainSplitOrientation = mainSplitHorizontal
+			_ = model.setFocus(tt.focus)
+			_ = model.applyLayout()
+
+			initialEditorHeight := model.editorContentHeight
+			initialResponseHeight := model.responseContentHeight
+
+			sendKeys(t, &model, "g", tt.key)
+
+			if !tt.wantEditor(model.editorContentHeight, initialEditorHeight) ||
+				!tt.wantResp(model.responseContentHeight, initialResponseHeight) {
+				t.Fatalf(
+					"expected g%s to resize stacked editor/response panes, editor height %d -> %d, response height %d -> %d",
+					tt.key,
+					initialEditorHeight,
+					model.editorContentHeight,
+					initialResponseHeight,
+					model.responseContentHeight,
+				)
+			}
+		})
+	}
+}
+
+func TestHandleKeyGjGkResizeEditorOnlyInHorizontalMainSplit(t *testing.T) {
+	tests := []struct {
+		name  string
+		key   string
+		focus paneFocus
+	}{
+		{name: "j editor", key: "j", focus: focusEditor},
+		{name: "k editor", key: "k", focus: focusEditor},
+		{name: "j response", key: "j", focus: focusResponse},
+		{name: "k response", key: "k", focus: focusResponse},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			model := New(Config{WorkspaceRoot: t.TempDir()})
+			model.width = 160
+			model.height = 50
+			model.ready = true
+			_ = model.setFocus(tt.focus)
+			_ = model.applyLayout()
+
+			initialSplit := model.editorSplit
+			initialEditorWidth := model.editor.Width()
+			initialResponseWidth := model.responseContentWidth()
+
+			sendKeys(t, &model, "g", tt.key)
+
+			if model.editorSplit != initialSplit ||
+				model.editor.Width() != initialEditorWidth ||
+				model.responseContentWidth() != initialResponseWidth {
+				t.Fatalf(
+					"expected g%s not to resize side-by-side editor/response panes; split %.2f -> %.2f, editor width %d -> %d, response width %d -> %d",
+					tt.key,
+					initialSplit,
+					model.editorSplit,
+					initialEditorWidth,
+					model.editor.Width(),
+					initialResponseWidth,
+					model.responseContentWidth(),
+				)
+			}
+		})
+	}
+}
+
 func TestHandleKeyGhCanRepeatWithoutPrefix(t *testing.T) {
 	model := New(Config{WorkspaceRoot: t.TempDir()})
 	model.width = 160

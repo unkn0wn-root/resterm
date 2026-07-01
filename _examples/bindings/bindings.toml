@@ -19,7 +19,7 @@ focus_requests = ["g r", "ctrl+alt+r"]
 focus_editor_normal = ["g i"]
 focus_response = ["g p"]
 
-# Resize sidebar.
+# Resize sidebar, or editor/response width in side-by-side layout.
 sidebar_width_decrease = ["g n"]
 sidebar_width_increase = ["g m"]
 

@@ -277,7 +277,17 @@ func (m Model) helpSections() []helpSection {
 						},
 						"g h / g l",
 					),
-					"Adjust editor/response width",
+					"Adjust editor/response width in side-by-side layout",
+				},
+				{
+					m.helpCombinedKey(
+						[]bindings.ActionID{
+							bindings.ActionSidebarHeightDecrease,
+							bindings.ActionSidebarHeightIncrease,
+						},
+						"g j / g k",
+					),
+					"Adjust editor/response height in stacked layout",
 				},
 				{
 					m.helpCombinedKey(
