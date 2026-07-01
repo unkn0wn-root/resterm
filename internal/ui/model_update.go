@@ -1094,21 +1094,29 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 	case bindings.ActionCancelRun:
 		return m.cancelActiveRuns(), true
 	case bindings.ActionSidebarWidthDecrease:
-		if m.navigatorPaneFocused() {
-			return m.runSidebarWidthResize(-sidebarWidthStep), true
+		if !m.navigatorPaneFocused() {
+			return m.runOrientedEditorResize(mainSplitVertical, -editorSplitStep), true
 		}
-		return m.runEditorResize(-editorSplitStep), true
+		return m.runSidebarWidthResize(-sidebarWidthStep), true
 	case bindings.ActionSidebarWidthIncrease:
-		if m.navigatorPaneFocused() {
-			return m.runSidebarWidthResize(sidebarWidthStep), true
+		if !m.navigatorPaneFocused() {
+			return m.runOrientedEditorResize(mainSplitVertical, editorSplitStep), true
 		}
-		return m.runEditorResize(editorSplitStep), true
+		return m.runSidebarWidthResize(sidebarWidthStep), true
 	case bindings.ActionSidebarHeightDecrease:
+		// Deltas are inverted for the stacked split: the "decrease" chord moves
+		// the divider down, growing the editor, and "increase" moves it up.
+		if !m.navigatorPaneFocused() {
+			return m.runOrientedEditorResize(mainSplitHorizontal, editorSplitStep), true
+		}
 		if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
 			return m.runWorkflowResize(-workflowSplitStep), true
 		}
 		return m.runSidebarResize(-sidebarSplitStep), true
 	case bindings.ActionSidebarHeightIncrease:
+		if !m.navigatorPaneFocused() {
+			return m.runOrientedEditorResize(mainSplitHorizontal, -editorSplitStep), true
+		}
 		if m.focus == focusWorkflows && len(m.workflowItems) > 0 {
 			return m.runWorkflowResize(workflowSplitStep), true
 		}
@@ -2013,17 +2021,28 @@ func (m *Model) runEditorResize(delta float64) tea.Cmd {
 		return cmd
 	}
 	if bounded {
+		dim := "width"
+		if m.mainSplitOrientation == mainSplitHorizontal {
+			dim = "height"
+		}
 		if delta < 0 {
 			m.setStatusMessage(
-				statusMsg{text: "Editor already at minimum width", level: statusInfo},
+				statusMsg{text: "Split already at minimum " + dim, level: statusInfo},
 			)
 		} else if delta > 0 {
 			m.setStatusMessage(
-				statusMsg{text: "Editor already at maximum width", level: statusInfo},
+				statusMsg{text: "Split already at maximum " + dim, level: statusInfo},
 			)
 		}
 	}
 	return nil
+}
+
+func (m *Model) runOrientedEditorResize(want mainSplitOrientation, delta float64) tea.Cmd {
+	if m.mainSplitOrientation != want {
+		return nil
+	}
+	return m.runEditorResize(delta)
 }
 
 func (m *Model) runSidebarWidthResize(delta float64) tea.Cmd {

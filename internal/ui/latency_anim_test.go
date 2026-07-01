@@ -7,8 +7,8 @@ import (
 
 func TestLatencyAnimTextFinal(t *testing.T) {
 	got := latencyAnimText(latAnimTotal(), latCap)
-	if got != "" {
-		t.Fatalf("expected empty, got %q", got)
+	if got != latencyPlaceholder {
+		t.Fatalf("expected placeholder, got %q", got)
 	}
 }
 
@@ -44,6 +44,30 @@ func TestLatencyAnimTextCollapse(t *testing.T) {
 	}
 	if n := len([]rune(midBars)); n != len([]rune(bars)) {
 		t.Fatalf("expected collapse to keep width, got %d", n)
+	}
+}
+
+func TestLatencyAnimTextSettle(t *testing.T) {
+	start := latAnimSettleStart()
+	first, val := splitAnim(t, latencyAnimText(start, latCap))
+	if val != "ms" {
+		t.Fatalf("expected placeholder unit, got %q", val)
+	}
+	if first != latFill(len([]rune(first))) {
+		t.Fatalf("expected flat bars, got %q", first)
+	}
+	if n := len([]rune(first)); n != len(latAnimVals) {
+		t.Fatalf("expected %d bars, got %d", len(latAnimVals), n)
+	}
+
+	mid, _ := splitAnim(t, latencyAnimText(start+latAnimSettle/2, latCap))
+	if n := len([]rune(mid)); n <= latPlaceholderBars || n >= len([]rune(first)) {
+		t.Fatalf("expected width between %d and %d, got %d", latPlaceholderBars, len([]rune(first)), n)
+	}
+
+	end := latencyAnimText(start+latAnimSettle, latCap)
+	if end != latencyPlaceholder {
+		t.Fatalf("expected placeholder, got %q", end)
 	}
 }
 

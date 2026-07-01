@@ -10,12 +10,13 @@ import (
 )
 
 const (
-	latAnimHold = 280 * time.Millisecond
-	latAnimCol  = 420 * time.Millisecond
-	latAnimTick = 45 * time.Millisecond
-	latAnimHi   = 700 * time.Millisecond
-	latAnimLo   = 280 * time.Millisecond
-	latAnimJit  = 1.0
+	latAnimHold   = 280 * time.Millisecond
+	latAnimCol    = 420 * time.Millisecond
+	latAnimSettle = 360 * time.Millisecond
+	latAnimTick   = 45 * time.Millisecond
+	latAnimHi     = 700 * time.Millisecond
+	latAnimLo     = 280 * time.Millisecond
+	latAnimJit    = 1.0
 )
 
 var latAnimSteps = []time.Duration{
@@ -59,6 +60,9 @@ func (m Model) latencyText() string {
 	}
 	if m.latAnimOn {
 		return latencyAnimText(time.Since(m.latAnimStart), s.cap)
+	}
+	if !m.latAnimStart.IsZero() {
+		return latencyPlaceholder
 	}
 	return ""
 }
@@ -107,36 +111,38 @@ func latencyAnimText(el time.Duration, max int) string {
 		max = latPlaceholderBars
 	}
 	if el >= latAnimTotal() {
-		return ""
+		return latencyPlaceholder
 	}
 
 	vals := latAnimSeq(el)
 	if len(vals) == 0 {
-		return ""
+		return latencyPlaceholder
 	}
 
 	w := min(max, len(vals))
+	if el >= latAnimSettleStart() {
+		return latAnimSettleText(el-latAnimSettleStart(), w)
+	}
+
 	bars := latAnimBars(vals, w)
 	last := vals[len(vals)-1]
 	lab := latAnimFmt(last)
 
-	p := 0.0
-	start := latAnimColStart()
-	if el > start {
-		if latAnimCol <= 0 || el >= start+latAnimCol {
-			p = 1
-		} else {
-			p = float64(el-start) / float64(latAnimCol)
-		}
-	}
-
-	if p > 0 {
-		bars = latAnimColBars(bars, p)
-		if bars == "" {
-			return ""
-		}
+	if start := latAnimColStart(); el > start {
+		bars = latAnimColBars(bars, float64(el-start)/float64(latAnimCol))
 	}
 	return bars + " " + lab
+}
+
+func latAnimSettleText(el time.Duration, w int) string {
+	p := min(1, float64(el)/float64(latAnimSettle))
+	p = 0.5 - 0.5*math.Cos(math.Pi*p)
+
+	n := w + int(math.Round(float64(latPlaceholderBars-w)*p))
+	if n < 1 {
+		n = 1
+	}
+	return latPlaceholder(n)
 }
 
 func latAnimSeq(el time.Duration) []time.Duration {
@@ -187,9 +193,6 @@ func latAnimBars(vals []time.Duration, max int) string {
 func latAnimColBars(bars string, p float64) string {
 	if p <= 0 {
 		return bars
-	}
-	if p >= 1 {
-		return ""
 	}
 
 	rs := []rune(bars)
@@ -323,6 +326,10 @@ func latAnimColStart() time.Duration {
 	return latAnimBurst() + latAnimHold
 }
 
-func latAnimTotal() time.Duration {
+func latAnimSettleStart() time.Duration {
 	return latAnimColStart() + latAnimCol
+}
+
+func latAnimTotal() time.Duration {
+	return latAnimSettleStart() + latAnimSettle
 }

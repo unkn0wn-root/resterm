@@ -170,7 +170,10 @@ A few keys that make Resterm feel “native” quickly:
   - `g+p` - jump to **Response**.
   - `g+h` / `g+l` - adjust layout:
     - When the **left pane** (sidebar) is focused: change sidebar width.
-    - Otherwise: change editor/response split.
+    - When editor/response are side-by-side: change editor/response width.
+  - `g+j` / `g+k` - adjust layout:
+    - When editor/response are stacked: change editor/response height.
+    - When the navigator is focused: collapse/expand the selected branch.
   - `g+v` / `g+s` - toggle response pane between inline and stacked layout.
   - `g+1`, `g+2`, `g+3` + minimize/restore sidebar, editor, response.
   - `g+z` / `g+Z` - zoom the focused pane / clear zoom.

@@ -13,8 +13,8 @@ func TestLatencySeriesRenderPlaceholder(t *testing.T) {
 	}
 }
 
-func TestLatencySeriesRenderNoPadding(t *testing.T) {
-	s := newLatencySeries(4)
+func TestLatencySeriesRenderPadsYoung(t *testing.T) {
+	s := newLatencySeries(10)
 	s.add(1 * time.Millisecond)
 	s.add(4 * time.Millisecond)
 	got := s.render()
@@ -23,9 +23,14 @@ func TestLatencySeriesRenderNoPadding(t *testing.T) {
 		t.Fatalf("expected latency format, got %q", got)
 	}
 
-	bars := parts[0]
-	if n := len([]rune(bars)); n != 2 {
-		t.Fatalf("expected 2 bars, got %d (%q)", n, bars)
+	bars := []rune(parts[0])
+	if n := len(bars); n != latPlaceholderBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
+	}
+	for _, r := range bars[:latPlaceholderBars-2] {
+		if r != latencyLevels[0] {
+			t.Fatalf("expected flat pad, got %q", parts[0])
+		}
 	}
 	if !strings.HasSuffix(got, "4ms") {
 		t.Fatalf("expected last duration suffix, got %q", got)
@@ -42,8 +47,8 @@ func TestLatencySeriesRenderSingleSample(t *testing.T) {
 	}
 
 	bars := []rune(parts[0])
-	if n := len(bars); n != 1 {
-		t.Fatalf("expected 1 bar, got %d (%q)", n, parts[0])
+	if n := len(bars); n != latPlaceholderBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
 	}
 	if bars[len(bars)-1] == latencyLevels[0] {
 		t.Fatalf("expected bar for first sample, got %q", parts[0])
@@ -58,8 +63,8 @@ func TestLatencySeriesRenderGrowsWithSamples(t *testing.T) {
 	if len(parts) != 2 {
 		t.Fatalf("expected latency format, got %q", got)
 	}
-	if n := len([]rune(parts[0])); n != 1 {
-		t.Fatalf("expected 1 bar, got %d (%q)", n, parts[0])
+	if n := len([]rune(parts[0])); n != latPlaceholderBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
 	}
 
 	for i := 0; i < 5; i++ {

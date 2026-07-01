@@ -143,8 +143,8 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Focus navigator / editor / response panes | `g+r` / `g+i` / `g+p` |
 | Open timeline tab | `Ctrl+Alt+L` (or `g+t`) |
 | WebSocket commands (Stream tab) | `g+w`, then `i`/`p`/`c`/`l` |
-| Adjust sidebar or editor width | `g+h` / `g+l` (contextual) |
-| Collapse / expand current navigator branch | `g+j` / `g+k` |
+| Adjust sidebar or side-by-side editor/response width | `g+h` / `g+l` (contextual) |
+| Adjust stacked editor/response height, or collapse / expand current navigator branch | `g+j` / `g+k` (contextual) |
 | Collapse all / expand all in navigator | `g+Shift+J` / `g+Shift+K` |
 | Toggle sidebar / editor / response minimize | `g+1` / `g+2` / `g+3` |
 | Zoom focused pane / clear zoom | `g+z` / `g+Z` |
@@ -245,8 +245,8 @@ send_request = ["ctrl+enter", "cmd+enter"]
 
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
-| `sidebar_width_decrease` / `sidebar_width_increase` | Shrink/grow sidebar width (editor split elsewhere). | `g h`, `g l` | ✓ |
-| `sidebar_height_decrease` / `sidebar_height_increase` | Collapse / expand the selected navigator branch. | `g j`, `g k` | ✓ |
+| `sidebar_width_decrease` / `sidebar_width_increase` | Shrink/grow sidebar width when the navigator is focused; resize editor/response width in side-by-side layout. | `g h`, `g l` | ✓ |
+| `sidebar_height_decrease` / `sidebar_height_increase` | Collapse / expand the selected navigator branch; resize editor/response height in stacked layout. | `g j`, `g k` | ✓ |
 | `workflow_height_increase` / `workflow_height_decrease` | Collapse all / expand all navigator branches. | `g shift+j`, `g shift+k` | ✓ |
 | `focus_requests` / `focus_response` / `focus_editor_normal` | Jump directly to a pane. | `g r`, `g p`, `g i` | ✗ |
 | `set_main_split_horizontal` / `set_main_split_vertical` | Stack vs side-by-side editor/response. | `g s`, `g v` | ✗ |
@@ -283,7 +283,7 @@ Binary responses show size and type hints alongside quick previews. For large bi
 - Toggle the sidebar, editor, or response panes with `g+1`, `g+2`, and `g+3`. Minimized panes collapse into thin frames that display an indicator along with a reminder of the restoring shortcut.
 - Status bar badges (`Sidebar:min`, `Editor:min`, `Response:min`) mirror the current state so you can tell when something is hidden even if the stub scrolls out of view.
 - Use `g+z` to zoom the currently focused pane and hide the others temporarily; `g+Z` clears zoom and restores the previous layout (including any manual minimize state).
-- Resize chords such as `g+h` / `g+l` are disabled while a related pane is hidden or zoomed, preventing accidental layout resets.
+- Resize chords such as `g+h` / `g+l` and `g+j` / `g+k` are disabled while a related pane is hidden or zoomed, preventing accidental layout resets.
 
 ### Timeline & tracing
 

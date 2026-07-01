@@ -68,6 +68,9 @@ func (s *latencySeries) render() string {
 
 	min, max := s.bounds()
 	bars := sparkline(s.vals, min, max)
+	if pad := latPlaceholderBars - len(s.vals); pad > 0 {
+		bars = latFill(pad) + bars
+	}
 	v, _ := s.last()
 	rounded := v.Round(time.Millisecond)
 	if rounded <= 0 {
