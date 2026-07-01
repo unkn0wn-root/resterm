@@ -482,7 +482,7 @@ func New(cfg Config) Model {
 
 	editor := newRequestEditor()
 	editor.SetRuneStyler(selectEditorRuneStyler(cfg.FilePath, th.EditorMetadata))
-	editor.Placeholder = "Write HTTP requests here..."
+	editor.Placeholder = "Write API requests here..."
 	editor.SetValue(cfg.InitialContent)
 	editor.moveToBufferTop()
 	editor.ShowLineNumbers = true
