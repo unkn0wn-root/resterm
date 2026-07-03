@@ -10,7 +10,7 @@ import (
 func TestBuildHeaderLineFitsWidth(t *testing.T) {
 	left := []string{"RESTERM", "ENV", "WORKSPACE"}
 	sep := " "
-	right := latencyPlaceholder
+	right := "▁▁▁▁ ms"
 	width := 20
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
@@ -26,7 +26,7 @@ func TestBuildHeaderLineFitsWidth(t *testing.T) {
 
 func TestBuildHeaderLineRightOnly(t *testing.T) {
 	sep := " "
-	right := latencyPlaceholder
+	right := "▁▁▁▁ ms"
 	width := 4
 	line := buildHeaderLine(nil, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "\n") {
@@ -43,7 +43,7 @@ func TestBuildHeaderLineRightOnly(t *testing.T) {
 func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 	left := []string{"BRAND", "ONE", "TWO", "THREE"}
 	sep := " "
-	right := latencyPlaceholder
+	right := "▁▁▁▁ ms"
 	width := 16
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "THREE") {
@@ -57,7 +57,7 @@ func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 func TestBuildHeaderLineNarrowWidthDropsRight(t *testing.T) {
 	left := []string{"BRAND", "ONE"}
 	sep := " "
-	right := latencyPlaceholder
+	right := "▁▁▁▁ ms"
 	width := 4
 	line := buildHeaderLine(left, sep, right, lipgloss.NewStyle(), width)
 	if strings.Contains(line, "▁") {

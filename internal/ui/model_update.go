@@ -19,9 +19,6 @@ import (
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{textarea.Blink}
-	if cmd := m.latencyAnimTickCmd(); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
 	if m.updateEnabled {
 		cmds = append(cmds, newUpdateTickCmd(0))
 	}
@@ -106,10 +103,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleGitStatusMsg(typed)
 	case tabSpinMsg:
 		if cmd := m.handleTabSpin(typed); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	case latencyAnimMsg:
-		if cmd := m.handleLatencyAnim(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case responseRenderedMsg:

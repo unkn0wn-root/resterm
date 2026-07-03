@@ -2142,12 +2142,8 @@ func (m Model) renderHeader() string {
 
 	separator := m.theme.HeaderSeparator.Render(" ")
 
-	rightText := ""
-	rightStyle := m.theme.HeaderValue
-	if m.latencySeries != nil {
-		rightText = m.latencyText()
-		rightStyle = m.latencyStyle()
-	}
+	rightText := m.latencyText()
+	rightStyle := m.latencyStyle()
 
 	totalWidth := max(m.width, 1)
 	contentWidth := headerContentWidth(totalWidth, m.theme.Header)

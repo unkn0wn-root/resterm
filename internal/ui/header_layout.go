@@ -22,18 +22,11 @@ func headerContentWidth(total int, style lipgloss.Style) int {
 }
 
 func styleRight(text string, st lipgloss.Style, maxWidth int) (string, int) {
-	if maxWidth <= 0 {
+	if maxWidth <= 0 || text == "" {
 		return "", 0
 	}
-	t := strings.TrimSpace(text)
-	if t == "" {
-		return "", 0
-	}
-	t = truncateToWidth(t, max(1, maxWidth-st.GetHorizontalFrameSize()))
-	if strings.TrimSpace(t) == "" {
-		return "", 0
-	}
-	s := st.Render(t)
+	text = truncateToWidth(text, max(1, maxWidth-st.GetHorizontalFrameSize()))
+	s := st.Render(text)
 	return s, lipgloss.Width(s)
 }
 
