@@ -14,7 +14,7 @@ type latencySeries struct {
 
 const (
 	latCap     = 10
-	latMinBars = 4
+	latMinBars = 5
 	latWarmN   = 3
 	latWarmDiv = 5
 	latGamma   = 0.75
@@ -22,7 +22,7 @@ const (
 
 var (
 	latencyLevels  = []rune("▁▂▄▆█")
-	latPlaceholder = latFill(latMinBars) + " ◷"
+	latPlaceholder = string(latencyLevels) + " ◷"
 )
 
 func (m Model) latencyText() string {
