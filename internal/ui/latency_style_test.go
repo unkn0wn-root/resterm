@@ -29,7 +29,7 @@ func TestLatencyStyleAfterSample(t *testing.T) {
 		latencySeries: newLatencySeries(latCap),
 	}
 
-	m.addLatency(120 * time.Millisecond)
+	m.latencySeries.add(120 * time.Millisecond)
 	if got := m.latencyText(); got == latPlaceholder {
 		t.Fatalf("expected series render after sample, got %q", got)
 	}

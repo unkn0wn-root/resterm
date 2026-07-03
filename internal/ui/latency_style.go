@@ -20,41 +20,27 @@ var (
 )
 
 func (m Model) latencyStyle() lipgloss.Style {
-	s := m.latencySeries
-	if s == nil || s.empty() {
+	if m.latencySeries.empty() {
 		return m.themeRuntime.inactiveStyle(m.theme.HeaderValue)
 	}
-	v, _ := s.last()
-	return latStyle(m.theme, v)
+	return latStyle(m.theme, m.latencySeries.last())
 }
 
 func latStyle(th theme.Theme, d time.Duration) lipgloss.Style {
 	st := th.HeaderValue
-	if d <= 0 {
-		return st
-	}
-
-	ok := latOkMax
-	wn := latWarnMax
-	if wn < ok {
-		wn = ok
-	}
-	if d <= ok {
+	switch {
+	case d <= latOkMax:
 		return st.Foreground(latFg(th.Success, latOkFg))
-	}
-	if d <= wn {
+	case d <= latWarnMax:
 		return st.Foreground(latWarnFg)
+	default:
+		return st.Foreground(latFg(th.Error, latErrFg))
 	}
-	return st.Foreground(latFg(th.Error, latErrFg))
 }
 
 func latFg(st lipgloss.Style, fb lipgloss.Color) lipgloss.TerminalColor {
-	fg := st.GetForeground()
-	if fg == nil {
-		return fb
+	if fg := st.GetForeground(); theme.ColorDefined(fg) {
+		return fg
 	}
-	if c, ok := fg.(lipgloss.Color); ok && c == "" {
-		return fb
-	}
-	return fg
+	return fb
 }

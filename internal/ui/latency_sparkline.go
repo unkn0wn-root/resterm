@@ -25,22 +25,11 @@ var (
 	latPlaceholder = latFill(latMinBars) + " ms"
 )
 
-func (m *Model) addLatency(d time.Duration) {
-	if m.latencySeries == nil || d <= 0 {
-		return
-	}
-	m.latencySeries.add(d)
-}
-
 func (m Model) latencyText() string {
-	s := m.latencySeries
-	if s == nil {
-		return ""
-	}
-	if s.empty() {
+	if m.latencySeries.empty() {
 		return latPlaceholder
 	}
-	return s.render()
+	return m.latencySeries.render()
 }
 
 func newLatencySeries(capacity int) *latencySeries {
@@ -51,17 +40,12 @@ func newLatencySeries(capacity int) *latencySeries {
 }
 
 func (s *latencySeries) add(d time.Duration) {
-	if s == nil || d <= 0 {
+	if d <= 0 {
 		return
 	}
-	if s.cap < 1 {
-		s.cap = 1
-	}
-
 	s.vals = append(s.vals, d)
 	if len(s.vals) > s.cap {
-		delta := len(s.vals) - s.cap
-		s.vals = s.vals[delta:]
+		s.vals = s.vals[len(s.vals)-s.cap:]
 	}
 }
 
@@ -69,41 +53,34 @@ func (s *latencySeries) empty() bool {
 	return s == nil || len(s.vals) == 0
 }
 
-func (s *latencySeries) last() (time.Duration, bool) {
-	if s == nil || len(s.vals) == 0 {
-		return 0, false
-	}
-	return s.vals[len(s.vals)-1], true
+func (s *latencySeries) last() time.Duration {
+	return s.vals[len(s.vals)-1]
 }
 
 func (s *latencySeries) render() string {
-	if s == nil || len(s.vals) == 0 {
+	if len(s.vals) == 0 {
 		return ""
 	}
 
-	min, max := s.bounds()
-	bars := sparkline(s.vals, min, max)
+	lo, hi := s.bounds()
+	bars := sparkline(s.vals, lo, hi)
 	if pad := latMinBars - len(s.vals); pad > 0 {
 		bars = latFill(pad) + bars
 	}
-	v, _ := s.last()
-	rounded := v.Round(time.Millisecond)
-	if rounded <= 0 {
-		rounded = v
+
+	v := s.last()
+	if r := v.Round(time.Millisecond); r > 0 {
+		v = r
 	}
-	return bars + " " + formatDurationShort(rounded)
+	return bars + " " + formatDurationShort(v)
 }
 
 func (s *latencySeries) bounds() (time.Duration, time.Duration) {
-	if len(s.vals) == 0 {
-		return 0, 0
-	}
 	if len(s.vals) == 1 {
-		v := s.vals[0]
-		return 0, v
+		return 0, s.vals[0]
 	}
 
-	sorted := append([]time.Duration(nil), s.vals...)
+	sorted := slices.Clone(s.vals)
 	slices.Sort(sorted)
 	lo := percentile(sorted, 10)
 	hi := percentile(sorted, 90)
@@ -114,67 +91,31 @@ func (s *latencySeries) bounds() (time.Duration, time.Duration) {
 }
 
 func percentile(vals []time.Duration, pct int) time.Duration {
-	if len(vals) == 0 {
-		return 0
-	}
-	if pct <= 0 {
-		return vals[0]
-	}
-	if pct >= 100 {
-		return vals[len(vals)-1]
-	}
-
-	pos := (float64(pct) / 100.0) * float64(len(vals)-1)
-	idx := int(pos + 0.5)
-	if idx < 0 {
-		idx = 0
-	}
-	if idx >= len(vals) {
-		idx = len(vals) - 1
-	}
-	return vals[idx]
+	pos := float64(pct) / 100 * float64(len(vals)-1)
+	return vals[int(pos+0.5)]
 }
 
-func sparkline(vals []time.Duration, min, max time.Duration) string {
-	if len(vals) == 0 {
-		return ""
+func sparkline(vals []time.Duration, lo, hi time.Duration) string {
+	if hi <= lo {
+		return latFill(len(vals))
 	}
 
-	levels := latencyLevels
-	if max <= min {
-		return strings.Repeat(string(levels[0]), len(vals))
-	}
-
-	scale := float64(max - min)
+	scale := float64(hi - lo)
 	out := make([]rune, len(vals))
 	for i, v := range vals {
-		if v < min {
-			v = min
-		}
-		if v > max {
-			v = max
-		}
-
-		n := latCurve(float64(v-min) / scale)
-		idx := int(n*float64(len(levels)-1) + 0.5)
-		if idx < 0 {
-			idx = 0
-		}
-		if idx >= len(levels) {
-			idx = len(levels) - 1
-		}
-		out[i] = levels[idx]
+		v = min(max(v, lo), hi)
+		n := latCurve(float64(v-lo) / scale)
+		out[i] = latencyLevels[int(n*float64(len(latencyLevels)-1)+0.5)]
 	}
 	return string(out)
 }
 
 func latFill(n int) string {
-	if n <= 0 {
-		return ""
-	}
 	return strings.Repeat(string(latencyLevels[0]), n)
 }
 
+// latClamp widens a too-narrow percentile span while the series is young so
+// the first bars don't exaggerate tiny differences.
 func latClamp(lo, hi time.Duration, n int) (time.Duration, time.Duration) {
 	if n >= latWarmN || hi <= 0 {
 		return lo, hi
@@ -189,18 +130,9 @@ func latClamp(lo, hi time.Duration, n int) (time.Duration, time.Duration) {
 	pad := (minSpan - span) / 2
 	lo -= pad
 	hi += minSpan - span - pad
-	if lo < 0 {
-		lo = 0
-	}
-	return lo, hi
+	return max(lo, 0), hi
 }
 
 func latCurve(n float64) float64 {
-	if n <= 0 {
-		return 0
-	}
-	if n >= 1 {
-		return 1
-	}
 	return math.Pow(n, latGamma)
 }

@@ -174,11 +174,11 @@ func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (str
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
 	if msg.response != nil {
-		m.addLatency(msg.response.Duration)
+		m.latencySeries.add(msg.response.Duration)
 		return
 	}
 	if msg.grpc != nil {
-		m.addLatency(msg.grpc.Duration)
+		m.latencySeries.add(msg.grpc.Duration)
 	}
 }
 
