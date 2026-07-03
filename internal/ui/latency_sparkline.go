@@ -22,7 +22,7 @@ const (
 
 var (
 	latencyLevels  = []rune("▁▂▄▆█")
-	latPlaceholder = latFill(latMinBars) + " ms"
+	latPlaceholder = latFill(latMinBars) + " ◷"
 )
 
 func (m Model) latencyText() string {

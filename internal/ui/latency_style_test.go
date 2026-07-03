@@ -14,7 +14,7 @@ func TestLatencyPlaceholder(t *testing.T) {
 		latencySeries: newLatencySeries(latCap),
 	}
 
-	if got := m.latencyText(); got != "▁▁▁▁ ms" {
+	if got := m.latencyText(); got != "▁▁▁▁ ◷" {
 		t.Fatalf("expected placeholder text, got %q", got)
 	}
 	if !m.latencyStyle().GetFaint() {
