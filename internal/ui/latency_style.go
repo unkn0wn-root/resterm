@@ -9,10 +9,8 @@ import (
 )
 
 const (
-	latOkMax     = 500 * time.Millisecond
-	latWarnMax   = 1000 * time.Millisecond
-	latAnimWarnP = 0.3
-	latAnimOkP   = 0.65
+	latOkMax   = 500 * time.Millisecond
+	latWarnMax = 1000 * time.Millisecond
 )
 
 var (
@@ -22,35 +20,12 @@ var (
 )
 
 func (m Model) latencyStyle() lipgloss.Style {
-	st := m.theme.HeaderValue
 	s := m.latencySeries
 	if s == nil || s.empty() {
-		if m.latAnimOn {
-			el := time.Since(m.latAnimStart)
-			if el < latAnimSettleStart() {
-				return latAnimStyle(m.theme, el)
-			}
-		}
-		return st
+		return m.themeRuntime.inactiveStyle(m.theme.HeaderValue)
 	}
-	v, ok := s.last()
-	if !ok {
-		return st
-	}
+	v, _ := s.last()
 	return latStyle(m.theme, v)
-}
-
-func latAnimStyle(th theme.Theme, el time.Duration) lipgloss.Style {
-	st := th.HeaderValue
-	p := latAnimProgress(el)
-	wn, ok := latAnimThresholds()
-	if p >= ok {
-		return st.Foreground(latFg(th.Success, latOkFg))
-	}
-	if p >= wn {
-		return st.Foreground(latWarnFg)
-	}
-	return st.Foreground(latFg(th.Error, latErrFg))
 }
 
 func latStyle(th theme.Theme, d time.Duration) lipgloss.Style {

@@ -13,17 +13,35 @@ type latencySeries struct {
 }
 
 const (
-	latCap             = 10
-	latPlaceholderBars = 4
-	latWarmN           = 3
-	latWarmDiv         = 5
-	latGamma           = 0.75
+	latCap     = 10
+	latMinBars = 4
+	latWarmN   = 3
+	latWarmDiv = 5
+	latGamma   = 0.75
 )
 
 var (
-	latencyLevels      = []rune("▁▂▄▆█")
-	latencyPlaceholder = latPlaceholder(latPlaceholderBars)
+	latencyLevels  = []rune("▁▂▄▆█")
+	latPlaceholder = latFill(latMinBars) + " ms"
 )
+
+func (m *Model) addLatency(d time.Duration) {
+	if m.latencySeries == nil || d <= 0 {
+		return
+	}
+	m.latencySeries.add(d)
+}
+
+func (m Model) latencyText() string {
+	s := m.latencySeries
+	if s == nil {
+		return ""
+	}
+	if s.empty() {
+		return latPlaceholder
+	}
+	return s.render()
+}
 
 func newLatencySeries(capacity int) *latencySeries {
 	if capacity < 1 {
@@ -59,16 +77,13 @@ func (s *latencySeries) last() (time.Duration, bool) {
 }
 
 func (s *latencySeries) render() string {
-	if s == nil {
+	if s == nil || len(s.vals) == 0 {
 		return ""
-	}
-	if len(s.vals) == 0 {
-		return latencyPlaceholder
 	}
 
 	min, max := s.bounds()
 	bars := sparkline(s.vals, min, max)
-	if pad := latPlaceholderBars - len(s.vals); pad > 0 {
+	if pad := latMinBars - len(s.vals); pad > 0 {
 		bars = latFill(pad) + bars
 	}
 	v, _ := s.last()
@@ -158,13 +173,6 @@ func latFill(n int) string {
 		return ""
 	}
 	return strings.Repeat(string(latencyLevels[0]), n)
-}
-
-func latPlaceholder(n int) string {
-	if n < 1 {
-		n = 1
-	}
-	return latFill(n) + " ms"
 }
 
 func latClamp(lo, hi time.Duration, n int) (time.Duration, time.Duration) {

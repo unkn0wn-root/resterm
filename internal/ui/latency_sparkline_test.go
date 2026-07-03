@@ -6,10 +6,10 @@ import (
 	"time"
 )
 
-func TestLatencySeriesRenderPlaceholder(t *testing.T) {
+func TestLatencySeriesRenderEmpty(t *testing.T) {
 	s := newLatencySeries(4)
-	if got := s.render(); got != latencyPlaceholder {
-		t.Fatalf("expected placeholder, got %q", got)
+	if got := s.render(); got != "" {
+		t.Fatalf("expected empty render without samples, got %q", got)
 	}
 }
 
@@ -24,10 +24,10 @@ func TestLatencySeriesRenderPadsYoung(t *testing.T) {
 	}
 
 	bars := []rune(parts[0])
-	if n := len(bars); n != latPlaceholderBars {
-		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
+	if n := len(bars); n != latMinBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, n, parts[0])
 	}
-	for _, r := range bars[:latPlaceholderBars-2] {
+	for _, r := range bars[:latMinBars-2] {
 		if r != latencyLevels[0] {
 			t.Fatalf("expected flat pad, got %q", parts[0])
 		}
@@ -47,8 +47,8 @@ func TestLatencySeriesRenderSingleSample(t *testing.T) {
 	}
 
 	bars := []rune(parts[0])
-	if n := len(bars); n != latPlaceholderBars {
-		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
+	if n := len(bars); n != latMinBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, n, parts[0])
 	}
 	if bars[len(bars)-1] == latencyLevels[0] {
 		t.Fatalf("expected bar for first sample, got %q", parts[0])
@@ -63,8 +63,8 @@ func TestLatencySeriesRenderGrowsWithSamples(t *testing.T) {
 	if len(parts) != 2 {
 		t.Fatalf("expected latency format, got %q", got)
 	}
-	if n := len([]rune(parts[0])); n != latPlaceholderBars {
-		t.Fatalf("expected %d bars, got %d (%q)", latPlaceholderBars, n, parts[0])
+	if n := len([]rune(parts[0])); n != latMinBars {
+		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, n, parts[0])
 	}
 
 	for i := 0; i < 5; i++ {
