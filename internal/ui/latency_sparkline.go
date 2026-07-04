@@ -26,10 +26,13 @@ var (
 )
 
 func (m Model) latencyText() string {
-	if m.latencySeries.empty() {
-		return latPlaceholder
+	if !m.latencySeries.empty() {
+		return m.latencySeries.render()
 	}
-	return m.latencySeries.render()
+	if m.latAnimOn {
+		return latClimb(m.latAnimP()) + " ms"
+	}
+	return latPlaceholder
 }
 
 func newLatencySeries(capacity int) *latencySeries {

@@ -20,6 +20,8 @@ type tabSpinMsg struct {
 	seq int
 }
 
+type latAnimMsg struct{}
+
 type profileNextIterationMsg struct{}
 
 type updateTickMsg struct{}
