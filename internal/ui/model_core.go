@@ -287,6 +287,8 @@ type Model struct {
 	lastGRPC         *grpcclient.Response
 	lastError        error
 	latencySeries    *latencySeries
+	latAnimOn        bool
+	latAnimT0        time.Time
 
 	scriptRunner    *scripts.Runner
 	testResults     []scripts.TestResult
@@ -745,5 +747,6 @@ func New(cfg Config) Model {
 		strings.TrimSpace(model.lastResponseSaveDir) == "" {
 		model.lastResponseSaveDir = model.workspaceRoot
 	}
+	model.startLatAnim()
 	return model
 }
