@@ -264,12 +264,15 @@ type Model struct {
 	requestDetailViewport  *viewport.Model
 	helpViewport           *viewport.Model
 
-	showSearchPrompt   bool
-	searchInput        textinput.Model
-	searchIsRegex      bool
-	searchJustOpened   bool
-	searchTarget       searchTarget
-	searchResponsePane responsePaneID
+	showSearchPrompt      bool
+	searchInput           textinput.Model
+	searchIsRegex         bool
+	searchJustOpened      bool
+	searchTarget          searchTarget
+	searchResponsePane    responsePaneID
+	showCommandLine       bool
+	commandLineInput      textinput.Model
+	commandLineJustOpened bool
 
 	statusMessage    statusMsg
 	statusUser       string
@@ -359,6 +362,7 @@ type Model struct {
 	newFileExtIndex        int
 	newFileError           string
 	newFileFromSave        bool
+	saveAsFollowUp         tea.Cmd
 	openPathInput          textinput.Model
 	openPathError          string
 	responseSaveInput      textinput.Model
@@ -402,6 +406,13 @@ type Model struct {
 type navDocCache struct {
 	doc *restfile.Document
 	mod time.Time
+}
+
+func newPromptInput(placeholder, prompt string) textinput.Model {
+	in := textinput.New()
+	in.Placeholder = placeholder
+	in.Prompt = prompt
+	return in
 }
 
 func New(cfg Config) Model {
@@ -490,46 +501,16 @@ func New(cfg Config) Model {
 	editor.KeyMap = viewKeyMap
 	editor.Cursor.SetMode(cursor.CursorStatic)
 
-	newFileInput := textinput.New()
-	newFileInput.Placeholder = "new-request"
-	newFileInput.CharLimit = 0
-	newFileInput.Prompt = ""
-	newFileInput.SetCursor(0)
-
-	openPathInput := textinput.New()
-	openPathInput.Placeholder = "./examples/basic.http"
-	openPathInput.CharLimit = 0
-	openPathInput.Prompt = ""
-	openPathInput.SetCursor(0)
-
-	responseSaveInput := textinput.New()
-	responseSaveInput.Placeholder = "~/Downloads/response.bin"
-	responseSaveInput.CharLimit = 0
-	responseSaveInput.Prompt = ""
-	responseSaveInput.SetCursor(0)
-
-	searchInput := textinput.New()
-	searchInput.Placeholder = "pattern"
-	searchInput.CharLimit = 0
-	searchInput.Prompt = "/"
-	searchInput.SetCursor(0)
-	searchInput.Blur()
+	newFileInput := newPromptInput("new-request", "")
+	openPathInput := newPromptInput("./examples/basic.http", "")
+	responseSaveInput := newPromptInput("~/Downloads/response.bin", "")
+	searchInput := newPromptInput("pattern", "/")
+	commandLineInput := newPromptInput("command", "")
 
 	navFilter := newNavigatorFilterInput()
 
-	helpFilter := textinput.New()
-	helpFilter.Placeholder = "Search..."
-	helpFilter.CharLimit = 0
-	helpFilter.Prompt = ""
-	helpFilter.SetCursor(0)
-	helpFilter.Blur()
-
-	historyFilter := textinput.New()
-	historyFilter.Placeholder = "method:GET date:05-Jun-2024 users"
-	historyFilter.CharLimit = 0
-	historyFilter.Prompt = "Filter: "
-	historyFilter.SetCursor(0)
-	historyFilter.Blur()
+	helpFilter := newPromptInput("Search...", "")
+	historyFilter := newPromptInput("method:GET date:05-Jun-2024 users", "Filter: ")
 
 	primaryViewport := viewport.New(0, 0)
 	primaryViewport.SetContent(logoPlaceholder(0, 0))
@@ -706,6 +687,7 @@ func New(cfg Config) Model {
 		responseSaveInput:        responseSaveInput,
 		searchInput:              searchInput,
 		searchTarget:             searchTargetEditor,
+		commandLineInput:         commandLineInput,
 		streamMgr:                stream.NewManager(),
 		streamMsgChan:            make(chan tea.Msg, 128),
 		streamBatchWindow:        defaultStreamBatchWindow,

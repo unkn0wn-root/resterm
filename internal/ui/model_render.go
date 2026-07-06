@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/cellbuf"
@@ -1857,6 +1858,9 @@ func clampPositive(value, maxValue int) int {
 }
 
 func (m Model) renderCommandBar() string {
+	if m.showCommandLine {
+		return m.renderCommandLinePrompt()
+	}
 	if m.showSearchPrompt && m.searchTarget != searchTargetResponse {
 		return m.renderSearchPrompt()
 	}
@@ -1905,6 +1909,33 @@ func (m Model) renderSearchPrompt() string {
 	return m.renderSearchCommandBar(m.theme.CommandBar.Width(m.width))
 }
 
+func (m Model) renderCommandLinePrompt() string {
+	style := m.theme.CommandBar.Width(m.width)
+	subtle := m.themeRuntime.subtleTextStyle(m.theme)
+	label := lipgloss.NewStyle().Bold(true).Render(":")
+
+	reserved := lipgloss.Width(label)
+	hints := ""
+	if m.commandLineInput.Value() == "" {
+		hints = subtle.
+			PaddingLeft(1).
+			Render("w q wq q! qa noh e help")
+		reserved += lipgloss.Width(hints)
+	}
+
+	segments := []string{
+		label,
+		renderPromptInput(m.commandLineInput, commandBarContentWidth(style)-reserved),
+	}
+	if hints != "" {
+		segments = append(segments, hints)
+	}
+	return renderCommandBarContainer(
+		style,
+		lipgloss.JoinHorizontal(lipgloss.Top, segments...),
+	)
+}
+
 func (m Model) renderResponseSearchPrompt(width int) string {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
@@ -1939,7 +1970,7 @@ func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
 
 	segments := []string{
 		label,
-		m.renderSearchPromptInput(commandBarContentWidth(style) - reserved),
+		renderPromptInput(m.searchInput, commandBarContentWidth(style)-reserved),
 	}
 	if modeBadge != "" {
 		segments = append(segments, modeBadge)
@@ -1968,30 +1999,26 @@ func (m Model) searchPromptHints() string {
 	return "^R regex"
 }
 
-func (m Model) renderSearchPromptInput(width int) string {
-	if width < 4 {
-		width = 4
-	}
-	// Copy so we can adjust Width without mutating the real input.
-	inputModel := m.searchInput
-	inputModel.Width = 0
-	if inputModel.Value() == "" {
+// input is received as a copy, so Width can be adjusted without mutating the real model.
+func renderPromptInput(input textinput.Model, width int) string {
+	width = max(width, 4)
+	input.Width = 0
+	if input.Value() == "" {
 		// With a zero width, textinput renders only the first placeholder rune.
 		// Set just enough width for the placeholder without padding the gap to the next segment.
-		placeholderWidth := lipgloss.Width(inputModel.Placeholder)
-		if placeholderWidth > 1 {
-			inputModel.Width = placeholderWidth - 1
+		if placeholderWidth := lipgloss.Width(input.Placeholder); placeholderWidth > 1 {
+			input.Width = placeholderWidth - 1
 		}
 	} else {
-		inputModel.Width = max(width-lipgloss.Width(inputModel.Prompt), 1)
-		value := inputModel.Value()
-		pos := inputModel.Position()
+		input.Width = max(width-lipgloss.Width(input.Prompt), 1)
+		value := input.Value()
+		pos := input.Position()
 		// Rebuild the copy's overflow window after assigning a render-only width.
-		inputModel.Reset()
-		inputModel.SetValue(value)
-		inputModel.SetCursor(pos)
+		input.Reset()
+		input.SetValue(value)
+		input.SetCursor(pos)
 	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(inputModel.View())
+	return lipgloss.NewStyle().MaxWidth(width).Render(input.View())
 }
 
 func renderSearchPromptLabel(text string) string {

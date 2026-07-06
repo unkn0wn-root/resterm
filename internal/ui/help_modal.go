@@ -373,6 +373,19 @@ func (m Model) helpSections() []helpSection {
 			},
 		},
 		{
+			title: "Command line",
+			entries: []helpEntry{
+				{":", "Open Vim-style command line"},
+				{":w / :write", "Save current file"},
+				{":q / :qa", "Quit when there are no unsaved changes"},
+				{":q! / :qa!", "Quit without saving"},
+				{":wq / :x", "Save and quit"},
+				{":e / :edit", "Open file or folder prompt"},
+				{":noh", "Clear search highlights"},
+				{":help", "Open this help"},
+			},
+		},
+		{
 			title: "Response selection",
 			entries: []helpEntry{
 				{"v / V", "Response: show cursor / start selection"},
