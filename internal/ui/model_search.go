@@ -54,16 +54,13 @@ func (m *Model) openSearchPrompt() tea.Cmd {
 		m.searchTarget = searchTargetResponse
 		m.searchResponsePane = m.responsePaneFocus
 		m.searchIsRegex = pane.search.isRegex
-		if pane.search.hasQuery() {
-			m.searchInput.SetValue(pane.search.query)
-		} else {
-			m.searchInput.SetValue("")
-		}
 	default:
 		m.prepareEditorSearchContext()
 	}
 
-	m.searchInput.CursorEnd()
+	// Like Vim, "/" always opens an empty prompt; the previous query stays
+	// available to n/N via the target's search state.
+	m.searchInput.Reset()
 	return m.searchInput.Focus()
 }
 
@@ -144,7 +141,6 @@ func (m *Model) clearLiveSearchTarget() tea.Cmd {
 func (m *Model) prepareEditorSearchContext() {
 	m.searchTarget = searchTargetEditor
 	m.searchIsRegex = m.editor.search.isRegex
-	m.searchInput.SetValue(m.editor.search.query)
 }
 
 func (m *Model) responseSearchContent(
