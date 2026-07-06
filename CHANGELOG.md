@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [0.44.7](https://github.com/unkn0wn-root/resterm/compare/v0.44.6...v0.44.7) (2026-07-06)
+
+
+### Features
+
+* **ui:** add startup sparkline animation ([#307](https://github.com/unkn0wn-root/resterm/issues/307)) ([8508faa](https://github.com/unkn0wn-root/resterm/commit/8508faa345b7647511a4be1501ed43a5cc378dcb))
+
 ### [0.44.6](https://github.com/unkn0wn-root/resterm/compare/v0.44.5...v0.44.6) (2026-07-03)
 
 ### [0.44.5](https://github.com/unkn0wn-root/resterm/compare/v0.44.4...v0.44.5) (2026-07-01)
