@@ -53,7 +53,7 @@ func TestRenderSearchPromptAlignsToCommandBarStart(t *testing.T) {
 
 	out := ansi.Strip(model.renderSearchPrompt())
 
-	if !strings.HasPrefix(out, " "+searchPromptIcon+" Search") {
+	if !strings.HasPrefix(out, " /pattern") {
 		t.Fatalf("expected search prompt to align with command bar gutter, got %q", out)
 	}
 }
@@ -65,7 +65,7 @@ func TestRenderSearchPromptShowsLiteralGuideWhenEmpty(t *testing.T) {
 	model.searchInput.Focus()
 
 	out := ansi.Strip(model.renderSearchPrompt())
-	expected := searchPromptIcon + " Search /pattern LITERAL " + model.searchPromptHints()
+	expected := "/pattern LITERAL ^R regex"
 
 	if !strings.Contains(out, expected) {
 		t.Fatalf("expected empty literal editor search guide %q, got %q", expected, out)
@@ -83,7 +83,7 @@ func TestRenderSearchPromptShowsRegexGuideWhenEmpty(t *testing.T) {
 	model.searchInput.Focus()
 
 	out := ansi.Strip(model.renderSearchPrompt())
-	expected := searchPromptIcon + " Search /pattern REGEX " + model.searchPromptHints()
+	expected := "/pattern REGEX ^R literal"
 
 	if !strings.Contains(out, expected) {
 		t.Fatalf("expected empty regex editor search guide %q, got %q", expected, out)
@@ -143,7 +143,7 @@ func TestRenderResponseSearchPromptShowsLiteralGuideWhenEmpty(t *testing.T) {
 	model.searchInput.Focus()
 
 	out := ansi.Strip(model.renderResponseSearchPrompt(96))
-	expected := searchPromptIcon + " Search /pattern LITERAL " + model.searchPromptHints()
+	expected := "/pattern LITERAL ^R regex"
 
 	if !strings.Contains(out, expected) {
 		t.Fatalf("expected empty literal response search guide %q, got %q", expected, out)
@@ -160,7 +160,7 @@ func TestRenderResponseSearchPromptShowsRegexGuideWhenEmpty(t *testing.T) {
 	model.searchInput.Focus()
 
 	out := ansi.Strip(model.renderResponseSearchPrompt(96))
-	expected := searchPromptIcon + " Search /pattern REGEX " + model.searchPromptHints()
+	expected := "/pattern REGEX ^R literal"
 
 	if !strings.Contains(out, expected) {
 		t.Fatalf("expected empty regex response search guide %q, got %q", expected, out)
@@ -178,13 +178,8 @@ func TestRenderResponseSearchPromptHidesGuideAfterTyping(t *testing.T) {
 
 	out := ansi.Strip(model.renderResponseSearchPrompt(48))
 
-	if !strings.HasPrefix(out, searchPromptIcon+" Search") {
+	if !strings.HasPrefix(out, "/pattern") {
 		t.Fatalf("expected response search prompt to start at pane edge, got %q", out)
-	}
-
-	const value = "/pattern"
-	if !strings.Contains(out, value) {
-		t.Fatalf("expected response search input value, got %q", out)
 	}
 	assertSearchGuideHidden(t, out)
 }

@@ -504,7 +504,7 @@ func New(cfg Config) Model {
 	newFileInput := newPromptInput("new-request", "")
 	openPathInput := newPromptInput("./examples/basic.http", "")
 	responseSaveInput := newPromptInput("~/Downloads/response.bin", "")
-	searchInput := newPromptInput("pattern", "/")
+	searchInput := newPromptInput("pattern", "")
 	commandLineInput := newPromptInput("command", "")
 
 	navFilter := newNavigatorFilterInput()

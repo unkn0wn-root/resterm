@@ -1910,30 +1910,7 @@ func (m Model) renderSearchPrompt() string {
 }
 
 func (m Model) renderCommandLinePrompt() string {
-	style := m.theme.CommandBar.Width(m.width)
-	subtle := m.themeRuntime.subtleTextStyle(m.theme)
-	label := lipgloss.NewStyle().Bold(true).Render(":")
-
-	reserved := lipgloss.Width(label)
-	hints := ""
-	if m.commandLineInput.Value() == "" {
-		hints = subtle.
-			PaddingLeft(1).
-			Render("w q wq q! qa noh e help")
-		reserved += lipgloss.Width(hints)
-	}
-
-	segments := []string{
-		label,
-		renderPromptInput(m.commandLineInput, commandBarContentWidth(style)-reserved),
-	}
-	if hints != "" {
-		segments = append(segments, hints)
-	}
-	return renderCommandBarContainer(
-		style,
-		lipgloss.JoinHorizontal(lipgloss.Top, segments...),
-	)
+	return m.renderPromptBar(m.theme.CommandBar.Width(m.width), ":", m.commandLineInput, "w q wq q! qa noh e help")
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {
@@ -1944,59 +1921,32 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 	return m.renderSearchCommandBar(style)
 }
 
-const (
-	searchPromptIcon = "⌕"
-)
-
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
-	subtle := m.themeRuntime.subtleTextStyle(m.theme)
-	label := renderSearchPromptLabel("Search")
+	mode, hint := "LITERAL", "^R regex"
+	if m.searchIsRegex {
+		mode, hint = "REGEX", "^R literal"
+	}
+	return m.renderPromptBar(style, "/", m.searchInput, mode, hint)
+}
 
+// guides are subtle helper segments shown only while the input is empty.
+func (m Model) renderPromptBar(style lipgloss.Style, prompt string, input textinput.Model, guides ...string) string {
+	label := lipgloss.NewStyle().Bold(true).Render(prompt)
 	reserved := lipgloss.Width(label)
-	showGuide := m.searchInput.Value() == ""
-	modeBadge := ""
-	hints := ""
-	if showGuide {
-		modeBadge = subtle.
-			PaddingLeft(1).
-			Render(strings.ToUpper(m.searchPromptMode()))
-		reserved += lipgloss.Width(modeBadge)
 
-		hints = subtle.
-			PaddingLeft(1).
-			Render(m.searchPromptHints())
-		reserved += lipgloss.Width(hints)
+	var extras []string
+	if input.Value() == "" {
+		subtle := m.themeRuntime.subtleTextStyle(m.theme).PaddingLeft(1)
+		for _, guide := range guides {
+			seg := subtle.Render(guide)
+			reserved += lipgloss.Width(seg)
+			extras = append(extras, seg)
+		}
 	}
 
-	segments := []string{
-		label,
-		renderPromptInput(m.searchInput, commandBarContentWidth(style)-reserved),
-	}
-	if modeBadge != "" {
-		segments = append(segments, modeBadge)
-	}
-	if hints != "" {
-		segments = append(segments, hints)
-	}
-
-	return renderCommandBarContainer(
-		style,
-		lipgloss.JoinHorizontal(lipgloss.Top, segments...),
-	)
-}
-
-func (m Model) searchPromptMode() string {
-	if m.searchIsRegex {
-		return "regex"
-	}
-	return "literal"
-}
-
-func (m Model) searchPromptHints() string {
-	if m.searchIsRegex {
-		return "^R literal"
-	}
-	return "^R regex"
+	segments := []string{label, renderPromptInput(input, commandBarContentWidth(style)-reserved)}
+	segments = append(segments, extras...)
+	return renderCommandBarContainer(style, lipgloss.JoinHorizontal(lipgloss.Top, segments...))
 }
 
 // input is received as a copy, so Width can be adjusted without mutating the real model.
@@ -2019,10 +1969,6 @@ func renderPromptInput(input textinput.Model, width int) string {
 		input.SetCursor(pos)
 	}
 	return lipgloss.NewStyle().MaxWidth(width).Render(input.View())
-}
-
-func renderSearchPromptLabel(text string) string {
-	return lipgloss.NewStyle().Bold(true).Render(searchPromptIcon + " " + text + " ")
 }
 
 func commandBarContentWidth(style lipgloss.Style) int {

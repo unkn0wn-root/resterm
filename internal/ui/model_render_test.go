@@ -1394,7 +1394,7 @@ func TestResponseSearchPromptRendersAtColumnBottom(t *testing.T) {
 	view := model.renderResponseColumn(responsePanePrimary, true, 36)
 	lines := strings.Split(ansi.Strip(view), "\n")
 	bodyLine := lineIndexContaining(lines, "short-body")
-	searchLine := lineIndexContaining(lines, searchPromptIcon+" Search")
+	searchLine := lineIndexContaining(lines, "/needle")
 	if bodyLine < 0 {
 		t.Fatalf("expected response body in column, got %q", ansi.Strip(view))
 	}
@@ -1441,18 +1441,18 @@ func TestResponseSearchPromptOnlyRendersInTargetSplitPane(t *testing.T) {
 	secondary.viewport.SetContent("secondary-body")
 
 	primaryView := model.renderResponseColumn(responsePanePrimary, true, 32)
-	if strings.Contains(ansi.Strip(primaryView), searchPromptIcon+" Search") {
+	if strings.Contains(ansi.Strip(primaryView), "/needle") {
 		t.Fatalf("did not expect search prompt in primary pane, got %q", ansi.Strip(primaryView))
 	}
 
 	secondaryView := model.renderResponseColumn(responsePaneSecondary, false, 32)
 	secondaryPlain := ansi.Strip(secondaryView)
-	if !strings.Contains(secondaryPlain, searchPromptIcon+" Search") {
+	if !strings.Contains(secondaryPlain, "/needle") {
 		t.Fatalf("expected search prompt in secondary pane, got %q", secondaryPlain)
 	}
 	secondaryLines := strings.Split(secondaryPlain, "\n")
 	bodyLine := lineIndexContaining(secondaryLines, "secondary-body")
-	searchLine := lineIndexContaining(secondaryLines, searchPromptIcon+" Search")
+	searchLine := lineIndexContaining(secondaryLines, "/needle")
 	if bodyLine < 0 || searchLine < 0 {
 		t.Fatalf("expected secondary body and search prompt, got %q", secondaryPlain)
 	}
