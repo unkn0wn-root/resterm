@@ -72,6 +72,7 @@ type requestBuilder struct {
 	sse               *ssebuilder.Builder
 	websocket         *wsbuilder.Builder
 	bodyOptions       restfile.BodyOptions
+	multipart         *multipartSpan
 	ssh               *restfile.SSHSpec
 	k8s               *restfile.K8sSpec
 }
@@ -199,6 +200,9 @@ func (r *requestBuilder) markHeadersDone() {
 		return
 	}
 	r.http.MarkHeadersDone()
+	if ct := r.http.MimeType(); restfile.IsMultipartMime(ct) {
+		r.multipart = newMultipartSpan(ct)
+	}
 }
 
 func (r *requestBuilder) applyHTTPBody(req *restfile.Request) {

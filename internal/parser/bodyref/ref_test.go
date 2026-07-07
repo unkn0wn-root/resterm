@@ -97,3 +97,28 @@ func TestParseBodyFileChecksLineAndInlineForms(t *testing.T) {
 		})
 	}
 }
+
+func TestIncludeLine(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+		ok   bool
+	}{
+		{in: "@payload.json", want: "payload.json", ok: true},
+		{in: "  @ payload.json  ", want: "payload.json", ok: true},
+		{in: "@my file.json", want: "my file.json", ok: true},
+		{in: "@{template}"},
+		{in: "@"},
+		{in: "@   "},
+		{in: "plain text"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			got, ok := IncludeLine(tt.in)
+			if ok != tt.ok || got != tt.want {
+				t.Fatalf("IncludeLine(%q)=(%q,%v), want (%q,%v)", tt.in, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}

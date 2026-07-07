@@ -1,7 +1,7 @@
 package httpclient
 
 import (
-	"bufio"
+	"bytes"
 	"errors"
 	"io/fs"
 	"os"
@@ -10,6 +10,7 @@ import (
 	"syscall"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -62,7 +63,8 @@ func (c *Client) readFileWithFallback(
 		if err == nil {
 			return data, path, nil
 		}
-		return nil, "", diag.WrapAsf(diag.ClassFilesystem, err,
+		return nil, "", diag.WrapAsf(
+			diag.ClassFilesystem, err,
 			"read %s %s",
 			strings.ToLower(label),
 			path,
@@ -79,7 +81,8 @@ func (c *Client) readFileWithFallback(
 			return data, candidate, nil
 		}
 		if stopReadFallback(err) {
-			return nil, "", diag.WrapAsf(diag.ClassFilesystem, err,
+			return nil, "", diag.WrapAsf(
+				diag.ClassFilesystem, err,
 				"read %s %s",
 				strings.ToLower(label),
 				candidate,
@@ -93,7 +96,8 @@ func (c *Client) readFileWithFallback(
 		lastErr = os.ErrNotExist
 		lastPath = path
 	}
-	return nil, "", diag.WrapAsf(diag.ClassFilesystem, lastErr,
+	return nil, "", diag.WrapAsf(
+		diag.ClassFilesystem, lastErr,
 		"read %s %s (last tried %s)",
 		strings.ToLower(label),
 		path,
@@ -101,44 +105,37 @@ func (c *Client) readFileWithFallback(
 	)
 }
 
-// Lines starting with @ get replaced with the file contents.
-// @{variable} syntax is left alone so template expansion can handle it.
-func (c *Client) injectBodyIncludes(
-	body string,
-	lookup fileLookup,
-) (string, error) {
-	scanner := bufio.NewScanner(strings.NewReader(body))
-	scanner.Buffer(make([]byte, 0, 1024), 1024*1024)
+// injectBodyIncludes replaces each "@path" line with the referenced file's
+// bytes. "@{...}" template lines are left alone. crlf rejoins lines with CRLF
+// and always terminates the body with CRLF, like curl -F: readline-based
+// multipart parsers (e.g. Python's cgi) block without it.
+func (c *Client) injectBodyIncludes(body string, lookup fileLookup, crlf bool) ([]byte, error) {
+	eol := "\n"
+	if crlf {
+		eol = "\r\n"
+	}
 
-	var b strings.Builder
-	first := true
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !first {
-			b.WriteByte('\n')
+	var b bytes.Buffer
+	b.Grow(len(body))
+	for i, line := range strings.Split(strings.TrimSuffix(body, "\n"), "\n") {
+		if i > 0 {
+			b.WriteString(eol)
 		}
-
-		first = false
-		trimmed := strings.TrimSpace(line)
-		if len(trimmed) > 1 && strings.HasPrefix(trimmed, "@") &&
-			!strings.HasPrefix(trimmed, "@{") {
-			includePath := strings.TrimSpace(trimmed[1:])
-			if includePath != "" {
-				data, _, err := lookup.read(c, includePath, "include body file")
-				if err != nil {
-					return "", err
-				}
-				b.WriteString(string(data))
-				continue
+		line = strings.TrimSuffix(line, "\r")
+		if path, ok := bodyref.IncludeLine(line); ok {
+			data, _, err := lookup.read(c, path, "include body file")
+			if err != nil {
+				return nil, err
 			}
+			b.Write(data)
+			continue
 		}
 		b.WriteString(line)
 	}
-
-	if err := scanner.Err(); err != nil {
-		return "", diag.WrapAs(diag.ClassFilesystem, err, "scan body includes")
+	if crlf {
+		b.WriteString(eol)
 	}
-	return b.String(), nil
+	return b.Bytes(), nil
 }
 
 func buildPathCandidates(path, baseDir string, fallbacks []string, allowRaw bool) []string {

@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -14,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"math/big"
+	"mime/multipart"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -28,6 +30,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
 	"github.com/unkn0wn-root/resterm/internal/nettrace"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/stream"
@@ -82,14 +85,14 @@ func TestInjectBodyIncludes(t *testing.T) {
 
 	body := "part1\n@payload.json\n@{notIncluded}\n"
 	lookup := newFileLookup(baseDir, Options{})
-	processed, err := client.injectBodyIncludes(body, lookup)
+	processed, err := client.injectBodyIncludes(body, lookup, false)
 	if err != nil {
 		t.Fatalf("inject body includes: %v", err)
 	}
-	if !strings.Contains(processed, `{"status":"ok"}`) {
+	if !strings.Contains(string(processed), `{"status":"ok"}`) {
 		t.Fatalf("expected file contents to be embedded, got %q", processed)
 	}
-	if !strings.Contains(processed, "@{notIncluded}") {
+	if !strings.Contains(string(processed), "@{notIncluded}") {
 		t.Fatalf("expected handlebars directive to remain untouched")
 	}
 }
@@ -101,11 +104,11 @@ func TestInjectBodyIncludesFallback(t *testing.T) {
 		"/does/not/exist",
 		Options{FallbackBaseDirs: []string{"workspace"}},
 	)
-	processed, err := client.injectBodyIncludes(body, lookup)
+	processed, err := client.injectBodyIncludes(body, lookup, false)
 	if err != nil {
 		t.Fatalf("inject body includes with fallback: %v", err)
 	}
-	if processed != "hi" {
+	if string(processed) != "hi" {
 		t.Fatalf("expected fallback file contents, got %q", processed)
 	}
 }
@@ -389,6 +392,75 @@ func TestBuildHTTPRequestSendsXMLBodyRaw(t *testing.T) {
 	}
 	if got := httpReq.Header.Get("Content-Type"); got != "text/xml; charset=utf-8" {
 		t.Fatalf("unexpected content type %q", got)
+	}
+}
+
+func TestBuildHTTPRequestMultipartUsesCRLFFramingAfterParse(t *testing.T) {
+	const boundary = "resterm-test-boundary"
+	src := "" +
+		"POST https://example.com/upload\r\n" +
+		"Content-Type: multipart/form-data; boundary=" + boundary + "\r\n" +
+		"\r\n" +
+		"--" + boundary + "\r\n" +
+		"Content-Disposition: form-data; name=\"field1\"\r\n" +
+		"\r\n" +
+		"value1\r\n" +
+		"--" + boundary + "\r\n" +
+		"Content-Disposition: form-data; name=\"file\"; filename=\"testfile.txt\"\r\n" +
+		"Content-Type: text/plain\r\n" +
+		"\r\n" +
+		"@testfile.txt\r\n" +
+		"--" + boundary + "--\r\n"
+
+	doc := parser.Parse("upload.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected one request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	if strings.Contains(req.Body.Text, "\r") {
+		t.Fatalf("parser should expose normalized body text before send, got %q", req.Body.Text)
+	}
+
+	client := NewClient(mapFS{"testfile.txt": []byte("hello\n")})
+	httpReq, _, body, err := client.BuildHTTPRequest(context.Background(), req, nil, Options{})
+	if err != nil {
+		t.Fatalf("build request: %v", err)
+	}
+	if got := httpReq.Header.Get("Content-Type"); got != "multipart/form-data; boundary="+boundary {
+		t.Fatalf("unexpected content type %q", got)
+	}
+	if bytes.Contains(body, []byte("--"+boundary+"\nContent-Disposition")) {
+		t.Fatalf("multipart delimiter was framed with LF only:\n%q", string(body))
+	}
+	wantFileFraming := "\r\n\r\nhello\n\r\n--" + boundary + "--"
+	if !bytes.Contains(body, []byte(wantFileFraming)) {
+		t.Fatalf("expected CRLF framing around unchanged file bytes %q, got:\n%q", wantFileFraming, string(body))
+	}
+
+	mr := multipart.NewReader(bytes.NewReader(body), boundary)
+	form, err := mr.ReadForm(1024)
+	if err != nil {
+		t.Fatalf("read multipart form: %v\nbody:\n%q", err, string(body))
+	}
+	t.Cleanup(func() { _ = form.RemoveAll() })
+	if got := form.Value["field1"]; len(got) != 1 || got[0] != "value1" {
+		t.Fatalf("unexpected field1 value: %v", got)
+	}
+	files := form.File["file"]
+	if len(files) != 1 {
+		t.Fatalf("expected one file part, got %d", len(files))
+	}
+	file, err := files[0].Open()
+	if err != nil {
+		t.Fatalf("open file part: %v", err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	fileBody, err := io.ReadAll(file)
+	if err != nil {
+		t.Fatalf("read file part: %v", err)
+	}
+	if string(fileBody) != "hello\n" {
+		t.Fatalf("unexpected file body %q", string(fileBody))
 	}
 }
 

@@ -55,6 +55,17 @@ func ParseBodyFile(line string, forceInline bool) (string, bool) {
 	return Parse(line, opt)
 }
 
+// IncludeLine returns the file path from an "@path" body include line.
+// "@{...}" template markers are not includes.
+func IncludeLine(line string) (string, bool) {
+	t := strings.TrimSpace(line)
+	if len(t) <= 1 || !strings.HasPrefix(t, "@") || strings.HasPrefix(t, "@{") {
+		return "", false
+	}
+	p := strings.TrimSpace(t[1:])
+	return p, p != ""
+}
+
 func parsePath(s string) (string, bool) {
 	if !hasLeadingSpace(s) {
 		return "", false
