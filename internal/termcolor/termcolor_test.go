@@ -82,3 +82,19 @@ func lookup(vals map[string]string) Lookup {
 		return v, ok
 	}
 }
+
+func TestConfigPaint(t *testing.T) {
+	c := Enabled(termenv.ANSI)
+	if got, want := c.Bold("x"), "\x1b[1mx\x1b[0m"; got != want {
+		t.Fatalf("Bold=%q, want %q", got, want)
+	}
+	if got, want := c.Faint("x"), "\x1b[2mx\x1b[0m"; got != want {
+		t.Fatalf("Faint=%q, want %q", got, want)
+	}
+	if got := (Config{}).Bold("x"); got != "x" {
+		t.Fatalf("disabled Bold=%q, want plain", got)
+	}
+	if got := (Config{Enabled: true, Profile: termenv.Ascii}).Bold("x"); got != "\x1b[1mx\x1b[0m" {
+		t.Fatalf("Ascii profile not promoted: %q", got)
+	}
+}

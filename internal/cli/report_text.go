@@ -44,10 +44,7 @@ func (p textPainter) PaintText(text, fg string, bold bool) string {
 }
 
 func (p textPainter) profile() termenv.Profile {
-	if p.cfg.Profile == termenv.Ascii {
-		return termenv.ANSI
-	}
-	return p.cfg.Profile
+	return p.cfg.Termenv()
 }
 
 func (p textPainter) TextPalette() runfmt.TextPalette {

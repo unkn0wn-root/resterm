@@ -79,6 +79,30 @@ func TrueColor() Config {
 	return Enabled(termenv.TrueColor)
 }
 
+// Termenv returns the profile to style output with; Ascii is promoted to
+// plain ANSI so an enabled config always styles visibly.
+func (c Config) Termenv() termenv.Profile {
+	if c.Profile == termenv.Ascii {
+		return termenv.ANSI
+	}
+	return c.Profile
+}
+
+func (c Config) Bold(s string) string {
+	return c.paint(s, termenv.Style.Bold)
+}
+
+func (c Config) Faint(s string) string {
+	return c.paint(s, termenv.Style.Faint)
+}
+
+func (c Config) paint(s string, fn func(termenv.Style) termenv.Style) string {
+	if !c.Enabled || s == "" {
+		return s
+	}
+	return fn(c.Termenv().String(s)).String()
+}
+
 func (c Config) Formatter() string {
 	if !c.Enabled {
 		return ""

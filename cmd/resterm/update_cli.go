@@ -11,6 +11,11 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/term"
+
+	"github.com/unkn0wn-root/resterm/internal/cli"
+	"github.com/unkn0wn-root/resterm/internal/mdterm"
+	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/update"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -19,6 +24,7 @@ const (
 	updateRepo         = "unkn0wn-root/resterm"
 	updateCheckTimeout = 20 * time.Second
 	updateApplyTimeout = 10 * time.Minute
+	changelogMaxNotes  = 32 << 10
 )
 
 var errUpdateDisabled = errors.New("update disabled for dev build")
@@ -120,10 +126,11 @@ func (p *cliProgress) render(force bool) {
 }
 
 type cliUpdater struct {
-	cl  update.Client
-	ver string
-	out io.Writer
-	err io.Writer
+	cl    update.Client
+	ver   string
+	out   io.Writer
+	color termcolor.Config
+	width int
 }
 
 func newCLIUpdater(cl update.Client, ver string) cliUpdater {
@@ -131,7 +138,12 @@ func newCLIUpdater(cl update.Client, ver string) cliUpdater {
 		cl:  cl,
 		ver: str.Trim(ver),
 		out: os.Stdout,
-		err: os.Stderr,
+		color: termcolor.Resolve(termcolor.Input{
+			Mode:   termcolor.ModeAuto,
+			TTY:    term.IsTerminal(int(os.Stdout.Fd())),
+			Lookup: os.LookupEnv,
+		}),
+		width: min(cli.DetectWidth(os.Stdout), cli.MaxTextWidth),
 	}
 }
 
@@ -174,7 +186,7 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 		u.out,
 		"Updating resterm %s → %s\n",
 		current,
-		res.Info.Version,
+		u.color.Bold(res.Info.Version),
 	); werr != nil {
 		log.Printf("print update header failed: %v", werr)
 	}
@@ -236,18 +248,19 @@ func (u cliUpdater) printNoUpdate() {
 }
 
 func (u cliUpdater) printAvailable(res update.Result) {
-	if _, err := fmt.Fprintf(u.out, "New version available: %s\n", res.Info.Version); err != nil {
+	ver := u.color.Bold(res.Info.Version)
+	if _, err := fmt.Fprintf(u.out, "New version available: %s\n", ver); err != nil {
 		log.Printf("print available failed: %v", err)
 	}
 }
 
 func (u cliUpdater) printChangelog(res update.Result) {
-	notes := str.Trim(res.Info.Notes)
-	divider := strings.Repeat("-", 64)
+	divider := mdterm.Rule(u.color, u.width)
 	if _, err := fmt.Fprintln(u.out, divider); err != nil {
 		log.Printf(changelogDividerErr, err)
 	}
-	if notes == "" {
+	body := mdterm.Render(clipNotes(res.Info.Notes), mdterm.Options{Width: u.width, Color: u.color})
+	if body == "" {
 		if _, err := fmt.Fprintln(u.out, "Changelog: not provided"); err != nil {
 			log.Printf("print changelog missing failed: %v", err)
 		}
@@ -256,61 +269,31 @@ func (u cliUpdater) printChangelog(res update.Result) {
 		}
 		return
 	}
-	if _, err := fmt.Fprintln(u.out, "Changelog:"); err != nil {
+	if _, err := fmt.Fprintln(u.out, u.color.Bold("Changelog:")); err != nil {
 		log.Printf("print changelog header failed: %v", err)
 		return
 	}
-	for _, line := range formatChangelog(notes) {
-		if _, err := fmt.Fprintln(u.out, line); err != nil {
-			log.Printf("print changelog body failed: %v", err)
-			return
-		}
+	if _, err := fmt.Fprintln(u.out, body); err != nil {
+		log.Printf("print changelog body failed: %v", err)
+		return
 	}
 	if _, err := fmt.Fprintln(u.out, divider); err != nil {
 		log.Printf(changelogDividerErr, err)
 	}
 }
 
-func formatChangelog(raw string) []string {
-	normalized := strings.ReplaceAll(raw, "\r\n", "\n")
-	lines := strings.Split(normalized, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmedRight := strings.TrimRight(line, " \t")
-		if str.Trim(trimmedRight) == "" {
-			out = append(out, "")
-			continue
-		}
-
-		leading := countLeadingSpaces(line)
-		token := str.Trim(trimmedRight)
-		switch {
-		case strings.HasPrefix(token, "- ") || strings.HasPrefix(token, "* "):
-			item := str.Trim(token[2:])
-			out = append(out, strings.Repeat(" ", leading)+"• "+item)
-		default:
-			out = append(out, trimmedRight)
-		}
+// clipNotes bounds the renderer's input: the inline scanner is quadratic on
+// adversarial text, and anything longer is unreadable as a changelog anyway.
+func clipNotes(notes string) string {
+	notes = str.Trim(notes)
+	if len(notes) <= changelogMaxNotes {
+		return notes
 	}
-	return out
-}
-
-// Tabs count as 4 spaces for changelog indentation calculation
-// so markdown nested lists look reasonable in the terminal.
-func countLeadingSpaces(s string) int {
-	count := 0
-	for _, r := range s {
-		if r == ' ' || r == '\t' {
-			if r == '\t' {
-				count += 4
-			} else {
-				count++
-			}
-			continue
-		}
-		break
+	cut := notes[:changelogMaxNotes]
+	if i := strings.LastIndexByte(cut, '\n'); i > 0 {
+		cut = cut[:i]
 	}
-	return count
+	return cut + "\n\n[changelog truncated]"
 }
 
 func humanBytes(n int64) string {

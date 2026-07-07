@@ -22,6 +22,9 @@ const (
 	minHelpDivisor = 3
 )
 
+// MaxTextWidth caps wrapped CLI text output at a readable line length.
+const MaxTextWidth = 100
+
 func PrintFlagSetUsage(w io.Writer, app string, fs *flag.FlagSet) {
 	_, _ = fmt.Fprintf(w, "Usage: %s %s [flags]\n\n", app, fs.Name())
 	_, _ = fmt.Fprintln(w, "Flags:")
@@ -30,7 +33,7 @@ func PrintFlagSetUsage(w io.Writer, app string, fs *flag.FlagSet) {
 
 func PrintFlagDefaults(w io.Writer, fs *flag.FlagSet) {
 	rows := collectRows(fs)
-	lay := newLayout(rows, detectWidth(w))
+	lay := newLayout(rows, DetectWidth(w))
 	for _, row := range rows {
 		renderRow(w, row, lay)
 	}
@@ -236,10 +239,10 @@ func displayWidth(s string) int {
 	return runewidth.StringWidth(s)
 }
 
-// detectWidth resolves the terminal width. COLUMNS overrides everything, otherwise
+// DetectWidth resolves the terminal width. COLUMNS overrides everything, otherwise
 // writer, the standard streams and finally /dev/tty are probed so a redirected
 // stderr still yields the real width. defaultWidth is the last resort.
-func detectWidth(w io.Writer) int {
+func DetectWidth(w io.Writer) int {
 	if cols, ok := envWidth(); ok {
 		return cols
 	}
