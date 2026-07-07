@@ -255,6 +255,7 @@ func (m *Model) applyThemeDefinition(def theme.Definition) {
 func (m *Model) applyThemeToInputs() {
 	m.themeRuntime.applyRequestEditor(&m.editor, m.theme)
 	m.themeRuntime.applyTextInput(&m.searchInput, m.theme, textInputKindGeneric)
+	m.themeRuntime.applyTextInput(&m.commandLineInput, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.helpFilter, m.theme, textInputKindHelp)
 	m.themeRuntime.applyTextInput(&m.newFileInput, m.theme, textInputKindGeneric)
 	m.themeRuntime.applyTextInput(&m.openPathInput, m.theme, textInputKindGeneric)
