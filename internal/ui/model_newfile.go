@@ -30,6 +30,7 @@ func (m *Model) prepareNewFileModal(fromSave bool) {
 	m.showThemeSelector = false
 	m.closeOpenModal()
 	m.newFileFromSave = fromSave
+	m.saveAsFollowUp = nil
 }
 
 func (m *Model) closeNewFileModal() {
@@ -38,6 +39,7 @@ func (m *Model) closeNewFileModal() {
 	m.newFileInput.Blur()
 	m.newFileInput.SetValue("")
 	m.newFileFromSave = false
+	m.saveAsFollowUp = nil
 }
 
 func (m *Model) cycleNewFileExtension(delta int) {
@@ -113,6 +115,7 @@ func (m *Model) submitNewFile() tea.Cmd {
 	}
 
 	fromSave := m.newFileFromSave
+	followUp := m.saveAsFollowUp
 	m.closeNewFileModal()
 	focusCmd := m.setFocus(focusEditor)
 	cmd := m.openFile(finalPath)
@@ -126,5 +129,8 @@ func (m *Model) submitNewFile() tea.Cmd {
 			level: statusSuccess,
 		},
 	)
+	if followUp != nil {
+		return batchCommands(focusCmd, cmd, followUp)
+	}
 	return batchCommands(focusCmd, cmd)
 }

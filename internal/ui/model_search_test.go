@@ -152,6 +152,40 @@ func TestSlashOpensResponseSearchPromptWithoutTypingSlash(t *testing.T) {
 	}
 }
 
+func TestSearchPromptReopensEmptyAfterEscape(t *testing.T) {
+	model := New(Config{})
+	model.ready = true
+	model.focus = focusEditor
+	model.editorInsertMode = false
+	model.editor.SetValue("one\ntwo\nthree two")
+
+	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = updated.(Model)
+	for _, r := range "two" {
+		updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		model = updated.(Model)
+	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	model = updated.(Model)
+	if model.editor.SearchActive() {
+		t.Fatal("expected esc to clear search highlights")
+	}
+
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
+	model = updated.(Model)
+	if !model.showSearchPrompt {
+		t.Fatal("expected search prompt to reopen")
+	}
+	if got := model.searchInput.Value(); got != "" {
+		t.Fatalf("expected reopened search prompt to be empty, got %q", got)
+	}
+	if model.editor.search.query != "two" {
+		t.Fatalf("expected retained query for n/N, got %q", model.editor.search.query)
+	}
+}
+
 func TestSlashStillOpensHistoryFilter(t *testing.T) {
 	model := New(Config{})
 	model.ready = true
@@ -521,10 +555,10 @@ func TestLiveSearchEmptyQueryClearsCurrentTarget(t *testing.T) {
 
 	updated, _ := model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'/'}})
 	model = updated.(Model)
-	for range "foo" {
-		updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-		model = updated.(Model)
-	}
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	model = updated.(Model)
+	updated, _ = model.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	model = updated.(Model)
 
 	pane = model.pane(responsePanePrimary)
 	if pane == nil {

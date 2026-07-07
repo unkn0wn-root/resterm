@@ -61,7 +61,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setStatusMessage(*typed.status)
 		}
 	case tea.KeyMsg:
-		if !m.showSearchPrompt && !m.showEnvSelector && !m.showFileChangeModal {
+		if !m.showSearchPrompt && !m.showCommandLine {
 			if cmd := m.handleKey(typed); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
@@ -432,6 +432,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				cmds = append(cmds, m.applyLiveSearchPrompt())
 			}
 			return m, batchCommands(cmds...)
+		}
+		return m, batchCommands(cmds...)
+	}
+
+	if m.showCommandLine {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			cmd := m.handleCommandLineKey(keyMsg)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}
@@ -1263,6 +1271,10 @@ func (m *Model) handleKeyWithChord(msg tea.KeyMsg, allowChord bool) tea.Cmd {
 	if cmd, handled := m.handleHistoryFilterKey(msg); handled {
 		m.resetChordState()
 		return combine(cmd)
+	}
+
+	if m.canOpenCommandLine(msg) {
+		return combine(m.openCommandLine())
 	}
 
 	if m.operator.active {

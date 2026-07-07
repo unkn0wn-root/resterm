@@ -19,6 +19,9 @@ func statusMsgFromCmd(cmd tea.Cmd) (statusMsg, bool) {
 	if status, ok := msg.(statusMsg); ok {
 		return status, true
 	}
+	if evt, ok := msg.(editorEvent); ok && evt.status != nil {
+		return *evt.status, true
+	}
 	if batch, ok := msg.(tea.BatchMsg); ok {
 		for _, item := range batch {
 			if status, ok := statusMsgFromCmd(item); ok {

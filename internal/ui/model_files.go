@@ -30,6 +30,14 @@ type editorDocumentReplacement struct {
 	reportWorkspaceErrors bool
 }
 
+type saveFileOutcome int
+
+const (
+	saveFileOutcomeFailed saveFileOutcome = iota
+	saveFileOutcomeSaved
+	saveFileOutcomePending
+)
+
 func (m *Model) openSelectedFile() tea.Cmd {
 	path := selectedFilePath(m.fileList.SelectedItem())
 	if path == "" {
@@ -84,31 +92,27 @@ func (m *Model) openTemporaryDocument() tea.Cmd {
 }
 
 func (m *Model) saveFile() tea.Cmd {
+	_, cmd := m.saveFileWithOutcome()
+	return cmd
+}
+
+func (m *Model) saveFileWithOutcome() (saveFileOutcome, tea.Cmd) {
 	if m.currentFile == "" {
 		if strings.TrimSpace(m.editor.Value()) == "" {
-			return func() tea.Msg {
-				return statusMsg{text: "No file selected", level: statusWarn}
-			}
+			return saveFileOutcomeFailed, statusCmd(statusWarn, "No file selected")
 		}
 		m.openSaveAsModal()
-		return nil
+		return saveFileOutcomePending, nil
 	}
 	content := []byte(m.editor.Value())
 	if err := os.WriteFile(m.currentFile, content, 0o644); err != nil {
-		return func() tea.Msg {
-			return statusMsg{text: fmt.Sprintf("save failed: %v", err), level: statusError}
-		}
+		return saveFileOutcomeFailed, statusCmd(statusError, fmt.Sprintf("save failed: %v", err))
 	}
 	m.watchFile(m.currentFile, content)
 	m.refreshCurrentDocument(content)
-	return batchCommands(
+	return saveFileOutcomeSaved, batchCommands(
 		m.refreshGitStatusCmd(),
-		func() tea.Msg {
-			return statusMsg{
-				text:  fmt.Sprintf("Saved %s", filepath.Base(m.currentFile)),
-				level: statusSuccess,
-			}
-		},
+		statusCmd(statusSuccess, fmt.Sprintf("Saved %s", filepath.Base(m.currentFile))),
 	)
 }
 

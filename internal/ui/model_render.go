@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/cellbuf"
@@ -1857,6 +1858,9 @@ func clampPositive(value, maxValue int) int {
 }
 
 func (m Model) renderCommandBar() string {
+	if m.showCommandLine {
+		return m.renderCommandLinePrompt()
+	}
 	if m.showSearchPrompt && m.searchTarget != searchTargetResponse {
 		return m.renderSearchPrompt()
 	}
@@ -1905,6 +1909,10 @@ func (m Model) renderSearchPrompt() string {
 	return m.renderSearchCommandBar(m.theme.CommandBar.Width(m.width))
 }
 
+func (m Model) renderCommandLinePrompt() string {
+	return m.renderPromptBar(m.theme.CommandBar.Width(m.width), ":", m.commandLineInput, "w q wq q! qa noh e help")
+}
+
 func (m Model) renderResponseSearchPrompt(width int) string {
 	if width <= 0 {
 		width = defaultResponseViewportWidth
@@ -1913,89 +1921,54 @@ func (m Model) renderResponseSearchPrompt(width int) string {
 	return m.renderSearchCommandBar(style)
 }
 
-const (
-	searchPromptIcon = "⌕"
-)
-
 func (m Model) renderSearchCommandBar(style lipgloss.Style) string {
-	subtle := m.themeRuntime.subtleTextStyle(m.theme)
-	label := renderSearchPromptLabel("Search")
+	mode, hint := "LITERAL", "^R regex"
+	if m.searchIsRegex {
+		mode, hint = "REGEX", "^R literal"
+	}
+	return m.renderPromptBar(style, "/", m.searchInput, mode, hint)
+}
 
+// guides are subtle helper segments shown only while the input is empty.
+func (m Model) renderPromptBar(style lipgloss.Style, prompt string, input textinput.Model, guides ...string) string {
+	label := lipgloss.NewStyle().Bold(true).Render(prompt)
 	reserved := lipgloss.Width(label)
-	showGuide := m.searchInput.Value() == ""
-	modeBadge := ""
-	hints := ""
-	if showGuide {
-		modeBadge = subtle.
-			PaddingLeft(1).
-			Render(strings.ToUpper(m.searchPromptMode()))
-		reserved += lipgloss.Width(modeBadge)
 
-		hints = subtle.
-			PaddingLeft(1).
-			Render(m.searchPromptHints())
-		reserved += lipgloss.Width(hints)
+	var extras []string
+	if input.Value() == "" {
+		subtle := m.themeRuntime.subtleTextStyle(m.theme).PaddingLeft(1)
+		for _, guide := range guides {
+			seg := subtle.Render(guide)
+			reserved += lipgloss.Width(seg)
+			extras = append(extras, seg)
+		}
 	}
 
-	segments := []string{
-		label,
-		m.renderSearchPromptInput(commandBarContentWidth(style) - reserved),
-	}
-	if modeBadge != "" {
-		segments = append(segments, modeBadge)
-	}
-	if hints != "" {
-		segments = append(segments, hints)
-	}
-
-	return renderCommandBarContainer(
-		style,
-		lipgloss.JoinHorizontal(lipgloss.Top, segments...),
-	)
+	segments := []string{label, renderPromptInput(input, commandBarContentWidth(style)-reserved)}
+	segments = append(segments, extras...)
+	return renderCommandBarContainer(style, lipgloss.JoinHorizontal(lipgloss.Top, segments...))
 }
 
-func (m Model) searchPromptMode() string {
-	if m.searchIsRegex {
-		return "regex"
-	}
-	return "literal"
-}
-
-func (m Model) searchPromptHints() string {
-	if m.searchIsRegex {
-		return "^R literal"
-	}
-	return "^R regex"
-}
-
-func (m Model) renderSearchPromptInput(width int) string {
-	if width < 4 {
-		width = 4
-	}
-	// Copy so we can adjust Width without mutating the real input.
-	inputModel := m.searchInput
-	inputModel.Width = 0
-	if inputModel.Value() == "" {
+// input is received as a copy, so Width can be adjusted without mutating the real model.
+func renderPromptInput(input textinput.Model, width int) string {
+	width = max(width, 4)
+	input.Width = 0
+	if input.Value() == "" {
 		// With a zero width, textinput renders only the first placeholder rune.
 		// Set just enough width for the placeholder without padding the gap to the next segment.
-		placeholderWidth := lipgloss.Width(inputModel.Placeholder)
-		if placeholderWidth > 1 {
-			inputModel.Width = placeholderWidth - 1
+		if placeholderWidth := lipgloss.Width(input.Placeholder); placeholderWidth > 1 {
+			input.Width = placeholderWidth - 1
 		}
 	} else {
-		inputModel.Width = max(width-lipgloss.Width(inputModel.Prompt), 1)
-		value := inputModel.Value()
-		pos := inputModel.Position()
+		input.Width = max(width-lipgloss.Width(input.Prompt), 1)
+		value := input.Value()
+		pos := input.Position()
 		// Rebuild the copy's overflow window after assigning a render-only width.
-		inputModel.Reset()
-		inputModel.SetValue(value)
-		inputModel.SetCursor(pos)
+		input.Reset()
+		input.SetValue(value)
+		input.SetCursor(pos)
 	}
-	return lipgloss.NewStyle().MaxWidth(width).Render(inputModel.View())
-}
-
-func renderSearchPromptLabel(text string) string {
-	return lipgloss.NewStyle().Bold(true).Render(searchPromptIcon + " " + text + " ")
+	return lipgloss.NewStyle().MaxWidth(width).Render(input.View())
 }
 
 func commandBarContentWidth(style lipgloss.Style) int {

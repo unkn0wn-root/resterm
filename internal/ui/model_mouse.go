@@ -117,7 +117,7 @@ func (m *Model) consumeMouseClick(area mouseArea, target string, x, y int) bool 
 }
 
 func (m *Model) mouseModalActive() bool {
-	return m.modalCapturesGlobalKeys() || m.showHelp || m.showSearchPrompt
+	return m.modalCapturesGlobalKeys() || m.showHelp || m.showSearchPrompt || m.showCommandLine
 }
 
 func (m *Model) handleMouseClick(msg tea.MouseMsg) (tea.Cmd, bool) {

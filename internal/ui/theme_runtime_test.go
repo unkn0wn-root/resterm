@@ -89,6 +89,15 @@ func TestApplyThemeDefinitionStylesFiltersUseDistinctPromptAndTextColors(t *test
 	if got := model.searchInput.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
 		t.Fatalf("expected light input text foreground, got %v", got)
 	}
+	if got := model.commandLineInput.PromptStyle.GetForeground(); got != lipgloss.Color("#1e40af") {
+		t.Fatalf("expected light command prompt foreground, got %v", got)
+	}
+	if got := model.commandLineInput.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
+		t.Fatalf("expected light command text foreground, got %v", got)
+	}
+	if got := model.commandLineInput.Cursor.Style.GetForeground(); got != lipgloss.Color("#1e40af") {
+		t.Fatalf("expected light command cursor foreground, got %v", got)
+	}
 	if got := model.helpFilter.TextStyle.GetForeground(); got != lipgloss.Color("#0f172a") {
 		t.Fatalf("expected light help filter text foreground, got %v", got)
 	}

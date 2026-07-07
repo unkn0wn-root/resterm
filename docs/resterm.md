@@ -174,6 +174,8 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F` or `/`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
+Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
+
 ### Editor completions (IntelliSense)
 
 While the editor is in insert mode, Resterm suggests completions based on where the
