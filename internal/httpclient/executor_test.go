@@ -442,7 +442,7 @@ func TestBuildHTTPRequestMultipartUsesCRLFFramingAfterParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read multipart form: %v\nbody:\n%q", err, string(body))
 	}
-	defer form.RemoveAll()
+	t.Cleanup(func() { _ = form.RemoveAll() })
 	if got := form.Value["field1"]; len(got) != 1 || got[0] != "value1" {
 		t.Fatalf("unexpected field1 value: %v", got)
 	}
@@ -454,7 +454,7 @@ func TestBuildHTTPRequestMultipartUsesCRLFFramingAfterParse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open file part: %v", err)
 	}
-	defer file.Close()
+	t.Cleanup(func() { _ = file.Close() })
 	fileBody, err := io.ReadAll(file)
 	if err != nil {
 		t.Fatalf("read file part: %v", err)
