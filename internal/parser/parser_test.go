@@ -2427,6 +2427,119 @@ Content-Type: application/xml
 	}
 }
 
+func TestParseMultipartBodyPreservesBoundaryLines(t *testing.T) {
+	src := `POST https://example.com/api
+Content-Type: multipart/form-data; boundary=multipart-boundary
+
+--multipart-boundary
+Content-Disposition: form-data; name="field"
+
+value
+--multipart-boundary--
+`
+
+	doc := Parse("multipart-boundary-body.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	want := "--multipart-boundary\n" +
+		"Content-Disposition: form-data; name=\"field\"\n" +
+		"\n" +
+		"value\n" +
+		"--multipart-boundary--"
+	if got := doc.Requests[0].Body.Text; got != want {
+		t.Fatalf("unexpected body text:\nwant %q\n got %q", want, got)
+	}
+}
+
+func TestParseMultipartBodyKeepsPartContentVerbatim(t *testing.T) {
+	src := `POST https://example.com/api
+Content-Type: multipart/form-data; boundary=B
+
+--B
+Content-Disposition: form-data; name="script"; filename="run.sh"
+
+#!/bin/sh
+// not a comment
+> not a script
+@x = not a variable
+-- dashes
+--B--
+# @name upload
+`
+
+	doc := Parse("multipart-verbatim.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	req := doc.Requests[0]
+	want := "--B\n" +
+		"Content-Disposition: form-data; name=\"script\"; filename=\"run.sh\"\n" +
+		"\n" +
+		"#!/bin/sh\n" +
+		"// not a comment\n" +
+		"> not a script\n" +
+		"@x = not a variable\n" +
+		"-- dashes\n" +
+		"--B--"
+	if req.Body.Text != want {
+		t.Fatalf("unexpected body text:\nwant %q\n got %q", want, req.Body.Text)
+	}
+	if req.Metadata.Name != "upload" {
+		t.Fatalf("expected directive after close delimiter to parse, got name %q", req.Metadata.Name)
+	}
+	if len(req.Variables) != 0 {
+		t.Fatalf("expected no variables from part content, got %+v", req.Variables)
+	}
+	if len(req.Metadata.Scripts) != 0 {
+		t.Fatalf("expected no scripts from part content, got %d", len(req.Metadata.Scripts))
+	}
+}
+
+func TestParseMultipartWithoutBoundaryParamKeepsDashLines(t *testing.T) {
+	src := `POST https://example.com/api
+Content-Type: multipart/form-data
+
+--x
+value
+--x--
+`
+
+	doc := Parse("multipart-no-boundary.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	want := "--x\nvalue\n--x--"
+	if got := doc.Requests[0].Body.Text; got != want {
+		t.Fatalf("unexpected body text:\nwant %q\n got %q", want, got)
+	}
+}
+
+func TestParseMultipartQuotedBoundary(t *testing.T) {
+	src := `POST https://example.com/api
+Content-Type: multipart/form-data; boundary="B b"
+
+--B b
+Content-Disposition: form-data; name="note"
+
+# kept
+--B b--
+`
+
+	doc := Parse("multipart-quoted-boundary.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	want := "--B b\n" +
+		"Content-Disposition: form-data; name=\"note\"\n" +
+		"\n" +
+		"# kept\n" +
+		"--B b--"
+	if got := doc.Requests[0].Body.Text; got != want {
+		t.Fatalf("unexpected body text:\nwant %q\n got %q", want, got)
+	}
+}
+
 func TestParsePlainAngleNameWithoutContentTypeStaysInlineBody(t *testing.T) {
 	src := `POST https://example.com/api
 

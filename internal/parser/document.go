@@ -91,10 +91,13 @@ func (b *documentBuilder) processLine(lineNumber int, line string) {
 
 	b.flushScriptIfNeeded(trimmed)
 
-	if b.handleBlockComment(lineNumber, line, trimmed) {
+	if b.handleSeparator(lineNumber, trimmed) {
 		return
 	}
-	if b.handleSeparator(lineNumber, trimmed) {
+	if b.handleMultipartBodyLine(line, trimmed) {
+		return
+	}
+	if b.handleBlockComment(lineNumber, line, trimmed) {
 		return
 	}
 	if b.handleCommentLine(lineNumber, line, trimmed) {
@@ -262,6 +265,18 @@ func (b *documentBuilder) handleBodyContinuation(line string) bool {
 		return true
 	}
 	return false
+}
+
+// Blank lines fall through to handleBlankLine, which appends them to the body
+// with their whitespace normalized away.
+func (b *documentBuilder) handleMultipartBodyLine(line, trimmed string) bool {
+	if trimmed == "" || !b.inRequest || b.request.multipart == nil ||
+		!b.request.multipart.bodyLine(trimmed) {
+		return false
+	}
+	b.request.http.AppendBodyLine(line)
+	b.appendLine(line)
+	return true
 }
 
 func (b *documentBuilder) handleMethodLine(lineNumber int, line string) bool {

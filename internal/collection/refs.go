@@ -3,6 +3,7 @@ package collection
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -60,19 +61,9 @@ func bodyIncludes(body string) []string {
 	parts := strings.Split(body, "\n")
 	out := make([]string, 0, len(parts))
 	for _, ln := range parts {
-		// TrimSpace keeps CRLF and LF source files equivalent for include parsing.
-		t := strings.TrimSpace(ln)
-		if len(t) <= 1 {
-			continue
+		if p, ok := bodyref.IncludeLine(ln); ok {
+			out = append(out, p)
 		}
-		if !strings.HasPrefix(t, "@") || strings.HasPrefix(t, "@{") {
-			continue
-		}
-		p := strings.TrimSpace(t[1:])
-		if p == "" {
-			continue
-		}
-		out = append(out, p)
 	}
 	return out
 }

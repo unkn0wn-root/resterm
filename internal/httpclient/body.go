@@ -51,11 +51,7 @@ func (c *Client) prepareBody(
 				)
 			}
 
-			processed, procErr := c.injectBodyIncludes(expanded, lookup)
-			if procErr != nil {
-				return bodyPlan{}, procErr
-			}
-			return bodyPlan{rd: strings.NewReader(processed)}, nil
+			return c.textBodyPlan(expanded, lookup, req)
 		}
 		return bodyPlan{rd: bytes.NewReader(data)}, nil
 	case req.Body.Text != "":
@@ -67,14 +63,33 @@ func (c *Client) prepareBody(
 				return bodyPlan{}, diag.WrapAs(diag.ClassProtocol, err, "expand body template")
 			}
 		}
-		processed, err := c.injectBodyIncludes(expanded, lookup)
-		if err != nil {
-			return bodyPlan{}, err
-		}
-		return bodyPlan{rd: strings.NewReader(processed)}, nil
+		return c.textBodyPlan(expanded, lookup, req)
 	default:
 		return bodyPlan{}, nil
 	}
+}
+
+func (c *Client) textBodyPlan(
+	body string,
+	lookup fileLookup,
+	req *restfile.Request,
+) (bodyPlan, error) {
+	processed, err := c.injectBodyIncludes(body, lookup, isMultipartRequest(req))
+	if err != nil {
+		return bodyPlan{}, err
+	}
+	return bodyPlan{rd: bytes.NewReader(processed)}, nil
+}
+
+// Multipart bodies need CRLF framing on the wire. The Content-Type header is
+// what is actually sent (scripts may rewrite it after parse); Body.MimeType is
+// the parse-time fallback.
+func isMultipartRequest(req *restfile.Request) bool {
+	ct := req.Headers.Get("Content-Type")
+	if ct == "" {
+		ct = req.Body.MimeType
+	}
+	return restfile.IsMultipartMime(ct)
 }
 
 // GET requests put everything in query params, POST uses JSON body.
