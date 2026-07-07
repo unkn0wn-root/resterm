@@ -87,6 +87,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Multi-step workflows** with `@workflow` / `@step`.
 - **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
 - **RestermScript** - a small, safe expression language purpose.
+- **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
