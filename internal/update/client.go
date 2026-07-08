@@ -47,6 +47,9 @@ func NewClient(h *http.Client, repo string) (Client, error) {
 	return Client{http: h, repo: repo, api: apiHost}, nil
 }
 
+// Ready reports whether the client was actually built by NewClient - the UI
+// gets it through ui.Config so a zero value slips in when the field was
+// never set.
 func (c Client) Ready() bool {
 	return c.repo != "" && c.http != nil
 }
@@ -69,6 +72,8 @@ func (c Client) Latest(ctx context.Context) (Info, error) {
 	case http.StatusTooManyRequests:
 		return Info{}, ErrRateLimited
 	case http.StatusForbidden:
+		// github reports an exhausted quota as 403, not 429; the header is
+		// what tells it apart from a plain permission error
 		if res.Header.Get("X-RateLimit-Remaining") == "0" {
 			return Info{}, ErrRateLimited
 		}
@@ -78,6 +83,7 @@ func (c Client) Latest(ctx context.Context) (Info, error) {
 	}
 }
 
+// Check returns the release to install when one newer than curr exists.
 func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, bool, error) {
 	if DevBuild(curr) {
 		return Result{}, false, ErrDevBuild
@@ -105,6 +111,7 @@ func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, 
 	return Result{Info: info, Bin: bin, Digest: want}, true, nil
 }
 
+// what labels the request in error messages, e.g. "latest release".
 func (c Client) do(ctx context.Context, url, what, accept string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

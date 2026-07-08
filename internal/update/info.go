@@ -24,7 +24,7 @@ type Asset struct {
 	Name   string
 	URL    string
 	Size   int64
-	Digest string
+	Digest string // "sha256:<hex>"; empty on releases predating api digests
 }
 
 func (i Info) Asset(name string) (Asset, bool) {

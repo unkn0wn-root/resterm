@@ -43,6 +43,9 @@ func (c Client) stage(ctx context.Context, res Result, path string, prog Progres
 	return verifyVersion(ctx, path, res.Info.Version)
 }
 
+// prepareTemp reserves a temp file next to the target binary so the final
+// rename never crosses filesystems. On Windows the pattern keeps an .exe
+// suffix so the staged binary can be run for the version check.
 func prepareTemp(dir string) (string, error) {
 	pat := "resterm-update-*"
 	if runtime.GOOS == "windows" {
