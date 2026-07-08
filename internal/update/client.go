@@ -28,7 +28,6 @@ const (
 type Client struct {
 	http *http.Client
 	repo string
-	api  string
 }
 
 type Result struct {
@@ -44,7 +43,7 @@ func NewClient(h *http.Client, repo string) (Client, error) {
 	if h == nil {
 		h = http.DefaultClient
 	}
-	return Client{http: h, repo: repo, api: apiHost}, nil
+	return Client{http: h, repo: repo}, nil
 }
 
 // Ready reports whether the client was actually built by NewClient - the UI
@@ -55,7 +54,7 @@ func (c Client) Ready() bool {
 }
 
 func (c Client) Latest(ctx context.Context) (Info, error) {
-	url := fmt.Sprintf("%s/repos/%s/releases/latest", c.api, c.repo)
+	url := fmt.Sprintf("%s/repos/%s/releases/latest", apiHost, c.repo)
 	res, err := c.do(ctx, url, "latest release", "application/vnd.github+json")
 	if err != nil {
 		return Info{}, err
