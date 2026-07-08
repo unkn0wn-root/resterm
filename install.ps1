@@ -78,6 +78,57 @@ function Add-ToPath {
     return $false
 }
 
+function Download-File {
+    param($Url, $OutputPath, $Label)
+
+    Write-Info "Downloading from: $Url"
+    try {
+        Invoke-WebRequest -Uri $Url -OutFile $OutputPath
+    }
+    catch {
+        Write-Err "$Label download failed: $_"
+    }
+}
+
+function Get-ExpectedChecksum {
+    param($ChecksumPath, $BinaryFilename)
+
+    $line = Get-Content -Path $ChecksumPath -TotalCount 1
+    if (-not $line) {
+        Write-Err "Checksum file is empty"
+    }
+
+    $fields = $line.Trim() -split '\s+'
+    if ($fields.Count -ne 1 -and $fields.Count -ne 2) {
+        Write-Err "Invalid checksum line"
+    }
+
+    $expected = $fields[0].ToLowerInvariant()
+    if ($expected -notmatch '^[0-9a-f]{64}$') {
+        Write-Err "Invalid SHA-256 digest: $($fields[0])"
+    }
+
+    if ($fields.Count -eq 2) {
+        $name = $fields[1].TrimStart([char[]]"*")
+        if ($name -ne $BinaryFilename) {
+            Write-Err "Checksum names $name, want $BinaryFilename"
+        }
+    }
+
+    return $expected
+}
+
+function Verify-Checksum {
+    param($FilePath, $ChecksumPath, $BinaryFilename)
+
+    $expected = Get-ExpectedChecksum $ChecksumPath $BinaryFilename
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $FilePath).Hash.ToLowerInvariant()
+    if ($actual -ne $expected) {
+        Write-Err "Checksum mismatch for $FilePath`: expected $expected, got $actual"
+    }
+    Write-Info "Checksum verified"
+}
+
 function Main {
     Write-Info "Starting Resterm installation..."
 
@@ -103,12 +154,23 @@ function Main {
 
     $installPath = Join-Path $installDir $BINARY_NAME
 
-    Write-Info "Downloading from: $downloadUrl"
     try {
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $installPath
+        $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) "resterm-install-$([guid]::NewGuid().ToString('N'))"
+        New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
+
+        $tempBinary = Join-Path $tempDir $BINARY_NAME
+        $checksumPath = "$tempBinary.sha256"
+
+        Download-File $downloadUrl $tempBinary "Binary"
+        Download-File "${downloadUrl}.sha256" $checksumPath "Checksum"
+        Verify-Checksum $tempBinary $checksumPath $binaryFilename
+
+        Move-Item -Path $tempBinary -Destination $installPath -Force
     }
-    catch {
-        Write-Err "Download failed: $_"
+    finally {
+        if ($tempDir -and (Test-Path $tempDir)) {
+            Remove-Item -Path $tempDir -Recurse -Force
+        }
     }
 
     if (-not (Test-Path $installPath)) {

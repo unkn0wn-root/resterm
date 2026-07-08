@@ -145,12 +145,11 @@ func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, 
 		return Result{}, ErrNoAsset
 	}
 
-	res := Result{Info: info, Bin: bin}
-	if sum, ok := info.Asset(plat.Sum); ok {
-		res.Sum = sum
-		res.HasSum = true
+	sum, ok := info.Asset(plat.Sum)
+	if !ok {
+		return Result{}, ErrNoChecksum
 	}
-	return res, nil
+	return Result{Info: info, Bin: bin, Sum: sum, HasSum: true}, nil
 }
 
 func needsUpdate(curr, latest string) (bool, error) {

@@ -33,7 +33,10 @@ func newUpdateCheckCmd(cl update.Client, ver string) tea.Cmd {
 
 		res, err := cl.Check(ctx, ver, plat)
 		if err != nil {
-			if errors.Is(err, update.ErrNoUpdate) {
+			// missing assets mean the release is still uploading. retry at next tick
+			if errors.Is(err, update.ErrNoUpdate) ||
+				errors.Is(err, update.ErrNoAsset) ||
+				errors.Is(err, update.ErrNoChecksum) {
 				return updateCheckMsg{}
 			}
 			return updateCheckMsg{err: err}

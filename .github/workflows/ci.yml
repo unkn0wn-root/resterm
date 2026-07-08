@@ -4,10 +4,10 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   pull_request:
   workflow_dispatch:
-  release:
-    types: [published]
 
 jobs:
   lint-and-test:
@@ -27,11 +27,9 @@ jobs:
         run: golangci-lint run
 
   release-builds:
-    if: github.event_name == 'release'
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: lint-and-test
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     strategy:
       matrix:
         goos: [linux, windows, darwin]
@@ -75,7 +73,38 @@ jobs:
           echo "Building version $VERSION"
           GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
           (cd dist && sha256sum "$name" > "$name.sha256")
-      - name: Upload release artifacts
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*
+          if-no-files-found: error
+
+  # Assets are attached while the release is still a draft, so /releases/latest
+  # never serves a release with missing binaries or checksums.
+  release-draft:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: release-builds
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Verify release is complete
+        run: |
+          set -euo pipefail
+          count=$(ls dist | wc -l)
+          if [ "$count" -ne 12 ]; then
+            echo "expected 12 release assets, got $count:"
+            ls dist
+            exit 1
+          fi
+      - name: Create draft release
         uses: softprops/action-gh-release@v1
         with:
+          draft: true
           files: dist/*
