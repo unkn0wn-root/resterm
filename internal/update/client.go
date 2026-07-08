@@ -50,6 +50,28 @@ func (c Client) Ready() bool {
 	return c.repo != "" && c.http != nil
 }
 
+func (c Client) get(ctx context.Context, url, what string) (*http.Response, error) {
+	if c.http == nil {
+		return nil, errNilHTTPClient
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("build %s request: %w", what, err)
+	}
+	req.Header.Set("User-Agent", userAgent)
+
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download %s: %w", what, err)
+	}
+	if res.StatusCode != http.StatusOK {
+		_ = res.Body.Close()
+		return nil, fmt.Errorf("download %s failed: %s", what, res.Status)
+	}
+	return res, nil
+}
+
 func (c Client) Latest(ctx context.Context) (Info, error) {
 	if c.repo == "" {
 		return Info{}, ErrUnknownRepo

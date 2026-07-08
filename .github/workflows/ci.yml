@@ -66,14 +66,15 @@ jobs:
             arm64) goarch_label="arm64" ;;
             *) goarch_label="$GOARCH" ;;
           esac
-          output="dist/resterm_${goos_label}_${goarch_label}"
+          name="resterm_${goos_label}_${goarch_label}"
           if [ "$GOOS" = "windows" ]; then
-            output="${output}.exe"
+            name="${name}.exe"
           fi
+          output="dist/${name}"
 
           echo "Building version $VERSION"
           GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
-          sha256sum "$output" | awk '{print $1}' > "${output}.sha256"
+          (cd dist && sha256sum "$name" > "$name.sha256")
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v1
         with:
