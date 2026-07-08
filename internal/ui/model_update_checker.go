@@ -31,15 +31,18 @@ func newUpdateCheckCmd(cl update.Client, ver string) tea.Cmd {
 			return updateCheckMsg{err: err}
 		}
 
-		res, err := cl.Check(ctx, ver, plat)
+		res, ok, err := cl.Check(ctx, ver, plat)
 		if err != nil {
-			// missing assets mean the release is still uploading. retry at next tick
-			if errors.Is(err, update.ErrNoUpdate) ||
-				errors.Is(err, update.ErrNoAsset) ||
-				errors.Is(err, update.ErrNoChecksum) {
+			// transient: assets still uploading or the shared api quota is spent. retry at next tick
+			if errors.Is(err, update.ErrNoAsset) ||
+				errors.Is(err, update.ErrNoDigest) ||
+				errors.Is(err, update.ErrRateLimited) {
 				return updateCheckMsg{}
 			}
 			return updateCheckMsg{err: err}
+		}
+		if !ok {
+			return updateCheckMsg{}
 		}
 		return updateCheckMsg{res: &res}
 	}

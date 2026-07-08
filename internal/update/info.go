@@ -21,9 +21,10 @@ type Info struct {
 }
 
 type Asset struct {
-	Name string
-	URL  string
-	Size int64
+	Name   string
+	URL    string
+	Size   int64
+	Digest string
 }
 
 func decodeInfo(r io.Reader) (Info, error) {
@@ -36,9 +37,10 @@ func decodeInfo(r io.Reader) (Info, error) {
 		Body   string    `json:"body"`
 		Pub    time.Time `json:"published_at"`
 		Assets []struct {
-			Name string `json:"name"`
-			URL  string `json:"browser_download_url"`
-			Size int64  `json:"size"`
+			Name   string `json:"name"`
+			URL    string `json:"browser_download_url"`
+			Size   int64  `json:"size"`
+			Digest string `json:"digest"`
 		} `json:"assets"`
 	}
 
@@ -64,9 +66,10 @@ func decodeInfo(r io.Reader) (Info, error) {
 				continue
 			}
 			info.Assets = append(info.Assets, Asset{
-				Name: a.Name,
-				URL:  a.URL,
-				Size: a.Size,
+				Name:   a.Name,
+				URL:    a.URL,
+				Size:   a.Size,
+				Digest: a.Digest,
 			})
 		}
 	}

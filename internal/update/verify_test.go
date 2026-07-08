@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"net/http"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -12,81 +12,38 @@ import (
 	"testing"
 )
 
-func TestParseChecksum(t *testing.T) {
-	const bin = "resterm_Linux_x86_64"
+func TestParseDigest(t *testing.T) {
 	sum := sha256.Sum256([]byte("x"))
 	h := hex.EncodeToString(sum[:])
 
-	valid := []struct {
-		name string
-		body string
-	}{
-		{"hash only", h + "\n"},
-		{"no newline", h},
-		{"gnu format", h + "  " + bin + "\n"},
-		{"binary mode", h + " *" + bin + "\n"},
-		{"crlf", h + "  " + bin + "\r\n"},
-		{"uppercase", strings.ToUpper(h) + "\n"},
-		{"extra lines", h + "\ngarbage\n"},
-	}
-	for _, tc := range valid {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := parseChecksum(strings.NewReader(tc.body), bin)
-			if err != nil {
-				t.Fatalf("parse err: %v", err)
-			}
-			if got != sum {
-				t.Fatalf("digest mismatch: got %x want %x", got, sum)
-			}
-		})
-	}
-
-	invalid := []struct {
-		name string
-		body string
-	}{
-		{"wrong filename", h + "  resterm\n"},
-		{"short token", h[:63] + "\n"},
-		{"long token", h + "ab\n"},
-		{"non-hex", strings.Repeat("z", 64) + "\n"},
-		{"empty", ""},
-		{"blank first line", "\n" + h + "\n"},
-		{"three fields", h + " a b\n"},
-		{"oversized line", strings.Repeat("a", 8<<10)},
-	}
-	for _, tc := range invalid {
-		t.Run(tc.name, func(t *testing.T) {
-			if _, err := parseChecksum(strings.NewReader(tc.body), bin); err == nil {
-				t.Fatal("expected parse error")
-			}
-		})
-	}
-}
-
-func TestFetchChecksum(t *testing.T) {
-	const bin = "resterm_Linux_x86_64"
-	sum := sha256.Sum256([]byte("x"))
-	body := hex.EncodeToString(sum[:]) + "  " + bin + "\n"
-
-	tr := stubTransport{res: map[string]stubResponse{
-		"https://mock/sum": {body: body},
-	}}
-	cl, err := NewClient(&http.Client{Transport: tr}, "unkn0wn-root/resterm")
+	got, err := parseDigest("sha256:" + h)
 	if err != nil {
-		t.Fatalf("client err: %v", err)
-	}
-
-	got, err := cl.fetchChecksum(context.Background(), Asset{Name: bin + ".sha256", URL: "https://mock/sum"}, bin)
-	if err != nil {
-		t.Fatalf("fetch err: %v", err)
+		t.Fatalf("parse err: %v", err)
 	}
 	if got != sum {
 		t.Fatalf("digest mismatch: got %x want %x", got, sum)
 	}
 
-	missing := Asset{Name: bin + ".sha256", URL: "https://mock/missing"}
-	if _, err := cl.fetchChecksum(context.Background(), missing, bin); err == nil {
-		t.Fatal("expected fetch error")
+	if _, err := parseDigest(""); !errors.Is(err, ErrNoDigest) {
+		t.Fatalf("expected ErrNoDigest, got %v", err)
+	}
+
+	invalid := []struct {
+		name string
+		v    string
+	}{
+		{"wrong algorithm", "sha512:" + h},
+		{"no prefix", h},
+		{"short", "sha256:" + h[:63]},
+		{"long", "sha256:" + h + "ab"},
+		{"non-hex", "sha256:" + strings.Repeat("z", 64)},
+	}
+	for _, tc := range invalid {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := parseDigest(tc.v); err == nil {
+				t.Fatal("expected parse error")
+			}
+		})
 	}
 }
 

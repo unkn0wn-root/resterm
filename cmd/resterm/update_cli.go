@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/mdterm"
+	"github.com/unkn0wn-root/resterm/internal/rtfmt"
 	"github.com/unkn0wn-root/resterm/internal/termcolor"
 	"github.com/unkn0wn-root/resterm/internal/update"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -26,10 +26,6 @@ const (
 	updateApplyTimeout = 10 * time.Minute
 	changelogMaxNotes  = 32 << 10
 )
-
-var errUpdateDisabled = errors.New("update disabled for dev build")
-
-const changelogDividerErr = "print changelog divider failed: %v"
 
 type cliProgress struct {
 	out        io.Writer
@@ -51,7 +47,7 @@ func newCLIProgress(out io.Writer, label string) *cliProgress {
 }
 
 func (p *cliProgress) Start(total int64) {
-	if p == nil || p.done {
+	if p.done {
 		return
 	}
 	p.total = total
@@ -59,70 +55,60 @@ func (p *cliProgress) Start(total int64) {
 }
 
 func (p *cliProgress) Advance(n int64) {
-	if p == nil || p.done || n <= 0 {
+	if p.done || n <= 0 {
 		return
 	}
 	p.downloaded += n
 	p.render(false)
 }
 
-func (p *cliProgress) Finish() {
-	if p == nil || p.done {
+func (p *cliProgress) Done(err error) {
+	if p.done {
+		return
+	}
+	h := rtfmt.LogHandler(log.Printf, "progress finish write failed: %v")
+	// on failure leave the bar at its true position; the caller prints the error
+	if err != nil {
+		p.done = true
+		_ = rtfmt.Fprintln(p.out, h)
 		return
 	}
 	if p.total > 0 {
 		p.downloaded = p.total
 		p.render(true)
-		if _, err := fmt.Fprintln(p.out); err != nil {
-			log.Printf("progress finish write failed: %v", err)
-		}
+		_ = rtfmt.Fprintln(p.out, h)
 	} else {
-		line := fmt.Sprintf("\r%s: %s", p.label, humanBytes(p.downloaded))
-		if _, err := fmt.Fprintln(p.out, line); err != nil {
-			log.Printf("progress finish write failed: %v", err)
-		}
+		_ = rtfmt.Fprintf(p.out, "\r%s: %s\n", h, p.label, byteLabel(p.downloaded))
 	}
 	p.done = true
 }
 
 func (p *cliProgress) render(force bool) {
-	if p == nil || p.done {
+	if p.done {
 		return
 	}
-	var line string
+	h := rtfmt.LogHandler(log.Printf, "progress write failed: %v")
 	if p.total > 0 {
-		percent := 0
-		if p.total > 0 {
-			percent = int((p.downloaded * 100) / p.total)
-			if percent > 100 {
-				percent = 100
-			}
+		percent := int((p.downloaded * 100) / p.total)
+		if percent > 100 {
+			percent = 100
 		}
 		if !force && percent == p.lastPct {
 			return
 		}
 		p.lastPct = percent
-		filled := 0
-		if p.total > 0 {
-			filled = int((p.downloaded * int64(p.barWidth)) / p.total)
-			if filled > p.barWidth {
-				filled = p.barWidth
-			}
-		}
-		if filled < 0 {
-			filled = 0
+		filled := int((p.downloaded * int64(p.barWidth)) / p.total)
+		if filled > p.barWidth {
+			filled = p.barWidth
 		}
 		bar := strings.Repeat("=", filled) + strings.Repeat(" ", p.barWidth-filled)
-		line = fmt.Sprintf("\r%s: [%s] %3d%%", p.label, bar, percent)
-	} else {
-		if !force && p.downloaded == 0 {
-			return
-		}
-		line = fmt.Sprintf("\r%s: %s", p.label, humanBytes(p.downloaded))
+		_ = rtfmt.Fprintf(p.out, "\r%s: [%s] %3d%%", h, p.label, bar, percent)
+		return
 	}
-	if _, err := fmt.Fprint(p.out, line); err != nil {
-		log.Printf("progress write failed: %v", err)
+	if !force && p.downloaded == 0 {
+		return
 	}
+	_ = rtfmt.Fprintf(p.out, "\r%s: %s", h, p.label, byteLabel(p.downloaded))
 }
 
 type cliUpdater struct {
@@ -148,9 +134,6 @@ func newCLIUpdater(cl update.Client, ver string) cliUpdater {
 }
 
 func (u cliUpdater) check(ctx context.Context) (update.Result, bool, error) {
-	if u.ver == "" || u.ver == "dev" {
-		return update.Result{}, false, errUpdateDisabled
-	}
 	ctx, cancel := context.WithTimeout(ctx, updateCheckTimeout)
 	defer cancel()
 
@@ -158,62 +141,38 @@ func (u cliUpdater) check(ctx context.Context) (update.Result, bool, error) {
 	if err != nil {
 		return update.Result{}, false, err
 	}
-
-	res, err := u.cl.Check(ctx, u.ver, plat)
-	if err != nil {
-		if errors.Is(err, update.ErrNoUpdate) {
-			return update.Result{}, false, nil
-		}
-		return update.Result{}, false, err
-	}
-	return res, true, nil
+	return u.cl.Check(ctx, u.ver, plat)
 }
 
-func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapStatus, error) {
+func (u cliUpdater) apply(ctx context.Context, res update.Result) error {
 	ctx, cancel := context.WithTimeout(ctx, updateApplyTimeout)
 	defer cancel()
 
 	exe, err := os.Executable()
 	if err != nil {
-		return update.SwapStatus{}, fmt.Errorf("locate executable: %w", err)
+		return fmt.Errorf("locate executable: %w", err)
 	}
 	exe = resolveExecPath(exe)
-	current := str.Trim(u.ver)
-	if current == "" {
-		current = "unknown"
-	}
-	if _, werr := fmt.Fprintf(
+	_ = rtfmt.Fprintf(
 		u.out,
 		"Updating resterm %s → %s\n",
-		current,
+		rtfmt.LogHandler(log.Printf, "print update header failed: %v"),
+		u.ver,
 		u.color.Bold(res.Info.Version),
-	); werr != nil {
-		log.Printf("print update header failed: %v", werr)
-	}
+	)
 	prog := newCLIProgress(u.out, "Downloading")
-	st, err := update.ApplyWithProgress(ctx, u.cl, res, exe, prog)
-	if err != nil && !errors.Is(err, update.ErrPendingSwap) {
-		return st, err
+	if err := u.cl.Apply(ctx, res, exe, prog); err != nil {
+		return err
 	}
-	if _, werr := fmt.Fprintln(u.out, "Checksum verified."); werr != nil {
-		log.Printf("print checksum status failed: %v", werr)
-	}
-	if _, werr := fmt.Fprintln(u.out, "Binary verified."); werr != nil {
-		log.Printf("print binary verification failed: %v", werr)
-	}
-	if st.Pending {
-		if _, werr := fmt.Fprintf(
-			u.out,
-			"Update staged at %s. Restart resterm to complete.\n",
-			st.NewPath,
-		); werr != nil {
-			log.Printf("print staged path failed: %v", werr)
-		}
-	}
-	if _, werr := fmt.Fprintf(u.out, "resterm updated to %s\n", res.Info.Version); werr != nil {
-		log.Printf("print update notice failed: %v", werr)
-	}
-	return st, err
+	_ = rtfmt.Fprintln(u.out, rtfmt.LogHandler(log.Printf, "print checksum status failed: %v"), "Checksum verified.")
+	_ = rtfmt.Fprintln(u.out, rtfmt.LogHandler(log.Printf, "print binary verification failed: %v"), "Binary verified.")
+	_ = rtfmt.Fprintf(
+		u.out,
+		"resterm updated to %s\n",
+		rtfmt.LogHandler(log.Printf, "print update notice failed: %v"),
+		res.Info.Version,
+	)
+	return nil
 }
 
 func resolveExecPath(path string) string {
@@ -228,44 +187,44 @@ func resolveExecPath(path string) string {
 }
 
 func (u cliUpdater) printNoUpdate() {
-	if _, err := fmt.Fprintln(u.out, "resterm is up to date."); err != nil {
-		log.Printf("print no-update failed: %v", err)
-	}
+	_ = rtfmt.Fprintln(u.out, rtfmt.LogHandler(log.Printf, "print no-update failed: %v"), "resterm is up to date.")
 }
 
 func (u cliUpdater) printAvailable(res update.Result) {
 	ver := u.color.Bold(res.Info.Version)
-	if _, err := fmt.Fprintf(u.out, "New version available: %s\n", ver); err != nil {
-		log.Printf("print available failed: %v", err)
-	}
+	_ = rtfmt.Fprintf(
+		u.out,
+		"New version available: %s\n",
+		rtfmt.LogHandler(log.Printf, "print available failed: %v"),
+		ver,
+	)
 }
 
 func (u cliUpdater) printChangelog(res update.Result) {
+	h := rtfmt.LogHandler(log.Printf, "print changelog divider failed: %v")
 	divider := mdterm.Rule(u.color, u.width)
-	if _, err := fmt.Fprintln(u.out, divider); err != nil {
-		log.Printf(changelogDividerErr, err)
-	}
+	_ = rtfmt.Fprintln(u.out, h, divider)
 	body := mdterm.Render(clipNotes(res.Info.Notes), mdterm.Options{Width: u.width, Color: u.color})
 	if body == "" {
-		if _, err := fmt.Fprintln(u.out, "Changelog: not provided"); err != nil {
-			log.Printf("print changelog missing failed: %v", err)
-		}
-		if _, err := fmt.Fprintln(u.out, divider); err != nil {
-			log.Printf(changelogDividerErr, err)
-		}
+		_ = rtfmt.Fprintln(
+			u.out,
+			rtfmt.LogHandler(log.Printf, "print changelog missing failed: %v"),
+			"Changelog: not provided",
+		)
+		_ = rtfmt.Fprintln(u.out, h, divider)
 		return
 	}
-	if _, err := fmt.Fprintln(u.out, u.color.Bold("Changelog:")); err != nil {
-		log.Printf("print changelog header failed: %v", err)
+	if err := rtfmt.Fprintln(
+		u.out,
+		rtfmt.LogHandler(log.Printf, "print changelog header failed: %v"),
+		u.color.Bold("Changelog:"),
+	); err != nil {
 		return
 	}
-	if _, err := fmt.Fprintln(u.out, body); err != nil {
-		log.Printf("print changelog body failed: %v", err)
+	if err := rtfmt.Fprintln(u.out, rtfmt.LogHandler(log.Printf, "print changelog body failed: %v"), body); err != nil {
 		return
 	}
-	if _, err := fmt.Fprintln(u.out, divider); err != nil {
-		log.Printf(changelogDividerErr, err)
-	}
+	_ = rtfmt.Fprintln(u.out, h, divider)
 }
 
 // clipNotes bounds the renderer's input: the inline scanner is quadratic on
@@ -280,22 +239,4 @@ func clipNotes(notes string) string {
 		cut = cut[:i]
 	}
 	return cut + "\n\n[changelog truncated]"
-}
-
-func humanBytes(n int64) string {
-	const (
-		kb = 1024
-		mb = 1024 * kb
-		gb = 1024 * mb
-	)
-	switch {
-	case n >= gb:
-		return fmt.Sprintf("%.2f GiB", float64(n)/float64(gb))
-	case n >= mb:
-		return fmt.Sprintf("%.2f MiB", float64(n)/float64(mb))
-	case n >= kb:
-		return fmt.Sprintf("%.2f KiB", float64(n)/float64(kb))
-	default:
-		return fmt.Sprintf("%d B", n)
-	}
 }

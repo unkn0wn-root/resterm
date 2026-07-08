@@ -612,8 +612,7 @@ func New(cfg Config) Model {
 	if updateCmd == "" {
 		updateCmd = "resterm --update"
 	}
-	updateEnabled := cfg.EnableUpdate && updateVersion != "" && updateVersion != "dev" &&
-		cfg.UpdateClient.Ready()
+	updateEnabled := cfg.EnableUpdate && !update.DevBuild(updateVersion) && cfg.UpdateClient.Ready()
 	statusUser, statusHost := currentStatusIdentity()
 
 	model := Model{
