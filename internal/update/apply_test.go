@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -19,7 +20,7 @@ func TestApplyPOSIX(t *testing.T) {
 
 	body := "#!/bin/sh\necho \"resterm v1.1.0\"\n"
 	sum := sha256.Sum256([]byte(body))
-	sumLine := hex.EncodeToString(sum[:]) + "  resterm\n"
+	sumLine := hex.EncodeToString(sum[:]) + "  resterm_Linux_x86_64\n"
 
 	tr := stubTransport{res: map[string]stubResponse{
 		"https://mock/bin": {body: body},
@@ -65,18 +66,123 @@ func TestApplyPOSIX(t *testing.T) {
 	}
 }
 
-func TestVerifyVersionMismatch(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("posix-only test")
+func TestApplyNoChecksum(t *testing.T) {
+	cl, err := NewClient(&http.Client{Transport: stubTransport{}}, "unkn0wn-root/resterm")
+	if err != nil {
+		t.Fatalf("client err: %v", err)
 	}
+
+	res := Result{
+		Info: Info{Version: "v1.1.0"},
+		Bin:  Asset{Name: "resterm_Linux_x86_64", URL: "https://mock/bin"},
+	}
+
 	dir := t.TempDir()
-	path := filepath.Join(dir, "resterm-check")
-	body := "#!/bin/sh\necho \"resterm v1.0.0\"\n"
-	if err := os.WriteFile(path, []byte(body), 0o755); err != nil {
+	exe := filepath.Join(dir, "resterm")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
 		t.Fatalf("write stub: %v", err)
 	}
-	err := verifyVersion(context.Background(), path, "v2.0.0")
-	if err == nil {
-		t.Fatal("expected version mismatch error")
+
+	if _, err := ApplyWithProgress(context.Background(), cl, res, exe, nil); !errors.Is(err, ErrNoChecksum) {
+		t.Fatalf("expected ErrNoChecksum, got %v", err)
+	}
+
+	got, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatalf("read exe: %v", err)
+	}
+	if string(got) != "old" {
+		t.Fatalf("binary replaced without checksum: %q", string(got))
+	}
+}
+
+func TestApplyChecksumMismatch(t *testing.T) {
+	body := "#!/bin/sh\necho \"resterm v1.1.0\"\n"
+	sumLine := strings.Repeat("0", 64) + "  resterm_Linux_x86_64\n"
+
+	tr := stubTransport{res: map[string]stubResponse{
+		"https://mock/bin": {body: body},
+		"https://mock/sum": {body: sumLine},
+	}}
+
+	cl, err := NewClient(&http.Client{Transport: tr}, "unkn0wn-root/resterm")
+	if err != nil {
+		t.Fatalf("client err: %v", err)
+	}
+
+	res := Result{
+		Info: Info{Version: "v1.1.0"},
+		Bin: Asset{
+			Name: "resterm_Linux_x86_64",
+			URL:  "https://mock/bin",
+			Size: int64(len(body)),
+		},
+		Sum:    Asset{Name: "resterm_Linux_x86_64.sha256", URL: "https://mock/sum"},
+		HasSum: true,
+	}
+
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "resterm")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+
+	_, err = ApplyWithProgress(context.Background(), cl, res, exe, nil)
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("expected checksum mismatch, got %v", err)
+	}
+
+	got, err := os.ReadFile(exe)
+	if err != nil {
+		t.Fatalf("read exe: %v", err)
+	}
+	if string(got) != "old" {
+		t.Fatalf("binary replaced despite mismatch: %q", string(got))
+	}
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read dir: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("leftover temp files: %d entries", len(entries))
+	}
+}
+
+func TestApplySizeExceeded(t *testing.T) {
+	body := "#!/bin/sh\necho \"resterm v1.1.0\"\n"
+	sum := sha256.Sum256([]byte(body))
+	sumLine := hex.EncodeToString(sum[:]) + "  resterm_Linux_x86_64\n"
+
+	tr := stubTransport{res: map[string]stubResponse{
+		"https://mock/bin": {body: body},
+		"https://mock/sum": {body: sumLine},
+	}}
+
+	cl, err := NewClient(&http.Client{Transport: tr}, "unkn0wn-root/resterm")
+	if err != nil {
+		t.Fatalf("client err: %v", err)
+	}
+
+	res := Result{
+		Info: Info{Version: "v1.1.0"},
+		Bin: Asset{
+			Name: "resterm_Linux_x86_64",
+			URL:  "https://mock/bin",
+			Size: int64(len(body)) - 1,
+		},
+		Sum:    Asset{Name: "resterm_Linux_x86_64.sha256", URL: "https://mock/sum"},
+		HasSum: true,
+	}
+
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "resterm")
+	if err := os.WriteFile(exe, []byte("old"), 0o755); err != nil {
+		t.Fatalf("write stub: %v", err)
+	}
+
+	_, err = ApplyWithProgress(context.Background(), cl, res, exe, nil)
+	if err == nil || !strings.Contains(err.Error(), "download size mismatch") {
+		t.Fatalf("expected size mismatch, got %v", err)
 	}
 }

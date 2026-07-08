@@ -44,6 +44,15 @@ func TestClientCheckMissingAsset(t *testing.T) {
 	}
 }
 
+func TestClientCheckMissingChecksum(t *testing.T) {
+	body := `{"tag_name":"v1.1.0","body":"","published_at":"2024-01-01T00:00:00Z","assets":[{"name":"resterm_Linux_x86_64","browser_download_url":"https://mock/bin","size":12}]}`
+	cl := newTestClient(body)
+	plat, _ := For("linux", "amd64")
+	if _, err := cl.Check(context.Background(), "1.0.0", plat); !errors.Is(err, ErrNoChecksum) {
+		t.Fatalf("expected ErrNoChecksum, got %v", err)
+	}
+}
+
 func newTestClient(body string) Client {
 	tr := stubTransport{res: map[string]stubResponse{
 		"https://api.github.com/repos/unkn0wn-root/resterm/releases/latest": {body: body},

@@ -190,27 +190,13 @@ func (u cliUpdater) apply(ctx context.Context, res update.Result) (update.SwapSt
 	); werr != nil {
 		log.Printf("print update header failed: %v", werr)
 	}
-	if !res.HasSum {
-		if _, werr := fmt.Fprintln(
-			u.out,
-			"Warning: checksum not published; proceeding without verification.",
-		); werr != nil {
-			log.Printf("print checksum warning failed: %v", werr)
-		}
-	}
 	prog := newCLIProgress(u.out, "Downloading")
 	st, err := update.ApplyWithProgress(ctx, u.cl, res, exe, prog)
 	if err != nil && !errors.Is(err, update.ErrPendingSwap) {
 		return st, err
 	}
-	if res.HasSum {
-		if _, werr := fmt.Fprintln(u.out, "Checksum verified."); werr != nil {
-			log.Printf("print checksum status failed: %v", werr)
-		}
-	} else {
-		if _, werr := fmt.Fprintln(u.out, "Checksum verification skipped."); werr != nil {
-			log.Printf("print checksum skip failed: %v", werr)
-		}
+	if _, werr := fmt.Fprintln(u.out, "Checksum verified."); werr != nil {
+		log.Printf("print checksum status failed: %v", werr)
 	}
 	if _, werr := fmt.Fprintln(u.out, "Binary verified."); werr != nil {
 		log.Printf("print binary verification failed: %v", werr)

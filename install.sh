@@ -72,6 +72,28 @@ download_binary() {
     fi
 }
 
+sha256_of() {
+    if command_exists sha256sum; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+verify_checksum() {
+    local file="$1" url="$2" sumfile expected actual
+    command_exists sha256sum || command_exists shasum || \
+        error "Need sha256sum or shasum to verify the download"
+    sumfile="$file.sha256"
+    download_binary "$url" "$sumfile"
+    expected="$(awk 'NR==1{print $1}' "$sumfile")"
+    actual="$(sha256_of "$file")"
+    if [ "$actual" != "$expected" ]; then
+        error "Checksum mismatch for $file: expected $expected, got $actual"
+    fi
+    info "Checksum verified"
+}
+
 main() {
     info "Starting Resterm installation..."
 
@@ -114,6 +136,7 @@ main() {
     TMP_BINARY="$TMP_DIR/$BINARY_NAME"
 
     download_binary "$DOWNLOAD_URL" "$TMP_BINARY"
+    verify_checksum "$TMP_BINARY" "${DOWNLOAD_URL}.sha256"
     chmod +x "$TMP_BINARY"
 
     info "Installing to $INSTALL_DIR..."

@@ -206,6 +206,12 @@ func run(a []string) error {
 				)
 				return nil
 			}
+			if errors.Is(err, update.ErrNoAsset) || errors.Is(err, update.ErrNoChecksum) {
+				return fmt.Errorf(
+					"update check failed: %w (assets may still be uploading - try again in a few minutes)",
+					err,
+				)
+			}
 			return fmt.Errorf("update check failed: %w", err)
 		}
 		if !ok {
