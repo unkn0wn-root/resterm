@@ -25,24 +25,6 @@ func (c Client) Apply(ctx context.Context, res Result, exe string, prog Progress
 	return commitBinary(tmpPath, exe)
 }
 
-func prepareTemp(dir string) (string, error) {
-	pat := "resterm-update-*"
-	if runtime.GOOS == "windows" {
-		pat = "resterm-update-*.exe"
-	}
-
-	tmp, err := os.CreateTemp(dir, pat)
-	if err != nil {
-		return "", fmt.Errorf("create temp file: %w", err)
-	}
-
-	path := tmp.Name()
-	if err := tmp.Close(); err != nil {
-		return "", fmt.Errorf("close temp file: %w", err)
-	}
-	return path, nil
-}
-
 func (c Client) stage(ctx context.Context, res Result, path string, prog Progress) error {
 	got, err := c.download(ctx, res.Bin, path, prog)
 	if err != nil {
@@ -59,6 +41,27 @@ func (c Client) stage(ctx context.Context, res Result, path string, prog Progres
 	}
 
 	return verifyVersion(ctx, path, res.Info.Version)
+}
+
+// prepareTemp reserves a temp file next to the target binary so the final
+// rename never crosses filesystems. On Windows the pattern keeps an .exe
+// suffix so the staged binary can be run for the version check.
+func prepareTemp(dir string) (string, error) {
+	pat := "resterm-update-*"
+	if runtime.GOOS == "windows" {
+		pat = "resterm-update-*.exe"
+	}
+
+	tmp, err := os.CreateTemp(dir, pat)
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+
+	path := tmp.Name()
+	if err := tmp.Close(); err != nil {
+		return "", fmt.Errorf("close temp file: %w", err)
+	}
+	return path, nil
 }
 
 func commitBinary(tmp, exe string) error {

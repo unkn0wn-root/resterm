@@ -24,7 +24,16 @@ type Asset struct {
 	Name   string
 	URL    string
 	Size   int64
-	Digest string
+	Digest string // "sha256:<hex>"; empty on releases predating api digests
+}
+
+func (i Info) Asset(name string) (Asset, bool) {
+	for _, a := range i.Assets {
+		if a.Name == name {
+			return a, true
+		}
+	}
+	return Asset{}, false
 }
 
 func decodeInfo(r io.Reader) (Info, error) {
@@ -75,13 +84,4 @@ func decodeInfo(r io.Reader) (Info, error) {
 	}
 
 	return info, nil
-}
-
-func (i Info) Asset(name string) (Asset, bool) {
-	for _, a := range i.Assets {
-		if a.Name == name {
-			return a, true
-		}
-	}
-	return Asset{}, false
 }

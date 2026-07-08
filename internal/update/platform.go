@@ -9,7 +9,7 @@ import (
 type Platform struct {
 	OS    string
 	Arch  string
-	Asset string
+	Asset string // release asset name, e.g. "resterm_Darwin_arm64"
 }
 
 const binPrefix = "resterm"
@@ -38,6 +38,8 @@ func For(goos, goarch string) (Platform, error) {
 	}, nil
 }
 
+// mapOS and mapArch translate runtime values to the uname style labels the
+// release workflow bakes into asset names (see .github/workflows/ci.yml).
 func mapOS(v string) (string, error) {
 	switch strings.ToLower(v) {
 	case "linux":

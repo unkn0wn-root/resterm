@@ -9,6 +9,9 @@ import (
 	"os"
 )
 
+// Progress is implemented by callers that want to render download progress.
+// Start's total is 0 when the size is unknown, and Done always fires once
+// the download ends, with the error it failed on or nil.
 type Progress interface {
 	Start(total int64)
 	Advance(n int64)
@@ -60,6 +63,8 @@ func (c Client) download(
 			total = res.ContentLength
 		}
 		prog.Start(total)
+		// err is the named return, so the deferred Done reports how the
+		// download actually ended
 		defer func() {
 			prog.Done(err)
 		}()

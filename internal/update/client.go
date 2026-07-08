@@ -28,7 +28,12 @@ const (
 type Client struct {
 	http *http.Client
 	repo string
-	api  string
+}
+
+type Result struct {
+	Info   Info
+	Bin    Asset
+	Digest [sha256.Size]byte
 }
 
 func NewClient(h *http.Client, repo string) (Client, error) {
@@ -38,13 +43,74 @@ func NewClient(h *http.Client, repo string) (Client, error) {
 	if h == nil {
 		h = http.DefaultClient
 	}
-	return Client{http: h, repo: repo, api: apiHost}, nil
+	return Client{http: h, repo: repo}, nil
 }
 
+// Ready reports whether the client was actually built by NewClient - the UI
+// gets it through ui.Config so a zero value slips in when the field was
+// never set.
 func (c Client) Ready() bool {
 	return c.repo != "" && c.http != nil
 }
 
+func (c Client) Latest(ctx context.Context) (Info, error) {
+	url := fmt.Sprintf("%s/repos/%s/releases/latest", apiHost, c.repo)
+	res, err := c.do(ctx, url, "latest release", "application/vnd.github+json")
+	if err != nil {
+		return Info{}, err
+	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
+
+	switch res.StatusCode {
+	case http.StatusOK:
+		return decodeInfo(res.Body)
+	case http.StatusNotFound:
+		return Info{}, ErrNoRelease
+	case http.StatusTooManyRequests:
+		return Info{}, ErrRateLimited
+	case http.StatusForbidden:
+		// github reports an exhausted quota as 403, not 429; the header is
+		// what tells it apart from a plain permission error
+		if res.Header.Get("X-RateLimit-Remaining") == "0" {
+			return Info{}, ErrRateLimited
+		}
+		fallthrough
+	default:
+		return Info{}, fmt.Errorf("latest release request failed: %s", res.Status)
+	}
+}
+
+// Check returns the release to install when one newer than curr exists.
+func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, bool, error) {
+	if DevBuild(curr) {
+		return Result{}, false, ErrDevBuild
+	}
+
+	info, err := c.Latest(ctx)
+	if err != nil {
+		return Result{}, false, err
+	}
+
+	need, err := needsUpdate(curr, info.Version)
+	if err != nil || !need {
+		return Result{}, false, err
+	}
+
+	bin, ok := info.Asset(plat.Asset)
+	if !ok {
+		return Result{}, false, ErrNoAsset
+	}
+
+	want, err := parseDigest(bin.Digest)
+	if err != nil {
+		return Result{}, false, err
+	}
+	return Result{Info: info, Bin: bin, Digest: want}, true, nil
+}
+
+// what labels the request in error messages, e.g. "latest release".
 func (c Client) do(ctx context.Context, url, what, accept string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
@@ -74,68 +140,8 @@ func (c Client) get(ctx context.Context, url, what string) (*http.Response, erro
 	return res, nil
 }
 
-func (c Client) Latest(ctx context.Context) (Info, error) {
-	url := fmt.Sprintf("%s/repos/%s/releases/latest", c.api, c.repo)
-	res, err := c.do(ctx, url, "latest release", "application/vnd.github+json")
-	if err != nil {
-		return Info{}, err
-	}
-	defer func() {
-		_ = res.Body.Close()
-	}()
-
-	switch res.StatusCode {
-	case http.StatusOK:
-		return decodeInfo(res.Body)
-	case http.StatusNotFound:
-		return Info{}, ErrNoRelease
-	case http.StatusTooManyRequests:
-		return Info{}, ErrRateLimited
-	case http.StatusForbidden:
-		if res.Header.Get("X-RateLimit-Remaining") == "0" {
-			return Info{}, ErrRateLimited
-		}
-		fallthrough
-	default:
-		return Info{}, fmt.Errorf("latest release request failed: %s", res.Status)
-	}
-}
-
-type Result struct {
-	Info   Info
-	Bin    Asset
-	Digest [sha256.Size]byte
-}
-
 func DevBuild(ver string) bool {
 	return ver == "" || ver == "dev"
-}
-
-func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, bool, error) {
-	if DevBuild(curr) {
-		return Result{}, false, ErrDevBuild
-	}
-
-	info, err := c.Latest(ctx)
-	if err != nil {
-		return Result{}, false, err
-	}
-
-	need, err := needsUpdate(curr, info.Version)
-	if err != nil || !need {
-		return Result{}, false, err
-	}
-
-	bin, ok := info.Asset(plat.Asset)
-	if !ok {
-		return Result{}, false, ErrNoAsset
-	}
-
-	want, err := parseDigest(bin.Digest)
-	if err != nil {
-		return Result{}, false, err
-	}
-	return Result{Info: info, Bin: bin, Digest: want}, true, nil
 }
 
 func needsUpdate(curr, latest string) (bool, error) {

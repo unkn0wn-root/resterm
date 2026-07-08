@@ -11,7 +11,7 @@ import (
 )
 
 // parseDigest decodes an api asset digest like "sha256:9f86d081...".
-// Anything but sha256 is rejected so a future algorithm change fails loudly.
+// Anything but sha256 is rejected so a future algorithm change fails.
 func parseDigest(v string) ([sha256.Size]byte, error) {
 	var sum [sha256.Size]byte
 	if v == "" {
@@ -29,6 +29,8 @@ func parseDigest(v string) ([sha256.Size]byte, error) {
 	return [sha256.Size]byte(raw), nil
 }
 
+// verifyVersion runs the staged binary's --version as a last check that the
+// download is the release it claims to be, before it replaces the install.
 func verifyVersion(ctx context.Context, path, want string) error {
 	if want == "" {
 		return nil

@@ -21,6 +21,8 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/wrap"
 )
 
+const ruleWidth = 40 // rule width when wrapping is disabled
+
 type Options struct {
 	Width int // wrap width in cells; <= 0 disables wrapping
 	Color termcolor.Config
@@ -44,20 +46,6 @@ func Render(src string, opts Options) string {
 
 func Rule(cfg termcolor.Config, width int) string {
 	return rule(newStyler(cfg), width)
-}
-
-func sanitize(src string) string {
-	src = strings.ReplaceAll(src, "\r\n", "\n")
-	src = strings.ReplaceAll(src, "\r", "\n")
-	return strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\t' {
-			return r
-		}
-		if r < 0x20 || r == 0x7f {
-			return -1
-		}
-		return r
-	}, src)
 }
 
 type renderer struct {
@@ -116,17 +104,8 @@ func (r *renderer) reset() {
 	r.col = 0
 }
 
-const ruleWidth = 40 // rule width when wrapping is disabled
-
 func (r *renderer) hr() {
 	r.out = append(r.out, rule(r.st, r.w))
-}
-
-func rule(st styler, w int) string {
-	if w <= 0 {
-		w = ruleWidth
-	}
-	return st.span(strings.Repeat("─", w), aFaint)
 }
 
 func (r *renderer) heading(lvl int, txt string) {
@@ -234,6 +213,27 @@ func (r *renderer) codeBlock(lines []string, i int, f fence) int {
 		r.out = append(r.out, "    "+t)
 	}
 	return i
+}
+
+func rule(st styler, w int) string {
+	if w <= 0 {
+		w = ruleWidth
+	}
+	return st.span(strings.Repeat("─", w), aFaint)
+}
+
+func sanitize(src string) string {
+	src = strings.ReplaceAll(src, "\r\n", "\n")
+	src = strings.ReplaceAll(src, "\r", "\n")
+	return strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' {
+			return r
+		}
+		if r < 0x20 || r == 0x7f {
+			return -1
+		}
+		return r
+	}, src)
 }
 
 type fence struct {
