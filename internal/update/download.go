@@ -3,6 +3,7 @@ package update
 import (
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -11,7 +12,7 @@ import (
 type Progress interface {
 	Start(total int64)
 	Advance(n int64)
-	Finish()
+	Done(err error)
 }
 
 type progressWriter struct {
@@ -25,10 +26,14 @@ func (w progressWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func (c Client) download(ctx context.Context, a Asset, dst string, prog Progress) ([sha256.Size]byte, error) {
-	var sum [sha256.Size]byte
+func (c Client) download(
+	ctx context.Context,
+	a Asset,
+	dst string,
+	prog Progress,
+) (sum [sha256.Size]byte, err error) {
 	if a.URL == "" {
-		return sum, fmt.Errorf("empty asset url")
+		return sum, errors.New("empty asset url")
 	}
 
 	res, err := c.get(ctx, a.URL, "asset")
@@ -46,7 +51,7 @@ func (c Client) download(ctx context.Context, a Asset, dst string, prog Progress
 
 	var reader io.Reader = res.Body
 	if a.Size > 0 {
-		// one byte past the expected size so an oversized body fails the exact-size check early
+		// one byte past the expected size so an oversized body fails the exact size check early
 		reader = io.LimitReader(reader, a.Size+1)
 	}
 	if prog != nil {
@@ -55,7 +60,9 @@ func (c Client) download(ctx context.Context, a Asset, dst string, prog Progress
 			total = res.ContentLength
 		}
 		prog.Start(total)
-		defer prog.Finish()
+		defer func() {
+			prog.Done(err)
+		}()
 		reader = io.TeeReader(reader, progressWriter{progress: prog})
 	}
 
@@ -72,6 +79,5 @@ func (c Client) download(ctx context.Context, a Asset, dst string, prog Progress
 	if a.Size > 0 && n != a.Size {
 		return sum, fmt.Errorf("download size mismatch: got %d want %d", n, a.Size)
 	}
-	copy(sum[:], h.Sum(nil))
-	return sum, nil
+	return [sha256.Size]byte(h.Sum(nil)), nil
 }

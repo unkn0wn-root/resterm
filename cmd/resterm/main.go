@@ -15,7 +15,6 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -181,7 +180,9 @@ func run(a []string) error {
 		return err
 	}
 
-	hc := &http.Client{Timeout: 60 * time.Second}
+	// no client timeout: each call is ctx-bounded and a client wide cap
+	// would abort large binary downloads on slow links
+	hc := &http.Client{}
 	uc, err := update.NewClient(hc, updateRepo)
 	if err != nil {
 		return fmt.Errorf("update client: %w", err)
@@ -198,7 +199,7 @@ func run(a []string) error {
 		ctx := context.Background()
 		res, ok, err := u.check(ctx)
 		if err != nil {
-			if errors.Is(err, errUpdateDisabled) {
+			if errors.Is(err, update.ErrDevBuild) {
 				_ = rtfmt.Fprintln(
 					os.Stdout,
 					rtfmt.LogHandler(log.Printf, "update notice write failed: %v"),
@@ -206,7 +207,7 @@ func run(a []string) error {
 				)
 				return nil
 			}
-			if errors.Is(err, update.ErrNoAsset) || errors.Is(err, update.ErrNoChecksum) {
+			if errors.Is(err, update.ErrNoAsset) || errors.Is(err, update.ErrNoDigest) {
 				return fmt.Errorf(
 					"update check failed: %w (assets may still be uploading - try again in a few minutes)",
 					err,
@@ -228,7 +229,7 @@ func run(a []string) error {
 			)
 			return nil
 		}
-		if _, err := u.apply(ctx, res); err != nil && !errors.Is(err, update.ErrPendingSwap) {
+		if err := u.apply(ctx, res); err != nil {
 			return fmt.Errorf("update failed: %w", err)
 		}
 		return nil

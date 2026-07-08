@@ -12,7 +12,7 @@ func TestDecodeInfo(t *testing.T) {
         "published_at": "2024-08-01T12:00:00Z",
         "url": "https://api.github.com/repos/unkn0wn-root/resterm/releases/1",
         "assets": [
-            {"name": "resterm_Linux_x86_64", "browser_download_url": "https://x/bin", "size": 1024},
+            {"name": "resterm_Linux_x86_64", "browser_download_url": "https://x/bin", "size": 1024, "digest": "sha256:abc123"},
             {"name": "resterm_Linux_x86_64.sha256", "browser_download_url": "https://x/sum", "size": 99},
             {"name": "", "browser_download_url": ""}
         ]
@@ -27,6 +27,9 @@ func TestDecodeInfo(t *testing.T) {
 	}
 	if len(info.Assets) != 2 {
 		t.Fatalf("want 2 assets, got %d", len(info.Assets))
+	}
+	if info.Assets[0].Digest != "sha256:abc123" {
+		t.Fatalf("digest not decoded: %q", info.Assets[0].Digest)
 	}
 }
 

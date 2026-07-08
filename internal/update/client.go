@@ -2,18 +2,22 @@ package update
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+
+	"golang.org/x/mod/semver"
 )
 
 var (
-	ErrUnknownRepo   = errors.New("update repo not set")
-	ErrNoRelease     = errors.New("no release available")
-	ErrNoUpdate      = errors.New("already on latest version")
-	ErrNoAsset       = errors.New("platform asset not found")
-	errNilHTTPClient = errors.New("http client is nil")
+	ErrUnknownRepo = errors.New("update repo not set")
+	ErrNoRelease   = errors.New("no release available")
+	ErrDevBuild    = errors.New("update disabled for dev build")
+	ErrNoAsset     = errors.New("platform asset not found")
+	ErrNoDigest    = errors.New("release asset has no sha256 digest")
+	ErrRateLimited = errors.New("github api rate limited")
 )
 
 const (
@@ -37,33 +41,31 @@ func NewClient(h *http.Client, repo string) (Client, error) {
 	return Client{http: h, repo: repo, api: apiHost}, nil
 }
 
-func (c Client) WithAPI(v string) Client {
-	if v == "" {
-		c.api = apiHost
-		return c
-	}
-	c.api = strings.TrimRight(v, "/")
-	return c
-}
-
 func (c Client) Ready() bool {
 	return c.repo != "" && c.http != nil
 }
 
-func (c Client) get(ctx context.Context, url, what string) (*http.Response, error) {
-	if c.http == nil {
-		return nil, errNilHTTPClient
-	}
-
+func (c Client) do(ctx context.Context, url, what, accept string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("build %s request: %w", what, err)
 	}
 	req.Header.Set("User-Agent", userAgent)
+	if accept != "" {
+		req.Header.Set("Accept", accept)
+	}
 
 	res, err := c.http.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("download %s: %w", what, err)
+		return nil, fmt.Errorf("fetch %s: %w", what, err)
+	}
+	return res, nil
+}
+
+func (c Client) get(ctx context.Context, url, what string) (*http.Response, error) {
+	res, err := c.do(ctx, url, what, "")
+	if err != nil {
+		return nil, err
 	}
 	if res.StatusCode != http.StatusOK {
 		_ = res.Body.Close()
@@ -73,24 +75,10 @@ func (c Client) get(ctx context.Context, url, what string) (*http.Response, erro
 }
 
 func (c Client) Latest(ctx context.Context) (Info, error) {
-	if c.repo == "" {
-		return Info{}, ErrUnknownRepo
-	}
-	if c.http == nil {
-		return Info{}, errNilHTTPClient
-	}
-
 	url := fmt.Sprintf("%s/repos/%s/releases/latest", c.api, c.repo)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	res, err := c.do(ctx, url, "latest release", "application/vnd.github+json")
 	if err != nil {
-		return Info{}, fmt.Errorf("build request: %w", err)
-	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", userAgent)
-
-	res, err := c.http.Do(req)
-	if err != nil {
-		return Info{}, fmt.Errorf("fetch latest release: %w", err)
+		return Info{}, err
 	}
 	defer func() {
 		_ = res.Body.Close()
@@ -98,16 +86,14 @@ func (c Client) Latest(ctx context.Context) (Info, error) {
 
 	switch res.StatusCode {
 	case http.StatusOK:
-		info, decErr := decodeInfo(res.Body)
-		if decErr != nil {
-			return Info{}, decErr
-		}
-		return info, nil
+		return decodeInfo(res.Body)
 	case http.StatusNotFound:
 		return Info{}, ErrNoRelease
+	case http.StatusTooManyRequests:
+		return Info{}, ErrRateLimited
 	case http.StatusForbidden:
-		if strings.Contains(strings.ToLower(res.Header.Get("X-RateLimit-Remaining")), "0") {
-			return Info{}, fmt.Errorf("github api rate limited")
+		if res.Header.Get("X-RateLimit-Remaining") == "0" {
+			return Info{}, ErrRateLimited
 		}
 		fallthrough
 	default:
@@ -118,49 +104,57 @@ func (c Client) Latest(ctx context.Context) (Info, error) {
 type Result struct {
 	Info   Info
 	Bin    Asset
-	Sum    Asset
-	HasSum bool
+	Digest [sha256.Size]byte
 }
 
-func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, error) {
-	if curr == "" || curr == "dev" {
-		return Result{}, ErrNoUpdate
+func DevBuild(ver string) bool {
+	return ver == "" || ver == "dev"
+}
+
+func (c Client) Check(ctx context.Context, curr string, plat Platform) (Result, bool, error) {
+	if DevBuild(curr) {
+		return Result{}, false, ErrDevBuild
 	}
 
 	info, err := c.Latest(ctx)
 	if err != nil {
-		return Result{}, err
+		return Result{}, false, err
 	}
 
-	need, cmpErr := needsUpdate(curr, info.Version)
-	if cmpErr != nil {
-		return Result{}, cmpErr
-	}
-	if !need {
-		return Result{}, ErrNoUpdate
+	need, err := needsUpdate(curr, info.Version)
+	if err != nil || !need {
+		return Result{}, false, err
 	}
 
 	bin, ok := info.Asset(plat.Asset)
 	if !ok {
-		return Result{}, ErrNoAsset
+		return Result{}, false, ErrNoAsset
 	}
 
-	sum, ok := info.Asset(plat.Sum)
-	if !ok {
-		return Result{}, ErrNoChecksum
+	want, err := parseDigest(bin.Digest)
+	if err != nil {
+		return Result{}, false, err
 	}
-	return Result{Info: info, Bin: bin, Sum: sum, HasSum: true}, nil
+	return Result{Info: info, Bin: bin, Digest: want}, true, nil
 }
 
 func needsUpdate(curr, latest string) (bool, error) {
-	lv, err := parseSemver(latest)
-	if err != nil {
-		return false, fmt.Errorf("latest: %w", err)
+	lv := canon(latest)
+	if !semver.IsValid(lv) {
+		return false, fmt.Errorf("invalid latest version %q", latest)
 	}
 
-	cv, err := parseSemver(curr)
-	if err != nil {
+	// snapshot builds carry commit-ish versions; treat them as outdated
+	cv := canon(curr)
+	if !semver.IsValid(cv) {
 		return true, nil
 	}
-	return cv.lt(lv), nil
+	return semver.Compare(cv, lv) < 0, nil
+}
+
+func canon(v string) string {
+	if strings.HasPrefix(v, "v") {
+		return v
+	}
+	return "v" + v
 }

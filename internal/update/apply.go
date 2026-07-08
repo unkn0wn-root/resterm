@@ -2,54 +2,24 @@ package update
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 )
 
-var (
-	ErrPendingSwap = errors.New("update staged; restart required to complete")
-)
-
-type SwapStatus struct {
-	Pending bool
-	NewPath string
-}
-
-func ApplyWithProgress(
-	ctx context.Context,
-	c Client,
-	res Result,
-	exe string,
-	prog Progress,
-) (SwapStatus, error) {
-	return c.apply(ctx, res, exe, prog)
-}
-
-func (c Client) apply(ctx context.Context, res Result, exe string, prog Progress) (SwapStatus, error) {
-	if !res.HasSum {
-		return SwapStatus{}, ErrNoChecksum
-	}
-
-	want, err := c.fetchChecksum(ctx, res.Sum, res.Bin.Name)
-	if err != nil {
-		return SwapStatus{}, err
-	}
-
+func (c Client) Apply(ctx context.Context, res Result, exe string, prog Progress) error {
 	tmpPath, err := prepareTemp(filepath.Dir(exe))
 	if err != nil {
-		return SwapStatus{}, err
+		return err
 	}
 	defer func() {
 		_ = os.Remove(tmpPath)
 	}()
 
-	if err := c.stage(ctx, res, want, tmpPath, prog); err != nil {
-		return SwapStatus{}, err
+	if err := c.stage(ctx, res, tmpPath, prog); err != nil {
+		return err
 	}
 
 	return commitBinary(tmpPath, exe)
@@ -73,13 +43,13 @@ func prepareTemp(dir string) (string, error) {
 	return path, nil
 }
 
-func (c Client) stage(ctx context.Context, res Result, want [sha256.Size]byte, path string, prog Progress) error {
+func (c Client) stage(ctx context.Context, res Result, path string, prog Progress) error {
 	got, err := c.download(ctx, res.Bin, path, prog)
 	if err != nil {
 		return err
 	}
-	if got != want {
-		return fmt.Errorf("checksum mismatch: got %x want %x", got, want)
+	if got != res.Digest {
+		return fmt.Errorf("checksum mismatch: got %x want %x", got, res.Digest)
 	}
 
 	if runtime.GOOS != "windows" {
@@ -91,43 +61,36 @@ func (c Client) stage(ctx context.Context, res Result, want [sha256.Size]byte, p
 	return verifyVersion(ctx, path, res.Info.Version)
 }
 
-// Windows can't replace a running executable, so we write it as .new
-// and rely on the startup code to swap them before relaunching.
-func commitBinary(tmpPath, exe string) (SwapStatus, error) {
+func commitBinary(tmp, exe string) error {
 	if runtime.GOOS == "windows" {
-		dst := exe + ".new"
-		if err := copyFile(tmpPath, dst); err != nil {
-			return SwapStatus{}, err
-		}
-		return SwapStatus{Pending: true, NewPath: dst}, ErrPendingSwap
+		return swapBinary(tmp, exe)
 	}
-
-	if err := os.Rename(tmpPath, exe); err != nil {
-		return SwapStatus{}, fmt.Errorf("replace binary: %w", err)
+	if err := os.Rename(tmp, exe); err != nil {
+		return fmt.Errorf("replace binary: %w", err)
 	}
-	return SwapStatus{}, nil
+	return nil
 }
 
-func copyFile(src, dst string) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return fmt.Errorf("open src: %w", err)
-	}
-	defer func() {
-		_ = in.Close()
-	}()
+// swapBinary renames the running binary aside before moving tmp into place:
+// Windows blocks deleting or overwriting a running executable but allows
+// renaming it. The .old file stays behind until the next update overwrites
+// it, which only succeeds once every process running the old binary has exited.
+func swapBinary(tmp, exe string) error {
+	// updaters before 0.46.1 staged the new binary as .new and left the file
+	// behind when the update failed halfway.
+	// @ToDo: keep this cleanup until updating from those versions is unlikely, then delete it
+	_ = os.Remove(exe + ".new")
 
-	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
-	if err != nil {
-		return fmt.Errorf("open dst: %w", err)
+	old := exe + ".old"
+	if err := os.Rename(exe, old); err != nil {
+		return fmt.Errorf("move current binary aside (close running resterm instances and retry): %w", err)
 	}
-
-	if _, err := io.Copy(out, in); err != nil {
-		_ = out.Close()
-		return fmt.Errorf("copy: %w", err)
-	}
-	if err := out.Close(); err != nil {
-		return fmt.Errorf("close dst: %w", err)
+	if err := os.Rename(tmp, exe); err != nil {
+		err = fmt.Errorf("install new binary: %w", err)
+		if rerr := os.Rename(old, exe); rerr != nil {
+			err = errors.Join(err, fmt.Errorf("restore old binary: %w", rerr))
+		}
+		return err
 	}
 	return nil
 }

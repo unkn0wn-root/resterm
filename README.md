@@ -275,7 +275,8 @@ resterm --check-update
 resterm --update
 ```
 
-The first command reports whether a newer release is available. The second downloads and installs it (Windows users receive a staged binary to swap on restart).
+The first command reports whether a newer release is available. The second downloads, verifies and installs it in place. On Windows the previous binary is left beside the new one as `resterm.exe.old`.
+The next update replaces it once no process is still running the old version.
 
 ## Quick Configuration Overview
 

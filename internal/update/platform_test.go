@@ -10,9 +10,6 @@ func TestPlatformFor(t *testing.T) {
 	if p.Asset != "resterm_Linux_x86_64" {
 		t.Fatalf("unexpected asset: %s", p.Asset)
 	}
-	if p.Sum != "resterm_Linux_x86_64.sha256" {
-		t.Fatalf("unexpected sum: %s", p.Sum)
-	}
 }
 
 func TestPlatformForWindows(t *testing.T) {
@@ -22,9 +19,6 @@ func TestPlatformForWindows(t *testing.T) {
 	}
 	if p.Asset != "resterm_Windows_arm64.exe" {
 		t.Fatalf("unexpected windows asset: %s", p.Asset)
-	}
-	if p.Sum != "resterm_Windows_arm64.exe.sha256" {
-		t.Fatalf("unexpected windows sum: %s", p.Sum)
 	}
 }
 

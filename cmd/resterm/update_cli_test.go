@@ -20,8 +20,43 @@ func TestCLIUpdaterCheckDev(t *testing.T) {
 		t.Fatalf("new client: %v", err)
 	}
 	u := newCLIUpdater(cl, "dev")
-	if _, _, err := u.check(context.Background()); !errors.Is(err, errUpdateDisabled) {
-		t.Fatalf("expected errUpdateDisabled, got %v", err)
+	if _, _, err := u.check(context.Background()); !errors.Is(err, update.ErrDevBuild) {
+		t.Fatalf("expected ErrDevBuild, got %v", err)
+	}
+}
+
+func TestCLIProgressDone(t *testing.T) {
+	var buf bytes.Buffer
+	p := newCLIProgress(&buf, "Downloading")
+	p.Start(100)
+	p.Advance(100)
+	p.Done(nil)
+
+	out := buf.String()
+	if !strings.Contains(out, "100%") {
+		t.Fatalf("bar not completed on success: %q", out)
+	}
+	if !strings.HasSuffix(out, "\n") {
+		t.Fatalf("progress line not terminated: %q", out)
+	}
+}
+
+func TestCLIProgressDoneError(t *testing.T) {
+	var buf bytes.Buffer
+	p := newCLIProgress(&buf, "Downloading")
+	p.Start(100)
+	p.Advance(45)
+	p.Done(errors.New("boom"))
+
+	out := buf.String()
+	if strings.Contains(out, "100%") {
+		t.Fatalf("bar forced to 100%% on failure: %q", out)
+	}
+	if !strings.Contains(out, "45%") {
+		t.Fatalf("bar lost its true position: %q", out)
+	}
+	if !strings.HasSuffix(out, "\n") {
+		t.Fatalf("progress line not terminated: %q", out)
 	}
 }
 

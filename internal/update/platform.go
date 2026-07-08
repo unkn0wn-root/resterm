@@ -10,7 +10,6 @@ type Platform struct {
 	OS    string
 	Arch  string
 	Asset string
-	Sum   string
 }
 
 const binPrefix = "resterm"
@@ -36,7 +35,6 @@ func For(goos, goarch string) (Platform, error) {
 		OS:    goos,
 		Arch:  goarch,
 		Asset: asset,
-		Sum:   asset + ".sha256",
 	}, nil
 }
 

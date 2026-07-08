@@ -19,12 +19,10 @@ jobs:
           go-version-file: go.mod
       - name: Run tests
         run: go test ./...
-      - name: Install golangci-lint
-        run: |
-          go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
       - name: Run golangci-lint
-        run: golangci-lint run
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
 
   release-builds:
     if: startsWith(github.ref, 'refs/tags/v')
@@ -72,6 +70,10 @@ jobs:
 
           echo "Building version $VERSION"
           GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
+          # .sha256 files only serve resterm binaries with the pre-digest updater,
+          # which look them up on the latest release to self-update.
+          # @ToDo: Drop this once updating straight from those versions is unlikely.
+          # @Note: the asset count in release draft must shrink to 6 at the same time.
           (cd dist && sha256sum "$name" > "$name.sha256")
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
