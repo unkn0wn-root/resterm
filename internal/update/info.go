@@ -27,6 +27,15 @@ type Asset struct {
 	Digest string
 }
 
+func (i Info) Asset(name string) (Asset, bool) {
+	for _, a := range i.Assets {
+		if a.Name == name {
+			return a, true
+		}
+	}
+	return Asset{}, false
+}
+
 func decodeInfo(r io.Reader) (Info, error) {
 	if r == nil {
 		return Info{}, errEmptyPayload
@@ -75,13 +84,4 @@ func decodeInfo(r io.Reader) (Info, error) {
 	}
 
 	return info, nil
-}
-
-func (i Info) Asset(name string) (Asset, bool) {
-	for _, a := range i.Assets {
-		if a.Name == name {
-			return a, true
-		}
-	}
-	return Asset{}, false
 }
