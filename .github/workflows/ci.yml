@@ -72,6 +72,10 @@ jobs:
 
           echo "Building version $VERSION"
           GOOS="$GOOS" GOARCH="$GOARCH" go build -trimpath -ldflags "$LDFLAGS" -o "$output" ./cmd/resterm
+          # .sha256 files only serve resterm binaries with the pre-digest updater,
+          # which look them up on the latest release to self-update.
+          # @ToDo: Drop this once updating straight from those versions is unlikely.
+          # @Note: the asset count in release draft must shrink to 6 at the same time.
           (cd dist && sha256sum "$name" > "$name.sha256")
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

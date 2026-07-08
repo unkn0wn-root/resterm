@@ -45,18 +45,23 @@ detect_arch() {
     esac
 }
 
-get_latest_release() {
+fetch() {
     if command_exists curl; then
-        curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | \
-            grep '"tag_name":' | \
-            sed -E 's/.*"tag_name": "([^"]+)".*/\1/'
+        curl -fsSL -H "Accept: application/vnd.github+json" "$1"
     elif command_exists wget; then
-        wget -qO- "https://api.github.com/repos/${REPO}/releases/latest" | \
-            grep '"tag_name":' | \
-            sed -E 's/.*"tag_name": "([^"]+)".*/\1/'
+        wget -qO- --header="Accept: application/vnd.github+json" "$1"
     else
         error "Neither curl nor wget found. Please install one of them."
     fi
+}
+
+# the release api publishes a sha256 digest for every asset; "name" comes
+# before "digest" inside each asset object, so remember the last name seen
+digest_for() {
+    printf '%s' "$RELEASE_JSON" | awk -F'"' -v name="$1" '
+        $2 == "name" { found = ($4 == name) }
+        found && $2 == "digest" { sub(/^sha256:/, "", $4); print $4; exit }
+    '
 }
 
 download_binary() {
@@ -81,12 +86,9 @@ sha256_of() {
 }
 
 verify_checksum() {
-    local file="$1" url="$2" sumfile expected actual
+    local file="$1" expected="$2" actual
     command_exists sha256sum || command_exists shasum || \
         error "Need sha256sum or shasum to verify the download"
-    sumfile="$file.sha256"
-    download_binary "$url" "$sumfile"
-    expected="$(awk 'NR==1{print $1}' "$sumfile")"
     actual="$(sha256_of "$file")"
     if [ "$actual" != "$expected" ]; then
         error "Checksum mismatch for $file: expected $expected, got $actual"
@@ -122,13 +124,18 @@ main() {
     }
 
     info "Fetching latest release..."
-    VERSION=$(get_latest_release)
+    RELEASE_JSON="$(fetch "https://api.github.com/repos/${REPO}/releases/latest")"
+    VERSION=$(printf '%s' "$RELEASE_JSON" | grep '"tag_name":' | sed -E 's/.*"tag_name": "([^"]+)".*/\1/')
     if [ -z "$VERSION" ]; then
         error "Failed to fetch latest release version"
     fi
     info "Latest version: $VERSION"
 
     BINARY_FILENAME="resterm_${OS}_${ARCH}"
+    EXPECTED_SHA256="$(digest_for "$BINARY_FILENAME")"
+    printf '%s' "$EXPECTED_SHA256" | grep -qE '^[0-9a-f]{64}$' || \
+        error "No sha256 digest for $BINARY_FILENAME in release $VERSION"
+
     DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${BINARY_FILENAME}"
     TMP_DIR="$(mktemp -d)"
     trap 'rm -rf "$TMP_DIR"' EXIT
@@ -136,7 +143,7 @@ main() {
     TMP_BINARY="$TMP_DIR/$BINARY_NAME"
 
     download_binary "$DOWNLOAD_URL" "$TMP_BINARY"
-    verify_checksum "$TMP_BINARY" "${DOWNLOAD_URL}.sha256"
+    verify_checksum "$TMP_BINARY" "$EXPECTED_SHA256"
     chmod +x "$TMP_BINARY"
 
     info "Installing to $INSTALL_DIR..."

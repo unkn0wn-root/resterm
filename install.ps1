@@ -33,8 +33,7 @@ function Get-Architecture {
 function Get-LatestRelease {
     try {
         Write-Info "Fetching latest release..."
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest"
-        return $response.tag_name
+        return Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest" -Headers @{ Accept = "application/vnd.github+json" }
     }
     catch {
         Write-Err "Failed to fetch latest release: $_"
@@ -91,40 +90,21 @@ function Download-File {
 }
 
 function Get-ExpectedChecksum {
-    param($ChecksumPath, $BinaryFilename)
+    param($Release, $BinaryFilename)
 
-    $line = Get-Content -Path $ChecksumPath -TotalCount 1
-    if (-not $line) {
-        Write-Err "Checksum file is empty"
+    $asset = $Release.assets | Where-Object { $_.name -eq $BinaryFilename }
+    if (-not $asset -or $asset.digest -notmatch '^sha256:[0-9a-f]{64}$') {
+        Write-Err "No sha256 digest for $BinaryFilename in release $($Release.tag_name)"
     }
-
-    $fields = $line.Trim() -split '\s+'
-    if ($fields.Count -ne 1 -and $fields.Count -ne 2) {
-        Write-Err "Invalid checksum line"
-    }
-
-    $expected = $fields[0].ToLowerInvariant()
-    if ($expected -notmatch '^[0-9a-f]{64}$') {
-        Write-Err "Invalid SHA-256 digest: $($fields[0])"
-    }
-
-    if ($fields.Count -eq 2) {
-        $name = $fields[1].TrimStart([char[]]"*")
-        if ($name -ne $BinaryFilename) {
-            Write-Err "Checksum names $name, want $BinaryFilename"
-        }
-    }
-
-    return $expected
+    return $asset.digest.Substring(7).ToLowerInvariant()
 }
 
 function Verify-Checksum {
-    param($FilePath, $ChecksumPath, $BinaryFilename)
+    param($FilePath, $Expected)
 
-    $expected = Get-ExpectedChecksum $ChecksumPath $BinaryFilename
     $actual = (Get-FileHash -Algorithm SHA256 -Path $FilePath).Hash.ToLowerInvariant()
-    if ($actual -ne $expected) {
-        Write-Err "Checksum mismatch for $FilePath`: expected $expected, got $actual"
+    if ($actual -ne $Expected) {
+        Write-Err "Checksum mismatch for $FilePath`: expected $Expected, got $actual"
     }
     Write-Info "Checksum verified"
 }
@@ -135,13 +115,15 @@ function Main {
     $arch = Get-Architecture
     Write-Info "Detected Architecture: $arch"
 
-    $version = Get-LatestRelease
+    $release = Get-LatestRelease
+    $version = $release.tag_name
     if (-not $version) {
         Write-Err "Failed to fetch latest release version"
     }
     Write-Info "Latest version: $version"
 
     $binaryFilename = "resterm_Windows_${arch}.exe"
+    $expected = Get-ExpectedChecksum $release $binaryFilename
     $downloadUrl = "https://github.com/$REPO/releases/download/$version/$binaryFilename"
 
     $installDir = Get-InstallDir
@@ -159,11 +141,9 @@ function Main {
         New-Item -ItemType Directory -Path $tempDir -Force | Out-Null
 
         $tempBinary = Join-Path $tempDir $BINARY_NAME
-        $checksumPath = "$tempBinary.sha256"
 
         Download-File $downloadUrl $tempBinary "Binary"
-        Download-File "${downloadUrl}.sha256" $checksumPath "Checksum"
-        Verify-Checksum $tempBinary $checksumPath $binaryFilename
+        Verify-Checksum $tempBinary $expected
 
         Move-Item -Path $tempBinary -Destination $installPath -Force
     }
