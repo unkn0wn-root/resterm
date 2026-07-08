@@ -26,8 +26,7 @@ func parseDigest(v string) ([sha256.Size]byte, error) {
 	if err != nil || len(raw) != sha256.Size {
 		return sum, fmt.Errorf("invalid sha256 digest %q", v)
 	}
-	copy(sum[:], raw)
-	return sum, nil
+	return [sha256.Size]byte(raw), nil
 }
 
 func verifyVersion(ctx context.Context, path, want string) error {

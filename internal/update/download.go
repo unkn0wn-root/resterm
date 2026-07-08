@@ -79,6 +79,5 @@ func (c Client) download(
 	if a.Size > 0 && n != a.Size {
 		return sum, fmt.Errorf("download size mismatch: got %d want %d", n, a.Size)
 	}
-	copy(sum[:], h.Sum(nil))
-	return sum, nil
+	return [sha256.Size]byte(h.Sum(nil)), nil
 }
