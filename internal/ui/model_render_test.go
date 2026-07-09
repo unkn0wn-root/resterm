@@ -15,6 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/navigator"
+	"github.com/unkn0wn-root/resterm/internal/update"
 )
 
 func TestNavigatorTagChipsFilterMatchesQueryTokens(t *testing.T) {
@@ -1172,6 +1173,34 @@ func TestStatusBarRightShowsIdentity(t *testing.T) {
 	}
 	if trimmed := strings.TrimSpace(plain); !strings.HasSuffix(trimmed, "workstation") {
 		t.Fatalf("expected host to be the rightmost section, got %q", trimmed)
+	}
+}
+
+func TestStatusBarVersionShowsUpdateTarget(t *testing.T) {
+	model := New(Config{Version: "v1.0.0"})
+	model.width = 100
+	model.statusUser = ""
+	model.statusHost = ""
+	model.updateInfo = &update.Result{Info: update.Info{Version: "v1.2.0"}}
+
+	bar := model.renderStatusBar()
+	plain := ansi.Strip(bar)
+	want := statusBarVersionIcon + " v1.0.0 " + statusBarUpdateIcon + " v1.2.0"
+	if !strings.Contains(plain, want) {
+		t.Fatalf("expected update-aware version section %q in %q", want, plain)
+	}
+
+	palette := statusBarPalette(model.theme.StatusBarPalette)
+	section, ok := model.statusBarVersionSection(palette)
+	if !ok {
+		t.Fatal("expected version section")
+	}
+	if section.style.Background != palette.Warn.Background {
+		t.Fatalf(
+			"expected update version section to use warn background %v, got %v",
+			palette.Warn.Background,
+			section.style.Background,
+		)
 	}
 }
 

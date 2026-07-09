@@ -16,6 +16,7 @@ import (
 
 const (
 	statusBarVersionIcon   = "◇"
+	statusBarUpdateIcon    = "⇧"
 	statusBarHTTPFileIcon  = "⇄"
 	statusBarFilesIcon     = "◧"
 	statusBarRequestsIcon  = "↑"
@@ -279,11 +280,8 @@ func (m Model) statusBarRightSections(
 			valueStyle: gitValueStyle,
 		})
 	}
-	if version := m.statusBarVersion(); version != "" {
-		segs = append(segs, statusBarSection{
-			text:  statusBarVersionText(version),
-			style: palette.Version,
-		})
+	if section, ok := m.statusBarVersionSection(palette); ok {
+		segs = append(segs, section)
 	}
 	if m.statusUser != "" {
 		segs = append(segs, statusBarSection{
@@ -354,6 +352,34 @@ func (m Model) statusBarVersion() string {
 		version = strings.TrimSpace(m.updateVersion)
 	}
 	return version
+}
+
+func (m Model) statusBarUpdateVersion() string {
+	if m.updateInfo == nil {
+		return ""
+	}
+	return strings.TrimSpace(m.updateInfo.Info.Version)
+}
+
+// updateInfo is only set when the update check finds a newer release,
+// so any version it carries means there is an update worth showing.
+func (m Model) statusBarVersionSection(
+	palette theme.StatusBarPalette,
+) (statusBarSection, bool) {
+	current := m.statusBarVersion()
+	if latest := m.statusBarUpdateVersion(); latest != "" {
+		return statusBarSection{
+			text:  fmt.Sprintf("%s %s %s", statusBarVersionText(current), statusBarUpdateIcon, latest),
+			style: palette.Warn,
+		}, true
+	}
+	if current == "" {
+		return statusBarSection{}, false
+	}
+	return statusBarSection{
+		text:  statusBarVersionText(current),
+		style: palette.Version,
+	}, true
 }
 
 func statusBarVersionText(version string) string {
