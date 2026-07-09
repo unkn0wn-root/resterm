@@ -16,7 +16,7 @@ import (
 
 const (
 	statusBarVersionIcon   = "◇"
-	statusBarUpdateIcon    = "⇧"
+	statusBarUpdateIcon    = "⇡"
 	statusBarHTTPFileIcon  = "⇄"
 	statusBarFilesIcon     = "◧"
 	statusBarRequestsIcon  = "↑"
