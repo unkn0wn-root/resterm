@@ -6,7 +6,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const latAnimDur = 900 * time.Millisecond
+const latAnimDur = 1 * time.Second
 
 var latAnimTick = latAnimDur / time.Duration(len(latencyLevels))
 
