@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 func TestBuildHeaderLineFitsWidth(t *testing.T) {
@@ -37,6 +38,18 @@ func TestBuildHeaderLineRightOnly(t *testing.T) {
 	}
 	if !strings.Contains(line, "▁") {
 		t.Fatalf("expected right text to be present, got %q", line)
+	}
+}
+
+func TestBuildHeaderLineTruncatesStyledRight(t *testing.T) {
+	right := "\x1b[31mLATENCY\x1b[0m"
+	line := buildHeaderLine(nil, " ", right, lipgloss.NewStyle(), 5)
+
+	if got := ansi.Strip(line); got != "LATE…" {
+		t.Fatalf("expected ANSI-aware truncation, got %q", got)
+	}
+	if got := lipgloss.Width(line); got != 5 {
+		t.Fatalf("expected width 5, got %d", got)
 	}
 }
 

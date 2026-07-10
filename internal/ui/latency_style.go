@@ -9,38 +9,49 @@ import (
 )
 
 const (
-	latOkMax   = 500 * time.Millisecond
-	latWarnMax = 1000 * time.Millisecond
+	latOKMax   = 500 * time.Millisecond
+	latWarnMax = time.Second
+	latLabel   = "Latency "
 )
 
 var (
-	latOkFg   = lipgloss.Color("#6EF17E")
 	latWarnFg = lipgloss.Color("#FFD46A")
 	latErrFg  = lipgloss.Color("#FF6E6E")
 )
 
-func (m Model) latencyStyle() lipgloss.Style {
-	if m.latencySeries.empty() {
-		return m.themeRuntime.inactiveStyle(m.theme.HeaderValue)
+func (m Model) renderLatency() string {
+	s, ok := m.latencySeries.summary()
+	if !ok {
+		return m.latMutedStyle().Render(latLabel + m.latencyText())
 	}
-	return latStyle(m.theme, m.latencySeries.last())
+
+	muted := m.latMutedStyle()
+	curSt := latStyle(m.theme, s.cur)
+	p95St := latStyle(m.theme, s.p95)
+	cur := formatLatencyDuration(s.cur)
+	p95 := formatLatencyDuration(s.p95)
+
+	return muted.Render(latLabel+s.hist) +
+		curSt.Render(string(s.last)+" "+cur) +
+		muted.Render(latP95Sep) +
+		p95St.Render(p95)
+}
+
+func (m Model) latMutedStyle() lipgloss.Style {
+	if m.themeRuntime.isLight() {
+		return m.themeRuntime.subtleTextStyle(m.theme)
+	}
+	return m.theme.HeaderValue.Faint(true)
 }
 
 func latStyle(th theme.Theme, d time.Duration) lipgloss.Style {
 	st := th.HeaderValue
 	switch {
-	case d <= latOkMax:
-		return st.Foreground(latFg(th.Success, latOkFg))
+	case d <= latOKMax:
+		return st
 	case d <= latWarnMax:
 		return st.Foreground(latWarnFg)
 	default:
-		return st.Foreground(latFg(th.Error, latErrFg))
+		return st.Foreground(foregroundColor(th.Error, latErrFg))
 	}
-}
-
-func latFg(st lipgloss.Style, fb lipgloss.Color) lipgloss.TerminalColor {
-	if fg := st.GetForeground(); theme.ColorDefined(fg) {
-		return fg
-	}
-	return fb
 }
