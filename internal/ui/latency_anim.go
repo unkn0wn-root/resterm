@@ -6,9 +6,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-const latAnimDur = 1 * time.Second
+const latAnimDur = time.Second
 
-var latAnimTick = latAnimDur / time.Duration(len(latencyLevels))
+var latAnimTick = latAnimDur / time.Duration(len(latRamp))
 
 func (m *Model) startLatAnim() {
 	m.latAnimOn = true
@@ -36,10 +36,10 @@ func (m Model) latAnimP() float64 {
 	return min(float64(time.Since(m.latAnimT0))/float64(latAnimDur), 1)
 }
 
-// latClimb draws one frame of the startup animation: bars rise one by one
-// into the placeholder ramp, so at p=1 the frame matches latPlaceholder.
+// latClimb draws one frame of the startup animation: bars rise one by one into
+// the placeholder ramp, so at p=1 the frame matches latPlaceholder.
 func latClimb(p float64) string {
-	n := len(latencyLevels)
+	n := len(latRamp)
 	k := min(int(p*float64(n)), n-1)
-	return string(latencyLevels[:k+1]) + latFill(n-1-k)
+	return string(latRamp[:k+1]) + latFill(n-1-k)
 }

@@ -25,7 +25,11 @@ func styleRight(text string, st lipgloss.Style, maxWidth int) (string, int) {
 	if maxWidth <= 0 || text == "" {
 		return "", 0
 	}
-	text = truncateToWidth(text, max(1, maxWidth-st.GetHorizontalFrameSize()))
+	w := maxWidth - st.GetHorizontalFrameSize()
+	if w <= 0 {
+		return "", 0
+	}
+	text = ansi.Truncate(text, w, "…")
 	s := st.Render(text)
 	return s, lipgloss.Width(s)
 }

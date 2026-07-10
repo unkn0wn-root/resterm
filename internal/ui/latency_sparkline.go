@@ -12,22 +12,35 @@ type latencySeries struct {
 	cap  int
 }
 
+type latencySummary struct {
+	hist string
+	last rune
+	cur  time.Duration
+	p95  time.Duration
+}
+
 const (
-	latCap     = 10
+	// Keep the statistics window wider than the sparkline so p95 remains useful
+	// without allowing the header visualization to grow indefinitely.
+	latCap     = 100
+	latBarsCap = 10
 	latMinBars = 5
 	latWarmN   = 3
 	latWarmDiv = 5
 	latGamma   = 0.75
+	latP95     = 95
+	latP95Sep  = " · p95 "
 )
 
 var (
-	latencyLevels  = []rune("▁▂▄▆█")
-	latPlaceholder = string(latencyLevels) + " ms"
+	latLevels      = []rune("▁▂▃▄▅▆▇█")
+	latRamp        = []rune("▁▂▄▆█")
+	latPlaceholder = string(latRamp) + " ms"
 )
 
 func (m Model) latencyText() string {
-	if !m.latencySeries.empty() {
-		return m.latencySeries.render()
+	if s, ok := m.latencySeries.summary(); ok {
+		return formatLatencySummary(s)
 	}
 	if m.latAnimOn {
 		return latClimb(m.latAnimP()) + " ms"
@@ -35,17 +48,18 @@ func (m Model) latencyText() string {
 	return latPlaceholder
 }
 
-func newLatencySeries(capacity int) *latencySeries {
-	if capacity < 1 {
-		capacity = 1
+func newLatencySeries(cap int) *latencySeries {
+	if cap < 1 {
+		cap = 1
 	}
-	return &latencySeries{cap: capacity}
+	return &latencySeries{cap: cap}
 }
 
 func (s *latencySeries) add(d time.Duration) {
 	if d <= 0 {
 		return
 	}
+
 	s.vals = append(s.vals, d)
 	if len(s.vals) > s.cap {
 		s.vals = s.vals[len(s.vals)-s.cap:]
@@ -56,46 +70,67 @@ func (s *latencySeries) empty() bool {
 	return s == nil || len(s.vals) == 0
 }
 
-func (s *latencySeries) last() time.Duration {
-	return s.vals[len(s.vals)-1]
-}
-
-func (s *latencySeries) render() string {
-	if len(s.vals) == 0 {
-		return ""
+func (s *latencySeries) summary() (latencySummary, bool) {
+	if s.empty() {
+		return latencySummary{}, false
 	}
 
-	lo, hi := s.bounds()
-	bars := sparkline(s.vals, lo, hi)
-	if pad := latMinBars - len(s.vals); pad > 0 {
+	vals := slices.Clone(s.vals)
+	slices.Sort(vals)
+	lo, hi := latBounds(vals)
+
+	tail := s.vals
+	if len(tail) > latBarsCap {
+		tail = tail[len(tail)-latBarsCap:]
+	}
+	bars := sparkline(tail, lo, hi)
+	if pad := latMinBars - len(tail); pad > 0 {
 		bars = latFill(pad) + bars
 	}
+	rs := []rune(bars)
+	last := len(rs) - 1
 
-	v := s.last()
-	if r := v.Round(time.Millisecond); r > 0 {
-		v = r
-	}
-	return bars + " " + formatDurationShort(v)
+	return latencySummary{
+		hist: string(rs[:last]),
+		last: rs[last],
+		cur:  s.vals[len(s.vals)-1],
+		p95:  percentile(vals, latP95),
+	}, true
 }
 
-func (s *latencySeries) bounds() (time.Duration, time.Duration) {
-	if len(s.vals) == 1 {
-		return 0, s.vals[0]
+func (s latencySummary) bars() string {
+	return s.hist + string(s.last)
+}
+
+func formatLatencySummary(s latencySummary) string {
+	return s.bars() + " " + formatLatencyDuration(s.cur) +
+		latP95Sep + formatLatencyDuration(s.p95)
+}
+
+func latBounds(vals []time.Duration) (time.Duration, time.Duration) {
+	if len(vals) == 1 {
+		return 0, vals[0]
 	}
 
-	sorted := slices.Clone(s.vals)
-	slices.Sort(sorted)
-	lo := percentile(sorted, 10)
-	hi := percentile(sorted, 90)
+	lo := percentile(vals, 10)
+	hi := percentile(vals, 90)
 	if hi <= lo {
-		return sorted[0], sorted[len(sorted)-1]
+		return vals[0], vals[len(vals)-1]
 	}
-	return latClamp(lo, hi, len(s.vals))
+	return latClamp(lo, hi, len(vals))
 }
 
+// percentile expects vals sorted in ascending order and pct in [1, 100].
 func percentile(vals []time.Duration, pct int) time.Duration {
-	pos := float64(pct) / 100 * float64(len(vals)-1)
-	return vals[int(pos+0.5)]
+	rank := int(math.Ceil(float64(pct)/100*float64(len(vals)))) - 1
+	return vals[rank]
+}
+
+func formatLatencyDuration(d time.Duration) string {
+	if rounded := d.Round(time.Millisecond); rounded > 0 {
+		d = rounded
+	}
+	return formatDurationShort(d)
 }
 
 func sparkline(vals []time.Duration, lo, hi time.Duration) string {
@@ -108,17 +143,18 @@ func sparkline(vals []time.Duration, lo, hi time.Duration) string {
 	for i, v := range vals {
 		v = min(max(v, lo), hi)
 		n := latCurve(float64(v-lo) / scale)
-		out[i] = latencyLevels[int(n*float64(len(latencyLevels)-1)+0.5)]
+		level := int(n*float64(len(latLevels)-1) + 0.5)
+		out[i] = latLevels[level]
 	}
 	return string(out)
 }
 
 func latFill(n int) string {
-	return strings.Repeat(string(latencyLevels[0]), n)
+	return strings.Repeat(string(latLevels[0]), n)
 }
 
-// latClamp widens a too-narrow percentile span while the series is young so
-// the first bars don't exaggerate tiny differences.
+// latClamp widens a too-narrow percentile span while the series is
+// young so the first bars don't exaggerate tiny differences.
 func latClamp(lo, hi time.Duration, n int) (time.Duration, time.Duration) {
 	if n >= latWarmN || hi <= 0 {
 		return lo, hi

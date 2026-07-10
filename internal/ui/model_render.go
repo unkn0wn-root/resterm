@@ -2115,8 +2115,8 @@ func (m Model) renderHeader() string {
 
 	separator := m.theme.HeaderSeparator.Render(" ")
 
-	rightText := m.latencyText()
-	rightStyle := m.latencyStyle()
+	rightText := m.renderLatency()
+	rightStyle := lipgloss.NewStyle()
 
 	totalWidth := max(m.width, 1)
 	contentWidth := headerContentWidth(totalWidth, m.theme.Header)
