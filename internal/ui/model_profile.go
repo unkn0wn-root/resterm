@@ -191,7 +191,7 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 	m.statusPulseBase = progressText
 	m.showProfileProgress(state)
 
-	return m.executeRequest(state.doc, iterationReq, state.options, "", nil)
+	return m.executeRequestGen(state.latGen, state.doc, iterationReq, state.options, "", nil)
 }
 
 func (m *Model) handleProfileUIDrivenResponse(msg responseMsg) tea.Cmd {

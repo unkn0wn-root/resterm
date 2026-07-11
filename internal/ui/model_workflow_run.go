@@ -914,7 +914,7 @@ func (m *Model) executeWorkflowRequest(
 	m.setStatusMessage(statusMsg{text: message, level: statusInfo})
 	spin := m.startSending()
 
-	cmd := m.executeRequest(st.doc, clone, opts, "", vals, xv)
+	cmd := m.executeRequestGen(st.latGen, st.doc, clone, opts, "", vals, xv)
 	pulse := m.startStatusPulse()
 	return batchCmds([]tea.Cmd{cmd, pulse, spin})
 }
