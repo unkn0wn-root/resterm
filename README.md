@@ -417,5 +417,5 @@ Customize colors and keybindings via `themes/*.toml` and `bindings.toml` or `bin
 
 ## Documentation
 
-The full reference guide lives in [`docs/resterm.md`](./docs/resterm.md).
-The command-line guide lives in [`docs/cli.md`](./docs/cli.md).
+- [`docs/resterm.md`](./docs/resterm.md) - the full reference: request syntax, directives, scripting and transports.
+- [`docs/cli.md`](./docs/cli.md) - the command-line guide: `resterm run`, importers, collections and history.
