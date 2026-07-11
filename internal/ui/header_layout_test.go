@@ -53,6 +53,21 @@ func TestBuildHeaderLineTruncatesStyledRight(t *testing.T) {
 	}
 }
 
+func TestBuildHeaderLineTruncatesMultiSegmentRight(t *testing.T) {
+	right := "\x1b[2mLatency ▁▁▁\x1b[0m" +
+		"\x1b[31m█ 120ms\x1b[0m" +
+		"\x1b[2m · p95 \x1b[0m" +
+		"\x1b[31m120ms\x1b[0m"
+	line := buildHeaderLine(nil, " ", right, lipgloss.NewStyle(), 15)
+
+	if got := ansi.Strip(line); got != "Latency ▁▁▁█ 1…" {
+		t.Fatalf("expected ANSI-aware truncation, got %q", got)
+	}
+	if got := lipgloss.Width(line); got != 15 {
+		t.Fatalf("expected width 15, got %d", got)
+	}
+}
+
 func TestBuildHeaderLineDropsTrailingSegments(t *testing.T) {
 	left := []string{"BRAND", "ONE", "TWO", "THREE"}
 	sep := " "

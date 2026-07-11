@@ -56,6 +56,7 @@ func (m *Model) applyEnvironmentSelection() tea.Cmd {
 	}
 
 	m.cfg.EnvironmentName = item.name
+	m.latencySeries.reset()
 	if gs := m.globalsStore(); gs != nil {
 		gs.Clear(item.name)
 	}

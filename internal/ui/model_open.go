@@ -94,6 +94,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.activeRequestKey = ""
 	m.activeRequestTitle = ""
 	m.doc = nil
+	m.latencySeries.reset()
 	m.editor.SetValue("")
 	m.editor.SetCursor(0)
 	m.markClean()

@@ -18,13 +18,13 @@ func TestLatencySeriesSummaryPadsYoungSeries(t *testing.T) {
 	s.add(4 * time.Millisecond)
 
 	sum := requireLatencySummary(t, s)
-	bars := []rune(sum.bars())
+	bars := []rune(sum.bars)
 	if got := len(bars); got != latMinBars {
-		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, got, sum.bars())
+		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, got, sum.bars)
 	}
 	for _, bar := range bars[:latMinBars-2] {
 		if bar != latLevels[0] {
-			t.Fatalf("expected flat padding, got %q", sum.bars())
+			t.Fatalf("expected flat padding, got %q", sum.bars)
 		}
 	}
 	if sum.cur != 4*time.Millisecond {
@@ -40,26 +40,26 @@ func TestLatencySeriesSummarySingleSample(t *testing.T) {
 	s.add(50 * time.Millisecond)
 
 	sum := requireLatencySummary(t, s)
-	bars := []rune(sum.bars())
+	bars := []rune(sum.bars)
 	if got := len(bars); got != latMinBars {
-		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, got, sum.bars())
+		t.Fatalf("expected %d bars, got %d (%q)", latMinBars, got, sum.bars)
 	}
-	if sum.last == latLevels[0] {
-		t.Fatalf("expected a raised bar for the sample, got %q", sum.bars())
+	if bars[len(bars)-1] == latLevels[0] {
+		t.Fatalf("expected a raised bar for the sample, got %q", sum.bars)
 	}
 }
 
 func TestLatencySeriesSummaryGrowsWithSamples(t *testing.T) {
 	s := newLatencySeries(10)
 	s.add(10 * time.Millisecond)
-	if got := len([]rune(requireLatencySummary(t, s).bars())); got != latMinBars {
+	if got := len([]rune(requireLatencySummary(t, s).bars)); got != latMinBars {
 		t.Fatalf("expected %d bars, got %d", latMinBars, got)
 	}
 
 	for i := 0; i < 5; i++ {
 		s.add(10 * time.Millisecond)
 	}
-	if got := len([]rune(requireLatencySummary(t, s).bars())); got != 6 {
+	if got := len([]rune(requireLatencySummary(t, s).bars)); got != 6 {
 		t.Fatalf("expected 6 bars, got %d", got)
 	}
 }
@@ -71,7 +71,7 @@ func TestLatencySeriesSummaryLimitsVisibleBars(t *testing.T) {
 	}
 
 	sum := requireLatencySummary(t, s)
-	if got := len([]rune(sum.bars())); got != latBarsCap {
+	if got := len([]rune(sum.bars)); got != latBarsCap {
 		t.Fatalf("expected %d visible bars, got %d", latBarsCap, got)
 	}
 	if sum.cur != 20*time.Millisecond {
@@ -79,6 +79,35 @@ func TestLatencySeriesSummaryLimitsVisibleBars(t *testing.T) {
 	}
 	if sum.p95 != 19*time.Millisecond {
 		t.Fatalf("expected p95 latency 19ms, got %s", sum.p95)
+	}
+}
+
+func TestLatencySeriesSummaryScalesBarsToVisibleWindow(t *testing.T) {
+	s := newLatencySeries(latCap)
+	for i := 0; i < 90; i++ {
+		s.add(10 * time.Millisecond)
+	}
+	for i := 1; i <= 10; i++ {
+		s.add(time.Duration(i*100) * time.Millisecond)
+	}
+
+	sum := requireLatencySummary(t, s)
+	bars := []rune(sum.bars)
+	if bars[0] != latLevels[0] || bars[len(bars)-1] != latLevels[len(latLevels)-1] {
+		t.Fatalf("expected bars scaled to the visible tail, got %q", sum.bars)
+	}
+	if sum.p95 != 500*time.Millisecond {
+		t.Fatalf("expected p95 over the full window, got %s", sum.p95)
+	}
+}
+
+func TestLatencySeriesReset(t *testing.T) {
+	s := newLatencySeries(4)
+	s.add(time.Millisecond)
+	s.reset()
+
+	if _, ok := s.summary(); ok {
+		t.Fatal("expected no summary after reset")
 	}
 }
 
@@ -118,11 +147,11 @@ func TestLatencySeriesSummaryRendersSparkline(t *testing.T) {
 	}
 
 	sum := requireLatencySummary(t, s)
-	if got := sum.bars(); got != "▁▃▅▇█" {
-		t.Fatalf("expected sparkline %q, got %q", "▁▃▅▇█", got)
+	if sum.bars != "▁▃▅▇█" {
+		t.Fatalf("expected sparkline %q, got %q", "▁▃▅▇█", sum.bars)
 	}
-	if got := formatLatencySummary(sum); got != "▁▃▅▇█ 5ms · p95 5ms" {
-		t.Fatalf("unexpected formatted summary %q", got)
+	if sum.cur != 5*time.Millisecond || sum.p95 != 5*time.Millisecond {
+		t.Fatalf("expected 5ms current and p95, got %s and %s", sum.cur, sum.p95)
 	}
 }
 

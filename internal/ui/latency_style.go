@@ -11,7 +11,7 @@ import (
 const (
 	latOKMax   = 500 * time.Millisecond
 	latWarnMax = time.Second
-	latLabel   = "Latency "
+	latLabel   = "RTT"
 )
 
 var (
@@ -22,19 +22,19 @@ var (
 func (m Model) renderLatency() string {
 	s, ok := m.latencySeries.summary()
 	if !ok {
-		return m.latMutedStyle().Render(latLabel + m.latencyText())
+		return m.latMutedStyle().Render(latLabel + " " + m.latIdleText())
 	}
 
 	muted := m.latMutedStyle()
-	curSt := latStyle(m.theme, s.cur)
-	p95St := latStyle(m.theme, s.p95)
+	rs := []rune(s.bars)
+	last := len(rs) - 1
 	cur := formatLatencyDuration(s.cur)
 	p95 := formatLatencyDuration(s.p95)
 
-	return muted.Render(latLabel+s.hist) +
-		curSt.Render(string(s.last)+" "+cur) +
-		muted.Render(latP95Sep) +
-		p95St.Render(p95)
+	return muted.Render(latLabel+" "+string(rs[:last])) +
+		latStyle(m.theme, s.cur).Render(string(rs[last])+" "+cur) +
+		muted.Render(" · p95 ") +
+		latStyle(m.theme, s.p95).Render(p95)
 }
 
 func (m Model) latMutedStyle() lipgloss.Style {
