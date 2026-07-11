@@ -1667,3 +1667,57 @@ func applyRunEvt(t *testing.T, m *Model, evt core.Evt) {
 	}
 	*m = nm
 }
+
+func TestCompareCoreRunRecordsLatency(t *testing.T) {
+	m := newOrchTestModel(t, Config{})
+	doc := &restfile.Document{}
+	req := &restfile.Request{
+		Method: "GET",
+		URL:    "https://example.com/items",
+		Metadata: restfile.RequestMetadata{
+			Name: "Items",
+		},
+	}
+	spec := &restfile.CompareSpec{
+		Environments: []string{"dev", "stage"},
+		Baseline:     "dev",
+	}
+
+	if cmd := m.startCompareRun(doc, req, spec, httpclient.Options{}); cmd == nil {
+		t.Fatal("expected compare run to return command")
+	}
+	run := core.RunMeta{ID: m.compareRun.id, Mode: core.ModeCompare}
+	at := time.Unix(1, 0)
+
+	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(run, at)})
+	applyRunEvt(t, &m, core.CmpRowStart{
+		Meta:    core.NewMeta(run, at),
+		Row:     core.RowMeta{Index: 0, Env: "dev", Base: true, Total: 2},
+		Doc:     doc,
+		Request: req,
+	})
+	first := cloneRequest(m.compareRun.current)
+	applyRunEvt(t, &m, core.CmpRowDone{
+		Meta: core.NewMeta(run, at.Add(10*time.Millisecond)),
+		Row:  core.RowMeta{Index: 0, Env: "dev", Base: true, Total: 2},
+		Result: engine.RequestResult{
+			Response: testHTTPResp(
+				"https://example.com/items",
+				200,
+				`{"env":"dev"}`,
+				10*time.Millisecond,
+			),
+			Executed:    first,
+			RequestText: renderRequestText(first),
+			Environment: "dev",
+		},
+	})
+
+	sum, ok := m.latencySeries.summary()
+	if !ok {
+		t.Fatal("expected compare row to record latency")
+	}
+	if sum.cur != 10*time.Millisecond {
+		t.Fatalf("expected current latency 10ms, got %s", sum.cur)
+	}
+}
