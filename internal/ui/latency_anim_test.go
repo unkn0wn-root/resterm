@@ -20,23 +20,16 @@ func TestLatClimbBuildsRamp(t *testing.T) {
 	}
 }
 
-func TestLatencyTextDuringAnim(t *testing.T) {
+func TestLatIdleTextDuringAnim(t *testing.T) {
 	m := Model{latencySeries: newLatencySeries(latCap)}
 	m.startLatAnim()
 
-	if got := m.latencyText(); got != latFill(latMinBars)+" ms" {
+	if got := m.latIdleText(); got != latFill(latMinBars)+" ms" {
 		t.Fatalf("expected flat climb frame, got %q", got)
 	}
 
-	m.latencySeries.add(120 * time.Millisecond)
-	s := requireLatencySummary(t, m.latencySeries)
-	if got := m.latencyText(); got != formatLatencySummary(s) {
-		t.Fatalf("expected series render to win over anim, got %q", got)
-	}
-
-	m.latencySeries.vals = nil
 	m.latAnimOn = false
-	if got := m.latencyText(); got != latPlaceholder {
+	if got := m.latIdleText(); got != latPlaceholder {
 		t.Fatalf("expected placeholder after anim, got %q", got)
 	}
 }

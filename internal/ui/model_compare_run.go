@@ -34,6 +34,7 @@ type compareState struct {
 	label        string
 	canceled     bool
 	cancelReason string
+	latGen       int
 }
 
 func (s *compareState) matches(req *restfile.Request) bool {
@@ -115,6 +116,7 @@ func (m *Model) beginCompareRun(state *compareState) []tea.Cmd {
 	}
 	m.resetCompareState()
 	m.compareBundle = nil
+	state.latGen = m.latencySeries.generation()
 	m.compareRun = state
 	m.statusPulseBase = state.label
 	m.statusPulseFrame = -1
@@ -192,7 +194,7 @@ func (m *Model) executeCompareIteration() tea.Cmd {
 	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 
 	runCmd := m.withEnvironment(env, func() tea.Cmd {
-		return m.executeRequest(state.doc, clone, state.options, env, nil)
+		return m.executeRequestGen(state.latGen, state.doc, clone, state.options, env, nil)
 	})
 
 	pulse := m.startStatusPulse()
@@ -263,6 +265,8 @@ func (m *Model) handleCompareRowDone(st *compareState, evt core.CmpRowDone) tea.
 		return nil
 	}
 	msg := m.responseMsgFromRunState(evt.Result, false)
+	msg.latGen = st.latGen
+	m.recordResponseLatency(msg)
 	env := st.currentEnv
 	if strings.TrimSpace(env) == "" {
 		env = compareEnvAt(st, evt.Row.Index, evt.Row.Env)

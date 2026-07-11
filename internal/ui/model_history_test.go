@@ -671,3 +671,20 @@ func TestTogglePaneFollowLatestPinsSnapshot(t *testing.T) {
 		t.Fatalf("expected live pane to receive new response")
 	}
 }
+
+func TestRecordResponseLatencyDropsPreResetSamples(t *testing.T) {
+	m := &Model{latencySeries: newLatencySeries(latCap)}
+	resp := &httpclient.Response{Duration: 120 * time.Millisecond}
+
+	gen := m.latencySeries.gen
+	m.latencySeries.reset()
+	m.recordResponseLatency(responseMsg{response: resp, latGen: gen})
+	if _, ok := m.latencySeries.summary(); ok {
+		t.Fatal("expected pre-reset sample to be dropped")
+	}
+
+	m.recordResponseLatency(responseMsg{response: resp, latGen: m.latencySeries.gen, environment: "other"})
+	if _, ok := m.latencySeries.summary(); !ok {
+		t.Fatal("expected current-generation sample to be recorded regardless of environment")
+	}
+}

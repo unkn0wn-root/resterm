@@ -17,10 +17,10 @@ func TestLatencyPlaceholder(t *testing.T) {
 		latencySeries: newLatencySeries(latCap),
 	}
 
-	if got := m.latencyText(); got != "▁▂▄▆█ ms" {
+	if got := m.latIdleText(); got != "▁▂▄▆█ ms" {
 		t.Fatalf("expected placeholder text, got %q", got)
 	}
-	if got := ansi.Strip(m.renderLatency()); got != "Latency ▁▂▄▆█ ms" {
+	if got := ansi.Strip(m.renderLatency()); got != "RTT ▁▂▄▆█ ms" {
 		t.Fatalf("expected labeled placeholder, got %q", got)
 	}
 	if !m.latMutedStyle().GetFaint() {
@@ -36,10 +36,7 @@ func TestRenderLatencyAfterSample(t *testing.T) {
 	}
 
 	m.latencySeries.add(120 * time.Millisecond)
-	if got := m.latencyText(); got == latPlaceholder {
-		t.Fatalf("expected series render after sample, got %q", got)
-	}
-	if got := ansi.Strip(m.renderLatency()); got != "Latency ▁▁▁▁█ 120ms · p95 120ms" {
+	if got := ansi.Strip(m.renderLatency()); got != "RTT ▁▁▁▁█ 120ms · p95 120ms" {
 		t.Fatalf("expected labeled latency summary, got %q", got)
 	}
 
@@ -49,6 +46,20 @@ func TestRenderLatencyAfterSample(t *testing.T) {
 	}
 	if fg := st.GetForeground(); fg != m.theme.HeaderValue.GetForeground() {
 		t.Fatalf("expected neutral active colour, got %v", fg)
+	}
+}
+
+func TestRenderLatencyPrefersSummaryOverAnim(t *testing.T) {
+	m := &Model{
+		theme:         theme.DefaultTheme(),
+		themeRuntime:  newThemeRuntime(theme.DefaultDefinition()),
+		latencySeries: newLatencySeries(latCap),
+	}
+
+	m.startLatAnim()
+	m.latencySeries.add(120 * time.Millisecond)
+	if got := ansi.Strip(m.renderLatency()); got != "RTT ▁▁▁▁█ 120ms · p95 120ms" {
+		t.Fatalf("expected summary to win over animation, got %q", got)
 	}
 }
 

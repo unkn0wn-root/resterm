@@ -36,6 +36,7 @@ type execContext struct {
 	extraVals      map[string]rts.Value
 	extras         []map[string]string
 	runtimeSecrets []string
+	latGen         int
 
 	// Execution services and lifetime control.
 	client     *httpclient.Client
@@ -168,6 +169,20 @@ func (m *Model) executeRequest(
 	extraVals map[string]rts.Value,
 	extras ...map[string]string,
 ) tea.Cmd {
+	return m.executeRequestGen(m.latencySeries.generation(), doc, req, options, envOverride, extraVals, extras...)
+}
+
+// executeRequestGen lets aggregate runs pin their run-start RTT generation so
+// a context switch mid-run doesn't leak samples into the new series.
+func (m *Model) executeRequestGen(
+	gen int,
+	doc *restfile.Document,
+	req *restfile.Request,
+	options httpclient.Options,
+	envOverride string,
+	extraVals map[string]rts.Value,
+	extras ...map[string]string,
+) tea.Cmd {
 	if err := docErr(doc); err != nil {
 		return func() tea.Msg {
 			return responseMsg{
@@ -183,6 +198,7 @@ func (m *Model) executeRequest(
 	}
 	if req != nil && req.WebSocket != nil && len(req.WebSocket.Steps) == 0 {
 		exec := newExecContext(m, doc, req, options, envName, extraVals, extras)
+		exec.latGen = gen
 		return exec.cmdInteractive()
 	}
 
@@ -208,7 +224,9 @@ func (m *Model) executeRequest(
 				environment: envName,
 			}
 		}
-		return m.responseMsgFromRunState(res, false)
+		msg := m.responseMsgFromRunState(res, false)
+		msg.latGen = gen
+		return msg
 	})
 }
 
@@ -238,6 +256,7 @@ func (m *Model) executeExplain(
 		return nil
 	}
 	x := mergeRunExtras(extras...)
+	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(doc, req, envName, rqeng.ExecOptions{
 			Extra:  x,
@@ -253,7 +272,9 @@ func (m *Model) executeExplain(
 				environment: envName,
 			}
 		}
-		return m.responseMsgFromRunState(res, false)
+		msg := m.responseMsgFromRunState(res, false)
+		msg.latGen = gen
+		return msg
 	})
 }
 
@@ -312,7 +333,9 @@ func (e *execContext) cmdInteractive() tea.Cmd {
 }
 
 func (e *execContext) runInteractive() tea.Msg {
-	return responseMsgFromExecResult(xexec.RunRequest(interactiveExecFlow{ctx: e}))
+	msg := responseMsgFromExecResult(xexec.RunRequest(interactiveExecFlow{ctx: e}))
+	msg.latGen = e.latGen
+	return msg
 }
 
 func (e *execContext) finish() {
@@ -327,6 +350,7 @@ func (e *execContext) baseResponse() responseMsg {
 		requestText:    "",
 		runtimeSecrets: append([]string(nil), e.runtimeSecrets...),
 		environment:    e.envName,
+		latGen:         e.latGen,
 	}
 }
 

@@ -89,6 +89,7 @@ func (m *Model) execRunReq(
 		return nil
 	}
 	x := mergeRunExtras(xs...)
+	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(doc, req, env, rqeng.ExecOptions{
 			Extra:      x,
@@ -99,7 +100,7 @@ func (m *Model) execRunReq(
 			AttachWS:   m.attachWebSocketHandle,
 			AttachGRPC: m.attachGRPCSession,
 		})
-		return runReqMsg{res: res, err: err}
+		return runReqMsg{res: res, err: err, latGen: gen}
 	})
 }
 

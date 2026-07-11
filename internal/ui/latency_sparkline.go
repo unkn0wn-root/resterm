@@ -10,11 +10,12 @@ import (
 type latencySeries struct {
 	vals []time.Duration
 	cap  int
+	sum  latencySummary
+	gen  int
 }
 
 type latencySummary struct {
-	hist string
-	last rune
+	bars string
 	cur  time.Duration
 	p95  time.Duration
 }
@@ -28,8 +29,6 @@ const (
 	latWarmN   = 3
 	latWarmDiv = 5
 	latGamma   = 0.75
-	latP95     = 95
-	latP95Sep  = " · p95 "
 )
 
 var (
@@ -38,10 +37,7 @@ var (
 	latPlaceholder = string(latRamp) + " ms"
 )
 
-func (m Model) latencyText() string {
-	if s, ok := m.latencySeries.summary(); ok {
-		return formatLatencySummary(s)
-	}
+func (m Model) latIdleText() string {
 	if m.latAnimOn {
 		return latClimb(m.latAnimP()) + " ms"
 	}
@@ -64,47 +60,59 @@ func (s *latencySeries) add(d time.Duration) {
 	if len(s.vals) > s.cap {
 		s.vals = s.vals[len(s.vals)-s.cap:]
 	}
+	s.sum = s.summarize()
+}
+
+// reset starts a new generation: responses stamped with an older gen (in
+// flight when the context switched) are dropped by recordResponseLatency.
+func (s *latencySeries) reset() {
+	s.vals = nil
+	s.sum = latencySummary{}
+	s.gen++
 }
 
 func (s *latencySeries) empty() bool {
 	return s == nil || len(s.vals) == 0
 }
 
+func (s *latencySeries) generation() int {
+	if s == nil {
+		return 0
+	}
+	return s.gen
+}
+
 func (s *latencySeries) summary() (latencySummary, bool) {
 	if s.empty() {
 		return latencySummary{}, false
 	}
+	return s.sum, true
+}
 
-	vals := slices.Clone(s.vals)
-	slices.Sort(vals)
-	lo, hi := latBounds(vals)
-
+// summarize scales the bars against the visible tail so recent latency shifts
+// keep their shape; p95 uses the whole window.
+func (s *latencySeries) summarize() latencySummary {
 	tail := s.vals
 	if len(tail) > latBarsCap {
 		tail = tail[len(tail)-latBarsCap:]
 	}
+	sorted := slices.Clone(tail)
+	slices.Sort(sorted)
+	lo, hi := latBounds(sorted)
+
 	bars := sparkline(tail, lo, hi)
 	if pad := latMinBars - len(tail); pad > 0 {
 		bars = latFill(pad) + bars
 	}
-	rs := []rune(bars)
-	last := len(rs) - 1
+
+	vals := slices.Clone(s.vals)
+	slices.Sort(vals)
 
 	return latencySummary{
-		hist: string(rs[:last]),
-		last: rs[last],
+		bars: bars,
 		cur:  s.vals[len(s.vals)-1],
-		p95:  percentile(vals, latP95),
-	}, true
-}
-
-func (s latencySummary) bars() string {
-	return s.hist + string(s.last)
-}
-
-func formatLatencySummary(s latencySummary) string {
-	return s.bars() + " " + formatLatencyDuration(s.cur) +
-		latP95Sep + formatLatencyDuration(s.p95)
+		p95:  percentile(vals, 95),
+	}
 }
 
 func latBounds(vals []time.Duration) (time.Duration, time.Duration) {

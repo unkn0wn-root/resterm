@@ -173,6 +173,11 @@ func responseTestStatusSummary(tests []scripts.TestResult, scriptErr error) (str
 }
 
 func (m *Model) recordResponseLatency(msg responseMsg) {
+	// A response can land after the series was reset (environment or
+	// workspace switch); don't let it contaminate the new context.
+	if msg.latGen != m.latencySeries.generation() {
+		return
+	}
 	if msg.response != nil {
 		m.latencySeries.add(msg.response.Duration)
 		return

@@ -43,6 +43,7 @@ type workflowState struct {
 	stepStart        time.Time
 	canceled         bool
 	cancelReason     string
+	latGen           int
 	pendingExplain   *xplain.Report
 	src              *restfile.Request
 }
@@ -491,6 +492,7 @@ func (m *Model) startWorkflowUIDrivenState(st *workflowState) tea.Cmd {
 	if st == nil {
 		return nil
 	}
+	st.latGen = m.latencySeries.generation()
 	m.workflowRun = st
 	m.statusPulseBase = ""
 	m.statusPulseFrame = -1
@@ -506,6 +508,7 @@ func (m *Model) startWorkflowCoreRun(pl *core.WorkflowPlan, opts httpclient.Opti
 	if rq == nil {
 		return nil
 	}
+	st.latGen = m.latencySeries.generation()
 	m.workflowRun = st
 	m.statusPulseBase = ""
 	m.statusPulseFrame = -1
@@ -642,6 +645,7 @@ func (m *Model) handleWorkflowReqDone(st *workflowState, evt core.ReqDone) tea.C
 	}
 	st.current = nil
 	msg := m.responseMsgFromRunState(evt.Result, st.origin == workflowOriginForEach)
+	msg.latGen = st.latGen
 	st.pendingExplain = msg.explain
 	m.recordResponseLatency(msg)
 	if isCanceled(evt.Result.Err) {
@@ -910,7 +914,7 @@ func (m *Model) executeWorkflowRequest(
 	m.setStatusMessage(statusMsg{text: message, level: statusInfo})
 	spin := m.startSending()
 
-	cmd := m.executeRequest(st.doc, clone, opts, "", vals, xv)
+	cmd := m.executeRequestGen(st.latGen, st.doc, clone, opts, "", vals, xv)
 	pulse := m.startStatusPulse()
 	return batchCmds([]tea.Cmd{cmd, pulse, spin})
 }

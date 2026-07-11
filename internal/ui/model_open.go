@@ -94,6 +94,7 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 	m.activeRequestKey = ""
 	m.activeRequestTitle = ""
 	m.doc = nil
+	m.latencySeries.reset()
 	m.editor.SetValue("")
 	m.editor.SetCursor(0)
 	m.markClean()
@@ -129,9 +130,12 @@ func (m *Model) applyOpenDirectory(dir string) tea.Cmd {
 
 func (m *Model) applyOpenFilePath(path string) tea.Cmd {
 	m.closeOpenModal()
-	dir := filepath.Dir(path)
-	m.workspaceRoot = dir
-	m.cfg.WorkspaceRoot = dir
+	if inside := m.workspaceRoot != "" && m.ensureWorkspaceFile(path); !inside {
+		m.latencySeries.reset()
+		dir := filepath.Dir(path)
+		m.workspaceRoot = dir
+		m.cfg.WorkspaceRoot = dir
+	}
 	m.cfg.FilePath = path
 	m.cfg.Recursive = m.workspaceRecursive
 

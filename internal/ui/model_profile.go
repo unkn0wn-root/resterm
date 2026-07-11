@@ -37,6 +37,7 @@ type profileState struct {
 	measuredEnd   time.Time
 	canceled      bool
 	cancelReason  string
+	latGen        int
 	skipped       bool
 	skipReason    string
 }
@@ -123,6 +124,7 @@ func (m *Model) startProfileRun(
 		return nil
 	}
 	state := profileStateFromPlan(pl, options, true, msgBase)
+	state.latGen = m.latencySeries.generation()
 	if requestNeedsUIDrivenRun(req) {
 		state.core = false
 		return m.startProfileUIDrivenState(state)
@@ -189,7 +191,7 @@ func (m *Model) executeProfileIteration() tea.Cmd {
 	m.statusPulseBase = progressText
 	m.showProfileProgress(state)
 
-	return m.executeRequest(state.doc, iterationReq, state.options, "", nil)
+	return m.executeRequestGen(state.latGen, state.doc, iterationReq, state.options, "", nil)
 }
 
 func (m *Model) handleProfileUIDrivenResponse(msg responseMsg) tea.Cmd {
@@ -243,6 +245,7 @@ func (m *Model) handleProfileIterDone(state *profileState, evt core.ProIterDone)
 		return nil
 	}
 	msg := m.responseMsgFromRunState(evt.Result, false)
+	msg.latGen = state.latGen
 	m.recordResponseLatency(msg)
 	return m.consumeProfileResult(state, msg, evt.Meta.At)
 }

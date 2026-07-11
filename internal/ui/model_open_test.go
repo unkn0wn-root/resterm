@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
@@ -159,5 +160,47 @@ func TestSubmitOpenPathOpensAuxiliaryWorkspaceFiles(t *testing.T) {
 				)
 			}
 		})
+	}
+}
+
+func TestApplyOpenFilePathResetsLatencyOnWorkspaceChange(t *testing.T) {
+	tmp := t.TempDir()
+	file := filepath.Join(tmp, "demo.http")
+	if err := os.WriteFile(file, []byte("GET https://example.com"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+
+	th := theme.DefaultTheme()
+	model := New(Config{Theme: &th})
+	model.latencySeries.add(120 * time.Millisecond)
+
+	model.applyOpenFilePath(file)
+	if _, ok := model.latencySeries.summary(); ok {
+		t.Fatal("expected latency reset when the workspace root changes")
+	}
+
+	model.latencySeries.add(120 * time.Millisecond)
+	other := filepath.Join(tmp, "other.http")
+	if err := os.WriteFile(other, []byte("GET https://example.com"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	model.applyOpenFilePath(other)
+	if _, ok := model.latencySeries.summary(); !ok {
+		t.Fatal("expected latency to survive a same-workspace file open")
+	}
+
+	nested := filepath.Join(tmp, "sub", "nested.http")
+	if err := os.MkdirAll(filepath.Dir(nested), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(nested, []byte("GET https://example.com"), 0o644); err != nil {
+		t.Fatalf("write file: %v", err)
+	}
+	model.applyOpenFilePath(nested)
+	if _, ok := model.latencySeries.summary(); !ok {
+		t.Fatal("expected latency to survive a nested file open")
+	}
+	if filepath.Clean(model.workspaceRoot) != filepath.Clean(tmp) {
+		t.Fatalf("expected workspace root to stay %q, got %q", tmp, model.workspaceRoot)
 	}
 }
