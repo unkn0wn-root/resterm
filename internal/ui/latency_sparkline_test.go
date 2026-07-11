@@ -104,10 +104,14 @@ func TestLatencySeriesSummaryScalesBarsToVisibleWindow(t *testing.T) {
 func TestLatencySeriesReset(t *testing.T) {
 	s := newLatencySeries(4)
 	s.add(time.Millisecond)
+	gen := s.gen
 	s.reset()
 
 	if _, ok := s.summary(); ok {
 		t.Fatal("expected no summary after reset")
+	}
+	if s.gen == gen {
+		t.Fatal("expected reset to start a new generation")
 	}
 }
 

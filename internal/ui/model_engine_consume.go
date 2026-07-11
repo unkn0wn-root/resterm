@@ -22,7 +22,9 @@ func (m *Model) handleRunReqMsg(msg runReqMsg) tea.Cmd {
 			diag.New(diag.ClassUI, "unexpected aggregate run result on request path"),
 		)
 	}
-	return m.handleResponseMessage(m.responseMsgFromRun(msg.res))
+	rm := m.responseMsgFromRun(msg.res)
+	rm.latGen = msg.latGen
+	return m.handleResponseMessage(rm)
 }
 
 func (m *Model) handleRunErr(err error) tea.Cmd {

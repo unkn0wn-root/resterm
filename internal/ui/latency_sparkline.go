@@ -11,6 +11,7 @@ type latencySeries struct {
 	vals []time.Duration
 	cap  int
 	sum  latencySummary
+	gen  int
 }
 
 type latencySummary struct {
@@ -62,13 +63,23 @@ func (s *latencySeries) add(d time.Duration) {
 	s.sum = s.summarize()
 }
 
+// reset starts a new generation: responses stamped with an older gen (in
+// flight when the context switched) are dropped by recordResponseLatency.
 func (s *latencySeries) reset() {
 	s.vals = nil
 	s.sum = latencySummary{}
+	s.gen++
 }
 
 func (s *latencySeries) empty() bool {
 	return s == nil || len(s.vals) == 0
+}
+
+func (s *latencySeries) generation() int {
+	if s == nil {
+		return 0
+	}
+	return s.gen
 }
 
 func (s *latencySeries) summary() (latencySummary, bool) {

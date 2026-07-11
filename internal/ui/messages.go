@@ -52,6 +52,7 @@ type responseMsg struct {
 	preview        bool
 	explain        *xplain.Report
 	historyDone    bool
+	latGen         int
 }
 
 type statusMsg struct {
@@ -105,8 +106,9 @@ type externalEditorMsg struct {
 }
 
 type runReqMsg struct {
-	res engine.RequestResult
-	err error
+	res    engine.RequestResult
+	err    error
+	latGen int
 }
 
 type runEvtMsg struct {

@@ -36,6 +36,7 @@ type execContext struct {
 	extraVals      map[string]rts.Value
 	extras         []map[string]string
 	runtimeSecrets []string
+	latGen         int
 
 	// Execution services and lifetime control.
 	client     *httpclient.Client
@@ -113,6 +114,7 @@ func newExecContext(
 		req:          req,
 		options:      options,
 		envName:      envName,
+		latGen:       m.latencySeries.generation(),
 		extraVals:    extraVals,
 		extras:       extras,
 		client:       client,
@@ -191,6 +193,7 @@ func (m *Model) executeRequest(
 		return nil
 	}
 	x := mergeRunExtras(extras...)
+	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(doc, req, envName, rqeng.ExecOptions{
 			Extra:      x,
@@ -208,7 +211,9 @@ func (m *Model) executeRequest(
 				environment: envName,
 			}
 		}
-		return m.responseMsgFromRunState(res, false)
+		msg := m.responseMsgFromRunState(res, false)
+		msg.latGen = gen
+		return msg
 	})
 }
 
@@ -238,6 +243,7 @@ func (m *Model) executeExplain(
 		return nil
 	}
 	x := mergeRunExtras(extras...)
+	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(doc, req, envName, rqeng.ExecOptions{
 			Extra:  x,
@@ -253,7 +259,9 @@ func (m *Model) executeExplain(
 				environment: envName,
 			}
 		}
-		return m.responseMsgFromRunState(res, false)
+		msg := m.responseMsgFromRunState(res, false)
+		msg.latGen = gen
+		return msg
 	})
 }
 
@@ -312,7 +320,9 @@ func (e *execContext) cmdInteractive() tea.Cmd {
 }
 
 func (e *execContext) runInteractive() tea.Msg {
-	return responseMsgFromExecResult(xexec.RunRequest(interactiveExecFlow{ctx: e}))
+	msg := responseMsgFromExecResult(xexec.RunRequest(interactiveExecFlow{ctx: e}))
+	msg.latGen = e.latGen
+	return msg
 }
 
 func (e *execContext) finish() {
@@ -327,6 +337,7 @@ func (e *execContext) baseResponse() responseMsg {
 		requestText:    "",
 		runtimeSecrets: append([]string(nil), e.runtimeSecrets...),
 		environment:    e.envName,
+		latGen:         e.latGen,
 	}
 }
 
