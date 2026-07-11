@@ -281,8 +281,10 @@ The next update replaces it once no process is still running the old version.
 ## Quick Configuration Overview
 
 - Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. Prefer JSON when you need multiple environments in one file.
-- Flags you probably reach for most are `--workspace`, `--file`, `--env`, `--env-file`, `--timeout`, `--insecure`, `--follow`, `--proxy`, `--recursive`, `--from-curl`, `--from-openapi`, and `--http-out`.
-- Config is stored at `$HOME/Library/Application Support/resterm`, `%APPDATA%\resterm`, or `$HOME/.config/resterm` and can be overridden with `RESTERM_CONFIG_DIR`.
+- Config is stored per OS and can be overridden with `RESTERM_CONFIG_DIR`:
+  - macOS: `~/Library/Application Support/resterm`
+  - Windows: `%APPDATA%\resterm`
+  - Linux/Unix: `~/.config/resterm`
 
 ## Collections
 
@@ -415,5 +417,5 @@ Customize colors and keybindings via `themes/*.toml` and `bindings.toml` or `bin
 
 ## Documentation
 
-The full reference, including request syntax, metadata, directive tables, scripting APIs, transport settings, and advanced workflows, lives in [`docs/resterm.md`](./docs/resterm.md).
-The command-line guide for `resterm run`, importers, collection tooling, and history maintenance lives in [`docs/cli.md`](./docs/cli.md).
+The full reference guide lives in [`docs/resterm.md`](./docs/resterm.md).
+The command-line guide lives in [`docs/cli.md`](./docs/cli.md).
