@@ -127,6 +127,7 @@ func (m *Model) reloadWorkspace() tea.Cmd {
 	m.rebuildNavigator(entries)
 	return batchCommands(
 		m.refreshGitStatusCmd(),
+		m.scheduleMockReload(0),
 		func() tea.Msg {
 			return statusMsg{text: "Workspace refreshed", level: statusSuccess}
 		},
@@ -164,6 +165,7 @@ func (m *Model) reparseDocument() tea.Cmd {
 	m.dirty = wasDirty
 	return batchCommands(
 		m.refreshGitStatusCmd(),
+		m.scheduleMockReload(0),
 		func() tea.Msg {
 			return statusMsg{text: "Document reloaded", level: statusInfo}
 		},
@@ -299,7 +301,7 @@ func (m *Model) updateEditorStyler(path string) {
 }
 
 func parseEditableDocument(path string, data []byte) *restfile.Document {
-	if !filesvc.IsRequestFile(path) {
+	if path != "" && !filesvc.IsRequestFile(path) {
 		return &restfile.Document{Path: path, Raw: append([]byte(nil), data...)}
 	}
 	return parser.Parse(path, data)

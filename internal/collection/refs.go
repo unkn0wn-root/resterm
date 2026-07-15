@@ -51,6 +51,11 @@ func collectRefs(doc *restfile.Document) []ref {
 			}
 		}
 	}
+	for _, mock := range doc.Mocks {
+		if mock != nil {
+			rs = addRef(rs, mock.Response.Body.FilePath, RoleAsset)
+		}
+	}
 	return rs
 }
 

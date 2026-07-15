@@ -195,6 +195,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		cmds = append(cmds, m.nextFileWatchMsgCmd())
+	case mockReloadResultMsg:
+		if cmd := m.handleMockReload(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case mockReloadTickMsg:
+		if cmd := m.handleMockReloadTick(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case mockServerDoneMsg:
+		if cmd := m.handleMockServerDone(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+	case mockServerClosedMsg:
+		if cmd := m.handleMockServerClosed(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case wsConsoleResultMsg:
 		m.handleConsoleResult(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
@@ -209,6 +225,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			}
+		}
+		return m, batchCommands(cmds...)
+	}
+
+	if m.showMockLogs {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			return m, batchCommands(append(cmds, m.handleMockLogsKey(keyMsg))...)
 		}
 		return m, batchCommands(cmds...)
 	}
@@ -854,10 +877,7 @@ func (m *Model) revealLineRangeInEditor(r restfile.LineRange) {
 		return
 	}
 	start := r.Start - 1
-	end := r.End - 1
-	if end < start {
-		end = start
-	}
+	end := max(r.End-1, start)
 	h := m.editor.Height()
 	if h <= 0 {
 		h = 1
@@ -1178,6 +1198,10 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		return m.saveResponseBody(), true
 	case bindings.ActionOpenResponseExternally:
 		return m.openResponseExternally(), true
+	case bindings.ActionToggleMockServer:
+		return m.toggleMockServer(), true
+	case bindings.ActionCaptureMockResponse:
+		return m.captureMockResponse(), true
 	default:
 		return nil, false
 	}
@@ -1233,7 +1257,8 @@ func (m *Model) modalCapturesGlobalKeys() bool {
 		m.showHistoryPreview,
 		m.showRequestDetails,
 		m.showLayoutSaveModal,
-		m.showFileChangeModal:
+		m.showFileChangeModal,
+		m.showMockLogs:
 		return true
 	default:
 		return false

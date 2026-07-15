@@ -99,6 +99,31 @@ type BodySource struct {
 	Options  BodyOptions
 }
 
+// Scenarios that share a method and path merge into one route when compiled.
+type Mock struct {
+	Title     string
+	Name      string
+	Method    string
+	Path      string
+	Latency   time.Duration
+	Default   bool
+	Match     MockMatch
+	Response  MockResponse
+	LineRange LineRange
+}
+
+type MockMatch struct {
+	Query   map[string][]string
+	Headers map[string][]string
+	JSON    []byte
+}
+
+type MockResponse struct {
+	Status  int
+	Headers http.Header
+	Body    BodySource
+}
+
 type BodyOptions struct {
 	ExpandTemplates bool
 	ForceInline     bool
@@ -395,6 +420,7 @@ type Document struct {
 	Settings  map[string]string
 	Uses      []UseSpec
 	Requests  []*Request
+	Mocks     []*Mock
 	Workflows []Workflow
 	Errors    []ParseError
 	Warnings  []ParseDiagnostic
@@ -481,6 +507,9 @@ type ParseError struct {
 	Line    int
 	Column  int
 	Message string
+	// Mock marks @mock/@match errors so the mock compiler can reject a
+	// document without matching on message text.
+	Mock bool
 }
 
 type ParseDiagnostic = ParseError

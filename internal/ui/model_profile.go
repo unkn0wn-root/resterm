@@ -406,7 +406,7 @@ func evaluateProfileOutcome(msg responseMsg) (bool, string) {
 		if !test.Passed {
 			reason := test.Name
 			if strings.TrimSpace(test.Message) != "" {
-				reason = fmt.Sprintf("%s – %s", test.Name, test.Message)
+				reason = fmt.Sprintf("%s - %s", test.Name, test.Message)
 			}
 			return false, fmt.Sprintf("Test failed: %s", reason)
 		}
@@ -1022,7 +1022,7 @@ func (m *Model) buildProfileHistoryEntry(
 		Status:         status,
 		StatusCode:     code,
 		Duration:       dur,
-		BodySnippet:    "<profile run – see profileResults>",
+		BodySnippet:    "<profile run - see profileResults>",
 		RequestText:    text,
 		Description:    strings.TrimSpace(req.Metadata.Description),
 		Tags:           normalizedTags(req.Metadata.Tags),

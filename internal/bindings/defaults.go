@@ -56,6 +56,8 @@ var (
 	ActionScrollResponseBottom   ActionID = "scroll_response_bottom"
 	ActionSaveResponseBody       ActionID = "save_response_body"
 	ActionOpenResponseExternally ActionID = "open_response_externally"
+	ActionToggleMockServer       ActionID = "toggle_mock_server"
+	ActionCaptureMockResponse    ActionID = "capture_mock_response"
 )
 
 type definition struct {
@@ -116,6 +118,8 @@ var definitions = []definition{
 	def(ActionScrollResponseBottom, false, "shift+g"),
 	def(ActionSaveResponseBody, false, "g shift+s"),
 	def(ActionOpenResponseExternally, false, "g shift+e"),
+	def(ActionToggleMockServer, false, "g shift+m"),
+	def(ActionCaptureMockResponse, false, "g a"),
 }
 
 var definitionLookup = func() map[ActionID]definition {

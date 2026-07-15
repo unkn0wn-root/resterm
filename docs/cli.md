@@ -1,11 +1,12 @@
 # Resterm CLI
 
-Resterm has two commandline entry points:
+Resterm has three command-line entry points:
 
 - `resterm` opens the interactive TUI and also exposes import, update, history, and collection tooling.
 - `resterm run` executes the same `.http` / `.rest` files headlessly without opening the TUI.
+- `resterm mock` serves mock responses declared in those files.
 
-Use this guide for commandline behavior. For request syntax, directives, workflows, auth, and UI behavior, see [`resterm.md`](./resterm.md). For RestermScript, see [`restermscript.md`](./restermscript.md).
+Use this guide for command-line behavior. For request syntax, directives, workflows, auth, and UI behavior, see [`resterm.md`](./resterm.md). For RestermScript, see [`restermscript.md`](./restermscript.md).
 
 ## Command Overview
 
@@ -13,6 +14,7 @@ Use this guide for commandline behavior. For request syntax, directives, workflo
 | --- | --- |
 | `resterm [file]` | Open the TUI in the current workspace or a specific request file. |
 | `resterm run [flags] <file\|->` | Execute request files, workflows, compare runs, or profile runs without the TUI. |
+| `resterm mock [flags] [file\|dir]` | Serve and optionally hot-reload `# @mock` response blocks. |
 | `resterm init [dir]` | Bootstrap a new Resterm workspace. |
 | `resterm collection ...` | Export, import, pack, and unpack portable request bundles. |
 | `resterm history ...` | Export, import, inspect, compact, and verify persisted history. |
@@ -57,6 +59,7 @@ These flags belong to the top-level `resterm` command.
 | `--openapi-resolve-refs` | `-or` | Resolve external `$ref` references during OpenAPI import. |
 | `--openapi-include-deprecated` | `-od` | Include deprecated operations when generating requests. |
 | `--openapi-server-index <n>` | `-os <n>` | Preferred server index from the spec to use as the base URL. |
+| `--openapi-mode <mode>` |  | Generate `requests` (default), `mocks`, or `both`. |
 
 ## `resterm run`
 
@@ -270,9 +273,31 @@ Top-level flags also expose a few CLI-only workflows:
 | `--openapi-resolve-refs` | Resolve external `$ref` values during OpenAPI import. |
 | `--openapi-include-deprecated` | Keep deprecated operations during OpenAPI generation. |
 | `--openapi-server-index <n>` | Pick the preferred server entry from the OpenAPI document. |
+| `--openapi-mode <mode>` | Generate requests, mock responses, or both (`requests`, `mocks`, `both`). |
 | `--check-update` | Check for a newer release and exit. |
 | `--update` | Download and install the latest release when supported. |
 | `--version` | Print version, commit, build date, and checksum. |
+
+## `resterm mock`
+
+Serve mock response blocks from one request file or a workspace:
+
+```bash
+resterm mock ./api.http
+resterm mock --recursive --addr 127.0.0.1:9090 ./requests
+```
+
+| Flag | Short | Description |
+| --- | --- | --- |
+| `--addr <host:port>` | `-a` | Listen address (default `127.0.0.1:8080`). |
+| `--cors <policy>` |  | `auto`, `off`, `*`, or a comma-separated origin allowlist. |
+| `--recursive` | `-r` | Scan nested workspace directories. |
+| `--watch` | `-w` | Reload source files and referenced body fixtures (enabled by default). |
+| `--quiet` | `-q` | Hide per-request access summaries. |
+
+`--cors=auto` allows browser clients on loopback and disables CORS for non-loopback binds. Binding to a non-loopback address prints an exposure warning. Reloads are atomic: invalid edits are reported and the last valid route set stays live. Stop the server with `Ctrl+C` or `SIGTERM`. In-flight requests get a short grace period to finish.
+
+See [Mock Servers](./resterm.md#mock-servers) for the response-block syntax, matching rules, selectors, and TUI commands.
 
 ## `resterm init`
 
@@ -328,6 +353,7 @@ Generate a collection from OpenAPI:
 resterm \
   --from-openapi openapi.yml \
   --http-out openapi.http \
+  --openapi-mode both \
   --openapi-resolve-refs \
   --openapi-server-index 1
 ```
@@ -340,6 +366,8 @@ resterm --from-openapi https://petstore3.swagger.io/api/v3/openapi.json --http-o
 
 For a URL spec, relative `servers` URLs are resolved against it, and `--openapi-resolve-refs`
 follows external `$ref`s over HTTP. `--insecure` and `--proxy` apply to the fetch.
+
+Mock generation emits every concrete OpenAPI response status and media example. Named examples become named scenarios, and when a response has no example Resterm samples its schema. Range responses such as `2XX` and `default` are skipped. External examples and binary example bodies cannot produce a deterministic inline mock, so they are dropped with a diagnostic.
 
 ## Related Docs
 

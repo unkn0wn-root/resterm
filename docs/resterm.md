@@ -8,6 +8,7 @@
 - [Workspaces & Files](#workspaces--files)
 - [Variables and Environments](#variables-and-environments)
 - [Request File Anatomy](#request-file-anatomy)
+- [Mock Servers](#mock-servers)
 - [Compare Runs](#compare-runs)
 - [Workflows](#workflows)
 - [Streaming (SSE & WebSocket)](#streaming-sse--websocket)
@@ -40,7 +41,7 @@
 go install github.com/unkn0wn-root/resterm/cmd/resterm@latest
 ```
 
-This requires Go 1.24 or newer. The binary will be installed in `$(go env GOPATH)/bin`.
+This requires Go 1.25 or newer. The binary will be installed in `$(go env GOPATH)/bin`.
 
 ---
 
@@ -154,6 +155,8 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 | Load full Raw dump (hex) | `g+Shift+D` |
 | Save response body / open externally | `g+Shift+S` / `g+Shift+E` |
 | Run compare sweep (`@compare` or `--compare` targets) | `g+c` |
+| Start/stop workspace mock server | `g+Shift+M` |
+| Capture focused HTTP response as a mock | `g+a` |
 | Navigator filter | `/` to focus; type to search files/requests/tags; `Esc` clears filter and chips |
 | Navigator: toggle method filter for selected request | `m` (repeat to switch/clear) |
 | Navigator: toggle tag filters from selected item | `t` (repeat to toggle) |
@@ -174,7 +177,7 @@ Once the files exist, run `resterm` in the same directory to open the workspace.
 
 The editor supports familiar Vim motions (`h`, `j`, `k`, `l`, `w`, `b`, `gg`, `G`, etc.), insert entries (`i`, `a`, `I`, `A`, `o`, `O`; `I` moves to the first non-blank character), visual selections with `v` / `V`, yank and delete/change operations, undo/redo (`u` / `Ctrl+r`), and a search palette (`Shift+F` or `/`, toggle regex with `Ctrl+R` and `n` moves cursor forward and `p` backwards).
 
-Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
+Press `:` from normal mode panes to open a Vim-style command line. Supported actions include `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help`, `:noh`, and the `:mock` command family.
 
 ### Editor completions (IntelliSense)
 
@@ -244,6 +247,8 @@ send_request = ["ctrl+enter", "cmd+enter"]
 | `explain_request` | Prepare an Explain preview for the active request without sending it. | `g x` |
 | `cancel_run` | Cancel the in-flight request, compare, profile, or workflow run. | `ctrl+c` |
 | `copy_response_tab` | Copy the focused Pretty/Raw/Headers response tab to the clipboard. | `ctrl+shift+c`, `g y` |
+| `toggle_mock_server` | Start or stop the workspace mock server. | `g shift+m` |
+| `capture_mock_response` | Append the focused live/pinned HTTP response as a mock block. | `g a` |
 
 | Action ID | Description | Default bindings | Repeatable |
 | --- | --- | --- | --- |
@@ -640,6 +645,78 @@ Troubleshooting:
 | `@setting` | `# @setting key value` | Generic settings (transport/TLS today: `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`, `http-*`, `grpc-*`). |
 | `@settings` | `# @settings key1=val1 key2=val2 ...` | Batch settings on one line; supports the same keys as `@setting` and future prefixes. |
 | `@timeout` | `# @timeout 5s` | Equivalent to `@setting timeout 5s`. |
+
+## Mock Servers
+
+Mock scenarios live beside requests in ordinary `.http` / `.rest` files. A scenario starts after a `###` separator, declares its route with `@mock`, and contains a raw HTTP response:
+
+```http
+### Payment accepted
+# @mock method=POST path=/payments name=accepted default=true latency=150ms
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+X-Provider: sandbox
+
+{"id":"pay_123","status":"pending"}
+```
+
+Run one file or a workspace with `resterm mock`:
+
+```bash
+resterm mock payments.http
+resterm mock --recursive --addr 127.0.0.1:9090 .
+```
+
+### Route and response syntax
+
+- `method` and an origin-form `path` are required. Paths may be exact (`/health`), use segment wildcards (`/users/{id}`), or end in a remainder wildcard (`/assets/{path...}`). A trailing slash is significant.
+- `name` is an optional scenario selector containing letters, digits, `.`, `_`, or `-`.
+- `default=true` marks the fallback for a route. A route can have at most one default, and a default cannot also have `@match` conditions.
+- `latency` accepts a non-negative Go duration such as `150ms` or `2s`. Waiting stops when the client cancels the request.
+- The response status must be `200` through `599`. Repeated headers are preserved. Connection/framing headers such as `Content-Length`, `Transfer-Encoding`, and `Connection` are managed by the server and rejected in source files.
+- The body is literal text through the next `###`, or a single `< ./fixtures/body.json` file reference. Relative fixtures resolve from the declaring request file and participate in hot reload, but must remain within the selected request file's directory or workspace root. Absolute paths and paths or symlinks that escape that root are rejected.
+- `HEAD` returns the selected status and headers without a body. `204` and `304` scenarios must not declare a body.
+
+### Conditional scenarios
+
+Add `@match` before the raw status line to select a response by query values, request headers, or a JSON body subset:
+
+```http
+### Declined payment
+# @mock method=POST path=/payments name=declined
+# @match query={"mode":"decline"} headers={"X-Tenant":"demo"} json={"amount":0}
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{"error":"amount must be positive"}
+```
+
+Query and header objects accept a string or an array of strings per key. Only the declared keys are constrained, and their values must match exactly, order included. Header names are case-insensitive. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
+
+Scenario selection is deterministic:
+
+1. `X-Resterm-Mock: <name>` selects a named scenario directly.
+2. `X-Resterm-Mock-Status: <code>` limits candidates to a response status. It can be combined with the name selector.
+3. Otherwise, conditional scenarios are checked in file/path order, then the explicit default, then the first unconditional scenario.
+4. A missing route, selector, or match returns an `application/problem+json` `404` response.
+
+### CORS, reload, and request logs
+
+On loopback, CLI `--cors=auto` enables wildcard CORS and automatic preflight responses. On a public bind it disables CORS and prints an exposure warning. Use `--cors=off`, `--cors='*'`, or an explicit comma-separated origin allowlist to override it. A declared `OPTIONS` mock takes precedence over automatic preflight handling.
+
+Watching is enabled by default. Source and fixture changes compile into a new immutable route set and swap atomically. A parse or compile error leaves the last valid routes serving. Access logs keep the latest 200 entries.
+
+Inside the TUI:
+
+- `g Shift+M` toggles the mock server at the remembered session address (initially `127.0.0.1:8080`).
+- `:mock`, `:mock status`, `:mock start [host:port]`, `:mock stop`, and `:mock restart [host:port]` manage it.
+- `:mock logs` opens the request log, where `c` clears it. `:mock clear` clears it without opening the modal.
+- The status bar shows the active address, route count, call count, and reload-error marker.
+- The active editor buffer overlays its on-disk file during reload, so unsaved mock edits can be tested. Invalid edits keep the last valid routes.
+
+Press `g a` or run `:mock capture` to append the focused live or pinned HTTP response as a mock block. Capture keeps the status, ordinary headers, raw text body, method, and URL path. It deliberately skips query/header/body matchers and latency. The new block stays unsaved and the editor jumps to it for review. Persisted history entries, binary or non-UTF-8 bodies, bodies over 4 MiB, parser-sized overlong lines, and bodies containing a `###` separator are not captured inline. Check captured headers and bodies for credentials or personal data before saving.
+
+OpenAPI imports can create the same blocks with `--openapi-mode mocks` or combine requests and mocks with `--openapi-mode both`.
 
 ### RestermScript (RST)
 
@@ -1194,24 +1271,24 @@ Return values from `set*` helpers are ignored; side effects apply to the outgoin
 
 Objects:
 
-- `client.test(name, fn)` – registers a named test. Exceptions or manual failures mark the test as failed.
-- `tests.assert(condition, message)` – add a pass/fail entry.
-- `tests.fail(message)` – explicit failure.
+- `client.test(name, fn)` - registers a named test. Exceptions or manual failures mark the test as failed.
+- `tests.assert(condition, message)` - add a pass/fail entry.
+- `tests.fail(message)` - explicit failure.
 - `response`
   - `status`, `statusCode`, `url`, `duration`
   - `body()` (raw string)
   - `json()` (parsed JSON or `null`)
   - `headers.get(name)`, `headers.has(name)`, `headers.all` (lowercase map)
 - `stream`
-  - `enabled()` – returns `true` when the current response is an SSE or WebSocket transcript.
-  - `kind()` – returns `"sse"` or `"websocket"`.
-  - `summary()` – copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.).
-  - `events()` – array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
-  - `onEvent(fn)` – registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
-  - `onClose(fn)` – registers a callback invoked once with the summary after all events replay.
-- `vars` – same API as pre-request scripts (allows reading request/file/global values and writing request-scope values for assertions).
-- `vars.global` – identical to pre-request usage; changes persist after the script.
-- `console.*` – same placeholders as above.
+  - `enabled()` - returns `true` when the current response is an SSE or WebSocket transcript.
+  - `kind()` - returns `"sse"` or `"websocket"`.
+  - `summary()` - copy of the transcript summary (`sentCount`, `receivedCount`, `eventCount`, `duration`, etc.).
+  - `events()` - array of event objects (`data`/`comment` for SSE, `type`/`text`/`base64`/`direction` for WebSockets).
+  - `onEvent(fn)` - registers a callback invoked for each event after the script runs; useful for assertions over the entire stream.
+  - `onClose(fn)` - registers a callback invoked once with the summary after all events replay.
+- `vars` - same API as pre-request scripts (allows reading request/file/global values and writing request-scope values for assertions).
+- `vars.global` - identical to pre-request usage; changes persist after the script.
+- `console.*` - same placeholders as above.
 
 Example test block:
 
@@ -1546,7 +1623,7 @@ Resterm now has a dedicated CLI guide: [`cli.md`](./cli.md).
 Use it for:
 
 - `resterm run` selectors, formats, body-only output, artifacts, persisted state, and exit codes
-- `resterm init`, `collection`, and `history` subcommands
+- `resterm init`, `mock`, `collection`, and `history` subcommands
 - shared execution flags such as `--workspace`, `--env`, `--timeout`, `--proxy`, and `--compare`
 - curl and OpenAPI import flows
 
@@ -1555,6 +1632,7 @@ Common entry points:
 ```bash
 resterm
 resterm run ./requests.http
+resterm mock ./mocks.http
 resterm init ./api-tests
 resterm history stats
 resterm collection export --workspace ./api --out ./shared/api-bundle
@@ -1682,6 +1760,7 @@ Inside Resterm, press `g` then `t` (or `Ctrl+Alt+T`) and pick “Aurora” for a
 Explore `_examples/` for ready-to-run:
 
 - `basic.http` - simple GET/POST with bearer auth.
+- `mocks.http` - mock routes, variants, matchers, selectors, latency, and fixture bodies.
 - `scopes.http` - demonstrates global/file/request captures.
 - `scripts.http` - pre-request and test scripting patterns.
 - `xml.http` - XML bodies and explicit inline angle-prefixed text.

@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -62,20 +64,29 @@ func (b *Builder) Generate(
 
 	b.globals = make(map[string]restfile.Variable)
 	b.warnings = nil
+	mode, err := openapi.ParseGenerationMode(string(opts.Mode))
+	if err != nil {
+		return nil, err
+	}
+	includeRequests := mode == openapi.GenerationRequests || mode == openapi.GenerationBoth
+	includeMocks := mode == openapi.GenerationMocks || mode == openapi.GenerationBoth
 
 	baseVar := opts.BaseURLVariable
 	if strings.TrimSpace(baseVar) == "" {
 		baseVar = openapi.DefaultBaseURLVariable
 	}
 
-	baseURL := selectBaseURL(spec, opts.PreferredServerIndex)
 	doc := &restfile.Document{}
-	if baseURL != "" {
-		doc.Variables = append(doc.Variables, restfile.Variable{
-			Name:  baseVar,
-			Value: baseURL,
-			Scope: restfile.ScopeFile,
-		})
+	baseURL := ""
+	if includeRequests {
+		baseURL = selectBaseURL(spec, opts.PreferredServerIndex)
+		if baseURL != "" {
+			doc.Variables = append(doc.Variables, restfile.Variable{
+				Name:  baseVar,
+				Value: baseURL,
+				Scope: restfile.ScopeFile,
+			})
+		}
 	}
 
 	for _, op := range spec.Operations {
@@ -88,11 +99,16 @@ func (b *Builder) Generate(
 		if op.Deprecated && !opts.IncludeDeprecated {
 			continue
 		}
-		req, err := b.buildRequest(op, spec, baseVar, baseURL)
-		if err != nil {
-			return nil, err
+		if includeRequests {
+			req, err := b.buildRequest(op, spec, baseVar, baseURL)
+			if err != nil {
+				return nil, err
+			}
+			doc.Requests = append(doc.Requests, req)
 		}
-		doc.Requests = append(doc.Requests, req)
+		if includeMocks {
+			doc.Mocks = append(doc.Mocks, b.buildMocks(op)...)
+		}
 	}
 
 	if len(b.globals) > 0 {
@@ -152,7 +168,7 @@ func (b *Builder) registerGlobal(name, value string, secret bool) {
 
 func (b *Builder) noteWarning(message string) {
 	trimmed := strings.TrimSpace(message)
-	if trimmed == "" {
+	if trimmed == "" || slices.Contains(b.warnings, trimmed) {
 		return
 	}
 	b.warnings = append(b.warnings, trimmed)
@@ -255,8 +271,22 @@ func (rb *requestBuilder) buildParamBinding(param model.Parameter, varName strin
 	style := normPSty(param)
 	explode := resolveParamExplode(param, style)
 	kind := rb.inferSchemaKind(param)
-	sample := rb.parameterSample(param, kind)
-	serialized := rb.serializeParamValue(param, kind, style, explode, sample)
+	serialized := ""
+	if param.Example.Serialized {
+		value, ok := param.Example.Value.(string)
+		if ok {
+			serialized = value
+		} else {
+			rb.builder.noteWarning(fmt.Sprintf(
+				"parameter %s has a serialized example of type %T; example ignored",
+				param.Name,
+				param.Example.Value,
+			))
+		}
+	} else {
+		sample := rb.parameterSample(param, kind)
+		serialized = rb.serializeParamValue(param, kind, style, explode, sample)
+	}
 	return paramBinding{
 		Param:           param,
 		VarName:         varName,
@@ -284,11 +314,11 @@ func (rb *requestBuilder) inferSchemaKind(param model.Parameter) schemaKind {
 }
 
 func (rb *requestBuilder) parameterSample(param model.Parameter, kind schemaKind) any {
-	if param.Example.HasValue {
+	if param.Example.HasValue && param.Example.Value != nil {
 		return param.Example.Value
 	}
 	if param.Schema != nil {
-		if value, ok := rb.builder.samples.FromSchema(param.Schema); ok {
+		if value, ok := rb.builder.samples.sample(param.Schema, sampleRequest); ok {
 			return value
 		}
 	}
@@ -427,22 +457,58 @@ func (rb *requestBuilder) applyRequestBody(req *restfile.Request) {
 		return
 	}
 
-	content, ok := rb.resolveMediaSample(media)
+	example, ok := rb.resolveMediaExample(media)
 	if !ok {
 		return
 	}
+	contentType, validContentType := safeContentType(media.ContentType)
+	if !validContentType {
+		rb.builder.noteWarning(fmt.Sprintf(
+			"request %s has an invalid content type %q; Content-Type was omitted",
+			rb.requestName(),
+			media.ContentType,
+		))
+	}
 
-	text := stringifySample(content, true)
+	text := ""
+	switch {
+	case example.Serialized:
+		value, ok := example.Value.(string)
+		if !ok {
+			rb.builder.noteWarning(fmt.Sprintf(
+				"request %s has a serialized body example of type %T; example ignored",
+				rb.requestName(),
+				example.Value,
+			))
+			return
+		}
+		text = value
+	case example.Value == nil && isJSONMedia(contentType):
+		text = "null"
+	case example.Value == nil:
+		return
+	default:
+		text = stringifySample(example.Value, true)
+	}
+	text, err := checkedBodyText(text)
+	if err != nil {
+		rb.builder.noteWarning(fmt.Sprintf(
+			"request %s has a body example that cannot be represented; example ignored: %v",
+			rb.requestName(),
+			err,
+		))
+		return
+	}
 	if !strings.HasSuffix(text, "\n") {
 		text += "\n"
 	}
 	req.Body = restfile.BodySource{
 		Text:     text,
-		MimeType: media.ContentType,
+		MimeType: contentType,
 	}
 
-	if req.Headers.Get("Content-Type") == "" && media.ContentType != "" {
-		req.Headers.Set("Content-Type", media.ContentType)
+	if req.Headers.Get("Content-Type") == "" && contentType != "" {
+		req.Headers.Set("Content-Type", contentType)
 	}
 }
 
@@ -450,8 +516,20 @@ func (rb *requestBuilder) applyAcceptHeader(req *restfile.Request) {
 	if req.Headers.Get("Accept") != "" {
 		return
 	}
-	contentType, ok := selectResponseContentType(rb.op.Responses)
+	rawContentType, ok := selectResponseContentType(rb.op.Responses)
 	if !ok {
+		return
+	}
+	contentType, valid := safeContentType(rawContentType)
+	if !valid {
+		rb.builder.noteWarning(fmt.Sprintf(
+			"request %s has an invalid response content type %q; Accept was omitted",
+			rb.requestName(),
+			rawContentType,
+		))
+		return
+	}
+	if contentType == "" {
 		return
 	}
 	req.Headers.Set("Accept", contentType)
@@ -662,14 +740,15 @@ func (rb *requestBuilder) uniqueVariableName(location model.ParameterLocation, n
 	return fmt.Sprintf("%s_%d", base, count+1)
 }
 
-func (rb *requestBuilder) resolveMediaSample(media *model.MediaType) (any, bool) {
-	if media.Example.HasValue {
-		return media.Example.Value, true
+func (rb *requestBuilder) resolveMediaExample(media *model.MediaType) (model.Example, bool) {
+	if len(media.Examples) > 0 && media.Examples[0].HasValue {
+		return media.Examples[0], true
 	}
-	if media.Schema != nil {
-		return rb.builder.samples.FromSchema(media.Schema)
+	value, ok := rb.builder.samples.sample(media.Schema, sampleRequest)
+	if !ok {
+		return model.Example{}, false
 	}
-	return nil, false
+	return model.Example{Value: value, HasValue: true}, true
 }
 
 func normPSty(param model.Parameter) pSty {
@@ -745,9 +824,7 @@ func ensureStringMap(value any) map[string]string {
 	result := make(map[string]string)
 	switch v := value.(type) {
 	case map[string]string:
-		for key, val := range v {
-			result[key] = val
-		}
+		maps.Copy(result, v)
 	case map[string]any:
 		for key, val := range v {
 			result[key] = fmt.Sprint(val)
@@ -973,8 +1050,8 @@ func deriveRequestName(op model.Operation) string {
 	}
 	b := strings.Builder{}
 	b.WriteString(strings.ToLower(string(op.Method)))
-	segments := strings.Split(strings.Trim(op.Path, "/"), "/")
-	for _, segment := range segments {
+	segments := strings.SplitSeq(strings.Trim(op.Path, "/"), "/")
+	for segment := range segments {
 		if segment == "" {
 			continue
 		}

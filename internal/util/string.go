@@ -47,6 +47,15 @@ func FirstTrimmed(values ...string) string {
 	return ""
 }
 
+func AllBlank(lines []string) bool {
+	for _, line := range lines {
+		if strings.TrimSpace(line) != "" {
+			return false
+		}
+	}
+	return true
+}
+
 func TrimLeadingOnce(s string) string {
 	if s == "" {
 		return s

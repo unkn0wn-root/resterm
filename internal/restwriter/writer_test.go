@@ -21,7 +21,7 @@ func TestRenderSettings(t *testing.T) {
 		}},
 	}
 
-	out := Render(doc, Options{})
+	out := mustRender(t, doc)
 	if !strings.Contains(out, "# @setting timeout 2s") {
 		t.Fatalf("expected file setting in output: %q", out)
 	}
@@ -45,7 +45,7 @@ func TestRenderCommandAuth(t *testing.T) {
 		}},
 	}
 
-	out := Render(doc, Options{})
+	out := mustRender(t, doc)
 	if !strings.Contains(
 		out,
 		`# @auth command argv=["gh","auth","token"] cache_key=github timeout=5s`,
@@ -69,7 +69,7 @@ func TestRenderBodyOptions(t *testing.T) {
 		}},
 	}
 
-	out := Render(doc, Options{})
+	out := mustRender(t, doc)
 	if !strings.Contains(out, "# @body expand") {
 		t.Fatalf("expected body expand directive in output: %q", out)
 	}
@@ -89,7 +89,7 @@ func TestRenderAmbiguousInlineBodyAddsDirective(t *testing.T) {
 		}},
 	}
 
-	out := Render(doc, Options{})
+	out := mustRender(t, doc)
 	if !strings.Contains(out, "# @body inline") {
 		t.Fatalf("expected body inline directive in output: %q", out)
 	}
@@ -100,4 +100,13 @@ func TestFormatAuthParamPrefersSingleQuotesForJSONLikeValues(t *testing.T) {
 	if got != `argv='["tool","arg with space"]'` {
 		t.Fatalf("unexpected formatted auth param %q", got)
 	}
+}
+
+func mustRender(t *testing.T, doc *restfile.Document) string {
+	t.Helper()
+	out, err := Render(doc, Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
 }

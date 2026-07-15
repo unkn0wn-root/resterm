@@ -25,6 +25,8 @@ type documentBuilder struct {
 	doc                  *restfile.Document
 	inRequest            bool
 	request              *requestBuilder
+	mock                 *mockBuilder
+	pendingTitle         string
 	fileVars             []restfile.Variable
 	globalVars           []restfile.Variable
 	fileSettings         map[string]string
@@ -74,6 +76,11 @@ func (b *documentBuilder) addWarning(line int, message string) {
 
 func (b *documentBuilder) processLine(lineNumber int, line string) {
 	trimmed := strings.TrimSpace(line)
+
+	if b.mock != nil {
+		b.handleMockBlockLine(lineNumber, line, trimmed)
+		return
+	}
 
 	if b.inBlock {
 		if b.handleBlockComment(lineNumber, line, trimmed) {
@@ -165,11 +172,13 @@ func (b *documentBuilder) handleSeparator(lineNumber int, trimmed string) bool {
 	if !strings.HasPrefix(trimmed, "###") {
 		return false
 	}
+	b.flushMock()
 	if b.workflow != nil {
 		b.flushWorkflow(lineNumber - 1)
 	}
 	b.flushRequest(lineNumber - 1)
 	b.flushFileSettings()
+	b.pendingTitle = strings.TrimSpace(strings.TrimPrefix(trimmed, "###"))
 	return true
 }
 
@@ -318,9 +327,9 @@ func (b *documentBuilder) handleHeaderLine(line string) bool {
 	if !b.inRequest || !b.request.http.HasMethod() || b.request.http.HeaderDone() {
 		return false
 	}
-	if idx := strings.Index(line, ":"); idx != -1 {
-		headerName := strings.TrimSpace(line[:idx])
-		headerValue := strings.TrimSpace(line[idx+1:])
+	if before, after, ok := strings.Cut(line, ":"); ok {
+		headerName := strings.TrimSpace(before)
+		headerValue := strings.TrimSpace(after)
 		if headerName != "" {
 			b.request.http.AddHeader(headerName, headerValue)
 		}
@@ -772,6 +781,7 @@ func (b *documentBuilder) flushWorkflow(line int) {
 }
 
 func (b *documentBuilder) finish() {
+	b.flushMock()
 	b.flushRequest(0)
 	b.flushWorkflow(0)
 	if len(b.fileSettings) > 0 {

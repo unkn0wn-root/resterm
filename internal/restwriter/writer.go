@@ -1,7 +1,9 @@
 package restwriter
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -9,10 +11,14 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/util"
 )
 
 type Options struct {
@@ -28,7 +34,10 @@ func WriteDocument(ctx context.Context, doc *restfile.Document, dst string, opts
 		return errors.New("writer: destination path is empty")
 	}
 
-	content := Render(doc, opts)
+	content, err := Render(doc, opts)
+	if err != nil {
+		return err
+	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -70,7 +79,7 @@ func writeFile(dst, content string, overwrite bool) error {
 	return nil
 }
 
-func Render(doc *restfile.Document, opts Options) string {
+func Render(doc *restfile.Document, opts Options) (string, error) {
 	var b strings.Builder
 
 	renderHeader(&b, opts.HeaderComment)
@@ -93,8 +102,181 @@ func Render(doc *restfile.Document, opts Options) string {
 		renderRequest(&b, req)
 		idx++
 	}
+	for _, mock := range doc.Mocks {
+		if mock == nil {
+			continue
+		}
+		if idx > 0 {
+			b.WriteString("\n")
+		}
+		if err := renderMock(&b, mock); err != nil {
+			return "", err
+		}
+		idx++
+	}
 
-	return b.String()
+	return b.String(), nil
+}
+
+func renderMock(b *strings.Builder, mock *restfile.Mock) error {
+	if mock == nil {
+		return errors.New("writer: mock is nil")
+	}
+	file := strings.TrimSpace(mock.Response.Body.FilePath)
+	body := mock.Response.Body.Text
+	if file == "" && body != "" {
+		if !restfile.ResponseAllowsBody(mock.Response.Status) {
+			return fmt.Errorf("status %d cannot have a response body", mock.Response.Status)
+		}
+		var err error
+		body, err = NormalizeMockBody(body)
+		if err != nil {
+			return err
+		}
+	}
+	title := strings.Join(strings.Fields(mock.Title), " ")
+	if title == "" {
+		title = fmt.Sprintf("Mock %s %s", strings.ToUpper(mock.Method), mock.Path)
+	}
+	b.WriteString("### ")
+	b.WriteString(title)
+	b.WriteString("\n# @mock method=")
+	b.WriteString(strings.ToUpper(strings.TrimSpace(mock.Method)))
+	b.WriteString(" path=")
+	b.WriteString(strings.TrimSpace(mock.Path))
+	if mock.Name != "" {
+		b.WriteString(" name=")
+		b.WriteString(mock.Name)
+	}
+	if mock.Default {
+		b.WriteString(" default=true")
+	}
+	if mock.Latency > 0 {
+		b.WriteString(" latency=")
+		b.WriteString(mock.Latency.String())
+	}
+	b.WriteString("\n")
+	renderMockMatch(b, mock.Match)
+
+	status := mock.Response.Status
+	fmt.Fprintf(b, "HTTP/1.1 %d", status)
+	if text := http.StatusText(status); text != "" {
+		b.WriteString(" ")
+		b.WriteString(text)
+	}
+	b.WriteString("\n")
+	renderHeaders(b, mock.Response.Headers)
+	b.WriteString("\n")
+	if file != "" {
+		b.WriteString("< ")
+		b.WriteString(file)
+		b.WriteString("\n")
+		return nil
+	}
+	if body != "" {
+		b.WriteString(body)
+		b.WriteString("\n")
+	}
+	return nil
+}
+
+func NormalizeMockBody(body string) (string, error) {
+	body, err := NormalizeInlineBody(body)
+	if err != nil || body == "" {
+		return body, err
+	}
+	lines := strings.Split(body, "\n")
+	if _, isFile := bodyref.Parse(lines[0], bodyref.Options{Location: bodyref.Line}); isFile && util.AllBlank(lines[1:]) {
+		return "", errors.New("mock body looks like a file reference")
+	}
+	return body, nil
+}
+
+func MockNameSlug(raw string) string {
+	var b strings.Builder
+	dash := false
+	for _, r := range strings.ToLower(strings.TrimSpace(raw)) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '.' {
+			b.WriteRune(r)
+			dash = false
+			continue
+		}
+		if !dash && b.Len() > 0 {
+			b.WriteByte('-')
+			dash = true
+		}
+	}
+	return strings.Trim(b.String(), "-._")
+}
+
+func UniqueMockName(base string, used map[string]struct{}) string {
+	base = strings.Trim(strings.TrimSpace(base), "-")
+	if base == "" {
+		base = "scenario"
+	}
+	if _, exists := used[base]; !exists {
+		used[base] = struct{}{}
+		return base
+	}
+	for suffix := 2; ; suffix++ {
+		candidate := fmt.Sprintf("%s-%d", base, suffix)
+		if _, exists := used[candidate]; exists {
+			continue
+		}
+		used[candidate] = struct{}{}
+		return candidate
+	}
+}
+
+func NormalizeInlineBody(body string) (string, error) {
+	if !utf8.ValidString(body) {
+		return "", errors.New("body is not valid UTF-8")
+	}
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+	lines := strings.Split(body, "\n")
+	for _, line := range lines {
+		if len(line) >= 1<<20 {
+			return "", errors.New("body contains a line longer than the parser limit")
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "###") {
+			return "", errors.New("body contains a request separator")
+		}
+		for _, r := range line {
+			if unicode.IsControl(r) && r != '\t' {
+				return "", errors.New("body contains control characters")
+			}
+		}
+	}
+	return body, nil
+}
+
+func renderMockMatch(b *strings.Builder, match restfile.MockMatch) {
+	var fields []string
+	if len(match.Query) > 0 {
+		data, _ := json.Marshal(match.Query)
+		fields = append(fields, "query="+string(data))
+	}
+	if len(match.Headers) > 0 {
+		data, _ := json.Marshal(match.Headers)
+		fields = append(fields, "headers="+string(data))
+	}
+	if len(match.JSON) > 0 {
+		fields = append(fields, "json="+formatMockJSON(match.JSON))
+	}
+	if len(fields) == 0 {
+		return
+	}
+	b.WriteString("# @match ")
+	b.WriteString(strings.Join(fields, " "))
+	b.WriteString("\n")
+}
+
+func formatMockJSON(raw []byte) string {
+	var compact bytes.Buffer
+	if err := json.Compact(&compact, raw); err == nil {
+		raw = compact.Bytes()
+	}
+	return strconv.Quote(string(raw))
 }
 
 func renderHeader(b *strings.Builder, text string) {
@@ -102,7 +284,7 @@ func renderHeader(b *strings.Builder, text string) {
 	if text == "" {
 		return
 	}
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		b.WriteString("# ")
 		b.WriteString(strings.TrimSpace(line))
 		b.WriteString("\n")
@@ -211,7 +393,7 @@ func renderDescription(b *strings.Builder, desc string) {
 	if desc == "" {
 		return
 	}
-	for _, line := range strings.Split(desc, "\n") {
+	for line := range strings.SplitSeq(desc, "\n") {
 		t := strings.TrimSpace(line)
 		if t == "" {
 			continue

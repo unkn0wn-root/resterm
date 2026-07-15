@@ -94,12 +94,20 @@ type RequestBody struct {
 type Response struct {
 	StatusCode  string
 	Description string
+	Headers     []Header
 	MediaTypes  []MediaType
+}
+
+type Header struct {
+	Name        string
+	Description string
+	Example     Example
+	Schema      *SchemaRef
 }
 
 type MediaType struct {
 	ContentType string
-	Example     Example
+	Examples    []Example
 	Schema      *SchemaRef
 }
 
@@ -113,10 +121,12 @@ const (
 )
 
 type Example struct {
-	Summary  string
-	Value    any
-	Source   ExampleSource
-	HasValue bool
+	Name       string
+	Summary    string
+	Value      any
+	Source     ExampleSource
+	HasValue   bool
+	Serialized bool
 }
 
 type SchemaRef struct {
@@ -131,7 +141,9 @@ type Schema struct {
 	Format               string
 	Pattern              string
 	Example              any
+	HasExample           bool
 	Default              any
+	HasDefault           bool
 	Enum                 []any
 	Min                  *float64
 	Max                  *float64
@@ -149,9 +161,22 @@ type Schema struct {
 	AllOf                []*SchemaRef
 }
 
-// SchemaTypeInfo captures normalized schema type inference details.
-// PrimaryType is the non-null concrete type when available, TypeNull for null-only schemas,
-// or the caller-provided default when no type could be inferred.
+func (s *Schema) ExampleValue() (any, bool) {
+	if s == nil {
+		return nil, false
+	}
+	return s.Example, s.HasExample || s.Example != nil
+}
+
+func (s *Schema) DefaultValue() (any, bool) {
+	if s == nil {
+		return nil, false
+	}
+	return s.Default, s.HasDefault || s.Default != nil
+}
+
+// PrimaryType is the first concrete (non-null) type when one is declared,
+// TypeNull for null-only schemas, and the caller's default otherwise.
 type SchemaTypeInfo struct {
 	PrimaryType SchemaType
 	Nullable    bool
@@ -174,7 +199,7 @@ func InferSchemaType(sch *Schema, d SchemaType) SchemaTypeInfo {
 			continue
 		case TypeNull:
 			info.Nullable = true
-			if info.PrimaryType == d {
+			if !hasConcrete {
 				info.PrimaryType = TypeNull
 				info.Explicit = true
 			}

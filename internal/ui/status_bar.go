@@ -26,6 +26,7 @@ const (
 	statusBarInsertIcon    = "▸"
 	statusBarVisualIcon    = "◫"
 	statusBarGitIcon       = "⎇"
+	statusBarMockIcon      = "◉"
 	statusBarHorizontalPad = 1
 	statusBarSectionPad    = 1
 	statusBarMinLeftWidth  = 12
@@ -50,6 +51,7 @@ const (
 	statusBarSegmentMode      statusBarSegmentKind = "Mode"
 	statusBarSegmentEditorPos statusBarSegmentKind = "EditorPos"
 	statusBarSegmentZoom      statusBarSegmentKind = "Zoom"
+	statusBarSegmentMock      statusBarSegmentKind = "Mock"
 )
 
 type statusBarSection struct {
@@ -188,7 +190,7 @@ func (m Model) statusBarMessage() (string, statusLevel) {
 }
 
 func (m Model) statusBarSegments() []statusBarSeg {
-	segs := make([]statusBarSeg, 0, 5)
+	segs := make([]statusBarSeg, 0, 6)
 	if m.currentFile != "" {
 		segs = append(segs, statusBarSeg{
 			key: statusBarSegmentFile,
@@ -208,6 +210,14 @@ func (m Model) statusBarSegments() []statusBarSeg {
 			key: statusBarSegmentZoom,
 			val: m.collapsedStatusLabel(m.zoomRegion),
 		})
+	}
+	if server := m.activeMockServer(); server != nil {
+		stats := server.Stats()
+		value := fmt.Sprintf("%s R%d C%d", stats.Addr, stats.Routes, stats.Calls)
+		if m.mock.reloadErr != "" {
+			value += " !"
+		}
+		segs = append(segs, statusBarSeg{key: statusBarSegmentMock, val: value})
 	}
 	return segs
 }
@@ -411,6 +421,8 @@ func statusBarContextText(seg statusBarSeg) string {
 		return val
 	case statusBarSegmentMode:
 		return statusBarModeText(val)
+	case statusBarSegmentMock:
+		return statusBarMockIcon + " " + val
 	case "", statusBarSegmentZoom, statusBarSegmentEditorPos:
 		return val
 	default:
@@ -559,10 +571,7 @@ func statusBarLeftReserve(segs []statusBarSection, width int) int {
 		return 0
 	}
 
-	reserve := width * 2 / 3
-	if reserve < statusBarMinLeftWidth {
-		reserve = statusBarMinLeftWidth
-	}
+	reserve := max(width*2/3, statusBarMinLeftWidth)
 	if reserve > width {
 		return width
 	}

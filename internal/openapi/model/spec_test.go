@@ -16,7 +16,6 @@ func TestInferSchemaTypeCaseInsensitive(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := InferSchemaType(&Schema{Types: []SchemaType{tc.in}}, "")
 			if got.PrimaryType != tc.want {
@@ -85,7 +84,6 @@ func TestInferSchemaTypeNullUnions(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := InferSchemaType(tc.sch, tc.def)
 			if got.PrimaryType != tc.want {
@@ -118,6 +116,7 @@ func TestInferSchemaType(t *testing.T) {
 		{
 			name: "string null union keeps string and marks nullable",
 			sch:  &Schema{Types: []SchemaType{"string", "null"}},
+			def:  TypeString,
 			want: SchemaTypeInfo{PrimaryType: TypeString, Nullable: true, Explicit: true},
 		},
 		{
@@ -149,7 +148,6 @@ func TestInferSchemaType(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := InferSchemaType(tc.sch, tc.def)
 			if got != tc.want {

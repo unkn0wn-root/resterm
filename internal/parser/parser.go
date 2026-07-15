@@ -33,6 +33,9 @@ func Parse(path string, data []byte) *restfile.Document {
 	}
 
 	if err := scanner.Err(); err != nil {
+		if builder.mock != nil {
+			builder.mock.endLine = lineNumber + 1
+		}
 		msg := fmt.Sprintf("parse error: %v", err)
 		if errors.Is(err, bufio.ErrTooLong) {
 			msg = fmt.Sprintf("parse error: line exceeds %d bytes", maxScanToken)

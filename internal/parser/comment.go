@@ -27,6 +27,10 @@ func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 	}
 	argCol := directiveArgCol(text, baseCol)
 
+	if b.handleMockDirective(line, key, rest) {
+		return
+	}
+
 	if b.handleWorkflowStart(line, key, rest) {
 		return
 	}

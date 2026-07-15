@@ -2,6 +2,8 @@ package openapi
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -40,6 +42,28 @@ type GeneratorOptions struct {
 	BaseURLVariable      string
 	IncludeDeprecated    bool
 	PreferredServerIndex int
+	Mode                 GenerationMode
+}
+
+type GenerationMode string
+
+const (
+	GenerationRequests GenerationMode = "requests"
+	GenerationMocks    GenerationMode = "mocks"
+	GenerationBoth     GenerationMode = "both"
+)
+
+func ParseGenerationMode(raw string) (GenerationMode, error) {
+	switch GenerationMode(strings.ToLower(strings.TrimSpace(raw))) {
+	case "", GenerationRequests:
+		return GenerationRequests, nil
+	case GenerationMocks:
+		return GenerationMocks, nil
+	case GenerationBoth:
+		return GenerationBoth, nil
+	default:
+		return "", fmt.Errorf("unsupported OpenAPI generation mode %q (want requests, mocks, or both)", raw)
+	}
 }
 
 type WriterOptions struct {

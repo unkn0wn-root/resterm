@@ -87,6 +87,9 @@ func (m Model) View() string {
 	if m.showErrorModal {
 		return m.renderWithinAppFrame(m.renderErrorModal())
 	}
+	if m.showMockLogs {
+		return m.renderWithinAppFrame(m.renderMockLogsModal())
+	}
 
 	if m.showFileChangeModal {
 		return m.renderWithinAppFrame(m.renderFileChangeModal())
@@ -1043,7 +1046,7 @@ func renderTitledPaneFrame(
 	content string,
 ) string {
 	rendered := frameStyle.Render(content)
-	title = sanitizePaneTitle(title)
+	title = oneLine(title)
 	if title == "" || frameStyle.GetBorderTopSize() == 0 {
 		return rendered
 	}
@@ -1062,10 +1065,6 @@ func renderTitledPaneFrame(
 	}
 	lines[0] = top
 	return strings.Join(lines, "\n")
-}
-
-func sanitizePaneTitle(title string) string {
-	return strings.Join(strings.Fields(title), " ")
 }
 
 func (m Model) paneTitleStyle(
@@ -1910,7 +1909,7 @@ func (m Model) renderSearchPrompt() string {
 }
 
 func (m Model) renderCommandLinePrompt() string {
-	return m.renderPromptBar(m.theme.CommandBar.Width(m.width), ":", m.commandLineInput, "w q wq q! qa noh e help")
+	return m.renderPromptBar(m.theme.CommandBar.Width(m.width), ":", m.commandLineInput, "w q wq q! qa noh e help mock")
 }
 
 func (m Model) renderResponseSearchPrompt(width int) string {

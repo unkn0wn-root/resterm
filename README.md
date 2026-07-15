@@ -90,6 +90,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
+- **Mock servers** declared in the same files, with deterministic variants, matchers, latency, CORS, hot reload, OpenAPI examples, and response capture.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -97,7 +98,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 ## CLI
 
-Resterm also ships with a built-in CLI: `resterm run`.
+Resterm also ships with built-in `resterm run` and `resterm mock` commands.
 
 Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI.
 
@@ -115,6 +116,14 @@ resterm run --request Echo requests.http
 > This is different from the `headless` package. The `headless` package is the embeddable Go API for building your own runner or CI integration, while `resterm run` is the built-in CLI on top of the same execution engine.
 
 See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
+
+To serve response scenarios from a request file, add a raw `# @mock` response block and run:
+
+```bash
+resterm mock --watch ./requests.http
+```
+
+The TUI can toggle the workspace server with `g Shift+M`, inspect it with `:mock logs`, and capture the focused HTTP response with `g a`. See [Mock Servers](docs/resterm.md#mock-servers) for syntax and matching rules.
 
 ## Headless
 
@@ -393,7 +402,7 @@ Resterm supports unary and streaming calls with transcripts, metadata, and body 
 
 #### OpenAPI import
 
-Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
+Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Use `--openapi-mode requests`, `mocks`, or `both` to choose generated blocks. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
 
 #### Collection sharing
 

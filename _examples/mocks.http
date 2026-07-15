@@ -1,0 +1,29 @@
+### Health
+# @mock method=GET path=/health name=healthy default=true
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
+
+### Payment declined
+# @mock method=POST path=/payments name=declined
+# @match query={"mode":"decline"} headers={"X-Tenant":"demo"} json={"amount":0}
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{"error":"amount must be positive"}
+
+### Payment accepted
+# @mock method=POST path=/payments name=accepted default=true latency=150ms
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+X-Provider: sandbox
+
+{"id":"pay_123","status":"pending"}
+
+### User fixture
+# @mock method=GET path=/users/{id} name=user default=true
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+< ./mock-user.json

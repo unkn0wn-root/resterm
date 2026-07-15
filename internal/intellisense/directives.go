@@ -3,6 +3,8 @@ package intellisense
 import "slices"
 
 var directives = []Item{
+	{Label: "@mock", Summary: "Define a static mock HTTP response"},
+	{Label: "@match", Summary: "Match mock requests by query, headers, or JSON body"},
 	{Label: "@name", Summary: "Assign a display name to the request"},
 	{Label: "@description", Aliases: []string{"@desc"}, Summary: "Add a multi-line description"},
 	{Label: "@tag", Aliases: []string{"@tags"}, Summary: "Categorize the request with tags"},
@@ -207,6 +209,18 @@ var settingArgs = []Item{
 
 // directiveArgs maps a directive base key to its option/sub-token suggestions.
 var directiveArgs = map[string][]Item{
+	"mock": {
+		{Label: "method=", Summary: "HTTP method to match", Insert: "method=GET"},
+		{Label: "path=", Summary: "Origin-form route path", Insert: "path=/resource"},
+		{Label: "name=", Summary: "Scenario selector name", Insert: "name=success"},
+		{Label: "default=true", Summary: "Use as the route fallback"},
+		{Label: "latency=", Summary: "Fixed response latency", Insert: "latency=250ms"},
+	},
+	"match": {
+		{Label: "query=", Summary: "Exact query matcher JSON", Insert: `query={"key":"value"}`},
+		{Label: "headers=", Summary: "Exact header matcher JSON", Insert: `headers={"X-Key":"value"}`},
+		{Label: "json=", Summary: "Recursive JSON subset matcher", Insert: `json={"key":"value"}`},
+	},
 	"auth": {
 		{
 			Label:      "request",

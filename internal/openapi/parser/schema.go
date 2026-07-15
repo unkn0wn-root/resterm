@@ -53,14 +53,18 @@ func (m *schMap) toSch(src *hbase.Schema) *model.Schema {
 		return nil
 	}
 
+	example, exampleSet := nodeAnyOK(src.Example, m.warn, "schema example")
+	defaultValue, defaultSet := nodeAnyOK(src.Default, m.warn, "schema default")
 	out := &model.Schema{
 		Title:       src.Title,
 		Description: src.Description,
 		Types:       model.SchemaTypesFromStrings(src.Type),
 		Format:      src.Format,
 		Pattern:     src.Pattern,
-		Example:     nodeAny(src.Example, m.warn, "schema example"),
-		Default:     nodeAny(src.Default, m.warn, "schema default"),
+		Example:     example,
+		HasExample:  exampleSet,
+		Default:     defaultValue,
+		HasDefault:  defaultSet,
 		Enum:        nodesAny(src.Enum, m.warn, "schema enum"),
 		Min:         clonePtr(src.Minimum),
 		Max:         clonePtr(src.Maximum),
@@ -142,8 +146,13 @@ func dynRef(src *hbase.DynamicValue[*hbase.SchemaProxy, bool]) *hbase.SchemaProx
 }
 
 func nodeAny(src *yaml.Node, warn func(string), ctx string) any {
+	out, _ := nodeAnyOK(src, warn, ctx)
+	return out
+}
+
+func nodeAnyOK(src *yaml.Node, warn func(string), ctx string) (any, bool) {
 	if src == nil {
-		return nil
+		return nil, false
 	}
 	var out any
 	if err := src.Decode(&out); err != nil {
@@ -151,9 +160,9 @@ func nodeAny(src *yaml.Node, warn func(string), ctx string) any {
 			warn,
 			fmt.Sprintf("OpenAPI compatibility: unable to decode %s; value ignored: %v", ctx, err),
 		)
-		return nil
+		return nil, false
 	}
-	return out
+	return out, true
 }
 
 func noteWarn(warn func(string), msg string) {

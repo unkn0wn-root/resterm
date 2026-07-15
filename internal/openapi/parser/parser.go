@@ -376,65 +376,84 @@ func extractExample(
 	sm *schMap,
 	ctx string,
 ) model.Example {
-	if exp != nil {
-		val := nodeAny(exp, sm.warn, ctx+" explicit example")
-		if val != nil {
-			return model.Example{
-				Value:    val,
-				Source:   model.ExampleFromExplicit,
-				HasValue: true,
-			}
-		}
+	examples := extractExamples(exp, exs, sm, ctx)
+	if len(examples) > 0 {
+		return examples[0]
 	}
-
-	if orderedmap.Len(exs) == 0 {
-		return model.Example{}
-	}
-
-	for _, ex := range exs.FromOldest() {
-		if ex == nil {
-			continue
-		}
-		val, ok := exampleValue(ex, sm, ctx)
-		if !ok {
-			continue
-		}
-		return model.Example{
-			Summary:  ex.Summary,
-			Value:    val,
-			Source:   model.ExampleFromExplicit,
-			HasValue: true,
-		}
-	}
-
 	return model.Example{}
 }
 
-func exampleValue(ex *hbase.Example, sm *schMap, ctx string) (any, bool) {
-	if ex == nil {
-		return nil, false
+func extractExamples(
+	exp *yaml.Node,
+	exs *orderedmap.Map[string, *hbase.Example],
+	sm *schMap,
+	ctx string,
+) []model.Example {
+	if exp != nil {
+		if val, ok := nodeAnyOK(exp, sm.warn, ctx+" explicit example"); ok {
+			return []model.Example{{
+				Value:    val,
+				Source:   model.ExampleFromExplicit,
+				HasValue: true,
+			}}
+		}
+	}
+	if orderedmap.Len(exs) == 0 {
+		return nil
 	}
 
-	val := func(node *yaml.Node, loc string) (any, bool) {
-		if node == nil {
-			return nil, false
+	out := make([]model.Example, 0, orderedmap.Len(exs))
+	for name, ex := range exs.FromOldest() {
+		if ex == nil {
+			continue
 		}
-		v := nodeAny(node, sm.warn, loc)
-		if v == nil {
-			return nil, false
+		example, ok := convertExampleObject(ex, sm, ctx+" example "+name)
+		if !ok {
+			if ex.ExternalValue != "" {
+				noteWarn(sm.warn, fmt.Sprintf(
+					"OpenAPI compatibility: %s example %q uses externalValue; example ignored",
+					ctx,
+					name,
+				))
+			}
+			continue
 		}
-		return v, true
+		example.Name = name
+		example.Summary = ex.Summary
+		out = append(out, example)
+	}
+	return out
+}
+
+func convertExampleObject(ex *hbase.Example, sm *schMap, ctx string) (model.Example, bool) {
+	if ex == nil {
+		return model.Example{}, false
 	}
 
 	switch {
 	case ex.Value != nil:
-		return val(ex.Value, ctx+" example value")
+		value, ok := nodeAnyOK(ex.Value, sm.warn, ctx+" example value")
+		return model.Example{
+			Value:    value,
+			Source:   model.ExampleFromExplicit,
+			HasValue: ok,
+		}, ok
 	case ex.DataValue != nil:
-		return val(ex.DataValue, ctx+" data value")
+		value, ok := nodeAnyOK(ex.DataValue, sm.warn, ctx+" data value")
+		return model.Example{
+			Value:    value,
+			Source:   model.ExampleFromExplicit,
+			HasValue: ok,
+		}, ok
 	case ex.SerializedValue != "":
-		return ex.SerializedValue, true
+		return model.Example{
+			Value:      ex.SerializedValue,
+			Source:     model.ExampleFromExplicit,
+			HasValue:   true,
+			Serialized: true,
+		}, true
 	default:
-		return nil, false
+		return model.Example{}, false
 	}
 }
 
@@ -444,16 +463,16 @@ func extractExampleFromSchema(ref *model.SchemaRef) (model.Example, bool) {
 	}
 
 	sch := ref.Node
-	if sch.Example != nil {
+	if value, ok := sch.ExampleValue(); ok {
 		return model.Example{
-			Value:    sch.Example,
+			Value:    value,
 			Source:   model.ExampleFromExplicit,
 			HasValue: true,
 		}, true
 	}
-	if sch.Default != nil {
+	if value, ok := sch.DefaultValue(); ok {
 		return model.Example{
-			Value:    sch.Default,
+			Value:    value,
 			Source:   model.ExampleFromDefault,
 			HasValue: true,
 		}, true
@@ -493,13 +512,6 @@ func convertRequestBody(rb *h3.RequestBody, sm *schMap) *model.RequestBody {
 	return out
 }
 
-func extractMediaTypeExample(mt *h3.MediaType, sm *schMap) model.Example {
-	if mt == nil {
-		return model.Example{}
-	}
-	return extractExample(mt.Example, mt.Examples, sm, "media type")
-}
-
 func convertMediaType(contentType string, mt *h3.MediaType, sm *schMap) (model.MediaType, bool) {
 	if mt == nil {
 		return model.MediaType{}, false
@@ -507,15 +519,15 @@ func convertMediaType(contentType string, mt *h3.MediaType, sm *schMap) (model.M
 
 	media := model.MediaType{
 		ContentType: contentType,
-		Example:     extractMediaTypeExample(mt, sm),
+		Examples:    extractExamples(mt.Example, mt.Examples, sm, "media type"),
 	}
 
 	ref := pickMediaSchema(mt)
 	if ref != nil {
 		media.Schema = sm.toRef(ref)
-		if !media.Example.HasValue {
+		if len(media.Examples) == 0 {
 			if ex, ok := extractExampleFromSchema(media.Schema); ok {
-				media.Example = ex
+				media.Examples = []model.Example{ex}
 			}
 		}
 	}
@@ -568,6 +580,7 @@ func convertResponses(responses *h3.Responses, sm *schMap) []model.Response {
 		resp := model.Response{
 			StatusCode:  code,
 			Description: raw.Description,
+			Headers:     convertResponseHeaders(raw.Headers, sm),
 		}
 		if orderedmap.Len(raw.Content) > 0 {
 			types := mapKeys(raw.Content)
@@ -583,6 +596,57 @@ func convertResponses(responses *h3.Responses, sm *schMap) []model.Response {
 		out = append(out, resp)
 	}
 	return out
+}
+
+func convertResponseHeaders(
+	headers *orderedmap.Map[string, *h3.Header],
+	sm *schMap,
+) []model.Header {
+	if orderedmap.Len(headers) == 0 {
+		return nil
+	}
+	names := mapKeys(headers)
+	out := make([]model.Header, 0, len(names))
+	for _, name := range names {
+		raw := headers.GetOrZero(name)
+		if raw == nil {
+			continue
+		}
+		out = append(out, convertResponseHeader(name, raw, sm))
+	}
+	return out
+}
+
+func convertResponseHeader(name string, raw *h3.Header, sm *schMap) model.Header {
+	header := model.Header{
+		Name:        name,
+		Description: raw.Description,
+		Example:     extractExample(raw.Example, raw.Examples, sm, "response header "+name),
+	}
+	if raw.Schema != nil {
+		header.Schema = sm.toRef(raw.Schema)
+		if header.Example.HasValue {
+			return header
+		}
+		if example, ok := extractExampleFromSchema(header.Schema); ok {
+			header.Example = example
+		}
+		return header
+	}
+
+	contentTypes := mapKeys(raw.Content)
+	if len(contentTypes) == 0 {
+		return header
+	}
+	media, ok := convertMediaType(contentTypes[0], raw.Content.GetOrZero(contentTypes[0]), sm)
+	if !ok {
+		return header
+	}
+	header.Schema = media.Schema
+	if !header.Example.HasValue && len(media.Examples) > 0 {
+		header.Example = media.Examples[0]
+	}
+	return header
 }
 
 func resolveSecurityRequirements(doc *h3.Document, op *h3.Operation) []model.SecurityRequirement {

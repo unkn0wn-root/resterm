@@ -23,7 +23,7 @@ func renderHistogram(bins []analysis.HistogramBucket, indent string) string {
 	for i, bucket := range bins {
 		fmt.Fprintf(
 			&builder,
-			"%s%-*s – %-*s | %s (%-*s) %*s\n",
+			"%s%-*s - %-*s | %s (%-*s) %*s\n",
 			rowIndent,
 			layout.fromWidth, layout.from[i],
 			layout.toWidth, layout.to[i],
@@ -125,7 +125,7 @@ func renderHistogramLegend(indent string) string {
 	lines := []string{
 		fmt.Sprintf("%sLegend:", indent),
 		fmt.Sprintf("%sgreen <= p50", entryIndent),
-		fmt.Sprintf("%syellow between p50–p90", entryIndent),
+		fmt.Sprintf("%syellow between p50-p90", entryIndent),
 		fmt.Sprintf(
 			"%sred overlaps or exceeds p90 (faded when bucket <%d%% of busiest)",
 			entryIndent,
