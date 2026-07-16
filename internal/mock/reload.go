@@ -80,16 +80,16 @@ func (r *Reloader) fingerprint(overlayPath string, overlay []byte) string {
 	for _, f := range r.fixtures {
 		writeStat(h, f)
 	}
-	fmt.Fprintf(h, "%s\x00%d\x00", overlayPath, len(overlay))
-	h.Write(overlay)
+	_, _ = fmt.Fprintf(h, "%s\x00%d\x00", overlayPath, len(overlay))
+	_, _ = h.Write(overlay)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func writeStat(hash io.Writer, path string) {
+func writeStat(w io.Writer, path string) {
 	info, err := os.Stat(path)
 	if err != nil {
-		fmt.Fprintf(hash, "%s\x00missing\x00", path)
+		_, _ = fmt.Fprintf(w, "%s\x00missing\x00", path)
 		return
 	}
-	fmt.Fprintf(hash, "%s\x00%d\x00%d\x00", path, info.Size(), info.ModTime().UnixNano())
+	_, _ = fmt.Fprintf(w, "%s\x00%d\x00%d\x00", path, info.Size(), info.ModTime().UnixNano())
 }
