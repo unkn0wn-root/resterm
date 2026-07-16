@@ -14,7 +14,7 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files and supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, with a fast feedback loop built around `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Mock Servers](#mock-servers), [Documentation](#documentation).
 
 ## Screenshot tour
 
@@ -117,13 +117,46 @@ resterm run --request Echo requests.http
 
 See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
 
-To serve response scenarios from a request file, add a raw `# @mock` response block and run:
+## Mock Servers
 
-```bash
-resterm mock --watch ./requests.http
+Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. A route can hold several named scenarios: `@match` picks one by query values, headers, or a subset of the JSON body, and the `default` scenario answers everything else.
+
+```http
+### Payment accepted
+# @mock method=POST path=/payments name=accepted default=true latency=150ms
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":"pay_123","status":"pending"}
+
+### Payment declined
+# @mock method=POST path=/payments name=declined
+# @match query={"mode":"decline"} headers={"X-Tenant":"demo"} json={"amount":0}
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{"error":"amount must be positive"}
 ```
 
-The TUI can toggle the workspace server with `g Shift+M`, inspect it with `:mock logs`, and capture the focused HTTP response with `g a`. See [Mock Servers](docs/resterm.md#mock-servers) for syntax and matching rules.
+Serve one file or a whole directory from the CLI:
+
+```bash
+resterm mock ./requests.http
+resterm mock --recursive --addr 127.0.0.1:9090 ./requests
+```
+
+Mock servers also support:
+
+- Exact paths, segment wildcards (`/users/{id}`), and catch-all suffixes (`/assets/{path...}`).
+- Inline text bodies or file-backed fixtures, repeated headers, fixed latency, `HEAD`, and automatic `404` / `405` responses for anything that doesn't match.
+- Pinning a scenario per request with the `X-Resterm-Mock` and `X-Resterm-Mock-Status` headers.
+- CORS that defaults to wildcard on loopback and turns off (with an exposure warning) on non-loopback binds; `--cors` sets an explicit origin allowlist.
+- Hot reload on file changes (a broken edit keeps the last valid routes live) and a request log of recent calls.
+- Generating mock blocks from an OpenAPI spec with `--openapi-mode mocks`, or `both` for requests and mocks together.
+
+In the TUI, `g Shift+M` starts and stops the workspace server, `:mock logs` opens its request log, and `g a` captures the focused live response as a mock block. Captured blocks stay unsaved on purpose - review headers and bodies for secrets before saving.
+
+See the full [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock), and the [working example](_examples/mocks.http).
 
 ## Headless
 
