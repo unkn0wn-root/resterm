@@ -203,7 +203,7 @@ func proOutcome(out engine.RequestResult) (bool, string) {
 			continue
 		}
 		if strings.TrimSpace(t.Message) != "" {
-			return false, fmt.Sprintf("Test failed: %s – %s", t.Name, t.Message)
+			return false, fmt.Sprintf("Test failed: %s - %s", t.Name, t.Message)
 		}
 		return false, fmt.Sprintf("Test failed: %s", t.Name)
 	}

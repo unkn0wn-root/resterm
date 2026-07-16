@@ -493,7 +493,7 @@ func (m *Model) consumeHTTPResponse(
 		primary := timeline.breaches[0]
 		overrun := primary.Over.Round(time.Millisecond)
 		statusText = fmt.Sprintf(
-			"%s – trace budget breach %s (+%s)",
+			"%s - trace budget breach %s (+%s)",
 			statusText,
 			humanPhaseName(primary.Kind),
 			overrun,

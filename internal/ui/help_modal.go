@@ -303,6 +303,21 @@ func (m Model) helpSections() []helpSection {
 			}),
 		},
 		{
+			title: "Mock Server",
+			entries: sortedHelpEntries([]helpEntry{
+				{
+					m.helpActionKey(bindings.ActionToggleMockServer, "g Shift+M"),
+					"Start or stop the workspace mock server",
+				},
+				{
+					m.helpActionKey(bindings.ActionCaptureMockResponse, "g a"),
+					"Capture the focused HTTP response as a mock",
+				},
+				{":mock logs", "Open mock request log (c clears)"},
+				{":mock status", "Show address, routes, scenarios, and calls"},
+			}),
+		},
+		{
 			title: "Streaming & WebSocket",
 			entries: sortedHelpEntries([]helpEntry{
 				{"Ctrl+Space", "Stream tab: pause or resume live follow"},

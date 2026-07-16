@@ -21,6 +21,8 @@ const (
 )
 
 var directiveValueModes = map[string]metadataValueMode{
+	"mock":                  metadataValueModeRest,
+	"match":                 metadataValueModeRest,
 	"name":                  metadataValueModeToken,
 	"description":           metadataValueModeRest,
 	"desc":                  metadataValueModeRest,

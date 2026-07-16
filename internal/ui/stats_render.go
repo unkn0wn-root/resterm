@@ -452,7 +452,7 @@ func renderColoredHistogramRow(lineIdx int, row histogramLine, ctx histogramCont
 	var builder strings.Builder
 	builder.WriteString(row.prefix)
 	builder.WriteString(statsLabelStyle.Render(from))
-	builder.WriteString(" – ")
+	builder.WriteString(" - ")
 	builder.WriteString(statsLabelStyle.Render(to))
 	builder.WriteString(" | ")
 	builder.WriteString(coloredBar)

@@ -86,7 +86,7 @@ func (r responseRenderer) formatTestSummary(
 			line.WriteString(r.stats.Value.Render(result.Name))
 		}
 		if strings.TrimSpace(result.Message) != "" {
-			line.WriteString(" – ")
+			line.WriteString(" - ")
 			line.WriteString(r.stats.Message.Render(result.Message))
 		}
 		if result.Elapsed > 0 {

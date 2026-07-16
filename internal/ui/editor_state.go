@@ -915,7 +915,7 @@ func (e requestEditor) Update(msg tea.Msg) (requestEditor, tea.Cmd) {
 			!prevActive || prevMode != e.mode {
 			start, end := e.selectionSummaryRange()
 			summary := fmt.Sprintf(
-				"Selection L%d:%d–L%d:%d",
+				"Selection L%d:%d-L%d:%d",
 				start.Line+1,
 				start.Column+1,
 				end.Line+1,

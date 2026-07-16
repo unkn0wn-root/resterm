@@ -39,6 +39,12 @@ GRPC localhost:8080
 # @websocket
 # @ws send-file < ./ws/frame.bin
 GET ws://localhost/ws
+
+### Mock
+# @mock method=GET path=/fixture default=true
+HTTP/1.1 200 OK
+
+< ./payloads/mock.json
 `)
 	writeFile(t, ws, "rts/helpers.rts", "module helpers\n")
 	writeFile(t, ws, "scripts/test.js", "tests.test('ok', () => true)")
@@ -48,6 +54,7 @@ GET ws://localhost/ws
 	writeFile(t, ws, "descriptors/service.protoset", "proto-binary")
 	writeFile(t, ws, "grpc/message.json", `{"id":"42"}`)
 	writeFile(t, ws, "ws/frame.bin", "frame-bytes")
+	writeFile(t, ws, "payloads/mock.json", `{"mock":true}`)
 	writeFile(t, ws, "resterm.env.json", `
 {
   "dev": {
@@ -72,8 +79,8 @@ GET ws://localhost/ws
 		t.Fatalf("export bundle: %v", err)
 	}
 
-	if res.FileCount != 10 {
-		t.Fatalf("file count=%d want 10", res.FileCount)
+	if res.FileCount != 11 {
+		t.Fatalf("file count=%d want 11", res.FileCount)
 	}
 	if res.ManifestPath != filepath.Join(out, ManifestFile) {
 		t.Fatalf("manifest path=%q want %q", res.ManifestPath, filepath.Join(out, ManifestFile))
@@ -87,8 +94,8 @@ GET ws://localhost/ws
 	if err != nil {
 		t.Fatalf("decode manifest: %v", err)
 	}
-	if len(mf.Files) != 10 {
-		t.Fatalf("manifest file entries=%d want 10", len(mf.Files))
+	if len(mf.Files) != 11 {
+		t.Fatalf("manifest file entries=%d want 11", len(mf.Files))
 	}
 
 	roleByPath := map[string]FileRole{
@@ -96,6 +103,7 @@ GET ws://localhost/ws
 		"rts/helpers.rts":              RoleScript,
 		"scripts/test.js":              RoleScript,
 		"payloads/body.json":           RoleAsset,
+		"payloads/mock.json":           RoleAsset,
 		"queries/query.graphql":        RoleAsset,
 		"queries/vars.json":            RoleAsset,
 		"descriptors/service.protoset": RoleAsset,

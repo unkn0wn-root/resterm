@@ -1,6 +1,7 @@
 package generator
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
@@ -44,68 +45,87 @@ type schemaSampler struct {
 	maxDepth int
 }
 
+type sampleContext uint8
+
+const (
+	sampleAll sampleContext = iota
+	sampleRequest
+	sampleResponse
+)
+
 func newSchemaSampler() *schemaSampler {
 	return &schemaSampler{maxDepth: 6}
 }
 
 // schemaSampler synthesizes deterministic sample values from schemas when
 // explicit OpenAPI examples/defaults/enums are missing.
-func (b *schemaSampler) FromSchema(ref *model.SchemaRef) (any, bool) {
+func (b *schemaSampler) sample(ref *model.SchemaRef, context sampleContext) (any, bool) {
 	if ref == nil || ref.Node == nil {
 		return nil, false
 	}
-	return b.build(ref, 0)
+	return b.build(ref, 0, context)
 }
 
 // Depth limit prevents infinite recursion from circular schema references.
 // AllOf merges all schemas together since the result must satisfy all of them.
 // OneOf/AnyOf just pick the first option since we can't guess which variant to use.
-func (b *schemaSampler) build(ref *model.SchemaRef, depth int) (any, bool) {
-	if ref == nil || ref.Node == nil {
-		return nil, false
-	}
-	if depth >= b.maxDepth {
+func (b *schemaSampler) build(ref *model.SchemaRef, depth int, context sampleContext) (any, bool) {
+	if ref == nil || ref.Node == nil || depth >= b.maxDepth {
 		return nil, false
 	}
 	sch := ref.Node
-	if sch.Example != nil {
-		return sch.Example, true
+	if value, ok := explicitSchemaSample(sch); ok {
+		return value, true
 	}
-	if sch.Default != nil {
-		return sch.Default, true
+	if value, ok := b.sampleComposition(sch, depth+1, context); ok {
+		return value, true
+	}
+	return b.sampleByType(sch, depth+1, context)
+}
+
+func explicitSchemaSample(sch *model.Schema) (any, bool) {
+	if value, ok := sch.ExampleValue(); ok {
+		return value, true
+	}
+	if value, ok := sch.DefaultValue(); ok {
+		return value, true
 	}
 	if len(sch.Enum) > 0 {
 		return sch.Enum[0], true
 	}
+	return nil, false
+}
 
+func (b *schemaSampler) sampleComposition(sch *model.Schema, depth int, context sampleContext) (any, bool) {
 	if len(sch.OneOf) > 0 {
-		if value, ok := b.build(sch.OneOf[0], depth+1); ok {
+		if value, ok := b.build(sch.OneOf[0], depth, context); ok {
 			return value, true
 		}
 	}
 	if len(sch.AnyOf) > 0 {
-		if value, ok := b.build(sch.AnyOf[0], depth+1); ok {
+		if value, ok := b.build(sch.AnyOf[0], depth, context); ok {
 			return value, true
 		}
 	}
 	if len(sch.AllOf) > 0 {
 		composed := make(map[string]any)
 		for _, candidate := range sch.AllOf {
-			value, ok := b.build(candidate, depth+1)
+			value, ok := b.build(candidate, depth, context)
 			if !ok {
 				continue
 			}
 			if fragment, ok := value.(map[string]any); ok {
-				for k, v := range fragment {
-					composed[k] = v
-				}
+				maps.Copy(composed, fragment)
 			}
 		}
 		if len(composed) > 0 {
 			return composed, true
 		}
 	}
+	return nil, false
+}
 
+func (b *schemaSampler) sampleByType(sch *model.Schema, depth int, context sampleContext) (any, bool) {
 	typeInfo := model.InferSchemaType(sch, model.TypeString)
 	switch typeInfo.PrimaryType {
 	case model.TypeNull:
@@ -122,19 +142,19 @@ func (b *schemaSampler) build(ref *model.SchemaRef, depth int) (any, bool) {
 		if sch.Items == nil {
 			return []any{}, true
 		}
-		value, ok := b.build(sch.Items, depth+1)
+		value, ok := b.build(sch.Items, depth, context)
 		if !ok {
 			value = defaultForType(sch.Items)
 		}
 		return []any{value}, true
 	case model.TypeObject:
-		return b.sampleForObject(sch, depth+1)
+		return b.sampleForObject(sch, depth, context)
 	default:
 		return nil, false
 	}
 }
 
-func (b *schemaSampler) sampleForObject(sch *model.Schema, depth int) (any, bool) {
+func (b *schemaSampler) sampleForObject(sch *model.Schema, depth int, context sampleContext) (any, bool) {
 	if sch == nil {
 		return nil, false
 	}
@@ -143,10 +163,10 @@ func (b *schemaSampler) sampleForObject(sch *model.Schema, depth int) (any, bool
 	keys := util.SortedKeys(sch.Properties)
 	for _, name := range keys {
 		prop := sch.Properties[name]
-		if prop == nil {
+		if !sampleProperty(prop, context) {
 			continue
 		}
-		value, ok := b.build(prop, depth)
+		value, ok := b.build(prop, depth, context)
 		if !ok {
 			value = defaultForType(prop)
 		}
@@ -154,17 +174,28 @@ func (b *schemaSampler) sampleForObject(sch *model.Schema, depth int) (any, bool
 	}
 
 	if sch.AdditionalProperties != nil {
-		value, ok := b.build(sch.AdditionalProperties, depth)
+		value, ok := b.build(sch.AdditionalProperties, depth, context)
 		if !ok {
 			value = defaultForType(sch.AdditionalProperties)
 		}
 		result["additionalProperty"] = value
 	}
 
-	if len(result) == 0 {
-		return map[string]any{}, true
-	}
 	return result, true
+}
+
+func sampleProperty(ref *model.SchemaRef, context sampleContext) bool {
+	if ref == nil || ref.Node == nil {
+		return false
+	}
+	switch context {
+	case sampleRequest:
+		return ref.Node.ReadOnly == nil || !*ref.Node.ReadOnly
+	case sampleResponse:
+		return ref.Node.WriteOnly == nil || !*ref.Node.WriteOnly
+	default:
+		return true
+	}
 }
 
 func sampleForString(sch *model.Schema) string {
@@ -218,14 +249,8 @@ func defaultForType(ref *model.SchemaRef) any {
 	}
 	sch := ref.Node
 	// Keep fallback precedence aligned with build(): example -> default -> enum.
-	if sch.Example != nil {
-		return sch.Example
-	}
-	if sch.Default != nil {
-		return sch.Default
-	}
-	if len(sch.Enum) > 0 {
-		return sch.Enum[0]
+	if value, ok := explicitSchemaSample(sch); ok {
+		return value
 	}
 	typeInfo := model.InferSchemaType(sch, "")
 	if typeInfo.PrimaryType == "" {

@@ -31,9 +31,10 @@ func TestConvertMediaTypeExplicitExamplePreferred(t *testing.T) {
 	if media.ContentType != "application/json" {
 		t.Fatalf("unexpected content type: %s", media.ContentType)
 	}
-	if !media.Example.HasValue || media.Example.Source != model.ExampleFromExplicit ||
-		media.Example.Value != "explicit" {
-		t.Fatalf("unexpected example: %#v", media.Example)
+	if len(media.Examples) != 1 || !media.Examples[0].HasValue ||
+		media.Examples[0].Source != model.ExampleFromExplicit ||
+		media.Examples[0].Value != "explicit" {
+		t.Fatalf("unexpected examples: %#v", media.Examples)
 	}
 	if media.Schema == nil || media.Schema.Identifier != "#/components/schemas/Demo" {
 		t.Fatalf("unexpected schema ref: %#v", media.Schema)
@@ -53,9 +54,10 @@ func TestConvertMediaTypeSchemaFallbackExample(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected media type conversion")
 	}
-	if !media.Example.HasValue || media.Example.Source != model.ExampleFromDefault ||
-		media.Example.Value != "schema-default" {
-		t.Fatalf("unexpected fallback example: %#v", media.Example)
+	if len(media.Examples) != 1 || !media.Examples[0].HasValue ||
+		media.Examples[0].Source != model.ExampleFromDefault ||
+		media.Examples[0].Value != "schema-default" {
+		t.Fatalf("unexpected fallback examples: %#v", media.Examples)
 	}
 }
 
@@ -150,7 +152,7 @@ func TestLoaderParse(t *testing.T) {
 		t.Fatalf("request body not parsed for registerDevice")
 	}
 	mt := registerDevice.RequestBody.MediaTypes[0]
-	if !mt.Example.HasValue {
+	if len(mt.Examples) == 0 || !mt.Examples[0].HasValue {
 		t.Fatalf("request body example missing")
 	}
 	if len(registerDevice.Security) == 0 || registerDevice.Security[0].SchemeName != "oauthDemo" {

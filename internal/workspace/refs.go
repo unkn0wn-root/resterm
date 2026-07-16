@@ -50,6 +50,11 @@ func (c *refCollector) collectDoc() {
 	for _, req := range c.doc.Requests {
 		c.collectReq(req)
 	}
+	for _, mock := range c.doc.Mocks {
+		if mock != nil {
+			c.add(RefBody, mock.Response.Body.FilePath, mock.LineRange.Start)
+		}
+	}
 	for _, wf := range c.doc.Workflows {
 		c.collectWorkflow(wf)
 	}

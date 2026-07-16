@@ -252,7 +252,7 @@ func (e *Engine) recordProfile(
 		Status:      status,
 		StatusCode:  code,
 		Duration:    out.Duration,
-		BodySnippet: "<profile run – see profileResults>",
+		BodySnippet: "<profile run - see profileResults>",
 		RequestText: redactText(
 			request.RenderRequestText(st.req),
 			e.secretValues(doc, st.req, st.env),

@@ -113,7 +113,7 @@ func buildTimelineReport(
 		spec = nil
 	}
 
-	report.title = fmt.Sprintf("Timeline – %s", tl.Duration.Round(time.Microsecond))
+	report.title = fmt.Sprintf("Timeline - %s", tl.Duration.Round(time.Microsecond))
 	report.summary = buildTimelineSummary(tl, styles)
 	rows := buildTimelineRows(tl)
 	report.totalDuration = tl.Duration

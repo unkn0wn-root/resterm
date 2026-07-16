@@ -19,12 +19,14 @@ const (
 	exCommandEdit
 	exCommandHelp
 	exCommandNoHighlight
+	exCommandMock
 )
 
 type exCommand struct {
 	kind exCommandKind
 	name string
 	bang bool
+	args []string
 }
 
 func isCommandLineTriggerKey(msg tea.KeyMsg) bool {
@@ -97,6 +99,12 @@ func parseExCommand(input string) exCommand {
 	if kind == exCommandUnknown {
 		return exCommand{kind: exCommandUnknown, name: strings.Join(fields, " ")}
 	}
+	if kind == exCommandMock {
+		if bang {
+			return exCommand{kind: exCommandUnknown, name: strings.Join(fields, " ")}
+		}
+		return exCommand{kind: kind, args: fields[1:]}
+	}
 	if len(fields) > 1 {
 		return exCommand{kind: exCommandTrailing, name: strings.Join(fields[1:], " ")}
 	}
@@ -119,6 +127,8 @@ func exCommandKindFor(name string) exCommandKind {
 		return exCommandHelp
 	case "noh", "nohlsearch":
 		return exCommandNoHighlight
+	case "mock":
+		return exCommandMock
 	default:
 		return exCommandUnknown
 	}
@@ -152,6 +162,8 @@ func (m *Model) executeExCommand(input string) tea.Cmd {
 		return nil
 	case exCommandNoHighlight:
 		return m.clearSearchHighlightsFromEx()
+	case exCommandMock:
+		return m.executeMockCommand(cmd.args)
 	default:
 		return statusCmd(statusWarn, "Unknown command: "+cmd.name+" (try :help)")
 	}

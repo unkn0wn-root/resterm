@@ -17,7 +17,10 @@ func TestRenderCurlOutput(t *testing.T) {
 	}
 
 	hdr := buildHeader("", cmd, warn)
-	got := restwriter.Render(doc, restwriter.Options{HeaderComment: hdr})
+	got, err := restwriter.Render(doc, restwriter.Options{HeaderComment: hdr})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 
 	wantPath := filepath.Join("testdata", "basic.http")
 	want, err := os.ReadFile(wantPath)
@@ -53,7 +56,10 @@ sudo -u root -p "prompt here" curl https://api.example.com/multi \
 	}
 
 	hdr := buildHeader("", cmd, warn)
-	got := restwriter.Render(doc, restwriter.Options{HeaderComment: hdr})
+	got, err := restwriter.Render(doc, restwriter.Options{HeaderComment: hdr})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
 
 	wantPath := filepath.Join("testdata", "advanced.http")
 	want, err := os.ReadFile(wantPath)

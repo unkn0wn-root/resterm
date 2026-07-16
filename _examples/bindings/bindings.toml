@@ -31,3 +31,7 @@ open_file_in_editor = ["g e"]
 
 # Launch the theme selector.
 open_theme_selector = ["ctrl+alt+t", "f6"]
+
+# Mock server lifecycle and focused-response capture.
+toggle_mock_server = ["g shift+m"]
+capture_mock_response = ["g a"]

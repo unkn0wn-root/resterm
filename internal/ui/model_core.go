@@ -197,6 +197,7 @@ type Model struct {
 	fileWatcher   *watcher.Watcher
 	fileWatchChan chan tea.Msg
 	runMsgChan    chan tea.Msg
+	mock          mockServerState
 
 	fileList                 list.Model
 	requestList              list.Model
@@ -263,6 +264,8 @@ type Model struct {
 	requestDetailFields    []requestDetailField
 	requestDetailViewport  *viewport.Model
 	helpViewport           *viewport.Model
+	showMockLogs           bool
+	mockLogsViewport       *viewport.Model
 
 	showSearchPrompt      bool
 	searchInput           textinput.Model
@@ -585,6 +588,8 @@ func New(cfg Config) Model {
 
 	helpViewport := viewport.New(0, 0)
 	helpViewport.SetContent("")
+	mockLogsViewport := viewport.New(0, 0)
+	mockLogsViewport.SetContent("")
 
 	sshMgr := cfg.SSHManager
 	if sshMgr == nil {
@@ -643,6 +648,7 @@ func New(cfg Config) Model {
 		historyPreviewViewport: &previewViewport,
 		requestDetailViewport:  &detailViewport,
 		helpViewport:           &helpViewport,
+		mockLogsViewport:       &mockLogsViewport,
 		helpFilter:             helpFilter,
 		activeThemeKey:         activeTheme,
 		settingsHandle:         cfg.SettingsHandle,

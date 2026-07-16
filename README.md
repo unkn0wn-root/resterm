@@ -14,7 +14,7 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files and supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, with a fast feedback loop built around `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Mock Servers](#mock-servers), [Documentation](#documentation).
 
 ## Screenshot tour
 
@@ -90,6 +90,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
+- **Mock servers** declared in the same files, with deterministic variants, matchers, latency, CORS, hot reload, OpenAPI examples, and response capture.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -97,7 +98,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 ## CLI
 
-Resterm also ships with a built-in CLI: `resterm run`.
+Resterm also ships with built-in `resterm run` and `resterm mock` commands.
 
 Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI.
 
@@ -115,6 +116,47 @@ resterm run --request Echo requests.http
 > This is different from the `headless` package. The `headless` package is the embeddable Go API for building your own runner or CI integration, while `resterm run` is the built-in CLI on top of the same execution engine.
 
 See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
+
+## Mock Servers
+
+Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. A route can hold several named scenarios: `@match` picks one by query values, headers, or a subset of the JSON body, and the `default` scenario answers everything else.
+
+```http
+### Payment accepted
+# @mock method=POST path=/payments name=accepted default=true latency=150ms
+HTTP/1.1 202 Accepted
+Content-Type: application/json
+
+{"id":"pay_123","status":"pending"}
+
+### Payment declined
+# @mock method=POST path=/payments name=declined
+# @match query={"mode":"decline"} headers={"X-Tenant":"demo"} json={"amount":0}
+HTTP/1.1 422 Unprocessable Entity
+Content-Type: application/json
+
+{"error":"amount must be positive"}
+```
+
+Serve one file or a whole directory from the CLI:
+
+```bash
+resterm mock ./requests.http
+resterm mock --recursive --addr 127.0.0.1:9090 ./requests
+```
+
+Mock servers also support:
+
+- Exact paths, segment wildcards (`/users/{id}`), and catch-all suffixes (`/assets/{path...}`).
+- Inline text bodies or file-backed fixtures, repeated headers, fixed latency, `HEAD`, and automatic `404` / `405` responses for anything that doesn't match.
+- Pinning a scenario per request with the `X-Resterm-Mock` and `X-Resterm-Mock-Status` headers.
+- CORS that defaults to wildcard on loopback and turns off (with an exposure warning) on non-loopback binds; `--cors` sets an explicit origin allowlist.
+- Hot reload on file changes (a broken edit keeps the last valid routes live) and a request log of recent calls.
+- Generating mock blocks from an OpenAPI spec with `--openapi-mode mocks`, or `both` for requests and mocks together.
+
+In the TUI, `g Shift+M` starts and stops the workspace server, `:mock logs` opens its request log, and `g a` captures the focused live response as a mock block. Captured blocks stay unsaved on purpose - review headers and bodies for secrets before saving.
+
+See the full [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock), and the [working example](_examples/mocks.http).
 
 ## Headless
 
@@ -393,7 +435,7 @@ Resterm supports unary and streaming calls with transcripts, metadata, and body 
 
 #### OpenAPI import
 
-Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
+Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Use `--openapi-mode requests`, `mocks`, or `both` to choose generated blocks. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
 
 #### Collection sharing
 

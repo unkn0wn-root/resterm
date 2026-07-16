@@ -22,12 +22,11 @@ func TestSchemaSamplerStringFormatsDeterministic(t *testing.T) {
 	}
 
 	for _, tc := range tests {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			sch := &model.Schema{Types: []model.SchemaType{model.TypeString}, Format: tc.format}
 			ref := &model.SchemaRef{Node: sch}
 
-			value, ok := sampler.FromSchema(ref)
+			value, ok := sampler.sample(ref, sampleAll)
 			if !ok {
 				t.Fatalf("expected example for format %s", tc.format)
 			}
@@ -41,7 +40,7 @@ func TestSchemaSamplerStringFormatsDeterministic(t *testing.T) {
 				t.Fatalf("unexpected example for %s: %s", tc.format, got)
 			}
 
-			value2, ok := sampler.FromSchema(ref)
+			value2, ok := sampler.sample(ref, sampleAll)
 			if !ok {
 				t.Fatalf("second retrieval failed for %s", tc.format)
 			}
@@ -68,7 +67,7 @@ func TestSchemaSamplerHandlesRecursiveSchema(t *testing.T) {
 	ref.Node.Properties["next"] = ref
 
 	sampler := newSchemaSampler()
-	got, ok := sampler.FromSchema(ref)
+	got, ok := sampler.sample(ref, sampleAll)
 	if !ok {
 		t.Fatalf("expected example for recursive schema")
 	}
@@ -96,7 +95,7 @@ func TestSchemaSamplerNullTypeProducesNull(t *testing.T) {
 		},
 	}
 
-	got, ok := sampler.FromSchema(ref)
+	got, ok := sampler.sample(ref, sampleAll)
 	if !ok {
 		t.Fatalf("expected sample for null schema")
 	}
@@ -115,7 +114,7 @@ func TestSchemaSamplerNullStringUnionPrefersConcreteType(t *testing.T) {
 		},
 	}
 
-	got, ok := sampler.FromSchema(ref)
+	got, ok := sampler.sample(ref, sampleAll)
 	if !ok {
 		t.Fatalf("expected sample for null/string union")
 	}
@@ -125,5 +124,68 @@ func TestSchemaSamplerNullStringUnionPrefersConcreteType(t *testing.T) {
 	}
 	if s == "" {
 		t.Fatalf("expected non-empty string sample for null/string union")
+	}
+}
+
+func TestSchemaSamplerRespectsReadWriteVisibility(t *testing.T) {
+	t.Parallel()
+
+	readOnly := true
+	writeOnly := true
+	ref := &model.SchemaRef{Node: &model.Schema{
+		Types: []model.SchemaType{model.TypeObject},
+		Properties: map[string]*model.SchemaRef{
+			"id": {
+				Node: &model.Schema{Types: []model.SchemaType{model.TypeString}, ReadOnly: &readOnly},
+			},
+			"name": {
+				Node: &model.Schema{Types: []model.SchemaType{model.TypeString}},
+			},
+			"password": {
+				Node: &model.Schema{Types: []model.SchemaType{model.TypeString}, WriteOnly: &writeOnly},
+			},
+		},
+	}}
+
+	tests := []struct {
+		name     string
+		context  sampleContext
+		included string
+		excluded string
+	}{
+		{
+			name:     "request omits read-only properties",
+			context:  sampleRequest,
+			included: "password",
+			excluded: "id",
+		},
+		{
+			name:     "response omits write-only properties",
+			context:  sampleResponse,
+			included: "id",
+			excluded: "password",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			value, ok := newSchemaSampler().sample(ref, tc.context)
+			if !ok {
+				t.Fatal("expected object sample")
+			}
+			object, ok := value.(map[string]any)
+			if !ok {
+				t.Fatalf("sample type = %T, want map[string]any", value)
+			}
+			if _, ok := object["name"]; !ok {
+				t.Fatalf("ordinary property missing: %#v", object)
+			}
+			if _, ok := object[tc.included]; !ok {
+				t.Fatalf("property %q missing: %#v", tc.included, object)
+			}
+			if _, ok := object[tc.excluded]; ok {
+				t.Fatalf("property %q should be omitted: %#v", tc.excluded, object)
+			}
+		})
 	}
 }

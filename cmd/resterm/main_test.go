@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	restparser "github.com/unkn0wn-root/resterm/internal/parser"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
@@ -102,6 +103,50 @@ func TestRunRejectsConflictingImportShortFlags(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "choose either --from-curl or --from-openapi") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRunOpenAPIMockMode(t *testing.T) {
+	t.Setenv("RESTERM_CONFIG_DIR", t.TempDir())
+	dir := t.TempDir()
+	spec := filepath.Join(dir, "openapi.yaml")
+	out := filepath.Join(dir, "mocks.http")
+	if err := os.WriteFile(spec, []byte(`openapi: 3.1.0
+info: {title: Demo, version: "1"}
+paths:
+  /health:
+    get:
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              example: {ok: true}
+`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run([]string{
+		"--from-openapi", spec,
+		"--http-out", out,
+		"--openapi-mode", "mocks",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := restparser.Parse(out, data)
+	if len(doc.Errors) > 0 || len(doc.Requests) != 0 || len(doc.Mocks) != 1 {
+		t.Fatalf("generated errors=%+v requests=%d mocks=%d\n%s", doc.Errors, len(doc.Requests), len(doc.Mocks), data)
+	}
+}
+
+func TestRunRejectsInvalidOpenAPIMode(t *testing.T) {
+	t.Setenv("RESTERM_CONFIG_DIR", t.TempDir())
+	err := run([]string{"--from-openapi", "missing.yaml", "--openapi-mode", "dynamic"})
+	if err == nil || !strings.Contains(err.Error(), "requests, mocks, or both") {
+		t.Fatalf("error = %v", err)
 	}
 }
 
