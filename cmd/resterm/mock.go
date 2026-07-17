@@ -171,8 +171,8 @@ func (w *mockWatcher) tick() {
 
 func printMockEvent(logger *log.Logger, event mock.Event) {
 	scenario := ""
-	if event.Scenario != "" {
-		scenario = " [" + event.Scenario + "]"
+	if label := event.ScenarioLabel(); label != "" {
+		scenario = " [" + label + "]"
 	}
 	logger.Printf(
 		"%s %s -> %d%s (%s)",

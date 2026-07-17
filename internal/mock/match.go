@@ -1,7 +1,9 @@
 package mock
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -13,7 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-const maxMatchBody = 4 << 20
+const maxMockRequestBody = 4 << 20
 
 // matcher is one compiled @match condition, run per request against a probe.
 type matcher func(*probe) (bool, *problem)
@@ -121,18 +123,27 @@ func (p *probe) json() (any, bool, *problem) {
 	if p.r.Body != nil {
 		rd = p.r.Body
 	}
-	data, err := io.ReadAll(io.LimitReader(rd, maxMatchBody+1))
+	data, err := io.ReadAll(io.LimitReader(rd, maxMockRequestBody+1))
 	if err != nil {
-		p.err = &problem{http.StatusBadRequest, "read JSON request body: " + err.Error()}
+		p.err = &problem{
+			status: http.StatusBadRequest,
+			detail: "read JSON request body: " + err.Error(),
+		}
 		return nil, false, p.err
 	}
-	if len(data) > maxMatchBody {
-		p.err = &problem{http.StatusRequestEntityTooLarge, "JSON request body exceeds 4 MiB matcher limit"}
+	if len(data) > maxMockRequestBody {
+		p.err = &problem{
+			status: http.StatusRequestEntityTooLarge,
+			detail: "JSON request body exceeds 4 MiB limit",
+		}
 		return nil, false, p.err
 	}
 	p.body, err = decodeJSON(data)
 	if err != nil {
-		p.err = &problem{http.StatusBadRequest, "invalid JSON request body: " + err.Error()}
+		p.err = &problem{
+			status: http.StatusBadRequest,
+			detail: "invalid JSON request body: " + err.Error(),
+		}
 		return nil, false, p.err
 	}
 	p.ok = true
@@ -140,8 +151,18 @@ func (p *probe) json() (any, bool, *problem) {
 }
 
 func decodeJSON(data []byte) (any, error) {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
+
 	var v any
-	if err := json.Unmarshal(data, &v); err != nil {
+	if err := decoder.Decode(&v); err != nil {
+		return nil, err
+	}
+	var extra any
+	if err := decoder.Decode(&extra); err != io.EOF {
+		if err == nil {
+			return nil, errors.New("multiple JSON values")
+		}
 		return nil, err
 	}
 	return v, nil
@@ -171,7 +192,28 @@ func subset(want, got any) bool {
 			}
 		}
 		return true
+	case json.Number:
+		got, ok := got.(json.Number)
+		return ok && equalJSONNumbers(want, got)
 	default:
 		return want == got
 	}
+}
+
+// equalJSONNumbers compares two JSON numbers by value so 100, 1e2 and 100.0 all
+// match. The int64 path keeps integers exact past float64's 2^53; the float64
+// fallback handles the rest and, unlike big.Rat, cannot be made to allocate
+// 10^exp by a hostile request - ParseFloat returns +Inf for a runaway exponent.
+func equalJSONNumbers(want, got json.Number) bool {
+	if want == got {
+		return true
+	}
+	if a, err := want.Int64(); err == nil {
+		if b, err := got.Int64(); err == nil {
+			return a == b
+		}
+	}
+	a, aerr := want.Float64()
+	b, berr := got.Float64()
+	return aerr == nil && berr == nil && a == b
 }

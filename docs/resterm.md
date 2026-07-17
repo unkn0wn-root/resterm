@@ -669,13 +669,97 @@ resterm mock --recursive --addr 127.0.0.1:9090 .
 
 ### Route and response syntax
 
-- `method` and an origin-form `path` are required. Paths may be exact (`/health`), use segment wildcards (`/users/{id}`), or end in a remainder wildcard (`/assets/{path...}`). A trailing slash is significant.
+- `method` and an origin-form `path` are required. Paths may be exact (`/health`), use segment wildcards (`/users/{id}`), or end in a remainder wildcard (`/assets/{path...}`). Wildcard names must be unique within a path. A trailing slash is significant.
 - `name` is an optional scenario selector containing letters, digits, `.`, `_`, or `-`.
+- `sequence` names a response sequence and follows the same naming rules. It cannot be combined with `name`.
 - `default=true` marks the fallback for a route. A route can have at most one default, and a default cannot also have `@match` conditions.
 - `latency` accepts a non-negative Go duration such as `150ms` or `2s`. Waiting stops when the client cancels the request.
+- Response interpolation is enabled by default. Set `interpolate=false` to preserve `{{...}}` as literal response text.
 - The response status must be `200` through `599`. Repeated headers are preserved. Connection/framing headers such as `Content-Length`, `Transfer-Encoding`, and `Connection` are managed by the server and rejected in source files.
 - The body is literal text through the next `###`, or a single `< ./fixtures/body.json` file reference. Relative fixtures resolve from the declaring request file and participate in hot reload, but must remain within the selected request file's directory or workspace root. Absolute paths and paths or symlinks that escape that root are rejected.
-- `HEAD` returns the selected status and headers without a body. `204` and `304` scenarios must not declare a body.
+- `HEAD` returns the selected status and headers without a body. `204`, `205`, and `304` scenarios must not declare a body.
+
+### Response interpolation
+
+Response header values and inline or file-backed bodies can use request data and Resterm's dynamic template helpers:
+
+```http
+### User
+# @mock method=POST path=/users/{id}
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: {{$uuid}}
+
+{
+  "id": {{json.path.id}},
+  "view": {{json.query.view}},
+  "tenant": {{json.headers.X-Tenant}},
+  "name": {{json.body.user.name}},
+  "attempt": {{json.body.attempt}},
+  "generatedAt": "{{$timestampISO8601}}"
+}
+```
+
+Available inputs are:
+
+- `{{path.name}}` for a route wildcard, including catch-all wildcards.
+- `{{query.name}}` for a query value. Repeated values use the first value.
+- `{{headers.Name}}` for a request header, including `{{headers.Host}}`. Header names are case-insensitive and repeated values use the first value.
+- `{{body.path.to.field}}` for a JSON body field. Array indexes and quoted keys use the same forms as `items[0].id` and `$["display.name"]`.
+- Dynamic helpers such as `{{$uuid}}`, `{{$guid}}`, `{{$timestamp}}`, `{{$timestampms}}`, `{{$timestampISO8601}}`, and `{{$randomint}}`. Timestamp offsets such as `{{$timestampISO8601 - 1h}}` are supported.
+
+The placeholders above insert text as-is. Use them in response headers and in plain text or XML bodies. Strings read from a JSON request body are not quoted or escaped. Other JSON values such as numbers, booleans, `null`, arrays, and objects are written as compact JSON. Each occurrence is resolved separately.
+
+When a request value is part of a JSON response, add the `json.` prefix:
+
+- `{{json.path.name}}`, `{{json.query.name}}`, and `{{json.headers.Name}}` turn their values into JSON strings. Resterm adds the surrounding quotes and escapes the contents.
+- `{{json.body.path.to.field}}` keeps the field's JSON type and numeric precision.
+
+Do not put quotes around a `json.` placeholder. It writes a complete JSON value. For example:
+
+```json
+{"id": {{json.path.id}}}
+```
+
+If `id` is `alice`, Resterm returns:
+
+```json
+{"id":"alice"}
+```
+
+Quotes, backslashes, and control characters in the value are escaped so they cannot change the surrounding JSON. Resterm only encodes the placeholder value. It does not infer this behavior from `Content-Type` or validate the finished response body. A mock can still return malformed JSON when a test needs it.
+
+Template names and paths are validated when the mock set compiles. A missing query value, header, or JSON field returns `400 application/problem+json`; malformed JSON also returns `400`, and JSON bodies over 4 MiB return `413`. The server renders every response header and the complete body before writing anything. A rendered header value that is not HTTP-safe or a failed dynamic helper returns `500`. `HEAD` still renders the selected body to calculate its `Content-Length`, but does not write the body.
+
+Use `interpolate=false` when a mock must return template syntax literally. Captured responses and OpenAPI-generated mocks add this option automatically when their static response contains `{{`.
+
+### Response sequences
+
+A named sequence contains two or more raw responses separated by a line whose trimmed content is exactly `---`:
+
+```http
+### Poll payment
+# @mock method=GET path=/payments/{id} sequence=polling
+HTTP/1.1 503 Service Unavailable
+Retry-After: 1
+
+{"status":"pending"}
+---
+HTTP/1.1 503 Service Unavailable
+Retry-After: 1
+
+{"status":"pending"}
+---
+HTTP/1.1 200 OK
+
+{"status":"completed"}
+```
+
+Ordinary requests advance atomically through the sequence. Once the final response is reached, it repeats forever. The cursor belongs to the compiled scenario, so all clients and concrete path values share it. `@match`, `default`, and `latency` apply to the whole sequence. A selected step is consumed before latency, interpolation, or response writing; cancellation and rendering/write failures therefore do not replay a transient step.
+
+`X-Resterm-Mock: polling` selects the sequence. `X-Resterm-Mock-Status: 200` pins the first sequence response with that status without advancing the cursor, and it can be combined with the name selector. Sequence progress appears in CLI and TUI request logs as `polling 2/3`.
+
+A no-op hot reload keeps the active handler and its cursors. Any source or fixture change that produces a new compiled handler resets every sequence to its first response. In a sequence's inline body, a line whose trimmed content is exactly `---` is reserved as the response delimiter; use a file-backed body when the payload must contain such a line. Outside a sequence, `---` remains ordinary body text.
 
 ### Conditional scenarios
 
@@ -696,7 +780,7 @@ Query and header objects accept a string or an array of strings per key. Only th
 Scenario selection is deterministic:
 
 1. `X-Resterm-Mock: <name>` selects a named scenario directly.
-2. `X-Resterm-Mock-Status: <code>` limits candidates to a response status. It can be combined with the name selector.
+2. `X-Resterm-Mock-Status: <code>` limits candidates to a response status. It can be combined with the name selector; for a sequence it pins the first matching step without advancing.
 3. Otherwise, conditional scenarios are checked in file/path order, then the explicit default, then the first unconditional scenario.
 4. A missing route, selector, or match returns an `application/problem+json` `404` response.
 

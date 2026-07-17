@@ -2,6 +2,7 @@ package mock
 
 import (
 	"cmp"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -26,12 +27,18 @@ func Compile(docs []*restfile.Document) (*Handler, error) {
 
 func compile(docs []*restfile.Document, read fixtureReader) (*Handler, error) {
 	c := &compiler{read: read, index: make(map[string]*route)}
-	for _, doc := range sortDocs(docs) {
+	docs = sortDocs(docs)
+	for _, doc := range docs {
 		if err := c.addDoc(doc); err != nil {
 			return nil, err
 		}
 	}
-	return c.handler()
+	h, err := c.handler()
+	if err != nil {
+		return nil, err
+	}
+	h.digest = digest(docs, c.routes)
+	return h, nil
 }
 
 func (c *compiler) addDoc(doc *restfile.Document) error {
@@ -51,7 +58,7 @@ func (c *compiler) addDoc(doc *restfile.Document) error {
 
 func (c *compiler) addMock(doc *restfile.Document, spec *restfile.Mock) error {
 	src := loc{doc.Path, spec.LineRange.Start}
-	pat, err := restfile.CompileMockPathPattern(spec.Path)
+	pat, params, err := restfile.CompileMockPath(spec.Path)
 	if err != nil {
 		return fmt.Errorf("%s: %w", src, err)
 	}
@@ -59,7 +66,7 @@ func (c *compiler) addMock(doc *restfile.Document, spec *restfile.Mock) error {
 		return fmt.Errorf("%s: invalid mock method %q", src, spec.Method)
 	}
 
-	v, err := c.newVariant(doc.Path, spec, src)
+	v, err := c.newVariant(doc.Path, spec, params, src)
 	if err != nil {
 		return fmt.Errorf("%s: %w", src, err)
 	}
@@ -80,33 +87,43 @@ func (c *compiler) addMock(doc *restfile.Document, spec *restfile.Mock) error {
 	return nil
 }
 
-func (c *compiler) newVariant(path string, spec *restfile.Mock, src loc) (*variant, error) {
+func (c *compiler) newVariant(
+	path string,
+	spec *restfile.Mock,
+	pathParams map[string]string,
+	src loc,
+) (*variant, error) {
+	if err := spec.CheckShape(); err != nil {
+		return nil, err
+	}
 	switch {
-	case !restfile.ValidMockStatus(spec.Response.Status):
-		return nil, fmt.Errorf("mock response status must be between 200 and 599")
 	case spec.Latency < 0:
-		return nil, fmt.Errorf("mock latency cannot be negative")
+		return nil, errors.New("mock latency cannot be negative")
 	case spec.Name != "" && !restfile.ValidMockName(spec.Name):
-		return nil, fmt.Errorf("invalid mock scenario name")
+		return nil, errors.New("invalid mock scenario name")
+	case spec.Sequence != "" && !restfile.ValidMockName(spec.Sequence):
+		return nil, errors.New("invalid mock sequence name")
 	case spec.Default && spec.Match.HasConditions():
-		return nil, fmt.Errorf("default mock scenario cannot have @match conditions")
+		return nil, errors.New("default mock scenario cannot have @match conditions")
 	}
 	if err := checkMatch(spec.Match); err != nil {
 		return nil, err
 	}
 
-	headers, err := respHeaders(spec.Response.Headers)
-	if err != nil {
-		return nil, err
-	}
-	body, fixture := []byte(spec.Response.Body.Text), ""
-	if ref := spec.Response.Body.FilePath; ref != "" {
-		if body, fixture, err = c.read(path, ref); err != nil {
+	responses := make([]response, 0, len(spec.Responses))
+	for _, specResponse := range spec.Responses {
+		resp, err := c.newResponse(path, specResponse)
+		if err != nil {
 			return nil, err
 		}
-	}
-	if !restfile.ResponseAllowsBody(spec.Response.Status) && len(body) > 0 {
-		return nil, fmt.Errorf("status %d cannot have a response body", spec.Response.Status)
+		if !spec.DisableInterpolation {
+			interpolate, err := validateResponseTemplates(resp, pathParams)
+			if err != nil {
+				return nil, err
+			}
+			resp.interpolate = interpolate
+		}
+		responses = append(responses, resp)
 	}
 
 	ms, err := newMatchers(spec.Match)
@@ -114,18 +131,40 @@ func (c *compiler) newVariant(path string, spec *restfile.Mock, src loc) (*varia
 		return nil, err
 	}
 
+	name := spec.Name
+	if spec.Sequence != "" {
+		name = spec.Sequence
+	}
 	return &variant{
-		name:     spec.Name,
-		def:      spec.Default,
-		latency:  spec.Latency,
-		match:    spec.Match,
-		matchers: ms,
-		status:   spec.Response.Status,
-		headers:  headers,
-		body:     body,
-		fixture:  fixture,
-		src:      src,
+		name:       name,
+		def:        spec.Default,
+		latency:    spec.Latency,
+		match:      spec.Match,
+		matchers:   ms,
+		responses:  responses,
+		pathParams: pathParams,
+		src:        src,
 	}, nil
+}
+
+func (c *compiler) newResponse(path string, spec restfile.MockResponse) (response, error) {
+	if !restfile.ValidMockStatus(spec.Status) {
+		return response{}, fmt.Errorf("mock response status must be between 200 and 599")
+	}
+	headers, err := respHeaders(spec.Headers)
+	if err != nil {
+		return response{}, err
+	}
+	body, fixture := []byte(spec.Body.Text), ""
+	if ref := spec.Body.FilePath; ref != "" {
+		if body, fixture, err = c.read(path, ref); err != nil {
+			return response{}, err
+		}
+	}
+	if !restfile.ResponseAllowsBody(spec.Status) && len(body) > 0 {
+		return response{}, fmt.Errorf("status %d cannot have a response body", spec.Status)
+	}
+	return response{status: spec.Status, headers: headers, body: body, fixture: fixture}, nil
 }
 
 func (c *compiler) handler() (*Handler, error) {
@@ -145,8 +184,10 @@ func (c *compiler) handler() (*Handler, error) {
 			methods = append(methods, rt.method)
 		}
 		for _, v := range rt.variants {
-			if v.fixture != "" && !slices.Contains(fixtures, v.fixture) {
-				fixtures = append(fixtures, v.fixture)
+			for _, resp := range v.responses {
+				if resp.fixture != "" && !slices.Contains(fixtures, resp.fixture) {
+					fixtures = append(fixtures, resp.fixture)
+				}
 			}
 		}
 	}
@@ -155,7 +196,6 @@ func (c *compiler) handler() (*Handler, error) {
 		mux:       mux,
 		routes:    len(c.routes),
 		scenarios: scenarios,
-		digest:    digest(c.routes),
 		methods:   methods,
 		fixtures:  fixtures,
 	}, nil

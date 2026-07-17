@@ -51,8 +51,11 @@ func (c *refCollector) collectDoc() {
 		c.collectReq(req)
 	}
 	for _, mock := range c.doc.Mocks {
-		if mock != nil {
-			c.add(RefBody, mock.Response.Body.FilePath, mock.LineRange.Start)
+		if mock == nil {
+			continue
+		}
+		for _, resp := range mock.Responses {
+			c.add(RefBody, resp.Body.FilePath, mock.LineRange.Start)
 		}
 	}
 	for _, wf := range c.doc.Workflows {

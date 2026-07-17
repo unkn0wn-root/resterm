@@ -27,3 +27,28 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 
 < ./mock-user.json
+
+### Interpolated profile
+# @mock method=GET path=/profiles/{id}
+HTTP/1.1 200 OK
+Content-Type: application/json
+X-Request-ID: {{$uuid}}
+
+{"id":{{json.path.id}},"generatedAt":"{{$timestampISO8601}}"}
+
+### Poll payment
+# @mock method=GET path=/payments/{id} sequence=polling
+HTTP/1.1 503 Service Unavailable
+Retry-After: 1
+
+{"id":{{json.path.id}},"status":"pending"}
+---
+HTTP/1.1 503 Service Unavailable
+Retry-After: 1
+
+{"id":{{json.path.id}},"status":"pending"}
+---
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"id":{{json.path.id}},"status":"completed"}

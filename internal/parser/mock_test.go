@@ -2,6 +2,7 @@ package parser
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -37,10 +38,14 @@ GET https://example.com
 	if m.Name != "accepted" || !m.Default || m.Latency != 250*time.Millisecond {
 		t.Fatalf("unexpected mock options: %+v", m)
 	}
-	if m.Response.Status != 202 || m.Response.Body.Text != "{\"id\":\"pay_123\",\"status\":\"pending\"}" {
-		t.Fatalf("unexpected response: %+v", m.Response)
+	if len(m.Responses) != 1 {
+		t.Fatalf("responses = %d, want 1", len(m.Responses))
 	}
-	if got := m.Response.Headers.Values("Set-Cookie"); !reflect.DeepEqual(got, []string{"one=1", "two=2"}) {
+	resp := m.Responses[0]
+	if resp.Status != 202 || resp.Body.Text != "{\"id\":\"pay_123\",\"status\":\"pending\"}" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if got := resp.Headers.Values("Set-Cookie"); !reflect.DeepEqual(got, []string{"one=1", "two=2"}) {
 		t.Fatalf("set-cookie = %#v", got)
 	}
 	if got := m.Match.Query["mode"]; !reflect.DeepEqual(got, []string{"test"}) {
@@ -72,8 +77,122 @@ POST https://not-a-request.example
 		t.Fatalf("requests=%d mocks=%d", len(doc.Requests), len(doc.Mocks))
 	}
 	want := "POST https://not-a-request.example\n# @name not-a-directive\n@file not-a-variable"
-	if got := doc.Mocks[0].Response.Body.Text; got != want {
+	if got := doc.Mocks[0].Responses[0].Body.Text; got != want {
 		t.Fatalf("body:\n%q\nwant:\n%q", got, want)
+	}
+}
+
+func TestParseMockSequence(t *testing.T) {
+	src := `# @mock method=GET path=/payments/{id} sequence=polling interpolate=false
+HTTP/1.1 503 Service Unavailable
+Retry-After: 1
+
+pending
+
+---
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"completed"}
+`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Mocks) != 1 {
+		t.Fatalf("errors=%+v mocks=%d", doc.Errors, len(doc.Mocks))
+	}
+	m := doc.Mocks[0]
+	if m.Sequence != "polling" || !m.DisableInterpolation || len(m.Responses) != 2 {
+		t.Fatalf("sequence mock = %+v", m)
+	}
+	if first := m.Responses[0]; first.Status != 503 || first.Body.Text != "pending" ||
+		first.Headers.Get("Retry-After") != "1" {
+		t.Fatalf("first response = %+v", first)
+	}
+	if second := m.Responses[1]; second.Status != 200 || second.Body.Text != `{"status":"completed"}` {
+		t.Fatalf("second response = %+v", second)
+	}
+}
+
+func TestParseMockResponseDelimiterIsLiteralWithoutSequence(t *testing.T) {
+	src := `# @mock method=GET path=/text
+HTTP/1.1 200 OK
+
+before
+---
+after
+`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Mocks) != 1 {
+		t.Fatalf("errors=%+v mocks=%d", doc.Errors, len(doc.Mocks))
+	}
+	if got := doc.Mocks[0].Responses[0].Body.Text; got != "before\n---\nafter" {
+		t.Fatalf("body = %q", got)
+	}
+}
+
+func TestParseMockSequenceTrailingDelimiter(t *testing.T) {
+	src := `# @mock method=GET path=/x sequence=poll
+HTTP/1.1 503 Service Unavailable
+
+pending
+---
+HTTP/1.1 200 OK
+
+done
+---
+`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("errors = %+v", doc.Errors)
+	}
+	if got := len(doc.Mocks[0].Responses); got != 2 {
+		t.Fatalf("responses = %d, want 2 (no phantom from trailing delimiter)", got)
+	}
+}
+
+func TestParseMockSequenceDiagnostics(t *testing.T) {
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			name:   "name and sequence",
+			source: "# @mock method=GET path=/x name=one sequence=two\nHTTP/1.1 200 OK",
+			want:   "name and sequence cannot be combined",
+		},
+		{
+			name:   "one response",
+			source: "# @mock method=GET path=/x sequence=one\nHTTP/1.1 200 OK",
+			want:   "at least two responses",
+		},
+		{
+			name:   "empty sequence",
+			source: "# @mock method=GET path=/x sequence=\nHTTP/1.1 200 OK",
+			want:   "sequence name cannot be empty",
+		},
+		{
+			name:   "invalid interpolation option",
+			source: "# @mock method=GET path=/x interpolate=maybe\nHTTP/1.1 200 OK",
+			want:   "interpolate must be true or false",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			doc := Parse("bad.http", []byte(test.source))
+			if len(doc.Errors) == 0 {
+				t.Fatalf("expected %q error", test.want)
+			}
+			found := false
+			for _, err := range doc.Errors {
+				if strings.Contains(err.Message, test.want) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("errors=%+v, want %q", doc.Errors, test.want)
+			}
+		})
 	}
 }
 

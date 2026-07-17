@@ -109,7 +109,7 @@ POST https://api.example.test/payments
 			"Content-Length": {"35"},
 			"Set-Cookie":     {"session=secret"},
 		},
-		Body: []byte(`{"id":"pay_123","status":"pending"}`),
+		Body: []byte(`{"id":"pay_123","status":"pending","template":"{{literal}}"}`),
 		Request: &restfile.Request{
 			Method: http.MethodPost,
 			Metadata: restfile.RequestMetadata{
@@ -132,13 +132,20 @@ POST https://api.example.test/payments
 	}
 	spec := model.doc.Mocks[0]
 	if spec.Method != http.MethodPost || spec.Path != "/payments" ||
-		spec.Response.Status != http.StatusAccepted || spec.Name != "payment" || !spec.Default {
+		spec.Responses[0].Status != http.StatusAccepted || spec.Name != "payment" || !spec.Default {
 		t.Fatalf("captured mock = %+v", spec)
 	}
-	if spec.Response.Headers.Get("Content-Length") != "" || spec.Response.Headers.Get("Set-Cookie") != "" {
-		t.Fatalf("captured headers = %v", spec.Response.Headers)
+	if !spec.DisableInterpolation {
+		t.Fatal("captured literal template was not preserved")
+	}
+	if spec.Responses[0].Headers.Get("Content-Length") != "" ||
+		spec.Responses[0].Headers.Get("Set-Cookie") != "" {
+		t.Fatalf("captured headers = %v", spec.Responses[0].Headers)
 	}
 	if !strings.Contains(model.editor.Value(), `{"id":"pay_123"`) {
 		t.Fatalf("captured body missing from editor: %q", model.editor.Value())
+	}
+	if !strings.Contains(model.editor.Value(), "interpolate=false") {
+		t.Fatalf("captured interpolation option missing from editor: %q", model.editor.Value())
 	}
 }

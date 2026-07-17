@@ -13,6 +13,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	"github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -22,19 +23,22 @@ func (b *documentBuilder) addMockError(line int, message string) {
 }
 
 type mockBuilder struct {
-	startLine int
-	endLine   int
-	title     string
-	method    string
-	path      string
-	name      string
-	latency   time.Duration
-	isDefault bool
-	match     restfile.MockMatch
-	status    int
-	headers   http.Header
-	inBody    bool
-	body      []string
+	startLine            int
+	endLine              int
+	title                string
+	method               string
+	path                 string
+	name                 string
+	sequence             string
+	latency              time.Duration
+	isDefault            bool
+	disableInterpolation bool
+	match                restfile.MockMatch
+	responses            []restfile.MockResponse
+	status               int
+	headers              http.Header
+	inBody               bool
+	body                 []string
 }
 
 func (b *documentBuilder) handleMockDirective(line int, key, raw string) bool {
@@ -62,7 +66,7 @@ func (b *documentBuilder) startMock(line int, raw string) {
 	vals := options.Parse(raw)
 	for _, key := range util.SortedKeys(vals) {
 		switch key {
-		case "method", "path", "name", "default", "latency":
+		case "method", "path", "name", "sequence", "default", "latency", "interpolate":
 		default:
 			b.addMockError(line, fmt.Sprintf("unknown @mock option %q", key))
 		}
@@ -75,6 +79,7 @@ func (b *documentBuilder) startMock(line int, raw string) {
 		method:    strings.ToUpper(strings.TrimSpace(vals["method"])),
 		path:      strings.TrimSpace(vals["path"]),
 		name:      strings.TrimSpace(vals["name"]),
+		sequence:  strings.TrimSpace(vals["sequence"]),
 		headers:   make(http.Header),
 		match: restfile.MockMatch{
 			Query:   make(map[string][]string),
@@ -83,13 +88,15 @@ func (b *documentBuilder) startMock(line int, raw string) {
 	}
 	b.pendingTitle = ""
 	b.checkMockRoute(line, m)
+	if _, ok := vals["sequence"]; ok && m.sequence == "" {
+		b.addMockError(line, "@mock sequence name cannot be empty")
+	}
 
 	if raw, ok := vals["default"]; ok {
-		v, err := strconv.ParseBool(strings.TrimSpace(raw))
-		if err != nil {
-			b.addMockError(line, "@mock default must be true or false")
-		} else {
+		if v, ok := value.ParseBool(raw); ok {
 			m.isDefault = v
+		} else {
+			b.addMockError(line, "@mock default must be true or false")
 		}
 	}
 	if raw, ok := vals["latency"]; ok {
@@ -98,6 +105,13 @@ func (b *documentBuilder) startMock(line int, raw string) {
 			b.addMockError(line, "@mock latency must be a non-negative Go duration")
 		} else {
 			m.latency = v
+		}
+	}
+	if raw, ok := vals["interpolate"]; ok {
+		if v, ok := value.ParseBool(raw); ok {
+			m.disableInterpolation = !v
+		} else {
+			b.addMockError(line, "@mock interpolate must be true or false")
 		}
 	}
 	b.mock = m
@@ -117,6 +131,12 @@ func (b *documentBuilder) checkMockRoute(line int, m *mockBuilder) {
 	if m.name != "" && !restfile.ValidMockName(m.name) {
 		b.addMockError(line, "@mock name may contain only letters, digits, '.', '_' and '-'")
 	}
+	if m.sequence != "" && !restfile.ValidMockName(m.sequence) {
+		b.addMockError(line, "@mock sequence may contain only letters, digits, '.', '_' and '-'")
+	}
+	if m.name != "" && m.sequence != "" {
+		b.addMockError(line, "@mock name and sequence cannot be combined")
+	}
 }
 
 func (b *documentBuilder) handleMockBlockLine(ln int, line, trimmed string) {
@@ -128,6 +148,15 @@ func (b *documentBuilder) handleMockBlockLine(ln int, line, trimmed string) {
 
 	m := b.mock
 	m.endLine = ln
+	if m.sequence != "" && restfile.IsMockSequenceDelimiter(trimmed) {
+		if !m.started() {
+			b.addMockError(ln, "@mock sequence has an empty response")
+			return
+		}
+		m.trimStructuralBlankLine()
+		m.finishResponse(b, ln)
+		return
+	}
 	switch {
 	case m.inBody:
 		m.body = append(m.body, line)
@@ -149,8 +178,10 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, trimmed string
 			return
 		}
 		key, raw := lex.SplitDirective(strings.TrimSpace(text[1:]))
-		if key == "match" {
+		if key == "match" && len(m.responses) == 0 {
 			m.addMatch(b, line, raw)
+		} else if key == "match" {
+			b.addMockError(line, "@match must be declared before the first sequence response")
 		} else {
 			b.addMockError(line, fmt.Sprintf("directive @%s is not valid before a mock response", key))
 		}
@@ -259,10 +290,32 @@ func (b *documentBuilder) flushMock() {
 		return
 	}
 	m := b.mock
-	if m.status == 0 {
-		b.addMockError(m.endLine, "@mock response status line is missing")
+	if m.started() || len(m.responses) == 0 {
+		m.finishResponse(b, m.endLine)
 	}
+	if m.sequence != "" && len(m.responses) < 2 {
+		b.addMockError(m.endLine, "@mock sequence must define at least two responses")
+	}
+	b.doc.Mocks = append(b.doc.Mocks, &restfile.Mock{
+		Title:                m.title,
+		Name:                 m.name,
+		Sequence:             m.sequence,
+		Method:               m.method,
+		Path:                 m.path,
+		Latency:              m.latency,
+		Default:              m.isDefault,
+		Match:                m.match,
+		Responses:            m.responses,
+		DisableInterpolation: m.disableInterpolation,
+		LineRange:            restfile.LineRange{Start: m.startLine, End: m.endLine},
+	})
+	b.mock = nil
+}
 
+func (m *mockBuilder) finishResponse(b *documentBuilder, line int) {
+	if m.status == 0 {
+		b.addMockError(line, "@mock response status line is missing")
+	}
 	body := restfile.BodySource{MimeType: m.headers.Get("Content-Type")}
 	if len(m.body) > 0 {
 		file, ok := parseHTTPBodyFile(m.body[0], false)
@@ -272,18 +325,21 @@ func (b *documentBuilder) flushMock() {
 			body.Text = strings.Join(m.body, "\n")
 		}
 	}
-	b.doc.Mocks = append(b.doc.Mocks, &restfile.Mock{
-		Title:     m.title,
-		Name:      m.name,
-		Method:    m.method,
-		Path:      m.path,
-		Latency:   m.latency,
-		Default:   m.isDefault,
-		Match:     m.match,
-		Response:  restfile.MockResponse{Status: m.status, Headers: m.headers, Body: body},
-		LineRange: restfile.LineRange{Start: m.startLine, End: m.endLine},
+	m.responses = append(m.responses, restfile.MockResponse{
+		Status:  m.status,
+		Headers: m.headers,
+		Body:    body,
 	})
-	b.mock = nil
+	m.status = 0
+	m.headers = make(http.Header)
+	m.inBody = false
+	m.body = nil
+}
+
+// started reports whether the current response has begun accumulating, so a
+// trailing or stray '---' does not finalize a phantom empty response.
+func (m *mockBuilder) started() bool {
+	return m.status != 0 || len(m.body) > 0
 }
 
 func (m *mockBuilder) trimStructuralBlankLine() {

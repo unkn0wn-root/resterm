@@ -3,6 +3,8 @@ package rts
 import (
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 type jseg struct {
@@ -66,6 +68,87 @@ func JSONPathGet(v any, path string) (any, bool) {
 		cur = val
 	}
 	return cur, true
+}
+
+// ValidJSONPath reports whether path uses the supported JSONPathGet syntax.
+func ValidJSONPath(path string) bool {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return true
+	}
+	if strings.HasPrefix(p, "$") {
+		p = p[1:]
+		if p == "" {
+			return true
+		}
+		if p[0] == '.' {
+			p = p[1:]
+			if p == "" {
+				return false
+			}
+		} else if p[0] != '[' {
+			return false
+		}
+	}
+
+	needKey := true
+	allowBracket := true
+	for i := 0; i < len(p); {
+		switch p[i] {
+		case '.':
+			if needKey {
+				return false
+			}
+			needKey = true
+			allowBracket = false
+			i++
+		case '[':
+			if !allowBracket {
+				return false
+			}
+			next, ok := validJSONPathBracket(p, i)
+			if !ok {
+				return false
+			}
+			needKey = false
+			allowBracket = true
+			i = next
+		default:
+			if !needKey {
+				return false
+			}
+			start := i
+			for i < len(p) && p[i] != '.' && p[i] != '[' {
+				r, size := utf8.DecodeRuneInString(p[i:])
+				if r == utf8.RuneError && size == 1 {
+					return false
+				}
+				if r == ']' || unicode.IsSpace(r) || unicode.IsControl(r) {
+					return false
+				}
+				i += size
+			}
+			if i == start {
+				return false
+			}
+			needKey = false
+			allowBracket = true
+		}
+	}
+	return !needKey
+}
+
+func validJSONPathBracket(path string, start int) (int, bool) {
+	if start+1 >= len(path) {
+		return 0, false
+	}
+	i := start + 1
+	if path[i] == '"' || path[i] == '\'' {
+		_, end, ok := readQ(path, i)
+		return end + 1, ok
+	}
+	res := readIdx(path, i)
+	return res.next + 1, res.ok && !res.stop && res.idx >= 0
 }
 
 func splitPath(p string) []jseg {

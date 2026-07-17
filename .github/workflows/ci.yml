@@ -19,6 +19,8 @@ jobs:
           go-version-file: go.mod
       - name: Run tests
         run: go test ./...
+      - name: Run mock race tests
+        run: go test -race ./internal/mock
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:

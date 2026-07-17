@@ -103,13 +103,16 @@ type BodySource struct {
 type Mock struct {
 	Title     string
 	Name      string
+	Sequence  string
 	Method    string
 	Path      string
 	Latency   time.Duration
 	Default   bool
 	Match     MockMatch
-	Response  MockResponse
-	LineRange LineRange
+	Responses []MockResponse
+	// DisableInterpolation preserves response templates as literal text.
+	DisableInterpolation bool
+	LineRange            LineRange
 }
 
 type MockMatch struct {
