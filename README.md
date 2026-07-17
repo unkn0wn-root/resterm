@@ -14,7 +14,7 @@
 
 Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files and supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, with a fast feedback loop built around `history`, `diffs`, `tracing`, and `profiling`.
 
-Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Mock Servers](#mock-servers), [Documentation](#documentation).
+Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
 
 ## Screenshot tour
 
