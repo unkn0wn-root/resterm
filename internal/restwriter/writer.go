@@ -122,17 +122,8 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 	if mock == nil {
 		return errors.New("writer: mock is nil")
 	}
-	file := strings.TrimSpace(mock.Response.Body.FilePath)
-	body := mock.Response.Body.Text
-	if file == "" && body != "" {
-		if !restfile.ResponseAllowsBody(mock.Response.Status) {
-			return fmt.Errorf("status %d cannot have a response body", mock.Response.Status)
-		}
-		var err error
-		body, err = NormalizeMockBody(body)
-		if err != nil {
-			return err
-		}
+	if err := mock.CheckShape(); err != nil {
+		return fmt.Errorf("writer: %w", err)
 	}
 	title := strings.Join(strings.Fields(mock.Title), " ")
 	if title == "" {
@@ -144,7 +135,10 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 	b.WriteString(strings.ToUpper(strings.TrimSpace(mock.Method)))
 	b.WriteString(" path=")
 	b.WriteString(strings.TrimSpace(mock.Path))
-	if mock.Name != "" {
+	if mock.Sequence != "" {
+		b.WriteString(" sequence=")
+		b.WriteString(mock.Sequence)
+	} else if mock.Name != "" {
 		b.WriteString(" name=")
 		b.WriteString(mock.Name)
 	}
@@ -155,17 +149,52 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 		b.WriteString(" latency=")
 		b.WriteString(mock.Latency.String())
 	}
+	if mock.DisableInterpolation {
+		b.WriteString(" interpolate=false")
+	}
 	b.WriteString("\n")
 	renderMockMatch(b, mock.Match)
 
-	status := mock.Response.Status
+	for i, resp := range mock.Responses {
+		if i > 0 {
+			b.WriteString(restfile.MockSequenceDelimiter + "\n")
+		}
+		if err := renderMockResponse(b, resp, mock.Sequence != ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func renderMockResponse(b *strings.Builder, resp restfile.MockResponse, sequence bool) error {
+	file := strings.TrimSpace(resp.Body.FilePath)
+	body := resp.Body.Text
+	if file == "" && body != "" {
+		if !restfile.ResponseAllowsBody(resp.Status) {
+			return fmt.Errorf("status %d cannot have a response body", resp.Status)
+		}
+		var err error
+		body, err = NormalizeMockBody(body)
+		if err != nil {
+			return err
+		}
+		if sequence {
+			for line := range strings.SplitSeq(body, "\n") {
+				if restfile.IsMockSequenceDelimiter(line) {
+					return errors.New("mock sequence body contains a response delimiter")
+				}
+			}
+		}
+	}
+
+	status := resp.Status
 	fmt.Fprintf(b, "HTTP/1.1 %d", status)
 	if text := http.StatusText(status); text != "" {
 		b.WriteString(" ")
 		b.WriteString(text)
 	}
 	b.WriteString("\n")
-	renderHeaders(b, mock.Response.Headers)
+	renderHeaders(b, resp.Headers)
 	b.WriteString("\n")
 	if file != "" {
 		b.WriteString("< ")
@@ -186,7 +215,11 @@ func NormalizeMockBody(body string) (string, error) {
 		return body, err
 	}
 	lines := strings.Split(body, "\n")
-	if _, isFile := bodyref.Parse(lines[0], bodyref.Options{Location: bodyref.Line}); isFile && util.AllBlank(lines[1:]) {
+	if _, isFile := bodyref.Parse(
+		lines[0],
+		bodyref.Options{Location: bodyref.Line},
+	); isFile &&
+		util.AllBlank(lines[1:]) {
 		return "", errors.New("mock body looks like a file reference")
 	}
 	return body, nil

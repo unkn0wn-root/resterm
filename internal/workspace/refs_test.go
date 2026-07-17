@@ -74,8 +74,9 @@ func TestRefsCollectsStaticRequestRefs(t *testing.T) {
 		},
 		Mocks: []*restfile.Mock{{
 			LineRange: restfile.LineRange{Start: 35, End: 39},
-			Response: restfile.MockResponse{
-				Body: restfile.BodySource{FilePath: "./mock-response.json"},
+			Responses: []restfile.MockResponse{
+				{Body: restfile.BodySource{FilePath: "./mock-response.json"}},
+				{Body: restfile.BodySource{FilePath: "./mock-response-final.json"}},
 			},
 		}},
 		Workflows: []restfile.Workflow{
@@ -114,6 +115,7 @@ func TestRefsCollectsStaticRequestRefs(t *testing.T) {
 		{kind: RefRTSJSON, path: "./capture.json"},
 		{kind: RefWebSocket, path: "./ws.bin"},
 		{kind: RefBody, path: "./mock-response.json"},
+		{kind: RefBody, path: "./mock-response-final.json"},
 		{kind: RefRTSJSON, path: "./workflow.json"},
 	}
 	for _, tt := range tests {

@@ -2,6 +2,7 @@ package generator
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/mock"
@@ -60,7 +61,7 @@ func TestGenerateOpenAPIMocks(t *testing.T) {
 		t.Fatalf("requests=%d mocks=%d", len(doc.Requests), len(doc.Mocks))
 	}
 	if first := doc.Mocks[0]; !first.Default || first.Name != "status-202-accepted" ||
-		first.Response.Headers.Get("X-Rate-Limit") != "10" {
+		first.Responses[0].Headers.Get("X-Rate-Limit") != "10" {
 		t.Fatalf("first generated mock = %+v", first)
 	}
 
@@ -95,5 +96,40 @@ func TestGenerateOpenAPIBoth(t *testing.T) {
 	}
 	if len(doc.Requests) != 1 || len(doc.Mocks) != 1 {
 		t.Fatalf("requests=%d mocks=%d", len(doc.Requests), len(doc.Mocks))
+	}
+}
+
+func TestGenerateOpenAPIMockPreservesLiteralTemplates(t *testing.T) {
+	spec := &model.Spec{Operations: []model.Operation{{
+		Method: model.MethodGet,
+		Path:   "/templates",
+		Responses: []model.Response{{
+			StatusCode: "200",
+			MediaTypes: []model.MediaType{{
+				ContentType: "application/json",
+				Examples: []model.Example{{
+					Value:    map[string]any{"value": "{{literal}}"},
+					HasValue: true,
+				}},
+			}},
+		}},
+	}}}
+	doc, err := NewBuilder().Generate(
+		context.Background(),
+		spec,
+		openapi.GeneratorOptions{Mode: openapi.GenerationMocks},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Mocks) != 1 || !doc.Mocks[0].DisableInterpolation {
+		t.Fatalf("generated mocks = %+v", doc.Mocks)
+	}
+	rendered, err := restwriter.Render(doc, restwriter.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered, "interpolate=false") || !strings.Contains(rendered, "{{literal}}") {
+		t.Fatalf("rendered mock:\n%s", rendered)
 	}
 }

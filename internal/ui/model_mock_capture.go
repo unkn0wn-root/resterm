@@ -80,20 +80,22 @@ func (m *Model) capturedMock() (*restfile.Mock, error) {
 	}
 
 	label := capturedMockLabel(resp, m.activeRequestTitle)
-	spec := &restfile.Mock{
-		Title:   capturedMockTitle(resp, label),
-		Name:    nextCapturedMockName(route, label, resp.StatusCode),
-		Method:  method,
-		Path:    path,
-		Default: capturedMockIsDefault(route),
-		Response: restfile.MockResponse{
-			Status:  resp.StatusCode,
-			Headers: capturedMockHeaders(resp.Headers),
-			Body: restfile.BodySource{
-				Text:     body,
-				MimeType: resp.Headers.Get("Content-Type"),
-			},
+	response := restfile.MockResponse{
+		Status:  resp.StatusCode,
+		Headers: capturedMockHeaders(resp.Headers),
+		Body: restfile.BodySource{
+			Text:     body,
+			MimeType: resp.Headers.Get("Content-Type"),
 		},
+	}
+	spec := &restfile.Mock{
+		Title:                capturedMockTitle(resp, label),
+		Name:                 nextCapturedMockName(route, label, resp.StatusCode),
+		Method:               method,
+		Path:                 path,
+		Default:              capturedMockIsDefault(route),
+		Responses:            []restfile.MockResponse{response},
+		DisableInterpolation: response.HasTemplate(),
 	}
 	// A default scenario answers every request, so query conditions are only
 	// attached once another scenario already covers the route.
@@ -314,6 +316,7 @@ func nextCapturedMockName(route []*restfile.Mock, label string, status int) stri
 	used := make(map[string]struct{}, len(route))
 	for _, spec := range route {
 		used[spec.Name] = struct{}{}
+		used[spec.Sequence] = struct{}{}
 	}
 	return restwriter.UniqueMockName(base, used)
 }

@@ -24,9 +24,9 @@ func (h *Handler) Scenarios() int { return h.scenarios }
 func (h *Handler) Digest() string { return h.digest }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	hd, pat := h.lookup(r)
-	if pat != "" {
-		hd.ServeHTTP(w, r)
+	if h.lookup(r) != "" {
+		// ServeMux populates Request.PathValue before dispatching the route.
+		h.mux.ServeHTTP(w, r)
 		return
 	}
 
@@ -43,7 +43,7 @@ func (h *Handler) allowedMethods(r *http.Request) []string {
 	var allowed []string
 	for _, m := range h.methods {
 		pr.Method = m
-		if _, pat := h.lookup(pr); pat == "" {
+		if h.lookup(pr) == "" {
 			continue
 		}
 		if m == http.MethodGet {
@@ -56,19 +56,20 @@ func (h *Handler) allowedMethods(r *http.Request) []string {
 }
 
 func (h *Handler) hasRoute(r *http.Request) bool {
-	_, pat := h.lookup(r)
-	return pat != ""
+	return h.lookup(r) != ""
 }
 
-func (h *Handler) lookup(r *http.Request) (http.Handler, string) {
+// lookup returns the mux pattern matching r, or "" when no mock route applies.
+// It rejects paths ServeMux would otherwise answer with a redirect.
+func (h *Handler) lookup(r *http.Request) string {
 	if !cleanPath(r.URL.EscapedPath()) {
-		return nil, ""
+		return ""
 	}
-	hd, pat := h.mux.Handler(r)
+	_, pat := h.mux.Handler(r)
 	if pat != "" && missingRouteSlash(pat, r.URL.EscapedPath()) {
-		return nil, ""
+		return ""
 	}
-	return hd, pat
+	return pat
 }
 
 // ServeMux still reports a trailing-slash pattern for the unslashed path while

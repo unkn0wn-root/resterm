@@ -71,7 +71,7 @@ func mockLogLine(e mock.Event) string {
 		}
 		return when + " RELOAD error  " + oneLine(e.Error)
 	}
-	name := e.Scenario
+	name := e.ScenarioLabel()
 	if name == "" {
 		name = e.Route
 	}

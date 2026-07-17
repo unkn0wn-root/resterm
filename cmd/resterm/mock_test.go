@@ -3,10 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/mock"
 )
 
 func TestServeMocksStartsAndStopsWithContext(t *testing.T) {
@@ -33,6 +37,22 @@ ok`)
 	}
 	if errOut.Len() != 0 {
 		t.Fatalf("stderr:\n%s", errOut.String())
+	}
+}
+
+func TestPrintMockEventIncludesSequenceProgress(t *testing.T) {
+	var output bytes.Buffer
+	printMockEvent(log.New(&output, "", 0), mock.Event{
+		Method:        "GET",
+		Target:        "/payments/1",
+		Status:        200,
+		Scenario:      "polling",
+		SequenceStep:  2,
+		SequenceTotal: 3,
+		Duration:      time.Millisecond,
+	})
+	if got := output.String(); !strings.Contains(got, "[polling 2/3]") {
+		t.Fatalf("event output = %q", got)
 	}
 }
 

@@ -90,7 +90,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
-- **Mock servers** declared in the same files, with deterministic variants, matchers, latency, CORS, hot reload, OpenAPI examples, and response capture.
+- **Mock servers** declared in the same files, with conditional scenarios, response interpolation, response sequences, hot reload, and response capture.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -144,15 +144,6 @@ Serve one file or a whole directory from the CLI:
 resterm mock ./requests.http
 resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 ```
-
-Mock servers also support:
-
-- Exact paths, segment wildcards (`/users/{id}`), and catch-all suffixes (`/assets/{path...}`).
-- Inline text bodies or file-backed fixtures, repeated headers, fixed latency, `HEAD`, and automatic `404` / `405` responses for anything that doesn't match.
-- Pinning a scenario per request with the `X-Resterm-Mock` and `X-Resterm-Mock-Status` headers.
-- CORS that defaults to wildcard on loopback and turns off (with an exposure warning) on non-loopback binds; `--cors` sets an explicit origin allowlist.
-- Hot reload on file changes (a broken edit keeps the last valid routes live) and a request log of recent calls.
-- Generating mock blocks from an OpenAPI spec with `--openapi-mode mocks`, or `both` for requests and mocks together.
 
 In the TUI, `g Shift+M` starts and stops the workspace server, `:mock logs` opens its request log, and `g a` captures the focused live response as a mock block. Captured blocks stay unsaved on purpose - review headers and bodies for secrets before saving.
 

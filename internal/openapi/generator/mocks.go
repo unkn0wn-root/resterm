@@ -147,15 +147,17 @@ func (b *Builder) mockForResponse(
 	if ct != "" {
 		headers.Set("Content-Type", ct)
 	}
+	response := restfile.MockResponse{
+		Status:  status,
+		Headers: headers,
+		Body:    restfile.BodySource{Text: body, MimeType: ct},
+	}
 	return &restfile.Mock{
-		Title:  mockTitle(op, status, example, ct, multi),
-		Method: string(op.Method),
-		Path:   op.Path,
-		Response: restfile.MockResponse{
-			Status:  status,
-			Headers: headers,
-			Body:    restfile.BodySource{Text: body, MimeType: ct},
-		},
+		Title:                mockTitle(op, status, example, ct, multi),
+		Method:               string(op.Method),
+		Path:                 op.Path,
+		Responses:            []restfile.MockResponse{response},
+		DisableInterpolation: response.HasTemplate(),
 	}
 }
 

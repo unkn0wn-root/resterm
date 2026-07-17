@@ -71,6 +71,37 @@ user`)
 	)
 }
 
+func TestJSONMatcherComparesNumbersExactly(t *testing.T) {
+	tests := []struct {
+		name string
+		want string
+		got  string
+		ok   bool
+	}{
+		{name: "decimal equivalent", want: `1`, got: `1.0`, ok: true},
+		{name: "exponent equivalent", want: `100`, got: `1e2`, ok: true},
+		{
+			name: "distinct large integers",
+			want: `9007199254740993`, got: `9007199254740992`, ok: false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			want, err := decodeJSON([]byte(test.want))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := decodeJSON([]byte(test.got))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ok := subset(want, got); ok != test.ok {
+				t.Fatalf("subset(%s, %s) = %t, want %t", test.want, test.got, ok, test.ok)
+			}
+		})
+	}
+}
+
 func TestCompileRejectsInvalidMocks(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -101,6 +132,45 @@ HTTP/1.1 201 Created`,
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			_, err := Compile([]*restfile.Document{parser.Parse("bad.http", []byte(test.source))})
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Compile() error = %v, want %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestCompileRejectsInvalidResponseLists(t *testing.T) {
+	response := restfile.MockResponse{Status: http.StatusOK}
+	tests := []struct {
+		name string
+		mock *restfile.Mock
+		want string
+	}{
+		{
+			name: "missing response",
+			mock: &restfile.Mock{Method: http.MethodGet, Path: "/x"},
+			want: "exactly one response",
+		},
+		{
+			name: "sequence with one response",
+			mock: &restfile.Mock{
+				Method: http.MethodGet, Path: "/x", Sequence: "polling",
+				Responses: []restfile.MockResponse{response},
+			},
+			want: "at least two responses",
+		},
+		{
+			name: "name and sequence",
+			mock: &restfile.Mock{
+				Method: http.MethodGet, Path: "/x", Name: "named", Sequence: "polling",
+				Responses: []restfile.MockResponse{response, response},
+			},
+			want: "cannot be combined",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := Compile([]*restfile.Document{{Mocks: []*restfile.Mock{test.mock}}})
 			if err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("Compile() error = %v, want %q", err, test.want)
 			}

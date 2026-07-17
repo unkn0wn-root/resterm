@@ -179,6 +179,30 @@ func TestDynamicHelpersCaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestIsDynamic(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		want bool
+	}{
+		{name: "$uuid", want: true},
+		{name: "$TIMESTAMPISO8601 - 1h", want: true},
+		{name: "$guid + 0s", want: true},
+		{name: "$uuid + 1s", want: false},
+		{name: "$unknown", want: false},
+		{name: "$timestamp + nope", want: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			if got := IsDynamic(test.name); got != test.want {
+				t.Fatalf("IsDynamic(%q) = %t, want %t", test.name, got, test.want)
+			}
+		})
+	}
+}
+
 func TestDynamicTimestampOffset(t *testing.T) {
 	t.Parallel()
 

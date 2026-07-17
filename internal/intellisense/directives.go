@@ -3,7 +3,7 @@ package intellisense
 import "slices"
 
 var directives = []Item{
-	{Label: "@mock", Summary: "Define a static mock HTTP response"},
+	{Label: "@mock", Summary: "Define an interpolated mock response or response sequence"},
 	{Label: "@match", Summary: "Match mock requests by query, headers, or JSON body"},
 	{Label: "@name", Summary: "Assign a display name to the request"},
 	{Label: "@description", Aliases: []string{"@desc"}, Summary: "Add a multi-line description"},

@@ -255,6 +255,14 @@ func resolveDynamic(name string) (string, bool) {
 	return resolveDynamicBase(name, 0)
 }
 
+// IsDynamic reports whether name identifies a supported dynamic template helper.
+// It defers to resolveDynamic so support and validation share one definition; the
+// generated value is discarded, which is why callers use it only at compile time.
+func IsDynamic(name string) bool {
+	_, ok := resolveDynamic(name)
+	return ok
+}
+
 func (r *Resolver) traceVar(it ResolveTrace) {
 	if r == nil || r.trace == nil {
 		return
