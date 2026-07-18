@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type loc struct {
@@ -30,7 +31,6 @@ type variant struct {
 	name       string
 	def        bool
 	latency    time.Duration
-	match      restfile.MockMatch // only feeds the digest, matching uses matchers
 	matchers   []matcher
 	responses  []response
 	pathParams map[string]string
@@ -39,16 +39,18 @@ type variant struct {
 }
 
 type response struct {
-	status      int
-	headers     http.Header
-	body        []byte
-	fixture     string
-	interpolate bool
+	status  int
+	headers http.Header
+	body    []byte
+	fixture string
+	// set at compile time so rendering only touches the parts with templates
+	interpHeaders bool
+	interpBody    bool
+	bodyTpl       vars.Template
 }
 
 type route struct {
 	method   string
-	path     string
 	pattern  string
 	label    string
 	variants []*variant
@@ -62,7 +64,7 @@ func (rt *route) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	event.Route = rt.label
 
 	p := &probe{r: r}
-	sel, err := rt.pick(r, p)
+	sel, err := rt.pick(p)
 	if err != nil {
 		event.Error = err.detail
 		writeProblem(w, err.status, err.detail)
@@ -90,7 +92,7 @@ func (rt *route) serveHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	rendered, renderErr := renderMockResponse(v, resp, r, p)
+	rendered, renderErr := v.render(resp, p)
 	if renderErr != nil {
 		event.Error = renderErr.detail
 		writeProblem(w, renderErr.status, renderErr.detail)

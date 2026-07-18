@@ -129,7 +129,7 @@ after
 	}
 }
 
-func TestParseMockSequenceTrailingDelimiter(t *testing.T) {
+func TestParseMockSequenceTrailingDelimiterErrors(t *testing.T) {
 	src := `# @mock method=GET path=/x sequence=poll
 HTTP/1.1 503 Service Unavailable
 
@@ -141,8 +141,11 @@ done
 ---
 `
 	doc := Parse("mocks.http", []byte(src))
-	if len(doc.Errors) != 0 {
-		t.Fatalf("errors = %+v", doc.Errors)
+	if len(doc.Errors) != 1 || !strings.Contains(doc.Errors[0].Message, "dangling delimiter") {
+		t.Fatalf("errors = %+v, want one dangling delimiter error", doc.Errors)
+	}
+	if got := doc.Errors[0].Line; got != 9 {
+		t.Fatalf("error line = %d, want 9 (the trailing delimiter)", got)
 	}
 	if got := len(doc.Mocks[0].Responses); got != 2 {
 		t.Fatalf("responses = %d, want 2 (no phantom from trailing delimiter)", got)

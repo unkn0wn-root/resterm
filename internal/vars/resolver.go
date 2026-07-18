@@ -5,15 +5,12 @@ import (
 	"fmt"
 	"math/big"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/unkn0wn-root/resterm/internal/duration"
 )
-
-var templateVarPattern = regexp.MustCompile(`\{\{([^}]+)\}\}`)
 
 type Provider interface {
 	Resolve(name string) (string, bool)
@@ -155,15 +152,15 @@ func providerLabel(p Provider) string {
 }
 
 func (r *Resolver) ExpandTemplates(input string) (string, error) {
-	return r.expandTemplates(input, r.exprPos, true, true)
+	return CompileTemplate(input).render(r, r.exprPos, true, true)
 }
 
 func (r *Resolver) ExpandTemplatesAt(input string, pos ExprPos) (string, error) {
-	return r.expandTemplates(input, pos, true, true)
+	return CompileTemplate(input).render(r, pos, true, true)
 }
 
 func (r *Resolver) ExpandTemplatesStatic(input string) (string, error) {
-	return r.expandTemplates(input, r.exprPos, false, false)
+	return CompileTemplate(input).render(r, r.exprPos, false, false)
 }
 
 func (r *Resolver) AddRefResolver(fn RefResolver) {
@@ -182,70 +179,42 @@ func (r *Resolver) SetExprPos(pos ExprPos) {
 	r.exprPos = pos
 }
 
-func (r *Resolver) expandTemplates(
-	input string,
-	pos ExprPos,
-	allowDynamic, allowExpr bool,
-) (string, error) {
-	var firstErr error
-	result := ReplaceTemplateVars(input, func(match, name string) string {
-		if name == "" {
-			return match
+// resolveName resolves one placeholder name. A non-nil error means the
+// placeholder cannot be resolved and callers keep it as literal text.
+func (r *Resolver) resolveName(name string, pos ExprPos, allowDynamic, allowExpr bool) (string, error) {
+	if strings.HasPrefix(name, "=") {
+		if !allowExpr {
+			return "", fmt.Errorf("expressions not allowed")
 		}
-		if strings.HasPrefix(name, "=") {
-			if !allowExpr {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("expressions not allowed")
-				}
-				return match
-			}
-			expr := strings.TrimSpace(name[1:])
-			if expr == "" {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("empty expression")
-				}
-				return match
-			}
-			if r.expr == nil {
-				if firstErr == nil {
-					firstErr = fmt.Errorf("expressions not enabled")
-				}
-				return match
-			}
-			val, err := r.expr(expr, pos)
-			if err != nil {
-				if firstErr == nil {
-					firstErr = err
-				}
-				return match
-			}
-			return val
+		expr := strings.TrimSpace(name[1:])
+		if expr == "" {
+			return "", fmt.Errorf("empty expression")
 		}
-		if allowDynamic && strings.HasPrefix(name, "$") {
-			if value, ok := r.Resolve(name); ok {
-				return value
-			}
-			if dynamic, ok := resolveDynamic(name); ok {
-				r.traceVar(ResolveTrace{
-					Name:    name,
-					Source:  "dynamic",
-					Value:   dynamic,
-					Dynamic: true,
-					Uses:    1,
-				})
-				return dynamic
-			}
+		if r.expr == nil {
+			return "", fmt.Errorf("expressions not enabled")
 		}
+		return r.expr(expr, pos)
+	}
+	if allowDynamic && strings.HasPrefix(name, "$") {
 		if value, ok := r.Resolve(name); ok {
-			return value
+			return value, nil
 		}
-		r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})
-		if firstErr == nil {
-			firstErr = fmt.Errorf("undefined variable: %s", name)
+		if dynamic, ok := resolveDynamic(name); ok {
+			r.traceVar(ResolveTrace{
+				Name:    name,
+				Source:  "dynamic",
+				Value:   dynamic,
+				Dynamic: true,
+				Uses:    1,
+			})
+			return dynamic, nil
 		}
-		return match
-	})
-	return result, firstErr
+	}
+	if value, ok := r.Resolve(name); ok {
+		return value, nil
+	}
+	r.traceVar(ResolveTrace{Name: name, Missing: true, Uses: 1})
+	return "", fmt.Errorf("undefined variable: %s", name)
 }
 
 func resolveDynamic(name string) (string, bool) {
@@ -374,15 +343,12 @@ func (EnvProvider) Label() string {
 	return "env"
 }
 
+// ReplaceTemplateVars rewrites every {{...}} in input through fn. The
+// callback gets the raw match and the trimmed name, which is empty for a
+// blank {{ }}.
 func ReplaceTemplateVars(input string, fn func(match, name string) string) string {
 	if fn == nil {
 		return input
 	}
-	return templateVarPattern.ReplaceAllStringFunc(input, func(match string) string {
-		sub := templateVarPattern.FindStringSubmatch(match)
-		if len(sub) < 2 {
-			return match
-		}
-		return fn(match, strings.TrimSpace(sub[1]))
-	})
+	return CompileTemplate(input).replace(fn)
 }

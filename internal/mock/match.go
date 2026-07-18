@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"mime"
 	"net/http"
 	"net/url"
@@ -54,20 +55,25 @@ func queryMatcher(want map[string][]string) matcher {
 func headerMatcher(want map[string][]string) matcher {
 	return func(p *probe) (bool, *problem) {
 		for k, vals := range want {
-			var got []string
-			if strings.EqualFold(k, "Host") {
-				if p.r.Host != "" {
-					got = []string{p.r.Host}
-				}
-			} else {
-				got = p.r.Header.Values(k)
-			}
+			got := headerValues(p.r, k)
 			if got == nil || !slices.Equal(got, vals) {
 				return false, nil
 			}
 		}
 		return true, nil
 	}
+}
+
+// headerValues reads a request header for mock config. net/http strips Host
+// out of the header map, so every header lookup needs the same special case.
+func headerValues(r *http.Request, name string) []string {
+	if strings.EqualFold(name, "Host") {
+		if r.Host == "" {
+			return nil
+		}
+		return []string{r.Host}
+	}
+	return r.Header.Values(name)
 }
 
 func jsonMatcher(want any) matcher {
@@ -200,20 +206,16 @@ func subset(want, got any) bool {
 	}
 }
 
-// equalJSONNumbers compares two JSON numbers by value so 100, 1e2 and 100.0 all
-// match. The int64 path keeps integers exact past float64's 2^53; the float64
-// fallback handles the rest and, unlike big.Rat, cannot be made to allocate
-// 10^exp by a hostile request - ParseFloat returns +Inf for a runaway exponent.
+// equalJSONNumbers compares two JSON numbers by value so 100, 1e2 and 100.0
+// all match. 256 bits keep mixed int/decimal forms exact far past float64's
+// 2^53. Unlike big.Rat, a hostile request cannot make this allocate 10^exp
+// bytes, because a runaway exponent just saturates to Inf and Inf never
+// matches anything.
 func equalJSONNumbers(want, got json.Number) bool {
 	if want == got {
 		return true
 	}
-	if a, err := want.Int64(); err == nil {
-		if b, err := got.Int64(); err == nil {
-			return a == b
-		}
-	}
-	a, aerr := want.Float64()
-	b, berr := got.Float64()
-	return aerr == nil && berr == nil && a == b
+	a, _, aerr := big.ParseFloat(string(want), 10, 256, big.ToNearestEven)
+	b, _, berr := big.ParseFloat(string(got), 10, 256, big.ToNearestEven)
+	return aerr == nil && berr == nil && !a.IsInf() && !b.IsInf() && a.Cmp(b) == 0
 }

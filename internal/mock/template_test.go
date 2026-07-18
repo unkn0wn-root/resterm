@@ -346,6 +346,15 @@ HTTP/1.1 200 OK
 	assertResponse(t, handler, req, http.StatusOK, "expanded {{oops")
 }
 
+func TestResponseInterpolationServesBlankPlaceholderLiterally(t *testing.T) {
+	handler := compileSource(t, `# @mock method=GET path=/x
+HTTP/1.1 200 OK
+
+{{}} {{ }} {{query.v}}`)
+	req := httptest.NewRequest(http.MethodGet, "/x?v=expanded", nil)
+	assertResponse(t, handler, req, http.StatusOK, "{{}} {{ }} expanded")
+}
+
 func TestCompileRejectsInvalidResponseTemplates(t *testing.T) {
 	tests := []struct {
 		name string

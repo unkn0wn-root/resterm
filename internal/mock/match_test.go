@@ -17,11 +17,14 @@ func TestEqualJSONNumbers(t *testing.T) {
 		{"100", "1e2", true},
 		{"1.5", "1.50", true},
 		{"9007199254740993", "9.007199254740993e15", true}, // same value, different form
-		{"9007199254740993", "9007199254740992", false},    // adjacent ints stay distinct (int64 path)
+		{"9007199254740993", "9007199254740992", false},    // adjacent ints stay distinct
+		{"9007199254740993", "9007199254740992.0", false},  // ...even when one side is a decimal
 		{"1e100", "10e99", true},
 		{"1", "2", false},
 		{"1", "1e999999999", false}, // runaway exponent stays cheap (ParseFloat -> +Inf)
 		{"1e999999999", "1", false},
+		{"1e999999999", "1e999999999", true},  // byte-identical short-circuits before Inf
+		{"1e999999999", "2e999999999", false}, // distinct overflows never compare equal
 	}
 	for _, tt := range tests {
 		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
