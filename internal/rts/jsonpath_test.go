@@ -9,6 +9,7 @@ func TestValidJSONPath(t *testing.T) {
 	}{
 		{path: "user.id", want: true},
 		{path: "items[0].id", want: true},
+		{path: "items.[0].id", want: true}, // JSONPathGet resolves this form too
 		{path: `$["display.name"]`, want: true},
 		{path: "user..id", want: false},
 		{path: "items[nope]", want: false},

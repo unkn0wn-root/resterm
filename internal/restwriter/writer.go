@@ -215,11 +215,8 @@ func NormalizeMockBody(body string) (string, error) {
 		return body, err
 	}
 	lines := strings.Split(body, "\n")
-	if _, isFile := bodyref.Parse(
-		lines[0],
-		bodyref.Options{Location: bodyref.Line},
-	); isFile &&
-		util.AllBlank(lines[1:]) {
+	_, isFile := bodyref.Parse(lines[0], bodyref.Options{Location: bodyref.Line})
+	if isFile && util.AllBlank(lines[1:]) {
 		return "", errors.New("mock body looks like a file reference")
 	}
 	return body, nil

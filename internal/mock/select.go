@@ -29,30 +29,34 @@ type selection struct {
 	step int
 }
 
-func (rt *route) pick(r *http.Request, p *probe) (selection, *problem) {
-	name := strings.TrimSpace(r.Header.Get(selectorNameHeader))
-	status, err := parseStatus(r.Header.Get(selectorStatusHeader))
+func (rt *route) pick(p *probe) (selection, *problem) {
+	name := strings.TrimSpace(p.r.Header.Get(selectorNameHeader))
+	status, err := parseStatus(p.r.Header.Get(selectorStatusHeader))
 	if err != nil {
 		return selection{}, err
 	}
+	v, err := rt.variantFor(name, status, p)
+	if err != nil {
+		return selection{}, err
+	}
+	return v.selectResponse(status), nil
+}
+
+func (rt *route) variantFor(name string, status int, p *probe) (*variant, *problem) {
 	if name != "" {
-		v, selectErr := rt.named(name, status)
-		if selectErr != nil {
-			return selection{}, selectErr
-		}
-		return v.selectResponse(status), nil
+		return rt.named(name, status)
 	}
 
 	vs := rt.variants
 	if status != 0 {
 		vs = make([]*variant, 0, len(rt.variants))
 		for _, v := range rt.variants {
-			if v.hasStatus(status) {
+			if _, ok := v.stepFor(status); ok {
 				vs = append(vs, v)
 			}
 		}
 		if len(vs) == 0 {
-			return selection{}, &problem{
+			return nil, &problem{
 				status: http.StatusNotFound,
 				detail: fmt.Sprintf("mock status %d was not found for this route", status),
 			}
@@ -63,25 +67,25 @@ func (rt *route) pick(r *http.Request, p *probe) (selection, *problem) {
 		if len(v.matchers) == 0 {
 			continue
 		}
-		matched, matchErr := v.matches(p)
-		if matchErr != nil {
-			return selection{}, matchErr
+		matched, err := v.matches(p)
+		if err != nil {
+			return nil, err
 		}
 		if matched {
-			return v.selectResponse(status), nil
+			return v, nil
 		}
 	}
 	for _, v := range vs {
 		if v.def {
-			return v.selectResponse(status), nil
+			return v, nil
 		}
 	}
 	for _, v := range vs {
 		if len(v.matchers) == 0 {
-			return v.selectResponse(status), nil
+			return v, nil
 		}
 	}
-	return selection{}, &problem{
+	return nil, &problem{
 		status: http.StatusNotFound,
 		detail: "no mock scenario matched the request",
 	}
@@ -92,10 +96,12 @@ func (rt *route) named(name string, status int) (*variant, *problem) {
 		if v.name != name {
 			continue
 		}
-		if status != 0 && !v.hasStatus(status) {
-			return nil, &problem{
-				status: http.StatusNotFound,
-				detail: fmt.Sprintf("mock scenario %q has no response with status %d", name, status),
+		if status != 0 {
+			if _, ok := v.stepFor(status); !ok {
+				return nil, &problem{
+					status: http.StatusNotFound,
+					detail: fmt.Sprintf("mock scenario %q has no response with status %d", name, status),
+				}
 			}
 		}
 		return v, nil
@@ -109,38 +115,30 @@ func (rt *route) named(name string, status int) (*variant, *problem) {
 func (v *variant) selectResponse(status int) selection {
 	step := 0
 	if status == 0 {
-		step = v.nextResponse()
-	} else {
-		for i := range v.responses {
-			if v.responses[i].status == status {
-				step = i
-				break
-			}
-		}
+		step = v.advance()
+	} else if i, ok := v.stepFor(status); ok {
+		step = i
 	}
 	return selection{v: v, step: step}
 }
 
-func (v *variant) nextResponse() int {
-	last := uint64(len(v.responses) - 1)
-	for {
-		current := v.next.Load()
-		if current >= last {
-			return int(last)
-		}
-		if v.next.CompareAndSwap(current, current+1) {
-			return int(current)
-		}
+// advance returns the next sequence step, sticking at the final response once
+// the sequence is exhausted.
+func (v *variant) advance() int {
+	last := len(v.responses) - 1
+	if n := v.next.Add(1) - 1; n < uint64(last) {
+		return int(n)
 	}
+	return last
 }
 
-func (v *variant) hasStatus(status int) bool {
-	for _, resp := range v.responses {
+func (v *variant) stepFor(status int) (int, bool) {
+	for i, resp := range v.responses {
 		if resp.status == status {
-			return true
+			return i, true
 		}
 	}
-	return false
+	return 0, false
 }
 
 func parseStatus(raw string) (int, *problem) {

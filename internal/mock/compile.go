@@ -77,7 +77,6 @@ func (c *compiler) addMock(doc *restfile.Document, spec *restfile.Mock) error {
 	}
 	rt := &route{
 		method:   spec.Method,
-		path:     spec.Path,
 		pattern:  key,
 		label:    spec.Method + " " + spec.Path,
 		variants: []*variant{v},
@@ -117,11 +116,9 @@ func (c *compiler) newVariant(
 			return nil, err
 		}
 		if !spec.DisableInterpolation {
-			interpolate, err := validateResponseTemplates(resp, pathParams)
-			if err != nil {
+			if err := resp.compileTemplates(pathParams); err != nil {
 				return nil, err
 			}
-			resp.interpolate = interpolate
 		}
 		responses = append(responses, resp)
 	}
@@ -131,15 +128,10 @@ func (c *compiler) newVariant(
 		return nil, err
 	}
 
-	name := spec.Name
-	if spec.Sequence != "" {
-		name = spec.Sequence
-	}
 	return &variant{
-		name:       name,
+		name:       cmp.Or(spec.Sequence, spec.Name),
 		def:        spec.Default,
 		latency:    spec.Latency,
-		match:      spec.Match,
 		matchers:   ms,
 		responses:  responses,
 		pathParams: pathParams,
@@ -279,9 +271,10 @@ func (rt *route) validate() error {
 	names := make(map[string]loc)
 	var def *loc
 	for _, v := range rt.variants {
-		if prev, ok := names[v.name]; v.name != "" && ok {
-			return fmt.Errorf("%s: mock scenario name %q is already used at %s", v.src, v.name, prev)
-		} else if v.name != "" {
+		if v.name != "" {
+			if prev, ok := names[v.name]; ok {
+				return fmt.Errorf("%s: mock scenario name %q is already used at %s", v.src, v.name, prev)
+			}
 			names[v.name] = v.src
 		}
 		if !v.def {
@@ -290,8 +283,7 @@ func (rt *route) validate() error {
 		if def != nil {
 			return fmt.Errorf("%s: mock route already has a default at %s", v.src, *def)
 		}
-		src := v.src
-		def = &src
+		def = &v.src
 	}
 	return nil
 }

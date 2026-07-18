@@ -92,7 +92,6 @@ func ValidJSONPath(path string) bool {
 	}
 
 	needKey := true
-	allowBracket := true
 	for i := 0; i < len(p); {
 		switch p[i] {
 		case '.':
@@ -100,18 +99,13 @@ func ValidJSONPath(path string) bool {
 				return false
 			}
 			needKey = true
-			allowBracket = false
 			i++
 		case '[':
-			if !allowBracket {
-				return false
-			}
 			next, ok := validJSONPathBracket(p, i)
 			if !ok {
 				return false
 			}
 			needKey = false
-			allowBracket = true
 			i = next
 		default:
 			if !needKey {
@@ -132,7 +126,6 @@ func ValidJSONPath(path string) bool {
 				return false
 			}
 			needKey = false
-			allowBracket = true
 		}
 	}
 	return !needKey
@@ -148,7 +141,7 @@ func validJSONPathBracket(path string, start int) (int, bool) {
 		return end + 1, ok
 	}
 	res := readIdx(path, i)
-	return res.next + 1, res.ok && !res.stop && res.idx >= 0
+	return res.next + 1, res.ok && res.idx >= 0
 }
 
 func splitPath(p string) []jseg {

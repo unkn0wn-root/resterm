@@ -140,13 +140,13 @@ func (b *documentBuilder) checkMockRoute(line int, m *mockBuilder) {
 }
 
 func (b *documentBuilder) handleMockBlockLine(ln int, line, trimmed string) {
+	m := b.mock
 	if strings.HasPrefix(trimmed, "###") {
-		b.mock.trimStructuralBlankLine()
+		m.trimStructuralBlankLine()
 		b.handleSeparator(ln, trimmed)
 		return
 	}
 
-	m := b.mock
 	m.endLine = ln
 	if m.sequence != "" && restfile.IsMockSequenceDelimiter(trimmed) {
 		if !m.started() {

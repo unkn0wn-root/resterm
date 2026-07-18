@@ -39,30 +39,40 @@ func parseRequestTemplate(name string) (requestTemplate, bool) {
 	return ref, true
 }
 
-func validateResponseTemplates(resp response, pathParams map[string]string) (bool, error) {
-	hasTemplates := false
-	for name, values := range resp.headers {
+// compileTemplates validates every placeholder against the route's path params
+// and records which parts of the response need per-request interpolation.
+func (r *response) compileTemplates(pathParams map[string]string) error {
+	for name, values := range r.headers {
 		for _, value := range values {
-			hasTemplate, err := validateTemplateString(value, pathParams)
+			has, err := validateTemplateString(value, pathParams)
 			if err != nil {
-				return false, fmt.Errorf("response header %q: %w", name, err)
+				return fmt.Errorf("response header %q: %w", name, err)
 			}
-			hasTemplates = hasTemplates || hasTemplate
+			r.interpHeaders = r.interpHeaders || has
 		}
 	}
-	bodyHasTemplate, err := validateTemplateString(string(resp.body), pathParams)
+	body := string(r.body)
+	has, err := validateTemplateString(body, pathParams)
 	if err != nil {
-		return false, fmt.Errorf("response body: %w", err)
+		return fmt.Errorf("response body: %w", err)
 	}
-	return hasTemplates || bodyHasTemplate, nil
+	if has {
+		r.interpBody = true
+		r.bodyTpl = vars.CompileTemplate(body)
+	}
+	return nil
 }
 
 // Use the same template scanner during validation and rendering so both paths
-// agree on what counts as a placeholder. An unterminated "{{" stays literal.
+// agree on what counts as a placeholder. An unterminated "{{" or a blank
+// "{{ }}" stays literal, exactly as the resolver renders it.
 func validateTemplateString(input string, pathParams map[string]string) (bool, error) {
 	has := false
 	var err error
 	vars.ReplaceTemplateVars(input, func(match, name string) string {
+		if name == "" {
+			return match
+		}
 		has = true
 		if err == nil {
 			err = validateTemplateName(name, pathParams)
@@ -73,9 +83,6 @@ func validateTemplateString(input string, pathParams map[string]string) (bool, e
 }
 
 func validateTemplateName(name string, pathParams map[string]string) error {
-	if name == "" {
-		return fmt.Errorf("response template name cannot be empty")
-	}
 	if strings.HasPrefix(name, "=") {
 		return fmt.Errorf("response templates do not support expressions")
 	}
@@ -120,46 +127,47 @@ func invalidTemplateSubject(subject string) bool {
 	}) >= 0
 }
 
-func renderMockResponse(
-	v *variant,
-	resp *response,
-	r *http.Request,
-	p *probe,
-) (renderedResponse, *problem) {
-	if !resp.interpolate {
-		return renderedResponse{headers: resp.headers, body: resp.body}, nil
+func (v *variant) render(resp *response, p *probe) (renderedResponse, *problem) {
+	out := renderedResponse{headers: resp.headers, body: resp.body}
+	if !resp.interpHeaders && !resp.interpBody {
+		return out, nil
 	}
 
-	provider := &requestProvider{request: r, probe: p, pathParams: v.pathParams}
+	provider := &requestProvider{probe: p, pathParams: v.pathParams}
 	resolver := vars.NewResolver(provider)
-	headers := make(http.Header, len(resp.headers))
-	for name, values := range resp.headers {
-		for _, value := range values {
-			expanded, err := resolver.ExpandTemplates(value)
-			if err != nil {
-				return renderedResponse{}, provider.renderProblem(err)
-			}
-			if !httpguts.ValidHeaderFieldValue(expanded) {
-				return renderedResponse{}, &problem{
-					status: http.StatusInternalServerError,
-					detail: fmt.Sprintf(
-						"mock response interpolation produced an invalid value for header %q",
-						name,
-					),
+	if resp.interpHeaders {
+		headers := make(http.Header, len(resp.headers))
+		for name, values := range resp.headers {
+			for _, value := range values {
+				expanded, err := resolver.ExpandTemplates(value)
+				if err != nil {
+					return renderedResponse{}, provider.renderProblem(err)
 				}
+				if !httpguts.ValidHeaderFieldValue(expanded) {
+					return renderedResponse{}, &problem{
+						status: http.StatusInternalServerError,
+						detail: fmt.Sprintf(
+							"mock response interpolation produced an invalid value for header %q",
+							name,
+						),
+					}
+				}
+				headers.Add(name, expanded)
 			}
-			headers.Add(name, expanded)
 		}
+		out.headers = headers
 	}
-	body, err := resolver.ExpandTemplates(string(resp.body))
-	if err != nil {
-		return renderedResponse{}, provider.renderProblem(err)
+	if resp.interpBody {
+		body, err := resp.bodyTpl.Render(resolver)
+		if err != nil {
+			return renderedResponse{}, provider.renderProblem(err)
+		}
+		out.body = []byte(body)
 	}
-	return renderedResponse{headers: headers, body: []byte(body)}, nil
+	return out, nil
 }
 
 type requestProvider struct {
-	request    *http.Request
 	probe      *probe
 	pathParams map[string]string
 	problem    *problem
@@ -174,10 +182,8 @@ func (p *requestProvider) Resolve(name string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	if !ref.encodeJSON {
-		if text, ok := value.(string); ok {
-			return text, true
-		}
+	if text, ok := value.(string); ok && !ref.encodeJSON {
+		return text, true
 	}
 	data, err := json.Marshal(value)
 	if err != nil {
@@ -214,7 +220,7 @@ func (p *requestProvider) resolvePath(name string) (string, bool) {
 	if !ok {
 		return "", false
 	}
-	return p.request.PathValue(wildcard), true
+	return p.probe.r.PathValue(wildcard), true
 }
 
 func (p *requestProvider) resolveQuery(name string) (string, bool) {
@@ -227,14 +233,7 @@ func (p *requestProvider) resolveQuery(name string) (string, bool) {
 }
 
 func (p *requestProvider) resolveHeader(name string) (string, bool) {
-	if strings.EqualFold(name, "Host") {
-		if p.request.Host == "" {
-			p.missing("request header", name)
-			return "", false
-		}
-		return p.request.Host, true
-	}
-	values := p.request.Header.Values(name)
+	values := headerValues(p.probe.r, name)
 	if len(values) == 0 {
 		p.missing("request header", name)
 		return "", false
