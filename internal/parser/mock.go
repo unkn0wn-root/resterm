@@ -39,6 +39,7 @@ type mockBuilder struct {
 	headers              http.Header
 	inBody               bool
 	body                 []string
+	delimLine            int
 }
 
 func (b *documentBuilder) handleMockDirective(line int, key, raw string) bool {
@@ -149,6 +150,7 @@ func (b *documentBuilder) handleMockBlockLine(ln int, line, trimmed string) {
 
 	m.endLine = ln
 	if m.sequence != "" && restfile.IsMockSequenceDelimiter(trimmed) {
+		m.delimLine = ln
 		if !m.started() {
 			b.addMockError(ln, "@mock sequence has an empty response")
 			return
@@ -290,6 +292,9 @@ func (b *documentBuilder) flushMock() {
 		return
 	}
 	m := b.mock
+	if m.delimLine > 0 && !m.started() {
+		b.addMockError(m.delimLine, "@mock sequence ends with a dangling delimiter")
+	}
 	if m.started() || len(m.responses) == 0 {
 		m.finishResponse(b, m.endLine)
 	}
@@ -337,7 +342,7 @@ func (m *mockBuilder) finishResponse(b *documentBuilder, line int) {
 }
 
 // started reports whether the current response has begun accumulating, so a
-// trailing or stray '---' does not finalize a phantom empty response.
+// stray '---' is reported instead of finalizing a phantom empty response.
 func (m *mockBuilder) started() bool {
 	return m.status != 0 || len(m.body) > 0
 }

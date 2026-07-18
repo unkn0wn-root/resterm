@@ -759,7 +759,7 @@ Ordinary requests advance atomically through the sequence. Once the final respon
 
 `X-Resterm-Mock: polling` selects the sequence. `X-Resterm-Mock-Status: 200` pins the first sequence response with that status without advancing the cursor, and it can be combined with the name selector. Sequence progress appears in CLI and TUI request logs as `polling 2/3`.
 
-A no-op hot reload keeps the active handler and its cursors. Any source or fixture change that produces a new compiled handler resets every sequence to its first response. In a sequence's inline body, a line whose trimmed content is exactly `---` is reserved as the response delimiter; use a file-backed body when the payload must contain such a line. Outside a sequence, `---` remains ordinary body text.
+A no-op hot reload keeps the active handler and its cursors. Any source or fixture change that produces a new compiled handler resets every sequence to its first response. In a sequence's inline body, a line whose trimmed content is exactly `---` is reserved as the response delimiter; use a file-backed body when the payload must contain such a line. Outside a sequence, `---` remains ordinary body text. A `---` with no response after it at the end of the block is reported as a dangling delimiter.
 
 ### Conditional scenarios
 
