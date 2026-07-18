@@ -291,11 +291,29 @@ resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 | --- | --- | --- |
 | `--addr <host:port>` | `-a` | Listen address (default `127.0.0.1:8080`). |
 | `--cors <policy>` |  | `auto`, `off`, `*`, or a comma-separated origin allowlist. |
+| `--tls-cert <file>` |  | Serve HTTPS using this PEM certificate (requires `--tls-key`). |
+| `--tls-key <file>` |  | PEM private key for `--tls-cert`. |
 | `--recursive` | `-r` | Scan nested workspace directories. |
 | `--watch` | `-w` | Reload source files and referenced body fixtures (enabled by default). |
 | `--quiet` | `-q` | Hide per-request access summaries. |
 
 `--cors=auto` allows browser clients on loopback and disables CORS for non-loopback binds. Binding to a non-loopback address prints an exposure warning. Reloads are atomic: invalid edits are reported and the last valid route set stays live. Stop the server with `Ctrl+C` or `SIGTERM`. In-flight requests get a short grace period to finish.
+
+`--tls-cert` and `--tls-key` switch the server to HTTPS. Resterm does not generate certificates. Bring your own pair, for example with [mkcert](https://github.com/FiloSottile/mkcert):
+
+```bash
+mkcert -install
+mkcert 127.0.0.1 localhost
+resterm mock --tls-cert ./127.0.0.1+1.pem --tls-key ./127.0.0.1+1-key.pem ./requests
+```
+
+`mkcert -install` adds the local CA to supported system trust stores, which Resterm uses by default. For explicit per-request trust, find the public `rootCA.pem` in the directory printed by `mkcert -CAROOT`, copy it next to the request file, and add:
+
+```http
+# @setting http-root-cas ./rootCA.pem
+```
+
+Relative CA paths resolve from the request file. Do not copy or share `rootCA-key.pem`.
 
 See [Mock Servers](./resterm.md#mock-servers) for the response-block syntax, matching rules, selectors, and TUI commands.
 

@@ -49,6 +49,9 @@ type Options struct {
 	CORS    CORS
 	Logs    int
 	OnEvent func(Event)
+	// TLSCert and TLSKey are PEM file paths. When set, the server speaks HTTPS.
+	TLSCert string
+	TLSKey  string
 }
 
 type Stats struct {

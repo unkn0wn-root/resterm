@@ -35,6 +35,8 @@ type mockConfig struct {
 	path      string
 	addr      string
 	cors      string
+	tlsCert   string
+	tlsKey    string
 	recursive bool
 	watch     bool
 	quiet     bool
@@ -45,6 +47,14 @@ func runMock(args []string) error {
 	cfg := mockConfig{addr: mock.DefaultAddr, cors: "auto", watch: true}
 	cli.StringVarAliases(fs, &cfg.addr, cfg.addr, "Listen address", "addr", "a")
 	cli.StringVarAliases(fs, &cfg.cors, cfg.cors, "CORS policy: auto, off, *, or comma-separated origins", "cors")
+	cli.StringVarAliases(
+		fs,
+		&cfg.tlsCert,
+		"",
+		"Serve HTTPS using this PEM certificate (requires --tls-key)",
+		"tls-cert",
+	)
+	cli.StringVarAliases(fs, &cfg.tlsKey, "", "PEM private key for --tls-cert", "tls-key")
 	cli.BoolVarAliases(fs, &cfg.recursive, false, "Scan workspace recursively", "recursive", "r")
 	cli.BoolVarAliases(fs, &cfg.watch, true, "Reload changed sources and fixtures", "watch", "w")
 	cli.BoolVarAliases(fs, &cfg.quiet, false, "Suppress per-request access summaries", "quiet", "q")
@@ -81,6 +91,9 @@ func runMock(args []string) error {
 }
 
 func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) error {
+	if (cfg.tlsCert == "") != (cfg.tlsKey == "") {
+		return cli.ExitErr{Err: errors.New("mock: --tls-cert and --tls-key must be set together"), Code: 2}
+	}
 	cors, warning, err := mock.ResolveCORS(cfg.cors, cfg.addr)
 	if err != nil {
 		return cli.ExitErr{Err: fmt.Errorf("mock: %w", err), Code: 2}
@@ -102,7 +115,9 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 	}
 	logger := log.New(errOut, "", 0)
 	server, err := mock.Start(cfg.addr, handler, mock.Options{
-		CORS: cors,
+		CORS:    cors,
+		TLSCert: cfg.tlsCert,
+		TLSKey:  cfg.tlsKey,
 		OnEvent: func(event mock.Event) {
 			if !cfg.quiet && !event.Reload {
 				printMockEvent(logger, event)
@@ -112,9 +127,14 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 	if err != nil {
 		return fmt.Errorf("mock: %w", err)
 	}
+	scheme := "http"
+	if cfg.tlsCert != "" {
+		scheme = "https"
+	}
 	_, _ = fmt.Fprintf(
 		out,
-		"Mock server listening on http://%s (%d routes, %d scenarios)\n",
+		"Mock server listening on %s://%s (%d routes, %d scenarios)\n",
+		scheme,
 		server.Addr(),
 		handler.Routes(),
 		handler.Scenarios(),
