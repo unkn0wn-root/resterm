@@ -40,6 +40,19 @@ ok`)
 	}
 }
 
+func TestServeMocksRequiresTLSPair(t *testing.T) {
+	var out, errOut bytes.Buffer
+	err := serveMocks(context.Background(), mockConfig{
+		path:    ".",
+		addr:    "127.0.0.1:0",
+		cors:    "off",
+		tlsCert: "cert.pem",
+	}, &out, &errOut)
+	if err == nil || !strings.Contains(err.Error(), "must be set together") {
+		t.Fatalf("err = %v, want the TLS pair error", err)
+	}
+}
+
 func TestPrintMockEventIncludesSequenceProgress(t *testing.T) {
 	var output bytes.Buffer
 	printMockEvent(log.New(&output, "", 0), mock.Event{

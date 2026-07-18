@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"net"
@@ -75,8 +76,21 @@ func Start(addr string, handler *Handler, opts Options) (*Server, error) {
 		MaxHeaderBytes:    1 << 20,
 	}
 
+	serve := s.srv.Serve
+	if opts.TLSCert != "" || opts.TLSKey != "" {
+		cert, err := tls.LoadX509KeyPair(opts.TLSCert, opts.TLSKey)
+		if err != nil {
+			_ = ln.Close()
+			return nil, fmt.Errorf("load TLS key pair: %w", err)
+		}
+		s.srv.TLSConfig = &tls.Config{Certificates: []tls.Certificate{cert}}
+		serve = func(ln net.Listener) error {
+			return s.srv.ServeTLS(ln, "", "")
+		}
+	}
+
 	go func() {
-		err := s.srv.Serve(ln)
+		err := serve(ln)
 		if errors.Is(err, http.ErrServerClosed) {
 			err = nil
 		}
