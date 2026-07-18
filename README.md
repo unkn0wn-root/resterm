@@ -83,10 +83,8 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 - **HTTP, GraphQL, gRPC, WebSocket, and SSE** are supported out of the box.
 - Requests live in plain `.http` / `.rest` files.
-- **Conditional logic** - `@when`, `@skip-if`, `@if`/`@elif`/`@else`, `@switch`/`@case`, and `@for-each`.
-- **Multi-step workflows** with `@workflow` / `@step`.
-- **Captures, variables, and assertions** (`@capture`, `@var`, `@assert`).
-- **RestermScript** - a small, safe expression language purpose.
+- **File-native automation** - conditional logic (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
+- **RestermScript** - a small, safe expression language purpose-built for Resterm.
 - **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
@@ -119,7 +117,7 @@ See the full [CLI documentation](docs/cli.md) for usage, selectors, output forma
 
 ## Mock Servers
 
-Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. A route can hold several named scenarios: `@match` picks one by query values, headers, or a subset of the JSON body, and the `default` scenario answers everything else.
+Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. A route can hold several named scenarios: `@match` picks one by query values, headers, or a subset of the JSON body, and the `default` scenario answers everything else. Responses can interpolate request data like `{{path.id}}` or `{{body.user.email}}` and a `sequence` scenario returns a different response on each call.
 
 ```http
 ### Payment accepted
@@ -160,19 +158,10 @@ The public Go API lives in the [`headless`](./headless) package and can run requ
 
 ## Quick Start
 
-1. Install Resterm using the command that matches your OS.
+1. Install Resterm (see [Installation](#installation) for install scripts, Windows, and manual installs).
 
    ```bash
-   # Linux/macOS (Homebrew)
    brew install resterm
-
-   # Linux (install script)
-   curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
-   ```
-
-   ```powershell
-   # Windows (PowerShell)
-   iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
    ```
 
 2. Bootstrap a tiny workspace.
@@ -209,7 +198,7 @@ A few keys that make Resterm feel “native” quickly:
     - When editor/response are stacked: change editor/response height.
     - When the navigator is focused: collapse/expand the selected branch.
   - `g+v` / `g+s` - toggle response pane between inline and stacked layout.
-  - `g+1`, `g+2`, `g+3` + minimize/restore sidebar, editor, response.
+  - `g+1`, `g+2`, `g+3` - minimize/restore sidebar, editor, response.
   - `g+z` / `g+Z` - zoom the focused pane / clear zoom.
 
 - **Environments & globals**
@@ -321,55 +310,26 @@ The next update replaces it once no process is still running the old version.
 
 ## Collections
 
-You can export a workspace into a Git-friendly Resterm bundle. The exported bundle always includes a `manifest.json` with checksums, so imports can verify file integrity before writing anything.
-
-When Resterm sees `resterm.env.example.json` in your workspace, it includes that file as-is. If only `resterm.env.json` exists, Resterm generates `resterm.env.example.json` automatically and replaces values with `REPLACE_ME` placeholders so secrets are not exported.
-
-### Export a bundle
+Export a workspace into a Git-friendly Resterm bundle and import it into another workspace. Bundles carry a `manifest.json` with checksums so imports verify file integrity first, and environment values are replaced with `REPLACE_ME` placeholders on export so secrets stay out of the bundle.
 
 ```bash
-resterm collection export \
-  --workspace ./my-api \
-  --out ./shared/my-api-bundle \
-  --recursive \
-  --name "my-api-v1"
+resterm collection export --workspace ./my-api --out ./shared/my-api-bundle
+resterm collection import --in ./shared/my-api-bundle --workspace ./my-local-api
 ```
 
-### Import a bundle
-
-```bash
-resterm collection import \
-  --in ./shared/my-api-bundle \
-  --workspace ./my-local-api
-```
-
-If you want to preview actions first, you can run:
-
-```bash
-resterm collection import \
-  --in ./shared/my-api-bundle \
-  --workspace ./my-local-api \
-  --dry-run
-```
-
-If files already exist and should be replaced intentionally, add `--force`.
+Add `--dry-run` to preview an import and `--force` to overwrite existing files intentionally. Docs: [`docs/resterm.md#collection-sharing`](./docs/resterm.md#collection-sharing).
 
 ## Inline curl import
 
 Paste a curl command into the editor and press `Ctrl+Enter` to convert it into a structured request. Resterm understands common flags, merges repeated data segments, and keeps multipart uploads intact.
 
 ```bash
-curl \
-  --compressed \
-  --url "https://httpbin.org/post?source=resterm&case=multipart" \
+curl --compressed \
+  --url "https://httpbin.org/post?source=resterm" \
   --request POST \
   -H "Accept: application/json" \
-  -H "X-Client: resterm-dev" \
   --user resterm:test123 \
-  -F file=@README.md \
-  --form-string memo='Testing resterm inline curl
-with multiline value' \
-  --form-string meta='{"env":"test","attempt":1}'
+  -F file=@README.md
 ```
 
 If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically.
@@ -427,10 +387,6 @@ Resterm supports unary and streaming calls with transcripts, metadata, and body 
 #### OpenAPI import
 
 Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Use `--openapi-mode requests`, `mocks`, or `both` to choose generated blocks. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
-
-#### Collection sharing
-
-Export a portable Resterm-native bundle with `resterm collection export` and import it into another workspace with `resterm collection import`. Docs: [`docs/resterm.md#collection-sharing`](./docs/resterm.md#collection-sharing).
 
 #### Curl import
 
