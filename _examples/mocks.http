@@ -37,7 +37,7 @@ X-Request-ID: {{$uuid}}
 {"id":{{json.path.id}},"generatedAt":"{{$timestampISO8601}}"}
 
 ### Poll payment
-# @mock method=GET path=/payments/{id} sequence=polling
+# @mock method=GET path=/payments/{id} sequence=polling sequence-key=path.id
 HTTP/1.1 503 Service Unavailable
 Retry-After: 1
 
@@ -52,3 +52,9 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 
 {"id":{{json.path.id}},"status":"completed"}
+
+### Payment webhook
+# @mock method=POST path=/webhooks/payment
+# @match headers={"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true}} json={"status":"completed"}
+# @expect calls=1
+HTTP/1.1 204 No Content

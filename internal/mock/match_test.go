@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestEqualJSONNumbers(t *testing.T) {
@@ -30,6 +32,51 @@ func TestEqualJSONNumbers(t *testing.T) {
 		t.Run(tt.a+"_"+tt.b, func(t *testing.T) {
 			if got := equalJSONNumbers(json.Number(tt.a), json.Number(tt.b)); got != tt.want {
 				t.Fatalf("equalJSONNumbers(%q, %q) = %t, want %t", tt.a, tt.b, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMatchHeaderRule(t *testing.T) {
+	tests := []struct {
+		name string
+		got  []string
+		rule restfile.MockHeaderRule
+		want bool
+	}{
+		{
+			name: "exact ordered",
+			got:  []string{"one", "two"},
+			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpExact, Values: []string{"one", "two"}},
+			want: true,
+		},
+		{
+			name: "exact rejects reordered",
+			got:  []string{"two", "one"},
+			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpExact, Values: []string{"one", "two"}},
+		},
+		{
+			name: "prefix any value",
+			got:  []string{"Basic token", "Bearer token"},
+			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpPrefix, Values: []string{"Bearer "}},
+			want: true,
+		},
+		{
+			name: "present accepts empty value",
+			got:  []string{""},
+			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpPresent},
+			want: true,
+		},
+		{
+			name: "absent",
+			rule: restfile.MockHeaderRule{Op: restfile.MockHeaderOpAbsent},
+			want: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := matchHeaderRule(test.got, test.rule); got != test.want {
+				t.Fatalf("matchHeaderRule() = %t, want %t", got, test.want)
 			}
 		})
 	}

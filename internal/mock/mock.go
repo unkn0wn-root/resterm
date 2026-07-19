@@ -7,8 +7,12 @@ import (
 )
 
 const (
-	DefaultAddr = "127.0.0.1:8080"
-	DefaultLogs = 200
+	DefaultAddr             = "127.0.0.1:8080"
+	DefaultLogs             = 200
+	DefaultSequenceKeyLimit = 10_000
+	DefaultJournalEntries   = 200
+	DefaultJournalBytes     = 16 << 20
+	DefaultJournalBodyLimit = 64 << 10
 )
 
 type Event struct {
@@ -46,9 +50,14 @@ func WildcardCORS() CORS {
 }
 
 type Options struct {
-	CORS    CORS
-	Logs    int
-	OnEvent func(Event)
+	CORS             CORS
+	EnableControl    bool
+	Logs             int
+	SequenceKeyLimit int
+	JournalEntries   int
+	JournalBytes     int64
+	JournalBodyLimit int64
+	OnEvent          func(Event)
 	// TLSCert and TLSKey are PEM file paths. When set, the server speaks HTTPS.
 	TLSCert string
 	TLSKey  string

@@ -39,7 +39,7 @@ func (rt *route) pick(p *probe) (selection, *problem) {
 	if err != nil {
 		return selection{}, err
 	}
-	return v.selectResponse(status), nil
+	return v.selectResponse(status, p)
 }
 
 func (rt *route) variantFor(name string, status int, p *probe) (*variant, *problem) {
@@ -112,24 +112,28 @@ func (rt *route) named(name string, status int) (*variant, *problem) {
 	}
 }
 
-func (v *variant) selectResponse(status int) selection {
+func (v *variant) selectResponse(status int, p *probe) (selection, *problem) {
 	step := 0
-	if status == 0 {
-		step = v.advance()
-	} else if i, ok := v.stepFor(status); ok {
-		step = i
+	if status != 0 {
+		if i, ok := v.stepFor(status); ok {
+			step = i
+		}
+		return selection{v: v, step: step}, nil
 	}
-	return selection{v: v, step: step}
-}
 
-// advance returns the next sequence step, sticking at the final response once
-// the sequence is exhausted.
-func (v *variant) advance() int {
-	last := len(v.responses) - 1
-	if n := v.next.Add(1) - 1; n < uint64(last) {
-		return int(n)
+	key, err := v.sequenceKey(p)
+	if err != nil {
+		return selection{}, err
 	}
-	return last
+	var ok bool
+	step, ok = v.cursor.advance(key, len(v.responses)-1)
+	if !ok {
+		return selection{}, &problem{
+			status: http.StatusTooManyRequests,
+			detail: fmt.Sprintf("mock sequence %q reached its sequence-key limit", v.sequence),
+		}
+	}
+	return selection{v: v, step: step}, nil
 }
 
 func (v *variant) stepFor(status int) (int, bool) {

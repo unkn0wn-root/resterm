@@ -672,6 +672,7 @@ resterm mock --recursive --addr 127.0.0.1:9090 .
 - `method` and an origin-form `path` are required. Paths may be exact (`/health`), use segment wildcards (`/users/{id}`), or end in a remainder wildcard (`/assets/{path...}`). Wildcard names must be unique within a path. A trailing slash is significant.
 - `name` is an optional scenario selector containing letters, digits, `.`, `_`, or `-`.
 - `sequence` names a response sequence and follows the same naming rules. It cannot be combined with `name`.
+- `sequence-key` optionally gives a sequence its own cursor per `path`, `query`, `header`, or `cookie` value. It requires `sequence`.
 - `default=true` marks the fallback for a route. A route can have at most one default, and a default cannot also have `@match` conditions.
 - `latency` accepts a non-negative Go duration such as `150ms` or `2s`. Waiting stops when the client cancels the request.
 - Response interpolation is enabled by default. Set `interpolate=false` to preserve `{{...}}` as literal response text.
@@ -739,7 +740,7 @@ A named sequence contains two or more raw responses separated by a line whose tr
 
 ```http
 ### Poll payment
-# @mock method=GET path=/payments/{id} sequence=polling
+# @mock method=GET path=/payments/{id} sequence=polling sequence-key=path.id
 HTTP/1.1 503 Service Unavailable
 Retry-After: 1
 
@@ -755,9 +756,29 @@ HTTP/1.1 200 OK
 {"status":"completed"}
 ```
 
-Ordinary requests advance atomically through the sequence. Once the final response is reached, it repeats forever. The cursor belongs to the compiled scenario, so all clients and concrete path values share it. `@match`, `default`, and `latency` apply to the whole sequence. A selected step is consumed before latency, interpolation, or response writing; cancellation and rendering/write failures therefore do not replay a transient step.
+Ordinary requests advance atomically through the sequence. Once the final response is reached, it repeats forever. Without `sequence-key`, the cursor belongs to the compiled scenario, preserving the global behavior where every client and concrete wildcard path shares it. `@match`, `default`, and `latency` apply to the whole sequence. A selected step is consumed before latency, interpolation, or response writing. Cancellation and rendering or write failures do not replay a transient step.
+
+Use one of these key sources when callers should advance independently:
+
+```http
+# @mock method=GET path=/payments/{id} sequence=polling sequence-key=path.id
+# @mock method=GET path=/jobs sequence=polling sequence-key=query.job
+# @mock method=GET path=/jobs sequence=polling sequence-key=header.X-Correlation-ID
+# @mock method=GET path=/jobs sequence=polling sequence-key=cookie.session
+```
+
+Path keys must name a wildcard declared by that route. Query, header, and cookie keys use the first repeated value. A missing, empty, or larger-than-4-KiB key returns `400` and does not advance a cursor. `X-Resterm-Mock-Status` still pins a response without consulting the key or advancing it. Each compiled sequence retains at most 10,000 distinct keys by default. An unseen key after that limit returns `429` without evicting established test state. Adjust the bound with `resterm mock --sequence-key-limit` when necessary.
 
 `X-Resterm-Mock: polling` selects the sequence. `X-Resterm-Mock-Status: 200` pins the first sequence response with that status without advancing the cursor, and it can be combined with the name selector. Sequence progress appears in CLI and TUI request logs as `polling 2/3`.
+
+Reset every cursor, or every cursor with a particular sequence name, without restarting the standalone server:
+
+```bash
+resterm mock reset
+resterm mock reset polling
+```
+
+Inside the TUI, use `:mock reset` or `:mock reset polling`. A named reset applies to every route using that sequence name. Requests that already reserved a response finish with that response. Later requests start from the reset state.
 
 A no-op hot reload keeps the active handler and its cursors. Any source or fixture change that produces a new compiled handler resets every sequence to its first response. In a sequence's inline body, a line whose trimmed content is exactly `---` is reserved as the response delimiter; use a file-backed body when the payload must contain such a line. Outside a sequence, `---` remains ordinary body text. A `---` with no response after it at the end of the block is reported as a dangling delimiter.
 
@@ -775,7 +796,18 @@ Content-Type: application/json
 {"error":"amount must be positive"}
 ```
 
-Query and header objects accept a string or an array of strings per key. Only the declared keys are constrained, and their values must match exactly, order included. Header names are case-insensitive. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
+Query objects accept a string or an array of strings per key. Header matchers retain the same exact shorthand and also support generic rules:
+
+```http
+# @match headers={"X-Tenant":{"exact":"demo"},"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true},"X-Debug":{"absent":true}}
+```
+
+- A string or array is shorthand for `exact`. Repeated values must match exactly and in order.
+- `prefix` succeeds when any value for that header starts with the non-empty prefix.
+- `present` requires the header to have a value, including an explicitly empty value.
+- `absent` requires no value for that header.
+
+Each header declares exactly one rule. Header names are case-insensitive. Only declared query and header keys are constrained. JSON objects match as recursive subsets, while arrays are exact and ordered. JSON numbers compare numerically (`1`, `1.0`, and `1e0` are equal). JSON matching accepts `application/json` and `+json`, rejects malformed bodies with `400`, and caps matcher input at 4 MiB (`413`).
 
 Scenario selection is deterministic:
 
@@ -784,17 +816,52 @@ Scenario selection is deterministic:
 3. Otherwise, conditional scenarios are checked in file/path order, then the explicit default, then the first unconditional scenario.
 4. A missing route, selector, or match returns an `application/problem+json` `404` response.
 
-### CORS, reload, and request logs
+### Request verification
+
+Add one exact call-count expectation before the first mock response. It inherits that block's method, path, and optional `@match` conditions:
+
+```http
+### Payment webhook
+# @mock method=POST path=/webhooks/payment
+# @match headers={"Authorization":{"prefix":"Bearer "}} json={"status":"completed"}
+# @expect calls=1
+HTTP/1.1 204 No Content
+```
+
+`calls=0` asserts that an endpoint was not called. Expectations count journaled requests matching their complete pattern. They do not depend on which scenario or response was selected. Overlapping expectations may count the same request independently.
+
+For a standalone server, verify the source file or workspace from another terminal:
+
+```bash
+resterm mock verify payments.http
+resterm mock verify --recursive .
+```
+
+The command exits `0` when every expectation passes, `1` for a mismatch, incomplete journal, or connection failure, and `2` for invalid source/usage or no expectations. `resterm mock clear` clears both the verification journal and human-readable logs.
+
+While the TUI owns an active mock server, `:mock verify` checks the active compiled expectations and opens a result view. The same in-process journal is available to TUI request assertions and workflows through read-only RestermScript helpers:
+
+```http
+# @assert mock.count({method:"POST", path:"/webhooks/payment"}) == 1
+# @assert mock.received({method:"POST", path:"/webhooks/payment", headers:{Authorization:{prefix:"Bearer "}}, json:{status:"completed"}})
+```
+
+Both functions take one pattern dictionary. `count` returns the exact count, and `received` is shorthand for a count greater than zero. Supported fields are `method`, `path`, `query`, `headers`, and `json`, with the same wildcard, exact, header-rule, and JSON-subset semantics as mocks. These helpers are deliberately in-process: `resterm run` does not connect to an arbitrary mock journal. Use `resterm mock verify` for standalone or headless automation.
+
+### CORS, reload, and request journals
 
 On loopback, CLI `--cors=auto` enables wildcard CORS and automatic preflight responses. On a public bind it disables CORS and prints an exposure warning. Use `--cors=off`, `--cors='*'`, or an explicit comma-separated origin allowlist to override it. A declared `OPTIONS` mock takes precedence over automatic preflight handling.
 
-Watching is enabled by default. Source and fixture changes compile into a new immutable route set and swap atomically. A parse or compile error leaves the last valid routes serving. Access logs keep the latest 200 entries.
+Watching is enabled by default. Source and fixture changes compile into a new immutable route set and swap atomically. A parse or compile error leaves the last valid routes serving. Reloading keeps the request journal, while verification uses the newly active expectations.
+
+Access logs and the verification journal are separate bounded structures. Both retain 200 entries by default. The journal additionally defaults to a 16 MiB retained-data budget and 64 KiB per request body. Adjust these with `--journal-entries`, `--journal-bytes`, and `--journal-body-limit`. It records matched, unmatched, and method-not-allowed requests, but not CORS preflights or private operational calls. If an entry is evicted or cannot be retained, verification fails closed instead of reporting a potentially false count. Metadata-only patterns can still inspect a retained request whose body was truncated, while a JSON pattern reports the journal as incomplete for that request.
 
 Inside the TUI:
 
 - `g Shift+M` toggles the mock server at the remembered session address (initially `127.0.0.1:8080`).
 - `:mock`, `:mock status`, `:mock start [host:port]`, `:mock stop`, and `:mock restart [host:port]` manage it.
-- `:mock logs` opens the request log, where `c` clears it. `:mock clear` clears it without opening the modal.
+- `:mock logs` opens the request log, where `c` clears the log. `:mock clear` clears both the log and the verification journal.
+- `:mock reset [sequence]` resets sequence cursors, and `:mock verify` checks active `@expect` declarations.
 - The status bar shows the active address, route count, call count, and reload-error marker.
 - The active editor buffer overlays its on-disk file during reload, so unsaved mock edits can be tested. Invalid edits keep the last valid routes.
 

@@ -15,6 +15,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/mock"
+	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 )
 
 func handleMockSubcommand(args []string) (bool, error) {
@@ -32,19 +33,49 @@ func handleMockSubcommand(args []string) (bool, error) {
 }
 
 type mockConfig struct {
-	path      string
-	addr      string
-	cors      string
-	tlsCert   string
-	tlsKey    string
-	recursive bool
-	watch     bool
-	quiet     bool
+	path             string
+	addr             string
+	cors             string
+	tlsCert          string
+	tlsKey           string
+	recursive        bool
+	watch            bool
+	quiet            bool
+	sequenceKeyLimit int
+	journalEntries   int
+	journalBytes     string
+	journalBodyLimit string
 }
 
 func runMock(args []string) error {
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "reset":
+			return runMockReset(args[1:], os.Stdout, os.Stderr)
+		case "clear":
+			return runMockClear(args[1:], os.Stdout, os.Stderr)
+		case "verify":
+			return runMockVerify(args[1:], os.Stdout, os.Stderr)
+		}
+	}
+	return runMockServe(args)
+}
+
+func defaultMockConfig() mockConfig {
+	return mockConfig{
+		addr:             mock.DefaultAddr,
+		cors:             "auto",
+		watch:            true,
+		sequenceKeyLimit: mock.DefaultSequenceKeyLimit,
+		journalEntries:   mock.DefaultJournalEntries,
+		journalBytes:     "16MiB",
+		journalBodyLimit: "64KiB",
+	}
+}
+
+func runMockServe(args []string) error {
 	fs := cli.NewFlagSet("mock")
-	cfg := mockConfig{addr: mock.DefaultAddr, cors: "auto", watch: true}
+	cfg := defaultMockConfig()
 	cli.StringVarAliases(fs, &cfg.addr, cfg.addr, "Listen address", "addr", "a")
 	cli.StringVarAliases(fs, &cfg.cors, cfg.cors, "CORS policy: auto, off, *, or comma-separated origins", "cors")
 	cli.StringVarAliases(
@@ -58,6 +89,34 @@ func runMock(args []string) error {
 	cli.BoolVarAliases(fs, &cfg.recursive, false, "Scan workspace recursively", "recursive", "r")
 	cli.BoolVarAliases(fs, &cfg.watch, true, "Reload changed sources and fixtures", "watch", "w")
 	cli.BoolVarAliases(fs, &cfg.quiet, false, "Suppress per-request access summaries", "quiet", "q")
+	cli.IntVarAliases(
+		fs,
+		&cfg.sequenceKeyLimit,
+		cfg.sequenceKeyLimit,
+		"Maximum distinct keys retained by each sequence",
+		"sequence-key-limit",
+	)
+	cli.IntVarAliases(
+		fs,
+		&cfg.journalEntries,
+		cfg.journalEntries,
+		"Maximum requests retained for verification",
+		"journal-entries",
+	)
+	cli.StringVarAliases(
+		fs,
+		&cfg.journalBytes,
+		cfg.journalBytes,
+		"Maximum memory retained by the request journal",
+		"journal-bytes",
+	)
+	cli.StringVarAliases(
+		fs,
+		&cfg.journalBodyLimit,
+		cfg.journalBodyLimit,
+		"Maximum body bytes retained per request",
+		"journal-body-limit",
+	)
 	fs.Usage = func() { printMockUsage(os.Stderr, fs) }
 
 	if len(args) == 1 {
@@ -104,6 +163,32 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 	if !mock.IsLoopbackAddr(cfg.addr) {
 		_, _ = fmt.Fprintf(errOut, "warning: mock server is exposed on %s\n", cfg.addr)
 	}
+	journalBytes, err := dvalue.ParseByteSize(cfg.journalBytes)
+	if err != nil || journalBytes <= 0 {
+		return cli.ExitErr{
+			Err:  fmt.Errorf("mock: invalid --journal-bytes %q", cfg.journalBytes),
+			Code: 2,
+		}
+	}
+	journalBodyLimit, err := dvalue.ParseByteSize(cfg.journalBodyLimit)
+	if err != nil || journalBodyLimit <= 0 {
+		return cli.ExitErr{
+			Err:  fmt.Errorf("mock: invalid --journal-body-limit %q", cfg.journalBodyLimit),
+			Code: 2,
+		}
+	}
+	if journalBodyLimit > journalBytes {
+		return cli.ExitErr{
+			Err:  errors.New("mock: --journal-body-limit must not exceed --journal-bytes"),
+			Code: 2,
+		}
+	}
+	if cfg.sequenceKeyLimit <= 0 || cfg.journalEntries <= 0 {
+		return cli.ExitErr{
+			Err:  errors.New("mock: sequence key and journal entry limits must be positive"),
+			Code: 2,
+		}
+	}
 
 	reloader := mock.NewReloader(cfg.path, cfg.recursive)
 	handler, err := reloader.Reload("", nil)
@@ -115,9 +200,14 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 	}
 	logger := log.New(errOut, "", 0)
 	server, err := mock.Start(cfg.addr, handler, mock.Options{
-		CORS:    cors,
-		TLSCert: cfg.tlsCert,
-		TLSKey:  cfg.tlsKey,
+		CORS:             cors,
+		EnableControl:    true,
+		TLSCert:          cfg.tlsCert,
+		TLSKey:           cfg.tlsKey,
+		SequenceKeyLimit: cfg.sequenceKeyLimit,
+		JournalEntries:   cfg.journalEntries,
+		JournalBytes:     journalBytes,
+		JournalBodyLimit: journalBodyLimit,
 		OnEvent: func(event mock.Event) {
 			if !cfg.quiet && !event.Reload {
 				printMockEvent(logger, event)
@@ -215,6 +305,9 @@ func closeMockServer(server *mock.Server) error {
 
 func printMockUsage(w io.Writer, fs *flag.FlagSet) {
 	_, _ = fmt.Fprintln(w, "Usage: resterm mock [flags] [file|dir]")
+	_, _ = fmt.Fprintln(w, "       resterm mock reset [flags] [sequence]")
+	_, _ = fmt.Fprintln(w, "       resterm mock clear [flags]")
+	_, _ = fmt.Fprintln(w, "       resterm mock verify [flags] [file|dir]")
 	_, _ = fmt.Fprintln(w)
 	_, _ = fmt.Fprintln(w, "Serve # @mock response blocks from a request file or workspace.")
 	_, _ = fmt.Fprintln(w)

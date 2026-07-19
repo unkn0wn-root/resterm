@@ -87,6 +87,9 @@ func (m Model) View() string {
 	if m.showErrorModal {
 		return m.renderWithinAppFrame(m.renderErrorModal())
 	}
+	if m.showMockVerification {
+		return m.renderWithinAppFrame(m.renderMockVerificationModal())
+	}
 	if m.showMockLogs {
 		return m.renderWithinAppFrame(m.renderMockLogsModal())
 	}

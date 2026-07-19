@@ -15,6 +15,9 @@ Use this guide for command-line behavior. For request syntax, directives, workfl
 | `resterm [file]` | Open the TUI in the current workspace or a specific request file. |
 | `resterm run [flags] <file\|->` | Execute request files, workflows, compare runs, or profile runs without the TUI. |
 | `resterm mock [flags] [file\|dir]` | Serve and optionally hot-reload `# @mock` response blocks. |
+| `resterm mock reset [flags] [sequence]` | Reset all sequence cursors or every cursor with one name. |
+| `resterm mock clear [flags]` | Clear the standalone mock journal and access logs. |
+| `resterm mock verify [flags] [file\|dir]` | Verify exact `# @expect` call counts against a running mock server. |
 | `resterm init [dir]` | Bootstrap a new Resterm workspace. |
 | `resterm collection ...` | Export, import, pack, and unpack portable request bundles. |
 | `resterm history ...` | Export, import, inspect, compact, and verify persisted history. |
@@ -296,6 +299,10 @@ resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 | `--recursive` | `-r` | Scan nested workspace directories. |
 | `--watch` | `-w` | Reload source files and referenced body fixtures (enabled by default). |
 | `--quiet` | `-q` | Hide per-request access summaries. |
+| `--sequence-key-limit <n>` |  | Maximum distinct keys retained by each keyed sequence (default `10000`). |
+| `--journal-entries <n>` |  | Maximum requests retained for verification (default `200`). |
+| `--journal-bytes <size>` |  | Total retained-data budget for the verification journal (default `16MiB`). |
+| `--journal-body-limit <size>` |  | Body bytes retained per journaled request (default `64KiB`). |
 
 `--cors=auto` allows browser clients on loopback and disables CORS for non-loopback binds. Binding to a non-loopback address prints an exposure warning. Reloads are atomic: invalid edits are reported and the last valid route set stays live. Stop the server with `Ctrl+C` or `SIGTERM`. In-flight requests get a short grace period to finish.
 
@@ -314,6 +321,34 @@ resterm mock --tls-cert ./127.0.0.1+1.pem --tls-key ./127.0.0.1+1-key.pem ./requ
 ```
 
 Relative CA paths resolve from the request file. Do not copy or share `rootCA-key.pem`.
+
+### Mock operations
+
+A running standalone mock server exposes a narrow loopback-only control channel for Resterm's own operational commands. It is not a general mock administration API. The TUI-owned server does not enable it, and it never exposes raw journal entries. The literal `/.resterm/` path namespace is reserved for these endpoints: mocks cannot declare routes inside it, and wildcard routes that overlap it are shadowed while the control channel is enabled.
+
+```bash
+# Reset all sequences, or every sequence named polling.
+resterm mock reset
+resterm mock reset polling
+
+# Clear the verification journal and request logs.
+resterm mock clear
+
+# Check # @expect declarations loaded from a file or workspace.
+resterm mock verify payments.http
+resterm mock verify --recursive .
+```
+
+The operations connect to `http://127.0.0.1:8080` by default. Each accepts `--url`, `--timeout`, and `--insecure`, and `verify` also accepts `--recursive`. Put flags before the optional sequence or source argument, for example:
+
+```bash
+resterm mock reset --url http://127.0.0.1:9090 polling
+resterm mock verify --url https://localhost:9443 --insecure payments.http
+```
+
+The URL must contain only the `http` or `https` scheme and host. Operational commands intentionally do not support proxy base paths. Source files or directories named `reset`, `clear`, or `verify` should be passed with an explicit path such as `./reset` so they are not interpreted as operations.
+
+`verify` exits `0` when every exact call count passes, `1` for mismatches, an incomplete journal, or a connection failure, and `2` for invalid usage, an invalid source, or a missing `@expect` declaration. Operational requests are excluded from both request counts and access logs.
 
 See [Mock Servers](./resterm.md#mock-servers) for the response-block syntax, matching rules, selectors, and TUI commands.
 

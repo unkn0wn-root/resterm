@@ -20,8 +20,9 @@ type Server struct {
 	done    chan struct{}
 	err     error
 
-	logs  ring
-	calls atomic.Uint64
+	logs    ring
+	calls   atomic.Uint64
+	journal *requestJournal
 }
 
 type requestEventKey struct{}
@@ -51,6 +52,10 @@ func Start(addr string, handler *Handler, opts Options) (*Server, error) {
 	if addr == "" {
 		addr = DefaultAddr
 	}
+	journal, err := newRequestJournal(opts)
+	if err != nil {
+		return nil, err
+	}
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("listen on %s: %w", addr, err)
@@ -61,11 +66,13 @@ func Start(addr string, handler *Handler, opts Options) (*Server, error) {
 		n = DefaultLogs
 	}
 	s := &Server{
-		opts: opts,
-		addr: ln.Addr().String(),
-		done: make(chan struct{}),
-		logs: ring{limit: n, events: make([]Event, 0, n)},
+		opts:    opts,
+		addr:    ln.Addr().String(),
+		done:    make(chan struct{}),
+		logs:    ring{limit: n, events: make([]Event, 0, n)},
+		journal: journal,
 	}
+	handler.setSequenceKeyLimit(opts.SequenceKeyLimit)
 	s.handler.Store(handler)
 	s.srv = &http.Server{
 		Addr:              s.addr,
@@ -101,8 +108,17 @@ func Start(addr string, handler *Handler, opts Options) (*Server, error) {
 }
 
 func (s *Server) Reload(handler *Handler) {
+	handler.setSequenceKeyLimit(s.opts.SequenceKeyLimit)
 	s.handler.Store(handler)
 	s.RecordReload(nil)
+}
+
+func (s *Server) ResetSequences(name string) int {
+	return s.handler.Load().ResetSequences(name)
+}
+
+func (s *Server) Expectations() []Expectation {
+	return s.handler.Load().Expectations()
 }
 
 func (s *Server) RecordReload(err error) {
@@ -122,6 +138,9 @@ func (s *Server) Close(ctx context.Context) error {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if s.opts.EnableControl && s.handleControl(w, r) {
+		return
+	}
 	start := time.Now()
 	event := &Event{Time: start, Method: r.Method, Target: r.URL.RequestURI()}
 	r = r.WithContext(context.WithValue(r.Context(), requestEventKey{}, event))
@@ -132,10 +151,21 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.record(*event)
 	}()
 
+	entry, err := captureRequest(r, s.journal.bodyLimit)
+	if err != nil {
+		s.journal.add(entry)
+		event.Error = err.Error()
+		writeProblem(sw, http.StatusBadRequest, "could not read request body")
+		return
+	}
+
 	handler := s.handler.Load()
+	// CORS preflights are server plumbing, not received traffic, so they stay
+	// out of the journal.
 	if s.handleCORS(sw, r, handler) {
 		return
 	}
+	s.journal.add(entry)
 	handler.ServeHTTP(sw, r)
 }
 
@@ -160,6 +190,23 @@ func (s *Server) Logs() []Event {
 
 func (s *Server) ClearLogs() {
 	s.logs.clear()
+}
+
+func (s *Server) ClearRequests() {
+	s.journal.clear()
+}
+
+func (s *Server) Clear() {
+	s.ClearLogs()
+	s.ClearRequests()
+}
+
+func (s *Server) Count(ctx context.Context, pattern RequestPattern) (uint64, error) {
+	return s.journal.count(ctx, pattern)
+}
+
+func (s *Server) JournalStats() JournalStats {
+	return s.journal.stats()
 }
 
 func (s *Server) Done() <-chan struct{} { return s.done }

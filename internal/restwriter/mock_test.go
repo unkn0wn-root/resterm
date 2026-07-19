@@ -20,9 +20,11 @@ func TestRenderMocksRoundTrip(t *testing.T) {
 			Default: true,
 			Latency: 250 * time.Millisecond,
 			Match: restfile.MockMatch{
-				Query:   map[string][]string{"mode": {"test"}},
-				Headers: map[string][]string{"X-Tenant": {"acme"}},
-				JSON:    []byte(`{"amount":100}`),
+				Query: map[string]restfile.StringList{"mode": {"test"}},
+				Headers: map[string]restfile.MockHeaderRule{
+					"X-Tenant": {Op: restfile.MockHeaderOpExact, Values: []string{"acme"}},
+				},
+				JSON: []byte(`{"amount":100}`),
 			},
 			Responses: []restfile.MockResponse{{
 				Status:  http.StatusAccepted,
@@ -73,9 +75,16 @@ func TestRenderMockSequenceRoundTrip(t *testing.T) {
 	doc := &restfile.Document{Mocks: []*restfile.Mock{{
 		Title:                "Polling",
 		Sequence:             "polling",
+		SequenceKey:          restfile.MockSequenceKey{Source: restfile.MockSequenceKeySourcePath, Name: "id"},
 		Method:               http.MethodGet,
 		Path:                 "/payments/{id}",
 		DisableInterpolation: true,
+		Expectation:          &restfile.MockExpectation{Calls: 2},
+		Match: restfile.MockMatch{Headers: map[string]restfile.MockHeaderRule{
+			"Authorization": {
+				Op: restfile.MockHeaderOpPrefix, Values: []string{"Bearer "},
+			},
+		}},
 		Responses: []restfile.MockResponse{
 			{
 				Status:  http.StatusServiceUnavailable,
@@ -90,7 +99,9 @@ func TestRenderMockSequenceRoundTrip(t *testing.T) {
 	}}}
 
 	rendered := mustRender(t, doc)
-	if !strings.Contains(rendered, "sequence=polling interpolate=false") ||
+	if !strings.Contains(rendered, "sequence=polling sequence-key=path.id interpolate=false") ||
+		!strings.Contains(rendered, "# @expect calls=2") ||
+		!strings.Contains(rendered, `headers={"Authorization":{"prefix":"Bearer "}}`) ||
 		!strings.Contains(rendered, "\n---\nHTTP/1.1 200 OK") {
 		t.Fatalf("rendered sequence:\n%s", rendered)
 	}
@@ -99,7 +110,10 @@ func TestRenderMockSequenceRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip errors=%+v mocks=%d\n%s", parsed.Errors, len(parsed.Mocks), rendered)
 	}
 	m := parsed.Mocks[0]
-	if m.Sequence != "polling" || !m.DisableInterpolation || len(m.Responses) != 2 ||
+	if m.Sequence != "polling" || m.SequenceKey.String() != "path.id" ||
+		m.Expectation == nil || m.Expectation.Calls != 2 ||
+		m.Match.Headers["Authorization"].Op != restfile.MockHeaderOpPrefix ||
+		!m.DisableInterpolation || len(m.Responses) != 2 ||
 		m.Responses[1].Body.Text != `{"status":"{{literal}}"}` {
 		t.Fatalf("round-trip mock = %+v", m)
 	}

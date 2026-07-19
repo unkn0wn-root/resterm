@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -19,12 +20,33 @@ const (
 
 type mockServerState struct {
 	server      *mock.Server
+	inspector   *mockInspector
 	addr        string
 	reloader    mockReloader
 	reloadErr   string
 	gen         uint64 // newest scheduled reload generation
 	inFlightGen uint64 // generation being reloaded, 0 when idle
 	pending     *mockReloadRequest
+}
+
+// mockInspector resolves the live server at call time, so scripts from a run
+// that outlives a :mock stop or restart never count against a stale journal.
+type mockInspector struct {
+	srv atomic.Pointer[mock.Server]
+}
+
+func (i *mockInspector) Count(ctx context.Context, pattern mock.RequestPattern) (uint64, error) {
+	if s := i.srv.Load(); s != nil {
+		return s.Count(ctx, pattern)
+	}
+	return 0, mock.ErrInspectorUnavailable
+}
+
+func (m *Model) mockInspector() *mockInspector {
+	if m.mock.inspector == nil {
+		m.mock.inspector = &mockInspector{}
+	}
+	return m.mock.inspector
 }
 
 func (s *mockServerState) resetReload() {
@@ -101,9 +123,19 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 		if m.mock.server == nil {
 			return statusCmd(statusInfo, "Mock server is stopped")
 		}
-		m.mock.server.ClearLogs()
+		m.mock.server.Clear()
 		m.syncMockLogs()
-		return statusCmd(statusInfo, "Mock request log cleared")
+		return statusCmd(statusInfo, "Mock request journal and logs cleared")
+	case "reset":
+		if len(args) > 1 {
+			return mockCommandUsage("reset [sequence]")
+		}
+		return m.resetMockSequences(args)
+	case "verify":
+		if len(args) != 0 {
+			return mockCommandUsage("verify")
+		}
+		return m.verifyMockRequests()
 	case "capture":
 		if len(args) != 0 {
 			return mockCommandUsage("capture")
@@ -112,7 +144,7 @@ func (m *Model) executeMockCommand(args []string) tea.Cmd {
 	default:
 		return statusCmd(
 			statusWarn,
-			"Unknown :mock command (use start, stop, restart, status, logs, clear, or capture)",
+			"Unknown :mock command (use start, stop, restart, status, logs, clear, reset, verify, or capture)",
 		)
 	}
 }
@@ -162,6 +194,7 @@ func (m *Model) startMockServer(addr string) tea.Cmd {
 	}
 
 	m.mock.server = server
+	m.mockInspector().srv.Store(server)
 	m.mock.addr = server.Addr()
 	m.mock.reloader = reloader
 	m.mock.resetReload()
@@ -251,9 +284,11 @@ func (m *Model) detachMockServer(server *mock.Server) {
 	}
 	m.mock.gen++
 	m.mock.server = nil
+	m.mock.inspector.srv.Store(nil)
 	m.mock.reloader = nil
 	m.mock.resetReload()
 	m.showMockLogs = false
+	m.closeMockVerification()
 }
 
 func (m *Model) Close() error {

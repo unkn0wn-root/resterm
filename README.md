@@ -117,7 +117,7 @@ See the full [CLI documentation](docs/cli.md) for usage, selectors, output forma
 
 ## Mock Servers
 
-Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. A route can hold several named scenarios: `@match` picks one by query values, headers, or a subset of the JSON body, and the `default` scenario answers everything else. Responses can interpolate request data like `{{path.id}}` or `{{body.user.email}}` and a `sequence` scenario returns a different response on each call.
+Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. A route can hold several named scenarios: `@match` picks one by query values, reusable header rules, or a subset of the JSON body, and the `default` scenario answers everything else. Responses can interpolate request data like `{{path.id}}` or `{{body.user.email}}`. Sequences can advance independently per path, query, header, or cookie value. The bounded request journal also lets mocks declare and verify exact call counts.
 
 ```http
 ### Payment accepted
@@ -141,9 +141,10 @@ Serve one file or a whole directory from the CLI:
 ```bash
 resterm mock ./requests.http
 resterm mock --recursive --addr 127.0.0.1:9090 ./requests
+resterm mock verify ./requests.http
 ```
 
-In the TUI, `g Shift+M` starts and stops the workspace server, `:mock logs` opens its request log, and `g a` captures the focused live response as a mock block. Captured blocks stay unsaved on purpose - review headers and bodies for secrets before saving.
+In the TUI, `g Shift+M` starts and stops the workspace server, `:mock logs` opens its request log, `:mock reset [sequence]` resets sequence cursors, and `:mock verify` checks active expectations. `g a` captures the focused live response as a mock block. Captured blocks stay unsaved on purpose so you can review headers and bodies for secrets before saving.
 
 See the full [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock), and the [working example](_examples/mocks.http).
 

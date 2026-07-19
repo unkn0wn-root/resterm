@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync/atomic"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -28,14 +27,16 @@ func (l loc) String() string {
 }
 
 type variant struct {
-	name       string
-	def        bool
-	latency    time.Duration
-	matchers   []matcher
-	responses  []response
-	pathParams map[string]string
-	next       atomic.Uint64
-	src        loc
+	name            string
+	sequence        string
+	def             bool
+	latency         time.Duration
+	matchers        []matcher
+	responses       []response
+	pathParams      map[string]string
+	sequenceKeySpec restfile.MockSequenceKey
+	cursor          sequenceCursor
+	src             loc
 }
 
 type response struct {

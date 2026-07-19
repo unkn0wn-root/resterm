@@ -138,6 +138,10 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 	if mock.Sequence != "" {
 		b.WriteString(" sequence=")
 		b.WriteString(mock.Sequence)
+		if key := mock.SequenceKey.String(); key != "" {
+			b.WriteString(" sequence-key=")
+			b.WriteString(key)
+		}
 	} else if mock.Name != "" {
 		b.WriteString(" name=")
 		b.WriteString(mock.Name)
@@ -153,7 +157,12 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 		b.WriteString(" interpolate=false")
 	}
 	b.WriteString("\n")
-	renderMockMatch(b, mock.Match)
+	if mock.Expectation != nil {
+		fmt.Fprintf(b, "# @expect calls=%d\n", mock.Expectation.Calls)
+	}
+	if err := renderMockMatch(b, mock.Match); err != nil {
+		return err
+	}
 
 	for i, resp := range mock.Responses {
 		if i > 0 {
@@ -280,25 +289,32 @@ func NormalizeInlineBody(body string) (string, error) {
 	return body, nil
 }
 
-func renderMockMatch(b *strings.Builder, match restfile.MockMatch) {
+func renderMockMatch(b *strings.Builder, match restfile.MockMatch) error {
 	var fields []string
 	if len(match.Query) > 0 {
-		data, _ := json.Marshal(match.Query)
+		data, err := json.Marshal(match.Query)
+		if err != nil {
+			return fmt.Errorf("writer: marshal mock query matchers: %w", err)
+		}
 		fields = append(fields, "query="+string(data))
 	}
 	if len(match.Headers) > 0 {
-		data, _ := json.Marshal(match.Headers)
+		data, err := json.Marshal(match.Headers)
+		if err != nil {
+			return fmt.Errorf("writer: marshal mock header matchers: %w", err)
+		}
 		fields = append(fields, "headers="+string(data))
 	}
 	if len(match.JSON) > 0 {
 		fields = append(fields, "json="+formatMockJSON(match.JSON))
 	}
 	if len(fields) == 0 {
-		return
+		return nil
 	}
 	b.WriteString("# @match ")
 	b.WriteString(strings.Join(fields, " "))
 	b.WriteString("\n")
+	return nil
 }
 
 func formatMockJSON(raw []byte) string {

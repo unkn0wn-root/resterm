@@ -10,6 +10,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/registry"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -38,6 +39,7 @@ type Config struct {
 	Registry              *registry.Index
 	Bindings              *bindings.Map
 	SourceDiagnostics     bool
+	MockInspector         mock.Inspector
 }
 
 type Executor interface {

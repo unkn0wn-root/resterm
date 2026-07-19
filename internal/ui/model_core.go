@@ -232,40 +232,43 @@ type Model struct {
 	envList                  list.Model
 	themeList                list.Model
 
-	responseLatest         *responseSnapshot
-	responsePrevious       *responseSnapshot
-	responsePending        *responseSnapshot
-	responseTokens         map[string]*responseSnapshot
-	responseLastFocused    responsePaneID
-	focus                  paneFocus
-	compareSnapshots       map[string]*responseSnapshot
-	compareRowIndex        int
-	compareSelectedEnv     string
-	compareFocusedEnv      string
-	showEnvSelector        bool
-	showThemeSelector      bool
-	showHelp               bool
-	helpJustOpened         bool
-	helpFilter             textinput.Model
-	showNewFileModal       bool
-	showLayoutSaveModal    bool
-	showOpenModal          bool
-	showErrorModal         bool
-	showFileChangeModal    bool
-	fileChangeTitle        string
-	fileChangeMessage      string
-	errorModalMessage      string
-	showHistoryPreview     bool
-	historyPreviewContent  string
-	historyPreviewTitle    string
-	historyPreviewViewport *viewport.Model
-	showRequestDetails     bool
-	requestDetailTitle     string
-	requestDetailFields    []requestDetailField
-	requestDetailViewport  *viewport.Model
-	helpViewport           *viewport.Model
-	showMockLogs           bool
-	mockLogsViewport       *viewport.Model
+	responseLatest           *responseSnapshot
+	responsePrevious         *responseSnapshot
+	responsePending          *responseSnapshot
+	responseTokens           map[string]*responseSnapshot
+	responseLastFocused      responsePaneID
+	focus                    paneFocus
+	compareSnapshots         map[string]*responseSnapshot
+	compareRowIndex          int
+	compareSelectedEnv       string
+	compareFocusedEnv        string
+	showEnvSelector          bool
+	showThemeSelector        bool
+	showHelp                 bool
+	helpJustOpened           bool
+	helpFilter               textinput.Model
+	showNewFileModal         bool
+	showLayoutSaveModal      bool
+	showOpenModal            bool
+	showErrorModal           bool
+	showFileChangeModal      bool
+	fileChangeTitle          string
+	fileChangeMessage        string
+	errorModalMessage        string
+	showHistoryPreview       bool
+	historyPreviewContent    string
+	historyPreviewTitle      string
+	historyPreviewViewport   *viewport.Model
+	showRequestDetails       bool
+	requestDetailTitle       string
+	requestDetailFields      []requestDetailField
+	requestDetailViewport    *viewport.Model
+	helpViewport             *viewport.Model
+	showMockLogs             bool
+	mockLogsViewport         *viewport.Model
+	showMockVerification     bool
+	mockVerificationText     string
+	mockVerificationViewport *viewport.Model
 
 	showSearchPrompt      bool
 	searchInput           textinput.Model

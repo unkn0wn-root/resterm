@@ -40,11 +40,11 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 	return ms, nil
 }
 
-func queryMatcher(want map[string][]string) matcher {
+func queryMatcher(want map[string]restfile.StringList) matcher {
 	return func(p *probe) (bool, *problem) {
 		q := p.query()
 		for k, vals := range want {
-			if got, ok := q[k]; !ok || !slices.Equal(got, vals) {
+			if got, ok := q[k]; !ok || !slices.Equal(got, []string(vals)) {
 				return false, nil
 			}
 		}
@@ -52,15 +52,38 @@ func queryMatcher(want map[string][]string) matcher {
 	}
 }
 
-func headerMatcher(want map[string][]string) matcher {
+func headerMatcher(want map[string]restfile.MockHeaderRule) matcher {
 	return func(p *probe) (bool, *problem) {
-		for k, vals := range want {
+		for k, rule := range want {
 			got := headerValues(p.r, k)
-			if got == nil || !slices.Equal(got, vals) {
+			if !matchHeaderRule(got, rule) {
 				return false, nil
 			}
 		}
 		return true, nil
+	}
+}
+
+func matchHeaderRule(got []string, rule restfile.MockHeaderRule) bool {
+	switch rule.Op {
+	case restfile.MockHeaderOpExact:
+		return got != nil && slices.Equal(got, rule.Values)
+	case restfile.MockHeaderOpPrefix:
+		if len(rule.Values) != 1 {
+			return false
+		}
+		for _, value := range got {
+			if strings.HasPrefix(value, rule.Values[0]) {
+				return true
+			}
+		}
+		return false
+	case restfile.MockHeaderOpPresent:
+		return len(got) > 0
+	case restfile.MockHeaderOpAbsent:
+		return len(got) == 0
+	default:
+		return false
 	}
 }
 
