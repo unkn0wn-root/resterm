@@ -13,6 +13,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/mock"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
@@ -68,9 +69,39 @@ func defaultMockConfig() mockConfig {
 		watch:            true,
 		sequenceKeyLimit: mock.DefaultSequenceKeyLimit,
 		journalEntries:   mock.DefaultJournalEntries,
-		journalBytes:     "16MiB",
-		journalBodyLimit: "64KiB",
+		journalBytes:     strings.ReplaceAll(bodyfmt.FormatByteSize(mock.DefaultJournalBytes), " ", ""),
+		journalBodyLimit: strings.ReplaceAll(bodyfmt.FormatByteSize(mock.DefaultJournalBodyLimit), " ", ""),
 	}
+}
+
+func (c mockConfig) parseLimits() (int64, int64, error) {
+	total, err := parseMockByteLimit("--journal-bytes", c.journalBytes)
+	if err != nil {
+		return 0, 0, err
+	}
+	body, err := parseMockByteLimit("--journal-body-limit", c.journalBodyLimit)
+	if err != nil {
+		return 0, 0, err
+	}
+	if body > total {
+		return 0, 0, mockUsageError(errors.New("mock: --journal-body-limit must not exceed --journal-bytes"))
+	}
+	if c.sequenceKeyLimit <= 0 || c.journalEntries <= 0 {
+		return 0, 0, mockUsageError(errors.New("mock: sequence key and journal entry limits must be positive"))
+	}
+	return total, body, nil
+}
+
+func parseMockByteLimit(name, raw string) (int64, error) {
+	n, err := dvalue.ParseByteSize(raw)
+	if err != nil || n <= 0 {
+		return 0, mockUsageError(fmt.Errorf("mock: invalid %s %q", name, raw))
+	}
+	return n, nil
+}
+
+func mockUsageError(err error) error {
+	return cli.ExitErr{Err: err, Code: 2}
 }
 
 func runMockServe(args []string) error {
@@ -130,7 +161,7 @@ func runMockServe(args []string) error {
 		if errors.Is(err, flag.ErrHelp) {
 			return nil
 		}
-		return cli.ExitErr{Err: err, Code: 2}
+		return mockUsageError(err)
 	}
 	switch len(fs.Args()) {
 	case 0:
@@ -138,10 +169,8 @@ func runMockServe(args []string) error {
 	case 1:
 		cfg.path = fs.Arg(0)
 	default:
-		return cli.ExitErr{
-			Err:  fmt.Errorf("mock: unexpected args: %s", strings.Join(fs.Args()[1:], " ")),
-			Code: 2,
-		}
+		err := fmt.Errorf("mock: unexpected args: %s", strings.Join(fs.Args()[1:], " "))
+		return mockUsageError(err)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -151,11 +180,11 @@ func runMockServe(args []string) error {
 
 func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) error {
 	if (cfg.tlsCert == "") != (cfg.tlsKey == "") {
-		return cli.ExitErr{Err: errors.New("mock: --tls-cert and --tls-key must be set together"), Code: 2}
+		return mockUsageError(errors.New("mock: --tls-cert and --tls-key must be set together"))
 	}
 	cors, warning, err := mock.ResolveCORS(cfg.cors, cfg.addr)
 	if err != nil {
-		return cli.ExitErr{Err: fmt.Errorf("mock: %w", err), Code: 2}
+		return mockUsageError(fmt.Errorf("mock: %w", err))
 	}
 	if warning != "" {
 		_, _ = fmt.Fprintln(errOut, "warning:", warning)
@@ -163,31 +192,9 @@ func serveMocks(ctx context.Context, cfg mockConfig, out, errOut io.Writer) erro
 	if !mock.IsLoopbackAddr(cfg.addr) {
 		_, _ = fmt.Fprintf(errOut, "warning: mock server is exposed on %s\n", cfg.addr)
 	}
-	journalBytes, err := dvalue.ParseByteSize(cfg.journalBytes)
-	if err != nil || journalBytes <= 0 {
-		return cli.ExitErr{
-			Err:  fmt.Errorf("mock: invalid --journal-bytes %q", cfg.journalBytes),
-			Code: 2,
-		}
-	}
-	journalBodyLimit, err := dvalue.ParseByteSize(cfg.journalBodyLimit)
-	if err != nil || journalBodyLimit <= 0 {
-		return cli.ExitErr{
-			Err:  fmt.Errorf("mock: invalid --journal-body-limit %q", cfg.journalBodyLimit),
-			Code: 2,
-		}
-	}
-	if journalBodyLimit > journalBytes {
-		return cli.ExitErr{
-			Err:  errors.New("mock: --journal-body-limit must not exceed --journal-bytes"),
-			Code: 2,
-		}
-	}
-	if cfg.sequenceKeyLimit <= 0 || cfg.journalEntries <= 0 {
-		return cli.ExitErr{
-			Err:  errors.New("mock: sequence key and journal entry limits must be positive"),
-			Code: 2,
-		}
+	journalBytes, journalBodyLimit, err := cfg.parseLimits()
+	if err != nil {
+		return err
 	}
 
 	reloader := mock.NewReloader(cfg.path, cfg.recursive)

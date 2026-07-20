@@ -218,6 +218,11 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 			want:   "interpolate must be true or false",
 		},
 		{
+			name:   "status without code",
+			source: "# @mock method=GET path=/x\nHTTP/1.1",
+			want:   "invalid mock response status line",
+		},
+		{
 			name:   "key without sequence",
 			source: "# @mock method=GET path=/x sequence-key=query.job\nHTTP/1.1 200 OK",
 			want:   "sequence-key requires sequence",
@@ -236,6 +241,11 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 			name:   "negative expected calls",
 			source: "# @mock method=GET path=/x\n# @expect calls=-1\nHTTP/1.1 200 OK",
 			want:   "calls must be a non-negative integer",
+		},
+		{
+			name:   "null query matchers",
+			source: "# @mock method=GET path=/x\n# @match query=null\nHTTP/1.1 200 OK",
+			want:   "expected a JSON object",
 		},
 		{
 			name:   "duplicate expectation",
@@ -263,21 +273,21 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 			want:   "cannot be null",
 		},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			doc := Parse("bad.http", []byte(test.source))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("bad.http", []byte(tt.source))
 			if len(doc.Errors) == 0 {
-				t.Fatalf("expected %q error", test.want)
+				t.Fatalf("expected %q error", tt.want)
 			}
 			found := false
 			for _, err := range doc.Errors {
-				if strings.Contains(err.Message, test.want) {
+				if strings.Contains(err.Message, tt.want) {
 					found = true
 					break
 				}
 			}
 			if !found {
-				t.Fatalf("errors=%+v, want %q", doc.Errors, test.want)
+				t.Fatalf("errors=%+v, want %q", doc.Errors, tt.want)
 			}
 		})
 	}

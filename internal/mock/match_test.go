@@ -82,6 +82,28 @@ func TestMatchHeaderRule(t *testing.T) {
 	}
 }
 
+func TestIsJSONMediaType(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  bool
+	}{
+		{name: "json", value: "application/json", want: true},
+		{name: "json parameters", value: "application/json; charset=utf-8", want: true},
+		{name: "json suffix", value: "application/problem+json", want: true},
+		{name: "non-json", value: "text/plain"},
+		{name: "invalid", value: "not a media type"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isJSONMediaType(tt.value); got != tt.want {
+				t.Fatalf("isJSONMediaType(%q) = %t, want %t", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMatchJSONNumberHugeExponentDoesNotBlowUp(t *testing.T) {
 	handler := compileSource(t, `# @mock method=POST path=/n
 # @match json={"n":1}

@@ -181,7 +181,6 @@ func (c *compiler) handler() (*Handler, error) {
 	methods := make([]string, 0, len(c.routes))
 	var fixtures []string
 	sequences := make(map[string][]*sequenceCursor)
-	var allSequences []*sequenceCursor
 	scenarios := 0
 	for _, rt := range c.routes {
 		if err := rt.validate(); err != nil {
@@ -197,7 +196,6 @@ func (c *compiler) handler() (*Handler, error) {
 		for _, v := range rt.variants {
 			if v.sequence != "" {
 				sequences[v.sequence] = append(sequences[v.sequence], &v.cursor)
-				allSequences = append(allSequences, &v.cursor)
 			}
 			for _, resp := range v.responses {
 				if resp.fixture != "" && !slices.Contains(fixtures, resp.fixture) {
@@ -214,7 +212,6 @@ func (c *compiler) handler() (*Handler, error) {
 		methods:      methods,
 		fixtures:     fixtures,
 		sequences:    sequences,
-		allSequences: allSequences,
 		expectations: c.expectations,
 	}
 	h.setSequenceKeyLimit(DefaultSequenceKeyLimit)
@@ -267,7 +264,10 @@ func docError(doc *restfile.Document) error {
 
 func inMocks(mocks []*restfile.Mock, line int) bool {
 	for _, m := range mocks {
-		if m != nil && line >= m.LineRange.Start && line <= m.LineRange.End {
+		if m == nil {
+			continue
+		}
+		if line >= m.LineRange.Start && line <= m.LineRange.End {
 			return true
 		}
 	}

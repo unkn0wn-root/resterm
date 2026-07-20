@@ -3,9 +3,12 @@ package mock
 import (
 	"context"
 	"errors"
+	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+	"testing/iotest"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -228,4 +231,111 @@ HTTP/1.1 204 No Content`)
 	if err != nil || count != 1 {
 		t.Fatalf("Count(all) = %d, %v, want the GET only", count, err)
 	}
+}
+
+func TestServerContinuesAfterJournalBodyReadError(t *testing.T) {
+	h := compileSource(t, `# @mock method=POST path=/data
+HTTP/1.1 200 OK
+
+ok`)
+	s := newJournalTestServer(t, h, Options{})
+	req := httptest.NewRequest(http.MethodPost, "/data", nil)
+	req.Header.Set("Content-Type", "application/json")
+	req.Body = unreadableBody(`{"kind":"ok"}`)
+	rec := httptest.NewRecorder()
+
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK || rec.Body.String() != "ok" {
+		t.Fatalf("response = %d %q, want 200 %q", rec.Code, rec.Body.String(), "ok")
+	}
+	n, err := s.Count(context.Background(), RequestPattern{Method: http.MethodPost})
+	if err != nil || n != 1 {
+		t.Fatalf("metadata Count() = %d, %v, want 1", n, err)
+	}
+	_, err = s.Count(context.Background(), RequestPattern{JSON: []byte(`{"kind":"ok"}`)})
+	var incomplete *IncompleteError
+	if !errors.As(err, &incomplete) {
+		t.Fatalf("JSON Count() error = %v, want IncompleteError", err)
+	}
+}
+
+func TestServerReplaysJournalBodyReadErrorToMatcher(t *testing.T) {
+	h := compileSource(t, `# @mock method=POST path=/data
+# @match json={"kind":"ok"}
+HTTP/1.1 200 OK`)
+	s := newJournalTestServer(t, h, Options{})
+	req := httptest.NewRequest(http.MethodPost, "/data", nil)
+	req.Header.Set("Content-Type", "application/json")
+	req.Body = unreadableBody(`{"kind":"ok"}`)
+	rec := httptest.NewRecorder()
+
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest ||
+		!strings.Contains(rec.Body.String(), "read JSON request body: broken request body") {
+		t.Fatalf("response = %d %q, want body read error", rec.Code, rec.Body.String())
+	}
+}
+
+func TestJournalSkipsUnreadableCORSPreflight(t *testing.T) {
+	h := compileSource(t, `# @mock method=GET path=/data
+HTTP/1.1 204 No Content`)
+	s := newJournalTestServer(t, h, Options{CORS: WildcardCORS()})
+	req := httptest.NewRequest(http.MethodOptions, "/data", nil)
+	req.Header.Set("Origin", "https://app.example")
+	req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+	req.Body = unreadableBody("partial")
+	rec := httptest.NewRecorder()
+
+	s.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("preflight status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	if got := s.JournalStats().Entries; got != 0 {
+		t.Fatalf("preflight journal entries = %d, want 0", got)
+	}
+}
+
+func TestJournalCountsHEADAsActualMethod(t *testing.T) {
+	h := compileSource(t, `# @mock method=GET path=/data
+HTTP/1.1 204 No Content`)
+	s := newJournalTestServer(t, h, Options{})
+	rec := httptest.NewRecorder()
+
+	s.ServeHTTP(rec, httptest.NewRequest(http.MethodHead, "/data", nil))
+
+	if rec.Code != http.StatusNoContent {
+		t.Fatalf("HEAD status = %d, want %d", rec.Code, http.StatusNoContent)
+	}
+	for method, want := range map[string]uint64{http.MethodHead: 1, http.MethodGet: 0} {
+		n, err := s.Count(context.Background(), RequestPattern{Method: method})
+		if err != nil || n != want {
+			t.Fatalf("Count(%s) = %d, %v, want %d", method, n, err, want)
+		}
+	}
+}
+
+func newJournalTestServer(t *testing.T, h *Handler, opts Options) *Server {
+	t.Helper()
+	j, err := newRequestJournal(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &Server{
+		opts:    opts,
+		logs:    ring{events: make([]Event, 0, DefaultLogs), limit: DefaultLogs},
+		journal: j,
+	}
+	h.setSequenceKeyLimit(opts.SequenceKeyLimit)
+	s.handler.Store(h)
+	return s
+}
+
+func unreadableBody(prefix string) io.ReadCloser {
+	return io.NopCloser(io.MultiReader(
+		strings.NewReader(prefix),
+		iotest.ErrReader(errors.New("broken request body")),
+	))
 }

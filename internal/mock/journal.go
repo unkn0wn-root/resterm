@@ -165,10 +165,10 @@ func (j *requestJournal) stats() JournalStats {
 	}
 }
 
-// captureRequest snapshots the request for the journal and replaces r.Body so
-// the mock handler can still read it. The returned record is valid even when
-// the body read fails. The error only reports the failed read.
-func captureRequest(r *http.Request, bodyLimit int64) (requestRecord, error) {
+// capture snapshots the request for the journal and replaces r.Body so
+// the mock handler can still read it. When the body read fails, the replacement
+// replays both the captured prefix and the same error.
+func (j *requestJournal) capture(r *http.Request) (requestRecord, error) {
 	entry := requestRecord{
 		method:  r.Method,
 		path:    r.URL.Path,
@@ -179,24 +179,29 @@ func captureRequest(r *http.Request, bodyLimit int64) (requestRecord, error) {
 	}
 	var readErr error
 	if r.Body != nil && r.Body != http.NoBody {
-		original := r.Body
-		prefix, err := io.ReadAll(io.LimitReader(original, bodyLimit+1))
-		entry.body = prefix
+		body := r.Body
+		b, err := io.ReadAll(io.LimitReader(body, j.bodyLimit+1))
+		entry.body = b
 		switch {
-		case int64(len(prefix)) > bodyLimit:
-			entry.body = prefix[:bodyLimit]
+		case err != nil:
 			entry.bodyTruncated = true
 			r.Body = &replayReadCloser{
-				Reader: io.MultiReader(bytes.NewReader(prefix), original),
-				Closer: original,
+				Reader: io.MultiReader(bytes.NewReader(b), terminalErrorReader{err: err}),
+				Closer: body,
+			}
+			readErr = fmt.Errorf("read request journal body: %w", err)
+		case int64(len(b)) > j.bodyLimit:
+			entry.bodyTruncated = true
+			r.Body = &replayReadCloser{
+				Reader: io.MultiReader(bytes.NewReader(b), body),
+				Closer: body,
 			}
 		default:
 			// the limited read drained the body, so replay the prefix alone
-			r.Body = &replayReadCloser{Reader: bytes.NewReader(prefix), Closer: original}
+			r.Body = &replayReadCloser{Reader: bytes.NewReader(b), Closer: body}
 		}
-		if err != nil {
-			entry.bodyTruncated = true
-			readErr = fmt.Errorf("read request journal body: %w", err)
+		if int64(len(entry.body)) > j.bodyLimit {
+			entry.body = entry.body[:j.bodyLimit]
 		}
 	}
 	entry.size = entry.retainedSize()
@@ -223,4 +228,12 @@ func (r requestRecord) retainedSize() int64 {
 type replayReadCloser struct {
 	io.Reader
 	io.Closer
+}
+
+type terminalErrorReader struct {
+	err error
+}
+
+func (r terminalErrorReader) Read([]byte) (int, error) {
+	return 0, r.err
 }

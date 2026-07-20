@@ -150,14 +150,42 @@ mock`)
 	}
 }
 
-func TestNewClientRejectsURLPaths(t *testing.T) {
-	for _, rawURL := range []string{
-		"http://127.0.0.1:8080/proxy",
-		"http://user@127.0.0.1:8080",
-		"http://127.0.0.1:8080?query=1",
-	} {
-		if _, err := NewClient(rawURL, ClientOptions{}); err == nil {
-			t.Fatalf("NewClient(%q) accepted an ambiguous URL", rawURL)
-		}
+func TestNewClientValidatesURL(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{name: "http host", raw: "http://127.0.0.1:8080", want: "http://127.0.0.1:8080"},
+		{name: "https root path", raw: " https://localhost:9443/ ", want: "https://localhost:9443"},
+		{name: "ipv6 host", raw: "http://[::1]:8080", want: "http://[::1]:8080"},
+		{name: "malformed url", raw: "http://[::1", wantErr: true},
+		{name: "unsupported scheme", raw: "ftp://127.0.0.1:8080", wantErr: true},
+		{name: "missing host", raw: "http://", wantErr: true},
+		{name: "empty hostname", raw: "http://:8080", wantErr: true},
+		{name: "user info", raw: "http://user@127.0.0.1:8080", wantErr: true},
+		{name: "path", raw: "http://127.0.0.1:8080/proxy", wantErr: true},
+		{name: "query", raw: "http://127.0.0.1:8080?query=1", wantErr: true},
+		{name: "empty query", raw: "http://127.0.0.1:8080?", wantErr: true},
+		{name: "fragment", raw: "http://127.0.0.1:8080#fragment", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c, err := NewClient(tt.raw, ClientOptions{})
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("NewClient(%q) accepted an ambiguous URL", tt.raw)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("NewClient(%q) error = %v", tt.raw, err)
+			}
+			if got := c.baseURL.String(); got != tt.want {
+				t.Fatalf("NewClient(%q) URL = %q, want %q", tt.raw, got, tt.want)
+			}
+		})
 	}
 }

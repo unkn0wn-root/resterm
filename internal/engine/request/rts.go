@@ -3,6 +3,7 @@ package request
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -255,9 +256,9 @@ func (e *Engine) rtsExtra(src map[string]rts.Value) map[string]rts.Value {
 	if e.cfg.MockInspector == nil {
 		return src
 	}
-	out := make(map[string]rts.Value, len(src)+1)
-	for name, value := range src {
-		out[name] = value
+	out := maps.Clone(src)
+	if out == nil {
+		out = make(map[string]rts.Value, 1)
 	}
 	out["mock"] = mock.RTSValue(e.cfg.MockInspector)
 	return out

@@ -36,26 +36,39 @@ func (e *controlError) Error() string {
 	return e.Detail
 }
 
-func NewClient(rawURL string, opts ClientOptions) (*Client, error) {
-	baseURL, err := url.Parse(strings.TrimSpace(rawURL))
+// parseControlURL accepts only bare scheme://host URLs so control requests
+// cannot be redirected through user info, paths, queries, or fragments.
+func parseControlURL(s string) (*url.URL, error) {
+	u, err := url.Parse(strings.TrimSpace(s))
 	if err != nil {
 		return nil, fmt.Errorf("parse mock URL: %w", err)
 	}
-	if baseURL.Scheme != "http" && baseURL.Scheme != "https" {
+	switch {
+	case u.Scheme != "http" && u.Scheme != "https":
 		return nil, errors.New("mock URL must use http or https")
+	case u.Hostname() == "":
+		return nil, errors.New("mock URL must contain a host")
+	case u.User != nil:
+		return nil, errors.New("mock URL cannot contain user info")
+	case u.Path != "" && u.Path != "/":
+		return nil, errors.New("mock URL cannot contain a path")
+	case u.ForceQuery, u.RawQuery != "", u.Fragment != "":
+		return nil, errors.New("mock URL cannot contain a query or fragment")
 	}
-	if baseURL.Host == "" || baseURL.User != nil || baseURL.RawQuery != "" || baseURL.Fragment != "" {
-		return nil, errors.New("mock URL must contain only a scheme and host")
-	}
-	if baseURL.Path != "" && baseURL.Path != "/" {
-		return nil, errors.New("mock URL must not contain a path")
-	}
-	baseURL.Path = ""
-	baseURL.RawPath = ""
+	u.Path = ""
+	u.RawPath = ""
+	return u, nil
+}
 
-	transport := http.DefaultTransport.(*http.Transport).Clone()
+func NewClient(rawURL string, opts ClientOptions) (*Client, error) {
+	u, err := parseControlURL(rawURL)
+	if err != nil {
+		return nil, err
+	}
+
+	tr := http.DefaultTransport.(*http.Transport).Clone()
 	if opts.InsecureSkipVerify {
-		transport.TLSClientConfig = &tls.Config{
+		tr.TLSClientConfig = &tls.Config{
 			MinVersion:         tls.VersionTLS12,
 			InsecureSkipVerify: true, //nolint:gosec // explicitly requested for a local mock server
 		}
@@ -65,9 +78,9 @@ func NewClient(rawURL string, opts ClientOptions) (*Client, error) {
 		timeout = 5 * time.Second
 	}
 	return &Client{
-		baseURL: baseURL,
+		baseURL: u,
 		http: &http.Client{
-			Transport: transport,
+			Transport: tr,
 			Timeout:   timeout,
 			CheckRedirect: func(*http.Request, []*http.Request) error {
 				return http.ErrUseLastResponse
@@ -116,8 +129,7 @@ func (c *Client) post(ctx context.Context, path string, request, response any) e
 		return fmt.Errorf("call mock control API: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	limited := io.LimitReader(resp.Body, controlBodyLimit+1)
-	data, err := io.ReadAll(limited)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, controlBodyLimit+1))
 	if err != nil {
 		return fmt.Errorf("read mock control response: %w", err)
 	}

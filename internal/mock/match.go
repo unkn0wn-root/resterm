@@ -137,14 +137,21 @@ func (p *probe) query() url.Values {
 	return p.q
 }
 
+func isJSONMediaType(s string) bool {
+	mt, _, err := mime.ParseMediaType(strings.TrimSpace(s))
+	if err != nil {
+		return false
+	}
+	return mt == "application/json" || strings.HasSuffix(mt, "+json")
+}
+
 func (p *probe) json() (any, bool, *problem) {
 	if p.loaded {
 		return p.body, p.ok, p.err
 	}
 	p.loaded = true
 
-	mt, _, err := mime.ParseMediaType(strings.TrimSpace(p.r.Header.Get("Content-Type")))
-	if err != nil || mt != "application/json" && !strings.HasSuffix(mt, "+json") {
+	if !isJSONMediaType(p.r.Header.Get("Content-Type")) {
 		return nil, false, nil
 	}
 

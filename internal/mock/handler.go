@@ -16,7 +16,6 @@ type Handler struct {
 	methods      []string
 	fixtures     []string
 	sequences    map[string][]*sequenceCursor
-	allSequences []*sequenceCursor
 	expectations []Expectation
 }
 
@@ -31,22 +30,32 @@ func (h *Handler) Expectations() []Expectation {
 }
 
 func (h *Handler) ResetSequences(name string) int {
-	cursors := h.allSequences
 	if name != "" {
-		cursors = h.sequences[name]
+		cs := h.sequences[name]
+		for _, c := range cs {
+			c.reset()
+		}
+		return len(cs)
 	}
-	for _, cursor := range cursors {
-		cursor.reset()
+
+	n := 0
+	for _, cs := range h.sequences {
+		for _, c := range cs {
+			c.reset()
+			n++
+		}
 	}
-	return len(cursors)
+	return n
 }
 
 func (h *Handler) setSequenceKeyLimit(limit int) {
 	if limit <= 0 {
 		limit = DefaultSequenceKeyLimit
 	}
-	for _, cursor := range h.allSequences {
-		cursor.setLimit(limit)
+	for _, cs := range h.sequences {
+		for _, c := range cs {
+			c.setLimit(limit)
+		}
 	}
 }
 
@@ -129,7 +138,10 @@ func cleanPath(path string) bool {
 	}
 	for raw := range strings.SplitSeq(path, "/") {
 		seg, err := url.PathUnescape(raw)
-		if err != nil || seg == "." || seg == ".." {
+		if err != nil {
+			return false
+		}
+		if seg == "." || seg == ".." {
 			return false
 		}
 	}

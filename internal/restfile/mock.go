@@ -124,38 +124,40 @@ func (r *MockHeaderRule) UnmarshalJSON(data []byte) error {
 	if len(fields) != 1 {
 		return errors.New("mock header matcher must contain exactly one operator")
 	}
-	for op, raw := range fields {
-		switch op {
-		case "exact":
-			var values StringList
-			if err := values.UnmarshalJSON(raw); err != nil || len(values) == 0 {
-				return errors.New("mock header exact matcher requires a string or non-empty string array")
-			}
-			*r = MockHeaderRule{Op: MockHeaderOpExact, Values: values}
-			return nil
-		case "prefix":
-			var prefix string
-			if err := json.Unmarshal(raw, &prefix); err != nil || prefix == "" {
-				return errors.New("mock header prefix matcher must be a non-empty string")
-			}
-			*r = MockHeaderRule{Op: MockHeaderOpPrefix, Values: []string{prefix}}
-			return nil
-		case "present", "absent":
-			var enabled bool
-			if err := json.Unmarshal(raw, &enabled); err != nil || !enabled {
-				return fmt.Errorf("mock header %s matcher must be true", op)
-			}
-			ruleOp := MockHeaderOpPresent
-			if op == "absent" {
-				ruleOp = MockHeaderOpAbsent
-			}
-			*r = MockHeaderRule{Op: ruleOp}
-			return nil
-		default:
-			return fmt.Errorf("unknown mock header matcher operator %q", op)
-		}
+	var op string
+	for name := range fields {
+		op = name
 	}
-	return errors.New("mock header matcher object is empty")
+	raw := fields[op]
+	switch op {
+	case "exact":
+		var values StringList
+		if err := values.UnmarshalJSON(raw); err != nil || len(values) == 0 {
+			return errors.New("mock header exact matcher requires a string or non-empty string array")
+		}
+		*r = MockHeaderRule{Op: MockHeaderOpExact, Values: values}
+		return nil
+	case "prefix":
+		var prefix string
+		if err := json.Unmarshal(raw, &prefix); err != nil || prefix == "" {
+			return errors.New("mock header prefix matcher must be a non-empty string")
+		}
+		*r = MockHeaderRule{Op: MockHeaderOpPrefix, Values: []string{prefix}}
+		return nil
+	case "present", "absent":
+		var enabled bool
+		if err := json.Unmarshal(raw, &enabled); err != nil || !enabled {
+			return fmt.Errorf("mock header %s matcher must be true", op)
+		}
+		ruleOp := MockHeaderOpPresent
+		if op == "absent" {
+			ruleOp = MockHeaderOpAbsent
+		}
+		*r = MockHeaderRule{Op: ruleOp}
+		return nil
+	default:
+		return fmt.Errorf("unknown mock header matcher operator %q", op)
+	}
 }
 
 func ResponseAllowsBody(status int) bool {

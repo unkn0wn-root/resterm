@@ -15,6 +15,26 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/mock"
 )
 
+func TestDefaultMockConfigUsesPackageLimits(t *testing.T) {
+	cfg := defaultMockConfig()
+	total, body, err := cfg.parseLimits()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.sequenceKeyLimit; got != mock.DefaultSequenceKeyLimit {
+		t.Fatalf("sequence key limit = %d, want %d", got, mock.DefaultSequenceKeyLimit)
+	}
+	if got := cfg.journalEntries; got != mock.DefaultJournalEntries {
+		t.Fatalf("journal entries = %d, want %d", got, mock.DefaultJournalEntries)
+	}
+	if total != mock.DefaultJournalBytes {
+		t.Fatalf("journal bytes = %d, want %d", total, mock.DefaultJournalBytes)
+	}
+	if body != mock.DefaultJournalBodyLimit {
+		t.Fatalf("journal body limit = %d, want %d", body, mock.DefaultJournalBodyLimit)
+	}
+}
+
 func TestServeMocksStartsAndStopsWithContext(t *testing.T) {
 	file := filepath.Join(t.TempDir(), "api.http")
 	writeMockFile(t, file, `# @mock method=GET path=/value default=true
@@ -56,16 +76,59 @@ func TestServeMocksRequiresTLSPair(t *testing.T) {
 }
 
 func TestServeMocksValidatesJournalLimitsAsUsageErrors(t *testing.T) {
-	cfg := defaultMockConfig()
-	cfg.path = "."
-	cfg.addr = "127.0.0.1:0"
-	cfg.cors = "off"
-	cfg.journalBytes = "1KiB"
-	cfg.journalBodyLimit = "2KiB"
-	var out, errOut bytes.Buffer
-	err := serveMocks(context.Background(), cfg, &out, &errOut)
-	if cli.ExitCode(err) != 2 || !strings.Contains(err.Error(), "must not exceed") {
-		t.Fatalf("err = %v, code = %d", err, cli.ExitCode(err))
+	tests := []struct {
+		name   string
+		change func(*mockConfig)
+		want   string
+	}{
+		{
+			name:   "invalid journal bytes",
+			change: func(cfg *mockConfig) { cfg.journalBytes = "invalid" },
+			want:   "invalid --journal-bytes",
+		},
+		{
+			name:   "zero journal bytes",
+			change: func(cfg *mockConfig) { cfg.journalBytes = "0" },
+			want:   "invalid --journal-bytes",
+		},
+		{
+			name:   "invalid journal body limit",
+			change: func(cfg *mockConfig) { cfg.journalBodyLimit = "invalid" },
+			want:   "invalid --journal-body-limit",
+		},
+		{
+			name: "body limit exceeds journal bytes",
+			change: func(cfg *mockConfig) {
+				cfg.journalBytes = "1KiB"
+				cfg.journalBodyLimit = "2KiB"
+			},
+			want: "must not exceed",
+		},
+		{
+			name:   "non-positive sequence key limit",
+			change: func(cfg *mockConfig) { cfg.sequenceKeyLimit = 0 },
+			want:   "limits must be positive",
+		},
+		{
+			name:   "non-positive journal entry limit",
+			change: func(cfg *mockConfig) { cfg.journalEntries = 0 },
+			want:   "limits must be positive",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := defaultMockConfig()
+			cfg.path = "."
+			cfg.addr = "127.0.0.1:0"
+			cfg.cors = "off"
+			tt.change(&cfg)
+			var out, errOut bytes.Buffer
+			err := serveMocks(context.Background(), cfg, &out, &errOut)
+			if cli.ExitCode(err) != 2 || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("err = %v, code = %d, want %q", err, cli.ExitCode(err), tt.want)
+			}
+		})
 	}
 }
 

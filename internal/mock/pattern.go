@@ -3,7 +3,6 @@ package mock
 import (
 	"encoding/json"
 	"fmt"
-	"mime"
 	"net/http"
 	"net/url"
 	"slices"
@@ -33,37 +32,41 @@ type pathMatcher struct {
 	mux *http.ServeMux
 }
 
-func compileRequestPattern(pattern RequestPattern) (*compiledPattern, error) {
-	normalized, err := normalizeRequestPattern(pattern)
+func compileRequestPattern(p RequestPattern) (*compiledPattern, error) {
+	p, err := normalizeRequestPattern(p)
 	if err != nil {
 		return nil, err
 	}
-	compiled := &compiledPattern{pattern: normalized}
-	if normalized.Path != "" {
-		compiled.path, err = newPathMatcher(normalized.Path)
+	cp := &compiledPattern{pattern: p}
+	if p.Path != "" {
+		cp.path, err = newPathMatcher(p.Path)
 		if err != nil {
 			return nil, err
 		}
 	}
-	if len(normalized.JSON) > 0 {
-		compiled.hasJSON = true
-		compiled.json, err = decodeJSON(normalized.JSON)
+	if len(p.JSON) > 0 {
+		cp.hasJSON = true
+		cp.json, err = decodeJSON(p.JSON)
 		if err != nil {
 			return nil, fmt.Errorf("invalid request pattern JSON: %w", err)
 		}
 	}
-	return compiled, nil
+	return cp, nil
 }
 
-func normalizeRequestPattern(pattern RequestPattern) (RequestPattern, error) {
+func normalizeRequestPattern(p RequestPattern) (RequestPattern, error) {
+	q := make(map[string]restfile.StringList, len(p.Query))
+	for k, vs := range p.Query {
+		q[k] = slices.Clone(vs)
+	}
 	out := RequestPattern{
-		Method: strings.ToUpper(strings.TrimSpace(pattern.Method)),
-		Path:   strings.TrimSpace(pattern.Path),
-		Query:  cloneValues(pattern.Query),
-		JSON:   slices.Clone(pattern.JSON),
+		Method: strings.ToUpper(strings.TrimSpace(p.Method)),
+		Path:   strings.TrimSpace(p.Path),
+		Query:  q,
+		JSON:   slices.Clone(p.JSON),
 	}
 	if out.Method != "" && !httpguts.ValidHeaderFieldName(out.Method) {
-		return RequestPattern{}, fmt.Errorf("invalid request pattern method %q", pattern.Method)
+		return RequestPattern{}, fmt.Errorf("invalid request pattern method %q", p.Method)
 	}
 	if out.Path != "" {
 		if err := restfile.ValidateMockPath(out.Path); err != nil {
@@ -73,7 +76,7 @@ func normalizeRequestPattern(pattern RequestPattern) (RequestPattern, error) {
 	if err := checkQueryRules(out.Query); err != nil {
 		return RequestPattern{}, err
 	}
-	headers, err := canonHeaderRules(pattern.Headers)
+	headers, err := canonHeaderRules(p.Headers)
 	if err != nil {
 		return RequestPattern{}, err
 	}
@@ -105,11 +108,11 @@ func canonHeaderRules(src map[string]restfile.MockHeaderRule) (map[string]restfi
 			return nil, err
 		}
 		rule.Values = slices.Clone(rule.Values)
-		canonical := http.CanonicalHeaderKey(name)
-		if _, exists := out[canonical]; exists {
-			return nil, fmt.Errorf("mock header matcher %q is repeated with different casing", canonical)
+		name = http.CanonicalHeaderKey(name)
+		if _, exists := out[name]; exists {
+			return nil, fmt.Errorf("mock header matcher %q is repeated with different casing", name)
 		}
-		out[canonical] = rule
+		out[name] = rule
 	}
 	return out, nil
 }
@@ -188,8 +191,7 @@ func (p *compiledPattern) matches(entry requestRecord) (bool, error) {
 	if !p.hasJSON {
 		return true, nil
 	}
-	mediaType, _, err := mime.ParseMediaType(strings.TrimSpace(entry.headers.Get("Content-Type")))
-	if err != nil || mediaType != "application/json" && !strings.HasSuffix(mediaType, "+json") {
+	if !isJSONMediaType(entry.headers.Get("Content-Type")) {
 		return false, nil
 	}
 	if entry.bodyTruncated {
@@ -200,15 +202,4 @@ func (p *compiledPattern) matches(entry requestRecord) (bool, error) {
 		return false, nil
 	}
 	return subset(p.json, body), nil
-}
-
-func cloneValues[M ~map[string]S, S ~[]string](src M) M {
-	if src == nil {
-		return make(M)
-	}
-	out := make(M, len(src))
-	for name, values := range src {
-		out[name] = slices.Clone(values)
-	}
-	return out
 }

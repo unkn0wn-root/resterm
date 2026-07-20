@@ -151,19 +151,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		s.record(*event)
 	}()
 
-	entry, err := captureRequest(r, s.journal.bodyLimit)
-	if err != nil {
-		s.journal.add(entry)
-		event.Error = err.Error()
-		writeProblem(sw, http.StatusBadRequest, "could not read request body")
-		return
-	}
-
 	handler := s.handler.Load()
 	// CORS preflights are server plumbing, not received traffic, so they stay
 	// out of the journal.
 	if s.handleCORS(sw, r, handler) {
 		return
+	}
+
+	entry, err := s.journal.capture(r)
+	if err != nil {
+		event.Error = err.Error()
 	}
 	s.journal.add(entry)
 	handler.ServeHTTP(sw, r)

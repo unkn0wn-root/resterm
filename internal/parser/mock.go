@@ -439,12 +439,9 @@ func parseMockStatusLine(line string) (int, bool, error) {
 }
 
 func parseStringListMap(raw string) (map[string]restfile.StringList, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+	fields, err := parseJSONObject(raw)
+	if err != nil {
 		return nil, err
-	}
-	if fields == nil {
-		return nil, fmt.Errorf("expected a JSON object")
 	}
 	out := make(map[string]restfile.StringList, len(fields))
 	for key, value := range fields {
@@ -458,12 +455,9 @@ func parseStringListMap(raw string) (map[string]restfile.StringList, error) {
 }
 
 func parseMockHeaderRules(raw string) (map[string]restfile.MockHeaderRule, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+	fields, err := parseJSONObject(raw)
+	if err != nil {
 		return nil, err
-	}
-	if fields == nil {
-		return nil, fmt.Errorf("expected a JSON object")
 	}
 	out := make(map[string]restfile.MockHeaderRule, len(fields))
 	for name, value := range fields {
@@ -474,6 +468,17 @@ func parseMockHeaderRules(raw string) (map[string]restfile.MockHeaderRule, error
 		out[name] = rule
 	}
 	return out, nil
+}
+
+func parseJSONObject(raw string) (map[string]json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		return nil, fmt.Errorf("expected a JSON object")
+	}
+	return obj, nil
 }
 
 func parseMockSequenceKey(raw, path string) (restfile.MockSequenceKey, error) {
