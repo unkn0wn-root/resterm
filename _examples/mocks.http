@@ -58,3 +58,10 @@ Content-Type: application/json
 # @match headers={"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true}} json={"status":"completed"}
 # @expect calls=1
 HTTP/1.1 204 No Content
+
+### Payment webhook rejected
+# @mock method=POST path=/webhooks/payment name=rejected default=true
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
+{"error":"missing or invalid webhook credentials"}
