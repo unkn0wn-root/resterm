@@ -300,7 +300,7 @@ resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 | `--watch` | `-w` | Reload source files and referenced body fixtures (enabled by default). |
 | `--quiet` | `-q` | Hide per-request access summaries. |
 | `--sequence-key-limit <n>` |  | Maximum distinct keys retained by each keyed sequence (default `10000`). |
-| `--journal-entries <n>` |  | Maximum requests retained for verification (default `200`). |
+| `--journal-entries <n>` |  | Maximum requests retained for verification (default `2000`). |
 | `--journal-bytes <size>` |  | Total retained-data budget for the verification journal (default `16MiB`). |
 | `--journal-body-limit <size>` |  | Body bytes retained per journaled request (default `64KiB`). |
 

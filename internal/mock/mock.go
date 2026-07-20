@@ -10,7 +10,7 @@ const (
 	DefaultAddr             = "127.0.0.1:8080"
 	DefaultLogs             = 200
 	DefaultSequenceKeyLimit = 10_000
-	DefaultJournalEntries   = 200
+	DefaultJournalEntries   = 2000
 	DefaultJournalBytes     = 16 << 20
 	DefaultJournalBodyLimit = 64 << 10
 )
