@@ -88,7 +88,7 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 - **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
 - **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
 - **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
-- **Mock servers** declared in the same files, with conditional scenarios, response interpolation, response sequences, hot reload, and response capture.
+- **Mock servers** declared in the same files, with conditional scenarios, response interpolation, keyed sequences, call verification, hot reload, and response capture.
 - **Timeline tracing**, **profiling**, and **compare runs** across environments.
 - **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
 - No cloud sync, no accounts, no telemetry. Everything stays local.
@@ -117,14 +117,13 @@ See the full [CLI documentation](docs/cli.md) for usage, selectors, output forma
 
 ## Mock Servers
 
-Resterm can serve mock responses straight from the same `.http` / `.rest` files your requests live in. Couple of highlights:
+Resterm can serve HTTP mocks from the same `.http` / `.rest` files as your real requests.
 
-- Scenario matching per route: `@match` picks a response by query values, header rules (`exact`, `prefix`, `present`, `absent`) or a JSON body subset, and a `default` scenario answers everything else.
-- Response sequences for polling and retry flows, with per-key cursors so every path, query, header, or cookie value advances through the sequence independently.
-- Interpolated responses that echo request data like `{{path.id}}` or `{{body.user.email}}` and use generators like `{{$uuid}}`.
-- Call count verification: declare `# @expect calls=N` next to a mock, then check it with `resterm mock verify` in CI or `:mock verify` in the TUI.
-- Journal inspection from RestermScript: `mock.count` and `mock.received` let request assertions check what the mock server actually received.
-- Hot reload and TLS support.
+- Match incoming requests by query parameters, headers, or JSON bodies, then select a named or default response.
+- Model polling and retry flows with response sequences, including independent cursors for different resources or callers.
+- Build responses from path, query, header, and body values, with generators for dynamic data.
+- Verify exact call counts with `@expect` or inspect received traffic from RestermScript.
+- Hot reload source files and fixtures, with optional TLS support.
 
 Two scenarios on one route look like this:
 
@@ -150,10 +149,7 @@ Serve one file or a whole directory from the CLI:
 ```bash
 resterm mock ./requests.http
 resterm mock --recursive --addr 127.0.0.1:9090 ./requests
-resterm mock verify ./requests.http
 ```
-
-In the TUI, `g Shift+M` starts and stops the workspace server, `:mock logs` opens its request log, `:mock reset [sequence]` resets sequence cursors, and `:mock verify` checks active expectations. `g a` captures the focused live response as a mock block. Captured blocks stay unsaved on purpose so you can review headers and bodies for secrets before saving.
 
 See the full [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock), and the [working example](_examples/mocks.http).
 
