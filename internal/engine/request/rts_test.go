@@ -43,6 +43,21 @@ func TestRTSExtraClonesCallerValues(t *testing.T) {
 	}
 }
 
+func TestRTSExtraPreservesCallerMockValue(t *testing.T) {
+	e := New(engcfg.Config{MockInspector: testMockInspector{}}, nil)
+	src := map[string]rts.Value{"mock": rts.Str("loop item")}
+
+	got := e.rtsExtra(src)
+
+	if value := got["mock"]; value.K != rts.VStr || value.S != "loop item" {
+		t.Fatalf("mock value = %+v, want caller value", value)
+	}
+	got["mock"] = rts.Str("changed")
+	if value := src["mock"].S; value != "loop item" {
+		t.Fatalf("source mock value = %q after output mutation, want %q", value, "loop item")
+	}
+}
+
 func TestRunRTSPreRequestErrorRendersInlineSource(t *testing.T) {
 	eng := New(engcfg.Config{}, nil)
 	src := `### RTS

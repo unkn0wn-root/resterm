@@ -361,7 +361,7 @@ RTS provides a small standard library that covers common request needs without e
 
 ## Host objects for request evaluation
 
-Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers, while everything else is read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The `mock` object is present only when the TUI owns an active in-process mock server.
+Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers, while everything else is read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped. A local value named `mock`, such as an `@for-each` loop variable, takes precedence.
 
 ### env
 
@@ -393,7 +393,7 @@ Resterm exposes host objects when evaluating templates, directives, `@apply`, as
 
 ### mock
 
-When the TUI's workspace mock server is active, `mock` provides read-only access to its bounded request journal:
+When the TUI's workspace mock server is running, `mock` provides read-only access to its bounded request journal:
 
 ```rts
 mock.count({method: "POST", path: "/webhooks/{name}"})

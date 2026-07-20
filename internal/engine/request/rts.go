@@ -260,7 +260,10 @@ func (e *Engine) rtsExtra(src map[string]rts.Value) map[string]rts.Value {
 	if out == nil {
 		out = make(map[string]rts.Value, 1)
 	}
-	out["mock"] = mock.RTSValue(e.cfg.MockInspector)
+	// explicit runtime bindings, including @for-each variables, shadow host objects.
+	if _, exists := out["mock"]; !exists {
+		out["mock"] = mock.RTSValue(e.cfg.MockInspector)
+	}
 	return out
 }
 
