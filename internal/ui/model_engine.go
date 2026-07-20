@@ -37,6 +37,7 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 		Registry:              m.registryIndex(),
 		Bindings:              m.bindingsMap,
 		SourceDiagnostics:     true,
+		MockInspector:         m.mockInspector(),
 	}
 }
 

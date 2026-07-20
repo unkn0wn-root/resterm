@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"io"
 	"net/http"
 	"os"
@@ -8,7 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -91,6 +95,82 @@ func TestTUIStartsReloadsAndStopsMockServer(t *testing.T) {
 	if closed, ok := stop().(mockServerClosedMsg); !ok || closed.err != nil {
 		t.Fatalf("stop result = %+v", closed)
 	}
+}
+
+func TestTUIMockResetVerifyAndClear(t *testing.T) {
+	model := newMockTestModel(t, `### Poll
+# @mock method=GET path=/poll sequence=polling
+# @expect calls=1
+HTTP/1.1 503 Service Unavailable
+
+pending
+---
+HTTP/1.1 200 OK
+
+done
+`)
+	_ = model.startMockServer("127.0.0.1:0")
+	server := model.activeMockServer()
+	if server == nil {
+		t.Fatal("mock server was not started")
+	}
+	call := func() int {
+		t.Helper()
+		response, err := http.Get("http://" + server.Addr() + "/poll")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		return response.StatusCode
+	}
+	if got := call(); got != http.StatusServiceUnavailable {
+		t.Fatalf("first status = %d", got)
+	}
+
+	verify := model.executeMockCommand([]string{"verify"})
+	if verify == nil {
+		t.Fatal("verify command is nil")
+	}
+	result, ok := verify().(mockVerifyMsg)
+	if !ok {
+		t.Fatal("verify command did not produce a mockVerifyMsg")
+	}
+	if message := mockCommandStatus(t, model.handleMockVerify(result)); message.level != statusSuccess {
+		t.Fatalf("verify status = %#v", message)
+	}
+	if !model.showMockVerification || !strings.Contains(model.mockVerificationText, "PASS") {
+		t.Fatalf("verification modal = %t %q", model.showMockVerification, model.mockVerificationText)
+	}
+	model.closeMockVerification()
+
+	if got := call(); got != http.StatusOK {
+		t.Fatalf("second status = %d", got)
+	}
+	reset := model.executeMockCommand([]string{"reset", "polling"})
+	if message := mockCommandStatus(t, reset); message.level != statusSuccess {
+		t.Fatalf("reset status = %#v", message)
+	}
+	if got := call(); got != http.StatusServiceUnavailable {
+		t.Fatalf("status after reset = %d", got)
+	}
+
+	clear := model.executeMockCommand([]string{"clear"})
+	if message := mockCommandStatus(t, clear); message.level != statusInfo {
+		t.Fatalf("clear status = %#v", message)
+	}
+	count, err := server.Count(context.Background(), mock.RequestPattern{})
+	if err != nil || count != 0 || len(server.Logs()) != 0 {
+		t.Fatalf("after clear count=%d err=%v logs=%d", count, err, len(server.Logs()))
+	}
+}
+
+func mockCommandStatus(t *testing.T, command tea.Cmd) statusMsg {
+	t.Helper()
+	event, ok := command().(editorEvent)
+	if !ok || event.status == nil {
+		t.Fatalf("mock command result = %#v, want editor status event", event)
+	}
+	return *event.status
 }
 
 func TestCaptureFocusedHTTPResponseAsMock(t *testing.T) {

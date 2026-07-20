@@ -101,23 +101,68 @@ type BodySource struct {
 
 // Scenarios that share a method and path merge into one route when compiled.
 type Mock struct {
-	Title     string
-	Name      string
-	Sequence  string
-	Method    string
-	Path      string
-	Latency   time.Duration
-	Default   bool
-	Match     MockMatch
-	Responses []MockResponse
+	Title       string
+	Name        string
+	Sequence    string
+	SequenceKey MockSequenceKey
+	Method      string
+	Path        string
+	Latency     time.Duration
+	Default     bool
+	Match       MockMatch
+	Expectation *MockExpectation
+	Responses   []MockResponse
 	// DisableInterpolation preserves response templates as literal text.
 	DisableInterpolation bool
 	LineRange            LineRange
 }
 
+type MockSequenceKeySource uint8
+
+const (
+	MockSequenceKeySourceUnknown MockSequenceKeySource = iota
+	MockSequenceKeySourcePath
+	MockSequenceKeySourceQuery
+	MockSequenceKeySourceHeader
+	MockSequenceKeySourceCookie
+)
+
+type MockSequenceKey struct {
+	Source MockSequenceKeySource
+	Name   string
+}
+
+func (k MockSequenceKey) IsZero() bool {
+	return k.Source == MockSequenceKeySourceUnknown && k.Name == ""
+}
+
+type MockExpectation struct {
+	Calls uint64
+	Line  int
+}
+
+type MockHeaderOp uint8
+
+const (
+	MockHeaderOpUnknown MockHeaderOp = iota
+	MockHeaderOpExact
+	MockHeaderOpPrefix
+	MockHeaderOpPresent
+	MockHeaderOpAbsent
+)
+
+type MockHeaderRule struct {
+	Op     MockHeaderOp
+	Values []string
+}
+
+// StringList decodes a JSON string or string array, the value shape shared by
+// @match query, @match headers, and mock request patterns.
+type StringList []string
+
 type MockMatch struct {
-	Query   map[string][]string
-	Headers map[string][]string
+	Query   map[string]StringList
+	Headers map[string]MockHeaderRule
 	JSON    []byte
 }
 

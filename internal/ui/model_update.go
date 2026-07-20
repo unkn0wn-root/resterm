@@ -211,6 +211,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd := m.handleMockServerClosed(typed); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	case mockVerifyMsg:
+		if cmd := m.handleMockVerify(typed); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	case wsConsoleResultMsg:
 		m.handleConsoleResult(typed)
 		cmds = append(cmds, m.nextStreamMsgCmd())
@@ -225,6 +229,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
 			}
+		}
+		return m, batchCommands(cmds...)
+	}
+
+	if m.showMockVerification {
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			return m, batchCommands(append(cmds, m.handleMockVerificationKey(keyMsg))...)
 		}
 		return m, batchCommands(cmds...)
 	}
@@ -254,43 +265,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showHistoryPreview {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			vp := m.historyPreviewViewport
-			switch keyMsg.String() {
+			switch key := keyMsg.String(); key {
 			case "esc", "enter":
 				m.closeHistoryPreview()
-				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
-			case "down", "j":
-				if vp != nil {
-					vp.ScrollDown(1)
-				}
-				return m, batchCommands(cmds...)
-			case "up", "k":
-				if vp != nil {
-					vp.ScrollUp(1)
-				}
-				return m, batchCommands(cmds...)
-			case "pgdown", "ctrl+f":
-				if vp != nil {
-					vp.ScrollDown(vp.Height)
-				}
-				return m, batchCommands(cmds...)
-			case "pgup", "ctrl+b", "ctrl+u":
-				if vp != nil {
-					vp.ScrollUp(vp.Height)
-				}
-				return m, batchCommands(cmds...)
-			case "home":
-				if vp != nil {
-					vp.GotoTop()
-				}
-				return m, batchCommands(cmds...)
-			case "end":
-				if vp != nil {
-					vp.GotoBottom()
-				}
-				return m, batchCommands(cmds...)
+			default:
+				scrollViewportKey(m.historyPreviewViewport, key)
 			}
 		}
 		return m, batchCommands(cmds...)
@@ -298,43 +279,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showRequestDetails {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			vp := m.requestDetailViewport
-			switch keyMsg.String() {
+			switch key := keyMsg.String(); key {
 			case "esc", "enter":
 				m.closeRequestDetails()
-				return m, batchCommands(cmds...)
 			case "ctrl+q", "ctrl+d":
 				return m, tea.Quit
-			case "down", "j":
-				if vp != nil {
-					vp.ScrollDown(1)
-				}
-				return m, batchCommands(cmds...)
-			case "up", "k":
-				if vp != nil {
-					vp.ScrollUp(1)
-				}
-				return m, batchCommands(cmds...)
-			case "pgdown", "ctrl+f":
-				if vp != nil {
-					vp.ScrollDown(vp.Height)
-				}
-				return m, batchCommands(cmds...)
-			case "pgup", "ctrl+b", "ctrl+u":
-				if vp != nil {
-					vp.ScrollUp(vp.Height)
-				}
-				return m, batchCommands(cmds...)
-			case "home":
-				if vp != nil {
-					vp.GotoTop()
-				}
-				return m, batchCommands(cmds...)
-			case "end":
-				if vp != nil {
-					vp.GotoBottom()
-				}
-				return m, batchCommands(cmds...)
+			default:
+				scrollViewportKey(m.requestDetailViewport, key)
 			}
 		}
 		return m, batchCommands(cmds...)
@@ -1258,7 +1209,8 @@ func (m *Model) modalCapturesGlobalKeys() bool {
 		m.showRequestDetails,
 		m.showLayoutSaveModal,
 		m.showFileChangeModal,
-		m.showMockLogs:
+		m.showMockLogs,
+		m.showMockVerification:
 		return true
 	default:
 		return false

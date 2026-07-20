@@ -1,3 +1,7 @@
+# Serve these mocks with `resterm mock _examples/mocks.http`, or open this file
+# in the TUI and press `g Shift+M`.
+# @const mock.base http://127.0.0.1:8080
+
 ### Health
 # @mock method=GET path=/health name=healthy default=true
 HTTP/1.1 200 OK
@@ -37,7 +41,7 @@ X-Request-ID: {{$uuid}}
 {"id":{{json.path.id}},"generatedAt":"{{$timestampISO8601}}"}
 
 ### Poll payment
-# @mock method=GET path=/payments/{id} sequence=polling
+# @mock method=GET path=/payments/{id} sequence=polling sequence-key=path.id
 HTTP/1.1 503 Service Unavailable
 Retry-After: 1
 
@@ -52,3 +56,69 @@ HTTP/1.1 200 OK
 Content-Type: application/json
 
 {"id":{{json.path.id}},"status":"completed"}
+
+### Payment webhook
+# @mock method=POST path=/webhooks/payment
+# @match headers={"Authorization":{"prefix":"Bearer "},"X-Correlation-ID":{"present":true}} json={"status":"completed"}
+# @expect calls=1
+HTTP/1.1 204 No Content
+
+### Payment webhook rejected
+# @mock method=POST path=/webhooks/payment name=rejected default=true
+HTTP/1.1 401 Unauthorized
+Content-Type: application/json
+
+{"error":"missing or invalid webhook credentials"}
+
+### Per-key rate limit
+# @mock method=GET path=/quota sequence=quota sequence-key=header.X-Api-Key
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"remaining":1}
+---
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"remaining":0}
+---
+HTTP/1.1 429 Too Many Requests
+Retry-After: 60
+Content-Type: application/json
+
+{"error":"quota exhausted for this API key"}
+
+### Legacy endpoint must stay unused
+# @mock method=GET path=/v1/legacy
+# @expect calls=0
+HTTP/1.1 410 Gone
+Content-Type: application/json
+
+{"error":"use /payments instead"}
+
+### Fallback for unmocked GET paths
+# @mock method=GET path=/{rest...} default=true
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+
+{"error":"no mock for this path","path":{{json.path.rest}}}
+
+### Poll payment until it completes
+# @name poll-payment
+GET {{mock.base}}/payments/pay_42
+
+### Spend the quota for one API key
+# @name spend-quota
+GET {{mock.base}}/quota
+X-Api-Key: demo-key
+
+### Deliver the payment webhook
+# The mock.* assertion needs the TUI-owned server (`g Shift+M`).
+# @name deliver-webhook
+# @assert mock.received({method:"POST", path:"/webhooks/payment", json:{status:"completed"}})
+POST {{mock.base}}/webhooks/payment
+Authorization: Bearer demo-token
+X-Correlation-ID: {{$uuid}}
+Content-Type: application/json
+
+{"status":"completed"}

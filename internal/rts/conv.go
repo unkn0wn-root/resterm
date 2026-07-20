@@ -95,6 +95,37 @@ func ToIface(v Value) any {
 	}
 }
 
+// ToIfaceStrict converts data values. Unlike ToIface it errors on objects and
+// functions instead of stringifying them.
+func ToIfaceStrict(v Value) (any, error) {
+	switch v.K {
+	case VNull, VBool, VNum, VStr:
+		return ToIface(v), nil
+	case VList:
+		out := make([]any, 0, len(v.L))
+		for _, it := range v.L {
+			converted, err := ToIfaceStrict(it)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, converted)
+		}
+		return out, nil
+	case VDict:
+		out := make(map[string]any, len(v.M))
+		for k, it := range v.M {
+			converted, err := ToIfaceStrict(it)
+			if err != nil {
+				return nil, err
+			}
+			out[k] = converted
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("cannot convert %v to a data value", v.K)
+	}
+}
+
 func FromIface(ctx *Ctx, pos Pos, v any) (Value, error) {
 	switch t := v.(type) {
 	case nil:

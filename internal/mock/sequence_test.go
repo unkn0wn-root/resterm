@@ -48,6 +48,165 @@ func TestResponseSequenceAdvancesAndRepeatsFinalResponse(t *testing.T) {
 	}
 }
 
+func TestResponseSequenceAdvancesIndependentlyByKey(t *testing.T) {
+	tests := []struct {
+		name   string
+		key    string
+		path   string
+		first  func(*http.Request)
+		second func(*http.Request)
+	}{
+		{
+			name:   "path",
+			key:    "path.id",
+			path:   "/payments/{id}",
+			first:  func(r *http.Request) {},
+			second: func(r *http.Request) {},
+		},
+		{
+			name: "query",
+			key:  "query.job",
+			path: "/payments",
+			first: func(r *http.Request) {
+				r.URL.RawQuery = "job=one"
+			},
+			second: func(r *http.Request) {
+				r.URL.RawQuery = "job=two"
+			},
+		},
+		{
+			name: "header",
+			key:  "header.X-Correlation-ID",
+			path: "/payments",
+			first: func(r *http.Request) {
+				r.Header.Set("X-Correlation-ID", "one")
+			},
+			second: func(r *http.Request) {
+				r.Header.Set("X-Correlation-ID", "two")
+			},
+		},
+		{
+			name: "cookie",
+			key:  "cookie.session",
+			path: "/payments",
+			first: func(r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: "session", Value: "one"})
+			},
+			second: func(r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: "session", Value: "two"})
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := fmt.Sprintf(`# @mock method=GET path=%s sequence=polling sequence-key=%s
+HTTP/1.1 503 Service Unavailable
+
+pending
+---
+HTTP/1.1 200 OK
+
+done`, test.path, test.key)
+			handler := compileSource(t, source)
+			newRequest := func(isSecond bool) *http.Request {
+				target := "/payments"
+				if test.name == "path" {
+					target = "/payments/one"
+					if isSecond {
+						target = "/payments/two"
+					}
+				}
+				req := httptest.NewRequest(http.MethodGet, target, nil)
+				if isSecond {
+					test.second(req)
+				} else {
+					test.first(req)
+				}
+				return req
+			}
+
+			assertResponse(t, handler, newRequest(false), http.StatusServiceUnavailable, "pending")
+			assertResponse(t, handler, newRequest(false), http.StatusOK, "done")
+			assertResponse(t, handler, newRequest(true), http.StatusServiceUnavailable, "pending")
+		})
+	}
+}
+
+func TestResponseSequenceKeyMissingAndLimitDoNotAdvance(t *testing.T) {
+	handler := compileSource(t, `# @mock method=GET path=/payments sequence=polling sequence-key=header.X-Job
+HTTP/1.1 503 Service Unavailable
+
+pending
+---
+HTTP/1.1 200 OK
+
+done`)
+	handler.setSequenceKeyLimit(1)
+
+	missing := httptest.NewRequest(http.MethodGet, "/payments", nil)
+	assertResponse(t, handler, missing, http.StatusBadRequest, "missing or empty")
+
+	oversized := httptest.NewRequest(http.MethodGet, "/payments", nil)
+	oversized.Header.Set("X-Job", strings.Repeat("x", maxSequenceKeyBytes+1))
+	assertResponse(t, handler, oversized, http.StatusBadRequest, "4 KiB limit")
+
+	first := httptest.NewRequest(http.MethodGet, "/payments", nil)
+	first.Header.Set("X-Job", "one")
+	assertResponse(t, handler, first, http.StatusServiceUnavailable, "pending")
+
+	full := httptest.NewRequest(http.MethodGet, "/payments", nil)
+	full.Header.Set("X-Job", "two")
+	assertResponse(t, handler, full, http.StatusTooManyRequests, "sequence-key limit")
+
+	if reset := handler.ResetSequences("polling"); reset != 1 {
+		t.Fatalf("ResetSequences() = %d, want 1", reset)
+	}
+	assertResponse(t, handler, full, http.StatusServiceUnavailable, "pending")
+}
+
+func TestResponseSequenceResetByNameAndAll(t *testing.T) {
+	handler := compileSource(t, `# @mock method=GET path=/one sequence=polling
+HTTP/1.1 503 Service Unavailable
+
+one pending
+---
+HTTP/1.1 200 OK
+
+one done
+### Two
+# @mock method=GET path=/two sequence=polling
+HTTP/1.1 503 Service Unavailable
+
+two pending
+---
+HTTP/1.1 200 OK
+
+two done
+### Other
+# @mock method=GET path=/other sequence=other
+HTTP/1.1 503 Service Unavailable
+
+other pending
+---
+HTTP/1.1 200 OK
+
+other done`)
+
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/one", nil), 503, "one pending")
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/two", nil), 503, "two pending")
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/other", nil), 503, "other pending")
+	if reset := handler.ResetSequences("polling"); reset != 2 {
+		t.Fatalf("named reset = %d, want 2", reset)
+	}
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/one", nil), 503, "one pending")
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/two", nil), 503, "two pending")
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/other", nil), 200, "other done")
+	if reset := handler.ResetSequences(""); reset != 3 {
+		t.Fatalf("all reset = %d, want 3", reset)
+	}
+	assertResponse(t, handler, httptest.NewRequest(http.MethodGet, "/other", nil), 503, "other pending")
+}
+
 func TestResponseSequenceStatusSelectorPinsWithoutAdvancing(t *testing.T) {
 	handler := compileSource(t, pollingSequence)
 

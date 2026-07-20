@@ -32,6 +32,7 @@ func TestDirectiveCatalogContainsRequiredDirectives(t *testing.T) {
 		"@k8s",
 		"@rts",
 		"@sse",
+		"@expect",
 	}
 	for _, label := range required {
 		if !contains(directives, label) {
@@ -90,6 +91,16 @@ func TestDirectiveArgsFilterByPrefix(t *testing.T) {
 	rts := argOptions("rts", "")
 	if !contains(rts, "pre-request") || contains(rts, "test") {
 		t.Fatalf("rts args = %v", rts)
+	}
+
+	mock := argOptions("mock", "")
+	for _, label := range []string{"sequence=", "sequence-key=", "interpolate=false"} {
+		if !contains(mock, label) {
+			t.Fatalf("mock args missing %q: %v", label, mock)
+		}
+	}
+	if !contains(argOptions("expect", ""), "calls=") {
+		t.Fatal("expect args missing calls=")
 	}
 
 	if opts := argOptions("unknown", ""); opts != nil {

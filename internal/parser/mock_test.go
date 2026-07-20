@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestParseMockBlock(t *testing.T) {
@@ -48,14 +50,51 @@ GET https://example.com
 	if got := resp.Headers.Values("Set-Cookie"); !reflect.DeepEqual(got, []string{"one=1", "two=2"}) {
 		t.Fatalf("set-cookie = %#v", got)
 	}
-	if got := m.Match.Query["mode"]; !reflect.DeepEqual(got, []string{"test"}) {
+	if got := m.Match.Query["mode"]; !reflect.DeepEqual(got, restfile.StringList{"test"}) {
 		t.Fatalf("query matcher = %#v", got)
 	}
-	if got := m.Match.Headers["X-Tenant"]; !reflect.DeepEqual(got, []string{"acme", "west"}) {
+	if got := m.Match.Headers["X-Tenant"]; got.Op != restfile.MockHeaderOpExact ||
+		!reflect.DeepEqual(got.Values, []string{"acme", "west"}) {
 		t.Fatalf("header matcher = %#v", got)
 	}
 	if string(m.Match.JSON) != `{"amount":100}` {
 		t.Fatalf("json matcher = %s", m.Match.JSON)
+	}
+}
+
+func TestParseMockSequenceKeyExpectationAndHeaderRules(t *testing.T) {
+	src := `# @mock method=POST path=/payments/{id} sequence=polling sequence-key=path.id
+# @expect calls=2
+# @match headers={"X-Tenant":{"exact":"acme"},"Authorization":{"prefix":"Bearer "},"X-Request-ID":{"present":true},"X-Debug":{"absent":true}}
+HTTP/1.1 503 Service Unavailable
+
+pending
+---
+HTTP/1.1 200 OK
+
+done`
+	doc := Parse("mocks.http", []byte(src))
+	if len(doc.Errors) != 0 || len(doc.Mocks) != 1 {
+		t.Fatalf("errors=%+v mocks=%d", doc.Errors, len(doc.Mocks))
+	}
+	mock := doc.Mocks[0]
+	if mock.SequenceKey.Source != restfile.MockSequenceKeySourcePath ||
+		mock.SequenceKey.Name != "id" || mock.SequenceKey.String() != "path.id" {
+		t.Fatalf("sequence key = %+v", mock.SequenceKey)
+	}
+	if mock.Expectation == nil || mock.Expectation.Calls != 2 || mock.Expectation.Line != 2 {
+		t.Fatalf("expectation = %+v", mock.Expectation)
+	}
+	wantOps := map[string]restfile.MockHeaderOp{
+		"X-Tenant":      restfile.MockHeaderOpExact,
+		"Authorization": restfile.MockHeaderOpPrefix,
+		"X-Request-Id":  restfile.MockHeaderOpPresent,
+		"X-Debug":       restfile.MockHeaderOpAbsent,
+	}
+	for name, want := range wantOps {
+		if got := mock.Match.Headers[name].Op; got != want {
+			t.Fatalf("header %s op = %v, want %v", name, got, want)
+		}
 	}
 }
 
@@ -178,22 +217,77 @@ func TestParseMockSequenceDiagnostics(t *testing.T) {
 			source: "# @mock method=GET path=/x interpolate=maybe\nHTTP/1.1 200 OK",
 			want:   "interpolate must be true or false",
 		},
+		{
+			name:   "status without code",
+			source: "# @mock method=GET path=/x\nHTTP/1.1",
+			want:   "invalid mock response status line",
+		},
+		{
+			name:   "key without sequence",
+			source: "# @mock method=GET path=/x sequence-key=query.job\nHTTP/1.1 200 OK",
+			want:   "sequence-key requires sequence",
+		},
+		{
+			name:   "unknown key source",
+			source: "# @mock method=GET path=/x sequence=poll sequence-key=body.id\nHTTP/1.1 503 Nope\n---\nHTTP/1.1 200 OK",
+			want:   "source \"body\" is not supported",
+		},
+		{
+			name:   "unknown path key",
+			source: "# @mock method=GET path=/x/{id} sequence=poll sequence-key=path.job\nHTTP/1.1 503 Nope\n---\nHTTP/1.1 200 OK",
+			want:   "path wildcard \"job\" is not declared",
+		},
+		{
+			name:   "negative expected calls",
+			source: "# @mock method=GET path=/x\n# @expect calls=-1\nHTTP/1.1 200 OK",
+			want:   "calls must be a non-negative integer",
+		},
+		{
+			name:   "null query matchers",
+			source: "# @mock method=GET path=/x\n# @match query=null\nHTTP/1.1 200 OK",
+			want:   "expected a JSON object",
+		},
+		{
+			name:   "duplicate expectation",
+			source: "# @mock method=GET path=/x\n# @expect calls=1\n# @expect calls=2\nHTTP/1.1 200 OK",
+			want:   "@expect is already defined",
+		},
+		{
+			name:   "multiple header operations",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"present\":true,\"absent\":true}}\nHTTP/1.1 200 OK",
+			want:   "must contain exactly one operator",
+		},
+		{
+			name:   "empty header prefix",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"prefix\":\"\"}}\nHTTP/1.1 200 OK",
+			want:   "must be a non-empty string",
+		},
+		{
+			name:   "false header presence",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":{\"present\":false}}\nHTTP/1.1 200 OK",
+			want:   "must be true",
+		},
+		{
+			name:   "null header matcher",
+			source: "# @mock method=GET path=/x\n# @match headers={\"X-Test\":null}\nHTTP/1.1 200 OK",
+			want:   "cannot be null",
+		},
 	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			doc := Parse("bad.http", []byte(test.source))
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("bad.http", []byte(tt.source))
 			if len(doc.Errors) == 0 {
-				t.Fatalf("expected %q error", test.want)
+				t.Fatalf("expected %q error", tt.want)
 			}
 			found := false
 			for _, err := range doc.Errors {
-				if strings.Contains(err.Message, test.want) {
+				if strings.Contains(err.Message, tt.want) {
 					found = true
 					break
 				}
 			}
 			if !found {
-				t.Fatalf("errors=%+v, want %q", doc.Errors, test.want)
+				t.Fatalf("errors=%+v, want %q", doc.Errors, tt.want)
 			}
 		})
 	}

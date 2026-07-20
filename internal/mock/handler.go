@@ -9,12 +9,14 @@ import (
 )
 
 type Handler struct {
-	mux       *http.ServeMux
-	routes    int
-	scenarios int
-	digest    string
-	methods   []string
-	fixtures  []string
+	mux          *http.ServeMux
+	routes       int
+	scenarios    int
+	digest       string
+	methods      []string
+	fixtures     []string
+	sequences    map[string][]*sequenceCursor
+	expectations []Expectation
 }
 
 func (h *Handler) Routes() int { return h.routes }
@@ -22,6 +24,40 @@ func (h *Handler) Routes() int { return h.routes }
 func (h *Handler) Scenarios() int { return h.scenarios }
 
 func (h *Handler) Digest() string { return h.digest }
+
+func (h *Handler) Expectations() []Expectation {
+	return slices.Clone(h.expectations)
+}
+
+func (h *Handler) ResetSequences(name string) int {
+	if name != "" {
+		cs := h.sequences[name]
+		for _, c := range cs {
+			c.reset()
+		}
+		return len(cs)
+	}
+
+	n := 0
+	for _, cs := range h.sequences {
+		for _, c := range cs {
+			c.reset()
+			n++
+		}
+	}
+	return n
+}
+
+func (h *Handler) setSequenceKeyLimit(limit int) {
+	if limit <= 0 {
+		limit = DefaultSequenceKeyLimit
+	}
+	for _, cs := range h.sequences {
+		for _, c := range cs {
+			c.setLimit(limit)
+		}
+	}
+}
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.lookup(r) != "" {
@@ -74,7 +110,8 @@ func (h *Handler) lookup(r *http.Request) string {
 
 // ServeMux still reports a trailing-slash pattern for the unslashed path while
 // it prepares the 301 redirect. Mock routes are exact, so treat that request as
-// unmatched instead of serving the redirect.
+// unmatched instead of serving the redirect. The pattern carries a method
+// prefix for live routes but not for journal patterns.
 func missingRouteSlash(pat, path string) bool {
 	if strings.HasSuffix(path, "/") {
 		return false
@@ -85,11 +122,10 @@ func missingRouteSlash(pat, path string) bool {
 	if !strings.HasSuffix(pat, "...}") {
 		return false
 	}
-	_, p, ok := strings.Cut(pat, " ")
-	if !ok {
-		return false
+	if _, p, ok := strings.Cut(pat, " "); ok {
+		pat = p
 	}
-	prefix := p[:strings.LastIndexByte(p, '{')]
+	prefix := pat[:strings.LastIndexByte(pat, '{')]
 	return strings.Count(path, "/") == strings.Count(strings.TrimSuffix(prefix, "/"), "/")
 }
 
@@ -102,7 +138,10 @@ func cleanPath(path string) bool {
 	}
 	for raw := range strings.SplitSeq(path, "/") {
 		seg, err := url.PathUnescape(raw)
-		if err != nil || seg == "." || seg == ".." {
+		if err != nil {
+			return false
+		}
+		if seg == "." || seg == ".." {
 			return false
 		}
 	}

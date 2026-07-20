@@ -361,7 +361,7 @@ RTS provides a small standard library that covers common request needs without e
 
 ## Host objects for request evaluation
 
-Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers, while everything else is read-only. Lookups in `env` and `vars` are case-insensitive; header lookups are normalized, while query keys and JSON paths are case-sensitive.
+Resterm exposes host objects when evaluating templates, directives, `@apply`, assertions, and pre-request scripts. In pre-request scripts, `request` and `vars` expose mutation helpers, while everything else is read-only. Lookups in `env` and `vars` are case-insensitive. Header lookups are normalized, while query keys and JSON paths are case-sensitive. The TUI also exposes `mock` during request evaluation. Its helpers work while the workspace mock server is running and return an error when it is stopped. A local value named `mock`, such as an `@for-each` loop variable, takes precedence.
 
 ### env
 
@@ -390,6 +390,30 @@ Resterm exposes host objects when evaluating templates, directives, `@apply`, as
 ### stream
 
 `stream` provides streaming metadata for SSE and WebSocket requests. It includes helpers such as `stream.enabled()`, `stream.kind()`, `stream.summary()`, and `stream.events()`. Summary and event shapes depend on the stream type (for SSE: `eventCount`, `byteCount`, `duration`, `reason`; for WebSocket: `sentCount`, `receivedCount`, `duration`, `closedBy`, `closeCode`, `closeReason`).
+
+### mock
+
+When the TUI's workspace mock server is running, `mock` provides read-only access to its bounded request journal:
+
+```rts
+mock.count({method: "POST", path: "/webhooks/{name}"})
+mock.received({
+  method: "POST",
+  path: "/webhooks/payment",
+  headers: {Authorization: {prefix: "Bearer "}},
+  json: {status: "completed"}
+})
+```
+
+Both helpers require one pattern dictionary. `count` returns the exact number of matching requests, while `received` returns whether the count is greater than zero. Pattern fields are optional:
+
+- `method` is case-insensitive and normalized to uppercase.
+- `path` uses mock path syntax, including `{name}` and terminal `{name...}` wildcards.
+- `query` maps keys to exact strings or ordered lists of strings.
+- `headers` maps case-insensitive names to exact strings/lists or one rule: `{exact: ...}`, `{prefix: "..."}`, `{present: true}`, or `{absent: true}`.
+- `json` uses recursive object-subset matching and exact ordered arrays.
+
+Journal eviction makes inspection fail instead of returning a potentially false result. Resterm does not connect `resterm run` to an external journal. Use declarative `@expect` entries with `resterm mock verify` for standalone or CI automation.
 
 ## Directives and workflows
 

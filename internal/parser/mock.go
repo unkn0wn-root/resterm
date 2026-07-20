@@ -30,10 +30,12 @@ type mockBuilder struct {
 	path                 string
 	name                 string
 	sequence             string
+	sequenceKey          restfile.MockSequenceKey
 	latency              time.Duration
 	isDefault            bool
 	disableInterpolation bool
 	match                restfile.MockMatch
+	expectation          *restfile.MockExpectation
 	responses            []restfile.MockResponse
 	status               int
 	headers              http.Header
@@ -55,8 +57,8 @@ func (b *documentBuilder) handleMockDirective(line int, key, raw string) bool {
 		}
 		b.startMock(line, raw)
 		return true
-	case "match":
-		b.addMockError(line, "@match must follow an @mock directive")
+	case "match", "expect":
+		b.addMockError(line, "@"+key+" must follow an @mock directive")
 		return true
 	default:
 		return false
@@ -67,7 +69,7 @@ func (b *documentBuilder) startMock(line int, raw string) {
 	vals := options.Parse(raw)
 	for _, key := range util.SortedKeys(vals) {
 		switch key {
-		case "method", "path", "name", "sequence", "default", "latency", "interpolate":
+		case "method", "path", "name", "sequence", "sequence-key", "default", "latency", "interpolate":
 		default:
 			b.addMockError(line, fmt.Sprintf("unknown @mock option %q", key))
 		}
@@ -83,14 +85,23 @@ func (b *documentBuilder) startMock(line int, raw string) {
 		sequence:  strings.TrimSpace(vals["sequence"]),
 		headers:   make(http.Header),
 		match: restfile.MockMatch{
-			Query:   make(map[string][]string),
-			Headers: make(map[string][]string),
+			Query:   make(map[string]restfile.StringList),
+			Headers: make(map[string]restfile.MockHeaderRule),
 		},
 	}
 	b.pendingTitle = ""
 	b.checkMockRoute(line, m)
 	if _, ok := vals["sequence"]; ok && m.sequence == "" {
 		b.addMockError(line, "@mock sequence name cannot be empty")
+	}
+	if raw, ok := vals["sequence-key"]; ok {
+		if m.sequence == "" {
+			b.addMockError(line, "@mock sequence-key requires sequence")
+		} else if key, err := parseMockSequenceKey(raw, m.path); err != nil {
+			b.addMockError(line, "@mock sequence-key "+err.Error())
+		} else {
+			m.sequenceKey = key
+		}
 	}
 
 	if raw, ok := vals["default"]; ok {
@@ -180,11 +191,14 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, trimmed string
 			return
 		}
 		key, raw := lex.SplitDirective(strings.TrimSpace(text[1:]))
-		if key == "match" && len(m.responses) == 0 {
+		switch {
+		case key == "match" && len(m.responses) == 0:
 			m.addMatch(b, line, raw)
-		} else if key == "match" {
-			b.addMockError(line, "@match must be declared before the first sequence response")
-		} else {
+		case key == "expect" && len(m.responses) == 0:
+			m.addExpectation(b, line, raw)
+		case key == "match" || key == "expect":
+			b.addMockError(line, "@"+key+" must be declared before the first sequence response")
+		default:
 			b.addMockError(line, fmt.Sprintf("directive @%s is not valid before a mock response", key))
 		}
 		return
@@ -232,7 +246,7 @@ func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
 		m.addStringMatchers(b, line, "query", raw, m.match.Query)
 	}
 	if raw, ok := vals["headers"]; ok {
-		m.addStringMatchers(b, line, "headers", raw, m.match.Headers)
+		m.addHeaderMatchers(b, line, raw)
 	}
 	if raw, ok := vals["json"]; ok {
 		if len(m.match.JSON) > 0 {
@@ -245,7 +259,36 @@ func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
 	}
 }
 
-func (m *mockBuilder) addStringMatchers(b *documentBuilder, line int, kind, raw string, dst map[string][]string) {
+func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
+	vals := options.Parse(raw)
+	for _, key := range util.SortedKeys(vals) {
+		if key != "calls" {
+			b.addMockError(line, fmt.Sprintf("unknown @expect option %q", key))
+		}
+	}
+	if m.expectation != nil {
+		b.addMockError(line, "@expect is already defined for this mock")
+		return
+	}
+	rawCalls, ok := vals["calls"]
+	if !ok || strings.TrimSpace(rawCalls) == "" {
+		b.addMockError(line, "@expect calls is required")
+		return
+	}
+	calls, err := strconv.ParseUint(strings.TrimSpace(rawCalls), 10, 64)
+	if err != nil {
+		b.addMockError(line, "@expect calls must be a non-negative integer")
+		return
+	}
+	m.expectation = &restfile.MockExpectation{Calls: calls, Line: line}
+}
+
+func (m *mockBuilder) addStringMatchers(
+	b *documentBuilder,
+	line int,
+	kind, raw string,
+	dst map[string]restfile.StringList,
+) {
 	vals, err := parseStringListMap(raw)
 	if err != nil {
 		b.addMockError(line, fmt.Sprintf("invalid @match %s: %s", kind, err))
@@ -257,13 +300,6 @@ func (m *mockBuilder) addStringMatchers(b *documentBuilder, line int, kind, raw 
 			b.addMockError(line, fmt.Sprintf("@match %s name cannot be empty", kind))
 			continue
 		}
-		if kind == "headers" {
-			canon, ok := b.canonMatchHeader(line, name, vals[k])
-			if !ok {
-				continue
-			}
-			name = canon
-		}
 		if _, ok := dst[name]; ok {
 			b.addMockError(line, fmt.Sprintf("@match %s %q is repeated", kind, name))
 			continue
@@ -272,13 +308,41 @@ func (m *mockBuilder) addStringMatchers(b *documentBuilder, line int, kind, raw 
 	}
 }
 
-func (b *documentBuilder) canonMatchHeader(line int, key string, vals []string) (string, bool) {
+func (m *mockBuilder) addHeaderMatchers(b *documentBuilder, line int, raw string) {
+	vals, err := parseMockHeaderRules(raw)
+	if err != nil {
+		b.addMockError(line, "invalid @match headers: "+err.Error())
+		return
+	}
+	for _, key := range util.SortedKeys(vals) {
+		name := strings.TrimSpace(key)
+		if name == "" {
+			b.addMockError(line, "@match headers name cannot be empty")
+			continue
+		}
+		canon, ok := b.canonMatchHeader(line, name, vals[key])
+		if !ok {
+			continue
+		}
+		if _, exists := m.match.Headers[canon]; exists {
+			b.addMockError(line, fmt.Sprintf("@match headers %q is repeated", canon))
+			continue
+		}
+		m.match.Headers[canon] = vals[key]
+	}
+}
+
+func (b *documentBuilder) canonMatchHeader(
+	line int,
+	key string,
+	rule restfile.MockHeaderRule,
+) (string, bool) {
 	if !httpguts.ValidHeaderFieldName(key) {
 		b.addMockError(line, fmt.Sprintf("invalid @match header name %q", key))
 		return "", false
 	}
 	key = http.CanonicalHeaderKey(key)
-	for _, v := range vals {
+	for _, v := range rule.Values {
 		if !httpguts.ValidHeaderFieldValue(v) {
 			b.addMockError(line, fmt.Sprintf("invalid @match header value for %q", key))
 			return "", false
@@ -305,11 +369,13 @@ func (b *documentBuilder) flushMock() {
 		Title:                m.title,
 		Name:                 m.name,
 		Sequence:             m.sequence,
+		SequenceKey:          m.sequenceKey,
 		Method:               m.method,
 		Path:                 m.path,
 		Latency:              m.latency,
 		Default:              m.isDefault,
 		Match:                m.match,
+		Expectation:          m.expectation,
 		Responses:            m.responses,
 		DisableInterpolation: m.disableInterpolation,
 		LineRange:            restfile.LineRange{Start: m.startLine, End: m.endLine},
@@ -372,28 +438,90 @@ func parseMockStatusLine(line string) (int, bool, error) {
 	return status, true, nil
 }
 
-func parseStringListMap(raw string) (map[string][]string, error) {
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(raw), &fields); err != nil {
+func parseStringListMap(raw string) (map[string]restfile.StringList, error) {
+	fields, err := parseJSONObject(raw)
+	if err != nil {
 		return nil, err
 	}
-	if fields == nil {
-		return nil, fmt.Errorf("expected a JSON object")
-	}
-	out := make(map[string][]string, len(fields))
+	out := make(map[string]restfile.StringList, len(fields))
 	for key, value := range fields {
-		var scalar string
-		if json.Unmarshal(value, &scalar) == nil {
-			out[key] = []string{scalar}
-			continue
-		}
-		var list []string
-		if err := json.Unmarshal(value, &list); err != nil || list == nil {
+		var values restfile.StringList
+		if err := json.Unmarshal(value, &values); err != nil {
 			return nil, fmt.Errorf("value for %q must be a string or string array", key)
 		}
-		out[key] = list
+		out[key] = values
 	}
 	return out, nil
+}
+
+func parseMockHeaderRules(raw string) (map[string]restfile.MockHeaderRule, error) {
+	fields, err := parseJSONObject(raw)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]restfile.MockHeaderRule, len(fields))
+	for name, value := range fields {
+		var rule restfile.MockHeaderRule
+		if err := json.Unmarshal(value, &rule); err != nil {
+			return nil, fmt.Errorf("matcher for %q: %w", name, err)
+		}
+		out[name] = rule
+	}
+	return out, nil
+}
+
+func parseJSONObject(raw string) (map[string]json.RawMessage, error) {
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return nil, err
+	}
+	if obj == nil {
+		return nil, fmt.Errorf("expected a JSON object")
+	}
+	return obj, nil
+}
+
+func parseMockSequenceKey(raw, path string) (restfile.MockSequenceKey, error) {
+	raw = strings.TrimSpace(raw)
+	source, name, ok := strings.Cut(raw, ".")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return restfile.MockSequenceKey{}, fmt.Errorf(
+			"must use path.<name>, query.<name>, header.<name>, or cookie.<name>",
+		)
+	}
+
+	key := restfile.MockSequenceKey{Name: name}
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "path":
+		_, params, err := restfile.CompileMockPath(path)
+		if err != nil {
+			return restfile.MockSequenceKey{}, err
+		}
+		if _, exists := params[name]; !exists {
+			return restfile.MockSequenceKey{}, fmt.Errorf(
+				"path wildcard %q is not declared by the mock path",
+				name,
+			)
+		}
+		key.Source = restfile.MockSequenceKeySourcePath
+	case "query":
+		key.Source = restfile.MockSequenceKeySourceQuery
+	case "header":
+		if !httpguts.ValidHeaderFieldName(name) {
+			return restfile.MockSequenceKey{}, fmt.Errorf("header name %q is invalid", name)
+		}
+		key.Source = restfile.MockSequenceKeySourceHeader
+		key.Name = http.CanonicalHeaderKey(name)
+	case "cookie":
+		if !httpguts.ValidHeaderFieldName(name) {
+			return restfile.MockSequenceKey{}, fmt.Errorf("cookie name %q is invalid", name)
+		}
+		key.Source = restfile.MockSequenceKeySourceCookie
+	default:
+		return restfile.MockSequenceKey{}, fmt.Errorf("source %q is not supported", source)
+	}
+	return key, nil
 }
 
 func compactJSON(raw string) ([]byte, error) {

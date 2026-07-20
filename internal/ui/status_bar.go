@@ -152,6 +152,7 @@ func statusBarPalette(palette theme.StatusBarPalette) theme.StatusBarPalette {
 	palette.File = statusBarSegmentStyle(palette.File, defaults.File)
 	palette.Focus = statusBarSegmentStyle(palette.Focus, defaults.Focus)
 	palette.Mode = statusBarSegmentStyle(palette.Mode, defaults.Mode)
+	palette.Mock = statusBarSegmentStyle(palette.Mock, defaults.Mock)
 	palette.Zoom = statusBarSegmentStyle(palette.Zoom, defaults.Zoom)
 	palette.Minimized = statusBarSegmentStyle(palette.Minimized, defaults.Minimized)
 	palette.Version = statusBarSegmentStyle(palette.Version, defaults.Version)
@@ -469,6 +470,9 @@ func (m Model) statusBarContextSection(
 	if seg.key == statusBarSegmentEditorPos {
 		return m.statusBarEditorPosSection(text, palette), true
 	}
+	if seg.key == statusBarSegmentMock && m.mock.reloadErr != "" {
+		return statusBarSection{text: text, style: palette.Warn}, true
+	}
 	return statusBarSection{
 		text:  text,
 		style: statusBarContextStyle(seg.key, palette),
@@ -555,6 +559,8 @@ func statusBarContextStyle(
 		return palette.Focus
 	case statusBarSegmentMode:
 		return palette.Mode
+	case statusBarSegmentMock:
+		return palette.Mock
 	case statusBarSegmentZoom:
 		return palette.Zoom
 	default:

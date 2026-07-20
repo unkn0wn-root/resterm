@@ -16,9 +16,10 @@ import (
 type fixtureReader func(path, ref string) ([]byte, string, error)
 
 type compiler struct {
-	read   fixtureReader
-	index  map[string]*route // by pattern, merged scenarios keep declaration order
-	routes []*route
+	read         fixtureReader
+	index        map[string]*route // by pattern, merged scenarios keep declaration order
+	routes       []*route
+	expectations []Expectation
 }
 
 func Compile(docs []*restfile.Document) (*Handler, error) {
@@ -62,6 +63,9 @@ func (c *compiler) addMock(doc *restfile.Document, spec *restfile.Mock) error {
 	if err != nil {
 		return fmt.Errorf("%s: %w", src, err)
 	}
+	if strings.HasPrefix(pat, controlNamespace) {
+		return fmt.Errorf("%s: mock path is inside the reserved %s namespace", src, controlNamespace)
+	}
 	if spec.Method == "" || !httpguts.ValidHeaderFieldName(spec.Method) {
 		return fmt.Errorf("%s: invalid mock method %q", src, spec.Method)
 	}
@@ -69,6 +73,13 @@ func (c *compiler) addMock(doc *restfile.Document, spec *restfile.Mock) error {
 	v, err := c.newVariant(doc.Path, spec, params, src)
 	if err != nil {
 		return fmt.Errorf("%s: %w", src, err)
+	}
+	if spec.Expectation != nil {
+		expectation, err := compileExpectation(doc.Path, spec)
+		if err != nil {
+			return fmt.Errorf("%s: %w", src, err)
+		}
+		c.expectations = append(c.expectations, expectation)
 	}
 	key := spec.Method + " " + pat
 	if rt := c.index[key]; rt != nil {
@@ -108,6 +119,10 @@ func (c *compiler) newVariant(
 	if err := checkMatch(spec.Match); err != nil {
 		return nil, err
 	}
+	sequenceKey, err := checkSequenceKey(spec.SequenceKey, pathParams)
+	if err != nil {
+		return nil, err
+	}
 
 	responses := make([]response, 0, len(spec.Responses))
 	for _, specResponse := range spec.Responses {
@@ -129,13 +144,15 @@ func (c *compiler) newVariant(
 	}
 
 	return &variant{
-		name:       cmp.Or(spec.Sequence, spec.Name),
-		def:        spec.Default,
-		latency:    spec.Latency,
-		matchers:   ms,
-		responses:  responses,
-		pathParams: pathParams,
-		src:        src,
+		name:            cmp.Or(spec.Sequence, spec.Name),
+		sequence:        spec.Sequence,
+		def:             spec.Default,
+		latency:         spec.Latency,
+		matchers:        ms,
+		responses:       responses,
+		pathParams:      pathParams,
+		sequenceKeySpec: sequenceKey,
+		src:             src,
 	}, nil
 }
 
@@ -163,6 +180,7 @@ func (c *compiler) handler() (*Handler, error) {
 	mux := http.NewServeMux()
 	methods := make([]string, 0, len(c.routes))
 	var fixtures []string
+	sequences := make(map[string][]*sequenceCursor)
 	scenarios := 0
 	for _, rt := range c.routes {
 		if err := rt.validate(); err != nil {
@@ -176,6 +194,9 @@ func (c *compiler) handler() (*Handler, error) {
 			methods = append(methods, rt.method)
 		}
 		for _, v := range rt.variants {
+			if v.sequence != "" {
+				sequences[v.sequence] = append(sequences[v.sequence], &v.cursor)
+			}
 			for _, resp := range v.responses {
 				if resp.fixture != "" && !slices.Contains(fixtures, resp.fixture) {
 					fixtures = append(fixtures, resp.fixture)
@@ -184,12 +205,40 @@ func (c *compiler) handler() (*Handler, error) {
 		}
 	}
 
-	return &Handler{
-		mux:       mux,
-		routes:    len(c.routes),
-		scenarios: scenarios,
-		methods:   methods,
-		fixtures:  fixtures,
+	h := &Handler{
+		mux:          mux,
+		routes:       len(c.routes),
+		scenarios:    scenarios,
+		methods:      methods,
+		fixtures:     fixtures,
+		sequences:    sequences,
+		expectations: c.expectations,
+	}
+	h.setSequenceKeyLimit(DefaultSequenceKeyLimit)
+	return h, nil
+}
+
+func compileExpectation(path string, spec *restfile.Mock) (Expectation, error) {
+	pattern, err := compileRequestPattern(RequestPattern{
+		Method:  spec.Method,
+		Path:    spec.Path,
+		Query:   spec.Match.Query,
+		Headers: spec.Match.Headers,
+		JSON:    spec.Match.JSON,
+	})
+	if err != nil {
+		return Expectation{}, fmt.Errorf("invalid mock expectation: %w", err)
+	}
+	line := spec.Expectation.Line
+	if line <= 0 {
+		line = spec.LineRange.Start
+	}
+	return Expectation{
+		Pattern: pattern.pattern,
+		Calls:   spec.Expectation.Calls,
+		Source:  path,
+		Line:    line,
+		Title:   spec.Title,
 	}, nil
 }
 
@@ -215,7 +264,10 @@ func docError(doc *restfile.Document) error {
 
 func inMocks(mocks []*restfile.Mock, line int) bool {
 	for _, m := range mocks {
-		if m != nil && line >= m.LineRange.Start && line <= m.LineRange.End {
+		if m == nil {
+			continue
+		}
+		if line >= m.LineRange.Start && line <= m.LineRange.End {
 			return true
 		}
 	}
@@ -223,25 +275,56 @@ func inMocks(mocks []*restfile.Mock, line int) bool {
 }
 
 func checkMatch(m restfile.MockMatch) error {
-	for name := range m.Query {
-		if strings.TrimSpace(name) == "" {
-			return fmt.Errorf("mock query matcher name cannot be empty")
-		}
+	if err := checkQueryRules(m.Query); err != nil {
+		return err
 	}
-	for name, values := range m.Headers {
-		if !httpguts.ValidHeaderFieldName(name) {
-			return fmt.Errorf("invalid mock header matcher %q", name)
-		}
+	for name := range m.Headers {
 		if isSelectorHeader(name) {
 			return fmt.Errorf("mock selector header %q cannot be used as a matcher", name)
 		}
-		for _, val := range values {
-			if !httpguts.ValidHeaderFieldValue(val) {
-				return fmt.Errorf("invalid value for mock header matcher %q", name)
-			}
-		}
 	}
-	return nil
+	_, err := canonHeaderRules(m.Headers)
+	return err
+}
+
+func checkSequenceKey(
+	key restfile.MockSequenceKey,
+	pathParams map[string]string,
+) (restfile.MockSequenceKey, error) {
+	if key.IsZero() {
+		return key, nil
+	}
+	if key.Name == "" || key.Name != strings.TrimSpace(key.Name) {
+		return restfile.MockSequenceKey{}, errors.New("mock sequence key name cannot be empty")
+	}
+	switch key.Source {
+	case restfile.MockSequenceKeySourcePath:
+		if _, exists := pathParams[key.Name]; !exists {
+			return restfile.MockSequenceKey{}, fmt.Errorf(
+				"mock sequence key path wildcard %q is not declared",
+				key.Name,
+			)
+		}
+	case restfile.MockSequenceKeySourceQuery:
+	case restfile.MockSequenceKeySourceHeader:
+		if !httpguts.ValidHeaderFieldName(key.Name) {
+			return restfile.MockSequenceKey{}, fmt.Errorf(
+				"invalid mock sequence key header %q",
+				key.Name,
+			)
+		}
+		key.Name = http.CanonicalHeaderKey(key.Name)
+	case restfile.MockSequenceKeySourceCookie:
+		if !httpguts.ValidHeaderFieldName(key.Name) {
+			return restfile.MockSequenceKey{}, fmt.Errorf(
+				"invalid mock sequence key cookie %q",
+				key.Name,
+			)
+		}
+	default:
+		return restfile.MockSequenceKey{}, errors.New("mock sequence key source is invalid")
+	}
+	return key, nil
 }
 
 func respHeaders(src http.Header) (http.Header, error) {

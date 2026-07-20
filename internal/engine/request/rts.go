@@ -3,6 +3,7 @@ package request
 import (
 	"context"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/mock"
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
@@ -246,8 +248,23 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 		AllowRandom: true,
 		Site:        in.site,
 		Uses:        e.rtsUses(in.doc, in.req),
-		Extra:       in.x,
+		Extra:       e.rtsExtra(in.x),
 	}
+}
+
+func (e *Engine) rtsExtra(src map[string]rts.Value) map[string]rts.Value {
+	if e.cfg.MockInspector == nil {
+		return src
+	}
+	out := maps.Clone(src)
+	if out == nil {
+		out = make(map[string]rts.Value, 1)
+	}
+	// explicit runtime bindings, including @for-each variables, shadow host objects.
+	if _, exists := out["mock"]; !exists {
+		out["mock"] = mock.RTSValue(e.cfg.MockInspector)
+	}
+	return out
 }
 
 func (e *Engine) rtsEval(
@@ -593,6 +610,7 @@ func (e *Engine) runRTSPreRequest(
 				ReadFile:    os.ReadFile,
 				AllowRandom: true,
 				Site:        "@script pre-request",
+				Extra:       e.rtsExtra(nil),
 			}
 		},
 	})

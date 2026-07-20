@@ -72,7 +72,6 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 		}
 	}
 
-	vp := m.helpViewport
 	if isSearchTriggerKey(keyStr) {
 		return m.focusHelpFilter()
 	}
@@ -91,30 +90,8 @@ func (m *Model) handleHelpKey(msg tea.KeyMsg) tea.Cmd {
 		m.clearHelpFilter()
 		m.showHelp = false
 		m.helpJustOpened = false
-	case "down", "j":
-		if vp != nil {
-			vp.ScrollDown(1)
-		}
-	case "up", "k":
-		if vp != nil {
-			vp.ScrollUp(1)
-		}
-	case "pgdown", "ctrl+f":
-		if vp != nil {
-			vp.ScrollDown(max(1, vp.Height))
-		}
-	case "pgup", "ctrl+b", "ctrl+u":
-		if vp != nil {
-			vp.ScrollUp(max(1, vp.Height))
-		}
-	case "home":
-		if vp != nil {
-			vp.GotoTop()
-		}
-	case "end":
-		if vp != nil {
-			vp.GotoBottom()
-		}
+	default:
+		scrollViewportKey(m.helpViewport, keyStr)
 	}
 	return nil
 }
@@ -313,7 +290,9 @@ func (m Model) helpSections() []helpSection {
 					m.helpActionKey(bindings.ActionCaptureMockResponse, "g a"),
 					"Capture the focused HTTP response as a mock",
 				},
-				{":mock logs", "Open mock request log (c clears)"},
+				{":mock logs", "Open mock request log (c clears the log)"},
+				{":mock reset [sequence]", "Reset all or one named response sequence"},
+				{":mock verify", "Verify active # @expect call counts"},
 				{":mock status", "Show address, routes, scenarios, and calls"},
 			}),
 		},

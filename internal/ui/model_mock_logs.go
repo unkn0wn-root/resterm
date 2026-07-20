@@ -90,8 +90,7 @@ func mockLogLine(e mock.Event) string {
 }
 
 func (m *Model) handleMockLogsKey(msg tea.KeyMsg) tea.Cmd {
-	vp := m.mockLogsViewport
-	switch msg.String() {
+	switch key := msg.String(); key {
 	case "esc", "enter":
 		m.closeMockLogs()
 	case "ctrl+q", "ctrl+d":
@@ -101,30 +100,8 @@ func (m *Model) handleMockLogsKey(msg tea.KeyMsg) tea.Cmd {
 			server.ClearLogs()
 		}
 		m.syncMockLogs()
-	case "down", "j":
-		if vp != nil {
-			vp.ScrollDown(1)
-		}
-	case "up", "k":
-		if vp != nil {
-			vp.ScrollUp(1)
-		}
-	case "pgdown", "ctrl+f":
-		if vp != nil {
-			vp.ScrollDown(max(vp.Height, 1))
-		}
-	case "pgup", "ctrl+b", "ctrl+u":
-		if vp != nil {
-			vp.ScrollUp(max(vp.Height, 1))
-		}
-	case "home", "g":
-		if vp != nil {
-			vp.GotoTop()
-		}
-	case "end", "shift+g", "G":
-		if vp != nil {
-			vp.GotoBottom()
-		}
+	default:
+		scrollViewportKey(m.mockLogsViewport, key)
 	}
 	return nil
 }
