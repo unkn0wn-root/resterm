@@ -42,14 +42,17 @@ func newMatchers(m restfile.MockMatch) ([]matcher, error) {
 
 func queryMatcher(want map[string]restfile.StringList) matcher {
 	return func(p *probe) (bool, *problem) {
-		q := p.query()
-		for k, vals := range want {
-			if got, ok := q[k]; !ok || !slices.Equal(got, []string(vals)) {
-				return false, nil
-			}
-		}
-		return true, nil
+		return matchQuery(p.query(), want), nil
 	}
+}
+
+func matchQuery(got url.Values, want map[string]restfile.StringList) bool {
+	for k, vals := range want {
+		if g, ok := got[k]; !ok || !slices.Equal(g, []string(vals)) {
+			return false
+		}
+	}
+	return true
 }
 
 func headerMatcher(want map[string]restfile.MockHeaderRule) matcher {
@@ -90,13 +93,17 @@ func matchHeaderRule(got []string, rule restfile.MockHeaderRule) bool {
 // headerValues reads a request header for mock config. net/http strips Host
 // out of the header map, so every header lookup needs the same special case.
 func headerValues(r *http.Request, name string) []string {
+	return headerOrHost(r.Header, r.Host, name)
+}
+
+func headerOrHost(h http.Header, host, name string) []string {
 	if strings.EqualFold(name, "Host") {
-		if r.Host == "" {
+		if host == "" {
 			return nil
 		}
-		return []string{r.Host}
+		return []string{host}
 	}
-	return r.Header.Values(name)
+	return h.Values(name)
 }
 
 func jsonMatcher(want any) matcher {

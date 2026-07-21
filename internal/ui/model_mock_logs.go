@@ -90,40 +90,24 @@ func mockLogLine(e mock.Event) string {
 }
 
 func (m *Model) handleMockLogsKey(msg tea.KeyMsg) tea.Cmd {
-	switch key := msg.String(); key {
-	case "esc", "enter":
-		m.closeMockLogs()
-	case "ctrl+q", "ctrl+d":
-		return tea.Quit
-	case "c":
-		if server := m.activeMockServer(); server != nil {
-			server.ClearLogs()
-		}
-		m.syncMockLogs()
-	default:
-		scrollViewportKey(m.mockLogsViewport, key)
+	if key := msg.String(); key != "c" {
+		return modalKey(key, m.closeMockLogs, m.mockLogsViewport)
 	}
+	if server := m.activeMockServer(); server != nil {
+		server.ClearLogs()
+	}
+	m.syncMockLogs()
 	return nil
 }
 
 func (m Model) renderMockLogsModal() string {
-	width := min(m.width-6, 120)
-	if width < 48 {
-		width = max(m.width-4, 36)
-	}
-	contentWidth := max(width-4, 32)
-	viewWidth := max(contentWidth-4, 20)
-	bodyHeight := max(min(m.height-12, 30), 8)
-	if m.height > 0 {
-		bodyHeight = min(bodyHeight, max(m.height-6, 4))
-	}
-
+	size := m.modalSize(120, 30)
 	var body string
 	if vp := m.mockLogsViewport; vp != nil {
-		if vp.Width != viewWidth || vp.Height != bodyHeight {
+		if vp.Width != size.view || vp.Height != size.body {
 			follow := vp.AtBottom()
-			vp.Width = viewWidth
-			vp.Height = bodyHeight
+			vp.Width = size.view
+			vp.Height = size.body
 			vp.SetContent(m.mockLogText())
 			if follow {
 				vp.GotoBottom()
@@ -133,7 +117,7 @@ func (m Model) renderMockLogsModal() string {
 	} else {
 		body = m.mockLogText()
 	}
-	bodyView := lipgloss.NewStyle().Padding(0, 2).Width(contentWidth).Render(body)
+	bodyView := lipgloss.NewStyle().Padding(0, 2).Width(size.content).Render(body)
 	title := "Mock Requests"
 	if server := m.activeMockServer(); server != nil {
 		title += " - " + server.Addr()
@@ -143,13 +127,5 @@ func (m Model) renderMockLogsModal() string {
 		m.theme.CommandBarHint.Render("Esc"),
 		m.theme.CommandBarHint.Render("c"),
 	)
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderModalTitle(title, width),
-		"",
-		bodyView,
-		"",
-		m.theme.HeaderValue.Padding(0, 2).Render(instructions),
-	)
-	return m.renderCenteredModal(m.theme.BrowserBorder.Width(width).Render(content))
+	return m.renderModalBox(title, bodyView, instructions, size.width)
 }

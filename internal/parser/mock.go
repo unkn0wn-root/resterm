@@ -270,17 +270,17 @@ func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
 		b.addMockError(line, "@expect is already defined for this mock")
 		return
 	}
-	rawCalls, ok := vals["calls"]
-	if !ok || strings.TrimSpace(rawCalls) == "" {
+	calls := strings.TrimSpace(vals["calls"])
+	if calls == "" {
 		b.addMockError(line, "@expect calls is required")
 		return
 	}
-	calls, err := strconv.ParseUint(strings.TrimSpace(rawCalls), 10, 64)
+	n, err := strconv.ParseUint(calls, 10, 64)
 	if err != nil {
 		b.addMockError(line, "@expect calls must be a non-negative integer")
 		return
 	}
-	m.expectation = &restfile.MockExpectation{Calls: calls, Line: line}
+	m.expectation = &restfile.MockExpectation{Calls: n, Line: line}
 }
 
 func (m *mockBuilder) addStringMatchers(
@@ -482,46 +482,17 @@ func parseJSONObject(raw string) (map[string]json.RawMessage, error) {
 }
 
 func parseMockSequenceKey(raw, path string) (restfile.MockSequenceKey, error) {
-	raw = strings.TrimSpace(raw)
-	source, name, ok := strings.Cut(raw, ".")
-	name = strings.TrimSpace(name)
-	if !ok || name == "" {
-		return restfile.MockSequenceKey{}, fmt.Errorf(
-			"must use path.<name>, query.<name>, header.<name>, or cookie.<name>",
-		)
+	key, err := restfile.ParseMockSequenceKey(raw)
+	if err != nil {
+		return restfile.MockSequenceKey{}, err
 	}
-
-	key := restfile.MockSequenceKey{Name: name}
-	switch strings.ToLower(strings.TrimSpace(source)) {
-	case "path":
-		_, params, err := restfile.CompileMockPath(path)
-		if err != nil {
+	var params map[string]string
+	if key.Source == restfile.MockSequenceKeySourcePath {
+		if _, params, err = restfile.CompileMockPath(path); err != nil {
 			return restfile.MockSequenceKey{}, err
 		}
-		if _, exists := params[name]; !exists {
-			return restfile.MockSequenceKey{}, fmt.Errorf(
-				"path wildcard %q is not declared by the mock path",
-				name,
-			)
-		}
-		key.Source = restfile.MockSequenceKeySourcePath
-	case "query":
-		key.Source = restfile.MockSequenceKeySourceQuery
-	case "header":
-		if !httpguts.ValidHeaderFieldName(name) {
-			return restfile.MockSequenceKey{}, fmt.Errorf("header name %q is invalid", name)
-		}
-		key.Source = restfile.MockSequenceKeySourceHeader
-		key.Name = http.CanonicalHeaderKey(name)
-	case "cookie":
-		if !httpguts.ValidHeaderFieldName(name) {
-			return restfile.MockSequenceKey{}, fmt.Errorf("cookie name %q is invalid", name)
-		}
-		key.Source = restfile.MockSequenceKeySourceCookie
-	default:
-		return restfile.MockSequenceKey{}, fmt.Errorf("source %q is not supported", source)
 	}
-	return key, nil
+	return key.Check(params)
 }
 
 func compactJSON(raw string) ([]byte, error) {
