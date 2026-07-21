@@ -2,7 +2,6 @@ package mock
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 
@@ -65,11 +64,7 @@ func (o *rtsInspector) requestCount(
 	if err != nil {
 		return 0, rts.Errf(ctx, pos, "%s: %v", sig, err)
 	}
-	goctx := context.Background()
-	if ctx != nil && ctx.Ctx != nil {
-		goctx = ctx.Ctx
-	}
-	count, err := o.inspector.Count(goctx, pattern)
+	count, err := o.inspector.Count(ctx.GoCtx(), pattern)
 	if err != nil {
 		return 0, rts.Errf(ctx, pos, "%s: %v", sig, err)
 	}

@@ -35,6 +35,17 @@ type VerificationResult struct {
 	Passed      bool
 }
 
+func (r VerificationResult) Detail() string {
+	switch {
+	case r.Err != nil:
+		return r.Err.Error()
+	case r.Passed:
+		return fmt.Sprintf("%d call(s)", r.Actual)
+	default:
+		return fmt.Sprintf("expected %d call(s), received %d", r.Expectation.Calls, r.Actual)
+	}
+}
+
 func Verify(
 	ctx context.Context,
 	inspector Inspector,

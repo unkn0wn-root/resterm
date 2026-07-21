@@ -235,7 +235,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showMockVerification {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			return m, batchCommands(append(cmds, m.handleMockVerificationKey(keyMsg))...)
+			cmd := modalKey(keyMsg.String(), m.closeMockVerification, m.mockVerificationViewport)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}
@@ -265,28 +266,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	if m.showHistoryPreview {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch key := keyMsg.String(); key {
-			case "esc", "enter":
-				m.closeHistoryPreview()
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			default:
-				scrollViewportKey(m.historyPreviewViewport, key)
-			}
+			cmd := modalKey(keyMsg.String(), m.closeHistoryPreview, m.historyPreviewViewport)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}
 
 	if m.showRequestDetails {
 		if keyMsg, ok := msg.(tea.KeyMsg); ok {
-			switch key := keyMsg.String(); key {
-			case "esc", "enter":
-				m.closeRequestDetails()
-			case "ctrl+q", "ctrl+d":
-				return m, tea.Quit
-			default:
-				scrollViewportKey(m.requestDetailViewport, key)
-			}
+			cmd := modalKey(keyMsg.String(), m.closeRequestDetails, m.requestDetailViewport)
+			return m, batchCommands(append(cmds, cmd)...)
 		}
 		return m, batchCommands(cmds...)
 	}

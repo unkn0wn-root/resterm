@@ -113,11 +113,9 @@ func (rt *route) named(name string, status int) (*variant, *problem) {
 }
 
 func (v *variant) selectResponse(status int, p *probe) (selection, *problem) {
-	step := 0
 	if status != 0 {
-		if i, ok := v.stepFor(status); ok {
-			step = i
-		}
+		// variantFor already checked that the status exists on this variant
+		step, _ := v.stepFor(status)
 		return selection{v: v, step: step}, nil
 	}
 
@@ -125,8 +123,7 @@ func (v *variant) selectResponse(status int, p *probe) (selection, *problem) {
 	if err != nil {
 		return selection{}, err
 	}
-	var ok bool
-	step, ok = v.cursor.advance(key, len(v.responses)-1)
+	step, ok := v.cursor.advance(key, len(v.responses)-1)
 	if !ok {
 		return selection{}, &problem{
 			status: http.StatusTooManyRequests,

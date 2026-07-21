@@ -177,11 +177,8 @@ func (p *compiledPattern) matches(entry requestRecord) (bool, error) {
 	if p.path != nil && !p.path.matches(entry.path, entry.rawPath) {
 		return false, nil
 	}
-	for name, values := range p.pattern.Query {
-		got, ok := entry.query[name]
-		if !ok || !slices.Equal(got, []string(values)) {
-			return false, nil
-		}
+	if !matchQuery(entry.query, p.pattern.Query) {
+		return false, nil
 	}
 	for name, rule := range p.pattern.Headers {
 		if !matchHeaderRule(entry.headerValues(name), rule) {

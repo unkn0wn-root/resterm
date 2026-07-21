@@ -66,22 +66,16 @@ func (m *Model) handleMockVerify(msg mockVerifyMsg) tea.Cmd {
 		if i > 0 {
 			content.WriteByte('\n')
 		}
-		label := result.Expectation.Label()
+		status := "PASS"
 		switch {
 		case result.Err != nil:
-			fmt.Fprintf(&content, "ERROR  %s\n       %v", label, result.Err)
+			status = "ERROR"
 		case !result.Passed:
-			fmt.Fprintf(
-				&content,
-				"FAIL   %s\n       expected %d call(s), received %d",
-				label,
-				result.Expectation.Calls,
-				result.Actual,
-			)
+			status = "FAIL"
 		default:
 			passed++
-			fmt.Fprintf(&content, "PASS   %s\n       %d call(s)", label, result.Actual)
 		}
+		fmt.Fprintf(&content, "%-6s %s\n       %s", status, result.Expectation.Label(), result.Detail())
 	}
 	m.mockVerificationText = content.String()
 	m.showMockVerification = true
@@ -107,51 +101,22 @@ func (m *Model) closeMockVerification() {
 	m.mockVerificationText = ""
 }
 
-func (m *Model) handleMockVerificationKey(msg tea.KeyMsg) tea.Cmd {
-	switch key := msg.String(); key {
-	case "esc", "enter":
-		m.closeMockVerification()
-	case "ctrl+q", "ctrl+d":
-		return tea.Quit
-	default:
-		scrollViewportKey(m.mockVerificationViewport, key)
-	}
-	return nil
-}
-
 func (m Model) renderMockVerificationModal() string {
-	width := min(m.width-6, 110)
-	if width < 48 {
-		width = max(m.width-4, 36)
-	}
-	contentWidth := max(width-4, 32)
-	viewWidth := max(contentWidth-4, 20)
-	bodyHeight := max(min(m.height-12, 24), 8)
-	if m.height > 0 {
-		bodyHeight = min(bodyHeight, max(m.height-6, 4))
-	}
+	size := m.modalSize(110, 24)
 	body := m.mockVerificationText
 	if vp := m.mockVerificationViewport; vp != nil {
-		if vp.Width != viewWidth || vp.Height != bodyHeight {
-			vp.Width = viewWidth
-			vp.Height = bodyHeight
+		if vp.Width != size.view || vp.Height != size.body {
+			vp.Width = size.view
+			vp.Height = size.body
 			vp.SetContent(m.mockVerificationText)
 		}
 		body = vp.View()
 	}
-	bodyView := lipgloss.NewStyle().Padding(0, 2).Width(contentWidth).Render(body)
+	bodyView := lipgloss.NewStyle().Padding(0, 2).Width(size.content).Render(body)
 	instructions := fmt.Sprintf(
 		"%s / %s Close  j/k Scroll",
 		m.theme.CommandBarHint.Render("Esc"),
 		m.theme.CommandBarHint.Render("Enter"),
 	)
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		m.renderModalTitle("Mock Verification", width),
-		"",
-		bodyView,
-		"",
-		m.theme.HeaderValue.Padding(0, 2).Render(instructions),
-	)
-	return m.renderCenteredModal(m.theme.BrowserBorder.Width(width).Render(content))
+	return m.renderModalBox("Mock Verification", bodyView, instructions, size.width)
 }

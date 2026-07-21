@@ -119,9 +119,9 @@ func (c *compiler) newVariant(
 	if err := checkMatch(spec.Match); err != nil {
 		return nil, err
 	}
-	sequenceKey, err := checkSequenceKey(spec.SequenceKey, pathParams)
+	sequenceKey, err := spec.SequenceKey.Check(pathParams)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mock sequence key: %w", err)
 	}
 
 	responses := make([]response, 0, len(spec.Responses))
@@ -285,46 +285,6 @@ func checkMatch(m restfile.MockMatch) error {
 	}
 	_, err := canonHeaderRules(m.Headers)
 	return err
-}
-
-func checkSequenceKey(
-	key restfile.MockSequenceKey,
-	pathParams map[string]string,
-) (restfile.MockSequenceKey, error) {
-	if key.IsZero() {
-		return key, nil
-	}
-	if key.Name == "" || key.Name != strings.TrimSpace(key.Name) {
-		return restfile.MockSequenceKey{}, errors.New("mock sequence key name cannot be empty")
-	}
-	switch key.Source {
-	case restfile.MockSequenceKeySourcePath:
-		if _, exists := pathParams[key.Name]; !exists {
-			return restfile.MockSequenceKey{}, fmt.Errorf(
-				"mock sequence key path wildcard %q is not declared",
-				key.Name,
-			)
-		}
-	case restfile.MockSequenceKeySourceQuery:
-	case restfile.MockSequenceKeySourceHeader:
-		if !httpguts.ValidHeaderFieldName(key.Name) {
-			return restfile.MockSequenceKey{}, fmt.Errorf(
-				"invalid mock sequence key header %q",
-				key.Name,
-			)
-		}
-		key.Name = http.CanonicalHeaderKey(key.Name)
-	case restfile.MockSequenceKeySourceCookie:
-		if !httpguts.ValidHeaderFieldName(key.Name) {
-			return restfile.MockSequenceKey{}, fmt.Errorf(
-				"invalid mock sequence key cookie %q",
-				key.Name,
-			)
-		}
-	default:
-		return restfile.MockSequenceKey{}, errors.New("mock sequence key source is invalid")
-	}
-	return key, nil
 }
 
 func respHeaders(src http.Header) (http.Header, error) {

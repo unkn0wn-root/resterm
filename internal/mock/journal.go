@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"net/url"
 	"slices"
-	"strings"
 	"sync"
 )
 
@@ -33,13 +33,7 @@ type requestRecord struct {
 }
 
 func (r requestRecord) headerValues(name string) []string {
-	if strings.EqualFold(name, "Host") {
-		if r.host == "" {
-			return nil
-		}
-		return []string{r.host}
-	}
-	return r.headers.Values(name)
+	return headerOrHost(r.headers, r.host, name)
 }
 
 type requestJournal struct {
@@ -74,9 +68,8 @@ func newRequestJournal(opts Options) (*requestJournal, error) {
 	if bodyLimit <= 0 {
 		bodyLimit = DefaultJournalBodyLimit
 	}
-	maxInt := int64(^uint(0) >> 1)
 	switch {
-	case bodyLimit >= maxInt:
+	case bodyLimit >= math.MaxInt:
 		return nil, fmt.Errorf("mock journal body limit is too large")
 	case bodyLimit > byteLimit:
 		return nil, fmt.Errorf("mock journal body limit exceeds total byte limit")

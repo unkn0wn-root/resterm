@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+
+	"golang.org/x/net/http/httpguts"
 )
 
 var mockNameRE = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
@@ -65,6 +67,60 @@ func (k MockSequenceKey) String() string {
 		return ""
 	}
 	return source + "." + k.Name
+}
+
+// ParseMockSequenceKey parses the source.name form used by @mock sequence-key.
+func ParseMockSequenceKey(raw string) (MockSequenceKey, error) {
+	source, name, ok := strings.Cut(strings.TrimSpace(raw), ".")
+	name = strings.TrimSpace(name)
+	if !ok || name == "" {
+		return MockSequenceKey{}, errors.New(
+			"must use path.<name>, query.<name>, header.<name>, or cookie.<name>",
+		)
+	}
+	key := MockSequenceKey{Name: name}
+	switch strings.ToLower(strings.TrimSpace(source)) {
+	case "path":
+		key.Source = MockSequenceKeySourcePath
+	case "query":
+		key.Source = MockSequenceKeySourceQuery
+	case "header":
+		key.Source = MockSequenceKeySourceHeader
+	case "cookie":
+		key.Source = MockSequenceKeySourceCookie
+	default:
+		return MockSequenceKey{}, fmt.Errorf("source %q is not supported", source)
+	}
+	return key, nil
+}
+
+// Check validates the key and returns it with header names canonicalized.
+func (k MockSequenceKey) Check(params map[string]string) (MockSequenceKey, error) {
+	if k.IsZero() {
+		return k, nil
+	}
+	if k.Name == "" || k.Name != strings.TrimSpace(k.Name) {
+		return MockSequenceKey{}, errors.New("name cannot be empty")
+	}
+	switch k.Source {
+	case MockSequenceKeySourcePath:
+		if _, ok := params[k.Name]; !ok {
+			return MockSequenceKey{}, fmt.Errorf("path wildcard %q is not declared", k.Name)
+		}
+	case MockSequenceKeySourceQuery:
+	case MockSequenceKeySourceHeader:
+		if !httpguts.ValidHeaderFieldName(k.Name) {
+			return MockSequenceKey{}, fmt.Errorf("header name %q is invalid", k.Name)
+		}
+		k.Name = http.CanonicalHeaderKey(k.Name)
+	case MockSequenceKeySourceCookie:
+		if !httpguts.ValidHeaderFieldName(k.Name) {
+			return MockSequenceKey{}, fmt.Errorf("cookie name %q is invalid", k.Name)
+		}
+	default:
+		return MockSequenceKey{}, errors.New("source is invalid")
+	}
+	return k, nil
 }
 
 func (l *StringList) UnmarshalJSON(data []byte) error {
@@ -125,10 +181,10 @@ func (r *MockHeaderRule) UnmarshalJSON(data []byte) error {
 		return errors.New("mock header matcher must contain exactly one operator")
 	}
 	var op string
-	for name := range fields {
-		op = name
+	var raw json.RawMessage
+	for name, value := range fields {
+		op, raw = name, value
 	}
-	raw := fields[op]
 	switch op {
 	case "exact":
 		var values StringList

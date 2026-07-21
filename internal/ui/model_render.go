@@ -2318,26 +2318,12 @@ func (m Model) renderRequestDetailsModal() string {
 			Render(body)
 	}
 
-	headerView := m.renderModalTitle(title, width)
 	instructions := fmt.Sprintf(
 		"%s / %s Close",
 		m.theme.CommandBarHint.Render("Esc"),
 		m.theme.CommandBarHint.Render("Enter"),
 	)
-	instructionsView := m.theme.HeaderValue.
-		Padding(0, 2).
-		Render(instructions)
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		headerView,
-		"",
-		bodyView,
-		"",
-		instructionsView,
-	)
-	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
+	return m.renderModalBox(title, bodyView, instructions, width)
 }
 
 func (m Model) renderHistoryPreviewModal() string {
@@ -2388,26 +2374,12 @@ func (m Model) renderHistoryPreviewModal() string {
 		bodyView = bodyStyle.Render(wrapPreformattedContent(body, viewWidth))
 	}
 
-	headerView := m.renderModalTitle(title, width)
 	instructions := fmt.Sprintf(
 		"%s / %s Close",
 		m.theme.CommandBarHint.Render("Esc"),
 		m.theme.CommandBarHint.Render("Enter"),
 	)
-	instructionsView := m.theme.HeaderValue.
-		Padding(0, 2).
-		Render(instructions)
-
-	content := lipgloss.JoinVertical(
-		lipgloss.Left,
-		headerView,
-		"",
-		bodyView,
-		"",
-		instructionsView,
-	)
-	box := m.theme.BrowserBorder.Width(width).Render(content)
-	return m.renderCenteredModal(box)
+	return m.renderModalBox(title, bodyView, instructions, width)
 }
 
 func (m Model) renderErrorModal() string {

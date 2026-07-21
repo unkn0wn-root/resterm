@@ -145,23 +145,12 @@ func runMockVerify(args []string, out, errOut io.Writer) error {
 	defer stop()
 	passed := true
 	for _, result := range mock.Verify(ctx, client, expectations) {
-		label := result.Expectation.Label()
-		switch {
-		case result.Err != nil:
+		status := "PASS"
+		if result.Err != nil || !result.Passed {
+			status = "FAIL"
 			passed = false
-			_, _ = fmt.Fprintf(out, "FAIL %s: %v\n", label, result.Err)
-		case !result.Passed:
-			passed = false
-			_, _ = fmt.Fprintf(
-				out,
-				"FAIL %s: expected %d call(s), received %d\n",
-				label,
-				result.Expectation.Calls,
-				result.Actual,
-			)
-		default:
-			_, _ = fmt.Fprintf(out, "PASS %s: %d call(s)\n", label, result.Actual)
 		}
+		_, _ = fmt.Fprintf(out, "%s %s: %s\n", status, result.Expectation.Label(), result.Detail())
 	}
 	if !passed {
 		return cli.ExitErr{Code: 1}
