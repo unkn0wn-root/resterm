@@ -12,7 +12,7 @@
   <img src="_media/resterm_base.png" alt="Screenshot of Resterm TUI base" width="720" />
 </p>
 
-Resterm is a **keyboard-driven** API client that lives in your terminal and keeps everything local. It stores requests as plain files and supports **SSH tunnels**, **Kubernetes port-forwarding**, **OAuth 2.0**, and **command-backed auth**, with a fast feedback loop built around `history`, `diffs`, `tracing`, and `profiling`.
+Resterm is a keyboard-driven API client that runs in your terminal. Requests are plain `.http` files that you can diff, review and version like code. Everything stays on your machine. No accounts, no cloud sync, no telemetry.
 
 Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Quick Start](#quick-start), [Documentation](#documentation).
 
@@ -81,26 +81,20 @@ Quick links: [Screenshots](#screenshot-tour), [Installation](#installation), [Qu
 
 ## Why Resterm
 
-- **HTTP, GraphQL, gRPC, WebSocket, and SSE** are supported out of the box.
-- Requests live in plain `.http` / `.rest` files.
-- **File-native automation** - conditional logic (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
-- **RestermScript** - a small, safe expression language purpose-built for Resterm.
-- **Vim-style TUI controls** with familiar motions, `/` search and command-line actions like `:w`, `:q`, `:q!`, `:wq`, `:x`, `:e`, `:help` and `:noh`.
-- **OAuth 2.0** (client credentials, password, auth code + PKCE), **command-backed auth** via existing CLIs, **SSH tunnels**, and **Kubernetes port-forwards** are built in - no extra tools.
-- **CLI** with `resterm run` for requests, workflows, JSON/JUnit output, and reusable run artifacts.
-- **Mock servers** declared in the same files, with conditional scenarios, response interpolation, keyed sequences, call verification, hot reload, and response capture.
-- **Timeline tracing**, **profiling**, and **compare runs** across environments.
-- **Streaming transcripts** and an interactive console for WebSocket and SSE sessions.
-- No cloud sync, no accounts, no telemetry. Everything stays local.
-- There is no AI integration and there will never be.
+- **HTTP, GraphQL, gRPC, WebSocket and SSE** out of the box.
+- **Automation lives in the request files:** conditions (`@when`, `@if`/`@elif`/`@else`, `@for-each`), multi-step workflows (`@workflow` / `@step`), captures, variables and assertions (`@capture`, `@var`, `@assert`).
+- **RestermScript**, a small expression language built for Resterm, with JavaScript hooks when you want them.
+- **Vim-style controls** with familiar motions, `/` search and commands like `:w`, `:q`, `:e` and `:help`.
+- **Built-in auth and tunneling:** OAuth 2.0 (client credentials, password, auth code with PKCE), auth backed by your existing CLIs, SSH tunnels and Kubernetes port-forwards. No extra tools needed.
+- **CLI runner:** `resterm run` for scripted runs and CI, with JSON and JUnit output.
+- **Mock servers** declared next to the requests they mimic, with matching rules, sequences, call verification and hot reload.
+- **Timeline tracing, profiling and compare runs** across environments.
+- **Streaming transcripts** and an interactive console for WebSocket and SSE.
+- **No AI integration**, ever.
 
 ## CLI
 
-Resterm also ships with built-in `resterm run` and `resterm mock` commands.
-
-Use `resterm run` when you want to execute `.http` / `.rest` files directly from the terminal without opening the TUI.
-
-**Example**:
+Use `resterm run` to execute `.http` / `.rest` files without opening the TUI.
 
 ```bash
 mkdir my-api && cd my-api
@@ -108,24 +102,21 @@ resterm init
 resterm run --request Echo requests.http
 ```
 
-`resterm init` creates `requests.http` with sample requests and `resterm.env.json` with a `dev` environment that points at `httpbin.org`. The command above runs the **Echo** request which POSTs a JSON body and prints the response.
+`resterm init` creates `requests.http` with sample requests and `resterm.env.json` with a `dev` environment pointing at httpbin.org. The last command runs the Echo request, which POSTs a JSON body and prints the response.
 
-> [!NOTE]
-> This is different from the `headless` package. The `headless` package is the embeddable Go API for building your own runner or CI integration, while `resterm run` is the built-in CLI on top of the same execution engine.
-
-See the full [CLI documentation](docs/cli.md) for usage, selectors, output formats, and examples.
+The [CLI documentation](docs/cli.md) covers selectors, output formats and more examples.
 
 ## Mock Servers
 
-Resterm can serve HTTP mocks from the same `.http` / `.rest` files as your real requests.
+The same files that hold your requests can serve HTTP mocks.
 
-- Match incoming requests by query parameters, headers, or JSON bodies, then select a named or default response.
-- Model polling and retry flows with response sequences, including independent cursors for different resources or callers.
-- Build responses from path, query, header, and body values, with generators for dynamic data.
-- Verify exact call counts with `@expect` or inspect received traffic from RestermScript.
-- Hot reload source files and fixtures, with optional TLS support.
+- Match incoming requests by query, headers or JSON body, then pick a named or default response.
+- Model polling and retry flows with response sequences, including independent cursors per resource or caller.
+- Build responses from path, query, header and body values, with generators for dynamic data.
+- Verify call counts with `@expect` or inspect received traffic from RestermScript.
+- Hot reload source files and fixtures, with optional TLS.
 
-Two scenarios on one route look like this:
+Two scenarios on one route:
 
 ```http
 ### Payment accepted
@@ -144,40 +135,37 @@ Content-Type: application/json
 {"error":"amount must be positive"}
 ```
 
-Serve one file or a whole directory from the CLI:
+Serve one file or a whole directory:
 
 ```bash
 resterm mock ./requests.http
 resterm mock --recursive --addr 127.0.0.1:9090 ./requests
 ```
 
-See the full [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock), and the [working example](_examples/mocks.http).
+More in the [Mock Servers reference](docs/resterm.md#mock-servers), the [`resterm mock` CLI guide](docs/cli.md#resterm-mock) and the [working example](_examples/mocks.http).
 
 ## Headless
 
-Resterm ships with the engine API, so you can build your own headless runner for Resterm and embed request execution in your own Go tooling/code, CI or internal automation.
+The [`headless`](./headless) package is the public Go API for the same engine that powers the TUI and CLI. Use it to run requests, workflows, assertions, compare runs and profiles from your own Go code or CI.
 
-The public Go API lives in the [`headless`](./headless) package and can run requests, workflows, assertions, compare runs and profiles without the TUI.
-
-> [!NOTE]
-> If you don't want to build your own runner, check out [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
+If you would rather not build a runner yourself, there is [resterm-runner](https://github.com/unkn0wn-root/resterm-runner).
 
 ## Quick Start
 
-1. Install Resterm (see [Installation](#installation) for install scripts, Windows, and manual installs).
+1. Install Resterm (see [Installation](#installation) for scripts, Windows and manual installs).
 
    ```bash
    brew install resterm
    ```
 
-2. Bootstrap a tiny workspace.
+2. Bootstrap a workspace.
 
    ```bash
    mkdir my-api && cd my-api
    resterm init
    ```
 
-3. Run it and send your first request.
+3. Start it and send your first request.
 
    ```bash
    resterm
@@ -185,47 +173,32 @@ The public Go API lives in the [`headless`](./headless) package and can run requ
 
    Press `Ctrl+Enter` in the editor to send the highlighted request.
 
-If you do not want files yet, just run `resterm`, type a URL in the editor, and press `Ctrl+Enter`.
-If you already have a curl command, paste it into the editor and press `Ctrl+Enter` to import it.
+No files yet? Just run `resterm`, type a URL and press `Ctrl+Enter`. A pasted curl command works too.
 
-## Navigation & layout cheat sheet
+## Keyboard cheat sheet
 
-A few keys that make Resterm feel “native” quickly:
-
-- **Pane focus & layout**
-  - `Tab` / `Shift+Tab` - move focus between sidebar, editor, and response.
-  - `g+r` - jump to **Requests** (sidebar).
-  - `g+i` - jump to **Editor**.
-  - `g+p` - jump to **Response**.
-  - `g+h` / `g+l` - adjust layout:
-    - When the **left pane** (sidebar) is focused: change sidebar width.
-    - When editor/response are side-by-side: change editor/response width.
-  - `g+j` / `g+k` - adjust layout:
-    - When editor/response are stacked: change editor/response height.
-    - When the navigator is focused: collapse/expand the selected branch.
-  - `g+v` / `g+s` - toggle response pane between inline and stacked layout.
-  - `g+1`, `g+2`, `g+3` - minimize/restore sidebar, editor, response.
-  - `g+z` / `g+Z` - zoom the focused pane / clear zoom.
-
-- **Environments & globals**
-  - `Ctrl+E` - switch environments.
-  - `Ctrl+G` - inspect captured globals.
-
-- **Working with responses**
-  - `Ctrl+V` / `Ctrl+U` - split the response pane for side-by-side comparison.
-  - When response pane is focused:
-    - `Ctrl+Shift+C` or `g y` - copy the entire Pretty/Raw/Headers tab
-      to the clipboard (no mouse selection needed).
-  - `g x` - build an Explain preview for the active request without sending it.
-  - `g e` - open the current or selected supported file in your external editor.
-
----
+- Pane focus and layout
+  - `Tab` / `Shift+Tab`: move between sidebar, editor and response.
+  - `g+r`, `g+i`, `g+p`: jump to requests, editor or response.
+  - `g+h` / `g+l`: resize horizontally. Changes sidebar width when the sidebar is focused, the editor/response split otherwise.
+  - `g+j` / `g+k`: resize editor/response height when stacked, collapse or expand branches in the navigator.
+  - `g+v` / `g+s`: toggle the response pane between inline and stacked layout.
+  - `g+1`, `g+2`, `g+3`: minimize or restore sidebar, editor, response.
+  - `g+z` / `g+Z`: zoom the focused pane, clear zoom.
+- Environments and globals
+  - `Ctrl+E`: switch environments.
+  - `Ctrl+G`: inspect captured globals.
+- Responses
+  - `Ctrl+V` / `Ctrl+U`: split the response pane for side-by-side comparison.
+  - `Ctrl+Shift+C` or `g y` (response focused): copy the whole Pretty, Raw or Headers tab.
+  - `g x`: show the Explain preview for the active request without sending it.
+  - `g e`: open the current file in your external editor.
 
 > [!TIP]
-> **If you only remember three shortcuts…**
-> - `Ctrl+Enter` - send request
-> - `Tab` / `Shift+Tab` - switch panes
-> - `g+p` - jump to response
+> If you only remember three shortcuts:
+> - `Ctrl+Enter` sends the request
+> - `Tab` / `Shift+Tab` switches panes
+> - `g+p` jumps to the response
 
 ## Installation
 
@@ -241,7 +214,7 @@ brew install resterm
 **Linux / macOS (Shell script)**
 
 > [!IMPORTANT]
-> Pre-built Linux binaries depend on glibc **2.32 or newer**. If you run an older distro, build from source on a machine with a newer glibc toolchain or upgrade glibc before using the release archives.
+> Pre-built Linux binaries depend on glibc 2.32 or newer. On an older distro, build from source with a newer glibc toolchain or upgrade glibc before using the release archives.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh | bash
@@ -259,7 +232,7 @@ wget -qO- https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.sh
 iwr -useb https://raw.githubusercontent.com/unkn0wn-root/resterm/main/install.ps1 | iex
 ```
 
-These scripts detect your architecture, download the latest release, and install the binary.
+The scripts detect your architecture, download the latest release and install the binary.
 
 ### Manual installation
 
@@ -303,12 +276,11 @@ resterm --check-update
 resterm --update
 ```
 
-The first command reports whether a newer release is available. The second downloads, verifies and installs it in place. On Windows the previous binary is left beside the new one as `resterm.exe.old`.
-The next update replaces it once no process is still running the old version.
+The first command reports whether a newer release is available. The second downloads, verifies and installs it in place. On Windows the old binary stays next to the new one as `resterm.exe.old` and is cleaned up on the next update.
 
-## Quick Configuration Overview
+## Configuration
 
-- Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root, or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. Prefer JSON when you need multiple environments in one file.
+- Environments are JSON files (`resterm.env.json`) discovered in the request directory, workspace root or CWD. Dotenv files (`.env`, `.env.*`) are opt-in via `--env-file` and are single-workspace. Prefer JSON when one file should hold several environments.
 - Config is stored per OS and can be overridden with `RESTERM_CONFIG_DIR`:
   - macOS: `~/Library/Application Support/resterm`
   - Windows: `%APPDATA%\resterm`
@@ -316,33 +288,44 @@ The next update replaces it once no process is still running the old version.
 
 ## Collections
 
-Export a workspace into a Git-friendly Resterm bundle and import it into another workspace. Bundles carry a `manifest.json` with checksums so imports verify file integrity first, and environment values are replaced with `REPLACE_ME` placeholders on export so secrets stay out of the bundle.
+Export a workspace as a Git-friendly bundle and import it into another one. Bundles carry a `manifest.json` with checksums, so imports verify file integrity first. Environment values are exported as `REPLACE_ME` placeholders, so secrets never leave your machine.
 
 ```bash
 resterm collection export --workspace ./my-api --out ./shared/my-api-bundle
 resterm collection import --in ./shared/my-api-bundle --workspace ./my-local-api
 ```
 
-Add `--dry-run` to preview an import and `--force` to overwrite existing files intentionally. Docs: [`docs/resterm.md#collection-sharing`](./docs/resterm.md#collection-sharing).
+Add `--dry-run` to preview an import and `--force` to overwrite existing files. Docs: [collection sharing](./docs/resterm.md#collection-sharing).
 
-## Inline curl import
+## Curl import
 
-Paste a curl command into the editor and press `Ctrl+Enter` to convert it into a structured request. Resterm understands common flags, merges repeated data segments, and keeps multipart uploads intact.
+Paste a curl command into the editor and press `Ctrl+Enter` to turn it into a structured request. Resterm understands the common flags, merges repeated data segments and keeps multipart uploads intact. Shell prefixes like `sudo` or `$` are ignored. The CLI does the same conversion with `--from-curl`.
+
+This:
 
 ```bash
-curl --compressed \
-  --url "https://httpbin.org/post?source=resterm" \
-  --request POST \
-  -H "Accept: application/json" \
-  --user resterm:test123 \
-  -F file=@README.md
+curl -X POST https://api.example.com/login \
+  -H "Content-Type: application/json" \
+  --user demo:secret \
+  -d '{"user":"demo"}'
 ```
 
-If you copied the command from a shell, prefixes like `sudo` or `$` are ignored automatically.
+becomes this:
+
+```http
+### POST https://api.example.com/login
+# @auth basic demo secret
+POST https://api.example.com/login
+Content-Type: application/json
+
+{"user":"demo"}
+```
+
+Docs: [inline requests](./docs/resterm.md#inline-requests) and [import examples](./docs/cli.md#import-examples).
 
 ## RestermScript
 
-RestermScript (RTS) is a small expression language built specifically for Resterm. Because it targets Resterm features directly, it can evolve alongside Resterm and stay symbiotic with the request format, workflows, and directives. JavaScript hooks are still available when you want them, but RTS is the default because it is readable, predictable, and focused on Resterm’s domain.
+RestermScript (RTS) is a small expression language built for Resterm. It targets the request format, workflows and directives directly, which keeps scripts short and predictable. JavaScript hooks remain available when you need more.
 
 Quick example (RTS module + request):
 
@@ -368,19 +351,19 @@ Full reference: [`docs/restermscript.md`](docs/restermscript.md).
 
 #### OAuth 2.0
 
-Resterm supports client credentials, password grant, and authorization code + PKCE. For auth code flows, it opens your system browser, spins up a local callback server on `127.0.0.1`, captures the redirect, and exchanges the code automatically. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
+Client credentials, password grant and authorization code with PKCE. For auth code flows Resterm opens your browser, runs a local callback server on `127.0.0.1`, captures the redirect and exchanges the code. Tokens are cached per environment and refreshed when they expire. Docs: [`docs/resterm.md#oauth-20-directive`](./docs/resterm.md#oauth-20-directive) and `_examples/oauth2.http`.
 
 #### Workflows and scripting
 
-Chain requests with `@workflow` and `@step`, pass data between steps, and add lightweight JS hooks where needed. Docs + sample: [`docs/resterm.md#workflows-multi-step-workflows`](./docs/resterm.md#workflows-multi-step-workflows) and `_examples/workflows.http`.
+Chain requests with `@workflow` and `@step`, pass data between steps and add JS hooks where needed. Docs and sample: [`docs/resterm.md#workflows`](./docs/resterm.md#workflows) and `_examples/workflows.http`.
 
 #### Compare runs
 
-Run the same request across environments with `@compare` or `--compare`, then diff responses side by side with `g+c`. Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
+Run the same request across environments with `@compare` or `--compare`, then diff the responses side by side with `g+c`. Docs: [`docs/resterm.md#compare-runs`](./docs/resterm.md#compare-runs).
 
 #### Tracing and timeline
 
-Add `@trace` with budgets to capture DNS, connect, TLS, TTFB, and transfer timings. Resterm visualizes overruns and can export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
+Add `@trace` with budgets to capture DNS, connect, TLS, TTFB and transfer timings. Resterm highlights overruns and can export spans to OpenTelemetry. Docs: [`docs/resterm.md#timeline--tracing`](./docs/resterm.md#timeline--tracing).
 
 #### Streaming (WebSocket and SSE)
 
@@ -388,29 +371,25 @@ Use `@websocket` with `@ws` steps or `@sse` to script and record streams. The St
 
 #### gRPC
 
-Resterm supports unary and streaming calls with transcripts, metadata, and body expansion for gRPC files. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
+Unary and streaming calls with transcripts, metadata and body expansion. Docs: [`docs/resterm.md#grpc`](./docs/resterm.md#grpc).
 
 #### OpenAPI import
 
-Convert OpenAPI 3 specs into Resterm `.http` collections from the CLI with `--from-openapi`, passing either a local file or an `http(s)` URL (e.g. `--from-openapi https://api.example.com/openapi.json`). Use `--openapi-mode requests`, `mocks`, or `both` to choose generated blocks. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
-
-#### Curl import
-
-Convert curl commands into `.http` files from the CLI with `--from-curl`. Docs: [`docs/resterm.md#importing-curl-commands`](./docs/resterm.md#importing-curl-commands).
+Convert OpenAPI 3 specs into `.http` collections with `--from-openapi`, from a local file or an `http(s)` URL. Choose the generated blocks with `--openapi-mode requests`, `mocks` or `both`. Remote fetches respect the global `--insecure` and `--proxy` flags. Docs: [`docs/cli.md#import-examples`](./docs/cli.md#import-examples).
 
 #### SSH tunnels
 
-Route HTTP, gRPC, WebSocket, and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-tunnels`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
+Route HTTP, gRPC, WebSocket and SSE traffic through bastions with `@ssh` profiles. Docs: [`docs/resterm.md#ssh-tunnels`](./docs/resterm.md#ssh-tunnels) and `_examples/ssh.http`.
 
 #### Kubernetes port-forwards
 
-Route HTTP, gRPC, WebSocket, and SSE traffic through Kubernetes with `@k8s` profiles targeting pods/services/deployments/statefulsets. Docs: [`docs/resterm.md#kubernetes-port-forwards`](./docs/resterm.md#kubernetes-port-forwards) and `_examples/k8s.http`.
+Same idea with `@k8s` profiles, targeting pods, services, deployments or statefulsets. Docs: [`docs/resterm.md#kubernetes-port-forwards`](./docs/resterm.md#kubernetes-port-forwards) and `_examples/k8s.http`.
 
 #### Theming and bindings
 
-Customize colors and keybindings via `themes/*.toml` and `bindings.toml` or `bindings.json` under the config directory. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
+Customize colors and keybindings with `themes/*.toml` and `bindings.toml` or `bindings.json` in the config directory. Docs: [`docs/resterm.md#theming`](./docs/resterm.md#theming) and [`docs/resterm.md#custom-bindings`](./docs/resterm.md#custom-bindings).
 
 ## Documentation
 
-- [`docs/resterm.md`](./docs/resterm.md) - the full reference: request syntax, directives, scripting and transports.
-- [`docs/cli.md`](./docs/cli.md) - the command-line guide: `resterm run`, importers, collections and history.
+- [`docs/resterm.md`](./docs/resterm.md) covers request syntax, directives, scripting and transports.
+- [`docs/cli.md`](./docs/cli.md) covers `resterm run`, importers, collections and history.
