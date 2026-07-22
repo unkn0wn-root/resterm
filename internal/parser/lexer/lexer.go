@@ -1,15 +1,12 @@
-package lex
+// Package lexer tokenizes directive text into whitespace separated fields.
+// It understands quoted values, optional backslash escapes and bracketed
+// JSON-like values that have to stay inside a single field.
+package lexer
 
 import (
 	"strings"
 	"unicode"
-)
-
-type fieldMode uint8
-
-const (
-	fieldPlain fieldMode = iota
-	fieldEscaped
+	"unicode/utf8"
 )
 
 func SplitFirst(text string) (string, string) {
@@ -40,21 +37,40 @@ func SplitDirective(text string) (string, string) {
 	return key, rest
 }
 
-// TokenizeFields tokenizes fields on spaces while keeping quoted values together.
+// Fields splits input on spaces while keeping quoted values together.
 // Quotes themselves get stripped, so `"hello resterm"` becomes `hello resterm`.
-func TokenizeFields(input string) []string {
-	return tokenizeFieldsWithMode(input, fieldPlain)
+func Fields(input string) []string {
+	return New(input).collect()
 }
 
-// TokenizeFieldsEscaped is like TokenizeFields but also treats backslashes as escapes.
+// FieldsEscaped is like Fields but also treats backslashes as escapes.
 // A trailing backslash gets preserved if nothing follows it.
-func TokenizeFieldsEscaped(input string) []string {
-	return tokenizeFieldsWithMode(input, fieldEscaped)
+func FieldsEscaped(input string) []string {
+	return NewEscaped(input).collect()
 }
 
-func tokenizeFieldsWithMode(input string, mode fieldMode) []string {
-	var tokens []string
-	var current strings.Builder
+// A Lexer scans directive text one field at a time. Fields split on
+// whitespace. A quoted value stays in one field and loses its quotes. A "["
+// or "{" right after "=" opens a bracket balanced run that also stays in one
+// field. In escape mode a backslash makes the next rune literal.
+type Lexer struct {
+	src     string
+	pos     int
+	escapes bool
+}
+
+func New(src string) *Lexer {
+	return &Lexer{src: src}
+}
+
+// NewEscaped returns a Lexer that treats backslashes as escapes.
+func NewEscaped(src string) *Lexer {
+	return &Lexer{src: src, escapes: true}
+}
+
+// Next returns the next field. ok is false once the input is exhausted.
+func (l *Lexer) Next() (field string, ok bool) {
+	var tok strings.Builder
 	var quote rune
 	var last rune
 	hasLast := false
@@ -63,24 +79,14 @@ func tokenizeFieldsWithMode(input string, mode fieldMode) []string {
 	inJSONString := false
 	jsonEscaped := false
 
-	flush := func() {
-		if current.Len() == 0 {
-			return
-		}
-		tokens = append(tokens, current.String())
-		current.Reset()
-		last = 0
-		hasLast = false
-	}
-
 	write := func(r rune) {
-		current.WriteRune(r)
+		tok.WriteRune(r)
 		last = r
 		hasLast = true
 	}
 
 	startsQuotedValue := func() bool {
-		return current.Len() == 0 || (hasLast && last == '=')
+		return tok.Len() == 0 || (hasLast && last == '=')
 	}
 
 	startsJSONValue := func(r rune) bool {
@@ -100,7 +106,7 @@ func tokenizeFieldsWithMode(input string, mode fieldMode) []string {
 		if len(jsonClosers) == 0 {
 			return
 		}
-		// This tokenizer groups JSON-like directive values but does not validate them.
+		// The lexer groups JSON-like directive values but does not validate them.
 		// Downstream parsers validate each field according to its own syntax.
 		if jsonClosers[len(jsonClosers)-1] != r {
 			return
@@ -108,7 +114,7 @@ func tokenizeFieldsWithMode(input string, mode fieldMode) []string {
 		jsonClosers = jsonClosers[:len(jsonClosers)-1]
 	}
 
-	for _, r := range input {
+	for i, r := range l.src[l.pos:] {
 		switch {
 		case len(jsonClosers) > 0:
 			write(r)
@@ -135,7 +141,7 @@ func tokenizeFieldsWithMode(input string, mode fieldMode) []string {
 		case escaping:
 			write(r)
 			escaping = false
-		case mode == fieldEscaped && r == '\\':
+		case l.escapes && r == '\\':
 			escaping = true
 		case quote != 0:
 			if r == quote {
@@ -149,16 +155,31 @@ func tokenizeFieldsWithMode(input string, mode fieldMode) []string {
 		case (r == '"' || r == '\'') && startsQuotedValue():
 			quote = r
 		case unicode.IsSpace(r):
-			flush()
+			if tok.Len() > 0 {
+				l.pos += i + utf8.RuneLen(r)
+				return tok.String(), true
+			}
 		default:
 			write(r)
 		}
 	}
+
+	l.pos = len(l.src)
 	if escaping {
 		write('\\')
 	}
-	flush()
-	return tokens
+	if tok.Len() > 0 {
+		return tok.String(), true
+	}
+	return "", false
+}
+
+func (l *Lexer) collect() []string {
+	var fields []string
+	for f, ok := l.Next(); ok; f, ok = l.Next() {
+		fields = append(fields, f)
+	}
+	return fields
 }
 
 func TrimQuotes(value string) string {
@@ -178,7 +199,7 @@ func IsIdent(value string) bool {
 	}
 	for i, r := range value {
 		if i == 0 {
-			if !IsIdentStartRune(r) {
+			if !isIdentStartRune(r) {
 				return false
 			}
 			continue
@@ -190,12 +211,12 @@ func IsIdent(value string) bool {
 	return true
 }
 
-func IsIdentStartRune(r rune) bool {
+func isIdentStartRune(r rune) bool {
 	return r == '_' || isAlpha(r)
 }
 
 func IsIdentRune(r rune) bool {
-	return IsIdentStartRune(r) || isDigit(r)
+	return isIdentStartRune(r) || isDigit(r)
 }
 
 func isAlpha(r rune) bool {

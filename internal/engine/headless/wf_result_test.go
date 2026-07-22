@@ -11,11 +11,10 @@ import (
 )
 
 func TestEvaluateStepStatusCode(t *testing.T) {
+	code := 404
 	res := wfStepRes{
 		step: restfile.WorkflowStep{
-			Expect: map[string]string{
-				workflowExpectStatusCode: "404",
-			},
+			Expect: restfile.WorkflowExpect{StatusCode: &code},
 		},
 		http: &httpclient.Response{
 			Status:     http.StatusText(http.StatusNotFound),

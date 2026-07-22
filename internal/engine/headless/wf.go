@@ -381,11 +381,17 @@ func writeWorkflowStep(
 			b.WriteString(" on-failure=")
 			b.WriteString(string(step.OnFailure))
 		}
-		for k, v := range step.Expect {
+		if step.Expect.Status != "" {
+			fmt.Fprintf(b, " expect.status=%s", step.Expect.Status)
+		}
+		if step.Expect.StatusCode != nil {
+			fmt.Fprintf(b, " expect.statuscode=%d", *step.Expect.StatusCode)
+		}
+		for k, v := range step.Expect.Extra {
 			fmt.Fprintf(b, " expect.%s=%s", k, v)
 		}
 		for k, v := range step.Vars {
-			fmt.Fprintf(b, " vars.%s=%s", k, v)
+			fmt.Fprintf(b, " %s=%s", k, v)
 		}
 		for k, v := range step.Options {
 			fmt.Fprintf(b, " %s=%s", k, v)

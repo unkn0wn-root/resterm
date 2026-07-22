@@ -235,26 +235,6 @@ func workflowForEachSpec(step restfile.WorkflowStep, req *restfile.Request) (*fo
 	return spec, nil
 }
 
-func workflowStepVars(step restfile.WorkflowStep) map[string]string {
-	if len(step.Vars) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(step.Vars))
-	for key, value := range step.Vars {
-		if key == "" {
-			continue
-		}
-		if !strings.HasPrefix(key, "vars.") {
-			key = "vars." + key
-		}
-		out[key] = value
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
 func workflowApplyVars(st *workflowState, vals map[string]string) {
 	if st == nil || len(vals) == 0 {
 		return
@@ -263,7 +243,7 @@ func workflowApplyVars(st *workflowState, vals map[string]string) {
 		st.vars = make(map[string]string)
 	}
 	for key, value := range vals {
-		if strings.HasPrefix(key, "vars.workflow.") {
+		if restfile.IsWorkflowScopedVar(key) {
 			st.vars[key] = value
 		}
 	}
@@ -304,18 +284,6 @@ func (m *Model) wfVars(
 		return base
 	}
 	return mergeVariableMaps(base, extra)
-}
-
-func workflowLoopKeys(st *workflowState, name string) (string, string) {
-	if name == "" {
-		return "", ""
-	}
-	reqKey := "vars.request." + name
-	wfKey := ""
-	if st != nil && st.loopVarsWorkflow {
-		wfKey = "vars.workflow." + name
-	}
-	return reqKey, wfKey
 }
 
 func (m *Model) wfErr(
@@ -388,7 +356,7 @@ func (m *Model) wfRunReq(
 		}
 	}
 	name := spec.Var
-	reqKey, wfKey := workflowLoopKeys(st, name)
+	reqKey, wfKey := restfile.WorkflowVarKeys(name, st != nil && st.loopVarsWorkflow)
 	st.loop = &workflowLoopState{
 		step:      loopStep,
 		request:   req,
@@ -743,7 +711,7 @@ func workflowResultFromRun(
 		return out
 	}
 
-	hasExp := hasStatusExp(step.Expect)
+	hasExp := step.Expect.HasStatus()
 	hasResp := res.Response != nil || res.GRPC != nil || res.Stream != nil ||
 		len(res.Transcript) > 0
 	hasProto := res.Response != nil || res.GRPC != nil
@@ -801,34 +769,26 @@ func workflowResultFromRun(
 		}
 	}
 	if hasProto && res.Err == nil {
-		if exp, okExp := step.Expect["status"]; okExp {
-			want := strings.TrimSpace(exp)
+		if step.Expect.Status != "" {
+			want := strings.TrimSpace(step.Expect.Status)
 			got := strings.TrimSpace(out.Status)
-			if want == "" {
-				ok = false
-				out.Message = "invalid expected status"
-			} else if got == "" || !strings.EqualFold(want, got) {
+			if got == "" || !strings.EqualFold(want, got) {
 				ok = false
 				out.Message = fmt.Sprintf("expected status %s", want)
 			}
 		}
-		if exp, okExp := step.Expect["statuscode"]; okExp {
-			want, err := strconv.Atoi(strings.TrimSpace(exp))
-			if err != nil {
+		if step.Expect.StatusCode != nil {
+			want := *step.Expect.StatusCode
+			got := 0
+			switch {
+			case res.Response != nil:
+				got = res.Response.StatusCode
+			case res.GRPC != nil:
+				got = int(res.GRPC.StatusCode)
+			}
+			if got != want {
 				ok = false
-				out.Message = fmt.Sprintf("invalid expected status code %q", exp)
-			} else {
-				got := 0
-				switch {
-				case res.Response != nil:
-					got = res.Response.StatusCode
-				case res.GRPC != nil:
-					got = int(res.GRPC.StatusCode)
-				}
-				if got != want {
-					ok = false
-					out.Message = fmt.Sprintf("expected status code %d", want)
-				}
+				out.Message = fmt.Sprintf("expected status code %d", want)
 			}
 		}
 	}
@@ -934,7 +894,7 @@ func (m *Model) executeWorkflowRequestStep(
 		)
 	}
 	st.currentBranch = ""
-	stepVars := workflowStepVars(step)
+	stepVars := step.Vars
 	workflowApplyVars(st, stepVars)
 	xv := workflowStepExtras(st, stepVars, nil)
 	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
@@ -976,7 +936,7 @@ func (m *Model) executeWorkflowIfStep(
 		)
 	}
 	st.currentBranch = ""
-	stepVars := workflowStepVars(step)
+	stepVars := step.Vars
 	workflowApplyVars(st, stepVars)
 	xv := workflowStepExtras(st, stepVars, nil)
 	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
@@ -1067,7 +1027,7 @@ func (m *Model) executeWorkflowSwitchStep(
 		)
 	}
 	st.currentBranch = ""
-	stepVars := workflowStepVars(step)
+	stepVars := step.Vars
 	workflowApplyVars(st, stepVars)
 	xv := workflowStepExtras(st, stepVars, nil)
 	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
@@ -1175,7 +1135,7 @@ func (m *Model) executeWorkflowLoopIteration(
 
 	for loop.index < len(loop.items) {
 		item := loop.items[loop.index]
-		stepVars := workflowStepVars(loop.step)
+		stepVars := loop.step.Vars
 		workflowApplyVars(st, stepVars)
 		xv := workflowStepExtras(st, stepVars, nil)
 		pos := m.rtsPosForLine(st.doc, loop.request, loop.line)
@@ -1422,19 +1382,6 @@ func (m *Model) wfAdvanceResp(
 	return m.executeWorkflowStep()
 }
 
-func hasStatusExp(exp map[string]string) bool {
-	if len(exp) == 0 {
-		return false
-	}
-	if _, ok := exp["status"]; ok {
-		return true
-	}
-	if _, ok := exp["statuscode"]; ok {
-		return true
-	}
-	return false
-}
-
 func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult {
 	if st == nil || st.index < 0 || st.index >= len(st.steps) {
 		return workflowStepResult{
@@ -1471,7 +1418,7 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 		stream            = cloneStreamInfo(rm.stream)
 		transcript        = append([]byte(nil), rm.transcript...)
 		tests             = append([]scripts.TestResult(nil), rm.tests...)
-		hasExp            = hasStatusExp(step.Expect)
+		hasExp            = step.Expect.HasStatus()
 		hasResp           = rm.response != nil || rm.grpc != nil || rm.stream != nil ||
 			len(rm.transcript) > 0
 		hasProtoResp = rm.response != nil || rm.grpc != nil
@@ -1532,31 +1479,23 @@ func evaluateWorkflowStep(st *workflowState, rm responseMsg) workflowStepResult 
 	}
 
 	if hasProtoResp && !hasErr {
-		if exp, okExp := step.Expect["status"]; okExp {
-			expected := strings.TrimSpace(exp)
+		if step.Expect.Status != "" {
+			expected := strings.TrimSpace(step.Expect.Status)
 			trimmedStatus := strings.TrimSpace(status)
-			if expected == "" {
-				ok = false
-				msg = "invalid expected status"
-			} else if trimmedStatus == "" || !strings.EqualFold(expected, trimmedStatus) {
+			if trimmedStatus == "" || !strings.EqualFold(expected, trimmedStatus) {
 				ok = false
 				msg = fmt.Sprintf("expected status %s", expected)
 			}
 		}
-		if exp, okExp := step.Expect["statuscode"]; okExp {
-			expectedCode, err := strconv.Atoi(strings.TrimSpace(exp))
-			if err != nil {
-				msg = fmt.Sprintf("invalid expected status code %q", exp)
+		if step.Expect.StatusCode != nil {
+			expectedCode := *step.Expect.StatusCode
+			actual := 0
+			if rm.response != nil {
+				actual = rm.response.StatusCode
+			}
+			if actual != expectedCode {
 				ok = false
-			} else {
-				actual := 0
-				if rm.response != nil {
-					actual = rm.response.StatusCode
-				}
-				if actual != expectedCode {
-					ok = false
-					msg = fmt.Sprintf("expected status code %d", expectedCode)
-				}
+				msg = fmt.Sprintf("expected status code %d", expectedCode)
 			}
 		}
 	}
@@ -2427,14 +2366,22 @@ func (w workflowDefinitionWriter) appendRequest(step restfile.WorkflowStep) {
 		w.builder.WriteString(" on-failure=")
 		w.builder.WriteString(string(step.OnFailure))
 	}
-	for key, value := range step.Expect {
+	if step.Expect.Status != "" {
+		w.builder.WriteString(" expect.status=")
+		w.builder.WriteString(step.Expect.Status)
+	}
+	if step.Expect.StatusCode != nil {
+		w.builder.WriteString(" expect.statuscode=")
+		w.builder.WriteString(strconv.Itoa(*step.Expect.StatusCode))
+	}
+	for key, value := range step.Expect.Extra {
 		w.builder.WriteString(" expect.")
 		w.builder.WriteString(key)
 		w.builder.WriteString("=")
 		w.builder.WriteString(value)
 	}
 	for key, value := range step.Vars {
-		w.builder.WriteString(" vars.")
+		w.builder.WriteString(" ")
 		w.builder.WriteString(key)
 		w.builder.WriteString("=")
 		w.builder.WriteString(value)

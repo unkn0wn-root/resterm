@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -346,7 +345,7 @@ func (r *wfRun) runReqStep(
 		return r.finishStep(ok, skip, cancel, true, false), nil
 	}
 
-	reqKey, wfKey := loopKeys(r.pl.WfVars, spec.Var)
+	reqKey, wfKey := restfile.WorkflowVarKeys(spec.Var, r.pl.WfVars)
 	for i, item := range items {
 		itemStr, err := r.dep.ValueString(ctx, r.dep.PosForLine(r.pl.Doc, req, spec.Line), item)
 		if err != nil {
@@ -740,9 +739,8 @@ func (r *wfRun) stepScope(
 	req *restfile.Request,
 	extra map[string]string,
 ) (map[string]string, map[string]string) {
-	vals := stepVars(step)
-	applyVars(r.vars, vals)
-	xv := stepExtras(r.vars, vals, extra)
+	applyVars(r.vars, step.Vars)
+	xv := stepExtras(r.vars, step.Vars, extra)
 	vv := r.dep.CollectVariables(r.pl.Doc, req, r.pl.Run.Env, xv)
 	return xv, vv
 }
@@ -957,11 +955,8 @@ func evalReq(step restfile.WorkflowStep, out engine.RequestResult) (bool, bool, 
 			return false, false, false
 		}
 	}
-	if exp, ok := step.Expect["status"]; ok {
-		want := strings.TrimSpace(exp)
-		if want == "" {
-			return false, false, false
-		}
+	if step.Expect.Status != "" {
+		want := strings.TrimSpace(step.Expect.Status)
 		switch {
 		case out.Response != nil:
 			if !strings.EqualFold(want, strings.TrimSpace(out.Response.Status)) {
@@ -975,30 +970,23 @@ func evalReq(step restfile.WorkflowStep, out engine.RequestResult) (bool, bool, 
 			return false, false, false
 		}
 	}
-	if exp, ok := step.Expect["statuscode"]; ok {
-		want, err := strconv.Atoi(strings.TrimSpace(exp))
-		if err != nil {
-			return false, false, false
-		}
+	if step.Expect.StatusCode != nil {
 		got := 0
 		switch {
 		case out.Response != nil:
 			got = out.Response.StatusCode
-			if got >= 400 && !hasStatusExp(step.Expect) {
-				return false, false, false
-			}
 		case out.GRPC != nil:
 			got = int(out.GRPC.StatusCode)
 		default:
 			return false, false, false
 		}
-		if got != want {
+		if got != *step.Expect.StatusCode {
 			return false, false, false
 		}
 	}
 	switch {
 	case out.Response != nil:
-		if out.Response.StatusCode >= 400 && !hasStatusExp(step.Expect) {
+		if out.Response.StatusCode >= 400 && !step.Expect.HasStatus() {
 			return false, false, false
 		}
 		return true, false, false
@@ -1192,26 +1180,6 @@ func normWfStep(step *restfile.WorkflowStep) {
 	step.Using = strings.TrimSpace(step.Using)
 }
 
-func stepVars(step restfile.WorkflowStep) map[string]string {
-	if len(step.Vars) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(step.Vars))
-	for k, v := range step.Vars {
-		if k == "" {
-			continue
-		}
-		if !strings.HasPrefix(k, "vars.") {
-			k = "vars." + k
-		}
-		out[k] = v
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
 func applyVars(dst map[string]string, vals map[string]string) {
 	if len(vals) == 0 {
 		return
@@ -1220,7 +1188,7 @@ func applyVars(dst map[string]string, vals map[string]string) {
 		return
 	}
 	for k, v := range vals {
-		if strings.HasPrefix(k, "vars.workflow.") {
+		if restfile.IsWorkflowScopedVar(k) {
 			dst[k] = v
 		}
 	}
@@ -1246,18 +1214,6 @@ func stepExtras(
 		out[k] = v
 	}
 	return out
-}
-
-func loopKeys(wfVars bool, name string) (string, string) {
-	if name == "" {
-		return "", ""
-	}
-	reqKey := "vars.request." + name
-	wfKey := ""
-	if wfVars {
-		wfKey = "vars.workflow." + name
-	}
-	return reqKey, wfKey
 }
 
 func stepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
@@ -1322,15 +1278,4 @@ func cloneStrMap(src map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-func hasStatusExp(exp map[string]string) bool {
-	if len(exp) == 0 {
-		return false
-	}
-	if _, ok := exp["status"]; ok {
-		return true
-	}
-	_, ok := exp["statuscode"]
-	return ok
 }

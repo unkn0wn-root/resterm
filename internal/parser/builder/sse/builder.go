@@ -24,22 +24,20 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 		return false
 	}
 
-	trimmed := str.Trim(rest)
-	if trimmed == "" {
+	rest = str.Trim(rest)
+	if rest == "" {
 		b.enabled = true
 		return true
 	}
 
-	lowered := str.LowerTrim(trimmed)
-	switch lowered {
-	case "0", "false", "off", "disable", "disabled":
+	if dvalue.IsOffToken(rest) {
 		b.enabled = false
 		b.options = restfile.SSEOptions{}
 		return true
 	}
 
 	b.enabled = true
-	assignments := options.Parse(trimmed)
+	assignments := options.Parse(rest)
 	for key, value := range assignments {
 		b.applyOption(key, value)
 	}

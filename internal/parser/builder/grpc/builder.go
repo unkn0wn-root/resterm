@@ -116,8 +116,7 @@ func (b *Builder) HandleBodyLine(line string, forceInline bool) bool {
 		return false
 	}
 
-	trimmed := str.Trim(line)
-	if trimmed == "" {
+	if str.Trim(line) == "" {
 		return false
 	}
 

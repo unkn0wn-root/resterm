@@ -3,10 +3,8 @@ package ssh
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -22,33 +20,16 @@ type Directive struct {
 
 func ParseDirective(rest string) (Directive, error) {
 	res := Directive{}
-	trimmed := str.Trim(rest)
-	if trimmed == "" {
+	scope, name, opts, ok := options.ParseProfileHeader(
+		rest,
+		restfile.SSHScopeRequest,
+		restfile.SSHScopeFile,
+		restfile.SSHScopeGlobal,
+	)
+	if !ok {
 		return res, fmt.Errorf("@ssh requires options")
 	}
 
-	fields := lex.TokenizeFieldsEscaped(trimmed)
-	if len(fields) == 0 {
-		return res, fmt.Errorf("@ssh requires options")
-	}
-
-	scope := restfile.SSHScopeRequest
-	idx := 0
-	if sc, ok := parseSSHScope(fields[idx]); ok {
-		scope = sc
-		idx++
-	}
-
-	name := "default"
-	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
-		name = str.Trim(fields[idx])
-		idx++
-	}
-	if name == "" {
-		name = "default"
-	}
-
-	opts := options.Parse(strings.Join(fields[idx:], " "))
 	prof := restfile.SSHProfile{Scope: scope, Name: name}
 	applySSHOptions(&prof, opts)
 	if scope == restfile.SSHScopeRequest {
@@ -76,15 +57,6 @@ func ParseDirective(rest string) (Directive, error) {
 	res.Profile = prof
 	res.Spec = &restfile.SSHSpec{Use: use, Inline: inline}
 	return res, nil
-}
-
-func parseSSHScope(token string) (restfile.SSHScope, bool) {
-	return dscope.Parse(
-		token,
-		restfile.SSHScopeRequest,
-		restfile.SSHScopeFile,
-		restfile.SSHScopeGlobal,
-	)
 }
 
 func applySSHOptions(prof *restfile.SSHProfile, opts map[string]string) {

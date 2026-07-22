@@ -5,9 +5,9 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
+	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -125,7 +125,7 @@ func (b *Builder) handleStep(rest string) bool {
 	}
 	b.on = true
 
-	act, rem := lex.SplitFirst(t)
+	act, rem := lexer.SplitFirst(t)
 	if act == "" {
 		return true
 	}
@@ -203,7 +203,7 @@ func parseWSClose(rest string, step *restfile.WebSocketStep) bool {
 		step.Code = wsCloseOK
 		return true
 	}
-	codeTok, tail := lex.SplitFirst(rest)
+	codeTok, tail := lexer.SplitFirst(rest)
 	if codeTok == "" {
 		step.Code = wsCloseOK
 		return true

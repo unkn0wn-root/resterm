@@ -1,7 +1,9 @@
 package restfile
 
 import (
+	"maps"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -506,7 +508,7 @@ type WorkflowStep struct {
 	Name      string
 	Using     string
 	OnFailure WorkflowFailureMode
-	Expect    map[string]string
+	Expect    WorkflowExpect
 	Vars      map[string]string
 	Options   map[string]string
 	Line      int
@@ -514,6 +516,50 @@ type WorkflowStep struct {
 	If        *WorkflowIf
 	Switch    *WorkflowSwitch
 	ForEach   *WorkflowForEach
+}
+
+// WorkflowExpect holds the parsed expect assertions of a workflow step.
+// StatusCode comes out of the parser already validated. Extra keeps
+// unrecognized expect keys so reporting can still show them.
+type WorkflowExpect struct {
+	Status     string
+	StatusCode *int
+	Extra      map[string]string
+}
+
+func (e WorkflowExpect) HasStatus() bool {
+	return e.Status != "" || e.StatusCode != nil
+}
+
+func (e WorkflowExpect) Empty() bool {
+	return e.Status == "" && e.StatusCode == nil && len(e.Extra) == 0
+}
+
+func (e WorkflowExpect) Clone() WorkflowExpect {
+	if e.StatusCode != nil {
+		n := *e.StatusCode
+		e.StatusCode = &n
+	}
+	e.Extra = maps.Clone(e.Extra)
+	return e
+}
+
+// WorkflowVarKeys returns the request and workflow scoped variable keys for a
+// loop variable name. wfKey is empty unless wf is true.
+func WorkflowVarKeys(name string, wf bool) (reqKey, wfKey string) {
+	if name == "" {
+		return "", ""
+	}
+	reqKey = "vars.request." + name
+	if wf {
+		wfKey = "vars.workflow." + name
+	}
+	return reqKey, wfKey
+}
+
+// IsWorkflowScopedVar reports whether key names a workflow scoped variable.
+func IsWorkflowScopedVar(key string) bool {
+	return strings.HasPrefix(key, "vars.workflow.")
 }
 
 type WorkflowIf struct {

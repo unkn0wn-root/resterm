@@ -8,52 +8,12 @@ import (
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
 	ssebuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/sse"
 	wsbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/websocket"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-type scriptKind string
-
-const (
-	scriptKindTest       scriptKind = "test"
-	scriptKindTests      scriptKind = "tests"
-	scriptKindPreRequest scriptKind = "pre-request"
-)
-
-func (k scriptKind) String() string {
-	return string(k)
-}
-
-type scriptLang string
-
-const (
-	scriptLangJS  scriptLang = "js"
-	scriptLangRTS scriptLang = "rts"
-)
-
-func (l scriptLang) String() string {
-	return string(l)
-}
-
-const (
-	defaultScriptKind = scriptKindTest
-	defaultScriptLang = scriptLangJS
-)
-
-type bodyDirective string
-
-const (
-	bodyDirectiveExpand          bodyDirective = "expand"
-	bodyDirectiveExpandTemplates bodyDirective = "expand-templates"
-	bodyDirectiveInline          bodyDirective = "inline"
-	bodyDirectiveRaw             bodyDirective = "raw"
-)
-
 type requestBuilder struct {
 	startLine         int
-	endLine           int
 	metadata          restfile.RequestMetadata
 	variables         []restfile.Variable
 	originalLines     []string
@@ -77,143 +37,27 @@ type requestBuilder struct {
 	k8s               *restfile.K8sSpec
 }
 
-func normScriptKind(kind string) scriptKind {
-	out := str.LowerTrim(kind)
-	if out == "" {
-		return defaultScriptKind
+// protoDirective offers a directive to each protocol builder in turn. The
+// first builder that recognizes the key claims it, so the order decides
+// which protocol wins when a key is ambiguous.
+func (r *requestBuilder) protoDirective(key, rest string) bool {
+	if r.grpc.HandleDirective(key, rest) {
+		return true
 	}
-	return scriptKind(out)
+	if r.websocket.HandleDirective(key, rest) {
+		return true
+	}
+	if r.sse.HandleDirective(key, rest) {
+		return true
+	}
+	return r.graphql.HandleDirective(key, rest)
 }
 
-func normScriptLang(lang string) scriptLang {
-	out := str.LowerTrim(lang)
-	switch out {
-	case "":
-		return defaultScriptLang
-	case "javascript":
-		return defaultScriptLang
-	case "restermlang":
-		return scriptLangRTS
-	default:
-		return scriptLang(out)
+func (r *requestBuilder) protoBodyLine(raw string) bool {
+	if r.graphql.HandleBodyLine(raw, r.bodyOptions.ForceInline) {
+		return true
 	}
-}
-
-func (r *requestBuilder) appendScriptLine(
-	kind scriptKind,
-	lang scriptLang,
-	body string,
-	path string,
-	loc restfile.ScriptLine,
-) {
-	if r.discardScript {
-		return
-	}
-	kind = normScriptKind(kind.String())
-	lang = normScriptLang(lang.String())
-	if r.scriptBufferKind != "" &&
-		(r.scriptBufferKind != kind ||
-			r.scriptBufferLang != lang ||
-			r.scriptSourcePath != path) {
-		r.flushPendingScript()
-	}
-	if r.scriptBufferKind == "" {
-		r.scriptBufferKind = kind
-		r.scriptBufferLang = lang
-		r.scriptSourcePath = path
-	}
-	r.scriptBuffer = append(r.scriptBuffer, body)
-	r.scriptBufferLines = append(r.scriptBufferLines, loc)
-}
-
-func (r *requestBuilder) flushPendingScript() {
-	if len(r.scriptBuffer) == 0 {
-		return
-	}
-	script := strings.Join(r.scriptBuffer, "\n")
-	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind:       r.scriptBufferKind.String(),
-		Lang:       r.scriptBufferLang.String(),
-		Body:       script,
-		SourcePath: r.scriptSourcePath,
-		Lines:      append([]restfile.ScriptLine(nil), r.scriptBufferLines...),
-	})
-	r.scriptBuffer = nil
-	r.scriptBufferKind = ""
-	r.scriptBufferLang = ""
-	r.scriptSourcePath = ""
-	r.scriptBufferLines = nil
-}
-
-func (r *requestBuilder) appendScriptInclude(kind scriptKind, lang scriptLang, path string) {
-	if r.discardScript {
-		return
-	}
-	kind = normScriptKind(kind.String())
-	lang = normScriptLang(lang.String())
-	r.flushPendingScript()
-	r.metadata.Scripts = append(r.metadata.Scripts, restfile.ScriptBlock{
-		Kind:     kind.String(),
-		Lang:     lang.String(),
-		FilePath: path,
-	})
-}
-
-func (r *requestBuilder) handleBodyDirective(rest string) bool {
-	rs := str.Trim(rest)
-	if rs == "" {
-		return false
-	}
-	k, v := lex.SplitDirective(rs)
-	if k == "" {
-		return false
-	}
-
-	directive := bodyDirective(k)
-	switch directive {
-	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
-	case bodyDirectiveInline, bodyDirectiveRaw:
-	default:
-		return false
-	}
-
-	enabled := true
-	if str.Trim(v) != "" {
-		parsed, ok := dvalue.ParseBool(v)
-		if !ok {
-			return false
-		}
-		enabled = parsed
-	}
-
-	switch directive {
-	case bodyDirectiveExpand, bodyDirectiveExpandTemplates:
-		r.bodyOptions.ExpandTemplates = enabled
-	case bodyDirectiveInline, bodyDirectiveRaw:
-		r.bodyOptions.ForceInline = enabled
-	}
-	return true
-}
-
-func (r *requestBuilder) markHeadersDone() {
-	if r == nil || r.http == nil || r.http.HeaderDone() {
-		return
-	}
-	r.http.MarkHeadersDone()
-	if ct := r.http.MimeType(); restfile.IsMultipartMime(ct) {
-		r.multipart = newMultipartSpan(ct)
-	}
-}
-
-func (r *requestBuilder) applyHTTPBody(req *restfile.Request) {
-	if file := r.http.BodyFromFile(); file != "" {
-		req.Body.FilePath = file
-	} else if text := r.http.BodyText(); text != "" {
-		req.Body.Text = text
-	}
-	if mime := r.http.MimeType(); mime != "" {
-		req.Body.MimeType = mime
-	}
+	return r.grpc.HandleBodyLine(raw, r.bodyOptions.ForceInline)
 }
 
 func (r *requestBuilder) applyReqSettings(req *restfile.Request) {
