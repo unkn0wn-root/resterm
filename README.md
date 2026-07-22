@@ -301,6 +301,26 @@ Add `--dry-run` to preview an import and `--force` to overwrite existing files. 
 
 Paste a curl command into the editor and press `Ctrl+Enter` to turn it into a structured request. Resterm understands the common flags, merges repeated data segments and keeps multipart uploads intact. Shell prefixes like `sudo` or `$` are ignored. The CLI does the same conversion with `--from-curl`.
 
+This:
+
+```bash
+curl -X POST https://api.example.com/login \
+  -H "Content-Type: application/json" \
+  --user demo:secret \
+  -d '{"user":"demo"}'
+```
+
+becomes this:
+
+```http
+### POST https://api.example.com/login
+# @auth basic demo secret
+POST https://api.example.com/login
+Content-Type: application/json
+
+{"user":"demo"}
+```
+
 Docs: [inline requests](./docs/resterm.md#inline-requests) and [import examples](./docs/cli.md#import-examples).
 
 ## RestermScript
