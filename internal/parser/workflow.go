@@ -354,7 +354,7 @@ func parseWorkflowRunOptions(opts map[string]string) (run, fail string, err erro
 	}
 	fail = str.Trim(opts["fail"])
 	if run == "" && fail == "" {
-		return "", "", errors.New("expected run=... or fail=...")
+		return "", "", errors.New("missing a run= or fail= option")
 	}
 	if run != "" && fail != "" {
 		return "", "", errors.New("cannot combine run and fail")
