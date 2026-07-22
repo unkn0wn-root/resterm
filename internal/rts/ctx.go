@@ -47,7 +47,7 @@ func (e *StackError) Pretty() string {
 		if name == "" {
 			name = "<fn>"
 		}
-		out.WriteString(fmt.Sprintf("\n  at %s in %s", f.Pos.String(), name))
+		fmt.Fprintf(&out, "\n  at %s in %s", f.Pos.String(), name)
 	}
 	return out.String()
 }
