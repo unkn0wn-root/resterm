@@ -1,5 +1,7 @@
 package rts
 
+import "slices"
+
 import "testing"
 
 func lexKinds(src string) []Kind {
@@ -17,13 +19,7 @@ func lexKinds(src string) []Kind {
 func TestLexerAutoSemi(t *testing.T) {
 	src := "let a = 1\nlet b = 2\n"
 	k := lexKinds(src)
-	seen := false
-	for _, it := range k {
-		if it == AUTO_SEMI {
-			seen = true
-			break
-		}
-	}
+	seen := slices.Contains(k, AUTO_SEMI)
 	if !seen {
 		t.Fatalf("expected auto semi")
 	}

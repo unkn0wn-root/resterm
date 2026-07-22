@@ -1,6 +1,7 @@
 package telemetry
 
 import (
+	"maps"
 	"strings"
 	"time"
 )
@@ -27,9 +28,7 @@ func (c Config) Clone() Config {
 	out := c
 	if len(c.Headers) > 0 {
 		out.Headers = make(map[string]string, len(c.Headers))
-		for key, value := range c.Headers {
-			out.Headers[key] = value
-		}
+		maps.Copy(out.Headers, c.Headers)
 	}
 	return out
 }

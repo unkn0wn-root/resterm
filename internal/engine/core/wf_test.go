@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"errors"
+	"maps"
 	"net/http"
 	"strconv"
 	"strings"
@@ -249,9 +250,7 @@ func (d *fakeDep) CollectVariables(
 		}
 	}
 	for _, x := range extra {
-		for k, v := range x {
-			out[k] = v
-		}
+		maps.Copy(out, x)
 	}
 	return out
 }

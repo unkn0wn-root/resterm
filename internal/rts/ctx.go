@@ -3,6 +3,7 @@ package rts
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 )
 
@@ -39,15 +40,16 @@ func (e *StackError) Error() string {
 }
 
 func (e *StackError) Pretty() string {
-	out := e.Err.Error()
+	var out strings.Builder
+	out.WriteString(e.Err.Error())
 	for _, f := range e.Frames {
 		name := f.Name
 		if name == "" {
 			name = "<fn>"
 		}
-		out += fmt.Sprintf("\n  at %s in %s", f.Pos.String(), name)
+		out.WriteString(fmt.Sprintf("\n  at %s in %s", f.Pos.String(), name))
 	}
-	return out
+	return out.String()
 }
 
 type Ctx struct {

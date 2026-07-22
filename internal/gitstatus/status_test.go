@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -138,11 +139,11 @@ func TestLoadOutsideRepositoryReturnsEmptySnapshot(t *testing.T) {
 }
 
 func joinRecords(records ...string) string {
-	out := ""
+	var out strings.Builder
 	for _, record := range records {
-		out += record + "\x00"
+		out.WriteString(record + "\x00")
 	}
-	return out
+	return out.String()
 }
 
 func requireGit(t *testing.T) {

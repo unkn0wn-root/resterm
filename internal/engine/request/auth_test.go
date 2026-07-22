@@ -267,7 +267,7 @@ func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
 	rt := rtrun.New(rtrun.Config{})
 	rt.AuthCmd().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
 		n := atomic.AddInt32(&calls, 1)
-		return []byte(fmt.Sprintf("%s/token-%d", cfg.Dir, n)), nil
+		return fmt.Appendf(nil, "%s/token-%d", cfg.Dir, n), nil
 	})
 
 	authA := &restfile.AuthSpec{

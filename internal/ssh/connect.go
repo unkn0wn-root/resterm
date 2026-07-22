@@ -30,10 +30,7 @@ func (o sessionOpener) open(
 	cfg execConfig,
 	cached bool,
 ) (*session, error) {
-	attempts := cfg.Retries + 1
-	if attempts < 1 {
-		attempts = 1
-	}
+	attempts := max(cfg.Retries+1, 1)
 
 	delay := o.retryDelay
 	if delay <= 0 {

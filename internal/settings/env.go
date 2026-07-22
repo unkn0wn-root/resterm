@@ -1,6 +1,7 @@
 package settings
 
 import (
+	"maps"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -31,9 +32,7 @@ func FromEnv(set vars.EnvironmentSet, envName string) map[string]string {
 func Merge(scopes ...map[string]string) map[string]string {
 	out := make(map[string]string)
 	for _, scope := range scopes {
-		for k, v := range scope {
-			out[k] = v
-		}
+		maps.Copy(out, scope)
 	}
 	return out
 }

@@ -67,8 +67,8 @@ func parse(raw string, allowBare bool) (Version, bool) {
 		return Unknown, false
 	}
 	s = strings.ToLower(s)
-	if strings.HasPrefix(s, "http/") {
-		s = strings.TrimPrefix(s, "http/")
+	if after, ok := strings.CutPrefix(s, "http/"); ok {
+		s = after
 	} else if !allowBare {
 		return Unknown, false
 	}

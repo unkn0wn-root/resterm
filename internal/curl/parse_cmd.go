@@ -106,8 +106,8 @@ func splitLong(t string) (string, string, bool) {
 		return "", "", false
 	}
 
-	if idx := strings.Index(raw, "="); idx >= 0 {
-		return raw[:idx], raw[idx+1:], true
+	if before, after, ok := strings.Cut(raw, "="); ok {
+		return before, after, true
 	}
 
 	return raw, "", false

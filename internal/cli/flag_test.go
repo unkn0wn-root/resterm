@@ -137,7 +137,7 @@ func TestPrintFlagDefaultsWrapsWithinAvailableColumns(t *testing.T) {
 }
 
 func lineWith(s, sub string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if strings.Contains(line, sub) {
 			return line
 		}

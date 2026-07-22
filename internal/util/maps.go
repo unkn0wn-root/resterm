@@ -2,7 +2,7 @@ package util
 
 import (
 	"maps"
-	"sort"
+	"slices"
 )
 
 func CloneMap[K comparable, V any](src map[K]V) map[K]V {
@@ -20,6 +20,6 @@ func SortedKeys[M ~map[K]V, K ~string, V any](m M) []K {
 	for k := range m {
 		ks = append(ks, k)
 	}
-	sort.Slice(ks, func(i, j int) bool { return ks[i] < ks[j] })
+	slices.Sort(ks)
 	return ks
 }

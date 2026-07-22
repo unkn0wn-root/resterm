@@ -1,5 +1,7 @@
 package restfile
 
+import "maps"
+
 import "strings"
 
 func CloneAuthSpec(auth *AuthSpec) *AuthSpec {
@@ -48,8 +50,6 @@ func cloneAuthParams(src map[string]string) map[string]string {
 		return nil
 	}
 	dst := make(map[string]string, len(src))
-	for key, value := range src {
-		dst[key] = value
-	}
+	maps.Copy(dst, src)
 	return dst
 }

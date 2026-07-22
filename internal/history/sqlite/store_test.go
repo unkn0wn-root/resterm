@@ -178,10 +178,10 @@ func TestAppendConcurrent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(workers)
 
-	for i := 0; i < workers; i++ {
+	for i := range workers {
 		go func(w int) {
 			defer wg.Done()
-			for j := 0; j < perWorker; j++ {
+			for j := range perWorker {
 				id := n.Add(1)
 				e := history.Entry{
 					ID:         fmt.Sprintf("%d", id),

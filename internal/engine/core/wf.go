@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"strings"
 	"time"
@@ -1204,15 +1205,9 @@ func stepExtras(
 		return nil
 	}
 	out := make(map[string]string, n)
-	for k, v := range base {
-		out[k] = v
-	}
-	for k, v := range vals {
-		out[k] = v
-	}
-	for k, v := range extra {
-		out[k] = v
-	}
+	maps.Copy(out, base)
+	maps.Copy(out, vals)
+	maps.Copy(out, extra)
 	return out
 }
 
@@ -1274,8 +1269,6 @@ func cloneStrMap(src map[string]string) map[string]string {
 		return nil
 	}
 	out := make(map[string]string, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
+	maps.Copy(out, src)
 	return out
 }

@@ -83,7 +83,7 @@ func buildHeader(base, cmd string, warn []string) string {
 }
 
 func appendLines(lines []string, raw string) []string {
-	for _, line := range strings.Split(raw, "\n") {
+	for line := range strings.SplitSeq(raw, "\n") {
 		if t := strings.TrimSpace(line); t != "" {
 			lines = append(lines, t)
 		}

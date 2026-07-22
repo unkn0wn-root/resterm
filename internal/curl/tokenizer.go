@@ -100,7 +100,7 @@ func readHex(rs []rune, i *int, n int) (rune, error) {
 		return 0, fmt.Errorf("invalid hex escape")
 	}
 	val := 0
-	for j := 0; j < n; j++ {
+	for j := range n {
 		r := rs[*i+1+j]
 		d, ok := hexVal(r)
 		if !ok {

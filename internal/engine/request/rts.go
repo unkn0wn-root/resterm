@@ -52,11 +52,11 @@ func requestQuery(raw string) map[string][]string {
 	if raw == "" {
 		return nil
 	}
-	idx := strings.Index(raw, "?")
-	if idx < 0 {
+	_, after, ok := strings.Cut(raw, "?")
+	if !ok {
 		return nil
 	}
-	q := raw[idx+1:]
+	q := after
 	if cut := strings.Index(q, "#"); cut >= 0 {
 		q = q[:cut]
 	}
@@ -188,18 +188,14 @@ func rtsStream(info *scripts.StreamInfo) *rts.Stream {
 		return nil
 	}
 	sum := make(map[string]any, len(info.Summary))
-	for k, v := range info.Summary {
-		sum[k] = v
-	}
+	maps.Copy(sum, info.Summary)
 	evs := make([]map[string]any, len(info.Events))
 	for i, item := range info.Events {
 		if item == nil {
 			continue
 		}
 		cp := make(map[string]any, len(item))
-		for k, v := range item {
-			cp[k] = v
-		}
+		maps.Copy(cp, item)
 		evs[i] = cp
 	}
 	return &rts.Stream{Kind: info.Kind, Summary: sum, Events: evs}
@@ -277,9 +273,7 @@ func (e *Engine) rtsEval(
 ) vars.ExprEval {
 	vv := e.collectVariables(doc, req, env)
 	for _, overlay := range extras {
-		for k, v := range overlay {
-			vv[k] = v
-		}
+		maps.Copy(vv, overlay)
 	}
 	return e.ExprEval(ctx, doc, req, env, base, vv, extra)
 }
@@ -518,9 +512,7 @@ func (e *Engine) runAsserts(
 		}
 		ex[k] = v
 	}
-	for k, v := range rts.AssertExtra(resp) {
-		ex[k] = v
-	}
+	maps.Copy(ex, rts.AssertExtra(resp))
 	rt := e.buildRT(rtIn{
 		doc:  doc,
 		req:  req,
@@ -1040,9 +1032,7 @@ func applyPatchVars(req *restfile.Request, vv map[string]string, in map[string]s
 	if vv == nil {
 		return
 	}
-	for k, v := range in {
-		vv[k] = v
-	}
+	maps.Copy(vv, in)
 }
 
 func setRequestVars(req *restfile.Request, vv map[string]string) {

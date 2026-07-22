@@ -102,7 +102,7 @@ func listSort(ctx *rts.Ctx, pos rts.Pos, args []rts.Value) (rts.Value, error) {
 	}
 
 	kind := items[0].K
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		if items[i].K != kind {
 			return rts.Null(), rts.Errf(ctx, pos, "%s expects numbers or strings", sigListSort)
 		}
@@ -350,10 +350,7 @@ func intNum(ctx *rts.Ctx, pos rts.Pos, v rts.Value, sig string) (int, error) {
 
 func sliceIdx(n, st, en int) (int, int) {
 	st = clampIdx(n, st)
-	en = clampIdx(n, en)
-	if en < st {
-		en = st
-	}
+	en = max(clampIdx(n, en), st)
 	return st, en
 }
 

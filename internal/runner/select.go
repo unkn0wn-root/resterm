@@ -256,10 +256,7 @@ func lineInRange(line int, rg restfile.LineRange) bool {
 	if line <= 0 || rg.Start <= 0 {
 		return false
 	}
-	end := rg.End
-	if end < rg.Start {
-		end = rg.Start
-	}
+	end := max(rg.End, rg.Start)
 	return line >= rg.Start && line <= end
 }
 

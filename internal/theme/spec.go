@@ -2,6 +2,7 @@ package theme
 
 import (
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -1277,9 +1278,7 @@ func applyEditorMetadata(dst *EditorMetadataPalette, spec EditorMetadataSpec) er
 			map[string]lipgloss.Color,
 			len(dst.DirectiveColors)+len(spec.DirectiveColors),
 		)
-		for key, value := range dst.DirectiveColors {
-			combined[key] = value
-		}
+		maps.Copy(combined, dst.DirectiveColors)
 		for key, value := range spec.DirectiveColors {
 			normalized := strings.ToLower(strings.TrimSpace(key))
 			if normalized == "" {
@@ -1311,9 +1310,7 @@ func cloneTheme(src Theme) Theme {
 			map[string]lipgloss.Color,
 			len(src.EditorMetadata.DirectiveColors),
 		)
-		for k, v := range src.EditorMetadata.DirectiveColors {
-			clone.EditorMetadata.DirectiveColors[k] = v
-		}
+		maps.Copy(clone.EditorMetadata.DirectiveColors, src.EditorMetadata.DirectiveColors)
 	}
 	return clone
 }

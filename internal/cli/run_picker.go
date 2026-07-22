@@ -170,10 +170,7 @@ func (m *runRequestPickerModel) View() string {
 		return ""
 	}
 	box := m.st.box
-	inner := m.wid - box.GetHorizontalFrameSize()
-	if inner < 1 {
-		inner = 1
-	}
+	inner := max(m.wid-box.GetHorizontalFrameSize(), 1)
 	lines := []string{
 		m.st.title.Render("Select a Request to Run"),
 		m.st.path.Render(xansi.TruncateLeft(m.path, inner, "...")),
@@ -202,10 +199,7 @@ func (m *runRequestPickerModel) setSize(wid, hgt int) {
 		m.wid = wid
 	}
 	if hgt > 0 {
-		rows := hgt - runRequestPickerChromeRows
-		if rows < runRequestPickerMinRows {
-			rows = runRequestPickerMinRows
-		}
+		rows := max(hgt-runRequestPickerChromeRows, runRequestPickerMinRows)
 		if rows > runRequestPickerMaxRows {
 			rows = runRequestPickerMaxRows
 		}
@@ -259,10 +253,7 @@ func (m *runRequestPickerModel) appendDigit(ch byte) {
 		return
 	}
 	next := m.num + string(ch)
-	maxDigits := len(strconv.Itoa(len(m.choices)))
-	if maxDigits < 1 {
-		maxDigits = 1
-	}
+	maxDigits := max(len(strconv.Itoa(len(m.choices))), 1)
 	if len(next) > maxDigits || !m.validNumberInput(next) {
 		next = string(ch)
 	}
@@ -418,19 +409,13 @@ func (m *runRequestPickerModel) renderRow(
 			reserve = lipgloss.Width(badge) + 1
 		}
 	}
-	avail := wid - lipgloss.Width(head) - 1 - reserve
-	if avail < 1 {
-		avail = 1
-	}
+	avail := max(wid-lipgloss.Width(head)-1-reserve, 1)
 	body := head + " " + nameSt.Render(xansi.Truncate(name, avail, "..."))
 	if badge != "" {
 		if compact {
 			body += " " + badge
 		} else {
-			pad := wid - lipgloss.Width(body) - lipgloss.Width(badge)
-			if pad < 1 {
-				pad = 1
-			}
+			pad := max(wid-lipgloss.Width(body)-lipgloss.Width(badge), 1)
 			body += strings.Repeat(" ", pad) + badge
 		}
 	}

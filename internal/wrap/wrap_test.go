@@ -70,11 +70,11 @@ func TestWrapStructuredContinuationAvoidsPrefixColorLeak(t *testing.T) {
 	if !strings.HasPrefix(c, rd) {
 		t.Fatalf("expected continuation to keep prefix ANSI, got %q", c)
 	}
-	i := strings.Index(c, gr)
-	if i == -1 {
+	_, after, ok0 := strings.Cut(c, gr)
+	if !ok0 {
 		t.Fatalf("expected continuation to include token color, got %q", c)
 	}
-	if j := strings.Index(c[i+len(gr):], rd); j != -1 {
+	if j := strings.Index(after, rd); j != -1 {
 		t.Fatalf("expected no leaked prefix color after token color, got %q", c)
 	}
 }
@@ -97,8 +97,8 @@ func TestWrapStructuredContinuationKeepsTokenColorAfterPrefixReset(t *testing.T)
 	if !strings.Contains(c, gr) {
 		t.Fatalf("expected continuation to restore token color after prefix reset, got %q", c)
 	}
-	i := strings.Index(c, gr)
-	if j := strings.Index(c[i+len(gr):], rd); j != -1 {
+	_, after, _ := strings.Cut(c, gr)
+	if j := strings.Index(after, rd); j != -1 {
 		t.Fatalf("expected no prefix color after token color, got %q", c)
 	}
 }
