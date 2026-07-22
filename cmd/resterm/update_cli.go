@@ -89,18 +89,12 @@ func (p *cliProgress) render(force bool) {
 	}
 	h := rtfmt.LogHandler(log.Printf, "progress write failed: %v")
 	if p.total > 0 {
-		percent := int((p.downloaded * 100) / p.total)
-		if percent > 100 {
-			percent = 100
-		}
+		percent := min(int((p.downloaded*100)/p.total), 100)
 		if !force && percent == p.lastPct {
 			return
 		}
 		p.lastPct = percent
-		filled := int((p.downloaded * int64(p.barWidth)) / p.total)
-		if filled > p.barWidth {
-			filled = p.barWidth
-		}
+		filled := min(int((p.downloaded*int64(p.barWidth))/p.total), p.barWidth)
 		bar := strings.Repeat("=", filled) + strings.Repeat(" ", p.barWidth-filled)
 		_ = rtfmt.Fprintf(p.out, "\r%s: [%s] %3d%%", h, p.label, bar, percent)
 		return

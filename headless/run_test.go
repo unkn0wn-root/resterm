@@ -503,9 +503,7 @@ func TestRunPlanAllowsConcurrentReuse(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
 	for range n {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			rep, err := RunPlan(context.Background(), pl)
 			if err != nil {
 				errs <- err
@@ -514,7 +512,7 @@ func TestRunPlanAllowsConcurrentReuse(t *testing.T) {
 			if rep.Passed != 1 || rep.Failed != 0 {
 				errs <- fmt.Errorf("unexpected report: %+v", rep)
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	close(errs)
