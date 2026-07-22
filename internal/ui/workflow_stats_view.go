@@ -114,10 +114,7 @@ func (v *workflowStatsView) move(delta int) bool {
 	if !v.hasEntries() {
 		return false
 	}
-	next := v.selected + delta
-	if next < 0 {
-		next = 0
-	}
+	next := max(v.selected+delta, 0)
 	if next >= len(v.entries) {
 		next = len(v.entries) - 1
 	}
@@ -176,14 +173,8 @@ func (v *workflowStatsView) scrollDetail(width, height, delta int) bool {
 	if bodyHeight < 1 {
 		return false
 	}
-	maxOffset := len(body) - bodyHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	next := v.detailOffset + delta
-	if next < 0 {
-		next = 0
-	}
+	maxOffset := max(len(body)-bodyHeight, 0)
+	next := max(v.detailOffset+delta, 0)
 	if next > maxOffset {
 		next = maxOffset
 	}
@@ -204,10 +195,7 @@ func (v *workflowStatsView) scrollDetailEdge(width, height int, top bool) bool {
 	}
 	_, body := v.detailParts(layout.detailWidth)
 	bodyHeight := v.detailBodyHeight(layout.detailWidth, layout.detailHeight, len(body))
-	maxOffset := len(body) - bodyHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset := max(len(body)-bodyHeight, 0)
 	next := maxOffset
 	if top {
 		next = 0
@@ -275,17 +263,11 @@ type workflowStatsLayout struct {
 
 func (v *workflowStatsView) layout(width, height int) workflowStatsLayout {
 	summaryHeight := len(v.summaryLines(width)) + 1
-	available := height - summaryHeight
-	if available < 1 {
-		available = 1
-	}
+	available := max(height-summaryHeight, 1)
 
 	if width >= workflowStatsSplitMinWidth && height >= workflowStatsSplitMinH {
 		gapWidth := visibleWidth(workflowStatsGap)
-		listWidth := width * 38 / 100
-		if listWidth < 32 {
-			listWidth = 32
-		}
+		listWidth := max(width*38/100, 32)
 		if listWidth > 48 {
 			listWidth = 48
 		}
@@ -307,24 +289,15 @@ func (v *workflowStatsView) layout(width, height int) workflowStatsLayout {
 		}
 	}
 
-	listHeight := height / 3
-	if listHeight < 4 {
-		listHeight = 4
-	}
+	listHeight := max(height/3, 4)
 	if v != nil && len(v.entries)+1 < listHeight {
 		listHeight = len(v.entries) + 1
 	}
-	maxList := available - 4
-	if maxList < 1 {
-		maxList = 1
-	}
+	maxList := max(available-4, 1)
 	if listHeight > maxList {
 		listHeight = maxList
 	}
-	detailHeight := available - listHeight - 1
-	if detailHeight < 1 {
-		detailHeight = 1
-	}
+	detailHeight := max(available-listHeight-1, 1)
 	return workflowStatsLayout{
 		listWidth:    width,
 		detailWidth:  width,
@@ -436,10 +409,7 @@ func (v *workflowStatsView) renderStepList(width, height int) []string {
 		return workflowFitLines(lines, width, height)
 	}
 	start := workflowWindowStart(len(v.entries), v.selected, rowsHeight)
-	end := start + rowsHeight
-	if end > len(v.entries) {
-		end = len(v.entries)
-	}
+	end := min(start+rowsHeight, len(v.entries))
 	for i := start; i < end; i++ {
 		lines = append(lines, v.renderStepRow(i, width))
 	}
@@ -456,10 +426,7 @@ func workflowWindowStart(total, selected, height int) int {
 	if selected >= total {
 		selected = total - 1
 	}
-	start := selected - height/2
-	if start < 0 {
-		start = 0
-	}
+	start := max(selected-height/2, 0)
 	if start+height > total {
 		start = total - height
 	}
@@ -545,10 +512,7 @@ func (v *workflowStatsView) renderDetail(width, height int) []string {
 		lines = append(lines, workflowFitLine(statsSubLabelStyle.Render(rangeLine), width))
 	}
 	if bodyHeight > 0 {
-		end := v.detailOffset + bodyHeight
-		if end > len(body) {
-			end = len(body)
-		}
+		end := min(v.detailOffset+bodyHeight, len(body))
 		if v.detailOffset < len(body) {
 			lines = append(lines, body[v.detailOffset:end]...)
 		}
@@ -621,10 +585,7 @@ func (v *workflowStatsView) detailBodyHeight(width, height, bodyLines int) int {
 		return 0
 	}
 	header := v.detailHeader(v.entries[v.selected], width)
-	bodyHeight := height - len(header) - 1
-	if bodyHeight < 0 {
-		bodyHeight = 0
-	}
+	bodyHeight := max(height-len(header)-1, 0)
 	if bodyLines == 0 {
 		return 0
 	}
@@ -632,10 +593,7 @@ func (v *workflowStatsView) detailBodyHeight(width, height, bodyLines int) int {
 }
 
 func (v *workflowStatsView) clampDetailOffset(bodyLines, bodyHeight int) {
-	maxOffset := bodyLines - bodyHeight
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
+	maxOffset := max(bodyLines-bodyHeight, 0)
 	if v.detailOffset > maxOffset {
 		v.detailOffset = maxOffset
 	}
@@ -652,10 +610,7 @@ func workflowDetailRangeLine(offset, height, total int) string {
 		return fmt.Sprintf("Detail 0/%d", total)
 	}
 	start := offset + 1
-	end := offset + height
-	if end > total {
-		end = total
-	}
+	end := min(offset+height, total)
 	return fmt.Sprintf("Detail %d-%d/%d", start, end, total)
 }
 
@@ -867,7 +822,7 @@ func workflowWrapLines(lines []string, width int) []string {
 func workflowJoinColumns(left, right []string, leftWidth, rightWidth int) []string {
 	height := max(len(left), len(right))
 	out := make([]string, 0, height)
-	for i := 0; i < height; i++ {
+	for i := range height {
 		l := strings.Repeat(" ", leftWidth)
 		r := strings.Repeat(" ", rightWidth)
 		if i < len(left) {

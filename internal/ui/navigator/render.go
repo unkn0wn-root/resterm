@@ -269,10 +269,7 @@ func truncateRow(line string, width int, th theme.Theme, selected bool) string {
 		indicatorStyle = th.NavigatorSubtitleSelected
 	}
 	indicator := indicatorStyle.Render(" +")
-	avail := width - lipgloss.Width(indicator)
-	if avail < 0 {
-		avail = 0
-	}
+	avail := max(width-lipgloss.Width(indicator), 0)
 	return ansi.Truncate(line, avail, "") + indicator
 }
 

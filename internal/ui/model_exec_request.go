@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"sort"
 	"strings"
@@ -20,9 +21,7 @@ func cloneRequest(req *restfile.Request) *restfile.Request {
 	clone.Headers = cloneHeader(req.Headers)
 	if req.Settings != nil {
 		clone.Settings = make(map[string]string, len(req.Settings))
-		for k, v := range req.Settings {
-			clone.Settings[k] = v
-		}
+		maps.Copy(clone.Settings, req.Settings)
 	}
 
 	clone.Variables = append([]restfile.Variable(nil), req.Variables...)

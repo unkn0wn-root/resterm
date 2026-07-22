@@ -3,10 +3,7 @@ package scroll
 // Align returns a y-offset that keeps the selection away from viewport edges.
 // It behaves like a lightweight scrolloff: nudge just enough to keep a small buffer.
 func Align(sel, off, h, total int) int {
-	buf := h / 4
-	if buf < 1 {
-		buf = 1
-	}
+	buf := max(h/4, 1)
 	return AlignWithBuffer(sel, off, h, total, buf)
 }
 
@@ -83,16 +80,10 @@ func Reveal(start, end, off, h, total int) int {
 	if h > total {
 		h = total
 	}
-	maxOff := total - h
-	if maxOff < 0 {
-		maxOff = 0
-	}
+	maxOff := max(total-h, 0)
 	off = clamp(off, 0, maxOff)
 
-	buf := h / 5
-	if buf < 1 {
-		buf = 1
-	}
+	buf := max(h/5, 1)
 	top := off + buf
 	bot := off + h - 1 - buf
 	if start >= top && end <= bot {
@@ -100,10 +91,7 @@ func Reveal(start, end, off, h, total int) int {
 	}
 
 	offset := clamp(start-buf, 0, maxOff)
-	need := end - h + 1 + buf
-	if need < 0 {
-		need = 0
-	}
+	need := max(end-h+1+buf, 0)
 	if offset < need {
 		offset = clamp(need, 0, maxOff)
 	}

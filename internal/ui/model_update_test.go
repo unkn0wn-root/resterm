@@ -1686,10 +1686,7 @@ func TestMainSplitOrientationChord(t *testing.T) {
 	responseFrame := model.theme.ResponseBorder.GetVerticalFrameSize()
 	paneFrame := model.visiblePaneFrameHeight()
 	outerBudget := baselineHeight + paneFrame + paneBottomPadding
-	expectedTotal := outerBudget - editorFrame - responseFrame - (paneBottomPadding * 2)
-	if expectedTotal < 1 {
-		expectedTotal = 1
-	}
+	expectedTotal := max(outerBudget-editorFrame-responseFrame-(paneBottomPadding*2), 1)
 	combined := model.editorContentHeight + model.responseContentHeight
 	if combined < expectedTotal-1 || combined > expectedTotal+1 {
 		t.Fatalf("expected stacked heights near %d, got %d", expectedTotal, combined)

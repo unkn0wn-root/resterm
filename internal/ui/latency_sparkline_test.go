@@ -56,7 +56,7 @@ func TestLatencySeriesSummaryGrowsWithSamples(t *testing.T) {
 		t.Fatalf("expected %d bars, got %d", latMinBars, got)
 	}
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		s.add(10 * time.Millisecond)
 	}
 	if got := len([]rune(requireLatencySummary(t, s).bars)); got != 6 {
@@ -84,7 +84,7 @@ func TestLatencySeriesSummaryLimitsVisibleBars(t *testing.T) {
 
 func TestLatencySeriesSummaryScalesBarsToVisibleWindow(t *testing.T) {
 	s := newLatencySeries(latCap)
-	for i := 0; i < 90; i++ {
+	for range 90 {
 		s.add(10 * time.Millisecond)
 	}
 	for i := 1; i <= 10; i++ {

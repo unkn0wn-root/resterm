@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -354,9 +355,7 @@ func (m *Model) collectVariablesWithStoreGlobals(
 	resolvedEnv := vars.SelectEnv(m.cfg.EnvironmentSet, envName, m.cfg.EnvironmentName)
 	result := make(map[string]string)
 	if env := vars.EnvValues(m.cfg.EnvironmentSet, resolvedEnv); env != nil {
-		for k, v := range env {
-			result[k] = v
-		}
+		maps.Copy(result, env)
 	}
 
 	if doc != nil {
@@ -369,9 +368,7 @@ func (m *Model) collectVariablesWithStoreGlobals(
 	}
 
 	m.mergeFileRuntimeVars(result, doc, resolvedEnv)
-	for name, value := range globalValueMap(storeGlobals) {
-		result[name] = value
-	}
+	maps.Copy(result, globalValueMap(storeGlobals))
 
 	if req != nil {
 		for _, v := range req.Variables {
@@ -434,9 +431,7 @@ func cloneGlobalValues(src map[string]vars.GlobalMutation) map[string]vars.Globa
 		return nil
 	}
 	out := make(map[string]vars.GlobalMutation, len(src))
-	for key, value := range src {
-		out[key] = value
-	}
+	maps.Copy(out, src)
 	return out
 }
 
@@ -629,12 +624,8 @@ func maskSecret(value string, secret bool) string {
 
 func mergeVariableMaps(base map[string]string, additions map[string]string) map[string]string {
 	merged := make(map[string]string, len(base)+len(additions))
-	for k, v := range base {
-		merged[k] = v
-	}
-	for k, v := range additions {
-		merged[k] = v
-	}
+	maps.Copy(merged, base)
+	maps.Copy(merged, additions)
 	return merged
 }
 
@@ -673,8 +664,6 @@ func cloneStringMap(input map[string]string) map[string]string {
 	}
 
 	clone := make(map[string]string, len(input))
-	for k, v := range input {
-		clone[k] = v
-	}
+	maps.Copy(clone, input)
 	return clone
 }

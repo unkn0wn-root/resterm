@@ -86,10 +86,7 @@ func buildCompareBundle(results []compareResult, baseline string) *compareBundle
 		return nil
 	}
 
-	baseIdx := findBaselineIndex(results, baseline)
-	if baseIdx < 0 {
-		baseIdx = 0
-	}
+	baseIdx := max(findBaselineIndex(results, baseline), 0)
 
 	base := &results[baseIdx]
 	out := &compareBundle{

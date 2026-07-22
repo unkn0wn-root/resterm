@@ -48,8 +48,8 @@ func TestColorizeProfileHistogramBarsColored(t *testing.T) {
 		hist
 	colored := colorizeStatsReport(input, statsReportKindProfile, nil)
 	stripped := ansiSequenceRegex.ReplaceAllString(colored, "")
-	lines := strings.Split(strings.TrimSpace(hist), "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(strings.TrimSpace(hist), "\n")
+	for line := range lines {
 		if !strings.Contains(stripped, strings.TrimSpace(line)) {
 			t.Fatalf("expected histogram line %q to be preserved, got %q", line, stripped)
 		}

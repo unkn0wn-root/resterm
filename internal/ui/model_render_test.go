@@ -81,7 +81,7 @@ func TestNavigatorTagChipsLimit(t *testing.T) {
 	model := New(Config{})
 	m := &model
 	var tags []string
-	for i := 0; i < 15; i++ {
+	for i := range 15 {
 		tags = append(tags, fmt.Sprintf("tag%d", i))
 	}
 	m.navigator = navigator.New[any]([]*navigator.Node[any]{
@@ -529,11 +529,11 @@ func assertSectionBackground(
 ) {
 	t.Helper()
 	wantBg := renderedCellBackgrounds(lipgloss.NewStyle().Background(want).Render("x"))[0]
-	start := strings.Index(plain, text)
-	if start < 0 {
+	before, _, ok := strings.Cut(plain, text)
+	if !ok {
 		t.Fatalf("expected minimized indicator %q in %q", text, plain)
 	}
-	cellStart := lipgloss.Width(plain[:start])
+	cellStart := lipgloss.Width(before)
 	for idx := cellStart; idx < cellStart+lipgloss.Width(text); idx++ {
 		if !slices.Equal(backgrounds[idx], wantBg) {
 			t.Fatalf(
@@ -754,8 +754,8 @@ func TestStatusBarGitSummaryUsesForegroundWithoutBackground(t *testing.T) {
 	bar := model.renderStatusBar()
 	plain := ansi.Strip(bar)
 	gitText := "⎇ main M1 U1 ↑1 ↓2"
-	start := strings.Index(plain, gitText)
-	if start < 0 {
+	before, _, ok := strings.Cut(plain, gitText)
+	if !ok {
 		t.Fatalf("expected git summary %q in %q", gitText, plain)
 	}
 	for _, want := range []string{
@@ -776,7 +776,7 @@ func TestStatusBarGitSummaryUsesForegroundWithoutBackground(t *testing.T) {
 			len(backgrounds),
 		)
 	}
-	cellStart := lipgloss.Width(plain[:start])
+	cellStart := lipgloss.Width(before)
 	for idx := cellStart; idx < cellStart+lipgloss.Width(gitText); idx++ {
 		if len(backgrounds[idx]) != 0 {
 			t.Fatalf(
@@ -959,10 +959,7 @@ func TestStatusBarBaseFillsOpenCells(t *testing.T) {
 		leftOffset = statusBarHorizontalPad
 	}
 	leftSections := model.statusBarLeftSections("Ready", statusInfo, palette)
-	rightLimit := contentWidth - statusBarLeftReserve(leftSections, contentWidth)
-	if rightLimit < 0 {
-		rightLimit = 0
-	}
+	rightLimit := max(contentWidth-statusBarLeftReserve(leftSections, contentWidth), 0)
 	right := fitStatusBarSections(model.statusBarRightSections(palette), rightLimit)
 	rightWidth := statusBarSectionsWidth(right)
 	left := fitStatusBarSections(leftSections, contentWidth-rightWidth)
@@ -1089,15 +1086,15 @@ func TestStatusBarEditorPositionStyling(t *testing.T) {
 	bar := m.renderStatusBar()
 	plain := ansi.Strip(bar)
 	pos := "Ln 3/3 Col 6"
-	start := strings.Index(plain, pos)
-	if start < 0 {
+	before, _, ok := strings.Cut(plain, pos)
+	if !ok {
 		t.Fatalf("expected editor position %q in %q", pos, plain)
 	}
 	if !strings.Contains(bar, "38;2;234;234;234") {
 		t.Fatalf("expected value foreground on editor position in %q", bar)
 	}
 	backgrounds := renderedCellBackgrounds(bar)
-	cellStart := lipgloss.Width(plain[:start])
+	cellStart := lipgloss.Width(before)
 	for idx := cellStart; idx < cellStart+lipgloss.Width(pos); idx++ {
 		if len(backgrounds[idx]) != 0 {
 			t.Fatalf(
@@ -1755,7 +1752,7 @@ func TestUnfocusedSplitResponseColumnKeepsPrettyContentReadable(t *testing.T) {
 }
 
 func lineWith(view, needle string) string {
-	for _, line := range strings.Split(view, "\n") {
+	for line := range strings.SplitSeq(view, "\n") {
 		if strings.Contains(ansi.Strip(line), needle) {
 			return line
 		}

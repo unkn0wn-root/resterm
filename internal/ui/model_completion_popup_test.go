@@ -101,7 +101,7 @@ func TestBuildCompletionPopupTruncatesSummaryWhenWidthIsTight(t *testing.T) {
 	if !strings.Contains(plain, "@variables") {
 		t.Fatalf("expected label to remain visible, got %q", plain)
 	}
-	for _, line := range strings.Split(plain, "\n") {
+	for line := range strings.SplitSeq(plain, "\n") {
 		if w := lipgloss.Width(line); w > 18 {
 			t.Fatalf("expected popup width <= 18, got %d in %q", w, line)
 		}

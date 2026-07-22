@@ -435,10 +435,7 @@ func renderColoredHistogramRow(lineIdx int, row histogramLine, ctx histogramCont
 		percentWidth = visibleWidth(row.percentText)
 	}
 
-	barPadding := barWidth - visibleWidth(row.bar)
-	if barPadding < 0 {
-		barPadding = 0
-	}
+	barPadding := max(barWidth-visibleWidth(row.bar), 0)
 	paddedBar := row.bar + strings.Repeat(" ", barPadding)
 
 	barStyle := histogramBarStyle(lineIdx, row, ctx)
@@ -697,12 +694,12 @@ func renderLabelValue(label, value string, labelStyle, valueStyle lipgloss.Style
 }
 
 func splitLabelValue(line string) (string, string, bool) {
-	idx := strings.Index(line, ":")
-	if idx == -1 {
+	before, after, ok := strings.Cut(line, ":")
+	if !ok {
 		return "", "", false
 	}
-	label := strings.TrimSpace(line[:idx])
-	value := strings.TrimSpace(line[idx+1:])
+	label := strings.TrimSpace(before)
+	value := strings.TrimSpace(after)
 	return label, value, true
 }
 

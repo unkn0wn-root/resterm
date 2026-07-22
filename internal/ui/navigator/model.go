@@ -276,10 +276,7 @@ func (m *Model[T]) VisibleRows() []Flat[T] {
 		m.offset = 0
 	}
 
-	end := m.offset + m.viewHeight
-	if end > len(m.flat) {
-		end = len(m.flat)
-	}
+	end := min(m.offset+m.viewHeight, len(m.flat))
 	return m.flat[m.offset:end]
 }
 

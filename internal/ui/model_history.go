@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -2296,9 +2297,7 @@ func traceSpecFromSummary(summary *history.TraceSummary) *restfile.TraceSpec {
 	spec.Budgets.Tolerance = summary.Budgets.Tolerance
 	if len(summary.Budgets.Phases) > 0 {
 		phases := make(map[string]time.Duration, len(summary.Budgets.Phases))
-		for name, limit := range summary.Budgets.Phases {
-			phases[name] = limit
-		}
+		maps.Copy(phases, summary.Budgets.Phases)
 		spec.Budgets.Phases = phases
 	}
 	return spec

@@ -33,7 +33,7 @@ func (m *Model) nextVisibleFocus(forward bool) paneFocus {
 	if !forward {
 		step = -1
 	}
-	for i := 0; i < len(sequence); i++ {
+	for range sequence {
 		idx = (idx + step + len(sequence)) % len(sequence)
 		candidate := sequence[idx]
 		if m.focusVisible(candidate) {

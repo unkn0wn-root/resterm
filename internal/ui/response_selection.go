@@ -224,10 +224,7 @@ func (m *Model) selLineTop(p *responsePaneState, tab responseTab) (int, bool) {
 }
 
 func (m *Model) selLineBottom(p *responsePaneState, tab responseTab) (int, bool) {
-	h := p.viewport.Height
-	if h < 1 {
-		h = 1
-	}
+	h := max(p.viewport.Height, 1)
 	return m.selLineAt(p, tab, p.viewport.YOffset+h-1)
 }
 
@@ -236,10 +233,7 @@ func (m *Model) selLineAt(p *responsePaneState, tab responseTab, offset int) (in
 	if !ok || len(cache.rev) == 0 {
 		return 0, false
 	}
-	off := offset
-	if off < 0 {
-		off = 0
-	}
+	off := max(offset, 0)
 	if off >= len(cache.rev) {
 		off = len(cache.rev) - 1
 	}
@@ -330,24 +324,15 @@ func (m *Model) moveRespSelWrap(p *responsePaneState, dir int) tea.Cmd {
 		return nil
 	}
 
-	step := p.viewport.Height
-	if step < 1 {
-		step = 1
-	}
+	step := max(p.viewport.Height, 1)
 
-	cur := p.sel.c
-	if cur < 0 {
-		cur = 0
-	}
+	cur := max(p.sel.c, 0)
 	if cur >= len(cache.spans) {
 		cur = len(cache.spans) - 1
 	}
 
 	span := cache.spans[cur]
-	pos := span.start + (step * dir)
-	if pos < 0 {
-		pos = 0
-	}
+	pos := max(span.start+(step*dir), 0)
 	if pos >= len(cache.rev) {
 		pos = len(cache.rev) - 1
 	}
@@ -498,10 +483,7 @@ func respViewportHeight(p *responsePaneState) int {
 	if p == nil {
 		return 1
 	}
-	h := p.viewport.Height
-	if h < 1 {
-		h = 1
-	}
+	h := max(p.viewport.Height, 1)
 	return h
 }
 
@@ -509,10 +491,7 @@ func clampViewportOffset(offset, totalRows, height int) int {
 	if totalRows <= 0 {
 		return 0
 	}
-	maxOff := totalRows - height
-	if maxOff < 0 {
-		maxOff = 0
-	}
+	maxOff := max(totalRows-height, 0)
 	if offset < 0 {
 		return 0
 	}
@@ -1121,11 +1100,11 @@ func styleSGR(style lipgloss.Style) (string, string) {
 	if styled == sentinel {
 		return "", ""
 	}
-	idx := strings.Index(styled, sentinel)
-	if idx == -1 {
+	before, after, ok := strings.Cut(styled, sentinel)
+	if !ok {
 		return "", ""
 	}
-	return styled[:idx], styled[idx+len(sentinel):]
+	return before, after
 }
 
 func toTermenvColor(profile termenv.Profile, c lipgloss.TerminalColor) termenv.Color {
