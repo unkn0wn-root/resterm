@@ -2750,11 +2750,11 @@ GET https://example.com/audit
 	if step0.Using != "AuthLogin" {
 		t.Fatalf("expected first step to use AuthLogin, got %q", step0.Using)
 	}
-	if step0.Expect["status"] != "200 OK" {
-		t.Fatalf("expected first step expect.status=200 OK, got %q", step0.Expect["status"])
+	if step0.Expect.Status != "200 OK" {
+		t.Fatalf("expected first step expect.status=200 OK, got %q", step0.Expect.Status)
 	}
-	if step0.Expect["statuscode"] != "200" {
-		t.Fatalf("expected first step expect.statuscode=200, got %q", step0.Expect["statuscode"])
+	if step0.Expect.StatusCode == nil || *step0.Expect.StatusCode != 200 {
+		t.Fatalf("expected first step expect.statuscode=200, got %v", step0.Expect.StatusCode)
 	}
 	step1 := workflow.Steps[1]
 	if step1.OnFailure != restfile.WorkflowOnFailureStop {
@@ -2764,8 +2764,8 @@ GET https://example.com/audit
 	if step1.Vars[varsKey] != "{{vars.global.username}}" {
 		t.Fatalf("expected %s override, got %q", varsKey, step1.Vars[varsKey])
 	}
-	if step1.Expect["status"] != "201 Created" {
-		t.Fatalf("expected quoted status value, got %q", step1.Expect["status"])
+	if step1.Expect.Status != "201 Created" {
+		t.Fatalf("expected quoted status value, got %q", step1.Expect.Status)
 	}
 	step2 := workflow.Steps[2]
 	if step2.Options["capture"] != "global.auditId" {
@@ -2820,7 +2820,7 @@ GET https://example.com
 		t.Fatalf("expected 4 steps, got %d", len(workflow.Steps))
 	}
 	for i := 0; i < 3; i++ {
-		if len(workflow.Steps[i].Expect) != 0 {
+		if !workflow.Steps[i].Expect.Empty() {
 			t.Fatalf(
 				"expected step %d to have no expectations, got %v",
 				i+1,
@@ -2829,11 +2829,11 @@ GET https://example.com
 		}
 	}
 	mixed := workflow.Steps[3]
-	if mixed.Expect["status"] != "200 OK" {
-		t.Fatalf("expected mixed step expect.status=200 OK, got %q", mixed.Expect["status"])
+	if mixed.Expect.Status != "200 OK" {
+		t.Fatalf("expected mixed step expect.status=200 OK, got %q", mixed.Expect.Status)
 	}
-	if mixed.Expect["statuscode"] != "200" {
-		t.Fatalf("expected mixed step expect.statuscode=200, got %q", mixed.Expect["statuscode"])
+	if mixed.Expect.StatusCode == nil || *mixed.Expect.StatusCode != 200 {
+		t.Fatalf("expected mixed step expect.statuscode=200, got %v", mixed.Expect.StatusCode)
 	}
 }
 

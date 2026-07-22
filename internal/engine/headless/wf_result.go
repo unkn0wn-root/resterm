@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -31,11 +30,7 @@ const (
 	wfStatusSkipped  = "[SKIPPED]"
 )
 
-const (
-	workflowStepDefaultLabel = "step"
-	workflowExpectStatus     = "status"
-	workflowExpectStatusCode = "statuscode"
-)
+const workflowStepDefaultLabel = "step"
 
 type wfState struct {
 	doc      *restfile.Document
@@ -236,7 +231,7 @@ func workflowTransportOutcome(res *wfStepRes) (bool, string) {
 		if res.http.Duration > 0 {
 			res.dur = res.http.Duration
 		}
-		if res.http.StatusCode >= 400 && !hasStatusExpectation(res.step.Expect) {
+		if res.http.StatusCode >= 400 && !res.step.Expect.HasStatus() {
 			return false, fmt.Sprintf("unexpected status code %d", res.http.StatusCode)
 		}
 		return true, msg
@@ -265,18 +260,15 @@ func firstFailedWorkflowTest(tests []scripts.TestResult) (string, bool) {
 }
 
 func workflowExpectationFailure(res wfStepRes) (string, bool) {
-	if exp, ok := res.step.Expect[workflowExpectStatus]; ok {
-		want := strings.TrimSpace(exp)
-		if want == "" || !strings.EqualFold(want, strings.TrimSpace(res.status)) {
+	if res.step.Expect.Status != "" {
+		want := strings.TrimSpace(res.step.Expect.Status)
+		if !strings.EqualFold(want, strings.TrimSpace(res.status)) {
 			return fmt.Sprintf("expected status %s", want), true
 		}
 	}
 
-	if exp, ok := res.step.Expect[workflowExpectStatusCode]; ok {
-		want, err := strconv.Atoi(strings.TrimSpace(exp))
-		if err != nil {
-			return fmt.Sprintf("invalid expected status code %q", exp), true
-		}
+	if res.step.Expect.StatusCode != nil {
+		want := *res.step.Expect.StatusCode
 		got, ok := workflowStatusCode(res)
 		if !ok || got != want {
 			return fmt.Sprintf("expected status code %d", want), true
@@ -295,15 +287,6 @@ func workflowStatusCode(res wfStepRes) (int, bool) {
 	default:
 		return 0, false
 	}
-}
-
-func hasStatusExpectation(exp map[string]string) bool {
-	if len(exp) == 0 {
-		return false
-	}
-	_, hasStatus := exp[workflowExpectStatus]
-	_, hasStatusCode := exp[workflowExpectStatusCode]
-	return hasStatus || hasStatusCode
 }
 
 func toWorkflowStep(res wfStepRes) engine.WorkflowStep {

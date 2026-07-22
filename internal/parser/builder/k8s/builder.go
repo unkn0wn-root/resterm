@@ -3,11 +3,9 @@ package k8s
 import (
 	"fmt"
 	"strconv"
-	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
 	k8starget "github.com/unkn0wn-root/resterm/internal/k8s/target"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -42,33 +40,16 @@ func (e *DirectiveError) Unwrap() error {
 
 func ParseDirective(rest string) (Directive, error) {
 	res := Directive{}
-	trimmed := str.Trim(rest)
-	if trimmed == "" {
+	scope, name, opts, ok := options.ParseProfileHeader(
+		rest,
+		restfile.K8sScopeRequest,
+		restfile.K8sScopeFile,
+		restfile.K8sScopeGlobal,
+	)
+	if !ok {
 		return res, fmt.Errorf("@k8s requires options")
 	}
 
-	fields := lex.TokenizeFieldsEscaped(trimmed)
-	if len(fields) == 0 {
-		return res, fmt.Errorf("@k8s requires options")
-	}
-
-	scope := restfile.K8sScopeRequest
-	idx := 0
-	if sc, ok := parseK8sScope(fields[idx]); ok {
-		scope = sc
-		idx++
-	}
-
-	name := "default"
-	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
-		name = str.Trim(fields[idx])
-		idx++
-	}
-	if name == "" {
-		name = "default"
-	}
-
-	opts := options.Parse(strings.Join(fields[idx:], " "))
 	prof := restfile.K8sProfile{Scope: scope, Name: name}
 	profileErr := func(err error) error {
 		if err == nil {
@@ -116,15 +97,6 @@ func ParseDirective(rest string) (Directive, error) {
 	res.Profile = prof
 	res.Spec = &restfile.K8sSpec{Use: use, Inline: inline}
 	return res, nil
-}
-
-func parseK8sScope(token string) (restfile.K8sScope, bool) {
-	return dscope.Parse(
-		token,
-		restfile.K8sScopeRequest,
-		restfile.K8sScopeFile,
-		restfile.K8sScopeGlobal,
-	)
 }
 
 func applyK8sOptions(prof *restfile.K8sProfile, opts map[string]string) error {

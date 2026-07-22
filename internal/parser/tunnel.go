@@ -34,7 +34,7 @@ func (b *documentBuilder) handleSSH(line int, rest string) {
 
 	if res.Scope == restfile.SSHScopeGlobal || res.Scope == restfile.SSHScopeFile {
 		res.Profile.Scope = res.Scope
-		b.sshDefs = append(b.sshDefs, res.Profile)
+		b.file.ssh = append(b.file.ssh, res.Profile)
 	}
 }
 
@@ -69,7 +69,7 @@ func (b *documentBuilder) handleK8s(line int, rest string) {
 	if res.Scope == restfile.K8sScopeGlobal || res.Scope == restfile.K8sScopeFile {
 		res.Profile.Scope = res.Scope
 		res.Profile.Line = line
-		b.k8sDefs = append(b.k8sDefs, res.Profile)
+		b.file.k8s = append(b.file.k8s, res.Profile)
 	}
 }
 
@@ -84,5 +84,21 @@ func (b *documentBuilder) addInvalidK8sProfile(
 	prof.Line = line
 	prof.Invalid = true
 	prof.Error = message
-	b.k8sDefs = append(b.k8sDefs, prof)
+	b.file.k8s = append(b.file.k8s, prof)
+}
+
+func (b *documentBuilder) handleSSHDirective(line int, key, rest string) bool {
+	if key != "ssh" {
+		return false
+	}
+	b.handleSSH(line, rest)
+	return true
+}
+
+func (b *documentBuilder) handleK8sDirective(line int, key, rest string) bool {
+	if key != "k8s" {
+		return false
+	}
+	b.handleK8s(line, rest)
+	return true
 }

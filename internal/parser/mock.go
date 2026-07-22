@@ -11,9 +11,9 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/value"
+	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -151,46 +151,46 @@ func (b *documentBuilder) checkMockRoute(line int, m *mockBuilder) {
 	}
 }
 
-func (b *documentBuilder) handleMockBlockLine(ln int, line, trimmed string) {
+func (b *documentBuilder) handleMockBlockLine(ln line) {
 	m := b.mock
-	if strings.HasPrefix(trimmed, "###") {
+	if ln.isSeparator() {
 		m.trimStructuralBlankLine()
-		b.handleSeparator(ln, trimmed)
+		b.handleSeparator(ln)
 		return
 	}
 
-	m.endLine = ln
-	if m.sequence != "" && restfile.IsMockSequenceDelimiter(trimmed) {
-		m.delimLine = ln
+	m.endLine = ln.no
+	if m.sequence != "" && restfile.IsMockSequenceDelimiter(ln.text) {
+		m.delimLine = ln.no
 		if !m.started() {
-			b.addMockError(ln, "@mock sequence has an empty response")
+			b.addMockError(ln.no, "@mock sequence has an empty response")
 			return
 		}
 		m.trimStructuralBlankLine()
-		m.finishResponse(b, ln)
+		m.finishResponse(b, ln.no)
 		return
 	}
 	switch {
 	case m.inBody:
-		m.body = append(m.body, line)
+		m.body = append(m.body, ln.raw)
 	case m.status == 0:
-		m.parsePreamble(b, ln, trimmed)
-	case trimmed == "":
+		m.parsePreamble(b, ln.no, ln.text)
+	case ln.text == "":
 		m.inBody = true
 	default:
-		m.addHeader(b, ln, line)
+		m.addHeader(b, ln.no, ln.raw)
 	}
 }
 
-func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, trimmed string) {
-	if trimmed == "" {
+func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, s string) {
+	if s == "" {
 		return
 	}
-	if text, _, ok := stripComment(trimmed); ok {
+	if text, _, ok := stripComment(s); ok {
 		if !strings.HasPrefix(text, "@") {
 			return
 		}
-		key, raw := lex.SplitDirective(strings.TrimSpace(text[1:]))
+		key, raw := lexer.SplitDirective(strings.TrimSpace(text[1:]))
 		switch {
 		case key == "match" && len(m.responses) == 0:
 			m.addMatch(b, line, raw)
@@ -204,7 +204,7 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, trimmed string
 		return
 	}
 
-	status, recognized, err := parseMockStatusLine(trimmed)
+	status, recognized, err := parseMockStatusLine(s)
 	if !recognized {
 		b.addMockError(line, "expected an HTTP response status line in @mock block")
 	} else if err != nil {

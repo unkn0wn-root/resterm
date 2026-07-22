@@ -1,13 +1,9 @@
 package parser
 
 import (
-	"errors"
-	"slices"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
+	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -21,7 +17,7 @@ func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 		return
 	}
 
-	key, rest := lex.SplitDirective(directive)
+	key, rest := lexer.SplitDirective(directive)
 	if key == "" {
 		return
 	}
@@ -62,20 +58,29 @@ func (b *documentBuilder) handleComment(line, baseCol int, text string) {
 		return
 	}
 
+	b.handleRequestDirective(line, argCol, key, rest)
+}
+
+// handleRequestDirective routes request scoped directives and creates the
+// request on demand. When the directive turns out to be unknown, that fresh
+// request is rolled back again. Leaving it open would swallow shorthand
+// variables that belong to the file rather than to any request.
+func (b *documentBuilder) handleRequestDirective(no, argCol int, key, rest string) bool {
 	startedRequest := !b.inRequest
-	b.ensureRequest(line)
-	if b.handleRequestBuilderDirective(key, rest) {
-		return
-	}
-	if b.handleRequestMetadataDirective(line, argCol, key, rest) {
-		return
+	b.ensureRequest(no)
+	switch {
+	case b.request.protoDirective(key, rest):
+		return true
+	case key == "body" && b.request.handleBodyDirective(rest):
+		return true
+	case b.handleRequestMetadataDirective(no, argCol, key, rest):
+		return true
 	}
 	if startedRequest {
-		// Unknown directive outside requests should be ignored, not create a
-		// synthetic request that captures subsequent shorthand vars.
 		b.inRequest = false
 		b.request = nil
 	}
+	return false
 }
 
 // directiveArgCol returns the 1-based source column of a directive's argument
@@ -118,8 +123,8 @@ func (b *documentBuilder) handleWorkflowStart(line int, key, rest string) bool {
 		return true
 	case "step":
 		if b.workflow != nil {
-			if err := b.workflow.addStep(line, rest); err != "" {
-				b.addError(line, err)
+			if err := b.workflow.addStep(line, rest); err != nil {
+				b.addError(line, err.Error())
 			}
 		}
 		return true
@@ -140,7 +145,7 @@ func (b *documentBuilder) handleUseDirective(line int, key, rest string) bool {
 	if b.inRequest && b.request != nil {
 		b.request.metadata.Uses = append(b.request.metadata.Uses, spec)
 	} else {
-		b.fileUses = append(b.fileUses, spec)
+		b.file.uses = append(b.file.uses, spec)
 	}
 	return true
 }
@@ -149,23 +154,13 @@ func (b *documentBuilder) handleWorkflowDirective(line int, key, rest string) bo
 	if b.workflow == nil || b.inRequest {
 		return false
 	}
-	if handled, errMsg := b.workflow.handleDirective(key, rest, line); handled {
-		if errMsg != "" {
-			b.addError(line, errMsg)
+	if handled, err := b.workflow.handleDirective(key, rest, line); handled {
+		if err != nil {
+			b.addError(line, err.Error())
 		}
 		return true
 	}
 	return false
-}
-
-func (b *documentBuilder) handleConstDirective(line int, key, rest string) bool {
-	if key != "const" {
-		return false
-	}
-	if name, value := options.ParseNameValue(rest); name != "" {
-		b.addConstant(name, value, line)
-	}
-	return true
 }
 
 func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
@@ -198,7 +193,7 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 		}
 		spec := restfile.CloneAuthSpecValue(*dir.Spec)
 		spec.SourcePath = b.doc.Path
-		b.authDefs = append(b.authDefs, restfile.AuthProfile{
+		b.file.auth = append(b.file.auth, restfile.AuthProfile{
 			Scope:      dir.Scope,
 			Name:       dir.Name,
 			Spec:       spec,
@@ -223,22 +218,6 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 	return true
 }
 
-func (b *documentBuilder) handleSSHDirective(line int, key, rest string) bool {
-	if key != "ssh" {
-		return false
-	}
-	b.handleSSH(line, rest)
-	return true
-}
-
-func (b *documentBuilder) handleK8sDirective(line int, key, rest string) bool {
-	if key != "k8s" {
-		return false
-	}
-	b.handleK8s(line, rest)
-	return true
-}
-
 func (b *documentBuilder) handlePatchDirective(line, argCol int, key, rest string) bool {
 	if key != "patch" {
 		return false
@@ -256,7 +235,7 @@ func (b *documentBuilder) handlePatchDirective(line, argCol int, key, rest strin
 		spec.Col = c
 	}
 	spec.SourcePath = b.doc.Path
-	b.patchDefs = append(b.patchDefs, spec)
+	b.file.patches = append(b.file.patches, spec)
 	return true
 }
 
@@ -266,360 +245,51 @@ func (b *documentBuilder) handleFileSettingsDirective(key, rest string) bool {
 	}
 	switch key {
 	case "setting":
-		b.handleFileSetting(rest)
+		b.file.settings = putSetting(b.file.settings, rest)
 		return true
 	case "settings":
-		b.fileSettings = applySettingsTokens(b.fileSettings, rest)
+		b.file.settings = applySettingsTokens(b.file.settings, rest)
 		return true
 	default:
 		return false
 	}
 }
 
-func (b *documentBuilder) handleRequestBuilderDirective(key, rest string) bool {
-	if b.request.grpc.HandleDirective(key, rest) {
+func (b *documentBuilder) handleBlockComment(ln line) bool {
+	if b.inBlock {
+		content, closed := parseBlockCommentLine(ln.text)
+		if content != "" {
+			b.handleComment(ln.no, 0, content)
+		}
+		b.appendLine(ln.raw)
+		if closed {
+			b.inBlock = false
+		}
 		return true
 	}
-	if b.request.websocket.HandleDirective(key, rest) {
-		return true
-	}
-	if b.request.sse.HandleDirective(key, rest) {
-		return true
-	}
-	if b.request.graphql.HandleDirective(key, rest) {
-		return true
-	}
-	if key == "body" {
-		return b.request.handleBodyDirective(rest)
-	}
-	return false
-}
 
-func (b *documentBuilder) handleRequestMetadataDirective(line, argCol int, key, rest string) bool {
-	switch key {
-	case "name":
-		if rest != "" {
-			value := lex.TrimQuotes(strings.TrimSpace(rest))
-			b.request.metadata.Name = value
+	if ln.isBlockCommentStart() {
+		content, closed := cutBlockCommentStart(ln.text)
+		if content != "" {
+			b.handleComment(ln.no, 0, content)
 		}
-		return true
-	case "description", "desc":
-		if b.request.metadata.Description != "" {
-			b.request.metadata.Description += "\n"
+		b.appendLine(ln.raw)
+		if !closed {
+			b.inBlock = true
 		}
-		b.request.metadata.Description += rest
-		return true
-	case "tag", "tags":
-		tags := strings.Fields(rest)
-		if len(tags) == 0 {
-			tags = strings.Split(rest, ",")
-		}
-		for _, tag := range tags {
-			tag = strings.TrimSpace(tag)
-			if tag == "" {
-				continue
-			}
-			if !slices.ContainsFunc(b.request.metadata.Tags, func(item string) bool {
-				return strings.EqualFold(item, tag)
-			}) {
-				b.request.metadata.Tags = append(b.request.metadata.Tags, tag)
-			}
-		}
-		return true
-	case "no-log", "nolog":
-		b.request.metadata.NoLog = true
-		return true
-	case "log-sensitive-headers", "log-secret-headers":
-		if rest == "" {
-			b.request.metadata.AllowSensitiveHeaders = true
-			return true
-		}
-		if value, ok := dvalue.ParseBool(rest); ok {
-			b.request.metadata.AllowSensitiveHeaders = value
-		}
-		return true
-	case "settings":
-		b.request.settings = applySettingsTokens(b.request.settings, rest)
-		return true
-	case "setting":
-		key, value := lex.SplitDirective(rest)
-		if key != "" {
-			if b.request.settings == nil {
-				b.request.settings = make(map[string]string)
-			}
-			b.request.settings[key] = value
-		}
-		return true
-	case "timeout":
-		if b.request.settings == nil {
-			b.request.settings = make(map[string]string)
-		}
-		b.request.settings["timeout"] = rest
-		return true
-	case "var":
-		name, value := options.ParseNameValue(rest)
-		if name == "" {
-			return true
-		}
-		variable := restfile.Variable{
-			Name:   name,
-			Value:  value,
-			Line:   line,
-			Scope:  restfile.ScopeRequest,
-			Secret: false,
-		}
-		b.request.variables = append(b.request.variables, variable)
-		return true
-	case "script":
-		if rest != "" {
-			b.setScript(rest, "")
-		} else {
-			b.request.discardScript = false
-		}
-		return true
-	case "rts":
-		if err := b.setRTSScript(rest); err != nil {
-			b.addError(line, err.Error())
-		}
-		return true
-	case "apply":
-		spec, err := parseApplySpec(rest, line)
-		if err != nil {
-			b.addError(line, err.Error())
-			return true
-		}
-		if c := exprCol(rest, spec.Expression, argCol); c > 0 {
-			spec.Col = c
-		}
-		b.request.metadata.Applies = append(b.request.metadata.Applies, spec)
-		return true
-	case "capture":
-		if capture, ok := b.parseCaptureDirective(rest, line); ok {
-			if c := exprCol(rest, capture.Expression, argCol); c > 0 {
-				capture.Col = c
-			}
-			b.request.metadata.Captures = append(b.request.metadata.Captures, capture)
-		}
-		return true
-	case "assert":
-		if spec, ok := b.parseAssertDirective(rest, line, argCol); ok {
-			b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
-		} else {
-			b.addError(line, "@assert expression missing")
-		}
-		return true
-	case "when", "skip-if":
-		negate := key == "skip-if"
-		spec, err := parseConditionSpec(rest, line, negate)
-		if err != nil {
-			b.addError(line, err.Error())
-			return true
-		}
-		if b.request.metadata.When != nil {
-			b.addError(line, "@when directive already defined for this request")
-			return true
-		}
-		if c := exprCol(rest, spec.Expression, argCol); c > 0 {
-			spec.Col = c
-		}
-		b.request.metadata.When = spec
-		return true
-	case "for-each":
-		spec, err := parseForEachSpec(rest, line)
-		if err != nil {
-			b.addError(line, err.Error())
-			return true
-		}
-		if b.request.metadata.ForEach != nil {
-			b.addError(line, "@for-each directive already defined for this request")
-			return true
-		}
-		b.request.metadata.ForEach = spec
-		return true
-	case "profile":
-		if spec := parseProfileSpec(rest); spec != nil {
-			b.request.metadata.Profile = spec
-		}
-		return true
-	case "trace":
-		if spec := parseTraceSpec(rest); spec != nil {
-			b.request.metadata.Trace = spec
-		}
-		return true
-	case "compare":
-		if b.request.metadata.Compare != nil {
-			b.addError(line, "@compare directive already defined for this request")
-			return true
-		}
-		spec, err := parseCompareDirective(rest)
-		if err != nil {
-			b.addError(line, err.Error())
-			return true
-		}
-		b.request.metadata.Compare = spec
 		return true
 	}
 	return false
 }
 
-func (b *documentBuilder) setScript(rest, lang string) {
-	k, l := parseScriptSpec(rest)
-	if lang != "" {
-		l = normScriptLang(lang)
+func (b *documentBuilder) handleCommentLine(ln line) bool {
+	if commentText, col, ok := stripComment(ln.text); ok {
+		// col counts from the start of the trimmed text. Adding the offset of
+		// the trimmed text inside the raw line turns it into a source column.
+		base := strings.Index(ln.raw, ln.text) + col
+		b.handleComment(ln.no, base, commentText)
+		b.appendLine(ln.raw)
+		return true
 	}
-	b.request.currentScriptKind = k
-	b.request.currentScriptLang = l
-	b.request.discardScript = false
-}
-
-func (b *documentBuilder) setRTSScript(rest string) error {
-	k, l, err := parseRTSScriptSpec(rest)
-	if err != nil {
-		b.request.discardScript = true
-		b.request.flushPendingScript()
-		return err
-	}
-	b.request.currentScriptKind = k
-	b.request.currentScriptLang = l
-	b.request.discardScript = false
-	return nil
-}
-
-func applySettingsTokens(dst map[string]string, raw string) map[string]string {
-	opts := options.Parse(raw)
-	if len(opts) == 0 {
-		return dst
-	}
-	if dst == nil {
-		dst = make(map[string]string, len(opts))
-	}
-	for k, v := range opts {
-		if k == "" {
-			continue
-		}
-		dst[k] = v
-	}
-	return dst
-}
-
-func parseScriptSpec(rest string) (scriptKind, scriptLang) {
-	fields := lex.TokenizeFields(rest)
-	kind := scriptKind("")
-	lang := scriptLang("")
-	for _, field := range fields {
-		if strings.Contains(field, "=") {
-			continue
-		}
-		if kind == "" {
-			kind = scriptKind(field)
-			continue
-		}
-		if lang == "" {
-			if v, ok := scriptLangToken(field); ok {
-				lang = v
-			}
-		}
-	}
-	params := options.ParseFields(fields)
-	if v := params["lang"]; v != "" {
-		lang = scriptLang(v)
-	}
-	if v := params["language"]; v != "" && lang == "" {
-		lang = scriptLang(v)
-	}
-	return normScriptKind(kind.String()), normScriptLang(lang.String())
-}
-
-func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
-	fields := lex.TokenizeFields(rest)
-	var kind scriptKind
-	kindSet := false
-
-	for _, field := range fields {
-		if strings.Contains(field, "=") {
-			continue
-		}
-		if lang, ok := scriptLangToken(field); ok {
-			if lang != scriptLangRTS {
-				return "", "", errRTSLangUnsupported()
-			}
-			continue
-		}
-
-		next, err := parseRTSScriptKind(field)
-		if err != nil {
-			return "", "", err
-		}
-		if kindSet {
-			return "", "", errRTSMultipleModes()
-		}
-		kind = next
-		kindSet = true
-	}
-
-	if err := validateRTSScriptLangOptions(fields); err != nil {
-		return "", "", err
-	}
-	if !kindSet {
-		return "", "", errRTSModeRequired()
-	}
-
-	return kind, scriptLangRTS, nil
-}
-
-func parseRTSScriptKind(field string) (scriptKind, error) {
-	switch kind := normScriptKind(field); kind {
-	case scriptKindPreRequest:
-		return kind, nil
-	case scriptKindTest, scriptKindTests:
-		return "", errRTSTestUnsupported()
-	default:
-		return "", errRTSModeUnsupported()
-	}
-}
-
-func validateRTSScriptLangOptions(fields []string) error {
-	params := options.ParseFields(fields)
-	for _, opt := range []string{"lang", "language"} {
-		if val := params[opt]; val != "" && normScriptLang(val) != scriptLangRTS {
-			return errRTSLangUnsupported()
-		}
-	}
-	return nil
-}
-
-func errRTSTestUnsupported() error {
-	return errors.New(
-		"@rts test is not supported, use @assert for RTS response checks or @script test for JavaScript tests",
-	)
-}
-
-func errRTSLangUnsupported() error {
-	return errors.New(
-		"@rts only supports RestermScript, remove lang=js or use @script for JavaScript",
-	)
-}
-
-func errRTSModeRequired() error {
-	return errors.New("@rts requires a mode, use '@rts pre-request'")
-}
-
-func errRTSModeUnsupported() error {
-	return errors.New("@rts supports only pre-request mode, use '@rts pre-request'")
-}
-
-func errRTSMultipleModes() error {
-	return errors.New("@rts accepts only one mode, use '@rts pre-request'")
-}
-
-func scriptLangToken(tok string) (scriptLang, bool) {
-	out := strings.ToLower(strings.TrimSpace(tok))
-	switch out {
-	case "js", "javascript":
-		return scriptLangJS, true
-	case "rts", "restermlang":
-		return scriptLangRTS, true
-	default:
-		return "", false
-	}
+	return false
 }

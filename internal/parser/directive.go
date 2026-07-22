@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
 	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
+	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -59,7 +59,7 @@ func parseApplyUses(raw string) ([]string, error) {
 		if !strings.EqualFold(strings.TrimSpace(k), "use") {
 			return nil, fmt.Errorf("@apply token %q must be use=<name>", p)
 		}
-		n := strings.TrimSpace(lex.TrimQuotes(v))
+		n := strings.TrimSpace(lexer.TrimQuotes(v))
 		if !validPatchName(n) {
 			return nil, fmt.Errorf("@apply use name %q is invalid", n)
 		}
@@ -72,7 +72,7 @@ func parseApplyUses(raw string) ([]string, error) {
 }
 
 func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
-	scTok, rem := lex.SplitFirst(rest)
+	scTok, rem := lexer.SplitFirst(rest)
 	if scTok == "" {
 		return restfile.PatchProfile{}, fmt.Errorf(
 			"@patch requires '<scope> <name> <expression>'",
@@ -82,7 +82,7 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 	if !ok {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch scope must be file or global")
 	}
-	n, rem := lex.SplitFirst(rem)
+	n, rem := lexer.SplitFirst(rem)
 	n = strings.TrimSpace(n)
 	if !validPatchName(n) {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch name %q is invalid", n)
@@ -120,7 +120,7 @@ func validPatchName(n string) bool {
 		return false
 	}
 	for _, r := range n {
-		if lex.IsIdentRune(r) {
+		if lexer.IsIdentRune(r) {
 			continue
 		}
 		if r == '-' || r == '.' {
@@ -132,7 +132,7 @@ func validPatchName(n string) bool {
 }
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
-	f := lex.TokenizeFields(rest)
+	f := lexer.Fields(rest)
 	n := len(f)
 	switch n {
 	case 0:
@@ -157,7 +157,7 @@ func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
 		if p == "" || a == "" {
 			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
 		}
-		if !lex.IsIdent(a) {
+		if !lexer.IsIdent(a) {
 			return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", a)
 		}
 		return restfile.UseSpec{
@@ -184,28 +184,28 @@ func parseConditionSpec(rest string, line int, negate bool) (*restfile.Condition
 }
 
 func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
-	trimmed := strings.TrimSpace(rest)
-	if trimmed == "" {
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
 		return nil, fmt.Errorf("@for-each expression missing")
 	}
-	if idx := strings.LastIndex(trimmed, " as "); idx >= 0 {
-		expr := strings.TrimSpace(trimmed[:idx])
-		name := strings.TrimSpace(trimmed[idx+4:])
+	if idx := strings.LastIndex(rest, " as "); idx >= 0 {
+		expr := strings.TrimSpace(rest[:idx])
+		name := strings.TrimSpace(rest[idx+4:])
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
 		}
-		if !lex.IsIdent(name) {
+		if !lexer.IsIdent(name) {
 			return nil, fmt.Errorf("@for-each name %q is invalid", name)
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
 	}
-	if idx := strings.Index(trimmed, " in "); idx >= 0 {
-		name := strings.TrimSpace(trimmed[:idx])
-		expr := strings.TrimSpace(trimmed[idx+4:])
+	if idx := strings.Index(rest, " in "); idx >= 0 {
+		name := strings.TrimSpace(rest[:idx])
+		expr := strings.TrimSpace(rest[idx+4:])
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
 		}
-		if !lex.IsIdent(name) {
+		if !lexer.IsIdent(name) {
 			return nil, fmt.Errorf("@for-each name %q is invalid", name)
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
@@ -241,12 +241,12 @@ type authDirective struct {
 
 func parseAuthDirective(rest string) (authDirective, bool, error) {
 	dir := authDirective{Scope: restfile.AuthScopeRequest}
-	trimmed := strings.TrimSpace(rest)
-	if trimmed == "" {
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
 		return dir, false, nil
 	}
 
-	fields := lex.TokenizeFields(trimmed)
+	fields := lexer.Fields(rest)
 	if len(fields) == 0 {
 		return dir, false, nil
 	}
@@ -302,7 +302,7 @@ func parseAuthScope(token string) (restfile.AuthScope, bool) {
 }
 
 func parseAuthSpec(rest string) *restfile.AuthSpec {
-	fields := lex.TokenizeFields(rest)
+	fields := lexer.Fields(rest)
 	if len(fields) == 0 {
 		return nil
 	}
@@ -360,15 +360,15 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 }
 
 func parseProfileSpec(rest string) *restfile.ProfileSpec {
-	trimmed := strings.TrimSpace(rest)
+	rest = strings.TrimSpace(rest)
 	spec := &restfile.ProfileSpec{}
 
-	if trimmed == "" {
+	if rest == "" {
 		spec.Count = 10
 		return spec
 	}
 
-	fields := lex.TokenizeFields(trimmed)
+	fields := lexer.Fields(rest)
 	params := options.ParseFields(fields)
 
 	if spec.Count == 0 {
@@ -408,78 +408,14 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 
 func parseTraceSpec(rest string) *restfile.TraceSpec {
 	spec := &restfile.TraceSpec{Enabled: true}
-	trimmed := strings.TrimSpace(rest)
-	if trimmed == "" {
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
 		return spec
 	}
 
-	fields := lex.TokenizeFields(trimmed)
-	for _, field := range fields {
-		value := strings.TrimSpace(field)
-		if value == "" {
-			continue
-		}
-		lower := strings.ToLower(value)
-		switch lower {
-		case "off", "disable", "disabled", "false":
-			spec.Enabled = false
-			continue
-		case "on", "enable", "enabled", "true":
-			spec.Enabled = true
-			continue
-		}
-
-		if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
-			name := tracebudget.NormalizePhase(parts[0])
-			dur := parseDuration(parts[1])
-			if name == "" || dur <= 0 {
-				continue
-			}
-			if name == tracebudget.TotalPhase {
-				spec.Budgets.Total = dur
-				continue
-			}
-			if spec.Budgets.Phases == nil {
-				spec.Budgets.Phases = make(map[string]time.Duration)
-			}
-			spec.Budgets.Phases[name] = dur
-			continue
-		}
-
-		if idx := strings.Index(value, "="); idx != -1 {
-			key := strings.ToLower(strings.TrimSpace(value[:idx]))
-			val := strings.TrimSpace(value[idx+1:])
-			switch key {
-			case "enabled":
-				if b, ok := dvalue.ParseBool(val); ok {
-					spec.Enabled = b
-				}
-			case "total":
-				if dur := parseDuration(val); dur > 0 {
-					spec.Budgets.Total = dur
-				}
-			case "tolerance", "allowance", "grace":
-				if dur := parseDuration(val); dur >= 0 {
-					spec.Budgets.Tolerance = dur
-				}
-			default:
-				dur := parseDuration(val)
-				if dur <= 0 {
-					continue
-				}
-				name := tracebudget.NormalizePhase(key)
-				if name == "" {
-					continue
-				}
-				if name == tracebudget.TotalPhase {
-					spec.Budgets.Total = dur
-					continue
-				}
-				if spec.Budgets.Phases == nil {
-					spec.Budgets.Phases = make(map[string]time.Duration)
-				}
-				spec.Budgets.Phases[name] = dur
-			}
+	for _, field := range lexer.Fields(rest) {
+		if value := strings.TrimSpace(field); value != "" {
+			applyTraceToken(spec, value)
 		}
 	}
 
@@ -489,8 +425,75 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 	return spec
 }
 
+// applyTraceToken handles one @trace token, which is an on/off word, a
+// "phase<=dur" budget or a key=value option. The budget form has to be
+// checked before the plain option form because it contains "=" as well.
+func applyTraceToken(spec *restfile.TraceSpec, value string) {
+	switch strings.ToLower(value) {
+	case "off", "disable", "disabled", "false":
+		spec.Enabled = false
+		return
+	case "on", "enable", "enabled", "true":
+		spec.Enabled = true
+		return
+	}
+
+	if parts := strings.SplitN(value, "<=", 2); len(parts) == 2 {
+		name := tracebudget.NormalizePhase(parts[0])
+		dur := parseDuration(parts[1])
+		if name != "" && dur > 0 {
+			setTracePhaseBudget(spec, name, dur)
+		}
+		return
+	}
+
+	if idx := strings.Index(value, "="); idx != -1 {
+		key := strings.ToLower(strings.TrimSpace(value[:idx]))
+		val := strings.TrimSpace(value[idx+1:])
+		applyTraceOption(spec, key, val)
+	}
+}
+
+func applyTraceOption(spec *restfile.TraceSpec, key, val string) {
+	switch key {
+	case "enabled":
+		if b, ok := dvalue.ParseBool(val); ok {
+			spec.Enabled = b
+		}
+	case "total":
+		if dur := parseDuration(val); dur > 0 {
+			spec.Budgets.Total = dur
+		}
+	case "tolerance", "allowance", "grace":
+		if dur := parseDuration(val); dur >= 0 {
+			spec.Budgets.Tolerance = dur
+		}
+	default:
+		dur := parseDuration(val)
+		if dur <= 0 {
+			return
+		}
+		name := tracebudget.NormalizePhase(key)
+		if name == "" {
+			return
+		}
+		setTracePhaseBudget(spec, name, dur)
+	}
+}
+
+func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duration) {
+	if name == tracebudget.TotalPhase {
+		spec.Budgets.Total = dur
+		return
+	}
+	if spec.Budgets.Phases == nil {
+		spec.Budgets.Phases = make(map[string]time.Duration)
+	}
+	spec.Budgets.Phases[name] = dur
+}
+
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
-	fields := lex.TokenizeFields(rest)
+	fields := lexer.Fields(rest)
 	envs := make([]string, 0, len(fields))
 	seen := make(map[string]struct{})
 	var baseline string

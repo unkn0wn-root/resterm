@@ -4,8 +4,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
+	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
 	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
+	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 )
 
 var nameValueRe = regexp.MustCompile(`^([A-Za-z0-9_.-]+)(?:\s*(?::|=)\s*(.*?)|\s+(\S.*))?$`)
@@ -15,7 +16,7 @@ func Parse(input string) map[string]string {
 	if tr == "" {
 		return map[string]string{}
 	}
-	tos := lex.TokenizeFieldsEscaped(tr)
+	tos := lexer.FieldsEscaped(tr)
 	if len(tos) == 0 {
 		return map[string]string{}
 	}
@@ -34,9 +35,42 @@ func Parse(input string) map[string]string {
 		if key == "" {
 			continue
 		}
-		ops[strings.ToLower(key)] = lex.TrimQuotes(val)
+		ops[strings.ToLower(key)] = lexer.TrimQuotes(val)
 	}
 	return ops
+}
+
+// ParseProfileHeader splits a profile directive such as @ssh or @k8s into an
+// optional scope token, an optional name token and key=value options. The
+// name is the first field that has no "=". ok is false when rest has no
+// tokens at all. Tokenization strips quotes, so a quoted value that
+// contained spaces gets split apart again by the option parse that follows.
+func ParseProfileHeader[T ~int](
+	rest string,
+	request, file, global T,
+) (scope T, name string, opts map[string]string, ok bool) {
+	scope = request
+	fields := lexer.FieldsEscaped(strings.TrimSpace(rest))
+	if len(fields) == 0 {
+		return scope, "", nil, false
+	}
+
+	idx := 0
+	if sc, ok := dscope.Parse(fields[idx], request, file, global); ok {
+		scope = sc
+		idx++
+	}
+
+	name = "default"
+	if idx < len(fields) && !strings.Contains(fields[idx], "=") {
+		name = strings.TrimSpace(fields[idx])
+		idx++
+	}
+	if name == "" {
+		name = "default"
+	}
+
+	return scope, name, Parse(strings.Join(fields[idx:], " ")), true
 }
 
 func ParseFields(fields []string) map[string]string {
@@ -51,7 +85,7 @@ func ParseFields(fields []string) map[string]string {
 			if key == "" {
 				continue
 			}
-			pairs[strings.ToLower(key)] = lex.TrimQuotes(val)
+			pairs[strings.ToLower(key)] = lexer.TrimQuotes(val)
 		}
 	}
 	return pairs

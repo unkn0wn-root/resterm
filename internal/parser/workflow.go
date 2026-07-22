@@ -1,79 +1,25 @@
 package parser
 
 import (
+	"errors"
 	"fmt"
 	"maps"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/lex"
 	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
-type expectValidator func(raw string) error
-
-const (
-	wfKeyDesc    = "description"
-	wfKeyDescAlt = "desc"
-	wfKeyTag     = "tag"
-	wfKeyTags    = "tags"
-	wfKeyWhen    = "when"
-	wfKeySkipIf  = "skip-if"
-	wfKeyForEach = "for-each"
-	wfKeySwitch  = "switch"
-	wfKeyCase    = "case"
-	wfKeyDefault = "default"
-	wfKeyIf      = "if"
-	wfKeyElif    = "elif"
-	wfKeyElse    = "else"
-	wfOptOnFail  = "on-failure"
-	wfOptOnFail2 = "onfailure"
-	wfOptRun     = "run"
-	wfOptUsing   = "using"
-	wfOptFail    = "fail"
-	wfOptName    = "name"
-	wfPreExpect  = "expect."
-	wfPreVars    = "vars."
-
-	wfExpectStatus     = "status"
-	wfExpectStatusCode = "statuscode"
-
-	wfFailureStop     = string(restfile.WorkflowOnFailureStop)
-	wfFailureContinue = string(restfile.WorkflowOnFailureContinue)
-	wfFailureFail     = "fail"
-	wfFailureAbort    = "abort"
-	wfFailureSkip     = "skip"
-)
-
 var workflowFailureAliases = map[string]restfile.WorkflowFailureMode{
-	wfFailureStop:     restfile.WorkflowOnFailureStop,
-	wfFailureFail:     restfile.WorkflowOnFailureStop,
-	wfFailureAbort:    restfile.WorkflowOnFailureStop,
-	wfFailureContinue: restfile.WorkflowOnFailureContinue,
-	wfFailureSkip:     restfile.WorkflowOnFailureContinue,
-}
-
-var expectValidators = map[string]expectValidator{
-	wfExpectStatus: func(raw string) error {
-		if str.Trim(raw) == "" {
-			return fmt.Errorf("expect.status requires a value")
-		}
-		return nil
-	},
-	wfExpectStatusCode: func(raw string) error {
-		t := str.Trim(raw)
-		if t == "" {
-			return fmt.Errorf("expect.statuscode requires a value")
-		}
-		if _, err := strconv.Atoi(t); err != nil {
-			return fmt.Errorf("expect.statuscode must be an integer, got %q", raw)
-		}
-		return nil
-	},
+	string(restfile.WorkflowOnFailureStop): restfile.WorkflowOnFailureStop,
+	"fail":                                 restfile.WorkflowOnFailureStop,
+	"abort":                                restfile.WorkflowOnFailureStop,
+	string(restfile.WorkflowOnFailureContinue): restfile.WorkflowOnFailureContinue,
+	"skip": restfile.WorkflowOnFailureContinue,
 }
 
 type workflowSwitchBuilder struct {
@@ -122,7 +68,7 @@ func (b *workflowBuilder) applyOptions(opts map[string]string) {
 	if len(opts) == 0 {
 		return
 	}
-	if mode, ok := popFailMode(opts, wfOptOnFail, wfOptOnFail2); ok {
+	if mode, ok := popFailMode(opts, "on-failure", "onfailure"); ok {
 		b.wf.DefaultOnFailure = mode
 	}
 	if len(opts) == 0 {
@@ -134,9 +80,9 @@ func (b *workflowBuilder) applyOptions(opts map[string]string) {
 	maps.Copy(b.wf.Options, opts)
 }
 
-func (b *workflowBuilder) handleDirective(key, rest string, line int) (bool, string) {
+func (b *workflowBuilder) handleDirective(key, rest string, line int) (bool, error) {
 	key = str.LowerTrim(key)
-	if err := b.flushOpen(key, line); err != "" {
+	if err := b.flushOpen(key, line); err != nil {
 		return true, err
 	}
 	if handled, err := b.handleWorkflowMeta(key, rest, line); handled {
@@ -151,135 +97,126 @@ func (b *workflowBuilder) handleDirective(key, rest string, line int) (bool, str
 	if handled, err := b.handleWorkflowIf(key, rest, line); handled {
 		return true, err
 	}
-	return false, ""
+	return false, nil
 }
 
-func (b *workflowBuilder) flushOpen(key string, line int) string {
-	if b.sw != nil && key != wfKeyCase && key != wfKeyDefault {
+func (b *workflowBuilder) flushOpen(key string, line int) error {
+	if b.sw != nil && key != "case" && key != "default" {
 		return b.flushFlow(line)
 	}
-	if b.ifb != nil && key != wfKeyElif && key != wfKeyElse {
+	if b.ifb != nil && key != "elif" && key != "else" {
 		return b.flushFlow(line)
 	}
-	return ""
+	return nil
 }
 
-func (b *workflowBuilder) handleWorkflowMeta(key, rest string, line int) (bool, string) {
+func (b *workflowBuilder) handleWorkflowMeta(key, rest string, line int) (bool, error) {
 	switch key {
-	case wfKeyDesc, wfKeyDescAlt:
+	case "description", "desc":
 		if rest == "" {
-			return true, ""
+			return true, nil
 		}
-		if b.wf.Description != "" {
-			b.wf.Description += "\n"
-		}
-		b.wf.Description += rest
+		b.wf.Description = appendDesc(b.wf.Description, rest)
 		b.touch(line)
-		return true, ""
-	case wfKeyTag, wfKeyTags:
+		return true, nil
+	case "tag", "tags":
 		tags := parseTagList(rest)
 		if len(tags) == 0 {
-			return true, ""
+			return true, nil
 		}
-		for _, tag := range tags {
-			if !slices.ContainsFunc(b.wf.Tags, func(item string) bool {
-				return strings.EqualFold(item, tag)
-			}) {
-				b.wf.Tags = append(b.wf.Tags, tag)
-			}
-		}
+		b.wf.Tags = appendTagsFold(b.wf.Tags, tags)
 		b.touch(line)
-		return true, ""
+		return true, nil
 	default:
-		return false, ""
+		return false, nil
 	}
 }
 
-func (b *workflowBuilder) handleWorkflowCondition(key, rest string, line int) (bool, string) {
+func (b *workflowBuilder) handleWorkflowCondition(key, rest string, line int) (bool, error) {
 	switch key {
-	case wfKeyWhen, wfKeySkipIf:
-		if err := b.requireNoPending(); err != "" {
+	case "when", "skip-if":
+		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		spec, err := parseConditionSpec(rest, line, key == wfKeySkipIf)
+		spec, err := parseConditionSpec(rest, line, key == "skip-if")
 		if err != nil {
-			return true, err.Error()
+			return true, err
 		}
 		if b.pendWhen != nil {
-			return true, "@when directive already defined for next step"
+			return true, errors.New("@when directive already defined for next step")
 		}
 		b.pendWhen = spec
 		b.touch(line)
-		return true, ""
-	case wfKeyForEach:
-		if err := b.requireNoPending(); err != "" {
+		return true, nil
+	case "for-each":
+		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
 		spec, err := parseForEachSpec(rest, line)
 		if err != nil {
-			return true, err.Error()
+			return true, err
 		}
 		if b.pendEach != nil {
-			return true, "@for-each directive already defined for next step"
+			return true, errors.New("@for-each directive already defined for next step")
 		}
 		b.pendEach = spec
 		b.touch(line)
-		return true, ""
+		return true, nil
 	default:
-		return false, ""
+		return false, nil
 	}
 }
 
-func (b *workflowBuilder) handleWorkflowSwitch(key, rest string, line int) (bool, string) {
+func (b *workflowBuilder) handleWorkflowSwitch(key, rest string, line int) (bool, error) {
 	switch key {
-	case wfKeySwitch:
-		if err := b.requireNoPending(); err != "" {
+	case "switch":
+		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		if err := b.flushFlow(line); err != "" {
+		if err := b.flushFlow(line); err != nil {
 			return true, err
 		}
 		expr := str.Trim(rest)
 		if expr == "" {
-			return true, "@switch expression missing"
+			return true, errors.New("@switch expression missing")
 		}
 		b.sw = &workflowSwitchBuilder{expr: expr, line: line}
 		b.touch(line)
-		return true, ""
-	case wfKeyCase:
+		return true, nil
+	case "case":
 		if b.sw == nil {
-			return true, "@case without @switch"
+			return true, errors.New("@case without @switch")
 		}
-		if err := b.sw.addCase(rest, line); err != "" {
+		if err := b.sw.addCase(rest, line); err != nil {
 			return true, err
 		}
 		b.touch(line)
-		return true, ""
-	case wfKeyDefault:
+		return true, nil
+	case "default":
 		if b.sw == nil {
-			return true, "@default without @switch"
+			return true, errors.New("@default without @switch")
 		}
-		if err := b.sw.addDefault(rest, line); err != "" {
+		if err := b.sw.addDefault(rest, line); err != nil {
 			return true, err
 		}
 		b.touch(line)
-		return true, ""
+		return true, nil
 	default:
-		return false, ""
+		return false, nil
 	}
 }
 
-func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, string) {
+func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, error) {
 	switch key {
-	case wfKeyIf:
-		if err := b.requireNoPending(); err != "" {
+	case "if":
+		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		if err := b.flushFlow(line); err != "" {
+		if err := b.flushFlow(line); err != nil {
 			return true, err
 		}
 		cond, run, fail, err := parseExprRun(rest, "@if expression missing")
-		if err != "" {
+		if err != nil {
 			return true, err
 		}
 		b.ifb = &workflowIfBuilder{
@@ -287,13 +224,13 @@ func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, st
 			line: line,
 		}
 		b.touch(line)
-		return true, ""
-	case wfKeyElif:
+		return true, nil
+	case "elif":
 		if b.ifb == nil {
-			return true, "@elif without @if"
+			return true, errors.New("@elif without @if")
 		}
 		cond, run, fail, err := parseExprRun(rest, "@elif expression missing")
-		if err != "" {
+		if err != nil {
 			return true, err
 		}
 		b.ifb.elifs = append(
@@ -301,41 +238,41 @@ func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, st
 			restfile.WorkflowIfBranch{Cond: cond, Run: run, Fail: fail, Line: line},
 		)
 		b.touch(line)
-		return true, ""
-	case wfKeyElse:
+		return true, nil
+	case "else":
 		if b.ifb == nil {
-			return true, "@else without @if"
+			return true, errors.New("@else without @if")
 		}
 		if b.ifb.els != nil {
-			return true, "@else already defined"
+			return true, errors.New("@else already defined")
 		}
 		opts := options.Parse(rest)
 		run, fail, err := parseWorkflowRunOptions(opts)
-		if err != "" {
+		if err != nil {
 			return true, err
 		}
 		b.ifb.els = &restfile.WorkflowIfBranch{Run: run, Fail: fail, Line: line}
 		b.touch(line)
-		return true, ""
+		return true, nil
 	default:
-		return false, ""
+		return false, nil
 	}
 }
 
-func (b *workflowBuilder) requireNoPending() string {
+func (b *workflowBuilder) requireNoPending() error {
 	if b.pendWhen != nil {
-		return "@when must be followed by @step"
+		return errors.New("@when must be followed by @step")
 	}
 	if b.pendEach != nil {
-		return "@for-each must be followed by @step"
+		return errors.New("@for-each must be followed by @step")
 	}
-	return ""
+	return nil
 }
 
-func (b *workflowBuilder) flushFlow(line int) string {
+func (b *workflowBuilder) flushFlow(line int) error {
 	if b.sw != nil {
 		if len(b.sw.cases) == 0 && b.sw.def == nil {
-			return "@switch requires at least one @case or @default"
+			return errors.New("@switch requires at least one @case or @default")
 		}
 		step := restfile.WorkflowStep{
 			Kind: restfile.WorkflowStepKindSwitch,
@@ -369,73 +306,73 @@ func (b *workflowBuilder) flushFlow(line int) string {
 		b.ifb = nil
 		b.touch(line)
 	}
-	return ""
+	return nil
 }
 
-func (sw *workflowSwitchBuilder) addCase(rest string, line int) string {
+func (sw *workflowSwitchBuilder) addCase(rest string, line int) error {
 	expr, run, fail, err := parseExprRun(rest, "@case expression missing")
-	if err != "" {
+	if err != nil {
 		return err
 	}
 	sw.cases = append(
 		sw.cases,
 		restfile.WorkflowSwitchCase{Expr: expr, Run: run, Fail: fail, Line: line},
 	)
-	return ""
+	return nil
 }
 
-func (sw *workflowSwitchBuilder) addDefault(rest string, line int) string {
+func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 	if sw.def != nil {
-		return "@default already defined"
+		return errors.New("@default already defined")
 	}
 	opts := options.Parse(rest)
 	run, fail, err := parseWorkflowRunOptions(opts)
-	if err != "" {
+	if err != nil {
 		return err
 	}
 	sw.def = &restfile.WorkflowSwitchCase{Run: run, Fail: fail, Line: line}
-	return ""
+	return nil
 }
 
-func parseExprRun(rest, miss string) (string, string, string, string) {
+func parseExprRun(rest, miss string) (expr, run, fail string, err error) {
 	expr, opts := splitExprOptions(rest)
 	expr = str.Trim(expr)
 	if expr == "" {
-		return "", "", "", miss
+		return "", "", "", errors.New(miss)
 	}
-	run, fail, err := parseWorkflowRunOptions(opts)
-	if err != "" {
+	run, fail, err = parseWorkflowRunOptions(opts)
+	if err != nil {
 		return "", "", "", err
 	}
-	return expr, run, fail, ""
+	return expr, run, fail, nil
 }
 
-func parseWorkflowRunOptions(opts map[string]string) (string, string, string) {
-	run := str.Trim(opts[wfOptRun])
+func parseWorkflowRunOptions(opts map[string]string) (run, fail string, err error) {
+	run = str.Trim(opts["run"])
 	if run == "" {
-		run = str.Trim(opts[wfOptUsing])
+		run = str.Trim(opts["using"])
 	}
-	fail := str.Trim(opts[wfOptFail])
+	fail = str.Trim(opts["fail"])
 	if run == "" && fail == "" {
-		return "", "", "expected run=... or fail=..."
+		return "", "", errors.New("missing a run= or fail= option")
 	}
 	if run != "" && fail != "" {
-		return "", "", "cannot combine run and fail"
+		return "", "", errors.New("cannot combine run and fail")
 	}
-	return run, fail, ""
+	return run, fail, nil
 }
 
-func (b *workflowBuilder) addStep(line int, rest string) string {
-	if err := b.flushFlow(line); err != "" {
+func (b *workflowBuilder) addStep(line int, rest string) error {
+	if err := b.flushFlow(line); err != nil {
 		return err
 	}
 	name, opts, err := parseStepSpec(rest)
-	if err != "" {
+	if err != nil {
 		return err
 	}
-	use := options.PopAny(opts, wfOptUsing, wfOptRun)
+	use := options.PopAny(opts, "using", "run")
 	if use == "" {
-		return "@step missing using request"
+		return errors.New("@step missing using request")
 	}
 	step := restfile.WorkflowStep{
 		Kind:      restfile.WorkflowStepKindRequest,
@@ -444,11 +381,13 @@ func (b *workflowBuilder) addStep(line int, rest string) string {
 		OnFailure: b.wf.DefaultOnFailure,
 		Line:      line,
 	}
-	if val := options.Pop(opts, wfOptOnFail); val != "" {
+	if val := options.Pop(opts, "on-failure"); val != "" {
 		if mode, ok := parseWorkflowFailureMode(val); ok {
 			step.OnFailure = mode
 		}
 	}
+	// A step with a bad expect option is still added so the workflow keeps
+	// its shape. The error is reported next to it.
 	expErr := applyStepOpts(&step, opts)
 	b.applyPending(&step)
 	b.wf.Steps = append(b.wf.Steps, step)
@@ -456,29 +395,29 @@ func (b *workflowBuilder) addStep(line int, rest string) string {
 	return expErr
 }
 
-func parseStepSpec(rest string) (string, map[string]string, string) {
+func parseStepSpec(rest string) (string, map[string]string, error) {
 	rem := str.Trim(rest)
 	if rem == "" {
-		return "", nil, "@step missing content"
+		return "", nil, errors.New("@step missing content")
 	}
 	name := ""
-	tok, tail := lex.SplitFirst(rem)
+	tok, tail := lexer.SplitFirst(rem)
 	if tok != "" && !strings.Contains(tok, "=") {
 		name = tok
 		rem = tail
 	}
 	opts := options.Parse(rem)
-	if nm, ok := opts[wfOptName]; ok {
+	if nm, ok := opts["name"]; ok {
 		if name == "" {
 			name = nm
 		}
-		delete(opts, wfOptName)
+		delete(opts, "name")
 	}
-	return name, opts, ""
+	return name, opts, nil
 }
 
 func splitExprOptions(input string) (string, map[string]string) {
-	tokens := lex.TokenizeFields(strings.TrimSpace(input))
+	tokens := lexer.Fields(strings.TrimSpace(input))
 	if len(tokens) == 0 {
 		return "", map[string]string{}
 	}
@@ -497,30 +436,42 @@ func splitExprOptions(input string) (string, map[string]string) {
 	return expr, opts
 }
 
-func applyStepOpts(step *restfile.WorkflowStep, opts map[string]string) string {
+func applyStepOpts(step *restfile.WorkflowStep, opts map[string]string) error {
 	if len(opts) == 0 {
-		return ""
+		return nil
 	}
 	var errs []string
 	var left map[string]string
 	for key, val := range opts {
 		switch {
-		case strings.HasPrefix(key, wfPreExpect):
-			suf := strings.TrimPrefix(key, wfPreExpect)
-			if suf == "" {
-				continue
-			}
-			if validate, ok := expectValidators[suf]; ok {
-				if err := validate(val); err != nil {
-					errs = append(errs, err.Error())
+		case strings.HasPrefix(key, "expect."):
+			switch suf := strings.TrimPrefix(key, "expect."); suf {
+			case "":
+			case "status":
+				if str.Trim(val) == "" {
+					errs = append(errs, "expect.status requires a value")
 					continue
 				}
+				step.Expect.Status = val
+			case "statuscode":
+				t := str.Trim(val)
+				if t == "" {
+					errs = append(errs, "expect.statuscode requires a value")
+					continue
+				}
+				n, err := strconv.Atoi(t)
+				if err != nil {
+					errs = append(errs, fmt.Sprintf("expect.statuscode must be an integer, got %q", val))
+					continue
+				}
+				step.Expect.StatusCode = &n
+			default:
+				if step.Expect.Extra == nil {
+					step.Expect.Extra = make(map[string]string)
+				}
+				step.Expect.Extra[suf] = val
 			}
-			if step.Expect == nil {
-				step.Expect = make(map[string]string)
-			}
-			step.Expect[suf] = val
-		case strings.HasPrefix(key, wfPreVars):
+		case strings.HasPrefix(key, "vars."):
 			key = str.Trim(key)
 			if key == "" {
 				continue
@@ -540,9 +491,9 @@ func applyStepOpts(step *restfile.WorkflowStep, opts map[string]string) string {
 		step.Options = left
 	}
 	if len(errs) > 0 {
-		return strings.Join(errs, "; ")
+		return errors.New(strings.Join(errs, "; "))
 	}
-	return ""
+	return nil
 }
 
 func (b *workflowBuilder) applyPending(step *restfile.WorkflowStep) {
@@ -576,11 +527,11 @@ func popFailMode(opts map[string]string, keys ...string) (restfile.WorkflowFailu
 }
 
 func parseWorkflowFailureMode(value string) (restfile.WorkflowFailureMode, bool) {
-	trimmed := strings.TrimSpace(strings.ToLower(value))
-	if trimmed == "" {
+	s := strings.TrimSpace(strings.ToLower(value))
+	if s == "" {
 		return "", false
 	}
-	mode, ok := workflowFailureAliases[trimmed]
+	mode, ok := workflowFailureAliases[s]
 	return mode, ok
 }
 
@@ -593,9 +544,9 @@ func parseTagList(text string) []string {
 	})
 	var tags []string
 	for _, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		if trimmed != "" {
-			tags = append(tags, trimmed)
+		part = strings.TrimSpace(part)
+		if part != "" {
+			tags = append(tags, part)
 		}
 	}
 	return tags

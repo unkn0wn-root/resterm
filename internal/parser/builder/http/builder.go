@@ -13,12 +13,12 @@ var methodRe = regexp.MustCompile(
 	`^(?i)(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS|TRACE|CONNECT|WS|WSS)\b`,
 )
 
-func IsMethodLine(line string) bool {
+func isMethodLine(line string) bool {
 	return methodRe.MatchString(line)
 }
 
 func ParseMethodLine(line string) (method string, url string, ver httpver.Version, ok bool) {
-	if !IsMethodLine(line) {
+	if !isMethodLine(line) {
 		return "", "", httpver.Unknown, false
 	}
 
@@ -41,13 +41,13 @@ func ParseMethodLine(line string) (method string, url string, ver httpver.Versio
 }
 
 func ParseWebSocketURLLine(line string) (url string, ok bool) {
-	trimmed := str.Trim(line)
-	if trimmed == "" {
+	s := str.Trim(line)
+	if s == "" {
 		return "", false
 	}
-	lower := str.LowerTrim(trimmed)
+	lower := str.Lower(s)
 	if strings.HasPrefix(lower, "ws://") || strings.HasPrefix(lower, "wss://") {
-		return trimmed, true
+		return s, true
 	}
 	return "", false
 }

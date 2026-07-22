@@ -78,7 +78,7 @@ func cloneWorkflowSteps(src []restfile.WorkflowStep) []restfile.WorkflowStep {
 
 func cloneWorkflowStep(src restfile.WorkflowStep) restfile.WorkflowStep {
 	dst := src
-	dst.Expect = maps.Clone(src.Expect)
+	dst.Expect = src.Expect.Clone()
 	dst.Vars = maps.Clone(src.Vars)
 	dst.Options = maps.Clone(src.Options)
 	dst.When = clonePtr(src.When)
