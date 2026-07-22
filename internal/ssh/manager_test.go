@@ -413,17 +413,15 @@ func TestDialPersistentConcurrentSharesClient(t *testing.T) {
 	var wg sync.WaitGroup
 	errs := make(chan error, n)
 	conns := make(chan net.Conn, n)
-	for i := 0; i < n; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range n {
+		wg.Go(func() {
 			conn, err := m.DialContext(context.Background(), cfg, "tcp", "x:80")
 			if err != nil {
 				errs <- err
 				return
 			}
 			conns <- conn
-		}()
+		})
 	}
 	close(start)
 	wg.Wait()

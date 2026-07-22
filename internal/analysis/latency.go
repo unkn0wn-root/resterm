@@ -2,6 +2,7 @@ package analysis
 
 import (
 	"math"
+	"slices"
 	"sort"
 	"time"
 )
@@ -42,7 +43,7 @@ func ComputeLatencyStats(durations []time.Duration, percentiles []int, bins int)
 	}
 
 	sorted := append([]time.Duration(nil), durations...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i] < sorted[j] })
+	slices.Sort(sorted)
 
 	stats.Count = count
 	stats.Min = sorted[0]
@@ -109,10 +110,7 @@ func computePercentiles(values []time.Duration, percentiles []int) map[int]time.
 		}
 
 		rank := float64(p) / 100 * float64(count)
-		idx := int(math.Ceil(rank)) - 1
-		if idx < 0 {
-			idx = 0
-		}
+		idx := max(int(math.Ceil(rank))-1, 0)
 		if idx >= count {
 			idx = count - 1
 		}

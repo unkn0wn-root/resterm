@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -366,10 +367,7 @@ func renderTimeline(report timelineReport, width int) string {
 		total = maxRowDuration(report.rows)
 	}
 
-	maxWidth := width - 32
-	if maxWidth < 10 {
-		maxWidth = 10
-	}
+	maxWidth := max(width-32, 10)
 	barWidth := clamp(barRowWidth, 10, maxWidth)
 	for _, row := range report.rows {
 		builder.WriteString(renderTimelineRow(row, total, barWidth, report.styles))
@@ -471,10 +469,7 @@ func renderTimelineBar(
 	if total > 0 {
 		ratio = float64(duration) / float64(total)
 	}
-	filled := int(math.Round(ratio * float64(width)))
-	if filled < 0 {
-		filled = 0
-	}
+	filled := max(int(math.Round(ratio*float64(width))), 0)
 	if filled > width {
 		filled = width
 	}
@@ -561,9 +556,7 @@ func cloneTraceSpec(spec *restfile.TraceSpec) *restfile.TraceSpec {
 	clone.Budgets.Tolerance = spec.Budgets.Tolerance
 	if len(spec.Budgets.Phases) > 0 {
 		phases := make(map[string]time.Duration, len(spec.Budgets.Phases))
-		for name, limit := range spec.Budgets.Phases {
-			phases[name] = limit
-		}
+		maps.Copy(phases, spec.Budgets.Phases)
 		clone.Budgets.Phases = phases
 	}
 	return clone

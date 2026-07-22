@@ -19,7 +19,7 @@ func TestManagerResolveCachesByEnvironment(t *testing.T) {
 	mgr.now = func() time.Time { return time.Unix(100, 0) }
 	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
 		n := calls.Add(1)
-		return []byte(fmt.Sprintf("token-%d", n)), nil
+		return fmt.Appendf(nil, "token-%d", n), nil
 	})
 
 	cfg := Config{Argv: []string{"gh"}, CacheKey: "github"}
@@ -58,7 +58,7 @@ func TestManagerResolveTTLRefreshesExpiredEntry(t *testing.T) {
 	mgr.now = func() time.Time { return now }
 	mgr.SetExecFunc(func(context.Context, Config) ([]byte, error) {
 		n := calls.Add(1)
-		return []byte(fmt.Sprintf("token-%d", n)), nil
+		return fmt.Appendf(nil, "token-%d", n), nil
 	})
 
 	cfg := Config{
@@ -418,13 +418,11 @@ func TestManagerResolveDeduplicatesInflightCalls(t *testing.T) {
 	ress := make(chan Result, 2)
 
 	for range 2 {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			res, err := mgr.Resolve(context.Background(), "dev", cfg)
 			errs <- err
 			ress <- res
-		}()
+		})
 	}
 
 	<-start

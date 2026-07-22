@@ -1,6 +1,7 @@
 package nettrace
 
 import (
+	"maps"
 	"sort"
 	"time"
 )
@@ -88,9 +89,7 @@ func (b Budget) Clone() Budget {
 	clone := Budget{Total: b.Total, Tolerance: b.Tolerance}
 	if len(b.Phases) > 0 {
 		clone.Phases = make(map[PhaseKind]time.Duration, len(b.Phases))
-		for kind, dur := range b.Phases {
-			clone.Phases[kind] = dur
-		}
+		maps.Copy(clone.Phases, b.Phases)
 	}
 	return clone
 }

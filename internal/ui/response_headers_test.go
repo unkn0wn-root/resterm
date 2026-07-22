@@ -187,7 +187,7 @@ func TestHeadersDisplayRendersCountRuleToPaneWidth(t *testing.T) {
 		_ = cmd()
 	}
 
-	for _, line := range strings.Split(stripANSIEscape(pane.viewport.View()), "\n") {
+	for line := range strings.SplitSeq(stripANSIEscape(pane.viewport.View()), "\n") {
 		if !strings.Contains(line, "1 HEADER") {
 			continue
 		}

@@ -289,8 +289,8 @@ func fallbackRawBody(snapshot *responseSnapshot, body string) string {
 		if strings.TrimSpace(trimmed) != "" {
 			if strings.TrimSpace(snapshot.rawSummary) != "" {
 				summary := trimSection(snapshot.rawSummary)
-				if strings.HasPrefix(trimmed, summary) {
-					trimmed = strings.TrimLeft(strings.TrimPrefix(trimmed, summary), "\r\n")
+				if after, ok := strings.CutPrefix(trimmed, summary); ok {
+					trimmed = strings.TrimLeft(after, "\r\n")
 				}
 			}
 			if strings.TrimSpace(trimmed) != "" {

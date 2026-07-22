@@ -47,14 +47,8 @@ func FromSpec(spec *restfile.TraceSpec) (nettrace.Budget, bool) {
 }
 
 func FromTrace(tb restfile.TraceBudget) nettrace.Budget {
-	t := tb.Total
-	if t < 0 {
-		t = 0
-	}
-	g := tb.Tolerance
-	if g < 0 {
-		g = 0
-	}
+	t := max(tb.Total, 0)
+	g := max(tb.Tolerance, 0)
 	b := nettrace.Budget{
 		Total:     t,
 		Tolerance: g,

@@ -91,8 +91,8 @@ func (b *bodyBuilder) addData(val string, guess bool) error {
 
 func (b *bodyBuilder) addBinary(val string) error {
 	trim := strings.TrimSpace(val)
-	if strings.HasPrefix(trim, "@") {
-		return b.addFile(strings.TrimPrefix(trim, "@"))
+	if after, ok := strings.CutPrefix(trim, "@"); ok {
+		return b.addFile(after)
 	}
 	return b.addRaw(val)
 }
@@ -113,13 +113,13 @@ func (b *bodyBuilder) addURLEncoded(raw string) error {
 	if err := b.ensureKind(bodyKindForm); err != nil {
 		return err
 	}
-	for _, part := range strings.Split(raw, "&") {
+	for part := range strings.SplitSeq(raw, "&") {
 		if part == "" {
 			continue
 		}
-		if idx := strings.Index(part, "="); idx >= 0 {
-			name := strings.TrimSpace(part[:idx])
-			value := part[idx+1:]
+		if before, after, ok := strings.Cut(part, "="); ok {
+			name := strings.TrimSpace(before)
+			value := after
 			b.form = append(b.form, formField{name: name, val: value, encVal: true})
 			continue
 		}
@@ -132,7 +132,7 @@ func (b *bodyBuilder) addFormValues(raw string) error {
 	if err := b.ensureKind(bodyKindForm); err != nil {
 		return err
 	}
-	for _, part := range strings.Split(raw, "&") {
+	for part := range strings.SplitSeq(raw, "&") {
 		name, value := splitFormPair(part)
 		b.form = append(b.form, formField{name: name, val: value})
 	}
@@ -255,13 +255,13 @@ func (f formField) encode() string {
 
 func splitFormPair(raw string) (string, string) {
 	part := raw
-	id := strings.Index(part, "=")
-	if id < 0 {
+	before, after, ok := strings.Cut(part, "=")
+	if !ok {
 		return strings.TrimSpace(part), ""
 	}
 
-	name := strings.TrimSpace(part[:id])
-	val := part[id+1:]
+	name := strings.TrimSpace(before)
+	val := after
 	return name, val
 }
 

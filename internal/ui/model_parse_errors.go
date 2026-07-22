@@ -60,7 +60,7 @@ func (m Model) errView(err error) eView {
 }
 
 func firstErrLine(s string) string {
-	for _, line := range strings.Split(s, "\n") {
+	for line := range strings.SplitSeq(s, "\n") {
 		if line != "" {
 			return line
 		}

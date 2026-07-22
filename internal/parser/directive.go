@@ -199,9 +199,9 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
 	}
-	if idx := strings.Index(rest, " in "); idx >= 0 {
-		name := strings.TrimSpace(rest[:idx])
-		expr := strings.TrimSpace(rest[idx+4:])
+	if before, after, ok := strings.Cut(rest, " in "); ok {
+		name := strings.TrimSpace(before)
+		expr := strings.TrimSpace(after)
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
 		}
@@ -447,9 +447,9 @@ func applyTraceToken(spec *restfile.TraceSpec, value string) {
 		return
 	}
 
-	if idx := strings.Index(value, "="); idx != -1 {
-		key := strings.ToLower(strings.TrimSpace(value[:idx]))
-		val := strings.TrimSpace(value[idx+1:])
+	if before, after, ok := strings.Cut(value, "="); ok {
+		key := strings.ToLower(strings.TrimSpace(before))
+		val := strings.TrimSpace(after)
 		applyTraceOption(spec, key, val)
 	}
 }
@@ -503,9 +503,9 @@ func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
 		if value == "" {
 			continue
 		}
-		if idx := strings.Index(value, "="); idx != -1 {
-			key := strings.ToLower(strings.TrimSpace(value[:idx]))
-			val := strings.TrimSpace(value[idx+1:])
+		if before, after, ok := strings.Cut(value, "="); ok {
+			key := strings.ToLower(strings.TrimSpace(before))
+			val := strings.TrimSpace(after)
 			switch key {
 			case "base", "baseline", "primary", "ref":
 				if val == "" {

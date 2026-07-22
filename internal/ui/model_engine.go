@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"maps"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -115,9 +116,7 @@ func mergeRunExtras(xs ...map[string]string) map[string]string {
 	}
 	out := make(map[string]string, n)
 	for _, x := range xs {
-		for k, v := range x {
-			out[k] = v
-		}
+		maps.Copy(out, x)
 	}
 	return out
 }
@@ -127,8 +126,6 @@ func copyRunValues(src map[string]rts.Value) map[string]rts.Value {
 		return nil
 	}
 	out := make(map[string]rts.Value, len(src))
-	for k, v := range src {
-		out[k] = v
-	}
+	maps.Copy(out, src)
 	return out
 }

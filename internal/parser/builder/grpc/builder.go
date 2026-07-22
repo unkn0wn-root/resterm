@@ -95,9 +95,9 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 	case "grpc-metadata":
 		req := b.EnsureRequest()
 		if rest != "" {
-			if idx := strings.Index(rest, ":"); idx >= 0 {
-				key := str.Trim(rest[:idx])
-				value := str.Trim(rest[idx+1:])
+			if before, after, ok := strings.Cut(rest, ":"); ok {
+				key := str.Trim(before)
+				value := str.Trim(after)
 				if key != "" {
 					req.Metadata = append(req.Metadata, restfile.MetadataPair{
 						Key:   key,

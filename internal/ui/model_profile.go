@@ -425,10 +425,7 @@ func profileProgressLabel(state *profileState) string {
 		return fmt.Sprintf("%s warmup %d/%d", state.messageBase, state.index+1, state.warmup)
 	}
 
-	measured := state.index - state.warmup + 1
-	if measured > state.spec.Count {
-		measured = state.spec.Count
-	}
+	measured := min(state.index-state.warmup+1, state.spec.Count)
 	return fmt.Sprintf("%s run %d/%d", state.messageBase, measured, state.spec.Count)
 }
 
@@ -764,10 +761,7 @@ func writeProfileHeader(b *strings.Builder, title string) {
 	b.WriteString(title)
 	b.WriteString("\n")
 
-	lineWidth := len(title)
-	if lineWidth < 12 {
-		lineWidth = 12
-	}
+	lineWidth := max(len(title), 12)
 	b.WriteString(strings.Repeat("─", lineWidth))
 	b.WriteString("\n\n")
 }

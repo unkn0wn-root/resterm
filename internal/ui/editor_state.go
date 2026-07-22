@@ -1638,10 +1638,7 @@ func (e requestEditor) PasteClipboard(after bool) (requestEditor, tea.Cmd) {
 	prevView := e.ViewStart()
 	runes := []rune(e.Value())
 	insert := []rune(text)
-	index := max(cursor.Offset, 0)
-	if index > len(runes) {
-		index = len(runes)
-	}
+	index := min(max(cursor.Offset, 0), len(runes))
 
 	insertPos := index
 	linewise := strings.HasSuffix(text, "\n")

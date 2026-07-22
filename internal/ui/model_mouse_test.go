@@ -95,7 +95,7 @@ func TestCurrentMouseLayoutMatchesRenderedPaneGeometry(t *testing.T) {
 			name: "wide line numbers",
 			configure: func(t *testing.T, m *Model) {
 				var b strings.Builder
-				for i := 0; i < 120; i++ {
+				for range 120 {
 					b.WriteString("GET https://example.com\n")
 				}
 				m.editor.SetValue(b.String())
@@ -156,10 +156,7 @@ func renderedMouseLayout(m *Model) mouseLayout {
 		rightX := originX + fileW
 		ly.editor = mouseRect{x: rightX, y: panesY, w: editorW, h: editorH}
 
-		responseW := max(editorW, m.width-fileW)
-		if responseW < 0 {
-			responseW = 0
-		}
+		responseW := max(max(editorW, m.width-fileW), 0)
 		responsePane := m.renderResponsePane(responseW, renderContext{})
 		ly.response = mouseRect{
 			x: rightX,

@@ -7,7 +7,7 @@ import (
 
 func TestNavigatorTypewriterScroll(t *testing.T) {
 	nodes := make([]*Node[any], 0, 6)
-	for i := 0; i < 6; i++ {
+	for i := range 6 {
 		nodes = append(nodes, &Node[any]{ID: fmt.Sprintf("n%d", i), Title: "n"})
 	}
 	m := New(nodes)

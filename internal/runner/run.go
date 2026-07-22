@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -227,10 +228,8 @@ func resultFailed(item Result) bool {
 			return true
 		}
 	}
-	for _, step := range item.Steps {
-		if stepFailed(step) {
-			return true
-		}
+	if slices.ContainsFunc(item.Steps, stepFailed) {
+		return true
 	}
 	if item.Profile != nil && len(item.Profile.Failures) > 0 {
 		return true

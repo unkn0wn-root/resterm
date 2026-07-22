@@ -66,10 +66,7 @@ func buildHeaderLine(
 	}
 	ml := width - headerGap - rw
 	line, lw := fitHeaderSegments(left, sw, sep, sepW, ml)
-	pad := width - lw - rw
-	if pad < headerGap {
-		pad = headerGap
-	}
+	pad := max(width-lw-rw, headerGap)
 	line = lipgloss.JoinHorizontal(
 		lipgloss.Center,
 		line,

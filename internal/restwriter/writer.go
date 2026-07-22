@@ -272,8 +272,8 @@ func NormalizeInlineBody(body string) (string, error) {
 		return "", errors.New("body is not valid UTF-8")
 	}
 	body = strings.ReplaceAll(body, "\r\n", "\n")
-	lines := strings.Split(body, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(body, "\n")
+	for line := range lines {
 		if len(line) >= 1<<20 {
 			return "", errors.New("body contains a line longer than the parser limit")
 		}

@@ -405,7 +405,7 @@ func TestResponseSequenceConcurrentCallsReserveEachTransientStepOnce(t *testing.
 		}
 		counts[step]++
 	}
-	for step := 0; step < steps-1; step++ {
+	for step := range steps - 1 {
 		if counts[step] != 1 {
 			t.Fatalf("step %d count = %d, want 1; all=%v", step, counts[step], counts)
 		}

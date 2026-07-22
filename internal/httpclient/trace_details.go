@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"sort"
 	"strings"
 
@@ -290,10 +291,8 @@ func appendUnique(dst []string, val string) []string {
 	if val == "" {
 		return dst
 	}
-	for _, existing := range dst {
-		if existing == val {
-			return dst
-		}
+	if slices.Contains(dst, val) {
+		return dst
 	}
 	return append(dst, val)
 }

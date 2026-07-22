@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"testing"
 
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
@@ -8,12 +9,7 @@ import (
 )
 
 func containsResponseTab(tabs []responseTab, target responseTab) bool {
-	for _, tab := range tabs {
-		if tab == target {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(tabs, target)
 }
 
 func TestAvailableResponseTabsIncludesTimelineForTraceSpec(t *testing.T) {

@@ -520,10 +520,7 @@ func TestApplyLayoutKeepsPaneWidthsWithinWindow(t *testing.T) {
 
 			filePane := model.renderFilePane(renderContext{})
 			editorPane := model.renderEditorPane(renderContext{})
-			available := model.width - lipgloss.Width(filePane) - lipgloss.Width(editorPane)
-			if available < 0 {
-				available = 0
-			}
+			available := max(model.width-lipgloss.Width(filePane)-lipgloss.Width(editorPane), 0)
 			responsePane := model.renderResponsePane(available, renderContext{})
 			panesWidth := lipgloss.Width(
 				lipgloss.JoinHorizontal(lipgloss.Top, filePane, editorPane, responsePane),

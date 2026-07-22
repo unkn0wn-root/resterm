@@ -36,7 +36,7 @@ func TestStreamServerOutput(t *testing.T) {
 		t.Fatalf("execute streaming output: %v", err)
 	}
 
-	var out []map[string]interface{}
+	var out []map[string]any
 	if err := json.Unmarshal(resp.Body, &out); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestStreamClientInput(t *testing.T) {
 		t.Fatalf("execute streaming input: %v", err)
 	}
 
-	var out []map[string]interface{}
+	var out []map[string]any
 	if err := json.Unmarshal(resp.Body, &out); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestStreamBidi(t *testing.T) {
 		t.Fatalf("execute bidi stream: %v", err)
 	}
 
-	var out []map[string]interface{}
+	var out []map[string]any
 	if err := json.Unmarshal(resp.Body, &out); err != nil {
 		t.Fatalf("decode response body: %v", err)
 	}

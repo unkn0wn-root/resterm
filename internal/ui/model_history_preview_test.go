@@ -61,7 +61,7 @@ func TestHistoryPreviewScrolling(t *testing.T) {
 	entry.ProfileResults = &history.ProfileResults{
 		Percentiles: make([]history.ProfilePercentile, 0, 50),
 	}
-	for i := 0; i < 50; i++ {
+	for i := range 50 {
 		entry.ProfileResults.Percentiles = append(
 			entry.ProfileResults.Percentiles,
 			history.ProfilePercentile{Percentile: i, Value: time.Duration(i)},

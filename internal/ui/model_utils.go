@@ -500,10 +500,7 @@ func centerContent(content string, width, height int) string {
 			continue
 		}
 
-		padding := (width - lineWidth) / 2
-		if padding < 0 {
-			padding = 0
-		}
+		padding := max((width-lineWidth)/2, 0)
 		padded[i] = strings.Repeat(" ", padding) + line
 	}
 

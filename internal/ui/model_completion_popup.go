@@ -134,10 +134,7 @@ func (m Model) completionPopupLayout(
 		return completionPopupLayout{}, false
 	}
 
-	x := cursorX
-	if x < 0 {
-		x = 0
-	}
+	x := max(cursorX, 0)
 	if x > contentW-maxW {
 		x = max(contentW-maxW, 0)
 	}
@@ -214,10 +211,7 @@ func completionPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int) {
 	if maxTextW < 1 {
 		return 0, 0
 	}
-	labelW := prefLabelW
-	if labelW < 1 {
-		labelW = 1
-	}
+	labelW := max(prefLabelW, 1)
 	if labelW > maxTextW {
 		labelW = maxTextW
 	}
@@ -229,10 +223,7 @@ func completionPopupColumns(prefLabelW, prefSummaryW, maxTextW int) (int, int) {
 	if avail < 1 {
 		return labelW, 0
 	}
-	summaryW := prefSummaryW
-	if summaryW > avail {
-		summaryW = avail
-	}
+	summaryW := min(prefSummaryW, avail)
 	return labelW, summaryW
 }
 
@@ -435,7 +426,7 @@ func (m Model) buildCompletionPreview(
 		if strings.TrimSpace(text) == "" {
 			return true
 		}
-		for _, line := range strings.Split(wrapToWidth(text, textW), "\n") {
+		for line := range strings.SplitSeq(wrapToWidth(text, textW), "\n") {
 			line = ansi.Truncate(line, textW, "")
 			if !addLine(style.Render(line)) {
 				return false

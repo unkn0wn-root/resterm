@@ -511,7 +511,7 @@ func writeExplainBlock(b *strings.Builder, pad, text string) {
 	if strings.TrimSpace(text) == "" {
 		return
 	}
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		b.WriteString(pad)
 		b.WriteString(line)
 		b.WriteString("\n")

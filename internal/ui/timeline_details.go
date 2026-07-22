@@ -256,10 +256,7 @@ func shortRel(d time.Duration) string {
 	case d >= time.Minute:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
 	default:
-		secs := int(d.Seconds())
-		if secs < 1 {
-			secs = 1
-		}
+		secs := max(int(d.Seconds()), 1)
 		return fmt.Sprintf("%ds", secs)
 	}
 }

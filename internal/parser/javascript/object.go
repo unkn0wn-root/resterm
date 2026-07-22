@@ -167,10 +167,7 @@ func formatNumberLiteral(text string) string {
 			buf.WriteString(digits[:firstGroup])
 			for i := firstGroup; i < len(digits); i += 4 {
 				buf.WriteByte('_')
-				end := i + 4
-				if end > len(digits) {
-					end = len(digits)
-				}
+				end := min(i+4, len(digits))
 				buf.WriteString(digits[i:end])
 			}
 			return sign + buf.String()
@@ -632,7 +629,7 @@ func (l *lexer) readUnicodeEscape() (rune, bool) {
 	}
 
 	digits := make([]rune, 4)
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		r := l.next()
 		if !isHexDigit(r) {
 			return 0, false
@@ -646,7 +643,7 @@ func (l *lexer) readUnicodeEscape() (rune, bool) {
 
 func (l *lexer) readHexEscape() (rune, bool) {
 	digits := make([]rune, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		r := l.next()
 		if !isHexDigit(r) {
 			return 0, false

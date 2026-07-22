@@ -3,7 +3,9 @@ package ui
 import (
 	"context"
 	"fmt"
+	"maps"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -260,16 +262,10 @@ func workflowStepExtras(
 	}
 	out := make(map[string]string, size)
 	if st != nil {
-		for key, value := range st.vars {
-			out[key] = value
-		}
+		maps.Copy(out, st.vars)
 	}
-	for key, value := range stepVars {
-		out[key] = value
-	}
-	for key, value := range extra {
-		out[key] = value
-	}
+	maps.Copy(out, stepVars)
+	maps.Copy(out, extra)
 	return out
 }
 
@@ -2122,21 +2118,14 @@ func appendWorkflowExplainNote(out []string, note string) []string {
 	if note == "" {
 		return out
 	}
-	for _, existing := range out {
-		if existing == note {
-			return out
-		}
+	if slices.Contains(out, note) {
+		return out
 	}
 	return append(out, note)
 }
 
 func containsString(xs []string, want string) bool {
-	for _, item := range xs {
-		if item == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(xs, want)
 }
 
 func prependExplainChangesUnique(dst, src []xplain.Change) []xplain.Change {
@@ -2244,7 +2233,7 @@ func workflowDefinition(state *workflowState) string {
 	}
 	b.WriteString("\n")
 	if desc := state.workflow.Description; desc != "" {
-		for _, line := range strings.Split(desc, "\n") {
+		for line := range strings.SplitSeq(desc, "\n") {
 			b.WriteString("# @description ")
 			b.WriteString(line)
 			b.WriteString("\n")

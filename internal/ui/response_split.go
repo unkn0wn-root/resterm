@@ -335,20 +335,14 @@ func (pane *responsePaneState) setCurrPosition() {
 		if pane.headerScroll == nil {
 			pane.headerScroll = make(map[headersViewMode]int)
 		}
-		offset := pane.viewport.YOffset
-		if offset < 0 {
-			offset = 0
-		}
+		offset := max(pane.viewport.YOffset, 0)
 		pane.headerScroll[pane.headersView] = offset
 		return
 	}
 	if pane.tabScroll == nil {
 		pane.tabScroll = make(map[responseTab]int)
 	}
-	offset := pane.viewport.YOffset
-	if offset < 0 {
-		offset = 0
-	}
+	offset := max(pane.viewport.YOffset, 0)
 	pane.tabScroll[pane.activeTab] = offset
 }
 

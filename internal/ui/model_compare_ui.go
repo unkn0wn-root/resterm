@@ -28,16 +28,10 @@ func (m *Model) handleCompareTabKey(msg tea.KeyMsg, pane *responsePaneState) tea
 	case "up", "k":
 		return m.moveCompareFocus(-1)
 	case "pgdown":
-		step := pane.viewport.Height - 1
-		if step < 1 {
-			step = 1
-		}
+		step := max(pane.viewport.Height-1, 1)
 		return m.moveCompareFocus(step)
 	case "pgup":
-		step := pane.viewport.Height - 1
-		if step < 1 {
-			step = 1
-		}
+		step := max(pane.viewport.Height-1, 1)
 		return m.moveCompareFocus(-step)
 	case "home":
 		return m.setCompareFocusAt(pane, 0)
@@ -156,10 +150,7 @@ func (m *Model) ensureCompareRowVisible(pane *responsePaneState, bundle *compare
 	if pane.tabScroll == nil {
 		pane.tabScroll = make(map[responseTab]int)
 	}
-	targetLine := compareHeaderLineCount + m.compareRowIndex
-	if targetLine < 0 {
-		targetLine = 0
-	}
+	targetLine := max(compareHeaderLineCount+m.compareRowIndex, 0)
 	height := pane.viewport.Height
 	offset := pane.tabScroll[responseTabCompare]
 	if targetLine < offset {

@@ -702,7 +702,7 @@ func sgrFlags(b []byte) (bool, bool) {
 
 	vals := make([]int, 0, 8)
 	num := -1
-	for i := 0; i < len(params); i++ {
+	for i := range params {
 		c := params[i]
 		switch {
 		case c == ';':

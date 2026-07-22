@@ -601,7 +601,7 @@ func TestRequestEditorMotionWordStarts(t *testing.T) {
 
 func TestRequestEditorMotionPaging(t *testing.T) {
 	var lines []string
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		lines = append(lines, fmt.Sprintf("line %d", i))
 	}
 	editor := newTestEditor(strings.Join(lines, "\n"))
@@ -770,7 +770,7 @@ func TestRequestEditorUndoWhenEmpty(t *testing.T) {
 
 func TestDeleteSelectionPreservesViewStart(t *testing.T) {
 	var lines []string
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		lines = append(lines, fmt.Sprintf("line %03d", i))
 	}
 	content := strings.Join(lines, "\n")
@@ -797,7 +797,7 @@ func TestDeleteSelectionPreservesViewStart(t *testing.T) {
 
 func TestUndoRestoresViewStart(t *testing.T) {
 	var lines []string
-	for i := 0; i < 120; i++ {
+	for i := range 120 {
 		lines = append(lines, fmt.Sprintf("line %03d", i))
 	}
 	content := strings.Join(lines, "\n")

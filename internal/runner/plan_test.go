@@ -115,7 +115,7 @@ func TestRunPlanDoesNotMutateBuiltDocument(t *testing.T) {
 		t.Fatalf("built doc variables = %d, want 0", got)
 	}
 
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		rep, err := RunPlan(context.Background(), pl)
 		if err != nil {
 			t.Fatalf("RunPlan(%d): %v", i, err)

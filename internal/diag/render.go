@@ -77,10 +77,7 @@ func itemLines(rep Report, it Diagnostic) []Line {
 		ls = append(ls, Line{Kind: LineLoc, Text: "--> " + loc})
 	}
 	if src, ok := lineText(sourceFor(rep, it), it.Span.Start.Line); ok {
-		width := len(strconv.Itoa(it.Span.Start.Line))
-		if width < 4 {
-			width = 4
-		}
+		width := max(len(strconv.Itoa(it.Span.Start.Line)), 4)
 		bar := strings.Repeat(" ", width) + " |"
 		col := it.Span.Start.Col
 		if col <= 0 {

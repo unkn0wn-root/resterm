@@ -61,7 +61,7 @@ func literalMatches(content, pattern string) []searchMatch {
 	matches := make([]searchMatch, 0)
 	for i := 0; i <= len(contentRunes)-plen; i++ {
 		match := true
-		for j := 0; j < plen; j++ {
+		for j := range plen {
 			if contentRunes[i+j] != patternRunes[j] {
 				match = false
 				break

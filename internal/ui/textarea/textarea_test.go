@@ -96,10 +96,7 @@ func TestHorizontalScrollMargin(t *testing.T) {
 	}
 
 	lineWidth := visualWidth(textarea.value[0])
-	expected := target + 1 + margin - textarea.Width()
-	if expected < 0 {
-		expected = 0
-	}
+	expected := max(target+1+margin-textarea.Width(), 0)
 	maxOffset := max(0, lineWidth+margin-textarea.Width())
 	if expected > maxOffset {
 		expected = maxOffset
@@ -118,10 +115,7 @@ func TestHorizontalScrollMargin(t *testing.T) {
 	}
 
 	textarea.SetCursor(len(textarea.value[0]))
-	endExpected := lineWidth + margin - textarea.Width()
-	if endExpected < 0 {
-		endExpected = 0
-	}
+	endExpected := max(lineWidth+margin-textarea.Width(), 0)
 	if textarea.horizOffset != endExpected {
 		t.Fatalf(
 			"expected horiz offset %d at end of line, got %d",
@@ -2079,7 +2073,6 @@ func TestView(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		tt := tt
 
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()

@@ -329,11 +329,11 @@ func findReqVar(req *restfile.Request, name string) (restfile.Variable, bool) {
 }
 
 func queryFromURL(raw string) string {
-	idx := strings.Index(raw, "?")
-	if idx == -1 {
+	_, after, ok := strings.Cut(raw, "?")
+	if !ok {
 		return ""
 	}
-	qs := raw[idx+1:]
+	qs := after
 	if cut := strings.Index(qs, "#"); cut >= 0 {
 		qs = qs[:cut]
 	}

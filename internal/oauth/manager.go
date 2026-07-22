@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"maps"
 	"net/http"
 	"net/url"
 	"sort"
@@ -362,9 +363,7 @@ func mergeExtras(base, override map[string]string) map[string]string {
 	}
 
 	merged := make(map[string]string, len(base)+len(override))
-	for k, v := range base {
-		merged[k] = v
-	}
+	maps.Copy(merged, base)
 	for k, v := range override {
 		if v == "" {
 			continue
@@ -378,9 +377,7 @@ func cloneConfig(cfg Config) Config {
 	out := cfg
 	if len(cfg.Extra) > 0 {
 		out.Extra = make(map[string]string, len(cfg.Extra))
-		for key, value := range cfg.Extra {
-			out.Extra[key] = value
-		}
+		maps.Copy(out.Extra, cfg.Extra)
 	}
 	return out
 }
@@ -389,9 +386,7 @@ func cloneToken(tok Token) Token {
 	out := tok
 	if len(tok.Raw) > 0 {
 		out.Raw = make(map[string]any, len(tok.Raw))
-		for key, value := range tok.Raw {
-			out.Raw[key] = value
-		}
+		maps.Copy(out.Raw, tok.Raw)
 	}
 	return out
 }

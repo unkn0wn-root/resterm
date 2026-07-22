@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -328,16 +329,16 @@ func convertSSETranscript(t *httpclient.SSETranscript) *scripts.StreamInfo {
 		return nil
 	}
 	info := &scripts.StreamInfo{Kind: "sse"}
-	info.Summary = map[string]interface{}{
+	info.Summary = map[string]any{
 		"eventCount": t.Summary.EventCount,
 		"byteCount":  t.Summary.ByteCount,
 		"duration":   t.Summary.Duration,
 		"reason":     t.Summary.Reason,
 	}
 	if len(t.Events) > 0 {
-		events := make([]map[string]interface{}, len(t.Events))
+		events := make([]map[string]any, len(t.Events))
 		for i, evt := range t.Events {
-			events[i] = map[string]interface{}{
+			events[i] = map[string]any{
 				"index":     evt.Index,
 				"id":        evt.ID,
 				"event":     evt.Event,
@@ -357,7 +358,7 @@ func convertWebSocketTranscript(t *httpclient.WebSocketTranscript) *scripts.Stre
 		return nil
 	}
 	info := &scripts.StreamInfo{Kind: "websocket"}
-	info.Summary = map[string]interface{}{
+	info.Summary = map[string]any{
 		"sentCount":     t.Summary.SentCount,
 		"receivedCount": t.Summary.ReceivedCount,
 		"duration":      t.Summary.Duration,
@@ -366,9 +367,9 @@ func convertWebSocketTranscript(t *httpclient.WebSocketTranscript) *scripts.Stre
 		"closeReason":   t.Summary.CloseReason,
 	}
 	if len(t.Events) > 0 {
-		events := make([]map[string]interface{}, len(t.Events))
+		events := make([]map[string]any, len(t.Events))
 		for i, evt := range t.Events {
-			events[i] = map[string]interface{}{
+			events[i] = map[string]any{
 				"step":      evt.Step,
 				"direction": evt.Direction,
 				"type":      evt.Type,
@@ -401,12 +402,8 @@ func mergeStringMaps(base map[string]string, extra map[string]string) map[string
 		return nil
 	}
 	out := make(map[string]string, len(base)+len(extra))
-	for key, value := range base {
-		out[key] = value
-	}
-	for key, value := range extra {
-		out[key] = value
-	}
+	maps.Copy(out, base)
+	maps.Copy(out, extra)
 	return out
 }
 

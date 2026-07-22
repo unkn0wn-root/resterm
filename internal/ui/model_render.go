@@ -141,14 +141,8 @@ func (m Model) renderAppContent(rc renderContext) string {
 
 	var panes string
 	if m.mainSplitOrientation == mainSplitHorizontal {
-		availableRight := m.width - fileWidth
-		if availableRight < 0 {
-			availableRight = 0
-		}
-		rightWidth := editorWidth
-		if availableRight > rightWidth {
-			rightWidth = availableRight
-		}
+		availableRight := max(m.width-fileWidth, 0)
+		rightWidth := max(availableRight, editorWidth)
 		responsePane := m.renderResponsePane(rightWidth, rc)
 		rightParts := make([]string, 0, 2)
 		if editorPane != "" {
@@ -386,10 +380,7 @@ func (m Model) renderFilePane(rc renderContext) string {
 		bodyParts = append(bodyParts, filter, filterSep)
 		filterHeight = lipgloss.Height(filter) + lipgloss.Height(filterSep)
 	}
-	available := contentHeight - filterHeight
-	if available < 1 {
-		available = 1
-	}
+	available := max(contentHeight-filterHeight, 1)
 
 	listHeight := available
 
@@ -607,10 +598,7 @@ func padToWidth(content string, width int) string {
 	if width <= 0 {
 		return content
 	}
-	height := lipgloss.Height(content)
-	if height < 1 {
-		height = 1
-	}
+	height := max(lipgloss.Height(content), 1)
 	return lipgloss.Place(
 		width,
 		height,
@@ -635,10 +623,7 @@ func (m Model) renderNavigatorFilter(width int, active bool, rc renderContext) s
 		m.themeRuntime.applyTextInput(&input, m.theme, textInputKindNavigator)
 	}
 	if width > 4 {
-		input.Width = width - 2
-		if input.Width < 1 {
-			input.Width = 1
-		}
+		input.Width = max(width-2, 1)
 	}
 	filterView := input.View()
 	row := filterView
@@ -839,10 +824,7 @@ func (m Model) renderEditorPane(rc renderContext) string {
 	if active && m.editorInsertMode {
 		content = m.renderCompletionPopup(content)
 	}
-	contentWidth := lipgloss.Width(content)
-	if contentWidth < 1 {
-		contentWidth = 1
-	}
+	contentWidth := max(lipgloss.Width(content), 1)
 	content = padHorizontal(content, paneHorizontalPadding)
 	innerWidth := contentWidth + (paneHorizontalPadding * 2)
 	editorContentHeight := m.editorContentHeight
@@ -887,18 +869,9 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	if availableWidth < 0 {
 		availableWidth = 0
 	}
-	targetOuterWidth := availableWidth
-	if targetOuterWidth < frameWidth {
-		targetOuterWidth = frameWidth
-	}
-	innerWidth := paneInnerWidth(targetOuterWidth, frameWidth)
-	if innerWidth < 1 {
-		innerWidth = 1
-	}
-	contentBudget := innerWidth - (paneHorizontalPadding * 2)
-	if contentBudget < 1 {
-		contentBudget = 1
-	}
+	targetOuterWidth := max(availableWidth, frameWidth)
+	innerWidth := max(paneInnerWidth(targetOuterWidth, frameWidth), 1)
+	contentBudget := max(innerWidth-(paneHorizontalPadding*2), 1)
 	if innerWidth < contentBudget+(paneHorizontalPadding*2) {
 		innerWidth = contentBudget + (paneHorizontalPadding * 2)
 	}
@@ -955,10 +928,7 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 			totalColumns := primaryWidth + secondaryWidth
 			if availableForColumns > 0 && totalColumns > availableForColumns {
 				scale := float64(availableForColumns) / float64(totalColumns)
-				primaryWidth = int(math.Round(float64(primaryWidth) * scale))
-				if primaryWidth < 1 {
-					primaryWidth = 1
-				}
+				primaryWidth = max(int(math.Round(float64(primaryWidth)*scale)), 1)
 				secondaryWidth = availableForColumns - primaryWidth
 				if secondaryWidth < 1 {
 					secondaryWidth = 1
@@ -1016,10 +986,7 @@ func (m Model) renderResponsePane(availableWidth int, rc renderContext) string {
 	if responseHeight <= 0 {
 		responseHeight = m.paneContentHeight
 	}
-	height := responseHeight + paneBottomPadding
-	if height < 1 {
-		height = 1
-	}
+	height := max(responseHeight+paneBottomPadding, 1)
 	body = lipgloss.NewStyle().Width(contentBudget).Render(body)
 	body = padHorizontal(body, paneHorizontalPadding)
 	frame := style.Width(innerWidth).MaxWidth(width).Height(height)
@@ -1224,10 +1191,7 @@ func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
 	pw := m.responseWidthPx
 	if pw <= 0 {
 		frame := m.theme.ResponseBorder.GetHorizontalFrameSize()
-		pw = paneOuterWidthFromContent(m.responseContentWidth(), frame)
-		if pw < 0 {
-			pw = 0
-		}
+		pw = max(paneOuterWidthFromContent(m.responseContentWidth(), frame), 0)
 	}
 
 	eo := editorWidth
@@ -1235,16 +1199,10 @@ func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
 		eo = 0
 	} else if eo <= 0 {
 		ef := m.theme.EditorBorder.GetHorizontalFrameSize()
-		eo = paneOuterWidthFromContent(lipgloss.Width(m.editor.View()), ef)
-		if eo < 0 {
-			eo = 0
-		}
+		eo = max(paneOuterWidthFromContent(lipgloss.Width(m.editor.View()), ef), 0)
 	}
 
-	la := m.width - m.sidebarWidthPx - eo
-	if la < 0 {
-		la = 0
-	}
+	la := max(m.width-m.sidebarWidthPx-eo, 0)
 	if pw > la {
 		pw = la
 	}
@@ -1253,11 +1211,7 @@ func (m Model) responseTargetWidth(fileWidth, editorWidth int) int {
 	if aa < 0 {
 		pw += aa
 	} else if pw < aa {
-		if la < aa {
-			pw = la
-		} else {
-			pw = aa
-		}
+		pw = min(la, aa)
 	}
 	if pw < 0 {
 		pw = 0
@@ -1365,10 +1319,7 @@ func (m Model) renderPaneTabs(id responsePaneID, focused bool, width int) string
 	tabs := m.availableResponseTabs()
 	lineWidth := max(width, 1)
 	rowStyle := m.theme.Tabs.Width(lineWidth).Align(lipgloss.Center)
-	contentLimit := lineWidth
-	if contentLimit < 1 {
-		contentLimit = 1
-	}
+	contentLimit := max(lineWidth, 1)
 	rowContent := m.buildTabRowContent(
 		tabs,
 		pane,
@@ -1506,10 +1457,7 @@ func (m Model) tabSpinner() string {
 	if !m.spinnerActive() || len(tabSpinFrames) == 0 {
 		return ""
 	}
-	idx := m.tabSpinIdx
-	if idx < 0 {
-		idx = 0
-	}
+	idx := max(m.tabSpinIdx, 0)
 	return tabSpinFrames[idx%len(tabSpinFrames)]
 }
 
@@ -1686,10 +1634,7 @@ func (m Model) renderTabRowFromStates(
 ) (string, int) {
 	segments := make([]string, 0, len(states))
 	for _, state := range states {
-		length := state.length
-		if length < 0 {
-			length = 0
-		}
+		length := max(state.length, 0)
 		if length > state.maxLength {
 			length = state.maxLength
 		}
@@ -1778,10 +1723,7 @@ func (m Model) renderHistoryPaneFor(id responsePaneID) string {
 	header := m.renderHistoryHeader(contentWidth)
 	filter := m.renderHistoryFilterLine(contentWidth)
 	filterSep := dividerLine(m.theme.PaneDivider, contentWidth)
-	bodyHeight := contentHeight - m.historyHeaderHeight()
-	if bodyHeight < 1 {
-		bodyHeight = 1
-	}
+	bodyHeight := max(contentHeight-m.historyHeaderHeight(), 1)
 
 	if len(m.historyEntries) == 0 {
 		msg := lipgloss.NewStyle().
@@ -2136,9 +2078,9 @@ func (m Model) renderHeaderButton(idx int, label, value, icon string) string {
 	palette := m.theme.HeaderSegment(idx)
 	labelText := headerLabelTextWithIcon(label, icon)
 	valueText := strings.TrimSpace(value)
-	if strings.HasPrefix(valueText, tabIndicatorPrefix) {
+	if after, ok := strings.CutPrefix(valueText, tabIndicatorPrefix); ok {
 		valueText = strings.TrimSpace(
-			strings.TrimPrefix(valueText, tabIndicatorPrefix),
+			after,
 		)
 	}
 	if valueText == "" {
@@ -2383,10 +2325,7 @@ func (m Model) renderHistoryPreviewModal() string {
 }
 
 func (m Model) renderErrorModal() string {
-	width := m.width - 10
-	if width > 72 {
-		width = 72
-	}
+	width := min(m.width-10, 72)
 	if width < 32 {
 		candidate := m.width - 4
 		if candidate > 0 {
@@ -2434,10 +2373,7 @@ func (m Model) renderLayoutSaveModal() string {
 	longest := max(lipgloss.Width(bodyText), lipgloss.Width(hintsText))
 	minContent := max(32, longest+(pad*2))
 
-	width := m.width - 10
-	if width > 68 {
-		width = 68
-	}
+	width := min(m.width-10, 68)
 
 	minOuter := minContent + frame
 	if width < minOuter {
@@ -2467,10 +2403,7 @@ func (m Model) renderLayoutSaveModal() string {
 }
 
 func (m Model) renderEnvironmentModal() string {
-	width := min(m.width-10, 48)
-	if width < 24 {
-		width = 24
-	}
+	width := max(min(m.width-10, 48), 24)
 
 	commands := fmt.Sprintf(
 		"%s Select    %s Cancel",
@@ -2490,10 +2423,7 @@ func (m Model) renderEnvironmentModal() string {
 }
 
 func (m Model) renderFileChangeModal() string {
-	width := m.width - 10
-	if width > 72 {
-		width = 72
-	}
+	width := min(m.width-10, 72)
 	if width < 32 {
 		candidate := m.width - 4
 		if candidate > 0 {
@@ -2530,10 +2460,7 @@ func (m Model) renderFileChangeModal() string {
 }
 
 func (m Model) renderThemeModal() string {
-	width := min(m.width-10, 60)
-	if width < 28 {
-		width = 28
-	}
+	width := max(min(m.width-10, 60), 28)
 
 	commands := fmt.Sprintf(
 		"%s Apply    %s Cancel",
@@ -2558,17 +2485,11 @@ func (m Model) renderHelpOverlay() string {
 }
 
 func (m Model) helpOverlayBox() (string, mouseRect) {
-	width := min(m.width-6, 120)
-	if width < 48 {
-		width = 48
-	}
+	width := max(min(m.width-6, 120), 48)
 
 	contentWidth := width
 	viewWidth := max(contentWidth-4, 22)
-	maxBodyHeight := m.height - 8
-	if maxBodyHeight < 6 {
-		maxBodyHeight = 6
-	}
+	maxBodyHeight := max(m.height-8, 6)
 
 	header := func(text string, align lipgloss.Position) string {
 		return m.theme.HeaderTitle.
@@ -2596,10 +2517,7 @@ func (m Model) helpOverlayBox() (string, mouseRect) {
 		Width(contentWidth).
 		Render(top)
 
-	bodyHeight := maxBodyHeight - lipgloss.Height(topView)
-	if bodyHeight > 28 {
-		bodyHeight = 28
-	}
+	bodyHeight := min(maxBodyHeight-lipgloss.Height(topView), 28)
 	if bodyHeight < 6 {
 		bodyHeight = 6
 	}
@@ -2691,10 +2609,7 @@ func (m Model) renderHelpFilter(width int) string {
 }
 
 func (m Model) renderNewFileModal() string {
-	width := min(m.width-10, 60)
-	if width < 36 {
-		width = 36
-	}
+	width := max(min(m.width-10, 60), 36)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
 		Render(m.newFileInput.View())
@@ -2746,10 +2661,7 @@ func (m Model) renderNewFileModal() string {
 }
 
 func (m Model) renderOpenModal() string {
-	width := min(m.width-10, 60)
-	if width < 36 {
-		width = 36
-	}
+	width := max(min(m.width-10, 60), 36)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).
 		Render(m.openPathInput.View())
@@ -2785,10 +2697,7 @@ func (m Model) renderOpenModal() string {
 }
 
 func (m Model) renderResponseSaveModal() string {
-	width := min(m.width-10, 72)
-	if width < 40 {
-		width = 40
-	}
+	width := max(min(m.width-10, 72), 40)
 	bg := m.themeRuntime.modalInputBackground(m.theme)
 	inputView := lipgloss.NewStyle().
 		Width(width - 8).

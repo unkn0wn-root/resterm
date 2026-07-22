@@ -340,9 +340,7 @@ func cloneGlobalValues(src map[string]vars.GlobalMutation) map[string]vars.Globa
 		return nil
 	}
 	dst := make(map[string]vars.GlobalMutation, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
+	maps.Copy(dst, src)
 	return dst
 }
 

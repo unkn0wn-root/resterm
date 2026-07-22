@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -89,9 +90,7 @@ func cloneStoredValues(src map[string]storedValue) map[string]storedValue {
 	}
 
 	dst := make(map[string]storedValue, len(src))
-	for k, v := range src {
-		dst[k] = v
-	}
+	maps.Copy(dst, src)
 	return dst
 }
 

@@ -659,10 +659,7 @@ func (m *Model) OffsetForPosition(line, column int) int {
 		offset += len(m.value[i]) + 1
 	}
 
-	col := column
-	if col < 0 {
-		col = 0
-	}
+	col := max(column, 0)
 
 	lineLen := len(m.value[line])
 	if col > lineLen {
@@ -1218,14 +1215,8 @@ func (m *Model) repositionView() {
 	if h <= 0 {
 		h = m.height
 	}
-	total := len(m.value)
-	if total < 1 {
-		total = 1
-	}
-	maxOff := total - h
-	if maxOff < 0 {
-		maxOff = 0
-	}
+	total := max(len(m.value), 1)
+	maxOff := max(total-h, 0)
 	target := scroll.Align(row, m.viewport.YOffset, h, total)
 	if m.row >= len(m.value)-1 {
 		target = maxOff
@@ -1934,10 +1925,7 @@ func rangesOverlap(aStart, aEnd, bStart, bEnd int) bool {
 // formatLineNumber formats the line number for display dynamically based on
 // the maximum number of lines.
 func (m Model) formatLineNumber(x any) string {
-	maxLine := len(m.value)
-	if maxLine < 1 {
-		maxLine = 1
-	}
+	maxLine := max(len(m.value), 1)
 	if m.height > maxLine {
 		maxLine = m.height
 	}
@@ -1948,10 +1936,7 @@ func (m Model) formatLineNumber(x any) string {
 			maxLine = n
 		}
 	}
-	digits := len(strconv.Itoa(maxLine))
-	if digits < 2 {
-		digits = 2
-	}
+	digits := max(len(strconv.Itoa(maxLine)), 2)
 	return fmt.Sprintf(" %*v ", digits, x)
 }
 

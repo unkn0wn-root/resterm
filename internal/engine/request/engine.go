@@ -2,6 +2,7 @@ package request
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"time"
 
@@ -279,9 +280,7 @@ func newExec(
 	}
 	ctx, cancel := context.WithCancel(baseCtx)
 	base := e.collectVariables(doc, req, env)
-	for k, v := range opt.Extra {
-		base[k] = v
-	}
+	maps.Copy(base, opt.Extra)
 	hasRTS, hasJS := detectPreRequestScripts(req)
 	exp := newExplainBuilder(e, doc, req, env, opt.Mode == ExecModePreview)
 	if req != nil &&

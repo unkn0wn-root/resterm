@@ -312,7 +312,7 @@ func renderExplainBlock(text string, width int, st lipgloss.Style) string {
 		avail = width
 	}
 	var lines []string
-	for _, line := range strings.Split(text, "\n") {
+	for line := range strings.SplitSeq(text, "\n") {
 		segs := wrapLineSegments(line, avail)
 		if len(segs) == 0 {
 			lines = append(lines, prefix)

@@ -58,10 +58,7 @@ func (d historyDelegate) Render(w io.Writer, m list.Model, index int, item list.
 	}
 
 	lines := historyDescriptionLines(hi.entry)
-	maxLines := d.Height() - 1
-	if maxLines < 0 {
-		maxLines = 0
-	}
+	maxLines := max(d.Height()-1, 0)
 	if maxLines > 0 && len(lines) > maxLines {
 		lines = lines[:maxLines]
 	}

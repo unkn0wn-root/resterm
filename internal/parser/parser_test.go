@@ -2819,7 +2819,7 @@ GET https://example.com
 	if len(workflow.Steps) != 4 {
 		t.Fatalf("expected 4 steps, got %d", len(workflow.Steps))
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if !workflow.Steps[i].Expect.Empty() {
 			t.Fatalf(
 				"expected step %d to have no expectations, got %v",

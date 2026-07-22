@@ -270,8 +270,8 @@ func grpcStreamInfoFromSession(sess *stream.Session) (*scripts.StreamInfo, []byt
 	st, err := sess.State()
 	info := &scripts.StreamInfo{
 		Kind:    "grpc",
-		Summary: make(map[string]interface{}),
-		Events:  make([]map[string]interface{}, 0, len(evs)),
+		Summary: make(map[string]any),
+		Events:  make([]map[string]any, 0, len(evs)),
 	}
 
 	cnt := struct {
@@ -284,7 +284,7 @@ func grpcStreamInfoFromSession(sess *stream.Session) (*scripts.StreamInfo, []byt
 		if ev == nil {
 			continue
 		}
-		item := map[string]interface{}{
+		item := map[string]any{
 			"timestamp": ev.Timestamp.Format(time.RFC3339Nano),
 		}
 		if mtd := grpcMetaTrim(ev.Metadata, grpcclient.MetaMethod); mtd != "" {

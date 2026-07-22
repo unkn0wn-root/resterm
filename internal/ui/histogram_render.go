@@ -102,10 +102,7 @@ func renderHistogramBar(count, maxCount int) string {
 	if fill > histogramBarWidth {
 		fill = histogramBarWidth
 	}
-	empty := histogramBarWidth - fill
-	if empty < 0 {
-		empty = 0
-	}
+	empty := max(histogramBarWidth-fill, 0)
 	return strings.Repeat("█", fill) + strings.Repeat("░", empty)
 }
 

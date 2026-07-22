@@ -3,6 +3,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -308,10 +309,8 @@ func messageHasQuit(msg tea.Msg) bool {
 	case tea.QuitMsg:
 		return true
 	case tea.BatchMsg:
-		for _, cmd := range typed {
-			if commandHasQuit(cmd) {
-				return true
-			}
+		if slices.ContainsFunc(typed, commandHasQuit) {
+			return true
 		}
 	}
 	return false

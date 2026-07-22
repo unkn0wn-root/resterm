@@ -16,8 +16,8 @@ func TestWrapDiffContentPreservesMarkers(t *testing.T) {
 	if !ok {
 		t.Fatal("expected wrap to complete")
 	}
-	lines := strings.Split(wrapped, "\n")
-	for _, line := range lines {
+	lines := strings.SplitSeq(wrapped, "\n")
+	for line := range lines {
 		switch {
 		case line == "":
 			continue
@@ -41,7 +41,7 @@ func TestWrapDiffContentHandlesContextLines(t *testing.T) {
 	if !ok {
 		t.Fatal("expected wrap to complete")
 	}
-	for _, line := range strings.Split(wrapped, "\n") {
+	for line := range strings.SplitSeq(wrapped, "\n") {
 		if line == "" {
 			continue
 		}
@@ -191,7 +191,7 @@ func TestComputeDiffForPrettyDetectsLeadingWhitespaceChanges(t *testing.T) {
 	}
 	if strings.Contains(plain, "shared line") {
 		// shared line should appear only as context without diff markers
-		for _, line := range strings.Split(plain, "\n") {
+		for line := range strings.SplitSeq(plain, "\n") {
 			if strings.Contains(line, "shared line") && len(line) > 0 && line[0] != ' ' &&
 				line[0] != '@' {
 				t.Fatalf("expected shared line to appear only in context, got %q", line)

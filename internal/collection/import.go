@@ -281,7 +281,7 @@ func checkNoSymlinkEscape(baseAbs, baseReal, dst string) error {
 	}
 
 	cur := baseAbs
-	for _, seg := range strings.Split(rel, string(os.PathSeparator)) {
+	for seg := range strings.SplitSeq(rel, string(os.PathSeparator)) {
 		if seg == "" || seg == "." {
 			continue
 		}
