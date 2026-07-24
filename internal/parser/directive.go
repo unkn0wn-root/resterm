@@ -7,11 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/tracebudget"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -59,7 +56,7 @@ func parseApplyUses(raw string) ([]string, error) {
 		if !strings.EqualFold(strings.TrimSpace(k), "use") {
 			return nil, fmt.Errorf("@apply token %q must be use=<name>", p)
 		}
-		n := strings.TrimSpace(lexer.TrimQuotes(v))
+		n := strings.TrimSpace(directive.TrimQuotes(v))
 		if !validPatchName(n) {
 			return nil, fmt.Errorf("@apply use name %q is invalid", n)
 		}
@@ -72,7 +69,7 @@ func parseApplyUses(raw string) ([]string, error) {
 }
 
 func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
-	scTok, rem := lexer.SplitFirst(rest)
+	scTok, rem := directive.CutToken(rest)
 	if scTok == "" {
 		return restfile.PatchProfile{}, fmt.Errorf(
 			"@patch requires '<scope> <name> <expression>'",
@@ -82,7 +79,7 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 	if !ok {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch scope must be file or global")
 	}
-	n, rem := lexer.SplitFirst(rem)
+	n, rem := directive.CutToken(rem)
 	n = strings.TrimSpace(n)
 	if !validPatchName(n) {
 		return restfile.PatchProfile{}, fmt.Errorf("@patch name %q is invalid", n)
@@ -103,15 +100,13 @@ func parsePatchSpec(rest string, line int) (restfile.PatchProfile, error) {
 	}, nil
 }
 
-func parsePatchScope(tok string) (restfile.PatchScope, bool) {
-	switch strings.ToLower(strings.TrimSpace(tok)) {
-	case "file":
-		return restfile.PatchScopeFile, true
-	case "global":
-		return restfile.PatchScopeGlobal, true
-	default:
-		return 0, false
+// A patch is only useful where later requests can still see it.
+func parsePatchScope(tok string) (directive.Scope, bool) {
+	scope, ok := directive.ParseScope(tok)
+	if !ok || scope == directive.ScopeRequest {
+		return directive.ScopeRequest, false
 	}
+	return scope, true
 }
 
 func validPatchName(n string) bool {
@@ -120,19 +115,15 @@ func validPatchName(n string) bool {
 		return false
 	}
 	for _, r := range n {
-		if lexer.IsIdentRune(r) {
-			continue
+		if !directive.IsKeyRune(r) {
+			return false
 		}
-		if r == '-' || r == '.' {
-			continue
-		}
-		return false
 	}
 	return true
 }
 
 func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
-	f := lexer.Fields(rest)
+	f := directive.Fields(rest)
 	n := len(f)
 	switch n {
 	case 0:
@@ -157,7 +148,7 @@ func parseUseSpec(rest string, line int) (restfile.UseSpec, error) {
 		if p == "" || a == "" {
 			return restfile.UseSpec{}, fmt.Errorf("@use requires a non-empty path and alias")
 		}
-		if !lexer.IsIdent(a) {
+		if !directive.IsIdent(a) {
 			return restfile.UseSpec{}, fmt.Errorf("@use alias %q is invalid", a)
 		}
 		return restfile.UseSpec{
@@ -194,7 +185,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<expr> as <name>'")
 		}
-		if !lexer.IsIdent(name) {
+		if !directive.IsIdent(name) {
 			return nil, fmt.Errorf("@for-each name %q is invalid", name)
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
@@ -205,7 +196,7 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 		if expr == "" || name == "" {
 			return nil, fmt.Errorf("@for-each requires '<name> in <expr>'")
 		}
-		if !lexer.IsIdent(name) {
+		if !directive.IsIdent(name) {
 			return nil, fmt.Errorf("@for-each name %q is invalid", name)
 		}
 		return &restfile.ForEachSpec{Expression: expr, Var: name, Line: line, Col: 1}, nil
@@ -213,62 +204,43 @@ func parseForEachSpec(rest string, line int) (*restfile.ForEachSpec, error) {
 	return nil, fmt.Errorf("@for-each must use 'as' or 'in'")
 }
 
-func parseCaptureScope(token string) (restfile.CaptureScope, bool, bool) {
-	lowered := strings.ToLower(strings.TrimSpace(token))
-	secret := false
-	if strings.HasSuffix(lowered, "-secret") {
-		secret = true
-		lowered = strings.TrimSuffix(lowered, "-secret")
-	}
-	switch lowered {
-	case "request":
-		return restfile.CaptureScopeRequest, secret, true
-	case "file":
-		return restfile.CaptureScopeFile, secret, true
-	case "global":
-		return restfile.CaptureScopeGlobal, secret, true
-	default:
-		return 0, false, false
-	}
-}
-
 type authDirective struct {
-	Scope   restfile.AuthScope
+	Scope   directive.Scope
 	Name    string
 	Spec    *restfile.AuthSpec
 	Disable bool
 }
 
 func parseAuthDirective(rest string) (authDirective, bool, error) {
-	dir := authDirective{Scope: restfile.AuthScopeRequest}
+	dir := authDirective{Scope: directive.ScopeRequest}
 	rest = strings.TrimSpace(rest)
 	if rest == "" {
 		return dir, false, nil
 	}
 
-	fields := lexer.Fields(rest)
+	fields := directive.Fields(rest)
 	if len(fields) == 0 {
 		return dir, false, nil
 	}
 
 	explicitScope := false
-	if scope, ok := parseAuthScope(fields[0]); ok {
+	if scope, ok := directive.ParseScope(fields[0]); ok {
 		dir.Scope = scope
 		explicitScope = true
 		fields = fields[1:]
 		if len(fields) == 0 {
 			return dir, true, fmt.Errorf(
 				"@auth %s scope requires an auth spec",
-				restfile.AuthScopeLabel(scope),
+				scope.String(),
 			)
 		}
 	}
 
 	if strings.EqualFold(fields[0], "none") {
-		if dir.Scope != restfile.AuthScopeRequest {
+		if dir.Scope != directive.ScopeRequest {
 			return dir, true, fmt.Errorf(
 				"@auth %s scope does not support none",
-				restfile.AuthScopeLabel(dir.Scope),
+				dir.Scope.String(),
 			)
 		}
 		if len(fields) != 1 {
@@ -283,7 +255,7 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 		if explicitScope {
 			return dir, true, fmt.Errorf(
 				"@auth %s scope requires a valid auth spec",
-				restfile.AuthScopeLabel(dir.Scope),
+				dir.Scope.String(),
 			)
 		}
 		return dir, false, nil
@@ -292,17 +264,8 @@ func parseAuthDirective(rest string) (authDirective, bool, error) {
 	return dir, true, nil
 }
 
-func parseAuthScope(token string) (restfile.AuthScope, bool) {
-	return dscope.Parse(
-		token,
-		restfile.AuthScopeRequest,
-		restfile.AuthScopeFile,
-		restfile.AuthScopeGlobal,
-	)
-}
-
 func parseAuthSpec(rest string) *restfile.AuthSpec {
-	fields := lexer.Fields(rest)
+	fields := directive.Fields(rest)
 	if len(fields) == 0 {
 		return nil
 	}
@@ -328,7 +291,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if len(fields) < 2 {
 			return nil
 		}
-		maps.Copy(params, options.ParseFields(fields[1:]))
+		maps.Copy(params, directive.OptionFields(fields[1:]))
 		if params["token_url"] == "" && params["cache_key"] == "" {
 			return nil
 		}
@@ -342,7 +305,7 @@ func parseAuthSpec(rest string) *restfile.AuthSpec {
 		if len(fields) < 2 {
 			return nil
 		}
-		maps.Copy(params, options.ParseFields(fields[1:]))
+		maps.Copy(params, directive.OptionFields(fields[1:]))
 		if params["argv"] == "" && params["cache_key"] == "" {
 			return nil
 		}
@@ -368,8 +331,8 @@ func parseProfileSpec(rest string) *restfile.ProfileSpec {
 		return spec
 	}
 
-	fields := lexer.Fields(rest)
-	params := options.ParseFields(fields)
+	fields := directive.Fields(rest)
+	params := directive.OptionFields(fields)
 
 	if spec.Count == 0 {
 		if raw, ok := params["count"]; ok {
@@ -413,7 +376,7 @@ func parseTraceSpec(rest string) *restfile.TraceSpec {
 		return spec
 	}
 
-	for _, field := range lexer.Fields(rest) {
+	for _, field := range directive.Fields(rest) {
 		if value := strings.TrimSpace(field); value != "" {
 			applyTraceToken(spec, value)
 		}
@@ -457,7 +420,7 @@ func applyTraceToken(spec *restfile.TraceSpec, value string) {
 func applyTraceOption(spec *restfile.TraceSpec, key, val string) {
 	switch key {
 	case "enabled":
-		if b, ok := dvalue.ParseBool(val); ok {
+		if b, ok := directive.ParseBool(val); ok {
 			spec.Enabled = b
 		}
 	case "total":
@@ -493,7 +456,7 @@ func setTracePhaseBudget(spec *restfile.TraceSpec, name string, dur time.Duratio
 }
 
 func parseCompareDirective(rest string) (*restfile.CompareSpec, error) {
-	fields := lexer.Fields(rest)
+	fields := directive.Fields(rest)
 	envs := make([]string, 0, len(fields))
 	seen := make(map[string]struct{})
 	var baseline string

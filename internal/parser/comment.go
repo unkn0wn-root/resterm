@@ -3,77 +3,76 @@ package parser
 import (
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func (b *documentBuilder) handleComment(line, baseCol int, text string) {
-	if !strings.HasPrefix(text, "@") {
+	call, ok := directive.Parse(text)
+	if !ok {
+		return
+	}
+	argCol := 0
+	if baseCol > 0 {
+		argCol = baseCol + call.ArgOffset
+	}
+
+	if b.handleMockDirective(line, call.Name, call.Args) {
 		return
 	}
 
-	directive := strings.TrimSpace(text[1:])
-	if directive == "" {
+	if b.handleWorkflowStart(line, call.Name, call.Args) {
+		return
+	}
+	if b.handleUseDirective(line, call.Name, call.Args) {
+		return
+	}
+	if b.handleWorkflowDirective(line, call) {
+		return
+	}
+	if b.handleScopedVariableDirective(call.Name, call.Args, line) {
+		return
+	}
+	if b.handleConstDirective(line, call.Name, call.Args) {
+		return
+	}
+	if b.handleAuthDirective(line, call.Name, call.Args) {
+		return
+	}
+	if b.handleSSHDirective(line, call.Name, call.Args) {
+		return
+	}
+	if b.handleK8sDirective(line, call.Name, call.Args) {
+		return
+	}
+	if b.handlePatchDirective(line, argCol, call.Name, call.Args) {
+		return
+	}
+	if b.handleFileSettingsDirective(call.Name, call.Args) {
 		return
 	}
 
-	key, rest := lexer.SplitDirective(directive)
-	if key == "" {
-		return
-	}
-	argCol := directiveArgCol(text, baseCol)
-
-	if b.handleMockDirective(line, key, rest) {
-		return
-	}
-
-	if b.handleWorkflowStart(line, key, rest) {
-		return
-	}
-	if b.handleUseDirective(line, key, rest) {
-		return
-	}
-	if b.handleWorkflowDirective(line, key, rest) {
-		return
-	}
-	if b.handleScopedVariableDirective(key, rest, line) {
-		return
-	}
-	if b.handleConstDirective(line, key, rest) {
-		return
-	}
-	if b.handleAuthDirective(line, key, rest) {
-		return
-	}
-	if b.handleSSHDirective(line, key, rest) {
-		return
-	}
-	if b.handleK8sDirective(line, key, rest) {
-		return
-	}
-	if b.handlePatchDirective(line, argCol, key, rest) {
-		return
-	}
-	if b.handleFileSettingsDirective(key, rest) {
-		return
-	}
-
-	b.handleRequestDirective(line, argCol, key, rest)
+	b.handleRequestDirective(line, argCol, call)
 }
 
 // handleRequestDirective routes request scoped directives and creates the
 // request on demand. When the directive turns out to be unknown, that fresh
 // request is rolled back again. Leaving it open would swallow shorthand
 // variables that belong to the file rather than to any request.
-func (b *documentBuilder) handleRequestDirective(no, argCol int, key, rest string) bool {
+func (b *documentBuilder) handleRequestDirective(
+	no, argCol int,
+	call directive.Call,
+) bool {
 	startedRequest := !b.inRequest
 	b.ensureRequest(no)
+	if handled, err := b.request.protoDirective(call.Name, call.Args); handled {
+		b.addErrors(no, err)
+		return true
+	}
 	switch {
-	case b.request.protoDirective(key, rest):
+	case call.Name == directive.Body && b.request.handleBodyDirective(call.Args):
 		return true
-	case key == "body" && b.request.handleBodyDirective(rest):
-		return true
-	case b.handleRequestMetadataDirective(no, argCol, key, rest):
+	case b.handleRequestMetadataDirective(no, argCol, call):
 		return true
 	}
 	if startedRequest {
@@ -81,25 +80,6 @@ func (b *documentBuilder) handleRequestDirective(no, argCol int, key, rest strin
 		b.request = nil
 	}
 	return false
-}
-
-// directiveArgCol returns the 1-based source column of a directive's argument
-// (the text after the "@<key>" token), given baseCol, the column of text[0] (the
-// '@'). The key token is measured from text rather than the parsed key
-// so trailing markers (e.g. the colon in "@assert:") are accounted for.
-func directiveArgCol(text string, baseCol int) int {
-	if baseCol <= 0 {
-		return 0
-	}
-	body := text[1:] // after '@'
-	lead := len(body) - len(strings.TrimLeft(body, " \t"))
-	tok := body[lead:]
-	if i := strings.IndexAny(tok, " \t"); i >= 0 {
-		tok = tok[:i]
-	}
-	afterTok := body[lead+len(tok):]
-	gap := len(afterTok) - len(strings.TrimLeft(afterTok, " \t"))
-	return baseCol + 1 + lead + len(tok) + gap
 }
 
 // exprCol returns the 1-based source column of expr within rest, the directive
@@ -116,14 +96,18 @@ func exprCol(rest, expr string, argCol int) int {
 	return argCol + off
 }
 
-func (b *documentBuilder) handleWorkflowStart(line int, key, rest string) bool {
-	switch key {
-	case "workflow":
-		b.startWorkflow(line, rest)
+func (b *documentBuilder) handleWorkflowStart(
+	line int,
+	name directive.Name,
+	args string,
+) bool {
+	switch name {
+	case directive.Workflow:
+		b.startWorkflow(line, args)
 		return true
-	case "step":
+	case directive.Step:
 		if b.workflow != nil {
-			if err := b.workflow.addStep(line, rest); err != nil {
+			if err := b.workflow.addStep(line, args); err != nil {
 				b.addError(line, err.Error())
 			}
 		}
@@ -133,11 +117,15 @@ func (b *documentBuilder) handleWorkflowStart(line int, key, rest string) bool {
 	}
 }
 
-func (b *documentBuilder) handleUseDirective(line int, key, rest string) bool {
-	if key != "use" {
+func (b *documentBuilder) handleUseDirective(
+	line int,
+	name directive.Name,
+	args string,
+) bool {
+	if name != directive.Use {
 		return false
 	}
-	spec, err := parseUseSpec(rest, line)
+	spec, err := parseUseSpec(args, line)
 	if err != nil {
 		b.addError(line, err.Error())
 		return true
@@ -150,11 +138,11 @@ func (b *documentBuilder) handleUseDirective(line int, key, rest string) bool {
 	return true
 }
 
-func (b *documentBuilder) handleWorkflowDirective(line int, key, rest string) bool {
+func (b *documentBuilder) handleWorkflowDirective(line int, call directive.Call) bool {
 	if b.workflow == nil || b.inRequest {
 		return false
 	}
-	if handled, err := b.workflow.handleDirective(key, rest, line); handled {
+	if handled, err := b.workflow.handleDirective(call, line); handled {
 		if err != nil {
 			b.addError(line, err.Error())
 		}
@@ -163,12 +151,16 @@ func (b *documentBuilder) handleWorkflowDirective(line int, key, rest string) bo
 	return false
 }
 
-func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
-	if key != "auth" {
+func (b *documentBuilder) handleAuthDirective(
+	line int,
+	name directive.Name,
+	args string,
+) bool {
+	if name != directive.Auth {
 		return false
 	}
 
-	dir, ok, err := parseAuthDirective(rest)
+	dir, ok, err := parseAuthDirective(args)
 	if !ok {
 		return true
 	}
@@ -178,20 +170,18 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 	}
 
 	switch dir.Scope {
-	case restfile.AuthScopeFile, restfile.AuthScopeGlobal:
+	case directive.ScopeFile, directive.ScopeGlobal:
 		if b.inRequest {
 			b.addError(
 				line,
-				"@auth "+restfile.AuthScopeLabel(
-					dir.Scope,
-				)+" scope must be declared outside a request",
+				"@auth "+dir.Scope.String()+" scope must be declared outside a request",
 			)
 			return true
 		}
 		if dir.Disable || dir.Spec == nil {
 			return true
 		}
-		spec := restfile.CloneAuthSpecValue(*dir.Spec)
+		spec := *dir.Spec.Clone()
 		spec.SourcePath = b.doc.Path
 		b.file.auth = append(b.file.auth, restfile.AuthProfile{
 			Scope:      dir.Scope,
@@ -200,7 +190,7 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 			Line:       line,
 			SourcePath: b.doc.Path,
 		})
-	case restfile.AuthScopeRequest:
+	case directive.ScopeRequest:
 		b.ensureRequest(line)
 		if dir.Disable {
 			b.request.metadata.Auth = nil
@@ -208,7 +198,7 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 			return true
 		}
 		if dir.Spec != nil {
-			spec := restfile.CloneAuthSpec(dir.Spec)
+			spec := dir.Spec.Clone()
 			spec.SourcePath = b.doc.Path
 			b.request.metadata.Auth = spec
 			b.request.metadata.AuthDisabled = false
@@ -218,20 +208,24 @@ func (b *documentBuilder) handleAuthDirective(line int, key, rest string) bool {
 	return true
 }
 
-func (b *documentBuilder) handlePatchDirective(line, argCol int, key, rest string) bool {
-	if key != "patch" {
+func (b *documentBuilder) handlePatchDirective(
+	line, argCol int,
+	name directive.Name,
+	args string,
+) bool {
+	if name != directive.Patch {
 		return false
 	}
 	if b.inRequest {
 		b.addError(line, "@patch must be declared outside a request")
 		return true
 	}
-	spec, err := parsePatchSpec(rest, line)
+	spec, err := parsePatchSpec(args, line)
 	if err != nil {
 		b.addError(line, err.Error())
 		return true
 	}
-	if c := exprCol(rest, spec.Expression, argCol); c > 0 {
+	if c := exprCol(args, spec.Expression, argCol); c > 0 {
 		spec.Col = c
 	}
 	spec.SourcePath = b.doc.Path
@@ -239,16 +233,19 @@ func (b *documentBuilder) handlePatchDirective(line, argCol int, key, rest strin
 	return true
 }
 
-func (b *documentBuilder) handleFileSettingsDirective(key, rest string) bool {
+func (b *documentBuilder) handleFileSettingsDirective(
+	name directive.Name,
+	args string,
+) bool {
 	if b.inRequest {
 		return false
 	}
-	switch key {
-	case "setting":
-		b.file.settings = putSetting(b.file.settings, rest)
+	switch name {
+	case directive.Setting:
+		b.file.settings = putSetting(b.file.settings, args)
 		return true
-	case "settings":
-		b.file.settings = applySettingsTokens(b.file.settings, rest)
+	case directive.Settings:
+		b.file.settings = applySettingsTokens(b.file.settings, args)
 		return true
 	default:
 		return false

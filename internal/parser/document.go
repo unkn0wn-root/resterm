@@ -1,16 +1,16 @@
 package parser
 
 import (
+	"errors"
 	"maps"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
 	ssebuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/sse"
 	wsbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/websocket"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -74,6 +74,44 @@ func (b *documentBuilder) addError(line int, message string) {
 		Line:    line,
 		Message: msg,
 	})
+}
+
+// Unknown options go to Warnings. One bad key should not cost you the whole
+// directive.
+func (b *documentBuilder) addErrors(line int, err error) {
+	if err == nil {
+		return
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, item := range joined.Unwrap() {
+			b.addErrors(line, item)
+		}
+		return
+	}
+	var unknown *directive.UnknownOptionsError
+	if errors.As(err, &unknown) {
+		b.addWarning(line, err.Error())
+		return
+	}
+	b.addError(line, err.Error())
+}
+
+// True if err is more than unknown option warnings. When it is false the
+// caller can still use what it parsed.
+func fatalErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		for _, item := range joined.Unwrap() {
+			if fatalErr(item) {
+				return true
+			}
+		}
+		return false
+	}
+	var unknown *directive.UnknownOptionsError
+	return !errors.As(err, &unknown)
 }
 
 func (b *documentBuilder) addWarning(line int, message string) {
@@ -239,13 +277,13 @@ func (b *documentBuilder) startWorkflow(line int, rest string) {
 	if b.inRequest {
 		b.flushRequest(line - 1)
 	}
-	nameToken, remainder := lexer.SplitFirst(rest)
+	nameToken, remainder := directive.CutToken(rest)
 	if nameToken == "" || strings.Contains(nameToken, "=") {
 		return
 	}
 	b.flushWorkflow(line - 1)
 	sb := newWorkflowBuilder(line, nameToken)
-	sb.applyOptions(options.Parse(remainder))
+	sb.applyOptions(directive.ParseOptions(remainder))
 	sb.touch(line)
 	b.workflow = sb
 }

@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/bodyfmt"
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
 	"github.com/unkn0wn-root/resterm/internal/cli"
 	"github.com/unkn0wn-root/resterm/internal/mock"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 )
 
 func handleMockSubcommand(args []string) (bool, error) {
@@ -93,7 +93,7 @@ func (c mockConfig) parseLimits() (int64, int64, error) {
 }
 
 func parseMockByteLimit(name, raw string) (int64, error) {
-	n, err := dvalue.ParseByteSize(raw)
+	n, err := bytesize.Parse(raw)
 	if err != nil || n <= 0 {
 		return 0, mockUsageError(fmt.Errorf("mock: invalid %s %q", name, raw))
 	}

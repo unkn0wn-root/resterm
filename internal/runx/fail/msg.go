@@ -192,10 +192,6 @@ var httpMessageClassifier = messageClassifier{
 	rules:       mergeMessageRules(sharedMessageRules, httpMessageRules),
 }
 
-func classifyHTTPMessage(msg, source string) Failure {
-	return httpMessageClassifier.classify(msg, source)
-}
-
 func classifyMessage(msg, source string) Failure {
 	return genericMessageClassifier.classify(msg, source)
 }

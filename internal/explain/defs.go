@@ -1,7 +1,9 @@
 package explain
 
+import "github.com/unkn0wn-root/resterm/internal/directive"
+
 const (
-	StageApply            = "@apply"
+	StageApply            = "@" + string(directive.Apply)
 	StageCondition        = "condition"
 	StageRoute            = "route"
 	StageSettings         = "settings"

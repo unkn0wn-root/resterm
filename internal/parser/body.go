@@ -4,12 +4,11 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -136,7 +135,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 	if rs == "" {
 		return false
 	}
-	k, v := lexer.SplitDirective(rs)
+	k, v := directive.CutKey(rs)
 	if k == "" {
 		return false
 	}
@@ -153,7 +152,7 @@ func (r *requestBuilder) handleBodyDirective(rest string) bool {
 
 	enabled := true
 	if str.Trim(v) != "" {
-		b, ok := dvalue.ParseBool(v)
+		b, ok := directive.ParseBool(v)
 		if !ok {
 			return false
 		}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -46,12 +47,12 @@ type wfRun struct {
 }
 
 const (
-	wfTagWhen    = "@when"
-	wfTagForEach = "@for-each"
-	wfTagIf      = "@if"
-	wfTagElif    = "@elif"
-	wfTagSwitch  = "@switch"
-	wfTagCase    = "@case"
+	wfTagWhen    = "@" + string(directive.When)
+	wfTagForEach = "@" + string(directive.ForEach)
+	wfTagIf      = "@" + string(directive.If)
+	wfTagElif    = "@" + string(directive.Elif)
+	wfTagSwitch  = "@" + string(directive.Switch)
+	wfTagCase    = "@" + string(directive.Case)
 
 	wfSkipIfNoBranch     = "no @if branch matched"
 	wfSkipIfNoRun        = "no @if run target"
@@ -1211,23 +1212,9 @@ func stepExtras(
 	return out
 }
 
-func stepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
-	lbl := step.Name
-	if lbl == "" {
-		switch step.Kind {
-		case restfile.WorkflowStepKindIf:
-			lbl = "@if"
-		case restfile.WorkflowStepKindSwitch:
-			lbl = "@switch"
-		case restfile.WorkflowStepKindForEach:
-			lbl = step.Using
-			if lbl == "" {
-				lbl = "@for-each"
-			}
-		default:
-			lbl = step.Using
-		}
-	}
+// Branch and iteration details need to look the same in engine events, reports, and the UI.
+func StepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
+	lbl := step.Label()
 	if lbl == "" {
 		lbl = "step"
 	}

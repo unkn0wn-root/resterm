@@ -299,7 +299,6 @@ type Model struct {
 	latAnimOn        bool
 	latAnimT0        time.Time
 
-	scriptRunner    *scripts.Runner
 	testResults     []scripts.TestResult
 	scriptError     error
 	updateClient    update.Client
@@ -682,7 +681,6 @@ func New(cfg Config) Model {
 		statusUser:               statusUser,
 		statusHost:               statusHost,
 		latencySeries:            newLatencySeries(latCap),
-		scriptRunner:             scripts.NewRunner(nil),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,
 		updateCmd:                updateCmd,

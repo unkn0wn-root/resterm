@@ -13,6 +13,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/openapi"
 	"github.com/unkn0wn-root/resterm/internal/openapi/model"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -84,7 +85,7 @@ func (b *Builder) Generate(
 			doc.Variables = append(doc.Variables, restfile.Variable{
 				Name:  baseVar,
 				Value: baseURL,
-				Scope: restfile.ScopeFile,
+				Scope: directive.ScopeFile,
 			})
 		}
 	}
@@ -161,7 +162,7 @@ func (b *Builder) registerGlobal(name, value string, secret bool) {
 	b.globals[name] = restfile.Variable{
 		Name:   name,
 		Value:  value,
-		Scope:  restfile.ScopeGlobal,
+		Scope:  directive.ScopeGlobal,
 		Secret: secret,
 	}
 }
@@ -262,7 +263,7 @@ func (rb *requestBuilder) processParameters() {
 		rb.variables = append(rb.variables, restfile.Variable{
 			Name:  binding.VarName,
 			Value: binding.SerializedValue,
-			Scope: restfile.ScopeRequest,
+			Scope: directive.ScopeRequest,
 		})
 	}
 }
@@ -417,7 +418,7 @@ func (rb *requestBuilder) composeURL() string {
 			rb.variables = append(rb.variables, restfile.Variable{
 				Name:  rb.baseVarName,
 				Value: operationBase,
-				Scope: restfile.ScopeRequest,
+				Scope: directive.ScopeRequest,
 			})
 		}
 		return url

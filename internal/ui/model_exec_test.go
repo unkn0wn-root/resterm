@@ -11,8 +11,6 @@ import (
 	"net/http/httptest"
 	"net/http/httptrace"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -21,13 +19,14 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
-	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 	"nhooyr.io/websocket"
@@ -70,52 +69,6 @@ func startUIWebSocketServer(t *testing.T) (*httptest.Server, func()) {
 
 	return srv, func() {
 		srv.Close()
-	}
-}
-
-func TestPrepareGRPCRequestExpandsTemplKeepMsg(t *testing.T) {
-	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
-		"userId": "123",
-		"token":  "abcd",
-	}))
-
-	req := &restfile.Request{
-		Method: "GRPC",
-		Body:   restfile.BodySource{Text: "{\"id\":\"{{userId}}\"}"},
-		GRPC: &restfile.GRPCRequest{
-			Target:     " localhost:50051 ",
-			FullMethod: "/pkg.Service/GetUser",
-			Message:    "{\"id\":\"{{userId}}\"}",
-			Metadata: []restfile.MetadataPair{
-				{Key: "authorization", Value: "Bearer {{token}}"},
-			},
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-
-	if req.URL != "localhost:50051" {
-		t.Fatalf("expected URL to be trimmed target, got %q", req.URL)
-	}
-	if strings.Contains(req.GRPC.Message, "{{") {
-		t.Fatalf("expected message templates to be expanded, got %q", req.GRPC.Message)
-	}
-	if req.GRPC.MessageFile != "" {
-		t.Fatalf("expected message file to be cleared when inline body provided")
-	}
-	want := "Bearer abcd"
-	found := false
-	for _, pair := range req.GRPC.Metadata {
-		if pair.Key == "authorization" && pair.Value == want {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected metadata to be expanded to %q", want)
 	}
 }
 
@@ -231,161 +184,6 @@ func TestInlineCurlRequestMultiline(t *testing.T) {
 	}
 	if req.LineRange.Start != 1 || req.LineRange.End != 3 {
 		t.Fatalf("expected multi-line range, got %+v", req.LineRange)
-	}
-}
-
-func TestPrepareGRPCRequestUsesBodyOverride(t *testing.T) {
-	resolver := vars.NewResolver()
-	req := &restfile.Request{
-		Method: "GRPC",
-		Body:   restfile.BodySource{Text: "{\"name\":\"sam\"}"},
-		GRPC: &restfile.GRPCRequest{
-			Target:  "localhost:50051",
-			Service: "UserService",
-			Method:  "Create",
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-	if req.GRPC.FullMethod != "/UserService/Create" {
-		t.Fatalf("expected full method to be inferred, got %q", req.GRPC.FullMethod)
-	}
-	if req.GRPC.Message != "{\"name\":\"sam\"}" {
-		t.Fatalf("expected body override to populate grpc message, got %q", req.GRPC.Message)
-	}
-}
-
-func TestPrepareGRPCRequestNormalizesSchemedTarget(t *testing.T) {
-	resolver := vars.NewResolver()
-	req := &restfile.Request{
-		Method: "GRPC",
-		GRPC: &restfile.GRPCRequest{
-			Target:     "grpc://localhost:8082",
-			FullMethod: "/pkg.Service/Call",
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-	if req.GRPC.Target != "localhost:8082" {
-		t.Fatalf("expected target to be normalized, got %q", req.GRPC.Target)
-	}
-	if req.URL != "localhost:8082" {
-		t.Fatalf("expected URL to mirror normalized target, got %q", req.URL)
-	}
-}
-
-func TestPrepareGRPCRequestNormalizesSecureSchemes(t *testing.T) {
-	resolver := vars.NewResolver()
-	req := &restfile.Request{
-		Method: "GRPC",
-		GRPC: &restfile.GRPCRequest{
-			Target:     "grpcs://api.example.com:8443",
-			FullMethod: "/pkg.Service/Call",
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-	if req.GRPC.Target != "api.example.com:8443" {
-		t.Fatalf("expected target to drop grpcs scheme, got %q", req.GRPC.Target)
-	}
-	if !req.GRPC.PlaintextSet || req.GRPC.Plaintext {
-		t.Fatalf(
-			"expected secure scheme to enforce TLS, got plaintext=%v set=%v",
-			req.GRPC.Plaintext,
-			req.GRPC.PlaintextSet,
-		)
-	}
-}
-
-func TestNormalizeGRPCTargetPreservesQuery(t *testing.T) {
-	req := &restfile.Request{
-		Method: "GRPC",
-		GRPC: &restfile.GRPCRequest{
-			Target:     "grpc://localhost:9000/service?alt=blue",
-			FullMethod: "/svc.Method",
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, vars.NewResolver(), ""); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-	if req.GRPC.Target != "localhost:9000/service?alt=blue" {
-		t.Fatalf("expected query to be preserved, got %q", req.GRPC.Target)
-	}
-}
-
-func TestPrepareGRPCRequestExpandsDescriptorSet(t *testing.T) {
-	resolver := vars.NewResolver(
-		vars.NewMapProvider(
-			"doc",
-			map[string]string{"grpc.descriptor": "./testdata/example.protoset"},
-		),
-	)
-	req := &restfile.Request{
-		Method: "GRPC",
-		GRPC: &restfile.GRPCRequest{
-			Target:        "localhost:50051",
-			FullMethod:    "/pkg.Svc/Call",
-			DescriptorSet: "{{grpc.descriptor}}",
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, resolver, ""); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-	if req.GRPC.DescriptorSet != "./testdata/example.protoset" {
-		t.Fatalf("expected descriptor set to be expanded, got %q", req.GRPC.DescriptorSet)
-	}
-}
-
-func TestPrepareGRPCRequestExpandsMessageFile(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "msg.json")
-	if err := os.WriteFile(path, []byte(`{"id":"{{userId}}"}`), 0o600); err != nil {
-		t.Fatalf("write message file: %v", err)
-	}
-
-	resolver := vars.NewResolver(vars.NewMapProvider("env", map[string]string{
-		"userId": "abc",
-	}))
-	req := &restfile.Request{
-		Method: "GRPC",
-		Body: restfile.BodySource{
-			FilePath: "msg.json",
-			Options:  restfile.BodyOptions{ExpandTemplates: true},
-		},
-		GRPC: &restfile.GRPCRequest{
-			Target:     "localhost:50051",
-			FullMethod: "/pkg.Service/Get",
-		},
-	}
-
-	var model Model
-	if err := model.prepareGRPCRequest(req, resolver, dir); err != nil {
-		t.Fatalf("prepareGRPCRequest returned error: %v", err)
-	}
-	if req.GRPC.MessageFile != "msg.json" {
-		t.Fatalf("expected message file to be preserved, got %q", req.GRPC.MessageFile)
-	}
-	if req.GRPC.Message != "" {
-		t.Fatalf("expected inline message to stay empty, got %q", req.GRPC.Message)
-	}
-	if !req.GRPC.MessageExpandedSet {
-		t.Fatalf("expected expanded message to be set")
-	}
-	if req.GRPC.MessageExpanded != `{"id":"abc"}` {
-		t.Fatalf("expected expanded message, got %q", req.GRPC.MessageExpanded)
 	}
 }
 
@@ -796,7 +594,7 @@ func TestExecuteRequestRunsScriptsForSSE(t *testing.T) {
 		SSE:    &restfile.SSERequest{},
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "stream.count",
 				Expression: "{{response.json.summary.eventCount}}",
 			}},
@@ -953,22 +751,6 @@ func TestExecuteExplainRTSGlobalMutationPreservesRequestVarPrecedenceForJS(t *te
 	}
 }
 
-func TestResolveRequestTimeout(t *testing.T) {
-	req := &restfile.Request{Settings: map[string]string{"timeout": "5s"}}
-	if got := resolveRequestTimeout(req, 30*time.Second); got != 5*time.Second {
-		t.Fatalf("expected timeout override to return 5s, got %s", got)
-	}
-
-	req.Settings["timeout"] = "invalid"
-	if got := resolveRequestTimeout(req, 10*time.Second); got != 10*time.Second {
-		t.Fatalf("expected fallback to base timeout, got %s", got)
-	}
-
-	if got := resolveRequestTimeout(nil, 15*time.Second); got != 15*time.Second {
-		t.Fatalf("expected base timeout when request nil, got %s", got)
-	}
-}
-
 func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 	model := Model{
 		cfg: Config{EnvironmentName: "dev"},
@@ -976,7 +758,7 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth.http",
 		Auth: []restfile.AuthProfile{{
-			Scope: restfile.AuthScopeFile,
+			Scope: directive.ScopeFile,
 			Spec: restfile.AuthSpec{
 				Type:   "bearer",
 				Params: map[string]string{"token": "file-token"},
@@ -990,17 +772,13 @@ func TestBuildHTTPRequestUsesInheritedFileAuth(t *testing.T) {
 		LineRange: restfile.LineRange{Start: 2, End: 3},
 	}
 
-	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", nil, nil)
-	if msg := exec.runPreRequestScripts(); msg != nil {
-		t.Fatalf("runPreRequestScripts: %v", msg.err)
-	}
-	exec.buildResolver()
-
+	model.syncRegistry(doc)
+	model.requestSvc(httpclient.Options{}).ResolveInheritedAuth(doc, req)
 	client := httpclient.NewClient(nil)
 	httpReq, _, _, err := client.BuildHTTPRequest(
 		context.Background(),
 		req,
-		exec.resolver,
+		vars.NewResolver(),
 		httpclient.Options{},
 	)
 	if err != nil {
@@ -1018,7 +796,7 @@ func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 	model.registryIndex().Sync(&restfile.Document{
 		Path: "/tmp/other.http",
 		Auth: []restfile.AuthProfile{{
-			Scope: restfile.AuthScopeGlobal,
+			Scope: directive.ScopeGlobal,
 			Spec: restfile.AuthSpec{
 				Type:   "bearer",
 				Params: map[string]string{"token": "global-token"},
@@ -1028,7 +806,10 @@ func TestResolveInheritedAuthUsesGlobalFallback(t *testing.T) {
 	})
 
 	req := &restfile.Request{}
-	model.resolveInheritedAuth(&restfile.Document{Path: "/tmp/current.http"}, req)
+	model.requestSvc(httpclient.Options{}).ResolveInheritedAuth(
+		&restfile.Document{Path: "/tmp/current.http"},
+		req,
+	)
 
 	if req.Metadata.Auth == nil {
 		t.Fatalf("expected inherited global auth")
@@ -1045,7 +826,7 @@ func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "/tmp/inherited-auth-apply.http",
 		Auth: []restfile.AuthProfile{{
-			Scope: restfile.AuthScopeFile,
+			Scope: directive.ScopeFile,
 			Spec: restfile.AuthSpec{
 				Type:   "bearer",
 				Params: map[string]string{"token": "file-token"},
@@ -1066,14 +847,22 @@ func TestRunPreRequestScriptsApplyCanClearInheritedAuth(t *testing.T) {
 		},
 	}
 
-	exec := newExecContext(&model, doc, req, httpclient.Options{}, "", nil, nil)
-	if msg := exec.runPreRequestScripts(); msg != nil {
-		t.Fatalf("runPreRequestScripts: %v", msg.err)
+	res, err := model.requestSvc(httpclient.Options{}).ExecuteWith(
+		doc,
+		req,
+		"",
+		rqeng.ExecOptions{Mode: rqeng.ExecModePreview},
+	)
+	if err != nil {
+		t.Fatalf("ExecuteWith: %v", err)
 	}
-	if req.Metadata.Auth != nil {
+	if res.Err != nil {
+		t.Fatalf("preview error: %v", res.Err)
+	}
+	if res.Executed.Metadata.Auth != nil {
 		t.Fatalf("expected @apply to clear inherited auth")
 	}
-	if !req.Metadata.AuthDisabled {
+	if !res.Executed.Metadata.AuthDisabled {
 		t.Fatalf("expected cleared inherited auth to stay disabled for this execution")
 	}
 }
@@ -1087,7 +876,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 		cfg: Config{EnvironmentName: "dev"},
 	}
 
-	model.oauthMgr().SetRequestFunc(
+	model.runtimeSvc().OAuth().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			atomic.AddInt32(&calls, 1)
 			values, err := url.ParseQuery(req.Body.Text)
@@ -1115,7 +904,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 	resolver := vars.NewResolver()
-	if err := model.ensureOAuth(
+	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		resolver,
@@ -1137,7 +926,7 @@ func TestEnsureOAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if err := model.ensureOAuth(
+	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 		context.Background(),
 		req2,
 		resolver,
@@ -1157,7 +946,7 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 	model := Model{
 		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.oauthMgr().SetRequestFunc(
+	model.runtimeSvc().OAuth().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			atomic.AddInt32(&called, 1)
 			return &httpclient.Response{
@@ -1176,7 +965,7 @@ func TestEnsureOAuthSkipsWhenHeaderPresent(t *testing.T) {
 			}},
 		},
 	}
-	if err := model.ensureOAuth(
+	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1204,12 +993,50 @@ func copyValues(src url.Values) url.Values {
 	return dst
 }
 
+func testEnsureCommandAuth(
+	m *Model,
+	ctx context.Context,
+	req *restfile.Request,
+	res *vars.Resolver,
+	env string,
+	timeout time.Duration,
+) (authcmd.Result, error) {
+	return m.requestSvc(httpclient.Options{}).EnsureCommandAuth(
+		ctx,
+		nil,
+		req,
+		res,
+		env,
+		timeout,
+	)
+}
+
+func testBuildCommandAuthConfig(
+	m *Model,
+	auth *restfile.AuthSpec,
+	res *vars.Resolver,
+	timeout time.Duration,
+) (authcmd.Config, error) {
+	return m.requestSvc(httpclient.Options{}).
+		BuildCommandAuthConfig(nil, auth, res, timeout)
+}
+
+func testPrepareExplainAuthPreview(
+	m *Model,
+	req *restfile.Request,
+	res *vars.Resolver,
+	env string,
+) (rqeng.ExplainAuthPreviewResult, error) {
+	return m.requestSvc(httpclient.Options{}).
+		PrepareExplainAuthPreview(nil, req, res, env)
+}
+
 func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	var requests int32
 	model := Model{
 		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.oauthMgr().SetRequestFunc(
+	model.runtimeSvc().OAuth().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			atomic.AddInt32(&requests, 1)
 			return &httpclient.Response{
@@ -1229,7 +1056,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	if err := model.ensureOAuth(
+	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1240,7 +1067,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 		t.Fatalf("ensureOAuth stage: %v", err)
 	}
 	req.Headers = nil
-	if err := model.ensureOAuth(
+	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1255,7 +1082,7 @@ func TestEnsureOAuthUsesEnvironmentOverride(t *testing.T) {
 	}
 
 	req.Headers = nil
-	if err := model.ensureOAuth(
+	if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1275,7 +1102,7 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 		cfg: Config{EnvironmentName: "dev"},
 	}
 
-	model.oauthMgr().SetRequestFunc(
+	model.runtimeSvc().OAuth().SetRequestFunc(
 		func(ctx context.Context, req *restfile.Request, opts httpclient.Options) (*httpclient.Response, error) {
 			<-ctx.Done()
 			return nil, ctx.Err()
@@ -1292,7 +1119,7 @@ func TestEnsureOAuthCancelsWithContext(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		if err := model.ensureOAuth(
+		if err := model.requestSvc(httpclient.Options{}).EnsureOAuth(
 			ctx,
 			req,
 			resolver,
@@ -1324,7 +1151,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 		cfg:         Config{EnvironmentName: "dev"},
 		currentFile: "/tmp/example.http",
 	}
-	model.authCmdMgr().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
+	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, cfg authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		seen = cfg
 		return []byte("token-basic"), nil
@@ -1336,7 +1163,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 	}}
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
 
-	res, err := model.ensureCommandAuth(
+	res, err := testEnsureCommandAuth(&model,
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1360,7 +1187,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 	}
 
 	req2 := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if _, err := model.ensureCommandAuth(
+	if _, err := testEnsureCommandAuth(&model,
 		context.Background(),
 		req2,
 		vars.NewResolver(),
@@ -1380,7 +1207,7 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 	model := Model{
 		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&called, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1394,7 +1221,7 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 		},
 	}
 
-	if _, err := model.ensureCommandAuth(
+	if _, err := testEnsureCommandAuth(&model,
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1418,7 +1245,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 		cfg:         Config{EnvironmentName: "dev"},
 		currentFile: "/tmp/example.http",
 	}
-	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1434,7 +1261,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}}
 
 	seedReq := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: seedAuth}}
-	if _, err := model.ensureCommandAuth(
+	if _, err := testEnsureCommandAuth(&model,
 		context.Background(),
 		seedReq,
 		vars.NewResolver(),
@@ -1445,7 +1272,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}
 
 	req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: cacheOnlyAuth}}
-	res, err := model.ensureCommandAuth(
+	res, err := testEnsureCommandAuth(&model,
 		context.Background(),
 		req,
 		vars.NewResolver(),
@@ -1479,7 +1306,7 @@ func TestBuildCommandAuthConfigExpandsArgvAfterJSONDecode(t *testing.T) {
 		"profile": `qa"blue\team`,
 	}))
 
-	cfg, err := model.buildCommandAuthConfig(auth, resolver, 5*time.Second)
+	cfg, err := testBuildCommandAuthConfig(&model, auth, resolver, 5*time.Second)
 	if err != nil {
 		t.Fatalf("buildCommandAuthConfig: %v", err)
 	}
@@ -1499,7 +1326,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 		cfg:         Config{EnvironmentName: "dev"},
 		currentFile: "/tmp/example.http",
 	}
-	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&calls, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1512,7 +1339,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 	}}
 
 	prime := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
-	if _, err := model.ensureCommandAuth(
+	if _, err := testEnsureCommandAuth(&model,
 		context.Background(),
 		prime,
 		vars.NewResolver(),
@@ -1528,15 +1355,15 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 			"cache_key": "github",
 		},
 	}}}
-	preview, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
+	preview, err := testPrepareExplainAuthPreview(&model, req, vars.NewResolver(), "")
 	if err != nil {
 		t.Fatalf("prepareExplainAuthPreview: %v", err)
 	}
-	if preview.status != xplain.StageOK {
-		t.Fatalf("expected preview ok, got %v", preview.status)
+	if preview.Status != xplain.StageOK {
+		t.Fatalf("expected preview ok, got %v", preview.Status)
 	}
-	if preview.summary != explainSummaryAuthPrepared {
-		t.Fatalf("expected auth prepared summary, got %q", preview.summary)
+	if preview.Summary != explainSummaryAuthPrepared {
+		t.Fatalf("expected auth prepared summary, got %q", preview.Summary)
 	}
 	if got := req.Headers.Get("X-Registry-Token"); got != "Token token-basic" {
 		t.Fatalf("expected cached auth header, got %q", got)
@@ -1544,7 +1371,7 @@ func TestPrepareExplainAuthPreviewCommandUsesCacheOnly(t *testing.T) {
 	if atomic.LoadInt32(&calls) != 1 {
 		t.Fatalf("expected preview to reuse cache only, got %d executions", calls)
 	}
-	if len(preview.extraSecrets) == 0 {
+	if len(preview.ExtraSecrets) == 0 {
 		t.Fatalf("expected preview secrets to include cached auth values")
 	}
 }
@@ -1562,7 +1389,7 @@ func TestPrepareExplainAuthPreviewCommandCacheOnlyRequiresSeed(t *testing.T) {
 		},
 	}
 
-	_, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
+	_, err := testPrepareExplainAuthPreview(&model, req, vars.NewResolver(), "")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -1577,7 +1404,7 @@ func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
 	model := Model{
 		cfg: Config{EnvironmentName: "dev"},
 	}
-	model.authCmdMgr().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+	model.runtimeSvc().AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
 		atomic.AddInt32(&called, 1)
 		return []byte("token-basic"), nil
 	})
@@ -1590,15 +1417,15 @@ func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
 		},
 	}
 
-	preview, err := model.prepareExplainAuthPreview(req, vars.NewResolver(), "")
+	preview, err := testPrepareExplainAuthPreview(&model, req, vars.NewResolver(), "")
 	if err != nil {
 		t.Fatalf("prepareExplainAuthPreview: %v", err)
 	}
-	if preview.status != xplain.StageSkipped {
-		t.Fatalf("expected preview skip, got %v", preview.status)
+	if preview.Status != xplain.StageSkipped {
+		t.Fatalf("expected preview skip, got %v", preview.Status)
 	}
-	if preview.summary != explainSummaryCommandAuthExecutionSkipped {
-		t.Fatalf("expected command skip summary, got %q", preview.summary)
+	if preview.Summary != explainSummaryCommandAuthExecutionSkipped {
+		t.Fatalf("expected command skip summary, got %q", preview.Summary)
 	}
 	if req.Headers.Get("Authorization") != "" {
 		t.Fatalf("expected no auth header injection without cache")
@@ -1608,24 +1435,9 @@ func TestPrepareExplainAuthPreviewCommandSkipsWithoutCache(t *testing.T) {
 	}
 }
 
-func TestResolveHTTPOptionsFallbackEnvEnable(t *testing.T) {
-	model := &Model{currentFile: "/tmp/request.http", workspaceRoot: "/workspace"}
-	opts := httpclient.Options{BaseDir: "", FallbackBaseDirs: []string{"/extra"}}
-
-	t.Setenv("RESTERM_ENABLE_FALLBACK", "true")
-	resolved := model.resolveHTTPOptions(opts)
-	if len(resolved.FallbackBaseDirs) == 0 {
-		t.Fatalf("expected fallbacks enabled, got %v", resolved.FallbackBaseDirs)
-	}
-	if resolved.NoFallback {
-		t.Fatalf("expected NoFallback to be false when enabled")
-	}
-}
-
 func TestExecuteRequestCancelsBeforePreRequest(t *testing.T) {
 	model := Model{
-		cfg:          Config{EnvironmentName: "dev"},
-		scriptRunner: scripts.NewRunner(nil),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	req := &restfile.Request{
@@ -1682,7 +1494,7 @@ func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
 	if resp.response == nil {
 		t.Fatalf("expected placeholder websocket response")
 	}
-	if got := resp.response.Headers.Get(streamHeaderType); got != "websocket" {
+	if got := resp.response.Headers.Get(httpclient.StreamHeaderType); got != "websocket" {
 		t.Fatalf("expected websocket placeholder header, got %q", got)
 	}
 
@@ -1701,6 +1513,56 @@ func TestExecuteRequestInteractiveWebSocketStaysAlive(t *testing.T) {
 	case <-time.After(150 * time.Millisecond):
 	}
 
+	session.Cancel()
+	select {
+	case <-session.Done():
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for websocket session shutdown")
+	}
+}
+
+func TestRunRequestServiceAttachesInteractiveWebSocket(t *testing.T) {
+	srv, cleanup := startUIWebSocketServer(t)
+	defer cleanup()
+
+	wsURL := strings.Replace(srv.URL, "http", "ws", 1) + "/ws/chat"
+	model := New(Config{})
+	req := &restfile.Request{
+		Method:    "GET",
+		URL:       wsURL,
+		WebSocket: &restfile.WebSocketRequest{},
+	}
+	svc := model.runRequestSvc(httpclient.Options{})
+	if svc == nil {
+		t.Fatal("expected run request service")
+	}
+
+	res, err := svc.ExecuteWith(
+		nil,
+		req,
+		"",
+		rqeng.ExecOptions{Ctx: context.Background()},
+	)
+	if err != nil {
+		t.Fatalf("ExecuteWith: %v", err)
+	}
+	if res.Response == nil {
+		t.Fatal("expected placeholder websocket response")
+	}
+	if got := res.Response.Headers.Get(httpclient.StreamHeaderType); got != "websocket" {
+		t.Fatalf("expected websocket placeholder header, got %q", got)
+	}
+
+	sessionID := model.sessionIDForRequest(req)
+	session := model.sessionHandles[sessionID]
+	if session == nil {
+		t.Fatalf("expected websocket session handle for %q", sessionID)
+	}
+	select {
+	case <-session.Done():
+		t.Fatal("core websocket session canceled immediately after request returned")
+	case <-time.After(150 * time.Millisecond):
+	}
 	session.Cancel()
 	select {
 	case <-session.Done():
@@ -1731,8 +1593,7 @@ func TestExecuteRequestRejectsNilRequest(t *testing.T) {
 
 func TestExecuteRequestRejectsSSHAndK8sBeforeResolve(t *testing.T) {
 	model := Model{
-		cfg:          Config{EnvironmentName: "dev"},
-		scriptRunner: scripts.NewRunner(nil),
+		cfg: Config{EnvironmentName: "dev"},
 	}
 
 	req := &restfile.Request{

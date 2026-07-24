@@ -84,6 +84,15 @@ func (e *Engine) fileDir(doc *restfile.Document) string {
 	return ""
 }
 
+// Naming these makes the call sites readable. A bare true/false here decides
+// whether secrets reach the screen, which is not something to guess at.
+type secrecy bool
+
+const (
+	keepSecrets secrecy = false
+	omitSecrets secrecy = true
+)
+
 func (e *Engine) envName(name string) string {
 	return vars.SelectEnv(e.cfg.EnvironmentSet, name, e.cfg.EnvironmentName)
 }
@@ -164,6 +173,47 @@ func (e *Engine) buildResolver(
 	extras ...map[string]string,
 ) *vars.Resolver {
 	env = e.envName(env)
+	res := vars.NewResolver(e.providers(doc, req, env, globs, keepSecrets, extras...)...)
+	res.AddRefResolver(vars.EnvRefResolver)
+	res.SetExprEval(e.rtsEval(ctx, doc, req, env, base, extra, extras...))
+	res.SetExprPos(e.rtsPos(doc, req))
+	return res
+}
+
+// DisplayResolver uses normal variable precedence for UI text but leaves out
+// known secret values so labels and previews do not expose them.
+func (e *Engine) DisplayResolver(
+	ctx context.Context,
+	doc *restfile.Document,
+	req *restfile.Request,
+	env, base string,
+	extra map[string]rts.Value,
+	extras ...map[string]string,
+) *vars.Resolver {
+	env = e.envName(env)
+	base = e.rtsBase(doc, base)
+	globs := e.collectStoredGlobalValues(env)
+	maps.DeleteFunc(globs, func(_ string, v vars.GlobalMutation) bool { return v.Secret })
+
+	res := vars.NewResolver(e.providers(doc, req, env, globs, omitSecrets, extras...)...)
+	res.AddRefResolver(vars.EnvRefResolver)
+	vv := e.collectVariablesWithGlobals(doc, req, env, globs, omitSecrets, extras...)
+	res.SetExprEval(e.ExprEvalWithOptions(
+		ctx, doc, req, env, base, vv, extra,
+		ExprEvalOptions{OmitSecretGlobals: true},
+	))
+	res.SetExprPos(e.rtsPos(doc, req))
+	return res
+}
+
+func (e *Engine) providers(
+	doc *restfile.Document,
+	req *restfile.Request,
+	env string,
+	globs map[string]vars.GlobalMutation,
+	sec secrecy,
+	extras ...map[string]string,
+) []vars.Provider {
 	ps := make([]vars.Provider, 0, 8)
 	if doc != nil && len(doc.Constants) > 0 {
 		vals := make(map[string]string, len(doc.Constants))
@@ -180,9 +230,14 @@ func (e *Engine) buildResolver(
 	if req != nil && len(req.Variables) > 0 {
 		vals := make(map[string]string, len(req.Variables))
 		for _, v := range req.Variables {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			vals[v.Name] = v.Value
 		}
-		ps = append(ps, vars.NewMapProvider("request", vals))
+		if len(vals) > 0 {
+			ps = append(ps, vars.NewMapProvider("request", vals))
+		}
 	}
 	if vals := globalValueMap(globs); len(vals) > 0 {
 		ps = append(ps, vars.NewMapProvider("global", vals))
@@ -190,33 +245,40 @@ func (e *Engine) buildResolver(
 	if doc != nil && len(doc.Globals) > 0 {
 		vals := make(map[string]string, len(doc.Globals))
 		for _, v := range doc.Globals {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			vals[v.Name] = v.Value
 		}
-		ps = append(ps, vars.NewMapProvider("document-global", vals))
+		if len(vals) > 0 {
+			ps = append(ps, vars.NewMapProvider("document-global", vals))
+		}
 	}
 	fv := make(map[string]string)
 	if doc != nil {
 		for _, v := range doc.Variables {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			fv[v.Name] = v.Value
 		}
 	}
-	e.mergeFileRuntimeVars(fv, doc, env)
+	e.mergeFileRuntimeVars(fv, doc, env, sec)
 	if len(fv) > 0 {
 		ps = append(ps, vars.NewMapProvider("file", fv))
 	}
 	if envVals := vars.EnvValues(e.cfg.EnvironmentSet, env); len(envVals) > 0 {
 		ps = append(ps, vars.NewMapProvider("environment", envVals))
 	}
-	ps = append(ps, vars.EnvProvider{})
-
-	res := vars.NewResolver(ps...)
-	res.AddRefResolver(vars.EnvRefResolver)
-	res.SetExprEval(e.rtsEval(ctx, doc, req, env, base, extra, extras...))
-	res.SetExprPos(e.rtsPos(doc, req))
-	return res
+	return append(ps, vars.EnvProvider{})
 }
 
-func (e *Engine) mergeFileRuntimeVars(dst map[string]string, doc *restfile.Document, env string) {
+func (e *Engine) mergeFileRuntimeVars(
+	dst map[string]string,
+	doc *restfile.Document,
+	env string,
+	sec secrecy,
+) {
 	fs := e.rt.Files()
 	if dst == nil || fs == nil {
 		return
@@ -224,6 +286,9 @@ func (e *Engine) mergeFileRuntimeVars(dst map[string]string, doc *restfile.Docum
 	env = e.envName(env)
 	if snap := fs.Snapshot(env, e.filePath(doc)); len(snap) > 0 {
 		for k, v := range snap {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			name := strings.TrimSpace(v.Name)
 			if name == "" {
 				name = k
@@ -244,6 +309,7 @@ func (e *Engine) collectVariables(
 		req,
 		env,
 		e.collectStoredGlobalValues(env),
+		keepSecrets,
 		extras...,
 	)
 }
@@ -253,6 +319,7 @@ func (e *Engine) collectVariablesWithGlobals(
 	req *restfile.Request,
 	env string,
 	globs map[string]vars.GlobalMutation,
+	sec secrecy,
 	extras ...map[string]string,
 ) map[string]string {
 	env = e.envName(env)
@@ -262,16 +329,25 @@ func (e *Engine) collectVariablesWithGlobals(
 	}
 	if doc != nil {
 		for _, v := range doc.Variables {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			out[v.Name] = v.Value
 		}
 		for _, v := range doc.Globals {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			out[v.Name] = v.Value
 		}
 	}
-	e.mergeFileRuntimeVars(out, doc, env)
+	e.mergeFileRuntimeVars(out, doc, env, sec)
 	maps.Copy(out, globalValueMap(globs))
 	if req != nil {
 		for _, v := range req.Variables {
+			if sec == omitSecrets && v.Secret {
+				continue
+			}
 			out[v.Name] = v.Value
 		}
 	}
@@ -478,7 +554,7 @@ func (x *execCtx) applySettings() *xrunResult {
 	if x.doc != nil && x.doc.Settings != nil {
 		fset = x.doc.Settings
 	}
-	before := cloneRequest(x.req)
+	before := CloneRequest(x.req)
 	x.mset = settings.Merge(gset, fset, x.req.Settings)
 	x.req.Settings = x.mset
 	x.exp.setSettings(x.mset)

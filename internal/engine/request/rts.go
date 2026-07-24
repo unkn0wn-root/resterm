@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/mock"
@@ -416,9 +417,9 @@ func (e *Engine) EvalCondition(
 	if expr == "" {
 		return true, "", nil
 	}
-	tag := "@when"
+	tag := directive.When.Tag()
 	if spec.Negate {
-		tag = "@skip-if"
+		tag = directive.SkipIf.Tag()
 	}
 	val, err := e.rtsEvalValue(
 		ctx,
@@ -436,17 +437,11 @@ func (e *Engine) EvalCondition(
 		return false, "", err
 	}
 	truthy := val.IsTruthy()
-	shouldRun := truthy
-	if spec.Negate {
-		shouldRun = !truthy
-	}
-	if shouldRun {
+	if truthy != spec.Negate {
 		return true, "", nil
 	}
-	if spec.Negate {
-		return false, fmt.Sprintf("@skip-if evaluated to true: %s", expr), nil
-	}
-	return false, fmt.Sprintf("@when evaluated to false: %s", expr), nil
+	reason := fmt.Sprintf("%s evaluated to %t: %s", tag, truthy, expr)
+	return false, reason, nil
 }
 
 func (e *Engine) EvalForEachItems(
@@ -531,7 +526,7 @@ func (e *Engine) runAsserts(
 		if expr == "" {
 			continue
 		}
-		rt.Site = "@assert " + expr
+		rt.Site = directive.Assert.Tag() + " " + expr
 		start := time.Now()
 		val, err := e.evalRTSValue(ctx, doc, rt, expr, e.rtsPosForLineCol(doc, req, as.Line, as.Col))
 		if err != nil {
@@ -1004,7 +999,7 @@ func applyPatchAuth(req *restfile.Request, auth *restfile.AuthSpec, set bool) {
 		req.Metadata.AuthDisabled = true
 		return
 	}
-	req.Metadata.Auth = restfile.CloneAuthSpec(auth)
+	req.Metadata.Auth = auth.Clone()
 	req.Metadata.AuthDisabled = false
 }
 
@@ -1052,7 +1047,7 @@ func setRequestVars(req *restfile.Request, vv map[string]string) {
 		req.Variables = append(req.Variables, restfile.Variable{
 			Name:  name,
 			Value: val,
-			Scope: restfile.ScopeRequest,
+			Scope: directive.ScopeRequest,
 		})
 	}
 }

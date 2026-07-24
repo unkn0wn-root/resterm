@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 )
 
@@ -18,6 +19,19 @@ const (
 	optionSettingInsecure        optionSettingKey = "insecure"
 	optionSettingNoCookies       optionSettingKey = "no-cookies"
 )
+
+// A typo here used to be dropped in silence, leaving the setting at a default
+// the file never asked for.
+func settingBool(key optionSettingKey, value string) (bool, error) {
+	if b, ok := directive.ParseBool(value); ok {
+		return b, nil
+	}
+	return false, diag.New(
+		diag.ClassProtocol,
+		"invalid "+string(key)+" "+strconv.Quote(value)+" (use true or false)",
+		diag.WithComponent(diag.ComponentHTTP),
+	)
+}
 
 // ApplyOptionSettings applies the generic HTTP settings recognized by the client.
 // It validates http-version and returns an error for invalid values.
@@ -63,19 +77,27 @@ func applyOptionSettings(opts *Options, settings map[string]string, strictVersio
 	}
 
 	if value, ok := settingValue(norm, optionSettingFollowRedirects); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			opts.FollowRedirects = b
+		b, err := settingBool(optionSettingFollowRedirects, value)
+		if err != nil {
+			return err
 		}
+		opts.FollowRedirects = b
 	}
 
 	if value, ok := settingValue(norm, optionSettingInsecure); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			opts.InsecureSkipVerify = b
+		b, err := settingBool(optionSettingInsecure, value)
+		if err != nil {
+			return err
 		}
+		opts.InsecureSkipVerify = b
 	}
 
 	if value, ok := settingValue(norm, optionSettingNoCookies); ok {
-		if b, err := strconv.ParseBool(value); err == nil && b {
+		b, err := settingBool(optionSettingNoCookies, value)
+		if err != nil {
+			return err
+		}
+		if b {
 			opts.CookieJar = nil
 		}
 	}

@@ -52,7 +52,7 @@ type execConfig struct {
 
 func NormalizeProfile(p restfile.SSHProfile) (Config, error) {
 	cfg := baseCfg(p)
-	cfg.Name = connprofile.Fallback(cfg.Name, "default")
+	cfg.Name = connprofile.Fallback(cfg.Name, connprofile.DefaultName)
 	if cfg.Host == "" {
 		return Config{}, errors.New("ssh host is required")
 	}
@@ -174,7 +174,7 @@ func prepareExecConfig(cfg Config) (execConfig, error) {
 
 func (cfg Config) normalize() Config {
 	trimConfigStrings(&cfg)
-	defaultZero(&cfg.Name, "default")
+	defaultZero(&cfg.Name, connprofile.DefaultName)
 	defaultZero(&cfg.Port, defaultPort)
 	defaultZero(&cfg.Timeout, defaultTimeout)
 	return cfg

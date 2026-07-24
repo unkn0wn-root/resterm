@@ -146,17 +146,6 @@ func Classes(err error) []Class {
 	return out
 }
 
-// HasClass reports whether err contains class.
-func HasClass(err error, class Class) bool {
-	target := classOrUnknown(class)
-	found := false
-	collectClasses(err, func(class Class) bool {
-		found = classOrUnknown(class) == target
-		return !found
-	})
-	return found
-}
-
 // Class returns the first non-unknown item class in the report.
 func (r Report) Class() Class {
 	for _, it := range r.Items {
@@ -322,12 +311,8 @@ func leafDiagnostic(e *diagnosticError) Diagnostic {
 		Component: component,
 		Severity:  SeverityError,
 		Message:   msg,
-		Span:      e.meta.span,
-		Labels:    append([]Label(nil), e.meta.labels...),
 		Source:    append([]byte(nil), e.meta.source...),
-		Notes:     notesFromMetadata(e.meta),
 		Chain:     opChain(e, msg),
-		Frames:    append([]StackFrame(nil), e.meta.frames...),
 	}
 	if e.meta.path != "" && d.Span.Start.Path == "" {
 		d.Span.Start.Path = e.meta.path
@@ -406,15 +391,4 @@ func collectClasses(err error, visit func(Class) bool) bool {
 		return collectClasses(wrapped.Unwrap(), visit)
 	}
 	return true
-}
-
-func notesFromMetadata(meta metadata) []Note {
-	out := make([]Note, 0, len(meta.notes)+len(meta.help))
-	for _, note := range meta.notes {
-		out = append(out, Note{Kind: NoteInfo, Message: note})
-	}
-	for _, help := range meta.help {
-		out = append(out, Note{Kind: NoteHelp, Message: help})
-	}
-	return out
 }

@@ -3,6 +3,7 @@ package parser
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	graphqlbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/graphql"
 	grpcbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/grpc"
 	httpbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/http"
@@ -40,17 +41,20 @@ type requestBuilder struct {
 // protoDirective offers a directive to each protocol builder in turn. The
 // first builder that recognizes the key claims it, so the order decides
 // which protocol wins when a key is ambiguous.
-func (r *requestBuilder) protoDirective(key, rest string) bool {
-	if r.grpc.HandleDirective(key, rest) {
-		return true
+func (r *requestBuilder) protoDirective(name directive.Name, args string) (bool, error) {
+	if r.grpc.HandleDirective(name, args) {
+		return true, nil
 	}
-	if r.websocket.HandleDirective(key, rest) {
-		return true
+	if handled, err := r.websocket.HandleDirective(name, args); handled {
+		return true, err
 	}
-	if r.sse.HandleDirective(key, rest) {
-		return true
+	if handled, err := r.sse.HandleDirective(name, args); handled {
+		return true, err
 	}
-	return r.graphql.HandleDirective(key, rest)
+	if r.graphql.HandleDirective(name, args) {
+		return true, nil
+	}
+	return false, nil
 }
 
 func (r *requestBuilder) protoBodyLine(raw string) bool {

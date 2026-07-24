@@ -2,10 +2,10 @@ package settings
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
@@ -207,11 +207,7 @@ func resolveBool(norm map[string]string, key string) (bool, bool) {
 	if !ok {
 		return false, false
 	}
-	val, err := strconv.ParseBool(strings.TrimSpace(raw))
-	if err != nil {
-		return false, false
-	}
-	return val, true
+	return directive.ParseBool(raw)
 }
 
 func splitList(raw string) []string {

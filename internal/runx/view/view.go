@@ -103,11 +103,6 @@ func RenderBody(rep *runner.Report, opt BodyOptions) (string, error) {
 	return requestBodyText(*res, mode, opt.Color, opt.Theme), nil
 }
 
-func CanRender(rep *runner.Report) bool {
-	_, err := singleResult(rep)
-	return err == nil
-}
-
 func CanRenderRequest(rep *runner.Report) bool {
 	res, err := singleResult(rep)
 	return err == nil && res.Kind == runner.ResultKindRequest

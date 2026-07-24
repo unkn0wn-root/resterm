@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -20,7 +21,9 @@ func TestEvalConditionErrorCarriesSource(t *testing.T) {
 	req := &restfile.Request{}
 	spec := &restfile.ConditionSpec{Expression: "missing.value", Line: 2}
 
-	_, _, err := model.evalCondition(context.Background(), doc, req, "", "", spec, nil, nil)
+	_, _, err := model.requestSvc(httpclient.Options{}).EvalCondition(
+		context.Background(), doc, req, "", "", spec, nil, nil,
+	)
 	if err == nil {
 		t.Fatalf("expected @when condition error")
 	}

@@ -215,7 +215,7 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 
 	seedReq := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
-			Auth: restfile.CloneAuthSpec(&defsDoc.Auth[0].Spec),
+			Auth: defsDoc.Auth[0].Spec.Clone(),
 		},
 	}
 	if _, err := eng.EnsureCommandAuth(

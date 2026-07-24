@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/connprofile"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -25,10 +26,10 @@ func Resolve(
 
 	use := strings.TrimSpace(spec.Use)
 	if use != "" {
-		if prof, ok := lookupProfile(fileProfiles, use, restfile.SSHScopeFile); ok {
+		if prof, ok := lookupProfile(fileProfiles, use, directive.ScopeFile); ok {
 			merged = *prof
 			useFound = true
-		} else if prof, ok := lookupProfile(globalProfiles, use, restfile.SSHScopeGlobal); ok {
+		} else if prof, ok := lookupProfile(globalProfiles, use, directive.ScopeGlobal); ok {
 			merged = *prof
 			useFound = true
 		}
@@ -59,9 +60,9 @@ func Resolve(
 func lookupProfile(
 	profiles []restfile.SSHProfile,
 	name string,
-	scope restfile.SSHScope,
+	scope directive.Scope,
 ) (*restfile.SSHProfile, bool) {
-	sf := func(p restfile.SSHProfile) restfile.SSHScope { return p.Scope }
+	sf := func(p restfile.SSHProfile) directive.Scope { return p.Scope }
 	nf := func(p restfile.SSHProfile) string { return p.Name }
 	return restfile.LookupNamedScoped(profiles, name, scope, sf, nf)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -29,8 +30,8 @@ func (m *Model) statusResolver(
 	env string,
 	extras ...map[string]string,
 ) *vars.Resolver {
-	base := m.rtsBase(doc, "")
-	return m.buildDisplayResolver(context.Background(), doc, req, env, base, nil, extras...)
+	rq := m.requestSvc(httpclient.Options{})
+	return rq.DisplayResolver(context.Background(), doc, req, env, "", nil, extras...)
 }
 
 func (m *Model) statusRequestLabel(

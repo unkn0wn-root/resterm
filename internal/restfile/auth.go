@@ -2,47 +2,13 @@ package restfile
 
 import "maps"
 
-import "strings"
-
-func CloneAuthSpec(auth *AuthSpec) *AuthSpec {
-	if auth == nil {
+func (a *AuthSpec) Clone() *AuthSpec {
+	if a == nil {
 		return nil
 	}
-	cp := *auth
-	cp.Params = cloneAuthParams(auth.Params)
+	cp := *a
+	cp.Params = cloneAuthParams(a.Params)
 	return &cp
-}
-
-func CloneAuthSpecValue(auth AuthSpec) AuthSpec {
-	cp := auth
-	cp.Params = cloneAuthParams(auth.Params)
-	return cp
-}
-
-func AuthScopeLabel(scope AuthScope) string {
-	switch scope {
-	case AuthScopeRequest:
-		return "request"
-	case AuthScopeFile:
-		return "file"
-	case AuthScopeGlobal:
-		return "global"
-	default:
-		return strings.ToLower(strings.TrimSpace(scope.String()))
-	}
-}
-
-func (s AuthScope) String() string {
-	switch s {
-	case AuthScopeRequest:
-		return "request"
-	case AuthScopeFile:
-		return "file"
-	case AuthScopeGlobal:
-		return "global"
-	default:
-		return "unknown"
-	}
 }
 
 func cloneAuthParams(src map[string]string) map[string]string {

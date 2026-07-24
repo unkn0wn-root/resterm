@@ -3,6 +3,8 @@ package intellisense
 import (
 	"strings"
 	"testing"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
 func contains(items []Item, label string) bool {
@@ -14,9 +16,9 @@ func contains(items []Item, label string) bool {
 	return false
 }
 
-func argOptions(directive, query string) []Item {
+func argOptions(name, query string) []Item {
 	return directiveSource{}.Provide(
-		Context{Kind: KindDirectiveArg, Directive: directive, Query: query},
+		Context{Kind: KindDirectiveArg, Directive: name, Query: query},
 		Scope{},
 	)
 }
@@ -136,7 +138,7 @@ func TestCompareArgsIncludeEnvironments(t *testing.T) {
 		}
 	}
 	// Static options must not be mutated by appended environments.
-	if got := len(directiveArgs["compare"]); got != 2 {
+	if got := len(directiveArgs[directive.Compare]); got != 2 {
 		t.Fatalf("compare static args mutated, len = %d", got)
 	}
 }

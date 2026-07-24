@@ -1,8 +1,6 @@
 package runfail
 
 import (
-	"slices"
-
 	"github.com/unkn0wn-root/resterm/internal/diag"
 )
 
@@ -77,22 +75,6 @@ type Meta struct {
 	Rank     int
 }
 
-var codeOrder = []Code{
-	CodeAssertion,
-	CodeTraceBudget,
-	CodeTimeout,
-	CodeNetwork,
-	CodeTLS,
-	CodeAuth,
-	CodeScript,
-	CodeFilesystem,
-	CodeProtocol,
-	CodeRoute,
-	CodeCanceled,
-	CodeInternal,
-	CodeUnknown,
-}
-
 var catalog = map[Code]Meta{
 	CodeAssertion:   {Category: CategorySemantic, ExitCode: ExitFailure, Rank: 100},
 	CodeTraceBudget: {Category: CategorySemantic, ExitCode: ExitFailure, Rank: 100},
@@ -107,15 +89,6 @@ var catalog = map[Code]Meta{
 	CodeCanceled:    {Category: CategoryCanceled, ExitCode: ExitCanceled, Rank: 0},
 	CodeInternal:    {Category: CategoryInternal, ExitCode: ExitInternal, Rank: 90},
 	CodeUnknown:     {Category: CategoryInternal, ExitCode: ExitInternal, Rank: 90},
-}
-
-func KnownCodes() []Code {
-	return slices.Clone(codeOrder)
-}
-
-func Lookup(code Code) (Meta, bool) {
-	m, ok := catalog[code]
-	return m, ok
 }
 
 func metaOf(code Code) (Code, Meta) {

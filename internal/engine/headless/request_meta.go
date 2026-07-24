@@ -12,5 +12,5 @@ func (e *Engine) compareSpec(req *restfile.Request) *restfile.CompareSpec {
 	if spec := core.BuildCompareSpec(e.cfg.CompareTargets, e.cfg.CompareBase); spec != nil {
 		return spec
 	}
-	return core.CloneCompareSpec(req.Metadata.Compare)
+	return req.Metadata.Compare.Clone()
 }

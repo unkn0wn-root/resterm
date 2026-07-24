@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
@@ -406,7 +407,7 @@ func TestApplyRawViewModePreservesPrebuiltRawWithoutBody(t *testing.T) {
 func TestHeavyHexGeneratedOnDemand(t *testing.T) {
 	body := bytes.Repeat([]byte("A"), rawHeavyLimit+1)
 	meta := binaryview.Analyze(body, "text/plain")
-	bv := buildBodyViews(body, "text/plain", &meta, nil, "")
+	bv := defaultResponseRenderer().buildBodyViewsCtx(context.Background(), body, "text/plain", &meta, nil, "")
 	rawDefault := bv.raw
 	rawText := bv.rawText
 	rawHex := bv.rawHex

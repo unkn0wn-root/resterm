@@ -1945,8 +1945,8 @@ func TestRequestEditorExitSearchMode(t *testing.T) {
 	if ranges := editor.HighlightRanges(); len(ranges) != 0 {
 		t.Fatalf("expected search highlights cleared, got %d", len(ranges))
 	}
-	if _, ok := editor.currentSearchMatch(); ok {
-		t.Fatal("did not expect current search match after exit")
+	if editor.search.active {
+		t.Fatal("did not expect an active search match after exit")
 	}
 
 	editor, cmd = editor.NextSearchMatch()

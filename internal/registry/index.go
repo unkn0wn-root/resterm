@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/filesvc"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -17,49 +18,40 @@ type docSet[T any] struct {
 	gs []T
 }
 
-type set[T any, S comparable] struct {
-	mu  sync.RWMutex
-	by  map[string]docSet[T]
-	ks  []string
-	fsc S
-	gsc S
-	sc  func(T) S
-	nm  func(T) string
+type set[T any] struct {
+	mu sync.RWMutex
+	by map[string]docSet[T]
+	ks []string
+	sc func(T) directive.Scope
+	nm func(T) string
 }
 
-func newSet[T any, S comparable](
-	fsc S,
-	gsc S,
-	sc func(T) S,
-	nm func(T) string,
-) *set[T, S] {
-	return &set[T, S]{
-		by:  make(map[string]docSet[T]),
-		fsc: fsc,
-		gsc: gsc,
-		sc:  sc,
-		nm:  nm,
+func newSet[T any](sc func(T) directive.Scope, nm func(T) string) *set[T] {
+	return &set[T]{
+		by: make(map[string]docSet[T]),
+		sc: sc,
+		nm: nm,
 	}
 }
 
-func splitByScope[T any, S comparable](xs []T, fsc, gsc S, sc func(T) S) docSet[T] {
+func splitByScope[T any](xs []T, sc func(T) directive.Scope) docSet[T] {
 	var out docSet[T]
 	for _, x := range xs {
 		switch sc(x) {
-		case fsc:
+		case directive.ScopeFile:
 			out.fs = append(out.fs, x)
-		case gsc:
+		case directive.ScopeGlobal:
 			out.gs = append(out.gs, x)
 		}
 	}
 	return out
 }
 
-func (s *set[T, S]) split(xs []T) docSet[T] {
-	return splitByScope(xs, s.fsc, s.gsc, s.sc)
+func (s *set[T]) split(xs []T) docSet[T] {
+	return splitByScope(xs, s.sc)
 }
 
-func (s *set[T, S]) load(src map[string][]T) {
+func (s *set[T]) load(src map[string][]T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -76,7 +68,7 @@ func (s *set[T, S]) load(src map[string][]T) {
 	sort.Strings(s.ks)
 }
 
-func (s *set[T, S]) sync(p string, xs []T) {
+func (s *set[T]) sync(p string, xs []T) {
 	if p == "" {
 		return
 	}
@@ -99,7 +91,7 @@ func (s *set[T, S]) sync(p string, xs []T) {
 	s.by[p] = ds
 }
 
-func (s *set[T, S]) drop(p string) {
+func (s *set[T]) drop(p string) {
 	if p == "" {
 		return
 	}
@@ -110,7 +102,7 @@ func (s *set[T, S]) drop(p string) {
 	s.reindex()
 }
 
-func (s *set[T, S]) reindex() {
+func (s *set[T]) reindex() {
 	s.ks = s.ks[:0]
 	for p := range s.by {
 		s.ks = append(s.ks, p)
@@ -118,7 +110,7 @@ func (s *set[T, S]) reindex() {
 	sort.Strings(s.ks)
 }
 
-func (s *set[T, S]) layers(p string, xs []T) ([]T, []T) {
+func (s *set[T]) layers(p string, xs []T) ([]T, []T) {
 	cur := s.split(xs)
 	fs := cloneSlice(cur.fs)
 	gs := cloneSlice(cur.gs)
@@ -134,7 +126,7 @@ func (s *set[T, S]) layers(p string, xs []T) ([]T, []T) {
 	return fs, gs
 }
 
-func (s *set[T, S]) named(p string, xs []T, n string) (T, bool) {
+func (s *set[T]) named(p string, xs []T, n string) (T, bool) {
 	key := nameKey(n)
 	if key == "" {
 		var z T
@@ -164,7 +156,7 @@ func (s *set[T, S]) named(p string, xs []T, n string) (T, bool) {
 	return z, false
 }
 
-func (s *set[T, S]) deflt(p string, xs []T) (T, bool) {
+func (s *set[T]) deflt(p string, xs []T) (T, bool) {
 	cur := s.split(xs)
 	if v, ok := findDefault(cur.fs, s.nm); ok {
 		return v, true
@@ -192,36 +184,28 @@ type Index struct {
 	mu    sync.RWMutex
 	root  string
 	rec   bool
-	ssh   *set[restfile.SSHProfile, restfile.SSHScope]
-	auth  *set[restfile.AuthProfile, restfile.AuthScope]
-	k8s   *set[restfile.K8sProfile, restfile.K8sScope]
-	patch *set[restfile.PatchProfile, restfile.PatchScope]
+	ssh   *set[restfile.SSHProfile]
+	auth  *set[restfile.AuthProfile]
+	k8s   *set[restfile.K8sProfile]
+	patch *set[restfile.PatchProfile]
 }
 
 func New() *Index {
 	return &Index{
 		ssh: newSet(
-			restfile.SSHScopeFile,
-			restfile.SSHScopeGlobal,
-			func(v restfile.SSHProfile) restfile.SSHScope { return v.Scope },
+			func(v restfile.SSHProfile) directive.Scope { return v.Scope },
 			func(v restfile.SSHProfile) string { return v.Name },
 		),
 		auth: newSet(
-			restfile.AuthScopeFile,
-			restfile.AuthScopeGlobal,
-			func(v restfile.AuthProfile) restfile.AuthScope { return v.Scope },
+			func(v restfile.AuthProfile) directive.Scope { return v.Scope },
 			func(v restfile.AuthProfile) string { return v.Name },
 		),
 		k8s: newSet(
-			restfile.K8sScopeFile,
-			restfile.K8sScopeGlobal,
-			func(v restfile.K8sProfile) restfile.K8sScope { return v.Scope },
+			func(v restfile.K8sProfile) directive.Scope { return v.Scope },
 			func(v restfile.K8sProfile) string { return v.Name },
 		),
 		patch: newSet(
-			restfile.PatchScopeFile,
-			restfile.PatchScopeGlobal,
-			func(v restfile.PatchProfile) restfile.PatchScope { return v.Scope },
+			func(v restfile.PatchProfile) directive.Scope { return v.Scope },
 			func(v restfile.PatchProfile) string { return v.Name },
 		),
 	}
@@ -403,7 +387,7 @@ func (ix *Index) DefaultAuth(doc *restfile.Document) (*restfile.AuthProfile, boo
 }
 
 func cloneAuth(v restfile.AuthProfile) restfile.AuthProfile {
-	v.Spec = restfile.CloneAuthSpecValue(v.Spec)
+	v.Spec = *v.Spec.Clone()
 	if v.Spec.SourcePath == "" {
 		v.Spec.SourcePath = v.SourcePath
 	}
@@ -491,35 +475,27 @@ func docPatch(doc *restfile.Document) []restfile.PatchProfile {
 func ixSplitSSH(doc *restfile.Document) docSet[restfile.SSHProfile] {
 	return splitByScope(
 		docSSH(doc),
-		restfile.SSHScopeFile,
-		restfile.SSHScopeGlobal,
-		func(v restfile.SSHProfile) restfile.SSHScope { return v.Scope },
+		func(v restfile.SSHProfile) directive.Scope { return v.Scope },
 	)
 }
 
 func ixSplitAuth(doc *restfile.Document) docSet[restfile.AuthProfile] {
 	return splitByScope(
 		docAuth(doc),
-		restfile.AuthScopeFile,
-		restfile.AuthScopeGlobal,
-		func(v restfile.AuthProfile) restfile.AuthScope { return v.Scope },
+		func(v restfile.AuthProfile) directive.Scope { return v.Scope },
 	)
 }
 
 func ixSplitK8s(doc *restfile.Document) docSet[restfile.K8sProfile] {
 	return splitByScope(
 		docK8s(doc),
-		restfile.K8sScopeFile,
-		restfile.K8sScopeGlobal,
-		func(v restfile.K8sProfile) restfile.K8sScope { return v.Scope },
+		func(v restfile.K8sProfile) directive.Scope { return v.Scope },
 	)
 }
 
 func ixSplitPatch(doc *restfile.Document) docSet[restfile.PatchProfile] {
 	return splitByScope(
 		docPatch(doc),
-		restfile.PatchScopeFile,
-		restfile.PatchScopeGlobal,
-		func(v restfile.PatchProfile) restfile.PatchScope { return v.Scope },
+		func(v restfile.PatchProfile) directive.Scope { return v.Scope },
 	)
 }

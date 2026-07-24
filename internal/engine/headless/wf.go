@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/restwriter"
 )
 
 func (e *Engine) executeWorkflow(
@@ -138,7 +138,7 @@ func manualStepRes(
 ) wfStepRes {
 	out := wfStepRes{
 		step:   stepOrDefault(step),
-		name:   workflowStepLabel(step, meta.Branch, meta.Iter, meta.Total),
+		name:   core.StepLabel(step, meta.Branch, meta.Iter, meta.Total),
 		branch: meta.Branch,
 		iter:   meta.Iter,
 		total:  meta.Total,
@@ -324,126 +324,8 @@ func workflowDefinition(st *wfState) string {
 	if st == nil {
 		return ""
 	}
-	var b strings.Builder
-	name := st.wf.Name
-	if name == "" {
-		name = fmt.Sprintf("workflow-%d", st.start.Unix())
-	}
-	b.WriteString("# @workflow ")
-	b.WriteString(name)
-	if st.wf.DefaultOnFailure == restfile.WorkflowOnFailureContinue {
-		b.WriteString(" on-failure=continue")
-	}
-	for k, v := range st.wf.Options {
-		if strings.HasPrefix(k, "vars.") {
-			fmt.Fprintf(&b, " %s=%s", k, v)
-		}
-	}
-	b.WriteString("\n")
-	for _, step := range st.wf.Steps {
-		writeWorkflowStep(&b, st.wf.DefaultOnFailure, step)
-	}
-	return strings.TrimRight(b.String(), "\n")
-}
-
-func writeWorkflowStep(
-	b *strings.Builder,
-	df restfile.WorkflowFailureMode,
-	step restfile.WorkflowStep,
-) {
-	if b == nil {
-		return
-	}
-	switch step.Kind {
-	case restfile.WorkflowStepKindIf:
-		writeIfStep(b, step.If)
-	case restfile.WorkflowStepKindSwitch:
-		writeSwitchStep(b, step.Switch)
-	default:
-		if step.When != nil {
-			tag := "@when"
-			if step.When.Negate {
-				tag = "@skip-if"
-			}
-			fmt.Fprintf(b, "# %s %s\n", tag, step.When.Expression)
-		}
-		if step.ForEach != nil {
-			fmt.Fprintf(b, "# @for-each %s as %s\n", step.ForEach.Expr, step.ForEach.Var)
-		}
-		b.WriteString("# @step ")
-		if name := step.Name; name != "" {
-			b.WriteString(name)
-			b.WriteString(" ")
-		}
-		b.WriteString("using=")
-		b.WriteString(step.Using)
-		if step.OnFailure != df {
-			b.WriteString(" on-failure=")
-			b.WriteString(string(step.OnFailure))
-		}
-		if step.Expect.Status != "" {
-			fmt.Fprintf(b, " expect.status=%s", step.Expect.Status)
-		}
-		if step.Expect.StatusCode != nil {
-			fmt.Fprintf(b, " expect.statuscode=%d", *step.Expect.StatusCode)
-		}
-		for k, v := range step.Expect.Extra {
-			fmt.Fprintf(b, " expect.%s=%s", k, v)
-		}
-		for k, v := range step.Vars {
-			fmt.Fprintf(b, " %s=%s", k, v)
-		}
-		for k, v := range step.Options {
-			fmt.Fprintf(b, " %s=%s", k, v)
-		}
-		b.WriteString("\n")
-	}
-}
-
-func writeIfStep(b *strings.Builder, blk *restfile.WorkflowIf) {
-	if b == nil || blk == nil {
-		return
-	}
-	fmt.Fprintf(b, "# @if %s%s\n", blk.Then.Cond, runFailSuffix(blk.Then.Run, blk.Then.Fail))
-	for _, br := range blk.Elifs {
-		fmt.Fprintf(b, "# @elif %s%s\n", br.Cond, runFailSuffix(br.Run, br.Fail))
-	}
-	if blk.Else != nil {
-		fmt.Fprintf(b, "# @else%s\n", runFailSuffix(blk.Else.Run, blk.Else.Fail))
-	}
-}
-
-func writeSwitchStep(b *strings.Builder, blk *restfile.WorkflowSwitch) {
-	if b == nil || blk == nil {
-		return
-	}
-	fmt.Fprintf(b, "# @switch %s\n", blk.Expr)
-	for _, br := range blk.Cases {
-		fmt.Fprintf(b, "# @case %s%s\n", br.Expr, runFailSuffix(br.Run, br.Fail))
-	}
-	if blk.Default != nil {
-		fmt.Fprintf(b, "# @default%s\n", runFailSuffix(blk.Default.Run, blk.Default.Fail))
-	}
-}
-
-func runFailSuffix(run, fail string) string {
-	if run != "" {
-		return " run=" + quoteOpt(run)
-	}
-	if fail != "" {
-		return " fail=" + quoteOpt(fail)
-	}
-	return ""
-}
-
-func quoteOpt(v string) string {
-	if v == "" {
-		return v
-	}
-	if strings.ContainsAny(v, " \t\"") {
-		return strconv.Quote(v)
-	}
-	return v
+	fallback := fmt.Sprintf("workflow-%d", st.start.Unix())
+	return restwriter.RenderWorkflow(st.wf, fallback)
 }
 
 func stepOrDefault(step restfile.WorkflowStep) restfile.WorkflowStep {

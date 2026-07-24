@@ -18,7 +18,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-func (e *Engine) expandWebSocketSteps(req *restfile.Request, res *vars.Resolver) error {
+func expandWebSocketSteps(req *restfile.Request, res *vars.Resolver) error {
 	if req == nil || req.WebSocket == nil || res == nil {
 		return nil
 	}
@@ -108,7 +108,7 @@ func grpcScriptResponse(req *restfile.Request, resp *grpcclient.Response) *scrip
 	}
 }
 
-func (e *Engine) prepareGRPCRequest(
+func prepareGRPCRequest(
 	req *restfile.Request,
 	res *vars.Resolver,
 	base string,
@@ -131,6 +131,8 @@ func (e *Engine) prepareGRPCRequest(
 		}
 	}
 
+	// Pre-request scripts update BodySource, so sync it back into the gRPC
+	// message fields before the request is sent.
 	switch {
 	case strings.TrimSpace(req.Body.Text) != "":
 		grpcReq.Message = req.Body.Text
@@ -139,6 +141,8 @@ func (e *Engine) prepareGRPCRequest(
 		grpcReq.MessageFile = req.Body.FilePath
 		grpcReq.Message = ""
 	}
+	// MessageExpanded belongs to the current body. Clear it before expanding
+	// the latest file contents.
 	grpcReq.MessageExpanded = ""
 	grpcReq.MessageExpandedSet = false
 
@@ -233,6 +237,8 @@ func expandGRPCMessageFile(path, base string, res *vars.Resolver) (string, error
 	return out, nil
 }
 
+// Dial targets do not use URL schemes. A secure scheme selects TLS unless the
+// request explicitly chose plaintext behavior.
 func normalizeGRPCTarget(target string, req *restfile.GRPCRequest) string {
 	val := strings.TrimSpace(target)
 	if val == "" {

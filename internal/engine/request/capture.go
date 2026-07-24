@@ -11,6 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -90,7 +91,7 @@ func (r *captureResult) addRequest(name, value string, secret bool) {
 		Name:   name,
 		Value:  value,
 		Secret: secret,
-		Scope:  restfile.ScopeRequest,
+		Scope:  directive.ScopeRequest,
 	}
 }
 
@@ -109,7 +110,7 @@ func (r *captureResult) addFile(name, value string, secret bool) {
 		Name:   name,
 		Value:  value,
 		Secret: secret,
-		Scope:  restfile.ScopeFile,
+		Scope:  directive.ScopeFile,
 	}
 }
 
@@ -142,19 +143,19 @@ func (e *Engine) applyCaptures(in captureRun) error {
 			return diag.WrapAsf(diag.ClassScript, err, "%s", captureErrCtx(in.req, c, ex))
 		}
 		switch c.Scope {
-		case restfile.CaptureScopeRequest:
-			upsertVariable(&in.req.Variables, restfile.ScopeRequest, c.Name, val, c.Secret)
+		case directive.ScopeRequest:
+			upsertVariable(&in.req.Variables, directive.ScopeRequest, c.Name, val, c.Secret)
 			if in.out != nil {
 				in.out.addRequest(c.Name, val, c.Secret)
 			}
-		case restfile.CaptureScopeFile:
+		case directive.ScopeFile:
 			if in.doc != nil {
-				upsertVariable(&in.doc.Variables, restfile.ScopeFile, c.Name, val, c.Secret)
+				upsertVariable(&in.doc.Variables, directive.ScopeFile, c.Name, val, c.Secret)
 			}
 			if in.out != nil {
 				in.out.addFile(c.Name, val, c.Secret)
 			}
-		case restfile.CaptureScopeGlobal:
+		case directive.ScopeGlobal:
 			if gs := e.rt.Globals(); gs != nil {
 				gs.Set(env, c.Name, val, c.Secret)
 			}
@@ -209,7 +210,7 @@ func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 		env:  in.env,
 		vars: in.v,
 		x:    in.x,
-		site: "@capture " + in.ex,
+		site: directive.Capture.Tag() + " " + in.ex,
 		resp: in.rr,
 		res:  in.rr,
 		st:   in.rs,
@@ -396,7 +397,7 @@ func newCaptureContext(
 	}
 	var hdr http.Header
 	if resp != nil {
-		hdr = cloneHeader(resp.Header)
+		hdr = resp.Header.Clone()
 	}
 	return &captureContext{
 		response: resp,
@@ -763,7 +764,7 @@ func formatCaptureValue(value any) (string, error) {
 
 func upsertVariable(
 	list *[]restfile.Variable,
-	scope restfile.VariableScope,
+	scope directive.Scope,
 	name, value string,
 	secret bool,
 ) {

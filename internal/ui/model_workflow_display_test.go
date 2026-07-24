@@ -22,7 +22,7 @@ func TestWorkflowRunSubjectForEachUsesRequestBaseTitle(t *testing.T) {
 		}},
 	}
 
-	if got, want := workflowRunSubject(st), requestBaseTitle(req); got != want {
-		t.Fatalf("workflowRunSubject() = %q, want %q", got, want)
+	if got, want := st.runSubject(), requestBaseTitle(req); got != want {
+		t.Fatalf("runSubject() = %q, want %q", got, want)
 	}
 }

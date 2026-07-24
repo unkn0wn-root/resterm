@@ -1002,7 +1002,7 @@ func TestStatusBarBaseFillsOpenCells(t *testing.T) {
 }
 
 func renderedCellBackgrounds(s string) [][]int {
-	bounds := responseSearchBoundaries(s)
+	bounds := buildResponseSearchContentIndex(s).bounds
 	backgrounds := make([][]int, 0, len(bounds)-1)
 	for _, bound := range bounds[1:] {
 		var state sgrState

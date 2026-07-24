@@ -1,7 +1,6 @@
 package restfile
 
 import (
-	"slices"
 	"strings"
 )
 
@@ -10,18 +9,6 @@ const (
 	ScriptLangJS         = "js"
 	ScriptLangRTS        = "rts"
 )
-
-// CloneScriptBlocks returns a copy of script block metadata.
-func CloneScriptBlocks(src []ScriptBlock) []ScriptBlock {
-	if len(src) == 0 {
-		return nil
-	}
-	dst := slices.Clone(src)
-	for i := range dst {
-		dst[i].Lines = slices.Clone(src[i].Lines)
-	}
-	return dst
-}
 
 // NormalizeScriptLang returns the canonical script language token.
 func NormalizeScriptLang(lang string) string {

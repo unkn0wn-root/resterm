@@ -40,7 +40,7 @@ func TestParseSGRParamsHandlesEmptyAndTrailingDefaults(t *testing.T) {
 }
 
 func TestResponseSearchBoundariesIgnorePrivateCSIInRestore(t *testing.T) {
-	bounds := responseSearchBoundaries("\x1b[31mred\x1b[?mX")
+	bounds := buildResponseSearchContentIndex("\x1b[31mred\x1b[?mX").bounds
 	if len(bounds) != 5 {
 		t.Fatalf("expected 4 visible runes plus initial boundary, got %d", len(bounds))
 	}
@@ -54,7 +54,7 @@ func TestResponseSearchBoundariesIgnorePrivateCSIInRestore(t *testing.T) {
 }
 
 func TestResponseSearchBoundariesCompactSGRRestore(t *testing.T) {
-	bounds := responseSearchBoundaries("\x1b[31m\x1b[32m\x1b[33mX")
+	bounds := buildResponseSearchContentIndex("\x1b[31m\x1b[32m\x1b[33mX").bounds
 	if len(bounds) != 2 {
 		t.Fatalf("expected one visible rune plus initial boundary, got %d", len(bounds))
 	}
@@ -65,7 +65,7 @@ func TestResponseSearchBoundariesCompactSGRRestore(t *testing.T) {
 
 func TestResponseSearchBoundariesPreserveCompositeSGRRestore(t *testing.T) {
 	content := "\x1b[1m\x1b[3m\x1b[38;2;0;0;0m\x1b[48;5;244mX"
-	bounds := responseSearchBoundaries(content)
+	bounds := buildResponseSearchContentIndex(content).bounds
 	if len(bounds) != 2 {
 		t.Fatalf("expected one visible rune plus initial boundary, got %d", len(bounds))
 	}
@@ -76,7 +76,7 @@ func TestResponseSearchBoundariesPreserveCompositeSGRRestore(t *testing.T) {
 }
 
 func TestResponseSearchBoundariesClearAttributesWithoutClearingColors(t *testing.T) {
-	bounds := responseSearchBoundaries("\x1b[1;31m\x1b[22mX")
+	bounds := buildResponseSearchContentIndex("\x1b[1;31m\x1b[22mX").bounds
 	if len(bounds) != 2 {
 		t.Fatalf("expected one visible rune plus initial boundary, got %d", len(bounds))
 	}

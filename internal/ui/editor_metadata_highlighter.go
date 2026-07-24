@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
@@ -20,45 +21,24 @@ const (
 	metadataValueModeRest
 )
 
-var directiveValueModes = map[string]metadataValueMode{
-	"mock":                  metadataValueModeRest,
-	"match":                 metadataValueModeRest,
-	"name":                  metadataValueModeToken,
-	"description":           metadataValueModeRest,
-	"desc":                  metadataValueModeRest,
-	"tag":                   metadataValueModeRest,
-	"auth":                  metadataValueModeToken,
-	"graphql":               metadataValueModeToken,
-	"graphql-operation":     metadataValueModeToken,
-	"operation":             metadataValueModeToken,
-	"variables":             metadataValueModeRest,
-	"graphql-variables":     metadataValueModeRest,
-	"query":                 metadataValueModeRest,
-	"graphql-query":         metadataValueModeRest,
-	"grpc":                  metadataValueModeRest,
-	"grpc-descriptor":       metadataValueModeRest,
-	"grpc-reflection":       metadataValueModeToken,
-	"grpc-plaintext":        metadataValueModeToken,
-	"grpc-authority":        metadataValueModeRest,
-	"grpc-metadata":         metadataValueModeRest,
-	"script":                metadataValueModeToken,
-	"rts":                   metadataValueModeToken,
-	"patch":                 metadataValueModeRest,
-	"use":                   metadataValueModeRest,
-	"apply":                 metadataValueModeRest,
-	"when":                  metadataValueModeRest,
-	"skip-if":               metadataValueModeRest,
-	"assert":                metadataValueModeRest,
-	"for-each":              metadataValueModeRest,
-	"switch":                metadataValueModeRest,
-	"case":                  metadataValueModeRest,
-	"default":               metadataValueModeRest,
-	"if":                    metadataValueModeRest,
-	"elif":                  metadataValueModeRest,
-	"else":                  metadataValueModeRest,
-	"no-log":                metadataValueModeNone,
-	"log-sensitive-headers": metadataValueModeToken,
-	"log-secret-headers":    metadataValueModeToken,
+// ok is false for anything the catalog does not know, aliases included.
+func directiveValueMode(name string) (metadataValueMode, bool) {
+	spec, ok := directive.Lookup(directive.Name(name))
+	if !ok {
+		return metadataValueModeToken, false
+	}
+	return metadataMode(spec.Args), true
+}
+
+func metadataMode(kind directive.ArgKind) metadataValueMode {
+	switch kind {
+	case directive.ArgNone:
+		return metadataValueModeNone
+	case directive.ArgText, directive.ArgOptions:
+		return metadataValueModeRest
+	default:
+		return metadataValueModeToken
+	}
 }
 
 type metadataRuneStyler struct {
@@ -211,7 +191,7 @@ func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 		}
 	}
 
-	valueStart := skipSpace(line, directiveEnd)
+	valueStart := skipArgSep(line, directiveEnd)
 	if valueStart >= len(line) {
 		if styled {
 			return styles
@@ -219,14 +199,14 @@ func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 		return nil
 	}
 
-	switch directiveKey {
-	case "setting":
+	switch directive.Name(directiveKey) {
+	case directive.Setting:
 		s.applySettingStyles(line, &styles, &styled, valueStart)
 		if styled {
 			return styles
 		}
 		return nil
-	case "timeout":
+	case directive.Timeout:
 		s.applyTimeoutStyles(line, &styles, &styled, valueStart)
 		if styled {
 			return styles
@@ -235,7 +215,7 @@ func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 	}
 
 	mode := metadataValueModeToken
-	if m, ok := directiveValueModes[directiveKey]; ok {
+	if m, ok := directiveValueMode(directiveKey); ok {
 		mode = m
 	}
 	if mode == metadataValueModeNone || !s.valueEnabled {
@@ -379,6 +359,16 @@ func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []li
 func skipSpace(line []rune, start int) int {
 	i := start
 	for i < len(line) && unicode.IsSpace(line[i]) {
+		i++
+	}
+	return i
+}
+
+// The colon in "@name: value" separates, it is not part of the value, so the
+// styling starts past it.
+func skipArgSep(line []rune, start int) int {
+	i := start
+	for i < len(line) && directive.IsArgSep(line[i]) {
 		i++
 	}
 	return i

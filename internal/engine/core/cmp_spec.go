@@ -26,18 +26,6 @@ func BuildCompareSpec(targets []string, baseline string) *restfile.CompareSpec {
 	}
 }
 
-func CloneCompareSpec(spec *restfile.CompareSpec) *restfile.CompareSpec {
-	if spec == nil {
-		return nil
-	}
-
-	cp := *spec
-	if len(spec.Environments) > 0 {
-		cp.Environments = append([]string(nil), spec.Environments...)
-	}
-	return &cp
-}
-
 func prepareCompareSpec(spec *restfile.CompareSpec) *restfile.CompareSpec {
 	if spec == nil {
 		return nil

@@ -96,6 +96,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 		cmds = append(cmds, m.nextRunMsgCmd())
+	case requestWarningMsg:
+		m.setStatusMessage(statusMsg{text: string(typed.warning), level: statusWarn})
+		cmds = append(cmds, m.nextRunMsgCmd())
 	case statusMsg:
 		m.setStatusMessage(typed)
 	case statusPulseMsg:
@@ -134,10 +137,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case externalEditorMsg:
 		if cmd := m.handleExternalEditorMsg(typed); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	case profileNextIterationMsg:
-		if cmd := m.executeProfileIteration(); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	case updateTickMsg:

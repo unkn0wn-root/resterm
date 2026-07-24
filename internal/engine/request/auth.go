@@ -64,7 +64,7 @@ func (e *Engine) ResolveInheritedAuth(doc *restfile.Document, req *restfile.Requ
 		return
 	}
 	if pf, ok := e.registryIndex().DefaultAuth(doc); ok {
-		req.Metadata.Auth = restfile.CloneAuthSpec(&pf.Spec)
+		req.Metadata.Auth = pf.Spec.Clone()
 	}
 }
 

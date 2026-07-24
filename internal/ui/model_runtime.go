@@ -1,11 +1,9 @@
 package ui
 
 import (
-	"github.com/unkn0wn-root/resterm/internal/authcmd"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
-	"github.com/unkn0wn-root/resterm/internal/oauth"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 )
 
@@ -50,22 +48,6 @@ func (m *Model) cookieStore() *cookieStore {
 		return nil
 	}
 	return rt.Cookies()
-}
-
-func (m *Model) authCmdMgr() *authcmd.Manager {
-	rt := m.runtimeSvc()
-	if rt == nil {
-		return nil
-	}
-	return rt.AuthCmd()
-}
-
-func (m *Model) oauthMgr() *oauth.Manager {
-	rt := m.runtimeSvc()
-	if rt == nil {
-		return nil
-	}
-	return rt.OAuth()
 }
 
 func (m *Model) historyStore() history.Store {

@@ -1,18 +1,11 @@
 package restfile
 
 import (
-	"maps"
 	"net/http"
 	"strings"
 	"time"
-)
 
-type VariableScope int
-
-const (
-	ScopeFile VariableScope = iota
-	ScopeRequest
-	ScopeGlobal
+	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
 type LineRange struct {
@@ -23,7 +16,7 @@ type LineRange struct {
 type Variable struct {
 	Name   string
 	Value  string
-	Scope  VariableScope
+	Scope  directive.Scope
 	Line   int
 	Secret bool
 }
@@ -42,16 +35,8 @@ type AuthSpec struct {
 	SourcePath string
 }
 
-type AuthScope int
-
-const (
-	AuthScopeRequest AuthScope = iota
-	AuthScopeFile
-	AuthScopeGlobal
-)
-
 type AuthProfile struct {
-	Scope      AuthScope
+	Scope      directive.Scope
 	Name       string
 	Spec       AuthSpec
 	Line       int
@@ -187,29 +172,6 @@ type GraphQLBody struct {
 	OperationName string
 }
 
-type SSHScope int
-
-const (
-	SSHScopeRequest SSHScope = iota
-	SSHScopeFile
-	SSHScopeGlobal
-)
-
-type K8sScope int
-
-const (
-	K8sScopeRequest K8sScope = iota
-	K8sScopeFile
-	K8sScopeGlobal
-)
-
-type PatchScope int
-
-const (
-	PatchScopeFile PatchScope = iota
-	PatchScopeGlobal
-)
-
 type Opt[T any] struct {
 	Val T
 	Set bool
@@ -220,7 +182,7 @@ type SSHOpt[T any] = Opt[T]
 type K8sOpt[T any] = Opt[T]
 
 type SSHProfile struct {
-	Scope        SSHScope
+	Scope        directive.Scope
 	Name         string
 	Host         string
 	Port         int
@@ -247,7 +209,7 @@ type SSHSpec struct {
 }
 
 type K8sProfile struct {
-	Scope        K8sScope
+	Scope        directive.Scope
 	Name         string
 	Line         int
 	Namespace    string
@@ -340,14 +302,6 @@ type CompareSpec struct {
 	Baseline     string
 }
 
-type CaptureScope int
-
-const (
-	CaptureScopeRequest CaptureScope = iota
-	CaptureScopeFile
-	CaptureScopeGlobal
-)
-
 type CaptureExprMode uint8
 
 const (
@@ -357,7 +311,7 @@ const (
 )
 
 type CaptureSpec struct {
-	Scope      CaptureScope
+	Scope      directive.Scope
 	Name       string
 	Expression string
 	Mode       CaptureExprMode
@@ -381,7 +335,7 @@ type ApplySpec struct {
 }
 
 type PatchProfile struct {
-	Scope      PatchScope
+	Scope      directive.Scope
 	Name       string
 	Expression string
 	Line       int
@@ -518,6 +472,27 @@ type WorkflowStep struct {
 	ForEach   *WorkflowForEach
 }
 
+// Without an explicit name, use the request target or branch directive so the
+// UI still has something useful to show.
+func (s WorkflowStep) Label() string {
+	if s.Name != "" {
+		return s.Name
+	}
+	switch s.Kind {
+	case WorkflowStepKindIf:
+		return directive.If.Tag()
+	case WorkflowStepKindSwitch:
+		return directive.Switch.Tag()
+	case WorkflowStepKindForEach:
+		if s.Using != "" {
+			return s.Using
+		}
+		return directive.ForEach.Tag()
+	default:
+		return s.Using
+	}
+}
+
 // WorkflowExpect holds the parsed expect assertions of a workflow step.
 // StatusCode comes out of the parser already validated. Extra keeps
 // unrecognized expect keys so reporting can still show them.
@@ -533,15 +508,6 @@ func (e WorkflowExpect) HasStatus() bool {
 
 func (e WorkflowExpect) Empty() bool {
 	return e.Status == "" && e.StatusCode == nil && len(e.Extra) == 0
-}
-
-func (e WorkflowExpect) Clone() WorkflowExpect {
-	if e.StatusCode != nil {
-		n := *e.StatusCode
-		e.StatusCode = &n
-	}
-	e.Extra = maps.Clone(e.Extra)
-	return e
 }
 
 // WorkflowVarKeys returns the request and workflow scoped variable keys for a

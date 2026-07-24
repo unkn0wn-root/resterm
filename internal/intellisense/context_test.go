@@ -150,6 +150,50 @@ func TestAnalyzeClassifiesContexts(t *testing.T) {
 			col:      9,
 			wantKind: KindNone,
 		},
+		{
+			name:     "colon separates the directive from its arg",
+			lines:    []string{"# @auth:bea"},
+			line:     0,
+			col:      11,
+			wantKind: KindDirectiveArg, wantDir: "auth", wantQuery: "bea",
+		},
+		{
+			name:     "colon and space separate the directive from its arg",
+			lines:    []string{"# @auth: bea"},
+			line:     0,
+			col:      12,
+			wantKind: KindDirectiveArg, wantDir: "auth", wantQuery: "bea",
+		},
+		{
+			name:     "colon with no arg yet offers every arg",
+			lines:    []string{"# @auth:"},
+			line:     0,
+			col:      8,
+			wantKind: KindDirectiveArg, wantDir: "auth", wantQuery: "",
+		},
+		{
+			name:     "colon before any name is not a directive",
+			lines:    []string{"# @:bea"},
+			line:     0,
+			col:      7,
+			wantKind: KindNone,
+		},
+		{
+			// A non-breaking space pasted in from a doc still separates.
+			name:     "unicode space separates the directive from its arg",
+			lines:    []string{"# @auth\u00a0bea"},
+			line:     0,
+			col:      11,
+			wantKind: KindDirectiveArg, wantDir: "auth", wantQuery: "bea",
+		},
+		{
+			// The colon belongs to the value here, not to the name.
+			name:     "colon inside an arg is left alone",
+			lines:    []string{"# @settings base=http://x"},
+			line:     0,
+			col:      25,
+			wantKind: KindNone,
+		},
 	}
 
 	for _, tc := range cases {

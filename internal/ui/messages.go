@@ -3,6 +3,7 @@ package ui
 import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -21,8 +22,6 @@ type tabSpinMsg struct {
 }
 
 type latAnimMsg struct{}
-
-type profileNextIterationMsg struct{}
 
 type updateTickMsg struct{}
 
@@ -118,4 +117,8 @@ type runEvtMsg struct {
 type runWorkerDoneMsg struct {
 	runID string
 	err   error
+}
+
+type requestWarningMsg struct {
+	warning rqeng.Warning
 }

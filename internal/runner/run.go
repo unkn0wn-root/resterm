@@ -107,7 +107,6 @@ type Result struct {
 	Profile                   *ProfileInfo
 	Steps                     []StepResult
 	Failure                   runfail.Failure
-	requestText               string
 	transcript                []byte
 	unresolvedTemplateVars    []string
 	unresolvedTemplateVarsSet bool
@@ -172,12 +171,7 @@ type StepResult struct {
 	Stream          *StreamInfo
 	Trace           *TraceInfo
 	Failure         runfail.Failure
-	requestText     string
 	transcript      []byte
-}
-
-func Run(opts Options) (*Report, error) {
-	return RunContext(context.Background(), opts)
 }
 
 func RunContext(ctx context.Context, opts Options) (*Report, error) {
@@ -311,25 +305,6 @@ func requestMethodValue(method string) string {
 	return method
 }
 
-func cloneReq(req *restfile.Request) *restfile.Request {
-	if req == nil {
-		return nil
-	}
-	clone := *req
-	if req.Metadata.Profile != nil {
-		spec := *req.Metadata.Profile
-		clone.Metadata.Profile = &spec
-	}
-	if req.Metadata.Compare != nil {
-		spec := *req.Metadata.Compare
-		if len(req.Metadata.Compare.Environments) > 0 {
-			spec.Environments = append([]string(nil), req.Metadata.Compare.Environments...)
-		}
-		clone.Metadata.Compare = &spec
-	}
-	return &clone
-}
-
 func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackEnv string) Result {
 	runReq := req
 	if res.Executed != nil {
@@ -352,7 +327,6 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 		SkipReason:      str.Trim(res.SkipReason),
 		Stream:          streamResult(res.Stream),
 		Trace:           traceResult(res.Response),
-		requestText:     str.Trim(res.RequestText),
 		transcript:      bytes.Clone(res.Transcript),
 	}
 	if res.Explain != nil {
@@ -443,7 +417,6 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 		Canceled:        row.Canceled,
 		Stream:          streamResult(row.Stream),
 		Trace:           traceResult(row.Response),
-		requestText:     "",
 		transcript:      bytes.Clone(row.Transcript),
 	}
 	step.Failure = stepFailure(step)
@@ -565,7 +538,6 @@ func workflowStepResult(step engine.WorkflowStep) StepResult {
 		Canceled:        step.Canceled,
 		Stream:          streamResult(step.Stream),
 		Trace:           traceResult(step.Response),
-		requestText:     "",
 		transcript:      bytes.Clone(step.Transcript),
 	}
 	out.Failure = stepFailure(out)
