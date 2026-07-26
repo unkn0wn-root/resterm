@@ -232,9 +232,10 @@ func TestRunPlanExecutionErrorMarksRunDoneUnsuccessful(t *testing.T) {
 }
 
 type fakeDep struct {
-	rec     []bool
-	each    map[string][]rts.Value
-	execErr error
+	rec          []bool
+	each         map[string][]rts.Value
+	execErr      error
+	execCanceled bool
 }
 
 func (d *fakeDep) CollectVariables(
@@ -264,6 +265,9 @@ func (d *fakeDep) ExecuteWith(
 	d.rec = append(d.rec, opt.Record)
 	if d.execErr != nil {
 		return engine.RequestResult{}, d.execErr
+	}
+	if d.execCanceled {
+		return engine.RequestResult{Err: context.Canceled, Executed: req}, nil
 	}
 	body := `{"ok":true}`
 	if req != nil && strings.Contains(req.URL, "items") {
@@ -339,6 +343,8 @@ func (d *fakeDep) EvalValue(
 		return rts.Bool(true), nil
 	case "false":
 		return rts.Bool(false), nil
+	case "boom":
+		return rts.Value{}, errors.New("unsupported expression")
 	default:
 		return rts.Str(expr), nil
 	}

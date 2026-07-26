@@ -878,16 +878,15 @@ func (f flow) ExecuteInteractiveWebSocket() xexec.RequestResult {
 }
 
 func (x *execCtx) executeInteractiveWebSocket() xexec.RequestResult {
-	ctx, cancel, detach := sessionContext(x.sendCtx)
-	attached := false
+	lt := newSessionLifetime(x.sendCtx)
+	detached := false
 	defer func() {
-		detach()
-		if !attached {
-			cancel()
+		if !detached {
+			lt.close()
 		}
 	}()
 
-	handle, fallback, err := x.eng.hc.StartWebSocket(ctx, x.req, x.res, x.opts)
+	handle, fallback, err := x.eng.hc.StartWebSocket(lt.ctx, x.req, x.res, x.opts)
 	if err != nil {
 		res := x.fail(err, "WebSocket request failed")
 		res.RequestText = x.reqText()
@@ -903,12 +902,17 @@ func (x *execCtx) executeInteractiveWebSocket() xexec.RequestResult {
 		return *res
 	}
 
-	detach()
-	attached = true
+	if !lt.detach() {
+		res := x.canceled(x.sendCtx.Err())
+		res.RequestText = x.reqText()
+		return *res
+	}
+
+	detached = true
 	x.onWS(handle, x.req)
 	go func() {
 		<-handle.Session.Done()
-		cancel()
+		lt.cancel()
 	}()
 	return x.interactiveHTTPResult(httpclient.StreamingWebSocketResponse(handle.Meta))
 }
