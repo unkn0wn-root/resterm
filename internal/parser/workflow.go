@@ -411,18 +411,14 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 	return expErr
 }
 
+// Everything before the first option is the alias, so it may hold spaces. The
+// name= option is only a fallback for a step written without one.
 func parseStepSpec(rest string) (string, directive.Options, error) {
-	rem := str.Trim(rest)
-	if rem == "" {
+	head, opts := directive.CutOptions(rest)
+	if head == "" && len(opts) == 0 {
 		return "", nil, errors.New("@step missing content")
 	}
-	name := ""
-	tok, tail := directive.CutToken(rem)
-	if tok != "" && !strings.Contains(tok, "=") {
-		name = tok
-		rem = tail
-	}
-	opts := directive.ParseOptions(rem)
+	name := directive.UnquoteToken(head)
 	if nm := opts.Pop("name"); name == "" {
 		name = nm
 	}

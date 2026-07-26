@@ -64,6 +64,31 @@ func TestRenderIncludesWorkflows(t *testing.T) {
 	}
 }
 
+// A step alias holding a space used to render bare and read back as one word
+// plus a stray option.
+func TestRenderWorkflowStepNameRoundTrip(t *testing.T) {
+	for _, name := range []string{"Create Account", `Create "Big" Account`, "Create"} {
+		wf := restfile.Workflow{
+			Name: "deploy",
+			Steps: []restfile.WorkflowStep{{
+				Kind:  restfile.WorkflowStepKindRequest,
+				Name:  name,
+				Using: "create",
+			}},
+		}
+
+		src := RenderWorkflow(wf, "")
+		doc := parser.Parse("workflow.http", []byte(src))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("rendered workflow did not parse: %v\n%s", doc.Errors, src)
+		}
+		got := doc.Workflows[0].Steps[0]
+		if got.Name != name || got.Using != "create" || len(got.Options) != 0 {
+			t.Fatalf("step %q changed after round trip: %+v\n%s", name, got, src)
+		}
+	}
+}
+
 // The writer quotes any value holding a space, so the reader has to keep it in
 // one piece. Branches used to come back with the tail of a quoted value parsed
 // as extra options and the quotes stripped off the expression.
