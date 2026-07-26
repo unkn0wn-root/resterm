@@ -224,14 +224,19 @@ func appendTagsFold(dst, tags []string) []string {
 }
 
 func putSetting(dst map[string]string, rest string) map[string]string {
-	key, value := directive.CutKey(rest)
+	key, val := directive.CutKey(rest)
 	if key == "" {
 		return dst
+	}
+	// A key written on its own is a flag, the same as it is in @settings. Only
+	// the parser can tell that apart from a value that was written empty.
+	if val == "" {
+		val = "true"
 	}
 	if dst == nil {
 		dst = make(map[string]string)
 	}
-	dst[key] = value
+	dst[key] = val
 	return dst
 }
 

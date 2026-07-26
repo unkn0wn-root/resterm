@@ -126,3 +126,83 @@ func firstRequest(t *testing.T, doc *restfile.Document) *restfile.Request {
 	}
 	return doc.Requests[0]
 }
+
+// @setting and @settings have to agree on a key written without a value. Only
+// the parser can tell a flag apart from a value that was written empty.
+func TestBareSettingKeyIsAFlag(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		key  string
+		want string
+	}{
+		{
+			name: "setting flag",
+			src:  "### r\nGET http://x\n# @setting insecure\n",
+			key:  "insecure",
+			want: "true",
+		},
+		{
+			name: "settings flag",
+			src:  "### r\nGET http://x\n# @settings insecure\n",
+			key:  "insecure",
+			want: "true",
+		},
+		{
+			name: "setting value still wins",
+			src:  "### r\nGET http://x\n# @setting insecure false\n",
+			key:  "insecure",
+			want: "false",
+		},
+		{
+			name: "flag on an unknown key",
+			src:  "### r\nGET http://x\n# @setting feature.flag\n",
+			key:  "feature.flag",
+			want: "true",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("t.http", []byte(tt.src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no errors, got %v", doc.Errors)
+			}
+			req := firstRequest(t, doc)
+			if got := req.Settings[tt.key]; got != tt.want {
+				t.Fatalf("settings[%q] = %q, want %q", tt.key, got, tt.want)
+			}
+		})
+	}
+}
+
+// A value written as empty is not a flag. These are the spellings that still
+// reach the appliers with nothing in them, which is what they report as missing.
+func TestWrittenEmptySettingValueStaysEmpty(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		key  string
+	}{
+		{
+			name: "settings trailing equals",
+			src:  "### r\nGET http://x\n# @settings insecure=\n",
+			key:  "insecure",
+		},
+		{
+			name: "bare timeout directive",
+			src:  "### r\nGET http://x\n# @timeout\n",
+			key:  "timeout",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("t.http", []byte(tt.src))
+			req := firstRequest(t, doc)
+			if got, ok := req.Settings[tt.key]; !ok || got != "" {
+				t.Fatalf("settings[%q] = %q (present %t), want an empty value", tt.key, got, ok)
+			}
+		})
+	}
+}

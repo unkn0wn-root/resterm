@@ -127,3 +127,83 @@ func TestApplyAllHTTPInvalidVersionReturnsError(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+func TestApplyHTTPSettingsRejectsInvalidInsecure(t *testing.T) {
+	opts := httpclient.Options{InsecureSkipVerify: true}
+
+	err := ApplyHTTPSettings(&opts, map[string]string{"http-insecure": "maybe"}, nil)
+	if err == nil {
+		t.Fatal("expected invalid http-insecure error")
+	}
+	if !strings.Contains(err.Error(), `invalid http-insecure "maybe" (use true or false)`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !opts.InsecureSkipVerify {
+		t.Fatal("expected the rejected value to leave the option untouched")
+	}
+}
+
+func TestApplyGRPCSettingsRejectsInvalidInsecure(t *testing.T) {
+	opts := grpcclient.Options{}
+
+	err := ApplyGRPCSettings(&opts, map[string]string{"grpc-insecure": "maybe"}, nil)
+	if err == nil {
+		t.Fatal("expected invalid grpc-insecure error")
+	}
+	if !strings.Contains(err.Error(), `invalid grpc-insecure "maybe"`) {
+		t.Fatalf("error must name the key the file used, got: %v", err)
+	}
+	if opts.Insecure {
+		t.Fatal("expected the rejected value to leave the option untouched")
+	}
+}
+
+// A bare key parses to an empty value, which the generic HTTP settings already
+// reject. The prefixed spellings have to agree, and the wording has to say the
+// value is missing rather than invalid.
+func TestApplyHTTPSettingsRejectsEmptyInsecure(t *testing.T) {
+	opts := httpclient.Options{}
+
+	err := ApplyHTTPSettings(&opts, map[string]string{"http-insecure": ""}, nil)
+	if err == nil {
+		t.Fatal("expected missing http-insecure error")
+	}
+	if !strings.Contains(err.Error(), "missing http-insecure value (use true or false)") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestApplyHTTPSettingsAcceptsBooleanSpellings(t *testing.T) {
+	for _, tc := range []struct {
+		raw  string
+		want bool
+	}{
+		{raw: "yes", want: true},
+		{raw: "on", want: true},
+		{raw: "off", want: false},
+		{raw: "0", want: false},
+	} {
+		t.Run(tc.raw, func(t *testing.T) {
+			opts := httpclient.Options{InsecureSkipVerify: !tc.want}
+			err := ApplyHTTPSettings(&opts, map[string]string{"http-insecure": tc.raw}, nil)
+			if err != nil {
+				t.Fatalf("ApplyHTTPSettings returned error: %v", err)
+			}
+			if opts.InsecureSkipVerify != tc.want {
+				t.Fatalf("insecure = %v, want %v", opts.InsecureSkipVerify, tc.want)
+			}
+		})
+	}
+}
+
+func TestApplyHTTPSettingsRejectsInvalidRootMode(t *testing.T) {
+	opts := httpclient.Options{}
+
+	err := ApplyHTTPSettings(&opts, map[string]string{"http-root-mode": "merge"}, nil)
+	if err == nil {
+		t.Fatal("expected invalid http-root-mode error")
+	}
+	if !strings.Contains(err.Error(), `invalid http-root-mode "merge" (use append or replace)`) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

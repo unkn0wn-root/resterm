@@ -176,6 +176,8 @@ func captureReqMeta(sent *http.Request, resp *http.Response) reqMeta {
 	return reqMeta{headers: h, method: method, host: host, length: length, te: te}
 }
 
+// The settings were validated when they were applied, so re-reading them here
+// takes what it can and leaves anything unreadable at its current value.
 func applyRequestSettings(opts Options, settings map[string]string) Options {
 	effective := opts
 	_ = applyOptionSettings(&effective, settings, false)
