@@ -411,14 +411,15 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 	return expErr
 }
 
-// Everything before the first option is the alias, so it may hold spaces. The
-// name= option is only a fallback for a step written without one.
+// The alias is the first word. Quoting it lets it hold spaces or an equals sign,
+// while bare words after it stay options the way @step has always read them. The
+// name= option is a fallback for a step that opens with an option.
 func parseStepSpec(rest string) (string, directive.Options, error) {
-	head, opts := directive.CutOptions(rest)
-	if head == "" && len(opts) == 0 {
+	if str.Trim(rest) == "" {
 		return "", nil, errors.New("@step missing content")
 	}
-	name := directive.UnquoteToken(head)
+	name, tail := directive.CutName(rest)
+	opts := directive.ParseOptions(tail)
 	if nm := opts.Pop("name"); name == "" {
 		name = nm
 	}

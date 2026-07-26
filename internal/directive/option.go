@@ -48,7 +48,9 @@ func (o Options) put(key, val string) {
 	if key == "" {
 		return
 	}
-	o[strings.ToLower(key)] = TrimQuotes(strings.TrimSpace(val))
+	// The lexer already took the quotes off. Stripping again would eat a layer
+	// from a value that is itself a quoted string.
+	o[strings.ToLower(key)] = strings.TrimSpace(val)
 }
 
 func (o Options) Get(key string) string {
@@ -216,36 +218,34 @@ func ParseNameValue(input string) (string, string) {
 	return tr[:end], strings.TrimSpace(val)
 }
 
-// CutOptions splits a directive argument into the free-form head it starts with
-// and the key=value options that follow it. The head is returned as it was
-// written and the options are parsed from the original text, so a quoted value
-// keeps the spaces inside it either way.
+// CutOptions splits a directive argument into the head it starts with and the
+// key=value options after it. Both halves come from the original text, so a
+// quoted value keeps the spaces inside it.
 func CutOptions(input string) (string, Options) {
 	lex := &lexer{src: input}
-	at := 0
 	for {
 		tok, ok := lex.next()
 		if !ok {
 			return strings.TrimSpace(input), Options{}
 		}
-		if isOption(tok) {
-			return strings.TrimSpace(input[:at]), ParseOptions(input[at:])
+		if isOption(input[tok.start:tok.end]) {
+			return strings.TrimSpace(input[:tok.start]), ParseOptions(input[tok.start:])
 		}
-		at = lex.pos
 	}
 }
 
-// A name followed by one equals sign. A comparison such as "a==b" is part of the
-// head, and the other comparison operators already fail on the name.
-func isOption(token string) bool {
-	key, val, ok := strings.Cut(token, "=")
-	if !ok || key == "" || strings.HasPrefix(val, "=") {
-		return false
-	}
-	for _, r := range key {
+// A name, then an equals sign typed outside quotes, then the value. This has to
+// read the source. The lexer decodes "a=b" and a=b to the same text and only one
+// of them was an option, so a decoded token cannot answer the question. A quote
+// is not a name rune, so a quoted word never counts, and "a==b" is a comparison.
+func isOption(raw string) bool {
+	for i, r := range raw {
+		if r == '=' {
+			return i > 0 && !strings.HasPrefix(raw[i+1:], "=")
+		}
 		if !IsKeyRune(r) {
 			return false
 		}
 	}
-	return true
+	return false
 }

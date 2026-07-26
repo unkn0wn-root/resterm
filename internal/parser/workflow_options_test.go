@@ -100,13 +100,15 @@ GET https://example.com/first
 	}
 }
 
-// A step alias is the whole head of the line. It used to be cut at the first
-// space, which left the rest of the name parsed as options.
-func TestParseWorkflowStepKeepsMultiWordName(t *testing.T) {
+// A quoted alias may hold spaces. A bare one still ends at the first space,
+// because a second bare word is indistinguishable from a bare option.
+func TestParseWorkflowStepAliasGrammar(t *testing.T) {
 	src := `# @workflow demo
 # @step "Create Account" using=First
-# @step Delete Account using=First
+# @step Delete dry-run using=First
 # @step using=First name="Read Account"
+# @step "a=b" using=First
+# @step Path\Name using=First
 
 ### First
 # @name First
@@ -118,25 +120,38 @@ GET https://example.com/first
 		t.Fatalf("unexpected parse errors: %v", doc.Errors)
 	}
 	steps := doc.Workflows[0].Steps
-	if len(steps) != 3 {
-		t.Fatalf("expected 3 steps, got %d", len(steps))
+	if len(steps) != 5 {
+		t.Fatalf("expected 5 steps, got %d", len(steps))
 	}
 
-	want := []string{"Create Account", "Delete Account", "Read Account"}
+	want := []struct {
+		name string
+		opts map[string]string
+	}{
+		{name: "Create Account"},
+		{name: "Delete", opts: map[string]string{"dry-run": "true"}},
+		{name: "Read Account"},
+		{name: "a=b"},
+		{name: `Path\Name`},
+	}
 	for i, step := range steps {
-		if step.Name != want[i] {
-			t.Fatalf("step %d name = %q, want %q", i, step.Name, want[i])
+		if step.Name != want[i].name {
+			t.Fatalf("step %d name = %q, want %q", i, step.Name, want[i].name)
 		}
 		if step.Using != "First" {
 			t.Fatalf("step %d using = %q, want %q", i, step.Using, "First")
 		}
-		if len(step.Options) != 0 {
-			t.Fatalf("step %d picked up %v from its own name", i, step.Options)
+		if len(step.Options) != len(want[i].opts) {
+			t.Fatalf("step %d options = %v, want %v", i, step.Options, want[i].opts)
+		}
+		for k, v := range want[i].opts {
+			if step.Options[k] != v {
+				t.Fatalf("step %d option %q = %q, want %q", i, k, step.Options[k], v)
+			}
 		}
 	}
 }
 
-// An alias is optional and the head may be empty.
 func TestParseWorkflowStepWithoutName(t *testing.T) {
 	src := `# @workflow demo
 # @step using=First
@@ -153,5 +168,45 @@ GET https://example.com/first
 	step := doc.Workflows[0].Steps[0]
 	if step.Name != "" || step.Using != "First" {
 		t.Fatalf("step = %+v, want no name and using=First", step)
+	}
+}
+
+// A quoted value and a comparison decode to the same token, so classifying an
+// option after decoding got all of these wrong.
+func TestParseWorkflowBranchClassifiesOptionsFromSource(t *testing.T) {
+	src := `# @workflow demo
+# @if true fail="=foo"
+# @elif response.text() == "a=b" run=First
+# @else fail=none
+# @switch role
+# @case "a=b" run=First
+# @default fail=none
+
+### First
+# @name First
+GET https://example.com/first
+`
+
+	doc := Parse("workflow.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %v", doc.Errors)
+	}
+	steps := doc.Workflows[0].Steps
+	if len(steps) != 2 {
+		t.Fatalf("expected an @if and a @switch step, got %d", len(steps))
+	}
+
+	branch := steps[0].If
+	if branch.Then.Fail != "=foo" {
+		t.Fatalf("@if fail = %q, want %q", branch.Then.Fail, "=foo")
+	}
+	if want := `response.text() == "a=b"`; branch.Elifs[0].Cond != want {
+		t.Fatalf("@elif condition = %q, want %q", branch.Elifs[0].Cond, want)
+	}
+	if branch.Elifs[0].Run != "First" {
+		t.Fatalf("@elif run = %q, want %q", branch.Elifs[0].Run, "First")
+	}
+	if want := `"a=b"`; steps[1].Switch.Cases[0].Expr != want {
+		t.Fatalf("@case expression = %q, want %q", steps[1].Switch.Cases[0].Expr, want)
 	}
 }

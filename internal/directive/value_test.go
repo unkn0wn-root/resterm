@@ -120,27 +120,6 @@ func TestTrimQuotes(t *testing.T) {
 	}
 }
 
-// The last two cases are where TrimQuotes gives a different answer: it cannot
-// see the escapes, and it strips quotes off text that was never one token.
-func TestUnquoteToken(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		`"Create Account"`:      "Create Account",
-		`'Create Account'`:      "Create Account",
-		`Create`:                "Create",
-		`Create Account`:        "Create Account",
-		``:                      "",
-		`"Create \"Big\" Acct"`: `Create "Big" Acct`,
-		`"a" + "b"`:             `"a" + "b"`,
-	}
-	for input, want := range tests {
-		if got := UnquoteToken(input); got != want {
-			t.Fatalf("UnquoteToken(%q) = %q, want %q", input, got, want)
-		}
-	}
-}
-
 func TestIsIdent(t *testing.T) {
 	t.Parallel()
 

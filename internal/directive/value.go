@@ -79,17 +79,6 @@ func TrimQuotes(value string) string {
 	return value
 }
 
-// UnquoteToken reads raw source the way the lexer would, so a quoted token gives
-// up its quotes and the escapes inside them. Anything that is not one token
-// comes back untouched. TrimQuotes is the blunt version for a value the lexer
-// already produced.
-func UnquoteToken(value string) string {
-	if fields := fieldsEscaped(value); len(fields) == 1 {
-		return fields[0]
-	}
-	return value
-}
-
 // Identifiers use an ASCII letter or underscore first, then letters, digits, or underscores.
 func IsIdent(value string) bool {
 	if value == "" {

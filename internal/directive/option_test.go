@@ -329,6 +329,25 @@ func TestIsOption(t *testing.T) {
 	}
 }
 
+// The lexer already decoded the value. A second strip used to take a layer off
+// anything that was itself a quoted string.
+func TestParseOptionsKeepsDecodedValues(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]string{
+		`fail="\"hi\""`: `"hi"`,
+		`fail="=foo"`:   "=foo",
+		`fail="a=b"`:    "a=b",
+		"fail=\"a\tb\"": "a\tb",
+		`fail=plain`:    "plain",
+	}
+	for in, want := range tests {
+		if got := ParseOptions(in)["fail"]; got != want {
+			t.Fatalf("ParseOptions(%q)[fail] = %q, want %q", in, got, want)
+		}
+	}
+}
+
 func TestCutOptions(t *testing.T) {
 	t.Parallel()
 

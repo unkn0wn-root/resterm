@@ -28,24 +28,39 @@ type lexer struct {
 	last    rune
 	quote   rune
 	escaped bool
+	begun   bool
+	start   int
 	// closers holds the brackets still waiting to be matched, outermost first.
 	closers  []rune
 	inString bool
 	strEsc   bool
 }
 
+// A token carries the span it came from because meaning depends on the source.
+// "a=b" and a=b decode to the same text and only one of them is an option.
+type token struct {
+	val   string
+	start int
+	end   int
+}
+
 func (l *lexer) collect() []string {
 	var fields []string
-	for field, ok := l.next(); ok; field, ok = l.next() {
-		fields = append(fields, field)
+	for tok, ok := l.next(); ok; tok, ok = l.next() {
+		fields = append(fields, tok.val)
 	}
 	return fields
 }
 
-func (l *lexer) next() (string, bool) {
+func (l *lexer) next() (token, bool) {
 	l.reset()
+	base := l.pos
 
-	for i, r := range l.src[l.pos:] {
+	for i, r := range l.src[base:] {
+		if !l.begun && !unicode.IsSpace(r) {
+			l.begun = true
+			l.start = base + i
+		}
 		switch {
 		case len(l.closers) > 0:
 			l.json(r)
@@ -72,8 +87,8 @@ func (l *lexer) next() (string, bool) {
 			l.quote = r
 		case unicode.IsSpace(r):
 			if l.tok.Len() > 0 {
-				l.pos += i + utf8.RuneLen(r)
-				return l.tok.String(), true
+				l.pos = base + i + utf8.RuneLen(r)
+				return token{val: l.tok.String(), start: l.start, end: base + i}, true
 			}
 		default:
 			l.write(r)
@@ -85,9 +100,9 @@ func (l *lexer) next() (string, bool) {
 		l.write('\\')
 	}
 	if l.tok.Len() == 0 {
-		return "", false
+		return token{}, false
 	}
-	return l.tok.String(), true
+	return token{val: l.tok.String(), start: l.start, end: len(l.src)}, true
 }
 
 func (l *lexer) reset() {
@@ -95,6 +110,7 @@ func (l *lexer) reset() {
 	l.last = 0
 	l.quote = 0
 	l.escaped = false
+	l.begun = false
 	l.closers = l.closers[:0]
 	l.inString = false
 	l.strEsc = false

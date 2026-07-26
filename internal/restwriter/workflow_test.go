@@ -67,7 +67,16 @@ func TestRenderIncludesWorkflows(t *testing.T) {
 // A step alias holding a space used to render bare and read back as one word
 // plus a stray option.
 func TestRenderWorkflowStepNameRoundTrip(t *testing.T) {
-	for _, name := range []string{"Create Account", `Create "Big" Account`, "Create"} {
+	names := []string{
+		"Create",
+		"Create Account",
+		`Create "Big" Account`,
+		`Path\Name`,
+		"'Quoted'",
+		"a=b",
+		"Tab\tName",
+	}
+	for _, name := range names {
 		wf := restfile.Workflow{
 			Name: "deploy",
 			Steps: []restfile.WorkflowStep{{

@@ -61,9 +61,7 @@ func (w workflowWriter) writeRequest(step restfile.WorkflowStep) {
 		w.writeLine(directive.ForEach, step.ForEach.Expr+" as "+step.ForEach.Var)
 	}
 
-	// The alias runs up to the first option, so one holding a space has to be
-	// quoted to survive a read back.
-	w.writeHead(directive.Step, quoteWorkflowValue(strings.TrimSpace(step.Name)))
+	w.writeHead(directive.Step, directive.Quote(strings.TrimSpace(step.Name)))
 	w.writeOption("using", step.Using)
 	if step.OnFailure != w.fail {
 		w.writeOption("on-failure", string(step.OnFailure))
@@ -151,12 +149,5 @@ func (w workflowWriter) writeOption(key, value string) {
 	w.b.WriteString(" ")
 	w.b.WriteString(key)
 	w.b.WriteString("=")
-	w.b.WriteString(quoteWorkflowValue(value))
-}
-
-func quoteWorkflowValue(value string) string {
-	if strings.ContainsAny(value, " \t\"") {
-		return strconv.Quote(value)
-	}
-	return value
+	w.b.WriteString(directive.Quote(value))
 }
