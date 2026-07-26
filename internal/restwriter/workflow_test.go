@@ -64,6 +64,58 @@ func TestRenderIncludesWorkflows(t *testing.T) {
 	}
 }
 
+// The writer quotes any value holding a space, so the reader has to keep it in
+// one piece. Branches used to come back with the tail of a quoted value parsed
+// as extra options and the quotes stripped off the expression.
+func TestRenderWorkflowBranchRoundTrip(t *testing.T) {
+	wf := restfile.Workflow{
+		Name: "deploy",
+		Steps: []restfile.WorkflowStep{
+			{
+				Kind: restfile.WorkflowStepKindIf,
+				If: &restfile.WorkflowIf{
+					Then: restfile.WorkflowIfBranch{
+						Cond: `response.body.name == "John Doe"`,
+						Run:  "create",
+					},
+					Else: &restfile.WorkflowIfBranch{Fail: "nothing matched"},
+				},
+			},
+			{
+				Kind: restfile.WorkflowStepKindSwitch,
+				Switch: &restfile.WorkflowSwitch{
+					Expr:  "response.body.role",
+					Cases: []restfile.WorkflowSwitchCase{{Expr: `"site admin"`, Fail: "not allowed here"}},
+				},
+			},
+		},
+	}
+
+	src := RenderWorkflow(wf, "")
+	doc := parser.Parse("workflow.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("rendered workflow did not parse: %v\n%s", doc.Errors, src)
+	}
+	if len(doc.Workflows) != 1 || len(doc.Workflows[0].Steps) != 2 {
+		t.Fatalf("parsed %#v, want 1 workflow with 2 steps\n%s", doc.Workflows, src)
+	}
+
+	got := doc.Workflows[0].Steps
+	if branch := got[0].If; branch == nil ||
+		branch.Then.Cond != wf.Steps[0].If.Then.Cond ||
+		branch.Then.Run != "create" ||
+		branch.Else == nil ||
+		branch.Else.Fail != "nothing matched" {
+		t.Fatalf("@if changed after round trip:\nwant: %#v\ngot:  %#v\n%s", wf.Steps[0].If, branch, src)
+	}
+	if sw := got[1].Switch; sw == nil ||
+		len(sw.Cases) != 1 ||
+		sw.Cases[0].Expr != `"site admin"` ||
+		sw.Cases[0].Fail != "not allowed here" {
+		t.Fatalf("@switch changed after round trip:\nwant: %#v\ngot:  %#v\n%s", wf.Steps[1].Switch, sw, src)
+	}
+}
+
 func TestRenderWorkflowRoundTrip(t *testing.T) {
 	code := 201
 	wf := restfile.Workflow{

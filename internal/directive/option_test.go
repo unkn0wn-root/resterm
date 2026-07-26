@@ -312,16 +312,81 @@ func TestIsOption(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]bool{
-		"host=jump":     true,
-		"local-port=1":  true,
-		"bare":          false,
-		"=orphan":       false,
-		"has space=1":   false,
-		"expect.status": false,
+		"host=jump":            true,
+		"local-port=1":         true,
+		"bare":                 false,
+		"=orphan":              false,
+		"has space=1":          false,
+		"expect.status":        false,
+		"last.statusCode==200": false,
+		"a!=b":                 false,
+		"a>=b":                 false,
 	}
 	for input, want := range tests {
-		if got := IsOption(input); got != want {
-			t.Fatalf("IsOption(%q) = %t, want %t", input, got, want)
+		if got := isOption(input); got != want {
+			t.Fatalf("isOption(%q) = %t, want %t", input, got, want)
 		}
+	}
+}
+
+func TestCutOptions(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		rest string
+		head string
+		opts Options
+	}{
+		{
+			name: "quoted option value",
+			rest: `true fail="explicit failure"`,
+			head: "true",
+			opts: Options{"fail": "explicit failure"},
+		},
+		{
+			name: "quoted expression",
+			rest: `name == "John Doe" run=StepOK`,
+			head: `name == "John Doe"`,
+			opts: Options{"run": "StepOK"},
+		},
+		{
+			name: "comparison without spaces",
+			rest: "last.statusCode==200 run=StepOK",
+			head: "last.statusCode==200",
+			opts: Options{"run": "StepOK"},
+		},
+		{
+			name: "head only",
+			rest: "  last.statusCode == 200  ",
+			head: "last.statusCode == 200",
+			opts: Options{},
+		},
+		{
+			name: "options only",
+			rest: "run=StepOK fail=nope",
+			head: "",
+			opts: Options{"run": "StepOK", "fail": "nope"},
+		},
+		{
+			name: "bare option after the first",
+			rest: "true run=StepOK quiet",
+			head: "true",
+			opts: Options{"run": "StepOK", "quiet": "true"},
+		},
+		{name: "empty", opts: Options{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			head, opts := CutOptions(tt.rest)
+			if head != tt.head {
+				t.Fatalf("CutOptions(%q) head = %q, want %q", tt.rest, head, tt.head)
+			}
+			if !maps.Equal(opts, tt.opts) {
+				t.Fatalf("CutOptions(%q) options = %v, want %v", tt.rest, opts, tt.opts)
+			}
+		})
 	}
 }

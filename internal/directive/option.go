@@ -216,12 +216,33 @@ func ParseNameValue(input string) (string, string) {
 	return tr[:end], strings.TrimSpace(val)
 }
 
-func IsOption(token string) bool {
-	i := strings.Index(token, "=")
-	if i <= 0 {
+// CutOptions splits a directive argument into the free-form head it starts with
+// and the key=value options that follow it. The head is returned as it was
+// written and the options are parsed from the original text, so a quoted value
+// keeps the spaces inside it either way.
+func CutOptions(input string) (string, Options) {
+	lex := &lexer{src: input}
+	at := 0
+	for {
+		tok, ok := lex.next()
+		if !ok {
+			return strings.TrimSpace(input), Options{}
+		}
+		if isOption(tok) {
+			return strings.TrimSpace(input[:at]), ParseOptions(input[at:])
+		}
+		at = lex.pos
+	}
+}
+
+// A name followed by one equals sign. A comparison such as "a==b" is part of the
+// head, and the other comparison operators already fail on the name.
+func isOption(token string) bool {
+	key, val, ok := strings.Cut(token, "=")
+	if !ok || key == "" || strings.HasPrefix(val, "=") {
 		return false
 	}
-	for _, r := range token[:i] {
+	for _, r := range key {
 		if !IsKeyRune(r) {
 			return false
 		}

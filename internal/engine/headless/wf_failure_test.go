@@ -25,7 +25,7 @@ func TestExecuteWorkflowContinuesPastFailedIfBranch(t *testing.T) {
 
 	src := fmt.Sprintf(`### flow
 # @workflow demo on-failure=continue
-# @if true fail=broken
+# @if true fail="explicit failure"
 # @step Cleanup using=Cleanup
 
 ### Cleanup
@@ -44,6 +44,9 @@ GET %s/cleanup
 	}
 	if len(out.Steps) != 2 {
 		t.Fatalf("expected both steps to report, got %d", len(out.Steps))
+	}
+	if got := out.Steps[0].Err; got == nil || got.Error() != "explicit failure" {
+		t.Fatalf("first step error = %v, want the whole fail message", got)
 	}
 	if hits.Load() != 1 {
 		t.Fatalf("cleanup request ran %d times, want 1", hits.Load())

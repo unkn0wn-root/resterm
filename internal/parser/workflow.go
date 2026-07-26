@@ -355,8 +355,7 @@ func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 }
 
 func parseExprRun(rest, miss string) (expr, run, fail string, err error) {
-	expr, opts := splitExprOptions(rest)
-	expr = str.Trim(expr)
+	expr, opts := directive.CutOptions(rest)
 	if expr == "" {
 		return "", "", "", errors.New(miss)
 	}
@@ -428,26 +427,6 @@ func parseStepSpec(rest string) (string, directive.Options, error) {
 		name = nm
 	}
 	return name, opts, nil
-}
-
-func splitExprOptions(input string) (string, directive.Options) {
-	tokens := directive.Fields(strings.TrimSpace(input))
-	if len(tokens) == 0 {
-		return "", directive.Options{}
-	}
-	optIndex := -1
-	for i, token := range tokens {
-		if directive.IsOption(token) {
-			optIndex = i
-			break
-		}
-	}
-	if optIndex == -1 {
-		return strings.Join(tokens, " "), directive.Options{}
-	}
-	expr := strings.Join(tokens[:optIndex], " ")
-	opts := directive.ParseOptions(strings.Join(tokens[optIndex:], " "))
-	return expr, opts
 }
 
 func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
