@@ -630,6 +630,10 @@ Troubleshooting:
 
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
+- A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
+- In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
+- The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
+- `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
 
 ### Metadata directives
 

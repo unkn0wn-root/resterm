@@ -16,6 +16,7 @@ type jsonReport struct {
 	EndedAt       time.Time    `json:"endedAt"`
 	DurationMs    int64        `json:"durationMs"`
 	Summary       jsonSummary  `json:"summary"`
+	Warnings      []string     `json:"warnings,omitempty"`
 	Results       []jsonResult `json:"results"`
 }
 
@@ -230,7 +231,8 @@ func (rep Report) json() jsonReport {
 			ExitCode:     rep.ExitCode(""),
 			FailureCodes: rep.FailureCodes(),
 		},
-		Results: make([]jsonResult, 0, len(rep.Results)),
+		Warnings: rep.Warnings,
+		Results:  make([]jsonResult, 0, len(rep.Results)),
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, res.json())

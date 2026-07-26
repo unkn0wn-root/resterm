@@ -221,7 +221,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 		return batchCommands(rc, cmd)
 	}
 
-	m.doc = doc
+	m.setDocument(doc)
 	m.syncRequestList(doc)
 	m.syncRegistry(doc)
 	if err := docErr(doc); err != nil {
@@ -375,7 +375,7 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
-	m.doc = doc
+	m.setDocument(doc)
 	m.syncRequestList(doc)
 	m.syncRegistry(doc)
 	if err := docErr(doc); err != nil {

@@ -43,6 +43,23 @@ func Parse(path string, data []byte) *restfile.Document {
 	return doc
 }
 
+// WarningTexts renders each parse warning with its source location. Warnings are
+// not fatal, so callers report them beside their results instead of failing.
+func WarningTexts(doc *restfile.Document) []string {
+	if doc == nil || len(doc.Warnings) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(doc.Warnings))
+	for _, warn := range doc.Warnings {
+		if doc.Path == "" {
+			out = append(out, fmt.Sprintf("line %d: %s", warn.Line, warn.Message))
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s:%d: %s", doc.Path, warn.Line, warn.Message))
+	}
+	return out
+}
+
 func Check(doc *restfile.Document) error {
 	if doc == nil || len(doc.Errors) == 0 {
 		return nil

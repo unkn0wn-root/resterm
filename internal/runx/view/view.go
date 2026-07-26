@@ -80,7 +80,7 @@ func Render(rep *runner.Report, opt Options) (string, error) {
 	if res.Kind != runner.ResultKindRequest {
 		return reportText(rep)
 	}
-	return renderRequest(*res, Options{
+	return renderRequest(*res, rep.Warnings, Options{
 		Mode:    mode,
 		Headers: opt.Headers,
 		Color:   opt.Color,
@@ -137,11 +137,11 @@ func reportText(rep *runner.Report) (string, error) {
 	return bodyfmt.TrimSection(buf.String()), nil
 }
 
-func renderRequest(res runner.Result, opt Options) string {
+func renderRequest(res runner.Result, warns []string, opt Options) string {
 	st := newStyler(opt.Color, opt.Theme)
 	summary := requestSummary(res, st)
 	issues := requestIssues(res, st)
-	warnings := requestWarnings(res, st)
+	warnings := requestWarnings(res, warns, st)
 	headers := requestHeadersText(res, opt.Headers, st)
 	body := requestBody(res, opt.Mode, opt.Color, opt.Theme, st)
 	return bodyfmt.JoinSections(summary, issues, warnings, headers, body)
@@ -207,17 +207,23 @@ func diagnosticIssue(label string, err error, st styler) string {
 	return st.label(label+":") + "\n" + indent(st.value(body, toneWarn), "  ")
 }
 
-func requestWarnings(res runner.Result, st styler) string {
-	items, _ := res.UnresolvedTemplateVars()
-	if len(items) == 0 {
+// Parse warnings share this section with the run's own warnings.
+func requestWarnings(res runner.Result, warns []string, st styler) string {
+	lines := make([]string, 0, len(warns)+1)
+	for _, warn := range warns {
+		lines = append(lines, st.value(warn, toneCaution))
+	}
+	if items, _ := res.UnresolvedTemplateVars(); len(items) > 0 {
+		lines = append(lines, st.pair(
+			"Unresolved template variables",
+			strings.Join(items, ", "),
+			toneCaution,
+		))
+	}
+	if len(lines) == 0 {
 		return ""
 	}
-	line := st.pair(
-		"Unresolved template variables",
-		strings.Join(items, ", "),
-		toneCaution,
-	)
-	return st.sectionCaution("Warnings:") + "\n" + indent(line, "  ")
+	return st.sectionCaution("Warnings:") + "\n" + indent(strings.Join(lines, "\n"), "  ")
 }
 
 func testsText(res runner.Result, st styler) string {

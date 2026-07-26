@@ -3,7 +3,6 @@ package ui
 import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
-	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -119,6 +118,8 @@ type runWorkerDoneMsg struct {
 	err   error
 }
 
-type requestWarningMsg struct {
-	warning rqeng.Warning
+// A warning the engine raised while running. The engine works off the UI
+// goroutine, so it hands these to the run queue instead of touching the model.
+type runWarningMsg struct {
+	text string
 }

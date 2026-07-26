@@ -71,6 +71,8 @@ type Report struct {
 	Failed        int
 	Skipped       int
 	StopReason    string
+	// Warnings holds parse warnings. They never affect the exit code.
+	Warnings []string
 }
 
 type ResultKind string

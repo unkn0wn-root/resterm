@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
+	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -255,6 +256,9 @@ func (m Model) statusBarLeftSections(
 	if section, ok := m.statusBarTestSection(palette); ok {
 		segs = append(segs, section)
 	}
+	if section, ok := m.statusBarWarningSection(palette); ok {
+		segs = append(segs, section)
+	}
 
 	for _, item := range m.statusBarSegments() {
 		section, ok := m.statusBarContextSection(item, palette)
@@ -264,6 +268,35 @@ func (m Model) statusBarLeftSections(
 		segs = append(segs, section)
 	}
 	return segs
+}
+
+// Parse warnings describe the file rather than a run, so they get a segment of
+// their own. The status bar never clears its message, so a warning written there
+// would be lost behind the first run result and never come back.
+func (m Model) statusBarWarningSection(
+	palette theme.StatusBarPalette,
+) (statusBarSection, bool) {
+	if !m.docMatchesEditor() {
+		return statusBarSection{}, false
+	}
+	label := parseWarningLabel(m.doc)
+	if label == "" {
+		return statusBarSection{}, false
+	}
+	return statusBarSection{text: label, style: palette.Warn}, true
+}
+
+// Kept short so it does not crowd the file and environment segments off the bar.
+// The full text is in the Explain pane.
+func parseWarningLabel(doc *restfile.Document) string {
+	if doc == nil || len(doc.Warnings) == 0 {
+		return ""
+	}
+	label := fmt.Sprintf("WARN line %d", doc.Warnings[0].Line)
+	if rest := len(doc.Warnings) - 1; rest > 0 {
+		label += fmt.Sprintf(" +%d", rest)
+	}
+	return label
 }
 
 func (m Model) statusBarTestSection(

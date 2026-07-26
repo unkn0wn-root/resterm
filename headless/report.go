@@ -82,6 +82,9 @@ type Report struct {
 	Failed        int
 	Skipped       int
 	StopReason    StopReason
+	// Warnings holds parse warnings with their source location. They never
+	// affect HasFailures or the exit code.
+	Warnings []string
 }
 
 // HasFailures reports whether the report contains any failed results.
@@ -353,6 +356,7 @@ func toFormatReport(rep *Report) runfmt.Report {
 		Failed:        rep.Failed,
 		Skipped:       rep.Skipped,
 		StopReason:    string(rep.StopReason),
+		Warnings:      rep.Warnings,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, toFormatResult(res))

@@ -232,7 +232,7 @@ func (m *Model) replaceEditorWithDocument(
 	m.currentRequest = nil
 	m.activeRequestKey = ""
 	m.activeRequestTitle = ""
-	m.doc = repl.doc
+	m.setDocument(repl.doc)
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
 
@@ -272,8 +272,21 @@ func (m *Model) replaceEditorContent(value string, opt editorContentOptions) {
 	m.editor.ClearSelection()
 }
 
+// Records the editor revision doc came from. The editor must already hold that
+// content when this is called.
+func (m *Model) setDocument(doc *restfile.Document) {
+	m.doc = doc
+	m.docRev = m.editor.Revision()
+}
+
+// Editing does not reparse, so anything describing the file has to ask this
+// first and stay quiet until the next parse.
+func (m Model) docMatchesEditor() bool {
+	return m.doc != nil && m.docRev == m.editor.Revision()
+}
+
 func (m *Model) refreshCurrentDocument(content []byte) {
-	m.doc = parseEditableDocument(m.currentFile, content)
+	m.setDocument(parseEditableDocument(m.currentFile, content))
 	m.syncRegistry(m.doc)
 	m.syncRequestList(m.doc)
 	entries := m.syncWorkspaceEntriesStatus()

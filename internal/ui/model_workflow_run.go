@@ -14,6 +14,7 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
@@ -38,6 +39,9 @@ type workflowState struct {
 	latGen         int
 	pendingExplain *xplain.Report
 	src            *restfile.Request
+	// These belong to the document the run was planned from, not to any one step,
+	// so they are kept here instead of gathered from step reports.
+	warnings []string
 }
 
 type workflowStepRuntime struct {
@@ -115,6 +119,7 @@ func workflowStateFromPlan(
 		steps:    steps,
 		origin:   workflowOriginForMode(pl.Run.Mode),
 		start:    time.Now(),
+		warnings: parser.WarningTexts(pl.Doc),
 	}
 	return st
 }

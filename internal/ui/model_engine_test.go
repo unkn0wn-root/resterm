@@ -81,19 +81,19 @@ func TestUIRequestEngineQueuesInsecureSSHWarningOnce(t *testing.T) {
 		t.Fatalf("caller warning callback count = %d, want 2", callbackCount)
 	}
 
-	var msg requestWarningMsg
+	var msg runWarningMsg
 	select {
 	case queued := <-model.runMsgChan:
 		var ok bool
-		msg, ok = queued.(requestWarningMsg)
+		msg, ok = queued.(runWarningMsg)
 		if !ok {
-			t.Fatalf("queued message type = %T, want requestWarningMsg", queued)
+			t.Fatalf("queued message type = %T, want runWarningMsg", queued)
 		}
 	default:
 		t.Fatal("expected queued request warning")
 	}
-	if msg.warning != rqeng.WarningSSHHostKeyVerificationDisabled {
-		t.Fatalf("warning = %q", msg.warning)
+	if msg.text != string(rqeng.WarningSSHHostKeyVerificationDisabled) {
+		t.Fatalf("warning = %q", msg.text)
 	}
 	select {
 	case extra := <-model.runMsgChan:

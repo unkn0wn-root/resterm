@@ -70,8 +70,8 @@ type requestRunner interface {
 // workflow run shares one wrapper so repeated warnings are only shown once.
 type uiRequestEngine struct {
 	*rqeng.Engine
-	model        *Model
-	seenWarnings map[rqeng.Warning]struct{}
+	model *Model
+	seen  map[string]struct{}
 }
 
 func (e *uiRequestEngine) ExecuteWith(
@@ -85,7 +85,7 @@ func (e *uiRequestEngine) ExecuteWith(
 		if nextWarning != nil {
 			nextWarning(warning)
 		}
-		e.queueWarning(warning)
+		e.queueWarning(string(warning))
 	}
 	opt.AttachSSE = e.model.attachSSEHandle
 	opt.AttachWS = e.model.attachWebSocketHandle
@@ -93,16 +93,21 @@ func (e *uiRequestEngine) ExecuteWith(
 	return e.Engine.ExecuteWith(doc, req, env, opt)
 }
 
-func (e *uiRequestEngine) queueWarning(warning rqeng.Warning) {
-	if e.seenWarnings == nil {
-		e.seenWarnings = make(map[rqeng.Warning]struct{})
-	}
-	if _, seen := e.seenWarnings[warning]; seen {
+// Engine warnings only. Parse warnings have their own status bar segment, and
+// sending them here as well would show them twice and lose the progress text.
+func (e *uiRequestEngine) queueWarning(text string) {
+	if text == "" {
 		return
 	}
-	e.seenWarnings[warning] = struct{}{}
+	if e.seen == nil {
+		e.seen = make(map[string]struct{})
+	}
+	if _, seen := e.seen[text]; seen {
+		return
+	}
+	e.seen[text] = struct{}{}
 
-	emitQueuedMsg(e.model.runMsgChan, requestWarningMsg{warning: warning})
+	emitQueuedMsg(e.model.runMsgChan, runWarningMsg{text: text})
 }
 
 func (m *Model) runRequestSvc(opts httpclient.Options) *uiRequestEngine {

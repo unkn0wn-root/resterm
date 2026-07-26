@@ -12,6 +12,7 @@ import (
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/k8s"
+	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -82,6 +83,11 @@ func newExplainBuilder(
 	}
 	if e != nil {
 		b.globals = effectiveGlobalValues(doc, e.collectStoredGlobalValues(env))
+	}
+	// Done here and not in the caller so that reports built on paths which fail
+	// before the request runs carry them too.
+	for _, warn := range parser.WarningTexts(doc) {
+		b.warn(warn)
 	}
 	if !preview || req == nil {
 		return b

@@ -28,6 +28,7 @@ type Report struct {
 	Failed        int
 	Skipped       int
 	StopReason    string
+	Warnings      []string
 }
 
 type Result struct {

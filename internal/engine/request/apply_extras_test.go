@@ -83,3 +83,83 @@ func TestApplySeesTypedForEachValues(t *testing.T) {
 		})
 	}
 }
+
+// The status bar only holds a warning while the run is in flight, so the report
+// has to carry parse warnings for anything that looks at a finished run.
+func TestExplainReportCarriesParseWarnings(t *testing.T) {
+	client := httpclient.NewClientWithOptions(
+		httpclient.WithHTTPFactory(func(httpclient.Options) (*http.Client, error) {
+			return &http.Client{
+				Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+					return &http.Response{
+						Status:     "200 OK",
+						StatusCode: http.StatusOK,
+						Header:     make(http.Header),
+						Body:       io.NopCloser(strings.NewReader("ok")),
+						Request:    r,
+					}, nil
+				}),
+			}, nil
+		}),
+	)
+
+	doc := &restfile.Document{
+		Path: "warn.http",
+		Warnings: []restfile.ParseError{
+			{Line: 3, Message: `unknown @sse option "max-event"`},
+		},
+	}
+	req := &restfile.Request{Method: http.MethodGet, URL: "http://example.test"}
+
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(doc, req, "", ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith: %v", err)
+	}
+	if res.Explain == nil {
+		t.Fatal("expected an explain report")
+	}
+
+	want := `warn.http:3: unknown @sse option "max-event"`
+	for _, got := range res.Explain.Warnings {
+		if got == want {
+			return
+		}
+	}
+	t.Fatalf("explain warnings = %v, want one to be %q", res.Explain.Warnings, want)
+}
+
+// The ssh/k8s conflict returns before the request runs and builds its own
+// report, so it needs the parse warnings too.
+func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
+	doc := &restfile.Document{
+		Path: "warn.http",
+		Warnings: []restfile.ParseError{
+			{Line: 3, Message: `unknown @sse option "max-event"`},
+		},
+	}
+	req := &restfile.Request{
+		Method: http.MethodGet,
+		URL:    "http://example.test",
+		SSH:    &restfile.SSHSpec{Inline: &restfile.SSHProfile{Host: "jump.example.test"}},
+		K8s:    &restfile.K8sSpec{Use: "prof"},
+	}
+
+	res, err := New(engcfg.Config{}, nil).ExecuteWith(doc, req, "", ExecOptions{})
+	if err != nil {
+		t.Fatalf("ExecuteWith: %v", err)
+	}
+	if res.Err == nil {
+		t.Fatal("expected the ssh/k8s conflict to fail the request")
+	}
+	if res.Explain == nil {
+		t.Fatal("expected an explain report")
+	}
+
+	want := `warn.http:3: unknown @sse option "max-event"`
+	for _, got := range res.Explain.Warnings {
+		if got == want {
+			return
+		}
+	}
+	t.Fatalf("explain warnings = %v, want one to be %q", res.Explain.Warnings, want)
+}

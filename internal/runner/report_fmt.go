@@ -53,6 +53,7 @@ func ReportModel(rep *Report) runfmt.Report {
 		Failed:        rep.Failed,
 		Skipped:       rep.Skipped,
 		StopReason:    rep.StopReason,
+		Warnings:      rep.Warnings,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, toFormatResult(res))

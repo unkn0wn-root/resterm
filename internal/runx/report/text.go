@@ -56,6 +56,11 @@ func writeText(w io.Writer, rep *Report, painter TextPainter) error {
 	); err != nil {
 		return err
 	}
+	for _, warn := range rep.Warnings {
+		if _, err := fmt.Fprintf(w, "%s %s\n", st.warnLabel("WARN"), st.value(warn)); err != nil {
+			return err
+		}
+	}
 	for _, res := range rep.Results {
 		if _, err := fmt.Fprintf(
 			w,
@@ -217,6 +222,10 @@ func (s textStyler) resultLabel(text string) string {
 	default:
 		return s.paint(text, s.pal.Success, true)
 	}
+}
+
+func (s textStyler) warnLabel(text string) string {
+	return s.paint(text, s.pal.Caution, true)
 }
 
 func (s textStyler) stepLabel(text string) string {

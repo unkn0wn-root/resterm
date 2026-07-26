@@ -27,6 +27,7 @@ func reportFromFmt(rep runfmt.Report) *Report {
 		Failed:        rep.Failed,
 		Skipped:       rep.Skipped,
 		StopReason:    StopReason(rep.StopReason),
+		Warnings:      rep.Warnings,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, resultFromFmt(res))

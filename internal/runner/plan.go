@@ -33,6 +33,7 @@ type Plan struct {
 	state  statePaths
 	doc    *restfile.Document
 	sel    selectedTarget
+	warns  []string
 }
 
 func Build(opts Options) (*Plan, error) {
@@ -54,6 +55,7 @@ func Build(opts Options) (*Plan, error) {
 	if err := parser.Check(doc); err != nil {
 		return nil, err
 	}
+	warns := parser.WarningTexts(doc)
 
 	work := str.Trim(opts.WorkspaceRoot)
 	if work == "" {
@@ -99,6 +101,7 @@ func Build(opts Options) (*Plan, error) {
 		doc:    doc,
 		sel:    sel,
 		state:  st,
+		warns:  warns,
 	}, nil
 }
 
@@ -151,6 +154,9 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		FilePath:      opt.FilePath,
 		EnvName:       opt.EnvName,
 		StartedAt:     start,
+		// A Plan is reusable and safe for concurrent RunPlan calls, so each
+		// report gets its own copy rather than aliasing the plan's.
+		Warnings: slices.Clone(pl.warns),
 	}
 
 	if tg.workflow != nil {

@@ -25,10 +25,10 @@ func (state *workflowState) explainReport() *xplain.Report {
 		Decision: state.summary(),
 		Failure:  state.explainFailure(entries),
 		Vars:     wfExplainVars(entries),
-		Warnings: wfExplainWarnings(entries),
+		Warnings: state.explainWarnings(entries),
 	}
 	for _, entry := range entries {
-		rep.Stages = append(rep.Stages, stepExplain(entry.result).stages()...)
+		rep.Stages = append(rep.Stages, stepExplain(entry.result, state.warnings).stages()...)
 	}
 	return rep
 }
@@ -109,8 +109,13 @@ func (state *workflowState) explainFailure(entries []workflowStatsEntry) string 
 	return ""
 }
 
-func wfExplainWarnings(entries []workflowStatsEntry) []string {
+// Document warnings come first, without a step label. Every step's report
+// repeats them, and a label on each copy would read as several problems.
+func (state *workflowState) explainWarnings(entries []workflowStatsEntry) []string {
 	var out []string
+	for _, warn := range state.warnings {
+		out = appendExplainNote(out, warn)
+	}
 	for _, entry := range entries {
 		rep := entry.result.Explain
 		if rep == nil {
@@ -124,7 +129,7 @@ func wfExplainWarnings(entries []workflowStatsEntry) []string {
 		)
 		for _, warn := range rep.Warnings {
 			warn = strings.TrimSpace(warn)
-			if warn == "" {
+			if warn == "" || slices.Contains(state.warnings, warn) {
 				continue
 			}
 			if label != "" {
@@ -177,10 +182,16 @@ func wfExplainVars(entries []workflowStatsEntry) []xplain.Var {
 type wfStepExplain struct {
 	r   workflowStepResult
 	lbl string
+	// The run already reports these once, so a step leaves them out.
+	docWarnings []string
 }
 
-func stepExplain(r workflowStepResult) wfStepExplain {
-	return wfStepExplain{r: r, lbl: core.StepLabel(r.Step, r.Branch, r.Iteration, r.Total)}
+func stepExplain(r workflowStepResult, docWarnings []string) wfStepExplain {
+	return wfStepExplain{
+		r:           r,
+		lbl:         core.StepLabel(r.Step, r.Branch, r.Iteration, r.Total),
+		docWarnings: docWarnings,
+	}
 }
 
 type wfExplainStage struct {
@@ -465,7 +476,7 @@ func (x wfStepExplain) outcomeNotes(sum string) []string {
 	}
 	for _, warn := range rep.Warnings {
 		warn = strings.TrimSpace(warn)
-		if warn == "" {
+		if warn == "" || slices.Contains(x.docWarnings, warn) {
 			continue
 		}
 		notes = appendExplainNote(notes, "Warning: "+warn)
