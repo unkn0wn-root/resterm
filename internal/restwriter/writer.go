@@ -115,6 +115,11 @@ func Render(doc *restfile.Document, opts Options) (string, error) {
 		}
 		idx++
 	}
+	// A mock block runs to the next separator, so a workflow written straight
+	// after one would be read back as part of the mock body.
+	if idx > 0 && len(doc.Workflows) > 0 {
+		b.WriteString("\n###\n")
+	}
 	for _, wf := range doc.Workflows {
 		if idx > 0 {
 			b.WriteString("\n")

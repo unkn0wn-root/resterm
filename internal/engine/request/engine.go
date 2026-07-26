@@ -501,7 +501,10 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	if len(x.req.Metadata.Applies) > 0 {
 		before = CloneRequest(x.req)
 	}
-	if err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, nil); err != nil {
+	// @for-each binds its item as a typed value, and @apply reads it the same way
+	// every other expression in the run does.
+	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, x.extraX)
+	if err != nil {
 		x.exp.stage(
 			xplain.StageApply,
 			xplain.StageError,
