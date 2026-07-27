@@ -99,14 +99,17 @@ func applyTLSSettings(
 	}
 	norm := normalize(settings)
 
-	if raw := firstSetting(norm, prefixLower+"-root-mode"); raw != "" {
+	// Read straight from the map. firstSetting skips written-empty values, and
+	// those have to reach the missing-value error like every other setting.
+	mode := prefixLower + "-root-mode"
+	if raw, ok := norm[mode]; ok {
 		switch strings.ToLower(strings.TrimSpace(raw)) {
 		case string(tlsconfig.RootModeAppend):
 			cfg.RootMode = tlsconfig.RootModeAppend
 		case string(tlsconfig.RootModeReplace):
 			cfg.RootMode = tlsconfig.RootModeReplace
 		default:
-			return invalidSetting(component, prefixLower+"-root-mode", raw, "append or replace")
+			return invalidSetting(component, mode, raw, "append or replace")
 		}
 	}
 

@@ -176,6 +176,59 @@ func TestBareSettingKeyIsAFlag(t *testing.T) {
 	}
 }
 
+// Writing @setting with an equals sign is the @settings spelling, and it used
+// to store a key with the equals sign in it that nothing would ever look up.
+func TestSettingAcceptsTheEqualsSpelling(t *testing.T) {
+	tests := []struct {
+		name string
+		src  string
+		key  string
+		want string
+	}{
+		{
+			name: "boolean",
+			src:  "### r\nGET http://x\n# @setting insecure=false\n",
+			key:  "insecure",
+			want: "false",
+		},
+		{
+			name: "duration",
+			src:  "### r\nGET http://x\n# @setting timeout=5s\n",
+			key:  "timeout",
+			want: "5s",
+		},
+		{
+			name: "written empty stays empty",
+			src:  "### r\nGET http://x\n# @setting insecure=\n",
+			key:  "insecure",
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			doc := Parse("t.http", []byte(tt.src))
+			if len(doc.Errors) != 0 {
+				t.Fatalf("expected no errors, got %v", doc.Errors)
+			}
+			req := firstRequest(t, doc)
+			if got, ok := req.Settings[tt.key]; !ok || got != tt.want {
+				t.Fatalf("settings[%q] = %q (present %t), want %q", tt.key, got, ok, tt.want)
+			}
+		})
+	}
+
+	t.Run("file level", func(t *testing.T) {
+		doc := Parse("t.http", []byte("# @setting insecure=false\n\n### r\nGET http://x\n"))
+		if len(doc.Errors) != 0 {
+			t.Fatalf("expected no errors, got %v", doc.Errors)
+		}
+		if got, ok := doc.Settings["insecure"]; !ok || got != "false" {
+			t.Fatalf("file settings[insecure] = %q (present %t), want %q", got, ok, "false")
+		}
+	})
+}
+
 // A value written as empty is not a flag. These are the spellings that still
 // reach the appliers with nothing in them, which is what they report as missing.
 func TestWrittenEmptySettingValueStaysEmpty(t *testing.T) {

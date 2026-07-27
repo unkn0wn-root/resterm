@@ -197,21 +197,9 @@ func (r *wfRun) runStep(ctx context.Context, rt WorkflowStepRuntime) (bool, erro
 	case restfile.WorkflowStepKindRequest, restfile.WorkflowStepKindForEach:
 		return r.runReqStep(ctx, step, rt.Req, "")
 	default:
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			rt.Req,
-			"",
-			0,
-			0,
-			engine.RequestResult{
-				Err: diag.Newf(diag.ClassUI, "unknown workflow step kind %q", step.Kind),
-			},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, rt.Req, "", engine.RequestResult{
+			Err: diag.Newf(diag.ClassUI, "unknown workflow step kind %q", step.Kind),
+		})
 	}
 }
 
@@ -226,19 +214,9 @@ func (r *wfRun) runReqStep(
 		return true, nil
 	}
 	if req == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			branch,
-			0,
-			0,
-			engine.RequestResult{Err: diag.New(diag.ClassUI, "workflow step missing request")},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, branch, engine.RequestResult{
+			Err: diag.New(diag.ClassUI, "workflow step missing request"),
+		})
 	}
 
 	xv, vv := r.stepScope(step, req, nil)
@@ -260,34 +238,12 @@ func (r *wfRun) runReqStep(
 				r.idx++
 				return true, nil
 			}
-			out, emitErr := r.emitManualStep(
-				ctx,
-				step,
-				req,
-				branch,
-				0,
-				0,
-				engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagWhen)},
-			)
-			if emitErr != nil {
-				return false, emitErr
-			}
-			return r.finishStep(step, out, true), nil
+			return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
+				Err: diag.WrapAs(diag.ClassScript, err, wfTagWhen),
+			})
 		}
 		if !ok {
-			out, emitErr := r.emitManualStep(
-				ctx,
-				step,
-				req,
-				branch,
-				0,
-				0,
-				engine.RequestResult{Skipped: true, SkipReason: reason},
-			)
-			if emitErr != nil {
-				return false, emitErr
-			}
-			return r.finishStep(step, out, true), nil
+			return r.manualFinish(ctx, step, req, branch, engine.RequestResult{Skipped: true, SkipReason: reason})
 		}
 	}
 
@@ -298,19 +254,9 @@ func (r *wfRun) runReqStep(
 			r.idx++
 			return true, nil
 		}
-		out, emitErr := r.emitManualStep(
-			ctx,
-			step,
-			req,
-			branch,
-			0,
-			0,
-			engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach)},
-		)
-		if emitErr != nil {
-			return false, emitErr
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
+			Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach),
+		})
 	}
 	if spec == nil {
 		out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
@@ -331,34 +277,15 @@ func (r *wfRun) runReqStep(
 		nil,
 	)
 	if err != nil {
-		out, emitErr := r.emitManualStep(
-			ctx,
-			step,
-			req,
-			branch,
-			0,
-			0,
-			engine.RequestResult{Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach)},
-		)
-		if emitErr != nil {
-			return false, emitErr
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
+			Err: diag.WrapAs(diag.ClassScript, err, wfTagForEach),
+		})
 	}
 	if len(items) == 0 {
-		out, emitErr := r.emitManualStep(
-			ctx,
-			step,
-			req,
-			branch,
-			0,
-			0,
-			engine.RequestResult{Skipped: true, SkipReason: wfSkipForEachNoItems},
-		)
-		if emitErr != nil {
-			return false, emitErr
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, req, branch, engine.RequestResult{
+			Skipped:    true,
+			SkipReason: wfSkipForEachNoItems,
+		})
 	}
 
 	reqKey, wfKey := restfile.WorkflowVarKeys(spec.Var, r.pl.WfVars)
@@ -486,19 +413,9 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 		return true, nil
 	}
 	if step.If == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Err: diag.New(diag.ClassUI, "workflow @if missing definition")},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{
+			Err: diag.New(diag.ClassUI, "workflow @if missing definition"),
+		})
 	}
 
 	xv, vv := r.stepScope(step, nil, nil)
@@ -508,80 +425,22 @@ func (r *wfRun) runIf(ctx context.Context, step restfile.WorkflowStep) (bool, er
 			r.canceled = true
 			return true, nil
 		}
-		out, emitErr := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Err: err},
-		)
-		if emitErr != nil {
-			return false, emitErr
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: err})
 	}
 	if br == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoBranch},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoBranch})
 	}
 	if msg := strings.TrimSpace(br.Fail); msg != "" {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Err: fmt.Errorf("%s", msg)},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: fmt.Errorf("%s", msg)})
 	}
 	branch, req := r.resolveBranchRequest(br.Run)
 	if branch == "" {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoRun},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipIfNoRun})
 	}
 	if req == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			branch,
-			0,
-			0,
-			engine.RequestResult{Err: fmt.Errorf("request %s not found", branch)},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, branch, engine.RequestResult{
+			Err: fmt.Errorf("request %s not found", branch),
+		})
 	}
 
 	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
@@ -597,21 +456,9 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 		return true, nil
 	}
 	if step.Switch == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{
-				Err: diag.New(diag.ClassUI, "workflow @switch missing definition"),
-			},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{
+			Err: diag.New(diag.ClassUI, "workflow @switch missing definition"),
+		})
 	}
 
 	xv, vv := r.stepScope(step, nil, nil)
@@ -621,80 +468,22 @@ func (r *wfRun) runSwitch(ctx context.Context, step restfile.WorkflowStep) (bool
 			r.canceled = true
 			return true, nil
 		}
-		out, emitErr := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Err: err},
-		)
-		if emitErr != nil {
-			return false, emitErr
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: err})
 	}
 	if sel == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoCase},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoCase})
 	}
 	if msg := strings.TrimSpace(sel.Fail); msg != "" {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Err: fmt.Errorf("%s", msg)},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Err: fmt.Errorf("%s", msg)})
 	}
 	branch, req := r.resolveBranchRequest(sel.Run)
 	if branch == "" {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			"",
-			0,
-			0,
-			engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoRun},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, "", engine.RequestResult{Skipped: true, SkipReason: wfSkipSwitchNoRun})
 	}
 	if req == nil {
-		out, err := r.emitManualStep(
-			ctx,
-			step,
-			nil,
-			branch,
-			0,
-			0,
-			engine.RequestResult{Err: fmt.Errorf("request %s not found", branch)},
-		)
-		if err != nil {
-			return false, err
-		}
-		return r.finishStep(step, out, true), nil
+		return r.manualFinish(ctx, step, nil, branch, engine.RequestResult{
+			Err: fmt.Errorf("request %s not found", branch),
+		})
 	}
 
 	out, err := r.executeStepRequest(ctx, step, req, branch, 0, 0, xv, nil)
@@ -768,6 +557,23 @@ func (r *wfRun) emitManualStep(
 	out := evalReq(step, res)
 	r.note(out)
 	return out, nil
+}
+
+// manualFinish emits a synthetic result and ends the step in one call. The
+// for-each iterations advance the loop themselves, so they use the pieces
+// directly.
+func (r *wfRun) manualFinish(
+	ctx context.Context,
+	step restfile.WorkflowStep,
+	req *restfile.Request,
+	branch string,
+	res engine.RequestResult,
+) (bool, error) {
+	out, err := r.emitManualStep(ctx, step, req, branch, 0, 0, res)
+	if err != nil {
+		return false, err
+	}
+	return r.finishStep(step, out, true), nil
 }
 
 func (r *wfRun) executeStepRequest(

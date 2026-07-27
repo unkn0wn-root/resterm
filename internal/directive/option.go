@@ -220,9 +220,10 @@ func ParseNameValue(input string) (string, string) {
 
 // CutOptions splits a directive argument into the head it starts with and the
 // key=value options after it. Both halves come from the original text, so a
-// quoted value keeps the spaces inside it.
+// quoted value keeps the spaces inside it. The span lexer escapes the same way
+// ParseOptions does, or the two would disagree about where a quoted value ends.
 func CutOptions(input string) (string, Options) {
-	lex := &lexer{src: input}
+	lex := &lexer{src: input, escapes: true}
 	for {
 		tok, ok := lex.next()
 		if !ok {

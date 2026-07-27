@@ -207,3 +207,17 @@ func TestApplyHTTPSettingsRejectsInvalidRootMode(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// A written-empty root mode used to be skipped in silence while every other
+// setting reports a missing value.
+func TestApplyHTTPSettingsRejectsEmptyRootMode(t *testing.T) {
+	opts := httpclient.Options{}
+
+	err := ApplyHTTPSettings(&opts, map[string]string{"http-root-mode": ""}, nil)
+	if err == nil {
+		t.Fatal("expected missing http-root-mode error")
+	}
+	if !strings.Contains(err.Error(), "missing http-root-mode value (use append or replace)") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

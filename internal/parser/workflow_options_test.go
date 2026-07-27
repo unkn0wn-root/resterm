@@ -210,3 +210,31 @@ GET https://example.com/first
 		t.Fatalf("@case expression = %q, want %q", steps[1].Switch.Cases[0].Expr, want)
 	}
 }
+
+// An escaped quote does not end the string it sits in. Splitting spans with a
+// lexer that ignored the escape used to close the quote early and read the tail
+// of the string as options.
+func TestParseWorkflowBranchKeepsEscapedQuotes(t *testing.T) {
+	src := `# @workflow demo
+# @if response.body.msg == "say \" fail=x" run=First
+
+### First
+# @name First
+GET https://example.com/first
+`
+
+	doc := Parse("workflow.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("unexpected parse errors: %v", doc.Errors)
+	}
+	branch := doc.Workflows[0].Steps[0].If
+	if want := `response.body.msg == "say \" fail=x"`; branch.Then.Cond != want {
+		t.Fatalf("@if condition = %q, want %q", branch.Then.Cond, want)
+	}
+	if branch.Then.Run != "First" {
+		t.Fatalf("@if run = %q, want %q", branch.Then.Run, "First")
+	}
+	if branch.Then.Fail != "" {
+		t.Fatalf("@if fail = %q, want it empty", branch.Then.Fail)
+	}
+}

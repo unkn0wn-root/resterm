@@ -228,6 +228,11 @@ func putSetting(dst map[string]string, rest string) map[string]string {
 	if key == "" {
 		return dst
 	}
+	// The @settings spelling. Read it that way instead of storing a key with an
+	// equals sign in it, which no consumer would ever look up.
+	if strings.Contains(key, "=") {
+		return applySettingsTokens(dst, rest)
+	}
 	// A key written on its own is a flag, the same as it is in @settings. Only
 	// the parser can tell that apart from a value that was written empty.
 	if val == "" {

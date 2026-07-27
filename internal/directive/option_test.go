@@ -393,6 +393,14 @@ func TestCutOptions(t *testing.T) {
 			head: "true",
 			opts: Options{"run": "StepOK", "quiet": "true"},
 		},
+		// The span lexer has to honor the escape, or the quote closes early and
+		// the tail of the string reads as an option.
+		{
+			name: "escaped quote inside a quoted expression",
+			rest: `response.body.msg == "say \" fail=x" run=StepOK`,
+			head: `response.body.msg == "say \" fail=x"`,
+			opts: Options{"run": "StepOK"},
+		},
 		{name: "empty", opts: Options{}},
 	}
 
