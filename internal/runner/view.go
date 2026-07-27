@@ -11,17 +11,6 @@ func (r Result) Transcript() []byte {
 	return bytes.Clone(r.transcript)
 }
 
-func (r Result) RequestText() string {
-	return r.requestText
-}
-
-func (r *Result) SetRequestText(text string) {
-	if r == nil {
-		return
-	}
-	r.requestText = str.Trim(text)
-}
-
 func (r Result) UnresolvedTemplateVars() ([]string, bool) {
 	if !r.unresolvedTemplateVarsSet {
 		return nil, false
@@ -53,19 +42,4 @@ func (r *Result) SetUnresolvedTemplateVars(items []string) {
 	}
 	sort.Strings(out)
 	r.unresolvedTemplateVars = out
-}
-
-func (s StepResult) Transcript() []byte {
-	return bytes.Clone(s.transcript)
-}
-
-func (s StepResult) RequestText() string {
-	return s.requestText
-}
-
-func (s *StepResult) SetRequestText(text string) {
-	if s == nil {
-		return
-	}
-	s.requestText = str.Trim(text)
 }

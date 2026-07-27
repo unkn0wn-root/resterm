@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -32,7 +33,7 @@ func TestResolveUseWithInlineOverrides(t *testing.T) {
 		},
 	}
 	fileProfiles := []restfile.SSHProfile{
-		{Scope: restfile.SSHScopeFile, Name: "edge", Host: "profile-host"},
+		{Scope: directive.ScopeFile, Name: "edge", Host: "profile-host"},
 	}
 
 	cfg, err := Resolve(spec, fileProfiles, nil, nil, "")
@@ -47,10 +48,10 @@ func TestResolveUseWithInlineOverrides(t *testing.T) {
 func TestResolvePrefersFileProfileOverGlobal(t *testing.T) {
 	spec := &restfile.SSHSpec{Use: "edge"}
 	fileProfiles := []restfile.SSHProfile{
-		{Scope: restfile.SSHScopeFile, Name: "edge", Host: "file-host"},
+		{Scope: directive.ScopeFile, Name: "edge", Host: "file-host"},
 	}
 	globalProfiles := []restfile.SSHProfile{
-		{Scope: restfile.SSHScopeGlobal, Name: "edge", Host: "global-host"},
+		{Scope: directive.ScopeGlobal, Name: "edge", Host: "global-host"},
 	}
 
 	cfg, err := Resolve(spec, fileProfiles, globalProfiles, nil, "")
@@ -75,7 +76,7 @@ func TestResolveExpandsAfterMerge(t *testing.T) {
 		},
 	}
 	fileProfiles := []restfile.SSHProfile{{
-		Scope:      restfile.SSHScopeFile,
+		Scope:      directive.ScopeFile,
 		Name:       "edge",
 		Host:       "{{ssh_host}}",
 		Key:        "{{ssh_key}}",
@@ -125,7 +126,7 @@ func TestResolveInlineOverridesOptionalFields(t *testing.T) {
 		},
 	}
 	fileProfiles := []restfile.SSHProfile{{
-		Scope:        restfile.SSHScopeFile,
+		Scope:        directive.ScopeFile,
 		Name:         "edge",
 		Host:         "profile-host",
 		PortStr:      "22",

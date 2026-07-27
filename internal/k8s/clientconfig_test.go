@@ -137,18 +137,18 @@ func TestRawConfigAppliesContextOverrideAndExecPolicy(t *testing.T) {
 		Context:    "ctx-b",
 		Namespace:  "ns-override",
 	}
-	raw, err := rawConfig(cfg, LoadOptions{
+	cc, err := clientConfig(cfg, LoadOptions{
 		ExecPolicy:    ExecPolicyAllowlist,
 		ExecAllowlist: []string{"aws"},
 	})
 	if err != nil {
+		t.Fatalf("client config err: %v", err)
+	}
+	raw, err := cc.RawConfig()
+	if err != nil {
 		t.Fatalf("raw config err: %v", err)
 	}
 
-	cc := clientcmd.NewNonInteractiveClientConfig(raw, "ctx-b", &clientcmd.ConfigOverrides{
-		CurrentContext: "ctx-b",
-		Context:        clientcmdapi.Context{Namespace: "ns-override"},
-	}, nil)
 	ns, _, err := cc.Namespace()
 	if err != nil {
 		t.Fatalf("namespace resolve err: %v", err)

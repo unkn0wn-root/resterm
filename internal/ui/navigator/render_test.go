@@ -99,7 +99,7 @@ func TestRenderWorkflowShowsBadgeNoCaret(t *testing.T) {
 			Tags:   []string{"demo", "workflow"},
 		},
 	}
-	out := renderRow(node, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(node, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected workflow row without caret, got %q", clean)
@@ -124,7 +124,7 @@ func TestRenderRowShowsBadgesButOmitsTags(t *testing.T) {
 			Badges: []string{"AUTH", "gRPC"},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if strings.Contains(clean, "#beta") || strings.Contains(clean, "#users") {
 		t.Fatalf("expected tags to be omitted from list row, got %q", clean)
@@ -147,7 +147,7 @@ func TestRenderSelectedRequestShowsMarker(t *testing.T) {
 			Method: "GET",
 		},
 	}
-	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, true, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.HasPrefix(clean, "> GET  getStatus") {
 		t.Fatalf("expected selected request marker before method badge, got %q", clean)
@@ -164,7 +164,7 @@ func TestRenderRowShowsDirIcon(t *testing.T) {
 			Expanded: false,
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconDirClosed) {
 		t.Fatalf("expected directory icon, got %q", clean)
@@ -184,7 +184,7 @@ func TestRenderSelectedFileShowsMarkerAndCaret(t *testing.T) {
 			Count:    2,
 		},
 	}
-	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, true, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.HasPrefix(clean, iconSelected+" "+iconCaretClosed+" api.http (2)") {
 		t.Fatalf("expected selected file marker, caret, and title, got %q", clean)
@@ -208,7 +208,7 @@ func TestRenderFileShowsGitStatusSeparateFromBadges(t *testing.T) {
 		},
 	}
 
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, "api.http M ACTIVE") {
 		t.Fatalf("expected git marker between title and badges, got %q", clean)
@@ -231,7 +231,7 @@ func TestRenderSelectedDirShowsMarkerAndIcon(t *testing.T) {
 			Title: "queries",
 		},
 	}
-	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, true, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.HasPrefix(clean, iconSelected+" "+iconDirClosed+" queries") {
 		t.Fatalf("expected selected directory marker, icon, and title, got %q", clean)
@@ -247,7 +247,7 @@ func TestRenderSelectedWorkflowShowsMarker(t *testing.T) {
 			Title: "sample-order",
 		},
 	}
-	out := renderRow(row, true, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, true, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.HasPrefix(clean, "> WF  sample-order") {
 		t.Fatalf("expected selected workflow marker before badge, got %q", clean)
@@ -318,7 +318,7 @@ func TestRenderRowShowsRTSIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconRTS) {
 		t.Fatalf("expected rts icon, got %q", clean)
@@ -337,7 +337,7 @@ func TestRenderRTSUsesModuleIndicator(t *testing.T) {
 			Payload: Payload[any]{FilePath: "/tmp/mod.rts"},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if strings.Contains(clean, iconCaretClosed) || strings.Contains(clean, iconCaretOpen) {
 		t.Fatalf("expected rts row without caret, got %q", clean)
@@ -364,7 +364,7 @@ func TestRenderRowShowsEnvIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconEnv) {
 		t.Fatalf("expected env icon, got %q", clean)
@@ -393,7 +393,7 @@ func TestRenderRowShowsGraphQLIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconGraphQL) {
 		t.Fatalf("expected graphql icon, got %q", clean)
@@ -422,7 +422,7 @@ func TestRenderRowShowsJSONIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconJSON) {
 		t.Fatalf("expected json icon, got %q", clean)
@@ -451,7 +451,7 @@ func TestRenderRowShowsJavaScriptIcon(t *testing.T) {
 			},
 		},
 	}
-	out := renderRow(row, false, th, 80, true, false, theme.AppearanceUnknown)
+	out := renderRowState(row, false, false, th, 80, true, false, theme.AppearanceUnknown)
 	clean := ansi.Strip(out)
 	if !strings.Contains(clean, iconJavaScript) {
 		t.Fatalf("expected javascript icon, got %q", clean)

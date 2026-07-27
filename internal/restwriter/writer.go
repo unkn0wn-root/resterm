@@ -16,6 +16,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
@@ -114,6 +115,19 @@ func Render(doc *restfile.Document, opts Options) (string, error) {
 		}
 		idx++
 	}
+	// A mock block runs to the next separator, so a workflow written straight
+	// after one would be read back as part of the mock body.
+	if idx > 0 && len(doc.Workflows) > 0 {
+		b.WriteString("\n###\n")
+	}
+	for _, wf := range doc.Workflows {
+		if idx > 0 {
+			b.WriteString("\n")
+		}
+		b.WriteString(RenderWorkflow(wf, "workflow"))
+		b.WriteString("\n")
+		idx++
+	}
 
 	return b.String(), nil
 }
@@ -131,7 +145,9 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 	}
 	b.WriteString("### ")
 	b.WriteString(title)
-	b.WriteString("\n# @mock method=")
+	b.WriteString("\n")
+	b.WriteString(directive.Mock.Comment())
+	b.WriteString(" method=")
 	b.WriteString(strings.ToUpper(strings.TrimSpace(mock.Method)))
 	b.WriteString(" path=")
 	b.WriteString(strings.TrimSpace(mock.Path))
@@ -158,7 +174,12 @@ func renderMock(b *strings.Builder, mock *restfile.Mock) error {
 	}
 	b.WriteString("\n")
 	if mock.Expectation != nil {
-		fmt.Fprintf(b, "# @expect calls=%d\n", mock.Expectation.Calls)
+		fmt.Fprintf(
+			b,
+			"%s calls=%d\n",
+			directive.Expect.Comment(),
+			mock.Expectation.Calls,
+		)
 	}
 	if err := renderMockMatch(b, mock.Match); err != nil {
 		return err
@@ -311,7 +332,8 @@ func renderMockMatch(b *strings.Builder, match restfile.MockMatch) error {
 	if len(fields) == 0 {
 		return nil
 	}
-	b.WriteString("# @match ")
+	b.WriteString(directive.Match.Comment())
+	b.WriteString(" ")
 	b.WriteString(strings.Join(fields, " "))
 	b.WriteString("\n")
 	return nil
@@ -342,24 +364,38 @@ func renderScopeVariables(b *strings.Builder, vars []restfile.Variable) {
 	for _, v := range vars {
 		val := strings.TrimSpace(v.Value)
 		switch v.Scope {
-		case restfile.ScopeGlobal:
-			dir := "@global"
+		case directive.ScopeGlobal:
+			name := directive.Global
 			if v.Secret {
-				dir = "@global-secret"
+				name = directive.GlobalSecret
 			}
-			fmt.Fprintf(b, "# %s %s %s\n", dir, v.Name, val)
-		case restfile.ScopeFile:
+			fmt.Fprintf(b, "%s %s %s\n", name.Comment(), v.Name, val)
+		case directive.ScopeFile:
 			scope := "file"
 			if v.Secret {
 				scope = "file-secret"
 			}
-			fmt.Fprintf(b, "# @var %s %s %s\n", scope, v.Name, val)
+			fmt.Fprintf(
+				b,
+				"%s %s %s %s\n",
+				directive.Var.Comment(),
+				scope,
+				v.Name,
+				val,
+			)
 		default:
 			scope := "request"
 			if v.Secret {
 				scope = "request-secret"
 			}
-			fmt.Fprintf(b, "# @var %s %s %s\n", scope, v.Name, val)
+			fmt.Fprintf(
+				b,
+				"%s %s %s %s\n",
+				directive.Var.Comment(),
+				scope,
+				v.Name,
+				val,
+			)
 		}
 	}
 }
@@ -374,7 +410,8 @@ func renderRequest(b *strings.Builder, req *restfile.Request) {
 	b.WriteString("\n")
 
 	if req.Metadata.Name != "" {
-		b.WriteString("# @name ")
+		b.WriteString(directive.RequestName.Comment())
+		b.WriteString(" ")
 		b.WriteString(req.Metadata.Name)
 		b.WriteString("\n")
 	}
@@ -409,10 +446,10 @@ func renderBodyOptions(b *strings.Builder, req *restfile.Request) {
 	}
 	opt := req.Body.Options
 	if opt.ExpandTemplates {
-		b.WriteString("# @body expand\n")
+		b.WriteString(directive.Body.Comment() + " expand\n")
 	}
 	if opt.ForceInline || bodyTextNeedsInlineDirective(req) {
-		b.WriteString("# @body inline\n")
+		b.WriteString(directive.Body.Comment() + " inline\n")
 	}
 }
 
@@ -444,7 +481,8 @@ func renderDescription(b *strings.Builder, desc string) {
 		if t == "" {
 			continue
 		}
-		b.WriteString("# @description ")
+		b.WriteString(directive.Description.Comment())
+		b.WriteString(" ")
 		b.WriteString(t)
 		b.WriteString("\n")
 	}
@@ -464,17 +502,18 @@ func renderTags(b *strings.Builder, tags []string) {
 	if len(out) == 0 {
 		return
 	}
-	b.WriteString("# @tag ")
+	b.WriteString(directive.Tag.Comment())
+	b.WriteString(" ")
 	b.WriteString(strings.Join(out, " "))
 	b.WriteString("\n")
 }
 
 func renderLoggingDirectives(b *strings.Builder, meta restfile.RequestMetadata) {
 	if meta.NoLog {
-		b.WriteString("# @no-log\n")
+		b.WriteString(directive.NoLog.Comment() + "\n")
 	}
 	if meta.AllowSensitiveHeaders {
-		b.WriteString("# @log-sensitive-headers true\n")
+		b.WriteString(directive.LogSensitiveHeaders.Comment() + " true\n")
 	}
 }
 
@@ -484,12 +523,12 @@ func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
 	}
 	switch strings.ToLower(auth.Type) {
 	case "basic":
-		b.WriteString("# @auth basic ")
+		b.WriteString(directive.Auth.Comment() + " basic ")
 		b.WriteString(strings.TrimSpace(auth.Params["username"]))
 		b.WriteString(" ")
 		b.WriteString(strings.TrimSpace(auth.Params["password"]))
 	case "bearer":
-		b.WriteString("# @auth bearer ")
+		b.WriteString(directive.Auth.Comment() + " bearer ")
 		b.WriteString(strings.TrimSpace(auth.Params["token"]))
 	case "apikey", "api-key":
 		place := strings.TrimSpace(auth.Params["placement"])
@@ -501,7 +540,7 @@ func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
 		if name == "" {
 			name = "X-API-Key"
 		}
-		b.WriteString("# @auth apikey ")
+		b.WriteString(directive.Auth.Comment() + " apikey ")
 		b.WriteString(place)
 		b.WriteString(" ")
 		b.WriteString(name)
@@ -512,14 +551,14 @@ func renderAuth(b *strings.Builder, auth *restfile.AuthSpec) {
 		if len(formatted) == 0 {
 			return
 		}
-		b.WriteString("# @auth oauth2 ")
+		b.WriteString(directive.Auth.Comment() + " oauth2 ")
 		b.WriteString(strings.Join(formatted, " "))
 	case "command":
 		formatted := formatCommandParams(auth.Params)
 		if len(formatted) == 0 {
 			return
 		}
-		b.WriteString("# @auth command ")
+		b.WriteString(directive.Auth.Comment() + " command ")
 		b.WriteString(strings.Join(formatted, " "))
 	default:
 		return
@@ -537,7 +576,8 @@ func renderSettings(b *strings.Builder, set map[string]string) {
 		if val == "" {
 			continue
 		}
-		b.WriteString("# @setting ")
+		b.WriteString(directive.Setting.Comment())
+		b.WriteString(" ")
 		b.WriteString(key)
 		b.WriteString(" ")
 		b.WriteString(val)
@@ -636,14 +676,15 @@ func formatAuthParam(key, val string) string {
 
 func renderRequestVariables(b *strings.Builder, vars []restfile.Variable) {
 	for _, v := range vars {
-		if v.Scope != restfile.ScopeRequest {
+		if v.Scope != directive.ScopeRequest {
 			continue
 		}
 		scope := "request"
 		if v.Secret {
 			scope = "request-secret"
 		}
-		b.WriteString("# @var ")
+		b.WriteString(directive.Var.Comment())
+		b.WriteString(" ")
 		b.WriteString(scope)
 		b.WriteString(" ")
 		b.WriteString(v.Name)
@@ -658,7 +699,8 @@ func renderRequestVariables(b *strings.Builder, vars []restfile.Variable) {
 func renderCaptures(b *strings.Builder, caps []restfile.CaptureSpec) {
 	for _, c := range caps {
 		scope := captureScopeToken(c)
-		b.WriteString("# @capture ")
+		b.WriteString(directive.Capture.Comment())
+		b.WriteString(" ")
 		b.WriteString(scope)
 		b.WriteString(" ")
 		b.WriteString(c.Name)
@@ -693,11 +735,11 @@ func renderHeaders(b *strings.Builder, hdr http.Header) {
 func captureScopeToken(c restfile.CaptureSpec) string {
 	scope := ""
 	switch c.Scope {
-	case restfile.CaptureScopeRequest:
+	case directive.ScopeRequest:
 		scope = "request"
-	case restfile.CaptureScopeFile:
+	case directive.ScopeFile:
 		scope = "file"
-	case restfile.CaptureScopeGlobal:
+	case directive.ScopeGlobal:
 		scope = "global"
 	default:
 		scope = "request"

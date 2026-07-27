@@ -13,10 +13,6 @@ type Parser struct {
 	loopDepth int
 }
 
-func NewParser(path string, src []byte) *Parser {
-	return NewParserAt(path, src, Pos{Line: 1, Col: 1})
-}
-
 func NewParserAt(path string, src []byte, pos Pos) *Parser {
 	lx := NewLexerAt(path, src, pos)
 	p := &Parser{lx: lx}

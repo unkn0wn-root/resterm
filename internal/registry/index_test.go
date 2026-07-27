@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
@@ -47,7 +48,7 @@ func TestIndexDefaultAuthUsesCurrentFileFirst(t *testing.T) {
 	ix.Sync(&restfile.Document{
 		Path: "/tmp/defs.http",
 		Auth: []restfile.AuthProfile{{
-			Scope: restfile.AuthScopeGlobal,
+			Scope: directive.ScopeGlobal,
 			Spec: restfile.AuthSpec{
 				Type:   "bearer",
 				Params: map[string]string{"token": "global"},
@@ -58,7 +59,7 @@ func TestIndexDefaultAuthUsesCurrentFileFirst(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "/tmp/use.http",
 		Auth: []restfile.AuthProfile{{
-			Scope: restfile.AuthScopeFile,
+			Scope: directive.ScopeFile,
 			Spec: restfile.AuthSpec{
 				Type:   "bearer",
 				Params: map[string]string{"token": "file"},
@@ -94,7 +95,7 @@ func TestIndexSSHUsesCurrentDocOverStoredFile(t *testing.T) {
 	doc := &restfile.Document{
 		Path: path,
 		SSH: []restfile.SSHProfile{{
-			Scope: restfile.SSHScopeGlobal,
+			Scope: directive.ScopeGlobal,
 			Name:  "jump",
 			Host:  "new.example.com",
 		}},
@@ -116,7 +117,7 @@ func TestIndexSSHUsesWorkspaceGlobal(t *testing.T) {
 	ix.Sync(&restfile.Document{
 		Path: "/tmp/defs.http",
 		SSH: []restfile.SSHProfile{{
-			Scope: restfile.SSHScopeGlobal,
+			Scope: directive.ScopeGlobal,
 			Name:  "jump",
 			Host:  "jump.example.com",
 		}},
@@ -141,7 +142,7 @@ func TestIndexK8sUsesWorkspaceGlobal(t *testing.T) {
 	ix.Sync(&restfile.Document{
 		Path: "/tmp/defs.http",
 		K8s: []restfile.K8sProfile{{
-			Scope:   restfile.K8sScopeGlobal,
+			Scope:   directive.ScopeGlobal,
 			Name:    "cluster",
 			Target:  "service:api",
 			PortStr: "http",

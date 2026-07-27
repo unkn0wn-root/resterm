@@ -216,13 +216,6 @@ func decorateResponseContent(
 	return builder.String()
 }
 
-// responseSearchBoundaries maps visible-rune boundaries to raw byte offsets and
-// active SGR prefixes. bounds[0] is always the boundary before the first visible
-// rune, so len(bounds) is visible rune count plus one.
-func responseSearchBoundaries(content string) []responseSearchBoundary {
-	return buildResponseSearchContentIndex(content).bounds
-}
-
 func buildResponseSearchContentIndex(content string) responseSearchContentIndex {
 	index := responseSearchContentIndex{
 		raw:    content,

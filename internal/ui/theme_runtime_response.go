@@ -41,7 +41,7 @@ func newGRPCResponseRenderSource(
 ) responseRenderSource {
 	return responseRenderSource{
 		grpc:       cloneGRPCResponse(resp),
-		grpcReq:    cloneRequest(req),
+		grpcReq:    req.Clone(),
 		grpcMethod: strings.TrimSpace(fullMethod),
 	}
 }

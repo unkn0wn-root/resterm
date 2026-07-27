@@ -4,8 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -172,7 +171,7 @@ func (b *documentBuilder) setRTSScript(rest string) error {
 }
 
 func parseScriptSpec(rest string) (scriptKind, scriptLang) {
-	fields := lexer.Fields(rest)
+	fields := directive.Fields(rest)
 	kind := scriptKind("")
 	lang := scriptLang("")
 	for _, field := range fields {
@@ -189,7 +188,7 @@ func parseScriptSpec(rest string) (scriptKind, scriptLang) {
 			}
 		}
 	}
-	params := options.ParseFields(fields)
+	params := directive.OptionFields(fields)
 	if v := params["lang"]; v != "" {
 		lang = scriptLang(v)
 	}
@@ -200,7 +199,7 @@ func parseScriptSpec(rest string) (scriptKind, scriptLang) {
 }
 
 func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
-	fields := lexer.Fields(rest)
+	fields := directive.Fields(rest)
 	var kind scriptKind
 	kindSet := false
 
@@ -210,7 +209,7 @@ func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
 		}
 		if lang, ok := scriptLangToken(field); ok {
 			if lang != scriptLangRTS {
-				return "", "", errRTSLangUnsupported()
+				return "", "", errRTSLangUnsupported
 			}
 			continue
 		}
@@ -220,7 +219,7 @@ func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
 			return "", "", err
 		}
 		if kindSet {
-			return "", "", errRTSMultipleModes()
+			return "", "", errRTSMultipleModes
 		}
 		kind = next
 		kindSet = true
@@ -230,7 +229,7 @@ func parseRTSScriptSpec(rest string) (scriptKind, scriptLang, error) {
 		return "", "", err
 	}
 	if !kindSet {
-		return "", "", errRTSModeRequired()
+		return "", "", errRTSModeRequired
 	}
 
 	return kind, scriptLangRTS, nil
@@ -241,45 +240,33 @@ func parseRTSScriptKind(field string) (scriptKind, error) {
 	case scriptKindPreRequest:
 		return kind, nil
 	case scriptKindTest, scriptKindTests:
-		return "", errRTSTestUnsupported()
+		return "", errRTSTestUnsupported
 	default:
-		return "", errRTSModeUnsupported()
+		return "", errRTSModeUnsupported
 	}
 }
 
 func validateRTSScriptLangOptions(fields []string) error {
-	params := options.ParseFields(fields)
+	params := directive.OptionFields(fields)
 	for _, opt := range []string{"lang", "language"} {
 		if val := params[opt]; val != "" && normScriptLang(val) != scriptLangRTS {
-			return errRTSLangUnsupported()
+			return errRTSLangUnsupported
 		}
 	}
 	return nil
 }
 
-func errRTSTestUnsupported() error {
-	return errors.New(
-		"@rts test is not supported, use @assert for RTS response checks or @script test for JavaScript tests",
-	)
-}
+var errRTSTestUnsupported = errors.New(
+	"@rts test is not supported, use @assert for RTS response checks or @script test for JavaScript tests",
+)
 
-func errRTSLangUnsupported() error {
-	return errors.New(
-		"@rts only supports RestermScript, remove lang=js or use @script for JavaScript",
-	)
-}
+var errRTSLangUnsupported = errors.New("@rts only supports RestermScript, remove lang=js or use @script for JavaScript")
 
-func errRTSModeRequired() error {
-	return errors.New("@rts requires a mode, use '@rts pre-request'")
-}
+var errRTSModeRequired = errors.New("@rts requires a mode, use '@rts pre-request'")
 
-func errRTSModeUnsupported() error {
-	return errors.New("@rts supports only pre-request mode, use '@rts pre-request'")
-}
+var errRTSModeUnsupported = errors.New("@rts supports only pre-request mode, use '@rts pre-request'")
 
-func errRTSMultipleModes() error {
-	return errors.New("@rts accepts only one mode, use '@rts pre-request'")
-}
+var errRTSMultipleModes = errors.New("@rts accepts only one mode, use '@rts pre-request'")
 
 func scriptLangToken(tok string) (scriptLang, bool) {
 	out := strings.ToLower(strings.TrimSpace(tok))

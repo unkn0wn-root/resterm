@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/parser"
@@ -433,7 +434,7 @@ func TestEngineExecuteRequestCapturesScriptedWebSocketTranscript(t *testing.T) {
 				Expression: "stream.summary().receivedCount == 2",
 			}},
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "ws.reply",
 				Expression: "{{stream.events[1].text}}",
 			}},
@@ -504,7 +505,7 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 				Expression: "stream.summary().receivedCount == 2",
 			}},
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "grpc.count",
 				Expression: "{{stream.summary.receivedCount}}",
 			}},

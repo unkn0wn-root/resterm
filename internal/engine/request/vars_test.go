@@ -4,9 +4,28 @@ import (
 	"context"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
+
+func TestResolveHTTPOptionsFallbackEnvEnable(t *testing.T) {
+	e := New(engcfg.Config{
+		FilePath:      "/tmp/request.http",
+		WorkspaceRoot: "/workspace",
+	}, nil)
+	opts := httpclient.Options{FallbackBaseDirs: []string{"/extra"}}
+
+	t.Setenv("RESTERM_ENABLE_FALLBACK", "true")
+	resolved := e.resolveHTTPOptions(nil, opts)
+	if len(resolved.FallbackBaseDirs) == 0 {
+		t.Fatalf("expected fallbacks enabled, got %v", resolved.FallbackBaseDirs)
+	}
+	if resolved.NoFallback {
+		t.Fatalf("expected NoFallback to be false when enabled")
+	}
+}
 
 func TestResolveSSHUsesDocumentGlobalProfiles(t *testing.T) {
 	t.Parallel()
@@ -15,7 +34,7 @@ func TestResolveSSHUsesDocumentGlobalProfiles(t *testing.T) {
 	doc := &restfile.Document{
 		SSH: []restfile.SSHProfile{
 			{
-				Scope: restfile.SSHScopeGlobal,
+				Scope: directive.ScopeGlobal,
 				Name:  "jump",
 				Host:  "127.0.0.1",
 			},
@@ -50,7 +69,7 @@ func TestResolveK8sUsesDocumentGlobalProfiles(t *testing.T) {
 	doc := &restfile.Document{
 		K8s: []restfile.K8sProfile{
 			{
-				Scope:   restfile.K8sScopeGlobal,
+				Scope:   directive.ScopeGlobal,
 				Name:    "cluster-api",
 				Pod:     "api-server",
 				PortStr: "8080",
@@ -89,7 +108,7 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 	doc := &restfile.Document{
 		Patches: []restfile.PatchProfile{
 			{
-				Scope:      restfile.PatchScopeGlobal,
+				Scope:      directive.ScopeGlobal,
 				Name:       "githubCliAuth",
 				Expression: `{headers: {"Authorization": "Bearer abc"}}`,
 				Line:       1,

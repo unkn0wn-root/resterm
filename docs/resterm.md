@@ -630,6 +630,10 @@ Troubleshooting:
 
 - Begin each request with a line that starts with `###`. Everything up to the next separator belongs to the same request.
 - Lines prefixed with `#`, `//`, or `--` are treated as comments. Metadata directives live inside these comment blocks.
+- A directive problem that does not invalidate the file becomes a warning rather than an error. Parsing continues and valid parts are retained where possible: an unrecognized option on `@ssh`, `@k8s`, `@sse`, or `@websocket` is dropped while the rest of the directive still applies, whereas a directive the parser cannot make sense of at all (an `@capture` with no usable scope, say) is dropped entirely and reported. Warnings never change the exit code.
+- In the TUI, the status bar carries a `WARN line <n>` segment while the parsed file has warnings, with `+<n>` when there is more than one. It sits beside the status message rather than replacing it, so a response status or a startup message does not hide it. The full text appears in the Explain pane for each run.
+- The segment describes the last parse, not the live buffer. Editing hides it until the document is parsed again, which happens on save, on an explicit reload, and whenever you run a request.
+- `resterm run` lists warnings under `WARN` in text output, in the `Warnings:` section of a single-request result, and under `warnings` in JSON.
 
 ### Metadata directives
 
@@ -1037,7 +1041,7 @@ Key directives and tokens:
 
 - `@workflow <name>` starts a workflow. Add `on-failure=<stop|continue>` to change the default behaviour and attach other tokens (e.g. `region=us-east-1`) which are surfaced under `Workflow.Options` for tooling.
 - `@description` / `@tag` lines inside the workflow build the description and tag list shown in the UI and stored in history.
-- `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments.
+- `@step <optional-alias>` defines an execution step. Supply `using=<RequestName>` (required), `on-failure=<...>` for per-step overrides, `expect.status` / `expect.statuscode`, and any number of `vars.*` assignments. The alias is the first word, so quote it when it holds spaces or an equals sign (`@step "Create Account" using=CreateUser`). `name=` sets it instead when the step starts with an option.
 - `vars.request.*` keys add step-scoped values that are available as `{{vars.request.<name>}}` during that request. They do not rewrite existing `@var` declarations automatically, so reference the namespaced token (or copy it in a pre-request script) when you want the override.
 - `vars.workflow.*` keys persist between steps and are available anywhere in the workflow as `{{vars.workflow.<name>}}`, letting later requests reuse or mutate shared context (e.g. `vars.workflow.userId`).
 - Unknown tokens on `@workflow` or `@step` are preserved in `Options`, allowing custom scripts or future features to consume them without changing the file format.
@@ -1654,6 +1658,8 @@ Key points:
 - Custom root CAs replace system roots by default (strict). Set `http-root-mode append` or `grpc-root-mode append` if you want to keep system roots in addition to your own.
 - File-level defaults: place `# @setting key value` or `# @settings key1=val1 ...` before the first request to apply to all requests in that file. Request-level overrides still win.
 - Settings are generic. Today the recognized prefixes are transport/TLS (`http-*`, `grpc-*`, `timeout`, `proxy`, `followredirects`, `insecure`, `no-cookies`). Future features can add more prefixes; unknown keys are ignored for now to stay forward-compatible.
+- Boolean settings (`followredirects`, `insecure`, `no-cookies`, `http-insecure`, `grpc-insecure`) accept `true`/`false`, `yes`/`no`, `on`/`off`, and `1`/`0`. A key written on its own is a flag meaning `true`, so `# @setting insecure`, `# @settings insecure`, and `# @setting insecure true` are the same thing. `@setting` also accepts the `key=value` spelling, so `# @setting insecure=false` means what `# @settings insecure=false` does.
+- Settings validate their values. A value outside a setting's vocabulary fails the request instead of falling back to a default, so a typo cannot silently leave TLS verification or redirects at the wrong setting. This covers booleans, `timeout` (a Go duration such as `30s`), `proxy` (a URL with a scheme and host, such as `http://host:8080`), `http-version`, and `http-root-mode`/`grpc-root-mode`. Writing a key with an empty value (`# @settings insecure=`, or `"settings.insecure": ""` in an environment file) is reported as a missing value rather than treated as a flag.
 - Environment defaults: `resterm.env.json` can carry global settings under the `settings.` prefix (e.g., `"settings.http-root-cas": "ca-dev.pem"`, `"settings.grpc-insecure": "false"`). Precedence is global (env) < file < request.
 - OAuth token exchanges reuse the same HTTP TLS settings (root CAs, client cert/key, `http-insecure`) as the main request.
 

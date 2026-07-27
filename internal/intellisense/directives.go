@@ -1,86 +1,31 @@
 package intellisense
 
-import "slices"
+import (
+	"slices"
 
-var directives = []Item{
-	{Label: "@mock", Summary: "Define an interpolated mock response or response sequence"},
-	{Label: "@match", Summary: "Match mock requests by query, header rules, or JSON body"},
-	{Label: "@expect", Summary: "Declare the expected number of matching mock calls"},
-	{Label: "@name", Summary: "Assign a display name to the request"},
-	{Label: "@description", Aliases: []string{"@desc"}, Summary: "Add a multi-line description"},
-	{Label: "@tag", Aliases: []string{"@tags"}, Summary: "Categorize the request with tags"},
-	{Label: "@no-log", Aliases: []string{"@nolog"}, Summary: "Disable logging of response bodies"},
-	{
-		Label:   "@log-sensitive-headers",
-		Aliases: []string{"@log-secret-headers"},
-		Summary: "Permit logging sensitive headers",
-	},
-	{Label: "@auth", Summary: "Configure authentication (basic, bearer, etc.)"},
-	{Label: "@setting", Summary: "Set options (transport/TLS/etc.)"},
-	{Label: "@settings", Summary: "Set multiple options on one line"},
-	{Label: "@timeout", Summary: "Override the request timeout"},
-	{Label: "@body", Summary: "Control body parsing and template expansion"},
-	{Label: "@var", Summary: "Declare a request-scoped variable"},
-	{Label: "@request", Summary: "Define a request-scoped variable"},
-	{Label: "@request-secret", Summary: "Define a secret request variable"},
-	{Label: "@file", Summary: "Define a file-scoped variable"},
-	{Label: "@file-secret", Summary: "Define a secret file variable"},
-	{Label: "@global", Summary: "Define or override a global variable"},
-	{Label: "@global-secret", Summary: "Define a secret global variable"},
-	{Label: "@const", Summary: "Define a reusable constant"},
-	{Label: "@use", Summary: "Import a RestermScript module"},
-	{Label: "@script", Summary: "Start a pre-request or test script block"},
-	{Label: "@rts", Summary: "Start a RestermScript pre-request block", Insert: "@rts pre-request"},
-	{Label: "@patch", Summary: "Define a reusable apply profile at file/global scope"},
-	{
-		Label:   "@apply",
-		Summary: "Apply an inline patch or reuse profiles (use=...) before pre-request scripts",
-	},
-	{
-		Label:   "@when",
-		Aliases: []string{"@skip-if"},
-		Summary: "Conditionally run or skip a request/step",
-	},
-	{Label: "@capture", Summary: "Capture data from the response"},
-	{Label: "@assert", Summary: "Evaluate a RestermScript assertion"},
-	{Label: "@trace", Summary: "Enable HTTP tracing and latency budgets"},
-	{Label: "@profile", Summary: "Run the request repeatedly with profiling"},
-	{Label: "@compare", Summary: "Run the request across multiple environments"},
-	{Label: "@ssh", Summary: "Send request via SSH jump host"},
-	{Label: "@k8s", Summary: "Send request via Kubernetes port-forward"},
-	{Label: "@workflow", Summary: "Begin a workflow definition"},
-	{Label: "@step", Summary: "Add a workflow step"},
-	{Label: "@if", Summary: "Conditionally run a workflow step"},
-	{Label: "@elif", Summary: "Additional workflow condition"},
-	{Label: "@else", Summary: "Fallback workflow branch"},
-	{Label: "@switch", Summary: "Branch workflow steps based on a value"},
-	{Label: "@case", Summary: "Match a switch case"},
-	{Label: "@default", Summary: "Fallback switch case"},
-	{Label: "@for-each", Summary: "Run a request once per list item"},
-	{Label: "@graphql", Summary: "Enable GraphQL request handling"},
-	{
-		Label:   "@graphql-operation",
-		Aliases: []string{"@operation"},
-		Summary: "Set the GraphQL operation name",
-	},
-	{
-		Label:   "@variables",
-		Aliases: []string{"@graphql-variables"},
-		Summary: "Provide GraphQL variables (JSON)",
-	},
-	{Label: "@query", Aliases: []string{"@graphql-query"}, Summary: "Inline a GraphQL query"},
-	{Label: "@grpc", Summary: "Configure the gRPC method (supports streaming)"},
-	{Label: "@grpc-descriptor", Summary: "Load a gRPC descriptor set"},
-	{Label: "@grpc-reflection", Summary: "Toggle gRPC reflection"},
-	{Label: "@grpc-plaintext", Summary: "Force plaintext gRPC transport"},
-	{Label: "@grpc-authority", Summary: "Set gRPC authority override"},
-	{
-		Label:   "@grpc-metadata",
-		Summary: "Attach gRPC metadata (Repeatable. Reserved keys rejected - use @timeout)",
-	},
-	{Label: "@sse", Summary: "Enable Server-Sent Events streaming"},
-	{Label: "@websocket", Summary: "Enable WebSocket streaming"},
-	{Label: "@ws", Summary: "Add a WebSocket scripted step (send/ping/wait/close)"},
+	"github.com/unkn0wn-root/resterm/internal/directive"
+)
+
+var directives = directiveItems()
+
+func directiveItems() []Item {
+	specs := directive.Specs()
+	items := make([]Item, len(specs))
+	for i, spec := range specs {
+		aliases := make([]string, len(spec.Aliases))
+		for j, alias := range spec.Aliases {
+			aliases[j] = alias.Tag()
+		}
+		items[i] = Item{
+			Label:   spec.Name.Tag(),
+			Aliases: aliases,
+			Summary: spec.Summary,
+		}
+		if spec.Name == directive.RTS {
+			items[i].Insert = directive.RTS.Tag() + " pre-request"
+		}
+	}
+	return items
 }
 
 var scriptArgs = []Item{
@@ -209,8 +154,8 @@ var settingArgs = []Item{
 }
 
 // directiveArgs maps a directive base key to its option/sub-token suggestions.
-var directiveArgs = map[string][]Item{
-	"mock": {
+var directiveArgs = map[directive.Name][]Item{
+	directive.Mock: {
 		{Label: "method=", Summary: "HTTP method to match", Insert: "method=GET"},
 		{Label: "path=", Summary: "Origin-form route path", Insert: "path=/resource"},
 		{Label: "name=", Summary: "Scenario selector name", Insert: "name=success"},
@@ -224,15 +169,15 @@ var directiveArgs = map[string][]Item{
 		{Label: "latency=", Summary: "Fixed response latency", Insert: "latency=250ms"},
 		{Label: "interpolate=false", Summary: "Preserve response template syntax literally"},
 	},
-	"match": {
+	directive.Match: {
 		{Label: "query=", Summary: "Exact query matcher JSON", Insert: `query={"key":"value"}`},
 		{Label: "headers=", Summary: "Header matcher rules as JSON", Insert: `headers={"X-Key":"value"}`},
 		{Label: "json=", Summary: "Recursive JSON subset matcher", Insert: `json={"key":"value"}`},
 	},
-	"expect": {
+	directive.Expect: {
 		{Label: "calls=", Summary: "Exact matching request count", Insert: "calls=1"},
 	},
-	"auth": {
+	directive.Auth: {
 		{
 			Label:      "request",
 			Summary:    "Make the auth directive explicitly request-scoped",
@@ -441,7 +386,7 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("5s"),
 		},
 	},
-	"apply": {
+	directive.Apply: {
 		{
 			Label:      "use=",
 			Summary:    "Reference a named patch profile",
@@ -449,15 +394,15 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("jsonApi"),
 		},
 	},
-	"patch": {
+	directive.Patch: {
 		{Label: "file", Summary: "Define a file-scoped reusable patch profile"},
 		{Label: "global", Summary: "Define a workspace-global reusable patch profile"},
 	},
-	"body": {
+	directive.Body: {
 		{Label: "expand", Summary: "Expand templates before sending body (incl. gRPC files)"},
 		{Label: "expand-templates", Summary: "Synonym for expand (explicit form)"},
 	},
-	"profile": {
+	directive.Profile: {
 		{
 			Label:      "count=",
 			Summary:    "Number of measured runs",
@@ -477,14 +422,14 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("250ms"),
 		},
 	},
-	"script":  scriptArgs,
-	"rts":     rtsArgs,
-	"if":      workflowRunArgs,
-	"elif":    workflowRunArgs,
-	"else":    workflowRunArgs,
-	"case":    workflowRunArgs,
-	"default": workflowRunArgs,
-	"trace": {
+	directive.Script:  scriptArgs,
+	directive.RTS:     rtsArgs,
+	directive.If:      workflowRunArgs,
+	directive.Elif:    workflowRunArgs,
+	directive.Else:    workflowRunArgs,
+	directive.Case:    workflowRunArgs,
+	directive.Default: workflowRunArgs,
+	directive.Trace: {
 		{Label: "enabled=true", Summary: "Turn tracing on"},
 		{Label: "enabled=false", Summary: "Turn tracing off"},
 		{
@@ -554,7 +499,7 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("25ms"),
 		},
 	},
-	"sse": {
+	directive.SSE: {
 		{
 			Label:      "timeout=",
 			Summary:    "Total stream timeout",
@@ -599,7 +544,7 @@ var directiveArgs = map[string][]Item{
 		},
 		{Label: "off", Summary: "Disable SSE for this request"},
 	},
-	"websocket": {
+	directive.WebSocket: {
 		{
 			Label:      "timeout=",
 			Summary:    "Handshake deadline",
@@ -637,7 +582,7 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("true"),
 		},
 	},
-	"ws": {
+	directive.WS: {
 		{Label: "send", Summary: "Send a text frame"},
 		{Label: "send-json", Summary: "Send a JSON frame"},
 		{Label: "send-base64", Summary: "Send base64-decoded binary data"},
@@ -647,7 +592,7 @@ var directiveArgs = map[string][]Item{
 		{Label: "wait", Summary: "Wait for a duration or incoming message"},
 		{Label: "close", Summary: "Close the connection with code and reason"},
 	},
-	"compare": {
+	directive.Compare: {
 		{
 			Label:      "base=",
 			Summary:    "Set the baseline environment",
@@ -661,7 +606,7 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("prod"),
 		},
 	},
-	"ssh": {
+	directive.SSH: {
 		{
 			Label:      "host=",
 			Summary:    "Jump host (supports env:VAR and templates)",
@@ -738,7 +683,7 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("true"),
 		},
 	},
-	"k8s": {
+	directive.K8s: {
 		{
 			Label:      "target=",
 			Summary:    "Target ref (pod:/service:/deployment:/statefulset:)",
@@ -836,8 +781,8 @@ var directiveArgs = map[string][]Item{
 			CursorBack: len("true"),
 		},
 	},
-	"setting":  settingArgs,
-	"settings": settingArgs,
+	directive.Setting:  settingArgs,
+	directive.Settings: settingArgs,
 }
 
 type directiveSource struct{}
@@ -847,11 +792,12 @@ func (directiveSource) Provide(ctx Context, sc Scope) []Item {
 	case KindDirective:
 		return filter(directives, ctx.Query)
 	case KindDirectiveArg:
+		name := directive.Name(ctx.Directive).Canonical()
 		if ctx.ArgKey == "use" {
-			return filter(profileItems(ctx.Directive, sc.Profiles), ctx.Query)
+			return filter(profileItems(name, sc.Profiles), ctx.Query)
 		}
-		opts := directiveArgs[ctx.Directive]
-		if ctx.Directive == "compare" {
+		opts := directiveArgs[name]
+		if name == directive.Compare {
 			opts = slices.Concat(opts, environmentItems(sc.Environments))
 		}
 		if len(opts) == 0 {
@@ -863,19 +809,19 @@ func (directiveSource) Provide(ctx Context, sc Scope) []Item {
 	}
 }
 
-func profileItems(directive string, profiles ProfileSet) []Item {
+func profileItems(name directive.Name, profiles ProfileSet) []Item {
 	var names []string
-	switch directive {
-	case "apply":
+	switch name {
+	case directive.Apply:
 		names = profiles.Patch
-	case "ssh":
+	case directive.SSH:
 		names = profiles.SSH
-	case "k8s":
+	case directive.K8s:
 		names = profiles.K8s
 	}
 	out := make([]Item, len(names))
 	for i, n := range names {
-		out[i] = Item{Label: n, Summary: directive + " profile"}
+		out[i] = Item{Label: n, Summary: name.String() + " profile"}
 	}
 	return out
 }

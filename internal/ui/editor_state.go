@@ -2457,16 +2457,6 @@ func (e requestEditor) clampOffset(offset int) int {
 	return offset
 }
 
-func (e requestEditor) currentSearchMatch() (searchMatch, bool) {
-	if !e.search.active {
-		return searchMatch{}, false
-	}
-	if e.search.index < 0 || e.search.index >= len(e.search.matches) {
-		return searchMatch{}, false
-	}
-	return e.search.matches[e.search.index], true
-}
-
 func (e *requestEditor) jumpToSearchIndex(index int) tea.Cmd {
 	if index < 0 || index >= len(e.search.matches) {
 		return nil

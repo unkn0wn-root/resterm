@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	xexec "github.com/unkn0wn-root/resterm/internal/exec"
@@ -52,16 +53,20 @@ const (
 	ExecModePreview
 )
 
+type Warning string
+
+const WarningSSHHostKeyVerificationDisabled Warning = "@ssh strict_hostkey=false (insecure)"
+
 type ExecOptions struct {
 	Extra      map[string]string
 	Values     map[string]rts.Value
 	Record     bool
 	Ctx        context.Context
 	Mode       ExecMode
+	OnWarning  func(Warning)
 	AttachSSE  func(*httpclient.StreamHandle, *restfile.Request)
 	AttachWS   func(*httpclient.WebSocketHandle, *restfile.Request)
 	AttachGRPC func(*stream.Session, *restfile.Request)
-	Release    func()
 }
 
 func New(cfg engine.Config, rt *rtrun.Runtime) *Engine {
@@ -126,7 +131,7 @@ func (e *Engine) ExecuteWith(
 
 	e.syncRegistry(doc)
 	env = e.envName(env)
-	req = cloneRequest(req)
+	req = CloneRequest(req)
 	opts := e.resolveHTTPOptions(doc, e.cfg.HTTPOptions)
 	if opts.CookieJar == nil {
 		if cs := e.rt.Cookies(); cs != nil {
@@ -191,9 +196,8 @@ func (e *Engine) store(res xrunResult) {
 	}
 }
 
-// SeedLast sets the ambient "previous response" RTS evaluation binds to (resp/trace)
-// for callers that produce responses outside ExecuteWith - e.g. the TUI
-// interactive WebSocket path, whose responses never flow through store().
+// The UI can replace or finish a response outside ExecuteWith. SeedLast keeps
+// RTS values such as resp and trace aligned with that UI state.
 func (e *Engine) SeedLast(resp *httpclient.Response, grpc *grpcclient.Response) {
 	switch {
 	case grpc != nil:
@@ -239,7 +243,6 @@ type execCtx struct {
 
 	sendCtx context.Context
 	cancel  context.CancelFunc
-	rel     func()
 
 	baseVars  map[string]string
 	storeG    map[string]vars.GlobalMutation
@@ -261,6 +264,7 @@ type execCtx struct {
 	runtimeSecrets []string
 	trace          *vars.Trace
 	exp            *explainBuilder
+	onWarning      func(Warning)
 	onSSE          func(*httpclient.StreamHandle, *restfile.Request)
 	onWS           func(*httpclient.WebSocketHandle, *restfile.Request)
 	onGRPC         func(*stream.Session, *restfile.Request)
@@ -298,7 +302,6 @@ func newExec(
 		opts:      opts,
 		sendCtx:   ctx,
 		cancel:    cancel,
-		rel:       opt.Release,
 		baseVars:  base,
 		storeG:    e.collectStoredGlobalValues(env),
 		hasRTSPre: hasRTS,
@@ -306,6 +309,7 @@ func newExec(
 		extraV:    cloneStringMap(opt.Extra),
 		extraX:    cloneValueMap(opt.Values),
 		exp:       exp,
+		onWarning: opt.OnWarning,
 		onSSE:     opt.AttachSSE,
 		onWS:      opt.AttachWS,
 		onGRPC:    opt.AttachGRPC,
@@ -367,7 +371,7 @@ func (x *execCtx) canceled(err error) *xrunResult {
 func (x *execCtx) reqText() string { return renderRequestText(x.req) }
 
 func (x *execCtx) currentVariables() map[string]string {
-	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, x.extraV)
+	return x.eng.collectVariablesWithGlobals(x.doc, x.req, x.env, x.storeG, false, x.extraV)
 }
 
 func (x *execCtx) currentGlobals() map[string]vars.GlobalMutation {
@@ -395,6 +399,14 @@ func (x *execCtx) applyRuntimeGlobals(ch map[string]vars.GlobalMutation) {
 
 func (x *execCtx) preview() bool {
 	return x != nil && x.mod == ExecModePreview
+}
+
+func (x *execCtx) warn(warning Warning) {
+	x.exp.warn(string(warning))
+	if x.preview() || x.onWarning == nil {
+		return
+	}
+	x.onWarning(warning)
 }
 
 func requestTiming(start, end time.Time, res xrunResult) engine.Timing {
@@ -450,9 +462,9 @@ func (f flow) EvaluateCondition() *xexec.RequestResult {
 		x.extraX,
 	)
 	if err != nil {
-		tag := "@when"
+		tag := directive.When.Tag()
 		if x.req.Metadata.When != nil && x.req.Metadata.When.Negate {
-			tag = "@skip-if"
+			tag = directive.SkipIf.Tag()
 		}
 		x.exp.stage(
 			tag,
@@ -487,9 +499,12 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 	vv := cloneStringMap(x.baseVars)
 	var before *restfile.Request
 	if len(x.req.Metadata.Applies) > 0 {
-		before = cloneRequest(x.req)
+		before = CloneRequest(x.req)
 	}
-	if err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, nil); err != nil {
+	// @for-each binds its item as a typed value, and @apply reads it the same way
+	// every other expression in the run does.
+	err := x.eng.runRTSApply(x.sendCtx, x.doc, x.req, x.env, x.opts.BaseDir, vv, x.extraX)
+	if err != nil {
 		x.exp.stage(
 			xplain.StageApply,
 			xplain.StageError,
@@ -513,7 +528,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 
 	before = nil
 	if x.hasRTSPre {
-		before = cloneRequest(x.req)
+		before = CloneRequest(x.req)
 	}
 	rtsOut, err := x.eng.runRTSPreRequest(
 		x.sendCtx,
@@ -567,7 +582,7 @@ func (f flow) RunPreRequest() *xexec.RequestResult {
 
 	before = nil
 	if x.hasJSPre {
-		before = cloneRequest(x.req)
+		before = CloneRequest(x.req)
 	}
 	jsOut, err := x.eng.sc.RunPreRequest(x.req.Metadata.Scripts, prerequest.Input{
 		Request:   x.req,
@@ -676,7 +691,7 @@ func (x *execCtx) resolveRoute() *xrunResult {
 		notes := append([]string{rt.Summary}, rt.Notes...)
 		x.exp.stage(xplain.StageRoute, xplain.StageOK, rt.Kind, nil, nil, notes...)
 		if sp != nil && sp.Active() && sp.Config != nil && !sp.Config.Strict {
-			x.exp.warn("@ssh strict_hostkey=false (insecure)")
+			x.warn(WarningSSHHostKeyVerificationDisabled)
 		}
 	}
 	return nil
@@ -687,7 +702,7 @@ func (x *execCtx) prepareAuth() *xrunResult {
 		return nil
 	}
 	x.exp.addSecrets(AuthSecretValues(x.req.Metadata.Auth, x.res)...)
-	before := cloneRequest(x.req)
+	before := CloneRequest(x.req)
 	if x.preview() {
 		out, err := x.eng.prepareExplainAuthPreview(x.doc, x.req, x.res, x.env)
 		if err != nil {
@@ -751,8 +766,8 @@ func (x *execCtx) prepareAuth() *xrunResult {
 
 func (x *execCtx) prepareProto() *xrunResult {
 	if x.req.GRPC != nil {
-		before := cloneRequest(x.req)
-		if err := x.eng.prepareGRPCRequest(x.req, x.res, x.grpcOpts.BaseDir); err != nil {
+		before := CloneRequest(x.req)
+		if err := prepareGRPCRequest(x.req, x.res, x.grpcOpts.BaseDir); err != nil {
 			x.exp.stage(
 				xplain.StageGRPCPrepare,
 				xplain.StageError,
@@ -772,8 +787,8 @@ func (x *execCtx) prepareProto() *xrunResult {
 		)
 	}
 	if x.req.WebSocket != nil {
-		before := cloneRequest(x.req)
-		if err := x.eng.expandWebSocketSteps(x.req, x.res); err != nil {
+		before := CloneRequest(x.req)
+		if err := expandWebSocketSteps(x.req, x.res); err != nil {
 			x.exp.stage(
 				xplain.StageWebSocketPrepare,
 				xplain.StageError,
@@ -855,9 +870,67 @@ func (f flow) PreviewResult() xexec.RequestResult {
 
 func (f flow) UseGRPC() bool { return f.ctx != nil && f.ctx.useGRPC }
 
-func (f flow) IsInteractiveWebSocket() bool { return false }
+func (f flow) IsInteractiveWebSocket() bool {
+	return f.ctx.req.WebSocket != nil &&
+		len(f.ctx.req.WebSocket.Steps) == 0 &&
+		f.ctx.onWS != nil
+}
 
-func (f flow) ExecuteInteractiveWebSocket() xexec.RequestResult { return xexec.RequestResult{} }
+func (f flow) ExecuteInteractiveWebSocket() xexec.RequestResult {
+	return f.ctx.executeInteractiveWebSocket()
+}
+
+func (x *execCtx) executeInteractiveWebSocket() xexec.RequestResult {
+	lt := newSessionLifetime(x.sendCtx)
+	detached := false
+	defer func() {
+		if !detached {
+			lt.close()
+		}
+	}()
+
+	handle, fallback, err := x.eng.hc.StartWebSocket(lt.ctx, x.req, x.res, x.opts)
+	if err != nil {
+		res := x.fail(err, "WebSocket request failed")
+		res.RequestText = x.reqText()
+		return *res
+	}
+	if fallback != nil {
+		return x.interactiveHTTPResult(fallback)
+	}
+	if handle == nil || handle.Session == nil {
+		err := diag.New(diag.ClassProtocol, "websocket session not available")
+		res := x.fail(err, "WebSocket request failed")
+		res.RequestText = x.reqText()
+		return *res
+	}
+
+	if !lt.detach() {
+		res := x.canceled(x.sendCtx.Err())
+		res.RequestText = x.reqText()
+		return *res
+	}
+
+	detached = true
+	x.onWS(handle, x.req)
+	go func() {
+		<-handle.Session.Done()
+		lt.cancel()
+	}()
+	return x.interactiveHTTPResult(httpclient.StreamingWebSocketResponse(handle.Meta))
+}
+
+func (x *execCtx) interactiveHTTPResult(resp *httpclient.Response) xexec.RequestResult {
+	x.exp.sentHTTP(x.req, resp)
+	x.exp.setHTTP(resp)
+	x.exp.setPrepared(x.req)
+
+	res := x.base()
+	res.Response = resp
+	res.RequestText = x.reqText()
+	res.Explain = x.exp.finish(xplain.StatusReady, "HTTP request sent", nil)
+	return res
+}
 
 func (f flow) ExecuteGRPC() xexec.RequestResult {
 	if f.ctx == nil {

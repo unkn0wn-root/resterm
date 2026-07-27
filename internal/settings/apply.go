@@ -2,10 +2,10 @@ package settings
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/tlsconfig"
@@ -99,27 +99,26 @@ func applyTLSSettings(
 	}
 	norm := normalize(settings)
 
-	if rawMode := firstSetting(norm, prefixLower+"-root-mode"); rawMode != "" {
-		mode := strings.ToLower(strings.TrimSpace(rawMode))
-		switch mode {
+	// Read straight from the map. firstSetting skips written-empty values, and
+	// those have to reach the missing-value error like every other setting.
+	mode := prefixLower + "-root-mode"
+	if raw, ok := norm[mode]; ok {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
 		case string(tlsconfig.RootModeAppend):
 			cfg.RootMode = tlsconfig.RootModeAppend
 		case string(tlsconfig.RootModeReplace):
 			cfg.RootMode = tlsconfig.RootModeReplace
 		default:
-			return diag.New(
-				diag.ClassProtocol,
-				fmt.Sprintf(
-					"invalid %s-root-mode %q (use append or replace)",
-					prefixLower,
-					rawMode,
-				),
-				diag.WithComponent(component),
-			)
+			return invalidSetting(component, mode, raw, "append or replace")
 		}
 	}
 
-	if b, ok := resolveBool(norm, prefixLower+"-insecure"); ok {
+	key := prefixLower + "-insecure"
+	if raw, ok := norm[key]; ok {
+		b, valid := directive.ParseBool(raw)
+		if !valid {
+			return invalidSetting(component, key, raw, "true or false")
+		}
 		cfg.Insecure = b
 	}
 	val, err := resolveSetting(
@@ -173,6 +172,18 @@ func settingsComponent(prefix string) diag.Component {
 	}
 }
 
+// Settings come from a file the user edits, so name the key and what it takes.
+// The wording matches the generic HTTP settings in the httpclient package.
+func invalidSetting(c diag.Component, key, val, want string) error {
+	msg := fmt.Sprintf("invalid %s %q (use %s)", key, val, want)
+	if strings.TrimSpace(val) == "" {
+		// Nothing was written after the key, which reads as missing rather than
+		// invalid. "@setting http-insecure" is the usual way to land here.
+		msg = fmt.Sprintf("missing %s value (use %s)", key, want)
+	}
+	return diag.New(diag.ClassProtocol, msg, diag.WithComponent(c))
+}
+
 func normalize(settings map[string]string) map[string]string {
 	norm := make(map[string]string, len(settings))
 	for k, v := range settings {
@@ -200,18 +211,6 @@ func resolveSetting(
 		return "", nil
 	}
 	return expand(raw, label)
-}
-
-func resolveBool(norm map[string]string, key string) (bool, bool) {
-	raw, ok := norm[key]
-	if !ok {
-		return false, false
-	}
-	val, err := strconv.ParseBool(strings.TrimSpace(raw))
-	if err != nil {
-		return false, false
-	}
-	return val, true
 }
 
 func splitList(raw string) []string {

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -67,7 +67,7 @@ GET https://example.com/api
 		t.Fatalf("expected one capture, got %d", len(req.Metadata.Captures))
 	}
 	capture := req.Metadata.Captures[0]
-	if capture.Scope != restfile.CaptureScopeGlobal {
+	if capture.Scope != directive.ScopeGlobal {
 		t.Fatalf("expected global capture scope, got %v", capture.Scope)
 	}
 	if capture.Name != "authToken" {
@@ -91,7 +91,7 @@ GET https://example.com
 		t.Fatalf("expected 1 auth profile, got %d", len(doc.Auth))
 	}
 	prof := doc.Auth[0]
-	if prof.Scope != restfile.AuthScopeFile {
+	if prof.Scope != directive.ScopeFile {
 		t.Fatalf("expected file scope, got %v", prof.Scope)
 	}
 	if prof.Spec.Type != "command" {
@@ -619,13 +619,13 @@ GET https://example.com
 	if len(doc.Patches) != 2 {
 		t.Fatalf("expected 2 patch profiles, got %d", len(doc.Patches))
 	}
-	if doc.Patches[0].Scope != restfile.PatchScopeFile {
+	if doc.Patches[0].Scope != directive.ScopeFile {
 		t.Fatalf("expected first patch to be file scope, got %v", doc.Patches[0].Scope)
 	}
 	if doc.Patches[0].Name != "jsonApi" {
 		t.Fatalf("unexpected first patch name %q", doc.Patches[0].Name)
 	}
-	if doc.Patches[1].Scope != restfile.PatchScopeGlobal {
+	if doc.Patches[1].Scope != directive.ScopeGlobal {
 		t.Fatalf("expected second patch to be global scope, got %v", doc.Patches[1].Scope)
 	}
 	if doc.Patches[1].Name != "strict" {
@@ -768,10 +768,10 @@ GET https://example.com
 	for _, v := range doc.Variables {
 		fileVars[v.Name] = v
 	}
-	if v, ok := fileVars["api.base"]; !ok || v.Scope != restfile.ScopeFile || v.Secret {
+	if v, ok := fileVars["api.base"]; !ok || v.Scope != directive.ScopeFile || v.Secret {
 		t.Fatalf("expected file api.base as non-secret file var, got %#v", v)
 	}
-	if v, ok := fileVars["api.token"]; !ok || v.Scope != restfile.ScopeFile || !v.Secret {
+	if v, ok := fileVars["api.token"]; !ok || v.Scope != directive.ScopeFile || !v.Secret {
 		t.Fatalf("expected file-secret api.token, got %#v", v)
 	}
 
@@ -780,10 +780,10 @@ GET https://example.com
 	for _, v := range req.Variables {
 		reqVars[v.Name] = v
 	}
-	if v, ok := reqVars["request.id"]; !ok || v.Scope != restfile.ScopeRequest || v.Secret {
+	if v, ok := reqVars["request.id"]; !ok || v.Scope != directive.ScopeRequest || v.Secret {
 		t.Fatalf("expected request id as non-secret request var, got %#v", v)
 	}
-	if v, ok := reqVars["request.token"]; !ok || v.Scope != restfile.ScopeRequest || !v.Secret {
+	if v, ok := reqVars["request.token"]; !ok || v.Scope != directive.ScopeRequest || !v.Secret {
 		t.Fatalf("expected request-secret token, got %#v", v)
 	}
 }
@@ -807,7 +807,7 @@ GET https://example.com
 	}
 
 	if len(doc.Variables) != 1 || doc.Variables[0].Name != "base.url" || !doc.Variables[0].Secret ||
-		doc.Variables[0].Scope != restfile.ScopeFile {
+		doc.Variables[0].Scope != directive.ScopeFile {
 		t.Fatalf("expected one secret file variable, got %#v", doc.Variables)
 	}
 
@@ -815,7 +815,7 @@ GET https://example.com
 	if len(req.Variables) != 1 {
 		t.Fatalf("expected one request variable, got %d", len(req.Variables))
 	}
-	if rv := req.Variables[0]; rv.Name != "trace.id" || rv.Scope != restfile.ScopeRequest ||
+	if rv := req.Variables[0]; rv.Name != "trace.id" || rv.Scope != directive.ScopeRequest ||
 		!rv.Secret {
 		t.Fatalf("unexpected request var: %#v", rv)
 	}
@@ -859,7 +859,7 @@ GET http://example.com
 	}
 
 	prof := doc.SSH[0]
-	if prof.Scope != restfile.SSHScopeGlobal {
+	if prof.Scope != directive.ScopeGlobal {
 		t.Fatalf("expected global scope, got %v", prof.Scope)
 	}
 	if prof.Name != "edge" {
@@ -938,7 +938,7 @@ GET http://{{api_host}}
 		t.Fatalf("expected inline overrides")
 	}
 	inline := req.SSH.Inline
-	if inline.Scope != restfile.SSHScopeRequest {
+	if inline.Scope != directive.ScopeRequest {
 		t.Fatalf("expected request scope inline, got %v", inline.Scope)
 	}
 	if inline.Host != "{{api_host}}" {
@@ -1007,7 +1007,7 @@ GET http://example.com
 	}
 
 	prof := doc.K8s[0]
-	if prof.Scope != restfile.K8sScopeGlobal {
+	if prof.Scope != directive.ScopeGlobal {
 		t.Fatalf("expected global scope, got %v", prof.Scope)
 	}
 	if prof.Name != "cluster-api" {
@@ -1121,7 +1121,7 @@ GET http://example.com
 	if req.K8s.Inline == nil {
 		t.Fatalf("expected inline overrides")
 	}
-	if req.K8s.Inline.Scope != restfile.K8sScopeRequest {
+	if req.K8s.Inline.Scope != directive.ScopeRequest {
 		t.Fatalf("expected request scope inline, got %v", req.K8s.Inline.Scope)
 	}
 	if req.K8s.Inline.Pod != "{{pod_name}}" {
@@ -1241,7 +1241,7 @@ GET http://example.com
 	if !prof.Invalid {
 		t.Fatalf("expected invalid k8s profile marker")
 	}
-	if prof.Name != "api" || prof.Scope != restfile.K8sScopeGlobal || prof.Line != 1 {
+	if prof.Name != "api" || prof.Scope != directive.ScopeGlobal || prof.Line != 1 {
 		t.Fatalf("unexpected invalid profile marker: %+v", prof)
 	}
 	if !strings.Contains(prof.Error, "@k8s global scope requires target and port") {
@@ -1381,7 +1381,7 @@ Header: value
 		t.Fatalf("expected 1 file variable, got %d", len(doc.Variables))
 	}
 	v := doc.Variables[0]
-	if v.Name != "id" || v.Value != "abc" || v.Scope != restfile.ScopeFile {
+	if v.Name != "id" || v.Value != "abc" || v.Scope != directive.ScopeFile {
 		t.Fatalf("unexpected file variable %+v", v)
 	}
 	if len(doc.Requests[0].Variables) != 0 {
@@ -1415,10 +1415,10 @@ Content-Type: application/json
 	for _, v := range doc.Variables {
 		fileVars[v.Name] = v
 	}
-	if v, ok := fileVars["hostname"]; !ok || v.Scope != restfile.ScopeFile {
+	if v, ok := fileVars["hostname"]; !ok || v.Scope != directive.ScopeFile {
 		t.Fatalf("expected hostname as file variable, got %#v", v)
 	}
-	if v, ok := fileVars["admin_email"]; !ok || v.Scope != restfile.ScopeFile {
+	if v, ok := fileVars["admin_email"]; !ok || v.Scope != directive.ScopeFile {
 		t.Fatalf("expected admin_email as file variable, got %#v", v)
 	}
 }
@@ -1446,7 +1446,7 @@ Content-Type: application/json
 	}
 	values := map[string]string{}
 	for _, v := range req.Variables {
-		if v.Scope != restfile.ScopeRequest {
+		if v.Scope != directive.ScopeRequest {
 			t.Fatalf("expected %s to be request scoped, got %v", v.Name, v.Scope)
 		}
 		values[v.Name] = v.Value
@@ -1474,7 +1474,7 @@ func TestShorthandAfterHeaderWithoutBodyStaysRequestScoped(t *testing.T) {
 		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
 	}
 	v := req.Variables[0]
-	if v.Name != "tail" || v.Value != "outside" || v.Scope != restfile.ScopeRequest {
+	if v.Name != "tail" || v.Value != "outside" || v.Scope != directive.ScopeRequest {
 		t.Fatalf("unexpected request var %+v", v)
 	}
 }
@@ -1504,14 +1504,14 @@ GET https://example.com/2
 	if len(req1.Variables) != 1 {
 		t.Fatalf("expected 1 request var in first request, got %d", len(req1.Variables))
 	}
-	if req1.Variables[0].Name != "fileVar" || req1.Variables[0].Scope != restfile.ScopeRequest {
+	if req1.Variables[0].Name != "fileVar" || req1.Variables[0].Scope != directive.ScopeRequest {
 		t.Fatalf("unexpected var in first request: %+v", req1.Variables[0])
 	}
 
 	if len(req2.Variables) != 1 {
 		t.Fatalf("expected 1 request var in second request, got %d", len(req2.Variables))
 	}
-	if req2.Variables[0].Name != "reqVar" || req2.Variables[0].Scope != restfile.ScopeRequest {
+	if req2.Variables[0].Name != "reqVar" || req2.Variables[0].Scope != directive.ScopeRequest {
 		t.Fatalf("unexpected var in second request: %+v", req2.Variables[0])
 	}
 }
@@ -1537,7 +1537,7 @@ GET https://example.com
 	if v.Name != "requestId" || v.Value != "abc123" {
 		t.Fatalf("unexpected request variable %q=%q", v.Name, v.Value)
 	}
-	if v.Scope != restfile.ScopeRequest {
+	if v.Scope != directive.ScopeRequest {
 		t.Fatalf("expected requestId to be request scoped, got %v", v.Scope)
 	}
 }
@@ -1561,7 +1561,7 @@ func TestExplicitRequestVarNotMovedAfterBody(t *testing.T) {
 		t.Fatalf("expected no file variables, got %d", len(doc.Variables))
 	}
 	v := req.Variables[0]
-	if v.Name != "keep" || v.Value != "me" || v.Scope != restfile.ScopeRequest {
+	if v.Name != "keep" || v.Value != "me" || v.Scope != directive.ScopeRequest {
 		t.Fatalf("unexpected request variable %+v", v)
 	}
 }
@@ -1581,7 +1581,7 @@ GET https://example.com
 		t.Fatalf("expected 1 capture, got %d", len(req.Metadata.Captures))
 	}
 	cap := req.Metadata.Captures[0]
-	if cap.Scope != restfile.CaptureScopeGlobal {
+	if cap.Scope != directive.ScopeGlobal {
 		t.Fatalf("expected global capture scope, got %v", cap.Scope)
 	}
 	if cap.Name != "auth.token" {
@@ -1613,7 +1613,7 @@ GET https://example.com
 		t.Fatalf("expected 1 capture, got %d", len(req.Metadata.Captures))
 	}
 	cap := req.Metadata.Captures[0]
-	if cap.Scope != restfile.CaptureScopeGlobal {
+	if cap.Scope != directive.ScopeGlobal {
 		t.Fatalf("expected global capture scope, got %v", cap.Scope)
 	}
 	if !cap.Secret {
@@ -2983,6 +2983,29 @@ POST https://example.com/graphql
 	}
 }
 
+func TestParseGraphQLDirectiveAliases(t *testing.T) {
+	src := `# @graphql
+# @graphql-query query FetchUser { user { id } }
+# @graphql-variables {"id":"123"}
+POST https://example.com/graphql
+`
+
+	doc := Parse("graphql-aliases.http", []byte(src))
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
+	}
+	gql := doc.Requests[0].Body.GraphQL
+	if gql == nil {
+		t.Fatal("expected GraphQL body")
+	}
+	if gql.Query != "query FetchUser { user { id } }" {
+		t.Fatalf("unexpected query %q", gql.Query)
+	}
+	if gql.Variables != `{"id":"123"}` {
+		t.Fatalf("unexpected variables %q", gql.Variables)
+	}
+}
+
 func TestParseGraphQLDirectiveFileRefsIgnoreBodyInline(t *testing.T) {
 	src := `# @body inline
 # @graphql
@@ -3086,7 +3109,7 @@ query Second {
 
 func TestParseOptionTokensQuotedValues(t *testing.T) {
 	input := `expect.status="201 Created" vars.request.item_name='Workflow Demo Item' note=alpha\ beta message="He said \"hi\"" flag`
-	opts := options.Parse(input)
+	opts := directive.ParseOptions(input)
 
 	if got := opts["expect.status"]; got != "201 Created" {
 		t.Fatalf("expected expect.status to be '201 Created', got %q", got)
@@ -3107,7 +3130,7 @@ func TestParseOptionTokensQuotedValues(t *testing.T) {
 
 func TestParseOptionTokensBareJSONValue(t *testing.T) {
 	input := `argv=["gh", "auth", "token"] mode=json`
-	opts := options.Parse(input)
+	opts := directive.ParseOptions(input)
 
 	if got := opts["argv"]; got != `["gh", "auth", "token"]` {
 		t.Fatalf("expected argv JSON preserved, got %q", got)
@@ -3297,6 +3320,97 @@ GET https://example.com/events
 	}
 }
 
+func TestParseSSEDirectiveReportsInvalidOptions(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{
+			name:   "duration",
+			option: "duration=eventually",
+			want:   `invalid @sse duration "eventually"`,
+		},
+		{
+			name:   "negative idle timeout",
+			option: "idle-timeout=-1s",
+			want:   `invalid @sse idle-timeout "-1s"`,
+		},
+		{
+			name:   "max events",
+			option: "max-events=many",
+			want:   `invalid @sse max-events "many"`,
+		},
+		{
+			name:   "negative max events",
+			option: "max-events=-1",
+			want:   `invalid @sse max-events "-1"`,
+		},
+		{
+			name:   "max bytes",
+			option: "max-bytes=12XB",
+			want:   `invalid @sse max-bytes "12XB"`,
+		},
+		{
+			name:   "negative byte limit alias",
+			option: "limit-bytes=-1KiB",
+			want:   `invalid @sse limit-bytes "-1KiB"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "# @sse " + tt.option + "\nGET https://example.com/events\n"
+			doc := Parse("invalid-sse.http", []byte(src))
+
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("expected parse error containing %q, got %v", tt.want, doc.Errors)
+			}
+			if len(doc.Requests) != 1 || doc.Requests[0].SSE == nil {
+				t.Fatalf("expected parser recovery to retain the SSE request, got %+v", doc.Requests)
+			}
+			if got := doc.Requests[0].SSE.Options; got != (restfile.SSEOptions{}) {
+				t.Fatalf("invalid option was applied: %+v", got)
+			}
+		})
+	}
+}
+
+func TestParseSSEDirectiveAppliesValidOptionsAlongsideErrors(t *testing.T) {
+	src := `# @sse duration=eventually idle=-1s max-bytes=1KiB
+GET https://example.com/events
+`
+
+	doc := Parse("partially-invalid-sse.http", []byte(src))
+	if !hasParseMessage(doc.Errors, `invalid @sse duration "eventually"`) {
+		t.Fatalf("expected duration parse error, got %v", doc.Errors)
+	}
+	if !hasParseMessage(doc.Errors, `invalid @sse idle "-1s"`) {
+		t.Fatalf("expected idle parse error, got %v", doc.Errors)
+	}
+	if len(doc.Errors) != 2 {
+		t.Fatalf("expected separate errors for both invalid options, got %v", doc.Errors)
+	}
+	for _, parseErr := range doc.Errors {
+		if parseErr.Line != 1 {
+			t.Fatalf("expected error on directive line 1, got %+v", parseErr)
+		}
+	}
+	if err := Check(doc); err == nil {
+		t.Fatal("expected parser.Check to reject a document with an invalid SSE option")
+	}
+	if len(doc.Requests) != 1 || doc.Requests[0].SSE == nil {
+		t.Fatalf("expected parser recovery to retain the SSE request, got %+v", doc.Requests)
+	}
+	opts := doc.Requests[0].SSE.Options
+	if opts.TotalTimeout != 0 {
+		t.Fatalf("invalid duration was applied: %v", opts.TotalTimeout)
+	}
+	if opts.MaxBytes != 1024 {
+		t.Fatalf("valid max-bytes option was not applied: %d", opts.MaxBytes)
+	}
+}
+
 func TestParseWebSocketDirectives(t *testing.T) {
 	src := `# @name ws
 # @websocket timeout=12s idle=6s max-message-bytes=1mb subprotocols=chat,json compression=false
@@ -3352,6 +3466,188 @@ GET ws://example.com/socket
 	if ws.Steps[6].Type != restfile.WebSocketStepClose || ws.Steps[6].Code != 1001 ||
 		ws.Steps[6].Reason != "going away" {
 		t.Fatalf("unexpected close step: %+v", ws.Steps[6])
+	}
+}
+
+func TestParseWebSocketDirectiveReportsInvalidOptions(t *testing.T) {
+	tests := []struct {
+		name   string
+		option string
+		want   string
+	}{
+		{
+			name:   "timeout",
+			option: "timeout=eventually",
+			want:   `invalid @websocket timeout "eventually"`,
+		},
+		{
+			name:   "negative idle timeout",
+			option: "idle-timeout=-1s",
+			want:   `invalid @websocket idle-timeout "-1s"`,
+		},
+		{
+			name:   "max message bytes",
+			option: "max-message-bytes=12XB",
+			want:   `invalid @websocket max-message-bytes "12XB"`,
+		},
+		{
+			name:   "empty subprotocol list",
+			option: "subprotocols=",
+			want:   `invalid @websocket subprotocols ""`,
+		},
+		{
+			name:   "compression",
+			option: "compression=perhaps",
+			want:   `invalid @websocket compression "perhaps"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := "# @websocket " + tt.option + "\nGET wss://example.com/socket\n"
+			doc := Parse("invalid-websocket.http", []byte(src))
+
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("expected parse error containing %q, got %v", tt.want, doc.Errors)
+			}
+			if len(doc.Requests) != 1 || doc.Requests[0].WebSocket == nil {
+				t.Fatalf(
+					"expected parser recovery to retain the WebSocket request, got %+v",
+					doc.Requests,
+				)
+			}
+			opts := doc.Requests[0].WebSocket.Options
+			if opts.HandshakeTimeout != 0 ||
+				opts.IdleTimeout != 0 ||
+				opts.MaxMessageBytes != 0 ||
+				len(opts.Subprotocols) != 0 ||
+				opts.CompressionSet {
+				t.Fatalf("invalid option was applied: %+v", opts)
+			}
+		})
+	}
+}
+
+func TestParseWebSocketDirectiveAppliesValidOptionsAlongsideErrors(t *testing.T) {
+	src := `# @websocket timeout=eventually max-message-bytes=1KiB compression=true
+GET wss://example.com/socket
+`
+
+	doc := Parse("partially-invalid-websocket.http", []byte(src))
+	if !hasParseMessage(doc.Errors, `invalid @websocket timeout "eventually"`) {
+		t.Fatalf("expected timeout parse error, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 || doc.Requests[0].WebSocket == nil {
+		t.Fatalf("expected parser recovery to retain the WebSocket request, got %+v", doc.Requests)
+	}
+	opts := doc.Requests[0].WebSocket.Options
+	if opts.HandshakeTimeout != 0 {
+		t.Fatalf("invalid timeout was applied: %v", opts.HandshakeTimeout)
+	}
+	if opts.MaxMessageBytes != 1024 {
+		t.Fatalf("valid max-message-bytes option was not applied: %d", opts.MaxMessageBytes)
+	}
+	if !opts.CompressionSet || !opts.Compression {
+		t.Fatalf("valid compression option was not applied: %+v", opts)
+	}
+}
+
+func TestParseWebSocketStepReportsMalformedInput(t *testing.T) {
+	tests := []struct {
+		name string
+		step string
+		want string
+	}{
+		{
+			name: "missing action",
+			step: "# @ws",
+			want: "@ws requires an action",
+		},
+		{
+			name: "unknown action",
+			step: "# @ws dance",
+			want: `unknown @ws action "dance"`,
+		},
+		{
+			name: "missing file",
+			step: "# @ws send-file",
+			want: "@ws send-file requires a path",
+		},
+		{
+			name: "missing wait duration",
+			step: "# @ws wait",
+			want: "@ws wait requires a duration",
+		},
+		{
+			name: "invalid wait duration",
+			step: "# @ws wait eventually",
+			want: `invalid @ws wait duration "eventually"`,
+		},
+		{
+			name: "negative wait duration",
+			step: "# @ws wait -1s",
+			want: `invalid @ws wait duration "-1s"`,
+		},
+		{
+			name: "invalid close code",
+			step: "# @ws close 999",
+			want: `invalid @ws close code "999"`,
+		},
+		{
+			name: "reserved close code",
+			step: "# @ws close 1005",
+			want: `invalid @ws close code "1005"`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := tt.step + "\nGET wss://example.com/socket\n"
+			doc := Parse("invalid-websocket-step.http", []byte(src))
+
+			if !hasParseMessage(doc.Errors, tt.want) {
+				t.Fatalf("expected parse error containing %q, got %v", tt.want, doc.Errors)
+			}
+			if len(doc.Requests) != 1 {
+				t.Fatalf("expected parser recovery to retain the request, got %+v", doc.Requests)
+			}
+			if ws := doc.Requests[0].WebSocket; ws != nil && len(ws.Steps) != 0 {
+				t.Fatalf("malformed step was applied: %+v", ws.Steps)
+			}
+		})
+	}
+}
+
+func TestParseStreamingDirectivesIgnoreUnknownOptions(t *testing.T) {
+	src := `# @sse future-sse-option=value
+# @websocket future-websocket-option=value
+GET wss://example.com/socket
+`
+
+	doc := Parse("future-streaming-options.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected unknown options to remain forward-compatible, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 {
+		t.Fatalf("expected one request, got %d", len(doc.Requests))
+	}
+}
+
+func TestParseWebSocketCloseReasonWithoutCode(t *testing.T) {
+	src := `# @ws close going away
+GET wss://example.com/socket
+`
+
+	doc := Parse("websocket-close-reason.http", []byte(src))
+	if len(doc.Errors) != 0 {
+		t.Fatalf("expected reason-only close step to remain valid, got %v", doc.Errors)
+	}
+	if len(doc.Requests) != 1 || doc.Requests[0].WebSocket == nil {
+		t.Fatalf("expected WebSocket request, got %+v", doc.Requests)
+	}
+	steps := doc.Requests[0].WebSocket.Steps
+	if len(steps) != 1 || steps[0].Code != 1000 || steps[0].Reason != "going away" {
+		t.Fatalf("unexpected close step: %+v", steps)
 	}
 }
 

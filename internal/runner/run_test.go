@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -51,7 +52,7 @@ func TestRunSingleRequestDefaultSelection(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -190,7 +191,7 @@ func TestRunSelectRequestByName(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -246,7 +247,7 @@ func TestRunFailFastSkipsRemainingRequests(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -310,7 +311,7 @@ func TestRunSelectRequestByLine(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -354,7 +355,7 @@ func TestRunPersistsCookiesAcrossRequests(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Select:        Select{All: true},
@@ -398,7 +399,7 @@ func TestRunNoCookiesSettingSkipsJarForRequest(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Select:        Select{All: true},
@@ -448,7 +449,7 @@ func TestRunUsesWorkspaceGlobalPatchProfile(t *testing.T) {
 		t.Fatalf("write use: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      use,
 		WorkspaceRoot: dir,
 	})
@@ -495,7 +496,7 @@ func TestRunUsesWorkspaceGlobalInheritedAuth(t *testing.T) {
 		t.Fatalf("write use: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      use,
 		WorkspaceRoot: dir,
 	})
@@ -528,7 +529,7 @@ func TestRunRejectsMultipleRequestsWithoutSelector(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := Run(Options{FilePath: file, WorkspaceRoot: dir})
+	_, err := RunContext(context.Background(), Options{FilePath: file, WorkspaceRoot: dir})
 	if err == nil {
 		t.Fatalf("expected selector error")
 	}
@@ -552,7 +553,7 @@ func TestRunRejectsLineSelectorConflict(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	_, err := Run(Options{
+	_, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Select:        Select{Request: "two", Line: 5},
@@ -594,7 +595,7 @@ func TestRunCountsFailedAsserts(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -658,7 +659,7 @@ func TestRunWorkflowByName(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -742,7 +743,7 @@ func TestRunWorkflowByLine(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -795,7 +796,7 @@ func TestRunRequestForEach(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -867,7 +868,7 @@ func TestRunAllCarriesJSPreRequestGlobals(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -928,7 +929,7 @@ func TestRunAllCarriesCapturesAcrossRequests(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -984,7 +985,7 @@ func TestRunAllCarriesRTSPreRequestGlobals(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -1032,7 +1033,7 @@ func TestRunExecutesRTSPreRequestDirective(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		Client:        client,
@@ -1081,7 +1082,7 @@ func TestReportWriteJSON(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		Version:       "test",
 		FilePath:      file,
 		WorkspaceRoot: dir,
@@ -1229,7 +1230,7 @@ func TestWorkflowWriteJSONIncludesSteps(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		Version:       "test",
 		FilePath:      file,
 		WorkspaceRoot: dir,
@@ -1318,7 +1319,7 @@ func TestRunAllCarriesStreamCapturesAndArtifacts(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		Version:       "test",
 		FilePath:      file,
 		WorkspaceRoot: dir,
@@ -1417,7 +1418,7 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		Version:       "test",
 		FilePath:      file,
 		WorkspaceRoot: dir,
@@ -1531,7 +1532,7 @@ func TestRunProfileMetadata(t *testing.T) {
 		}, nil
 	})
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		Version:       "test",
 		FilePath:      file,
 		WorkspaceRoot: dir,
@@ -1648,7 +1649,7 @@ func TestRunPersistGlobalsAcrossInvocations(t *testing.T) {
 		t.Fatalf("write use file: %v", err)
 	}
 
-	first, err := Run(Options{
+	first, err := RunContext(context.Background(), Options{
 		FilePath:       seedFile,
 		WorkspaceRoot:  dir,
 		StateDir:       stateDir,
@@ -1661,7 +1662,7 @@ func TestRunPersistGlobalsAcrossInvocations(t *testing.T) {
 		t.Fatalf("expected seed run to pass, got %+v", first)
 	}
 
-	second, err := Run(Options{
+	second, err := RunContext(context.Background(), Options{
 		FilePath:       useFile,
 		WorkspaceRoot:  dir,
 		StateDir:       stateDir,
@@ -1721,7 +1722,7 @@ func TestRunPersistOAuthAcrossInvocations(t *testing.T) {
 		t.Fatalf("write use file: %v", err)
 	}
 
-	first, err := Run(Options{
+	first, err := RunContext(context.Background(), Options{
 		FilePath:      seedFile,
 		WorkspaceRoot: dir,
 		StateDir:      stateDir,
@@ -1734,7 +1735,7 @@ func TestRunPersistOAuthAcrossInvocations(t *testing.T) {
 		t.Fatalf("expected oauth seed run to pass, got %+v", first)
 	}
 
-	second, err := Run(Options{
+	second, err := RunContext(context.Background(), Options{
 		FilePath:      useFile,
 		WorkspaceRoot: dir,
 		StateDir:      stateDir,
@@ -1774,7 +1775,7 @@ func TestRunFailsOnTraceBudgetBreachAndWritesTraceArtifacts(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		ArtifactDir:   artifacts,
@@ -1850,7 +1851,7 @@ func TestRunPersistsHistory(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 		StateDir:      stateDir,
@@ -1897,7 +1898,7 @@ func TestRunRejectsUnseededHeadlessOAuthAuthorizationCode(t *testing.T) {
 		t.Fatalf("write file: %v", err)
 	}
 
-	rep, err := Run(Options{
+	rep, err := RunContext(context.Background(), Options{
 		FilePath:      file,
 		WorkspaceRoot: dir,
 	})

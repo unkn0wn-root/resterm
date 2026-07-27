@@ -2,63 +2,45 @@ package ui
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/intellisense"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 	"github.com/unkn0wn-root/resterm/internal/ui/textarea"
 )
 
-type metadataValueMode int
+// An unknown name still paints a token value. The zero Spec.Args is ArgNone,
+// which would hide the value, so the fallback has to be spelled out.
+func directiveArgKind(name directive.Name) directive.ArgKind {
+	spec, ok := directive.Lookup(name)
+	if !ok {
+		return directive.ArgToken
+	}
+	return spec.Args
+}
 
-const (
-	metadataValueModeNone metadataValueMode = iota
-	metadataValueModeToken
-	metadataValueModeRest
-)
+// stylePainter fills styles lazily so a line with nothing painted returns nil.
+type stylePainter struct {
+	styles []lipgloss.Style
+	n      int
+}
 
-var directiveValueModes = map[string]metadataValueMode{
-	"mock":                  metadataValueModeRest,
-	"match":                 metadataValueModeRest,
-	"name":                  metadataValueModeToken,
-	"description":           metadataValueModeRest,
-	"desc":                  metadataValueModeRest,
-	"tag":                   metadataValueModeRest,
-	"auth":                  metadataValueModeToken,
-	"graphql":               metadataValueModeToken,
-	"graphql-operation":     metadataValueModeToken,
-	"operation":             metadataValueModeToken,
-	"variables":             metadataValueModeRest,
-	"graphql-variables":     metadataValueModeRest,
-	"query":                 metadataValueModeRest,
-	"graphql-query":         metadataValueModeRest,
-	"grpc":                  metadataValueModeRest,
-	"grpc-descriptor":       metadataValueModeRest,
-	"grpc-reflection":       metadataValueModeToken,
-	"grpc-plaintext":        metadataValueModeToken,
-	"grpc-authority":        metadataValueModeRest,
-	"grpc-metadata":         metadataValueModeRest,
-	"script":                metadataValueModeToken,
-	"rts":                   metadataValueModeToken,
-	"patch":                 metadataValueModeRest,
-	"use":                   metadataValueModeRest,
-	"apply":                 metadataValueModeRest,
-	"when":                  metadataValueModeRest,
-	"skip-if":               metadataValueModeRest,
-	"assert":                metadataValueModeRest,
-	"for-each":              metadataValueModeRest,
-	"switch":                metadataValueModeRest,
-	"case":                  metadataValueModeRest,
-	"default":               metadataValueModeRest,
-	"if":                    metadataValueModeRest,
-	"elif":                  metadataValueModeRest,
-	"else":                  metadataValueModeRest,
-	"no-log":                metadataValueModeNone,
-	"log-sensitive-headers": metadataValueModeToken,
-	"log-secret-headers":    metadataValueModeToken,
+func (p *stylePainter) paint(from, to int, style lipgloss.Style) {
+	if from >= to {
+		return
+	}
+	if p.styles == nil {
+		p.styles = make([]lipgloss.Style, p.n)
+	}
+	for i := from; i < to; i++ {
+		p.styles[i] = style
+	}
 }
 
 type metadataRuneStyler struct {
@@ -179,23 +161,9 @@ func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 		return nil
 	}
 
-	var (
-		styles []lipgloss.Style
-		styled bool
-	)
-
-	ensureStyles := func() {
-		if !styled {
-			styles = make([]lipgloss.Style, len(line))
-			styled = true
-		}
-	}
-
+	p := &stylePainter{n: len(line)}
 	if s.commentEnabled {
-		ensureStyles()
-		for idx := markerStart; idx < markerStart+markerLen && idx < len(line); idx++ {
-			styles[idx] = s.commentStyle
-		}
+		p.paint(markerStart, markerStart+markerLen, s.commentStyle)
 	}
 
 	directiveEnd := directiveStart + 1
@@ -205,60 +173,30 @@ func (s *metadataRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 	directiveKey := strings.ToLower(string(line[directiveStart+1 : directiveEnd]))
 
 	if dirStyle, ok := s.directiveStyle(directiveKey); ok {
-		ensureStyles()
-		for idx := directiveStart; idx < directiveEnd; idx++ {
-			styles[idx] = dirStyle
-		}
+		p.paint(directiveStart, directiveEnd, dirStyle)
 	}
 
-	valueStart := skipSpace(line, directiveEnd)
+	valueStart := skipArgSep(line, directiveEnd)
 	if valueStart >= len(line) {
-		if styled {
-			return styles
-		}
-		return nil
+		return p.styles
 	}
 
-	switch directiveKey {
-	case "setting":
-		s.applySettingStyles(line, &styles, &styled, valueStart)
-		if styled {
-			return styles
+	switch directiveArgKind(directive.Name(directiveKey)) {
+	case directive.ArgNone:
+	case directive.ArgSetting:
+		s.applySettingStyles(p, line, valueStart)
+	case directive.ArgOptions:
+		s.applyOptionStyles(p, line, valueStart)
+	case directive.ArgText:
+		if s.valueEnabled {
+			p.paint(valueStart, len(line), s.valueStyle)
 		}
-		return nil
-	case "timeout":
-		s.applyTimeoutStyles(line, &styles, &styled, valueStart)
-		if styled {
-			return styles
-		}
-		return nil
-	}
-
-	mode := metadataValueModeToken
-	if m, ok := directiveValueModes[directiveKey]; ok {
-		mode = m
-	}
-	if mode == metadataValueModeNone || !s.valueEnabled {
-		if styled {
-			return styles
-		}
-		return nil
-	}
-
-	ensureStyles()
-	switch mode {
-	case metadataValueModeRest:
-		for idx := valueStart; idx < len(line); idx++ {
-			styles[idx] = s.valueStyle
-		}
-	case metadataValueModeToken:
-		tokenEnd := readToken(line, valueStart)
-		for idx := valueStart; idx < tokenEnd && idx < len(line); idx++ {
-			styles[idx] = s.valueStyle
+	case directive.ArgToken:
+		if s.valueEnabled {
+			p.paint(valueStart, readToken(line, valueStart), s.valueStyle)
 		}
 	}
-
-	return styles
+	return p.styles
 }
 
 func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
@@ -280,57 +218,61 @@ func (s *metadataRuneStyler) directiveStyle(key string) (lipgloss.Style, bool) {
 	return style, true
 }
 
-func (s *metadataRuneStyler) applySettingStyles(
-	line []rune,
-	styles *[]lipgloss.Style,
-	styled *bool,
-	start int,
-) {
+func (s *metadataRuneStyler) applySettingStyles(p *stylePainter, line []rune, start int) {
 	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
 
-	ensure := func() {
-		if !*styled {
-			*styles = make([]lipgloss.Style, len(line))
-			*styled = true
-		}
-	}
-
-	keyEnd := readToken(line, start)
-	if keyEnd > start && s.settingKeyEnabled {
-		ensure()
-		for idx := start; idx < keyEnd && idx < len(line); idx++ {
-			(*styles)[idx] = s.settingKeyStyle
-		}
-	}
-
-	valueStart := skipSpace(line, keyEnd)
-	if valueStart >= len(line) || !s.settingValueEnabled {
+	// The @settings spelling. putSetting reads it with ParseOptions, so it gets
+	// painted the way @settings is.
+	tokEnd := readToken(line, start)
+	if slices.Contains(line[start:tokEnd], '=') {
+		s.applyOptionStyles(p, line, start)
 		return
 	}
 
-	ensure()
-	for idx := valueStart; idx < len(line); idx++ {
-		(*styles)[idx] = s.settingValueStyle
+	keyEnd := tokEnd
+	for keyEnd > start && line[keyEnd-1] == ':' {
+		keyEnd--
+	}
+	if s.settingKeyEnabled {
+		p.paint(start, keyEnd, s.settingKeyStyle)
+	}
+	if s.settingValueEnabled {
+		p.paint(skipSpace(line, tokEnd), len(line), s.settingValueStyle)
 	}
 }
 
-func (s *metadataRuneStyler) applyTimeoutStyles(
-	line []rune,
-	styles *[]lipgloss.Style,
-	styled *bool,
-	start int,
-) {
-	if !s.settingValueEnabled {
+func (s *metadataRuneStyler) applyOptionStyles(p *stylePainter, line []rune, start int) {
+	if s.valueEnabled {
+		p.paint(start, len(line), s.valueStyle)
+	}
+	if !s.settingKeyEnabled && !s.settingValueEnabled {
 		return
 	}
-	if !*styled {
-		*styles = make([]lipgloss.Style, len(line))
-		*styled = true
+
+	// Spans are byte offsets in rest. The cursor turns them into rune indexes.
+	rest := string(line[start:])
+	b, r := 0, start
+	runeAt := func(off int) int {
+		for b < off {
+			_, size := utf8.DecodeRuneInString(rest[b:])
+			b += size
+			r++
+		}
+		return r
 	}
-	for idx := start; idx < len(line); idx++ {
-		(*styles)[idx] = s.settingValueStyle
+	for _, f := range directive.FieldSpans(rest) {
+		if f.Eq < 0 {
+			continue
+		}
+		keyStart, keyEnd := runeAt(f.Start), runeAt(f.Eq)
+		if s.settingKeyEnabled {
+			p.paint(keyStart, keyEnd, s.settingKeyStyle)
+		}
+		if s.settingValueEnabled {
+			p.paint(keyEnd+1, runeAt(f.End), s.settingValueStyle)
+		}
 	}
 }
 
@@ -379,6 +321,16 @@ func (s *metadataRuneStyler) requestSeparatorStyles(line []rune, start int) []li
 func skipSpace(line []rune, start int) int {
 	i := start
 	for i < len(line) && unicode.IsSpace(line[i]) {
+		i++
+	}
+	return i
+}
+
+// The colon in "@name: value" separates, it is not part of the value, so the
+// styling starts past it.
+func skipArgSep(line []rune, start int) int {
+	i := start
+	for i < len(line) && directive.IsArgSep(line[i]) {
 		i++
 	}
 	return i

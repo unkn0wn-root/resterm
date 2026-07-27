@@ -52,10 +52,6 @@ func stripANSIEscape(s string) string {
 
 var ansiSequenceRegex = bodyfmt.ANSISequenceRegex
 
-func formatTestSummary(results []scripts.TestResult, scriptErr error) string {
-	return defaultResponseRenderer().formatTestSummary(results, scriptErr)
-}
-
 func (r responseRenderer) formatTestSummary(
 	results []scripts.TestResult,
 	scriptErr error,
@@ -144,14 +140,18 @@ func (r responseRenderer) buildRespSummary(
 	}
 
 	if resp.Headers != nil {
-		if streamType := strings.TrimSpace(resp.Headers.Get(streamHeaderType)); streamType != "" {
+		if streamType := strings.TrimSpace(
+			resp.Headers.Get(httpclient.StreamHeaderType),
+		); streamType != "" {
 			lines = append(
 				lines,
 				renderLabelValue("Stream", streamType, r.stats.Label, r.stats.Value),
 			)
 		}
 
-		if summary := strings.TrimSpace(resp.Headers.Get(streamHeaderSummary)); summary != "" {
+		if summary := strings.TrimSpace(
+			resp.Headers.Get(httpclient.StreamHeaderSummary),
+		); summary != "" {
 			lines = append(
 				lines,
 				renderLabelValue("Stream summary", summary, r.stats.Label, r.stats.Message),
@@ -209,10 +209,6 @@ func contentLength(resp *httpclient.Response) contentLen {
 	return contentLen{n: n, has: true, numeric: true}
 }
 
-func renderContentLengthLine(resp *httpclient.Response) string {
-	return defaultResponseRenderer().renderContentLengthLine(resp)
-}
-
 func (r responseRenderer) renderContentLengthLine(resp *httpclient.Response) string {
 	cl := contentLength(resp)
 	if !cl.has {
@@ -225,10 +221,6 @@ func (r responseRenderer) renderContentLengthLine(resp *httpclient.Response) str
 	}
 
 	return renderLabelValue("Content-Length", value, r.stats.Label, r.stats.Value)
-}
-
-func renderContentLengthLinePretty(resp *httpclient.Response) string {
-	return defaultResponseRenderer().renderContentLengthLinePretty(resp)
 }
 
 func (r responseRenderer) renderContentLengthLinePretty(resp *httpclient.Response) string {

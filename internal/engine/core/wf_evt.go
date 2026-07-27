@@ -70,7 +70,7 @@ func (r *wfRun) emitReqStart(
 		Meta: r.meta(time.Now()),
 		Req: ReqMeta{
 			Index: r.seq,
-			Label: stepLabel(step, branch, iter, total),
+			Label: StepLabel(step, branch, iter, total),
 			Env:   r.pl.Run.Env,
 		},
 		Doc:     r.pl.Doc,
@@ -92,7 +92,7 @@ func (r *wfRun) emitReqDone(
 		Meta: r.meta(time.Now()),
 		Req: ReqMeta{
 			Index: r.seq,
-			Label: stepLabel(step, branch, iter, total),
+			Label: StepLabel(step, branch, iter, total),
 			Env:   r.pl.Run.Env,
 		},
 		Result: res,

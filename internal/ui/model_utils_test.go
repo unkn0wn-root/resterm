@@ -392,7 +392,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 			Headers: http.Header{"Content-Length": {"64"}},
 			Body:    []byte("payload"),
 		}
-		line := renderContentLengthLine(resp)
+		line := defaultResponseRenderer().renderContentLengthLine(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 64 bytes" {
 			t.Fatalf("expected header-derived content length, got %q", plain)
@@ -401,7 +401,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 
 	t.Run("falls back to body length", func(t *testing.T) {
 		resp := &httpclient.Response{Body: []byte("xyz")}
-		line := renderContentLengthLine(resp)
+		line := defaultResponseRenderer().renderContentLengthLine(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 3 bytes" {
 			t.Fatalf("expected body length fallback, got %q", plain)
@@ -412,7 +412,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 		resp := &httpclient.Response{
 			Headers: http.Header{"Content-Length": {"approx 100"}},
 		}
-		line := renderContentLengthLine(resp)
+		line := defaultResponseRenderer().renderContentLengthLine(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: approx 100" {
 			t.Fatalf("expected raw header value, got %q", plain)
@@ -421,7 +421,7 @@ func TestRenderContentLengthLine(t *testing.T) {
 
 	t.Run("pluralizes singular byte", func(t *testing.T) {
 		resp := &httpclient.Response{Body: []byte{0x01}}
-		line := renderContentLengthLine(resp)
+		line := defaultResponseRenderer().renderContentLengthLine(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 1 byte" {
 			t.Fatalf("expected singular byte form, got %q", plain)
@@ -434,7 +434,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 		resp := &httpclient.Response{
 			Headers: http.Header{"Content-Length": {"2048"}},
 		}
-		line := renderContentLengthLinePretty(resp)
+		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 2 KiB" {
 			t.Fatalf("expected human readable size, got %q", plain)
@@ -443,7 +443,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 
 	t.Run("falls back to body length", func(t *testing.T) {
 		resp := &httpclient.Response{Body: bytes.Repeat([]byte{'x'}, 1536)}
-		line := renderContentLengthLinePretty(resp)
+		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 1.5 KiB" {
 			t.Fatalf("expected body length in human readable form, got %q", plain)
@@ -452,7 +452,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 
 	t.Run("handles zero length", func(t *testing.T) {
 		resp := &httpclient.Response{}
-		line := renderContentLengthLinePretty(resp)
+		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: 0 B" {
 			t.Fatalf("expected zero length to render with unit, got %q", plain)
@@ -461,7 +461,7 @@ func TestRenderContentLengthLinePretty(t *testing.T) {
 
 	t.Run("returns raw value when non-numeric", func(t *testing.T) {
 		resp := &httpclient.Response{Headers: http.Header{"Content-Length": {"approx 100"}}}
-		line := renderContentLengthLinePretty(resp)
+		line := defaultResponseRenderer().renderContentLengthLinePretty(resp)
 		plain := stripANSIEscape(line)
 		if plain != "Content-Length: approx 100" {
 			t.Fatalf("expected non-numeric header to remain unchanged, got %q", plain)
@@ -475,7 +475,7 @@ func TestFormatTestSummaryColorsStatuses(t *testing.T) {
 		{Name: "beta", Passed: false, Message: "boom"},
 	}
 
-	output := formatTestSummary(results, nil)
+	output := defaultResponseRenderer().formatTestSummary(results, nil)
 
 	if !strings.Contains(output, statsHeadingStyle.Render("Tests:")) {
 		t.Fatalf("expected colored Tests header, got %q", output)

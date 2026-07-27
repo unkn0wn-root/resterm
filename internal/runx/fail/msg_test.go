@@ -8,7 +8,7 @@ func TestClassifyMessageSharedRules(t *testing.T) {
 		fn   func(string, string) Failure
 	}{
 		{name: "generic", fn: classifyMessage},
-		{name: "http", fn: classifyHTTPMessage},
+		{name: "http", fn: httpMessageClassifier.classify},
 	}
 	for _, classifier := range classifiers {
 		t.Run(classifier.name, func(t *testing.T) {
@@ -83,13 +83,13 @@ func TestClassifyMessageContextSpecificRules(t *testing.T) {
 		},
 		{
 			name: "http default protocol",
-			fn:   classifyHTTPMessage,
+			fn:   httpMessageClassifier.classify,
 			msg:  "unexpected failure",
 			code: CodeProtocol,
 		},
 		{
 			name: "http unexpected token defaults protocol",
-			fn:   classifyHTTPMessage,
+			fn:   httpMessageClassifier.classify,
 			msg:  "unexpected token in JSON",
 			code: CodeProtocol,
 		},
@@ -107,7 +107,7 @@ func TestClassifyMessageContextSpecificRules(t *testing.T) {
 		},
 		{
 			name: "http proxy network",
-			fn:   classifyHTTPMessage,
+			fn:   httpMessageClassifier.classify,
 			msg:  "proxy connection reset",
 			code: CodeNetwork,
 		},

@@ -3,7 +3,6 @@ package diag
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"strconv"
 	"strings"
 )
@@ -34,18 +33,6 @@ func Render(err error) string {
 
 func RenderReport(rep Report) string {
 	return text(Lines(rep))
-}
-
-func Write(w io.Writer, err error) error {
-	if w == nil {
-		return nil
-	}
-	out := Render(err)
-	if out == "" {
-		return nil
-	}
-	_, err = fmt.Fprintln(w, out)
-	return err
 }
 
 func Lines(rep Report) []Line {

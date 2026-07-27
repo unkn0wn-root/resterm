@@ -213,19 +213,6 @@ func TestClassOfStopsAfterFirstClass(t *testing.T) {
 	}
 }
 
-func TestHasClassStopsAfterMatch(t *testing.T) {
-	err := diag.Join(
-		diag.ClassProtocol,
-		"resolve request",
-		diag.New(diag.ClassAuth, "token rejected"),
-		panicUnwrapper{},
-	)
-
-	if !diag.HasClass(err, diag.ClassProtocol) {
-		t.Fatalf("HasClass(error, %q) = false, want true", diag.ClassProtocol)
-	}
-}
-
 type panicUnwrapper struct{}
 
 func (panicUnwrapper) Error() string { return "unreachable" }

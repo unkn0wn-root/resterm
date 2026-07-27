@@ -56,13 +56,8 @@ type Option func(*metadata)
 
 type metadata struct {
 	component Component
-	span      Span
 	source    []byte
 	path      string
-	labels    []Label
-	notes     []string
-	help      []string
-	frames    []StackFrame
 }
 
 // WithComponent records the package or protocol area that produced a diagnostic.
@@ -72,46 +67,11 @@ func WithComponent(component Component) Option {
 	}
 }
 
-// WithSpan records the source range associated with a diagnostic.
-func WithSpan(span Span) Option {
-	return func(m *metadata) {
-		m.span = span
-	}
-}
-
 // WithSource records source text used by renderers for span excerpts.
 func WithSource(path string, src []byte) Option {
 	return func(m *metadata) {
 		m.path = path
 		m.source = append([]byte(nil), src...)
-	}
-}
-
-// WithLabel adds an additional source annotation.
-func WithLabel(label Label) Option {
-	return func(m *metadata) {
-		m.labels = append(m.labels, label)
-	}
-}
-
-// WithNote adds supporting diagnostic text.
-func WithNote(text string) Option {
-	return func(m *metadata) {
-		m.notes = append(m.notes, text)
-	}
-}
-
-// WithHelp adds actionable remediation text.
-func WithHelp(text string) Option {
-	return func(m *metadata) {
-		m.help = append(m.help, text)
-	}
-}
-
-// WithStack records runtime stack frames associated with a diagnostic.
-func WithStack(frames []StackFrame) Option {
-	return func(m *metadata) {
-		m.frames = append([]StackFrame(nil), frames...)
 	}
 }
 
@@ -144,11 +104,6 @@ func Wrap(err error, operation string, opts ...Option) error {
 		return nil
 	}
 	return newError(ClassUnknown, operation, err, opts...)
-}
-
-// Wrapf records formatted operation context on err.
-func Wrapf(err error, format string, args ...any) error {
-	return Wrap(err, fmt.Sprintf(format, args...))
 }
 
 // WrapAs records operation context and overrides the resulting diagnostic class.

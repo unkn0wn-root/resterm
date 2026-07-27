@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	engcfg "github.com/unkn0wn-root/resterm/internal/engine"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -34,19 +35,19 @@ func TestApplyCapturesStoresValues(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
 				{
-					Scope:      restfile.CaptureScopeGlobal,
+					Scope:      directive.ScopeGlobal,
 					Name:       "authToken",
 					Expression: "Bearer {{response.json.token}}",
 					Secret:     true,
 				},
 				{
-					Scope:      restfile.CaptureScopeFile,
+					Scope:      directive.ScopeFile,
 					Name:       "lastTrace",
 					Expression: "{{response.headers.X-Trace}}",
 					Secret:     false,
 				},
 				{
-					Scope:      restfile.CaptureScopeRequest,
+					Scope:      directive.ScopeRequest,
 					Name:       "recentStatus",
 					Expression: "{{response.status}}",
 					Secret:     false,
@@ -154,20 +155,20 @@ func TestApplyCapturesEvaluatesRSTExpressions(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
 				{
-					Scope:      restfile.CaptureScopeGlobal,
+					Scope:      directive.ScopeGlobal,
 					Name:       "auth.token",
 					Expression: `response.json.token`,
 					Secret:     true,
 					Line:       2,
 				},
 				{
-					Scope:      restfile.CaptureScopeFile,
+					Scope:      directive.ScopeFile,
 					Name:       "user.id",
 					Expression: `response.json.data.id`,
 					Line:       3,
 				},
 				{
-					Scope:      restfile.CaptureScopeRequest,
+					Scope:      directive.ScopeRequest,
 					Name:       "trace",
 					Expression: `response.headers["x-amzn-trace-id"]`,
 					Line:       4,
@@ -220,7 +221,7 @@ func TestApplyCapturesRSTKeepsQuotedTemplateMarkersLiteral(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "quoted",
 				Expression: `"{{response.json.token}}"`,
 			}},
@@ -252,7 +253,7 @@ func TestApplyCapturesFailsOnMixedTemplateRTSCall(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "mixed",
 				Expression: `contains({{name}}, "ali")`,
 				Mode:       restfile.CaptureExprModeTemplate,
@@ -283,7 +284,7 @@ func TestApplyCapturesFailsOnMixedTemplateRTSCallAutoMode(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "mixed",
 				Expression: `contains({{name}}, "ali")`,
 			}},
@@ -313,7 +314,7 @@ func TestApplyCapturesFailsOnMixedTemplateRTSSingleArgCall(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "mixed",
 				Expression: `contains({{name}})`,
 				Mode:       restfile.CaptureExprModeTemplate,
@@ -346,7 +347,7 @@ func TestApplyCapturesRSTStreamExpression(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "last",
 				Expression: "stream.events()[1].text",
 			}},
@@ -381,7 +382,7 @@ func TestApplyCapturesStrictModeFailsOnMissingJSONPath(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Name: "Login",
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "auth.token",
 				Expression: "{{response.json.missing.token}}",
 				Line:       7,
@@ -424,7 +425,7 @@ func TestApplyCapturesNonStrictKeepsTemplateMissingJSONEmpty(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "auth.token",
 				Expression: "{{response.json.missing.token}}",
 			}},
@@ -457,7 +458,7 @@ func TestApplyCapturesErrorIncludesNormalizedExpression(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Name: "BrokenCapture",
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "token",
 				Expression: "response.json.token[",
 				Line:       5,
@@ -497,7 +498,7 @@ func TestApplyCapturesStrictModeSupportsMultiIndexJSONPath(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "v",
 				Expression: "{{response.json.m[0][1]}}",
 			}},
@@ -529,7 +530,7 @@ func TestApplyCapturesStrictModeFailsOnMalformedJSONPath(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "v",
 				Expression: "{{response.json.items[}}",
 				Line:       9,
@@ -563,7 +564,7 @@ func TestApplyCapturesStrictModeFailsOnUnexpectedJSONPathChar(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "v",
 				Expression: "{{response.json.foo]bar}}",
 				Line:       11,
@@ -603,12 +604,12 @@ func TestApplyCapturesUsesEnvironmentOverride(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
 				{
-					Scope:      restfile.CaptureScopeGlobal,
+					Scope:      directive.ScopeGlobal,
 					Name:       "status",
 					Expression: "{{response.status}}",
 				},
 				{
-					Scope:      restfile.CaptureScopeFile,
+					Scope:      directive.ScopeFile,
 					Name:       "lastStatus",
 					Expression: "{{response.status}}",
 				},
@@ -659,7 +660,7 @@ func TestApplyCapturesStreamNegativeIndex(t *testing.T) {
 	req := &restfile.Request{
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{{
-				Scope:      restfile.CaptureScopeRequest,
+				Scope:      directive.ScopeRequest,
 				Name:       "last",
 				Expression: "{{stream.events[-1].event}}",
 			}},
@@ -699,17 +700,17 @@ func TestApplyCapturesWithStreamData(t *testing.T) {
 		Metadata: restfile.RequestMetadata{
 			Captures: []restfile.CaptureSpec{
 				{
-					Scope:      restfile.CaptureScopeRequest,
+					Scope:      directive.ScopeRequest,
 					Name:       "streamKind",
 					Expression: "{{stream.kind}}",
 				},
 				{
-					Scope:      restfile.CaptureScopeFile,
+					Scope:      directive.ScopeFile,
 					Name:       "received",
 					Expression: "{{stream.summary.receivedCount}}",
 				},
 				{
-					Scope:      restfile.CaptureScopeGlobal,
+					Scope:      directive.ScopeGlobal,
 					Name:       "lastMessage",
 					Expression: "{{stream.events[1].text}}",
 				},

@@ -30,12 +30,3 @@ func Emit(ctx context.Context, s Sink, e Evt) error {
 	}
 	return s.OnEvt(ctx, e)
 }
-
-func EmitAll(ctx context.Context, s Sink, es ...Evt) error {
-	for _, e := range es {
-		if err := Emit(ctx, s, e); err != nil {
-			return err
-		}
-	}
-	return nil
-}

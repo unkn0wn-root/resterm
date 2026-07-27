@@ -31,7 +31,7 @@ func (m *Model) cancelStatus() string {
 		return "Canceling profile run..."
 	}
 	if state := m.workflowRun; state != nil {
-		name := strings.TrimSpace(workflowRunSubject(state))
+		name := strings.TrimSpace(state.runSubject())
 		if name == "" {
 			name = "workflow"
 		}
@@ -221,7 +221,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 		return batchCommands(rc, cmd)
 	}
 
-	m.doc = doc
+	m.setDocument(doc)
 	m.syncRequestList(doc)
 	m.syncRegistry(doc)
 	if err := docErr(doc); err != nil {
@@ -238,7 +238,7 @@ func (m *Model) prepareActiveRequestExec() (*activeReqExec, tea.Cmd) {
 
 	m.setActiveRequest(req)
 
-	cloned := cloneRequest(req)
+	cloned := req.Clone()
 	m.currentRequest = cloned
 	m.testResults = nil
 	m.scriptError = nil
@@ -375,7 +375,7 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 	content := m.editor.Value()
 	doc := parser.Parse(m.currentFile, []byte(content))
-	m.doc = doc
+	m.setDocument(doc)
 	m.syncRequestList(doc)
 	m.syncRegistry(doc)
 	if err := docErr(doc); err != nil {
@@ -402,7 +402,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 
 	spec := core.BuildCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase)
 	if spec == nil && req.Metadata.Compare != nil {
-		spec = core.CloneCompareSpec(req.Metadata.Compare)
+		spec = req.Metadata.Compare.Clone()
 	}
 	if spec == nil {
 		m.setStatusMessage(statusMsg{
@@ -414,7 +414,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 
 	m.setActiveRequest(req)
 
-	cloned := cloneRequest(req)
+	cloned := req.Clone()
 	m.currentRequest = cloned
 	m.testResults = nil
 	m.scriptError = nil

@@ -13,18 +13,13 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/duration"
 )
 
+const DefaultName = "default"
+
 func Fallback(val, def string) string {
 	if val == "" {
 		return def
 	}
 	return val
-}
-
-func BoolKey(v bool) string {
-	if v {
-		return "1"
-	}
-	return "0"
 }
 
 func ParsePort(label string, target *int, rawOut *string, raw string) error {

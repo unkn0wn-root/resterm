@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -19,8 +20,6 @@ import (
 
 type compareState struct {
 	id           string
-	core         bool
-	doc          *restfile.Document
 	base         *restfile.Request
 	options      httpclient.Options
 	spec         *restfile.CompareSpec
@@ -37,14 +36,9 @@ type compareState struct {
 	latGen       int
 }
 
-func (s *compareState) matches(req *restfile.Request) bool {
-	return s != nil && s.current != nil && req == s.current
-}
-
 func compareStateFromPlan(
 	pl *core.ComparePlan,
 	opts httpclient.Options,
-	useCore bool,
 	originEnv string,
 	label string,
 ) *compareState {
@@ -54,11 +48,9 @@ func compareStateFromPlan(
 	envs := append([]string(nil), pl.Spec.Environments...)
 	return &compareState{
 		id:        strings.TrimSpace(pl.Run.ID),
-		core:      useCore,
-		doc:       pl.Doc,
-		base:      cloneRequest(pl.Request),
+		base:      pl.Request.Clone(),
 		options:   opts,
-		spec:      core.CloneCompareSpec(&pl.Spec),
+		spec:      pl.Spec.Clone(),
 		envs:      envs,
 		originEnv: originEnv,
 		results:   make([]compareResult, 0, len(envs)),
@@ -102,11 +94,7 @@ func (m *Model) startCompareRun(
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-	state := compareStateFromPlan(pl, options, true, m.cfg.EnvironmentName, label)
-	if requestNeedsUIDrivenRun(req) {
-		state.core = false
-		return m.startCompareUIDrivenState(state)
-	}
+	state := compareStateFromPlan(pl, options, m.cfg.EnvironmentName, label)
 	return m.startCompareCoreRun(pl, state)
 }
 
@@ -134,30 +122,19 @@ func (m *Model) beginCompareRun(state *compareState) []tea.Cmd {
 	return cmds
 }
 
-func (m *Model) startCompareUIDrivenState(state *compareState) tea.Cmd {
-	if state == nil {
-		return nil
-	}
-	cmds := m.beginCompareRun(state)
-	if cmd := m.executeCompareIteration(); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-	return batchCmds(cmds)
-}
-
 func (m *Model) startCompareCoreRun(pl *core.ComparePlan, state *compareState) tea.Cmd {
 	if pl == nil || state == nil {
 		return nil
 	}
-	rq := m.requestSvc(state.options)
+	rq := m.runRequestSvc(state.options)
 	if rq == nil {
 		return nil
 	}
 	cmds := m.beginCompareRun(state)
 	if len(state.envs) > 0 {
 		state.currentEnv = state.envs[0]
-		state.current = cloneRequest(state.base)
-		state.requestText = renderRequestText(state.current)
+		state.current = state.base.Clone()
+		state.requestText = rqeng.RenderRequestText(state.current)
 		m.statusPulseBase = state.statusLine()
 		m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
 		if spin := m.startSending(); spin != nil {
@@ -174,64 +151,13 @@ func (m *Model) startCompareCoreRun(pl *core.ComparePlan, state *compareState) t
 	return batchCmds(cmds)
 }
 
-func (m *Model) executeCompareIteration() tea.Cmd {
-	state := m.compareRun
-	if state == nil {
-		return nil
-	}
-	if state.index >= len(state.envs) {
-		return m.finalizeCompareRun(state)
-	}
-
-	env := state.envs[state.index]
-	clone := cloneRequest(state.base)
-	state.current = clone
-	state.currentEnv = env
-	state.requestText = renderRequestText(clone)
-
-	spin := m.startSending()
-	m.statusPulseBase = state.statusLine()
-	m.setStatusMessage(statusMsg{text: state.statusLine(), level: statusInfo})
-
-	runCmd := m.withEnvironment(env, func() tea.Cmd {
-		return m.executeRequestGen(state.latGen, state.doc, clone, state.options, env, nil)
-	})
-
-	pulse := m.startStatusPulse()
-	return batchCmds([]tea.Cmd{runCmd, pulse, spin})
-}
-
-func (m *Model) handleCompareUIDrivenResponse(msg responseMsg) tea.Cmd {
-	state := m.compareRun
-	if state == nil {
-		return nil
-	}
-	canceled, cmd := m.consumeCompareRow(state, state.current, state.currentEnv, msg)
-	var cmds []tea.Cmd
-	if cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-
-	if canceled || state.index >= len(state.envs) {
-		if cmd := m.finalizeCompareRun(state); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-		return batchCmds(cmds)
-	}
-
-	if cmd := m.executeCompareIteration(); cmd != nil {
-		cmds = append(cmds, cmd)
-	}
-	return batchCmds(cmds)
-}
-
 func (m *Model) handleCompareRunEvt(evt core.Evt) tea.Cmd {
 	st := m.compareRun
-	if st == nil || !st.core || evt == nil {
+	if st == nil || evt == nil {
 		return nil
 	}
 	meta := core.MetaOf(evt)
-	if st.id != "" && meta.Run.ID != "" && st.id != meta.Run.ID {
+	if runIDMismatch(st.id, meta.Run.ID) {
 		return nil
 	}
 	switch v := evt.(type) {
@@ -251,8 +177,8 @@ func (m *Model) handleCompareRowStart(st *compareState, evt core.CmpRowStart) te
 	}
 	st.index = evt.Row.Index
 	st.currentEnv = compareEnvAt(st, evt.Row.Index, evt.Row.Env)
-	st.current = cloneRequest(evt.Request)
-	st.requestText = renderRequestText(st.current)
+	st.current = evt.Request.Clone()
+	st.requestText = rqeng.RenderRequestText(st.current)
 	m.statusPulseBase = st.statusLine()
 	m.setStatusMessage(statusMsg{text: st.statusLine(), level: statusInfo})
 	spin := m.startSending()
@@ -340,7 +266,7 @@ func (m *Model) consumeCompareRow(
 		currentReq = msg.executed
 	}
 	if currentReq != nil {
-		result.Request = cloneRequest(currentReq)
+		result.Request = currentReq.Clone()
 	}
 	if strings.TrimSpace(result.RequestText) == "" {
 		result.RequestText = strings.TrimSpace(msg.requestText)
@@ -465,19 +391,6 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 	return nil
 }
 
-func (m *Model) withEnvironment(env string, fn func() tea.Cmd) tea.Cmd {
-	prev := m.cfg.EnvironmentName
-	m.cfg.EnvironmentName = env
-	if fn == nil {
-		m.cfg.EnvironmentName = prev
-		return nil
-	}
-	defer func() {
-		m.cfg.EnvironmentName = prev
-	}()
-	return fn()
-}
-
 func (m *Model) pinCompareReferencePane(state *compareState) {
 	if state == nil || !m.responseSplit {
 		return
@@ -542,7 +455,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		Description: strings.TrimSpace(baseReq.Metadata.Description),
 		Tags:        normalizedTags(baseReq.Metadata.Tags),
 		Status:      state.progressSummary(),
-		RequestText: renderRequestText(baseReq),
+		RequestText: rqeng.RenderRequestText(baseReq),
 		Compare:     &history.CompareEntry{},
 	}
 	if state.canceled {
@@ -594,7 +507,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 
 	req := result.Request
 	if req != nil && strings.TrimSpace(entry.RequestText) == "" {
-		entry.RequestText = renderRequestText(req)
+		entry.RequestText = rqeng.RenderRequestText(req)
 	}
 	if req != nil {
 		secrets := m.secretValuesForEnvironment(env, req)

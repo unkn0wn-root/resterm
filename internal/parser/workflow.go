@@ -8,8 +8,7 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -64,7 +63,7 @@ func (b *workflowBuilder) touch(line int) {
 	}
 }
 
-func (b *workflowBuilder) applyOptions(opts map[string]string) {
+func (b *workflowBuilder) applyOptions(opts directive.Options) {
 	if len(opts) == 0 {
 		return
 	}
@@ -80,46 +79,52 @@ func (b *workflowBuilder) applyOptions(opts map[string]string) {
 	maps.Copy(b.wf.Options, opts)
 }
 
-func (b *workflowBuilder) handleDirective(key, rest string, line int) (bool, error) {
-	key = str.LowerTrim(key)
-	if err := b.flushOpen(key, line); err != nil {
+func (b *workflowBuilder) handleDirective(
+	call directive.Call,
+	line int,
+) (bool, error) {
+	if err := b.flushOpen(call.Name, line); err != nil {
 		return true, err
 	}
-	if handled, err := b.handleWorkflowMeta(key, rest, line); handled {
+	if handled, err := b.handleWorkflowMeta(call.Name, call.Args, line); handled {
 		return true, err
 	}
-	if handled, err := b.handleWorkflowCondition(key, rest, line); handled {
+	if handled, err := b.handleWorkflowCondition(call, line); handled {
 		return true, err
 	}
-	if handled, err := b.handleWorkflowSwitch(key, rest, line); handled {
+	if handled, err := b.handleWorkflowSwitch(call.Name, call.Args, line); handled {
 		return true, err
 	}
-	if handled, err := b.handleWorkflowIf(key, rest, line); handled {
+	if handled, err := b.handleWorkflowIf(call.Name, call.Args, line); handled {
 		return true, err
 	}
 	return false, nil
 }
 
-func (b *workflowBuilder) flushOpen(key string, line int) error {
-	if b.sw != nil && key != "case" && key != "default" {
+func (b *workflowBuilder) flushOpen(name directive.Name, line int) error {
+	if b.sw != nil && name != directive.Case && name != directive.Default {
 		return b.flushFlow(line)
 	}
-	if b.ifb != nil && key != "elif" && key != "else" {
+	if b.ifb != nil && name != directive.Elif && name != directive.Else {
 		return b.flushFlow(line)
 	}
 	return nil
 }
 
-func (b *workflowBuilder) handleWorkflowMeta(key, rest string, line int) (bool, error) {
-	switch key {
-	case "description", "desc":
+func (b *workflowBuilder) handleWorkflowMeta(
+	name directive.Name,
+	rest string,
+	line int,
+) (bool, error) {
+	switch name {
+	case directive.Description:
 		if rest == "" {
 			return true, nil
 		}
 		b.wf.Description = appendDesc(b.wf.Description, rest)
 		b.touch(line)
 		return true, nil
-	case "tag", "tags":
+	case directive.Tag:
 		tags := parseTagList(rest)
 		if len(tags) == 0 {
 			return true, nil
@@ -132,13 +137,20 @@ func (b *workflowBuilder) handleWorkflowMeta(key, rest string, line int) (bool, 
 	}
 }
 
-func (b *workflowBuilder) handleWorkflowCondition(key, rest string, line int) (bool, error) {
-	switch key {
-	case "when", "skip-if":
+func (b *workflowBuilder) handleWorkflowCondition(
+	call directive.Call,
+	line int,
+) (bool, error) {
+	switch call.Name {
+	case directive.When:
 		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		spec, err := parseConditionSpec(rest, line, key == "skip-if")
+		spec, err := parseConditionSpec(
+			call.Args,
+			line,
+			call.Spelling == directive.SkipIf,
+		)
 		if err != nil {
 			return true, err
 		}
@@ -148,11 +160,11 @@ func (b *workflowBuilder) handleWorkflowCondition(key, rest string, line int) (b
 		b.pendWhen = spec
 		b.touch(line)
 		return true, nil
-	case "for-each":
+	case directive.ForEach:
 		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
-		spec, err := parseForEachSpec(rest, line)
+		spec, err := parseForEachSpec(call.Args, line)
 		if err != nil {
 			return true, err
 		}
@@ -167,9 +179,13 @@ func (b *workflowBuilder) handleWorkflowCondition(key, rest string, line int) (b
 	}
 }
 
-func (b *workflowBuilder) handleWorkflowSwitch(key, rest string, line int) (bool, error) {
-	switch key {
-	case "switch":
+func (b *workflowBuilder) handleWorkflowSwitch(
+	name directive.Name,
+	rest string,
+	line int,
+) (bool, error) {
+	switch name {
+	case directive.Switch:
 		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
@@ -183,7 +199,7 @@ func (b *workflowBuilder) handleWorkflowSwitch(key, rest string, line int) (bool
 		b.sw = &workflowSwitchBuilder{expr: expr, line: line}
 		b.touch(line)
 		return true, nil
-	case "case":
+	case directive.Case:
 		if b.sw == nil {
 			return true, errors.New("@case without @switch")
 		}
@@ -192,7 +208,7 @@ func (b *workflowBuilder) handleWorkflowSwitch(key, rest string, line int) (bool
 		}
 		b.touch(line)
 		return true, nil
-	case "default":
+	case directive.Default:
 		if b.sw == nil {
 			return true, errors.New("@default without @switch")
 		}
@@ -206,9 +222,13 @@ func (b *workflowBuilder) handleWorkflowSwitch(key, rest string, line int) (bool
 	}
 }
 
-func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, error) {
-	switch key {
-	case "if":
+func (b *workflowBuilder) handleWorkflowIf(
+	name directive.Name,
+	rest string,
+	line int,
+) (bool, error) {
+	switch name {
+	case directive.If:
 		if err := b.requireNoPending(); err != nil {
 			return true, err
 		}
@@ -225,7 +245,7 @@ func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, er
 		}
 		b.touch(line)
 		return true, nil
-	case "elif":
+	case directive.Elif:
 		if b.ifb == nil {
 			return true, errors.New("@elif without @if")
 		}
@@ -239,14 +259,14 @@ func (b *workflowBuilder) handleWorkflowIf(key, rest string, line int) (bool, er
 		)
 		b.touch(line)
 		return true, nil
-	case "else":
+	case directive.Else:
 		if b.ifb == nil {
 			return true, errors.New("@else without @if")
 		}
 		if b.ifb.els != nil {
 			return true, errors.New("@else already defined")
 		}
-		opts := options.Parse(rest)
+		opts := directive.ParseOptions(rest)
 		run, fail, err := parseWorkflowRunOptions(opts)
 		if err != nil {
 			return true, err
@@ -325,7 +345,7 @@ func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 	if sw.def != nil {
 		return errors.New("@default already defined")
 	}
-	opts := options.Parse(rest)
+	opts := directive.ParseOptions(rest)
 	run, fail, err := parseWorkflowRunOptions(opts)
 	if err != nil {
 		return err
@@ -335,8 +355,7 @@ func (sw *workflowSwitchBuilder) addDefault(rest string, line int) error {
 }
 
 func parseExprRun(rest, miss string) (expr, run, fail string, err error) {
-	expr, opts := splitExprOptions(rest)
-	expr = str.Trim(expr)
+	expr, opts := directive.CutOptions(rest)
 	if expr == "" {
 		return "", "", "", errors.New(miss)
 	}
@@ -347,12 +366,9 @@ func parseExprRun(rest, miss string) (expr, run, fail string, err error) {
 	return expr, run, fail, nil
 }
 
-func parseWorkflowRunOptions(opts map[string]string) (run, fail string, err error) {
-	run = str.Trim(opts["run"])
-	if run == "" {
-		run = str.Trim(opts["using"])
-	}
-	fail = str.Trim(opts["fail"])
+func parseWorkflowRunOptions(opts directive.Options) (run, fail string, err error) {
+	run, _ = opts.First("run", "using")
+	fail = opts.Get("fail")
 	if run == "" && fail == "" {
 		return "", "", errors.New("missing a run= or fail= option")
 	}
@@ -370,7 +386,7 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 	if err != nil {
 		return err
 	}
-	use := options.PopAny(opts, "using", "run")
+	use, _ := opts.PopAny("using", "run")
 	if use == "" {
 		return errors.New("@step missing using request")
 	}
@@ -381,7 +397,7 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 		OnFailure: b.wf.DefaultOnFailure,
 		Line:      line,
 	}
-	if val := options.Pop(opts, "on-failure"); val != "" {
+	if val := opts.Pop("on-failure"); val != "" {
 		if mode, ok := parseWorkflowFailureMode(val); ok {
 			step.OnFailure = mode
 		}
@@ -395,48 +411,22 @@ func (b *workflowBuilder) addStep(line int, rest string) error {
 	return expErr
 }
 
-func parseStepSpec(rest string) (string, map[string]string, error) {
-	rem := str.Trim(rest)
-	if rem == "" {
+// The alias is the first word. Quoting it lets it hold spaces or an equals sign,
+// while bare words after it stay options the way @step has always read them. The
+// name= option is a fallback for a step that opens with an option.
+func parseStepSpec(rest string) (string, directive.Options, error) {
+	if str.Trim(rest) == "" {
 		return "", nil, errors.New("@step missing content")
 	}
-	name := ""
-	tok, tail := lexer.SplitFirst(rem)
-	if tok != "" && !strings.Contains(tok, "=") {
-		name = tok
-		rem = tail
-	}
-	opts := options.Parse(rem)
-	if nm, ok := opts["name"]; ok {
-		if name == "" {
-			name = nm
-		}
-		delete(opts, "name")
+	name, tail := directive.CutName(rest)
+	opts := directive.ParseOptions(tail)
+	if nm := opts.Pop("name"); name == "" {
+		name = nm
 	}
 	return name, opts, nil
 }
 
-func splitExprOptions(input string) (string, map[string]string) {
-	tokens := lexer.Fields(strings.TrimSpace(input))
-	if len(tokens) == 0 {
-		return "", map[string]string{}
-	}
-	optIndex := -1
-	for i, token := range tokens {
-		if options.IsToken(token) {
-			optIndex = i
-			break
-		}
-	}
-	if optIndex == -1 {
-		return strings.Join(tokens, " "), map[string]string{}
-	}
-	expr := strings.Join(tokens[:optIndex], " ")
-	opts := options.Parse(strings.Join(tokens[optIndex:], " "))
-	return expr, opts
-}
-
-func applyStepOpts(step *restfile.WorkflowStep, opts map[string]string) error {
+func applyStepOpts(step *restfile.WorkflowStep, opts directive.Options) error {
 	if len(opts) == 0 {
 		return nil
 	}
@@ -512,7 +502,7 @@ func (b *workflowBuilder) applyPending(step *restfile.WorkflowStep) {
 	}
 }
 
-func popFailMode(opts map[string]string, keys ...string) (restfile.WorkflowFailureMode, bool) {
+func popFailMode(opts directive.Options, keys ...string) (restfile.WorkflowFailureMode, bool) {
 	for _, key := range keys {
 		val, ok := opts[key]
 		if !ok {

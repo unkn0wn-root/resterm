@@ -1,13 +1,17 @@
 package websocket
 
 import (
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
 	"strconv"
 	"strings"
+	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -19,8 +23,6 @@ type Builder struct {
 }
 
 const (
-	wsKeyWebSocket   = "websocket"
-	wsKeyWS          = "ws"
 	wsOptTimeout     = "timeout"
 	wsOptIdle        = "idle"
 	wsOptIdleAlt     = "idle-timeout"
@@ -37,40 +39,46 @@ const (
 	wsActWait        = "wait"
 	wsActClose       = "close"
 	wsCloseOK        = 1000
+	wsCloseStandard  = 1014
+	wsCloseAppMin    = 3000
+	wsCloseAppMax    = 4999
 )
 
 func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(key, rest string) bool {
-	switch normKey(key) {
-	case wsKeyWebSocket:
-		return b.handleWebSocket(rest)
-	case wsKeyWS:
-		return b.handleStep(rest)
+func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error) {
+	switch name {
+	case directive.WebSocket:
+		return true, b.handleWebSocket(rest)
+	case directive.WS:
+		return true, b.handleStep(rest)
 	default:
-		return false
+		return false, nil
 	}
 }
 
-func (b *Builder) handleWebSocket(rest string) bool {
+func (b *Builder) handleWebSocket(rest string) error {
 	t := str.Trim(rest)
 	if t == "" {
 		b.on = true
-		return true
+		return nil
 	}
-	if dvalue.IsOffToken(t) {
+	if directive.IsOff(t) {
 		b.reset()
-		return true
+		return nil
 	}
 
 	b.on = true
-	opts := options.Parse(t)
-	for key, value := range opts {
-		b.applyOption(key, value)
+	opts := directive.ParseOptions(t)
+	var errs []error
+	for _, key := range slices.Sorted(maps.Keys(opts)) {
+		if err := b.applyOption(key, opts[key]); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	return true
+	return errors.Join(errs...)
 }
 
 func (b *Builder) reset() {
@@ -79,33 +87,67 @@ func (b *Builder) reset() {
 	b.steps = nil
 }
 
-func (b *Builder) applyOption(name, value string) {
-	switch normKey(name) {
+// ParseOptions lowercases keys, so name is already normalized.
+func (b *Builder) applyOption(name, value string) error {
+	switch name {
 	case wsOptTimeout:
-		if dur, ok := duration.Parse(value); ok && dur >= 0 {
-			b.opts.HandshakeTimeout = dur
+		dur, err := wsDuration(name, value)
+		if err != nil {
+			return err
 		}
+		b.opts.HandshakeTimeout = dur
 	case wsOptIdle, wsOptIdleAlt:
-		if dur, ok := duration.Parse(value); ok && dur >= 0 {
-			b.opts.IdleTimeout = dur
+		dur, err := wsDuration(name, value)
+		if err != nil {
+			return err
 		}
+		b.opts.IdleTimeout = dur
 	case wsOptMaxMsg:
-		if size, err := dvalue.ParseByteSize(value); err == nil {
-			b.opts.MaxMessageBytes = size
+		size, err := bytesize.Parse(value)
+		if err != nil {
+			return fmt.Errorf("invalid @websocket %s %q: %w", name, value, err)
 		}
+		b.opts.MaxMessageBytes = size
 	case wsOptSub, wsOptSubs:
-		if list := options.SplitCSV(value); len(list) > 0 {
-			b.opts.Subprotocols = list
+		list := directive.SplitCSV(value)
+		if len(list) == 0 {
+			return fmt.Errorf(
+				"invalid @websocket %s %q: expected at least one subprotocol",
+				name,
+				value,
+			)
 		}
+		b.opts.Subprotocols = list
 	case wsOptCompression:
-		if val, err := strconv.ParseBool(value); err == nil {
-			b.opts.Compression = val
-			b.opts.CompressionSet = true
+		val, ok := directive.ParseBool(value)
+		if !ok {
+			return fmt.Errorf(
+				"invalid @websocket %s %q: expected true or false",
+				name,
+				value,
+			)
 		}
+		b.opts.Compression = val
+		b.opts.CompressionSet = true
+	default:
+		return directive.UnknownOption(directive.WebSocket, name)
 	}
+	return nil
 }
 
-type wsStepParser func(rest string, step *restfile.WebSocketStep) bool
+func wsDuration(name, value string) (time.Duration, error) {
+	dur, ok := duration.Parse(value)
+	if !ok || dur < 0 {
+		return 0, fmt.Errorf(
+			"invalid @websocket %s %q: expected a non-negative duration",
+			name,
+			value,
+		)
+	}
+	return dur, nil
+}
+
+type wsStepParser func(rest string, step *restfile.WebSocketStep) error
 
 var wsStepParsers = map[string]wsStepParser{
 	wsActSend:       parseWSSendText,
@@ -118,104 +160,125 @@ var wsStepParsers = map[string]wsStepParser{
 	wsActClose:      parseWSClose,
 }
 
-func (b *Builder) handleStep(rest string) bool {
+func (b *Builder) handleStep(rest string) error {
 	t := str.Trim(rest)
 	if t == "" {
-		return true
+		return errors.New("@ws requires an action")
 	}
 	b.on = true
 
-	act, rem := lexer.SplitFirst(t)
+	act, rem := directive.CutToken(t)
 	if act == "" {
-		return true
+		return errors.New("@ws requires an action")
 	}
 	act = str.LowerTrim(act)
 	rem = str.Trim(rem)
 
 	parse, ok := wsStepParsers[act]
 	if !ok {
-		return false
+		return fmt.Errorf("unknown @ws action %q", act)
 	}
 	step := restfile.WebSocketStep{}
-	if !parse(rem, &step) {
-		return true
+	if err := parse(rem, &step); err != nil {
+		return err
 	}
 
 	b.steps = append(b.steps, step)
-	return true
+	return nil
 }
 
-func parseWSSendText(rest string, step *restfile.WebSocketStep) bool {
+func parseWSSendText(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepSendText
 	step.Value = rest
-	return true
+	return nil
 }
 
-func parseWSSendJSON(rest string, step *restfile.WebSocketStep) bool {
+func parseWSSendJSON(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepSendJSON
 	step.Value = rest
-	return true
+	return nil
 }
 
-func parseWSSendBase64(rest string, step *restfile.WebSocketStep) bool {
+func parseWSSendBase64(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepSendBase64
 	step.Value = rest
-	return true
+	return nil
 }
 
-func parseWSSendFile(rest string, step *restfile.WebSocketStep) bool {
+func parseWSSendFile(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepSendFile
 	if after, ok := strings.CutPrefix(rest, "<"); ok {
 		rest = str.Trim(after)
 	}
 	if rest == "" {
-		return false
+		return errors.New("@ws send-file requires a path")
 	}
 	step.File = rest
-	return true
+	return nil
 }
 
-func parseWSPing(rest string, step *restfile.WebSocketStep) bool {
+func parseWSPing(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepPing
 	step.Value = rest
-	return true
+	return nil
 }
 
-func parseWSPong(rest string, step *restfile.WebSocketStep) bool {
+func parseWSPong(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepPong
 	step.Value = rest
-	return true
+	return nil
 }
 
-func parseWSWait(rest string, step *restfile.WebSocketStep) bool {
+func parseWSWait(rest string, step *restfile.WebSocketStep) error {
+	if rest == "" {
+		return errors.New("@ws wait requires a duration")
+	}
 	step.Type = restfile.WebSocketStepWait
 	dur, ok := duration.Parse(rest)
 	if !ok || dur < 0 {
-		return false
+		return fmt.Errorf(
+			"invalid @ws wait duration %q: expected a non-negative duration",
+			rest,
+		)
 	}
 	step.Duration = dur
-	return true
+	return nil
 }
 
-func parseWSClose(rest string, step *restfile.WebSocketStep) bool {
+func parseWSClose(rest string, step *restfile.WebSocketStep) error {
 	step.Type = restfile.WebSocketStepClose
 	if rest == "" {
 		step.Code = wsCloseOK
-		return true
+		return nil
 	}
-	codeTok, tail := lexer.SplitFirst(rest)
+	codeTok, tail := directive.CutToken(rest)
 	if codeTok == "" {
 		step.Code = wsCloseOK
-		return true
+		return nil
 	}
 	if code, err := strconv.Atoi(codeTok); err == nil {
+		if !validWSCloseCode(code) {
+			return fmt.Errorf(
+				"invalid @ws close code %q: expected an allowed WebSocket close code",
+				codeTok,
+			)
+		}
 		step.Code = code
 		step.Reason = str.Trim(tail)
-		return true
+		return nil
 	}
 	step.Code = wsCloseOK
 	step.Reason = str.Trim(rest)
-	return true
+	return nil
+}
+
+func validWSCloseCode(code int) bool {
+	switch code {
+	case 1004, 1005, 1006, 1015:
+		return false
+	}
+	return code >= wsCloseOK && code <= wsCloseStandard ||
+		code >= wsCloseAppMin && code <= wsCloseAppMax
 }
 
 func (b *Builder) Finalize() (*restfile.WebSocketRequest, bool) {
@@ -228,8 +291,4 @@ func (b *Builder) Finalize() (*restfile.WebSocketRequest, bool) {
 		Steps:   steps,
 	}
 	return req, true
-}
-
-func normKey(s string) string {
-	return str.LowerTrim(s)
 }

@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 )
 
 const (
@@ -74,8 +76,8 @@ func newWorkflowStatsView(state *workflowState) *workflowStatsView {
 	selected := workflowDefaultSelection(entries)
 
 	return &workflowStatsView{
-		label:      workflowRunLabel(state),
-		name:       workflowRunSubject(state),
+		label:      state.runLabel(),
+		name:       state.runSubject(),
 		started:    state.start,
 		ended:      state.end,
 		totalSteps: len(state.steps),
@@ -462,7 +464,7 @@ func (v *workflowStatsView) renderStepRow(idx, width int) string {
 		nameWidth = 1
 	}
 	name := workflowPlainTruncate(
-		workflowStepLabel(
+		core.StepLabel(
 			entry.result.Step,
 			entry.result.Branch,
 			entry.result.Iteration,
@@ -534,7 +536,7 @@ func (v *workflowStatsView) detailHeader(entry workflowStatsEntry, width int) []
 	title := fmt.Sprintf(
 		"%d. %s",
 		entry.index+1,
-		workflowStepLabel(
+		core.StepLabel(
 			entry.result.Step,
 			entry.result.Branch,
 			entry.result.Iteration,
@@ -632,7 +634,7 @@ func workflowStepLine(idx int, res workflowStepResult) string {
 	line := fmt.Sprintf(
 		"%d. %s %s",
 		idx+1,
-		workflowStepLabel(res.Step, res.Branch, res.Iteration, res.Total),
+		core.StepLabel(res.Step, res.Branch, res.Iteration, res.Total),
 		label,
 	)
 	if strings.TrimSpace(res.Status) != "" {

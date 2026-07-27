@@ -35,18 +35,6 @@ type RenderState struct {
 	ActiveNodeID   string
 }
 
-// ListView renders the navigator list with an optional height constraint.
-func ListView(
-	m *Model[any],
-	th theme.Theme,
-	width int,
-	height int,
-	focus bool,
-	appearance theme.Appearance,
-) string {
-	return ListViewWithState(m, th, width, height, focus, appearance, RenderState{})
-}
-
 // ListViewWithState renders the navigator list with selection and active-row
 // hints. Selection is the keyboard cursor; active state is the open file or
 // active request.
@@ -78,18 +66,6 @@ func ListViewWithState(
 		)
 	}
 	return strings.Join(out, "\n")
-}
-
-func renderRow(
-	row Flat[any],
-	selected bool,
-	th theme.Theme,
-	width int,
-	focus bool,
-	compact bool,
-	appearance theme.Appearance,
-) string {
-	return renderRowState(row, selected, false, th, width, focus, compact, appearance)
 }
 
 func renderRowState(

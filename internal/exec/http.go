@@ -15,11 +15,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
-const (
-	StageCaptures = "captures"
-
-	streamHeaderType = "X-Resterm-Stream-Type"
-)
+const StageCaptures = "captures"
 
 type HTTPInput struct {
 	Client           *httpclient.Client
@@ -306,7 +302,7 @@ func streamInfoFromResponse(
 	if req == nil || resp == nil {
 		return nil, nil
 	}
-	streamType := strings.ToLower(resp.Headers.Get(streamHeaderType))
+	streamType := strings.ToLower(resp.Headers.Get(httpclient.StreamHeaderType))
 	if req.SSE != nil && streamType == "sse" {
 		transcript, err := httpclient.DecodeSSETranscript(resp.Body)
 		if err != nil {

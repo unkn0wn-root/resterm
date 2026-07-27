@@ -299,7 +299,6 @@ type Model struct {
 	latAnimOn        bool
 	latAnimT0        time.Time
 
-	scriptRunner    *scripts.Runner
 	testResults     []scripts.TestResult
 	scriptError     error
 	updateClient    update.Client
@@ -381,7 +380,10 @@ type Model struct {
 	fileMissing          bool
 	pendingReloadConfirm bool
 
-	doc                *restfile.Document
+	doc *restfile.Document
+	// docRev is the editor revision doc was parsed from. Anything describing the
+	// buffer has to check it, because editing does not reparse.
+	docRev             uint64
 	currentFile        string
 	currentRequest     *restfile.Request
 	lastCursorSync     cursorSyncState
@@ -682,7 +684,6 @@ func New(cfg Config) Model {
 		statusUser:               statusUser,
 		statusHost:               statusHost,
 		latencySeries:            newLatencySeries(latCap),
-		scriptRunner:             scripts.NewRunner(nil),
 		updateClient:             cfg.UpdateClient,
 		updateVersion:            updateVersion,
 		updateCmd:                updateCmd,
@@ -727,6 +728,9 @@ func New(cfg Config) Model {
 	if hs := model.historyStore(); hs != nil {
 		_ = hs.Load()
 	}
+	// initialDoc came from the content the editor was just given, so stamp it the
+	// way setDocument would.
+	model.docRev = model.editor.Revision()
 	model.setHistoryScopeForFile(model.currentFile)
 	model.syncHistory()
 	model.watchFile(cfg.FilePath, []byte(cfg.InitialContent))

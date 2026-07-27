@@ -1,11 +1,15 @@
 package sse
 
 import (
-	"strings"
+	"errors"
+	"fmt"
+	"maps"
+	"slices"
+	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/bytesize"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/duration"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -19,56 +23,73 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(key, rest string) bool {
-	if !strings.EqualFold(key, "sse") {
-		return false
+func (b *Builder) HandleDirective(name directive.Name, rest string) (bool, error) {
+	if name != directive.SSE {
+		return false, nil
 	}
 
 	rest = str.Trim(rest)
 	if rest == "" {
 		b.enabled = true
-		return true
+		return true, nil
 	}
 
-	if dvalue.IsOffToken(rest) {
+	if directive.IsOff(rest) {
 		b.enabled = false
 		b.options = restfile.SSEOptions{}
-		return true
+		return true, nil
 	}
 
 	b.enabled = true
-	assignments := options.Parse(rest)
-	for key, value := range assignments {
-		b.applyOption(key, value)
+	assignments := directive.ParseOptions(rest)
+	var errs []error
+	for _, key := range slices.Sorted(maps.Keys(assignments)) {
+		if err := b.applyOption(key, assignments[key]); err != nil {
+			errs = append(errs, err)
+		}
 	}
-	return true
+	return true, errors.Join(errs...)
 }
 
-func (b *Builder) applyOption(name, value string) {
-	switch str.LowerTrim(name) {
+// ParseOptions lowercases keys, so name is already normalized.
+func (b *Builder) applyOption(name, value string) error {
+	switch name {
 	case "duration", "timeout":
-		if dur, ok := duration.Parse(value); ok {
-			if dur < 0 {
-				return
-			}
-			b.options.TotalTimeout = dur
+		dur, err := sseDuration(name, value)
+		if err != nil {
+			return err
 		}
+		b.options.TotalTimeout = dur
 	case "idle", "idle-timeout":
-		if dur, ok := duration.Parse(value); ok {
-			if dur < 0 {
-				return
-			}
-			b.options.IdleTimeout = dur
+		dur, err := sseDuration(name, value)
+		if err != nil {
+			return err
 		}
+		b.options.IdleTimeout = dur
 	case "max-events":
-		if n, err := dvalue.ParsePositiveInt(value); err == nil {
-			b.options.MaxEvents = n
+		n, err := directive.ParseNonNegativeInt(value)
+		if err != nil {
+			return fmt.Errorf("invalid @sse %s %q: %w", name, value, err)
 		}
+		b.options.MaxEvents = n
 	case "max-bytes", "limit-bytes":
-		if size, err := dvalue.ParseByteSize(value); err == nil {
-			b.options.MaxBytes = size
+		size, err := bytesize.Parse(value)
+		if err != nil {
+			return fmt.Errorf("invalid @sse %s %q: %w", name, value, err)
 		}
+		b.options.MaxBytes = size
+	default:
+		return directive.UnknownOption(directive.SSE, name)
 	}
+	return nil
+}
+
+func sseDuration(name, value string) (time.Duration, error) {
+	dur, ok := duration.Parse(value)
+	if !ok || dur < 0 {
+		return 0, fmt.Errorf("invalid @sse %s %q: expected a non-negative duration", name, value)
+	}
+	return dur, nil
 }
 
 func (b *Builder) Finalize() (*restfile.SSERequest, bool) {

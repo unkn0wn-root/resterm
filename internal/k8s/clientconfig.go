@@ -51,20 +51,6 @@ func parseExecPolicy(raw string) (ExecPolicy, error) {
 	}
 }
 
-func rawConfig(cfg Config, opt LoadOptions) (clientcmdapi.Config, error) {
-	raw, _, err := loadRaw(cfg)
-	if err != nil {
-		return clientcmdapi.Config{}, err
-	}
-
-	st, err := normalizeLoadOptions(opt)
-	if err != nil {
-		return clientcmdapi.Config{}, err
-	}
-	applyExecPolicy(&raw, st)
-	return raw, nil
-}
-
 func clientConfig(cfg Config, opt LoadOptions) (clientcmd.ClientConfig, error) {
 	raw, ovs, err := loadRaw(cfg)
 	if err != nil {

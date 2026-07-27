@@ -3,6 +3,7 @@ package grpc
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -43,9 +44,9 @@ func (b *Builder) SetTarget(target string) {
 	req.Target = str.Trim(target)
 }
 
-func (b *Builder) HandleDirective(key, rest string) bool {
-	switch key {
-	case "grpc":
+func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
+	switch name {
+	case directive.GRPC:
 		req := b.EnsureRequest()
 		if rest == "" {
 			return true
@@ -63,10 +64,10 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 			}
 		}
 		return true
-	case "grpc-descriptor":
+	case directive.GRPCDescriptor:
 		b.EnsureRequest().DescriptorSet = rest
 		return true
-	case "grpc-reflection":
+	case directive.GRPCReflection:
 		req := b.EnsureRequest()
 		if rest == "" {
 			req.UseReflection = true
@@ -76,7 +77,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 			req.UseReflection = true
 		}
 		return true
-	case "grpc-plaintext":
+	case directive.GRPCPlaintext:
 		req := b.EnsureRequest()
 		req.PlaintextSet = true
 		if rest == "" {
@@ -89,10 +90,10 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 			req.Plaintext = true
 		}
 		return true
-	case "grpc-authority":
+	case directive.GRPCAuthority:
 		b.EnsureRequest().Authority = rest
 		return true
-	case "grpc-metadata":
+	case directive.GRPCMetadata:
 		req := b.EnsureRequest()
 		if rest != "" {
 			if before, after, ok := strings.Cut(rest, ":"); ok {

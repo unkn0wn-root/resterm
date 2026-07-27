@@ -3,6 +3,7 @@ package graphql
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/parser/bodyref"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	str "github.com/unkn0wn-root/resterm/internal/util"
@@ -22,9 +23,9 @@ func New() *Builder {
 	return &Builder{}
 }
 
-func (b *Builder) HandleDirective(key, rest string) bool {
-	switch key {
-	case "graphql":
+func (b *Builder) HandleDirective(name directive.Name, rest string) bool {
+	switch name {
+	case directive.GraphQL:
 		if rest == "" || strings.EqualFold(rest, "true") {
 			b.enabled = true
 			return true
@@ -33,12 +34,12 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 			return true
 		}
 		return true
-	case "operation", "graphql-operation":
+	case directive.GraphQLOperation:
 		if b.enabled {
 			b.operation = rest
 		}
 		return b.enabled
-	case "variables":
+	case directive.Variables:
 		if !b.enabled {
 			return false
 		}
@@ -55,7 +56,7 @@ func (b *Builder) HandleDirective(key, rest string) bool {
 			}
 		}
 		return true
-	case "query":
+	case directive.Query:
 		if !b.enabled {
 			return false
 		}

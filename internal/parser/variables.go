@@ -4,9 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	dscope "github.com/unkn0wn-root/resterm/internal/parser/directive/scope"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -19,27 +17,22 @@ func (b *documentBuilder) handleVariableLine(ln line) bool {
 	if matches == nil {
 		return false
 	}
-	scopeToken, secret := dscope.ParseToken(matches[1])
 	name := matches[2]
 	valueCandidate := matches[3]
 	if valueCandidate == "" {
 		valueCandidate = matches[4]
 	}
 	value := strings.TrimSpace(valueCandidate)
-	switch scopeToken {
-	case "global":
-		b.addScopedVariable(name, value, ln.no, restfile.ScopeGlobal, secret)
-	case "request":
-		b.addScopedVariable(name, value, ln.no, restfile.ScopeRequest, secret)
-	case "file":
-		b.addScopedVariable(name, value, ln.no, restfile.ScopeFile, secret)
-	default:
-		scope := restfile.ScopeRequest
+
+	// A shorthand variable without a scope belongs to whichever block it sits in.
+	scope, secret, ok := directive.ParseSecretScope(matches[1])
+	if !ok {
+		scope = directive.ScopeRequest
 		if !b.inRequest {
-			scope = restfile.ScopeFile
+			scope = directive.ScopeFile
 		}
-		b.addScopedVariable(name, value, ln.no, scope, secret)
 	}
+	b.addScopedVariable(name, value, ln.no, scope, secret)
 	b.appendLine(ln.raw)
 	return true
 }
@@ -47,7 +40,7 @@ func (b *documentBuilder) handleVariableLine(ln line) bool {
 func (b *documentBuilder) addScopedVariable(
 	name, value string,
 	line int,
-	scope restfile.VariableScope,
+	scope directive.Scope,
 	secret bool,
 ) {
 	if name == "" {
@@ -61,39 +54,36 @@ func (b *documentBuilder) addScopedVariable(
 		Secret: secret,
 	}
 	switch scope {
-	case restfile.ScopeGlobal:
+	case directive.ScopeGlobal:
 		b.file.globals = append(b.file.globals, variable)
-	case restfile.ScopeFile:
+	case directive.ScopeFile:
 		b.file.vars = append(b.file.vars, variable)
-	case restfile.ScopeRequest:
+	case directive.ScopeRequest:
 		b.ensureRequest(line)
 		b.request.variables = append(b.request.variables, variable)
 	}
 }
 
-func (b *documentBuilder) handleScopedVariableDirective(key, rest string, line int) bool {
-	scopeToken := key
+func (b *documentBuilder) handleScopedVariableDirective(
+	name directive.Name,
+	rest string,
+	line int,
+) bool {
+	scopeToken := name.String()
 	args := rest
-	if key == "var" {
-		scopeToken, args = lexer.SplitFirst(rest)
+	if name == directive.Var {
+		scopeToken, args = directive.CutToken(rest)
 		if scopeToken == "" {
 			return false
 		}
 	}
 
-	scopeStr, secret := dscope.ParseToken(scopeToken)
-	name, value := options.ParseNameValue(args)
-
-	switch scopeStr {
-	case "global":
-		b.addScopedVariable(name, value, line, restfile.ScopeGlobal, secret)
-	case "file":
-		b.addScopedVariable(name, value, line, restfile.ScopeFile, secret)
-	case "request":
-		b.addScopedVariable(name, value, line, restfile.ScopeRequest, secret)
-	default:
+	scope, secret, ok := directive.ParseSecretScope(scopeToken)
+	if !ok {
 		return false
 	}
+	varName, value := directive.ParseNameValue(args)
+	b.addScopedVariable(varName, value, line, scope, secret)
 	return true
 }
 
@@ -106,11 +96,15 @@ func (b *documentBuilder) addConstant(name, value string, line int) {
 	b.file.consts = append(b.file.consts, constant)
 }
 
-func (b *documentBuilder) handleConstDirective(line int, key, rest string) bool {
-	if key != "const" {
+func (b *documentBuilder) handleConstDirective(
+	line int,
+	name directive.Name,
+	rest string,
+) bool {
+	if name != directive.Const {
 		return false
 	}
-	if name, value := options.ParseNameValue(rest); name != "" {
+	if name, value := directive.ParseNameValue(rest); name != "" {
 		b.addConstant(name, value, line)
 	}
 	return true

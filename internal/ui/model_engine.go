@@ -26,7 +26,7 @@ func (m *Model) runCfg(opts httpclient.Options) engine.Config {
 		EnvironmentName:       m.cfg.EnvironmentName,
 		EnvironmentFile:       m.cfg.EnvironmentFile,
 		AllowInteractiveOAuth: true,
-		HTTPOptions:           m.resolveHTTPOptions(opts),
+		HTTPOptions:           opts,
 		GRPCOptions:           m.grpcOptions,
 		History:               m.historyStore(),
 		SSHManager:            m.sshManager(),
@@ -57,6 +57,67 @@ func (m *Model) requestSvc(opts httpclient.Options) *rqeng.Engine {
 	return m.rq
 }
 
+type requestRunner interface {
+	ExecuteWith(
+		doc *restfile.Document,
+		req *restfile.Request,
+		env string,
+		opt rqeng.ExecOptions,
+	) (engine.RequestResult, error)
+}
+
+// This wrapper turns engine callbacks into UI updates. A profile, compare, or
+// workflow run shares one wrapper so repeated warnings are only shown once.
+type uiRequestEngine struct {
+	*rqeng.Engine
+	model *Model
+	seen  map[string]struct{}
+}
+
+func (e *uiRequestEngine) ExecuteWith(
+	doc *restfile.Document,
+	req *restfile.Request,
+	env string,
+	opt rqeng.ExecOptions,
+) (engine.RequestResult, error) {
+	nextWarning := opt.OnWarning
+	opt.OnWarning = func(warning rqeng.Warning) {
+		if nextWarning != nil {
+			nextWarning(warning)
+		}
+		e.queueWarning(string(warning))
+	}
+	opt.AttachSSE = e.model.attachSSEHandle
+	opt.AttachWS = e.model.attachWebSocketHandle
+	opt.AttachGRPC = e.model.attachGRPCSession
+	return e.Engine.ExecuteWith(doc, req, env, opt)
+}
+
+// Engine warnings only. Parse warnings have their own status bar segment, and
+// sending them here as well would show them twice and lose the progress text.
+func (e *uiRequestEngine) queueWarning(text string) {
+	if text == "" {
+		return
+	}
+	if e.seen == nil {
+		e.seen = make(map[string]struct{})
+	}
+	if _, seen := e.seen[text]; seen {
+		return
+	}
+	e.seen[text] = struct{}{}
+
+	emitQueuedMsg(e.model.runMsgChan, runWarningMsg{text: text})
+}
+
+func (m *Model) runRequestSvc(opts httpclient.Options) *uiRequestEngine {
+	rq := m.requestSvc(opts)
+	if rq == nil {
+		return nil
+	}
+	return &uiRequestEngine{Engine: rq, model: m}
+}
+
 func (m *Model) runMsg(fn func(context.Context) tea.Msg) tea.Cmd {
 	if fn == nil {
 		return nil
@@ -78,15 +139,9 @@ func (m *Model) execRunReq(
 	xs ...map[string]string,
 ) tea.Cmd {
 	if err := docErr(doc); err != nil {
-		return func() tea.Msg {
-			return responseMsg{
-				err:         err,
-				executed:    cloneRequest(req),
-				environment: env,
-			}
-		}
+		return responseErrCmd(err, req, env)
 	}
-	rq := m.requestSvc(opts)
+	rq := m.runRequestSvc(opts)
 	if rq == nil {
 		return nil
 	}
@@ -94,13 +149,10 @@ func (m *Model) execRunReq(
 	gen := m.latencySeries.generation()
 	return m.runMsg(func(ctx context.Context) tea.Msg {
 		res, err := rq.ExecuteWith(doc, req, env, rqeng.ExecOptions{
-			Extra:      x,
-			Values:     copyRunValues(vals),
-			Record:     true,
-			Ctx:        ctx,
-			AttachSSE:  m.attachSSEHandle,
-			AttachWS:   m.attachWebSocketHandle,
-			AttachGRPC: m.attachGRPCSession,
+			Extra:  x,
+			Values: copyRunValues(vals),
+			Record: true,
+			Ctx:    ctx,
 		})
 		return runReqMsg{res: res, err: err, latGen: gen}
 	})

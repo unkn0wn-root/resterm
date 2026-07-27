@@ -72,3 +72,25 @@ func streamResp(meta StreamMeta, headers http.Header, body []byte, dur time.Dura
 		Request:        meta.Request,
 	}
 }
+
+// This temporary response lets the UI show an interactive WebSocket before the
+// session closes and its final transcript is available.
+func StreamingWebSocketResponse(meta StreamMeta) *Response {
+	headers := cloneHdr(meta.Headers)
+	if headers == nil {
+		headers = make(http.Header)
+	}
+	headers.Set(StreamHeaderType, "websocket")
+	headers.Set(StreamHeaderSummary, "streaming")
+
+	if meta.Status == "" {
+		meta.Status = webSocketSwitchingProtocolsStatus
+	}
+	if meta.StatusCode == 0 {
+		meta.StatusCode = http.StatusSwitchingProtocols
+	}
+	if meta.Proto == "" {
+		meta.Proto = "HTTP/1.1"
+	}
+	return streamResp(meta, headers, nil, 0)
+}

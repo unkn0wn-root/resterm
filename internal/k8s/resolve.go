@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/connprofile"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	k8starget "github.com/unkn0wn-root/resterm/internal/k8s/target"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -83,14 +84,14 @@ func resolveNamedProfile(
 	globalProfiles []restfile.K8sProfile,
 	name string,
 ) (restfile.K8sProfile, bool) {
-	sf := func(p restfile.K8sProfile) restfile.K8sScope { return p.Scope }
+	sf := func(p restfile.K8sProfile) directive.Scope { return p.Scope }
 	nf := func(p restfile.K8sProfile) string { return p.Name }
 	p, ok := restfile.ResolveNamedScoped(
 		fileProfiles,
 		globalProfiles,
 		name,
-		restfile.K8sScopeFile,
-		restfile.K8sScopeGlobal,
+		directive.ScopeFile,
+		directive.ScopeGlobal,
 		sf,
 		nf,
 	)

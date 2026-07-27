@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -20,7 +22,7 @@ func TestRunRTSApplyPatch(t *testing.T) {
 			"X-Keep": []string{"keep"},
 		},
 		Variables: []restfile.Variable{
-			{Name: "old", Value: "x", Scope: restfile.ScopeRequest},
+			{Name: "old", Value: "x", Scope: directive.ScopeRequest},
 		},
 		LineRange: restfile.LineRange{Start: 1, End: 4},
 		Metadata: restfile.RequestMetadata{
@@ -33,8 +35,10 @@ func TestRunRTSApplyPatch(t *testing.T) {
 	}
 	vars := map[string]string{"existing": "1"}
 
-	if err := model.runRTSApply(context.Background(), nil, req, "", "", vars, nil); err != nil {
-		t.Fatalf("runRTSApply: %v", err)
+	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
+		context.Background(), nil, req, "", "", vars, nil,
+	); err != nil {
+		t.Fatalf("ApplyPatches: %v", err)
 	}
 
 	if req.Method != "POST" {
@@ -120,7 +124,7 @@ func TestRunRTSApplyOrder(t *testing.T) {
 		},
 	}
 
-	if err := model.runRTSApply(
+	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
 		context.Background(),
 		nil,
 		req,
@@ -129,7 +133,7 @@ func TestRunRTSApplyOrder(t *testing.T) {
 		map[string]string{},
 		nil,
 	); err != nil {
-		t.Fatalf("runRTSApply: %v", err)
+		t.Fatalf("ApplyPatches: %v", err)
 	}
 	if got := req.Headers.Get("X-Test"); got != "1" {
 		t.Fatalf("expected X-Test header 1, got %q", got)
@@ -159,8 +163,10 @@ func TestRunRTSApplyClearsAuthAndDeletesSetting(t *testing.T) {
 		},
 	}
 
-	if err := m.runRTSApply(context.Background(), nil, req, "", "", nil, nil); err != nil {
-		t.Fatalf("runRTSApply: %v", err)
+	if err := m.requestSvc(httpclient.Options{}).ApplyPatches(
+		context.Background(), nil, req, "", "", nil, nil,
+	); err != nil {
+		t.Fatalf("ApplyPatches: %v", err)
 	}
 	if req.Metadata.Auth != nil {
 		t.Fatalf("expected auth to be cleared")
@@ -185,8 +191,10 @@ func TestRunRTSApplyTemplatedURLQuery(t *testing.T) {
 		},
 	}
 
-	if err := model.runRTSApply(context.Background(), nil, req, "", "", nil, nil); err != nil {
-		t.Fatalf("runRTSApply: %v", err)
+	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
+		context.Background(), nil, req, "", "", nil, nil,
+	); err != nil {
+		t.Fatalf("ApplyPatches: %v", err)
 	}
 	if !strings.Contains(req.URL, "{{host}}") {
 		t.Fatalf("expected template to be preserved, got %q", req.URL)
@@ -222,8 +230,10 @@ func TestRunRTSApplyTemplatedQueryPreservesTemplate(t *testing.T) {
 		},
 	}
 
-	if err := model.runRTSApply(context.Background(), nil, req, "", "", nil, nil); err != nil {
-		t.Fatalf("runRTSApply: %v", err)
+	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
+		context.Background(), nil, req, "", "", nil, nil,
+	); err != nil {
+		t.Fatalf("ApplyPatches: %v", err)
 	}
 	if !strings.Contains(req.URL, "{{= helpers.mode(env) }}") {
 		t.Fatalf("expected template to be preserved, got %q", req.URL)
@@ -242,7 +252,7 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 		Path: "/tmp/patches.http",
 		Patches: []restfile.PatchProfile{
 			{
-				Scope:      restfile.PatchScopeFile,
+				Scope:      directive.ScopeFile,
 				Name:       "jsonApi",
 				Expression: `{method: "post", headers: {"X-From": "file"}}`,
 				Line:       1,
@@ -254,12 +264,12 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 		Path: "/tmp/other.http",
 		Patches: []restfile.PatchProfile{
 			{
-				Scope:      restfile.PatchScopeGlobal,
+				Scope:      directive.ScopeGlobal,
 				Name:       "jsonApi",
 				Expression: `{method: "delete", headers: {"X-From": "global"}}`,
 			},
 			{
-				Scope:      restfile.PatchScopeGlobal,
+				Scope:      directive.ScopeGlobal,
 				Name:       "authProd",
 				Expression: `{headers: {"Authorization": "Bearer abc"}}`,
 			},
@@ -278,8 +288,10 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 		},
 	}
 
-	if err := m.runRTSApply(context.Background(), doc, req, "", "", nil, nil); err != nil {
-		t.Fatalf("runRTSApply: %v", err)
+	if err := m.requestSvc(httpclient.Options{}).ApplyPatches(
+		context.Background(), doc, req, "", "", nil, nil,
+	); err != nil {
+		t.Fatalf("ApplyPatches: %v", err)
 	}
 	if req.Method != "POST" {
 		t.Fatalf("expected file patch to win and set method POST, got %q", req.Method)
@@ -307,7 +319,9 @@ func TestRunRTSApplyUseMissingProfile(t *testing.T) {
 		},
 	}
 
-	err := m.runRTSApply(context.Background(), nil, req, "", "", nil, nil)
+	err := m.requestSvc(httpclient.Options{}).ApplyPatches(
+		context.Background(), nil, req, "", "", nil, nil,
+	)
 	if err == nil {
 		t.Fatalf("expected missing profile error")
 	}

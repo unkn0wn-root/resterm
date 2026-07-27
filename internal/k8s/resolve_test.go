@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -27,7 +28,7 @@ func TestResolveUseMissingWithInline(t *testing.T) {
 func TestResolveUseInvalidProfileReportsDefinitionError(t *testing.T) {
 	spec := &restfile.K8sSpec{Use: "cluster-api"}
 	globalProfiles := []restfile.K8sProfile{{
-		Scope:   restfile.K8sScopeGlobal,
+		Scope:   directive.ScopeGlobal,
 		Name:    "cluster-api",
 		Line:    1,
 		Invalid: true,
@@ -74,7 +75,7 @@ func TestResolveUseWithInlineOverrides(t *testing.T) {
 	}
 	fileProfiles := []restfile.K8sProfile{
 		{
-			Scope:     restfile.K8sScopeFile,
+			Scope:     directive.ScopeFile,
 			Name:      "api",
 			Namespace: "dev",
 			Pod:       "api-0",
@@ -148,7 +149,7 @@ func TestResolvePrefersFileScopeProfile(t *testing.T) {
 	spec := &restfile.K8sSpec{Use: "api"}
 	fileProfiles := []restfile.K8sProfile{
 		{
-			Scope:   restfile.K8sScopeFile,
+			Scope:   directive.ScopeFile,
 			Name:    "api",
 			Pod:     "file-pod",
 			Port:    8080,
@@ -157,7 +158,7 @@ func TestResolvePrefersFileScopeProfile(t *testing.T) {
 	}
 	globalProfiles := []restfile.K8sProfile{
 		{
-			Scope:   restfile.K8sScopeGlobal,
+			Scope:   directive.ScopeGlobal,
 			Name:    "api",
 			Pod:     "global-pod",
 			Port:    8080,
@@ -184,7 +185,7 @@ func TestResolveInlinePodClearsBaseNonPodTarget(t *testing.T) {
 	}
 	fileProfiles := []restfile.K8sProfile{
 		{
-			Scope:   restfile.K8sScopeFile,
+			Scope:   directive.ScopeFile,
 			Name:    "api",
 			Target:  "service:api",
 			PortStr: "http",
@@ -212,7 +213,7 @@ func TestResolveInlineTargetPodOverridesBasePod(t *testing.T) {
 	}
 	fileProfiles := []restfile.K8sProfile{
 		{
-			Scope:   restfile.K8sScopeFile,
+			Scope:   directive.ScopeFile,
 			Name:    "api",
 			Pod:     "api-0",
 			PortStr: "8080",

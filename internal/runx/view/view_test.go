@@ -71,11 +71,6 @@ func TestRenderHTTPPrettyUsesTrackedUnresolvedVarsAndEffectiveTarget(t *testing.
 			},
 		}},
 	}
-	rep.Results[0].SetRequestText(strings.Join([]string{
-		"GET {{services.api.base}}/reports",
-		"X-API-Key: {{reporting.apiKey}}",
-		"X-Shared-Secret: {{reporting.sharedSecret}}",
-	}, "\n"))
 	rep.Results[0].SetUnresolvedTemplateVars([]string{"reporting.token"})
 
 	out, err := Render(rep, Options{Mode: ModePretty})

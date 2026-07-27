@@ -320,8 +320,8 @@ func (c *Client) CompleteWebSocket(
 		headers = make(http.Header)
 	}
 	headers.Set("Content-Type", streamContentTypeJSON)
-	headers.Set(streamHeaderType, "websocket")
-	headers.Set(streamHeaderSummary, fmt.Sprintf(
+	headers.Set(StreamHeaderType, "websocket")
+	headers.Set(StreamHeaderSummary, fmt.Sprintf(
 		"sent=%d recv=%d closed=%s",
 		transcript.Summary.SentCount,
 		transcript.Summary.ReceivedCount,

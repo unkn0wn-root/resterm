@@ -3,6 +3,8 @@ package intellisense
 import (
 	"strings"
 	"unicode"
+
+	"github.com/unkn0wn-root/resterm/internal/directive"
 )
 
 type Kind int
@@ -114,26 +116,28 @@ func analyzeDirectiveArea(area []rune) (Context, bool) {
 		return Context{Kind: KindDirective}, true
 	}
 
-	firstSpace := -1
+	// A colon ends the name the same way a space does. Parse takes both, so
+	// "@auth:bea" has to complete like "@auth bea".
+	sep := -1
 	for i, r := range area {
-		if unicode.IsSpace(r) {
-			firstSpace = i
+		if directive.IsArgSep(r) {
+			sep = i
 			break
 		}
 		if !isQueryRune(r) {
 			return Context{}, false
 		}
 	}
-	if firstSpace == -1 {
+	if sep == -1 {
 		return Context{Kind: KindDirective, Query: strings.ToLower(string(area))}, true
 	}
-	if firstSpace == 0 {
+	if sep == 0 {
 		return Context{}, false
 	}
 
-	base := strings.ToLower(string(area[:firstSpace]))
+	base := strings.ToLower(string(area[:sep]))
 
-	start, token, ok := splitToken(area, skipSpaces(area, firstSpace))
+	start, token, ok := splitToken(area, skipArgSep(area, sep))
 	if !ok {
 		return Context{}, false
 	}
@@ -310,9 +314,9 @@ func splitValueToken(token []rune) (key, value string, ok bool) {
 	return "", "", false
 }
 
-func skipSpaces(area []rune, start int) int {
+func skipArgSep(area []rune, start int) int {
 	for start < len(area) {
-		if !unicode.IsSpace(area[start]) {
+		if !directive.IsArgSep(area[start]) {
 			return start
 		}
 		start++

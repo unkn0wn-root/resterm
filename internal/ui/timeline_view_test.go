@@ -53,21 +53,6 @@ func TestBuildTimelineReportBudgets(t *testing.T) {
 	}
 }
 
-func TestCloneTraceSpecIndependence(t *testing.T) {
-	src := &restfile.TraceSpec{Enabled: true}
-	src.Budgets.Total = time.Second
-	src.Budgets.Phases = map[string]time.Duration{"dns": 10 * time.Millisecond}
-
-	clone := cloneTraceSpec(src)
-	if clone == nil {
-		t.Fatalf("expected clone to be created")
-	}
-	clone.Budgets.Phases["dns"] = 20 * time.Millisecond
-	if src.Budgets.Phases["dns"] != 10*time.Millisecond {
-		t.Fatalf("expected original map to remain unchanged, got %s", src.Budgets.Phases["dns"])
-	}
-}
-
 func TestRenderTimelineSuggestsBudgetsWhenMissing(t *testing.T) {
 	tl := &nettrace.Timeline{
 		Duration: 100 * time.Millisecond,

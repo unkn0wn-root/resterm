@@ -206,9 +206,9 @@ func CompleteSSE(handle *StreamHandle) (*Response, error) {
 		headers = make(http.Header)
 	}
 	headers.Set("Content-Type", streamContentTypeJSON)
-	headers.Set(streamHeaderType, "sse")
+	headers.Set(StreamHeaderType, "sse")
 	headers.Set(
-		streamHeaderSummary,
+		StreamHeaderSummary,
 		fmt.Sprintf(
 			"events=%d bytes=%d reason=%s",
 			transcript.Summary.EventCount,

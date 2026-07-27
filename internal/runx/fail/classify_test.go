@@ -134,18 +134,16 @@ func TestFromErrorTypedFailures(t *testing.T) {
 	}
 }
 
-func TestCatalogCoversKnownCodes(t *testing.T) {
-	for _, code := range KnownCodes() {
-		m, ok := Lookup(code)
-		if !ok {
-			t.Fatalf("missing catalog entry for %q", code)
-		}
-		if m.Category == "" || m.ExitCode == 0 || m.Rank < 0 {
-			t.Fatalf("incomplete catalog entry for %q: %+v", code, m)
+// Every catalog entry has to be complete and New has to agree with it. A new
+// code added with a missing field would otherwise surface as exit status 0.
+func TestCatalogEntriesAreComplete(t *testing.T) {
+	for code, meta := range catalog {
+		if meta.Category == "" || meta.ExitCode == 0 || meta.Rank < 0 {
+			t.Fatalf("incomplete catalog entry for %q: %+v", code, meta)
 		}
 		got := New(code, "message", "source")
-		if got.Code != code || got.Category != m.Category || got.ExitCode != m.ExitCode {
-			t.Fatalf("New(%q) = %+v, want catalog %+v", code, got, m)
+		if got.Code != code || got.Category != meta.Category || got.ExitCode != meta.ExitCode {
+			t.Fatalf("New(%q) = %+v, want catalog %+v", code, got, meta)
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/analysis"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -19,9 +20,7 @@ import (
 
 type profileState struct {
 	id            string
-	core          bool
 	base          *restfile.Request
-	doc           *restfile.Document
 	options       httpclient.Options
 	spec          restfile.ProfileSpec
 	total         int
@@ -51,10 +50,6 @@ type profileFailure struct {
 	Duration   time.Duration
 }
 
-func (s *profileState) matches(req *restfile.Request) bool {
-	return s != nil && s.current != nil && req != nil && s.current == req
-}
-
 func (s *profileState) successCount() int {
 	return len(s.successes)
 }
@@ -72,7 +67,6 @@ func (s *profileState) failureCount() int {
 func profileStateFromPlan(
 	pl *core.ProfilePlan,
 	opts httpclient.Options,
-	useCore bool,
 	msgBase string,
 ) *profileState {
 	if pl == nil {
@@ -80,9 +74,7 @@ func profileStateFromPlan(
 	}
 	return &profileState{
 		id:          strings.TrimSpace(pl.Run.ID),
-		core:        useCore,
-		base:        cloneRequest(pl.Request),
-		doc:         pl.Doc,
+		base:        pl.Request.Clone(),
 		options:     opts,
 		spec:        pl.Spec,
 		total:       pl.Total,
@@ -123,40 +115,23 @@ func (m *Model) startProfileRun(
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-	state := profileStateFromPlan(pl, options, true, msgBase)
+	state := profileStateFromPlan(pl, options, msgBase)
 	state.latGen = m.latencySeries.generation()
-	if requestNeedsUIDrivenRun(req) {
-		state.core = false
-		return m.startProfileUIDrivenState(state)
-	}
 	return m.startProfileCoreRun(pl, state)
-}
-
-func (m *Model) startProfileUIDrivenState(state *profileState) tea.Cmd {
-	if state == nil {
-		return nil
-	}
-	m.profileRun = state
-	spin := m.startSending()
-	m.statusPulseBase = strings.TrimSpace(profileProgressLabel(state))
-	m.statusPulseFrame = 0
-	execCmd := m.executeProfileIteration()
-	pulse := m.startStatusPulse()
-	return batchCmds([]tea.Cmd{execCmd, pulse, spin})
 }
 
 func (m *Model) startProfileCoreRun(pl *core.ProfilePlan, state *profileState) tea.Cmd {
 	if pl == nil || state == nil {
 		return nil
 	}
-	rq := m.requestSvc(state.options)
+	rq := m.runRequestSvc(state.options)
 	if rq == nil {
 		return nil
 	}
 	m.profileRun = state
 	m.statusPulseFrame = 0
 	if state.total > 0 {
-		state.current = cloneRequest(state.base)
+		state.current = state.base.Clone()
 		m.currentRequest = state.current
 		if state.index >= state.warmup && state.measuredStart.IsZero() {
 			state.measuredStart = time.Now()
@@ -173,42 +148,13 @@ func (m *Model) startProfileCoreRun(pl *core.ProfilePlan, state *profileState) t
 	return batchCmds([]tea.Cmd{worker, pulse, spin})
 }
 
-func (m *Model) executeProfileIteration() tea.Cmd {
-	state := m.profileRun
-	if state == nil || state.canceled || state.index >= state.total {
-		return nil
-	}
-
-	iterationReq := cloneRequest(state.base)
-	state.current = iterationReq
-	m.currentRequest = iterationReq
-
-	if state.index >= state.warmup && state.measuredStart.IsZero() {
-		state.measuredStart = time.Now()
-	}
-
-	progressText := profileProgressLabel(state)
-	m.statusPulseBase = progressText
-	m.showProfileProgress(state)
-
-	return m.executeRequestGen(state.latGen, state.doc, iterationReq, state.options, "", nil)
-}
-
-func (m *Model) handleProfileUIDrivenResponse(msg responseMsg) tea.Cmd {
-	state := m.profileRun
-	if state == nil {
-		return nil
-	}
-	return m.consumeProfileResult(state, msg, time.Time{})
-}
-
 func (m *Model) handleProfileRunEvt(evt core.Evt) tea.Cmd {
 	state := m.profileRun
-	if state == nil || !state.core || evt == nil {
+	if state == nil || evt == nil {
 		return nil
 	}
 	meta := core.MetaOf(evt)
-	if state.id != "" && meta.Run.ID != "" && state.id != meta.Run.ID {
+	if runIDMismatch(state.id, meta.Run.ID) {
 		return nil
 	}
 	switch v := evt.(type) {
@@ -228,7 +174,7 @@ func (m *Model) handleProfileIterStart(state *profileState, evt core.ProIterStar
 	if state == nil {
 		return nil
 	}
-	state.current = cloneRequest(evt.Request)
+	state.current = evt.Request.Clone()
 	m.currentRequest = state.current
 	if !evt.Iter.Warmup && state.measuredStart.IsZero() {
 		state.measuredStart = evt.Meta.At
@@ -365,21 +311,7 @@ func (m *Model) consumeProfileResult(
 		progressText := profileProgressLabel(state)
 		m.statusPulseBase = progressText
 		m.setStatusMessage(statusMsg{text: progressText, level: statusInfo})
-		if state.core {
-			return nil
-		}
-		spin := m.startSending()
-		if state.delay > 0 {
-			next := tea.Tick(
-				state.delay,
-				func(time.Time) tea.Msg { return profileNextIterationMsg{} },
-			)
-			pulse := m.startStatusPulse()
-			return batchCmds([]tea.Cmd{next, pulse, spin})
-		}
-		exec := m.executeProfileIteration()
-		pulse := m.startStatusPulse()
-		return batchCmds([]tea.Cmd{exec, pulse, spin})
+		return nil
 	}
 
 	return m.finalizeProfileRun(msg, state)
@@ -997,7 +929,7 @@ func (m *Model) buildProfileHistoryEntry(
 
 	secrets := m.secretValuesForRedaction(req)
 	mask := !req.Metadata.AllowSensitiveHeaders
-	text := redactHistoryText(renderRequestText(req), secrets, mask)
+	text := redactHistoryText(rqeng.RenderRequestText(req), secrets, mask)
 	status, code := profileHistoryStatus(st, msg)
 	now := time.Now()
 	dur := time.Duration(0)

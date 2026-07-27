@@ -11,9 +11,7 @@ import (
 
 	"golang.org/x/net/http/httpguts"
 
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/value"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/util"
 )
@@ -44,9 +42,13 @@ type mockBuilder struct {
 	delimLine            int
 }
 
-func (b *documentBuilder) handleMockDirective(line int, key, raw string) bool {
-	switch key {
-	case "mock":
+func (b *documentBuilder) handleMockDirective(
+	line int,
+	name directive.Name,
+	raw string,
+) bool {
+	switch name {
+	case directive.Mock:
 		if b.inRequest {
 			b.addMockError(line, "@mock must start a new block after a ### separator")
 			return true
@@ -57,8 +59,8 @@ func (b *documentBuilder) handleMockDirective(line int, key, raw string) bool {
 		}
 		b.startMock(line, raw)
 		return true
-	case "match", "expect":
-		b.addMockError(line, "@"+key+" must follow an @mock directive")
+	case directive.Match, directive.Expect:
+		b.addMockError(line, name.Tag()+" must follow an @mock directive")
 		return true
 	default:
 		return false
@@ -66,7 +68,7 @@ func (b *documentBuilder) handleMockDirective(line int, key, raw string) bool {
 }
 
 func (b *documentBuilder) startMock(line int, raw string) {
-	vals := options.Parse(raw)
+	vals := directive.ParseOptions(raw)
 	for _, key := range util.SortedKeys(vals) {
 		switch key {
 		case "method", "path", "name", "sequence", "sequence-key", "default", "latency", "interpolate":
@@ -105,7 +107,7 @@ func (b *documentBuilder) startMock(line int, raw string) {
 	}
 
 	if raw, ok := vals["default"]; ok {
-		if v, ok := value.ParseBool(raw); ok {
+		if v, ok := directive.ParseBool(raw); ok {
 			m.isDefault = v
 		} else {
 			b.addMockError(line, "@mock default must be true or false")
@@ -120,7 +122,7 @@ func (b *documentBuilder) startMock(line int, raw string) {
 		}
 	}
 	if raw, ok := vals["interpolate"]; ok {
-		if v, ok := value.ParseBool(raw); ok {
+		if v, ok := directive.ParseBool(raw); ok {
 			m.disableInterpolation = !v
 		} else {
 			b.addMockError(line, "@mock interpolate must be true or false")
@@ -187,19 +189,22 @@ func (m *mockBuilder) parsePreamble(b *documentBuilder, line int, s string) {
 		return
 	}
 	if text, _, ok := stripComment(s); ok {
-		if !strings.HasPrefix(text, "@") {
+		call, ok := directive.Parse(text)
+		if !ok {
 			return
 		}
-		key, raw := lexer.SplitDirective(strings.TrimSpace(text[1:]))
 		switch {
-		case key == "match" && len(m.responses) == 0:
-			m.addMatch(b, line, raw)
-		case key == "expect" && len(m.responses) == 0:
-			m.addExpectation(b, line, raw)
-		case key == "match" || key == "expect":
-			b.addMockError(line, "@"+key+" must be declared before the first sequence response")
+		case call.Name == directive.Match && len(m.responses) == 0:
+			m.addMatch(b, line, call.Args)
+		case call.Name == directive.Expect && len(m.responses) == 0:
+			m.addExpectation(b, line, call.Args)
+		case call.Name == directive.Match || call.Name == directive.Expect:
+			b.addMockError(line, call.Name.Tag()+" must be declared before the first sequence response")
 		default:
-			b.addMockError(line, fmt.Sprintf("directive @%s is not valid before a mock response", key))
+			b.addMockError(
+				line,
+				fmt.Sprintf("directive %s is not valid before a mock response", call.Spelling.Tag()),
+			)
 		}
 		return
 	}
@@ -234,7 +239,7 @@ func (m *mockBuilder) addHeader(b *documentBuilder, ln int, line string) {
 }
 
 func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
-	vals := options.Parse(raw)
+	vals := directive.ParseOptions(raw)
 	for _, key := range util.SortedKeys(vals) {
 		switch key {
 		case "query", "headers", "json":
@@ -260,7 +265,7 @@ func (m *mockBuilder) addMatch(b *documentBuilder, line int, raw string) {
 }
 
 func (m *mockBuilder) addExpectation(b *documentBuilder, line int, raw string) {
-	vals := options.Parse(raw)
+	vals := directive.ParseOptions(raw)
 	for _, key := range util.SortedKeys(vals) {
 		if key != "calls" {
 			b.addMockError(line, fmt.Sprintf("unknown @expect option %q", key))

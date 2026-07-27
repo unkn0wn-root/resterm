@@ -22,8 +22,6 @@ type tabSpinMsg struct {
 
 type latAnimMsg struct{}
 
-type profileNextIterationMsg struct{}
-
 type updateTickMsg struct{}
 
 type statusLevel int
@@ -118,4 +116,10 @@ type runEvtMsg struct {
 type runWorkerDoneMsg struct {
 	runID string
 	err   error
+}
+
+// A warning the engine raised while running. The engine works off the UI
+// goroutine, so it hands these to the run queue instead of touching the model.
+type runWarningMsg struct {
+	text string
 }

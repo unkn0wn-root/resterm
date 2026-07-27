@@ -112,32 +112,7 @@ func (s *rtsRuneStyler) StylesForLine(line []rune, idx int) []lipgloss.Style {
 }
 
 func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
-	var (
-		styles []lipgloss.Style
-		styled bool
-	)
-
-	ensureStyles := func() {
-		if !styled {
-			styles = make([]lipgloss.Style, len(line))
-			styled = true
-		}
-	}
-	paint := func(start, end int, style lipgloss.Style) {
-		if start < 0 {
-			start = 0
-		}
-		if end > len(line) {
-			end = len(line)
-		}
-		if start >= end {
-			return
-		}
-		ensureStyles()
-		for j := start; j < end; j++ {
-			styles[j] = style
-		}
-	}
+	p := &stylePainter{n: len(line)}
 
 	var quote rune
 	wantFn := false
@@ -146,11 +121,11 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 
 		if quote != 0 {
 			if s.stringEnabled {
-				paint(i, i+1, s.stringStyle)
+				p.paint(i, i+1, s.stringStyle)
 			}
 			if ch == '\\' && i+1 < len(line) {
 				if s.stringEnabled {
-					paint(i+1, i+2, s.stringStyle)
+					p.paint(i+1, i+2, s.stringStyle)
 				}
 				i += 2
 				continue
@@ -169,7 +144,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 		if ch == '"' || ch == '\'' {
 			quote = ch
 			if s.stringEnabled {
-				paint(i, i+1, s.stringStyle)
+				p.paint(i, i+1, s.stringStyle)
 			}
 			i++
 			continue
@@ -177,7 +152,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 
 		if ch == '#' {
 			if s.commentEnabled {
-				paint(i, len(line), s.commentStyle)
+				p.paint(i, len(line), s.commentStyle)
 			}
 			break
 		}
@@ -191,7 +166,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 			class := rts.KeywordClassOf(token)
 			if class != rts.KeywordNone {
 				if style, ok := s.keywordStyleForClass(class); ok {
-					paint(start, i, style)
+					p.paint(start, i, style)
 				}
 				if token == "fn" {
 					wantFn = true
@@ -204,7 +179,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 			if wantFn || call {
 				style, ok := s.nameStyle(line, start, wantFn)
 				if ok {
-					paint(start, i, style)
+					p.paint(start, i, style)
 				}
 			}
 			wantFn = false
@@ -217,7 +192,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 				i++
 			}
 			if s.numberEnabled {
-				paint(start, i, s.numberStyle)
+				p.paint(start, i, s.numberStyle)
 			}
 			continue
 		}
@@ -225,10 +200,7 @@ func (s *rtsRuneStyler) computeStyles(line []rune) []lipgloss.Style {
 		i++
 	}
 
-	if !styled {
-		return nil
-	}
-	return styles
+	return p.styles
 }
 
 func (s *rtsRuneStyler) nameStyle(

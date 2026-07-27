@@ -3,6 +3,7 @@ package parser
 import (
 	"errors"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	k8sbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/k8s"
 	sshbuilder "github.com/unkn0wn-root/resterm/internal/parser/builder/ssh"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
@@ -10,12 +11,12 @@ import (
 
 func (b *documentBuilder) handleSSH(line int, rest string) {
 	res, err := sshbuilder.ParseDirective(rest)
-	if err != nil {
-		b.addError(line, err.Error())
+	b.addErrors(line, err)
+	if fatalErr(err) {
 		return
 	}
 
-	if res.Scope == restfile.SSHScopeRequest {
+	if res.Scope == directive.ScopeRequest {
 		b.ensureRequest(line)
 		if b.request.k8s != nil {
 			b.addError(line, "@ssh cannot be combined with @k8s on the same request")
@@ -32,7 +33,7 @@ func (b *documentBuilder) handleSSH(line int, rest string) {
 		return
 	}
 
-	if res.Scope == restfile.SSHScopeGlobal || res.Scope == restfile.SSHScopeFile {
+	if res.Scope == directive.ScopeGlobal || res.Scope == directive.ScopeFile {
 		res.Profile.Scope = res.Scope
 		b.file.ssh = append(b.file.ssh, res.Profile)
 	}
@@ -40,8 +41,8 @@ func (b *documentBuilder) handleSSH(line int, rest string) {
 
 func (b *documentBuilder) handleK8s(line int, rest string) {
 	res, err := k8sbuilder.ParseDirective(rest)
-	if err != nil {
-		b.addError(line, err.Error())
+	b.addErrors(line, err)
+	if fatalErr(err) {
 		var dirErr *k8sbuilder.DirectiveError
 		if errors.As(err, &dirErr) {
 			b.addInvalidK8sProfile(line, dirErr.Profile, err.Error())
@@ -49,7 +50,7 @@ func (b *documentBuilder) handleK8s(line int, rest string) {
 		return
 	}
 
-	if res.Scope == restfile.K8sScopeRequest {
+	if res.Scope == directive.ScopeRequest {
 		b.ensureRequest(line)
 		if b.request.ssh != nil {
 			b.addError(line, "@k8s cannot be combined with @ssh on the same request")
@@ -66,7 +67,7 @@ func (b *documentBuilder) handleK8s(line int, rest string) {
 		return
 	}
 
-	if res.Scope == restfile.K8sScopeGlobal || res.Scope == restfile.K8sScopeFile {
+	if res.Scope == directive.ScopeGlobal || res.Scope == directive.ScopeFile {
 		res.Profile.Scope = res.Scope
 		res.Profile.Line = line
 		b.file.k8s = append(b.file.k8s, res.Profile)
@@ -78,7 +79,7 @@ func (b *documentBuilder) addInvalidK8sProfile(
 	prof restfile.K8sProfile,
 	message string,
 ) {
-	if prof.Scope != restfile.K8sScopeGlobal && prof.Scope != restfile.K8sScopeFile {
+	if prof.Scope != directive.ScopeGlobal && prof.Scope != directive.ScopeFile {
 		return
 	}
 	prof.Line = line
@@ -87,16 +88,24 @@ func (b *documentBuilder) addInvalidK8sProfile(
 	b.file.k8s = append(b.file.k8s, prof)
 }
 
-func (b *documentBuilder) handleSSHDirective(line int, key, rest string) bool {
-	if key != "ssh" {
+func (b *documentBuilder) handleSSHDirective(
+	line int,
+	name directive.Name,
+	rest string,
+) bool {
+	if name != directive.SSH {
 		return false
 	}
 	b.handleSSH(line, rest)
 	return true
 }
 
-func (b *documentBuilder) handleK8sDirective(line int, key, rest string) bool {
-	if key != "k8s" {
+func (b *documentBuilder) handleK8sDirective(
+	line int,
+	name directive.Name,
+	rest string,
+) bool {
+	if name != directive.K8s {
 		return false
 	}
 	b.handleK8s(line, rest)

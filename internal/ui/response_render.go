@@ -680,23 +680,6 @@ type bodyViews struct {
 	ct        string
 }
 
-func buildBodyViews(
-	body []byte,
-	contentType string,
-	meta *binaryview.Meta,
-	viewBody []byte,
-	viewContentType string,
-) bodyViews {
-	return defaultResponseRenderer().buildBodyViewsCtx(
-		context.Background(),
-		body,
-		contentType,
-		meta,
-		viewBody,
-		viewContentType,
-	)
-}
-
 func (r responseRenderer) buildBodyViewsCtx(
 	ctx context.Context,
 	body []byte,

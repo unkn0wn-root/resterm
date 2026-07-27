@@ -14,6 +14,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/history"
@@ -30,25 +31,6 @@ type responseLoadingTickMsg struct{}
 
 func (m *Model) handleResponseMessage(msg responseMsg) tea.Cmd {
 	m.recordResponseLatency(msg)
-
-	if state := m.compareRun; state != nil {
-		if !state.core &&
-			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
-			return m.handleCompareUIDrivenResponse(msg)
-		}
-	}
-	if state := m.workflowRun; state != nil {
-		if !state.core &&
-			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
-			return m.handleWorkflowUIDrivenResponse(msg)
-		}
-	}
-	if state := m.profileRun; state != nil {
-		if !state.core &&
-			(state.matches(msg.executed) || (msg.executed == nil && state.current != nil)) {
-			return m.handleProfileUIDrivenResponse(msg)
-		}
-	}
 
 	m.lastError = nil
 	m.testResults = msg.tests
@@ -469,7 +451,7 @@ func (m *Model) consumeHTTPResponse(
 	m.abortResponseFormatting()
 
 	var traceSpec *restfile.TraceSpec
-	if cloned := cloneTraceSpec(traceSpecFromRequest(resp.Request)); cloned != nil &&
+	if cloned := traceSpecFromRequest(resp.Request).Clone(); cloned != nil &&
 		cloned.Enabled {
 		traceSpec = cloned
 	}
@@ -965,7 +947,7 @@ func (m *Model) recordSkippedHistory(
 	}
 
 	if strings.TrimSpace(requestText) == "" {
-		requestText = renderRequestText(req)
+		requestText = rqeng.RenderRequestText(req)
 	}
 
 	secrets := m.secretValuesForRedaction(req, extraSecrets...)
@@ -1798,7 +1780,7 @@ func (m *Model) previewRequest(req *restfile.Request) tea.Cmd {
 	if req == nil {
 		return nil
 	}
-	preview := renderRequestText(req)
+	preview := rqeng.RenderRequestText(req)
 	title := strings.TrimSpace(m.statusRequestTitle(m.doc, req, ""))
 	if title == "" {
 		title = requestDisplayName(req)
@@ -2146,7 +2128,7 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 
 	m.loadHistoryDocument(doc, requestText)
 
-	req := cloneRequest(docReq)
+	req := docReq.Clone()
 	m.currentRequest = req
 	m.testResults = nil
 	m.scriptError = nil
@@ -2232,7 +2214,7 @@ func (m *Model) presentHistoryEntry(entry history.Entry, req *restfile.Request) 
 	rep := entry.Trace.Report()
 	traceSpec := traceSpecFromSummary(entry.Trace)
 	if traceSpec == nil {
-		if clone := cloneTraceSpec(traceSpecFromRequest(req)); clone != nil && clone.Enabled {
+		if clone := traceSpecFromRequest(req).Clone(); clone != nil && clone.Enabled {
 			traceSpec = clone
 		}
 	}

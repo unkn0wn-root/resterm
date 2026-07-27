@@ -1,11 +1,13 @@
 package httpclient
 
 import (
-	"strconv"
+	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/diag"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/httpver"
 )
 
@@ -19,13 +21,31 @@ const (
 	optionSettingNoCookies       optionSettingKey = "no-cookies"
 )
 
-// ApplyOptionSettings applies the generic HTTP settings recognized by the client.
-// It validates http-version and returns an error for invalid values.
+// Settings come from a file the user edits, so name the key and what it takes.
+func invalidSetting[K ~string](key K, val, want string) error {
+	msg := fmt.Sprintf("invalid %s %q (use %s)", key, val, want)
+	if strings.TrimSpace(val) == "" {
+		// Nothing was written after the key, which reads as missing rather than
+		// invalid. "@setting insecure" is the usual way to land here.
+		msg = fmt.Sprintf("missing %s value (use %s)", key, want)
+	}
+	return diag.New(diag.ClassProtocol, msg, diag.WithComponent(diag.ComponentHTTP))
+}
+
+func invalidBool(key optionSettingKey, val string) error {
+	return invalidSetting(key, val, "true or false")
+}
+
+// ApplyOptionSettings applies the generic HTTP settings recognized by the client
+// and reports the first value it cannot read.
 func ApplyOptionSettings(opts *Options, settings map[string]string) error {
 	return applyOptionSettings(opts, settings, true)
 }
 
-func applyOptionSettings(opts *Options, settings map[string]string, strictVersion bool) error {
+// A value that does not parse is an error only while the settings are being
+// applied. The send path re-reads values that were validated then, so outside
+// strict mode it keeps what it can read and leaves the rest alone.
+func applyOptionSettings(opts *Options, settings map[string]string, strict bool) error {
 	if opts == nil || len(settings) == 0 {
 		return nil
 	}
@@ -35,47 +55,58 @@ func applyOptionSettings(opts *Options, settings map[string]string, strictVersio
 		return nil
 	}
 
-	if raw, ok := settingValue(norm, httpver.Key); ok {
-		v, ok := httpver.ParseValue(raw)
-		if !ok {
-			if strictVersion {
-				return diag.New(
-					diag.ClassProtocol,
-					"invalid http-version "+strconv.Quote(
-						raw,
-					)+" (use 1.0, 1.1, 2 or HTTP/1.1, HTTP/2)",
-					diag.WithComponent(diag.ComponentHTTP),
-				)
-			}
-		} else {
+	if val, ok := settingValue(norm, httpver.Key); ok {
+		switch v, valid := httpver.ParseValue(val); {
+		case valid:
 			opts.HTTPVersion = v
+		case strict:
+			return invalidSetting(httpver.Key, val, "1.0, 1.1, 2 or HTTP/1.1, HTTP/2")
 		}
 	}
 
-	if value, ok := settingValue(norm, optionSettingTimeout); ok {
-		if dur, err := time.ParseDuration(value); err == nil {
+	if val, ok := settingValue(norm, optionSettingTimeout); ok {
+		switch dur, err := time.ParseDuration(val); {
+		case err == nil:
 			opts.Timeout = dur
+		case strict:
+			return invalidSetting(optionSettingTimeout, val, "a duration such as 30s")
 		}
 	}
 
-	if value, ok := settingValue(norm, optionSettingProxy); ok && strings.TrimSpace(value) != "" {
-		opts.ProxyURL = value
+	// An empty proxy reads as "not set". Anything else has to be a URL the
+	// transport can dial, or it fails much later with a bare dial error.
+	if val, ok := settingValue(norm, optionSettingProxy); ok && strings.TrimSpace(val) != "" {
+		switch u, err := url.Parse(val); {
+		case err == nil && u.Scheme != "" && u.Host != "":
+			opts.ProxyURL = val
+		case strict:
+			return invalidSetting(optionSettingProxy, val, "a URL such as http://host:8080")
+		}
 	}
 
-	if value, ok := settingValue(norm, optionSettingFollowRedirects); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
+	if val, ok := settingValue(norm, optionSettingFollowRedirects); ok {
+		switch b, valid := directive.ParseBool(val); {
+		case valid:
 			opts.FollowRedirects = b
+		case strict:
+			return invalidBool(optionSettingFollowRedirects, val)
 		}
 	}
 
-	if value, ok := settingValue(norm, optionSettingInsecure); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
+	if val, ok := settingValue(norm, optionSettingInsecure); ok {
+		switch b, valid := directive.ParseBool(val); {
+		case valid:
 			opts.InsecureSkipVerify = b
+		case strict:
+			return invalidBool(optionSettingInsecure, val)
 		}
 	}
 
-	if value, ok := settingValue(norm, optionSettingNoCookies); ok {
-		if b, err := strconv.ParseBool(value); err == nil && b {
+	if val, ok := settingValue(norm, optionSettingNoCookies); ok {
+		switch b, valid := directive.ParseBool(val); {
+		case !valid && strict:
+			return invalidBool(optionSettingNoCookies, val)
+		case b:
 			opts.CookieJar = nil
 		}
 	}

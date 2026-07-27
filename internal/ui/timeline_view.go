@@ -2,7 +2,6 @@ package ui
 
 import (
 	"fmt"
-	"maps"
 	"math"
 	"sort"
 	"strings"
@@ -543,23 +542,6 @@ func maxRowDuration(rows []timelineRow) time.Duration {
 		}
 	}
 	return max
-}
-
-// cloneTraceSpec returns a deep copy of the provided trace spec so downstream consumers
-// can safely mutate budget limits without affecting the source request metadata.
-func cloneTraceSpec(spec *restfile.TraceSpec) *restfile.TraceSpec {
-	if spec == nil {
-		return nil
-	}
-	clone := &restfile.TraceSpec{Enabled: spec.Enabled}
-	clone.Budgets.Total = spec.Budgets.Total
-	clone.Budgets.Tolerance = spec.Budgets.Tolerance
-	if len(spec.Budgets.Phases) > 0 {
-		phases := make(map[string]time.Duration, len(spec.Budgets.Phases))
-		maps.Copy(phases, spec.Budgets.Phases)
-		clone.Budgets.Phases = phases
-	}
-	return clone
 }
 
 func formatTime(t time.Time) string {

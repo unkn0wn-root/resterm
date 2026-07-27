@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -89,22 +90,33 @@ func (w *requestTextWriter) writeGRPCSection(grpc *restfile.GRPCRequest) {
 	}
 
 	if grpc.FullMethod != "" {
-		w.writeLine("# @grpc " + strings.TrimPrefix(grpc.FullMethod, "/"))
+		w.writeLine(directive.GRPC.Comment() + " " +
+			strings.TrimPrefix(grpc.FullMethod, "/"))
 	}
 	if grpc.DescriptorSet != "" {
-		w.writeLine("# @grpc-descriptor " + grpc.DescriptorSet)
+		w.writeLine(directive.GRPCDescriptor.Comment() + " " + grpc.DescriptorSet)
 	}
 	if !grpc.UseReflection {
-		w.writeLine("# @grpc-reflection false")
+		w.writeLine(directive.GRPCReflection.Comment() + " false")
 	}
 	if grpc.PlaintextSet {
-		w.writeLine(fmt.Sprintf("# @grpc-plaintext %t", grpc.Plaintext))
+		line := fmt.Sprintf(
+			"%s %t",
+			directive.GRPCPlaintext.Comment(),
+			grpc.Plaintext,
+		)
+		w.writeLine(line)
 	}
 	if grpc.Authority != "" {
-		w.writeLine("# @grpc-authority " + grpc.Authority)
+		w.writeLine(directive.GRPCAuthority.Comment() + " " + grpc.Authority)
 	}
 	for _, pair := range grpc.Metadata {
-		w.writeLine(fmt.Sprintf("# @grpc-metadata %s: %s", pair.Key, pair.Value))
+		w.writeLine(fmt.Sprintf(
+			"%s %s: %s",
+			directive.GRPCMetadata.Comment(),
+			pair.Key,
+			pair.Value,
+		))
 	}
 
 	w.blankLine()
@@ -121,9 +133,10 @@ func (w *requestTextWriter) writeGraphQLSection(gql *restfile.GraphQLBody) {
 		return
 	}
 
-	w.writeLine("# @graphql")
+	w.writeLine(directive.GraphQL.Comment())
 	if strings.TrimSpace(gql.OperationName) != "" {
-		w.writeLine("# @operation " + strings.TrimSpace(gql.OperationName))
+		w.writeLine(directive.Operation.Comment() + " " +
+			strings.TrimSpace(gql.OperationName))
 	}
 
 	switch {
@@ -138,7 +151,7 @@ func (w *requestTextWriter) writeGraphQLSection(gql *restfile.GraphQLBody) {
 	}
 
 	w.blankLine()
-	w.writeLine("# @variables")
+	w.writeLine(directive.Variables.Comment())
 	switch {
 	case strings.TrimSpace(gql.Variables) != "":
 		w.writeTextBlock(gql.Variables)
@@ -169,7 +182,7 @@ func (w *requestTextWriter) blankLine() {
 
 func renderSSEDirectiveLine(opts restfile.SSEOptions) string {
 	return renderDirectiveLine(
-		"# @sse",
+		directive.SSE.Comment(),
 		durationDirectivePart("duration", opts.TotalTimeout),
 		durationDirectivePart("idle", opts.IdleTimeout),
 		intDirectivePart("max-events", opts.MaxEvents),
@@ -179,7 +192,7 @@ func renderSSEDirectiveLine(opts restfile.SSEOptions) string {
 
 func renderWebSocketDirectiveLine(opts restfile.WebSocketOptions) string {
 	return renderDirectiveLine(
-		"# @websocket",
+		directive.WebSocket.Comment(),
 		durationDirectivePart("timeout", opts.HandshakeTimeout),
 		durationDirectivePart("idle", opts.IdleTimeout),
 		int64DirectivePart("max-message-bytes", opts.MaxMessageBytes),
@@ -237,7 +250,7 @@ func boolDirectivePart(name string, value, set bool) string {
 }
 
 func renderWebSocketStepLine(st restfile.WebSocketStep) string {
-	const prefix = "# @ws "
+	prefix := directive.WS.Comment() + " "
 
 	switch st.Type {
 	case restfile.WebSocketStepSendText:

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
+	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
@@ -29,8 +30,6 @@ const (
 	wfStatusCanceled = "[CANCELED]"
 	wfStatusSkipped  = "[SKIPPED]"
 )
-
-const workflowStepDefaultLabel = "step"
 
 type wfState struct {
 	doc      *restfile.Document
@@ -74,40 +73,6 @@ type wfStepRes struct {
 	reqText string
 }
 
-func workflowLabel(step restfile.WorkflowStep) string {
-	if step.Name != "" {
-		return step.Name
-	}
-
-	switch step.Kind {
-	case restfile.WorkflowStepKindIf:
-		return "@if"
-	case restfile.WorkflowStepKindSwitch:
-		return "@switch"
-	case restfile.WorkflowStepKindForEach:
-		if step.Using != "" {
-			return step.Using
-		}
-		return "@for-each"
-	default:
-		return step.Using
-	}
-}
-
-func workflowStepLabel(step restfile.WorkflowStep, branch string, iter, total int) string {
-	label := strings.TrimSpace(workflowLabel(step))
-	if label == "" {
-		label = workflowStepDefaultLabel
-	}
-	if branch != "" {
-		label = fmt.Sprintf("%s -> %s", label, branch)
-	}
-	if iter > 0 && total > 0 {
-		label = fmt.Sprintf("%s (%d/%d)", label, iter, total)
-	}
-	return label
-}
-
 func workflowStatus(res wfStepRes) string {
 	switch {
 	case res.cancel:
@@ -142,7 +107,7 @@ func makeStepRes(
 ) wfStepRes {
 	res := wfStepRes{
 		step:    step,
-		name:    workflowStepLabel(step, branch, iter, total),
+		name:    core.StepLabel(step, branch, iter, total),
 		branch:  branch,
 		iter:    iter,
 		total:   total,

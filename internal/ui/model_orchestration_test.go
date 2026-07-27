@@ -9,6 +9,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	histdb "github.com/unkn0wn-root/resterm/internal/history/sqlite"
@@ -38,9 +39,6 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 	if m.compareRun == nil {
 		t.Fatal("expected compare run state")
 	}
-	if !m.compareRun.core {
-		t.Fatal("expected standard compare run to use core events")
-	}
 	if !m.responseSplit {
 		t.Fatal("expected compare to enable response split")
 	}
@@ -69,7 +67,7 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 	if got := m.compareRun.currentEnv; got != "dev" {
 		t.Fatalf("expected first env dev after row start, got %q", got)
 	}
-	first := cloneRequest(m.compareRun.current)
+	first := m.compareRun.current.Clone()
 	applyRunEvt(t, &m, core.CmpRowDone{
 		Meta: core.NewMeta(run, at.Add(10*time.Millisecond)),
 		Row:  core.RowMeta{Index: 0, Env: "dev", Base: true, Total: 2},
@@ -81,7 +79,7 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 				10*time.Millisecond,
 			),
 			Executed:    first,
-			RequestText: renderRequestText(first),
+			RequestText: rqeng.RenderRequestText(first),
 			Environment: "dev",
 		},
 	})
@@ -125,7 +123,7 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 		t.Fatal("expected secondary pane to pin first row snapshot")
 	}
 
-	second := cloneRequest(m.compareRun.current)
+	second := m.compareRun.current.Clone()
 	applyRunEvt(t, &m, core.CmpRowDone{
 		Meta: core.NewMeta(run, at.Add(23*time.Millisecond)),
 		Row:  core.RowMeta{Index: 1, Env: "stage", Total: 2},
@@ -137,7 +135,7 @@ func TestCompareRunProgressionPinsReferenceAndBuildsBundle(t *testing.T) {
 				12*time.Millisecond,
 			),
 			Executed:    second,
-			RequestText: renderRequestText(second),
+			RequestText: rqeng.RenderRequestText(second),
 			Environment: "stage",
 		},
 	})
@@ -193,7 +191,7 @@ func TestCompareRunCancelAfterFirstRowPreservesCanceledState(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected compare run to return command")
 	}
-	if m.compareRun == nil || !m.compareRun.core {
+	if m.compareRun == nil {
 		t.Fatal("expected core compare run state")
 	}
 
@@ -221,14 +219,14 @@ func TestCompareRunCancelAfterFirstRowPreservesCanceledState(t *testing.T) {
 		t.Fatal("expected compare run to be marked canceled")
 	}
 
-	cur := cloneRequest(m.compareRun.current)
+	cur := m.compareRun.current.Clone()
 	applyRunEvt(t, &m, core.CmpRowDone{
 		Meta: core.NewMeta(run, at.Add(time.Millisecond)),
 		Row:  core.RowMeta{Index: 0, Env: "dev", Base: true, Total: 2},
 		Result: engine.RequestResult{
 			Err:         context.Canceled,
 			Executed:    cur,
-			RequestText: renderRequestText(cur),
+			RequestText: rqeng.RenderRequestText(cur),
 			Environment: "dev",
 		},
 	})
@@ -272,9 +270,6 @@ func TestProfileRunWarmupProgressAdvancesToMeasuredStage(t *testing.T) {
 	if m.profileRun == nil || m.profileRun.current == nil {
 		t.Fatal("expected profile run to start first iteration")
 	}
-	if !m.profileRun.core {
-		t.Fatal("expected standard profile run to use core events")
-	}
 	if !strings.Contains(m.statusMessage.text, "warmup 1/1") {
 		t.Fatalf("expected warmup status, got %q", m.statusMessage.text)
 	}
@@ -282,7 +277,7 @@ func TestProfileRunWarmupProgressAdvancesToMeasuredStage(t *testing.T) {
 	run := core.RunMeta{ID: m.profileRun.id, Mode: core.ModeProfile}
 	at := time.Unix(3, 0)
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(run, at)})
-	cur := cloneRequest(m.profileRun.current)
+	cur := m.profileRun.current.Clone()
 	applyRunEvt(t, &m, core.ProIterStart{
 		Meta: core.NewMeta(run, at),
 		Iter: core.IterMeta{
@@ -316,7 +311,7 @@ func TestProfileRunWarmupProgressAdvancesToMeasuredStage(t *testing.T) {
 				15*time.Millisecond,
 			),
 			Executed:    cur,
-			RequestText: renderRequestText(cur),
+			RequestText: rqeng.RenderRequestText(cur),
 		},
 	})
 
@@ -358,14 +353,11 @@ func TestProfileRunCancelWhileActiveFinalizesSummary(t *testing.T) {
 	if m.profileRun == nil || m.profileRun.current == nil {
 		t.Fatal("expected active profile iteration")
 	}
-	if !m.profileRun.core {
-		t.Fatal("expected standard profile run to use core events")
-	}
 
 	run := core.RunMeta{ID: m.profileRun.id, Mode: core.ModeProfile}
 	at := time.Unix(4, 0)
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(run, at)})
-	cur := cloneRequest(m.profileRun.current)
+	cur := m.profileRun.current.Clone()
 	applyRunEvt(t, &m, core.ProIterStart{
 		Meta: core.NewMeta(run, at),
 		Iter: core.IterMeta{
@@ -393,7 +385,7 @@ func TestProfileRunCancelWhileActiveFinalizesSummary(t *testing.T) {
 		Result: engine.RequestResult{
 			Err:         context.Canceled,
 			Executed:    cur,
-			RequestText: renderRequestText(cur),
+			RequestText: rqeng.RenderRequestText(cur),
 		},
 	})
 
@@ -434,13 +426,13 @@ func TestProfileRunCancelWhileIdleBetweenRunsFinalizesImmediately(t *testing.T) 
 	if cmd == nil {
 		t.Fatal("expected profile run command")
 	}
-	if m.profileRun == nil || !m.profileRun.core {
+	if m.profileRun == nil {
 		t.Fatal("expected core profile run state")
 	}
 
 	run := core.RunMeta{ID: m.profileRun.id, Mode: core.ModeProfile}
 	at := time.Unix(5, 0)
-	cur := cloneRequest(m.profileRun.current)
+	cur := m.profileRun.current.Clone()
 	applyRunEvt(t, &m, core.ProIterDone{
 		Meta: core.NewMeta(run, at.Add(10*time.Millisecond)),
 		Iter: core.IterMeta{
@@ -460,7 +452,7 @@ func TestProfileRunCancelWhileIdleBetweenRunsFinalizesImmediately(t *testing.T) 
 				10*time.Millisecond,
 			),
 			Executed:    cur,
-			RequestText: renderRequestText(cur),
+			RequestText: rqeng.RenderRequestText(cur),
 		},
 	})
 	if m.profileRun == nil {
@@ -489,7 +481,7 @@ func TestProfileRunCancelWhileIdleBetweenRunsFinalizesImmediately(t *testing.T) 
 	}
 }
 
-func TestProfileRunInteractiveWebSocketFallsBackToUIDrivenPath(t *testing.T) {
+func TestProfileRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 	m := newOrchTestModel(t, Config{})
 	doc := &restfile.Document{}
 	req := &restfile.Request{
@@ -511,11 +503,8 @@ func TestProfileRunInteractiveWebSocketFallsBackToUIDrivenPath(t *testing.T) {
 	if m.profileRun == nil {
 		t.Fatal("expected profile run state")
 	}
-	if m.profileRun.core {
-		t.Fatal("expected interactive websocket profile to use UI-driven TUI path")
-	}
 	if m.profileRun.current == nil {
-		t.Fatal("expected UI-driven profile path to start interactive request immediately")
+		t.Fatal("expected core profile path to prepare the first request")
 	}
 }
 
@@ -571,7 +560,7 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	m.workflowRun = workflowStateFromPlan(pl)
 	at := time.Unix(10, 0)
 
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
@@ -610,8 +599,8 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 			`{"ok":true}`,
 			8*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[0]),
-		RequestText: renderRequestText(doc.Requests[0]),
+		Executed:    doc.Requests[0].Clone(),
+		RequestText: rqeng.RenderRequestText(doc.Requests[0]),
 		Environment: "dev",
 	}
 	applyRunEvt(t, &m, core.ReqDone{
@@ -675,7 +664,7 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 			`{"item":"a"}`,
 			9*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[1]),
+		Executed:    doc.Requests[1].Clone(),
 		RequestText: "GET https://example.com/items/a\n",
 		Environment: "dev",
 	}
@@ -738,7 +727,7 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 			`{"item":"b"}`,
 			11*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[1]),
+		Executed:    doc.Requests[1].Clone(),
 		RequestText: "GET https://example.com/items/b\n",
 		Environment: "dev",
 	}
@@ -818,7 +807,7 @@ func TestWorkflowRunCancelMarksRemainingStepsCanceled(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	m.workflowRun = workflowStateFromPlan(pl)
 	at := time.Unix(20, 0)
 
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
@@ -853,7 +842,7 @@ func TestWorkflowRunCancelMarksRemainingStepsCanceled(t *testing.T) {
 
 	res := engine.RequestResult{
 		Err:         context.Canceled,
-		Executed:    cloneRequest(doc.Requests[0]),
+		Executed:    doc.Requests[0].Clone(),
 		Environment: "dev",
 	}
 	applyRunEvt(t, &m, core.ReqDone{
@@ -917,7 +906,7 @@ func TestWorkflowRunKeepsSpinnerActiveUntilRunDone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	m.workflowRun = workflowStateFromPlan(pl)
 	at := time.Unix(25, 0)
 
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
@@ -952,7 +941,7 @@ func TestWorkflowRunKeepsSpinnerActiveUntilRunDone(t *testing.T) {
 			`{"ok":true}`,
 			9*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[0]),
+		Executed:    doc.Requests[0].Clone(),
 		RequestText: "GET https://example.com/one\n",
 		Environment: "dev",
 	}
@@ -1015,7 +1004,7 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	m.workflowRun = workflowStateFromPlan(pl)
 	at := time.Unix(26, 0)
 
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
@@ -1042,7 +1031,7 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 			`{"error":"bad gateway"}`,
 			9*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[0]),
+		Executed:    doc.Requests[0].Clone(),
 		RequestText: "GET https://example.com/one\n",
 		Environment: "dev",
 	}
@@ -1079,76 +1068,6 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 	}
 }
 
-func TestWorkflowUIDrivenResponseKeepsSpinnerActiveBetweenSteps(t *testing.T) {
-	m := newOrchTestModel(t, Config{})
-	doc := &restfile.Document{
-		Requests: []*restfile.Request{
-			{
-				Method: "GET",
-				URL:    "https://example.com/one",
-				Metadata: restfile.RequestMetadata{
-					Name: "one",
-				},
-			},
-			{
-				Method: "GET",
-				URL:    "https://example.com/two",
-				Metadata: restfile.RequestMetadata{
-					Name: "two",
-				},
-			},
-		},
-	}
-	wf := restfile.Workflow{
-		Name: "demo",
-		Steps: []restfile.WorkflowStep{
-			{Name: "One", Using: "one"},
-			{Name: "Two", Using: "two"},
-		},
-	}
-	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-ui-spin", Env: "dev"})
-	if err != nil {
-		t.Fatalf("PrepareWorkflow: %v", err)
-	}
-	m.doc = doc
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, false)
-	m.workflowRun.current = cloneRequest(doc.Requests[0])
-	m.workflowRun.stepStart = time.Unix(26, 0)
-	m.sending = true
-
-	res := engine.RequestResult{
-		Response: testHTTPResp(
-			"https://example.com/one",
-			200,
-			`{"ok":true}`,
-			11*time.Millisecond,
-		),
-		Executed:    cloneRequest(doc.Requests[0]),
-		RequestText: "GET https://example.com/one\n",
-		Environment: "dev",
-		Explain: testRunExplain(
-			doc.Requests[0],
-			"dev",
-			xplain.StatusReady,
-			"HTTP request sent",
-		),
-	}
-	_ = m.handleWorkflowUIDrivenResponse(m.responseMsgFromRunState(res, false))
-
-	if m.workflowRun == nil {
-		t.Fatal("expected workflow to continue after first UI-driven response")
-	}
-	if !m.sending {
-		t.Fatal("expected UI-driven workflow spinner to remain active between steps")
-	}
-	if got := m.workflowRun.index; got != 1 {
-		t.Fatalf("expected workflow to advance to second step, got %d", got)
-	}
-	if len(m.workflowRun.results) != 1 || m.workflowRun.results[0].Explain == nil {
-		t.Fatal("expected UI-driven workflow result to retain explain report")
-	}
-}
-
 func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 	m := newOrchTestModel(t, Config{})
 	doc := &restfile.Document{
@@ -1180,7 +1099,7 @@ func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	m.workflowRun = workflowStateFromPlan(pl)
 	at := time.Unix(27, 0)
 
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
@@ -1206,7 +1125,7 @@ func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 			`{"one":true}`,
 			8*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[0]),
+		Executed:    doc.Requests[0].Clone(),
 		RequestText: "GET https://example.com/one\n",
 		Environment: "dev",
 		Explain: testRunExplain(
@@ -1252,7 +1171,7 @@ func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 			`{"two":true}`,
 			9*time.Millisecond,
 		),
-		Executed:    cloneRequest(doc.Requests[1]),
+		Executed:    doc.Requests[1].Clone(),
 		RequestText: "GET https://example.com/two\n",
 		Environment: "dev",
 		Explain: testRunExplain(
@@ -1338,7 +1257,7 @@ func TestWorkflowExplainReportCarriesPerStepChangesAndVars(t *testing.T) {
 		}},
 	}
 
-	out := renderExplainReport(workflowExplainReport(state))
+	out := renderExplainReport(state.explainReport())
 	if !strings.Contains(out, "Pipeline: 2 ok") {
 		t.Fatalf("expected flattened workflow pipeline, got %q", out)
 	}
@@ -1362,7 +1281,7 @@ func TestWorkflowExplainReportCarriesPerStepChangesAndVars(t *testing.T) {
 	}
 }
 
-func TestWorkflowRunInteractiveWebSocketFallsBackToUIDrivenPath(t *testing.T) {
+func TestWorkflowRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 	m := newOrchTestModel(t, Config{})
 	doc := &restfile.Document{
 		Requests: []*restfile.Request{{
@@ -1389,15 +1308,9 @@ func TestWorkflowRunInteractiveWebSocketFallsBackToUIDrivenPath(t *testing.T) {
 	if m.workflowRun == nil {
 		t.Fatal("expected workflow run state")
 	}
-	if m.workflowRun.core {
-		t.Fatal("expected interactive websocket workflow to use UI-driven TUI path")
-	}
-	if m.workflowRun.current == nil {
-		t.Fatal("expected UI-driven workflow path to start interactive request immediately")
-	}
 }
 
-func TestCompareRunInteractiveWebSocketFallsBackToUIDrivenPath(t *testing.T) {
+func TestCompareRunInteractiveWebSocketUsesCorePath(t *testing.T) {
 	m := newOrchTestModel(t, Config{})
 	doc := &restfile.Document{}
 	req := &restfile.Request{
@@ -1420,14 +1333,11 @@ func TestCompareRunInteractiveWebSocketFallsBackToUIDrivenPath(t *testing.T) {
 	if m.compareRun == nil {
 		t.Fatal("expected compare run state")
 	}
-	if m.compareRun.core {
-		t.Fatal("expected interactive websocket compare to use UI-driven TUI path")
-	}
 	if got := m.compareRun.currentEnv; got != "dev" {
-		t.Fatalf("expected UI-driven compare path to start first env immediately, got %q", got)
+		t.Fatalf("expected core compare path to start first env immediately, got %q", got)
 	}
 	if m.compareRun.current == nil {
-		t.Fatal("expected UI-driven compare path to start interactive request immediately")
+		t.Fatal("expected core compare path to prepare the first request")
 	}
 }
 
@@ -1461,7 +1371,7 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PrepareForEach: %v", err)
 	}
-	m.workflowRun = workflowStateFromPlan(pl, httpclient.Options{}, true)
+	m.workflowRun = workflowStateFromPlan(pl)
 	at := time.Unix(30, 0)
 
 	applyRunEvt(t, &m, core.RunStart{Meta: core.NewMeta(pl.Run, at)})
@@ -1498,7 +1408,7 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 			`{"item":"a"}`,
 			7*time.Millisecond,
 		),
-		Executed:    cloneRequest(req),
+		Executed:    req.Clone(),
 		RequestText: "GET https://example.com/items/a\n",
 		Environment: "dev",
 	}
@@ -1552,7 +1462,7 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 			`{"item":"b"}`,
 			9*time.Millisecond,
 		),
-		Executed:    cloneRequest(req),
+		Executed:    req.Clone(),
 		RequestText: "GET https://example.com/items/b\n",
 		Environment: "dev",
 	}
@@ -1696,7 +1606,7 @@ func TestCompareCoreRunRecordsLatency(t *testing.T) {
 		Doc:     doc,
 		Request: req,
 	})
-	first := cloneRequest(m.compareRun.current)
+	first := m.compareRun.current.Clone()
 	applyRunEvt(t, &m, core.CmpRowDone{
 		Meta: core.NewMeta(run, at.Add(10*time.Millisecond)),
 		Row:  core.RowMeta{Index: 0, Env: "dev", Base: true, Total: 2},
@@ -1708,7 +1618,7 @@ func TestCompareCoreRunRecordsLatency(t *testing.T) {
 				10*time.Millisecond,
 			),
 			Executed:    first,
-			RequestText: renderRequestText(first),
+			RequestText: rqeng.RenderRequestText(first),
 			Environment: "dev",
 		},
 	})

@@ -6,9 +6,7 @@ import (
 	"strings"
 
 	"github.com/unkn0wn-root/resterm/internal/capture"
-	"github.com/unkn0wn-root/resterm/internal/parser/directive/options"
-	dvalue "github.com/unkn0wn-root/resterm/internal/parser/directive/value"
-	"github.com/unkn0wn-root/resterm/internal/parser/lexer"
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
@@ -22,84 +20,88 @@ func (b *documentBuilder) handleDescriptionLine(ln line) bool {
 	return true
 }
 
-func (b *documentBuilder) handleRequestMetadataDirective(no, argCol int, key, rest string) bool {
-	switch key {
-	case "name":
+func (b *documentBuilder) handleRequestMetadataDirective(
+	no, argCol int,
+	call directive.Call,
+) bool {
+	rest := call.Args
+	switch call.Name {
+	case directive.RequestName:
 		if rest != "" {
-			b.request.metadata.Name = lexer.TrimQuotes(strings.TrimSpace(rest))
+			b.request.metadata.Name = directive.TrimQuotes(strings.TrimSpace(rest))
 		}
 		return true
-	case "description", "desc":
+	case directive.Description:
 		b.request.metadata.Description = appendDesc(b.request.metadata.Description, rest)
 		return true
-	case "tag", "tags":
+	case directive.Tag:
 		b.addRequestTags(rest)
 		return true
-	case "no-log", "nolog":
+	case directive.NoLog:
 		b.request.metadata.NoLog = true
 		return true
-	case "log-sensitive-headers", "log-secret-headers":
+	case directive.LogSensitiveHeaders:
 		if rest == "" {
 			b.request.metadata.AllowSensitiveHeaders = true
 			return true
 		}
-		if value, ok := dvalue.ParseBool(rest); ok {
+		if value, ok := directive.ParseBool(rest); ok {
 			b.request.metadata.AllowSensitiveHeaders = value
 		}
 		return true
-	case "settings":
+	case directive.Settings:
 		b.request.settings = applySettingsTokens(b.request.settings, rest)
 		return true
-	case "setting":
+	case directive.Setting:
 		b.request.settings = putSetting(b.request.settings, rest)
 		return true
-	case "timeout":
+	case directive.Timeout:
 		if b.request.settings == nil {
 			b.request.settings = make(map[string]string)
 		}
 		b.request.settings["timeout"] = rest
 		return true
-	case "var":
+	case directive.Var:
 		b.addRequestVar(no, rest)
 		return true
-	case "script":
+	case directive.Script:
 		if rest != "" {
 			b.setScript(rest, "")
 		} else {
 			b.request.discardScript = false
 		}
 		return true
-	case "rts":
+	case directive.RTS:
 		if err := b.setRTSScript(rest); err != nil {
 			b.addError(no, err.Error())
 		}
 		return true
-	case "apply":
+	case directive.Apply:
 		b.addApply(no, argCol, rest)
 		return true
-	case "capture":
+	case directive.Capture:
 		b.addCapture(no, argCol, rest)
 		return true
-	case "assert":
+	case directive.Assert:
 		b.addAssert(no, argCol, rest)
 		return true
-	case "when", "skip-if":
-		b.setWhen(no, argCol, key, rest)
+	case directive.When:
+		b.setWhen(no, argCol, call.Spelling == directive.SkipIf, rest)
 		return true
-	case "for-each":
+	case directive.ForEach:
 		b.setForEach(no, rest)
 		return true
-	case "profile":
+	case directive.Profile:
 		if spec := parseProfileSpec(rest); spec != nil {
 			b.request.metadata.Profile = spec
 		}
 		return true
-	case "trace":
+	case directive.Trace:
 		if spec := parseTraceSpec(rest); spec != nil {
 			b.request.metadata.Trace = spec
 		}
 		return true
-	case "compare":
+	case directive.Compare:
 		b.setCompare(no, rest)
 		return true
 	}
@@ -115,7 +117,7 @@ func (b *documentBuilder) addRequestTags(rest string) {
 }
 
 func (b *documentBuilder) addRequestVar(no int, rest string) {
-	name, value := options.ParseNameValue(rest)
+	name, value := directive.ParseNameValue(rest)
 	if name == "" {
 		return
 	}
@@ -123,7 +125,7 @@ func (b *documentBuilder) addRequestVar(no int, rest string) {
 		Name:  name,
 		Value: value,
 		Line:  no,
-		Scope: restfile.ScopeRequest,
+		Scope: directive.ScopeRequest,
 	})
 }
 
@@ -159,8 +161,8 @@ func (b *documentBuilder) addAssert(no, argCol int, rest string) {
 	b.request.metadata.Asserts = append(b.request.metadata.Asserts, spec)
 }
 
-func (b *documentBuilder) setWhen(no, argCol int, key, rest string) {
-	spec, err := parseConditionSpec(rest, no, key == "skip-if")
+func (b *documentBuilder) setWhen(no, argCol int, invert bool, rest string) {
+	spec, err := parseConditionSpec(rest, no, invert)
 	if err != nil {
 		b.addError(no, err.Error())
 		return
@@ -222,19 +224,29 @@ func appendTagsFold(dst, tags []string) []string {
 }
 
 func putSetting(dst map[string]string, rest string) map[string]string {
-	key, value := lexer.SplitDirective(rest)
+	key, val := directive.CutKey(rest)
 	if key == "" {
 		return dst
+	}
+	// The @settings spelling. Read it that way instead of storing a key with an
+	// equals sign in it, which no consumer would ever look up.
+	if strings.Contains(key, "=") {
+		return applySettingsTokens(dst, rest)
+	}
+	// A key written on its own is a flag, the same as it is in @settings. Only
+	// the parser can tell that apart from a value that was written empty.
+	if val == "" {
+		val = "true"
 	}
 	if dst == nil {
 		dst = make(map[string]string)
 	}
-	dst[key] = value
+	dst[key] = val
 	return dst
 }
 
 func applySettingsTokens(dst map[string]string, raw string) map[string]string {
-	opts := options.Parse(raw)
+	opts := directive.ParseOptions(raw)
 	if len(opts) == 0 {
 		return dst
 	}
@@ -254,12 +266,12 @@ func (b *documentBuilder) parseCaptureDirective(
 	rest string,
 	line int,
 ) (restfile.CaptureSpec, bool) {
-	scopeToken, remainder := lexer.SplitDirective(rest)
+	scopeToken, remainder := directive.CutKey(rest)
 	if scopeToken == "" {
 		b.addWarning(line, "@capture missing scope (use request, file, or global)")
 		return restfile.CaptureSpec{}, false
 	}
-	scope, secret, ok := parseCaptureScope(scopeToken)
+	scope, secret, ok := directive.ParseSecretScope(scopeToken)
 	if !ok {
 		b.addWarning(
 			line,
@@ -354,7 +366,7 @@ func splitAssert(text string) (string, string) {
 		if ch == '=' && s[i+1] == '>' {
 			left := strings.TrimSpace(s[:i])
 			right := strings.TrimSpace(s[i+2:])
-			return left, lexer.TrimQuotes(right)
+			return left, directive.TrimQuotes(right)
 		}
 	}
 	return s, ""

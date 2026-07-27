@@ -359,7 +359,7 @@ func TestBinaryBodySummaryKeepsOriginalUILabelAndStyling(t *testing.T) {
 	body := []byte{0x00, 0x01, 0x02, 0x03}
 	meta := binaryview.Analyze(body, "application/octet-stream")
 
-	views := buildBodyViews(body, "application/octet-stream", &meta, nil, "")
+	views := defaultResponseRenderer().buildBodyViewsCtx(context.Background(), body, "application/octet-stream", &meta, nil, "")
 	want := renderLabelValue("Raw tab", "hex / base64", statsLabelStyle, statsValueStyle)
 	if !strings.Contains(views.pretty, want) {
 		t.Fatalf("expected original UI label rendering, got %q", views.pretty)
