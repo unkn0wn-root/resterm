@@ -329,6 +329,44 @@ func TestIsOption(t *testing.T) {
 	}
 }
 
+func TestFieldSpans(t *testing.T) {
+	t.Parallel()
+
+	input := `"file edge" host=jump json={"a":"b c"} last==200 timeout="5 s" path=a\ b persist`
+	want := []struct {
+		field string
+		key   string
+	}{
+		{field: `"file edge"`},
+		{field: "host=jump", key: "host"},
+		{field: `json={"a":"b c"}`, key: "json"},
+		{field: "last==200"},
+		{field: `timeout="5 s"`, key: "timeout"},
+		{field: `path=a\ b`, key: "path"},
+		{field: "persist"},
+	}
+
+	spans := FieldSpans(input)
+	if len(spans) != len(want) {
+		t.Fatalf("FieldSpans(%q) returned %d spans, want %d", input, len(spans), len(want))
+	}
+	for i, w := range want {
+		f := spans[i]
+		if got := input[f.Start:f.End]; got != w.field {
+			t.Fatalf("span %d = %q, want %q", i, got, w.field)
+		}
+		if w.key == "" {
+			if f.Eq >= 0 {
+				t.Fatalf("span %d (%q) has Eq %d, want positional", i, w.field, f.Eq)
+			}
+			continue
+		}
+		if f.Eq < 0 || input[f.Start:f.Eq] != w.key {
+			t.Fatalf("span %d (%q) Eq = %d, want key %q", i, w.field, f.Eq, w.key)
+		}
+	}
+}
+
 // The lexer already decoded the value. A second strip used to take a layer off
 // anything that was itself a quoted string.
 func TestParseOptionsKeepsDecodedValues(t *testing.T) {

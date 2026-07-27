@@ -235,18 +235,50 @@ func CutOptions(input string) (string, Options) {
 	}
 }
 
+// FieldSpan locates one field of an option list in its source text. Offsets are
+// bytes. Eq is the equals sign that makes the field an option, -1 when the
+// field is positional.
+type FieldSpan struct {
+	Start, End, Eq int
+}
+
+// FieldSpans reports where each field sits, scanning the way ParseOptions does,
+// so a span never splits a quoted or bracketed value.
+func FieldSpans(input string) []FieldSpan {
+	lex := &lexer{src: input, escapes: true}
+	var spans []FieldSpan
+	for {
+		tok, ok := lex.next()
+		if !ok {
+			return spans
+		}
+		eq := optionEq(input[tok.start:tok.end])
+		if eq >= 0 {
+			eq += tok.start
+		}
+		spans = append(spans, FieldSpan{Start: tok.start, End: tok.end, Eq: eq})
+	}
+}
+
 // A name, then an equals sign typed outside quotes, then the value. This has to
 // read the source. The lexer decodes "a=b" and a=b to the same text and only one
 // of them was an option, so a decoded token cannot answer the question. A quote
 // is not a name rune, so a quoted word never counts, and "a==b" is a comparison.
-func isOption(raw string) bool {
+func optionEq(raw string) int {
 	for i, r := range raw {
 		if r == '=' {
-			return i > 0 && !strings.HasPrefix(raw[i+1:], "=")
+			if i > 0 && !strings.HasPrefix(raw[i+1:], "=") {
+				return i
+			}
+			return -1
 		}
 		if !IsKeyRune(r) {
-			return false
+			return -1
 		}
 	}
-	return false
+	return -1
+}
+
+func isOption(raw string) bool {
+	return optionEq(raw) >= 0
 }

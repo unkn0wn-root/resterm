@@ -2,10 +2,12 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/theme"
 )
 
@@ -83,23 +85,23 @@ func TestMetadataRuneStylerColonSeparator(t *testing.T) {
 	}
 }
 
-func TestDirectiveValueModesComeFromCatalog(t *testing.T) {
-	tests := map[string]metadataValueMode{
-		"name":      metadataValueModeToken,
-		"desc":      metadataValueModeRest,
-		"nolog":     metadataValueModeNone,
-		"settings":  metadataValueModeRest,
-		"websocket": metadataValueModeRest,
+func TestDirectiveArgumentKindsComeFromCatalog(t *testing.T) {
+	tests := map[string]directive.ArgKind{
+		"name":      directive.ArgToken,
+		"desc":      directive.ArgText,
+		"nolog":     directive.ArgNone,
+		"setting":   directive.ArgSetting,
+		"settings":  directive.ArgOptions,
+		"timeout":   directive.ArgToken,
+		"websocket": directive.ArgOptions,
 	}
 	for name, want := range tests {
-		got, ok := directiveValueMode(name)
-		if !ok || got != want {
-			t.Fatalf("directiveValueMode(%q) = (%d, %t), want (%d, true)",
-				name, got, ok, want)
+		if got := directiveArgKind(directive.Name(name)); got != want {
+			t.Fatalf("directiveArgKind(%q) = %d, want %d", name, got, want)
 		}
 	}
-	if _, ok := directiveValueMode("grpc-method"); ok {
-		t.Fatal("unknown directive unexpectedly has a catalog mode")
+	if got := directiveArgKind("grpc-method"); got != directive.ArgToken {
+		t.Fatalf("unknown directive kind = %d, want the ArgToken fallback", got)
 	}
 }
 
@@ -135,6 +137,103 @@ func TestMetadataRuneStylerSettingDirective(t *testing.T) {
 		Render("5"); got != want {
 		t.Fatalf("setting value style mismatch:\nwant %q\n got %q", want, got)
 	}
+}
+
+func TestMetadataRuneStylerSettingEqualsDirective(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+
+	tests := []struct {
+		name  string
+		line  string
+		value string
+	}{
+		{name: "value", line: "# @setting timeout=5s", value: "5s"},
+		{name: "empty value", line: "# @setting timeout="},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			styles := styler.StylesForLine([]rune(tt.line), 0)
+			assertMetadataTokenColor(t, styles, tt.line, "timeout", palette.SettingKey)
+			assertMetadataTokenNotColor(t, styles, tt.line, "=", palette.SettingKey)
+			if tt.value != "" {
+				assertMetadataTokenColor(t, styles, tt.line, tt.value, palette.SettingValue)
+			}
+		})
+	}
+}
+
+func TestMetadataRuneStylerOptionDirectives(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	styler := newMetadataRuneStyler(palette)
+
+	tests := []struct {
+		name        string
+		line        string
+		keys        []string
+		values      []string
+		positionals []string
+	}{
+		{
+			name:   "settings",
+			line:   "# @settings timeout=5s insecure=false",
+			keys:   []string{"timeout", "insecure"},
+			values: []string{"5s", "false"},
+		},
+		{
+			name:        "ssh",
+			line:        `# @ssh "file edge" host=jump timeout="5 s" persist`,
+			keys:        []string{"host", "timeout"},
+			values:      []string{"jump", `"5 s"`},
+			positionals: []string{`"file edge"`, "persist"},
+		},
+		{
+			name:   "json value",
+			line:   `# @mock json={"name":"hello resterm"} status=200`,
+			keys:   []string{"json", "status"},
+			values: []string{`{"name":"hello resterm"}`, "200"},
+		},
+		{
+			name:   "escaped space",
+			line:   `# @ssh host=hello\ resterm timeout=5s`,
+			keys:   []string{"host", "timeout"},
+			values: []string{`hello\ resterm`, "5s"},
+		},
+		{
+			name:        "comparison is positional",
+			line:        "# @else last.statusCode==200 run=next",
+			keys:        []string{"run"},
+			values:      []string{"next"},
+			positionals: []string{"last.statusCode==200"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			styles := styler.StylesForLine([]rune(tt.line), 0)
+			for _, key := range tt.keys {
+				assertMetadataTokenColor(t, styles, tt.line, key, palette.SettingKey)
+			}
+			for _, value := range tt.values {
+				assertMetadataTokenColor(t, styles, tt.line, value, palette.SettingValue)
+			}
+			for _, positional := range tt.positionals {
+				assertMetadataTokenColor(t, styles, tt.line, positional, palette.Value)
+			}
+		})
+	}
+}
+
+func TestMetadataRuneStylerTimeoutUsesGenericValue(t *testing.T) {
+	palette := theme.DefaultTheme().EditorMetadata
+	if palette.Value == palette.SettingValue {
+		t.Fatal("generic and setting value colors must differ for this test to mean anything")
+	}
+
+	line := "# @timeout 5s"
+	styles := newMetadataRuneStyler(palette).StylesForLine([]rune(line), 0)
+	assertMetadataTokenColor(t, styles, line, "5s", palette.Value)
 }
 
 func TestMetadataRuneStylerRequestLines(t *testing.T) {
@@ -177,6 +276,48 @@ func TestMetadataRuneStylerRequestLines(t *testing.T) {
 	wsWant := lipgloss.NewStyle().Foreground(color).Bold(true).Render("W")
 	if got := styles[0].Render("W"); got != wsWant {
 		t.Fatalf("WebSocket request style mismatch:\nwant %q\n got %q", wsWant, got)
+	}
+}
+
+// The returned range is in runes, matching how StylesForLine indexes the line.
+func metadataTokenRange(t *testing.T, styles []lipgloss.Style, line, token string) (int, int) {
+	t.Helper()
+	byteStart := strings.Index(line, token)
+	if byteStart < 0 {
+		t.Fatalf("token %q is not in %q", token, line)
+	}
+	start := len([]rune(line[:byteStart]))
+	end := start + len([]rune(token))
+	if len(styles) < end {
+		t.Fatalf("StylesForLine(%q) returned %d styles, need %d", line, len(styles), end)
+	}
+	return start, end
+}
+
+func assertMetadataTokenColor(t *testing.T, styles []lipgloss.Style, line, token string, want lipgloss.Color) {
+	t.Helper()
+	start, end := metadataTokenRange(t, styles, line, token)
+	for i := start; i < end; i++ {
+		if got := styles[i].GetForeground(); got != want {
+			t.Fatalf("StylesForLine(%q) token %q rune %d color = %q, want %q", line, token, i-start, got, want)
+		}
+	}
+}
+
+func assertMetadataTokenNotColor(t *testing.T, styles []lipgloss.Style, line, token string, unwanted lipgloss.Color) {
+	t.Helper()
+	start, end := metadataTokenRange(t, styles, line, token)
+	for i := start; i < end; i++ {
+		if got := styles[i].GetForeground(); got == unwanted {
+			t.Fatalf(
+				"StylesForLine(%q) token %q rune %d color = %q, do not want %q",
+				line,
+				token,
+				i-start,
+				got,
+				unwanted,
+			)
+		}
 	}
 }
 
