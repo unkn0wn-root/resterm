@@ -1,4 +1,4 @@
-package rtssrc
+package rtshost
 
 import (
 	"os"
@@ -10,18 +10,18 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
-// Source is RTS script text plus source metadata for diagnostics.
-type Source struct {
+// source is RTS script text plus the metadata diagnostics point back at.
+type source struct {
 	Text string
 	Path string
 	Raw  []byte
 	Pos  rts.Pos
 }
 
-// Load returns RTS source text and diagnostic metadata for a script block.
-func Load(doc *restfile.Document, block restfile.ScriptBlock, base string) (Source, error) {
+// loadSource returns RTS source text and diagnostic metadata for a script block.
+func loadSource(doc *restfile.Document, block restfile.ScriptBlock, base string) (source, error) {
 	if block.FilePath == "" {
-		return inline(doc, block), nil
+		return inlineSource(doc, block), nil
 	}
 	path := block.FilePath
 	if !filepath.IsAbs(path) && base != "" {
@@ -29,9 +29,9 @@ func Load(doc *restfile.Document, block restfile.ScriptBlock, base string) (Sour
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Source{}, err
+		return source{}, err
 	}
-	return Source{
+	return source{
 		Text: string(data),
 		Path: path,
 		Raw:  data,
@@ -39,19 +39,19 @@ func Load(doc *restfile.Document, block restfile.ScriptBlock, base string) (Sour
 	}, nil
 }
 
-// Annotate attaches source metadata to err when available.
-func Annotate(err error, src Source) error {
+// annotate attaches the script source to err so diagnostics can render the offending line.
+func (s source) annotate(err error) error {
 	if err == nil {
 		return nil
 	}
-	if src.Path == "" && len(src.Raw) == 0 {
+	if s.Path == "" && len(s.Raw) == 0 {
 		return err
 	}
 	// Empty operation keeps the original diagnostic message and adds no chain entry.
-	return diag.Wrap(err, "", diag.WithSource(src.Path, src.Raw))
+	return diag.Wrap(err, "", diag.WithSource(s.Path, s.Raw))
 }
 
-func inline(doc *restfile.Document, block restfile.ScriptBlock) Source {
+func inlineSource(doc *restfile.Document, block restfile.ScriptBlock) source {
 	path := block.SourcePath
 	var raw []byte
 	if doc != nil {
@@ -68,7 +68,7 @@ func inline(doc *restfile.Document, block restfile.ScriptBlock) Source {
 	}
 	// Keep Col at 1: bodySource pads each inline line to its source column.
 	// Setting Pos.Col from block.Lines would double-count the first line offset.
-	return Source{
+	return source{
 		Text: bodySource(block.Body, block.Lines),
 		Path: path,
 		Raw:  raw,
@@ -76,38 +76,35 @@ func inline(doc *restfile.Document, block restfile.ScriptBlock) Source {
 	}
 }
 
+// bodySource rebuilds the block body at its document coordinates so RTS
+// positions point at the .http file.
 func bodySource(body string, lines []restfile.ScriptLine) string {
 	if len(lines) == 0 {
 		return body
 	}
 
-	parts := strings.Split(body, "\n")
 	var b strings.Builder
 	line := 1
 	if lines[0].Line > 0 {
 		line = lines[0].Line
 	}
-	for i, part := range parts {
+	for i, part := range strings.Split(body, "\n") {
 		if i > 0 {
 			b.WriteByte('\n')
 			line++
 		}
-		// Extra body lines have no source metadata
-		if i >= len(lines) {
+		// Lines without metadata or with stale metadata behind the cursor stay verbatim.
+		if i >= len(lines) || lines[i].Line < line {
 			b.WriteString(part)
 			continue
 		}
 		loc := lines[i]
-		if loc.Line < line {
-			b.WriteString(part)
-			continue
-		}
 		for line < loc.Line {
 			b.WriteByte('\n')
 			line++
 		}
-		if col := loc.Col; col > 1 {
-			b.WriteString(strings.Repeat(" ", col-1))
+		if loc.Col > 1 {
+			b.WriteString(strings.Repeat(" ", loc.Col-1))
 		}
 		b.WriteString(part)
 	}

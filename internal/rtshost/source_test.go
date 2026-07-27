@@ -1,4 +1,4 @@
-package rtssrc
+package rtshost
 
 import (
 	"strings"
@@ -9,7 +9,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/rts"
 )
 
-func TestLoadInlineSourceMapsLinesAndColumns(t *testing.T) {
+func TestLoadSourceMapsInlineLinesAndColumns(t *testing.T) {
 	doc := &restfile.Document{
 		Path: "sample.http",
 		Raw: []byte(
@@ -25,9 +25,9 @@ func TestLoadInlineSourceMapsLinesAndColumns(t *testing.T) {
 		},
 	}
 
-	src, err := Load(doc, block, "")
+	src, err := loadSource(doc, block, "")
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("loadSource: %v", err)
 	}
 	if src.Text != "  first()\n\n    second()" {
 		t.Fatalf("unexpected source text: %q", src.Text)
@@ -66,12 +66,12 @@ func TestAnnotateAddsSourceToDiagnostic(t *testing.T) {
 		Pos: rts.Pos{Path: "sample.http", Line: 3, Col: 3},
 		Msg: "boom",
 	}
-	src := Source{
+	src := source{
 		Path: "sample.http",
 		Raw:  []byte("### Sample\n# @rts pre-request\n> boom()\n"),
 	}
 
-	out := diag.Render(Annotate(err, src))
+	out := diag.Render(src.annotate(err))
 	if !strings.Contains(out, "   3 | > boom()") {
 		t.Fatalf("expected source line in rendered diagnostic:\n%s", out)
 	}
@@ -83,7 +83,7 @@ func TestAnnotateAddsPathWithoutSource(t *testing.T) {
 		Msg: "boom",
 	}
 
-	out := diag.Render(Annotate(err, Source{Path: "inline.http"}))
+	out := diag.Render(source{Path: "inline.http"}.annotate(err))
 	if !strings.Contains(out, "--> inline.http:2:4") {
 		t.Fatalf("expected path-only location in rendered diagnostic:\n%s", out)
 	}

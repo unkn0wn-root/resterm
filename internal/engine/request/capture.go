@@ -14,6 +14,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/directive"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
+	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
@@ -205,15 +206,16 @@ func (e *Engine) captureValue(in captureValueIn) (string, captureExpr, error) {
 func (e *Engine) captureRTSValue(in captureRTSIn) (string, error) {
 	ps := e.rtsPosForLineCol(in.doc, in.req, in.spec.Line, in.spec.Col)
 	rt := e.buildRT(rtIn{
-		doc:  in.doc,
-		req:  in.req,
-		env:  in.env,
-		vars: in.v,
-		x:    in.x,
-		site: directive.Capture.Tag() + " " + in.ex,
-		resp: in.rr,
-		res:  in.rr,
-		st:   in.rs,
+		doc:     in.doc,
+		req:     in.req,
+		env:     in.env,
+		vars:    in.v,
+		x:       in.x,
+		site:    directive.Capture.Tag() + " " + in.ex,
+		resp:    in.rr,
+		res:     in.rr,
+		st:      in.rs,
+		secrets: rtshost.IncludeSecrets,
 	})
 	return e.evalRTSString(context.Background(), in.doc, rt, in.ex, ps)
 }

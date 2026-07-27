@@ -17,7 +17,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/prerequest"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/rts"
-	"github.com/unkn0wn-root/resterm/internal/rtspre"
+	"github.com/unkn0wn-root/resterm/internal/rtshost"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/urltpl"
 	"github.com/unkn0wn-root/resterm/internal/vars"
@@ -203,18 +203,18 @@ func rtsStream(info *scripts.StreamInfo) *rts.Stream {
 }
 
 type rtIn struct {
-	doc               *restfile.Document
-	req               *restfile.Request
-	env               string
-	base              string
-	vars              map[string]string
-	site              string
-	resp              *rts.Resp
-	res               *rts.Resp
-	tr                *rts.Trace
-	st                *rts.Stream
-	x                 map[string]rts.Value
-	omitSecretGlobals bool
+	doc     *restfile.Document
+	req     *restfile.Request
+	env     string
+	base    string
+	vars    map[string]string
+	site    string
+	resp    *rts.Resp
+	res     *rts.Resp
+	tr      *rts.Trace
+	st      *rts.Stream
+	x       map[string]rts.Value
+	secrets rtshost.SecretPolicy
 }
 
 func (e *Engine) buildRT(in rtIn) rts.RT {
@@ -234,7 +234,7 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	return rts.RT{
 		Env:         e.rtsEnv(in.env),
 		Vars:        in.vars,
-		Globals:     rtspre.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), in.omitSecretGlobals),
+		Globals:     rtshost.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), in.secrets),
 		Resp:        resp,
 		Res:         res,
 		Trace:       tr,
@@ -309,16 +309,20 @@ func (e *Engine) ExprEvalWithOptions(
 	extra map[string]rts.Value,
 	opt ExprEvalOptions,
 ) vars.ExprEval {
+	secrets := rtshost.IncludeSecrets
+	if opt.OmitSecretGlobals {
+		secrets = rtshost.OmitSecrets
+	}
 	return func(expr string, pos vars.ExprPos) (string, error) {
 		rt := e.buildRT(rtIn{
-			doc:               doc,
-			req:               req,
-			env:               env,
-			base:              base,
-			vars:              vv,
-			site:              "{{= " + expr + " }}",
-			x:                 extra,
-			omitSecretGlobals: opt.OmitSecretGlobals,
+			doc:     doc,
+			req:     req,
+			env:     env,
+			base:    base,
+			vars:    vv,
+			site:    "{{= " + expr + " }}",
+			x:       extra,
+			secrets: secrets,
 		})
 		return e.evalRTSString(ctx, doc, rt, expr, rts.Pos{Path: pos.Path, Line: pos.Line, Col: pos.Col})
 	}
@@ -359,13 +363,14 @@ func (e *Engine) rtsEvalValue(
 		vv = e.collectVariables(doc, req, env)
 	}
 	rt := e.buildRT(rtIn{
-		doc:  doc,
-		req:  req,
-		env:  env,
-		base: base,
-		vars: vv,
-		site: site,
-		x:    extra,
+		doc:     doc,
+		req:     req,
+		env:     env,
+		base:    base,
+		vars:    vv,
+		site:    site,
+		x:       extra,
+		secrets: rtshost.IncludeSecrets,
 	})
 	return e.evalRTSValue(ctx, doc, rt, expr, pos)
 }
@@ -509,16 +514,17 @@ func (e *Engine) runAsserts(
 	}
 	maps.Copy(ex, rts.AssertExtra(resp))
 	rt := e.buildRT(rtIn{
-		doc:  doc,
-		req:  req,
-		env:  env,
-		base: base,
-		vars: vv,
-		resp: resp,
-		res:  resp,
-		tr:   tr,
-		st:   st,
-		x:    ex,
+		doc:     doc,
+		req:     req,
+		env:     env,
+		base:    base,
+		vars:    vv,
+		resp:    resp,
+		res:     resp,
+		tr:      tr,
+		st:      st,
+		x:       ex,
+		secrets: rtshost.IncludeSecrets,
 	})
 	out := make([]scripts.TestResult, 0, len(req.Metadata.Asserts))
 	for _, as := range req.Metadata.Asserts {
@@ -572,15 +578,15 @@ func (e *Engine) runRTSPreRequest(
 	uses := e.rtsUses(doc, req)
 	envs := e.rtsEnv(env)
 	base = e.rtsBase(doc, base)
-	gv := rtspre.RuntimeGlobals(globs, false)
-	mut := rtspre.NewMutator(&out, e.rtsReq(req), vv, gv)
+	gv := rtshost.RuntimeGlobals(globs, rtshost.IncludeSecrets)
+	mut := rtshost.NewMutator(&out, e.rtsReq(req), vv, gv)
 	empty := &rts.Resp{}
 
-	err := rtspre.Run(ctx, e.re, rtspre.ExecInput{
+	err := rtshost.RunPreRequest(ctx, e.re, rtshost.PreRequest{
 		Doc:     doc,
 		Scripts: req.Metadata.Scripts,
 		BaseDir: base,
-		BuildRT: func() rts.RT {
+		Runtime: func() rts.RT {
 			return rts.RT{
 				Env:         envs,
 				Vars:        vv,
