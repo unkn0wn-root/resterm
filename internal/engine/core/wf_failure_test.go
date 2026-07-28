@@ -51,7 +51,7 @@ func runFailureWorkflow(
 		Name:             "demo",
 		DefaultOnFailure: mode,
 		Steps:            []restfile.WorkflowStep{first, next},
-	}, RunMeta{ID: "wf-1", Env: "dev"})
+	}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -145,7 +145,7 @@ func TestRunPlanCancellationStopsUnderContinue(t *testing.T) {
 			},
 			nextStep(),
 		},
-	}, RunMeta{ID: "wf-1", Env: "dev"})
+	}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -180,7 +180,7 @@ func TestPrepareWorkflowInheritsDefaultOnFailure(t *testing.T) {
 		Name:             "demo",
 		DefaultOnFailure: restfile.WorkflowOnFailureContinue,
 		Steps:            []restfile.WorkflowStep{nextStep()},
-	}, RunMeta{ID: "wf-1", Env: "dev"})
+	}, RunMeta{ID: "wf-1", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}

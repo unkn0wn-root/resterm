@@ -8,16 +8,17 @@ import (
 )
 
 type jsonReport struct {
-	SchemaVersion string       `json:"schemaVersion"`
-	Version       string       `json:"version,omitempty"`
-	FilePath      string       `json:"filePath"`
-	EnvName       string       `json:"envName,omitempty"`
-	StartedAt     time.Time    `json:"startedAt"`
-	EndedAt       time.Time    `json:"endedAt"`
-	DurationMs    int64        `json:"durationMs"`
-	Summary       jsonSummary  `json:"summary"`
-	Warnings      []string     `json:"warnings,omitempty"`
-	Results       []jsonResult `json:"results"`
+	SchemaVersion        string            `json:"schemaVersion"`
+	Version              string            `json:"version,omitempty"`
+	FilePath             string            `json:"filePath"`
+	EnvName              string            `json:"envName,omitempty"`
+	EnvironmentSelection map[string]string `json:"environmentSelection,omitempty"`
+	StartedAt            time.Time         `json:"startedAt"`
+	EndedAt              time.Time         `json:"endedAt"`
+	DurationMs           int64             `json:"durationMs"`
+	Summary              jsonSummary       `json:"summary"`
+	Warnings             []string          `json:"warnings,omitempty"`
+	Results              []jsonResult      `json:"results"`
 }
 
 type jsonSummary struct {
@@ -31,28 +32,29 @@ type jsonSummary struct {
 }
 
 type jsonResult struct {
-	Kind            string       `json:"kind,omitempty"`
-	Name            string       `json:"name,omitempty"`
-	Method          string       `json:"method,omitempty"`
-	Target          string       `json:"target,omitempty"`
-	EffectiveTarget string       `json:"effectiveTarget,omitempty"`
-	Environment     string       `json:"environment,omitempty"`
-	Status          string       `json:"status"`
-	Summary         string       `json:"summary,omitempty"`
-	Canceled        bool         `json:"canceled,omitempty"`
-	SkipReason      string       `json:"skipReason,omitempty"`
-	Error           string       `json:"error,omitempty"`
-	ScriptError     string       `json:"scriptError,omitempty"`
-	Failure         *jsonFailure `json:"failure,omitempty"`
-	DurationMs      int64        `json:"durationMs,omitempty"`
-	HTTP            *jsonHTTP    `json:"http,omitempty"`
-	GRPC            *jsonGRPC    `json:"grpc,omitempty"`
-	Stream          *jsonStream  `json:"stream,omitempty"`
-	Trace           *jsonTrace   `json:"trace,omitempty"`
-	Tests           []jsonTest   `json:"tests,omitempty"`
-	Compare         *jsonCompare `json:"compare,omitempty"`
-	Profile         *jsonProfile `json:"profile,omitempty"`
-	Steps           []jsonStep   `json:"steps,omitempty"`
+	Kind                 string            `json:"kind,omitempty"`
+	Name                 string            `json:"name,omitempty"`
+	Method               string            `json:"method,omitempty"`
+	Target               string            `json:"target,omitempty"`
+	EffectiveTarget      string            `json:"effectiveTarget,omitempty"`
+	Environment          string            `json:"environment,omitempty"`
+	EnvironmentSelection map[string]string `json:"environmentSelection,omitempty"`
+	Status               string            `json:"status"`
+	Summary              string            `json:"summary,omitempty"`
+	Canceled             bool              `json:"canceled,omitempty"`
+	SkipReason           string            `json:"skipReason,omitempty"`
+	Error                string            `json:"error,omitempty"`
+	ScriptError          string            `json:"scriptError,omitempty"`
+	Failure              *jsonFailure      `json:"failure,omitempty"`
+	DurationMs           int64             `json:"durationMs,omitempty"`
+	HTTP                 *jsonHTTP         `json:"http,omitempty"`
+	GRPC                 *jsonGRPC         `json:"grpc,omitempty"`
+	Stream               *jsonStream       `json:"stream,omitempty"`
+	Trace                *jsonTrace        `json:"trace,omitempty"`
+	Tests                []jsonTest        `json:"tests,omitempty"`
+	Compare              *jsonCompare      `json:"compare,omitempty"`
+	Profile              *jsonProfile      `json:"profile,omitempty"`
+	Steps                []jsonStep        `json:"steps,omitempty"`
 }
 
 type jsonHTTP struct {
@@ -105,6 +107,7 @@ type jsonTest struct {
 
 type jsonCompare struct {
 	Baseline string `json:"baseline,omitempty"`
+	Group    string `json:"group,omitempty"`
 }
 
 type jsonProfile struct {
@@ -180,27 +183,28 @@ type jsonTraceBreach struct {
 }
 
 type jsonStep struct {
-	Name            string       `json:"name,omitempty"`
-	Method          string       `json:"method,omitempty"`
-	Target          string       `json:"target,omitempty"`
-	EffectiveTarget string       `json:"effectiveTarget,omitempty"`
-	Environment     string       `json:"environment,omitempty"`
-	Branch          string       `json:"branch,omitempty"`
-	Iteration       int          `json:"iteration,omitempty"`
-	Total           int          `json:"total,omitempty"`
-	Status          string       `json:"status"`
-	Summary         string       `json:"summary,omitempty"`
-	Canceled        bool         `json:"canceled,omitempty"`
-	SkipReason      string       `json:"skipReason,omitempty"`
-	Error           string       `json:"error,omitempty"`
-	ScriptError     string       `json:"scriptError,omitempty"`
-	Failure         *jsonFailure `json:"failure,omitempty"`
-	DurationMs      int64        `json:"durationMs,omitempty"`
-	HTTP            *jsonHTTP    `json:"http,omitempty"`
-	GRPC            *jsonGRPC    `json:"grpc,omitempty"`
-	Stream          *jsonStream  `json:"stream,omitempty"`
-	Trace           *jsonTrace   `json:"trace,omitempty"`
-	Tests           []jsonTest   `json:"tests,omitempty"`
+	Name                 string            `json:"name,omitempty"`
+	Method               string            `json:"method,omitempty"`
+	Target               string            `json:"target,omitempty"`
+	EffectiveTarget      string            `json:"effectiveTarget,omitempty"`
+	Environment          string            `json:"environment,omitempty"`
+	EnvironmentSelection map[string]string `json:"environmentSelection,omitempty"`
+	Branch               string            `json:"branch,omitempty"`
+	Iteration            int               `json:"iteration,omitempty"`
+	Total                int               `json:"total,omitempty"`
+	Status               string            `json:"status"`
+	Summary              string            `json:"summary,omitempty"`
+	Canceled             bool              `json:"canceled,omitempty"`
+	SkipReason           string            `json:"skipReason,omitempty"`
+	Error                string            `json:"error,omitempty"`
+	ScriptError          string            `json:"scriptError,omitempty"`
+	Failure              *jsonFailure      `json:"failure,omitempty"`
+	DurationMs           int64             `json:"durationMs,omitempty"`
+	HTTP                 *jsonHTTP         `json:"http,omitempty"`
+	GRPC                 *jsonGRPC         `json:"grpc,omitempty"`
+	Stream               *jsonStream       `json:"stream,omitempty"`
+	Trace                *jsonTrace        `json:"trace,omitempty"`
+	Tests                []jsonTest        `json:"tests,omitempty"`
 }
 
 func WriteJSON(w io.Writer, rep *Report) error {
@@ -215,13 +219,14 @@ func (rep Report) MarshalJSON() ([]byte, error) {
 
 func (rep Report) json() jsonReport {
 	out := jsonReport{
-		SchemaVersion: schemaVersion(rep.SchemaVersion),
-		Version:       rep.Version,
-		FilePath:      rep.FilePath,
-		EnvName:       rep.EnvName,
-		StartedAt:     rep.StartedAt,
-		EndedAt:       rep.EndedAt,
-		DurationMs:    durMS(rep.Duration),
+		SchemaVersion:        schemaVersion(rep.SchemaVersion),
+		Version:              rep.Version,
+		FilePath:             rep.FilePath,
+		EnvName:              rep.EnvName,
+		EnvironmentSelection: rep.EnvironmentSelection,
+		StartedAt:            rep.StartedAt,
+		EndedAt:              rep.EndedAt,
+		DurationMs:           durMS(rep.Duration),
 		Summary: jsonSummary{
 			Total:        rep.Total,
 			Passed:       rep.Passed,
@@ -246,26 +251,27 @@ func (res Result) MarshalJSON() ([]byte, error) {
 
 func (res Result) json() jsonResult {
 	out := jsonResult{
-		Kind:            res.Kind,
-		Name:            res.Name,
-		Method:          requestMethodValue(res.Method),
-		Target:          res.Target,
-		EffectiveTarget: effectiveTargetValue(res.Target, res.EffectiveTarget),
-		Environment:     res.Environment,
-		Status:          jsonStatus(res.Status),
-		Summary:         res.Summary,
-		Canceled:        res.Canceled,
-		SkipReason:      res.SkipReason,
-		Error:           res.Error,
-		ScriptError:     res.ScriptError,
-		Failure:         res.Failure.json(),
-		DurationMs:      durMS(res.Duration),
-		HTTP:            res.HTTP.json(),
-		GRPC:            res.GRPC.json(),
-		Stream:          res.Stream.json(),
-		Trace:           res.Trace.json(),
-		Compare:         res.Compare.json(),
-		Profile:         res.Profile.json(),
+		Kind:                 res.Kind,
+		Name:                 res.Name,
+		Method:               requestMethodValue(res.Method),
+		Target:               res.Target,
+		EffectiveTarget:      effectiveTargetValue(res.Target, res.EffectiveTarget),
+		Environment:          res.Environment,
+		EnvironmentSelection: res.EnvironmentSelection,
+		Status:               jsonStatus(res.Status),
+		Summary:              res.Summary,
+		Canceled:             res.Canceled,
+		SkipReason:           res.SkipReason,
+		Error:                res.Error,
+		ScriptError:          res.ScriptError,
+		Failure:              res.Failure.json(),
+		DurationMs:           durMS(res.Duration),
+		HTTP:                 res.HTTP.json(),
+		GRPC:                 res.GRPC.json(),
+		Stream:               res.Stream.json(),
+		Trace:                res.Trace.json(),
+		Compare:              res.Compare.json(),
+		Profile:              res.Profile.json(),
 	}
 	if len(res.Tests) > 0 {
 		out.Tests = make([]jsonTest, 0, len(res.Tests))
@@ -288,26 +294,27 @@ func (step Step) MarshalJSON() ([]byte, error) {
 
 func (step Step) json() jsonStep {
 	out := jsonStep{
-		Name:            step.Name,
-		Method:          requestMethodValue(step.Method),
-		Target:          step.Target,
-		EffectiveTarget: effectiveTargetValue(step.Target, step.EffectiveTarget),
-		Environment:     step.Environment,
-		Branch:          step.Branch,
-		Iteration:       step.Iteration,
-		Total:           step.Total,
-		Status:          jsonStatus(step.Status),
-		Summary:         step.Summary,
-		Canceled:        step.Canceled,
-		SkipReason:      step.SkipReason,
-		Error:           step.Error,
-		ScriptError:     step.ScriptError,
-		Failure:         step.Failure.json(),
-		DurationMs:      durMS(step.Duration),
-		HTTP:            step.HTTP.json(),
-		GRPC:            step.GRPC.json(),
-		Stream:          step.Stream.json(),
-		Trace:           step.Trace.json(),
+		Name:                 step.Name,
+		Method:               requestMethodValue(step.Method),
+		Target:               step.Target,
+		EffectiveTarget:      effectiveTargetValue(step.Target, step.EffectiveTarget),
+		Environment:          step.Environment,
+		EnvironmentSelection: step.EnvironmentSelection,
+		Branch:               step.Branch,
+		Iteration:            step.Iteration,
+		Total:                step.Total,
+		Status:               jsonStatus(step.Status),
+		Summary:              step.Summary,
+		Canceled:             step.Canceled,
+		SkipReason:           step.SkipReason,
+		Error:                step.Error,
+		ScriptError:          step.ScriptError,
+		Failure:              step.Failure.json(),
+		DurationMs:           durMS(step.Duration),
+		HTTP:                 step.HTTP.json(),
+		GRPC:                 step.GRPC.json(),
+		Stream:               step.Stream.json(),
+		Trace:                step.Trace.json(),
 	}
 	if len(step.Tests) > 0 {
 		out.Tests = make([]jsonTest, 0, len(step.Tests))
@@ -417,7 +424,7 @@ func (cmp *Compare) json() *jsonCompare {
 	if cmp == nil {
 		return nil
 	}
-	return &jsonCompare{Baseline: cmp.Baseline}
+	return &jsonCompare{Baseline: cmp.Baseline, Group: cmp.Group}
 }
 
 func (prof *Profile) json() *jsonProfile {

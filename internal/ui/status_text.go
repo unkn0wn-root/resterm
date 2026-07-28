@@ -27,23 +27,21 @@ func expandStatusText(r *vars.Resolver, raw string) string {
 func (m *Model) statusResolver(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
 	extras ...map[string]string,
 ) *vars.Resolver {
 	rq := m.requestSvc(httpclient.Options{})
-	return rq.DisplayResolver(context.Background(), doc, req, env, "", nil, extras...)
+	return rq.DisplayResolver(context.Background(), doc, req, m.env, "", nil, extras...)
 }
 
 func (m *Model) statusRequestLabel(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
 	extras ...map[string]string,
 ) string {
 	if req == nil {
 		return ""
 	}
-	r := m.statusResolver(doc, req, env, extras...)
+	r := m.statusResolver(doc, req, extras...)
 	name := expandStatusText(r, req.Metadata.Name)
 	if name == "" {
 		name = expandStatusText(r, req.URL)
@@ -54,13 +52,12 @@ func (m *Model) statusRequestLabel(
 func (m *Model) statusRequestTitle(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
 	extras ...map[string]string,
 ) string {
 	if req == nil {
 		return ""
 	}
-	r := m.statusResolver(doc, req, env, extras...)
+	r := m.statusResolver(doc, req, extras...)
 
 	method := strings.ToUpper(strings.TrimSpace(req.Method))
 	if method == "" {

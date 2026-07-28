@@ -25,20 +25,10 @@ const (
 // detection keeps JSON discovery stable by requiring names that intentionally look like .env files
 func IsDotEnvPath(path string) bool {
 	base := strings.ToLower(filepath.Base(path))
-	ext := strings.ToLower(filepath.Ext(path))
-	if ext == ".json" || strings.HasSuffix(base, ".json") {
+	if strings.HasSuffix(base, ".json") {
 		return false
 	}
-	if base == ".env" {
-		return true
-	}
-	if strings.HasPrefix(base, ".env.") {
-		return true
-	}
-	if strings.HasSuffix(base, ".env") {
-		return true
-	}
-	return false
+	return base == ".env" || strings.HasPrefix(base, ".env.") || strings.HasSuffix(base, ".env")
 }
 
 func loadDotEnvEnvironment(path string) (envs EnvironmentSet, err error) {
@@ -94,14 +84,12 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 			return nil, err
 		}
 
-		finalValue := value
 		if mode != quoteModeSingle {
 			// single quotes purposely stay literal
 			// so a value such as '${TOKEN}' never surprises the reader by expanding
-			if expanded, err := expandDotEnvValue(value, values, lineNumber); err != nil {
+			value, err = expandDotEnvValue(value, values, lineNumber)
+			if err != nil {
 				return nil, err
-			} else {
-				finalValue = expanded
 			}
 		}
 		if isWorkspaceKey(key) {
@@ -114,7 +102,7 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 			}
 			workspaceSeen = true
 		}
-		values[key] = finalValue
+		values[key] = value
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, diag.WrapAsf(diag.ClassFilesystem, err, "read env file %s", path)
@@ -124,18 +112,13 @@ func parseDotEnv(r io.Reader, path string) (map[string]string, error) {
 }
 
 func parseDotEnvAssignment(line string, lineNumber int) (string, string, error) {
-	trimmed := strings.TrimSpace(line)
-	if trimmed == "" {
-		return "", "", nil
-	}
-
-	lower := strings.ToLower(trimmed)
+	lower := strings.ToLower(line)
 	if strings.HasPrefix(lower, "export ") || strings.HasPrefix(lower, "export\t") {
-		trimmed = strings.TrimSpace(trimmed[len("export"):])
+		line = strings.TrimSpace(line[len("export"):])
 	}
 
-	idx := strings.IndexRune(trimmed, '=')
-	if idx < 0 {
+	key, value, ok := strings.Cut(line, "=")
+	if !ok {
 		return "", "", diag.Newf(
 			diag.ClassParse,
 			"dotenv line %d: expected KEY=value",
@@ -143,12 +126,10 @@ func parseDotEnvAssignment(line string, lineNumber int) (string, string, error) 
 		)
 	}
 
-	key := strings.TrimSpace(trimmed[:idx])
+	key = strings.TrimSpace(key)
 	if key == "" {
 		return "", "", diag.Newf(diag.ClassParse, "dotenv line %d: missing key", lineNumber)
 	}
-
-	value := trimmed[idx+1:]
 	return key, value, nil
 }
 
@@ -160,17 +141,17 @@ func parseDotEnvValue(raw string, lineNumber int) (string, quoteMode, error) {
 
 	switch leadingTrimmed[0] {
 	case '"':
-		value, _, err := parseQuotedValue(leadingTrimmed, quoteModeDouble, lineNumber)
+		value, err := parseQuotedValue(leadingTrimmed, quoteModeDouble, lineNumber)
 		return value, quoteModeDouble, err
 	case '\'':
-		value, _, err := parseQuotedValue(leadingTrimmed, quoteModeSingle, lineNumber)
+		value, err := parseQuotedValue(leadingTrimmed, quoteModeSingle, lineNumber)
 		return value, quoteModeSingle, err
 	default:
 		return stripInlineComment(leadingTrimmed), quoteModeNone, nil
 	}
 }
 
-func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, string, error) {
+func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, error) {
 	quote := byte('"')
 	if mode == quoteModeSingle {
 		quote = '\''
@@ -181,7 +162,7 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 		ch := input[i]
 		if ch == '\\' {
 			if i+1 >= len(input) {
-				return "", "", diag.Newf(
+				return "", diag.Newf(
 					diag.ClassParse,
 					"dotenv line %d: unfinished escape",
 					lineNumber,
@@ -197,20 +178,19 @@ func parseQuotedValue(input string, mode quoteMode, lineNumber int) (string, str
 			continue
 		}
 		if ch == quote {
-			remainder := input[i+1:]
-			trimmed := strings.TrimSpace(remainder)
-			if trimmed != "" && trimmed[0] != '#' && trimmed[0] != ';' {
-				return "", "", diag.Newf(
+			rest := strings.TrimSpace(input[i+1:])
+			if rest != "" && rest[0] != '#' && rest[0] != ';' {
+				return "", diag.Newf(
 					diag.ClassParse,
 					"dotenv line %d: unexpected content after quoted value",
 					lineNumber,
 				)
 			}
-			return b.String(), remainder, nil
+			return b.String(), nil
 		}
 		b.WriteByte(ch)
 	}
-	return "", "", diag.Newf(
+	return "", diag.Newf(
 		diag.ClassParse,
 		"dotenv line %d: unterminated quoted value",
 		lineNumber,
@@ -303,11 +283,8 @@ func resolveDotEnvRef(name string, resolved map[string]string, lineNumber int) (
 		return value, nil
 	}
 	// allow OS envs fallbacks so sensitive values can stay outside the dotenv file and be passed at launch time
-	if envValue, ok := os.LookupEnv(name); ok {
-		return envValue, nil
-	}
-	if envValue, ok := os.LookupEnv(strings.ToUpper(name)); ok {
-		return envValue, nil
+	if value, ok := lookupEnv(name); ok {
+		return value, nil
 	}
 	return "", diag.Newf(
 		diag.ClassParse,

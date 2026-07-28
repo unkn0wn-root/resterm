@@ -9,7 +9,7 @@ func (e *Engine) compareSpec(req *restfile.Request) *restfile.CompareSpec {
 	if req == nil {
 		return nil
 	}
-	if spec := core.BuildCompareSpec(e.cfg.CompareTargets, e.cfg.CompareBase); spec != nil {
+	if spec := core.BuildCompareSpec(e.cfg.CompareTargets, e.cfg.CompareBase, e.cfg.CompareGroup); spec != nil {
 		return spec
 	}
 	return req.Metadata.Compare.Clone()

@@ -9,14 +9,14 @@ import (
 )
 
 func (m *Model) refreshCompletionScope() {
-	scope := buildCompletionScope(m.doc, m.cfg.EnvironmentSet, m.cfg.EnvironmentName)
+	scope := buildCompletionScope(m.doc, m.cfg.Catalog, m.cfg.Selection)
 	m.editor.SetCompletionScope(scope)
 }
 
 func buildCompletionScope(
 	doc *restfile.Document,
-	set vars.EnvironmentSet,
-	env string,
+	cat vars.Catalog,
+	sel vars.Selection,
 ) intellisense.Scope {
 	var scope intellisense.Scope
 	seen := make(map[string]struct{})
@@ -58,23 +58,24 @@ func buildCompletionScope(
 	}
 
 	// Environment keys fill in only where a declared variable did not.
-	for _, key := range sortedKeys(vars.EnvValues(set, env)) {
-		add(key, "env", false)
+	if env, err := cat.Resolve(sel); err == nil {
+		for _, key := range sortedKeys(env.Values()) {
+			add(key, "env", false)
+		}
 	}
-	scope.Environments = environmentNames(set)
+	scope.Environments, scope.EnvironmentGroups = completionEnvironments(cat)
 	return scope
 }
 
-func environmentNames(set vars.EnvironmentSet) []string {
-	names := make([]string, 0, len(set))
-	for name := range set {
-		if name == vars.SharedEnvKey {
-			continue
-		}
-		names = append(names, name)
+func completionEnvironments(cat vars.Catalog) ([]string, map[string][]string) {
+	if !cat.Grouped() {
+		return cat.Names(), nil
 	}
-	sort.Strings(names)
-	return names
+	groups := make(map[string][]string, cat.Len())
+	for _, group := range cat.Groups() {
+		groups[group.Name] = group.ProfileNames()
+	}
+	return nil, groups
 }
 
 func profileNames[T any](profiles []T, name func(T) string) []string {

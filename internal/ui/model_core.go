@@ -150,8 +150,8 @@ type Config struct {
 	ActiveThemeKey      string
 	Settings            config.Settings
 	SettingsHandle      config.SettingsHandle
-	EnvironmentSet      vars.EnvironmentSet
-	EnvironmentName     string
+	Catalog             vars.Catalog
+	Selection           vars.Selection
 	EnvironmentFile     string
 	EnvironmentFallback string
 	HTTPOptions         httpclient.Options
@@ -167,6 +167,7 @@ type Config struct {
 	UpdateCmd           string
 	CompareTargets      []string
 	CompareBase         string
+	CompareGroup        string
 	Bindings            *bindings.Map
 	Runtime             *rtrun.Runtime
 }
@@ -180,6 +181,7 @@ type operatorState struct {
 
 type Model struct {
 	cfg                Config
+	env                vars.Environment
 	run                *rtrun.Runtime
 	rq                 *rqeng.Engine
 	bindingsMap        *bindings.Map
@@ -554,12 +556,12 @@ func New(cfg Config) Model {
 	historyList.Paginator.Type = paginator.Arabic
 	historyList.Paginator.ArabicFormat = "%d/%d"
 
-	envItems := makeEnvItems(cfg.EnvironmentSet)
+	envItems := makeEnvItems(cfg.Catalog, cfg.Selection)
 	envList := list.New(envItems, listDelegateForTheme(th, false, 0), 0, 0)
 	envList.Title = "Environments"
 	envList.SetShowStatusBar(false)
 	envList.SetShowHelp(false)
-	envList.SetFilteringEnabled(false)
+	envList.SetFilteringEnabled(true)
 	envList.DisableQuitKeybindings()
 
 	themeItems := makeThemeItems(cfg.ThemeCatalog, activeTheme)
@@ -625,8 +627,10 @@ func New(cfg Config) Model {
 	updateEnabled := cfg.EnableUpdate && !update.DevBuild(updateVersion) && cfg.UpdateClient.Ready()
 	statusUser, statusHost := currentStatusIdentity()
 
+	env, _ := cfg.Catalog.Resolve(cfg.Selection)
 	model := Model{
 		cfg:                    cfg,
+		env:                    env,
 		run:                    run,
 		bindingsMap:            bindingMap,
 		theme:                  th,

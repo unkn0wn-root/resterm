@@ -46,6 +46,25 @@ func (o *mapObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return mapRequire(ctx, pos, args, o.s.r, o.name, o.m)
 }
 
+type envObj struct {
+	*mapObj
+	groups *mapObj
+}
+
+func newEnvObj(values, groups map[string]string) *envObj {
+	return &envObj{
+		mapObj: newMapObj("env", values),
+		groups: newMapObj("env.groups", groups),
+	}
+}
+
+func (o *envObj) GetMember(name string) (Value, bool) {
+	if strings.EqualFold(name, "groups") {
+		return Obj(o.groups), true
+	}
+	return o.mapObj.GetMember(name)
+}
+
 type Resp struct {
 	Status string
 	Code   int

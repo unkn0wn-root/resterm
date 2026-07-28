@@ -28,12 +28,12 @@ func TestLoadEnvironmentFileFlattensNestedObjects(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, err := LoadEnvironmentFile(path)
+	cat, err := LoadEnvironmentFile(path)
 	if err != nil {
 		t.Fatalf("load env: %v", err)
 	}
 
-	dev := envs["dev"]
+	dev := resolveValues(t, cat, "dev")
 	if dev["base.url"] != "https://api.dev" {
 		t.Fatalf("expected base.url to be flattened, got %q", dev["base.url"])
 	}
@@ -74,18 +74,12 @@ func TestSharedMergesIntoAllEnvironments(t *testing.T) {
 		t.Fatalf("write env file: %v", err)
 	}
 
-	envs, err := LoadEnvironmentFile(path)
+	cat, err := LoadEnvironmentFile(path)
 	if err != nil {
 		t.Fatalf("load env: %v", err)
 	}
 
-	// $shared must be removed from the set.
-	if _, ok := envs[SharedEnvKey]; ok {
-		t.Fatal("$shared should not appear in the returned EnvironmentSet")
-	}
-
-	// dev inherits shared values.
-	dev := envs["dev"]
+	dev := resolveValues(t, cat, "dev")
 	if dev["api.version"] != "v2" {
 		t.Fatalf("dev should inherit api.version from $shared, got %q", dev["api.version"])
 	}
@@ -96,8 +90,7 @@ func TestSharedMergesIntoAllEnvironments(t *testing.T) {
 		t.Fatalf("dev base.url wrong, got %q", dev["base.url"])
 	}
 
-	// prod overrides auth.clientId but inherits api.version.
-	prod := envs["prod"]
+	prod := resolveValues(t, cat, "prod")
 	if prod["api.version"] != "v2" {
 		t.Fatalf("prod should inherit api.version from $shared, got %q", prod["api.version"])
 	}
@@ -133,7 +126,7 @@ func TestIsReservedEnvironmentTrimsWhitespace(t *testing.T) {
 	}
 }
 
-func TestDefaultEnvironment(t *testing.T) {
+func TestCatalogDefaultSelection(t *testing.T) {
 	tests := []struct {
 		name string
 		set  EnvironmentSet
@@ -180,32 +173,78 @@ func TestDefaultEnvironment(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := DefaultEnvironment(tc.set); got != tc.want {
-				t.Fatalf("DefaultEnvironment() = %q, want %q", got, tc.want)
+			cat, err := NewCatalog(tc.set)
+			if err != nil {
+				t.Fatalf("new catalog: %v", err)
+			}
+			if got := cat.DefaultSelection().Name(); got != tc.want {
+				t.Fatalf("DefaultSelection().Name() = %q, want %q", got, tc.want)
 			}
 		})
 	}
 }
 
-func TestSelectEnvTrimsInputs(t *testing.T) {
-	set := EnvironmentSet{"dev": {"base.url": "https://api.dev"}}
-
-	if got := SelectEnv(set, "  stage  ", "dev"); got != "stage" {
-		t.Fatalf("SelectEnv override = %q, want %q", got, "stage")
+func TestCatalogSelect(t *testing.T) {
+	cat, err := NewCatalog(EnvironmentSet{"dev": {"base.url": "https://api.dev"}})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
 	}
-	if got := SelectEnv(set, "", "  dev  "); got != "dev" {
-		t.Fatalf("SelectEnv current = %q, want %q", got, "dev")
+
+	sel, err := cat.Select("  dev  ", nil)
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+	if got := sel.Name(); got != "dev" {
+		t.Fatalf("selection name = %q, want dev", got)
+	}
+
+	if _, err := cat.Select("stage", nil); err == nil {
+		t.Fatal("expected unknown environment to be rejected")
+	}
+	if _, err := cat.Select("dev", map[string]string{"api": "dev"}); err == nil {
+		t.Fatal("expected group selection against flat catalog to be rejected")
+	}
+
+	empty := Catalog{}
+	sel, err = empty.Select("adhoc", nil)
+	if err != nil {
+		t.Fatalf("select on empty catalog: %v", err)
+	}
+	if got := sel.Name(); got != "adhoc" {
+		t.Fatalf("empty catalog selection name = %q, want adhoc", got)
 	}
 }
 
-func TestEnvValuesTrimsName(t *testing.T) {
-	set := EnvironmentSet{"dev": {"base.url": "https://api.dev"}}
+func TestGroupedCatalogSelect(t *testing.T) {
+	cat, err := NewGroupedCatalog(nil, []Group{{
+		Name:     "api",
+		Profiles: EnvironmentSet{"dev": {"url": "d"}, "prod": {"url": "p"}},
+		Default:  "dev",
+	}})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
 
-	env := EnvValues(set, "  dev  ")
-	if env == nil {
-		t.Fatal("expected trimmed environment lookup to succeed")
+	if _, err := cat.Select("", map[string]string{"missing": "dev"}); err == nil {
+		t.Fatal("expected unknown group to be rejected")
 	}
-	if env["base.url"] != "https://api.dev" {
-		t.Fatalf("unexpected env values: %#v", env)
+	if _, err := cat.Select("", map[string]string{"api": "dev", "API": "prod"}); err == nil {
+		t.Fatal("expected duplicate group keys to be rejected")
 	}
+	if _, err := cat.Select("dev", nil); err == nil {
+		t.Fatal("expected environment name against grouped catalog to be rejected")
+	}
+}
+
+func resolveValues(t *testing.T, cat Catalog, name string) map[string]string {
+	t.Helper()
+	sel, err := cat.Select(name, nil)
+	if err != nil {
+		t.Fatalf("select %q: %v", name, err)
+	}
+	env, err := cat.Resolve(sel)
+	if err != nil {
+		t.Fatalf("resolve %q: %v", name, err)
+	}
+	return env.Values()
 }

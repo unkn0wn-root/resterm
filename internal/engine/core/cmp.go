@@ -9,14 +9,17 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 	"google.golang.org/grpc/codes"
 )
 
 type ComparePlan struct {
-	Run     RunMeta
-	Doc     *restfile.Document
-	Request *restfile.Request
-	Spec    restfile.CompareSpec
+	Run      RunMeta
+	Doc      *restfile.Document
+	Request  *restfile.Request
+	Group    string
+	Baseline string
+	Targets  []vars.Target
 }
 
 type cmpRun struct {
@@ -34,24 +37,24 @@ type cmpRun struct {
 func PrepareCompare(
 	doc *restfile.Document,
 	req *restfile.Request,
-	spec *restfile.CompareSpec,
+	targets []vars.Target,
+	group, baseline string,
 	run RunMeta,
 ) (*ComparePlan, error) {
 	if req == nil {
 		return nil, fmt.Errorf("request is nil")
 	}
-	spec = prepareCompareSpec(spec)
-	if spec == nil || len(spec.Environments) < 2 {
+	if len(targets) < 2 {
 		return nil, fmt.Errorf("compare requires at least two environments")
 	}
-	run = normRun(run, ModeCompare, engine.ReqTitle(req), run.Env)
-	out := &ComparePlan{
-		Run:     run,
-		Doc:     doc,
-		Request: req,
-		Spec:    *spec,
-	}
-	return out, nil
+	return &ComparePlan{
+		Run:      normRun(run, ModeCompare, engine.ReqTitle(req)),
+		Doc:      doc,
+		Request:  req,
+		Group:    group,
+		Baseline: baseline,
+		Targets:  targets,
+	}, nil
 }
 
 func RunCompare(ctx context.Context, dep Dep, sink Sink, pl *ComparePlan) error {
@@ -91,7 +94,7 @@ func CompareBaseIndex(rows []engine.CompareRow, want string) int {
 		return 0
 	}
 	for i := range rows {
-		if strings.EqualFold(rows[i].Environment, want) {
+		if strings.EqualFold(rows[i].Name(), want) {
 			return i
 		}
 	}
@@ -103,30 +106,30 @@ func CompareBaseline(rows []engine.CompareRow, want string) string {
 	if want != "" || len(rows) == 0 {
 		return want
 	}
-	return rows[0].Environment
+	return rows[0].Name()
 }
 
 func (r *cmpRun) run(ctx context.Context) error {
-	total := len(r.pl.Spec.Environments)
-	for i, env := range r.pl.Spec.Environments {
+	total := len(r.pl.Targets)
+	for i, target := range r.pl.Targets {
 		if ctx.Err() != nil {
 			r.canceled = true
 			break
 		}
 		req := request.CloneRequest(r.pl.Request)
-		if err := r.emitRowStart(i, env, total, req); err != nil {
+		if err := r.emitRowStart(i, target, total, req); err != nil {
 			return err
 		}
 		out, err := r.dep.ExecuteWith(
 			r.pl.Doc,
 			req,
-			env,
+			target.Env,
 			request.ExecOptions{Record: false, Ctx: ctx},
 		)
 		if err != nil {
 			return err
 		}
-		if err := r.emitRowDone(i, env, total, out); err != nil {
+		if err := r.emitRowDone(i, target, total, out); err != nil {
 			return err
 		}
 		ok, skip, cancel := compareOutcome(out)
@@ -152,25 +155,21 @@ func (r *cmpRun) note(ok, skip, cancel bool) {
 	}
 }
 
-func (r *cmpRun) row(i int, env string, total int) RowMeta {
-	name := strings.TrimSpace(env)
+func (r *cmpRun) row(i int, target vars.Target, total int) RowMeta {
 	return RowMeta{
-		Index: i,
-		Env:   name,
-		Base:  r.base(i, name),
-		Total: total,
+		Index:   i,
+		Env:     target.Env.Label(),
+		Profile: target.Profile,
+		Base:    r.base(i, target),
+		Total:   total,
 	}
 }
 
-func (r *cmpRun) base(i int, env string) bool {
-	if r == nil {
-		return false
-	}
-	want := strings.TrimSpace(r.pl.Spec.Baseline)
-	if want == "" {
+func (r *cmpRun) base(i int, target vars.Target) bool {
+	if r.pl.Baseline == "" {
 		return i == 0
 	}
-	return strings.EqualFold(env, want)
+	return strings.EqualFold(target.Name(), r.pl.Baseline)
 }
 
 func compareOutcome(out engine.RequestResult) (bool, bool, bool) {

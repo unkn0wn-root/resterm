@@ -205,7 +205,7 @@ func rtsStream(info *scripts.StreamInfo) *rts.Stream {
 type rtIn struct {
 	doc     *restfile.Document
 	req     *restfile.Request
-	env     string
+	env     vars.Environment
 	base    string
 	vars    map[string]string
 	site    string
@@ -233,6 +233,7 @@ func (e *Engine) buildRT(in rtIn) rts.RT {
 	}
 	return rts.RT{
 		Env:         e.rtsEnv(in.env),
+		EnvGroups:   in.env.Selection().Groups(),
 		Vars:        in.vars,
 		Globals:     rtshost.RuntimeGlobals(e.collectGlobalValues(in.doc, in.env), in.secrets),
 		Resp:        resp,
@@ -268,7 +269,8 @@ func (e *Engine) rtsEval(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	extra map[string]rts.Value,
 	extras ...map[string]string,
 ) vars.ExprEval {
@@ -292,7 +294,8 @@ func (e *Engine) ExprEval(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 ) vars.ExprEval {
@@ -304,7 +307,8 @@ func (e *Engine) ExprEvalWithOptions(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 	opt ExprEvalOptions,
@@ -354,7 +358,8 @@ func (e *Engine) rtsEvalValue(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base, expr, site string,
+	env vars.Environment,
+	base, expr, site string,
 	pos rts.Pos,
 	vv map[string]string,
 	extra map[string]rts.Value,
@@ -382,7 +387,7 @@ func (e *Engine) PosForLine(doc *restfile.Document, req *restfile.Request, line 
 func (e *Engine) CollectVariables(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	extras ...map[string]string,
 ) map[string]string {
 	return e.collectVariables(doc, req, env, extras...)
@@ -392,7 +397,8 @@ func (e *Engine) EvalValue(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base, expr, site string,
+	env vars.Environment,
+	base, expr, site string,
 	pos rts.Pos,
 	vv map[string]string,
 	extra map[string]rts.Value,
@@ -410,7 +416,8 @@ func (e *Engine) EvalCondition(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	spec *restfile.ConditionSpec,
 	vv map[string]string,
 	extra map[string]rts.Value,
@@ -453,7 +460,8 @@ func (e *Engine) EvalForEachItems(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	spec ForEachSpec,
 	vv map[string]string,
 	extra map[string]rts.Value,
@@ -492,7 +500,8 @@ func (e *Engine) runAsserts(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 	resp *rts.Resp,
@@ -556,7 +565,8 @@ func (e *Engine) RunPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	globals map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
@@ -567,7 +577,8 @@ func (e *Engine) runRTSPreRequest(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	globs map[string]vars.GlobalMutation,
 ) (prerequest.Output, error) {
@@ -577,6 +588,7 @@ func (e *Engine) runRTSPreRequest(
 	}
 	uses := e.rtsUses(doc, req)
 	envs := e.rtsEnv(env)
+	groups := env.Selection().Groups()
 	base = e.rtsBase(doc, base)
 	gv := rtshost.RuntimeGlobals(globs, rtshost.IncludeSecrets)
 	mut := rtshost.NewMutator(&out, e.rtsReq(req), vv, gv)
@@ -589,6 +601,7 @@ func (e *Engine) runRTSPreRequest(
 		Runtime: func() rts.RT {
 			return rts.RT{
 				Env:         envs,
+				EnvGroups:   groups,
 				Vars:        vv,
 				Globals:     gv,
 				Resp:        e.rtsLast(),
@@ -1125,7 +1138,8 @@ func (e *Engine) runRTSApply(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 ) error {
@@ -1165,7 +1179,8 @@ func (e *Engine) ApplyPatches(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env, base string,
+	env vars.Environment,
+	base string,
 	vv map[string]string,
 	extra map[string]rts.Value,
 ) error {

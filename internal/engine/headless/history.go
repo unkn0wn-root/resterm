@@ -7,6 +7,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 var sensHdr = map[string]struct{}{
@@ -35,7 +36,7 @@ var sensHdr = map[string]struct{}{
 func (e *Engine) secretValues(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	extra ...string,
 ) []string {
 	vals := make(map[string]struct{})
@@ -66,7 +67,7 @@ func (e *Engine) secretValues(
 	}
 	if e != nil && e.rt != nil {
 		if fs := e.rt.Files(); fs != nil {
-			if snap := fs.Snapshot(e.env(env), e.filePath(doc)); len(snap) > 0 {
+			if snap := fs.Snapshot(env.Scope(), e.filePath(doc)); len(snap) > 0 {
 				for _, v := range snap {
 					if v.Secret {
 						add(v.Value)
@@ -75,7 +76,7 @@ func (e *Engine) secretValues(
 			}
 		}
 		if gs := e.rt.Globals(); gs != nil {
-			if snap := gs.Snapshot(e.env(env)); len(snap) > 0 {
+			if snap := gs.Snapshot(env.Scope()); len(snap) > 0 {
 				for _, v := range snap {
 					if v.Secret {
 						add(v.Value)

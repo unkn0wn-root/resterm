@@ -65,7 +65,7 @@ func TestExecuteProfilePreservesWarmupStatsAndFailures(t *testing.T) {
 		Requests: []*restfile.Request{req},
 	}
 
-	out, err := eng.ExecuteProfile(doc, req, "")
+	out, err := eng.ExecuteProfile(doc, req, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteProfile: %v", err)
 	}

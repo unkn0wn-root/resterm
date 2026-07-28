@@ -50,10 +50,10 @@ func TestStatusRequestLabelPrefersName(t *testing.T) {
 	if len(doc.Requests) != 2 {
 		t.Fatalf("expected 2 requests, got %d", len(doc.Requests))
 	}
-	if got := m.statusRequestLabel(doc, doc.Requests[0], ""); got != "Login" {
+	if got := m.statusRequestLabel(doc, doc.Requests[0]); got != "Login" {
 		t.Fatalf("named request: want %q, got %q", "Login", got)
 	}
-	if got := m.statusRequestLabel(doc, doc.Requests[1], ""); got != "https://api.example.com/health" {
+	if got := m.statusRequestLabel(doc, doc.Requests[1]); got != "https://api.example.com/health" {
 		t.Fatalf("unnamed request: want URL fallback, got %q", got)
 	}
 }

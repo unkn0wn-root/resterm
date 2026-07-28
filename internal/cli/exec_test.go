@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -141,5 +145,183 @@ func TestExecFlagsShortAliases(t *testing.T) {
 	}
 	if cfg.ServiceName != "resterm-test" {
 		t.Fatalf("telemetry service = %q, want resterm-test", cfg.ServiceName)
+	}
+}
+
+func TestExecFlagsParseGroupedSelections(t *testing.T) {
+	flags := NewExecFlags()
+	fs := NewFlagSet("test")
+	flags.Bind(fs)
+	err := fs.Parse([]string{
+		"--env-group", "app=dev app 1",
+		"--env-group", "api=dev",
+		"--compare", "dev app 1,dev app 2",
+		"--compare-group", "app",
+	})
+	if err != nil {
+		t.Fatalf("parse flags: %v", err)
+	}
+	if got, want := map[string]string(flags.EnvGroups), map[string]string{
+		"api": "dev",
+		"app": "dev app 1",
+	}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("group flags = %#v, want %#v", got, want)
+	}
+	targets, err := ParseCompareTargets(flags.CompareTargetsRaw)
+	if err != nil {
+		t.Fatalf("parse compare: %v", err)
+	}
+	if want := []string{"dev app 1", "dev app 2"}; !reflect.DeepEqual(targets, want) {
+		t.Fatalf("compare targets = %#v, want %#v", targets, want)
+	}
+}
+
+func TestExecFlagsRejectDuplicateGroupedSelection(t *testing.T) {
+	flags := NewExecFlags()
+	fs := NewFlagSet("test")
+	flags.Bind(fs)
+	err := fs.Parse([]string{
+		"--env-group", "api=dev",
+		"--env-group", "API=prod",
+	})
+	if err == nil || !strings.Contains(err.Error(), "selected more than once") {
+		t.Fatalf("error = %v, want duplicate group error", err)
+	}
+}
+
+func TestExecFlagsResolveGroupedDefaultsAndCompare(t *testing.T) {
+	dir := t.TempDir()
+	envFile := filepath.Join(dir, "resterm.env.json")
+	data := `{
+		"$groups": {
+			"api": {
+				"$default": "dev",
+				"dev": {"api.url": "dev"},
+				"prod": {"api.url": "prod"}
+			},
+			"app": {
+				"$default": "dev app 1",
+				"dev app 1": {"app.url": "one"},
+				"dev app 2": {"app.url": "two"}
+			}
+		}
+	}`
+	if err := os.WriteFile(envFile, []byte(data), 0o600); err != nil {
+		t.Fatalf("write env file: %v", err)
+	}
+
+	flags := NewExecFlags()
+	flags.EnvFile = envFile
+	flags.EnvGroups = GroupFlags{"app": "dev app 2"}
+	flags.CompareTargetsRaw = "dev,prod"
+	flags.CompareBaseline = "prod"
+	flags.CompareGroup = "api"
+	cfg, err := flags.Resolve(filepath.Join(dir, "api.http"))
+	if err != nil {
+		t.Fatalf("resolve flags: %v", err)
+	}
+	env, err := cfg.Catalog.Resolve(cfg.Selection)
+	if err != nil {
+		t.Fatalf("resolve environment: %v", err)
+	}
+	if got, want := env.Label(), "api=dev, app=dev app 2"; got != want {
+		t.Fatalf("environment = %q, want %q", got, want)
+	}
+	if cfg.CompareGroup != "api" || cfg.CompareBase != "prod" {
+		t.Fatalf("compare config = group %q base %q", cfg.CompareGroup, cfg.CompareBase)
+	}
+}
+
+func TestExecFlagsRejectEnvironmentModeConflicts(t *testing.T) {
+	dir := t.TempDir()
+	flat := filepath.Join(dir, "flat.json")
+	grouped := filepath.Join(dir, "grouped.json")
+	if err := os.WriteFile(flat, []byte(`{"dev": {}, "prod": {}}`), 0o600); err != nil {
+		t.Fatalf("write flat env: %v", err)
+	}
+	if err := os.WriteFile(grouped, []byte(`{
+		"$groups": {
+			"api": {
+				"$default": "dev",
+				"dev": {},
+				"prod": {}
+			}
+		}
+	}`), 0o600); err != nil {
+		t.Fatalf("write grouped env: %v", err)
+	}
+
+	tests := []struct {
+		name  string
+		flags ExecFlags
+		want  string
+	}{
+		{
+			name: "name and group flags",
+			flags: ExecFlags{
+				EnvName:   "dev",
+				EnvGroups: GroupFlags{"api": "dev"},
+			},
+			want: "--env cannot be combined",
+		},
+		{
+			name: "group selection with flat catalog",
+			flags: ExecFlags{
+				EnvFile:   flat,
+				EnvGroups: GroupFlags{"api": "dev"},
+			},
+			want: "requires grouped environments",
+		},
+		{
+			name: "name with grouped catalog",
+			flags: ExecFlags{
+				EnvFile: grouped,
+				EnvName: "dev",
+			},
+			want: "cannot be combined with grouped environments",
+		},
+		{
+			name: "grouped compare without group",
+			flags: ExecFlags{
+				EnvFile:           grouped,
+				CompareTargetsRaw: "dev,prod",
+			},
+			want: "grouped compare requires a group",
+		},
+		{
+			name: "compare group with flat catalog",
+			flags: ExecFlags{
+				EnvFile:           flat,
+				CompareTargetsRaw: "dev,prod",
+				CompareGroup:      "api",
+			},
+			want: "requires grouped environments",
+		},
+		{
+			name: "compare group without targets",
+			flags: ExecFlags{
+				EnvFile:      grouped,
+				CompareGroup: "api",
+			},
+			want: "--compare-group requires --compare",
+		},
+		{
+			name: "compare base not in targets",
+			flags: ExecFlags{
+				EnvFile:           flat,
+				CompareTargetsRaw: "dev,prod",
+				CompareBaseline:   "stage",
+			},
+			want: "must match a compare target",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := tt.flags.Resolve(filepath.Join(dir, "api.http"))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("error = %v, want containing %q", err, tt.want)
+			}
+		})
 	}
 }

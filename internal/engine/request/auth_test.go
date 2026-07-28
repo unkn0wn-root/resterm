@@ -37,7 +37,7 @@ func TestOAuthNeedsHeadlessSeed(t *testing.T) {
 	}
 
 	oa.Restore([]oauth.SnapshotEntry{{
-		Key:    "oauth-public",
+		Key:    "3:dev12:oauth-public",
 		Config: cfg,
 		Token: oauth.Token{
 			AccessToken:  "expired-token",
@@ -72,7 +72,7 @@ func TestEnsureCommandAuthSetsAuthorizationHeader(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		"",
+		testEnv(""),
 		5*time.Second,
 	)
 	if err != nil {
@@ -118,7 +118,7 @@ func TestEnsureCommandAuthSkipsWhenHeaderPresent(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		"",
+		testEnv(""),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth with existing header: %v", err)
@@ -156,7 +156,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		seedReq,
 		vars.NewResolver(),
-		"",
+		testEnv(""),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth seed: %v", err)
@@ -168,7 +168,7 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		"",
+		testEnv(""),
 		time.Second,
 	)
 	if err != nil {
@@ -185,6 +185,62 @@ func TestEnsureCommandAuthCacheOnlyReuseInheritsSeededConfig(t *testing.T) {
 	}
 }
 
+func TestEnsureCommandAuthIsolatesGroupedCredentialProfiles(t *testing.T) {
+	var calls int32
+	eng := newTestEngine()
+	eng.rt.AuthCmd().SetExecFunc(func(_ context.Context, _ authcmd.Config) ([]byte, error) {
+		n := atomic.AddInt32(&calls, 1)
+		return []byte(fmt.Sprintf("token-%d", n)), nil
+	})
+	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{{
+		Name:    "credentials",
+		Default: "personal",
+		Profiles: vars.EnvironmentSet{
+			"personal": {},
+			"ci":       {},
+		},
+	}})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	personal, _ := cat.Resolve(cat.DefaultSelection())
+	ciSel, _ := cat.Select("", map[string]string{"credentials": "ci"})
+	ci, _ := cat.Resolve(ciSel)
+	auth := &restfile.AuthSpec{Type: "command", Params: map[string]string{
+		"argv":      `["token"]`,
+		"cache_key": "shared",
+	}}
+	doc := &restfile.Document{Path: "/tmp/example.http"}
+
+	run := func(env vars.Environment) string {
+		t.Helper()
+		req := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: auth}}
+		if _, err := eng.EnsureCommandAuth(
+			context.Background(),
+			doc,
+			req,
+			vars.NewResolver(),
+			env,
+			time.Second,
+		); err != nil {
+			t.Fatalf("ensure command auth for %s: %v", env.Label(), err)
+		}
+		return req.Headers.Get("Authorization")
+	}
+	if got := run(personal); got != "Bearer token-1" {
+		t.Fatalf("personal auth = %q", got)
+	}
+	if got := run(ci); got != "Bearer token-2" {
+		t.Fatalf("ci auth = %q", got)
+	}
+	if got := run(personal); got != "Bearer token-1" {
+		t.Fatalf("cached personal auth = %q", got)
+	}
+	if calls != 2 {
+		t.Fatalf("command executions = %d, want 2", calls)
+	}
+}
+
 func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 	var calls int32
 	var seen authcmd.Config
@@ -193,11 +249,13 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 	defsPath := filepath.Join(workspace, "auth_command.http")
 	usePath := filepath.Join(workspace, "rts", "rts_all_features.http")
 
+	cat, sel := testConfig("dev")
 	eng := New(
 		engine.Config{
-			FilePath:        defsPath,
-			EnvironmentName: "dev",
-			WorkspaceRoot:   workspace,
+			FilePath:      defsPath,
+			Catalog:       cat,
+			Selection:     sel,
+			WorkspaceRoot: workspace,
 		},
 		rtrun.New(rtrun.Config{}),
 	)
@@ -223,7 +281,7 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 		defsDoc,
 		seedReq,
 		vars.NewResolver(),
-		"",
+		testEnv("dev"),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth seed: %v", err)
@@ -244,7 +302,7 @@ func TestEnsureCommandAuthGlobalCrossFile(t *testing.T) {
 		useDoc,
 		req,
 		vars.NewResolver(),
-		"",
+		testEnv("dev"),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth inherited reuse: %v", err)
@@ -287,15 +345,18 @@ func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
 		SourcePath: "/tmp/workspace-b/auth.http",
 	}
 
+	cat, sel := testConfig("dev")
 	engA := New(engine.Config{
-		FilePath:        "/tmp/workspace-a/request.http",
-		EnvironmentName: "dev",
-		WorkspaceRoot:   "/tmp/workspace-a",
+		FilePath:      "/tmp/workspace-a/request.http",
+		Catalog:       cat,
+		Selection:     sel,
+		WorkspaceRoot: "/tmp/workspace-a",
 	}, rt)
 	engB := New(engine.Config{
-		FilePath:        "/tmp/workspace-b/request.http",
-		EnvironmentName: "dev",
-		WorkspaceRoot:   "/tmp/workspace-b",
+		FilePath:      "/tmp/workspace-b/request.http",
+		Catalog:       cat,
+		Selection:     sel,
+		WorkspaceRoot: "/tmp/workspace-b",
 	}, rt)
 
 	reqA := &restfile.Request{Metadata: restfile.RequestMetadata{Auth: authA}}
@@ -306,7 +367,7 @@ func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
 		&restfile.Document{Path: "/tmp/workspace-a/request.http"},
 		reqA,
 		vars.NewResolver(),
-		"",
+		testEnv("dev"),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth workspace A: %v", err)
@@ -316,7 +377,7 @@ func TestEnsureCommandAuthWorkspaceScope(t *testing.T) {
 		&restfile.Document{Path: "/tmp/workspace-b/request.http"},
 		reqB,
 		vars.NewResolver(),
-		"",
+		testEnv("dev"),
 		time.Second,
 	); err != nil {
 		t.Fatalf("ensureCommandAuth workspace B: %v", err)
@@ -411,7 +472,7 @@ func TestEnsureCommandAuthWithoutRuntimeReturnsInitError(t *testing.T) {
 		&restfile.Document{Path: "/tmp/example.http"},
 		req,
 		vars.NewResolver(),
-		"",
+		testEnv(""),
 		time.Second,
 	)
 	if err == nil {
@@ -423,10 +484,12 @@ func TestEnsureCommandAuthWithoutRuntimeReturnsInitError(t *testing.T) {
 }
 
 func newTestEngine() *Engine {
+	cat, sel := testConfig("dev")
 	return New(
 		engine.Config{
-			FilePath:        "/tmp/example.http",
-			EnvironmentName: "dev",
+			FilePath:  "/tmp/example.http",
+			Catalog:   cat,
+			Selection: sel,
 		},
 		rtrun.New(rtrun.Config{}),
 	)

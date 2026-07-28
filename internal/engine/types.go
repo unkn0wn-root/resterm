@@ -23,8 +23,8 @@ import (
 type Config struct {
 	FilePath              string
 	Client                *httpclient.Client
-	EnvironmentSet        vars.EnvironmentSet
-	EnvironmentName       string
+	Catalog               vars.Catalog
+	Selection             vars.Selection
 	EnvironmentFile       string
 	AllowInteractiveOAuth bool
 	HTTPOptions           httpclient.Options
@@ -36,6 +36,7 @@ type Config struct {
 	Recursive             bool
 	CompareTargets        []string
 	CompareBase           string
+	CompareGroup          string
 	Registry              *registry.Index
 	Bindings              *bindings.Map
 	SourceDiagnostics     bool
@@ -46,23 +47,23 @@ type Executor interface {
 	ExecuteRequest(
 		doc *restfile.Document,
 		req *restfile.Request,
-		envOverride string,
+		sel vars.Selection,
 	) (RequestResult, error)
 	ExecuteWorkflow(
 		doc *restfile.Document,
 		wf *restfile.Workflow,
-		envOverride string,
+		sel vars.Selection,
 	) (*WorkflowResult, error)
 	ExecuteCompare(
 		doc *restfile.Document,
 		req *restfile.Request,
 		spec *restfile.CompareSpec,
-		envOverride string,
+		sel vars.Selection,
 	) (*CompareResult, error)
 	ExecuteProfile(
 		doc *restfile.Document,
 		req *restfile.Request,
-		envOverride string,
+		sel vars.Selection,
 	) (*ProfileResult, error)
 	RuntimeState() RuntimeState
 	LoadRuntimeState(RuntimeState)
@@ -83,6 +84,7 @@ type RequestResult struct {
 	RequestText    string
 	RuntimeSecrets []string
 	Environment    string
+	Selection      vars.Selection
 	Skipped        bool
 	SkipReason     string
 	Preview        bool
@@ -102,7 +104,9 @@ type Timing struct {
 
 type CompareResult struct {
 	Baseline    string
+	Group       string
 	Environment string
+	Selection   vars.Selection
 	Summary     string
 	Report      string
 	Success     bool
@@ -111,8 +115,19 @@ type CompareResult struct {
 	Rows        []CompareRow
 }
 
+// Name is the label a compare row is matched by. Grouped compares use the
+// profile, flat compares the environment.
+func (r CompareRow) Name() string {
+	if r.Profile != "" {
+		return r.Profile
+	}
+	return r.Environment
+}
+
 type CompareRow struct {
 	Environment string
+	Profile     string
+	Selection   vars.Selection
 	Summary     string
 	Response    *httpclient.Response
 	GRPC        *grpcclient.Response
@@ -130,6 +145,7 @@ type CompareRow struct {
 
 type ProfileResult struct {
 	Environment string
+	Selection   vars.Selection
 	Summary     string
 	Report      string
 	StartedAt   time.Time
@@ -162,6 +178,7 @@ type WorkflowResult struct {
 	Kind        string
 	Name        string
 	Environment string
+	Selection   vars.Selection
 	Summary     string
 	Report      string
 	StartedAt   time.Time
@@ -175,6 +192,7 @@ type WorkflowResult struct {
 
 type WorkflowStep struct {
 	Name       string
+	Selection  vars.Selection
 	Method     string
 	Target     string
 	Branch     string

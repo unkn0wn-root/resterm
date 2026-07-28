@@ -86,7 +86,7 @@ func PrepareWorkflow(
 	if err != nil {
 		return nil, err
 	}
-	run = normRun(run, ModeWorkflow, wf.Name, run.Env)
+	run = normRun(run, ModeWorkflow, wf.Name)
 	out := &WorkflowPlan{
 		Run:      run,
 		Doc:      doc,
@@ -119,7 +119,7 @@ func PrepareForEach(
 		OnFailure: restfile.WorkflowOnFailureStop,
 		Line:      req.LineRange.Start,
 	}
-	run = normRun(run, ModeForEach, name, run.Env)
+	run = normRun(run, ModeForEach, name)
 	return &WorkflowPlan{
 		Run: run,
 		Doc: doc,
@@ -951,18 +951,15 @@ func baseDir(doc *restfile.Document) string {
 	return filepath.Dir(doc.Path)
 }
 
-func normRun(run RunMeta, mode Mode, name, env string) RunMeta {
+func normRun(run RunMeta, mode Mode, name string) RunMeta {
 	if run.Mode == ModeUnknown {
 		run.Mode = mode
 	}
 	if strings.TrimSpace(run.Name) == "" {
 		run.Name = strings.TrimSpace(name)
 	}
-	if strings.TrimSpace(run.Env) == "" {
-		run.Env = strings.TrimSpace(env)
-	}
 	if strings.TrimSpace(run.ID) == "" {
-		run.ID = run.Mode.String() + ":" + run.Name + ":" + run.Env
+		run.ID = run.Mode.String() + ":" + run.Name + ":" + run.Env.Scope()
 	}
 	return run
 }

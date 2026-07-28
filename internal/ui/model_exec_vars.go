@@ -85,7 +85,7 @@ func (m *Model) globalsSnapshot() map[string]globalValue {
 	if gs == nil {
 		return nil
 	}
-	return gs.Snapshot(m.cfg.EnvironmentName)
+	return gs.Snapshot(m.env.Scope())
 }
 
 func (m *Model) clearGlobalValues() tea.Cmd {
@@ -95,12 +95,12 @@ func (m *Model) clearGlobalValues() tea.Cmd {
 		return nil
 	}
 
-	env := m.cfg.EnvironmentName
-	gs.Clear(env)
+	env := m.env
+	gs.Clear(env.Scope())
 	if cs := m.cookieStore(); cs != nil {
-		cs.Clear(env)
+		cs.Clear(env.Scope())
 	}
-	label := env
+	label := env.Label()
 	if strings.TrimSpace(label) == "" {
 		label = "default"
 	}

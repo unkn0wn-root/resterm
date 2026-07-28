@@ -999,7 +999,7 @@ func (m *Model) runShortcutBinding(binding bindings.Binding, msg tea.KeyMsg) (te
 		}
 		return cmd, true
 	case bindings.ActionOpenEnvSelector:
-		if len(m.cfg.EnvironmentSet) == 0 {
+		if m.cfg.Catalog.Empty() {
 			return func() tea.Msg {
 				return statusMsg{text: "No environments configured", level: statusWarn}
 			}, true

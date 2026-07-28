@@ -1,6 +1,8 @@
 package headless
 
 import (
+	"maps"
+
 	"github.com/unkn0wn-root/resterm/internal/runner"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 )
@@ -14,20 +16,21 @@ func reportFromRunner(rep *runner.Report) *Report {
 
 func reportFromFmt(rep runfmt.Report) *Report {
 	out := &Report{
-		SchemaVersion: rep.SchemaVersion,
-		Version:       rep.Version,
-		FilePath:      rep.FilePath,
-		EnvName:       rep.EnvName,
-		StartedAt:     rep.StartedAt,
-		EndedAt:       rep.EndedAt,
-		Duration:      rep.Duration,
-		Results:       make([]Result, 0, len(rep.Results)),
-		Total:         rep.Total,
-		Passed:        rep.Passed,
-		Failed:        rep.Failed,
-		Skipped:       rep.Skipped,
-		StopReason:    StopReason(rep.StopReason),
-		Warnings:      rep.Warnings,
+		SchemaVersion:        rep.SchemaVersion,
+		Version:              rep.Version,
+		FilePath:             rep.FilePath,
+		EnvName:              rep.EnvName,
+		EnvironmentSelection: EnvironmentSelection(maps.Clone(rep.EnvironmentSelection)),
+		StartedAt:            rep.StartedAt,
+		EndedAt:              rep.EndedAt,
+		Duration:             rep.Duration,
+		Results:              make([]Result, 0, len(rep.Results)),
+		Total:                rep.Total,
+		Passed:               rep.Passed,
+		Failed:               rep.Failed,
+		Skipped:              rep.Skipped,
+		StopReason:           StopReason(rep.StopReason),
+		Warnings:             rep.Warnings,
 	}
 	for _, res := range rep.Results {
 		out.Results = append(out.Results, resultFromFmt(res))
@@ -37,53 +40,55 @@ func reportFromFmt(rep runfmt.Report) *Report {
 
 func resultFromFmt(res runfmt.Result) Result {
 	out := Result{
-		Kind:        Kind(res.Kind),
-		Name:        res.Name,
-		Method:      res.Method,
-		Target:      res.Target,
-		Environment: res.Environment,
-		Status:      Status(res.Status),
-		Summary:     res.Summary,
-		Duration:    res.Duration,
-		Canceled:    res.Canceled,
-		SkipReason:  res.SkipReason,
-		Error:       res.Error,
-		ScriptError: res.ScriptError,
-		Failure:     failureFromFmt(res.Failure),
-		HTTP:        httpFromFmt(res.HTTP),
-		GRPC:        grpcFromFmt(res.GRPC),
-		Stream:      streamFromFmt(res.Stream),
-		Trace:       traceFromFmt(res.Trace),
-		Tests:       testsFromFmt(res.Tests),
-		Compare:     compareFromFmt(res.Compare),
-		Profile:     profileFromFmt(res.Profile),
-		Steps:       stepsFromFmt(res.Steps),
+		Kind:                 Kind(res.Kind),
+		Name:                 res.Name,
+		Method:               res.Method,
+		Target:               res.Target,
+		Environment:          res.Environment,
+		EnvironmentSelection: EnvironmentSelection(maps.Clone(res.EnvironmentSelection)),
+		Status:               Status(res.Status),
+		Summary:              res.Summary,
+		Duration:             res.Duration,
+		Canceled:             res.Canceled,
+		SkipReason:           res.SkipReason,
+		Error:                res.Error,
+		ScriptError:          res.ScriptError,
+		Failure:              failureFromFmt(res.Failure),
+		HTTP:                 httpFromFmt(res.HTTP),
+		GRPC:                 grpcFromFmt(res.GRPC),
+		Stream:               streamFromFmt(res.Stream),
+		Trace:                traceFromFmt(res.Trace),
+		Tests:                testsFromFmt(res.Tests),
+		Compare:              compareFromFmt(res.Compare),
+		Profile:              profileFromFmt(res.Profile),
+		Steps:                stepsFromFmt(res.Steps),
 	}
 	return out
 }
 
 func stepFromFmt(step runfmt.Step) Step {
 	out := Step{
-		Name:        step.Name,
-		Method:      step.Method,
-		Target:      step.Target,
-		Environment: step.Environment,
-		Branch:      step.Branch,
-		Iteration:   step.Iteration,
-		Total:       step.Total,
-		Status:      Status(step.Status),
-		Summary:     step.Summary,
-		Duration:    step.Duration,
-		Canceled:    step.Canceled,
-		SkipReason:  step.SkipReason,
-		Error:       step.Error,
-		ScriptError: step.ScriptError,
-		Failure:     failureFromFmt(step.Failure),
-		HTTP:        httpFromFmt(step.HTTP),
-		GRPC:        grpcFromFmt(step.GRPC),
-		Stream:      streamFromFmt(step.Stream),
-		Trace:       traceFromFmt(step.Trace),
-		Tests:       testsFromFmt(step.Tests),
+		Name:                 step.Name,
+		Method:               step.Method,
+		Target:               step.Target,
+		Environment:          step.Environment,
+		EnvironmentSelection: EnvironmentSelection(maps.Clone(step.EnvironmentSelection)),
+		Branch:               step.Branch,
+		Iteration:            step.Iteration,
+		Total:                step.Total,
+		Status:               Status(step.Status),
+		Summary:              step.Summary,
+		Duration:             step.Duration,
+		Canceled:             step.Canceled,
+		SkipReason:           step.SkipReason,
+		Error:                step.Error,
+		ScriptError:          step.ScriptError,
+		Failure:              failureFromFmt(step.Failure),
+		HTTP:                 httpFromFmt(step.HTTP),
+		GRPC:                 grpcFromFmt(step.GRPC),
+		Stream:               streamFromFmt(step.Stream),
+		Trace:                traceFromFmt(step.Trace),
+		Tests:                testsFromFmt(step.Tests),
 	}
 	return out
 }
@@ -141,7 +146,7 @@ func compareFromFmt(cmp *runfmt.Compare) *Compare {
 	if cmp == nil {
 		return nil
 	}
-	return &Compare{Baseline: cmp.Baseline}
+	return &Compare{Baseline: cmp.Baseline, Group: cmp.Group}
 }
 
 func profileFromFmt(prof *runfmt.Profile) *Profile {

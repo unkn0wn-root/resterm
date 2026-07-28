@@ -49,7 +49,7 @@ func PrepareProfile(
 	if total <= 0 {
 		total = spec.Count
 	}
-	run = normRun(run, ModeProfile, engine.ReqTitle(req), run.Env)
+	run = normRun(run, ModeProfile, engine.ReqTitle(req))
 	return &ProfilePlan{
 		Run:     run,
 		Doc:     doc,

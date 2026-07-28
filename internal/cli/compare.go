@@ -14,15 +14,22 @@ func ParseCompareTargets(raw string) ([]string, error) {
 		return nil, nil
 	}
 
-	repl := strings.NewReplacer(",", " ", ";", " ")
-	fields := strings.Fields(repl.Replace(raw))
+	var fields []string
+	if strings.ContainsAny(raw, ",;") {
+		fields = strings.FieldsFunc(raw, func(r rune) bool {
+			return r == ',' || r == ';'
+		})
+	} else {
+		fields = strings.Fields(raw)
+	}
 	if len(fields) == 0 {
 		return nil, nil
 	}
 
 	seen := make(map[string]struct{}, len(fields))
 	targets := make([]string, 0, len(fields))
-	for _, field := range fields {
+	for _, rawField := range fields {
+		field := str.Trim(rawField)
 		if err := runcheck.ValidateConcreteEnvironment(field, "environment"); err != nil {
 			return nil, err
 		}

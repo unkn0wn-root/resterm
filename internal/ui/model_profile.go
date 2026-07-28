@@ -15,7 +15,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 type profileState struct {
@@ -99,17 +98,16 @@ func (m *Model) startProfileRun(
 		m.setStatusMessage(
 			statusMsg{text: "Profiling is not supported for gRPC requests", level: statusWarn},
 		)
-		return m.executeRequest(doc, req, options, "", nil)
+		return m.executeRequest(doc, req, options, m.cfg.Selection, nil)
 	}
-	title := strings.TrimSpace(m.statusRequestTitle(doc, req, ""))
+	title := strings.TrimSpace(m.statusRequestTitle(doc, req))
 	if title == "" {
 		title = requestBaseTitle(req)
 	}
 	msgBase := fmt.Sprintf("Profiling %s", title)
-	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
 	pl, err := core.PrepareProfile(doc, req, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: env,
+		Env: m.env,
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
@@ -938,9 +936,12 @@ func (m *Model) buildProfileHistoryEntry(
 	}
 
 	return &history.Entry{
-		ID:             fmt.Sprintf("%d", now.UnixNano()),
-		ExecutedAt:     now,
-		Environment:    msg.environment,
+		ID:          fmt.Sprintf("%d", now.UnixNano()),
+		ExecutedAt:  now,
+		Environment: msg.environment,
+		EnvironmentSelection: history.EnvironmentSelection(
+			msg.selection.Groups(),
+		),
 		RequestName:    requestIdentifier(req),
 		FilePath:       m.historyFilePath(),
 		Method:         req.Method,

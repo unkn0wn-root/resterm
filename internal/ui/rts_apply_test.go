@@ -36,7 +36,7 @@ func TestRunRTSApplyPatch(t *testing.T) {
 	vars := map[string]string{"existing": "1"}
 
 	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
-		context.Background(), nil, req, "", "", vars, nil,
+		context.Background(), nil, req, testEnv(""), "", vars, nil,
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestRunRTSApplyOrder(t *testing.T) {
 		context.Background(),
 		nil,
 		req,
-		"",
+		testEnv(""),
 		"",
 		map[string]string{},
 		nil,
@@ -164,7 +164,7 @@ func TestRunRTSApplyClearsAuthAndDeletesSetting(t *testing.T) {
 	}
 
 	if err := m.requestSvc(httpclient.Options{}).ApplyPatches(
-		context.Background(), nil, req, "", "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, nil,
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestRunRTSApplyTemplatedURLQuery(t *testing.T) {
 	}
 
 	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
-		context.Background(), nil, req, "", "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, nil,
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestRunRTSApplyTemplatedQueryPreservesTemplate(t *testing.T) {
 	}
 
 	if err := model.requestSvc(httpclient.Options{}).ApplyPatches(
-		context.Background(), nil, req, "", "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, nil,
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestRunRTSApplyUseProfiles(t *testing.T) {
 	}
 
 	if err := m.requestSvc(httpclient.Options{}).ApplyPatches(
-		context.Background(), doc, req, "", "", nil, nil,
+		context.Background(), doc, req, testEnv(""), "", nil, nil,
 	); err != nil {
 		t.Fatalf("ApplyPatches: %v", err)
 	}
@@ -320,7 +320,7 @@ func TestRunRTSApplyUseMissingProfile(t *testing.T) {
 	}
 
 	err := m.requestSvc(httpclient.Options{}).ApplyPatches(
-		context.Background(), nil, req, "", "", nil, nil,
+		context.Background(), nil, req, testEnv(""), "", nil, nil,
 	)
 	if err == nil {
 		t.Fatalf("expected missing profile error")

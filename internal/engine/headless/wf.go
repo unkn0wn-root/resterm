@@ -13,18 +13,19 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 	"github.com/unkn0wn-root/resterm/internal/restwriter"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (e *Engine) executeWorkflow(
 	ctx context.Context,
 	doc *restfile.Document,
 	wf *restfile.Workflow,
-	env string,
+	env vars.Environment,
 ) (*engine.WorkflowResult, error) {
 	if wf == nil {
 		return nil, fmt.Errorf("workflow is nil")
 	}
-	pl, err := core.PrepareWorkflow(doc, *wf, core.RunMeta{Env: e.env(env)})
+	pl, err := core.PrepareWorkflow(doc, *wf, core.RunMeta{Env: env})
 	if err != nil {
 		return nil, err
 	}
@@ -41,9 +42,9 @@ func (e *Engine) executeForEach(
 	ctx context.Context,
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 ) (*engine.WorkflowResult, error) {
-	pl, err := core.PrepareForEach(doc, req, core.RunMeta{Env: e.env(env)})
+	pl, err := core.PrepareForEach(doc, req, core.RunMeta{Env: env})
 	if err != nil {
 		return nil, err
 	}
@@ -178,7 +179,8 @@ func (e *Engine) buildWorkflowResult(st *wfState) *engine.WorkflowResult {
 	out := &engine.WorkflowResult{
 		Kind:        string(st.kind),
 		Name:        st.wf.Name,
-		Environment: st.env,
+		Environment: st.env.Label(),
+		Selection:   st.env.Selection(),
 		Summary:     workflowSummary(st),
 		Report:      workflowReport(st),
 		StartedAt:   st.start,
@@ -191,6 +193,7 @@ func (e *Engine) buildWorkflowResult(st *wfState) *engine.WorkflowResult {
 	fail := false
 	for _, item := range st.res {
 		step := toWorkflowStep(item)
+		step.Selection = out.Selection
 		out.Steps = append(out.Steps, step)
 		if step.Canceled {
 			out.Canceled = true
@@ -305,7 +308,10 @@ func (e *Engine) recordWorkflow(st *wfState, out *engine.WorkflowResult) {
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
-		Environment: st.env,
+		Environment: st.env.Label(),
+		EnvironmentSelection: history.EnvironmentSelection(
+			st.env.Selection().Groups(),
+		),
 		RequestName: name,
 		FilePath:    e.filePath(st.doc),
 		Method:      restfile.HistoryMethodWorkflow,

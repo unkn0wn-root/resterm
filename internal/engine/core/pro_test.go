@@ -11,6 +11,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestRunProfileEmitsWarmupAndMeasuredIterations(t *testing.T) {
@@ -27,7 +28,7 @@ func TestRunProfileEmitsWarmupAndMeasuredIterations(t *testing.T) {
 	}
 	pl, err := PrepareProfile(&restfile.Document{Path: "pro.http"}, req, RunMeta{
 		ID:  "pro-1",
-		Env: "dev",
+		Env: testEnvironment("dev"),
 	})
 	if err != nil {
 		t.Fatalf("PrepareProfile: %v", err)
@@ -122,7 +123,7 @@ func TestRunProfileStopsOnSkippedIteration(t *testing.T) {
 			},
 		},
 	}
-	pl, err := PrepareProfile(nil, req, RunMeta{ID: "pro-2", Env: "dev"})
+	pl, err := PrepareProfile(nil, req, RunMeta{ID: "pro-2", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareProfile: %v", err)
 	}
@@ -180,7 +181,7 @@ func TestRunProfileCancelDuringDelayEmitsRunDone(t *testing.T) {
 			},
 		},
 	}
-	pl, err := PrepareProfile(nil, req, RunMeta{ID: "pro-3", Env: "dev"})
+	pl, err := PrepareProfile(nil, req, RunMeta{ID: "pro-3", Env: testEnvironment("dev")})
 	if err != nil {
 		t.Fatalf("PrepareProfile: %v", err)
 	}
@@ -253,7 +254,7 @@ type proDep struct {
 func (d *proDep) ExecuteWith(
 	doc *restfile.Document,
 	req *restfile.Request,
-	env string,
+	env vars.Environment,
 	opt request.ExecOptions,
 ) (engine.RequestResult, error) {
 	d.call = append(d.call, opt.Record)
@@ -264,7 +265,8 @@ func (d *proDep) ExecuteWith(
 	d.res = d.res[1:]
 	out.Executed = request.CloneRequest(req)
 	out.RequestText = request.RenderRequestText(req)
-	out.Environment = env
+	out.Environment = env.Label()
+	out.Selection = env.Selection()
 	return out, nil
 }
 

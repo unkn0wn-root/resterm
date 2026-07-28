@@ -315,28 +315,28 @@ func (m *Model) sendActiveRequest() tea.Cmd {
 	if st.req.WebSocket != nil && len(st.req.WebSocket.Steps) == 0 {
 		spin := m.startSending()
 		base := "Sending"
-		if label := m.statusRequestLabel(st.doc, st.req, ""); label != "" {
+		if label := m.statusRequestLabel(st.doc, st.req); label != "" {
 			base = fmt.Sprintf("Sending %s", label)
 		}
 		m.statusPulseBase = base
 		m.statusPulseFrame = -1
 		m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-		execCmd := m.executeRequest(st.doc, st.req, st.opts, "", nil)
+		execCmd := m.executeRequest(st.doc, st.req, st.opts, m.cfg.Selection, nil)
 		pulse := m.startStatusPulse()
 		return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 	}
 
 	spin := m.startSending()
 	base := "Sending"
-	if label := m.statusRequestLabel(st.doc, st.req, ""); label != "" {
+	if label := m.statusRequestLabel(st.doc, st.req); label != "" {
 		base = fmt.Sprintf("Sending %s", label)
 	}
 	m.statusPulseBase = base
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-	execCmd := m.execRunReq(st.doc, st.req, st.opts, "", nil)
+	execCmd := m.execRunReq(st.doc, st.req, st.opts, m.cfg.Selection, nil)
 	pulse := m.startStatusPulse()
 	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 }
@@ -357,14 +357,14 @@ func (m *Model) explainActiveRequest() tea.Cmd {
 	spin := m.startSending()
 	m.sendingOverlayBase = responseExplainPreviewBase
 	base := "Preparing explain preview"
-	if label := m.statusRequestLabel(st.doc, st.req, ""); label != "" {
+	if label := m.statusRequestLabel(st.doc, st.req); label != "" {
 		base = fmt.Sprintf("Preparing explain for %s", label)
 	}
 	m.statusPulseBase = base
 	m.statusPulseFrame = -1
 	m.setStatusMessage(statusMsg{text: base, level: statusInfo})
 
-	execCmd := m.executeExplain(st.doc, st.req, st.opts, "", nil)
+	execCmd := m.executeExplain(st.doc, st.req, st.opts, m.cfg.Selection, nil)
 	pulse := m.startStatusPulse()
 	return st.wrap(batchCmds([]tea.Cmd{execCmd, pulse, spin}))
 }
@@ -400,7 +400,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 		return nil
 	}
 
-	spec := core.BuildCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase)
+	spec := core.BuildCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase, m.cfg.CompareGroup)
 	if spec == nil && req.Metadata.Compare != nil {
 		spec = req.Metadata.Compare.Clone()
 	}

@@ -44,7 +44,7 @@ func TestResolveSSHUsesDocumentGlobalProfiles(t *testing.T) {
 		SSH: &restfile.SSHSpec{Use: "jump"},
 	}
 
-	plan, err := e.resolveSSH(doc, req, nil, "dev")
+	plan, err := e.resolveSSH(doc, req, nil, testEnv("dev"))
 	if err != nil {
 		t.Fatalf("resolveSSH() error = %v", err)
 	}
@@ -80,7 +80,7 @@ func TestResolveK8sUsesDocumentGlobalProfiles(t *testing.T) {
 		K8s: &restfile.K8sSpec{Use: "cluster-api"},
 	}
 
-	plan, err := e.resolveK8s(doc, req, nil, "dev")
+	plan, err := e.resolveK8s(doc, req, nil, testEnv("dev"))
 	if err != nil {
 		t.Fatalf("resolveK8s() error = %v", err)
 	}
@@ -128,7 +128,15 @@ func TestRunRTSApplyUsesDocumentGlobalPatchProfiles(t *testing.T) {
 		},
 	}
 
-	if err := e.runRTSApply(context.Background(), doc, req, "", "", nil, nil); err != nil {
+	if err := e.runRTSApply(
+		context.Background(),
+		doc,
+		req,
+		testEnv(""),
+		"",
+		nil,
+		nil,
+	); err != nil {
 		t.Fatalf("runRTSApply() error = %v", err)
 	}
 	if got := req.Headers.Get("Authorization"); got != "Bearer abc" {

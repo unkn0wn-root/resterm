@@ -13,6 +13,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/engine/request"
 	"github.com/unkn0wn-root/resterm/internal/history"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func (e *Engine) executeCompare(
@@ -20,9 +21,22 @@ func (e *Engine) executeCompare(
 	doc *restfile.Document,
 	req *restfile.Request,
 	spec *restfile.CompareSpec,
-	env string,
+	env vars.Environment,
 ) (*engine.CompareResult, error) {
-	pl, err := core.PrepareCompare(doc, req, spec, core.RunMeta{Env: e.env(env)})
+	spec = core.NormalizeCompareSpec(spec)
+	if spec == nil || len(spec.Environments) < 2 {
+		return nil, fmt.Errorf("compare requires at least two environments")
+	}
+	targets, err := e.cfg.Catalog.CompareTargets(
+		env.Selection(),
+		spec.Group,
+		spec.Baseline,
+		spec.Environments,
+	)
+	if err != nil {
+		return nil, err
+	}
+	pl, err := core.PrepareCompare(doc, req, targets, spec.Group, spec.Baseline, core.RunMeta{Env: env})
 	if err != nil {
 		return nil, err
 	}
@@ -30,8 +44,8 @@ func (e *Engine) executeCompare(
 	if err := core.RunCompare(ctx, e.rq, cl, pl); err != nil {
 		return nil, err
 	}
-	out := e.buildCompareResult(req, &pl.Spec, pl.Run.Env, cl.rows)
-	e.recordCompare(doc, req, out)
+	out := e.buildCompareResult(req, spec, env, cl.rows)
+	e.recordCompare(doc, req, out, env, targets)
 	return out, nil
 }
 
@@ -57,7 +71,9 @@ func (c *cmpCollector) OnEvt(_ context.Context, e core.Evt) error {
 func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 	canceled := out.Err != nil && errors.Is(out.Err, context.Canceled)
 	row := engine.CompareRow{
-		Environment: strings.TrimSpace(meta.Env),
+		Environment: meta.Env,
+		Profile:     meta.Profile,
+		Selection:   out.Selection,
 		Response:    cloneHTTP(out.Response),
 		GRPC:        cloneGRPC(out.GRPC),
 		Stream:      cloneStream(out.Stream),
@@ -84,7 +100,7 @@ func compareRow(meta core.RowMeta, out engine.RequestResult) engine.CompareRow {
 func (e *Engine) buildCompareResult(
 	req *restfile.Request,
 	spec *restfile.CompareSpec,
-	env string,
+	env vars.Environment,
 	rows []engine.CompareRow,
 ) *engine.CompareResult {
 	base := core.CompareBaseIndex(rows, compareBase(spec))
@@ -96,7 +112,9 @@ func (e *Engine) buildCompareResult(
 	}
 	out := &engine.CompareResult{
 		Baseline:    core.CompareBaseline(rows, compareBase(spec)),
-		Environment: env,
+		Group:       spec.Group,
+		Environment: env.Label(),
+		Selection:   env.Selection(),
 		Rows:        rows,
 	}
 	allSkip := len(rows) > 0
@@ -139,7 +157,7 @@ func compareRunSummary(
 	parts := make([]string, 0, len(rows))
 	for _, row := range rows {
 		name := row.Environment
-		if spec != nil && strings.EqualFold(spec.Baseline, name) {
+		if spec != nil && strings.EqualFold(spec.Baseline, row.Name()) {
 			name += "*"
 		}
 		switch {
@@ -188,6 +206,8 @@ func (e *Engine) recordCompare(
 	doc *restfile.Document,
 	req *restfile.Request,
 	out *engine.CompareResult,
+	env vars.Environment,
+	targets []vars.Target,
 ) {
 	hs := e.history()
 	if hs == nil || req == nil || out == nil || len(out.Rows) == 0 {
@@ -197,6 +217,10 @@ func (e *Engine) recordCompare(
 	ent := history.Entry{
 		ID:          fmt.Sprintf("%d", now.UnixNano()),
 		ExecutedAt:  now,
+		Environment: out.Environment,
+		EnvironmentSelection: history.EnvironmentSelection(
+			out.Selection.Groups(),
+		),
 		RequestName: engine.ReqID(req),
 		FilePath:    e.filePath(doc),
 		Method:      restfile.HistoryMethodCompare,
@@ -205,20 +229,26 @@ func (e *Engine) recordCompare(
 		Duration:    compareDuration(out.Rows),
 		RequestText: redactText(
 			request.RenderRequestText(req),
-			e.secretValues(doc, req, out.Environment),
+			e.secretValues(doc, req, env),
 			!req.Metadata.AllowSensitiveHeaders,
 		),
 		Description: strings.TrimSpace(req.Metadata.Description),
 		Tags:        engine.Tags(req.Metadata.Tags),
 		Compare: &history.CompareEntry{
 			Baseline: out.Baseline,
+			Group:    out.Group,
 			Results:  make([]history.CompareResult, 0, len(out.Rows)),
 		},
 	}
-	for _, row := range out.Rows {
-		secs := e.secretValues(doc, req, row.Environment)
+	// Rows keep target order and a canceled run only stops early, so targets[i] matches row i.
+	for i, row := range out.Rows {
+		secs := e.secretValues(doc, req, targets[i].Env)
 		item := history.CompareResult{
 			Environment: row.Environment,
+			Profile:     row.Profile,
+			EnvironmentSelection: history.EnvironmentSelection(
+				row.Selection.Groups(),
+			),
 			Status:      compareHistoryStatus(row),
 			Duration:    row.Duration,
 			RequestText: ent.RequestText,

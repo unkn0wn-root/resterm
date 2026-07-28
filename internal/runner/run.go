@@ -43,11 +43,12 @@ type Options struct {
 	PersistAuth     bool
 	History         bool
 	FailFast        bool
-	EnvSet          vars.EnvironmentSet
-	EnvName         string
+	Catalog         vars.Catalog
+	Selection       vars.Selection
 	EnvironmentFile string
 	CompareTargets  []string
 	CompareBase     string
+	CompareGroup    string
 	Profile         bool
 	HTTPOptions     httpclient.Options
 	GRPCOptions     grpcclient.Options
@@ -58,19 +59,20 @@ type Options struct {
 const stopReasonFailFast = "fail_fast"
 
 type Report struct {
-	SchemaVersion string
-	Version       string
-	FilePath      string
-	EnvName       string
-	StartedAt     time.Time
-	EndedAt       time.Time
-	Duration      time.Duration
-	Results       []Result
-	Total         int
-	Passed        int
-	Failed        int
-	Skipped       int
-	StopReason    string
+	SchemaVersion        string
+	Version              string
+	FilePath             string
+	EnvName              string
+	EnvironmentSelection map[string]string
+	StartedAt            time.Time
+	EndedAt              time.Time
+	Duration             time.Duration
+	Results              []Result
+	Total                int
+	Passed               int
+	Failed               int
+	Skipped              int
+	StopReason           string
 	// Warnings holds parse warnings. They never affect the exit code.
 	Warnings []string
 }
@@ -92,6 +94,7 @@ type Result struct {
 	Target                    string
 	EffectiveTarget           string
 	Environment               string
+	EnvironmentSelection      map[string]string
 	Summary                   string
 	Duration                  time.Duration
 	Passed                    bool
@@ -116,6 +119,7 @@ type Result struct {
 
 type CompareInfo struct {
 	Baseline string
+	Group    string
 }
 
 type ProfileInfo struct {
@@ -151,29 +155,30 @@ type TraceInfo struct {
 }
 
 type StepResult struct {
-	Name            string
-	Method          string
-	Target          string
-	EffectiveTarget string
-	Environment     string
-	Branch          string
-	Iteration       int
-	Total           int
-	Summary         string
-	Duration        time.Duration
-	Response        *httpclient.Response
-	GRPC            *grpcclient.Response
-	Err             error
-	Tests           []scripts.TestResult
-	ScriptErr       error
-	Passed          bool
-	Skipped         bool
-	SkipReason      string
-	Canceled        bool
-	Stream          *StreamInfo
-	Trace           *TraceInfo
-	Failure         runfail.Failure
-	transcript      []byte
+	Name                 string
+	Method               string
+	Target               string
+	EffectiveTarget      string
+	Environment          string
+	EnvironmentSelection map[string]string
+	Branch               string
+	Iteration            int
+	Total                int
+	Summary              string
+	Duration             time.Duration
+	Response             *httpclient.Response
+	GRPC                 *grpcclient.Response
+	Err                  error
+	Tests                []scripts.TestResult
+	ScriptErr            error
+	Passed               bool
+	Skipped              bool
+	SkipReason           string
+	Canceled             bool
+	Stream               *StreamInfo
+	Trace                *TraceInfo
+	Failure              runfail.Failure
+	transcript           []byte
 }
 
 func RunContext(ctx context.Context, opts Options) (*Report, error) {
@@ -314,22 +319,23 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 	}
 	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
-		Kind:            ResultKindRequest,
-		Name:            requestName(runReq),
-		Method:          requestMethod(runReq),
-		Target:          requestSourceTarget(runReq),
-		EffectiveTarget: requestTarget(runReq, res.Response),
-		Environment:     envName,
-		Response:        res.Response,
-		GRPC:            res.GRPC,
-		Err:             res.Err,
-		Tests:           cloneTests(res.Tests),
-		ScriptErr:       res.ScriptErr,
-		Skipped:         res.Skipped,
-		SkipReason:      str.Trim(res.SkipReason),
-		Stream:          streamResult(res.Stream),
-		Trace:           traceResult(res.Response),
-		transcript:      bytes.Clone(res.Transcript),
+		Kind:                 ResultKindRequest,
+		Name:                 requestName(runReq),
+		Method:               requestMethod(runReq),
+		Target:               requestSourceTarget(runReq),
+		EffectiveTarget:      requestTarget(runReq, res.Response),
+		Environment:          envName,
+		EnvironmentSelection: res.Selection.Groups(),
+		Response:             res.Response,
+		GRPC:                 res.GRPC,
+		Err:                  res.Err,
+		Tests:                cloneTests(res.Tests),
+		ScriptErr:            res.ScriptErr,
+		Skipped:              res.Skipped,
+		SkipReason:           str.Trim(res.SkipReason),
+		Stream:               streamResult(res.Stream),
+		Trace:                traceResult(res.Response),
+		transcript:           bytes.Clone(res.Transcript),
 	}
 	if res.Explain != nil {
 		item.SetUnresolvedTemplateVars(explainMissingTemplateVars(res.Explain))
@@ -340,16 +346,22 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 	return item
 }
 
-func skippedRequestResult(req *restfile.Request, fallbackEnv, reason string) Result {
+func skippedRequestResult(
+	req *restfile.Request,
+	fallbackEnv string,
+	sel vars.Selection,
+	reason string,
+) Result {
 	return Result{
-		Kind:        ResultKindRequest,
-		Name:        requestName(req),
-		Method:      requestMethod(req),
-		Target:      requestSourceTarget(req),
-		Environment: str.Trim(fallbackEnv),
-		Skipped:     true,
-		SkipReason:  str.Trim(reason),
-		Passed:      false,
+		Kind:                 ResultKindRequest,
+		Name:                 requestName(req),
+		Method:               requestMethod(req),
+		Target:               requestSourceTarget(req),
+		Environment:          str.Trim(fallbackEnv),
+		EnvironmentSelection: sel.Groups(),
+		Skipped:              true,
+		SkipReason:           str.Trim(reason),
+		Passed:               false,
 	}
 }
 
@@ -368,18 +380,20 @@ func requestFailed(item Result) bool {
 func compareRunResult(req *restfile.Request, res engine.CompareResult, fallbackEnv string) Result {
 	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
-		Kind:        ResultKindCompare,
-		Name:        requestName(req),
-		Method:      "COMPARE",
-		Target:      requestSourceTarget(req),
-		Environment: envName,
-		Summary:     str.Trim(res.Summary),
-		Duration:    compareDuration(res.Rows),
-		Passed:      res.Success,
-		Skipped:     res.Skipped,
-		Canceled:    res.Canceled,
+		Kind:                 ResultKindCompare,
+		Name:                 requestName(req),
+		Method:               "COMPARE",
+		Target:               requestSourceTarget(req),
+		Environment:          envName,
+		EnvironmentSelection: res.Selection.Groups(),
+		Summary:              str.Trim(res.Summary),
+		Duration:             compareDuration(res.Rows),
+		Passed:               res.Success,
+		Skipped:              res.Skipped,
+		Canceled:             res.Canceled,
 		Compare: &CompareInfo{
 			Baseline: str.Trim(res.Baseline),
+			Group:    str.Trim(res.Group),
 		},
 		Steps: make([]StepResult, 0, len(res.Rows)),
 	}
@@ -401,25 +415,26 @@ func compareDuration(rows []engine.CompareRow) time.Duration {
 
 func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult {
 	step := StepResult{
-		Name:            str.Trim(row.Environment),
-		Method:          requestMethod(req),
-		Target:          requestSourceTarget(req),
-		EffectiveTarget: requestTarget(req, row.Response),
-		Environment:     str.Trim(row.Environment),
-		Summary:         str.Trim(row.Summary),
-		Duration:        row.Duration,
-		Response:        row.Response,
-		GRPC:            row.GRPC,
-		Err:             row.Err,
-		Tests:           cloneTests(row.Tests),
-		ScriptErr:       row.ScriptErr,
-		Passed:          row.Success,
-		Skipped:         row.Skipped,
-		SkipReason:      str.Trim(row.SkipReason),
-		Canceled:        row.Canceled,
-		Stream:          streamResult(row.Stream),
-		Trace:           traceResult(row.Response),
-		transcript:      bytes.Clone(row.Transcript),
+		Name:                 str.Trim(row.Environment),
+		Method:               requestMethod(req),
+		Target:               requestSourceTarget(req),
+		EffectiveTarget:      requestTarget(req, row.Response),
+		Environment:          str.Trim(row.Environment),
+		EnvironmentSelection: row.Selection.Groups(),
+		Summary:              str.Trim(row.Summary),
+		Duration:             row.Duration,
+		Response:             row.Response,
+		GRPC:                 row.GRPC,
+		Err:                  row.Err,
+		Tests:                cloneTests(row.Tests),
+		ScriptErr:            row.ScriptErr,
+		Passed:               row.Success,
+		Skipped:              row.Skipped,
+		SkipReason:           str.Trim(row.SkipReason),
+		Canceled:             row.Canceled,
+		Stream:               streamResult(row.Stream),
+		Trace:                traceResult(row.Response),
+		transcript:           bytes.Clone(row.Transcript),
 	}
 	step.Failure = stepFailure(step)
 	return step
@@ -428,17 +443,18 @@ func compareStepResult(req *restfile.Request, row engine.CompareRow) StepResult 
 func profileRunResult(req *restfile.Request, res engine.ProfileResult, fallbackEnv string) Result {
 	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
-		Kind:        ResultKindProfile,
-		Name:        requestName(req),
-		Method:      "PROFILE",
-		Target:      requestSourceTarget(req),
-		Environment: envName,
-		Summary:     str.Trim(res.Summary),
-		Duration:    res.Duration,
-		Passed:      res.Success,
-		Skipped:     res.Skipped,
-		SkipReason:  str.Trim(res.SkipReason),
-		Canceled:    res.Canceled,
+		Kind:                 ResultKindProfile,
+		Name:                 requestName(req),
+		Method:               "PROFILE",
+		Target:               requestSourceTarget(req),
+		Environment:          envName,
+		EnvironmentSelection: res.Selection.Groups(),
+		Summary:              str.Trim(res.Summary),
+		Duration:             res.Duration,
+		Passed:               res.Success,
+		Skipped:              res.Skipped,
+		SkipReason:           str.Trim(res.SkipReason),
+		Canceled:             res.Canceled,
 		Profile: &ProfileInfo{
 			Count:    res.Count,
 			Warmup:   res.Warmup,
@@ -496,16 +512,17 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 	}
 	envName := str.FirstTrimmed(res.Environment, fallbackEnv)
 	item := Result{
-		Kind:        kind,
-		Name:        str.Trim(res.Name),
-		Method:      str.UpperTrim(string(res.Kind)),
-		Environment: envName,
-		Summary:     str.Trim(res.Summary),
-		Duration:    res.Duration,
-		Passed:      res.Success,
-		Skipped:     res.Skipped,
-		Canceled:    res.Canceled,
-		Steps:       make([]StepResult, 0, len(res.Steps)),
+		Kind:                 kind,
+		Name:                 str.Trim(res.Name),
+		Method:               str.UpperTrim(string(res.Kind)),
+		Environment:          envName,
+		EnvironmentSelection: res.Selection.Groups(),
+		Summary:              str.Trim(res.Summary),
+		Duration:             res.Duration,
+		Passed:               res.Success,
+		Skipped:              res.Skipped,
+		Canceled:             res.Canceled,
+		Steps:                make([]StepResult, 0, len(res.Steps)),
 	}
 	if item.Method == "" {
 		item.Method = "WORKFLOW"
@@ -521,26 +538,27 @@ func workflowRunResult(res engine.WorkflowResult, fallbackEnv string) Result {
 func workflowStepResult(step engine.WorkflowStep) StepResult {
 	target := str.Trim(step.Target)
 	out := StepResult{
-		Name:            str.Trim(step.Name),
-		Method:          str.Trim(step.Method),
-		Target:          target,
-		EffectiveTarget: effectiveURL(step.Response, target),
-		Branch:          str.Trim(step.Branch),
-		Iteration:       step.Iteration,
-		Total:           step.Total,
-		Summary:         str.Trim(step.Summary),
-		Duration:        step.Duration,
-		Response:        step.Response,
-		GRPC:            step.GRPC,
-		Err:             step.Err,
-		Tests:           cloneTests(step.Tests),
-		ScriptErr:       step.ScriptErr,
-		Passed:          step.Success,
-		Skipped:         step.Skipped,
-		Canceled:        step.Canceled,
-		Stream:          streamResult(step.Stream),
-		Trace:           traceResult(step.Response),
-		transcript:      bytes.Clone(step.Transcript),
+		Name:                 str.Trim(step.Name),
+		Method:               str.Trim(step.Method),
+		Target:               target,
+		EffectiveTarget:      effectiveURL(step.Response, target),
+		Branch:               str.Trim(step.Branch),
+		Iteration:            step.Iteration,
+		Total:                step.Total,
+		EnvironmentSelection: step.Selection.Groups(),
+		Summary:              str.Trim(step.Summary),
+		Duration:             step.Duration,
+		Response:             step.Response,
+		GRPC:                 step.GRPC,
+		Err:                  step.Err,
+		Tests:                cloneTests(step.Tests),
+		ScriptErr:            step.ScriptErr,
+		Passed:               step.Success,
+		Skipped:              step.Skipped,
+		Canceled:             step.Canceled,
+		Stream:               streamResult(step.Stream),
+		Trace:                traceResult(step.Response),
+		transcript:           bytes.Clone(step.Transcript),
 	}
 	out.Failure = stepFailure(out)
 	return out

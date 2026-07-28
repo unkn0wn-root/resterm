@@ -1418,15 +1418,20 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 		}, nil
 	})
 
+	cat, err := vars.NewCatalog(vars.EnvironmentSet{
+		"dev":   {"host": "dev.example.com"},
+		"stage": {"host": "stage.example.com"},
+	})
+	if err != nil {
+		t.Fatalf("environment catalog: %v", err)
+	}
 	rep, err := RunContext(context.Background(), Options{
-		Version:       "test",
-		FilePath:      file,
-		WorkspaceRoot: dir,
-		Client:        client,
-		EnvSet: vars.EnvironmentSet{
-			"dev":   {"host": "dev.example.com"},
-			"stage": {"host": "stage.example.com"},
-		},
+		Version:        "test",
+		FilePath:       file,
+		WorkspaceRoot:  dir,
+		Client:         client,
+		Catalog:        cat,
+		Selection:      cat.DefaultSelection(),
 		CompareTargets: []string{"dev", "stage"},
 		CompareBase:    "stage",
 	})

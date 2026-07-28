@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -215,6 +216,9 @@ func (m *Manager) Restore(entries []SnapshotEntry) {
 			continue
 		}
 		cfg := cloneConfig(entry.Config).Resolved()
+		if cfg.CacheKey != "" && key == cfg.CacheKey {
+			continue
+		}
 		token := cloneToken(entry.Token)
 		if strings.TrimSpace(token.AccessToken) == "" {
 			continue
@@ -394,7 +398,7 @@ func cloneToken(tok Token) Token {
 func (m *Manager) cacheKey(env string, cfg Config) string {
 	cfg = cfg.Normalized()
 	if cfg.CacheKey != "" {
-		return cfg.CacheKey
+		return cachePart(env) + cachePart(cfg.CacheKey)
 	}
 
 	parts := []string{
@@ -423,6 +427,11 @@ func (m *Manager) cacheKey(env string, cfg Config) string {
 		}
 	}
 	return strings.Join(parts, "|")
+}
+
+func cachePart(s string) string {
+	s = strings.TrimSpace(s)
+	return strconv.Itoa(len(s)) + ":" + s
 }
 
 func (m *Manager) requestToken(

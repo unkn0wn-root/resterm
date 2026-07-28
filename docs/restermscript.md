@@ -367,6 +367,17 @@ Resterm exposes host objects when evaluating templates, directives, `@apply`, as
 
 `env` provides environment values. You can access values through `env.get("name")`, `env.has("name")`, `env.require("name"[, msg])`, or `env.name`. `require` throws when a value is missing.
 
+For grouped environments, `env.name` is the complete selection label, such as `api=dev, app=dev app 1`. `env.groups` exposes the selected profile in each group. Member access is case-insensitive and the same `get`, `has`, and `require` helpers are available:
+
+```rts
+env.groups.api
+env.groups.get("credentials")
+env.groups.has("app")
+env.groups.require("api", "API profile is required")
+```
+
+For named environments, `env.name` is unchanged and `env.groups` is empty.
+
 ### vars
 
 `vars` provides request runtime variables, including globals and workflow overrides. You can access values through `vars.get("key")`, `vars.has("key")`, `vars.require("key"[, msg])`, or `vars.key`. `vars.global` provides global reads and writes in pre-request scripts through `get`, `has`, `require`, `set`, and `delete`.

@@ -110,16 +110,16 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		t.Fatalf("public Run: %v", err)
 	}
 
-	envs, err := vars.LoadEnvironmentFile(envFile)
+	cat, err := vars.LoadEnvironmentFile(envFile)
 	if err != nil {
 		t.Fatalf("load env file: %v", err)
 	}
-	envName := vars.DefaultEnvironment(envs)
+	sel := cat.DefaultSelection()
 	want, err := runner.RunContext(context.Background(), runner.Options{
 		FilePath:        path,
 		WorkspaceRoot:   dir,
-		EnvSet:          envs,
-		EnvName:         envName,
+		Catalog:         cat,
+		Selection:       sel,
 		EnvironmentFile: envFile,
 		CompareTargets:  []string{"dev", "stage"},
 		CompareBase:     "stage",

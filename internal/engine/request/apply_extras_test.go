@@ -62,7 +62,7 @@ func TestApplySeesTypedForEachValues(t *testing.T) {
 				},
 			}
 
-			res, err := e.ExecuteWith(nil, req, "", ExecOptions{
+			res, err := e.ExecuteWith(nil, req, testEnv(""), ExecOptions{
 				Values: map[string]rts.Value{
 					"item": rts.Dict(map[string]rts.Value{"id": rts.Str("42")}),
 					"list": rts.List([]rts.Value{rts.Str("first"), rts.Str("second")}),
@@ -111,7 +111,12 @@ func TestExplainReportCarriesParseWarnings(t *testing.T) {
 	}
 	req := &restfile.Request{Method: http.MethodGet, URL: "http://example.test"}
 
-	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(doc, req, "", ExecOptions{})
+	res, err := New(engcfg.Config{Client: client}, nil).ExecuteWith(
+		doc,
+		req,
+		testEnv(""),
+		ExecOptions{},
+	)
 	if err != nil {
 		t.Fatalf("ExecuteWith: %v", err)
 	}
@@ -144,7 +149,7 @@ func TestExplainReportCarriesParseWarningsOnEarlyFailure(t *testing.T) {
 		K8s:    &restfile.K8sSpec{Use: "prof"},
 	}
 
-	res, err := New(engcfg.Config{}, nil).ExecuteWith(doc, req, "", ExecOptions{})
+	res, err := New(engcfg.Config{}, nil).ExecuteWith(doc, req, testEnv(""), ExecOptions{})
 	if err != nil {
 		t.Fatalf("ExecuteWith: %v", err)
 	}

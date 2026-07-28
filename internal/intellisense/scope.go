@@ -1,9 +1,10 @@
 package intellisense
 
 type Scope struct {
-	Variables    []VarRef
-	Environments []string
-	Profiles     ProfileSet
+	Variables         []VarRef
+	Environments      []string
+	EnvironmentGroups map[string][]string
+	Profiles          ProfileSet
 }
 
 type VarRef struct {

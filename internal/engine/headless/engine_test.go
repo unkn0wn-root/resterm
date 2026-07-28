@@ -32,7 +32,7 @@ func TestEngineExecuteRequest(t *testing.T) {
 	eng := New(engine.Config{})
 	doc, req := testDocumentRequest(srv.URL)
 
-	res, err := eng.ExecuteRequest(doc, req, "")
+	res, err := eng.ExecuteRequest(doc, req, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestEngineExecuteCompareProfileAndWorkflow(t *testing.T) {
 	compare, err := eng.ExecuteCompare(doc, compareReq, &restfile.CompareSpec{
 		Environments: []string{"one", "two"},
 		Baseline:     "one",
-	}, "")
+	}, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteCompare: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestEngineExecuteCompareProfileAndWorkflow(t *testing.T) {
 
 	docProfile, profileReq := testDocumentRequest(srv.URL)
 	profileReq.Metadata.Profile = &restfile.ProfileSpec{Count: 2}
-	profile, err := eng.ExecuteProfile(docProfile, profileReq, "")
+	profile, err := eng.ExecuteProfile(docProfile, profileReq, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteProfile: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestEngineExecuteCompareProfileAndWorkflow(t *testing.T) {
 			Using: "ok",
 		}},
 	}
-	out, err := eng.ExecuteWorkflow(doc, wf, "")
+	out, err := eng.ExecuteWorkflow(doc, wf, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteWorkflow: %v", err)
 	}
@@ -117,10 +117,10 @@ func TestEngineExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 	setProd := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/set/prod"}
 	echo := &restfile.Request{Method: http.MethodGet, URL: srv.URL + "/echo"}
 
-	if _, err := eng.ExecuteRequest(doc, setDev, "dev"); err != nil {
+	if _, err := eng.ExecuteRequest(doc, setDev, testSelection("dev")); err != nil {
 		t.Fatalf("set dev cookie: %v", err)
 	}
-	res, err := eng.ExecuteRequest(doc, echo, "dev")
+	res, err := eng.ExecuteRequest(doc, echo, testSelection("dev"))
 	if err != nil {
 		t.Fatalf("echo dev cookie: %v", err)
 	}
@@ -128,7 +128,7 @@ func TestEngineExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 		t.Fatalf("expected dev cookie, got %q", got)
 	}
 
-	res, err = eng.ExecuteRequest(doc, echo, "prod")
+	res, err = eng.ExecuteRequest(doc, echo, testSelection("prod"))
 	if err != nil {
 		t.Fatalf("echo prod cookie before set: %v", err)
 	}
@@ -136,10 +136,10 @@ func TestEngineExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 		t.Fatalf("expected no prod cookie before set, got %q", got)
 	}
 
-	if _, err := eng.ExecuteRequest(doc, setProd, "prod"); err != nil {
+	if _, err := eng.ExecuteRequest(doc, setProd, testSelection("prod")); err != nil {
 		t.Fatalf("set prod cookie: %v", err)
 	}
-	res, err = eng.ExecuteRequest(doc, echo, "prod")
+	res, err = eng.ExecuteRequest(doc, echo, testSelection("prod"))
 	if err != nil {
 		t.Fatalf("echo prod cookie: %v", err)
 	}
@@ -147,7 +147,7 @@ func TestEngineExecuteRequestIsolatesCookiesPerEnvironment(t *testing.T) {
 		t.Fatalf("expected prod cookie, got %q", got)
 	}
 
-	res, err = eng.ExecuteRequest(doc, echo, "dev")
+	res, err = eng.ExecuteRequest(doc, echo, testSelection("dev"))
 	if err != nil {
 		t.Fatalf("echo dev cookie after prod set: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestWorkflowScriptErr(t *testing.T) {
 		},
 	}
 
-	reqRes, err := eng.ExecuteRequest(doc, req, "")
+	reqRes, err := eng.ExecuteRequest(doc, req, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestWorkflowScriptErr(t *testing.T) {
 		}},
 	}
 
-	out, err := eng.ExecuteWorkflow(doc, wf, "")
+	out, err := eng.ExecuteWorkflow(doc, wf, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteWorkflow: %v", err)
 	}
@@ -238,7 +238,11 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 
 	// Default (headless / `resterm run`): expression-relative column (base 1) and
 	// no source attached, exactly as before the source-span change.
-	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], "")
+	res, err := New(engine.Config{}).ExecuteRequest(
+		doc,
+		doc.Requests[0],
+		testSelection(""),
+	)
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -257,7 +261,11 @@ func TestRequestAssertParseErrorSourceSpanGated(t *testing.T) {
 	}
 
 	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
-	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(doc, doc.Requests[0], "")
+	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(
+		doc,
+		doc.Requests[0],
+		testSelection(""),
+	)
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -295,7 +303,11 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 
 	// Default (headless / `resterm run`): expression-relative column (base 1) and
 	// no source attached, exactly as before the source-span change.
-	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], "")
+	res, err := New(engine.Config{}).ExecuteRequest(
+		doc,
+		doc.Requests[0],
+		testSelection(""),
+	)
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -314,7 +326,11 @@ func TestRequestCaptureParseErrorSourceSpanGated(t *testing.T) {
 	}
 
 	// TUI (SourceDiagnostics): precise column at the '&' plus source for the caret.
-	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(doc, doc.Requests[0], "")
+	res, err = New(engine.Config{SourceDiagnostics: true}).ExecuteRequest(
+		doc,
+		doc.Requests[0],
+		testSelection(""),
+	)
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -347,7 +363,11 @@ func TestRequestRTSModuleParseErrorCarriesSourceSpan(t *testing.T) {
 		t.Fatalf("expected 1 request, got %d", len(doc.Requests))
 	}
 
-	res, err := New(engine.Config{}).ExecuteRequest(doc, doc.Requests[0], "")
+	res, err := New(engine.Config{}).ExecuteRequest(
+		doc,
+		doc.Requests[0],
+		testSelection(""),
+	)
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -443,7 +463,7 @@ func TestEngineExecuteRequestCapturesScriptedWebSocketTranscript(t *testing.T) {
 	doc := &restfile.Document{Path: "ws.http", Requests: []*restfile.Request{req}}
 
 	eng := New(engine.Config{})
-	res, err := eng.ExecuteRequest(doc, req, "")
+	res, err := eng.ExecuteRequest(doc, req, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}
@@ -520,7 +540,7 @@ func TestEngineExecuteRequestCapturesGRPCTranscript(t *testing.T) {
 			DialTimeout:         time.Second,
 		},
 	})
-	res, err := eng.ExecuteRequest(doc, req, "")
+	res, err := eng.ExecuteRequest(doc, req, testSelection(""))
 	if err != nil {
 		t.Fatalf("ExecuteRequest: %v", err)
 	}

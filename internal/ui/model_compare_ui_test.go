@@ -53,3 +53,20 @@ func TestSelectCompareFocusPinsSnapshots(t *testing.T) {
 		)
 	}
 }
+
+func TestBuildCompareBundleMatchesGroupedBaselineProfile(t *testing.T) {
+	results := []compareResult{
+		{Environment: "api=dev, auth=ci", Profile: "dev"},
+		{Environment: "api=prod, auth=ci", Profile: "prod"},
+	}
+	bundle := buildCompareBundle(results, "prod")
+	if bundle == nil {
+		t.Fatal("expected compare bundle")
+	}
+	if got, want := bundle.Baseline, "api=prod, auth=ci"; got != want {
+		t.Fatalf("baseline = %q, want %q", got, want)
+	}
+	if got := bundle.Rows[1].Summary; got != "baseline" {
+		t.Fatalf("baseline row summary = %q, want baseline", got)
+	}
+}

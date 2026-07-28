@@ -5,6 +5,20 @@ import "time"
 // EnvironmentSet maps environment names to variable values.
 type EnvironmentSet map[string]map[string]string
 
+type EnvironmentSelection map[string]string
+
+type EnvironmentGroup struct {
+	Default  string         `json:"default,omitempty"`
+	Profiles EnvironmentSet `json:"profiles,omitempty"`
+}
+
+type EnvironmentGroups map[string]EnvironmentGroup
+
+type GroupedEnvironmentSet struct {
+	Shared map[string]string `json:"shared,omitempty"`
+	Groups EnvironmentGroups `json:"groups,omitempty"`
+}
+
 // Source identifies the request document to execute.
 // Path is required and provides the logical file identity and relative-resolution anchor.
 // Path may be synthetic when Content is provided.
@@ -41,15 +55,18 @@ type StateOptions struct {
 
 // EnvironmentOptions controls environment loading and selection.
 type EnvironmentOptions struct {
-	Set      EnvironmentSet `json:"set,omitempty"`
-	Name     string         `json:"name,omitempty"`
-	FilePath string         `json:"filePath,omitempty"`
+	Set       EnvironmentSet         `json:"set,omitempty"`
+	Grouped   *GroupedEnvironmentSet `json:"grouped,omitempty"`
+	Name      string                 `json:"name,omitempty"`
+	Selection EnvironmentSelection   `json:"selection,omitempty"`
+	FilePath  string                 `json:"filePath,omitempty"`
 }
 
 // CompareOptions configures compare runs across multiple environments.
 type CompareOptions struct {
 	Targets []string `json:"targets,omitempty"`
 	Base    string   `json:"base,omitempty"`
+	Group   string   `json:"group,omitempty"`
 }
 
 // ProfileOptions configures profile runs.

@@ -300,6 +300,7 @@ type TraceBudget struct {
 type CompareSpec struct {
 	Environments []string
 	Baseline     string
+	Group        string
 }
 
 type CaptureExprMode uint8

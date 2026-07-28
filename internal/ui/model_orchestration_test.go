@@ -556,7 +556,7 @@ func TestWorkflowRunBranchAndLoopProgression(t *testing.T) {
 			},
 		},
 	}
-	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-1", Env: "dev"})
+	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-1", Env: testEnv("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -803,7 +803,7 @@ func TestWorkflowRunCancelMarksRemainingStepsCanceled(t *testing.T) {
 			{Name: "Two", Using: "two"},
 		},
 	}
-	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-2", Env: "dev"})
+	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-2", Env: testEnv("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -902,7 +902,7 @@ func TestWorkflowRunKeepsSpinnerActiveUntilRunDone(t *testing.T) {
 			Using: "one",
 		}},
 	}
-	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-spin", Env: "dev"})
+	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-spin", Env: testEnv("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -1000,7 +1000,7 @@ func TestWorkflowRunHTTPServerErrorDoesNotOpenErrorModal(t *testing.T) {
 			Using: "one",
 		}},
 	}
-	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-502", Env: "dev"})
+	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-502", Env: testEnv("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -1095,7 +1095,7 @@ func TestWorkflowRunFinalExplainAggregatesAllSteps(t *testing.T) {
 			{Name: "Two", Using: "two"},
 		},
 	}
-	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-explain", Env: "dev"})
+	pl, err := core.PrepareWorkflow(doc, wf, core.RunMeta{ID: "wf-explain", Env: testEnv("dev")})
 	if err != nil {
 		t.Fatalf("PrepareWorkflow: %v", err)
 	}
@@ -1345,7 +1345,7 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	store := histdb.New(filepath.Join(t.TempDir(), "history.db"))
 	t.Cleanup(func() { _ = store.Close() })
 
-	m := newOrchTestModel(t, Config{History: store, EnvironmentName: "dev"})
+	m := newOrchTestModel(t, Config{History: store, Selection: testSelection("dev")})
 	doc := &restfile.Document{
 		Variables: []restfile.Variable{{
 			Name:  "items",
@@ -1367,7 +1367,7 @@ func TestForEachRunRecordsPerRequestHistory(t *testing.T) {
 	}
 	req := doc.Requests[0]
 	m.doc = doc
-	pl, err := core.PrepareForEach(doc, req, core.RunMeta{ID: "each-1", Env: "dev"})
+	pl, err := core.PrepareForEach(doc, req, core.RunMeta{ID: "each-1", Env: testEnv("dev")})
 	if err != nil {
 		t.Fatalf("PrepareForEach: %v", err)
 	}

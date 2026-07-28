@@ -3,6 +3,7 @@ package oauth
 import (
 	"context"
 	"encoding/base64"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -240,7 +241,7 @@ func TestManagerMergeCachedConfig(t *testing.T) {
 		CacheKey:     "github",
 		Extra:        map[string]string{"audience": "https://api.local"},
 	}
-	mgr.storeToken("github", base, Token{AccessToken: "cached"})
+	mgr.storeToken(mgr.cacheKey("dev", base), base, Token{AccessToken: "cached"})
 
 	merged := mgr.MergeCachedConfig("dev", Config{
 		CacheKey:     "github",
@@ -264,6 +265,59 @@ func TestManagerMergeCachedConfig(t *testing.T) {
 	}
 }
 
+func TestManagerExplicitCacheKeyIsScoped(t *testing.T) {
+	mgr := NewManager(nil)
+	var calls int
+	mgr.SetRequestFunc(
+		func(context.Context, *restfile.Request, httpclient.Options) (*httpclient.Response, error) {
+			calls++
+			return &httpclient.Response{
+				Status:     "200 OK",
+				StatusCode: 200,
+				Body: []byte(fmt.Sprintf(
+					`{"access_token":"token-%d","token_type":"Bearer","expires_in":3600}`,
+					calls,
+				)),
+				Headers: http.Header{},
+			}, nil
+		},
+	)
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		GrantType: "client_credentials",
+		CacheKey:  "shared",
+	}
+
+	personal, err := mgr.Token(context.Background(), "scope-personal", cfg, httpclient.Options{})
+	if err != nil {
+		t.Fatalf("personal token: %v", err)
+	}
+	ci, err := mgr.Token(context.Background(), "scope-ci", cfg, httpclient.Options{})
+	if err != nil {
+		t.Fatalf("ci token: %v", err)
+	}
+	again, err := mgr.Token(context.Background(), "scope-personal", cfg, httpclient.Options{})
+	if err != nil {
+		t.Fatalf("cached personal token: %v", err)
+	}
+	if personal.AccessToken != "token-1" || ci.AccessToken != "token-2" ||
+		again.AccessToken != "token-1" {
+		t.Fatalf("tokens = %q, %q, %q", personal.AccessToken, ci.AccessToken, again.AccessToken)
+	}
+	if calls != 2 {
+		t.Fatalf("token requests = %d, want 2", calls)
+	}
+
+	restored := NewManager(nil)
+	restored.Restore(mgr.Snapshot())
+	if got, ok := restored.CachedToken("scope-personal", cfg); !ok || got.AccessToken != "token-1" {
+		t.Fatalf("restored personal token = %+v, %v", got, ok)
+	}
+	if got, ok := restored.CachedToken("scope-ci", cfg); !ok || got.AccessToken != "token-2" {
+		t.Fatalf("restored ci token = %+v, %v", got, ok)
+	}
+}
+
 func TestManagerMergeCachedConfigCacheOnlyInheritsResolvedValues(t *testing.T) {
 	mgr := NewManager(nil)
 	base := Config{
@@ -274,7 +328,7 @@ func TestManagerMergeCachedConfigCacheOnlyInheritsResolvedValues(t *testing.T) {
 		Header:    " X-Access-Token ",
 		CacheKey:  " github ",
 	}
-	mgr.storeToken("github", base, Token{AccessToken: "cached"})
+	mgr.storeToken(mgr.cacheKey("dev", base), base, Token{AccessToken: "cached"})
 
 	merged := mgr.MergeCachedConfig("dev", Config{CacheKey: " github "})
 	if merged.TokenURL != "https://auth.local/token" ||
@@ -442,7 +496,7 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 		CacheKey:  "github",
 		Extra:     map[string]string{"audience": "https://api.local"},
 	}
-	mgr.storeToken("github", cfg, Token{
+	mgr.storeToken(mgr.cacheKey("dev", cfg), cfg, Token{
 		AccessToken:  "expired-token",
 		RefreshToken: "refresh-1",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -463,6 +517,34 @@ func TestManagerSnapshotRestoreAndCanHeadless(t *testing.T) {
 	if merged.TokenURL != cfg.TokenURL || merged.AuthURL != cfg.AuthURL ||
 		merged.ClientID != cfg.ClientID {
 		t.Fatalf("expected restored config to merge, got %#v", merged)
+	}
+}
+
+func TestManagerIgnoresUnscopedExplicitCacheKeyAfterRestore(t *testing.T) {
+	cfg := Config{
+		TokenURL:  "https://auth.local/token",
+		GrantType: "authorization_code",
+		CacheKey:  "github",
+	}
+	mgr := NewManager(nil)
+	mgr.Restore([]SnapshotEntry{{
+		Key:    "github",
+		Config: cfg,
+		Token: Token{
+			AccessToken:  "expired-token",
+			RefreshToken: "refresh-1",
+			Expiry:       time.Now().Add(-time.Hour),
+		},
+	}})
+
+	if mgr.CanHeadless("dev", cfg) {
+		t.Fatal("unscoped explicit cache key should not be reused")
+	}
+	if _, ok := mgr.CachedToken("dev", cfg); ok {
+		t.Fatal("unscoped explicit cache key should not resolve")
+	}
+	if got := mgr.Snapshot(); len(got) != 0 {
+		t.Fatalf("unscoped explicit cache key should be discarded, got %+v", got)
 	}
 }
 

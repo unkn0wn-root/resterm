@@ -35,7 +35,7 @@ func TestRunWarningQueueLeavesParseWarningsAlone(t *testing.T) {
 	model.setStatusMessage(statusMsg{text: "Sending GET /x", level: statusInfo})
 
 	rq := &uiRequestEngine{Engine: nil, model: &model}
-	_, _ = rq.ExecuteWith(doc, nil, "", rqeng.ExecOptions{})
+	_, _ = rq.ExecuteWith(doc, nil, testEnv(""), rqeng.ExecOptions{})
 
 	select {
 	case queued := <-model.runMsgChan:

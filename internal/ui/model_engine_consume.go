@@ -51,6 +51,7 @@ func (m *Model) responseMsgFromRunState(res engine.RequestResult, done bool) res
 		requestText:    res.RequestText,
 		runtimeSecrets: append([]string(nil), res.RuntimeSecrets...),
 		environment:    res.Environment,
+		selection:      res.Selection,
 		skipped:        res.Skipped,
 		skipReason:     res.SkipReason,
 		preview:        res.Preview,

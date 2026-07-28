@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	schemaVer = 2
+	schemaVer = 3
 )
 
 type mig struct {
@@ -106,6 +106,12 @@ var migs = []mig{
 		ver: 2,
 		qs: []string{
 			`CREATE INDEX IF NOT EXISTS idx_hist_method ON hist(method, exec_ns DESC, id_num DESC, id DESC);`,
+		},
+	},
+	{
+		ver: 3,
+		qs: []string{
+			`ALTER TABLE hist ADD COLUMN env_sel_json BLOB;`,
 		},
 	},
 }

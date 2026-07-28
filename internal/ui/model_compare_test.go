@@ -9,7 +9,7 @@ import (
 )
 
 func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
-	spec := core.BuildCompareSpec([]string{"dev", "stage", "prod"}, "")
+	spec := core.BuildCompareSpec([]string{"dev", "stage", "prod"}, "", "")
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -22,15 +22,15 @@ func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
 	}
 }
 
-func TestBuildConfigCompareSpecAppendsBaseline(t *testing.T) {
-	spec := core.BuildCompareSpec([]string{"dev", "stage"}, "prod")
+func TestBuildConfigCompareSpecKeepsUnknownBaselineForValidation(t *testing.T) {
+	spec := core.BuildCompareSpec([]string{"dev", "stage"}, "prod", "")
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
 	if spec.Baseline != "prod" {
 		t.Fatalf("expected baseline prod, got %s", spec.Baseline)
 	}
-	expect := []string{"dev", "stage", "prod"}
+	expect := []string{"dev", "stage"}
 	if !reflect.DeepEqual(expect, spec.Environments) {
 		t.Fatalf("unexpected environments: %#v", spec.Environments)
 	}
@@ -65,7 +65,7 @@ func TestCompareSpecForRequestPrefersConfig(t *testing.T) {
 }
 
 func TestNormalizeCompareTargets(t *testing.T) {
-	spec := core.BuildCompareSpec([]string{"dev", "DEV", " stage ", ""}, "")
+	spec := core.BuildCompareSpec([]string{"dev", "DEV", " stage ", ""}, "", "")
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}

@@ -25,7 +25,6 @@ type compareState struct {
 	spec         *restfile.CompareSpec
 	envs         []string
 	index        int
-	originEnv    string
 	current      *restfile.Request
 	currentEnv   string
 	requestText  string
@@ -39,22 +38,29 @@ type compareState struct {
 func compareStateFromPlan(
 	pl *core.ComparePlan,
 	opts httpclient.Options,
-	originEnv string,
 	label string,
 ) *compareState {
 	if pl == nil {
 		return nil
 	}
-	envs := append([]string(nil), pl.Spec.Environments...)
+	envs := make([]string, 0, len(pl.Targets))
+	targets := make([]string, 0, len(pl.Targets))
+	for _, target := range pl.Targets {
+		envs = append(envs, target.Env.Label())
+		targets = append(targets, target.Name())
+	}
 	return &compareState{
-		id:        strings.TrimSpace(pl.Run.ID),
-		base:      pl.Request.Clone(),
-		options:   opts,
-		spec:      pl.Spec.Clone(),
-		envs:      envs,
-		originEnv: originEnv,
-		results:   make([]compareResult, 0, len(envs)),
-		label:     label,
+		id:      strings.TrimSpace(pl.Run.ID),
+		base:    pl.Request.Clone(),
+		options: opts,
+		spec: &restfile.CompareSpec{
+			Environments: targets,
+			Baseline:     pl.Baseline,
+			Group:        pl.Group,
+		},
+		envs:    envs,
+		results: make([]compareResult, 0, len(envs)),
+		label:   label,
 	}
 }
 
@@ -80,13 +86,24 @@ func (m *Model) startCompareRun(
 		return nil
 	}
 
-	title := strings.TrimSpace(m.statusRequestTitle(doc, req, ""))
+	title := strings.TrimSpace(m.statusRequestTitle(doc, req))
 	if title == "" {
 		title = requestBaseTitle(req)
 	}
 	label := fmt.Sprintf("Compare %s", title)
-	env := vars.SelectEnv(m.cfg.EnvironmentSet, "", m.cfg.EnvironmentName)
-	pl, err := core.PrepareCompare(doc, req, spec, core.RunMeta{
+	spec = core.NormalizeCompareSpec(spec)
+	env := m.env
+	targets, err := m.cfg.Catalog.CompareTargets(
+		env.Selection(),
+		spec.Group,
+		spec.Baseline,
+		spec.Environments,
+	)
+	if err != nil {
+		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
+		return nil
+	}
+	pl, err := core.PrepareCompare(doc, req, targets, spec.Group, spec.Baseline, core.RunMeta{
 		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
 		Env: env,
 	})
@@ -94,7 +111,7 @@ func (m *Model) startCompareRun(
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-	state := compareStateFromPlan(pl, options, m.cfg.EnvironmentName, label)
+	state := compareStateFromPlan(pl, options, label)
 	return m.startCompareCoreRun(pl, state)
 }
 
@@ -253,6 +270,7 @@ func (m *Model) consumeCompareRow(
 	}
 	result := compareResult{
 		Environment: currentEnv,
+		Selection:   msg.selection,
 		Stream:      cloneStreamInfo(msg.stream),
 		Transcript:  append([]byte(nil), msg.transcript...),
 		Tests:       append([]scripts.TestResult(nil), msg.tests...),
@@ -261,6 +279,9 @@ func (m *Model) consumeCompareRow(
 		Canceled:    canceled,
 		Skipped:     msg.skipped,
 		SkipReason:  msg.skipReason,
+	}
+	if state.spec != nil && state.spec.Group != "" {
+		result.Profile, _ = msg.selection.Profile(state.spec.Group)
 	}
 	if currentReq == nil {
 		currentReq = msg.executed
@@ -335,7 +356,6 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 		return nil
 	}
 
-	m.cfg.EnvironmentName = state.originEnv
 	m.compareRun = nil
 	m.stopSending()
 	m.stopStatusPulseIfIdle()
@@ -458,6 +478,8 @@ func (m *Model) recordCompareHistory(state *compareState) {
 		RequestText: rqeng.RenderRequestText(baseReq),
 		Compare:     &history.CompareEntry{},
 	}
+	entry.Environment = m.env.Label()
+	entry.EnvironmentSelection = history.EnvironmentSelection(m.env.Selection().Groups())
 	if state.canceled {
 		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.envs))
 		if strings.TrimSpace(state.label) != "" {
@@ -467,6 +489,7 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	}
 	if state.spec != nil {
 		entry.Compare.Baseline = state.spec.Baseline
+		entry.Compare.Group = state.spec.Group
 	}
 
 	var totalDur time.Duration
@@ -499,10 +522,12 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 	status, _ := compareRowStatus(&result)
 
 	entry := history.CompareResult{
-		Environment: env,
-		Status:      status,
-		Duration:    compareRowDuration(&result),
-		RequestText: strings.TrimSpace(result.RequestText),
+		Environment:          env,
+		Profile:              result.Profile,
+		EnvironmentSelection: history.EnvironmentSelection(result.Selection.Groups()),
+		Status:               status,
+		Duration:             compareRowDuration(&result),
+		RequestText:          strings.TrimSpace(result.RequestText),
 	}
 
 	req := result.Request
@@ -510,7 +535,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.RequestText = rqeng.RenderRequestText(req)
 	}
 	if req != nil {
-		secrets := m.secretValuesForEnvironment(env, req)
+		secrets := m.secretValuesForSelection(result.Selection, req)
 		maskHeaders := !req.Metadata.AllowSensitiveHeaders
 		entry.RequestText = redactHistoryText(entry.RequestText, secrets, maskHeaders)
 	}
@@ -530,10 +555,10 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.Error = result.Err.Error()
 		entry.BodySnippet = entry.Error
 	case result.Response != nil:
-		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, env, m)
+		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, result.Selection, m)
 		entry.StatusCode = result.Response.StatusCode
 	case result.GRPC != nil:
-		entry.BodySnippet = buildCompareGRPCSnippet(result.GRPC, req, env, m)
+		entry.BodySnippet = buildCompareGRPCSnippet(result.GRPC, req, result.Selection, m)
 		entry.StatusCode = int(result.GRPC.StatusCode)
 	case result.Stream != nil || len(result.Transcript) > 0:
 		entry.BodySnippet = streamSummaryText(result.Stream)
@@ -551,7 +576,7 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 func buildCompareHTTPSnippet(
 	resp *httpclient.Response,
 	req *restfile.Request,
-	env string,
+	sel vars.Selection,
 	m *Model,
 ) string {
 	if resp == nil {
@@ -560,14 +585,14 @@ func buildCompareHTTPSnippet(
 	if req != nil && req.Metadata.NoLog {
 		return "<body suppressed>"
 	}
-	secrets := m.secretValuesForEnvironment(env, req)
+	secrets := m.secretValuesForSelection(sel, req)
 	return redactHistoryText(string(resp.Body), secrets, false)
 }
 
 func buildCompareGRPCSnippet(
 	resp *grpcclient.Response,
 	req *restfile.Request,
-	env string,
+	sel vars.Selection,
 	m *Model,
 ) string {
 	if resp == nil {
@@ -576,7 +601,7 @@ func buildCompareGRPCSnippet(
 	if req != nil && req.Metadata.NoLog {
 		return "<body suppressed>"
 	}
-	secrets := m.secretValuesForEnvironment(env, req)
+	secrets := m.secretValuesForSelection(sel, req)
 	return redactHistoryText(resp.Message, secrets, false)
 }
 
@@ -595,7 +620,8 @@ func (s *compareState) progressSummary() string {
 	parts := make([]string, len(s.envs))
 	for idx, env := range s.envs {
 		label := env
-		if s.spec != nil && strings.EqualFold(env, s.spec.Baseline) {
+		if s.spec != nil && idx < len(s.spec.Environments) &&
+			strings.EqualFold(s.spec.Environments[idx], s.spec.Baseline) {
 			label += "*"
 		}
 		switch {

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,7 +19,6 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
 	"github.com/unkn0wn-root/resterm/internal/runx/report"
 	str "github.com/unkn0wn-root/resterm/internal/util"
-	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 // Plan stores prepared runner inputs that can be executed multiple times.
@@ -130,11 +128,12 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 	exec := engheadless.New(engine.Config{
 		FilePath:        opt.FilePath,
 		Client:          opt.Client,
-		EnvironmentSet:  cloneEnvSet(opt.EnvSet),
-		EnvironmentName: opt.EnvName,
+		Catalog:         opt.Catalog,
+		Selection:       opt.Selection,
 		EnvironmentFile: opt.EnvironmentFile,
 		CompareTargets:  slices.Clone(opt.CompareTargets),
 		CompareBase:     str.Trim(opt.CompareBase),
+		CompareGroup:    str.Trim(opt.CompareGroup),
 		HTTPOptions:     cloneHTTPOptions(opt.HTTPOptions),
 		GRPCOptions:     cloneGRPCOptions(opt.GRPCOptions),
 		WorkspaceRoot:   opt.WorkspaceRoot,
@@ -144,16 +143,23 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 
 	defer func() { _ = exec.Close() }()
 
+	env, err := opt.Catalog.Resolve(opt.Selection)
+	if err != nil {
+		return nil, err
+	}
+	envName := env.Label()
+
 	if err := loadRunnerState(exec, pl.state, opt); err != nil {
 		return nil, fmt.Errorf("load runner state: %w", err)
 	}
 
 	rep := &Report{
-		Version:       opt.Version,
-		SchemaVersion: runfmt.ReportSchemaVersion,
-		FilePath:      opt.FilePath,
-		EnvName:       opt.EnvName,
-		StartedAt:     start,
+		Version:              opt.Version,
+		SchemaVersion:        runfmt.ReportSchemaVersion,
+		FilePath:             opt.FilePath,
+		EnvName:              envName,
+		EnvironmentSelection: env.Selection().Groups(),
+		StartedAt:            start,
 		// A Plan is reusable and safe for concurrent RunPlan calls, so each
 		// report gets its own copy rather than aliasing the plan's.
 		Warnings: slices.Clone(pl.warns),
@@ -161,11 +167,11 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 
 	if tg.workflow != nil {
 		rep.Results = make([]Result, 0, 1)
-		out, err := exec.ExecuteWorkflowContext(ctx, doc, tg.workflow, opt.EnvName)
+		out, err := exec.ExecuteWorkflowContext(ctx, doc, tg.workflow, opt.Selection)
 		if err != nil {
 			return nil, err
 		}
-		rep.add(workflowRunResult(*out, opt.EnvName))
+		rep.add(workflowRunResult(*out, envName))
 		return finishRun(rep, exec, pl.state, opt)
 	}
 
@@ -178,24 +184,29 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 			r.Metadata.Profile = &restfile.ProfileSpec{}
 			runReq = &r
 		}
-		res, err := exec.ExecuteRequestContext(ctx, doc, runReq, opt.EnvName)
+		res, err := exec.ExecuteRequestContext(ctx, doc, runReq, opt.Selection)
 		if err != nil {
 			return nil, err
 		}
 		switch {
 		case res.Workflow != nil:
-			rep.add(workflowRunResult(*res.Workflow, opt.EnvName))
+			rep.add(workflowRunResult(*res.Workflow, envName))
 		case res.Compare != nil:
-			rep.add(compareRunResult(runReq, *res.Compare, opt.EnvName))
+			rep.add(compareRunResult(runReq, *res.Compare, envName))
 		case res.Profile != nil:
-			rep.add(profileRunResult(runReq, *res.Profile, opt.EnvName))
+			rep.add(profileRunResult(runReq, *res.Profile, envName))
 		default:
-			rep.add(requestRunResult(runReq, res, opt.EnvName))
+			rep.add(requestRunResult(runReq, res, envName))
 		}
 		if opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]) {
 			rep.StopReason = stopReasonFailFast
 			for _, skipped := range tg.requests[i+1:] {
-				rep.add(skippedRequestResult(skipped, opt.EnvName, "skipped after --fail-fast"))
+				rep.add(skippedRequestResult(
+					skipped,
+					envName,
+					env.Selection(),
+					"skipped after --fail-fast",
+				))
 			}
 			break
 		}
@@ -231,25 +242,13 @@ func clonePlanOptions(opts Options, path, work, art string) Options {
 	out.WorkspaceRoot = work
 	out.ArtifactDir = art
 	out.StateDir = str.Trim(opts.StateDir)
-	out.EnvSet = cloneEnvSet(opts.EnvSet)
-	out.EnvName = str.Trim(opts.EnvName)
 	out.EnvironmentFile = str.Trim(opts.EnvironmentFile)
 	out.CompareTargets = slices.Clone(opts.CompareTargets)
 	out.CompareBase = str.Trim(opts.CompareBase)
+	out.CompareGroup = str.Trim(opts.CompareGroup)
 	out.HTTPOptions = cloneHTTPOptions(opts.HTTPOptions)
 	out.GRPCOptions = cloneGRPCOptions(opts.GRPCOptions)
 	out.Client = opts.Client.Clone()
-	return out
-}
-
-func cloneEnvSet(src vars.EnvironmentSet) vars.EnvironmentSet {
-	if len(src) == 0 {
-		return nil
-	}
-	out := make(vars.EnvironmentSet, len(src))
-	for name, vals := range src {
-		out[name] = maps.Clone(vals)
-	}
 	return out
 }
 

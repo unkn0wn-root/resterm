@@ -2016,7 +2016,7 @@ func (m Model) renderHeader() string {
 	if workspace == "" {
 		workspace = "."
 	}
-	env := m.cfg.EnvironmentName
+	env := m.env.Label()
 	if env == "" {
 		env = "default"
 	}

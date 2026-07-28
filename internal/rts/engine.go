@@ -32,6 +32,7 @@ type Use struct {
 // RT is the host-provided runtime surface visible to an evaluation.
 type RT struct {
 	Env         map[string]string
+	EnvGroups   map[string]string
 	Vars        map[string]string
 	Globals     map[string]string
 	Resp        *Resp
@@ -173,7 +174,7 @@ func (e *Eng) newCtx(ctx context.Context, rt RT) *Ctx {
 
 func (e *Eng) buildPre(cx *Ctx, rt RT, pos Pos) (map[string]Value, error) {
 	pre := e.modulePre()
-	pre["env"] = Obj(newMapObj("env", rt.Env))
+	pre["env"] = Obj(newEnvObj(rt.Env, rt.EnvGroups))
 	pre["vars"] = Obj(newVarsObj("vars", rt.Vars, rt.Globals, rt.VarsMut, rt.GlobalMut))
 	pre["last"] = Obj(newRespObj("last", rt.Resp))
 
