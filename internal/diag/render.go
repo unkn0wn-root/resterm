@@ -87,7 +87,7 @@ func itemLines(rep Report, it Diagnostic) []Line {
 		)
 	}
 	if len(it.Chain) > 0 {
-		ls = append(ls, chainLines(it.Chain)...)
+		ls = append(ls, chainLines(msg, it.Chain)...)
 	}
 	for _, note := range it.Notes {
 		ls = append(ls, noteLine(note))
@@ -123,14 +123,18 @@ func noteLine(note Note) Line {
 	}
 }
 
-func chainLines(entries []ChainEntry) []Line {
+func chainLines(headline string, entries []ChainEntry) []Line {
 	entries = prepareChain(entries)
 	if len(entries) == 0 {
 		return nil
 	}
 	if len(entries) == 1 {
 		root := entries[0]
-		out := []Line{{Kind: LineChain, Text: root.Message}}
+		var out []Line
+		// an operation root that repeats the headline adds nothing, so render only its causes
+		if root.Kind != ChainOperation || root.Message != headline {
+			out = append(out, Line{Kind: LineChain, Text: root.Message})
+		}
 		appendTreeChainLines(&out, "", root.Children)
 		return out
 	}
