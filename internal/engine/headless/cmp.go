@@ -52,7 +52,7 @@ func (e *Engine) executeCompare(
 		return nil, err
 	}
 	out := e.buildCompareResult(req, spec, env, cl.rows)
-	e.recordCompare(doc, req, out, env, targets)
+	e.recordCompare(doc, req, out, env)
 	return out, nil
 }
 
@@ -209,12 +209,25 @@ func compareReport(rows []engine.CompareRow, spec *restfile.CompareSpec) string 
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// rowEnvironment resolves the environment a compare row ran under. Rows carry
+// their own selection, so history does not depend on rows and compare targets
+// staying index aligned.
+func (e *Engine) rowEnvironment(row engine.CompareRow, fallback vars.Environment) vars.Environment {
+	if row.Selection.Empty() {
+		return fallback
+	}
+	env, err := e.cfg.Catalog.Resolve(row.Selection)
+	if err != nil {
+		return fallback
+	}
+	return env
+}
+
 func (e *Engine) recordCompare(
 	doc *restfile.Document,
 	req *restfile.Request,
 	out *engine.CompareResult,
 	env vars.Environment,
-	targets []vars.Target,
 ) {
 	hs := e.history()
 	if hs == nil || req == nil || out == nil || len(out.Rows) == 0 {
@@ -247,9 +260,8 @@ func (e *Engine) recordCompare(
 			Results:  make([]history.CompareResult, 0, len(out.Rows)),
 		},
 	}
-	// Rows keep target order and a canceled run only stops early, so targets[i] matches row i.
-	for i, row := range out.Rows {
-		secs := e.secretValues(doc, req, targets[i].Env)
+	for _, row := range out.Rows {
+		secs := e.secretValues(doc, req, e.rowEnvironment(row, env))
 		item := history.CompareResult{
 			Environment: row.Environment,
 			Profile:     row.Profile,

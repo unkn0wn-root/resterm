@@ -6,7 +6,9 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
+	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
+	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
 func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
@@ -75,6 +77,57 @@ func TestNormalizeCompareTargets(t *testing.T) {
 	expect := []string{"dev", "stage"}
 	if !reflect.DeepEqual(expect, spec.Environments) {
 		t.Fatalf("unexpected targets: %#v", spec.Environments)
+	}
+}
+
+// In a grouped compare the baseline names a profile while the visible label is
+// the full selection, so the marker has to match on target name, not position.
+func TestCompareProgressSummaryMarksGroupedBaseline(t *testing.T) {
+	cat, err := vars.NewGroupedCatalog(nil, []vars.Group{
+		{
+			Name:    "api",
+			Default: "dev",
+			Profiles: vars.EnvironmentSet{
+				"dev":   {"api.url": "d"},
+				"stage": {"api.url": "s"},
+				"prod":  {"api.url": "p"},
+			},
+		},
+		{
+			Name:     "app",
+			Default:  "one",
+			Profiles: vars.EnvironmentSet{"one": {"app.url": "1"}},
+		},
+	})
+	if err != nil {
+		t.Fatalf("catalog: %v", err)
+	}
+	base := cat.DefaultSelection()
+	targets, err := cat.CompareTargets(base, "api", "stage", []string{"dev", "stage", "prod"})
+	if err != nil {
+		t.Fatalf("compare targets: %v", err)
+	}
+	pl, err := core.PrepareCompare(core.CompareInput{
+		Doc:      &restfile.Document{Path: "cmp.http"},
+		Request:  &restfile.Request{Method: "GET", URL: "https://example.com"},
+		Targets:  targets,
+		Group:    "api",
+		Baseline: "stage",
+	})
+	if err != nil {
+		t.Fatalf("prepare compare: %v", err)
+	}
+
+	state := compareStateFromPlan(pl, httpclient.Options{}, "Compare items")
+	want := "api=dev, app=one? api=stage, app=one*? api=prod, app=one?"
+	if got := state.progressSummary(); got != want {
+		t.Fatalf("progress summary =\n%q\nwant\n%q", got, want)
+	}
+	if got := state.envAt(1); got != "api=stage, app=one" {
+		t.Fatalf("envAt(1) = %q", got)
+	}
+	if got := state.envAt(3); got != "" {
+		t.Fatalf("envAt(3) = %q, want empty for out of range", got)
 	}
 }
 

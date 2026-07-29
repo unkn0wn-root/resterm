@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,8 +23,9 @@ type compareState struct {
 	id           string
 	base         *restfile.Request
 	options      httpclient.Options
-	spec         *restfile.CompareSpec
-	envs         []string
+	targets      []vars.Target
+	group        string
+	baseline     string
 	index        int
 	current      *restfile.Request
 	currentEnv   string
@@ -43,25 +45,24 @@ func compareStateFromPlan(
 	if pl == nil {
 		return nil
 	}
-	envs := make([]string, 0, len(pl.Targets))
-	targets := make([]string, 0, len(pl.Targets))
-	for _, target := range pl.Targets {
-		envs = append(envs, target.Env.Label())
-		targets = append(targets, target.Name())
-	}
 	return &compareState{
-		id:      strings.TrimSpace(pl.Run.ID),
-		base:    pl.Request.Clone(),
-		options: opts,
-		spec: &restfile.CompareSpec{
-			Environments: targets,
-			Baseline:     pl.Baseline,
-			Group:        pl.Group,
-		},
-		envs:    envs,
-		results: make([]compareResult, 0, len(envs)),
-		label:   label,
+		id:       strings.TrimSpace(pl.Run.ID),
+		base:     pl.Request.Clone(),
+		options:  opts,
+		targets:  slices.Clone(pl.Targets),
+		group:    pl.Group,
+		baseline: pl.Baseline,
+		results:  make([]compareResult, 0, len(pl.Targets)),
+		label:    label,
 	}
+}
+
+// envAt is the environment label of target i, empty when i is out of range.
+func (s *compareState) envAt(i int) string {
+	if s == nil || i < 0 || i >= len(s.targets) {
+		return ""
+	}
+	return s.targets[i].Env.Label()
 }
 
 func (m *Model) startCompareRun(
@@ -155,8 +156,8 @@ func (m *Model) startCompareCoreRun(pl *core.ComparePlan, state *compareState) t
 		return nil
 	}
 	cmds := m.beginCompareRun(state)
-	if len(state.envs) > 0 {
-		state.currentEnv = state.envs[0]
+	if len(state.targets) > 0 {
+		state.currentEnv = state.envAt(0)
 		state.current = state.base.Clone()
 		state.requestText = rqeng.RenderRequestText(state.current)
 		m.statusPulseBase = state.statusLine()
@@ -222,7 +223,7 @@ func (m *Model) handleCompareRowDone(st *compareState, evt core.CmpRowDone) tea.
 		env = compareEnvAt(st, evt.Row.Index, evt.Row.Env)
 	}
 	canceled, cmd := m.consumeCompareRow(st, st.current, env, msg)
-	if canceled || st.index >= len(st.envs) {
+	if canceled || st.index >= len(st.targets) {
 		return batchCmds([]tea.Cmd{cmd, m.finalizeCompareRun(st)})
 	}
 	return cmd
@@ -244,8 +245,8 @@ func (m *Model) handleCompareRunDone(st *compareState, evt core.RunDone) tea.Cmd
 }
 
 func compareEnvAt(st *compareState, i int, fallback string) string {
-	if st != nil && i >= 0 && i < len(st.envs) {
-		return st.envs[i]
+	if env := st.envAt(i); env != "" {
+		return env
 	}
 	return fallback
 }
@@ -287,8 +288,8 @@ func (m *Model) consumeCompareRow(
 		Skipped:     msg.skipped,
 		SkipReason:  msg.skipReason,
 	}
-	if state.spec != nil && state.spec.Group != "" {
-		result.Profile, _ = msg.selection.Profile(state.spec.Group)
+	if state.group != "" {
+		result.Profile, _ = msg.selection.Profile(state.group)
 	}
 	if currentReq == nil {
 		currentReq = msg.executed
@@ -373,7 +374,7 @@ func (m *Model) finalizeCompareRun(state *compareState) tea.Cmd {
 		secondary.invalidateCaches()
 	}
 
-	if bundle := buildCompareBundle(state.results, baselineFromSpec(state.spec)); bundle != nil {
+	if bundle := buildCompareBundle(state.results, state.baseline); bundle != nil {
 		m.compareBundle = bundle
 		if m.responseLatest != nil {
 			m.responseLatest.compareBundle = bundle
@@ -488,16 +489,14 @@ func (m *Model) recordCompareHistory(state *compareState) {
 	entry.Environment = m.env.Label()
 	entry.EnvironmentSelection = history.EnvironmentSelection(m.env.Selection().Groups())
 	if state.canceled {
-		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.envs))
+		status := fmt.Sprintf("canceled after %d/%d", len(state.results), len(state.targets))
 		if strings.TrimSpace(state.label) != "" {
 			status = fmt.Sprintf("%s | %s", strings.TrimSpace(state.label), status)
 		}
 		entry.Status = status
 	}
-	if state.spec != nil {
-		entry.Compare.Baseline = state.spec.Baseline
-		entry.Compare.Group = state.spec.Group
-	}
+	entry.Compare.Baseline = state.baseline
+	entry.Compare.Group = state.group
 
 	var totalDur time.Duration
 	results := make([]history.CompareResult, 0, len(state.results))
@@ -608,23 +607,15 @@ func (m *Model) compareGRPCSnippet(
 	return redactHistoryText(resp.Message, m.secretValuesForSelection(sel, req), false)
 }
 
-func baselineFromSpec(spec *restfile.CompareSpec) string {
-	if spec == nil {
-		return ""
-	}
-	return strings.TrimSpace(spec.Baseline)
-}
-
 func (s *compareState) progressSummary() string {
-	if s == nil || len(s.envs) == 0 {
+	if s == nil || len(s.targets) == 0 {
 		return ""
 	}
 
-	parts := make([]string, len(s.envs))
-	for idx, env := range s.envs {
-		label := env
-		if s.spec != nil && idx < len(s.spec.Environments) &&
-			strings.EqualFold(s.spec.Environments[idx], s.spec.Baseline) {
+	parts := make([]string, len(s.targets))
+	for idx, target := range s.targets {
+		label := target.Env.Label()
+		if s.baseline != "" && strings.EqualFold(target.Name(), s.baseline) {
 			label += "*"
 		}
 		switch {

@@ -216,6 +216,12 @@ func (m *Manager) Restore(entries []SnapshotEntry) {
 			continue
 		}
 		cfg := cloneConfig(entry.Config).Resolved()
+		// A stored key equal to the raw CacheKey predates env scoping, when an
+		// explicit cache_key ignored the environment. Such a token cannot be
+		// attributed to a selection, and no lookup reaches it now that keys are
+		// env prefixed, so drop it and let the next request fetch a fresh one.
+		// One restore purges them, so this can go once upgrades from v0.48 and
+		// earlier are out of scope.
 		if cfg.CacheKey != "" && key == cfg.CacheKey {
 			continue
 		}
