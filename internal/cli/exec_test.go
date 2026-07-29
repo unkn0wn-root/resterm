@@ -227,8 +227,8 @@ func TestExecFlagsResolveGroupedDefaultsAndCompare(t *testing.T) {
 	if got, want := env.Label(), "api=dev, app=dev app 2"; got != want {
 		t.Fatalf("environment = %q, want %q", got, want)
 	}
-	if cfg.CompareGroup != "api" || cfg.CompareBase != "prod" {
-		t.Fatalf("compare config = group %q base %q", cfg.CompareGroup, cfg.CompareBase)
+	if cfg.Compare.Group != "api" || cfg.Compare.Base != "prod" {
+		t.Fatalf("compare config = group %q base %q", cfg.Compare.Group, cfg.Compare.Base)
 	}
 }
 

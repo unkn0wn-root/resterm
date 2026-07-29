@@ -3,6 +3,7 @@ package vars
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"io"
 	"maps"
 	"strconv"
@@ -12,6 +13,35 @@ import (
 	str "github.com/unkn0wn-root/resterm/internal/util"
 )
 
+// scopeVersion prefixes every grouped scope key. Scope keys own all persisted
+// per-selection runtime state (globals, file variables, cookie jars, command
+// auth, OAuth tokens), so bumping this discards every stored value.
+const scopeVersion = "g1:"
+
+// defaultEnvNames is the preference order for picking an environment when the
+// caller did not name one.
+var defaultEnvNames = [...]string{"dev", "default", "local"}
+
+// ErrUnknownSelection marks a name that no longer resolves against the catalog.
+// Callers that recover from a stale selection, such as history replay, match it
+// with errors.Is rather than assuming Select is their only failing call.
+var ErrUnknownSelection = errors.New("unknown environment selection")
+
+// unknownError carries a diagnostic that also matches ErrUnknownSelection. The
+// sentinel stays out of the message so callers keep the specific text.
+type unknownError struct{ err error }
+
+func (u unknownError) Error() string        { return u.err.Error() }
+func (u unknownError) Unwrap() error        { return u.err }
+func (u unknownError) Is(target error) bool { return target == ErrUnknownSelection }
+
+func errUnknown(format string, args ...any) error {
+	return unknownError{err: diag.Newf(diag.ClassParse, format, args...)}
+}
+
+// Selection is a resolved choice of environment: either a single name or one
+// profile per group. Groups returns the internal map, which callers must not
+// mutate.
 type Selection struct {
 	name     string
 	profiles map[string]string
@@ -32,7 +62,7 @@ func GroupSelection(profiles map[string]string) Selection {
 
 func (c Catalog) DefaultSelection() Selection {
 	if !c.Grouped() {
-		for _, want := range [...]string{"dev", "default", "local"} {
+		for _, want := range defaultEnvNames {
 			if env, ok := c.findEnv(want); ok {
 				return Selection{name: env.name}
 			}
@@ -67,7 +97,7 @@ func (c Catalog) Select(name string, profiles map[string]string) (Selection, err
 			if len(c.envs) == 0 {
 				return Selection{name: name}, nil
 			}
-			return Selection{}, diag.Newf(diag.ClassParse, "unknown environment %q", name)
+			return Selection{}, errUnknown("unknown environment %q", name)
 		}
 		return Selection{name: env.name}, nil
 	}
@@ -87,12 +117,11 @@ func (c Catalog) Select(name string, profiles map[string]string) (Selection, err
 		}
 		g, ok := c.findGroup(gname)
 		if !ok {
-			return Selection{}, diag.Newf(diag.ClassParse, "unknown environment group %q", gname)
+			return Selection{}, errUnknown("unknown environment group %q", gname)
 		}
 		p, ok := mapName(g.Profiles, rawProfile)
 		if !ok {
-			return Selection{}, diag.Newf(
-				diag.ClassParse,
+			return Selection{}, errUnknown(
 				"unknown profile %q in group %q",
 				str.Trim(rawProfile),
 				g.Name,
@@ -127,10 +156,6 @@ func (s Selection) Profile(group string) (string, bool) {
 		return s.profiles[g], true
 	}
 	return "", false
-}
-
-func (s Selection) Grouped() bool {
-	return s.profiles != nil
 }
 
 func (s Selection) Empty() bool {
@@ -194,7 +219,7 @@ func scope(groups []Group, sel Selection) string {
 		writePart(h, strings.ToLower(g.Name))
 		writePart(h, strings.ToLower(sel.profiles[g.Name]))
 	}
-	return "g1:" + hex.EncodeToString(h.Sum(nil))
+	return scopeVersion + hex.EncodeToString(h.Sum(nil))
 }
 
 func writePart(w io.Writer, s string) {

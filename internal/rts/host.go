@@ -46,6 +46,14 @@ func (o *mapObj) requireFn(ctx *Ctx, pos Pos, args []Value) (Value, error) {
 	return mapRequire(ctx, pos, args, o.s.r, o.name, o.m)
 }
 
+const (
+	envName = "env"
+	// envGroups is reserved on the env object, so an environment variable of
+	// that name is only reachable through env.get("groups").
+	envGroups    = "groups"
+	envGroupsObj = envName + "." + envGroups
+)
+
 type envObj struct {
 	*mapObj
 	groups *mapObj
@@ -53,13 +61,13 @@ type envObj struct {
 
 func newEnvObj(values, groups map[string]string) *envObj {
 	return &envObj{
-		mapObj: newMapObj("env", values),
-		groups: newMapObj("env.groups", groups),
+		mapObj: newMapObj(envName, values),
+		groups: newMapObj(envGroupsObj, groups),
 	}
 }
 
 func (o *envObj) GetMember(name string) (Value, bool) {
-	if strings.EqualFold(name, "groups") {
+	if strings.EqualFold(name, envGroups) {
 		return Obj(o.groups), true
 	}
 	return o.mapObj.GetMember(name)

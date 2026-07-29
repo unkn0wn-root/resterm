@@ -1,6 +1,7 @@
 package vars
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -234,6 +235,59 @@ func TestGroupedCatalogSelect(t *testing.T) {
 	if _, err := cat.Select("dev", nil); err == nil {
 		t.Fatal("expected environment name against grouped catalog to be rejected")
 	}
+}
+
+// History replay tells a stale saved selection from any other failure with
+// errors.Is, so every name that no longer resolves has to carry the sentinel.
+func TestUnknownSelectionIsSentinel(t *testing.T) {
+	flat, err := NewCatalog(EnvironmentSet{"dev": {"url": "d"}, "prod": {"url": "p"}})
+	if err != nil {
+		t.Fatalf("new catalog: %v", err)
+	}
+	grouped, err := NewGroupedCatalog(nil, []Group{{
+		Name:     "api",
+		Profiles: EnvironmentSet{"dev": {"url": "d"}},
+		Default:  "dev",
+	}})
+	if err != nil {
+		t.Fatalf("new grouped catalog: %v", err)
+	}
+
+	cases := []struct {
+		name string
+		err  error
+	}{
+		{"unknown environment", firstErr(flat.Select("stage", nil))},
+		{"unknown group", firstErr(grouped.Select("", map[string]string{"missing": "dev"}))},
+		{"unknown profile", firstErr(grouped.Select("", map[string]string{"api": "gone"}))},
+		{"unknown compare group", compareErr(grouped, "missing")},
+	}
+	for _, tc := range cases {
+		if tc.err == nil {
+			t.Fatalf("%s: expected an error", tc.name)
+		}
+		if !errors.Is(tc.err, ErrUnknownSelection) {
+			t.Fatalf("%s: %v does not match ErrUnknownSelection", tc.name, tc.err)
+		}
+		if strings.Contains(tc.err.Error(), ErrUnknownSelection.Error()) {
+			t.Fatalf("%s: sentinel text leaked into message %q", tc.name, tc.err)
+		}
+	}
+
+	// A malformed request is not a stale selection.
+	_, err = flat.Select("dev", map[string]string{"api": "dev"})
+	if err == nil || errors.Is(err, ErrUnknownSelection) {
+		t.Fatalf("group selection against a flat catalog = %v, want a non-sentinel error", err)
+	}
+}
+
+func firstErr(_ Selection, err error) error {
+	return err
+}
+
+func compareErr(cat Catalog, group string) error {
+	_, err := cat.CompareTargets(cat.DefaultSelection(), group, "", []string{"dev", "prod"})
+	return err
 }
 
 func resolveValues(t *testing.T, cat Catalog, name string) map[string]string {

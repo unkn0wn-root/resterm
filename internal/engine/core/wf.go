@@ -627,18 +627,17 @@ func (r *wfRun) evalStepValue(
 	if expr == "" {
 		return rts.Value{}, fmt.Errorf("%s expression missing", tag)
 	}
-	return r.dep.EvalValue(
-		ctx,
-		r.pl.Doc,
-		req,
-		r.pl.Run.Env,
-		baseDir(r.pl.Doc),
-		expr,
-		tag+" "+expr,
-		r.dep.PosForLine(r.pl.Doc, req, line),
-		vv,
-		extra,
-	)
+	return r.dep.EvalValue(ctx, request.EvalInput{
+		Doc:   r.pl.Doc,
+		Req:   req,
+		Env:   r.pl.Run.Env,
+		Base:  baseDir(r.pl.Doc),
+		Expr:  expr,
+		Site:  tag + " " + expr,
+		Pos:   r.dep.PosForLine(r.pl.Doc, req, line),
+		Vars:  vv,
+		Extra: extra,
+	})
 }
 
 func (r *wfRun) evalStepBool(

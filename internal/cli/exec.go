@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runx/check"
@@ -34,18 +35,16 @@ type ExecFlags struct {
 }
 
 type ExecConfig struct {
-	FilePath       string
-	Workspace      string
-	Recursive      bool
-	Catalog        vars.Catalog
-	Selection      vars.Selection
-	EnvFile        string
-	EnvFallback    string
-	HTTPOpts       httpclient.Options
-	GRPCOpts       grpcclient.Options
-	CompareTargets []string
-	CompareBase    string
-	CompareGroup   string
+	FilePath    string
+	Workspace   string
+	Recursive   bool
+	Catalog     vars.Catalog
+	Selection   vars.Selection
+	EnvFile     string
+	EnvFallback string
+	HTTPOpts    httpclient.Options
+	GRPCOpts    grpcclient.Options
+	Compare     engine.CompareConfig
 }
 
 func NewExecFlags() ExecFlags {
@@ -220,9 +219,7 @@ func (f ExecFlags) Resolve(filePath string) (ExecConfig, error) {
 			DefaultPlaintext:    true,
 			DefaultPlaintextSet: true,
 		},
-		CompareTargets: targets,
-		CompareBase:    base,
-		CompareGroup:   group,
+		Compare: engine.CompareConfig{Targets: targets, Base: base, Group: group},
 	}, nil
 }
 

@@ -193,7 +193,8 @@ func (e *Engine) DisplayResolver(
 	res.AddRefResolver(vars.EnvRefResolver)
 	vv := e.collectVariablesWithGlobals(doc, req, env, globs, omitSecrets, extras...)
 	res.SetExprEval(e.ExprEvalWithOptions(
-		ctx, doc, req, env, base, vv, extra,
+		ctx,
+		ExprInput{Doc: doc, Req: req, Env: env, Base: base, Vars: vv, Extra: extra},
 		ExprEvalOptions{OmitSecretGlobals: true},
 	))
 	res.SetExprPos(e.rtsPos(doc, req))

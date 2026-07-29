@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
@@ -250,7 +251,7 @@ func TestMouseDoubleClickRequestFileOpensAndExpands(t *testing.T) {
 		InitialContent: "### beta\nGET https://example.com/b\n",
 		Recursive:      false,
 		EnableUpdate:   false,
-		CompareTargets: nil,
+		Compare:        engine.CompareConfig{},
 		Selection:      testSelection(""),
 	})
 	model.frameWidth = 120

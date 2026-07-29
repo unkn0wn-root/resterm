@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -121,8 +122,7 @@ func TestRunCompareParityWithEnvResolve(t *testing.T) {
 		Catalog:         cat,
 		Selection:       sel,
 		EnvironmentFile: envFile,
-		CompareTargets:  []string{"dev", "stage"},
-		CompareBase:     "stage",
+		Compare:         engine.CompareConfig{Targets: []string{"dev", "stage"}, Base: "stage"},
 		HTTPOptions: httpclient.Options{
 			Timeout:         DefaultHTTPTimeout,
 			FollowRedirects: true,

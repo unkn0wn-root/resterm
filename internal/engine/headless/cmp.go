@@ -36,7 +36,14 @@ func (e *Engine) executeCompare(
 	if err != nil {
 		return nil, err
 	}
-	pl, err := core.PrepareCompare(doc, req, targets, spec.Group, spec.Baseline, core.RunMeta{Env: env})
+	pl, err := core.PrepareCompare(core.CompareInput{
+		Doc:      doc,
+		Request:  req,
+		Targets:  targets,
+		Group:    spec.Group,
+		Baseline: spec.Baseline,
+		Run:      core.RunMeta{Env: env},
+	})
 	if err != nil {
 		return nil, err
 	}

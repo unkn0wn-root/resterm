@@ -40,7 +40,7 @@ func (c Catalog) CompareTargets(
 	if c.Grouped() {
 		g, ok := c.findGroup(group)
 		if !ok {
-			return nil, diag.Newf(diag.ClassParse, "unknown environment group %q", group)
+			return nil, errUnknown("unknown environment group %q", group)
 		}
 		group = g.Name
 	}

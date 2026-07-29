@@ -12,49 +12,38 @@ import (
 
 type Dep interface {
 	CollectVariables(
-		*restfile.Document,
-		*restfile.Request,
-		vars.Environment,
-		...map[string]string,
+		doc *restfile.Document,
+		req *restfile.Request,
+		env vars.Environment,
+		extras ...map[string]string,
 	) map[string]string
 	ExecuteWith(
-		*restfile.Document,
-		*restfile.Request,
-		vars.Environment,
-		request.ExecOptions,
+		doc *restfile.Document,
+		req *restfile.Request,
+		env vars.Environment,
+		opt request.ExecOptions,
 	) (engine.RequestResult, error)
 	EvalCondition(
-		context.Context,
-		*restfile.Document,
-		*restfile.Request,
-		vars.Environment,
-		string,
-		*restfile.ConditionSpec,
-		map[string]string,
-		map[string]rts.Value,
+		ctx context.Context,
+		doc *restfile.Document,
+		req *restfile.Request,
+		env vars.Environment,
+		base string,
+		spec *restfile.ConditionSpec,
+		vv map[string]string,
+		extra map[string]rts.Value,
 	) (bool, string, error)
 	EvalForEachItems(
-		context.Context,
-		*restfile.Document,
-		*restfile.Request,
-		vars.Environment,
-		string,
-		request.ForEachSpec,
-		map[string]string,
-		map[string]rts.Value,
+		ctx context.Context,
+		doc *restfile.Document,
+		req *restfile.Request,
+		env vars.Environment,
+		base string,
+		spec request.ForEachSpec,
+		vv map[string]string,
+		extra map[string]rts.Value,
 	) ([]rts.Value, error)
-	EvalValue(
-		context.Context,
-		*restfile.Document,
-		*restfile.Request,
-		vars.Environment,
-		string,
-		string,
-		string,
-		rts.Pos,
-		map[string]string,
-		map[string]rts.Value,
-	) (rts.Value, error)
-	PosForLine(*restfile.Document, *restfile.Request, int) rts.Pos
-	ValueString(context.Context, rts.Pos, rts.Value) (string, error)
+	EvalValue(ctx context.Context, in request.EvalInput) (rts.Value, error)
+	PosForLine(doc *restfile.Document, req *restfile.Request, line int) rts.Pos
+	ValueString(ctx context.Context, pos rts.Pos, v rts.Value) (string, error)
 }

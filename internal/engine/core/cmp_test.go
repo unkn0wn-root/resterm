@@ -22,18 +22,17 @@ func TestRunCompareEmitsRowsInOrderAndStopsOnCanceledResult(t *testing.T) {
 			Name: "items",
 		},
 	}
-	pl, err := PrepareCompare(
-		&restfile.Document{Path: "cmp.http"},
-		req,
-		[]vars.Target{
+	pl, err := PrepareCompare(CompareInput{
+		Doc:     &restfile.Document{Path: "cmp.http"},
+		Request: req,
+		Targets: []vars.Target{
 			{Env: testEnvironment("dev")},
 			{Env: testEnvironment("stage")},
 			{Env: testEnvironment("prod")},
 		},
-		"",
-		"dev",
-		RunMeta{ID: "cmp-1", Env: testEnvironment("dev")},
-	)
+		Baseline: "dev",
+		Run:      RunMeta{ID: "cmp-1", Env: testEnvironment("dev")},
+	})
 	if err != nil {
 		t.Fatalf("PrepareCompare: %v", err)
 	}
@@ -140,7 +139,7 @@ func TestCompareBaselineHelpers(t *testing.T) {
 }
 
 func TestBuildCompareSpecNormalizesTargetsAndBaseline(t *testing.T) {
-	spec := BuildCompareSpec([]string{" dev ", "DEV", "", "stage"}, "STAGE", "")
+	spec := BuildCompareSpec(engine.CompareConfig{Targets: []string{" dev ", "DEV", "", "stage"}, Base: "STAGE"})
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}

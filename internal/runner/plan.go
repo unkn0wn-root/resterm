@@ -70,7 +70,7 @@ func Build(opts Options) (*Plan, error) {
 		Workflow: "--workflow",
 	}
 
-	err = runcheck.ValidateProfileCompare(opts.Profile, len(opts.CompareTargets) > 0, ns)
+	err = runcheck.ValidateProfileCompare(opts.Profile, len(opts.Compare.Targets) > 0, ns)
 	if err != nil {
 		return nil, UsageError{err: err}
 	}
@@ -87,7 +87,7 @@ func Build(opts Options) (*Plan, error) {
 	if err := runcheck.ValidateWorkflowMode(
 		sel.hasWorkflow(),
 		opts.Profile,
-		len(opts.CompareTargets) > 0,
+		len(opts.Compare.Targets) > 0,
 		ns,
 	); err != nil {
 		return nil, UsageError{err: err}
@@ -131,9 +131,7 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		Catalog:         opt.Catalog,
 		Selection:       opt.Selection,
 		EnvironmentFile: opt.EnvironmentFile,
-		CompareTargets:  slices.Clone(opt.CompareTargets),
-		CompareBase:     str.Trim(opt.CompareBase),
-		CompareGroup:    str.Trim(opt.CompareGroup),
+		Compare:         opt.Compare.Clone(),
 		HTTPOptions:     cloneHTTPOptions(opt.HTTPOptions),
 		GRPCOptions:     cloneGRPCOptions(opt.GRPCOptions),
 		WorkspaceRoot:   opt.WorkspaceRoot,
@@ -201,12 +199,7 @@ func RunPlan(ctx context.Context, pl *Plan) (*Report, error) {
 		if opt.FailFast && resultFailed(rep.Results[len(rep.Results)-1]) {
 			rep.StopReason = stopReasonFailFast
 			for _, skipped := range tg.requests[i+1:] {
-				rep.add(skippedRequestResult(
-					skipped,
-					envName,
-					env.Selection(),
-					"skipped after --fail-fast",
-				))
+				rep.add(skippedRequestResult(skipped, env, "skipped after --fail-fast"))
 			}
 			break
 		}
@@ -243,9 +236,7 @@ func clonePlanOptions(opts Options, path, work, art string) Options {
 	out.ArtifactDir = art
 	out.StateDir = str.Trim(opts.StateDir)
 	out.EnvironmentFile = str.Trim(opts.EnvironmentFile)
-	out.CompareTargets = slices.Clone(opts.CompareTargets)
-	out.CompareBase = str.Trim(opts.CompareBase)
-	out.CompareGroup = str.Trim(opts.CompareGroup)
+	out.Compare = opts.Compare.Clone()
 	out.HTTPOptions = cloneHTTPOptions(opts.HTTPOptions)
 	out.GRPCOptions = cloneGRPCOptions(opts.GRPCOptions)
 	out.Client = opts.Client.Clone()

@@ -400,7 +400,7 @@ func (m *Model) startConfigCompareFromEditor() tea.Cmd {
 		return nil
 	}
 
-	spec := core.BuildCompareSpec(m.cfg.CompareTargets, m.cfg.CompareBase, m.cfg.CompareGroup)
+	spec := core.BuildCompareSpec(m.cfg.Compare)
 	if spec == nil && req.Metadata.Compare != nil {
 		spec = req.Metadata.Compare.Clone()
 	}

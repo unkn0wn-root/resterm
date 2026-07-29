@@ -22,6 +22,18 @@ type ComparePlan struct {
 	Targets  []vars.Target
 }
 
+// CompareInput describes one compare run: the request to repeat, the resolved
+// targets to repeat it against, and which of them is the baseline. Group is set
+// only when the targets vary one environment group.
+type CompareInput struct {
+	Doc      *restfile.Document
+	Request  *restfile.Request
+	Targets  []vars.Target
+	Group    string
+	Baseline string
+	Run      RunMeta
+}
+
 type cmpRun struct {
 	dep      Dep
 	sink     Sink
@@ -34,26 +46,20 @@ type cmpRun struct {
 	canceled bool
 }
 
-func PrepareCompare(
-	doc *restfile.Document,
-	req *restfile.Request,
-	targets []vars.Target,
-	group, baseline string,
-	run RunMeta,
-) (*ComparePlan, error) {
-	if req == nil {
+func PrepareCompare(in CompareInput) (*ComparePlan, error) {
+	if in.Request == nil {
 		return nil, fmt.Errorf("request is nil")
 	}
-	if len(targets) < 2 {
+	if len(in.Targets) < 2 {
 		return nil, fmt.Errorf("compare requires at least two environments")
 	}
 	return &ComparePlan{
-		Run:      normRun(run, ModeCompare, engine.ReqTitle(req)),
-		Doc:      doc,
-		Request:  req,
-		Group:    group,
-		Baseline: baseline,
-		Targets:  targets,
+		Run:      normRun(in.Run, ModeCompare, engine.ReqTitle(in.Request)),
+		Doc:      in.Doc,
+		Request:  in.Request,
+		Group:    in.Group,
+		Baseline: in.Baseline,
+		Targets:  in.Targets,
 	}, nil
 }
 

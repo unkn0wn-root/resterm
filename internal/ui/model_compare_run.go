@@ -103,9 +103,16 @@ func (m *Model) startCompareRun(
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
 		return nil
 	}
-	pl, err := core.PrepareCompare(doc, req, targets, spec.Group, spec.Baseline, core.RunMeta{
-		ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
-		Env: env,
+	pl, err := core.PrepareCompare(core.CompareInput{
+		Doc:      doc,
+		Request:  req,
+		Targets:  targets,
+		Group:    spec.Group,
+		Baseline: spec.Baseline,
+		Run: core.RunMeta{
+			ID:  fmt.Sprintf("%d", time.Now().UnixNano()),
+			Env: env,
+		},
 	})
 	if err != nil {
 		m.setStatusMessage(statusMsg{text: err.Error(), level: statusError})
@@ -555,10 +562,10 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 		entry.Error = result.Err.Error()
 		entry.BodySnippet = entry.Error
 	case result.Response != nil:
-		entry.BodySnippet = buildCompareHTTPSnippet(result.Response, req, result.Selection, m)
+		entry.BodySnippet = m.compareHTTPSnippet(result.Response, req, result.Selection)
 		entry.StatusCode = result.Response.StatusCode
 	case result.GRPC != nil:
-		entry.BodySnippet = buildCompareGRPCSnippet(result.GRPC, req, result.Selection, m)
+		entry.BodySnippet = m.compareGRPCSnippet(result.GRPC, req, result.Selection)
 		entry.StatusCode = int(result.GRPC.StatusCode)
 	case result.Stream != nil || len(result.Transcript) > 0:
 		entry.BodySnippet = streamSummaryText(result.Stream)
@@ -573,11 +580,10 @@ func (m *Model) buildCompareHistoryResult(result compareResult) history.CompareR
 	return entry
 }
 
-func buildCompareHTTPSnippet(
+func (m *Model) compareHTTPSnippet(
 	resp *httpclient.Response,
 	req *restfile.Request,
 	sel vars.Selection,
-	m *Model,
 ) string {
 	if resp == nil {
 		return ""
@@ -585,15 +591,13 @@ func buildCompareHTTPSnippet(
 	if req != nil && req.Metadata.NoLog {
 		return "<body suppressed>"
 	}
-	secrets := m.secretValuesForSelection(sel, req)
-	return redactHistoryText(string(resp.Body), secrets, false)
+	return redactHistoryText(string(resp.Body), m.secretValuesForSelection(sel, req), false)
 }
 
-func buildCompareGRPCSnippet(
+func (m *Model) compareGRPCSnippet(
 	resp *grpcclient.Response,
 	req *restfile.Request,
 	sel vars.Selection,
-	m *Model,
 ) string {
 	if resp == nil {
 		return ""
@@ -601,8 +605,7 @@ func buildCompareGRPCSnippet(
 	if req != nil && req.Metadata.NoLog {
 		return "<body suppressed>"
 	}
-	secrets := m.secretValuesForSelection(sel, req)
-	return redactHistoryText(resp.Message, secrets, false)
+	return redactHistoryText(resp.Message, m.secretValuesForSelection(sel, req), false)
 }
 
 func baselineFromSpec(spec *restfile.CompareSpec) string {

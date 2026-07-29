@@ -2145,10 +2145,11 @@ func (m *Model) loadHistorySelection(send bool) tea.Cmd {
 		selectErr = m.selectEnvironment(targetEnv, nil)
 	}
 	if selectErr != nil {
-		m.setStatusMessage(statusMsg{
-			text:  fmt.Sprintf("History environment no longer resolves: %v", selectErr),
-			level: statusWarn,
-		})
+		text := fmt.Sprintf("History environment failed: %v", selectErr)
+		if errors.Is(selectErr, vars.ErrUnknownSelection) {
+			text = fmt.Sprintf("History environment no longer resolves: %v", selectErr)
+		}
+		m.setStatusMessage(statusMsg{text: text, level: statusWarn})
 		if send {
 			return nil
 		}

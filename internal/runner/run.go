@@ -46,9 +46,7 @@ type Options struct {
 	Catalog         vars.Catalog
 	Selection       vars.Selection
 	EnvironmentFile string
-	CompareTargets  []string
-	CompareBase     string
-	CompareGroup    string
+	Compare         engine.CompareConfig
 	Profile         bool
 	HTTPOptions     httpclient.Options
 	GRPCOptions     grpcclient.Options
@@ -346,19 +344,14 @@ func requestRunResult(req *restfile.Request, res engine.RequestResult, fallbackE
 	return item
 }
 
-func skippedRequestResult(
-	req *restfile.Request,
-	fallbackEnv string,
-	sel vars.Selection,
-	reason string,
-) Result {
+func skippedRequestResult(req *restfile.Request, env vars.Environment, reason string) Result {
 	return Result{
 		Kind:                 ResultKindRequest,
 		Name:                 requestName(req),
 		Method:               requestMethod(req),
 		Target:               requestSourceTarget(req),
-		Environment:          str.Trim(fallbackEnv),
-		EnvironmentSelection: sel.Groups(),
+		Environment:          env.Label(),
+		EnvironmentSelection: env.Selection().Groups(),
 		Skipped:              true,
 		SkipReason:           str.Trim(reason),
 		Passed:               false,

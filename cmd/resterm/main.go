@@ -421,9 +421,7 @@ func run(a []string) error {
 		UpdateClient:        uc,
 		EnableUpdate:        updateEnabled,
 		UpdateCmd:           ucmd,
-		CompareTargets:      cfg.CompareTargets,
-		CompareBase:         cfg.CompareBase,
-		CompareGroup:        cfg.CompareGroup,
+		Compare:             cfg.Compare,
 		Bindings:            bindingMap,
 	})
 	program := tea.NewProgram(

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
 	"github.com/unkn0wn-root/resterm/internal/httpclient"
 	"github.com/unkn0wn-root/resterm/internal/runner"
@@ -142,9 +143,7 @@ func (b *builder) buildCompare() error {
 			return UsageError{err: err}
 		}
 	}
-	b.out.CompareTargets = targets
-	b.out.CompareBase = base
-	b.out.CompareGroup = group
+	b.out.Compare = engine.CompareConfig{Targets: targets, Base: base, Group: group}
 	return nil
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/unkn0wn-root/resterm/internal/binaryview"
 	"github.com/unkn0wn-root/resterm/internal/diag"
 	"github.com/unkn0wn-root/resterm/internal/directive"
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	xplain "github.com/unkn0wn-root/resterm/internal/explain"
 	"github.com/unkn0wn-root/resterm/internal/grpcclient"
@@ -469,7 +470,7 @@ func TestStartConfigCompareHardFailsOnParseError(t *testing.T) {
 	model := New(Config{
 		FilePath:       "sample.http",
 		InitialContent: content,
-		CompareTargets: []string{"dev", "prod"},
+		Compare:        engine.CompareConfig{Targets: []string{"dev", "prod"}},
 	})
 	model.ready = true
 	model.width = 120

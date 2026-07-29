@@ -17,6 +17,7 @@ import (
 
 	"github.com/unkn0wn-root/resterm/internal/bindings"
 	"github.com/unkn0wn-root/resterm/internal/config"
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	rqeng "github.com/unkn0wn-root/resterm/internal/engine/request"
 	rtrun "github.com/unkn0wn-root/resterm/internal/engine/runtime"
 	"github.com/unkn0wn-root/resterm/internal/gitstatus"
@@ -165,9 +166,7 @@ type Config struct {
 	UpdateClient        update.Client
 	EnableUpdate        bool
 	UpdateCmd           string
-	CompareTargets      []string
-	CompareBase         string
-	CompareGroup        string
+	Compare             engine.CompareConfig
 	Bindings            *bindings.Map
 	Runtime             *rtrun.Runtime
 }

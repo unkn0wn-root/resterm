@@ -328,19 +328,8 @@ func (d *fakeDep) EvalForEachItems(
 	return nil, errors.New("missing list")
 }
 
-func (d *fakeDep) EvalValue(
-	ctx context.Context,
-	doc *restfile.Document,
-	req *restfile.Request,
-	env vars.Environment,
-	base string,
-	expr string,
-	site string,
-	pos rts.Pos,
-	vv map[string]string,
-	extra map[string]rts.Value,
-) (rts.Value, error) {
-	switch strings.TrimSpace(expr) {
+func (d *fakeDep) EvalValue(ctx context.Context, in request.EvalInput) (rts.Value, error) {
+	switch strings.TrimSpace(in.Expr) {
 	case "true":
 		return rts.Bool(true), nil
 	case "false":
@@ -348,7 +337,7 @@ func (d *fakeDep) EvalValue(
 	case "boom":
 		return rts.Value{}, errors.New("unsupported expression")
 	default:
-		return rts.Str(expr), nil
+		return rts.Str(in.Expr), nil
 	}
 }
 

@@ -4,12 +4,13 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/engine/core"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
 func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
-	spec := core.BuildCompareSpec([]string{"dev", "stage", "prod"}, "", "")
+	spec := core.BuildCompareSpec(engine.CompareConfig{Targets: []string{"dev", "stage", "prod"}})
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -23,7 +24,7 @@ func TestBuildConfigCompareSpecBaselineFallback(t *testing.T) {
 }
 
 func TestBuildConfigCompareSpecKeepsUnknownBaselineForValidation(t *testing.T) {
-	spec := core.BuildCompareSpec([]string{"dev", "stage"}, "prod", "")
+	spec := core.BuildCompareSpec(engine.CompareConfig{Targets: []string{"dev", "stage"}, Base: "prod"})
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -47,8 +48,10 @@ func TestCompareSpecForRequestPrefersConfig(t *testing.T) {
 	}
 	model := Model{
 		cfg: Config{
-			CompareTargets: []string{"cli-dev", "cli-stage"},
-			CompareBase:    "cli-stage",
+			Compare: engine.CompareConfig{
+				Targets: []string{"cli-dev", "cli-stage"},
+				Base:    "cli-stage",
+			},
 		},
 	}
 	spec := model.compareSpecForRequest(req)
@@ -65,7 +68,7 @@ func TestCompareSpecForRequestPrefersConfig(t *testing.T) {
 }
 
 func TestNormalizeCompareTargets(t *testing.T) {
-	spec := core.BuildCompareSpec([]string{"dev", "DEV", " stage ", ""}, "", "")
+	spec := core.BuildCompareSpec(engine.CompareConfig{Targets: []string{"dev", "DEV", " stage ", ""}})
 	if spec == nil {
 		t.Fatalf("expected spec")
 	}
@@ -79,8 +82,10 @@ func TestCompareSpecForRequestRequiresMetadata(t *testing.T) {
 	req := &restfile.Request{}
 	model := Model{
 		cfg: Config{
-			CompareTargets: []string{"cli-dev", "cli-stage"},
-			CompareBase:    "cli-stage",
+			Compare: engine.CompareConfig{
+				Targets: []string{"cli-dev", "cli-stage"},
+				Base:    "cli-stage",
+			},
 		},
 	}
 	if spec := model.compareSpecForRequest(req); spec != nil {

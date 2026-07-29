@@ -378,6 +378,8 @@ env.groups.require("api", "API profile is required")
 
 For named environments, `env.name` is unchanged and `env.groups` is empty.
 
+`groups` is reserved on `env`, alongside `get`, `has`, and `require`. An environment variable named `groups` is still readable through `env.get("groups")`.
+
 ### vars
 
 `vars` provides request runtime variables, including globals and workflow overrides. You can access values through `vars.get("key")`, `vars.has("key")`, `vars.require("key"[, msg])`, or `vars.key`. `vars.global` provides global reads and writes in pre-request scripts through `get`, `has`, `require`, `set`, and `delete`.

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"slices"
 	"time"
 
 	"github.com/unkn0wn-root/resterm/internal/authcmd"
@@ -17,6 +18,7 @@ import (
 	runfail "github.com/unkn0wn-root/resterm/internal/runx/fail"
 	"github.com/unkn0wn-root/resterm/internal/scripts"
 	"github.com/unkn0wn-root/resterm/internal/ssh"
+	str "github.com/unkn0wn-root/resterm/internal/util"
 	"github.com/unkn0wn-root/resterm/internal/vars"
 )
 
@@ -34,13 +36,27 @@ type Config struct {
 	History               history.Store
 	WorkspaceRoot         string
 	Recursive             bool
-	CompareTargets        []string
-	CompareBase           string
-	CompareGroup          string
+	Compare               CompareConfig
 	Registry              *registry.Index
 	Bindings              *bindings.Map
 	SourceDiagnostics     bool
 	MockInspector         mock.Inspector
+}
+
+// CompareConfig overrides a request's @compare directive for a whole run.
+// Group is set only when Targets name profiles inside one environment group.
+type CompareConfig struct {
+	Targets []string
+	Base    string
+	Group   string
+}
+
+// Clone copies the target list and trims the baseline and group names.
+func (c CompareConfig) Clone() CompareConfig {
+	c.Targets = slices.Clone(c.Targets)
+	c.Base = str.Trim(c.Base)
+	c.Group = str.Trim(c.Group)
+	return c
 }
 
 type Executor interface {

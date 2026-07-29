@@ -3,16 +3,19 @@ package core
 import (
 	"strings"
 
+	"github.com/unkn0wn-root/resterm/internal/engine"
 	"github.com/unkn0wn-root/resterm/internal/restfile"
 )
 
-func BuildCompareSpec(targets []string, baseline, group string) *restfile.CompareSpec {
-	envs := normalizeCompareTargets(targets)
+// BuildCompareSpec turns a run-wide compare override into a spec, or returns
+// nil when the override does not name at least two targets.
+func BuildCompareSpec(cfg engine.CompareConfig) *restfile.CompareSpec {
+	envs := normalizeCompareTargets(cfg.Targets)
 	if len(envs) < 2 {
 		return nil
 	}
 
-	base := normalizeCompareBaseline(envs, baseline)
+	base := normalizeCompareBaseline(envs, cfg.Base)
 	if base == "" {
 		base = envs[0]
 	}
@@ -20,7 +23,7 @@ func BuildCompareSpec(targets []string, baseline, group string) *restfile.Compar
 	return &restfile.CompareSpec{
 		Environments: envs,
 		Baseline:     base,
-		Group:        strings.TrimSpace(group),
+		Group:        strings.TrimSpace(cfg.Group),
 	}
 }
 

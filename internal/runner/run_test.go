@@ -1426,14 +1426,13 @@ func TestRunCompareFromCLIFlags(t *testing.T) {
 		t.Fatalf("environment catalog: %v", err)
 	}
 	rep, err := RunContext(context.Background(), Options{
-		Version:        "test",
-		FilePath:       file,
-		WorkspaceRoot:  dir,
-		Client:         client,
-		Catalog:        cat,
-		Selection:      cat.DefaultSelection(),
-		CompareTargets: []string{"dev", "stage"},
-		CompareBase:    "stage",
+		Version:       "test",
+		FilePath:      file,
+		WorkspaceRoot: dir,
+		Client:        client,
+		Catalog:       cat,
+		Selection:     cat.DefaultSelection(),
+		Compare:       engine.CompareConfig{Targets: []string{"dev", "stage"}, Base: "stage"},
 	})
 	if err != nil {
 		t.Fatalf("Run: %v", err)
