@@ -158,11 +158,11 @@ func compareSummary(entry history.Entry) string {
 	if entry.Compare == nil || len(entry.Compare.Results) == 0 {
 		return "compare: none"
 	}
+	baseline := entry.Compare.BaselineResult().Environment
 	segments := make([]string, 0, len(entry.Compare.Results))
 	for _, res := range entry.Compare.Results {
 		label := res.Environment
-		if entry.Compare.Baseline != "" &&
-			strings.EqualFold(entry.Compare.Baseline, res.Environment) {
+		if label == baseline {
 			label += "*"
 		}
 		status := strings.TrimSpace(res.Status)

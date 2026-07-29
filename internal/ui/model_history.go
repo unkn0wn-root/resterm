@@ -1217,29 +1217,11 @@ func selectCompareHistoryResult(entry history.Entry) *history.CompareResult {
 
 	for idx := range entry.Compare.Results {
 		res := &entry.Compare.Results[idx]
-		if res == nil {
-			continue
-		}
 		if res.Error != "" || res.StatusCode >= 400 {
 			return res
 		}
 	}
-	if baseline := strings.TrimSpace(entry.Compare.Baseline); baseline != "" {
-		for idx := range entry.Compare.Results {
-			res := &entry.Compare.Results[idx]
-			if res == nil {
-				continue
-			}
-			name := res.Profile
-			if name == "" {
-				name = res.Environment
-			}
-			if strings.EqualFold(name, baseline) {
-				return res
-			}
-		}
-	}
-	return &entry.Compare.Results[0]
+	return entry.Compare.BaselineResult()
 }
 
 func bundleFromHistory(entry history.Entry) *compareBundle {
@@ -1247,7 +1229,7 @@ func bundleFromHistory(entry history.Entry) *compareBundle {
 		return nil
 	}
 
-	bundle := &compareBundle{Baseline: entry.Compare.Baseline}
+	bundle := &compareBundle{Baseline: entry.Compare.BaselineResult().Environment}
 	rows := make([]compareRow, 0, len(entry.Compare.Results))
 	for idx := range entry.Compare.Results {
 		res := entry.Compare.Results[idx]

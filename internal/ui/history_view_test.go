@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
 func TestHistoryTimestampLabelToday(t *testing.T) {
@@ -26,5 +29,24 @@ func TestHistoryTimestampLabelPastDay(t *testing.T) {
 	want := "02-01-2025 09:30:00"
 	if got != want {
 		t.Fatalf("expected %q, got %q", want, got)
+	}
+}
+
+func TestCompareSummaryMarksGroupedBaseline(t *testing.T) {
+	entry := history.Entry{Compare: &history.CompareEntry{
+		Baseline: "prod",
+		Group:    "api",
+		Results: []history.CompareResult{
+			{Environment: "api=dev, auth=ci", Profile: "dev", Status: "200 OK"},
+			{Environment: "api=prod, auth=ci", Profile: "prod", Status: "200 OK"},
+		},
+	}}
+
+	got := compareSummary(entry)
+	if !strings.Contains(got, "api=prod, auth=ci*:200 OK") {
+		t.Fatalf("grouped baseline is not marked: %q", got)
+	}
+	if strings.Contains(got, "api=dev, auth=ci*:200 OK") {
+		t.Fatalf("non-baseline row is marked: %q", got)
 	}
 }

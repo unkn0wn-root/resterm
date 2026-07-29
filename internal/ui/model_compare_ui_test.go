@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/bubbles/viewport"
+
+	"github.com/unkn0wn-root/resterm/internal/history"
 )
 
 func TestSelectCompareFocusPinsSnapshots(t *testing.T) {
@@ -51,6 +53,106 @@ func TestSelectCompareFocusPinsSnapshots(t *testing.T) {
 			"expected compareRowIndex to remain at selected row, got %d",
 			model.compareRowIndex,
 		)
+	}
+}
+
+func TestSelectCompareFocusPinsGroupedHistoryBaseline(t *testing.T) {
+	model := New(Config{})
+	model.responseSplit = true
+	model.responsePaneFocus = responsePanePrimary
+	model.responsePanes[0] = newResponsePaneState(viewport.New(80, 10), true)
+	model.responsePanes[1] = newResponsePaneState(viewport.New(80, 10), false)
+	model.responsePanes[0].activeTab = responseTabCompare
+
+	entry := history.Entry{Compare: &history.CompareEntry{
+		Baseline: "prod",
+		Group:    "api",
+		Results: []history.CompareResult{
+			{
+				Environment: "api=dev, auth=ci",
+				Profile:     "dev",
+				Status:      "200 OK",
+				BodySnippet: `{"env":"dev"}`,
+			},
+			{
+				Environment: "api=prod, auth=ci",
+				Profile:     "prod",
+				Status:      "200 OK",
+				BodySnippet: `{"env":"prod"}`,
+			},
+		},
+	}}
+	bundle := bundleFromHistory(entry)
+	if bundle == nil {
+		t.Fatal("expected compare bundle")
+	}
+	model.populateCompareSnapshotsFromHistory(entry, bundle, "")
+	model.compareBundle = bundle
+	model.compareFocusedEnv = "api=dev, auth=ci"
+	model.compareRowIndex = 0
+
+	cmd := model.selectCompareFocus()
+	collectMsgs(cmd)
+
+	primary := model.pane(responsePanePrimary)
+	secondary := model.pane(responsePaneSecondary)
+	if primary == nil || primary.snapshot == nil {
+		t.Fatal("expected primary pane snapshot")
+	}
+	if secondary == nil || secondary.snapshot == nil {
+		t.Fatal("expected secondary pane snapshot")
+	}
+	if got, want := primary.snapshot.environment, "api=dev, auth=ci"; got != want {
+		t.Fatalf("primary environment = %q, want %q", got, want)
+	}
+	if got, want := secondary.snapshot.environment, "api=prod, auth=ci"; got != want {
+		t.Fatalf("secondary environment = %q, want %q", got, want)
+	}
+	if primary.snapshot == secondary.snapshot {
+		t.Fatal("target and baseline snapshots must be distinct")
+	}
+}
+
+func TestSelectCompareFocusRejectsMissingBaselineSnapshot(t *testing.T) {
+	model := New(Config{})
+	model.responseSplit = true
+	model.responsePaneFocus = responsePanePrimary
+	model.responsePanes[0] = newResponsePaneState(viewport.New(80, 10), true)
+	model.responsePanes[1] = newResponsePaneState(viewport.New(80, 10), false)
+	model.responsePanes[0].activeTab = responseTabCompare
+
+	primarySnap := &responseSnapshot{ready: true, environment: "current"}
+	secondarySnap := &responseSnapshot{ready: true, environment: "previous"}
+	model.responsePanes[0].snapshot = primarySnap
+	model.responsePanes[1].snapshot = secondarySnap
+	model.setCompareSnapshot(
+		"api=dev, auth=ci",
+		&responseSnapshot{ready: true, environment: "api=dev, auth=ci"},
+	)
+	model.compareBundle = &compareBundle{
+		Baseline: "api=prod, auth=ci",
+		Rows: []compareRow{
+			{Result: &compareResult{Environment: "api=dev, auth=ci"}},
+			{Result: &compareResult{Environment: "api=prod, auth=ci"}},
+		},
+	}
+	model.compareFocusedEnv = "api=dev, auth=ci"
+
+	if cmd := model.selectCompareFocus(); cmd != nil {
+		t.Fatal("missing baseline snapshot should not schedule a diff")
+	}
+	if got, want := model.statusMessage.text,
+		"Baseline response for api=prod, auth=ci unavailable"; got != want {
+		t.Fatalf("status = %q, want %q", got, want)
+	}
+	if model.statusMessage.level != statusWarn {
+		t.Fatalf("status level = %v, want warning", model.statusMessage.level)
+	}
+	if model.responsePanes[0].snapshot != primarySnap {
+		t.Fatal("missing baseline must not replace the primary snapshot")
+	}
+	if model.responsePanes[1].snapshot != secondarySnap {
+		t.Fatal("missing baseline must not replace the secondary snapshot")
 	}
 }
 

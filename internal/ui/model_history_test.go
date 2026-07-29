@@ -300,6 +300,24 @@ func TestSelectCompareHistoryResultMatchesGroupedBaseline(t *testing.T) {
 	}
 }
 
+func TestBundleFromHistoryResolvesBaselineEnvironment(t *testing.T) {
+	bundle := bundleFromHistory(history.Entry{
+		Compare: &history.CompareEntry{
+			Baseline: "prod",
+			Results: []history.CompareResult{
+				{Environment: "api=dev, auth=ci", Profile: "dev"},
+				{Environment: "api=prod, auth=ci", Profile: "prod"},
+			},
+		},
+	})
+	if bundle == nil {
+		t.Fatal("expected compare bundle")
+	}
+	if got, want := bundle.Baseline, "api=prod, auth=ci"; got != want {
+		t.Fatalf("baseline = %q, want %q", got, want)
+	}
+}
+
 func TestConsumeHTTPResponseSchedulesAsyncRender(t *testing.T) {
 	model := New(Config{})
 	model.ready = true

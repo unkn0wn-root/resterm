@@ -94,7 +94,11 @@ func (m *Model) selectCompareFocus() tea.Cmd {
 	}
 	baselineSnap := m.compareSnapshot(baselineEnv)
 	if baselineSnap == nil {
-		baselineSnap = targetSnap
+		m.setStatusMessage(statusMsg{
+			level: statusWarn,
+			text:  fmt.Sprintf("Baseline response for %s unavailable", baselineEnv),
+		})
+		return nil
 	}
 	var cmds []tea.Cmd
 	if cmd := m.ensureCompareSplit(); cmd != nil {
