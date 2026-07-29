@@ -196,6 +196,21 @@ func TestFlatCatalogValidation(t *testing.T) {
 			data: `{"$default": {}}`,
 			want: "reserved",
 		},
+		{
+			name: "environment must be object",
+			data: `{"dev": "oops"}`,
+			want: `"dev" must be an object`,
+		},
+		{
+			name: "array environment must be object",
+			data: `{"dev": ["oops"]}`,
+			want: `"dev" must be an object`,
+		},
+		{
+			name: "null environment must be object",
+			data: `{"dev": null}`,
+			want: `"dev" must be an object`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

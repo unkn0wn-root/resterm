@@ -350,7 +350,7 @@ Resterm automatically searches, in order:
 2. The workspace root.
 3. The current working directory.
 
-It loads the first `resterm.env.json` or `rest-client.env.json` it finds. The JSON can contain nested objects and arrays - they are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
+It loads the first `resterm.env.json` or `rest-client.env.json` it finds. Each named environment must be an object. Values inside it can contain nested objects and arrays, which are flattened using dot and bracket notation (`services.api.base`, `plans.addons[0]`).
 
 Example environment (`_examples/resterm.env.json`):
 

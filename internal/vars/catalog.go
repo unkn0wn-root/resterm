@@ -250,7 +250,9 @@ func parseFlat(root object) (Catalog, error) {
 		if err != nil {
 			return Catalog{}, err
 		}
-		values, err := flatten(f.raw)
+		// Flat environments are named objects. Without this check, scalar values
+		// loaded as empty environments and arrays created numeric root keys.
+		values, err := flattenObject(f.raw, name)
 		if err != nil {
 			return Catalog{}, err
 		}
@@ -328,14 +330,6 @@ func parseGroup(name string, obj object) (Group, error) {
 		g.Profiles[p] = values
 	}
 	return g, nil
-}
-
-func flatten(raw json.RawMessage) (map[string]string, error) {
-	var value any
-	if err := json.Unmarshal(raw, &value); err != nil {
-		return nil, err
-	}
-	return flattenValue(value), nil
 }
 
 func flattenObject(raw json.RawMessage, name string) (map[string]string, error) {
